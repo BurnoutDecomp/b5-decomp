@@ -46,12 +46,14 @@
 // -- BrnProfile.cpp (GetLicenceIssuedDate / SetLicenceIssuedDateAsNow) is mounted too.
 // What remains in the anonymous namespace is only the two un-named GuiCache far members.
 //
-// ⚠ 8 -> 9 IS A CONTROLLER PRESS. ([input vocabulary repair 2026-08-27] the accept now
-// ARRIVES as the console's 49 GUI_SELECT -- CgsInputPadsPC was repaired -- so the old
-// KI_ACTION_CONFIRM_PC == 45 compensation is retired.)
+// ⚠ 8 -> 9 IS A CONTROLLER PRESS. The PC input bridge used to deliver the accept as action
+// 45 rather than the console's 49 GUI_SELECT, which parked this state in PHOTOBOOTH forever
+// (boot-measured). That is fixed at the source now -- CgsInputPadsPC's KA_BINDINGS -- and the
+// compensating 45 arm this file carried is deleted; see the note at KI_ACTION_CONFIRM below.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnIntro.h"
+#include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                  // CgsDev::StrStream (the streamed unhandled-event assert)
@@ -156,8 +158,15 @@ namespace BrnGui
         // committed BrnPauseScreen / BrnInGame slices use.
         const s32 KI_ACTION_CONFIRM = 49;
         const s32 KI_ACTION_BACK    = 50;
-        // ([input vocabulary repair 2026-08-27] the KI_ACTION_CONFIRM_PC == 45 compensation
-        // is RETIRED: CgsInputPadsPC binds the accept key / pad-A to the console's 49.)
+        // + ROOT CAUSE FIXED ELSEWHERE, COMPENSATING ARM DELETED (input-vocabulary wave,
+        // 2026-08-29). The local `KI_ACTION_CONFIRM_PC` (45) used to sit here because
+        // KA_BINDINGS bound the accept key to 45 GUI_START rather than 49 GUI_SELECT. Both
+        // console bodies were checked and NEITHER handles 45:
+        //   Intro::HandleControllerInput            @0x824D1988 -- state 1 tests `== 49` only
+        //   Intro::HandleControllerPressedPhotoBooth @0x824D1B98 -- tests 49 then 50 only
+        // KA_BINDINGS now puts Enter/Space/pad-A on 49, so PHOTOBOOTH advances on the
+        // console's own id and 50 GUI_CANCEL (Escape / pad B) reaches PhotoBoothComponent::
+        // Cancel for the first time on PC.
 
         const s32 KI_CHANNEL_GUI_OUT      = 40;  // GuiEventOut
         const s32 KI_CHANNEL_GUI_INTERNAL = 42;  // internal/HUD-component channel

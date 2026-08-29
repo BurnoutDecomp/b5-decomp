@@ -24,6 +24,16 @@
 // inline FLAG comments. Each is modelled by-name so the bodies compile and encode the
 // real control flow + store-for-store data flow.
 //
+// ⭐ [A2 bridge-fidelity, 2026-08-29] BridgeControllerToGui repaired against 0x823E6B18:
+//   (a) the menu-accept early-out is now the console's THREE arms (45, then 55 gated on 54-not-held,
+//       then 54) instead of the single 45 arm the tree carried -- see the block comment there;
+//   (b) every `(0x1AC + 0x18 - 0x18) / 8` style pseudo-derivation is gone. The console holds
+//       r24 = padRecord + 0x18 == &maActionInfo[0] across the whole function, so each displacement
+//       is maActionInfo[(disp - 4) / 8].muStatus; the ids are now named constants at the top of the
+//       namespace. Re-derived: change-car = 53 pressed + 55 held; language cycle = 56 held + 48
+//       pressed (NOT 45 -- s3_input.md's guess). Values are unchanged; the addressing is now real.
+//   gaiGuiActionIndexTable / gaiGuiMenuAxisActionTable are untouched recovered console data.
+//
 // ⭐ [D2 gesture-sink, 2026-08-26] BridgeControllerToGameState's PreWorldInputBuffer is NO LONGER
 // a placeholder: it is the module-owned buffer GameStateModule::GetPreWorldInputBuffer() hands
 // back, and its ControllerInput +0x45 gesture byte is readable by consumers for the first time.
@@ -64,6 +74,28 @@ namespace BrnGame
 
     // The 8 menu-axis action ids the ToGui language/menu repeat loop scans (X360 dword_82035330).
     static const s32 gaiGuiMenuAxisActionTable[8] = { 37, 38, 39, 40, 41, 42, 43, 44 };
+
+    // ---- the individual action slots BridgeControllerToGui reads directly ---------------------
+    // MEASURED, not derived. The X360 keeps r24 = padRecord + 0x18 == &maActionInfo[0] for the whole
+    // function (0x823E6C80 `addi r24, r31, 0x18`), so every `lwz r11, <disp>(r24)` is
+    // maActionInfo[(disp - 4) / 8].muStatus. Decoded:
+    //     0x16C(r24) -> maActionInfo[45].muStatus   (45 = GUI_START)
+    //     0x1B4(r24) -> maActionInfo[54].muStatus   (54 = GUI_LSHOULDER)
+    //     0x1BC(r24) -> maActionInfo[55].muStatus   (55 = GUI_RSHOULDER)
+    //     0x1AC(r24) -> maActionInfo[53].muStatus   (53 = GUI_OPTION2)
+    //     0x1C4(r24) -> maActionInfo[56].muStatus   (56 = GUI_LTRIGGER)
+    //     0x184(r24) -> maActionInfo[48].muStatus   (48 = GUI_RTHUMB)
+    // ⚠️ These replace the old `(0x16C - 0x18 + 0x18) / 8` style expressions in this file, which
+    // were arithmetically `disp / 8` -- a no-op dressed as an offset derivation. They landed on the
+    // right ids only because integer division happened to truncate to them; they are NOT the
+    // console's addressing and must never be copied into a new read.
+    // Names per EGameInputActions (DecFIGS GameSource/Input/GameInputActions.h).
+    static const s32 KI_GUI_ACTION_START      = 45;  // GUI_START
+    static const s32 KI_GUI_ACTION_RTHUMB     = 48;  // GUI_RTHUMB   (language-cycle trigger)
+    static const s32 KI_GUI_ACTION_OPTION2    = 53;  // GUI_OPTION2  (change-car combo trigger)
+    static const s32 KI_GUI_ACTION_LSHOULDER  = 54;  // GUI_LSHOULDER
+    static const s32 KI_GUI_ACTION_RSHOULDER  = 55;  // GUI_RSHOULDER (change-car combo modifier)
+    static const s32 KI_GUI_ACTION_LTRIGGER   = 56;  // GUI_LTRIGGER  (language-cycle modifier)
 
     // ToGui language-cycle persistent state (X360 file-scope globals byte_82FAEB9C / dword_82FAEB98 /
     // flt_82FAEB94 / flt_82FAE490[8]). FLAG: file-scope here, promoted to their real home when the
@@ -325,8 +357,16 @@ namespace BrnGame
 
         // Camera/replay control events: when the relevant action bits are set, push two events onto
         // the world game-action queue (X360 AddEvent type 3 size 4, then a 144-byte type-97 event).
-        if (((lpActions[(452 - 24) / 8].muStatus >> 1) & 1) != 0 &&
-            (lpActions[(468 - 24) / 8].muStatus & 1) != 0)
+        // ⚠️ SLOTS RE-DERIVED 2026-08-29 alongside the ToGui repair. The old `(452 - 24) / 8` /
+        // `(468 - 24) / 8` expressions are the mfValue-offset formula applied to a muStatus offset:
+        // they truncate to 53 and 55 only by accident. The console (r31 = padRecord base here, NOT
+        // maActionInfo) reads
+        //     0x823CDBDC  lwz r11, 0x1C4(r31) ; extrwi 1,30 -> maActionInfo[53].muStatus PRESSED
+        //     0x823CDBEC  lwz r11, 0x1D4(r31) ; clrlwi  31  -> maActionInfo[55].muStatus HELD
+        // -- the SAME 53-pressed-while-55-held gesture BridgeControllerToGui turns into
+        // GuiEventToggleChangeCarMessage. Values unchanged; the addressing is now real.
+        if (((lpActions[KI_GUI_ACTION_OPTION2].muStatus >> 1) & 1) != 0 &&
+            (lpActions[KI_GUI_ACTION_RSHOULDER].muStatus & 1) != 0)
         {
             f32 lfZero = 0.0f;
             BrnWorldIO::GameActionQueue* lpQueue = lpWorldInput->GetGameActionQueue();
@@ -488,29 +528,78 @@ namespace BrnGame
             CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
         }
 
-        // Toggle-change-car message (when the GUI accepts input + the relevant action is pressed+held).
+        // Toggle-change-car message: 53 GUI_OPTION2 *pressed* while 55 GUI_RSHOULDER is *held*
+        // (X360 0x823E6C94 `lwz r11,0x1AC(r24)` + extrwi 1,30 -> bit1, then 0x823E6CA4
+        // `lwz r11,0x1BC(r24)` + clrlwi 31 -> bit0).
         if (mbGuiAcceptsControllerInput &&
-            ((lpActions[(0x1AC + 0x18 - 0x18) / 8].muStatus >> 1) & 1) != 0 &&
-            (lpActions[(0x1BC + 0x18 - 0x18) / 8].muStatus & 1) != 0)
+            ((lpActions[KI_GUI_ACTION_OPTION2].muStatus >> 1) & 1) != 0 &&
+            (lpActions[KI_GUI_ACTION_RSHOULDER].muStatus & 1) != 0)
         {
+            // The canonical record (BrnGuiDemangledEventTypes.h:277) is the X360-attested
+            // id 540 / SIZE 1 shape; the local 12-byte fork this file used to carry is
+            // retired (see the note in GameBridgeControllerToX.h). The one payload byte is
+            // a marker whose value is not attested, so it is stamped rather than left
+            // uninitialised -- the record must not carry stack garbage into the queue.
             BrnGui::GuiEventToggleChangeCarMessage lEvent;
+            lEvent.maData[0] = 0;
             CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
         }
 
-        // Front-end menu-accept synthesis (skipped while menu-accept is suppressed).
+        // ---- Front-end menu-accept early-out: THREE arms, in this order --------------------------
+        // (skipped while menu-accept is suppressed). Restored 2026-08-29 store-for-store from
+        // 0x823E6CE4..0x823E6DC8; the tree previously carried only the 45 arm, which silently
+        // dropped the "55 fires only while 54 is NOT held" guard -- the partner of the crash-mode
+        // both-bumpers gesture.
+        //
+        //   0x823E6CE4  lwz 0x16C(r24)  -> 45 ; bit1 -> emit 45, return ; bit0 -> return
+        //   0x823E6D2C  lwz 0x1BC(r24)  -> 55 ; bit1 -> if (!(54 bit0)) emit 55 ; return
+        //                                     ; bit0 -> return
+        //   0x823E6D84  lwz 0x1B4(r24)  -> 54 ; bit1 -> emit 54, return ; bit0 -> return
+        //
+        // Every one of those exits is a real `b __restgprlr_18` (LABEL_14 / loc_823E7200): once any
+        // of 45/55/54 is down or pressed, NOTHING else in this bridge runs this frame -- no axis
+        // events, no scan-table pass, no auto-repeat, no language cycle. Reproduced as `return`.
         if (!mbGuiSuppressMenuAccept && mbGuiAcceptsControllerInput)
         {
-            // The X360 examines the +0x16C / +0x1BC / +0x1B4 action bits and emits one of the
-            // controller-input-pressed events (45 / 55 / 54) for the first matching action. FLAG:
-            // action-slot identities named from the bridge's reads.
-            const CgsInput::InputIO::ActionInfo& lrA16C = lpActions[(0x16C - 0x18 + 0x18) / 8]; // +0x16C
-            if (((lrA16C.muStatus >> 1) & 1) != 0)
+            const u32 luStatus45 = lpActions[KI_GUI_ACTION_START].muStatus;      // +0x16C(r24)
+            if (((luStatus45 >> 1) & 1) != 0)
             {
-                CgsGui::GuiEventControllerInputPressed lEvent; lEvent.miPadId = 0; lEvent.miButtonId = 45;
+                CgsGui::GuiEventControllerInputPressed lEvent;
+                lEvent.miPadId = 0;
+                lEvent.miButtonId = KI_GUI_ACTION_START;
                 CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
                 return;
             }
-            if ((lrA16C.muStatus & 1) != 0)
+            if ((luStatus45 & 1) != 0)
+                return;
+
+            const u32 luStatus55 = lpActions[KI_GUI_ACTION_RSHOULDER].muStatus;  // +0x1BC(r24)
+            if (((luStatus55 >> 1) & 1) != 0)
+            {
+                // 0x823E6D3C: the 55 press is swallowed outright while 54 is held -- the console
+                // does NOT fall through to the 54 arm here, it returns either way.
+                if ((lpActions[KI_GUI_ACTION_LSHOULDER].muStatus & 1) == 0)
+                {
+                    CgsGui::GuiEventControllerInputPressed lEvent;
+                    lEvent.miPadId = 0;
+                    lEvent.miButtonId = KI_GUI_ACTION_RSHOULDER;
+                    CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+                }
+                return;
+            }
+            if ((luStatus55 & 1) != 0)
+                return;
+
+            const u32 luStatus54 = lpActions[KI_GUI_ACTION_LSHOULDER].muStatus;  // +0x1B4(r24)
+            if (((luStatus54 >> 1) & 1) != 0)
+            {
+                CgsGui::GuiEventControllerInputPressed lEvent;
+                lEvent.miPadId = 0;
+                lEvent.miButtonId = KI_GUI_ACTION_LSHOULDER;
+                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+                return;
+            }
+            if ((luStatus54 & 1) != 0)
                 return;
         }
 
@@ -579,9 +668,10 @@ namespace BrnGame
         // pair -- an integer-seconds word widened to double plus a fractional-seconds float
         // (LODWORD/HIDWORD u32->f64 idiom @0x823E6E30) -- compared against the per-action
         // repeat deadlines (0.8s initial delay, 0.1s repeat).
-        f32 lfNow = static_cast<f32>(
-            static_cast<f64>(static_cast<u32>(miLanguageCycleTimerLo)) +
-            static_cast<f64>(mfLanguageCycleTimerFrac));
+        // X360 keeps this in fp31 as a DOUBLE (0x823E6E30 magic-widen idiom) and compares the
+        // f32 deadlines against it; only the STORES narrow to f32. Reproduced that way.
+        f64 lfNow = static_cast<f64>(static_cast<u32>(miLanguageCycleTimerLo)) +
+                    static_cast<f64>(mfLanguageCycleTimerFrac);
         for (s32 i = 0; i < 8; ++i)
         {
             s32 liActionId = gaiGuiMenuAxisActionTable[i];
@@ -597,7 +687,7 @@ namespace BrnGame
             {
                 CgsGui::GuiEventControllerInputPressed lEvent; lEvent.miPadId = 0; lEvent.miButtonId = liActionId;
                 CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
-                safMenuRepeatNextTime[i] = lfNow + 0.8f;
+                safMenuRepeatNextTime[i] = static_cast<f32>(lfNow + 0.80000001);
             }
             else if (((lpAction->muStatus >> 2) & 1) != 0)
             {
@@ -629,10 +719,18 @@ namespace BrnGame
 
         // Language cycle: when the change-language combo is held and the debounce has elapsed, emit a
         // GuiEventSetLanguage stepping through the language list.
-        bool lbComboHeld = (lpActions[(0x1C4 - 0x18 + 0x18) / 8].muStatus & 1) != 0;
+        // ⚠️ SLOTS RE-DERIVED 2026-08-29 from the asm, not from the old fake arithmetic:
+        //   0x823E711C  lwz r11, 0x1C4(r24) ; clrlwi 31  -> maActionInfo[56].muStatus bit0 (HELD)
+        //   0x823E7158  lwz r11, 0x184(r24) ; extrwi 1,30 -> maActionInfo[48].muStatus bit1 (PRESSED)
+        // i.e. the combo is 56 GUI_LTRIGGER held + 48 GUI_RTHUMB pressed -- NOT 45, as a reading of
+        // the old `(0x184 - 0x18 + 0x18) / 8` expression against the pad base would suggest. The old
+        // expressions truncated to 56 and 48 anyway, so this is a fidelity/readability repair, not a
+        // behaviour change. ⓘ It also means the new 56 map-zoom binding cannot double-fire the
+        // language cycle on its own: 48 (pad RTHUMB) must be pressed in the same frame.
+        bool lbComboHeld = (lpActions[KI_GUI_ACTION_LTRIGGER].muStatus & 1) != 0;
         u8  lbPending;
         s32 liIndex;
-        if (lbComboHeld && ((lpActions[(0x184 - 0x18 + 0x18) / 8].muStatus >> 1) & 1) != 0)
+        if (lbComboHeld && ((lpActions[KI_GUI_ACTION_RTHUMB].muStatus >> 1) & 1) != 0)
         {
             sbLanguageCyclePending = 1;
             siLanguageCycleIndex = (siLanguageCycleIndex + 1) % 5;
@@ -644,12 +742,12 @@ namespace BrnGame
             liIndex = siLanguageCycleIndex;
             lbPending = sbLanguageCyclePending;
         }
-        if (lbPending == 1 && lfNow > (sfLanguageCycleLastTime + 1.0f))
+        if (lbPending == 1 && lfNow > (static_cast<f64>(sfLanguageCycleLastTime) + 1.0))
         {
             CgsGui::GuiEventSetLanguage lEvent;
             lEvent.meLanguage = static_cast<CgsLanguage::ELanguage>(gaiLanguageCycleIds[liIndex]);
             CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
-            sfLanguageCycleLastTime = lfNow;
+            sfLanguageCycleLastTime = static_cast<f32>(lfNow);
             sbLanguageCyclePending = 0;
         }
     }

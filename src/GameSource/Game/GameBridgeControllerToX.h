@@ -31,6 +31,8 @@
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h" // CgsInput::InputIO::ActionInfo (action slot read by name)
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"       // CgsGui::GuiEventControllerInput* / ActiveUserIndex / Axis / SetLanguage
 
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"  // BrnGui::GuiEventToggleChangeCarMessage (id 540) -- the canonical home
+
 #include <cstring>   // memcpy
 
 namespace BrnGame
@@ -104,13 +106,11 @@ namespace BrnGame
     // ========================================================================
 }
 
-namespace BrnGui
-{
-    // The change-car toggle request. Payload-less; the X360 AddGuiEvent instance
-    // @0x823DAA18 pushes it as event id 540 with the 1-byte payload marker. Homed here
-    // until a BrnGui event-type-defs home exists (its producers are this bridge + the
-    // front-end car-select flow).
-    struct GuiEventToggleChangeCarMessage : public CgsGui::GuiEvent<540>
-    {
-    };
-}
+// ⭐ FORK RETIRED 2026-08-29 (map-world wave). `BrnGui::GuiEventToggleChangeCarMessage` was
+// re-defined here as `CgsGui::GuiEvent<540>` (a 12-byte record) while its canonical home,
+// GameSource/Gui/BrnGuiDemangledEventTypes.h:277, already carried the X360-attested shape:
+// id 540, SIZE 1 -- and AddGuiEvent<T> takes its payload width from sizeof(T), so the two
+// definitions pushed records of different lengths. Two namespace-scope definitions of one
+// class link silently; this one only surfaced when a TU finally co-included both headers.
+// The canonical home is included below and the fork is gone; the note this file's sibling
+// GameBridgeGameStateToX.cpp:57 already carried named exactly this.

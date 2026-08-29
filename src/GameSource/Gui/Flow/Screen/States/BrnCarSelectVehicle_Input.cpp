@@ -18,6 +18,7 @@
 // kind -- it switches on it and reads a DIFFERENT payload shape in each arm.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectVehicle.h"
+#include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDConvertToString
@@ -49,18 +50,24 @@ namespace BrnGui
         const s32 KI_EVENT_CONTROLLER_AXIS     = 8;
 
         // ---- the five action ids this screen reacts to ------------------------------
-        // FLAG: EGameInputActions has no recovered enum home in the tree; these five are
-        // named for what THIS handler does with them (the two "_ALT" pair are the ids the
-        // DOWN/RELEASED arms use, the plain pair are the ids the PRESSED/RELEASED arms use).
+        // EGameInputActions now has a home (GameSource/Input/GameInputActions.h); the names
+        // below stay role-named because that is what THIS handler does with them -- the two
+        // "_ALT" ids are the dpad family (39/40 GUI_DPAD_LEFT/RIGHT, the DOWN/RELEASED
+        // hold-to-scroll arms) and the plain pair are the generic-nav family (43/44 GUI_LEFT/
+        // GUI_RIGHT, the PRESSED single-step arms).
         const s32 KI_ACTION_CAROUSEL_PREV_ALT = 39;   // 0x27
         const s32 KI_ACTION_CAROUSEL_NEXT_ALT = 40;   // 0x28
         const s32 KI_ACTION_CAROUSEL_PREV     = 43;   // 0x2B
         const s32 KI_ACTION_CAROUSEL_NEXT     = 44;   // 0x2C
         const s32 KI_ACTION_ACCEPT            = 49;   // 0x31 (EGameInputActions GUI_SELECT)
 
-        // ([input vocabulary repair 2026-08-27] the KI_ACTION_ACCEPT_PC == 45 compensation is
-        // RETIRED: CgsInputPadsPC binds the accept key / pad-A to the console's 49 GUI_SELECT
-        // -- the root-cause repair this banner used to defer.)
+        // ✅ ROOT CAUSE FIXED ELSEWHERE, COMPENSATING ARM DELETED (input-vocabulary wave,
+        // 2026-08-29). `KI_ACTION_ACCEPT_PC = 45` used to sit here because KA_BINDINGS bound
+        // the accept key to 45 GUI_START rather than 49 GUI_SELECT. The console body --
+        // BrnGui::CarSelectVehicle::HandleControllerInput @0x824DCD80 -- has switch cases
+        // { 40, 43, 44 } and one `v11 != 49` test, and NO 45 anywhere, so the arm was pure
+        // divergence. KA_BINDINGS now puts Enter/Space/pad-A on 49 and the CONTINUE prompt
+        // works through the console's own id.
 
         // The GuiAudioTriggerEvent action word TriggerSound posts (X360 `li r4, 7`).
         const s32 KI_AUDIO_ACTION_CAROUSEL = 7;

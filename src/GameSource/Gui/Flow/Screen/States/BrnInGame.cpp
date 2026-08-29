@@ -9,6 +9,7 @@
 #include "GameSource/Gui/BrnGuiOverlaysDirector.h"                        // GuiOverlayWaitFinishRequest (the 188 handshake payload)
 #include "GameSource/Gui/Flow/Screen/States/Shared/BrnScreenShared.h"     // GetSplashScreenIDForGameMode (+ GsmIO::EGameModeType)
 #include "GameSource/GameState/Progression/BrnProfile.h"                  // BrnProgression::Profile::GetIsNewProfile (the intro gate)
+#include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
 
 // BrnGui::InGame -- reconstructed from BURNOUT_X360_ARTIST.XEX (addresses in the
 // header). The SCREEN flow's in-game root state: it owns the pause / main-map /
@@ -43,14 +44,18 @@ namespace BrnGui
         const s32 KI_EVENT_NETWORK_SPLASH      = 269;  // GuiEventNetworkSplashEvent payload
         const s32 KI_EVENT_PERFORM_MENU_OPTION = 284;  // GuiEventPerformOnlineMainMenuOption payload
 
-        // ---- controller action sub-ids (payload word +4 of the action event). FLAG:
-        //      producer-side names not recovered -- roles from this state's switch
-        //      (same convention as BrnPauseScreen.cpp's action set). ---------------------
-        const s32 KI_ACTION_PAUSE_DRIVER_DETAILS  = 45;  // pause -> driver details (offline)
-        const s32 KI_ACTION_PAUSE_MAIN_MAP        = 46;  // pause -> main map (offline)
-        const s32 KI_ACTION_EA_TRAX_NEXT_DISABLE  = 54;  // suppress a pending next-track
-        const s32 KI_ACTION_EA_TRAX_NEXT          = 55;  // arm the next-EA-track debounce
-        const s32 KI_ACTION_OPEN_EVENT_MAP        = 58;  // open the event map (if at a start)
+        // ---- controller action sub-ids (payload word +4 of the action event). Named from
+        //      the DWARF vocabulary now that it has a home in the tree
+        //      (GameSource/Input/GameInputActions.h); the trailing comment on each line is
+        //      what THIS state does with it. ⚠️ 46 used to be called KI_ACTION_PAUSE_MAIN_MAP
+        //      here -- a local invention. The ROLE was right (Back opens the map) but the id
+        //      is E_GAMEINPUTACTIONS_GUI_BACK, and that misnomer is part of why the PC
+        //      binding table went years without a Back button. -------------------------
+        const s32 KI_ACTION_GUI_START         = E_GAMEINPUTACTIONS_GUI_START;         // 45 -> driver details
+        const s32 KI_ACTION_GUI_BACK          = E_GAMEINPUTACTIONS_GUI_BACK;          // 46 -> main map
+        const s32 KI_ACTION_GUI_LSHOULDER     = E_GAMEINPUTACTIONS_GUI_LSHOULDER;     // 54 -> suppress a pending next-track
+        const s32 KI_ACTION_GUI_RSHOULDER     = E_GAMEINPUTACTIONS_GUI_RSHOULDER;     // 55 -> arm the next-EA-track debounce
+        const s32 KI_ACTION_GUI_EVENT_DETAILS = E_GAMEINPUTACTIONS_GUI_EVENT_DETAILS; // 58 -> open the event map
 
         const f32 KF_EA_TRAX_DEBOUNCE = 0.3f;   // flt_82066050 (.rodata, 0x3E99999A)
 
@@ -429,24 +434,24 @@ namespace BrnGui
             reinterpret_cast<const u8*>(lpEvent) + 4);
         switch (liAction)
         {
-        case KI_ACTION_PAUSE_DRIVER_DETAILS:
+        case KI_ACTION_GUI_START:
             PauseGame(true, true);
             break;
 
-        case KI_ACTION_PAUSE_MAIN_MAP:
+        case KI_ACTION_GUI_BACK:
             PauseGame(true, false);
             break;
 
-        case KI_ACTION_EA_TRAX_NEXT_DISABLE:
+        case KI_ACTION_GUI_LSHOULDER:
             mfTimeToDisableNextEATrack = KF_EA_TRAX_DEBOUNCE;
             break;
 
-        case KI_ACTION_EA_TRAX_NEXT:
+        case KI_ACTION_GUI_RSHOULDER:
             if (mfTimeUntilNextEATrack <= 0.0f)
                 mfTimeUntilNextEATrack = KF_EA_TRAX_DEBOUNCE;
             break;
 
-        case KI_ACTION_OPEN_EVENT_MAP:
+        case KI_ACTION_GUI_EVENT_DETAILS:
             OpenEventMap();
             break;
 

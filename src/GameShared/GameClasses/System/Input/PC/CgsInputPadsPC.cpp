@@ -4,6 +4,7 @@
 #include <cstdlib>   // std::getenv (the harness focus-gate bypass)
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog (the pause gate's one-shot)
+#include "GameSource/Input/GameInputActions.h"                // EGameInputActions -- the action vocabulary KA_BINDINGS binds to
 
 // ============================================================================
 // FLAG PC-platform leaf (whole file): the host pad source standing in for the
@@ -232,27 +233,52 @@ namespace
     // menu accept row, and Escape stays on the menu stop row. Nothing is stolen from the
     // verified boot chain: every pre-existing row below is byte-identical to what it was.
     //
-    // ⭐ [input vocabulary repair 2026-08-27] THE 45-vs-49 DEFECT IS FIXED. The console
-    // vocabulary -- DWARF GameInputActions.h:24, EGameInputActions -- is:
-    //     45 GUI_START  (the Start button)   49 GUI_SELECT (the A button / accept)
-    //     46 GUI_BACK                        50 GUI_CANCEL (the B button / back)
-    // The old rows bound the accept key to 45 and Escape to 49 (inverted), and several
-    // GUI screens grew compensating "accept is 45 on PC" arms -- which is why A could
-    // not skip the boot videos (BootVideos::Update faithfully answers the console's 49
-    // and nothing on this host ever produced it from A). The rows below now bind:
-    //     ENTER / SPACE / pad-A     -> 49 GUI_SELECT
-    //     ESCAPE / pad-B            -> 50 GUI_CANCEL
-    //     P / pad-START             -> 45 GUI_START  (alongside driving row 8, exactly the
-    //                                  console's one-control-many-actions Start button)
-    // and every compensating arm is retired in the same change (BrnBootProfile /
-    // BrnCarSelectLivery_Input / BrnCarSelectVehicle_Input / BrnIntro). Screens that
-    // accept BOTH 45 and 49 natively on console (BrnCarSelectUnlock's cmpwi 0x2D/0x31)
-    // keep both -- that is console behaviour, not a compensation.
+    // ✅✅ THE ACCEPT-VOCABULARY DEFECT IS FIXED (input-vocabulary wave, 2026-08-29). It used
+    // to read "PRE-EXISTING DEFECT, NOT TOUCHED HERE" and four screens carried an invented
+    // `case 45` arm to work around it. What was wrong, and what it is now:
+    //
+    //   was:  row 45 <- Return/Space + pad A + pad START      (accept fired GUI_START)
+    //         row 49 <- Escape       + pad B                  (back   fired GUI_SELECT)
+    //         50 GUI_CANCEL bound NOWHERE -- unreachable on PC by any device, although it is
+    //         the id half the CrashNav family branches on for "back".
+    //   now:  row 49 GUI_SELECT <- Return/Space  + pad A      (accept, the console's A)
+    //         row 50 GUI_CANCEL <- Escape/Bksp   + pad B      (back,   the console's B)
+    //         row 45 GUI_START  <- 'P'           + pad START  (a THIRD thing, not accept)
+    //
+    // The names come from the DWARF (GameSource/Input/GameInputActions.h, now landed in the
+    // tree and included above); every consumer that used to recognise only 45 also already
+    // recognised 49, so moving the accept key breaks nothing, and the four compensating arms
+    // (BrnBootProfile / BrnCarSelectVehicle_Input / BrnCarSelectLivery_Input / BrnIntro) were
+    // asm-checked against their console bodies -- none of those four consoles handles 45 --
+    // and DELETED in the same wave. BrnCarSelectUnlock's `45 || 49` is genuine (X360
+    // @0x824CA420 tests both) and stays.
+    //
+    // ⭐ Why 45 gets its own KEY rather than doubling up on Enter: BrnBootLegal @0x82477270
+    // routes a 45 to BOTH the back/accept path and the press-start path, and the map routes
+    // 45 to EXIT. Enter on both 45 and 49 would, on the map, fire ToggleRoadPanelScores AND
+    // "GO_BACK" from one press. 'P' is already action 8 (world START) and pad START already
+    // emits 8, so 'P'/START emitting 8 + 45 together IS the console control.
+    //
+    // ⚠️ ONE PHYSICAL PRESS => EXACTLY ONE GUI ACTION ID. That rule shapes three choices
+    // below and is why this table does not simply multi-map everything:
+    //   * the pad DPAD's VERTICAL axis serves 41/42 (the family every menu reads) and its
+    //     HORIZONTAL axis serves 39/40; the numpad cluster 8/2/4/6 exposes the full 37..40
+    //     dpad family for the map's filter panel. Putting DPAD_UP on both 37 and 41 would
+    //     double-step BrnGui::OnlineGameOptions, which reads both families in one handler.
+    //   * 43/44 get ',' and '.' rather than the arrow keys, because CarSelectLivery reads
+    //     41 and 43 in the same switch and CarSelectVehicle reads 39/40 and 43/44 in the
+    //     same handler (39/40 = hold-to-scroll, 43/44 = step).
+    //   * 56/57 are KEYBOARD ONLY (PageUp/PageDown). The pad triggers stay on actions 0/1;
+    //     stacking 56/57 onto them would make one trigger pull emit two action ids.
+    // FLAG PC binding choice: every key below is a PC choice, not console truth --
+    // gaDefaultGameInputMapping is still unrecovered (see the park at the top of the file).
+    // Only the action SEMANTICS are attested.
     //
     // ⚠️ NOT BOUND (honest gaps, all of them consumed by the bridge but with no defensible
-    // host control): action 10 POWERSWERVE_R -> mbToggle, action 4 CRASHBREAKER, action 6
-    // LOOKBACK, action 9 POWERSWERVE_L, action 11 DIRTY_TRICK, action 12 SCREENSHOT, and
-    // the GUI_OPTION*/EVENT_DETAILS/CAR_LOG rows. They stay 0 rather than guessed.
+    // host control that would not double-fire): action 10 POWERSWERVE_R -> mbToggle, action 4
+    // CRASHBREAKER, action 6 LOOKBACK, action 9 POWERSWERVE_L, action 11 DIRTY_TRICK, action
+    // 12 SCREENSHOT, 47 GUI_LTHUMB (pad L3 is already 13 HORN), 48 GUI_RTHUMB, the three
+    // GUI_OPTION* rows and 59 GUI_CAR_LOG. They stay 0 rather than guessed.
     // ====================================================================================
 
     // Which XInput analogue axis, if any, additionally feeds an action's value.
@@ -271,11 +297,44 @@ namespace
         EPcAnalogueSource eXPadAnalogue;
     };
 
-    // ---- menu rows (unchanged from the boot-verified build) ----
+    // ---- menu rows ----
+    // 49 GUI_SELECT (accept) and 50 GUI_CANCEL (back). The names below are the CHANNEL names
+    // the harness uses, deliberately kept stable across the 45/49 -> 49/50 repair: "Accept"
+    // is still the accept control, it just carries the right action id now.
     const int KAI_KEYS_ACCEPT[] = { 0x0D /*VK_RETURN*/, 0x20 /*VK_SPACE*/, 0 };
-    const int KAI_KEYS_STOP[]   = { 0x1B /*VK_ESCAPE*/, 0 };
+    const int KAI_KEYS_STOP[]   = { 0x1B /*VK_ESCAPE*/, 0x08 /*VK_BACK*/, 0 };
+    // 41 GUI_UP == HighlightPrevious, 42 GUI_DOWN == HighlightNext -- settled against every
+    // real consumer (see GameInputActions.h). ⚠️ THESE TWO WERE INVERTED: Down/Right used to
+    // emit 41 and Up/Left 42, so pressing Down moved the highlight UP on every screen with
+    // more than two rows. It went unnoticed because the only boot-chain consumer was
+    // BootLegal's two-row WRAPPING title menu, where up and down are the same move.
+    const int KAI_KEYS_PREV[]   = { 0x26 /*VK_UP*/,   0x25 /*VK_LEFT*/,  0 };
     const int KAI_KEYS_NEXT[]   = { 0x28 /*VK_DOWN*/, 0x27 /*VK_RIGHT*/, 0 };
-    const int KAI_KEYS_PREV[]   = { 0x26 /*VK_UP*/, 0x25 /*VK_LEFT*/, 0 };
+    // 37..40 GUI_DPAD_* -- the map's road-rule filter panel family (CrashNavPanel
+    // @0x824408E0 reads ONLY these four) and PauseScreen's 38 "TO_COLOUR" hand-off.
+    // FLAG PC binding choice: the numpad cluster, so the whole family is reachable from a
+    // keyboard without stealing the arrow keys from 41/42.
+    // FLAG PC binding choice: the numpad cluster mirrors the dpad shape, but
+    // GetAsyncKeyState(VK_NUMPADx) reads 0 with NumLock off and laptop keyboards have no
+    // numpad at all -- so each row also carries a numpad-independent letter alias (I/K/J/L,
+    // the right-hand inverse-T). Collision-checked against every other bound key; the
+    // one-press-one-GUI-id rule holds.
+    const int KAI_KEYS_DPAD_UP[]    = { 0x68 /*VK_NUMPAD8*/, 'I', 0 };
+    const int KAI_KEYS_DPAD_DOWN[]  = { 0x62 /*VK_NUMPAD2*/, 'K', 0 };
+    const int KAI_KEYS_DPAD_LEFT[]  = { 0x64 /*VK_NUMPAD4*/, 'J', 0 };
+    const int KAI_KEYS_DPAD_RIGHT[] = { 0x66 /*VK_NUMPAD6*/, 'L', 0 };
+    // 43/44 GUI_LEFT/GUI_RIGHT -- legend prev/next on the map, option decrement/increment on
+    // Options/Trax/ColourCalibrate, carousel step on CarSelectVehicle.
+    // FLAG PC binding choice: ',' and '.' -- see the one-press-one-id note in the banner.
+    const int KAI_KEYS_GUI_LEFT[]  = { 0xBC /*VK_OEM_COMMA*/,  0 };
+    const int KAI_KEYS_GUI_RIGHT[] = { 0xBE /*VK_OEM_PERIOD*/, 0 };
+    // 56/57 GUI_L/RTRIGGER -- map zoom and inspect-hovered-event.
+    // FLAG PC binding choice: KEYBOARD ONLY. The pad triggers are actions 0/1 (accelerate /
+    // brake) and giving them 56/57 as well would emit two action ids from one pull.
+    const int KAI_KEYS_GUI_LTRIGGER[] = { 0x21 /*VK_PRIOR  (PageUp)*/,   0 };
+    const int KAI_KEYS_GUI_RTRIGGER[] = { 0x22 /*VK_NEXT   (PageDown)*/, 0 };
+    // 58 GUI_EVENT_DETAILS -- InGame::OpenEventMap() -> "MAP_EVENT". FLAG PC binding choice.
+    const int KAI_KEYS_EVENT_DETAILS[] = { 'N', 0 };
     // ---- driving rows ----
     const int KAI_KEYS_ACCELERATE[] = { 0x26 /*VK_UP*/,   'W', 0 };
     const int KAI_KEYS_BRAKE[]      = { 0x28 /*VK_DOWN*/, 'S', 0 };
@@ -288,22 +347,44 @@ namespace
     const int KAI_KEYS_SPIN_LEFT[]  = { 'Q', 0 };
     const int KAI_KEYS_SPIN_RIGHT[] = { 'E', 0 };
     // FLAG PC binding choice (this table is the one place bindings live -- see the banner):
-    // action 46 == KI_ACTION_PAUSE_MAIN_MAP, the OFFLINE pause. 'M' for map. Deliberately NOT
-    // on a pad button: KU_XPAD_START is already action 8 and KU_XPAD_BACK already action 7,
-    // and stacking pause onto either would fire two actions from one press.
+    // action 46 == EGameInputActions GUI_BACK, the Back button, which InGame turns into the
+    // OFFLINE pause -> main map. 'M' for map. ⭐ It NOW ALSO has the pad's BACK button: the
+    // stale reason it did not ("KU_XPAD_BACK is already action 7 RESET") was resolved the
+    // console's own way -- 7 RESET keeps its keyboard 'R' and gives the Back BUTTON up, so
+    // one Back press fires exactly one action id, and a controller can finally open the
+    // main menu at all (it previously could not, on any button).
     const int KAI_KEYS_PAUSE_MAP[]  = { 'M', 0 };
 
     const PcActionBinding KA_BINDINGS[] =
     {
-        // -- the menu rows, in the CONSOLE action vocabulary (see the repair banner) -----
-        { 49, KAI_KEYS_ACCEPT, KU_XPAD_A,                                              E_PCANALOGUE_NONE }, // GUI_SELECT (A / Enter,Space)
-        { 50, KAI_KEYS_STOP,   KU_XPAD_B,                                              E_PCANALOGUE_NONE }, // GUI_CANCEL (B / Escape)
-        { 41, KAI_KEYS_NEXT,   static_cast<unsigned short>(KU_XPAD_DPAD_DOWN | KU_XPAD_DPAD_RIGHT), E_PCANALOGUE_NONE },
-        { 42, KAI_KEYS_PREV,   static_cast<unsigned short>(KU_XPAD_DPAD_UP   | KU_XPAD_DPAD_LEFT),  E_PCANALOGUE_NONE },
-        // GUI_START: the Start button's GUI face. On the console ONE physical Start feeds
-        // both driving action 8 and GUI action 45 (the ActionMapping's one-control-many-
-        // actions shape); the P key + pad Start reproduce that pair with driving row 8 below.
-        { 45, KAI_KEYS_START,  KU_XPAD_START,                                          E_PCANALOGUE_NONE }, // GUI_START (Start / P)
+        // -- the GUI rows. The harness channel below looks a row up BY ACTION ID, never by
+        //    index, so this block may be reordered or grown freely. -----------------------
+        //  id  EGameInputActions          keyboard              pad button       pad analogue
+        { E_GAMEINPUTACTIONS_GUI_SELECT, KAI_KEYS_ACCEPT, KU_XPAD_A,     E_PCANALOGUE_NONE }, // 49 accept (Enter/Space/A)
+        { E_GAMEINPUTACTIONS_GUI_CANCEL, KAI_KEYS_STOP,   KU_XPAD_B,     E_PCANALOGUE_NONE }, // 50 back   (Esc/Bksp/B)
+        { E_GAMEINPUTACTIONS_GUI_UP,     KAI_KEYS_PREV,   KU_XPAD_DPAD_UP,   E_PCANALOGUE_NONE }, // 41 HighlightPrevious
+        { E_GAMEINPUTACTIONS_GUI_DOWN,   KAI_KEYS_NEXT,   KU_XPAD_DPAD_DOWN, E_PCANALOGUE_NONE }, // 42 HighlightNext
+        // 45 GUI_START -- the START button, NOT accept. It SHARES KAI_KEYS_START and KU_XPAD_START
+        // with driving row 8 on purpose and they must never drift apart: on the console the one
+        // START control emits BOTH 8 (world start) and 45 (GUI start), so 'P'/pad-START firing
+        // two action ids here is the console control, not a double-fire bug.
+        { E_GAMEINPUTACTIONS_GUI_START,  KAI_KEYS_START, KU_XPAD_START,  E_PCANALOGUE_NONE }, // 45 START (P)
+
+        // -- the dpad family. 37/38 are keyboard-only because the pad's DPAD_UP/DOWN carry
+        //    41/42 above; 39/40 take the pad's horizontal dpad, which nothing else wants.
+        { E_GAMEINPUTACTIONS_GUI_DPAD_UP,    KAI_KEYS_DPAD_UP,    0,                  E_PCANALOGUE_NONE }, // 37
+        { E_GAMEINPUTACTIONS_GUI_DPAD_DOWN,  KAI_KEYS_DPAD_DOWN,  0,                  E_PCANALOGUE_NONE }, // 38 (PauseScreen TO_COLOUR)
+        { E_GAMEINPUTACTIONS_GUI_DPAD_LEFT,  KAI_KEYS_DPAD_LEFT,  KU_XPAD_DPAD_LEFT,  E_PCANALOGUE_NONE }, // 39
+        { E_GAMEINPUTACTIONS_GUI_DPAD_RIGHT, KAI_KEYS_DPAD_RIGHT, KU_XPAD_DPAD_RIGHT, E_PCANALOGUE_NONE }, // 40
+
+        // -- horizontal nav / option adjust / legend ------------------------------------
+        { E_GAMEINPUTACTIONS_GUI_LEFT,  KAI_KEYS_GUI_LEFT,  0, E_PCANALOGUE_NONE }, // 43 (',')
+        { E_GAMEINPUTACTIONS_GUI_RIGHT, KAI_KEYS_GUI_RIGHT, 0, E_PCANALOGUE_NONE }, // 44 ('.')
+
+        // -- map zoom / event inspect / event details (keyboard only, see the banner) ----
+        { E_GAMEINPUTACTIONS_GUI_LTRIGGER,      KAI_KEYS_GUI_LTRIGGER,  0, E_PCANALOGUE_NONE }, // 56 PageUp
+        { E_GAMEINPUTACTIONS_GUI_RTRIGGER,      KAI_KEYS_GUI_RTRIGGER,  0, E_PCANALOGUE_NONE }, // 57 PageDown
+        { E_GAMEINPUTACTIONS_GUI_EVENT_DETAILS, KAI_KEYS_EVENT_DETAILS, 0, E_PCANALOGUE_NONE }, // 58 'N'
 
         // -- driving ------------------------------------------------------------------
         //  id  EGameInputActions       keyboard         pad button        pad analogue
@@ -312,20 +393,23 @@ namespace
         {  2, KAI_KEYS_HANDBRAKE,  KU_XPAD_X,        E_PCANALOGUE_NONE     }, // HANDBRAKE   (X / LCtrl)
         {  3, KAI_KEYS_BOOST,      KU_XPAD_A,        E_PCANALOGUE_NONE     }, // BOOST       (A / LShift)
         {  5, KAI_KEYS_CHANGEVIEW, KU_XPAD_Y,        E_PCANALOGUE_NONE     }, // CHANGEVIEW  (Y / C)
-        {  7, KAI_KEYS_RESET,      KU_XPAD_BACK,     E_PCANALOGUE_NONE     }, // RESET       (Back / R)
+        // ⚠️ KU_XPAD_BACK REMOVED from this row (input-vocabulary wave). The Back BUTTON now
+        // belongs to 46 GUI_BACK below -- the console's Back is the open-the-map control, and
+        // it is the only pad button the main menu can be opened with. Keyboard 'R' keeps
+        // RESET, so nothing about the driving reset is lost; only its pad alias moved.
+        {  7, KAI_KEYS_RESET,      0,                E_PCANALOGUE_NONE     }, // RESET       (R)
         {  8, KAI_KEYS_START,      KU_XPAD_START,    E_PCANALOGUE_NONE     }, // START       (Start / P)
         { 13, KAI_KEYS_HORN,       KU_XPAD_LTHUMB,   E_PCANALOGUE_NONE     }, // HORN        (L3 / H)
         { 54, KAI_KEYS_SPIN_LEFT,  KU_XPAD_LSHOULDER, E_PCANALOGUE_NONE    }, // GUI_LSHOULDER -> -mfSpin
         { 55, KAI_KEYS_SPIN_RIGHT, KU_XPAD_RSHOULDER, E_PCANALOGUE_NONE    }, // GUI_RSHOULDER -> +mfSpin
 
-        // -- the offline pause (pause wave, 2026-08-26) --------------------------------
-        // ADDITIVE. Action 46 was ABSENT FROM THIS TABLE ENTIRELY, which is why the offline
+        // -- the offline pause / open-the-map (pause wave, 2026-08-26) -------------------
+        // Action 46 GUI_BACK was ABSENT FROM THIS TABLE ENTIRELY, which is why the offline
         // pause could not be reached from a PC keyboard at all: InGame::HandleControllerInput
-        // has had `case KI_ACTION_PAUSE_MAIN_MAP: PauseGame(true,false)` all along
-        // (BrnInGame.cpp:436) and nothing could ever deliver a 46.
-        // ⚠️ This is NOT the documented 45-vs-49 accept-vocabulary defect and it does not touch
-        // row 45 -- that repair is a separate decision and is deliberately not made in passing.
-        { 46, KAI_KEYS_PAUSE_MAP,  0,                 E_PCANALOGUE_NONE    }, // PAUSE_MAIN_MAP (M)
+        // has had `case E_GAMEINPUTACTIONS_GUI_BACK: PauseGame(true,false)` all along
+        // (BrnInGame.cpp) and nothing could ever deliver a 46. The pad's BACK button joined
+        // it in the input-vocabulary wave (freed from row 7 RESET above).
+        { E_GAMEINPUTACTIONS_GUI_BACK, KAI_KEYS_PAUSE_MAP, KU_XPAD_BACK, E_PCANALOGUE_NONE }, // 46 (M / Back)
     };
     const u32 KU_NUM_BINDINGS = sizeof(KA_BINDINGS) / sizeof(KA_BINDINGS[0]);
 
@@ -387,14 +471,24 @@ namespace
         const char* lpcEventName = 0;
         switch (liActionId)
         {
-        // [input vocabulary repair 2026-08-27] the harness channels are named by INTENT and
-        // follow their rows: Accept rides GUI_SELECT (49), Stop rides GUI_CANCEL (50), and
-        // GUI_START (45) gets its own channel. Harness scripts keep their event names.
-        case 49: lpcEventName = "Local\\BurnoutPC_Input_Accept";     break;
-        case 50: lpcEventName = "Local\\BurnoutPC_Input_Stop";       break;
-        case 45: lpcEventName = "Local\\BurnoutPC_Input_Start";      break;
-        case 41: lpcEventName = "Local\\BurnoutPC_Input_Next";       break;
-        case 42: lpcEventName = "Local\\BurnoutPC_Input_Prev";       break;
+        // ⭐ THE CHANNEL MEANINGS ARE STABLE ACROSS THE 2026-08-29 VOCABULARY REPAIR; only the
+        //    action ids they carry were corrected, so every existing harness script
+        //    (tools/diagnostics/flow_run.ps1, boot_test.ps1) keeps working unchanged:
+        //      Accept   = "the accept control"  -- was 45 GUI_START, is now 49 GUI_SELECT
+        //      Stop     = "the back control"    -- was 49 GUI_SELECT, is now 50 GUI_CANCEL
+        //      Next     = "highlight next"      -- was 41, is now 42 GUI_DOWN (the pair was
+        //                                          inverted; the CHANNEL always meant "next")
+        //      Prev     = "highlight previous"  -- was 42, is now 41 GUI_UP
+        //      PauseMap = "open the main map"   -- 46 GUI_BACK, unchanged
+        //      Start    = "the START button"    -- NEW: 45 GUI_START, which is no longer the
+        //                                          accept control and so needs its own channel
+        //                                          (BootLegal's press-start path reads 45).
+        //    All six are AUTO-RESET taps, like a menu press.
+        case E_GAMEINPUTACTIONS_GUI_SELECT: lpcEventName = "Local\\BurnoutPC_Input_Accept";   break;
+        case E_GAMEINPUTACTIONS_GUI_CANCEL: lpcEventName = "Local\\BurnoutPC_Input_Stop";     break;
+        case E_GAMEINPUTACTIONS_GUI_DOWN:   lpcEventName = "Local\\BurnoutPC_Input_Next";     break;
+        case E_GAMEINPUTACTIONS_GUI_UP:     lpcEventName = "Local\\BurnoutPC_Input_Prev";     break;
+        case E_GAMEINPUTACTIONS_GUI_START:  lpcEventName = "Local\\BurnoutPC_Input_Start";    break;
         // -- driving. These three ids are the rows BridgeControllerToWorld reads straight out
         //    of maActionInfo[] into PlayerVehicleControls (asm-attested: [0].mfValue ->
         //    mfAcceleration, [1] -> mfBraking, [2] -> mfHandBrake), i.e. exactly the slots the
@@ -420,9 +514,10 @@ namespace
         //    press the game samples on the frames between Set() and Reset(), and a one-frame
         //    auto-reset tap cannot express a hold. See the driving-row banner above.
         case  3: lpcEventName = "Local\\BurnoutPC_Input_Boost";      break;
-        // -- the offline pause. AUTO-RESET like the four menu channels (a TAP): one press
-        //    opens the map, one press of Accept inside it comes back out.
-        case 46: lpcEventName = "Local\\BurnoutPC_Input_PauseMap";   break;
+        // -- the offline pause. AUTO-RESET like the other menu channels (a TAP): one press
+        //    opens the map, one press of Stop (50 GUI_CANCEL) or Start (45) inside it comes
+        //    back out -- the map's exit arm is 45/50, never 49.
+        case E_GAMEINPUTACTIONS_GUI_BACK: lpcEventName = "Local\\BurnoutPC_Input_PauseMap"; break;
         // ⭐⭐ -- the two SHOULDER rows (showtime S7b-a wave, 2026-08-27). MANUAL-RESET, i.e. a
         //    HOLD, because the control they stand in for is a hold: BrnGameStateModuleIO.cpp:92
         //    computes ControllerInput::mbCrashModePressed (+0x42) as
@@ -445,8 +540,9 @@ namespace
         // before launching the game, so a successful zero-time wait says the control is down
         // this update (and, for the auto-reset menu channels, consumes the one request).
         // The handle cache is indexed by KA_BINDINGS row, so every id in the switch above must
-        // also be a bound row; the lookup below is BY ACTION ID, not by a fixed index, so
-        // reordering or appending rows never disturbs the cache mapping.
+        // also be a bound row -- 49/50/41/42/45/46 and 0/1/2 and 54/55 all are. The lookup
+        // below is BY ACTION ID, not by a fixed index, so growing or reordering the table
+        // grows the cache without disturbing any existing row.
         static void* sapHarnessEvents[KU_NUM_BINDINGS] = {};
         u32 luBinding = 0;
         while (luBinding < KU_NUM_BINDINGS

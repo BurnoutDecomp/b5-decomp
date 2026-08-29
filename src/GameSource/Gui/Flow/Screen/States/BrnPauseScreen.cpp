@@ -9,6 +9,7 @@
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache (resource pins + apt-component watch)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiEventActivateCrashNav / GuiFlow
 #include "GameSource/Gui/BrnGuiOverlaysDirector.h"                        // GuiOverlayWaitFinishRequest (the 188 handshake payload)
+#include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
 
 // BrnGui::PauseScreen -- reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   OnEnter               @0x824CFCE0
@@ -55,13 +56,16 @@ namespace
     const s32 KI_CHANNEL_GUI_OUT      = 40;  // GuiEventOut
     const s32 KI_CHANNEL_GUI_INTERNAL = 42;  // internal/HUD-component channel
 
-    // ---- Controller action sub-ids (payload word +4 of the action event). 45/49 carry
-    //      the same roles as in BrnBootLegal.cpp; 50 and 38 are this screen's additions
-    //      (FLAG: their producer-side names are not recovered -- roles from this switch). ----
-    const s32 KI_ACTION_TO_COLOUR = 38;   // -> hand off to the colour-calibration screen
-    const s32 KI_ACTION_BACK      = 45;   // -> leave the pause menu (resume)
-    const s32 KI_ACTION_STOP      = 49;   // -> leave the pause menu (resume)
-    const s32 KI_ACTION_START     = 50;   // -> leave the pause menu (resume)
+    // ---- Controller action sub-ids (payload word +4 of the action event). Named from the
+    //      DWARF vocabulary (GameSource/Input/GameInputActions.h). ⚠️ ALL THREE OF THE
+    //      RESUME IDS USED TO BE MISNAMED HERE, each one shifted onto its neighbour's
+    //      meaning: 45 was called "BACK", 49 "STOP" and 50 "START". 45 is GUI_START, 49 is
+    //      GUI_SELECT and 50 is GUI_CANCEL. Nothing about the switch changes -- all three
+    //      resume -- but the names are no longer evidence for the wrong PC binding. ------
+    const s32 KI_ACTION_GUI_DPAD_DOWN = E_GAMEINPUTACTIONS_GUI_DPAD_DOWN; // 38 -> colour-calibration hand-off
+    const s32 KI_ACTION_GUI_START     = E_GAMEINPUTACTIONS_GUI_START;     // 45 -> leave the pause menu (resume)
+    const s32 KI_ACTION_GUI_SELECT    = E_GAMEINPUTACTIONS_GUI_SELECT;    // 49 -> leave the pause menu (resume)
+    const s32 KI_ACTION_GUI_CANCEL    = E_GAMEINPUTACTIONS_GUI_CANCEL;    // 50 -> leave the pause menu (resume)
 
     typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;
 
@@ -277,13 +281,13 @@ void PauseScreen::HandleControllerInput(const CgsModule::Event* lpEvent)
 
     switch (liAction)
     {
-    case KI_ACTION_TO_COLOUR:
+    case KI_ACTION_GUI_DPAD_DOWN:
         SendStateEvent("TO_COLOUR");
         break;
 
-    case KI_ACTION_BACK:
-    case KI_ACTION_STOP:
-    case KI_ACTION_START:
+    case KI_ACTION_GUI_START:
+    case KI_ACTION_GUI_SELECT:
+    case KI_ACTION_GUI_CANCEL:
     {
         // The pause menu carries exactly one option (KAPC_PAUSE_OPTION_STRING_IDS), so any
         // non-zero highlighted index is invalid (X360 cpp:277) -- fire the assert and do

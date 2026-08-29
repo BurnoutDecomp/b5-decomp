@@ -35,6 +35,7 @@
 #include "GameSource/Gui/BrnGuiWorldDataController.h"                     // BrnGui::WorldDataController
 #include "SharedClasses/DataLists/VehicleList.h"                          // BrnResource::VehicleList
 #include "SharedClasses/DataLists/VehicleListEntry.h"                     // BrnResource::VehicleListEntry
+#include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
 
 #include <cstring>   // std::strncpy / std::memset (ticker message build)
 
@@ -89,12 +90,15 @@ namespace BrnGui
         const s32 KI_EVENT_TICKER_ONOFF        = 538;  // ticker on/off (leading payload byte)
 
         // ---- the two accept action ids (X360 `cmpwi 0x2D / 0x31`) ----------------------
-        // FLAG: EGameInputActions has no recovered enum home; named per the family
-        // vocabulary (BrnOnlineGameRoomPlayerInfo_wH_10.cpp:66 -- 49 is GUI_SELECT). The
-        // console body of THIS screen natively accepts BOTH ids, so no PC input bridge
-        // leaf is needed here (contrast BrnCarSelectVehicle_Input.cpp:74).
-        const s32 KI_ACTION_ACCEPT_A = 45;   // 0x2D
-        const s32 KI_ACTION_ACCEPT   = 49;   // 0x31 (EGameInputActions GUI_SELECT)
+        // ⭐ VERIFIED GENUINE, NOT A PC COMPENSATION (input-vocabulary wave, 2026-08-29).
+        // Four sibling screens carried an invented `case 45` arm to work around the old
+        // KA_BINDINGS accept binding and all four were deleted in that wave; THIS one stays,
+        // because the console body really does test both: UpdateRunning @0x824CA420 reads
+        // `if (v19 == 45 || v19 == 49)`. Both ids are DWARF-named below
+        // (GameSource/Input/GameInputActions.h) -- START and SELECT, two different controls
+        // that this one screen deliberately treats alike.
+        const s32 KI_ACTION_GUI_START  = E_GAMEINPUTACTIONS_GUI_START;    // 45 (0x2D)
+        const s32 KI_ACTION_GUI_SELECT = E_GAMEINPUTACTIONS_GUI_SELECT;   // 49 (0x31)
 
         // ---- in-queue payload view (the queue delivers the HEADER-STRIPPED payload) ----
         // CgsGui::GuiEventControllerInputPressed, minus the header (the sibling screens'
@@ -397,8 +401,8 @@ namespace BrnGui
                     {
                         const ControllerButtonPayload* lpButton =
                             static_cast<const ControllerButtonPayload*>(lpEvent);
-                        if (lpButton->miButtonId == KI_ACTION_ACCEPT_A ||
-                            lpButton->miButtonId == KI_ACTION_ACCEPT)
+                        if (lpButton->miButtonId == KI_ACTION_GUI_START ||
+                            lpButton->miButtonId == KI_ACTION_GUI_SELECT)
                         {
                             GuiTickerFlagsWire536 lTickerClear;
                             mpStateInterface->GetOutputEventQueue()->AddEvent(
