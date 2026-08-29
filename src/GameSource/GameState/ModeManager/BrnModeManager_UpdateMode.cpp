@@ -261,6 +261,8 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
             // WRITING ZERO. The only writer of a ONE is the action this post carries.
             // [[silent-drop-stubs]] -- check a value has a writer before you trust it.
             //
+            // Evidence page (before/after pixels + the log ladder):
+            //   https://claude.ai/code/artifact/ebe1c741-6e40-4a0b-95ba-9c4fe61d42ca
             // Console 0x82350F50..0x82350F8C, store for store; see ShowtimeModeSwitchAction's
             // banner in BrnGameActions.h for the field-name provenance (the DWARF-named GUI twin).
             // The score word is the console's LITERAL ZERO on this producer -- it is

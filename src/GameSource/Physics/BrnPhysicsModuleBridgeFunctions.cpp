@@ -143,7 +143,26 @@ namespace BrnPhysics
         // ⚠️ It counts BEFORE every guard and every early-out, for the same reason the
         // [contact-entry] witness accumulates before the mode gates: a contact queue is per-frame
         // and a gated count measures the gate. [[diagnostics-that-lie]]
-        // Bounded: the table is 36x36 u16 counters and at most 24 lines are ever printed.
+        // Bounded: the table is 36x36 u16 counters and at most 30 lines are ever printed.
+        //
+        // ⭐⭐ WHAT IT MEASURED, 2026-08-29, free burn, the 69d654ef rear-end-ram recipe
+        // (-Drive -Teleport "3390.2,0.2,-1620.0,182"), first 2,500 spies:
+        //     [spy-owners] spies=2500 pairs: 3x0=343 6x0=587 7x0=1566 11x3=4
+        // i.e. PROPxWORLD, RACECAR_DEFORMABLE_PARTxWORLD, TRAFFIC_DEFORMABLE_PARTxWORLD and
+        // PROP_COLLISION_RACECARxPROP -- and NOTHING ELSE. In the same run [T4-hit] recorded three
+        // separate traffic cars struck at 16.5 and 22.6 m/s with crasherOwner=1 == RACECAR.
+        // ⛔ SO OWNER 2 (TRAFFIC_VEHICLE) AND OWNER 1 (RACECAR) NEVER REACH THIS FUNCTION AT ALL.
+        // Traffic *parts* reach the spy 1,566 times; traffic *vehicles* never do. The loss is
+        // therefore UPSTREAM of StoreContact, not inside it -- which is a different subsystem from
+        // the one 954a2ac0's hop-zero note pointed at.
+        // ⭐ THE STATIC LEAD, so the next wave does not re-derive it: race-car-vs-traffic potential
+        // contacts do not go down BridgeContactsToSimulation's path 1 (the merged external queue,
+        // the only producer of InAddPotentialContact in this tree) -- the console's own tripwires
+        // there assert AGAINST that pair, :100 `!(A == RACECAR && B == TRAFFIC_VEHICLE)`, with
+        // :94/:97/:103 covering world-traffic and traffic-traffic. They go down path 7, custom
+        // queue [8], into DeformationManager::ReadPotentialContact -- whose lpSimInput parameter is
+        // COMMENTED OUT on this build (BrnDeformationManager_ContactBridges.cpp:262). Start there.
+        // Evidence page: https://claude.ai/code/artifact/ebe1c741-6e40-4a0b-95ba-9c4fe61d42ca
         // DELETE-WHEN the traffic contact queue is proven to fill.
         {
             static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
