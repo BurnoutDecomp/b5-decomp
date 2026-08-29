@@ -287,6 +287,8 @@ class  RaceCarPhysics;               // the checking race car -- RaceCarPhysics.
 // (SharedIO/BrnVehicleEvents.h:300 / :409) -- MSVC mangles struct vs class.
 struct RemoveTrafficEvent;
 struct CreateArticulatedTrafficEvent;
+struct UpdateNetworkTrafficEvent;    // network transform event -- SharedIO/BrnVehicleEvents.h
+                                     // (UpdateNetworkTrafficVehicle arg)
 
 // VecFloat: a single 16-byte VMX float lane (the DWARF spells the members below as VecFloat).
 // Its canonical home is rw::math::vpu; here it is the 16-byte 4-lane vector value used for the
@@ -679,13 +681,40 @@ public:
     void DeallocateInternalBuffers(CgsModule::IOBufferStack* lpInputBufferStack,
                                    CgsModule::IOBufferStack* lpOutputBufferStack);
 
-    // @0x82643FB0 (72) / @0x8261DDF0 (347). DWARF :146 / :369. Both are crash-side arms of
-    // ProcessTrafficMaintenanceEvents; both are named one-shot gates this round (see the .cpp).
+    // @0x82643FB0 (72) DWARF :124. The crash-side arm of ProcessTrafficMaintenanceEvents.
+    // UN-GATED 2026-08-29 -- body in BrnPhysicalTrafficManager_TrafficEvents.cpp, together with
+    // the three functions below it that had no definition anywhere in the tree. While it was a
+    // gate, nothing in the build read mSetTrafficCrashingEventQueue at all.
     void ProcessTrafficEvents(const VehicleInputInterface* lpInputInterface,
                               VehicleOutputRequestInterface* lpOutputRequestInterface,
                               VehicleManagerOutputInterface* lpManagerOutputInterface,
                               VehicleOutputInterface* lpVehicleOutputInterface,
                               BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+
+    // @0x82640E20 (142) DWARF :647. Drain mSetTrafficCrashingEventQueue: map each GLOBAL traffic
+    // entity id through mu8GlobalToPhysicalEntityIndexMap and route the hit to
+    // SetTrafficVehicleCrashing / SetTrafficVehicleNotCrashing by the event's mbCrashing.
+    void ProcessSetTrafficCrashingEvents(const VehicleInputInterface* lpInputInterface,
+                                         VehicleOutputRequestInterface* lpOutputRequestInterface,
+                                         VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                         VehicleOutputInterface* lpVehicleOutputInterface,
+                                         BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+
+    // @0x8262CED0 (145) DWARF :656. The same drain over mUpdateNetworkTrafficEventQueue.
+    void ProcessUpdateNetworkTrafficEvents(const VehicleInputInterface* lpInputInterface,
+                                           VehicleOutputRequestInterface* lpOutputRequestInterface,
+                                           VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                           VehicleOutputInterface* lpVehicleOutputInterface,
+                                           BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+
+    // @0x8261CBD0 (50) DWARF :662. Hand a network traffic car's authoritative transform to its
+    // driver's catch-up interpolation. NAMED GATE (its callees have no bodies); network-only, so
+    // the queue that reaches it has no offline producer. See the .cpp for the recovered body.
+    void UpdateNetworkTrafficVehicle(const UpdateNetworkTrafficEvent* lpEvent,
+                                     EntityId lTrafficPhysicsId);
+
+    // @0x8261DDF0 (347). DWARF :369. Still a named one-shot gate (see BrnVehicleManager_
+    // MaintenanceEvents.cpp).
     void CheckForTrafficHittingWater(VehicleManagerOutputInterface* lpManagerOutputInterface,
                                      VehicleOutputRequestInterface* lpOutputRequestInterface,
                                      BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
@@ -818,6 +847,11 @@ public:
     // Signatures verbatim from DWARF BrnPhysicalTrafficManager.h:174/:190/:202/:386/:451.
     // Bodies in BrnPhysicalTrafficManager_CrashResponse.cpp. All five are reached from
     // VehicleManager::HandleRaceCarTrafficCarPotentialContact @0x8263FA50.
+
+    // @0x825CAB48 (50) DWARF :179. The exact inverse of the crash latch: only from CRASHING,
+    // state = E_TRAFFIC_TYPE_PHYSICAL then body->ClearCrashing() (vtable slot 1). No event, no
+    // bit, no deformation. Body in BrnPhysicalTrafficManager_TrafficEvents.cpp.
+    void SetTrafficVehicleNotCrashing(EntityId lTrafficPhysicsId);
 
     // @0x82636E38 (229) DWARF :174. Latch the traffic car into its CRASHING state: state = 1,
     // body->SetCrashing(), drop the potential bit, post the crashed-traffic event + the 32-byte

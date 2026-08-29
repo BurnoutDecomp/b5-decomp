@@ -782,18 +782,17 @@ namespace Vehicle
         DeallocateInternalBuffers(lpInputBufferStack, lpOutputBufferStack);
     }
 
-    // ---- the two crash-side arms, named one-shot gates -------------------------------------------
-    // GATE PhysicalTrafficManager::ProcessTrafficEvents @0x82643FB0 (72)
-    //    blocker: it dispatches the whole crash sub-tree (ProcessSetTrafficCrashingEvents ->
-    //    SetTrafficVehicleCrashing -> PhysicallyCrashTrafficCar), parked for wave T3 round 1.
-    //    DELETE-WHEN the crash/takedown wave lands. Contact IMPULSE does not need it.
-    void PhysicalTrafficManager::ProcessTrafficEvents(
-        const VehicleInputInterface*, VehicleOutputRequestInterface*,
-        VehicleManagerOutputInterface*, VehicleOutputInterface*,
-        BrnPhysics::Deformation::DeformationInputInterface*)
-    {
-        BRN_MAINTENANCE_GATE("PhysicalTrafficManager::ProcessTrafficEvents @0x82643FB0 (72)");
-    }
+    // ---- the crash-side arm that is STILL a named one-shot gate ----------------------------------
+    // GATE DELETED 2026-08-29 (traffic-crash wave): PhysicalTrafficManager::ProcessTrafficEvents
+    //    @0x82643FB0 (72) is BODIED in BrnPhysicalTrafficManager_TrafficEvents.cpp along with the
+    //    three functions it reaches that had no definition anywhere in the tree
+    //    (ProcessSetTrafficCrashingEvents / ProcessUpdateNetworkTrafficEvents /
+    //    SetTrafficVehicleNotCrashing). Its DELETE-WHEN said "when the crash/takedown wave lands";
+    //    that wave landed SetTrafficVehicleCrashing on 2026-08-25 and left this gate standing, so
+    //    the whole event-driven half of the traffic crash pipeline stayed unreachable for four
+    //    days while its own producer (VehicleInputInterface::SetTrafficCrashing) was live.
+    //    Mount BrnPhysicalTrafficManager_TrafficEvents.cpp in tools/build/build_game_exe.bat or
+    //    the call above is an LNK2019 at exe link.
 
     // GATE PhysicalTrafficManager::CheckForTrafficHittingWater @0x8261DDF0 (347)
     //    blocker: needs the water-volume query at 0x825C0758's sibling seam plus the crash
