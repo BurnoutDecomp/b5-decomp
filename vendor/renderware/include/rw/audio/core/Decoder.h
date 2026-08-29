@@ -57,13 +57,22 @@ namespace core
 // x64 widening. Only miStartSample/miEndSample are touched by the reconstructed methods;
 // the leading/trailing words are opaque ring bookkeeping and preserved as padding.
 // -------------------------------------------------------------------------------------
+// ⭐ PARTLY NAMED 2026-08-28 (phase E) by Decoder::Feed @0x82B67920, the PRODUCER that
+// fills these slots -- it was an exporter gap (no dossier) and was raw-decoded from the
+// XEX. Its stores identify the two leading words and the two flag bytes; every field
+// remains a 32-bit-safe scalar, so the 20-byte stride still survives x64.
 struct DecoderRequest
 {
-    u32 muReserved00;   // +0x00
-    u32 muReserved04;   // +0x04
-    s32 miStartSample;  // +0x08
-    s32 miEndSample;    // +0x0C  (0 => empty slot; cleared when fully consumed)
-    u32 muReserved10;   // +0x10
+    const void *mpFedData; // +0x00 -- the chunk bytes Feed was handed (Feed: stw r4)
+    u32 muReserved04;      // +0x04 -- Feed stores its r8 here; every committed call site
+                           //          passes 0, so its role is not yet attested
+    s32 miStartSample;     // +0x08 -- Feed: stw r7
+    s32 miEndSample;       // +0x0C  (0 => empty slot; Feed REFUSES a slot whose value is
+                           //          non-zero, so this doubles as the busy flag)
+    u8  mucContinue;       // +0x10 -- Feed: stb r6. The stream players pass "NOT a decoder
+                           //          reset", i.e. true means continue the current stream
+    u8  mucFlag11;         // +0x11 -- Feed: stb r9; 0 at every committed call site
+    u8  mucPad12[2];       // +0x12 -- pads the record back to its 20-byte stride
 };
 
 // -------------------------------------------------------------------------------------
@@ -122,6 +131,22 @@ public:
     // @0x826914D0 -- samples still owed by request `ucIndex`, or 0 if that slot is empty.
     s32 GetSamplesRemaining(u8 ucIndex);
 
+    // @0x82B67920 -- hand the decoder one more chunk to decode. Fills the request slot at
+    // the WRITE cursor, notifies the codec through FeedEvent, advances the cursor, and
+    // returns the index of the slot just filled -- which is the "decoder request handle"
+    // the sound players store in their feed descriptors.
+    //
+    // Returns 0 WITHOUT feeding when the slot is still busy. ⚠️ That failure is
+    // indistinguishable from successfully filling slot 0; the console has no separate
+    // status, and both players call it only after their own GetFeedSlot has confirmed a
+    // free slot. Reproduced as-is.
+    //
+    // (Exporter gap: this address has no dossier, so the body was raw-decoded from the XEX
+    // and hand-disassembled. The argument names come from its stores plus the committed
+    // call sites in the two SndPlayer1 families' SubmitChunk.)
+    u8 Feed(const void *pData, s32 iNumSamples, u8 ucContinue, s32 iStartSample,
+            u32 uReserved04, u8 ucFlag11);
+
 protected:
     // Base of the inline request ring: `this` + muRequestQueueOffset. Protected: codec
     // subclasses index the ring directly in the binary (EaXmaDec::DecodeEvent @0x82B96380
@@ -156,7 +181,10 @@ protected:
     u32   muSourceBufferOffset;     // +0x28
     u16   muCarrySamples;           // +0x2C
     u8    mucChannelCount;          // +0x2E
-    u8    mPad2F;                   // +0x2F
+    // ⭐ NAMED 2026-08-28 (phase E) by Decoder::Feed @0x82B67920: this is the ring's WRITE
+    // cursor -- Feed indexes the request queue with it, then post-increments it modulo
+    // mucRequestCount. It completes the three-cursor set (write / read / decode).
+    u8    mucRequestWriteIndex;     // +0x2F
     u8    mucRequestReadIndex;      // +0x30
     u8    mucRequestDecodeIndex;    // +0x31
     u8    mucRequestCount;          // +0x32

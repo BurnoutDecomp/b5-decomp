@@ -161,7 +161,7 @@ s32 XasDec::DecodeEvent(DecoderBuffer *pOutput)
         // Flag byte at Request+0x10: when clear, reset the streaming state for a fresh
         // request. Both stores are re-written just below -- dead on this path, but they
         // are the binary's shape (stw @0x82B9414C/0x82B94150) and are kept.
-        if (!lpDesc->muReserved10)
+        if (!lpDesc->mucContinue)
         {
             miRemainingSamples = 0;
             mpEncodedCursor = 0;
@@ -170,8 +170,7 @@ s32 XasDec::DecodeEvent(DecoderBuffer *pOutput)
         // Request+0x00 holds the base pointer of this request's encoded XAS0 data;
         // Request+0x0C seeds the remaining-sample counter directly (no start-sample
         // arithmetic -- the asm never reads Request+0x08).
-        mpEncodedCursor = reinterpret_cast<u8 *>(
-            static_cast<usize>(lpDesc->muReserved00));
+        mpEncodedCursor = const_cast<u8 *>(static_cast<const u8 *>(lpDesc->mpFedData));
         miRemainingSamples = lpDesc->miEndSample;
     }
 

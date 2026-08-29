@@ -207,10 +207,15 @@ s32 EaXmaDec::DecodeEvent(DecoderBuffer *pOutput, s32 iNumSamples)
             if (!lpRequest->miEndSample)
                 lpRequest = 0;
 
-            // muReserved10 is tested with `lbz` (a single byte at +0x10), i.e. the field is
-            // byte-sized in the original declaration; the frozen Decoder.h models the ring
-            // slot's word. Testing the whole word is identical for a 0/1 flag.
-            const s32 iBias = lpRequest->muReserved10 ? 0 : KI_XMA_PRIME_SAMPLES;
+            // ⭐ CONFIRMED AND NAMED 2026-08-28 (phase E). This TU had already deduced from
+            // its own `lbz` that +0x10 is a single BYTE, and noted that the then-frozen
+            // Decoder.h modelled it as the ring slot's word. Raw-decoding the ring's
+            // producer, Decoder::Feed @0x82B67920, settles both the width (it writes it
+            // with `stb`) and the meaning: the sound players pass "this is NOT a decoder
+            // reset", i.e. mucContinue means the chunk continues the current stream.
+            // That reading is exactly what this arithmetic wants -- a continuing stream is
+            // already primed, and only a fresh one needs the XMA priming samples added.
+            const s32 iBias = lpRequest->mucContinue ? 0 : KI_XMA_PRIME_SAMPLES;
             const s32 iStartSample = lpRequest->miStartSample;
 
             // Signed division (`srawi`+`addze`+`slwi`): the offset of the request's start
@@ -429,7 +434,9 @@ s32 EaXmaDec::DecodeEvent(DecoderBuffer *pOutput, s32 iNumSamples)
         {
             DecoderRequest *lpRequest = mpCurrentRequest;
             s32 iEndSample = lpRequest->miEndSample;
-            if (!lpRequest->muReserved10)
+            // Same rule as above: only a chunk that does NOT continue the current stream
+            // carries the XMA priming samples (see Decoder::Feed's mucContinue).
+            if (!lpRequest->mucContinue)
                 iEndSample += KI_XMA_PRIME_SAMPLES;
 
             const s32 iFramePhase = iEndSample & (KI_XMA_FRAME_SAMPLES - 1); // `clrlwi. r11,r11,23`
