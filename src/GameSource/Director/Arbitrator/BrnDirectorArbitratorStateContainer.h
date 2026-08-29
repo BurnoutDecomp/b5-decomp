@@ -119,6 +119,16 @@ namespace BrnDirector
         // CHANGING_TO_ROAMING->roaming edges). Declaration-only -- body forwards to the table.
         void SetCurrentState(EState leState);
 
+        // The shared ICE take-lists (race intro / post race / the three pause lists) this
+        // container owns. ADDITIVE GROW (ArbStateCrashNav::Prepare @0x822660A8): the console
+        // reaches the pause playlist as `GetPausePlaylist(sharedInfo->mpStateContainer)` --
+        // i.e. it passes the CONTAINER pointer straight to a SharedPlaylists method, because
+        // mSharedPlaylists is the container's first member (DWARF
+        // BrnDirectorArbitratorStateContainer.h:50) and the accessor folds to nothing.
+        // Reproduced as a named accessor rather than as that zero-offset coincidence.
+              SharedPlaylists& GetSharedPlaylists()       { return mSharedPlaylists; }
+        const SharedPlaylists& GetSharedPlaylists() const { return mSharedPlaylists; }
+
     private:
         // Embedded BY VALUE, in the DWARF member order (which is the source build's
         // memory order). The pointer table indexes these by EState, NOT by declaration
