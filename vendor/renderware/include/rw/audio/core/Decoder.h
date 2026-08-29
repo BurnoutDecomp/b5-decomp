@@ -60,8 +60,11 @@ namespace core
 //
 // ⚠️ THE STRIDE NO LONGER SURVIVES x64, and this comment used to claim the opposite. The
 // console stride is a hard-coded 0x14 and the record was believed "every field a 32-bit
-// word (no pointers)" -- but +0x00 IS a pointer (Feed stores the fed chunk there with
-// `stw r4`), so the host record grows to 24 bytes and the console offsets past +0x00 move.
+// word (no pointers)" -- but TWO of its leading words are pointers (Feed stores the fed
+// chunk with `stw r4, 0(r30)` @0x82B6795C and the seek-table base with `stw r8, 4(r30)`
+// @0x82B67964), so the host record grows to 32 bytes and every console offset past +0x00
+// moves. ⭐ The second pointer was found on 2026-08-29; the revision before that had typed
+// only the first and put the host size at 24.
 // Consequences, all of which are already handled but must stay handled:
 //   * every consumer reaches the ring as RequestQueue()[i] (host array indexing), so they
 //     all stay in step automatically -- do NOT reintroduce a literal 0x14 anywhere;
@@ -79,8 +82,21 @@ namespace core
 struct DecoderRequest
 {
     const void *mpFedData; // +0x00 -- the chunk bytes Feed was handed (Feed: stw r4)
-    u32 muReserved04;      // +0x04 -- Feed stores its r8 here; every committed call site
-                           //          passes 0, so its role is not yet attested
+    // ⭐ NAMED AND RETYPED 2026-08-29. This was `u32 muReserved04`, described as "role not
+    // yet attested because every committed call site passes 0". It IS attested, and it is a
+    // POINTER: the seek table's base. The chain, verified instruction by instruction:
+    //   SeekTableParser::mpSeekData (a u8*, PDB void*)
+    //     -> SndPlayer1::SetSeekData  `lwz r11,0x50(r1)` / `stw r11,0x38(r31)` @0x82B9C0E0
+    //     -> RequestExternal +0x38
+    //     -> SndPlayer1::SubmitChunk  `lwz r8,0x38(r29)` @0x82BA464C   (Feed's 5th argument)
+    //     -> Decoder::Feed            `stw r8,4(r30)`    @0x82B67964   (this field)
+    // ⚠️ It was ALREADY being dereferenced as a pointer by committed code:
+    // EaXmaDec_wG_04.cpp laundered it back through `static_cast<usize>` and even said so in
+    // its comment ("holds the seek table's base pointer (again in a 32-bit ring word)").
+    // Storing a host pointer in a u32 TRUNCATES it on x64, so that path was reading a
+    // corrupted base the moment a real table was ever fed. Typed honestly, the truncation
+    // and the cast wart both disappear.
+    const u8 *mpSeekData;  // +0x04 -- seek-table base (Feed: stw r8)
     s32 miStartSample;     // +0x08 -- Feed: stw r7
     s32 miEndSample;       // +0x0C  (0 => empty slot; Feed REFUSES a slot whose value is
                            //          non-zero, so this doubles as the busy flag)
@@ -159,8 +175,10 @@ public:
     // (Exporter gap: this address has no dossier, so the body was raw-decoded from the XEX
     // and hand-disassembled. The argument names come from its stores plus the committed
     // call sites in the two SndPlayer1 families' SubmitChunk.)
+    // ⚠️ The fifth argument was `u32 uReserved04`. It is the seek-table base pointer (r8),
+    // so on x64 that declaration truncated it. See mpSeekData above.
     u8 Feed(const void *pData, s32 iNumSamples, u8 ucContinue, s32 iStartSample,
-            u32 uReserved04, u8 ucFlag11);
+            const u8 *apSeekData, u8 ucFlag11);
 
 protected:
     // Base of the inline request ring: `this` + muRequestQueueOffset. Protected: codec
