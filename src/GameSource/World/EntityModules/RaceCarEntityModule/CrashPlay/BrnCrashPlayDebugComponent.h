@@ -146,6 +146,23 @@ namespace BrnWorld
         //     UpdateMomentum / UpdateTrafficStomp / UpdateBounceBoost / UpdateCarLeaping /
         //     UpdateNewRoad, and UpdateMomentum's only calls are GetPosition, Magnitude2D and
         //     SetBouncePromptNeeded).
+        // ⭐⭐⭐ AND PRESSING BOOST DOES NOT HELP, BY THE CONSOLE'S OWN DESIGN -- MEASURED AND
+        // THEN EXPLAINED, 2026-08-29. With the new BOOST harness channel a side-car delivered
+        // 290 presses across a 150 s showtime session (scratch/flow_run/q_boost4) and
+        // mfPlayerBoostPercentage did not move by one bit. The reason is four lines up the
+        // ordinary path, in RaceCarEntityModule::ProcessPlayerVehicleInput:
+        //     lbBoostRequested = (mPlayerVehicleControls.mbBoost || BOOST_LOCK payback)
+        //                        && !lpRaceCarState->mbCrashing            <-- THIS TERM
+        //                        && speed >= KF_MIN_SPEED_FOR_BOOST_MPH && engine running
+        //                        && !IsInAnyRaceStartState();
+        // A showtime player IS crashing for the whole session (every [crash-end] line reports
+        // crashing=1), so the ORDINARY boost request is gated off and SetBoostRequested(false)
+        // is correct behaviour, not a defect. The showtime spend does not travel that path at
+        // all: it travels mbBoostBounce, which RaceCarEntityModule reads from
+        // CrashPlayManager::IsBounceBoosting() -- i.e. from THIS CLASS, whose producer
+        // (UpdateBounceBoost @0x822A7CD0 / OnBounce @0x822A7EF8) is unreconstructed.
+        // ⇒ Until BrnCrashPlayManager.cpp lands, NO INPUT CAN DRAIN THE BAR. That is one gap,
+        // not two, and the button is not part of it.
         // ⇒ A showtime session in which the player never presses boost does not end ON THE
         // CONSOLE EITHER. ⛔ Do NOT add a timeout, and do not "fix" the boost producer.
         // ⇒ THE TWO REAL GAPS, in order:
