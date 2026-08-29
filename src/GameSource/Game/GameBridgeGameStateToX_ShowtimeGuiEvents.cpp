@@ -257,6 +257,20 @@ void BrnGameModule::TranslateShowtimeActionToGuiEvent(
         lEvent.miFinalShowtimeScore = lpSwitchAction->miFinalShowtimeScore;
         lEvent.mbEnteringShowtime   = lpSwitchAction->mbEnteringShowtime;
         PushGuiEvent(lEvent, lpGuiInput);
+
+        // [DIAG] NOT IN THE X360 BINARY. ⭐ THIS ARM IS THE CALIBRATION. 143 is the ONLY one of
+        // the eight whose producer is already bodied and mounted (ModeManager::UpdateCurrentMode
+        // posts it when miFramesUntilModeSwitchSend hits 0), so it is the arm that proves the
+        // gate, the dispatch and this function are all live. If 140/142 stay silent while THIS
+        // speaks, the remaining gap is upstream -- unbodied producers -- and not here.
+        if ( sbShowtimeDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            --siDiagLinesLeft;
+            *CgsDev::Log::gpDebugPrint
+                << "[showtime-score] action 143 SHOWTIME_MODE_SWITCH -> gui 397 entering="
+                << (lEvent.mbEnteringShowtime ? 1 : 0)
+                << " finalScore=" << lEvent.miFinalShowtimeScore << "\n";
+        }
         break;
     }
 

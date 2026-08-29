@@ -37,6 +37,44 @@
 // CrashedHudState declared no virtuals at all, so it never registered, never updated and never
 // sent anything: a hollow shell the FSM could enter and never leave. That, not a missing arm in
 // FBurnMain, is why the HUD did not come back after a crash.
+//
+// ===================================================================================
+// ⭐⭐⭐ THE HUD BLACKOUT IS THIS STATE, AND IT IS NOW ON FILM (showtime-score wave, 2026-08-30)
+// ===================================================================================
+// A long-standing unattributed report -- "the HUD goes black for ~18-21 s and three waves could
+// not reproduce it" -- has a named cause and a frame pair. scratch/flow_run/sthud_score2:
+//
+//   log 7261  [crash-hud] posting GUI 377 ... state=0 (START_CRASHED)
+//   log 7262  [crash-hud] FBurnMainHudState received GUI 377, payload=0
+//   log 7263  [crash-hud] SendStateEvent("START_CRASH")
+//   log 7265  [crash-hud] CrashedHudState::OnEnter -- registered 21 events (377 included)
+//
+//   frame bb_006990  FBURN_MAIN: boost bar bottom-left, sat-nav minimap + "RIVER CITY" +
+//                    "MILES DRIVEN : 0.0km" bottom-right.
+//   frame bb_010020  CRASHED:    NOTHING. No boost bar, no sat-nav, no district panel, no
+//                    odometer. Only the build-date/fps/memory debug overlay, which is not the
+//                    game HUD.
+//
+// The mechanism is the FSM, not a renderer: BRNFBFSM's Transition_2FBURN_MAIN_4CRASHED runs
+// FBurnMainHudState::OnLeave (which tears the freeburn HUD down) and then enters THIS state,
+// which constructs nothing and drives nothing. The blackout lasts until 377's FALLING edge
+// (payload 1) reaches UpdatePermenant below and sends END_CRASH -- i.e. exactly as long as the
+// car stays in its crash, which is the tens-of-seconds order the original report described.
+//
+// ⛔ AND IT IS *NOT* THE SHOWTIME PATH, which is what earlier attempts were looking at. The
+// GUI-377 producer suppresses itself for game modes 2/16 (GameBridgeWorldToGui.cpp's showtime
+// term, console-faithful), so a showtime session NEVER enters CRASHED -- measured: zero
+// [crash-hud] lines anywhere in the showtime segment of two runs, while the same runs print all
+// four lines above the moment showtime ENDS and the still-crashing car posts 377 in free burn.
+// The showtime HUD itself draws fine throughout (the Distance / Cars Crashed panels are on
+// screen in scratch/flow_run/wm_meter2 frames bb_002970..bb_004410).
+//
+// ⇒ THE FIX IS THE REST OF THIS FILE, and OnEnter alone will not do it: the eleven components
+// OnEnter builds are only ever DRIVEN by the five phase bodies (UpdateGetCache -> UpdateLoading
+// -> UpdateWFInit -> UpdateSetupState -> UpdateRunning) that Update's switch dispatches, and
+// UpdateSetupState is the one that pushes the apt view states and posts the enable events. A
+// wave that lands OnEnter without the phase machine will construct twelve components that
+// nothing ever shows.
 // ===================================================================================
 #include "GameSource/Gui/Flow/HUD/States/BrnCrashedHudState.h"
 
