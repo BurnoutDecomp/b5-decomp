@@ -335,7 +335,33 @@ namespace BrnDirector
 
     // CrashNav and Roaming already own SOME of their virtuals in their mounted-elsewhere
     // headers, so only the missing slots are stubbed.
+    // ⛔⛔ READ THIS BEFORE TOUCHING THE CRASH-NAV / PAUSE-CAMERA CHAIN (2026-08-29).
+    // These five are SILENT-DROP STUBS for a state that is fully reconstructed and simply
+    // never mounted: GameSource/Director/Arbitrator/States/BrnArbStateCrashNav.cpp owns real
+    // Construct/Prepare/Update/Release/GetName (416 lines, gate-clean). While these stand,
+    // ArbStateCrashNav's Update DOES NOTHING and its Release always succeeds -- so un-gating
+    // the arbitrator's crash-nav trigger would enter a state that publishes a camera nothing
+    // ever writes. That is the same shape ArbStateDriveThru's five stubs had (removed above)
+    // and the same shape ArbStateCrashing's empty shell had.
+    // ⇒ ALL FIVE COME OUT TOGETHER WITH THE MOUNT, never one at a time (LNK2005 x5 otherwise).
+    // ⚠️ MEASURED MOUNT COST, 2026-08-29 (a real `build exe`, not an estimate):
+    //   mounting BrnArbStateCrashNav.cpp + BrnICEMoviePlayer.cpp (they are atomic -- the state
+    //   calls the player's bodies) = these 5 LNK2005 + 36 LNK2019 unresolved. The 36 break down
+    //   as ~13 Camera::{TextFileRead,TextFileWrite,DebugMenu}Serialiser::Serialise<T> template
+    //   instantiations whose two home TUs DO NOT COMPILE today (a pre-existing
+    //   BehaviourPassengerCam incomplete-type break in BrnTextFile{Read,Write}Serialiser.cpp,
+    //   unrelated to this chain), ~10 declaration-only IceMovie / ICEMoviePlaylist accessors,
+    //   ~9 declaration-only BehaviourInterpolate / BehaviourManager setup methods, plus
+    //   ICEWrapper::{GetCurrentMovie,PlayMovie,IsPlayingMovie},
+    //   SharedCameraContainer::GetGameplayCameraHelperIndex and
+    //   Camera::Camera::SetRequestedBorderPostFX.
     void ArbStateCrashNav::Construct()                          { ArbitratorState::Construct(); }
+    // Prepare's stub added 2026-08-29 ALONGSIDE the real body landing in the (still unmounted)
+    // TU: declaring the override in BrnArbStateCrashNav.h puts a fifth slot in this class's
+    // vtable, and MainDirector references that vtable -- so the header edit alone takes the
+    // shared link RED (measured: LNK2001 from BrnMainDirector.obj). This forwards to the base,
+    // which is byte-for-byte the behaviour the class had before the override existed.
+    bool ArbStateCrashNav::Prepare(ArbStateSharedInfo& lrInfo)  { return ArbitratorState::Prepare(lrInfo); }
     void ArbStateCrashNav::Update(ArbStateSharedInfo& lrInfo)   { (void)lrInfo; }
     bool ArbStateCrashNav::Release(ArbStateSharedInfo& lrInfo)  { (void)lrInfo; return true; }
     const char* ArbStateCrashNav::GetName() const               { return "ArbStateCrashNav"; }
