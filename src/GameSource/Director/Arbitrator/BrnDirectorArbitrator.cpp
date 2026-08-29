@@ -160,15 +160,22 @@ namespace BrnDirector
     // SharedCameraContainer::ForcePrimaryGameplayBehaviourToFinish (its header quotes +0xB5D /
     // +0x29E).
     //
-    // ⚠️ WHAT IS STILL GATED, and the ONE wall behind all of it: every remaining gate here is
-    // either (a) a byte inside the un-homed MainDirector GameState block that the shared info
-    // carries as mpGameState, or (b) BehaviourManager::NewBehaviour<> -- the behaviour
-    // ALLOCATION path. (b) is the wall: NewBehaviour @0x82267418 needs
-    // BehaviourHelper::Prepare @0x82255F48, which dispatches a virtual through the pooled
-    // object's own vtable, i.e. the un-homed Camera::Behaviour base. Until that base is homed,
-    // NO camera behaviour can be allocated by anyone -- which is why the fly-by camera cannot
-    // move yet even though the whole state machine above it is now live. Each gate below
+    // ⚠️ WHAT IS STILL GATED: every remaining gate here is a byte inside the un-homed
+    // MainDirector GameState block that the shared info carries as mpGameState. Each gate below
     // carries its own consequence + DELETE-when.
+    //
+    // ⛔ THE SECOND HALF OF THIS NOTE WAS WRONG, AND IT IS RETIRED (2026-08-29). It read:
+    // "(b) BehaviourManager::NewBehaviour<> -- the behaviour ALLOCATION path. (b) is the wall:
+    //  NewBehaviour @0x82267418 needs BehaviourHelper::Prepare @0x82255F48, which dispatches a
+    //  virtual through the pooled object's own vtable, i.e. the un-homed Camera::Behaviour base.
+    //  Until that base is homed, NO camera behaviour can be allocated by anyone."
+    // BehaviourHelper::Prepare has been homed since the Pass-A re-home, and behaviours HAVE been
+    // allocated since: the crash camera's deathcam and taken-down cam both come through
+    // NewBehaviour<TBehaviour> (bodied out-of-line in BrnBehaviourManager.h), filmed 2026-08-29.
+    // The only thing @0x82267418 was ever missing is its own runtime TYPE DISPATCH off the shot
+    // RefSpec's class key -- landed in BrnBehaviourManager_NewBehaviourFromShot.cpp with the
+    // drive-thru camera. ⚠️ Read the DEBUG-CAMERA gates below on their own merits; they are NOT
+    // blocked by this any more.
     // ========================================================================
     void Arbitrator::Update(bool lbPaused, Camera::Camera& lrCameraInOut,
                             ArbStateSharedInfo& lrSharedInfo,

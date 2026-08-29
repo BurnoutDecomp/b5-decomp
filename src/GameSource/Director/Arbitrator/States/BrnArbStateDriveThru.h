@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"   // ArbitratorState / ArbStateSharedInfo
+#include "GameSource/Director/Camera/BrnBehaviourManager.h"              // Camera::BehaviourHandle<>, Camera::BehaviourManager
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h" // Camera::BehaviourInterpolate (+ its Parameters)
 
 // ============================================================================
 // GameSource/Director/Arbitrator/States/BrnArbStateDriveThru.h
@@ -24,11 +26,12 @@
 //   * mCamera is the base ArbitratorState's by-value Camera @+0x10 (this state reaches it
 //     by name through the base GetNonConstCamera(); Construct calls Camera::Construct(
 //     this+0x10)).
-//   * mDriveThruBehaviourHandle @+0x180 (BehaviourHandle, 0x14) -- the shop-shot cam handle.
-//   * mInterpolater             @+0x194 (BehaviourHandle, 0x14) -- an interpolation handle
-//                                 the DWARF declares but this TU's recovered function set
+//   * mDriveThruBehaviourHandle @+0x180 (Camera::BehaviourHandle, 0x14) -- shop-shot cam handle.
+//   * mInterpolater             @+0x194 (Camera::BehaviourHandle, 0x14) -- an interpolation
+//                                 handle the DWARF declares but this TU's recovered function set
 //                                 never touches beyond zeroing it in Construct.
-//   * mInterpolaterParams       @+0x1A8 (0x10)  -- Construct seeds {8, 0, 0, 1}; unread here.
+//   * mInterpolaterParams       @+0x1A8 (0x10)  -- Camera::BehaviourInterpolate::Parameters;
+//                                 Construct runs its Construct() ({8, 0, SLERP, SINUSOIDAL}).
 //   * meState                   @+0x1B8 (s32)   -- the drive-thru state machine value.
 //   * mbIsReversed              @+0x1BC (bool)  -- the resolved bay-approach-direction flag.
 // Parity is BY NAMED MEMBER (the project's x64-gate rule): the X360 4-byte-pointer offsets
@@ -39,8 +42,6 @@
 
 namespace BrnDirector
 {
-    namespace Camera { class Behaviour; class BehaviourInterpolate; }
-
     class ArbStateDriveThru : public ArbitratorState
     {
     public:
@@ -71,46 +72,34 @@ namespace BrnDirector
         // here so it keeps the base's no-op body. FLAG: body not recovered for this state.
 
     private:
-        // ---- a typed handle to a camera behaviour owned by the BehaviourManager ----------
-        // Allocated in Prepare via BehaviourManager::NewBehaviour<Camera::Behaviour> and
-        // released in Release via BehaviourManager::UnSetBehaviourUsedByHandle(mpManager,
-        // muAllocationKey). 0x14-byte block (5 words) pinned from the Construct/Prepare/
-        // Release asm: mbAllocated(+0x00), muAllocationKey(+0x04), a behaviour-lookup helper
-        // word(+0x08), mpManager(+0x0C), mpBehaviour(+0x10). Same convention as the sibling
-        // arbitrator states' own nested BehaviourHandle<> (BrnArbStateRoaming.h /
-        // BrnArbStatePostEvent.h / BrnArbStateCrashNav.h -- each is its own distinct nested
-        // type, left untouched here). FLAG: the +0x08 word's role is not fully recovered.
-        template <typename TBehaviour>
-        struct BehaviourHandle
-        {
-            BehaviourHandle()
-                : mbAllocated(false), muAllocationKey(0), muHelperIndex(0),
-                  mpManager(0), mpBehaviour(0) {}
-
-            bool IsAllocated() const { return mbAllocated; }
-
-            bool                      mbAllocated;     // +0x00
-            u32                       muAllocationKey; // +0x04
-            u32                       muHelperIndex;   // +0x08  FLAG: role not recovered (lookup helper)
-            Camera::BehaviourManager* mpManager;       // +0x0C
-            TBehaviour*               mpBehaviour;     // +0x10
-        };
-
-        // The DWARF-declared (but functionally unread by this TU's recovered bodies)
-        // interpolation-curve parameter block (BrnArbStateDriveThru.h:86). Construct seeds
-        // its four words {8, 0, 0, 1} (same shape as BrnArbStateRoaming's InterpolateParameters,
-        // field roles not recovered).
-        struct InterpolateParameters
-        {
-            u32 mauParams[4];   // +0x00..+0x0C
-        };
-
         // ---- members, DWARF order; X360 offsets in comments ------------------------------
-        BehaviourHandle<Camera::Behaviour>            mDriveThruBehaviourHandle; // +0x180
-        BehaviourHandle<Camera::BehaviourInterpolate> mInterpolater;             // +0x194
-        InterpolateParameters                         mInterpolaterParams;       // +0x1A8
-        EState                                        meState;                   // +0x1B8
-        bool                                           mbIsReversed;              // +0x1BC
+        // ⛔⛔ ODR FORK RETIRED 2026-08-29 (the drive-thru camera wave). Until now this header
+        // declared its OWN private `template <typename TBehaviour> struct BehaviourHandle` and a
+        // private `struct InterpolateParameters { u32 mauParams[4]; }` -- a second, incompatible
+        // spelling of two types that have real homes in
+        // GameSource/Director/Camera/BrnBehaviourManager.h and
+        // .../Behaviours/BrnBehaviourInterpolate.h. That fork is exactly why the .cpp reached its
+        // own handle through two `extern "C" sub_821FCxxx` shims declared and never defined:
+        // through the fork there was no GetProducedCamera()/GetBehaviour() to call, so the TU
+        // could not link and stayed unmounted. Both console accessors are byte-identical to the
+        // canonical ones (verified: sub_821FCE10 = pool slot + 0x10 == BehaviourHelper::mCamera,
+        // sub_821FCDA8 = *(pool slot) == the live Behaviour*, both asserting "IsAllocated()" at
+        // BrnBehaviourManager.h:589/:610) -- i.e. THIS WAS NEVER A MISSING FUNCTION, it was the
+        // fork hiding the one we already have. Same defect class the crash-camera wave retired
+        // from VehicleTracker (its private DirectorIO::InputBuffer fork), 2026-08-29.
+        //
+        // mDriveThruBehaviourHandle is allocated in Prepare via
+        // BehaviourManager::NewBehaviour<Camera::Behaviour> (the attribute-taking overload) and
+        // released in Release; mInterpolater is DWARF-declared but this TU's recovered function
+        // set only zeroes it in Construct. mInterpolaterParams is the canonical
+        // BehaviourInterpolate::Parameters -- Construct's four stores (+0x1A8 = 8, +0x1AC = 0,
+        // +0x1B0 = 0, +0x1B4 = 1) ARE that type's own Construct() (mType 8 / SetDebugName(0) /
+        // E_METHOD_SLERP / E_MAPPING_SINUSOIDAL), not four anonymous words.
+        Camera::BehaviourHandle<Camera::Behaviour>            mDriveThruBehaviourHandle; // +0x180
+        Camera::BehaviourHandle<Camera::BehaviourInterpolate> mInterpolater;             // +0x194
+        Camera::BehaviourInterpolate::Parameters              mInterpolaterParams;       // +0x1A8
+        EState                                                meState;                   // +0x1B8
+        bool                                                  mbIsReversed;              // +0x1BC
     };
 }
 

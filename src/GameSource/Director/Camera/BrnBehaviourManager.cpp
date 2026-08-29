@@ -40,15 +40,24 @@
 //         CgsDev::Log debug print -- reaches the same opaque BehaviourHelper::Get() name)
 //     * BehaviourManager::GenerateSceneQueries   @0x8221F1C0  (per-slot
 //         BehaviourHelper::GenerateSceneQueries -> Behaviour interior collision policy)
-//     * BehaviourManager::NewBehaviour<>         @0x82267418  (STILL BLOCKED, but no longer for
-//         the AllocateBehaviour<T> family -- that is now homed, see below). The shared NewBehaviour
-//         body resolves the freshly-prepared behaviour through the handle and stores lpOwningState /
-//         lpOwner into the Behaviour object's interior at console +0x170 / +0x174 -- offsets no
-//         homed Behaviour base slice models (there is no shared Behaviour base; each concrete
-//         behaviour is a standalone minimal slice), and NewBehaviour is generic over TBehaviour so
-//         a named setter cannot be added across all 20 types. Writing them raw would be an
-//         un-homed-interior offset hack (forbidden); dropping them would drop a side effect. Left
-//         declaration-only until the Behaviour base is homed with those named fields.
+//     * BehaviourManager::NewBehaviour<>         @0x82267418  -- ⭐ LANDED 2026-08-29, in
+//         BrnBehaviourManager_NewBehaviourFromShot.cpp (isolated for the same header-collision
+//         reason as the three AllocateBehaviour_* partfiles). ⛔ THE NOTE THAT STOOD HERE WAS
+//         STALE ON TWO COUNTS, and it is worth stating both because it parked the drive-thru
+//         camera for a month:
+//           (1) it said the +0x170 / +0x174 owner stores were "offsets no homed Behaviour base
+//               slice models". They are not Behaviour offsets at all -- they are
+//               BehaviourHelper::mpDebugArbitratorStateOwner / mpDebugMomentOwner, which this
+//               header has had named setters for since the helper was homed, and which the
+//               templated sibling in BrnBehaviourManager.h already writes by name.
+//           (2) the companion note in BrnDirectorArbitrator.cpp reads "until that base is homed,
+//               NO camera behaviour can be allocated by anyone". BehaviourHelper::Prepare was
+//               homed in the Pass-A re-home below, and the crash camera has been allocating
+//               behaviours through NewBehaviour<TBehaviour> since 2026-08-29.
+//         What was ACTUALLY missing was this overload's TYPE DISPATCH: unlike the templated
+//         family, it picks the concrete behaviour at runtime from the shot RefSpec's class key.
+//         Two of its three arms are still gated -- their Parameters arguments live inside
+//         BehaviourParameterBank::maReservedHead; see the TU's banner.
 //
 //   NOW HOMED THIS WAVE (Pass-A re-homed template instantiations):
 //     * BehaviourManager::AllocateBehaviour<TBehaviour>  @0x82263370 + 19 siblings -- the ONE
