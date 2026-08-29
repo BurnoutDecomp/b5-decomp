@@ -246,6 +246,20 @@ void RaceCarEntityModule::Construct()
     mRaceCarStreamer.Construct();
     mfTimeStep = 0.0f;
 
+    // [FLAG PC bring-up] mCameraTransform is seeded to IDENTITY rather than left as whatever the
+    // module's raw storage holds. The console never seeds it here -- PreSceneUpdate step 2 latches
+    // it every frame from InputBuffer_PreScene::GetCam...() -- but that latch cannot be
+    // reproduced yet: the source is a BrnDirector::Camera::Camera whose layout is not
+    // reconstructed (the IO header only forward-declares it), so there is nothing to copy FROM.
+    // Identity is not a behaviour guess, it is the value that keeps the CONSOLE'S OWN asserts
+    // quiet: CrashPlayManager::Update asserts MagnitudeSquared(lCameraX) > 0 and
+    // MagnitudeSquared(lCameraZ) > 0 every frame, and on this build an assert BLOCKS. The only
+    // consumer downstream of those two axes is the traffic-stomp air-ram direction, which is
+    // itself unreachable until OnCarCrash lands and sets mbTrafficStomp -- so the deviation is
+    // confined to code nothing can currently execute.
+    // DELETE-WHEN BrnDirector::Camera::Camera has a layout and PreSceneUpdate step 2 lands.
+    mCameraTransform.SetIdentity();
+
     // X360 0x822FD898: the two per-slot Construct sweeps, `ActiveRaceCar::Construct(i)`
     // x8 (asm 0x822FDBxx) and `RaceCar::Construct(i)` x35. Both arrays are real members
     // now, so both sweeps are restored (pose wave 2026-07-31). ActiveRaceCar::Construct
@@ -4928,6 +4942,30 @@ void RaceCarEntityModule::PrePhysicsUpdate(
 
     if( ( lUpdateSet & 1 ) == 0 )
     {
+        // ⭐⭐⭐ THE SHOWTIME SPINE (crash-play wave 2026-08-29), at the console's own slot: it is
+        // the FIRST call in the not-paused arm, ahead of UpdateActiveCars. Breaker @0x82307274,
+        // with every argument read straight off the module:
+        //   r3 = module + 98544  == &mCrashPlayManager
+        //   r4 = module + 99312  == &mCameraTransform
+        //   f1 = *(module + 99224) == mfTimeStep
+        //   r6 = lpOutput
+        //   r7 = (mePlayerActiveRaceCarIndex * 0x1CD0) + module + 0x1A60 == the player's slot
+        //   r8 = module + 99240  == &mPlayerVehicleControls
+        // ⚠️ THE SLOT GATE IS OURS, NOT THE CONSOLE'S. Breaker calls this unconditionally because
+        // its flow guarantees a player car by now; this build runs pre-physics frames before the
+        // junkyard reset attaches one (see the :1726 banner above), and Update dereferences the
+        // ActiveRaceCar immediately. Same temporary precondition the UpdateBoost arm below uses.
+        // DELETE-WHEN the player car is attached before the world's first pre-physics frame.
+        if( static_cast<u32>( mePlayerActiveRaceCarIndex ) < E_ACTIVE_RACE_CAR_INDEX_COUNT
+            && GetActiveRaceCar( mePlayerActiveRaceCarIndex )->IsAttached() )
+        {
+            mCrashPlayManager.Update( mCameraTransform,
+                                      mfTimeStep,
+                                      lpOutput,
+                                      GetActiveRaceCar( mePlayerActiveRaceCarIndex ),
+                                      &mPlayerVehicleControls );
+        }
+
         // ⭐⭐ THE IGNITION SLOT (engine wave 2026-08-12). The console runs UpdateActiveCars
         // at 0x823072F0, BEFORE ProcessPlayerVehicleInput at 0x8230732C, in the same
         // not-paused arm -- so the engine reaches RUNNING on the same frame the driver record

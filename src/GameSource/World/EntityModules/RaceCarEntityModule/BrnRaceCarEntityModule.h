@@ -1197,6 +1197,19 @@ private:
     // mbHorn +52 -> 99292, mbReset +55 -> 99295, mbToggle +56 -> 99296, mbIsWheel +58 -> 99298).
     PlayerVehicleControls mPlayerVehicleControls;
 
+    // X360 +0x183F0 (99312). The frame's CAMERA TRANSFORM, latched by PreSceneUpdate step 2 and
+    // read by exactly one consumer: PrePhysicsUpdate passes it to CrashPlayManager::Update, which
+    // flattens its X and Z rows into the ground plane and normalises them for the traffic-stomp
+    // air ram. THREE pins, all asm-literal:
+    //   * PreSceneUpdate @0x8230DA44 calls InputBuffer_PreScene::GetCam...() and copies FOUR
+    //     16-byte quads out of the returned pointer (`lvx128/stvx128` at +0, +0x10, +0x20, +0x30)
+    //     into `module + 99312` -- i.e. a whole 64-byte Matrix44Affine, not a Vector3;
+    //   * PrePhysicsUpdate @0x82307274 hands `module + 99312` to CrashPlayManager::Update as r4;
+    //   * CrashPlayManager::Update reads it at +0x00 and +0x20, which are xAxis and zAxis.
+    // It sits immediately after the 60-byte mPlayerVehicleControls (99240 + 60 == 99300, rounded
+    // up to the next 16-byte boundary == 99312), which is also why nothing could live between.
+    Matrix44Affine mCameraTransform;    // +0x183F0 (99312)
+
     // X360 +0x183E4 / +0x183E8 (99300 / 99304). DWARF :410 / :411. PreSceneUpdate seeds both from
     // the pre-scene input buffer (GetActivePaybackType / GetActivePaybackAggressor) and Prepare
     // seeds them to 3 / -1; ProcessPlayerVehicleInput switches on the type and, for
