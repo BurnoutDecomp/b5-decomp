@@ -315,6 +315,7 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
                 static s32 siScoreTicks   = 0;
                 static s32 siLastScore    = -1;
                 static s32 siLastTarget   = -1;
+                static s32 siLastCombo    = -1;
                 static s32 siLastHeartbeat = -1;
 
                 ++siScoreTicks;
@@ -322,21 +323,43 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
                 const StuntModeScoring* lpcStuntScorer = mScoringSystem.GetStuntScorer();
                 const s32 liScore      = lpcStuntScorer->GetCurrentScore();
                 const s32 liTarget     = lpcStuntScorer->GetTargetScore();
+                const s32 liCombo      = lpcStuntScorer->IsComboInProgress() ? 1 : 0;
                 const s32 liHeartbeat  = static_cast<s32>(mfTimeInMode) / 10;
 
                 if (liScore != siLastScore || liTarget != siLastTarget ||
-                    liHeartbeat != siLastHeartbeat)
+                    liCombo != siLastCombo || liHeartbeat != siLastHeartbeat)
                 {
                     siLastScore     = liScore;
                     siLastTarget    = liTarget;
+                    siLastCombo     = liCombo;
                     siLastHeartbeat = liHeartbeat;
 
+                    // ⭐ tSinceStunt IS THE DISCRIMINATOR, and it is why this rung carries a
+                    // fourth number rather than just the verdict. Run evtfin_meas2 measured
+                    // comboInProgress latching at timeInMode 110 s and NEVER clearing, and while
+                    // it is set BOTH exits from a stunt run are shut:
+                    // StuntModeScoring::HasStuntModeEnded early-returns false on it, and
+                    // StuntAttackMode::ShouldFinish returns false AND resets the two idle timers.
+                    // The mode then ran 95 s past its own deadline. UpdateCombo (X360 0x82320FF0)
+                    // is what should auto-end it, after mfTimeSinceLastStunt passes 5 s -- but it
+                    // holds that timer at zero while mbStuntInProgress or HasAnyPendingScore(), and
+                    // it only runs at all when UpdateScores sees IsPlayerCarActive(). So:
+                    //   tSinceStunt PINNED AT 0  -> the combo is being held alive (a stunt or a
+                    //                               pending score never resolves), or UpdateScores
+                    //                               is not running at all;
+                    //   tSinceStunt RISING > 5   -> UpdateCombo runs and its auto-end is not
+                    //                               firing, i.e. the defect is in EndCombo's reach.
+                    // Two very different repairs; the number separates them in one run.
+                    // Both members are read through committed PUBLIC const getters
+                    // (BrnStuntModeScoring.h:230 / :252) -- mbStuntInProgress and
+                    // HasAnyPendingScore() are protected and are deliberately NOT reached for.
                     *CgsDev::Log::gpDebugPrint
                         << "[evt-score] tick " << siScoreTicks
                         << " timeInMode " << mfTimeInMode
                         << " score " << liScore
                         << " target " << liTarget
-                        << " comboInProgress " << (lpcStuntScorer->IsComboInProgress() ? 1 : 0)
+                        << " comboInProgress " << liCombo
+                        << " tSinceStunt " << lpcStuntScorer->GetTimeSinceLastScoringStunt()
                         << "\n";
                 }
             }
