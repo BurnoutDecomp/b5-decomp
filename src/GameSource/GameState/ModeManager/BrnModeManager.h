@@ -301,6 +301,7 @@ public:
                                      ScoringSystem*             lpScoringSystem);                           // DWARF :548 / X360 0x82328BC8
     void SetupOpponentData(const StartGameModeParams* lpStartGameModeParams, GameModeParams* lpGameModeParams); // DWARF :557 / X360 0x82329348
     void SetupCheckpointDistricts(GameModeParams* lpGameModeParams);                                        // DWARF :561 / X360 0x823296F0
+    void ResultsAccept();                                                                                   // DWARF :262 / X360 0x82311858
     void FinishOfflineModeIntro();                                                                          // DWARF :274 / X360 0x823119B0
 
     // ===============================================================================================

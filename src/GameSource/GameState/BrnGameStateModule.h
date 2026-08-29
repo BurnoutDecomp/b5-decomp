@@ -523,10 +523,11 @@ public:
     // 25 GUI_FINISHED_OFFLINE_PRE_EVENT, 26 RESULTS_FINISHED, 27 POST_EVENT_LEAVE) -- verified by
     // the callee on each arm, not assumed.
     //
-    // ⚠️ ONLY CASE 25 IS ARMED TODAY. ModeManager::FinishOfflineModeIntro @0x823119B0 is bodied
-    // (BrnModeManager_IntroPlay.cpp:540); FinishedMapPan / ResultsAccept / UserCancelCurrentMode
-    // are neither declared nor bodied on this tree, so their arms are PARKED IN THE BODY with the
-    // console call written out. Nothing is fabricated. DELETE-WHEN those three land.
+    // ⚠️ CASES 25 AND 26 ARE ARMED (26 added 2026-08-29). ModeManager::FinishOfflineModeIntro
+    // @0x823119B0 and ModeManager::ResultsAccept @0x82311858 are both bodied in
+    // BrnModeManager_IntroPlay.cpp; FinishedMapPan / UserCancelCurrentMode are still neither
+    // declared nor bodied on this tree, so those two arms stay PARKED IN THE BODY with the console
+    // call written out. Nothing is fabricated. DELETE-WHEN those two land.
     void ProcessGameEventsModeIntroBringUp(
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue);
 
