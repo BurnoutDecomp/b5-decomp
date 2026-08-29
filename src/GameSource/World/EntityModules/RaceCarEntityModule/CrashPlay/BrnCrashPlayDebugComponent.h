@@ -247,16 +247,31 @@ namespace BrnWorld
         // whose first term is "the player's boost has settled to ~0". That boost is
         // BoostStrategy::GetBoostAmount()/GetMaxBoost() -- recomputed every frame by the LIVE
         // UpdateOutputBoostInfo, and NOT frozen (0.595307 / 0.505987 / 0.5 across three runs).
-        // It stopped moving because nothing SPENT it: the ordinary boost request is correctly
-        // gated off for a crashing player (`&& !lpRaceCarState->mbCrashing` in
-        // ProcessPlayerVehicleInput), and the showtime spend travels mbBoostBounce <-
-        // IsBounceBoosting() <- mfBounceBoostTimer, whose only producer is UpdateBounceBoost
-        // in THIS class -- which was unreconstructed. It is reconstructed now.
+        //
+        // ⛔⛔ THE REST OF THIS NOTE USED TO SAY "it stopped moving because nothing SPENT it",
+        // and pointed the next wave at mbBoostBounce / mfBounceBoostTimer. THAT WAS WRONG, and
+        // it cost a wave: the strategy's tank is never spent during crash play, it is
+        // OVERWRITTEN. RaceCarEntityModule::UpdateBoost @0x82304690 opens with
+        // `lbzx r11, r29, 0x1823D` -- this class's mbIsInShowtime -- and the showtime arm's
+        // first act is `SetBoostAmount(mfBoostPercentage * 0.01f)` through vtable slot 39. The
+        // strategy tank therefore MIRRORS mfBoostPercentage, which
+        // KF_COST_FOR_BEING_ON_GROUND already drains (measured 51.0 -> 0.000 in 13.0 s). The
+        // whole showtime arm was simply not reconstructed, so the mirror never ran; landing it
+        // is what closes this. See that function's banner for the eight publishes and their
+        // vtable bytes.
         // ⛔ Do NOT add a timeout to end showtime. The console's terminator is the idle ladder.
         // =====================================================================================
         bool IsActive() const         { return mbIsCrashPlayActive; }
         bool IsInShowtime() const     { return mbIsInShowtime; }
         bool IsBounceBoosting() const { return mfBounceBoostTimer > 0.0f; }
+
+        // DWARF BrnCrashPlayManager.h:181 (`float32_t GetBoostLevel()`), no out-of-line X360
+        // symbol -- the console inlines it at its one consumer. That consumer is the SHOWTIME
+        // ARM of RaceCarEntityModule::UpdateBoost @0x823046EC, which reads the member with a
+        // module-relative `lfsx f13, r29, 0x18224` (== mCrashPlayManager + 0x134 ==
+        // mfBoostPercentage) and multiplies it by flt_82002138 (0.01f) before handing it to
+        // BoostStrategy::SetBoostAmount. Inlining reversal, per AGENTS.md.
+        f32 GetBoostLevel() const { return mfBoostPercentage; }
 
         f32 GetMaxAftertouchPower() const { return 1.0f; }
 

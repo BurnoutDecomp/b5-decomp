@@ -5059,7 +5059,7 @@ void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfAcceleration, 
 }
 
 // ============================================================================
-// UpdateBoost @ 0x82304690 -- regular gameplay branch.
+// UpdateBoost @ 0x82304690 -- BOTH branches.
 //
 // The signature is taken from the PPC call at 0x82307300..0x82307318, not the
 // decompiler: r3=this, f1=lfTimeStep, r5=lpInput and r6=lpEventQueue. All
@@ -5069,12 +5069,89 @@ void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfAcceleration, 
 // Two regular-branch side effects remain outside this bounded boost closure:
 // the post-takedown AI RenderDamaged latch needs the unhomed damaged-car count,
 // and OnSlammed needs the still-opaque aggressive-driving flags at +0x1836C.
-// ============================================================================
+//
+// =============================================================================================
+// ⭐⭐⭐ THE SHOWTIME ARM -- THIS IS WHAT SPENDS THE TANK, AND IT WAS MISSING (2026-08-29).
+//
+// The console's very first act in this function is a branch on ONE byte:
+//     0x823046D8  lis r11, 1 ; ori r11, r11, 0x823D ; lbzx r11, r29, r11
+//     0x823046E8  beq cr6, loc_82304828            <- the regular arm, everything below
+// module + 0x1823D == mCrashPlayManager (+0x180F0) + 0x14D == mbIsInShowtime. The reconstruction
+// that was here landed ONLY the `beq` target, so on this build a showtime session fell straight
+// through into the racing path and none of the eight showtime publishes below ever ran.
+//
+// ⛔ THE PREVIOUS WAVE'S LEAD WAS THE WRONG SHAPE, AND THE NOTE IT LEFT IN
+// BrnCrashPlayDebugComponent.h IS WRONG. It said the terminator's boost "stopped moving because
+// nothing SPENT it", and sent the next wave to find a consumer that drains the tank below the
+// floor BoostBurnout3/5::OnStartCrashPlay drops to FLT_EPSILON. NOTHING DRAINS IT. During crash
+// play the strategy's tank is not spent at all -- it is OVERWRITTEN, every frame, from the
+// crash-play meter:
+//     0x823046FC  lfsx f13, r29, 0x18224      <- mCrashPlayManager.mfBoostPercentage (+0x134)
+//     0x82304708  lfs  f0, flt_82002138       <- 0.01f
+//     0x82304710  fmuls f1, f13, f0
+//     0x8230471C  bctrl -> vtable +0x9C       <- BoostStrategy::SetBoostAmount (slot 39)
+// and SetBoostAmount @0x822A61E0 is `mfBoostAmount = max(lfFraction * mfMaxBoost, 0)`. So the
+// tank MIRRORS the 0..100 crash-play meter, which the previous wave had already measured
+// draining 51.0 -> 0.000 in 13.0 s under KF_COST_FOR_BEING_ON_GROUND. That is why the floor is
+// dropped to FLT_EPSILON: the mirrored value walks all the way to zero and AreWeAllowedToBoost()
+// must not veto it on the way down. The end condition -- CrashModeScoring::Update @0x823209xx
+// storing `boostInfo.mfBoostAmount / boostInfo.mfMaxBoost` into the field
+// HasCrashModeEnded @0x823129A0 tests against +/-FLT_EPSILON -- then reaches zero on its own.
+//
+// The eight publishes, in the console's order, with the vtable byte each `bctrl` loads. Slot
+// numbering is BrnBoostStrategy.h's (byte == 4 * slot), and all eight map cleanly, which is what
+// pins the identification -- no other assignment of these eight bytes produces a sensible call:
+//     0x9C (39) SetBoostAmount(mfBoostPercentage * 0.01f)   f1 = the product above
+//     0x78 (30) SetCrashing(false)                          r4 = 0
+//     0x88 (34) SetBoostRequested(<module + 0x183E3>)       r4 = the byte named below
+//     0x84 (33) SetSpeed(0.0f)                              f1 = flt_82001CC0
+//     0x8C (35) SetInAir(false)                             r4 = 0
+//     0x90 (36) SetDrifting(false)                          r4 = 0
+//     0x94 (37) SetSpinAngle(0.0f)                          f1 = flt_82001CC0
+//     0x7C (31) SetTailgating(false, -1)                    r4 = 0, r5 = -1
+//
+// ⭐ module + 0x183E3 is mPlayerVehicleControls (+0x183A8) + 59 == mbBoostBounce, the LAST bool
+// of the 60-byte record. So in showtime the boost REQUEST is driven by the bounce button, not by
+// the boost button -- the ordinary `mbBoost` arm below is never consulted here at all. (That is
+// also why the request is a fresh call rather than a leftover: SetBoostRequested @0x822A6090
+// re-runs AreWeAllowedToBoost() on every call, which is the gate OnStartCrashPlay unlocked.)
+//
+// Everything else the regular arm does -- the four index/attach asserts, the wrecking state, the
+// takedown sweep, the online position modifier, UpdateChainExploits -- the console SKIPS in
+// showtime. Only the bounce-boost timer decay and BoostStrategy::Update survive, and Update's
+// modifier is a bare flt_82001C98 (1.0f), not the position ratio.
+//
+// [FLAG PC bring-up] the console's `bl BoostManager::DebugRender` at 0x82304810 is dropped, for
+// the same reason the regular arm already drops it: DebugRender (DWARF BrnBoostManager.h:285,
+// private) is a CgsDev::DebugInterface bar overlay whose body is not landed. The regular arm
+// carries the same routine INLINED (the DebugCriticalSection / GetUI / slot-28 / slot-29
+// sequence at the tail of the pseudocode) and drops it identically. No game state depends on it.
+// DELETE-WHEN BoostManager::DebugRender lands.
+// =============================================================================================
 void RaceCarEntityModule::UpdateBoost(
         f32 lfTimeStep,
         const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
         RaceCarEntityModuleIO::GameEventQueue* lpEventQueue )
 {
+    if( mCrashPlayManager.IsInShowtime() )                       // 0x823046E0 lbzx +0x1823D
+    {
+        const f32 KF_BOOST_PERCENTAGE_TO_FRACTION = 0.01f;       // flt_82002138
+
+        mBoostManager.SetBoostAmount(
+                mCrashPlayManager.GetBoostLevel() * KF_BOOST_PERCENTAGE_TO_FRACTION );
+        mBoostManager.SetCrashing( false );
+        mBoostManager.SetBoostRequested( mPlayerVehicleControls.mbBoostBounce );
+        mBoostManager.SetSpeed( 0.0f );
+        mBoostManager.SetInAir( 0.0f );                          // manager takes raw air time
+        mBoostManager.SetDrifting( false );
+        mBoostManager.SetSpinAngle( 0.0f );
+        mBoostManager.SetTailgating( false, E_ACTIVE_RACE_CAR_INDEX_INVALID );
+
+        mBoostManager.UpdateJustBounceBoostedTimer( lfTimeStep );   // 0x823047E4..0x823047F4
+        mBoostManager.Update( lpEventQueue, lfTimeStep, 1.0f );     // 0x82304808, f2 = 1.0f
+        return;
+    }
+
     const f32 KF_MPH_TO_MPS                 = 0.447039992f; // bits 0x3EE4E26D
     const f32 KF_MIN_SPEED_FOR_BOOST_MPH    = 25.0f;
     const f32 KF_MIN_IN_AIR_SPEED_MPH       = 2.0f;

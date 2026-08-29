@@ -72,6 +72,11 @@ public:
     void SetDrifting(bool lbDrifting) { mpBoostStrategy->SetDrifting(lbDrifting); }
     void SetSpinAngle(f32 lfAngle) { mpBoostStrategy->SetSpinAngle(lfAngle); }
     void SetOncomingState(OncomingState leState) { mpBoostStrategy->SetOncomingState(leState); }
+    // DWARF BrnBoostManager.h:237. Its ONE console call site is the showtime arm of
+    // RaceCarEntityModule::UpdateBoost @0x823046FC..0x8230471C, which the console emits as a
+    // direct `bctrl` through mpBoostStrategy's slot 39 (vtable byte 0x9C) -- the manager hop
+    // is inlined away exactly as it is for every other forwarder on this class.
+    void SetBoostAmount(f32 lfBoostFraction) { mpBoostStrategy->SetBoostAmount(lfBoostFraction); }
     void TurnOffBoosting() { mpBoostStrategy->TurnOffBoosting(); }
     void UpdateStuntBoost(
         const BrnGameState::GameStateModuleIO::CompletedStuntAction* lpCompletedStuntAction)
