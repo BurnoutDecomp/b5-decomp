@@ -31,6 +31,8 @@
 #include "GameSource/World/AI/SharedIO/BrnRaceCarAIInterfaces.h"          // RaceCarAIInterface / AddCarToCurrentModeEvent / E_EVENT_ADD_CAR_TO_MODE
 #include "GameSource/Math/BrnMathUtils.h"                                 // BrnMath::BuildTransform
 #include "SharedClasses/World/BrnWorldRegion.h"                           // BrnWorld::E_DISTRICT_INVALID
+#include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostStrategy.h"  // GetBoostAmount / GetMaxBoost
+#include "rw/math/fpu/scalar_operation.h"                                 // rw::math::fpu::IsZero
 
 namespace BrnWorld
 {
@@ -131,9 +133,66 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
     meGameModeType = lpGameModeParams->GetGameModeType();
     mbIsInGameMode = true;
 
+    // ========================================================================================
+    // ARTIST 0x823098D8..0x82309958 -- THE CRASH-PLAY ARM, immediately before OnModeStart.
+    // (crash-play wave 2026-08-29, landing with BrnCrashPlayManager.cpp.)
+    //
+    // The gate is KU_FLAG_ALLOW_CRASH_PLAY_CONTROLS (0x100), NOT the showtime flag below --
+    // pseudocode `if ( (*(a2 + 2196) & 0x100) != 0 )`, and 2196 is GameModeParams::muFlags.
+    // The boost fraction is built from the selected strategy's own two accessors, guarded
+    // against a zero max: `v40 = 1.0; if (!IsZero(GetMaxBoost())) v40 = GetBoostAmount() /
+    // GetMaxBoost();` (vtable slots 112 and 116 == GetBoostAmount / GetMaxBoost).
+    //
+    // WARN Activate IGNORES BOTH ARGUMENTS on this build -- across all 54 of its instructions
+    // ARTIST never reads r4, r5 or f1, and the initial meter comes from the file-scope
+    // KF_INITIAL_MIN_BOOST (51.0f) instead. The fraction is still computed and passed, exactly as
+    // the console does, because the two vtable calls are real side effects on the strategy's own
+    // call path and because the argument shape is the DWARF's.
+    // ========================================================================================
+    if (lpGameModeParams->GetFlag(
+            BrnGameState::GameModeParams::KU_FLAG_ALLOW_CRASH_PLAY_CONTROLS))
+    {
+        BoostStrategy* lpBoostStrategy = mBoostManager.GetBoostStrategy();
+
+        f32 lfInitialBoostPercentage = 1.0f;
+        if (lpBoostStrategy != 0 && !rw::math::fpu::IsZero(lpBoostStrategy->GetMaxBoost()))
+        {
+            lfInitialBoostPercentage =
+                lpBoostStrategy->GetBoostAmount() / lpBoostStrategy->GetMaxBoost();
+        }
+
+        mCrashPlayManager.Activate(GetActiveRaceCar(mePlayerActiveRaceCarIndex),
+                                   lfInitialBoostPercentage);
+    }
+
     // ARTIST 0x8230995C..0x8230997C. The manager wrapper supplies the B2 flag
     // from its selected strategy id.
     mBoostManager.OnModeStart(meGameModeType);
+
+    // ========================================================================================
+    // ARTIST 0x82309980..0x823099D4 -- THE SHOWTIME ARM.
+    //
+    // Under KU_FLAG_USE_SHOWTIME_VEHICLE_BEHAVIOUR (0x200) the console does three things:
+    //     (*(**(a1 + 97504) + 52))(*(a1 + 97504));   // the strategy's OnShowtimeStart virtual
+    //     *(a1 + 98877) = 1;                         // CrashPlayManager::mbIsInShowtime
+    //     *(GetActiveRaceCar(...) + 1922) = 1;       // ActiveRaceCar::mbIsInShowtime
+    //
+    // module+98877 == 98544 + 0x14D == mCrashPlayManager.mbIsInShowtime, and it had NO writer
+    // anywhere in this tree until now -- which is why CrashPlayManager::Update's showtime branch
+    // (UpdateTrafficStomp + UpdateBounceBoost) could never run and nothing could ever spend
+    // showtime boost.
+    //
+    // [X] PARKED: the strategy's OnShowtimeStart / OnShowtimeEnd virtuals (slots 52 / 56) are not
+    // declared on BoostStrategy in this tree. Their console bodies drop mfMinBoostAllowedAmount
+    // to FLT_EPSILON for the duration of crash play; without them the meter keeps its ordinary
+    // floor. DELETE-WHEN those two slots are declared and bodied.
+    // ========================================================================================
+    if (lpGameModeParams->GetFlag(
+            BrnGameState::GameModeParams::KU_FLAG_USE_SHOWTIME_VEHICLE_BEHAVIOUR))
+    {
+        mCrashPlayManager.mbIsInShowtime = true;
+        GetActiveRaceCar(mePlayerActiveRaceCarIndex)->SetInShowtime(true);
+    }
 
     if (!lpGameModeParams->GetFlag(
             BrnGameState::GameModeParams::KU_FLAG_USE_SHOWTIME_VEHICLE_BEHAVIOUR))
