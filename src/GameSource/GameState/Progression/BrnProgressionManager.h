@@ -39,6 +39,10 @@ namespace BrnGameState    { struct StreetManager; struct StuntManager; class Mod
 // progression TU); the console body never dereferences the GameModeParams* at all.
 namespace BrnGameState    { class GameModeParams; class StartGameModeParams; }
 namespace BrnGameState    { namespace GameStateModuleIO { struct ShowModeResultsAction; } }
+// [pause-stats wave 2026-08-29] GetGameStats' out-record. POINTER-ONLY here; its owning header
+// (GameSource/GameState/SharedIO/BrnGameActionData.h) is included by
+// BrnProgressionManager_GameStats.cpp, which is the only TU that fills one.
+namespace BrnGameState    { namespace GameStateModuleIO { struct GameStats; } }
 // mpVehicleList is a pointer member only (the bodies that walk it include the owning header).
 namespace BrnResource     { struct VehicleList; struct VehicleListEntry; }
 // BrnStreetData::ChallengeHighScoreEntry / ChallengePlayerScoreEntry come in via BrnProfile.h.
@@ -274,6 +278,37 @@ public:
     s32 GetNumberOfBeatenRivals();
     s32 GetTrueNumberOfRivals();
 
+    // ⭐⭐ [pause-stats wave 2026-08-29] X360 0x8238A6A0 (566 instructions) -- THE PAUSE
+    // SCREEN'S STAT PANEL. Fills a GameStats record from this manager, its embedded Profile,
+    // the StreetManager, the StuntManager and the AchievementManager. Its ONE caller is
+    // GameStateModule::ProcessGameEvents case 79 @0x823A2D18, which posts the filled record as
+    // game action 180 (352 bytes); TranslateGameActionsToGuiEvents case 180 turns that into GUI
+    // event 436, which BrnGui::CrashNavDriverDetails::HandleStatData and BrnGui::CrashNavStats
+    // both read. Body: BrnProgressionManager_GameStats.cpp.
+    //
+    // ⚠️ THE THIRD PARAMETER IS X360-ONLY AND IT IS THE POINT. The PS3 DWARF declares
+    // `void GetGameStats(GameStats*, BrnGameState::StuntManager*) const` -- two parameters. The
+    // X360 call site loads THREE (`addi r3,r31,0x7E20 / bl CountCompletedChallenges / mr r6,r3`
+    // @0x823A2D18..0x823A2D38), and the body stores that r6 straight into the record's
+    // maIntValues[32] (`stw r10, 0x98(r28)` @0x8238AF68) -- the extra int enumerator the X360
+    // GameStats has and the PS3 one does not. Same merge-window delta, seen from both ends.
+    //
+    // ⚠️ CONSTNESS: the DWARF says `const`, and the console body really does only read. It is
+    // declared NON-const here because ComputeCompletionPercentage() -- which it calls, and whose
+    // f32 return goes straight into maFloatValues[E_FLOAT_VALUE_PERCENTAGE_COMPLETE] -- is
+    // non-const in this tree (the DWARF has that one const too). One deviation, named, rather
+    // than a const_cast or a same-wave re-qualification of a function four other TUs call.
+    void GetGameStats(BrnGameState::GameStateModuleIO::GameStats* lpGameStats,
+                      const BrnGameState::StuntManager*           lpStuntManager,
+                      s32                                         liNumChallengesCompleted);
+
+    // X360 0x82370510 (50 instructions). The medal threshold of the player's CURRENT rank --
+    // i.e. how many wins the next rank costs in total. Asserts the cached rank byte is
+    // non-negative and in range, then returns the rank record's mu16MedalThresholdToNextRank
+    // (`lhz r3, 0x4C(r31)` -- UNSIGNED, no extsh). DWARF BrnProgressionManager.h return type is
+    // uint32_t. Body: BrnProgressionManager_GameStats.cpp (its only caller lives there).
+    u32 GetTotalWinsForNextRank();
+
     // X360 0x82396058. Re-evaluates whether any special car should unlock after a stunt-element
     // milestone; CheckForTrophyUnlocks calls it unconditionally after the trophy path.
     //
@@ -354,6 +389,18 @@ public:
     // IsThisCarInCurrentUnlockSequence, and sign-extended from a byte by
     // GameStateModule::OnPlayerCarChange.
     s32 GetProgressionRank() const;
+
+    // ADDITIVE GROW [pause-stats wave 2026-08-29] -- miSponsorCarCount (+133468), read BY NAME so
+    // the GUI bridge stays off the raw offset. TranslateGameActionsToGuiEvents case 180
+    // @0x823EC8D4 reads it (`lwzx r7, r29, 0x69598C` == manager+133468) as the DENOMINATOR of the
+    // panel's "Cars N of M" line, and again halved (`srawi r7,r7,1 / addze`) as the "drivers"
+    // total. X360-inlined, no standalone symbol.
+    // ⚠️ FLAG, AND IT CUTS AGAINST THE MEMBER'S OWN NAME: this member is documented below as
+    // "AddCar increments it for every E_UNLOCK_TYPE_SPONSOR car and once more for CARBEAGT",
+    // with the name FLAGGED as inferred from those two increments alone. This consumer uses it
+    // as the total number of collectable cars. Both readings cannot be right; the offset is
+    // certain, the NAME is not. Left as-is rather than renamed on one more witness.
+    s32 GetSponsorCarCount() const { return miSponsorCarCount; }
 
     // ------------------------------------------------------------------------
     // [stuntrace waveB fix round, 2026-08-26] ADDITIVE GROW -- the two per-mode rank queries the

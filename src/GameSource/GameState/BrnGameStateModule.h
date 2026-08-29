@@ -673,6 +673,36 @@ public:
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
         GameStateModuleIO::GameActionQueue* lpActionQueue);
 
+    // ⭐⭐⭐ [pause-stats wave 2026-08-29] X360 ProcessGameEvents @0x823A0A18, THE CASE-79 ARM --
+    // "the GUI asks for the player's game stats". The immediate neighbour of the case-80 arm
+    // above, extracted the same way, and it is SEVEN instructions long in the console because
+    // both halves of the work are calls:
+    //     0x823A2D18  addi r3, r31, 0x7E20   ; &mChallengeManager
+    //     0x823A2D1C  bl   ChallengeManager::CountCompletedChallenges     ; -> r3
+    //     0x823A2D20  mr   r6, r3                                        ; the THIRD argument
+    //     0x823A2D2C  addi r5, r31, 0x2CE90  ; &mStuntManager
+    //     0x823A2D30  addi r4, r1, var_E30   ; a stack-local GameStats
+    //     0x823A2D34  addi r3, r31, 0xBB30   ; &mProgressionManager
+    //     0x823A2D38  bl   ProgressionManager::GetGameStats
+    //     0x823A2D3C  li   r6, 0x160         ; 352 == sizeof(GameStats)
+    //     0x823A2D40  li   r5, 0xB4          ; action 180
+    //     0x823A2D48  mr   r3, r22           ; the action queue
+    //     0x823A2D4C  bl   VariableEventQueue<13312,16>::AddEvent
+    //
+    // ⭐ ARGUMENT ORDER IS THE ASM's, AND IT MATTERS: CountCompletedChallenges runs FIRST, into
+    // r6, so the challenge count is already in hand when GetGameStats is entered -- it is a
+    // plain third parameter, not something GetGameStats fetches. The PS3 DWARF's two-parameter
+    // `GetGameStats(GameStats*, StuntManager*) const` would have had nowhere to put it.
+    //
+    // PRODUCER of the event: BridgeGuiToGameState's case 435 (GameBridgeGUIToX_GameState.cpp),
+    // fed by CrashNavDriverDetails::UpdateInitSetup's GuiEventStatsRequest -- posted in the SAME
+    // cache latch that posts the 437 the case-80 arm answers.
+    // CONSUMER of the action: TranslateGameActionsToGuiEvents case 180 -> GUI event 436, which
+    // CrashNavDriverDetails::HandleStatData (and BrnGui::CrashNavStats) read.
+    void ProcessGameEventsGameStatsRequestBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue);
+
     // ⭐⭐ [tut-ticker] X360 PreWorldUpdate @0x823A5328, THE TRAINING LEG (@0x823A57A4..0x823A57C8):
     //     bl ShouldAllowTimedTutorialTips     ; r3 = this
     //     mr r8, r3                           ; -> Update's trailing bool

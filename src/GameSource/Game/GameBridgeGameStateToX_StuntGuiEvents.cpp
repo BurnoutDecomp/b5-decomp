@@ -33,6 +33,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                    // BrnGui::StuntType / GuiEventStunt*
 #include "GameSource/Gui/Events/BrnGuiEventRankProgressResponse.h" // GuiEventRankProgressResponse (case 181)
+#include "GameSource/Gui/Events/BrnGuiEventStatsResponse.h"        // GuiEventStatsResponse (case 180)
+#include "GameSource/GameState/SharedIO/BrnGameActionData.h"        // GameStateModuleIO::GameStats (the case-180 record)
+#include "GameSource/GameState/Progression/BrnProgressionManager.h" // ProgressionManager / Profile (case 180)
+#include "SharedClasses/Trigger/BrnGenericRegion.h"                  // GenericRegion::Type (the drive-thru set query)
 #include "GameSource/GameState/BrnGameActions.h"                   // the action payload homes
 #include "GameSource/GameState/BrnGameStateModuleIO.h"             // OutputBuffer / GameActionQueue
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"             // InputBuffer::GetGuiEvents()
@@ -552,6 +556,197 @@ namespace
                         << "[drivethru] BRIDGE action=" << liActionType
                         << " -> gui 366 type=" << static_cast<s32>(lEvent.meDriveThroughType)
                         << " effective=" << (lEvent.mbEffective ? 1 : 0) << "\n";
+                }
+                break;
+            }
+
+            // ---- 180  the GAME-STATS RESPONSE (432 bytes) ---------------------------------
+            // ⭐⭐⭐ [pause-stats wave 2026-08-29] X360 case 180 @0x823EC8A0, the arm the Driver
+            // Details pause panel's NUMBERS come out of. Unlike its 181 neighbour there is no
+            // Construct call: the console builds the whole 432-byte record inline (~150
+            // instructions of `lwz`/`stw` off the action, five `lwzx` off the module, four
+            // Set::GetLength calls, two Profile::GetDriveThrusFound calls, five literals, then a
+            // five-iteration loop that fills the six district columns) and hands it straight to
+            // AddGuiEvent<GuiEventStatsResponse> (id 436, 432 bytes) @0x823ECC88.
+            //
+            // THE LAST HOP of the START-button pause screen's stat panel:
+            //   GUI 435 -> game event 79 -> game action 180 -> GUI 436 (here). Without it
+            // CrashNavDriverDetails::HandleStatData never runs and every stat field stays blank.
+            //
+            // ⚠️ THE ACTION RECORD *IS* A GameStats, not a wrapper -- see E_ACTION_GAME_STATS_
+            // RESPONSE's banner in BrnGameActions.h. Named GameStats accessors replace the
+            // console's raw `lwz <off>(r31)` throughout; every mapping below is the asm's.
+            //
+            // ⚠️ FOUR FIELDS ARE HARD-CODED CONSTANTS IN THE CONSOLE, AND THEY CROSS-CHECK:
+            // `li 0xB / 0xE / 5 / 5` for the body-shop / gas-station / paint-shop / junkyard
+            // totals, then `li 0x23` (35) for the drive-thru grand total -- and 11+14+5+5 == 35
+            // exactly. They also equal the CAPACITIES of the four Profile drive-thru Sets whose
+            // GetLength supplies the matching "found" counts (Set<CgsID,11>, <14>, <5>, <5>),
+            // which is what pins each count to its category.
+            //
+            // ⚠️ SEVEN DESTINATION FIELDS ARE FED FROM THE MODULE, NOT THE ACTION (the console's
+            // `lwzx r11, r29, <const>` reads, r29 == this): miCarsTotal and miDriversTot from
+            // ProgressionManager::miSponsorCarCount (+133468, the second halved with
+            // `srawi 1 / addze`), the five "won" counters from the profile's
+            // maGameModeTypeAmountCompletedSinceTheStart at modes 0/3/5/7/8, and
+            // miBestRoadRageTakedownCount from Profile+118020.
+            case BrnGameState::GameStateModuleIO::E_ACTION_GAME_STATS_RESPONSE:
+            {
+                const BrnGameState::GameStateModuleIO::GameStats* lpStats =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::GameStats*>(lpAction);
+
+                typedef BrnGameState::GameStateModuleIO::GameStats GS;
+                namespace GsmIO = BrnGameState::GameStateModuleIO;
+
+                BrnProgression::ProgressionManager* lpProgressionManager =
+                    GetGameStateModule().GetProgressionManager();
+                const BrnProgression::Profile* lpProfile = lpProgressionManager->GetProfile();
+
+                BrnGui::GuiEventStatsResponse lEvent;    // id 436, 432 bytes
+                std::memset(&lEvent, 0, sizeof(lEvent));
+
+                // the three ids (`ld`/`std` at +0x00/+0x08/+0x10)
+                lEvent.mFaveCarId       = lpStats->GetValue(GS::E_ID_VALUE_TYPE_FAVOURITE_CAR);
+                lEvent.mForgottenCarId  = lpStats->GetValue(GS::E_ID_VALUE_TYPE_FORGOTTEN_CAR);
+                lEvent.mGreatestRivalId = lpStats->GetValue(GS::E_ID_VALUE_TYPE_NEMESIS);
+
+                lEvent.miDistanceOnline  = lpStats->GetValue(GS::E_INT_VALUE_TYPE_DISTANCE_DRIVEN_ONLINE);
+                lEvent.miDistanceOffline = lpStats->GetValue(GS::E_INT_VALUE_TYPE_DISTANCE_DRIVEN_OFFLINE);
+                lEvent.miTimePlayed      = lpStats->GetValue(GS::E_INT_VALUE_TYPE_TIME_PLAYED);
+                lEvent.miCarsCollected   = lpStats->GetValue(GS::E_INT_VALUE_TYPE_CARS_COLLECTED);
+                // `lwzx r7, r29, 0x69598C` -- the module's own car total, and `srawi r7,r7,1 /
+                // addze r8, r7` (a signed halving that rounds toward zero) for the drivers total.
+                lEvent.miCarsTotal  = lpProgressionManager->GetSponsorCarCount();
+                lEvent.miDriversTot = lEvent.miCarsTotal / 2;
+                lEvent.miDrivers    = 0;                                   // `stw r19` (r19 == 0)
+
+                lEvent.miPowerParkingBest = lpStats->GetValue(GS::E_INT_VALUE_TYPE_BEST_POWER_PARKING);
+                lEvent.miPowerParkingBest_BetweenOtherPlayers =
+                    lpStats->GetValue(GS::E_INT_VALUE_TYPE_BEST_POWER_PARKING_BETWEEN_OTHER_PLAYERS);
+
+                lEvent.miGolds   = lpStats->GetValue(GS::E_INT_VALUE_TYPE_MEDALS_GOLD);
+                lEvent.miSilvers = lpStats->GetValue(GS::E_INT_VALUE_TYPE_MEDALS_SILVER);
+                lEvent.miBronzes = lpStats->GetValue(GS::E_INT_VALUE_TYPE_MEDALS_BRONZE);
+                // `add r6, r7, r8` then `add r8, r6, r8` -- silver + bronze + gold.
+                lEvent.miAllMedalsEarned = lEvent.miGolds + lEvent.miSilvers + lEvent.miBronzes;
+
+                // ⚠️ NOT A TYPO: the console writes the EVENT-medal total into BOTH the
+                // all-medals total and the event-medals total (one `lwz r11, 0x40(r31)` feeding
+                // `stw r11` at +0x38 AND at +0x40). Same register, two destinations.
+                lEvent.miAllMedalsTotal      = lpStats->GetValue(GS::E_INT_VALUE_TYPE_TOTAL_EVENT_MEDALS);
+                lEvent.miEventMedalsEarned   = lpStats->GetValue(GS::E_INT_VALUE_TYPE_NUM_EVENT_MEDALS);
+                lEvent.miEventMedalsTotal    = lpStats->GetValue(GS::E_INT_VALUE_TYPE_TOTAL_EVENT_MEDALS);
+                // and likewise the two road-rule pairs are each written twice (+0x44/+0x4C and
+                // +0x48/+0x50 from the same two registers).
+                lEvent.miRoadRuleMedalsEarned = lpStats->GetValue(GS::E_INT_VALUE_TYPE_NUM_ROAD_RULE_MEDALS);
+                lEvent.miRoadRuleMedalsTotal  = lpStats->GetValue(GS::E_INT_VALUE_TYPE_TOTAL_ROAD_RULE_MEDALS);
+                lEvent.miRoadRules            = lEvent.miRoadRuleMedalsEarned;
+                lEvent.mRoadsRuledTotal       = lEvent.miRoadRuleMedalsTotal;
+
+                lEvent.miJumps    = lpStats->GetValue(GS::E_INT_VALUE_TYPE_JUMPS);
+                lEvent.miJumpTot  = lpStats->GetValue(GS::E_INT_VALUE_TYPE_JUMPS_MAX);
+                lEvent.miSmashes  = lpStats->GetValue(GS::E_INT_VALUE_TYPE_SMASHES);
+                lEvent.miSmashTot = lpStats->GetValue(GS::E_INT_VALUE_TYPE_SMASHES_MAX);
+                lEvent.miStunts   = lpStats->GetValue(GS::E_INT_VALUE_TYPE_STUNTS);
+                lEvent.miStuntTot = lpStats->GetValue(GS::E_INT_VALUE_TYPE_STUNTS_MAX);
+
+                lEvent.miSignatureTDs    = 0;   // `stw r19`
+                lEvent.miSignatureTDsTot = 0;   // `stw r19`
+
+                lEvent.miTotalTakedowns    = lpStats->GetValue(GS::E_INT_VALUE_TYPE_TAKEDOWNS);
+                lEvent.miStandardTakedowns = lpStats->GetTakedownTypeCount(0);
+                lEvent.miVerticalTakedowns = lpStats->GetTakedownTypeCount(3);
+                lEvent.miTBoneTakedowns    = lpStats->GetTakedownTypeCount(2);
+                lEvent.miAftertouchTakedowns = 0;                       // `stw r19`
+                lEvent.miCarTakedowns      = lpStats->GetTakedownTypeCount(10);
+                lEvent.miVanTakedowns      = lpStats->GetTakedownTypeCount(11);
+                lEvent.miBusTakedowns      = lpStats->GetTakedownTypeCount(12);
+                lEvent.miBigRigTakedowns   = 0;                         // `stw r19`
+
+                lEvent.mRoadsRuledTime     = lpStats->GetRoadsRuledCount(0);
+                lEvent.mRoadsRuledCrash    = lpStats->GetRoadsRuledCount(1);
+                lEvent.mRoadsRuledComplete = lpStats->GetValue(GS::E_INT_VALUE_TYPE_TOTALROADSRULED);
+                lEvent.mNumberOfRoads      = lpStats->GetTotalRoads();
+
+                lEvent.miWinsToNextRank = lpStats->GetValue(GS::E_INT_VALUE_TYPE_TOTAL_WINS_FOR_NEXT_RANK);
+                lEvent.miCarsToShutdown = lpStats->GetValue(GS::E_INT_VALUE_TYPE_TOTAL_CARS_TO_SHUTDOWN);
+                // `lfs f0, 0xA4(r31) / fctiwz / stfiwx` -- the float percentage is TRUNCATED to an
+                // int here, which is why the panel shows a whole number.
+                lEvent.miPercentageComplete =
+                    static_cast<s32>(lpStats->GetValue(GS::E_FLOAT_VALUE_PERCENTAGE_COMPLETE));
+
+                lEvent.miDriveThrusFound = lpProfile->GetDriveThrusFound();   // first of two calls
+
+                // the five "won" counters -- Profile+336/+348/+356/+364/+368, i.e. modes
+                // 0 / 3 / 5 / 7 / 8 of maGameModeTypeAmountCompletedSinceTheStart.
+                lEvent.miRacesWon     = lpProfile->GetGameModeTypeCompletedSinceTheStart(GsmIO::E_MODE_OFFLINE_RACE);
+                lEvent.miRoadRagesWon = lpProfile->GetGameModeTypeCompletedSinceTheStart(GsmIO::E_MODE_ROAD_RAGE);
+                lEvent.miMarkedManWon = lpProfile->GetGameModeTypeCompletedSinceTheStart(GsmIO::E_MODE_MARKED_MAN);
+                lEvent.miChallengesWon = lpProfile->GetGameModeTypeCompletedSinceTheStart(GsmIO::E_MODE_BURNING_ROUTE);
+                lEvent.miStuntRunsWon = lpProfile->GetGameModeTypeCompletedSinceTheStart(GsmIO::E_MODE_STUNT_ATTACK);
+
+                lEvent.miBestShowtime = lpStats->GetValue(GS::E_INT_VALUE_TYPE_BEST_SHOWTIME);
+                lEvent.miBestRoadRageTakedownCount = lpProfile->GetHighestNumberOfTakeDownsInRoadRage();
+                lEvent.miBestBoostChain = lpStats->GetValue(GS::E_INT_VALUE_TYPE_BEST_BOOST_CHAIN);
+                lEvent.miBestDrift      = lpStats->GetValue(GS::E_INT_VALUE_TYPE_BEST_DRIFT);
+                lEvent.miBestOncoming   = lpStats->GetValue(GS::E_INT_VALUE_TYPE_BEST_ONCOMING);
+                // the ONLY two `stfs` in the arm -- these stay floats end to end.
+                lEvent.mfBestAirtime = lpStats->GetValue(GS::E_FLOAT_VALUE_TYPE_BEST_AIRTIME);
+                lEvent.mfBestSpin    = lpStats->GetValue(GS::E_FLOAT_VALUE_TYPE_BEST_SPIN);
+                lEvent.miBestNumBarrelRolls = lpStats->GetValue(GS::E_INT_VALUE_TYPE_BEST_NO_BARREL_ROLLS);
+                lEvent.miHighestStuntScore  = lpStats->GetValue(GS::E_INT_VALUE_TYPE_HIGHEST_STUNT_SCORE);
+                lEvent.miEventsFound  = lpStats->GetValue(GS::E_INT_VALUE_TYPE_EVENTS_FOUND);
+                lEvent.miTotalEvents  = lpStats->GetValue(GS::E_INT_VALUE_TYPE_EVENTS_TOTAL);
+
+                // the four discovered-drive-thru Set lengths. The console inlines
+                // Set<CgsID,11/14/5/5>::GetLength on Profile+42568/+42712/+42664/+42520, which is
+                // exactly Profile::GetNumDriveThrusDiscovered's four non-car-park arms.
+                lEvent.miBodyShopsFound   = lpProfile->GetNumDriveThrusDiscovered(BrnTrigger::GenericRegion::E_TYPE_BODY_SHOP);
+                lEvent.miGasStationsFound = lpProfile->GetNumDriveThrusDiscovered(BrnTrigger::GenericRegion::E_TYPE_GAS_STATION);
+                lEvent.miPaintShopsFound  = lpProfile->GetNumDriveThrusDiscovered(BrnTrigger::GenericRegion::E_TYPE_PAINT_SHOP);
+                lEvent.miJunkYardsFound   = lpProfile->GetNumDriveThrusDiscovered(BrnTrigger::GenericRegion::E_TYPE_JUNK_YARD);
+
+                lEvent.miBodyShopsTotal   = 11;   // `li r11, 0xB`
+                lEvent.miGasStationsTotal = 14;   // `li r11, 0xE`
+                lEvent.miPaintShopsTotal  = 5;    // `li r11, 5`
+                lEvent.miJunkYardsTotal   = 5;    // `li r11, 5`
+                lEvent.miTotalDriveThrus  = 35;   // `li r11, 0x23`  (== 11 + 14 + 5 + 5)
+                lEvent.miTotalDriveThrusFound = lpProfile->GetDriveThrusFound();   // second call
+
+                // the six district columns, one district per iteration (the console walks ONE
+                // word cursor over the action's two 3x5 grids and six destination bases).
+                for (s32 liDistrict = 0;
+                     liDistrict < BrnGui::GuiEventStatsResponse::KI_NUM_DISTRICTS;
+                     ++liDistrict)
+                {
+                    lEvent.mBillboardStunts[liDistrict] =
+                        lpStats->GetCurrentStuntElementPerCounty(BrnGameState::E_STUNT_ELEMENT_TYPE_BILLBOARD, liDistrict);
+                    lEvent.mJumpStunts[liDistrict] =
+                        lpStats->GetCurrentStuntElementPerCounty(BrnGameState::E_STUNT_ELEMENT_TYPE_JUMP, liDistrict);
+                    lEvent.mSmashStunts[liDistrict] =
+                        lpStats->GetCurrentStuntElementPerCounty(BrnGameState::E_STUNT_ELEMENT_TYPE_SMASH, liDistrict);
+                    lEvent.mMaxBillboardStunts[liDistrict] =
+                        lpStats->GetMaxStuntElementPerCounty(BrnGameState::E_STUNT_ELEMENT_TYPE_BILLBOARD, liDistrict);
+                    lEvent.mMaxJumpStunts[liDistrict] =
+                        lpStats->GetMaxStuntElementPerCounty(BrnGameState::E_STUNT_ELEMENT_TYPE_JUMP, liDistrict);
+                    lEvent.mMaxSmashStunts[liDistrict] =
+                        lpStats->GetMaxStuntElementPerCounty(BrnGameState::E_STUNT_ELEMENT_TYPE_SMASH, liDistrict);
+                }
+
+                PushGuiEvent(lEvent, lpGuiInput);
+
+                // [DIAG] NOT IN THE X360 BINARY -- the stat panel's bridge rung, same
+                // change-only idiom as the [ddetails] rank rung below. One line per screen entry.
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[ddetails] action 180 -> gui 436 (cars " << lEvent.miCarsCollected
+                        << "/" << lEvent.miCarsTotal
+                        << " events " << lEvent.miEventsFound << "/" << lEvent.miTotalEvents
+                        << " drivethrus " << lEvent.miTotalDriveThrusFound << "/" << lEvent.miTotalDriveThrus
+                        << " roads " << lEvent.mRoadsRuledComplete << "/" << lEvent.mNumberOfRoads
+                        << " pct " << lEvent.miPercentageComplete
+                        << " td " << lEvent.miTotalTakedowns << ")\n";
                 }
                 break;
             }

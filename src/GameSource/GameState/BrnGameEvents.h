@@ -81,6 +81,18 @@ enum EGameEventType
     // (`v19 = 0x100000091LL; AddEvent(queue, &v19, 40, 16)`), and BridgeGuiToGameState
     // @0x823DDB78 case 145 emits this 1-byte signal event.
     E_GUI_HAS_STARTED_GAME          = 78,    // X360 case 78 @0x823A4590 (PS3 DWARF 79)
+    // ⭐⭐ [pause-stats wave 2026-08-29] THE GAME-STATS QUERY -- the sibling of the rank query
+    // documented immediately below, one id lower, and the three-consecutive-arm attestation in
+    // that block is what pins it: X360 case 79 @0x823A2D18 is
+    // `ChallengeManager::CountCompletedChallenges` + `ProgressionManager::GetGameStats` posting
+    // game action 180 (`li r5, 0xB4 / li r6, 0x160`), == PS3 E_EVENT_GAME_STATS_REQUEST (80).
+    // The VALUE below is the X360's; the spelling is the DWARF's.
+    // PRODUCER: BrnGui::CrashNavDriverDetails::UpdateInitSetup @0x824CF038 posts
+    // GuiEventStatsRequest (GUI event 435) in the same latch that posts 437, and
+    // BridgeGuiToGameState's case 435 emits this 1-byte signal event.
+    // CONSUMER: GameStateModule::ProcessGameEventsGameStatsRequestBringUp (this tree's
+    // extraction of case 79), which answers with game action 180 -> GUI event 436.
+    E_EVENT_GAME_STATS_REQUEST      = 79,    // X360 case 79 @0x823A2D18 (PS3 DWARF 80)
     // ⭐⭐ [driver-details pause wave 2026-08-28] THE RANK-PROGRESS QUERY. Same region, same
     // NON-uniform -1 drift the block above documents, and here the drift is pinned by THREE
     // CONSECUTIVE X360 arms rather than inferred:

@@ -135,6 +135,24 @@ namespace BrnGameState
             return maiTotalStuntElementCounts[leStuntElementType];
         }
 
+        // Additive accessor (FLAG: not its own X360 function -- inlined at the call site), the
+        // per-county sibling of the getter above.
+        // ProgressionManager::GetGameStats @0x8238A6A0 reads the grid straight off this manager
+        // through the same +0x20944 back-pointer, as a 3x5 s16 table:
+        //     r26 = stuntMgr + 0x5CA + 10*type   ; then `lhz r11, 0(r26)` / `extsh` / r26 += 2
+        // i.e. a SIGNED halfword per (type, county), stride 10 per type and 2 per county -- and
+        // it is the MAX/TOTAL half of the pause screen's "billboards 3/8" style readouts (the
+        // FOUND half comes from Profile::GetStuntElementCountByCounty).
+        // ⚠️ DELIBERATELY NOT SPELLED `GetMaxStuntElementCountByCounty`: that name is already
+        // declared (:106) as a non-const own-TU member with no definition anywhere in the tree,
+        // and defining it here would pre-empt that TU. Same member, same read, distinct name --
+        // matching the sibling getter above rather than the unbodied declaration.
+        s16 GetTotalStuntElementCountByCounty(StuntElementType leStuntElementType,
+                                              s32 leCounty) const
+        {
+            return maaiTotalStuntElementCountsPerCounty[leStuntElementType][leCounty];
+        }
+
     private:
         // ---- private methods (declaration-only; each owned by its own X360 TU) ----
         void              Clear();                                              // :166 (own TU)
