@@ -261,6 +261,17 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
             // WRITING ZERO. The only writer of a ONE is the action this post carries.
             // [[silent-drop-stubs]] -- check a value has a writer before you trust it.
             //
+            // ⚠️ CORRECTION TO 265b059d's OWN COMMIT MESSAGE, made here so it is not
+            // inherited: that message cited "10 prop-carrying frames to 252" as the
+            // starvation relief. Those are [contact-entry] counters, and that witness
+            // deliberately accumulates BEFORE every gate -- so its change measures where
+            // each run's car ended up, not the gate. The past-the-gate counter is
+            // [contact-pass] gatedFrames, and it is the one that moved:
+            //     before  [contact-pass] gatedFrames=241   (its last line of the run)
+            //     after   [contact-pass] gatedFrames=7921
+            // 33x more frames reach the console's own mode-and-state gate. Same claim,
+            // right instrument. [[diagnostics-that-lie]] -- a probe placed before a gate
+            // cannot measure that gate, however much its number moves.
             // Evidence page (before/after pixels + the log ladder):
             //   https://claude.ai/code/artifact/ebe1c741-6e40-4a0b-95ba-9c4fe61d42ca
             // Console 0x82350F50..0x82350F8C, store for store; see ShowtimeModeSwitchAction's
