@@ -91,7 +91,7 @@ namespace BrnGui
     }
 
     // @ 0x8241B928
-    bool LargeCarComponent::HandleAptLoadTriggers(const CgsGui::GuiEventAptTrigger* lpAptTrigger)
+    bool LargeCarComponent::HandleAptLoadTriggers(const CgsGui::GuiEventAptTriggerPayload* lpAptTrigger)
     {
         CGS_ASSERT(lpAptTrigger != 0, "lpAptTrigger");
         CGS_ASSERT(CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD == lpAptTrigger->meEventType,
@@ -110,7 +110,7 @@ namespace BrnGui
     }
 
     // @ 0x8241B9F8
-    bool LargeCarComponent::HandleAptTransitionTriggers(const CgsGui::GuiEventAptTrigger* lpAptTrigger)
+    bool LargeCarComponent::HandleAptTransitionTriggers(const CgsGui::GuiEventAptTriggerPayload* lpAptTrigger)
     {
         CGS_ASSERT(lpAptTrigger != 0, "lpAptTrigger");
         CGS_ASSERT(CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE == lpAptTrigger->meEventType,
