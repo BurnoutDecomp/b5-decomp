@@ -30,6 +30,8 @@
 // was everything ABOVE it.
 // =================================================================================================
 
+#include <cstdlib>                                                          // getenv (the [FLAG PC bring-up] progression-gate switch)
+
 #include "GameSource/GameState/BrnGameStateModule.h"
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                      // EGameModeType, EGameModeState, IsOnlineFreeBurnLobby
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                      // PreWorldInputBuffer / OutputBuffer / ControllerInput
@@ -199,7 +201,60 @@ namespace
         // ⚠️ THIS IS A REAL PROGRESSION GATE, not a bring-up artefact: on a profile that has never
         // won four events and has never ruled a road, showtime does not start offline. That is the
         // console's behaviour and it is reproduced, not softened.
-        if (!lbOnlineModeRunning && !mProgressionManager.AreRoadRulesAvailable())
+        //
+        // [FLAG PC bring-up gate 2026-08-29, NOT in the X360 binary] BRN_SHOWTIME_IGNORE_PROGRESSION.
+        // ⛔ WHY IT EXISTS, and why it is a *gate* rather than a poke at the progression state.
+        // The only two things that open AreRoadRulesAvailable are four medals
+        // (ProgressionManager::AwardMedal -> Profile::SetMedalCountFromTheStart,
+        // BrnProgressionManager_EventFinish.cpp:496) and a ruled road
+        // (miNumberOfParCrash/ParTimeRoadRulesRuledByPlayer, which have NO writer on this build --
+        // ProgressionManager::Construct zeroes them and nothing else touches them). Neither is
+        // reachable today: finishing four offline events end-to-end is not something this build
+        // can do yet. So a wave that wants to see the showtime SCORE cannot get into showtime at
+        // all, and the score half of the feature would stay unverifiable indefinitely.
+        // ⭐ WHAT IT DELIBERATELY DOES NOT DO. It does NOT write the medal count, does NOT write
+        // either road-rule tally, and does NOT touch the save. Those words feed
+        // ProgressionManager::GetPercentageComplete (BrnProgressionManager_Completion.cpp:261/:267)
+        // and the unlock predicates (BrnProgressionManager_Unlocks.cpp:321/:325); forging them
+        // would make a completion percentage and an unlock condition read differently, i.e. a
+        // value that renders and is WRONG. This flag is scoped to THIS ONE DECISION -- every other
+        // reader of progression still sees the true, empty profile -- and the nine gates below it
+        // still run unchanged, so a run under it is still a real gate-stack pass.
+        // ⚠️ OFF BY DEFAULT and CLEARED by tools/diagnostics/flow_run.ps1 on every run, on the same
+        // CAPABILITY discipline as BRN_EVENT_FSM / BRN_START_EVENT: it changes what the game DOES.
+        // A run taken under it is NOT comparable with a default run and must say so.
+        // DELETE-WHEN: the offline event flow can award a medal (then four wins open the gate the
+        // console's way and this flag is a lie).
+        static const bool sbIgnoreProgressionGate = (getenv("BRN_SHOWTIME_IGNORE_PROGRESSION") != 0);
+
+        if (!lbOnlineModeRunning && !mProgressionManager.AreRoadRulesAvailable() &&
+            sbIgnoreProgressionGate && lbCrashModePressed)
+        {
+            // Say so, once, and say what the true state was -- a run under this flag must be
+            // readable as such from its own log, not from the harness's banner alone.
+            static bool sbSaidSo = false;
+            if (!sbSaidSo && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbSaidSo = true;
+                const BrnProgression::Profile* const lpcProfile = mProgressionManager.GetProfile();
+                *CgsDev::Log::gpDebugPrint
+                    << "[showtime] ⚠ BRN_SHOWTIME_IGNORE_PROGRESSION is set: the console's road-rules"
+                       " gate REFUSED and is being ignored for this decision only. True state:"
+                       " medalsFromTheStart="
+                    << ((lpcProfile != 0)
+                            ? static_cast<s32>(lpcProfile->GetMedalCountFromTheStart()) : -1)
+                    << " parCrashRoadsRuled="
+                    << static_cast<s32>(
+                           mProgressionManager.GetNumberOfParCrashRoadRulesRuledByPlayer())
+                    << " parTimeRoadsRuled="
+                    << static_cast<s32>(
+                           mProgressionManager.GetNumberOfParTimeRoadRulesRuledByPlayer())
+                    << ". This run is NOT comparable with a default run. [FLAG PC bring-up]\n";
+            }
+        }
+
+        if (!lbOnlineModeRunning && !mProgressionManager.AreRoadRulesAvailable() &&
+            !sbIgnoreProgressionGate)
         {
             if (lbCrashModePressed)
             {

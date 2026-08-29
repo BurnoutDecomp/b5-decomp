@@ -1929,6 +1929,7 @@ void GuiModule::Destruct()
                 case 492:   // [E1] GuiEventCurrentStatus  -- distance driven + player-team table
                 case 424:   // [E1] GuiEventScoreUpdate    -- THE EVENT TIMER (mfEventTime/mfTargetTime)
                 case 428:   // [E1] GuiAttackScoreUpdate   -- THE STUNT SCORE (current/target/combo/multiplier)
+                case 434:   // [showtime] GuiCrashScoreUpdate -- THE SHOWTIME SCORE (cars crashed + distance)
                 case 203:   // [event-starts] GuiEventUpdateEventStarts -- THE EVENT-START TABLE
                 case 93:    // [A9] GuiEventPrepareForModeStart -- THE MODE-TYPE SEED (meGameModeType)
                     // [H1 wave 2026-08-25] On the console EVERY module-input event reaches
@@ -1943,6 +1944,16 @@ void GuiModule::Destruct()
                     // terms: BridgeGameStateToGui's stunt slice posts them and GuiCache::RecEvent
                     // now has the matching three arms. None of the three is re-consumed off the
                     // notification queue, so forwarding them here delivers exactly once.
+                    // [showtime score wave 2026-08-29] 434 joins on IDENTICAL terms and completes
+                    // that set for modes 2/16: its only producer is the same bridge's showtime arm
+                    // (@0x823EEE18), GuiCache::RecEvent's case-434 arm is its only consumer, and
+                    // nothing else in the pump touches it. It is the SOLE writer of
+                    // miShowTimeCarsCrashed / miShowTimeComboMultiplier /
+                    // mfShowTimeDistanceTravelled -- the three words
+                    // EventInfoComponent::UpdateCrash renders.
+                    // ⚠️ THE ID IS 434 (AddGuiEvent<GuiCrashScoreUpdate> @0x823D10D0 `li r5, 0x1B2`),
+                    // NOT the DecFIGS DWARF's 429. Forwarding 429 here would forward an id nothing
+                    // posts, and RecEvent has no arm for it either.
                     // [A9 mode-type arm 2026-08-27] 93 joins on exactly the same terms and it is
                     // the one that makes the other three mean anything: BrnGame::
                     // TranslateEventFlowGameActionToGuiEvent's case-23 arm posts it (mounted +

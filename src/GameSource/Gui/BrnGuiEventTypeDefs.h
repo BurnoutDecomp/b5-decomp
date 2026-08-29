@@ -2324,6 +2324,58 @@ static_assert(__builtin_offsetof(GuiAttackScoreUpdate, mfComboWarningTimeActive)
               "GuiAttackScoreUpdate wire drift (RecEvent case 48 @0x825109E4/0x825109FC/0x825109EC)");
 
 // =========================================================================================
+// ⭐⭐⭐ [showtime score wave 2026-08-29] RECOVERED (was the opaque
+// `GuiEvent<434> { u8 maPayload[4]; }` shell in BrnGuiDemangledEventTypes.h, which
+// mis-modelled the wire as a 12-byte GuiEvent header plus 4 payload bytes).
+// THE RECORD IS RAW: AddGuiEvent<GuiCrashScoreUpdate> @0x823D10D0 ends
+//     li r6, 0x10 ; li r5, 0x1B2 ; mr r4, r27 ; bl VariableEventQueue<32768,16>::AddEvent
+// with r27 == the object AS PASSED (no +12), so the 16 queued bytes OPEN with miCarsCrashed.
+// Size 16 and id 434 are unchanged, so the AddGuiEvent<T> instantiation
+// (CgsGuiModule_AddGuiEvent_Inst.cpp:77) is unaffected.
+//
+// ⛔⛔ THE ID IS 434, NOT THE DWARF'S 429 -- AND THAT MATTERS.
+// The DecFIGS DWARF spells this `struct GuiCrashScoreUpdate : public GuiEvent<429>`
+// (BrnGuiEventTypeDefs.h:4883). It is a PS3-build id. This whole family is shifted by +5 in
+// ARTIST, every one of them read off its own instantiation's `li r5`:
+//     GuiEventScoreUpdate      DWARF 419 -> X360 424 (0x1A8) @0x823D0EA8
+//     GuiRoadRageScoreUpdate   DWARF 421 -> X360 426 (0x1AA) @0x823D0F60
+//     GuiAttackScoreUpdate     DWARF 423 -> X360 428 (0x1AC) @0x823D1188
+//     GuiPursuitScoreUpdate    DWARF 427 -> X360 432 (0x1B0) @0x823D1018
+//     GuiCrashScoreUpdate      DWARF 429 -> X360 434 (0x1B2) @0x823D10D0
+// Posting the DWARF id would be a producer no consumer can hear: RecEvent's third
+// sub-switch rebases by 0x17C, and 429-380 == 49 sits inside jpt_825101AC's DEFAULT case
+// list (cases 41-53), so that arm discards the record without a diagnostic.
+//
+// Pinned at BOTH ends, field for field:
+//   producer  BrnGameModule::BridgeGameStateToGui @0x823EEE18..0x823EEE44 (the mode-{2,16}
+//             arm of jpt_823EED94 -- jump-table cases 0 and 14, the table being indexed by
+//             mode-2) copies ScoringOutputInterface +0xA54 -> payload +0x00,
+//             +0xA5C -> +0x04, +0xA58 -> +0x08 and +0xA60 (lfs) -> +0x0C.
+//   consumer  GuiCache::RecEvent @0x82510AA0..0x82510B28 (jpt_825101AC case 54 == id 434)
+//             reads +0x00 -> cache 0xA004, +0x04 -> 0xA008, +0x0C (lfs) -> 0xA00C.
+// ⚠️ +0x08 (miScoreMultiplier) IS POSTED AND NEVER CONSUMED. The console writes it into the
+// record and RecEvent's arm has no store for it -- GuiCache carries no member for it either.
+// That is the binary's behaviour; it is transcribed, not "cleaned up".
+//
+// The NAMES are the DWARF's own (BrnGuiEventTypeDefs.h:4885-4888) and their ORDER matches the
+// producer's offsets exactly, which is the independent corroboration that the +5 shift is an
+// ID shift and not a different record.
+struct GuiCrashScoreUpdate
+{
+    s32 miCarsCrashed;         // +0x00  <- ScoringOutputInterface::miShowtimeCarsCrashed
+    s32 miComboMultiplier;     // +0x04  <- ::miShowtimeComboMultiplier
+    s32 miScoreMultiplier;     // +0x08  <- ::miShowtimeScoreMultiplier   (posted, unconsumed)
+    f32 mfDistanceTravelled;   // +0x0C  <- ::mfShowtimeDistanceTravelled
+
+    s32 GetEventType() const { return 434; }
+};
+static_assert(sizeof(GuiCrashScoreUpdate) == 16, "X360 AddGuiEvent size 16 (id 434) @0x823D10D0");
+static_assert(__builtin_offsetof(GuiCrashScoreUpdate, miComboMultiplier)   == 0x04 &&
+              __builtin_offsetof(GuiCrashScoreUpdate, miScoreMultiplier)   == 0x08 &&
+              __builtin_offsetof(GuiCrashScoreUpdate, mfDistanceTravelled) == 0x0C,
+              "GuiCrashScoreUpdate wire drift (RecEvent case 54 @0x82510AF4/0x82510B10/0x82510B18)");
+
+// =========================================================================================
 // [A9 mode-type arm 2026-08-27] RECOVERED (was the opaque `GuiEvent<93> + u8[140]` shell in
 // BrnGuiDemangledEventTypes.h, which mis-modelled the wire as a 12-byte GuiEvent header plus
 // 140 payload bytes). THE RECORD IS RAW: AddGuiEvent<GuiEventPrepareForModeStart> @0x823D27D0

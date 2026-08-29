@@ -18,6 +18,8 @@
 //
 //   Update             @0x82435430   the per-frame mode switch (jpt_824354A8, 18 cases)
 //   UpdateStuntAttack  @0x82429C08   the score / multiplier / timer / combo readout
+//   UpdateCrash        @0x82412E98   the SHOWTIME readout (added 2026-08-29 with the
+//                                    showtime score chain: distance travelled + cars crashed)
 //
 // plus the three .rdata string tables ONLY these two bodies consume
 // (KAPC_EVENT_STATE_NAMES, KAC_STUNT_TYPE_STRING_IDS, KAPC_TIMEOUT_WEDGE_FRAME_NAMES),
@@ -123,9 +125,17 @@ namespace
 {
     // CgsLanguage::LanguageManager::ParameterFormatType, as the raw integers the X360
     // passes and this component's SetLocalisedText call sites take (the same convention
-    // BrnFlaptTextFieldRef.h documents). These two are the ONLY formats in this TU.
+    // BrnFlaptTextFieldRef.h documents).
     const s32 KI_FORMAT_TEXT_DATABASE_LOOKUP = 9;    // E_FORMAT_TEXT_DATABASE_LOOKUP (FindString)
     const s32 KI_FORMAT_INTEGER              = 11;   // E_FORMAT_INTEGER (FormatIntegerString @0x828610B0)
+    // [showtime score wave 2026-08-29] The third format this TU now uses: UpdateCrash's
+    // distance field. `li r5, 0x11` @0x82412ECC == 17 == E_FORMAT_SMALL_DISTANCE, which
+    // LanguageManager::FormatText(f32) routes to FormatSmallDistanceString @0x82861988 --
+    // metres scaled by mrSmallDistanceConversion, TRUNCATED to an integer, printed into
+    // mpDistanceFormatShort. (That leaf was a __debugbreak() trap stub until the pause-stats
+    // wave bodied it earlier today; a stub there would have killed the process on the first
+    // metre driven in showtime, not merely blanked the field.)
+    const s32 KI_FORMAT_SMALL_DISTANCE       = 17;   // E_FORMAT_SMALL_DISTANCE (FormatSmallDistanceString @0x82861988)
 
     // The event-state indices the mode-frame latch picks (KAPC_EVENT_STATE_NAMES rows).
     const s32 KI_EVENT_STATE_IDLE              = 1;
@@ -791,15 +801,74 @@ void EventInfoComponent::UpdateStuntAttack(GuiCache* lpCache, bool lbOnline)
     }
 }
 
+// ---------------------------------------------------------------------------
+// ⭐⭐⭐ @0x82412E98 (decl BrnEventInfo.h:214) -- THE SHOWTIME READOUT. Two fields, two
+// change-latches, and that is the whole function: distance travelled into
+// maTextField[0] and cars crashed into maTextField[1], each written only when the
+// cache word differs from the copy this component is holding.
+//
+// ASM SPINE (0x82412E98..0x82412F18), in the console's order:
+//   0x82412EBC  lfs   f0, 0x420(r31)          mfShowTimeDistanceTravelled (this)
+//   0x82412EC0  lfsx  f1, r30, 0xA00C         GuiCache::mfShowTimeDistanceTravelled
+//   0x82412EC4  fcmpu / beq                   -- a FLOAT compare (see the trap below)
+//   0x82412ECC  li    r5, 0x11                E_FORMAT_SMALL_DISTANCE
+//   0x82412ED0  stfs  f1, 0x420(r31)          latch, THEN write the field
+//   0x82412ED4  addi  r3, r31, 0x1C           == &maTextField[0]  ((0x1C-0x1C)/0x0C == 0)
+//   0x82412ED8  bl    sub_8246CE38            TextFieldRef::SetLocalisedText(f32, format)
+//   0x82412EE0  lwz   r10, 0x41C(r31)         miShowTimeCarsCrashed (this)
+//   0x82412EE8  lwzx  r4,  r30, 0xA004        GuiCache::miShowTimeCarsCrashed
+//   0x82412EEC  cmpw  / beq
+//   0x82412EF4  li    r5, 0xB                 E_FORMAT_INTEGER
+//   0x82412EF8  stw   r4, 0x41C(r31)
+//   0x82412EFC  addi  r3, r31, 0x28           == &maTextField[1]  ((0x28-0x1C)/0x0C == 1)
+//   0x82412F00  bl    sub_8246CF18            TextFieldRef::SetLocalisedText(s32, format)
+//
+// ⚠️⚠️ THE IDA PSEUDOCODE GETS THE DISTANCE COMPARE WRONG. It prints
+//     `if ( *(a2 + 40972) != *(result + 1056) )` -- an INT compare of two words, then an
+// int store. The asm is `lfs`/`lfsx`/`fcmpu`/`stfs` and the value it hands
+// SetLocalisedText rides f1, i.e. the FLOAT overload @0x8246CE38, not the int one
+// @0x8246CF18. Transcribing the pseudocode would compare bit patterns and then feed a bit
+// pattern to the small-distance formatter -- a field that renders and is wrong, which is
+// worse than a blank one. Both members are declared f32/s32 in this component's own layout
+// (mfShowTimeDistanceTravelled +0x420 / miShowTimeCarsCrashed +0x41C), so the types decide it.
+//
+// ⚠️ NO PrepareComponentsForGameMode ARM IS NEEDED AND NONE EXISTS. jpt_824291E4 routes
+// modes 2 and 16 straight to the epilogue, so showtime gets ONLY the seven generic
+// KAPC_TEXTFIELD_NAMES slots -- and maTextField[0] ("textField_1_mc") / maTextField[1]
+// ("textField_2_mc") are exactly the two this body drives. The panel's frame is
+// KAC_MODE_FRAME_NAMES[2] == KAC_MODE_FRAME_NAMES[16] == "ShowTime".
+//
+// ⓘ GuiCache::miShowTimeComboMultiplier (+0xA008) IS NOT READ HERE. RecEvent's case-434 arm
+// stores it and nothing in this component looks at it; the console's showtime panel shows
+// the crash count and the distance only. Do not add a third field.
+// ---------------------------------------------------------------------------
+void EventInfoComponent::UpdateCrash(GuiCache* lpCache)
+{
+    const f32 lfDistanceTravelled = lpCache->GetShowTimeDistanceTravelled();
+    if (lfDistanceTravelled != mfShowTimeDistanceTravelled)
+    {
+        mfShowTimeDistanceTravelled = lfDistanceTravelled;
+        maTextField[0].SetLocalisedText(lfDistanceTravelled, KI_FORMAT_SMALL_DISTANCE);
+    }
+
+    const s32 liCarsCrashed = lpCache->GetShowTimeCarsCrashed();
+    if (liCarsCrashed != miShowTimeCarsCrashed)
+    {
+        miShowTimeCarsCrashed = liCarsCrashed;
+        maTextField[1].SetLocalisedText(liCarsCrashed, KI_FORMAT_INTEGER);
+    }
+}
+
 // ============================================================================
-// [FLAG deferred 2026-08-27] the seven NON-STUNT per-mode Update arms. Update
+// [FLAG deferred 2026-08-27] the SIX remaining NON-STUNT per-mode Update arms. Update
 // @0x82435430's jump table names all seven by symbol, so the link needs bodies
-// the moment Update mounts -- but this wave's scope is the STUNT readout
-// (case 7 -> UpdateStuntAttack, real above). Each gate logs once and returns;
-// entering one of these modes today shows an un-updated (blank) event panel,
+// the moment Update mounts -- but that wave's scope was the STUNT readout
+// (case 7 -> UpdateStuntAttack, real above), and UpdateCrash landed 2026-08-29
+// with the showtime score chain. Each remaining gate logs once and returns;
+// entering one of those modes today shows an un-updated (blank) event panel,
 // which the log line makes attributable. Console addresses for the follow-on
 // wave (also in the BrnEventInfo.h declaration banner):
-//   UpdateRace @0x8242FCF0 / UpdateCrash @0x82412E98 / UpdateRoadRage
+//   UpdateRace @0x8242FCF0 / UpdateRoadRage
 //   @0x82429A48 / UpdateBurningRoute @0x8242A830 / UpdateSurvivor @0x82421530 /
 //   UpdateOnlineRace @0x824296B0 / UpdateFreeBurnLobby @0x8242FE98.
 // DELETE-WHEN (per arm): its real body lands in this TU family.
@@ -834,7 +903,6 @@ void EventInfoComponent::UpdateRace(GuiCache*)         { LogDeferredModeArm("Upd
 void EventInfoComponent::UpdateOnlineRace(GuiCache*)   { LogDeferredModeArm("UpdateOnlineRace"); }
 void EventInfoComponent::UpdateFreeBurnLobby(GuiCache*){ LogDeferredModeArm("UpdateFreeBurnLobby"); }
 void EventInfoComponent::UpdateRoadRage(GuiCache*)     { LogDeferredModeArm("UpdateRoadRage"); }
-void EventInfoComponent::UpdateCrash(GuiCache*)        { LogDeferredModeArm("UpdateCrash"); }
 void EventInfoComponent::UpdateBurningRoute(GuiCache*) { LogDeferredModeArm("UpdateBurningRoute"); }
 void EventInfoComponent::UpdateSurvivor(GuiCache*)     { LogDeferredModeArm("UpdateSurvivor"); }
 

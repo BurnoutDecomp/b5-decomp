@@ -299,6 +299,22 @@ namespace BrnGui
         // in a message-eligible state from the moment the cache is built.
         miGameFlowState      = 1;   // X360 stw r11(==1), 0x4B30(r31)  @0x82505C68
         mu8GameFlowByte_4B34 = 0;   // X360 stb r30(==0), 0x4B34(r31)  @0x825059E8
+
+        // ⭐ [showtime score wave 2026-08-29] The showtime readout triple's CHANGE SENTINELS.
+        //   X360 GuiCache::Construct @0x82505D30..0x82505D64, in the same far-member run as the
+        //   +0xA000/+0xA014/+0xA015 stores this slice already reproduces:
+        //     ori r9,  0xA008 ; stwx  r29   (r29 == -1, `li r29, -1` @0x82505A40)
+        //     ori r7,  0xA004 ; stwx  r29
+        //     ori r8,  0xA00C ; stfsx f0    (f0 <- flt_820037C8 @0x82505BB8, image 0xBF800000 == -1.0f)
+        // ⛔ NOT COSMETIC, and not zero. Both consumers of these words act only on a CHANGE --
+        // EventInfoComponent::UpdateCrash @0x82412E98 compares each against its own cached copy
+        // (itself seeded -1 / -1.0f by ClearEventSpecificData @0x82412CA8, BrnEventInfo.cpp:186)
+        // and only then touches the text field. Seeding 0 here would make the first genuine
+        // "0 cars crashed / 0 m" frame of a showtime run look unchanged, so the panel would
+        // keep whatever the previous mode left in it until the player's first crash.
+        miShowTimeCarsCrashed       = -1;      // stwx  r29  +0xA004
+        miShowTimeComboMultiplier   = -1;      // stwx  r29  +0xA008
+        mfShowTimeDistanceTravelled = -1.0f;   // stfsx f0   +0xA00C  (flt_820037C8)
     }
 
     // @0x8250DC30 -- publish the queue selected on the previous frame, clear it,
@@ -1355,6 +1371,44 @@ namespace BrnGui
                     miLastStuntScore         = miScoreCombo;        // stwx +0x9FD4
                     miGameFlowResetWord_9FD8 = miComboMultiplier;   // stwx +0x9FD8
                 }
+            }
+            break;
+
+        // ================================================================================
+        // ⭐⭐⭐ [showtime score wave 2026-08-29] THE SHOWTIME SCORE FEED, consumer half.
+        //
+        // X360 jpt_825101AC case 54 @0x82510AA0..0x82510B28 -- GuiCrashScoreUpdate. The third
+        // sub-switch rebases by 0x17C (380), so case 54 == GUI event id 434. Producer:
+        // BridgeGameStateToGui's mode-{2,16} arm @0x823EEE18, landed in
+        // GameSource/Game/GameBridgeGameStateToX_EventStatusGuiEvents.cpp.
+        //
+        // ⛔ THE ID IS 434, NOT THE DWARF'S 429 (see the type's banner in
+        // BrnGuiEventTypeDefs.h). 429-380 == 49 lands in this switch's DEFAULT case list, so a
+        // producer built from the DWARF id would post into silence.
+        //
+        // Three stores, in the console's own order (+0x04 first, then +0x00, then the float):
+        //     lwz r11, 4(r30) ; ori r10, 0xA008 ; stwx    -- miShowTimeComboMultiplier
+        //     lwz r11, 0(r30) ; ori r9,  0xA004 ; stwx    -- miShowTimeCarsCrashed
+        //     lfs f0, 0xC(r30); ori r8,  0xA00C ; stfsx   -- mfShowTimeDistanceTravelled
+        // ⚠️ The record's +0x08 (miScoreMultiplier) IS NOT CONSUMED. The console has no store
+        // for it here and no cache member to store it in; that is transcribed, not an omission.
+        // ================================================================================
+        case 434:
+            {
+                const BrnGui::GuiCrashScoreUpdate* lpCrashScoreUpdate =
+                    reinterpret_cast<const BrnGui::GuiCrashScoreUpdate*>(lpEvent);
+
+                // @0x82510AA0..0x82510AEC -- GsmIO::IsShowtimeGameMode(meGameModeType), i.e.
+                // `== 2 || == 0x10`. Spelled as literals for the same reason every other assert
+                // in this switch is: this TU cannot include BrnGameStateSharedIO.h (see the
+                // header note at the top of the file). Both values are read off the asm's cmpwi.
+                // Non-gating, exactly like the console's: it fires and then stores anyway.
+                CGS_ASSERT(meGameModeType == 2 || meGameModeType == 16,
+                           "GsmIO::IsShowtimeGameMode(meGameModeType)");   // cpp:2312
+
+                miShowTimeComboMultiplier   = lpCrashScoreUpdate->miComboMultiplier;    // stwx  +0xA008
+                miShowTimeCarsCrashed       = lpCrashScoreUpdate->miCarsCrashed;        // stwx  +0xA004
+                mfShowTimeDistanceTravelled = lpCrashScoreUpdate->mfDistanceTravelled;  // stfsx +0xA00C
             }
             break;
 
