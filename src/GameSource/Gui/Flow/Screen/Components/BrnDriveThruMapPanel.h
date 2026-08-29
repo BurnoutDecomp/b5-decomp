@@ -45,6 +45,15 @@ namespace BrnGui
             E_TEXTFIELD_COUNT    = 2,
         };
 
+        // ADDITIVE GROW (main-menu wave F1, 2026-08-29). DWARF BrnDriveThruMapPanel.h:4 --
+        // the ONE drive-thru second-level filter option label. PUBLIC static (the DWARF lists
+        // it ahead of the class's first `private:`; the banner above called it file-static,
+        // which is what a private static looks like once the class is stripped). It is passed
+        // whole by CrashNavPanel::RefreshSecondLevelFilter to SetupToggle
+        // (`addi r8, r11, off_82F25164` -> "$CN_PANEL_NO_TYPES" @0x8243ADA4, `li r5, 1`).
+        // The DEFINITION belongs to the DriveThruMapPanel TU -- declaration only here.
+        static const char* KAPC_DRIVETHRU_FILTER_OPTIONS[1];
+
         // @0x824174D0 -- run the base IconComponent construct (no state-identifier table),
         // park the icon on its "idle" state, then construct the two child text fields from
         // the file-static name table, and clear the drive-thru id + active flag.
@@ -60,6 +69,15 @@ namespace BrnGui
         // "DT_NAME_<id>" / "DT_LOC_<id>" into the two fields; for a zero id, clear them.
         void SetDriveThruData(CgsID lDriveThruID);
 
+        // BODIED (main-menu wave G1, 2026-08-29). Neither has a standalone X360 symbol: the
+        // console INLINES both into BrnGui::CrashNavPanel::ChangeVisiblePanelState
+        // @0x8243A548, on the E_PANEL_DRIVETHRU arms, as a bare named-state push plus the
+        // active-flag store --
+        //   out: `sub_824E2B90(this + 0x3788, "transOut"); *(this + 14968) = 0;`
+        //   in : `sub_824E2B90(this + 0x3788, "transIn");  *(this + 14968) = 1;`
+        // with 0x3788 == CrashNavPanel::mDrivethruPanel and 14968 == 0x3A78 == that panel's
+        // own mbActive (+0x2F0). Bodies live here (this is the member's home) rather than in
+        // the caller, which is what the DWARF method set says.
         void TransitionIn();
         void TransitionOut();
 

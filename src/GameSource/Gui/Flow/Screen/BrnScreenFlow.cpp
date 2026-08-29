@@ -15,6 +15,7 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectOnlineEnd.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnScreenLoading.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnInGame.h"
+#include "GameSource/Gui/Flow/Screen/States/BrnCrashNavMapMain.h"  // the real CN_MAP_MAIN (main-menu wave; NewPoolState needs the complete type)
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavStats.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavSettings.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavOptions.h"

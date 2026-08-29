@@ -70,6 +70,7 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuToggleGroup.h"    // MenuToggleGroupVarSize<3> (mFilterToggles, by value)
 #include "GameSource/Gui/Flow/Screen/Components/BrnDriveThruMapPanel.h"  // DriveThruMapPanel (mDrivethruPanel, by value)
 #include "GameSource/Gui/Flow/Screen/Components/BrnRivalMapPanel.h"      // RivalMapPanel (mRivalPanel, by value)
+#include "GameSource/Gui/Flow/Screen/Components/BrnRoadPanel.h"          // RoadPanel + RoadPanelData (mRoadPanel, by value)
 #include "GameSource/Gui/Flow/Shared/Components/BrnIcon.h"               // IconComponent (mGenericPanel, by value)
 #include "GameSource/Gui/BrnGuiTextField.h"                              // TextField (mGenericPanelText1/2, by value)
 
@@ -82,17 +83,19 @@
 //                        here so this header does not depend on that transitive path).
 namespace CgsModule  { struct Event; }
 namespace CgsNetwork { struct PlayerName; }
+// The two GUI-in payloads RecEvent dispatches to (real homes:
+// GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h and
+// GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h) -- pointer-only here.
+namespace CgsGui    { struct GuiEventAptTriggerPayload; struct GuiEventControllerInputPressed; }
 
 namespace BrnGui
 {
     // Real home GameSource/Gui/BrnGuiCache.h -- pointer-only here.
     class GuiCache;
 
-    // DWARF `struct BrnGui::RoadPanelData` (namespace scope, NOT nested in RoadPanel):
-    // references/DecFIGS/dwarfdump/.../BrnRoadPanel.h:57. It has no committed home yet --
-    // BrnRoadPanel.h is its owner-to-be -- and SetRoadPanelData only takes it by
-    // reference, so an incomplete type suffices.
-    struct RoadPanelData;
+    // BrnGui::RoadPanelData and BrnGui::RoadPanel now come from their committed home
+    // (BrnRoadPanel.h, included above). The old forward declaration + byte-carve pair that
+    // stood here was retired by the main-menu F1 wave; see the mRoadPanel member below.
 
     class CrashNavPanel : public CgsGui::GuiComponent
     {
@@ -117,6 +120,19 @@ namespace BrnGui
 
         // DWARF BrnCrashNavPanel.h:103. Names and values verbatim; StoreSettings gates its
         // capture branch on mePrepareStage == E_PREPARESTAGE_DONE.
+        // DWARF BrnCrashNavPanel.h:83. The panel's apt animation phase. Names and values
+        // verbatim; mpacAnimationStrings (BrnCrashNavPanel.cpp:50) is indexed by it, and
+        // SetupComponent pushes entry [E_ANIMSTATE_TRANS_IN] ("transIn") as the panel's
+        // initial "apt_label" view state (@0x824408B4).
+        enum AnimState
+        {
+            E_ANIMSTATE_INVISIBLE = 0,
+            E_ANIMSTATE_TRANS_IN  = 1,
+            E_ANIMSTATE_IDLE      = 2,
+            E_ANIMSTATE_TRANS_OUT = 3,
+            E_ANIMSTATE_COUNT     = 4,
+        };
+
         enum EPrepareStage
         {
             E_PREPARESTAGE_CONSTRUCTED = 0,
@@ -281,7 +297,80 @@ namespace BrnGui
         // carve note in the layout.
         s32 GetRoadPanelScoreMode() const;
 
+        // ADDITIVE GROW (main-menu wave, 2026-08-29): the two road-rule methods
+        // CrashNavMapMain::HandleCrashNavInputPressed @0x824CCAE8 calls by name.
+        // Declaration-only, exactly like the block above; bodies belong to this class's
+        // own TU (BrnCrashNavPanel.cpp) and are LINK-TIME EXTERNALS until it is mounted.
+
+        // @ 0x8243AA38 (DWARF BrnCrashNavPanel.h:225 `bool ToggleRoadPanelScores();`).
+        // Flip the road panel between its score modes. The X360 caller tests the result
+        // with `clrlwi r11, r3, 24 ; cmplwi cr6, r11, 1` @0x824CCCFC -- an explicit
+        // compare against 1 on the returned BYTE, which is what types it bool.
+        bool ToggleRoadPanelScores();
+
+        // @ 0x82418938 (DWARF BrnCrashNavPanel.h:255
+        // `const char * GetRoadRuleFriendSelectedName() const;`). The gamertag of the
+        // highlighted road-rule friend row; the caller feeds it straight to
+        // CgsNetwork::PlayerName::Construct (`mr r4, r3` @0x824CCD70). `const` is
+        // DWARF-attested, matching its IsRoadRuleFriendSelected() partner above.
+        const char* GetRoadRuleFriendSelectedName() const;
+
+        // ============ ADDITIVE GROW -- main-menu wave F1 (2026-08-29) ==================
+        // The remaining DWARF public surface, all X360-attested, all bodied in this TU.
+
+        // @ 0x8243A548 (DWARF cpp:385). Transition the currently-visible sub-panel out and
+        // the requested one in. Every caller but the two rival setters passes
+        // RivalMapPanel::E_RIVAL_TYPE_COUNT as "no rival transition" -- that value is also
+        // the flag that lets the method early-out when the requested panel is already
+        // visible (`if (meVisiblePanel == leNextPanel && leRivalType == E_RIVAL_TYPE_COUNT)`
+        // @0x8243A660).
+        void ChangeVisiblePanelState(PanelType leNextPanel,
+                                     RivalMapPanel::ERivalType leRivalType);
+
     private:
+        // @ 0x82418828 (DWARF cpp:804). Apt-trigger sink. When the trigger record's type is 1
+        // and its name string CONTAINS the filter toggle group's component name, the group is
+        // marked dirty so it re-outputs on the next Update.
+        void HandleAptEvents(const CgsGui::GuiEventAptTriggerPayload* lpAptEvent);
+
+        // @ 0x824408E0 (DWARF cpp:846). The panel's own controller arm, gated on
+        // mePrepareStage == E_PREPARESTAGE_DONE. It reads ONLY the D-PAD family:
+        //   37 GUI_DPAD_UP    -> mFilterToggles.HighlightPrevious(false)
+        //   38 GUI_DPAD_DOWN  -> mFilterToggles.HighlightNext(false)
+        //   39 GUI_DPAD_LEFT  -> mFilterToggles.HighlightPreviousItem()
+        //   40 GUI_DPAD_RIGHT -> mFilterToggles.HighlightNextItem()
+        // ⚠️ MEASURED: the 37/38 arms act and then return FALSE (`result = 0` at LABEL_8);
+        // only 39/40 report handled. Reproduced as-is.
+        bool HandleControllerInput(const CgsGui::GuiEventControllerInputPressed* lpControllerEvent);
+
+        // @ 0x8243AC60 (DWARF cpp:955). Re-populate the SECOND toggle row (the per-panel
+        // sub-filter) for whichever top-level filter is highlighted, then push the selection
+        // into the sub-panel. Skipped entirely while an online start is in progress and the
+        // game-mode type is neither -1 nor 15.
+        void RefreshSecondLevelFilter(EventPanel::EEventType leEventMode,
+                                      s32 leRoadRuleScoreType, bool lbForce);
+
+        // @ 0x8242D410 (DWARF cpp:1052). Push the second toggle row's highlighted option into
+        // the sub-panel that owns it (event game mode / road rule); drive-thru and rival
+        // panels have no second-level data and are no-ops.
+        void UpdateDataPanel();
+
+        // @ 0x82440258 (DWARF cpp:188). Re-apply the saved panel/mode/score-type triple after
+        // SetupToggle has rebuilt the top-level row.
+        void RestoreSettings();
+
+        // @ 0x8243AF30 (DWARF cpp:1101). Post the menu-navigation audio trigger for the
+        // D-pad action that caused the move.
+        void TriggerSound(s32 leAction);
+
+        // DWARF cpp:499 -- `void SetAnimState(BrnGui::CrashNavPanel::AnimState)`.
+        // ⛔ BLOCKED (no body written): the PS3 DWARF gives it a .cpp line but the X360 build
+        // has NO symbol for it (`scratch/func_index.tsv` carries all 25 other CrashNavPanel
+        // methods and not this one) and no caller in the export set expands it inline, so
+        // there is no store evidence to reconstruct from. Declared so the class shape stays
+        // DWARF-complete; do NOT invent a body.
+        void SetAnimState(AnimState leAnimState);
+
         // ---- full DWARF member sequence (BrnCrashNavPanel.h:237..:264) ----------------
         // X360 console offsets are COMMENTS ONLY; the host layout is name-based (pointers
         // widen, sub-panel host sizes differ from the console spans).
@@ -305,22 +394,16 @@ namespace BrnGui
         EventPanel        mEventPanel;      // +0x2EA8  (DWARF h:246; event-info sub-panel)
         DriveThruMapPanel mDrivethruPanel;  // +0x3788  (DWARF h:247)
 
-        // ---- mRoadPanel (DWARF h:248) -- the ONE member still carried as a carve ------
-        // The DWARF places `BrnGui::RoadPanel mRoadPanel` here (console +0x3A80..+0x482F,
-        // 0xDB0 bytes: IconComponent base 0x94 / mRoadSign @+0xA0 (RoadSignIcon vtable
-        // off_820564F0) / mRoadPanelData / mNames[4]+mScores[4]+mTargetCaption TextFields
-        // @+0x2A8..+0xD0F / mBestScoreBackingAnimation @+0xD10 / meCurrentRule @+0xD9C /
-        // meCurrentScoreMode @+0xDA0 / mbActive @+0xDA4 + pad). The committed
-        // BrnRoadPanel.h (owned by the RoadPanel TU, NOT this one) is still its own
-        // pre-DWARF partial slice whose tail fields are PRIVATE and DWARF-misnamed
-        // (miSelectedFriendIndex / miScoringMode), so a typed `RoadPanel mRoadPanel` here
-        // would strand this TU's two road-rule accessors. Until BrnRoadPanel.h applies its
-        // DWARF shape (requested), the region stays a byte-carve with the two fields this
-        // TU's accessors read split out at their console slots. Nothing is double-counted.
-        u8  maRoadPanelHead[0xD9C];        // mRoadPanel head (console +0x3A80..+0x481B)
-        s32 miActiveRoadRuleType;          // +0x481C == RoadPanel::meCurrentRule (+0xD9C)
-        s32 miActiveRoadRuleScoreMode;     // +0x4820 == RoadPanel::meCurrentScoreMode (+0xDA0)
-        u8  maRoadPanelTail[0xC];          // RoadPanel::mbActive + tail pad (+0x4824..+0x482F)
+        // ---- mRoadPanel (DWARF h:248) -- CARVE RETIRED 2026-08-29 (main-menu wave F1) ---
+        // The region used to be `u8 maRoadPanelHead[0xD9C]` plus two split-out s32s, because
+        // the committed BrnRoadPanel.h was a pre-DWARF slice with private, DWARF-misnamed
+        // tail fields. BrnRoadPanel.h now carries its DWARF member run (mRoadSign /
+        // mRoadPanelData / meIcon / the TextField run / mBestScoreBackingAnimation /
+        // meCurrentRule @+0xD9C / meCurrentScoreMode @+0xDA0 / mbActive @+0xDA4, sizeof
+        // 0xDB0 == 0x4830-0x3A80), so the member is typed here and every road-rule read goes
+        // through RoadPanel's own inline accessors. Nothing is double-counted, and the
+        // console offsets the old carve documented are unchanged.
+        RoadPanel mRoadPanel;              // +0x3A80  (DWARF h:248)
 
         RivalMapPanel mRivalPanel;         // +0x4830  (DWARF h:249)
         IconComponent mGenericPanel;       // +0x4FD8  (DWARF h:251; vtable off_82072F90)

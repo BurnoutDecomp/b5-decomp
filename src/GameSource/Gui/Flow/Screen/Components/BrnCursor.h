@@ -200,6 +200,16 @@ namespace BrnGui
         // DWARF h:348 -- non-const in the DWARF; kept non-const to match that shape.
         bool GetAlwaysSnap() { return mbAlwaysSnap; }
 
+        // DWARF h:320 -- the reader paired with SetBounds (h:212). Same footing as
+        // GetPosition: header-defined in the original, no X360 symbol, every call site
+        // folds it. ADDITIVE GROW (F2 small-closures wave).
+        Vector4 GetBounds() const { return mv4BoundsRect; }
+
+        // NOT DECLARED HERE: ClearSelection() (DWARF h:362). It has no X360 symbol, no
+        // reconstructed call site and no inline expansion anywhere in the export set, so
+        // its body is unrecoverable and a bare declaration would only be an unlinkable
+        // trap. [FLAG unrecovered] Add it with its body when a call site lands.
+
     private:
         // CrashNavMap::UpdateCursorStatus writes muLockedToIndex / meDisplayState and
         // reads KU_INVALID_SNAP_INDEX directly (all three stores are inlined in the X360).
@@ -207,6 +217,22 @@ namespace BrnGui
 
         // DWARF BrnCursor.h:163. Construct writes it into muLockedToIndex as `li r6, -1`.
         static const u32 KU_INVALID_SNAP_INDEX = 0xFFFFFFFFu;
+
+        // DWARF h:165/:166/:168/:169/:170 -- five private class statics whose DEFINITIONS
+        // the DWARF places at BrnCursor.cpp:23-:27, which is where they are defined here.
+        // Every value below is the MEASURED big-endian rodata word behind the literal the
+        // X360 loads at the one site that uses it (see the BrnCursor.cpp banner for the
+        // address of each): they are not float literals guessed from the pseudocode.
+        static const f32 KF_SNAPDIRECTION_MIN_DOT;      // h:165
+        static const f32 KF_SNAPDIRECTION_DOTWEIGHT;    // h:166
+        static const f32 KF_SNAP_DEADZONE;              // h:168
+        static const f32 KF_AUTOREPEAT_WAIT_DELAY;      // h:169
+        static const f32 KF_AUTOREPEAT_REPEAT_DELAY;    // h:170
+
+        // ALSO DWARF-attested at h:172-:175 / cpp:29-:32 and deliberately NOT declared:
+        // mXAxisName[3], mYAxisName[3], macTransitionVar[15], macShouldTransition[21].
+        // None of the eleven X360 bodies reads them (they belong to ClearSelection / the
+        // input-binding path), so their contents are unattested. [FLAG unrecovered]
 
         // DWARF h:177-:193. Trailing comments are X360 offsets -- documentation only.
         f32            mfMovementScalar;        // X360 +0x8C

@@ -80,6 +80,27 @@ namespace BrnGui
         // AddGuiEvent<GuiEventRankProgressResponse> @0x823D7290 -> AddEvent(&event, 438, 36).
         s32 GetEventType() const { return 438; }
 
+        // MERGE (main-menu wave F1 x the driver-details wave, 2026-08-29 rebase): both
+        // sessions independently NAMED the formerly-reserved 0x20-byte head. The DWARF rows
+        // (BrnGuiEventTypeDefs.h:5089..5097) win the member names; the accessor faces below
+        // are kept because CrashNavPanel::RecEvent's id-438 arm (@0x82442048..0x8244208C)
+        // reads the record through them (eight words -> EventPanel::SetModeRanks +
+        // SetModeRankWins, the order the consumer types). No member shifts: 8*4 == 0x20 and
+        // miCurrentRank stays at its X360-proven +0x20.
+        s32 GetRaceRank() const            { return miRaceRank; }
+        s32 GetRoadRageRank() const        { return miRoadRageRank; }
+        s32 GetStuntAttackRank() const     { return miStuntAttackRank; }
+        s32 GetMarkedManRank() const       { return miMarkedManRank; }
+        s32 GetRaceRankWins() const        { return miOfflineRaceRankWins; }
+        s32 GetRoadRageRankWins() const    { return miRoadRageRankWins; }
+        s32 GetStuntAttackRankWins() const { return miStuntAttackRankWins; }
+        s32 GetMarkedManRankWins() const   { return miMarkedManRankWins; }
+
+        // The raw +0x20 word WITHOUT GetPlayerRank's sentinel assert -- CrashNavPanel::RecEvent
+        // tests it against KI_PLAYER_HAS_FINISHED_LAST_RANK *before* deciding whether to call
+        // GetPlayerRank at all (`if (a2[8] == -1)` @0x82441FA0), so it must not trip that assert.
+        s32 GetCurrentRankRaw() const      { return miCurrentRank; }
+
         // Construct's destination words, in its own store order. Names + order: DWARF
         // BrnGuiEventTypeDefs.h:5089..5097.
         s32 miRaceRank;              // @0x00  <- action.miOfflineRace

@@ -3,7 +3,11 @@
 // ===================================================================================
 // BrnGui::CrashNavMap  -- owning header
 //   b5-decomp/src/GameSource/Gui/Flow/Screen/States/BrnCrashNavMap.h
-//   TU: GameSource/Gui/Flow/Screen/States/BrnCrashNavMap.cpp (19 functions, todo)
+//   TU: GameSource/Gui/Flow/Screen/States/BrnCrashNavMap.cpp (the base partfile: the
+//       ctor, OnLeave, PlaceCursorOnPlayer, SetFilterFromPanel, the two empty input
+//       virtuals and the two statics) PLUS BrnCrashNavMap_wJ_01..08.cpp (the other
+//       nineteen bodies). ALL NINE MOUNT AS ONE SET -- they share mauComponentHashIds
+//       and this class's statics.
 //
 // The crash-nav map screen-state BASE: owns the main map component, the crash-nav
 // panel/legend, the map cursor and the map-icon bookkeeping. Derived screens:
@@ -59,7 +63,7 @@
 //
 // The x64 host layout is NAME-BASED (pointers widen); the X360 offsets above are
 // documentation + the relative scalar-run pins in _AssertLayout below. Method bodies
-// belong to the BrnCrashNavMap.cpp TU (still todo) -- declarations only here.
+// belong to the BrnCrashNavMap.cpp / _wJ_0*.cpp TU set -- declarations only here.
 // ===================================================================================
 
 #include "types.hpp"
@@ -168,26 +172,50 @@ namespace BrnGui
         // ---- lifecycle virtuals (DWARF; bodies are the BrnCrashNavMap.cpp TU) -------
         virtual void Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm);   // @0x824B6660
         virtual void OnEnter();                                           // @0x824CB158
-        virtual void OnLeave();                                           // @0x824CB4B8 (DWARF cpp:418)
+        virtual void OnLeave();                                           // @0x824CB440 (DWARF cpp:418)
         virtual void Update();                                            // @0x824DD6D8
 
     protected:
         // ---- protected virtuals (DWARF order) ---------------------------------------
-        virtual void HandleCrashNavInputPressed(const CgsModule::Event* lpEvent);   // @0x824B6798
-        virtual void HandleCrashNavInputReleased(const CgsModule::Event* lpEvent);  // @0x824B67B8
+        // ⭐ CORRECTED 2026-08-29 (base-TU wave). Both rows used to read @0x824B6798 /
+        // @0x824B67B8. Neither is a function entry: those two addresses are INSIDE
+        // Construct @0x824B6660 (raw image words 3BBD0004 == `addi r29,r29,4`, the
+        // icon-name loop tail, and 387F06E0 == `addi r3,r31,0x6E0`, the
+        // CrashNavPanel::StoreSettings call), and neither has an .ida-exports .json. The
+        // class vtable at off_82076664 -- the pointer the ctor @0x825114B8 stores at this+0
+        // -- puts BOTH slots (9 == +0x24 pressed, 10 == +0x28 released) at 0x8284CB38, a
+        // single `blr` (4E800020) that the linker ICF-folded across the whole image (IDA
+        // names that address CgsSceneManager::CgsCollision::BaseCollisionGenerator::
+        // Destruct; slots 5, 7 and 19 of this same vtable point at it too). So the BASE
+        // pair are EMPTY virtuals -- bodied as such in BrnCrashNavMap.cpp. The real input
+        // maps are the derived CrashNavMapMain::HandleCrashNavInput{Pressed,Released}
+        // @0x824CCAE8 / @0x824CCD90.
+        virtual void HandleCrashNavInputPressed(const CgsModule::Event* lpEvent);   // vtbl slot 9  -> 0x8284CB38 (blr)
+        virtual void HandleCrashNavInputReleased(const CgsModule::Event* lpEvent);  // vtbl slot 10 -> 0x8284CB38 (blr)
         virtual void AppendExpectedAptComponents();                                 // @0x824B67E0
         virtual void SetupComponents();                                             // @0x824D8C40
 
         // ---- non-virtual helpers this TU owns (DWARF set; declarations only) --------
         void CheckForLoadComplete();                        // @0x824CB660
+
+        // ⭐ BLOCKED -- NO BODY EXISTS ANYWHERE (base-TU wave, 2026-08-29). DWARF
+        // BrnCrashNavMap.cpp:589. No X360 symbol (scratch/func_index.tsv carries 23
+        // `CrashNavMap::` rows and none of these five), no caller among the nineteen landed
+        // wave-J bodies, and no inlined site this project can pin. The tempting candidate --
+        // Update's id-64 GuiCache hand-off arm -- is NOT this function folded in: that arm's
+        // asserts cite cpp:330 and cpp:339, i.e. inside Update (cpp:274), well above
+        // cpp:589. DECLARATION-ONLY on purpose; do not invent a body. FLAG.
         void UpdateGuiCache(const CgsModule::Event* lpEvent);
+
         void UpdateMainMap();
         void UpdateSoundEvents(bool lbIsScrolling);
         void ResetIconManager(const CgsModule::Event* lpEvent);   // @0x824B6BE0
         void UpdateIconManager();
         void MoveCursor(const CgsModule::Event* lpEvent);         // @0x824BF100
+        // ⭐ BLOCKED -- see the UpdateGuiCache note above (DWARF cpp:1525). FLAG.
         void SetMapPanelState(MapState leMapState);
-        void SetFilterFromPanel();
+
+        void SetFilterFromPanel();                                // @0x824CC0E0 (DWARF cpp:1574)
         void UpdateRoadRule(const CgsModule::Event* lpEvent);
         void UpdateEvent();                                       // @0x824CC3F8
         void UpdateDrivethru();                                   // @0x824B7158
@@ -196,7 +224,16 @@ namespace BrnGui
         void UpdateButtonPrompts();                               // @0x824B68B8
         void UpdateEventInfoPanel();
         f32  CalculateEventZoomFactor();                          // @0x824BF4B0
-        bool PlaceCursorOnPlayer();                               // @0x824CBAA8 region
+        // ⭐ CORRECTED 2026-08-29: this row used to say "@0x824CBAA8 region". 0x824CBAA8 is
+        // inside UpdateIconManager @0x824CBA70, which is merely one of the three callers
+        // (the others are CrashNavMapMain::Update @0x824DDDF8 and
+        // OnlineGameRoomPlayerInfo::Update @0x824B0770). The real entry is 0x824BF6F0.
+        bool PlaceCursorOnPlayer();                               // @0x824BF6F0 (DWARF cpp:2136)
+
+        // ⭐ BLOCKED -- see the UpdateGuiCache note above (DWARF cpp:2232 / :2249 / :2266).
+        // The zoom the map actually performs runs through MainMapComponent::SetZoom, driven
+        // by the DERIVED CrashNavMapMain::HandleCrashNavInputPressed's action-56 arm; these
+        // three base helpers are dead on this build. FLAG.
         void ZoomIn();
         void ZoomOut();
         void ZoomUpdate();

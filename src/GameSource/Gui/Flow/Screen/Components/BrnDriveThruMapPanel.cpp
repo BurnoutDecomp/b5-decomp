@@ -19,13 +19,26 @@
 
 namespace BrnGui
 {
-    // File-static apt names for the two child text fields (X360 off_82F25168 table). The
-    // location field reuses the shared "RivalName" apt string. (DWARF KAPC_TEXTFIELD_NAMES,
-    // BrnDriveThruMapPanel.cpp:31.)
+    // ⭐ ADDITIVE (main-menu wave G1, 2026-08-29). The one drive-thru second-level filter
+    // option label (DWARF KAPC_DRIVETHRU_FILTER_OPTIONS, BrnDriveThruMapPanel.h:4).
+    // CrashNavPanel::RefreshSecondLevelFilter passes the whole table to
+    // MenuToggleGroupVarSize<3>::SetupToggle (`addi r8, r11, off_82F25164`, `li r5, 1`
+    // @0x8243ADA4). IMAGE-CITED: image.bin (file offset = VA - 0x82000000, big-endian) --
+    // the table at VA 0x82F25164 holds one pointer, 0x820494E0 -> "$CN_PANEL_NO_TYPES".
+    const char* DriveThruMapPanel::KAPC_DRIVETHRU_FILTER_OPTIONS[1] =
+    {
+        "$CN_PANEL_NO_TYPES",
+    };
+
+    // File-static apt names for the two child text fields (X360 off_82F25168 table, both
+    // entries read from the image: 0x82F25168 -> 0x820494D0 "DriveThruName", 0x82F2516C ->
+    // 0x820494C0 "DriveThruLoc"; the next pointer, 0x82F25170 "RivalName", is the FIRST
+    // entry of the RivalMapPanel table and is the loop's exclusive upper bound, not a
+    // member). (DWARF KAPC_TEXTFIELD_NAMES, BrnDriveThruMapPanel.cpp:31.)
     static const char* const KAPC_TEXTFIELD_NAMES[DriveThruMapPanel::E_TEXTFIELD_COUNT] =
     {
         "DriveThruName",
-        "RivalName",
+        "DriveThruLoc",
     };
 
     // Scratch buffer length for the localisation key the panel formats on the stack (X360
@@ -105,5 +118,21 @@ namespace BrnGui
         CgsCore::SPrintf(lacKey, KU_DT_KEY_BUFFER_SIZE, "DT_LOC_%llu", lDriveThruID);
         maTextfields[E_TEXTFIELD_LOCATION].SetLocalisedText(
             lacKey, CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+    }
+
+    // Inlined into CrashNavPanel::ChangeVisiblePanelState @0x8243A548 ------------------
+    // Push the named show/hide state at the panel's own apt clip, then latch the active
+    // flag. Store-for-store: the state push comes FIRST in both arms, the flag store
+    // second (asm order at the two E_PANEL_DRIVETHRU arms).
+    void DriveThruMapPanel::TransitionIn()
+    {
+        SetState("transIn");    // sub_824E2B90(panel, "transIn")
+        mbActive = true;        // stb 1, +0x2F0
+    }
+
+    void DriveThruMapPanel::TransitionOut()
+    {
+        SetState("transOut");   // sub_824E2B90(panel, "transOut")
+        mbActive = false;       // stb 0, +0x2F0
     }
 }

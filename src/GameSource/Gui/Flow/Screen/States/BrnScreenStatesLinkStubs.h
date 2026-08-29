@@ -53,26 +53,10 @@ namespace BrnGui
         virtual void Update();
     };
 
-    // PARTIAL (pause wave, 2026-08-26) -- OnEnter and the Update exit arm are the console's
-    // (@0x824CC9E8 / @0x824CCAE8 cases 45|50); entering this state IS the offline pause.
-    // ⛔ The CrashNavMap BASE half is still PARKED: the real class derives from CrashNavMap
-    // (X360 24944B, main-map vtable @0x8207707C), whose 19 written bodies are UNMOUNTED and
-    // whose ctor @0x825114B8 / OnLeave @0x824CB440 / PlaceCursorOnPlayer @0x824BF6F0 /
-    // SetFilterFromPanel @0x824CC0E0 do not exist -- so NO MAP IS DRAWN yet.
-    // ⚠️ SHADOWING HAZARD when the base lands: this declaration says
-    // `: CgsGui::State`, the real one derives from CrashNavMap. Re-parent, do not add a
-    // second declaration -- two survivors are an ODR fork. Script id "CN_MAP_MAIN".
-    struct CrashNavMapMain : public CgsGui::State
-    {
-        virtual void OnEnter();
-        virtual void OnLeave();
-        virtual void Update();
-
-    private:
-        // dword_82066358 -- the 19 ids OnEnter/OnLeave (un)register. Values in the .cpp.
-        static const s32 maiEventToObserve[19];
-        static const s32 miNumEventsObserved;
-    };
+    // (BrnGui::CrashNavMapMain -- the CN_MAP_MAIN screen, the offline pause / main menu --
+    //  was RECONSTRUCTED 2026-08-29 (main-menu wave); its real home is
+    //  States/BrnCrashNavMapMain.h, deriving the now-landed CrashNavMap base. The pause-wave
+    //  partial that lived here moved out with it, per the re-parent contract above.)
 
     // FLAG PC-platform leaf: placeholder -- real BrnGui::CrashNavProfile (X360 5896B;
     // out-of-line ctor + the wider Construct(id, fsm, ProfileManager&) @0x8252448C the
