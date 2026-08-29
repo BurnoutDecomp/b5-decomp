@@ -3390,6 +3390,39 @@ void RaceCarEntityModule::UpdateOutputBoostInfo(
             lInfo.mbJustLostBoostChunk = lpStrategy->HasJustLostBoostChunk();
             lInfo.mbBoostIsFull        = lpStrategy->IsBoostFull();
 
+            // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN the showtime idle ladder is proven to
+            // fire. THE CONTROL FOR THE BOOST BUTTON, and the reason it exists is the whole
+            // lesson of this cluster: 290 boost presses were delivered during a 150 s showtime
+            // session on 2026-08-29 and mfPlayerBoostPercentage did not move by one bit. That
+            // reads IDENTICALLY to "the harness channel is dead", and nothing measured so far
+            // could tell the two apart. [[diagnostics-that-lie]] -- and the brief's own rule:
+            // prove the stimulus before you report a zero.
+            // ⭐ mbHoldingBoostButton is the console's OWN copy of PlayerVehicleControls::mbBoost,
+            // i.e. the far end of the ordinary pad path, so printing it beside the strategy's
+            // mbBoosting and the raw amount/max separates FOUR different answers:
+            //   button 0 -> the press never arrived (harness/channel problem, not the game)
+            //   button 1, boosting 0 -> the strategy refuses to boost (AreWeAllowedToBoost /
+            //                           the crash-play gate) -- a real game answer
+            //   button 1, boosting 1, amount flat -> the burn is not wired
+            //   button 1, boosting 1, amount falling -> it works; something else ends the mode
+            // Once every 120 frames at 60 Hz, behind BRN_SHOWTIME_WATCH, player slot only.
+            {
+                static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
+                static s32        siCall  = 0;
+                if (sbWatch && CgsDev::Log::gpDebugPrint != 0 && (siCall++ % 120) == 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[boost-watch] call=" << siCall
+                        << " button="   << (lInfo.mbHoldingBoostButton ? 1 : 0)
+                        << " allowed="  << (lInfo.mbAllowedToBoost ? 1 : 0)
+                        << " boosting=" << (lpStrategy->IsBoosting() ? 1 : 0)
+                        << " amount="   << lInfo.mfBoostAmount
+                        << " max="      << lInfo.mfMaxBoost
+                        << " mode="     << static_cast<s32>(meGameModeType)
+                        << "\n";
+                }
+            }
+
             // Both showtime modes hide the boosting flame.
             if ( meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
                  meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME )
