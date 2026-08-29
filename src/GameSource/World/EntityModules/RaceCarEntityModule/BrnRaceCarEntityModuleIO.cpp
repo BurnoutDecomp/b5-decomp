@@ -454,6 +454,19 @@ OutputBuffer_PrePhysics::GetVehicleDriverInterface()
     return &mVehicleDriverInterface;
 }
 
+// X360 (W, :477) -- the mutable vehicle-EFFECTS accessor, the write half of the pair whose read
+// half is 0x8279E118 (+147488) above. LANDED 2026-08-29 (crash-play wave): it was
+// declaration-only, and CrashPlayManager::UpdateTrafficStomp is its first caller -- the console
+// inlines VehicleEffectsInputInterface::CreateAirRam there and reaches this interface's air-ram
+// queue directly (`bl RaceCarEntityModuleIO::OutputBuffer @0x822F9150` then
+// BaseEventQueue<CreateAirRamEvent>::AddEventSafe).
+BrnPhysics::Vehicle::VehicleEffectsInputInterface*
+OutputBuffer_PrePhysics::GetVehicleEffectsInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mVehicleEffectsInterface;
+}
+
 // X360 sub_822B5DF8 (W, :480) -- the mutable player-reset accessor (write-lock bit 3; tail
 // `addis r3, r28, 2 ; addi r3, r3, 0x4720` == this + 149280 == &mPlayerResetInterface).
 // LANDED 2026-08-26 (resetpump wave): RaceCarEntityModule::ProcessResetOnTrackResultQueue calls
@@ -466,9 +479,17 @@ OutputBuffer_PrePhysics::GetPlayerResetInterface()
     return &mPlayerResetInterface;
 }
 
-// X360 address NOT ATTRIBUTED (W). The write-lock accessor that returns +149312. It is NOT
-// 0x822B5CA8 -- that address returns +142192 and belongs to GetVehicleDriverInterface above.
-// The body is unchanged and was always right (by-name &member); only the citation moved.
+// X360 sub_822B5EA0 (W, :483) -- ATTRIBUTED 2026-08-29 (crash-play wave). It was carrying
+// "X360 address NOT ATTRIBUTED (W)". The address is settled by the two things that identify any
+// accessor in this class: the OFFSET IT RETURNS and the assert it fires. sub_822B5EA0 ends
+// `return a1 + 149312` -- mGameEventQueue, exactly this function -- behind
+// `if (((*a1 >> 3) & 1) == 0)` firing "Not locked for writing" at BrnRaceCarEntityModuleIO.h:492,
+// which is the write-lock bit-3 test IsBufferLockedForWriting() compiles to. It is reached as
+// `bl sub_822B5EA0` from all three CrashPlayManager event posters (UpdateCarLeaping @0x822F91F8,
+// UpdateNewRoad @0x822F9254/0x822F9284, SetBouncePromptNeeded @0x822F92DC), each time with
+// lpOutput in r3 and the result handed straight to VariableEventQueue<1536,16>::AddEvent.
+// It is NOT 0x822B5CA8 -- that address returns +142192 and belongs to GetVehicleDriverInterface
+// above. The body is unchanged and was always right (by-name &member); only the citation moved.
 OutputBuffer_PrePhysics::GameEventQueue*
 OutputBuffer_PrePhysics::GetGameEventQueue()
 {
