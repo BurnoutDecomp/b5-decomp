@@ -220,6 +220,14 @@ namespace BrnGui
         const s32 KI_EVENT_PROGRESSION_PROFILE      = 350;
         const s32 KI_EVENT_PERCENTAGE_COMPLETE      = 436;
         const s32 KI_EVENT_COMPRESSED_STILL_IMAGE   = 569;
+
+        // ---- the two apt movies this screen swaps between --------------------------------
+        // 217 is the "Results" apt (it is also maResourcesToLoad[0], and OnEnter seeds
+        // meCurrentMainMovie with it). 218 is the movie the rank-up/photo page swaps in
+        // (UpdateTakePhotoPage @0x824C3E28 `li r11, 0xDA` -> meCurrentMainMovie); the same two
+        // literals appear in the asm as 0xD9 / 0xDA. Named here so the swap reads as a swap.
+        const BrnGuiResourceId KU_RESULTS_MOVIE_RESOURCE = 217;   // "Results"
+        const BrnGuiResourceId KU_PHOTO_MOVIE_RESOURCE   = 218;
     }
 
     // ---- static resource list -------------------------------------------------------------
@@ -378,7 +386,7 @@ namespace BrnGui
         // meCurrentMainMovie is resource id 217 -- the same "Results" apt the state's own
         // maResourcesToLoad[0] requests. Update case 1 turns it into the PlayAptMovie call
         // that actually puts this screen on the display.
-        meCurrentMainMovie = 217;
+        meCurrentMainMovie = KU_RESULTS_MOVIE_RESOURCE;
         meWinState         = E_RESULTS_COUNT;      // the out-of-range "not decided yet" seed
 
         for (s32 liSubState = 0; liSubState < E_ACTIVE_SUBSTATE_EVENT_COUNT; ++liSubState)
@@ -975,6 +983,290 @@ namespace BrnGui
         {
             mbLicenseShown = true;
         }
+    }
+
+    // -----------------------------------------------------------------------------------
+    // IsAWinningResult -- the three-way `meWinState` test the X360 emits inline in
+    // UpdateTakePhotoPage @0x824C4044 and again @0x824C4168, and that SetupComponents /
+    // UpdateEventResults spell as `meWinState <= E_RESULTS_PLAIN_WIN`.
+    //
+    // ⭐ The asm is worth recording, because it is NOT a `<=`: it compares against 1, then 0,
+    // then 2, and sets the flag on any of the three (`cmpwi 1 / beq; cmpwi 0 / beq; cmpwi 2 /
+    // bne`). Over EResultsAnimations that is exactly the set {DETAILED_WIN, WIN_WITH_TARGETS,
+    // PLAIN_WIN} -- i.e. "the player won" -- so the source-level predicate is a membership
+    // test, not an ordering one. Outlined here (AGENTS.md "inlining reversal") so the two call
+    // sites read as the question they are asking.
+    // -----------------------------------------------------------------------------------
+    static bool IsAWinningResult(InstantResultsState::EResultsAnimations leWinState)
+    {
+        return leWinState == InstantResultsState::E_RESULTS_WIN_WITH_TARGETS
+            || leWinState == InstantResultsState::E_RESULTS_DETAILED_WIN
+            || leWinState == InstantResultsState::E_RESULTS_PLAIN_WIN;
+    }
+
+    // -----------------------------------------------------------------------------------
+    // UpdateSecondResultsPage  @0x824BE508  (cpp:1814, 103 instructions)
+    // The RESULTS_TWO sub-state -- the second results page, which only the mode-4 (pursuit)
+    // result raises (SelectSubstates gates it on `meFinishedGameModeType == 4`). Set-up pushes
+    // the shutdown car's name into mShutdownText and shows mSecondResultsIcon on frame 0; the
+    // running tick hands over on the dwell and flips the icon to frame 1 on the way out.
+    // -----------------------------------------------------------------------------------
+    void InstantResultsState::UpdateSecondResultsPage()
+    {
+        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RESULTS_TWO,
+                   "E_ACTIVE_SUBSTATE_EVENT_RESULTS_TWO == meActiveSubState");         // cpp:1814
+
+        if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
+        {
+            // "CAR_CAPS_<id>" -- the shutdown car's localised display name, built from the
+            // cache's pursued-car id. The X360 caps the SPrintf at 31 and NUL-terminates the
+            // 32nd byte itself.
+            char lacCarId[24];
+            CgsIDConvertToString(mpGuiCache->GetPursuitCarID(), lacCarId);
+
+            char lacCarStringId[32];
+            CgsCore::SPrintf(lacCarStringId, 31, "CAR_CAPS_%s", lacCarId);
+            lacCarStringId[31] = 0;
+
+            const char* lapacParams[1] = { lacCarStringId };
+            const CgsLanguage::LanguageManager::ParameterFormatType laeFormats[1] =
+                { CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP };
+
+            mSecondResultsIcon.SetState(0u);
+            mShutdownText.SetLocalisedText("POSTRACE_FINISH_PURSUIT_CAR_SHUTDOWN",
+                                           CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP,
+                                           1, lapacParams, laeFormats);
+
+            meSubStateState = E_SUBSTATE_RUNNING;
+            return;
+        }
+
+        CGS_ASSERT(meSubStateState == E_SUBSTATE_RUNNING,
+                   "Should not be updating car unlock when substate is in state");     // cpp:1858
+
+        if (TickSubstateAndEndIfDone())
+            mSecondResultsIcon.SetState(1u);
+    }
+
+    // -----------------------------------------------------------------------------------
+    // UpdateTakePhotoPage  @0x824C3C70  (cpp:1876..2061)
+    //
+    // ⭐⭐ THIS IS THE SUB-STATE THE RESULTS PRESENTATION WAS STUCK IN. Measured 2026-08-29
+    // (five runs, rs1..rs5): the "YOU WIN" stamp/banner presentation DOES draw, the RESULTS
+    // sub-state dwells out on schedule and hands over to TAKE_PHOTO -- and then the trap stub
+    // logged 2,795 identical lines to the end of the run, because nothing advanced the
+    // sub-state machine again. So the panel did not fail to appear; it appeared and then had
+    // nowhere to go.
+    //
+    // TWO PATHS, chosen by whether a Live Vision camera is attached (mpGuiCache->miCamStatus,
+    // already homed at +0x13B58 with all fifteen readers listed):
+    //   * camera present AND a winning result -> hide the results icon + the licence panel and
+    //     run the real mugshot: either the WAITING_FOR_CLEANUP ladder below (rank-up run) or a
+    //     straight jump into E_RESULTS_STATE_PHOTO_INTERRUPT.
+    //   * otherwise (the PC case -- there is no camera and no producer for GUI event 570, so
+    //     miCamStatus is 0, which is exactly a 360 with nothing plugged in) -> seed the stage
+    //     to OLD_LICENSE_RECAP on a win / DONE on a loss and let the dwell carry it out.
+    //
+    // ⚠️ TWO ARGUMENTS THE PSEUDOCODE DROPS, RECOVERED FROM THE ASM (AGENTS.md rung 1). Both
+    // EnsureResource calls are rendered `EnsureResourceIsUnloaded(mpGuiCache)` with no second
+    // argument at all; the asm shows `addi r4, r31, 0x19D8` (i.e. &mLargeIconResource) for the
+    // first, and a STACK-BUILT sResourceTuple{ meCurrentMainMovie, E_GUI_RESOURCETYPE_APT } for
+    // the second and for the case-1 EnsureResourceIsLoaded (`stw meCurrentMainMovie, var_50` /
+    // `li 4` / `stw var_4C`). Taking the pseudocode literally would have unloaded nothing.
+    // -----------------------------------------------------------------------------------
+    void InstantResultsState::UpdateTakePhotoPage()
+    {
+        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_TAKE_PHOTO,
+                   "E_ACTIVE_SUBSTATE_EVENT_TAKE_PHOTO == meActiveSubState");          // cpp:1876
+
+        if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
+        {
+            const bool lbWon = IsAWinningResult(meWinState);
+
+            if (lbWon && mpGuiCache->GetCamStatus() != 0)
+            {
+                mResultsIcon.SetState("Invisible");
+                if (mLicense.IsVisible())
+                    mLicense.SetVisible(false);
+
+                if (mResults.mbHasRankedUp)
+                {
+                    // The rank-up run tears the results movie down first, so the photo page
+                    // starts from the WAITING_FOR_CLEANUP rung of the ladder below.
+                    mePhotoPresentationStage = E_PHOTO_PRESENTATION_WAITING_FOR_CLEANUP;
+                }
+                else
+                {
+                    // No rank-up: hand straight over to the mugshot interrupt, which Update
+                    // routes to UpdatePhoto instead of the sub-state machine.
+                    meCurrentState = E_RESULTS_STATE_PHOTO_INTERRUPT;
+                    mPhotoBoothComponent.ShowComponent(false);
+                    mePhotoPresentationStage = E_PHOTO_PRESENTATION_RUNNING;
+
+                    if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint << "INSTANT RESULTS DEBUG: "
+                                                   << "UpdateTakePhotoPage"
+                                                   << " (meCurrentState = " << meCurrentState << ")\n";
+                    }
+                }
+            }
+            else
+            {
+                mePhotoPresentationStage = lbWon ? E_PHOTO_PRESENTATION_OLD_LICENSE_RECAP
+                                                 : E_PHOTO_PRESENTATION_DONE;
+            }
+
+            meSubStateState = E_SUBSTATE_RUNNING;
+            return;
+        }
+
+        CGS_ASSERT(meSubStateState == E_SUBSTATE_RUNNING,
+                   "Should not be updating car unlock when substate is in state");     // cpp:2061
+
+        switch (mePhotoPresentationStage)
+        {
+        case E_PHOTO_PRESENTATION_WAITING_FOR_CLEANUP:
+            // Wait for the results movie to finish animating out, then swap resource 217
+            // (Results) for 218 (the rank-up/photo movie).
+            if (!mLicense.IsVisible() && mpcAnimatingComponentName == 0
+                && meCurrentMainMovie == KU_RESULTS_MOVIE_RESOURCE)
+            {
+                mpStateInterface->PlayAptMovie("", 3);
+                mpStateInterface->PlayAptMovie("", 2);
+
+                if (mpGuiCache->EnsureResourceIsUnloaded(mLargeIconResource))
+                {
+                    CgsGui::sResourceTuple lMainMovie;
+                    lMainMovie.muId   = meCurrentMainMovie;
+                    lMainMovie.meType = CgsGui::E_GUI_RESOURCETYPE_APT;
+                    if (mpGuiCache->EnsureResourceIsUnloaded(lMainMovie))
+                    {
+                        meCurrentMainMovie       = KU_PHOTO_MOVIE_RESOURCE;
+                        mePhotoPresentationStage = E_PHOTO_PRESENTATION_LOADING;
+                    }
+                }
+            }
+            break;
+
+        case E_PHOTO_PRESENTATION_LOADING:
+        {
+            CgsGui::sResourceTuple lPhotoMovie;
+            lPhotoMovie.muId   = meCurrentMainMovie;
+            lPhotoMovie.meType = CgsGui::E_GUI_RESOURCETYPE_APT;
+            if (mpGuiCache->EnsureResourceIsLoaded(lPhotoMovie))
+            {
+                mpGuiCache->ClearExpectedAptComponentList(static_cast<GuiFlow>(0));
+                mpGuiCache->AppendExpectedAptComponent(static_cast<GuiFlow>(0),
+                                                       mUpgradeText.GetName());
+                mpGuiCache->AppendExpectedAptComponent(static_cast<GuiFlow>(0),
+                                                       mUpgradeStateAnimator.GetName());
+                mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[meCurrentMainMovie], 3);
+                mePhotoPresentationStage = E_PHOTO_PRESENTATION_INITIALISING;
+            }
+            break;
+        }
+
+        case E_PHOTO_PRESENTATION_INITIALISING:
+            if (mpGuiCache->AreAllAptComponentsInitialised(static_cast<GuiFlow>(0)))
+            {
+                mpGuiCache->ClearExpectedAptComponentList(static_cast<GuiFlow>(0));
+                mUpgradeStateAnimator.AddOutputAptViewState("apt_Transition", "takePhoto", false);
+                meCurrentState = E_RESULTS_STATE_PHOTO_INTERRUPT;
+                mPhotoBoothComponent.ShowComponent(false);
+
+                if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint << "INSTANT RESULTS DEBUG: "
+                                               << "UpdateTakePhotoPage"
+                                               << " (meCurrentState = " << meCurrentState << ")\n";
+                }
+
+                mePhotoPresentationStage = E_PHOTO_PRESENTATION_RUNNING;
+            }
+            break;
+
+        case E_PHOTO_PRESENTATION_RUNNING:
+            if (mResults.mbHasRankedUp)
+            {
+                mePhotoPresentationStage = E_PHOTO_PRESENTATION_DONE;
+            }
+            else
+            {
+                mLicense.SetVisible(true);
+                mePhotoPresentationStage = E_PHOTO_PRESENTATION_OLD_LICENSE_RECAP;
+            }
+            break;
+
+        case E_PHOTO_PRESENTATION_OLD_LICENSE_RECAP:
+            if (HasSubstateTimedOut())
+            {
+                if (!mResults.mbHasRankedUp && mLicense.IsVisible())
+                    mLicense.HideLicense();
+                mePhotoPresentationStage = E_PHOTO_PRESENTATION_DONE;
+            }
+            break;
+
+        case E_PHOTO_PRESENTATION_DONE:
+            meActiveSubState = GetNextSubstate();
+            ResetStateTimer();
+            meSubStateState = E_SUBSTATE_SET_UP_COMPONENTS;
+            break;
+
+        default:
+            CGS_ASSERT(false, "Invalid substate for taking new photo");                // cpp:2053
+            break;
+        }
+    }
+
+    // -----------------------------------------------------------------------------------
+    // UpdateRankUp  @0x824BE6A8  (cpp:2576, 77 instructions)
+    // The RANK_UP_TEXT sub-state: show mRankUpIcon on frame 0, dwell, flip it to frame 1 on
+    // the way out. (SelectSubstates never raises this flag in the shipped offline path -- it
+    // raises RANK_UP_LICENSE instead -- but the dispatch reaches it and the body is three
+    // lines, so it is landed rather than left as a stub that would look like a real gap.)
+    // -----------------------------------------------------------------------------------
+    void InstantResultsState::UpdateRankUp()
+    {
+        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_TEXT,
+                   "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_TEXT == meActiveSubState");        // cpp:2576
+
+        if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
+        {
+            mRankUpIcon.SetState(0u);
+            meSubStateState = E_SUBSTATE_RUNNING;
+            return;
+        }
+
+        CGS_ASSERT(meSubStateState == E_SUBSTATE_RUNNING,
+                   "Should not be updating rank up when substate is in state");        // cpp:2600
+
+        if (TickSubstateAndEndIfDone())
+            mRankUpIcon.SetState(1u);
+    }
+
+    // -----------------------------------------------------------------------------------
+    // UpdateLeaving  @0x824BE7E0  (cpp:3151, 68 instructions)
+    // The LEAVING sub-state -- the last dwell before DONE hands the flow back to the FSM.
+    // Set-up does nothing but arm the timer state; the running tick is the shared
+    // TickSubstateAndEndIfDone, whose expiry moves meActiveSubState on to DONE and so reaches
+    // TriggerExitResults. Without this body the presentation could never leave the screen.
+    // -----------------------------------------------------------------------------------
+    void InstantResultsState::UpdateLeaving()
+    {
+        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_LEAVING,
+                   "E_ACTIVE_SUBSTATE_EVENT_LEAVING == meActiveSubState");             // cpp:3151
+
+        if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
+        {
+            meSubStateState = E_SUBSTATE_RUNNING;
+            return;
+        }
+
+        CGS_ASSERT(meSubStateState == E_SUBSTATE_RUNNING,
+                   "Should not be waiting to leave when substate is");                 // cpp:3171
+
+        TickSubstateAndEndIfDone();
     }
 
     // -----------------------------------------------------------------------------------
