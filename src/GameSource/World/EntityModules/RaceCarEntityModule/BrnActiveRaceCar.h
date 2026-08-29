@@ -953,6 +953,15 @@ public:
     // CrashPlayManager::UpdateTrafficStomp @0x822F90F0 (`lbz r11, 0x774(r29)`) to pick the
     // grounded vs airborne traffic-stomp air-ram power.
     bool IsTouchingWorld() const                     { return mbIsTouchingWorld; }             // +0x774
+    // ADDITIVE 2026-08-29 (showtime end wave). The WRITE half, for the same reason the reader
+    // above exists: RaceCarEntityModule::UpdateCrashingPlayerContacts @0x822E879C stores 1 into
+    // this byte directly off the slot (`stb r22, 0x774(r24)`, r22 == 1) whenever a post-physics
+    // race-car contact's B-side owner is 0 (the world). No console accessor symbol -- the module
+    // pokes the member -- so this exists so the producer names it instead of re-deriving +0x774.
+    // ⚠️ Write-ONLY-true here on purpose: the contact pass never clears it. The clear belongs to
+    // ActiveRaceCar::Update @0x822F7A0C (`mbCrashing ? false : (mfTimeInAir <= 0.0f)`), which is
+    // drop #2 in that function's banner and is still not reproduced.
+    void SetTouchingWorld(bool lbTouchingWorld)      { mbIsTouchingWorld = lbTouchingWorld; }  // +0x774
     bool IsOnStartLine() const
     { return meRaceStartState == E_RACE_START_STATE_ON_START_LINE; }                           // +0x77C
 

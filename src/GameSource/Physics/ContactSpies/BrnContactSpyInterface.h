@@ -91,6 +91,24 @@ namespace ContactSpy
             return mpData->GetTrafficContacts();
         }
 
+        // ⭐ NEW 2026-08-29 (showtime end wave). DWARF BrnContactSpyInterface.h:30
+        //     `const ContactSpyData::RaceCarContactQueue * GetRaceCarContacts() const;`
+        // INLINED by the console at its one consumer, RaceCarEntityModule::
+        // UpdateCrashingPlayerContacts @0x822E86B8..0x822E86E4:
+        //     lwz   r11, 0(r31)             ; mpData
+        //     cmplwi/bne                    ; the null test
+        //     FireAssert("mpData != NULL", "..\..\..\GameSource\Physics/ContactSpies/…", 0xB3)
+        //     lwz   r29, 0(r31)             ; re-read mpData -- and NO further offset,
+        //                                   ; because mRaceCarContactQueue is at +0x00000
+        // -- the same shape as GetPropContacts below, minus the addend. Kept header-inline for
+        // the same reason: the pass-through has no state and the assert is CGS_ASSERT-stamped.
+        // 0xB3 == 179 is this header's own line in the console tree.
+        const ContactSpyData::RaceCarContactQueue* GetRaceCarContacts() const
+        {
+            CGS_ASSERT(mpData != nullptr, "mpData != NULL");
+            return mpData->GetRaceCarContacts();
+        }
+
         // X360 0x82355BF0 (DWARF BrnContactSpyInterface.h:110): asserts mpData != NULL then
         // returns &mpData->mRaceCarContactRunList (console byte offset 0x198D0 into
         // ContactSpyData). RETYPED with the promotion (was `const void*` over the u32 slot).

@@ -265,6 +265,18 @@ public:
         // spawn point, which is the exact signature the wave-Q5 scout names in §6.
         void GenerateSceneUpdateEvents( RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput );
 
+        // X360 0x822E85F0 (114). ⭐ THE CRASH-PLAY CONTACT PASS -- the ONLY producer of
+        // CrashPlayManager::HandlePlayerToVehicleImpact, and therefore of OnCarCrash. Walks
+        // the post-physics race-car contact queue for contacts whose A-side is the player's
+        // body (part 0) and dispatches them by the B-side's OWNER byte.
+        // ⚠️ SIGNATURE: the console call site at 0x82307674..0x82307680 loads THREE argument
+        // registers (r3=this, r4=lpInput, r5=lpOutput) but the callee's prologue captures only
+        // r3 and r4 (`mr r28, r3` / `mr r31, r4`) and never reads r5 anywhere in its 114
+        // instructions -- a stale third argument at the call site. Declared with the two the
+        // body actually uses.
+        void UpdateCrashingPlayerContacts(
+                const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput );
+
         // X360 0x822CEEA8 (the tail call of GenerateSceneUpdateEvents). Walk
         // mabResetThisFrame; for every set bit whose slot IsActive(), clear that entity's
         // volume padding, then clear the whole bit array. DWARF declares the parameter as
