@@ -2530,6 +2530,65 @@ void RaceCarEntityModule::HandleGameActions(
             mBoostManager.TurnOffBoosting();
             break;
 
+        // ⭐⭐⭐ [showtime session-length wave 2026-08-29] THE SHOWTIME LATCH. Four instructions,
+        // and without them an offline showtime session is FIVE SECONDS LONG.
+        //
+        // ARTIST 0x8230D6F4..0x8230D728, the SECOND jump table's case 36:
+        //     cmplwi r27, 0 ; bne  -> assert "lpModeSwitchAction"   (baked line 0x1CAF == 7343)
+        //     mr    r3, r31 ; lwz  r4, 4(r27)  ; bl GetActiveRaceCar
+        //     lbz   r11, 0xC(r27)
+        //     stb   r11, 0x788(r3)                                  ; ActiveRaceCar::mbIsInShowtime
+        // ⚠️ IDA LABELS THIS "jumptable 8230CDBC case 36" AND 36 IS NOT THE ACTION ID. This body
+        // has TWO tables and IDA prints the SECOND one's INDEX; the arm's identity comes from its
+        // ASSERT STRING instead -- var_2C0 is loaded with "lpModeSwitchAction" at 0x8230BE90, and
+        // the only 16-byte mode-switch action is E_ACTION_SHOWTIME_MODE_SWITCH == 143 (its two
+        // producers are ModeManager::UpdateCurrentMode @0x82350F70 and SendModeStopMessages
+        // @0x8234C000, both `li r5,0x8F` + `li r6,0x10`). Case index 36 of table 1 IS a different
+        // action; do not merge them.
+        //
+        // WHY IT IS LOAD-BEARING, measured end to end 2026-08-29 on a -Drive -Showtime run BEFORE
+        // this arm existed:
+        //     [crash-exit]  OPENED crash record for active race car 0 seconds=4.000000
+        //     [crash-latch] mbPlayerIsCrashing 1 -> 0 at tMode=4.049997 playerIdx=0
+        //                   playerActive=1 rawState.mbCrashing=0
+        //     [crash-end]   ENDED via !mbPlayerIsCrashing
+        // The FREE-BURN crash-recovery timer ended the showtime session. CrashModule::TickCrashes
+        // @0x827C6690 exists to stop precisely that -- `if (IsCarInShowtime(owner)) continue;`, a
+        // showtime wreck is never ticked -- and it read false forever, because IsCarInShowtime
+        // tests E_RACE_CAR_OUTPUT_FLAG_IN_SHOWTIME, which UpdateOutputInterfaces raises from
+        // ActiveRaceCar::mbIsInShowtime, whose ONLY writer of a 1 in the whole image is this arm.
+        //
+        // ⛔ NOT REPRODUCED, and it costs nothing here: the console's own assert is a null test on
+        // an event the queue walk has already proven non-null (the `while (lpEvent != 0)` above),
+        // so it can only fire on a corrupt queue. Kept as a CGS_ASSERT for the tripwire.
+        case BrnGameState::GameStateModuleIO::E_ACTION_SHOWTIME_MODE_SWITCH: // 143
+        {
+            const BrnGameState::GameStateModuleIO::ShowtimeModeSwitchAction* lpModeSwitch =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::ShowtimeModeSwitchAction*>(lpEvent);
+            CGS_ASSERT(lpModeSwitch != 0, "lpModeSwitchAction");   // BrnRaceCarEntityModule.cpp:7343
+
+            ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar(lpModeSwitch->meActiveRaceCarIndex);
+            if (lpActiveRaceCar != 0)   // [PC GUARD] the console indexes unconditionally
+            {
+                lpActiveRaceCar->SetInShowtime(lpModeSwitch->mbEnteringShowtime);
+
+                // [DIAG] NOT IN THE X360 BINARY. One line per switch, and there are at most two
+                // per session (enter + leave), so it cannot flood. Unconditional for the same
+                // reason the producer's witness is: this store is the arming edge of the whole
+                // showtime session, and its silence IS the defect.
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[showtime-switch] ActiveRaceCar "
+                        << static_cast<s32>(lpModeSwitch->meActiveRaceCarIndex)
+                        << " mbIsInShowtime <- " << (lpModeSwitch->mbEnteringShowtime ? 1 : 0)
+                        << "\n";
+                }
+            }
+            break;
+        }
+
         // ⭐⭐⭐ [drive-thru wave 2026-08-27] THE GAS-STATION BOOST REFILL -- the last link in the
         // chain, and the one that was missing. Action 100 is posted by
         // DriveThruManager::ProcessDriveThru @0x8239B6E8 case 1 and reaches this module unfiltered
