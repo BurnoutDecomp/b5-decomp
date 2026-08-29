@@ -32,11 +32,21 @@
 // slots (the X360 param save area), exactly as the house note says.
 //
 // -- ARMING STATE (hazards H1 supersession) ---------------------------------------------------
-// [!!] BOTH BODIES BELOW ARE LANDED BUT UNCALLED ON THIS BUILD, deliberately, exactly like
-// ModeManager::Construct (agent 1's banner). GameStateModule still drives the bring-up seam:
+// [x] CORRECTED 2026-08-29 (event-finish round). The text below used to open "BOTH BODIES BELOW
+// ARE LANDED BUT UNCALLED ON THIS BUILD" and that HALF of it is now FALSE and was actively
+// misleading: PreWorldUpdate HAS a caller. GameStateModule::PreWorldUpdateStuntBringUp
+// (GameStateModule_gUI_00.cpp:920) stages it at the console's own position via the
+// EmmPreWorldUpdate hop (#86), and BrnGameStateModule.cpp:1459-1462 already says so at the
+// superseded stand-in's own site. It is reached on every frame of an offline event -- MEASURED,
+// by the [mode-fsm] rung below printing a rising tick from inside this very arm, and by the
+// finish ladder at the tail of this function firing FinishCurrentMode at mode-time 129.5 s.
+// A wave started this round by reading this banner and concluding the finish ladder never runs.
+// It runs. PostWorldUpdate is the half that is still uncalled: there is no
+// ModeManager::PostWorldUpdate call site (its legs are lifted into
+// GameStateModule::PostWorldUpdateStuntBringUp instead, which is where the console's own
+// position for them is reproduced).
 //   BrnGameStateModule.cpp:1268   mModeManager.PreWorldUpdateClocksBringUp(lfGameTimestep);
-// and there is no ModeManager::PostWorldUpdate call site at all (grepped: BrnGameStateModule.cpp
-// names mModeManager eleven times and none of them is a world tick).
+// remains the superseded clocks stand-in, and the DELETE-WHEN below still stands for it.
 // PreWorldUpdate below CONTAINS the whole of PreWorldUpdateClocksBringUp -- the mode/online/
 // freeburn clock if-else at 0x82353A98..0x82353B94 is the same code, reached through the same
 // named accessors (GetCarSelectManager()->GetJunkyardId(), GetTrainingManager()->IsInPictureParadise()).
