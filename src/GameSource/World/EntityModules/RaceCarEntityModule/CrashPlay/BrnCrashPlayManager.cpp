@@ -191,6 +191,76 @@ struct TriggerCrashBreakerEvent
 };
 
 // =================================================================================================
+// Construct  (DWARF BrnCrashPlayManager.h:58) -- NO out-of-line X360 symbol: ARTIST inlines it into
+// RaceCarEntityModule::Construct, which is where the by-value member lives.
+//
+// WHY IT HAD TO LAND WITH THIS TU, measured. Without it the run at
+// scratch/flow_run/cp1 fired the CONSOLE'S OWN assert 7,050 times -- once per Update frame:
+//     [ASSERT] mpCrashPlayManager != NULL (BrnCrashPlayDebugComponent.cpp:111)
+// That assert is genuine console code (ARTIST CrashPlayDebugComponent::Update @0x822A81B0 is
+// nothing BUT that test: `lwz r11,0xC(r3) / cmplwi / bne` around the Begin/Fire/End sequence). It
+// cannot fire on the console because the manager is constructed; it fired here because nothing
+// ever set the debug component's back-pointer. 3,316 of those asserts had to be dismissed by the
+// harness during that one run.
+//
+// WHAT IS ATTESTED, AND WHAT IS NOT:
+//   * The six calls the DecFIGS DWARF lists as this function's callees are all here, in its order:
+//     Vector3::SetZero, FixedRingBuffer<EntityId,32>::Construct + RingBuffer::Clear,
+//     VolumeInstanceId::SetInvalid, FixedRingBuffer<EntityId,8>::Construct + RingBuffer::Clear.
+//   * FLAG: mCrashPlayDebugComponent.Construct(this) is NOT in that callee list -- but it is two
+//     stores, so it inlines away and would not appear there, Feb-2007's Construct makes exactly
+//     this call, and the console's own assert PROVES something must set the pointer. The only
+//     DWARF-declared setter is CrashPlayDebugComponent::Construct(CrashPlayManager*).
+//   * FLAG: the scalar zeroing below is a value-initialisation, not an attested store list. The
+//     class is carved out of module storage that nothing else writes, and the debug component
+//     reads these members before the first Activate. Activate re-seeds every one of them.
+//   * NOT reproduced: Feb-2007's `mbIsCrashPlayActive = true`. That is pre-merge drift -- on this
+//     build Activate is what turns crash play on, and constructing it ON would make every car
+//     permanently in crash play from boot.
+// =================================================================================================
+void CrashPlayManager::Construct()
+{
+    mCrashPlayDebugComponent.Construct( this );
+
+    mPlayerCarVolumeInstanceID.SetInvalid();
+    mLastPlayerPos.SetZero();
+
+    mRecentCrashSet.Construct();
+    mRecentCrashSet.Clear();
+    mRecentLeaptSet.Construct();
+    mRecentLeaptSet.Clear();
+
+    miCarsLeaptThisFrame           = 0;
+    miLastStreetEntered            = 0;
+    mbSendNewRoadMessage           = false;
+    muLastJunctionEnteredID        = 0;
+    mbSendNewJunctionMessage       = false;
+    mfCrashPlayTime                = 0.0f;
+    mfTimeSinceLastInAir           = 0.0f;
+    mfTimeSinceLastOnGround        = 0.0f;
+    mfTimeSinceLastVehicleImpact   = KF_MIN_TIME_BETWEEN_AIR_RAMS;
+    mfTimeSinceLastHitOverheadSign = KF_MIN_TIME_BETWEEN_HITTING_OVERHEAD_SIGNS;
+    mbTrafficStomp                 = false;
+    miFramesUntilAirRam            = 0;
+    mfTimeSinceLastTrafficStomp    = KF_MIN_TIME_BETWEEN_TRAFFIC_STOMPS;
+
+    mfBoostPercentage              = 0.0f;
+    mfAftertouchPower              = 0.0f;
+    mfDifficultyLevel              = 0.0f;
+    mfBounceBoostTimer             = 0.0f;
+    mfLoseBoostGracePeriod         = 0.0f;
+    miConsecutiveBouncesOnGround   = 0;
+    mbIsCrashPlayActive            = false;
+    mbIsInShowtime                 = false;
+    mbInfiniteAftertouch           = false;
+    mbInfiniteBoost                = false;
+    mbEarningAirTimeBoost          = false;
+    mbAboutToLoseBoost             = false;
+    mbBouncePromptNeeded           = false;
+    mbBoostChargePending           = false;
+}
+
+// =================================================================================================
 // Activate  @ 0x822C31A8
 //
 // ⚠️ BOTH PARAMETERS ARE UNUSED, AND THAT IS THE BINARY'S BEHAVIOUR, NOT A DROPPED SIDE EFFECT.
@@ -336,7 +406,39 @@ void CrashPlayManager::Update( const Matrix44Affine& lCameraTransform,
     mfTimeSinceLastTrafficStomp    += lfSimTimerTimeStep;
     mfTimeSinceLastHitOverheadSign += lfSimTimerTimeStep;
 
-    CGS_ASSERT( mPlayerCarVolumeInstanceID.IsValid(), "mPlayerCarVolumeInstanceID.IsValid()" ); // :278
+    // ⚠️⚠️ THE CONSOLE'S OWN :278 ASSERT, RAISED ONCE -- the same treatment, for the same reason,
+    // that PrePhysicsUpdate's :1726 assert already carries in BrnRaceCarEntityModule.cpp.
+    //
+    // It is genuine console code and it is CORRECT: mPlayerCarVolumeInstanceID is invalid here
+    // because NOTHING IN THIS TREE ASSIGNS IT. Construct() calls SetInvalid() (the DWARF's own
+    // callee list) and no writer has landed, so the id stays -1 for the whole session. Before
+    // Construct landed, the member held whatever the module's raw storage did -- usually 0, which
+    // IsValid() happily accepts -- so the gap was INVISIBLE, not absent.
+    //
+    // Measured 2026-08-29 (scratch/flow_run/cp2): as a verbatim per-frame CGS_ASSERT this fires
+    // 7,102 times in a 130 s run and the PC assert manager BLOCKS on each one, which starves the
+    // harness poll loop badly enough that a 1 Hz input schedule delivered ONE press instead of 90.
+    // An assert that stops the run from producing evidence is worse than useless.
+    //
+    // The consumer is UpdateTrafficStomp's air ram (CreateAirRamEvent::mVolumeId), which is
+    // already unreachable on this build for an unrelated reason (mbTrafficStomp has no writer
+    // until OnCarCrash lands), so nothing downstream is misled by the invalid id.
+    // DELETE-WHEN the player car's volume instance is published to the crash-play manager.
+    if( !mPlayerCarVolumeInstanceID.IsValid() )
+    {
+        static bool sbReportedInvalidVolumeId = false;
+        if( !sbReportedInvalidVolumeId )
+        {
+            sbReportedInvalidVolumeId = true;
+            if( CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[FLAG PC bring-up] CrashPlayManager::Update: mPlayerCarVolumeInstanceID."
+                       "IsValid() (X360 BrnCrashPlayManager.cpp:278) -- raised once, not per frame."
+                       " No writer for the member exists in this tree yet.\n";
+            }
+        }
+    }
 
     // The camera basis, flattened into the ground plane. The console builds both by storing the
     // matrix row to the stack, zeroing its Y word in place, reloading it, and running the two-step

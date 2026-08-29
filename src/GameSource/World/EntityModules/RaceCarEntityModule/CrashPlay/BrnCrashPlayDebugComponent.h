@@ -181,6 +181,7 @@ namespace BrnWorld
         // Destruct/Deactivate/OnPlayerCarCrash/OnCarLeapt/OnSmashStunt/GetBoostLevel/
         // IsPlayerInShowtimeOnGround/OnShowtimeStart/OnShowtimeEnd) are deliberately NOT declared
         // here -- declaring them would mint call sites to bodies no TU can define.
+        void Construct();   // DWARF BrnCrashPlayManager.h:58 -- inlined by ARTIST, see the .cpp
         void Activate(ActiveRaceCar* lpPlayerActiveRaceCar, f32 lfInitialBoostPercentage);
         void Update(const Matrix44Affine& lCameraTransform,
                     f32 lfSimTimerTimeStep,
