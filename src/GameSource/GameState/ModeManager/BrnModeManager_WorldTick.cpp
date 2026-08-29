@@ -285,6 +285,62 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
                 }
             }
         }
+
+        // ==========================================================================================
+        // [DIAG] NOT IN THE X360 BINARY -- the `[evt-score]` rung (added 2026-08-29, event-finish
+        // round). Gated on BRN_MODEMGR_DIAG, alongside this file's `[queue-hwm]` sibling.
+        // ==========================================================================================
+        // WHAT IT ANSWERS, and why the `[evt-finish]` pair alone could not. Those two rungs report
+        // the stunt score ONCE, at the finish. If that single reading is zero they cannot separate
+        // the two explanations that matter -- "the scorer works and this scripted drive simply did
+        // no stunts" versus "the scorer never scores at all" -- because both end at zero. This rung
+        // separates them: it prints every time miCurrentScore MOVES, so a working scorer leaves a
+        // trail of lines even on a run that ends below target, and a dead one leaves exactly one.
+        //
+        // ⭐ IT IS NOT A SAMPLER, AND IT IS NOT PER-SECOND. It is evaluated on EVERY pre-world tick
+        // and prints on the CHANGE, so a score that rises for one frame and is cleared again is
+        // still recorded -- the failure mode the 1-in-60 traffic sampler had, where the quantity
+        // being sampled was cleared between samples. `tick` is carried so "silent because nothing
+        // changed" is distinguishable from "silent because this arm stopped running".
+        // The 10-second floor is a LIVENESS heartbeat, not the sample period.
+        //
+        // ⛔ It reads only const accessors on the OFFLINE scorer (ss+0x350) -- the same one
+        // StuntAttackMode::ShouldFinish and ModeManager::GetPlayersFinishPosition read.
+        // DELETE-WHEN the event-finish bring-up is done.
+        if (meCurrentGameModeType == GameStateModuleIO::E_MODE_STUNT_ATTACK)
+        {
+            static const bool sbScoreDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
+            if (sbScoreDiag && CgsDev::Log::gpDebugPrint != 0)
+            {
+                static s32 siScoreTicks   = 0;
+                static s32 siLastScore    = -1;
+                static s32 siLastTarget   = -1;
+                static s32 siLastHeartbeat = -1;
+
+                ++siScoreTicks;
+
+                const StuntModeScoring* lpcStuntScorer = mScoringSystem.GetStuntScorer();
+                const s32 liScore      = lpcStuntScorer->GetCurrentScore();
+                const s32 liTarget     = lpcStuntScorer->GetTargetScore();
+                const s32 liHeartbeat  = static_cast<s32>(mfTimeInMode) / 10;
+
+                if (liScore != siLastScore || liTarget != siLastTarget ||
+                    liHeartbeat != siLastHeartbeat)
+                {
+                    siLastScore     = liScore;
+                    siLastTarget    = liTarget;
+                    siLastHeartbeat = liHeartbeat;
+
+                    *CgsDev::Log::gpDebugPrint
+                        << "[evt-score] tick " << siScoreTicks
+                        << " timeInMode " << mfTimeInMode
+                        << " score " << liScore
+                        << " target " << liTarget
+                        << " comboInProgress " << (lpcStuntScorer->IsComboInProgress() ? 1 : 0)
+                        << "\n";
+                }
+            }
+        }
     }
     else
     {
