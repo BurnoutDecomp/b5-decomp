@@ -51,16 +51,31 @@ namespace core
 
 // -------------------------------------------------------------------------------------
 // Decoder::Request -- one entry of the inline request ring. A request names a half-open
-// sample range [miStartSample, miEndSample) the decoder still owes the consumer. The
-// stride is a hard-coded 0x14 in the asm (`mulli r,r,0x14`), so this struct is pinned to
-// exactly 20 bytes; every field is a 32-bit word (no pointers) so the stride survives the
-// x64 widening. Only miStartSample/miEndSample are touched by the reconstructed methods;
-// the leading/trailing words are opaque ring bookkeeping and preserved as padding.
-// -------------------------------------------------------------------------------------
-// ⭐ PARTLY NAMED 2026-08-28 (phase E) by Decoder::Feed @0x82B67920, the PRODUCER that
-// fills these slots -- it was an exporter gap (no dossier) and was raw-decoded from the
-// XEX. Its stores identify the two leading words and the two flag bytes; every field
-// remains a 32-bit-safe scalar, so the 20-byte stride still survives x64.
+// sample range [miStartSample, miEndSample) the decoder still owes the consumer, together
+// with the chunk the producer handed in.
+//
+// ⭐ NAMED 2026-08-28 (phase E) by Decoder::Feed @0x82B67920, the PRODUCER that fills these
+// slots -- an exporter gap, raw-decoded from the XEX. Its stores identify the two leading
+// words and the two flag bytes, and five independent consumers corroborate both readings.
+//
+// ⚠️ THE STRIDE NO LONGER SURVIVES x64, and this comment used to claim the opposite. The
+// console stride is a hard-coded 0x14 and the record was believed "every field a 32-bit
+// word (no pointers)" -- but +0x00 IS a pointer (Feed stores the fed chunk there with
+// `stw r4`), so the host record grows to 24 bytes and the console offsets past +0x00 move.
+// Consequences, all of which are already handled but must stay handled:
+//   * every consumer reaches the ring as RequestQueue()[i] (host array indexing), so they
+//     all stay in step automatically -- do NOT reintroduce a literal 0x14 anywhere;
+//   * whoever ALLOCATES the ring must size it with sizeof(DecoderRequest). That is
+//     DecoderRegistry::DecoderFactory @0x82B6C778 (`mulli r21, r26, 0x14`), itself an
+//     exporter gap and not yet bodied on the host;
+//   * SndPlayer1::Process indexes this ring directly (`mulli r10, r9, 0x14` @0x82BA0830
+//     and @0x82BA0AB4) and must use sizeof(DecoderRequest) when it is bodied;
+//   * Decoder+0x20 carries the whole decoder-instance size, which StartRequest truncates
+//     into a u16 (`lwz r11,0x20(r3)` / `sth r11,0x28(r28)`). That total grows on the host
+//     -- the widened Decoder header, 20 ring slots at +4 bytes each, and the buffer -- so
+//     the truncation is a real overflow risk to check when SndPlayer1 lands, not a
+//     theoretical one.
+// The layout pins that enforce all this live in Decoder.cpp; see the note there.
 struct DecoderRequest
 {
     const void *mpFedData; // +0x00 -- the chunk bytes Feed was handed (Feed: stw r4)
@@ -151,6 +166,9 @@ protected:
     // Base of the inline request ring: `this` + muRequestQueueOffset. Protected: codec
     // subclasses index the ring directly in the binary (EaXmaDec::DecodeEvent @0x82B96380
     // computes `this + muRequestQueueOffset + 0x14 * mucRequestDecodeIndex` itself).
+    // ⚠️ Index through THIS accessor (RequestQueue()[i]) rather than reproducing that
+    // console arithmetic: the record grew past 0x14 on the host once its leading pointer
+    // was typed honestly -- see the DecoderRequest note above.
     DecoderRequest *RequestQueue()
     {
         return reinterpret_cast<DecoderRequest *>(
