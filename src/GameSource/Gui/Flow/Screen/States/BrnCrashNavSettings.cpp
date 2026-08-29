@@ -33,13 +33,16 @@
 //       mbAvailable == false as a result. SteelWheelsSponsorCode and
 //       OnInputSponsorProductCode branch on GetSku() four times between them; calling it
 //       is an LNK2019 (verified absent from build/game/Burnout_PC.map).
-//   (b) The on-screen keyboard is X360 XDK. BrnGuiKeyboard::Show @0x824F5B00 tail-calls
-//       CgsGui::GuiKeyboard::Show @0x8284CFD8, which calls XShowKeyboardUI; neither
-//       CgsGuiKeyboard.cpp nor BrnGuiKeyboard.cpp is in the exe and there is no PC leaf.
+//   (b) The on-screen keyboard is X360 XDK. BrnGui::BrnGuiKeyboard::Show @0x824F5B00 has NO
+//       DECLARATION in BrnGuiKeyboard.h (which carries only Prepare) and no body, so the
+//       call does not even compile; it tail-calls CgsGui::GuiKeyboard::Show @0x8284CFD8 --
+//       which IS reconstructed, in CgsGuiKeyboard.cpp, but that TU is NOT MOUNTED and its
+//       body calls XShowKeyboardUI, for which there is no PC leaf.
 //       Its string prep is parked with it because CgsUnicode::ConvertUtf8ToUtf16
-//       @0x82835828 is ALSO body-less -- the ledger calls it `reviewed`, and CgsUnicode.cpp
-//       (which IS mounted) defines only UnicodeBuffer::Convert. Found by the link, not by a
-//       gate: exactly the ledger-vs-files divergence AGENTS.md warns about.
+//       @0x82835828 is ALSO body-less: the ledger calls it `reviewed`, and CgsUnicode.cpp
+//       (which IS mounted, and does define plenty of other functions) has no definition for
+//       THAT one. Found by the link, not by a gate: exactly the ledger-vs-files divergence
+//       AGENTS.md warns about.
 // ⭐ NEITHER PARK CAN RE-CREATE THE SOFT-LOCK, and that is checked, not assumed: the
 // console's 45/50 (GO_BACK + resume) and 54/55 (TOGGLE_*) arms sit OUTSIDE the
 // `meState == E_STATE_MAIN` gate in HandleControllerInput, so Start/Back leaves this
@@ -369,7 +372,8 @@ namespace BrnGui
     // banner (a). The X360 body is fully recovered and is a two-branch validator over the
     // 19-character mask "L##L #L#L LL#L ##L#" (L == A-Z, # == 0-9): SKU 1/2 compare the
     // code against the literal "Z891 4K88 IN25 79AA", SKU 0 runs the mask, SKU >= 3 always
-    // fail. EVERY branch reads the SKU first, so there is nothing SKU-independent to keep.
+    // fail. Only the leading length compare against the mask is SKU-independent, and on its
+    // own it decides nothing -- every path that can return TRUE reads the SKU first.
     // Returning false is the console's own SKU >= 3 answer and is the only outcome this
     // build can reach anyway: the caller below is itself parked.
     bool CrashNavSettings::SteelWheelsSponsorCode(const char* lpacProductCode)
@@ -607,13 +611,15 @@ namespace BrnGui
                 // ⛔ PARKED, AS ONE ARM -- see the file banner (b). Everything after the
                 // latch above exists only to raise the on-screen keyboard, and the whole
                 // tail is missing its links, not its reconstruction:
-                //   * BrnGuiKeyboard::Show @0x824F5B00 tail-calls CgsGui::GuiKeyboard::Show
-                //     -> XShowKeyboardUI; neither CgsGuiKeyboard.cpp nor a PC leaf is in the
-                //     exe;
+                //   * BrnGuiKeyboard::Show @0x824F5B00 is neither declared in
+                //     BrnGuiKeyboard.h nor defined anywhere; its callee
+                //     CgsGui::GuiKeyboard::Show IS reconstructed but sits in the unmounted
+                //     CgsGuiKeyboard.cpp and bottoms out in XShowKeyboardUI, which has no PC
+                //     leaf;
                 //   * CgsUnicode::ConvertUtf8ToUtf16 @0x82835828 -- a real UTF-8 decoder over
                 //     the lead-length table at byte_820DE3C8 -- is `reviewed` in the ledger
-                //     but has NO BODY in CgsUnicode.cpp (a ledger/file divergence found by
-                //     this wave's link, not by any gate).
+                //     but has NO BODY (a ledger/file divergence found by this wave's link,
+                //     not by any gate).
                 // Parking the heading prep WITH the Show it feeds is deliberate: converting
                 // a string into a buffer nothing can ever display would look like progress
                 // and be none. The console's tail, verbatim, for whoever lands those two:
