@@ -766,7 +766,8 @@ namespace BrnGui
     // UpdateSubstate  @0x824DC188  (133 instructions)
     // ⛔ PARTIAL. The X360 dispatches all ten sub-states; the eight presentation updaters are
     // not reconstructed yet (see the ⛔ list in this file's banner), so they route through the
-    // logged stubs in BrnScreenStatesDataLinkStubs.cpp rather than being silently skipped.
+    // logged stubs in BrnScreenStatesDataLinkStubs.cpp, so a run that reaches one says so in
+    // BrnGame.log instead of doing nothing and looking correct.
     // The dispatch structure itself, its two asserts and the two trailing picture pumps are
     // faithful.
     // -----------------------------------------------------------------------------------
