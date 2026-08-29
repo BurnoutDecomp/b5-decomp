@@ -659,6 +659,7 @@ namespace CgsGui
         // budget. The License arm keeps its own budget so nothing that already reads this log
         // changes. ⭐ AND IT DISCRIMINATES: liComponent is printed, so a name the table does
         // not hold prints comp=-1 -- the probe can FAIL, visibly, which is the whole point.
+        static const s32   KI_APT_COMPUPD_BUDGET = 4000;
         static const char* spacUpdPrefix  = 0;
         static s32         siUpdPrefixLen = -1;
         if (siUpdPrefixLen < 0)
@@ -677,16 +678,34 @@ namespace CgsGui
         }
         if (spacUpdPrefix != 0)
         {
+            const bool lbMatch = (siUpdPrefixLen == 0)
+                || (std::strncmp(lpacName, spacUpdPrefix,
+                                 static_cast<size_t>(siUpdPrefixLen)) == 0);
             static s32 siWideLogs = 0;
-            if (siWideLogs < 4000
-                && (siUpdPrefixLen == 0
-                    || std::strncmp(lpacName, spacUpdPrefix, static_cast<size_t>(siUpdPrefixLen)) == 0))
+            if (lbMatch && siWideLogs <= KI_APT_COMPUPD_BUDGET)
             {
                 ++siWideLogs;
                 char lacWide[256];
-                std::snprintf(lacWide, sizeof(lacWide),
-                              "[AptComm] UpdateComponent '%s' key='%s' val='%s' comp=%d\n",
-                              lpacName, lpacKey, lpacValue, liComponent);
+                if (siWideLogs > KI_APT_COMPUPD_BUDGET)
+                {
+                    // ⭐⭐ THE ONE LINE THAT MAKES A CAPPED PROBE HONEST. A budget that runs
+                    // out silently is indistinguishable from a probe that never fires -- that
+                    // is precisely how the 40-line AddNewAptComponent cap and the level-1 apt
+                    // mount instrument each produced a confident wrong conclusion. This says
+                    // out loud where the instrument went blind, so a later silence can be
+                    // read correctly. ([[diagnostics-that-lie]])
+                    std::snprintf(lacWide, sizeof(lacWide),
+                                  "[AptComm] UpdateComponent probe BUDGET EXHAUSTED after %d lines "
+                                  "(prefix='%s') -- SILENCE BELOW THIS POINT MEANS NOTHING. "
+                                  "Narrow BRN_APT_COMPUPD to the component you care about.\n",
+                                  KI_APT_COMPUPD_BUDGET, spacUpdPrefix);
+                }
+                else
+                {
+                    std::snprintf(lacWide, sizeof(lacWide),
+                                  "[AptComm] UpdateComponent '%s' key='%s' val='%s' comp=%d\n",
+                                  lpacName, lpacKey, lpacValue, liComponent);
+                }
                 CgsDev::Log::WriteToLog(lacWide);
             }
         }
