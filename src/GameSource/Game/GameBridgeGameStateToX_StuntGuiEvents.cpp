@@ -831,8 +831,31 @@ namespace
                 // buffer it already asserted), so neither does this -- adding a test would be an
                 // invented arm. The accessor returns the address of an embedded sub-object.
                 const s32 liGameModeType = static_cast<s32>(lpScoring->meGameModeType);
-                if (liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
-                    liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+                const bool lbShowtime =
+                    (liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
+                     liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
+
+                // [DIAG] NOT IN THE X360 BINARY. BRN_SHOWTIME_SCORE_DIAG, first-N latched.
+                // ⭐ IT PRINTS ON BOTH SIDES OF THE GATE ON PURPOSE. A probe that only speaks
+                // when the gate PASSES cannot tell "the action never arrived" from "the gate
+                // refused it", and those two have completely different fixes -- one is an
+                // unbodied producer upstream, the other is a wrong mode read here. The first
+                // cut of this instrument printed only inside the arms and returned a zero that
+                // meant nothing.
+                {
+                    static const bool sbGateDiag  = ( getenv( "BRN_SHOWTIME_SCORE_DIAG" ) != 0 );
+                    static s32        siGateLines = 16;
+                    if ( sbGateDiag && siGateLines > 0 && CgsDev::Log::gpDebugPrint != 0 )
+                    {
+                        --siGateLines;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[showtime-gate] action " << liActionType
+                            << " scoringOut.meGameModeType=" << liGameModeType
+                            << (lbShowtime ? " -> TRANSLATE\n" : " -> refused (not showtime)\n");
+                    }
+                }
+
+                if (lbShowtime)
                 {
                     TranslateShowtimeActionToGuiEvent(liActionType, lpAction, lpGuiInput);
                 }

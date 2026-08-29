@@ -4,8 +4,11 @@
 // CgsContainers::RingBuffer<CgsID>::Push  @ 0x823193C0
 // ----------------------------------------------------------------------------------------------------
 // The recent-stunt ring of BrnGameState::CrashModeScoring (FixedRingBuffer<CgsID,8> mRecentStuntSet @+0x280;
-// CgsID == u64, BrnCommonTypes.h:32; embed carved as maRecentStuntSet[0x58] in BrnCrashModeScoringRecentCrash.h)
-// drives this RingBuffer<Type> generic Push out of line. The body is already defined inline in
+// CgsID == u64, BrnCommonTypes.h:32) drives this RingBuffer<Type> generic Push out of line.
+// [showtime-score 2026-08-29] This banner used to add "embed carved as maRecentStuntSet[0x58] in
+// BrnCrashModeScoringRecentCrash.h" -- STALE: that member is now the real FixedRingBuffer<CgsID,8>,
+// un-opaqued in the same change that landed DealWithShowtimeStunt (the caller this banner names).
+// The body is already defined inline in
 // CgsRingBuffer.h; this file is the thin explicit instantiation for the 8-byte CgsID element (called from
 // BrnGameState::CrashModeScoring::DealWithShowtimeStunt). The X360 body matches the generic store-for-store
 // at an 8-byte (sizeof CgsID) element stride.
