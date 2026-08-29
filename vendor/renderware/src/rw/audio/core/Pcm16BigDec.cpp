@@ -91,14 +91,14 @@ s32 Pcm16BigDec::DecodeEvent(DecoderBuffer *pOutput, s32 iNumSamples)
 
         // Flag byte at Request+0x10: when clear, reset the streaming state for a fresh
         // request (immediately re-seeded below, matching the console code).
-        if (!pDesc->muReserved10)
+        if (!pDesc->mucContinue)
         {
             mpSampleCursor = nullptr;
             miRemainingSamples = 0;
         }
 
         // Request+0x00 holds the base pointer of this request's interleaved PCM data.
-        s16 *pBase = reinterpret_cast<s16 *>(static_cast<usize>(pDesc->muReserved00));
+        s16 *pBase = const_cast<s16 *>(static_cast<const s16 *>(pDesc->mpFedData));
         mpSampleCursor = pBase;
         miRemainingSamples = pDesc->miEndSample;
 

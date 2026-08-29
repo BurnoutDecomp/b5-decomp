@@ -39,13 +39,31 @@ extern "C" void *XMemCpy(void *pDest, const void *pSrc, unsigned int uiCount);
 // by Collection.cpp / PlugIn.cpp.
 extern "C" System *off_83271928;
 
-// --- byte-layout pins for the inline request ring (asm hard-codes stride 0x14) ---
-static_assert(sizeof(DecoderRequest) == 20,
-              "DecoderRequest must be 20 bytes (asm ring stride 0x14)");
-static_assert(offsetof(DecoderRequest, miStartSample) == 0x08,
-              "DecoderRequest::miStartSample must be at +0x08");
-static_assert(offsetof(DecoderRequest, miEndSample) == 0x0C,
-              "DecoderRequest::miEndSample must be at +0x0C");
+// --- layout pins for the inline request ring ---
+//
+// ⚠️ REVISED 2026-08-28 (phase E). These used to pin the CONSOLE stride: sizeof == 20 and
+// miStartSample/miEndSample at the absolute console offsets +0x08/+0x0C. That held only
+// while the record was believed pointer-free. Raw-decoding Decoder::Feed @0x82B67920 (an
+// exporter gap) showed the console stores a POINTER at +0x00 -- the chunk it was handed --
+// so on x64 the record legitimately grows and those absolute offsets legitimately move.
+// The old asserts fired, which is exactly what they were for: they caught the widening
+// instead of letting it silently shift the two sample fields.
+//
+// What is actually invariant is the ORDER and the self-consistency of the ring, so that is
+// what is pinned now. Every committed consumer reaches the ring through RequestQueue()[i],
+// i.e. host array indexing, so they all stay in step automatically.
+//
+// ⚠️ THE ONE THING THAT MUST MATCH THIS: whoever ALLOCATES the ring must size it with
+// sizeof(DecoderRequest), never the console's 0x14. That is DecoderRegistry::DecoderFactory
+// @0x82B6C778 (`mulli r21, r26, 0x14`), which is itself an exporter gap and is not bodied
+// on the host yet -- when it lands, it must use the host sizeof or the ring and its
+// consumers will disagree.
+static_assert(offsetof(DecoderRequest, miStartSample) < offsetof(DecoderRequest, miEndSample),
+              "DecoderRequest: the sample range must stay in start-then-end order");
+static_assert(offsetof(DecoderRequest, mpFedData) == 0,
+              "DecoderRequest: the fed-chunk pointer is the leading word (Feed: stw r4, 0)");
+static_assert(sizeof(DecoderRequest) >= 20,
+              "DecoderRequest must still cover every console field it carries");
 
 // -------------------------------------------------------------------------------------
 // ~Decoder @0x82B678D8
@@ -245,6 +263,61 @@ void Decoder::Release()
         System::Free(off_83271928, mpAllocatedBlock, 0);
 
     System::Free(off_83271928, this, 0);
+}
+
+// -------------------------------------------------------------------------------------
+// Feed @0x82B67920 -- hand the decoder one more chunk.
+//
+// EXPORTER GAP: this address has no dossier, so the body below was raw-decoded from the
+// decrypted XEX (file_off 0x00B6A920) and hand-disassembled instruction by instruction.
+// It is the PRODUCER half of the request ring whose consumer side (Decode /
+// AdvanceDecodeState / GetCurrentRequestDesc / GetSamplesRemaining) was already
+// reconstructed, and both SndPlayer1 families call it from their SubmitChunk.
+//
+// Fill the slot at the write cursor, tell the codec about it through FeedEvent, advance
+// the cursor, and return the index of the slot just filled -- that index IS the "decoder
+// request handle" the players store in their feed descriptors and later pass to
+// GetSamplesRemaining.
+// -------------------------------------------------------------------------------------
+u8 Decoder::Feed(const void *pData, s32 iNumSamples, u8 ucContinue, s32 iStartSample,
+                 u32 uReserved04, u8 ucFlag11)
+{
+    const u8 lucSlot = mucRequestWriteIndex;                  // lbz 0x2F
+    DecoderRequest *lpRequest = reinterpret_cast<DecoderRequest *>(
+        reinterpret_cast<u8 *>(this) + muRequestQueueOffset
+        + sizeof(DecoderRequest) * lucSlot);                  // mulli 0x14 + add
+
+    // A non-zero end sample means the slot still owes the consumer samples.
+    // ⚠️ The refusal returns 0, which is indistinguishable from having filled slot 0 --
+    // the console has no separate status here. Both callers only reach this after their
+    // own GetFeedSlot has confirmed a free slot, so the ambiguity never bites in practice.
+    if (lpRequest->miEndSample != 0)
+        return 0;
+
+    lpRequest->mpFedData = pData;            // stw r4 -> +0x00
+    lpRequest->muReserved04 = uReserved04;   // stw r8 -> +0x04
+    lpRequest->miStartSample = iStartSample; // stw r7 -> +0x08
+    lpRequest->miEndSample = iNumSamples;    // stw r5 -> +0x0C (also arms the busy flag)
+    lpRequest->mucFlag11 = ucFlag11;         // stb r9 -> +0x11
+    lpRequest->mucContinue = ucContinue;     // stb r6 -> +0x10
+
+    // vt[0] -- the codec's own notification that a chunk arrived (EaXmaDec tail-calls its
+    // Service from here). The console passes the slot index; the committed base override
+    // takes none and the subclasses read the cursor themselves.
+    FeedEvent();
+
+    // If the decode cursor is sitting on the slot just filled, it has nothing staged yet,
+    // so seed the in-chunk offset from this request's start sample.
+    if (mucRequestWriteIndex == mucRequestDecodeIndex)
+        miCurrentSampleOffset = lpRequest->miStartSample;
+
+    // Post-increment the write cursor, wrapping at the ring modulus.
+    u8 lucNext = static_cast<u8>(mucRequestWriteIndex + 1);
+    mucRequestWriteIndex = lucNext;
+    if (lucNext >= mucRequestCount)
+        mucRequestWriteIndex = 0;
+
+    return lucSlot;
 }
 
 } // namespace core

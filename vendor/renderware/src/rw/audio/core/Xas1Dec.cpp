@@ -71,15 +71,14 @@ s32 Xas1Dec::DecodeEvent(DecoderBuffer *pOutput)
 
         // Flag byte at Request+0x10: when clear, reset the streaming state for a fresh
         // request; when set, keep decoding into the same run.
-        if (!pDesc->muReserved10)
+        if (!pDesc->mucContinue)
         {
             miRemainingSamples = 0;
             mpEncodedCursor = 0;
         }
 
         // Request+0x00 holds the base pointer of this request's encoded XAS data.
-        u8 *pDataBase = reinterpret_cast<u8 *>(
-            static_cast<usize>(pDesc->muReserved00));
+        u8 *pDataBase = const_cast<u8 *>(static_cast<const u8 *>(pDesc->mpFedData));
 
         mpEncodedCursor = pDataBase;
 

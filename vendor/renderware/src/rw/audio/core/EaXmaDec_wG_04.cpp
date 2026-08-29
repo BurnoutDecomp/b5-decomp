@@ -186,10 +186,10 @@ void EaXmaDec::Service()
             break;
 
         // Request+0x00 holds the pointer to this request's encoded XMA payload (the ring
-        // entry is pinned to 20 bytes, so the pointer rides in a 32-bit word -- same
-        // cross-TU wrinkle as the committed Pcm16BigDec::DecodeEvent).
+        // entry used to be pinned to 20 bytes, which forced the pointer through a 32-bit word;
+        // that wrinkle is retired -- the field is a real host pointer now, named by Decoder::Feed).
         const u8 *lpData =
-            reinterpret_cast<const u8 *>(static_cast<usize>(lpRequest->muReserved00));
+            static_cast<const u8 *>(lpRequest->mpFedData);
 
         if (mbFirstDecode)
         {
@@ -240,7 +240,7 @@ s32 EaXmaDec::StartPair(DecPair *pPair, u32 uPairIndex, const DecoderRequest *pR
     // the modelled u32 only ever holds a 0/1 flag -- so the test is a plain truthiness
     // test (same reading as the committed Pcm16BigDec::DecodeEvent).
     s32 iTargetFrame = pRequest->miStartSample / 512;
-    if (!pRequest->muReserved10)
+    if (!pRequest->mucContinue)
         iTargetFrame = (pRequest->miStartSample + 384) / 512;
 
     const u8 *const lpSliceBase = pPairData + 4; // past the 4-byte serialized size word
