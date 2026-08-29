@@ -20,6 +20,7 @@
 // 7 Released / 8 Axis). This screen only reacts to kind 6 -- PRESSED.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectLivery.h"
+#include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
@@ -42,8 +43,8 @@ namespace BrnGui
         const s32 KI_EVENT_CONTROLLER_PRESSED = 6;
 
         // ---- the seven action ids this screen reacts to -----------------------------
-        // FLAG: EGameInputActions has no recovered enum home in the tree; the four cursor
-        // ids are named for what THIS handler does with them.
+        // EGameInputActions now has a home (GameSource/Input/GameInputActions.h); the four
+        // cursor ids stay role-named for what THIS handler does with them.
         const s32 KI_ACTION_TOGGLE_PREV  = 41;   // 0x29 -- step to the previous toggle ROW
         const s32 KI_ACTION_TOGGLE_NEXT  = 42;   // 0x2A -- step to the next toggle ROW / enter it
         const s32 KI_ACTION_OPTION_PREV  = 43;   // 0x2B -- previous option within the row
@@ -52,8 +53,12 @@ namespace BrnGui
         const s32 KI_ACTION_BACK         = 50;   // 0x32 -- GUI_CANCEL
         const s32 KI_ACTION_RESTORE      = 52;   // 0x34 -- restore the factory paint
 
-        // ([input vocabulary repair 2026-08-27] the KI_ACTION_ACCEPT_PC == 45 compensation is
-        // RETIRED: CgsInputPadsPC binds the accept key / pad-A to the console's 49 GUI_SELECT.)
+        // + ROOT CAUSE FIXED ELSEWHERE, COMPENSATING ARM DELETED (input-vocabulary wave,
+        // 2026-08-29). The local `KI_ACTION_ACCEPT_PC` (45) used to sit here because
+        // KA_BINDINGS bound the accept key to 45 GUI_START rather than 49 GUI_SELECT. The
+        // console body -- BrnGui::CarSelectLivery::HandleControllerInput @0x824D6D10 --
+        // switches on exactly { 41, 42, 43, 44, 49, 50, 52 } and has NO 45 arm, so the extra
+        // case was pure divergence. KA_BINDINGS now puts Enter/Space/pad-A on 49.
 
         // The PresentationAction words TriggerSound is called with (X360 `li r4, 7 / 8 / 9`).
         const s32 KI_AUDIO_ACTION_SCROLL = 7;

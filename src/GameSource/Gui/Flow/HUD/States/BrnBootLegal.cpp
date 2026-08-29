@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log (diag probe)
 #include <cstdio>                                                         // std::snprintf (diag probe)
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"         // CgsResource::ID::HashString (the attract video resource id)
+#include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
 
 // BrnGui::BootLegal -- the boot legal / title-screen state (BF_LEGAL), reconstructed from
 // BURNOUT_X360_ARTIST.XEX (OnEnter 0x82477028 / Update 0x82477270 / OnLeave 0x82477E28 /
@@ -63,11 +64,17 @@ namespace
     const s32 KI_EVENT_VIDEO_FINISHED  = 510;  // attract video finished
     const s32 KI_EVENT_RESOURCE_READY  = 567;  // boot resources ready
 
-    // ---- Controller action sub-ids (payload word +4 of action events 6/21). ----
-    const s32 KI_ACTION_MENU_NEXT = 41;
-    const s32 KI_ACTION_MENU_PREV = 42;
-    const s32 KI_ACTION_BACK      = 45;  // -> request an attract restart / back-out
-    const s32 KI_ACTION_STOP      = 49;  // -> stop the attract video
+    // ---- Controller action sub-ids (payload word +4 of action events 6/21). Named from the
+    //      DWARF vocabulary (GameSource/Input/GameInputActions.h).
+    // ⚠️ THIS TU IS WHERE THE WHOLE MISNAMING STARTED. 41 was called MENU_NEXT and 42
+    // MENU_PREV -- exactly backwards -- and the PC binding table was then written against
+    // those names, so Down moved every menu highlight UP across the game. 45 was called
+    // "BACK" and 49 "STOP"; 45 is GUI_START (the START button, which is why it ALSO feeds
+    // the press-start path below) and 49 is GUI_SELECT (accept).
+    const s32 KI_ACTION_GUI_UP     = E_GAMEINPUTACTIONS_GUI_UP;     // 41 -> HighlightPrevious
+    const s32 KI_ACTION_GUI_DOWN   = E_GAMEINPUTACTIONS_GUI_DOWN;   // 42 -> HighlightNext
+    const s32 KI_ACTION_GUI_START  = E_GAMEINPUTACTIONS_GUI_START;  // 45 -> accept + press-start
+    const s32 KI_ACTION_GUI_SELECT = E_GAMEINPUTACTIONS_GUI_SELECT; // 49 -> accept / stop the attract video
 
     // ---- Stage timing constants (rodata floats). ----
     const f32 KF_WAIT_START_DWELL    = 3.0f;   // flt_8205AAF0
@@ -401,26 +408,16 @@ namespace BrnGui
     // ------------------------------------------------ UpdateSelectionMenu @ 0x82473978
     void BootLegal::UpdateSelectionMenu(s32 liAction)
     {
-        // ⚠⚠ THE TWO SLOTS WERE THE WRONG WAY ROUND, AND SO WAS THE COMMENT THAT
-        // JUSTIFIED THEM (fixed 2026-08-28). The X360 dispatch is not in doubt --
-        // @0x82473994 action 0x29 loads `lwz r11, 0x38(vtable)` and @0x824739AC action 0x2A
-        // loads `lwz r11, 0x34(vtable)` -- but the previous revision asserted +0x38 ==
-        // HighlightNext without reading the table. It is the other way round. Read out of
-        // BrnGui::MenuComponent's vtable at off_82074068:
-        //     +0x34 (slot 13) -> 0x824E4DE0  `li r4,0 ; b SelectableGroup::HighlightNext`
-        //     +0x38 (slot 14) -> 0x824E4DE8  `li r4,0 ; b SelectableGroup::HighlightPrevious`
-        // (0x824E4DE0 carries the ICF-folded name BrnGui::TableRow::HighlightNext; the BODY
-        // is what matters, and its tail-call names it.)
-        // So the console moves the highlight BACKWARD on action 41 and FORWARD on 42, and
-        // this menu had them swapped -- the boot/attract selection menu moved the wrong way.
-        // ⭐ Corroboration that this is the tree's settled reading, not a new theory:
-        // BrnCrashNavEnterOnline_wI_04.cpp:172/176 and BrnOnlineCustomMatch_wJ_04.cpp:99
-        // already map +0x38 -> HighlightPrevious and +0x34 -> HighlightNext. This file was
-        // the only consumer disagreeing with them.
-        if (liAction == KI_ACTION_MENU_NEXT)
-            mSelectionMenu.HighlightPrevious();   // vtable +0x38
-        else if (liAction == KI_ACTION_MENU_PREV)
-            mSelectionMenu.HighlightNext();       // vtable +0x34
+        // X360 @0x82473978: 41 -> menu vtable +0x38, 42 -> +0x34. ⚠️ THE TWO CALLS WERE
+        // SWAPPED HERE: on a BrnGui::MenuComponent the component vtable's slot 14 (+0x38) is
+        // HighlightPrevious and slot 13 (+0x34) is HighlightNext -- attested by the sibling
+        // MenuComponent consumer BrnGui::CrashNavEnterOnline (BrnCrashNavEnterOnline_wI_04
+        // .cpp:171, same slots, same class) and consistent with every other 41/42 consumer
+        // (41 == previous). It was invisible because this menu has TWO rows and wraps.
+        if (liAction == KI_ACTION_GUI_UP)
+            mSelectionMenu.HighlightPrevious();          // vtable slot 14 (lwz 0x38)
+        else if (liAction == KI_ACTION_GUI_DOWN)
+            mSelectionMenu.HighlightNext();              // vtable slot 13 (lwz 0x34)
 
         // Read the highlighted row straight off the menu's SelectableGroup (the X360 reads its
         // cached +0x3BD copy of this).
@@ -473,27 +470,18 @@ namespace BrnGui
             {
             case KI_EVENT_ACTION_A:
             case KI_EVENT_ACTION_B:
-                if (liSubId == KI_ACTION_BACK || liSubId == KI_ACTION_STOP)
+                if (liSubId == KI_ACTION_GUI_START || liSubId == KI_ACTION_GUI_SELECT)
                 {
                     lbBackRequested = true;
                 }
-                else if ((liSubId == KI_ACTION_MENU_NEXT || liSubId == KI_ACTION_MENU_PREV) &&
+                else if ((liSubId == KI_ACTION_GUI_UP || liSubId == KI_ACTION_GUI_DOWN) &&
                          meUpdateStage == E_STAGE_MENU_ACTIVE)
                 {
                     UpdateSelectionMenu(liSubId);
                 }
-                // [FLAG DELIBERATE PC DIVERGENCE -- user decision 2026-08-27] the console
-                // sets lbStartPressed for 45 (START) ONLY; 49 (A / GUI_SELECT) sets just
-                // lbBackRequested, which at the PRESS-START stage falls through into the
-                // menu's shared accept handler and accepts the never-displayed selector --
-                // the RETAIL A-at-title bug (see the fall-through banner below). Per the
-                // user's call, A is repaired to behave EXACTLY like START here: 49 sets
-                // lbStartPressed too, so the lbStartPressed arm runs first and opens the
-                // selector properly. lbStartPressed is consumed ONLY by the START_PRESSED
-                // stage, so every other stage's 49 handling (menu accept, attract stop) is
-                // byte-identical to the console.
-                if (liSubId == KI_ACTION_BACK || liSubId == KI_ACTION_STOP)
-                    lbStartPressed = true;   // X360: 45 only -- see the divergence note above
+                if (liSubId == KI_ACTION_GUI_START)
+                    lbStartPressed = true;   // X360: a 45 IS the START button, so it also
+                                             // falls through to the "press start" path
                 break;
 
             case KI_EVENT_CACHE_READY:
@@ -718,17 +706,6 @@ namespace BrnGui
                 return;
             }
             // fall through to the shared accept handler.
-            //
-            // ⚠️ THE RETAIL A-AT-TITLE BUG lived in this fall-through: on console, GUI_SELECT
-            // (49, the A button) set ONLY lbBackRequested, so at the PRESS-START stage it
-            // skipped the lbStartPressed arm (no DisplaySelectionMenu, no MENU_ACTIVE entry)
-            // and landed straight in the shared accept handler below -- accepting menu index
-            // 0 of the never-shown BURNOUT PARADISE / BEAT THE TEAM selector and leaving the
-            // flow broken (user-confirmed against retail, 2026-08-27). [FLAG DELIBERATE PC
-            // DIVERGENCE -- user decision 2026-08-27] REPAIRED at the flag-accumulation arm
-            // above: 49 now sets lbStartPressed exactly like 45, so an A press at the title
-            // opens the selector just as START does, and this fall-through can only be
-            // reached the way the healthy console paths reach it.
             /* fallthrough */
 
         case E_STAGE_MENU_ACTIVE:

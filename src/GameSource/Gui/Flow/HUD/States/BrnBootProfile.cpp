@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log (stage log)
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // CgsLanguage::LanguageManager (no-space formatting)
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache (resource/watcher surface)
+#include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
 
 #include <cstdio>   // std::snprintf (the stage log)
 
@@ -34,11 +35,15 @@ namespace BrnGui
         const s32 KI_EVENT_GUI_CACHE      = 64;   // per-frame cache event (GuiCache* payload)
         const s32 KI_EVENT_OVERLAY_RESULT = 189;  // overlay result (the profile message choices)
 
-        const s32 KI_ACTION_ACCEPT = 49;   // X360 HandleControllerInput accept sub-id (GUI_SELECT)
-        const s32 KI_ACTION_BACK   = 50;   // X360 HandleControllerInput back sub-id (GUI_CANCEL)
-        // ([input vocabulary repair 2026-08-27] the KI_ACTION_ACCEPT_PC == 45 compensation is
-        // RETIRED: CgsInputPadsPC now binds the accept key / pad-A to the console's 49
-        // GUI_SELECT, so the faithful sub-id is the one that arrives.)
+        // Named from the DWARF vocabulary (GameSource/Input/GameInputActions.h).
+        const s32 KI_ACTION_GUI_SELECT = E_GAMEINPUTACTIONS_GUI_SELECT;   // 49 accept
+        const s32 KI_ACTION_GUI_CANCEL = E_GAMEINPUTACTIONS_GUI_CANCEL;   // 50 back
+        // ⛔ DELETED (input-vocabulary wave, 2026-08-29): `KI_ACTION_ACCEPT_PC = 45`, an
+        // INVENTED COMPENSATING ARM. It existed only because KA_BINDINGS bound the accept key
+        // to 45 GUI_START instead of 49 GUI_SELECT. Checked against the console body --
+        // BrnGui::BootProfile::HandleControllerInput @0x82478610 tests `v2 == 49` and
+        // `v2 == 50` and nothing else -- so the arm was pure divergence. KA_BINDINGS now puts
+        // Enter/Space/pad-A on 49, which is what this handler has always wanted.
 
         const s32 KI_CHANNEL_GUI_OUT    = 40;  // GuiEventOut
         const s32 KI_CHANNEL_VIEW_STATE = 41;  // GuiOutViewState
@@ -401,7 +406,7 @@ namespace BrnGui
     {
         const s32 liSubId =
             reinterpret_cast<const ControllerInputPressedPayload*>(lpEvent)->miButtonId;
-        if (liSubId == KI_ACTION_ACCEPT)
+        if (liSubId == KI_ACTION_GUI_SELECT)
         {
             const s32 liNumOptions = mProfileMessage.GetNumOptions();
             if (liNumOptions >= 1)
@@ -423,7 +428,7 @@ namespace BrnGui
                     mpProfileManager->HandleMessageChoice(1);
             }
         }
-        else if (liSubId == KI_ACTION_BACK && mProfileMessage.GetNumOptions() == 2)
+        else if (liSubId == KI_ACTION_GUI_CANCEL && mProfileMessage.GetNumOptions() == 2)
         {
             if (mpProfileManager != 0)
                 mpProfileManager->HandleMessageChoice(0);
