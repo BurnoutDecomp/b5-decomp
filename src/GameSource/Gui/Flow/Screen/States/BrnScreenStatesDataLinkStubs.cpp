@@ -75,46 +75,9 @@ namespace
         CgsDev::Log::WriteToLog(lac);
     }
 
-    // ---- the PC bring-up ESCAPE HATCH (main-menu wave, 2026-08-29) --------------------
-    // FLAG link scaffold, not a reconstruction. Some un-reconstructed screen states sit on
-    // the CrashNav tab ring (CN_MAP_MAIN <-> CN_D_DETAIL <-> CN_SETTINGS <-> ON_PLAY), so a
-    // placeholder that observes nothing would trap the player in an invisible state with
-    // the world paused ("a bodied consumer is not a reached consumer" -- the pause-wave
-    // lesson). The hatch registers for the controller event only and drains the same
-    // event-6/payload+4 shape the real states read: 45/50 exit, 54/55 tab. The FSM (in
-    // BRNSCREENFSM.BUNDLE) owns where GO_BACK/TOGGLE_* actually lead; InGame::OnEnter posts
-    // the ActivateCrashNav(true) resume, so a bare GO_BACK is safe.
-    typedef CgsModule::VariableEventQueue<18432, 16> HatchInputQueue;
-    const s32 KAI_HATCH_EVENTS[] = { 6 };   // KI_EVENT_CONTROLLER
-
-    // Returns the first hatch-relevant action id (45/50/54/55) in the queue, else 0.
-    // Clears the queue either way (the real base spine clears at the end of its walk).
-    s32 HatchDrain(InputBuffer::GuiEventQueue* lpInQueueRaw)
-    {
-        HatchInputQueue* lpInQueue = reinterpret_cast<HatchInputQueue*>(lpInQueueRaw);
-        if (lpInQueue == 0)
-            return 0;
-
-        s32 liMatched = 0;
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
-             lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
-        {
-            if (liEventId != 6)
-                continue;
-            const s32 liAction =
-                *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpEvent) + 4);
-            if (liMatched == 0 &&
-                (liAction == 45 || liAction == 50 || liAction == 54 || liAction == 55))
-            {
-                liMatched = liAction;
-            }
-        }
-        lpInQueue->Clear();
-        return liMatched;
-    }
+    // (The escape-hatch helper that lived here died with the CN_SETTINGS / CN_D_DETAIL
+    //  hatches below -- both real screens landed. The MapEvent/OnlinePlay hatches keep
+    //  their own copy in BrnScreenStatesLinkStubs.cpp.)
 }
 
 namespace BrnGui
@@ -321,43 +284,11 @@ namespace BrnGui
     void CrashNavAccountManagement::OnLeave() {}
     void CrashNavAccountManagement::Update()  {}
 
-    // ---- CN_SETTINGS / CN_D_DETAIL -- ESCAPE-HATCHED placeholders (see the hatch banner
-    //      in the anonymous namespace above; declarations grown onto their leaf headers).
-    //      Logged PER ENTRY, deliberately -- the log line is the runtime witness that the
-    //      tab ring reached a parked screen. DELETE-WHEN the real class TUs land. ---------
-    void CrashNavSettings::OnEnter()
-    {
-        mpStateInterface->RegisterForEvents(KAI_HATCH_EVENTS, 1);
-        LogUnreconstructedState("CrashNavSettings", "OnEnter[escape hatch armed -- no screen drawn]");
-    }
-    void CrashNavSettings::OnLeave() { mpStateInterface->UnRegisterForEvents(KAI_HATCH_EVENTS, 1); }
-    void CrashNavSettings::Update()
-    {
-        switch (HatchDrain(mpInGuiEventQueue))
-        {
-        case 45: case 50: SendStateEvent("GO_BACK");      break;
-        case 54:          SendStateEvent("TOGGLE_LEFT");  break;
-        case 55:          SendStateEvent("TOGGLE_RIGHT"); break;
-        default:          break;
-        }
-    }
-
-    void CrashNavDriverDetails::OnEnter()
-    {
-        mpStateInterface->RegisterForEvents(KAI_HATCH_EVENTS, 1);
-        LogUnreconstructedState("CrashNavDriverDetails", "OnEnter[escape hatch armed -- no screen drawn]");
-    }
-    void CrashNavDriverDetails::OnLeave() { mpStateInterface->UnRegisterForEvents(KAI_HATCH_EVENTS, 1); }
-    void CrashNavDriverDetails::Update()
-    {
-        switch (HatchDrain(mpInGuiEventQueue))
-        {
-        case 45: case 50: SendStateEvent("GO_BACK");      break;
-        case 54:          SendStateEvent("TOGGLE_LEFT");  break;
-        case 55:          SendStateEvent("TOGGLE_RIGHT"); break;
-        default:          break;
-        }
-    }
+    // ---- CN_SETTINGS / CN_D_DETAIL: the ESCAPE HATCHES DIED 2026-08-29 (rebase) --------
+    //      Both real screen TUs landed on dev the same day (BrnCrashNavSettings.cpp /
+    //      BrnCrashNavDriverDetails.cpp, the START-button-screen wave) -- exactly the
+    //      DELETE-WHEN the hatches carried. Settings' resource table above STAYS (its TU
+    //      still reads it from here); DriverDetails' moved to its own TU.
 
     // ---- CrashNavColourCalibrate: the three lifecycle virtuals moved to the state's own
     //      TU (BrnCrashNavColourCalibrate.cpp, post-fx step 11). Only its static resource

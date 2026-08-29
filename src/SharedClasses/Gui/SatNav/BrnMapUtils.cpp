@@ -176,64 +176,6 @@ Matrix33 MapTransform::MakeTransform( Matrix33 lm33From, Matrix33 lm33To )
     return Multiply33( Invert33( lm33From ), lm33To );
 }
 
-// @ 0x8245A080 (main-map slice 2026-08-27) — the rect-to-rect overload, declared in the
-// DWARF (BrnMapUtils.h family) and previously in this header's declared-only list. The
-// X360 body is the un-NAMED sub_8245A080 that the MainMapComponent view pipeline calls
-// from Update / SnapToLocation / ApplyZoom / CalculatePositionedWorldRect (~10 sites):
-// it assembles TWO MakeCoordSpaceFromRect matrices on the stack — the vperm/vrlimi128
-// block builds exactly xAxis = {w, 0, 0, ·}, yAxis = {0, h, 0, 0}, zAxis =
-// {min.x, min.y, 1, ·} per rect, where `·` is uninitialised splat junk the consumer
-// never reads — from the two rect args in v2 (from) / v3 (to), then TAIL-CALLS the
-// two-matrix Transform @0x824503C0 with the point still untouched in v1 and the two
-// matrix pointers in r3/r4 (from-matrix in r3).
-Vector2 MapTransform::Transform( Vector2 lv2Point, Vector4 lv4From, Vector4 lv4To )
-{
-    return Transform( lv2Point,
-                      MakeCoordSpaceFromRect( lv4From ),
-                      MakeCoordSpaceFromRect( lv4To ) );
-}
-
-// @ 0x8244F318 — the pre-race map zoom: how many world units the (zoomed) map view must
-// span to fit the event's bounding rect A..B into the on-screen display rect C.
-// Decoded from the X360 asm (vminfp/vmaxfp corner fold, the vrefp + two-Newton-Raphson
-// reciprocals == full-precision divides, the two fsel maxima at the tail):
-//   min = min(A, B), max = max(A, B)  (per lane; the caller passes them pre-ordered)
-//   tX  = C.x * 0.85 / smv4DeviceRect.z      (screen fraction the map view spans in X)
-//   tY  = C.y * 0.85 / smv4DeviceRect.w      (and in Y)
-//   zoom = max( ((max.x-min.x) / tX) / lfBase,  (max.y-min.y) / tY,  2500 )
-// C is the fly-by's display rect in DEVICE PIXELS ({638, 349.8}); lfBase is the display
-// aspect (KF_MAP_BASE_ASPECT_RATIO) folded into the X term only (1280/1.7778 == 720, so
-// both terms measure world-units-per-0.85-screen-height). Constants read off the image:
-// 0.85 == flt_820550C0 (the usable-view fraction), 2500 == flt_820550BC (the minimum
-// zoom -- the map never zooms tighter than a 2500-world-unit window).
-f32 MapTransform::CalculateZoomFactor( Vector2 lv2A, Vector2 lv2B, Vector2 lv2C, f32 lfBase )
-{
-    const f32 KF_USABLE_VIEW_FRACTION = 0.85000002f;   // flt_820550C0
-    const f32 KF_MINIMUM_ZOOM         = 2500.0f;       // flt_820550BC
-
-    // vminfp / vmaxfp: the per-lane corner fold.
-    const f32 lfMinX = ( lv2A.x < lv2B.x ) ? lv2A.x : lv2B.x;
-    const f32 lfMinY = ( lv2A.y < lv2B.y ) ? lv2A.y : lv2B.y;
-    const f32 lfMaxX = ( lv2A.x > lv2B.x ) ? lv2A.x : lv2B.x;
-    const f32 lfMaxY = ( lv2A.y > lv2B.y ) ? lv2A.y : lv2B.y;
-
-    const f32 lfWidth  = lfMaxX - lfMinX;
-    const f32 lfHeight = lfMaxY - lfMinY;
-
-    // The screen fractions the display rect occupies (the vrefp+N-R reciprocal of the
-    // device extents, times the usable fraction, times the rect's pixel extents).
-    const f32 lfFractionX = lv2C.x * KF_USABLE_VIEW_FRACTION / smv4DeviceRect.z;
-    const f32 lfFractionY = lv2C.y * KF_USABLE_VIEW_FRACTION / smv4DeviceRect.w;
-
-    const f32 lfZoomX = ( lfWidth / lfFractionX ) * ( 1.0f / lfBase );
-    const f32 lfZoomY = lfHeight / lfFractionY;
-
-    // The two fsel maxima: the larger axis requirement, floored at the minimum zoom.
-    f32 lfZoom = ( lfZoomX - lfZoomY >= 0.0f ) ? lfZoomX : lfZoomY;
-    lfZoom = ( lfZoom - KF_MINIMUM_ZOOM >= 0.0f ) ? lfZoom : KF_MINIMUM_ZOOM;
-    return lfZoom;
-}
-
 // @ 0x824504E8 — install the zoomed world window from THREE CORNERS of the (possibly
 // rotated) rect: A is the shared origin corner, B and C its two adjacent corners
 // (SatNavComponent::SetViewParamsFromPlayerCar / SatNavRenderer::RenderComponent pass
