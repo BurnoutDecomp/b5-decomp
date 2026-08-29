@@ -6,6 +6,8 @@
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"  // CgsModule::ModuleSingleBuffered base
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"     // CgsModule::VariableEventQueue<N,16> (output GUI event queue)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CgsDev::Assert Begin/Fire/EndAssert
+#include "GameShared/GameClasses/Containers/CgsStack.h"             // CgsContainers::Stack<u16,8> (mShowtimePendingTrafficIndexStack, by value)
+#include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h" // BrnPhysics::ContactSpy::ContactSpyInterface (ProcessContacts' one argument)
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"        // BrnGameState::ModeManager (mModeManager, by value)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"         // BrnNetwork::NetworkPlayerID (s32 typedef; GetActiveRaceCarIndex param)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"       // GameStateModuleIO::GameActionQueue (real typedef)
@@ -354,11 +356,37 @@ public:
     // extracted rather than a straight `mModeManager.PostWorldUpdate(...)` (there is no
     // PostWorldInputBuffer on this build, and a synthesised one would hand ModeManager an
     // X360-sized opaque blob where a host RCEntityActiveRaceCarOutputInterface must be).
+    // ⭐ [showtime score wave 2026-08-29] THE FOURTH ARGUMENT IS THE FRAME'S CONTACT SPY, and it
+    // feeds the new LEG 5 -- GameStateModule::ProcessContacts, the console's own `bl` #25 of the
+    // same PostWorldUpdate. Same deviation as the first two arguments and for the same reason:
+    // the console reads it out of the PostWorldInputBuffer (+0x6E30, BrnGameStateModuleIO.h:204)
+    // and nothing on this build fills one, while the world module's UpdateOutputBuffer publishes
+    // exactly this type through its const GetContactSpyInterface().
     void PostWorldUpdateStuntBringUp(
         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
                                                       lpActiveRaceCarOutputInterface,
         const CgsModule::VariableEventQueue<1536, 16>* lpWorldGameEventQueue,
-        f32                                           lfDelta);
+        f32                                           lfDelta,
+        const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpyInterface);
+
+    // ==========================================================================================
+    // ⭐⭐⭐ [showtime score wave 2026-08-29] ProcessContacts -- X360 0x8236BC68, DWARF :853.
+    //
+    // THE PRODUCER CrashModeScoring::DealWithHitTrafficCar AND ::DealWithHitProp HAVE NEVER HAD.
+    // The console's sole caller is GameStateModule::PostWorldUpdate @0x8238F358 (`bl` #25,
+    // bracketed by PerfMonCpu Start/StopMonitor(*(this+292352) == miProcessContactsPM)), which
+    // itself has no call site on this build -- so on the X360 this function runs every showtime /
+    // stunt-attack frame and here it ran never.
+    //
+    // [FLAG PC bring-up] THE ARGUMENT IS THE DEVIATION, NOT THE BODY -- and here the reduction is
+    // total rather than partial: the console takes `const PostWorldInputBuffer*` and the ONLY
+    // thing it ever reads from it is `GetContactSpyInterface()` (sub_82362988, +0x6E30), called
+    // three times. Every other value in the body comes from `this`. So the parameter is that
+    // interface, and the body below is the console's, statement for statement.
+    // DELETE-WHEN a real PostWorldInputBuffer exists: change the parameter back and add the one
+    // accessor call at the top -- nothing else in the body moves.
+    // ==========================================================================================
+    void ProcessContacts(const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpyInterface);
 
     // ⭐⭐ [gateui] X360 PreWorldUpdate @0x823A5328 -- ITS THREE STUNT-CHAIN LEGS, IN THE
     // CONSOLE'S OWN ORDER (which matters, see below):
@@ -1730,6 +1758,48 @@ private:
     // Starts false: the console's own initial state is "not in showtime", so the first entry into
     // showtime IS a rising edge, which is exactly what makes the first post happen.
     bool mbWasInShowtimeGameMode        = false;
+
+    // =========================================================================================
+    // ⭐⭐⭐ [showtime score wave 2026-08-29] THE SHOWTIME CRASH-CHAIN HAND-OFF, three members.
+    // Names and types are the DecFIGS DWARF's verbatim (BrnGameStateModule.h:862/:863/:864);
+    // every offset is a store or a load in ProcessContacts @0x8236BC68 or UpdateShowtimeMode
+    // @0x82380EF8. As with the seven showtime members above, the members are NOT laid out at
+    // the console offsets on this minimal slice -- the offsets are the identity proof.
+    //
+    // ⛔ THE STACK IS A HAND-OFF BETWEEN THE TWO HALVES OF THE FRAME, and that is the whole
+    // reason "Cars Crashed" is a seven-hop chain rather than a one-hop one:
+    //   POST-world  ProcessContacts       pushes the index of each newly-crashed traffic car
+    //   PRE-world   UpdateShowtimeMode    pops ONE index every 2 frames (miShowtimePendingFrameDelay),
+    //                                     posts game action 116 E_ACTION_TRAFFIC_TYPE_REQUEST with
+    //                                     it, and parks it in muShowtimeRequestedTrafficIndex until
+    //                                     the traffic module answers with a TrafficTypeResponse --
+    //                                     only THEN does DealWithScoreForVehicleClass run and
+    //                                     maiNumCarsCrashed move.
+    // ⚠️ ONLY THE POST-WORLD HALF EXISTS TODAY. UpdateShowtimeMode is not reconstructed, so
+    // nothing pops this stack yet: it fills to KI_MAX_SIMULTANEOUS_SHOWTIME_CRASHES and then
+    // ProcessContacts' own IsFull() guard stops pushing -- which is the console's own behaviour
+    // when the consumer is starved, not a leak.
+    // =========================================================================================
+
+    // DWARF BrnGameStateModule.h:10 -- `const int32_t KI_MAX_SIMULTANEOUS_SHOWTIME_CRASHES = 8`,
+    // which is the `short_8_` template argument the X360's mangled Stack symbols carry.
+    static const s32 KI_MAX_SIMULTANEOUS_SHOWTIME_CRASHES = 8;
+
+    // X360 +284488 (0x45748), DWARF :862. ProcessContacts reaches it as `addis r28, r25, 4 ;
+    // addi r28, r28, 0x5748` and calls Stack<u16,8>::IsFull / ::Push on it; UpdateShowtimeMode
+    // calls ::Peek / ::Pop. Its "Stack used before Construct/Clear was called" assert (CgsStack.h
+    // :177) is what identifies the container as CgsContainers::Stack and not a Set.
+    CgsContainers::Stack<u16, KI_MAX_SIMULTANEOUS_SHOWTIME_CRASHES> mShowtimePendingTrafficIndexStack;
+
+    // X360 +284484 (0x45744), DWARF :863. UpdateShowtimeMode's inter-request countdown: it
+    // decrements this every frame the stack is non-empty and only pops when it reaches 0, then
+    // re-seeds it to 2. Declared here with the stack it paces; its only writer lands with
+    // UpdateShowtimeMode.
+    s32 miShowtimePendingFrameDelay = 0;
+
+    // X360 +284508 (0x4575C), DWARF :864. The index whose traffic-type answer is outstanding;
+    // K_INVALID_VEHICLE_INDEX (0xFFFF) when none is. Declared here for the same reason.
+    u16 muShowtimeRequestedTrafficIndex = 0xFFFFu;
 
 public:
     // ⭐⭐⭐ [bounce wave] ONE ARM of X360 GameStateModule::UpdateRoadRulesManager @0x82381258,

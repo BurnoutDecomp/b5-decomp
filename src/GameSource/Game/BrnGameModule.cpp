@@ -3956,10 +3956,23 @@ namespace BrnGame
                     // the extracted stunt-scorer fork, i.e. StuntModeScoring::Update. Same
                     // game-timer product every other leg in this block uses, for the same reason
                     // (nothing on this build stages a PreWorldInputBuffer timer block).
+                    // ⭐ [showtime score wave 2026-08-29] THE FOURTH ARGUMENT IS THE FRAME'S
+                    // CONTACT SPY, feeding the new LEG 5 (GameStateModule::ProcessContacts
+                    // @0x8236BC68 -- the producer CrashModeScoring::DealWithHitTrafficCar and
+                    // ::DealWithHitProp have never had). The console reads it out of the
+                    // PostWorldInputBuffer that BridgeWorldToGameState leg 4 fills; the same
+                    // ONE-FEED-NOT-TWO rule as the first two arguments applies, and the world
+                    // output buffer publishes exactly this type.
+                    // ⚠️ IT IS ONLY BOUND BECAUSE WorldModule::BridgePhysicsToOutput LANDED IN
+                    // THE SAME CHANGE. Before that, UpdateOutputBuffer::mContactSpyInterface had
+                    // no writer anywhere in the tree and this pointer would hand ProcessContacts
+                    // an interface whose IsValid() is false on every frame -- an argument that
+                    // looks live and is inert. [[silent-drop-stubs]]
                     mGameStateModule.PostWorldUpdateStuntBringUp(
                         lpcWorldOutput->GetActiveRaceCarOutputInterface(),
                         lpcWorldOutput->GetGameEventQueue(),
-                        mGameTimer.GetRate() * mGameTimer.GetScaleCurrent());
+                        mGameTimer.GetRate() * mGameTimer.GetScaleCurrent(),
+                        lpcWorldOutput->GetContactSpyInterface());
                     mpWorldUpdateOutputBuffer->UnlockForRead();
                 }
 

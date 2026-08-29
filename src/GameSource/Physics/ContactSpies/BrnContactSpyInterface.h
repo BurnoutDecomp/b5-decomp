@@ -57,6 +57,40 @@ namespace ContactSpy
             return mpData == nullptr || mpData->IsEmpty();
         }
 
+        // ⭐ NEW 2026-08-29 (showtime score wave). DWARF BrnContactSpyInterface.h:59
+        //     `bool IsValid() const;`
+        // INLINE (attested): the X360 emits no out-of-line symbol; it folds the accessor into
+        // BrnGameState::GameStateModule::ProcessContacts @0x8236BC80..0x8236BC8C --
+        //     bl      sub_82362988         ; PostWorldInputBuffer::GetContactSpyInterface()
+        //     lwz     r11, 0(r3)           ; mpData
+        //     cmplwi  cr6, r11, 0
+        //     beq     cr6, <the whole body is skipped>
+        // i.e. a bare "is this interface bound" test with no tripwire, which is exactly this
+        // declaration and NOT IsEmpty(). ⚠️ THE TWO ARE NOT INTERCHANGEABLE HERE: IsEmpty()
+        // also consults the five queues, so substituting it would additionally skip the
+        // console's two scorer asserts on a bound-but-quiet frame. Spelled as its own method
+        // so ProcessContacts reproduces the console test exactly (mpData is private).
+        bool IsValid() const
+        {
+            return mpData != nullptr;
+        }
+
+        // ⭐ NEW 2026-08-29 (showtime score wave). DWARF BrnContactSpyInterface.h:92
+        //     `const ContactSpyData::TrafficContactQueue * GetTrafficContacts() const;`
+        // OUT-OF-LINE on console at X360 0x82355B90 -- and unlike GetPropContacts it really is
+        // emitted: the body is the "mpData != NULL" FireAssert baking THIS header's line 187
+        // (0xBB), then `mpData + 0x70A0` == ContactSpyData::mTrafficContactQueue. Its one
+        // caller is GameStateModule::ProcessContacts @0x8236BD08, which is the only route to
+        // the traffic contacts (mTrafficContactQueue is private) and therefore the only
+        // producer CrashModeScoring::DealWithHitTrafficCar can ever have.
+        // Kept header-inline here for the same reason GetPropContacts is: the pass-through has
+        // no state and the assert is CGS_ASSERT-stamped.
+        const ContactSpyData::TrafficContactQueue* GetTrafficContacts() const
+        {
+            CGS_ASSERT(mpData != nullptr, "mpData != NULL");
+            return mpData->GetTrafficContacts();
+        }
+
         // X360 0x82355BF0 (DWARF BrnContactSpyInterface.h:110): asserts mpData != NULL then
         // returns &mpData->mRaceCarContactRunList (console byte offset 0x198D0 into
         // ContactSpyData). RETYPED with the promotion (was `const void*` over the u32 slot).
