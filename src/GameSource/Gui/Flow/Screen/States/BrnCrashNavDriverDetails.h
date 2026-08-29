@@ -15,6 +15,39 @@
 // and "GO_BACK". Three menu rows: $DDETAILS_LICENSE / $DDETAILS_RECORDS /
 // $DDETAILS_DISCOVER.
 //
+// ⚠️ WHAT THIS SCREEN DOES **NOT** OWN (checked 2026-08-29, after an art round):
+//   * THE WORLD BEHIND IT. On the console the world is DESATURATED and the camera keeps
+//     MOVING while this screen is up. Neither is this state's doing and neither is
+//     reachable from anything in this file. The chain is:
+//       OnEnter's { 8, 191, 12, 0, 0 } -> BrnGameModule (GameBridgeGUIToX) case 191
+//       payload0==0 -> DirectorIO::InputBuffer::SetGotCrashNavShownEvent
+//       -> MainDirector::PostGuiUpdate -> GameState::mbCrashNavShown (+0x101)
+//       -> Arbitrator::Update @0x8226ADA0 NORMAL case:
+//            if ((mbCrashNavShown || mbDoing100PercentSequence) && !mbGameIntroFlybyActive)
+//            { mArbStateCrashNav.Prepare(info); mArbStateCrashNav.Update(info);
+//              meState = E_STATE_CRASH_NAV_ICE_CAMERAS; }
+//       -> ArbStateCrashNav::Prepare @0x822660A8 copies SharedPlaylists::GetPausePlaylist
+//          (1256 bytes) into the state and ICEMoviePlayer::Loop()s it  == THE MOVING CAMERA
+//       -> the played camera's CameraEffects::mStartHookNameString -> BridgeDirectorToGui
+//          @0x823DD5C0 -> GuiPFXHookEvent (GUI 495) -> BrnGui::EffectsArbitrator::StartHook
+//          @0x8250B618 -> PFXHookNodeBlender -> colour cube -> BrnPostFx  == THE GREYSCALE.
+//     The hook names are DATA: POSTFX/PFXHOOKS.PFX ships `Pause_Screen`, `Black_White`,
+//     `Flash_B_W`, `Black_In_BW`/`Black_Out_BW`, `FadeIn_BW_Menu`/`FadeOut_BW_Menu` and --
+//     tellingly -- `Black_In(No_B_W)`/`Black_Out(No_B_W)`, i.e. the plain fades ARE the
+//     black-and-white ones. `Pause_Screen` has no code reference in the whole ARTIST export
+//     set, so it is triggered by the pause playlist's own effect track.
+//     ⛔ So a wave asked to "make the pause screen go black and white" must NOT touch this
+//     file. The blockers are all Director-side; the current ones are listed at the CRASH_NAV
+//     gate note in Director/Arbitrator/BrnDirectorArbitrator.cpp.
+//   * THE ARTWORK. The screen's movie (GUIAPT/BRNCRASHNAVDRIVERDETAILS.BUNDLE, 1 AptData +
+//     2x 1 MB Texture) carries the whole look -- Grunge_Entry_Bg[_02.._05] (the torn-paper
+//     strip behind every stat row), Grunge_Heading_Art_{City,Bridge,Crane,Curl_01..05,
+//     Splat_01/02,Dirt_Bg,L1,L2} (the skyline + paint-splash header) -- and all of it DRAWS
+//     in this build today (measured on a -PauseTarget driver frame dump, 2026-08-29). There
+//     is no missing backdrop asset and no missing row strip.
+//   * THE "PARADISE AWARDS" PROMPT AND ITS TICKER. Present on PS3, blanked on X360.
+//     Full evidence at the ⛔⛔ banner in UpdateWFInit -- read it before re-chasing.
+//
 // SHAPE. DecFIGS DWARF (dwarfdump .../BrnCrashNavDriverDetails.h): the base is
 // CgsGui::State and every member below is the DWARF's, in the DWARF's declaration
 // order -- which the X360 ctor @0x825001E0 and OnEnter @0x824CEC80 independently
@@ -129,6 +162,9 @@ namespace BrnGui
         // it, as the single {2, 536, 12, 0} post at the head of OnLeave @0x824CEF18
         // (`a1[5553] == 1` guard == meAchievementsTickerState == E_ACHIEVEMENTS_TICKER_SHOWING).
         // De-inlined back to the DWARF's own name.
+        // ⚠️ DEAD ON X360 AND FAITHFULLY SO: nothing in the build ever writes
+        // meAchievementsTickerState anything but INACTIVE, so the OnLeave guard never fires.
+        // See the ⛔⛔ banner in UpdateWFInit before "fixing" that.
         void HideTickerMessage();
 
         // @0x820664F0 (.rdata, 8 words) / @0x82066518 + @0x82066528 (.rdata).

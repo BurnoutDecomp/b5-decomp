@@ -311,8 +311,46 @@ namespace BrnDirector
             //     `if ( (mpGameState[257] || mpGameState[432]) && !mpGameState[217] ) {
             //          mArbStateCrashNav.Prepare(info); mArbStateCrashNav.Update(info);
             //          meState = E_STATE_CRASH_NAV_ICE_CAMERAS; }`
-            //   All three keys are bytes in the un-homed GameState block. CONSEQUENCE: crash
-            //   navigation (picture paradise) is never entered from here. DELETE-WHEN: as (a).
+            //
+            //   ⛔⛔ THE OLD REASON HERE WAS STALE AND IS CORRECTED (2026-08-29). It read
+            //   "All three keys are bytes in the un-homed GameState block". They are not, and
+            //   have not been for weeks -- all three are named members of BrnDirector::GameState
+            //   today, each at its own asm-attested offset in GameState::Clear:
+            //       [257] == +0x101 -> mbCrashNavShown            (written by
+            //                          MainDirector::PostGuiUpdate from the GUI's 191{0})
+            //       [432] == +0x1B0 -> mbDoing100PercentSequence
+            //       [217] == +0x0D9 -> mbGameIntroFlybyActive
+            //   Read this gate's reason as a bug report, not as a fact: the trigger is
+            //   expressible verbatim right now.
+            //
+            //   ⭐ WHAT THIS GATE ACTUALLY COSTS. This is the OFFLINE PAUSE's world look. The
+            //   GUI pause screens (CrashNavDriverDetails / CrashNavMapMain) post 191{0} on
+            //   OnEnter, which is exactly what raises mbCrashNavShown -- so on the console this
+            //   arm fires the moment the player presses START. ArbStateCrashNav::Prepare
+            //   @0x822660A8 then copies SharedPlaylists::GetPausePlaylist (1256 bytes) into the
+            //   state and ICEMoviePlayer::Loop()s it, which is why the retail pause camera keeps
+            //   MOVING while the sim is frozen; the played camera's CameraEffects hook name then
+            //   reaches BrnGui::EffectsArbitrator through BridgeDirectorToGui, which is why the
+            //   retail pause world is BLACK AND WHITE. Ours is a frozen, full-colour world
+            //   because this arm never runs. (Measured 2026-08-29: world-region frame delta
+            //   0.000 across ~6300 presents of pause, mean per-pixel saturation unchanged.)
+            //
+            //   ⚠️ THE REAL BLOCKERS, in order -- none of them is the GameState:
+            //     1. ArbStateCrashNav::Prepare (X360 @0x822660A8) is NOT reconstructed. Calling
+            //        the vtable +4 slot today would reach the ArbitratorState base, and
+            //        ArbStateCrashNav::Update would then dereference an unallocated
+            //        mRoadRunnerCam handle -- strictly worse than not entering.
+            //     2. GameSource/Director/Arbitrator/States/BrnArbStateCrashNav.cpp does not
+            //        COMPILE (BrnICEMoviePlayer.h:239/243/280 need a complete
+            //        Camera::BehaviourInterpolate) and is not mounted in build_game_exe.bat.
+            //     3. The greyscale half additionally needs BrnGameModule::BridgeDirectorToGui
+            //        (@0x823DD5C0, GameBridgeDirectorToX.cpp) -- which does not exist anywhere in
+            //        b5-decomp -- plus the three Gui/PFX TUs (BrnGuiEffectsArbitrator.cpp,
+            //        BrnPfxHookBlender.cpp, BrnGuiPFXHookNodeBlender.cpp); those three DO compile
+            //        clean today but are unmounted, and are inert without (3)'s bridge.
+            //   CONSEQUENCE: crash navigation (picture paradise) AND the offline pause's moving
+            //   black-and-white world are never entered from here.
+            //   DELETE-WHEN: blockers 1 and 2 are closed (the greyscale needs 3 as well).
 
             // ⚠️ GATE: the RENDER_METRICS trigger --
             //     `if ( mbDoRenderMetrics ) { meState = E_STATE_RENDER_METRICS;

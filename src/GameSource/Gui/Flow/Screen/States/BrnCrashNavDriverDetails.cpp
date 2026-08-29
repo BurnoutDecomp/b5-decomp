@@ -174,8 +174,9 @@ namespace
     // the SAME 0x8206B4A0 == 420.0f. Both floats read out of the unpacked image with the
     // verified reader.
     // ⚠️ Landing these needed a SECOND fix to be visible at all: every reserved apt variable
-    // (_x/_y/...) was being silently dropped -- see CgsAptCommunicator.cpp. Either alone
-    // leaves the card where the movie authored it, on top of the stat labels.
+    // (_x/_y/...) was being discarded with no diagnostic -- see CgsAptCommunicator.cpp (that
+    // bug is FIXED; this line only records why). Either fix alone leaves the card where the
+    // movie authored it, on top of the stat labels.
     // The console loads each with a single `lvx128 v1` -- one 16-byte VMX quad, which is
     // what a by-value rw Vector2 is -- and passes it straight to LicenseComponent::SetPosition.
     const Vector2 KV2_LICENSE_POSITION    = { 500.0f, 420.0f, 0.0f, 0.0f };   // 0x82FB4A90 (HD)
@@ -236,6 +237,17 @@ namespace
     };
 
     // { 2, 536, 12, 0 } ch 40 / 16 bytes -- HideTickerMessage's record.
+    // ⭐ WHAT ID 536 IS (recovered 2026-08-29): the shared TICKER CLEAR. The console names it
+    // itself through CgsGui::GuiModule::AddGuiEvent<BrnGui::GuiEventTickerClearMessages>
+    // @0x823D2718, whose single AddEvent is `(queue, ev, 536, 2)`; its sibling
+    // AddGuiEvent<BrnGui::GuiEventTickerCustomMessage> @0x823D1D08 is `(queue, ev, 537, 2072)`
+    // -- the SHOW half, which this screen never posts on X360 (see the ⛔⛔ banner in
+    // UpdateWFInit). ⚠️ The name is DELIBERATELY NOT reused here: BrnGui::GuiEventTickerClearMessages
+    // already has a home in BrnGuiDemangledEventTypes.h:277 as the 2-byte GAME->GUI form, and this
+    // is the 16-byte GUI->GAME (channel 40) form the state actually stack-builds. Two shapes, one
+    // id, opposite directions -- so a file-local record with a distinct name, NOT a second
+    // declaration of a name that has a real header (an ODR fork here would link silently).
+    // DELETE-WHEN: the ticker's out-queue record is recovered into its own home header.
     struct GuiEventHideTickerMessage : public CgsGui::GuiEvent<536>
     {
         u16 mu16Reserved;   // +0x0C (the X360 stores a halfword 0 here)
@@ -653,6 +665,50 @@ bool CrashNavDriverDetails::UpdateWFInit()
         lbInitialised = true;
     }
 
+    // ⛔⛔ THE ACHIEVEMENTS TICKER / "PARADISE AWARDS" PROMPT IS **OFF IN ARTIST**. THIS BLANK
+    // SetItem IS FAITHFUL -- DO NOT "RESTORE" IT (verified negative, 2026-08-29).
+    //
+    // Someone comparing this screen against a RETAIL PS3 shot will see a second bottom prompt
+    // ("PARADISE AWARDS" + the square glyph) beside RETURN TO GAME, and a ticker line reading
+    // "Press the square button to access your Paradise Awards." Neither is missing from this
+    // reconstruction: the X360 build we transcribe does not have them.
+    //
+    // MEASURED, both sides:
+    //   * X360 ARTIST. The whole class is 16 functions (identity.json); +0x56C8
+    //     (mAchievementsPrompt) is touched in exactly THREE of them and +0x56C4
+    //     (meAchievementsTickerState) in exactly TWO -- scanned over the `assembly` listings,
+    //     not just the pseudocode:
+    //         ctor @0x825001E0        vptr store only
+    //         OnEnter @0x824CEC80     Construct(+0x56C8); stw 0 -> +0x56C4 (INACTIVE)
+    //         UpdateWFInit @0x824BFE40  THIS call -- SetItem(&unk_820046A7, 15, 15)
+    //         OnLeave @0x824CEF18     cmpwi +0x56C4, 1  -> HideTickerMessage
+    //     `unk_820046A7` is the image's shared "" literal (it is what AptString::Create and
+    //     MassiveBaseObject::SetLastError pass for an empty string), and 15 == 15 ==
+    //     E_PADBUTTON_INVISIBLE. So meAchievementsTickerState is written ONLY to INACTIVE and
+    //     can never reach E_ACHIEVEMENTS_TICKER_SHOWING; the OnLeave arm and HideTickerMessage
+    //     are dead code the console still links. There is no `$ACHIEVEMENTS` string anywhere in
+    //     the ARTIST export set, and there is no `BrnGui::CrashNavAchievements` class either --
+    //     the screen that prompt would open DOES NOT EXIST in this build.
+    //   * DecFIGS PS3 (Dec-2007) -- the second witness, and it HAS the feature:
+    //         UpdateWFInit @0x4D9CD0 (PS3) calls, at BOTH exits,
+    //             HelpItem::SetItem(this+22208, "$ACHIEVEMENTS",
+    //                               E_PADBUTTON_OPTION0 /*6, the square glyph*/,
+    //                               E_PADBUTTON_INVISIBLE);
+    //         UpdatePermanent @0x50D1AC (PS3) carries an arm for GUI EVENT 523 that runs the
+    //             INACTIVE -> SHOWING -> SHOWN ladder, builds a GuiEventTickerCustomMessage
+    //             (id 537 -- see the id-536 note above) and asserts "Unrecognised
+    //             achievements ticker state" at BrnCrashNavDriverDetails.cpp:810.
+    //         `BrnCrashNavAchievements.h` exists in the DecFIGS DWARF tree.
+    //     The X360 UpdatePermanent's switch is {6, 21, 350} + {436, 569} -- no 523 -- and 523 is
+    //     not in maiEventToObserve either, so the event could not be delivered even if it were.
+    //
+    // ⇒ This is a PLATFORM/BUILD delta, not a decomp defect: the X360 shows achievements through
+    // the Xbox Guide (BrnGameState::AchievementManagerX360 -> XUserWriteAchievements), so the
+    // in-game awards list is a PS3 thing (AchievementManagerPS3), and ARTIST ships the prompt
+    // blanked with the movie's `AchievementPrompt_cpt` component still authored in the .apt.
+    // Adding it back would mean transcribing the PS3 build over the X360 spine -- a deliberate
+    // cross-build import, which the ladder does not allow without an explicit decision.
+    //
     // Unconditional, outside the gate (the X360 runs it on the fall-through too): blank
     // the achievements prompt.
     // `li r5,15; li r6,15` -- E_PADBUTTON_INVISIBLE on both slots, i.e. text only.
