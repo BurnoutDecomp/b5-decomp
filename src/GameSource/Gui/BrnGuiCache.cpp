@@ -276,6 +276,29 @@ namespace BrnGui
         //  icon path reads.)
         mEventsCtorSentinel  = 0;   // X360 `*(v47 + 40532) = 0`  (mEvents / GetNumPresetEvents)
         miProfileEventsCount = 0;   // X360 `*(v47 + 80724) = 0`  (GetNumProfileEvents)
+
+        // ⭐⭐⭐ THE GAME-FLOW-STATE SEED, and it is not cosmetic -- it is the single word that
+        // was suppressing EVERY HUD MESSAGE IN THE BUILD.
+        //   X360 GuiCache::Construct @0x82505860: `li r11, 1` @0x82505AB4 (the same 1 the
+        //   +0x4B78 mbPlayIntroVideo store above uses) then `stw r11, 0x4B30(r31)` @0x82505C68,
+        //   and `stb r30, 0x4B34(r31)` @0x825059E8 with r30 == 0. Traced as the LAST definition
+        //   of r11 before that store; there is exactly one store to +0x4B30 in the body.
+        // This slice omitted both, so miGameFlowState sat at whatever the allocation left --
+        // ZERO -- for the entire session, because RecEvent's case 132 is the only other writer
+        // and nothing in this build posts GUI event 132.
+        // ⛔ WHY THAT KILLS THE HUD MESSAGES. HudMessageDirector::CheckMessageIsAvailable
+        // @0x824F2B28 treats flow states 0 and 2 as "the player is crashed" and passes only
+        // messages carrying KU_AVAILABLE_WHILE_CRASHED. At 0, every ordinary message is
+        // rejected -- MEASURED 2026-08-29: a successful gas-station drive-thru resolved its
+        // message, found it in the controller table, and was dropped one gate later with
+        // "Not available while crashed". The same word gates the ANALYZER's four parked passes
+        // (online winner / crash boundary / challenge triggered / challenge ended), which fire
+        // only on 1 or 3, so those were dead too.
+        // ⚠️ Read the header's carve note with this: it records "values observed: -1 / 1 / 3"
+        // and calls -1 the invalid one. 1 is what Construct seeds -- so the HUD is meant to be
+        // in a message-eligible state from the moment the cache is built.
+        miGameFlowState      = 1;   // X360 stw r11(==1), 0x4B30(r31)  @0x82505C68
+        mu8GameFlowByte_4B34 = 0;   // X360 stb r30(==0), 0x4B34(r31)  @0x825059E8
     }
 
     // @0x8250DC30 -- publish the queue selected on the previous frame, clear it,
