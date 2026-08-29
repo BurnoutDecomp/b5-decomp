@@ -116,6 +116,12 @@ static const f32 KF_TRAFFIC_STOMP_DECAY_RATE           = 0.1f;    // flt_820147E
 static const f32 KF_AFTERTOUCH_GROUND_DECAY_TIME  = 0.66666669f;
 static const f32 KF_AFTERTOUCH_AIR_DECAY_TIME     = 0.071428575f;
 static const f32 KF_AFTERTOUCH_NO_BOOST_DECAY_TIME = 0.5f;        // flt_820147FC
+// :83 -- granted by OnCarCrash @0x822C3304 for every NEW car the player hits during crash play
+// (`lfs f0, flt_820147FC` == 0.5f, added to mfAftertouchPower and Min-clamped to the max). The
+// DWARF declares it immediately before KF_AFTERTOUCH_FOR_STATIONARY_BOUNCE_BOOST, and OnCarCrash /
+// OnBounce are the only two sites in this TU that ADD a 0.5f to mfAftertouchPower -- which is what
+// splits the shared flt_820147FC literal across the two names in declaration order.
+static const f32 KF_AFTERTOUCH_FOR_CAR_IMPACT = 0.5f;
 // :84 -- granted by OnBounce when the bounce came from a standing start
 // (JustBouncedAction::mbFromStationary); same 0.5f literal, different constant.
 static const f32 KF_AFTERTOUCH_FOR_STATIONARY_BOUNCE_BOOST = 0.5f;
@@ -796,6 +802,88 @@ void CrashPlayManager::SetBouncePromptNeeded( bool lbPromptNeeded,
                 KI_EVENT_SHOWTIME_BOUNCE_PROMPT,
                 1 );
         mbBouncePromptNeeded = lbPromptNeeded;
+    }
+}
+
+// =================================================================================================
+// OnCarCrash  @ 0x822C3280  -- the per-car-hit reward, and the recently-hit DEBOUNCE SET.
+//
+// (Landed 2026-08-29. It used to be a trap stub in WorldLinkStubs.cpp; that stub is now deleted.
+// The ledger files this function under GameShared/GameClasses/Containers/CgsRingBuffer.h because
+// its only callees are the inlined ring-buffer methods -- the same misfiling BoostStrategy::
+// UpdateChainExploits carries. Its real home is this .cpp: the DecFIGS dwarfdump declares the body
+// here, with `int32_t liCrashSetIndex` at BrnCrashPlayManager.cpp:689.)
+//
+// ⛔⛔ THE STUB'S OWN COMMENT WAS WRONG ON THE POINT IT WAS WRITTEN FOR. It said this function
+// "WOULD: push the hit vehicle into mRecentCrashSet, award the per-car boost, and set
+// mbTrafficStomp -- which is why the traffic-stomp air ram is currently unreachable". It sets
+// NEITHER mbTrafficStomp NOR mfBoostPercentage. The whole body is four stores wide and the asm is
+// unambiguous: the only fields it touches are mRecentCrashSet, mfAftertouchPower (+0x138) and
+// mfTimeSinceLastVehicleImpact (+0x120).
+//
+// ⭐ And mbTrafficStomp has NO true-writer ANYWHERE IN ARTIST. Exhaustive scan of all 30,084
+// exported functions for a byte store at CrashPlayManager +0x128, and separately for the
+// module-relative form (module + 0x18218, in every PPC encoding: `lis/ori 0x18218`, `addis rX,rY,2`
+// + `stb ..., -0x7DE8(rX)`, and the literal 98840): the ONLY writers are Activate @0x822C31A8
+// (stores 0 -- the init) and UpdateTrafficStomp @0x822F9074 (stores 0 -- the consume). Nothing sets
+// it. So the traffic-stomp air ram is dead code in the shipped X360 build too, and landing this
+// body does not -- and cannot -- wake it. Whatever gates showtime's stomp on the console, it is not
+// this member and not this function. DO NOT spend another wave looking for the writer here.
+//
+// SHAPE (asm 0x822C3280..0x822C333C, 48 instructions):
+//   if (!mbIsCrashPlayActive) return;                  `lbz r11, 0x14C(r31)` + beq
+//   if (!lbPlayerHitCar)      return;                  `clrlwi r11, r5, 24` + beq
+//   for (i = 0; i < mRecentCrashSet.GetLength(); ++i)  `lwz r11, 0x40(r31)` == miLength
+//       if (mRecentCrashSet[i] == lHitVehicleID) return;   -- already counted, no double reward
+//   mRecentCrashSet.Push(&lHitVehicleID);
+//   mfAftertouchPower = Min(mfAftertouchPower + KF_AFTERTOUCH_FOR_CAR_IMPACT,
+//                           GetMaxAftertouchPower());
+//   if (mfTimeSinceLastVehicleImpact >= KF_MIN_TIME_BETWEEN_AIR_RAMS)
+//       mfTimeSinceLastVehicleImpact = 0.0f;
+//
+// The `fsel f0, f12, f13, f0` at 0x822C3324 with f12 == (mfAftertouchPower + 0.5f) - 1.0f IS
+// rw::math::fpu::Min<float> -- the DWARF's callee list for this function names Min<float>
+// explicitly, which is what turns a branchless select back into the call.
+//
+// The two literals: flt_820147FC == 0.5f is KF_AFTERTOUCH_FOR_CAR_IMPACT (the DWARF declares that
+// constant immediately before KF_AFTERTOUCH_FOR_STATIONARY_BOUNCE_BOOST, which is the other 0.5f
+// site in this file), and flt_82CDB648 == 1.2f is KF_MIN_TIME_BETWEEN_AIR_RAMS, already named at
+// the top of this file from Activate's seed of the same field.
+//
+// The reset is deliberately one-sided: mfTimeSinceLastVehicleImpact only restarts once the previous
+// air-ram window has fully expired, so a burst of contacts in the same collision does not keep
+// re-arming it. Activate seeds the field TO the threshold so the first hit of a session fires.
+//
+// DROPPED: the DecFIGS build's `CgsDev::StrStream::StrStream` block (a streamed assert message).
+// ARTIST emits no assert here at all -- no BeginAssert/FireAssert/EndAssert triple anywhere in the
+// 48 instructions -- so it is compiled out in the target build. Rung 1 wins.
+// =================================================================================================
+void CrashPlayManager::OnCarCrash( CgsSceneManager::EntityId lHitVehicleID, bool lbPlayerHitCar )
+{
+    if( !mbIsCrashPlayActive || !lbPlayerHitCar )
+    {
+        return;
+    }
+
+    // Already in the recently-hit window -> this contact earns nothing.
+    for( s32 liCrashSetIndex = 0;
+         liCrashSetIndex < mRecentCrashSet.GetLength();
+         ++liCrashSetIndex )
+    {
+        if( mRecentCrashSet[static_cast<u32>( liCrashSetIndex )] == lHitVehicleID )
+        {
+            return;
+        }
+    }
+
+    mRecentCrashSet.Push( &lHitVehicleID );
+
+    mfAftertouchPower = rw::math::fpu::Min( mfAftertouchPower + KF_AFTERTOUCH_FOR_CAR_IMPACT,
+                                            GetMaxAftertouchPower() );
+
+    if( mfTimeSinceLastVehicleImpact >= KF_MIN_TIME_BETWEEN_AIR_RAMS )
+    {
+        mfTimeSinceLastVehicleImpact = 0.0f;
     }
 }
 
