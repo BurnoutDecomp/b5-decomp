@@ -19,6 +19,7 @@
 #include "GameSource/AttribSys/Generated/classes/shotgroup.h"                     // Attrib::Gen::shotgroup
 #include "GameSource/AttribSys/Generated/classes/iceanim.h"                       // Attrib::Gen::iceanim
 #include "rw/math/vpu/types.h"                                                    // rw::math::vpu::Matrix44Affine / Vector3
+#include "GameSource/Director/Arbitrator/BrnDirectorArbitratorStateContainer.h" // the roaming hand-back
 
 // ============================================================================
 // BrnDirector::ArbStateCarSelect / BrnDirector::InterpolaterHelper
@@ -661,6 +662,20 @@ namespace BrnDirector
     void ArbStateCarSelect::Update(ArbStateSharedInfo& lrSharedInfo)
     {
         GameState&                     lrGameState = *lrSharedInfo.mpGameState;
+
+        // [diag] BRN_CRASHCAM_DIAG -- this state's meState edge. It is here because the
+        // crash-camera investigation needed to know WHY the arbitrator never returns to roaming,
+        // and this state is where it parks. Edge-triggered; off unless the variable is set.
+        if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            static s32 siLastCarSelState = -1;
+            if (static_cast<s32>(meState) != siLastCarSelState)
+            {
+                siLastCarSelState = static_cast<s32>(meState);
+                *CgsDev::Log::gpDebugPrint
+                    << "[crashcam] carselect meState -> " << siLastCarSelState << "\n";
+            }
+        }
         // ✅ THE CAST IS GONE (2026-08-29, crash-camera wave). This used to launder
         // mpPlayerCar through a reinterpret_cast because ArbStateSharedInfo forward-declared its
         // pointee as `BrnDirector::VehicleInfo` -- a namespace fork of a type that does not
@@ -1260,14 +1275,58 @@ namespace BrnDirector
         case E_STATE_CHANGING_TO_ROAMING:
             GetNonConstCamera() = lrSharedInfo.mpSharedCameraContainer->GetSelectedGameplayCamera();
             lrSharedInfo.mpSharedCameraContainer->ForcePrimaryGameplayBehaviourToFinish();
-            // ⚠️ GATE: the X360 hands the frame to the ROAMING sibling here --
-            //     `if ( mpStateContainer->GetState(E_STATE_ROAMING)->Prepare(info) ) {
-            //          mpStateContainer->SetCurrentState(E_STATE_ROAMING); Release(info); }`
-            //   Release() is NOT in this TU's X360 export set (see the banner), so the
-            //   hand-off's second half cannot be written faithfully, and running only the first
-            //   half would leave this state current with its behaviours still held.
-            //   CONSEQUENCE: the junkyard outro does not hand back to roaming.
-            //   DELETE-WHEN: ArbStateCarSelect::Release is recovered.
+            // ⭐⭐ THE GATE HERE IS RETIRED (2026-08-29, crash-camera wave), AND ITS OWN REASONING
+            // WAS THE THING THAT WAS WRONG. It read: "Release() is NOT in this TU's X360 export
+            // set, so the hand-off's second half cannot be written faithfully."
+            //
+            // Absence from an export set means THIS CLASS DOES NOT OVERRIDE IT -- not that the
+            // call cannot be written. The console emits a VIRTUAL `this->Release(info)`, and with
+            // no override that dispatches to ArbitratorState::Release, which is bodied
+            // (BrnDirectorArbitratorState.cpp:73, `return true`). Writing the virtual call here
+            // reproduces exactly what the console does, byte for byte, including which body runs.
+            //
+            // ⛔⛔ WHAT THE GATE ACTUALLY COST, MEASURED THIS WAVE. Its CONSEQUENCE line said
+            // "the junkyard outro does not hand back to roaming", which reads like a cosmetic
+            // camera nicety. It is not: ArbStateRoaming::ProcessPossibleStateChanges is the ONLY
+            // caller of the crash / takedown / race-intro / drive-thru / post-event / rank-up /
+            // car-select edges in the entire arbitrator. With the container parked in this state
+            // for the whole session, EVERY OTHER DIRECTOR STATE IS UNREACHABLE. The reason nobody
+            // noticed is that this state's ACTIVE arm publishes
+            // SharedCameraContainer::GetSelectedGameplayCamera(), i.e. the ordinary chase camera
+            // -- so the game drives and looks completely normal while the arbitrator is stuck.
+            // Traced with BRN_CRASHCAM_DIAG:
+            //   [crashcam] container current state -> 1 (ArbStateRoaming)
+            //   [crashcam] container current state -> 8 (ArbStateCarSelect)   <- and never again
+            //   [crashcam] roaming meState -> 0                                <- for the rest of the run
+            //
+            // ⚠️ The gate's OTHER worry -- "running only the first half would leave this state
+            // current with its behaviours still held" -- is answered by the order below: the
+            // container only switches when roaming has actually prepared, and Release runs on the
+            // same frame, exactly as the console sequences it.
+            if (lrSharedInfo.mpStateContainer
+                    ->GetState(ArbitratorStateContainer::E_STATE_ROAMING)->Prepare(lrSharedInfo))
+            {
+                lrSharedInfo.mpStateContainer->SetCurrentState(
+                    ArbitratorStateContainer::E_STATE_ROAMING);
+                Release(lrSharedInfo);   // the virtual
+
+                // FLAG (family invariant, not a transcription): drop out of the hand-off state.
+                // The DecFIGS DWARF DOES declare `virtual bool ArbStateCarSelect::Release(
+                // ArbStateSharedInfo&)` (BrnArbStateCarSelect.h:196) -- so the class overrides it
+                // and the earlier note's "Release() is NOT in this TU's X360 export set" was a
+                // HOLE IN THE EXPORT SET, not a missing override. That override's body is not
+                // recovered, but every sibling Release in this family ends `meState =
+                // E_STATE_INACTIVE` (ArbStateRoaming::Release, ArbStateCrashing::Release,
+                // ArbStateCrashMode's ...), and the state machine's correctness depends on it:
+                // ⛔ WITHOUT THIS LINE THE STATE STAYS AT CHANGING_TO_ROAMING AND RE-TAKES THE
+                // FRAME EVERY UPDATE. Measured: `[crashcam] container current state -> 1
+                // (ArbStateRoaming)` 6,066 times in one run, and because UpdateAll visits
+                // CarSelect (index 8) AFTER Crashing (index 2), the crash camera was handed the
+                // frame and had it taken away again in the same update -- the state machine ran
+                // perfectly and nothing it produced could ever reach the screen.
+                // DELETE-WHEN: ArbStateCarSelect::Release is recovered and this moves into it.
+                meState = E_STATE_INACTIVE;
+            }
             break;
 
         default:

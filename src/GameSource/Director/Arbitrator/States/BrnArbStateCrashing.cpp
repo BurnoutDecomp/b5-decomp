@@ -17,6 +17,9 @@
 #include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"                 // EnsureEffectIsPlaying / StopCurrentEffect
 #include "GameSource/Director/Utils/BrnVehicleRef.h"                            // VehicleRef (the stack ref)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // [diag] gpDebugPrint
+#include "rw/math/vpu/vector3_operation.h"                                      // [diag] MagnitudeSquared
+#include <cstdlib>                                                              // [diag] getenv
 
 // ============================================================================
 // GameSource/Director/Arbitrator/States/BrnArbStateCrashing.cpp
@@ -128,6 +131,32 @@ namespace BrnDirector
         // The take the taken-down camera plays is the FIRST shot of the resource manager's
         // "takendown" shot group.
         const u32 KU_TAKENDOWN_SHOT_INDEX = 0;
+
+        // ------------------------------------------------------------------------------------
+        // [DIAG] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY, and off unless the variable is set.
+        //
+        // WHY IT EXISTS. This state is invisible from outside: it publishes a camera and a time
+        // scale, and when it does nothing it looks exactly like a build where it was never
+        // entered. The first run of the finished chain produced no dilation, and there was no way
+        // to tell "the arbitrator never handed us the frame" from "we ran and the slow-motion
+        // entry gate said no" -- two completely different bugs. Edge-triggered on meState so a
+        // steady state costs one line, not sixty a second (this simulation is frame-coupled;
+        // per-frame logging perturbs the thing being measured).
+        // ------------------------------------------------------------------------------------
+        bool CrashCamDiagOn()
+        {
+            static const bool sbOn = (getenv("BRN_CRASHCAM_DIAG") != 0);
+            return sbOn;
+        }
+
+        void ReportState(const char* lpcWhere, s32 leState)
+        {
+            if (!CrashCamDiagOn() || CgsDev::Log::gpDebugPrint == 0) { return; }
+            static s32 siLast = -99;
+            if (leState == siLast) { return; }
+            siLast = leState;
+            *CgsDev::Log::gpDebugPrint << "[crashcam] " << lpcWhere << " meState -> " << leState << "\n";
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -259,6 +288,26 @@ namespace BrnDirector
             lbPrepared = false;
         }
 
+        // [diag] BRN_CRASHCAM_DIAG -- Prepare is the door: if this never prints, the arbitrator
+        // never offered the state a frame and the bug is upstream (mbCrashActive / roaming's
+        // crash edge), not here.
+        if (CrashCamDiagOn() && CgsDev::Log::gpDebugPrint != 0)
+        {
+            static bool sbFirst = true;
+            static bool sbLast  = false;
+            if (sbFirst || lbPrepared != sbLast)
+            {
+                sbFirst = false;
+                sbLast  = lbPrepared;
+                *CgsDev::Log::gpDebugPrint
+                    << "[crashcam] Prepare -> " << (lbPrepared ? 1 : 0)
+                    << " (framesActive=" << mMomentSelector.GetFramesActive()
+                    << " validMoments=" << static_cast<s32>(mMomentSelector.GetNumValidMoments())
+                    << " deathcam=" << (mbShouldUseDeathcam ? 1 : 0)
+                    << " crashType=" << static_cast<s32>(meCrashType) << ")\n";
+            }
+        }
+
         return lbPrepared;
     }
 
@@ -326,6 +375,27 @@ namespace BrnDirector
                                           *lrSharedInfo.mpPlayerTracker,
                                           *lrSharedInfo.mpDebugPrinter,
                                           lbDontSetRealTime);
+
+            // [diag] BRN_CRASHCAM_DIAG -- the slow motion's own read-out: the velocity journal
+            // sample the entry gate actually saw, and the time scale the controller left behind.
+            // Edge-triggered on the requested scale, so a steady real-time frame costs nothing.
+            if (CrashCamDiagOn() && CgsDev::Log::gpDebugPrint != 0)
+            {
+                static f32 sfLastScale = -1.0f;
+                const f32  lfScale = GetCamera().GetEffects().mfSimTimeScale;
+                if (lfScale != sfLastScale)
+                {
+                    sfLastScale = lfScale;
+                    const rw::math::vpu::Vector3 lVel =
+                        lrSharedInfo.mpPlayerTracker->GetLinearVelocityJournal().GetCurrent();
+                    *CgsDev::Log::gpDebugPrint
+                        << "[crashcam] slomo requested scale=" << lfScale
+                        << " velMagSq=" << rw::math::vpu::MagnitudeSquared(lVel)
+                        << " vel.y=" << lVel.y
+                        << " firstFrame=" << (mImpactSlomoController.IsFirstFrameOfSlomo() ? 1 : 0)
+                        << "\n";
+                }
+            }
         }
 
         if (lbSuppressShake)
@@ -750,6 +820,33 @@ namespace BrnDirector
             CgsDev::Assert::FireAssert("unhandled state", KPC_SOURCE_FILE, 441);
             CgsDev::Assert::EndAssert();
             break;
+        }
+
+        // [diag] BRN_CRASHCAM_DIAG -- one line per state EDGE.
+        ReportState("Update", static_cast<s32>(meState));
+
+        // [diag] BRN_CRASHCAM_DIAG -- a 1 Hz heartbeat carrying the two numbers the whole chain
+        // turns on: the crash gate the arbitrator reads, and the tracked car's speed, which is
+        // what ImpactSlomoController::Update's entry test measures (it needs > 30 MPH, i.e.
+        // magSq > 179.86 m^2/s^2). Deliberately periodic rather than edge-triggered -- the
+        // question is "what were the numbers WHILE the crash ran", and an edge cannot answer it.
+        if (CrashCamDiagOn() && CgsDev::Log::gpDebugPrint != 0)
+        {
+            static u32 suHeartbeat = 0u;
+            if ((suHeartbeat++ % 60u) == 0u)
+            {
+                const VehicleTracker::Vector3Journal& lrJournal =
+                    lrSharedInfo.mpPlayerTracker->GetLinearVelocityJournal();
+                const rw::math::vpu::Vector3 lCur = lrJournal.GetCurrent();
+                *CgsDev::Log::gpDebugPrint
+                    << "[crashcam] hb meState=" << static_cast<s32>(meState)
+                    << " crashActive=" << (lrGameState.mbCrashActive ? 1 : 0)
+                    << " velMagSq=" << rw::math::vpu::MagnitudeSquared(lCur)
+                    << " vel.y=" << lCur.y
+                    << " journalSize=" << lrJournal.GetSize()
+                    << " simScale=" << GetCamera().GetEffects().mfSimTimeScale
+                    << "\n";
+            }
         }
 
         // Every arm ends here: mark the produced camera as the crash camera's

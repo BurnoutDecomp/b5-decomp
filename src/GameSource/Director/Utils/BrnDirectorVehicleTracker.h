@@ -99,35 +99,29 @@ public:
 // minimal slice that used to live here. GetCurrentEventState()/IsInCountdown() and the
 // E_EVENT_STATE_RACING alias are provided there.
 
-// ⛔⛔ THE PRIVATE `namespace DirectorIO { VehicleInfo; TimerStatusInterface; InputBuffer; }`
-// FORK THAT STOOD HERE MOVED INTO THE .cpp (2026-08-29, crash-camera wave), UNCHANGED.
+// THE PRIVATE `namespace DirectorIO { VehicleInfo; TimerStatusInterface; InputBuffer; }` FORK
+// THAT STOOD HERE IS RETIRED (2026-08-29, crash-camera wave), NOT MOVED.
 //
-// It was three declaration-only slices of types whose REAL homes are
-// DirectorModule/BrnDirectorModuleIO.h -- i.e. an ODR fork of BrnDirector::DirectorIO::
-// InputBuffer / VehicleInfo, exactly the species this project's rules forbid. It survived only
-// because no HEADER had ever pulled this file into a TU that also reaches the real ones.
+// It was three declaration-only slices of types whose REAL home is
+// DirectorModule/BrnDirectorModuleIO.h -- an ODR fork of BrnDirector::DirectorIO::InputBuffer /
+// VehicleInfo. It survived only because no HEADER had ever pulled this file into a TU that also
+// reaches the real ones, and because Update -- its only consumer -- was never linked.
 //
-// ⚠️ THE MOMENT ONE DID, IT WAS SIX BROKEN TUs. ArbStateCrashing embeds
-// VehicleTracker::ECrashType by value, so BrnArbStateCrashing.h includes this file, and the
-// arbitrator state CONTAINER includes that -- which put this fork in front of
-// BrnDirectorModuleIO.h in BrnMainDirector.cpp, BrnDirectorModule.cpp, BrnDirectorArbitrator.cpp,
-// BrnGameModule.cpp and both GameBridge TUs. Every one of them died on
-//   BrnDirectorModuleIO.h(145): error C2011: 'BrnDirector::DirectorIO::InputBuffer': 'class'
-//   type redefinition
-// and then on ~30 follow-on C2027s. Moving the block to the .cpp -- its only consumer -- makes
-// this header safe to include from anywhere, which is what a header carrying a type other
-// classes embed by value has to be.
+// TWO THINGS BROKE THE MOMENT IT WAS, and both are worth recording:
+//   1. ArbStateCrashing embeds VehicleTracker::ECrashType by value, so BrnArbStateCrashing.h
+//      includes this file and the arbitrator state CONTAINER includes that. That put the fork in
+//      front of BrnDirectorModuleIO.h in six TUs, every one of which died on
+//        BrnDirectorModuleIO.h(145): error C2011: 'DirectorIO::InputBuffer': type redefinition
+//      plus ~30 follow-on C2027s.
+//   2. Getting the forward declaration's CLASS-KEY wrong (`class` where the real home says
+//      `struct`) is not cosmetic: MSVC mangles it, so every TU that saw this header first emitted
+//      `VInputBuffer` while BrnCameraFinaliser.cpp emitted `UInputBuffer`, and
+//      CameraFinaliser::Update came up unresolved out of BrnMainDirector.obj.
 //
-// DELETE-WHEN (the real fix, still owed): VehicleTracker::Update is re-fitted to the REAL
-// InputBuffer API (GetUsedRaceCars / GetRaceCarInfo / GetTimerStatusInterface) and the .cpp's
-// copy goes too. The accessors this TU wants -- IsRaceCarUsed, GetVehicleInfo(idx),
-// GetWorldSimTimeStep, GetPlayerScoreData, GetPlayerSpeedMph, IsForcedFastTopDownCrashArmed --
-// are all declaration-only today, so nothing is emitted for them and the move costs nothing.
-// ⚠️ CLASS-KEY: `struct`, matching the real home (BrnDirectorModuleIO.h:145) and
-// BrnCameraFinaliser.h's forward declaration. MSVC mangles the class-key into the symbol, so
-// declaring it `class` here -- which the moved fork did -- made every TU that saw THIS header
-// FIRST emit `VInputBuffer` while BrnCameraFinaliser.cpp emitted `UInputBuffer`, and
-// CameraFinaliser::Update came up unresolved out of BrnMainDirector.obj. Measured, this build.
+// Update is now re-fitted to the real InputBuffer (GetUsedRaceCars / GetRaceCarInfo /
+// GetTimerStatusInterface), this TU is mounted, and MainDirector actually calls it -- so the
+// velocity journal the crash camera's slow motion reads is finally populated.
+// (`struct`, matching BrnDirectorModuleIO.h:145 -- the class-key is part of the symbol.)
 namespace DirectorIO { struct InputBuffer; }
 
 class VehicleTracker

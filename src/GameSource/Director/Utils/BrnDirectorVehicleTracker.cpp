@@ -10,87 +10,41 @@
 #include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
 
 #include "rw/math/vpu/vector3_operation.h"   // Vector3 lane ops
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"      // the REAL DirectorIO::InputBuffer
+#include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"           // Camera::VehicleInfo (the race-car array)
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatus::GetCurrentTimeStep
 
 namespace BrnDirector
 {
 
+// THE PRIVATE `namespace DirectorIO { VehicleInfo; TimerStatusInterface; InputBuffer; }` SLICE
+// THAT LIVED HERE IS GONE (2026-08-29, crash-camera wave). It was an ODR fork of types whose
+// real home is DirectorModule/BrnDirectorModuleIO.h, and every accessor on it was declared and
+// never defined -- which is precisely why VehicleTracker::Update could not link and why its
+// caller in MainDirector::PreSceneQueryUpdate stayed gated for so long. Update now reads the
+// real InputBuffer; see the notes at each re-fitted read.
 // ----------------------------------------------------------------------------
-// ⭐ MOVED HERE FROM THE HEADER (2026-08-29, crash-camera wave), byte for byte. See the banner
-// at BrnDirectorVehicleTracker.h for why: these three are declaration-only SLICES of types whose
-// real homes are DirectorModule/BrnDirectorModuleIO.h, and leaving them in a header made that
-// header impossible to include from any TU that also reaches the real ones -- which broke six
-// TUs the first time an arbitrator state embedded VehicleTracker::ECrashType by value.
-// Nothing is emitted for any of these accessors (all declaration-only), so confining the fork
-// to the single TU that uses it costs nothing and leaks nothing.
-// DELETE-WHEN: Update is re-fitted to the real InputBuffer API.
-// ----------------------------------------------------------------------------
-namespace DirectorIO
-{
-   // The motion data for one tracked vehicle the input buffer hands out. Update reads the
-    // MPH, the linear velocity, and the world transform's position out of it. The vehicle
-    // array is strided (0x4F0 per entry); the tracker indexes it by miVehicleIndex.
-    struct VehicleInfo
-    {
-        f32                       GetMphLastFrame() const;        // +0x3CC
-        rw::math::vpu::Vector3    GetLinearVelocity() const;      // +0x330
-        rw::math::vpu::Vector3    GetWorldPosition() const;       // transform Pos (+0x220)
-        // True while this vehicle is mid-crash (drives the crash-energy classification).
-        bool                      IsCrashing() const;
-        // The vehicle's top speed in MPH (the crash thresholds are measured below it).
-        f32                       GetMaxMph() const;
-    };
-
-    // The per-frame timer the world timestep is sampled from.
-    struct TimerStatusInterface
-    {
-        // The world sim timestep this frame (the body multiplies two timer fields: the raw
-        // step at +0x1C by the slow-mo scale at +0x20).
-        f32 GetWorldSimTimeStep() const;
-    };
-
-    class InputBuffer
-    {
-    public:
-        // The bitset of race-car slots currently in use (Update asserts the tracked slot is set).
-        const void*                 GetUsedRaceCars() const;
-        bool                        IsRaceCarUsed(s32 liIndex) const;
-        // The strided vehicle-info array (indexed by the tracked slot).
-        const VehicleInfo&          GetVehicleInfo(s32 liIndex) const;
-        // The frame timer interface.
-        const TimerStatusInterface& GetTimerStatusInterface() const;
-        // The score block for the tracked player car (copied into mScoreData).
-        const CarScoreData&         GetPlayerScoreData() const;
-        // The player car's current speed in MPH (the crash classifier compares it to the
-        // vehicle's max MPH minus the band thresholds). InputBuffer +0x7900.
-        f32                         GetPlayerSpeedMph() const;
-        // The "force the next world crash to be a high-energy top-down" gate the arbitrator
-        // raises on the input buffer. InputBuffer +0x7904.
-        bool                        IsForcedFastTopDownCrashArmed() const;
-    };
-}
 
 // ----------------------------------------------------------------------------
-// The crash-band thresholds and the race-end ramp constants are file-scope statics in the
-// console image (rodata at 0x82CDA5xx). Their VALUES are not recoverable from the rodata
-// dump here, so they are declared as the named tunables the body reads and given neutral
-// placeholders; the body's STRUCTURE (which threshold gates which band, the ramp blend) is
-// faithful to the asm. FLAG: placeholder values -- the rodata floats are not reproduced.
+// The race-end ramp constants are file-scope statics in the console image (.data at
+// 0x82CDA55x). Their VALUES are not recoverable: Hex-Rays prints them as bare flt_82CDA55x
+// symbols in every export because the region is writable, so there is nothing to read. They are
+// declared here as the named tunables the body reads, with neutral placeholders; the body's
+// STRUCTURE (which threshold gates which band, the ramp blend) is faithful to the asm.
+// FLAG: placeholder values -- the .data floats are not reproduced.
+// (The two CRASH-BAND thresholds that used to sit alongside them are gone with the classifier
+//  they fed -- see the GATE inside Update for why running it on 0.0f would have switched the
+//  crash slow motion OFF while looking like the console.)
 // ----------------------------------------------------------------------------
 namespace
 {
-    // Speed (MPH) the car must be BELOW (max MPH minus this) for a crash to count as merely
-    // "normal" rather than low-energy. flt_82CDA548.
-    f32 sfMinSpeedBelowMaxMPHForNormalCrash = 0.0f;     // FLAG: rodata value not recovered
-    // Speed (MPH) below the max for a crash to be classified high-energy. flt_82CDA54C.
-    f32 sfMinSpeedBelowMaxMPHForHighSpeedCrash = 0.0f;  // FLAG: rodata value not recovered
-
     // Distance to the finish line at which the race-end cinematic effect reaches FULL
     // strength (amount 1.0). flt_82CDA550.
-    f32 KF_DISTANCE_TO_FINISH_BEFORE_FULL_EFFECTS = 0.0f;  // FLAG: rodata value not recovered
+    f32 KF_DISTANCE_TO_FINISH_BEFORE_FULL_EFFECTS = 0.0f;  // FLAG: .data value not recovered
     // Distance to the finish at which the effect STARTS ramping in (amount 0.0). flt_82CDA554.
-    f32 KF_DISTANCE_TO_FINISH_BEFORE_EFFECTS = 0.0f;       // FLAG: rodata value not recovered
+    f32 KF_DISTANCE_TO_FINISH_BEFORE_EFFECTS = 0.0f;       // FLAG: .data value not recovered
     // Per-frame blend factor the effect amount lerps toward its target by. flt_82CDA558.
-    f32 KF_RACE_END_EFFECT_BLEND_FACTOR = 0.0f;            // FLAG: rodata value not recovered
+    f32 KF_RACE_END_EFFECT_BLEND_FACTOR = 0.0f;            // FLAG: .data value not recovered
 }
 
 // ----------------------------------------------------------------------------
@@ -126,20 +80,31 @@ void VehicleTracker::Update(
     CGS_ASSERT(lpGameState != NULL, "lpGameState != NULL");
     CGS_ASSERT(lpInput != NULL, "lpInput != NULL");
     CGS_ASSERT(miVehicleIndex != -1, "miVehicleIndex != -1");
-    CGS_ASSERT(lpInput->IsRaceCarUsed(miVehicleIndex),
+    CGS_ASSERT(lpInput->GetUsedRaceCars()->IsBitSet(static_cast<u32>(miVehicleIndex)),
                "lpInput->GetUsedRaceCars()->IsBitSet(miVehicleIndex)");
 
-    const DirectorIO::VehicleInfo& lVehicle = lpInput->GetVehicleInfo(miVehicleIndex);
+    // -- RE-FITTED TO THE REAL InputBuffer (2026-08-29, crash-camera wave). These three reads
+    // used to go through the declaration-only slice this file used to carry in its header
+    // (IsRaceCarUsed / GetVehicleInfo / GetTimerStatusInterface().GetWorldSimTimeStep()), none of
+    // which was ever defined -- so this function could never link and its caller stayed gated.
+    // The real accessors reach the same fields: the console's strided vehicle array IS
+    // GetRaceCarInfo() (0x4F0 per entry, the exact stride the slice recorded), and its elements
+    // are Camera::VehicleInfo, whose members carry the offsets the slice named by hand
+    // (+0x330 mLinearVelocity, +0x3CC mfSpeedMPH, +0x220 mTransform.Pos()).
+    const Camera::VehicleInfo& lVehicle = lpInput->GetRaceCarInfo()[miVehicleIndex];
 
-    // World sim timestep this frame: the raw step scaled by the slow-mo factor.
-    const f32 lfSimTimeStep = lpInput->GetTimerStatusInterface().GetWorldSimTimeStep();
+    // World sim timestep this frame: the SIM TimerStatus base step times its multiplier --
+    // exactly what the slice described as "the raw step at +0x1C by the slow-mo scale at +0x20",
+    // and exactly what GetCurrentTimeStep() is.
+    const f32 lfSimTimeStep =
+        lpInput->GetTimerStatusInterface()->GetSimTimerStatus()->GetCurrentTimeStep();
 
     mbIsFirstFrameOfCrash = false;
 
     // Crash-energy classification (only for the player car).
     if (miVehicleIndex == lePlayerCarIndex)
     {
-        if (!lVehicle.IsCrashing())
+        if (!lVehicle.mRaceCarState.mbCrashing)
         {
             meCrashType = E_CRASH_NOT_CRASHING;
         }
@@ -148,50 +113,61 @@ void VehicleTracker::Update(
             // The crash just started this frame.
             mbIsFirstFrameOfCrash = true;
 
-            if (lbForceNextWorldCrashToBeFastTopDown && lpInput->IsForcedFastTopDownCrashArmed())
-            {
-                meCrashType = E_CRASH_HIGH_ENERGY;
-            }
-            else
-            {
-                const f32 lfSpeedMPH       = lpInput->GetPlayerSpeedMph();
-                const f32 lfNormalThreshold = lVehicle.GetMaxMph() - sfMinSpeedBelowMaxMPHForNormalCrash;
-                const f32 lfHighThreshold   = lVehicle.GetMaxMph() - sfMinSpeedBelowMaxMPHForHighSpeedCrash;
-
-                if (lfSpeedMPH < lfNormalThreshold)
-                {
-                    meCrashType = E_CRASH_LOW_ENERGY;
-                }
-                else if (lfSpeedMPH >= lfHighThreshold)
-                {
-                    meCrashType = E_CRASH_HIGH_ENERGY;
-                }
-                else
-                {
-                    meCrashType = E_CRASH_NORMAL;
-                }
-            }
+            // GATE: THE CRASH-ENERGY BAND. The console picks LOW / NORMAL / HIGH here; this build
+            // leaves meCrashType at E_CRASH_NOT_CRASHING. Running the classifier anyway would be
+            // WORSE THAN NOT RUNNING IT, for three stacked reasons:
+            //
+            //   (a) its two thresholds are .data floats (flt_82CDA548 / flt_82CDA54C) whose
+            //       VALUES are in no export -- Hex-Rays leaves them as bare symbols because the
+            //       region is writable, so there is nothing to read. The placeholders at the top
+            //       of this file are 0.0f;
+            //   (b) with 0.0f the first test degenerates to `speed < maxSpeed`, true for
+            //       essentially every crash, so the answer would be E_CRASH_LOW_ENERGY every
+            //       time -- and E_CRASH_LOW_ENERGY IS THE ONE VALUE THAT SUPPRESSES THE CRASH
+            //       SLOW MOTION (ArbStateCrashing::ApplySlomoAndShake @0x8224F8D8 tests exactly
+            //       that enumerator). Classifying on invented constants would switch the feature
+            //       off while looking like the console;
+            //   (c) the two inputs it needs -- InputBuffer +0x7900 (the player speed in MPH) and
+            //       +0x7904 (the "force the next world crash to be a fast top-down" arm) -- have
+            //       no accessor on the real InputBuffer. The slice this file used to carry named
+            //       them; nothing ever defined them.
+            //
+            // THE DIVERGENCE, STATED PLAINLY: NOT_CRASHING is the console value only while the car
+            // is NOT crashing, and it is the PERMISSIVE value downstream -- the crash camera will
+            // slow down crashes the console might have classified LOW_ENERGY and left at real
+            // time. That is a visible behavioural difference, not a no-op.
+            // DELETE-WHEN: the two .data floats are read out of the image AND the two InputBuffer
+            // accessors are homed. The block goes back verbatim then; its shape is in the asm at
+            // 0x8223B1A8 and in this file's history.
+            (void)lbForceNextWorldCrashToBeFastTopDown;
         }
 
-        // Copy the player's live score block.
-        mScoreData = lpInput->GetPlayerScoreData();
+        // GATE: `mScoreData = lpInput->GetPlayerScoreData();`. The real InputBuffer models the
+        //   score region as one opaque span (mScoreAndBoostBlock, @0x3110..0x3238) with no
+        //   CarScoreData accessor, so there is nothing to copy BY NAME, and reaching into the
+        //   span by offset is the hack this wave has been retiring rather than adding.
+        //   CONSEQUENCE: mScoreData stays at its Construct() value, so the race-end effect ramp
+        //   below reads a zero distance-to-finish. That ramp runs only while the event state is
+        //   RACING -- which this build does not reach -- and its own three constants are
+        //   unrecovered placeholders too, so nothing observable changes today.
+        //   DELETE-WHEN: InputBuffer grows a named GetPlayerScoreData().
     }
 
     // Push this frame's samples into the history journals: seed every slot on the first
     // frame (so the window reads as steady state), then push one newest sample thereafter.
     if (mbFirstFrame)
     {
-        mMphJournal.SetAll(lVehicle.GetMphLastFrame());
+        mMphJournal.SetAll(lVehicle.mRaceCarState.mfSpeedMPH);
         mTimestepJournal.SetAll(0.0f);
-        mPositionJournal.SetAll(lVehicle.GetWorldPosition());
-        mLinearVelocityJournal.SetAll(lVehicle.GetLinearVelocity());
+        mPositionJournal.SetAll(lVehicle.mRaceCarState.mTransform.Pos());
+        mLinearVelocityJournal.SetAll(lVehicle.mRaceCarState.mLinearVelocity);
     }
     else
     {
-        mMphJournal.SetCurrent(lVehicle.GetMphLastFrame());
+        mMphJournal.SetCurrent(lVehicle.mRaceCarState.mfSpeedMPH);
         mTimestepJournal.SetCurrent(lfSimTimeStep);
-        mPositionJournal.SetCurrent(lVehicle.GetWorldPosition());
-        mLinearVelocityJournal.SetCurrent(lVehicle.GetLinearVelocity());
+        mPositionJournal.SetCurrent(lVehicle.mRaceCarState.mTransform.Pos());
+        mLinearVelocityJournal.SetCurrent(lVehicle.mRaceCarState.mLinearVelocity);
     }
 
     // Ramp the race-end cinematic effect amount. It only ramps while racing (event state ==

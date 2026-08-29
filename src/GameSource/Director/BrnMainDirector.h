@@ -9,6 +9,7 @@
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"     // Camera::BehaviourManager (mBehaviourManager)
 #include "GameSource/Director/Camera/BrnBehaviourParameterBank.h" // BrnDirector::NamedParameters (mNamedParameters)
 #include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h" // BrnDirector::AllVehicleData (mAllVehicleData)
+#include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"  // BrnDirector::VehicleTracker (mVehicleTracker)
 #include "GameSource/Director/Camera/BrnCameraFinaliser.h"      // BrnDirector::CameraFinaliser (mCameraFinaliser)
 #include "GameSource/Director/Camera/Camera.h"                  // BrnDirector::Camera::Camera (mLastCamera)
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h" // BrnDirector::GameState (maGameState)
@@ -448,8 +449,19 @@ namespace BrnDirector
         GameState maGameState;                        // +0x337E0 .. +0x339E0
 
         // +0x339E0 .. +0x33C90  BrnDirector::VehicleTracker (ArbStateSharedInfo +0x3C).
-        //           FLAG: un-homed; named opaque span.
-        u8 maVehicleTracker[0x33C90 - 0x339E0];
+        // -- REAL TYPE since 2026-08-29 (crash-camera wave). It was `u8 maVehicleTracker[0x2B0]`
+        // behind a "FLAG: un-homed" note, which had been WRONG for a while: the type has a full
+        // reconstruction in Utils/BrnDirectorVehicleTracker.h and its Update has a full body.
+        // Nothing linked it, so the span was never anything but zeroes -- and every consumer
+        // reached it through a reinterpret_cast on that span, which is why the emptiness was
+        // invisible.
+        //
+        // WHY IT MATTERED: this object owns the tracked car's LINEAR-VELOCITY JOURNAL, and
+        // ImpactSlomoController::Update -- the crash slow motion -- decides whether to start a
+        // burst from exactly that journal (speed over 30 MPH, the .y lane rising last frame and
+        // falling this one). Against a never-populated journal the magnitude reads 0 and the
+        // gate can NEVER pass: the crash camera would run, and the slow motion never would.
+        VehicleTracker mVehicleTracker;
 
         // +0x33C90 .. +0x349D0  BrnDirector::EffectInterface (ArbStateSharedInfo +0x30).
         //           FLAG: un-homed; named opaque span.

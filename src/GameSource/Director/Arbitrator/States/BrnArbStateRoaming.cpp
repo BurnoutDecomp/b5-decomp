@@ -239,6 +239,21 @@ namespace BrnDirector
     {
         SharedCameraContainer& lrContainer = *lrSharedInfo.mpSharedCameraContainer;
 
+        // [diag] BRN_CRASHCAM_DIAG -- roaming's own meState edge. BRN_DIRECTOR_TRACE already
+        // reports it, but flow_run.ps1 CLEARS that variable on every run, so a crash-camera
+        // investigation cannot see the one state that decides whether the crash edge is even
+        // reached. Edge-triggered; off unless the variable is set.
+        if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            static s32 siLastRoamState = -1;
+            if (static_cast<s32>(meState) != siLastRoamState)
+            {
+                siLastRoamState = static_cast<s32>(meState);
+                *CgsDev::Log::gpDebugPrint
+                    << "[crashcam] roaming meState -> " << siLastRoamState << "\n";
+            }
+        }
+
         // ---- prologue @0x822643B8..0x8226441C: the impact/normal shake cross-fade. Runs for
         // EVERY state, before the switch. Both divisors are writable .data words (1.0f in the
         // shipped image) and the console really divides -- keep the division.
@@ -910,6 +925,30 @@ namespace BrnDirector
         const bool lbCrashModeCandidate =
             lrGameState.mbCrashActive && !lbCrashFlagSet && !lbTakedownBit &&
             lrContainer.GetState(ArbitratorStateContainer::E_STATE_CRASH_MODE)->CanRun(lrSharedInfo);
+
+        // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The crash edge has FOUR
+        // conjuncts and three of them are silent; printing the whole tuple once per change is
+        // the difference between "the arbitrator refused" and "the arbitrator was never asked".
+        if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            static s32 siLast = -1;
+            const s32 liNow = (lrGameState.mbCrashActive ? 1 : 0)
+                            | (lbCrashFlagSet           ? 2 : 0)
+                            | (lbTakedownBit            ? 4 : 0)
+                            | (lbCrashModeCandidate     ? 8 : 0)
+                            | (static_cast<s32>(meState) << 8);
+            if (liNow != siLast)
+            {
+                siLast = liNow;
+                *CgsDev::Log::gpDebugPrint
+                    << "[crashcam] roaming crash edge: crashActive="
+                    << (lrGameState.mbCrashActive ? 1 : 0)
+                    << " camCrashFlag=" << (lbCrashFlagSet ? 1 : 0)
+                    << " takedownBit=" << (lbTakedownBit ? 1 : 0)
+                    << " candidate=" << (lbCrashModeCandidate ? 1 : 0)
+                    << " roamingState=" << static_cast<s32>(meState) << "\n";
+            }
+        }
 
         if (lbCrashModeCandidate)
         {
