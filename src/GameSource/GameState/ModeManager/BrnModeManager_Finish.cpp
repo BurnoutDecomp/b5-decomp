@@ -68,6 +68,8 @@
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"                   // CgsSystem::Time::GetFloatVal
 #include "GameShared/GameClasses/System/Timer/CgsTimerRequestInterface.h"  // CgsSystem::TimerRequestInterface / TimerRequests
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"           // VariableEventQueue<13312,16>::AddEvent
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint ([evt-finish] diag)
+#include <stdlib.h>                                                        // getenv        ([evt-finish] diag)
 
 namespace BrnGameState
 {
@@ -649,6 +651,46 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
         }
     }
 
+    // ==============================================================================================
+    // [DIAG] NOT IN THE X360 BINARY -- the `[evt-finish]` rung, RUNG 1 of 2 (added 2026-08-29,
+    // event-finish round). Gated on BRN_MODEMGR_DIAG, the env this file's sibling already stands
+    // behind and which flow_run.ps1 clears every run.
+    // ==============================================================================================
+    // WHY IT EARNS ITS PLACE. Before this round the whole finish path was UNINSTRUMENTED: the only
+    // proof an offline event had finished at all was a PARK line from ten frames further down
+    // (OnEventFinishUpdateProfile's ComputeCompletionPercentage), which fires on the win path AND
+    // the loss path and so cannot tell them apart. The question the campaign actually asks --
+    // "did the event finish, and was it a WIN?" -- was therefore not answerable from a log.
+    //
+    // ⚠️ IT IS DELIBERATELY NOT A SAMPLER. It prints once per call of FinishCurrentMode, which is
+    // once per event, so there is no sample period to miss the event through -- the trap the
+    // 1-in-60 traffic sampler fell into. It also prints the two SCORE words the verdict is computed
+    // from, not merely the verdict, so a wrong answer is separable from a wrong input.
+    //
+    // ⛔ NO SIDE EFFECTS. Every value below is either a local already computed above or a const
+    // accessor. In particular it does NOT call GetPlayersFinishPosition() -- that reader is
+    // CONSUME-ONCE on miDebugFinishPosition (see its banner at :252), so a diagnostic call would
+    // silently eat the debug override and change the result it claims to be observing.
+    // DELETE-WHEN the event-finish bring-up is done.
+    {
+        static const bool sbFinishDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
+        if (sbFinishDiag && CgsDev::Log::gpDebugPrint != 0)
+        {
+            const StuntModeScoring* lpcStuntScorer = mScoringSystem.GetStuntScorer();
+            *CgsDev::Log::gpDebugPrint
+                << "[evt-finish] FinishCurrentMode ENTERED mode "
+                << static_cast<s32>(meCurrentGameModeType)
+                << " finishType " << liFinishType
+                << " (0..7=1st..8th 8=aborted 9=passed 10=failed 11=unknown)"
+                << " attemptSucceeded " << (lbAttemptSucceeded ? 1 : 0)
+                << " timedOut " << (mbPlayerFinishedTimedOut ? 1 : 0)
+                << " carDestroyed " << (mbPlayerFinishedCarDestroyed ? 1 : 0)
+                << " stuntScore " << lpcStuntScorer->GetCurrentScore()
+                << " stuntTarget " << lpcStuntScorer->GetTargetScore()
+                << " debugFinishPos " << miDebugFinishPosition << "\n";
+        }
+    }
+
     // ---- the consecutive-unsuccessful-attempts tally ----------------------------------------
     const GameStateModuleIO::EGameModeType leFinishedMode = meCurrentGameModeType;
     if (meLastAttemptedGameModeType != leFinishedMode)
@@ -876,6 +918,38 @@ void ModeManager::ShowModeResults(
     lAction.miFinishPosition = GetPlayersFinishPosition();                          // record+0x04
     lAction.mu8FieldE0       = static_cast<u8>(HasPlayerWon() ? 1 : 0);             // record+0xE0
     lAction.mu64FieldC8      = 0;                                                   // record+0xC8
+
+    // ==============================================================================================
+    // [DIAG] NOT IN THE X360 BINARY -- the `[evt-finish]` rung, RUNG 2 of 2. Same gate, same round.
+    // ==============================================================================================
+    // THIS is the line the campaign turns on. miFinishPosition is the ONE word that decides whether
+    // the medal is awarded: ProgressionManager::OnEventFinishUpdateProfile early-returns on `< 1`
+    // and runs its whole win block -- the SetMedalCountFromTheStart(+1) that
+    // AreRoadRulesAvailable @0x82311520 needs four of -- only on `== 1`. A run that finishes with
+    // position 4 executes the identical park lines as a run that finishes with position 1 right up
+    // to the tail, so WITHOUT this rung the two are indistinguishable in a log.
+    //
+    // Placed immediately AFTER the store so it reports the value the record actually carries, and
+    // it reads the stored field rather than re-calling the consume-once getter.
+    // DELETE-WHEN the event-finish bring-up is done.
+    {
+        static const bool sbResultsDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
+        if (sbResultsDiag && CgsDev::Log::gpDebugPrint != 0)
+        {
+            const StuntModeScoring* lpcStuntScorer = mScoringSystem.GetStuntScorer();
+            *CgsDev::Log::gpDebugPrint
+                << "[evt-finish] ShowModeResults mode "
+                << static_cast<s32>(meCurrentGameModeType)
+                << " finishPosition " << lAction.miFinishPosition
+                << " (1 == WIN -> medal; anything else -> no medal)"
+                << " hasPlayerWon " << static_cast<s32>(lAction.mu8FieldE0)
+                << " stuntScore " << lpcStuntScorer->GetCurrentScore()
+                << " stuntTarget " << lpcStuntScorer->GetTargetScore()
+                << " eventId " << lpGameModeParams->muEventJunctionID
+                << " medalsBefore " << mpProgressionManager->GetProfile()->GetMedalCountFromTheStart()
+                << "\n";
+        }
+    }
 
     // ---- the finish-time field (record+0x0C) ----------------------------------------------------
     if (mbPlayerFinishedTimedOut)
