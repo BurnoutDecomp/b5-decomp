@@ -9,6 +9,9 @@
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"          // CgsSceneManager::EntityId
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"  // CgsSceneManager::VolumeInstanceId
 
+namespace BrnGameState { namespace GameStateModuleIO {
+    struct JustBouncedAction; struct RoadRulesEnterRoadAction; struct SendJunctionPlayerIsAtAction;
+} }
 namespace BrnPhysics { namespace ContactSpy { struct RaceCarContact; } }
 
 namespace BrnWorld
@@ -188,9 +191,9 @@ namespace BrnWorld
                                          CgsSceneManager::EntityId lHitVehicleID,
                                          const BrnPhysics::ContactSpy::RaceCarContact* lpContact);
         void OnCarCrash(CgsSceneManager::EntityId lHitVehicleID, bool lbPlayerHitCar);
-        void OnEnterRoad(const RoadRulesEnterRoadAction* lpRRAction);
-        void OnEnterJunction(const SendJunctionPlayerIsAtAction* lpJAction);
-        void OnBounce(const JustBouncedAction* lpBounceAction);
+        void OnEnterRoad(const BrnGameState::GameStateModuleIO::RoadRulesEnterRoadAction* lpRRAction);
+        void OnEnterJunction(const BrnGameState::GameStateModuleIO::SendJunctionPlayerIsAtAction* lpJAction);
+        void OnBounce(const BrnGameState::GameStateModuleIO::JustBouncedAction* lpBounceAction);
         void OnHitOverheadSign();
         void OnVehicleHitConfirmed(s32 liVehicleBaseScore, s32 liVehicleChainBonus, s32 liTotalVehiclesHit);
         f32  GetShowtimeTrafficDensityScale() const;

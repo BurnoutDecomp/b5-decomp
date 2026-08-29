@@ -146,6 +146,16 @@ namespace CgsSceneManager
             return static_cast<u16>(muId & KU_VOLUME_INDEX_MASK);
         }
 
+        // DWARF CgsVolumeInstanceId.h :79 / :82. The sentinel is all-ones: ARTIST tests it as
+        // `ld r11,0x18(r30)` + `cmpdi cr6,r11,-1` (CrashPlayManager::Update @0x82306648), and the
+        // assert string baked next to that test is literally
+        // "mPlayerCarVolumeInstanceID.IsValid()", so both the value and the method name are
+        // attested by the binary itself.
+        static const u64 KU_INVALID_ID = 0xFFFFFFFFFFFFFFFFull;
+
+        void SetInvalid()    { muId = KU_INVALID_ID; }
+        bool IsValid() const { return muId != KU_INVALID_ID; }
+
         u64 muId;
     };
 }

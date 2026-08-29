@@ -63,6 +63,14 @@ namespace Vehicle
 
         // DWARF :97/:100 -- the read accessors UpdateVehicleEffects' inlined queue walk proves.
         const CreateAirRamEventQueue* GetAirRamEventQueue() const { return &mAirRamQueue; }
+
+        // ADDITIVE 2026-08-29 (BrnCrashPlayManager.cpp landing) -- the WRITE half of the same pair,
+        // matching the const/non-const accessor pairs OutputBuffer_PrePhysics carries for every one
+        // of its interfaces. The console never emits it out-of-line because CreateAirRam (DWARF :94)
+        // is inlined at its call sites; CrashPlayManager::UpdateTrafficStomp @0x822F91B0 is one of
+        // them and reaches BaseEventQueue<CreateAirRamEvent>::AddEventSafe on this queue directly.
+        // DELETE-WHEN CreateAirRam itself is declared here and the producers call that instead.
+        CreateAirRamEventQueue* GetAirRamEventQueue() { return &mAirRamQueue; }
         const CreateSpinEventQueue*   GetSpinEventQueue()   const { return &mSpinQueue; }
 
     private:
