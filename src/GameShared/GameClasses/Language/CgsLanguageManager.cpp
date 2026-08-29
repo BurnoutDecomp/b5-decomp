@@ -852,10 +852,8 @@ namespace CgsLanguage
     //   with explicit locals for the same reason the integer leaves are (Reset / the Set*
     //   setters have no reconstructed bodies in the tree).
     // ------------------------------------------------------------------------
-    void LanguageManager::FormatXoverYString(char*, s32, s32, s32) const                  { __debugbreak(); }   // FLAG trap-stub
     // (FormatDateString + the four INTEGER leaves are no longer trap-stubs -- their faithful
     //  bodies are above this block.)
-    void LanguageManager::FormatHoursMinutesAndSecondsString(char*, f32, s32) const       { __debugbreak(); }   // FLAG trap-stub
 
     // @ 0x828629A8 (asserts cpp:1701/1702/1704/1706) -- [H2 wave 2026-08-25] the
     // M:SS.hh timer leaf (format 2; the road-rule panel's running/best time readouts
@@ -1202,17 +1200,296 @@ namespace CgsLanguage
                            mpTimeFormatMinsSecsMidText, liTargetSize, lapUtf8Params, 2);
     }
 
-    void LanguageManager::FormatSmallDistanceString(char*, f32, s32) const                { __debugbreak(); }   // FLAG trap-stub
     // (FormatLargeDistanceString is no longer a trap-stub -- its faithful body is above
     //  this block, landed with the H1 odometer wave.)
+    // ------------------------------------------------------------------------
+    // [pause-stats wave 2026-08-29] The distance leaves' SHARED BODY, de-inlined ONCE.
+    // The console emits four near-identical copies of it (FormatSmallDistanceString
+    // @0x82861988, FormatSmallDistanceStringLong @0x82861B88, FormatLargeDistanceString
+    // @0x82861D88 and FormatLargeDistanceStringLong @0x82861F88 -- 128/128/127/127
+    // instructions, differing only in the conversion factor, the format template and
+    // IntToString-vs-FloatToString). This is a de-optimisation of that duplication, not an
+    // invention: every step below is one of theirs, in their order, and each caller supplies
+    // exactly the operands its own asm loads.
+    //   * the two <=1-length tripwires are the inlined
+    //     UnicodeBuffer::SetThousandsSeparator / SetDecimalPointCharacter (CgsUnicode.h:598/617),
+    //     the same pair FormatIntegerString and FormatLargeDistanceString already carry;
+    //   * the LARGE leaves scale then FloatToString with ONE decimal place; the SMALL leaves
+    //     scale then `fctiwz`-TRUNCATE and IntToString with min digits 0;
+    //   * the REAL target size reaches _Print (no 1024 defect in this family).
+    // NOTE: FormatLargeDistanceString keeps its own inline copy above -- it landed with the H1
+    // odometer wave and is byte-checked against the asm there; it is left untouched on purpose.
+    // ------------------------------------------------------------------------
+    static void FormatDistanceIntoTemplate(char* lpcTarget, f32 lfMetres, s32 liTargetSize,
+                                           f32 lfConversion,
+                                           const CgsUnicode::CgsUtf8* lpUtf8Template,
+                                           const CgsUnicode::CgsUtf8* lpUtf8ThousandsSeparator,
+                                           const CgsUnicode::CgsUtf8* lpUtf8DecimalSeparator,
+                                           bool lbFractional)
+    {
+        const f32 lfScaledValue = lfConversion * lfMetres;
+
+        CgsUnicode::CgsUtf8 lacValue[256];
+        CgsUnicode::CgsUtf8 lacThousandsSeparator[4];
+        CgsUnicode::CgsUtf8 lacDecimalPointCharacter[4];
+        lacValue[0] = 0;
+        for (s32 liByte = 0; liByte < 4; ++liByte)
+        {
+            lacThousandsSeparator[liByte]    = 0;
+            lacDecimalPointCharacter[liByte] = 0;
+        }
+
+        CGS_ASSERT(CgsUnicode::StringLength(lpUtf8ThousandsSeparator) <= 1,
+                   "StringLength(lUtf8ThousandsSeparator) <= 1");        // CgsUnicode.h:598
+        CgsUnicode::Copy(lacThousandsSeparator, lpUtf8ThousandsSeparator);
+
+        CGS_ASSERT(CgsUnicode::StringLength(lpUtf8DecimalSeparator) <= 1,
+                   "StringLength(lUtf8DecimalPointCharacter) <= 1");     // CgsUnicode.h:617
+        CgsUnicode::Copy(lacDecimalPointCharacter, lpUtf8DecimalSeparator);
+
+        if (lbFractional)
+        {
+            CgsUnicode::FloatToString(lacValue, lfScaledValue, 0, 1,
+                                      lacThousandsSeparator, lacDecimalPointCharacter);
+        }
+        else
+        {
+            // `fctiwz` -- truncation, not rounding.
+            CgsUnicode::IntToString(lacValue, static_cast<s32>(lfScaledValue), 0,
+                                    lacThousandsSeparator);
+        }
+
+        CgsUnicode::UnicodeBuffer lValueBuffer;
+        lValueBuffer.Convert(lacValue);
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[1];
+        lapUtf8Params[0] = lValueBuffer.GetBuffer();
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                           lpUtf8Template, liTargetSize, lapUtf8Params, 1);
+    }
+
     f32  LanguageManager::GetDistanceDisplayScale() const                                 { __debugbreak(); return 1.0f; }   // FLAG trap-stub
+
+    // ========================================================================================
+    // [pause-stats wave 2026-08-29] THE SEVEN LEAVES THE DRIVER-DETAILS PAUSE PANEL RIDES.
+    // Every one of them was a __debugbreak() trap stub, and the first one HandleStatData reaches
+    // killed the process the instant the stat chain started delivering data (measured: an
+    // 0x80000003 in LanguageManager::FormatText <- TextField::SetLocalisedText <-
+    // CrashNavDriverDetails::HandleStatData, on the very first field). The screen could not have
+    // shown a number no matter how good the producer was.
+    // WARNING: the block banner above already says "treat the remaining trap bodies as live
+    // hazards, not debug-only" -- this is the third time that has been proved on a real screen.
+    //
+    // All seven share the shape the landed integer/time leaves already use: zero a
+    // UnicodeBuffer separator pair, Copy the locale separators in, render each value through
+    // IntToString/FloatToString, Convert each into a UnicodeBuffer, then _Print the positional
+    // parameters into the locale template. Asserts carry the console's own baked line numbers.
+    // ========================================================================================
+
+    // @ 0x82861360 (asserts cpp:1490/1491/1492) -- "%1 of %2". FIFTEEN of the pause panel's
+    // rows are this one call: cars collected, the three roads-ruled rows, events found, the
+    // three stunt-type rows, the four drive-thru-category rows and the three per-district
+    // columns. Both values render through IntToString with MINIMUM DIGITS 1 (`li r5, 1` at both
+    // call sites) and an EMPTY thousands separator -- the console zeroes the whole 9-byte
+    // separator block and only then stores the min-digit byte, so no grouping appears in an
+    // "x of y" readout.
+    void LanguageManager::FormatXoverYString(char* lpcTarget, s32 liX, s32 liY,
+                                             s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");       // cpp:1490
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");     // cpp:1491
+        CGS_ASSERT(mpGeneralXOverY != 0, "mpGeneralXOverY");        // cpp:1492
+
+        CgsUnicode::CgsUtf8 lacX[256];
+        CgsUnicode::CgsUtf8 lacY[256];
+        CgsUnicode::CgsUtf8 lacNoSeparator[4];
+        lacX[0] = 0;
+        lacY[0] = 0;
+        for (s32 liByte = 0; liByte < 4; ++liByte)
+        {
+            lacNoSeparator[liByte] = 0;
+        }
+
+        CgsUnicode::IntToString(lacX, liX, 1, lacNoSeparator);
+        CgsUnicode::IntToString(lacY, liY, 1, lacNoSeparator);
+
+        CgsUnicode::UnicodeBuffer lXBuffer;
+        CgsUnicode::UnicodeBuffer lYBuffer;
+        lXBuffer.Convert(lacX);
+        lYBuffer.Convert(lacY);
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[2];
+        lapUtf8Params[0] = lXBuffer.GetBuffer();
+        lapUtf8Params[1] = lYBuffer.GetBuffer();
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                           mpGeneralXOverY, liTargetSize, lapUtf8Params, 2);
+    }
+
+    // @ 0x828617B0 (asserts cpp:1651/1652/1654) -- H:MM:SS from THREE ALREADY-SPLIT INTEGERS.
+    // NOT a float leaf: see the signature correction at its declaration. All three values go
+    // through IntToString with min digits 2 (`li r5, 2` at all three sites) and an empty
+    // separator, then into mpTimeFormatHrsMinsSecs's three positional parameters.
+    void LanguageManager::FormatHoursAndMinutesAndSecondsString(char* lpcTarget, s32 liHours,
+                                                                s32 liMinutes, s32 liSeconds,
+                                                                s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                    // cpp:1651
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");                  // cpp:1652
+        CGS_ASSERT(mpTimeFormatHrsMinsSecs != 0, "mpTimeFormatHrsMinsSecs");     // cpp:1654
+
+        CgsUnicode::CgsUtf8 lacHours[256];
+        CgsUnicode::CgsUtf8 lacMinutes[256];
+        CgsUnicode::CgsUtf8 lacSeconds[256];
+        CgsUnicode::CgsUtf8 lacNoSeparator[4];
+        lacHours[0]   = 0;
+        lacMinutes[0] = 0;
+        lacSeconds[0] = 0;
+        for (s32 liByte = 0; liByte < 4; ++liByte)
+        {
+            lacNoSeparator[liByte] = 0;
+        }
+
+        CgsUnicode::IntToString(lacHours,   liHours,   2, lacNoSeparator);
+        CgsUnicode::IntToString(lacMinutes, liMinutes, 2, lacNoSeparator);
+        CgsUnicode::IntToString(lacSeconds, liSeconds, 2, lacNoSeparator);
+
+        CgsUnicode::UnicodeBuffer lHoursBuffer;
+        CgsUnicode::UnicodeBuffer lMinutesBuffer;
+        CgsUnicode::UnicodeBuffer lSecondsBuffer;
+        lHoursBuffer.Convert(lacHours);
+        lMinutesBuffer.Convert(lacMinutes);
+        lSecondsBuffer.Convert(lacSeconds);
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[3];
+        lapUtf8Params[0] = lHoursBuffer.GetBuffer();
+        lapUtf8Params[1] = lMinutesBuffer.GetBuffer();
+        lapUtf8Params[2] = lSecondsBuffer.GetBuffer();
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                           mpTimeFormatHrsMinsSecs, liTargetSize, lapUtf8Params, 3);
+    }
+
+    // @ 0x82862838 (asserts cpp:1614/1615/1617), the X360's unnamed sub_82862838 -- the FLOAT
+    // wrapper the dispatcher's format-1 case actually calls. Round-half-up to whole seconds
+    // (the same fsel FLOOR of `seconds + 0.5f` the landed time leaves use, which is plain
+    // truncation over the asserted >= 0.0f domain), split h / m / s, hand the three integers to
+    // the leaf above. The pause panel's TIME PLAYED row is this call.
+    void LanguageManager::FormatHoursMinutesAndSecondsString(char* lpcTarget, f32 lfTimeInSeconds,
+                                                             s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");             // cpp:1614
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");           // cpp:1615
+        CGS_ASSERT(lfTimeInSeconds >= 0.0f, "lfTimeInSeconds >= 0.0f");   // cpp:1617
+
+        const s32 liTotalSeconds = static_cast<s32>(lfTimeInSeconds + 0.5f);
+        const s32 liHours        = liTotalSeconds / 3600;
+        const s32 liMinutes      = (liTotalSeconds % 3600) / 60;
+        const s32 liSeconds      = (liTotalSeconds % 3600) % 60;
+
+        FormatHoursAndMinutesAndSecondsString(lpcTarget, liHours, liMinutes, liSeconds,
+                                              liTargetSize);
+    }
+
+    // @ 0x82861988 (asserts cpp:2087..2091) -- the SHORT-distance leaf (format 17). Scale by
+    // mrSmallDistanceConversion (+0x60FC, the metric/imperial factor), TRUNCATE to an integer
+    // (`fctiwz` -- metres are whole numbers here, unlike the large form's one decimal place),
+    // render through IntToString with the locale separators, print into mpDistanceFormatShort's
+    // %1. Min digits is the zeroed UnicodeBuffer byte the console reads back, i.e. 0.
+    void LanguageManager::FormatSmallDistanceString(char* lpcTarget, f32 lfMetres,
+                                                    s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                          // cpp:2087
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");                        // cpp:2088
+        CGS_ASSERT(mpDistanceFormatShort != 0, "mpDistanceFormatShort");               // cpp:2089
+        CGS_ASSERT(mpGeneralThousandsSeparator != 0, "mpGeneralThousandsSeparator");   // cpp:2090
+        CGS_ASSERT(mpGeneralDecimalSeparator != 0, "mpGeneralDecimalSeparator");       // cpp:2091
+
+        FormatDistanceIntoTemplate(lpcTarget, lfMetres, liTargetSize,
+                                   mrSmallDistanceConversion, mpDistanceFormatShort,
+                                   mpGeneralThousandsSeparator, mpGeneralDecimalSeparator, false);
+    }
+
+    // @ 0x82861B88 -- the SHORT-distance LONG-UNIT-NAME twin (format 18). FLAG: this is the ONE
+    // function in this block with NO IDA export (the exports have a hole between
+    // FormatSmallDistanceString @0x82861988 and FormatLargeDistanceString @0x82861D88, and
+    // FormatAutoDistanceStringLong's `bl` names the symbol that lives in it). Its body is
+    // reconstructed as the exact twin of FormatSmallDistanceString differing only in the format
+    // member -- which is precisely how FormatLargeDistanceStringLong (127 insns, EXPORTED)
+    // differs from FormatLargeDistanceString (127 insns): same code, mpDistanceFormatLongL
+    // (+0x614C) in place of mpDistanceFormatLong. INFERRED, not read; flagged as such.
+    void LanguageManager::FormatSmallDistanceStringLong(char* lpcTarget, f32 lfMetres,
+                                                        s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");
+        CGS_ASSERT(mpDistanceFormatShortL != 0, "mpDistanceFormatShortL");
+        CGS_ASSERT(mpGeneralThousandsSeparator != 0, "mpGeneralThousandsSeparator");
+        CGS_ASSERT(mpGeneralDecimalSeparator != 0, "mpGeneralDecimalSeparator");
+
+        FormatDistanceIntoTemplate(lpcTarget, lfMetres, liTargetSize,
+                                   mrSmallDistanceConversion, mpDistanceFormatShortL,
+                                   mpGeneralThousandsSeparator, mpGeneralDecimalSeparator, false);
+    }
+
+    // @ 0x82861F88 (asserts cpp:2205..2209) -- the LARGE-distance LONG-UNIT-NAME twin
+    // (format 20). Instruction-for-instruction FormatLargeDistanceString with
+    // mpDistanceFormatLongL (+0x614C) in place of mpDistanceFormatLong: same
+    // mrLargeDistanceConversion scale, same FloatToString with ONE decimal place.
+    void LanguageManager::FormatLargeDistanceStringLong(char* lpcTarget, f32 lfMetres,
+                                                        s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                          // cpp:2205
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");                        // cpp:2206
+        CGS_ASSERT(mpDistanceFormatLongL != 0, "mpDistanceFormatLongL");               // cpp:2207
+        CGS_ASSERT(mpGeneralThousandsSeparator != 0, "mpGeneralThousandsSeparator");   // cpp:2208
+        CGS_ASSERT(mpGeneralDecimalSeparator != 0, "mpGeneralDecimalSeparator");       // cpp:2209
+
+        FormatDistanceIntoTemplate(lpcTarget, lfMetres, liTargetSize,
+                                   mrLargeDistanceConversion, mpDistanceFormatLongL,
+                                   mpGeneralThousandsSeparator, mpGeneralDecimalSeparator, true);
+    }
+
+    // @ 0x82862188 (asserts cpp:2265/2266) -- pick the unit by MAGNITUDE: if the value in LARGE
+    // units (metres * mrLargeDistanceConversion, i.e. kilometres/miles) is below 1.0, print it
+    // in small units instead. The console's compare constant is flt_82001C98 == 1.0f.
+    void LanguageManager::FormatAutoDistanceString(char* lpcTarget, f32 lfMetres,
+                                                   s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");     // cpp:2265
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");   // cpp:2266
+
+        if (mrLargeDistanceConversion * lfMetres < 1.0f)
+        {
+            FormatSmallDistanceString(lpcTarget, lfMetres, liTargetSize);
+        }
+        else
+        {
+            FormatLargeDistanceString(lpcTarget, lfMetres, liTargetSize);
+        }
+    }
+
+    // @ 0x82862240 (asserts cpp:2275/2276) -- the long-unit-name twin of the chooser above
+    // (format 16). FOUR of the pause panel's rows ride it: distance driven, best drift, best
+    // oncoming and best airtime distance.
+    void LanguageManager::FormatAutoDistanceStringLong(char* lpcTarget, f32 lfMetres,
+                                                       s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");     // cpp:2275
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");   // cpp:2276
+
+        if (mrLargeDistanceConversion * lfMetres < 1.0f)
+        {
+            FormatSmallDistanceStringLong(lpcTarget, lfMetres, liTargetSize);
+        }
+        else
+        {
+            FormatLargeDistanceStringLong(lpcTarget, lfMetres, liTargetSize);
+        }
+    }
     // FLAG trap-stubs for the float-dispatch leaves 0x828641F0 references beyond the
     // block above (declared additions; decompiles land with the value-format slice).
-    void LanguageManager::FormatAutoDistanceString(char*, f32, s32) const                 { __debugbreak(); }   // FLAG trap-stub
-    void LanguageManager::FormatAutoDistanceStringLong(char*, f32, s32) const             { __debugbreak(); }   // FLAG trap-stub
-    void LanguageManager::FormatSmallDistanceStringLong(char*, f32, s32) const            { __debugbreak(); }   // FLAG trap-stub
-    void LanguageManager::FormatLargeDistanceStringLong(char*, f32, s32) const            { __debugbreak(); }   // FLAG trap-stub
-    void LanguageManager::FormatHoursAndMinutesAndSecondsString(u8*, f32, s32) const      { __debugbreak(); }   // FLAG trap-stub
 
     // ------------------------------------------------------------------------
     // @ 0x828615F8 (CgsLanguageManager.cpp:1566/:1567 own its two asserts) -- print a
@@ -1436,8 +1713,13 @@ namespace CgsLanguage
 
         switch (leType)
         {
-        case 1:  FormatHoursAndMinutesAndSecondsString(
-                     reinterpret_cast<u8*>(lpacBuffer), lfValue,
+        // ⛔ TARGET CORRECTED [pause-stats wave 2026-08-29]. This case used to call
+        // FormatHoursAndMinutesAndSecondsString(u8*, f32, s32). The X360 dispatcher's case 1
+        // calls sub_82862838 -- which IS FormatHoursMinutesAndSecondsString(char*, f32, s32),
+        // the float wrapper that floors seconds and splits h/m/s before handing the SPLIT
+        // INTEGERS to FormatHoursAndMinutesAndSecondsString. The two names differ by one "And"
+        // and by their whole signature; the wrong one was wired here.
+        case 1:  FormatHoursMinutesAndSecondsString(lpacBuffer, lfValue,
                      static_cast<s32>(luBufferSize));                                    break;
         case 2:  FormatMinutesAndSecondsAndHundredsString(lpacBuffer, lfValue,
                      static_cast<s32>(luBufferSize));                                    break;

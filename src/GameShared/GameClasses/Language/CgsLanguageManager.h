@@ -326,7 +326,16 @@ namespace CgsLanguage
         void FormatAutoDistanceStringLong(char* lpcTarget, f32 lfMetres, s32 liTargetSize) const;
         void FormatSmallDistanceStringLong(char* lpcTarget, f32 lfMetres, s32 liTargetSize) const;
         void FormatLargeDistanceStringLong(char* lpcTarget, f32 lfMetres, s32 liTargetSize) const;
-        void FormatHoursAndMinutesAndSecondsString(u8* lpTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
+        // ⛔ SIGNATURE CORRECTED [pause-stats wave 2026-08-29]. It used to read
+        // `(u8* lpTarget, f32 lfTimeInSeconds, s32 liTargetSize)`. The X360 symbol
+        // @0x828617B0 takes FIVE arguments and none of them is a float: its caller
+        // sub_82862838 (== FormatHoursMinutesAndSecondsString, the float wrapper) does the
+        // floor+split and hands it three ALREADY-SPLIT integers
+        // (`FormatHoursAndMinutesAndSecondsString(this, target, hours, minutes, seconds, size)`),
+        // and the body's three IntToString calls each take min-digits 2. The float form was
+        // also the wrong target for the dispatcher's format-1 case -- see FormatText(f32).
+        void FormatHoursAndMinutesAndSecondsString(char* lpcTarget, s32 liHours, s32 liMinutes,
+                                                   s32 liSeconds, s32 liTargetSize) const;
 
         // The metres -> display-unit scale the HUD multiplies a distance by to decide whether the
         // small or large distance string reads better (X360 reads it as a float member at +0x60F8;

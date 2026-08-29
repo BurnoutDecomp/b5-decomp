@@ -385,11 +385,24 @@ void ProgressionManager::GetGameStats(GsmIO::GameStats*                 lpGameSt
             lpGameStats->SetTotalRoads(lpStreetData->GetRoadCount());
         }
     }
-    else if (CgsDev::Log::gpDebugPrint != 0)
+    else
     {
-        *CgsDev::Log::gpDebugPrint
-            << "[stats] mpStreetManager is NULL -- roads-ruled + total-roads reported as 0"
-               " (PC bring-up)\n";
+        // ⛔⛔ [FLAG PC bring-up] THE ONE FIELD Construct() DOES NOT ZERO, SO THE GUARD MUST.
+        // miTotalRoads is the single member the console's GameStats::Construct never stores to
+        // (see its NOTE) -- because the console always overwrites it here, from the StreetData.
+        // With mpStreetManager NULL the record is a STACK LOCAL whose miTotalRoads is whatever
+        // was on the caller's frame: the first measured run printed "roads 0/32758" on the pause
+        // screen. A garbage denominator that renders is worse than a blank one, so the guard
+        // stores the zero the console's own path would have produced from an empty world.
+        // This is the ONLY place this wave departs from "Construct's value survives".
+        lpGameStats->SetTotalRoads(0);
+
+        if (CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[stats] mpStreetManager is NULL -- roads-ruled reported as 0 and total-roads"
+                   " FORCED to 0 (Construct does not zero it; PC bring-up)\n";
+        }
     }
 
     // The console re-zeroes the favourite/forgotten car ids here (`std r20, 0(r28)` /
