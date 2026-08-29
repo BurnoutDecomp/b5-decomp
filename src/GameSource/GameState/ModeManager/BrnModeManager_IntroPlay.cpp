@@ -14,6 +14,9 @@
 //   ModeManager::StopModeIntro               X360 0x82343F38
 //   ModeManager::StartPlayingMode            X360 0x82343340
 //   ModeManager::FinishOfflineModeIntro      X360 0x823119B0   (the GUI-event-25 landing point)
+//   ModeManager::ResultsAccept               X360 0x82311858   (the GUI-event-26 landing point --
+//                                                               added 2026-08-29, the event loop's
+//                                                               last game-side hop)
 //
 // [X] hazards H2: the sixteen bodies already committed in BrnModeManager.cpp are CALLED here,
 //     never re-implemented. This file calls exactly one of them -- GetNextLandmarkIndex
@@ -547,6 +550,50 @@ void ModeManager::FinishOfflineModeIntro()
     CGS_ASSERT(!IsOnlineGameMode(), "!IsOnlineGameMode()");   // :2522
 
     mpCurrentGameMode->SendEvent(E_GME_NEXT);
+}
+
+// ============================================================================
+// ModeManager::ResultsAccept -- X360 0x82311858
+// ============================================================================
+// WHOLE. Ten instructions, and the LAST game-side hop of the event loop: the results screen has
+// been dismissed, so tell the running mode the player accepted its results. Landing point for
+// game event 26 (E_EVENT_RESULTS_FINISHED), which the GUI->game bridge emits from GUI 292 --
+// the post-event teardown InstantResultsState::TriggerExitResults posts on its way out.
+//
+// [!] READ THE ASM, NOT THE PSEUDOCODE. Hex-Rays renders the tail as
+// `return (*(*v1 + 48))();` -- with NO ARGUMENT. The argument is there:
+//
+//     0x82311858  lwz     r11, 0xD98(r3)      ; mpCurrentGameMode
+//     0x8231185C  cmplwi  cr6, r11, 0
+//     0x82311860  beqlr   cr6                 ; null -> return, and NO assert (unlike
+//                                             ;   FinishOfflineModeIntro, which asserts here)
+//     0x82311864  clrlwi  r3, r11, 0          ; r3 = mpCurrentGameMode
+//     0x82311868  li      r4, 3               ; <-- THE ARGUMENT HEX-RAYS DROPS
+//     0x8231186C  lwz     r11, 0(r3)          ; vtable
+//     0x82311870  lwz     r11, 0x30(r11)      ; slot 12 == SendEvent(EGameModeEvent)
+//     0x82311874  mtctr   r11
+//     0x82311878  bctr                        ; tail call
+//
+// vtbl+0x30 is the same slot StartModeIntro / FinishOfflineModeIntro / ExitCurrentMode drive; the
+// literal 3 is the ENUM E_GME_USER_ACCEPT (BrnGameMode.h:83), the ONLY one of the four
+// EGameModeEvent values none of those three sites uses. GameMode::SendEvent @0x8232FDA0 maps
+// (E_GMS_RESULTS, E_GME_USER_ACCEPT) -> SetCurrentState(E_GMS_QUIT), QuitState::OnEnter
+// @0x823166A0 sets mbFinished, and UpdateCurrentMode's exit gate then calls ExitCurrentMode --
+// which is what actually clears mpCurrentGameMode and puts the frame-rate manager back to type 1.
+// So this ten-instruction function is the whole difference between "the results screen went away"
+// and "the event is over".
+//
+// [!] NO GUARD IS ADDED. The console's only test is the `beqlr` above; a stray event 26 with no
+// mode running is a silent no-op on the console and is a silent no-op here.
+// ============================================================================
+void ModeManager::ResultsAccept()
+{
+    if (mpCurrentGameMode == NULL)
+    {
+        return;
+    }
+
+    mpCurrentGameMode->SendEvent(E_GME_USER_ACCEPT);
 }
 
 }

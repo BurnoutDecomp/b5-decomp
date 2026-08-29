@@ -1580,11 +1580,13 @@ void GameStateModule::ProcessGameEventsStartGameModeBringUp(
 //     case 27: ModeManager::UserCancelCurrentMode(v23 + 4128);
 //              TakedownManager::ClearRaceCarData(v23 + 568)
 //
-// [!] ONLY CASE 25 IS ARMED. FinishOfflineModeIntro @0x823119B0 is bodied
-// (BrnModeManager_IntroPlay.cpp:540). FinishedMapPan / ResultsAccept / UserCancelCurrentMode and
-// TakedownManager::ClearRaceCarData have NO declaration and NO body anywhere in the tree -- a
-// tree-wide grep, not an assumption -- so their arms are written out and PARKED. Nothing faked.
-// DELETE-WHEN those four land: un-park each arm exactly as quoted above.
+// [!] CASES 25 AND 26 ARE ARMED (26 added 2026-08-29). FinishOfflineModeIntro @0x823119B0 is
+// bodied (BrnModeManager_IntroPlay.cpp) and so is ResultsAccept @0x82311858 -- the latter closes
+// the event loop's game side: it is the ONLY caller-visible path from "the results screen went
+// away" to ExitCurrentMode clearing mpCurrentGameMode. FinishedMapPan / UserCancelCurrentMode and
+// TakedownManager::ClearRaceCarData still have NO declaration and NO body anywhere in the tree --
+// a tree-wide `tools/re/hasbody.py`, not an assumption -- so their two arms stay written out and
+// PARKED. Nothing faked. DELETE-WHEN those three land: un-park each arm exactly as quoted above.
 //
 // (i) WHY CASE 25 IS THE ONE THAT MATTERS TODAY. IntroState::OnEnter sets mbUseCountdown only for
 // online modes and offline Showtime, so an offline stunt run's intro state has NO timer at all --
@@ -1650,9 +1652,35 @@ void GameStateModule::ProcessGameEventsModeIntroBringUp(
             break;
 
         case 26:   // E_EVENT_RESULTS_FINISHED
-            // [X] PARKED: ModeManager::ResultsAccept has no body on this tree, and the console's
-            // companion store *(gsm + 181413) = 1 writes a byte with no member on this build.
-            //     mModeManager.ResultsAccept();
+            // ⭐ UN-PARKED 2026-08-29. ModeManager::ResultsAccept @0x82311858 is bodied
+            // (BrnModeManager_IntroPlay.cpp) -- it is the event loop's LAST game-side hop:
+            //   SendEvent(E_GME_USER_ACCEPT) -> (RESULTS -> QUIT) -> QuitState sets mbFinished
+            //   -> UpdateCurrentMode's exit gate -> ExitCurrentMode clears mpCurrentGameMode.
+            // The console has NO guard on this arm and neither does the callee (its only test is
+            // its own `beqlr` on a null mode), so the call is unconditional here too.
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                // [DIAG] NOT IN THE X360 BINARY. Names the mode state going IN, because a
+                // no-op ResultsAccept and a missing event 26 are otherwise the same picture --
+                // SendEvent only acts from E_GMS_RESULTS (5).
+                const GameMode* lpMode = mModeManager.GetCurrentGameMode();
+                *CgsDev::Log::gpDebugPrint
+                    << "[evt-finish] event 26 -> ResultsAccept (mode "
+                    << (lpMode != 0 ? lpMode->GetCurrentState() : -1)
+                    << "; E_GMS_RESULTS==5 is the only state SendEvent(E_GME_USER_ACCEPT) acts "
+                       "from -- anything else and the mode is NOT torn down)\n";
+            }
+            mModeManager.ResultsAccept();
+
+            // [X] STILL PARKED, and now MEASURED rather than assumed: the console's companion
+            // store `lis r11,2 / ori r11,r11,0xC4A5 / stbx r17(=1), r31, r11` writes ONE byte at
+            // gsm+0x2C4A5 (181413) that has NO member on this build. A scan of ALL 27k X360
+            // function exports for every addressing form that can reach it -- the `ori 0xC4A5`
+            // index pair (1 hit: this store), the folded `addis rA,r31,3 / lbz rD,-0x3B5B(rA)`
+            // pair (0 hits) -- finds NO READER anywhere in the binary. Its two neighbours in the
+            // same run behave identically: 0x2C4A1 (cases 12 and 27) and 0x2C4B1 (case 149) are
+            // also write-only. So this byte is observationally inert, which is why parking it
+            // cannot be the reason a finished event fails to hand the car back.
             //     <gsm+181413> = 1;
             break;
 
