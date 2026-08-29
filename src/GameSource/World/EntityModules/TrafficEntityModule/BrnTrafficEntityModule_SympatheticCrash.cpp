@@ -38,15 +38,26 @@
 //
 // -------------------------------------------------------------------------------------------
 // RECOVERED CONSTANTS (every one read out of the image at the address the asm names):
-//   unk_8300CB90 = 0.0f  the give-up speed threshold, and IT IS GENUINELY ZERO.
-//       ⚠️ It has EXACTLY ONE reference in the whole 27k-function image -- the read at
-//       0x8273D5C0 in this function -- so nothing anywhere writes it, exactly like
-//       unk_8300D01C in BrnVehicleManager_RaceCarTrafficContact.cpp. Consequence, and it is
-//       the shipped behaviour rather than an approximation of one: the test is
-//       `0.0f > GetSpeed()`, and Vehicle::GetSpeed() is Splat(mSpeed.x) which a forward-driving
-//       traffic car never makes negative, so ON RETAIL A SYMPATHETICALLY-CRASHING CAR NEVER
-//       ABANDONS THE CRASH. The whole give-up arm below is dead code in the shipped build and
-//       is reproduced anyway.
+//   ⛔⛔ unk_8300CB90 -- THE GIVE-UP SPEED THRESHOLD IS **UNRECOVERED**. Placeholder 0.0f.
+//       The image byte at 0x8300CB90 is zero, and that proves NOTHING here: the whole
+//       0x8300CB60..0x8300CBAC block reads zero, INCLUDING 0x8300CB80, which an earlier wave
+//       attests is 40.0f at runtime (BrnTrafficEntityModule_wT1_01.cpp:1056 -- "dyn-init thunk
+//       0x82C662D0 squares the 40.0f splat at 0x8300CB80"). It is a dyn-init splat block.
+//       ⛔ AND THE ONE-XREF ARGUMENT DOES NOT APPLY EITHER, which is the trap worth naming: a
+//       scan of all 27,549 exported functions finds exactly ONE reference to 0x8300CB90 (this
+//       read) -- but the SAME scan finds ZERO references to 0x8300CB80, a constant that
+//       demonstrably has a writer. Dyn-init thunks are not in the export set, so "one xref"
+//       cannot be read as "nothing writes it" for a .data splat. (That inference IS sound for
+//       unk_8300D01C in BrnVehicleManager_RaceCarTrafficContact.cpp, which sits in a debug
+//       tunable block, not a splat block.)
+//       MEASURED with the 0.0f placeholder (BRN_TRAFFIC_DIAG run, 2026-08-29): the give-up arm
+//       fires -- 629 consecutive frames for ONE car -- so `0.0f > GetSpeed()` is reachable
+//       (Vehicle::GetSpeed() is Splat(mSpeed.x), which goes negative for a car that has been
+//       knocked backwards). The car never leaves the arm because nothing clears
+//       meSympCrashState: the console's demotion path (ReturnPhysicalVehicleToTraffic and
+//       friends) is not reconstructed in this tree. UNBLOCKED BY: the DecFIGS PS3 twin
+//       @0x957B6C reaches this constant through the TOC (off_1012Fxx), so resolving the PS3 TOC
+//       recovers the value.
 //   flt_820BA2A8 = 15.0f   approach distance that ends the ACCELERATE run (normal play)
 //   flt_820BA590 = 40.0f   ... and in showtime, where the crash is meant to start further out
 //   flt_820BA8F8 =  6.0f   ACCELERATE also ends on a timeout
@@ -77,7 +88,10 @@ namespace BrnTraffic
 namespace
 {
     // ---- the function's own RODATA, dumped from the image at the addresses the asm names ----
-    const f32 KF_SYMP_GIVE_UP_SPEED        = 0.0f;    // unk_8300CB90 -- see the banner
+    // ⛔ PLACEHOLDER, NOT A RECOVERED VALUE -- see the banner. 0.0f is NOT the expression's
+    // identity here (it means "only a car travelling BACKWARDS gives up"), so this is a flagged
+    // hole, not a safe default.
+    const f32 KF_SYMP_GIVE_UP_SPEED        = 0.0f;    // unk_8300CB90 -- UNRECOVERED
     const f32 KF_SYMP_APPROACH_DIST        = 15.0f;   // flt_820BA2A8
     const f32 KF_SYMP_APPROACH_DIST_SHOWTIME = 40.0f; // flt_820BA590
     const f32 KF_SYMP_ACCELERATE_TIMEOUT   = 6.0f;    // flt_820BA8F8
@@ -251,8 +265,8 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
     CGS_ASSERT(lpPhysicsInfo != 0, "lpPhysicsInfo");                  // :16310
 
     // ---- 3. the GIVE-UP arm (0x8273D5AC..0x8273D634) ------------------------------------------
-    // DEAD ON RETAIL: KF_SYMP_GIVE_UP_SPEED is the genuinely-zero unk_8300CB90 (banner).
-    // Reproduced because the branch is in the binary, not because it can be taken.
+    // ⚠️ REACHED, and its threshold is a PLACEHOLDER (banner). Do not tune it by watching the
+    // game: derive it from the PS3 TOC.
     if (KF_SYMP_GIVE_UP_SPEED > lpVehicle->GetSpeed().x
         && !lpPhysicsInfo->mbIsFatallyCrashing)
     {
@@ -260,6 +274,25 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
         lpVehicle->SetCrashTrafficTypeRaw(
             static_cast<u8>(BrnPhysics::Vehicle::eCrashTrafficType_Invalid));
         lpOutput->GetVehicleInputInterface()->SetTrafficNotCrashing(MakeTrafficEntityId(luVehicle));
+
+        // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Prints the two inputs of the test
+        // above, because a bare "the give-up arm fired" line cannot tell a correct threshold
+        // from a wrong one.
+        if (TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+        {
+            static s32 siGiveUpLogged = 0;
+            if (siGiveUpLogged < 12)
+            {
+                ++siGiveUpLogged;
+                *CgsDev::Log::gpDebugPrint
+                    << "[T6-symp] GIVE-UP vehicle=" << static_cast<s32>(luVehicle)
+                    << " speed=" << lpVehicle->GetSpeed().x
+                    << " threshold=" << KF_SYMP_GIVE_UP_SPEED
+                    << " state=" << static_cast<s32>(lpVehicle->GetSympCrashState())
+                    << " sympTime=" << lpVehicle->GetSympCrashTime()
+                    << " [DELETE-WHEN-STABLE]\n";
+            }
+        }
         return;
     }
 
@@ -285,6 +318,25 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
     // vrsqrtefp plus TWO Newton-Raphson refinement steps, which is what rw::math::vpu::Normalize
     // is.
     const Vector3 lvSteerDirection = rw::math::vpu::Normalize(lvToTarget);
+
+    // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One line the FIRST time each state is
+    // entered, so "the arm never ran" and "the arm ran and did nothing" are distinguishable.
+    if (TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+    {
+        static bool sbaStateLogged[5] = { false, false, false, false, false };
+        const s32 liState = static_cast<s32>(lpVehicle->GetSympCrashState());
+        if (liState >= 0 && liState < 5 && !sbaStateLogged[liState])
+        {
+            sbaStateLogged[liState] = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[T6-symp] state=" << liState
+                << " (1 HEADON 2 ACCEL 3 HANDBRAKE 4 LOCKUP) vehicle="
+                << static_cast<s32>(luVehicle)
+                << " fwdDist=" << lfForwardDistance
+                << " speed=" << lpVehicle->GetSpeed().x
+                << " [DELETE-WHEN-STABLE]\n";
+        }
+    }
 
     switch (lpVehicle->GetSympCrashState())
     {
