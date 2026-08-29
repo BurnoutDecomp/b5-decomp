@@ -1185,9 +1185,18 @@ namespace BrnGui
             // ⭐ `Array<__int64,8>::GetLength(a1 + 40600)` in the X360 is this record's
             // maCarsToUnlockFromSpecialEvent -- 40600 == 40552 + 48 -- which independently
             // re-confirms that member's +0x30 placement from a SECOND function.
+            // ⛔ THE GUARDED CALL IS NOT MADE, AND THAT IS A KNOWN GAP, NOT AN OVERSIGHT.
+            // The X360 runs DetermineCarUnlockPending(mpProfile) here when the array holds
+            // more than one car. That function is DECLARED (BrnGuiCache.h:985, X360
+            // @0x824EC678) but has NO BODY anywhere in b5-decomp -- this arm would be its
+            // first caller, and calling it is an unresolved external. A trap stub is not the
+            // answer either: 292 is the post-event TEARDOWN path, so a trap would turn a
+            // missing car-unlock recomputation into a crash on every event exit. The record
+            // clear and the suppress-byte drop below DO run, which is what the results flow
+            // depends on. DELETE-WHEN DetermineCarUnlockPending is reconstructed.
             if (mOfflinePostEventData.maCarsToUnlockFromSpecialEvent.GetLength() > 1)
             {
-                DetermineCarUnlockPending(mpProfile);
+                // DetermineCarUnlockPending(mpProfile);   // @0x824EC678 -- see above
             }
             mOfflinePostEventData = GuiEventOfflinePostEvent::OfflinePostEventData();
             mbSuppressPostEventPresentation = false;   // stb 0, +19319
