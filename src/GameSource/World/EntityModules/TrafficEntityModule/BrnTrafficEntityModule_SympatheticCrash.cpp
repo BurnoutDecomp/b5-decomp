@@ -38,34 +38,56 @@
 //
 // -------------------------------------------------------------------------------------------
 // RECOVERED CONSTANTS (every one read out of the image at the address the asm names):
-//   ⛔⛔ unk_8300CB90 -- THE GIVE-UP SPEED THRESHOLD IS **UNRECOVERED**. Placeholder 0.0f.
-//       The image byte at 0x8300CB90 is zero, and that proves NOTHING here: the whole
-//       0x8300CB60..0x8300CBAC block reads zero, INCLUDING 0x8300CB80, which an earlier wave
-//       attests is 40.0f at runtime (BrnTrafficEntityModule_wT1_01.cpp:1056 -- "dyn-init thunk
-//       0x82C662D0 squares the 40.0f splat at 0x8300CB80"). It is a dyn-init splat block.
-//       ⛔ AND THE ONE-XREF ARGUMENT DOES NOT APPLY EITHER, which is the trap worth naming: a
-//       scan of all 27,549 exported functions finds exactly ONE reference to 0x8300CB90 (this
-//       read) -- but the SAME scan finds ZERO references to 0x8300CB80, a constant that
-//       demonstrably has a writer. Dyn-init thunks are not in the export set, so "one xref"
-//       cannot be read as "nothing writes it" for a .data splat. (That inference IS sound for
-//       unk_8300D01C in BrnVehicleManager_RaceCarTrafficContact.cpp, which sits in a debug
-//       tunable block, not a splat block.)
-//       MEASURED with the 0.0f placeholder (BRN_TRAFFIC_DIAG run, 2026-08-29): the give-up arm
-//       fires -- 629 consecutive frames for ONE car -- so `0.0f > GetSpeed()` is reachable
-//       (Vehicle::GetSpeed() is Splat(mSpeed.x), which goes negative for a car that has been
-//       knocked backwards). UNBLOCKED BY: the DecFIGS PS3 twin @0x957B6C reaches this constant
-//       through the TOC (off_1012Fxx), so resolving the PS3 TOC recovers the value.
-//       ⛔ CORRECTED 2026-08-29 (wave 2): the "629 consecutive frames" was NOT evidence about
-//       this constant at all, and the explanation printed here was wrong twice over. It said
-//       "the car never leaves the arm because nothing clears meSympCrashState: the console's
-//       demotion path (ReturnPhysicalVehicleToTraffic and friends) is not reconstructed in this
-//       tree." BOTH halves are false. (a) ReturnPhysicalVehicleToTraffic @0x8273DCD0,
-//       StopVehicleBeingPhysical @0x8271FED0 and CleanUpCrashedVehiclePhysics @0x82720960 have
-//       all had bodies in BrnTrafficEntityModule_wT3_02.cpp since before that line was written.
-//       (b) NOTHING clears meSympCrashState on the console either -- and it does not need to:
-//       Vehicle::IsSympatheticallyCrashing @0x82704B18 reads miPhysicalReason == 3, NOT
-//       meSympCrashState, so this arm's own `SetPhysicalReason(E_PHYSICALREASON_NORMAL)` below
-//       IS the exit. The 629 frames were the wrong predicate latching, and are gone.
+//   ⭐⭐ unk_8300CB90 = 0.44704f * 2.0f == 0.89408f -- RECOVERED 2026-08-30 (wave 2). It is
+//       TWO MILES PER HOUR expressed in metres per second: the give-up arm fires once the car
+//       is doing less than 2 mph, i.e. once it has effectively stopped.
+//       HOW (no visual oracle, no tuning -- the DYN-INIT THUNK read out of the image):
+//         The .data splat block 0x8300CB60..0x8300CBAC is all zero in the image because a CRT
+//         dyn-init thunk fills it. Those thunks are NOT in the export set, which is why every
+//         xref scan came up empty. Scanning the raw text for the operand form instead
+//         (`addi rX, rX, 0xCB90` after `lis rX, 0x8301`) finds exactly two sites: our read at
+//         0x8273D5B8 (lvx128) and ONE WRITER at 0x82C66A54 (stvx128). Its thunk, in full:
+//           0x82C66A30  lis   r11, 0x82F3
+//           0x82C66A38  lfs   f0,  0x1928(r11)   -> 0x82F31928 = 0.44704f  (MPH -> m/s)
+//           0x82C66A3C  lis   r11, 0x820C
+//           0x82C66A40  lfs   f13, 0xA86C(r11)   -> 0x820BA86C = 2.0f
+//           0x82C66A48  fmuls f0, f0, f13                        (op 59, XO 25)
+//           0x82C66A4C  stfs  f0, -16(r1) ; lvx v0,r0,r10 ; vspltw v0,v0,0
+//           0x82C66A54  addi  r11, r11, 0xCB90  -> 0x8300CB90 ; stvx128 v0, r0, r11 ; blr
+//       CALIBRATION (do not trust a decoder you have not seen agree with a known answer): the
+//       same scan+decoder run on the NEIGHBOUR 0x8300CB80 finds its writer at 0x82C66128 taking
+//       flt_820BA590, and this file's own banner already lists flt_820BA590 = 40.0f -- which is
+//       exactly the "40.0f at runtime" an earlier wave attested for 0x8300CB80 from a different
+//       direction. (It also fixes a detail of that note: 0x82C662D0 does not WRITE 0x8300CB80,
+//       it READS it, squares it, and stores 1600.0f at 0x8300CC90 -- the swerve player-distance
+//       cutoff.)
+//       ⭐⭐ CRT INIT ORDER -- checked BEFORE trusting the value, because retail really does
+//       ship a static-init-order bug elsewhere in this tree whose genuinely-0.0 result is
+//       correct to reproduce. It does not apply here: BOTH operands are ordinary image
+//       constants, not dyn-init outputs. 0x820BA86C is .rdata holding 2.0f, and 0x82F31928
+//       holds 0.44704f in the image, sitting in a constants table between 1.5707964 (pi/2) and
+//       6.2831855 (2*pi); the only text reference to 0x82F31928 besides this thunk is another
+//       thunk READING it to splat 0x83017FE0 (the tree already knows that one as
+//       KF_MPH_TO_METRES_PER_SECOND, BrnBehaviourGameplayExternal.cpp:1546). Nothing writes
+//       either operand, so this thunk's result is 0.89408f no matter where it lands in the
+//       init order.
+//       ⭐ FAMILY: the tree has already recovered two siblings of this exact idiom --
+//       BrnVehicleManager.cpp:99 (0.44704 * 50.0, "the old 0.0 made the gate a pass-through")
+//       and BrnUpdateVehiclesJob.cpp:115 (1 / (0.44704 * 10.0)).
+//       ⛔ THE 629 FRAMES WERE NOT EVIDENCE ABOUT THIS CONSTANT. The note that used to stand
+//       here said "the car never leaves the arm because nothing clears meSympCrashState: the
+//       console's demotion path (ReturnPhysicalVehicleToTraffic and friends) is not
+//       reconstructed in this tree." BOTH halves are false. (a) ReturnPhysicalVehicleToTraffic
+//       @0x8273DCD0, StopVehicleBeingPhysical @0x8271FED0 and CleanUpCrashedVehiclePhysics
+//       @0x82720960 have all had bodies in BrnTrafficEntityModule_wT3_02.cpp since before that
+//       line was written. (b) NOTHING clears meSympCrashState on the console either -- and it
+//       does not need to: Vehicle::IsSympatheticallyCrashing @0x82704B18 reads miPhysicalReason
+//       == 3, NOT meSympCrashState, so this arm's own SetPhysicalReason(E_PHYSICALREASON_NORMAL)
+//       below IS the exit. The 629 consecutive frames were the wrong predicate latching.
+//       ⚠️ KEEP THE ONE-XREF WARNING, it is still true and still load-bearing: a scan of all
+//       27,549 exported functions finds exactly ONE reference to 0x8300CB90 and ZERO to
+//       0x8300CB80, and both have writers. "One xref" NEVER means "nothing writes it" for a
+//       .data splat -- the writers are dyn-init thunks and the export set does not contain them.
 //   flt_820BA2A8 = 15.0f   approach distance that ends the ACCELERATE run (normal play)
 //   flt_820BA590 = 40.0f   ... and in showtime, where the crash is meant to start further out
 //   flt_820BA8F8 =  6.0f   ACCELERATE also ends on a timeout
@@ -96,10 +118,11 @@ namespace BrnTraffic
 namespace
 {
     // ---- the function's own RODATA, dumped from the image at the addresses the asm names ----
-    // ⛔ PLACEHOLDER, NOT A RECOVERED VALUE -- see the banner. 0.0f is NOT the expression's
-    // identity here (it means "only a car travelling BACKWARDS gives up"), so this is a flagged
-    // hole, not a safe default.
-    const f32 KF_SYMP_GIVE_UP_SPEED        = 0.0f;    // unk_8300CB90 -- UNRECOVERED
+    // unk_8300CB90 <- dyn-init thunk 0x82C66A30: fmuls(flt_82F31928, flt_820BA86C) splatted.
+    // 0.44704 is the MPH->m/s factor, so this is 2 MPH == 0.89408 m/s. Spelled as the product
+    // the thunk computes, matching BrnVehicleManager.cpp:99 and BrnUpdateVehiclesJob.cpp:115.
+    // See the banner for the decode, the calibration and the CRT-init-order check.
+    const f32 KF_SYMP_GIVE_UP_SPEED        = 0.44704f * 2.0f;   // unk_8300CB90 == 0.89408f
     const f32 KF_SYMP_APPROACH_DIST        = 15.0f;   // flt_820BA2A8
     const f32 KF_SYMP_APPROACH_DIST_SHOWTIME = 40.0f; // flt_820BA590
     const f32 KF_SYMP_ACCELERATE_TIMEOUT   = 6.0f;    // flt_820BA8F8
@@ -273,8 +296,11 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
     CGS_ASSERT(lpPhysicsInfo != 0, "lpPhysicsInfo");                  // :16310
 
     // ---- 3. the GIVE-UP arm (0x8273D5AC..0x8273D634) ------------------------------------------
-    // ⚠️ REACHED, and its threshold is a PLACEHOLDER (banner). Do not tune it by watching the
-    // game: derive it from the PS3 TOC.
+    // Threshold RECOVERED 2026-08-30 from its dyn-init thunk (banner): 2 MPH in m/s. The
+    // SetPhysicalReason(NORMAL) below is this state machine's ONLY non-crashing exit -- it is
+    // what makes IsSympatheticallyCrashing() (miPhysicalReason == 3) go false next frame, which
+    // hands the car to UpdateNormalPhysical -> DriveTowardsTarget ->
+    // ReturnPhysicalVehicleToTraffic. Do not "simplify" the three stores; each is load-bearing.
     if (KF_SYMP_GIVE_UP_SPEED > lpVehicle->GetSpeed().x
         && !lpPhysicsInfo->mbIsFatallyCrashing)
     {
@@ -283,13 +309,16 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
             static_cast<u8>(BrnPhysics::Vehicle::eCrashTrafficType_Invalid));
         lpOutput->GetVehicleInputInterface()->SetTrafficNotCrashing(MakeTrafficEntityId(luVehicle));
 
-        // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Prints the two inputs of the test
+        // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Prints BOTH inputs of the test
         // above, because a bare "the give-up arm fired" line cannot tell a correct threshold
-        // from a wrong one.
+        // from a wrong one -- that is exactly what caught the retracted 0.0f. `reason` is
+        // printed AFTER the store, so a reader can see the exit actually taken: 3 -> 5 means
+        // IsSympatheticallyCrashing() goes false next frame and the car is handed to
+        // UpdateNormalPhysical. A SECOND line for the same vehicle would mean the latch is back.
         if (TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
         {
             static s32 siGiveUpLogged = 0;
-            if (siGiveUpLogged < 12)
+            if (siGiveUpLogged < 24)
             {
                 ++siGiveUpLogged;
                 *CgsDev::Log::gpDebugPrint
@@ -297,6 +326,7 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
                     << " speed=" << lpVehicle->GetSpeed().x
                     << " threshold=" << KF_SYMP_GIVE_UP_SPEED
                     << " state=" << static_cast<s32>(lpVehicle->GetSympCrashState())
+                    << " reasonAfter=" << static_cast<s32>(lpVehicle->GetPhysicalReason())
                     << " sympTime=" << lpVehicle->GetSympCrashTime()
                     << " [DELETE-WHEN-STABLE]\n";
             }
