@@ -38,6 +38,7 @@
 //  BrnGui::GuiEventNetworkPlayerImage -- see the note in the wave log.)
 #include <cmath>                                             // sqrtf/acosf (the icon heading derivation)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag one-shots
+#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [DIAG] gFilmLatch.mfLiveBoostFraction
 
 namespace BrnGame
 {
@@ -290,11 +291,75 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
     lBoostEvent.mbIsTailgating          = lpBoostInfo->mbIsTailgating;
 
 
-    // FLAG deferred (console seat: between the field fill and the post): the SHOWTIME
-    // override -- in either showtime mode the console forces mbBoostIsFull = true and
-    // gates mbAllowedToBoost on !CrashModeScoring::HasCrashModeEnded(). Neither the game
-    // module's mode word nor CrashModeScoring is homed on this build, and the PC has no
-    // showtime mode to enter; the override lands with them.
+    // ================================================================================
+    // ⭐⭐ THE SHOWTIME OVERRIDE -- THE BOOST BAR *IS* THE SHOWTIME METER, AND THIS IS THE
+    // ONLY PLACE THE CONSOLE TREATS IT DIFFERENTLY IN SHOWTIME (landed 2026-08-29).
+    //
+    // The note that stood here said "neither the game module's mode word nor CrashModeScoring
+    // is homed on this build". BOTH ARE, and have been for a while: the mode word is
+    // ModeManager::meCurrentGameModeType and the scorer is ScoringSystem::mCrashModeScoring,
+    // whose HasCrashModeEnded(f32) has a body in BrnCrashModeScoring.cpp. The X360 reaches
+    // both by a baked displacement off `this`, and the arithmetic pins the identification
+    // exactly -- no other member assignment fits:
+    //     0x823E585C  addis r27, r28, 0x67 ; addi r27, r27, -0x4D4C   ; r28 == this
+    //                 => r27 = this + 6730420  == mModeManager.meCurrentGameModeType (+3476)
+    //     0x823E5B98  addis r3,  r28, 0x67 ; addi r3,  r3,  -0x4D10
+    //                 => r3  = this + 6730480  == mModeManager.mScoringSystem (+3504)
+    //                                             .mCrashModeScoring        (+0x20)
+    // (6730480 - 6730420 == 60 == 3536 - 3476, and 3536 == 3504 + 0x20. The two displacements
+    // are 60 apart in the image and the two members are 60 apart in the recovered layout.)
+    //
+    // @0x823E5B74..0x823E5BC0, instruction for instruction:
+    //     beq  cr6, loc_823E5B84            ; the `cmpwi r11, 2` at 0x823E5B18 (mode == 2)
+    //     cmpwi cr6, r11, 0x10 ; bne ...    ; ... or mode == 16
+    //     lfs  f1, flt_82001C98             ; 1.0f -- the padding argument
+    //     bl   CrashModeScoring::HasCrashModeEnded
+    //     li   r11, 1  ; stb r11, +0x10     ; mbBoostIsFull = true   (UNCONDITIONAL in showtime)
+    //     clrlwi/cntlzw/extrwi r11, r3      ; r11 = (returned byte == 0)
+    //     and  r11, r11, r30                ; r30 == the ORIGINAL mbAllowedToBoost (lbz +0xA,
+    //                                       ;        loaded at 0x823E5B04, before the call)
+    //     stb  r11, +0x18                   ; mbAllowedToBoost = original && !ended
+    //
+    // ⚠️ HasCrashModeEnded is called UNCONDITIONALLY inside the arm -- the console does not
+    // short-circuit it on mbAllowedToBoost, and it is not a pure predicate to us (it carries
+    // the showtime-end witness), so the result is taken into a temporary rather than written
+    // as `mbAllowedToBoost && !HasCrashModeEnded(...)`, which would skip the call.
+    //
+    // ⭐ WHY THIS IS THE METER'S PRESENTATION, not a stray flag. Both overridden bytes land
+    // on BoostBarRenderer::Update:
+    //   * mbBoostIsFull drives the chained-boost ramp (BrnBoostBarRenderer.cpp:817) -- forcing
+    //     it true is what makes the showtime bar burn at full-bar intensity for the whole
+    //     session instead of only when the tank happens to top out;
+    //   * mbAllowedToBoost drives the visibility fade machine (:833) -- so when the session
+    //     ends, HasCrashModeEnded flips and the meter FADES OUT. That fade is the console's
+    //     own end-of-showtime animation for this bar, and without this arm it never plays.
+    // ================================================================================
+    {
+        BrnGameState::ModeManager* const lpModeManager = mGameStateModule.GetModeManager();
+        const s32 liGameModeType = static_cast<s32>(lpModeManager->GetCurrentGameModeType());
+
+        if (liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
+            liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+        {
+            // flt_82001C98 == 1.0f (the same image constant BoostStrategy::Update's showtime
+            // modifier reads -- see BrnRaceCarEntityModule.cpp's UpdateBoost banner).
+            const bool lbCrashModeEnded =
+                lpModeManager->GetScoringSystem()->GetCrashScorer()->HasCrashModeEnded(1.0f);
+
+            lBoostEvent.mbBoostIsFull    = true;
+            lBoostEvent.mbAllowedToBoost = lpBoostInfo->mbAllowedToBoost && !lbCrashModeEnded;
+        }
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY -- the film latch's boost-fraction stamp (BrnDiagFilmLatch.h).
+    // This is the exact fraction BoostBarRenderer draws, recorded at the exact instant it is
+    // published, so a frame dump beside it is SELF-LABELLING and "does the bar move with the
+    // value" stops needing a guessed frame rate to answer. One store to a file-scope float; no
+    // branch, no allocation, no I/O, and the reader is gated on BRN_FRAME_DUMP.
+    BrnDiag::gFilmLatch.mfLiveBoostFraction =
+        (lBoostEvent.mfMaxBoost > 0.0f)
+            ? (lBoostEvent.mfBoostAmount / lBoostEvent.mfMaxBoost)
+            : -1.0f;
 
     // ⚠️ NOT through the static CgsGui::GuiModule::AddGuiEvent(T&,...) helper: that overload
     // strips a 12-byte GuiEvent<N> header, and GuiEventBoostInfo is a BARE 28-byte payload

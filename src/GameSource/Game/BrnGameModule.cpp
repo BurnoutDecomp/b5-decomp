@@ -51,7 +51,9 @@ namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(
 // [DIAG] The time-dilation film latch (BrnDiagFilmLatch.h). Defined here because
 // BrnGameModule::UpdateTimers is its only writer; read by the back-buffer writer in
 // pc/gcm/renderengine/device.cpp under BRN_FRAME_DUMP_ARM=slomo. NOT in the X360 binary.
-namespace BrnDiag { FilmLatch gFilmLatch = { 0u, 0.0f, 0.0f, 1.0f, 0.0f }; }
+// The trailing -1.0f is mfLiveBoostFraction's "nothing published yet" sentinel; its one
+// writer is BridgeWorldVehicleDataToGui (GameBridgeWorldToGui.cpp).
+namespace BrnDiag { FilmLatch gFilmLatch = { 0u, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f }; }
 
 namespace BrnGame
 {

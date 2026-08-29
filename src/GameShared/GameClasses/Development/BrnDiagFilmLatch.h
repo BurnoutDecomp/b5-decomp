@@ -42,6 +42,24 @@ namespace BrnDiag
         // its own timestep can be.
         f32 mfLiveSimScale;
         f32 mfLiveSimStep;
+
+        // ⭐ THE LIVE SHOWTIME/BOOST METER FRACTION, on exactly the same argument as the two
+        // above and for exactly the same reason. The boost bar IS the showtime meter (the
+        // showtime arm of RaceCarEntityModule::UpdateBoost overwrites the strategy tank from
+        // CrashPlayManager::mfBoostPercentage every frame, and the bridge publishes that tank
+        // as GuiEventBoostInfo id 206), so "does the bar move with the value" is the whole
+        // question -- and a bitmap alone cannot answer it. A LOG line cannot either: the log
+        // ticks on SIM frames and the dump ticks on PRESENTS, so pairing them means guessing a
+        // frame rate. Stamping the published fraction into the same CSV row as the bitmap makes
+        // every frame SELF-LABELLING, exactly as mfLiveSimStep made the slow-motion strip
+        // self-labelling, and the fill measured off the pixels can then be regressed against it
+        // with no time base at all.
+        //
+        // Written in ONE place -- BrnGameModule::BridgeWorldVehicleDataToGui, the sole producer
+        // of event 206 -- as mfBoostAmount / mfMaxBoost, i.e. the exact fraction
+        // BoostBarRenderer::RenderComponent draws. Read in ONE place, the back-buffer writer in
+        // pc/gcm/renderengine/device.cpp. -1.0f means "no boost record has been published yet".
+        f32 mfLiveBoostFraction;
     };
 
     // Defined in GameSource/Game/BrnGameModule.cpp (the only writer).

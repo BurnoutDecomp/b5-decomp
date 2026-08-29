@@ -430,10 +430,17 @@ static void DumpBackBufferIfRequested()
                 FILE* lpCsv = std::fopen(lacCsv, "a");
                 if (lpCsv != nullptr)
                 {
-                    std::fprintf(lpCsv, "%u,%.6f,%.6f\n",
+                    // Column 4 is the LIVE BOOST/SHOWTIME METER FRACTION the GUI was last
+                    // handed (-1 == none published yet). Same argument as columns 2-3: a
+                    // bitmap of a bar cannot say whether the bar is tracking anything, and
+                    // the log ticks on SIM frames while this ticks on PRESENTS, so pairing
+                    // them by time means guessing a frame rate. Stamped here, each frame
+                    // names the value it is supposed to be drawing.
+                    std::fprintf(lpCsv, "%u,%.6f,%.6f,%.6f\n",
                                  renderengine::guPresentCount,
                                  BrnDiag::gFilmLatch.mfLiveSimScale,
-                                 BrnDiag::gFilmLatch.mfLiveSimStep);
+                                 BrnDiag::gFilmLatch.mfLiveSimStep,
+                                 BrnDiag::gFilmLatch.mfLiveBoostFraction);
                     std::fclose(lpCsv);
                 }
             }
