@@ -85,6 +85,18 @@ ScoringSystem::ScoringSystem()
 // burnout-skillz tally (every record cleared, every parallel id slot freed to INVALID).
 void ScoringSystem::Construct(StuntModeScoring::AchievementManager* lpAchievementManager)
 {
+    // [!] FIX 2026-08-29 (event-finish round) -- THE INLINED CrashModeScoring::Construct WAS LOST.
+    // This line is not new console behaviour; it is behaviour this reconstruction had dropped.
+    // The X360 body folds CrashModeScoring::Construct in at 0x82338040..0x82338090 -- fifteen
+    // stores that attach the crash scorer's two FixedRingBuffers to their inline storage -- and
+    // only THEN does `bl CrashModeScoring::ClearData` at 0x82338094. The banner above already
+    // described this as "the crash scorer clears"; that reading kept the call and lost the span.
+    // Consequence, measured: mRecentlyHitPropSet.mpData stayed NULL, so the first prop contact in
+    // any mode crashed DealWithHitProp's Push at rva 0x2BA4AF (run scratch/flow_run/evtfin_meas1,
+    // 55.7 s into an offline Stunt Run). ClearData cannot cover for it -- RingBuffer::Clear only
+    // resets the position words. Full asm transcription + the two named omissions are at the
+    // Construct body in BrnCrashModeScoring.cpp.
+    mCrashModeScoring.Construct();
     mCrashModeScoring.ClearData();
     mStuntModeScoring.Construct(lpAchievementManager);
 

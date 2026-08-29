@@ -124,6 +124,68 @@ namespace BrnGameState
     static const s32 KI_SCORE_BONUS_PER_BILLBOARD_HIT = 10000;   // BrnCrashModeScoring.cpp:35 (prop flag bit 1)
 
     // ------------------------------------------------------------------------
+    // Construct  (DWARF BrnCrashModeScoring.h:70) -- NO STANDALONE X360 EXPORT.
+    // RECOVERED FROM ITS ONE INLINED CALL SITE, exactly the way ScoringSystem::StartModeTimer
+    // was (BrnScoringSystem_Timer.cpp): the X360 compiler folded this whole body into
+    // ScoringSystem::Construct @0x82337FE0, which is the ONLY caller.
+    //
+    // ⛔ THIS FUNCTION'S ABSENCE WAS A LIVE CRASH, not a cosmetic gap (measured 2026-08-29).
+    // Without it mRecentlyHitPropSet.mpData stays NULL and miMaxLength stays 0, so the FIRST
+    // prop the player touches in ANY game mode takes DealWithHitProp's
+    //     mRecentlyHitPropSet.Push(&luEntry)  ->  mpData[miWritePos] = *lpEntry
+    // straight through a null pointer. Run scratch/flow_run/evtfin_meas1, 55.7 s into an
+    // offline Stunt Run:
+    //     [EXCEPTION] EXCEPTION_ACCESS_VIOLATION ... access violation WRITING 0x0
+    //       BrnGameState::CrashModeScoring::DealWithHitProp + 0x7F   [rva 0x2BA4AF]
+    //       BrnGameState::GameStateModule::ProcessContacts + 0x6E8
+    //     rdx = r14 = 0xBC2 -- the prop index (3010) sitting in a register, about to be stored.
+    // The reconstruction of ScoringSystem::Construct had kept the `bl ClearData` at 0x82338094
+    // and dropped the fifteen inlined stores immediately above it. ClearData does NOT attach the
+    // ring: RingBuffer::Clear() only resets the three position words (CgsRingBuffer.h:111).
+    //
+    // EVIDENCE -- the inlined span, 0x82338040..0x82338090, transcribed store for store
+    // (r3 == &mCrashModeScoring == ss+0x20, r30 == 0, r9 == 8):
+    //     0x82338040  addi r3, r31, 0x20      ; this
+    //     0x82338048  addi r11, r3, 0x58      ; &mRecentlyHitPropSet
+    //     0x8233804C  addi r10, r3, 0x280     ; &mRecentStuntSet
+    //     0x82338054  addi r8,  r11, 0x14     ; &mRecentlyHitPropSet.maData   (ring header is 0x14)
+    //     0x8233805C  addi r7,  r10, 0x18     ; &mRecentStuntSet.maData       (CgsID is 8-aligned)
+    //     0x82338058  stw  r3,  0x0C(r3)      ; the debug component's owner back-pointer
+    //     0x82338060  stb  r30, 0x10(r3)      ; ...and its enabled byte
+    //     0x82338064  stw  r30, 0x27C(r3)     ; maRecentCrashes count word == Array::Clear()
+    //     0x82338068  stw  r30, 0x08(r11)     ; propSet.miReadPos   = 0   \
+    //     0x8233806C  stw  r9,  0x04(r11)     ; propSet.miMaxLength = 8    | == FixedRingBuffer
+    //     0x82338070  stw  r30, 0x0C(r11)     ; propSet.miWritePos  = 0    |    ::Construct()
+    //     0x82338074  stw  r30, 0x10(r11)     ; propSet.miLength    = 0    |
+    //     0x82338078  stw  r8,  0x00(r11)     ; propSet.mpData      = maData  <-- THE ATTACH
+    //     0x8233807C..0x8233808C               ; the identical five stores for mRecentStuntSet
+    //     0x82338090  stb  r30, 0x55(r3)      ; mbInfiniteCrashMode = false
+    //     0x82338094  bl   CrashModeScoring::ClearData
+    // The five-store group IS CgsContainers::FixedRingBuffer<T,8>::Construct() de-inlined
+    // (CgsRingBuffer.h:145 -> RingBuffer::Construct(maData, Length)), field for field and in the
+    // same order, which is the cross-check that the offsets are read correctly.
+    //
+    // [!] TWO STORES ARE NOT REPRODUCED, both into sub-objects this tree deliberately keeps as
+    // opaque byte storage, and both named rather than faked:
+    //   * +0x0C / +0x10 land inside maCrashScoreDebugComponent[0x20] -- the embedded
+    //     CrashScoreDebugComponent's own construction (owner pointer + enabled flag). Its real
+    //     type is homed in BrnCrashScoreDebugComponent.h and is not embedded here by value.
+    //     Behaviour lost: the crash-score debug overlay is not registered. Nothing on the
+    //     scoring path reads it.
+    //   * mRecentStuntSet (+0x280) is maRecentStuntSet[0x58], an opaque blob, so its attach
+    //     cannot be written by name. It is INERT on this tree -- grepped: no code anywhere
+    //     pushes to or reads it, so it cannot repeat the prop-ring crash. It becomes a real
+    //     FixedRingBuffer<CgsID,8> when DealWithShowtimeStunt's own recovery lands, and this
+    //     line must be restored IN THE SAME CHANGE.
+    // ------------------------------------------------------------------------
+    void CrashModeScoring::Construct()
+    {
+        mRecentlyHitPropSet.Construct();   // 0x82338068..0x82338078 (the five-store group)
+        maRecentCrashes.Clear();           // 0x82338064  stw r30, 0x27C(r3)
+        mbInfiniteCrashMode = false;       // 0x82338090  stb r30, 0x55(r3)
+    }
+
+    // ------------------------------------------------------------------------
     // ClearData  (X360 0x82320D10)
     // Reset all live-scoring state to its start-of-mode defaults. The X360 stores into
     // every scalar/timer/counter member by offset; reproduced BY NAME here. The two
