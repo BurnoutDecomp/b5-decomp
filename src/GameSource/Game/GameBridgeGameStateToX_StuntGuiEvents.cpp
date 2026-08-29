@@ -791,6 +791,54 @@ namespace
                 break;
             }
 
+            // =====================================================================
+            // ⭐⭐⭐ 127 / 128 / 139-144 -- THE SHOWTIME FAMILY (showtime-score wave 2026-08-29)
+            // =====================================================================
+            // jpt_823EA1F0's "cases 127,128,139-144" arm, @0x823ED714..0x823ED754, transcribed
+            // instruction for instruction:
+            //     lwz  r11, var_3534(r1)   ; the local set once in the prologue @0x823E9D84 to
+            //                                `r31 + 0x30000 - 0x5B48` == lpGameStateOutput+173240
+            //                                == OutputBuffer::GetScoringOutputInterface()
+            //     lwz  r11, 0xA3C(r11)     ; +0xA3C is ScoringOutputInterface::meGameModeType
+            //                                (the committed member run pins mePlayerRaceCarIndex
+            //                                 at +0xA34 and miNumPlayersInGame at +0xA38, so the
+            //                                 next word is meGameModeType -- and the sibling
+            //                                 event-status slice already reads it by that name)
+            //     cmpwi 2 / beq ; cmpwi 0x10 / bne -> default   ; the offline/online showtime pair
+            //     mr r4, r3 ; mr r5, r31 ; mr r6, r20 ; mr r3, r29
+            //     bl TranslateShowtimeActionToGuiEvent
+            //
+            // ⚠️ Read through the SCORING OUTPUT INTERFACE, not through
+            // GetModeManager()->GetCurrentGameModeType(), even though both words track the same
+            // mode: the console reads the published output-buffer copy at this seat, and the
+            // ModeManager route would be a different member on a different object with a
+            // different publish latency. Same rule the GUI-377 producer's own note states.
+            //
+            // ⛔ NOT MODE-GATED BY US TWICE: the arm below is the whole gate; the callee has none.
+            case BrnGameState::GameStateModuleIO::E_ACTION_WORLD_STUNT_PERFORMED:   // 127
+            case BrnGameState::GameStateModuleIO::E_ACTION_OVERHEAD_SIGN_HIT:       // 128
+            case BrnGameState::GameStateModuleIO::E_ACTION_VEHICLE_LEAPT:           // 139
+            case BrnGameState::GameStateModuleIO::E_ACTION_VEHICLE_HIT:             // 140
+            case BrnGameState::GameStateModuleIO::E_ACTION_ENTER_NEW_ROAD:          // 141
+            case BrnGameState::GameStateModuleIO::E_ACTION_SHOWTIME_UPDATE:         // 142
+            case BrnGameState::GameStateModuleIO::E_ACTION_SHOWTIME_MODE_SWITCH:    // 143
+            case BrnGameState::GameStateModuleIO::E_ACTION_JUST_BOUNCED:            // 144
+            {
+                const BrnGameState::GameStateModuleIO::ScoringOutputInterface* const lpScoring =
+                    lpGameStateOutput->GetScoringOutputInterface();
+
+                // The console does not null-test here (it computes the address inline off a
+                // buffer it already asserted), so neither does this -- adding a test would be an
+                // invented arm. The accessor returns the address of an embedded sub-object.
+                const s32 liGameModeType = static_cast<s32>(lpScoring->meGameModeType);
+                if (liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
+                    liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+                {
+                    TranslateShowtimeActionToGuiEvent(liActionType, lpAction, lpGuiInput);
+                }
+                break;
+            }
+
             default:
                 // [stuntrace wave E1, 2026-08-26] the EVENT-FLOW arms (23/37/38/39/44/47/200/201)
                 // live in the sibling GameBridgeGameStateToX_EventFlowGuiEvents.cpp -- one drain

@@ -84,6 +84,9 @@
 // keystone's by-value embed is unaffected, which is what the previous FLAG was protecting.
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface + BoostOutputInfo + RaceCarState
 #include "GameSource/Math/BrnMathUtils.h"             // BrnMath::Magnitude2D @0x822B1DD8 (the XZ length)
+// [showtime score wave 2026-08-29] DealWithShowtimeStunt dereferences its WorldStuntAction to
+// reach mId. A .cpp include, NOT a header include -- the keystone's by-value embed is unaffected.
+#include "GameSource/GameState/BrnGameActions.h"       // GameStateModuleIO::WorldStuntAction
 #include "rw/math/vpu/vector3_operation.h"            // rw::math::vpu::Magnitude / Dot / operator-
 
 namespace BrnGameState
@@ -172,17 +175,60 @@ namespace BrnGameState
     //     type is homed in BrnCrashScoreDebugComponent.h and is not embedded here by value.
     //     Behaviour lost: the crash-score debug overlay is not registered. Nothing on the
     //     scoring path reads it.
-    //   * mRecentStuntSet (+0x280) is maRecentStuntSet[0x58], an opaque blob, so its attach
-    //     cannot be written by name. It is INERT on this tree -- grepped: no code anywhere
-    //     pushes to or reads it, so it cannot repeat the prop-ring crash. It becomes a real
-    //     FixedRingBuffer<CgsID,8> when DealWithShowtimeStunt's own recovery lands, and this
-    //     line must be restored IN THE SAME CHANGE.
+    //   * mRecentStuntSet (+0x280) was maRecentStuntSet[0x58], an opaque blob, so its attach
+    //     could not be written by name.
+    //     ✅ RESTORED 2026-08-29 (showtime-score wave), in the same change that un-opaqued the
+    //     member and landed DealWithShowtimeStunt -- exactly as this note demanded. It is no
+    //     longer inert: DealWithShowtimeStunt Pushes into it, so without the attach it would
+    //     repeat the prop-ring crash verbatim (mpData null, miMaxLength 0) on the first stunt
+    //     element scored in showtime.
     // ------------------------------------------------------------------------
     void CrashModeScoring::Construct()
     {
         mRecentlyHitPropSet.Construct();   // 0x82338068..0x82338078 (the five-store group)
+        mRecentStuntSet.Construct();       // 0x8233807C..0x8233808C (the identical five stores)
         maRecentCrashes.Clear();           // 0x82338064  stw r30, 0x27C(r3)
         mbInfiniteCrashMode = false;       // 0x82338090  stb r30, 0x55(r3)
+    }
+
+    // ------------------------------------------------------------------------
+    // DealWithShowtimeStunt  (X360 0x82320F38)
+    // De-dupe a stunt element into the recent-stunt window: linear-scan the live window for a
+    // CgsID equal to the action's, and Push only if it is absent. No score is awarded here --
+    // the whole function is the FIND-OR-INSERT half of the "don't pay twice for the same
+    // billboard" rule; the paying half is elsewhere.
+    //
+    // ⚠️⚠️ HEX-RAYS READS THE COMPARISON AS 32-BIT. Its pseudocode is
+    //     if ( *(8 * (v7 % v6) + v8 + 4) == *(a2 + 4) ) break;
+    // -- a WORD compare at element+4. The asm is three 64-bit instructions:
+    //     0x82320FA8  ld    r8, 0(r29)       ; the whole 8-byte CgsID out of the action
+    //     0x82320FBC  ldx   r11, r11, r9     ; the whole 8-byte element
+    //     0x82320FC0  cmpld cr6, r11, r8     ; a 64-bit compare
+    // On big-endian PPC a u64's low word sits at +4, which is how the decompiler arrived at
+    // "+4"; taking that literally on a little-endian host would compare the WRONG HALF of every
+    // id. CgsID is `typedef u64`, so `==` is the faithful transcription.
+    //
+    // The walk itself is RingBuffer<CgsID>::operator[] de-inlined -- `miReadPos + index`,
+    // `% miMaxLength`, `slwi 3` -- including its own range assert (the console's is
+    // "Attempt to access element outside range", CgsRingBuffer.h:258, which is the same assert
+    // this tree's operator[] already carries), so the indexed read is written through the
+    // container rather than re-implemented here. The loop bound is re-read from miLength on
+    // every iteration exactly as the console re-loads +0x290 at 0x82320FC8.
+    // ------------------------------------------------------------------------
+    void CrashModeScoring::DealWithShowtimeStunt(
+            const GameStateModuleIO::WorldStuntAction* lpStuntAction)
+    {
+        for (s32 liIndex = 0; liIndex < mRecentStuntSet.GetLength(); ++liIndex)
+        {
+            if (mRecentStuntSet[static_cast<u32>(liIndex)] == lpStuntAction->mId)
+            {
+                return;   // 0x82320FC4 `beq` -> the epilogue: already recorded, nothing to do
+            }
+        }
+
+        // 0x82320FD8: `mr r4, r29 / addi r3, r28, 0x280 / bl RingBuffer<__int64>::Push` -- the
+        // console hands Push the ACTION pointer, which is &action->mId because mId is at +0x00.
+        mRecentStuntSet.Push(&lpStuntAction->mId);
     }
 
     // ------------------------------------------------------------------------

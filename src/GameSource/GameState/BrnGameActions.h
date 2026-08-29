@@ -13,6 +13,7 @@
 #include "SharedClasses/World/BrnWorldRegion.h"               // [gateui] BrnWorld::ECounty (OnStuntElementCompleteForCountyAction)
 #include "SharedClasses/Progression/BrnTrainingTypes.h"       // [stuntrace] BrnProgression::ETrainingType (RequestGameTrainingAction)
 #include "SharedClasses/Progression/BrnTrophyUnlockData.h"    // BrnProgression::TrophyUnlockData (TrophyUnlockAction::meUnlockType) -- see the note below
+#include "SharedClasses/Traffic/BrnTrafficVehicleType.h"      // [showtime-score] BrnTraffic::VehicleClass / VehicleScoreCategory (VehicleHitAction)
 
 namespace BrnResource
 {
@@ -274,7 +275,59 @@ enum EGameActionType
     E_ACTION_ON_STUNT_ELEMENT_COMPLETE_BY_TYPE    = 60,  // X360 0x8239D430, size 4
     E_ACTION_STUNT_ELEMENT_BOOST        = 61,    // X360 0x8239D1A0, size 4
     E_ACTION_WORLD_STUNT_PERFORMED      = 127,   // X360 0x8239CE30 (DWARF :132 gives 122 -- PS3 value)
-    E_ACTION_POWER_PARK_RESULT          = 139,   // DWARF BrnGameActions.h:149
+
+    // =========================================================================================
+    // ⛔⛔ VALUE CORRECTION 2026-08-29 (showtime-score wave): POWER_PARK_RESULT was 139, AND 139
+    // IS SOMEBODY ELSE'S SEAT. The committed line said "= 139, // DWARF BrnGameActions.h:149"
+    // -- i.e. the raw PS3-DWARF value imported with NO band shift, in the middle of the +8 band
+    // this same file documents. It was latent (nothing switches on the enumerator; it is only a
+    // GameAction<T> template tag) and would have collided the moment 139's real occupant landed.
+    //
+    // 139's REAL occupant, PRODUCER-PINNED, not inferred: GameStateModule::ProcessGameEvents'
+    // case 47 posts it in the two instructions AFTER the leap scorer runs (@0x823A3D30):
+    //     bl BrnGameState__CrashModeScoring__DealWithVehicleLeaping
+    //     li r6, 1 ; li r5, 0x8B (139) ; bl VariableEventQueue<13312,16>::AddEvent
+    // -> DWARF 131 E_ACTION_VEHICLE_LEAPT, +8. Its GUI twin is GuiLeaptVehicleEvent (id 393),
+    // which TranslateShowtimeActionToGuiEvent posts for exactly this action.
+    //
+    // POWER_PARK_RESULT's real X360 seat is 147, also producer-pinned in the same function
+    // (@0x823A3EBC, immediately after ProgressionManager::OnPowerParkResult and
+    // AchievementManagerBase::OnPowerParking):
+    //     lwz r11, 0(r25) ; li r6, 8 ; li r5, 0x93 (147) ; stw r11, rec+0x00
+    //     lwz r11, 4(r25) ;                              ; stw r11, rec+0x04
+    // -- an 8-byte record whose two words are exactly PowerParkResultAction's
+    // {meOutcome, miOverallRating}. DWARF 139 + 8 == 147, the same band.
+    // =========================================================================================
+    E_ACTION_POWER_PARK_RESULT          = 147,   // DWARF 139 (+8 X360); size 8  BAND
+
+    // ---- THE SHOWTIME GAME-ACTION FAMILY (showtime-score wave 2026-08-29) --------------------
+    // The eight actions TranslateGameActionsToGuiEvents routes to
+    // TranslateShowtimeActionToGuiEvent @0x823E1988 (jump table jpt_823EA1F0 "cases 127,128,
+    // 139-144" @0x823ED714). Every one of the six added here is DWARF-named AND producer-pinned,
+    // and the two sets agree eight-for-eight -- which is the strongest available check that the
+    // band shift is read right:
+    //   X360 128 = DWARF 123 OVERHEAD_SIGN_HIT (+5)  ProcessGameEvents case 118 @0x823A16D8,
+    //              posted right after CrashModeScoring::DealWithHitOverheadSign; GUI twin
+    //              GuiHUDMessageSignSmashed (400).
+    //   X360 139 = DWARF 131 VEHICLE_LEAPT     (+8)  see the correction banner above; GUI twin
+    //              GuiLeaptVehicleEvent (393).
+    //   X360 140 = DWARF 132 VEHICLE_HIT       (+8)  UpdateShowtimeMode @0x82381048, posted
+    //              right after CrashModeScoring::DealWithScoreForVehicleClass; GUI twin
+    //              GuiHitVehicleEvent (394).
+    //   X360 141 = DWARF 133 ENTER_NEW_ROAD    (+8)  ProcessGameEvents case 48 @0x823A3D5C,
+    //              size 1. NO GUI twin -- and the console's own case 141 in the showtime
+    //              translator is EMPTY, which is the corroboration.
+    //   X360 142 = DWARF 134 SHOWTIME_UPDATE   (+8)  ProcessGameEvents case 49 @0x823A43E8;
+    //              GUI twin GuiShowtimeScoreUpdate (396), same three words in the same order.
+    //   X360 144 = DWARF 136 JUST_BOUNCED      (+8)  ProcessGameEvents case 52 @0x823A3DD0;
+    //              GUI twin GuiShowtimeJustBounced (402).
+    // (143 SHOWTIME_MODE_SWITCH and 146 SHOWTIME_INTRO_START were already pinned above.)
+    E_ACTION_OVERHEAD_SIGN_HIT          = 128,   // DWARF 123 (+5 X360); size 8  BAND
+    E_ACTION_VEHICLE_LEAPT              = 139,   // DWARF 131 (+8 X360); size 1  BAND
+    E_ACTION_VEHICLE_HIT                = 140,   // DWARF 132 (+8 X360); size 36 BAND
+    E_ACTION_ENTER_NEW_ROAD             = 141,   // DWARF 133 (+8 X360); size 1  BAND
+    E_ACTION_SHOWTIME_UPDATE            = 142,   // DWARF 134 (+8 X360); size 12 BAND
+    E_ACTION_JUST_BOUNCED               = 144,   // DWARF 136 (+8 X360); size 48 BAND
 
     // X360-ATTESTED value (NOT a DWARF-only import -- both ends agree on 15):
     //   producer  GameStateModule::ProcessGameEvents @0x823A0A18, the E_EVENT_COMPLETED_STUNT
@@ -689,11 +742,34 @@ struct StopBoostingAction : public GameAction<E_ACTION_STOP_BOOSTING>
 //   +0x20 -> when set, OnBounce adds KF_AFTERTOUCH_FOR_STATIONARY_BOUNCE_BOOST to
 //            mfAftertouchPower. DecFIGS BrnCrashPlayManager.cpp:84 names that constant
 //            literally, and DecFIGS BrnGameActions.h:3439 names the bool `mbFromStationary`.
+//
+// ⭐⭐ GROWN 2026-08-29 (showtime-score wave) -- AND THE GROWTH CORROBORATES THE TWO NAMES ABOVE
+// FROM A SECOND, INDEPENDENT CONSUMER. The head is no longer wholly unrecovered: the producer,
+// GameStateModule::ProcessGameEvents case 52 @0x823A3D74..0x823A3DE4, builds the 48-byte record
+// store for store, and the SECOND consumer -- BrnGameModule::TranslateShowtimeActionToGuiEvent
+// @0x823E1BBC -- reads +0x21 into GuiShowtimeJustBounced::mbOnCar and +0x22 into its
+// mbBoostedBounce. So +0x21 is `mbOnCar` on BOTH sides of the image, derived two different ways
+// (CrashPlayManager's behaviour above, and the DWARF-named GUI twin here). +0x22 is new.
+// The producer's store map:
+//     rec+0x10  lwz r11, 0(event)
+//     rec+0x14  lwz r8,  0x20D0(gsm)  == CrashModeScoring +0x2E0 miCurrentComboCount
+//     rec+0x18  the 4-word sum from gsm+0x20D8 == maiNumCarsCrashed[0..3]
+//     rec+0x1C  lwz r11, 8(event)
+//     rec+0x20  lbz r11, 4(event)   rec+0x21  lbz r11, 5(event)
+//     rec+0x22  lbz r8,  6(event)   rec+0x23  lbz r8,  7(event)
+//     li r6, 0x30 (48) ; li r5, 0x90 (144)
 struct JustBouncedAction
 {
-    u8   maPad00[0x20];      // +0x00 unrecovered ARTIST head -- never read by OnBounce
+    u8   maPad00[0x10];      // +0x00 still-unrecovered ARTIST head -- outside the store run
+    s32  miEventWord0;       // +0x10 FLAG name (the game event's word 0)
+    s32  miCurrentComboCount;// +0x14
+    s32  miTotalVehiclesCrashed; // +0x18 (maiNumCarsCrashed[0..3] summed by the producer)
+    s32  miEventWord2;       // +0x1C FLAG name (the game event's word 2)
     bool mbFromStationary;   // +0x20 DWARF BrnGameActions.h:3439
     bool mbOnCar;            // +0x21 DWARF BrnGameActions.h:3440
+    bool mbBoostedBounce;    // +0x22 DWARF BrnGuiEventTypeDefs.h:4520 via the GUI twin
+    u8   mu8EventByte7;      // +0x23 FLAG name -- stored by the producer, read by nobody
+    u8   maPad24[0x30 - 0x24]; // +0x24..+0x2F -- outside the store run; posted size is 48.
 };
 
 // Consumer: CrashPlayManager::OnEnterRoad @0x822A7D68 -- `ld r11, 0x10(r30)`, twice, and
@@ -1163,6 +1239,84 @@ struct PowerParkResultAction : public GameAction<E_ACTION_POWER_PARK_RESULT>
     BrnWorld::EPowerParkOutcome meOutcome;        // +0x00  (DWARF BrnGameActions.h:3497)
     s32                         miOverallRating;  // +0x04  (DWARF BrnGameActions.h:3498)
 };
+
+// =============================================================================================
+// THE SHOWTIME GAME-ACTION RECORDS (showtime-score wave 2026-08-29).
+//
+// Each is transcribed from BOTH ends of its wire: the producer's stack build (the store map is
+// quoted per record) and the reader in BrnGameModule::TranslateShowtimeActionToGuiEvent
+// @0x823E1988, which is the only consumer of all six. Where the producer writes a slot the
+// translator never reads, the slot is still carved -- named where the producer names it, padded
+// and said so where it does not -- so nothing silently shifts a later member.
+// =============================================================================================
+
+// Action 128, 8 bytes. Producer: GameStateModule::ProcessGameEvents case 118 @0x823A16D0:
+//     addi r3, r31, 0x1DF0 ; bl CrashModeScoring::DealWithHitOverheadSign
+//     lbz  r11, 0(r25)         ; the game event's own leading byte
+//     li   r11, 0x2710         ; 10000 == KI_SCORE_BONUS_PER_OVERHEAD_SIGN
+//     stw  r11, rec+0x00       ; miPointsAwarded
+//     stb  <the lbz>, rec+0x04
+// The whole case is itself mode-gated 2/16 at 0x823A16A0, i.e. overhead signs only score in
+// showtime. The translator reads +0x00 only, into GuiHUDMessageSignSmashed::miPointsAwarded.
+struct OverheadSignHitAction : public GameAction<E_ACTION_OVERHEAD_SIGN_HIT>
+{
+    s32 miPointsAwarded;    // +0x00  (the console stores the literal 10000 here)
+    u8  mu8SignFlags;       // +0x04  FLAG name: copied byte-for-byte from the game event's
+                            //        leading byte; no consumer in the image reads it, so the
+                            //        name describes the wire, not a recovered semantic.
+    u8  maPad5[3];          // +0x05..+0x07 -- never written; posted size is 8.
+};
+
+// Action 140, 36 bytes -- THE SHOWTIME PER-CAR SCORE RECORD. Producer:
+// GameStateModule::UpdateShowtimeMode @0x82380FD8..0x82381050. The five out-pointers below are
+// literally the last five parameters of the CrashModeScoring::DealWithScoreForVehicleClass call
+// two instructions earlier (r7/r8/r9/r10 + the stack slot), so the names are that function's
+// own parameter names, not invented ones:
+//     r7  = rec+0x04  lpiVehicleTypeCrashed
+//     r8  = rec+0x0C  lpiVehicleBaseScore
+//     r9  = rec+0x10  lpeVehicleScoreCategory
+//     r10 = rec+0x14  lpiScoreMultiplierEarned
+//     sp  = rec+0x1C  lpiComboBonusEarned
+// and the four slots the producer fills itself:
+//     rec+0x00  lwz r9, 4(trafficInfo)          the vehicle class
+//     rec+0x08  *(gsm+0x20D8..0x20E4) summed    == maiNumCarsCrashed[0]+[1]+[2]+[3]
+//                                               (gsm+0x1DF0 is the scorer, so 0x20D8-0x1DF0
+//                                                == +0x2E8 == maiNumCarsCrashed[0])
+//     rec+0x18  lwz r9, 0x20D4(gsm)             == scorer +0x2E4 miScoreMultiplier
+//     rec+0x20  sth r8, ...  (u16)              the traffic entity index
+struct VehicleHitAction : public GameAction<E_ACTION_VEHICLE_HIT>
+{
+    BrnTraffic::VehicleClass         meVehicleClass;            // +0x00
+    s32                              miVehicleTypeCrashed;      // +0x04
+    s32                              miTotalVehiclesCrashed;    // +0x08 (the summed per-class tally)
+    s32                              miVehicleBaseScore;        // +0x0C
+    BrnTraffic::VehicleScoreCategory meVehicleScoreCategory;    // +0x10
+    s32                              miScoreMultiplierEarned;   // +0x14
+    s32                              miTotalScoreMultiplier;    // +0x18
+    s32                              miComboBonusEarned;        // +0x1C
+    u16                              muTrafficEntityIndex;      // +0x20
+    u16                              mu16Pad22;                 // +0x22 -- never written; size 36.
+};
+
+// Action 142, 12 bytes -- THE SHOWTIME SCORE UPDATE. Producer: ProcessGameEvents case 49
+// @0x823A43C0 (and again from UpdateRoadRulesManager with the same id/size):
+//     lwz r4, 0(event)                       -> rec+0x00
+//     bl GameStateModule::GetActiveRaceCarIndex ; stw r3 -> rec+0x04
+//     lwz r11, 4(event)                      -> rec+0x08
+// The record is field-for-field the GUI twin BrnGui::GuiShowtimeScoreUpdate (id 396, DWARF
+// BrnGuiEventTypeDefs.h:6378-6380), which is where these three names come from; the translator
+// copies all three words straight across.
+struct ShowtimeUpdateAction : public GameAction<E_ACTION_SHOWTIME_UPDATE>
+{
+    BrnNetwork::NetworkPlayerID mNetworkPlayerID;       // +0x00
+    ::EActiveRaceCarIndex       meActiveRaceCarIndex;   // +0x04
+    s32                         miShowtimeScore;        // +0x08
+};
+
+// Action 144 (JustBouncedAction) is NOT re-declared here: it already had a home further up in
+// this file -- the CrashPlayManager::OnBounce slice -- and that record was GROWN in place with
+// this wave's producer store map instead of being forked. See its banner for the two-consumer
+// corroboration of mbOnCar at +0x21.
 
 // "A stunt element has been completed" action. DWARF home BrnGameActions.h:3837 (true owning home);
 // modelled here per the DWARF SHAPE -- the five named members the PS3 DecFIGS DWARF lists. The

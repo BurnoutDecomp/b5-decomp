@@ -16,6 +16,11 @@ struct TriggerCrashBreakerEvent;
 struct PickupEvent;
 struct VehicleLeaptEvent;
 
+// [showtime-score 2026-08-29] DealWithShowtimeStunt names its argument by pointer only, so a
+// forward declaration keeps BrnGameActions.h out of this keystone header (the by-value embed
+// rule above). The definition lives in GameSource/GameState/BrnGameActions.h.
+namespace BrnGameState { namespace GameStateModuleIO { struct WorldStuntAction; } }
+
 // ⛔⛔ THE CLASS-KEY IS LOAD-BEARING ON MSVC, AND THIS ONE WAS WRONG (fixed 2026-08-29).
 // The real type is `struct RCEntityActiveRaceCarOutputInterface`
 // (BrnRaceCarEntityModuleOutputInterface.h:139). This forward declaration said `class`, and
@@ -127,6 +132,11 @@ struct CrashModeScoring
                                       s32* lpiScoreMultiplierEarned,
                                       s32* lpiComboBonusEarned);                    // X360 0x82338778
     void DealWithVehicleLeaping(const VehicleLeaptEvent* lpLeapEvent);             // X360 0x82312980
+
+    // [showtime-score 2026-08-29] X360 0x82320F38. The recent-stunt de-dupe: record this stunt
+    // element's 64-bit CgsID in mRecentStuntSet unless the live window already holds it.
+    // Sole caller: BrnGameModule::TranslateShowtimeActionToGuiEvent @0x823E1988 case 127.
+    void DealWithShowtimeStunt(const GameStateModuleIO::WorldStuntAction* lpStuntAction);
     void GetVehicleScoreData(BrnTraffic::VehicleClass leVehicleClass,
                              CgsID lVehicleTypeID,
                              s32* lpiScore, s32* lpiMultiplier,
@@ -173,7 +183,14 @@ struct CrashModeScoring
     Array<RecentCrash, KI_MAX_RECENTLY_HIT_CARS> maRecentCrashes; // +0x7C  h:234 the live recent-hit-cars set
                                                                   //        (count word @+0x27C; ends @+0x280)
 
-    u8  maRecentStuntSet[0x58];               // +0x280 FixedRingBuffer<CgsID,8> mRecentStuntSet (h:237; opaque)
+    // +0x280 h:237 -- the recent-stunt de-dupe window. UN-OPAQUED 2026-08-29 (showtime-score
+    // wave) from `u8 maRecentStuntSet[0x58]`, because DealWithShowtimeStunt is its only user
+    // and cannot be written against a byte blob. The guest header/stride is proven twice over:
+    // ScoringSystem::Construct's inlined attach (@0x8233807C, `addi r7, r10, 0x18` -- the CgsID
+    // element array is 8-aligned so it starts 0x18 in, not 0x14), and DealWithShowtimeStunt's
+    // own walk (@0x82320F70: mpData +0x00, miMaxLength +0x04, miReadPos +0x08, miLength +0x10,
+    // elements `slwi 3` == 8 bytes). Host sizeof is 0x58 as well, though nothing depends on it.
+    CgsContainers::FixedRingBuffer<CgsID, 8> mRecentStuntSet;   // +0x280
 
     s32 miNumWheelsLastFrame;                 // +0x2D8 h:239
     s32 miBaseScore;                          // +0x2DC h:242  (raw crash score accumulator)
