@@ -1,5 +1,6 @@
 #include "GameSource/Physics/BrnPhysicsModule.h"
 
+#include <cstdlib>                                                            // getenv (the [spy-owners] BRN_SHOWTIME_WATCH histogram)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                    // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"      // sim IO buffers + OutContactSpy / InAddPotentialContact
@@ -128,6 +129,61 @@ namespace BrnPhysics
 
         const u32 luEntityTypeA = GetIdOwner(lContactSpy.mIDA);
         const u32 luEntityTypeB = GetIdOwner(lContactSpy.mIDB);
+
+        // [DIAG] NOT IN THE X360 BINARY. THE OWNER HISTOGRAM -- the witness that tells hop zero
+        // apart from a downstream one. GameStateModule::ProcessContacts measured, over 7,801 free-
+        // burn frames in which the player provably rammed four traffic cars ([T4-hit] slots 0/3/5,
+        // outcomes SLAMMED/CHECKED/CRASHING, crasherOwner=1), props max=22 on 1,723 frames and
+        // TRAFFIC max=0 on ZERO frames. StoreContact's `case 2` is the only writer of
+        // mTrafficContactQueue and it dispatches on exactly `luEntityTypeA` below -- so either the
+        // simulation never hands this function a spy whose A- or B-side owner is
+        // E_ENTITYTYPE_TRAFFIC_VEHICLE(2), or it does and the store is lost afterwards. Those are
+        // completely different defects in different subsystems and NOTHING measured so far can
+        // tell them apart. This counts every (ownerA, ownerB) pair the simulation actually emits.
+        // ⚠️ It counts BEFORE every guard and every early-out, for the same reason the
+        // [contact-entry] witness accumulates before the mode gates: a contact queue is per-frame
+        // and a gated count measures the gate. [[diagnostics-that-lie]]
+        // Bounded: the table is 36x36 u16 counters and at most 24 lines are ever printed.
+        // DELETE-WHEN the traffic contact queue is proven to fill.
+        {
+            static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
+            static u32        suSpies = 0;
+            static s32        siLines = 0;
+            static u16        sauPairs[36][36] = { { 0 } };
+
+            if (sbWatch)
+            {
+                const u32 luA = (luEntityTypeA < 36u) ? luEntityTypeA : 35u;
+                const u32 luB = (luEntityTypeB < 36u) ? luEntityTypeB : 35u;
+                if (sauPairs[luA][luB] < 0xFFFFu) { ++sauPairs[luA][luB]; }
+                ++suSpies;
+
+                // ⚠️ 500, not 4000, and the FIRST spy always prints. A 200 s showtime run whose
+                // crash landed in an empty street produced 10 prop frames total and never reached
+                // a 4000-spy threshold at all -- so the histogram printed NOTHING, which reads
+                // identically to "the probe is broken". A witness whose period exceeds the
+                // event rate measures the witness. [[diagnostics-that-lie]]
+                if (CgsDev::Log::gpDebugPrint != 0 && siLines < 30 &&
+                    (suSpies == 1u || (suSpies % 500u) == 0u))
+                {
+                    ++siLines;
+                    *CgsDev::Log::gpDebugPrint << "[spy-owners] spies=" << static_cast<s32>(suSpies) << " pairs:";
+                    for (u32 luI = 0; luI < 36u; ++luI)
+                    {
+                        for (u32 luJ = 0; luJ < 36u; ++luJ)
+                        {
+                            if (sauPairs[luI][luJ] != 0)
+                            {
+                                *CgsDev::Log::gpDebugPrint
+                                    << " " << static_cast<s32>(luI) << "x" << static_cast<s32>(luJ)
+                                    << "=" << static_cast<s32>(sauPairs[luI][luJ]);
+                            }
+                        }
+                    }
+                    *CgsDev::Log::gpDebugPrint << "\n";
+                }
+            }
+        }
 
         // Illegal-pair guards (negated conditions; X360 lines 0x454/0x458 == :1108/:1112).
         if (luEntityTypeA == static_cast<u32>(BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE))
