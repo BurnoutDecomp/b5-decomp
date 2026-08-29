@@ -230,7 +230,11 @@ void CrashPlayManager::Activate( ActiveRaceCar* /*lpPlayerActiveRaceCar*/,
     mRecentCrashSet.Clear();
     mRecentLeaptSet.Clear();
 
-    CGS_LOG( "SHOWTIME! CrashPlayManager::Activate called.\n" );
+    // The console's tail: gate on `gxMessageFilterFlags & 1`, then the gpDebugPrint virtual.
+    if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint << "SHOWTIME! CrashPlayManager::Activate called.\n";
+    }
 }
 
 // =================================================================================================
@@ -364,7 +368,7 @@ void CrashPlayManager::UpdateMomentum( f32 lfSimTimerTimeStep,
     }
     mLastPlayerPos = lPlayerPosition;
 
-    if( lpPlayerActiveRaceCar->GetAirTime() > 0.0f )
+    if( lpPlayerActiveRaceCar->GetPhysicsState()->mfTimeInAir > 0.0f )
     {
         mfTimeSinceLastOnGround += lfSimTimerTimeStep;
 
@@ -394,7 +398,7 @@ void CrashPlayManager::UpdateMomentum( f32 lfSimTimerTimeStep,
     // latches off the moment it touches down.
     if( mbEarningAirTimeBoost )
     {
-        if( lpPlayerActiveRaceCar->GetAirTime() > 0.0f )
+        if( lpPlayerActiveRaceCar->GetPhysicsState()->mfTimeInAir > 0.0f )
         {
             mfBoostPercentage += KF_BOOST_FOR_INITIAL_AIRTIME * lfSimTimerTimeStep;
             ClampBoostLevel();
@@ -528,7 +532,7 @@ void CrashPlayManager::UpdateTrafficStomp( f32 /*lfSimTimerTimeStep*/,
             // The console inlines VehicleEffectsInputInterface::CreateAirRam (DWARF :94) down to the
             // event it builds, then AddEventSafe. Reproduced field for field; the magnitude rides in
             // the direction vector's fourth lane, which is what Vector3Plus is for.
-            CreateAirRamEvent lAirRamEvent;
+            BrnPhysics::Vehicle::CreateAirRamEvent lAirRamEvent;
             lAirRamEvent.mVolumeId       = mPlayerCarVolumeInstanceID;
             lAirRamEvent.muEffectFlags   = 6;
             lAirRamEvent.mfDecay         = KF_TRAFFIC_STOMP_DECAY_RATE;

@@ -949,6 +949,10 @@ public:
     //  mPlaceOnTrackPosition, which ALREADY has a named reader at :194.)
     bool IsTouchingPlayer() const                    { return mbIsTouchingPlayer; }            // +0x773
     bool IsTouchingAnotherRaceCar() const            { return mbIsTouchingAnotherRaceCar; }    // +0x772
+    // DWARF BrnActiveRaceCar.h:826, the third of the same accessor family. Read by
+    // CrashPlayManager::UpdateTrafficStomp @0x822F90F0 (`lbz r11, 0x774(r29)`) to pick the
+    // grounded vs airborne traffic-stomp air-ram power.
+    bool IsTouchingWorld() const                     { return mbIsTouchingWorld; }             // +0x774
     bool IsOnStartLine() const
     { return meRaceStartState == E_RACE_START_STATE_ON_START_LINE; }                           // +0x77C
 
