@@ -327,6 +327,17 @@ public:
     // it is defined inline here, same precedent as the pairs above.
     s8   GetCurrentProgressionRank() const     { return mi8CurrentProgressionRank; }
 
+    // ADDITIVE GROW (CrashNavSettings wave, 2026-08-29): the credits-unlock flag at +118036
+    // (mbHasUnlockedCredits, already declared below). Two X360 sites, both inlining the raw
+    // far-member byte through the GuiCache's profile pointer, so there is no standalone
+    // symbol -- same precedent as GetCurrentProgressionRank above:
+    //   CrashNavSettings::HandleControllerInput @0x824D916C -- `stbx r30(1), profile, 0x1CD14`
+    //     when the up/down/left/left/up/down/right/right cheat completes;
+    //   CrashNavSettings::ShowMenu @0x824BCE28 -- `lbzx r11, profile, 0x1CD14`, which decides
+    //     whether the Credits row is selectable.
+    bool HasUnlockedCredits() const            { return mbHasUnlockedCredits; }
+    void SetHasUnlockedCredits(bool lbValue)   { mbHasUnlockedCredits = lbValue; }
+
     // ADDITIVE GROW: the persisted "car the player is in / where they left it" pair at +80/+88
     // (mSpawnCarId / mSpawnWheelId). The X360 emits no accessor symbols -- ProgressionManager::
     // OnPlayerCarChange @0x8237AC38 open-codes the two stores as `std r29, 0x1C0(progMgr)` /

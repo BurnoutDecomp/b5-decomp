@@ -15,6 +15,7 @@
 
 #include "GameShared/GameClasses/Gui/CgsSaveLoad.h"        // CgsGui::ConvertWideCharToAsciiSafe
 #include "GameShared/GameClasses/Gui/CgsGuiKeyboard.h"     // CgsGui::GuiKeyboardListener, CgsUtf16
+#include "GameSource/Gui/Flow/Screen/States/BrnCrashNavSettings.h"   // BrnGui::CrashNavProductCodeKeyboardListener (its real home)
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
 
 namespace CgsGui
@@ -128,19 +129,13 @@ namespace BrnGui
     }
 
     // ---- BrnCrashNavSettings.h:65..69 ----
+    // ⭐ NO LOCAL RE-DECLARATION ANY MORE (2026-08-29). CrashNavProductCodeKeyboardListener
+    // has a real home -- GameSource/Gui/Flow/Screen/States/BrnCrashNavSettings.h, included
+    // above -- and that home landed with the CrashNavSettings TU. The copy that used to sit
+    // here declared the same BrnGui:: qualified name with its own layout, i.e. an ODR fork
+    // that no compile gate can see and only a link (or a layout drift) would ever surface.
     // KI_PRODUCT_CODE_LENGTH = 20; macKeyboardString[20] @+0x04, mbKeyboardClosed @+0x18,
-    // mbNewData @+0x19 (vptr @0).
-    struct CrashNavProductCodeKeyboardListener : public CgsGui::GuiKeyboardListener
-    {
-        static const s32 KI_PRODUCT_CODE_LENGTH = 20;  // BrnCrashNavSettings.h:65
-
-        // @ 0x824C1850
-        virtual void KeyboardClosed(const CgsGui::CgsUtf16* lpResultText);
-
-        char macKeyboardString[KI_PRODUCT_CODE_LENGTH];  // +0x04 .. 0x17
-        bool mbKeyboardClosed;                           // +0x18
-        bool mbNewData;                                  // +0x19
-    };
+    // mbNewData @+0x19 (vptr @0) -- all still X360-proven, now stated once.
 
     // @ 0x824C1850 -- mark the dialog closed; if a result was returned, scan the first 20
     // UTF-16 code units for a terminator. Only when a terminator is found within those 20

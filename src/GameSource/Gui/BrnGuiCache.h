@@ -760,6 +760,19 @@ namespace BrnGui
         const BrnProgression::Profile* GetProfile() const;   // X360 far member @0x405C
         f32 GetDistanceDriven() const;                        // X360 far member @0x13B94
 
+        // ADDITIVE GROW (CrashNavSettings wave, 2026-08-29). The non-const twin of
+        // GetProfile above: CrashNavSettings::HandleControllerInput @0x824D916C WRITES
+        // through the same far member (`lwz r11, 0x405C(cache) ; stbx r30, r11, 0x1CD14`
+        // -- the credits-cheat unlock), so the const-only accessor cannot serve it.
+        // Declaration-only, same far-member convention.
+        BrnProgression::Profile* GetProfile();               // X360 far member @0x405C
+
+        // ADDITIVE GROW (CrashNavSettings wave, 2026-08-29). The latched autosave-icon
+        // flag -- see the member's own note at +0x12F09 for the producer
+        // (ProfileManager::ShowAutosaveIcon @0x82511038) and this reader. Every X360 read
+        // site inlines the raw far-member byte load and tests it against zero.
+        bool IsAutosaveIconVisible() const { return mbAutosaveIconVisible; }
+
         // ADDITIVE GROW (BrnPhotoBoothComponent / BrnLicenseComponent / BrnIntro TUs).
         // The latched BrnGui::GuiEventCamStatus word (X360 far member @0x13B58) -- see the
         // member's own note for the producer and the fifteen readers. Every X360 reader
@@ -1847,6 +1860,16 @@ namespace BrnGui
         // @0x824FF298 reads its four words (`v5 = cache + 76776; field_2EEE8 = v5[0]; ..
         // = v5[3]`) into the stored image's mOptionsDataProfileDLC1 segment.
         OptionsDataProfileDLC1 mOptionsDataProfileDLC1;  // +0x12BE8 (76776)
+        // ---- the latched "autosave icon is on screen" flag ----
+        // ADDITIVE CARVE (CrashNavSettings wave, 2026-08-29). X360-attested by three sites,
+        // all `... , 0x12F09` byte accesses on the cache:
+        //   BrnGui::ProfileManager::ShowAutosaveIcon @0x82511038 -- posts event 355 with the
+        //     visibility byte and then `stbx r30, r11, 0x12F09`, i.e. THIS IS THAT ARGUMENT;
+        //   BrnGui::GuiCache::Construct @0x825062A4 -- clears it;
+        //   BrnGui::CrashNavSettings::HandleControllerInput @0x824D93A4 / Update -- reads it
+        //     as the gate on raising the on-screen keyboard for the sponsor product code
+        //     (the prompt is deferred to E_STATE_PRODUCT_CODE_INPUT_PENDING while it is set).
+        bool mbAutosaveIconVisible;                      // +0x12F09 (77577)
         // ---- mPreRaceData: fly-by pre-event messages (GetPreEventInfo @0x824827D8) ----
         u8  maPreEventInfoStorage[3][580];               // +0x12F0C (77580) PreEventInfo maPreEventInfo[3] (stride 580)
         s32 miNumMessages;                               // +0x135D8 (79320) mPreRaceData.miNumMessages (GetPreEventInfo bound)

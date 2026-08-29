@@ -1909,6 +1909,14 @@ namespace BrnGui
         return mpProfile;
     }
 
+    // The non-const twin, for the one X360 site that WRITES through this far member:
+    // CrashNavSettings::HandleControllerInput @0x824D916C stores the credits-cheat unlock
+    // into `*(cache+0x405C) + 0x1CD14`. Same plain read of the same slot.
+    BrnProgression::Profile* GuiCache::GetProfile()
+    {
+        return mpProfile;
+    }
+
     // [H1] @ (far member +0x13B94 / 80788) -- the odometer's offline-distance readout
     // source (OdometerComponent::Update @0x82424160 is the attested reader; the header
     // member note carries the same cite). Same no-out-of-line-accessor situation as
