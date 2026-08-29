@@ -182,14 +182,21 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
     // (UpdateTrafficStomp + UpdateBounceBoost) could never run and nothing could ever spend
     // showtime boost.
     //
-    // [X] PARKED: the strategy's OnShowtimeStart / OnShowtimeEnd virtuals (slots 52 / 56) are not
-    // declared on BoostStrategy in this tree. Their console bodies drop mfMinBoostAllowedAmount
-    // to FLT_EPSILON for the duration of crash play; without them the meter keeps its ordinary
-    // floor. DELETE-WHEN those two slots are declared and bodied.
+    // The vtable BYTE offset 52 is SLOT 13, which BrnBoostStrategy.h:202 already declares and
+    // BoostBurnout2/3/5 already body: OnStartCrashPlay. It drops mfMinBoostAllowedAmount from
+    // mfMaxBoost * 0.15 to FLT_EPSILON, i.e. "during crash play the bar may be spent all the way
+    // to zero" -- and IsBoosting() is `mfBoostAmount > mfMinBoostAllowedAmount`, so that floor is
+    // load-bearing. It had no dispatcher anywhere in this tree until now.
     // ========================================================================================
     if (lpGameModeParams->GetFlag(
             BrnGameState::GameModeParams::KU_FLAG_USE_SHOWTIME_VEHICLE_BEHAVIOUR))
     {
+        BoostStrategy* lpShowtimeStrategy = mBoostManager.GetBoostStrategy();
+        if (lpShowtimeStrategy != 0)
+        {
+            lpShowtimeStrategy->OnStartCrashPlay();
+        }
+
         mCrashPlayManager.mbIsInShowtime = true;
         GetActiveRaceCar(mePlayerActiveRaceCarIndex)->SetInShowtime(true);
     }

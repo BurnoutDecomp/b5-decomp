@@ -246,6 +246,11 @@ void RaceCarEntityModule::Construct()
     mRaceCarStreamer.Construct();
     mfTimeStep = 0.0f;
 
+    // The crash-play manager is a by-value member and ARTIST inlines its Construct here. Landing
+    // it stops the console's own `mpCrashPlayManager != NULL` assert (BrnCrashPlayDebugComponent
+    // .cpp:111) firing once per Update frame -- 7,050 times in a single 150 s run before this.
+    mCrashPlayManager.Construct();
+
     // [FLAG PC bring-up] mCameraTransform is seeded to IDENTITY rather than left as whatever the
     // module's raw storage holds. The console never seeds it here -- PreSceneUpdate step 2 latches
     // it every frame from InputBuffer_PreScene::GetCam...() -- but that latch cannot be
