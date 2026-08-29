@@ -5,6 +5,9 @@
 
 #include "rw/audio/core/PlugIn.h"       // rw::audio::core::PlugIn (base) + Attribute_t
 #include "rw/audio/core/TimerHandle.h"  // rw::audio::core::TimerHandle (mCpuTicks @ console +0x50)
+#include "rw/audio/core/Voice.h"        // VoiceStageConfig (GetSize's config argument)
+
+#include <cstddef> // size_t (the host layout computation)
 
 // ============================================================================
 // rw::audio::core::SndPlayer1_CgsStreamMod -- the streaming sound-player plugin
@@ -54,6 +57,7 @@ namespace core
 {
 
 class Decoder;
+class Mixer;
 
 class SndPlayer1_CgsStreamMod : public PlugIn
 {
@@ -115,10 +119,66 @@ public:
         u8       numChannels;         // +0x1F
     };
 
+    // DWARF RequestState. A request is ACTIVE while it is neither FREE nor COMPLETE.
     enum ERequestState
     {
-        E_REQUESTSTATE_FREE     = 0,
-        E_REQUESTSTATE_COMPLETE = 4
+        E_REQUESTSTATE_FREE         = 0,
+        E_REQUESTSTATE_QUEUED       = 1,
+        E_REQUESTSTATE_FEEDING      = 2,
+        E_REQUESTSTATE_FEEDCOMPLETE = 3,
+        E_REQUESTSTATE_COMPLETE     = 4
+    };
+    static bool IsRequestActive(u8 au8State)
+    {
+        return au8State != E_REQUESTSTATE_FREE && au8State != E_REQUESTSTATE_COMPLETE;
+    }
+
+    // DWARF StreamState -- the streaming read machine in RwacTimerClient.
+    enum EStreamState
+    {
+        E_STREAMSTATE_READ_HEADER  = 0,   // accumulating the 4-byte chunk size
+        E_STREAMSTATE_READ_CHUNK   = 1,   // reading the chunk body
+        E_STREAMSTATE_SUBMIT_CHUNK = 2    // chunk complete, hand it to the feed ring
+    };
+
+    // One buffered stream chunk (console stride 8).
+    struct Chunk
+    {
+        u32 size;   // +0x00 -- the allocated capacity, grown if a chunk exceeds it
+        u8 *buf;    // +0x04
+    };
+
+    enum { KU_NUM_CHUNKS = 6 };
+    enum { KU_DEFAULT_CHUNK_BYTES = 6500 };
+
+    // The per-request streaming state (console stride 0x88). Kept beside the internal
+    // request ring rather than inside it because only streamed play types use most of it.
+    struct RequestExternal
+    {
+        f64   streamFileOffset;        // +0x00
+        u8   *pSampleData;             // +0x08 -- payload start (past the packed header)
+        s32   loopStartStreamOffset;   // +0x0C
+        s32   gigaSamplesInRam;        // +0x10 -- how much of a "giga" asset is resident
+        s32   numSamplesFed;           // +0x14
+        s32   numBytesFed;             // +0x18
+        char *pStreamLoopFileName;     // +0x1C
+        void *pReadStream;             // +0x20 -- CgsFileSystem::ReadStream* (un-homed here)
+        u32   streamState;             // +0x24 -- EStreamState
+        u8   *pStreamBuffer;           // +0x28
+        Chunk chunks[KU_NUM_CHUNKS];   // +0x2C .. +0x5B
+        u32   readBufferSelect;        // +0x5C
+        u32   writeBufferSelect;       // +0x60
+        u32   unlockBufferSelect;      // +0x64
+        u32   readSize;                // +0x68
+        u32   readPointer;             // +0x6C
+        u32   queuedChunks;            // +0x70
+        u32   lockedChunks;            // +0x74
+        u8    codec;                   // +0x78
+        u8    playType;                // +0x79 -- 0 resident, 1 streamed, 2 "giga" hybrid
+        u8    latestFeedSlot;          // +0x7A
+        u8    expelMode;               // +0x7B
+        u8   *pNextChunk;              // +0x7C
+        u8   *pLoopStartChunk;         // +0x80
     };
 
     // @ 0x8268CD20. Advance the current-request cursor around the ring and cache
@@ -128,6 +188,50 @@ public:
     // @ 0x8268FE88. Return the plugin timer's tick counter (`*(this+0x50)` ==
     // mTimerHandle.mCpuTicks by name).
     int GetPpuTicksEvent() const;
+
+    // ---- the self-contained callbacks/helpers (phase E) --------------------------------
+    static int GetSize(const VoiceStageConfig *config);                 // @0x826A4210
+    static int PreProcess(SndPlayer1_CgsStreamMod *self, Mixer *ctx,
+                          bool discontinuity, int outputSamplesRequested); // @0x8268CD10
+    bool WaitForStartTime(Mixer *ctx, f64 adStartTime, u32 *apuSilence); // @0x8268CAF8
+    int  Declick(Mixer *ctx);                                            // @0x8268CB78
+    bool GetFeedSlot(s32 *apiSlot);                                      // @0x826A4348
+    void UnpackHeader(u32 auRequestIndex, void *apPacked);               // @0x8268C990
+
+    // ---- the instance's two variable-length tails --------------------------------------
+    // Both live past the fixed object, at byte offsets recorded in the 16-bit fields the
+    // console keeps for exactly this purpose -- so the walk stays self-consistent at host
+    // widths without any console literal appearing in the arithmetic.
+    RequestInternal &Request(u32 auIndex)
+    {
+        return *reinterpret_cast<RequestInternal *>(
+            reinterpret_cast<u8 *>(this) + mRequestInternalOffset
+            + sizeof(RequestInternal) * auIndex);
+    }
+    const RequestInternal &Request(u32 auIndex) const
+    {
+        return *reinterpret_cast<const RequestInternal *>(
+            reinterpret_cast<const u8 *>(this) + mRequestInternalOffset
+            + sizeof(RequestInternal) * auIndex);
+    }
+    f32 *DeclickBuffer()
+    {
+        return reinterpret_cast<f32 *>(reinterpret_cast<u8 *>(this) + mDeclickBufferOffset);
+    }
+
+    // ⭐ THE ONE HOST LAYOUT COMPUTATION. GetSize and CreateInstance must agree exactly,
+    // so both derive from this. The console spells the same thing with its own extents
+    // (`align_up(0x188 + 4*channels, 8)` then `+ 0x20 * requests`), and BOTH of those are
+    // console sizes containing 32-bit pointers -- transliterating either would place the
+    // declick buffer and the request ring INSIDE the host object. (Exactly the bug found
+    // and fixed in Resample and GinsuPlayer this same wave.)
+    struct HostLayout
+    {
+        u32 declickOffset;   // -> mDeclickBufferOffset
+        u32 requestOffset;   // -> mRequestInternalOffset
+        u32 totalBytes;      // -> GetSize
+    };
+    static HostLayout ComputeHostLayout(u32 auChannels, s32 aiMaxRequests);
 
     // ---- layout (console offsets in comments; ⭐ names/order now DWARF-authoritative,
     //      from the DecFIGS header for THIS class rather than the ProStreet PDB for the
