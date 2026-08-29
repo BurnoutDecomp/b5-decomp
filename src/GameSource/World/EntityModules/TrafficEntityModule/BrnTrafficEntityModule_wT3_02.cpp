@@ -328,12 +328,18 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
             {
                 if (lpVehicle->IsSympatheticallyCrashing())                     // 0x82749584
                 {
-                    // GATE UpdateSympatheticCrashing @0x8273D378 -- exported, no body; its
-                    // target argument also needs Vehicle::GetSympatheticCrashTarget @0x82705450.
-                    static bool sbLoggedSympArm = false;
-                    LogMissingLeg(sbLoggedSympArm,
-                                  "GenerateDriverInputs arm UpdateSympatheticCrashing "
-                                  "@0x8273D378 -- no body");
+                    // GATE DELETED 2026-08-29 (traffic-crash wave). UpdateSympatheticCrashing
+                    // @0x8273D378 is BODIED in BrnTrafficEntityModule_SympatheticCrash.cpp with
+                    // its commit CrashVehicleForSympatheticCrashState @0x8272BA08. The gate's
+                    // second blocker ("needs Vehicle::GetSympatheticCrashTarget @0x82705450")
+                    // was already STALE -- that accessor has had a body in BrnTrafficVehicle.cpp
+                    // since before this note was written.
+                    // Argument set is the console's own (0x82749594..0x827495C0): r4 luVehicle,
+                    // r5 the vehicle's latched sympathetic-crash target, r6 lpOutput,
+                    // r7 &lControls, f1 mfSimTimeStep.
+                    UpdateSympatheticCrashing(static_cast<u32>(liVehicle),
+                                              lpVehicle->GetSympatheticCrashTarget(),
+                                              lpOutput, &lControls, mfSimTimeStep);
                 }
                 else if (lpVehicle->IsRecoveringFromSlam())                     // 0x827495DC
                 {

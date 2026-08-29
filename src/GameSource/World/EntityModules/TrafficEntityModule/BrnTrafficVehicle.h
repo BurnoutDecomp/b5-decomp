@@ -297,6 +297,11 @@ public:
     // out-of-line accessors. No layout change: both members already exist.
     void SetSympCrashTime(f32 lfTime) { mfSympCrashTime = lfTime; }
     void SetSympCrashState(SympatheticCrashState leState) { meSympCrashState = leState; }
+    // The reading halves of the pair above, added 2026-08-29 with UpdateSympatheticCrashing
+    // @0x8273D378 -- the console reaches both members with a bare `lfs 0x4C(veh)` /
+    // `lwz 0x48(veh)` inside that function, so these are the inlined accessors it used.
+    f32                   GetSympCrashTime() const  { return mfSympCrashTime; }
+    SympatheticCrashState GetSympCrashState() const { return meSympCrashState; }
     void StartGiveUpManoeuvre();
     void CopyEffectsFromCab(const Vehicle* lpCab);
 

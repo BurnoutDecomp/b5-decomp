@@ -32,6 +32,17 @@
 
 namespace BrnTraffic
 {
+namespace
+{
+    // SafeRequestMakeVehiclePhysical's sympathetic-crash seed, 0x8274B340..0x8274B348.
+    // The modulus is the 0x446F8657 magic-multiply reciprocal's divisor and the split is the
+    // literal `cmpwi r11, 0x32`. Deliberately NOT shared with the identically-valued pair in
+    // _wT3_02.cpp: that seat's split is a computed percentage (slider*35 + 30) and this one is a
+    // hard 50, so they are two different constants that happen to share a modulus.
+    const u32 KU_SYMP_CRASH_PERCENT_MODULUS   = 101u;
+    const s32 KI_SYMP_CRASH_ACCELERATE_PERCENT = 50;
+}
+
 // HOST SEAT REACHED ACROSS A TU BOUNDARY. The console walks maJobs[0..
 // muNumUpdateVehiclesJobs) (DWARF :619) and calls TrafficJobStub::GetNewPhysicalRequests on
 // each. That member is [MEMBER HOLE 5] on this tree (BrnTrafficJob.h cannot be included from
@@ -171,11 +182,30 @@ void TrafficEntityModule::SafeRequestMakeVehiclePhysical(
     if (leReason == E_PHYSICALREASON_SYMPATHETIC_CRASHING)     // 0x8274B2E0 cmpwi r25, 3
     {
         lpVehicle->SetSympatheticCrashTarget(lTargetEntityId); // 0x8274B2F0
-        // GATE sympathetic-crash seed @0x8274B2F4..0x8274B36C: one mRand LCG step, then
-        // mfSympCrashTime = 0.0f and meSympCrashState = (draw % 101 >= 50) ? HEADON :
-        // ACCELERATE. BLOCKER: Vehicle exposes no setter for either member and
-        // BrnTrafficVehicle.h is not this cluster's file (skipping the draw also leaves mRand
-        // one LCG step behind the console). DELETE-WHEN the crash wave lands those setters.
+
+        // GATE DELETED 2026-08-29 (traffic-crash wave). Its blocker -- "Vehicle exposes no
+        // setter for either member" -- was STALE: BrnTrafficVehicle.h has carried
+        // SetSympCrashTime / SetSympCrashState since the Vehicle wave, and the sibling seed in
+        // UpdateExtremeSwerving (_wT3_02.cpp, @0x8273EA84) has been calling both all along.
+        // ⭐ WHAT THE GATE COST: meSympCrashState is the ONLY field
+        // Vehicle::IsSympatheticallyCrashing() reads, so with the seed skipped it was
+        // permanently E_SYMPATHETIC_NONE and the whole chain-crash arm of GenerateDriverInputs
+        // was unreachable -- a car promoted for reason SYMPATHETIC_CRASHING(3) also fails
+        // IsNormalPhysical() (reason 5), so it fell into the ladder's final `lbSend = false`
+        // and drove nowhere at all.
+        //
+        // 0x8274B2F4..0x8274B36C, instruction for instruction: ONE mEffectRand LCG step
+        // (`ld/std 0x1380(this)` -- +0x1380 is mEffectRand's seed, NOT mRand's +0x1350; the old
+        // note named the wrong generator), the draw reduced mod 101 by the 0x446F8657
+        // magic-multiply reciprocal, `stfs flt_82001CC0(0.0f), 0x4C(veh)` unconditionally, then
+        // `< 50` picks ACCELERATE(2) and `>= 50` stores r30, which `li r30, 1` at 0x8274B114
+        // pins as HEADON(1).
+        const s32 liRoll =
+            static_cast<s32>(mEffectRand.RandomUInt() % KU_SYMP_CRASH_PERCENT_MODULUS);
+        lpVehicle->SetSympCrashTime(0.0f);
+        lpVehicle->SetSympCrashState(liRoll < KI_SYMP_CRASH_ACCELERATE_PERCENT
+                                         ? Vehicle::E_SYMPATHETIC_ACCELERATE
+                                         : Vehicle::E_SYMPATHETIC_HEADON);
     }
 }
 

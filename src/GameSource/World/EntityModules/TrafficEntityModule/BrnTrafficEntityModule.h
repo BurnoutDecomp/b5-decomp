@@ -799,10 +799,29 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
                                 BrnPhysics::Vehicle::BrnTrafficDriverControls* lpControls);
         // @0x8272C010 -- declaration only this round (see the gate in _wT3_02.cpp).
         bool CheckIfPhysicalVehicleIsStuck(u32 luVehicle);
+        // @0x8273D378 (594). DWARF :1394. BODIED 2026-08-29 in
+        // BrnTrafficEntityModule_SympatheticCrash.cpp -- the four-state chain-crash driver
+        // (HEADON / ACCELERATE / HANDBRAKE / LOCKUP) that aims a nearby traffic car at a wreck
+        // and then crashes it.
         void UpdateSympatheticCrashing(u32 luVehicle, EntityId lEntityId,
                                        BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
                                        BrnPhysics::Vehicle::BrnTrafficDriverControls* lpControls,
                                        f32 lfTimeStep);
+
+        // @0x8272BA08 (95). DWARF :1587. The commit every arm of UpdateSympatheticCrashing ends
+        // on: reason = CRASHED, crash type = Standard, and the SetTrafficCrashingEvent that
+        // PhysicalTrafficManager::ProcessSetTrafficCrashingEvents drains. Same TU.
+        void CrashVehicleForSympatheticCrashState(u32 luVehicle,
+                                                  BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput);
+
+        // FLAG: OUTLINED, NOT A CONSOLE SYMBOL. The X360 emits this 45-instruction block TWICE
+        // inside UpdateSympatheticCrashing (0x8273D754..0x8273D860 and 0x8273DAD8..0x8273DBDC),
+        // instruction-identical apart from the stack slots -- i.e. the compiler inlined one
+        // helper at two call sites. Restored as that helper per AGENTS.md "Inlining reversal".
+        // It adds no behaviour: it is the camera-facing test, CalculateDriverGasBrake, and the
+        // [0,1] gas/brake split, in the console's own order.
+        void ApplyDriverGasBrake(u32 luVehicle, f32 lfForwardDistance, Vector3 lvVehiclePos,
+                                 BrnPhysics::Vehicle::BrnTrafficDriverControls* lpOutControls);
 
         // @0x82718E48 (153). DWARF :1365.
         void CalculateAndSetSteering(u32 luVehicle, Vector3 lTargetDirection,
