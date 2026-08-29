@@ -195,6 +195,74 @@ namespace BrnPhysics
         // unknown is whether queue [11] is ever non-empty, which is exactly what the
         // [bridge-queues] witness above measures.
         // Evidence page: https://claude.ai/code/artifact/ebe1c741-6e40-4a0b-95ba-9c4fe61d42ca
+        //
+        // ==========================================================================================
+        // ⭐⭐⭐ 2026-08-29, drive-away wave: THE ANSWER, AND IT CLOSES THIS INVESTIGATION.
+        // `case 2` IS UNREACHABLE IN THE RETAIL X360 BUILD ITSELF. Six facts, each read off the
+        // ARTIST image, no measurement required:
+        //
+        //   1. mTrafficContactQueue has exactly one writer -- StoreContact's owner-2 arm -- and
+        //      GameStateModule::ProcessContacts' showtime leg 2 (@0x8236BE74) is its only consumer.
+        //   2. StoreContact @0x825A5DB0 dispatches on the SIMULATION id's owner byte, and its jump
+        //      table is `addi r11,r11,-1 / cmplwi r11,0xA / bgt default` (0x825A5E24..0x825A5E2C):
+        //      owners 1..11 only. TWELVE FALLS IN THE DEFAULT ARM.
+        //   3. A traffic vehicle enters the SIMULATION with its owner byte REWRITTEN TO 12
+        //      (E_ENTITYTYPE_PHYSICS_VEHICLE) -- `oris r11, r11, 0xC00` on BOTH the InAddRigidBody
+        //      and the InRemoveRigidBody post (BrnPhysicalTrafficManager_Remove.cpp:435/:497).
+        //      ⇒ 2 and 3 together: NO contact involving a fully-physical traffic car can ever
+        //      reach `case 2`. The console drops it by its own jump table.
+        //   4. The console states the sim-vs-scene owner mapping in its own code, in this very
+        //      file's StoreContact PROP arm: `(rawB == 11 && potB == 1) || (rawB == 12 && potB == 2)`.
+        //      Race car: scene 1 / sim 11.  Traffic: scene 2 / sim 12. That is why the measured
+        //      [spy-owners] histogram shows 11 and never 1, and 7 and never 2.
+        //   5. The ONLY producer that writes an owner-2 id straight into an InAddPotentialContact
+        //      is the SIMPLE-traffic bridge: BridgeSimpleTrafficWithCarContactsToSimulation
+        //      @0x825C83B0 splices ONE side to owner 1 / 11 (`oris r11,r11,0x100` @0x825C8680,
+        //      `oris r11,r11,0xB00` @0x825C85F8) and leaves the other as the traffic PHYSICS id,
+        //      which carries `| 0x02000000` == owner 2 from the contact-generation router
+        //      (BrnVehicleManagerContactGeneration.cpp:~230). So `case 2` is a SIMPLE-TRAFFIC-ONLY
+        //      arm. Not "mostly"; only.
+        //   6. ⛔⛔ AND NOTHING IN THE X360 IMAGE EVER MAKES A TRAFFIC CAR SIMPLE. mu8PhysicalType
+        //      lives at PhysicalTrafficVehicle+0x32 (pinned by BOTH readers:
+        //      PhysicalTrafficManager::IsTrafficVehicleSimple @0x825B4AB0 and
+        //      PhysicalTrafficVehicle::IsSimple @0x825B33C8, each `lbz r31,0x32(r3)` + the
+        //      `leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT` assert). A scan of ALL 27k exported
+        //      functions for `stb rX, 0x32(rY)` finds exactly ONE writer on this type:
+        //      GetFreeTrafficVehicleWithPhysics @0x82637A20 -- and its source register is set
+        //      `li r18, 0` at 0x8263773C, i.e. E_PHYSICAL_TRAFFIC_TYPE_FULL. There is no second
+        //      allocator, no SetSimple, and no bit-setter for mMadeSimpleTrafficVehicles
+        //      (+104616; its only touchers are Construct/Release/VehicleManager::Destruct, the
+        //      ProcessTrafficMaintenanceEvents assert-read and SendCreateRemoveTrafficEvents'
+        //      read+clear).
+        //
+        // ⇒ THE SIMPLE-TRAFFIC PHYSICS TIER IS DEAD CODE IN RETAIL. mpaSimpleVehiclePhysics,
+        //   mUsedSimpleVehiclePhysics, mMadeSimpleTrafficVehicles, IsSimple/IsTrafficVehicleSimple,
+        //   both BridgeSimpleTrafficWith*ContactsToSimulation bridges and StoreContact's `case 2`
+        //   are a complete, shipped, UNREACHED subsystem.
+        //
+        // ⛔ TWO STANDING LEADS ARE THEREFORE REFUTED -- do not re-chase either:
+        //   (a) "the producer is path 4's BridgeSimpleTrafficWithCarContactsToSimulation, which is
+        //       an inert boot gate on this build" (the paragraph immediately above). It is inert on
+        //       the CONSOLE too. Un-gating it produces nothing, because nothing is ever simple.
+        //   (b) "path 1 asserts against every vehicle pair EXCEPT (traffic, race car), so that is
+        //       the pair it expects." The missing :91..:103 tripwire is REDUNDANCY, not permission:
+        //       BrnVehicleManagerContactGeneration.cpp:174 is the console's own
+        //       `!(A == TRAFFIC_VEHICLE && B == RACECAR)` assert, fired AFTER the router
+        //       canonicalises the race car to side A -- so (2,1) is illegal by the console's own
+        //       rule and path 1 has no need to repeat it. Nor can the merged queue carry the pair
+        //       in the first place: VehicleManager's overlap-pair walk CONSUMES every pair with
+        //       owner 1 or 2 on both sides into custom queues [7]/[8]/[13] before the narrow phase,
+        //       which is why the merged view measures only prop/part/world owners.
+        //
+        // ⇒ WHAT IS ACTUALLY LEFT. "Cars Crashed" cannot be reached through the contact spies at
+        //   all. Either the retail count is produced by a path that does not run through
+        //   ProcessContacts' leg 2, or leg 2 is fed by a fully-physical traffic car being marked
+        //   crashed somewhere else -- PhysicallyCrashTrafficCar @0x825CAC10 /
+        //   SetTrafficVehicleCrashing @0x82636E38, reached from ProcessTrafficEvents @0x82643FB0,
+        //   WHICH IS A NAMED INERT GATE ON THIS BUILD
+        //   (BrnVehicleManager_MaintenanceEvents.cpp:~790). That gate is the next thing to open,
+        //   and it is a different subsystem from every one this comment block has named so far.
+        // ==========================================================================================
         // DELETE-WHEN the traffic contact queue is proven to fill.
         {
             static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
