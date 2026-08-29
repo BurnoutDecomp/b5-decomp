@@ -67,6 +67,8 @@
 // liNumActiveIcons` test stays false on -1 exactly as it did on 0 -- no spurious chirp.
 // =================================================================================================
 
+#include <cstring>   // std::memset (the GetOnlineFinishPoint link gate)
+
 #include "GameSource/Gui/BrnGuiCache.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the tracker-publish boundary print
@@ -728,5 +730,41 @@ namespace BrnGui
             luFinishPointCount += static_cast<u32>((luBits * 0x0101010101010101ULL) >> 56);
         }
         return luFinishPointCount;
+    }
+    // =============================================================================================
+    // X360 BrnGui::GuiCache::GetOnlineFinishPoint @0x82506940 (json name field verified).
+    // ⛔ LINK GATE, NOT A RECONSTRUCTION -- relocated here 2026-08-29 when
+    // BrnMainMapLinkGates.cpp (its old home) died with its last real-body retirement, matching
+    // the flyby wave's deletion of that file. The real body asserts mpWorldDataController,
+    // popcount-walks the 256-bit maOnlineFinishPointsMask @+0x7770 to the liIndex-th set bit,
+    // resolves it through the events-with-unique-finish list (cache+0x8040) and
+    // WorldDataController::GetLandmarkInfoFromIndex, and fills the out record. Its ONLY caller
+    // (CrashNavIconRenderer::GetIconInformation's ONLINE_FINISH_POINTS arm,
+    // BrnCrashNavIconRenderer_wK_01.cpp) iterates CountSetBits() of that same mask -- ZERO
+    // offline -- so the gate is unreachable in the offline milestone; it exists to close the
+    // link. RETURN VALUE = lpOutIconInfo, record ZEROED (deterministic; no reachable caller
+    // consumes the zeros). [FLAG link scaffold]
+    // DELETE-WHEN the real body lands (the popcount walk + the 0x8040-list element lookup).
+    // =============================================================================================
+    GuiEventUpdateSatNav::SatNavIconInfo*
+    GuiCache::GetOnlineFinishPoint(s32 /*liIndex*/,
+                                   GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
+    {
+        static bool sbLoggedGate = false;
+        if (!sbLoggedGate)
+        {
+            sbLoggedGate = true;
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[gui-cache-gate] BrnGui::GuiCache::GetOnlineFinishPoint: inert"
+                       " stand-in, no body anywhere in the tree [FLAG link scaffold]\n";
+            }
+        }
+        if (lpOutIconInfo != 0)
+        {
+            std::memset(lpOutIconInfo, 0, sizeof(*lpOutIconInfo));
+        }
+        return lpOutIconInfo;
     }
 }
