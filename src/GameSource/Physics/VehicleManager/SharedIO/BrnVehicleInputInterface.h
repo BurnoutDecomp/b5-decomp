@@ -319,6 +319,25 @@ namespace Vehicle
             return &mRemoveCrashedTrafficEventQueue;
         }
 
+        // The other two traffic readers, same family, same DWARF block
+        // (BrnVehicleInputInterface.h:204 / :210), added 2026-08-29 with the
+        // ProcessTrafficEvents un-gate. Both are header inlines the X360 folds at their call
+        // sites into a bare `addis/addi` off the interface, exactly like the three above --
+        //     0x82640F0C  addis r16, r30, 2 ; addi r16, r16, 0x2048  == +139336
+        //                 (mSetTrafficCrashingEventQueue's miLength; the queue itself is +139328)
+        //     0x8262CFxx  the same pair at +0x22278 / +0x22280        == +139768 / +139776
+        //                 (mUpdateNetworkTrafficEventQueue)
+        // reached here by name (PhysicalTrafficManager::ProcessSetTrafficCrashingEvents /
+        // ::ProcessUpdateNetworkTrafficEvents).
+        const SetTrafficCrashingEventQueue* GetSetTrafficCrashingEvents() const
+        {
+            return &mSetTrafficCrashingEventQueue;
+        }
+        const UpdateNetworkTrafficEventQueue* GetUpdateNetworkTrafficEvents() const
+        {
+            return &mUpdateNetworkTrafficEventQueue;
+        }
+
     private:
         InLineTestResultQueue                 mLineTestResultsQueue;                     // :261
         InTriangleCacheInterface              mTriangleCacheInterface;                   // :262
