@@ -370,8 +370,20 @@ namespace CgsGui
         mAptComponentList.SetName(liNew, lpacName);
         ++muNumActivecomponents;
         // FLAG (bring-up probe): surface each real registration in the boot log.
+        // ⚠️ [results wave 2026-08-29] THE 40-LINE BUDGET IS EXHAUSTED BY THE CAR-SELECT
+        // SCREEN, ~1,700 log lines before the offline results screen even mounts -- so for
+        // every screen after the junkyard this probe is silent by construction and its
+        // silence says nothing. Kept at 40 for the boot flow (nothing that reads this log
+        // changes), with an opt-in wide budget on the same env knob as the UpdateComponent
+        // probe above so a late screen can be watched without editing the source.
+        static s32 siAddBudget = -1;
+        if (siAddBudget < 0)
+        {
+            const char* lpacEnv = std::getenv("BRN_APT_COMPUPD");
+            siAddBudget = (lpacEnv != 0 && lpacEnv[0] != 0) ? 2000 : 40;
+        }
         static s32 siAddLogs = 0;
-        if (siAddLogs < 40)
+        if (siAddLogs < siAddBudget)
         {
             ++siAddLogs;
             char lacProbe[192];
@@ -631,6 +643,53 @@ namespace CgsGui
         const s32 liComponent = FindAptComponent(lpacName);
         // FLAG (bring-up probe): surface the licence card's model->view pushes AND the
         // two silent early-outs (unknown name / undefined bound reference).
+        //
+        // ⚠️⚠️ [results wave 2026-08-29] THIS PROBE WAS HARD-GATED TO NAMES BEGINNING
+        // "License" AND NOTHING ELSE, AND THAT MADE IT A DIAGNOSTIC THAT LIES BY OMISSION.
+        // The results-screen handoff was briefed with "no component of this state has ever
+        // produced an UpdateComponent line, not one, across all five runs" as evidence that
+        // component binding had failed. It was not evidence of anything: none of that
+        // screen's components is named License*, so the probe was structurally incapable of
+        // printing for them. Same shape as the apt mount instrument that was wired to level 1
+        // while this screen plays at level 3. ([[diagnostics-that-lie]],
+        // [[harness-answers-the-wrong-question]])
+        //
+        // ⇒ Opt-in wildcard: BRN_APT_COMPUPD=<prefix> widens the probe to any component whose
+        // name starts with <prefix> ("*" or an empty value = every component), on its own
+        // budget. The License arm keeps its own budget so nothing that already reads this log
+        // changes. ⭐ AND IT DISCRIMINATES: liComponent is printed, so a name the table does
+        // not hold prints comp=-1 -- the probe can FAIL, visibly, which is the whole point.
+        static const char* spacUpdPrefix  = 0;
+        static s32         siUpdPrefixLen = -1;
+        if (siUpdPrefixLen < 0)
+        {
+            const char* lpacEnv = std::getenv("BRN_APT_COMPUPD");
+            if (lpacEnv != 0 && lpacEnv[0] != 0)
+            {
+                spacUpdPrefix  = lpacEnv;
+                siUpdPrefixLen = (lpacEnv[0] == '*') ? 0 : static_cast<s32>(std::strlen(lpacEnv));
+            }
+            else
+            {
+                spacUpdPrefix  = 0;
+                siUpdPrefixLen = 0;
+            }
+        }
+        if (spacUpdPrefix != 0)
+        {
+            static s32 siWideLogs = 0;
+            if (siWideLogs < 4000
+                && (siUpdPrefixLen == 0
+                    || std::strncmp(lpacName, spacUpdPrefix, static_cast<size_t>(siUpdPrefixLen)) == 0))
+            {
+                ++siWideLogs;
+                char lacWide[256];
+                std::snprintf(lacWide, sizeof(lacWide),
+                              "[AptComm] UpdateComponent '%s' key='%s' val='%s' comp=%d\n",
+                              lpacName, lpacKey, lpacValue, liComponent);
+                CgsDev::Log::WriteToLog(lacWide);
+            }
+        }
         const bool lbLicenseUpdateProbe =
             (std::strncmp(lpacName, "License", 7) == 0);
         if (lbLicenseUpdateProbe)

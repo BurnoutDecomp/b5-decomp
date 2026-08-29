@@ -309,16 +309,20 @@ namespace BrnGui
     // sub-state does. These are the sub-state PRESENTATIONS and the component fill.
     // (SetupComponents and UpdateEventResults now have REAL bodies in
     //  BrnOfflineInstantResults.cpp -- they are the reveal path.)
+    // ⭐⭐ FOUR MORE ARE GONE (2026-08-29, the results-presentation wave):
+    // UpdateTakePhotoPage / UpdateLeaving / UpdateRankUp / UpdateSecondResultsPage are REAL
+    // in BrnOfflineInstantResults.cpp. UpdateTakePhotoPage is why they had to go together:
+    // measured over five runs (rs1..rs5), the results presentation DOES draw its "YOU WIN"
+    // stamp, dwells out on schedule, hands over to TAKE_PHOTO -- and then this stub logged
+    // 2,795 identical lines to the end of the run, because nothing advanced the sub-state
+    // machine again. The panel was not failing to appear; it appeared and had nowhere to go.
+    // UpdateLeaving is the far end of the same chain (LEAVING -> DONE -> TriggerExitResults).
     void InstantResultsState::HandleAptTriggers(const void*)   { LogUnreconstructedState("InstantResultsState", "HandleAptTriggers"); }
     void InstantResultsState::HandleControllerInput(const void*) { LogUnreconstructedState("InstantResultsState", "HandleControllerInput"); }
-    void InstantResultsState::UpdateSecondResultsPage() { LogUnreconstructedState("InstantResultsState", "UpdateSecondResultsPage"); }
-    void InstantResultsState::UpdateTakePhotoPage()     { LogUnreconstructedState("InstantResultsState", "UpdateTakePhotoPage"); }
-    void InstantResultsState::UpdateRankUp()            { LogUnreconstructedState("InstantResultsState", "UpdateRankUp"); }
     void InstantResultsState::UpdateLicense()           { LogUnreconstructedState("InstantResultsState", "UpdateLicense"); }
     void InstantResultsState::UpdateCarUnlock()         { LogUnreconstructedState("InstantResultsState", "UpdateCarUnlock"); }
     void InstantResultsState::UpdateFreeCarUnlock()     { LogUnreconstructedState("InstantResultsState", "UpdateFreeCarUnlock"); }
     void InstantResultsState::UpdateShowingRivals()     { LogUnreconstructedState("InstantResultsState", "UpdateShowingRivals"); }
-    void InstantResultsState::UpdateLeaving()           { LogUnreconstructedState("InstantResultsState", "UpdateLeaving"); }
     void InstantResultsState::UpdatePhoto()             { LogUnreconstructedState("InstantResultsState", "UpdatePhoto"); }
     // ⚠️ RETURN VALUES ARE NOT NEUTRAL, so both are stated rather than left to a bare `false`:
     //  * IsXSCarInUnlockedArray false  => SelectSubstates does not raise CAR_UNLOCK. That is
