@@ -154,10 +154,23 @@ namespace CgsGui
     AptValue*        AptCommunicator::mpAptInternalCommunicator = 0;
     bool             AptCommunicator::mbCircleButtonAsSelect    = false;
     CgsModule::VariableEventQueue<18432, 16> AptCommunicator::mOutAptTriggerEvents;
-    // FLAG: the literal reserved-variable names live in un-exported X360 rodata (see
-    // the header note); null entries here -> zero hashes -> "not reserved" for every
-    // key, which is the correct off-menu-path behaviour until the names are recovered.
-    const char* AptCommunicator::mpacReservedVariableNames[AptCommunicator::KI_NUM_RESERVED_VARIABLES] = { 0 };
+    // ⭐ RECOVERED FROM THE IMAGE 2026-08-29 (was `{ 0 }` -- see the corrected banner in
+    // the header). CalculateReservedVariableHashes @0x8284A1F8 walks a 9-entry POINTER
+    // table at .rodata 0x82F33144 (`lis r11,0x82F3 / addi r29,r11,0x3144 / lwzx r11,r31,r29`,
+    // loop bound `cmpwi r31,36` == 9 * 4). Each pointer and its string were read out of the
+    // unpacked image; entry 9 is 0xFFFFFFFF, i.e. the table really is 9 long:
+    //   0x82052198 "_x"        0x820522A8 "_y"        0x820E0574 "_width"
+    //   0x820E056C "_height"   0x8204F668 "_visible"  0x820E0560 "_rotation"
+    //   0x820E0558 "_alpha"    0x82073494 "_xscale"   0x8207348C "_yscale"
+    // ⭐ INDEPENDENT CORROBORATION: index 4 is "_visible", and 4 is exactly the one
+    // BOOLEAN arm of UpdateComponentReserved's switch (every other index creates an
+    // AptFloat). The order also matches the Feb-2007 RESERVEDAPTVARIABLES enum
+    // (X, Y, WIDTH, HEIGHT, VISIBLE, ROTATION, ALPHA + the two BP-era additions, which
+    // this table names as _xscale / _yscale).
+    const char* AptCommunicator::mpacReservedVariableNames[AptCommunicator::KI_NUM_RESERVED_VARIABLES] =
+    {
+        "_x", "_y", "_width", "_height", "_visible", "_rotation", "_alpha", "_xscale", "_yscale",
+    };
     u32         AptCommunicator::mauReservedVariablesHashes[AptCommunicator::KI_NUM_RESERVED_VARIABLES] = { 0 };
 
     // The console GuiModule::Update @0x828602C8 tail: publish this frame's trigger
@@ -244,13 +257,12 @@ namespace CgsGui
     // ========================================================================
     // CalculateReservedVariableHashes  @ 0x8284A1F8
     //
-    // Precompute the reserved-variable name hashes. FLAG: the literal name table is
-    // un-exported X360 rodata (see the header); with null entries the hashes stay 0
-    // and UpdateComponentReserved treats every key as "not reserved". Slot SEMANTICS
-    // are pinned by the Feb-2007 RESERVEDAPTVARIABLES enum (X, Y, WIDTH, HEIGHT,
-    // VISIBLE, ROTATION, ALPHA, +2 BP-era additions; references/Feb-2007/.../
-    // CgsAptCommunicator.h:142) -- VISIBLE == index 4, exactly the one boolean case in
-    // UpdateComponentReserved's switch; only the literal spellings are still missing.
+    // Precompute the reserved-variable name hashes. The literal name table is now
+    // recovered from the image (0x82F33144, 9 entries -- see the definition above), so
+    // this loop produces the console's nine live hashes rather than nine zeros.
+    // The console asserts on a null entry (CgsAptCommunicator.cpp:934, `li r5,0x3A6` at
+    // 0x8284A238) and then hashes it anyway; the null branch below cannot be taken with
+    // the real table and is kept only as the same tripwire.
     // ========================================================================
     void AptCommunicator::CalculateReservedVariableHashes()
     {

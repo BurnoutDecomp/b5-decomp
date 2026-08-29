@@ -261,12 +261,21 @@ namespace CgsGui
         // @ unk_8305A960 - the GUI-trigger out queue SendApt(Sound)Event push to.
         static CgsModule::VariableEventQueue<18432, 16> mOutAptTriggerEvents;
 
-        // @ mpacReservedVariableNames / @ dword_8305A6A0 - the reserved-variable name
-        // table and its precomputed hashes (filled by CalculateReservedVariableHashes).
-        // FLAG: the literal name strings live in un-exported X360 rodata (the table
-        // @0x8284A1F8 reads); until they are recovered the table entries are null and
-        // the hashes zero -- UpdateComponentReserved then correctly treats every key as
-        // "not reserved" (off the title-menu path).
+        // @ mpacReservedVariableNames == .rodata 0x82F33144 / @ dword_8305A6A0 - the
+        // reserved-variable name table and its precomputed hashes (filled by
+        // CalculateReservedVariableHashes @0x8284A1F8).
+        // ⛔⛔ BANNER CORRECTION (2026-08-29). The previous note here said the strings
+        // "live in un-exported X360 rodata ... until they are recovered the table entries
+        // are null and the hashes zero -- UpdateComponentReserved then CORRECTLY treats
+        // every key as 'not reserved' (off the title-menu path)". That last clause was
+        // wrong twice over: the path is NOT off-menu (LicenseComponent::SetPosition,
+        // RivalTableCell and CgsAptAnimator all drive it), and an all-null table does not
+        // make the drop correct -- it made EVERY reserved apt variable a SILENT DROP.
+        // With zero hashes the `while (luKeyHash != mauReservedVariablesHashes[i])` scan
+        // in UpdateComponentReserved falls off the end and returns, so _x / _y / _width /
+        // _height / _visible / _rotation / _alpha / _xscale / _yscale were all discarded
+        // for every GUI component in the build, with no log line and no assert.
+        // The names are now READ FROM THE IMAGE -- see the definition in the .cpp.
         static const char* mpacReservedVariableNames[KI_NUM_RESERVED_VARIABLES];
         static u32         mauReservedVariablesHashes[KI_NUM_RESERVED_VARIABLES];
 
