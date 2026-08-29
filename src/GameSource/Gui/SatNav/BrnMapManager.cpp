@@ -4,11 +4,11 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameSource/Gui/BrnGuiCache.h"              // BrnGui::GuiCache (RecvEvent resource load)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // CgsGui::sResourceTuple / ResourceRequestTypes
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // [map arm] StateInterface::GetAllocator (Construct)
-#include "SharedClasses/Gui/SatNav/BrnMapUtils.h"    // [map arm] MapTransform (Construct's world-corner pair)
 #include "pc/gcm/renderengine/renderstates.h"        // renderengine::TextureState (Initialize + GetResourceDescriptor)
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface::GetAllocator (Construct)
+#include "SharedClasses/Gui/SatNav/BrnMapUtils.h"    // BrnGui::MapTransform (Construct's world box)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG-TEMP] the map-lowres probe
 
-#include <new>       // placement new (ctor)
 #include <cstdlib>   // qsort (RefreshActiveTextureArray)
 #include <cmath>     // fabsf (SetZoomLevel)
 
@@ -16,6 +16,23 @@
 // leading sub-objects; RefreshActiveTextureArray rebuilds the flattened active-texture set;
 // GetTileState / RemoveTileFromSet / SetZoomLevel manage the requested-tile cache. See the
 // header for the (X360-pinned) member layout.
+//
+// ⭐ MOUNTABILITY (2026-08-29, main-menu wave D1). This TU used to hand-declare two MSVC CRT
+// artifacts -- `_vector_constructor_iterator_` and rw::Resource::`default constructor closure'
+// -- as extern "C" externals with no definition anywhere in the tree, which is why it could
+// never be added to the build list. Both are gone: the ctor now spells the SAME construction
+// as explicit C++ loops over the NAMED members (the committed-tree pattern for a PPC
+// vector-ctor idiom). The rw::Resource closure @0x823FD950 is, verbatim,
+//     li r11,0 ; stw r11,0(r3) ; stw r11,4(r3) ; stw r11,8(r3) ; stw r11,0xC(r3)
+//     stw r11,0x10(r3) ; stw r11,0(r3) ; blr
+// i.e. it ZEROES the whole 20-byte X360 rw::Resource -- exactly what value-initialising
+// `rw::Resource()` does on the host (BaseResources<4>: four null base-resource pointers), so
+// the semantics are preserved, not approximated.
+//
+// ⚠️ The old ctor also walked the object through RAW X360 BYTE OFFSETS (`new (lp + 0x2C8)`
+// ...). Those offsets are 4-byte-pointer console offsets; on the LLP64 host sTileCache and
+// sTexture are wider and every one of them pointed into the wrong member. Reaching the
+// members BY NAME is both the campaign rule and the bug fix.
 
 namespace BrnGui
 {
@@ -36,122 +53,130 @@ namespace BrnGui
     //           (6 tiles, stride 88; 3 * 20B resources per tile)
     //   +0x2B4  mActiveTextures.maTextures[19].mBB / .mBBWorld  sRect::sRect()
     //
-    // ⭐ [map arm 2026-08-27] REWRITTEN MEMBER-BY-NAME (was raw `this`+X360-offset
-    // placement news through two hand-declared, never-defined CRT closure externs --
-    // both un-mountable AND layout-corrupting on the LLP64 host, where every offset
-    // past the first pointer differs from the console's). The console's placement-new
-    // runs ARE the compiler-emitted member construction + the two explicit init loops;
-    // the by-name folds below are those exact semantics on the host layout. The
-    // `vector constructor iterator` over rw::Resource::`default constructor closure'
-    // is a per-element rw::Resource default construction == value-init of the POD.
+    // All byte offsets are X360 (4-byte-pointer ABI); members are reached by raw
+    // offset here so the exact store order / partial zeroing matches the asm.
     // ---------------------------------------------------------------------------
     MapManager::MapManager()
     {
-        // mWorldRect / mScreenRect / mLowResTexture's two boxes / every active-texture
-        // entry's two boxes: sRect::sRect() -> (0,0,1,1). The console emits these as the
-        // inline placement-new runs at +0x00/+0x10/+0x24/+0x34/+0x2B4.. .
-        mWorldRect            = SatNavTile::sRect();
-        mScreenRect           = SatNavTile::sRect();
+        // X360 0x82508550: sRect::sRect(this+0) / (this+16) -- mWorldRect / mScreenRect,
+        // each the sRect default ctor @0x82447F50 -> (0, 0, 1, 1).
+        mWorldRect  = SatNavTile::sRect();
+        mScreenRect = SatNavTile::sRect();
+
+        // X360: sRect::sRect(this+36) / (this+52) -- mLowResTexture's two bounding boxes
+        // (mLowResTexture @+0x20, mBB @+0x04, mBBWorld @+0x14). mpTextureState is NOT
+        // touched here; MainMapComponent::Construct's MapManager::Construct zeroes it.
         mLowResTexture.mBB      = SatNavTile::sRect();
         mLowResTexture.mBBWorld = SatNavTile::sRect();
-        for (uint32_t luTexture = 0; luTexture < KU_MAX_TEXTURES_IN_CACHE; ++luTexture)
+
+        // X360: the `v3 = 2 downto 0` five-word store loop at this+84 -- zeroes
+        // mLowResTextureCache.mTextureStateResources[3] (3 x 20 bytes on the console).
+        for (uint32_t luIndex = 0; luIndex < KU_MAX_NUMBER_OF_TEXTURES_PER_TILE; ++luIndex)
         {
-            mActiveTextures.maTextures[luTexture].mBB      = SatNavTile::sRect();
-            mActiveTextures.maTextures[luTexture].mBBWorld = SatNavTile::sRect();
+            mLowResTextureCache.mTextureStateResources[luIndex] = rw::Resource();
         }
 
-        // Zero mLowResTextureCache.mTextureStateResources[3] (the console's 3 x 5-word
-        // zero loop at +0x54).
-        for (int liResource = 0; liResource < 3; ++liResource)
-        {
-            mLowResTextureCache.mTextureStateResources[liResource] = rw::Resource();
-        }
-
-        // Default-construct the 3 rw::Resource entries of each maRequestedTiles[i]
-        // cache (the console's vector-constructor-iterator loop at +0xAC, stride 0x58).
+        // X360: the `v4 = 5 downto 0` loop, stride 88, calling
+        // `vector constructor iterator'(base, 20, 3, rw::Resource::`default ctor closure')
+        // on each maRequestedTiles[i].mTextureStateResources -- i.e. zero all 6 x 3 entries
+        // (the closure @0x823FD950 is a pure 20-byte zero-fill; see the banner).
         for (uint32_t luTile = 0; luTile < KU_TILE_ARRAY_SIZE; ++luTile)
         {
-            for (int liResource = 0; liResource < 3; ++liResource)
+            for (uint32_t luIndex = 0; luIndex < KU_MAX_NUMBER_OF_TEXTURES_PER_TILE; ++luIndex)
             {
-                maRequestedTiles[luTile].mTextureStateResources[liResource] = rw::Resource();
+                maRequestedTiles[luTile].mTextureStateResources[luIndex] = rw::Resource();
             }
+        }
+
+        // X360: the `v6 = 18 downto 0` loop, stride 36, sRect::sRect on (base-16) and (base)
+        // -- mActiveTextures.maTextures[19]'s mBB and mBBWorld. mpTextureState again untouched.
+        for (uint32_t luIndex = 0; luIndex < KU_MAX_TEXTURES_IN_CACHE; ++luIndex)
+        {
+            mActiveTextures.maTextures[luIndex].mBB      = SatNavTile::sRect();
+            mActiveTextures.maTextures[luIndex].mBBWorld = SatNavTile::sRect();
         }
     }
 
     // ---------------------------------------------------------------------------
     // BrnGui::MapManager::Construct
     //
-    // X360 ARTIST @0x82458590 ([map arm 2026-08-27]). Adopt the state interface and
-    // its allocator, reset the whole working set, and seed the low-res backdrop slot:
-    // local BB = the unit rect, world BB = the WHOLE world rect (the two
-    // MapTransform::Transform calls take the unit corners (0,0)/(1,1) from the
-    // NORMALISED space (unk_82FB2FA0) into the WORLD space (unk_82FB3610) -- which is
-    // by definition {smv4WorldRect.min, smv4WorldRect.max}; the backdrop texture
-    // covers all of Paradise City).
-    //   *(+0x56C) = lpStateInterface        *(+0x574) = iface->mpAllocator (h:337 assert)
-    //   mapDirectories[2] = 0               memset(maRequestedTiles, 0, 0x210)
-    //   muTilesRequestedCount = 0           mbEnabled = 0
-    //   meZoomLevel = E_ZOOM_MEDIUM (0)     mLowResTextureCache.mpTile = 0
-    //   mLowResTexture.mpTextureState = 0   mLowResTexture.mBB = (0,0,1,1)
-    //   mLowResTexture.mBBWorld = {world(0,0), world(1,1)}
+    // X360 ARTIST @0x82458590 (json name field verified). Called by
+    // MainMapComponent::Construct on the embedded manager (`bl` at 0x8245E3AC, r4 == the
+    // state interface). Landed this wave so that the REAL MapManager::RecvEvent -- which
+    // dereferences mpAllocator -- can replace its BrnMainMapLinkGates stand-in without
+    // reading uninitialised state; the semantics were already transcribed into
+    // BrnMainMap.cpp's FLAG boundary and are re-verified here against the export.
+    //
+    // ⭐ ONE CORRECTION TO THAT TRANSCRIPTION: it recorded `mWorldRect = {0,0,1,1}`. The
+    // asm's four stores at this+36/40/44/48 are 0x24..0x30, which is
+    // mLowResTexture.mBB, NOT mWorldRect (+0x00) -- mWorldRect is not touched by Construct
+    // at all (the ctor's sRect() already left it {0,0,1,1}). The {0,0,1,1} unit box is the
+    // backdrop texture's LOCAL box, and the world box below is that same unit square taken
+    // into world space, which is exactly what a full-world backdrop should be.
     // ---------------------------------------------------------------------------
     void MapManager::Construct(CgsGui::StateInterface* lpStateInterface)
     {
         CGS_ASSERT(lpStateInterface != NULL, "lpStateInterface != NULL");   // cpp:62
+
         mpStateInterface = lpStateInterface;
-        // GetAllocator carries the console's own inlined mpAllocator assert
-        // (CgsGuiStateInterface.h:337).
+
+        // The X360 inlines the accessor; the "mpAllocator != NULL" assert at
+        // CgsGuiStateInterface.h:337 in the export set is that accessor's own, so the real
+        // call carries it.
         mpAllocator = lpStateInterface->GetAllocator();
 
         mapDirectories[E_ZOOM_MEDIUM] = NULL;
         mapDirectories[E_ZOOM_HIGH]   = NULL;
 
-        // The console memsets the whole 6-slot requested-tile array (0x210 bytes at
-        // +0x9C); member-wise zero on the host layout.
+        // X360 `memset(this + 156, 0, 528)` == maRequestedTiles (6 x 88 console bytes).
+        // Spelled by name because 88 is the CONSOLE stride; the host record is wider.
         for (uint32_t luTile = 0; luTile < KU_TILE_ARRAY_SIZE; ++luTile)
         {
-            SatNavTile::sTileCache& lrTile = maRequestedTiles[luTile];
-            lrTile.meState        = SatNavTile::E_STATE_UNLOADED;
-            lrTile.muID           = 0;
-            lrTile.mpTile         = NULL;
-            lrTile.muTextureCount = 0;
-            for (int liResource = 0; liResource < 3; ++liResource)
+            SatNavTile::sTileCache& lTile = maRequestedTiles[luTile];
+            lTile.meState        = SatNavTile::E_STATE_UNLOADED;
+            lTile.muID           = 0u;
+            lTile.mpTile         = NULL;
+            lTile.muTextureCount = 0u;
+            for (uint32_t luIndex = 0; luIndex < KU_MAX_NUMBER_OF_TEXTURES_PER_TILE; ++luIndex)
             {
-                lrTile.mTextureStateResources[liResource] = rw::Resource();
-                lrTile.mapTextureStates[liResource]       = NULL;
+                lTile.mTextureStateResources[luIndex] = rw::Resource();
+                lTile.mapTextureStates[luIndex]       = NULL;
             }
         }
 
-        muTilesRequestedCount = 0;
-        mbEnabled             = false;
-        meZoomLevel           = E_ZOOM_MEDIUM;
+        muTilesRequestedCount = 0u;              // +0x568
+        mbEnabled             = false;           // +0x564
+        meZoomLevel           = E_ZOOM_MEDIUM;   // +0x570
 
+        // The console zeroes exactly these two head words of the low-res pair -- the cache's
+        // mpTile (+0x4C) and the backdrop's texture-state (+0x20). The latter is
+        // load-bearing: it is RecvEvent's "already built" guard.
         mLowResTextureCache.mpTile    = NULL;
         mLowResTexture.mpTextureState = NULL;
 
+        // this+36..48 -- the backdrop's LOCAL box is the unit square.
         mLowResTexture.mBB.mfLeft   = 0.0f;
         mLowResTexture.mBB.mfTop    = 0.0f;
         mLowResTexture.mBB.mfRight  = 1.0f;
         mLowResTexture.mBB.mfBottom = 1.0f;
 
-        // The two normalised->world corner transforms (the console's stacked
-        // smm33NormalisedSpace/smm33WorldSpace copies + the Transform pair).
-        {
-            Vector2 lv2Zero;
-            lv2Zero.x = 0.0f; lv2Zero.y = 0.0f; lv2Zero.z = 0.0f; lv2Zero.w = 0.0f;
-            Vector2 lv2One;
-            lv2One.x = 1.0f; lv2One.y = 1.0f; lv2One.z = 0.0f; lv2One.w = 0.0f;
+        // this+52..64 -- the same unit square carried from NORMALISED space into WORLD
+        // space. The asm stages the two corners through one scratch quadword: the first
+        // MapTransform::Transform runs on (0,0) and its x/y land in words 0/1, then the
+        // second runs on (1,1) into words 2/3 (0x82458748..0x82458770). The matrix pointers
+        // are r3 = a copy of smm33NormalisedSpace @0x82FB2FA0 (the FROM space) and
+        // r4 = a copy of smm33WorldSpace @0x82FB3610 (the TO space).
+        const Vector2 lv2UnitMin = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector2 lv2UnitMax = { 1.0f, 1.0f, 0.0f, 0.0f };
+        const Vector2 lv2WorldMin = MapTransform::Transform(
+            lv2UnitMin, MapTransform::GetNormalisedSpace(), MapTransform::GetWorldSpace());
+        const Vector2 lv2WorldMax = MapTransform::Transform(
+            lv2UnitMax, MapTransform::GetNormalisedSpace(), MapTransform::GetWorldSpace());
 
-            const Vector2 lv2WorldMin = MapTransform::Transform(
-                lv2Zero, MapTransform::GetNormalisedSpace(), MapTransform::GetWorldSpace());
-            const Vector2 lv2WorldMax = MapTransform::Transform(
-                lv2One, MapTransform::GetNormalisedSpace(), MapTransform::GetWorldSpace());
-
-            mLowResTexture.mBBWorld.mfLeft   = lv2WorldMin.x;
-            mLowResTexture.mBBWorld.mfTop    = lv2WorldMin.y;
-            mLowResTexture.mBBWorld.mfRight  = lv2WorldMax.x;
-            mLowResTexture.mBBWorld.mfBottom = lv2WorldMax.y;
-        }
+        mLowResTexture.mBBWorld.mfLeft   = lv2WorldMin.x;
+        mLowResTexture.mBBWorld.mfTop    = lv2WorldMin.y;
+        mLowResTexture.mBBWorld.mfRight  = lv2WorldMax.x;
+        mLowResTexture.mBBWorld.mfBottom = lv2WorldMax.y;
     }
 
     // @0x82448760 -- the bundle-load state of the requested-tile slot owning luID.
@@ -333,6 +358,17 @@ namespace BrnGui
             return;
         }
 
+        // [DIAG-TEMP] NOT IN THE X360 BINARY -- [map-lowres] the backdrop build attempt.
+        static int32_t siLowResLog = 6;
+        const bool lbLog = (siLowResLog > 0 && CgsDev::Log::gpDebugPrint != 0);
+        if (lbLog)
+        {
+            --siLowResLog;
+            *CgsDev::Log::gpDebugPrint
+                << "[map-lowres] event 64 reached; cache=" << (lpCache != NULL ? 1 : 0)
+                << " alloc=" << (mpAllocator != NULL ? 1 : 0) << "\n";
+        }
+
         // The low-res sat-nav map texture resource (id 199, a localised-text-class resource).
         const uint32_t luMapTextureResourceId = 199u;
 
@@ -340,12 +376,23 @@ namespace BrnGui
         lResourceTuple.muId   = luMapTextureResourceId;
         lResourceTuple.meType = CgsGui::E_GUI_RESOURCETYPE_LOCALISED_TEXT;   // 11
 
-        if (!lpCache->EnsureResourceIsLoaded(lResourceTuple))
+        const bool lbLoaded = lpCache->EnsureResourceIsLoaded(lResourceTuple);
+        if (lbLog)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[map-lowres] EnsureResourceIsLoaded(199,LOCALISED_TEXT)=" << (lbLoaded ? 1 : 0) << "\n";
+        }
+        if (!lbLoaded)
         {
             return;
         }
 
         const void* lpTexture2D = lpCache->GetLoadedResource(luMapTextureResourceId);
+        if (lbLog)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[map-lowres] GetLoadedResource(199)=" << (lpTexture2D != NULL ? 1 : 0) << "\n";
+        }
         CGS_ASSERT(lpTexture2D != NULL, "lpTexture2D != NULL");
 
         // Sampler parameters for the backdrop texture-state (clamp-ish addressing, point/linear
@@ -377,12 +424,32 @@ namespace BrnGui
 
         // Size the texture-state resource, carve it from the manager's allocator, initialise the
         // sampler+raster state in it, and latch the result into the low-res cache slot + backdrop.
+        //
+        // ⚠️ X360-vs-host descriptor WIDTH. The console's GetResourceDescriptor writes a
+        // rw::BaseResourceDescriptors<5> (10 words) and hands that same pointer straight to
+        // the allocator vtable slot; the host rwcore's rw::ResourceDescriptor is <4> (8 words).
+        // Reinterpreting the 10-word buffer as a ResourceDescriptor would be an X360 width on
+        // the host, so the slot-0 {size, alignment} is transcribed across explicitly and the
+        // remaining entries take rw's identity descriptor -- the committed pattern at
+        // CgsAptRenderHandler.cpp:325-341.
         uint32_t laDescriptor[10];
         renderengine::TextureState::GetResourceDescriptor(laDescriptor);
 
-        rw::Resource lAllocatedResource = mpAllocator->DoAllocate(
-            *reinterpret_cast<const rw::ResourceDescriptor*>(laDescriptor), NULL);
+        rw::ResourceDescriptor lAllocDescriptor;
+        lAllocDescriptor.m_baseResourceDescriptors[0].m_size      = laDescriptor[0];
+        lAllocDescriptor.m_baseResourceDescriptors[0].m_alignment = laDescriptor[1];
+        lAllocDescriptor.m_baseResourceDescriptors[1].m_size      = 0u;
+        lAllocDescriptor.m_baseResourceDescriptors[1].m_alignment = 1u;
+        lAllocDescriptor.m_baseResourceDescriptors[2].m_size      = 0u;
+        lAllocDescriptor.m_baseResourceDescriptors[2].m_alignment = 1u;
+        lAllocDescriptor.m_baseResourceDescriptors[3].m_size      = 0u;
+        lAllocDescriptor.m_baseResourceDescriptors[3].m_alignment = 1u;
 
+        // X360 `(*(**(this+1396) + 16))(&result, mpAllocator, descriptor, 0)` -- the
+        // IResourceAllocator DoAllocate slot, name argument NULL.
+        rw::Resource lAllocatedResource = mpAllocator->DoAllocate(lAllocDescriptor, NULL);
+
+        // X360: the five-word `*v12++ = *v11++` copy of the returned Resource into this+84.
         mLowResTextureCache.mTextureStateResources[0] = lAllocatedResource;
 
         renderengine::TextureState* lpState = renderengine::TextureState::Initialize(
@@ -392,6 +459,13 @@ namespace BrnGui
             reinterpret_cast<CgsGraphics::TextureState*>(lpState);
         mLowResTexture.mpTextureState =
             reinterpret_cast<CgsGraphics::TextureState*>(lpState);
+
+        // [DIAG-TEMP] NOT IN THE X360 BINARY.
+        if (lbLog)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[map-lowres] BACKDROP BUILT state=" << (lpState != NULL ? 1 : 0) << "\n";
+        }
     }
 
     // @0x8244FA80 -- rebuild the working tile set for the current world rect and zoom level. At

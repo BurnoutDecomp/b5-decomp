@@ -28,9 +28,13 @@ namespace BrnGui
             u32 muEventID;         // h:52
         };
 
-        // DWARF h:59/h:69/h:73/h:96/h:100 -- declaration-only (their own ledger
-        // functions). Prepare/ReleaseResources drive the GuiEventDrawEventIcons view
-        // state; the display-type enum lives with the sat-nav event defs.
+        // DWARF h:59/h:69/h:73/h:96/h:100. Construct / Update / Destruct are still
+        // declaration-only (their own ledger functions); Prepare @0x82517390 and
+        // ReleaseResources @0x825174C0 are BODIED in this TU as of 2026-08-29 (main-menu
+        // wave G2) -- they drive the GuiEventDrawEventIcons view state on channels 41 and 42.
+        // The display-type enum lives with the sat-nav event defs; leNewEventIconType is
+        // typed s32 here because that is how the X360 passes it (`stw r5, 0x2C`), and the
+        // .cpp casts it to GuiEventDrawEventIcons::EIconDisplayType at the one use.
         void Construct();
         void Prepare(CgsGui::StateInterface* lpStateInterface, GuiCache* lpGuiCache,
                      f32 lfOptionalFadeDuration, s32 leNewEventIconType,

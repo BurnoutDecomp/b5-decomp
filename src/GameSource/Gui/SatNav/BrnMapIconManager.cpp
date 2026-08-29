@@ -20,11 +20,25 @@
 // (UpdateWorldIcons @0x82511C88 drive-through pass, CalculateAlpha @0x82502940,
 // GetSatNavIconStateForRival @0x824FA320, IconDisplaySort @0x824F4508) and the
 // UpdateSatNavInfo two-flag FIX (the player record now reaches the used set -- the
-// yellow arrow). NAMED GATES remaining (each one-shot logged at its site): the
-// crash-nav pool half (component ctor unreconstructed) + UpdateCrashNavIcons
-// @0x825212C0, the landmark/checkpoint passes + the case-4 landmark state machine,
-// the online-route start/finish-point lookups, the online colour lookups and the
-// LARGE-map rival naming arm.
+// yellow arrow).
+//
+// ⭐ F3 (2026-08-29) closes this class's link holes against the CrashNavMap mount and
+// lands the CRASH-NAV pass. Bodied here:
+//   SetupComponent      @0x825123C0    AppendExpectedAptComponents     @0x82502A80
+//   GetSatNavIconPositions @0x8250A708 GetRivalIconAtIndex             @0x824FA7E0
+//   GetRoadSignNameAtIndex @0x824FAA50 GetEventIDAtIndex               @0x824FAB38
+//   GetDriveThroughAndJunkyardCount @0x824F4888
+//   UpdateCrashNavIcons @0x825212C0 -- the 50-element crash-nav apt icon-pool drive,
+//     committing through the newly-bodied CrashNavMapIcon::Update @0x8244F5D0.
+// The pool itself (mCrashNavIcons) is modelled now; see the CrashNavIconComponent
+// banner in BrnSatNavIcon.h for the element/0x90 split and its three X360 witnesses.
+//
+// NAMED GATES remaining (each one-shot logged at its site): the crash-nav pool BIND half
+// (CrashNavMapIcon::Construct @0x824481A8 unreconstructed, so the pool's components have
+// no apt clip yet), the landmark/checkpoint passes + the case-4 landmark state machine in
+// BOTH icon passes, the online-route start/finish-point lookups, the online colour
+// lookups, the LARGE-map rival naming arm, and UpdateCrashNavIcons' trailing GUI event
+// 561 (the crash-nav icon-set handoff; the payload type is not modelled in the tree).
 //
 // All branch conditions and the compared constants come from the X360 asm/pseudocode; the
 // game-mode and icon-type literals are resolved to their canonical enumerators (DecFIGS
@@ -206,6 +220,253 @@ const GuiEventUpdateSatNav::SatNavIconInfo* MapIconManager::GetDriveThroughOrJun
 }
 
 
+// ===================== [F3 2026-08-29] the map-UI query surface =====================
+// The seven link holes the S2 census measured against the CrashNavMap mount. Each is a
+// real X360 out-of-line body, transcribed store-for-store; all seven were already
+// DECLARED in the committed header, so nothing here is a new type.
+
+// @ 0x825123C0 -- bind the apt components. The whole body is the road-sign forward,
+// gated on mbUseRoadSigns (X360: `lbz r?, 0xA1B0(this); beq -> blr`).
+void MapIconManager::SetupComponent()
+{
+    if (mbUseRoadSigns)   // +0xA1B0
+    {
+        mRoadSignIconManager.SetupComponent();
+    }
+}
+
+// @ 0x82502A80 -- forward the expected-apt-component pass into the road-sign manager.
+// The X360 body is an UNCONDITIONAL tail-call (no mbUseRoadSigns gate here, unlike
+// SetupComponent above -- reproduced as the image has it, not "made consistent").
+void MapIconManager::AppendExpectedAptComponents()
+{
+    mRoadSignIconManager.AppendExpectedComponents();
+}
+
+// @ 0x824F4888 -- how many drive-through / junkyard icons occupy the front of the
+// selection-index space. Same filter chain as GetDriveThroughOrJunkyardAtIndex above
+// (hidden skip, paint-shop skip in road-rage/marked-man, junkyard only in freeburn or
+// the online free-burn lobby) -- this one just counts. The console re-loads the cache
+// pointer and the mode each iteration; the mode re-read is kept because the loop body
+// really does read it twice on the console.
+s32 MapIconManager::GetDriveThroughAndJunkyardCount() const
+{
+    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // :2720 (non-gating)
+
+    const bool lbSkipPaintShop = (mpGuiCache->GetGameMode() == E_MODE_ROAD_RAGE
+                                  || mpGuiCache->GetGameMode() == E_MODE_MARKED_MAN);
+
+    s32 liCount = 0;
+    const s32 liNumDriveThroughs = mpGuiCache->GetNumberOfDriveThroughs();
+    for (s32 liIndex = 0; liIndex < liNumDriveThroughs; ++liIndex)
+    {
+        CGS_ASSERT(liIndex < mpGuiCache->GetNumberOfDriveThroughs(),
+                   "liIndex < miNumDriveThroughs");   // BrnGuiCache.h:5164 (non-gating)
+
+        const SatNavIconInfo* lpIcon = mpGuiCache->GetDriveThrough(liIndex);
+
+        if (!lpIcon->IsHiddenDriveThru()
+            && (!lbSkipPaintShop
+                || lpIcon->GetIconTypeByte() != SatNavIconInfo::E_SATNAVICON_PAINT_SHOP))
+        {
+            const s32 liGameMode = mpGuiCache->GetGameMode();
+            const bool lbAllowJunkyard =
+                (liGameMode == E_MODE_NONE || liGameMode == E_MODE_ONLINE_FREE_BURN_LOBBY);
+
+            if (lbAllowJunkyard
+                || lpIcon->GetIconTypeByte() != SatNavIconInfo::E_SATNAVICON_JUNKYARD)
+            {
+                ++liCount;
+            }
+        }
+    }
+
+    return liCount;
+}
+
+// @ 0x824FAA50 -- the interned component name of the road-sign icon at a map selection
+// index (callers compare the returned pointer by identity). Rivals occupy the front of
+// the selection space when rival selection is on, so their count comes off first.
+const char* MapIconManager::GetRoadSignNameAtIndex(s32 liIndex) const
+{
+    CGS_ASSERT(liIndex >= 0, "liIndex >= 0");                        // :2591 (non-gating)
+    CGS_ASSERT(mbUseRoadSigns == true, "mbUseRoadSigns == true");    // :2592 (non-gating)
+
+    s32 liRoadSignIndex = liIndex;
+    if (mbAllowRivalSelection)   // +0x7081
+    {
+        liRoadSignIndex -= GetNumRivalIcons();
+    }
+
+    CGS_ASSERT(liRoadSignIndex >= 0, "liRoadSignIndex >= 0");        // :2601 (non-gating)
+    CGS_ASSERT(liRoadSignIndex < mRoadSignIconManager.GetNumIcons(),
+               "liRoadSignIndex < mRoadSignIconManager.GetNumIcons()");   // :2602 (non-gating)
+
+    return mRoadSignIconManager.GetIconNameAtIndex(static_cast<u32>(liRoadSignIndex));
+}
+
+// @ 0x824FAB38 -- the event id of the event icon at a map selection index. The index
+// space in front of the event icons is: rivals (when selectable), then EITHER the 64
+// road signs (when road signs are on) OR the drive-throughs/junkyards -- never both.
+u32 MapIconManager::GetEventIDAtIndex(s32 liIndex) const
+{
+    CGS_ASSERT(meEventIconDisplayType != GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT,
+               "meEventIconDisplayType != GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT");
+                                                                     // :2618 (non-gating)
+
+    s32 liEventIndex = liIndex;
+
+    if (mbAllowRivalSelection)   // +0x7081
+    {
+        liEventIndex -= GetNumRivalIcons();
+    }
+
+    if (mbUseRoadSigns)          // +0xA1B0
+    {
+        // X360 `subi 64` -- the whole road-sign pool always occupies the slice.
+        liEventIndex -= static_cast<s32>(RoadSignIconManager::KU_NUM_SIGN_ICONS);
+    }
+    else if (mbAllowDriveThruSelection && !mbShowingOnlineRoute)   // +0x7080 / +0xAA1F
+    {
+        liEventIndex -= GetDriveThroughAndJunkyardCount();
+    }
+
+    return mEventIconManager.GetEventIDForIconIndex(liEventIndex);
+}
+
+// @ 0x824FA7E0 -- the rival icon at a map selection index. Walks the used set counting
+// rival-family records (network rival / marked man / rival) and returns the liIndex'th.
+const GuiEventUpdateSatNav::SatNavIconInfo* MapIconManager::GetRivalIconAtIndex(s32 liIndex)
+{
+    CGS_ASSERT(mbAllowRivalSelection, "mbAllowRivalSelection");                 // :2558
+    CGS_ASSERT(liIndex >= 0, "liIndex >= 0");                                   // :2559
+    CGS_ASSERT(liIndex < GetNumRivalIcons(), "liIndex < GetNumRivalIcons()");   // :2560
+
+    s32 liRivalsSeen = 0;
+
+    for (s32 liIcon = 0; liIcon < miNumUsedIcons; ++liIcon)
+    {
+        const SatNavIconInfo& lrIcon = mSatNavIconInfo[liIcon];
+
+        const s8 li8IconType = lrIcon.GetIconTypeByte();
+        CGS_ASSERT(li8IconType >= 0, "leIconType >= 0");                        // TypeDefs:1911
+        CGS_ASSERT(li8IconType < SatNavIconInfo::E_SATNAVICON_MAX,
+                   "leIconType < E_SATNAVICON_MAX");                            // TypeDefs:1912
+
+        if (li8IconType == SatNavIconInfo::E_SATNAVICON_NETWORKRIVAL ||
+            li8IconType == SatNavIconInfo::E_SATNAVICON_MARKED_MAN ||
+            li8IconType == SatNavIconInfo::E_SATNAVICON_RIVAL)
+        {
+            if (liIndex == liRivalsSeen)
+            {
+                return &lrIcon;
+            }
+            ++liRivalsSeen;
+        }
+    }
+
+    // The X360 builds "Failed to find a rival icon for index <n>." into the assert
+    // message buffer, fires it, and returns r3 = 0.
+    CGS_ASSERT(false, "Failed to find a rival icon for index");   // :2576 (non-gating)
+    return 0;
+}
+
+// @ 0x8250A708 -- every on-screen icon position in device space, in the map cursor's
+// snap-index order: rivals, road signs, drive-throughs/junkyards, event icons, then the
+// local player last. Every transform is WorldToDevice with lbClamp = FALSE (the console
+// passes r3 = 0 at all four sites) -- off-screen icons are NOT pulled to the edge here,
+// unlike the icon-drawing passes, because these are snap targets.
+void MapIconManager::GetSatNavIconPositions(Vector2* lpav2Positions, s32* lpiNumIcons)
+{
+    CGS_ASSERT(lpiNumIcons != 0, "lpiNumIcons != NULL");   // :2484 (non-gating)
+    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");             // :2485 (non-gating)
+
+    *lpiNumIcons = 0;
+
+    // ---- rivals (only when they are selectable; they own the front of the space) ----
+    if (mbAllowRivalSelection)   // +0x7081
+    {
+        s32 liNumRivals = 0;
+
+        for (s32 liIcon = 0; liIcon < miNumUsedIcons; ++liIcon)
+        {
+            const SatNavIconInfo& lrIcon = mSatNavIconInfo[liIcon];
+            const s8 li8IconType = lrIcon.GetIconTypeByte();
+
+            if (li8IconType == SatNavIconInfo::E_SATNAVICON_NETWORKRIVAL ||
+                li8IconType == SatNavIconInfo::E_SATNAVICON_MARKED_MAN ||
+                li8IconType == SatNavIconInfo::E_SATNAVICON_RIVAL)
+            {
+                const Vector4& lv4Pos = lrIcon.GetPositionLane();
+                Vector3 lv3World;
+                lv3World.x = lv4Pos.x; lv3World.y = lv4Pos.y;
+                lv3World.z = lv4Pos.z; lv3World.w = lv4Pos.w;
+
+                lpav2Positions[liNumRivals] = MapTransform::WorldToDevice(lv3World, false);
+                ++liNumRivals;
+            }
+        }
+
+        *lpiNumIcons += liNumRivals;
+    }
+
+    // ---- the 64 road signs ----
+    if (mbUseRoadSigns)   // +0xA1B0
+    {
+        s32 liNumRoadSigns = 0;
+        mRoadSignIconManager.GetRoadSignIconPositions(lpav2Positions + *lpiNumIcons,
+                                                      &liNumRoadSigns);
+        *lpiNumIcons += liNumRoadSigns;
+    }
+
+    // ---- the drive-throughs / junkyards ----
+    if (mbAllowDriveThruSelection)   // +0x7080
+    {
+        if (!mbShowingOnlineRoute)   // +0xAA1F
+        {
+            // The console re-calls GetDriveThroughAndJunkyardCount as the loop bound on
+            // every iteration; kept, because the count is derived from live cache state.
+            for (s32 liDriveThrough = 0;
+                 liDriveThrough < GetDriveThroughAndJunkyardCount();
+                 ++liDriveThrough)
+            {
+                const SatNavIconInfo* lpIcon =
+                    GetDriveThroughOrJunkyardAtIndex(liDriveThrough);
+
+                const Vector4& lv4Pos = lpIcon->GetPositionLane();
+                Vector3 lv3World;
+                lv3World.x = lv4Pos.x; lv3World.y = lv4Pos.y;
+                lv3World.z = lv4Pos.z; lv3World.w = lv4Pos.w;
+
+                lpav2Positions[*lpiNumIcons] = MapTransform::WorldToDevice(lv3World, false);
+                ++(*lpiNumIcons);
+            }
+        }
+    }
+
+    // ---- the 2D event icons (already in device space; a straight copy) ----
+    if (meEventIconDisplayType != GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT)
+    {
+        s32 liNumEventIcons = 0;
+        mEventIconManager.GetEventIconPositions(lpav2Positions + *lpiNumIcons,
+                                                &liNumEventIcons);
+        *lpiNumIcons += liNumEventIcons;
+    }
+
+    // ---- the local player, last (the cache's world camera lane @+0x4AE0) ----
+    if (mbAllowPlayerSelection)   // +0xA1B1
+    {
+        const Vector4& lv4Player = mpGuiCache->GetWorldCameraPosition();
+        Vector3 lv3World;
+        lv3World.x = lv4Player.x; lv3World.y = lv4Player.y;
+        lv3World.z = lv4Player.z; lv3World.w = lv4Player.w;
+
+        lpav2Positions[*lpiNumIcons] = MapTransform::WorldToDevice(lv3World, false);
+        ++(*lpiNumIcons);
+    }
+}
+
+
 // ============================ H3b: the owner/update surface ============================
 
 // @ 0x824FA0F0 -- bind the cache and reset the whole selection/flag surface. The X360
@@ -250,10 +511,11 @@ void MapIconManager::Construct(GuiCache* lpGuiCache)
 }
 
 // @ 0x82520CE8 -- take ownership of the shared icon set for one screen. The parameter
-// -> member stores and the owner handshake are transcribed whole; the three sub-inits
-// the X360 runs on an owner change (the 50+16 apt icon component Construct/Prepare
-// loop, RoadSignIconManager::Prepare and EventIconManager::Prepare) ride the parked
-// icon slice -- one-shot-logged, see the banner.
+// -> member stores and the owner handshake are transcribed whole. The 50+16 apt icon
+// component Construct/Prepare loop is LANDED (F3 2026-08-29 -- it is the only writer of
+// mpStateInterface on the crash-nav pool, so the CrashNavMap main screen used to Update
+// never-constructed elements); RoadSignIconManager::Prepare and EventIconManager::Prepare
+// still ride the parked icon slice -- one-shot-logged where they sit.
 MapIconManager::OwnerId MapIconManager::SetOwnerParameters(
     CgsGui::StateInterface* lpStateInterface,
     const char* lpcComponentName,
@@ -265,7 +527,6 @@ MapIconManager::OwnerId MapIconManager::SetOwnerParameters(
     GuiEventDrawEventIcons::EIconDisplayType leEventIconDisplayType,
     const char* lpcIconParentName)
 {
-    (void)lpcIconParentName;
     CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");   // :263 (non-gating)
     CGS_ASSERT(lpcComponentName != 0, "lpcComponentName");   // :264 (non-gating)
 
@@ -278,29 +539,39 @@ MapIconManager::OwnerId MapIconManager::SetOwnerParameters(
 
         if (liMaxNumberIcons > 0)
         {
-            // [H3c] the per-icon component bind pass (the X360 loop @0x82520E70..):
-            // per icon a SPrintf'd "%s%d" name, the crash-nav component Construct +
+            // [H3c/F3] the per-icon component bind pass (the X360 loop @0x82520E70..):
+            // per icon a SPrintf'd "%s%d" name, the crash-nav ELEMENT Construct +
             // SetState(INVISIBLE) + dirty-flag raise, and -- for icons 0..15 -- the
             // sat-nav pair: SatNavMapIcon::Construct (slot 0 of the icon vtable),
             // FlaptManager::GetFile(0), the component Prepare (clip bind + icon reset)
-            // and a final SetState(INVISIBLE). The SAT-NAV half is LANDED below; the
-            // crash-nav half still rides the parked crash-nav pool (component ctor
-            // unreconstructed) -- one-shot-logged, not silent.
-            static bool sbLoggedCrashPark = false;
-            if (!sbLoggedCrashPark && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbLoggedCrashPark = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[UI-gate] PARK: MapIconManager::SetOwnerParameters crash-nav "
-                       "component half skipped (crash-nav pool unreconstructed; owner "
-                    << static_cast<s32>(leOwnerId) << ", " << liMaxNumberIcons << " icons)\n";
-            }
-
+            // and a final SetState(INVISIBLE). BOTH halves are now landed.
+            //
+            // The X360 keeps two independent cursors over the loop: r31 (v50) walks the
+            // crash-nav pool at icon+0x90 with stride 0x1F0, r14 (v49) walks the sat-nav
+            // pool with stride 0x60. It bounds-checks NEITHER against its pool size -- the
+            // "Max icons is larger than possible max icons" assert (:302, both pools are
+            // 50/16-shaped) fires AFTER the loop. Transcribed as the console has it; the
+            // sat-nav half keeps its own `liIcon < 16` arm because that IS a console test.
             char lacIconName[257];
             for (s32 liIcon = 0; liIcon < liMaxNumberIcons; ++liIcon)
             {
-                // [crash-nav component Construct + SetState(0) + the two dirty bytes:
-                //  parked with the crash-nav pool -- covered by the print above]
+                // ---- the crash-nav element half (X360 @0x82520E70..0x82520EAC) ----
+                CgsCore::SPrintf(lacIconName, 256, "%s%d", lpcComponentName, liIcon);
+
+                CrashNavIconComponent& lrCrashComponent = mCrashNavIcons[liIcon];
+                // `(**(icon-0x90))(icon-0x90, name, iface, parentName)` -- the ELEMENT's
+                // own vtable slot 0, i.e. CrashNavIconComponent::Construct @0x824481A8.
+                // THIS is what installs mpStateInterface on every pooled element; without
+                // it CrashNavMapIcon::Update's first AddOutputAptViewState asserts
+                // mpStateInterface null (CgsGuiComponent.cpp) and then dereferences it.
+                lrCrashComponent.Construct(lacIconName, lpStateInterface, lpcIconParentName);
+                // `((*icon)[4])(icon, 0)` -- icon vtable slot 4 == SetState. Construct has
+                // just stored meState = 0, so this compares equal and does nothing; the two
+                // dirty bytes are therefore raised explicitly right after, exactly as the
+                // console's `stb 1, 0x15C/0x15D` pair does.
+                lrCrashComponent.mIcon.SetState(MapIconBrnBase::E_ICONSTATE_INVISIBLE);
+                lrCrashComponent.mIcon.mbIsDirty        = true;   // icon+0x15C
+                lrCrashComponent.mIcon.mbDirtyIconState = true;   // icon+0x15D
 
                 if (liIcon < KI_MAX_SATNAV_MAP_ICONS)
                 {
@@ -1166,16 +1437,393 @@ void MapIconManager::UpdateSatNavIcons()
     }
 }
 
-// @ 0x825212C0 -- the crash-nav pass (the 50-icon pool + landmark state machines).
+// @ 0x825212C0 -- THE CRASH-NAV ICON-POOL DRIVE. [F3 2026-08-29 LANDED.]
+//
+// Structurally the twin of UpdateSatNavIcons above, but it drives the 50-element
+// crash-nav pool (mCrashNavIcons, the GuiComponent + CrashNavMapIcon pairs) instead of
+// the 16-element sat-nav one, and it commits through CrashNavMapIcon::Update
+// (@0x8244F5D0), which publishes _x/_y/_rotation/_alpha and the apt_state label.
+//
+// Differences from the sat-nav pass that are REAL, not transcription drift:
+//   * the used/max clamp asserts against 50, not 16 (:896-:898);
+//   * the plain-RIVAL arm has NO "online mode 13 and team 2" gate -- the crash-nav pass
+//     goes straight to LABEL_61 for network rivals (case 2) and gates only case 3 on
+//     mbShowOffLineRivalsOnSatNav / freeburn;
+//   * every record's CgsID low word is stamped into the pool icon's muId before the
+//     position commit (the crash-nav renderer keys off it);
+//   * the device position has a per-icon stack OFFSET added (`vaddfp128 v1,v1,v126`);
+//     only the case-4 checkpoint-stacking arms ever raise it, so it is zero here;
+//   * the body ends by posting a GUI event (id 561) carrying the used count and the pool
+//     base -- parked, see below.
+//
+// NAMED GATES (each one-shot logged, none silent): the two route start-point lookups,
+// the online player-colour arm, the LARGE-map rival arm (GetCrashNavIconStateForRival
+// @0x824F4680 has no body), the whole case-4 landmark state machine (IsStartIcon /
+// IsFinishIcon / IsTrackedIcon / IsPendingRaceLandmark / GuiTracker::GetTrackerInformation
+// and the checkpoint tables are all unreconstructed), and the trailing 561 post.
 void MapIconManager::UpdateCrashNavIcons()
 {
-    static bool sbLogged = false;
-    if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
+    typedef GuiEventUpdateSatNav::SatNavIconInfo SatNavIconInfo;
+
+    s32 liExtraIcons = 0;   // X360 v93 -- the route start-point icon reserves pool slot 0
+
+    CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // :877 (non-gating)
+
+    if (mbUseRoadSigns)                                  // +0xA1B0
+        mRoadSignIconManager.Update();
+    if (mpGuiCache->GetGameMode() == E_MODE_ONLINE_FREE_BURN_LOBBY)   // 15
+        UpdateFreeburnChallengeIcons();
+    UpdateWorldIcons();
+
+    CGS_ASSERT(miNumUsedIcons >= 0, "miNumUsedIcons >= 0");                        // :896
+    CGS_ASSERT(miNumUsedIcons <= KI_SATNAV_MAX_ICONS,
+               "miNumUsedIcons <= KI_SATNAV_MAX_ICONS");                           // :897
+    CGS_ASSERT(miMaxNumberIcons >= 0, "Max icons is negative");                    // :898
+
+    const s32 liNumIcons = (miNumUsedIcons >= miMaxNumberIcons) ? miMaxNumberIcons
+                                                                : miNumUsedIcons;   // X360 v94
+    qsort(mSatNavIconInfo, static_cast<size_t>(liNumIcons), sizeof(SatNavIconInfo),
+          IconDisplaySort);
+
+    // ---- the route START-POINT icon (pool slot 0) ----
+    const bool lbLightTriggerValid =
+        !(((mSelectedLightTriggerID & 0xFFFF00u) == 0xFFFF00u)
+          || ((mSelectedLightTriggerID & 0xFFu) == 0xFFu));
+    if (mbShowingOnlineRoute && lbLightTriggerValid && miSelectedCheckpoint > 0)
     {
-        sbLogged = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[UI-gate] PARK: MapIconManager::UpdateCrashNavIcons @0x825212C0 (the apt "
-               "icon-pool drive) is unreconstructed\n";
+        // [UI-gate] sub_824F8838 -- the event-start position lookup by light-trigger id
+        // over the cache's event array. Unreconstructed; online-route screens only.
+        // liExtraIcons stays 0 (the slot is not reserved), matching the sat-nav park.
+        static bool sbLoggedStartPark = false;
+        if (!sbLoggedStartPark && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLoggedStartPark = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[UI-gate] PARK: UpdateCrashNavIcons online-route start-point icon "
+                   "(event-start lookup unreconstructed)\n";
+        }
+    }
+    else if ((mbShowingPreRaceRoute || mbShowingCrashNavRoute) && muSelectedJunctionID != 0)
+    {
+        // [UI-gate] sub_824F8988 -- the junction start-point lookup. Same parked slice.
+        // (State 49 E_ICONSTATE_CRASHNAV_PRERACE_START_POINT, or 51 CUSTOMRENDERED when
+        // mbShowingCrashNavRoute is up.)
+        static bool sbLoggedJunctionPark = false;
+        if (!sbLoggedJunctionPark && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLoggedJunctionPark = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[UI-gate] PARK: UpdateCrashNavIcons junction start-point icon "
+                   "(junction lookup unreconstructed)\n";
+        }
+    }
+
+    // v124: the camera lane the alpha fade measures against (the @0x82CDA450 vperm picks
+    // {x, z}; CalculateAlpha takes the raw lane and picks the pair itself).
+    const Vector4& lv4Camera = mpGuiCache->GetWorldCameraPosition();   // cache +0x4AE0
+
+    s32 liIcon = 0;
+    for (; liIcon < liNumIcons; ++liIcon)
+    {
+        CGS_ASSERT(liIcon + liExtraIcons < miMaxNumberIcons,
+                   "Run out of icons to show");   // :973 (non-gating)
+
+        s32  liState        = MapIconBrnBase::E_ICONSTATE_INVISIBLE;   // 0
+        bool lbNearEventIcon = false;                                  // X360 v25
+
+        // X360 v126 -- the device-space offset added to the committed position. Only the
+        // (parked) case-4 checkpoint-stacking arms ever raise it; kept so the commit tail
+        // matches the X360 shape.
+        Vector2 lv2StackOffset;
+        lv2StackOffset.x = 0.0f; lv2StackOffset.y = 0.0f;
+        lv2StackOffset.z = 0.0f; lv2StackOffset.w = 0.0f;
+
+        CrashNavMapIcon&      lrIcon   = mCrashNavIcons[liIcon + liExtraIcons].mIcon;
+        const SatNavIconInfo& lrRecord = mSatNavIconInfo[liIcon];
+
+        const s8 li8IconType = lrRecord.GetIconTypeByte();
+        CGS_ASSERT(li8IconType >= 0, "leIconType >= 0");                       // TypeDefs:1911
+        CGS_ASSERT(li8IconType < SatNavIconInfo::E_SATNAVICON_MAX,
+                   "leIconType < E_SATNAVICON_MAX");                           // TypeDefs:1912
+
+        switch (li8IconType)
+        {
+        case SatNavIconInfo::E_SATNAVICON_PLAYER_CAR:   // 0 -- THE PLAYER ARROW
+        {
+            switch (mpGuiCache->GetGameMode())
+            {
+            case 10: case 12: case 14: case 15: case 17:
+            {
+                // [UI-gate] GuiCache::GetOnlinePlayerColourFromARCI is unreconstructed --
+                // online modes only. Colour 0's mapping is the arm's fallback.
+                static bool sbLoggedColourPark = false;
+                if (!sbLoggedColourPark && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    sbLoggedColourPark = true;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[UI-gate] PARK: UpdateCrashNavIcons online player-colour arm "
+                           "(GetOnlinePlayerColourFromARCI unreconstructed) -> colour 0\n";
+                }
+                liState = KAE_LOBBY_COLOUR_TO_PLAYER_ICON[0];
+                break;
+            }
+            case 11: case 13: case 16:
+                liState = MapIconBrnBase::E_ICONSTATE_PLAYER_ONLINE;    // 2
+                break;
+            default:
+                liState = MapIconBrnBase::E_ICONSTATE_PLAYER_OFFLINE;   // 1
+                break;
+            }
+
+            lrIcon.SetRotation(mbRotateSatNav ? 0.0f                                  // +0xAA1C
+                                              : (KF_PI - lrRecord.GetRotation()));
+
+            // The LARGE-map event-icon proximity fade (freeburn big map only).
+            if (meIconSizeMode == E_ICONSIZE_LARGE && mpGuiCache->GetGameMode() == -1)
+            {
+                Vector3 lv3Camera;
+                lv3Camera.x = lv4Camera.x; lv3Camera.y = lv4Camera.y;
+                lv3Camera.z = lv4Camera.z; lv3Camera.w = lv4Camera.w;
+                const Vector2 lv2Player = MapTransform::WorldToDevice(lv3Camera, false);
+
+                Vector2 lav2EventIcons[EventIconManager::KI_MAX_2DEVENTICONS];
+                s32 liNumEventIcons = 0;
+                mEventIconManager.GetEventIconPositions(lav2EventIcons, &liNumEventIcons);
+
+                for (s32 liEvent = 0; liEvent < liNumEventIcons; ++liEvent)
+                {
+                    const f32 lfDx = lv2Player.x - lav2EventIcons[liEvent].x;
+                    const f32 lfDy = lv2Player.y - lav2EventIcons[liEvent].y;
+                    if (900.0f > lfDx * lfDx + lfDy * lfDy)
+                    {
+                        lrIcon.SetAlpha(50.0f);
+                        lbNearEventIcon = true;
+                        break;
+                    }
+                }
+            }
+            break;
+        }
+
+        case SatNavIconInfo::E_SATNAVICON_MARKED_MAN:   // 1
+        {
+            liState = MapIconBrnBase::E_ICONSTATE_RIVAL;   // 14
+            if (mbRotateSatNav)
+            {
+                const GuiPlayerInfo* lpPlayerInfo = reinterpret_cast<const GuiPlayerInfo*>(
+                    &mpGuiCache->GetWorldCameraPosition());
+                CGS_ASSERT(lpPlayerInfo != 0, "lpPlayerInfo");   // :1114 (non-gating)
+                lrIcon.SetRotation(lpPlayerInfo->mfOrientation - lrRecord.GetRotation());
+            }
+            else
+            {
+                lrIcon.SetRotation(KF_PI - lrRecord.GetRotation());
+            }
+            break;
+        }
+
+        case SatNavIconInfo::E_SATNAVICON_NETWORKRIVAL:   // 2 -- straight to the arm
+        case SatNavIconInfo::E_SATNAVICON_RIVAL:          // 3 -- gated first
+        {
+            if (li8IconType == SatNavIconInfo::E_SATNAVICON_RIVAL
+                && !mbShowOffLineRivalsOnSatNav                     // +0xAA1D
+                && mpGuiCache->GetGameMode() == -1)
+                break;   // offline freeburn hides plain rivals unless the 200-event flag is up
+
+            if (meIconSizeMode != E_ICONSIZE_SMALL)
+            {
+                // [UI-gate] the LARGE-map rival arm: GetCrashNavIconStateForRival
+                // @0x824F4680 plus the CgsIDConvertToString -> "CAR_%s" SetIconText
+                // naming. Both unreconstructed; the rotation still lands (the X360 sets
+                // it after the state), the state stays invisible until the arm lands.
+                static bool sbLoggedLargeRivalPark = false;
+                if (!sbLoggedLargeRivalPark && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    sbLoggedLargeRivalPark = true;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[UI-gate] PARK: UpdateCrashNavIcons LARGE-map rival arm "
+                           "(GetCrashNavIconStateForRival unreconstructed)\n";
+                }
+                lrIcon.SetRotation(KF_PI - lrRecord.GetRotation());
+            }
+            else if (mbRotateSatNav)
+            {
+                const GuiPlayerInfo* lpPlayerInfo = reinterpret_cast<const GuiPlayerInfo*>(
+                    &mpGuiCache->GetWorldCameraPosition());
+                CGS_ASSERT(lpPlayerInfo != 0, "lpPlayerInfo");   // :1077 (non-gating)
+                liState = GetSatNavIconStateForRival(&lrRecord);
+                lrIcon.SetRotation(lpPlayerInfo->mfOrientation - lrRecord.GetRotation());
+            }
+            else
+            {
+                liState = GetSatNavIconStateForRival(&lrRecord);
+                lrIcon.SetRotation(KF_PI - lrRecord.GetRotation());
+            }
+            break;
+        }
+
+        case SatNavIconInfo::E_SATNAVICON_LANDMARK:   // 4
+        {
+            // [UI-gate] the crash-nav landmark state machine. Two whole sub-trees:
+            //   * the LARGE-map route arm (states 47 / 50 / 52 / 48) with its checkpoint
+            //     index walk over the cache's junction tables and the "%d" / "-" label
+            //     SetIconText naming plus the stack offsets;
+            //   * the SMALL-map arm (tracked / pending / start / finish -> 26..33) which
+            //     needs IsTrackedIcon @0x824F49E0, IsStartIcon @0x824F4BC0, IsFinishIcon
+            //     @0x824F4E48, IsPendingRaceLandmark @0x824F4D00,
+            //     GuiTracker::GetTrackerInformation and MapTransform::IsWithinViewport.
+            // NONE of those has a body in the tree, and their PRODUCER (the landmark pass
+            // of UpdateWorldIcons) is parked too -- so no record of this type can reach
+            // the used set on this build. A coherent park at both ends.
+            static bool sbLoggedLandmarkArmPark = false;
+            if (!sbLoggedLandmarkArmPark && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbLoggedLandmarkArmPark = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[UI-gate] PARK: UpdateCrashNavIcons landmark arm (case 4) "
+                       "(landmark/tracker slice unreconstructed)\n";
+            }
+            break;
+        }
+
+        case SatNavIconInfo::E_SATNAVICON_FREEBURN_CHALLENGE:   // 6
+            liState = MapIconBrnBase::E_ICONSTATE_SATNAV_FREEBURN_CHALLENGE;   // 40
+            lrIcon.SetRotation(0.0f);
+            break;
+
+        case SatNavIconInfo::E_SATNAVICON_JUNKYARD:   // 7
+            liState = (meIconSizeMode == E_ICONSIZE_SMALL)
+                          ? MapIconBrnBase::E_ICONSTATE_SATNAV_JUNKYARD          // 41
+                          : MapIconBrnBase::E_ICONSTATE_CRASHNAV_JUNKYARD;       // 36
+            lrIcon.SetRotation(0.0f);
+            break;
+
+        case SatNavIconInfo::E_SATNAVICON_CAR_PARK:   // 8
+            if (meIconSizeMode == E_ICONSIZE_SMALL)
+                liState = MapIconBrnBase::E_ICONSTATE_SATNAV_CAR_PARK;           // 42
+            lrIcon.SetRotation(0.0f);
+            break;
+
+        case SatNavIconInfo::E_SATNAVICON_BODYSHOP:   // 9
+            liState = (meIconSizeMode == E_ICONSIZE_SMALL)
+                          ? MapIconBrnBase::E_ICONSTATE_SATNAV_BODYSHOP          // 43
+                          : MapIconBrnBase::E_ICONSTATE_CRASHNAV_BODYSHOP;       // 37
+            lrIcon.SetRotation(0.0f);
+            break;
+
+        case SatNavIconInfo::E_SATNAVICON_GAS_STATION:   // 10
+            liState = (meIconSizeMode == E_ICONSIZE_SMALL)
+                          ? MapIconBrnBase::E_ICONSTATE_SATNAV_GAS_STATION       // 44
+                          : MapIconBrnBase::E_ICONSTATE_CRASHNAV_GAS_STATION;    // 38
+            lrIcon.SetRotation(0.0f);
+            break;
+
+        case SatNavIconInfo::E_SATNAVICON_PAINT_SHOP:   // 11
+            liState = (meIconSizeMode == E_ICONSIZE_SMALL)
+                          ? MapIconBrnBase::E_ICONSTATE_SATNAV_PAINT_SHOP        // 45
+                          : MapIconBrnBase::E_ICONSTATE_CRASHNAV_PAINT_SHOP;     // 39
+            lrIcon.SetRotation(0.0f);
+            break;
+
+        default:
+            break;   // 5 junction / 12 tire shop / 13 road sign: no state change
+        }
+
+        // ---- the shared alpha + commit tail (X360 LABEL_147/149/156) ----
+        const bool lbForcedInvisible = !mbIconsVisible;         // +0xAA1E
+        if (lbForcedInvisible)
+            liState = MapIconBrnBase::E_ICONSTATE_INVISIBLE;
+
+        if (!lbForcedInvisible
+            && liState != MapIconBrnBase::E_ICONSTATE_INVISIBLE
+            && meIconSizeMode == E_ICONSIZE_SMALL)
+        {
+            lrIcon.SetAlpha(CalculateAlpha(lrRecord.GetPositionLane(), lv4Camera));
+        }
+        else
+        {
+            if (mbIsActive)                                     // +0xAA22
+            {
+                if (!lbNearEventIcon)
+                    lrIcon.SetAlpha(100.0f);
+            }
+            else
+            {
+                lrIcon.SetAlpha(KF_INACTIVE_ALPHA);             // 128/255 * 100
+            }
+        }
+
+        // The pool icon carries the record's identity so the crash-nav renderer and the
+        // map cursor can key off it. X360 `stw` of the record's CgsID LOW word (`lwz
+        // 20(record)` -- the id is a big-endian u64 at record+0x10) into the pool
+        // element's id field. FLAG: the committed BrnSatNavIcon.h comments muId at
+        // icon+0x2C, but this store lands at element+0xC0 == icon+0x30; the discrepancy
+        // is in the COMMENT, not the access (this is by name). Worth settling next time
+        // CrashNavMapIcon's layout is re-derived.
+        lrIcon.muId = static_cast<u32>(lrRecord.GetCgsId());
+
+        {
+            Vector3 lv3Record;
+            const Vector4& lv4Pos = lrRecord.GetPositionLane();
+            lv3Record.x = lv4Pos.x; lv3Record.y = lv4Pos.y;
+            lv3Record.z = lv4Pos.z; lv3Record.w = lv4Pos.w;
+
+            // lbClamp = TRUE here (r3 = 1): the drawn icons ARE pulled to the map edge.
+            Vector2 lv2Device = MapTransform::WorldToDevice(lv3Record, true);
+            lv2Device.x += lv2StackOffset.x;
+            lv2Device.y += lv2StackOffset.y;
+            lrIcon.SetPosition(lv2Device);
+        }
+
+        lrIcon.SetState(static_cast<MapIconBrnBase::IconState>(liState));
+        lrIcon.Update();   // @0x8244F5D0 -- the apt view-state commit
+    }
+
+    // ---- the online START-POINT icon at the route head (checkpoint == 0) ----
+    s32 liUsedComponents = liIcon + liExtraIcons;
+    if (mbShowingOnlineRoute && lbLightTriggerValid && miSelectedCheckpoint == 0)
+    {
+        // [UI-gate] the same parked event-start lookup as the head block; on the console
+        // this drives one more pool component to state 46 and bumps the used count. The
+        // component it would drive is left to the invisible tail below.
+        static bool sbLoggedEndStartPark = false;
+        if (!sbLoggedEndStartPark && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLoggedEndStartPark = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[UI-gate] PARK: UpdateCrashNavIcons online-route tail start-point "
+                   "icon (event-start lookup unreconstructed)\n";
+        }
+    }
+
+    // ---- hide every unused pool component (X360 tail loop) ----
+    for (s32 liPool = liUsedComponents; liPool < miMaxNumberIcons; ++liPool)
+    {
+        CrashNavMapIcon& lrPoolIcon = mCrashNavIcons[liPool].mIcon;
+        if (lrPoolIcon.GetState() != MapIconBrnBase::E_ICONSTATE_INVISIBLE)
+        {
+            lrPoolIcon.SetState(MapIconBrnBase::E_ICONSTATE_INVISIBLE);
+            lrPoolIcon.Update();
+        }
+    }
+
+    // ---- the trailing GUI post ----
+    // [UI-gate] X360: when mpStateInterface (+0xA9FC) is set, the body posts a 40-byte
+    // event (`VariableEventQueue<65536,16>::AddEvent(iface+12, &rec, 40, 20)`) whose
+    // record is {8, 561, 12, miNumUsedIcons, &mCrashNavIcons[0]} -- the crash-nav icon
+    // renderer's per-frame handoff. The event type behind id 561 is not modelled in the
+    // tree yet, so posting it would mean inventing a payload struct. Parked loudly
+    // instead; this is the seam the CrashNavIconRenderer will need.
+    if (mpStateInterface != 0)
+    {
+        static bool sbLoggedPostPark = false;
+        if (!sbLoggedPostPark && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLoggedPostPark = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[UI-gate] PARK: UpdateCrashNavIcons trailing GUI event 561 "
+                   "(crash-nav icon-set handoff; event payload type unmodelled)\n";
+        }
     }
 }
 
@@ -1184,6 +1832,98 @@ void MapIconManager::UpdateCrashNavIcons()
 void MapIconManager::SetZoomFactor(f32 lfZoomFactor)
 {
     mRoadSignIconManager.SetZoomFactor(lfZoomFactor);
+}
+
+// =====================================================================================
+// ⭐ FIX1 (2026-08-29, main-menu closure wave). The five per-filter setters
+// CrashNavMap::SetFilterFromPanel @0x824CC0E0 pushes at the manager in one run. They were
+// declared by the F3 grow but had no bodies anywhere in the tree -- a guaranteed LNK2019
+// against the mounted BrnCrashNavMap.cpp. Store-for-store from the X360 exports; every
+// access is BY NAME over the members the header already pins at the measured offsets.
+// =====================================================================================
+
+// @0x824F4F68 -- one store, `stbx r4, r3, 0xA9F4`. No assert, no guard.
+void MapIconManager::SetShowDrivethrus(bool lbShowDrivethrus)
+{
+    mbShowingDriveThrus = lbShowDrivethrus;   // X360 +0xA9F4
+}
+
+// @0x824F4F78 -- assert then one store at +0x7080. The assert reads the SHOW flag
+// (`lbzx r11, r31, 0xA9F4`) and only fires when the caller asks for selection while
+// drive-throughs are hidden; it is non-gating, the store happens either way.
+void MapIconManager::SetAllowDriveThruSelection(bool lbAllowDriveThruSelection)
+{
+    CGS_ASSERT(mbShowingDriveThrus || !lbAllowDriveThruSelection,
+               "mbShowingDriveThrus || !lbAllowDriveThruSelection");   // cpp:3409
+
+    mbAllowDriveThruSelection = lbAllowDriveThruSelection;   // X360 +0x7080
+}
+
+// @0x824F4FF0 -- one store, `stb r4, 0x7081(r3)`.
+void MapIconManager::SetAllowRivalSelection(bool lbAllowRivalSelection)
+{
+    mbAllowRivalSelection = lbAllowRivalSelection;   // X360 +0x7081
+}
+
+// @0x825123E0 -- assert "lpStateInterface" (cpp:3457), then a CHANGE-GUARDED arm: only
+// when the requested flag differs from the latched one at +0xA1B0 does it touch the
+// embedded road-sign manager (at +0x7090). Turning ON runs SetupComponent first, then
+// SetSignsVisible(1); turning OFF is SetSignsVisible(0) alone. Both arms latch the flag;
+// the unchanged path latches nothing (the console falls straight through to the epilogue).
+void MapIconManager::SetUseRoadSigns(bool lbUseRoadSigns, CgsGui::StateInterface* lpStateInterface)
+{
+    CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");   // cpp:3457
+
+    if (mbUseRoadSigns != lbUseRoadSigns)
+    {
+        if (lbUseRoadSigns)
+        {
+            mRoadSignIconManager.SetupComponent();
+            mRoadSignIconManager.SetSignsVisible(1);
+        }
+        else
+        {
+            mRoadSignIconManager.SetSignsVisible(0);
+        }
+
+        mbUseRoadSigns = lbUseRoadSigns;   // X360 +0xA1B0
+    }
+}
+
+// @0x82523820 -- assert "lpStateInterface" (cpp:3493), then the same change-guard shape
+// over meEventIconDisplayType (+0xA9F0). The one-past-the-end sentinel
+// E_ICON_DISPLAY_TYPE_COUNT (5, `cmpwi cr6, r30, 5`) means "release"; anything else
+// re-prepares the embedded EventIconManager (+0xA1B4) with the manager's own GuiCache
+// (`lwzx r5, r31, 0xA9F8`).
+//
+// ⚠️ PPC FLOAT-ARG GPR SKIP. lfOptionalFadeDuration is argument 3 and rides f1, so its
+// GPR slot (r6) is SKIPPED and the two trailing args land in r7/r8 -- which is exactly
+// what the asm does (`mr r28, r7` / `mr r27, r8`) and why Hex-Rays renders a garbage
+// `int a4` here. The DWARF row governs the host signature; see the same note in
+// BrnCrashNavMap.cpp at the call site.
+void MapIconManager::SetUseEventIcons(GuiEventDrawEventIcons::EIconDisplayType leIconDisplayType,
+                                      CgsGui::StateInterface* lpStateInterface,
+                                      f32 lfValue,
+                                      u32* lpuUnknown,
+                                      s32 liUnknown)
+{
+    CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");   // cpp:3493
+
+    if (meEventIconDisplayType != leIconDisplayType)
+    {
+        if (leIconDisplayType == GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT)
+        {
+            mEventIconManager.ReleaseResources(lpStateInterface, lfValue);
+            meEventIconDisplayType = GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT;
+        }
+        else
+        {
+            mEventIconManager.Prepare(lpStateInterface, mpGuiCache, lfValue,
+                                      static_cast<s32>(leIconDisplayType),
+                                      lpuUnknown, liUnknown);
+            meEventIconDisplayType = leIconDisplayType;
+        }
+    }
 }
 
 }

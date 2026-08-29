@@ -151,6 +151,24 @@ Vector2 MapTransform::Transform( Vector2 lv2Point, Matrix33 lm33From, Matrix33 l
     return Transform( lv2Point, MakeTransform( lm33From, lm33To ) );
 }
 
+// @ 0x8245A080 (IDA `sub_8245A080` -- unnamed in the export set, identified here) — the
+// RECT-pair overload: take a point out of the coord space of `lv4From` into the coord space
+// of `lv4To`. Attested end to end: the 86-instruction body is two inlined
+// MakeCoordSpaceFromRect builds (per rect: `vspltw` of all four lanes, `vsubfp` of z-x and
+// w-y for the two axis lengths, `vperm` through the mask at unk_82CDA350 to interleave the
+// lanes, and `vrlimi128 v,v12,2,0` -- v12 == vcfsx(vspltisw 1) == 1.0f -- to set the
+// translation row's homogeneous 1) followed by a TAIL CALL to
+// `BrnGui::MapTransform::Transform` @0x824503C0, the two-matrix overload above, with the two
+// stack matrices in r3/r4. The unnamed symbol is why this leg has read as missing: it is the
+// declared-only DWARF overload at BrnMapUtils.h, and MainMapComponent::Update / ApplyZoom /
+// SnapToLocation call it four times each (world rect <-> MapTransform::smv4NormalizedRect).
+Vector2 MapTransform::Transform( Vector2 lv2Point, Vector4 lv4From, Vector4 lv4To )
+{
+    return Transform( lv2Point,
+                      MakeCoordSpaceFromRect( lv4From ),
+                      MakeCoordSpaceFromRect( lv4To ) );
+}
+
 // @ 0x824435C8 — the transform that takes a point out of `lm33From` space into
 // `lm33To` space: inverse(from) composed with to.
 Matrix33 MapTransform::MakeTransform( Matrix33 lm33From, Matrix33 lm33To )
@@ -319,6 +337,53 @@ Vector2 MapTransform::WorldToDevice( Vector3 lv3World, bool lbClamp )
     return lv2Out;
 }
 
+// (X360 inlines both of these; DWARF BrnMapUtils.h:135 / :140.) The map plane is world XZ:
+// Flatten drops the world Y and packs (x, z) into a Vector2, Unflatten lifts a map point
+// back onto the y == 0 plane.
+//
+// ⭐ THE XZ LANE PICK IS ATTESTED TWICE, INDEPENDENTLY.
+//  1. DWARF. The dump gives Flatten exactly one child, and it is
+//     `rw::math::vpu::_asmCreateVectorAxis<VectorAxisX, VectorAxisZ>`
+//     (references/DecFIGS/dwarfdump/_compile/BrnGuiUnity.cpp:1493-1497) -- the SDK's
+//     "build a 2-lane register from these two axes of a Vector3" primitive, with the axes
+//     spelled X and Z in the template arguments. That names the lanes outright.
+//  2. THE IMAGE. The permute mask the family uses, unk_82CDA450, reads
+//     {0,1,2,3, 24,25,26,27, 0,1,2,3, 0,1,2,3} == (x, z, x, x) -- decoded off
+//     scratch/postfx_step9_final/envfix/work/image.bin by the CrashNavMap slice and
+//     recorded at BrnCrashNavMap.cpp:430.
+//     (⚠️ SIDE NOTE for whoever next touches GameSource/Math/BrnMathUtils.cpp: its
+//     "FLAG (Flatten lane mask): unk_82CDA450 is an un-valued .rdata blob" is now STALE --
+//     the mask has been read, and it confirms the XZ choice that file inferred. Not edited
+//     here because BrnMath::Flatten is not this wave's TU.)
+//
+// The z/w lanes are written as 0, following this tree's Vector2 convention (WorldToDevice
+// above, BrnMath::Flatten, EventIconManager::GetEventIconPositions all do the same). The
+// console's mask duplicates .x into those two padding lanes instead; nothing in the
+// recovered set reads them, and the SDK Vector2 vocabulary (Dot / Magnitude) is x/y only.
+Vector2 MapTransform::Flatten( Vector3 lv3In )
+{
+    Vector2 lv2Out;
+    lv2Out.x = lv3In.x;
+    lv2Out.y = lv3In.z;
+    lv2Out.z = 0.0f;
+    lv2Out.w = 0.0f;
+    return lv2Out;
+}
+
+// The inverse of the pick above: the map's y goes back into the world Z lane and the world
+// height is zero. Pinned by its consumers -- CrashNavMap::UpdateMapCentre
+// (BrnCrashNavMap_wJ_07.cpp:204) feeds Unflatten's result straight into WorldToDevice, whose
+// own body reads .x and .z, so anything but (x, 0, y) would lose the map's second axis.
+Vector3 MapTransform::Unflatten( Vector2 lv2In )
+{
+    Vector3 lv3Out;
+    lv3Out.x = lv2In.x;
+    lv3Out.y = 0.0f;
+    lv3Out.z = lv2In.y;
+    lv3Out.w = 0.0f;
+    return lv3Out;
+}
+
 // (X360 inlines the 16-byte store to @0x82FB36A0 -- GuiModule::Construct's HD/SD pick
 // and the debug component's sliders.) Install the live sat-nav viewport rect.
 void MapTransform::SetSatNavRect( Vector4 lv4Rect )
@@ -343,6 +408,67 @@ Vector3 MapTransform::DeviceToWorld( Vector2 lv2Device )
     lv3Out.z = 0.0f;
     lv3Out.w = 0.0f;
     return lv3Out;
+}
+
+// @ 0x8244F318 — BrnGui::MapTransform::CalculateZoomFactor.
+//
+// The world-space zoom scale that makes the axis-aligned box spanned by lv2A/lv2B fit a
+// viewport whose normalised width/height are lv2C.x / lv2C.y, at aspect lfBase. Callers:
+// PreRaceFlyByState::CalculateZoomFactor @0x824BE8F0, CrashNavMap::CalculateEventZoomFactor
+// @0x824BF4B0, OnlineSelectRoute::CalculateZoomFactor @0x8248F398,
+// GuiNetworkRouteInfo::CalculateZoomFactor @0x8242C6C0.
+//
+// The asm is pure VMX + four scalar fdivs; every operand is decoded:
+//   vminfp/vmaxfp v1,v2                 -> the axis-aligned box of the two points
+//   splat lanes 0/1, vsubfp             -> lfWidth / lfHeight
+//   lvx unk_82FB30C0                    -> smv4DeviceRect {0, 0, 1280, 720}; lane 2 (z) and
+//                                          lane 3 (w) are the two vrefp+2xNewton reciprocals
+//   flt_820550C0 = 0.85f                -> the usable fraction of the viewport rect
+//   flt_82001C98 = 1.0f, fdivs by f1    -> 1.0f / lfBase, applied to the X axis ONLY
+//   flt_820550BC = 2500.0f              -> the fsel floor on the result
+//   two fsel pairs                      -> max(x, y) then max(that, 2500)
+// Every constant is read from the image (scratch/postfx_step9_final/envfix/work/image.bin,
+// file offset = VA - 0x82000000, big-endian): 451C4000 = 2500.0f, 3F59999A = 0.85f,
+// 3F800000 = 1.0f. None is invented.
+//
+// ⭐ THE X/Y ASYMMETRY IS THE CONSOLE'S, NOT A TRANSCRIPTION SLIP. The 1/lfBase factor
+// multiplies the X ratio and NOT the Y ratio -- `lfs f13, flt_82001C98 ; fdivs f13,f13,f1 ;
+// stfs f13, var_30` feeds only the v7 that the X path multiplies by at 0x8244F418, while the
+// Y path at 0x8244F46C divides the raw height and goes straight into the fsel. lfBase is the
+// aspect ratio (MainMapComponent::SetZoom passes 16/9 == flt_82F25AD4 into the same family
+// of maths), so this is the aspect correction on the horizontal axis alone.
+f32 MapTransform::CalculateZoomFactor( Vector2 lv2A, Vector2 lv2B, Vector2 lv2C, f32 lfBase )
+{
+    // vminfp / vmaxfp, then the lane-0 / lane-1 splats and subtracts.
+    const f32 lfMinX = ( lv2A.x < lv2B.x ) ? lv2A.x : lv2B.x;
+    const f32 lfMinY = ( lv2A.y < lv2B.y ) ? lv2A.y : lv2B.y;
+    const f32 lfMaxX = ( lv2A.x > lv2B.x ) ? lv2A.x : lv2B.x;
+    const f32 lfMaxY = ( lv2A.y > lv2B.y ) ? lv2A.y : lv2B.y;
+
+    const f32 lfWidth  = lfMaxX - lfMinX;
+    const f32 lfHeight = lfMaxY - lfMinY;
+
+    // flt_820550C0 / flt_820550BC / flt_82001C98 -- see the banner.
+    const f32 KF_VIEWPORT_USABLE_FRACTION = 0.85f;
+    const f32 KF_MIN_ZOOM_FACTOR          = 2500.0f;
+    const f32 KF_ONE                      = 1.0f;
+
+    // smv4DeviceRect lanes 2/3 (1280 / 720); the console forms both reciprocals with
+    // vrefp + two Newton-Raphson refinements, which is the C++ divide's value.
+    const f32 lfDeviceWidth  = smv4DeviceRect.z;
+    const f32 lfDeviceHeight = smv4DeviceRect.w;
+
+    // The usable viewport extents, back in device units.
+    const f32 lfViewportX = ( lv2C.x * KF_VIEWPORT_USABLE_FRACTION ) / lfDeviceWidth;
+    const f32 lfViewportY = ( lv2C.y * KF_VIEWPORT_USABLE_FRACTION ) / lfDeviceHeight;
+
+    const f32 lfAspectScale = KF_ONE / lfBase;                 // X axis only (see banner)
+    const f32 lfZoomX       = lfAspectScale * ( lfWidth / lfViewportX );
+    const f32 lfZoomY       = lfHeight / lfViewportY;
+
+    // `fsubs f12,f0,f13 ; fsel f0,f12,f0,f13` twice -- max(x, y) then max(that, 2500).
+    const f32 lfLarger = ( lfZoomX - lfZoomY >= 0.0f ) ? lfZoomX : lfZoomY;
+    return ( lfLarger - KF_MIN_ZOOM_FACTOR >= 0.0f ) ? lfLarger : KF_MIN_ZOOM_FACTOR;
 }
 
 } // namespace BrnGui

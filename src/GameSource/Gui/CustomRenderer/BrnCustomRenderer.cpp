@@ -153,8 +153,46 @@ void CustomRendererManager::Construct()
     // ⭐ [H3b] slot 1 is LIVE (2026-08-25): the reconstructed SatNavRenderer subobject
     // (guest this+0x1050), the minimap.
     mapCustomRenderComponents[E_SATNAV]               = &mSatNavRenderer;
-    mapCustomRenderComponents[E_MAINMAP]              = 0;
-    mapCustomRenderComponents[E_CRASHNAVICONS]        = 0;
+    // ⭐ [map-world] SLOT 2 IS LIVE (2026-08-29): BrnGui::MainMapRenderer, the reconstructed
+    // subobject (guest this+0x28D0) -- THE MAP WORLD. The park note below is kept as the
+    // measured record of the chain that feeds it; only its last paragraph ("WHAT IS MISSING")
+    // is now history. The ten X360 functions it named are bodied in
+    // GameSource/Gui/CustomRenderer/Renderers/BrnMainMapRenderer.cpp.
+    //
+    // ---- the measured producer chain (runs scratch/mainmenu_wave/f8_probe2, f8_fix1) -----
+    //   * CrashNavMap::CheckForLoadComplete posts GuiEventShowHideSatNav(E_MAPTYPE_MAIN,
+    //     show, 0.5s) on channels 41 AND 42;
+    //   * the channel-42 copy now reaches MainMapComponent::RecvEvent (the GuiModule
+    //     drain used to discard the whole channel -- fixed in BrnGuiModule.cpp), which
+    //     latches mMapManager.mbEnabled = true;
+    //   * MapManager::RecvEvent builds the low-res backdrop texture from GuiCache
+    //     resource 199 ([map-lowres] BACKDROP BUILT state=1);
+    //   * MainMapComponent::Update then runs both mbEnabled-gated legs every frame:
+    //     RefreshActiveTextureArray publishes muTextureCount = 1 (the backdrop) and
+    //     OutputViewState posts GuiEventRenderMainMap (id 223) with mpActiveTextures,
+    //     the world rect, the view rect and mbIsActive.
+    //     Measured: `[map-pump] enabled=1 active=1 maptype=0 lowres=1 texcount=1`.
+    // That event now lands on a real component. RenderComponent @0x82460130 reads the
+    // published mpActiveTextures, loops muTextureCount entries (stride 36 ==
+    // SatNavTile::sTexture), skips entries with a null mpTextureState, and for each one
+    // transforms the texture's mBBWorld corners through
+    // MapTransform::MakeTransform(mapRect -> viewRect) and emits a 4-vertex quad.
+    //
+    // The tile machinery is NOT involved and is not needed: MapManager's two
+    // SatNavTileDirectory slots have no writer anywhere in the ARTIST export set, and
+    // CalculateCurrentTileSet's add/remove bodies are compiled out of that build (only
+    // their asserts survive), so the console's own main map draws exactly ONE quad here --
+    // the low-res backdrop this build already builds and publishes.
+    mapCustomRenderComponents[E_MAINMAP]              = &mMainMapRenderer;
+    // ⭐ [map-world] slot 3 goes live IN THE SAME CHANGE as slot 2, and only ever with it.
+    // CrashNavIconRenderer's RenderComponent opens with the map background mask over the
+    // published view rect and draws the icon layer INTO the map world, so mounting it while
+    // slot 2 was null put icons over the driving scene -- which is why the reconstructed
+    // class sat compiled-but-unmounted. Its Prepare is also the ONLY EnsureResourcesAreLoaded
+    // call site for GuiCache textures 202/203, i.e. it is what makes the load notifications
+    // that MainMapRenderer::RecvEvent turns into its two mask texture states. Slot 2 does not
+    // draw without it.
+    mapCustomRenderComponents[E_CRASHNAVICONS]        = &mCrashNavIconRenderer;
     // ⭐ [boost-bar] slot 4 is LIVE (2026-08-25): the reconstructed BoostBarRenderer
     // subobject (guest this+0xE520), the in-game boost gauge.
     mapCustomRenderComponents[E_BOOSTBAR]             = &mBoostBarRenderer;

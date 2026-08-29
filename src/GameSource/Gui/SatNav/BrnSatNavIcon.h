@@ -3,6 +3,7 @@
 #include <cstddef>            // offsetof (SatNavMapIcon::SetState container_of)
 #include "types.hpp"
 #include "BrnCommonTypes.h"        // Vector2 (rw::math::vpu::Vector2 - alignas(16) {x,y,z,w})
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h" // [F3] CgsGui::GuiComponent (CrashNavIconComponent base)
 #include "GameSource/Gui/BrnGuiTextField.h"   // BrnGui::TextField (CrashNavMapIcon::mIconText, copied by operator=)
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.h" // the REAL BrnGui::FlaptIconComponent (SetState reach-back)
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"   // BrnFlapt::TextFieldRef (SatNavMapIcon::mIconText; Construct zeroes it)
@@ -27,6 +28,9 @@ namespace BrnFlapt { struct FileRef; }        // Prepare parameter (const-ref on
 
 namespace BrnGui
 {
+    struct CrashNavIconComponent;   // the pool element that OWNS a CrashNavMapIcon (below)
+    class  MapIconManager;          // the pool owner (BrnMapIconManager.h) -- friend, see below
+
     // ⭐ ODR FORK RETIRED (H3b, 2026-08-25): this header used to declare a LOCAL
     // `struct FlaptIconComponent { void* GotoAndStopLabel(const void*); }` stub for the
     // reach-back below. The REAL class (BrnGuiFlaptIconComponent.h, included above) has
@@ -181,17 +185,32 @@ namespace BrnGui
             }
         }
 
+        // @ 0x8244F5D0 [F3 2026-08-29] -- the per-frame COMMIT: push the dirty transform
+        // fields out to the hosting component's apt view state, then (separately) the
+        // icon-state label. This is what makes the crash-nav pool visible at all --
+        // MapIconManager::UpdateCrashNavIcons @0x825212C0 ends every icon with it. The
+        // console reaches the component as `this - 0x90`; the body uses the host's own
+        // container offset (see the SatNavMapIcon::SetState note above). Defined in
+        // BrnSatNavIcon.cpp, below CrashNavIconComponent.
+        void Update() override;
+
         f32 GetAlpha() const { return mfAlpha; }        // @ 0x827DD... (BrnSatNavIcon.h:511)
         f32 GetRotation() const { return mfRotationInRadians; }
 
-        // @ 0x827DD... -- the icon's full constructor. A separate, not-yet-reconstructed
-        // TU; declared-only here so the @0x827DD610 adjustor thunk can forward to it.
-        CrashNavMapIcon* Construct(s32 liA, s32 liB, s32 liC);
-
-        // @ 0x827DD610 (Construct`adjustor{144}') -- a compiler-emitted base-adjusting
-        // thunk: shifts `this` back by 0x90 to the full object, then forwards to Construct.
-        // This is the reconstructed TU; Construct (above) is out of scope.
-        CrashNavMapIcon* ConstructAdjustor144(s32 liA, s32 liB, s32 liC);
+        // @ 0x827DD610 (`CrashNavMapIcon::Construct'adjustor{144}'`) -- the ICON subobject's
+        // vtable Construct slot (MapIconBrnBase slot 0). The X360 body is the two-instruction
+        // MSVC base-adjusting thunk `addi r3,r3,-0x90 ; b CrashNavMapIcon::Construct`: it
+        // walks `this` from the icon back to the hosting element (144 == 0x90 == the icon's
+        // offset inside CrashNavIconComponent) and tail-calls the REAL constructor
+        // @0x824481A8, whose `this` is the ELEMENT (see CrashNavIconComponent::Construct).
+        //
+        // [2026-08-29] the earlier `Construct(s32,s32,s32)` / `ConstructAdjustor144(s32,s32,s32)`
+        // pair here was a PLACEHOLDER SIGNATURE -- the export shows three real parameters
+        // (name / state interface / parent name) and the thunk is the vtable override itself,
+        // so the two spellings collapse into this one override. The `ConstructAdjustor144`
+        // name is retired; nothing outside this file referenced it.
+        void Construct(const char* lpcName, CgsGui::StateInterface* lpStateInterface,
+                       const char* lpcParentName) override;
 
         // @ 0x8244BA18 -- copy-assign from lrSource. The X360 byte-copies the icon EXCEPT
         // the +0x00 vtable slot (copy anchor is this+0x04), copies the embedded TextField
@@ -201,16 +220,58 @@ namespace BrnGui
         CrashNavMapIcon& operator=(const CrashNavMapIcon& lrSource);
 
     private:
+        // [F3 2026-08-29] The element ctor @0x824481A8 runs with the ELEMENT as `this` and
+        // writes the icon's text field + the two dirty bytes directly; the manager's
+        // SetOwnerParameters bind pass @0x82520CE8 raises the same two bytes inline after
+        // SetState. Both are console-inlined stores into this object, so both writers get
+        // member access by name rather than a fabricated setter.
+        friend struct CrashNavIconComponent;
+        friend class  MapIconManager;
+
         // ADDITIVE GROW (brn-gui group, CrashNavMapIcon operator= @0x8244BA18): the icon's
         // by-value TextField, previously a comment-placeholder, is now a REAL member so
         // operator= can copy it (X360: TextField::operator=(this+0xC4, src+0xC4); the
         // 0x128-byte field then places the two dirty flags at +0x1EC/+0x1ED, exactly after
         // it). Adding it does not reorder/retype/remove any pre-existing REAL member (the
         // prior layout modelled only base fields + muId + the two dirty bytes).
-        TextField mIconText;     // X360 +0xC4 (copied by operator= via TextField::operator=)
+        TextField mIconText;     // icon +0x34 == element +0xC4 (operator= / the element ctor's
+                                 // virtual `(**(elem+0xC4))(elem+0xC4,"Icon",iface,elem+4)`)
 
-        bool mbIsDirty;          // X360 +0x1EC (raised by the Set* mutators / copied by operator=)
-        bool mbDirtyIconState;   // X360 +0x1ED (copied by operator=)
+        bool mbIsDirty;          // icon +0x15C == element +0x1EC (Set* mutators / Update clears it)
+        bool mbDirtyIconState;   // icon +0x15D == element +0x1ED
+    };
+
+    // ADDITIVE GROW [F3 2026-08-29] -- the element of MapIconManager's 50-slot crash-nav
+    // icon pool (DWARF BrnMapIconManager.h:435 `mCrashNavIcons`, X360 manager+0x9A0,
+    // element stride 0x1F0). The element is a GuiComponent whose CrashNavMapIcon half
+    // starts at element+0x90, X360-attested three ways:
+    //   * `CrashNavMapIcon::Construct'adjustor{144}'` @0x827DD610 does `addi r3,r3,-0x90`
+    //     -- 144 == 0x90 is the icon subobject's offset inside the element.
+    //   * CrashNavMapIcon::Update @0x8244F5D0 calls CgsGui::GuiComponent::
+    //     AddOutputAptViewState on `this - 0x90` four times.
+    //   * CrashNavMapIcon::Construct @0x824481A8 takes the ELEMENT as `this`: it runs
+    //     CgsGui::GuiComponent::Construct on it, then the icon's own text field at
+    //     element+0xC4 (== icon+0x34 == mIconText) and the icon fields at element+0xB0 /
+    //     +0xB4 / +0xB8 (== icon rotation / alpha / state) and +0x1EC / +0x1ED (the two
+    //     dirty flags).
+    // The X360 GuiComponent base is 0x90 bytes; on the host it is wider (the name buffer
+    // plus a 64-bit state-interface pointer), so the icon is a NAMED MEMBER and every
+    // reach-back goes through offsetof -- never a literal 0x90.
+    struct CrashNavIconComponent : public CgsGui::GuiComponent
+    {
+        CrashNavMapIcon mIcon;   // X360 element+0x90 (host placement differs)
+
+        // @ 0x824481A8 [F3 2026-08-29] -- THE element constructor. IDA labels the symbol
+        // `BrnGui::CrashNavMapIcon::Construct`, but every offset in its body is
+        // ELEMENT-relative (GuiComponent::Construct on `this`; the text field at +0xC4;
+        // the icon fields at +0xB0/+0xB4/+0xB8; the dirty bytes at +0x1EC/+0x1ED), so on
+        // the host it is the element's override of GuiComponent::Construct (vtable slot 0)
+        // -- which is exactly what MapIconManager::SetOwnerParameters calls:
+        // `(**(icon-0x90))(icon-0x90, name, iface, parentName)`. The icon-side vtable slot
+        // holds the `adjustor{144}` thunk into here (CrashNavMapIcon::Construct above).
+        // Body in BrnSatNavIcon.cpp.
+        void Construct(const char* lpcName, CgsGui::StateInterface* lpStateInterface,
+                       const char* lpcParentName) override;
     };
 
     // Sat-nav map icon. Set* changes push straight through the hosting Flapt component's

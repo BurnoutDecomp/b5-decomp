@@ -1318,10 +1318,9 @@ namespace BrnGui
         }
 
         // The REAL flow bring-up: base prepare (access pointers into the StateInterface)
-        // + the 14-state pool carve, then the flow's single in-queue. FLAG (allocator):
-        // the rw resource allocator the console threads through EventObserver::Prepare is
-        // null until the GUI resource slice lands (no reconstructed state dereferences it
-        // on the boot path). FLAG (ProfileManager): un-reconstructed; BF_PROFILE's
+        // + the 14-state pool carve, then the flow's single in-queue. (allocator: the
+        // flagged NULL died 2026-08-29 -- MapManager dereferences it now; see the
+        // lpFlowAllocator stand-in below.) FLAG (ProfileManager): un-reconstructed; BF_PROFILE's
         // manager-gated calls are boundary no-ops (see BrnBootProfile.cpp).
         // The profile manager's Prepare precedes the flows': it attaches the sign-in
         // listener, prepares the embedded save/load system, and carves the mugshot
@@ -1364,7 +1363,20 @@ namespace BrnGui
         // HandleStuntPerformed dereference it (mpAccessPointers->mpLanguageManager).
         mHudMessageAnalyzer.SetAccessPointers(&s_GuiAccessPointers);
 
-        mHudFlow.Prepare(&s_GuiAccessPointers, /*lpAllocator*/ 0, &mHudStatePool,
+        // FLAG PC stand-in (main-menu wave, 2026-08-29): the console threads a specific
+        // rw resource allocator from the (still-parked) GUI resource slice through
+        // EventObserver::Prepare; its identity is not recovered. The flows' allocator was
+        // a flagged NULL until CrashNavMap landed the first real dereferencer
+        // (MapManager::RecvEvent carves a TextureState resource for the low-res map
+        // backdrop) -- the park's own "becomes load-bearing when" fired as a boot
+        // GetAllocator assert + null-deref AV. The PC stand-in is the RW DEFAULT
+        // allocator, the exact allocator the committed apt texture-state cache leaf
+        // already uses for the SAME TextureState carve (CgsAptRenderHandler.cpp:333).
+        // DELETE-WHEN the GUI resource slice lands the console's real allocator.
+        rw::IResourceAllocator* lpFlowAllocator =
+            rw::ResourceAllocatorRegistry::GetDefaultAllocator();
+
+        mHudFlow.Prepare(&s_GuiAccessPointers, lpFlowAllocator, &mHudStatePool,
                          &mProfileManager);
         mHudInQueue.Construct();
         mHudFlow.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mHudInQueue));
@@ -1373,7 +1385,7 @@ namespace BrnGui
         // prepares all three flows here).
         mOverlayStatePool.Construct();
         mOverlayStatePool.Create(s_overlayStatePoolBacking, sizeof(s_overlayStatePoolBacking));
-        mOverlayFlow.Prepare(&s_GuiAccessPointers, /*lpAllocator*/ 0, &mOverlayStatePool);
+        mOverlayFlow.Prepare(&s_GuiAccessPointers, lpFlowAllocator, &mOverlayStatePool);
         mOverlayInQueue.Construct();
         mOverlayFlow.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mOverlayInQueue));
 
@@ -1382,7 +1394,7 @@ namespace BrnGui
         // state's Construct consumes it; the manager is a shell until reconstructed).
         mScreenStatePool.Construct();
         mScreenStatePool.Create(s_screenStatePoolBacking, sizeof(s_screenStatePoolBacking));
-        mScreenFlow.Prepare(&s_GuiAccessPointers, /*lpAllocator*/ 0, &mScreenStatePool,
+        mScreenFlow.Prepare(&s_GuiAccessPointers, lpFlowAllocator, &mScreenStatePool,
                             mProfileManager);
         mScreenInQueue.Construct();
         mScreenFlow.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mScreenInQueue));
@@ -2538,11 +2550,19 @@ void GuiModule::Destruct()
                     // consumer lands. The header size comes from the record's own head[2]
                     // ({payloadSize, type, headerSize}) rather than a hardcoded 12: the
                     // alignas(16) 212 record carries a 16-byte head, its siblings 12.
+                    // ⭐ [map-world 2026-08-29] 223 (GuiEventRenderMainMap, the per-frame
+                    // MAIN-MAP payload) joins the family -- the next record type whose
+                    // consumers landed. MainMapRenderer (manager slot 2) and
+                    // CrashNavIconRenderer (slot 3) both latch it in RecvEvent; without this
+                    // bridge the whole map screen drew nothing and CrashNavIconRenderer's
+                    // `mRenderMainMapEvent.mfZoomLevel != 0.0f` assert fired once per frame
+                    // on a record that had never been delivered.
                     else if (lpPlay->muEventType == 204 ||
                              lpPlay->muEventType == 212 ||
                              lpPlay->muEventType == 213 ||
                              lpPlay->muEventType == 214 ||
-                             lpPlay->muEventType == 215)
+                             lpPlay->muEventType == 215 ||
+                             lpPlay->muEventType == 223)
                     {
                         const u32 luPayloadOffset =
                             reinterpret_cast<const u32*>(lpEvent)[2];
@@ -2751,7 +2771,29 @@ void GuiModule::Destruct()
             while (liNotificationId >= 0 && lpNotification != 0)
             {
                 if (liNotificationId == 14 || liNotificationId == 16)
+                {
                     mGuiCache.RecEvent(lpNotification, liNotificationId);
+
+                    // ⭐ [map-world 2026-08-29] THE CUSTOM-RENDERER MANAGER IS THE OTHER
+                    // CONSOLE CONSUMER OF THESE COMPLETIONS. On the X360 every view-side
+                    // event reaches CustomRendererManager::RecvEvent through the view hop,
+                    // and MainMapRenderer::RecvEvent @0x82449E98's case-14 arm is the ONLY
+                    // way that component ever gets its two mask textures (203
+                    // MainMapBackgroundMask / 202 PreRaceBackgroundMask) -- it has no
+                    // resource-loading Prepare stage at all.
+                    //
+                    // MEASURED: the resource module publishes these completions on the MODEL
+                    // OUTPUT notification queue read right here. They do NOT transit the
+                    // module INPUT queue (the DispatchInboundGuiEvents tail forward) and they
+                    // do NOT transit the view queue (the ViewModule case-14 forward) -- with
+                    // both of those seats live, MainMapRenderer saw notifications for ids
+                    // 17/18/19/1/196/125/33..131 and NEVER 202 or 203, so its guard held the
+                    // whole map screen blank. This is the third and last PC seat of the one
+                    // console hop; the three streams are disjoint, so nothing is delivered
+                    // twice. Retire all three when BridgeFromInputToView gets its console
+                    // caller (see the FLAG at the hook in CgsGuiViewModule.cpp).
+                    mCustomRendererManager.RecvEvent(lpNotification, liNotificationId);
+                }
 
                 const CgsModule::Event* lpNext = 0;
                 liNotificationId = lpNotifications->GetNextEvent(

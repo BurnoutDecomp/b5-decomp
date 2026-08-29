@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h"    // CgsGui::CustomRenderComponentInterface base
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                              // CgsGui::GuiEventQueueSmall (a queue typedef)
 #include "pc/gcm/renderengine/texture.h"                                         // renderengine::Texture / Texture2D / Texture::Locked
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                            // BrnGui::GuiEventNetworkPlayerImage (id 258) -- the canonical home
 
 // ============================================================================
 // GameSource/Gui/CustomRenderer/Renderers/BrnNetworkPlayerImageRenderer.h
@@ -66,17 +67,17 @@ namespace BrnGui
 {
     class GuiCache;
 
-    // The typed event payload the renderer copies from (DWARF: BrnGuiEventTypes.h;
-    // CopyTexture takes `const GuiEventNetworkPlayerImage*`). The X360 CopyTexture
-    // reads exactly these two leading fields: the source NetworkTexture (+0x00) and
-    // the destination texture index (+0x04). Modelled minimally here -- this is the
-    // only consumer in scope, and no GuiEventNetworkPlayerImage home header is yet
-    // reconstructed. Grow additively when BrnGuiEventTypes.h is recovered.
-    struct GuiEventNetworkPlayerImage
-    {
-        CgsNetwork::NetworkTexture* mpTexture;   // +0x00  the transmitted image
-        s32                         miTextureIndex; // +0x04  which display slot [0..KI_MAX_NUM_TEXTURES_TO_DISPLAY)
-    };
+    // ⭐ FORK RETIRED 2026-08-29 (map-world wave). `BrnGui::GuiEventNetworkPlayerImage` used
+    // to be re-defined HERE, at namespace scope, while its canonical home already existed at
+    // GameSource/Gui/BrnGuiDemangledEventTypes.h:172. Two namespace-scope definitions of one
+    // class are an ODR fork that only a co-including TU finds -- and it made this header a
+    // hard C2011 against every TU that pulls the demangled home, which is why
+    // BrnCrashNavIconRenderer.h (and therefore the CrashNavIcon component) could not be
+    // embedded in BrnCustomRendererManager.h. Three TUs already recorded the fork and named
+    // exactly this fix (GameBridgeGameStateToX.cpp:56,
+    // GameBridgeGameStateToX_EventFlowGuiEvents.cpp:81, BrnCrashNavIconRenderer_wK_01.cpp:83).
+    // The demangled home now carries the same two typed fields this definition had, so the
+    // renderer's CopyTexture reads the identical record.
 
     class NetworkPlayerImageRenderer : public CgsGui::CustomRenderComponentInterface
     {

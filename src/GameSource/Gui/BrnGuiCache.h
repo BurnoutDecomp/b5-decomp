@@ -196,6 +196,28 @@ namespace BrnGui
         // GuiCache::AppendExpectedAptComponent faces declared below.
         void AppendExpectedAptComponent(GuiFlow leFlow, u32 luComponentNameHash);
 
+        // AppendExpectedAptComponentList @ 0x824ED920 -- ADD the caller's hash array to
+        // whatever the flow layer is already waiting on (as opposed to
+        // SetExpectedAptComponentList @0x824ED748, which REPLACES). Three console asserts,
+        // all non-gating: the flow bound ("Invalid GuiFlow of " << flow,
+        // BrnGuiCache.cpp:755), the caller's own count against the 192 capacity
+        // (BrnGuiCache.cpp:760) and the post-append total against the same capacity
+        // (BrnGuiCache.cpp:762). The append writes the ids only -- it does NOT touch the
+        // per-component loaded flags, which is why a screen calls ClearComponentInitialised
+        // first. ADDITIVE GROW (wave J: CrashNavMap::AppendExpectedAptComponents, which
+        // pushes its 50 "SatNavIcon<n>" hashes through the GuiCache face below).
+        void AppendExpectedAptComponentList(GuiFlow leFlow, const u32* lpauComponentNameHashes,
+                                            u32 luCount);
+
+        // The CONTROLLED-component registration count. GuiCache::
+        // ClearExpectedControlledAptComponentList @0x824EE798 is a single `stw 0` at
+        // cache+0x404C, which is this member (the helper is embedded at cache+0x8 and its
+        // tail runs muControlledComponentCount @+0x4044 / muPendingUnloadCount @+0x4048).
+        // The console reached it as a raw far store because the helper is a plain aggregate;
+        // on the host it goes through this named face, per the by-name access rule.
+        // ADDITIVE GROW (wave J: CrashNavMap::CheckForLoadComplete).
+        void ClearControlledComponentList() { muControlledComponentCount = 0; }
+
         // IsWaitingAptComponent @ 0x824EDB08 -- linear-scan the flow layer's expected
         // component ids for the hash. ADDITIVE GROW (BrnPauseScreen TU).
         bool IsWaitingAptComponent(GuiFlow leFlow, u32 luComponentNameHash) const;
@@ -456,10 +478,39 @@ namespace BrnGui
         const PresetEvent*   GetPresetEvent(s32 liIndex) const;
         s32                  GetNumPresetEvents() const;
 
-        // DWARF BrnGuiCache.h:801 -- the live count of registered event-start records. X360 @0x824F8830
-        // is a pure tail-forwarder: hands &mSetUpAllEventStartsInterface (embedded at GuiCache+0x5690)
-        // to its GetNumEventStarts() @0x824F7688 and tail-returns its result.
-        u32                  GetNumEventStarts() const;   // X360 far member @0x5690
+        // DWARF BrnGuiCache.h:801 -- the live count of registered event-start records.
+        // ⚠️ ADDRESS CORRECTION 2026-08-29 (crash-nav FIX2). This comment used to name
+        // @0x824F8830 as GetNumEventStarts "tail-forwarding to GetNumEventStarts @0x824F7688".
+        // Neither half holds, and the real addresses are attested by the same caller:
+        //   * CrashNavIconRenderer::GetNumIcons @0x82456C68 calls
+        //     BrnGui::GuiCache::GetNumEventStarts @0x8241E4C8 (an xref by name in the export),
+        //     so THAT is the count.
+        //   * 0x824F7688 is the bounds-checked element GetAt -- its own assert strings are
+        //     "Array used before Construct/Clear was called" (CgsArray.h:336) and
+        //     "luEventStartIndex < maEventStarts.GetLength()" (BrnGameStateSharedIO.h:1766),
+        //     and it tail-calls the stride-48 indexer @0x824F65E0.
+        //   * 0x824F8830 is therefore `GetEventStart(index)` -- `return GetAt(this + 22160,
+        //     index)`, 22160 == 0x5690 == mSetUpAllEventStartsInterface. IDA prints it with
+        //     one argument because it never typed the second; the call site
+        //     (CrashNavIconRenderer::GetIconInformation @0x82457028: `mr r4,r30 / lwz r3,0x90 /
+        //     bl`) passes two and uses the returned RECORD.
+        u32                  GetNumEventStarts() const;   // X360 @0x8241E4C8
+
+        // ADDITIVE GROW (crash-nav FIX2): the indexed twin of GetNumEventStarts. X360
+        // @0x824F8830, consumed by CrashNavIconRenderer::GetIconInformation's
+        // ONLINE_EVENT_STARTS arm, which reads the record's leading 16-byte position lane,
+        // its muJunctionId (+0x14, the ignore-list key) and its muEventInstanceId (+0x18).
+        // Bodied INLINE over the already-carved member rather than declared-only, because the
+        // console body is just the array GetAt and a declaration-only accessor would only move
+        // the missing symbol somewhere else. Carries the console's two asserts.
+        const SatNavEventDisplayInfo* GetEventStart(u32 luEventStartIndex) const
+        {
+            CGS_ASSERT(miEventStartsCount != -1,
+                       "Array used before Construct/Clear was called");   // CgsArray.h:336
+            CGS_ASSERT(static_cast<s32>(luEventStartIndex) < miEventStartsCount,
+                       "luEventStartIndex < maEventStarts.GetLength()");  // BrnGameStateSharedIO.h:1766
+            return &maEventStarts[luEventStartIndex];
+        }
 
         // DWARF h:1456-ish -- fill lpOutIconInfo with the online-landmark icon record at the given
         // position-in-list slot (used for meIconDisplayType == ONLINE_CHECKPOINTS). Returns the
@@ -467,6 +518,20 @@ namespace BrnGui
         GuiEventUpdateSatNav::SatNavIconInfo*
             GetOnlineLandmarkInfoAtPositionInList(s32 liIndex,
                                                   GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const;
+
+        // ADDITIVE GROW (crash-nav FIX2): the ONLINE_FINISH_POINTS twin of the landmark
+        // accessor above -- fill lpOutIconInfo with the finish-point icon record at the given
+        // slot. X360 @0x82506940, called by CrashNavIconRenderer::GetIconInformation's case-3
+        // arm (`addi r5,r1,var_90 / lwz r3,0x90 / mr r4,r30 / bl` @0x824570D8), which then
+        // reads the record's leading position lane and its sign-extended @+0x20 half-word.
+        // ⛔ DECLARATION-ONLY, per this header's far-member convention: the body is a real
+        // ledger item of its own (it asserts mpWorldDataController, walks the 256-bit
+        // maOnlineFinishPointsMask @+0x7770 with per-doubleword popcounts to turn the slot
+        // index into a landmark index, then forwards to GetLandmarkInfoFromIndex) and belongs
+        // to the GuiCache TU, not to a renderer wave. Needs a link stub until that lands.
+        GuiEventUpdateSatNav::SatNavIconInfo*
+            GetOnlineFinishPoint(s32 liIndex,
+                                 GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const;
 
         // ADDITIVE GROW (BrnCompassComponent TU): fill lpOutIconInfo with the sat-nav icon
         // record (world position + type) for the given landmark index, and return the out
@@ -1007,13 +1072,6 @@ namespace BrnGui
         // (`bl` @0x824C6AE8). Body: BrnGuiCache_wMap.cpp (map arm 2026-08-27).
         void RefreshMapState();
 
-        // [map arm 2026-08-27] the tracker-refresh worker RefreshMapState's offline arm
-        // tail-calls (@0x82510F7C) and GuiCache::RecEvent case 112's Burning-Home-Run arm
-        // calls (@0x825105F8): resolve `liNumLandmarks` u16 landmark indices to their icon
-        // records and publish the whole set to the GuiTracker as one id-232 SetTracker
-        // event. X360 @0x82506F28. Body: BrnGuiCache_wMap.cpp.
-        void UpdateTrackerInfo(const u16* lpLandmarkIndices, s32 liNumLandmarks);
-
         // [map arm 2026-08-27] the active-landmark latch: copy the event's u16 landmark
         // list into maActiveLandmarks (+0x5288) and its count into muNumActiveLandmarks
         // (+0x5286, BYTE store -- the console truncates a > 255 list; keep it). Asserts
@@ -1037,6 +1095,38 @@ namespace BrnGui
         // miPreviousIconCount, so it is the s32 count. DECLARATION-ONLY.
         s32 HACK_FindABetterPlaceForMe_SetActiveLandmarksByEventID(u32 luEventID, f32 lfT,
                                                                    bool lbFlag);
+
+        // ====================================================================
+        //  [wave J] The three internal workers RefreshMapState and the HACK above
+        //  dispatch through. All bodied in GameSource/Gui/BrnGuiCache_wJ_01.cpp.
+        // ====================================================================
+
+        // @0x824EE7D0 -- consume a GuiEventSetActiveLandmarks: assert the list against the
+        // 512 bound (BrnGuiCache.cpp:4067, non-gating), copy muNumLandmarks entries into
+        // mau16ActiveLandmarks and store the count with a BYTE store into
+        // muNumActiveLandmarks. The X360 reaches it BOTH from the RecEvent switch and
+        // directly from the HACK worker above (`bl` @0x82507374), so it is a named method,
+        // not a switch arm.
+        void HandleSetActiveLandmarksEvent(const GuiEventSetActiveLandmarks* lpActiveLandmarksEvent);
+
+        // @0x82506F28 -- build a GuiEventSetTracker from a raw landmark-index list and
+        // publish it to mpGuiTracker. Asserts lpLandmarkIndices (BrnGuiCache.cpp:3913) and
+        // the tracker pointer (BrnGuiCache.cpp:3932). Call sites: RefreshMapState's offline
+        // arm, and the two RecEvent arms currently FLAG-deferred at BrnGuiCache.cpp:1215 /
+        // :1496. The list is `u16*` rather than `LandmarkIndex*` to match its producer
+        // maCheckpointLandmarks, which the committed layout spells u16 -- FLAG: the console
+        // type is LandmarkIndex (same 2 bytes, same values).
+        void UpdateTrackerInfo(const u16* lpLandmarkIndices, s32 liCount);
+
+        // @0x82507070 -- the ONLINE twin of UpdateTrackerInfo: same record, same publish,
+        // but the landmark indices come from a round's SpecificGameModeEventInterface::Event
+        // (Event::GetLandmark(i) for i in [0, GetNumLandmarks())) instead of a flat list.
+        // Asserts lpEvent (BrnGuiCache.cpp:3947) and the tracker pointer
+        // (BrnGuiCache.cpp:3967). ⚠️ FLAG name: the X360 exports this as `sub_82507070` --
+        // it has NO symbol, so `UpdateTrackerInfoFromOnlineEvent` is OUR name, chosen to say
+        // what it is; do not present it as the console's.
+        void UpdateTrackerInfoFromOnlineEvent(
+            const BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event* lpEvent);
 
         // DWARF BrnGuiCache.h:780 -- the map-icon manager SetMapIconManager latched.
         // X360-INLINED at every call site (`lwz r11, 0x4060(cache)`, e.g.
@@ -1509,13 +1599,19 @@ namespace BrnGui
         // @0x8240F1C0) -- two different "checkpoint" counts on this class.
         // No member is shifted (2 + 1 + 9433 == 9436); the u16 array at +0x5288 stays padded.
         u8  muNumActiveLandmarks;                        // +0x5286 (21126)
-        u8  mPad_5287[1];                                // +0x5287
-        // [map arm 2026-08-27] ADDITIVE CARVE from the former mPad_5287[0x409]: the ACTIVE
-        // landmark-index array HandleSetActiveLandmarksEvent @0x824EE7D0 fills (`addi r10,
-        // r30, 0x5288` + the `sth` copy loop, bounded by the KI_MAX_LANDMARKS_IN_GAME == 512
-        // assert). 512 * 2 == 0x400; the pad keeps its first byte and its 8-byte tail, so no
-        // member shifts (1 + 0x400 + 8 == 0x409).
-        u16 maActiveLandmarks[512];                      // +0x5288..+0x5687 (KI_MAX_LANDMARKS_IN_GAME)
+        u8  mPad_5287[1];                                // +0x5287 (alignment byte before the array)
+        // [wave J ADDITIVE CARVE from mPad_5287] the ACTIVE-landmark id table itself, the
+        // array muNumActiveLandmarks above counts. Producer
+        // GuiCache::HandleSetActiveLandmarksEvent @0x824EE7D0 (`addi r10, r30, 0x5288`, one
+        // `sth` per entry, count `stb` at +0x5286); consumer
+        // HudMessageAnalyzer::HandleRaceCheckpointReached @0x8251B350. Capacity 512 is the
+        // producer's own bound (GuiEventSetActiveLandmarks::KU_MAX_LANDMARKS_IN_GAME) and it
+        // lands EXACTLY on the next carved member: 0x5288 + 512*2 == 0x5688, leaving the 8
+        // bytes to +0x568F that mSetUpAllEventStartsInterface's 16-byte alignment needs.
+        // Spelled u16 (not LandmarkIndex) because the producer's stores are raw `sth` and
+        // the whole table is a plain id run -- same call as maCheckpointLandmarks above.
+        // No member is shifted (1 + 1024 + 8 == 0x409, the pad's former size).
+        u16 mau16ActiveLandmarks[512];                   // +0x5288 (21128)
         u8  mPad_5688[8];                                // +0x5688..+0x568F
         // [H3b ADDITIVE CARVE] the embedded mSetUpAllEventStartsInterface's event-start
         // array (X360 @0x5690, 175 x 0x30 == 0x20D0 bytes -- ends EXACTLY at the count

@@ -39,7 +39,7 @@
 #include "BrnCommonTypes.h"                              // Vector2 (GetSatNavIconPositions)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"          // GuiEventUpdateSatNav::SatNavIconInfo, GuiEventDrawEventIcons::EIconDisplayType
 #include "GameSource/Gui/View/BrnRoadSignIconManager.h"  // BrnGui::RoadSignIconManager (embedded) + GuiEventRoadRuleBatchDataResponse fwd
-#include "GameSource/Gui/SatNav/BrnSatNavIcon.h"         // [H3c] SatNavIconComponent (the 16-element sat-nav icon pool)
+#include "GameSource/Gui/SatNav/BrnSatNavIcon.h"         // [H3c] SatNavIconComponent (16-element sat-nav pool) + [F3] CrashNavIconComponent (50-element crash-nav pool)
 #include "GameSource/Gui/SatNav/BrnEventIconManager.h"   // [H3c] BrnGui::EventIconManager (embedded @+0xA1B4)
 
 // Pointer-only use in SetOwnerParameters/ReleaseResources -- forward-declared rather than
@@ -53,6 +53,7 @@ namespace BrnGui
     class GuiCache;                  // embedded by pointer (mpGuiCache); declared in BrnGuiCache.h
     struct OnlineGameRoomPlayerInfo; // friend (writes meIconSizeMode; see the friend note below)
     struct CrashNavMap;              // friend (wave J; BrnCrashNavMap.h declares it as a struct)
+    struct CrashNavMapMain;          // friend (main-menu wave 2026-08-29; BrnCrashNavMapMain.h declares it as a struct)
     struct PreRaceFlyByState;        // friend (wave J; BrnPreRaceFlyBy.h declares it as a struct)
     struct SatNavComponent;          // friend (H3a; the owner-change pokes + the Construct icon-count reset)
 
@@ -209,6 +210,44 @@ namespace BrnGui
         // re-runs the owner's icon pass.
         void SetIconsVisible(bool lbVisible);
 
+        // -------------------------------------------------------------------------------
+        // ADDITIVE GROW (2026-08-29, the CrashNavMap base TU). The five per-filter setters
+        // CrashNavMap::SetFilterFromPanel @0x824CC0E0 pushes at the manager in one run
+        // (0x824CC390..0x824CC3E0). Signatures are the DWARF rows
+        // (BrnMapIconManager.h:259/264/269/280/289), each cross-checked against its own
+        // callee prologue. DECLARATION-ONLY -- bodies belong to BrnMapIconManager.cpp.
+        // -------------------------------------------------------------------------------
+
+        // DWARF h:259, @0x824F4F68 -- one store, mbShowingDriveThrus (+0xA9F4).
+        void SetShowDrivethrus(bool lbShowDrivethrus);
+
+        // DWARF h:264, @0x824F4F78 -- asserts "mbShowingDriveThrus ||
+        // !lbAllowDriveThruSelection" (BrnMapIconManager.cpp:3409) then stores +0x7080.
+        void SetAllowDriveThruSelection(bool lbAllowDriveThruSelection);
+
+        // DWARF h:269, @0x824F4FF0 -- one store, +0x7081.
+        void SetAllowRivalSelection(bool lbAllowRivalSelection);
+
+        // DWARF h:280, @0x825123E0 -- asserts "lpStateInterface" (cpp:3457); on a change,
+        // brings the embedded RoadSignIconManager's components up (SetupComponent +
+        // SetSignsVisible(true)) or hides them, then latches the flag at +0xA1B0.
+        void SetUseRoadSigns(bool lbUseRoadSigns, CgsGui::StateInterface* lpStateInterface);
+
+        // DWARF h:289, @0x82523820 -- asserts "lpStateInterface" (cpp:3493); on a change,
+        // either releases the embedded EventIconManager (when the type is the
+        // one-past-the-end sentinel 5) or re-prepares it, then latches +0xA9F0.
+        //
+        // ⚠️ THE THIRD PARAMETER IS A FLOAT AND EATS NO GPR. On the PPC ABI it travels in
+        // f1 and its GPR slot (r6) is SKIPPED, which is why the only call site in the export
+        // set never writes r6 and Hex-Rays renders a garbage `int a4` there. The DWARF row
+        // is authoritative: (EIconDisplayType, StateInterface*, float32_t, uint32_t*,
+        // int32_t). CrashNavMap::SetFilterFromPanel passes flt_82065668 == 0.5f, 0, 0.
+        void SetUseEventIcons(GuiEventDrawEventIcons::EIconDisplayType leIconDisplayType,
+                              CgsGui::StateInterface* lpStateInterface,
+                              f32 lfValue,
+                              u32* lpuUnknown,
+                              s32 liUnknown);
+
         // DWARF h:207 -- feed the manager the map's current zoom-derived icon scale.
         // FLAG inline-folded: this is the ONE DWARF row with no X360 ledger entry that
         // this header declares. It is attested indirectly but unambiguously -- the X360
@@ -230,6 +269,16 @@ namespace BrnGui
         // lands with this class's own TU.
         void SetZoomFactor(f32 lfZoomFactor);
 
+        // ADDITIVE GROW (mainmenu wave E2, CrashNavIconRenderer::RenderIcons @0x8246A410).
+        // The renderer publishes its per-frame 2D event-icon list straight into the
+        // manager's embedded bank: the X360 tail does `lwz r11,0x4060(cache)` (that is
+        // GuiCache::mpMapIconManager) then `addis/addi r3 -> r11 + 0xA1B4` -- exactly the
+        // address of mEventIconManager below -- and calls EventIconManager::Update2DIcons
+        // on it. The member is private and the caller is not a friend, so the honest
+        // exposure is this accessor over the named member (a raw +0xA1B4 on the host object
+        // is exactly the defect class this project bans; the host base widths differ).
+        EventIconManager& GetEventIconManager() { return mEventIconManager; }
+
     private:
         // The online game-room screen's Update stores meIconSizeMode directly (the X360
         // inlines the raw stwx at 0x824B1418; no DWARF accessor row) -- friendship, not
@@ -248,6 +297,14 @@ namespace BrnGui
                                            // meIconFilterMode, meIconSizeMode, mbRotateSatNav,
                                            // miSelectedCheckpoint, muSelectedJunctionID,
                                            // mbShowingCrashNavRoute, miNumUsedIcons
+        // [main-menu wave 2026-08-29] Same exposure rule, one class further down the
+        // hierarchy: friendship is NOT inherited, so CrashNavMapMain -- which derives
+        // from the already-befriended CrashNavMap -- needs its own row. Its Update
+        // @0x824DDDF8 pokes four of the same setter-less members the base does:
+        // meIconSizeMode (stwx 1, mgr, 0xAA04 @0x824DDF60), mbShowingCrashNavRoute
+        // (stbx 1, mgr, 0xAA21), miSelectedCheckpoint (stwx 0, mgr, 0xAA14) and
+        // muSelectedJunctionID (stwx junction, mgr, 0xAA10) @0x824DE004..0x824DE014.
+        friend struct CrashNavMapMain;
         friend struct PreRaceFlyByState;
         friend struct SatNavComponent;   // H3a: Update's owner-change pokes (mbIsDisplayingEventInfo /
                                          // mbRotateSatNav / meIconSizeMode) + Construct's miNumUsedIcons reset
@@ -325,9 +382,20 @@ namespace BrnGui
         s32                                  miMaxNumberIcons;                      // X360 +0x0994
         s8                                   mi8CurrentEventIndex;                  // X360 +0x0998
 
-        // [the 50-element crash-nav icon pool (DWARF h:435 mCrashNavIcons, X360 +0x9A0,
-        //  stride 0x1F0): not modelled here -- its component half is unreconstructed and
-        //  its bind/update passes stay parked]
+        // [F3 2026-08-29] DWARF h:435 `mCrashNavIcons[50]` -- the crash-nav apt icon pool
+        // (X360 +0x9A0, element stride 0x1F0: the GuiComponent at element+0, the
+        // CrashNavMapIcon at element+0x90). Modelled now because UpdateCrashNavIcons
+        // @0x825212C0 -- the pool drive -- lands in this wave; the element type and the
+        // 0x90 split are pinned in BrnSatNavIcon.h's CrashNavIconComponent banner. Every
+        // access is by name.
+        // [F3 2026-08-29, second pass] the element BIND pass (@0x824481A8, called from
+        // SetOwnerParameters as the element's vtable slot 0) is LANDED: every pooled
+        // element now gets GuiComponent::Construct -- its name, its hash and its
+        // mpStateInterface -- plus the embedded "Icon" TextField, before any Update runs.
+        // Unlike the sat-nav pool there is no Prepare/clip-bind step here: the crash-nav
+        // elements are plain GuiComponents driven purely through apt view states, which is
+        // exactly what CrashNavMapIcon::Update writes.
+        CrashNavIconComponent mCrashNavIcons[KI_MAX_CRASHNAV_MAP_ICONS];   // X360 +0x09A0
 
         // [H3c] DWARF h:438 `mSatNavMapIcons[16]` -- the sat-nav apt icon pool (X360
         // +0x6A80, stride 0x60: FlaptIconComponent @element+0, the icon @element+0x20).
