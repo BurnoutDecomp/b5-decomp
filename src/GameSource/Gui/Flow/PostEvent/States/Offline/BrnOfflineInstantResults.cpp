@@ -50,6 +50,9 @@
 #include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"   // GuiEventShowHideSatNav / ShowHideBoostBar
 #include "GameSource/GameState/Progression/BrnProfile.h"  // BrnProgression::Profile getters
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf / SnPrintf
+#include "GameShared/GameClasses/Language/CgsLanguageManager.h"  // ParameterFormatType
+#include "GameSource/Gui/Flow/Shared/Components/BrnButtonIcon.h"  // ButtonIconComponent::EPadButton
 #include "GameSource/GameState/BrnGameStateSharedIO.h"   // BrnGameState::GameStateModuleIO::EGameModeType (assert bounds)
 
 namespace BrnGui
@@ -156,6 +159,20 @@ namespace BrnGui
         {
             "transInIntro", "transOutIntro", "transInName",
             "transOutName", "transInOutro", "transOutOutro"
+        };
+
+        // The SEVENTH table, recovered with the six above and self-evident in a way none of
+        // them is: it reads FIRST..EIGHTH in order, and the DWARF declares both
+        // `const char*[8] KAC_FINISH_POS_STRINGIDS` and `KI_NUM_FINISH_POS_STRINGS = 8`
+        // beside it. SetupComponents indexes it with (miPlayerFinishPosition - 1) and asserts
+        // that index against the count, which is a third check on the extent.
+        const s32 KI_NUM_FINISH_POS_STRINGS = 8;                     // DWARF cpp:189
+        const char* const KAC_FINISH_POS_STRINGIDS[KI_NUM_FINISH_POS_STRINGS] =  // @0x82F26B78
+        {
+            "HUDMESSAGE_GAME_FINISH_FIRST",   "HUDMESSAGE_GAME_FINISH_SECOND",
+            "HUDMESSAGE_GAME_FINISH_THIRD",   "HUDMESSAGE_GAME_FINISH_FOURTH",
+            "HUDMESSAGE_GAME_FINISH_FIFTH",   "HUDMESSAGE_GAME_FINISH_SIXTH",
+            "HUDMESSAGE_GAME_FINISH_SEVENTH", "HUDMESSAGE_GAME_FINISH_EIGHTH",
         };
 
         // ---- component names (DWARF cpp:97..128; the image strings, lengths cross-checked
@@ -781,6 +798,182 @@ namespace BrnGui
 
         mLicense.SendPlayerPictureEvent();
         mPhotoBoothComponent.SendPlayerPictureEvent();
+    }
+
+    // -----------------------------------------------------------------------------------
+    // SetupComponents  @0x824B3FF0  (cpp:1300+, 492 instructions)
+    //
+    // ⭐⭐ THIS IS THE FUNCTION THAT REVEALS THE SCREEN. Everything before it only LOADS.
+    // Measured 2026-08-29: with OnEnter/Update landed but this still a stub, the results
+    // movie mounts and COMPOSES -- apt levels 2, 3, 4 and 5 all report live=1 composed=1 --
+    // and the display shows nothing, because nothing has pushed a frame onto the components.
+    // The tail below is what does:
+    //     mResultsIcon.SetState(meWinState)   -> KAC_RESULTS_FRAMES[meWinState] as "apt_state"
+    //     mLargeEventIcon.SetState("transIn") -> the mode icon transitions in (win only)
+    //
+    // ⛔ PARTIAL, ARM BY ARM, AND DELIBERATELY SO. The X360 switches on
+    // meFinishedGameModeType across nine arms. Several of them (0, 4, 5, 6, 8) gate on bytes
+    // in OfflinePostEventData's +0xB1..+0xB5 flag run, and that run is NOT attributable: the
+    // PS3 DWARF's declaration order is already proven wrong for this struct, and following it
+    // would put mbEliminated at +0xB3 where the X360's own string is "POSTRACE_OUTOFTIME".
+    // Guessing there prints the WRONG RESULT LINE at the player, silently. So those arms are
+    // left out, loudly, and meWinState keeps the E_RESULTS_PLAIN_LOSS the X360 itself seeds
+    // BEFORE the switch (`li r11, 5` / store to +0x2208 ahead of the dispatch) -- a real
+    // frame, not an out-of-range index, so the panel still appears.
+    // LANDED arms: 1 (won/lost by finish position) and 7/9 (the SCORE modes -- the stunt run
+    // and its sibling), whose every input is attested: miModeScore by its own string id,
+    // GetTargetScoreInEvent by its X360 symbol, miPlayerFinishPosition by the debug print.
+    // -----------------------------------------------------------------------------------
+    void InstantResultsState::SetupComponents()
+    {
+        mHelpItems[0].SetItem("$GENERAL_OPTION_RETRY",
+                              ButtonIconComponent::E_PADBUTTON_OPTION0,
+                              ButtonIconComponent::E_PADBUTTON_INVISIBLE);
+        mHelpItems[1].SetItem("$GENERAL_OPTION_CONTINUE",
+                              ButtonIconComponent::E_PADBUTTON_SELECT,
+                              ButtonIconComponent::E_PADBUTTON_INVISIBLE);
+        // The third help item's caption is &unk_820046A7 -- the image byte there is 0, i.e.
+        // the EMPTY STRING (it is the NUL of the "%s%s%s" literal at 0x820046A0). Read.
+        mHelpItems[2].SetItem("",
+                              ButtonIconComponent::E_PADBUTTON_INVISIBLE,
+                              ButtonIconComponent::E_PADBUTTON_INVISIBLE);
+
+        CGS_ASSERT(mResults.meFinishedGameModeType >= 0, "Invalid finish position");  // cpp:1312
+
+        const s32 liGameMode            = mResults.meFinishedGameModeType;
+        const s32 liFinishPositionIndex = mResults.miPlayerFinishPosition - 1;
+
+        // The X360 seeds PLAIN_LOSS before the switch; every arm below only overrides it.
+        meWinState = E_RESULTS_PLAIN_LOSS;
+
+        switch (liGameMode)
+        {
+        case 1:
+            CGS_ASSERT(liFinishPositionIndex >= 0, "liFinishPositionIndex >= 0");          // cpp:1359
+            CGS_ASSERT(liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS,
+                       "liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS");               // cpp:1360
+            if (mResults.miPlayerFinishPosition != 0)
+            {
+                mFinishedText.SetLocalisedText("POSTRACE_EVENT_LOST",
+                                               CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+                meWinState = E_RESULTS_PLAIN_LOSS;
+            }
+            else
+            {
+                mFinishedText.SetLocalisedText("POSTRACE_EVENT_WON",
+                                               CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+                meWinState = E_RESULTS_PLAIN_WIN;
+            }
+            break;
+
+        case 7:
+        case 9:
+        {
+            CGS_ASSERT(liFinishPositionIndex >= 0, "liFinishPositionIndex >= 0");          // cpp:1398
+            CGS_ASSERT(liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS,
+                       "liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS");               // cpp:1399
+
+            const CgsLanguage::LanguageManager::ParameterFormatType laeFormats[1] =
+                { CgsLanguage::LanguageManager::E_FORMAT_INTEGER };
+
+            char lacPlayerScore[1024];
+            CgsCore::SPrintf(lacPlayerScore, sizeof(lacPlayerScore), "%d", mResults.miModeScore);
+            const char* lapacPlayerParams[1] = { lacPlayerScore };
+            mFinishedText.SetLocalisedText("POSTRACE_FINISH_YOUR_SCORE_POINTS",
+                                           CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP,
+                                           1, lapacPlayerParams, laeFormats);
+
+            char lacTargetScore[1024];
+            CgsCore::SPrintf(lacTargetScore, sizeof(lacTargetScore), "%d",
+                             mpGuiCache->GetTargetScoreInEvent());
+            const char* lapacTargetParams[1] = { lacTargetScore };
+            mTargetResultText.SetLocalisedText("POSTRACE_FINISH_TARGET_SCORE_POINTS",
+                                               CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP,
+                                               1, lapacTargetParams, laeFormats);
+
+            meWinState = (liFinishPositionIndex != 0) ? E_RESULTS_LOSS_WITH_TARGETS
+                                                      : E_RESULTS_WIN_WITH_TARGETS;
+            break;
+        }
+
+        default:
+            // ⛔ Arms 0 / 3 / 4 / 5 / 6 / 8 are NOT reconstructed -- see the banner. The X360's
+            // own default arm also lands here and prints exactly this line.
+            if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "Unhandled game mode! (" << liGameMode << ")\n\n";
+            }
+            break;
+        }
+
+        // ---- the reveal ------------------------------------------------------------------
+        mResultsIcon.SetState(static_cast<u32>(meWinState));
+        if (meWinState <= E_RESULTS_PLAIN_WIN)          // 0/1/2 == the three WIN animations
+        {
+            mLargeEventIcon.SetState("transIn");
+        }
+        mpcAnimatingComponentName = mLargeEventIcon.GetName();
+    }
+
+    // -----------------------------------------------------------------------------------
+    // UpdateEventResults  @0x824BE228  (cpp:1727, 184 instructions)
+    // The RESULTS sub-state: set the components up on the first tick, then run the licence
+    // win-increment / reveal timers until the dwell expires and hand over to the next one.
+    // ⛔ ONE FLAGGED GATE: the X360 guards its ShowLicense call (and a +4.0 s dwell bump) with
+    // mResults +0xB5, a byte in the un-attributable flag run. Reading it by offset would be a
+    // guess, so the licence reveal is not driven here; it is left to the wave that pins that
+    // run. Everything else in this body is faithful.
+    // -----------------------------------------------------------------------------------
+    void InstantResultsState::UpdateEventResults()
+    {
+        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RESULTS,
+                   "E_ACTIVE_SUBSTATE_EVENT_RESULTS == meActiveSubState");            // cpp:1727
+
+        if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
+        {
+            SetupComponents();
+            mfTimeToShowLicense  = KF_SHOW_LICENSE_PAUSE;
+            mbLicenseShown       = false;
+            mfTimeToIncrementWin = KF_WIN_INCREMENT_PAUSE;
+            mbWinsIncremented    = false;
+            meSubStateState      = E_SUBSTATE_RUNNING;
+            return;
+        }
+
+        CGS_ASSERT(meSubStateState == E_SUBSTATE_RUNNING,
+                   "Should not be updating car unlock when substate is in state");    // cpp:1796
+
+        const f32 lfTimeStep = mpGuiCache->GetTimeStep();
+        mfTimeToShowLicense  -= lfTimeStep;
+        mfTimeToIncrementWin -= lfTimeStep;
+
+        if (TickSubstateAndEndIfDone())
+        {
+            // Push the "<frame>Out" transition onto the results icon, then start the mode
+            // icon's own trans-out on a winning result.
+            char lacFrame[32];
+            CgsCore::SnPrintf(lacFrame, sizeof(lacFrame), "%sOut",
+                              KAC_RESULTS_FRAMES[mResultsIcon.GetState()]);
+            mResultsIcon.SetState(lacFrame);
+
+            if (meWinState <= E_RESULTS_PLAIN_WIN)
+            {
+                mLargeEventIcon.SetState("transOut");
+                mpcAnimatingComponentName = mLargeEventIcon.GetName();
+            }
+        }
+        else if (mfTimeToShowLicense > 0.0f || mbLicenseShown)
+        {
+            if (mfTimeToIncrementWin <= 0.0f && !mbWinsIncremented)
+            {
+                mLicense.AddWin();
+                mbWinsIncremented = true;
+            }
+        }
+        else
+        {
+            mbLicenseShown = true;
+        }
     }
 
     // -----------------------------------------------------------------------------------

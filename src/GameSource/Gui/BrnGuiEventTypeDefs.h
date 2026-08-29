@@ -2505,7 +2505,11 @@ struct GuiEventOfflinePostEvent
         u8    maReserved08[8];                   // +0x08  UNNAMED -- no X360 access from this class
         CgsID mBeatenRival;                      // +0x10  ld; "Results.Beaten Rival = "
         s32   meFinishedGameModeType;            // +0x18  lwz @0x824D59DC; switched on
-        u8    maReserved1C[4];                   // +0x1C  UNNAMED
+        s32   miModeScore;                       // +0x1C  SetupComponents case 7/9 SPrintf's it
+                                                 //   "%d" into "POSTRACE_FINISH_YOUR_SCORE_POINTS"
+                                                 //   (== "your score"), beside GetTargetScoreInEvent
+                                                 //   for the target -- so this word is the PLAYER's
+                                                 //   mode score. String-id attested, not inferred.
         f32   mfTime;                            // +0x20  "POSTRACE_FINISH_YOUR_TIME"
         u8    maReserved24[12];                  // +0x24  UNNAMED
         Array<CgsID, 8> maCarsToUnlockFromSpecialEvent;  // +0x30  GetLength; miCount @0x22E8
