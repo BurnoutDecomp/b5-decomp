@@ -846,10 +846,15 @@ namespace BrnGui
 
             case KI_EVENT_CAR_SELECT_START:
             {
-                // Show the HUD again, then hand the flow to the online car-select screen.
-                GuiEventShowHideHud lShowHud;
-                lShowHud.maData[0] = 0;
-                mpStateInterface->OutputInternalState(lShowHud);
+                // Re-post the HUD hide, this time on the INTERNAL-STATE channel (42) rather
+                // than the OutputGuiEvent channel (40) OnEnter used, then hand the flow to
+                // the online car-select screen.
+                // ⚠️ The payload byte is 0 -- the same value OnEnter posts, i.e. HIDE. An
+                // earlier draft of this arm called it "show the HUD again"; the console
+                // stores `li r11, 0 / stb r11, sp+0x8C`, so it does not.
+                GuiEventShowHideHud lHideHud;
+                lHideHud.maData[0] = 0;
+                mpStateInterface->OutputInternalState(lHideHud);
 
                 CGS_ASSERT(*reinterpret_cast<const s32*>(lpEvent) == 2,
                            "static_cast<const GuiCarSelectStartEvent*>( lpEvent )"
@@ -917,10 +922,16 @@ namespace BrnGui
                 break;
 
             case KI_EVENT_STOP_MODE:
-                // The record's two trailing words distinguish a disconnect-driven stop from a
-                // normal one (X360 `*(v3 + 10) || *(v3 + 9)`, i.e. the words at +0x24/+0x28).
-                if (reinterpret_cast<const s32*>(lpEvent)[10] != 0
-                    || reinterpret_cast<const s32*>(lpEvent)[9] != 0)
+                // Two BYTES in the record distinguish a disconnect-driven stop from a normal
+                // one. ⚠️ THE WIDTH IS ASM-PINNED, NOT READ OFF THE PSEUDOCODE: Hex-Rays
+                // renders these as `*(v3 + 10) || *(v3 + 9)` over an `int v3`, which reads as
+                // word indices 10 and 9 (byte offsets 40 and 36). The X360 is
+                //     0x824D5E08  lbz  r11, 0xA(r27)
+                //     0x824D5E14  lbz  r11, 9(r27)
+                // -- lbz, i.e. the BYTES at +10 and +9. The offline sibling's own event-322
+                // arm reads the same record as `const u8*`, which is the second attestation.
+                if (reinterpret_cast<const u8*>(lpEvent)[10] != 0
+                    || reinterpret_cast<const u8*>(lpEvent)[9] != 0)
                 {
                     if ((CgsDev::Message::gxMessageFilterFlags
                          & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
