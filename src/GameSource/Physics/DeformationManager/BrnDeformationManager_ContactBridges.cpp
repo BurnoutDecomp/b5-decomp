@@ -256,6 +256,16 @@ namespace Deformation
     //     mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction -- the
     //     "TimeSinceLastRaceCarContact cool-down" reset the declaration's own banner names.
     // ==========================================================================================
+    // ⛔ THE UNUSED lpSimInput IS FAITHFUL -- DO NOT "FIX" IT (verified 2026-08-29).
+    // A 2026-08-29 lead read the commented-out parameter as a dropped side effect and named it
+    // the cause of the empty traffic contact queue. It is not. On the X360 this is a THREE-
+    // argument function: the prologue saves r3/r4/r5 only (`mr r30,r4` @0x8260540C, `mr r28,r3`
+    // @0x82605414, `mr r25,r5` @0x82605418), and across all 135 instructions r6 is never read --
+    // the single later use of the saved r5 is `mr r6,r25` @0x826055B0, the ContactId going into
+    // ValidateAndAddContact. The declaration keeps the parameter because the DWARF and every
+    // sibling Read*/Bridge* in this family carry it; the body has nothing to do with it.
+    // ⇒ The race-car-vs-traffic loss is NOT here. See the retraction in
+    // BrnPhysicsModuleBridgeFunctions.cpp's ProcessContactSpy banner for what it actually is.
     void DeformationManager::ReadPotentialContact(
         const CgsSceneManager::SceneManagerIO::PotentialContact& lrPotentialContact,
         BrnPhysics::ContactId lContactId,

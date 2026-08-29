@@ -186,6 +186,27 @@ namespace PhysicsModuleIO
         const CustomPotentialContactQueue& GetSimpleTrafficWithWorldQueue() const { return maCustomEventQueues[10]; }
         CustomPotentialContactQueue&       GetSimpleTrafficWithWorldQueue()       { return maCustomEventQueues[10]; }
 
+        // ====================================================================================
+        // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN the traffic contact queue is proven to
+        // fill. The PER-QUEUE WITNESS -- the one measurement that separates "the race car never
+        // touches traffic" from "it touches traffic down a queue nothing bridges to the sim".
+        //
+        // ⚠️ WHY IT IS A MEMBER AND NOT A FREE PROBE: maCustomEventQueues is private and only
+        // SIX of the fourteen indices have a committed accessor. A probe that could only see
+        // those six would have reported "queue 11 is empty" by not looking at it, which reads
+        // identically to the real thing. [[diagnostics-that-lie]]
+        //
+        // ⚠️ IT ACCUMULATES ACROSS FRAMES, it does not sample. Every one of these queues is a
+        // PER-FRAME queue that the physics clears at the top of PhysicsModule::Update, so a
+        // 1-in-N sample of GetLength() reads 0 on almost every frame even while contacts stream
+        // through -- the exact trap the [contact-entry] witness in GameStateModule::
+        // ProcessContacts already documents. Call it EVERY frame; it prints on a period.
+        //
+        // Bounded: 15 s32 counters, at most KI_DIAG_MAX_LINES lines for the whole process.
+        void DebugAccumulateQueueLengths() const;
+        static const s32 KI_DIAG_MAX_LINES = 24;
+        // ====================================================================================
+
     private:
         const InPotentialContactQueue* mpQueue;                    // +4  :246 (const source queue)
         CustomPotentialContactQueue    maCustomEventQueues[KI_CUSTOM_QUEUE_COUNT]; // +16 :247
