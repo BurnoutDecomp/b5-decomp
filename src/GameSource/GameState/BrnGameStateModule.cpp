@@ -2430,6 +2430,58 @@ void GameStateModule::ProcessContacts(
     // 0x8236BC80..0x8236BC8C -- the inlined ContactSpyInterface::IsValid() (mpData != NULL).
     // NOT IsEmpty(): see the accessor's banner in BrnContactSpyInterface.h.
     CGS_ASSERT(lpContactSpyInterface != 0, "lpContactSpyInterface != NULL");   // [PC GUARD]
+
+    // [DIAG] NOT IN THE X360 BINARY -- the ENTRY witness. It sits BEFORE every gate on purpose,
+    // for two reasons:
+    //   (a) a run that produces no [showtime-crash] line must still say WHICH precondition
+    //       failed -- "the spy is unbound", "the mode is not showtime", "the mode is not
+    //       IN_PROGRESS" and "there were no contacts" are four completely different defects;
+    //   (b) ⚠️⚠️ the CONTACT COUNTERS MUST ACCUMULATE OVER EVERY FRAME, NOT SAMPLE ONE.
+    //       A contact queue is a PER-FRAME queue -- the physics clears it at the top of each
+    //       PhysicsModule::Update -- so it is non-empty only on the frames where a contact
+    //       actually happened. A 1-in-60 sample of GetLength() reads 0 on ~99% of frames even
+    //       while contacts stream through, and the first version of this probe did exactly that
+    //       and printed "traffic=0" six times running. [[diagnostics-that-lie]]: sample period
+    //       vs event lifetime. And they must accumulate OUTSIDE the mode gates, because on this
+    //       build the showtime mode reaches E_GMS_IN_PROGRESS for only ~5 s of a 190 s run
+    //       (measured: 152 samples in E_GMS_RESULTS, 5 in IN_PROGRESS) -- so counting only past
+    //       the gates would measure the gate, not the physics.
+    {
+        static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
+        static s32        siEntryFrame    = 0;
+        static s32        siMaxProps      = 0;
+        static s32        siMaxTraffic    = 0;
+        static s32        siPropFrames    = 0;
+        static s32        siTrafficFrames = 0;
+        static s32        siTotalTraffic  = 0;
+
+        if (sbWatch && CgsDev::Log::gpDebugPrint != 0 &&
+            lpContactSpyInterface != 0 && lpContactSpyInterface->IsValid())
+        {
+            const s32 liProps   = lpContactSpyInterface->GetPropContacts()->GetLength();
+            const s32 liTraffic = lpContactSpyInterface->GetTrafficContacts()->GetLength();
+            if (liProps   > siMaxProps)   { siMaxProps   = liProps; }
+            if (liTraffic > siMaxTraffic) { siMaxTraffic = liTraffic; }
+            if (liProps   > 0) { ++siPropFrames; }
+            if (liTraffic > 0) { ++siTrafficFrames; siTotalTraffic += liTraffic; }
+        }
+
+        if (sbWatch && CgsDev::Log::gpDebugPrint != 0 && (siEntryFrame++ % 120) == 0)
+        {
+            const GameMode* const lpMode = mModeManager.GetCurrentGameMode();
+            *CgsDev::Log::gpDebugPrint
+                << "[contact-entry] frames=" << siEntryFrame
+                << " spy=" << ((lpContactSpyInterface != 0) ? 1 : 0)
+                << " valid=" << ((lpContactSpyInterface != 0 && lpContactSpyInterface->IsValid()) ? 1 : 0)
+                << " mode=" << static_cast<s32>(mModeManager.GetCurrentGameModeType())
+                << " state=" << ((lpMode != 0) ? static_cast<s32>(lpMode->GetCurrentState()) : -99)
+                << " | props: max=" << siMaxProps << " frames=" << siPropFrames
+                << " | traffic: max=" << siMaxTraffic << " frames=" << siTrafficFrames
+                << " total=" << siTotalTraffic
+                << "\n";
+        }
+    }
+
     if (lpContactSpyInterface == 0 || !lpContactSpyInterface->IsValid())
     {
         return;
@@ -2460,6 +2512,34 @@ void GameStateModule::ProcessContacts(
         lpContactSpyInterface->GetPropContacts();
     const BrnPhysics::ContactSpy::ContactSpyData::TrafficContactQueue* const lpTrafficContacts =
         lpContactSpyInterface->GetTrafficContacts();
+
+    // [DIAG] NOT IN THE X360 BINARY. The gate witness: which of this function's four
+    // preconditions is the one that stops it, and how much traffic the spy is actually
+    // carrying. Every gate above returns silently, so without this a run that produces no
+    // [showtime-crash] line cannot distinguish "the spy is unbound" from "the mode is not
+    // IN_PROGRESS" from "there were no traffic contacts" -- three completely different defects.
+    // Once per second at 60 Hz, only past the gates, only under BRN_SHOWTIME_WATCH.
+    // [[diagnostics-that-lie]] -- a probe that only fires on success proves nothing on failure.
+    //
+    // ⓘ THE ACCUMULATING HALF LIVES IN THE ENTRY PROBE, NOT HERE -- see its banner for why
+    // (per-frame queues cannot be sampled, and the mode gates above are open for only ~5 s of a
+    // 190 s run). This one only reports how many frames actually reached the console's own
+    // scoring gates, which is the other half of the answer.
+    {
+        static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
+        static s32        siFrame = 0;
+        if (sbWatch && CgsDev::Log::gpDebugPrint != 0 && (siFrame++ % 120) == 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[contact-pass] gatedFrames=" << siFrame
+                << " mode=" << static_cast<s32>(leGameModeType)
+                << " state=" << static_cast<s32>(lpCurrentGameMode->GetCurrentState())
+                << " playerIdx=" << static_cast<s32>(GetPlayerActiveRaceCarIndex())
+                << " props=" << lpPropContacts->GetLength()
+                << " traffic=" << lpTrafficContacts->GetLength()
+                << "\n";
+        }
+    }
 
     // 0x8236BD10..0x8236BD30 -- the two scorers. r24 = ScoringSystem+0x20 (the crash scorer);
     // r26 = ScoringSystem + 0x2620 when IsOnlineGameMode(), else ScoringSystem + 0x350 -- i.e.
