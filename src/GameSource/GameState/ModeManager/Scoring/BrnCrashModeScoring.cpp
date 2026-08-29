@@ -73,9 +73,16 @@
 // ============================================================================
 
 #include <cstring>                                    // std::memset (ClearData zeroes the Vector3 members)
+#include <cmath>                                      // std::fabs (Update's IsVectorSet epsilon test)
 #include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the X360 assert sites in these bodies)
 #include "GameShared/GameClasses/Core/CgsID.h"        // CgsIDUnCompress (GetVehicleScoreData diagnostic)
+// [showtime score wave 2026-08-29] Update's real body needs the two console types its own
+// signature already names by pointer. These are .cpp includes, NOT header includes -- the
+// keystone's by-value embed is unaffected, which is what the previous FLAG was protecting.
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface + BoostOutputInfo + RaceCarState
+#include "GameSource/Math/BrnMathUtils.h"             // BrnMath::Magnitude2D @0x822B1DD8 (the XZ length)
+#include "rw/math/vpu/vector3_operation.h"            // rw::math::vpu::Magnitude / Dot / operator-
 
 namespace BrnGameState
 {
@@ -125,8 +132,13 @@ namespace BrnGameState
     {
         // Vector3 mPlayerPosLastFrame (+0x20) and mPlayerPosLastStored (+0x30): the X360
         // splat-zeros both 16-byte lanes.
-        std::memset(maPlayerPosLastFrame, 0, sizeof(maPlayerPosLastFrame));
-        std::memset(maPlayerPosLastStored, 0, sizeof(maPlayerPosLastStored));
+        // ⭐ THE ZERO IS LOAD-BEARING, not just tidy. Update's distance block runs only when
+        // mPlayerPosLastFrame is non-zero (`vcmpgtfp.` against FLT_EPSILON, @0x82320AE0), so a
+        // zeroed anchor is what makes the FIRST frame of a crash contribute no distance -- the
+        // car has no previous position to have travelled from. Same test seeds
+        // mPlayerPosLastStored from mPlayerPosLastFrame the frame after.
+        std::memset(&mPlayerPosLastFrame,  0, sizeof(mPlayerPosLastFrame));
+        std::memset(&mPlayerPosLastStored, 0, sizeof(mPlayerPosLastStored));
 
         mfTimeSincePlayerCarMoved      = 0.0f;   // +0x40
         mfTimeSinceLastEvent           = 0.0f;   // +0x44
@@ -631,51 +643,300 @@ namespace BrnGameState
         return true;
     }
 
-    // ------------------------------------------------------------------------
-    // Update  (X360 0x82320808)  -- per-frame driver
-    // Advances the crash-mode timers/state once per simulation step (lfSimTimeStep). The
-    // scalar/timer bookkeeping is reconstructed BY NAME from the proven store offsets:
-    //   - advance the running clocks (mfTimeSinceModeStart, mfTimeSincePlayerCarMoved,
-    //     mfTimeSinceLastEvent, mfTimeSinceLastHitOverheadSign) by the step,
-    //   - latch mbPlayerIsCrashing / mfPlayerBoostPercentage from the player race-car state,
-    //   - drive the wall-contact grace timer (mfTimeContactingWall, mbAboutToResetCombo,
-    //     mfResetComboGracePeriod) and break the combo when it lapses,
-    //   - drive the air-time accumulators (mfTotalAirTime / mfCurrentJumpAirTime /
-    //     mfLongestJumpAirTime / mfHighestJump) and the distance/wheel bookkeeping,
-    //   - decay miNumWheelsLastFrame toward the live attached-wheel count, crediting the
-    //     car-destruction bonus (miCarDestructionBonus) per wheel lost.
+    // ========================================================================
+    // Update  (X360 0x82320808, 321 instructions)  -- the per-frame driver
     //
-    // FLAG: the bulk of Update reads the player RaceCarState and the traffic-state queue
-    // through the RCEntityActiveRaceCarOutputInterface / PhysicalTrafficStateQueue accessors
-    // and performs the speed / travel-direction / in-air tests with rw::math::vpu VMX vector
-    // intrinsics (Magnitude / Dot / IsValid / vsel masks). Those interface types and the
-    // VMX vector ops are NOT homed in this scope, so the interface-driven branches cannot be
-    // bodied store-for-store here without dragging their includes into the keystone's
-    // by-value embed. This body reconstructs ONLY the interface-independent scalar/timer
-    // bookkeeping that the asm proves by raw member offset; the interface reads are gated
-    // behind the non-null assert and otherwise left to land when those types are homed.
-    // ------------------------------------------------------------------------
+    // ⭐⭐⭐ [showtime score wave 2026-08-29] FULLY BODIED. It was the interface-independent
+    // clock advance only; everything the showtime readout renders lives in the half that was
+    // FLAG'd off, so "the score is always 0" was this function, not the GUI chain.
+    //
+    // ⚠️ IT IS NOT REACHED YET, AND THAT IS A DIFFERENT DEFECT. Its only caller,
+    // ModeManager::PostWorldUpdate, itself has NO CALL SITE on this build (that file's own ARMING
+    // STATE banner says so: GameStateModule drives PreWorldUpdateClocksBringUp instead). So the
+    // showtime HUD still renders Distance 0m today -- MEASURED 2026-08-29 -- and this body is what
+    // makes it move the moment that seam is wired. Landing it now is what turns "the score is
+    // always zero" from three unknowns into one named one.
+    //
+    // ⛔⛔ THE PARK NOTE ON THE CALL SITE IS WRONG, AND THIS IS WHERE IT IS PROVED.
+    // BrnModeManager_WorldTick.cpp parked the console's showtime arm with the reason
+    // "GameStateModuleIO::VehicleOutputInterface is a different, still-incomplete forward
+    // declaration over opaque storage, so the [traffic-state] queue cannot be reached by name".
+    // The queue argument arrives in r5 -- and r5 IS NEVER READ IN THIS FUNCTION. The whole
+    // 321-instruction body contains exactly two references to r5 and both are `li r5, <line>`
+    // writes feeding CgsDev::Assert::FireAssert (@0x82320858 :189, @0x82320888 :193). The f32
+    // rides f1, so r4 is the interface and r5 is the dead queue pointer.
+    // ⇒ The blocker was real for the ARGUMENT and irrelevant to the CALL. Passing a null queue
+    // is provably inert here; NOT calling Update at all cost the entire crash scorer.
+    // [[gates-are-stale-not-dead]] -- ask what the block actually blocks.
+    //
+    // ASM SPINE, in the console's order:
+    //   0x82320834  r30 = lpActiveRaceCarInterface, f30 = lfSimTimeStep
+    //   0x82320844  assert lpActiveRaceCarInterface != NULL                 (:189)
+    //   0x82320870  r27 = sub_82310240(r30) == GetPlayerRaceCarState()
+    //   0x82320878  assert lpPlayerState != NULL                            (:193)
+    //   0x823208C4  |mLinearVelocity| (+0x330) and |mAngularVelocity| (+0x340), VMX
+    //               rsqrt-refined with a vsel that returns EXACTLY 0 for a zero square
+    //   0x82320950  v127 = *(playerState + 0x220) == mTransform.wAxis, the world position
+    //   0x82320954  the four clocks store back
+    //   0x82320964  mbPlayerIsCrashing  <- IsPlayerCarCrashing() (inlined, -1 sentinel and all)
+    //   0x823209A4  mfPlayerBoostPercentage <- boost.mfBoostAmount / boost.mfMaxBoost
+    //   0x823209CC  the wall-contact grace timer
+    //   0x82320A8C  the "player has moved" reset (|linear| > 4 or |angular| > 6)
+    //   0x82320AB8  THE DISTANCE BLOCK -- mfDistanceTravelled
+    //   0x82320BDC  the air-time accumulators + mfHighestJump
+    //   0x82320C68  the wheel-loss decay into miCarDestructionBonus
+    //   0x82320CDC  mPlayerPosLastFrame = the world position
+    //
+    // ⛔ INIT-ORDER CHECKED, BOTH EDGES (2026-08-29). Every literal below is a plain .rdata
+    // constant: scanning the ASSEMBLY of all 30,084 exported ARTIST functions finds 2,952 that
+    // REFERENCE flt_82001CC0 / flt_82020B30 / flt_82020F9C / flt_82001DA0 / flt_820211D4 /
+    // flt_820211C8 / flt_82022E34 / flt_82002514 and ZERO store instructions targeting any of
+    // them. No CRT thunk writes them, so no thunk can observe a half-built dependency and there
+    // is no init-order question -- the image value IS the shipped value.
+    // Image reads (VA -> bytes -> value), big-endian at file offset VA-0x82000000:
+    //   flt_82001CC0 00000000  0.0f            flt_82020B30 34000000  1.1920929e-07 (FLT_EPSILON)
+    //   flt_82020F9C 3E99999A  0.3f            flt_82001DA0 3F000000  0.5f
+    //   flt_820211D4 40800000  4.0f            flt_820211C8 40C00000  6.0f
+    //   flt_82022E34 41A00000 20.0f            flt_82002514 B4000000 -1.1920929e-07
+    // ========================================================================
+    namespace
+    {
+        // flt_82020B30 / flt_82002514 -- the +/- epsilon pair. The console splats the POSITIVE
+        // one into a vector for the "has this position ever been written" test at 0x82320AE0
+        // (`vandc` clears the sign bit == fabs, then vcmpgtfp. against the splat) and uses both
+        // scalars for the air-time "is it already zero" test at 0x82320C38/0x82320C4C.
+        const f32 KF_VECTOR_SET_EPSILON = 1.1920929e-07f;   // flt_82020B30
+
+        // The four tuning literals the body reads, all image-verified (see the banner).
+        const f32 KF_WALL_CONTACT_COMBO_BREAK_SECONDS = 0.30000001f;  // flt_82020F9C
+        const f32 KF_COMBO_BREAK_GRACE_SECONDS        = 0.5f;         // flt_82001DA0
+        const f32 KF_MOVED_LINEAR_SPEED               = 4.0f;         // flt_820211D4
+        const f32 KF_MOVED_ANGULAR_SPEED              = 6.0f;         // flt_820211C8
+        const f32 KF_DISTANCE_UNTIL_STORE_POSITION    = 20.0f;        // flt_82022E34
+
+        // 0x82320AB8..0x82320AF0 and 0x82320B10..0x82320B44, both times on a Vector3 member.
+        // The console tests lanes (x, y, z, x) -- the `vrlimi128 v11, v13, 1, 1` duplicates x
+        // into w -- so the fourth lane adds nothing and this is a plain Vector3 test.
+        // Semantically: "has this anchor been written since ClearData zeroed it".
+        bool IsVectorSet(const Vector3& lrVector)
+        {
+            return (std::fabs(lrVector.x) > KF_VECTOR_SET_EPSILON) ||
+                   (std::fabs(lrVector.y) > KF_VECTOR_SET_EPSILON) ||
+                   (std::fabs(lrVector.z) > KF_VECTOR_SET_EPSILON);
+        }
+    }
+
     void CrashModeScoring::Update(
             const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
             const VehicleOutputInterface::PhysicalTrafficStateQueue* /*lpTrafficStateQueue*/,
             f32 lfSimTimeStep)
     {
-        CGS_ASSERT(lpActiveRaceCarInterface != nullptr, "lpActiveRaceCarInterface != NULL");
+        // The console's own two asserts, with their baked line numbers. Neither gates: it fires
+        // and dereferences anyway.
+        CGS_ASSERT(lpActiveRaceCarInterface != nullptr, "lpActiveRaceCarInterface != NULL");  // :189
+        if (lpActiveRaceCarInterface == nullptr)
+        {
+            return;   // [PC GUARD] not X360 -- the console's precondition is the assert above.
+        }
 
-        // Advance the running clocks (the X360 stores these unconditionally at the top).
-        mfTimeSinceModeStart           += lfSimTimeStep;   // *(a1+72)
-        mfTimeSincePlayerCarMoved      += lfSimTimeStep;   // *(a1+64)
-        mfTimeSinceLastEvent           += lfSimTimeStep;   // *(a1+68)
-        mfTimeSinceLastHitOverheadSign += lfSimTimeStep;   // *(a1+780)
+        const BrnPhysics::Vehicle::RaceCarState* const lpPlayerState =
+            lpActiveRaceCarInterface->GetPlayerRaceCarState();
+        CGS_ASSERT(lpPlayerState != nullptr, "lpPlayerState != NULL");                        // :193
+        if (lpPlayerState == nullptr)
+        {
+            return;   // [PC GUARD] same shape.
+        }
 
-        // FLAG: the remaining per-frame work (player crashing/boost latch @+0x54/+0x50, the
-        // wall-contact grace timer @+0x310/+0x304/+0x300, the air-time accumulators
-        // @+0x314/+0x318/+0x31C/+0x320, the distance @+0x308, and the wheel-loss decay
-        // @+0x2D8/+0x328) is driven by the RaceCarState pulled from lpActiveRaceCarInterface
-        // and the traffic-state queue via VMX vector math. Those reads/ops require the
-        // RCEntityActiveRaceCarOutputInterface / PhysicalTrafficStateQueue accessors and the
-        // rw::math::vpu intrinsics, neither homed in this scope; they land when those types
-        // are homed. The clock advance above is the interface-independent core.
+        // ---- 0x823208C4..0x82320948: the two speeds, computed BEFORE the clocks store ------
+        // The console's VMX form is `vmsum3fp128` + two Newton-Raphson rsqrt refinements + a
+        // `vsel` that substitutes an exact 0.0f when the squared length is exactly zero. That is
+        // rw::math::vpu::Magnitude's own shape; called by name rather than re-open-coded.
+        const f32 lfLinearSpeed  = rw::math::vpu::Magnitude(lpPlayerState->mLinearVelocity);   // +0x330
+        const f32 lfAngularSpeed = rw::math::vpu::Magnitude(lpPlayerState->mAngularVelocity);  // +0x340
+
+        // 0x82320950 `li r11, 0x220 ; lvx128 v127, r27, r11` -- 0x220 == 544 == mTransform
+        // (+496) plus 48, i.e. the FOURTH row of the Matrix44Affine, which is the translation.
+        const Vector3 lPlayerPosition = lpPlayerState->mTransform.Pos();
+
+        // ---- the running clocks (0x823208AC/B4/C0/E4 read, 0x82320954..0960 store) ---------
+        mfTimeSinceModeStart           += lfSimTimeStep;   // +0x48
+        mfTimeSincePlayerCarMoved      += lfSimTimeStep;   // +0x40
+        mfTimeSinceLastEvent           += lfSimTimeStep;   // +0x44
+        mfTimeSinceLastHitOverheadSign += lfSimTimeStep;   // +0x30C
+
+        // ---- 0x82320964..0x8232099C: the crashing latch -----------------------------------
+        // The console inlines the -1-sentinel form verbatim (`lwz 0x2858 ; cmpwi -1 ; else
+        // lbz 1120*idx + 0x77A`), which IS IsPlayerCarCrashing(): 1914 - 816 == RaceCarState
+        // +1098 == mbCrashing. Reached by name.
+        mbPlayerIsCrashing = lpActiveRaceCarInterface->IsPlayerCarCrashing();   // +0x54
+
+        // ---- 0x823209A0..0x823209C8: the boost gauge --------------------------------------
+        // `bl RCEntit` twice with the same argument (the console does NOT CSE it) is
+        // GetBoostOutputInfoN @0x823101C0 -- `&this[0x210 + 36*idx]`, with this header's own
+        // :1157/:1158 range asserts. +0x10 / +0x14 within the 36-byte record are mfBoostAmount
+        // and mfMaxBoost. Called ONCE here: both calls return the same pointer and neither has
+        // a side effect.
+        const EActiveRaceCarIndex lePlayerIndex =
+            lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();
+        // [PC GUARD] not X360. The console indexes with the raw -1 sentinel and reads off the
+        // front of the array (its two asserts fire and do not gate). Bounded here; on every
+        // input the asserts accept, the behaviour is identical.
+        if (lePlayerIndex >= E_ACTIVE_RACE_CAR_INDEX_0 &&
+            lePlayerIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT)
+        {
+            const BrnWorld::RaceCarEntityModuleIO::BoostOutputInfo* const lpBoost =
+                lpActiveRaceCarInterface->GetBoostOutputInfoN(lePlayerIndex);
+            mfPlayerBoostPercentage = lpBoost->mfBoostAmount / lpBoost->mfMaxBoost;   // +0x50
+        }
+
+        // ---- 0x823209CC..0x82320A8C: the wall-contact combo-break timer --------------------
+        // Accumulate while the car is scraping a wall OR is on the ground; zero it the moment
+        // the car is airborne and not touching anything. Past 0.3 s, arm a 0.5 s grace period;
+        // when that lapses the crash chain is broken (miCurrentComboCount = 0).
+        // ⚠️ The in-air term is the INLINED IsPlayerInAir() -- the console's own
+        // `maRaceCarStates[idx].mfTimeInAir > 0.0f` with the same -1 sentinel (1844 - 816 ==
+        // RaceCarState +1028 == mfTimeInAir). Reached by name.
+        if (lpPlayerState->mbContactingWall || !lpActiveRaceCarInterface->IsPlayerInAir())
+        {
+            mfTimeContactingWall += lfSimTimeStep;                          // +0x310
+            if (mfTimeContactingWall > KF_WALL_CONTACT_COMBO_BREAK_SECONDS && !mbAboutToResetCombo)
+            {
+                mfResetComboGracePeriod = KF_COMBO_BREAK_GRACE_SECONDS;     // +0x304
+                mbAboutToResetCombo     = true;                             // +0x300
+            }
+        }
+        else
+        {
+            mfTimeContactingWall = 0.0f;
+        }
+
+        if (mbAboutToResetCombo)
+        {
+            mfResetComboGracePeriod -= lfSimTimeStep;
+            if (mfResetComboGracePeriod <= 0.0f)
+            {
+                mbAboutToResetCombo = false;
+                miCurrentComboCount = 0;                                    // +0x2E0
+            }
+        }
+
+        // ---- 0x82320A8C..0x82320AB4: "the player car has moved" ---------------------------
+        // Either speed over its threshold restarts the idle clock. Two DIFFERENT constants and
+        // two different quantities: 4.0 m/s of linear speed, 6.0 rad/s of spin -- a car being
+        // spun on the spot counts as moving.
+        if (lfLinearSpeed > KF_MOVED_LINEAR_SPEED || lfAngularSpeed > KF_MOVED_ANGULAR_SPEED)
+        {
+            mfTimeSincePlayerCarMoved = 0.0f;                               // +0x40
+        }
+
+        // ---- 0x82320AB8..0x82320BD8: THE DISTANCE TRAVELLED -------------------------------
+        // ⭐ This is the number the showtime HUD's "Distance" field renders.
+        // Gated on mPlayerPosLastFrame having been written at least once (ClearData zeroes it),
+        // so the first frame of a crash contributes nothing.
+        if (IsVectorSet(mPlayerPosLastFrame))
+        {
+            const Vector3 lFrameDelta = mPlayerPosLastFrame - lPlayerPosition;
+
+            // BrnMath::Magnitude2D @0x822B1DD8 -- the XZ-plane length, so a drop contributes no
+            // distance. ⚠️ A teleport/reset must not read as travel: the console zeroes the
+            // measured step when the car's transform was reset this frame.
+            f32 lfDistanceMovedThisFrame = BrnMath::Magnitude2D(lFrameDelta);
+            if (lpPlayerState->mbResetCarTransform)                          // playerState +1102
+            {
+                lfDistanceMovedThisFrame = 0.0f;
+            }
+
+            // 0x82320B10..0x82320B4C -- seed the direction anchor the first time round.
+            if (!IsVectorSet(mPlayerPosLastStored))
+            {
+                mPlayerPosLastStored = mPlayerPosLastFrame;
+            }
+
+            // 0x82320B50..0x82320B90. The sign of dot(thisFrameStep, stepFromTheAnchor) says
+            // whether the car is still travelling AWAY from the anchor. Driving back over your
+            // own path UNWINDS the distance rather than adding to it -- that is what stops a car
+            // bouncing on the spot from inflating the score.
+            const Vector3 lStoredDelta = mPlayerPosLastStored - lPlayerPosition;
+            if (rw::math::vpu::Dot(lFrameDelta, lStoredDelta) >= 0.0f)
+            {
+                mfDistanceTravelled += lfDistanceMovedThisFrame;             // +0x308
+
+                if (lfDistanceMovedThisFrame >= mfDistanceUntilStorePosition)
+                {
+                    // Re-anchor and re-arm the 20 m window.
+                    mPlayerPosLastStored         = lPlayerPosition;
+                    mfDistanceUntilStorePosition = KF_DISTANCE_UNTIL_STORE_POSITION;   // +0x4C
+                }
+                else
+                {
+                    mfDistanceUntilStorePosition -= lfSimTimeStep;
+                }
+            }
+            else
+            {
+                // `fsel f0, f0, f0, f31` -- (x >= 0) ? x : 0.0f, i.e. clamped at zero.
+                const f32 lfUnwound = mfDistanceTravelled - lfDistanceMovedThisFrame;
+                mfDistanceTravelled = (lfUnwound >= 0.0f) ? lfUnwound : 0.0f;
+            }
+        }
+
+        // ---- 0x82320BDC..0x82320C68: the air-time accumulators ----------------------------
+        if (lpPlayerState->mfTimeInAir > 0.0f)                               // playerState +1028
+        {
+            mfCurrentJumpAirTime += lfSimTimeStep;                           // +0x318
+            mfTotalAirTime       += lfSimTimeStep;                           // +0x314
+            if (mfCurrentJumpAirTime >= mfLongestJumpAirTime)
+            {
+                mfLongestJumpAirTime = mfCurrentJumpAirTime;                 // +0x31C
+            }
+
+            // 0x82320C10..0x82320C2C. The down-ray's vertical distance is the height of the
+            // jump; keep the largest. `fsel f0, f12, f13, f0` with f12 == (highest - vertical)
+            // is max(highest, vertical).
+            if (lpPlayerState->mAboveGroundTestResult.mbValid)                // playerState +488
+            {
+                const f32 lfVerticalDistance =
+                    lpPlayerState->mAboveGroundTestResult.mfVerticalDistance; // playerState +480
+                if (lfVerticalDistance > mfHighestJump)
+                {
+                    mfHighestJump = lfVerticalDistance;                       // +0x320
+                }
+            }
+        }
+        else
+        {
+            // 0x82320C34..0x82320C64. On the ground: end the jump -- but only STORE when the
+            // value is not already ~zero, which is the console's own redundant-store elision
+            // (`> +eps` / `>= -eps` against flt_82020B30 / flt_82002514), not a semantic test.
+            if (mfCurrentJumpAirTime >  KF_VECTOR_SET_EPSILON ||
+                mfCurrentJumpAirTime < -KF_VECTOR_SET_EPSILON)
+            {
+                mfCurrentJumpAirTime = 0.0f;
+            }
+        }
+
+        // ---- 0x82320C68..0x82320CE0: the wheel-loss decay ---------------------------------
+        // Count the wheels still attached, then walk the cached count DOWN one at a time,
+        // crediting one car-destruction bonus per wheel lost. The console spells it as a
+        // do-while because it can lose more than one wheel in a frame.
+        // (WheelLite stride 112; +96 within it is mbAttached -- playerState +96/+208/+320/+432.)
+        s32 liWheelsAttached = 0;
+        for (s32 liWheel = 0; liWheel < 4; ++liWheel)
+        {
+            if (lpPlayerState->maWheels[liWheel].mbAttached)
+            {
+                ++liWheelsAttached;
+            }
+        }
+        while (liWheelsAttached < miNumWheelsLastFrame)                      // +0x2D8
+        {
+            --miNumWheelsLastFrame;
+            ++miCarDestructionBonus;                                         // +0x328
+        }
+        miNumWheelsLastFrame = liWheelsAttached;
+
+        // 0x82320CDC -- the tail store the whole distance block depends on next frame.
+        mPlayerPosLastFrame = lPlayerPosition;                               // +0x20
     }
 
     // ========================================================================
