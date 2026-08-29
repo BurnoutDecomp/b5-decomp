@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"       // CgsGui::State (base)
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // CgsGui::sResourceTuple (maResourcesToLoad)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"   // CgsGui::GuiComponent (mImpactTimePageChanger drives its AddOutputAptViewState)
 #include "GameSource/Gui/Flow/Shared/Components/BrnButtonIcon.h"      // BrnGui::ButtonIconComponent (mImpactTimeButton)
 
@@ -52,6 +53,22 @@ namespace BrnGui
         virtual void OnLeave();   // @0x8247D308 - PARTIAL, see the .cpp banner
         virtual void Update();    // @0x82481B88 - PARTIAL, see the .cpp banner
 
+        // @ 0x825084F0 -- hands the crashed HUD state's static resource list to the loader
+        // (X360: *r4 = &maResourcesToLoad; *r5 = muNumResourcesToLoad -- seven instructions,
+        // the exact shape of the CrashedStuntHudState twin at 0x82508510).
+        //
+        // ⭐ WHY THIS MATTERS BEFORE OnEnter DOES. Without this override the flow's loader is
+        // never told CRASHED needs anything, so B5CrashedHud is never requested -- and
+        // OnEnter's FindChildMovieClip("CrashHUD_mc") would then resolve against a FLAPT file
+        // that does not contain the clip, leaving mpMovieClipInst null right before the
+        // console's unconditional ResetTimeline. The declaration has to precede the body.
+        virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
+                                        u32* lpuNumberOfResources) const
+        {
+            *lppResourceTuples    = maResourcesToLoad;
+            *lpuNumberOfResources = muNumResourcesToLoad;
+        }
+
         // ---- Drain the state in-queue (UpdatePermenant @ 0x824812A0). ----
         // Non-virtual on X360 too; Update calls it every frame in every phase. PARTIAL:
         // the .cpp enumerates all ten console arms and which of them are live here.
@@ -83,6 +100,16 @@ namespace BrnGui
         // Statics: no effect on sizeof or on any guest offset below.
         static const s32 maiEventToObserve[21];
         static const s32 miNumEventsObserved;
+
+        // The four FLAPT bundles CRASHED loads. Table @0x82F263A0, count @0x82F263C0 -- both
+        // addresses decoded from GetResourcesToLoad's own instruction bytes, not guessed:
+        //   0x825084F0  3D6082F2  lis  r11, 0x82F2
+        //   0x825084F4  396B63A0  addi r11, r11, 0x63A0   -> 0x82F263A0
+        //   0x82508500  816B63C0  lwz  r11, 0x63C0(r11)   -> 0x82F263C0
+        // and the extent is self-confirming exactly as the CrashedStunt twin's is: four 8-byte
+        // tuples end at 0x82F263C0, which is where the count word (reading 4) begins.
+        static const CgsGui::sResourceTuple maResourcesToLoad[];   // @ 0x82F263A0 (.rdata)
+        static const u32                    muNumResourcesToLoad;  // @ 0x82F263C0 (.rdata)
 
         // --- members (DWARF order; base CgsGui::State occupies guest +0x00..+0x38) ---
 
