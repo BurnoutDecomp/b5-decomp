@@ -24,28 +24,39 @@
 //   TickSubstateAndEndIfDone       @0x824BB4D8 ( 27)   HasSubstateTimedOut @0x824B48C8 ( 52)
 //   TriggerExitResults             @0x824D58A8 ( 66)   WillShowCredits @0x824C5C38 ( 59)
 //   GetNextSubstate                @0x824B3820         ResetStateTimer @0x824B38C0
-//   SetEventIconResource           @0x824B39B0
+//   SetEventIconResource           @0x824B39B0         SetupComponents @0x824B3FF0 (492)
+//   UpdateEventResults             @0x824BE228 (184)   UpdateSecondResultsPage
+//                                                                     @0x824BE508 (103)
+//   UpdateTakePhotoPage            @0x824C3C70         UpdateRankUp    @0x824BE6A8 ( 77)
+//   UpdateLeaving                  @0x824BE7E0 ( 68)   HandleAptTriggers @0x824BDAB8 (475)
 //
 // ⛔ STILL NOT RECONSTRUCTED (declared in the header, bodied as LOGGED stubs in
 // BrnScreenStatesDataLinkStubs.cpp so the gap is visible in the log instead of silent):
-//   SetupComponents (492) HandleAptTriggers (475) HandleControllerInput (124)
-//   UpdateEventResults (184) UpdateSecondResultsPage (103) UpdateTakePhotoPage
-//   UpdateRankUp (77) UpdateLicense UpdateCarUnlock UpdateFreeCarUnlock UpdateShowingRivals
-//   UpdateLeaving (68) UpdatePhoto IsXSCarInUnlockedArray RenderDebug
-// Those are the substate PRESENTATIONS. They are not on the path that puts the results movie
-// on screen (that is Update case 1's PlayAptMovie, which runs before any substate does), and
-// several of them need OfflinePostEventData flag slots the X360 asm does not yet pin -- see
-// the ⛔ block in BrnGuiEventTypeDefs.h. Guessing those names is how a results page ends up
-// printing the wrong string, so they are left for a wave that can attest them.
+//   HandleControllerInput (124) UpdateLicense UpdateCarUnlock UpdateFreeCarUnlock
+//   UpdateShowingRivals UpdatePhoto IsXSCarInUnlockedArray RenderDebug
+// Those are the remaining substate PRESENTATIONS. Several of them need OfflinePostEventData
+// flag slots the X360 asm does not yet pin -- see the ⛔ block in BrnGuiEventTypeDefs.h.
+// Guessing those names is how a results page ends up printing the wrong string, so they are
+// left for a wave that can attest them.
+// ⚠️ THIS BLOCK WAS STALE FOR A WHOLE WAVE: it still listed SetupComponents,
+// UpdateEventResults, UpdateSecondResultsPage, UpdateTakePhotoPage, UpdateRankUp and
+// UpdateLeaving as un-reconstructed while all six had real bodies a few hundred lines below.
+// A brief written off this list would have re-scoped work that was already done. If you land
+// a body, move its name -- the list is load-bearing.
 // ===================================================================================
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress
+#include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // PlayAptMovie / Register
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"  // GuiEventAptTrigger(Payload)
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // Playback::Name::MakeHash
+#include "GameSource/Gui/BrnGuiWorldDataController.h"                     // GetProgressionData
+#include "SharedClasses/Progression/BrnProgressionData.h"                 // GetProgressionRankCount
 #include "GameSource/Gui/BrnGuiCache.h"
 #include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"   // GuiEventShowHideSatNav / ShowHideBoostBar
@@ -54,6 +65,8 @@
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"  // ParameterFormatType
 #include "GameSource/Gui/Flow/Shared/Components/BrnButtonIcon.h"  // ButtonIconComponent::EPadButton
 #include "GameSource/GameState/BrnGameStateSharedIO.h"   // BrnGameState::GameStateModuleIO::EGameModeType (assert bounds)
+
+#include <cstring>   // strcmp / strstr (HandleAptTriggers' component-name matching)
 
 namespace BrnGui
 {
@@ -199,6 +212,15 @@ namespace BrnGui
         const char KAC_UPGRADE_STATE_ANIMATOR[]             = "mainStateAnimator";     // [18]
         const char KAC_UPGRADE_TEXTFIELD[]                  = "upgradeTextOne_cpt";    // [19]
 
+        // The apt clip HandleAptTriggers drives the licence-upgrade animation on (the X360's
+        // aAptTransition_1, shared with HandleControllerInput's "takePhotoOut" post).
+        const char KAC_APT_TRANSITION[]                     = "apt_Transition";
+        // The credits music stream WillShowCredits starts. ⭐ The X360 does NOT hold this as
+        // an inline literal: it loads a `const char*` GLOBAL (`lwz r3, GunsAndRoses@l(r11)`)
+        // whose value is the string at 0x820A9ADC, read out of the image here. It sits in the
+        // shared sound-name pool, not this file's string block, which is why it is a pointer.
+        const char KAC_CREDITS_MUSIC_STREAM[]               = "Guns_And_Roses";
+
         // ---- durations (.rdata floats read at the addresses OnEnter/ResetStateTimer load
         //      them from; DWARF names from BrnOfflineInstantResults.cpp:41..57) -------------
         const f32 KF_SHOW_LICENSE_PAUSE  = 4.5f;   // flt_82F2740C
@@ -220,6 +242,18 @@ namespace BrnGui
         const s32 KI_EVENT_PROGRESSION_PROFILE      = 350;
         const s32 KI_EVENT_PERCENTAGE_COMPLETE      = 436;
         const s32 KI_EVENT_COMPRESSED_STILL_IMAGE   = 569;
+
+        // ---- what TriggerExitResults posts on its way out --------------------------------
+        // 292 (0x124) is the post-event TEARDOWN. Not a new id: GuiCache::RecEvent case 292
+        // clears mOfflinePostEventData and drops mbSuppressPostEventPresentation, and
+        // BridgeGuiToGameState's case 292 turns it into game event 26.
+        const s32 KI_EVENT_POST_EVENT_TEARDOWN      = 292;
+        // The state-output channel every OutputGuiEvent<T> body passes (`li r5, 0x28`).
+        const s32 KI_CHANNEL_GUI_OUT                = 40;
+        // The FSM this screen hands the HUD flow back to. Spelled exactly as the image's
+        // literal at the CgsIDCompress call site; BrnGameModule::BridgeGameToGui's stage-5
+        // twin spells it "BrnFBFsm", and CgsIDCompress is case-folding, so the two agree.
+        const char KAC_FREEBURN_FSM_ID[]            = "BRNFBFSM";
 
         // ---- the two apt movies this screen swaps between --------------------------------
         // 217 is the "Results" apt (it is also maResourcesToLoad[0], and OnEnter seeds
@@ -1326,7 +1360,8 @@ namespace BrnGui
                 break;
 
             case KI_EVENT_APT_TRIGGER:
-                HandleAptTriggers(lpEvent);
+                HandleAptTriggers(
+                    reinterpret_cast<const CgsGui::GuiEventAptTriggerPayload*>(lpEvent));
                 break;
 
             case KI_EVENT_CONTROLLER_INPUT_PRESSED:
@@ -1391,17 +1426,399 @@ namespace BrnGui
     }
 
     // -----------------------------------------------------------------------------------
-    // TriggerExitResults  @0x824D58A8  (cpp:3294, 66 instructions)
-    // Leave the results screen: either into the credits, or back to the front-end FSM.
+    // WillShowCredits  @0x824C5C38  (cpp:3433, 59 instructions)
     //
-    // ⛔ PARTIAL, and the missing piece is named. The X360 "ADVANCE" arm also (a) posts a
-    // GuiEventPlayMusicOnMenuStream when the cache's presentation-suppressed byte is set,
-    // (b) posts a {12, 0x124, 12}-shaped record on channel 40, and (c) posts a
-    // BrnGui::GuiEventRunFsm carrying CgsIDCompress("BRNFBFSM") + two trailing 1s -- i.e. it
-    // hands the front-end FSM back its own name. GuiEventRunFsm has no home in the tree yet,
-    // so rather than invent its payload shape this wave sends the state event and stops.
-    // CONSEQUENCE, stated plainly: the results screen will show and time out, but the handover
-    // back to the front-end FSM is not complete -- expect the flow to sit after ADVANCE.
+    // ⛔ THE STANDING NOTE ON THIS FUNCTION WAS STALE. It said the body "needs
+    // BrnGui::WorldDataController::GetProgressionData, which has no home in the tree" -- that
+    // has had a real body since BrnGuiWorldDataController.cpp landed (@0x82428818,
+    // BrnGuiWorldDataController.cpp:466), and GuiCache::GetWorldDataController has one too.
+    // ⭐ AND ALL THREE RECORD SLOTS IT READS ARE ALREADY NAMED AND ATTESTED -- none of them is
+    // in the un-attributable +0xB1..+0xB5 flag run this file's banner warns about:
+    //     this+0x2330 -> mResults.mbHasRankedUp       (record +0xB8, `lbz`)
+    //     this+0x231C -> mResults.miPlayerNewRank     (record +0xA4, `lwz`)
+    //     this+0x232E -> mResults.mbCompletedLastRank (record +0xB6, `lbz`, compared to 1)
+    // So there was nothing left to block on. The credits roll when the player has just ranked
+    // up INTO the last licence rank, or has completed it.
+    //
+    // NOTE the side effect in the true arm: it does not just answer the question, it starts
+    // the credits music. That is why TriggerExitResults may not call it twice.
+    // -----------------------------------------------------------------------------------
+    bool InstantResultsState::WillShowCredits()
+    {
+        CGS_ASSERT(mpGuiCache, "mpGuiCache");     // cpp:3433
+
+        if (!mResults.mbHasRankedUp)
+            return false;
+
+        if (mpGuiCache->IsPostEventPresentationSuppressed())
+            return false;
+
+        // The last rank's index: the rank table's length minus one (`lwz r11, 0x14(r3)` on the
+        // ProgressionData -- the same word ProgressionManager::GetProgressionRank clamps with,
+        // which is what pins it as muProgressionRankCount rather than a rank value).
+        const s32 liBurnoutLicenseRank = static_cast<s32>(
+            mpGuiCache->GetWorldDataController()->GetProgressionData()
+                ->GetProgressionRankCount()) - 1;
+        CGS_ASSERT(liBurnoutLicenseRank > 0, "liBurnoutLicenseRank > 0");   // cpp:3444
+
+        if (mResults.miPlayerNewRank != liBurnoutLicenseRank && !mResults.mbCompletedLastRank)
+            return false;
+
+        CgsGui::GuiEventPlayMusicOnMenuStream lMusicEvent(
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash(KAC_CREDITS_MUSIC_STREAM)),
+            true, false);
+        mpStateInterface->OutputGuiEvent(lMusicEvent);
+        return true;
+    }
+
+    // -----------------------------------------------------------------------------------
+    // The X360 emits the same StrStream + FireAssert sequence four times inside
+    // HandleAptTriggers -- a fixed message, a stage/sub-state value, a suffix. Outlined once
+    // here (AGENTS.md "inlining reversal"; the same treatment IsAWinningResult gets above).
+    // The console streams into the global CgsDev::Assert::gpcMessageBuffer; building into a
+    // stack buffer is the committed BrnGuiFsmController.cpp / BrnTriggerData.cpp precedent.
+    // -----------------------------------------------------------------------------------
+    static void FireUnexpectedStateAssert(const char* lpacMessage, s32 liState,
+                                          const char* lpacSuffix)
+    {
+        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+        lStrStream << lpacMessage << liState << lpacSuffix;
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
+        CgsDev::Assert::EndAssert();
+    }
+
+    // -----------------------------------------------------------------------------------
+    // HandleAptTriggers  @0x824BDAB8  (cpp:1005, 475 instructions)
+    //
+    // ⛔⛔ THIS IS NOT "HOW A PLAYER SKIPS THE PRESENTATION", AND CALLING IT THAT SENT THE
+    // LAST BRIEF LOOKING FOR A CONTROL THAT DOES NOT EXIST ON THIS SCREEN. Event 21 is
+    // CgsGui::GuiEventAptTrigger -- the APT MOVIE's own callback, fired when a clip finishes
+    // loading (E_APT_EVENT_ONLOAD) or finishes a transition (E_APT_EVENT_TRANSITION_COMPLETE).
+    // The only controller-input handler this class has is HandleControllerInput @0x824B3E00,
+    // and it answers exactly two buttons (49 / 50) and only while meCurrentState ==
+    // E_RESULTS_STATE_PHOTO_INTERRUPT -- i.e. it is the PHOTO BOOTH's take/cancel pair, not a
+    // skip. Every other page on this screen is timer-driven (HasSubstateTimedOut).
+    //
+    // ⭐⭐ WHAT IT ACTUALLY IS: THE HANG. Its last arm is the ONLY writer that clears
+    // mpcAnimatingComponentName -- and UpdateTakePhotoPage's E_PHOTO_PRESENTATION_
+    // WAITING_FOR_CLEANUP arm will not swap the results movie out until that pointer is null
+    // (`!mLicense.IsVisible() && mpcAnimatingComponentName == 0 && ...`). SetupComponents and
+    // UpdateEventResults both SET it to mLargeEventIcon.GetName(). So with this a stub the
+    // screen reaches TAKE_PHOTO and waits forever for a transition-complete nothing consumes:
+    // the same shape as the 2,795-identical-lines stall the previous wave fixed one step
+    // earlier, moved one step later. A finished screen and a hung screen are the same picture,
+    // which is why it survived.
+    //
+    // STRUCTURE (asm order; every strcmp target is `component + 4`, i.e. GuiComponent::macName,
+    // so they are spelled GetName() here):
+    //   ONLOAD (1):
+    //     * mFinishedText / mTargetResultText -- re-push the field's stored text once its clip
+    //       exists. The X360 passes `field + 0xA4`, which is macText: TextField::GetText().
+    //     * mLicense -- matched with strstr, not strcmp (`strstr(Str = the trigger name,
+    //       SubStr = License_cpt)`), because the licence owns a family of sub-clips whose
+    //       names all CONTAIN its own. Inside, an exact match while the RANK_UP_LICENSE
+    //       sub-state is running picks the upgrade caption+animation; then, matched or not,
+    //       the trigger is forwarded to the component.
+    //     * the three LargeCarComponents -- each gated on ITS OWN sub-state (XS car <-> 5,
+    //       rival car <-> 7, free car <-> 6). Note the pairing is not positional: the RIVAL
+    //       car is the one gated on 7.
+    //   TRANSITION_COMPLETE (4):
+    //     * an unconditional per-sub-state forward to the matching LargeCarComponent (no name
+    //       test at all -- the component does its own),
+    //     * the licence's transition forward,
+    //     * the NewRivals icon -- drives meNewRivalsPresentationStage,
+    //     * the CarUnlock icon -- drives whichever of the two unlock stage machines is live,
+    //     * and finally the mpcAnimatingComponentName clear described above.
+    //
+    // ⚠️ ONE CONSOLE QUIRK PRESERVED: the FREE-car arm's failure assert streams
+    // meCarUnlockPresentationStage (`lwz r29, 0x223C(r29)` at 0x824BE0DC), not the free-car
+    // stage it just switched on. That is the console's own copy-paste; it is a diagnostic, so
+    // it is reproduced rather than "corrected" -- correcting it would make our log disagree
+    // with a real X360 log for the same event.
+    // -----------------------------------------------------------------------------------
+    void InstantResultsState::HandleAptTriggers(const CgsGui::GuiEventAptTriggerPayload* lpAptTrigger)
+    {
+        CGS_ASSERT(lpAptTrigger, "lpEvent");     // cpp:1005
+
+        const char* const lpacName = lpAptTrigger->mpacComponentName;
+
+        if (lpAptTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
+        {
+            if (std::strcmp(mFinishedText.GetName(), lpacName) == 0)
+            {
+                mFinishedText.SetText(mFinishedText.GetText());
+                return;
+            }
+
+            if (std::strcmp(mTargetResultText.GetName(), lpacName) == 0)
+            {
+                mTargetResultText.SetText(mTargetResultText.GetText());
+                return;
+            }
+
+            if (std::strstr(lpacName, mLicense.GetName()) != 0)
+            {
+                if (meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_LICENSE
+                    && std::strcmp(mLicense.GetName(), lpacName) == 0)
+                {
+                    const s32 liBurnoutLicenseRank = static_cast<s32>(
+                        mpGuiCache->GetWorldDataController()->GetProgressionData()
+                            ->GetProgressionRankCount()) - 1;
+                    CGS_ASSERT(liBurnoutLicenseRank > 0,
+                               "liBurnoutLicenseRank > 0");                       // cpp:1026
+
+                    if (mResults.mbCompletedLastRank)
+                    {
+                        mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+                                                                    "upgradeElite", false);
+                        mUpgradeText.SetLocalisedText(
+                            "COMPLETION_SEQUENCE_ELITE",
+                            CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+                    }
+                    else if (liBurnoutLicenseRank == mResults.miPlayerNewRank)
+                    {
+                        mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+                                                                    "upgradeBurnout", false);
+                        mUpgradeText.SetLocalisedText(
+                            "COMPLETION_SEQUENCE_BURNOUT",
+                            CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+                    }
+                    else
+                    {
+                        mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+                                                                    "upgrade", false);
+                        mUpgradeText.SetLocalisedText(
+                            "LICENSE_UPGRADE_PENDING",
+                            CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+                    }
+                }
+
+                mLicense.HandleAptLoadTriggers(lpAptTrigger);
+                return;
+            }
+
+            if (std::strcmp(mUnlockedXSCarComponent.GetName(), lpacName) == 0)
+            {
+                if (meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK)
+                    mUnlockedXSCarComponent.HandleAptLoadTriggers(lpAptTrigger);
+                return;
+            }
+
+            if (std::strcmp(mUnlockedRivalCarComponent.GetName(), lpacName) == 0)
+            {
+                if (meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS)
+                    mUnlockedRivalCarComponent.HandleAptLoadTriggers(lpAptTrigger);
+                return;
+            }
+
+            if (std::strcmp(mUnlockedFreeCarComponent.GetName(), lpacName) == 0
+                && meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_FREE_CAR_UNLOCK)
+            {
+                mUnlockedFreeCarComponent.HandleAptLoadTriggers(lpAptTrigger);
+            }
+            return;
+        }
+
+        if (lpAptTrigger->meEventType
+                != CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE)
+        {
+            return;
+        }
+
+        // The unconditional per-sub-state forward. No name test here -- each component's own
+        // HandleAptTransitionTriggers compares the name and returns whether it claimed it.
+        switch (meActiveSubState)
+        {
+        case E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK:
+            mUnlockedXSCarComponent.HandleAptTransitionTriggers(lpAptTrigger);
+            break;
+        case E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS:
+            mUnlockedRivalCarComponent.HandleAptTransitionTriggers(lpAptTrigger);
+            break;
+        case E_ACTIVE_SUBSTATE_EVENT_FREE_CAR_UNLOCK:
+            mUnlockedFreeCarComponent.HandleAptTransitionTriggers(lpAptTrigger);
+            break;
+        default:
+            break;
+        }
+
+        if (std::strcmp(mLicense.GetName(), lpacName) == 0)
+        {
+            mLicense.HandleAptTransitionTriggers(lpAptTrigger);
+            return;
+        }
+
+        if (std::strcmp(mNewRivalsIcon.GetName(), lpacName) == 0)
+        {
+            CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS,
+                       "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState");
+                                                                                  // cpp:1088
+            switch (meNewRivalsPresentationStage)
+            {
+            case E_NEW_RIVALS_PRESENTATION_INTRO:
+                if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "\n\n\n**********Ready to set up new rival viewing (intro done)\n\n\n";
+                }
+                meNewRivalsPresentationStage = E_NEW_RIVALS_PRESENTATION_SHOWING_RIVAL_SET_UP_TEXT;
+                break;
+
+            case E_NEW_RIVALS_PRESENTATION_SHOWING_RIVAL:
+                if (mPendingRivalId != 0)
+                {
+                    if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "\n\n\n**********Ready to set up new rival viewing "
+                               "(rival pending)\n\n\n";
+                    }
+                    meNewRivalsPresentationStage =
+                        E_NEW_RIVALS_PRESENTATION_SHOWING_RIVAL_SET_UP_TEXT;
+                }
+                else
+                {
+                    meNewRivalsPresentationStage = E_NEW_RIVALS_PRESENTATION_OUTRO_SET_UP;
+                }
+                break;
+
+            case E_NEW_RIVALS_PRESENTATION_OUTRO_ENDING:
+                mUnlockedRivalCarComponent.ReleaseResources();
+                meNewRivalsPresentationStage = E_NEW_RIVALS_PRESENTATION_CLEANING_UP;
+                break;
+
+            default:
+                FireUnexpectedStateAssert(
+                    "InstantResultsState::HandleAptTriggers : Should not be receiving a "
+                    "transition complete when not expecting one (currently in state ",
+                    meNewRivalsPresentationStage, " )\n");                        // cpp:1126
+                break;
+            }
+            return;
+        }
+
+        if (std::strcmp(mCarUnlockIcon.GetName(), lpacName) == 0)
+        {
+            CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK
+                           || meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_FREE_CAR_UNLOCK,
+                       "( E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK == meActiveSubState ) || "
+                       "( E_ACTIVE_SUBSTATE_EVENT_FREE_CAR_UNLOCK == meActiveSubState )");
+                                                                                  // cpp:1134
+            if (meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK)
+            {
+                switch (meCarUnlockPresentationStage)
+                {
+                case E_CAR_UNLOCK_PRESENTATION_SHOWING_CAR:
+                    meCarUnlockPresentationStage = E_CAR_UNLOCK_PRESENTATION_OUTRO_SET_UP;
+                    break;
+                case E_CAR_UNLOCK_PRESENTATION_OUTRO_ENDING:
+                    meCarUnlockPresentationStage = E_CAR_UNLOCK_PRESENTATION_CLEANING_UP;
+                    break;
+                default:
+                    FireUnexpectedStateAssert(
+                        "InstantResultsState::HandleAptTriggers : Got a car unlock substate "
+                        "transition complete in state ",
+                        meCarUnlockPresentationStage, ".\n");                      // cpp:1156
+                    break;
+                }
+            }
+            else if (meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_FREE_CAR_UNLOCK)
+            {
+                switch (meFreeCarPresentationStages)
+                {
+                case E_FREE_CAR_UNLOCK_PRESENTATION_SHOWING_CAR:
+                    meFreeCarPresentationStages = E_FREE_CAR_UNLOCK_PRESENTATION_OUTRO_SET_UP;
+                    break;
+                case E_FREE_CAR_UNLOCK_PRESENTATION_OUTRO_ENDING:
+                    meFreeCarPresentationStages = E_FREE_CAR_UNLOCK_PRESENTATION_CLEANING_UP;
+                    break;
+                default:
+                    // ⚠️ the console streams the CAR-UNLOCK stage here, not the free-car one.
+                    // See the banner: reproduced, not corrected.
+                    FireUnexpectedStateAssert(
+                        "InstantResultsState::HandleAptTriggers : Got a free car unlock "
+                        "substate transition complete in state ",
+                        meCarUnlockPresentationStage, ".\n");                      // cpp:1181
+                    break;
+                }
+            }
+            else
+            {
+                FireUnexpectedStateAssert(
+                    "InstantResultsState::HandleAptTriggers : Should not be receiving a car "
+                    "unlock transition complete when not expecting one (currently in state ",
+                    meActiveSubState, " )\n");                                     // cpp:1190
+            }
+            return;
+        }
+
+        // ⭐ THE ONE ARM THE WHOLE SUB-STATE MACHINE WAITS ON -- see the banner.
+        if (mpcAnimatingComponentName != 0
+            && std::strcmp(mpcAnimatingComponentName, lpacName) == 0)
+        {
+            mpcAnimatingComponentName = 0;
+        }
+    }
+
+    // -----------------------------------------------------------------------------------
+    // TriggerExitResults  @0x824D58A8  (cpp:3294, 66 instructions)
+    // Leave the results screen: either into the credits, or back to the front end.
+    //
+    // ⭐⭐ COMPLETE NOW, AND THE PREVIOUS BANNER HERE WAS STALE IN THREE PLACES. It said
+    // "GuiEventRunFsm has no home in the tree yet" (it has had one since 2026-08-27 --
+    // BrnGuiEventTypeDefs.h:126, with the 144 wire id and a sizeof==24 static_assert), it
+    // called the middle record "{12, 0x124, 12}-shaped" (the asm writes {1, 292, 12}: `stw
+    // r30(=1)` at +0, `li r11,0x124` at +4, `li r11,0xC` at +8 -- a payload of ONE byte, the
+    // C++ sizeof of an empty event struct), and it described the record as un-decoded when
+    // 292 is already a named, consumed id on both sides of the bridge.
+    //
+    // THE EXIT SEQUENCE, read off @0x824D58A8 instruction by instruction:
+    //   1. assert mpGuiCache                                                (cpp:3294)
+    //   2. WillShowCredits() -> SendStateEvent("TO_CREDITS") and RETURN. Note the asm
+    //      compares the returned byte against 1 (`clrlwi r11,r3,24 / cmplwi r11,1`), which
+    //      is why WillShowCredits is a bool and not an int.
+    //   3. SendStateEvent("ADVANCE")
+    //   4. if the cache's presentation-suppressed byte (+0x4B77) is SET, post
+    //      GuiEventPlayMusicOnMenuStream{ dword_830082A8, flagA=1, flagB=0 }.
+    //      ⭐ dword_830082A8 is not opaque: its ONLY writer is the dyn-init
+    //      sub_82C64F20, whose entire body is `dword_830082A8 =
+    //      CgsSound::Playback::Name::MakeHash(&unk_820046A7)`, and 0x820046A7 is the second
+    //      NUL after the "%s%s%s" literal at 0x820046A0 -- i.e. the EMPTY STRING (read out of
+    //      the image here, and independently recorded by the wave that landed
+    //      SetupComponents' third help item). So it is the "no stream / silence" hash, and
+    //      the arm means "the presentation was skipped, so kill the menu-music stream".
+    //   5. UNCONDITIONALLY post the post-event TEARDOWN, {1, 292, 12} on channel 40.
+    //      GUI 292 is already homed at both ends: GuiCache::RecEvent case 292 clears
+    //      mOfflinePostEventData and drops mbSuppressPostEventPresentation, and the GUI->game
+    //      bridge's case 292 emits game event 26.
+    //   6. UNCONDITIONALLY post GuiEventRunFsm{ CgsIDCompress("BRNFBFSM"), 0,
+    //      E_GUI_HUD_FREEBURN, E_GUIFLOW_HUD } -- i.e. put the HUD flow back on the FreeBurn
+    //      FSM. ⭐ That record is CHARACTER-FOR-CHARACTER the second of the two posts
+    //      BrnGameModule::BridgeGameToGui makes at its stage 5 ("BrnFBFsm", 0,
+    //      E_GUI_HUD_FREEBURN, E_GUIFLOW_HUD) -- the in-game handoff. Two independent
+    //      producers, same record: that is the corroboration that the trailing pair of 1s
+    //      really are (meFsmToRun, meFlowToUse) and not something else.
+    //
+    // WIRE SHAPES (asm, not inference). Both channel-40 posts are written through
+    // GetOutputEventQueue()->AddEvent -- the standing accommodation documented in
+    // CgsGuiStateInterface.h, because this build's OutputGuiEvent<T> direct-passes with
+    // GetEventType() as the channel and GuiEventRunFsm is NOT a GuiEvent<N> subclass, so it
+    // would carry no wrapper header at all. The console's own wrapper is
+    // @0x824938D0: {sizeof=0x18, type=0x90, offset=0x10} + a 24-byte copy, AddEvent(..., 40,
+    // 40). The offset is SIXTEEN, not twelve, because GuiEventRunFsm leads with a CgsID and
+    // is 8-aligned -- exactly the "+0x0C for align<=4, +0x10 for align 8" rule
+    // CgsGuiEvent.h's GuiEventWrapper note records.
+    //
+    // ⚠️ DELIVERY: on the console this record leaves on channel 40, the interpreter's
+    // ProcessOutEvents case '(' UNWRAPS it (`lwz r11,8(r22)` / `lwz r6,0(r22)` /
+    // `lwz r5,4(r22)` -> AddEvent into the module's out-event buffer @0x8285E568) and it
+    // comes back around the module bus as GUI in-event 144, where GuiModule::Update's
+    // case 144 hands it to GuiFsmController::RunFsm. This build's flow-out drain had no
+    // seat for the inner id, so the paired change in BrnGuiModule.cpp's case-40 arm answers
+    // it at the drain -- the same call, one hop earlier, exactly like the 507 arm already
+    // sitting beside it. Without that half this post is a silent drop.
     // -----------------------------------------------------------------------------------
     void InstantResultsState::TriggerExitResults()
     {
@@ -1414,5 +1831,64 @@ namespace BrnGui
         }
 
         SendStateEvent("ADVANCE");
+
+        if (mpGuiCache->IsPostEventPresentationSuppressed())
+        {
+            // The console's cached MakeHash("") -- see the banner. Cached here too (one-time
+            // init at first use) rather than re-hashed per exit, which is what the dyn-init
+            // global buys on the console.
+            static const u32 KU_NO_MUSIC_STREAM_HASH =
+                static_cast<u32>(CgsSound::Playback::Name::MakeHash(""));
+
+            CgsGui::GuiEventPlayMusicOnMenuStream lMusicEvent(KU_NO_MUSIC_STREAM_HASH,
+                                                              true, false);
+            mpStateInterface->OutputGuiEvent(lMusicEvent);
+        }
+
+        // ---- 5. the post-event teardown, {1, 292, 12} on channel 40 ---------------------
+        // The one payload byte at +12 is never written by the console either (the `std r29`
+        // that lands there runs AFTER the AddEvent, as part of building the NEXT record) --
+        // it is the sizeof of an empty event struct, not a value. Zeroed here rather than
+        // left indeterminate; no consumer reads it.
+        struct PostEventTeardownRecord
+        {
+            s32 miOutEventSize;
+            s32 miOutEventType;
+            s32 miOutEventOffset;
+            s32 miPayload;
+        } lTeardown;
+        lTeardown.miOutEventSize   = 1;
+        lTeardown.miOutEventType   = KI_EVENT_POST_EVENT_TEARDOWN;   // 0x124
+        lTeardown.miOutEventOffset = 12;
+        lTeardown.miPayload        = 0;
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lTeardown), KI_CHANNEL_GUI_OUT, 16);
+
+        // ---- 6. hand the HUD flow back to the FreeBurn FSM ------------------------------
+        struct RunFsmRecord
+        {
+            s32            miOutEventSize;
+            s32            miOutEventType;
+            s32            miOutEventOffset;
+            s32            miAlignmentPad;      // the CgsID payload is 8-aligned
+            GuiEventRunFsm mOutEvent;
+        } lRunFsm;
+        // The console's `li r6, 0x28` -- if this is not 40 the queued record is not the
+        // console's, and RunFsm would read a shifted CgsID.
+        static_assert(sizeof(RunFsmRecord) == 40,
+                      "GuiEventRunFsm channel-40 wrapper is 40 bytes (16-byte header + 24)");
+        static_assert(__builtin_offsetof(RunFsmRecord, mOutEvent) == 16,
+                      "the wrapper's payload offset is 16 (GuiEventRunFsm is 8-aligned)");
+        lRunFsm.miOutEventSize   = static_cast<s32>(sizeof(GuiEventRunFsm));   // 0x18
+        lRunFsm.miOutEventType   = lRunFsm.mOutEvent.GetEventType();           // 0x90 == 144
+        lRunFsm.miOutEventOffset = 16;                                         // 0x10
+        lRunFsm.miAlignmentPad   = 0;
+        lRunFsm.mOutEvent.mFsmId          = CgsIDCompress(KAC_FREEBURN_FSM_ID);
+        lRunFsm.mOutEvent.mInitialStateId = static_cast<CgsID>(0);
+        lRunFsm.mOutEvent.meFsmToRun      = E_GUI_HUD_FREEBURN;
+        lRunFsm.mOutEvent.meFlowToUse     = E_GUIFLOW_HUD;
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRunFsm), KI_CHANNEL_GUI_OUT,
+            static_cast<s32>(sizeof(lRunFsm)));
     }
 }

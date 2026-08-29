@@ -65,10 +65,18 @@ namespace BrnGui
         void ShowCar();
 
         // 0x8241B928 -- handle the apt E_APT_EVENT_ONLOAD trigger for the bound name.
-        bool HandleAptLoadTriggers(const CgsGui::GuiEventAptTrigger* lpAptTrigger);
+        // ⚠️ CORRECTED 2026-08-29 (results-EXIT wave): the parameter is the BARE 20-byte
+        // GuiEventAptTriggerPayload, NOT GuiEventAptTrigger. CgsAptCommunicator.h's own note
+        // says the queued event-21 record is the payload only, and GuiEventAptTrigger derives
+        // from GuiEvent<21>, which prepends 12 header bytes -- so reading ->meEventType /
+        // ->mpacComponentName through it lands 12 bytes past every field. These two were the
+        // last consumers on the wrong type (LicenseComponent's twins already take the
+        // payload); the defect was latent only because their sole caller,
+        // InstantResultsState::HandleAptTriggers, was a stub until this wave.
+        bool HandleAptLoadTriggers(const CgsGui::GuiEventAptTriggerPayload* lpAptTrigger);
 
         // 0x8241B9F8 -- handle the apt E_APT_EVENT_TRANSITION_COMPLETE trigger for the bound name.
-        bool HandleAptTransitionTriggers(const CgsGui::GuiEventAptTrigger* lpAptTrigger);
+        bool HandleAptTransitionTriggers(const CgsGui::GuiEventAptTriggerPayload* lpAptTrigger);
 
         // 0x8241B7A8 -- resource load notification: RESOURCES_REQUESTED -> READY.
         void HandleLoadNotification(const CgsGui::GuiEventLoadNotification* lpLoadEvent);

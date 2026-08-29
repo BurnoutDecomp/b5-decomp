@@ -2449,6 +2449,47 @@ void GuiModule::Destruct()
                                 lpCalibrationPayload, static_cast<s32>(luCalibrationCommand));
                         }
                     }
+
+                    // ⭐⭐ INNER ID 144 -- GuiEventRunFsm posted BY A FLOW STATE. This is the
+                    // seat the offline results screen's exit needed and did not have.
+                    //
+                    // The console's chain: InstantResultsState::TriggerExitResults @0x824D58A8
+                    // ends with OutputGuiEvent<GuiEventRunFsm> @0x824938D0, which stack-builds
+                    // {sizeof=0x18, type=0x90, offset=0x10} + the 24-byte record and AddEvents
+                    // it on CHANNEL 40. EventInterpreterModule::ProcessOutEvents' case '('
+                    // then UNWRAPS it -- @0x8285E568 `lwz r11,8(r22)` (offset) / `lwz r6,0(r22)`
+                    // (payload size) / `lwz r5,4(r22)` (inner type) -> AddEvent into the module's
+                    // out-event buffer -- and the module bus fans that channel back around as
+                    // in-events, where GuiModule::Update's case 144 hands it to
+                    // GuiFsmController::RunFsm. (That loop-back is the same one the profile
+                    // manager's out-queue pump below already models, and it is how the
+                    // autosave-icon flag reaches the always-available manager.)
+                    //
+                    // This build routes channel 40 to the game bridge only, so without this arm
+                    // a state-posted RunFsm is a SILENT DROP: BridgeGuiToGameState has no
+                    // case 144 either (its X360 switch does not carry one -- checked), so the
+                    // record simply evaporates and the results screen ADVANCEs into nothing.
+                    // Answered at the drain, one hop earlier than the console's bus round-trip
+                    // -- the identical accommodation the 507 arm above already makes, and for
+                    // the identical reason. NOT consumed: the record is still forwarded below,
+                    // exactly as the console still puts it on the out buffer.
+                    // DELETE-WHEN the out-buffer -> in-events bus loop-back is modelled
+                    // generically; then this becomes a plain forward.
+                    if (liSize >= 12)
+                    {
+                        const u32* lpuRecord = reinterpret_cast<const u32*>(lpEvent);
+                        const u32  luInnerType   = lpuRecord[1];
+                        const u32  luInnerOffset = lpuRecord[2];
+                        if (luInnerType == 144u && luInnerOffset >= 12u &&
+                            static_cast<s32>(luInnerOffset) + static_cast<s32>(sizeof(GuiEventRunFsm))
+                                <= liSize)
+                        {
+                            mFsmController.RunFsm(
+                                reinterpret_cast<const GuiEventRunFsm*>(
+                                    reinterpret_cast<const u8*>(lpEvent) + luInnerOffset));
+                        }
+                    }
+
                     mGuiOutQueue.AddEvent(lpEvent, liId, liSize);
                     break;
                 }

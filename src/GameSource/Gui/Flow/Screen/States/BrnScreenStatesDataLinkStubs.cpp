@@ -317,21 +317,29 @@ namespace BrnGui
     // 2,795 identical lines to the end of the run, because nothing advanced the sub-state
     // machine again. The panel was not failing to appear; it appeared and had nowhere to go.
     // UpdateLeaving is the far end of the same chain (LEAVING -> DONE -> TriggerExitResults).
-    void InstantResultsState::HandleAptTriggers(const void*)   { LogUnreconstructedState("InstantResultsState", "HandleAptTriggers"); }
+    // ⭐⭐ TWO MORE ARE GONE (2026-08-29, the results-EXIT wave): HandleAptTriggers and
+    // WillShowCredits are REAL in BrnOfflineInstantResults.cpp. HandleAptTriggers is why they
+    // had to go with it: it is the ONLY writer that clears mpcAnimatingComponentName, and
+    // UpdateTakePhotoPage's WAITING_FOR_CLEANUP arm will not swap the results movie out until
+    // that pointer is null -- so the stub below did not "do nothing", it HUNG the screen one
+    // step past where the previous wave's stall had been. It is also not a player-facing
+    // control: event 21 is the APT MOVIE's own load/transition callback. The class's only
+    // controller-input handler is HandleControllerInput, and it answers two buttons in the
+    // photo-booth interrupt only -- this screen has no skip.
     void InstantResultsState::HandleControllerInput(const void*) { LogUnreconstructedState("InstantResultsState", "HandleControllerInput"); }
     void InstantResultsState::UpdateLicense()           { LogUnreconstructedState("InstantResultsState", "UpdateLicense"); }
     void InstantResultsState::UpdateCarUnlock()         { LogUnreconstructedState("InstantResultsState", "UpdateCarUnlock"); }
     void InstantResultsState::UpdateFreeCarUnlock()     { LogUnreconstructedState("InstantResultsState", "UpdateFreeCarUnlock"); }
     void InstantResultsState::UpdateShowingRivals()     { LogUnreconstructedState("InstantResultsState", "UpdateShowingRivals"); }
     void InstantResultsState::UpdatePhoto()             { LogUnreconstructedState("InstantResultsState", "UpdatePhoto"); }
-    // ⚠️ RETURN VALUES ARE NOT NEUTRAL, so both are stated rather than left to a bare `false`:
-    //  * IsXSCarInUnlockedArray false  => SelectSubstates does not raise CAR_UNLOCK. That is
-    //    the ordinary case (no XS car unlocked), so it degrades to "no car-unlock page".
-    //  * WillShowCredits false => the results screen ADVANCEs instead of handing over to the
-    //    credits. Wrong ONLY on the run that completes the final licence rank. The real body
-    //    needs BrnGui::WorldDataController::GetProgressionData, which has no home in the tree.
+    // ⚠️ THE RETURN VALUE IS NOT NEUTRAL, so it is stated rather than left to a bare `false`:
+    // IsXSCarInUnlockedArray false => SelectSubstates does not raise CAR_UNLOCK. That is the
+    // ordinary case (no XS car unlocked), so it degrades to "no car-unlock page".
+    // (WillShowCredits' stub is gone -- see above. The note that stood here, "the real body
+    // needs BrnGui::WorldDataController::GetProgressionData, which has no home in the tree",
+    // was STALE: that function has had a body since BrnGuiWorldDataController.cpp:466 landed,
+    // and all three OfflinePostEventData slots the body reads were already named.)
     bool InstantResultsState::IsXSCarInUnlockedArray()  { LogUnreconstructedState("InstantResultsState", "IsXSCarInUnlockedArray"); return false; }
-    bool InstantResultsState::WillShowCredits()         { LogUnreconstructedState("InstantResultsState", "WillShowCredits"); return false; }
 
     // ---- OnlineGameOptionsSummary ------------------------------------------------------
     void OnlineGameOptionsSummary::OnEnter() { LogUnreconstructedState("OnlineGameOptionsSummary", "OnEnter"); }

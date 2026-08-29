@@ -13,6 +13,11 @@
 #include "GameSource/Gui/Flow/Screen/Components/BrnPhotoBoothComponent.h"
 #include "GameSource/Gui/Flow/Screen/Components/BrnLargeCarComponent.h"
 
+// Pointer-only parameter of HandleAptTriggers (its real home is
+// GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h, which the .cpp
+// includes). Same treatment as BrnPreRaceFlyBy.h's HandleAptEvents declaration.
+namespace CgsGui { struct GuiEventAptTriggerPayload; }
+
 // ==========================================================================================
 // BrnGui::InstantResultsState -- the offline post-event instant-results presentation flow
 // state. This is the screen an offline event's finish is supposed to put on the display.
@@ -211,6 +216,16 @@ namespace BrnGui
         void                    ResetStateTimer();                 // @0x824B38C0  (DWARF h:633)
         void                    SetEventIconResource();            // @0x824B39B0  (DWARF h:709)
 
+        // @0x824BDAB8 (475) -- the Apt movie's own load / transition-complete callback.
+        // ⚠️ THE PARAMETER TYPE IS `GuiEventAptTriggerPayload`, NOT `GuiEventAptTrigger`.
+        // The queued event-21 record is the BARE 20-byte payload (CgsAptCommunicator.h says
+        // so, and the X360 reads meEventType at +0 / mpacComponentName at +8, which only
+        // holds without the 12-byte GuiEvent<21> header).
+        void HandleAptTriggers(const CgsGui::GuiEventAptTriggerPayload* lpAptTrigger);
+
+        // @0x824C5C38 (59) -- does this event's finish roll the credits?
+        bool WillShowCredits();
+
         // ---- ⛔ NOT RECONSTRUCTED YET. Declared so the dispatch above can be written
         //      faithfully; bodied as LOGGED stubs in BrnScreenStatesDataLinkStubs.cpp so the
         //      gap prints in BrnGame.log instead of being a silent no-op. Instruction counts
@@ -218,7 +233,6 @@ namespace BrnGui
         //      on screen -- that is Update's E_RESULTS_STATE_LOADING_RESOURCES arm, which runs
         //      before any sub-state does.
         void SetupComponents();            // @0x824B3FF0 (492)  fills the result text/icons
-        void HandleAptTriggers(const void* lpAptTrigger);   // @0x824BDAB8 (475)
         void HandleControllerInput(const void* lpInputEvent); // @0x824B3E00 (124)
         void UpdateEventResults();         // @0x824BE228 (184)
         void UpdateSecondResultsPage();    // @0x824BE508 (103)
@@ -231,8 +245,6 @@ namespace BrnGui
         void UpdateLeaving();              // @0x824BE7E0 (68)
         void UpdatePhoto();                // @0x824B47C8
         bool IsXSCarInUnlockedArray();     // @0x824C0730
-        bool WillShowCredits();            // @0x824C5C38 (59)  needs WorldDataController::
-                                           //   GetProgressionData, which has no home yet
 
         static const CgsGui::sResourceTuple maResourcesToLoad[];  // @0x82F26AFC (.rdata)
         static const u32                    muNumResourcesToLoad; // @0x82F26B0C (.rdata)
