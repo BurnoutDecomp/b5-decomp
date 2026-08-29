@@ -71,76 +71,54 @@ namespace BrnDirector
 
         // ---- ArbitratorState virtual overrides (X360 vtable order; see base) -------------
         void        Construct() override;                            // @0x82266010
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override; // @0x822660A8
         void        Update(ArbStateSharedInfo& lrSharedInfo) override;  // @0x8226DC98
         bool        Release(ArbStateSharedInfo& lrSharedInfo) override; // @0x8224FAA0
         const char* GetName() const override;                        // @0x821F6300
 
-        // Prepare() / Destruct() are NOT in this TU's X360 function set (Prepare is reached as a
-        // virtual call -- (*(*this+4))(this, info) -- so its body lives in another driver TU; the
-        // base declaration is kept, no override added here). The DWARF also lists IsActive(); it is
-        // NOT in this TU's X360 function set either and is omitted.
+        // ⛔ CORRECTED 2026-08-29 (pause-greyscale wave). The note here used to read "Prepare()
+        // is NOT in this TU's X360 function set ... its body lives in another driver TU". That
+        // was wrong: BrnDirector::ArbStateCrashNav::Prepare IS a named ARTIST symbol, at
+        // 0x822660A8, and it is the ONLY caller of ICEMoviePlayer::Prepare / Loop /
+        // InterpolateFrom in the entire image -- i.e. it is the single entry point of the
+        // moving pause camera. It is now overridden and bodied in the .cpp.
+        //
+        // Destruct() is genuinely absent from this TU's X360 function set (base declaration
+        // kept, no override). The DWARF also lists IsActive(); likewise absent, and omitted.
 
     private:
-        // ---- a typed handle to a camera behaviour owned by the BehaviourManager ----------
-        // Released in Release() via BehaviourManager::UnSetBehaviourUsedByHandle(mpManager,
-        // muAllocationKey). 0x14-byte block (5 words) pinned from the Construct/Release/Update asm:
-        // mbAllocated(+0x00), muAllocationKey(+0x04), a behaviour-lookup helper word(+0x08),
-        // mpManager(+0x0C), mpBehaviour(+0x10). The X360 re-resolves the live behaviour from the
-        // manager pool through (helper word, allocation key); GetBehaviour() returns the cached
-        // pointer to that same behaviour after asserting IsAllocated(). GetProducedCamera() returns
-        // the camera the live behaviour produced this frame (the manager keeps it alongside the
-        // behaviour pointer in the same pool slot -- the X360 reads it via sub_821FDC58).
-        // FLAG: the +0x08 word's role is not fully recovered in this TU (modelled as an opaque
-        //   behaviour-lookup helper index, as in BrnArbStateRoaming.h / BrnArbStateRaceIntro.h).
-        template <typename TBehaviour>
-        struct BehaviourHandle
-        {
-            BehaviourHandle()
-                : mbAllocated(false), muAllocationKey(0), muHelperIndex(0),
-                  mpManager(0), mpBehaviour(0) {}
-
-            bool IsAllocated() const { return mbAllocated; }
-
-            // The live behaviour this handle owns (only valid while IsAllocated()). The X360
-            // asserts IsAllocated() inside the manager-pool lookup before returning it.
-            TBehaviour* GetBehaviour() const
-            {
-                CGS_ASSERT(mbAllocated, "IsAllocated()");
-                return mpBehaviour;
-            }
-
-            // The camera the live behaviour produced this frame. The X360 reads it from the manager
-            // pool slot the handle resolves to (sub_821FDC58), which is the same camera the
-            // road-runner behaviour writes each frame -- modelled BY NAME as the behaviour's
-            // produced camera. Asserts IsAllocated(). Defined out-of-line in the .cpp where
-            // BehaviourRoadRunner is complete.
-            const Camera::Camera& GetProducedCamera() const;
-
-            bool                      mbAllocated;     // +0x00
-            u32                       muAllocationKey; // +0x04
-            u32                       muHelperIndex;   // +0x08  FLAG: role not recovered (lookup helper)
-            Camera::BehaviourManager* mpManager;       // +0x0C
-            TBehaviour*               mpBehaviour;     // +0x10
-        };
-
-        // The interpolation curve/easing parameters block the in/out interpolators read. Opaque
-        // slice (Construct seeds the leading words: [+0x00]=8, then 1/1 selectors). 0x10 bytes.
-        // FLAG: field roles not recovered (mirrors BrnArbStateRoaming::InterpolateParameters).
-        struct InterpolateParameters
-        {
-            u32 mauParams[4];   // +0x00..+0x0C  (Construct: [+0x00]=8; [+0x08]=1; [+0x0C]=1)
-        };
+        // ⭐⭐ THE NESTED HANDLE / PARAMS FORKS ARE RETIRED (2026-08-29, pause-greyscale wave).
+        //
+        // This state used to declare its OWN five-word `BehaviourHandle<TBehaviour>` and its own
+        // opaque `InterpolateParameters { u32 mauParams[4] }`. Both had real homes already:
+        //   * Camera::BehaviourHandle<TBehaviour>       -- GameSource/Director/Camera/BrnBehaviourManager.h
+        //   * Camera::BehaviourInterpolate::Parameters  -- .../Camera/Behaviours/BrnBehaviourInterpolate.h
+        //
+        // ⛔ The fork was not merely untidy, it was LOAD-BEARING AGAINST US, and only a LINK would
+        //    have found it. BehaviourManager declares TWO NewBehaviour<> overloads: a generic
+        //    `template<TBehaviour, THandle> NewBehaviour(THandle&, ...)` that is DECLARATION-ONLY,
+        //    and the BODIED `NewBehaviour(BehaviourHandle<TBehaviour>&, ...)`. A nested fork binds
+        //    the generic one -- so it COMPILES, and then leaves an unresolved external, with the
+        //    behaviour never allocated. Prepare @0x822660A8 allocates the road-runner fly-by
+        //    through exactly that call, so with the fork in place this state could never have
+        //    driven a camera at all.
+        //
+        // The two homes carry the same asm-attested five-word layout
+        // (mbAllocated +0x00 / muAllocationKey +0x04 / mpHelperPool +0x08 / mpManager +0x0C /
+        // mpBehaviour +0x10) and additionally IDENTIFY the +0x08 word this file used to FLAG as
+        // "role not recovered": it is the owning BehaviourHelper POOL pointer, pinned in
+        // BrnBehaviourManager.h from NewBehaviour<BehaviourRoadRunner> @0x822580F8.
 
         // ---- members, DWARF order; X360 offsets in comments ------------------------------
-        ICEPlayingMovie                               mICEPlayingMovie;   // X360 +0x180
-        ICEMoviePlayer                                mICEMoviePlayer;    // X360 +0x190
-        BehaviourHandle<Camera::BehaviourInterpolate> mInterpolater;      // X360 +0x840
-        InterpolateParameters                         mInterpolateParams; // X360 +0x854
-        BehaviourHandle<Camera::BehaviourRoadRunner>  mRoadRunnerCam;     // X360 +0x864
-        EState                                        meState;            // X360 +0x878
-        u32                                           muCurrentIceMovie;  // X360 +0x87C
-        f32                                           mfTimeInState;      // X360 +0x880
-        bool                                          mbHasReversed;      // X360 +0x884
+        ICEPlayingMovie                                       mICEPlayingMovie;   // X360 +0x180
+        ICEMoviePlayer                                        mICEMoviePlayer;    // X360 +0x190
+        Camera::BehaviourHandle<Camera::BehaviourInterpolate>  mInterpolater;      // X360 +0x840
+        Camera::BehaviourInterpolate::Parameters               mInterpolateParams; // X360 +0x854
+        Camera::BehaviourHandle<Camera::BehaviourRoadRunner>   mRoadRunnerCam;     // X360 +0x864
+        EState                                                meState;            // X360 +0x878
+        u32                                                   muCurrentIceMovie;  // X360 +0x87C
+        f32                                                   mfTimeInState;      // X360 +0x880
+        bool                                                  mbHasReversed;      // X360 +0x884
     };
 }
 

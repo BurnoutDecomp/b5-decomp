@@ -9,7 +9,8 @@
 #include "GameSource/BurnoutConstants.h"                              // EActiveRaceCarIndex
 #include "GameSource/Director/Utils/BrnVehicleRef.h"                  // BrnDirector::VehicleRef::EType
 #include "GameSource/Director/Camera/Camera.h"                        // BrnDirector::Camera::Camera (mCamera, by value)
-#include "GameSource/Director/Camera/BrnBehaviourManager.h"           // BrnDirector::Camera::BehaviourManager / BehaviourHandle<> / BehaviourInterpolate / BehaviourHelperIndex (canonical home)
+#include "GameSource/Director/Camera/BrnBehaviourManager.h"           // BrnDirector::Camera::BehaviourManager / BehaviourHandle<> / BehaviourHelperIndex (canonical home)
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h" // THE BehaviourInterpolate home -- needed COMPLETE (::Parameters is named below)
 
 // ============================================================================
 // GameSource/Director/Utils/BrnICEMoviePlayer.h
@@ -37,10 +38,20 @@
 // them; those pool instantiations are NOT defined here.
 //
 // The camera-behaviour layer the player drives -- BrnDirector::Camera::BehaviourManager,
-//   ::BehaviourHandle<>, ::BehaviourInterpolate (+ ::Parameters), ::BehaviourHelperIndex --
-//   now has its canonical full-layout home at GameSource/Director/Camera/BrnBehaviourManager.h
-//   (included above). The minimal slice that previously lived in this file was reconciled
-//   into that home, so there is exactly ONE definition; these types are used here by name only.
+//   ::BehaviourHandle<>, ::BehaviourHelperIndex -- has its canonical full-layout home at
+//   GameSource/Director/Camera/BrnBehaviourManager.h (included above). The minimal slice that
+//   previously lived in this file was reconciled into that home, so there is exactly ONE
+//   definition; those types are used here by name only.
+// ⭐ CORRECTED 2026-08-29 (pause-greyscale wave): the banner above used to claim
+//   BrnBehaviourManager.h was also the home of ::BehaviourInterpolate. It is NOT -- that slice
+//   was retired in the 2026-08-01 ODR reconcile and BrnBehaviourManager.h now only
+//   FORWARD-declares the class (see its own note at :110-124). This header names
+//   BehaviourInterpolate::Parameters in four signatures/members below, which needs the type
+//   COMPLETE, so it now includes the real home,
+//   GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h. Until this include landed,
+//   EVERY consumer of this header that did not itself include the real home first failed to
+//   compile at :239/:243/:280 -- which is exactly why BrnArbStateCrashNav.cpp could not be
+//   mounted, and hence why the offline pause camera never moved.
 // FLAG: BrnDirector::DebugComponent (the playlist's mpDebugComponent / SetDebugComponent)
 //   is an unreconstructed dev-tools type -- forward-declared only (pointer member).
 // ============================================================================
@@ -224,9 +235,17 @@ struct ICEMoviePlayer
 {
     void                Construct();
     bool                Prepare(ICEWrapper* lpICEWrapper);
-    bool                HasReachedEnd() const;
-    bool                IsLooping() const;
-    bool                IsPlaying() const;
+
+    // ⭐ HEADER-INLINE ON THE CONSOLE (2026-08-29, pause-greyscale wave). These four have NO
+    // out-of-line X360 symbol -- they appear only folded into their callers' bodies
+    // (ArbStateCrashNav::Release @0x8224FAA0 reads the +0x830 byte directly; Update
+    // @0x8226DC98 reads +0x82E; Loop @0x82251340's own assert reads +0x6A0). That is the
+    // signature of an in-class inline accessor, so they are defined here rather than in the
+    // .cpp -- which is also what lets a consumer TU call them without the player's TU.
+    bool                HasReachedEnd() const { return mbHasReachedEnd; }   // +0x069E
+    bool                IsLooping()     const { return mbIsLooping; }       // +0x069F
+    bool                IsPlaying()     const { return mbIsPlaying; }       // +0x06A0
+
     void                Play();
     void                Loop();
     void                CutToInterpolateOut();
@@ -238,12 +257,44 @@ struct ICEMoviePlayer
                                         f32 lfDuration,
                                         const Camera::BehaviourInterpolate::Parameters* lpParams,
                                         bool lbUpdatesDuringPause);
+    // Latch the blend the player performs once the playlist finishes: which helper slot to
+    // blend back TO, over what duration, how much it may overlap the last take, with which
+    // curve, and whether that blend keeps ticking while the sim is paused.
+    //
+    // ⭐ X360-ATTESTED AS AN INLINE, from its ONE call site -- ArbStateCrashNav::Prepare
+    // @0x82266164..0x8226618C (verified: ArbStateCrashNav::Prepare is the only caller of
+    // ICEMoviePlayer::Prepare / Loop / InterpolateFrom in the whole ARTIST image, so this
+    // player is reached from nowhere else):
+    //     stw  lToHelper, 0x678(player)   ; mToBehaviourHelperIndex
+    //     stfs f0,        0x68C(player)   ; mfMaxInterpolateOutOverlapTime
+    //     stfs f0,        0x688(player)   ; mfInterpolateOutDuration
+    //     stw  lpParams,  0x680(player)   ; mpInterpolateOutParams
+    //     stb  1,         0x6A1(player)   ; mbShouldInterpolateOut
+    //     stb  1,         0x6A2(player)   ; mbInterpolateOutUpdatesDuringPause
+    // ⚠️ FLAG (parameter identity, NOT the stores): that single call site passes 0.5 for BOTH
+    // floats, so the binary alone cannot separate `lfDuration` from `lfMaxOverlapTime` -- the
+    // pairing below is taken from the two MEMBER names (which are DWARF-derived), not proven
+    // by a differing pair of arguments. The member-to-offset mapping IS asm-attested.
     void                WhenFinishedInterpolateTo(Camera::BehaviourHelperIndex lToHelper,
                                                   f32 lfDuration, f32 lfMaxOverlapTime,
                                                   const Camera::BehaviourInterpolate::Parameters* lpParams,
-                                                  bool lbUpdatesDuringPause);
-    ICEMoviePlaylist&   GetPlaylist();
-    void                SetPlaylist(const ICEMoviePlaylist& lrPlaylist);
+                                                  bool lbUpdatesDuringPause)
+    {
+        mToBehaviourHelperIndex            = lToHelper;
+        mfMaxInterpolateOutOverlapTime     = lfMaxOverlapTime;
+        mfInterpolateOutDuration           = lfDuration;
+        mpInterpolateOutParams             = lpParams;
+        mbShouldInterpolateOut             = true;
+        mbInterpolateOutUpdatesDuringPause = lbUpdatesDuringPause;
+    }
+
+    ICEMoviePlaylist&   GetPlaylist() { return mPlaylist; }
+
+    // Take a copy of a shared playlist. X360-inline at the same one call site: a straight
+    // `memcpy(player + 0x160, lrPlaylist, 0x4E8)` -- i.e. the compiler-generated copy-assign
+    // of the whole 1256-byte ICEMoviePlaylist, which is what a by-value member assignment
+    // emits. Expressed as the assignment, not as a byte copy.
+    void                SetPlaylist(const ICEMoviePlaylist& lrPlaylist) { mPlaylist = lrPlaylist; }
     void                SetTargetRaceCar(EActiveRaceCarIndex leRaceCar, VehicleRef::EType leRefType);
     EActiveRaceCarIndex GetTargetRaceCar();
 
