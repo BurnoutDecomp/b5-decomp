@@ -315,6 +315,16 @@ struct RaceEventData
     // correctly-named twin of GetEventInstanceId above -- SAME doubleword, DWARF name.
     // The X360 emits no standalone symbol for any of the three (all inlined at the reader), so
     // they are header-inlines, exactly like ProgressionData::GetProgressionRankCount.
+    // ⭐ [main-menu wave G1] The two per-event time limits (DWARF :461/:467
+    // `float32_t GetTimeLimitFast() const;` / `GetTimeLimitSlow() const;`).
+    // INLINE ON PURPOSE, for the same reason GetCheckpointCount above is: the X360 emits no
+    // standalone symbol for either, and a caller in ANOTHER TU loads the word directly --
+    // BrnGui::EventPanel::SetEventData @0x824312D8 does `lfs f1, 0x24(r24)` with no call on the
+    // burning-route arm (the event's own target time, used when no challenged score overrides
+    // it). That is only possible if the original header defined the accessor inline.
+    f32   GetTimeLimitFast() const    { return mfTimeLimitFast; }
+    f32   GetTimeLimitSlow() const    { return mfTimeLimitSlow; }
+
     f32   GetTrafficDensity() const   { return mfTrafficDensity; }
     f32   GetBoostEarning() const     { return mfBoostEarning; }
     CgsID GetSpecialEventCarId() const { return mSpecialEventCarId; }
@@ -359,7 +369,15 @@ private:
     CgsID mSpecialEventCarId;           // 0x10  (DWARF :592)  GetSpecialEventCarId
     u32 muaCheckpointsOffset;           // 0x18  checkpoint table base (FixUp-rebased 32-bit slot)
     s32 miCheckpointCount;              // 0x1C  live checkpoint count
-    u8  maPad_20[0x08];                 // 0x20..0x27 (not in this slice)
+    // ⭐ [main-menu wave G1, 2026-08-29] CARVED OUT OF maPad_20. The DWARF
+    // (references/DecFIGS/dwarfdump/SharedClasses/Progression/BrnRaceEventData.h:241/:244)
+    // lists `float32_t mfTimeLimitFast;` then `float32_t mfTimeLimitSlow;` as the two members
+    // immediately after miCheckpointCount and immediately before miRankScore[6] -- so they are
+    // exactly the eight bytes this pad covered, at +0x20 and +0x24. X360-attested by
+    // BrnGui::EventPanel::SetEventData @0x824312D8 (`lfs f1, 0x24(event)`), which reads the
+    // burning-route target time straight off the record with no call -- see the accessor note.
+    f32 mfTimeLimitFast;                // 0x20  (DWARF :241)
+    f32 mfTimeLimitSlow;                // 0x24  (DWARF :244)
     s32 maiRankScores[KU_NUM_RANKS];    // 0x28  rank target scores (6 * 4 == 0x18 -> 0x40)
     f32 mafRankTimes[KU_NUM_RANKS];     // 0x40  rank target times  (6 * 4 == 0x18 -> 0x58)
     u8  maPad_58[0x94];                 // 0x58..0xEB (remaining record -- not in this slice)
