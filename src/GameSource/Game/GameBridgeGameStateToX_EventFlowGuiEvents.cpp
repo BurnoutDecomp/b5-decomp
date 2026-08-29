@@ -1005,7 +1005,26 @@ namespace
         //
         // FLAG -- most of this record's field NAMES are unproven (see the FLAGs on
         // ShowModeResultsAction and OfflinePostEventWire289). The COPY is exact; the meanings are
-        // not. Nothing consumes id 289 in b5-decomp yet, so nothing depends on the names.
+        // not.
+        // ⚠️ THE OLD TAIL OF THIS NOTE -- "Nothing consumes id 289 in b5-decomp yet, so nothing
+        // depends on the names" -- IS NOW FALSE (2026-08-29). Two consumers read the record:
+        // BrnGui::InstantResultsState and BrnGui::ShowtimeInstantResultsState, both via
+        // GuiCache::GetOfflinePostEventData().
+        // ⭐ AND THREE OF THE FLAGGED SLOTS BELOW ARE NOW ATTESTED FROM THE CONSUMER SIDE, so
+        // whoever next touches this arm should rename them here rather than re-deriving:
+        //     miField24 (action+0x10) == OfflinePostEventData::miBaseScore
+        //     miField28 (action+0x14) == OfflinePostEventData::miScoreMultiplier
+        //     mfField2C (action+0x18) == OfflinePostEventData::mfDistanceTravelled  (metres)
+        // Four independent agreements, not one: (a) the DecFIGS DWARF declares exactly that
+        // trio consecutively (BrnGuiEventTypeDefs.h:2393/:2394/:2395); (b) the X360 pins the
+        // middle one BY NAME in its own stringized assert -- ShowtimeInstantResultsState::
+        // UpdateScoreTotalling @0x824C62C4 fires "mResults.miScoreMultiplier > 0" on the word at
+        // record+0x28; (c) SetupTotalling @0x824BB548 multiplies record+0x2C by 1.0936133 (the
+        // metres->yards constant) and UpdateScoreTotalling hands it to SetLocalisedText under
+        // "KAC_SHOWTIME_DISTANCE_IN_METRES"; (d) mfField18's own FLAG in BrnGameActions.h had
+        // ALREADY reached "the SHOWTIME DISTANCE ... the raw metres value", from the producer
+        // side alone. The rename is deliberately NOT made in this pass: ShowModeResultsAction's
+        // write sites live in BrnModeManager_Finish.cpp, which another wave is editing.
         case BrnGameState::GameStateModuleIO::E_ACTION_SHOW_MODE_RESULTS:
         {
             const BrnGameState::GameStateModuleIO::ShowModeResultsAction* lpResults =
