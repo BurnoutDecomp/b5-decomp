@@ -4403,6 +4403,131 @@ void RaceCarEntityModule::GenerateSceneUpdateEvents(
     SetPaddingForResetRaceCars( lpSceneInterface );
 }
 
+// =================================================================================================
+// UpdateCrashingPlayerContacts  @0x822E85F0  -- THE CRASH-PLAY CONTACT PASS. 114 instructions.
+//
+// ⭐ This is the ONLY producer of CrashPlayManager::HandlePlayerToVehicleImpact in the whole
+// image, and therefore the only producer of OnCarCrash. Both were reconstructed before this and
+// both were dead: nothing called the pass, so nothing called them.
+//
+// SIGNATURE from the prologue, not the call site: the console loads THREE argument registers at
+// 0x82307674..0x8230767C (r3=this, r4=lpInput, r5=lpOutput) but the callee captures only
+// `mr r28, r3` / `mr r31, r4` and never touches r5 in any of its 114 instructions. r5 is a stale
+// third argument at the call site; it is not a parameter of this body.
+//
+// SHAPE:
+//   assert(-1 < mePlayerActiveRaceCarIndex < 8)                       // X360 :4718
+//   if (!maActiveRaceCars[player].IsActive()) return;
+//   if (!mbIsInOnlineGameMode                                         // lbzx +0x18345
+//       && meGameModeType != 2 && meGameModeType != 0x10) return;     // lwzx +0x18368
+//   for each RaceCarContact in lpInput->GetContactSpyInterface()->GetRaceCarContacts():
+//       if (c.mEntityIdA.GetEntityIndex() != player) continue;        // extrwi r10, r11, 14,8
+//       if (c.mEntityIdA.GetPartIndex()   != 0)      continue;        // clrlwi r11, r11, 22
+//       const u8 lucHitOwner = c.mEntityIdB.GetOwner();               // srwi r31, r5, 24
+//       if (mCrashPlayManager.IsInShowtime() && (lucHitOwner == 2 || lucHitOwner == 1))
+//           mCrashPlayManager.HandlePlayerToVehicleImpact(&player car, c.mEntityIdB, &c);
+//       if (lucHitOwner == 0)
+//           player car.mbIsTouchingWorld = true;                      // stb r22(=1), 0x774(r24)
+//
+// ⭐ THE TWO OWNER TESTS ARE INDEPENDENT, NOT AN ELSE. The `stb` at 0x822E879C is reached both
+// from the fall-through of the showtime block and from its `beq` skip at 0x822E8768 -- the owner
+// == 0 test at 0x822E8790 re-clears r31 and branches on its own. A car contact (owner 1/2) and a
+// world contact (owner 0) are mutually exclusive anyway, but the CONTROL FLOW is two ifs and
+// reproducing it as if/else would be a divergence in the case a future owner id lands in neither.
+//
+// ⭐ THE GAME-MODE GATE. The console runs this pass when mbIsInOnlineGameMode is set OR the mode
+// is one of two ids (2 and 0x10 == 16). Offline showtime is mode 2 -- which is what the run log
+// prints as `mode=2` in the [contact-pass] / [contact-entry] witnesses -- so the offline showtime
+// session takes the second arm. The ids are left as literals: EGameModeType's DWARF->X360 shift
+// is per-band and this TU has no attested name for either value.
+//
+// The A-side "is this the player's own body" test is the console's bitfield extraction spelled by
+// name: `extrwi r10, r11, 14,8` is (id >> 10) & 0x3FFF == EntityId::GetEntityIndex(), and
+// `clrlwi r11, r11, 22` is id & 0x3FF == EntityId::GetPartIndex(). Part 0 is the hull; a wheel or
+// a detached part contact is deliberately not a crash-play hit.
+//
+// The console copies each 96-byte contact to the stack with a 12 x 8-byte block move before
+// reading it (0x822E8718..0x822E8734) and passes the STACK copy to HandlePlayerToVehicleImpact.
+// That copy is a compiler artefact of taking the by-value queue element -- the callee takes a
+// const pointer and never writes through it -- so the reference is passed directly here, per the
+// de-optimisation rule.
+//
+// [FLAG PC bring-up] the two sibling legs the console runs immediately before this one at the
+// same slot -- UpdateRaceCarContacts @0x822F5A50 (0x82307664) and ProcessPropContactQueue
+// (0x82307670) -- are still unreconstructed, so only this third leg is called below.
+// DELETE-WHEN either of them lands.
+// =================================================================================================
+void RaceCarEntityModule::UpdateCrashingPlayerContacts(
+        const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput )
+{
+    CGS_ASSERT( ( mePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )
+                && ( mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ),
+                "( mePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && "
+                "( mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )" );   // X360 :4718
+
+    // [FLAG PC bring-up] the console indexes maActiveRaceCars unconditionally after its assert,
+    // because its flow guarantees a player slot by now. Same temporary precondition every other
+    // post-physics leg in this file carries -- this build ticks frames before one is attached.
+    // DELETE-WHEN the player car is attached before the world's first post-physics frame.
+    if( static_cast<u32>( mePlayerActiveRaceCarIndex ) >= E_ACTIVE_RACE_CAR_INDEX_COUNT )
+    {
+        return;
+    }
+
+    ActiveRaceCar* lpPlayerActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
+    if( !lpPlayerActiveRaceCar->IsActive() )
+    {
+        return;
+    }
+
+    const s32 KI_MODE_TYPE_CRASH  = 2;    // cmpwi r11, 2   @0x82307688 -- offline showtime
+    const s32 KI_MODE_TYPE_ONLINE = 0x10; // cmpwi r11, 0x10
+
+    if( !mbIsInOnlineGameMode
+        && static_cast<s32>( meGameModeType ) != KI_MODE_TYPE_CRASH
+        && static_cast<s32>( meGameModeType ) != KI_MODE_TYPE_ONLINE )
+    {
+        return;
+    }
+
+    const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpy =
+            lpInput->GetContactSpyInterface();
+    const BrnPhysics::ContactSpy::ContactSpyData::RaceCarContactQueue* lpContacts =
+            lpContactSpy->GetRaceCarContacts();
+
+    for( s32 liContact = 0; liContact < lpContacts->GetLength(); ++liContact )
+    {
+        const BrnPhysics::ContactSpy::RaceCarContact& lrContact = lpContacts->GetEvent( liContact );
+
+        // BaseContact stores the two ids as the bare 32-bit storage word (BrnCommonTypes.h's
+        // `struct EntityId { u32 muValue; }`), so the packed fields are read through the real
+        // scene-manager handle -- which is exactly what the console's `extrwi`/`clrlwi`/`srwi`
+        // triple IS, CgsSceneManager::EntityId's own accessors inlined.
+        const CgsSceneManager::EntityId lContactIdA( lrContact.mEntityIdA.muValue );
+        const CgsSceneManager::EntityId lHitVehicleID( lrContact.mEntityIdB.muValue );
+
+        if( static_cast<s32>( lContactIdA.GetEntityIndex() )
+                != static_cast<s32>( mePlayerActiveRaceCarIndex )
+            || lContactIdA.GetPartIndex() != 0 )
+        {
+            continue;
+        }
+
+        const u8 lucHitOwner = lHitVehicleID.GetOwner();
+
+        if( mCrashPlayManager.IsInShowtime() && ( lucHitOwner == 2 || lucHitOwner == 1 ) )
+        {
+            mCrashPlayManager.HandlePlayerToVehicleImpact(
+                    lpPlayerActiveRaceCar, lHitVehicleID, &lrContact );
+        }
+
+        if( lucHitOwner == 0 )
+        {
+            lpPlayerActiveRaceCar->SetTouchingWorld( true );
+        }
+    }
+}
+
 // ============================================================================
 // SetPaddingForResetRaceCars  @0x822CEEA8
 //
@@ -4749,6 +4874,17 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     if( !lbSimPaused )
     {
         GenerateSceneUpdateEvents( lpOutput );
+    }
+
+    // ⭐⭐ [showtime end wave 2026-08-29] THE CRASH-PLAY CONTACT PASS, at the console's own slot:
+    // the `bl` at 0x82307680, inside the sim-paused skip, immediately after the two sibling
+    // contact legs (0x82307664 UpdateRaceCarContacts / 0x82307670 ProcessPropContactQueue,
+    // neither reconstructed) and immediately before UpdateActiveRaceCarTransforms (0x82307688,
+    // below). This is the ONLY producer of CrashPlayManager::HandlePlayerToVehicleImpact ->
+    // OnCarCrash in the image; without it both of those bodies are unreachable.
+    if( !lbSimPaused && lpInput != 0 )
+    {
+        UpdateCrashingPlayerContacts( lpInput );
     }
 
     // ⭐⭐ [aicar_reset wave 2026-08-26] THE RESET-TRANSFORM RING, at the console's own

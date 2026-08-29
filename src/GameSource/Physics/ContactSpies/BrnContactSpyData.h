@@ -98,7 +98,15 @@ namespace BrnPhysics
             void Append(const ContactSpyData* lpOther);
             ContactSpyData& operator=(const ContactSpyData& lrOther);
 
-            const RaceCarContactQueue*         GetRaceCarContacts() const;
+            // ⭐ BODIED 2026-08-29 (showtime end wave), same footing as the two below: the X360
+            // emits no out-of-line symbol for it. Its one caller --
+            // ContactSpyInterface::GetRaceCarContacts, itself inlined into
+            // RaceCarEntityModule::UpdateCrashingPlayerContacts @0x822E86B8 -- folds the whole
+            // two-level chain to `lwz r29, 0(iface)` (mpData) with NO further offset, i.e.
+            // mpData + 0, which is exactly the mRaceCarContactQueue seat this header's member
+            // table already carries. Declared here with no definition anywhere in the tree
+            // until now, and it is the ONE route to the race-car contacts (the queue is private).
+            const RaceCarContactQueue*         GetRaceCarContacts() const { return &mRaceCarContactQueue; }
             // ⭐ BODIED 2026-08-29 (showtime score wave). DWARF BrnContactSpyData.h:143-region.
             // Same footing as GetPropContacts below: the X360 emits NO out-of-line symbol for
             // it, because its one caller -- ContactSpyInterface::GetTrafficContacts
