@@ -275,6 +275,35 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     void CrashModeScoring::DealWithHitProp(u16 luPropIndex, u8 luPropFlags)
     {
+        // [DIAG] NOT IN THE X360 BINARY -- the `[evt-prop]` witness. Gated BRN_MODEMGR_DIAG,
+        // first three calls per process only, so it cannot flood a drive through a railed street.
+        //
+        // WHY A CRASH FIX NEEDS ITS OWN WITNESS. Without it the only evidence that restoring
+        // CrashModeScoring::Construct worked is that the process STOPPED dying -- and a run can
+        // stop dying because the bug is fixed OR because it never touched a prop that time. Those
+        // are indistinguishable from the outside, and "reproducible is not attributable" is exactly
+        // how a fix gets banked that never ran. This line makes the repaired store attributable:
+        // it prints from INSIDE the function that faulted, one instruction ahead of the Push that
+        // faulted, and it prints miMaxLength -- which is 0 on the broken build and 8 on the fixed
+        // one, because that word is written by the same attach the fault proved was missing.
+        // DELETE-WHEN the event-finish bring-up is done.
+        {
+            static const bool sbPropDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
+            static s32        siCalls    = 0;
+            if (sbPropDiag && CgsDev::Log::gpDebugPrint != 0 && siCalls < 3)
+            {
+                ++siCalls;
+                *CgsDev::Log::gpDebugPrint
+                    << "[evt-prop] DealWithHitProp call " << siCalls
+                    << " prop " << static_cast<s32>(luPropIndex)
+                    << " flags " << static_cast<s32>(luPropFlags)
+                    << " ringMaxLength " << mRecentlyHitPropSet.GetMaxLength()
+                    << " (0 == the ring was never attached; 8 == Construct ran)"
+                    << " propsDestroyed " << miNumPropsDestroyed
+                    << "\n";
+            }
+        }
+
         const s32 liLength = mRecentlyHitPropSet.GetLength();
         for (s32 liPropSetIndex = 0; liPropSetIndex < liLength; ++liPropSetIndex)
         {
