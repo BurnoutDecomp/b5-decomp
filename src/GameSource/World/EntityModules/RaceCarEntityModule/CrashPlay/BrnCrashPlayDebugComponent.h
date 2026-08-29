@@ -109,6 +109,57 @@ namespace BrnWorld
         //     emitted it inline so the function boundary itself is not directly attested. The
         //     three constants (1.5 / 1.0 / 0.0) and the 0.001 threshold ARE asm-literal
         //     (flt_82014A8C / flt_82001C98 / flt_82001CC0 / flt_82013F90).
+        // =====================================================================================
+        // ⭐⭐⭐ WHY A SHOWTIME SESSION NEVER ENDS ON ITS OWN, AND WHY THAT IS NOT A REGRESSION.
+        // (Established 2026-08-29 from the X360 asm; the 2026-08-29 brief called it "a
+        // regression to close" and asked for the producer of mfPlayerBoostPercentage. The
+        // producer is fine. What is missing is the CONSUMER, and it is this class.)
+        //
+        // The only thing that ends an offline showtime session is
+        // CrashModeScoring::HasCrashModeEnded @0x823129A0, and since the 2026-08-27 showtime
+        // wreck guard landed (ActiveRaceCar::mbIsInShowtime finally has a writer, so TickCrashes
+        // stops reclaiming the wreck) its first exit -- !mbPlayerIsCrashing -- correctly no
+        // longer fires. That leaves its SECOND exit, the idle ladder, whose first term is
+        // "the player's boost has settled to ~0".
+        //
+        // ⛔ THE FROZEN 0.595307 IS NOT A FROZEN CONSTANT AND NOT A DEAD PRODUCER.
+        // CrashModeScoring::mfPlayerBoostPercentage is recomputed every frame as
+        // BoostStrategy::GetBoostAmount() / GetMaxBoost() (BrnCrashModeScoring.cpp @0x823209A4),
+        // published by the LIVE RaceCarEntityModule::UpdateOutputBoostInfo @0x822D1BD0. Measured
+        // across three runs it is NOT the same number -- 0.595307 in w2/w5 and 0.505987 in w4,
+        // from a start of 35.0/70.0 == 0.5 ([boost-bar] first 206) -- i.e. the quotient tracked
+        // boost EARNED while driving and then stopped moving because, once the car is a
+        // stationary wreck, NOTHING SPENDS IT.
+        //
+        // ⭐ WHAT SPENDS IT ON THE CONSOLE IS THE BOUNCE, AND ONLY THE BOUNCE.
+        //   * BoostBurnout2/3/5::OnStartCrashPlay drop mfMinBoostAllowedAmount (BoostStrategy
+        //     +0x100) to FLT_EPSILON (`stfs flt_82014460, 0x100` @0x822D5344 / @0x822A6AE0), i.e.
+        //     "during crash play the bar MAY be spent all the way to zero"; OnEndCrashPlay puts
+        //     the floor back at mfMaxBoost * K. Neither has a caller in this tree -- the base
+        //     BoostStrategy::OnStartCrashPlay/OnEndCrashPlay are empty stubs and nothing
+        //     dispatches the virtuals.
+        //   * CrashPlayManager::UpdateBounceBoost @0x822A7CD0 gates the bounce on
+        //     mfBoostPercentage (+0x134) being non-zero, and CrashPlayManager::OnBounce
+        //     @0x822A7EF8 SUBTRACTS a difficulty-lerped cost from it per bounce and clamps into
+        //     [0,100] -- so this meter is a 0..100 percentage spent per bounce, never drained on
+        //     a timer. Nothing in Update @0x82306530 decrements it (its five callees are
+        //     UpdateMomentum / UpdateTrafficStomp / UpdateBounceBoost / UpdateCarLeaping /
+        //     UpdateNewRoad, and UpdateMomentum's only calls are GetPosition, Magnitude2D and
+        //     SetBouncePromptNeeded).
+        // ⇒ A showtime session in which the player never presses boost does not end ON THE
+        // CONSOLE EITHER. ⛔ Do NOT add a timeout, and do not "fix" the boost producer.
+        // ⇒ THE TWO REAL GAPS, in order:
+        //   (1) BrnCrashPlayManager.cpp is `todo` -- all 15 functions, ~1,000 X360 insns, with
+        //       four LIVE callers already in the tree (RaceCarEntityModule::PrePhysicsUpdate ->
+        //       Update; UpdateCrashingPlayerContacts -> HandlePlayerToVehicleImpact;
+        //       HandleGameActions -> OnBounce / OnVehicleHitConfirmed; HandlePrepareForModeAction
+        //       -> Activate). Until it lands nothing can bounce and nothing spends boost.
+        //   (2) THE HARNESS CANNOT PRESS BOOST. tools/diagnostics/flow_run.ps1 drives
+        //       accelerate / brake / handbrake / steer / both-bumpers and has no boost channel at
+        //       all, so no showtime run yet recorded has supplied the stimulus the terminator
+        //       depends on. ⚠️ Before reporting "showtime never ends" again, prove the stimulus:
+        //       a run that never bounces measures the harness, not the game.
+        // =====================================================================================
         bool IsActive() const         { return mbIsCrashPlayActive; }
         bool IsInShowtime() const     { return mbIsInShowtime; }
         bool IsBounceBoosting() const { return mfBounceBoostTimer > 0.0f; }

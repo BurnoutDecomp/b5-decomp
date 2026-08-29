@@ -160,8 +160,40 @@ namespace BrnPhysics
         // the only producer of InAddPotentialContact in this tree) -- the console's own tripwires
         // there assert AGAINST that pair, :100 `!(A == RACECAR && B == TRAFFIC_VEHICLE)`, with
         // :94/:97/:103 covering world-traffic and traffic-traffic. They go down path 7, custom
-        // queue [8], into DeformationManager::ReadPotentialContact -- whose lpSimInput parameter is
-        // COMMENTED OUT on this build (BrnDeformationManager_ContactBridges.cpp:262). Start there.
+        // queue [8], into DeformationManager::ReadPotentialContact.
+        //
+        // ⛔⛔ THE REST OF THAT LEAD WAS WRONG, AND IT IS RETRACTED HERE SO NOBODY RE-CHASES IT.
+        // It said "...whose lpSimInput parameter is COMMENTED OUT on this build
+        // (BrnDeformationManager_ContactBridges.cpp:262). Start there." That parameter is
+        // commented out because THE CONSOLE DOES NOT HAVE IT. ReadPotentialContact @0x826053F8 is
+        // a THREE-argument function in the X360 image: the prologue saves r3/r4/r5 only
+        // (`mr r30,r4` @0x8260540C, `mr r28,r3` @0x82605414, `mr r25,r5` @0x82605418) and r6 is
+        // never read anywhere in its 135 instructions -- the only later use of the saved r5 is
+        // `mr r6,r25` @0x826055B0, i.e. the ContactId being forwarded into
+        // DeformationSensor::ValidateAndAddContact. There is no simulation input buffer in that
+        // body to drop. The commented-out parameter is faithful, not a defect.
+        // ⇒ [[diagnostics-that-lie]], in its static form: an unused parameter in a reconstruction
+        // looks exactly like a dropped side effect until you read the prologue.
+        //
+        // ⭐⭐ AND THE PREMISE UNDER IT IS ALSO WRONG: THERE IS NO LOSS ON THIS PATH.
+        // MEASURED, same free-burn rear-end-ram recipe, scratch/flow_run/w3_ram/BrnGame.log:
+        //     [T5-ram] ... q8routed=817 q8acc=180 ccCalls=471 ccApplied=470
+        // i.e. queue [8] carried 817 race-car-vs-traffic potential contacts, the deformation
+        // sensor ACCEPTED 180 of them, and 470 car-car impulses were applied. Path 7 works.
+        // It simply never produces a SIMULATION contact -- it feeds the deformation sensors and
+        // the direct impulse solver, so no OutContactSpy with owner 1 or 2 can ever come back
+        // from it, and ProcessContactSpy correctly never sees the pair. The `[spy-owners]` zero
+        // is the DESIGN of path 7, not a defect in it.
+        // ⇒ The producer of a (TRAFFIC_VEHICLE, RACECAR) SIM contact -- the only thing that can
+        // reach StoreContact's `case 2` and fill mTrafficContactQueue -- is path 4's
+        // VehicleManager::BridgeSimpleTrafficWithCarContactsToSimulation @0x825C83B0 (375 insns,
+        // custom queue [11] E_QUEUE_TYPE_SIMPLE_TRAFFIC_WITH_CAR), which is an INERT BOOT GATE on
+        // this build (BrnVehicleManager_PerFrameLeaves.cpp:220). It is corroborated by the
+        // console's own legality matrix: ValidateSimulationContactTypes accepts RACECAR with B in
+        // {2,3} (:670) and TRAFFIC_VEHICLE with B in {0,1,2} (:679), so the sim DOES carry the
+        // pair -- while path 1, the only other producer, asserts against it. The remaining
+        // unknown is whether queue [11] is ever non-empty, which is exactly what the
+        // [bridge-queues] witness above measures.
         // Evidence page: https://claude.ai/code/artifact/ebe1c741-6e40-4a0b-95ba-9c4fe61d42ca
         // DELETE-WHEN the traffic contact queue is proven to fill.
         {
@@ -715,6 +747,11 @@ namespace BrnPhysics
         // mTriangleCacheInterface seat -- X360 +128016 into the storage, PS3 buffer+128384).
         const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface =
             lpInputBuffer->GetVehicleInputInterface()->GetTriangleCacheInterface();
+
+        // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN the traffic contact queue is proven to fill.
+        // Called EVERY frame (it accumulates; it does not sample -- see its banner), and BEFORE
+        // any queue is walked or drained.
+        lpContactInterface->DebugAccumulateQueueLengths();
 
         const s32 liNumPotentialContacts = lpContactInterface->GetLength();
 

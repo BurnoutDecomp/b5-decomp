@@ -216,6 +216,19 @@ namespace Vehicle
     // X360 asm lines / 9 callees; PS3 DecFIGS 0x70DB6C) is NOT reconstructed yet -- the
     // simple-traffic car contacts are DROPPED, one log line per boot says so.
     // Reconstruct and DELETE this gate.
+    //
+    // ⭐ SCOPE, MEASURED 2026-08-29 (was inferred for the WORLD twin, now measured for BOTH):
+    // ITS QUEUE IS EMPTY. The [bridge-queues] witness accumulated every custom queue's length
+    // over 6,300 frames of a free-burn run that provably rammed traffic
+    // (scratch/flow_run/q_ram/BrnGame.log, -Teleport "3390.2,0.2,-1620.0,182"):
+    //     q0=108/38482  q3=24/408  q5=83/33994  q6=75/32953  q8=7/1716
+    //     q9=250/297580 q13=41/4459 src=27/1739
+    // -- queues [10] (simpleTraffic/world) and [11] (SIMPLE TRAFFIC/CAR, this function's) were
+    // NEVER non-empty, not once. That matches the console's own allocator: there are twenty FULL
+    // slots and exactly one SIMPLE one, and GetFreeTrafficVehicleWithPhysics @0x82637608 hands
+    // out only E_PHYSICAL_TRAFFIC_TYPE_FULL (BrnPhysicalTrafficManager_Create.cpp:351).
+    // ⇒ THIS GATE IS NOT THE "Cars Crashed" BLOCKER. Landing it would change nothing until a
+    // SIMPLE traffic slot can exist. Do not spend a wave on it for that reason.
     // ------------------------------------------------------------------------------------
     void VehicleManager::BridgeSimpleTrafficWithCarContactsToSimulation(
         CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InAddPotentialContact, 1024>* /*lpContactQueue*/,
