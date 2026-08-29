@@ -1932,6 +1932,9 @@ void GuiModule::Destruct()
                 case 434:   // [showtime] GuiCrashScoreUpdate -- THE SHOWTIME SCORE (cars crashed + distance)
                 case 203:   // [event-starts] GuiEventUpdateEventStarts -- THE EVENT-START TABLE
                 case 93:    // [A9] GuiEventPrepareForModeStart -- THE MODE-TYPE SEED (meGameModeType)
+                case 289:   // [results] GuiEventOfflinePostEvent -- THE OFFLINE RESULT RECORD
+                case 292:   // [results] post-event teardown (clears the record + suppress byte)
+                case 304:   // [results] raises the presentation-suppressed byte
                     // [H1 wave 2026-08-25] On the console EVERY module-input event reaches
                     // GuiCache::RecEvent (its ~180-case switch consumes what it wants);
                     // this build's pump routes selectively, so the two cache-consumed ids
@@ -1944,6 +1947,17 @@ void GuiModule::Destruct()
                     // terms: BridgeGameStateToGui's stunt slice posts them and GuiCache::RecEvent
                     // now has the matching three arms. None of the three is re-consumed off the
                     // notification queue, so forwarding them here delivers exactly once.
+                    // ⭐⭐ [results-screen wave 2026-08-29] 289/292/304 join on identical terms,
+                    // and they were THE last link in the offline results chain. Measured: with
+                    // GuiCache::RecEvent's case-289 arm landed but this forward missing, the
+                    // bridge posted the 192-byte record (its action-37 arm builds and pushes it
+                    // unconditionally on the offline path), the cache never saw it, and
+                    // InstantResultsState copied 192 ZERO bytes -- so its own reconstructed
+                    // SetupComponents printed the console's "Unhandled game mode! (0)" and the
+                    // screen stayed blank. A selective pump means a landed producer AND a landed
+                    // consumer still add up to nothing until the id is on this list; that is
+                    // three separate places to check, and the log looked identical at each.
+                    // None of the three is re-consumed off the notification queue.
                     // [showtime score wave 2026-08-29] 434 joins on IDENTICAL terms and completes
                     // that set for modes 2/16: its only producer is the same bridge's showtime arm
                     // (@0x823EEE18), GuiCache::RecEvent's case-434 arm is its only consumer, and
