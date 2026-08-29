@@ -180,6 +180,16 @@ enum EGameActionType
     E_ACTION_BODY_SHOP_DRIVE_THRU       = 97,   // size 144
     E_ACTION_PAINT_SHOP_DRIVE_THRU      = 98,   // size 144
     E_ACTION_GAS_STATION_DRIVE_THRU     = 100,  // size 144
+    // ⭐ [drive-thru wave 2026-08-29] PINNED AT BOTH ENDS, same standard as the three above.
+    // Producer: DriveThruManager::ProcessDriveThru @0x8239B6E8's mbIsClosed early-out --
+    // `li r5,0x65` (101) + `li r6,1` into the same VariableEventQueue<13312,16>::AddEvent, one
+    // zero byte of payload. Consumer: TranslateGameActionsToGuiEvents @0x823E9CE0 case 101
+    // @0x823EB628 -- `li r11,5` / `stb r19` (r19 == 0) into a GuiDriveThroughEvent, i.e.
+    // {E_DRIVE_THROUGH_TYPE_FAILED, mbEffective = false} on GUI id 366. It is the ONLY producer
+    // of the analyzer's FAILED drive-thru message. Named here (rather than only as
+    // BrnDriveThruManager.cpp's TU-local KI_ACTION_STOP_DRIVE_THRU_PRES) now that both ends
+    // exist in the tree.
+    E_ACTION_STOP_DRIVE_THRU_PRESENTATION = 101, // size 1
     // ⛔ VALUE CORRECTION 2026-08-20 -- this carried the PS3-DWARF value (19). The X360 ARTIST
     // build posts 23, asm-pinned at BOTH ends:
     //   producer  ModeManager::PrepareForMode @0x82342930 -- `li r5,0x17` (23) + `li r6,0x8E0`

@@ -98,6 +98,16 @@ namespace
         s32 GetEventType() const { return 356; }
     };
     static_assert(sizeof(AutosaveRequestWire356) == 1, "id 356 size 1");
+
+    // =========================================================================
+    // [drive-thru wave 2026-08-29] The byte the BODY-SHOP drive-thru action (97) carries its
+    // "the repair did something" flag in. The 144-byte shop payload is a serialised action
+    // blob, not a C++ class: transform @+0x00, an identity block @+0x40, per-action scalars
+    // from +0x80. For action 97 the producer (DriveThruManager::PostShopAction) writes the
+    // player entity id at +0x80, the not-online flag at +0x84 and this byte at +0x85, and the
+    // console's bridge arm reads exactly it back (`lbz r11, 0x85(r31)` @0x823EB5C8).
+    // =========================================================================
+    const s32 KI_SHOP_ACTION_EFFECTIVE_BYTE = 0x85;
 }
 
     // =========================================================================
@@ -146,14 +156,25 @@ namespace
     // Sole caller: BridgeGameStateToGui @0x823EE880 (call site @0x823EF22C).
     //
     // ⚠️⚠️ PARTIAL RECONSTRUCTION, AND IT IS NAMED, NOT HIDDEN. The console body is a
-    // ~700-case jump table (`jpt_823EA1F0`) over every game action in the build. FOUR arms are
-    // reproduced here -- 58 / 59 / 60, the stunt-collectible family, plus 148, the training
-    // ticker ([tut-ticker] 2026-08-24) -- and
-    // every other action falls through the default with NO event posted. That is a real
-    // behavioural gap for the other ~700 actions, not a silent one: each of them is currently
-    // unreachable anyway (this TU has never been mounted, and BridgeGameStateToGui @0x823EE880,
-    // the only caller, is still DEFERRED), so nothing regresses; but a future owner adding, say,
-    // the takedown or road-rules arms must add them HERE rather than in a parallel function.
+    // ~700-case jump table (`jpt_823EA1F0`) over every game action in the build. The arms
+    // reproduced here are 58 / 59 / 60 (the stunt-collectible family), 55, 112, 148 (the
+    // training ticker, [tut-ticker] 2026-08-24), 181, and 97 / 98 / 100 / 101 (the drive-thru
+    // family, [drive-thru] 2026-08-29); the event-flow arms live in the sibling
+    // GameBridgeGameStateToX_EventFlowGuiEvents.cpp, reached through the `default:` below.
+    // Every other action falls through with NO event posted. A future owner adding, say, the
+    // takedown or road-rules arms must add them HERE rather than in a parallel function.
+    //
+    // ⛔⛔ THE SENTENCE THAT STOOD HERE WAS STALE, AND IT WAS THE LOAD-BEARING ONE. It read:
+    // "each of them is currently unreachable anyway (this TU has never been mounted, and
+    //  BridgeGameStateToGui @0x823EE880, the only caller, is still DEFERRED), so nothing
+    //  regresses". BOTH HALVES ARE FALSE and have been for a while: this TU is mounted
+    // (tools/build/build_game_exe.bat), and TranslateGameActionsToGuiEvents is called EVERY
+    // FRAME from BrnGameModule.cpp inside the LockForRead/LockForWrite bracket, because the PC
+    // build re-seats the console's BridgeGameStateToGui call sequence inline. So a missing arm
+    // here is a LIVE behavioural gap, not a parked one -- which is exactly what it turned out
+    // to be for the drive-thru: the mechanic worked and the game said nothing for a day because
+    // 97/98/100 were absent from a drain loop that was running the whole time. Do not write
+    // "unreachable anyway" into this banner again without re-checking both facts.
     // The nearest sibling arms, for whoever comes next: 55 -> GuiAutosaveRequestEvent(356);
     // 57 -> GuiEventJumpStarted(216) @0x823EB868; 61 has NO case (the boost action is consumed
     // off the HUD path); 127 -> the Showtime-only CrashModeScoring leg, mode-gated 2/16.
@@ -442,6 +463,95 @@ namespace
                                 << " -> gui 537 id='" << lpcStringId << "'\n";
                         }
                     }
+                }
+                break;
+            }
+
+            // ---- 97 / 98 / 100 / 101  THE DRIVE-THRU ON-SCREEN RESPONSE ------------------
+            // ⭐⭐⭐ [drive-thru wave 2026-08-29] THIS IS WHAT A SUCCESSFUL DRIVE-THRU SAYS.
+            // The mechanic has worked for a day (a gas station refills boost 35 -> 70 in one
+            // session) and the game said nothing, because these four arms did not exist -- the
+            // CONSUMER side has been complete and mounted the whole time:
+            //   GUI 366 -> HudMessageAnalyzer::Update case 366 (BrnGuiHudMessageAnalyzer_wB_12
+            //   .cpp) -> HandleDriveThrough @0x8251D570 (..._gUI_03.cpp) -> the three message
+            //   tables in ..._wB_res.cpp: KAPC_DRIVE_THROUGH_MESSAGES ("DriThrGasStn",
+            //   "DriThrBdyShp", ...), KAPC_DRIVE_THROUGH_MAGIC_MESSAGES (the rare flavour line,
+            //   car wash + paint shop only) and KPAC_DRIVE_THROUGH_INEFFECTIVE_MESSAGES
+            //   ("DriThrBdyShX") when mbEffective is false.
+            // So the whole missing link was four `case` arms in an already-mounted, already-
+            // running drain loop.
+            //
+            // X360 @0x823EB5C8..0x823EB644, instruction for instruction. All four build the
+            // same 8-byte GuiDriveThroughEvent {meDriveThroughType@+0, mbEffective@+4} and post
+            // it through AddGuiEvent<GuiDriveThroughEvent> (id 366):
+            //   case 97  BODY_SHOP    lbz r11, 0x85(r31) ; stw r14(=1) ; stb r11
+            //                         -> type 1, EFFECTIVE FROM THE PAYLOAD BYTE AT +0x85
+            //   case 98  PAINT_SHOP   li r11,2 ; stb r14(=1) ; stw r11   -> type 2, effective 1
+            //   case 100 GAS_STATION  li r11,3 ; stb r14(=1) ; stw r11   -> type 3, effective 1
+            //   case 101 (stop pres)  li r11,5 ; stb r19(=0) ; stw r11   -> type 5, effective 0
+            // ⚠️ ONLY THE BODY SHOP READS THE PAYLOAD. The other three carry compile-time
+            // constants; do not "tidy" them into one shared arm that reads +0x85, because the
+            // gas-station payload's +0x85 is zero and the message would become the FAILED one.
+            //
+            // ⓘ The body shop's +0x85 byte is a HARDCODED 1 at the producer
+            // (DriveThruManager::ProcessDriveThru @0x8239BAA8 `li r26,1`, reproduced in
+            // BrnDriveThruManager.cpp's PostShopAction as `lacPayload[133] = 1`). So on this
+            // build the ineffective "DriThrBdyShX" line is unreachable THROUGH THIS PATH -- and
+            // that is the console's own shape, not a gap here. Noted because a reader chasing
+            // the ineffective message will otherwise suspect this arm.
+            //
+            // ⛔ Action 101 is E_ACTION_STOP_DRIVE_THRU_PRES -- posted by ProcessDriveThru's
+            // `mbIsClosed` early-out, i.e. "this drive-thru is closed, cancel the presentation".
+            // It maps to E_DRIVE_THROUGH_TYPE_FAILED, which is what makes the FAILED message a
+            // reachable arm of HandleDriveThrough rather than dead table rows.
+            case BrnGameState::GameStateModuleIO::E_ACTION_BODY_SHOP_DRIVE_THRU:     // 97
+            case BrnGameState::GameStateModuleIO::E_ACTION_PAINT_SHOP_DRIVE_THRU:    // 98
+            case BrnGameState::GameStateModuleIO::E_ACTION_GAS_STATION_DRIVE_THRU:   // 100
+            case BrnGameState::GameStateModuleIO::E_ACTION_STOP_DRIVE_THRU_PRESENTATION: // 101
+            {
+                BrnGui::GuiDriveThroughEvent lEvent;   // id 366, 8 bytes
+
+                if (liActionType ==
+                    BrnGameState::GameStateModuleIO::E_ACTION_BODY_SHOP_DRIVE_THRU)
+                {
+                    lEvent.meDriveThroughType = BrnGui::GuiDriveThroughEvent::E_DRIVE_THROUGH_TYPE_BODY_SHOP;
+                    // The 144-byte shop payload's per-action scalars start at +128; +0x85 (133)
+                    // is the "the repair did something" byte the console reads back here.
+                    lEvent.mbEffective =
+                        (reinterpret_cast<const u8*>(lpAction)[KI_SHOP_ACTION_EFFECTIVE_BYTE] != 0);
+                }
+                else if (liActionType ==
+                         BrnGameState::GameStateModuleIO::E_ACTION_PAINT_SHOP_DRIVE_THRU)
+                {
+                    lEvent.meDriveThroughType = BrnGui::GuiDriveThroughEvent::E_DRIVE_THROUGH_TYPE_PAINT_SHOP;
+                    lEvent.mbEffective        = true;
+                }
+                else if (liActionType ==
+                         BrnGameState::GameStateModuleIO::E_ACTION_GAS_STATION_DRIVE_THRU)
+                {
+                    lEvent.meDriveThroughType = BrnGui::GuiDriveThroughEvent::E_DRIVE_THROUGH_TYPE_GAS_STATION;
+                    lEvent.mbEffective        = true;
+                }
+                else
+                {
+                    lEvent.meDriveThroughType = BrnGui::GuiDriveThroughEvent::E_DRIVE_THROUGH_TYPE_FAILED;
+                    lEvent.mbEffective        = false;
+                }
+
+                PushGuiEvent(lEvent, lpGuiInput);
+
+                // [DIAG] NOT IN THE X360 BINARY. Unconditional (a handful of lines per session
+                // at most) and deliberately on the SAME `[drivethru]` tag as the producer's
+                // GATE/ENTER/POST/GAS REFILL rungs, so one grep reads the whole ladder end to
+                // end: an action that is posted but never bridged, and a bridged event whose
+                // message never appears, are otherwise indistinguishable
+                // [[diagnostics-that-lie]]. Delete with the rest of the drive-thru bring-up.
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[drivethru] BRIDGE action=" << liActionType
+                        << " -> gui 366 type=" << static_cast<s32>(lEvent.meDriveThroughType)
+                        << " effective=" << (lEvent.mbEffective ? 1 : 0) << "\n";
                 }
                 break;
             }
