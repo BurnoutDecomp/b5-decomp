@@ -746,16 +746,46 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
         if (meCurrentGameModeType == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
             meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
         {
-            // [!] [stuntrace] PARKED (header) -- header_request #12. Console 0x8234AD64:
+            // ⭐⭐⭐ [showtime score wave 2026-08-29] UNPARKED. Console 0x8234AD64:
             //   CrashModeScoring::Update(&mScoringSystem's mCrashModeScoring,   // this+0xDD0
             //       lpActiveRaceCarOutput,
             //       lpPostWorldInputBuffer->GetVehicleOutputInterface()->GetTrafficStateQueue(),
             //       lfDelta);
-            // The +9760 the console adds to the vehicle interface IS
-            // VehicleOutputInterface::mTrafficStateQueue @0x2620 (BrnVehicleOutputInterface.h:178)
-            // -- but GameStateModuleIO's `class VehicleOutputInterface` (BrnGameStateModuleIO.h:223)
-            // is a DIFFERENT, still-incomplete forward declaration over opaque storage, so the queue
-            // cannot be reached by name. Crash mode only.
+            //
+            // ⛔⛔ THE PARK NOTE WAS WRONG, AND ITS COST WAS THE WHOLE CRASH SCORER.
+            // It read: "the +9760 the console adds to the vehicle interface IS
+            // VehicleOutputInterface::mTrafficStateQueue @0x2620 -- but GameStateModuleIO's
+            // `class VehicleOutputInterface` is a DIFFERENT, still-incomplete forward
+            // declaration over opaque storage, so the queue cannot be reached by name."
+            // Both halves of that are true, and neither is a reason not to call:
+            // CrashModeScoring::Update @0x82320808 NEVER READS THE QUEUE. The f32 rides f1, so
+            // r4 is the interface and r5 is the queue -- and across all 321 instructions r5
+            // appears exactly twice, both times as `li r5, <line>` feeding
+            // CgsDev::Assert::FireAssert (@0x82320858 :189, @0x82320888 :193). The incoming
+            // pointer is dead in the callee, so passing 0 is provably inert.
+            // Because it stayed parked, mfDistanceTravelled and maiNumCarsCrashed never moved,
+            // and the showtime HUD read 0m / 0 for reasons three subsystems away from itself.
+            // [[gates-are-stale-not-dead]] -- ask what the block actually blocks.
+            //
+            // ⚠️ THE NULL IS A DIVERGENCE AND IS FLAGGED AS ONE. It is at the CALL SITE, not in
+            // the callee, and it is inert only because the callee ignores the argument -- which
+            // is checked above, not assumed. DELETE-WHEN GameStateModuleIO::VehicleOutputInterface
+            // models mTrafficStateQueue @0x2620 and the real pointer can be passed by name; the
+            // observable behaviour will not change when it is.
+            //
+            // ⛔⛔ AND IT STILL DOES NOT RUN TODAY -- read the ARMING STATE banner at the top of
+            // this file. PostWorldUpdate itself has NO CALL SITE on this build; GameStateModule
+            // drives PreWorldUpdateClocksBringUp instead and never reaches the post-world half.
+            // So this arm is correct-and-unreached: it costs nothing, it is what the console does,
+            // and it lights up the whole crash scorer the moment PostWorldUpdate is wired. Do not
+            // read "unparked" as "running" -- MEASURED 2026-08-29, the showtime HUD still renders
+            // Distance 0m / Cars Crashed 0 with this landed, because mfDistanceTravelled is never
+            // advanced. (The other half of that zero is CrashModeScoring::DealWithHitTrafficCar,
+            // whose console caller GameStateModule::ProcessContacts @0x8236BC68 is not
+            // reconstructed at all, so the crash COUNT has no producer either.)
+            mScoringSystem.GetCrashScorer()->Update(lpActiveRaceCarOutput,
+                                                    /* lpTrafficStateQueue */ 0,
+                                                    lfDelta);
         }
         else if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ROAD_RAGE)
         {

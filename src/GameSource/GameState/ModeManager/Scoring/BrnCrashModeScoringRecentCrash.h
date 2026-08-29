@@ -16,7 +16,16 @@ struct TriggerCrashBreakerEvent;
 struct PickupEvent;
 struct VehicleLeaptEvent;
 
-namespace BrnWorld { namespace RaceCarEntityModuleIO { class RCEntityActiveRaceCarOutputInterface; } }
+// ⛔⛔ THE CLASS-KEY IS LOAD-BEARING ON MSVC, AND THIS ONE WAS WRONG (fixed 2026-08-29).
+// The real type is `struct RCEntityActiveRaceCarOutputInterface`
+// (BrnRaceCarEntityModuleOutputInterface.h:139). This forward declaration said `class`, and
+// MSVC mangles the class-key into the decorated name -- `PEBV...` for class, `PEBU...` for
+// struct -- so Update's DEFINITION (this header included first, class-key latched to `class`)
+// and its CALL SITE (the real header included first, `struct`) decorated to two different
+// symbols. It was latent for as long as nothing called Update; the moment the ModeManager arm
+// was unparked it surfaced as one LNK2019 against a function whose body is right here.
+// [[shadowing-redeclarations]] -- only a LINK finds it, and it names the caller, not the cause.
+namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
 namespace VehicleOutputInterface { class PhysicalTrafficStateQueue; }
 
 // Minimal element-type home for the fixed-capacity
@@ -141,12 +150,15 @@ struct CrashModeScoring
     // the keystone's by-value embed (they are not touched by name by any of this TU's 13 methods):
     //   - the embedded CrashScoreDebugComponent (0x20 bytes; its real type derives from
     //     CgsDev::DebugComponent and is homed in BrnCrashScoreDebugComponent.h),
-    //   - the two Vector3 player-position members (Update mutates them only via raw vector ops),
     //   - the CgsID stunt-set ring (only Construct/Clear, not in this batch, touch it).
+    // (The two Vector3 player-position members WERE in that opaque list; they are real Vector3s
+    //  as of the showtime-score wave 2026-08-29, which bodies the Update half that reads them.
+    //  Same 16 bytes each, same offsets -- nothing is shifted; only the spelling changes, so the
+    //  distance math can be written with named members instead of a byte blob.)
 
     u8  maCrashScoreDebugComponent[0x20];     // +0x00  CrashScoreDebugComponent (h:215; opaque sub-object)
-    u8  maPlayerPosLastFrame[0x10];           // +0x20  Vector3 mPlayerPosLastFrame  (h:219; vector-op only)
-    u8  maPlayerPosLastStored[0x10];          // +0x30  Vector3 mPlayerPosLastStored (h:220; vector-op only)
+    Vector3 mPlayerPosLastFrame;              // +0x20  h:219  (Update's `stvx128 v127, r0, this+0x20` tail)
+    Vector3 mPlayerPosLastStored;             // +0x30  h:220  (the distance-direction anchor, re-stored every 20 m)
     f32 mfTimeSincePlayerCarMoved;            // +0x40  h:221
     f32 mfTimeSinceLastEvent;                 // +0x44  h:222
     f32 mfTimeSinceModeStart;                 // +0x48  h:223  (the running crash clock IsActiveCrash reads)
