@@ -66,16 +66,24 @@
 //     filled from mGameTimer, NOT change the reads here.
 //
 // ---------------------------------------------------------------------------
-// ⓘ SCOPE. This is the STUNT slice, not the whole ~17 KB function. Reproduced verbatim:
-// the id-492 build, the id-424 build (including the mode-{3,7,12,14,17} time arm) and the
-// mode-{7,9,12,14,17} id-428 build. NOT reproduced, and each is a real named gap:
+// ⓘ SCOPE. This is the STUNT slice plus (2026-08-29) the SHOWTIME slice, not the whole
+// ~17 KB function. Reproduced verbatim: the id-492 build, the id-424 build (including the
+// mode-{3,7,12,14,17} time arm), the mode-{7,9,12,14,17} id-428 build and the mode-{2,16}
+// id-434 build. NOT reproduced, and each is a real named gap:
 //   * GuiEventRaceDistanceRemaining (239) / GuiEventRaceDistanceToCheckpoint (240)
 //     @0x823EEA04..0x823EEB1C -- the per-car race-position feed.
-//   * the three SIBLING arms of the same jpt_823EED94 switch: modes 2/16 ->
-//     GuiCrashScoreUpdate (434), mode 3 -> GuiRoadRageScoreUpdate (429), mode 4 ->
-//     GuiPursuitScoreUpdate (432). Each needs its own payload reshape AND its own
-//     GuiCache::RecEvent arm (cases 46/50/52 of jpt_825101AC), i.e. its own slice.
-//     CONSEQUENCE: Showtime / Road Rage / Pursuit still show no mode-specific score.
+//   * two SIBLING arms of the same jpt_823EED94 switch: mode 3 -> GuiRoadRageScoreUpdate
+//     (426), mode 4 -> GuiPursuitScoreUpdate (432). Each needs its own payload reshape AND
+//     its own GuiCache::RecEvent arm (cases 46 / 52 of jpt_825101AC), i.e. its own slice.
+//     CONSEQUENCE: Road Rage / Pursuit still show no mode-specific score.
+//     ⛔⛔ THE ROAD-RAGE ID IN THIS BANNER WAS WRONG UNTIL 2026-08-29: it said 429 (and the
+//     case list said 46/50/52). 429 is the DecFIGS DWARF id of GuiCrashScoreUpdate, not the
+//     X360 id of anything on this switch. AddGuiEvent<GuiRoadRageScoreUpdate> @0x823D0F60
+//     posts `li r5, 0x1AA` == 426 (-> RecEvent case 46) and
+//     AddGuiEvent<GuiPursuitScoreUpdate> @0x823D1018 posts `li r5, 0x1B0` == 432 (-> case 52).
+//     Landing the road-rage arm from the old number would have produced a post no consumer
+//     could hear -- 429-380 == 49 is inside jpt_825101AC's DEFAULT case list. Take every id
+//     from its instantiation's own `li r5`, never from the DWARF.
 //   * GuiEventOnlinePostEvent (@0x823EEEAC..0x823EF19C), GuiEventUpdateEventStarts and
 //     GuiEventSpecificPresetRaces (the two memcpy arms) -- online / preset-race feeds.
 //   * TranslateGameActionsToGuiEvents / TranslateTakedownsToGuiEvents /
@@ -323,12 +331,57 @@ namespace
 
             // -------------------------------------------------------------------------
             // 3. the per-mode score record -- jpt_823EED94 over (mode - 2).
-            //    ONLY the attack arm (cases 5,7,10,12,15 == modes 7,9,12,14,17) is in this
-            //    slice; see the SCOPE note in the file banner for the crash / road-rage /
-            //    pursuit siblings that are not.
+            //    The attack arm (cases 5,7,10,12,15 == modes 7,9,12,14,17) and, since
+            //    2026-08-29, the SHOWTIME arm (cases 0,14 == modes 2,16). See the SCOPE
+            //    note in the file banner for the road-rage / pursuit siblings that are not.
             // -------------------------------------------------------------------------
             switch (leGameMode)
             {
+            // ---------------------------------------------------------------------
+            // ⭐⭐⭐ [showtime score wave 2026-08-29] THE SHOWTIME SCORE PRODUCER.
+            // @0x823EEE18..0x823EEE44 -- "jumptable 823EED94 cases 0,14", i.e. the arm
+            // for E_MODE_OFFLINE_SHOWTIME (2) and E_MODE_ONLINE_SHOWTIME (16) once the
+            // table's `addi r11, r11, -2` bias is undone.
+            //
+            // Four loads, four stores, in the console's own (non-field) order:
+            //   0x823EEE18  lwz  r11, 0xA54(r27)  -> stw  var_25B0    (payload +0x00)
+            //   0x823EEE24  lfs  f0,  0xA60(r27)  -> stfs var_25A4    (payload +0x0C)
+            //   0x823EEE34  lwz  r11, 0xA5C(r27)  -> stw  var_25B0+4  (payload +0x04)
+            //   0x823EEE3C  lwz  r11, 0xA58(r27)  -> stw  var_25A8    (payload +0x08)
+            // r27 is the ScoringOutputInterface, so every source is a named member of it.
+            //
+            // ⛔ THIS ARM IS WHY SHOWTIME HAD NO SCORE. Everything on both sides of it was
+            // already complete and mounted: CrashModeScoring counts the crashes and the
+            // distance, ScoringSystem::WriteDataToOutput @0x8232AE98 publishes them into
+            // +0xA54..+0xA60 every frame, GuiCache carries the three destination words and
+            // EventInfoComponent::Update already dispatches modes 2/16 to UpdateCrash. The
+            // ONLY missing links were this post, RecEvent's case-434 arm, and UpdateCrash's
+            // body -- all three land together, because none of them does anything alone.
+            // [[the missing producer, not the missing consumer]]
+            //
+            // ⚠️ miScoreMultiplier (+0x08 <- +0xA58) is posted and then NEVER READ: RecEvent's
+            // case-54 arm has no store for it and GuiCache has no member for it. Transcribed
+            // because the console stores it; do not "optimise" it away and do not invent a
+            // cache slot for it.
+            // ---------------------------------------------------------------------
+            case BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME:   // 2
+            case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME:    // 16
+            {
+                BrnGui::GuiCrashScoreUpdate lCrashScore;
+
+                lCrashScore.miCarsCrashed =                                                   // +0x00
+                    lpScoringOutputInterface->miShowtimeCarsCrashed;
+                lCrashScore.mfDistanceTravelled =                                             // +0x0C
+                    lpScoringOutputInterface->mfShowtimeDistanceTravelled;
+                lCrashScore.miComboMultiplier =                                               // +0x04
+                    lpScoringOutputInterface->miShowtimeComboMultiplier;
+                lCrashScore.miScoreMultiplier =                                               // +0x08
+                    lpScoringOutputInterface->miShowtimeScoreMultiplier;
+
+                PushGuiEvent(lCrashScore, lpGuiInput);                            // id 434, 16 bytes
+                break;
+            }
+
             case BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK:       // 7
             case BrnGameState::GameStateModuleIO::E_MODE_TRAFFIC_ATTACK:     // 9
             case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FUGITIVE:    // 12
@@ -368,9 +421,9 @@ namespace
                 break;
             }
             default:
-                // [FLAG] modes 2/16 (GuiCrashScoreUpdate 434), 3 (GuiRoadRageScoreUpdate 429)
-                // and 4 (GuiPursuitScoreUpdate 432) fall through with nothing posted -- see
-                // the SCOPE note in the file banner.
+                // [FLAG] modes 3 (GuiRoadRageScoreUpdate 426) and 4 (GuiPursuitScoreUpdate
+                // 432) still fall through with nothing posted -- see the SCOPE note in the
+                // file banner. Modes 2/16 no longer do (the showtime arm above).
                 break;
             }
         }

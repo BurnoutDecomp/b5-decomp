@@ -105,7 +105,17 @@ namespace BrnGui
                   __builtin_offsetof(GuiCompletedStuntEvent, miCompletedBarrelRolls) == 0x18,
                   "X360 handler reads @0x82411CC8");
     struct GuiCrashComboEvent { u8 maData[8]; s32 GetEventType() const { return 347; } };  // id 347 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiCrashScoreUpdate : public CgsGui::GuiEvent<434> { u8 maPayload[4]; };  // id 434 size 16 (12B GuiEvent header + opaque payload)
+    // [showtime score wave 2026-08-29] GuiCrashScoreUpdate (id 434) has been RECOVERED and now
+    // lives in BrnGuiEventTypeDefs.h as the real 16-byte RAW record (miCarsCrashed /
+    // miComboMultiplier / miScoreMultiplier / mfDistanceTravelled). The opaque
+    // `GuiEvent<434> { u8 maPayload[4]; }` shell that stood here mis-modelled the wire as a
+    // 12-byte GuiEvent header plus 4 payload bytes; it was DELETED rather than left to shadow
+    // the real home, exactly as GuiAttackScoreUpdate above. Moved rather than kept here for
+    // the same reason that one was: GuiCache::RecEvent, its only consumer, cannot include THIS
+    // header (the BrnGuiOptionsDataProfile.h C2011 recorded on GuiAttackScoreUpdate). Both
+    // sizeof (16) and GetEventType (434) are unchanged, and the one TU that instantiates
+    // AddGuiEvent<T> (CgsGuiModule_AddGuiEvent_Inst.cpp:77) includes BOTH headers, so that
+    // instantiation is unaffected.
     // GuiDeveloperChallengesCompleted (id 596) has been RECOVERED and now lives in
     // BrnGuiEventTypeDefs.h as a real FastBitArray<15> payload. The opaque u8[8]
     // placeholder that stood here was deleted rather than left to shadow it -- this

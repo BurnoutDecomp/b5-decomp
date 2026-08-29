@@ -523,6 +523,16 @@ namespace BrnGui
         s32 GetTargetScoreInEvent() const;          // X360 @0x8240F650 (miScoreTarget)
         s32 GetCurrentComboInEvent() const;         // X360 @0x8240F6B0 (miScoreCombo)
         s32 GetMultiplierInEvent() const;           // X360 @0x8240F710 (miComboMultiplier)
+        // ---- the SHOWTIME readout triple (showtime score wave 2026-08-29) ----------------
+        // DWARF accessor rows BrnGuiCache.h:1197 / :1194 / :1200. The X360 free build INLINED
+        // all three -- EventInfoComponent::UpdateCrash @0x82412E98 reads the two it needs as
+        // raw `lwzx`/`lfsx` off the cache base, and there is no out-of-line symbol for any of
+        // them -- so they are defined inline here rather than given a bogus X360 address.
+        // ⚠️ Unlike the accessors above, these carry NO assert: the console's inlined reads have
+        // none, and -1 (the Construct seed) is a legal value for all three.
+        s32 GetShowTimeCarsCrashed() const       { return miShowTimeCarsCrashed; }       // DWARF :1197
+        s32 GetShowTimeComboMultiplier() const   { return miShowTimeComboMultiplier; }   // DWARF :1194
+        f32 GetShowTimeDistanceTravelled() const { return mfShowTimeDistanceTravelled; } // DWARF :1200
         CgsID GetPursuitCarID() const;              // X360 @0x8240F7F0 (mPursuedCarID,  PURSUIT)
         CgsID GetShutdownCarID() const;             // X360 @0x824B3060 (mShutdownCarID)
         s32 GetTrophyCarUnlockType() const;         // X360 @0x824B30C0 (meTrophyCarUnlockType, != NONE)
@@ -1607,7 +1617,31 @@ namespace BrnGui
         u8  mPad_9FF8[8];                                // +0x9FF8..+0x9FFF
         s32 meTrophyCarUnlockType;                       // +0xA000 (40960) TrophyUnlockData::UnlockType
         // ---- mRaceCarInfo SoA (ARCI-indexed, 8 lanes) carved from the former mPad_A004[0x9C4] ----
-        u8  mPad_A004[16];                               // +0xA004..+0xA013
+        // ⭐⭐⭐ ADDITIVE CARVE (showtime score wave, 2026-08-29) from the HEAD of the former
+        // mPad_A004[16] -- THE SHOWTIME SCORE TRIPLE, the only three words the showtime HUD
+        // readout has. NAMES from the DecFIGS DWARF (BrnGuiCache.h:554/:557/:560, whose member
+        // ORDER matches these offsets exactly, with the DWARF accessor rows h:1197/:1194/:1200
+        // added below). OFFSETS X360-attested three times over:
+        //   WRITTEN  GuiCache::RecEvent case 54 (GUI id 434) @0x82510AF0..0x82510B1C --
+        //            `ori r10, 0xA008 ; stwx` / `ori r9, 0xA004 ; stwx` / `ori r8, 0xA00C ; stfsx`
+        //   SEEDED   GuiCache::Construct @0x82505D30..0x82505D64 -- `stwx r29` (-1) into both
+        //            0xA004 and 0xA008, `stfsx f0` (flt_820037C8 == -1.0f) into 0xA00C
+        //   READ     EventInfoComponent::UpdateCrash @0x82412E98 -- `lfsx f1, r30, 0xA00C`
+        //            (a FLOAT compare, `fcmpu`) and `lwzx r4, r30, 0xA004`
+        // ⚠️ +0xA00C IS A FLOAT and the console compares it with fcmpu. The IDA pseudocode for
+        // UpdateCrash prints it as an int word compare -- reading it that way would compare bit
+        // patterns and, worse, feed a bit pattern to the distance formatter.
+        // ⚠️ THE SEEDS ARE -1 / -1 / -1.0f, NOT ZERO, and they are load-bearing: UpdateCrash and
+        // ShowtimeInstantResultsState both only act on a CHANGE, so a 0 seed would silently
+        // swallow the first legitimate "0 cars crashed" frame.
+        // ⚠️ +0xA010 stays padding on purpose. GuiCrashScoreUpdate's fourth word
+        // (miScoreMultiplier, payload +0x08) is POSTED by the producer and has no store in
+        // RecEvent's arm and no member here -- there is nothing to carve for it.
+        // No member is shifted (4 + 4 + 4 + 4 == 16).
+        s32 miShowTimeCarsCrashed;                       // +0xA004 (40964) DWARF :554  GetShowTimeCarsCrashed
+        s32 miShowTimeComboMultiplier;                   // +0xA008 (40968) DWARF :557  GetShowTimeComboMultiplier
+        f32 mfShowTimeDistanceTravelled;                 // +0xA00C (40972) DWARF :560  GetShowTimeDistanceTravelled
+        u8  mPad_A010[4];                                // +0xA010..+0xA013
         // ADDITIVE CARVE (A9 mode-type arm, 2026-08-27) from the tail of the former
         // mPad_A004[17]. A single byte, and every recovered access is a byte access:
         //   WRITTEN 0 by GuiCache::Construct @0x82505D6C (`stbx r30, r31, r9`, r9 == 0xA014)
