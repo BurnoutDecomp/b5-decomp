@@ -915,6 +915,15 @@ public:
     RaceCarEntityModuleIO::EActiveRaceCarEngineState GetEngineState() const { return meEngineState; }   // +0x768
     EOnlineState GetOnlineState() const              { return meOnlineState; }                 // +0x744
     bool IsInShowtime() const                        { return mbIsInShowtime; }                // +0x788
+    // ⭐ ADDITIVE 2026-08-29, same rule as the rest of this block: RaceCarEntityModule::
+    // HandleGameActions @0x8230BE08 STORES this member directly off the slot with
+    // `stb r11, 0x788(r3)` @0x8230D724 (r3 == GetActiveRaceCar(action->meActiveRaceCarIndex),
+    // r11 == the action's +0x0C byte), with no console accessor symbol to name it after -- the
+    // compiler inlined the setter exactly as it inlined the IsInShowtime loads above. Exposed so
+    // that arm writes it BY NAME. ⛔ THIS IS THE ONLY PATH THAT EVER SETS IT TRUE: a scan of the
+    // assembly of every exported ARTIST function finds two other stores to +0x788, both in this
+    // class (Prepare @0x822EAC28 and ResetAfterCrash @0x822BF3A0), and both write ZERO.
+    void SetInShowtime(bool lbInShowtime)            { mbIsInShowtime = lbInShowtime; }        // +0x788
     bool IsNotSendingNetworkUpdates() const          { return mbNotSendingNetworkUpdates; }    // +0x798
     bool IsDisconnectedFromNetwork() const           { return mbIsDisconnectedFromNetwork; }   // +0x799
     const Vector3& GetCurrentInAirRotations() const  { return mCurrentInAirRotations; }        // +0x750

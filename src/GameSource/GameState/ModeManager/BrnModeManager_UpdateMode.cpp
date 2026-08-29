@@ -58,6 +58,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<>::AddEvent
 #include "SharedClasses/Trigger/BrnRegion.h"                      // BrnTrigger::BoxRegion::GetPosition
 #include "SharedClasses/Progression/BrnTrainingTypes.h"           // BrnProgression::ETrainingType (action-149 payload)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"        // [diagnostic] the [showtime-switch] arming witness
 
 namespace BrnGameState
 {
@@ -232,21 +233,63 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
         --miFramesUntilModeSwitchSend;
         if (miFramesUntilModeSwitchSend == 0)
         {
-            // [X][X] FRONTIER (showtime-only, off the stunt-race path): the 16-byte action-143
-            // payload's FIRST word is the LOCAL PLAYER'S NETWORK ID, read from
-            // mpGameStateModule + 0x38B68. That member is not declared on the host GameStateModule
-            // (its neighbour meControllerState @ +0x38B64 is), and its identity is pinned by
-            // OnlineFlybyManager::GetLocalPlayerNetworkID @0x82358720, whose entire body is
-            // `return *(mpGameStateModule + 232296);`.
-            // Console:
-            //   struct { BrnNetwork::NetworkPlayerID mLocalPlayerID;   // +0x00 gsm+0x38B68
-            //            EActiveRaceCarIndex         mePlayerCar;      // +0x04 mePlayerActiveRaceCarIndex
-            //            f32                         mfScore;          // +0x08 = 0.0f
-            //            u8                          mbSwitching;      // +0x0C = 1
-            //          } -- AddEvent(lpGameActionQueue, &payload, 143, 16)
-            // The POST is parked (a wrong network id on the wire is worse than no post); the frame
-            // counter above still behaves exactly as the console's. Re-arm the moment
-            // GameStateModule grows GetLocalPlayerNetworkID() -- header_request #9.
+            // ⭐⭐⭐ UN-PARKED 2026-08-29 (showtime session-length wave). THE PARK'S OWN BLOCKER HAD
+            // ALREADY BEEN DISCHARGED AND NOBODY RE-READ THE NOTE. It said "the POST is parked (a
+            // wrong network id on the wire is worse than no post) ... re-arm the moment
+            // GameStateModule grows GetLocalPlayerNetworkID() -- header_request #9". That header
+            // request LANDED THE SAME DAY: BrnGameStateModule.h:974 declares
+            // `GetLocalPlayerNetworkID()` over the member at :1337, pinned to X360 gsm+0x38B68 by
+            // OnlineFlybyManager::GetLocalPlayerNetworkID @0x82358720. The gate outlived its
+            // blocker by three days. [[gates-are-stale-not-dead]] -- ask WHEN this last ran.
+            //
+            // ⛔⛔ AND THE PARK COST THE WHOLE OFFLINE SHOWTIME SESSION, because it reasoned about
+            // the ONE field its offline consumer never reads. MEASURED 2026-08-29, end to end on a
+            // -Drive -Showtime run:
+            //     [crash-exit]  OPENED crash record for active race car 0 seconds=4.000000
+            //     [crash-exit]  CRASH COMPLETE posted for active race car 0 remove=0
+            //     [crash-latch] mbPlayerIsCrashing 1 -> 0 at tMode=4.049997  playerIdx=0
+            //                   playerActive=1 rawState.mbCrashing=0
+            //     [crash-end]   ENDED via !mbPlayerIsCrashing
+            // i.e. the ORDINARY FREE-BURN CRASH-RECOVERY TIMER ended the showtime session. The
+            // console's protection against exactly that is CrashModule::TickCrashes @0x827C6690:
+            // `if (IsCarInShowtime(owner)) { retract the ending message; continue; }` -- a showtime
+            // wreck is never ticked at all. That guard is reconstructed and mounted, and it was
+            // INERT, because IsCarInShowtime reads E_RACE_CAR_OUTPUT_FLAG_IN_SHOWTIME, which
+            // RaceCarEntityModule::UpdateOutputInterfaces raises from ActiveRaceCar::mbIsInShowtime
+            // (+0x788) -- and a scan of the ASSEMBLY of every exported ARTIST function finds
+            // exactly two stores to +0x788, ActiveRaceCar::Prepare and ::ResetAfterCrash, BOTH
+            // WRITING ZERO. The only writer of a ONE is the action this post carries.
+            // [[silent-drop-stubs]] -- check a value has a writer before you trust it.
+            //
+            // Console 0x82350F50..0x82350F8C, store for store; see ShowtimeModeSwitchAction's
+            // banner in BrnGameActions.h for the field-name provenance (the DWARF-named GUI twin).
+            // The score word is the console's LITERAL ZERO on this producer -- it is
+            // SendModeStopMessages @0x8234BFDC, the LEAVING post, that carries the real
+            // end-of-mode score, and that one is still parked on three CrashModeScoring accessors.
+            GameStateModuleIO::ShowtimeModeSwitchAction lSwitch;
+            lSwitch.mNetworkPlayerID     = mpGameStateModule->GetLocalPlayerNetworkID();  // gsm+0x38B68
+            lSwitch.meActiveRaceCarIndex = mePlayerActiveRaceCarIndex;                    // this+0x8038
+            lSwitch.miFinalShowtimeScore = 0;                                             // `stw r22(0)`
+            lSwitch.mbEnteringShowtime   = true;                                          // `stb r21(1)`
+            lSwitch.maPad[0] = 0;
+            lSwitch.maPad[1] = 0;
+            lSwitch.maPad[2] = 0;
+
+            lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSwitch),
+                                        GameStateModuleIO::E_ACTION_SHOWTIME_MODE_SWITCH,
+                                        static_cast<s32>(sizeof(GameStateModuleIO::ShowtimeModeSwitchAction)));
+
+            // [DIAG] NOT IN THE X360 BINARY. One-shot, unconditional (no env gate) because this
+            // post is the arming edge of the whole showtime session and its absence is exactly the
+            // defect above -- a run that does not print this line has the 5-second session.
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[showtime-switch] action 143 posted: car "
+                    << static_cast<s32>(lSwitch.meActiveRaceCarIndex)
+                    << " entering=1 (arms ActiveRaceCar::mbIsInShowtime -> IsCarInShowtime ->"
+                       " CrashModule::TickCrashes skips this wreck)\n";
+            }
         }
     }
 

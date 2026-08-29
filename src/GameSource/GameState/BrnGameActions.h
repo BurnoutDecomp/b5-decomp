@@ -607,6 +607,40 @@ enum EGameActionType
 template <EGameActionType T>
 struct GameAction { };
 
+// =============================================================================================
+// ⭐⭐⭐ ShowtimeModeSwitchAction -- action 143, 16 bytes. THE ONLY WRITER, ANYWHERE IN THE IMAGE,
+// OF BrnWorld::ActiveRaceCar::mbIsInShowtime (+0x788).
+//
+// FIELD NAMES ARE NOT INVENTED: this record is bridged 1:1 to the GUI event the DWARF fully
+// names -- BrnGui::GuiShowtimeModeSwitch (BrnGuiEventTypeDefs.h, X360 id 397, also 16 bytes,
+// DWARF :6393..:6396) -- and the four offsets below are exactly that struct's. The producer and
+// both consumers agree on every one:
+//   PRODUCER  ModeManager::UpdateCurrentMode @0x82350EC8, when miFramesUntilModeSwitchSend
+//             counts down to exactly 0 (asm 0x82350F50..0x82350F8C):
+//               stw *(gsm + 0x38B68), +0x00   mLocalPlayerNetworkID
+//               stw *(this + 0x8038), +0x04   ModeManager::mePlayerActiveRaceCarIndex
+//               stw r22(0),           +0x08   the score, LITERAL ZERO on this producer
+//               stb r21(1),           +0x0C   ENTERING showtime
+//               AddEvent(queue, &record, 0x8F == 143, 0x10 == 16)
+//   PRODUCER  ModeManager::SendModeStopMessages @0x8234BFDC posts the SAME id/size with the
+//             real end-of-mode score and +0x0C == 0 (LEAVING showtime). Still parked there.
+//   CONSUMER  RaceCarEntityModule::HandleGameActions @0x8230BE08, second jump table case 36
+//             (asm 0x8230D714): GetActiveRaceCar(*(u32*)(ev+4))->mbIsInShowtime = *(u8*)(ev+0xC).
+//             ⚠️ Its assert string is "lpModeSwitchAction" (the pointer preloaded into var_2C0 at
+//             0x8230BE90) -- which is what identifies this arm, because IDA prints the SECOND
+//             table's index and NOT the action id, and index 36 there is id 143.
+//   CONSUMER  HudMessageAnalyzer::HandleShowtimeModeSwitch @0x8251F240, via the GUI twin.
+// =============================================================================================
+struct ShowtimeModeSwitchAction : public GameAction<E_ACTION_SHOWTIME_MODE_SWITCH>
+{
+    BrnNetwork::NetworkPlayerID mNetworkPlayerID;       // +0x00
+    ::EActiveRaceCarIndex       meActiveRaceCarIndex;   // +0x04
+    s32                         miFinalShowtimeScore;   // +0x08
+    bool                        mbEnteringShowtime;     // +0x0C
+    u8                          maPad[3];               // +0x0D..0x0F -- the console never writes
+                                                        //   these three; posted size is 16.
+};
+
 // DecFIGS BrnGameActions.h:3977.  ARTIST case 70 reads the payload with one
 // `lbz 0(r27)` before forwarding it to BoostManager.
 struct AllowBoostEarningAction : public GameAction<E_ACTION_ALLOW_BOOST_EARNING>
