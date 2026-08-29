@@ -2511,7 +2511,25 @@ struct GuiEventOfflinePostEvent
                                                  //   for the target -- so this word is the PLAYER's
                                                  //   mode score. String-id attested, not inferred.
         f32   mfTime;                            // +0x20  "POSTRACE_FINISH_YOUR_TIME"
-        u8    maReserved24[12];                  // +0x24  UNNAMED
+        // ---- the SHOWTIME trio (named 2026-08-29, was `u8 maReserved24[12]`) -------------
+        // These are the three slots BrnGui::ShowtimeInstantResultsState reads, and they are
+        // named from TWO independent sources that agree:
+        //   (a) the DecFIGS DWARF declares exactly `int32_t miBaseScore; int32_t
+        //       miScoreMultiplier; float32_t mfDistanceTravelled;` as a consecutive run
+        //       (BrnGuiEventTypeDefs.h:2393/:2394/:2395), and this 12-byte hole is the only
+        //       3-slot run left unaccounted for in the X360 record;
+        //   (b) the X360 pins the MIDDLE one by name in its own stringized assert --
+        //       UpdateScoreTotalling @0x824C62C4 fires `"mResults.miScoreMultiplier > 0"`
+        //       on the word it loads from +0x28. With the middle slot nailed, the DWARF's
+        //       declaration order fixes the two either side.
+        // Corroborating uses: SetupTotalling @0x824BB548 multiplies mfDistanceTravelled by
+        // 1.0936133 (the metres->yards constant flt_820DB5A8) and UpdateScoreTotalling hands
+        // it to SetLocalisedText under "KAC_SHOWTIME_DISTANCE_IN_METRES" -- i.e. it really is
+        // a distance in metres; and miScoreMultiplier - 1 is the multiplier SetupTotalling
+        // scales the score by. Layout-neutral: three 4-byte slots in the same 12 bytes.
+        s32   miBaseScore;                       // +0x24  DWARF :2393
+        s32   miScoreMultiplier;                 // +0x28  DWARF :2394, ASSERT-ATTESTED
+        f32   mfDistanceTravelled;               // +0x2C  DWARF :2395 (metres)
         Array<CgsID, 8> maCarsToUnlockFromSpecialEvent;  // +0x30  GetLength; miCount @0x22E8
         u8    maReserved78[32];                  // +0x78  UNNAMED
         s32   miCtorSentinel98;                  // +0x98  a SECOND -1 CgsArray sentinel. ITS

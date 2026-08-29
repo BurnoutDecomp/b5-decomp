@@ -533,6 +533,23 @@ void ModeManager::ExitCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuffe
         mpProgressionManager->RequestUpdateRivals();
     }
 
+    // [DIAG] NOT IN THE X360 BINARY -- the TEARDOWN WITNESS (added 2026-08-29, drive-away round).
+    // This is the ONE line that separates "the results screen went away" from "the event is over":
+    // everything above it can run and still leave the player in a mode. It is not a sampler and
+    // not a heartbeat -- a mode exits at most a handful of times in a run, so it prints a handful
+    // of times. It is read BEFORE the three clears below so it can report what was torn down.
+    if (CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[evt-finish] ExitCurrentMode: TEARING DOWN mode type "
+            << static_cast<s32>(meCurrentGameModeType)
+            << " (state " << ((mpCurrentGameMode != NULL) ? mpCurrentGameMode->GetCurrentState() : -1)
+            << ") timedOut " << (lbTimedOut ? 1 : 0)
+            << " next " << static_cast<s32>(leNextGameModeType)
+            << " -- mpCurrentGameMode is about to become NULL and the frame-rate manager goes "
+               "back to type 1. The player is out of the event after this line.\n";
+    }
+
     mpCurrentGameMode              = NULL;
     meCurrentGameModeType          = GameStateModuleIO::E_MODE_NONE;   // `li r11,-1; stw 0xD94`
     mbFinishCurrentModeNextUpdate  = false;                            // `stbx r26(0), r29, 0x94F7`

@@ -117,6 +117,21 @@ namespace BrnGui
                               s32 liValue,
                               CgsLanguage::LanguageManager::ParameterFormatType leValueFormat);
 
+        // @0x824E7DD0 (BrnTextField.cpp:386/:387) -- the ONE-FLOAT-PARAMETER variant
+        // (ledger-unnamed sub_824E7DD0), the exact sibling of the integer form above with
+        // LanguageManager::FormatTextFromFloat in place of FormatTextFromInt. Same two
+        // asserts, same 1024-byte scratch, same SetDatabaseText + OutputAptData tail, same
+        // constant 1 return.
+        // ⚠️ THE VALUE ARGUMENT IS AN f32 AND THAT IS ASM-PINNED. At the one call site in
+        // the tree (ShowtimeInstantResultsState::UpdateScoreTotalling @0x824C6138) the X360
+        // sets r3/r4/r5/r7 and `lfs f1` -- and NEVER r6. That missing r6 is the documented
+        // f32-eats-a-GPR-slot shape, so the value rides in f1 and leValueFormat is the r7
+        // argument. Hex-Rays renders it as the phantom `(…, double a4, int a5, int a6, int a7)`.
+        bool SetLocalisedText(const char* lpacText,
+                              CgsLanguage::LanguageManager::ParameterFormatType leFormat,
+                              f32 lfValue,
+                              CgsLanguage::LanguageManager::ParameterFormatType leValueFormat);
+
         // @0x824E7800 (BrnTextField.cpp:264/:265/:266) -- the POSITIONAL-PARAMETER variant
         // (ledger-unnamed sub_824E7800). liNumParams (1..3) `(const char* text, u32 format)`
         // pairs follow in the varargs; the source id and every parameter are resolved through

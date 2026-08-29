@@ -214,6 +214,37 @@ bool TextField::SetLocalisedText(const char* lpacText,
     return true;
 }
 
+// @ 0x824E7DD0 -- cpp:386/:387. The ONE-FLOAT-PARAMETER variant (ledger-unnamed
+// sub_824E7DD0): the exact sibling of the integer form above, differing in one call --
+// LanguageManager::FormatTextFromFloat instead of FormatTextFromInt. Same two asserts
+// (streamed, folded), same 1024-capped scratch, same SetDatabaseText + OutputAptData
+// tail, same constant 1 return.
+// ⚠️ The value rides in f1 and therefore eats the r6 GPR slot; leValueFormat is the r7
+// argument. See the header note -- this is asm-pinned at the UpdateScoreTotalling call
+// site, not inferred from Hex-Rays (whose listing invents `int a5, int a6`).
+bool TextField::SetLocalisedText(const char* lpacText,
+                                 CgsLanguage::LanguageManager::ParameterFormatType leFormat,
+                                 f32 lfValue,
+                                 CgsLanguage::LanguageManager::ParameterFormatType leValueFormat)
+{
+    CGS_ASSERT(lpacText != 0,
+               "Text field is invalid in TextField::SetLocalisedText");                 // :386 (streamed; folded)
+    CGS_ASSERT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
+               "Text string too long in TextField::SetLocalisedText");                  // :387 (streamed; folded)
+
+    CgsLanguage::LanguageManager* lpLanguageManager =
+        TextFieldGetLanguageManager(mpStateInterface);
+
+    char lacFormatted[1136];   // X360 sp+0x70 local (the formatter writes through a 1024 cap)
+
+    lpLanguageManager->FormatTextFromFloat(lacFormatted, 1024, lpacText, leFormat,
+                                           lfValue, leValueFormat);
+
+    SetDatabaseText(lacFormatted);
+    OutputAptData();
+    return true;
+}
+
 // @ 0x824E7800 -- cpp:264/:265/:266. The POSITIONAL-PARAMETER variant (ledger-unnamed
 // sub_824E7800). The X360 spills its variadic register block and hands the cursor straight
 // to LanguageManager::FormatTextV, which walks liNumParams (const char*, format) pairs;

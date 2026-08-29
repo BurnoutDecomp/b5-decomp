@@ -1658,19 +1658,33 @@ void GameStateModule::ProcessGameEventsModeIntroBringUp(
             //   -> UpdateCurrentMode's exit gate -> ExitCurrentMode clears mpCurrentGameMode.
             // The console has NO guard on this arm and neither does the callee (its only test is
             // its own `beqlr` on a null mode), so the call is unconditional here too.
-            if (CgsDev::Log::gpDebugPrint != 0)
             {
-                // [DIAG] NOT IN THE X360 BINARY. Names the mode state going IN, because a
-                // no-op ResultsAccept and a missing event 26 are otherwise the same picture --
-                // SendEvent only acts from E_GMS_RESULTS (5).
-                const GameMode* lpMode = mModeManager.GetCurrentGameMode();
-                *CgsDev::Log::gpDebugPrint
-                    << "[evt-finish] event 26 -> ResultsAccept (mode "
-                    << (lpMode != 0 ? lpMode->GetCurrentState() : -1)
-                    << "; E_GMS_RESULTS==5 is the only state SendEvent(E_GME_USER_ACCEPT) acts "
-                       "from -- anything else and the mode is NOT torn down)\n";
+                // [DIAG] NOT IN THE X360 BINARY, and deliberately shaped to DISCRIMINATE rather
+                // than to announce. It reads the mode state BEFORE and AFTER the call, because
+                // three different failures otherwise produce the same picture: event 26 never
+                // arrived; it arrived with no mode running; it arrived while the mode sat in a
+                // state SendEvent(E_GME_USER_ACCEPT) ignores. Only E_GMS_RESULTS moves, and it
+                // moves to E_GMS_QUIT -- so "before 4 after 5" is the pass and every other pair
+                // names its own failure. SendEvent is synchronous, so the AFTER read is valid
+                // immediately; the mode pointer itself is not cleared until UpdateCurrentMode's
+                // exit gate runs ExitCurrentMode on the next tick (which prints its own line).
+                const GameMode* lpModeBefore = mModeManager.GetCurrentGameMode();
+                const s32       liStateBefore =
+                    (lpModeBefore != 0) ? lpModeBefore->GetCurrentState() : -1;
+
+                mModeManager.ResultsAccept();
+
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    const GameMode* lpModeAfter = mModeManager.GetCurrentGameMode();
+                    *CgsDev::Log::gpDebugPrint
+                        << "[evt-finish] event 26 -> ResultsAccept: mode state " << liStateBefore
+                        << " -> " << ((lpModeAfter != 0) ? lpModeAfter->GetCurrentState() : -1)
+                        << " (0=countdown 1=intro 2=inprogress 3=outro 4=results 5=quit; -1=no "
+                           "mode running). ONLY 4 -> 5 is a real teardown -- ExitCurrentMode "
+                           "clears the mode on the next update.\n";
+                }
             }
-            mModeManager.ResultsAccept();
 
             // [X] STILL PARKED, and now MEASURED rather than assumed: the console's companion
             // store `lis r11,2 / ori r11,r11,0xC4A5 / stbx r17(=1), r31, r11` writes ONE byte at
