@@ -136,6 +136,7 @@
 // Prop-spawn wave (2026-08-12) link-closure gates -- see the block at the FOOT of this file.
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropCellManager.h"        // PropCellManager contact-gen gates
 #include "GameSource/Replays/Serialisers/BrnReplayPropSerialiserFrame.h"                // PropSerialiserFrame delta-serialisation gates
+#include "GameSource/World/EntityModules/RaceCarEntityModule/CrashPlay/BrnCrashPlayDebugComponent.h" // CrashPlayManager::OnCarCrash trap
 
 // ---------------------------------------------------------------------------
 // rw::collision::Volume -- same documented platform/SDK forward-declaration
@@ -2978,4 +2979,24 @@ void BrnReplays::PropSerialiserFrame::KeyFrameWrite(BrnReplays::BaseSerialiser*,
             *CgsDev::Log::gpDebugPrint << "PropSerialiserFrame::KeyFrameWrite: inert -- frame interior still "
                                           "padding-modelled; replay only [FLAG PC boot gate]\n";
     }
+}
+
+// =================================================================================================
+// BrnWorld::CrashPlayManager::OnCarCrash  @ (its own TU, GameShared/GameClasses/Containers/
+// CgsRingBuffer.h in the ledger's grouping) -- TRAP STUB, added 2026-08-29 with
+// BrnCrashPlayManager.cpp.
+//
+// HandlePlayerToVehicleImpact calls it; its own TU is not reconstructed and `hasbody.py` confirms
+// there is no definition anywhere in the tree (the ledger's "reviewed" on that row is the default,
+// not a verdict). WOULD: push the hit vehicle into mRecentCrashSet, award the per-car boost, and
+// set mbTrafficStomp -- which is why the traffic-stomp air ram is currently unreachable.
+//
+// WARN THIS IS A LOUD TRAP AND ITS ONLY CALLER IS DELIBERATELY LEFT PARKED. The call site --
+// RaceCarEntityModule::UpdateCrashingPlayerContacts -> HandlePlayerToVehicleImpact -- is NOT
+// unparked by that wave for exactly this reason: unparking it would fire this trap the first time
+// a showtime player touches traffic. Land OnCarCrash's own TU before unparking it.
+// =================================================================================================
+void BrnWorld::CrashPlayManager::OnCarCrash(CgsSceneManager::EntityId, bool)
+{
+    CGS_ASSERT(false, "CrashPlayManager::OnCarCrash -- not reconstructed");
 }
