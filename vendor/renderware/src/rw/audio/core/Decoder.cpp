@@ -62,8 +62,16 @@ static_assert(offsetof(DecoderRequest, miStartSample) < offsetof(DecoderRequest,
               "DecoderRequest: the sample range must stay in start-then-end order");
 static_assert(offsetof(DecoderRequest, mpFedData) == 0,
               "DecoderRequest: the fed-chunk pointer is the leading word (Feed: stw r4, 0)");
+static_assert(offsetof(DecoderRequest, mpSeekData) == sizeof(void *),
+              "DecoderRequest: the seek-table base is the SECOND word (Feed: stw r8, 4)");
 static_assert(sizeof(DecoderRequest) >= 20,
               "DecoderRequest must still cover every console field it carries");
+// ⭐ 2026-08-29: the record carries TWO pointers, not one. `mpSeekData` was `u32
+// muReserved04`; on x64 that silently truncated the seek-table base every consumer needs.
+// The pin above exists so a future "tidy-up" that reorders or re-narrows either pointer
+// fails the build instead of corrupting the ring.
+static_assert(sizeof(DecoderRequest) >= 2 * sizeof(void *) + 3 * sizeof(u32),
+              "DecoderRequest: two pointers plus the sample range and flags must all fit");
 
 // -------------------------------------------------------------------------------------
 // ~Decoder @0x82B678D8
@@ -280,7 +288,7 @@ void Decoder::Release()
 // GetSamplesRemaining.
 // -------------------------------------------------------------------------------------
 u8 Decoder::Feed(const void *pData, s32 iNumSamples, u8 ucContinue, s32 iStartSample,
-                 u32 uReserved04, u8 ucFlag11)
+                 const u8 *apSeekData, u8 ucFlag11)
 {
     const u8 lucSlot = mucRequestWriteIndex;                  // lbz 0x2F
     DecoderRequest *lpRequest = reinterpret_cast<DecoderRequest *>(
@@ -295,7 +303,7 @@ u8 Decoder::Feed(const void *pData, s32 iNumSamples, u8 ucContinue, s32 iStartSa
         return 0;
 
     lpRequest->mpFedData = pData;            // stw r4 -> +0x00
-    lpRequest->muReserved04 = uReserved04;   // stw r8 -> +0x04
+    lpRequest->mpSeekData = apSeekData;      // stw r8 -> +0x04 (the seek-table base)
     lpRequest->miStartSample = iStartSample; // stw r7 -> +0x08
     lpRequest->miEndSample = iNumSamples;    // stw r5 -> +0x0C (also arms the busy flag)
     lpRequest->mucFlag11 = ucFlag11;         // stb r9 -> +0x11

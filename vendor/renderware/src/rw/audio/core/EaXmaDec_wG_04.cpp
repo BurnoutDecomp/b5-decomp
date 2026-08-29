@@ -253,12 +253,16 @@ s32 EaXmaDec::StartPair(DecPair *pPair, u32 uPairIndex, const DecoderRequest *pR
     if (iBitOffset >= 0x3FE0)
         iBitOffset = -1;
 
-    if (pRequest->muReserved04)
+    if (pRequest->mpSeekData)
     {
-        // Request+0x04 holds the seek table's base pointer (again in a 32-bit ring word),
-        // whose first words are per-pair byte offsets into the packed frame-count runs.
-        const u8 *const lpSeekBase =
-            reinterpret_cast<const u8 *>(static_cast<usize>(pRequest->muReserved04));
+        // Request+0x04 holds the seek table's base pointer, whose first words are per-pair
+        // byte offsets into the packed frame-count runs.
+        // ⭐ 2026-08-29: this used to read `muReserved04`, a u32, and launder it back with
+        // `static_cast<usize>`. The comment here already knew it was a pointer ("again in a
+        // 32-bit ring word") -- but on x64 the store side truncated it, so this base was
+        // only ever going to be correct by accident. The field is a real `const u8 *` now
+        // and the cast is gone; see the mpSeekData note in Decoder.h for the full chain.
+        const u8 *const lpSeekBase = pRequest->mpSeekData;
         const u8 *lpPacked = lpSeekBase + ReadU32BE(lpSeekBase + 4 * uPairIndex);
 
         // Skip whole 2048-byte packets while the target frame lies beyond the running

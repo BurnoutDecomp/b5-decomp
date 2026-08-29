@@ -144,15 +144,40 @@ public:
         u32  streamerRequestId;        // +0x2C rw::core::filesys::Stream::RequestId
         char *pNextChunk;              // +0x30 *** WIDENS ***
         char *pLoopStartChunk;         // +0x34 *** WIDENS ***
-        s32 mSeekBlockA;               // +0x38 [3.03] SeekTableParser output
-        s32 mSeekBlockB;               // +0x3C [3.03]
-        s32 mSeekStreamOffset;         // +0x40 [3.03]
-        s32 mSeekBlockD;               // +0x44 [3.03]
+        // ---- the SeekTableParser output block, +0x38..+0x44 and +0x4C -------------------
+        // ⭐ NAMED AND RETYPED 2026-08-29 from SndPlayer1::SetSeekData @0x82B9C068, whose
+        // store block maps the 32-byte parser (a stack local at r1+0x50) onto these fields
+        // one word at a time. Verified instruction by instruction:
+        //   lwz r11,0x50(r1) / stw r11,0x38(r31)   parser mpSeekData      -> +0x38  ⚠️ POINTER
+        //   lwz r11,0x5C(r1) / stw r11,0x3C(r31)   parser mPlayerSkip     -> +0x3C
+        //   lwz r11,0x60(r1) / stw r11,0x40(r31)   parser mChunkOffset    -> +0x40
+        //   lwz r11,0x64(r1) / stw r11,0x44(r31)   parser mSeekDataVersion-> +0x44
+        //   lbz r11,0x6C(r1) / stb r11,0x4C(r31)   parser mIsNewFeedChunk -> +0x4C
+        // (The parser's mStreamSkip / mDecoderSkip go to the RequestInternal instead, at
+        // +0x24 / +0x20, which is why they are absent here.)
+        //
+        // ⚠️ mpSeekData IS A POINTER and was previously modelled as `s32 mSeekBlockA`. It is
+        // the value SubmitChunk hands to Decoder::Feed in r8 (`lwz r8,0x38(r29)` @0x82BA464C)
+        // and that Feed stores into DecoderRequest::mpSeekData -- where EaXmaDec already
+        // dereferences it. A 32-bit field cannot hold it on x64.
+        u8 *pSeekData;                 // +0x38 [3.03] parser mpSeekData  *** WIDENS ***
+        s32 mPlayerSkip;               // +0x3C [3.03] parser mPlayerSkip
+        s32 mChunkOffset;              // +0x40 [3.03] parser mChunkOffset
+        s32 mSeekDataVersion;          // +0x44 [3.03] parser mSeekDataVersion
         u8  codec;                     // +0x48 indexes the 8-entry decoder GUID table
         u8  playType;                  // +0x49 0 resident, 1 streamed, 2 hybrid
         u8  feedSlotLatest;            // +0x4A
         u8  expelMode;                 // +0x4B
-        u8  mNoSeekTable;              // +0x4C [3.03]
+        // ⭐ RENAMED 2026-08-29: this is the parser's mIsNewFeedChunk byte, not a
+        // "no seek table" flag. SetSeekData's SUCCESS path copies the parser's byte through
+        // (`lbz r11,0x6C(r1)` / `stb r11,0x4C(r31)`); its RESET path stores a literal 1
+        // (`stb r10,0x4C(r31)` with r10 = 1 @0x82BA... 0x82B9C120). SubmitChunk passes
+        // `continue = !mIsNewFeedChunk` to Decoder::Feed, which is what makes the reset
+        // value of 1 mean "this is a new feed chunk, do NOT continue the previous stream".
+        // ⚠️ SetSeekData's reset is ASYMMETRIC -- it leaves mSeekDataVersion (+0x44) and
+        // numSamplesFed (+0x14) STALE while clearing the rest. That is console behaviour,
+        // confirmed at 0x82B9C108..0x82B9C128, and must not be "tidied".
+        u8  mIsNewFeedChunk;           // +0x4C [3.03] parser mIsNewFeedChunk
     };
 
     // ---- SndPlayer1FeedDesc: one chunk in flight. Console stride 0x10, count 20.
