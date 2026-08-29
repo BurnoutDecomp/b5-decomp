@@ -297,6 +297,76 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
         }
 
         // ==========================================================================================
+        // [FLAG PC bring-up] HARNESS-ONLY, NOT IN THE X360 BINARY -- the DEBUG FINISH-POSITION hook
+        // (added 2026-08-29, event-finish round). Gated on BRN_DEBUG_FINISH_POS; OFF by default, and
+        // flow_run.ps1 clears it on every run, so it can never ride into a capture silently.
+        // ==========================================================================================
+        // ⛔⛔ WHAT A MEDAL EARNED THROUGH THIS IS, AND IS NOT.
+        //   It is NOT a win. Nothing here scores a point, fabricates a completion percentage, or
+        //   writes a medal. It calls ONE console function --
+        //   ModeManager::FinishCurrentModeNextUpdateWithFinishPosition (DWARF :250, bodied at
+        //   BrnModeManager_Accessors.cpp:234) -- with the position the console's own debug member
+        //   carries, and every consumer downstream then runs FOR REAL: FinishCurrentMode's LABEL_39
+        //   reads `miDebugFinishPosition == 1` (BrnModeManager_Finish.cpp:643) exactly as the
+        //   shipped build does, ShowModeResults reads the position back through the consume-once
+        //   GetPlayersFinishPosition, and OnEventFinishUpdateProfile writes the profile.
+        //   ⇒ Any medal that appears with this set was AWARDED THROUGH THE DEBUG FINISH POSITION,
+        //   not by scoring the target. Say so wherever such a result is reported.
+        //
+        // WHY IT EARNS ITS PLACE. Stage 7 (offline stunt run) gates the medal on
+        // `miFinishPosition == 1`, which for mode 7 is `currentScore >= targetScore ? 1 : 4`. The
+        // target is 10,000; the best scripted run this campaign has managed banked 400. The scorer
+        // is demonstrably alive (0 -> 400 observed on the `[evt-score]` rung above), so the gap is
+        // the HARNESS's -- a keyboard-driven car cannot chain 10,000 points of stunts -- not the
+        // game's. Without this hook the entire win half of the finish path is unexercisable, which
+        // is why the console shipped the member in the first place (the same precedent as its
+        // "Fake Showtime" debug checkbox).
+        //
+        // ⚠️ THE VALUE IS THE FINISH POSITION, NOT A BOOLEAN. BRN_DEBUG_FINISH_POS=1 is the win
+        // (1 == first place); 4 reproduces the ordinary stunt-run loss. A value <= 0 is ignored,
+        // because every console consumer gates on `miDebugFinishPosition > 0` and a 0 would arm
+        // mbFinishCurrentModeNextUpdate while reading as "no override" -- a finish with a stale
+        // position, which is precisely the bug PlayerFinishedMode's -1 reset exists to prevent.
+        //
+        // BRN_DEBUG_FINISH_AT is the mode-time in seconds at which it fires (default 20). It is a
+        // HARNESS number, not a console one: it exists so the event start renders and the scorer
+        // initialises before the finish, and so a run is not at the mercy of the 120 s limit.
+        // ONE-SHOT per process, and only while the mode is actually in progress -- arming during
+        // the countdown or the outro would finish a mode that never ran.
+        // DELETE-WHEN a real pad can drive an offline event to its target score in the harness.
+        if (mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS)
+        {
+            static const char* const spcDebugFinishPos = getenv("BRN_DEBUG_FINISH_POS");
+            static const s32         siDebugFinishPos  =
+                (spcDebugFinishPos != NULL) ? atoi(spcDebugFinishPos) : 0;
+            static const char* const spcDebugFinishAt  = getenv("BRN_DEBUG_FINISH_AT");
+            static const f32         sfDebugFinishAt   =
+                (spcDebugFinishAt != NULL) ? static_cast<f32>(atof(spcDebugFinishAt)) : 20.0f;
+            static bool              sbDebugFinishFired = false;
+
+            if ((siDebugFinishPos > 0) && !sbDebugFinishFired && (mfTimeInMode >= sfDebugFinishAt))
+            {
+                sbDebugFinishFired = true;
+
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[evt-finish] ***** HARNESS DEBUG FINISH POSITION (BRN_DEBUG_FINISH_POS="
+                        << siDebugFinishPos << ") ***** mode "
+                        << static_cast<s32>(meCurrentGameModeType)
+                        << " timeInMode " << mfTimeInMode
+                        << " -- calling the console's own FinishCurrentModeNextUpdateWithFinishPosition("
+                        << siDebugFinishPos << "). NOTHING IS FORGED: no score, no completion "
+                        << "percentage, no medal is written here. Everything downstream is the "
+                        << "console's own path. A medal that follows was awarded through the DEBUG "
+                        << "FINISH POSITION, not by reaching the target score. One-shot.\n";
+                }
+
+                FinishCurrentModeNextUpdateWithFinishPosition(siDebugFinishPos);
+            }
+        }
+
+        // ==========================================================================================
         // [DIAG] NOT IN THE X360 BINARY -- the `[evt-score]` rung (added 2026-08-29, event-finish
         // round). Gated on BRN_MODEMGR_DIAG, alongside this file's `[queue-hwm]` sibling.
         // ==========================================================================================
