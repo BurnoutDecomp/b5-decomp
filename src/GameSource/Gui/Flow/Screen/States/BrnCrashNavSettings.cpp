@@ -36,6 +36,10 @@
 //   (b) The on-screen keyboard is X360 XDK. BrnGuiKeyboard::Show @0x824F5B00 tail-calls
 //       CgsGui::GuiKeyboard::Show @0x8284CFD8, which calls XShowKeyboardUI; neither
 //       CgsGuiKeyboard.cpp nor BrnGuiKeyboard.cpp is in the exe and there is no PC leaf.
+//       Its string prep is parked with it because CgsUnicode::ConvertUtf8ToUtf16
+//       @0x82835828 is ALSO body-less -- the ledger calls it `reviewed`, and CgsUnicode.cpp
+//       (which IS mounted) defines only UnicodeBuffer::Convert. Found by the link, not by a
+//       gate: exactly the ledger-vs-files divergence AGENTS.md warns about.
 // ⭐ NEITHER PARK CAN RE-CREATE THE SOFT-LOCK, and that is checked, not assumed: the
 // console's 45/50 (GO_BACK + resume) and 54/55 (TOGGLE_*) arms sit OUTSIDE the
 // `meState == E_STATE_MAIN` gate in HandleControllerInput, so Start/Back leaves this
@@ -49,10 +53,8 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // CgsDev::Log::WriteToLog
-#include "GameShared/GameClasses/Fonts/CgsUnicode.h"                       // ConvertUtf8ToUtf16
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                        // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"   // StateInterface, GuiEventNetworkSuspension
-#include "GameShared/GameClasses/Language/CgsLanguageManager.h"            // LanguageManager::FindString
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"           // the state in-queue
 #include "GameSource/Gui/BrnGuiCache.h"                                    // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                            // GuiEventActivateCrashNav / GuiOverlayRequest / GuiFlow
@@ -600,21 +602,26 @@ namespace BrnGui
                     reinterpret_cast<const GuiEventKeyboardResponse*>(lpEvent);
                 CGS_ASSERT(lpResponse->mpKeyboard != 0, "lpKeyboardResponse->lpKeyboard");   // cpp:237
 
-                mpGuiKeyboard = lpResponse->mpKeyboard;
+                mpGuiKeyboard = lpResponse->mpKeyboard;   // `stw r11, 0x1284` -- a real store
 
-                // The dialog's description line comes from the string table; the default
-                // and title lines are cleared to empty (`sth r20, 0x1104` / `0x1184` --
-                // two-byte stores, i.e. one UTF-16 terminator each).
-                CgsUnicode::ConvertUtf8ToUtf16(
-                    mpStateInterface->GetLanguageManager()->FindString("SPONSOR_CAR_INPUT_CODE"),
-                    macDialogHeading);
-                macDefaultHeading[0] = 0;
-                macTitleHeading[0]   = 0;
-
-                // ⛔ PARKED -- see the file banner (b): BrnGuiKeyboard::Show @0x824F5B00
-                // tail-calls CgsGui::GuiKeyboard::Show -> XShowKeyboardUI, and neither the
-                // Cgs keyboard TU nor a PC leaf is in the exe. Everything the console does
-                // BEFORE the call is reproduced above, so restoring this is one line.
+                // ⛔ PARKED, AS ONE ARM -- see the file banner (b). Everything after the
+                // latch above exists only to raise the on-screen keyboard, and the whole
+                // tail is missing its links, not its reconstruction:
+                //   * BrnGuiKeyboard::Show @0x824F5B00 tail-calls CgsGui::GuiKeyboard::Show
+                //     -> XShowKeyboardUI; neither CgsGuiKeyboard.cpp nor a PC leaf is in the
+                //     exe;
+                //   * CgsUnicode::ConvertUtf8ToUtf16 @0x82835828 -- a real UTF-8 decoder over
+                //     the lead-length table at byte_820DE3C8 -- is `reviewed` in the ledger
+                //     but has NO BODY in CgsUnicode.cpp (a ledger/file divergence found by
+                //     this wave's link, not by any gate).
+                // Parking the heading prep WITH the Show it feeds is deliberate: converting
+                // a string into a buffer nothing can ever display would look like progress
+                // and be none. The console's tail, verbatim, for whoever lands those two:
+                //   CgsUnicode::ConvertUtf8ToUtf16(
+                //       mpStateInterface->GetLanguageManager()->FindString("SPONSOR_CAR_INPUT_CODE"),
+                //       macDialogHeading);                    // dest 0x1204
+                //   macDefaultHeading[0] = 0;                 // `sth r20, 0x1104` (UTF-16 NUL)
+                //   macTitleHeading[0]   = 0;                 // `sth r20, 0x1184`
                 //   mpGuiKeyboard->Show(macDefaultHeading, macTitleHeading,
                 //                       macDialogHeading, mKeyboardListener);
                 static bool sbLoggedKeyboard = false;
@@ -622,7 +629,8 @@ namespace BrnGui
                 {
                     sbLoggedKeyboard = true;
                     LogParkedPlatformLeaf("Update[keyboard]",
-                                          "BrnGuiKeyboard::Show / XShowKeyboardUI");
+                                          "BrnGuiKeyboard::Show / XShowKeyboardUI "
+                                          "(+ CgsUnicode::ConvertUtf8ToUtf16, declared but never bodied)");
                 }
                 break;
             }
