@@ -307,10 +307,10 @@ namespace BrnGui
     // NONE of these is on the path that puts the results movie on screen -- that is Update's
     // E_RESULTS_STATE_LOADING_RESOURCES arm (two PlayAptMovie calls), which runs before any
     // sub-state does. These are the sub-state PRESENTATIONS and the component fill.
-    void InstantResultsState::SetupComponents()  { LogUnreconstructedState("InstantResultsState", "SetupComponents"); }
+    // (SetupComponents and UpdateEventResults now have REAL bodies in
+    //  BrnOfflineInstantResults.cpp -- they are the reveal path.)
     void InstantResultsState::HandleAptTriggers(const void*)   { LogUnreconstructedState("InstantResultsState", "HandleAptTriggers"); }
     void InstantResultsState::HandleControllerInput(const void*) { LogUnreconstructedState("InstantResultsState", "HandleControllerInput"); }
-    void InstantResultsState::UpdateEventResults()      { LogUnreconstructedState("InstantResultsState", "UpdateEventResults"); }
     void InstantResultsState::UpdateSecondResultsPage() { LogUnreconstructedState("InstantResultsState", "UpdateSecondResultsPage"); }
     void InstantResultsState::UpdateTakePhotoPage()     { LogUnreconstructedState("InstantResultsState", "UpdateTakePhotoPage"); }
     void InstantResultsState::UpdateRankUp()            { LogUnreconstructedState("InstantResultsState", "UpdateRankUp"); }

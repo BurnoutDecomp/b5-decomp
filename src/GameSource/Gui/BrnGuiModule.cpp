@@ -3216,21 +3216,47 @@ void GuiModule::Destruct()
             // boost", :1080) and "bar doesn't update with the correct values".
             mCustomRendererManager.Update();
 
-            // [PC diagnostic] log the level-1 flow-movie state on CHANGE only (live /
+            // [PC diagnostic] log the flow-movie mount state on CHANGE only (live /
             // composed flips) -- the mount/unmount/remount observability line.
+            //
+            // ⚠️⚠️ THIS USED TO REPORT LEVEL 1 ONLY, AND THAT IS A DIAGNOSTIC THAT LIES BY
+            // OMISSION. Measured 2026-08-29 (results-screen wave): the offline results state
+            // plays its movie at LEVEL 3, the bundle loaded, the runtime logged
+            // "[AptRT] import-load: 'Results'" -- and then the log said nothing at all,
+            // because the only mount instrument in the build was hard-wired to level 1. The
+            // silence read exactly like "the movie never mounted" when it was in fact
+            // "nothing was watching". Every level a state can address (0..8, the bound
+            // ViewModule::ProcessIncomingAptEvent asserts) is now reported.
             {
-                static s32 s_iPrevLevel1State = -1;
-                const s32 liLevel1State =
-                    (AptFlowMovieLive() ? 1 : 0) | (AptFlowMovieComposed() ? 2 : 0);
-                if (liLevel1State != s_iPrevLevel1State)
+                static s32 s_aiPrevLevelState[9] = { -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+                for (s32 liLevel = 0; liLevel < 9; ++liLevel)
                 {
-                    char lacState[96];
-                    std::snprintf(lacState, sizeof(lacState),
-                                  "[AptRT] level-1 state -> live=%d composed=%d\n",
-                                  liLevel1State & 1, (liLevel1State >> 1) & 1);
-                    CgsDev::Log::WriteToLog(lacState);
-                    s_iPrevLevel1State = liLevel1State;
+                    AptCIH* lpNode = AptFindAnimationAtLevel(liLevel);
+                    s32 liState = 0;
+                    if (lpNode != 0 && lpNode->GetCharacterInst() != 0)
+                    {
+                        liState |= 1;
+                        AptCharacterInst* lpCI = lpNode->GetCharacterInst();
+                        if (lpCI->GetTypeTag() == 5 || lpCI->GetTypeTag() == 9)
+                        {
+                            AptDisplayListState* lpState =
+                                static_cast<AptCharacterSpriteInstBase*>(lpCI)->mDisplayList.AsState();
+                            if (lpState != 0 && lpState->mpFirst != 0)
+                                liState |= 2;
+                        }
+                    }
+                    if (liState != s_aiPrevLevelState[liLevel])
+                    {
+                        char lacState[96];
+                        std::snprintf(lacState, sizeof(lacState),
+                                      "[AptRT] level-%d state -> live=%d composed=%d\n",
+                                      liLevel, liState & 1, (liState >> 1) & 1);
+                        CgsDev::Log::WriteToLog(lacState);
+                        s_aiPrevLevelState[liLevel] = liState;
+                    }
                 }
+            }
+            {
 
                 // [hud reveal gate 2026-08-25] DELETED: the "world-load stand-in" that fed a
                 // fabricated engine-on 379 the frame the in-game HUD movie composed. It had
