@@ -1163,6 +1163,44 @@ namespace BrnGui
             }
             break;
 
+        case 289:
+            // ⭐⭐ [results-screen wave 2026-08-29] THE OFFLINE EVENT-RESULT RECORD. X360:
+            //     case 289: memcpy(a1 + 40552, a2, 192);
+            // Measured, not deduced: with this arm missing, InstantResultsState copied an
+            // ALL-ZERO record out of the cache and its own reconstructed SetupComponents
+            // printed the console's own "Unhandled game mode! (0)" -- correct behaviour on a
+            // zero record, and indistinguishable in a frame sweep from the screen being
+            // broken. The record's home (+40552 == +0x9E68) and its 192-byte extent are
+            // pinned three independent ways now: this store, the consumer's own
+            // memcpy(this + 0x2278, cache + 40552, 192) @0x824DBAD8, and the fact that the
+            // consumer's next member sits exactly 192 bytes on.
+            mOfflinePostEventData = *reinterpret_cast<
+                const GuiEventOfflinePostEvent::OfflinePostEventData*>(lpEvent);
+            break;
+
+        case 292:
+            // X360 case 292: the post-event teardown. If more than one car is queued in the
+            // record's unlock array, re-run the car-unlock determination; then CLEAR the
+            // record and drop the presentation-suppressed byte.
+            // ⭐ `Array<__int64,8>::GetLength(a1 + 40600)` in the X360 is this record's
+            // maCarsToUnlockFromSpecialEvent -- 40600 == 40552 + 48 -- which independently
+            // re-confirms that member's +0x30 placement from a SECOND function.
+            if (mOfflinePostEventData.maCarsToUnlockFromSpecialEvent.GetLength() > 1)
+            {
+                DetermineCarUnlockPending(mpProfile);
+            }
+            mOfflinePostEventData = GuiEventOfflinePostEvent::OfflinePostEventData();
+            mbSuppressPostEventPresentation = false;   // stb 0, +19319
+            break;
+
+        case 304:
+            // X360 case 304: `*(a1 + 19319) = 1`. ⭐ This is the PRODUCER of the byte
+            // InstantResultsState::SelectSubstates and ::WillShowCredits gate on, which
+            // upgrades mbSuppressPostEventPresentation from consumer-named to
+            // producer-attested: 304 raises it, 292 clears it.
+            mbSuppressPostEventPresentation = true;    // stb 1, +19319
+            break;
+
         case 376:
             // [hud H3b tracking slice 2026-08-25] X360 case 376: the player race-car index
             // pair, with the console's four range asserts (BrnGuiCache.cpp:1904-1907).
