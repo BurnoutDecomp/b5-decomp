@@ -365,10 +365,11 @@ namespace BrnGui
     // (PauseScreen's full surface -- OnEnter/OnLeave/Update/GetResourcesToLoad --
     //  landed in its own TU, BrnPauseScreen.cpp; nothing of it lives here any more.)
 
-    // ---- ShowtimeInstantResultsState (BrnShowtimeInstantResults.cpp is partial) -------
-    void ShowtimeInstantResultsState::OnEnter() { LogUnreconstructedState("ShowtimeInstantResultsState", "OnEnter"); }
-    void ShowtimeInstantResultsState::OnLeave() {}
-    void ShowtimeInstantResultsState::Update()  {}
+    // ---- ShowtimeInstantResultsState -- NOTHING LIVES HERE ANY MORE ------------------
+    // OnEnter/OnLeave/Update were logging stubs here until 2026-08-29; all three (and the
+    // other twelve functions of the class) are now real bodies in
+    // GameSource/Gui/Flow/PostEvent/States/Showtime/BrnShowtimeInstantResults.cpp.
+    // Only the .rdata resource table above still belongs to this file.
 
     // ---- ImageGallerySelectable::Select (component; BrnImageGallerySelectable.cpp is
     //      partial -- Construct/Update/HandleLoadNotifications landed, the Select
