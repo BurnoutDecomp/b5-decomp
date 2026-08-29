@@ -44,11 +44,18 @@ typedef Mixer AudioProcessContext;
 class Decoder;
 class SampleBuffer;
 
-// ⚠️ NOT HOMED YET. The streaming half of this class talks to a StreamPool and to
-// rw::core::filesys::Stream (its ChunkInfo and RequestId included). Neither surface exists
-// in this tree, so the members that reference them are declared as opaque pointers with
-// their console types named in the comment. They are STORAGE ONLY here -- every body that
-// would dereference them lives in the streaming slice, which lands with those homes.
+// ⚠️ ONE un-homed surface. The streaming half of this class talks to a StreamPool and to
+// rw::core::filesys::Stream (its Chunk and request id included).
+//
+// ⭐ CORRECTION 2026-08-29: an earlier revision of this note claimed NEITHER surface existed
+// in this tree. That was wrong about half of it -- rw::core::filesys::Stream IS homed, at
+// b5-decomp/src/SDKs/EATech/rwcore/filesys/stream.h, with QueueFile / GetChunk /
+// ReleaseChunk / GetRequestState / GetState and the Chunk record (muSize, mpData) already
+// matching every console call site. Only rw::audio::core::StreamPool is missing.
+//
+// The members below therefore stay opaque pointers ONLY because the streaming bodies that
+// dereference them have not landed; the header is deliberately not pulled in here, to keep
+// this vendor header free of a src/SDKs dependency. They are STORAGE ONLY at this revision.
 class StreamPool;
 namespace filesysfwd { class Stream; }
 
