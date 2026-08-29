@@ -92,15 +92,41 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
     //        cleared  -> 1 == E_CRASHBARSTATE_LEAVE_CRASHED
     //   stb  r31,byte_82FAEB91  -> latch := state, AFTER the post
     //
-    // ⚠ FLAG (the one term not modelled): the showtime suppression. The console reads the
-    // current game-mode type inline off the module blob; BridgeWorldVehicleDataToGui is a
-    // BrnGameModule method and this tree gives it no GameStateModule reach (it receives only the
-    // GUI input buffer and the world output buffer). The term is pinned to "not in showtime"
-    // -- which is the && identity AND is provably this build's actual state: nothing here can
-    // set meCurrentGameModeType to 2 or 16, because SetPlayerCarToShowtimeMode's only console
-    // caller (PhysicsModule::HandleGameActions @0x825A72F0) is still a boot gate in
-    // BrnPhysicsConductorGates.cpp:153. DELETE-WHEN that gate opens: replace the constant with
-    // GameStateModule::IsShowtimeGameMode() (@0x823567A8, already bodied, same 2||16 test).
+    // ⭐⭐ THE SHOWTIME SUPPRESSION -- THE FLAG'S DELETE-WHEN HAS FIRED (2026-08-29).
+    // This term used to be pinned to the constant `false` with the note: "nothing here can set
+    // meCurrentGameModeType to 2 or 16, because SetPlayerCarToShowtimeMode's only console caller
+    // (PhysicsModule::HandleGameActions @0x825A72F0) is still a boot gate. DELETE-WHEN that gate
+    // opens." IT HAS OPENED, and a showtime run says so on three lines of its own log:
+    //     [s3-action] case 23 PREPARE_GAME_MODE: ... modeType 2 ... -> meCurrentGameModeType now 2
+    //     SHOWTIME! CrashPlayManager::Activate called.
+    //     [showtime-switch] ActiveRaceCar 0 mbIsInShowtime <- 1
+    // So the constant had stopped being the && identity and started being a FALSEHOOD, and the
+    // falsehood was load-bearing: it FROZE THE SHOWTIME METER. Measured, in frames, before this
+    // change -- BoostBarRenderer::RecvEvent case 377 maps payload 0|2 to
+    // mbCameraTransitionInProgress = true, and Update's very first act is
+    //     if (mbCameraTransitionInProgress || ...) { mGuiEventBoostInfo = mPrevious...; return; }
+    // so one suppressed-on-console START_CRASHED at showtime entry latched the bar and nothing
+    // ever cleared it (the clearing payload 1|3 is only posted on the falling edge, which a
+    // showtime session does not have until it ends). The bar stayed on screen at a FIXED fill
+    // while the published fraction walked 0.625 -> 0.510 -> 0.357 -> 0.103: pixel fill measured
+    // 0.455 +/- 0.007 across 143 frames, Pearson r = -0.04 against the value it was drawing.
+    //
+    // The console's own term, @0x823E585C..0x823E5890, is what stops that happening on hardware:
+    //     addis r27, r28, 0x67 ; addi r27, r27, -0x4D4C   ; r28 == this
+    //         => r27 = this + 6730420 == mModeManager.meCurrentGameModeType (+3476)
+    //     lwz   r11, 0(r27) ; cmpwi 2 / beq ; cmpwi 0x10 / bne ; li r11, 1
+    //         => r11 = (mode == 2 || mode == 16)
+    //     cntlzw r11 ; extrwi r11, r11, 1,26 ; and r31, r11, r10
+    //         => state = !isShowtime && crashing
+    // -- i.e. IN SHOWTIME THE CONSOLE NEVER POSTS 377 AT ALL, which is exactly why the console's
+    // showtime bar keeps moving.
+    //
+    // ⚠️ Read through GetModeManager()->GetCurrentGameModeType() rather than
+    // GameStateModule::IsShowtimeGameMode() (@0x823567A8), even though that helper runs the
+    // identical 2||16 test on the identical member: the helper carries its own
+    // `CGS_ASSERT(mbIsUpdating)`, which the console does NOT execute at this call site (it
+    // inlines the compare). Borrowing it here would import an assert the binary does not have
+    // at this seat -- an invented arm, and a per-frame one at that.
     //
     // ⚠️ RETRACTED 2026-08-27 (endcrash wave). This note used to read: "the console posts
     // LEAVE_CRASHED (1) on the falling edge and this reproduction does too -- but
@@ -121,7 +147,14 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
     //       unchanged and stays as written; only this note was false.
     {
         const bool lbPlayerCarCrashing = lpActiveInterface->IsPlayerCarCrashing();
-        const bool lbInShowtimeMode    = false;   // FLAG: see above -- the && identity, and true here
+
+        // @0x823E5864 -- the mode word, read straight off ModeManager as the console does.
+        const BrnGameState::GameStateModuleIO::EGameModeType leGameModeType =
+            mGameStateModule.GetModeManager()->GetCurrentGameModeType();
+        const bool lbInShowtimeMode =
+            (leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
+             leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
+
         const bool lbCrashState        = !lbInShowtimeMode && lbPlayerCarCrashing;
 
         static bool lbWasPlayerCarCrashing = false;   // console byte_82FAEB91
