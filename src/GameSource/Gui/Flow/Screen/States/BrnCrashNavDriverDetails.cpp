@@ -148,18 +148,38 @@ namespace
     const char KPC_DRIVER_DETAILS_MOVIE[] = "BrnCrashNavDriverDetails";
     const s32  KI_APT_MOVIE_LEVEL         = 3;
 
-    // ⚠️ MEASURED, NOT ASSUMED. KV2_LICENSE_POSITION / KV2_LICENSE_POSITION_SD (DWARF
-    // cpp:61/:62) live at X360 .bss unk_82FB4A90 / unk_82FB4C00 -- both read all-zero in
-    // the image, and a whole-image scan of the export set finds exactly ONE reference to
-    // either address: this file's UpdateWFInit. So the console selects between two
-    // zero vectors here; the branch is faithful and the values are the image's, not a
-    // placeholder. (A non-zero const Vector2 would have been constant-folded into
-    // .rdata; landing zeroed in .bss is the signature of a zero initialiser.)
-    // FLAG measured-zero: if a writer is ever found, correct BOTH here.
+    // ⛔⛔ BANNER CORRECTION (2026-08-29) -- THESE WERE NOT ZERO, AND THE OLD NOTE SAID SO
+    // WITH CONFIDENCE. It read: "both read all-zero in the image, and a whole-image scan of
+    // the export set finds exactly ONE reference to either address: this file's UpdateWFInit
+    // ... A non-zero const Vector2 would have been constant-folded into .rdata; landing
+    // zeroed in .bss is the signature of a zero initialiser." Every clause of that is a trap:
+    //   * .bss is zero in the image BY DEFINITION -- reading it proves nothing;
+    //   * a `const Vector2` whose ctor is not constant-foldable is emitted to .bss and filled
+    //     by a DYNAMIC initialiser, so "zero in .bss" is equally the signature of exactly that;
+    //   * the scan was over the EXPORT SET, and the writer is an unnamed sub_ IDA never
+    //     exported. Scanning the IMAGE for the `lis r?,0x82FB` + displacement pair finds it.
+    //
+    // THE WRITER: the static initialiser @0x82C54DA0 / @0x82C54DE0 --
+    //     0x82C54DA0  lis  r10, 0x8206
+    //     0x82C54DAC  lfs  f0, 0x5528(r10)   ; 0x82065528 == 500.0f   -> x
+    //     0x82C54DB4  stfs f0, -16(r1)
+    //     0x82C54DB8  lfs  f0, -0x4B60(r10') ; 0x8206B4A0 == 420.0f   -> y   (r10' = 0x8207<<16)
+    //     0x82C54DBC  stfs f0, -12(r1)
+    //     0x82C54DC0  std  r9, 0(r11)        ; r9 == 0 -> the z/w lanes
+    //     0x82C54DC4  lis  r11, 0x82FB
+    //     0x82C54DCC  addi r11, r11, 0x4A90  ; &KV2_LICENSE_POSITION
+    //     0x82C54DD0  lvx128  v0, r0, r10    ; the 16 bytes just built on the stack
+    //     0x82C54DD4  stvx128 v0, r0, r11    ; -> 0x82FB4A90
+    // and the identical block at 0x82C54DE0 fills 0x82FB4C00 from 0x8206B4A4 == 517.0f and
+    // the SAME 0x8206B4A0 == 420.0f. Both floats read out of the unpacked image with the
+    // verified reader.
+    // ⚠️ Landing these needed a SECOND fix to be visible at all: every reserved apt variable
+    // (_x/_y/...) was being silently dropped -- see CgsAptCommunicator.cpp. Either alone
+    // leaves the card where the movie authored it, on top of the stat labels.
     // The console loads each with a single `lvx128 v1` -- one 16-byte VMX quad, which is
     // what a by-value rw Vector2 is -- and passes it straight to LicenseComponent::SetPosition.
-    const Vector2 KV2_LICENSE_POSITION    = { 0.0f, 0.0f, 0.0f, 0.0f };   // unk_82FB4A90 (HD)
-    const Vector2 KV2_LICENSE_POSITION_SD = { 0.0f, 0.0f, 0.0f, 0.0f };   // unk_82FB4C00 (SD)
+    const Vector2 KV2_LICENSE_POSITION    = { 500.0f, 420.0f, 0.0f, 0.0f };   // 0x82FB4A90 (HD)
+    const Vector2 KV2_LICENSE_POSITION_SD = { 517.0f, 420.0f, 0.0f, 0.0f };   // 0x82FB4C00 (SD)
 
     // The HelpItem button-icon slot the console passes for "no button" (`li 15`); the
     // empty text is X360 unk_820046A7, the image's shared "" literal.
