@@ -13,6 +13,8 @@
 #include "rw/math/vpu/vector3_operation.h"
 #include "rw/math/vpu/vector4_operation.h"
 
+#include <cstdlib>   // getenv (BRN_SYMP_LATCH_CONTROL) -- DIAG, DELETE-WHEN-STABLE
+
 namespace BrnTraffic
 {
 // X360 .data 0x8300D190. Zero in the image; an unnamed dynamic-initialiser thunk @0x82C67830
@@ -859,13 +861,76 @@ bool Vehicle::IsLeftIndicatorOn() const
     return ((mxEffectState >> 1) & 1) != 0;
 }
 
-// FLAG: DWARF BrnTrafficVehicle.h:393, EXPORT HOLE -- the body is REASONED, not attested.
-// meSympCrashState is the only sympathetic-crash state field and Construct seeds it
-// E_SYMPATHETIC_NONE. DELETE-WHEN a per-function export or an inlined copy turns up.
+// =================================================================================================
+// Vehicle::IsSympatheticallyCrashing  @0x82704B18 (52 insns) -- NOW ATTESTED, and the previous
+// body read THE WRONG MEMBER.
+//
+// ⛔ THE FLAG THAT USED TO SIT HERE ("EXPORT HOLE -- the body is REASONED, not attested ...
+// meSympCrashState is the only sympathetic-crash state field") EXPIRED, AND ITS GUESS WAS WRONG.
+// 0x82704B18 has no per-function .json in .ida-exports (a real export hole), but the function IS
+// in the image and GenerateDriverInputs' own `xrefs_from` names it, so its address is known and
+// the bytes read straight out of ARTIST with tools/re/x360rd.py:
+//
+//   82704B30  lbz    r11, 5(r30)      \  mxFlags bit 0
+//   82704B34  clrlwi r11, r11, 31      >  CGS_ASSERT( IsAlive() )        BrnTrafficVehicle.h:1202
+//   82704B44  bne    -> 82704B64      /   (li r5,0x4B2; "IsAlive()" @0x820BA9C4)
+//   82704B64  lbz    r11, 0x39(r30)   -- miPhysicalReason  <<-- THE MEMBER IT ACTUALLY READS
+//   82704B68  cmplwi cr6, r11, 3      -- == E_PHYSICALREASON_SYMPATHETIC_CRASHING
+//   82704B6C  bne    -> 82704BCC (li r3,0)
+//   82704B70  lbz    r11, 5(r30) ; rlwinm 0,28,28   CGS_ASSERT( IsPhysical() )            .h:1205
+//   82704B9C  lwz    r11, 0x40(r30) ; cmpwi -1      CGS_ASSERT( mSympCrashTarget.IsValid() ) .h:1206
+//   82704BC4  li     r3, 1
+//
+// So it is the EXACT twin of IsExtremeSwerving (reason == 4) and IsNormalPhysical (reason == 5)
+// twenty lines below, with one extra assert on the latched target at +0x40. Attested three ways:
+// the immediate (`cmplwi 3`), the member offset (+0x39, matching this file's own static_assert),
+// and all three baked assert strings read back out of .rdata --
+// 0x820BA9C4 "IsAlive()", 0x820BA9B4 "IsPhysical()", 0x820BA9D0 "mSympCrashTarget.IsValid()",
+// against the file string 0x820032A0 ".../BrnTrafficVehicle.h".
+//
+// ⭐⭐ WHY THIS MATTERED: this predicate is the FIRST test in GenerateDriverInputs' manoeuvre-NONE
+// ladder (@0x82749584), so it decides every frame whether a physical car re-enters
+// UpdateSympatheticCrashing. Reading meSympCrashState made it a LATCH -- nothing on any path
+// clears that member (not the give-up arm, not StopVehicleBeingPhysical, not SetNotPhysical;
+// only Vehicle::Construct seeds it) -- so a car that gave up re-entered the arm EVERY FRAME
+// forever (measured: 629 consecutive frames for one car), and its SetTrafficNotCrashing re-posted
+// an event every one of them. That is the "15,641 events in one drive" number: re-entry, not
+// throughput.
+// Reading miPhysicalReason makes the console's own three writes the state transitions they are:
+//   UpdateExtremeSwerving / SafeRequestMakeVehiclePhysical  reason := 3  -> the arm ENGAGES
+//   the give-up arm            (@0x8273D5EC)                reason := 5  -> falls through to
+//                                                                          IsNormalPhysical ->
+//                                                                          UpdateNormalPhysical ->
+//                                                                          DriveTowardsTarget ->
+//                                                                          ReturnPhysicalVehicleToTraffic
+//   CrashVehicleForSympatheticCrashState (@0x8272BAC0)      reason := 0  -> the CRASHED early-send
+// i.e. BOTH exits of the state machine already existed and both were unreachable.
+// =================================================================================================
 bool Vehicle::IsSympatheticallyCrashing() const
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    return meSympCrashState != E_SYMPATHETIC_NONE;
+    CGS_ASSERT(IsAlive(), "IsAlive()");                                    // .h:1202
+
+    // ⭐ THE ONE-LINE CONTROL. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+    // Restores the pre-2026-08-29 body EXACTLY, so the latched build and the fixed build are ONE
+    // binary differing in one branch. Without it, "the car now leaves" rests on comparing two
+    // different exes. Same shape as BRN_TRAFFIC_EVENTS_CONTROL in
+    // BrnPhysicalTrafficManager_TrafficEvents.cpp.
+    {
+        static const bool sbLatchControl = (getenv("BRN_SYMP_LATCH_CONTROL") != 0);
+        if (sbLatchControl)
+        {
+            return meSympCrashState != E_SYMPATHETIC_NONE;
+        }
+    }
+
+    if (miPhysicalReason != 3)   // E_PHYSICALREASON_SYMPATHETIC_CRASHING
+    {
+        return false;
+    }
+    CGS_ASSERT(IsPhysical(), "IsPhysical()");                              // .h:1205
+    CGS_ASSERT(mSympCrashTarget.muValue != 0xFFFFFFFFu,
+               "mSympCrashTarget.IsValid()");                              // .h:1206
+    return true;
 }
 
 bool Vehicle::IsCrashing() const

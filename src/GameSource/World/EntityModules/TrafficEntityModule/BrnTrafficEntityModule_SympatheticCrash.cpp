@@ -53,11 +53,19 @@
 //       MEASURED with the 0.0f placeholder (BRN_TRAFFIC_DIAG run, 2026-08-29): the give-up arm
 //       fires -- 629 consecutive frames for ONE car -- so `0.0f > GetSpeed()` is reachable
 //       (Vehicle::GetSpeed() is Splat(mSpeed.x), which goes negative for a car that has been
-//       knocked backwards). The car never leaves the arm because nothing clears
-//       meSympCrashState: the console's demotion path (ReturnPhysicalVehicleToTraffic and
-//       friends) is not reconstructed in this tree. UNBLOCKED BY: the DecFIGS PS3 twin
-//       @0x957B6C reaches this constant through the TOC (off_1012Fxx), so resolving the PS3 TOC
-//       recovers the value.
+//       knocked backwards). UNBLOCKED BY: the DecFIGS PS3 twin @0x957B6C reaches this constant
+//       through the TOC (off_1012Fxx), so resolving the PS3 TOC recovers the value.
+//       ⛔ CORRECTED 2026-08-29 (wave 2): the "629 consecutive frames" was NOT evidence about
+//       this constant at all, and the explanation printed here was wrong twice over. It said
+//       "the car never leaves the arm because nothing clears meSympCrashState: the console's
+//       demotion path (ReturnPhysicalVehicleToTraffic and friends) is not reconstructed in this
+//       tree." BOTH halves are false. (a) ReturnPhysicalVehicleToTraffic @0x8273DCD0,
+//       StopVehicleBeingPhysical @0x8271FED0 and CleanUpCrashedVehiclePhysics @0x82720960 have
+//       all had bodies in BrnTrafficEntityModule_wT3_02.cpp since before that line was written.
+//       (b) NOTHING clears meSympCrashState on the console either -- and it does not need to:
+//       Vehicle::IsSympatheticallyCrashing @0x82704B18 reads miPhysicalReason == 3, NOT
+//       meSympCrashState, so this arm's own `SetPhysicalReason(E_PHYSICALREASON_NORMAL)` below
+//       IS the exit. The 629 frames were the wrong predicate latching, and are gone.
 //   flt_820BA2A8 = 15.0f   approach distance that ends the ACCELERATE run (normal play)
 //   flt_820BA590 = 40.0f   ... and in showtime, where the crash is meant to start further out
 //   flt_820BA8F8 =  6.0f   ACCELERATE also ends on a timeout

@@ -187,12 +187,17 @@ void TrafficEntityModule::SafeRequestMakeVehiclePhysical(
         // setter for either member" -- was STALE: BrnTrafficVehicle.h has carried
         // SetSympCrashTime / SetSympCrashState since the Vehicle wave, and the sibling seed in
         // UpdateExtremeSwerving (_wT3_02.cpp, @0x8273EA84) has been calling both all along.
-        // ⭐ WHAT THE GATE COST: meSympCrashState is the ONLY field
-        // Vehicle::IsSympatheticallyCrashing() reads, so with the seed skipped it was
-        // permanently E_SYMPATHETIC_NONE and the whole chain-crash arm of GenerateDriverInputs
-        // was unreachable -- a car promoted for reason SYMPATHETIC_CRASHING(3) also fails
-        // IsNormalPhysical() (reason 5), so it fell into the ladder's final `lbSend = false`
-        // and drove nowhere at all.
+        // ⛔ CORRECTED 2026-08-29 (traffic-crash wave 2). This note used to say "meSympCrashState
+        // is the ONLY field Vehicle::IsSympatheticallyCrashing() reads". IT IS NOT: that
+        // predicate @0x82704B18 reads miPhysicalReason (+0x39) == 3, exactly like its twins
+        // IsExtremeSwerving (== 4) and IsNormalPhysical (== 5) -- read out of the image, see the
+        // banner on Vehicle::IsSympatheticallyCrashing in BrnTrafficVehicle.cpp.
+        // ⭐ WHAT THE GATE ACTUALLY COST: the seed below is the ONLY thing that gives a car
+        // promoted for reason 3 a VALID meSympCrashState. With it skipped the car still entered
+        // UpdateSympatheticCrashing (reason 3 alone is the ticket), switched on
+        // E_SYMPATHETIC_NONE(0), and fell into the console's `default:` arm -- "Invalid
+        // sympathetic crashing state." every frame, with no steering and no commit. The arm was
+        // reachable and useless, not unreachable.
         //
         // 0x8274B2F4..0x8274B36C, instruction for instruction: ONE mEffectRand LCG step
         // (`ld/std 0x1380(this)` -- +0x1380 is mEffectRand's seed, NOT mRand's +0x1350; the old
