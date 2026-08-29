@@ -112,6 +112,30 @@ IsGameModeInProgress(const GameMode* lpGameMode)
            (lpGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS);
 }
 
+// ⭐⭐ THE SAME IDIOM FOR IsOnline, AND IT IS NOT DEFENSIVE PADDING -- IT IS THE CONSOLE'S
+// (added 2026-08-29, drive-away round, after this exact omission crashed the build).
+// `lwz r11, 0xD98(r31); cmplwi r11, 0; beq -> r11 = 0; else lbz r11, 0xAC(r11)` -- the null-safe
+// IsOnline() the X360 emits at EVERY use, the same shape ExitCurrentMode's banner already quotes.
+// PreWorldUpdate reads mpCurrentGameMode SIX times after it calls UpdateCurrentMode (0x82353A00,
+// 0x82353AA0, 0x82353D04, 0x82353D90, 0x82353F10, 0x82353F38) and null-tests it on every one.
+//
+// ⛔⛔ WHY A SINGLE `if (mpCurrentGameMode != NULL)` AT THE TOP OF THE BLOCK IS NOT EQUIVALENT,
+// MEASURED NOT ARGUED. UpdateCurrentMode's exit gate calls ExitCurrentMode, which sets
+// mpCurrentGameMode = NULL -- so the pointer can go null IN THE MIDDLE of this function, and the
+// compiler must (correctly) re-load it after the opaque call. The two bare `mpCurrentGameMode->`
+// derefs that used to sit below compiled to
+//     mov rax, [rdi+0x1340] ; cmp byte [rax+0x140], 0
+// and took an ACCESS VIOLATION reading 0x140 on the first run in which an event was ever actually
+// torn down (ModeManager::PreWorldUpdate+0x109, 2026-08-29). The crash was unreachable before only
+// because ResultsAccept was parked and no offline event had ever reached ExitCurrentMode.
+// ⇒ The re-evaluation is load-bearing, exactly as IsGameModeInProgress's banner above already
+// said about ITS three sites. Do not hoist either of them into a local.
+static bool
+IsGameModeOnline(const GameMode* lpGameMode)
+{
+    return (lpGameMode != NULL) && lpGameMode->IsOnline();
+}
+
 // ==============================================================================================
 // ModeManager::PreWorldUpdate -- X360 0x823537B8
 // ==============================================================================================
@@ -200,8 +224,11 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
         // lbFinal (r29) = mode->IsOnline() && !(type == 15 || type == 16) -- 0x82353A00..0x82353A50.
         // KEPT WHOLE: both the interface accessor and the scorer entry point exist by name with the
         // console's arity, and on an offline event the results interface carries no players.
+        // [!] THE NULL TEST IS THE CONSOLE'S, NOT A GUARD WE ADDED. 0x82353A00 reloads 0xD98 and
+        // branches to `r11 = 0` when it is null -- see IsGameModeOnline's banner. UpdateCurrentMode
+        // above can have torn the mode down on this very tick.
         const bool lbFinalNetworkResults =
-            mpCurrentGameMode->IsOnline() &&
+            IsGameModeOnline(mpCurrentGameMode) &&
             !(meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
               meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
         mScoringSystem.UpdateNetworkPlayerResults(
@@ -222,7 +249,11 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
 
         // Clocks, mode branch. `addi r11, r11, -0x6AE0` == this+0x9520 == mfTimeInMode.
         mfTimeInMode += lfSimTimeStep;
-        if (mpCurrentGameMode->IsOnline())
+        // [!] Again the console's own null-safe IsOnline, 0x82353AA0..0x82353AD4: it loads 0xD98
+        // into r10, adds the timestep into mfTimeInMode UNCONDITIONALLY, then `cmplwi r10,0 /
+        // beq -> r11 = 0` before reading +0xAC. A torn-down mode therefore takes the ELSE arm and
+        // mfTimeInOnline is RESET, which is the shipped behaviour, not a fallback we invented.
+        if (IsGameModeOnline(mpCurrentGameMode))
         {
             mfTimeInOnline += lfSimTimeStep;   // this+0x9524
         }
@@ -272,7 +303,12 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
                 ++siTicks;
 
                 const s32 liMode   = static_cast<s32>(meCurrentGameModeType);
-                const s32 liState  = mpCurrentGameMode->GetCurrentState();
+                // -1 == "the mode was torn down earlier in THIS tick" (UpdateCurrentMode's exit
+                // gate can null it). Reading it bare was an access violation waiting for the first
+                // run in which an event actually ended -- see IsGameModeOnline's banner.
+                const s32 liState  = (mpCurrentGameMode != NULL)
+                                         ? mpCurrentGameMode->GetCurrentState()
+                                         : -1;
                 const s32 liCtrl   = (mpGameStateModule != NULL &&
                                       mpGameStateModule->IsControllerActive()) ? 1 : 0;
                 const s32 liSecond = static_cast<s32>(mfTimeInMode);
@@ -334,7 +370,9 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
         // ONE-SHOT per process, and only while the mode is actually in progress -- arming during
         // the countdown or the outro would finish a mode that never ran.
         // DELETE-WHEN a real pad can drive an offline event to its target score in the harness.
-        if (mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS)
+        // IsGameModeInProgress, not a bare deref: UpdateCurrentMode above can have nulled the mode
+        // on this tick (see IsGameModeOnline's banner). The predicate is identical when it is live.
+        if (IsGameModeInProgress(mpCurrentGameMode))
         {
             static const char* const spcDebugFinishPos = getenv("BRN_DEBUG_FINISH_POS");
             static const s32         siDebugFinishPos  =
