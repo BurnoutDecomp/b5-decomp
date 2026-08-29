@@ -1090,11 +1090,16 @@ namespace BrnDirector
     // this was a live defect for SMASHES today, not only for jumps.
     //
     // ⚠️ WHAT IS GATED, and why (each is a NO-OP here, never a wrong value):
-    //   * the other 34 handled cases (0, 6, 12, 23, 24, 29, 30, 33, 34, 37, 39, 42, 43, 47,
-    //     53, 54, 97, 98, 100, 102, 107, 113, 120, 132, 140, 144, 145, 146, 150, 151,
+    //   * the other 30 handled cases (0, 6, 12, 23, 24, 29, 30, 33, 34, 37, 39, 42, 43, 47,
+    //     53, 54, 107, 113, 120, 132, 140, 144, 145, 146, 150, 151,
     //     205, 215, 216, 218, 223, 224) -- every one of them writes into a part of the
     //     GameState or the MainDirector flag tail that is still opaque, or calls an un-homed
-    //     aggregate (AllVehicleData, the VMX drive-thru transform pipeline, DebugRender).
+    //     aggregate (AllVehicleData, DebugRender).
+    //     ⭐ 97 / 98 / 100 / 102 CAME OFF THIS LIST 2026-08-29 and are bodied below. The reason
+    //     they were on it -- "an opaque GameState part / the un-homed VMX drive-thru transform
+    //     pipeline" -- had expired: every field they touch is a named DWARF member today and the
+    //     "pipeline" is two 64-byte matrix copies out of a serialised payload. They are the ONLY
+    //     writers of mbDriveThruActive in the image, i.e. the drive-thru camera's entire gate.
     //   * ProcessNewVehicleEvents -- declaration-only (AllVehicleData un-homed).
     //   * the post-loop slomo / crash-active tail and the whole debug-render block.
     // The console's own default arm is a no-op `b def_...`, so an unhandled id costs nothing.
@@ -1218,6 +1223,142 @@ namespace BrnDirector
                             << " firstTime=" << (lbFirstTime ? 1 : 0)
                             << " -> actionFlags(dec)=" << maGameState.miThisFramesActionFlags << "\n";
                     }
+                }
+                break;
+            }
+
+            // ---- 97 / 98 / 100 / 102  THE DRIVE-THRU CAMERA'S GATE -----------------------
+            // ⭐⭐⭐ [drive-thru camera wave 2026-08-29] THESE FOUR ARMS ARE THE ONLY WRITERS OF
+            // GameState::mbDriveThruActive IN THE WHOLE X360 IMAGE, and that flag is the gate
+            // on ArbStateRoaming::ProcessActiveDrivingTransitions -> E_STATE_DRIVETHRU
+            // (BrnArbStateRoaming.cpp:1059). Structurally identical to the mbCrashActive break
+            // the crash camera hit yesterday: the state, its container slot and its whole shot
+            // chain can be perfect and the camera still never runs, because nothing raises the
+            // flag the roaming state tests.
+            //
+            // ⛔ THE GATE THAT STOOD HERE SAID THESE CASES "write into a part of the GameState
+            // that is still opaque, or call an un-homed aggregate (... the VMX drive-thru
+            // transform pipeline ...)". BOTH HALVES ARE STALE. Every field these arms touch is
+            // a NAMED DWARF member of BrnDirector::GameState today --
+            //   +0x050 mBaseDriveThruTransform   +0x090 mDriveThruTransform
+            //   +0x0D0 mbDriveThruActive         +0x0D4 meDriveThruType
+            //   +0x1BC mfHowCloseToTotalled      +0x1C0 mbRoadRageOneMoreCrashToWrecked
+            // -- and the "VMX pipeline" is four 16-byte row copies of a 64-byte matrix out of a
+            // serialised action payload. Read from the ASM (0x82237EA4 / 0x82237FE8 /
+            // 0x822380C8 / 0x822381A8), not the pseudocode, which renders the payload base as
+            // `_R30 + 8` (it is `addi r11, r30, 0x40`) and gives cases 97 and 98 the same body.
+            //
+            // The 144-byte shop payload, from DriveThruManager::PostShopAction:
+            //   +0x00  the drive-thru region's transform (Matrix44Affine, 64 bytes)
+            //   +0x40  the identity block the producer builds inline (64 bytes)
+            //   +0x80.. the per-action scalars, which differ per shop -- WHICH IS WHY THE
+            //           "not online" BYTE IS AT A DIFFERENT OFFSET IN EVERY ARM
+            //           (gas +0x80, body +0x84, paint +0x88). Do not fold these into one arm.
+            //
+            // ⚠️ THE HARDCODED BASE TRANSFORM IS THE CONSOLE'S, NOT AN INVENTION. All three
+            // shop arms copy payload+0x40 into mBaseDriveThruTransform and then OVERWRITE all
+            // four of its rows with a compile-time matrix (a Y-rotation plus a fixed world
+            // position that sits within a few metres of one real shop bay: the body/paint pair
+            // use (2915.99, 2.6198201, -1590.3199), the gas arm (2624.5, 2.99, -641.42999)).
+            // It is a shipped dev leftover -- the copy it discards is dead in the console too.
+            // Reproduced store for store, including the discarded copy, because "tidying" it
+            // away would be a behaviour change and because nothing in this tree reads
+            // mBaseDriveThruTransform yet, so nobody would notice if we got it wrong.
+            case 97:   // E_ACTION_BODY_SHOP_DRIVE_THRU  @0x82237EA4
+            case 98:   // E_ACTION_PAINT_SHOP_DRIVE_THRU @0x822380C8
+            case 100:  // E_ACTION_GAS_STATION_DRIVE_THRU @0x82237FE8
+            {
+                // The type the ARBITRATOR STATE switches on. ⓘ Paint shop really does publish
+                // BODY_SHOP (2): `li r4,2` in BOTH the 97 and the 98 arm, so the two shops share
+                // one camera shot-group. Gas station is 3 (`li r4,3`).
+                const bool lbGasStation = (liActionType == 100);
+                maGameState.meDriveThruType =
+                    lbGasStation ? GameState::E_DRIVETHRU_GAS_STATION
+                                 : GameState::E_DRIVETHRU_BODY_SHOP;
+
+                // The two 64-byte matrix copies out of the serialised payload (allowed raw
+                // access: an external action blob, not a C++ object -- see the producer).
+                std::memcpy(&maGameState.mBaseDriveThruTransform, lpacPayload + 0x40,
+                            sizeof(Matrix44Affine));
+                std::memcpy(&maGameState.mDriveThruTransform,     lpacPayload + 0x00,
+                            sizeof(Matrix44Affine));
+
+                // ...then the compile-time base transform that discards the copy above.
+                Matrix44Affine& lrBase = maGameState.mBaseDriveThruTransform;
+                if (lbGasStation)
+                {
+                    lrBase.Right() = Vector3{ -0.24346f,    0.0f,  -0.96991098f, 0.0f };
+                    lrBase.Up()    = Vector3{  0.0f,        1.0f,   0.0f,        0.0f };
+                    lrBase.At()    = Vector3{  0.96991098f, 0.0f,  -0.24346f,    0.0f };
+                    lrBase.Pos()   = Vector3{  2624.5f,     2.99f, -641.42999f,  0.0f };
+                }
+                else
+                {
+                    lrBase.Right() = Vector3{ 0.61846203f, 0.0f,       -0.785815f,   0.0f };
+                    lrBase.Up()    = Vector3{ 0.0f,        1.0f,        0.0f,        0.0f };
+                    lrBase.At()    = Vector3{ 0.785815f,   0.0f,        0.61846203f, 0.0f };
+                    lrBase.Pos()   = Vector3{ 2915.99f,    2.6198201f, -1590.3199f,  0.0f };
+                }
+
+                if (liActionType == 100)
+                {
+                    // `lbz r10, 0x80(r30); stbx r10, r31, r14`
+                    maGameState.mbDriveThruActive = (lpacPayload[0x80] != 0);
+                }
+                else if (liActionType == 98)
+                {
+                    // `lbz r10, 0x88(r30); stbx r10, r31, r14`
+                    maGameState.mbDriveThruActive = (lpacPayload[0x88] != 0);
+                }
+                else
+                {
+                    // Body shop only: the flag is the AND of the not-online byte and the
+                    // "the repair did something" byte (`lbz 0x84` / `lbz 0x85`, both tested).
+                    maGameState.mbDriveThruActive =
+                        (lpacPayload[0x84] != 0) && (lpacPayload[0x85] != 0);
+
+                    // ...and the repair clears the road-rage damage book-keeping:
+                    //   *(+0x1C0) = *(+0x1C0) && !payload[0x85]
+                    //   if (payload[0x85]) *(f32*)(+0x1BC) = 0.0
+                    // (payload+0x85 is a hardcoded 1 at the producer, so on this build both
+                    //  always take their repaired arm -- see PostShopAction.)
+                    maGameState.mbRoadRageOneMoreCrashToWrecked =
+                        maGameState.mbRoadRageOneMoreCrashToWrecked && (lpacPayload[0x85] == 0);
+                    if (lpacPayload[0x85] != 0)
+                        maGameState.mfHowCloseToTotalled = 0.0f;
+                }
+
+                // [DIAG] NOT IN THE X360 BINARY. The DIRECTOR rung of the drive-thru ladder,
+                // on the same `[drivethru]` tag as the producer's GATE/ENTER/POST rungs and the
+                // bridge's BRIDGE rung, so one grep reads the chain end to end. It prints the
+                // transform POSITION because "the flag was raised" and "the camera was aimed at
+                // a real bay" are different claims and a zero transform looks like neither
+                // [[diagnostics-that-lie]]. Delete with the rest of the drive-thru bring-up.
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    const Vector3& lrPos = maGameState.mDriveThruTransform.Pos();
+                    *CgsDev::Log::gpDebugPrint
+                        << "[drivethru] DIRECTOR action=" << liActionType
+                        << " -> active=" << (maGameState.mbDriveThruActive ? 1 : 0)
+                        << " type=" << static_cast<s32>(maGameState.meDriveThruType)
+                        << " pos=(" << lrPos.x << "," << lrPos.y << "," << lrPos.z << ")\n";
+                }
+                break;
+            }
+
+            // ---- 102  E_ACTION_STOPPED_DRIVE_THRU (1 byte) -------------------------------
+            // @0x822381A8, two stores and nothing else: `stbx r29, r31, r14` /
+            // `stwx r29, r31, r20` with r29 == 0. This is the EXIT edge -- without it
+            // mbDriveThruActive would latch on and ArbStateRoaming would re-enter
+            // E_STATE_DRIVETHRU on every update after the first shop.
+            case 102:
+            {
+                maGameState.mbDriveThruActive = false;                       // +0x0D0 = 0
+                maGameState.meDriveThruType   = GameState::E_DRIVETHRU_INVALID; // +0x0D4 = 0
+
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint << "[drivethru] DIRECTOR action=102 -> active=0\n";
                 }
                 break;
             }
