@@ -294,6 +294,53 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
             }
         }
 
+        // ------------------------------------------------------------------------------------
+        // [showtime score wave 2026-08-29] THE PER-MODE SCORER FORK'S *FIRST* ARM.
+        // Console 0x8234AD2C..0x8234AD90, transcribed by BrnModeManager_WorldTick.cpp:745-789
+        // and reproduced here for exactly the reason the stunt arm below is here: the committed
+        // ModeManager::PostWorldUpdate dereferences a PostWorldInputBuffer nothing on this build
+        // creates, so its per-mode fork has never run. This is the same extraction, same file,
+        // same gate shape -- "THE ARGUMENTS ARE THE DEVIATION, NOT THE BODY".
+        //
+        //     if (meCurrentGameModeType == E_MODE_OFFLINE_SHOWTIME ||
+        //         meCurrentGameModeType == E_MODE_ONLINE_SHOWTIME)
+        //         mScoringSystem.GetCrashScorer()->Update(lpActiveRaceCarOutput,
+        //                                                 lpInput->GetVehicleOutputInterface()
+        //                                                        ->GetTrafficStateQueue(),
+        //                                                 lfDelta);
+        //
+        // ⭐ NOTE THE GATE: the showtime arm is NOT behind IsGameModeInProgress -- the console
+        // tests the mode TYPE only (`cmpwi r11, 2 / cmpwi r11, 0x10` at 0x8234AD34/0x8234AD44,
+        // with no +0x28 state load between them), unlike the stunt arm two branches later. It
+        // does sit inside the enclosing `mpCurrentGameMode != NULL` gate, which is why it is
+        // written here inside the same `lpCurrentGameMode != 0` test the sweep above uses.
+        // Do not add an IN_PROGRESS conjunct: showtime scores from the moment the mode exists,
+        // which is what makes the distance start climbing on the entry frame.
+        //
+        // ⚠️ THE NULL QUEUE IS A CALL-SITE DIVERGENCE AND IS FLAGGED AS ONE -- it is the same
+        // one BrnModeManager_WorldTick.cpp's own arm already carries, with the same proof:
+        // CrashModeScoring::Update @0x82320808 NEVER READS r5. Across all 321 instructions r5
+        // appears exactly twice, both `li r5,<line>` feeding CgsDev::Assert::FireAssert
+        // (@0x82320858 :189, @0x82320888 :193); the f32 rides f1, so r4 is the interface and r5
+        // is dead in the callee. GameStateModuleIO::VehicleOutputInterface is still an
+        // incomplete forward declaration on this tree, so there is no queue to name -- and
+        // passing 0 is provably inert rather than plausibly inert.
+        // DELETE-WHEN GameStateModuleIO::VehicleOutputInterface models mTrafficStateQueue
+        // @0x2620: the observable behaviour will not change when it does.
+        //
+        // ⛔ IT IS NOT THE PRODUCER OF "Cars Crashed" -- ONLY OF "Distance". maiNumCarsCrashed
+        // has exactly one writer in the image, CrashModeScoring::DealWithScoreForVehicleClass
+        // @0x82338778, whose only caller is GameStateModule::UpdateShowtimeMode @0x82380EF8 off
+        // the PRE-world half. See the banner on ProcessContactsBringUp below for that chain.
+        // ------------------------------------------------------------------------------------
+        if (lpCurrentGameMode != 0 &&
+            (lpModeManager->GetCurrentGameModeType() == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
+             lpModeManager->GetCurrentGameModeType() == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME))
+        {
+            lpModeManager->GetScoringSystem()->GetCrashScorer()->Update(
+                &mLastActiveRaceCarInterface, /* lpTrafficStateQueue */ 0, lfDelta);
+        }
+
         if (lpModeManager->GetCurrentGameModeType() == GameStateModuleIO::E_MODE_STUNT_ATTACK &&
             lpCurrentGameMode != 0 &&
             lpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS)
