@@ -402,6 +402,24 @@ namespace
         case  0: lpcEventName = "Local\\BurnoutPC_Input_Accelerate"; break;
         case  1: lpcEventName = "Local\\BurnoutPC_Input_Brake";      break;
         case  2: lpcEventName = "Local\\BurnoutPC_Input_HandBrake";  break;
+        // ⭐ -- BOOST (showtime terminator wave, 2026-08-29). Same shape as the shoulder rows
+        //    below: NO NEW KA_BINDINGS ROW IS ADDED AND NONE IS NEEDED -- action 3 has been in
+        //    that table all along ({3, KAI_KEYS_BOOST, KU_XPAD_A} above), and this lookup is BY
+        //    ACTION ID, so the existing row is found unchanged. The game sees an ordinary pad
+        //    holding A / LShift.
+        //    ⭐⭐ WHY IT IS WORTH A CHANNEL: BridgeControllerToWorld reads this action's
+        //    muStatus bit0 into PlayerVehicleControls::mbBoost (see the table at :218), and
+        //    that is the ONLY thing that spends boost during showtime -- the console's showtime
+        //    bar is drained by BOUNCING and by nothing else (CrashPlayManager::OnBounce
+        //    @0x822A7EF8 subtracts per bounce; nothing drains it on a timer). Since
+        //    CrashModeScoring::HasCrashModeEnded's idle ladder will not fire until the boost
+        //    percentage settles to ~0, a showtime run that never presses this button cannot end
+        //    -- ON THE CONSOLE EITHER. Every showtime measurement taken before this channel
+        //    existed was therefore measuring the harness, not the game.
+        //    ⚠️ MANUAL-RESET on the harness side, like the other driving rows: bouncing is a
+        //    press the game samples on the frames between Set() and Reset(), and a one-frame
+        //    auto-reset tap cannot express a hold. See the driving-row banner above.
+        case  3: lpcEventName = "Local\\BurnoutPC_Input_Boost";      break;
         // -- the offline pause. AUTO-RESET like the four menu channels (a TAP): one press
         //    opens the map, one press of Accept inside it comes back out.
         case 46: lpcEventName = "Local\\BurnoutPC_Input_PauseMap";   break;

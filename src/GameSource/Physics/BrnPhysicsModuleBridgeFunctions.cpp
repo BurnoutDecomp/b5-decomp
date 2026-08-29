@@ -773,6 +773,57 @@ namespace BrnPhysics
             const u32 luOwnerA = GetIdOwner(luIdA);
             const u32 luOwnerB = GetIdOwner(luIdB);
 
+            // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN the traffic contact queue is proven to
+            // fill. THE INPUT-SIDE TWIN of the [spy-owners] histogram below: [spy-owners] says
+            // which owner pairs come BACK from the simulation, this says which ones GO IN.
+            // ⭐ WHY IT IS THE DECIDING MEASUREMENT: this loop is the ONLY producer of
+            // InAddPotentialContact in the tree, and its source -- lpContactInterface's merged
+            // view -- has exactly two fillers on the console (AddEvent(event) @0x825E72F0, whose
+            // only caller is PropManager::AddContactResultsToQueue, i.e. custom queue [0]; and
+            // mpQueue, the CgsSceneManager's own contact output, set by PhysicsModule::Update).
+            // The console's own tripwires immediately below assert against (0,2), (2,0), (1,2),
+            // (2,2) and (1,1) but conspicuously NOT against (TRAFFIC_VEHICLE, RACECAR) -- the one
+            // vehicle pair it expects here, and the only pair that can reach StoreContact's
+            // `case 2` and fill mTrafficContactQueue. If it never appears in this histogram then
+            // the loss is upstream of the whole physics module, in the scene manager's output,
+            // and no bridge inside this file can be the fix.
+            // Bounded: a 36x36 u16 table, at most 12 lines for the whole process.
+            {
+                static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
+                static u32        suSeen  = 0;
+                static s32        siLines = 0;
+                static u16        sauPairs[36][36] = { { 0 } };
+
+                if (sbWatch)
+                {
+                    const u32 luA = (luOwnerA < 36u) ? luOwnerA : 35u;
+                    const u32 luB = (luOwnerB < 36u) ? luOwnerB : 35u;
+                    if (sauPairs[luA][luB] < 0xFFFFu) { ++sauPairs[luA][luB]; }
+                    ++suSeen;
+
+                    if (CgsDev::Log::gpDebugPrint != 0 && siLines < 12 &&
+                        (suSeen == 1u || (suSeen % 2000u) == 0u))
+                    {
+                        ++siLines;
+                        *CgsDev::Log::gpDebugPrint << "[merged-owners] events=" << static_cast<s32>(suSeen)
+                                                   << " pairs:";
+                        for (u32 luI = 0; luI < 36u; ++luI)
+                        {
+                            for (u32 luJ = 0; luJ < 36u; ++luJ)
+                            {
+                                if (sauPairs[luI][luJ] != 0)
+                                {
+                                    *CgsDev::Log::gpDebugPrint
+                                        << " " << static_cast<s32>(luI) << "x" << static_cast<s32>(luJ)
+                                        << "=" << static_cast<s32>(sauPairs[luI][luJ]);
+                                }
+                            }
+                        }
+                        *CgsDev::Log::gpDebugPrint << "\n";
+                    }
+                }
+            }
+
             // Pair-legality tripwires (fire-and-continue diagnostics).
             CGS_ASSERT(!(luOwnerA == 1u && luOwnerB == 1u),
                        "!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR && "
