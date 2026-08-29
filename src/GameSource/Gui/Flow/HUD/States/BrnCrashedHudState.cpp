@@ -104,6 +104,33 @@ const s32 CrashedHudState::maiEventToObserve[21] =
 };
 const s32 CrashedHudState::miNumEventsObserved = 21;
 
+// =======================================================================
+//  The static .rdata resource table @0x82F263A0 (count @0x82F263C0)
+// =======================================================================
+// Read straight out of the XEX image; see the header for the two-instruction address decode and
+// for why the table's extent is self-confirming (four 8-byte tuples ending exactly where the
+// count word begins, and that word reads 4).
+//
+// Each id is named via off_82F278E0[id], the same name table the CrashedStuntHudState,
+// FBurnMainHudState and RaceMainHudState recoveries used -- re-checked here by resolving the
+// stunt state's OWN first entry through it: id 194 comes back "B5CrashedStuntHud", which is
+// what that already-committed table says it is. All four entries are type 7 ==
+// E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE.
+//
+// ⭐ The list is the CrashedStunt one with ONE entry different -- 193 B5CrashedHud in place of
+// 194 B5CrashedStuntHud -- which is the shape you would expect of two crash screens that share
+// their messages, helper components and button glyphs and differ only in their own movie. Two
+// independently-decoded tables agreeing on three of four entries is a further check that the
+// address decode is right.
+const CgsGui::sResourceTuple CrashedHudState::maResourcesToLoad[] =
+{
+    { 193u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5CrashedHud
+    {  38u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5CrashedHudMessages
+    {  63u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5HelperComponents
+    {  61u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5ControllerButtons
+};
+const u32 CrashedHudState::muNumResourcesToLoad = 4;
+
     // @ 0x82473780 -- hash the component name and append it to the expected-apt-component id list.
     // DWARF declares this void; the X360 leaves the hash in r3 (the id it just stored). The
     // observable effect is the store into mauExpectedComponentIds[count] + count++.
