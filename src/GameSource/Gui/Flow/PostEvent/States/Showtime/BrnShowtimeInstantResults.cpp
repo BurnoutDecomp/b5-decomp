@@ -483,10 +483,15 @@ namespace BrnGui
         mFinishedText.SetLocalisedText(KAC_SHOWTIME_OVER,
                                        CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
 
-        // The X360 prints the base score with a bare "%d" into a 64-byte stack buffer and
-        // clears index 63 before handing the buffer to the ONE-POSITIONAL-PARAMETER form.
+        // The X360 prints the score with a bare "%d" into a 64-byte stack buffer and clears
+        // index 63 before handing the buffer to the ONE-POSITIONAL-PARAMETER form.
+        // ⚠️ THE SLOT IS miModeScore (+0x1C), NOT miBaseScore (+0x24). `lwz r6, 0xAA4(r31)`
+        // @0x824B4BF0, and mResults is based at +0xA88, so 0xAA4 - 0xA88 == 0x1C. Every OTHER
+        // read in this TU -- SetupTotalling, CalculateMultiplier -- uses 0xAAC == +0x24 ==
+        // miBaseScore, which is exactly why this one is easy to get wrong: the summary shows
+        // the MODE score, while the count-up ladder works off the base damage score.
         char lacScoreText[KU_SCORE_TEXT_LEN];
-        CgsCore::SnPrintf(lacScoreText, KU_SCORE_TEXT_LEN, "%d", mResults.miBaseScore);
+        CgsCore::SnPrintf(lacScoreText, KU_SCORE_TEXT_LEN, "%d", mResults.miModeScore);
         lacScoreText[KU_SCORE_TEXT_LEN - 1] = 0;
 
         mTotalScoreText.SetLocalisedText(KAC_SHOWTIME_SCORE,
