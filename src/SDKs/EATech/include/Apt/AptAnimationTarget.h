@@ -265,6 +265,14 @@ struct AptAnimationTarget
     static void* GetNewInsts();                           // @0x82AD5EA0
     static int   GetNewInstSize();                        // @0x82AD5EB0
     static int   DecNewInstSize();                        // @0x82AD5EC0 (post-increments)
+
+    // PushNewInst -- the guarded form of the two console new-instance stores
+    // (`v64 = 4 * dword_8324E548++; *(off_8324E544 + v64) = node;` inlined in
+    // instantiateCharacter @0x82B061D0 and AddToDisplayList @0x82B08D28). Returns
+    // true when the node was queued (the caller then owes it the AddRef the console
+    // pairs with TickNewInsts' Release). See the body for why the capacity test the
+    // console omits here is REQUIRED on the host.
+    static bool  PushNewInst(void* pNode);
     static void* GetDelayedReleaseList();                 // @0x82AD5ED8
     static int   GetDelayedReleaseListSize();             // @0x82AD5EE8
 

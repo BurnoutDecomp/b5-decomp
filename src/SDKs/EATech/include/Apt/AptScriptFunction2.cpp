@@ -207,7 +207,11 @@ void AptScriptFunction2::SetupBeforeExecution(SavedExecutionState* pSaved,
         // X360: ((pSuper->mnValueData >> 27) & 1) -- the defined bit on the
         // resolved value; if it (or the value) is missing, resolve "super"
         // against the function's own scope instead.
-        if (!pSuper || ((pSuper->mnValueData >> 27) & 1) == 0)
+        // CORRECTED 2026-08-29 (X360 bit-position survivor): mbIsDefined is X360 bit 27
+        // but x64 bit 4 (getIsDefined @0x1400C1520 `shr 4`); the raw `>>27` read
+        // meValueType bit 2 here, so an UNDEFINED `super` was accepted (and a defined
+        // one of the wrong tag rejected) when preloading register `super`.
+        if (!pSuper || !pSuper->getIsDefined())
             pSuper = mpCIH->findChild(&gAptKeySuper, 0);
         if (!pSuper)
             pSuper = gpUndefinedValue;     // miss -> the undefined singleton

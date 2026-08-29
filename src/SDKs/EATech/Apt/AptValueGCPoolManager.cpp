@@ -429,10 +429,18 @@ int AptValueGCPool_GetAllocatedCount(void* pPool)
 // That entry is now questionable and should be re-adjudicated by whoever next reconciles the
 // baseline -- it is NOT corrected here, because the ledger is CI-reconciled and blind-regenerating
 // it is its own hazard.
-// ⭐ Why this mattered: the wave that fixed the Apt pool-walk stride found this note while proving
-// the walk was correct. A note claiming "no console counterpart" tells the next reader not to go
-// looking -- which is exactly how the real body stays unfound.
-void** AptValueGC_PoolManager_GetAllAllocatedAptValues(void* pPool)
+//
+// CORRECTED AGAIN 2026-08-29 (independent fix, merged at rebase): the caller used to pair this
+// snapshot with mnItemsAllocated as the element count, but the two need not agree --
+// mnItemsAllocated counts every DOGMA pool item while the GetFirstAptValue/GetNextAptValue walk
+// visits only live AptValues, and the walk can also stop early. ReplaceReferences then read the
+// uninitialised tail of the scratch buffer as AptValue* and dereferenced garbage. The snapshot now
+// reports the number of entries it actually wrote through *pnOutCount, which is the only count the
+// caller may use. (Latent since this leaf was homed: CleanRemList's survivor pass was unreachable
+// until the AptAnimationTarget refcount bit-position fix of the same date made it live. The x64
+// twin sub_140838090 RETURNS its own count the same way -- the out-param is the calling-convention
+// port of that return pair.)
+void** AptValueGC_PoolManager_GetAllAllocatedAptValues(void* pPool, int* pnOutCount)
 {
     AptValueGC_PoolManager* const pMgr =
         static_cast<AptValueGC_PoolManager*>(pPool);
@@ -449,5 +457,7 @@ void** AptValueGC_PoolManager_GetAllAllocatedAptValues(void* pPool)
     for (AptValue* p = pMgr->GetFirstAptValue(); p != nullptr && i < snCapacity;
          p = pMgr->GetNextAptValue(p))
         spSnapshot[i++] = p;
+    if (pnOutCount != nullptr)
+        *pnOutCount = static_cast<int>(i);
     return spSnapshot;
 }

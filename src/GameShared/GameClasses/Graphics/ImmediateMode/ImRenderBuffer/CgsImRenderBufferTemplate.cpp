@@ -27,9 +27,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (X360 RenderStart guards)
 
 #include <cstdio>   // [diag] BRN_CXFORM_TRACE line formatting
-#include <cstring>  // std::strlen (the D3DCompile source length below) -- was reached
-            //          only transitively; a header change made that accidental include
-            //          disappear and the TU stopped compiling. Named explicitly now.
+#include <cstring>  // std::strlen (the D3DCompile source length) + memcpy (reading the bound
+            //          TextureState's sampler block on the mask stage). Named explicitly --
+            //          it was once reached only transitively and the TU broke when a header
+            //          change removed the accidental include.
 // [diag] BRN_CXFORM_TRACE writes through the engine log (same hook CgsIm2d.cpp's trace uses),
 // and stamps each line with the present counter that lives in device.cpp so a traced batch can
 // be correlated against the BRN_FRAME_DUMP image of the SAME frame.
@@ -866,6 +867,53 @@ namespace CgsGraphics
             }
         }
 
+        // ---- the sampler address mode a bound TextureState asks for --------------------------
+        // â­ [map-world 2026-08-29] renderengine's sampler address enum is the XENOS/X360 D3D
+        // ordering: 0 WRAP, 1 MIRROR, 2 CLAMP, 3 MIRRORONCE, 4 BORDER. Two of those values are
+        // pinned by what the game itself stores, so the table is not guessed:
+        //   * 2 == CLAMP -- XenonD3D9Shims.cpp:3423/3466/3624 already translate "X360 addressU = 2"
+        //     to D3DTADDRESS_CLAMP, and every GUI texture state (CrashNavIconRenderer /
+        //     MainMapRenderer / SatNavRenderer CreateIconTextureState, BoostBarRenderer's clamped
+        //     slots) writes 2 into muAddressU/muAddressV;
+        //   * 0 == WRAP  -- BoostBarRenderer::InitResources documents "0 = wrap for the tiling
+        //     background / end-cap / fire-body / fire-overlay / multiplier strips", and
+        //     SetChainedInactiveMask pushes that background state with a U range of
+        //     0 .. 20*width, i.e. twenty deliberate REPEATS.
+        // PC D3D9 numbers the same modes differently (WRAP 1, MIRROR 2, CLAMP 3, BORDER 4,
+        // MIRRORONCE 5), hence the translation rather than a pass-through. Anything outside the
+        // five known values falls back to CLAMP (the mode 21 of the 23 shipped GUI states ask
+        // for) rather than the zero border, which would silently erase a masked pass.
+        DWORD DispatchAddressMode(u32 luRenderEngineMode)
+        {
+            switch (luRenderEngineMode)
+            {
+            case 0u: return static_cast<DWORD>(D3DTADDRESS_WRAP);
+            case 1u: return static_cast<DWORD>(D3DTADDRESS_MIRROR);
+            case 2u: return static_cast<DWORD>(D3DTADDRESS_CLAMP);
+            case 3u: return static_cast<DWORD>(D3DTADDRESS_MIRRORONCE);
+            case 4u: return static_cast<DWORD>(D3DTADDRESS_BORDER);
+            default: return static_cast<DWORD>(D3DTADDRESS_CLAMP);
+            }
+        }
+
+        // The address pair a TextureState carries. renderengine::TextureState keeps the sampler
+        // config as the leading 32 opaque bytes of TextureState::Parameters (texturestate.cpp's
+        // `memcpy(mauSamplerState, lpParams, 32)`), whose first two words ARE muAddressU and
+        // muAddressV -- read by that contract, not by re-typing the whole block.
+        void DispatchTextureStateAddressModes(const renderengine::TextureState* lpState,
+                                              DWORD* lpuAddressUOut, DWORD* lpuAddressVOut)
+        {
+            u32 luAddressU = 2u;   // the clamp default, if there is no state to ask
+            u32 luAddressV = 2u;
+            if (lpState != nullptr)
+            {
+                memcpy(&luAddressU, lpState->mauSamplerState + 0, sizeof(u32));
+                memcpy(&luAddressV, lpState->mauSamplerState + 4, sizeof(u32));
+            }
+            *lpuAddressUOut = DispatchAddressMode(luAddressU);
+            *lpuAddressVOut = DispatchAddressMode(luAddressV);
+        }
+
         // Fold one colour channel through the batch transform's colour shift/scale and re-pack
         // to 8-bit. The apt CXForm channel space is FIXED-POINT 0..255 (identity scale = 255,
         // shift in 0..255 add units -- the same space AptRenderingContext composes in and
@@ -887,7 +935,7 @@ namespace CgsGraphics
         }
 
         // [diag] BRN_IM2D_TRACE -- the DEFERRED-channel half of the same witness.
-        // ⭐⭐ `[Im2dTrace]` (CgsIm2d.cpp:190) lives in `ImRenderer<V>::Render` and therefore
+        // â­â­ `[Im2dTrace]` (CgsIm2d.cpp:190) lives in `ImRenderer<V>::Render` and therefore
         // sees ONLY the immediate channel. `ImRenderBuffer<V>::Dispatch` reaches D3D9 through
         // its own `DrawPrimitiveUP` below and never enters `ImRenderer<V>::Render`, so under
         // BRN_IM2D_TRACE alone the entire recorded channel -- the sat-nav map, every Apt menu,
@@ -1493,6 +1541,8 @@ namespace CgsGraphics
                 ++liMaskDepth;
                 const Basic2dColouredTexturedVertex* lpCorners;
                 renderengine::Texture* lpMaskTexture;
+                // Non-null ONLY for opcode 17 -- opcode 18 (Apt) carries a raw Texture*.
+                const renderengine::TextureState* lpMaskState = nullptr;
                 if (lpCommand->muType == IM_CMD_PUSH_MASK)
                 {
                     const ImCommandPushMaskTextureState<V>* lpPush =
@@ -1502,6 +1552,7 @@ namespace CgsGraphics
                     const renderengine::TextureState* lpState =
                         reinterpret_cast<const renderengine::TextureState*>(lpPush->mpTextureState);
                     lpMaskTexture = (lpState != nullptr) ? lpState->mpRaster : nullptr;
+                    lpMaskState   = lpState;
                 }
                 else
                 {
@@ -1575,8 +1626,35 @@ namespace CgsGraphics
                     lpDevice->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
                     lpDevice->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
                     lpDevice->SetSamplerState(1, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
-                    lpDevice->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_BORDER);
-                    lpDevice->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_BORDER);
+                    // â­ [map-world 2026-08-29] THE MASK CROP. This pair used to be a hardcoded
+                    // D3DTADDRESS_BORDER/0 for BOTH opcodes -- a stand-in calibrated against the
+                    // boost-bar and sat-nav masks, whose masked draws happen to stay inside the
+                    // pushed rect so the border is never sampled. The main map does NOT: its
+                    // tile quads run past the mask rect, every one of those texels took the zero
+                    // border, and the Paradise City world was cropped to ~28% x 53% of the
+                    // published view rect (runs scratch/mainmenu_wave/mapworld_geo/_nomask/_mask
+                    // /_red: mask push removed -> the quad covers the whole screen, so the
+                    // geometry was never the bug). The console never had a hardcode here: the
+                    // mask's own renderengine::TextureState carries the address modes, and every
+                    // GUI mask state (CrashNavIconRenderer/MainMapRenderer CreateIconTextureState,
+                    // BrnSatNavRenderer, BoostBarRenderer's clamped slots) asks for mode 2 =
+                    // CLAMP on both axes -- edge texels stretch across the masked rect. So honour
+                    // the BOUND state instead. Two consequences, both faithful:
+                    //   * the map world now fills its view rect (clamp, as authored);
+                    //   * BoostBarRenderer::SetChainedInactiveMask, which pushes the WRAP-U
+                    //     background state with a U window of 0..20*width, finally TILES its
+                    //     twenty repeats instead of having repeats 2..20 erased by the border.
+                    // Opcode 18 (Apt PushMaskGeometry) has no TextureState to ask, so it keeps
+                    // the geometry-bounded border pair it was calibrated with.
+                    DWORD luMaskAddressU = static_cast<DWORD>(D3DTADDRESS_BORDER);
+                    DWORD luMaskAddressV = static_cast<DWORD>(D3DTADDRESS_BORDER);
+                    if (lpCommand->muType == IM_CMD_PUSH_MASK)
+                    {
+                        DispatchTextureStateAddressModes(lpMaskState,
+                                                         &luMaskAddressU, &luMaskAddressV);
+                    }
+                    lpDevice->SetSamplerState(1, D3DSAMP_ADDRESSU, luMaskAddressU);
+                    lpDevice->SetSamplerState(1, D3DSAMP_ADDRESSV, luMaskAddressV);
                     lpDevice->SetSamplerState(1, D3DSAMP_BORDERCOLOR, 0x00000000u);
                     lbMaskStageBound = true;
                 }
@@ -1740,7 +1818,7 @@ namespace CgsGraphics
                 // Gate on the SAME frames BRN_FRAME_DUMP writes so the logged bounds and the
                 // dumped pixels come from ONE frame -- correlating a trace from one boot
                 // against a dump from another produced a false lead.
-                // ⛔ ASK the writer for its period (BRN_FRAME_DUMP_EVERY can override the
+                // â›” ASK the writer for its period (BRN_FRAME_DUMP_EVERY can override the
                 // default 30); a second hardcoded 30 here would desync the two silently.
                 if (CxformTraceEnabled() && luCount >= 3u &&
                     (renderengine::guPresentCount % renderengine::FrameDumpEvery()) == 0u)

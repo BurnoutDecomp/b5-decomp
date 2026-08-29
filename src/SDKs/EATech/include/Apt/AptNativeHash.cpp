@@ -27,7 +27,106 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                // DOGMA_PoolManager
 #include "SDKs/Packages/Apt/2.00.00/source/AptValue/AptSprite.h"  // SpriteMembersIndex (member-name gperf)
 
-#include <cstring>   // memset
+#include <cstring>   // memset / strcmp
+#include <cstdio>    // snprintf (the dead-bucket report below)
+
+// ---------------------------------------------------------------------------
+// [FLAG PC bring-up guard -- 2026-08-29, the CrashNav map-screen exit AV]
+//
+// DestroyGCPointers below makes a VIRTUAL call (Release) through every non-null
+// bucket value. On this build a bucket can outlive its value: measured on the map
+// screen's exit teardown, the 'ControlledTextBox_mc' entry of a movie-clip property
+// hash still pointed at an AptCIH that AptAnimationTarget::CleanRemList had already
+// released and returned to the Apt pool, so the virtual call read the DOGMA free-list
+// link out of word 0 and executed it (EXECUTING 0x0000000018000000, reported from
+// AptNativeHash::DestroyGCPointers+0x6C).
+//
+// Every real AptValue vtable lives in the executable image, so "vtable outside the
+// image" is a sound liveness test. The guard drops the dead bucket instead of calling
+// into it, and REPORTS each hit so the underlying missing reference stays visible
+// rather than becoming a silent crash. Delete this when the unbalanced Release that
+// drops the node's refcount to the list-only value is found (see the wave notes).
+// ---------------------------------------------------------------------------
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+
+namespace
+{
+    struct AptHashImageRange
+    {
+        uintptr_t muBase;
+        uintptr_t muEnd;
+        AptHashImageRange() : muBase(0), muEnd(0)
+        {
+            muBase = reinterpret_cast<uintptr_t>(GetModuleHandleA(nullptr));
+            if (muBase == 0)
+                return;
+            const IMAGE_DOS_HEADER* lpDos = reinterpret_cast<const IMAGE_DOS_HEADER*>(muBase);
+            if (lpDos->e_magic != IMAGE_DOS_SIGNATURE)
+                return;
+            const IMAGE_NT_HEADERS* lpNt = reinterpret_cast<const IMAGE_NT_HEADERS*>(
+                muBase + static_cast<uintptr_t>(lpDos->e_lfanew));
+            if (lpNt->Signature == IMAGE_NT_SIGNATURE)
+                muEnd = muBase + lpNt->OptionalHeader.SizeOfImage;
+        }
+    };
+    const AptHashImageRange& AptHashImage()
+    {
+        static AptHashImageRange sRange;
+        return sRange;
+    }
+
+    bool AptHashPlausiblePointer(const void* lpPointer)
+    {
+        const uintptr_t lu = reinterpret_cast<uintptr_t>(lpPointer);
+        return lu >= 0x10000u && lu < (1ull << 47) && (lu & 7u) == 0u;
+    }
+
+    // A live AptValue: a plausible object whose vtable, and whose Release slot inside
+    // that vtable, both land in the executable image.
+    bool AptHashValueLooksLive(const void* lpValue)
+    {
+        const AptHashImageRange& lrImage = AptHashImage();
+        if (lrImage.muEnd == 0)
+            return true;                     // cannot judge -- behave as the console does
+        if (!AptHashPlausiblePointer(lpValue))
+            return false;
+        if (IsBadReadPtr(lpValue, sizeof(void*)))
+            return false;
+        const void* lpVTable = *reinterpret_cast<void* const*>(lpValue);
+        const uintptr_t luVTable = reinterpret_cast<uintptr_t>(lpVTable);
+        if (luVTable < lrImage.muBase || luVTable >= lrImage.muEnd)
+            return false;
+        if (IsBadReadPtr(lpVTable, 2 * sizeof(void*)))
+            return false;
+        const uintptr_t luRelease =
+            reinterpret_cast<uintptr_t>(reinterpret_cast<void* const*>(lpVTable)[1]);
+        return luRelease >= lrImage.muBase && luRelease < lrImage.muEnd;
+    }
+
+    void AptHashReportDeadValue(const void* lpHash, int liBucket, int liCapacity,
+                                const char* lpcKey, const void* lpValue)
+    {
+        static int siLeft = 24;
+        if (siLeft <= 0)
+            return;
+        --siLeft;
+        uintptr_t luVTable = 0;
+        if (AptHashPlausiblePointer(lpValue) && !IsBadReadPtr(lpValue, sizeof(void*)))
+            luVTable = reinterpret_cast<uintptr_t>(*reinterpret_cast<void* const*>(lpValue));
+        const uintptr_t luBase = AptHashImage().muBase;
+        char lacLine[512];
+        std::snprintf(lacLine, sizeof(lacLine),
+            "[apt-dead-value] hash=0x%llX bucket=%d/%d key='%s' value=0x%llX vtable=0x%llX "
+            "(the bucket outlived its AptValue -- guard dropped it instead of calling Release)\n",
+            static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(lpHash)),
+            liBucket, liCapacity, (lpcKey ? lpcKey : "<null>"),
+            static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(lpValue)),
+            static_cast<unsigned long long>(luVTable >= luBase ? luVTable - luBase : luVTable));
+        CgsDev::Log::WriteToLog(lacLine);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // dword_82143BA8 (X360 .rdata): member-index -> event-handler-bit lookup used by
@@ -498,32 +597,91 @@ void AptNativeHash::RegisterReferences(const AptValue* pOwner)
 
 // DestroyGCPointers @0x82AEB458 -- clear the proto slots, then release every live
 // bucket's value/key and free the table.
+//
+// ⭐ 2026-08-29 (main-menu wave): THE TABLE POINTER AND THE CAPACITY ARE RE-READ EVERY
+// TIME, because the console re-reads them and this body is re-entrant through the
+// Release() below. The X360 asm is explicit about it and it is not an artifact:
+//
+//     loc_82AEB49C:  lwz  r11, 4(r31)      ; mpTable      <- reloaded at the top of
+//                    add  r11, r30, r11    ;                 EVERY iteration
+//                    lwz  r10, 4(r11)      ; e->mpValue
+//                    ... bctrl              ; e->mpValue->Release()
+//                    lwz  r11, 4(r31)      ; mpTable      <- reloaded AFTER the call
+//                    stw  r28, 4(r11)      ; e->mpValue = 0
+//     loc_82AEB4D0:  lwz  r29, 4(r31)      ; mpTable      <- reloaded again for the key
+//                    ...
+//                    lwz  r11, 0(r31)      ; mnCapacity   <- reloaded for the loop test
+//                    cmpw r27, r11 ; blt loc_82AEB49C
+//     loc_82AEB500:  lwz  r10, 0(r31)      ; mnCapacity   <- reloaded for the free size
+//                    lwz  r4, 4(r31)       ; mpTable      <- reloaded for the free
+//
+// The previous body cached `tab` and `cap` once. That is safe only if nothing inside
+// Release() can touch THIS hash -- and it can: Release() on a bucket's AptValue runs the
+// full ForceDelete composite (PreDestroy / DestroyGCPointers / deleting destructor), which
+// re-enters the Apt teardown graph and can reach this same hash again (a re-entrant
+// DestroyGCPointers empties it and frees mpTable, and Set/Expand can replace it). With the
+// pointer cached, the rest of the loop then walks a block the pool has already handed back
+// out, reading recycled bytes as `AptValue*` and calling through the DOGMA free-list link
+// that now sits in word 0 -- which is exactly the map-screen exit AV measured this wave:
+// EXECUTING 0x18000000 from AptNativeHash::DestroyGCPointers+0x6C (`call [rax+8]` ==
+// mpValue->Release()), with the "value" and its "vtable" both pointing back into the Apt
+// pool. Re-reading follows the live table the way the console does.
+//
+// The mid-loop `mpTable == 0` break is the one PC-side addition: on the console the reload
+// simply picks up whatever the re-entrant call left, and a null there would fault. [FLAG PC
+// bring-up guard]
 void AptNativeHash::DestroyGCPointers()
 {
     UnsetPrototype();
     Unset__Proto__();
 
-    AptHashItem* tab = mpTable;
-    if (tab)
+    if (mpTable)
     {
-        const int cap = mnCapacity;
         mnEventHandlerMask = 0;
-        for (int i = 0; i < cap; ++i)
+        for (int i = 0; i < mnCapacity; ++i)      // mnCapacity re-read per iteration
         {
-            AptHashItem* e = &tab[i];
-            if (e->mpValue)
+            if (mpTable == nullptr)
+                break;                            // [FLAG PC bring-up guard] see the banner
+
+            if (mpTable[i].mpValue)
             {
-                e->mpValue->Release();
-                e->mpValue = nullptr;
+                // [FLAG PC bring-up guard -- 2026-08-29 map-screen exit AV] the console
+                // calls straight through. On this build a bucket can still hold a value
+                // the Apt GC has already handed back to the pool (measured: the CrashNav
+                // map screen's 'ControlledTextBox_mc' entry, freed by
+                // AptAnimationTarget::CleanRemList's refcount<=1 arm while this hash still
+                // pointed at it) -- and Release() is a virtual call, so a recycled block's
+                // free-list link is executed as code. Validate the vtable before the call,
+                // and report every hit so the missing reference stays visible instead of
+                // becoming a silent crash. See the wave notes for the open root cause.
+                if (!AptHashValueLooksLive(mpTable[i].mpValue))
+                {
+                    AptHashReportDeadValue(this, i, mnCapacity,
+                                           mpTable[i].mKey.c_str(), mpTable[i].mpValue);
+                    mpTable[i].mpValue = nullptr;
+                    if (mpTable[i].mKey.m_pData)
+                    {
+                        EAStringC::DecreaseInternalRefCount(mpTable[i].mKey.m_pData);
+                        mpTable[i].mKey.m_pData = nullptr;
+                    }
+                    continue;
+                }
+                mpTable[i].mpValue->Release();
+                if (mpTable == nullptr)
+                    break;                        // [FLAG PC bring-up guard]
+                mpTable[i].mpValue = nullptr;     // console: reload mpTable, then store
             }
-            if (e->mKey.m_pData)                          // real key or tombstone
+            if (mpTable[i].mKey.m_pData)          // real key or tombstone
             {
-                EAStringC::DecreaseInternalRefCount(e->mKey.m_pData);   // guards the tombstone
-                e->mKey.m_pData = nullptr;
+                EAStringC::DecreaseInternalRefCount(mpTable[i].mKey.m_pData);   // guards the tombstone
+                mpTable[i].mKey.m_pData = nullptr;
             }
         }
-        gpNonGCPoolManager->Deallocate(tab, sizeof(AptHashItem) * cap);
-        mpTable = nullptr;
+        if (mpTable)
+        {
+            gpNonGCPoolManager->Deallocate(mpTable, sizeof(AptHashItem) * mnCapacity);
+            mpTable = nullptr;
+        }
     }
 }
 

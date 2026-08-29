@@ -1155,6 +1155,7 @@ namespace CgsGui
                    "Event id sent to AptCommunicator::SendAptEvent is out of range");
 
         AptValue* lpMovieClip = 0;
+        bool lbTableFull = false;   // [FLAG PC bring-up] see the overflow arm below
         if (liEventId == GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
         {
             lpMovieClip = AptExtObject::GetParam(3);
@@ -1193,11 +1194,50 @@ namespace CgsGui
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
                 CgsDev::Assert::EndAssert();
+
+                // [FLAG PC bring-up] The console FALLS THROUGH this assert into
+                // AddNewAptComponent, which then writes slot 256 of every fixed 256-entry
+                // array in mAptComponentList -- i.e. the console can only continue past
+                // here by corrupting the statics that follow those arrays
+                // (muNumActivecomponents and miNumUsedKeyValues among them). The shipped
+                // build therefore PROVABLY never reaches this state, and there is no
+                // console gate to reproduce: the assert IS the console's answer, and
+                // falling through it is undefined on both machines.
+                //
+                // UPSTREAM LEAK CLOSED 2026-08-29 (AptCharacterInst::
+                // DestroyCharacterInst): AptCIH::ClearCIH / SetCharacterInst /
+                // ClearInst were destroying the outgoing character instance through a
+                // NON-VIRTUAL ~AptCharacterInst() instead of the console's vtable-slot-0
+                // scalar deleting destructor, so ~AptCharacterSpriteInstBase never ran and
+                // the embedded mDisplayList was never torn down -- no child clip ever
+                // reached pfnOnUnload. MEASURED before: 511 OnUnload calls / 0 matched
+                // removals / table saturated by the 5th screen. After: 1696 OnUnload calls,
+                // 135 matched removals, peak 195 of 256 slots at the crash-nav map, and the
+                // whole boot fires ZERO asserts. The guard below is now INERT on every
+                // known path; it is kept only as a damage bound. The historical measurement
+                // it was written against: 243 of the
+                // 256 occupied slots at the crash-nav map belong to the title / ESRB /
+                // licence / photo-booth / car-select screens, only 13 to map icons), refuse
+                // the registration instead of overrunning the table. Dropping it lands the
+                // component in a state the console's own code already tolerates everywhere:
+                // FindAptComponent returns -1 for it and UpdateComponent /
+                // UpdateComponentReserved early-out on that -1 (the "component not
+                // registered" path they take for every non-component clip). The assert above
+                // still fires on every occurrence, so this hides nothing.
+                //
+                // REMOVE THIS GUARD once the registrations are released again -- it is a
+                // bring-up bound on the damage, not the fix.
+                lbTableFull = true;
             }
 
             CGS_ASSERT(lpMovieClip != 0, "Invalid movieclip sent to AptCommunicator::SendAptEvent");
 
-            AddNewAptComponent(lpMovieClip, lName.GetBuffer());   // homed above @0x82849B88
+            // The trigger record below is still built and posted exactly as the console does
+            // -- only the table write is withheld.
+            if (!lbTableFull)
+            {
+                AddNewAptComponent(lpMovieClip, lName.GetBuffer());   // homed above @0x82849B88
+            }
         }
 
         // Build and (for the queued kinds) push the trigger record.

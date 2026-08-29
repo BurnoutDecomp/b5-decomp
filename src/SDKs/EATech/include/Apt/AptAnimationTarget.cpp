@@ -79,6 +79,72 @@ int   AptAnimationTarget::GetDelayedReleaseListSize(){ return snDelayedReleaseLi
 // index and POST-INCREMENTS the fill counter (returns the pre-increment value).
 int   AptAnimationTarget::DecNewInstSize()           { return snNewInstSize++; }
 
+// PushNewInst -- the guarded form of the two console new-instance stores
+// (`v = 4 * dword_8324E548++; *(off_8324E544 + v) = node;`, inlined at
+// instantiateCharacter @0x82B061D0 and AddToDisplayList @0x82B08D28). The console
+// stores unguarded because its table is sized by the same max-new-movie-clips count
+// that bounds a console frame's placements; on the host the crash-nav map's icon
+// clips place far more nodes in one frame than SetupStaticData's table holds, and the
+// unguarded store walked straight off the end of the pooled array. Returns true only
+// when the node was actually queued -- the caller owes an AddRef exactly then, because
+// TickNewInsts' matching Release only runs for entries that are in the table.
+//
+// FULL-TABLE BEHAVIOUR = FLUSH, NOT DROP (restored 2026-08-29 after a git-checkout
+// revert replaced this with a bare `return false`). The console's OWN idiom for the
+// SIBLING table is a flush, not a drop: AptAnimationTarget::AddToRemList @0x82AEE3F8
+// does `if (snDelayedReleaseListSize >= snMaxNewMovieClips) CleanRemList();` and then
+// stores unconditionally -- the call is visible in the export as CleanRemList's
+// (@0x82AEAB08) xref_to at 0x82AEE418, i.e. +0x20 into AddToRemList, ahead of the
+// slot scan and the store (that reconstruction is AptAnimationTargetAddToRemList
+// below). TickNewInsts @0x82B0C8E0 is CleanRemList's exact structural twin for the
+// new-instance table -- static, drains every entry, resets the fill counter to 0 --
+// so the same "full -> drain -> store" shape is the console-faithful response here.
+//
+// The one thing the console idiom cannot express is RE-ENTRANCY: TickNewInsts ticks
+// the queued CIHs (AptCIH::tick), and a tick can run AS that reaches
+// instantiateCharacter -> PushNewInst again. A nested call must not drain the table
+// the outer TickNewInsts is mid-walk over (it would Release entries the outer loop
+// still holds indices into), so the nested call takes the honest drop instead.
+// After a successful flush the capacity is re-tested and false is returned only if
+// the table is STILL full -- so the AddRef-only-when-queued contract at both call
+// sites (instantiateCharacter / AddToDisplayList) stays exact.
+//
+// Measured on the crash-nav map (the case that motivated the guard): the capacity
+// path fires exactly once per map open, with drops == 0.
+//
+// [FLAG PC bring-up guard] the capacity TEST has no console counterpart -- the console
+// table is sized by the same max-new-movie-clips count that bounds a console frame's
+// placements, so it never overflows there; the host's map icon clips place more nodes
+// in one frame than SetupStaticData's table holds. The flush RESPONSE is the console's.
+namespace
+{
+    // Re-entrancy latch for the capacity flush below (module-static, single-threaded
+    // Apt update; the Apt player has no concurrent director tick).
+    bool sbInPushNewInstFlush = false;
+}
+
+bool AptAnimationTarget::PushNewInst(void* pNode)
+{
+    if (spNewInsts == nullptr)
+        return false;
+
+    if (snNewInstSize >= snMaxNewMovieClips)
+    {
+        if (sbInPushNewInstFlush)
+            return false;   // nested inside a flush: never drain the table being walked
+
+        sbInPushNewInstFlush = true;
+        AptAnimationTarget::TickNewInsts();   // the AddToRemList/CleanRemList idiom
+        sbInPushNewInstFlush = false;
+
+        if (snNewInstSize >= snMaxNewMovieClips)
+            return false;   // still full after the flush -- caller owes no AddRef
+    }
+
+    static_cast<void**>(spNewInsts)[snNewInstSize++] = pNode;
+    return true;
+}
+
 // SetupStaticData @0x82AE41F0 -- allocate the shared static tables, sized to the
 // max-new-movie-clips count. (The X360 reads the count from its params struct at
 // +0x18; taken here as the explicit count so no opaque param layout is needed.)
@@ -307,7 +373,10 @@ extern void* AptUpdateZombieVector(char bClear);                                
 // The GC value pool: GetAllAllocatedAptValues snapshots the live-value table the
 // remove-list flush remaps references against; the table's element count lives at
 // +0x28 of the pool object. Declared opaque (the pool layout is its own TU).
-extern void** AptValueGC_PoolManager_GetAllAllocatedAptValues(void* pPool);        // ...::GetAllAllocatedAptValues
+// CORRECTED 2026-08-29: the snapshot reports the number of entries it ACTUALLY wrote
+// through its out-parameter; pairing it with the pool's mnItemsAllocated (below) read the
+// uninitialised tail of the scratch buffer as AptValue* and dereferenced garbage.
+extern void** AptValueGC_PoolManager_GetAllAllocatedAptValues(void* pPool, int* pnOutCount);  // ...::GetAllAllocatedAptValues
 extern int    AptValueGCPool_GetAllocatedCount(void* pPool);                       // *(pool + 0x28)
 // The pool itself is gpGCPoolManager (off_8324D834), from the AptDefine.h include above.
 // UNIFIED 2026-08-11: the `void* gpAptValueGCPool` alias this file used to read was a
@@ -703,12 +772,29 @@ void AptAnimationTarget::CleanRemList()
             continue;
         }
 
-        // The packed "delayed-deletion / refcount-class" field (bits [25..14]); 0 or 1
-        // are handled by a straight ForceDelete, anything higher runs the full teardown.
-        const u32 lnDelClass = (lpValue->mnValueData >> 14) & 0xFFFu;
-        if (lnDelClass <= 1u)
+        // The queued value's 12-bit mnReferenceCount; 0 or 1 are handled by a straight
+        // Release, anything higher runs the full teardown (PreDestroy/DestroyGCPointers).
+        //
+        // CORRECTED 2026-08-29 (X360 bit-position survivor -- the same family as the
+        // AptActionInterpreterStackOps `(mnValueData & 0x3FFC000) == 0x4000` receiver-hold
+        // site and AptValueVector::ReleaseValues): the console reads this field as
+        // `(v4[1] >> 14) & 0xFFF` because on big-endian PPC MSVC packs mnReferenceCount
+        // into bits 14..25 (AptValue::Release @0x82AE31D0 reads it that way; setRefCount
+        // @0x82AD7E90 writes it with `insrwi r10,r4,12,6`). On x64 MSVC packs the same
+        // named field from the LOW bit up, so it lives at bits 6..17 -- the literal `>>14`
+        // therefore read {top 4 refcount bits | mnGCRootCount | mnMaxRefCountHit | part of
+        // meValueType} and returned 0 for every ordinary refcount, so EVERY queued CIH took
+        // the `<= 1` arm and was Released WITHOUT PreDestroy. PreDestroy is the sole caller
+        // of gAptFuncs.pfnOnUnload -> CgsGui::AptCallbackFile::OnUnload ->
+        // AptCommunicator::RemoveExpiredAptComponent, so no GUI component registration was
+        // ever released: the 256-entry AptCommunicator component table filled up over the
+        // boot screens and overflowed when the crash-nav map registered its icon clips.
+        // Measured before the fix: 200/200 queued values classified refcount==0 while the
+        // queue site's own getRefCount() read 1..2 for the same nodes.
+        const u32 lnRefCount = lpValue->getRefCount();
+        if (lnRefCount <= 1u)
         {
-            if (lnDelClass == 1u)
+            if (lnRefCount == 1u)
             {
                 lpValue->Release();   // LABEL_18: (*(*v4 + 4))(v4)
             }
@@ -725,7 +811,9 @@ void AptAnimationTarget::CleanRemList()
             continue;
         }
 
-        if ((lpValue->mnValueData & 0x3FFC000u) != 0x4000u)   // GC-root tag != survives
+        // console `(v4[1] & 0x3FFC000) != 0x4000` == "refcount != 1" in PPC bit positions;
+        // read through the named accessor for the x64 packing (same correction as above).
+        if (lpValue->getRefCount() != 1u)
         {
             ++liSurvivors;
             lpList[liSurvivors - 1] = lpValue;                // compact survivors to the front
@@ -740,10 +828,13 @@ void AptAnimationTarget::CleanRemList()
     // then free or delete it.
     if (liSurvivors > 0)
     {
+        // The console reads its internal live table + *(pool + 0x28) as a matched pair; the
+        // DOGMA port has no flat live table, so the snapshot leaf reports its own fill count
+        // (mnItemsAllocated does not describe it -- see that leaf's banner).
+        int liAllCount = 0;
         AptValue** lpAllValues =
             reinterpret_cast<AptValue**>(
-                AptValueGC_PoolManager_GetAllAllocatedAptValues(gpGCPoolManager));
-        const int liAllCount = AptValueGCPool_GetAllocatedCount(gpGCPoolManager);   // *(pool + 0x28)
+                AptValueGC_PoolManager_GetAllAllocatedAptValues(gpGCPoolManager, &liAllCount));
 
         for (int liIndex = 0; liIndex < liSurvivors; ++liIndex)
         {
@@ -751,7 +842,8 @@ void AptAnimationTarget::CleanRemList()
             lpList[liIndex] = nullptr;
             AptReplaceReferences(lpValue, nullptr, lpAllValues, liAllCount);
 
-            if ((lpValue->mnValueData & 0x3FFC000u) == 0x4000u)
+            // console `(v16[1] & 0x3FFC000) == 0x4000` == "refcount == 1" (PPC positions).
+            if (lpValue->getRefCount() == 1u)
             {
                 lpValue->Release();      // (*(vtbl + 4))(v16)
             }
@@ -761,10 +853,15 @@ void AptAnimationTarget::CleanRemList()
             }
         }
 
-        if (lpAllValues != nullptr)
-        {
-            gpAptGCTableFree(lpAllValues, 4 * liAllCount);   // dword_8324E820
-        }
+        // The console frees the table GetAllAllocatedAptValues handed back here
+        // (`dword_8324E820(AllAllocatedAptValues, 4 * v14)`) because on X360 that accessor
+        // returns a freshly allocated copy of the pool's internal live table. The DOGMA port
+        // deliberately returns a REUSED static scratch buffer owned by the snapshot leaf (it
+        // has no flat live table to copy), so releasing it through the Apt GC table-free hook
+        // would free a foreign allocation and leave the leaf's static pointer dangling for the
+        // next call. Ownership stays with the leaf; there is nothing to free here.
+        // (Latent alongside the count mismatch above -- this whole survivor block was
+        // unreachable until the refcount bit-position fix of the same date made it live.)
     }
 
     snDelayedReleaseListSize = 0;

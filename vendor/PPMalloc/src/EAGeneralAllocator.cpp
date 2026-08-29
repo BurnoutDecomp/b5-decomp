@@ -248,6 +248,20 @@ namespace Allocator
         for (char* lpCur = lpBase; lpCur < lpEnd; )
         {
             PcBlock* lpBlk = reinterpret_cast<PcBlock*>(lpCur);
+            // Boundary-tag sanity. Without this the walk trusts whatever bytes sit at
+            // lpCur: one out-of-bounds write into a block header desynchronises the
+            // chain, the walk lands mid-payload, reads a non-zero word as `mbFree`, and
+            // hands the caller a block carved ON TOP of live data -- two overlapping
+            // LIVE allocations from one heap (the CrashNav main-map corruption,
+            // 2026-08-29). A corrupt chain must fail the allocation instead: the caller
+            // (AptDataHandler::AptAlloc) already asserts loudly on a null result.
+            if (lpBlk->mnMagic != KU_PC_MAGIC ||
+                lpBlk->mnSize < KU_PC_ALIGN ||
+                (lpBlk->mnSize & (KU_PC_ALIGN - 1)) != 0 ||
+                lpCur + lpBlk->mnSize > lpEnd)
+            {
+                return 0;
+            }
             if (lpBlk->mbFree)
             {
                 // place the (16-aligned) data at the next `luAlign` boundary at/after lpCur+16
@@ -328,10 +342,23 @@ namespace Allocator
         while (lpCur < lpEnd)
         {
             PcBlock* lpA = reinterpret_cast<PcBlock*>(lpCur);
+            // Same boundary-tag sanity as the Malloc walk: never coalesce across a
+            // header the chain no longer vouches for (that would merge live payload
+            // bytes into a free block).
+            if (lpA->mnMagic != KU_PC_MAGIC || lpA->mnSize < KU_PC_ALIGN ||
+                (lpA->mnSize & (KU_PC_ALIGN - 1)) != 0 || lpCur + lpA->mnSize > lpEnd)
+            {
+                break;
+            }
             char* lpNext = lpCur + lpA->mnSize;
             if (lpA->mbFree && lpNext < lpEnd)
             {
                 PcBlock* lpB = reinterpret_cast<PcBlock*>(lpNext);
+                if (lpB->mnMagic != KU_PC_MAGIC || lpB->mnSize < KU_PC_ALIGN ||
+                    (lpB->mnSize & (KU_PC_ALIGN - 1)) != 0 || lpNext + lpB->mnSize > lpEnd)
+                {
+                    break;
+                }
                 if (lpB->mbFree)
                 {
                     lpA->mnSize += lpB->mnSize;   // merge B into A; re-check A against the new next

@@ -214,6 +214,10 @@ void AptCharacterInst::DestroyCharacterInst(AptCharacterInst* pInst)
         break;
     }
     case 5u:   // sprite / movie-clip -- releases the embedded display list
+    case 16u:  // custom control -- same sprite base, same embedded display list (the
+               // factory's own switch hands 16 the sprite vtable; dropping this arm keeps
+               // custom-control children out of the rem list, the exact leak this
+               // dispatcher exists to close)
     {
         AptCharacterSpriteInstBase* const p = static_cast<AptCharacterSpriteInstBase*>(pInst);
         p->~AptCharacterSpriteInstBase();

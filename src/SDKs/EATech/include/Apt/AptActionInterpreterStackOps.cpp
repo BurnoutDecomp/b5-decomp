@@ -983,10 +983,19 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     //      plain value calls straight through. (console isMCInParentChain split) ----
     bool bReleaseAfter = false;   // console v54 (r29)
     // console: (*(v7+1) & 0x3FFC000) == 0x4000 -> the method needs an extra AddRef.
-    // console: (v7->mnValueData & 0x3FFC000) == 0x4000 -- a flags-band state test on
-    // the RECEIVER's packed word (NOT isMCInParentChain; the old form compared a bool
-    // against 0x4000 == never true, which skipped the hold ref).
-    if ((pMethodName->mnValueData & 0x3FFC000u) == 0x4000u)
+    // console: (v7->mnValueData & 0x3FFC000) == 0x4000 -- on X360 the 12-bit
+    // mnReferenceCount occupies bits 14..25 (AptValue::Release @0x82AE31D0 reads it as
+    // `(v2 >> 14) & 0xFFF`, setRefCount @0x82AD7E90 writes it with `insrwi r10,r4,12,6`),
+    // so mask 0x03FFC000 / value 0x4000 is exactly "refcount == 1": the receiver's ONLY
+    // live reference is the operand-stack slot this handler is about to drop, so take a
+    // hold ref across the call and release it after.
+    // CORRECTED 2026-08-29 (X360 bit-position survivor, same family as the AptDisplayList
+    // mbIsDefined sites): on x64 the refcount is bits 6..17 (getRefCount @0x14084E5C0
+    // `shr 6; and 0xFFF`), so the literal X360 mask/compare could only match a refcount
+    // in [256,511] with zero GC roots -- i.e. effectively NEVER -- and the hold ref was
+    // silently skipped on every dispatch, leaving the receiver unprotected across
+    // callFunction (a free-while-still-referenced source).
+    if (pMethodName->getRefCount() == 1u)
     {
         pMethodName->AddRef();   // console (**v7)(v7)
         bReleaseAfter = true;
