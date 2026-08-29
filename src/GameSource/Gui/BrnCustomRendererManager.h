@@ -9,6 +9,8 @@
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnInGameMessageRenderer.h"      // [tut-ticker] the live slot-8 component
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnBoostBarRenderer.h"           // [boost-bar] the live slot-4 component
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnSatNavRenderer.h"             // [H3b] the live slot-1 component (the minimap)
+#include "GameSource/Gui/CustomRenderer/Renderers/BrnMainMapRenderer.h"            // [map-world] the live slot-2 component (THE MAP WORLD)
+#include "GameSource/Gui/CustomRenderer/Renderers/BrnCrashNavIconRenderer.h"       // [map-world] the live slot-3 component (the icon layer on top of it)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (SetMaskRect)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -162,6 +164,20 @@ private:
     // minimap renderer, reconstructed whole 2026-08-25 (RenderComponent + the zoomed
     // view chain landed; the hollow-shell caveat in the array banner no longer applies).
     SatNavRenderer mSatNavRenderer;
+
+    // ⭐ [map-world 2026-08-29] the by-value subobject for slot 2 (guest this+0x28D0) --
+    // BrnGui::MainMapRenderer, the full-screen map WORLD. It draws the published
+    // active-texture set (the low-res Paradise City backdrop) inside the map's clip mask,
+    // over its own fade-to-edges background.
+    MainMapRenderer mMainMapRenderer;
+
+    // ⭐ [map-world 2026-08-29] the by-value subobject for slot 3 (guest this+0xB060) --
+    // BrnGui::CrashNavIconRenderer, the icon/road-sign/cursor layer that draws INTO the map
+    // world above. Its class had been reconstructed and compiled since 2026-08-29 (FIX2)
+    // but deliberately left unmounted: its RenderComponent opens with the map background
+    // mask over the published view rect, so mounting it while slot 2 was still null put the
+    // icons over the driving scene. The two go live together, in this order.
+    CrashNavIconRenderer mCrashNavIconRenderer;
 
     // ⭐ [tut-ticker] the by-value subobject for slot 8 (guest this+0x1E0F0) -- the
     // bottom-of-screen ticker, reconstructed whole 2026-08-24. The hollow-shell caveat in

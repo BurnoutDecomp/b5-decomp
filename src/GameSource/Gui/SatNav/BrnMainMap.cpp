@@ -3,37 +3,47 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // the one-shot gate log
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"       // CgsGui::GuiAccessPointers::GetGuiCache
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface::GetAccessPointers / OutputViewState / OutputGuiEvent
-#include "SharedClasses/Gui/SatNav/BrnMapUtils.h"          // BrnGui::MapTransform (device space / world rect / rect-to-rect Transform)
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface::GetAccessPointers
+#include "SharedClasses/Gui/SatNav/BrnMapUtils.h"          // BrnGui::MapTransform (device space / world rect)
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"      // BrnGui::GuiEventShowHideSatNav (the 213 payload)
-#include "GameSource/Gui/BrnGuiEventTypeDefs.h"            // BrnGui::GuiAudioTriggerEvent (the 201 payload)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"            // BrnGui::GuiAudioTriggerEvent (SetZoom's zoom cue)
 
-#include "rw/math/vpu/vector4_operation.h"          // rw::math::vpu::Magnitude (4-lane, the world-rect asserts)
-#include "rw/math/vpu/vector2_operation.h"          // rw::math::vpu::Magnitude (2-lane, the centre asserts/distances)
+#include "rw/math/vpu/vector4_operation.h"          // rw::math::vpu::Magnitude (the Construct assert)
+#include "rw/math/vpu/vector2_operation.h"          // rw::math::vpu::Magnitude (SnapToLocation cpp:405)
 
-#include <cmath>                                    // fabsf (ApplyZoom's fabs on the zoom delta)
+#include <cmath>                                    // ::fabsf (ApplyZoom's zoom-delta test)
 
 // BrnGui::MainMapComponent - the sat-nav main-map screen component bodies.
 //
-// This TU reconstructs the WHOLE ledger set: Construct @0x8245E228, Prepare @0x8244F4A8,
-// SetStandardDefZoomParams @0x82447ED8, RecvEvent @0x82458370, and — main-map slice
-// 2026-08-27 — Update @0x824696E8, SnapToLocation @0x8245EBA0, SetZoom @0x82469A38,
-// ApplyZoom @0x8245EE78, CalculateViewPaddingOffset @0x82447D38,
-// CalculatePositionedWorldRect @0x8245E5F0 and CalculateOffsetWorldCentre (inlined
-// everywhere on console; DWARF-attested .cpp body, see its banner). It also defines the
-// two class-static zoom-scale tables the DWARF places inside the class (h:218 / h:219).
-// The old "still held back" blockers are all retired: sub_8245A080 turned out to BE
-// MapTransform::Transform(Vector2, Vector4, Vector4) (now bodied in BrnMapUtils.cpp),
-// OutputGuiEvent<GuiAudioTriggerEvent> / OutputViewState<GuiEventRenderMainMap> are both
-// header-inline templates with committed explicit-instantiation TUs.
+// This TU reconstructs Construct @0x8245E228, Prepare @0x8244F4A8,
+// SetStandardDefZoomParams @0x82447ED8, RecvEvent @0x82458370 and SetZoom @0x82469A38, and
+// defines the two class-static zoom-scale tables the DWARF places inside the class
+// (h:218 / h:219).
 //
-// ⭐ VMX DECODE CONVENTION FOR THIS TU (pinned three independent ways — the reciprocal
-// and rsqrt Newton-Raphson idioms and the rect-centre folds all agree): the export's
-// plain `vmaddfp vD, vA, vB, vC` lines print the RAW FIELD ORDER, i.e. vD = vA*vC + vB
-// (printed op2 * op4 + op3), and `vnmsubfp vD, vA, vB, vC` likewise = vB - vA*vC. The
-// *128 forms print the repeated destination as their extra operand. Every
-// `vrefp`/`vrsqrtefp` + two-refinement-step block below is folded to the exact divide /
-// sqrt it computes, per the BrnMapUtils.cpp precedent.
+// ⭐ 2026-08-29 (main-menu wave G2) ADDS the SnapToLocation leg, end to end:
+//   SnapToLocation             @0x8245EBA0
+//   CalculatePositionedWorldRect @0x8245E5F0   (its two private collaborators, previously
+//   CalculateViewPaddingOffset   @0x82447D38    listed here as blockers)
+//   CalculateOffsetWorldCentre  (no address -- inlined; shape read off SnapToLocation)
+// This closes the "still-unrecovered vector pipeline" the old banner named: sub_8245A080 is
+// MapTransform::Transform(Vector2, Vector4, Vector4) and is bodied in BrnMapUtils.cpp.
+//
+// ⭐ 2026-08-29 (main-menu wave, map-pump slice) CLOSES THE CLASS. The last two members are
+// bodied at the bottom of this file:
+//   ApplyZoom @0x8245EE78   -- the zoom/centre animation step
+//   Update    @0x824696E8   -- the per-frame world-rect pump that drives the map world render
+// Both blockers the old banner named are gone: ApplyZoom now HAS a body, and
+// OutputViewState<GuiEventRenderMainMap> has a mounted instantiation
+// (GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface_OutputViewState_RenderMainMap_Inst.cpp,
+// X360 @0x82465E50). ⚠️ THE CONDUCTOR MUST NOW DELETE the inert MainMapComponent::Update
+// stand-in at BrnMainMapLinkGates.cpp:125-130 -- with it in place the link fails LNK2005 on
+// exactly that one symbol.
+//
+// ⚠️ TWO CLAIMS FROM THE OLD BLOCKED SKELETON WERE WRONG AND ARE CORRECTED AT THE BODIES:
+//   * `mMapManager.mWorldRect` is fed from mv4PaddingRect's corners taken normalised->world,
+//     NOT from mv4WorldRect. (0x824697C4 loads this+0x630, not this+0x610.)
+//   * the returned centre comes from CalculatePositionedWorldRect's RETURN, not from the
+//     pre-reposition centre.
 //
 // ⭐ THE ZOOM-SCALE TABLE VALUES ARE NO LONGER UNKNOWN. The old banner said the two
 // file-static float tables "are not present in the dossier or the IDA export and must not
@@ -47,16 +57,16 @@
 // which copies EC -> DC element by element, and by Construct's `lfs f0,
 // (flt_82F259E4 - 0x82F259DC)(r10)` == mfZoomScalFactors[E_ZOOMFACTOR_HIGH] (index 2).
 //
-// ⭐ MOUNT STATE (main-map slice 2026-08-27): this TU IS MOUNTED (build_game_exe.bat,
-// SatNav block, alongside BrnMainMapLinkGates.cpp), and BrnMapManager.cpp is mounted too
-// ([map arm 2026-08-27] bat note), so the MapManager methods the new bodies call —
-// SetZoomLevel @0x8244F768, CalculateCurrentTileSet @0x8244FA80,
-// RefreshActiveTextureArray @0x82448540 — resolve to their REAL bodies. The two
-// MainMapComponent gates that covered Update and SetZoom in BrnMainMapLinkGates.cpp are
-// DELETED in this same slice (LNK2005 otherwise). The MapManager::Construct FLAG
-// boundary below predates the map-arm mount and is retirement-ready (its DELETE-WHEN
-// condition — BrnMapManager.h declaring Construct and BrnMapManager.cpp bodying it — is
-// now met); the map-arm work owns that swap, so it is left intact here.
+// ⚠️ MOUNT NOTE FOR THE CONDUCTOR (measured, stunt-race UI wave 2026-08-27). This TU is
+// UNMOUNTED today and GameSource/Gui/SatNav/BrnMainMapLinkGates.cpp currently carries an
+// inert stand-in for MainMapComponent::RecvEvent. Those two must NEVER coexist -- the
+// real RecvEvent lives HERE (:below) and the gate would be a second definition (LNK2005).
+// Mounting this TU closes MainMapComponent::{Construct, Prepare, RecvEvent} and opens
+// exactly ONE new external, BrnGui::MapManager::RecvEvent @0x8244F898 (declared
+// BrnMapManager.h:68, bodied only in the unmounted BrnMapManager.cpp). MapManager::Construct
+// @0x82458590 -- the OTHER MapManager entry this TU would need -- is neither declared in
+// BrnMapManager.h nor bodied anywhere, so it is routed through the local FLAG boundary
+// below rather than left as a second hole.
 
 namespace BrnGui
 {
@@ -72,39 +82,37 @@ namespace BrnGui
     {
         // BrnMainMap.cpp:96 -- the console's own guard constant (flt_820068C0 = 1000000.0f).
         const f32 KF_MAX_WORLD_RECT_MAGNITUDE = 1000000.0f;
-        // The vperm/vaddfp rect-centre halving constant in Prepare (flt_82001DA0 = 0.5f);
-        // the same address feeds every half-width/half-height fmuls in
-        // CalculateViewPaddingOffset and CalculatePositionedWorldRect.
+        // The vperm/vaddfp rect-centre halving constant in Prepare (flt_82001DA0 = 0.5f).
         const f32 KF_RECT_CENTRE_SCALE = 0.5f;
+        // flt_82F25AD4 = 0x3FE38E39 = 1.7777778f, the 16:9 aspect SetZoom folds into the
+        // world rect's z lane (and that Update passes to ApplyZoom as its scale argument).
+        // Read from the image, not invented -- see SetZoom's banner.
+        const f32 KF_WORLD_RECT_ASPECT = 1.7777778f;
+        // The GuiAudioTriggerEvent action enum every menu/map cue in the family uses
+        // (X360 `li r4, 7` at every Construct call site).
+        const s32 KI_AUDIO_ACTION_MENU_CUE = 7;
 
-        // ---- main-map slice constants, all read off the decrypted XEX (big-endian) ----
-        // The world rect's x-max stretch: every world-rect rebuild multiplies LANE z alone
-        // (the vperm lane-2 insert through the rw::math::vpu permute table entry
-        // unk_8327F140 + 0xA0 == "insert source word 2 into lane 2").
-        // flt_82F25AD4 = 0x3FE38E39 = 1.7777778f (16:9).
-        const f32 KF_WORLD_ASPECT_RATIO = 1.7777778f;
-        // ApplyZoom's per-frame zoom-scale step AND its settle threshold (the same f12 is
-        // both the fabs compare operand and the fmadds multiplier). flt_82F25C6C = 100.0f.
-        const f32 KF_ZOOM_STEP = 100.0f;
-        // ApplyZoom's step direction pair (fsel-free two-compare pick): flt_82001C98 = 1.0f
-        // when the delta is positive, flt_820037C8 = -1.0f otherwise (compare vs
-        // flt_82001CC0 = 0.0f).
-        const f32 KF_ZOOM_STEP_UP   = 1.0f;
-        const f32 KF_ZOOM_STEP_DOWN = -1.0f;
-        // ApplyZoom's centre-ease divisors (each a vrefp + two-Newton-Raphson exact
-        // reciprocal, folded to the divide per the BrnMapUtils.cpp precedent): while the
-        // zoom scale still steps, the centre moves a QUARTER of the remaining distance per
-        // frame (flt_82004EF4 = 4.0f); once the scale has settled it moves the full
-        // distance (flt_82001C98 = 1.0f -- yes, the console really divides by 1).
-        const f32 KF_CENTRE_EASE_DIVISOR_ZOOMING = 4.0f;
-        const f32 KF_CENTRE_EASE_DIVISOR_SETTLED = 1.0f;
-        // ApplyZoom's "the view centre has arrived" distance, in world units
-        // (flt_82F25C68 = 1.0f).
-        const f32 KF_CENTRE_SETTLE_DISTANCE = 1.0f;
-        // GuiAudioTriggerEvent::Construct's action argument at both SetZoom sites (r4 = 7,
-        // same literal as every other map audio chirp -- BrnPreRaceFlyBy_wJ_01.cpp:419
-        // precedent).
-        const s32 KI_AUDIO_TRIGGER_ACTION = 7;
+        // ---- ApplyZoom's animation constants, ALL read from the raw image ----------------
+        // (scratch/postfx_step9_final/envfix/work/image.bin, file offset = VA - 0x82000000,
+        //  big-endian; none of these is a placeholder or a guess.)
+        // flt_82F25C6C = 42C80000. Serves BOTH roles in ApplyZoom: the per-frame zoom step
+        // and the "|desired - live| is small enough to stop stepping" threshold.
+        const f32 KF_ZOOM_STEP_PER_FRAME = 100.0f;
+        // flt_82F25C68 = 3F800000. World-units epsilon for "the centre has arrived".
+        const f32 KF_CENTRE_SETTLE_EPSILON = 1.0f;
+        // flt_82004EF4 = 40800000. The centre chases the desired centre by 1/4 per frame
+        // while the zoom is still stepping...
+        const f32 KF_CENTRE_CHASE_DIVISOR_ZOOMING = 4.0f;
+        // ...and flt_82001C98 = 3F800000, i.e. the whole way, once it has settled. The
+        // console runs its inlined reciprocal helper on this literal 1.0f; see ApplyZoom.
+        const f32 KF_CENTRE_CHASE_DIVISOR_SETTLED = 1.0f;
+
+        // The console's `fabs` (X360 `fabs f11, f13` @0x8245EEE8), spelled out so the
+        // signed-zero and NaN behaviour is the library's, not a hand-rolled compare.
+        inline f32 FAbs(f32 lfValue)
+        {
+            return ::fabsf(lfValue);
+        }
 
         // Same one-shot logger shape as BrnMainMapLinkGates.cpp / BrnFriendsListLinkGates.cpp:
         // an inert stand-in must never be scored as a silent success.
@@ -125,16 +133,11 @@ namespace BrnGui
 
     }
 
-    // (The MainMapMapManagerBoundary FLAG boundary is RETIRED -- [map arm 2026-08-27]
-    // BrnMapManager.h declares `void Construct(CgsGui::StateInterface*)`, BrnMapManager.cpp
-    // bodies @0x82458590, and the TU is MOUNTED, so Construct below calls
-    // `mMapManager.Construct(lpStateInterface)` directly, exactly the console's
-    // `bl BrnGui__MapManager__Construct` @0x8245E3AC on `this + 0x8C`. ⚠️ The old
-    // boundary's "recovered semantics" note misattributed two stores -- the asm-pinned
-    // truth in the real body is: the {0,0,1,1} block lands at +0x24 (mLowResTexture.mBB,
-    // `addi r7, r31, 0x24`), the two normalised->world corner transforms land at +0x34
-    // (mLowResTexture.mBBWorld, `addi r10, r31, 0x34`), and there is NO +0x560
-    // muTextureCount store.)
+    // (The MapManager::Construct @0x82458590 FLAG boundary that stood here is RETIRED
+    // 2026-08-29: the method is declared in BrnMapManager.h and bodied in
+    // BrnMapManager.cpp, and Construct below calls it directly. Its one factual error is
+    // corrected at that body -- the {0,0,1,1} it attributed to mWorldRect is actually
+    // mLowResTexture.mBB at +0x24.)
 
     // -------------------------------------------------------------------------
     // FLAG BOUNDARY -- the GuiCache high-definition byte at X360 GuiCache +0x4B49 (19273).
@@ -225,8 +228,11 @@ namespace BrnGui
         // theirs); restored as the real calls, which already carry those asserts.
         mpGuiCache = lpStateInterface->GetAccessPointers()->GetGuiCache();
 
-        // The embedded MapManager sub-construct (X360 `bl BrnGui__MapManager__Construct`
-        // @0x8245E3AC on `this + 0x8C`) -- direct now the real body is mounted [map arm].
+        // X360 `bl BrnGui__MapManager__Construct` @0x8245E3AC on the embedded manager.
+        // ⭐ REAL AS OF 2026-08-29 (main-menu wave D1): the FLAG boundary that used to stand
+        // here is gone -- MapManager::Construct @0x82458590 is bodied in BrnMapManager.cpp,
+        // which is also what makes the real MapManager::RecvEvent safe (it derefs
+        // mpAllocator, and this is the only thing that sets it).
         mMapManager.Construct(lpStateInterface);
 
         // The console's default: E_ZOOMFACTOR_HIGH, with both zoom scalars seeded from that
@@ -359,6 +365,30 @@ namespace BrnGui
 
         const GuiEventShowHideSatNav* lpSatNav =
             reinterpret_cast<const GuiEventShowHideSatNav*>(lpEvent);
+
+        // [DIAG-TEMP] NOT IN THE X360 BINARY -- [map-recv] what the component actually sees.
+        {
+            static s32 siEvents = 0;
+            static s32 siLeft213 = 8;
+            ++siEvents;
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                if (liEventType == 213 && siLeft213 > 0)
+                {
+                    --siLeft213;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[map-recv] 213 SEEN maptype=" << static_cast<s32>(lpSatNav->GetMapType())
+                        << " show=" << static_cast<s32>(lpSatNav->GetShow())
+                        << " (events so far " << siEvents << ")\n";
+                }
+                if (siEvents == 1 || siEvents == 500 || siEvents == 5000)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[map-recv] event #" << siEvents << " type=" << liEventType << "\n";
+                }
+            }
+        }
+
         if (liEventType == lpSatNav->GetEventType() &&
             lpSatNav->GetMapType() == GuiEventShowHideSatNav::E_MAPTYPE_MAIN)
         {
@@ -369,163 +399,148 @@ namespace BrnGui
     }
 
     // -------------------------------------------------------------------------
-    // BrnGui::MainMapComponent::Update
+    // BrnGui::MainMapComponent::SetZoom
     //
-    // X360 ARTIST @0x824696E8 (json name field verified; original body BrnMainMap.cpp:165
-    // per the DWARF). The per-frame animated map view:
-    //   1. advance the zoom/centre animation (ApplyZoom with the 16:9 lane-z stretch),
-    //   2. re-position mv4WorldRect around the padding-offset centre
-    //      (CalculateOffsetWorldCentre IN -> CalculatePositionedWorldRect),
-    //   3. publish the world-space padding rect into the embedded MapManager's world rect
-    //      (`stfs` x4 into this+0x8C+0x00..0x0C == MapManager::mWorldRect),
-    //   4. when the map is enabled, rebuild the tile working set and emit the
-    //      GuiEventRenderMainMap view-state (channel 41) through
-    //      OutputViewState<GuiEventRenderMainMap> @0x82465E50,
-    //   5. install the zoomed map spaces (SetZoomedWorldRect on three corners of
-    //      mv4WorldRect + SetZoomedViewportRect on mv4ViewRect),
-    //   6. return the re-positioned centre taken back OUT of the padding offset.
+    // X360 ARTIST @0x82469A38 (json name field verified). Selects a zoom factor; on the
+    // CUSTOM factor it also writes the caller's scale into the live table and chirps the
+    // zoom-in / zoom-out cue; with lbApplyNow it rebuilds mv4WorldRect immediately and snaps
+    // BOTH zoom scalars, otherwise it only sets the DESIRED scalar and lets ApplyZoom
+    // animate towards it.
     //
-    // The mbEnabled byte (this+0x5F0 == MapManager+0x564) is tested TWICE -- two separate
-    // `lbz`/`beq` arms in the asm, not one guarded block -- so two ifs are transcribed.
-    // The three SetZoomedWorldRect corners are assembled by the unk_82CDA350 perm mask as
-    // {x,y}, {z,y}, {x,w} of mv4WorldRect: origin, x-adjacent, y-adjacent -- the exact
-    // (A, B, C) order SetZoomedWorldRect's banner pins.
+    // ⭐ THE PPC FLOAT-ARG GPR SKIP (THE recurring campaign bug) IS PRESENT HERE. The
+    // console signature is `(this=r3, leZoomFactor=r4, lfCustomZoom=f1, lbApplyNow=r6)` --
+    // r5 is DEAD because the float consumes its GPR slot, which is why IDA prints a phantom
+    // `int a4` between the float and the bool. The DWARF-declared C++ shape is the
+    // three-parameter one in BrnMainMap.h:115; do not add a fourth.
+    //
+    // ⭐ THE AUDIO ARM IS AN EQUALITY TRIPLE, NOT A TWO-WAY BRANCH. `fcmpu f31, table[3]`
+    // is tested twice: `blt` -> "CodeMapZoomIn", `bgt` -> "CodeMapZoomOut", and EQUAL falls
+    // through to the store with NO event posted. The record is the same
+    // (action 7, componentName "", label, movieName "") shape the fly-by's
+    // UpdateIconManager posts (BrnPreRaceFlyBy_wJ_01.cpp:418); r5 is the shared empty-string
+    // sentinel unk_820046A7 (the NUL terminating "%s%s%s" at 0x820046A0 -- read from the
+    // image, and already identified as "" by that TU).
+    //
+    // ⭐ THE WORLD RECT IS BUILT FROM THE *OLD* SCALE. The `lfs f0, 0x660(r31)` that feeds
+    // the multiply at 0x82469B18 is mfWorldZoomScaleFactor read BEFORE the two `stfs f31`
+    // stores at 0x82469C3C/0x82469C40 replace it. Transcribed in that order deliberately --
+    // hoisting the snap above the rect build would change the frame's rect.
+    //
+    // ⭐ THE `.z * 16/9` IS A LANE-INSERT vperm, DECODED, NOT GUESSED. `lvx128 v7, r9, 0xA0`
+    // with r9 == unk_8327F140 reads the engine-wide lane-insert permute table whose rows sit
+    // at [0x8327F140 + lane*0x40 + srcword*0x10] (homed at Wheel.cpp:500-512, recovered by
+    // emulating the static-init writer bank 0x82C74000). 0xA0 == lane 2, srcword 2, i.e.
+    // "take dest word 2 from src2's word 2" -- so exactly the z lane of (rect * 16/9)
+    // survives and x/y/w keep the unscaled product. flt_82F25AD4 == 0x3FE38E39 ==
+    // 1.7777778f, read from the image; the identical constant is what Update passes to
+    // ApplyZoom, so it is the aspect ratio, not a magic scale.
     // -------------------------------------------------------------------------
-    Vector2 MainMapComponent::Update(Vector2 lv2WorldCentre)
+    void MainMapComponent::SetZoom(ZoomFactor leZoomFactor, f32 lfCustomZoom, bool lbApplyNow)
     {
-        // cpp:167 -- static FireAssert, the console's own text.
+        // X360 `stw r4, 0x668(r31)` -- unconditionally, before the CUSTOM test.
+        meCurrentZoomFactor = leZoomFactor;
+
+        if (leZoomFactor == E_ZOOMFACTOR_CUSTOM)
+        {
+            // `lfsx f0, (r4<<2), flt_82F259DC` == mfZoomScalFactors[E_ZOOMFACTOR_CUSTOM].
+            const f32 lfExistingZoom = mfZoomScalFactors[leZoomFactor];
+
+            const char* lpacLabel = 0;
+            if (lfCustomZoom < lfExistingZoom)
+            {
+                lpacLabel = "CodeMapZoomIn";     // a SMALLER world scale == closer in
+            }
+            else if (lfCustomZoom > lfExistingZoom)
+            {
+                lpacLabel = "CodeMapZoomOut";
+            }
+
+            if (lpacLabel != 0)
+            {
+                GuiAudioTriggerEvent lZoomCue;
+                lZoomCue.Construct(KI_AUDIO_ACTION_MENU_CUE, "", lpacLabel, "");
+                mpStateInterface->OutputGuiEvent(lZoomCue);
+            }
+
+            // `lwz r11, 0x668(r31)` -- the console re-reads the member rather than reusing
+            // r4, so the index is meCurrentZoomFactor, which it has just written.
+            mfZoomScalFactors[meCurrentZoomFactor] = lfCustomZoom;
+        }
+
+        const ZoomFactor leActiveZoom = meCurrentZoomFactor;
+
+        if (!lbApplyNow)
+        {
+            // The 0x82469C50 tail: desired only, no rect rebuild.
+            mfDesiredWorldZoomFactor = mfZoomScalFactors[leActiveZoom];
+            return;
+        }
+
+        const f32 lfZoom = mfZoomScalFactors[leActiveZoom];
+
+        // cpp:456 -- the console's own cache assert (it derefs nothing here, but the check
+        // is part of the body and is reproduced faithfully).
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
-        // f1 = flt_82F25AD4 (1.7777778f): the world-rect x-max stretch rides in as
-        // ApplyZoom's float argument.
-        const Vector2 lv2AnimatedCentre = ApplyZoom(lv2WorldCentre, KF_WORLD_ASPECT_RATIO);
+        // mv4WorldRect = mv4ViewRect * <the still-current scale>, then the z lane alone
+        // scaled by the 16:9 aspect (see the vperm note in the banner).
+        mv4WorldRect.x = mv4ViewRect.x * mfWorldZoomScaleFactor;
+        mv4WorldRect.y = mv4ViewRect.y * mfWorldZoomScaleFactor;
+        mv4WorldRect.z = mv4ViewRect.z * mfWorldZoomScaleFactor * KF_WORLD_RECT_ASPECT;
+        mv4WorldRect.w = mv4ViewRect.w * mfWorldZoomScaleFactor;
 
-        const Vector2 lv2OffsetCentre =
-            CalculateOffsetWorldCentre(lv2AnimatedCentre, E_OFFSETPADDING_IN);
-        const Vector2 lv2PositionedCentre = CalculatePositionedWorldRect(lv2OffsetCentre);
+        // cpp:461 -- same guard Construct fires, on the rect this function just installed.
+        CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
+                   "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f");
 
-        // The padding rect's two corners, taken from normalised space into the CURRENT
-        // (freshly positioned) world window, become the MapManager's world rect
-        // (X360 `stfs` x4 at 0x82469874..0x82469880 into MapManager+0x00..0x0C).
-        const Vector2 lv2PaddingMin = { mv4PaddingRect.x, mv4PaddingRect.y, 0.0f, 0.0f };
-        const Vector2 lv2PaddingMax = { mv4PaddingRect.z, mv4PaddingRect.w, 0.0f, 0.0f };
-        const Vector2 lv2WorldPadMin =
-            MapTransform::Transform(lv2PaddingMin, MapTransform::GetNormalisedRect(), mv4WorldRect);
-        const Vector2 lv2WorldPadMax =
-            MapTransform::Transform(lv2PaddingMax, MapTransform::GetNormalisedRect(), mv4WorldRect);
-        mMapManager.mWorldRect.mfLeft   = lv2WorldPadMin.x;
-        mMapManager.mWorldRect.mfTop    = lv2WorldPadMin.y;
-        mMapManager.mWorldRect.mfRight  = lv2WorldPadMax.x;
-        mMapManager.mWorldRect.mfBottom = lv2WorldPadMax.y;
-
-        // First mbEnabled arm: refresh the tile working set.
-        if (mMapManager.mbEnabled)
-        {
-            mMapManager.CalculateCurrentTileSet();
-            mMapManager.RefreshActiveTextureArray();
-        }
-
-        // Second mbEnabled arm: emit the per-frame render event. The console fills the
-        // payload member-by-member on the stack -- no GuiEventRenderMainMap::Construct
-        // call exists in the body.
-        if (mMapManager.mbEnabled)
-        {
-            GuiEventRenderMainMap lRenderEvent;
-            lRenderEvent.mv4MapRect       = mv4WorldRect;                 // stack var_A0
-            lRenderEvent.mv4ViewRect      = mv4ViewRect;                  // stack var_90
-            lRenderEvent.mpActiveTextures = &mMapManager.mActiveTextures; // this+0x340 == MapManager+0x2B4
-            lRenderEvent.mfZoomLevel      = mfWorldZoomScaleFactor;       // this+0x660
-            lRenderEvent.meMapType        = meMapType;                    // this+0x66C
-            lRenderEvent.mbIsActive       = mbIsActive;                   // this+0x67C
-
-            // cpp:203 -- a STREAMED assert on the console (StrStreamBase << into
-            // gpcMessageBuffer, then FireAssert on the buffer); lowered to the static
-            // sequence with the recovered literal per the project convention.
-            CGS_ASSERT(mpStateInterface != 0, "State interface is invalid");
-
-            mpStateInterface->OutputViewState(lRenderEvent);
-        }
-
-        // The zoomed map spaces: three corners of the positioned world rect (origin,
-        // x-adjacent, y-adjacent) + the on-screen view rect.
-        const Vector2 lv2CornerOrigin = { mv4WorldRect.x, mv4WorldRect.y, 0.0f, 0.0f };
-        const Vector2 lv2CornerX      = { mv4WorldRect.z, mv4WorldRect.y, 0.0f, 0.0f };
-        const Vector2 lv2CornerY      = { mv4WorldRect.x, mv4WorldRect.w, 0.0f, 0.0f };
-        MapTransform::SetZoomedWorldRect(lv2CornerOrigin, lv2CornerX, lv2CornerY);
-        MapTransform::SetZoomedViewportRect(mv4ViewRect);
-
-        return CalculateOffsetWorldCentre(lv2PositionedCentre, E_OFFSETPADDING_OUT);
-    }
-
-    // -------------------------------------------------------------------------
-    // BrnGui::MainMapComponent::CalculateOffsetWorldCentre
-    //
-    // Original body BrnMainMap.cpp:273 (DWARF); the console INLINES it at every call site
-    // -- there is no out-of-line X360 address -- but each expansion is byte-recognisable:
-    // CalculateViewPaddingOffset, then the rect-to-rect Transform @0x8245A080 world ->
-    // normalised, a full-quad vaddfp128/vsubfp128 of the offset, and the Transform back
-    // normalised -> world (Update @0x82469780/@0x82469790 + @0x82469A08/@0x82469A18,
-    // ApplyZoom @0x8245F1D4..@0x8245F228, SnapToLocation @0x8245EE08..@0x8245EE5C).
-    //
-    // [FLAG enum-name mapping] Which OffsetPadding enumerator selects + and which - is NOT
-    // recoverable: the method is inlined everywhere, so the enumerator constants are erased
-    // from the binary. The two directions themselves ARE attested (every site applies the
-    // ADD form to the centre it feeds INTO CalculatePositionedWorldRect and the SUBTRACT
-    // form to the centre it hands back OUT), so E_OFFSETPADDING_IN is mapped to + and
-    // E_OFFSETPADDING_OUT to -; behaviour is invariant to the naming as long as all
-    // call sites (all in this TU) agree.
-    //
-    // The console's add/sub is a full-quad vector op; both operands carry 0 in z/w
-    // (Transform and CalculateViewPaddingOffset zero them), so the x/y member form below
-    // is lane-exact.
-    // -------------------------------------------------------------------------
-    Vector2 MainMapComponent::CalculateOffsetWorldCentre(Vector2 lv2Centre, OffsetPadding lePadding)
-    {
-        const Vector2 lv2PaddingOffset = CalculateViewPaddingOffset();
-
-        Vector2 lv2Normalised =
-            MapTransform::Transform(lv2Centre, mv4WorldRect, MapTransform::GetNormalisedRect());
-
-        if (lePadding == E_OFFSETPADDING_IN)
-        {
-            lv2Normalised.x += lv2PaddingOffset.x;
-            lv2Normalised.y += lv2PaddingOffset.y;
-        }
-        else
-        {
-            lv2Normalised.x -= lv2PaddingOffset.x;
-            lv2Normalised.y -= lv2PaddingOffset.y;
-        }
-
-        return MapTransform::Transform(lv2Normalised, MapTransform::GetNormalisedRect(), mv4WorldRect);
+        // `stfs f31, 0x664` then `stfs f31, 0x660` -- desired first, then live.
+        mfDesiredWorldZoomFactor = lfZoom;
+        mfWorldZoomScaleFactor   = lfZoom;
     }
 
     // -------------------------------------------------------------------------
     // BrnGui::MainMapComponent::CalculateViewPaddingOffset
     //
-    // X360 ARTIST @0x82447D38 (json name field verified; original body BrnMainMap.cpp:301).
-    // The offset between the VIEW rect's centre and the PADDING rect's centre, z/w zeroed
-    // (`std r11, 0(r7)` on the return quad's high half). Each centre is the console's
-    // min + 0.5*(max-min) fold: the lvsl-built lane selectors split the rect into
-    // splat(min)/splat(max), vsubfp forms the extent, and the vmaddfp (raw field order,
-    // see the TU banner) folds 0.5*extent + min. flt_82001DA0 = 0.5f both times.
+    // X360 ARTIST @0x82447D38 (json name field verified). A leaf: no calls, 104 lines of
+    // VMX. It returns the 2D offset between the CENTRE of the view rect and the CENTRE of
+    // the padding rect -- i.e. how far the padded map view sits off the plain view centre.
+    //
+    // DECODE. The whole body is the same four-instruction idiom twice (once per rect):
+    //   lvsl v,0,{0,4,8,12} + vspltw w0   -> the four lane-SELECT permutes (.x/.y/.z/.w)
+    //   vperm/vsubfp                      -> (rect.z - rect.x) and (rect.w - rect.y)
+    //   vmaddfp with the splat of flt_82001DA0
+    // flt_82001DA0 is read from the image (file offset 0x1DA0, big-endian 3F000000) == 0.5f
+    // -- the SAME constant Prepare's rect-centre halving uses. The vmaddfp is
+    // `min + 0.5 * (max - min)`, the rect centre; the two centres are then subtracted lane
+    // by lane with two scalar `fsubs` and returned through the sret pointer with the z/w
+    // lanes explicitly zeroed (`std r11, 0(var_48)`).
+    //
+    // ⭐ THE vmaddfp OPERAND ORDER IS PINNED, NOT ASSUMED. IDA prints the VMX128 multiply-add
+    // with the addend in the THIRD printed slot here (`vmaddfp v13, v4, v11, v13` == 0.5 *
+    // (max-min) + min). The cross-check is the rsqrt Newton-Raphson refinement in the sibling
+    // SnapToLocation @0x8245EBA0, which uses the identical printed shape: only the
+    // addend-third reading yields the textbook `y + 0.5*y*(1 - x*y*y)`; the other reading
+    // yields 0.5*y*y + (1 - x*y*y), which is dimensionally impossible for a reciprocal square
+    // root. Both readings resolve the same way, and the rect-centre semantics the function's
+    // NAME states fall out of it.
     // -------------------------------------------------------------------------
     Vector2 MainMapComponent::CalculateViewPaddingOffset()
     {
-        // this+0x620 = mv4ViewRect, this+0x630 = mv4PaddingRect.
+        // `lvx128 v13, r0, this+0x620` == mv4ViewRect; `... this+0x630` == mv4PaddingRect.
         const f32 lfViewCentreX =
-            (mv4ViewRect.z - mv4ViewRect.x) * KF_RECT_CENTRE_SCALE + mv4ViewRect.x;
+            mv4ViewRect.x + (mv4ViewRect.z - mv4ViewRect.x) * KF_RECT_CENTRE_SCALE;
         const f32 lfViewCentreY =
-            (mv4ViewRect.w - mv4ViewRect.y) * KF_RECT_CENTRE_SCALE + mv4ViewRect.y;
+            mv4ViewRect.y + (mv4ViewRect.w - mv4ViewRect.y) * KF_RECT_CENTRE_SCALE;
+
         const f32 lfPaddingCentreX =
-            (mv4PaddingRect.z - mv4PaddingRect.x) * KF_RECT_CENTRE_SCALE + mv4PaddingRect.x;
+            mv4PaddingRect.x + (mv4PaddingRect.z - mv4PaddingRect.x) * KF_RECT_CENTRE_SCALE;
         const f32 lfPaddingCentreY =
-            (mv4PaddingRect.w - mv4PaddingRect.y) * KF_RECT_CENTRE_SCALE + mv4PaddingRect.y;
+            mv4PaddingRect.y + (mv4PaddingRect.w - mv4PaddingRect.y) * KF_RECT_CENTRE_SCALE;
 
         Vector2 lv2Offset;
-        lv2Offset.x = lfViewCentreX - lfPaddingCentreX;   // fsubs @0x82447EA4
-        lv2Offset.y = lfViewCentreY - lfPaddingCentreY;   // fsubs @0x82447EB8
-        lv2Offset.z = 0.0f;                               // std r11(0) @0x82447EC0
+        lv2Offset.x = lfViewCentreX - lfPaddingCentreX;
+        lv2Offset.y = lfViewCentreY - lfPaddingCentreY;
+        lv2Offset.z = 0.0f;   // the console's explicit `std` of the z/w pair
         lv2Offset.w = 0.0f;
         return lv2Offset;
     }
@@ -533,346 +548,592 @@ namespace BrnGui
     // -------------------------------------------------------------------------
     // BrnGui::MainMapComponent::CalculatePositionedWorldRect
     //
-    // X360 ARTIST @0x8245E5F0 (json name field verified; original body BrnMainMap.cpp:326).
-    // Re-positions mv4WorldRect (in place -- this is the member-writing heart of the view
-    // pipeline) so its centre lands on lv2Centre, edge-clamped against the FIXED world
-    // rect (v127 = flt_82FB31F0 == MapTransform::smv4WorldRect) wherever the stick flags
-    // pin the map to a screen edge, then returns the positioned rect's actual centre.
+    // X360 ARTIST @0x8245E5F0 (json name field verified). Re-centres mv4WorldRect on
+    // lv2Centre WITHOUT changing its size, clamping it back inside the fixed world rect on
+    // whichever screen edges are "stuck", and returns the centre of the rect it installed.
     //
-    // The clamp floor on the left/up edges is offset by the view-padding offset taken from
-    // normalised space into the CURRENT world window as a POINT transform (the
-    // @0x8245A080 rect-to-rect Transform on the raw CalculateViewPaddingOffset result --
-    // translation included, exactly as the console does it). The right/down ceilings are
-    // the plain `fixed max - extent`. Each clamp is an fsel, transcribed operand-exact:
-    //   left  @0x8245E76C: fsel(rect.x - floor,   rect.x, floor)   == max
-    //   right @0x8245E7B4: fsel(rect.x - ceiling, ceiling, rect.x) == min
-    //   up    @0x8245E92C: fsel(rect.y - floor,   rect.y, floor)   == max
-    //   down  @0x8245E978: fsel(rect.y - ceiling, ceiling, rect.y) == min
-    // The stick flags are read as +0x67A (left) / +0x67B (right) / +0x678 (up) /
-    // +0x679 (down) -- the header's attested flag order. Lane-insert stores go through the
-    // rw::math::vpu permute table (unk_8327F140 + 0x00/0x40/0x80/0xC0 = lanes x/y/z/w),
-    // lowered to the named member writes.
+    // ⭐ IT DOES NOT TOUCH mv4PaddingRect. The Update skeleton banner below said "rebuilds
+    // mv4WorldRect + mv4PaddingRect"; the asm's only `stvx128 ..., r0, r30` target is
+    // r30 == this + 0x610 == mv4WorldRect (nine of them), and this+0x630 is never written.
+    // Corrected here rather than left to trip the Update follow-on.
+    //
+    // DECODE, in the console's order:
+    //   CalculateViewPaddingOffset()                       -> the normalised-space pad
+    //   sub_8245A080(pad, smv4NormalizedRect, mv4WorldRect) -> that pad in WORLD units
+    //     (v2 == from == unk_82FB3660, v3 == to == this+0x610; the from/to register roles
+    //      are the ones BrnMapUtils.cpp's rect-pair overload already documents)
+    //   width  = mv4WorldRect.z - mv4WorldRect.x            (taken BEFORE .x moves)
+    //   mv4WorldRect.x = lv2Centre.x - width * 0.5f         (flt_82001DA0 again)
+    //   if (mbStickMapLeft ) .x = max(.x, smv4WorldRect.x + padWorld.x)   // lbz 0x67A
+    //   if (mbStickMapRight) .x = min(.x, smv4WorldRect.z - width)        // lbz 0x67B
+    //   mv4WorldRect.z = mv4WorldRect.x + width
+    //   height = mv4WorldRect.w - mv4WorldRect.y            (AFTER the .z rebuild)
+    //   mv4WorldRect.y = lv2Centre.y - height * 0.5f
+    //   if (mbStickMapUp  ) .y = max(.y, smv4WorldRect.y + padWorld.y)    // lbz 0x678
+    //   if (mbStickMapDown) .y = min(.y, smv4WorldRect.w - height)        // lbz 0x679
+    //   mv4WorldRect.w = mv4WorldRect.y + height
+    //   assert Magnitude(mv4WorldRect) < 1000000.0f                       // cpp:376
+    //   return centre(mv4WorldRect)
+    //
+    // ⭐ THE LEFT/RIGHT ASYMMETRY IS THE CONSOLE'S. The two "low edge" clamps add the world
+    // pad (`vaddfp v11, splat(smv4WorldRect.x), splat(padWorld.x)` @0x8245E698 and the .y
+    // twin @0x8245E850) while the two "high edge" clamps subtract only the extent
+    // (`vsubfp v13, splat(smv4WorldRect.z), splat(width)` @0x8245E700). Transcribed as
+    // written; do not "symmetrise" it.
+    //
+    // ⭐ EVERY LANE WRITE IS A vperm LANE-INSERT off the engine-wide table at
+    // [0x8327F140 + lane*0x40 + srcword*0x10] (homed at Wheel.cpp:500): rows 0x00 / 0x40 /
+    // 0x80 / 0xC0 are lanes 0/1/2/3 with source word 0, which is why each scalar is first
+    // splatted across a whole stack quadword before the insert. On the host those are plain
+    // member-lane assignments, so the other three lanes are preserved exactly as the console
+    // preserves them.
+    //
+    // The `fsel f0, f11, f0, f13` / `fsel f0, f11, f13, f0` pairs are max / min with the
+    // console's tie-to-the-first-operand behaviour (fsel takes the second operand when the
+    // difference is >= 0), reproduced as >= comparisons rather than std::max/min.
     // -------------------------------------------------------------------------
     Vector2 MainMapComponent::CalculatePositionedWorldRect(Vector2 lv2Centre)
     {
-        const Vector4& lv4FixedRect = MapTransform::GetWorldRect();   // flt_82FB31F0
+        const Vector4& lrv4FixedWorldRect = MapTransform::GetWorldRect();
 
-        // The world-space padding offset (see the banner: a point transform, on purpose).
-        const Vector2 lv2WorldPadding = MapTransform::Transform(
-            CalculateViewPaddingOffset(), MapTransform::GetNormalisedRect(), mv4WorldRect);
+        const Vector2 lv2Padding = CalculateViewPaddingOffset();
+        const Vector2 lv2PaddingWorld =
+            MapTransform::Transform(lv2Padding, MapTransform::GetNormalisedRect(), mv4WorldRect);
 
-        // ---- x half ------------------------------------------------------------------
+        // ---- the X axis ----
         const f32 lfWidth = mv4WorldRect.z - mv4WorldRect.x;
+        mv4WorldRect.x = lv2Centre.x - lfWidth * KF_RECT_CENTRE_SCALE;
 
-        mv4WorldRect.x = lv2Centre.x - lfWidth * KF_RECT_CENTRE_SCALE;   // lane-0 insert @0x8245E73C
-
-        if (mbStickMapLeft)    // lbz +0x67A
+        if (mbStickMapLeft)
         {
-            const f32 lfFloor = lv4FixedRect.x + lv2WorldPadding.x;
-            mv4WorldRect.x =
-                (mv4WorldRect.x - lfFloor >= 0.0f) ? mv4WorldRect.x : lfFloor;   // fsel @0x8245E76C
+            const f32 lfMinX = lrv4FixedWorldRect.x + lv2PaddingWorld.x;
+            mv4WorldRect.x = (mv4WorldRect.x - lfMinX >= 0.0f) ? mv4WorldRect.x : lfMinX;
         }
-        if (mbStickMapRight)   // lbz +0x67B
+        if (mbStickMapRight)
         {
-            const f32 lfCeiling = lv4FixedRect.z - lfWidth;
-            mv4WorldRect.x =
-                (mv4WorldRect.x - lfCeiling >= 0.0f) ? lfCeiling : mv4WorldRect.x;   // fsel @0x8245E7B4
+            const f32 lfMaxX = lrv4FixedWorldRect.z - lfWidth;
+            mv4WorldRect.x = (mv4WorldRect.x - lfMaxX >= 0.0f) ? lfMaxX : mv4WorldRect.x;
         }
+        mv4WorldRect.z = mv4WorldRect.x + lfWidth;
 
-        mv4WorldRect.z = mv4WorldRect.x + lfWidth;   // lane-2 insert @0x8245E854
-
-        // ---- y half ------------------------------------------------------------------
+        // ---- the Y axis (the height is measured after the .z rebuild, as the asm does) ----
         const f32 lfHeight = mv4WorldRect.w - mv4WorldRect.y;
+        mv4WorldRect.y = lv2Centre.y - lfHeight * KF_RECT_CENTRE_SCALE;
 
-        mv4WorldRect.y = lv2Centre.y - lfHeight * KF_RECT_CENTRE_SCALE;   // lane-1 insert @0x8245E8FC
-
-        if (mbStickMapUp)      // lbz +0x678
+        if (mbStickMapUp)
         {
-            const f32 lfFloor = lv4FixedRect.y + lv2WorldPadding.y;
-            mv4WorldRect.y =
-                (mv4WorldRect.y - lfFloor >= 0.0f) ? mv4WorldRect.y : lfFloor;   // fsel @0x8245E930
+            const f32 lfMinY = lrv4FixedWorldRect.y + lv2PaddingWorld.y;
+            mv4WorldRect.y = (mv4WorldRect.y - lfMinY >= 0.0f) ? mv4WorldRect.y : lfMinY;
         }
-        if (mbStickMapDown)    // lbz +0x679
+        if (mbStickMapDown)
         {
-            const f32 lfCeiling = lv4FixedRect.w - lfHeight;
-            mv4WorldRect.y =
-                (mv4WorldRect.y - lfCeiling >= 0.0f) ? lfCeiling : mv4WorldRect.y;   // fsel @0x8245E980
+            const f32 lfMaxY = lrv4FixedWorldRect.w - lfHeight;
+            mv4WorldRect.y = (mv4WorldRect.y - lfMaxY >= 0.0f) ? lfMaxY : mv4WorldRect.y;
         }
+        mv4WorldRect.w = mv4WorldRect.y + lfHeight;
 
-        mv4WorldRect.w = mv4WorldRect.y + lfHeight;   // lane-3 insert @0x8245EA20
-
-        // cpp:376 -- static FireAssert, the console's own text.
+        // cpp:376 -- the same guard Construct / SetZoom fire, on the rect just installed.
         CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
                    "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f");
 
-        // The positioned rect's centre, z/w zeroed (`std r31, 0(r11)` @0x8245EB70).
-        Vector2 lv2PositionedCentre;
-        lv2PositionedCentre.x = mv4WorldRect.x + lfWidth * KF_RECT_CENTRE_SCALE;
-        lv2PositionedCentre.y = mv4WorldRect.y + lfHeight * KF_RECT_CENTRE_SCALE;
-        lv2PositionedCentre.z = 0.0f;
-        lv2PositionedCentre.w = 0.0f;
-        return lv2PositionedCentre;
+        Vector2 lv2NewCentre;
+        lv2NewCentre.x = mv4WorldRect.x + (mv4WorldRect.z - mv4WorldRect.x) * KF_RECT_CENTRE_SCALE;
+        lv2NewCentre.y = mv4WorldRect.y + (mv4WorldRect.w - mv4WorldRect.y) * KF_RECT_CENTRE_SCALE;
+        lv2NewCentre.z = 0.0f;   // the console's explicit `std` of the z/w pair
+        lv2NewCentre.w = 0.0f;
+        return lv2NewCentre;
+    }
+
+    // -------------------------------------------------------------------------
+    // BrnGui::MainMapComponent::CalculateOffsetWorldCentre
+    //
+    // NO OUT-OF-LINE X360 ADDRESS: the console inlines this private helper at every call
+    // site (BrnMainMap.h:207 declares it; scratch/func_index.tsv has no entry). Its shape is
+    // read straight off SnapToLocation @0x8245EBA0, which expands it TWICE, once per
+    // OffsetPadding value, as an identical four-step chain that differs ONLY in the sign of
+    // the padding add:
+    //     bl CalculateViewPaddingOffset                       -> pad (normalised space)
+    //     bl sub_8245A080  (v2 = mv4WorldRect, v3 = normalised) -> centre in normalised space
+    //     vaddfp128 v1, v1, v127   /   vsubfp128 v1, v1, v127   -> +pad  /  -pad
+    //     bl sub_8245A080  (v2 = normalised, v3 = mv4WorldRect) -> back to world space
+    // (@0x8245EDF4..0x8245EE18 for the ADD arm, @0x8245EE38..0x8245EE5C for the SUB arm.)
+    // The E_OFFSETPADDING_IN / _OUT enumerator ORDER is the DWARF's (BrnMainMap.h:202) and
+    // the add arm is the one the console emits FIRST, i.e. IN == pad the centre inward.
+    // -------------------------------------------------------------------------
+    Vector2 MainMapComponent::CalculateOffsetWorldCentre(Vector2 lv2Centre, OffsetPadding lePadding)
+    {
+        const Vector2 lv2Padding = CalculateViewPaddingOffset();
+
+        Vector2 lv2Normalised =
+            MapTransform::Transform(lv2Centre, mv4WorldRect, MapTransform::GetNormalisedRect());
+
+        if (lePadding == E_OFFSETPADDING_IN)
+        {
+            lv2Normalised.x += lv2Padding.x;
+            lv2Normalised.y += lv2Padding.y;
+            lv2Normalised.z += lv2Padding.z;   // whole-quadword vaddfp128
+            lv2Normalised.w += lv2Padding.w;
+        }
+        else
+        {
+            lv2Normalised.x -= lv2Padding.x;
+            lv2Normalised.y -= lv2Padding.y;
+            lv2Normalised.z -= lv2Padding.z;
+            lv2Normalised.w -= lv2Padding.w;
+        }
+
+        return MapTransform::Transform(lv2Normalised,
+                                       MapTransform::GetNormalisedRect(), mv4WorldRect);
     }
 
     // -------------------------------------------------------------------------
     // BrnGui::MainMapComponent::SnapToLocation
     //
-    // X360 ARTIST @0x8245EBA0 (json name field verified; original body BrnMainMap.cpp:395).
-    // Centre the map on a location with NO animation: snap the zoom scale to its desired
-    // value, park the desired centre on the location (full-quad store, like
-    // SetDesiredWorldCentre), rebuild the world rect at that scale, and run the
-    // padding/positioning pipeline once so mv4WorldRect lands where Update would have
-    // eased it. ⭐ THE TWO CalculateOffsetWorldCentre RESULTS ARE DISCARDED ON THE CONSOLE
-    // TOO -- v1 is overwritten right after each inlined expansion (@0x8245EE1C the
-    // positioned-rect call reloads the RAW location, and the final expansion's result dies
-    // at the blr). The calls are kept because that is what the original source did (the
-    // opaque Transform calls kept the compiler from deleting them); only
-    // CalculatePositionedWorldRect's mv4WorldRect side effect matters here.
+    // X360 ARTIST @0x8245EBA0 (json name field verified). Jumps the map straight to a world
+    // location: the pending zoom is committed immediately (no animation), the world rect is
+    // rebuilt around it, and the zoom-in-flight flag is cleared. Called by
+    // CrashNavMapMain::Update (BrnCrashNavMapMain.cpp:419) and the online room's map
+    // (BrnOnlineGameRoomPlayerInfo_wH_00.cpp:482).
+    //
+    // ⭐ THE RECT BUILD IS THE SAME ONE SetZoom DOES, including the lane-insert aspect
+    // scale: `lvx128 v7, r25, 0xA0` off the engine lane-insert table at 0x8327F140 == lane 2
+    // / source word 2 == "dest.z from src2.z", so only the z lane of (rect * 16/9) survives.
+    // flt_82F25AD4 == 0x3FE38E39 == 1.7777778f, read from the image.
+    //
+    // ⭐ THE TWO CalculateOffsetWorldCentre RESULTS ARE DEAD ON THE CONSOLE, AND THAT IS
+    // TRANSCRIBED, NOT TIDIED AWAY. At 0x8245EE1C and 0x8245EE5C the returned Vector2 is
+    // dropped: the `vmr128 v1, v124` immediately after the first chain reloads the ORIGINAL
+    // lv2Location for the CalculatePositionedWorldRect call, and the second chain is the last
+    // thing before `stb r31, 0x670`. The calls survive optimisation only because
+    // sub_8245A080 is out-of-line, so the console really does run them; the observable
+    // effects of the tail are CalculatePositionedWorldRect's writes to mv4WorldRect and the
+    // flag clear. [FLAG dead-value] Written as assignments to a discarded local so the shape
+    // stays visible -- if a later wave finds the source assigned these to a member, this is
+    // where to look. CalculatePositionedWorldRect's own return is discarded the same way
+    // (its sret buffer is overwritten by the next CalculateViewPaddingOffset call).
     // -------------------------------------------------------------------------
     void MainMapComponent::SnapToLocation(Vector2 lv2Location)
     {
-        // cpp:397 -- static FireAssert, the console's own text.
+        // cpp:397 -- the console's cache tripwire (it derefs nothing here).
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
-        mfWorldZoomScaleFactor = mfDesiredWorldZoomFactor;   // stfs @0x8245EC0C
-        mv2DesiredCentre       = lv2Location;                // full-quad stvx @0x8245EC3C
+        // `lfs f0, 0x664(r30)` then `stfs f0, 0x660(r30)`: the pending zoom is committed
+        // outright rather than animated towards.
+        mfWorldZoomScaleFactor = mfDesiredWorldZoomFactor;
 
-        // The world rect at the desired scale (the shared rebuild idiom; the 16:9 stretch
-        // is the flt_82F25AD4 constant here, not a parameter).
-        mv4WorldRect.x = mv4ViewRect.x * mfDesiredWorldZoomFactor;
-        mv4WorldRect.y = mv4ViewRect.y * mfDesiredWorldZoomFactor;
-        mv4WorldRect.z = mv4ViewRect.z * mfDesiredWorldZoomFactor * KF_WORLD_ASPECT_RATIO;
-        mv4WorldRect.w = mv4ViewRect.w * mfDesiredWorldZoomFactor;
+        // `stvx128 v124, r0, this+0x650` -- a full quadword, all four lanes of the caller's
+        // Vector2 (the same whole-register store SetDesiredWorldCentre performs).
+        mv2DesiredCentre = lv2Location;
 
-        // cpp:405 / cpp:406 -- static FireAsserts, the console's own strings. The first is
-        // the TWO-lane magnitude (the console sums lanes x/y only -- see the
-        // vector2_operation.h grow note), the second the full-4.
+        // mv4WorldRect = mv4ViewRect * <the just-committed scale>, then the z lane alone
+        // scaled by the 16:9 aspect (the lane-insert vperm; see the banner).
+        mv4WorldRect.x = mv4ViewRect.x * mfWorldZoomScaleFactor;
+        mv4WorldRect.y = mv4ViewRect.y * mfWorldZoomScaleFactor;
+        mv4WorldRect.z = mv4ViewRect.z * mfWorldZoomScaleFactor * KF_WORLD_RECT_ASPECT;
+        mv4WorldRect.w = mv4ViewRect.w * mfWorldZoomScaleFactor;
+
+        // cpp:405 -- a TWO-lane magnitude (the asm splats lanes 0 and 1 of the squared
+        // register and adds them; z/w are never read), hence the Vector2 overload.
         CGS_ASSERT(rw::math::vpu::Magnitude(mv2DesiredCentre) < KF_MAX_WORLD_RECT_MAGNITUDE,
                    "RwMathVPU::Magnitude(mv2DesiredCentre) < 1000000.0f");
+        // cpp:406 -- the four-lane one, on the rect just installed.
         CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
                    "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f");
 
-        CalculateOffsetWorldCentre(lv2Location, E_OFFSETPADDING_IN);    // result discarded (console too)
-        CalculatePositionedWorldRect(lv2Location);                      // side effect: mv4WorldRect
-        CalculateOffsetWorldCentre(lv2Location, E_OFFSETPADDING_OUT);   // result discarded (console too)
+        // See the [FLAG dead-value] note above: the console computes all three of these and
+        // uses none of the returned values.
+        Vector2 lv2Discarded = CalculateOffsetWorldCentre(lv2Location, E_OFFSETPADDING_IN);
+        lv2Discarded = CalculatePositionedWorldRect(lv2Location);
+        lv2Discarded = CalculateOffsetWorldCentre(lv2Location, E_OFFSETPADDING_OUT);
+        (void)lv2Discarded;
 
-        mbIsZooming = false;   // stb @0x8245EE60
+        // `stb r31, 0x670(r30)` with r31 == 0 -- a snap ends any zoom animation.
+        mbIsZooming = false;
     }
 
-    // -------------------------------------------------------------------------
-    // BrnGui::MainMapComponent::SetZoom
-    //
-    // X360 ARTIST @0x82469A38 (json name field verified; original body BrnMainMap.cpp:429).
-    // Select a zoom factor. On E_ZOOMFACTOR_CUSTOM the caller's scale overwrites the
-    // table's CUSTOM slot, with an audio chirp keyed on which way the zoom moved relative
-    // to the slot's previous value ("CodeMapZoomIn" when the new zoom is tighter,
-    // "CodeMapZoomOut" when wider; equal = silent). With lbApplyNow the world rect is
-    // rebuilt IMMEDIATELY -- ⭐ from the OLD mfWorldZoomScaleFactor (the console loads
-    // this+0x660 before the tail stores update it; the new scale is applied by the next
-    // Update's ApplyZoom pass) -- and both zoom scalars snap to the new table value.
-    // Without it only the desired factor is set and ApplyZoom animates there.
-    // -------------------------------------------------------------------------
-    void MainMapComponent::SetZoom(ZoomFactor leZoomFactor, float lfCustomZoom, bool lbApplyNow)
-    {
-        meCurrentZoomFactor = leZoomFactor;   // stw @0x82469A60
-
-        if (leZoomFactor == E_ZOOMFACTOR_CUSTOM)
-        {
-            const f32 lfPreviousCustomZoom = mfZoomScalFactors[leZoomFactor];
-            if (lfCustomZoom < lfPreviousCustomZoom)
-            {
-                // r4 = 7, r5 = "" (the shared empty-string sentinel unk_820046A7),
-                // r6 = "CodeMapZoomIn", r7 = "" -- (action, component, label, movie).
-                GuiAudioTriggerEvent lAudioEvent;
-                lAudioEvent.Construct(KI_AUDIO_TRIGGER_ACTION, "", "CodeMapZoomIn", "");
-                mpStateInterface->OutputGuiEvent(lAudioEvent);
-            }
-            else if (lfCustomZoom > lfPreviousCustomZoom)
-            {
-                GuiAudioTriggerEvent lAudioEvent;
-                lAudioEvent.Construct(KI_AUDIO_TRIGGER_ACTION, "", "CodeMapZoomOut", "");
-                mpStateInterface->OutputGuiEvent(lAudioEvent);
-            }
-
-            mfZoomScalFactors[meCurrentZoomFactor] = lfCustomZoom;   // stfsx @0x82469AC8
-        }
-
-        if (lbApplyNow)
-        {
-            const f32 lfNewZoom = mfZoomScalFactors[meCurrentZoomFactor];   // lfsx @0x82469AE0
-
-            // cpp:456 -- static FireAssert, the console's own text.
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
-
-            // The shared world-rect rebuild -- on the OLD scale (see the banner).
-            mv4WorldRect.x = mv4ViewRect.x * mfWorldZoomScaleFactor;
-            mv4WorldRect.y = mv4ViewRect.y * mfWorldZoomScaleFactor;
-            mv4WorldRect.z = mv4ViewRect.z * mfWorldZoomScaleFactor * KF_WORLD_ASPECT_RATIO;
-            mv4WorldRect.w = mv4ViewRect.w * mfWorldZoomScaleFactor;
-
-            // cpp:461 -- static FireAssert, the console's own text.
-            CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
-                       "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f");
-
-            mfDesiredWorldZoomFactor = lfNewZoom;   // stfs @0x82469C3C
-            mfWorldZoomScaleFactor   = lfNewZoom;   // stfs @0x82469C40
-        }
-        else
-        {
-            mfDesiredWorldZoomFactor = mfZoomScalFactors[meCurrentZoomFactor];   // stfs @0x82469C54
-        }
-    }
 
     // -------------------------------------------------------------------------
     // BrnGui::MainMapComponent::ApplyZoom
     //
-    // X360 ARTIST @0x8245EE78 (json name field verified; original body BrnMainMap.cpp:545).
-    // The per-frame zoom/centre animation step, returning the eased world centre. lfZoom
-    // is the world-rect lane-z stretch (Update passes flt_82F25AD4 == 16:9). Three phases:
+    // X360 ARTIST @0x8245EE78 (json name field verified). The per-frame ANIMATION step of
+    // the map view: it walks mfWorldZoomScaleFactor towards mfDesiredWorldZoomFactor and the
+    // live world centre towards mv2DesiredCentre, rebuilds mv4WorldRect for whatever the
+    // scale now is, and reports whether a zoom is still in flight (mbIsZooming). Returns the
+    // world centre the caller should adopt this frame. Its ONE caller is Update below.
     //
-    //   A. SCALE STEPPING (|desired - current| > 100): the scale moves a fixed 100.0 per
-    //      frame toward the desired factor (fmadds step*dir + scale), mbIsZooming latches
-    //      true, and the centre eases a QUARTER of its remaining distance (the
-    //      vrefp+2xN-R reciprocal of flt_82004EF4=4, vmaddcfp128 delta*(1/4) + centre).
-    //      The arrived-block is skipped (r9 = 0).
+    // ⭐ THE PPC FLOAT-ARG GPR SKIP AGAIN. The console signature is
+    // `(sret=r3, this=r4, lv2WorldCentre=v1, lfZoom=f1)`; Hex-Rays shows a single `int a1`
+    // and loses r4 entirely, which is why the pseudocode's `_R30 = v1` reads like nonsense.
+    // Decoded off the raw prologue: `mr r30, r4` (this), `mr r20, r3` (the sret buffer),
+    // `vmr128 v124, v1` (the centre), `fmr f31, f1` (the zoom). The DWARF C++ shape is the
+    // two-parameter one declared in BrnMainMap.h; do not add a third.
     //
-    //   B. SCALE SETTLED: if the centre still sits > 1.0 world units from the desired
-    //      centre, the world rect is rebuilt at the current scale, the centre takes a
-    //      FULL step (divisor flt_82001C98 = 1.0), and the padding/positioning pipeline
-    //      runs (IN -> CalculatePositionedWorldRect -> OUT); mbIsZooming = whether the
-    //      re-positioned centre still differs from the input by > 1.0 (the vcmpgtfp bit
-    //      stored straight to +0x670 @0x8245F2BC), and "arrived" is its negation (the
-    //      cntlzw/extrwi pair). If the centre was already within 1.0, "arrived" is
-    //      immediate (r9 stays 1) and the input centre is returned unchanged.
+    // ⭐ EVERY MAGIC NUMBER HERE WAS READ FROM THE IMAGE, NONE GUESSED
+    // (scratch/postfx_step9_final/envfix/work/image.bin, file offset = VA - 0x82000000, BE):
+    //     flt_82F25C6C = 42C80000 = 100.0f  -- the per-frame zoom step AND the "the zoom has
+    //                                         settled" threshold (the same constant serves both)
+    //     flt_82F25C68 = 3F800000 =   1.0f  -- the world-units "close enough" epsilon
+    //     flt_82004EF4 = 40800000 =   4.0f  -- the centre-chase divisor while zooming
+    //     flt_82001C98 = 3F800000 =   1.0f  -- the centre-chase divisor once zoom has settled
+    //     flt_82001CC0 = 00000000 =   0.0f, flt_820037C8 = BF800000 = -1.0f (the sign pick)
+    //     flt_820068C0 = 49742400 = 1000000.0f (the shared Magnitude guard)
     //
-    //   C. ARRIVED: park mv2DesiredCentre on the eased centre when their x/y differ (the
-    //      vrlimi128 lane-duplication + vcmpeqfp. all-lanes test reduces to that pair),
-    //      snap the scale to the desired factor (re-latching mbIsZooming when it actually
-    //      moved), and push the zoom level into the embedded MapManager. ⭐ The switch's
-    //      jump table is FOUR IDENTICAL entries: every defined ZoomFactor lands on
-    //      MapManager::SetZoomLevel(&mMapManager, 0) (r4 = 0 == E_ZOOM_MEDIUM); only the
-    //      out-of-range default differs (the "Unexpected zoom factor" assert).
+    // ⭐ THE TWO CHASE DIVISORS ARE THE SAME INLINED HELPER, NOT TWO DIFFERENT MATHS. Both
+    // arms emit `centre + (desired - centre) * (1/K)` with the reciprocal computed by
+    // vrefp + two Newton-Raphson refinements -- K == 4.0f while the zoom is still stepping
+    // and K == 1.0f once it has settled (i.e. the settled arm jumps the centre the whole way
+    // in one frame). The console really does run the reciprocal chain on the literal 1.0f;
+    // that is the shared helper being inlined twice, and it is transcribed as
+    // `* (1.0f / K)` rather than folded away so the shape stays legible.
     //
-    // The tail ALWAYS rebuilds mv4WorldRect from the (possibly stepped/snapped) current
-    // scale with the lfZoom stretch, and re-checks the magnitude guard.
+    // ⭐ vmaddfp / vnmsubfp128 OPERAND ORDER PINNED OFF THE rsqrt REFINEMENT (the recurring
+    // campaign bug). At 0x8245F018/0x8245F01C the pair must produce the textbook
+    // `y + 0.5*y*(1 - x*y*y)`. Only ONE reading of each does:
+    //     vnmsubfp128 vD, vA, vB, vC  ->  vC - vA*vB     (addend printed THIRD)
+    //     vmaddfp     vD, vA, vB, vC  ->  vA*vC + vB     (addend printed SECOND)
+    // They genuinely differ because the VMX128 form re-orders its encoding fields and the
+    // classic Altivec form does not -- exactly the trap the campaign has been burned by.
+    // The same reading makes `vmaddcfp128 v123, v11, v13, v124` == v11*v13 + v124, i.e. the
+    // chase above, and makes the vrefp refinements `r + r*(1 - c*r)`.
+    //
+    // ⭐ THE RETURNED CENTRE IS THE *PRE*-REPOSITION ONE, AND THAT IS TRANSCRIBED, NOT
+    // TIDIED. In the settled arm the console computes a fully re-padded, re-positioned
+    // centre (the pad-in / CalculatePositionedWorldRect / pad-out chain at
+    // 0x8245F1B4..0x8245F228) and then uses it for NOTHING except the convergence test at
+    // 0x8245F22C -- v123, the return value, was last written at 0x8245F144 and is never
+    // updated from it. [FLAG dead-value] If a later wave finds the source returning the
+    // repositioned centre, this is the line to revisit.
+    //
+    // ⭐ THE FOUR-WAY switch REALLY DOES HAVE ONE ARM. The jump table at jpt_8245F340 sends
+    // cases 0-3 to the same `SetZoomLevel(E_ZOOM_MEDIUM)` block (IDA even labels it
+    // "cases 0-3"); only the out-of-range default reaches the "Unexpected zoom factor"
+    // assert at cpp:635. Reproduced as written -- collapsing it to an unconditional call
+    // would drop the console's own range tripwire.
     // -------------------------------------------------------------------------
-    Vector2 MainMapComponent::ApplyZoom(Vector2 lv2WorldCentre, float lfZoom)
+    Vector2 MainMapComponent::ApplyZoom(Vector2 lv2WorldCentre, f32 lfZoom)
     {
-        Vector2 lv2Centre     = lv2WorldCentre;   // v123
-        bool lbCentreArrived  = true;             // r9 (seeded 1 @0x8245EEB8)
+        // v123 -- the value that will be returned. Seeded with the caller's centre
+        // (`vmr128 v123, v124` @0x8245EEB0) so every path that does not chase leaves it alone.
+        Vector2 lv2Result = lv2WorldCentre;
+
+        // `mr r9, r23` with r23 == 1: the commit block runs unless a later path clears this.
+        bool lbCommit = true;
 
         const f32 lfZoomDelta = mfDesiredWorldZoomFactor - mfWorldZoomScaleFactor;
 
-        if (fabsf(lfZoomDelta) > KF_ZOOM_STEP)
+        if (FAbs(lfZoomDelta) > KF_ZOOM_STEP_PER_FRAME)
         {
-            // ---- phase A: the scale still steps -------------------------------------
-            const f32 lfDirection =
-                (lfZoomDelta > 0.0f) ? KF_ZOOM_STEP_UP : KF_ZOOM_STEP_DOWN;
-            // fmadds @0x8245EF24: step*direction + scale.
-            mfWorldZoomScaleFactor = KF_ZOOM_STEP * lfDirection + mfWorldZoomScaleFactor;
-            mbIsZooming = true;   // stb @0x8245EF34
+            // ---- the zoom is still far from its target: step it and chase the centre ----
+            // `fcmpu f13, 0.0 ; ble -> -1.0` -- the sign is picked with a plain compare, so a
+            // delta of exactly 0.0f takes the NEGATIVE arm (unreachable here: |delta| > 100).
+            const f32 lfStepSign = (lfZoomDelta > 0.0f) ? 1.0f : -1.0f;
+            mfWorldZoomScaleFactor += KF_ZOOM_STEP_PER_FRAME * lfStepSign;
 
-            // vmaddcfp128 @0x8245EF94: centre + (desired - centre)/4.
-            lv2Centre.x = (mv2DesiredCentre.x - lv2WorldCentre.x) / KF_CENTRE_EASE_DIVISOR_ZOOMING
-                          + lv2WorldCentre.x;
-            lv2Centre.y = (mv2DesiredCentre.y - lv2WorldCentre.y) / KF_CENTRE_EASE_DIVISOR_ZOOMING
-                          + lv2WorldCentre.y;
+            // `stb r23, 0x670(r30)` -- stepping the zoom IS a zoom in flight.
+            mbIsZooming = true;
 
-            lbCentreArrived = false;   // mr r9, r31 @0x8245EF3C
+            const f32 lfChase = 1.0f / KF_CENTRE_CHASE_DIVISOR_ZOOMING;
+            lv2Result.x = lv2WorldCentre.x + (mv2DesiredCentre.x - lv2WorldCentre.x) * lfChase;
+            lv2Result.y = lv2WorldCentre.y + (mv2DesiredCentre.y - lv2WorldCentre.y) * lfChase;
+            lv2Result.z = lv2WorldCentre.z + (mv2DesiredCentre.z - lv2WorldCentre.z) * lfChase;
+            lv2Result.w = lv2WorldCentre.w + (mv2DesiredCentre.w - lv2WorldCentre.w) * lfChase;
+
+            // `b loc_8245F2C4` with r9 == 0: the commit block is SKIPPED while stepping.
+            lbCommit = false;
         }
         else
         {
-            // ---- phase B: the scale has settled; does the centre still travel? ------
+            // ---- the zoom has settled; only the centre may still need to move ----
             Vector2 lv2ToDesired;
             lv2ToDesired.x = mv2DesiredCentre.x - lv2WorldCentre.x;
             lv2ToDesired.y = mv2DesiredCentre.y - lv2WorldCentre.y;
-            lv2ToDesired.z = 0.0f;
-            lv2ToDesired.w = 0.0f;
+            lv2ToDesired.z = mv2DesiredCentre.z - lv2WorldCentre.z;
+            lv2ToDesired.w = mv2DesiredCentre.w - lv2WorldCentre.w;
 
-            if (rw::math::vpu::Magnitude(lv2ToDesired) > KF_CENTRE_SETTLE_DISTANCE)
+            // The two-lane magnitude (the asm splats lanes 0 and 1 of the squared register
+            // and adds them; z/w are never read), with the console's vsel zero-dot guard.
+            if (rw::math::vpu::Magnitude(lv2ToDesired) > KF_CENTRE_SETTLE_EPSILON)
             {
-                // The shared world-rect rebuild, at the current scale.
+                // mv4WorldRect = mv4ViewRect * <the current scale>, then the z lane alone
+                // scaled by lfZoom -- the SAME lane-insert vperm SetZoom / SnapToLocation do
+                // (`lvx128 v7, r25, 0xA0` off the engine table at 0x8327F140 == lane 2 /
+                // source word 2 == "dest.z from src2.z").
                 mv4WorldRect.x = mv4ViewRect.x * mfWorldZoomScaleFactor;
                 mv4WorldRect.y = mv4ViewRect.y * mfWorldZoomScaleFactor;
                 mv4WorldRect.z = mv4ViewRect.z * mfWorldZoomScaleFactor * lfZoom;
                 mv4WorldRect.w = mv4ViewRect.w * mfWorldZoomScaleFactor;
 
-                // vmaddcfp128 @0x8245F144: a FULL step (divisor 1.0 -- see the constants).
-                lv2Centre.x = lv2ToDesired.x / KF_CENTRE_EASE_DIVISOR_SETTLED + lv2WorldCentre.x;
-                lv2Centre.y = lv2ToDesired.y / KF_CENTRE_EASE_DIVISOR_SETTLED + lv2WorldCentre.y;
-
-                // cpp:579 -- static FireAssert, the console's own text.
+                // cpp:579 -- the shared four-lane guard on the rect just installed.
                 CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
                            "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f");
 
-                // The padding/positioning pipeline the eased centre runs through.
-                const Vector2 lv2OffsetCentre =
-                    CalculateOffsetWorldCentre(lv2Centre, E_OFFSETPADDING_IN);
-                const Vector2 lv2PositionedCentre = CalculatePositionedWorldRect(lv2OffsetCentre);
-                const Vector2 lv2AdjustedCentre =
-                    CalculateOffsetWorldCentre(lv2PositionedCentre, E_OFFSETPADDING_OUT);
+                // The settled arm's chase divisor is 1.0f, i.e. the centre lands on the
+                // desired centre this frame (see the banner -- the reciprocal chain on a
+                // literal 1.0f is the shared helper being inlined).
+                const f32 lfChase = 1.0f / KF_CENTRE_CHASE_DIVISOR_SETTLED;
+                lv2Result.x = lv2WorldCentre.x + lv2ToDesired.x * lfChase;
+                lv2Result.y = lv2WorldCentre.y + lv2ToDesired.y * lfChase;
+                lv2Result.z = lv2WorldCentre.z + lv2ToDesired.z * lfChase;
+                lv2Result.w = lv2WorldCentre.w + lv2ToDesired.w * lfChase;
 
-                Vector2 lv2Moved;
-                lv2Moved.x = lv2AdjustedCentre.x - lv2WorldCentre.x;
-                lv2Moved.y = lv2AdjustedCentre.y - lv2WorldCentre.y;
-                lv2Moved.z = 0.0f;
-                lv2Moved.w = 0.0f;
+                // The pad-in / reposition / pad-out chain. Its result feeds ONLY the
+                // convergence test below -- see the [FLAG dead-value] note in the banner.
+                const Vector2 lv2PadIn = CalculateViewPaddingOffset();
+                Vector2 lv2Normalised =
+                    MapTransform::Transform(lv2Result, mv4WorldRect,
+                                            MapTransform::GetNormalisedRect());
+                lv2Normalised.x += lv2PadIn.x;
+                lv2Normalised.y += lv2PadIn.y;
+                lv2Normalised.z += lv2PadIn.z;   // whole-quadword vaddfp128
+                lv2Normalised.w += lv2PadIn.w;
+                const Vector2 lv2Padded =
+                    MapTransform::Transform(lv2Normalised, MapTransform::GetNormalisedRect(),
+                                            mv4WorldRect);
 
-                // stb @0x8245F2BC: the compare bit IS the member value.
-                mbIsZooming = rw::math::vpu::Magnitude(lv2Moved) > KF_CENTRE_SETTLE_DISTANCE;
-                lbCentreArrived = !mbIsZooming;   // cntlzw/extrwi @0x8245F2B8/@0x8245F2C0
+                const Vector2 lv2Positioned = CalculatePositionedWorldRect(lv2Padded);
+
+                const Vector2 lv2PadOut = CalculateViewPaddingOffset();
+                Vector2 lv2Unpadded =
+                    MapTransform::Transform(lv2Positioned, mv4WorldRect,
+                                            MapTransform::GetNormalisedRect());
+                lv2Unpadded.x -= lv2PadOut.x;
+                lv2Unpadded.y -= lv2PadOut.y;
+                lv2Unpadded.z -= lv2PadOut.z;
+                lv2Unpadded.w -= lv2PadOut.w;
+                const Vector2 lv2Settled =
+                    MapTransform::Transform(lv2Unpadded, MapTransform::GetNormalisedRect(),
+                                            mv4WorldRect);
+
+                // `vsubfp128 v0, v1, v124` then the two-lane magnitude: how far the settled
+                // centre still is from the one the caller came in with.
+                Vector2 lv2Remaining;
+                lv2Remaining.x = lv2Settled.x - lv2WorldCentre.x;
+                lv2Remaining.y = lv2Settled.y - lv2WorldCentre.y;
+                lv2Remaining.z = lv2Settled.z - lv2WorldCentre.z;
+                lv2Remaining.w = lv2Settled.w - lv2WorldCentre.w;
+
+                // `stb r11, 0x670(r30)` takes the compare result directly, and the commit
+                // flag is its complement (`cntlzw` + `extrwi ...,1,26` @0x8245F2B8).
+                mbIsZooming =
+                    (rw::math::vpu::Magnitude(lv2Remaining) > KF_CENTRE_SETTLE_EPSILON);
+                lbCommit = !mbIsZooming;
             }
-            // (else: within 1.0 already -- lbCentreArrived stays true, lv2Centre stays
-            //  the input centre.)
+            // else: the centre is already within the epsilon. lv2Result stays the caller's
+            // centre, mbIsZooming is NOT touched, and lbCommit stays true.
         }
 
-        if (lbCentreArrived)
+        if (lbCommit)
         {
-            // ---- phase C: park the animation ----------------------------------------
-            // vrlimi128 x/y-duplication + vcmpeqfp. @0x8245F2E8: store only when the x/y
-            // lanes differ; the store itself is the full quad.
-            if (mv2DesiredCentre.x != lv2Centre.x || mv2DesiredCentre.y != lv2Centre.y)
+            // `vrlimi128 v13, v123, 3, 2` on both operands before `vcmpeqfp.`: lanes 2 and 3
+            // are overwritten with a 2-word rotation of the same register, so both sides
+            // become {x, y, x, y} and the all-lanes compare is a pure 2D equality.
+            if (mv2DesiredCentre.x != lv2Result.x || mv2DesiredCentre.y != lv2Result.y)
             {
-                mv2DesiredCentre = lv2Centre;   // stvx @0x8245F2FC
+                // The whole-quadword `stvx128 v123, r0, r26` -- i.e. SetDesiredWorldCentre.
+                SetDesiredWorldCentre(lv2Result);
             }
 
-            if (mfWorldZoomScaleFactor != mfDesiredWorldZoomFactor)
+            if (mfWorldZoomScaleFactor == mfDesiredWorldZoomFactor)
             {
-                mfWorldZoomScaleFactor = mfDesiredWorldZoomFactor;   // stfs @0x8245F310
-                mbIsZooming = true;                                  // stb @0x8245F314
+                mbIsZooming = false;
             }
             else
             {
-                mbIsZooming = false;                                 // stb @0x8245F31C
+                mfWorldZoomScaleFactor = mfDesiredWorldZoomFactor;
+                mbIsZooming = true;
             }
 
             switch (meCurrentZoomFactor)
             {
-                // jpt_8245F340: four identical entries -- every defined factor takes the
-                // same arm, r4 = 0 == MapManager::E_ZOOM_MEDIUM.
-                case E_ZOOMFACTOR_LOW:
-                case E_ZOOMFACTOR_MEDIUM:
-                case E_ZOOMFACTOR_HIGH:
-                case E_ZOOMFACTOR_CUSTOM:
-                    mMapManager.SetZoomLevel(MapManager::E_ZOOM_MEDIUM);
-                    break;
-                default:
-                    // cpp:635 -- static FireAssert, the console's own text.
-                    CGS_ASSERT(false, "Unexpected zoom factor");
-                    break;
+            case E_ZOOMFACTOR_LOW:
+            case E_ZOOMFACTOR_MEDIUM:
+            case E_ZOOMFACTOR_HIGH:
+            case E_ZOOMFACTOR_CUSTOM:
+                // Every in-range factor selects the SAME tile zoom level (jpt_8245F340).
+                mMapManager.SetZoomLevel(MapManager::E_ZOOM_MEDIUM);
+                break;
+            default:
+                // cpp:635 -- the console's out-of-range tripwire.
+                CGS_ASSERT(false, "Unexpected zoom factor");
+                break;
             }
         }
 
-        // ---- the unconditional tail: the world rect at the current scale ------------
+        // The unconditional tail: rebuild mv4WorldRect for whatever mfWorldZoomScaleFactor
+        // now is (the commit block above may have just replaced it), with the same lane-insert
+        // aspect scale on .z. `lfs f0, 0x660(r30)` is a FRESH read -- do not hoist it.
         mv4WorldRect.x = mv4ViewRect.x * mfWorldZoomScaleFactor;
         mv4WorldRect.y = mv4ViewRect.y * mfWorldZoomScaleFactor;
         mv4WorldRect.z = mv4ViewRect.z * mfWorldZoomScaleFactor * lfZoom;
         mv4WorldRect.w = mv4ViewRect.w * mfWorldZoomScaleFactor;
 
-        // cpp:645 -- static FireAssert, the console's own text.
+        // cpp:645
         CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
                    "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f");
 
-        return lv2Centre;   // stvx v123 -> [r20] @0x8245F48C
+        return lv2Result;
+    }
+
+    // -------------------------------------------------------------------------
+    // BrnGui::MainMapComponent::Update
+    //
+    // X360 ARTIST @0x824696E8 (json name field verified). ⭐ THE PER-FRAME MAP-WORLD PUMP --
+    // the last gate between the CrashNav map chrome and the map world actually rendering.
+    // In order: animate the view (ApplyZoom), re-pad and re-position the world rect, hand the
+    // tile manager the padded world region it must cover, rebuild + refresh the tile working
+    // set, emit GuiEventRenderMainMap for the custom map renderer, publish the zoomed world /
+    // viewport spaces for the icon layer, and return the caller's next world centre.
+    //
+    // Its ONE committed caller feedback-assigns the return
+    // (`mv2WorldCenterPoint = mMainMapComponent.Update(mv2WorldCenterPoint)` --
+    // BrnCrashNavMap_wJ_07.cpp:382 and BrnPreRaceFlyBy_wJ_04.cpp:347), which is why the
+    // returned centre is the animation's carrier and not a convenience.
+    //
+    // ⭐ WHAT THE OLD BLOCKED SKELETON GOT WRONG, corrected here against the raw asm:
+    //   (a) `mMapManager.mWorldRect` is NOT mv4WorldRect. It is mv4PaddingRect's two corners
+    //       taken from NORMALISED space into the current world rect -- i.e. the padded,
+    //       on-screen slice of the world, which is exactly the region that needs tiles.
+    //       (0x824697C4 loads this+0x630 == mv4PaddingRect, not this+0x610.)
+    //   (b) The tail's input is CalculatePositionedWorldRect's RETURN (stack var_D0 reloaded
+    //       at 0x824699FC), not the pre-reposition centre.
+    //
+    // ⭐ THE TWO PERM BLOCKS ARE DECODED OFF THE IMAGE, NOT GUESSED. Both use the mask at
+    // unk_82CDA350 = {0,1,2,3, 20,21,22,23, 0,1,2,3, 0,1,2,3} (read from image.bin: bytes
+    // 00 01 02 03 14 15 16 17 00 01 02 03 00 01 02 03), which pairs word0 of operand A with
+    // word1 of operand B -- so `vperm vD, splat(a), splat(b), mask` is simply "make the
+    // Vector2 (a, b)". The `lvsl v13, 0, N ; vspltw v, v13, 0` idiom in front of each is the
+    // lane-SELECT permute for lane N/4 (N == 0/4/8/12 -> .x/.y/.z/.w). So:
+    //   * block 1 (0x824697C0..0x8246980C) splits mv4PaddingRect into its (x,y) and (z,w)
+    //     corners;
+    //   * block 2 (0x8246996C..0x824699D4) splits mv4WorldRect into the three corners
+    //     SetZoomedWorldRect wants: origin (x,y), the x-axis point (z,y), the y-axis point
+    //     (x,w) -- the MakeCoordSpaceFromPoints triple.
+    // The re-interleave that assembles the tile rect uses the second mask
+    // unk_82CDA3C0 = {0,1,2,3, 0,1,2,3, 0,1,2,3, 20,21,22,23} plus `vsldoi ...,8`
+    // (IDA prints the immediate 8 as a phantom `v8`), which yields {A.x, A.y, B.x, B.y}.
+    //
+    // ⭐ THE EVENT IS STACK-BUILT FIELD BY FIELD, WITH NO Construct() CALL. Measured stack
+    // slots: var_A0 = mv4MapRect (this+0x610), var_90 = mv4ViewRect (this+0x620),
+    // var_80 = &mMapManager.mActiveTextures (this+0x340 == 0x8C + 0x2B4),
+    // var_7C = mfWorldZoomScaleFactor (this+0x660), var_78 = meMapType (this+0x66C),
+    // var_74 = mbIsActive (this+0x67C) -- exactly GuiEventRenderMainMap's declared order, and
+    // OutputViewState is handed var_A0. mMapManager.mbEnabled (MapManager +0x564) is read
+    // TWICE, once for the tile rebuild and once for the event, and both reads are kept.
+    // -------------------------------------------------------------------------
+    Vector2 MainMapComponent::Update(Vector2 lv2WorldCentre)
+    {
+        // cpp:167 -- the console's cache tripwire (it derefs nothing here).
+        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+
+        // flt_82F25AD4 == 0x3FE38E39 == 1.7777778f, read from the image: the 16:9 aspect the
+        // whole family folds into the world rect's z lane (SetZoom and SnapToLocation apply
+        // the identical constant inline).
+        const Vector2 lv2Zoomed = ApplyZoom(lv2WorldCentre, KF_WORLD_RECT_ASPECT);
+
+        // ---- pad the animated centre, then re-position the world rect around it ----
+        const Vector2 lv2PadIn = CalculateViewPaddingOffset();
+        Vector2 lv2Normalised =
+            MapTransform::Transform(lv2Zoomed, mv4WorldRect, MapTransform::GetNormalisedRect());
+        lv2Normalised.x += lv2PadIn.x;
+        lv2Normalised.y += lv2PadIn.y;
+        lv2Normalised.z += lv2PadIn.z;   // whole-quadword vaddfp128
+        lv2Normalised.w += lv2PadIn.w;
+        const Vector2 lv2Padded =
+            MapTransform::Transform(lv2Normalised, MapTransform::GetNormalisedRect(), mv4WorldRect);
+
+        // Rebuilds mv4WorldRect (only) around the padded centre and returns the centre it
+        // actually installed -- that return is what the tail below carries back to the caller.
+        const Vector2 lv2Positioned = CalculatePositionedWorldRect(lv2Padded);
+
+        // ---- hand the tile manager the padded on-screen region, in world units ----
+        // The padding rect lives in NORMALISED space, so each corner is transformed
+        // normalised -> world against the rect CalculatePositionedWorldRect just installed.
+        const Vector2 lv2PaddingMin = { mv4PaddingRect.x, mv4PaddingRect.y,
+                                        mv4PaddingRect.x, mv4PaddingRect.x };
+        const Vector2 lv2PaddingMax = { mv4PaddingRect.z, mv4PaddingRect.w,
+                                        mv4PaddingRect.z, mv4PaddingRect.z };
+        const Vector2 lv2TileMin = MapTransform::Transform(
+            lv2PaddingMin, MapTransform::GetNormalisedRect(), mv4WorldRect);
+        const Vector2 lv2TileMax = MapTransform::Transform(
+            lv2PaddingMax, MapTransform::GetNormalisedRect(), mv4WorldRect);
+
+        // The {A.x, A.y, B.x, B.y} re-interleave, stored lane by lane through the console's
+        // four scalar `stfs` at 0x82469874..0x82469880.
+        mMapManager.mWorldRect.mfLeft   = lv2TileMin.x;
+        mMapManager.mWorldRect.mfTop    = lv2TileMin.y;
+        mMapManager.mWorldRect.mfRight  = lv2TileMax.x;
+        mMapManager.mWorldRect.mfBottom = lv2TileMax.y;
+
+        if (mMapManager.mbEnabled)
+        {
+            mMapManager.CalculateCurrentTileSet();
+            mMapManager.RefreshActiveTextureArray();
+        }
+
+        // [DIAG-TEMP] NOT IN THE X360 BINARY -- [map-pump] the per-frame map chain state.
+        {
+            static s32 siLeft = 12;
+            static s32 siFrame = 0;
+            ++siFrame;
+            if (siLeft > 0 && (siFrame % 60) == 1 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                --siLeft;
+                *CgsDev::Log::gpDebugPrint
+                    << "[map-pump] f=" << siFrame
+                    << " enabled=" << static_cast<s32>(mMapManager.mbEnabled)
+                    << " active=" << static_cast<s32>(mbIsActive)
+                    << " maptype=" << static_cast<s32>(meMapType)
+                    << " lowres=" << (mMapManager.mLowResTexture.mpTextureState != 0 ? 1 : 0)
+                    << " texcount=" << static_cast<s32>(mMapManager.mActiveTextures.muTextureCount)
+                    << " dirs=" << (mMapManager.mapDirectories[0] != 0 ? 1 : 0)
+                    << "/" << (mMapManager.mapDirectories[1] != 0 ? 1 : 0)
+                    << " zoom=" << mfWorldZoomScaleFactor
+                    << " world=(" << mv4WorldRect.x << "," << mv4WorldRect.y
+                    << "," << mv4WorldRect.z << "," << mv4WorldRect.w << ")"
+                    << " view=(" << mv4ViewRect.x << "," << mv4ViewRect.y
+                    << "," << mv4ViewRect.z << "," << mv4ViewRect.w << ")"
+                    << "\n";
+            }
+        }
+
+        // The console re-reads the same byte rather than reusing the first test's register.
+        if (mMapManager.mbEnabled)
+        {
+            GuiEventRenderMainMap lRenderEvent;
+            lRenderEvent.mv4MapRect       = mv4WorldRect;
+            lRenderEvent.mv4ViewRect      = mv4ViewRect;
+            lRenderEvent.mpActiveTextures = &mMapManager.mActiveTextures;
+            lRenderEvent.mfZoomLevel      = mfWorldZoomScaleFactor;
+            lRenderEvent.meMapType        = meMapType;
+            lRenderEvent.mbIsActive       = mbIsActive;
+
+            // cpp:203 -- a streamed assert on the console (BeginAssert + StrStreamBase +
+            // FireAssert); the message text is the console's own.
+            CGS_ASSERT(mpStateInterface != 0, "State interface is invalid");
+
+            mpStateInterface->OutputViewState(lRenderEvent);
+        }
+
+        // ---- publish the zoomed spaces the icon / sat-nav layer reads ----
+        // The three corners of mv4WorldRect, in MakeCoordSpaceFromPoints order.
+        const Vector2 lv2ZoomOrigin = { mv4WorldRect.x, mv4WorldRect.y,
+                                        mv4WorldRect.x, mv4WorldRect.x };
+        const Vector2 lv2ZoomXPoint = { mv4WorldRect.z, mv4WorldRect.y,
+                                        mv4WorldRect.z, mv4WorldRect.z };
+        const Vector2 lv2ZoomYPoint = { mv4WorldRect.x, mv4WorldRect.w,
+                                        mv4WorldRect.x, mv4WorldRect.x };
+        MapTransform::SetZoomedWorldRect(lv2ZoomOrigin, lv2ZoomXPoint, lv2ZoomYPoint);
+        MapTransform::SetZoomedViewportRect(mv4ViewRect);
+
+        // ---- un-pad the positioned centre and hand it back to the caller ----
+        const Vector2 lv2PadOut = CalculateViewPaddingOffset();
+        Vector2 lv2Unpadded =
+            MapTransform::Transform(lv2Positioned, mv4WorldRect, MapTransform::GetNormalisedRect());
+        lv2Unpadded.x -= lv2PadOut.x;
+        lv2Unpadded.y -= lv2PadOut.y;
+        lv2Unpadded.z -= lv2PadOut.z;
+        lv2Unpadded.w -= lv2PadOut.w;
+
+        return MapTransform::Transform(lv2Unpadded, MapTransform::GetNormalisedRect(), mv4WorldRect);
     }
 }

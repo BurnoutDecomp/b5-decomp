@@ -378,6 +378,8 @@ namespace CgsGui
             case 213:   // SatNav/MainMap show-hide  {s32 mode, f32 fade, u8 enable}
             case 214:   // BoostBar render enable    {u8 flag}
             case 215:   // AboveCar render enable    {u8 flag}
+            case 223:   // ⭐ [map-world] the per-frame RenderMainMap payload -- MainMapRenderer
+                        // (slot 2) and CrashNavIconRenderer (slot 3) both latch it.
                 // ⭐ [boost-bar] the custom-renderer view-state commands, bridged body-only
                 // from channel 41 by GuiModule (see its case-41 note). On the console these
                 // reach the manager through the loop-tail forward below every view event

@@ -292,13 +292,6 @@ struct GuiEventUpdateSatNav
         {
             return miLandmarkIndex;   // [H3b] the head carve named it; same bytes.
         }
-        // [map arm 2026-08-27] the write sides of the two head fields, attested by the
-        // GuiCache landmark fills: GetLandmarkInfoFromIndex @0x82506688 (`sth r27, 0x20`
-        // -- the caller's index -- and `lbz lm+0x31; stb 0x22` -- the landmark's design
-        // index) and GetLandmarkInfoFromID @0x825067E0 (`lhz lm+0x28; sth 0x20`).
-        void SetLandmarkIndexHalf(s16 liIndex) { miLandmarkIndex = liIndex; }   // @0x20
-        void SetDesignIndex(u8 lu8Design)      { mu8DesignIndex = lu8Design; }  // @0x22
-
         // ADDITIVE GROW (wave-J CrashNavMap + PreRaceFlyBy TUs). Two named faces over head
         // members that are already DWARF-documented but were, until now, buried inside the
         // opaque reserved head:
@@ -318,6 +311,23 @@ struct GuiEventUpdateSatNav
         {
             mv4Position = lv4Position;
         }
+
+        // ADDITIVE GROW (wave J, GuiCache map-side closure). The two head fields the
+        // landmark-info fills write and nothing had a named face for yet:
+        //   * the landmark half-word @0x20 -- GuiCache::GetLandmarkInfoFromIndex
+        //     @0x82506688 `sth r27, 0x20(icon)` (the caller's landmark index) and
+        //     GuiCache::GetLandmarkInfoFromID @0x825067E0 `sth <lm+0x28>, 0x20(icon)`
+        //     (the resolved landmark's own TriggerRegion region index).
+        //   * the design-index byte @0x22 -- both fills do `lbz r11, 0x31(lm)` /
+        //     `stb r11, 0x22(icon)`, i.e. Landmark::GetDesignIndex().
+        // FLAG consumer-named: the MEMBER names are the DWARF's (:1704/:1705); the
+        // accessor pair is ours, same idiom as GetLandmarkIndexHalf / SetPositionLane.
+        void SetLandmarkIndexHalf(s16 li16LandmarkIndex)                    // @0x20
+        {
+            miLandmarkIndex = li16LandmarkIndex;
+        }
+        u8   GetDesignIndex() const        { return mu8DesignIndex; }       // @0x22
+        void SetDesignIndex(u8 lu8Design)  { mu8DesignIndex = lu8Design; }  // @0x22
 
     private:
         // ---- leading payload (PS3 DWARF :1699-1707) ----
@@ -391,6 +401,47 @@ static_assert(sizeof(GuiEventUpdateSatNav::SatNavIconInfo) == 0x30,
               "SatNavIconInfo stride 0x30 (DoWorstCase icon step; 0x900/0x30 == 48 icons)");
 
 // ===================================================================================
+// BrnGui::GuiEventSetActiveLandmarks -- the "these landmarks are the live ones" payload.
+//   DWARF home: this header (BrnGuiEventTypeDefs.h:1455, `struct GuiEventSetActiveLandmarks
+//   : public GuiEvent<169>`), members verbatim: uint32_t muNumLandmarks;
+//   LandmarkIndex maLandmarkIndices[512].
+//
+// ADDITIVE GROW (wave J, GuiCache map-side closure). The consumer is
+// GuiCache::HandleSetActiveLandmarksEvent @0x824EE7D0, which asserts
+// muNumLandmarks <= 512 and copies the list into the cache's +0x5288 u16 table, storing
+// the count with a BYTE store at +0x5286 (see BrnGuiCache.h's muNumActiveLandmarks note).
+// The producer in this wave is
+// GuiCache::HACK_FindABetterPlaceForMe_SetActiveLandmarksByEventID @0x825071C8, which
+// builds one on its stack and hands it straight to the handler -- NOT through the queue.
+//
+// ⛔ NOT DERIVED FROM CgsGui::GuiEvent<169> HERE, DELIBERATELY -- and this is X360-proven,
+// not a shortcut. The committed CgsGui::GuiEvent<N> in this tree carries a REAL 12-byte
+// header (muHeader0 / muEventType / muHeader2, CgsGuiEvent.h:33-45), but the X360 producer
+// @0x8250736C passes `r1 + 0x90` and the handler @0x824EE7D0's first instruction is
+// `lwz muNumLandmarks, 0(arg)` -- the count IS at byte 0. Deriving would push every member
+// 12+ bytes down and silently break the offsets. This is the same call the flat
+// GuiEventUpdateSatNav above makes: id carried by GetEventType(), no base bytes. (The PS3
+// DWARF's `: public GuiEvent<169>` describes a base that is empty on that toolchain; the
+// binary is authoritative on layout, per this file's LAYOUT NOTE.)
+// KI_MAX_LANDMARKS_IN_GAME == 512 is the console's own bound -- its assert text spells it
+// "lpActiveLandmarksEvent->muNumLandmarks <= static_cast<uint32_t>( KI_MAX_LANDMARKS_IN_GAME )".
+// ===================================================================================
+struct GuiEventSetActiveLandmarks
+{
+    // The console's own bound (the assert at BrnGuiCache.cpp:4067 compares against 0x200).
+    static const u32 KU_MAX_LANDMARKS_IN_GAME = 512;
+
+    u32                          muNumLandmarks;                             // @0x00
+    BrnGameState::LandmarkIndex  maLandmarkIndices[KU_MAX_LANDMARKS_IN_GAME]; // @0x04 (stride 2)
+
+    // The PS3 DWARF's template id for this payload (BrnGuiEventTypeDefs.h:1455). Carried
+    // as a method for the same reason GuiEventUpdateSatNav carries its 199: the record is
+    // a flat struct with no queue header. No producer in this wave queues it -- the only
+    // X360 producer hands it straight to GuiCache::HandleSetActiveLandmarksEvent.
+    s32 GetEventType() const { return 169; }
+};
+
+// ===================================================================================
 // BrnGui::GuiEventDrawEventIcons -- the "draw event icons" GUI event payload.
 //   Home: this header (Gui/BrnGuiEventTypeDefs.h; the X360 asserts reference it:
 //   Construct @0x824EB218 -> BrnGuiEventTypeDefs.h:2785; GetIgnoreIcons @0x82443518 ->
@@ -459,6 +510,33 @@ public:
     // non-NULL, writes the count to *lpiNumIconsToIgnore, copies the entries to
     // lpuIconsToIgnore.
     void GetIgnoreIcons(u32* lpuIconsToIgnore, s32* lpiNumIconsToIgnore) const;
+
+    // DWARF :2683 / :2684 / :2685 -- the three header-inline readers. The X360 emits no
+    // out-of-line body for any of them: CrashNavIconRenderer::RecvEvent case 554
+    // (@0x82456498) inlines all three as `lfs 0x28` / `lwz 0x2C` / `lbz 0x34` straight off
+    // the payload, which is exactly the field set above. ADDITIVE (declared by the DWARF,
+    // read by the one consumer); no layout change.
+    f32              GetFadeTime()    const { return mfFadeTime; }
+    EIconDisplayType GetDisplayType() const { return meIconDisplayType; }
+    bool             GetDrawIcons()   const { return mbDrawIcons; }
+
+    // ADDITIVE 2026-08-29 (main-menu wave G2). The wire type id this payload is queued
+    // under: 554, X360-attested at BOTH producers and the consumer.
+    //   * EventIconManager::Prepare         @0x82517390 and
+    //   * EventIconManager::ReleaseResources @0x825174C0
+    //     each stack-build the GuiEventWrapper header {sizeof(T)=56, type=554, offset=12}
+    //     and AddEvent it on channels 41 and 42 -- the OutputViewState / OutputInternalState
+    //     record shape CgsGuiEvent.h documents. 56 is sizeof(*this) here, which corroborates
+    //     that the id word really is the middle one.
+    //   * CrashNavIconRenderer::RecvEvent @0x82456498 dispatches `case 554` and then inlines
+    //     GetFadeTime / GetDisplayType / GetDrawIcons straight off the payload.
+    // Static + inline: GuiEventWrapper only ever spells `lrEvent.GetEventType()`, so no
+    // GuiEvent<N> base is introduced and NO byte of the layout above moves (see the
+    // NOT MODELLED note in the class banner).
+    // [FLAG id divergence] the PS3 DWARF derives this event from GuiEvent<539>, not 539 vs
+    // 554 reconciled here; the X360 wire value is what the queue and its one consumer agree
+    // on, so 554 is what is used. Revisit if a DWARF-side dispatch table ever contradicts it.
+    static s32       GetEventType()        { return 554; }
 
 private:
     u32 mauIconsToIgnore[KI_MAX_ICONS_TO_IGNORE]; // @0x00 (DWARF :2693) -- the copied list
@@ -2585,5 +2663,58 @@ static_assert(__builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData,
               __builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, mbHasRankedUp)          == 0xB8,
               "OfflinePostEventData slot drift vs the X360 loads (0x2278/0x2288/0x2290/0x2298/"
               "0x22A8/0x2318/0x2328/0x2330 with the record based at 0x2278)");
+
+// ===================================================================================
+// The CRASH-NAV MAP status payloads -- ids 560 / 561 / 562. DWARF home:
+// BrnGuiEventTypeDefs.h:2840 / :2856 / :2871 (this file), so they are homed here rather
+// than modelled opaquely at the receiver.
+//
+// The ONE consumer in the binary is BrnGui::CrashNavIconRenderer::RecvEvent @0x82456168,
+// and its store sets pin each record's width exactly:
+//   560 -> `addi r11,r22,0x1A0` + FOUR ld/std pairs at +0x00/+0x08/+0x10/+0x18  = 32 bytes
+//   561 -> `addi r10,r22,0x1C4` + TWO lwz/stw pairs at +0x00/+0x04              =  8 bytes
+//   562 -> `addi r10,r22,0x1544` + TWO lwz/stw pairs at +0x00/+0x04             =  8 bytes
+// The console leads 560 with a 16-byte VMX lane (the ctor's `stvx128 v0, r31, 0x1A0`
+// zeroes exactly +0x1A0..+0x1AF) and then writes two words at +0x10/+0x14 (`li r10,2` ->
+// miDisplayState, `li r11,4` -> miAnimationState), which is Vector2 (16B VMX) + two s32.
+// NO CgsGui::GuiEvent<N> header is present: the first payload word IS mv2Position's x
+// lane, so these are plain records carrying their own GetEventType() -- the same shape as
+// GuiEventDrawEventIcons above, whose Construct also writes its first member at +0x00.
+// ===================================================================================
+
+class  CrashNavMapIcon;   // GameSource/Gui/SatNav/BrnSatNavIcon.h
+struct RoadSignIcon;      // GameSource/Gui/View/BrnRoadSignIconManager.h
+
+// DWARF :2840 -- where the map cursor is and what it is doing. X360 +0x1A0 on the
+// renderer, copied whole by RecvEvent case 560 (which first asserts the pointer,
+// "lpMapCursorStatus", BrnCrashNavIconRenderer.cpp:461).
+struct GuiEventMapCursorStatus
+{
+    Vector2 mv2Position;      // :2842  payload +0x00 (16-byte VMX lane on console)
+    s32     miDisplayState;   // :2843  payload +0x10 (renderer ctor seeds 2)
+    s32     miAnimationState; // :2844  payload +0x14 (renderer ctor / SetRenderEnabled seed 4)
+
+    s32 GetEventType() const { return 560; }
+};
+
+// DWARF :2856 -- the live crash-nav icon bank the map component publishes each frame.
+// X360 +0x1C4 on the renderer (RecvEvent case 561, assert "lpMapIconStatus" :471).
+struct GuiEventMapIconStatus
+{
+    CrashNavMapIcon* lpSatNavIcons;    // :2858  payload +0x00 (DWARF spells it lp*, sic)
+    s32              liNumberOfIcons;  // :2859  payload +0x04
+
+    s32 GetEventType() const { return 561; }
+};
+
+// DWARF :2871 -- the road-sign icon bank + its screen scale. X360 +0x1544 on the renderer
+// (RecvEvent case 562, assert "lRoadSignIconStatus" :481).
+struct GuiEventRoadSignIconStatus
+{
+    RoadSignIcon* mpRoadSignIcons;   // :2873  payload +0x00
+    f32           mfScaleFactor;     // :2874  payload +0x04
+
+    s32 GetEventType() const { return 562; }
+};
 
 } // namespace BrnGui

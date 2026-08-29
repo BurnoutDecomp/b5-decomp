@@ -38,6 +38,10 @@
 // per-T (id,size) constant pair store-for-store.
 // ============================================================================
 
+// GuiEventNetworkPlayerImage carries the transmitted photo pointer-only (the renderer's
+// CopyTexture is the only consumer, and it lives in its own TU).
+namespace CgsNetwork { class NetworkTexture; }
+
 namespace BrnGui
 {
     // NOTE (HudMessageAnalyzer keystone, wave B): the analyzer-consumed payloads formerly
@@ -183,7 +187,22 @@ namespace BrnGui
     struct GuiEventMustFixCarFirst { u8 maData[1]; s32 GetEventType() const { return 552; } };  // id 552 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventNetworkLeftGame { u8 maData[8]; s32 GetEventType() const { return 273; } };  // id 273 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventNetworkLobbyPlayerList : public CgsGui::GuiEvent<244> { u8 maPayload[444]; };  // id 244 size 456 (12B GuiEvent header + opaque payload)
-    struct GuiEventNetworkPlayerImage { u8 maData[8]; s32 GetEventType() const { return 258; } };  // id 258 size 8 (raw; size not GuiEvent-shaped)
+    // ⭐ 2026-08-29 (map-world wave): TYPED, and the fork retired. This used to be an opaque
+    // `u8 maData[8]` here AND a second, incompatible namespace-scope definition in
+    // BrnNetworkPlayerImageRenderer.h:75 -- the pre-existing ODR fork three TUs record
+    // (GameBridgeGameStateToX.cpp:56, GameBridgeGameStateToX_EventFlowGuiEvents.cpp:81,
+    // BrnCrashNavIconRenderer_wK_01.cpp:83), and the reason no TU could include both that
+    // renderer header and this one. The two leading fields are the ones the X360
+    // NetworkPlayerImageRenderer::CopyTexture reads (+0x00 the transmitted NetworkTexture,
+    // +0x04 the destination display slot); the console record is 8 bytes with 4-byte
+    // pointers, and is native-width here, exactly like the producers'
+    // GuiEventNetworkPlayerImageRecord in BrnLicenseComponent.cpp / BrnPhotoBoothComponent.cpp.
+    struct GuiEventNetworkPlayerImage
+    {
+        CgsNetwork::NetworkTexture* mpTexture;      // +0x00
+        s32                         miTextureIndex; // +0x04
+        s32 GetEventType() const { return 258; }
+    };  // id 258 size 8 on X360 (4-byte pointer); native-width here
     struct GuiEventNetworkPlayerList : public CgsGui::GuiEvent<243> { u8 maPayload[156]; };  // id 243 size 168 (12B GuiEvent header + opaque payload)
     struct GuiEventNetworkPlayerStatus : public CgsGui::GuiEvent<245> { u8 maPayload[2532]; };  // id 245 size 2544 (12B GuiEvent header + opaque payload)
     struct GuiEventNetworkPostGameProcessingFinished { u8 maData[1]; s32 GetEventType() const { return 274; } };  // id 274 size 1 (raw; size not GuiEvent-shaped)
@@ -816,5 +835,39 @@ namespace BrnGui
     };  // id 213, payload 12 bytes -> wrapped record 24 on channel 41 / 42
     static_assert(sizeof(GuiEventShowHideSatNav) == 12,
                   "GuiEventShowHideSatNav is the 12-byte OutputViewState/InternalState payload");
-    struct alignas(8) GuiEventSetHoveredEventIcon : public CgsGui::GuiEvent<559> { u8 maPayload[12]; };  // id 559 size 24 [8-aligned: OViewState off16]
+    // ===============================================================================
+    // id 559 -- the hovered crash-nav icon. CORRECTED 2026-08-29 (mainmenu wave): this
+    // entry used to be `: public CgsGui::GuiEvent<559> { u8 maPayload[12]; }`, i.e. a
+    // 12-byte GuiEvent header followed by twelve opaque bytes. Both halves were wrong and
+    // the two ends of the wire prove it:
+    //   PRODUCER  CrashNavMap::UpdateIconManager @0x824CBB5C / @0x824CC094 fill the record
+    //             at +0x00 / +0x08 / +0x10 / +0x14 -- the FIRST field is at +0x00, so
+    //             there is no header in front of it.
+    //   CONSUMER  CrashNavIconRenderer::RecvEvent case 559 @0x8245656C reads doublewords
+    //             at +0x00 and +0x08 and a word at +0x10 for its "cannot hover over two
+    //             icon types at once" guard (BrnCrashNavIconRenderer.cpp:451), then copies
+    //             three doublewords (24 bytes) into mHoveredEventIcon.
+    //   SIZE      OutputViewState<GuiEventSetHoveredEventIcon> @0x824C2EE8: payload 24,
+    //             record offset word 16 -> the payload is 8-ALIGNED and 24 bytes on the
+    //             console. Twelve header bytes + twelve payload bytes cannot produce that
+    //             field placement.
+    // Written base-less with its own GetEventType(), exactly like GuiEventSetInspectedEventIcon
+    // above. This retires the "kept file-local here rather than widening a shared catalogue
+    // entry on one consumer's evidence" FLAG in BrnCrashNavMap_wJ_08.cpp (which now has BOTH
+    // ends' evidence); that TU's file-local twin is left untouched and still agrees field
+    // for field. DWARF (BrnGuiEventTypeDefs.h:2823) supplies the names.
+    //
+    // HOST WIDTH: mpcHoveredRoadName is 4 bytes on the X360 (payload 24, record 40) and 8
+    // on the x64 host (payload 32, record 48). Never write those console numbers as
+    // literals -- every poster takes sizeof().
+    // ===============================================================================
+    struct alignas(8) GuiEventSetHoveredEventIcon
+    {
+        CgsID       mHoveredDriveThroughID;  // +0x00 (DWARF :2826)
+        CgsID       mHoveredPlayerID;        // +0x08 (DWARF :2827; the producer's rival id)
+        u32         muHoveredEventID;        // +0x10 (DWARF :2825)
+        const char* mpcHoveredRoadName;      // +0x14 on X360, +0x18 here (DWARF :2828)
+
+        s32 GetEventType() const { return 559; }
+    };  // id 559, X360 payload 24 -> wrapped record 40 on channel 41
 }

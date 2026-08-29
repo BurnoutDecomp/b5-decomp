@@ -61,9 +61,14 @@ namespace BrnGui
         return BrnTraffic::GetScoringTrafficDataElement(maScoringTrafficDataStorage, luIndex);
     }
 
-    // (GetEventDestinationLandmarkIndex @0x8240FA88 MOVED to the MOUNTED
-    // BrnGuiCache_wMap.cpp, map arm 2026-08-27 -- the BrnMainMapLinkGates.cpp retirement
-    // prescription. One home only: re-adding it here while wMap is mounted is LNK2005.)
+    // @ 0x8240FA88 -- GetEventDestinationLandmarkIndex: ⭐ MOVED OUT 2026-08-29 (wave J).
+    // The body now lives in the MOUNTED GameSource/Gui/BrnGuiCache_wJ_01.cpp, where it
+    // retires the BrnMainMapLinkGates.cpp:332 stand-in. It was moved rather than copied
+    // BECAUSE THE TWO CANNOT COEXIST (LNK2005), and this TU is unmounted: leaving a second
+    // definition here would arm that clash for whoever mounts wB_res next.
+    // ⚠️ The moved body also carries the console's REAL assert texts, which this copy did
+    // not -- the mode gate's text is the full GsmIO enumeration the X360 bakes at
+    // BrnGuiCache.h:4055, not the paraphrase that stood here. Do not restore this copy.
 
     // @ 0x8241E7D8 -- number of online finish points = total set bits across the 256-bit
     // finish-point bitmask (maOnlineFinishPointsMask @0x7770, 4 doublewords). The X360 loads
@@ -72,19 +77,12 @@ namespace BrnGui
     // step-1 / step-2 masks the X360 materialises carry redundant high bits set (0xD555.../
     // 0xF333...), but those bits only ever meet the zero bits shifted in, so each step is the
     // canonical popcount mask exactly.
-    u32 GuiCache::GetNumOnlineFinishPoints() const
-    {
-        u32 luFinishPointCount = 0;
-        for (s32 liWord = 0; liWord < 4; ++liWord)
-        {
-            u64 luBits = maOnlineFinishPointsMask[liWord];
-            luBits = luBits - ((luBits >> 1) & 0xD555555555555555ULL);
-            luBits = ((luBits >> 2) & 0xF333333333333333ULL) + (luBits & 0x3333333333333333ULL);
-            luBits = (luBits + (luBits >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
-            luFinishPointCount += static_cast<u32>((luBits * 0x0101010101010101ULL) >> 56);
-        }
-        return luFinishPointCount;
-    }
+    // ⭐ MOVED OUT 2026-08-29 (wave G3), for the same reason and by the same rule as
+    // GetEventDestinationLandmarkIndex above: the body now lives in the MOUNTED
+    // GameSource/Gui/BrnGuiCache_wJ_01.cpp, where it closes a measured LNK2019. The two
+    // cannot coexist (LNK2005), and leaving a second definition in this UNMOUNTED TU would
+    // arm that clash for whoever mounts wB_res next. The moved body is byte-identical
+    // (same console masks, same four-word loop) and carries the same note.
 
     // @ 0x824EC610 -- the event's finish landmark. Fetches the checkpoint count
     // (GetCheckpointsInEvent), asserts it is non-zero, then returns the LAST checkpoint's

@@ -22,7 +22,11 @@
 // against the reconstructed bodies. The aggregate spans 0x578 so later methods land cleanly.
 // Uses SatNavTile::sTileCache (added to BrnSatNavTile.h alongside this TU).
 
-namespace rw { class IResourceAllocator; }
+// rw::IResourceAllocator / rw::Resource arrive COMPLETE through BrnSatNavTile.h ->
+// rw/rwcore_structs.h. No local re-declaration: rwcore_structs.h spells IResourceAllocator
+// `struct`, and MSVC mangles the class-key into the decorated name (V vs U), so a local
+// `class IResourceAllocator;` here would decorate MapManager::RecvEvent's DoAllocate call
+// site differently from the vendor definition and fail to link.
 namespace CgsGui { struct StateInterface; }   // held by pointer only (out-of-batch Construct)
 namespace CgsModule { struct Event; }          // RecvEvent payload base (empty marker; carries the GuiCache* in its first word)
 
@@ -61,10 +65,13 @@ namespace BrnGui
 
         MapManager();                                                 // @0x82508550
 
-        // @0x82458590 -- [map arm 2026-08-27] adopt the state interface + its allocator and
-        // reset the whole working set (directories, requested tiles, counters, the low-res
-        // backdrop slot with its unit local BB and whole-world world BB). The console caller
-        // is MainMapComponent::Construct's embedded-MapManager sub-construct.
+        // @0x82458590 -- bring the tile manager up against its owning state: latch the
+        // state interface + its resource allocator, clear the working set, and seed the
+        // low-res backdrop's local/world bounding boxes. MainMapComponent::Construct calls
+        // it on the embedded instance (X360 `bl MapManager::Construct` @0x8245E3AC).
+        // ⚠️ MapManager::RecvEvent DEREFERENCES mpAllocator, and nothing else initialises
+        // it -- the ctor above deliberately does not. Never mount a caller of RecvEvent
+        // without this Construct having run.
         void            Construct(CgsGui::StateInterface* lpStateInterface);
 
         void            SetZoomLevel(EZoomLevel leZoomLevel);         // @0x8244F768

@@ -5,6 +5,23 @@
 // reads that list back out. Each runs non-fatal CGS_ASSERT guards (the X360 proceeds
 // regardless). The X360-baked assert file/line are discarded per project convention;
 // the stringized conditions match the X360 assert text.
+//
+// ⛔⛔ MOUNT CONTRACT -- READ BEFORE SCORING THIS SYMBOL AS LANDED.
+// This TU is NOT in build_game_exe.bat / build/game/obj/build.rsp, which is the ONLY reason
+// the full link measured `BrnGui::GuiEventDrawEventIcons::GetIgnoreIcons(u32*, int*) const`
+// as an unresolved external: the body below has been correct and complete all along, and it
+// was re-verified store-for-store against the X360 export @0x82443518 on 2026-08-29 (wave
+// G3) -- the two null asserts with their BrnGuiEventTypeDefs.h:2815/:2816 lines, the count
+// read at this+0x30, and the word-by-word copy out of the ignore list at this+0x00.
+// Its consumer, CrashNavIconRenderer::RecvEvent @0x82456168 (case 554), IS mounted.
+// ⇒ THE FIX IS A BAT MOUNT, NOT A NEW BODY. Add
+//     %SRC%\GameSource\Gui\BrnGuiEventDrawEventIcons.cpp
+// to build_game_exe.bat beside the other GameSource\Gui event TUs. Verified safe:
+// GuiEventDrawEventIcons::Construct and ::GetIgnoreIcons are defined NOWHERE ELSE in the
+// tree (no LinkStubs / LinkGates entry either), so the mount cannot raise LNK2005, and this
+// TU introduces no undefined externals of its own -- it calls nothing but CGS_ASSERT.
+// Writing the body a second time in a mounted TU would have been the wrong fix: it would
+// have armed exactly that LNK2005 for whoever mounts this file next.
 
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT

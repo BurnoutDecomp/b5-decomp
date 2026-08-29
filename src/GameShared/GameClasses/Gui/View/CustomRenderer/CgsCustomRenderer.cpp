@@ -59,31 +59,15 @@ namespace CgsGui
     }
 }
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82C290D8
-//   (BrnGui::MainMapRenderer::SetRenderEnabled)
+// ⭐ 2026-08-29 (map-world wave) -- BrnGui::MainMapRenderer::SetRenderEnabled @0x82C290D8
+// NO LONGER LIVES HERE. DecFIGS keys the leaf to CgsCustomRenderer.h only because it is an
+// ICF-folded `stb r4, 4(r3); blr`; its identity is MainMapRenderer's, and the DWARF
+// declares it `virtual void SetRenderEnabled(bool)` at BrnMainMapRenderer.cpp:377.
 //
-// NOTE: this function is keyed to CgsCustomRenderer.h by DecFIGS file attribution, but its
-// identity is BrnGui::MainMapRenderer::SetRenderEnabled (a derived custom renderer).
-// Behaviour-faithful to the X360 pseudocode:
-//     *(this + 4) = a2;             // store the enabled flag at offset 4
-//     return this;
-//
-// ⚠️ ODR FORK CLOSED (2026-08-16). `BrnGui::MainMapRenderer` was declared THREE times with
-// three different layouts: as a CustomRenderComponentInterface subclass in
-// CgsCustomRenderer.h, as a bare `struct { u32; bool; }` at namespace scope in THIS file,
-// and as the real { void* mpVtable; u32 maZeroGroups[6][5]; ParticleSystem2d[4] } in
-// GameSource/Gui/CustomRenderer/Renderers/BrnMainMapRenderer.h. Three namespace-scope
-// definitions of one class link SILENTLY, and whichever the linker keeps decides what
-// every call site actually touches. There is now exactly ONE: the real home header, which
-// this TU includes -- so the ledger function below is a genuine member of the genuine
-// class, and mbRenderEnabled is the member the console's `stb r4, 4(r3)` writes.
-#include "GameSource/Gui/CustomRenderer/Renderers/BrnMainMapRenderer.h"
-
-namespace BrnGui
-{
-    MainMapRenderer* MainMapRenderer::SetRenderEnabled(bool lbRenderEnabled)
-    {
-        mbRenderEnabled = lbRenderEnabled;
-        return this;
-    }
-}
+// The body that used to sit here had the signature `MainMapRenderer* SetRenderEnabled(bool)`
+// on a class that had no base -- a NON-virtual, wrong-return-type member that would have
+// SHADOWED the base vtable slot instead of overriding it the moment the class became a real
+// CgsGui::CustomRenderComponentInterface (the H3b shadowing-redeclaration defect class).
+// MainMapRenderer is now that real component, so the override lives with the rest of the
+// class in GameSource/Gui/CustomRenderer/Renderers/BrnMainMapRenderer.cpp. Nothing about
+// this file's own two bodies changed.

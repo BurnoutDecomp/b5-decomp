@@ -22,23 +22,31 @@ namespace BrnGui { struct CrashNavMap; }  // friend of MainMapComponent (reads m
 //   Prepare                    @ 0x8244F4A8   (bodied, BrnMainMap.cpp)
 //   RecvEvent                  @ 0x82458370   (bodied, BrnMainMap.cpp)
 //   SetStandardDefZoomParams   @ 0x82447ED8   (bodied, BrnMainMap.cpp)
-//   Update                     @ 0x824696E8   (bodied, BrnMainMap.cpp -- main-map slice)
-//   SnapToLocation             @ 0x8245EBA0   (bodied, BrnMainMap.cpp -- main-map slice)
-//   ApplyZoom                  @ 0x8245EE78   (bodied, BrnMainMap.cpp -- main-map slice)
-//   SetZoom                    @ 0x82469A38   (bodied, BrnMainMap.cpp -- main-map slice)
-//   CalculatePositionedWorldRect @ 0x8245E5F0 (bodied, BrnMainMap.cpp -- main-map slice)
-//   CalculateViewPaddingOffset   @ 0x82447D38 (bodied, BrnMainMap.cpp -- main-map slice)
+//   Update                     @ 0x824696E8
+//   SnapToLocation             @ 0x8245EBA0
+//   ApplyZoom                  @ 0x8245EE78
+//   SetZoom                    @ 0x82469A38
+//   CalculatePositionedWorldRect @ 0x8245E5F0
+//   CalculateViewPaddingOffset   @ 0x82447D38
 // DWARF: references/DecFIGS/dwarfdump/GameSource/Gui/SatNav/BrnMainMap.h
 //
 // LAYOUT NOTE: the X360 `this` embeds MapManager at +0x8C (4-byte-pointer ABI). Members are
 // reached BY NAME (semantic parity, not byte offsets) so the PC x64 widths differ from the
 // documented X360 offsets -- every X360 offset in this file is a COMMENT, never arithmetic.
-// The full DWARF instance-member run (BrnMainMap.h:209-232) is declared below. The whole
-// ledger set is bodied in BrnMainMap.cpp as of the 2026-08-27 main-map slice (the old
-// blockers fell: "sub_8245A080" IS MapTransform::Transform(Vector2, Vector4, Vector4),
-// now bodied in BrnMapUtils.cpp, and the OutputViewState<> / GuiAudioTriggerEvent
-// collaborators were already homed). Still declared-only: Release, IncreaseZoom,
-// DecreaseZoom, SetZoomLevel, SetMapManager and the DWARF accessor block.
+// The full DWARF instance-member run (BrnMainMap.h:209-232) is declared below. Construct and
+// Prepare -- the two that run on the stunt-run fly-by path -- are bodied in BrnMainMap.cpp as
+// of 2026-08-27; SetZoom landed 2026-08-29 (main-menu wave D1).
+//
+// ⭐ 2026-08-29 (main-menu wave G2): SnapToLocation is BODIED, and with it the two private
+// helpers it needs -- CalculateViewPaddingOffset @0x82447D38 and CalculatePositionedWorldRect
+// @0x8245E5F0 -- plus the inlined CalculateOffsetWorldCentre. IsZooming and GetWorldRect
+// (header-inline on the console, no out-of-line address) are bodied HERE.
+//
+// ⭐ 2026-08-29 (main-menu wave, map-pump slice): THE CLASS IS COMPLETE. ApplyZoom
+// @0x8245EE78 and Update @0x824696E8 -- the last two -- are bodied in BrnMainMap.cpp.
+// OutputViewState<GuiEventRenderMainMap> is mounted (X360 @0x82465E50), so Update's old
+// second blocker is gone too. The inert Update stand-in in BrnMainMapLinkGates.cpp must be
+// deleted in the same change (LNK2005 otherwise).
 
 namespace BrnGui
 {
@@ -131,7 +139,23 @@ namespace BrnGui
             mv2DesiredCentre = lv2DesiredWorldCentre;
         }
 
-        bool    IsZooming() const;
+        // DWARF BrnMainMap.h:379-ish -- header-inline on the console (a BrnMainMap.h decl
+        // line, no out-of-line address in scratch/func_index.tsv), so its faithful home is a
+        // body here, exactly like SetDesiredWorldCentre above.
+        //
+        // ⭐ WHICH MEMBER IT READS IS NOW PINNED (main-menu wave G2). mbIsZooming is the only
+        // zoom-STATE member the class owns (the other two zoom members are floats -- the DWARF
+        // member run below), and it is written as a flag by exactly the three functions the
+        // name implies: Construct clears it at bring-up (`stb 0, 0x670`, X360 @0x8245E5xx),
+        // SnapToLocation clears it as its last act (`stb r31, 0x670(r30)` @0x8245EE60 -- a snap
+        // is by definition the end of an animated zoom), and the animated ApplyZoom
+        // @0x8245EE78 is the only other writer. 0x670 == comp+1648 == mbIsZooming per the
+        // member map below. Its two consumers (CrashNavMap::UpdateSoundEvents wJ_03:273 and
+        // the cursor-lock arm wJ_08:519) both read it as "is a zoom animation in flight".
+        bool    IsZooming() const
+        {
+            return mbIsZooming;
+        }
 
         // DWARF BrnMainMap.h:415 -- `void SetStickMapToScreenEdges(bool, bool, bool, bool)`,
         // header-inline on the console for the same two reasons as above. Writes the four
@@ -179,7 +203,18 @@ namespace BrnGui
         // below; Prepare reads the global directly (same value either way).
         // No static member is declared for it here because the DWARF has none; the instance
         // shape below is the attested one.
-        Vector4    GetWorldRect() const;                      // DWARF h:314
+        // DWARF h:314. BODIED 2026-08-29 (main-menu wave G2). The member it returns is
+        // mv4WorldRect -- the ONLY Vector4 member whose name matches, and the one every
+        // consumer wants: CrashNavMap::MoveCursor / PlaceCursorOnPlayer reach
+        // mMainMapComponent.mv4WorldRect through `friend struct CrashNavMap` for exactly the
+        // quantity this accessor names (state+0x670 == component+1552, see the member map
+        // below), and CalculatePositionedWorldRect / SnapToLocation / SetZoom are its writers.
+        // Returned BY VALUE per the DWARF signature (contrast GetDisplayRect, which the DWARF
+        // spells as a const reference).
+        Vector4    GetWorldRect() const
+        {
+            return mv4WorldRect;
+        }
         Vector4    GetViewRect() const;                       // DWARF h:330
         // DWARF spells this return type fully qualified (`const rw::math::vpu::Vector4&`);
         // `Vector4` is the file-wide typedef of exactly that type (BrnCommonTypes.h:14).
