@@ -27,6 +27,8 @@
 #include "SharedClasses/Trigger/BrnRegion.h"                            // BrnTrigger::BoxRegion::GetPosition
 #include "SharedClasses/Trigger/BrnSpawnLocation.h"                     // BrnTrigger::SpawnLocation (cross-table check)
 #include <cmath>                                                        // std::sqrt (FindNearestJunkyardID)
+#include <stdlib.h>                                                     // getenv (the [showtime-crash] witness)
+#include "SharedClasses/Physics/Props/BrnPropEntityID.h"                 // BrnWorld::PropEntityID + BrnWorld::E_ENTITYTYPE_* (ProcessContacts' prop leg)
 
 namespace BrnGameState
 {
@@ -200,6 +202,18 @@ void GameStateModule::Construct()
     // trap paid up front -- PostWorldUpdate Appends into it and PreWorldUpdate Clears it, and
     // Clear() does NOT bind a buffer.
     mGameEventCarryQueue.Construct();
+
+    // ⭐ [showtime score wave 2026-08-29] THE SHOWTIME CRASH HAND-OFF STACK (X360 this+284488).
+    // Same never-Constructed-container trap, and this container makes it LOUD rather than latent:
+    // CgsContainers::Stack's uninitialised sentinel is miLength == 0x7FFFFFFF, and every Push /
+    // Peek / Pop / IsFull opens with CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED,
+    // "Stack used before Construct/Clear was called"). ProcessContacts calls IsFull() on the very
+    // first showtime frame, so without this the assert fires immediately -- and on a pool-carved
+    // module the garbage length would then index maData out of range.
+    // ⓘ The console does this in the same Construct @0x82380388 block; UpdateShowtimeMode's own
+    // "Stack used before Construct/Clear was called" FireAssert (BrnGameStateModule.cpp:1611
+    // region, CgsStack.h:177) is the X360 witness that the container is this type.
+    mShowtimePendingTrafficIndexStack.Construct();
 
     // ⭐ [gateui r4] CONSTRUCT INSURANCE (verify_r3_fix3bridge NOTE-2). The round-3 carry-queue
     // gate narrowed the producer to E_MGS_IN_GAME, so the FIRST in-game pre-world leg now reads
@@ -2373,6 +2387,204 @@ void GameStateModule::CopyScoringDataToOutput(
             mProgressionManager.GetCurrentLiveryData();
         lpScoringOut->mfDistanceDrivenInCurrentCar =
             (lpLiveryData != 0) ? lpLiveryData->mfDistanceDriven : 0.0f;        // stfs out+0xAA4
+    }
+}
+
+
+// ==============================================================================================
+// GameStateModule::ProcessContacts  --  X360 0x8236BC68  (DWARF BrnGameStateModule.h:853)
+// ==============================================================================================
+// THE MISSING PRODUCER of CrashModeScoring::DealWithHitProp / ::DealWithHitTrafficCar and of
+// StuntModeScoring::DealWithHitProp. Its sole console caller is GameStateModule::PostWorldUpdate
+// @0x8238F358 (`bl` #25, bracketed by PerfMonCpu Start/StopMonitor(miProcessContactsPM ==
+// *(this+292352))); that function has no call site on this build, so on the X360 this runs on
+// every showtime / stunt-attack frame and here it ran never. Reached now from
+// PostWorldUpdateStuntBringUp's LEG 5, at the console's own position.
+//
+// [FLAG PC bring-up] ARGUMENT REDUCED, BODY COMPLETE. The console parameter is
+// `const PostWorldInputBuffer*` and the ONLY thing the body ever reads from it is
+// GetContactSpyInterface() (sub_82362988 -> +0x6E30, BrnGameStateModuleIO.h:204), called three
+// times; everything else comes from `this`. See the declaration's banner in the header.
+//
+// THE TWO OWNER READS ARE NOT THE SAME INSTRUCTION AND MUST NOT BE THE SAME C++.
+// The console reads the A-side owner as `lwz r11,0(c) ; srwi r10,r11,24` -- a word load and a
+// shift -- but the B-side owner as `lbz r9,4(c)` / `lbz r10,4(c)`, a BYTE load at the word's
+// base address. On the big-endian X360 that byte IS the word's most-significant byte, i.e. the
+// same `>> 24` field. Transcribing it as a byte read of `&mEntityIdB` on this little-endian host
+// would read the LEAST significant byte and the arm would never match. Both are written as
+// `>> 24` here, which is the console's meaning on both hosts.
+// [[invented-arms-and-the-c4715-ratchet]] -- ask which SIDE, and read vs write.
+//
+// THE PART-INDEX CALLS LOOK DEAD AND ARE KEPT. Each prop arm constructs a SECOND PropEntityID
+// from the same word and calls GetPartIndex(), whose result is discarded (0x8236BDE8 /
+// 0x8236BE30). They are kept because PropEntityID's constructor carries the console's own
+// AssertIsProp() tripwire -- dropping them would drop an assert the console fires.
+//
+// GetPlayerActiveRaceCarIndex() IS RE-READ INSIDE BOTH LOOPS, per iteration, exactly as the
+// console does (`mr r3,r25 ; bl ...` at 0x8236BE38 and 0x8236BEE8). Not hoisted: the accessor
+// asserts mbIsUpdating and the console does not cache it.
+// ==============================================================================================
+void GameStateModule::ProcessContacts(
+        const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpyInterface)
+{
+    // 0x8236BC80..0x8236BC8C -- the inlined ContactSpyInterface::IsValid() (mpData != NULL).
+    // NOT IsEmpty(): see the accessor's banner in BrnContactSpyInterface.h.
+    CGS_ASSERT(lpContactSpyInterface != 0, "lpContactSpyInterface != NULL");   // [PC GUARD]
+    if (lpContactSpyInterface == 0 || !lpContactSpyInterface->IsValid())
+    {
+        return;
+    }
+
+    // 0x8236BC90..0x8236BCBC -- the mode gate: showtime (2 / 16) or stunt attack (7).
+    const GameStateModuleIO::EGameModeType leGameModeType = mModeManager.GetCurrentGameModeType();
+    const bool lbShowtime =
+        (leGameModeType == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME) ||
+        (leGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
+    if (!lbShowtime && leGameModeType != GameStateModuleIO::E_MODE_STUNT_ATTACK)
+    {
+        return;
+    }
+
+    // 0x8236BCC0..0x8236BCEC -- the mode must exist AND be IN_PROGRESS (the house
+    // `lwz 0x28 ; addi -2 ; cntlzw ; extrwi` idiom, reached by name here).
+    const GameMode* const lpCurrentGameMode = mModeManager.GetCurrentGameMode();
+    if (lpCurrentGameMode == 0 ||
+        lpCurrentGameMode->GetCurrentState() != GameStateModuleIO::E_GMS_IN_PROGRESS)
+    {
+        return;
+    }
+
+    // 0x8236BCF0..0x8236BD0C -- the two contact queues, each through its own re-fetch of the
+    // interface (the console does not CSE those re-fetches either).
+    const BrnPhysics::ContactSpy::ContactSpyData::PropContactQueue* const lpPropContacts =
+        lpContactSpyInterface->GetPropContacts();
+    const BrnPhysics::ContactSpy::ContactSpyData::TrafficContactQueue* const lpTrafficContacts =
+        lpContactSpyInterface->GetTrafficContacts();
+
+    // 0x8236BD10..0x8236BD30 -- the two scorers. r24 = ScoringSystem+0x20 (the crash scorer);
+    // r26 = ScoringSystem + 0x2620 when IsOnlineGameMode(), else ScoringSystem + 0x350 -- i.e.
+    // the ONLINE vs OFFLINE stunt scorer. Reached through the named accessors (hazards H9).
+    ScoringSystem* const lpScoringSystem = mModeManager.GetScoringSystem();
+    CrashModeScoring* const lpCrashScorer = lpScoringSystem->GetCrashScorer();
+    StuntModeScoring* const lpStuntScorer = IsOnlineGameMode()
+                                               ? lpScoringSystem->GetOnlineStuntScorer()
+                                               : lpScoringSystem->GetStuntScorer();
+
+    // The console's two tripwires, with their baked line numbers (li r5, 0x1A68 / 0x1A69).
+    // Neither gates -- both are address-of-a-subobject tests that can only fail on a null this.
+    CGS_ASSERT(lpCrashScorer != 0, "lpCrashScorer != NULL");   // BrnGameStateModule.cpp:6760
+    CGS_ASSERT(lpStuntScorer != 0, "lpStuntScorer != NULL");   // BrnGameStateModule.cpp:6761
+
+    // ------------------------------------------------------------------------------------
+    // LEG 1 -- the PROP contacts (0x8236BD84..0x8236BE70).
+    // Only a contact between a PROP and a RACE CAR counts, in either order, and only when that
+    // race car is the local player's.
+    // ------------------------------------------------------------------------------------
+    for (s32 liIndex = 0; liIndex < lpPropContacts->GetLength(); ++liIndex)
+    {
+        const BrnPhysics::ContactSpy::PropContact& lrContact = lpPropContacts->GetEvent(liIndex);
+
+        s32 liRaceCarIndex    = -1;   // r29 -- E_ACTIVE_RACE_CAR_INDEX_INVALID
+        u32 luPropEntityIndex = 0;    // r30
+
+        const u32 luOwnerA = lrContact.mEntityIdA.muValue >> BrnWorld::PropEntityID::KU_OWNER_BASE;
+        const u32 luOwnerB = lrContact.mEntityIdB.muValue >> BrnWorld::PropEntityID::KU_OWNER_BASE;
+
+        if (luOwnerA == static_cast<u32>(BrnWorld::E_ENTITYTYPE_PROP) &&
+            luOwnerB == static_cast<u32>(BrnWorld::E_ENTITYTYPE_RACECAR))
+        {
+            const BrnWorld::PropEntityID lPropId(lrContact.mEntityIdA.muValue);
+            luPropEntityIndex = lPropId.GetEntityIndex();
+
+            const BrnWorld::PropEntityID lPropIdForPart(lrContact.mEntityIdA.muValue);
+            (void)lPropIdForPart.GetPartIndex();          // console 0x8236BDE8 -- result discarded
+
+            liRaceCarIndex = static_cast<s32>(
+                (lrContact.mEntityIdB.muValue >> BrnWorld::PropEntityID::KU_ENTITY_INDEX_BASE) &
+                0x3FFFu);                                 // extrwi r29, r11, 14,8
+        }
+        else if (luOwnerA == static_cast<u32>(BrnWorld::E_ENTITYTYPE_RACECAR) &&
+                 luOwnerB == static_cast<u32>(BrnWorld::E_ENTITYTYPE_PROP))
+        {
+            liRaceCarIndex = static_cast<s32>(
+                (lrContact.mEntityIdA.muValue >> BrnWorld::PropEntityID::KU_ENTITY_INDEX_BASE) &
+                0x3FFFu);
+
+            const BrnWorld::PropEntityID lPropId(lrContact.mEntityIdB.muValue);
+            luPropEntityIndex = lPropId.GetEntityIndex();
+
+            const BrnWorld::PropEntityID lPropIdForPart(lrContact.mEntityIdB.muValue);
+            (void)lPropIdForPart.GetPartIndex();          // console 0x8236BE30 -- result discarded
+        }
+
+        if (liRaceCarIndex == static_cast<s32>(GetPlayerActiveRaceCarIndex()))
+        {
+            lpCrashScorer->DealWithHitProp(static_cast<u16>(luPropEntityIndex), lrContact.muFlags);
+            lpStuntScorer->DealWithHitProp(static_cast<u16>(luPropEntityIndex), lrContact.muFlags);
+        }
+    }
+
+    // ------------------------------------------------------------------------------------
+    // LEG 2 -- the TRAFFIC contacts (0x8236BE74..0x8236BF3C). SHOWTIME ONLY: the console
+    // re-reads the mode type here and re-tests 2 / 16 WITHOUT the stunt-attack arm the outer
+    // gate allowed, so a stunt-attack run reaches leg 1 and stops.
+    //
+    // THIS IS THE HALF THE SHOWTIME CRASH COUNT DEPENDS ON, AND IT ONLY PRIMES THE COUNT.
+    // DealWithHitTrafficCar records a RecentCrash and bumps miCurrentComboCount; it does NOT
+    // touch maiNumCarsCrashed. What it produces is the victim's traffic index, pushed here onto
+    // mShowtimePendingTrafficIndexStack for the PRE-world half (UpdateShowtimeMode @0x82380EF8,
+    // not reconstructed) to turn into a traffic-type request and finally a score. The stack's
+    // banner in BrnGameStateModule.h carries the whole seven-hop chain.
+    // ------------------------------------------------------------------------------------
+    if (!lbShowtime)
+    {
+        return;
+    }
+
+    // 0x8236BEA4 -- the console tests IsFull() ONCE before the loop and again after every
+    // successful push, so a full stack drops further victims silently rather than tripping
+    // Push's own "!IsFull()" assert.
+    if (mShowtimePendingTrafficIndexStack.IsFull())
+    {
+        return;
+    }
+
+    for (s32 liIndex = 0; liIndex < lpTrafficContacts->GetLength(); ++liIndex)
+    {
+        const BrnPhysics::ContactSpy::TrafficContact& lrContact =
+            lpTrafficContacts->GetEvent(liIndex);
+
+        u16 luVictimTrafficIndex = 0;
+
+        if (lpCrashScorer->DealWithHitTrafficCar(GetPlayerActiveRaceCarIndex(),
+                                                 lrContact.mEntityIdA,
+                                                 lrContact.mEntityIdB,
+                                                 &luVictimTrafficIndex))
+        {
+            mShowtimePendingTrafficIndexStack.Push(luVictimTrafficIndex);
+
+            // [DIAG] NOT IN THE X360 BINARY. The bounded witness for this leg, and the only
+            // evidence available for it: the crash COUNT cannot move until four more hops land,
+            // so there is no pixel to film here. One line per detected victim; the stack fills
+            // to 8 and stops, so it cannot flood. BRN_SHOWTIME_WATCH is the same opt-in the
+            // showtime physics witness in RaceCarPhysics::Update uses.
+            {
+                static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
+                if (sbWatch && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[showtime-crash] traffic car " << static_cast<s32>(luVictimTrafficIndex)
+                        << " crashed; combo=" << lpCrashScorer->GetCurrentComboCount()
+                        << " pending=" << mShowtimePendingTrafficIndexStack.GetLength()
+                        << " (no consumer yet -- UpdateShowtimeMode @0x82380EF8 unreconstructed)\n";
+                }
+            }
+
+            if (mShowtimePendingTrafficIndexStack.IsFull())
+            {
+                break;
+            }
+        }
     }
 }
 

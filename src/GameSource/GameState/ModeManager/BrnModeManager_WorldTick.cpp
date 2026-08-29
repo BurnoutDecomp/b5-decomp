@@ -780,9 +780,30 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
             // and it lights up the whole crash scorer the moment PostWorldUpdate is wired. Do not
             // read "unparked" as "running" -- MEASURED 2026-08-29, the showtime HUD still renders
             // Distance 0m / Cars Crashed 0 with this landed, because mfDistanceTravelled is never
-            // advanced. (The other half of that zero is CrashModeScoring::DealWithHitTrafficCar,
-            // whose console caller GameStateModule::ProcessContacts @0x8236BC68 is not
-            // reconstructed at all, so the crash COUNT has no producer either.)
+            // advanced.
+            //
+            // ⭐ [showtime score wave 2026-08-29] BOTH HALVES OF THAT PARAGRAPH ARE NOW ANSWERED,
+            // and its second half was WRONG. It read: "The other half of that zero is
+            // CrashModeScoring::DealWithHitTrafficCar, whose console caller
+            // GameStateModule::ProcessContacts @0x8236BC68 is not reconstructed at all, so the
+            // crash COUNT has no producer either."
+            //   * DISTANCE: fixed. This arm is still unreached, but the identical call now runs
+            //     from GameStateModule::PostWorldUpdateStuntBringUp's extracted LEG 3, beside the
+            //     stunt arm below -- and the panel counts (filmed 12m -> 49m over 10.5 s).
+            //   * COUNT: the claim was true and NOT SUFFICIENT. DealWithHitTrafficCar never
+            //     touches maiNumCarsCrashed; it records a RecentCrash and bumps
+            //     miCurrentComboCount. maiNumCarsCrashed[] has exactly ONE writer in the image,
+            //     CrashModeScoring::DealWithScoreForVehicleClass @0x82338778, whose exactly-one
+            //     caller is GameStateModule::UpdateShowtimeMode @0x82380EF8 -- on the PRE-world
+            //     half, not this one. ProcessContacts (now landed, and called from LEG 5 of the
+            //     same bring-up entry point) only PRIMES the count: it pushes each victim's
+            //     traffic index onto GameStateModule::mShowtimePendingTrafficIndexStack, and the
+            //     pre-world half has to turn that into a traffic-type request, get an answer back
+            //     from the traffic module, and only then score it. Three of those hops are still
+            //     unreconstructed -- see the stack's banner in BrnGameStateModule.h for the full
+            //     eight-hop map with each remaining gap's address.
+            // [[diagnostics-that-lie]] -- "X has no caller" is not the same claim as
+            // "X is what writes the field".
             mScoringSystem.GetCrashScorer()->Update(lpActiveRaceCarOutput,
                                                     /* lpTrafficStateQueue */ 0,
                                                     lfDelta);

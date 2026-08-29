@@ -2224,21 +2224,12 @@ void WorldModule::BridgeTrafficEntityInfoToOutput_PreScene(void *,struct BrnWorl
 //  the real streamer leg (X360 0x827AEEB0) now lives in its home TU
 //  Bridges/WorldBridgeEntityModulesToOutput.cpp.)
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AEB18 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgePhysicsToOutput(void *,struct BrnWorldIO::UpdateOutputBuffer *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePhysicsToOutput: inert [FLAG PC boot gate]\n";
-    }
-}
+// ⛔ GATE RETIRED 2026-08-29 (showtime score wave): WorldModule::BridgePhysicsToOutput
+// @0x827AEB18 now has a real body in Bridges/WorldBridgeEntityModulesToOutput.cpp, beside
+// its sibling world-output bridges. It is PARTIAL -- the contact-spy leg (2) only, with the
+// other five named at that body -- but it is no longer inert: it is the ONLY writer of
+// UpdateOutputBuffer::mContactSpyInterface, which until now was unbound (mpData == NULL) on
+// every frame, so every game-state-side reader of the world's contact spy saw an empty one.
 
 // ⛔ GATE RETIRED 2026-08-11 (triangle-cache wiring wave): WorldModule::
 // BridgeSceneModuleToOutput @0x827A5700 now has its REAL body in

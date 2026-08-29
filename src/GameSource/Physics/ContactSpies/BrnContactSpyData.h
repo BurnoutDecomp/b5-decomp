@@ -99,7 +99,15 @@ namespace BrnPhysics
             ContactSpyData& operator=(const ContactSpyData& lrOther);
 
             const RaceCarContactQueue*         GetRaceCarContacts() const;
-            const TrafficContactQueue*         GetTrafficContacts() const;
+            // ⭐ BODIED 2026-08-29 (showtime score wave). DWARF BrnContactSpyData.h:143-region.
+            // Same footing as GetPropContacts below: the X360 emits NO out-of-line symbol for
+            // it, because its one caller -- ContactSpyInterface::GetTrafficContacts
+            // @0x82355B90 -- inlines the whole second level as `lwz r11,0(iface)` (mpData)
+            // then `addi r3, r11, 0x70A0`, which is exactly the mTrafficContactQueue seat this
+            // header's member table already carries. Declared here with no definition anywhere
+            // in the tree until now, and it is the ONE route to the traffic contacts that
+            // GameStateModule::ProcessContacts needs (mTrafficContactQueue is private).
+            const TrafficContactQueue*         GetTrafficContacts() const { return &mTrafficContactQueue; }
             const PhysicalCarPartContactQueue* GetPhysicalCarPartContacts() const;
             const HingedCarPartContactQueue*   GetHingedPartContacts() const;
             // ⭐ BODIED 2026-08-18 (wave Q round 2). DWARF BrnContactSpyData.h:146. It was

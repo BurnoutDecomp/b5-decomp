@@ -2,6 +2,7 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
 #include "GameSource/World/AI/SharedIO/BrnAIModuleIO_OutputBuffer.h"
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToOutput.h"
+#include "GameSource/Physics/BrnPhysicsModuleIO.h"                    // PhysicsModuleIO::OutputBuffer::GetContactSpyInterface (BridgePhysicsToOutput leg 2)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"      // CgsModule::VariableEventQueue<N,16>
@@ -585,6 +586,71 @@ void BridgeWorldEntityInfoToOutput(
 
     lpOutputBuffer->AppendSoundWorldLoadInterface(
         lpWorldEntityOutput_PreScene->GetSoundWorldLoadInterface() );
+}
+
+// ----------------------------------------------------------------------------
+// BridgePhysicsToOutput  @ 0x827AEB18
+//
+// [showtime score wave 2026-08-29] GATE RETIRED, PARTIALLY -- the CONTACT-SPY leg only.
+// This replaces the one-shot inert stub that stood in WorldLinkStubs.cpp since the
+// world-drive wave (2026-07-27). The caller already exists and already brackets it
+// correctly: BrnWorldModule.cpp:3183 runs it every frame inside
+// LockBuffersForIO(lpUpdateOutputBuffer, lpPhysicsOutput).
+//
+// THE CONSOLE'S SEVEN LEGS, in body order (asm @0x827AEB18):
+//    1  vehicle-output-interface fan-in: OutputBuffer::Ge(phys) -> UpdateOutputBuffer::
+//       GetVehicleOutputInt(out), then PhysicalTrafficState_::Append(+1220),
+//       ImpactEvent_::Append(+1122), VariableEventQueue<1536,16>::Append(+3262),
+//       `*dst = *src` and memcpy(dst+2, src+2, 8960)
+//  ⭐2  *UpdateOutputBuffer::GetContactSpyInterface(out) =
+//         *PhysicsModuleIO::OutputBuffer::GetContactSpyInterface(phys)   (0x8279F8E0)
+//    3  VehicleManagerOutputInt( UpdateOutputBuffer::GetVehicleMa(out), sub_8279F4F0(phys) )
+//    4  UpdateOutputBuffer::SetDeformationOutputInterface(out, OutputBu(phys))
+//    5  UpdateOutputBuffer::AppendGameEventQueue(out, OutputBuffer::Ge(phys) + 26096)
+//    6  UpdateOutputBuffer::AppendPropUpdateNotificationQueue(out, GetProp(phys) + 64048)
+//
+// ⭐ LEG 2 IS LANDED HERE AND THE REST ARE NOT, and the reason is scope, not difficulty:
+// this wave needs the contact spy and nothing else. Leg 2 is a whole-object copy of a
+// one-pointer handle (ContactSpyInterface is `ContactSpyData* mpData`), so it is
+// host-safe as written -- the console's own `*dst = *src`, no byte count involved.
+//
+// [!] NOT REPRODUCED, named rather than faked. Leg 1 in particular carries a MEASURED
+// SIZE TRAP of exactly the kind BridgeWorldToGameState's leg 5 documents: the console
+// memcpy's 8960 X360 bytes of a VehicleOutputInterface whose host object has widened
+// pointers, so it must be an assignment, not a byte copy -- and the two truncated IDA
+// accessor names (`OutputBuffer::Ge`, `GetVehicleOutputInt`) have to be resolved against
+// their return offsets first. Legs 3-6 need four UpdateOutputBuffer setters/appenders
+// whose sources are still opaque spans on this tree. Behaviour still lost: the physics
+// vehicle/impact/traffic-state fan-in, the deformation interface, and the physics module's
+// own game events and prop-update notifications.
+// DELETE-WHEN a wave lands legs 1 and 3-6: this banner shrinks to the function's own.
+//
+// ⚠️ WHY THIS MATTERS BEYOND THIS WAVE. Nothing else in the tree writes
+// UpdateOutputBuffer::mContactSpyInterface, so before this the world's published contact
+// spy was UNBOUND (mpData == NULL) on every frame of every run -- i.e. IsEmpty() was
+// trivially true for every game-state-side reader. The physics side was never the
+// problem: PhysicsModule::BridgeSimulationToOutput has bound the PHYSICS output buffer's
+// interface for months (BrnPhysicsModuleBridgeFunctions.cpp:566), which is why the
+// world-side PropEntityModule::ProcessContacts works -- it reads the physics buffer
+// through the prop bridge, not this one.
+// ----------------------------------------------------------------------------
+void BridgePhysicsToOutput(
+    void* lpWorldModule,
+    BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+    const BrnPhysics::PhysicsModuleIO::OutputBuffer* lpPhysicsOutputBuffer)
+{
+    (void)lpWorldModule;   // X360 r3 -- never read by this bridge
+
+    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");
+    CGS_ASSERT(lpPhysicsOutputBuffer != 0, "lpPhysicsOutputBuffer != NULL");
+    if (lpOutputBuffer == 0 || lpPhysicsOutputBuffer == 0)
+    {
+        return;   // [PC GUARD] not X360 -- the console has no tripwire here at all.
+    }
+
+    // ---- leg 2: publish the frame's contact spy (0x827AEB68..0x827AEB78) ---------------
+    *lpOutputBuffer->GetContactSpyInterface() =
+        *lpPhysicsOutputBuffer->GetContactSpyInterface();
 }
 
 }   // namespace WorldModule

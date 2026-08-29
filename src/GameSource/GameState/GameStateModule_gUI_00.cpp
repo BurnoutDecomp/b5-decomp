@@ -96,7 +96,8 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
                                                       lpActiveRaceCarOutputInterface,
         const CgsModule::VariableEventQueue<1536, 16>* lpWorldGameEventQueue,
-        f32                                           lfDelta)
+        f32                                           lfDelta,
+        const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpyInterface)
 {
     // ---- leg 1: refresh the cached active-race-car snapshot ---------------------------------
     // âš ï¸ COPIED BY ASSIGNMENT, NEVER AT THE CONSOLE'S LITERAL 10480 BYTES. 10480 is the X360
@@ -396,6 +397,87 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
             lpModeManager->GetCurrentGameModeType(),
             lpModeManager->GetScoringSystem(),
             lfDelta);
+    }
+
+    // ============================================================================
+    // [showtime score wave 2026-08-29] LEG 5 -- THE CONTACT PASS
+    // (console PostWorldUpdate `bl` #25, GameStateModule::ProcessContacts @0x8236BC68).
+    //
+    // POSITION IS THE CONSOLE'S: PostWorldUpdate calls ProcessContacts AFTER
+    // ModeManager::PostWorldUpdate (leg 3's home) and after TriggerQueryManager::PostWorldUpdate,
+    // bracketed by PerfMonCpu Start/StopMonitor(miProcessContactsPM). It is OUTSIDE every mode
+    // gate -- ProcessContacts does its own.
+    //
+    // Unlike legs 1-4 this is not an extraction: it is the whole console function, called by its
+    // real name, with one argument reduced (the PostWorldInputBuffer it would read the contact
+    // spy out of does not exist here, so the interface arrives directly). See its banner.
+    //
+    // THE mbIsUpdating BRACKET IS REQUIRED AND IS THE CONSOLE'S OWN. GameStateModule::
+    // PostWorldUpdate sets `*(this + 292289) = 1` as its second statement and clears it in the
+    // tail; ProcessContacts calls GetPlayerActiveRaceCarIndex() once per contact and that
+    // accessor asserts mbIsUpdating. Narrowed to this leg rather than the whole function so it
+    // cannot change what legs 1-4 observe.
+    // ============================================================================
+    if (lpContactSpyInterface != 0)
+    {
+        mbIsUpdating = true;
+        ProcessContacts(lpContactSpyInterface);
+        mbIsUpdating = false;
+    }
+
+    // ============================================================================
+    // [showtime score wave 2026-08-29] LEG 6 -- PUBLISH THE PLAYER'S ACTIVE-CAR INDEX
+    // (console PostWorldUpdate @0x8238F358, the block immediately after ProcessContacts).
+    //
+    // ⛔⛔ WITHOUT THIS, LEG 5 IS A "VALUE THAT LOOKS RIGHT AND IS WRONG". ProcessContacts
+    // compares every contact's race-car index against GameStateModule::GetPlayerActiveRaceCarIndex(),
+    // i.e. against the member mePlayerActiveRaceCarIndex -- and that member HAS NO WRITER
+    // ANYWHERE IN THIS TREE. It is only ever read (grep: eleven read sites, zero stores). It
+    // happens not to be garbage today only because BrnMain.cpp:45 makes the module static
+    // storage, so it zero-inits to E_ACTIVE_RACE_CAR_INDEX_0 -- which is USUALLY but not always
+    // the player's slot. Landing leg 5 on top of that would have produced a detector that
+    // silently matched the wrong car whenever the player is not in slot 0.
+    // [[deterministic-does-not-mean-data]] -- a stable value is not an initialised one.
+    //
+    // The console block, verbatim (its `v21`):
+    //     v21 = 0;
+    //     if ( iface.mePlayerActiveRaceCarIndex != -1 ) v21 = iface.mbIsPlayerCarActive;
+    //     if ( v21 ) { *(this+208304) = iface.mePlayerActiveRaceCarIndex;
+    //                  *(this+208308) = globalIface.mePlayerGlobalRaceCarIndex; }
+    //     else       { *(this+208304) = -1; *(this+208308) = -1; }
+    // and that `v21` expression IS RCEntityActiveRaceCarOutputInterface::IsPlayerCarActive()
+    // (BrnRCEntityActiveRaceCarOutputInterface.cpp:539 -- the same range assert, the same
+    // -1 early-out, the same mbIsPlayerCarActive return), so it is called by name.
+    //
+    // ⓘ POSITION IS THE CONSOLE'S, and it matters: the publish runs AFTER ProcessContacts, so
+    // the contact pass reads the PREVIOUS frame's index. That one-frame staleness is the
+    // console's own; do not "fix" it by hoisting this above leg 5.
+    //
+    // [!] PARKED, named rather than faked -- the GLOBAL half (`*(this+208308)`,
+    // miPlayerGlobalRaceCarIndex). Its source is mLastGlobalRaceCarInterface, which still has
+    // NO WRITER on this build (its own member FLAG in BrnGameStateModule.h says so: only
+    // PostWorldUpdate's 2416-byte snapshot leg fills it, and that leg is not landed). Calling
+    // RCEntityGlobalRaceCarOutputInterface::GetPlayerGlobalRaceCarIndex() on the Clear()ed
+    // interface would fire its "Player car index hasn't been set" assert EVERY FRAME and then
+    // publish -1 anyway -- a per-frame assert storm in exchange for the value the member
+    // already holds. DELETE-WHEN that snapshot leg lands.
+    // [!] PARKED for the same reason: the per-slot maRaceCarCrashing[8] refresh
+    // (console 0x8238F460..0x8238F4E4, `*(this + 208316 + i) = <iface slot i in use> ?
+    // GetRaceCarState(i)->mbCrashing : 0`). Its gate is a u16-per-slot flag array at
+    // iface+10112 that this tree's RCEntityActiveRaceCarOutputInterface does not yet name, and
+    // guessing which member that is would be exactly the offset-poke hazards H9 forbids.
+    // ============================================================================
+    if (mLastActiveRaceCarInterface.IsPlayerCarActive())
+    {
+        mePlayerActiveRaceCarIndex = mLastActiveRaceCarInterface.GetPlayerActiveRaceCarIndex();
+    }
+    else
+    {
+        // ⚠️ THE LEADING `::` IS LOAD-BEARING, not style. BrnGameState declares its OWN
+        // EActiveRaceCarIndex (BrnModeManager.h's dual-scope banner at :53-61), so the
+        // unqualified enumerator resolves to BrnGameState::E_ACTIVE_RACE_CAR_INDEX_INVALID and
+        // will not convert to the member's global-scope type.
+        mePlayerActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
     }
 }
 
