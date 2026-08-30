@@ -9,7 +9,8 @@
 //   ResetStreamBlocks      0x828E8D90   Service                 0x82900100
 //   SubmitReadRequest      0x828F8CD0   SubmitCloseRequest      0x828F8F00
 //   StartAsyncReadInternal 0x828E8F50   StopAsyncReadInternal   0x82900400
-//   OnRead                 0x829009C0
+//   OnOpen                 0x82900740   OnRead                  0x829009C0
+//   OnClose                0x828E9168
 //   OpenCallback           0x82900CF8   ReadCallback  0x82900DA8   CloseCallback 0x828E93C8
 //
 // The stream owns a ring of KI_MAX_STREAM_BLOCKS blocks carved out of a single caller buffer.
@@ -81,6 +82,7 @@ namespace CgsFileSystem
         miBlockSize      = static_cast<s32>(luBufferSize / luNumBlocks);
         miNormalPriority = liNormalPriority;
         miHighPriority   = liHighPriority;
+        mbPrintToLog     = lbPrintToLog;
 
         if (static_cast<s32>(luNumBlocks) > KI_MAX_STREAM_BLOCKS)
         {
@@ -145,6 +147,56 @@ namespace CgsFileSystem
         mbWaitingToSeek  = true;
         muInputPosition  = luPosition;
         muOutputPosition = luPosition;
+        Service();
+    }
+
+    // OnOpen @0x82900740 — consume the device-open completion, retaining the compound
+    // logical-device/device-handle pair on success. Every arm matches ARTIST's state update;
+    // the handler always retires the pending open and re-enters Service.
+    void StreamDeviceDiskRead::OnOpen(s32 liResult, Handle lHandle, u64 luSize, void* lpContext)
+    {
+        (void)luSize;
+        (void)lpContext;
+
+        FileFutexHelper lGuard(mFutex);
+
+        CGS_ASSERT(meStatus == E_STATUS_OPENING, "Incorrect stream state\n");
+        CGS_ASSERT(miPendingOperationCount > 0,
+                   "Received stream event with 0 pending operations\n");
+
+        if (liResult == -2)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "WARNING: Open failed on: "
+                                           << macFileName << "\n";
+            meStatus = E_STATUS_CLOSED;
+            mbWaitingToClose = false;
+            miPendingOperationCount = 0;
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "WARNING: Failed to open file '"
+                                           << macFileName << "'";
+        }
+        else if (liResult == -1)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "WARNING: Open cancelled on: "
+                                           << macFileName << "\n";
+            meStatus = E_STATUS_CLOSED;
+        }
+        else if (liResult != 0)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
+            lMessage << "Unhandled response: " << liResult << "\n";
+            FireFormattedAssert(lacMessage);
+        }
+        else
+        {
+            mHandle = lHandle;
+            meStatus = E_STATUS_OPEN;
+        }
+
+        --miPendingOperationCount;
         Service();
     }
 
@@ -505,6 +557,52 @@ namespace CgsFileSystem
         --miPendingOperationCount;
         --miInputRequestsPending;
         Service();
+    }
+
+    // OnClose @0x828E9168 — retire the queued close and return the stream to CLOSED on
+    // success/failure, or OPEN when the operation was cancelled. The cache-end side effect in
+    // ARTIST is conditional on a live cache id; the PC path never assigns one.
+    void StreamDeviceDiskRead::OnClose(s32 liResult, Handle lHandle, u64 luSize, void* lpContext)
+    {
+        (void)lHandle;
+        (void)luSize;
+        (void)lpContext;
+
+        FileFutexHelper lGuard(mFutex);
+
+        CGS_ASSERT(meStatus != E_STATUS_CLOSED, "Incorrect stream state\n");
+        CGS_ASSERT(miPendingOperationCount > 0,
+                   "Received stream event with 0 pending operations\n");
+
+        if (liResult == -2)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "WARNING: Close failed on: "
+                                           << macFileName << "\n";
+            meStatus = E_STATUS_CLOSED;
+        }
+        else if (liResult == -1)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "WARNING: Close cancelled on: "
+                                           << macFileName << "\n";
+            meStatus = E_STATUS_OPEN;
+        }
+        else if (liResult != 0)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
+            lMessage << "Unhandled response: " << liResult << "\n";
+            FireFormattedAssert(lacMessage);
+        }
+        else
+        {
+            meStatus = E_STATUS_CLOSED;
+            if (muCacheId != 0xFFFFFFFFu)
+                CGS_ASSERT(mpFileSystem != nullptr, "mpFileSystem\n");
+        }
+
+        --miPendingOperationCount;
     }
 
     // OpenCallback @ 0x82900CF8 — device open-completion trampoline: forward to OnOpen on the owning

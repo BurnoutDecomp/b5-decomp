@@ -7,8 +7,9 @@
 // faithful X360 engine; only this leaf — the actual byte transfer — is re-expressed with the
 // host file API (marked), exactly as the bundle loader's CRT leaf is today.
 //
-// The device's worker-dispatched ops receive an integer file handle; this device maps those
-// integers onto Win32 HANDLEs through a small fixed table (the int handle is the table index).
+// The device's worker-dispatched ops receive the opaque native-width DeviceHandle declared by
+// DecFIGS. This leaf stores the Win32 HANDLE directly in that token and keeps a small table only
+// so Shutdown can close handles that callers left live.
 
 #include "types.hpp"
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevice.h"
@@ -23,20 +24,22 @@ namespace CgsFileSystem
 
         // ---- worker-dispatched ops (see CgsDevice.h for the opcode->method mapping) ----
         int Connect() override;                                                              // worker start: no-op
-        int Open(const char* lpcPath, int liMode, int* lpiOutHandle) override;               // CreateFileA
-        int Close(int liHandle) override;                                                    // CloseHandle
-        int Read(int liHandle, u64 lu64Offset, u32 luSize, void* lpBuffer, int* lpiOutResult) override;        // SetFilePointerEx + ReadFile
-        int Write(int liHandle, u64 lu64Offset, u32 luSize, const void* lpBuffer, int* lpiOutResult) override;  // SetFilePointerEx + WriteFile
-        int GetFileSize(int liHandle, u64* lpu64OutSize) override;                            // GetFileSizeEx
-        int Seek(int liHandle, u64 lu64Offset, int* lpiOutResult) override;                   // SetFilePointerEx
+        int Open(const char* lpcPath, u32 luMode, Handle::DeviceHandle* lppOutHandle) override; // CreateFileA
+        int Close(Handle::DeviceHandle lpHandle) override;                                     // CloseHandle
+        int Read(Handle::DeviceHandle lpHandle, void* lpBuffer, u32 luSize,
+                 u32* lpuOutResult) override;                                                   // ReadFile
+        int Write(Handle::DeviceHandle lpHandle, const void* lpBuffer, u32 luSize,
+                  u32* lpuOutResult) override;                                                  // WriteFile
+        int GetFileSize(Handle::DeviceHandle lpHandle, u64* lpu64OutSize) override;             // GetFileSizeEx
+        int Seek(Handle::DeviceHandle lpHandle, u64 lu64Offset,
+                 u64* lpu64OutPosition) override;                                               // SetFilePointerEx
         int Shutdown() override;                                                              // close all open handles
 
     private:
         static const int KI_MAX_OPEN_FILES = 32;
 
-        // Look up the Win32 HANDLE for an integer handle (the table index); returns the
-        // INVALID sentinel for an out-of-range / closed slot.
-        void* HandleFor(int liHandle) const;
+        // Validate that an opaque token is one of this device's live Win32 handles.
+        void* HandleFor(Handle::DeviceHandle lpHandle) const;
 
         void* mapHandles[KI_MAX_OPEN_FILES];  // Win32 HANDLEs (INVALID_HANDLE_VALUE == free)
     };

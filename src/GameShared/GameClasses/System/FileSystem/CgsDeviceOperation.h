@@ -19,11 +19,37 @@ namespace CgsFileSystem
 {
     class Device;
 
-    // The worker fires this after an op completes: callback(device, handle, result, context).
-    // (X360: the `v22(HIDWORD(v17), v17, result, v23)` indirect call in PhysicalDeviceThread.)
-    // The context was a 32-bit value on the X360; here it is a void* (x64 callers pass an
-    // object pointer, e.g. a sync-wait completion record) — marked PC divergence.
-    typedef void (*OperationCallback)(Device* lpDevice, s32 liHandle, s32 liResult, void* lpContext);
+    // CgsDeviceOperation.h:72 (DecFIGS): the public file handle carries both the logical
+    // device and that device's private handle. ARTIST passes the pair in r4/r5 and stores it
+    // as the 8-byte Operation field at +0x108. On the x64 target the pointer naturally widens.
+    struct Handle
+    {
+        // DecFIGS CgsDeviceOperation.h:67. A device owns the concrete pointee; the
+        // file-system layer deliberately treats it as an opaque native-width token.
+        typedef void* DeviceHandle;
+
+        void Clear() { mpDevice = nullptr; mDeviceHandle = nullptr; }
+        bool IsNull() const { return mpDevice == nullptr; }
+
+        static Handle Make(Device* lpDevice, DeviceHandle lpDeviceHandle)
+        {
+            Handle lHandle;
+            lHandle.mpDevice = lpDevice;
+            lHandle.mDeviceHandle = lpDeviceHandle;
+            return lHandle;
+        }
+
+        Device* GetDevice() const { return mpDevice; }
+        DeviceHandle GetDeviceHandle() const { return mDeviceHandle; }
+
+    private:
+        Device*      mpDevice;
+        DeviceHandle mDeviceHandle;
+    };
+
+    // CgsDeviceOperation.h:104 (DecFIGS): result, compound handle, transferred size,
+    // producer context. This is also the callback ABI visible in the ARTIST worker asm.
+    typedef void (*OperationCallback)(s32 liResult, Handle lHandle, u64 luSize, void* lpContext);
 
     // miType values — the worker's switch(opcode) arms (PhysicalDeviceThread cases 0..9).
     enum OperationType
@@ -32,11 +58,11 @@ namespace CgsFileSystem
         E_OP_WRITE       = 1,  // device->Write (after a pre-check)
         E_OP_OPEN        = 2,  // device->Open  (uses macPath)
         E_OP_CLOSE       = 3,  // device->Close
-        E_OP_GETFILESIZE = 4,  // device->GetFileSize
-        E_OP_OPENEX      = 5,  // device->OpenEx (uses macPath)
-        E_OP_SEEK        = 6,  // device->Seek
-        E_OP_OP7         = 7,  // device->Op7
-        E_OP_DISCONNECT  = 8,  // device->OnDisconnect (no callback)
+        E_OP_GETFILESIZE     = 4,  // device->GetFileSize
+        E_OP_OPEN_DIRECTORY  = 5,  // device->OpenDirectory (uses macPath)
+        E_OP_READ_DIRECTORY  = 6,  // device->ReadDirectory
+        E_OP_CLOSE_DIRECTORY = 7,  // device->CloseDirectory
+        E_OP_DISCONNECT      = 8,  // device->OnDisconnect (no callback)
         E_OP_SHUTDOWN    = 9   // device->Shutdown then the worker thread exits
     };
 
@@ -44,11 +70,12 @@ namespace CgsFileSystem
     {
         s32               miType;        // opcode (E_OP_*)            (X360 Operation+0)
         char              macPath[256];  // path/filename for opens    (X360 Operation+4)
-        Device*           mpDevice;      // target device
-        s32               miHandle;      // file handle
+        u32               muFlags;       // open flags
+        Handle            mHandle;       // target device + opaque device handle
         u64               mu64Offset;    // byte offset
-        u32               muSize;        // byte count
-        void*             mpBuffer;      // read destination / write source
+        void*             mpReadBuffer;  // read/directory destination
+        const void*       mpWriteBuffer; // write source
+        u32               muSize;        // byte count / directory capacity
         OperationCallback mpfCallback;   // completion callback
         void*             mpContext;     // callback context (x64 pointer; X360 was a 32-bit value)
         s32               miPriority;    // scheduler priority (X360 Operation+0x12C)

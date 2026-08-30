@@ -29,13 +29,9 @@
 
 namespace CgsFileSystem
 {
-    // A file handle as returned by an async Open and passed back to Read/Write/Close (X360: a plain
-    // 32-bit handle; see CgsDeviceOperation::miHandle).
-    typedef s32 Handle;
-
     // Completion callback the async device ops invoke when an operation finishes: the result code,
     // the file handle, the byte count, and the producer's context pointer (the issuing AsyncOp).
-    typedef void (*AsyncCompletionCallback)(s32 liResult, Handle lHandle, u64 luSize, void* lpContext);
+    typedef OperationCallback AsyncCompletionCallback;
 
     struct DeviceManager
     {

@@ -53,54 +53,58 @@ namespace CgsFileSystem
         return 0;   // worker-start / op8 hook: base no-op (a device with no connect step)
     }
 
-    int Device::Open(const char* /*lpcPath*/, int /*liMode*/, int* /*lpiOutHandle*/)
+    int Device::Open(const char* /*lpcPath*/, u32 /*luMode*/, Handle::DeviceHandle* /*lppOutHandle*/)
     {
         CGS_ASSERT(false, "Not implemented\n");
         return -2;
     }
 
-    int Device::Close(int /*liHandle*/)
+    int Device::Close(Handle::DeviceHandle /*lpHandle*/)
     {
         CGS_ASSERT(false, "Not implemented\n");
         return -2;
     }
 
-    int Device::Read(int /*liHandle*/, u64 /*lu64Offset*/, u32 /*luSize*/, void* /*lpBuffer*/, int* /*lpiOutResult*/)
+    int Device::Read(Handle::DeviceHandle /*lpHandle*/, void* /*lpBuffer*/, u32 /*luSize*/, u32* /*lpuOutResult*/)
     {
         CGS_ASSERT(false, "Not implemented\n");
         return -2;
     }
 
-    int Device::Write(int /*liHandle*/, u64 /*lu64Offset*/, u32 /*luSize*/, const void* /*lpBuffer*/, int* /*lpiOutResult*/)
+    int Device::Write(Handle::DeviceHandle /*lpHandle*/, const void* /*lpBuffer*/, u32 /*luSize*/, u32* /*lpuOutResult*/)
     {
         CGS_ASSERT(false, "Not implemented\n");
         return -2;
     }
 
-    int Device::CheckOp(int /*liHandle*/, u64 /*lu64Offset*/, void* /*lpOut*/)
-    {
-        return 0;   // default pre-check: OK to proceed
-    }
-
-    int Device::GetFileSize(int /*liHandle*/, u64* /*lpu64OutSize*/)   // @0x828DDE50 (default)
+    int Device::Seek(Handle::DeviceHandle /*lpHandle*/, u64 /*lu64Offset*/, u64* /*lpu64OutPosition*/)
     {
         CGS_ASSERT(false, "Not implemented\n");
         return -2;
     }
 
-    int Device::OpenEx(const char* /*lpcPath*/, u32 /*luA*/, u32 /*luB*/, int* /*lpiOutC*/, int* /*lpiOutResult*/)
+    int Device::GetFileSize(Handle::DeviceHandle /*lpHandle*/, u64* /*lpu64OutSize*/)   // @0x828DDE50 (default)
     {
         CGS_ASSERT(false, "Not implemented\n");
         return -2;
     }
 
-    int Device::Op7(int /*liHandle*/)
+    // ---- directory enumeration "Not implemented" defaults (@0x828DDEE0/F70/000) ----
+    int Device::OpenDirectory(const char* /*lpcPath*/, void* /*lpEntryBuffer*/, u32 /*luMaxEntries*/,
+                              u32* /*lpuOutCount*/, Handle::DeviceHandle* /*lppOutHandle*/)  // @0x828DDEE0
     {
         CGS_ASSERT(false, "Not implemented\n");
         return -2;
     }
 
-    int Device::Seek(int /*liHandle*/, u64 /*lu64Offset*/, int* /*lpiOutResult*/)
+    int Device::CloseDirectory(Handle::DeviceHandle /*lpHandle*/)   // @0x828DDF70
+    {
+        CGS_ASSERT(false, "Not implemented\n");
+        return -2;
+    }
+
+    int Device::ReadDirectory(Handle::DeviceHandle /*lpHandle*/, void* /*lpEntryBuffer*/,
+                              u32 /*luMaxEntries*/, u32* /*lpuOutCount*/)  // @0x828DE000
     {
         CGS_ASSERT(false, "Not implemented\n");
         return -2;
@@ -109,25 +113,6 @@ namespace CgsFileSystem
     int Device::Shutdown()
     {
         return 0;   // worker-exit hook: base no-op
-    }
-
-    // ---- directory enumeration "Not implemented" defaults (@0x828DDEE0/F70/000) ----
-    int Device::OpenDirectory(const char* /*lpcPath*/, void* /*lpEntryBuffer*/, int /*liMaxEntries*/, int* /*lpiOutCount*/, int* /*lpiOutHandle*/)  // @0x828DDEE0
-    {
-        CGS_ASSERT(false, "Not implemented\n");
-        return -2;
-    }
-
-    int Device::CloseDirectory(int /*liHandle*/)   // @0x828DDF70
-    {
-        CGS_ASSERT(false, "Not implemented\n");
-        return -2;
-    }
-
-    int Device::ReadDirectory(int /*liHandle*/, void* /*lpEntryBuffer*/, int /*liMaxEntries*/, int* /*lpiOutCount*/)  // @0x828DE000
-    {
-        CGS_ASSERT(false, "Not implemented\n");
-        return -2;
     }
 
 } // namespace CgsFileSystem

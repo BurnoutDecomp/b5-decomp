@@ -20,6 +20,7 @@
 #include "rw/audio/core/Collection.h"
 
 #include "coreallocator/icoreallocator_interface.h" // EA::Allocator::ICoreAllocator
+#include <cstddef>                                    // offsetof
 
 namespace rw
 {
@@ -63,10 +64,12 @@ int Collection::AddCapacity(Collection *self, int count)
     // v4 (r30) = count + mCapacity -- the number of Node slots the new block holds.
     const int slots = count + self->mCapacity;
 
-    // 12 bytes per Node + 8-byte NodeBlock header; tag "rw::audio::core::Collection:
-    // NodeBlock"; flags=1, align=16, offset=0 (vtable[1] Alloc-with-align).
+    // X360 requests 12 bytes per Node + its 8-byte NodeBlock header. Express the
+    // same native layout through the C++ types so x64 reserves its 24-byte Nodes
+    // and 16-byte aligned header instead of overwriting the allocator's next
+    // boundary tag. Tag/flags/alignment match the console allocation.
     NodeBlock *block = static_cast<NodeBlock *>(Allocator()->Alloc(
-        static_cast<size_t>(12 * slots + 8),
+        offsetof(NodeBlock, maNodes) + sizeof(Node) * static_cast<size_t>(slots),
         "rw::audio::core::Collection: NodeBlock", 1, 16, 0));
 
     if (block)

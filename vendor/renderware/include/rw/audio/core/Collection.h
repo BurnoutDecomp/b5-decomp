@@ -59,7 +59,7 @@ namespace core
 class Collection
 {
 public:
-    // A single 12-byte link record handed out by the Collection.
+    // One link record handed out by the Collection (12 bytes on X360, 24 bytes on x64).
     // FLAG (rwaudio PDB reconcile): PDB name = Collection::ItemNode [sizeof = 12]
     //   { ListDNode node { ListDNode* pnext; ListDNode* pprev; }; ItemHandle* pHandle; }.
     //   Kept as flat Node here (ARTIST asm shape); mppOwner is PDB pHandle (PDB type
@@ -74,7 +74,8 @@ public:
         void **mppOwner;  // +0x08 (PDB pHandle, type ItemHandle*)
     };
 
-    // A pool block: an 8-byte header followed by miNodeCount Node records.
+    // A pool block: an 8-byte X360 header (naturally 16 bytes on x64) followed by
+    // miNodeCount native-width Node records.
     // FLAG (rwaudio PDB reconcile): the 8-byte header is PDB Collection::NodeBlockHeader
     //   [sizeof = 8] { ListNode node { ListNode* pnext; }; int size; }; the trailing
     //   maNodes[] array is the ARTIST asm's carved Node slots (block + 8).
