@@ -62,9 +62,8 @@ namespace Logic
 // surface (the GUI audio-settings fields) is reconstructed in its own home/TU.
 struct GuiEventAudioSettings
 {
-    // Storage stand-in so MixerControl can embed it by value. The real field set
-    // is DEFERRED; this carries no behaviour for the destructor-only TU.
-    u32 muReserved;
+    s32 miMusicVolume;
+    s32 miSFXVolume;
 };
 
 // BrnMixerControl.h:36 (DWARF). Reuses the committed BrnEffectControl base by
@@ -83,10 +82,19 @@ struct MixerControl : public BrnSound::Logic::BrnEffectControl
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectControl* CreateObject(u32 auType);
 
+    void SetupLoadData() override;
+    bool Attach() override;
+    void UpdateParams(f32 afDeltaTime) override;
+    void Notify(const CgsSound::Io::MessageHeader* apMessage) override;
+    s32 GetMusicVolumeForMixer() const { return mCachedSettings.miMusicVolume; }
+
     // MixerControl-owned members observed in the DWARF (BrnMixerControl.h:80-87),
     // pinned BY NAME. The destructor does not tear these down (non-owning), so
     // they carry no teardown behaviour in this TU.
-    void*       mpMixerData;              // BrnMixerControl.h:80
+private:
+    void RestartMixer();
+
+    u8*         mpMixerData;              // BrnMixerControl.h:80
     const char* mpcNicotineBundle;        // BrnMixerControl.h:82
     const char* mpcNicotineAsset;         // BrnMixerControl.h:83
     const char* mpcNicotineSnapshotAsset; // BrnMixerControl.h:84

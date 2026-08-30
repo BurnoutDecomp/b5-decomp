@@ -41,6 +41,12 @@ namespace Gen
     {
     public:
         explicit speechdata(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit speechdata(const RefSpec& lrRefSpec, void* lpOwner = nullptr)
+            : Instance(lrRefSpec, lpOwner) {}
+
+        // speechdata.h:81; FirstTimeTips is a RefSpec array keyed by 0x564FC966.
+        // The caller wraps the selected RefSpec as a languagestreamconfiguration.
+        const RefSpec& FirstTimeTips(u32 luIndex) const;
 
         // DWARF: each is `unsigned int … () const` — the entry count of the named array.
         unsigned int Num_LicenseUpgradeVoiceOvers() const;  // @0x82686DE0
@@ -64,6 +70,17 @@ namespace Gen
             AssertOnClassCheck(GetClass(), KI_SPEECHDATA_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x188u);
+    }
+
+    inline const RefSpec& speechdata::FirstTimeTips(u32 luIndex) const
+    {
+        static const u64 KU_FIRST_TIME_TIPS_KEY = 0x564FC966ull;
+        speechdata* lpSelf = const_cast<speechdata*>(this);
+        const RefSpec* lpTip = static_cast<const RefSpec*>(
+            lpSelf->GetAttributePointer(KU_FIRST_TIME_TIPS_KEY, luIndex));
+        if (!lpTip)
+            lpTip = static_cast<const RefSpec*>(DefaultDataArea(0x18u));
+        return *lpTip;
     }
 
     // Shared Num_* body: resolve the named array attribute into a stack cursor, read its

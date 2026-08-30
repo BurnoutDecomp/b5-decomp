@@ -124,10 +124,11 @@ DMixIO* DMixIO::TurnOnMixOutput()
 }
 
 // GetStateID @ 0x82B449B8
-//   lhz r11,4(r3); clrlwi r3,r11,24  -> low 8 bits of the state word.
+//   lhz r11,4(r3); clrlwi r3,r11,24. On PPC big-endian, the halfword at
+//   byte +4 is the high half of m_ID, so this selects numeric bits [23:16].
 int DMixIO::GetStateID()
 {
-    return m_ID & 0xFF;
+    return (m_ID >> 16) & 0xFF;
 }
 
 // GetSFX_ID @ 0x82B449C8

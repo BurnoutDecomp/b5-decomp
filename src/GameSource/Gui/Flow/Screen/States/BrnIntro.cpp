@@ -255,13 +255,6 @@ namespace BrnGui
         // CgsCommon.cpp:148, faithful to X360 @0x82689A50) and is already used at runtime by
         // BrnGuiModule's menu-music table. The hash is therefore computed for real here, which
         // is what the console posts.
-        //
-        // What is still ABSENT is the CONSUMER: BrnGameModule::BridgeGuiToSound hands the GUI
-        // out-queue to the sound module, whose SoundLogicModule::ProcessGuiEvents @0x826ED6C8
-        // is unreconstructed, and the sound -> GUI feedback leg
-        // (BridgeSoundToGuiPreUpdate, GameBridgeSoundToX.cpp:10-11) is unreconstructed too.
-        // So nothing raises 466/467 back and mbVoiceOverPlaying stays false -- see the pacing
-        // note on HandleStateTransitions.
         u32 VoiceOverNameHash(const char* lpacVoiceOverName)
         {
             return static_cast<u32>(CgsSound::Playback::Name::MakeHash(lpacVoiceOverName));
@@ -278,19 +271,14 @@ namespace BrnGui
         // switch has no arm for that id, so the request never reached
         // BrnGameModule::BridgeGuiToGame at all. The X360's OutputGuiEvent<T> builds a
         // GuiEventWrapper<T, 40> and posts it on CHANNEL 40 (@0x824C3178 --
-        // "{4, 466, 12, <name hash>}, channel 40, 16 bytes"). Reproduced directly here, the
-        // same way this file's PostCommand16<N> already does it.
-        struct GuiEventAudioVoiceOverRecord : public CgsGui::GuiEvent<KI_EVENT_VOICEOVER_STARTED>
+        // "{4, 466, 12, <name hash>}, channel 40, 16 bytes"). The local payload tag below
+        // is boxed through that canonical wrapper, preserving the original structure.
+        struct GuiEventAudioVoiceOverPayload : public CgsModule::Event
         {
-            u32 muNameHash;   // payload +0x00 -- CgsSound::Playback::Name::MakeHash result
+            u32 muNameHash;
 
-            explicit GuiEventAudioVoiceOverRecord(u32 luNameHash)
-                : CgsGui::GuiEvent<KI_EVENT_VOICEOVER_STARTED>(), muNameHash(luNameHash)
-            {
-                const size_t luOffset = offsetof(GuiEventAudioVoiceOverRecord, muNameHash);
-                muHeader0 = static_cast<u32>(sizeof(*this) - luOffset);   // X360 4
-                muHeader2 = static_cast<u32>(luOffset);                   // X360 12
-            }
+            explicit GuiEventAudioVoiceOverPayload(u32 luNameHash) : muNameHash(luNameHash) {}
+            s32 GetEventType() const { return KI_EVENT_VOICEOVER_STARTED; }
         };
 
         const char* const KAC_VO_INTRO_NEED_PICTURE   = "Intro_Need_Picture";    // -> 0x82FB4A80
@@ -304,9 +292,12 @@ namespace BrnGui
         {
             // The hash word is stored NATIVELY (the console's big-endian bytes are that
             // platform's native order; the consumer reads a u32, not a byte string).
-            GuiEventAudioVoiceOverRecord lRecord(VoiceOverNameHash(lpacVoiceOverName));
-            lpInterface->GetOutputEventQueue()->AddEvent(&lRecord, KI_CHANNEL_GUI_OUT,
-                                                        static_cast<s32>(sizeof(lRecord)));
+            GuiEventAudioVoiceOverPayload lEvent(VoiceOverNameHash(lpacVoiceOverName));
+            CgsGui::GuiEventWrapper<GuiEventAudioVoiceOverPayload, KI_CHANNEL_GUI_OUT>
+                lWrapper(lEvent);
+            lpInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lWrapper), KI_CHANNEL_GUI_OUT,
+                static_cast<s32>(sizeof(lWrapper)));
         }
 
         // ================================================================================

@@ -19,6 +19,8 @@
 //          -> 48 kHz stereo s16 PCM -> CgsSystem::AudioOutputPC (XAudio2).
 //
 //  PC SIMPLIFICATIONS (faithful movie-owned data path, PC leaf):
+//  FLAG PC-platform leaf: FFmpeg/XAudio2 replace the X360 XMA hardware and movie
+//  render driver while preserving the movie-owned stream, timing, and output shape.
 //   * FFmpeg xmaframes replaces the X360 XMA hardware (EaXmaDec).
 //   * The whole stream is decoded up front into a PCM buffer and played from a
 //     cursor, rather than through the game-sound voices. This path stays separate

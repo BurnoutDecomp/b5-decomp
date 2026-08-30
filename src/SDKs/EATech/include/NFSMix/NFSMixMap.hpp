@@ -64,8 +64,8 @@ public:
     // ---- cursor / block-pointer helpers (ARTIST-verified) ----
     stMixCtlProc* GetProcessMixCtlPtr(char lbAdvance);     // @0x82B49500
     int*          GetMasterChannelOutputArrayPtr(int liN); // @0x82B495F0
-    int*          GetMasterChannelInputPtr(int liN);       // @0x82B49618
-    int*          GetSubChannelInputPtr(int liN);          // @0x82B49638
+    int**         GetMasterChannelInputPtr(int liN);       // @0x82B49618
+    int**         GetSubChannelInputPtr(int liN);          // @0x82B49638
     int           GetMapStateCopies(int liState);          // @0x82B49658
 
     // ---- "next slot" allocators (return &m_p<X>[m_nAssigned<X>]; bump the count if
@@ -74,6 +74,7 @@ public:
     stEvtMixCtlSharedData* GetNextEvtMixCtlShared(char lbAdvance);     // @0x82B48FB8
     st3DMixCtlProc*        GetNext3DMixCtlProc(char lbAdvance);        // @0x82B49048
     st3DMixCtlSharedData*  GetNext3DMixCtlShared(char lbAdvance);      // @0x82B49078
+    st3DMixCtlUniqueData*  GetNext3DMixCtlUnique(char lbAdvance);      // @0x82B490B0
     stMasterMixChProc*     GetNextMasterMixProc(char lbAdvance);       // @0x82B490E0
     stMasterMixChSharedData* GetNextMasterMixShared(char lbAdvance);   // @0x82B49110
     stSubMixChProc*        GetNextSubMixProc(char lbAdvance);          // @0x82B49178
@@ -92,10 +93,9 @@ public:
     int* AddScaleIDs(unsigned short* lpScaleParams, int liProcIdx); // @0x82B492F8
     int* AddEvtScaleIDs(stMixEvtParams* lpEvtParams, int liProcIdx); // @0x82B493F8 (event twin of AddScaleIDs)
     // Links the freshly-allocated shared/unique MixCtl records into lpProc (sets
-    // lpProc->psdata / ->pudata) for NFSMixMapState::CreateMixCtls. Body is its own TU
-    // (still un-reconstructed); signature is ARTIST-derived from the call site (r3=this,
-    // r4=proc, r5=entry cursor, r6=object index, r7=proc index; return discarded).
-    // Declared here so CreateMixCtls compiles against it (trap-stubbed at link).
+    // lpProc->psdata / ->pudata) for NFSMixMapState::CreateMixCtls. Signature is
+    // ARTIST-derived from the call site (r3=this, r4=proc, r5=entry cursor,
+    // r6=object index, r7=proc index; return discarded).
     void AssignMixCtlDataPtrs(stMixCtlProc* lpProc, int* lpEntry, int liObjectIndex, int liProcIdx);
 
     // vtable-less allocation passes (build the runtime mixer graph from the parsed counts).
@@ -106,10 +106,7 @@ public:
     void UpdateSubChannels();       // @0x82B4AC10 -- accumulate sub-channel inputs (Q15, clamped)
     stMasterMixChProc* GetMasterMixChProc(int liPackedID); // @0x82B4A840 -- state-routed master-mix proc
 
-    // ---- BLOCKED (declared so callers compile; bodies deferred -- see NFSMixMap.cpp notes) ----
-    //   * The SFX-callback-host functions call mpMixerInterface via un-modelled vtable slots
-    //     (+4 register / +8 get-state-instance-count) and Nicotine::DMixIO::GetDMixID.
-    //   * The per-frame DSP updaters need X360 rodata float/int tables not in this export.
+    // Host callbacks, graph construction, and per-frame DSP update passes.
     int   SETSFXID(int liID, int* lpObj);                 // @0x82B481C0  (host slot +4)
     void* GetObjectPtr(int liID, char lbA, char lbB);     // @0x82B4A550  (host slot +4 / DMixIO)
     void  ConnectMixMap();                                // @0x82B4A8D8  (via SETSFXID/GetObjectPtr)
@@ -117,6 +114,7 @@ public:
     void  AllocateDMixIOArrays();                         // @0x82B49750  (host debug / DMixIO)
     void  CreateMainMapState(int liState, int liCopy, int liObjIdx); // @0x82B49680 (NFSMixMapState build API)
     void  InitMainMapStates();                            // @0x82B4ABD0  (NFSMixMap::SetupStateProcArrays)
+    void  SetupStateProcArrays();                         // @0x82B4AB28
     void  Update3DMixCtls();       // @0x82B4BB98  (rodata flt_82F8795C/flt_82002138/flt_820037C8)
     void  UpdateEvtMixCtls();      // @0x82B4C2A8  (couples the 3 envelope updaters below)
     void  UpdateMasterChannels();  // @0x82B4ACD8  (rodata dword_821483D0[] preset table)
@@ -143,7 +141,7 @@ public:
     NFSMixMapState**          m_pStateProcs;               // +0x98
     NFSMixMapState**          m_pStateProcMemBlock;        // +0x9c
     Nicotine::DMixIO**        m_pDMixIOObj;                // +0xa0
-    Nicotine::DMixIO**        m_pDMixIOMemBlock;           // +0xa4
+    Nicotine::DMixIO*         m_pDMixIOMemBlock;           // +0xa4
     int                       m_nStateMapCount;            // +0xa8
     int                       m_nTotalDMixIO;              // +0xac
     int                       m_nTotalDMix3DIO;            // +0xb0
@@ -178,7 +176,7 @@ public:
     int                       m_nAssignedEvtMixCtlShared;  // +0x170
     int                       m_nAssignedEvtMixCtlUnique;  // +0x174
     int*                      m_pMasterChannelOutputArrayBlock; // +0x178
-    int**                     m_pDynMixInputBlocks;        // +0x17c
+    int*                      m_pDynMixInputBlocks;        // +0x17c (contiguous 16-int blocks)
     int**                     m_pScalePtrArray;            // +0x180
     stCurveDataProc*          m_pCurveDataArray;           // +0x184
     stMixCtlSharedData*       m_pMixCtlData_S;             // +0x188
@@ -212,8 +210,8 @@ public:
     int                       m_nTotalUniqueMasterChannels;// +0x1f8
     int                       m_CurrentMasterInputOffset;  // +0x1fc
     int                       m_CurrentSubInputOffset;     // +0x200
-    int*                      m_pMasterChannelInputs;      // +0x204
-    int*                      m_pSubChannelInputs;         // +0x208
+    int**                     m_pMasterChannelInputs;      // +0x204
+    int**                     m_pSubChannelInputs;         // +0x208
     int                       m_CurrentStateProcBlockOffset;      // +0x20c
     int                       m_CurrentEvtMixCtlPtrBlockOffset;   // +0x210
     int                       m_Current3DMixCtlPtrBlockOffset;    // +0x214

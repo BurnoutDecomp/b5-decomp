@@ -64,6 +64,7 @@ public:
     NFSMixMapState* GetMixMapProc(int liIndex);   // @0x82B4D648 -- &m_pFirstInstance[liIndex]
     NFSMixMapState* AddMixState(int liObjectIndex, NFSMixMapState* lpFirstInstance); // @0x82B4D660
     void CreateMixCtls();             // @0x82B4C890 -- build this state's mix-control procs
+    void Create3DMixCtls();           // @0x82B4D100 -- build this state's 3D mix-control procs
     void CreateEvtMixCtls();          // @0x82B4CE00 -- build this state's event mix-control procs
     void CreateSubMixChannels();      // @0x82B4CB00 -- build this state's sub-mix channel procs
     void CreateMasterMixChannels();   // @0x82B4CC48 -- build this state's master-mix channel procs

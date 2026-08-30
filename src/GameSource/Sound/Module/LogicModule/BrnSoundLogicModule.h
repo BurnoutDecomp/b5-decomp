@@ -17,6 +17,7 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsVoice.h"            // the three stage-2 logic voices
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"           // Io::PreUpdateOutput (the by-value pre-update block; phase C1)
 #include "GameSource/AttribSys/Generated/classes/burnoutglobaldata.h"
+#include "GameSource/Sound/Collision/BrnCollisionFrameInformation.h"
 
 // =============================================================================
 // BrnSound::Module::SoundLogicModule
@@ -196,6 +197,8 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
 
     Attrib::Gen::burnoutglobaldata& GetGlobalData() { return mBurnoutGlobalData; }
     const Attrib::Gen::burnoutglobaldata& GetGlobalData() const { return mBurnoutGlobalData; }
+    BrnSound::Logic::FrameInformation& GetFrameInformation() { return mFrameInformation; }
+    const BrnSound::Logic::FrameInformation& GetFrameInformation() const { return mFrameInformation; }
 
     // The freed-ids list, by reference (the root Update's append target).
     CgsSound::Playback::Module::Io::OutputBuffer::FreedBuffersArray& GetFreedStreamBufferIds()
@@ -213,6 +216,11 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     void ProcessGuiEvents(const CgsModule::VariableEventQueue<18432, 16>* apGuiEvents);
 
 private:
+    // ARTIST 0x826EC250. Broadcast each playback-freed stream voice id to the
+    // three StreamingState instances as sound message 16.
+    void ProcessStreamFreedQueue(
+        const CgsSound::Playback::Module::Io::OutputBuffer::FreedBuffersArray& arFreedIds);
+
     // Members in DWARF source order (BrnSoundLogicModule.h:365-383). Only the two
     // touched members are real typed members; the rest of the class tail is omitted
     // from this slice (see header note).
@@ -237,6 +245,7 @@ private:
     // It is constructed before the asset is available and rebound by
     // ResourcesAreReady once the registrar completes the load.
     Attrib::Gen::burnoutglobaldata mBurnoutGlobalData;
+    BrnSound::Logic::FrameInformation mFrameInformation;
 
     // (phase B5: the by-value lEnvironment member is RETIRED -- the LOGIC Environment is
     // the ENGINE base's mEnvironment @+0x2950, reached via GetEnvironment().)

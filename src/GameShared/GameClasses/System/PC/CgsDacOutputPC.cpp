@@ -5,8 +5,6 @@
 #include "rw/audio/core/Mixer.h"       // Mixer::KU_FRAME_SIZE
 #include "rw/audio/core/PlugIn.h"      // System (ExecuteCommands + the two locks)
 
-#include "GameShared/GameClasses/Development/Log/CgsLog.h" // the one-shot first-valid-frame diagnostic
-
 #include <cstring> // memset (the silence frames)
 
 // ===========================================================================
@@ -65,18 +63,6 @@ namespace
 
         if (liFrameValid == 1)
         {
-            // One-shot diagnostic: the first VALID engine frame through the fill
-            // (log-visible proof the full console path produced output). The
-            // probe-era peak scan that accompanied it is retired with the probe
-            // (2026-08-28: 440 Hz confirmed by ear + a logged peak of 0.999).
-            static bool s_bLoggedFirstValid = false;
-            if (!s_bLoggedFirstValid)
-            {
-                s_bLoggedFirstValid = true;
-                if (CgsDev::Log::gpDebugPrint)
-                    (*CgsDev::Log::gpDebugPrint)
-                        << "[Audio] engine fill: first VALID mixed frame reached the device\n";
-            }
             // The engine frame is interleaved WAVE-order f32 in the Dac's static
             // buffer ({FL,FR,C,LFE,BL,BR} x 256, already clipped to [-1,1]).
             // FLAG PC-platform fold: the console hands all six channels to its 5.1
@@ -85,7 +71,6 @@ namespace
             // saturating f32 -> s16 (the sum can exceed the clipped per-channel range).
             const f32* lpFrame = rw::audio::core::DacGetInterleaveBuffer();
             const int liChannels = rw::audio::core::DacGetChannelCount();
-            f32 lfPeak = 0.0f;
             for (int liSample = 0; liSample < liFrames; ++liSample)
             {
                 f32 lfLeft;
@@ -114,26 +99,8 @@ namespace
                 if (lfLeft  < -1.0f) lfLeft  = -1.0f;
                 if (lfRight >  1.0f) lfRight =  1.0f;
                 if (lfRight < -1.0f) lfRight = -1.0f;
-                const f32 lfAbsLeft  = (lfLeft  < 0.0f) ? -lfLeft  : lfLeft;
-                const f32 lfAbsRight = (lfRight < 0.0f) ? -lfRight : lfRight;
-                if (lfAbsLeft  > lfPeak) lfPeak = lfAbsLeft;
-                if (lfAbsRight > lfPeak) lfPeak = lfAbsRight;
                 lpOut[liSample * 2 + 0] = static_cast<s16>(lfLeft  * 32767.0f);
                 lpOut[liSample * 2 + 1] = static_cast<s16>(lfRight * 32767.0f);
-            }
-
-            // A valid frame can still be an all-zero submix graph. Keep a second one-shot
-            // witness for the Phase-G retirement gate: this is sampled before the movie
-            // fill is added, so it proves an audible engine voice—not movie audio—reached
-            // the PC speaker path.
-            static bool s_bLoggedFirstNonSilent = false;
-            if (!s_bLoggedFirstNonSilent && lfPeak > 0.00001f)
-            {
-                s_bLoggedFirstNonSilent = true;
-                if (CgsDev::Log::gpDebugPrint)
-                    (*CgsDev::Log::gpDebugPrint)
-                        << "[Audio] engine fill: first NON-SILENT mixed frame reached the device, peak="
-                        << lfPeak << "\n";
             }
         }
         else

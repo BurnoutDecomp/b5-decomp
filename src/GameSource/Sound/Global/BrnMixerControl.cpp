@@ -1,4 +1,11 @@
 #include "GameSource/Sound/Global/BrnMixerControl.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsEnvironment.h"
+#include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
+#include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include <cstring>
 
 // =============================================================================
 // BrnSound::Logic::MixerControl — out-of-line bodies.
@@ -48,6 +55,114 @@ const char* MixerControl::GetTypeName() const
 
 static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* const gpMixerControlReg =
     CgsSound::Logic::EffectControl::AddToClassTypeInfoArray(MixerControl::GetStaticTypeInfo());
+
+void MixerControl::SetupLoadData()
+{
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    CgsSound::Playback::Environment* lpPlaybackEnvironment =
+        lpModule->GetPlaybackModule().GetEnvironment();
+    CGS_ASSERT(lpPlaybackEnvironment != 0, "mpObject");
+
+    if (lpPlaybackEnvironment->GetAudioMode() ==
+        CgsSound::Playback::Environment::E_AUDIO_MODE_SURROUND)
+    {
+        mpcNicotineBundle = "Sound\\NicotineAssetSurround.bundle";
+        mpcNicotineAsset = "NicotineAssetSurround";
+        mpcNicotineSnapshotAsset = "NicotineAssetSurround.mss";
+    }
+    else
+    {
+        mpcNicotineBundle = "Sound\\NicotineAssetMain.bundle";
+        mpcNicotineAsset = "NicotineAssetMain";
+        mpcNicotineSnapshotAsset = "NicotineAssetMain.mss";
+    }
+
+    static_cast<BrnSound::Logic::IResourceRequester*>(this)->LoadAsset(
+        mpcNicotineBundle, mpcNicotineAsset, ResourceRegistrar::E_DATA);
+    static_cast<BrnSound::Logic::IResourceRequester*>(this)->LoadAsset(
+        mpcNicotineBundle, mpcNicotineSnapshotAsset, ResourceRegistrar::E_DATA);
+}
+
+bool MixerControl::Attach()
+{
+    mCachedSettings.miMusicVolume = 8;
+    mCachedSettings.miSFXVolume = 8;
+    CgsSound::Logic::EffectBase::Attach();
+    mpMixerData = 0;
+    RestartMixer();
+    return true;
+}
+
+void MixerControl::UpdateParams(f32)
+{
+    const BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<const BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    const BrnSound::Logic::FrameInformation& lrFrame = lpModule->GetFrameInformation();
+
+    SetMixerInputValue(0, lrFrame.meImpactTime.GetCurrent() == 1 ? 0 : 0x7FFF);
+    SetMixerInputValue(1, lrFrame.meFatality.GetCurrent() == E_FATAL_OFF ? 0 : 0x7FFF);
+    SetMixerInputValue(2, (!lrFrame.maPaused.IsZero() || lrFrame.mbInReplay) ? 0 : 0x7FFF);
+    SetMixerInputValue(3, 0x7FFF * mCachedSettings.miMusicVolume / 11);
+    SetMixerInputValue(4, 0x7FFF * mCachedSettings.miSFXVolume / 11);
+}
+
+void MixerControl::Notify(const CgsSound::Io::MessageHeader* apMessage)
+{
+    CGS_ASSERT(apMessage && (apMessage->GetEventId() == 12 || apMessage->GetEventId() == 43),
+        "( lpMessageHeader ) && ( lpMessageHeader->GetEventId() == E_SOUNDMESSAGE_SETTINGS || lpMessageHeader->GetEventId() == E_SOUNDMESSAGE_RESTART_MIXER )");
+    if (!apMessage)
+        return;
+
+    if (apMessage->GetEventId() == 12)
+    {
+        const CgsSound::Io::Message<GuiEventAudioSettings>* lpSettings =
+            static_cast<const CgsSound::Io::Message<GuiEventAudioSettings>*>(apMessage);
+        mCachedSettings = lpSettings->mData;
+    }
+    else if (apMessage->GetEventId() == 43)
+    {
+        RestartMixer();
+    }
+}
+
+void MixerControl::RestartMixer()
+{
+    ResourceRegistrar& lrRegistrar = GetResourceRegistrar();
+    CgsResource::ResourceHandle* lpMapHandle =
+        lrRegistrar.GetResource(mpcNicotineBundle, mpcNicotineAsset);
+    CgsResource::ResourceHandle* lpSnapshotHandle =
+        lrRegistrar.GetResource(mpcNicotineBundle, mpcNicotineSnapshotAsset);
+    CGS_ASSERT(lpMapHandle != 0, "lpMixerMapHandle");
+    CGS_ASSERT(lpSnapshotHandle != 0, "lpSnapshotHandle");
+    if (!lpMapHandle || !lpSnapshotHandle)
+        return;
+
+    CgsResource::ResourcePtr<CgsResource::BinaryFileResource> lMap(*lpMapHandle);
+    CgsResource::ResourcePtr<CgsResource::BinaryFileResource> lSnapshots(*lpSnapshotHandle);
+    const u32 luMapSize = lMap->GetSize();
+
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    CgsSound::Playback::Environment* lpPlaybackEnvironment =
+        lpModule->GetPlaybackModule().GetEnvironment();
+    if (mpMixerData)
+        lpPlaybackEnvironment->Free(mpMixerData);
+    mpMixerData = static_cast<u8*>(
+        lpPlaybackEnvironment->Allocate(luMapSize, 16, "MixerMapData"));
+    CGS_ASSERT(mpMixerData != 0, "mpMixerData");
+    if (!mpMixerData)
+        return;
+    std::memcpy(mpMixerData, lMap->GetData(), luMapSize);
+
+    Nicotine::IDynamicMixer& lrMixer = lpModule->GetEnvironment().GetDynamicMixer();
+    lrMixer.DestroyMap();
+    lrMixer.InitMap(reinterpret_cast<int*>(mpMixerData));
+    lrMixer.InitSnapshots(const_cast<void*>(lSnapshots->GetData()));
+    lrMixer.SetSnapshot(0, true);
+    lrMixer.ProcessMixMap(0, 0.16f);
+
+}
 
 // ---------------------------------------------------------------------------
 // ~MixerControl  @ 0x826BAED8  (the X360 `vector deleting destructor')

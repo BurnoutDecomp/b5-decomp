@@ -98,7 +98,10 @@ AemsPlayerVoice::AemsPlayerVoice(AemsFactory& arFactory,
     VoiceSpec* lpRwacSpec = reinterpret_cast<VoiceSpec*>(laSpecStorage.data());
     std::memcpy(lpRwacSpec, &arVoiceSpec, luSpecBytes);
     lpRwacSpec->mpVoiceSchema = lpRwacSchema;
-    lpRwacSpec->mu8ProcessingStage = 1;
+    // ARTIST @ 0x826DA3FC-0x826DA404 writes 1 to VoiceSpec +0x0F: the
+    // voice-type byte, not processing stage (+0x0D).  The RWAC half is an
+    // internal submix voice, matching the SplicerPlayerVoice construction.
+    lpRwacSpec->mu8VoiceType = E_SUBMIX_VOICE;
 
     mbCreated = CreateVoiceInstance(*lpRwacSpec, *this,
                                     arFactory.GetRwacFactory(),

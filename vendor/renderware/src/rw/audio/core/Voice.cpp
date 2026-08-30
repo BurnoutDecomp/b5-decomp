@@ -9,6 +9,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/Voice.h"
+#include "rw/audio/core/Send.h"
 
 #include <cstddef> // offsetof, size_t
 #include <cstdint> // uintptr_t
@@ -314,8 +315,21 @@ Voice *Voice::ReleaseImmediate(Voice *self, u8 keepInList)
         PlugIn *stage = self->mpPlugIns[i];
         if (stage)
         {
-            stage->~PlugIn();  // vt[0]
-            stage->Destroy(0); // vt[3]
+            PlugInDescRunTime *lpDesc = stage->mpPlugInDescRunTime;
+            // Send retains the middleware's explicit four-word console vtable in
+            // its PlugInBaseView rather than deriving from the host PlugIn class.
+            // Dispatch its two ARTIST slots by descriptor identity; treating that
+            // stored console-table sentinel as a native C++ vptr executes data.
+            if (lpDesc && lpDesc->muId == 0x53656E30u) // 'Sen0'
+            {
+                Send::ReleaseEvent(reinterpret_cast<Send*>(stage));       // vt[0]
+                Send::ScalarDeletingDestructor(stage, 0);                 // vt[3]
+            }
+            else
+            {
+                stage->~PlugIn();  // vt[0]
+                stage->Destroy(0); // vt[3]
+            }
         }
     }
 

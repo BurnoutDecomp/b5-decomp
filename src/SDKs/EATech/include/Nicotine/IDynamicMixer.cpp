@@ -3,6 +3,7 @@
 #include "SDKs/EATech/include/NFSMix/MixerAllocator.hpp"   // off_83250004 mixer allocator
 #include "SDKs/EATech/include/Nicotine/SnapshotMixer.hpp"  // the snapshot mixer this drives
 #include <new>                                              // placement new
+#include <cstring>
 
 // ===========================================================================
 //  Nicotine::IDynamicMixer -- the CgsSound -> NFS-mix seam. Reconstructed store-for-store
@@ -108,25 +109,26 @@ void IDynamicMixer::CreateInstance(const MAP_CREATE_PARAMS* lpParams)
     // off_83250004 = the create-params' allocator (asm stores it UNCONDITIONALLY).
     g_pMixerAllocator = lpParams->MixerAllocator;
 
-    // --- NFSMixMaster (0x80 == 128 bytes) ---
+    // --- NFSMixMaster (0x80 == 128 bytes on X360) ---
     // The asm GUARDS the construction (`Allocate ? new(block) NFSMixMaster : 0`) --
     // an earlier revision dropped the ternary and placement-new'd unconditionally
     // (UB on a null block); restored 2026-08-25 (wave 1). The mNumStates store is
     // unconditional in the asm (a null master would crash there on console too);
     // kept under the same guard as the sane host equivalent of that crash path.
-    void* lpMasterMem = g_pMixerAllocator->Allocate(128, 16, "NFSMixMaster");
+    // FLAG PC-platform leaf: allocate the native object size. Its runtime pointer
+    // members widen on x64; carving ARTIST's 0x80 bytes corrupts the host heap.
+    void* lpMasterMem = g_pMixerAllocator->Allocate(
+        static_cast<unsigned int>(sizeof(NFSMixMaster)), 16, "NFSMixMaster");
     mMixMaster = lpMasterMem ? new (lpMasterMem) NFSMixMaster() : 0;
     if (mMixMaster)
         mMixMaster->mNumStates = lpParams->NumMixStates; // *(v4+8) = *(a2+4)
 
-    // --- SnapshotMixer (0x20 == 32 bytes; the asm zero-fills 8 words before Construct) ---
-    void* lpSnapMem = g_pMixerAllocator->Allocate(32, 16, "SnapshotMixer");
+    // --- SnapshotMixer (0x20 == 32 bytes on X360) ---
+    // FLAG PC-platform leaf: like NFSMixMaster, its pointers widen on x64.
+    void* lpSnapMem = g_pMixerAllocator->Allocate(
+        static_cast<unsigned int>(sizeof(SnapshotMixer)), 16, "SnapshotMixer");
     if (lpSnapMem)
-    {
-        int* lpWords = static_cast<int*>(lpSnapMem);
-        for (int li = 0; li < 8; ++li)   // 32 bytes / 4 = 8 words
-            lpWords[li] = 0;
-    }
+        std::memset(lpSnapMem, 0, sizeof(SnapshotMixer));
     mpSnapshot = static_cast<SnapshotMixer*>(lpSnapMem);
     if (mpSnapshot)
         mpSnapshot->Construct(this);     // owner = this
@@ -153,7 +155,8 @@ void IDynamicMixer::InitMap(int* lpMapData)
 {
     if (mMixMaster)
     {
-        mMixMaster->CreateMainMainMap(lpMapData, 0); // alloc+ctor+Init the map
+        if (!mMixMaster->CreateMainMainMap(lpMapData, 0))
+            return;
         mMixMaster->AssignSFXCallbacks(this);        // bind the SFX-callback owner
         mMixMaster->InitMixMap();                    // finish map setup
         if (mpSnapshot)
@@ -181,11 +184,11 @@ void IDynamicMixer::DestroyMap()
 //       if (mMixMaster) mpSnapshot->AttachToMixMap(mMixMaster->m_pMainMixMap);
 //   }
 // ---------------------------------------------------------------------------
-void IDynamicMixer::InitSnapshots()
+void IDynamicMixer::InitSnapshots(void* apSnapshotData)
 {
     if (mpSnapshot)
     {
-        mpSnapshot->InitSnapshots();
+        mpSnapshot->InitSnapshots(static_cast<SnapshotHeader*>(apSnapshotData));
         if (mMixMaster)
             mpSnapshot->AttachToMixMap(mMixMaster->m_pMainMixMap); // *v3 == m_pMainMixMap
     }
@@ -221,10 +224,10 @@ IDynamicMixer* IDynamicMixer::SetCameraState(int liState)
 // IDynamicMixer::SetSnapshot @0x82B44DB8 -- apply the current snapshot if one exists.
 //   if (mpSnapshot) mpSnapshot->SetSnapshot();   (lwz +0x1C; beqlr; tail-call)
 // ---------------------------------------------------------------------------
-void IDynamicMixer::SetSnapshot()
+void IDynamicMixer::SetSnapshot(int aiSnapshot, bool abActive)
 {
     if (mpSnapshot)
-        mpSnapshot->SetSnapshot();
+        mpSnapshot->SetSnapshot(aiSnapshot, abActive);
 }
 
 } // namespace Nicotine

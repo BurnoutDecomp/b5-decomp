@@ -25,8 +25,11 @@ namespace Gen
 
         bool Find(u32 auUserStringHash, RefSpec& arConfiguration) const
         {
-            static const u64 KU_LANGUAGE_STREAM_CONFIGURATIONS = 0x68C1540Dull;
-            static const u64 KU_USER_STRINGS_HASHED = 0xC32E1A1Dull;
+            // ARTIST @0x8269E978-0x8269E990 and @0x8269E9A8-0x8269E9C0
+            // construct the complete 64-bit Attrib keys with insrdi.  AttribSys hashes
+            // the whole doubleword; retaining only the low word makes every lookup miss.
+            static const u64 KU_LANGUAGE_STREAM_CONFIGURATIONS = 0xE9D833DF68C1540Dull;
+            static const u64 KU_USER_STRINGS_HASHED = 0xE28BB454C32E1A1Dull;
             for (u32 luIndex = 0; luIndex < 1024; ++luIndex)
             {
                 const u32* lpuUser = static_cast<const u32*>(

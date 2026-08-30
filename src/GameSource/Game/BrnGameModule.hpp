@@ -951,11 +951,6 @@ namespace BrnGame
         // until the first pass runs.
         CgsMemory::LinearMalloc* mpReusableLoadingScreenAllocator;
         bool mbGuiPreAccept;            // @ +10094153 (command 71 -- resume-world-load)
-        // PC scheduler latch: acknowledge a GUI voice-over request on the next GUI
-        // sub-step. Playback and the 467 completion now travel through the real
-        // BridgeGuiToSound -> SpeechEffect -> sound pre-update route.
-        bool mbGuiVoiceOverPending;
-
         // [FLAG PC bring-up] (no console member): true while the DIRECTOR is the thing driving
         // the world camera -- i.e. from the frame the GUI's game-intro fly-by request reaches
         // the director until the arbitrator has finished unwinding its attract states.

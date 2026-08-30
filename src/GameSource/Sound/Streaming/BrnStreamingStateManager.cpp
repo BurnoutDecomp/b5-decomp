@@ -532,7 +532,9 @@ void StreamingStateManager::UpdateParams(f32 af32GameDt)
             lpState->Attach(&lrRequest);
         }
         else
+        {
             RePostStreamRequest(lrRequest);
+        }
     }
 
     muPlayRequestCount = 0;

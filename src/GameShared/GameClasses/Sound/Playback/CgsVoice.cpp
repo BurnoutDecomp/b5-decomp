@@ -28,6 +28,7 @@ namespace Playback
 {
 
 const ISlotFactory* ISlotFactory::spHead = 0;
+const Name PlayerVoice::SK_PLAYER_SLOT_NAME("~PlayerVoice::SK_PLAYER_SLOT_NAME~");
 
 // CgsVoice.h:144. Static slot factories register by prepending themselves to
 // the process-wide list; SetupConf performs the corresponding name lookup.
@@ -180,7 +181,9 @@ bool Voice::Attach(Name akName, Handle<Content>& arhContent)
 {
     Slot* lpSlot = FindNamedSlot(akName);
     if (!lpSlot)
+    {
         return false;
+    }
     return lpSlot->Attach(*this, Handle<Content>(arhContent.GetObject()));
 }
 

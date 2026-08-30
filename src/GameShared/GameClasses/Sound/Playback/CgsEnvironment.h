@@ -146,6 +146,11 @@ namespace Playback
         // there); the host keeps the member private and exposes it by name.
         CpuMonitors& GetCpuMonitors() { return mCpuMonitors; }
 
+        // @0x82689BD0. The X360 queries its render driver's speaker config. The
+        // PC engine output is deliberately opened as stereo, so the native
+        // render-driver equivalent is the stereo mode.
+        eAudioMode GetAudioMode() const;
+
         // DWARF h:280. Look the owning factory handle up by interned name (the X360
         // symbol IDA truncates to `Environment::Ge`; callers: Module::CreateVoice
         // @0x826D7B00 / Module::CreateContent @0x826C12A8). FLAG (DEFER):

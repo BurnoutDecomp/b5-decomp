@@ -178,7 +178,8 @@ struct BrnEffectObject : public CgsSound::Logic::EffectObject,
 
     // BrnEffectObject.h:171 — override of EffectBase::Detach, bodied inline in
     // this DWARF home. ASM @ 0x826EBF88: if a resource request is outstanding,
-    // pull this object's requests out of its registrar, then reset bookkeeping.
+    // pull this object's requests out of its registrar, then perform the same
+    // attach/detach reset as EffectBase::Detach @ 0x826805F0.
     virtual bool Detach()
     {
         // X360 STORE ORDER (0x826EBF88):
@@ -186,18 +187,16 @@ struct BrnEffectObject : public CgsSound::Logic::EffectObject,
         //       reg = (this as IResourceRequester)->GetResourceRegistrar();
         //       reg.RemoveRequests(this as IResourceRequester);
         //   }
-        //   stb 0, +0x2D   (mbResourceRequestActive = false)
-        //   stw 3, +0x24   (meAttachState = E_ATTACH_STATE_FINISHED)
-        //   stw 0, +0x20   (mfDeltaTime = 0)
+        //   stb 0, +0x2D   (request/data-ready byte = false)
+        //   stw 3, +0x24   (meDetachState = E_DETACH_STATE_FINISHED)
+        //   stw 0, +0x20   (meAttachState = E_ATTACH_STATE_NONE)
         //   return true
         if (mbResourceRequestActive)
         {
             GetResourceRegistrar().RemoveRequests(static_cast<IResourceRequester*>(this));
         }
         mbResourceRequestActive = false;
-        meAttachState = CgsSound::Logic::EffectBase::E_ATTACH_STATE_FINISHED;
-        mfDeltaTime   = 0.0f;
-        return true;
+        return CgsSound::Logic::EffectBase::Detach();
     }
 
     // BrnEffectObject.h:207 — resolve a sample tag. Declared for home

@@ -80,11 +80,17 @@ struct Environment;
 struct DynamicMixer : public Nicotine::IDynamicMixer
 {
     DynamicMixer() : mpEnvironment(0) {}
+    virtual ~DynamicMixer();
 
     // DWARF :562. FLAG (DEFER): declared-only -- bodied with the mixer slices
     // (the Environment's Construct wires mpEnvironment + CreateInstance directly,
     // matching the @0x8268D050 asm).
     void Construct(Environment* apEnvironment);
+
+    bool ConnectDMixIO(Nicotine::DMixIO* apDMixIO) override;
+    int  GetStateCount(int aiState) override;
+    int  DMixPrintf(const char* apFormat, ...) override;
+    void DMixAssert(bool abCondition, const char* apFormat, ...) override;
 
     Environment* mpEnvironment;   // DWARF :212 (console mixer +0x20)
 };

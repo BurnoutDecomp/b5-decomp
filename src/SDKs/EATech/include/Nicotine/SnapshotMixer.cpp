@@ -471,10 +471,8 @@ namespace Nicotine {
     // no-arg (SnapshotMixer.hpp / IDynamicMixer.hpp -- out of this TU's file set),
     // so this body sources the header from mpSnapshotHdr, null-guarded, until the
     // argument is threaded through those headers.
-    void SnapshotMixer::InitSnapshots()
+    void SnapshotMixer::InitSnapshots(SnapshotHeader* lpHdr)
     {
-        SnapshotHeader* const lpHdr = mpSnapshotHdr;   // console: r4 (see the FLAG above)
-
         if (meState == 2)                    // +0x08: already built -> tear down first
             DestroySnapshots();
 
@@ -561,9 +559,6 @@ namespace Nicotine {
             meState = 1;                     // +0x08
         }
     }
-
-    // SetSnapshot (no-arg) is still un-addressed in the export set.
-    void SnapshotMixer::SetSnapshot()      {}   // FLAG link-stub (X360 body un-exported)
 
     // The 512-entry snapshot volume-curve LUT (X360 rodata unk_82F86F88; dumped
     // bit-exact 2026-08-07, _data_volume_curve_lut: 2048 bytes of big-endian f32).

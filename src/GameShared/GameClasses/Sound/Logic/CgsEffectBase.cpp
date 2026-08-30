@@ -5,6 +5,8 @@
 //   EffectBase::Attach()              @ 0x826A1138
 //   EffectBase::Prepare(State*)       @ 0x8268CEC8
 //   EffectBase::GetMixerOutputValue() @ 0x82680720
+//   EffectBase::GetRWACMixerOutputValue() @ 0x82680778
+//   EffectBase::SetMixerInputValue()   @ 0x82680610
 //   EffectBase::SetDMixIOPtr()        @ 0x826808D8
 //   EffectControl::GetTypeName()      @ 0x8268CEB8
 //   EffectObject::GetTypeName()       @ 0x8268CE98
@@ -129,6 +131,31 @@ f32 EffectBase::GetMixerOutputValue(int aiSlot, int aiPreset)
 }
 
 // ---------------------------------------------------------------------------
+// EffectBase::GetRWACMixerOutputValue(slot, preset) @ 0x82680778
+// ---------------------------------------------------------------------------
+f32 EffectBase::GetRWACMixerOutputValue(int aiSlot, int aiPreset)
+{
+    if (!mpDynamicMixIo)
+        return 0.0f;
+
+    const s32 liOutput = mpDynamicMixIo->GetDMixOutput(aiSlot, aiPreset);
+    switch (aiPreset)
+    {
+    case Nicotine::DMixIO::DMX_VOL:
+    case Nicotine::DMixIO::DMX_DEPTH:
+        return static_cast<f32>(liOutput) * 0.000030518509f;
+    case Nicotine::DMixIO::DMX_PITCH:
+        return static_cast<f32>(liOutput) * 0.00024414062f;
+    case Nicotine::DMixIO::DMX_FREQ:
+        return liOutput <= 24900 ? static_cast<f32>(liOutput) : 96000.0f;
+    case Nicotine::DMixIO::DMX_AZIM:
+        return static_cast<f32>(liOutput) * 0.0054932479f;
+    default:
+        return 0.0f;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // EffectBase::SetDMixIOPtr(apDmixIO)  @ 0x826808D8
 //   if (!apDmixIO) <assert "lpDmixIO">;  mpDynamicMixIo = apDmixIO;
 // (asm: the non-null guard (cmplwi cr6,r31,0; bne skip) fires the assert; the store
@@ -158,6 +185,25 @@ const char* EffectControl::GetTypeName() const
 ClassTypeInfo<EffectControl>* EffectControl::AddToClassTypeInfoArray(ClassTypeInfo<EffectControl>* apTypeInfo)
 {
     return RegisterClassTypeInfo<EffectControl>(gapEffectControlTypeInfo, apTypeInfo);
+}
+
+// ---------------------------------------------------------------------------
+// EffectBase::SetMixerInputValue(slot, value) @ 0x82680610
+//   assert 0 <= slot < KI_MAX_SFX_CTLS;
+//   if (mpDynamicMixIo) mpDynamicMixIo->SetDMixInput(slot, clamp(value,0,0x7fff));
+// ---------------------------------------------------------------------------
+void EffectBase::SetMixerInputValue(int aiSlot, int aiValue)
+{
+    CGS_ASSERT(aiSlot >= 0 && aiSlot < KI_MAX_SFX_CTLS,
+               "( liIndex >= 0 ) && ( liIndex < KI_MAX_SFX_CTLS )");
+    if (!mpDynamicMixIo)
+        return;
+
+    if (aiValue < 0)
+        aiValue = 0;
+    else if (aiValue > 0x7FFF)
+        aiValue = 0x7FFF;
+    mpDynamicMixIo->SetDMixInput(aiSlot, aiValue);
 }
 
 ClassTypeInfo<EffectControl>* EffectControl::GetRegisteredTypeInfo(u32 auIndex)

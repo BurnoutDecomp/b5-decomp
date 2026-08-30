@@ -96,9 +96,8 @@ public:
     void TurnOffAllSnapshots();                        // @0x82B46DE0
 
     // ---- driven by Nicotine::IDynamicMixer (declared here; bodied by other TUs) ----
-    void InitSnapshots();                            // (re)build the snapshot/channel arrays
+    void InitSnapshots(SnapshotHeader* lpHeader);    // @0x82B47350
     void DestroySnapshots();                         // tear down the snapshot/channel arrays
-    void SetSnapshot();                              // apply the currently-selected snapshot
 
     void*            mpOwner;        // +0x00  owner (has the assert vtable; Construct arg)
     SnapshotHeader*  mpSnapshotHdr;  // +0x04

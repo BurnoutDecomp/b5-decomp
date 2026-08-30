@@ -1,8 +1,7 @@
 #ifndef CGS_SOUND_LOGIC_CGSDYNAMICMIXER_H
 #define CGS_SOUND_LOGIC_CGSDYNAMICMIXER_H
 
-#include "types.hpp"
-#include "SDKs/EATech/include/Nicotine/IDynamicMixer.hpp" // Nicotine::IDynamicMixer (the base)
+#include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"
 
 // =============================================================================
 // GameShared/GameClasses/Sound/Logic/CgsDynamicMixer.h
@@ -19,24 +18,4 @@
 // fields are modelled here. The rest of the class surface (any Init/Process
 // overrides) is left to its full owning TU.
 // =============================================================================
-namespace CgsSound
-{
-namespace Logic
-{
-
-class DynamicMixer : public Nicotine::IDynamicMixer
-{
-public:
-    DynamicMixer() {}
-
-    // @ 0x827DC970 (scalar deleting destructor). Runs the Nicotine::IDynamicMixer
-    // base sub-object destructor (implicit via inheritance); the conditional
-    // operator delete is the MSVC deleting-destructor tail. Bodied out-of-line in
-    // CgsDynamicMixer.cpp so the symbol is emitted exactly once.
-    virtual ~DynamicMixer();
-};
-
-} // namespace Logic
-} // namespace CgsSound
-
 #endif // CGS_SOUND_LOGIC_CGSDYNAMICMIXER_H

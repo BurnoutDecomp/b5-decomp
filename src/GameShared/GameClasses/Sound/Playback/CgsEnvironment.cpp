@@ -39,6 +39,37 @@ namespace CgsSound
 namespace Playback
 {
 
+Environment::eAudioMode Environment::GetAudioMode() const
+{
+    CGS_ASSERT(mpDacPlugin != 0, "mpDacPlugin");
+    // FLAG PC-platform leaf: AudioOutputPC opens the engine DAC as a two-channel
+    // XAudio2 source voice, the native equivalent of XAudioGetSpeakerConfig.
+    return E_AUDIO_MODE_STEREO;
+}
+
+// Header-inline in the X360 callers: allocate one resource block through the
+// Environment's owning rw allocator and return its primary base resource.
+void* Environment::Allocate(u32 lu32Size, u32 lu32Alignment, const char* lpcName)
+{
+    rw::ResourceDescriptor lDescriptor;
+    for (u32 lu = 0; lu < 4u; ++lu)
+    {
+        lDescriptor.m_baseResourceDescriptors[lu].m_size = 0;
+        lDescriptor.m_baseResourceDescriptors[lu].m_alignment = 1;
+    }
+    lDescriptor.m_baseResourceDescriptors[0].m_size = lu32Size;
+    lDescriptor.m_baseResourceDescriptors[0].m_alignment = lu32Alignment ? lu32Alignment : 1u;
+    rw::Resource lResource = GetAllocator()->DoAllocate(lDescriptor, lpcName);
+    return lResource.m_baseResources[0];
+}
+
+// Header-inline in the X360 callers: release a raw allocator block through the
+// same Environment allocator that supplied it.
+void Environment::Free(void* lpMemory)
+{
+    GetAllocator()->Free(lpMemory, 0);
+}
+
 // @ 0x826AD130. Find the first free factory slot and store apFactory into it,
 // acquiring a reference (and releasing any prior occupant). Returns false if the
 // table is empty or full.

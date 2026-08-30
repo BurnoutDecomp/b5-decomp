@@ -97,7 +97,7 @@ struct DMixIO
 
     // -- packed state-word accessors (all read miState @ +0x04). --------------
 
-    // GetStateID @ 0x82B449B8: low 8 bits of the state word.
+    // GetStateID @ 0x82B449B8: packed state byte in bits [23:16].
     int GetStateID();
     // GetSFX_ID  @ 0x82B449C8: bits [10:4] (7-bit SFX id).
     int GetSFX_ID();
@@ -106,13 +106,18 @@ struct DMixIO
     // IsSFXObj @ 0x82B449E8: top 3 bits == 0b010 (object-class tag == SFX).
     int IsSFXObj();
 
+    // NFSMixMap's connection pass uses the packed word as one canonical DMix
+    // identity. These are the ARTIST GetDMixID/SetDMixID one-word accessors.
+    u32  GetDMixID() const { return m_ID; }
+    void SetDMixID(u32 auID) { m_ID = auID; }
+
     // FLAG (Nicotine PDB reconcile -- ProStreet08Milestone.pdb, Nicotine::DMixIO [sizeof=16]):
     // MATCHES exactly (vfptr/u32/int*/int*), so the PDB names are authoritative:
     // muState->m_ID, mpiDMixInput->m_pDMixInputBlock, mpiDMixOutput->m_pDMixOutputBlock. The
     // "enable word at +0x3C" is inside the output BLOCK (m_pDMixOutputBlock points to it), not
     // a DMixIO member -- consistent with sizeof=16.
     // [+0x00] vptr (the virtual dtor above).
-    // [+0x04] packed state word: bit0-7 stateId, bit4-10 sfxId,
+    // [+0x04] packed state word: bit16-23 stateId, bit4-10 sfxId,
     //         bit16-20 instanceNum, bit29-31 object-class tag.
     u32  m_ID;
     // [+0x08] input parameter array base (int per slot); null until allocated.
