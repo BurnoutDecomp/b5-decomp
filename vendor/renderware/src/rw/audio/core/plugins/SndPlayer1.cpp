@@ -80,17 +80,6 @@ namespace
         f32 requestHandle;
     };
 
-    struct SndPlayer1PlayLegacyParams
-    {
-        f64 startTime;
-        f64 streamFileOffset;
-        const char *pStreamFilePath;
-        const void *pRamData;
-        u32 streamPoolGuid;
-        f32 expelMode;
-        f32 requestHandle;
-    };
-
     struct SndPlayer1PlayParams
     {
         f64 startTime;
@@ -563,6 +552,34 @@ SndPlayer1::~SndPlayer1()
         System::Free(mpSystemUseGetSystemAccessor, mpRequestHandle, 0);
 }
 
+void SndPlayer1::GetFileInfo(const void* apData, FileInfo* apInfo)
+{
+    assert(apData != 0 && apInfo != 0);
+    BitGetter lBits;
+    lBits.mpBitBuffer = static_cast<const u8*>(apData);
+    lBits.mBitPosition = 0;
+    BitGetter::GetBits(&lBits, 4); // version
+    BitGetter::GetBits(&lBits, 4); // codec
+    apInfo->numChannels = static_cast<u8>(BitGetter::GetBits(&lBits, 6) + 1u);
+    apInfo->sampleRate = BitGetter::GetBits(&lBits, 18);
+    BitGetter::GetBits(&lBits, 3); // play type + loop flag
+    apInfo->numSamples = BitGetter::GetBits(&lBits, 29);
+}
+
+f64 SndPlayer1::GetSamplePositionAttribute() const
+{
+    f64 lValue;
+    std::memcpy(&lValue, &mAttribute[ATTRIBUTE_GETSAMPLEPOSITION], sizeof(lValue));
+    return lValue;
+}
+
+f64 SndPlayer1::GetSampleLengthAttribute() const
+{
+    f64 lValue;
+    std::memcpy(&lValue, &mAttribute[ATTRIBUTE_GETSAMPLELENGTH], sizeof(lValue));
+    return lValue;
+}
+
 int SndPlayer1::Event(int aiEventId, void *apParam)
 {
     System *system = mpSystemUseGetSystemAccessor;
@@ -671,8 +688,8 @@ int SndPlayer1::Event(int aiEventId, void *apParam)
     }
     case 0:
     {
-        const SndPlayer1PlayLegacyParams *legacy =
-            static_cast<const SndPlayer1PlayLegacyParams *>(apParam);
+        const PlayLegacyParams *legacy =
+            static_cast<const PlayLegacyParams *>(apParam);
         expanded.startTime = legacy->startTime;
         expanded.streamFileOffset = legacy->streamFileOffset;
         expanded.seekTime = 0.0;
@@ -698,7 +715,7 @@ int SndPlayer1::Event(int aiEventId, void *apParam)
     const f32 handle = *mpRequestHandle;
     play->requestHandle = handle;
     if (aiEventId == 0)
-        static_cast<SndPlayer1PlayLegacyParams *>(apParam)->requestHandle = handle;
+        static_cast<PlayLegacyParams *>(apParam)->requestHandle = handle;
 
     size_t nameBytes = 1;
     if (play->pStreamFilePath != 0)

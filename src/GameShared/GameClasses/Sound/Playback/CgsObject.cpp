@@ -55,6 +55,13 @@ namespace CgsSound
 namespace Playback
 {
 
+void* Content::GetData(EContentState aeExpectedState)
+{
+    CGS_ASSERT(static_cast<u8>(aeExpectedState) == (mu8ContentState & 0x7Fu),
+               "aeExpectedState == GetState()");
+    return DoGetData();
+}
+
 void Content::DoDispose()
 {
     // Snapshot the owning factory BEFORE destroying ourselves.

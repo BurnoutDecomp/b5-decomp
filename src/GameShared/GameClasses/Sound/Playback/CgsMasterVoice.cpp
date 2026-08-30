@@ -19,6 +19,30 @@ namespace Playback
 
 MasterVoice* MasterVoice::spMasterVoice;   // cpp:43 (X360 dword_82FFB9E0)
 
+MasterVoice::MasterVoice(size_t auClientSize, Factory& arFactory,
+                         const VoiceSpec& arVoiceSpec, u32 au32Ident)
+    : SubmixVoice(auClientSize, arFactory, arVoiceSpec, au32Ident)
+{
+    CGS_ASSERT(spMasterVoice == NULL, "0 == spMasterVoice");
+    spMasterVoice = this;
+}
+
+bool MasterVoice::IsAvailable()
+{
+    return spMasterVoice != NULL;
+}
+
+MasterVoice& MasterVoice::GetMasterVoice()
+{
+    CGS_ASSERT(spMasterVoice != NULL, "spMasterVoice");
+    return *spMasterVoice;
+}
+
+bool MasterVoice::IsCompatible(EVoiceType leVoiceType)
+{
+    return leVoiceType == E_MASTER_VOICE;
+}
+
 // @ 0x826D7A28
 MasterVoice::~MasterVoice()
 {

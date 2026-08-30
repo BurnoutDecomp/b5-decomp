@@ -2,6 +2,8 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"   // complete Factory + Environment (the by-name allocator walk)
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
+#include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"
+#include "GameShared/GameClasses/System/Resource/CgsAlignedBinaryFileResource.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "rw/rwcore_structs.h"
 
@@ -42,6 +44,14 @@ namespace Playback
     namespace
     {
         const CgsResource::ResourceHandle skNullResourceHandle = {};
+    }
+
+    template <class ResType>
+    void* ContentLoader<ResType>::GetData()
+    {
+        void* lpvData = const_cast<void*>(mpResource.operator->()->GetData());
+        CGS_ASSERT(lpvData, "lpvData");
+        return lpvData;
     }
 
     // Load @ 0x826DCBF8. Only the resource-module load method (mu8LoadMethod==1) is supported;
@@ -356,7 +366,20 @@ namespace Playback
     // Explicit instantiations: emit the ContentLoader symbols for both resource-element types the
     // X360 build attests -- BinaryFileResource (GenericRwacWaveContent) and
     // AlignedBinaryFileResource (GenericRwacReverbIRContent).
-    template struct ContentLoader<CgsResource::BinaryFileResource>;
-    template struct ContentLoader<CgsResource::AlignedBinaryFileResource>;
+    #define CGS_INSTANTIATE_CONTENT_LOADER(RES_TYPE) \
+        template void* ContentLoader<RES_TYPE>::GetData(); \
+        template bool ContentLoader<RES_TYPE>::Load(Content&, const ContentSpec&); \
+        template bool ContentLoader<RES_TYPE>::Unload(Content&, const ContentSpec&); \
+        template void ContentLoader<RES_TYPE>::Update(Content&, const ContentSpec&); \
+        template void ContentLoader<RES_TYPE>::UpdateUnload(Content&, const ContentSpec&); \
+        template void ContentLoader<RES_TYPE>::PurgeLoadData(Content&, const ContentSpec&); \
+        template bool ContentLoader<RES_TYPE>::StartResourceModuleLoading(Content&, const ContentSpec&); \
+        template void ContentLoader<RES_TYPE>::RestartResourceModuleLoading(Content&, const ContentSpec&); \
+        template void ContentLoader<RES_TYPE>::UpdateResourceModuleLoading(Content&, const ContentSpec&); \
+        template void ContentLoader<RES_TYPE>::CancelResourceModuleLoading(Content&, const ContentSpec&)
+
+    CGS_INSTANTIATE_CONTENT_LOADER(CgsResource::BinaryFileResource);
+    CGS_INSTANTIATE_CONTENT_LOADER(CgsResource::AlignedBinaryFileResource);
+    #undef CGS_INSTANTIATE_CONTENT_LOADER
 }
 }

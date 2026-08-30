@@ -111,12 +111,21 @@ namespace Playback
 
     struct Content : public Object
     {
-        Content(Factory& lFactory, const ContentSpec& lContentSpec, u32 lu32DataSize);
+        static void* operator new(size_t luClientSize, Factory& arFactory,
+                                  const ContentSpec& akrContentSpec);
+        static void operator delete(void* lpMemory, Factory& arFactory,
+                                    const ContentSpec& akrContentSpec);
+
+        Content(Factory& lFactory, const ContentSpec& lContentSpec, u32 lu32Ident);
         virtual ~Content();
 
         // The spec this content was created from (read by Slot::Attach to match the
         // slot's authored ContentClass). ADDITIVE grow (by-name accessor).
         const ContentSpec& GetContentSpec() const { return mContentSpec; }
+
+        // @0x82692AC0. Validate the caller's expected lifecycle state, then
+        // dispatch the concrete content's DoGetData hook.
+        void* GetData(EContentState aeExpectedState);
 
         // @ 0x826A2458. Drop a load reference when detached from a voice slot;
         // commits the unload (via DoUnload) on the last reference, then hands off to
@@ -136,6 +145,13 @@ namespace Playback
         // (X360 CgsSound::Playback::Content::SetContentState). Reached from
         // ContentLoader<>::UpdateResourceModuleLoading on the FINISHED transition.
         void SetContentState(int liState);
+
+        // DWARF CgsContent.h:431. The X360 inlines this masked byte read at
+        // Slot::Update @0x82693B10 before committing a pending attachment.
+        EContentState GetContentState() const
+        {
+            return static_cast<EContentState>(mu8ContentState & 0x7Fu);
+        }
 
         // DWARF CgsContent.h:445 / :452 -- the CHANGED-bit pair (test / clear of
         // the mu8ContentState 0x80 bit). The environment's UpdateContent
@@ -183,12 +199,12 @@ namespace Playback
         // ContentLoader into raw vtable-index dispatch). DoOnPostLoad keeps its
         // inline base default (return true); the others are FLAG (DEFER)
         // declared-only base slices bodied in their own TUs.
-        virtual bool  DoLoad();
-        virtual bool  DoUnload();
+        virtual bool  DoLoad() = 0;
+        virtual bool  DoUnload() = 0;
         virtual bool  DoOnPostLoad();
         virtual bool  DoOnPreUnload();
-        virtual void  DoUpdate(f32 af32DeltaTime);
-        virtual void* DoGetData();
+        virtual void  DoUpdate(f32 af32DeltaTime) = 0;
+        virtual void* DoGetData() = 0;
 
         Factory& mFactory;
         const ContentSpec& mContentSpec;
@@ -200,14 +216,14 @@ namespace Playback
         u8 mu8RemoveState;
     };
 
-    inline Content::Content(Factory& lFactory, const ContentSpec& lContentSpec, u32 lu32DataSize)
+    inline Content::Content(Factory& lFactory, const ContentSpec& lContentSpec, u32 lu32Ident)
         : Object(),
           mFactory(lFactory),
           mContentSpec(lContentSpec),
-          mIdent(0),
+          mIdent(lu32Ident),
           mpLoadService(0),
-          mu32DataSize(lu32DataSize),
-          mu16LoadCount(1),
+          mu32DataSize(0),
+          mu16LoadCount(0),
           mu8ContentState(E_CONTENT_STATE_UNLOADED),
           mu8RemoveState(E_CONTENT_REMOVE_ALIVE)
     {
@@ -224,6 +240,11 @@ namespace Playback
     // back through the factory's environment allocator.
 
     inline bool Content::DoOnPostLoad()
+    {
+        return true;
+    }
+
+    inline bool Content::DoOnPreUnload()
     {
         return true;
     }

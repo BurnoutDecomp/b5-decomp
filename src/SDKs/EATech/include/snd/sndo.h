@@ -116,6 +116,12 @@ namespace Snd9
     // The full factory surface is reconstructed when a TU that touches it is decompiled.
     struct IAemsSamplePlayerFactory
     {
+        virtual IAemsSamplePlayer* CreateInstance(
+            void* apParams, int aiNumOutputs, const int* apOutputs,
+            const char* apcName, int aiValue,
+            const AemsPlayerInputAccessor* apAccessor) = 0;
+        virtual void Release() = 0;
+
     protected:
         // Subclass-only construction (abstract interface base).
         IAemsSamplePlayerFactory() {}

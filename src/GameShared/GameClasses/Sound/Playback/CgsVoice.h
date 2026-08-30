@@ -59,6 +59,7 @@ class PlayerVoice;
 typedef rw::audio::core::System System;
 struct SubmixVoice;    // Connect target (Voice subclass, own TU; struct-keyed to match its CgsSubmixVoice.h definition -- a class-keyed fwd mangles divergent symbols)
 struct VoiceSpec;      // referenced by ctor/GetAllocationSize (own TU; struct-keyed to match CgsDataStructures.h)
+struct SlotSchema;
 class Factory;         // owning module factory (own TU)
 
 // DWARF CgsVoice.h:43 / :60. Voice playback / removal lifecycle enums.
@@ -83,10 +84,14 @@ enum EVoiceRemoveState
 // 12 bytes { Name, f32, bool(pad) }.
 struct Send
 {
+    Send() : mName(), mf32Gain(1.0f), mbHasChanged(false) {}
+    explicit Send(Name aName) : mName(aName), mf32Gain(1.0f), mbHasChanged(false) {}
+
     Name  GetName() const  { return mName; }
     f32   Get() const      { return mf32Gain; }
     void  Set(f32 af32Gain) { mbHasChanged = (mf32Gain != af32Gain); mf32Gain = af32Gain; }
     bool  HasChanged() const { return mbHasChanged; }
+    void  AcknowledgeChange() { mbHasChanged = false; }
 
     Name mName;         // +0x00
     f32  mf32Gain;      // +0x04
@@ -97,6 +102,12 @@ struct Send
 // value + dirty flag. 20 bytes { Name, min, max, value, bool(pad) }.
 struct InputParameter
 {
+    InputParameter()
+        : mName(), mf32Min(0.0f), mf32Max(0.0f), mf32Value(1.0f), mbHasChanged(false) {}
+    explicit InputParameter(const ParameterSchema& arSchema)
+        : mName(arSchema.mName), mf32Min(arSchema.mf32Minimum),
+          mf32Max(arSchema.mf32Maximum), mf32Value(1.0f), mbHasChanged(false) {}
+
     Name  GetName() const     { return mName; }
     f32   GetValueRaw() const  { return mf32Value; }   // @0xC (Get/SetParameter)
     f32   GetMin() const       { return mf32Min; }
@@ -115,6 +126,10 @@ struct InputParameter
 // CgsVoice.h:608 (DWARF). One output parameter: named value + old value. 12 bytes.
 struct OutputParameter
 {
+    OutputParameter() : mName(), mf32Value(0.0f), mf32OldValue(0.0f) {}
+    explicit OutputParameter(const ParameterSchema& arSchema)
+        : mName(arSchema.mName), mf32Value(0.0f), mf32OldValue(0.0f) {}
+
     Name  GetName() const  { return mName; }
     f32   Get() const      { return mf32Value; }   // *(p+4)
     bool  IsChanging() const { return mf32Value != mf32OldValue; }
@@ -153,31 +168,9 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// The slot disposer the Voice's owning module hands a released slot back to. The
-// request is a 20-byte block { mpImpl, 0, 0, 0, 0 }; DisposeSlot is vtable slot 5
-// (byte 0x14).
-// ---------------------------------------------------------------------------
-struct SlotDisposeRequest
-{
-    ISlotImplementation* mpImpl;   // +0x00
-    u32                  mau32Reserved[4];  // +0x04..0x13 (zeroed)
-};
-
-class ISlotDisposer
-{
-public:
-    virtual ~ISlotDisposer() {}
-    virtual void DoReserved0() = 0;
-    virtual void DoReserved1() = 0;
-    virtual void DoReserved2() = 0;
-    virtual void DoReserved3() = 0;
-    virtual void DisposeSlot(SlotDisposeRequest* apRequest) = 0;   // slot 5 / byte 0x14
-};
-
-// ---------------------------------------------------------------------------
-// Minimal Playback::Voice / PlayerVoice slice. Voice derives from Object; the Slot
-// Release path reaches the slot disposer through raw offsets off the Voice (mFactory
-// @+8 -> +0xC -> +0x30), documented at the call site. Full hierarchy DEFERRED.
+// Minimal Playback::Voice / PlayerVoice slice. Voice derives from Object. Slot
+// Release resolves the same Factory -> Environment -> allocator chain by name so
+// pointer widening cannot change its meaning on the native-64 host.
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // CgsSound::Playback::Voice -- one playing sound instance. Owns the tail-allocated
@@ -209,6 +202,17 @@ public:
         u16 muInputParameterOffset;   // +0x04 (Voice +0x28)
         u16 muOutputParameterOffset;  // +0x06 (Voice +0x2A)
     };
+
+    // @0x826C08B8 / PS3 0x45E0C4. The derived client object and all authored
+    // slot/send/parameter tables share one allocator-owned carve.
+    static void* operator new(size_t auClientSize, Factory& arFactory,
+                              const VoiceSpec& arVoiceSpec);
+    static void operator delete(void* apMemory, Factory& arFactory,
+                                const VoiceSpec& arVoiceSpec);
+    static void operator delete(void* apMemory);
+
+    Voice(size_t auClientSize, Factory& arFactory, const VoiceSpec& arVoiceSpec,
+          u32 au32Ident);
 
     virtual ~Voice();                                            // vtable 0x00
     virtual f32   GetCpuTicks();                                 // vtable 0x04
@@ -265,6 +269,11 @@ public:
     // `*(obj+12)` -- this member by name).
     u32 GetIdent() const { return mIdent; }
 
+    u32 GetSlotCount() const { return mu32SlotCount; }
+    u32 GetSendCount() const { return mu32SendCount; }
+    u32 GetInputParameterCount() const { return mu32InputParameterCount; }
+    u32 GetOutputParameterCount() const { return mu32OutputParameterCount; }
+
     // Ident write (DWARF CgsVoice.h:567, SetIdent(StreamBuffer::Ident)). INLINE in
     // the original -- Module::CreateVoice @0x826D7B00 stores `*(voice+12)` after a
     // successful factory CreateVoice; this member by name.
@@ -318,6 +327,10 @@ private:
 
 class PlayerVoice : public Voice
 {
+public:
+    PlayerVoice(size_t auClientSize, Factory& arFactory,
+                const VoiceSpec& arVoiceSpec, u32 au32Ident)
+        : Voice(auClientSize, arFactory, arVoiceSpec, au32Ident) {}
 };
 
 // ---------------------------------------------------------------------------
@@ -326,6 +339,9 @@ class PlayerVoice : public Voice
 class Slot
 {
 public:
+    Slot();
+    explicit Slot(const SlotSchema& arSchema);
+
     // @ 0x826C77F8. Bind ahContent iff its ContentClass matches mpContentClass.
     bool Attach(Voice& arVoice, Handle<Content> ahContent);
 
@@ -344,15 +360,33 @@ public:
     void Release(Voice& arVoice);
 
     // Per-frame slot tick, driven by Voice::Update @0x826A24F0 (asm arg regs:
-    // r3=slot(this), r4=System*, r5=Voice&, r6=PlayerVoice&, f1=dt). FLAG (DEFER):
-    // declared-only -- bodied in the Voice keystone TU.
-    void Update(System* apSystem, Voice& arVoice, PlayerVoice& arPlayerVoice, f32 af32DeltaTime);
+    // r3=slot(this), r4=System*, r5=Voice&, r6=PlayerVoice*, f1=dt). The player
+    // pointer is nullable for non-player voices, as pinned by DecFIGS DWARF.
+    void Update(System* apSystem, Voice& arVoice, PlayerVoice* apPlayerVoice,
+                f32 af32DeltaTime);
+
+    // Header-inline pending-attachment latch reached by Content::OnAttach when
+    // the asynchronous content is not loaded yet (ARTIST OnAttach @0x826A23A8).
+    void PendingAttach()
+    {
+        CGS_ASSERT(mu8Attach == 0, "AS_DETACHED == mu8Attach");
+        mu8Attach = 1;
+    }
 
     // The interned name this slot answers to (the Voice name-lookup loops
     // FindNamedSlot/GetIndexOfSlot compare against it). FLAG (additive grow, by-name):
     // the slot's first word (X360 +0x00, previously modelled as an anonymous pad) is
     // the slot Name; exposed by NAME. Host-width: Name widens on the 64-bit host.
     Name GetName() const { return mName; }
+    u32 GetPluginOffset() const { return mu16PluginOffset; }
+    void SetPluginOffset(u32 au32Offset)
+    {
+        mu16PluginOffset = static_cast<u16>(au32Offset);
+    }
+    void SetImplementation(ISlotImplementation* apImplementation)
+    {
+        mpImpl = apImplementation;
+    }
 
 private:
     Name                 mName;          // +0x00  interned slot name
@@ -361,6 +395,15 @@ private:
     ISlotImplementation* mpImpl;         // +0x0C  type-specific behaviour
     u8                   mu8Attach;      // +0x10  0=detached, 2=attached
     u8                   mu8Playing;     // +0x11  0=stopped, 1=playing
+    u16                  mu16PluginOffset; // +0x12  RWAC stage index
+};
+
+enum EVoiceType
+{
+    E_PLAYER_VOICE = 0,
+    E_SUBMIX_VOICE = 1,
+    E_MASTER_VOICE = 2,
+    E_VOICE_TYPE_COUNT = 3
 };
 
 } // namespace Playback

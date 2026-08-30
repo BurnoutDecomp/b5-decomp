@@ -31,24 +31,29 @@ namespace Playback
     {
         const u32 lu32OutputParameterCount = arVoiceSpec.GetOutputParameterCount();
         const u32 lu32ParameterCount       = arVoiceSpec.GetParameterCount();
-        const u32 lu32TailUnitCount        = arVoiceSpec.GetTailUnitCount();
         const u32 lu32InputParameterCount  = lu32ParameterCount - lu32OutputParameterCount;
         const u32 lu32SlotCount            = arVoiceSpec.GetSlotCount();
+        const u32 lu32SendCount            = arVoiceSpec.GetSendCount();
 
-        const u32 lu32TailSize =
-            20u * (lu32SlotCount + lu32InputParameterCount) +
-            12u * (lu32TailUnitCount + lu32OutputParameterCount);
+        // Native counterpart of ARTIST's 20*(slots+inputs)+12*(sends+outputs).
+        // Slot contains three pointers on x64, so the console stride must not be
+        // carried into the host allocation while Voice::Voice uses sizeof(Slot).
+        const size_t luTailSize =
+            sizeof(Slot) * lu32SlotCount +
+            sizeof(InputParameter) * lu32InputParameterCount +
+            sizeof(Send) * lu32SendCount +
+            sizeof(OutputParameter) * lu32OutputParameterCount;
 
         Environment& lrEnvironment          = arFactory.GetEnvironment();
         const u32 lu32ClientSize            = static_cast<u32>(GetClientAllocationSize(arFactory, arVoiceSpec));
         rw::IResourceAllocator* lpAllocator = lrEnvironment.GetAllocator();
-        const u32 lu32TotalSize             = lu32ClientSize + lu32TailSize;
+        const size_t luTotalSize             = lu32ClientSize + luTailSize;
 
         // X360 stack build: a FIVE-entry serialised descriptor (40B). Reuse the committed
         // CgsResource::ResourceDescriptor (= rw::BaseResourceDescriptors<5>) BY NAME.
         // desc[0] = { total, 4 }; desc[1..4] = { 0, 1 }.
         CgsResource::ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size      = lu32TotalSize;
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(luTotalSize);
         lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4;
         for (u32 luIndex = 1; luIndex < 5; ++luIndex)
         {

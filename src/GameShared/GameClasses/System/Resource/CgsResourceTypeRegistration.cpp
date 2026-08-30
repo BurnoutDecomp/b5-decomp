@@ -13,6 +13,15 @@
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupListResourceType.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsVoiceHierarchyResourceType.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsSnrResourceType.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsRegistryResourceType.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacWaveContentResourceType.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacReverbIRContentResourceType.h"
+#include "GameShared/GameClasses/Sound/Playback/Plugins/Ginsu/CgsGinsuWaveContentResourceType.h"
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsBankResourceType.h"
+#include "GameShared/GameClasses/Sound/Playback/CSIS/CgsCsisResourceType.h"
+#include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerResourceType.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsNicotineResourceType.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsSnapshotDataResourceType.h"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysSchemaResourceType.h"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultResourceType.h"   // CgsResource::AttribSysVaultResourceType (0x1C)
 #include "GameShared/GameClasses/World/Resources/CgsWorldPainter2DResourceType.h"    // CgsResource::WorldPainter2DResourceType (0x30)
@@ -106,6 +115,27 @@ namespace CgsResource
         TypeRegistry::Register(&sVoiceHierarchy, "VoiceHierarchy");
         static SnrResourceType             sSnr;               // [game #27] 0x19  SNR (streamed audio)
         TypeRegistry::Register(&sSnr, "Snr");
+        // Phase-F sound-content family.  All ten handlers are emitted by the
+        // same ARTIST registration monolith; leaving one out makes BundleLoader
+        // skip its FixUp/import/post-fix path even though the content factory is live.
+        static RegistryResourceType sSoundRegistry;             // 0xA000
+        TypeRegistry::Register(&sSoundRegistry, "Registry");
+        static GenericRwacWaveContentResourceType sRwacWave;     // 0xA020
+        TypeRegistry::Register(&sRwacWave, "GenericRwacWaveContent");
+        static GinsuWaveContentResourceType sGinsuWave;          // 0xA021
+        TypeRegistry::Register(&sGinsuWave, "GinsuWaveContent");
+        static AemsBankResourceType sAemsBank;                   // 0xA022
+        TypeRegistry::Register(&sAemsBank, "AemsBank");
+        static CsisResourceType sCsis;                           // 0xA023
+        TypeRegistry::Register(&sCsis, "Csis");
+        static NicotineResourceType sNicotine;                   // 0xA024
+        TypeRegistry::Register(&sNicotine, "Nicotine");
+        static SplicerResourceType sSplicer;                     // 0xA025
+        TypeRegistry::Register(&sSplicer, "Splicer");
+        static GenericRwacReverbIRContentResourceType sRwacIr;   // 0xA028
+        TypeRegistry::Register(&sRwacIr, "GenericRwacReverbIRContent");
+        static SnapshotDataResourceType sSnapshotData;           // 0xA029
+        TypeRegistry::Register(&sSnapshotData, "SnapshotData");
         static VideoDataResourceType       sVideoData;         // [game #30] 0x42  VideoData (movie metadata)
         TypeRegistry::Register(&sVideoData, "VideoData");
         static CgsGraphics::InstanceListResourceType sInstanceList; // [game #32] 0x23  InstanceList (world instances)

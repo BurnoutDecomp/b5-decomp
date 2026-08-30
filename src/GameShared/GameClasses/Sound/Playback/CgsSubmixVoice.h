@@ -33,9 +33,14 @@ namespace Playback
 // PlugIn pointer.
 struct SubmixVoice : public Voice
 {
+    SubmixVoice(size_t auClientSize, Factory& arFactory,
+                const VoiceSpec& arVoiceSpec, u32 au32Ident);
     virtual ~SubmixVoice();
 
-private:
+    rw::audio::core::PlugIn* GetSubmix() const { return mpSubmix; }
+    rw::audio::core::PlugIn** GetSubmixAddress() { return &mpSubmix; }
+
+protected:
     rw::audio::core::PlugIn* mpSubmix;   // CgsSubmixVoice.h:78
 };
 

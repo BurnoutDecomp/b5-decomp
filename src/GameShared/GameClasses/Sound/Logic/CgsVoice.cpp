@@ -35,6 +35,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"  // Playback::Name::MakeHash (reused)
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"   // the REAL Playback::Voice layout
+#include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
 
 namespace CgsSound
 {
@@ -63,24 +64,20 @@ namespace Logic
 //       the Playback::Voice and seeds mVoiceHandle. That factory entry point is NOT
 //       reconstructed, so we cannot create a real Playback::Voice here.
 // ----------------------------------------------------------------------------
-void Voice::Construct(void* lpOwnerModule, s32 liIndex, void* lpGlobalSpecTable, Ident luNameHash)
+void Voice::Construct(Module* lpOwnerModule, Ident luIdent,
+                      Ident luFactoryName, Ident luVoiceSpecName)
 {
-    // PROVEN: stash the owning module (read by Connect at +0x08).
+    CGS_ASSERT(lpOwnerModule != 0, "lpOwnerModule");
     mpOwnerModule = lpOwnerModule;
 
-    // FLAG: STUB (reconstructed-from-callsite + Playback dep). The real X360 creates
-    // the Playback::Voice from (lpGlobalSpecTable, liIndex, luNameHash) via the
-    // Playback voice factory and stores the resulting handle into mVoiceHandle.
-    //   BLOCKS ON: CgsSound::Playback voice-creation factory fed by dword_83008650
-    //              (the spec table @ guest 0x83008650) -- not reconstructed.
-    // Until that lands, leave mVoiceHandle null (mpObject == 0). NOTE: every other
-    // method then trips its "Voice not yet created!" assert -- that is the honest
-    // state for an unwired leaf; the parent wires the real factory.
-    (void)liIndex;
-    (void)lpGlobalSpecTable;
-    (void)luNameHash;
-    // mVoiceHandle is left as default-constructed/null by the caller's placement;
-    // we deliberately do NOT fabricate a fake object.
+    // DecFIGS pins the three scalar arguments as Command::QueueElement values. The
+    // ARTIST call site supplies {ident, GenericRwacFactory::SK_NAME, VoiceSpec name};
+    // Playback::Module::CreateVoice is the exact engine endpoint at owner+0x238.
+    lpOwnerModule->GetPlaybackModule().CreateVoice(
+        &mVoiceHandle,
+        luIdent,
+        Playback::Name(static_cast<uintptr_t>(luFactoryName)),
+        luVoiceSpecName);
 }
 
 // ----------------------------------------------------------------------------
@@ -125,7 +122,7 @@ void Voice::Destruct()
 //     asm: if(!*(a1+4)) <assert>; v7=*(a1+4); if(v7) ++*(v7+4);
 //          result = Playback::Module::Module::ConnectVoice(*(a1+8)+568,&v7,a2,a3);
 // ----------------------------------------------------------------------------
-s32 Voice::Connect(Ident luSendNameHash, s32 liSend)
+void Voice::Connect(Ident luSendNameHash, Ident luSubmixIdent)
 {
     CGS_ASSERT(mVoiceHandle.GetObject(), "Voice not yet created!");
 
@@ -136,14 +133,9 @@ s32 Voice::Connect(Ident luSendNameHash, s32 liSend)
     if (lpVoice)
         lpVoice->Acquire();
 
-    // FLAG: STUB -- the actual connect is a Playback-layer call.
-    //   BLOCKS ON: CgsSound::Playback::Module::Module::ConnectVoice
-    //              (routed through *(mpOwnerModule + 568), the owner's playback
-    //              sub-module). Playback::Module::Module is not reconstructed.
-    // Returns 0 (failure/no-op) until the Playback module exists.
-    (void)luSendNameHash;
-    (void)liSend;
-    return 0;
+    Playback::Handle<Playback::Voice> lhVoice(lpVoice);
+    mpOwnerModule->GetPlaybackModule().ConnectVoice(
+        &lhVoice, luSendNameHash, luSubmixIdent);
 }
 
 // ----------------------------------------------------------------------------

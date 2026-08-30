@@ -4,6 +4,7 @@
 #define _WIN32_WINNT 0x0A00 // Windows 10 -> in-box XAudio 2.9
 #endif
 #include <Windows.h>
+#include <mmdeviceapi.h>
 // The XAudio2 Redistributable header (vendor/xaudio2redist, fetched by
 // tools\build\fetch_xaudio2_redist.bat) rather than the Windows SDK <xaudio2.h>:
 // same 2.9 engine and same interfaces, but it names xaudio2_9redist.dll -- the
@@ -127,6 +128,78 @@ public:
 };
 VoiceCallback g_callback;
 
+// FLAG PC-platform leaf: XAudio2 2.9 normally selects Windows' default render
+// endpoint.  A machine may have active endpoints but no current default (for
+// example after a USB/virtual-device topology change); in that case 2.9 returns
+// HRESULT_FROM_WIN32(ERROR_NOT_FOUND).  The X360 had a single platform-owned
+// output, so preserve that availability by trying each active PC render endpoint.
+HRESULT CreateMasteringVoiceWithEndpointFallback(int liChannels, int liSampleRate,
+                                                  UINT32* apEndpointIndex)
+{
+    *apEndpointIndex = UINT32_MAX;
+    HRESULT lResult = g_pXAudio2->CreateMasteringVoice(
+        &g_pMaster, liChannels, liSampleRate);
+    if (SUCCEEDED(lResult))
+        return lResult;
+
+    IMMDeviceEnumerator* lpEnumerator = nullptr;
+    IMMDeviceCollection* lpEndpoints = nullptr;
+    const HRESULT lComResult = ::CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    HRESULT lEnumResult = ::CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+        CLSCTX_INPROC_SERVER, __uuidof(IMMDeviceEnumerator),
+        reinterpret_cast<void**>(&lpEnumerator));
+    if (SUCCEEDED(lEnumResult))
+        lEnumResult = lpEnumerator->EnumAudioEndpoints(
+            eRender, DEVICE_STATE_ACTIVE, &lpEndpoints);
+
+    UINT32 luCount = 0;
+    if (SUCCEEDED(lEnumResult))
+        lEnumResult = lpEndpoints->GetCount(&luCount);
+    char lacEnumResult[16];
+    sprintf_s(lacEnumResult, "0x%08X", static_cast<unsigned>(lEnumResult));
+    AUDIO_LOG << "[Audio] default endpoint unavailable; active-endpoint fallback: COM "
+              << (SUCCEEDED(lComResult) || lComResult == RPC_E_CHANGED_MODE ? "ready" : "failed")
+              << ", enumerate " << lacEnumResult << ", candidates " << luCount << "\n";
+    for (UINT32 luIndex = 0; SUCCEEDED(lEnumResult) && luIndex < luCount; ++luIndex)
+    {
+        IMMDevice* lpEndpoint = nullptr;
+        LPWSTR lpEndpointId = nullptr;
+        HRESULT lItemResult = lpEndpoints->Item(luIndex, &lpEndpoint);
+        if (SUCCEEDED(lItemResult))
+            lItemResult = lpEndpoint->GetId(&lpEndpointId);
+        if (SUCCEEDED(lItemResult))
+        {
+            lItemResult = g_pXAudio2->CreateMasteringVoice(
+                &g_pMaster, liChannels, liSampleRate, 0, lpEndpointId);
+            if (SUCCEEDED(lItemResult))
+            {
+                *apEndpointIndex = luIndex;
+                lResult = lItemResult;
+            }
+        }
+        if (FAILED(lItemResult))
+        {
+            char lacItemResult[16];
+            sprintf_s(lacItemResult, "0x%08X", static_cast<unsigned>(lItemResult));
+            AUDIO_LOG << "[Audio] active endpoint " << luIndex
+                      << " rejected: " << lacItemResult << "\n";
+        }
+        ::CoTaskMemFree(lpEndpointId);
+        if (lpEndpoint)
+            lpEndpoint->Release();
+        if (SUCCEEDED(lResult))
+            break;
+    }
+
+    if (lpEndpoints)
+        lpEndpoints->Release();
+    if (lpEnumerator)
+        lpEnumerator->Release();
+    if (SUCCEEDED(lComResult))
+        ::CoUninitialize();
+    return lResult;
+}
+
 // --- the built-in diagnostic test tone (440 Hz) ---
 struct ToneState
 {
@@ -187,8 +260,9 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
         Close();
         return false;
     }
-    const HRESULT lMasterResult =
-        g_pXAudio2->CreateMasteringVoice(&g_pMaster, liChannels, liSampleRate);
+    UINT32 luEndpointIndex = UINT32_MAX;
+    const HRESULT lMasterResult = CreateMasteringVoiceWithEndpointFallback(
+        liChannels, liSampleRate, &luEndpointIndex);
     if (FAILED(lMasterResult))
     {
         char lacResult[16];
@@ -225,7 +299,11 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
     for (int li = 0; li < kBuffers; ++li) // prime the queue
         SubmitBuffer(li);
 
-    AUDIO_LOG << "[Audio] XAudio2 opened: " << liSampleRate << " Hz, " << liChannels << " ch (16-bit PCM)\n";
+    AUDIO_LOG << "[Audio] XAudio2 opened: " << liSampleRate << " Hz, " << liChannels
+              << " ch (16-bit PCM)";
+    if (luEndpointIndex != UINT32_MAX)
+        AUDIO_LOG << " via active endpoint " << luEndpointIndex;
+    AUDIO_LOG << "\n";
     return true;
 }
 

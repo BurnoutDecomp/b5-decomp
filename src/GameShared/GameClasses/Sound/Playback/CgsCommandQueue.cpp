@@ -136,19 +136,19 @@ template struct CommandQueue<255u, std::uintptr_t>;
 // (`*(this+8) - 4 + 0x68` == the owning AemsFactory's embedded CsisCommandQueue)
 // is documented on the class's mpCommandQueue stand-in.
 
-// 0x826DAF10. If no request is outstanding, report "nothing stopped". Otherwise
-// build a release command from the handle, post it to the command queue, clear the
-// handle, and report that the voice was stopped.
-bool AemsPlayerVoice::Stop()
+CsisCommandQueue& operator<<(CsisCommandQueue& arQueue,
+                             const CsisReleaseCommand& arCommand)
 {
-    if (mhRequestHandle == 0)
-        return false;
+    const bool lbPosted = arQueue.mQueue.PostCommand(
+        static_cast<unsigned int>(sizeof(arCommand) / sizeof(std::uintptr_t)),
+        arCommand.AsCommand());
+    CGS_ASSERT(lbPosted, "Possibly need to increase CsisCommandQueue::E_QUEUE_LENGTH");
+    return arQueue;
+}
 
-    CsisReleaseCommand lCommand(mhRequestHandle);
-    (*mpCommandQueue) << lCommand;
-
-    mhRequestHandle = 0;
-    return true;
+bool CsisCommandQueue::GetCommand(u32& arCount, std::uintptr_t* apWords)
+{
+    return mQueue.GetCommand(arCount, apWords);
 }
 
 } // namespace Playback

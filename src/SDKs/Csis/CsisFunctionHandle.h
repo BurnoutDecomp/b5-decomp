@@ -48,10 +48,11 @@ public:
     // forwarding the binding-record sizes (kind=0, idSize=20, fnDescSize=10).
     Result SetFast(const InterfaceId* pId);
 
-    // +0x00 -- handle payload word (populated by the binding machinery).
-    s32 miPayload;
-    // +0x04 -- registry slot index.
+    union { void* mpDescriptor; uintptr_t miPayload; };
     s32 miIndex;
+    u32 muPadding;
 };
+
+static_assert(sizeof(FunctionHandle) == 0x10, "native CSIS function handle");
 
 } // namespace Csis

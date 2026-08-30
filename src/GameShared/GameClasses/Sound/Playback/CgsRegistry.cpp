@@ -1,4 +1,8 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsRegistry.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h"
+
+#include <cstddef>
+#include <cstring>
 
 // CgsSound::Playback::Registry out-of-line members.
 //
@@ -42,13 +46,13 @@ Registry::Registry(const RegistrySpec& lSpec)
     // mpu8Data = address just past the slot array (X360: this + (capacity + 7)
     // words). FLAG (host-width): derived from the named slot array end rather than
     // the X360 `4 * (capacity + 7)` byte offset.
-    mpu8Data = reinterpret_cast<u8*>(lppSlot + mu32EntityCapacity);
+    mpu8Data = GetDataStart();
 
     // mpcStringTable = mpu8Data + muDataSize when a string table exists, else null.
     // X360: `if (muStringTableSize) v9 = a1 + muDataSize + v7; else v9 = 0`.
     if (muStringTableSize)
     {
-        mpcStringTable = reinterpret_cast<char*>(mpu8Data + muDataSize);
+        mpcStringTable = GetStringTableStart();
     }
     else
     {
@@ -143,6 +147,119 @@ bool Registry::AddEntity(const Entity& lEntity)
     lppSlot[luIndex] = &lEntity;
     ++mu32EntityCount;
     return true;
+}
+
+bool Registry::Contains(const Entity& arEntity) const
+{
+    const u8* lpu8Entity = reinterpret_cast<const u8*>(&arEntity);
+    return lpu8Entity >= GetDataStart() && lpu8Entity < mpu8Data;
+}
+
+void Registry::FixUp()
+{
+    const uintptr_t luBase = reinterpret_cast<uintptr_t>(this);
+    mpcStringTable = reinterpret_cast<char*>(
+        luBase + reinterpret_cast<uintptr_t>(mpcStringTable));
+    mpu8Data = reinterpret_cast<u8*>(
+        luBase + reinterpret_cast<uintptr_t>(mpu8Data));
+
+    const Entity** lppEntity = GetFirstEntity();
+    for (u32 luI = 0; luI < mu32EntityCapacity; ++luI)
+    {
+        if (lppEntity[luI] == 0)
+            continue;
+
+        lppEntity[luI] = reinterpret_cast<const Entity*>(
+            luBase + reinterpret_cast<uintptr_t>(lppEntity[luI]));
+        Entity& lrEntity = *const_cast<Entity*>(lppEntity[luI]);
+        const IEntityFixer* lpFixer = IEntityFixer::GetFixer(lrEntity.mTypeName);
+        CGS_ASSERT(lpFixer != 0, "lpFixer");
+        if (lpFixer != 0)
+            lpFixer->FixUp(lrEntity);
+    }
+}
+
+void Registry::Resolve(const Registry& arRegistry)
+{
+    const Entity* const* lppEntity = GetFirstEntity();
+    for (u32 luI = 0; luI < mu32EntityCapacity; ++luI)
+    {
+        if (lppEntity[luI] == 0)
+            continue;
+
+        Entity& lrEntity = *const_cast<Entity*>(lppEntity[luI]);
+        const IEntityFixer* lpFixer = IEntityFixer::GetFixer(lrEntity.mTypeName);
+        CGS_ASSERT(lpFixer != 0, "lpFixer");
+        if (lpFixer != 0)
+            lpFixer->Resolve(lrEntity, arRegistry);
+    }
+}
+
+const Entity* Registry::Import(u8* apu8Base, const Entity& arEntity,
+                               const Registry& arFrom) const
+{
+    const std::ptrdiff_t liOffset =
+        reinterpret_cast<const u8*>(&arEntity) - arFrom.GetDataStart();
+    Entity* lpImported = reinterpret_cast<Entity*>(apu8Base + liOffset);
+    const IEntityFixer* lpFixer = IEntityFixer::GetFixer(arEntity.mTypeName);
+    CGS_ASSERT(lpFixer != 0, "lpFixer");
+    if (lpFixer != 0)
+        lpFixer->Relocate(*lpImported, apu8Base, *this, arFrom);
+    return lpImported;
+}
+
+Registry& Registry::operator+=(Registry& arOther)
+{
+    arOther.Resolve(*this);
+
+    CGS_ASSERT(mpu8Data != 0, "mpu8Data");
+    CGS_ASSERT(arOther.mpu8Data != 0, "lOther.mpu8Data");
+    CGS_ASSERT(arOther.mu32EntityCount <=
+                   (mu32EntityCapacity - mu32EntityCount),
+               "The Registry has overgrown it's entity limits");
+
+    const size_t luOtherDataUsed = static_cast<size_t>(
+        arOther.mpu8Data - arOther.GetDataStart());
+    const size_t luDataRemaining = static_cast<size_t>(
+        GetDataStart() + muDataSize - mpu8Data);
+    CGS_ASSERT(luOtherDataUsed <= luDataRemaining,
+               "The Registry has overgrown it's size");
+
+    u8* lpu8DestinationBase = mpu8Data;
+    std::memcpy(lpu8DestinationBase, arOther.GetDataStart(), luOtherDataUsed);
+    mpu8Data += luOtherDataUsed;
+
+    const size_t luOtherStringsUsed = arOther.muStringTableSize != 0
+        ? static_cast<size_t>(arOther.mpcStringTable - arOther.GetStringTableStart())
+        : 0u;
+    const size_t luStringsUsed = muStringTableSize != 0
+        ? static_cast<size_t>(mpcStringTable - GetStringTableStart())
+        : 0u;
+    // ARTIST @0x826C0650 conditionally copies the string arena only when it
+    // fits; the main/factory registries deliberately have zero string capacity
+    // because Module::ImportStringTable owns those debug-name strings.  There is
+    // no assert on the non-fitting branch.
+    const size_t luStringsRemaining =
+        muStringTableSize >= luStringsUsed
+            ? muStringTableSize - luStringsUsed
+            : 0u;
+    if (luOtherStringsUsed != 0 && luOtherStringsUsed <= luStringsRemaining)
+    {
+        std::memcpy(mpcStringTable, arOther.GetStringTableStart(), luOtherStringsUsed);
+        mpcStringTable += luOtherStringsUsed;
+    }
+
+    const Entity* const* lppOtherEntity = arOther.GetFirstEntity();
+    for (u32 luI = 0; luI < arOther.mu32EntityCapacity; ++luI)
+    {
+        if (lppOtherEntity[luI] == 0)
+            continue;
+
+        const Entity* lpImported =
+            Import(lpu8DestinationBase, *lppOtherEntity[luI], arOther);
+        AddEntity(*lpImported);
+    }
+    return *this;
 }
 
 }

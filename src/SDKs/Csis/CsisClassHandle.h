@@ -51,8 +51,14 @@ enum class Result : int
     E_OK = 0
 };
 
-// Vendor registry record types SetHandle indexes (forward declarations only).
-struct InterfaceId;
+// Native-64 interface selector materialised by the AEMS relocation table.
+// Xbox One sub_14096C510 builds exactly {name pointer, system id, interface id}.
+struct InterfaceId
+{
+    const char* mpName;
+    u16 muSystemId;
+    u16 muInterfaceId;
+};
 
 } // namespace Csis
 
@@ -92,10 +98,12 @@ public:
     // forwarding the binding-record sizes (kind=0, idSize=24, fnDescSize=12).
     Result SetFast(const InterfaceId* pId);
 
-    // +0x00 -- handle payload word (populated by the binding machinery).
-    s32 miPayload;
-    // +0x04 -- registry slot index; -3 == unbound/invalid sentinel.
+    // Native-64 handle: descriptor pointer + 32-bit generation token.
+    union { void* mpDescriptor; uintptr_t miPayload; };
     s32 miIndex;
+    u32 muPadding;
 };
+
+static_assert(sizeof(ClassHandle) == 0x10, "native CSIS class handle");
 
 } // namespace Csis

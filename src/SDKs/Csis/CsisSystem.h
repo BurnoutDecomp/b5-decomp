@@ -3,6 +3,10 @@
 
 #include "types.hpp"
 
+#include <cstddef>
+
+namespace rw { struct IResourceAllocator; }
+
 // ===========================================================================
 // SDKs/Csis/CsisSystem.h
 //
@@ -32,49 +36,50 @@
 //   * word_8324E908  -- a rolling 16-bit non-negative serial counter Subscribe
 //                       stamps onto each registered client (wraps to 1, never 0/neg).
 //
-// SUBSCRIBED-CONTENT OBJECT (Csis::SystemContent below) -- Subscribe/Unsubscribe do
-// NOT own this object; it is created by the audio content TU
-// (CgsSound::Playback::CsisContent, the X360 caller of both). Subscribe walks it by
-// the byte offsets the asm proves; this header models those offsets as NAMED fields
-// so the bodies access them by name (no raw-offset reinterpret casts). The object is
-// laid out as a header (counts + three array pointers + an intrusive list node)
-// followed by three inline client arrays beginning at +0x28.
+// The PC target consumes the native-64 MOIR image from the Xbox One ABI arbiter.
+// Its three array pointers, 16-byte list node, and 24/24/32-byte client records
+// are wider than ARTIST's 32-bit geometry. The serialized offsets are pinned below.
 // ===========================================================================
 
 namespace Csis
 {
 
-// ---------------------------------------------------------------------------
-// A single 12-byte client record in the first two inline arrays (update- and
-// destroy-notification clients). Subscribe relocates the +0x04 field from a
-// content-relative offset to an absolute pointer (asm: lwz r8,4(node); add r8,r8,a1;
-// stw r8,4(node)) and stamps the rolling serial into the +0x0A half-word. Unsubscribe
-// writes -1 into the +0x08 word.
-// ---------------------------------------------------------------------------
-struct SystemClient12
-{
-    u8  maHeader[4];   // +0x00  (record header; not read by Subscribe/Unsubscribe)
-    s32 miTargetOrOffset; // +0x04  content-relative offset on disk -> absolute pointer in Subscribe ⚠️ FLAG: 32-bit serialised slot; a 64-bit host pointer TRUNCATES here (see Subscribe)
-    s32 miStatus;      // +0x08  set to -1 by Unsubscribe
-    s16 miSerial;      // +0x0A  rolling serial id stamped by Subscribe
-};  // sizeof == 0x0C (12)
+struct InterfaceId;
 
 // ---------------------------------------------------------------------------
-// A single 16-byte client record in the third inline array. Subscribe relocates the
-// +0x08 field (asm: lwz r8,8(node); add r8,r8,a1; stw r8,8(node)) and stamps the
-// serial into +0x0E. Unsubscribe writes -1 into +0x0C.
+// Native-64 counterpart of ARTIST's 12-byte record. The serialized interface id
+// shares the status word which Unsubscribe invalidates, exactly as on the console.
 // ---------------------------------------------------------------------------
-struct SystemClient16
+struct SystemClient24
 {
-    u8  maHeader[8];   // +0x00  (record header; not read by Subscribe/Unsubscribe)
-    s32 miTargetOrOffset; // +0x08  content-relative offset -> absolute pointer in Subscribe ⚠️ FLAG: 32-bit serialised slot; a 64-bit host pointer TRUNCATES here (see Subscribe)
-    s32 miStatus;      // +0x0C  set to -1 by Unsubscribe
-    s16 miSerial;      // +0x0E  rolling serial id stamped by Subscribe
-};  // sizeof == 0x10 (16)
+    u64       muRuntimeLink;    // +0x00
+    uintptr_t muTargetOrOffset; // +0x08, image offset -> host pointer
+    union
+    {
+        struct { u16 muInterfaceId; s16 miSerial; } mLive; // +0x10/+0x12
+        s32 miStatus;                                     // +0x10
+    } mState;
+    u32 muPadding;              // +0x14
+};
+
+// ---------------------------------------------------------------------------
+// Native-64 counterpart of ARTIST's 16-byte third-array record.
+// ---------------------------------------------------------------------------
+struct SystemClient32
+{
+    u8        maRuntimeHeader[16];
+    uintptr_t muTargetOrOffset; // +0x10, image offset -> host pointer
+    union
+    {
+        struct { u16 muInterfaceId; s16 miSerial; } mLive; // +0x18/+0x1A
+        s32 miStatus;                                     // +0x18
+    } mState;
+    u32 muPadding;              // +0x1C
+};
 
 // ---------------------------------------------------------------------------
 // The intrusive doubly-linked-list node embedded in every subscribed-content object
-// at +0x20. The list links point at OTHER content objects' nodes (their own +0x20),
+// at +0x30. The list links point at OTHER content objects' nodes,
 // not at the containing objects -- exactly as the X360 stores them: Subscribe does
 // `node->next = head ; head_node->prev = node` and Unsubscribe stitches
 // `prev->next = next ; next->prev = prev`. The global list head (off_8324E90C) is a
@@ -82,34 +87,34 @@ struct SystemClient16
 // ---------------------------------------------------------------------------
 struct SystemContentNode
 {
-    SystemContentNode* mpNext;  // +0x00 (node-relative; == owning content + 0x20)
-    SystemContentNode* mpPrev;  // +0x04
+    SystemContentNode* mpNext;  // +0x00
+    SystemContentNode* mpPrev;  // +0x08
 };
 
 // ---------------------------------------------------------------------------
-// The subscribed-content object header (offsets proven by Subscribe/Unsubscribe).
-// The three inline client arrays start at +0x28 (mauInlineArrays) and run
-// contiguously: muNumUpdate SystemClient12, then muNumDestroy SystemClient12, then
-// muNumThird SystemClient16. The list node at +0x20 links the object into the global
-// subscribed-content list (off_8324E90C).
-//
-// FLAG: only the fields the two functions touch are recovered; +0x00..+0x09 and the
-// trailing inline-array bytes belong to CgsSound::Playback::CsisContent (the owning
-// TU) and are modelled as an honest opaque header span here.
+// Native-64 subscribed-content header. Arrays start at +0x40 and run
+// contiguously: update SystemClient24, destroy SystemClient24, third SystemClient32.
 // ---------------------------------------------------------------------------
 struct SystemContent
 {
-    u8  maOpaqueHeader[0x0A];  // +0x00..+0x09  (owned by CgsSound CsisContent)
+    u8  maOpaqueHeader[0x0A];  // +0x00..+0x09 (MOIR magic/version/layout)
     u16 muNumUpdate;           // +0x0A  count of array-1 (update) clients
     u16 muNumDestroy;          // +0x0C  count of array-2 (destroy) clients
     u16 muNumThird;            // +0x0E  count of array-3 clients
-    u8  maPad10[0x04];         // +0x10..+0x13  (unread here)
-    SystemClient12* mpArray1;  // +0x14  -> &mauInlineArrays[0]
-    SystemClient12* mpArray2;  // +0x18  -> mpArray1 + muNumUpdate
-    SystemClient16* mpArray3;  // +0x1C  -> mpArray2 + muNumDestroy (as 16-byte records)
-    SystemContentNode mListNode; // +0x20 intrusive list node {next @ +0x20, prev @ +0x24}
-    u8  mauInlineArrays[1];    // +0x28  start of the contiguous inline client arrays
+    u16 muSystemId;            // +0x10
+    u8  maPad12[0x06];         // +0x12..+0x17
+    SystemClient24* mpArray1;  // +0x18
+    SystemClient24* mpArray2;  // +0x20
+    SystemClient32* mpArray3;  // +0x28
+    SystemContentNode mListNode; // +0x30
+    u8  mauInlineArrays[1];    // +0x40
 };
+
+static_assert(sizeof(SystemClient24) == 0x18, "native CSIS client-24 layout");
+static_assert(sizeof(SystemClient32) == 0x20, "native CSIS client-32 layout");
+static_assert(offsetof(SystemContent, mpArray1) == 0x18, "native CSIS array offset");
+static_assert(offsetof(SystemContent, mListNode) == 0x30, "native CSIS node offset");
+static_assert(offsetof(SystemContent, mauInlineArrays) == 0x40, "native CSIS data offset");
 
 // ---------------------------------------------------------------------------
 // Csis::System -- all members are static (the X360 functions take no `this`; they
@@ -118,13 +123,17 @@ struct SystemContent
 class System
 {
 public:
-    // @ 0x82B0F1C0 (no dossier exported; behaviour attested from the ONLY caller,
-    // RootSoundModule::Prepare @0x826FAF0C: r3 = &gCsisTestBedAlloc in, r3 flows
-    // straight into Csis::System::Init). Install the Csis-wide allocator. FLAG:
-    // the store target global + any validation are un-attested -- modelled as the
-    // minimal store-and-return; the allocator is held as the opaque interface
-    // pointer the caller passes (the CgsSound::TestBed::Allocator).
-    static void* SetAllocator(void* apAllocator);
+    // @ 0x82B0F1C0. Install the Csis-wide allocator before Init; return -7 once
+    // the system is already initialized, otherwise 0. ARTIST stores this pointer
+    // in off_8324E904, which CreateInstanceFast uses to allocate "CsisAlloc"
+    // records and all zero-ref paths use to free them.
+    static int SetAllocator(rw::IResourceAllocator* apAllocator);
+
+    // Typed host counterparts of off_8324E904's Alloc/Free virtual calls. The
+    // native rw interface exposes those calls through its resource descriptor
+    // face on PC, so these preserve ownership without relying on vtable offsets.
+    static void* Allocate(size_t auSize, const char* apcName, u32 auAlignment);
+    static void Free(void* apBlock);
 
     // @ 0x82B0F1F8 -- create the global registry mutex (CreateMutexA(0,0,0)), clear
     // the subscribed-content list head, set the inited flag. Returns 0.
@@ -148,6 +157,10 @@ public:
     // @ 0x82B0F428 -- deregister pContent: mark every client's status word -1 and
     // unlink pContent from the global subscribed-content list. Returns 0.
     static int Unsubscribe(SystemContent* pContent);
+
+    // Native-64 SetHandle core. kind: 0 class, 1 function, 2 global variable.
+    static int ResolveInterface(u32 auKind, const InterfaceId* apId,
+                                void** appDescriptor, s32* apiToken);
 };
 
 } // namespace Csis

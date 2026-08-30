@@ -1,4 +1,5 @@
 #include "SDKs/Csis/CsisFunctionHandle.h"
+#include "SDKs/Csis/CsisSystem.h"
 
 // ===========================================================================
 // Csis::FunctionHandle -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -23,8 +24,8 @@ namespace Csis
 // ---------------------------------------------------------------------------
 Result FunctionHandle::SetFast(const InterfaceId* pId)
 {
-    return SetHandle<FunctionHandle, InterfaceId, CsisDef::FunctionDesc>(
-        this, pId, 0, 20, 10);
+    return static_cast<Result>(System::ResolveInterface(
+        1, pId, &mpDescriptor, &miIndex));
 }
 
 } // namespace Csis

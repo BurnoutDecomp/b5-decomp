@@ -76,14 +76,14 @@ public:
     {
         Subscriber* mpNext;                       // +0x00  next in list
         Subscriber* mpPrev;                       // +0x04  prev in list
-        void (*mpfnCallback)(int iParam, void* pContext); // +0x08  invoked by CallFast
+        void (*mpfnCallback)(uintptr_t iParam, void* pContext); // +0x10
         void*       mpContext;                    // +0x0C  opaque callback context
     };
 
     // @ 0x82B0FB40 -- validate the handle, then invoke every subscriber's
     // callback as fn(iParam, context). Returns the ValidHandle result, or -4 if
     // the handle is valid but the subscriber list is empty.
-    Result CallFast(int iParam);
+    Result CallFast(uintptr_t iParam);
 
     // @ 0x82B0FBA8 -- validate the handle, then head-insert pNode into the
     // descriptor's doubly-linked subscriber list. Returns 0 on success.

@@ -246,6 +246,25 @@ struct RwacCommandQueue
     // cursor (with wrap). Asserts the ring is non-empty before reading. Returns
     // `this` (the X360 leaves the queue pointer in r3 on the normal path).
     RwacCommandQueue* GetCommand(uintptr_t* apOutWord);
+
+    bool IsEmpty() const { return mu32Read == mu32Write; }
+
+    // Producer-side mirror of GetCommand. Commands are copied into the ring as
+    // pointer-width words, preserving host pointers while retaining the X360
+    // command framing (one leading count word followed by the record words).
+    void PostCommand(uintptr_t auWord);
+
+    template <typename T>
+    void Post(const T& arCommand)
+    {
+        static_assert((sizeof(T) % sizeof(uintptr_t)) == 0,
+                      "RWAC commands are pointer-width word records");
+        const u32 luWordCount = static_cast<u32>(sizeof(T) / sizeof(uintptr_t));
+        PostCommand(luWordCount);
+        const uintptr_t* lpWords = reinterpret_cast<const uintptr_t*>(&arCommand);
+        for (u32 luWord = 0; luWord < luWordCount; ++luWord)
+            PostCommand(lpWords[luWord]);
+    }
 };
 
 } // namespace Playback

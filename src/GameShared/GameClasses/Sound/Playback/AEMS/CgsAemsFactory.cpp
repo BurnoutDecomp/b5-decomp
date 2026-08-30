@@ -26,11 +26,15 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsContent.h"
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsPlayerVoice.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include "rw/rwcore_structs.h"      // rw::IResourceAllocator / BaseResourceDescriptors (the carve)
 #include "SDKs/Csis/CsisSystem.h"   // Csis::System::IsInited
+#include "SDKs/Csis/CsisClass.h"
 #include "SDKs/EATech/include/snd/sndaems.h" // Snd9::Aems::SetSamplePlayerFactory
 
 #include <cstring>
@@ -46,6 +50,8 @@ namespace
     // The interned factory name (console dword_83008664, written at static-init
     // by sub_82C65788 = Name::MakeHash("~AemsFactory::SK_NAME~")).
     const Name skAemsFactoryName("~AemsFactory::SK_NAME~");
+    const Name skAemsContentType("~AemsContent::SK_CONTENT_TYPE~");
+    const Name skCsisContentType("~CsisContent::SK_CONTENT_TYPE~");
 
     // The five-pair allocator-descriptor inline (the RWAC/Module TU-local convention).
     void* AllocateMemoryResource(rw::IResourceAllocator* lpAllocator, size_t luSize,
@@ -111,16 +117,11 @@ AemsFactory::AemsFactory(Environment& arEnvironment, const AemsFactorySpec& akrS
 {
     // +0x64: the retained RWAC factory handle (raw pointer + explicit retain --
     // the console's `old count + 1` on the pointee when non-null).
-    mpRwacFactory = akrSpec.mpRwacFactory;
+    mpRwacFactory = static_cast<GenericRwacFactory*>(akrSpec.mpRwacFactory);
     if (mpRwacFactory != 0)
     {
         mpRwacFactory->Acquire();
     }
-
-    // The two command-queue control words (+0x464/+0x468); the payload span is
-    // ctor-untouched (decode-attested).
-    mu32CommandQueueControl0 = 0;
-    mu32CommandQueueControl1 = 0;
 
     // +0x60 -> the in-place Registry immediately after the fixed head (console +0x56C).
     RegistrySpec lRegistrySpec;
@@ -158,6 +159,117 @@ AemsFactory::AemsFactory(Environment& arEnvironment, const AemsFactorySpec& akrS
 Registry* GetAemsFactoryRegistry(Factory* lpAemsFactory)
 {
     return static_cast<AemsFactory*>(lpAemsFactory)->GetRegistry();
+}
+
+// ARTIST @0x826E9AC8. AEMS only accepts player voices. The constructed voice
+// immediately queues its CSIS class binding and delegates the render graph to
+// the retained GenericRwacFactory.
+bool AemsFactory::DoCreateVoice(const VoiceSpec& akrSpec,
+                                Handle<Voice>& arHandleOut,
+                                u32 au32Ident)
+{
+    arHandleOut.SetObject(0);
+    CGS_ASSERT(akrSpec.mu8VoiceType == E_PLAYER_VOICE,
+               "E_PLAYER_VOICE == akrSpec.GetVoiceType()");
+    if (akrSpec.mu8VoiceType != E_PLAYER_VOICE)
+        return false;
+
+    AemsPlayerVoice* lpVoice = new (*this, akrSpec)
+        AemsPlayerVoice(*this, akrSpec, au32Ident);
+    if (!lpVoice || !lpVoice->IsCreated())
+        return false;
+
+    lpVoice->Acquire();
+    arHandleOut.SetObject(lpVoice);
+    return true;
+}
+
+// ARTIST @0x826E9B98. The AEMS factory owns exactly two concrete content
+// classes: native module banks and CSIS class/interface descriptors.
+bool AemsFactory::DoCreateContent(const ContentSpec& akrSpec,
+                                  Handle<Content>& arHandleOut,
+                                  u32 au32Ident)
+{
+    const Name& lkrContentTypeName = akrSpec.GetContentType().GetName();
+    Content* lpContent = 0;
+
+    if (lkrContentTypeName == skCsisContentType)
+    {
+        lpContent = new (*this, akrSpec) CsisContent(*this, akrSpec, au32Ident);
+    }
+    else if (lkrContentTypeName == skAemsContentType)
+    {
+        lpContent = new (*this, akrSpec) AemsContent(*this, akrSpec, au32Ident);
+    }
+
+    if (lpContent)
+        lpContent->Acquire();
+    arHandleOut.SetObject(lpContent);
+    return lpContent != 0;
+}
+
+// ARTIST @0x826C2358. Drain the fixed CSIS command ring on the playback thread.
+void AemsFactory::DoUpdate(f32 /*af32DeltaTime*/)
+{
+    uintptr_t laWords[16];
+    for (;;)
+    {
+        u32 luCount = 16;
+        if (!mCommandQueue.GetCommand(luCount, laWords))
+            break;
+
+        CGS_ASSERT(luCount != 0 && luCount <= 16, "luCommandCount");
+        if (luCount == 0 || luCount > 16)
+            continue;
+
+        switch (static_cast<ECsisCommandType>(laWords[0]))
+        {
+        case E_CSIS_COMMAND_SET_CLASS_HANDLE:
+        {
+            CGS_ASSERT(luCount == 5, "SetClassHandle command size");
+            Csis::ClassHandle* lpHandle =
+                reinterpret_cast<Csis::ClassHandle*>(laWords[1]);
+            Csis::InterfaceId lId;
+            lId.mpName = reinterpret_cast<const char*>(laWords[2]);
+            lId.muSystemId = static_cast<u16>(laWords[3]);
+            lId.muInterfaceId = static_cast<u16>(laWords[4]);
+            const Csis::Result leResult = lpHandle->SetFast(&lId);
+            CGS_ASSERT(static_cast<s32>(leResult) >= 0, "ClassHandle::SetFast");
+            break;
+        }
+        case E_CSIS_COMMAND_CREATE:
+        {
+            CGS_ASSERT(luCount == 4, "Create command size");
+            Csis::ClassHandle* lpHandle =
+                reinterpret_cast<Csis::ClassHandle*>(laWords[1]);
+            void* lpParameters = reinterpret_cast<void*>(laWords[2]);
+            Csis::Class** lppClass = reinterpret_cast<Csis::Class**>(laWords[3]);
+            const int liResult = Csis::Class::CreateInstanceFast(
+                lpHandle, lpParameters, lppClass);
+            CGS_ASSERT(liResult >= 0, "Class::CreateInstanceFast");
+            break;
+        }
+        case E_CSIS_COMMAND_RELEASE:
+        {
+            CGS_ASSERT(luCount == 2, "Release command size");
+            Csis::Class* lpClass = reinterpret_cast<Csis::Class*>(laWords[1]);
+            if (lpClass)
+                lpClass->ReleaseFast();
+            break;
+        }
+        case E_CSIS_COMMAND_UPDATE:
+        {
+            CGS_ASSERT(luCount == 3, "Update command size");
+            Csis::Class* lpClass = reinterpret_cast<Csis::Class*>(laWords[1]);
+            if (lpClass)
+                lpClass->SetMemberDataFast(reinterpret_cast<void*>(laWords[2]));
+            break;
+        }
+        default:
+            CGS_ASSERT(false, "Invalid CSIS command");
+            break;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

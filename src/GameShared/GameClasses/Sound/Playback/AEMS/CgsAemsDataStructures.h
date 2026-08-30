@@ -75,12 +75,22 @@ struct AemsVoiceCsisClass : public Entity
     // count -- an earlier caller comment misnamed it).
     u32 GetParameterCount() const     { return mu32ParameterCount; }
     u32 GetUserParameterStart() const { return mu16UserParameterStart; }
+    const char* GetClassName() const
+    {
+        return reinterpret_cast<const char*>(this + 1);
+    }
+    u32 GetSystemCrc() const { return mSystemCrc; }
+    u32 GetClassCrc() const { return mClassCrc; }
 
 private:
     // DWARF :140-144 (console offsets past the 8-byte Entity base in comments).
     u32 mu32ParameterCount;      // +0x08
     u16 mu16UserParameterStart;  // +0x0C (the GetClientAllocationSize lhz)
-    u16 mu16ClassNameLength;     // +0x0E
+    // ARTIST's serialized records use one byte plus a zero pad here.  DecFIGS
+    // names the storage as u16, but that interpretation makes every retail
+    // length 0x0500..0x1200; the byte value matches the inline C string exactly.
+    u8  mu8ClassNameLength;      // +0x0E
+    u8  mu8ClassNamePad;         // +0x0F
     u32 mSystemCrc;              // +0x10
     u32 mClassCrc;               // +0x14
 };

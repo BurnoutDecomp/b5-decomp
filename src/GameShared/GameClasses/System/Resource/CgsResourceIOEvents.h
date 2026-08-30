@@ -308,6 +308,7 @@ namespace Events
     // the entry), or both null if the resource is absent.
     struct AcquireResourceResponse : public PoolEvent
     {
+        ID     mResourceId;       // +0x10 echoed requested identity (ARTIST 0x82700A34)
         void*  mpResourceMemory;   // &Entry.mResource.m_baseResources[E_MEMTYPE_MAINMEMORY] (null if absent)
         Entry* mpSourceEntry;      // the found entry (null if absent)
     };

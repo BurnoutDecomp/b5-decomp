@@ -51,6 +51,7 @@ union Parameter
 {
     s32   intVal;
     float floatVal;
+    u64   nativeWord;
 };
 
 } // namespace CsisDef
@@ -86,8 +87,11 @@ namespace CsisDef
 // ---------------------------------------------------------------------------
 struct GlobalVariableDesc
 {
-    Csis::GlobalVariableSubscriber* phead;  // +0x00  clients.phead (CListDStack)
-    Parameter                       curVal; // +0x04
+    Csis::GlobalVariableSubscriber* phead; // +0x00
+    Parameter                       curVal; // +0x08
+    const char*                     pName;  // +0x10
+    s32                             token;  // +0x18
+    u32                             padding;
 };
 
 } // namespace CsisDef

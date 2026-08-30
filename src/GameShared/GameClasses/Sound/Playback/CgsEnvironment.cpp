@@ -4,7 +4,8 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (wave 11):
 //   Environment::AddFactory   @ 0x826AD130   Environment::AddVoice   @ 0x826AD1E0
 //   Environment::AddContent   @ 0x826AD290   Environment::GetAllocator @ 0x82680EF8
-//   Environment::GetRegistry  @ 0x82680EA0   Environment::GetVoice   @ 0x826BFAF0  (was GetV)
+//   Environment::GetRegistry  @ 0x82680EA0   Environment::GetFactory @ DecFIGS 0x441058
+//   Environment::GetVoice     @ 0x826BFAF0  (was GetV)
 //   Environment::GetR         @ 0x826BFE50   Environment::StartDac   @ 0x82680F50
 //   Environment::StopDac      @ 0x82680FE8   Environment::~Environment @ 0x826E9020
 //   Environment::operator new @ 0x826ACF98   Environment::operator delete @ 0x826BFD60
@@ -148,6 +149,28 @@ Registry* Environment::GetRegistry()
 {
     CGS_ASSERT(mpRegistry, "mpRegistry");
     return mpRegistry;
+}
+
+// DecFIGS @ 0x441058 (the standalone X360 body was folded/not exported). Walk
+// the registered factory handles in order and return an acquired handle to the
+// first factory whose interned name matches. The ARTIST CreateVoice/CreateContent
+// callers attest this exact contract at their Environment::Ge call sites.
+Handle<Factory> Environment::GetFactory(Name aName)
+{
+    Handle<Factory> lhResult(static_cast<Factory*>(0));
+    for (u32 lu32I = 0; lu32I < mu32FactoryCount; ++lu32I)
+    {
+        Factory* lpFactory = mphFactory[lu32I].GetObject();
+        if (lpFactory && lpFactory->GetName() == aName)
+        {
+            lhResult.SetObject(lpFactory);
+            lpFactory->Acquire();
+            return lhResult;
+        }
+    }
+
+    lhResult.SetObject(0);
+    return lhResult;
 }
 
 // @ 0x826BFAF0. Look a voice up by ident. The X360 `*(voice + 0x0C)` is

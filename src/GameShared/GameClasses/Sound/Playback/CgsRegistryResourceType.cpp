@@ -41,13 +41,11 @@ namespace CgsResource
         // Verbatim assert (the shipped inline cites CgsRegistryResourceType.h:91).
         CGS_ASSERT(lpRegistry != nullptr, "lpRegistry");
 
-        // 4*(capacity + 7): the console 7-word header + the capacity-length slot array
-        // (4-byte console slots -- a SERIALISED-form word size, kept as the descriptor
-        // maths the asm computes).
+        // ARTIST's expression is 4*(capacity+7) because that build has 32-bit
+        // size_t/pointers.  Platform 4 is the native x64 image: the same named
+        // header members and slot array occupy their host widths.
         const u32 luSerialisedSize = static_cast<u32>(
-            4u * (lpRegistry->GetEntityCapacity() + 7u)
-            + lpRegistry->GetStringTableSize()
-            + lpRegistry->GetDataSize());
+            lpRegistry->GetSerialisedSize());
 
         ResourceDescriptor lDescriptor;
         for (int li = 0; li < 5; ++li)

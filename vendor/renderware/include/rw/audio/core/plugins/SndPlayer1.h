@@ -75,6 +75,25 @@ public:
     // pass &1.0f (mono voices) and &2.0f (stereo voices).
     struct ConstructorParams { f32 maxRequests; };
 
+    struct FileInfo
+    {
+        u8  numChannels;
+        u8  maPad[3];
+        u32 sampleRate;
+        u32 numSamples;
+    };
+
+    struct PlayLegacyParams
+    {
+        f64 startTime;
+        f64 streamFileOffset;
+        const char* pStreamFilePath;
+        const void* pRamData;
+        u32 streamPoolGuid;
+        f32 expelMode;
+        f32 requestHandle;
+    };
+
     enum Attribute
     {
         ATTRIBUTE_GETCURRENTREQUEST  = 0,   // f32 slot
@@ -203,6 +222,7 @@ public:
     static int    GetSize(const VoiceStageConfig *apConfig);           // @0x82BA0220
     static int    CreateInstance(SndPlayer1 *self,
                                  const ConstructorParams *apParams);   // @0x82BA6C80
+    static void   GetFileInfo(const void* apData, FileInfo* apInfo);   // @0x82B9BE70
     static int    PreProcess(SndPlayer1 *self, AudioProcessContext *ctx,
                              bool discontinuity, int aiRequestedCount);// @0x82B9C2D8
     static int    Process(SndPlayer1 *self, AudioProcessContext *ctx,
@@ -283,6 +303,8 @@ public:
     {
         *reinterpret_cast<f64 *>(&mAttribute[ATTRIBUTE_GETSAMPLELENGTH]) = adValue;
     }
+    f64 GetSamplePositionAttribute() const;
+    f64 GetSampleLengthAttribute() const;
 
     // ---- layout (console offsets documentary; host widths, by-name access) -------------
     Attribute_t mAttribute[ATTRIBUTE_MAX];             // +0x28 .. +0x3F

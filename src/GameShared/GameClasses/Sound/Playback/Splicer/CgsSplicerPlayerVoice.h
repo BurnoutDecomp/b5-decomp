@@ -49,8 +49,9 @@ struct Splice;
 // ---------------------------------------------------------------------------
 struct SplicerPlayerVoice : public PlayerVoice
 {
-    // @ 0x826AFC48 (placement new). size = 20*(slots + inputParams) +
-    // 12*(sends + outputParams) + 140; allocated through the Factory's Environment.
+    // @ 0x826AFC48 (placement new). ARTIST size = 20*(slots + inputParams) +
+    // 12*(sends + outputParams) + 140; the host uses the corresponding native
+    // sizeof values and compiler-supplied client size.
     void* operator new(size_t auSize, Factory& arFactory, const VoiceSpec& arVoiceSpec);
 
     // @ 0x826E1838. Null the two own members, then run the base dtor chain: the

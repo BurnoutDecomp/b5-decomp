@@ -16,10 +16,112 @@
 
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 
+#include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
+#include "rw/rwcore_structs.h"
+
+#include <new>
+
 namespace CgsSound
 {
 namespace Playback
 {
+
+void* Voice::operator new(size_t auClientSize, Factory& arFactory,
+                          const VoiceSpec& arVoiceSpec)
+{
+    const u32 luOutputCount = arVoiceSpec.GetOutputParameterCount();
+    const u32 luParameterCount = arVoiceSpec.GetParameterCount();
+    const u32 luInputCount = luParameterCount - luOutputCount;
+    const size_t luSize = auClientSize
+        + sizeof(Slot) * arVoiceSpec.GetSlotCount()
+        + sizeof(Send) * arVoiceSpec.GetSendCount()
+        + sizeof(InputParameter) * luInputCount
+        + sizeof(OutputParameter) * luOutputCount;
+
+    CgsResource::ResourceDescriptor lDescriptor;
+    lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(luSize);
+    lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4;
+    for (u32 luIndex = 1; luIndex < 5; ++luIndex)
+    {
+        lDescriptor.m_baseResourceDescriptors[luIndex].m_size = 0;
+        lDescriptor.m_baseResourceDescriptors[luIndex].m_alignment = 1;
+    }
+
+    rw::Resource lResource = arFactory.GetEnvironment().GetAllocator()->DoAllocate(
+        reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), "Voice");
+    return lResource.m_baseResources[0];
+}
+
+void Voice::operator delete(void* /*apMemory*/, Factory& /*arFactory*/,
+                            const VoiceSpec& /*arVoiceSpec*/)
+{
+}
+
+void Voice::operator delete(void* /*apMemory*/)
+{
+    // Voice::DoDispose returns the allocator carve; ordinary scalar delete is
+    // never the owning path in the playback object model.
+}
+
+Voice::Voice(size_t auClientSize, Factory& arFactory, const VoiceSpec& arVoiceSpec,
+             u32 au32Ident)
+    : Object(),
+      mFactory(arFactory),
+      mIdent(au32Ident),
+      mu8PlaybackState(E_PLAYBACK_STATE_INVALID),
+      mu8RemoveState(E_VOICE_REMOVE_ALIVE),
+      mu32SlotCount(arVoiceSpec.GetSlotCount()),
+      mu32SendCount(arVoiceSpec.GetSendCount()),
+      mu32InputParameterCount(arVoiceSpec.GetParameterCount()
+                              - arVoiceSpec.GetOutputParameterCount()),
+      mu32OutputParameterCount(arVoiceSpec.GetOutputParameterCount())
+{
+    size_t luOffset = auClientSize;
+    mOffsets.muSlotOffset = static_cast<u16>(luOffset);
+    luOffset += sizeof(Slot) * mu32SlotCount;
+    mOffsets.muSendOffset = static_cast<u16>(luOffset);
+    luOffset += sizeof(Send) * mu32SendCount;
+    mOffsets.muInputParameterOffset = static_cast<u16>(luOffset);
+    luOffset += sizeof(InputParameter) * mu32InputParameterCount;
+    mOffsets.muOutputParameterOffset = static_cast<u16>(luOffset);
+
+    for (u32 luSend = 0; luSend < mu32SendCount; ++luSend)
+        ::new (&GetSend(luSend)) Send(arVoiceSpec.mapSendName[luSend]);
+
+    u32 luSlot = 0;
+    u32 luInput = 0;
+    u32 luOutput = 0;
+    const VoiceSchema& lrVoiceSchema = arVoiceSpec.GetVoiceSchema();
+    for (u32 luFeature = 0; luFeature < lrVoiceSchema.GetFeatureSchemaCount();
+         ++luFeature)
+    {
+        const FeatureSchema& lrFeature = lrVoiceSchema.GetFeatureSchema(luFeature);
+        for (u32 lu = 0; lu < lrFeature.GetSlotSchemaCount(); ++lu)
+            ::new (&GetSlot(luSlot++)) Slot(*lrFeature.GetSlotSchema(lu));
+
+        for (u32 lu = 0; lu < lrFeature.GetParameterSchemaCount(); ++lu)
+        {
+            const ParameterSchema& lrParameter = *lrFeature.GetParameterSchema(lu);
+            if (lrParameter.GetDirection() == E_PARAMETER_OUTPUT)
+                ::new (&GetOutputParameter(luOutput++)) OutputParameter(lrParameter);
+            else
+                ::new (&GetInputParameter(luInput++)) InputParameter(lrParameter);
+        }
+    }
+}
+
+Slot::Slot()
+    : mName(), mpContentClass(0), mhContent(), mpImpl(0), mu8Attach(0),
+      mu8Playing(0), mu16PluginOffset(0)
+{
+}
+
+Slot::Slot(const SlotSchema& arSchema)
+    : mName(arSchema.mName), mpContentClass(arSchema.mpContentClass), mhContent(),
+      mpImpl(0), mu8Attach(0), mu8Playing(0), mu16PluginOffset(0)
+{
+}
 
 // @ 0x826C77F8. Bind ahContent iff its ContentClass matches this slot's authored
 // mpContentClass (Entity mName + mTypeName word-for-word). The incoming
@@ -52,6 +154,18 @@ bool Slot::Attach(Voice& arVoice, Handle<Content> ahContent)
     }
 
     return false;
+}
+
+// @ 0x826ACA78. Notify the bound content, release the handle, and clear the
+// pending/attached latch. The handle assignment performs the Object ref drop.
+void Slot::Detach(Voice& arVoice)
+{
+    if (mhContent)
+    {
+        mhContent->OnDetach(arVoice, *this);
+        mhContent = Handle<Content>(0);
+        mu8Attach = 0;
+    }
 }
 
 // @ 0x82693428.
@@ -108,27 +222,46 @@ void Slot::HandleDetach(Voice& arVoice)
     }
 }
 
-// @ 0x826C0810. Detach current content, then hand this slot's impl to the Voice's
-// slot disposer as a zero-padded 20-byte request. The disposer is reached off the
-// Voice through raw offsets (voice.mFactory @+8 -> +0xC -> +0x30); those Voice header
-// words are DEFERRED to the Voice keystone, so the walk stays offset-faithful.
+// @ 0x82693B10. Commit an asynchronous attachment once its content reaches
+// LOADED, then let a playing player slot advance its type-specific engine. A
+// false update result stops the slot and publishes the Voice STOPPED state.
+void Slot::Update(System* apSystem, Voice& arVoice, PlayerVoice* apPlayerVoice,
+                  f32 af32DeltaTime)
+{
+    if (mu8Attach == 1)
+    {
+        CGS_ASSERT(mhContent, "mpObject");
+        if (mhContent->GetContentState() == E_CONTENT_STATE_LOADED)
+            HandleAttach(arVoice);
+    }
+
+    if (apPlayerVoice && mu8Playing)
+    {
+        CGS_ASSERT(mpImpl, "mpImpl");
+        CGS_ASSERT(mhContent, "mpObject");
+        if (!mpImpl->DoUpdatePlaying(apSystem, *this, *apPlayerVoice,
+                                     *mhContent, af32DeltaTime))
+        {
+            arVoice.SetPlaybackState(E_PLAYBACK_STATE_STOPPED);
+            mu8Playing = 0;
+        }
+    }
+}
+
+// @ 0x826C0810. Detach current content, then return this slot implementation's
+// allocation through Voice -> Factory -> Environment -> IResourceAllocator. The
+// ARTIST code reaches the same objects at +8/+0xC/+0x30 and sends a Resource whose
+// first lane is mpImpl; named access preserves that route across x64 widening.
 void Slot::Release(Voice& arVoice)
 {
     Detach(arVoice);
 
     CGS_ASSERT(mpImpl, "mpImpl");
-
-    u8*   lpu8Voice = reinterpret_cast<u8*>(&arVoice);
-    void* lpFactory = *reinterpret_cast<void**>(lpu8Voice + 8);
-    void* lpModule  = *reinterpret_cast<void**>(reinterpret_cast<u8*>(lpFactory) + 0xC);
-    ISlotDisposer* lpDisposer =
-        *reinterpret_cast<ISlotDisposer**>(reinterpret_cast<u8*>(lpModule) + 0x30);
-
-    // 20-byte request: word[0] = mpImpl, words[1..4] = 0.
-    SlotDisposeRequest lRequest = {};
-    lRequest.mpImpl = mpImpl;
-
-    lpDisposer->DisposeSlot(&lRequest);   // disposer virtual at vtable byte 0x14.
+    Factory& lrFactory = const_cast<Factory&>(arVoice.GetFactory());
+    rw::Resource lResource = {};
+    lResource.m_baseResources[0] = mpImpl;
+    lrFactory.GetEnvironment().GetAllocator()->DoFree(lResource);
+    mpImpl = 0;
 }
 
 // ============================================================================
@@ -385,7 +518,7 @@ void Voice::Update(System* apSystem, f32 af32DeltaTime)
         {
             Slot& lrSlot = GetSlot(lu32I);
             // asm: r4=System*, r5=this(Voice&), r6=this(PlayerVoice&), f1=dt.
-            lrSlot.Update(apSystem, *this, static_cast<PlayerVoice&>(*this), af32DeltaTime);
+            lrSlot.Update(apSystem, *this, static_cast<PlayerVoice*>(this), af32DeltaTime);
         }
         DoUpdate(apSystem, af32DeltaTime);      // vtable byte 0x14
     }
@@ -402,6 +535,21 @@ void Voice::Update(System* apSystem, f32 af32DeltaTime)
 // at the call site, so no member teardown is emitted here.
 Voice::~Voice()
 {
+    for (u32 luSlot = 0; luSlot < mu32SlotCount; ++luSlot)
+        GetSlot(luSlot).Release(*this);
+}
+
+// @ 0x826C0D08. Snapshot the factory, run the most-derived non-deleting
+// destructor, then return the shared Voice/tail-table carve to the factory's
+// environment allocator as a one-lane Resource.
+void Voice::DoDispose()
+{
+    Factory& lrFactory = const_cast<Factory&>(mFactory);
+    this->~Voice();
+
+    rw::Resource lResource = {};
+    lResource.m_baseResources[0] = this;
+    lrFactory.GetEnvironment().GetAllocator()->DoFree(lResource);
 }
 
 } // namespace Playback

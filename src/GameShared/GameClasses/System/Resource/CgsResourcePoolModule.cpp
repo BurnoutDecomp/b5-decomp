@@ -319,6 +319,7 @@ namespace CgsResource
 
         Events::AcquireResourceResponse lResponse;
         static_cast<Events::PoolEvent&>(lResponse) = static_cast<const Events::PoolEvent&>(*lpRequest);   // echo user/id/pool
+        lResponse.mResourceId      = lpRequest->mResourceId;
         lResponse.mpResourceMemory = 0;
         lResponse.mpSourceEntry    = 0;
 

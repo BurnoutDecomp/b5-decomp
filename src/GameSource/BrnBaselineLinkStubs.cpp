@@ -565,14 +565,6 @@ namespace Playback
         return false;
     }
 
-    // Environment::GetFactory (DWARF CgsEnvironment.h:280; the by-name factory
-    // lookup, its own slice). Reached from Module::CreateVoice/CreateContent.
-    // Empty handle = "no factory registered under that name".
-    Handle<Factory> Environment::GetFactory(Name /*aName*/)
-    {
-        return Handle<Factory>(0);
-    }
-
     // Environment::Allocate (DWARF CgsEnvironment.h; the environment's carve
     // helper). Same allocator route the dispose walk attests (the env's rw
     // allocator), expressed through the committed <5>-descriptor idiom.
@@ -633,8 +625,8 @@ namespace Playback
     // The serialised-entity type names Registry::GetEntity<T> compares slots
     // against -- interned from the type-name literals, the convention the
     // committed VoiceSchema::SK_TYPE_NAME("VoiceSchema") definition attests.
-    const Name ContentSpec::SK_TYPE_NAME("ContentSpec");
-    const Name VoiceSpec::SK_TYPE_NAME("VoiceSpec");
+    const Name ContentSpec::SK_TYPE_NAME("~ContentSpec~");
+    const Name VoiceSpec::SK_TYPE_NAME("~VoiceSpec~");
 }
 }
 
@@ -676,11 +668,6 @@ namespace Playback
     {
         return static_cast<EProfileVoiceType>(0);
     }
-    void Voice::DoDispose()
-    {
-        // The real disposer is the environment-allocator carve return (the
-        // wave-3 dispose pattern); lands with the Voice keystone slice.
-    }
     void Voice::DoUpdate(System* /*apSystem*/, f32 /*af32DeltaTime*/)
     {
     }
@@ -695,21 +682,6 @@ namespace Playback
         return true;
     }
 
-    // ---- the Slot per-frame surface (Voice::Update's callees; their own
-    //      ledgered slices -- CgsVoice.h:344 marks them DEFER) ----
-    void Slot::Update(System* /*apSystem*/, Voice& /*arVoice*/,
-                      PlayerVoice& /*arPlayerVoice*/, f32 /*af32DeltaTime*/)
-    {
-    }
-    void Slot::Detach(Voice& /*arVoice*/)
-    {
-    }
-
-    // Content::OnAttach (CgsContent.h marks it DEFER; the attach-side load
-    // reference). Inert until voice-attach traffic exists.
-    void Content::OnAttach(Voice& /*arVoice*/, Slot& /*arSlot*/)
-    {
-    }
 }
 }
 
@@ -717,19 +689,6 @@ namespace CgsSound
 {
 namespace Playback
 {
-    // ContentType::GetContentClass @ 0x82691778 -- an exact copy of the
-    // canonical body in CgsDataStructures.cpp, carried here because that TU is
-    // NOT in the exe source list yet (its EntityFixer fix hooks need the
-    // declared-only Entity member-pointer fixup templates -- their own slice);
-    // the resolved-pointer accessor is all the mounted playback module needs.
-    // Remove this copy when CgsDataStructures.cpp mounts.
-    const ContentClass& ContentType::GetContentClass() const
-    {
-        CGS_ASSERT(mpContentClass != 0, "mpContentClass");
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(mpContentClass) & 1) == 0,
-                   "This Data Structure is not resolved. (Name ");
-        return *mpContentClass;
-    }
 }
 }
 

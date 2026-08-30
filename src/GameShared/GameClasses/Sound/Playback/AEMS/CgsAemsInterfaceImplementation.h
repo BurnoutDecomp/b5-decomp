@@ -69,7 +69,6 @@ namespace Playback
     struct Environment;
     typedef rw::audio::core::System System;
     struct AemsPlayerVoice;
-    struct AemsPlayerInputAccessor;   // AemsRWSampleFactory::CreateInstance arg (ptr).
 
     // CgsAemsInterfaceImplementation.h (DWARF). A plug-in config slot the
     // AemsRWSampleFactory holds three of, by value (console 12 bytes: ptr @+0,
@@ -116,6 +115,8 @@ namespace Playback
         virtual void GetOutputs(int aiNumOutputs, int* apValues);      // that TU
 
     private:
+        friend struct AemsPlayerVoice;
+        friend struct AemsRWSampleFactory;
         // Layout faithful to DWARF (CgsAemsInterfaceImplementation.h:143..174).
         const Environment&        mEnvironment;        // :143
         AemsPlayerVoice*          mpPlayerVoice;        // :144
@@ -171,7 +172,7 @@ namespace Playback
         virtual Snd9::IAemsSamplePlayer* CreateInstance(void* apParams, int aiNumOutputs,
                                                         const int* apOutputs, const char* apcName,
                                                         int aiValue,
-                                                        const AemsPlayerInputAccessor* apAccessor);
+                                                        const Snd9::AemsPlayerInputAccessor* apAccessor);
         virtual void Release();                                        // own TU
 
         // CgsAemsInterfaceImplementation.h:48 @ 0x826C2848 (scalar-deleting dtor).

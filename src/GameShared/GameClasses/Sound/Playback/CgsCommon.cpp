@@ -187,7 +187,7 @@ uintptr_t Name::MakeHash(const char* lkpacName)
 
     HashTable::Store(luHash, lkpacName);
 
-    return luHash;
+    return static_cast<uintptr_t>(luHash);
 }
 
 }

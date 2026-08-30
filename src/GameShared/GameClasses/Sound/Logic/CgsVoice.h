@@ -66,6 +66,7 @@ class Voice;
 
 namespace Logic
 {
+class Module;
 
 // CgsVoice.h. The sound-logic voice. Virtual (the X360 scalar-deleting dtor installs
 // a vtable at +0), so it carries an implicit vptr at +0.
@@ -74,7 +75,7 @@ class Voice
 public:
     // The interned name-hash type the logic layer passes around (Connect's send name,
     // Construct's spec name). Playback::Name::MakeHash returns this widened value.
-    typedef uintptr_t Ident;
+    typedef u32 Ident;
 
     // -------------------------------------------------------------------------
     // Construct(parentModule, idx, globalSpecTable, nameHash)
@@ -89,7 +90,8 @@ public:
     //   the reserved K_INIT_SND9_SUBMIX_IDENT), and nameHash is the spec's name hash.
     //   The body sets mpOwnerModule and creates the Playback::Voice into mVoiceHandle
     //   -- see the .cpp for the proven-vs-FLAGGED split.
-    void Construct(void* lpOwnerModule, s32 liIndex, void* lpGlobalSpecTable, Ident luNameHash);
+    void Construct(Module* lpOwnerModule, Ident luIdent,
+                   Ident luFactoryName, Ident luVoiceSpecName);
 
     // Destruct  @ 0x826C4E38. Assert the wrapped voice exists and is NOT playing,
     // mark its state byte (+0x11 = 2), then Release the handle and null mpObject.
@@ -97,7 +99,7 @@ public:
 
     // Connect(sendNameHash, send)  @ 0x826C4F18. Acquire the handle and forward to
     // Playback::Module::Module::ConnectVoice(ownerModule+568, &voice, ...).
-    s32 Connect(Ident luSendNameHash, s32 liSend);
+    void Connect(Ident luSendNameHash, Ident luSubmixIdent);
 
     // GetIdent  @ 0x826AD988. Return the wrapped Playback::Voice's ident (obj+0x0C).
     s32 GetIdent() const;
@@ -157,7 +159,7 @@ private:
     // routes ConnectVoice through (*(a1+8) + 568). Stored opaquely (void*) -- the
     // owning-module type (BrnSound::Module::SoundLogicModule) is another group's
     // surface and only its +568 Playback::Module sub-object is touched here.
-    void* mpOwnerModule;
+    Module* mpOwnerModule;
 };
 
 } // namespace Logic

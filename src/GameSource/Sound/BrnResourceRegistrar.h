@@ -5,9 +5,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsLinkedList.h"                // CgsContainers::LinkedListHelper / LinkedListNode
 #include "GameShared/GameClasses/Containers/CgsArray.h"                     // CgsContainers::Array (removal-candidate map)
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"           // CgsModule::VariableEventQueue<N,16>
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"       // CgsModule::BaseEventReceiverQueue (QueuedResource base)
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"      // CgsResource::ResourceHandle
+#include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"           // BrnResource::GameDataIO::RequestInterface<4096>
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h"   // CgsAttribSys::AttribSysIO::AttribSysRequestInterface<2048>
 
 // =============================================================================
 // BrnSound::Logic::ResourceRegistrar + IResourceRequester
@@ -94,6 +95,8 @@ namespace Logic
             // default ctor (it never default-constructs a RequestedResource).
             RequestedResource() {}
 
+            RequestedResource& operator=(const RequestedResource& lrSource);
+
             // 0x826ADAE8 -- copy the bundle name + handle out of the source QueuedResource, hash the
             // bundle name, seed the per-resource requester list (N=16), and (if the source carried a
             // requester) record it. `lrSource` is the QueuedResource the load was driven from.
@@ -134,24 +137,24 @@ namespace Logic
             // FLAG: added for the host pool array only; the X360 has no default ctor.
             QueuedResource() {}
 
+            QueuedResource(const char* lpcResourceName, const char* lpcFileName,
+                           IResourceRequester* lpRequester, s32 liBundleId, EType leType);
+
+            QueuedResource& operator=(const QueuedResource& lrSource);
+
             // 0x82695710 -- build the queued item FROM a RequestedResource node payload (`lrSource`):
             // copy the handle/type/ids + bundle name, init the embedded BaseEventReceiverQueue
             // (cap 0xC0, align 16, buffer @ +0x18), and set mState = 5 (FAITHFUL: the ctor really
             // sets 5 -- do NOT "fix" this).
             QueuedResource(const RequestedResource& lrSource);
 
-            // 0x827007E8 -- drive the load state machine; returns true when the resource is ready.
-            // FLAG: stubbed -- depends on BrnResource::GameDataIO::RequestInterface<4096>::LoadBundle
-            // (not reconstructed at the <4096> shape used here) + the receiver-queue event protocol.
+            // 0x827007E8 -- drive the live load state machine; returns true when the resource is ready.
             bool Prepare(ResourceRegistrar& lrOwner);
 
             // 0x827005D0 -- drive the release state machine; returns true when the unload is done.
-            // FLAG: stubbed -- depends on RequestInterface<4096>::UnloadBundle (not reconstructed).
             bool Release(ResourceRegistrar& lrOwner);
 
             // 0x826FBD68 / 0x826FBE98 -- AttribSys vault register/unregister legs of the state machines.
-            // FLAG: stubbed -- depend on CgsAttribSys::AttribSysIO::AttribSysRequestInterface<2048>
-            // (not reconstructed).
             bool PrepareAttribSys(ResourceRegistrar& lrOwner);
             bool ReleaseAttribSys(ResourceRegistrar& lrOwner);
 
@@ -167,28 +170,28 @@ namespace Logic
             //   on x64 the faithful equivalent is the committed ResourceHandle (two pointers) -- the
             //   X360 32-bit split is a pointer-width artifact, not two distinct fields.
             CgsResource::ResourceHandle mResourceHandle;
-            // +0x128 miResourceType / needs-acquire flag (= src[0x40])
-            s32  miResourceType;
+            // +0x120 mResourceId -- the 64-bit CgsResource identity produced by ID::HashString.
+            CgsResource::ID mResourceId;
+            // +0x128 muResourceNameHash -- the FNV lookup key (zero means bundle-only request).
+            u32  muResourceNameHash;
             // +0x12C unused/zeroed in the ctor (set 0)
             s32  miPad12C;
             // +0x130 mState (= 5 in the ctor; the load/release state machines step it 0..9)
             s32  mState;
             // +0x134 mResourceClass (= src[0x12C])
             s32  mResourceClass;
-            // +0x138 mpRequester -- the IResourceRequester that enqueued this load (zeroed by this ctor;
-            //   set by the load-request enqueue path, which is the not-reconstructed GameDataIO flow).
+            // +0x138 mpRequester -- the IResourceRequester that enqueued this load (zeroed by the
+            //   requested-resource release ctor; set by the public LoadAsset enqueue path).
             //   SearchQueued matches against it (X360 node data +0x138); RequestedResource's ctor reads
             //   it to seed the requested-resource requester list. X360: a 4-byte ptr word; ptr on x64.
             IResourceRequester* mpRequester;
             // +0x13C mBundleId (= src[0x130])
             s32  mBundleId;
-            // +0x140 mbResourceStillRequested -- UpdateRequests branch flag (X360 node data +0x140,
-            //   read as `*(v4+328)`): when set, a matched requested resource is retired (queued for
-            //   removal); when clear, the queued item's requester is transferred onto the requested
-            //   node. NOT set by the ctor (left from the enqueue path); modelled by name. Exact
-            //   boolean semantic is inferred from the UpdateRequests branch, not a named DWARF field.
-            s32  mbResourceStillRequested;
-            // +0x144 pad to the X360 payload size 0x148 (the ctor leaves +0x140/+0x144 uninitialised).
+            // +0x140 mbRelinquished (DecFIGS name; X360 reads byte node+0x148): when true, a matched
+            //   requested resource is retired; otherwise the requester is transferred and notified.
+            bool mbRelinquished;
+            u8   maPad141[3];
+            // +0x144 pad to the X360 payload size 0x148.
             s32  miPad144;
         };
 
@@ -209,6 +212,19 @@ namespace Logic
         // 0x826B0B08 -- resolve a (resourceName, bundleName) pair against the loading requested list;
         // returns the resolved ResourceHandle (or 0). a2 == bundle name (may be null), a3 == resource name.
         CgsResource::ResourceHandle* GetResource(const char* lpcBundleName, const char* lpcResourceName);
+
+        // 0x826E1F88 -- duplicate-detect and append a new load request.
+        void AddRequest(const QueuedResource& lrRequest);
+
+        BrnResource::GameDataIO::RequestInterface<4096>& GetResourceRequestInterface()
+        {
+            return mResourceRequestInterface;
+        }
+
+        CgsAttribSys::AttribSysIO::AttribSysRequestInterface<2048>& GetAttribSysRequestInterface()
+        {
+            return mAttribSysRequestInterface;
+        }
 
     private:
         typedef CgsContainers::LinkedListNode<QueuedResource>    QueuedNode;
@@ -261,28 +277,27 @@ namespace Logic
         CgsContainers::LinkedListHelper<RequestedResource, 124> mLoadedResourceList;
 
         // @+0xCAA0 mAttribSysRequestInterface -- VariableEventQueue<2048,16> (the X360 a1+12968).
-        CgsModule::VariableEventQueue<2048, 16> mAttribSysRequestInterface;
+        CgsAttribSys::AttribSysIO::AttribSysRequestInterface<2048> mAttribSysRequestInterface;
 
         // @+0xD2B0 mResourceRequestInterface -- VariableEventQueue<4096,16> (the X360 a1+13484).
-        CgsModule::VariableEventQueue<4096, 16> mResourceRequestInterface;
+        BrnResource::GameDataIO::RequestInterface<4096> mResourceRequestInterface;
     };
 
     // BrnResourceRegistrar.h:337 (DWARF). The resource-requester interface BrnEffectObject and the
     // controls/state-managers implement (X360: the IResourceRequester sub-object vptr @ this+4 on
-    // BrnEffectObject; the detach/registrar paths route through it). Exactly three virtuals -- the
-    // X360 IResourceRequester vtable is { dtor, ResourcesAreReady, GetResourceRegistrar }; GetResource
-    // is reached through the registrar (GetResourceRegistrar().GetResource), NOT a requester virtual,
-    // so nothing is added there. Defined after ResourceRegistrar so LoadAsset's EType param resolves.
+    // BrnEffectObject; the detach/registrar paths route through it). DecFIGS declares exactly two
+    // virtuals and no virtual destructor: {ResourcesAreReady, GetResourceRegistrar}. GetResource is
+    // reached through the registrar, not a requester virtual. Defined after ResourceRegistrar so
+    // LoadAsset's EType parameter resolves.
     struct IResourceRequester
     {
-        virtual ~IResourceRequester() {}
         virtual void               ResourcesAreReady() = 0;
         virtual ResourceRegistrar& GetResourceRegistrar() = 0;
 
-        // BrnResourceRegistrar.h:272 (DWARF; body ResourceRegistrar.cpp:1084 -- a separate deferred
-        // slice). Enqueue a bundle+resource load request of the given asset class. The sound effects'
+        // BrnResourceRegistrar.h:272 (DWARF; body ResourceRegistrar.cpp:1084). Enqueue a
+        // bundle+resource load request of the given asset class. The sound effects'
         // SetupLoadData tail-forwards here (X360 0x826E4C88: r5=0 -> lpcResourceName null, r6=0 ->
-        // E_DATA). Declared-only; not defined in this TU.
+        // E_DATA).
         void LoadAsset(const char* lpcBundleName, const char* lpcResourceName,
                        ResourceRegistrar::EType leType);
     };

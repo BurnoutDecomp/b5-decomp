@@ -26,6 +26,7 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsDataStructures.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace CgsSound
@@ -36,7 +37,12 @@ namespace Playback
 // CgsAemsDataStructures.h. The fixer's interned type Name (the X360 global
 // dword_82FFBD90). Constructing a Name from the type-name string interns it
 // (MakeHash -> Store), so GetValue() yields the hash the X360 holds in that word.
-const Name AemsVoiceCsisClass::SK_TYPE_NAME = Name("AemsVoiceCsisClass");
+const Name AemsVoiceCsisClass::SK_TYPE_NAME = Name("~AemsVoiceCsisClass~");
+
+namespace
+{
+    const EntityFixer<AemsVoiceCsisClass> sAemsVoiceCsisClassFixer;
+}
 
 // ---------------------------------------------------------------------------
 // AemsVoiceCsisClass::DoFixUp(arEntity)  @ 0x8268AAC0

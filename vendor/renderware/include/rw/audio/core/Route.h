@@ -33,7 +33,7 @@
 // =====================================================================================
 
 #include "types.hpp" // f32, u32, s32, u8
-#include "rw/audio/core/PlugIn.h"          // rw::audio::core::System
+#include "rw/audio/core/Iir2Filters.h"     // PlugInBaseView / AudioProcessContext
 #include "rw/audio/core/SubMixConnector.h" // rw::audio::core::SubMixConnector, SubMix
 
 namespace rw
@@ -84,7 +84,7 @@ public:
     // Placement-construct the Route part: install the derived vtable, clear the embedded
     // connector's owning-SubMix/cursor/flag fields, and zero the foldback gain array.
     // X360 @0x82BA3D40. Returns 1.
-    static int CreateInstance(int a1);
+    static int CreateInstance(Route *self);
 
     // sizeof(Route) == 84. X360 @0x82B982F8.
     static int GetSize();
@@ -93,6 +93,11 @@ public:
     // @0x82B9B258.
     static char** GetPlugInDescRunTime();
 
+    // Accumulate the selected source channels into the connected SubMix buffer, then
+    // retain each channel's final sample for disconnect de-clicking. X360
+    // @0x82B9B268. Returns 1.
+    static int Process(Route *self, AudioProcessContext *ctx, char resetRamp);
+
     // Queue a connect command (ConnectByPointerHandler) into the owning System's
     // deferred-command ring. X360 @0x82BA3DC8. pEvent is the 4-word connect event payload
     // (typed host-side -- see RouteConnectEvent). Returns self (the X360 r3 passthrough).
@@ -100,7 +105,7 @@ public:
 
     // Release: disconnect the embedded connector (folding its gains back into the
     // SubMix) and clear the foldback gain array. X360 @0x82BA3D88.
-    static int ReleaseEvent(int a1);
+    static SubMixConnector *ReleaseEvent(Route *self);
 
     // Deferred connect handler replayed off the ring (the consumer calls it through
     // int (*)(void *) with the record's own address): disconnect the embedded connector,
@@ -122,10 +127,8 @@ public:
     // ProStreet08 X360 PDB; field order + offsets MATCH this ARTIST layout exactly. Own
     // members renamed to the PDB names; the +0x50 byte triple was a single guessed array
     // (mau8Gain[3]) -- the PDB resolves it as three named per-channel bytes. The PlugIn
-    // base members (mpVTable/mpSystem/mGap08) belong to PlugIn and are left untouched.
-    void*           mpVTable;         // +0x00 (X360)
-    System*         mpSystem;         // +0x04 (X360)
-    char            mGap08[0x24 - 0x08]; // +0x08 .. +0x23 (X360) -- opaque PlugIn base body
+    // base members belong to PlugIn and are left untouched.
+    PlugInBaseView  mBase;            // +0x00 .. +0x23 (X360)
     SubMixConnector mSubMixConnector; // +0x24 (X360) -- embedded inbound connector subobject
     f32             mDeClickValue[6]; // +0x38 (X360) -- foldback gain array
     u8              mSourceStartChannel; // +0x50 (X360) -- per-channel byte gain (source)

@@ -51,8 +51,8 @@ struct Entity
     static void UnresolveMemberPointer(const T** appMember);
     template <typename T>
     static void RelocateMemberPointer(const T** appMember, u8* apu8Base,
-                                      const class Registry& arFrom,
-                                      const class Registry& arTo);
+                                      const class Registry& arTo,
+                                      const class Registry& arFrom);
 };
 
 // CgsDataStructures.h:178/187/198 (DWARF). Namespace-scope free-function template
@@ -66,7 +66,7 @@ template <typename T>
 void UnresolveMemberPointer(const T** appMember);
 template <typename T>
 void RelocateMemberPointer(const T** appMember, u8* apu8Base,
-                           const Registry& arFrom, const Registry& arTo);
+                           const Registry& arTo, const Registry& arFrom);
 
 // CgsRegistry.h:42. The sizing descriptor passed to Registry construction.
 struct RegistrySpec
@@ -89,6 +89,8 @@ struct RegistrySpec
 struct Registry
 {
 private:
+    friend struct Entity;
+
     u32        mu32EntityCount;     // CgsRegistry.h:232  (a1[0]) live entry count
     u32        mu32EntityCapacity;  // CgsRegistry.h:233  (a1[1]) slot-array length
     size_t     muDataSize;          // CgsRegistry.h:234  (a1[2]) entity-blob size
@@ -105,9 +107,34 @@ private:
     // never assumes the blob byte size, so the named indexing stays faithful).
     const Entity* mapEntity[1];
 
-    // CgsRegistry.h:215. First slot of the open-addressing array (named accessor
-    // replacing the X360 `a1 + 7`). FLAG: shape helper, not a recon'd TU.
+    // CgsRegistry.h:215-224. Named starts of the three in-place regions.
     const Entity** GetFirstEntity() { return mapEntity; }
+    const Entity* const* GetFirstEntity() const { return mapEntity; }
+    u8* GetDataStart()
+    {
+        return reinterpret_cast<u8*>(mapEntity + mu32EntityCapacity);
+    }
+    const u8* GetDataStart() const
+    {
+        return reinterpret_cast<const u8*>(mapEntity + mu32EntityCapacity);
+    }
+    char* GetStringTableStart()
+    {
+        return muStringTableSize != 0
+            ? reinterpret_cast<char*>(GetDataStart() + muDataSize)
+            : 0;
+    }
+    const char* GetStringTableStart() const
+    {
+        return muStringTableSize != 0
+            ? reinterpret_cast<const char*>(GetDataStart() + muDataSize)
+            : 0;
+    }
+
+    // CgsRegistry.h:230 / X360 @0x826A22A8. Return the corresponding entity in
+    // the copy beginning at apu8Base and relocate its nested member pointers.
+    const Entity* Import(u8* apu8Base, const Entity& arEntity,
+                         const Registry& arFrom) const;
 
 public:
     // CgsRegistry.h:73. Build the table in place over a supplied blob.
@@ -117,6 +144,13 @@ public:
     // on success, false if the table is full. Bodied store-for-store from the
     // X360 AddEntity @ 0x82692DA0.
     bool AddEntity(const Entity& lEntity);
+
+    // CgsRegistry.h:95/97/137/204/211. The runtime registry operations used by
+    // Module::AddRegistry and the factory merge path.
+    Registry& operator+=(Registry& arOther);
+    bool Contains(const Entity& arEntity) const;
+    void FixUp();
+    void Resolve(const Registry& arRegistry);
 
     // CgsRegistry.h (DWARF). Type-checked entity lookup by interned Name. The X360
     // `bl Registry::GetEntity<T>` body is reconstructed out-of-line below (ONE shared
@@ -132,6 +166,25 @@ public:
     u32    GetEntityCapacity() const  { return mu32EntityCapacity; }
     size_t GetDataSize() const        { return muDataSize; }
     size_t GetStringTableSize() const { return muStringTableSize; }
+    const char* GetStringTableData() const { return GetStringTableStart(); }
+    size_t GetStringTableUsedSize() const
+    {
+        return muStringTableSize != 0
+            ? static_cast<size_t>(mpcStringTable - GetStringTableStart())
+            : 0u;
+    }
+    size_t GetSerialisedSize() const
+    {
+        const size_t luHeaderBytes = static_cast<size_t>(
+            reinterpret_cast<const u8*>(mapEntity) -
+            reinterpret_cast<const u8*>(this));
+        return luHeaderBytes + sizeof(mapEntity[0]) * mu32EntityCapacity
+             + muDataSize + muStringTableSize;
+    }
+    const Entity* GetEntityAtSlot(u32 au32Index) const
+    {
+        return au32Index < mu32EntityCapacity ? mapEntity[au32Index] : 0;
+    }
 
     // DWARF CgsRegistry.h:137 (header-inline on console). Debug-TTY dump of the
     // table. FLAG (DEFER): declared-only -- bodied with the Registry slices
@@ -213,6 +266,93 @@ const T* Registry::GetEntity(Name& arName) const
     }
 
     return 0;
+}
+
+// =============================================================================
+// Serialized member-pointer helpers (X360 CgsRegistry.h:753-805 family).
+// A low-bit-set value is an unresolved Name. A live pointer must name the right
+// entity type. During a registry merge, pointers already in the destination stay
+// put; pointers into the source are imported at the same data-blob displacement.
+// =============================================================================
+template <typename T>
+void Entity::ResolveMemberPointer(const T** appMember, const Registry& arRegistry)
+{
+    CGS_ASSERT(appMember != 0, "lppEntity");
+    CGS_ASSERT(appMember != 0 && *appMember != 0, "*lppEntity");
+    if (appMember == 0 || *appMember == 0)
+        return;
+
+    const uintptr_t luValue = reinterpret_cast<uintptr_t>(*appMember);
+    if ((luValue & 1u) != 0u)
+    {
+        Name lName(luValue);
+        const T* lpResolved = arRegistry.GetEntity<T>(lName);
+        if (lpResolved != 0)
+            *appMember = lpResolved;
+    }
+}
+
+template <typename T>
+void Entity::UnresolveMemberPointer(const T** appMember)
+{
+    CGS_ASSERT(appMember != 0, "lppEntity");
+    CGS_ASSERT(appMember != 0 && *appMember != 0, "*lppEntity");
+    if (appMember == 0 || *appMember == 0)
+        return;
+
+    const uintptr_t luValue = reinterpret_cast<uintptr_t>(*appMember);
+    if ((luValue & 1u) == 0u)
+    {
+        const Entity* lpEntity = reinterpret_cast<const Entity*>(*appMember);
+        CGS_ASSERT(lpEntity->mTypeName == T::SK_TYPE_NAME,
+                   "T::SK_TYPE_NAME == (*lppEntity)->GetTypeName()");
+        *appMember = reinterpret_cast<const T*>(lpEntity->mName.GetValue());
+    }
+}
+
+template <typename T>
+void Entity::RelocateMemberPointer(const T** appMember, u8* apu8Base,
+                                   const Registry& arTo,
+                                   const Registry& arFrom)
+{
+    CGS_ASSERT(appMember != 0, "lppEntity");
+    CGS_ASSERT(appMember != 0 && *appMember != 0, "*lppEntity");
+    if (appMember == 0 || *appMember == 0)
+        return;
+
+    if ((reinterpret_cast<uintptr_t>(*appMember) & 1u) == 0u)
+    {
+        const Entity* lpEntity = reinterpret_cast<const Entity*>(*appMember);
+        CGS_ASSERT(lpEntity->mTypeName == T::SK_TYPE_NAME,
+                   "T::SK_TYPE_NAME == (*lppEntity)->GetTypeName()");
+
+        if (!arTo.Contains(*lpEntity))
+        {
+            CGS_ASSERT(arFrom.Contains(*lpEntity),
+                       "lRegistryFrom.Contains(**lppEntity)");
+            *appMember = reinterpret_cast<const T*>(
+                arTo.Import(apu8Base, *lpEntity, arFrom));
+        }
+    }
+}
+
+template <typename T>
+void ResolveMemberPointer(const T** appMember, const Registry& arRegistry)
+{
+    Entity::ResolveMemberPointer<T>(appMember, arRegistry);
+}
+
+template <typename T>
+void UnresolveMemberPointer(const T** appMember)
+{
+    Entity::UnresolveMemberPointer<T>(appMember);
+}
+
+template <typename T>
+void RelocateMemberPointer(const T** appMember, u8* apu8Base,
+                           const Registry& arTo, const Registry& arFrom)
+{
+    Entity::RelocateMemberPointer<T>(appMember, apu8Base, arTo, arFrom);
 }
 
 }

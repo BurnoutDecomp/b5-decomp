@@ -21,6 +21,12 @@ namespace CgsSound
 {
 namespace Playback
 {
+    SubmixVoice::SubmixVoice(size_t auClientSize, Factory& arFactory,
+                             const VoiceSpec& arVoiceSpec, u32 au32Ident)
+        : Voice(auClientSize, arFactory, arVoiceSpec, au32Ident), mpSubmix(0)
+    {
+    }
+
     SubmixVoice::~SubmixVoice()
     {
         // The Voice base destructor runs implicitly here (the X360 `bl ~Voice`).
