@@ -54,6 +54,8 @@ namespace core
 typedef int (*RawPuller2FillFn)(u32 luFrameCount, void* lpDst, f32 lfArg, void* lpContext);
 
 class RawPuller2; // fwd -- the ring records carry the RawPuller2 instance
+class Mixer;
+typedef Mixer AudioProcessContext;
 
 // The 4-word play event payload EventEvent receives and copies into the ring record
 // (event words 0..3 -> command words 2..5 on the X360). Words 0/1 are floats (PlayHandler
@@ -100,7 +102,7 @@ public:
 
     // Placement-construct: install the vtable, clear the callback + frame count, and
     // mark the puller for a restart. X360 @0x82B3798. Returns 1.
-    static int CreateInstance(int self);
+    static int CreateInstance(RawPuller2* self);
 
     // sizeof(RawPuller2) == 56. X360 @0x82B97348.
     static int GetSize();
@@ -121,8 +123,8 @@ public:
     // Per-frame setup + render. PreProcess stows the requested frame count; Process pulls
     // the callback and copies the produced channels into the output node. X360
     // @0x82B9A5C8 / @0x82B9A5D8.
-    static int PreProcess(int self, int a2, int a3, int a4);
-    static int Process(int self, int a2);
+    static int PreProcess(RawPuller2* self, int a2, int a3, int a4);
+    static int Process(RawPuller2* self, AudioProcessContext* context);
 
     // FLAG (rwaudio PDB reconcile): NFS ProStreet 08 X360 PDB confirms this exact layout
     // (sizeof=56, field order matches). Member names below are the authoritative PDB names;

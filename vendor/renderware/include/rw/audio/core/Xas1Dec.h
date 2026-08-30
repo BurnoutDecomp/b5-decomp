@@ -47,6 +47,9 @@ struct DecoderDesc;
 class Xas1Dec : public Decoder
 {
 public:
+    static bool CreateInstanceEvent(Xas1Dec *pDecoder);
+    static u32 GetSize(u32 uNumChannels, u32 *puAlignment);
+
     // @0x82B91E90 -- return the address of this codec's static registration descriptor.
     static DecoderDesc *GetDecoderDesc();
 

@@ -39,11 +39,11 @@ static void* const skpRawPuller2VTable = &skRawPuller2VTableSlot;
 //   *(self+0x34) = 1   (stb)   mbRestart    = 1
 //   return 1
 // -------------------------------------------------------------------------------------
-int RawPuller2::CreateInstance(int self)
+int RawPuller2::CreateInstance(RawPuller2* self)
 {
     if (self)
     {
-        RawPuller2* lpSelf = reinterpret_cast<RawPuller2*>(self);
+        RawPuller2* lpSelf = self;
         lpSelf->mpVTable     = skpRawPuller2VTable; // *self = off_8217F4E4
         lpSelf->mpPullCallback   = 0;                   // +0x24
         lpSelf->mSamplesRequested = 0;                   // +0x30
@@ -175,9 +175,9 @@ int RawPuller2::StopHandler(void* cmd)
 // PreProcess @0x82B9A5C8 -- *(self+0x30) = a4 ; return 0
 //   (stows the requested per-pull frame count into muFrameCount.)
 // -------------------------------------------------------------------------------------
-int RawPuller2::PreProcess(int self, int /*a2*/, int /*a3*/, int a4)
+int RawPuller2::PreProcess(RawPuller2* self, int /*a2*/, int /*a3*/, int a4)
 {
-    reinterpret_cast<RawPuller2*>(self)->mSamplesRequested = static_cast<u32>(a4); // *(self+0x30)
+    self->mSamplesRequested = static_cast<u32>(a4); // *(self+0x30)
     return 0;
 }
 
@@ -227,13 +227,13 @@ namespace
     char skScratchBuffer[64 * 1024];
 }
 
-int RawPuller2::Process(int self, int a2)
+int RawPuller2::Process(RawPuller2* self, AudioProcessContext* context)
 {
-    RawPuller2* lpSelf = reinterpret_cast<RawPuller2*>(self);
+    RawPuller2* lpSelf = self;
     if (!lpSelf->mpPullCallback)
         return 0;
 
-    AudioProcessContext* lpCtx = reinterpret_cast<AudioProcessContext*>(a2);
+    AudioProcessContext* lpCtx = context;
     // lbz 0x35(r31) -- an UNSIGNED byte load; it is both the published channel count and the
     // unsigned bound of the scatter loop (cmplw r30, r29).
     const u8 lbNumChannels = static_cast<u8>(lpSelf->mPlayNumChannels); // v4 = *(self+0x35)

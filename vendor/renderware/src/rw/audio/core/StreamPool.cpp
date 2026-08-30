@@ -12,6 +12,15 @@
 #include "SDKs/EATech/rwcore/filesys/stream.h" // rw::core::filesys::Stream::Kill
 
 #include <cstddef> // offsetof
+#include <cstdlib> // abort
+
+namespace
+{
+    [[noreturn]] void UnreachableRwCoreStreamPath()
+    {
+        std::abort();
+    }
+}
 
 namespace rw
 {
@@ -222,3 +231,41 @@ rw::core::filesys::Stream *StreamPool::GetRwCoreStream(StreamHandle apStreamHand
 } // namespace core
 } // namespace audio
 } // namespace rw
+
+// FLAG PC-platform leaf: the PC executable deliberately leaves the legacy rw::core::filesys
+// stream engine unmounted. These five exports are referenced only by SndPlayer1's streamed
+// continuation, which cannot be reached: the retail image has a writer-less StreamPool list,
+// so the preceding AcquireStream call dereferences null first. Termination preserves that
+// fatal boundary without pulling the phase-F stream engine into phase E.
+// DELETE-WHEN: Stream::startnextrequest is reconstructed and stream.cpp is mounted; remove
+// these five definitions together with the omitted Stream::Kill call above.
+namespace rw { namespace core { namespace filesys {
+
+s32 Stream::QueueFile(const char* /*apPath*/, Handle* /*apPreOpenHandle*/,
+                      u64 /*auSize*/, ChunkParseCallback /*apParse*/,
+                      void* /*apParseContext*/)
+{
+    UnreachableRwCoreStreamPath();
+}
+
+Chunk* Stream::GetChunk()
+{
+    UnreachableRwCoreStreamPath();
+}
+
+s32 Stream::ReleaseChunk(Chunk* /*apChunk*/)
+{
+    UnreachableRwCoreStreamPath();
+}
+
+s32 Stream::GetRequestState(u32 /*auRequestId*/) const
+{
+    UnreachableRwCoreStreamPath();
+}
+
+s32 Stream::GetState() const
+{
+    UnreachableRwCoreStreamPath();
+}
+
+}}}

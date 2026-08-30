@@ -17,6 +17,10 @@
 #include "rw/audio/core/Xas1Dec.h"  // Xas1Dec::GetDecoderDesc
 #include "rw/audio/core/XasDec.h"   // XasDec::GetDecoderDesc
 #include "rw/audio/core/EaXmaDec.h" // EaXmaDec::GetDecoderDesc
+#include "rw/audio/core/Decoder.h"  // Decoder / DecoderRequest / DecoderBuffer
+
+#include <cstddef> // offsetof
+#include <cstdint> // uintptr_t
 
 namespace rw
 {
@@ -28,8 +32,22 @@ namespace core
 // A link slot points at DecoderDesc::mpNext (+0x10); recover the owning record.
 static DecoderDesc *InfoFromLink(void *link)
 {
-    return reinterpret_cast<DecoderDesc *>(reinterpret_cast<char *>(link) - 0x10);
+    return reinterpret_cast<DecoderDesc *>(
+        reinterpret_cast<char *>(link) - offsetof(DecoderDesc, mpNext));
 }
+
+static u32 AlignUpDecoderFactory(u32 value, u32 alignment)
+{
+    return (value + alignment - 1u) & ~(alignment - 1u);
+}
+
+static std::uintptr_t AlignUpDecoderFactoryPointer(std::uintptr_t value,
+                                                   std::uintptr_t alignment)
+{
+    return (value + alignment - 1u) & ~(alignment - 1u);
+}
+
+extern "C" System *off_83271928;
 
 // -------------------------------------------------------------------------------------
 // DecoderRegistry::CreateInstance @0x82B6C728
@@ -121,6 +139,104 @@ DecoderDesc *DecoderRegistry::RegisterStandardRunTimeDecoders(DecoderRegistry *s
     RegisterDecoder(self, Xas1Dec::GetDecoderDesc());
     RegisterDecoder(self, XasDec::GetDecoderDesc());
     return RegisterDecoder(self, EaXmaDec::GetDecoderDesc());
+}
+
+// -------------------------------------------------------------------------------------
+// DecoderFactory @0x82B6C778 -- allocate one codec instance, its inline request ring,
+// and (for block codecs) its inline buffer descriptor plus separate sample storage.
+// Console record sizes are replaced only where pointer widening requires host sizeof;
+// alignment, truncation, callback order and initialization order follow the X360 body.
+// -------------------------------------------------------------------------------------
+Decoder *DecoderRegistry::DecoderFactory(DecoderRegistry * /*self*/, void *decoderHandle,
+                                         u32 numChannels, u32 maxSlots, System *system)
+{
+    DecoderDesc *desc = static_cast<DecoderDesc *>(decoderHandle);
+
+    u32 alignment = 0;
+    const u32 codecBytes = desc->pGetSize(numChannels, &alignment);
+    const bool blockBased = desc->muMaxBlockSize != 0;
+    const u32 requestOffset = AlignUpDecoderFactory(codecBytes, 8u);
+    const u32 requestBytes = maxSlots * static_cast<u32>(sizeof(DecoderRequest));
+
+    u32 instanceBytes = requestOffset + requestBytes;
+    if (blockBased)
+    {
+        instanceBytes = AlignUpDecoderFactory(instanceBytes, 16u)
+                      + static_cast<u32>(sizeof(DecoderBuffer));
+        if (alignment <= 16u)
+            alignment = 16u;
+    }
+
+    Decoder *decoder = 0;
+    System::New2<Decoder>(off_83271928, &decoder, 0, instanceBytes, alignment, 0);
+    if (!decoder)
+        return 0;
+
+    decoder->mpFinaliser = desc->pReleaseEvent;
+    decoder->mpAllocatedBlock = 0;
+    decoder->mucChannelCount = static_cast<u8>(numChannels);
+    decoder->mpSystemUseGetSystemAccessor = system;
+
+    if (!desc->pCreateInstanceEvent(decoder))
+    {
+        decoder->Release();
+        return 0;
+    }
+
+    u8 *decoderBytes = reinterpret_cast<u8 *>(decoder);
+    u8 *requestAddress = reinterpret_cast<u8 *>(AlignUpDecoderFactoryPointer(
+        reinterpret_cast<std::uintptr_t>(decoderBytes + codecBytes), 8u));
+    const u32 actualRequestOffset = static_cast<u32>(requestAddress - decoderBytes);
+
+    decoder->mpDecoder = decoder;
+    decoder->mpDecodeCallback = desc->pDecodeEvent;
+    decoder->mGuid = desc->muId;
+    decoder->miCurrentSampleOffset = 0;
+    decoder->muInstanceSize = instanceBytes;
+    decoder->muRequestQueueOffset = actualRequestOffset;
+    decoder->muCarrySamples = 0;
+    decoder->mucRequestWriteIndex = 0;
+    decoder->mucRequestReadIndex = 0;
+    decoder->mucRequestDecodeIndex = 0;
+    decoder->mucRequestCount = static_cast<u8>(maxSlots);
+    decoder->mucUsesSourceBuffer = blockBased ? 1u : 0u;
+
+    if (blockBased)
+    {
+        u8 *sampleBufferAddress = reinterpret_cast<u8 *>(AlignUpDecoderFactoryPointer(
+            reinterpret_cast<std::uintptr_t>(requestAddress + requestBytes), 16u));
+        const u32 actualSampleBufferOffset =
+            static_cast<u32>(sampleBufferAddress - decoderBytes);
+        decoder->muSourceBufferOffset =
+            static_cast<u32>(static_cast<u16>(actualSampleBufferOffset));
+
+        const u32 storageBytes = static_cast<u32>(desc->muMaxBlockSize)
+                               * numChannels * static_cast<u32>(sizeof(f32));
+        f32 *storage = static_cast<f32 *>(system->mpAllocator->Alloc(
+            storageBytes, "Decoder block storage", 1, 128u, 0u));
+        decoder->mpAllocatedBlock = storage;
+        if (!storage)
+        {
+            decoder->Release();
+            return 0;
+        }
+
+        DecoderBuffer *sampleBuffer =
+            reinterpret_cast<DecoderBuffer *>(sampleBufferAddress);
+        sampleBuffer->mpSystem = system;
+        sampleBuffer->muSampleCursor = 0;
+        sampleBuffer->mucChannelCount = static_cast<u8>(numChannels);
+        sampleBuffer->mpData = storage;
+        sampleBuffer->muStride = desc->muMaxBlockSize;
+    }
+
+    DecoderRequest *requests = reinterpret_cast<DecoderRequest *>(requestAddress);
+    for (u32 slot = 0; slot < decoder->mucRequestCount; ++slot)
+    {
+        requests[slot].mpFedData = 0;
+        requests[slot].miEndSample = 0;
+    }
+    return decoder;
 }
 
 } // namespace core

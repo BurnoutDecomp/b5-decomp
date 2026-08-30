@@ -98,7 +98,7 @@ struct SampleBuffer
     System *mpSystem;        // +0x00 -- Execute seeds the owning System (was the opaque
                              //   AudioChannelBuffer header word)
     f32 *mpSamples;          // +0x04 -- Execute seeds the region base (Mixer::mBuffer[i])
-    u32 mUnk08;              // +0x08 (untouched by the decoded bodies)
+    usize mpTempStore;       // +0x08 (pointer-sized; untouched by the decoded bodies)
     u16 muUnk0C;             // +0x0C -- Execute seeds 0
     u16 muStride;            // +0x0E -- Execute seeds 256 (samples per channel slot; the
                              //   committed spelling -- every filter reads it by this name)

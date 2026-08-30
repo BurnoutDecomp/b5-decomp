@@ -37,9 +37,25 @@ static const f32 KF_PCM16_SCALE = 1.0f / 32768.0f;
 //          stw r10,0x34(r11); stw r10,0x38(r11); blr -- zero self+0x34/+0x38, return 1)
 //   +0x08 0 (no ReleaseEvent)               +0x0C 0x82B951B8 DecodeEvent
 //   +0x10 mpNext = 0                        +0x14 muId = 0x50364230 'P6B0'
-// FLAG (host callback slots deferred): see the EaXmaDec.cpp descriptor note --
-// the header stays the opaque zeroed span until the dispatch consumer lands.
-extern "C" DecoderDesc off_82F893CC = { {0}, 0, 0x50364230u /* 'P6B0' */ };
+static bool Pcm16BigDecCreateThunk(Decoder *decoder)
+{
+    return Pcm16BigDec::CreateInstanceEvent(static_cast<Pcm16BigDec *>(decoder));
+}
+
+static s32 Pcm16BigDecDecodeThunk(Decoder *decoder, DecoderBuffer *buffer, s32 count)
+{
+    return static_cast<Pcm16BigDec *>(decoder)->DecodeEvent(buffer, count);
+}
+
+extern "C" DecoderDesc off_82F893CC = {
+    &Pcm16BigDec::GetSize,
+    &Pcm16BigDecCreateThunk,
+    0,
+    &Pcm16BigDecDecodeThunk,
+    0,
+    0x50364230u, // 'P6B0'
+    0
+};
 
 // -------------------------------------------------------------------------------------
 // GetDecoderDesc @0x82B91E38
@@ -59,11 +75,17 @@ DecoderDesc *Pcm16BigDec::GetDecoderDesc()
 // returned. The descriptor framework passes the instance pointer in r3, but the asm
 // overwrites r3 with the return value without reading it, so it is unused here.
 // -------------------------------------------------------------------------------------
-s32 Pcm16BigDec::GetSize(Pcm16BigDec *pDecoder, u32 *puAlignment)
+u32 Pcm16BigDec::GetSize(u32 /*uNumChannels*/, u32 *puAlignment)
 {
-    (void)pDecoder;
     *puAlignment = 16;
-    return 60;
+    return static_cast<u32>(sizeof(Pcm16BigDec));
+}
+
+bool Pcm16BigDec::CreateInstanceEvent(Pcm16BigDec *pDecoder)
+{
+    pDecoder->mpSampleCursor = 0;
+    pDecoder->miRemainingSamples = 0;
+    return true;
 }
 
 // -------------------------------------------------------------------------------------

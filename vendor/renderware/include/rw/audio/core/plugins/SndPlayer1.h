@@ -29,11 +29,20 @@
 #include "rw/audio/core/PlugIn.h"           // PlugIn (polymorphic base) + Attribute_t + System
 #include "rw/audio/core/TimerHandle.h"      // TimerHandle (the per-frame timer client)
 #include "rw/audio/core/Voice.h"            // VoiceStageConfig (GetSize's argument)
+#include "rw/audio/core/StreamPool.h"       // StreamPool::StreamHandle
 
 #include <cstddef> // size_t
 
 namespace rw
 {
+namespace core
+{
+namespace filesys
+{
+struct Stream;
+struct Chunk;
+}
+}
 namespace audio
 {
 namespace core
@@ -44,21 +53,9 @@ typedef Mixer AudioProcessContext;
 class Decoder;
 class SampleBuffer;
 
-// ⚠️ ONE un-homed surface. The streaming half of this class talks to a StreamPool and to
-// rw::core::filesys::Stream (its Chunk and request id included).
-//
-// ⭐ CORRECTION 2026-08-29: an earlier revision of this note claimed NEITHER surface existed
-// in this tree. That was wrong about half of it -- rw::core::filesys::Stream IS homed, at
-// b5-decomp/src/SDKs/EATech/rwcore/filesys/stream.h, with QueueFile / GetChunk /
-// ReleaseChunk / GetRequestState / GetState and the Chunk record (muSize, mpData) already
-// matching every console call site. Only rw::audio::core::StreamPool is missing.
-//
-// The members below therefore stay opaque pointers ONLY because the streaming bodies that
-// dereference them have not landed; the header is deliberately not pulled in here, to keep
-// this vendor header free of a src/SDKs dependency. They are STORAGE ONLY at this revision.
-class StreamPool;
-namespace filesysfwd { class Stream; }
-
+// The streaming surface uses the homed StreamPool and rw::core::filesys::Stream types.
+// The latter remains forward-declared here to keep this vendor header free of a src/SDKs
+// include dependency.
 // The host layout of one instance's two variable-length tails. See ComputeLayout.
 struct SndPlayer1Layout
 {
@@ -138,9 +135,9 @@ public:
         s32 numSamplesFed;             // +0x14
         s32 numBytesFed;               // +0x18
         char *pStreamLoopFileName;     // +0x1C *** WIDENS ***
-        StreamPool *pStreamPool;       // +0x20 *** WIDENS *** (un-homed; storage only)
-        void *streamHandle;            // +0x24 *** WIDENS *** StreamPool::StreamHandle
-        void *pRwCoreStream;           // +0x28 *** WIDENS *** rw::core::filesys::Stream*
+        StreamPool *pStreamPool;       // +0x20 *** WIDENS ***
+        StreamPool::StreamHandle streamHandle; // +0x24 *** WIDENS ***
+        rw::core::filesys::Stream *pRwCoreStream; // +0x28 *** WIDENS ***
         u32  streamerRequestId;        // +0x2C rw::core::filesys::Stream::RequestId
         char *pNextChunk;              // +0x30 *** WIDENS ***
         char *pLoopStartChunk;         // +0x34 *** WIDENS ***
@@ -185,8 +182,8 @@ public:
     // pointer-free. This one carries TWO pointers, so it widens.
     struct SndPlayer1FeedDesc
     {
-        void *pChunkInfo;              // +0x00 *** WIDENS *** Stream::ChunkInfo*
-        void *pRwCoreStream;           // +0x04 *** WIDENS *** Stream*
+        rw::core::filesys::Chunk *pChunkInfo; // +0x00 *** WIDENS ***
+        rw::core::filesys::Stream *pRwCoreStream; // +0x04 *** WIDENS ***
         s32   chunkSamplesPlayed;      // +0x08
         u8    decoderRequestHandle;    // +0x0C Decoder::Feed's return
         u8    feedState;               // +0x0D FeedState
@@ -219,6 +216,26 @@ public:
 
     // The per-frame timer client the constructor registers.
     static void RwacTimerClient(void *apContext, f32 afTimeToNextCall); // @0x82BA6980
+
+    static int  PlayHandler(void *apCommand);
+    static int  StopHandler(void *apCommand);
+    static int  ModifyStartTimeHandler(void *apCommand);
+    static void StreamLostCallback(void *apContext);
+    static void RemoveRequest(SndPlayer1 *self, u32 index);
+    static void FeedCleanup(SndPlayer1 *self);
+    static void RequestCleanup(SndPlayer1 *self);
+    static u8   StartRequest(SndPlayer1 *self, u32 index);
+    static char *SubmitChunk(SndPlayer1 *self, char *block, u32 index,
+                             u8 isNewFeedChunk, u8 seekActive);
+    static u8   StreamNextChunk(SndPlayer1 *self, u32 index,
+                                u8 isNewFeedChunk, u8 seekActive);
+    static u8   HandleLoopStart(SndPlayer1 *self, u32 index);
+    static u8   HandleSampleEnd(SndPlayer1 *self, u32 index, u8 *finished);
+    static void UnpackHeader(SndPlayer1 *self, u32 index, const u8 *header);
+    static void SetSeekData(SndPlayer1 *self, u32 index,
+                            const u8 *seekTable, s32 targetSample);
+    static s32  ChunkParsed(u8 *buffer, u32 available, u32 requestId,
+                            void *context, u32 handlerA, u32 handlerB, u32 *consumed);
 
     // ⭐ THE ONE HOST LAYOUT HELPER. GetSize and CreateInstance MUST both go through it, or
     // the allocation and the placement disagree and the request ring overruns its buffer.
