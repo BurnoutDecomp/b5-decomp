@@ -1,22 +1,18 @@
 #include "GameSource/Sound/World/BrnEmitterEffect.h"
 
-// =============================================================================
-// BrnSound::Logic::World::EmitterEffect -- out-of-line bodies.
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. See BrnEmitterEffect.h for the
-// dual-base layout rationale, the embedded VoiceWrapper member, the
-// X360-32-bit-vs-host-64-bit offset note + the un-homed-leaf-member FLAG.
-//
-// This is the leaf-shape sibling of BrnSound::Logic::Explosion::ExplosionEffect
-// (BrnExplosionEffect.cpp @ 0x826D5480): the two constructors are store-for-store
-// identical apart from the class-specific vtable constants (primary/IResourceRequester
-// leaf vptrs off_820B4010/off_820B3FDC here).
-//
-// This TU's recon'd function set (dossier) has three entries; the constructor and the
-// scalar deleting destructor are bodied here:
-//   EmitterEffect()                @ 0x826D1C00  (the leaf constructor)
-//   GetSoundEntity()               @ 0x82686708  (DEFERRED -- owned-state surface not homed)
-//   `scalar deleting destructor'   @ 0x826E6B40  (compiler-synthesised)
-// =============================================================================
+#include "GameSource/Sound/Module/LogicModule/BrnEmitter3dControl.h"
+#include "GameSource/Sound/Module/LogicModule/BrnEmitterState.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "SharedClasses/Sound/World/BrnStaticSoundMap.h"
+#include "GameSource/AttribSys/Generated/classes/worldemitter.h"
+#include "GameSource/AttribSys/Generated/classes/worldemitterlist.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+
+#include <algorithm>
+#include <cmath>
 
 namespace BrnSound
 {
@@ -25,53 +21,187 @@ namespace Logic
 namespace World
 {
 
-// ---------------------------------------------------------------------------
-// EmitterEffect::EmitterEffect  @ 0x826D1C00
-//
-//   stfs 0.0f, 0x20 ; stfs 0.0f, 0x1C           ; leaf f32 = 0.0f (FLAG: un-homed)
-//   stw off_820AE954, 4                          ; (transient) IResourceRequester base vptr
-//   sth 0,0x10 ; stw 0,0xC ; stw 0,0x34 ; stw 0,8 ; stb 0,0x30 ; sth 0,0x12
-//   stw 0,0x28 ; stw 0,0x24                      ; base meDetach/meAttach region = 0
-//   stw off_820B4010,0 ; stw off_820B3FDC,4      ; final dual-base leaf vptrs
-//   bl CgsSound::Logic::VoiceWrapper::VoiceWrapper(this+0x38)   ; embedded member ctor
-//   return this
-//
-// MSVC's INLINED full-object constructor: no `bl` to a base ctor -- it inlines the
-// BrnEffectObject base member zero-init and installs the two leaf vptrs directly, then
-// constructs the embedded VoiceWrapper at +0x38. In reconstructed C++ the two vptr
-// installs + base member zero-init are produced implicitly by the BrnEffectObject base
-// sub-object's own default ctor (reused BY NAME); the only hand-written tail effect is
-// the embedded VoiceWrapper sub-object construction (matching the ExplosionEffect
-// precedent).
-//
-// FLAG (un-homed leaf members): the additional inlined leaf scalar zero-inits target
-// EmitterEffect's OWN leaf members, whose names/types are un-homed. They are
-// DECLARATION-ONLY (see header FLAG) and are NOT fabricated as named fields and NOT
-// raw-offset-hacked here.
-// ---------------------------------------------------------------------------
 EmitterEffect::EmitterEffect()
-    : BrnEffectObject()   // installs the base vptrs + zero-inits the base members (BY NAME)
-    , mVoiceWrapper()     // tail `bl CgsSound::Logic::VoiceWrapper::VoiceWrapper(this+0x38)`
+    : BrnEffectObject()
+    , mVoice()
+    , mPos()
+    , mp3dControl(0)
+    , mi16PitchOutput(0)
 {
-    // The remaining inlined leaf scalar zero-inits target un-homed leaf members
-    // (DECLARATION-ONLY; see header FLAG). NOT fabricated here.
 }
 
-// ---------------------------------------------------------------------------
-// ~EmitterEffect  (the out-of-line anchor the scalar deleting destructor @ 0x826E6B40
-// forwards to). Its member teardown lives in the inherited BrnEffectObject base chain
-// + the embedded VoiceWrapper member (reused BY NAME), so this leaf body is empty. It
-// exists so the class has a defined key function (the vtable emission point), mirroring
-// the committed CollisionEffect / ExplosionEffect precedent.
-//
-// The X360 scalar deleting destructor @ 0x826E6B40 chains this dtor and, when bit0 of
-// its flags arg is set, frees the object through the global sound MemBase allocator
-// (off_82FFB954, vtable slot +0x14); that allocator is not homed here, so the `delete`
-// half is left to the host toolchain's operator delete -- the raw allocator vtable
-// dispatch is NOT reproduced and no allocator is fabricated.
-// ---------------------------------------------------------------------------
 EmitterEffect::~EmitterEffect()
 {
+}
+
+const char* EmitterEffect::GetTypeName() const
+{
+    return "EmitterEffect";
+}
+
+CgsSound::Logic::EffectObject* EmitterEffect::CreateObject(u32)
+{
+    return new EmitterEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
+EmitterEffect::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>
+        sTypeInfo(0x70000, "EmitterEffect",
+                  CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
+                  &EmitterEffect::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
+EmitterEffect::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const
+    gpEmitterEffectReg =
+        CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(
+            EmitterEffect::GetStaticTypeInfo());
+
+s32 EmitterEffect::GetController(s32 aiIndex)
+{
+    return aiIndex == 0 ? 0 : -1;
+}
+
+void EmitterEffect::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    CGS_ASSERT(apController != 0, "lpController");
+    if (!apController)
+        return;
+    CGS_ASSERT((apController->GetId() & 0x7F0) == 0, "Unexpected control.");
+    if ((apController->GetId() & 0x7F0) == 0)
+        mp3dControl = static_cast<Emitter3dControl*>(apController);
+}
+
+const BrnSound::World::StaticSoundEntity& EmitterEffect::GetSoundEntity() const
+{
+    const EmitterState* lpState = static_cast<const EmitterState*>(mpState);
+    CGS_ASSERT(lpState != 0, "lpState");
+    CGS_ASSERT(lpState && lpState->IsAttached(), "IsAttached()");
+    return lpState->GetSoundEntity();
+}
+
+bool EmitterEffect::Attach()
+{
+    CgsSound::Logic::EffectBase::Attach();
+
+    const BrnSound::World::StaticSoundEntity& lrEntity = GetSoundEntity();
+    mPos = lrEntity.GetPos();
+    CGS_ASSERT(mp3dControl != 0, "mp3dControl");
+    if (mp3dControl)
+        mp3dControl->AttachEmitterPosition(&mPos);
+
+    BrnSound::Module::SoundLogicModule* lpLogicModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    CGS_ASSERT(lpLogicModule != 0, "lpLogicModule");
+    if (!lpLogicModule)
+        return true;
+
+    Attrib::Gen::worldemitterlist lWorldEmitters(
+        lpLogicModule->GetGlobalData().WorldEmitterList());
+    const u32 luEmitter = lrEntity.GetType();
+    CGS_ASSERT(luEmitter < lWorldEmitters.Num_mWorldEmitters(),
+               "luEmitter < static_cast< uint32_t >( lWorldEmitters.mNumWorldEmitters() )");
+
+    mi16PitchOutput = 1;
+    if (luEmitter < lWorldEmitters.Num_mWorldEmitters())
+    {
+        Attrib::Gen::worldemitter lEmitter;
+        lEmitter.ChangeWithDefault(lWorldEmitters.mWorldEmitters(luEmitter));
+        CGS_ASSERT(!lEmitter.IsStream(),
+                   "EmitterEffect : Emitter streams not yet supported.");
+        if (!lEmitter.IsStream() && lEmitter.EmitterName())
+        {
+            if (lEmitter.AffectedByDoppler())
+                mi16PitchOutput = 2;
+
+            CgsSound::Logic::VoiceWrapper::CreateParams lParams;
+            lParams.mpLogicModule = lpLogicModule;
+            lParams.mFactoryName = static_cast<u32>(
+                CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+            lParams.mVoiceSpecName = static_cast<u32>(
+                CgsSound::Playback::Name::MakeHash("PositionalVoiceSpec"));
+            lParams.mContentSpecName = static_cast<u32>(
+                CgsSound::Playback::Name::MakeHash(lEmitter.EmitterName()));
+            lParams.mSlotName = static_cast<u32>(
+                CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue());
+            lParams.mSendName = static_cast<u32>(
+                CgsSound::Playback::Name::MakeHash("Send01"));
+            lParams.mSubMixVoiceID = 1;
+            lParams.mReverbSendName = static_cast<u32>(
+                CgsSound::Playback::Name::MakeHash("ReverbSend"));
+            lParams.mReverbSubMixVoiceID = 2;
+            lParams.miSendIndex = 0;
+            mVoice.Create(lParams);
+            mVoice.Play(0);
+
+            const u32 luRadius = static_cast<u32>(
+                CgsSound::Playback::Name::MakeHash("SimplePanningRadius"));
+            const u32 luCentre = static_cast<u32>(
+                CgsSound::Playback::Name::MakeHash("SimplePanningCentreLevel"));
+            const u32 luMain = static_cast<u32>(
+                CgsSound::Playback::Name::MakeHash("SimplePanningMainLevel"));
+            const u32 luLfe = static_cast<u32>(
+                CgsSound::Playback::Name::MakeHash("SimplePanningLfeLevel"));
+            mVoice.SetParameter(2, 0.85f, &luRadius);
+            mVoice.SetParameter(3, 1.0f, &luCentre);
+            mVoice.SetParameter(4, 1.0f, &luMain);
+            mVoice.SetParameter(5, 0.0f, &luLfe);
+        }
+    }
+    return true;
+}
+
+void EmitterEffect::ProcessUpdate()
+{
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    CGS_ASSERT(lpModule != 0, "lpModule");
+    if (!lpModule)
+        return;
+
+    const BrnSound::World::StaticSoundEntity& lrEntity = GetSoundEntity();
+    const rw::math::vpu::Vector3 lListener =
+        lpModule->GetFrameInformation().mPlayerTransform.Pos();
+    const f32 lfDistance = rw::math::vpu::Length(lListener - lrEntity.GetPos());
+    const f32 lfRadius = static_cast<f32>(lrEntity.GetRadius());
+    const f32 lfDistanceGain = lfRadius > 0.0f
+        ? 1.0f - std::max(0.0f, std::min(1.0f, lfDistance / lfRadius))
+        : 0.0f;
+
+    const f32 lfVolume = GetRWACMixerOutputValue(0, 0);
+    const f32 lfReverb = GetRWACMixerOutputValue(4, 0);
+    const f32 lfPitch = GetRWACMixerOutputValue(mi16PitchOutput, 1);
+    const f32 lfAzimuth = GetRWACMixerOutputValue(3, 3);
+
+    const u32 luAzimuth = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("SimplePanningAzimuth"));
+    const u32 luPitch = static_cast<u32>(CgsSound::Playback::Name::MakeHash(
+        "~GenericRwacPlayerVoice::SK_PLAYER_PARAMETER_PITCH~"));
+    const u32 luSend = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("Send01"));
+    const u32 luReverb = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("ReverbSend"));
+    mVoice.SetParameter(1, lfAzimuth, &luAzimuth);
+    mVoice.SetParameter(0, lfPitch, &luPitch);
+    mVoice.SetGain(0, lfDistanceGain * lfVolume, &luSend);
+    mVoice.SetGain(1, lfReverb, &luReverb);
+    mVoice.Update();
+}
+
+bool EmitterEffect::Detach()
+{
+    mVoice.Release();
+    if (mp3dControl)
+        mp3dControl->AttachEmitterPosition(0);
+    return BrnEffectObject::Detach();
 }
 
 } // namespace World

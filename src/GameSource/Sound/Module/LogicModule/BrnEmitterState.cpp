@@ -2,7 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
-#include <cstring>   // std::memcpy (the 16-byte lvx/stvx entity copy)
+#include <cstring>
 
 // =============================================================================
 // BrnSound::Logic::World::EmitterState -- out-of-line bodies.
@@ -80,6 +80,29 @@ const char* EmitterState::GetTypeName() const
     return "EmitterState";
 }
 
+CgsSound::Logic::State* EmitterState::CreateObject(u32)
+{
+    return new EmitterState();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*
+EmitterState::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
+        0x70000, "EmitterState", 0, &EmitterState::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*
+EmitterState::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const
+    gpEmitterStateReg =
+        CgsSound::Logic::State::AddToClassTypeInfoArray(EmitterState::GetStaticTypeInfo());
+
 // ---------------------------------------------------------------------------
 // Attach  @ 0x826D2010
 //
@@ -103,8 +126,13 @@ const char* EmitterState::GetTypeName() const
 void EmitterState::Attach(void* lpvAttachment)
 {
     CGS_ASSERT(lpvAttachment != 0, "lpvAttachment");
-    std::memcpy(mEntity, lpvAttachment, sizeof(mEntity));   // 16-byte lvx128/stvx128 copy
+    mEntity = *static_cast<const BrnSound::World::StaticSoundEntity*>(lpvAttachment);
     State::Attach(nullptr);
+}
+
+void EmitterState::UpdateParams(f32 lfDeltaTime)
+{
+    CgsSound::Logic::State::UpdateParams(lfDeltaTime);
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +168,7 @@ bool EmitterState::IsAttachedToThis(void* lpvTestAttachment)
     CGS_ASSERT(lpvTestAttachment != 0, "lpvTestAttachment");
 
     const f32* lpTest = static_cast<const f32*>(lpvTestAttachment);      // test entity mPosPlus xyzw
-    const f32* lpMine = reinterpret_cast<const f32*>(mEntity);           // GetSoundEntity().mPosPlus
+    const f32* lpMine = reinterpret_cast<const f32*>(&mEntity);          // GetSoundEntity().mPosPlus
 
     // GetSoundEntity() asserts IsAttached() before yielding mEntity (position read).
     CGS_ASSERT(IsAttached(), "IsAttached()");

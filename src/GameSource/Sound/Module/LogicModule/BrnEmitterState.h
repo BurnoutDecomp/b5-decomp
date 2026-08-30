@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnState.h"
+#include "SharedClasses/Sound/World/BrnStaticSoundMap.h"
 
 // =============================================================================
 // BrnSound::Logic::World::EmitterState
@@ -52,6 +53,8 @@ struct EmitterState : public BrnSound::Logic::BrnState
     // order.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetStaticTypeInfo();
+    static CgsSound::Logic::State* CreateObject(u32 auType);
 
     // @ 0x826D1F70 -- scalar deleting destructor. The X360 thunk installs
     // EmitterState's own vtable (off_820AE1F4), calls State::DestroyEffects() to
@@ -70,6 +73,12 @@ struct EmitterState : public BrnSound::Logic::BrnState
     virtual void UpdateParams(f32 lfDeltaTime);
     virtual bool IsAttachedToThis(void* lpvTestAttachment);
 
+    const BrnSound::World::StaticSoundEntity& GetSoundEntity() const
+    {
+        CGS_ASSERT(IsAttached(), "IsAttached()");
+        return mEntity;
+    }
+
 private:
     // mEntity -- StaticSoundEntity (DWARF BrnEmitterState.h:117), the static sound
     // entity this state is attached to. StaticSoundEntity's full layout is deferred
@@ -81,7 +90,7 @@ private:
     // layout cascade the header note warned about. The X360 places it at this+0x60
     // (its w at this+0x6C); Attach's whole-vector copy and IsAttachedToThis's
     // per-lane float compare + w-high-word type compare are the only accesses.
-    alignas(16) u8 mEntity[16];
+    BrnSound::World::StaticSoundEntity mEntity;
 };
 
 } // namespace World

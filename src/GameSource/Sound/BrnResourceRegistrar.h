@@ -209,6 +209,12 @@ namespace Logic
         // requested list clearing its references, and queues any now-unreferenced node for removal.
         void RemoveRequests(IResourceRequester* lpRequester);
 
+        // BrnResourceRegistrar.cpp:398 -- relinquish one named resource for a
+        // requester.  Unlike RemoveRequests(), this preserves the requester's
+        // references to every other loaded resource.
+        void RemoveRefsToResource(IResourceRequester* lpRequester,
+                                  const char* lpcResourceName);
+
         // 0x826B0B08 -- resolve a (resourceName, bundleName) pair against the loading requested list;
         // returns the resolved ResourceHandle (or 0). a2 == bundle name (may be null), a3 == resource name.
         CgsResource::ResourceHandle* GetResource(const char* lpcBundleName, const char* lpcResourceName);

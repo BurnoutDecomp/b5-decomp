@@ -21,11 +21,163 @@
 #include "GameShared/GameClasses/Sound/Logic/Cgs3dEffectControl.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
+#include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
+
+#include <algorithm>
+#include <cmath>
 
 namespace CgsSound
 {
 namespace Logic
 {
+
+Cgs3dEffectControl::Cgs3dEffectControl()
+    : EffectControl()
+    , mfDistanceToMic()
+    , mfVelocityToMic()
+    , mpEmitterPosition(0)
+    , mpEmitterDirection(0)
+    , mEmitterPosition()
+    , mEmitterDirection()
+    , mDebugRenderingMessageData()
+{
+}
+
+ClassTypeInfo<EffectControl>* Cgs3dEffectControl::GetTypeInfo() const
+{
+    static ClassTypeInfo<EffectControl> sTypeInfo(
+        0, "Cgs3dEffectControl", EffectControl::GetStaticTypeInfo(), 0);
+    return &sTypeInfo;
+}
+
+const char* Cgs3dEffectControl::GetTypeName() const
+{
+    return "Cgs3dEffectControl";
+}
+
+void Cgs3dEffectControl::AttachEmitterPosition(
+    const rw::math::vpu::Vector3* apPosition)
+{
+    mpEmitterPosition = apPosition;
+}
+
+void Cgs3dEffectControl::AttachEmitterDirection(
+    const rw::math::vpu::Vector3* apDirection)
+{
+    mpEmitterDirection = apDirection;
+}
+
+void Cgs3dEffectControl::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
+{
+    CGS_ASSERT(apMessageHeader != 0, "lpMessageHeader");
+    if (apMessageHeader)
+    {
+        const f32* lpfPayload = reinterpret_cast<const f32*>(apMessageHeader + 1);
+        mDebugRenderingMessageData.mfYOffset = lpfPayload[0];
+        mDebugRenderingMessageData.mfRadius = lpfPayload[1];
+        mDebugRenderingMessageData.mbEnable = lpfPayload[2] != 0.0f;
+    }
+}
+
+bool Cgs3dEffectControl::Detach()
+{
+    EffectBase::Detach();
+    if (GetDMixIOPtr())
+    {
+        SetMixerInputValueUnbound(3, 0);
+        SetMixerInputValueUnbound(1, -1);
+        SetMixerInputValueUnbound(2, 0);
+        SetMixerInputValueUnbound(0, -1);
+        SetMixerInputValueUnbound(
+            15, GetDMixIOPtr()->GetDMixInput(15) & ~1);
+    }
+    return true;
+}
+
+void Cgs3dEffectControl::UpdateParams(f32 afDeltaTime)
+{
+    if (!mpEmitterPosition)
+    {
+        if (GetDMixIOPtr())
+        {
+            SetMixerInputValueUnbound(3, 0);
+            SetMixerInputValueUnbound(1, -1);
+            SetMixerInputValueUnbound(2, 0);
+            SetMixerInputValueUnbound(0, -1);
+            SetMixerInputValueUnbound(
+                15, GetDMixIOPtr()->GetDMixInput(15) & ~1);
+        }
+        return;
+    }
+
+    mEmitterPosition.Update(*mpEmitterPosition);
+    if (mpEmitterDirection)
+        mEmitterDirection.Update(*mpEmitterDirection);
+    if (GetDMixIOPtr())
+        SetMixerInputValueUnbound(15, GetDMixIOPtr()->GetDMixInput(15) | 1);
+    Generate3DParams(0);
+    UpdateDoppler(afDeltaTime, 0);
+}
+
+s32 Cgs3dEffectControl::GetPanningAngle(
+    MicrophoneSystem& arMicSystem, MicrophoneSystem::EMicPositions aePosition)
+{
+    const rw::math::vpu::Vector3& lrMicPos =
+        arMicSystem.GetMicrophone(aePosition, MicrophoneSystem::E_PLAYER_1)
+            ->GetMicrophoneMatrix().wAxis;
+    const rw::math::vpu::Vector3& lrMicForward =
+        arMicSystem.GetMicrophone(aePosition, MicrophoneSystem::E_PLAYER_1)
+            ->GetMicrophoneMatrix().zAxis;
+    const f32 lfDx = mpEmitterPosition->x - lrMicPos.x;
+    const f32 lfDz = mpEmitterPosition->z - lrMicPos.z;
+    const f32 lfFx = lrMicForward.x;
+    const f32 lfFz = lrMicForward.z;
+    const f32 lfLength = std::sqrt(lfDx * lfDx + lfDz * lfDz);
+    const f32 lfForwardLength = std::sqrt(lfFx * lfFx + lfFz * lfFz);
+    if (lfLength <= 0.0001f || lfForwardLength <= 0.0001f)
+        return 0;
+    const f32 lfDot = std::max(-1.0f, std::min(1.0f,
+        (lfDx * lfFx + lfDz * lfFz) / (lfLength * lfForwardLength)));
+    f32 lfDegrees = std::acos(lfDot) * 57.2957795f;
+    if (lfFx * lfDz - lfFz * lfDx < 0.0f)
+        lfDegrees = 360.0f - lfDegrees;
+    return static_cast<s32>(lfDegrees);
+}
+
+void Cgs3dEffectControl::UpdateDoppler(f32 afDeltaTime, s32)
+{
+    if (!mpEmitterPosition || !GetDMixIOPtr())
+        return;
+
+    MicrophoneSystem& lrMicSystem =
+        GetLogicModule()->GetEnvironment().GetMicrophoneSystem();
+    for (s32 liMic = 0; liMic < 2; ++liMic)
+    {
+        const rw::math::vpu::Vector3& lrMicPos =
+            lrMicSystem.GetMicrophone(
+                MicrophoneSystem::E_MIC_PLAYER,
+                static_cast<MicrophoneSystem::EPlayer>(liMic))
+                ->GetMicrophoneMatrix().wAxis;
+        const f32 lfDistance = rw::math::vpu::Length(*mpEmitterPosition - lrMicPos);
+        const f32 lfPrevious = mfDistanceToMic[liMic].GetCurrent();
+        mfDistanceToMic[liMic].Update(lfDistance);
+        const f32 lfVelocity = (lfDistance - lfPrevious) /
+            (afDeltaTime == 0.0f ? 1.0f : afDeltaTime);
+        const f32 lfPreviousVelocity = mfVelocityToMic[liMic].GetCurrent();
+        mfVelocityToMic[liMic].Update(lfVelocity);
+        if ((lfVelocity < 0.0f && lfPreviousVelocity > 0.0f) ||
+            (lfVelocity > 0.0f && lfPreviousVelocity < 0.0f))
+        {
+            const s32 liFlag = liMic == 0 ? static_cast<s32>(0x80000000u)
+                                          : 0x40000000;
+            SetMixerInputValueUnbound(
+                15, GetDMixIOPtr()->GetDMixInput(15) | liFlag);
+        }
+        SetMixerInputValueUnbound(13 + liMic,
+                                  static_cast<s32>(lfVelocity * 100.0f));
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Cgs3dEffectControl::SetMixerInputValueUnbound  @ 0x82682570
@@ -78,18 +230,13 @@ void Cgs3dEffectControl::Generate3DParams(s32 /*aiUnused*/)
 {
     CGS_ASSERT(mpEmitterPosition, "mpEmitterPosition");
 
-    // GetLogicModule() (EffectBase +0x28) + 0x29A0 == CgsSound::Logic::Module::mMicrophoneSystem.
-    u8* lpModule = reinterpret_cast<u8*>(GetLogicModule());
     MicrophoneSystem& lrMicSystem =
-        *reinterpret_cast<MicrophoneSystem*>(lpModule + 0x29A0);
+        GetLogicModule()->GetEnvironment().GetMicrophoneSystem();
 
-    const s32* lpiNumPlayers = reinterpret_cast<const s32*>(&lrMicSystem);
-
-    if (*lpiNumPlayers == 1)
+    if (true)
     {
         if (GetDMixIOPtr())
         {
-            const u8* lpMicSys = reinterpret_cast<const u8*>(&lrMicSystem);
             const rw::math::vpu::Vector3& lrEmitterPos = *mpEmitterPosition;
 
             // slot 3: panning angle to mic 0 (E_MIC_CAMERA).
@@ -98,7 +245,9 @@ void Cgs3dEffectControl::Generate3DParams(s32 /*aiUnused*/)
 
             // slot 1: distance emitter -> mic 0 listener position (micSys+0x40), *100.
             const rw::math::vpu::Vector3& lrMic0Pos =
-                *reinterpret_cast<const rw::math::vpu::Vector3*>(lpMicSys + 0x40);
+                lrMicSystem.GetMicrophone(MicrophoneSystem::E_MIC_CAMERA,
+                                          MicrophoneSystem::E_PLAYER_1)
+                    ->GetMicrophoneMatrix().wAxis;
             f32 lfDist0 = rw::math::vpu::Length(lrMic0Pos - lrEmitterPos) * 100.0f;
             SetMixerInputValueUnbound(1, static_cast<s32>(lfDist0));
 
@@ -108,14 +257,12 @@ void Cgs3dEffectControl::Generate3DParams(s32 /*aiUnused*/)
 
             // slot 0: distance emitter -> mic 1 listener position (micSys+0x180), *100.
             const rw::math::vpu::Vector3& lrMic1Pos =
-                *reinterpret_cast<const rw::math::vpu::Vector3*>(lpMicSys + 0x180);
+                lrMicSystem.GetMicrophone(MicrophoneSystem::E_MIC_PLAYER,
+                                          MicrophoneSystem::E_PLAYER_1)
+                    ->GetMicrophoneMatrix().wAxis;
             f32 lfDist1 = rw::math::vpu::Length(lrMic1Pos - lrEmitterPos) * 100.0f;
             SetMixerInputValueUnbound(0, static_cast<s32>(lfDist1));
         }
-    }
-    else if (*lpiNumPlayers != 0)
-    {
-        CGS_ASSERT(false, "Two Player game not supported yet. Needs some work.");
     }
 }
 

@@ -43,10 +43,10 @@ namespace Io
 
         // BrnSoundRootSharedIO.h:71 -- own TU (declared-only here).
         void Construct(eLoadEvent leEvent, u16 lu16Zone);
-        // BrnSoundRootSharedIO.h:78 -- own TU.
-        eLoadEvent GetEvent() const;
-        // BrnSoundRootSharedIO.h:85 -- own TU.
-        u16 GetZone() const;
+        // BrnSoundRootSharedIO.h:78/:85. The console inlines both one-field reads
+        // into SoundWorldScene::Update.
+        eLoadEvent GetEvent() const { return meEvent; }
+        u16 GetZone() const { return mu16Zone; }
 
     private:
         eLoadEvent meEvent;   // :91

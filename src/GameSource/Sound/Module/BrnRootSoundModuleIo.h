@@ -10,6 +10,7 @@
 #include <cstring>                                      // memset (RootOutputBuffer::Construct trailing-state clear)
 #include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h" // AudioEffectsMessageQueue (adopted real type)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // AudioCarDataLoadedEvent (queue element)
+#include "GameSource/Sound/Module/SharedIO/BrnSoundRootSharedIO.h"
 #include "GameSource/Replays/BrnReplayRequestInterface.h" // BrnReplays::ReplayIO::RequestInterface (the replay request member; phase C1)
 
 // =============================================================================
@@ -240,7 +241,8 @@ namespace Io
         struct DeformationInterface          { u8 mData[4]; };
         struct ScoringOutputInterface        { u8 mData[0xAB0]; };   // XMemCpy 0xAB0 (SetScoringInterface)
         struct OnlineScoringOutputInterface  { u8 mData[0xA4]; };    // memcpy 0xA4  (SetOnlineScoringInterface)
-        struct SoundWorldLoadInterface       { u8 mData[16]; };
+        typedef CgsModule::EventQueue<BrnSound::Module::Io::SoundWorldLoadEvent, 25>
+                                                SoundWorldLoadInterface;
         struct GuiEventQueue                 { u8 mData[4]; };
         struct GameModeOutputInterface       { u8 mData[0x10]; };    // 4-word copy (SetGameModeInterface)
         struct UpdateInfo                    { u8 mData[1]; };       // single-byte copy (SetUpdateInfo)
@@ -272,6 +274,7 @@ namespace Io
         EActiveRaceCarIndex GetPlayerActiveRaceCarIndex() const;
         // X360 0x82694550 -- the per-frame update info @ +0xEBBC.
         const UpdateInfo* GetUpdateInfo() const;
+        const SoundWorldLoadInterface* GetWorldLoadInterface() const;
         // X360 0x826947F0 -- the online-scoring output interface @ +0xEA30 (folded bare class).
         const OnlineScoringOutputInterface* GetOnlineScoringInterface() const;
         // X360 0x826945F8 -- the game-mode output interface @ +0xEBAC (folded bare class).
@@ -320,6 +323,7 @@ namespace Io
         // root input's own audio-car-loaded queue @ +0xED50 -- BridgeWorldToSound's
         // append target.
         AudioCarLoadedDataQueue* GetAudioCarDataLoadedQueue();
+        const AudioCarLoadedDataQueue* GetAudioCarDataLoadedQueueForRead() const;
 
     private:
         u8 maPad0[0x004 - sizeof(CgsModule::IOBuffer)];                               // base end -> +0x00004
@@ -354,7 +358,6 @@ namespace Io
         OnlineScoringOutputInterface  mOnlineScoringInterface;     // @ +0x0EA30
         // (no pad: OnlineScoringOutputInterface is 0xA4, filling 0xEA30..0xEAD4 exactly)
         SoundWorldLoadInterface       mWorldLoadInterface;         // @ +0x0EAD4
-        u8 maPad11[0xEBA8 - (0xEAD4 + sizeof(SoundWorldLoadInterface))];
         const GuiEventQueue*          mpGuiEventQueue;             // @ +0x0EBA8 (host-widens past here)
         GameModeOutputInterface       mGameModeInterface;          // @ +0x0EBAC
         UpdateInfo                    mUpdateInfo;                 // @ +0x0EBBC
@@ -433,6 +436,7 @@ namespace Io
         mVehicleData.Clear();                       // @0x8227D550 -- the interface's own Clear
         mGameActionQueue.Construct();               // VEQ Construct runs Clear() itself
         mGameEventQueue.Construct();                // the C4 fix: BridgeWorldToSound's append target
+        mWorldLoadInterface.Construct();            // EventQueue<SoundWorldLoadEvent,25>
         mpGuiEventQueue = 0;
         std::memset(&mGameModeInterface, 0xFF, sizeof(mGameModeInterface));   // -1 x4 words
         std::memset(&mReplayStatusInterface, 0, sizeof(mReplayStatusInterface));

@@ -16,6 +16,15 @@ class ObjectPool
 public:
     static const s32 KI_CAPACITY = N;
 
+    // Every X360 owner that default-constructs an ObjectPool inlines this same
+    // all-free seed: descending free indices, a full free count, and no occupied
+    // bits.  StateManager relies on that post-state immediately when resource
+    // callbacks register their Content objects.
+    ObjectPool()
+    {
+        Clear();
+    }
+
     // Reset the pool to its all-free state. X360 (SceneManagerEntity<10000,s32>::Clear
     // @0x828B8E30 / VolumeInstance<5048,s32>::Clear, both called by EntityManager::Prepare
     // @0x828C5FC8): memset the occupancy BitArray to 0, refill the free queue DESCENDING

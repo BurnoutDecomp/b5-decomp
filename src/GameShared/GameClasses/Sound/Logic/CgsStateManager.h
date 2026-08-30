@@ -8,6 +8,8 @@
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h"     // CgsContainers::ObjectPool
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsObject.h"     // CgsSound::Playback::Object
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"     // CgsSound::Playback::Name
+#include "GameShared/GameClasses/Sound/Logic/CgsContent.h"       // CgsSound::Logic::Content
 
 // The IO message header the Notify hook receives (full home CgsMessage.h;
 // pointer-only here).
@@ -142,28 +144,10 @@ public:
     class RegisteredContent
     {
     public:
-        RegisteredContent() : muLeading(0), mpContent(0), muTrailing(0) {}
+        RegisteredContent() : mName(), mContent() {}
 
-        // Drop the reference this slot holds on its content object and dispose the
-        // object when no references remain. Recovered from the inlined per-element
-        // teardown in the pool destructor at 0x826EAC90.
-        virtual ~RegisteredContent()
-        {
-            if (mpContent != 0)
-            {
-                CGS_ASSERT(mpContent->GetRefCount() > 0, "mu32RefCount > 0");
-                mpContent->Release();
-                if (mpContent->GetRefCount() == 0)
-                {
-                    mpContent->DoDispose();
-                }
-            }
-        }
-
-    private:
-        u32                         muLeading;   // +0x00 opaque (untouched by recon'd code)
-        CgsSound::Playback::Object* mpContent;   // +0x08 held refcounted content, or null
-        u32                         muTrailing;  // +0x0C opaque (untouched by recon'd code)
+        CgsSound::Playback::Name mName;       // +0x00
+        CgsSound::Logic::Content mContent;    // +0x04 (12 bytes on X360)
     };
 
     // CgsStateManager.h (ctor home @ 0x826FAA18). Construct: install the vtable
@@ -247,6 +231,12 @@ public:
     // it, body left to the State-machine group.
     // FLAG (declared-only): no body here -- see CgsState.* / the State group.
     bool PrepareStates(s32 liStateMask, s32 liInstancesPerState, s32 liStartState);
+
+    // Content registry @ 0x826AC9F8 / 0x826C7740. The key is the playback Name
+    // stored at element +0 and the returned Content is the embedded sub-object at
+    // element +4.
+    Content* GetContent(const CgsSound::Playback::Name& arName);
+    Content* RegisterContent(const CgsSound::Playback::Name& arName);
 
     // CgsStateManager.h:363 (DWARF) @ 0x8268DFE8. Register a per-class RTTI
     // descriptor into StateManager's static ClassTypeInfo<StateManager> array.

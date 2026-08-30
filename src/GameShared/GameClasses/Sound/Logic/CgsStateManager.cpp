@@ -98,6 +98,35 @@ StateManager::StateManager()
 {
 }
 
+Content* StateManager::GetContent(const CgsSound::Playback::Name& arName)
+{
+    for (s32 liSlot = 0; liSlot < KI_NUM_CONTENT_SLOTS; ++liSlot)
+    {
+        if (mContentPool.IsObjectAllocated(liSlot))
+        {
+            RegisteredContent& lrEntry = mContentPool[liSlot];
+            if (lrEntry.mName == arName)
+                return &lrEntry.mContent;
+        }
+    }
+    return 0;
+}
+
+Content* StateManager::RegisterContent(const CgsSound::Playback::Name& arName)
+{
+    CGS_ASSERT(GetContent(arName) == 0,
+               "You cannot register content multiple times.");
+
+    const s32 liSlot = mContentPool.AllocateObject();
+    CGS_ASSERT(liSlot != -1, "No free registered content slots.");
+    if (liSlot == -1)
+        return 0;
+
+    RegisteredContent& lrEntry = mContentPool[liSlot];
+    lrEntry.mName = arName;
+    return &lrEntry.mContent;
+}
+
 // ---------------------------------------------------------------------------
 // StateManager::~StateManager()  @ 0x826FAAB8 (the X360 vector deleting destructor)
 //
