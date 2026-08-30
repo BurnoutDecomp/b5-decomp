@@ -23,7 +23,7 @@ namespace Playback
 //   size = 20*(sc + ipc) + 12*(sendCount + oc) + 140
 // Allocated through the Factory's Environment RenderWare IResourceAllocator (same
 // shape as the committed GenericRwacVoiceConfig::operator new).
-void* SplicerPlayerVoice::operator new(size_t /*auSize*/, Factory& arFactory,
+void* SplicerPlayerVoice::operator new(size_t auSize, Factory& arFactory,
                                        const VoiceSpec& arVoiceSpec)
 {
     const u32 lu32OutputParameterCount = arVoiceSpec.GetOutputParameterCount();
@@ -32,17 +32,21 @@ void* SplicerPlayerVoice::operator new(size_t /*auSize*/, Factory& arFactory,
     const u32 lu32InputParameterCount  = lu32ParameterCount - lu32OutputParameterCount;
     const u32 lu32SlotCount            = arVoiceSpec.GetSlotCount();
 
-    const u32 lu32Size =
-        20u * (lu32SlotCount + lu32InputParameterCount) +
-        12u * (lu32SendCount + lu32OutputParameterCount) +
-        140u;
+    // ARTIST's fixed 140-byte client and 20/12-byte tail records become their
+    // native host sizes. The compiler-supplied auSize is sizeof the widened
+    // SplicerPlayerVoice and the Voice constructor uses the same four sizeofs.
+    const size_t luSize = auSize +
+        sizeof(Slot) * lu32SlotCount +
+        sizeof(InputParameter) * lu32InputParameterCount +
+        sizeof(Send) * lu32SendCount +
+        sizeof(OutputParameter) * lu32OutputParameterCount;
 
     rw::IResourceAllocator* lpAllocator = arFactory.GetEnvironment().GetAllocator();
 
     // X360 stack build: a FIVE-entry serialised descriptor (40B). desc[0] = { size, 4 };
     // desc[1..4] = { 0, 1 }.
     CgsResource::ResourceDescriptor lDescriptor;
-    lDescriptor.m_baseResourceDescriptors[0].m_size = lu32Size;
+    lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(luSize);
     lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4;
     for (u32 luIndex = 1; luIndex < 5; ++luIndex)
     {

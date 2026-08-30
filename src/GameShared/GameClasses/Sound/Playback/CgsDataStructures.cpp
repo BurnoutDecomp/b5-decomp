@@ -11,6 +11,7 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsContent.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
@@ -23,6 +24,42 @@ namespace Playback
 // X360 global dword_82FFB9DC). Concrete fixers link themselves on via their ctor
 // (DEFERRED). Starts empty.
 const IEntityFixer* IEntityFixer::spHead = 0;
+
+IEntityFixer::IEntityFixer()
+    : mpNext(spHead)
+{
+    spHead = this;
+}
+
+IEntityFixer::~IEntityFixer()
+{
+    const IEntityFixer** lppFixer = &spHead;
+    while (*lppFixer != 0 && *lppFixer != this)
+        lppFixer = &const_cast<IEntityFixer*>(*lppFixer)->mpNext;
+    if (*lppFixer == this)
+        *lppFixer = mpNext;
+}
+
+// CgsDataStructures.cpp:40-48. The concrete fixer instances are deliberately
+// process-lifetime objects; their base constructors populate spHead.
+namespace
+{
+    const EntityFixer<ContentClass>    sContentClassFixer;
+    const EntityFixer<ContentType>     sContentTypeFixer;
+    const EntityFixer<ParameterSchema> sParameterSchemaFixer;
+    const EntityFixer<SlotSchema>      sSlotSchemaFixer;
+    const EntityFixer<FeatureSchema>   sFeatureSchemaFixer;
+    const EntityFixer<VoiceSchema>     sVoiceSchemaFixer;
+    const EntityFixer<VoiceSpec>       sVoiceSpecFixer;
+    const EntityFixer<ContentSpec>     sContentSpecFixer;
+}
+
+const Name ContentClass::SK_TYPE_NAME("~ContentClass~");
+const Name ContentType::SK_TYPE_NAME("~ContentType~");
+const Name ParameterSchema::SK_TYPE_NAME("~ParameterSchema~");
+const Name SlotSchema::SK_TYPE_NAME("~SlotSchema~");
+const Name FeatureSchema::SK_TYPE_NAME("~FeatureSchema~");
+const Name VoiceSchema::SK_TYPE_NAME("~VoiceSchema~");
 
 // IEntityFixer::GetFixer @ 0x826809B0
 //

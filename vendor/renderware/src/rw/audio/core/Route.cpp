@@ -10,6 +10,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/Route.h"
+#include "rw/audio/core/MixKernels.h" // MixWithGain
 #include "rw/audio/core/SubMix.h" // SubMix (the real class; moved out of SubMixConnector.h)
 
 namespace rw
@@ -30,9 +31,28 @@ static void* const skpRouteVTable = &skRouteVTableSlot;
 // second host address vs Send.cpp).
 static void* const skpRouteBaseVTable = gpBasePlugInVTableSentinel;
 
-// off_82F8FBC8 -- the static "Route" plug-in run-time descriptor: a pointer to the
-// type-name string. GetPlugInDescRunTime returns &off_82F8FBC8 (a char**).
-static char* const skpRouteDescName = const_cast<char*>("Route");
+// PlugIn::CreateInstance dispatches every descriptor through the common
+// int(PlugIn*, void*) ABI. Route's console constructor ignores the context word.
+static int RouteCreateInstanceThunk(PlugIn *self, void *)
+{
+    return Route::CreateInstance(reinterpret_cast<Route *>(self));
+}
+
+// off_82F8FBC8 -- the complete mutable Route descriptor. RegisterPlugInRunTime threads
+// the record through mpNext and writes mbSeq, so this must be real writable descriptor
+// storage rather than the former single read-only name pointer.
+static PlugInDescRunTime g_RouteDesc = {
+    "Route",
+    reinterpret_cast<void *>(&Route::GetSize),             // @0x82B982F8
+    reinterpret_cast<void *>(&RouteCreateInstanceThunk),   // @0x82BA3D40
+    0,
+    reinterpret_cast<void *>(&Route::Process),             // @0x82B9B268
+    0, 0, 0, 0,
+    0,
+    0x526F7530u,       // 'Rou0'
+    4, 0, 0, 1, 0, 0,
+    0
+};
 
 // -------------------------------------------------------------------------------------
 // CreateInstance @0x82BA3D40
@@ -42,22 +62,21 @@ static char* const skpRouteDescName = const_cast<char*>("Route");
 // The +0x2C/+0x30/+0x34 stores clear the embedded connector's mField08 / mpSubMix /
 // mbField10; the +0x38 loop clears maChannelGain[0..5].
 // -------------------------------------------------------------------------------------
-int Route::CreateInstance(int a1)
+int Route::CreateInstance(Route *self)
 {
-    if (a1)
+    if (self)
     {
-        Route* lpSelf = reinterpret_cast<Route*>(a1);
-        lpSelf->mpVTable = skpRouteVTable;        // *a1 = off_8217F524
-        lpSelf->mSubMixConnector.mpSubMixBuffer = 0;    // stw 0, 0x2C(a1)
-        lpSelf->mSubMixConnector.mpSubMix = 0;          // stw 0, 0x30(a1)
-        lpSelf->mSubMixConnector.mNumSubMixChannels = 0;// stb 0, 0x34(a1)
+        self->mBase.mpVTable = skpRouteVTable;                 // *self = off_8217F524
+        self->mSubMixConnector.mpSubMixBuffer = 0;             // stw 0, 0x2C(a1)
+        self->mSubMixConnector.mpSubMix = 0;                   // stw 0, 0x30(a1)
+        self->mSubMixConnector.mNumSubMixChannels = 0;         // stb 0, 0x34(a1)
 
         // The X360 zeroes the 6-dword gain array (a1+0x38) AFTER the beq, i.e.
         // unconditionally; reproducing that literally through a null a1 would be a
         // host null-store. The only real caller always passes a valid buffer, so the
         // (semantically identical) guarded form is used.
         for (int li = 0; li < 6; ++li)
-            lpSelf->mDeClickValue[li] = 0.0f;     // stw 0 -> +0x38 + 4*i
+            self->mDeClickValue[li] = 0.0f;                    // stw 0 -> +0x38 + 4*i
     }
     return 1;
 }
@@ -79,7 +98,42 @@ int Route::GetSize()
 // -------------------------------------------------------------------------------------
 char** Route::GetPlugInDescRunTime()
 {
-    return const_cast<char**>(&skpRouteDescName);
+    return reinterpret_cast<char **>(&g_RouteDesc);
+}
+
+// -------------------------------------------------------------------------------------
+// Process @0x82B9B268 -- route selected source channels into the attached SubMix.
+//   if (!connector.mNumSubMixChannels) return 1
+//   dst = connector.mpSubMixBuffer + targetStart * 256
+//   for (i = 0; i < mNumChannels; ++i) {
+//       src = ctx->mpSrcBuffer->mpSamples
+//           + (sourceStart + i) * ctx->mpSrcBuffer->muStride
+//       MixWithGain(dst, src, 1.0f, 256)
+//       mDeClickValue[targetStart + i] = src[255]
+//       dst += 256
+//   }
+// -------------------------------------------------------------------------------------
+int Route::Process(Route *self, AudioProcessContext *ctx, char /*resetRamp*/)
+{
+    if (!self->mSubMixConnector.mNumSubMixChannels)
+        return 1;
+
+    f32 *lpDestination = self->mSubMixConnector.mpSubMixBuffer
+        + static_cast<u32>(self->mTargetStartChannel) * Mixer::KU_FRAME_SIZE;
+    AudioChannelBuffer *lpSourceBuffer = ctx->mpSrcBuffer;
+
+    for (u32 luChannel = 0; luChannel < self->mNumChannels; ++luChannel)
+    {
+        const u32 luSourceChannel = static_cast<u32>(self->mSourceStartChannel) + luChannel;
+        const f32 *lpSource = lpSourceBuffer->mpSamples
+            + static_cast<u32>(lpSourceBuffer->muStride) * luSourceChannel;
+
+        MixWithGain(lpDestination, lpSource, 1.0f, Mixer::KU_FRAME_SIZE);
+        self->mDeClickValue[static_cast<u32>(self->mTargetStartChannel) + luChannel]
+            = lpSource[Mixer::KU_FRAME_SIZE - 1];
+        lpDestination += Mixer::KU_FRAME_SIZE;
+    }
+    return 1;
 }
 
 // -------------------------------------------------------------------------------------
@@ -92,7 +146,7 @@ char** Route::GetPlugInDescRunTime()
 // -------------------------------------------------------------------------------------
 Route* Route::EventEvent(Route* self, int /*a2*/, const RouteConnectEvent* pEvent)
 {
-    System* lpSystem = self->mpSystem;                             // v3 = *(result+4)
+    System* lpSystem = static_cast<System *>(self->mBase.mpSystem); // v3 = *(result+4)
     char* lpRingBase = lpSystem->mpDeferredRingBase;               // *(v3+0x20)
 
     u32 luCursor = lpSystem->muDeferredRingCursor;                 // *(v3+0x10B8)
@@ -123,16 +177,15 @@ Route* Route::EventEvent(Route* self, int /*a2*/, const RouteConnectEvent* pEven
 //   zero 6 dwords at a1+0x38 (the gain array)
 //   return result
 // -------------------------------------------------------------------------------------
-int Route::ReleaseEvent(int a1)
+SubMixConnector *Route::ReleaseEvent(Route *self)
 {
-    Route* lpSelf = reinterpret_cast<Route*>(a1);
     SubMixConnector* lpResult =
-        SubMixConnector::Disconnect(&lpSelf->mSubMixConnector, lpSelf->mDeClickValue); // r3 = a1+0x24, r4 = a1+0x38
+        SubMixConnector::Disconnect(&self->mSubMixConnector, self->mDeClickValue); // r3 = a1+0x24, r4 = a1+0x38
 
     for (int li = 0; li < 6; ++li)
-        lpSelf->mDeClickValue[li] = 0.0f; // stw 0 -> +0x38 + 4*i
+        self->mDeClickValue[li] = 0.0f; // stw 0 -> +0x38 + 4*i
 
-    return static_cast<int>(reinterpret_cast<uintptr_t>(lpResult));
+    return lpResult;
 }
 
 // -------------------------------------------------------------------------------------

@@ -325,7 +325,11 @@ public:
     // NUL-terminated string via Name::MakeHash. Kept as the raw serialised-blob
     // word view (serialised record; the committed Registry's pointer members widen
     // on host, so the console word indices cannot be taken through the real type).
-    void ImportStringTable(const u32* lpStringTableResource);
+    void ImportStringTable(const Registry& arRegistry);
+
+    // @0x826C7BE8. Fix, self-resolve and merge a loaded serialized registry into
+    // the environment (1), AEMS (2), or generic-RWAC (3) factory registry.
+    void AddRegistry(Registry& arRegistry, u32 au32RegistryId);
 
     // Module::AttachVoice @ 0x826D7D80 (DWARF h:345: AttachVoice(Handle<Voice>,
     // Handle<Content>, u32) -- the content param is a CONTENT handle; the old rival

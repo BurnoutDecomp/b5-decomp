@@ -11,6 +11,7 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/CgsContentSpecFixer.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsContent.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
@@ -19,43 +20,58 @@ namespace CgsSound
 namespace Playback
 {
 
-void ContentSpecFixer::DoFixDown(const Entity& arEntity) const
+template <>
+Name EntityFixer<ContentSpec>::DoGetTypeName() const
 {
-    CGS_ASSERT(arEntity.mTypeName.GetValue() == SK_TYPE_NAME.GetValue(),
+    return ContentSpec::SK_TYPE_NAME;
+}
+
+template <>
+void EntityFixer<ContentSpec>::DoFixDown(Entity& arEntity) const
+{
+    CGS_ASSERT(arEntity.mTypeName.GetValue() == ContentSpec::SK_TYPE_NAME.GetValue(),
                "ContentSpec::SK_TYPE_NAME == lEntity.GetTypeName()");
 }
 
-void ContentSpecFixer::DoFixUp(const Entity& arEntity) const
+template <>
+void EntityFixer<ContentSpec>::DoFixUp(Entity& arEntity) const
 {
-    CGS_ASSERT(arEntity.mTypeName.GetValue() == SK_TYPE_NAME.GetValue(),
+    CGS_ASSERT(arEntity.mTypeName.GetValue() == ContentSpec::SK_TYPE_NAME.GetValue(),
                "ContentSpec::SK_TYPE_NAME == lEntity.GetTypeName()");
 }
 
-void ContentSpecFixer::DoRelocate(Entity& arEntity, u8* apu8Base,
-                                  const Registry& arRegistryTo,
-                                  const Registry& arRegistryFrom) const
+template <>
+void EntityFixer<ContentSpec>::DoRelocate(Entity& arEntity, u8* apu8Base,
+                                          const Registry& arRegistryTo,
+                                          const Registry& arRegistryFrom) const
 {
-    CGS_ASSERT(arEntity.mTypeName.GetValue() == SK_TYPE_NAME.GetValue(),
+    CGS_ASSERT(arEntity.mTypeName.GetValue() == ContentSpec::SK_TYPE_NAME.GetValue(),
                "ContentSpec::SK_TYPE_NAME == lEntity.GetTypeName()");
 
-    RelocateMemberPointer<ContentType>(GetContentTypeSlot(arEntity),
+    ContentSpec& lrContentSpec = static_cast<ContentSpec&>(arEntity);
+    RelocateMemberPointer<ContentType>(&lrContentSpec.mpContentType,
                                        apu8Base, arRegistryTo, arRegistryFrom);
 }
 
-void ContentSpecFixer::DoResolve(Entity& arEntity, const Registry& arRegistry) const
+template <>
+void EntityFixer<ContentSpec>::DoResolve(Entity& arEntity,
+                                         const Registry& arRegistry) const
 {
-    CGS_ASSERT(arEntity.mTypeName.GetValue() == SK_TYPE_NAME.GetValue(),
+    CGS_ASSERT(arEntity.mTypeName.GetValue() == ContentSpec::SK_TYPE_NAME.GetValue(),
                "ContentSpec::SK_TYPE_NAME == lEntity.GetTypeName()");
 
-    ResolveMemberPointer<ContentType>(GetContentTypeSlot(arEntity), arRegistry);
+    ContentSpec& lrContentSpec = static_cast<ContentSpec&>(arEntity);
+    ResolveMemberPointer<ContentType>(&lrContentSpec.mpContentType, arRegistry);
 }
 
-void ContentSpecFixer::DoUnresolve(Entity& arEntity) const
+template <>
+void EntityFixer<ContentSpec>::DoUnresolve(Entity& arEntity) const
 {
-    CGS_ASSERT(arEntity.mTypeName.GetValue() == SK_TYPE_NAME.GetValue(),
+    CGS_ASSERT(arEntity.mTypeName.GetValue() == ContentSpec::SK_TYPE_NAME.GetValue(),
                "ContentSpec::SK_TYPE_NAME == lEntity.GetTypeName()");
 
-    UnresolveMemberPointer<ContentType>(GetContentTypeSlot(arEntity));
+    ContentSpec& lrContentSpec = static_cast<ContentSpec&>(arEntity);
+    UnresolveMemberPointer<ContentType>(&lrContentSpec.mpContentType);
 }
 
 } // namespace Playback

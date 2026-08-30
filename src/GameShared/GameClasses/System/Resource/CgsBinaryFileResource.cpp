@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"
+#include "GameShared/GameClasses/System/Resource/CgsAlignedBinaryFileResource.h"
 #include "rw/rwcore_structs.h"   // rw::BaseResourceDescriptors<5> complete for the body
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x828EC990
@@ -20,6 +21,11 @@ namespace CgsResource
     // subclass is instantiated/registered.
     BinaryFileResourceType::BinaryFileResourceType()
         : Type()
+    {
+    }
+
+    AlignedBinaryFileResourceType::AlignedBinaryFileResourceType()
+        : BinaryFileResourceType()
     {
     }
 

@@ -14,6 +14,7 @@
 #include "GameSource/Sound/BrnResourceRegistrar.h"               // BrnSound::Logic::IResourceRequester (base) + ResourceRegistrar (member)
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"   // CgsSound::Logic::Environment + canonical CgsSound::Logic::StateManager (the 9-slot map + the CreateStateMan factory)
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h" // CgsSound::Logic::Module -- the REAL engine base (phase B5)
+#include "GameShared/GameClasses/Sound/Logic/CgsVoice.h"            // the three stage-2 logic voices
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"           // Io::PreUpdateOutput (the by-value pre-update block; phase C1)
 
 // =============================================================================
@@ -216,6 +217,10 @@ private:
     rw::IResourceAllocator* mpBrnAllocator;         // X360 word 19777 (byte +0x4D04)
 
     Array<BrnGameState::GameStateModuleIO::SoundTriggerAction, 16> maTriggerActions; // h:372 (X360 this+0x4CA0)
+
+    CgsSound::Logic::Voice mMasterVoice;       // X360 this+0x51F0, ident 1
+    CgsSound::Logic::Voice mGlobalReverbVoice; // X360 this+0x51FC, ident 2
+    CgsSound::Logic::Voice mSubmixVoice;       // X360 this+0x5208, ident -16
 
     BrnSound::Logic::ResourceRegistrar mResourceRegistrar; // h:383 (+0x588 from the IResourceRequester sub-object == X360 this+0x5218)
 

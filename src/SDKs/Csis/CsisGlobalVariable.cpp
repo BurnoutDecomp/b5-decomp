@@ -11,12 +11,31 @@
 namespace Csis
 {
 
+namespace
+{
+Result ValidateGlobalHandle(GlobalVariableHandle* apHandle)
+{
+    if (!apHandle || apHandle->miIndex < 0)
+        return static_cast<Result>(apHandle ? apHandle->miIndex : -3);
+    if (!apHandle->mpDescriptor)
+        return static_cast<Result>(-6);
+    if (apHandle->miIndex != *reinterpret_cast<s32*>(
+            reinterpret_cast<u8*>(apHandle->mpDescriptor) + 0x18))
+    {
+        apHandle->mpDescriptor = 0;
+        apHandle->miIndex = -3;
+        return static_cast<Result>(-3);
+    }
+    return static_cast<Result>(0);
+}
+}
+
 // ---------------------------------------------------------------------------
 // GlobalVariable::SetFast @ 0x82B0FEB0
 // ---------------------------------------------------------------------------
 Result GlobalVariable::SetFast(GlobalVariableHandle* pHandle, const CsisDef::Parameter* pValue)
 {
-    Result status = ValidHandle<GlobalVariableHandle, CsisDef::GlobalVariableDesc>(pHandle, 0);
+    Result status = ValidateGlobalHandle(pHandle);
     if (static_cast<int>(status) < 0)
         return status;
 
@@ -39,7 +58,7 @@ Result GlobalVariable::SetFast(GlobalVariableHandle* pHandle, const CsisDef::Par
 // ---------------------------------------------------------------------------
 Result GlobalVariable::SubscribeFast(GlobalVariableHandle* pHandle, GlobalVariableSubscriber* pNode)
 {
-    Result status = ValidHandle<GlobalVariableHandle, CsisDef::GlobalVariableDesc>(pHandle, 0);
+    Result status = ValidateGlobalHandle(pHandle);
     if (static_cast<int>(status) < 0)
         return status;
 
@@ -58,7 +77,7 @@ Result GlobalVariable::SubscribeFast(GlobalVariableHandle* pHandle, GlobalVariab
 // ---------------------------------------------------------------------------
 Result GlobalVariable::UnsubscribeFast(GlobalVariableHandle* pHandle, GlobalVariableSubscriber* pNode)
 {
-    Result status = ValidHandle<GlobalVariableHandle, CsisDef::GlobalVariableDesc>(pHandle, 0);
+    Result status = ValidateGlobalHandle(pHandle);
     if (static_cast<int>(status) < 0)
         return status;
 

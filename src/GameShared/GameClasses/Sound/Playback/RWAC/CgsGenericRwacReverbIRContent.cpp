@@ -22,6 +22,34 @@ namespace CgsSound
 {
 namespace Playback
 {
+    GenericRwacReverbIRContent::GenericRwacReverbIRContent(Factory& arFactory,
+                                                           const ContentSpec& akrSpec,
+                                                           u32 au32Ident)
+        : Content(arFactory, akrSpec, au32Ident),
+          mLoader()
+    {
+    }
+
+    bool GenericRwacReverbIRContent::DoLoad()
+    {
+        return mLoader.Load(*this, GetContentSpec());
+    }
+
+    bool GenericRwacReverbIRContent::DoUnload()
+    {
+        return mLoader.Unload(*this, GetContentSpec());
+    }
+
+    void GenericRwacReverbIRContent::DoUpdate(f32 /*af32Dt*/)
+    {
+        mLoader.Update(*this, GetContentSpec());
+    }
+
+    void* GenericRwacReverbIRContent::DoGetData()
+    {
+        return mLoader.GetData();
+    }
+
     GenericRwacReverbIRContent::~GenericRwacReverbIRContent()
     {
         // mLoader (-> ResourcePtr<AlignedBinaryFileResource> -> ~BaseResourcePtr

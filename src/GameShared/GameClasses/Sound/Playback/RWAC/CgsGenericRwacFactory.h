@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"   // Factory base + Environment
 #include "GameShared/GameClasses/Sound/Playback/CgsRegistry.h"  // Registry + RegistrySpec (the in-place carve)
 #include "GameShared/GameClasses/Sound/Playback/CgsHandle.h"    // Handle<GenericRwacFactory>
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacCommands.h"
 
 // ============================================================================
 // CgsGenericRwacFactory.h  (home for RwacLock + GenericRwacFactory).
@@ -45,6 +46,10 @@ namespace CgsSound
 {
 namespace Playback
 {
+
+struct GenericRwacVoice;
+struct GenericRwacVoiceConfig;
+struct GenericRwacFeatureImplementation;
 
 // The process-wide default RWAC System (X360 off_83271928). Declared-only; bodied in
 // the RWAC System singleton TU.
@@ -114,12 +119,31 @@ public:
     // The nested registry (console +0x401C), by name -- the GetRwacFactoryRegistry
     // accessor (CgsSoundPlaybackModule.h:99) reads it off the generic Factory*.
     Registry* GetRegistry() { return mpRegistry; }
+    rw::audio::core::System* GetSystem() const { return mpSystem; }
+    RwacCommandQueue& GetCommandQueue() { return mCommandQueue; }
+
+    // @0x826C1AE8. Resolve serialized plug-in handles, then merge the registry.
+    void AddRegistry(Registry& arRegistry);
+
+protected:
+    virtual bool DoCreateVoice(const VoiceSpec& akrSpec,
+                               Handle<Voice>& arHandleOut,
+                               u32 au32Ident);
+    virtual bool DoCreateContent(const ContentSpec& akrSpec,
+                                 Handle<Content>& arHandleOut,
+                                 u32 au32Ident);
+    virtual void DoUpdate(f32 af32DeltaTime);
 
 private:
+    friend struct GenericRwacVoice;
+
+    GenericRwacVoiceConfig* SetupConfig(const VoiceSpec& akrSpec,
+                                        Voice& arBaseVoice,
+                                        GenericRwacVoice& arVoiceOut);
+    const GenericRwacFeatureImplementation& GetFeatureImplementation(Name aName) const;
+
     rw::audio::core::System* mpSystem;                    // console +0x10
-    u8   mau8CommandQueueStorage[0x4000];                 // console +0x14 (ring payload)
-    u32  mu32CommandQueueWriteCursor;                     // console +0x4014
-    u32  mu32CommandQueueReadCursor;                      // console +0x4018
+    RwacCommandQueue mCommandQueue;                       // console +0x14
     Registry* mpRegistry;                                 // console +0x401C
 };
 

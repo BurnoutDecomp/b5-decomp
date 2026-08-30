@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"   // CgsSound::Playback::Name::MakeHash
 
 #include <cctype>
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -20,6 +21,9 @@ namespace
     // ---- big-endian readers (the staged bundles are the X360 originals) -----
     inline u32 Be32(const u8* p) { return (u32(p[0]) << 24) | (u32(p[1]) << 16) | (u32(p[2]) << 8) | u32(p[3]); }
     inline u16 Be16(const u8* p) { return u16((u16(p[0]) << 8) | u16(p[1])); }
+    inline u16 Le16(const u8* p) { return u16(u16(p[0]) | (u16(p[1]) << 8)); }
+    inline u32 Le32(const u8* p) { return u32(p[0]) | (u32(p[1]) << 8) | (u32(p[2]) << 16) | (u32(p[3]) << 24); }
+    inline u64 Le64(const u8* p) { return u64(Le32(p)) | (u64(Le32(p + 4)) << 32); }
 
     struct WaveSpec
     {
@@ -76,6 +80,34 @@ namespace
         return true;
     }
 
+    // The engine-facing StreamsRegistry is a platform-4 native-x64 bundle after
+    // Phase F.  StreamHeaders remains the original platform-2 SNR container, so
+    // keep its BE reader above and use this LE counterpart only for Registry.
+    bool LoadResourceLE(const std::vector<u8>& d, u32 luEntryBase, std::vector<u8>& lrOut)
+    {
+        if (d.size() < 0x30 || luEntryBase + 0x40 > d.size())
+            return false;
+        const u32 luData0 = Le32(&d[0x18]);
+        const u32 luUnc   = Le32(&d[luEntryBase + 0x10]) & 0x0FFFFFFF;
+        const u32 luDisk  = Le32(&d[luEntryBase + 0x1C]) & 0x0FFFFFFF;
+        const u32 luOff   = Le32(&d[luEntryBase + 0x28]);
+        if (luData0 + luOff + luDisk > d.size() || luUnc == 0)
+            return false;
+        const u8* lpSrc = &d[luData0 + luOff];
+        if ((Le32(&d[0x24]) & 1) != 0)
+        {
+            lrOut.resize(luUnc);
+            uLongf lDst = luUnc;
+            if (uncompress(lrOut.data(), &lDst, lpSrc, luDisk) != Z_OK || lDst != luUnc)
+                return false;
+            return true;
+        }
+        if (luDisk != luUnc)
+            return false;
+        lrOut.assign(lpSrc, lpSrc + luDisk);
+        return true;
+    }
+
     void Init()
     {
         if (g_bInitTried) return;
@@ -113,36 +145,55 @@ namespace
             return;
         }
         std::vector<u8> reg;
-        if (!LoadResource(regBundle, Be32(&regBundle[0x14]), reg))
+        if (Le32(&regBundle[8]) != 4 ||
+            !LoadResourceLE(regBundle, Le32(&regBundle[0x14]), reg))
         {
-            AUDIO_LOG << "[StreamHeaders] registry payload decompress FAILED\n";
+            AUDIO_LOG << "[StreamHeaders] native-x64 registry payload load FAILED\n";
             return;
         }
 
-        // Scan the wave ContentSpec records: {u32 nameHash, u32 typeHash(0x511A448B
-        // == wave), u32 classRef, u32 misc, char path[] NUL} 4-aligned, path =
-        // "<gamedb url>|<SNS file>". (FLAG: pragmatic scan; the full serialised
-        // Registry parse is the CgsSound::Playback::Registry recon follow-on.)
-        size_t pos = 0;
-        // find the first record: 12 bytes before the first "gamedb"
-        for (size_t i = 0; i + 6 < reg.size(); ++i)
-            if (std::memcmp(&reg[i], "gamedb", 6) == 0) { pos = (i >= 16) ? i - 16 : 0; break; }
-        while (pos + 17 <= reg.size())
+        // Walk the native-x64 Registry image produced by engine_transcode.py:
+        // 48-byte header, cap u64 entity offsets, then 8-aligned ContentSpecs.
+        // A ContentSpec is {Name, type Name, ContentType* tag, u16 pathLength,
+        // u8 loadMethod, u8 loadTime, char path[]}.  This is the same graph the
+        // live RegistryResourceType fixes and RootSoundModule merges.
+        if (reg.size() < 48)
+            return;
+        const u32 luCount = Le32(&reg[0]);
+        const u32 luCapacity = Le32(&reg[4]);
+        const u64 luDataEnd = Le64(&reg[16]);
+        const size_t luSlotEnd = 48u + size_t(luCapacity) * 8u;
+        if (luCount > luCapacity || luSlotEnd > reg.size() || luDataEnd > reg.size())
+            return;
+        std::vector<size_t> lRecords;
+        lRecords.reserve(luCount);
+        for (u32 i = 0; i < luCapacity; ++i)
         {
-            const u32 luType = Be32(&reg[pos + 4]);
-            size_t z = pos + 16;
-            while (z < reg.size() && reg[z] != 0) ++z;
-            if (z >= reg.size()) break;
-            const char* lpacPath = reinterpret_cast<const char*>(&reg[pos + 16]);
-            if (std::strncmp(lpacPath, "gamedb://", 9) != 0)
-                break;   // end of the spec run
+            const u64 luOffset = Le64(&reg[48u + size_t(i) * 8u]);
+            if (luOffset != 0 && luOffset >= luSlotEnd && luOffset < luDataEnd)
+                lRecords.push_back(size_t(luOffset));
+        }
+        std::sort(lRecords.begin(), lRecords.end());
+        lRecords.erase(std::unique(lRecords.begin(), lRecords.end()), lRecords.end());
+        if (lRecords.size() != luCount)
+            return;
+        for (size_t pos : lRecords)
+        {
+            if (pos + 20 > luDataEnd)
+                return;
+            const u32 luType = Le32(&reg[pos + 4]);
+            const u16 luPathLength = Le16(&reg[pos + 16]);
+            if (pos + 20u + luPathLength >= luDataEnd || reg[pos + 20u + luPathLength] != 0)
+                return;
+            const char* lpacPath = reinterpret_cast<const char*>(&reg[pos + 20]);
             if (luType == 0x511A448Bu)
             {
                 const char* lpacBar = std::strchr(lpacPath, '|');
-                if (lpacBar != nullptr)
+                if (std::strncmp(lpacPath, "gamedb://", 9) == 0 && lpacBar != nullptr &&
+                    lpacBar < lpacPath + luPathLength)
                 {
                     WaveSpec lSpec;
-                    lSpec.muNameHash = Be32(&reg[pos]);
+                    lSpec.muNameHash = Le32(&reg[pos]);
                     // headerId = crc32 of the LOWERCASED url (CgsResource::ID::HashString)
                     std::string lUrl(lpacPath, lpacBar);
                     for (char& c : lUrl) c = char(std::tolower(u8(c)));
@@ -152,7 +203,6 @@ namespace
                     g_pSpecs->push_back(std::move(lSpec));
                 }
             }
-            pos = (z + 1 + 3) & ~size_t(3);
         }
 
         g_bReady = !g_pSpecs->empty() && !g_pHeaders->empty();

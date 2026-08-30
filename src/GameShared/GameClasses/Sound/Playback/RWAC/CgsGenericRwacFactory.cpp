@@ -18,6 +18,15 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacContent.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacVoice.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacVoiceConfig.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacPlayerVoice.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacSubmixVoice.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacMasterVoice.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
+#include "GameShared/GameClasses/System/PC/CgsDacOutputPC.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "rw/audio/core/PlugIn.h"   // the complete System (Lock/Unlock members; phase B5)
@@ -44,6 +53,8 @@
 #include "rw/audio/core/Pcm16BigDec.h"
 #include "rw/audio/core/plugins/Dac.h"               // the output plug-in (phase D)
 #include "rw/audio/core/plugins/SndPlayer1.h"
+#include "rw/audio/core/Voice.h"
+#include "rw/audio/core/SubMix.h"
 #include "GameShared/GameClasses/Sound/Playback/Plugins/GainArray/CgsGainArrayPlugin.h" // the game-side 'JGA0'
 #include "GameShared/GameClasses/Sound/Playback/Plugins/Ginsu/GinsuPlayer.h"            // the game-side 'Gns0'
 #include "GameShared/GameClasses/Sound/Playback/Plugins/Streaming/internal/sndplayer1shared.h"
@@ -92,6 +103,23 @@ namespace CgsSound
 {
 namespace Playback
 {
+
+const Name GenericRwacFeatureImplementation::SK_TYPE_NAME(
+    "~GenericRwacFeatureImplementation~");
+
+namespace
+{
+    const EntityFixer<GenericRwacFeatureImplementation>
+        sGenericRwacFeatureImplementationFixer;
+}
+
+void GenericRwacFeatureImplementation::ResolvePluginInfoHandle(
+    u32 au32Index, rw::audio::core::PlugInRegistry* apRegistry) const
+{
+    PluginInfo* lpInfo = GetPluginInfoAddress(au32Index);
+    lpInfo->mHandle = rw::audio::core::PlugInRegistry::GetPlugInHandle(
+        apRegistry, static_cast<int>(lpInfo->mGuid));
+}
     // The process-wide default RWAC System accessor (bodied phase B5): the console
     // inlines the off_83271928 read + the "mpSystem" assert (CgsGenericRwacFactory.h:59)
     // at every consumer.
@@ -142,6 +170,13 @@ namespace
     // here at static-init, exactly as the console does; GenericRwacFactorySkName()
     // (BrnBaselineLinkStubs.cpp) interns the same literal -- one hash, one value.
     const Name skRwacFactoryName("~GenericRwacFactory::SK_NAME~");
+    const Name skWaveContentType(
+        "~GenericRwacWaveContent::SK_WAVE_DATA_CONTENT_TYPE~");
+    const Name skReverbIrContentType(
+        "~GenericRwacReverbIRContent::SK_REVERB_IR_DATA_CONTENT_TYPE~");
+    const Name skInternalSubmixFeature("~InternalSubmixFeature~");
+    const Name skInternalSendFeature("~InternalSendFeature~");
+    const Name skInternalDacFeature("~InternalDacFeature~");
 
     // The console's `rw::IResourceAllocator::AllocateMemoryResource` five-pair
     // descriptor inline -- (bytes, align) + four (0, 1) pairs through the
@@ -215,11 +250,13 @@ Handle<GenericRwacFactory> GenericRwacFactory::Create(Environment& arEnvironment
 // RwacLock guard, the complete plug-in/decoder registration pass.
 GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
                                        const GenericRwacFactorySpec& akrSpec)
-    : Factory(skRwacFactoryName, arEnvironment)
+    : Factory(skRwacFactoryName, arEnvironment),
+      mpSystem(akrSpec.mpSystem),
+      mCommandQueue(),
+      mpRegistry(0)
 {
-    mpSystem = akrSpec.mpSystem;
-    mu32CommandQueueWriteCursor = 0;   // console +0x4014
-    mu32CommandQueueReadCursor  = 0;   // console +0x4018
+    mCommandQueue.mu32Write = 0;
+    mCommandQueue.mu32Read  = 0;
     // (the +0x14..+0x4013 queue payload is NOT ctor-touched -- decode-attested)
 
     // The in-place Registry immediately after the fixed head (console +0x4020).
@@ -283,6 +320,346 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         DecoderRegistry::RegisterDecoder(lpDecoderRegistry,
                                          rw::audio::core::Pcm16BigDec::GetDecoderDesc());
     }   // ~RwacLock == System::Unlock (the console tail)
+}
+
+void GenericRwacFactory::AddRegistry(Registry& arRegistry)
+{
+    RwacLock lLock(mpSystem);
+    rw::audio::core::PlugInRegistry* lpPlugInRegistry =
+        rw::audio::core::System::GetPlugInRegistry(mpSystem);
+
+    for (u32 luI = 0; luI < arRegistry.GetEntityCapacity(); ++luI)
+    {
+        const Entity* lpEntity = arRegistry.GetEntityAtSlot(luI);
+        if (lpEntity == 0 ||
+            lpEntity->mTypeName != GenericRwacFeatureImplementation::SK_TYPE_NAME)
+            continue;
+
+        const GenericRwacFeatureImplementation* lpFeature =
+            static_cast<const GenericRwacFeatureImplementation*>(lpEntity);
+        for (u32 luPlugin = 0; luPlugin < lpFeature->GetPluginInfoCount(); ++luPlugin)
+            lpFeature->ResolvePluginInfoHandle(luPlugin, lpPlugInRegistry);
+    }
+
+    *mpRegistry += arRegistry;
+}
+
+const GenericRwacFeatureImplementation&
+GenericRwacFactory::GetFeatureImplementation(Name aName) const
+{
+    const GenericRwacFeatureImplementation* lpImplementation =
+        mpRegistry->GetEntity<GenericRwacFeatureImplementation>(aName);
+    CGS_ASSERT(lpImplementation != 0, "lpFeatureImplementation");
+    return *lpImplementation;
+}
+
+GenericRwacVoiceConfig* GenericRwacFactory::SetupConfig(
+    const VoiceSpec& akrSpec, Voice& arBaseVoice, GenericRwacVoice& arVoiceOut)
+{
+    GenericRwacVoiceConfig* lpConfig =
+        new (mEnvironment) GenericRwacVoiceConfig(mEnvironment);
+    if (lpConfig == 0)
+        return 0;
+
+    const EVoiceType leVoiceType = static_cast<EVoiceType>(akrSpec.mu8VoiceType);
+    lpConfig->SetVoiceType(leVoiceType);
+    switch (leVoiceType)
+    {
+    case E_PLAYER_VOICE:
+        lpConfig->SetProcessingStage(0);
+        break;
+    case E_SUBMIX_VOICE:
+        lpConfig->SetProcessingStage(akrSpec.mu8ProcessingStage);
+        break;
+    case E_MASTER_VOICE:
+        lpConfig->SetProcessingStage(255);
+        break;
+    default:
+        CGS_ASSERT(false, "Invalid Voice Type");
+        break;
+    }
+
+    u32 luCurrentPlugin = 0;
+    u32 luFeaturePluginBase = 0;
+    u8 luChannels = akrSpec.mu8ChannelCount;
+
+    if (leVoiceType != E_PLAYER_VOICE)
+    {
+        void* lpContext = 0;
+        if (leVoiceType == E_MASTER_VOICE)
+        {
+            rw::audio::core::SubMix::ConstructorParams* lpParams =
+                static_cast<rw::audio::core::SubMix::ConstructorParams*>(
+                    lpConfig->GetScratchpad().Allocate(
+                        sizeof(rw::audio::core::SubMix::ConstructorParams)));
+            CGS_ASSERT(lpParams != 0, "lpParams");
+            lpParams->pName = "Master";
+            lpContext = lpParams;
+        }
+
+        const GenericRwacFeatureImplementation& lrSubmix =
+            GetFeatureImplementation(skInternalSubmixFeature);
+        for (u32 luPlugin = 0; luPlugin < lrSubmix.GetPluginInfoCount(); ++luPlugin)
+        {
+            lpConfig->SetConfig(luCurrentPlugin++,
+                lrSubmix.GetPluginInfoHandle(luPlugin), luChannels, lpContext);
+        }
+        luFeaturePluginBase = 1;
+    }
+
+    const VoiceSchema& lrVoiceSchema = akrSpec.GetVoiceSchema();
+    for (u32 luFeature = 0; luFeature < lrVoiceSchema.GetFeatureSchemaCount();
+         ++luFeature)
+    {
+        const FeatureSchema& lrSchema = lrVoiceSchema.GetFeatureSchema(luFeature);
+        const GenericRwacFeatureImplementation& lrImplementation =
+            GetFeatureImplementation(lrSchema.mName);
+        const u32 luImplementationBase = luCurrentPlugin;
+
+        for (u32 luPlugin = 0;
+             luPlugin < lrImplementation.GetPluginInfoCount(); ++luPlugin)
+        {
+            u8 luOutputChannels = static_cast<u8>(
+                lrImplementation.GetPluginInfoOutputChannels(luPlugin));
+            if (luOutputChannels == 0)
+            {
+                CGS_ASSERT(luChannels > 0, "lu8Channels > 0");
+                luOutputChannels = luChannels;
+            }
+            lpConfig->SetConfig(luCurrentPlugin++,
+                lrImplementation.GetPluginInfoHandle(luPlugin),
+                luOutputChannels, 0);
+            luChannels = luOutputChannels;
+        }
+
+        for (u32 luSlotMap = 0;
+             luSlotMap < lrImplementation.GetSlotMapCount(); ++luSlotMap)
+        {
+            const u32 luSlotIndex = arBaseVoice.GetIndexOfSlot(
+                lrImplementation.GetSlotMapName(luSlotMap));
+            if (luSlotIndex != static_cast<u32>(-1))
+            {
+                Slot& lrSlot = arBaseVoice.GetSlot(luSlotIndex);
+                lrSlot.SetPluginOffset(luFeaturePluginBase +
+                    lrImplementation.GetSlotMapOffset(luSlotMap));
+            }
+        }
+
+        for (u32 luParameterMap = 0;
+             luParameterMap < lrImplementation.GetParameterMapCount();
+             ++luParameterMap)
+        {
+            const Name lName =
+                lrImplementation.GetParameterMapName(luParameterMap);
+            const u32 luInput = arBaseVoice.GetIndexOfInputParameter(lName);
+            if (luInput != static_cast<u32>(-1))
+            {
+                arVoiceOut.AddParameterMap(
+                    static_cast<u8>(luInput),
+                    static_cast<u8>(luImplementationBase +
+                        lrImplementation.GetParameterMapOffset(luParameterMap)),
+                    static_cast<u8>(
+                        lrImplementation.GetParameterMapAttribute(luParameterMap)),
+                    E_PARAMETER_INPUT);
+                continue;
+            }
+
+            const u32 luOutput = arBaseVoice.GetIndexOfOutputParameter(lName);
+            if (luOutput != static_cast<u32>(-1))
+            {
+                arVoiceOut.AddParameterMap(
+                    static_cast<u8>(luOutput),
+                    static_cast<u8>(luImplementationBase +
+                        lrImplementation.GetParameterMapOffset(luParameterMap)),
+                    static_cast<u8>(
+                        lrImplementation.GetParameterMapAttribute(luParameterMap)),
+                    E_PARAMETER_OUTPUT);
+            }
+        }
+
+        luFeaturePluginBase += lrImplementation.GetPluginInfoCount();
+    }
+
+    if (leVoiceType == E_MASTER_VOICE)
+    {
+        lpConfig->SetFirstSendPlugin(0);
+        const GenericRwacFeatureImplementation& lrDac =
+            GetFeatureImplementation(skInternalDacFeature);
+        for (u32 luPlugin = 0; luPlugin < lrDac.GetPluginInfoCount(); ++luPlugin)
+        {
+            lpConfig->SetConfig(luCurrentPlugin++,
+                lrDac.GetPluginInfoHandle(luPlugin), 0, 0);
+        }
+    }
+    else
+    {
+        lpConfig->SetFirstSendPlugin(luCurrentPlugin);
+        const GenericRwacFeatureImplementation& lrSend =
+            GetFeatureImplementation(skInternalSendFeature);
+        for (u32 luSend = 0; luSend < akrSpec.GetSendCount(); ++luSend)
+        {
+            for (u32 luPlugin = 0; luPlugin < lrSend.GetPluginInfoCount(); ++luPlugin)
+            {
+                lpConfig->SetConfig(luCurrentPlugin++,
+                    lrSend.GetPluginInfoHandle(luPlugin), luChannels, 0);
+            }
+        }
+    }
+
+    lpConfig->SetPluginCount(luCurrentPlugin);
+    return lpConfig;
+}
+
+bool GenericRwacFactory::DoCreateVoice(const VoiceSpec& akrSpec,
+                                       Handle<Voice>& arHandleOut,
+                                       u32 au32Ident)
+{
+    arHandleOut.SetObject(0);
+    Voice* lpVoice = 0;
+    GenericRwacVoice* lpRwacVoice = 0;
+    rw::audio::core::PlugIn** lppSubmix = 0;
+
+    switch (static_cast<EVoiceType>(akrSpec.mu8VoiceType))
+    {
+    case E_PLAYER_VOICE:
+    {
+        GenericRwacPlayerVoice* lpPlayer = new (*this, akrSpec)
+            GenericRwacPlayerVoice(*this, akrSpec, au32Ident);
+        lpVoice = lpPlayer;
+        lpRwacVoice = lpPlayer;
+        break;
+    }
+    case E_SUBMIX_VOICE:
+    {
+        GenericRwacSubmixVoice* lpSubmix = new (*this, akrSpec)
+            GenericRwacSubmixVoice(*this, akrSpec, au32Ident);
+        lpVoice = lpSubmix;
+        lpRwacVoice = lpSubmix;
+        lppSubmix = lpSubmix->GetSubmixAddress();
+        break;
+    }
+    case E_MASTER_VOICE:
+    {
+        GenericRwacMasterVoice* lpMaster = new (*this, akrSpec)
+            GenericRwacMasterVoice(*this, akrSpec, au32Ident);
+        lpVoice = lpMaster;
+        lpRwacVoice = lpMaster;
+        lppSubmix = lpMaster->GetSubmixAddress();
+        break;
+    }
+    default:
+        CGS_ASSERT(false, "Invalid Voice Type");
+        return false;
+    }
+
+    if (lpVoice == 0 || lpRwacVoice == 0 ||
+        !lpRwacVoice->CreateVoiceInstance(akrSpec, *lpVoice, *this, lppSubmix))
+        return false;
+
+    lpVoice->Acquire();
+    arHandleOut.SetObject(lpVoice);
+    return true;
+}
+
+void GenericRwacFactory::DoUpdate(f32 /*af32DeltaTime*/)
+{
+    while (!mCommandQueue.IsEmpty())
+    {
+        uintptr_t luWordCount = 0;
+        mCommandQueue.GetCommand(&luWordCount);
+        CGS_ASSERT(luWordCount > 0 && luWordCount <= 16,
+                   "luCommandCount > 0 && luCommandCount <= 16");
+        uintptr_t lauWords[16] = {};
+        for (u32 luWord = 0; luWord < static_cast<u32>(luWordCount); ++luWord)
+            mCommandQueue.GetCommand(&lauWords[luWord]);
+
+        switch (static_cast<ERwacCommandType>(lauWords[0]))
+        {
+        case E_RWAC_COMMAND_VOICE_CREATE_INSTANCE:
+        {
+            CGS_ASSERT(luWordCount == 6, "Voice-create command word count");
+            RwacCommandVoiceCreateInstance* lpCommand =
+                reinterpret_cast<RwacCommandVoiceCreateInstance*>(lauWords);
+            Voice* lpPlaybackVoice =
+                reinterpret_cast<Voice*>(lpCommand->mpPlaybackVoice);
+            rw::audio::core::Voice** lppRwacVoice =
+                reinterpret_cast<rw::audio::core::Voice**>(lpCommand->mppVoice);
+            rw::audio::core::PlugIn*** lpppPlugin =
+                reinterpret_cast<rw::audio::core::PlugIn***>(lpCommand->mpppPlugin);
+            GenericRwacVoiceConfig* lpConfig =
+                reinterpret_cast<GenericRwacVoiceConfig*>(lpCommand->mpConfig);
+
+            *lppRwacVoice = rw::audio::core::Voice::CreateInstance(
+                static_cast<u8>(lpConfig->GetProcessingStage()),
+                static_cast<int>(lpConfig->GetPluginCount()),
+                &lpConfig->GetConfig(0), lpppPlugin, mpSystem);
+            lpPlaybackVoice->SetPlaybackState(E_PLAYBACK_STATE_STOPPED);
+            lpPlaybackVoice->AcknowledgePlaybackStateChange();
+
+            rw::audio::core::PlugIn** lppSubmix =
+                reinterpret_cast<rw::audio::core::PlugIn**>(lpCommand->maOperand);
+            if (lppSubmix != 0 && *lpppPlugin != 0)
+                *lppSubmix = (*lpppPlugin)[0];
+
+            if (lpConfig->GetVoiceType() == E_MASTER_VOICE &&
+                *lppRwacVoice != 0 && lpConfig->GetPluginCount() != 0)
+            {
+                rw::audio::core::PlugIn* lpDac =
+                    (*lpppPlugin)[lpConfig->GetPluginCount() - 1u];
+                mEnvironment.SetDacPlugin(lpDac);
+                DacOutputPC::Attach(static_cast<rw::audio::core::Dac*>(lpDac));
+                rw::audio::core::PlugIn::Event(lpDac, 3, 0);
+            }
+            lpConfig->Release();
+            break;
+        }
+        case E_RWAC_COMMAND_VOICE_RELEASE:
+            CGS_ASSERT(luWordCount == 2, "Voice-release command word count");
+            rw::audio::core::Voice::Release(
+                reinterpret_cast<rw::audio::core::Voice*>(lauWords[1]));
+            break;
+        case E_RWAC_COMMAND_PLUGIN_GET_ATTRIBUTE:
+            CGS_ASSERT(luWordCount == 4, "Get-attribute command word count");
+            rw::audio::core::PlugIn::GetAttribute(
+                reinterpret_cast<rw::audio::core::PlugIn*>(lauWords[1]),
+                static_cast<int>(lauWords[2]),
+                reinterpret_cast<f32*>(lauWords[3]));
+            break;
+        default:
+            CGS_ASSERT(false, "Invalid Command");
+            break;
+        }
+    }
+}
+
+// @0x826E9990. Select the concrete content class from the authored ContentType,
+// construct it in a factory-owned carve, and return one owned handle reference.
+bool GenericRwacFactory::DoCreateContent(const ContentSpec& akrSpec,
+                                         Handle<Content>& arHandleOut,
+                                         u32 au32Ident)
+{
+    const Name& lkrContentTypeName = akrSpec.GetContentType().GetName();
+    Content* lpContent = 0;
+
+    if (lkrContentTypeName == skWaveContentType)
+    {
+        lpContent = new (*this, akrSpec)
+            GenericRwacWaveContent(*this, akrSpec, au32Ident);
+    }
+    else if (lkrContentTypeName == skReverbIrContentType)
+    {
+        lpContent = new (*this, akrSpec)
+            GenericRwacReverbIRContent(*this, akrSpec, au32Ident);
+    }
+    else
+    {
+        CGS_ASSERT(false, "Unknown content type");
+    }
+
+    if (lpContent)
+        lpContent->Acquire();
+    arHandleOut.SetObject(lpContent);
+    return lpContent != 0;
 }
 
 // The per-factory registry accessor (CgsSoundPlaybackModule.h:99 -- the console

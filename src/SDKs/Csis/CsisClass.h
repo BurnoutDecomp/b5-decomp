@@ -61,7 +61,7 @@ struct ClassDesc;
 namespace Csis
 {
 
-class Class; // fwd (client callbacks / the observer callback take a Class*)
+class Class;
 
 // Vendor handle-validation free template used by the *ConstructorFast methods; its
 // body lives in another Csis TU. Declared (not defined) here for compile/link, as a
@@ -79,32 +79,24 @@ Result ValidHandle(THandle** ppHandle, int liKind);
 // ---------------------------------------------------------------------------
 struct ClassClientNode
 {
-    // Destructor-client callback shape (ReleaseFast: mpfnClient(pClass, data)).
-    typedef void (*ClientFn)(Class* pClass, void* pClientData);
+    typedef void (*ConstructorFn)(Class* pClass, void* pParameters,
+                                  void* pClientData);
+    typedef void (*DestructorFn)(Class* pClass, void* pClientData);
+    typedef void (*MemberDataFn)(void* pParameters, void* pClientData);
 
     ClassClientNode* mpNext;       // +0x00  forward link (0 == end)
-    ClassClientNode* mpPrev;       // +0x04  back link    (0 == head)
-    ClientFn         mpfnClient;   // +0x08  callback (only read by ReleaseFast)
-    void*            mpClientData; // +0x0C  callback context
+    ClassClientNode* mpPrev;       // +0x08  back link    (0 == head)
+    union
+    {
+        ConstructorFn mpfnConstructor;
+        DestructorFn  mpfnDestructor;
+        MemberDataFn  mpfnMemberData;
+        void*         mpfnRaw;
+    };                            // +0x10
+    void* mpClientData;           // +0x18  callback context
 };
 
-// ---------------------------------------------------------------------------
-// Csis::IClassObserver -- the process-global class-lifecycle observer singleton
-// (X360 module-data symbol off_8324E904). ReleaseFast and UnsubscribeDestructorFast
-// invoke its vtable slot +0xC when a Class's refcount reaches zero, passing
-// (this observer, pClass, 0). Only that one vtable slot is reached from this TU;
-// the concrete observer type lives in the vendor SystemDesc TU, so this is a
-// minimal typed stand-in (flagged vendor extern).
-// ---------------------------------------------------------------------------
-class IClassObserver
-{
-public:
-    virtual void Reserved0() = 0; // vtable +0x0
-    virtual void Reserved4() = 0; // vtable +0x4
-    virtual void Reserved8() = 0; // vtable +0x8
-    // vtable +0xC -- invoked as OnClassDestroyed(pClass, 0) once refcount hits 0.
-    virtual void OnClassDestroyed(Class* lpClass, int liFlags) = 0;
-};
+static_assert(sizeof(ClassClientNode) == 0x20, "native CSIS class-client node");
 
 // ---------------------------------------------------------------------------
 // Csis::Class
@@ -112,6 +104,13 @@ public:
 class Class
 {
 public:
+    Class();
+
+    // @ 0x82B0FA40. Resolve a class handle, allocate the runtime class record,
+    // invoke its constructor-client list, and return the new instance.
+    static int CreateInstanceFast(ClassHandle* phHandle, void* pParameters,
+                                  Class** ppClass);
+
     // @ 0x82B0F5B8 -- write miRefCount through the out-param; return 0.
     int GetRefCount(s32* lpiOutRefCount);
 
@@ -129,7 +128,7 @@ public:
 
     // @ 0x82B0FDB8 -- validate the handle, then push lpNode onto the constructor-
     // client list; return 0 or the negative ValidHandle Result.
-    int SubscribeConstructorFast(ClassHandle** phHandle, ClassClientNode* lpNode);
+    static int SubscribeConstructorFast(ClassHandle* phHandle, ClassClientNode* lpNode);
 
     // @ 0x82B0F5F0 -- push lpNode onto the destructor-client list (+0xC) and AddRef;
     // return 0.
@@ -144,21 +143,21 @@ public:
     // passes only (phHandle, lpNode) with no `this` (the body resolves everything through
     // the handle and never touches a member), e.g. Snd9::Aems::BeginRemoveModuleBank calls
     // Csis::Class::UnsubscribeConstructorFast(&record.mpHandle, &record.mNode) with 2 args.
-    static int UnsubscribeConstructorFast(ClassHandle** phHandle, ClassClientNode* lpNode);
+    static int UnsubscribeConstructorFast(ClassHandle* phHandle, ClassClientNode* lpNode);
 
     // @ 0x82B0F630 -- unlink lpNode from the destructor-client list (+0xC), DecRef,
     // and notify the global observer when the count reaches zero; return 0.
     int UnsubscribeDestructorFast(ClassClientNode* lpNode);
+
+    // Native-64 counterpart of SubscribeMemberDataFast: unlink the member-data
+    // client, release its retained class reference, and notify at zero.
+    int UnsubscribeMemberDataFast(ClassClientNode* lpNode);
 
     SystemDesc::ClassDesc* mpClassDesc;         // +0x00
     s32                    miRefCount;          // +0x04
     ClassClientNode*       mpMemberDataClients; // +0x08
     ClassClientNode*       mpDestructorClients; // +0x0C
 };
-
-// The process-global class-lifecycle observer singleton (off_8324E904). Defined in
-// this TU's .cpp; null until the vendor system installs it.
-extern IClassObserver* gpClassDestroyNotifier;
 
 } // namespace Csis
 

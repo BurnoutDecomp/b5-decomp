@@ -6,6 +6,7 @@
 #include "types.hpp"
 
 #include "SDKs/EATech/include/snd/sndo.h" // Snd9::IAemsSamplePlayerFactory
+#include "SDKs/Csis/CsisClass.h"
 
 // ============================================================================
 // SDKs/EATech/include/snd/sndaems.h  (Snd9 AEMS module-bank manager home)
@@ -58,6 +59,7 @@ namespace Aems
 struct ModuleBankLink
 {
     ModuleBankLink* mpNext; // +0x00  (bank +0x50)  0 == end of list
+    ModuleBankLink** mppPrev;
 };
 
 // A registered AEMS module bank. Header fields are the ones the remove/query paths
@@ -65,17 +67,70 @@ struct ModuleBankLink
 // byte offset (miModuleTableOffset) and is walked as compiled AEMS data.
 struct ModuleBank
 {
-    u8    mPad00[0x0A];                 // +0x00
-    u16   muModuleCount;                // +0x0A  number of module records in the table
-    u8    mPad0C[0x1C - 0x0C];          // +0x0C
-    s32   miModuleTableOffset;          // +0x1C  self-relative byte offset to the module table
-    u8    mPad20[0x3C - 0x20];          // +0x20
-    s32   miBankHandle;                 // +0x3C  bank id matched by the remove/query paths
-    u8    mPad40[0x44 - 0x40];          // +0x40
-    s32   miRemoved;                    // +0x44  set to 1 by BeginRemoveModuleBank
-    void* mpAllocatedBlock;             // +0x48  auxiliary allocation freed on teardown
-    ModuleBankLink mLink;               // +0x50  intrusive registry link
+    u8    maFileHeader[0x0A];            // +0x00, ABKC/version/native-width marker
+    u16   muModuleCount;                 // +0x0A
+    u8    maPad0C[0x08];                 // +0x0C
+    u32   muTotalSize;                   // +0x14
+    u32   muResidentSize;                // +0x18
+    u32   muModuleTableOffset;           // +0x1C
+    u32   muSampleOffset;                // +0x20, becomes mpSampleBank before link
+    u32   muSampleSize;                  // +0x24
+    u8    maPad28[0x08];                 // +0x28
+    u32   muFunctionRelocOffset;          // +0x30
+    u32   muPointerRelocOffset;           // +0x34
+    u32   muCsisRelocOffset;              // +0x38
+    s32   miBankHandle;                   // +0x3C
+    void* mpSampleBank;                   // +0x40
+    s32   miRemoved;                      // +0x48
+    u32   muPad4C;
+    void* mpAllocatedBlock;               // +0x50, copied stream path
+    s32   miStreamFileOffset;             // +0x58
+    u32   muPad5C;
+    ModuleBankLink mLink;                 // +0x60
+    u8    maPad70[0x08];                  // +0x70, native module table starts >= +0x78
 };
+
+// Native-64 fixed portion of one compiled AEMS module. The trailing table at
+// +0x68 contains muSamplePlayerCount + muAlternateCount signed byte offsets.
+struct ModuleRecord
+{
+    u8                    maRuntime00[0x08]; // +0x00
+    Csis::ClassHandle     mClassHandle;      // +0x08
+    Csis::ClassClientNode mConstructorNode; // +0x18
+    u16                   muCurrentInstances;// +0x38
+    u16                   muMaxInstances;    // +0x3A
+    u16                   muGlobalCount;     // +0x3C
+    u16                   muFunctionCount;   // +0x3E
+    u8                    muSamplePlayerCount;// +0x40
+    u8                    mbHasDestructor;   // +0x41
+    u8                    mbHasClassData;    // +0x42
+    u8                    muAlternateCount;  // +0x43
+    u8                    maPad44[0x04];      // +0x44
+    void*                 mpProgram;         // +0x48, image offset -> pointer
+    void*                 mpInstanceTemplate;// +0x50, image offset -> pointer
+    u32                   muInstanceSize;    // +0x58
+    s32                   miDestroyDataOffset;// +0x5C
+    void*                 mpInstanceList;    // +0x60
+};
+
+static_assert(offsetof(ModuleBank, mLink) == 0x60, "native AEMS bank link");
+static_assert(sizeof(ModuleBank) == 0x78, "native AEMS bank header");
+static_assert(offsetof(ModuleRecord, mClassHandle) == 0x08, "native AEMS class handle");
+static_assert(offsetof(ModuleRecord, mConstructorNode) == 0x18, "native AEMS constructor node");
+static_assert(offsetof(ModuleRecord, mpProgram) == 0x48, "native AEMS program pointer");
+static_assert(sizeof(ModuleRecord) == 0x68, "native AEMS module fixed record");
+
+inline s32* ModuleRecordOffsets(ModuleRecord* apRecord)
+{
+    return reinterpret_cast<s32*>(reinterpret_cast<u8*>(apRecord) + sizeof(ModuleRecord));
+}
+
+inline ModuleRecord* NextModuleRecord(ModuleRecord* apRecord)
+{
+    return reinterpret_cast<ModuleRecord*>(
+        reinterpret_cast<u8*>(apRecord) + sizeof(ModuleRecord) +
+        sizeof(s32) * (apRecord->muSamplePlayerCount + apRecord->muAlternateCount));
+}
 
 // Recover the owning bank from its embedded registry link (container-of). The
 // registry head and every mpNext point at &bank.mLink, not the bank base.
@@ -103,5 +158,13 @@ IAemsSamplePlayerFactory* SetSamplePlayerFactory(IAemsSamplePlayerFactory* apFac
 
 } // namespace Aems
 } // namespace Snd9
+
+// C-facing AEMS bank entry point used by AemsContent.  The callback may retain
+// the input allocation or return a separate resident allocation.
+typedef void* (*SNDAEMSModuleBankAllocator)(void* apBank, int aiResidentSize,
+                                            int aiTotalSize);
+extern "C" s32 SNDAEMS_addmodulebank(void* apBank, s32 aiStreamFileOffset,
+                                     s32 aiFlags,
+                                     SNDAEMSModuleBankAllocator apAllocator);
 
 #endif // SDKS_EATECH_SND_SNDAEMS_H

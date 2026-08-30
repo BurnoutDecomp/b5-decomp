@@ -126,11 +126,6 @@ void SoundLogicModule::Construct()
 //     + unlock + detach + false (retry); ready -> unlock ->
 //   case 6: DetachBuffers + return true.
 //
-// FLAG [grow-in, stage 2]: the committed Logic::Voice slice's Construct/Connect signatures
-// diverge from this call shape (the console passes (this, ident, dword_83008650 == the
-// GenericRwacFactory name hash, MakeHash("<spec>VoiceSpec")); reconciling the Voice slice +
-// the LoadAsset data dependency is its own batch), so stage 2 still ADVANCES without
-// constructing the voices; everything else in the machine is real.
 bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
                                CgsModule::IOBuffer* apInputBuffer,
                                CgsModule::IOBuffer* apOutputBuffer)
@@ -167,8 +162,29 @@ bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
         break;   // one chunk per call (console LABEL_20: detach + return 0)
     case E_PREPSTAGE_VOICES:
         meBrnPrepareStage = E_PREPSTAGE_VOICES;
-        // FLAG [grow-in]: the 3 Voice constructs + the "Send01" connects + the
-        // BurnoutGlobalData LoadAsset (see the banner). Advance into the bridge.
+        if (!mMasterVoice.GetVoiceObject())
+        {
+            const u32 luFactoryName = static_cast<u32>(
+                CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+            mSubmixVoice.Construct(
+                this, CgsSound::Playback::KU_INIT_SND9_SUBMIX_IDENT, luFactoryName,
+                static_cast<u32>(CgsSound::Playback::Name::MakeHash("SubmixVoiceSpec")));
+            mMasterVoice.Construct(
+                this, 1, luFactoryName,
+                static_cast<u32>(CgsSound::Playback::Name::MakeHash("MasterVoiceSpec")));
+            mGlobalReverbVoice.Construct(
+                this, 2, luFactoryName,
+                static_cast<u32>(CgsSound::Playback::Name::MakeHash("GlobalReverbVoiceSpec")));
+            break; // console returns after the construct pass and re-enters stage 2.
+        }
+        {
+            const u32 luSend01 = static_cast<u32>(
+                CgsSound::Playback::Name::MakeHash("Send01"));
+            mSubmixVoice.Connect(luSend01, 1);
+            mGlobalReverbVoice.Connect(luSend01, 1);
+            LoadAsset("Sound\\BurnoutGlobalData.bin", "BurnoutGlobalData",
+                      BrnSound::Logic::ResourceRegistrar::E_ATTRIBSYS);
+        }
         // fall through
     case E_PREPSTAGE_BRIDGE:
         meBrnPrepareStage = E_PREPSTAGE_BRIDGE;
@@ -232,12 +248,11 @@ bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
 void SoundLogicModule::ResourceBridging()
 {
     mResourceRegistrar.Update();
-
-    // [grow-in] FLAG: the two VariableEventQueue Appends that bridge the registrar's request
-    //   interfaces (X360 this+74952 = mResourceRequestInterface, this+72888 = mAttribSysRequest-
-    //   Interface) into the logic output buffer (*(this+19608)+2068 / +4) are deferred -- they need
-    //   the output-buffer VEQ layout + access to the registrar's private request interfaces. The
-    //   X360 also brackets this in the output buffer's LockForWrite/UnlockForWrite.
+    CGS_ASSERT(mpBrnLogicOutputBuffer != 0, "mpBrnLogicOutputBuffer");
+    mpBrnLogicOutputBuffer->GetResourceRequestInterface()->mRequestQueue.Append(
+        mResourceRegistrar.GetResourceRequestInterface().mRequestQueue);
+    mpBrnLogicOutputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
+        mResourceRegistrar.GetAttribSysRequestInterface().mRequestQueue);
 }
 
 // X360 0x826AFEF8. Create the 9 sound-logic state managers and register them in the

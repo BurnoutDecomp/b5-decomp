@@ -1,7 +1,7 @@
-#ifndef CGS_SOUND_PLAYBACK_RWAC_GENERIC_RWAC_MASTER_VOICE_H
-#define CGS_SOUND_PLAYBACK_RWAC_GENERIC_RWAC_MASTER_VOICE_H
+#ifndef CGS_SOUND_PLAYBACK_RWAC_GENERIC_RWAC_SUBMIX_VOICE_H
+#define CGS_SOUND_PLAYBACK_RWAC_GENERIC_RWAC_SUBMIX_VOICE_H
 
-#include "GameShared/GameClasses/Sound/Playback/CgsMasterVoice.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacVoice.h"
 
 namespace CgsSound
@@ -11,12 +11,12 @@ namespace Playback
 
 class GenericRwacFactory;
 
-class GenericRwacMasterVoice : public MasterVoice, public GenericRwacVoice
+class GenericRwacSubmixVoice : public SubmixVoice, public GenericRwacVoice
 {
 public:
-    GenericRwacMasterVoice(GenericRwacFactory& arFactory,
+    GenericRwacSubmixVoice(GenericRwacFactory& arFactory,
                            const VoiceSpec& akrSpec, u32 au32Ident);
-    virtual ~GenericRwacMasterVoice();
+    virtual ~GenericRwacSubmixVoice();
 
     virtual f32 GetCpuTicks();
     virtual EProfileVoiceType GetProfileVoiceType();

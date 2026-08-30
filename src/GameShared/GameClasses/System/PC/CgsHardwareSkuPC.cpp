@@ -10,7 +10,7 @@ namespace CgsSystem
     {
         s32 FindLanguage()
         {
-            return 0;   // ELoadingLanguage English
+            return 7;   // CgsLanguage::E_LANGUAGE_ENGLISH_US
         }
     }
 }

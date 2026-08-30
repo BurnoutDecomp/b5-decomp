@@ -8,6 +8,10 @@
 #include <Windows.h>  // CreateMutexA / WaitForSingleObject / ReleaseMutex / HANDLE
 
 #include "SDKs/Csis/CsisSystem.h"
+#include "SDKs/Csis/CsisClassHandle.h"
+#include "rw/rwcore_structs.h"
+
+#include <cstring>
 
 namespace
 {
@@ -21,27 +25,49 @@ namespace
     Csis::SystemContentNode*   gpCsisListHead = 0;  // off_8324E90C
     short                      gwCsisSerial   = 0;  // word_8324E908
 
-    // The Csis-wide allocator installed by System::SetAllocator (2026-08-25,
-    // faithful-audio-engine phase A). FLAG: the X360 store-target global is
-    // un-attested (no dossier for @0x82B0F1C0); held opaque.
-    void*                      gpCsisAllocator = 0;
+    // off_8324E904 and byte_8324E900: the Csis-wide allocator and its installed
+    // latch. ARTIST CreateInstanceFast allocates through this exact global.
+    rw::IResourceAllocator*    gpCsisAllocator = 0;
+    unsigned char              gbCsisAllocatorSet = 0;
 }
 
 namespace Csis
 {
 
 // ---------------------------------------------------------------------------
-// System::SetAllocator @ 0x82B0F1C0  (no dossier exported)
-//
-// Behaviour attested from the only caller (RootSoundModule::Prepare @0x826FAF0C):
-// receives &gCsisTestBedAlloc in r3 and its return flows directly into
-// Csis::System::Init. Modelled as the minimal install-and-return; the allocator
-// interface shape is owned by the (un-reconstructed) Csis allocation paths.
+// System::SetAllocator @ 0x82B0F1C0.
+// if (byte_8324E901) return -7; off_8324E904=allocator;
+// byte_8324E900=1; return 0.
 // ---------------------------------------------------------------------------
-void* System::SetAllocator(void* apAllocator)
+int System::SetAllocator(rw::IResourceAllocator* apAllocator)
 {
+    if (gbCsisInited)
+        return -7;
     gpCsisAllocator = apAllocator;
-    return apAllocator;
+    gbCsisAllocatorSet = 1;
+    return 0;
+}
+
+void* System::Allocate(size_t auSize, const char* apcName, u32 auAlignment)
+{
+    if (!gbCsisAllocatorSet || !gpCsisAllocator)
+        return 0;
+
+    rw::ResourceDescriptor lDescriptor = {};
+    lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(auSize);
+    lDescriptor.m_baseResourceDescriptors[0].m_alignment = auAlignment;
+    for (u32 luLane = 1; luLane < 4; ++luLane)
+        lDescriptor.m_baseResourceDescriptors[luLane].m_alignment = 1;
+    return gpCsisAllocator->DoAllocate(lDescriptor, apcName).m_baseResources[0];
+}
+
+void System::Free(void* apBlock)
+{
+    if (!apBlock || !gpCsisAllocator)
+        return;
+    rw::Resource lResource = {};
+    lResource.m_baseResources[0] = apBlock;
+    gpCsisAllocator->DoFree(lResource);
 }
 
 // ---------------------------------------------------------------------------
@@ -130,32 +156,17 @@ namespace
 // ---------------------------------------------------------------------------
 int System::Subscribe(SystemContent* pContent)
 {
-    // The content base address is what the asm adds to each record's relative
-    // target word (`add r8,r8,r3`); reproduced as an integer add by name.
-    //
-    // ⚠️ FLAG (host-width TRUNCATION -- latent, 2026-08-25 wave 4 audit note): the
-    // relocated word lives INSIDE the serialised 12/16-byte content records
-    // (SystemClient12/16::miTargetOrOffset, an s32 on-disk slot), so a 64-bit host
-    // pointer CANNOT fit it -- this add truncates. Nothing in the tree reads
-    // miTargetOrOffset back yet (the console dispatch consumer that would bctrl
-    // through it is unbodied), so the defect cannot fire today. The real fix is a
-    // SIDE TABLE mapping record -> host pointer, to be built together with that
-    // dispatch consumer -- do NOT widen the field (it would break the on-disk
-    // blob layout).
-    const s32 iContentBase =
-        static_cast<s32>(reinterpret_cast<std::uintptr_t>(pContent));
+    const uintptr_t uContentBase = reinterpret_cast<uintptr_t>(pContent);
 
-    SystemClient12* pArray1 =
-        reinterpret_cast<SystemClient12*>(pContent->mauInlineArrays); // content + 0x28
+    SystemClient24* pArray1 =
+        reinterpret_cast<SystemClient24*>(pContent->mauInlineArrays);
     pContent->mpArray1 = pArray1;
 
-    SystemClient12* pArray2 = pArray1 + pContent->muNumUpdate;        // + 12*numUpdate
+    SystemClient24* pArray2 = pArray1 + pContent->muNumUpdate;
     pContent->mpArray2 = pArray2;
 
-    // mpArray3 is pArray2 advanced by 12*numDestroy BYTES (then read as 16-byte
-    // records). The asm computes the byte offset with the 12-byte stride.
-    SystemClient16* pArray3 = reinterpret_cast<SystemClient16*>(
-        reinterpret_cast<unsigned char*>(pArray2) + 12 * pContent->muNumDestroy);
+    SystemClient32* pArray3 = reinterpret_cast<SystemClient32*>(
+        pArray2 + pContent->muNumDestroy);
     pContent->mpArray3 = pArray3;
 
     short wSerial = gwCsisSerial;  // lhz word_8324E908
@@ -165,10 +176,10 @@ int System::Subscribe(SystemContent* pContent)
     {
         for (u16 i = 0; i < pContent->muNumUpdate; ++i)
         {
-            SystemClient12* pNode = pContent->mpArray1 + i;
-            pNode->miTargetOrOffset += iContentBase;  // relocate -> absolute
+            SystemClient24* pNode = pContent->mpArray1 + i;
+            pNode->muTargetOrOffset += uContentBase;
             wSerial = NextSerial(wSerial);
-            pNode->miSerial = wSerial;
+            pNode->mState.mLive.miSerial = wSerial;
         }
         gwCsisSerial = wSerial;  // sth r11, word_8324E908
     }
@@ -178,10 +189,10 @@ int System::Subscribe(SystemContent* pContent)
     {
         for (u16 i = 0; i < pContent->muNumDestroy; ++i)
         {
-            SystemClient12* pNode = pContent->mpArray2 + i;
-            pNode->miTargetOrOffset += iContentBase;
+            SystemClient24* pNode = pContent->mpArray2 + i;
+            pNode->muTargetOrOffset += uContentBase;
             wSerial = NextSerial(wSerial);
-            pNode->miSerial = wSerial;
+            pNode->mState.mLive.miSerial = wSerial;
         }
         gwCsisSerial = wSerial;
     }
@@ -191,10 +202,10 @@ int System::Subscribe(SystemContent* pContent)
     {
         for (u16 i = 0; i < pContent->muNumThird; ++i)
         {
-            SystemClient16* pNode = pContent->mpArray3 + i;
-            pNode->miTargetOrOffset += iContentBase;
+            SystemClient32* pNode = pContent->mpArray3 + i;
+            pNode->muTargetOrOffset += uContentBase;
             wSerial = NextSerial(wSerial);
-            pNode->miSerial = wSerial;
+            pNode->mState.mLive.miSerial = wSerial;
         }
         gwCsisSerial = wSerial;
     }
@@ -236,21 +247,21 @@ int System::Unsubscribe(SystemContent* pContent)
     if (pContent->muNumUpdate > 0)
     {
         for (u16 i = 0; i < pContent->muNumUpdate; ++i)
-            (pContent->mpArray1 + i)->miStatus = -1;  // stw -1, 8(node)
+            (pContent->mpArray1 + i)->mState.miStatus = -1;
     }
 
     // ---- array 2: status = -1 ----------------------------------------------
     if (pContent->muNumDestroy > 0)
     {
         for (u16 i = 0; i < pContent->muNumDestroy; ++i)
-            (pContent->mpArray2 + i)->miStatus = -1;
+            (pContent->mpArray2 + i)->mState.miStatus = -1;
     }
 
     // ---- array 3: status = -1 ----------------------------------------------
     if (pContent->muNumThird > 0)
     {
         for (u16 i = 0; i < pContent->muNumThird; ++i)
-            (pContent->mpArray3 + i)->miStatus = -1;  // stw -1, 0xC(node)
+            (pContent->mpArray3 + i)->mState.miStatus = -1;
     }
 
     // ---- unlink from the subscribed-content list ----------------------------
@@ -270,6 +281,60 @@ int System::Unsubscribe(SystemContent* pContent)
         pNode->mpNext->mpPrev = pNode->mpPrev;        // next->prev = prev
 
     return 0;
+}
+
+int System::ResolveInterface(u32 auKind, const InterfaceId* apId,
+                             void** appDescriptor, s32* apiToken)
+{
+    if (!apId || !appDescriptor || !apiToken)
+        return -3;
+
+    for (SystemContentNode* lpNode = gpCsisListHead; lpNode; lpNode = lpNode->mpNext)
+    {
+        SystemContent* lpContent = reinterpret_cast<SystemContent*>(
+            reinterpret_cast<u8*>(lpNode) - offsetof(SystemContent, mListNode));
+        if (lpContent->muSystemId != apId->muSystemId)
+            continue;
+
+        if (auKind == 0 || auKind == 1)
+        {
+            SystemClient24* lpEntries = auKind == 0
+                ? lpContent->mpArray2 : lpContent->mpArray1;
+            const u16 luCount = auKind == 0
+                ? lpContent->muNumDestroy : lpContent->muNumUpdate;
+            for (u16 luIndex = 0; luIndex < luCount; ++luIndex)
+            {
+                SystemClient24& lrEntry = lpEntries[luIndex];
+                const char* lpcName = reinterpret_cast<const char*>(lrEntry.muTargetOrOffset);
+                if (lrEntry.mState.mLive.muInterfaceId == apId->muInterfaceId &&
+                    lpcName && apId->mpName && std::strcmp(lpcName, apId->mpName) == 0)
+                {
+                    *appDescriptor = &lrEntry;
+                    *apiToken = lrEntry.mState.miStatus;
+                    return 0;
+                }
+            }
+        }
+        else if (auKind == 2)
+        {
+            for (u16 luIndex = 0; luIndex < lpContent->muNumThird; ++luIndex)
+            {
+                SystemClient32& lrEntry = lpContent->mpArray3[luIndex];
+                const char* lpcName = reinterpret_cast<const char*>(lrEntry.muTargetOrOffset);
+                if (lrEntry.mState.mLive.muInterfaceId == apId->muInterfaceId &&
+                    lpcName && apId->mpName && std::strcmp(lpcName, apId->mpName) == 0)
+                {
+                    *appDescriptor = &lrEntry;
+                    *apiToken = lrEntry.mState.miStatus;
+                    return 0;
+                }
+            }
+        }
+    }
+
+    *appDescriptor = 0;
+    *apiToken = -6;
+    return -6;
 }
 
 } // namespace Csis

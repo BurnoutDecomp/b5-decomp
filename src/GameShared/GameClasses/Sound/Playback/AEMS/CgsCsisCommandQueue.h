@@ -52,6 +52,16 @@ namespace Playback
 struct CsisSetClassHandleCommand : public CsisCommand
 {
     std::uintptr_t maOperands[4]; // +4  words 1..4 -- carried verbatim through the queue
+
+    CsisSetClassHandleCommand(std::uintptr_t apHandle, const char* apcName,
+                              u32 auSystemId, u32 auClassId)
+        : CsisCommand(E_CSIS_COMMAND_SET_CLASS_HANDLE)
+    {
+        maOperands[0] = apHandle;
+        maOperands[1] = reinterpret_cast<std::uintptr_t>(apcName);
+        maOperands[2] = auSystemId;
+        maOperands[3] = auClassId;
+    }
 };
 
 // CgsAemsFactory.h:160 (DWARF). Create command: 4 words (tag + 3 operands).
@@ -59,6 +69,15 @@ struct CsisSetClassHandleCommand : public CsisCommand
 struct CsisCreateCommand : public CsisCommand
 {
     std::uintptr_t maOperands[3]; // +4  words 1..3 -- carried verbatim through the queue
+
+    CsisCreateCommand(std::uintptr_t ahClass, std::uintptr_t apParameters,
+                      std::uintptr_t apRequestHandle)
+        : CsisCommand(E_CSIS_COMMAND_CREATE)
+    {
+        maOperands[0] = ahClass;
+        maOperands[1] = apParameters;
+        maOperands[2] = apRequestHandle;
+    }
 };
 
 // CgsAemsFactory.h:212 (DWARF). Update command: 3 words (tag + 2 operands).
@@ -66,6 +85,13 @@ struct CsisCreateCommand : public CsisCommand
 struct CsisUpdateCommand : public CsisCommand
 {
     std::uintptr_t maOperands[2]; // +4  words 1..2 -- carried verbatim through the queue
+
+    CsisUpdateCommand(std::uintptr_t ahRequest, std::uintptr_t apParameters)
+        : CsisCommand(E_CSIS_COMMAND_UPDATE)
+    {
+        maOperands[0] = ahRequest;
+        maOperands[1] = apParameters;
+    }
 };
 
 // CgsAemsFactory.h:240 (DWARF). Post a typed CSIS command record onto the queue and

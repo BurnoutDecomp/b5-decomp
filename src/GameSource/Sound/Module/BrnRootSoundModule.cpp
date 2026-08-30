@@ -11,6 +11,12 @@
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // the audio-stream LinearMalloc (PLAYBACK stage)
 #include "coreallocator/icoreallocator_interface.h"                      // EA::Allocator::ICoreAllocator (the bridge base)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"               // gpDebugPrint (bring-up trace)
+#include "GameSource/Resource/SharedIO/BrnGameDataRequestQueueImpl.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
+
+#include <cstring>
+
+namespace CgsSystem { namespace HardwareSku { s32 FindLanguage(); } }
 
 // BrnSound::Module::RootSoundModule -- see the header. Reconstructed from BURNOUT_X360_ARTIST.XEX
 // (ctor 0x827E4808, Construct 0x826AF350, Prepare 0x826FABF8), cross-checked against the DecFIGS
@@ -32,6 +38,60 @@ namespace
     bool KB_TESTBED_ALLOCATORS_VERBOSE = false;
     bool KB_TESTBED_ALLOCATORS_SANITY  = false;
     s32  KI_DEBUG_PRINT_AUDIO_ALLOCATIONS = 0;
+
+    struct RegistryBootInfo
+    {
+        u32         mu32RegistryId;
+        const char* mpcBundleName;
+        const char* mpcResourceName;
+    };
+
+    const RegistryBootInfo skaBaseRegistryInfo[] =
+    {
+        {1, "PlaybackRegistry.bundle", "Registry"},
+        {1, "Sound\\SoundEntity.bundle", "SoundEntity"},
+        {3, "RwacFeatureRegistry.bundle", "RwacFeatureRegistry"},
+        {1, "sound\\aems\\Csis.bundle", "BoostCsisEntityReg"},
+        {1, "sound\\aems\\Csis.bundle", "BoostCsisVoiceReg"},
+        {2, "sound\\aems\\Csis.bundle", "BoostCsisFactoryReg"},
+        {1, "sound\\aems\\Csis.bundle", "TrafficCsisEntityReg"},
+        {1, "sound\\aems\\Csis.bundle", "TrafficCsisVoiceReg"},
+        {2, "sound\\aems\\Csis.bundle", "TrafficCsisFactoryReg"},
+        {1, "sound\\aems\\Csis.bundle", "SkidsCsisEntityReg"},
+        {1, "sound\\aems\\Csis.bundle", "SkidsCsisVoiceReg"},
+        {2, "sound\\aems\\Csis.bundle", "SkidsCsisFactoryReg"},
+        {1, "sound\\aems\\Csis.bundle", "HornsCsisEntityReg"},
+        {1, "sound\\aems\\Csis.bundle", "HornsCsisVoiceReg"},
+        {2, "sound\\aems\\Csis.bundle", "HornsCsisFactoryReg"},
+        {1, "sound\\aems\\Csis.bundle", "ScrapesCsisEntityReg"},
+        {1, "sound\\aems\\Csis.bundle", "ScrapesCsisVoiceReg"},
+        {2, "sound\\aems\\Csis.bundle", "ScrapesCsisFactoryReg"},
+        {1, "sound\\aems\\Csis.bundle", "InAirCsisEntityReg"},
+        {1, "sound\\aems\\Csis.bundle", "InAirCsisVoiceReg"},
+        {2, "sound\\aems\\Csis.bundle", "InAirCsisFactoryReg"},
+        {1, "sound\\aems\\Csis.bundle", "SurfaceCsisEntityReg"},
+        {1, "sound\\aems\\Csis.bundle", "SurfaceCsisVoiceReg"},
+        {2, "sound\\aems\\Csis.bundle", "SurfaceCsisFactoryReg"},
+        {1, "sound\\aems\\Csis.bundle", "TurboCsisEntityReg"},
+        {1, "sound\\aems\\Csis.bundle", "TurboCsisVoiceReg"},
+        {2, "sound\\aems\\Csis.bundle", "TurboCsisFactoryReg"},
+        {1, "sound\\aems\\Csis.bundle", "GearWhineCsisEntityReg"},
+        {1, "sound\\aems\\Csis.bundle", "GearWhineCsisVoiceReg"},
+        {2, "sound\\aems\\Csis.bundle", "GearWhineCsisFactoryReg"},
+        {1, "sound\\aems\\Csis.bundle", "CrumpleCsisEntityReg"},
+        {1, "sound\\aems\\Csis.bundle", "CrumpleCsisVoiceReg"},
+        {2, "sound\\aems\\Csis.bundle", "CrumpleCsisFactoryReg"},
+    };
+
+    const RegistryBootInfo skaLocalizedRegistryInfo[] =
+    {
+        {1, "sound\\streams\\StreamsRegistry.bundle",    "StreamsRegistry"},
+        {1, "sound\\streams\\StreamsRegistry_FR.bundle", "StreamsRegistry"},
+        {1, "sound\\streams\\StreamsRegistry_IT.bundle", "StreamsRegistry"},
+        {1, "sound\\streams\\StreamsRegistry_DE.bundle", "StreamsRegistry"},
+        {1, "sound\\streams\\StreamsRegistry_ES.bundle", "StreamsRegistry"},
+        {1, "sound\\streams\\StreamsRegistry_JP.bundle", "StreamsRegistry"},
+    };
 
     // Static-init names from the X360 dynamic initializers (0x82C61A88/AC8/B08: Allocator(&g,
     // "<name>", 0); the gRwac one (0x82C61A48) was not exported -- name matched to the sibling
@@ -213,6 +273,160 @@ namespace Module
     // common exit, which destroys this call's scratch IO buffers and returns false so
     // LoadSoundModule retries next frame. Case order follows the X360 EXECUTION order
     // (0,1,2,3,6,4,7 -- fallthrough follows source order, not case value).
+    bool RootSoundModule::RegistryLoad(Io::LogicOutputBuffer* lpLogicOutputBuffer)
+    {
+        const RegistryBootInfo* lpInfo = 0;
+        if (meCurrentRegistry == 0)
+        {
+            CGS_ASSERT(mu32CurrentRegistry <
+                           sizeof(skaBaseRegistryInfo) / sizeof(skaBaseRegistryInfo[0]),
+                       "mu32CurrentRegistry < RegistryBootInfo count");
+            lpInfo = &skaBaseRegistryInfo[mu32CurrentRegistry];
+        }
+        else if (meCurrentRegistry == 1)
+        {
+            u32 luLanguageIndex = 0;
+            switch (CgsSystem::HardwareSku::FindLanguage())
+            {
+            case 7:
+            case 8:  luLanguageIndex = 0; break;
+            case 10: luLanguageIndex = 1; break;
+            case 15: luLanguageIndex = 2; break;
+            case 11: luLanguageIndex = 3; break;
+            case 22: luLanguageIndex = 4; break;
+            case 16: luLanguageIndex = 5; break;
+            default:
+                CGS_ASSERT(false,
+                    "Unhandled Language when loading Sound Streams Registry.\n");
+                return false;
+            }
+            lpInfo = &skaLocalizedRegistryInfo[luLanguageIndex];
+        }
+        else
+        {
+            CGS_ASSERT(false, "RootSoundModule::LoadLoopModelResouces in a weird state");
+            return false;
+        }
+
+        typedef BrnResource::GameDataIO::RequestInterface<4096> ResourceRequests;
+
+        switch (meResourceStage)
+        {
+        case E_RESOURCE_LOAD_NOT_STARTED:
+        {
+            bool lbBundleAlreadyRequested = false;
+            if (meCurrentRegistry == 0)
+            {
+                for (u32 luI = 0; luI < mu32CurrentRegistry; ++luI)
+                {
+                    if (std::strcmp(skaBaseRegistryInfo[luI].mpcBundleName,
+                                    lpInfo->mpcBundleName) == 0)
+                    {
+                        lbBundleAlreadyRequested = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!lbBundleAlreadyRequested)
+            {
+                lpLogicOutputBuffer->LockForWrite();
+                mReceiverQueue.Clear();
+                ResourceRequests* lpRequests = reinterpret_cast<ResourceRequests*>(
+                    lpLogicOutputBuffer->GetResourceRequestInterface());
+                lpRequests->LoadBundle(&mReceiverQueue, 1, 6,
+                                       lpInfo->mpcBundleName, false);
+                lpLogicOutputBuffer->UnlockForWrite();
+                meResourceStage = E_RESOURCE_LOAD_REQUESTED;
+            }
+            else
+            {
+                meResourceStage = E_RESOURCE_ACQUIRE_NOT_STARTED;
+            }
+        }
+        // fall through
+        case E_RESOURCE_LOAD_REQUESTED:
+            if (meResourceStage == E_RESOURCE_LOAD_REQUESTED)
+            {
+                if (mReceiverQueue.GetCount() < 1)
+                    return false;
+                mReceiverQueue.Clear();
+                meResourceStage = E_RESOURCE_ACQUIRE_NOT_STARTED;
+            }
+            // fall through
+        case E_RESOURCE_ACQUIRE_NOT_STARTED:
+        {
+            lpLogicOutputBuffer->LockForWrite();
+            ResourceRequests* lpRequests = reinterpret_cast<ResourceRequests*>(
+                lpLogicOutputBuffer->GetResourceRequestInterface());
+            lpRequests->AcquireResource(&mReceiverQueue,
+                                        static_cast<s32>(lpInfo->mu32RegistryId),
+                                        6, lpInfo->mpcResourceName);
+            lpLogicOutputBuffer->UnlockForWrite();
+            meResourceStage = E_RESOURCE_ACQUIRE_REQUESTED;
+        }
+        // fall through
+        case E_RESOURCE_ACQUIRE_REQUESTED:
+            if (mReceiverQueue.GetCount() < 1)
+                return false;
+
+            {
+                const CgsModule::Event* lpEvent = 0;
+                s32 liEventSize = 0;
+                mReceiverQueue.GetFirstEvent(&lpEvent, &liEventSize);
+                while (lpEvent != 0)
+                {
+                    const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                        reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(
+                            lpEvent);
+                    const u32 luRegistryId =
+                        static_cast<u32>(lpResponse->miEventId);
+                    if (luRegistryId >= 1 && luRegistryId < 4)
+                    {
+                        CgsResource::ResourceHandle lHandle;
+                        lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+                        lHandle.mpSourceEntry = lpResponse->mpSourceEntry;
+                        CgsResource::ResourcePtr<CgsSound::Playback::Registry>
+                            lRegistry(lHandle);
+                        mLogicModule.GetPlaybackModule().AddRegistry(
+                            *lRegistry, luRegistryId);
+                    }
+                    else if (luRegistryId >= 4)
+                    {
+                        CGS_ASSERT(false,
+                            "RootSoundModule::RegistryLoad have received a resource with an ID that wasn't requested");
+                    }
+
+                    const CgsModule::Event* lpNext = 0;
+                    mReceiverQueue.GetNextEvent(lpEvent, &lpNext, &liEventSize);
+                    lpEvent = lpNext;
+                }
+            }
+            mReceiverQueue.Clear();
+            // fall through
+        case E_RESOURCE_ACQUIRE_COUNT:
+            meResourceStage = E_RESOURCE_LOAD_NOT_STARTED;
+            ++mu32CurrentRegistry;
+            if (meCurrentRegistry == 0)
+            {
+                if (mu32CurrentRegistry ==
+                    sizeof(skaBaseRegistryInfo) / sizeof(skaBaseRegistryInfo[0]))
+                {
+                    mu32CurrentRegistry = 0;
+                    meCurrentRegistry = 1;
+                }
+                return false;
+            }
+
+            mLogicModule.GetPlaybackModule().GetEnvironment()->GetRegistry()->Resolve(
+                *mLogicModule.GetPlaybackModule().GetEnvironment()->GetRegistry());
+            return true;
+        default:
+            CGS_ASSERT(false, "RootSoundModule::LoadLoopModelResouces in a weird state");
+            return false;
+        }
+    }
+
     bool RootSoundModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
                                   CgsModule::IOBufferStack* lpInputBufferStack,
                                   CgsModule::IOBufferStack* lpOutputBufferStack,
@@ -298,19 +512,18 @@ namespace Module
                                        << " (bank 0x18 carve "
                                        << (lpRwacBank ? "present" : "MISSING") << ")\n";
 
-            // * the Csis side: Init(SetAllocator(&gCsisTestBedAlloc)) -- one expression.
-            //   [deferred slice] the console first carves bank 9 into a dedicated
+            // * the Csis side. The console first carves bank 9 into a dedicated
             //   "CsisPrivateHeap" sub-allocator (GetResourceDescriptor 0x2000/4 + the
-            //   bank allocator's virtual CreateAllocator + Initialize) and backs
-            //   gCsisTestBedAlloc with it; the host GeneralResourceAllocator does not
-            //   model the sub-allocator factory yet, and the committed Csis slice never
-            //   allocates (Subscribe/Lock only), so gCsisTestBedAlloc stays un-backed
-            //   here -- the wiring shape (SetAllocator's return feeding Init) is the
-            //   X360's.
+            //   bank allocator's virtual CreateAllocator + Initialize). The host uses
+            //   the same bank-9 resource allocator directly; CSIS now allocates its
+            //   native Class records through this testbed wrapper and returns them on
+            //   the zero-reference path.
+            gCsisTestBedAlloc.SetAllocator(
+                &lpAllocatorList->GetRWGeneralResourceAllocator(9)->field_0x0);
             gCsisTestBedAlloc.SetVerbose(KB_TESTBED_ALLOCATORS_VERBOSE);
             gCsisTestBedAlloc.SetSanityCheck(KB_TESTBED_ALLOCATORS_SANITY);
-            Csis::System::SetAllocator(&gCsisTestBedAlloc);   // X360: Init(SetAllocator(&g)) --
-            Csis::System::Init();                             // SetAllocator's return feeds Init
+            Csis::System::SetAllocator(&gCsisTestBedAlloc);
+            Csis::System::Init();
 
             // * VectorToCsisMutex FIRST, then the three hook installs overwrite what it
             //   vectored (the X360 store order); then the locked tuning pair.
@@ -384,6 +597,15 @@ namespace Module
             // The full stage stays [gated] on the rw::audio engine; this is its data half.
             // FLAG (PC leaf): host-only call, no @0x82 anchor of its own -- the console
             // equivalent is the RegistryLoad + StreamingStateManager::Prepare pair above.
+            if (!RegistryLoad(lpLogicOutputBuffer))
+            {
+                lpSoundModuleOutputBuffer->LockForWrite();
+                lpLogicOutputBuffer->LockForRead();
+                BridgeLogicToRoot(lpLogicOutputBuffer, lpSoundModuleOutputBuffer);
+                lpLogicOutputBuffer->UnlockForRead();
+                lpSoundModuleOutputBuffer->UnlockForWrite();
+                break;
+            }
             CgsSystem::StreamHeadersPC::Preload();
             meReleaseStage = E_RELEASESTAGE_REGISTRY_LOAD;
             // fall through
@@ -420,6 +642,26 @@ namespace Module
             //   UnlockBuffersForIO + UnlockForWrite.
             // Blocked on: the playback Io pair + the RootOutputBuffer request interfaces +
             // CgsModuleUtils.h (LockBuffersForIO). All land with the playback-module TU group.
+
+            lpLogicOutputBuffer->LockForRead();
+            lpSoundModuleOutputBuffer->LockForWrite();
+            lpPlaybackInputBuffer->LockForWrite();
+            BridgeLogicToRoot(lpLogicOutputBuffer, lpSoundModuleOutputBuffer);
+            lpLogicOutputBuffer->UnlockForRead();
+            lpSoundModuleOutputBuffer->UnlockForWrite();
+            lpPlaybackInputBuffer->UnlockForWrite();
+
+            mLogicModule.GetPlaybackModule().Update(
+                lpPlaybackInputBuffer, lpPlaybackOutputBuffer);
+
+            lpSoundModuleOutputBuffer->LockForWrite();
+            lpPlaybackOutputBuffer->LockForRead();
+            lpSoundModuleOutputBuffer->GetResourceRequestInterface()->mRequestQueue.Append(
+                lpPlaybackOutputBuffer->GetResourceRequestQueue());
+            mLogicModule.GetFreedStreamBufferIds().AppendArray(
+                lpPlaybackOutputBuffer->GetStreamBuffersFreed());
+            lpPlaybackOutputBuffer->UnlockForRead();
+            lpSoundModuleOutputBuffer->UnlockForWrite();
 
             if (!lbLogicPrepared)
                 break;

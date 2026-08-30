@@ -1,15 +1,13 @@
 #include "GameSource/Sound/BrnResourceRegistrar.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
 
 #include <cstring>   // strncpy
 
 // BrnSound::Logic::ResourceRegistrar -- the sound-logic streaming-resource broker. Faithfully
 // decompiled from BURNOUT_X360_ARTIST.XEX (per-function addresses cited at each body). The
 // queue-driven load/unload state machines (QueuedResource::Prepare/Release/PrepareAttribSys/
-// ReleaseAttribSys) bottom out in BrnResource::GameDataIO::RequestInterface<4096> and
-// CgsAttribSys::AttribSysIO::AttribSysRequestInterface<2048>, neither of which is reconstructed at
-// the shape the X360 calls here; those four are stubbed (see each FLAG). Everything else is the real
-// X360 logic. The broker is not driven at runtime yet (its owner SoundLogicModule isn't prepared),
-// so this is faithful-and-compiling code, not a live path.
+// ReleaseAttribSys) feed the reconstructed GameDataIO and AttribSys request interfaces. The owner
+// SoundLogicModule drives Update each bridge tick and appends both outgoing queues to the root pump.
 
 // =============================================================================
 // rw::RwHash32String @ X360 0x82BBC458 -- FNV-1a over the raw bytes (prime 0x01000193); the caller
@@ -51,7 +49,7 @@ namespace Logic
     ResourceRegistrar::RequestedResource::RequestedResource(const QueuedResource& lrSource)
     {
         // miResourceType (+0x40) <- src miResourceType (+0x128)
-        miResourceType = lrSource.miResourceType;
+        miResourceType = static_cast<s32>(lrSource.muResourceNameHash);
 
         // muBundleNameHash (+0x44) <- RwHash32String(src bundle name, basis); 0 when the name is empty.
         if (lrSource.macBundleName[0] != 0)
@@ -85,6 +83,34 @@ namespace Logic
         }
     }
 
+    ResourceRegistrar::RequestedResource&
+    ResourceRegistrar::RequestedResource::operator=(const RequestedResource& lrSource)
+    {
+        if (this == &lrSource)
+            return *this;
+
+        strncpy(macBundleName, lrSource.macBundleName, sizeof(macBundleName));
+        macBundleName[sizeof(macBundleName) - 1] = 0;
+        miResourceType = lrSource.miResourceType;
+        muBundleNameHash = lrSource.muBundleNameHash;
+        mResourceHandle = lrSource.mResourceHandle;
+        miId12C = lrSource.miId12C;
+        miId130 = lrSource.miId130;
+
+        // The X360 copy destination owns its own fixed requester-node pool. Rebuild that
+        // pool instead of copying the helper's self-referential list pointers.
+        mRequesterList.Construct();
+        const CgsContainers::LinkedListNode<IResourceRequester*>* lpRequester =
+            lrSource.mRequesterList.GetHead();
+        while (lpRequester)
+        {
+            mRequesterList.AddTail(lpRequester->mData);
+            lpRequester = static_cast<const CgsContainers::LinkedListNode<IResourceRequester*>*>(
+                lpRequester->GetNextNode());
+        }
+        return *this;
+    }
+
     // 0x826ADCA8 -- move every requester-list node whose payload == lpRequester from live -> free;
     // return true iff at least one was removed. The X360 finds-then-removes in a loop
     // (sub_826A5F48 == LinkedListHelper find-by-value); modelled here as a head-restart walk.
@@ -116,18 +142,20 @@ namespace Logic
         // handle (+0x118/+0x11C) <- src handle (+0x48/+0x4C)
         mResourceHandle = lrSource.mResourceHandle;
 
-        // miResourceType (+0x128) <- src miResourceType (+0x40)
-        miResourceType = lrSource.miResourceType;
+        // Resource identity/hash (+0x120/+0x128) <- the requested resource.
+        mResourceId = lrSource.mResourceHandle.GetResourceId();
+        muResourceNameHash = static_cast<u32>(lrSource.miResourceType);
 
         // FAITHFUL: the ctor really sets mState (+0x130) = 5; +0x12C = 0; +0x138 (mpRequester) = 0.
         miPad12C = 0;
         mState   = 5;
 
         // FLAG (fix): the X360 ctor zeroes +0x140 (`stb r26,0x140(r28)`, r26=0) -- the
-        // mbResourceStillRequested flag UpdateRequests later reads. Previously omitted, leaving
+        // mbRelinquished flag UpdateRequests later reads. Previously omitted, leaving
         // the flag uninitialised. ARTIST 0x82695768 confirms the zero-init. (Byte store on X360;
-        // zeroing the whole field is the faithful intent.)
-        mbResourceStillRequested = 0;
+        // zeroing the field is the faithful intent.)
+        mbRelinquished = false;
+        std::memset(maPad141, 0, sizeof(maPad141));
 
         // mResourceClass (+0x134) <- src miId12C (+0x12C); mpRequester (+0x138) = 0
         mResourceClass = lrSource.miId12C;
@@ -145,39 +173,307 @@ namespace Logic
         mReceiverQueue.Construct(macReceiverBuffer, 0xC0, 16);
     }
 
-    // 0x827007E8 -- load state machine.
-    // FLAG: stubbed -- the load legs call BrnResource::GameDataIO::RequestInterface<4096>::LoadBundle
-    //   (X360 0x827007E8) and the AttribSys leg, neither reconstructed at the shape used here; the
-    //   real machine returns false until the (not-yet-reconstructed) request interfaces report ready,
-    //   so returning false (not-ready) is the faithful no-progress result.
-    bool ResourceRegistrar::QueuedResource::Prepare(ResourceRegistrar& /*lrOwner*/)
+    // 0x82697BA0 -- build a fresh load request from the public LoadAsset arguments.
+    ResourceRegistrar::QueuedResource::QueuedResource(
+        const char* lpcResourceName, const char* lpcFileName,
+        IResourceRequester* lpResourceRequester, s32 liBundleId, EType leType)
     {
+        mResourceHandle.Clear();
+        miPad12C = 0;
+        mResourceClass = static_cast<s32>(leType);
+        mpRequester = lpResourceRequester;
+        mBundleId = liBundleId;
+        mbRelinquished = false;
+        std::memset(maPad141, 0, sizeof(maPad141));
+        miPad144 = 0;
+
+        CGS_ASSERT(lpcResourceName || lpcFileName, "lpcResourceName || lpcFileName");
+
+        if (lpcFileName)
+        {
+            CGS_ASSERT(strlen(lpcFileName) < sizeof(macBundleName), "String too long");
+            strncpy(macBundleName, lpcFileName, sizeof(macBundleName));
+            macBundleName[sizeof(macBundleName) - 1] = 0;
+            mState = 0;
+        }
+        else
+        {
+            macBundleName[0] = 0;
+            mState = 2;
+        }
+
+        if (lpcResourceName)
+        {
+            mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
+                CgsResource::ID::HashString(reinterpret_cast<const u8*>(lpcResourceName)))));
+            muResourceNameHash = rw::RwHash32String(lpcResourceName, KU_FNV_OFFSET_BASIS);
+        }
+        else
+        {
+            mResourceId.SetHash(0);
+            muResourceNameHash = 0;
+        }
+
+        mReceiverQueue.Construct(macReceiverBuffer, 0xC0, 16);
+    }
+
+    ResourceRegistrar::QueuedResource&
+    ResourceRegistrar::QueuedResource::operator=(const QueuedResource& lrSource)
+    {
+        if (this == &lrSource)
+            return *this;
+
+        strncpy(macBundleName, lrSource.macBundleName, sizeof(macBundleName));
+        macBundleName[sizeof(macBundleName) - 1] = 0;
+        mResourceHandle = lrSource.mResourceHandle;
+        mResourceId = lrSource.mResourceId;
+        muResourceNameHash = lrSource.muResourceNameHash;
+        miPad12C = lrSource.miPad12C;
+        mState = lrSource.mState;
+        mResourceClass = lrSource.mResourceClass;
+        mpRequester = lrSource.mpRequester;
+        mBundleId = lrSource.mBundleId;
+        mbRelinquished = lrSource.mbRelinquished;
+        std::memcpy(maPad141, lrSource.maPad141, sizeof(maPad141));
+        miPad144 = lrSource.miPad144;
+
+        // Preserve any responses while rebinding the receiver to this object's own buffer.
+        mReceiverQueue.Construct(macReceiverBuffer, 0xC0, 16);
+        const CgsModule::Event* lpEvent = 0;
+        s32 liEventSize = 0;
+        s32 liEventType = lrSource.mReceiverQueue.GetFirstEvent(&lpEvent, &liEventSize);
+        while (liEventType >= 0)
+        {
+            mReceiverQueue.AddEvent(lpEvent, liEventType, liEventSize);
+            liEventType = lrSource.mReceiverQueue.GetNextEvent(lpEvent, &lpEvent, &liEventSize);
+        }
+        return *this;
+    }
+
+    // 0x827007E8 -- load bundle -> acquire named resource -> optional AttribSys vault.
+    bool ResourceRegistrar::QueuedResource::Prepare(ResourceRegistrar& lrOwner)
+    {
+        const CgsModule::Event* lpEvent = 0;
+        s32 liEventSize = 0;
+
+        switch (mState)
+        {
+        case 0:
+            mState = 0;
+            lrOwner.mResourceRequestInterface.LoadBundle(
+                &mReceiverQueue, 1, 6, macBundleName, false);
+            // fall through: a response cannot normally exist in the same frame.
+        case 1:
+        {
+            mState = 1;
+            if (mReceiverQueue.GetLength() <= 0)
+                return false;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liEventSize);
+            CGS_ASSERT(liType == 2,
+                "mReceiverQueue.GetFirstEvent( &lpEvent, &liEventSize ) == CgsResource::ResourceIO::EVENT_LOADBUNDLE");
+            const CgsResource::Events::LoadBundleResponse* lpLoad =
+                reinterpret_cast<const CgsResource::Events::LoadBundleResponse*>(lpEvent);
+            CGS_ASSERT(lpLoad != 0, "lpEvent");
+            CGS_ASSERT(lpLoad->miEventId == 1,
+                "lpLoad->GetEventId() == E_USER_BUNDLE_LOAD_REQUEST_ID");
+            // fall through to the resource-acquire leg.
+        }
+        case 2:
+            mState = 2;
+            if (muResourceNameHash == 0)
+            {
+                // The console stamps ready here but reports it on the following tick.
+                mState = 5;
+                return false;
+            }
+            mReceiverQueue.Clear();
+            {
+                CgsResource::Events::AcquireResourceRequest lRequest;
+                lRequest.mpUser = &mReceiverQueue;
+                lRequest.miEventId = 2;
+                lRequest.miPoolId = mBundleId;
+                lRequest.mResourceId = mResourceId;
+                lRequest.mbCheckRefCount = false;
+                lrOwner.mResourceRequestInterface.mRequestQueue.AddEvent(&lRequest, 4);
+            }
+            // fall through: wait for the resource module's response.
+        case 3:
+        {
+            mState = 3;
+            if (mReceiverQueue.GetLength() <= 0)
+                return false;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liEventSize);
+            CGS_ASSERT(liType == 4,
+                "mReceiverQueue.GetFirstEvent( &lpEvent, &liEventSize ) == CgsResource::ResourceIO::EVENT_ACQUIRERESOURCE");
+            const CgsResource::Events::AcquireResourceResponse* lpAcquire =
+                reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+            CGS_ASSERT(lpAcquire != 0, "lpAcquire");
+            CGS_ASSERT(lpAcquire->miEventId == 2,
+                "lpAcquire->GetEventId() == E_USER_RESOURCE_REQUEST_ID");
+
+            CgsResource::ResourceHandle lResponseHandle;
+            lResponseHandle.mpResourceMemory = lpAcquire->mpResourceMemory;
+            lResponseHandle.mpSourceEntry = lpAcquire->mpSourceEntry;
+            CGS_ASSERT(lpAcquire->mResourceId == mResourceId &&
+                       lResponseHandle.GetResourceId() == mResourceId,
+                "ResourceRegistrar : The resource system gave us the wrong resource.");
+            mResourceHandle = lResponseHandle;
+            mReceiverQueue.Clear();
+            // fall through to the resource-class leg.
+        }
+        case 4:
+            mState = 4;
+            if (mResourceClass == E_DATA)
+            {
+                mState = 5;
+                return true;
+            }
+            if (mResourceClass == E_ATTRIBSYS && PrepareAttribSys(lrOwner))
+            {
+                mState = 5;
+                return true;
+            }
+            return false;
+        case 5:
+            mState = 5;
+            return true;
+        case 9:
+            mState = 9;
+            return false;
+        default:
+            CGS_ASSERT(false, "ResourceRegistrar::QueuedResource::Prepare() - Bad State");
+            return false;
+        }
+    }
+
+    // 0x827005D0 -- unregister the vault, clear its handle, then unload its bundle.
+    bool ResourceRegistrar::QueuedResource::Release(ResourceRegistrar& lrOwner)
+    {
+        const CgsModule::Event* lpEvent = 0;
+        s32 liEventSize = 0;
+
+        switch (mState)
+        {
+        case 0:
+            mState = 0;
+            return true;
+        case 5:
+        case 6:
+            mState = 6;
+            if (mResourceClass == E_ATTRIBSYS)
+            {
+                if (!ReleaseAttribSys(lrOwner))
+                    return false;
+            }
+            else
+            {
+                CGS_ASSERT(mResourceClass == E_DATA, "Bad State");
+            }
+            // fall through.
+        case 7:
+            mState = 7;
+            mResourceHandle.Clear();
+            if (macBundleName[0])
+            {
+                lrOwner.mResourceRequestInterface.UnloadBundle(
+                    &mReceiverQueue, 4, mBundleId, macBundleName);
+            }
+            // fall through.
+        case 8:
+            mState = 8;
+            if (!macBundleName[0])
+            {
+                mState = 0;
+                return true;
+            }
+            if (mReceiverQueue.GetLength() <= 0)
+                return false;
+            {
+                const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liEventSize);
+                CGS_ASSERT(liType == 3,
+                    "mReceiverQueue.GetFirstEvent( &lpEvent, &liEventSize ) == CgsResource::ResourceIO::EVENT_UNLOADBUNDLE");
+                const CgsResource::Events::UnloadBundleResponse* lpUnload =
+                    reinterpret_cast<const CgsResource::Events::UnloadBundleResponse*>(lpEvent);
+                CGS_ASSERT(lpUnload != 0, "lpEvent");
+                CGS_ASSERT(lpUnload->miEventId == 4,
+                    "lpUnLoad->GetEventId() == E_USER_BUNDLE_UNLOAD_REQUEST_ID");
+            }
+            mState = 0;
+            return true;
+        default:
+            CGS_ASSERT(false, "Bad State in release machine");
+            return false;
+        }
+    }
+
+    namespace
+    {
+        struct VaultResponse : public CgsModule::Event
+        {
+            s32 miEventId;
+        };
+    }
+
+    // 0x826FBD68 -- register this acquired handle as a resident AttribSys vault.
+    bool ResourceRegistrar::QueuedResource::PrepareAttribSys(ResourceRegistrar& lrOwner)
+    {
+        if (miPad12C == 0)
+        {
+            mReceiverQueue.Clear();
+            lrOwner.mAttribSysRequestInterface.RegisterVault(
+                &mReceiverQueue, mResourceHandle, 3,
+                CgsAttribSys::AttribSysIO::E_VAULT_TYPE_RESIDENT);
+            miPad12C = 1;
+        }
+        if (miPad12C == 1)
+        {
+            if (mReceiverQueue.GetLength() <= 0)
+                return false;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liEventSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liEventSize);
+            CGS_ASSERT(liType == 3,
+                "mReceiverQueue.GetFirstEvent( &lpEvent, &liEventSize ) == CgsAttribSys::AttribSysIO::E_OUT_EVENT_VAULT_REGISTERED");
+            const VaultResponse* lpRegistered = reinterpret_cast<const VaultResponse*>(lpEvent);
+            CGS_ASSERT(lpRegistered != 0, "lpVaultRegistered");
+            CGS_ASSERT(lpRegistered->miEventId == 3,
+                "lpVaultRegistered->GetEventId() == E_USER_ATTRIBSYS_REQUEST_ID");
+            mReceiverQueue.Clear();
+            miPad12C = 2;
+        }
+        return miPad12C == 2;
+    }
+
+    // 0x826FBE98 -- unregister the resident vault before its bundle is released.
+    bool ResourceRegistrar::QueuedResource::ReleaseAttribSys(ResourceRegistrar& lrOwner)
+    {
+        if (miPad12C == 0)
+        {
+            mReceiverQueue.Clear();
+            lrOwner.mAttribSysRequestInterface.UnregisterVault(
+                &mReceiverQueue, mResourceHandle, 3);
+            miPad12C = 1;
+        }
+        if (miPad12C == 1)
+        {
+            if (mReceiverQueue.GetLength() <= 0)
+                return false;
+            const CgsModule::Event* lpEvent = 0;
+            s32 liEventSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liEventSize);
+            CGS_ASSERT(liType == 5,
+                "mReceiverQueue.GetFirstEvent( &lpEvent, &liEventSize ) == CgsAttribSys::AttribSysIO::E_OUT_EVENT_VAULT_UNREGISTERED");
+            const VaultResponse* lpUnregistered = reinterpret_cast<const VaultResponse*>(lpEvent);
+            CGS_ASSERT(lpUnregistered != 0, "lpVaultUnRegistered");
+            CGS_ASSERT(lpUnregistered->miEventId == 3,
+                "lpVaultUnRegistered->GetEventId() == E_USER_ATTRIBSYS_REQUEST_ID");
+            mReceiverQueue.Clear();
+            miPad12C = 2;
+        }
+        if (miPad12C == 2)
+            return true;
+        CGS_ASSERT(false, "Bad State.");
         return false;
-    }
-
-    // 0x827005D0 -- release state machine.
-    // FLAG: stubbed -- the unload legs call RequestInterface<4096>::UnloadBundle (X360 0x827005D0),
-    //   not reconstructed; the real machine completes (returns true) once the unload event arrives,
-    //   so returning true (done) lets UpdateQueued recycle the node without leaking.
-    bool ResourceRegistrar::QueuedResource::Release(ResourceRegistrar& /*lrOwner*/)
-    {
-        return true;
-    }
-
-    // 0x826FBD68 -- AttribSys vault register leg.
-    // FLAG: stubbed -- calls CgsAttribSys::AttribSysIO::AttribSysRequestInterface<2048>::RegisterVault
-    //   (not reconstructed); returns true (leg complete).
-    bool ResourceRegistrar::QueuedResource::PrepareAttribSys(ResourceRegistrar& /*lrOwner*/)
-    {
-        return true;
-    }
-
-    // 0x826FBE98 -- AttribSys vault unregister leg.
-    // FLAG: stubbed -- calls AttribSysRequestInterface<2048>::UnregisterVault (not reconstructed);
-    //   returns true (leg complete).
-    bool ResourceRegistrar::QueuedResource::ReleaseAttribSys(ResourceRegistrar& /*lrOwner*/)
-    {
-        return true;
     }
 
     // =========================================================================
@@ -190,8 +486,8 @@ namespace Logic
         // The two request interfaces: Construct then Clear (the X360 calls both back-to-back).
         mResourceRequestInterface.Construct();
         mResourceRequestInterface.Clear();
-        mAttribSysRequestInterface.Construct();
-        mAttribSysRequestInterface.Clear();
+        mAttribSysRequestInterface.mRequestQueue.Construct();
+        mAttribSysRequestInterface.mRequestQueue.Clear();
 
         // The three pools: free list seeded with the node pool, live list empty (helper Construct does both).
         mLoadedResourceList.Construct();
@@ -217,7 +513,7 @@ namespace Logic
             // node pointer itself, which carries the same intent without the always-true &mData!=0.
             CGS_ASSERT(lpNode != 0, "lpIterator->GetData()");
 
-            if ((!lbMatchType || liResourceType == lpNode->mData.miResourceType) &&
+            if ((!lbMatchType || liResourceType == static_cast<s32>(lpNode->mData.muResourceNameHash)) &&
                 lpRequester == lpNode->mData.mpRequester)
             {
                 return true;
@@ -324,17 +620,13 @@ namespace Logic
     // queued resource type (data +0x128), then finds the requested node whose (miResourceType,
     // muBundleNameHash) match. On a match:
     //   * a per-queued-item state guard fires the debug assert if mState is not in {0,2,5,9};
-    //   * if the queued item's mbResourceStillRequested (+0x140) is set, the requested node is queued
+    //   * if the queued item's mbRelinquished (+0x140) is set, the requested node is queued
     //     for removal once it has no live refs (AddNodeToRemoveResourceCandidateList);
     //   * otherwise the queued item's requester (mpRequester, +0x138) is transferred onto the
     //     requested node's mRequesterList, the requested node is dropped from the removal candidates
     //     if present, and -- when the queued list holds no other duplicate referencing that requester
-    //     -- the requester is released through its vtable (the X360 `(***v20)(*v20)` indirect call);
+    //     -- the requester is notified through ResourcesAreReady (the X360 slot-0 indirect call);
     //   * the matched queued node is then recycled (live -> free).
-    // FLAG: the requester-release indirect call `(***v20)(*v20)` (X360) routes through an
-    //   IResourceRequester vtable slot that is not modelled on the trimmed 3-virtual interface used
-    //   here; it is omitted (the transfer leg never runs because the stubbed load path leaves
-    //   mpRequester null), and noted rather than invented. The structural loop is otherwise faithful.
     void ResourceRegistrar::UpdateRequests()
     {
         QueuedNode* lpQueued = mLoadingQueuedResourceList.GetHead();
@@ -346,7 +638,7 @@ namespace Logic
             {
                 luBundleHash = rw::RwHash32String(lpQueued->mData.macBundleName, KU_FNV_OFFSET_BASIS);
             }
-            const s32 liResType = lpQueued->mData.miResourceType; // data +0x128
+            const s32 liResType = static_cast<s32>(lpQueued->mData.muResourceNameHash); // data +0x128
 
             bool lbAdvanceQueued = true;
 
@@ -366,7 +658,7 @@ namespace Logic
                         CgsDev::Assert::EndAssert();
                     }
 
-                    if (lpQueued->mData.mbResourceStillRequested) // data +0x140
+                    if (lpQueued->mData.mbRelinquished) // data +0x140
                     {
                         // FLAG (fix): the X360 guard is `FindFirstInstanceOf(lpRequested) == -1`
                         //   (queue for removal only if NOT already a candidate), NOT a refcount
@@ -390,8 +682,20 @@ namespace Logic
                         {
                             mapRemovalCandidates.EraseFast(static_cast<u32>(liCandidateIndex));
                         }
-                        // FLAG: the X360 then releases the requester via an IResourceRequester vtable
-                        //   slot not present on the trimmed interface; omitted (dead under the stub path).
+                        bool lbRequesterStillQueued = false;
+                        for (QueuedNode* lpOther = mLoadingQueuedResourceList.GetHead();
+                             lpOther;
+                             lpOther = static_cast<QueuedNode*>(lpOther->GetNextNode()))
+                        {
+                            if (lpOther != lpQueued &&
+                                lpOther->mData.mpRequester == lpQueued->mData.mpRequester)
+                            {
+                                lbRequesterStillQueued = true;
+                                break;
+                            }
+                        }
+                        if (!lbRequesterStillQueued)
+                            lpQueued->mData.mpRequester->ResourcesAreReady();
                     }
 
                     // Recycle the matched queued node (live -> free); resume the inner walk past it and
@@ -427,13 +731,8 @@ namespace Logic
             {
                 // X360 (sub_826EB100): grab a free RequestedResource node and placement-construct the
                 // RequestedResource directly in the node from the queued source, then AddTail it.
-                // FLAG: PC-port divergence. The generic LinkedListHelper::AddTail copy-ASSIGNS the value
-                //   into the node (mData = value); RequestedResource embeds a self-referential
-                //   LinkedListHelper<...,16> whose internal free/live list pointers reference its own
-                //   maNodePool, so a copy carries stale pointers. The X360 builds in place (no copy).
-                //   This path is dead (broker not driven at runtime + Prepare is stubbed to false), so
-                //   the copy never executes; kept as the faithful structural shape. A future in-place
-                //   "AddTailConstruct(src)" helper would remove the divergence.
+                // AddTail copy-assigns into the destination node; RequestedResource::operator=
+                // reconstructs its embedded self-referential requester pool before copying entries.
                 RequestedResource lRequested(lpNode->mData);
                 mLoadedResourceList.AddTail(lRequested);
             }
@@ -477,11 +776,9 @@ namespace Logic
                 CgsDev::Assert::EndAssert();
             }
 
-            // Build an unloading QueuedResource from the requested node and AddHead it onto the unload list.
-            // FLAG: PC-port divergence (same as the UpdateQueued promotion): AddHead copy-ASSIGNS the
-            //   QueuedResource, whose embedded BaseEventReceiverQueue mpBuffer points at its own
-            //   macReceiverBuffer; a copy carries a stale buffer pointer. The X360 builds in place.
-            //   Dead path (broker not driven at runtime); kept as the faithful structural shape.
+            // Build an unloading QueuedResource from the requested node and AddHead it onto the
+            // unload list. QueuedResource::operator= rebinds the destination receiver queue to its
+            // own embedded buffer while preserving any queued responses.
             QueuedResource lUnloadingItem(lpNode->mData);
             QueuedNode* lpAdded = mUnLoadingQueuedResourceList.AddHead(lUnloadingItem);
             if (lpAdded == 0)
@@ -521,16 +818,16 @@ namespace Logic
     void ResourceRegistrar::Update()
     {
         mResourceRequestInterface.Clear();
-        mAttribSysRequestInterface.Clear();
+        mAttribSysRequestInterface.mRequestQueue.Clear();
 
-        if (mAttribSysRequestInterface.GetLength())
+        if (mAttribSysRequestInterface.mRequestQueue.GetLength())
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mAttribSysRequestInterface.GetRequestQueue()->GetLength() == 0",
                                        KAC_RR_FILE, 513);
             CgsDev::Assert::EndAssert();
         }
-        if (mResourceRequestInterface.GetLength())
+        if (mResourceRequestInterface.mRequestQueue.GetLength())
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mResourceRequestInterface.GetRequestQueue()->GetLength() == 0",
@@ -541,6 +838,44 @@ namespace Logic
         UpdateRequests();
         UpdateQueued();
         ClearUnreferancedFiles();
+    }
+
+    // 0x826E1F88 -- mark a duplicate load as state 9, then append it regardless so
+    // UpdateRequests can merge its requester into the already-loaded entry.
+    void ResourceRegistrar::AddRequest(const QueuedResource& lrRequest)
+    {
+        QueuedResource lRequest;
+        lRequest = lrRequest;
+        const u32 luBundleHash = lRequest.macBundleName[0]
+            ? rw::RwHash32String(lRequest.macBundleName, KU_FNV_OFFSET_BASIS)
+            : 0;
+
+        for (QueuedNode* lpNode = mLoadingQueuedResourceList.GetHead();
+             lpNode;
+             lpNode = static_cast<QueuedNode*>(lpNode->GetNextNode()))
+        {
+            const u32 luExistingBundleHash = lpNode->mData.macBundleName[0]
+                ? rw::RwHash32String(lpNode->mData.macBundleName, KU_FNV_OFFSET_BASIS)
+                : 0;
+            if (luBundleHash == luExistingBundleHash &&
+                lRequest.muResourceNameHash == lpNode->mData.muResourceNameHash)
+            {
+                lRequest.mState = 9;
+                break;
+            }
+        }
+        mLoadingQueuedResourceList.AddTail(lRequest);
+    }
+
+    // 0x826E2348 -- public requester entry point. Pool 6 is the sound-data pool.
+    void IResourceRequester::LoadAsset(const char* lpcBundleName,
+                                       const char* lpcResourceName,
+                                       ResourceRegistrar::EType leType)
+    {
+        CGS_ASSERT(lpcBundleName, "lpFilename");
+        ResourceRegistrar::QueuedResource lRequest(
+            lpcResourceName, lpcBundleName, this, 6, leType);
+        GetResourceRegistrar().AddRequest(lRequest);
     }
 }
 }

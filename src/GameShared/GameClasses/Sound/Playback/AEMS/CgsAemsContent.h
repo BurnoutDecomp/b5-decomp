@@ -4,6 +4,8 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Sound/Playback/CgsContent.h"             // CgsSound::Playback::Content / Factory / ContentSpec
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"               // Slot / PlayerVoice / ISlotImplementation
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsPlayerVoice.h" // concrete AEMS player voice
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacContent.h" // ContentLoader<T> + CgsResource::BinaryFileResource
 
 // =============================================================================
@@ -47,58 +49,24 @@ namespace CgsSound
 namespace Playback
 {
 
-// Forward-declared engine collaborators (full homes elsewhere).
-struct System;
-struct Content;
-
-// CgsVoice.h:43 (DWARF). Playback state bits/values; bit-1 == PLAYING is the bit
-// DoPlay raises on the player voice's playback-flags byte.
-enum EPlaybackStateBits
+// CgsAemsContent.h (DecFIGS): CSIS class/interface descriptor content. ARTIST
+// DoOnPostLoad/DoOnPreUnload subscribe the loaded MOIR image with Csis::System.
+struct CsisContent : public Content
 {
-    E_PLAYBACK_STATE_PLAYING_BIT = 2,
-};
+    CsisContent(Factory& arFactory, const ContentSpec& akrSpec, u32 au32Ident);
+    virtual ~CsisContent();
 
-// CgsVoice.h:195 (DWARF). One slot on a voice. MINIMAL: the overrides receive it
-// by const-ref but read nothing from it (the X360 ignores the Slot arg), so only
-// the type identity is load-bearing here.
-struct Slot
-{
-};
+protected:
+    virtual bool  DoLoad();
+    virtual bool  DoUnload();
+    virtual void  DoUpdate(f32 af32Dt);
+    virtual void* DoGetData();
+    virtual bool  DoOnPostLoad();
+    virtual bool  DoOnPreUnload();
 
-// CgsPlayerVoice.h:42 / CgsAemsPlayerVoice.h:53 (DWARF). The AEMS player voice the
-// slot drives. MINIMAL home -- see file banner FLAGs. Only the playback-flags byte
-// DoPlay raises and the three forwarded member functions are modelled.
-struct AemsPlayerVoice
-{
-    // The playback-flags byte at AemsPlayerVoice+0x80 (X360). DoPlay raises the
-    // PLAYING bit here before starting playback. FLAG: exact layout slot DEFERRED.
-    u8 mu8PlaybackFlags;
-
-    // Raises the PLAYING bit on the playback-flags byte (X360: `|= 2`).
-    void SetPlaying() { mu8PlaybackFlags = static_cast<u8>(mu8PlaybackFlags | E_PLAYBACK_STATE_PLAYING_BIT); }
-
-    // Cross-TU member bodies (defined in the AemsPlayerVoice TUs; declared here).
-    bool Play(u32 au32Param); // that TU
-    bool Stop();              // that TU
-    bool Update(f32 af32Dt);  // that TU
-};
-
-// The Slot dispatches play/stop/update through a PlayerVoice& base; for the AEMS
-// slot that reference always denotes an AemsPlayerVoice. Modelled as an alias of
-// the minimal AemsPlayerVoice for this TU's purposes (the real PlayerVoice is the
-// AemsPlayerVoice's base; the overrides only ever see AemsPlayerVoice instances).
-typedef AemsPlayerVoice PlayerVoice;
-
-// CgsVoice.h:676 (DWARF). The slot-implementation interface. Pure-virtual play/
-// stop/update hooks the concrete slot implementations override.
-struct ISlotImplementation
-{
-    virtual ~ISlotImplementation() {}
-
-    virtual bool DoPlay(const Slot& aSlot, PlayerVoice& aVoice, Content& aContent, u32 au32Param) = 0;
-    virtual bool DoStop(const Slot& aSlot, PlayerVoice& aVoice, Content& aContent) = 0;
-    virtual bool DoUpdatePlaying(System* apSystem, const Slot& aSlot, PlayerVoice& aVoice,
-                                 Content& aContent, f32 af32Dt) = 0;
+private:
+    ContentLoader<CgsResource::BinaryFileResource> mLoader;
+    void* mpCsisData;
 };
 
 // =============================================================================
@@ -143,7 +111,10 @@ protected:
     virtual bool  DoOnPostLoad();      // :141 (own TU)
     virtual bool  DoOnPreUnload();     // :155 (own TU)
 
-    void* AddAemsBankCallback(void* apData, int aiArg1, int aiArg2); // :183 (own TU)
+    // The callback is passed to SNDAEMS_addmodulebank as a raw three-argument
+    // function pointer.  DecFIGS' mangled symbol has no hidden `this` argument and
+    // its body is the one-instruction `return pBank`, so it is static.
+    static void* AddAemsBankCallback(void* apData, int aiArg1, int aiArg2); // :183
 
 private:
     ContentLoader<CgsResource::BinaryFileResource> mLoader; // :189  (object +0x20)

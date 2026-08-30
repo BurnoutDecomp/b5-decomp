@@ -1,4 +1,5 @@
 #include "SDKs/Csis/CsisGlobalVariableHandle.h"
+#include "SDKs/Csis/CsisSystem.h"
 
 // ===========================================================================
 // Csis::GlobalVariableHandle -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -24,8 +25,8 @@ namespace Csis
 // ---------------------------------------------------------------------------
 Result GlobalVariableHandle::SetFast(const InterfaceId* pId)
 {
-    return SetHandle<GlobalVariableHandle, InterfaceId, CsisDef::GlobalVariableDesc>(
-        this, pId, 0, 28, 14);
+    return static_cast<Result>(System::ResolveInterface(
+        2, pId, &mpDescriptor, &miIndex));
 }
 
 } // namespace Csis

@@ -5,8 +5,8 @@
 
 // ============================================================================
 //  CgsSystem::StreamHeadersPC -- the runtime stream-header resolution chain, on
-//  the ORIGINAL X360 sound data (SOUND\STREAMS\STREAMSREGISTRY.BUNDLE +
-//  STREAMHEADERS.bundle, big-endian zlib'd bnd2 containers).
+//  the native-x64 StreamsRegistry graph plus the original-format
+//  STREAMHEADERS.bundle (whose SNR/EAAC bodies remain big-endian by format).
 //
 //  THE CONSOLE CHAIN (X360 ARTIST, asm-verified):
 //    - BrnSound::Logic::Streaming::StreamingStateManager::Prepare @0x826EE680
@@ -23,10 +23,9 @@
 //    - path zone 1 (after '|') is the .SNS stream file under "SOUND\STREAMS\".
 //
 //  This PC realisation loads both bundles once and answers the two lookups the
-//  bring-up needs. FLAG (bring-up parse): the registry payload is scanned for
-//  its wave ContentSpec records ({nameHash, typeHash 0x511A448B, classRef,
-//  misc, path}) rather than through the full serialised CgsSound::Playback::
-//  Registry reconstruction (Registry::Import/FixUp -- its own recon slice).
+//  bring-up needs.  It walks the same platform-4 native-x64 Registry image that
+//  RegistryResourceType fixes and RootSoundModule merges; no byte-pattern scan
+//  or second console-layout copy is involved.
 // ============================================================================
 
 namespace CgsSystem

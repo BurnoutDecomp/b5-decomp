@@ -26,6 +26,14 @@ namespace Playback
 
 // --- resolved-schema count forwarders -------------------------------------
 
+const VoiceSchema& VoiceSpec::GetVoiceSchema() const
+{
+    CGS_ASSERT(mpVoiceSchema != 0, "mpVoiceSchema");
+    CGS_ASSERT((reinterpret_cast<uintptr_t>(mpVoiceSchema) & 1) == 0,
+               "This Data Structure is not resolved. (Name found in a pointer context.)");
+    return *mpVoiceSchema;
+}
+
 u32 VoiceSpec::GetSlotCount() const
 {
     CGS_ASSERT(mpVoiceSchema != 0, "mpVoiceSchema");

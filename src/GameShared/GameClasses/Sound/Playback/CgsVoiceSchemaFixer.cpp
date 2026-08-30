@@ -20,6 +20,16 @@ namespace CgsSound
 namespace Playback
 {
 
+const FeatureSchema& VoiceSchema::GetFeatureSchema(u32 au32Index) const
+{
+    CGS_ASSERT(au32Index < mu32FeatureSchemaCount, "au32Index < mu32FeatureSchemaCount");
+    const FeatureSchema* lpSchema = mapFeatureSchema[au32Index];
+    CGS_ASSERT(lpSchema != 0, "lpFeatureSchema");
+    CGS_ASSERT((reinterpret_cast<uintptr_t>(lpSchema) & 1) == 0,
+               "This Data Structure is not resolved. (Name found in a pointer context.)");
+    return *lpSchema;
+}
+
 template <>
 void EntityFixer<VoiceSchema>::DoFixDown(Entity& arEntity) const
 {

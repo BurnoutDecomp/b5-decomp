@@ -52,10 +52,7 @@
 
 namespace CgsResource
 {
-    // Resource *payload* classes (distinct from the committed BinaryFileResourceType /
-    // AlignedBinaryFileResourceType in CgsBinaryFileResource.h). Forward-declared:
-    // ResourcePtr<T> stores only a typed view over BaseResourcePtr::mpResourceMemory
-    // and adds no T-sized member, so an incomplete type suffices for these homes.
+    // Resource payload records (their complete homes are included by the loader TU).
     struct BinaryFileResource;
     struct AlignedBinaryFileResource;
 }
@@ -130,7 +127,7 @@ namespace Playback
     //   ContentLoader<CgsResource::AlignedBinaryFileResource> mLoader (:64).
     struct GenericRwacReverbIRContent : public Content
     {
-        GenericRwacReverbIRContent(Factory& aFactory, const ContentSpec& aSpec, u32 au32DataSize);
+        GenericRwacReverbIRContent(Factory& aFactory, const ContentSpec& aSpec, u32 au32Ident);
         virtual ~GenericRwacReverbIRContent();
 
     protected:
@@ -148,7 +145,7 @@ namespace Playback
     //   ContentLoader<CgsResource::BinaryFileResource> mLoader (:70).
     struct GenericRwacWaveContent : public Content
     {
-        GenericRwacWaveContent(Factory& aFactory, const ContentSpec& aSpec, u32 au32DataSize);
+        GenericRwacWaveContent(Factory& aFactory, const ContentSpec& aSpec, u32 au32Ident);
         virtual ~GenericRwacWaveContent();
 
         bool GetStreamPath(char* apBuffer, size_t aBufferSize) const; // :94 (own TU)

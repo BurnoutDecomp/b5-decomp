@@ -1,4 +1,5 @@
 #include "SDKs/Csis/CsisClassHandle.h"
+#include "SDKs/Csis/CsisSystem.h"
 
 // ===========================================================================
 // Csis::ClassHandle -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -24,7 +25,9 @@ namespace Csis
 // ---------------------------------------------------------------------------
 ClassHandle::ClassHandle()
 {
+    mpDescriptor = 0;
     miIndex = -3;
+    muPadding = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -39,8 +42,8 @@ ClassHandle::ClassHandle()
 // ---------------------------------------------------------------------------
 Result ClassHandle::SetFast(const InterfaceId* pId)
 {
-    return SetHandle<ClassHandle, InterfaceId, CsisDef::FunctionDesc>(
-        this, pId, 0, 24, 12);
+    return static_cast<Result>(System::ResolveInterface(
+        0, pId, &mpDescriptor, &miIndex));
 }
 
 } // namespace Csis

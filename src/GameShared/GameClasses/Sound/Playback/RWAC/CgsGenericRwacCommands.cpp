@@ -110,6 +110,17 @@ RwacCommandQueue* RwacCommandQueue::GetCommand(uintptr_t* apOutWord)
     return this;
 }
 
+void RwacCommandQueue::PostCommand(uintptr_t auWord)
+{
+    const u32 luNext = (mu32Write + 1u) & (E_QUEUE_LENGTH - 1u);
+    CGS_ASSERT(luNext != mu32Read, "Writing when there's no room to Write.");
+    if (luNext == mu32Read)
+        return;
+
+    mauCommandQueue[mu32Write] = auWord;
+    mu32Write = luNext;
+}
+
 // ---------------------------------------------------------------------------
 // RwacCommandPlayerPlayParameters::ctor  @ 0x826AD578
 //   copy 3 words (tag + 2 operands) from arSource; if operand 0 (the play-request

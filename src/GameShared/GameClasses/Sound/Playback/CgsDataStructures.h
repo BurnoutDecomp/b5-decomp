@@ -6,6 +6,8 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsRegistry.h"
 
+namespace rw { namespace audio { namespace core { class PlugInRegistry; } } }
+
 // CgsSound::Playback::IEntityFixer -- the base of the sound-playback "entity
 // fixer" type-handler hierarchy (canonical DWARF home CgsDataStructures.h:210).
 //
@@ -49,14 +51,28 @@ public:
     // spHead). Defaulted here for shape so the type is constructible in the embed
     // check; the real push-onto-spHead ctor is DEFERRED to the CgsDataStructures
     // TU. Declared protected-style intent but kept public for the placeholder.
-    IEntityFixer() : mpNext(0) {}
-    virtual ~IEntityFixer() {}
+    IEntityFixer();
+    virtual ~IEntityFixer();
 
     // CgsDataStructures.h:310. Walk the static spHead list and return the first
     // registered fixer whose type Name equals aName, or null. STATIC member (the
     // X360 reads the global spHead, never a `this`). Bodied store-for-store from
     // the X360 GetFixer @ 0x826809B0.
     static const IEntityFixer* GetFixer(Name aName);
+
+    Name GetTypeName() const { return DoGetTypeName(); }
+    void Unresolve(Entity& arEntity) const { DoUnresolve(arEntity); }
+    void Resolve(Entity& arEntity, const Registry& arRegistry) const
+    {
+        DoResolve(arEntity, arRegistry);
+    }
+    void Relocate(Entity& arEntity, u8* apu8Base,
+                  const Registry& arTo, const Registry& arFrom) const
+    {
+        DoRelocate(arEntity, apu8Base, arTo, arFrom);
+    }
+    void FixUp(Entity& arEntity) const { DoFixUp(arEntity); }
+    void FixDown(Entity& arEntity) const { DoFixDown(arEntity); }
 
 protected:
     // ----- virtual interface (DWARF order; slot 0 == DoGetTypeName) -----
@@ -262,7 +278,102 @@ struct ContentClass : public Entity
 // with the GenericRwacFeatureImplementation registration TU).
 struct GenericRwacFeatureImplementation : public Entity
 {
-    static const Name SK_TYPE_NAME;   // FLAG: definition DEFERRED.
+    struct PluginInfo
+    {
+        u32   mGuid;
+        void* mHandle;
+        u32   mu32OutputChannels;
+    };
+    struct ParameterMap
+    {
+        Name mName;
+        u16  mu16PluginOffset;
+        u16  mu16Attribute;
+    };
+    struct SlotMap
+    {
+        Name mName;
+        Name mRuntimeClass;
+        u16  mu16PluginOffset;
+    };
+
+    static const Name SK_TYPE_NAME;
+
+    Name GetFeatureSchemaName() const { return mFeatureSchemaName; }
+    u32 GetPluginInfoCount() const { return mu32PluginInfoCount; }
+    u32 GetParameterMapCount() const { return mu32ParameterMapCount; }
+    u32 GetSlotMapCount() const { return mu32SlotMapCount; }
+
+    void* GetPluginInfoHandle(u32 au32Index) const
+    {
+        return GetPluginInfoAddress(au32Index)->mHandle;
+    }
+    u32 GetPluginInfoOutputChannels(u32 au32Index) const
+    {
+        return GetPluginInfoAddress(au32Index)->mu32OutputChannels;
+    }
+    Name GetParameterMapName(u32 au32Index) const
+    {
+        return GetParameterMapAddress(au32Index)->mName;
+    }
+    u32 GetParameterMapOffset(u32 au32Index) const
+    {
+        return GetParameterMapAddress(au32Index)->mu16PluginOffset;
+    }
+    u32 GetParameterMapAttribute(u32 au32Index) const
+    {
+        return GetParameterMapAddress(au32Index)->mu16Attribute;
+    }
+    Name GetSlotMapName(u32 au32Index) const
+    {
+        return GetSlotMapAddress(au32Index)->mName;
+    }
+    Name GetSlotMapRuntimeClass(u32 au32Index) const
+    {
+        return GetSlotMapAddress(au32Index)->mRuntimeClass;
+    }
+    u32 GetSlotMapOffset(u32 au32Index) const
+    {
+        return GetSlotMapAddress(au32Index)->mu16PluginOffset;
+    }
+
+    void ResolvePluginInfoHandle(u32 au32Index,
+                                 rw::audio::core::PlugInRegistry* apRegistry) const;
+
+private:
+    PluginInfo* GetPluginInfoAddress(u32 au32Index) const
+    {
+        CGS_ASSERT(au32Index < mu32PluginInfoCount,
+                   "lu32I < mu32PluginInfoCount");
+        return const_cast<PluginInfo*>(reinterpret_cast<const PluginInfo*>(this + 1))
+             + au32Index;
+    }
+
+    ParameterMap* GetParameterMapAddress(u32 au32Index) const
+    {
+        CGS_ASSERT(au32Index < mu32ParameterMapCount,
+                   "lu32I < mu32ParameterMapCount");
+        const u8* lpBase = reinterpret_cast<const u8*>(this + 1)
+                         + sizeof(PluginInfo) * mu32PluginInfoCount;
+        return const_cast<ParameterMap*>(reinterpret_cast<const ParameterMap*>(lpBase))
+             + au32Index;
+    }
+
+    SlotMap* GetSlotMapAddress(u32 au32Index) const
+    {
+        CGS_ASSERT(au32Index < mu32SlotMapCount,
+                   "lu32I < mu32SlotMapCount");
+        const u8* lpBase = reinterpret_cast<const u8*>(this + 1)
+                         + sizeof(PluginInfo) * mu32PluginInfoCount
+                         + sizeof(ParameterMap) * mu32ParameterMapCount;
+        return const_cast<SlotMap*>(reinterpret_cast<const SlotMap*>(lpBase))
+             + au32Index;
+    }
+
+    Name mFeatureSchemaName;
+    u32  mu32PluginInfoCount;
+    u32  mu32ParameterMapCount;
+    u32  mu32SlotMapCount;
 };
 
 // CgsDataStructures.h:440 (DWARF). ContentType : public Entity. Carries the resolved
@@ -287,12 +398,17 @@ struct ParameterSchema : public Entity
 {
     static const Name SK_TYPE_NAME;   // FLAG: definition DEFERRED.
 
-    EParameterDirection GetDirection() const { return meDirection; }
+    EParameterDirection GetDirection() const
+    {
+        return static_cast<EParameterDirection>(mu32Direction);
+    }
 
-    // The parameter direction word the resolve pass tests == E_PARAMETER_OUTPUT.
-    // FLAG (host/offset): pinned BY NAME; the exact byte offset is DEFERRED to the
-    // full ParameterSchema home (only the accessor is load-bearing in Wave 6).
-    EParameterDirection meDirection;
+    // DecFIGS CgsDataStructures.h:698-700, also visible in every serialized
+    // PlaybackRegistry/SoundEntity record.  The earlier minimal home put the
+    // direction at +8 and therefore read the minimum float as an enum.
+    float mf32Minimum;
+    float mf32Maximum;
+    u32   mu32Direction;
 };
 
 // CgsDataStructures.h (DWARF). A slot sub-schema entity carrying a resolved
@@ -342,6 +458,10 @@ struct VoiceSpec : public Entity
     // still a serialized index; a live VoiceSchema* once resolved.
     const VoiceSchema* mpVoiceSchema;   // (+0x8)
     u8                 mu8SendCount;    // (+0xC)
+    u8                 mu8ProcessingStage;
+    u8                 mu8ChannelCount;
+    u8                 mu8VoiceType;
+    Name               mapSendName[1];
 };
 
 // ============================================================================
@@ -367,6 +487,91 @@ struct EntityFixer : public IEntityFixer
     virtual void DoFixUp(Entity& arEntity) const;
     virtual void DoFixDown(Entity& arEntity) const;
 };
+
+struct ContentSpec;
+
+template <typename T>
+Name EntityFixer<T>::DoGetTypeName() const
+{
+    return T::SK_TYPE_NAME;
+}
+
+template <typename T>
+void EntityFixer<T>::DoUnresolve(Entity& arEntity) const
+{
+    CGS_ASSERT(arEntity.mTypeName == T::SK_TYPE_NAME,
+               "T::SK_TYPE_NAME == lEntity.GetTypeName()");
+}
+
+template <typename T>
+void EntityFixer<T>::DoResolve(Entity& arEntity, const Registry&) const
+{
+    CGS_ASSERT(arEntity.mTypeName == T::SK_TYPE_NAME,
+               "T::SK_TYPE_NAME == lEntity.GetTypeName()");
+}
+
+template <typename T>
+void EntityFixer<T>::DoRelocate(Entity& arEntity, u8*,
+                                const Registry&, const Registry&) const
+{
+    CGS_ASSERT(arEntity.mTypeName == T::SK_TYPE_NAME,
+               "T::SK_TYPE_NAME == lEntity.GetTypeName()");
+}
+
+template <typename T>
+void EntityFixer<T>::DoFixUp(Entity& arEntity) const
+{
+    CGS_ASSERT(arEntity.mTypeName == T::SK_TYPE_NAME,
+               "T::SK_TYPE_NAME == lEntity.GetTypeName()");
+}
+
+template <typename T>
+void EntityFixer<T>::DoFixDown(Entity& arEntity) const
+{
+    CGS_ASSERT(arEntity.mTypeName == T::SK_TYPE_NAME,
+               "T::SK_TYPE_NAME == lEntity.GetTypeName()");
+}
+
+// Explicit-specialization declarations prevent a TU that constructs a fixer
+// from instantiating the generic no-field hook in place of the recovered body.
+template <> void EntityFixer<ContentType>::DoUnresolve(Entity&) const;
+template <> void EntityFixer<ContentType>::DoResolve(Entity&, const Registry&) const;
+template <> void EntityFixer<ContentType>::DoRelocate(Entity&, u8*, const Registry&, const Registry&) const;
+template <> void EntityFixer<ContentType>::DoFixUp(Entity&) const;
+template <> void EntityFixer<ContentType>::DoFixDown(Entity&) const;
+
+template <> void EntityFixer<ParameterSchema>::DoFixUp(Entity&) const;
+template <> void EntityFixer<ParameterSchema>::DoFixDown(Entity&) const;
+
+template <> void EntityFixer<SlotSchema>::DoUnresolve(Entity&) const;
+template <> void EntityFixer<SlotSchema>::DoResolve(Entity&, const Registry&) const;
+template <> void EntityFixer<SlotSchema>::DoRelocate(Entity&, u8*, const Registry&, const Registry&) const;
+template <> void EntityFixer<SlotSchema>::DoFixUp(Entity&) const;
+template <> void EntityFixer<SlotSchema>::DoFixDown(Entity&) const;
+
+template <> void EntityFixer<FeatureSchema>::DoUnresolve(Entity&) const;
+template <> void EntityFixer<FeatureSchema>::DoResolve(Entity&, const Registry&) const;
+template <> void EntityFixer<FeatureSchema>::DoFixUp(Entity&) const;
+template <> void EntityFixer<FeatureSchema>::DoFixDown(Entity&) const;
+
+template <> void EntityFixer<VoiceSchema>::DoUnresolve(Entity&) const;
+template <> void EntityFixer<VoiceSchema>::DoResolve(Entity&, const Registry&) const;
+template <> void EntityFixer<VoiceSchema>::DoRelocate(Entity&, u8*, const Registry&, const Registry&) const;
+template <> void EntityFixer<VoiceSchema>::DoFixUp(Entity&) const;
+template <> void EntityFixer<VoiceSchema>::DoFixDown(Entity&) const;
+
+template <> void EntityFixer<VoiceSpec>::DoUnresolve(Entity&) const;
+template <> void EntityFixer<VoiceSpec>::DoResolve(Entity&, const Registry&) const;
+template <> void EntityFixer<VoiceSpec>::DoRelocate(Entity&, u8*, const Registry&, const Registry&) const;
+template <> void EntityFixer<VoiceSpec>::DoFixUp(Entity&) const;
+template <> void EntityFixer<VoiceSpec>::DoFixDown(Entity&) const;
+
+template <> Name EntityFixer<ContentSpec>::DoGetTypeName() const;
+template <> void EntityFixer<ContentSpec>::DoUnresolve(Entity&) const;
+template <> void EntityFixer<ContentSpec>::DoResolve(Entity&, const Registry&) const;
+template <> void EntityFixer<ContentSpec>::DoRelocate(Entity&, u8*, const Registry&, const Registry&) const;
+template <> void EntityFixer<ContentSpec>::DoFixUp(Entity&) const;
+template <> void EntityFixer<ContentSpec>::DoFixDown(Entity&) const;
 
 }
 }

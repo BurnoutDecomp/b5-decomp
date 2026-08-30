@@ -21,11 +21,141 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsContent.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "SDKs/Csis/CsisSystem.h"
+#include "SDKs/EATech/include/snd/sndaems.h"
 
 namespace CgsSound
 {
 namespace Playback
 {
+
+CsisContent::CsisContent(Factory& arFactory, const ContentSpec& akrSpec, u32 au32Ident)
+    : Content(arFactory, akrSpec, au32Ident),
+      mLoader(),
+      mpCsisData(0)
+{
+}
+
+CsisContent::~CsisContent()
+{
+}
+
+bool CsisContent::DoLoad()
+{
+    return mLoader.Load(*this, GetContentSpec());
+}
+
+bool CsisContent::DoUnload()
+{
+    return mLoader.Unload(*this, GetContentSpec());
+}
+
+void CsisContent::DoUpdate(f32 /*af32Dt*/)
+{
+    mLoader.Update(*this, GetContentSpec());
+}
+
+void* CsisContent::DoGetData()
+{
+    void* lpData = mLoader.GetData();
+    CGS_ASSERT(lpData != 0, "lpvData");
+    return lpData;
+}
+
+// ARTIST @0x826D9CF0.
+bool CsisContent::DoOnPostLoad()
+{
+    mpCsisData = Content::GetData(E_CONTENT_STATE_LOADING);
+    CGS_ASSERT(mpCsisData != 0, "mpCsisData");
+    Csis::System::Subscribe(static_cast<Csis::SystemContent*>(mpCsisData));
+    return true;
+}
+
+// ARTIST @0x826D9C58.
+bool CsisContent::DoOnPreUnload()
+{
+    CGS_ASSERT(mpCsisData != 0, "mpCsisData");
+    Csis::System::Unsubscribe(static_cast<Csis::SystemContent*>(mpCsisData));
+    mpCsisData = 0;
+    return true;
+}
+
+AemsContent::AemsContent(Factory& arFactory, const ContentSpec& akrSpec, u32 au32Ident)
+    : Content(arFactory, akrSpec, au32Ident),
+      mLoader(),
+      miAemsBankHandle(0),
+      mbRemoveBegun(false),
+      mpAemsData(0)
+{
+}
+
+bool AemsContent::DoLoad()
+{
+    return mLoader.Load(*this, GetContentSpec());
+}
+
+bool AemsContent::DoUnload()
+{
+    return mLoader.Unload(*this, GetContentSpec());
+}
+
+void AemsContent::DoUpdate(f32 /*af32Dt*/)
+{
+    mLoader.Update(*this, GetContentSpec());
+}
+
+void* AemsContent::DoGetData()
+{
+    void* lpData = mLoader.GetData();
+    CGS_ASSERT(lpData != 0, "lpvData");
+    return lpData;
+}
+
+void* AemsContent::AddAemsBankCallback(void* apData, int /*aiResidentSize*/,
+                                       int /*aiTotalSize*/)
+{
+    return apData;
+}
+
+bool AemsContent::DoOnPostLoad()
+{
+    void* lpData = Content::GetData(E_CONTENT_STATE_LOADING);
+    CGS_ASSERT(mpAemsData == 0, "0 == mpAemsData");
+    mpAemsData = lpData;
+    CGS_ASSERT(mpAemsData != 0, "Ran out of memory trying to load some AEMS data.");
+
+    miAemsBankHandle = SNDAEMS_addmodulebank(
+        mpAemsData, 0, 0, &AemsContent::AddAemsBankCallback);
+    CGS_ASSERT(miAemsBankHandle > 0, "miAemsBankHandle > 0");
+    if (miAemsBankHandle <= 0)
+    {
+        mpAemsData = 0;
+        return false;
+    }
+    mbRemoveBegun = false;
+    return true;
+}
+
+bool AemsContent::DoOnPreUnload()
+{
+    if (!mbRemoveBegun)
+    {
+        const s32 liResult = Snd9::Aems::BeginRemoveModuleBank(miAemsBankHandle);
+        CGS_ASSERT(liResult == 0, "Snd9::RESULT_OK == lResult");
+        mbRemoveBegun = true;
+        return false;
+    }
+
+    if (!Snd9::Aems::IsModuleBankRemoved(miAemsBankHandle))
+    {
+        return false;
+    }
+
+    CGS_ASSERT(mpAemsData != 0, "mpAemsData");
+    mpAemsData = 0;
+    return true;
+}
 
 // ---------------------------------------------------------------------------
 // AemsContentSlot::DoPlay  @ 0x826DAFF0
@@ -34,8 +164,8 @@ namespace Playback
 bool AemsContentSlot::DoPlay(const Slot& /*aSlot*/, PlayerVoice& aVoice,
                              Content& /*aContent*/, u32 au32Param)
 {
-    aVoice.SetPlaying();                 // lbz/ori 2/stb 0x80(playerVoice)
-    return aVoice.Play(au32Param);       // tail-call AemsPlayerVoice::Play
+    aVoice.SetPlaybackState(E_PLAYBACK_STATE_PLAYING); // lbz/ori 2/stb 0x80(playerVoice)
+    return static_cast<AemsPlayerVoice&>(aVoice).Play(au32Param);
 }
 
 // ---------------------------------------------------------------------------
@@ -44,7 +174,7 @@ bool AemsContentSlot::DoPlay(const Slot& /*aSlot*/, PlayerVoice& aVoice,
 // ---------------------------------------------------------------------------
 bool AemsContentSlot::DoStop(const Slot& /*aSlot*/, PlayerVoice& aVoice, Content& /*aContent*/)
 {
-    return aVoice.Stop();                // tail-call AemsPlayerVoice::Stop
+    return static_cast<AemsPlayerVoice&>(aVoice).Stop();
 }
 
 // ---------------------------------------------------------------------------
@@ -55,7 +185,7 @@ bool AemsContentSlot::DoStop(const Slot& /*aSlot*/, PlayerVoice& aVoice, Content
 bool AemsContentSlot::DoUpdatePlaying(System* /*apSystem*/, const Slot& /*aSlot*/,
                                       PlayerVoice& aVoice, Content& /*aContent*/, f32 af32Dt)
 {
-    return aVoice.Update(af32Dt);        // tail-call AemsPlayerVoice::Update
+    return static_cast<AemsPlayerVoice&>(aVoice).Update(af32Dt);
 }
 
 } // namespace Playback

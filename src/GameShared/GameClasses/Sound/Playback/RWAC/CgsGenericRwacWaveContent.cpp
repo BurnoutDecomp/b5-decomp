@@ -22,9 +22,37 @@ namespace CgsSound
 namespace Playback
 {
 
+GenericRwacWaveContent::GenericRwacWaveContent(Factory& arFactory,
+                                               const ContentSpec& akrSpec,
+                                               u32 au32Ident)
+    : Content(arFactory, akrSpec, au32Ident),
+      mLoader()
+{
+}
+
+bool GenericRwacWaveContent::DoLoad()
+{
+    return mLoader.Load(*this, GetContentSpec());
+}
+
 bool GenericRwacWaveContent::DoUnload()
 {
     return mLoader.Unload(*this, GetContentSpec());
+}
+
+void GenericRwacWaveContent::DoUpdate(f32 /*af32Dt*/)
+{
+    mLoader.Update(*this, GetContentSpec());
+}
+
+void* GenericRwacWaveContent::DoGetData()
+{
+    return mLoader.GetData();
+}
+
+bool GenericRwacWaveContent::GetStreamPath(char* apBuffer, size_t aBufferSize) const
+{
+    return GetContentSpec().GetPathZone(1, apBuffer, aBufferSize);
 }
 
 } // namespace Playback

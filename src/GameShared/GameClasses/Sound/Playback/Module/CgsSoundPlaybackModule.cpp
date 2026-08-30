@@ -26,11 +26,8 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GetDefaultRwacSystem + RwacSystemLock (phase B4)
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"        // AemsFactory::Create (the stage-3 create, cascade slice 2)
 #include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerFactory.h"  // SplicerFactory::Create (the stage-3 create, cascade slice 3)
-#include "GameShared/GameClasses/System/PC/CgsDacOutputPC.h"                  // DacOutputPC::Attach (the phase-D output bridge)
-#include "rw/audio/core/plugins/Dac.h"                                        // the Dac plug-in (phase D)
-#include "rw/audio/core/Voice.h"                                              // Voice::CreateInstance (the DAC-voice seam)
 
-#include <new>   // placement new (the phase-D Dac pre-construction)
+#include <cstddef>
 
 // The stage-3 stream-provider interface global (X360 off_82FFBA0C): Prepare
 // publishes the module's IStreamProvider sub-object (console `= &this->+0x228`)
@@ -354,58 +351,6 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
                 "Aems Update", static_cast<PerfMonCpuPage>(19), false, 1.0f, true);
         }
 
-        // ---- the phase-D output bridge: create + start the engine's DAC VOICE ----
-        // FLAG PC seam (phase D 2026-08-28, voice-form rework): the console creates
-        // the Dac as the DATA-driven DAC VOICE's terminal stage -- Voice::
-        // CreateInstance @0x82B6EC50 -> PlugIn::CreateInstance @0x82B6A818 with the
-        // 'Dac0' record (the VoiceSpec arrives with the phase-F registry content) --
-        // and starts it from SoundLogicModule::ProcessGuiEvents @0x826ED6C8 (not
-        // yet reconstructed). Until those land, the seam builds the one-stage DAC
-        // voice through the SAME engine path and starts it immediately. The stage
-        // channel byte (6) is the DAC's own count and the priority class 255 sorts
-        // the voice LAST in the active walk (Mixer::Execute must interleave AFTER
-        // every producer voice) -- both data values unrecovered until phase F.
-        {
-            using rw::audio::core::PlugIn;
-            using rw::audio::core::PlugInRegistry;
-            using rw::audio::core::PlugInDescRunTime;
-            using rw::audio::core::Voice;
-            using rw::audio::core::VoiceStageConfig;
-
-            rw::audio::core::System* lpRwacSystem = GetDefaultRwacSystem();
-            PlugInRegistry* lpPlugInRegistry =
-                rw::audio::core::System::GetPlugInRegistry(lpRwacSystem);
-            PlugInDescRunTime* lpDacDesc = static_cast<PlugInDescRunTime*>(
-                PlugInRegistry::GetPlugInHandle(lpPlugInRegistry, 0x44616330)); // 'Dac0'
-            CGS_ASSERT(lpDacDesc != 0, "lpDacDesc");
-
-            // The producers below enqueue command-ring records; the ring's consumer
-            // (the engine fill's ExecuteCommands, live once a device is open) replays
-            // under the system-lock hooks, so the producer side holds the same lock
-            // (the console producer discipline).
-            rw::audio::core::RwacSystemLock(lpRwacSystem);
-            VoiceStageConfig lDacStage;
-            lDacStage.mpContext      = 0;
-            lDacStage.mpDesc         = lpDacDesc;
-            lDacStage.mFlagAndField8 = 6;
-            PlugIn** lppDacPlugIns = 0;
-            Voice* lpDacVoice = Voice::CreateInstance(255, 1, &lDacStage,
-                                                      &lppDacPlugIns, lpRwacSystem);
-            CGS_ASSERT(lpDacVoice != 0, "lpDacVoice");
-            rw::audio::core::RwacSystemUnlock(lpRwacSystem);
-
-            mhEnvironment.GetObject()->SetDacPlugin(lppDacPlugIns[0]);
-            DacOutputPC::Attach(static_cast<rw::audio::core::Dac*>(lppDacPlugIns[0]));
-            mhEnvironment.GetObject()->StartDac();   // locks internally
-
-            // (The TEMPORARY SinePlayer audible probe that stood here was REMOVED
-            // 2026-08-28 after the tone was CONFIRMED BY EAR -- gate D's audible
-            // proof. The full path it proved: SinePlayer voice -> Mixer::
-            // ProcessInputPlugIns chunk assembly -> publish -> the DAC voice's
-            // Process stage -> XenonDownMix/ReOrder/Clip -> the engine fill's
-            // 6->2 fold. See the ledger entry.)
-        }
-
         mePrepareStage++;   // the raw bump with the .h:500 bound assert (inlined op++)
         meReleaseStage = E_RELEASESTAGE_FACTORIES;
         // fall through
@@ -570,27 +515,20 @@ void Module::DumpRegistries()
 //                      i.e. base = (const char*)a2 + (a2[1] + 7) * 4 + a2[2]
 //   size = end - start  (v6, the byte length to copy)
 // ---------------------------------------------------------------------------
-void Module::ImportStringTable(const u32* lpStringTableResource)
+void Module::ImportStringTable(const Registry& arRegistry)
 {
-    if (!lpStringTableResource[4])
-        return;
-
-    const u8* lkpu8Base = reinterpret_cast<const u8*>(lpStringTableResource);
-    const char* lkpcEnd = reinterpret_cast<const char*>(
-        static_cast<uintptr_t>(lpStringTableResource[5]));
-    const char* lkpcStart = reinterpret_cast<const char*>(
-        lkpu8Base + (lpStringTableResource[1] + 7) * 4 + lpStringTableResource[2]);
-
     u32 lu32StringTableSize =
-        static_cast<u32>(lkpcEnd - lkpcStart);
-    if (lkpcEnd == lkpcStart)
+        static_cast<u32>(arRegistry.GetStringTableUsedSize());
+    if (lu32StringTableSize == 0)
         return;
 
     Environment* lpEnvironment = mhEnvironment.GetObject();
     CGS_ASSERT(lpEnvironment, "mpObject");
 
     Module::StringTable* lpChunk = static_cast<Module::StringTable*>(
-        lpEnvironment->Allocate(lu32StringTableSize + 4, 4, "StringTable"));
+        lpEnvironment->Allocate(
+            lu32StringTableSize + static_cast<u32>(offsetof(Module::StringTable, macData)),
+            4, "StringTable"));
     if (!lpChunk)
         return;
 
@@ -598,10 +536,8 @@ void Module::ImportStringTable(const u32* lpStringTableResource)
     lpChunk->mpNext = mpStringTable;
     mpStringTable   = lpChunk;
 
-    // Re-derive the source start (the X360 recomputes it under the same a2[4] guard).
-    const char* lkpcSource = reinterpret_cast<const char*>(
-        lkpu8Base + (lpStringTableResource[1] + 7) * 4 + lpStringTableResource[2]);
-    std::memcpy(lpChunk->macData, lkpcSource, lu32StringTableSize);
+    std::memcpy(lpChunk->macData, arRegistry.GetStringTableData(),
+                lu32StringTableSize);
 
     // Intern every NUL-terminated string in the copied region.
     char* lpcCursor = lpChunk->macData;
@@ -617,6 +553,44 @@ void Module::ImportStringTable(const u32* lpStringTableResource)
         lu32StringTableSize -= lu32StringLen;
         lpcCursor           += lu32StringLen;
     } while (lu32StringTableSize);
+}
+
+void Module::AddRegistry(Registry& arRegistry, u32 au32RegistryId)
+{
+    arRegistry.FixUp();
+    arRegistry.Resolve(arRegistry);
+    ImportStringTable(arRegistry);
+
+    switch (au32RegistryId)
+    {
+    case 1:
+    {
+        Registry* lpRegistry = GetEnvironment()->GetRegistry();
+        CGS_ASSERT(lpRegistry != 0, "mpRegistry");
+        *lpRegistry += arRegistry;
+        break;
+    }
+    case 2:
+    {
+        Factory* lpFactory = mhAemsFactory.GetObject();
+        CGS_ASSERT(lpFactory != 0, "mpObject");
+        Registry* lpRegistry = GetAemsFactoryRegistry(lpFactory);
+        CGS_ASSERT(lpRegistry != 0, "mpRegistry");
+        *lpRegistry += arRegistry;
+        break;
+    }
+    case 3:
+    {
+        GenericRwacFactory* lpFactory =
+            static_cast<GenericRwacFactory*>(mhRwacFactory.GetObject());
+        CGS_ASSERT(lpFactory != 0, "mpObject");
+        lpFactory->AddRegistry(arRegistry);
+        break;
+    }
+    default:
+        CGS_ASSERT(false, "");
+        break;
+    }
 }
 
 // ---------------------------------------------------------------------------

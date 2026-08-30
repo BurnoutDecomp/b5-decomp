@@ -51,7 +51,7 @@ public:
     // which builds a Name from a raw submix-name word (the X360 passes the raw u32 as
     // the `VName@12@` argument to Registry::GetEntity<VoiceSpec>). Shape-only: stores
     // the value verbatim (no interning -- the value is already an interned Ident).
-    explicit Name(uintptr_t luValue) : mHash(luValue) {}
+    explicit Name(uintptr_t luValue) : mHash(static_cast<u32>(luValue)) {}
 
     // CgsCommon.h. Value-equality on the interned hash. FLAG: ADDITIVE home-grow for
     // the Module CreateVoice init-submix path, which asserts the requested factory
@@ -85,7 +85,11 @@ private:
     // CgsCommon.h:249. The interned hash value. NOT touched by MakeHash/Store
     // (those are static and operate on the HashTable pool); future Name ctor TUs
     // assign it from MakeHash's return. Modelled for shape completeness. FLAG.
-    uintptr_t mHash;
+    // Name is a serialized 32-bit Ident on every shipped build.  Keeping the
+    // storage fixed-width is also load-bearing on the x64 target: Entity remains
+    // the two-dword prefix used by every Registry record, while only genuine
+    // pointer members widen in platform-4 data.
+    u32 mHash;
 
     // CgsCommon.h:269. One interning-table node (16 bytes on X360: 4x4-byte
     // words -- verified by the `slwi r8,r8,4` 16-byte node stride and the four
