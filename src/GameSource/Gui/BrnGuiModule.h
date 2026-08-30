@@ -454,9 +454,6 @@ namespace BrnGui
     // prepared; BrnRendererModule drives GuiModule::Render (the GUI render chain) through it.
     extern GuiModule* gpActiveGuiModule;
 
-    // The current menu-music stream hash (X360 dword_830082A8): the last hash posted on
-    // the menu-music channel; 0 == silence. Read by the post-title intro handoff.
-    extern s32 gCurrentMenuMusicHash;
 }
 
 #endif

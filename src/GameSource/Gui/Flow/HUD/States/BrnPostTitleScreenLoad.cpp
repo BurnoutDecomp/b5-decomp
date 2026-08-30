@@ -140,11 +140,6 @@ namespace BrnGui
         };
     }
 
-    // The current menu-music stream hash global (X360 dword_830082A8): the last hash
-    // posted on the menu-music channel; 0 == silence. Defined in BrnGuiModule.cpp
-    // (the module's movie tail also reads it).
-    extern s32 gCurrentMenuMusicHash;
-
     // ---- the GuiCache boundary this state touches (X360 far members; same FLAG'd
     // boundary discipline as BrnBootLegalBoundary.cpp) --------------------------------
     namespace
@@ -170,8 +165,8 @@ namespace BrnGui
 
     // @ 0x8247E2B8 -- consume this frame's events, then walk the post-title phases:
     //   E_IDLE: mark the cache's post-title phase; if the intro video is enabled, drop
-    //     the loading screen (command 20), post the current menu-music hash (silence on
-    //     a cold boot -- the video carries its own audio), and play the "intro" video;
+    //     the loading screen (command 20), post the empty-name hash (zero: silence), and
+    //     play the "intro" video with its own sound-stream name;
     //     otherwise post phase-complete (70) straight away.
     //   E_PLAYING_VIDEO: when the video-finished feedback lands, restore the menu music
     //     ("GunsAndRoses"), raise the loading screen (command 19), and post 70.
@@ -194,15 +189,17 @@ namespace BrnGui
                 BrnGui::GuiEventPlayVideo lPlayEvent;
                 lPlayEvent.muVideoResourceId = static_cast<u32>(
                     CgsResource::ID::HashString(reinterpret_cast<const u8*>("intro")));
-                // The X360 fills the definition's sound-stream slot with
-                // MakeHash("intro") and sets the trailing flag byte; the PC movie
-                // player plays the video's own audio track, so the hash ride-along is
-                // carried by the definition when that slot lands. [follow-on]
-                (void)CgsSound::Playback::Name::MakeHash("intro");
+                // X360 @0x8247E430..438 stores MakeHash("intro") into the
+                // VideoDefinition sound-stream slot before posting event 508.
+                lPlayEvent.muSoundStreamName = static_cast<u32>(
+                    CgsSound::Playback::Name::MakeHash("intro"));
                 lPlayEvent.mbDisableCustomSoundtracks = true;
 
                 PostCommand16<20>(mpStateInterface, KI_CHANNEL_GUI_OUT);   // loading screen down
-                MusicOnMenuStreamEvent lMusic(gCurrentMenuMusicHash);
+                // X360 @0x8247E474..490 posts dword_830082A8. Its sole dynamic
+                // initializer hashes the empty string, which MakeHash returns as 0:
+                // stop the title/menu stream while the movie-owned stream is active.
+                MusicOnMenuStreamEvent lMusic(0);
                 mpStateInterface->OutputGuiEvent<MusicOnMenuStreamEvent>(lMusic);
                 mbVideoFinished = false;
                 mpStateInterface->OutputGuiEvent<BrnGui::GuiEventPlayVideo>(lPlayEvent);
