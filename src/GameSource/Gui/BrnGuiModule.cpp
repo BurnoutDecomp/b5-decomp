@@ -916,7 +916,6 @@ namespace BrnGui
 namespace BrnGui
 {
     GuiModule*      gpActiveGuiModule      = 0;
-    s32             gCurrentMenuMusicHash  = 0;
 
     // The exact eight packed colours passed to ViewModule::Construct by ARTIST
     // (0x82F27F84, count 8).
@@ -2548,9 +2547,6 @@ void GuiModule::Destruct()
                     // by it is GuiEventPlayMusicOnMenuStream (23). Publish the typed
                     // id so BridgeGuiToSound reaches MusicEffect::Notify.
                     CGS_ASSERT(mpOutputBuffer != 0, "mpOutputBuffer");
-                    gCurrentMenuMusicHash = static_cast<s32>(
-                        reinterpret_cast<const CgsGui::GuiEventPlayMusicOnMenuStream*>(
-                            lpEvent)->muStreamNameHash);
                     mpOutputBuffer->AddEvent(lpEvent, 23, liSize);
                     break;
 
