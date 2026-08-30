@@ -65,14 +65,18 @@ namespace CgsGui
     void StateInterface::PlayLoadingScreen()
     {
         GuiEventPlayAptLoadingMovie lEvent;
-        mOutEventQueue.AddEvent(&lEvent, 40, sizeof(lEvent));   // X360 size 16
+        GuiEventWrapper<GuiEventPlayAptLoadingMovie, 40> lWrapper(lEvent);
+        mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWrapper),
+                                40, static_cast<s32>(sizeof(lWrapper)));   // X360 size 16
     }
 
     // @ 0x82476FE0 - queue a "stop apt loading movie" event (type 20, channel 40).
     void StateInterface::StopLoadingScreen()
     {
         GuiEventStopAptLoadingMovie lEvent;
-        mOutEventQueue.AddEvent(&lEvent, 40, sizeof(lEvent));   // X360 size 16
+        GuiEventWrapper<GuiEventStopAptLoadingMovie, 40> lWrapper(lEvent);
+        mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWrapper),
+                                40, static_cast<s32>(sizeof(lWrapper)));   // X360 size 16
     }
 
     // @ 0x82436E40 - queue a resource load/unload request (channel 39).

@@ -18,50 +18,17 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor / Start/StopMonitor
 #include "SDKs/EATech/include/NFSMix/MixerAllocator.hpp"                  // Nicotine mixer-allocator face
-#include "rw/rwcore_structs.h"                                            // rw::IResourceAllocator / Resource
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
 
 namespace
 {
-    // FLAG [host interface seam, phase B2 -- the RwacCoreAllocatorBridge sibling]:
-    // the console hands the Environment's rw allocator to the Nicotine mixer as
-    // MAP_CREATE_PARAMS::MixerAllocator (the console rw-allocator vtable head IS
-    // the {.., Allocate(size,align,name), Free} shape, rwcore.pdb-proven); the
-    // host models the two interfaces separately, so this adapter routes the mixer
-    // face onto the Environment's rw allocator. Free is the host no-op default.
-    struct LogicMixerAllocatorBridge : public MixerAllocator
-    {
-        LogicMixerAllocatorBridge() : mpAllocator(0) {}
-
-        virtual void* Allocate(unsigned int luSize, unsigned int luAlign, const char* lpcName)
-        {
-            if (!mpAllocator)
-                return 0;
-            rw::ResourceDescriptor lDescriptor;
-            for (u32 lu = 0; lu < 4; ++lu)
-            {
-                lDescriptor.m_baseResourceDescriptors[lu].m_size      = 0;
-                lDescriptor.m_baseResourceDescriptors[lu].m_alignment = 1;
-            }
-            lDescriptor.m_baseResourceDescriptors[0].m_size      = luSize;
-            lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlign ? luAlign : 16;
-            rw::Resource lResource =
-                mpAllocator->DoAllocate(lDescriptor, lpcName ? lpcName : "LogicMixer");
-            return lResource.m_baseResources[0];
-        }
-
-        virtual void Free(void* lpPtr, int /*liFlag*/)
-        {
-            if (mpAllocator)
-                mpAllocator->Free(lpPtr, 0);   // host default no-op (teardown only)
-        }
-
-        rw::IResourceAllocator* mpAllocator;
-    };
-
-    LogicMixerAllocatorBridge gLogicMixerAllocatorBridge;
+    // FLAG PC-platform leaf: ARTIST's 32-bit Nicotine/NFSMix objects are carved
+    // from the sound Environment allocator. The native x64 objects and pointer
+    // arrays are wider than that console-sized linear carve, so the PC port uses
+    // the middleware's dedicated aligned allocator at the platform boundary.
+    MixerAllocator gLogicMixerAllocatorPC;
 }
 
 namespace CgsSound
@@ -129,13 +96,12 @@ void Environment::Construct(const EnvironmentSpec& akrSpec)
 
     // The mixer's creation descriptor the X360 builds on the stack:
     // {mPrintSelect = 0, NumMixStates = managerCount, MixerAllocator = the
-    // Environment's allocator} -- routed through the host bridge (see above).
+    // Environment's allocator}. The PC/x64 allocation boundary is described above.
     mDynamicMixer.mpEnvironment = this;
-    gLogicMixerAllocatorBridge.mpAllocator = mpAllocator;
     Nicotine::IDynamicMixer::MAP_CREATE_PARAMS lCreateParams;
     lCreateParams.mPrintSelect   = 0;
     lCreateParams.NumMixStates   = static_cast<int>(mu32StateManagerCount);
-    lCreateParams.MixerAllocator = &gLogicMixerAllocatorBridge;
+    lCreateParams.MixerAllocator = &gLogicMixerAllocatorPC;
     mDynamicMixer.CreateInstance(&lCreateParams);
 
     mCpuMonitors.miDynamicMixer      = -1;

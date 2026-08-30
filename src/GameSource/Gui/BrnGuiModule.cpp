@@ -2438,7 +2438,30 @@ void GuiModule::Destruct()
                         }
                     }
 
-                    mGuiOutQueue.AddEvent(lpEvent, liId, liSize);
+                    // EventInterpreterModule::ProcessOutEvents @0x8285E568 unwraps a
+                    // channel-40 GuiEventWrapper before it publishes the GuiModule output:
+                    // word 0 is the raw payload size, word 1 is the event type, and word 2
+                    // is the payload offset.  Every game-module bridge consumes that
+                    // canonical, type-keyed queue; leaving the wrapper keyed as 40 makes
+                    // BridgeGuiToSound miss events such as voice-over request 466.
+                    const u32* const lpuWrapper = reinterpret_cast<const u32*>(lpEvent);
+                    const u32 luPayloadSize   = lpuWrapper[0];
+                    const u32 luEventType     = lpuWrapper[1];
+                    const u32 luPayloadOffset = lpuWrapper[2];
+                    const CgsModule::Event* const lpRawEvent =
+                        reinterpret_cast<const CgsModule::Event*>(
+                            reinterpret_cast<const u8*>(lpEvent) + luPayloadOffset);
+                    mGuiOutQueue.AddEvent(
+                        lpRawEvent, static_cast<s32>(luEventType),
+                        static_cast<s32>(luPayloadSize));
+
+                    // ProcessOutEvents also returns the unwrapped event to the interpreter's
+                    // observer fan-out.  This is why a state that posts voice-over event 466
+                    // observes 466 as "started" on the following GUI update, while sound later
+                    // posts the distinct completion event 467 through its pre-update output.
+                    RouteEventToFlow(
+                        lpRawEvent, static_cast<s32>(luEventType),
+                        static_cast<s32>(luPayloadSize));
                     break;
                 }
 

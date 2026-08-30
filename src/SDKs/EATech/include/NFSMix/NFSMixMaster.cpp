@@ -1,5 +1,6 @@
 #include "SDKs/EATech/include/NFSMix/NFSMixMaster.hpp"
 #include "SDKs/EATech/include/NFSMix/NFSMixMap.hpp"        // complete type
+#include "SDKs/EATech/include/NFSMix/NFSMixMapState.hpp"
 #include "SDKs/EATech/include/NFSMix/MixerAllocator.hpp"   // off_83250004 mixer allocator
 #include <new>                                              // placement new
 
@@ -89,6 +90,9 @@ NFSMixMap* NFSMixMaster::CreateMainMainMap(int* lpMapData, int* lpSBActiveMasks)
     NFSMixMap* lpMap = lpMem ? new (lpMem) NFSMixMap() : 0;
     m_pMainMixMap = lpMap;      // +0x00
 
+    if (!lpMap)
+        return 0;
+
     lpMap->Init(this);          // NFSMixMap::Init(map, this)
 
     m_pSBActiveMasks  = lpSBActiveMasks; // +0x74
@@ -116,7 +120,38 @@ void NFSMixMaster::ProcessMixMap(float lfDeltaTime, int liCamState)
 // @0x82B4ABD0 (declared-only in NFSMixMap.hpp; bodies deferred in the NFSMix
 // cluster -- both now have per-address dossiers in the export dir), so a faithful
 // body here would still trade the stub for unresolved externals.
-void NFSMixMaster::InitMixMap()                  {}   // FLAG link-stub (blocked on AllocateInputArrays/InitMainMapStates)
+void NFSMixMaster::InitMixMap()
+{
+    m_pMainMixMap->InitMixMap(m_pMainMixMapData, m_pMainMixMap);
+    m_pMainMixMap->AllocateMixerMemory();
+
+    for (int liState = 0; liState < mNumStates; ++liState)
+        m_StateRefCount[liState] = m_pMainMixMap->GetMapStateCopies(liState);
+
+    for (int liState = 0; liState < mNumStates; ++liState)
+    {
+        const int liCopies = m_StateRefCount[liState];
+        for (int liCopy = 0; liCopy < liCopies; ++liCopy)
+            m_pMainMixMap->CreateMainMapState(liState, liCopies, liCopy);
+    }
+
+    m_pMainMixMap->AllocateInputArrays();
+    for (int liState = 0; liState < mNumStates; ++liState)
+    {
+        NFSMixMapState* lpState = m_pMainMixMap->m_pStateProcs[liState];
+        if (!lpState)
+            continue;
+        for (int liCopy = 0; liCopy < m_StateRefCount[liState]; ++liCopy)
+        {
+            NFSMixMapState* lpCopy = lpState->GetMixMapProc(liCopy);
+            lpCopy->CreateSubMixChannels();
+            lpCopy->CreateMasterMixChannels();
+        }
+    }
+
+    m_pMainMixMap->InitMainMapStates();
+    m_bMapReady = true;
+}
 
 // NFSMixMaster::DestroyMainMainMap @0x82B457E0 (targeted export 2026-08-07) -- tear
 // down the owned main map + the load bookkeeping. The console: DestroyMainMixMap on

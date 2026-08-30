@@ -394,11 +394,43 @@ void SoundLogicModule::ProcessGuiEvents(
     }
 }
 
+// ARTIST 0x826EC250. The playback module reports the voice id for every stream
+// buffer that has completed its close/grace-period cycle. StreamingEffect::Detach
+// waits for this message before it releases its State, so each id is addressed to
+// effect object 0 in all three StreamingState instances (manager 6).
+void SoundLogicModule::ProcessStreamFreedQueue(
+    const CgsSound::Playback::Module::Io::OutputBuffer::FreedBuffersArray& arFreedIds)
+{
+    for (u32 luFreed = 0; luFreed < arFreedIds.GetLength(); ++luFreed)
+    {
+        for (u16 luInstance = 0; luInstance < 3; ++luInstance)
+        {
+            CgsSound::Io::Message<CgsSound::Io::QueueElement> lMessage;
+            lMessage.Construct(16, 6, luInstance, 0,
+                               CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
+            lMessage.mData = arFreedIds.GetItem(luFreed);
+            QueueSoundMessage(mMessageQueue, lMessage);
+        }
+    }
+}
+
 void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
                               CgsModule::IOBuffer* apInputBuffer,
                               CgsModule::IOBuffer* apOutputBuffer)
 {
     CGS_ASSERT(apInputBuffer != 0, "lpInputBuffer");
+
+    // ARTIST 0x82702A78..0x82702A90 starts every logic tick by emptying the
+    // per-frame outputs: maTriggerActions' count @+0x4EA0, the GuiOut queue
+    // @+0x4EB0, the car-data queue count @+0x4FC8, and the audio-effects queue
+    // @+0x5150.  PreUpdate publishes this block before the next Update, so
+    // clearing it here gives each event exactly one frame of lifetime.
+    maTriggerActions.Clear();
+    reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
+        mPreUpdateOutput.maGuiOutEventQueueStorage)->Clear();
+    mPreUpdateOutput.mAudioCarDataLoadedQueue.Clear();
+    mPreUpdateOutput.mAudioEffectsMessageQueue.Clear();
+
     Io::RootInputBuffer* lpInput = static_cast<Io::RootInputBuffer*>(apInputBuffer);
     lpInput->LockForRead();
     const Io::RootInputBuffer::GuiEventQueue* lpGuiQueue = lpInput->GetGuiEventQueue();
@@ -407,6 +439,12 @@ void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
     lpInput->UnlockForRead();
 
     CgsSound::Logic::Module::Update(af32GameDt, af32SimDt, apInputBuffer, apOutputBuffer);
+
+    // ARTIST 0x82702D8C..0x82702D98: publish playback's freed stream
+    // identifiers into the logic message queue, then consume the list. The
+    // messages are intentionally processed by the base Update on the next tick.
+    ProcessStreamFreedQueue(mFreedStreamBufferIds);
+    mFreedStreamBufferIds.Clear();
 
     // The resource broker must continue to drain after boot; effect and manager
     // LoadAsset requests are resolved through this pass. X360 0x82702E14..0x82702E58

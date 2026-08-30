@@ -9,6 +9,7 @@
 
 #include "rw/audio/core/PlugIn.h"
 #include "rw/audio/core/Voice.h" // VoiceStageConfig (the a4 record CreateInstance reads)
+#include "rw/audio/core/Send.h"
 
 namespace rw
 {
@@ -74,6 +75,15 @@ PlugIn *PlugIn::CreateInstance(PlugIn *self, Voice *voice, PlugInDescRunTime *pD
 // -------------------------------------------------------------------------------------
 int PlugIn::Event(PlugIn *self, int aiEventId, void *apParam)
 {
+    // Send is represented by the middleware's explicit console base view rather than a
+    // native C++ subclass. Its descriptor is the stable runtime discriminator; the
+    // stored console-vtable token is data, not a host-callable vtable.
+    if (self->mpPlugInDescRunTime &&
+        self->mpPlugInDescRunTime->muId == 0x53656E30u) // 'Sen0'
+    {
+        return Send::EventEvent(reinterpret_cast<Send*>(self), aiEventId,
+                                static_cast<void *const *>(apParam)) ? 1 : 0;
+    }
     return self->Event(aiEventId, apParam); // (*(*self+4))(self, r4, r5)
 }
 

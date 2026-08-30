@@ -15,11 +15,6 @@ namespace CgsSound
 namespace Playback
 {
 
-namespace
-{
-    const Name skPlayerSlotName("~PlayerVoice::SK_PLAYER_SLOT_NAME~");
-}
-
 GenericRwacVoice::GenericRwacVoice()
     : mpFactory(0), mpVoice(0), mppPlugin(0), mu16PluginCount(0),
       mu16FirstSendPlugin(0), mu32ParameterMapCount(0), mu8Flags(0)
@@ -60,7 +55,7 @@ bool GenericRwacVoice::CreateVoiceInstance(
     CGS_ASSERT(akrSpec.mu8VoiceType == E_MASTER_VOICE || mu16FirstSendPlugin > 0,
                "(E_MASTER_VOICE == lVoiceSpec.GetVoiceType()) || (mu16FirstSendPlugin > 0)");
 
-    mu8Flags = arBaseVoice.FindNamedSlot(skPlayerSlotName) != 0 ? 1u : 0u;
+    mu8Flags = arBaseVoice.FindNamedSlot(PlayerVoice::SK_PLAYER_SLOT_NAME) != 0 ? 1u : 0u;
 
     RwacCommandVoiceCreateInstance lCommand(
         reinterpret_cast<uintptr_t>(&arBaseVoice),

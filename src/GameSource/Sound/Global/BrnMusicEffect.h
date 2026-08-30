@@ -28,10 +28,14 @@ public:
     void Prepare(Module::SoundLogicModule* apModule,
                  Streaming::StreamingStateManager* apStreamingManager,
                  const char* apVoiceSpec);
-    void Queue(u32 auContentSpec, u32 auPriority = 6);
+    void Queue(u32 auContentSpec, u8 auOutputSlot, u32 auPriority = 6);
     void Stop(f32 afFadeOut = 0.25f);
     void Update(f32 afDeltaTime);
     void SetSongQueued(bool abSongQueued);
+    u8 GetOutputSlot() const { return mu8OutputSlot; }
+    void SetVolume(f32 afVolume) { mfVolume = afVolume; }
+    void SetHighPassFreq(f32 afFrequency) { mfHighPassFrequency = afFrequency; }
+    void SetLowPassFreq(f32 afFrequency) { mfLowPassFrequency = afFrequency; }
 
     const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
     void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
@@ -52,6 +56,8 @@ private:
     bool mbInternalPause;
     bool mbStreamPaused;
     bool mbSongQueued;
+    u8 mu8QueuedOutputSlot;
+    u8 mu8OutputSlot;
 };
 
 class MusicEffect : public BrnEffectObject
@@ -89,10 +95,10 @@ public:
     void Notify(const CgsSound::Io::MessageHeader* apMessage) override;
 
 private:
-    MusicStream mEaTraxStream;
-    MusicStream mEventStream;
-    MusicStream mSpecialStream;
-    MusicStream mMenuStream;
+    MusicStream mSecondaryStream;
+    MusicStream mEATraxStream;
+    MusicStream mMusicStreamMenu;
+    MusicStream mJunkyardStream;
     EaTraxData mEaTraxData;
 };
 

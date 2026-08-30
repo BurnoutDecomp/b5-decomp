@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 
 namespace BrnSound
 {
@@ -28,8 +29,8 @@ bool MusicEffect::EaTraxData::Prepare(Module::SoundLogicModule* apLogicModule)
 }
 
 MusicEffect::MusicEffect()
-    : BrnEffectObject(), mEaTraxStream(), mEventStream(), mSpecialStream(),
-      mMenuStream(), mEaTraxData() {}
+    : BrnEffectObject(), mSecondaryStream(), mEATraxStream(), mMusicStreamMenu(),
+      mJunkyardStream(), mEaTraxData() {}
 
 MusicEffect::~MusicEffect() {}
 
@@ -67,22 +68,45 @@ bool MusicEffect::Attach()
     CGS_ASSERT(lpStreaming != 0, "lpStreamingStateManager");
     if (!lpStreaming)
         return false;
-    mEaTraxStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
-    mEventStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
-    mSpecialStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
-    mMenuStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
+    mSecondaryStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
+    mEATraxStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
+    mMusicStreamMenu.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
+    mJunkyardStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
     return mEaTraxData.Prepare(lpModule);
 }
 
 void MusicEffect::UpdateParams(f32 afDeltaTime)
 {
-    mEaTraxStream.Update(afDeltaTime);
-    mEventStream.Update(afDeltaTime);
-    mSpecialStream.Update(afDeltaTime);
-    mMenuStream.Update(afDeltaTime);
+    mSecondaryStream.Update(afDeltaTime);
+    mEATraxStream.Update(afDeltaTime);
+    mMusicStreamMenu.Update(afDeltaTime);
+    mJunkyardStream.Update(afDeltaTime);
 }
 
-void MusicEffect::ProcessUpdate() {}
+void MusicEffect::ProcessUpdate()
+{
+    using Nicotine::DMixIO;
+
+    mEATraxStream.SetVolume(
+        GetRWACMixerOutputValue(mEATraxStream.GetOutputSlot(), DMixIO::DMX_VOL));
+    mEATraxStream.SetHighPassFreq(0.0f);
+    mEATraxStream.SetLowPassFreq(GetRWACMixerOutputValue(8, DMixIO::DMX_FREQ));
+
+    mSecondaryStream.SetVolume(
+        GetRWACMixerOutputValue(mSecondaryStream.GetOutputSlot(), DMixIO::DMX_VOL));
+    mSecondaryStream.SetHighPassFreq(0.0f);
+    mSecondaryStream.SetLowPassFreq(96000.0f);
+
+    mMusicStreamMenu.SetVolume(
+        GetRWACMixerOutputValue(mMusicStreamMenu.GetOutputSlot(), DMixIO::DMX_VOL));
+    mMusicStreamMenu.SetHighPassFreq(0.0f);
+    mMusicStreamMenu.SetLowPassFreq(96000.0f);
+
+    mJunkyardStream.SetVolume(
+        GetRWACMixerOutputValue(mJunkyardStream.GetOutputSlot(), DMixIO::DMX_VOL));
+    mJunkyardStream.SetHighPassFreq(0.0f);
+    mJunkyardStream.SetLowPassFreq(96000.0f);
+}
 
 void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
 {
@@ -94,7 +118,7 @@ void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
             static_cast<const CgsSound::Io::Message<CgsGui::GuiEventPlayMusicOnMenuStream>*>(apMessage);
         const u32 luMenuName = lpMessage->mData.muStreamNameHash;
         if (luMenuName == 0)
-            mMenuStream.Stop();
+            mMusicStreamMenu.Stop();
         else
         {
             // GetEventStartContentSpec maps the authored menu event name onto
@@ -106,14 +130,14 @@ void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
             if (luMenuName == luGunsAndRoses)
                 luContentSpec = static_cast<u32>(
                     CgsSound::Playback::Name::MakeHash("Guns_And_Roses"));
-            mMenuStream.Queue(luContentSpec, 6);
+            mMusicStreamMenu.Queue(luContentSpec, 12);
         }
     }
     else if (apMessage->GetEventId() == 28)
     {
         const CgsSound::Io::Message<CgsSound::Playback::Name>* lpMessage =
             static_cast<const CgsSound::Io::Message<CgsSound::Playback::Name>*>(apMessage);
-        mSpecialStream.Queue(static_cast<u32>(lpMessage->mData.GetValue()), 6);
+        mSecondaryStream.Queue(static_cast<u32>(lpMessage->mData.GetValue()), 5);
     }
 }
 

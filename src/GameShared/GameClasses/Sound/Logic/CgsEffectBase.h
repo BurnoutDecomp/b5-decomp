@@ -196,6 +196,15 @@ public:
     // mixer-output slot (aiSlot) under preset aiPreset via DMixIO::GetDMixOutput and
     // converts that signed integer result to an f32 (X360 extsw -> fcfid -> frsp).
     f32 GetMixerOutputValue(int aiSlot, int aiPreset);
+
+    // @ 0x82680778. Read and convert a dynamic-mixer output to the units expected
+    // by a RenderWare Audio Core voice (Q15 gain/depth, Q12 pitch, Hz, or degrees).
+    f32 GetRWACMixerOutputValue(int aiSlot, int aiPreset);
+
+    // @ 0x82680610. Clamp a game-side mixer input to the Q15 range and write it
+    // through the effect's connected DMixIO handle. A not-yet-connected effect
+    // performs no write, matching the shipped null branch.
+    void SetMixerInputValue(int aiSlot, int aiValue);
 };
 
 // State: the controlling sound-logic state. (2026-08-25, audio-faithfulness wave 4:

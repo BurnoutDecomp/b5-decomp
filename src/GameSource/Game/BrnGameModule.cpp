@@ -608,7 +608,6 @@ namespace BrnGame
         miGuiFsmStage      = 6;
         mbGuiPhaseComplete = false;
         mbGuiPreAccept     = false;
-        mbGuiVoiceOverPending  = false;
         mbDirectorCameraLive   = false;
         mbPlayerCarCrashing    = false;
         mbWorldDataPrepared    = false;
@@ -706,6 +705,10 @@ namespace BrnGame
         s32 liId = (lpGuiOutQueue != 0) ? lpGuiOutQueue->GetFirstEvent(&lpEvent, &liSize) : -1;
         while (liId >= 0 && lpEvent != 0)
         {
+            const s32 liCommand = liId;
+            const u8* const lpuPayload = reinterpret_cast<const u8*>(lpEvent);
+            const s32 liPayloadSize = liSize;
+
             // ---- the DISPLAY-CALIBRATION events, 545 and 546 -------------------------------
             // X360 BridgeGuiToGame @0x823CB758 handles these two ids in its one switch:
             //   case 0x221 (545) BrnGui::GuiOptionsBrightnessContrast          @0x823CB9FC
@@ -722,16 +725,6 @@ namespace BrnGame
             // options slider) and BrnGui::ColourCalibrationScreen::Update (546, the calibration
             // ramp screen showing and hiding).
             //
-            // FLAG PC-ABI adapter (the SAME one BridgeGuiToDirector below carries, and for the
-            // same reason): the console's GUI out queue is re-keyed by GuiEventWrapper type, so
-            // GetFirstEvent hands back 545 / 546 directly. On PC a record reaches this queue in
-            // EITHER form -- the flow states post through StateInterface::GetOutputEventQueue()
-            // on CHANNEL 40 with a { payloadBytes, eventType, payloadOffset } header (that is
-            // what ScreenLoading's 545 record is: { 8, 545, 12, brightness, contrast }, 20
-            // bytes), while CgsGuiModuleIO::OutputBuffer::AddGuiOutEvent<T> keys the record by
-            // T::GetEventType() exactly as the console does (that is ColourCalibrationScreen's
-            // 546). Both are resolved to (id, payload) here so the arms below are the console's.
-            //
             // ⚠ THE PAYLOAD IS READ BY NAME, NOT AT THE CONSOLE'S BYTE OFFSETS. The 546 payload
             // leads with a CgsResource::ResourceHandle -- two POINTERS, 8 bytes on the X360 and
             // 16 bytes here -- so the console's `+8` for the bool is a guest offset and using it
@@ -739,26 +732,6 @@ namespace BrnGame
             // BrnGui::GuiOptionsBrightnessContrastPostFxControl and the members are reached by
             // name; the size check below is against the HOST sizeof for the same reason.
             {
-                s32       liCalibrationId    = liId;
-                const u8* lpuCalibPayload    = reinterpret_cast<const u8*>(lpEvent);
-                s32       liCalibPayloadSize = liSize;
-                if (liId == 40 && liSize >= 12)
-                {
-                    const u32* lpuRecord = reinterpret_cast<const u32*>(lpEvent);
-                    const u32  luOffset  = lpuRecord[2];
-                    liCalibrationId = static_cast<s32>(lpuRecord[1]);
-                    if (luOffset >= 12u && static_cast<s32>(luOffset) < liSize)
-                    {
-                        lpuCalibPayload    = reinterpret_cast<const u8*>(lpEvent) + luOffset;
-                        liCalibPayloadSize = liSize - static_cast<s32>(luOffset);
-                    }
-                    else
-                    {
-                        lpuCalibPayload    = 0;
-                        liCalibPayloadSize = 0;
-                    }
-                }
-
                 // Payload layout pins (event payloads are the classic byte-layout trap).
                 // 545: two words, brightness first -- swap them and the frame goes dark
                 // instead of bright, silently. 546: the handle LEADS and the flag follows
@@ -778,31 +751,31 @@ namespace BrnGame
                               "GUI 546 payload: the post-fx flag follows the handle "
                               "(X360 payload +8; host +16 -- the handle is two pointers)");
 
-                if (liCalibrationId == 545)
+                if (liCommand == 545)
                 {
-                    CGS_ASSERT(lpuCalibPayload != 0, "NULL != lpBrightnessContrast");
-                    if (lpuCalibPayload != 0
-                        && liCalibPayloadSize >= static_cast<s32>(
+                    CGS_ASSERT(lpuPayload != 0, "NULL != lpBrightnessContrast");
+                    if (lpuPayload != 0
+                        && liPayloadSize >= static_cast<s32>(
                                sizeof(BrnGui::GuiOptionsBrightnessContrast)))
                     {
                         const BrnGui::GuiOptionsBrightnessContrast* const lpSettings =
                             reinterpret_cast<const BrnGui::GuiOptionsBrightnessContrast*>(
-                                lpuCalibPayload);
+                                lpuPayload);
                         miBrightness = lpSettings->mBrightness;
                         miContrast   = lpSettings->mContrast;
                     }
                 }
-                else if (liCalibrationId == 546)
+                else if (liCommand == 546)
                 {
-                    CGS_ASSERT(lpuCalibPayload != 0, "lpBrightnessContrastPostFxControl");
-                    if (lpuCalibPayload != 0
-                        && liCalibPayloadSize >= static_cast<s32>(
+                    CGS_ASSERT(lpuPayload != 0, "lpBrightnessContrastPostFxControl");
+                    if (lpuPayload != 0
+                        && liPayloadSize >= static_cast<s32>(
                                sizeof(BrnGui::GuiOptionsBrightnessContrastPostFxControl)))
                     {
                         const BrnGui::GuiOptionsBrightnessContrastPostFxControl* const lpControl =
                             reinterpret_cast<
                                 const BrnGui::GuiOptionsBrightnessContrastPostFxControl*>(
-                                    lpuCalibPayload);
+                                    lpuPayload);
                         // mbEnablePostFx is the console's byte at payload +8 -- false while
                         // the calibration ramp is on screen, true when it hides. The game module
                         // stores it verbatim; BrnRendererModule::Render ANDs
@@ -818,11 +791,8 @@ namespace BrnGame
                 }
             }
 
-            if (liId == 40)   // channel 40: GuiEventOut command records (muEventType @+4)
+            switch (liCommand)
             {
-                const u32 luCommand = reinterpret_cast<const u32*>(lpEvent)[1];
-                switch (luCommand)
-                {
                     case 19:   // PlayAptLoadingMovie -> ShowLoadingScreen (X360 write buffer [9828] = 1)
                         mDispatchThreadInputBufferManager.GetWriteBuffer()->ShowLoadingScreen();
                         break;
@@ -834,18 +804,6 @@ namespace BrnGame
                         break;
                     case 71:   // pre-accept -- resume the world load during the accept dwell
                         mbGuiPreAccept = true;
-                        break;
-                    case 466:
-                        // A GUI voice-over REQUEST (the {4, 466, 12, <name hash>} record
-                        // BrnGui::Intro's SetupComponents / HandleTransitionFrom* /
-                        // Update post through OutputGuiEvent<GuiEventAudioVoiceOver>).
-                        // On the console this leaves through BridgeGuiToSound and the
-                        // sound module answers it on the GUI input side; see the FLAG'd
-                        // reply block in the GUI-input write bracket below.
-                        // The payload word (record +12) is the line's
-                        // CgsSound::Playback::Name::MakeHash id -- carry it through so the
-                        // speech player can resolve and sound the actual stream.
-                        mbGuiVoiceOverPending = true;
                         break;
                     case 90:   // profile-first-boot flag (X360 +10094136: 0 -> 1)
                         if (miInputModuleState == 0)
@@ -906,9 +864,9 @@ namespace BrnGame
                         // also the console's ordering: ProcessGameEvents runs inside
                         // PreWorldUpdate, not inside the GUI update.
                         maiPendingCarSelectActivate[0] =
-                            static_cast<s32>(reinterpret_cast<const u32*>(lpEvent)[3]);   // action
+                            static_cast<s32>(reinterpret_cast<const u32*>(lpuPayload)[0]); // action
                         maiPendingCarSelectActivate[1] =
-                            static_cast<s32>(reinterpret_cast<const u32*>(lpEvent)[4]);   // type
+                            static_cast<s32>(reinterpret_cast<const u32*>(lpuPayload)[1]); // type
                         mbCarSelectActivatePending = true;
                         break;
                     }
@@ -937,7 +895,6 @@ namespace BrnGame
                         break;
                     default:
                         break;
-                }
             }
             const CgsModule::Event* lpNext = 0;
             liId = lpGuiOutQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
@@ -3602,8 +3559,10 @@ namespace BrnGame
                 if (mGuiModule.IsPrepared())
                 {
                     CGS_ASSERT(mpGuiOutputBuffer != 0, "GUI output buffer was not created");
+                    const CgsModule::VariableEventQueue<18432, 16>* const lpRetainedGuiEvents =
+                        mGuiModule.GetGuiOutQueue();
                     mpGuiOutputBuffer->LockForWrite();
-                    mpGuiOutputBuffer->AddGuiOutEvents(mGuiModule.GetGuiOutQueue());
+                    mpGuiOutputBuffer->AddGuiOutEvents(lpRetainedGuiEvents);
                     mpGuiOutputBuffer->UnlockForWrite();
                 }
 
@@ -4352,50 +4311,6 @@ namespace BrnGame
                     }
                     // FLAG GameState stand-in (THE CAR-SELECT CAR LIST -- GUI events 406 + 412).
                     PublishCarSelectionToGui();
-                    // FLAG sound stand-in (the VOICE-OVER round trip, GUI events 466/467).
-                    // CONSOLE CHAIN: the GUI posts a voice-over REQUEST as out-event 466
-                    // carrying a CgsSound::Playback::Name::MakeHash id; BridgeGuiToSound
-                    // @0x823C0A58 hands the GUI out-queue to the sound root input buffer,
-                    // and the sound side reports back through the module's
-                    // PreUpdateOutput GuiOutEventQueue -- 466 when the line STARTS, 467
-                    // when it FINISHES. BrnGui::Intro subscribes to both and gates every
-                    // one of its timed transitions on them: 466 sets mbVoiceOverPlaying
-                    // (which freezes mfPauseTimer) and 467 clears it AND RESETS
-                    // mfPauseTimer to 0 -- 467 is the ONLY writer of that reset outside
-                    // Intro::OnEnter (image-wide scan of stores to Intro+0xDEC).
-                    // WHY A STAND-IN: neither leg exists on PC. The sound module's GUI
-                    // drain (BrnSound::Logic::SoundLogicModule::ProcessGuiEvents
-                    // @0x826ED6C8) is unreconstructed and so is the return leg
-                    // (BridgeSoundToGuiPreUpdate -- see the banner in
-                    // GameBridgeSoundToX.cpp). With NOBODY answering, mfPauseTimer is
-                    // never reset after the WELCOME-TEXT dwell has already run it up to
-                    // KF_INTRO_TRANSITION_PAUSE, so the LICENCE state's own 2 s dwell is
-                    // zero and the driver licence is on screen for a single frame.
-                    // WHAT THIS POSTS: the console's own answer for a voice-over whose
-                    // sample never plays -- started, then immediately finished, in the
-                    // same sub-step. No duration is invented; the GUI simply gets its
-                    // dwell floor back. Replace with the real bridge when the sound
-                    // module's GUI legs land.
-                    // WHAT THIS DOES NOW: the request's name hash is handed to the PC
-                    // engine-owned SpeechEffect,
-                    // which resolves it to its stream and sounds it on the audio output's
-                    // dedicated voice slot. 466 goes back as soon as the line starts and
-                    // 467 only when it has PLAYED OUT, which is the console's own timing
-                    // (SpeechEffect::UpdateParams @0x826F8074 posts 467 off the stream's
-                    // end state) -- so BrnGui::Intro's mfPauseTimer now holds for the real
-                    // length of the line instead of being released in the same sub-step.
-                    // When the line cannot be sounded (no mapping, missing stream, no
-                    // audio device) the old immediate 466-then-467 answer still goes out,
-                    // so the flow can never stall on a silent line.
-                    if (mbGuiVoiceOverPending)
-                    {
-                        mbGuiVoiceOverPending = false;
-                        // Acknowledge the request immediately; the same GUI output
-                        // event is bridged to SoundLogicModule, where SpeechEffect
-                        // owns playback and posts 467 on stream completion.
-                        CgsGui::GuiEvent<466> lVoiceOverStarted;
-                        CgsGui::GuiModule::AddGuiEvent(lVoiceOverStarted, mpGuiInputBuffer);
-                    }
                     mpGuiInputBuffer->UnlockForWrite();
                     mPcInputOutputBuffer.UnlockForRead();
 

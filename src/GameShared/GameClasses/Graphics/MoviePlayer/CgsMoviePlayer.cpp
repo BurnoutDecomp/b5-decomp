@@ -162,6 +162,12 @@ namespace CgsGraphics
         // recombined them; the PC decoder emits them separately, so detect the layout and
         // recombine below. Signature: the coded frame is 1280 wide and 240 tall.
         miVerticalStrips = (mpVideoCtx->width == 1280 && mpVideoCtx->height == 240) ? 3 : 1;
+        // FFmpeg reports the coded-packet rate.  The X360 format interleaves one
+        // independently predicted packet per vertical band, so N packets make one
+        // displayed frame and the display clock is codedRate/N.  Keep mfFrameRate
+        // in the player-facing display-frame domain used by timing and crossfades.
+        if (miVerticalStrips > 1 && mfFrameRate > 1.0)
+            mfFrameRate /= static_cast<f64>(miVerticalStrips);
         miCurrentStrip   = 0;
         miStripsDecoded  = 0;
         muPacketRoute    = 0;
@@ -339,9 +345,9 @@ namespace CgsGraphics
             if (liRecv == 0)
             {
                 miCurrentStrip = liBand;
-                // Each MVhd declares the authored display rate (30 fps for the shipped movies).
-                // FFmpeg flattens the N interleaved MV0 packets into one AVStream but retains that
-                // per-video header rate, so advance time once per complete N-band chunk set.
+                // FFmpeg exposes the coded-packet rate; PrepareResources converted it
+                // to the displayed-frame rate after detecting the N-band layout. Advance
+                // time once per complete N-band set.
                 const s64 liDisplayIndex = miStripsDecoded / liN;
                 const f64 lfFps = (mfFrameRate > 1.0) ? mfFrameRate : 30.0;
                 mfFramePtsSec = static_cast<f64>(liDisplayIndex) / lfFps;

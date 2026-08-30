@@ -65,12 +65,12 @@ struct st3DMixCtlProc        { st3DMixCtlSharedData* p3DMixCtlData_S; st3DMixCtl
 
 // ---- sub-mix channel records ----
 struct stMixChSharedData     { stSubMixChParams* pMapParams; int MIXCHINID; int NumInputs; }; // 12
-struct stMixChUniqueData     { int* pInputs; int Output; };                                   // 8
+struct stMixChUniqueData     { int** pInputs; int Output; };                                  // 8 X360
 struct stSubMixChProc        { stMixChSharedData* pMixChData_S; stMixChUniqueData* pMixChData_U; }; // 8
 
 // ---- master-mix channel records ----
 struct stMasterMixChSharedData { stMasterMixChParams* pMapParams; int MIXCHINID; int NumInputs; int* pPRESETS; }; // 16
-struct stMasterMixChUniqueData { int outputID; int* pInputs; int Output; st3DMixCtlProc** p3DData; int* pOutputs; }; // 20
+struct stMasterMixChUniqueData { int outputID; int** pInputs; int Output; st3DMixCtlProc** p3DData; int* pOutputs; }; // 20 X360
 struct stMasterMixChProc       { stMasterMixChSharedData* pMixChData_S; stMasterMixChUniqueData* pMixChData_U; };    // 8
 
 // ---- serialised section headers (fixed 16/32-byte blob headers) ----

@@ -63,7 +63,15 @@ enum EFatalityFlag
 // BrnCollisionFrameInformation.h:44 (DWARF). Per-frame sound-logic snapshot.
 struct FrameInformation
 {
-    FrameInformation() {}
+    FrameInformation()
+        : meFatality(E_FATAL_OFF)
+        , meImpactTime(0)
+        , mbInReplay(false)
+        , mu32FatalStartCount(0)
+        , mIsHardStop(false)
+    {
+        maPaused.Prepare();
+    }
 
     // BrnCollisionFrameInformation.h:55 (DWARF). Drive the fatality state machine
     // from the per-frame crash-input flag. @ 0x826ADD18.

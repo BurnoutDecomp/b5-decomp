@@ -541,24 +541,6 @@ namespace CgsSound
 {
 namespace Playback
 {
-    // Environment::Allocate (DWARF CgsEnvironment.h; the environment's carve
-    // helper). Same allocator route the dispose walk attests (the env's rw
-    // allocator), expressed through the committed <5>-descriptor idiom.
-    void* Environment::Allocate(u32 lu32Size, u32 lu32Alignment, const char* lpcName)
-    {
-        rw::BaseResourceDescriptors<5> lDescriptor;
-        for (u32 luEntry = 0u; luEntry < 5u; ++luEntry)
-        {
-            lDescriptor.m_baseResourceDescriptors[luEntry].m_size      = 0u;
-            lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1u;
-        }
-        lDescriptor.m_baseResourceDescriptors[0].m_size      = lu32Size;
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = lu32Alignment;
-        rw::Resource lResource = GetAllocator()->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), lpcName);
-        return lResource.m_baseResources[0];
-    }
-
     // Environment::operator delete(void*) (DWARF h:167): demanded by the
     // compiler-emitted scalar deleting destructor; the console never scalar-
     // deletes an Environment (disposal is DoDispose -> the allocator-keyed

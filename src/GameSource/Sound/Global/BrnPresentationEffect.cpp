@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Global/BrnPresentationEffect.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
@@ -253,6 +254,7 @@ void PresentationEffect::Play(const PresentationEntry& arEntry)
     lpVoice->mfTimeSinceLastTick = 0.0f;
     lpVoice->mVoice.Create(lParams);
     lpVoice->mVoice.Play(arEntry.mu16Splice);
+    SetMixerInputValue(arEntry.mu8MixerOutput, 0x7FFF);
 }
 
 void PresentationEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
@@ -264,10 +266,13 @@ void PresentationEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
     const BrnGui::GuiAudioTriggerEvent& lrEvent = lpMessage->mData;
     const char* lpString = std::strcmp(lrEvent.macLabel, "uninitialised") == 0
         ? lrEvent.macComponent : lrEvent.macLabel;
-    const u64 luStringId = static_cast<u32>(CgsSound::Playback::Name::MakeHash(lpString));
-    const u64 luScreenId = static_cast<u32>(CgsSound::Playback::Name::MakeHash(lrEvent.macMovie));
+    const u64 luStringId = static_cast<u32>(CgsResource::ID::HashString(
+        reinterpret_cast<const u8*>(lpString)));
+    const u64 luScreenId = static_cast<u32>(CgsResource::ID::HashString(
+        reinterpret_cast<const u8*>(lrEvent.macMovie)));
     PresentationEntry lEntry = {};
-    if (Resolve(lrEvent.meAction, luStringId, luScreenId, lEntry) && lEntry.mu8Valid)
+    const bool lbResolved = Resolve(lrEvent.meAction, luStringId, luScreenId, lEntry);
+    if (lbResolved && lEntry.mu8Valid)
         Play(lEntry);
 }
 
@@ -288,8 +293,40 @@ void PresentationEffect::UpdateParams(f32 afDeltaTime)
 
 void PresentationEffect::ProcessUpdate()
 {
+    const u32 luSendName = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("Send01"));
+    const u32 luRwacPitchName = static_cast<u32>(CgsSound::Playback::Name::MakeHash(
+        "~GenericRwacPlayerVoice::SK_PLAYER_PARAMETER_PITCH~"));
+    const u32 luSplicerPitchName = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("~SplicerPlayerVoice::Pitch~"));
+
     for (s32 liVoice = 0; liVoice < 4; ++liVoice)
-        maVoices[liVoice].mVoice.Update();
+    {
+        AgingVoice& lrVoice = maVoices[liVoice];
+        lrVoice.mVoice.Update();
+
+        const s32 liState = lrVoice.mVoice.GetState();
+        if (liState == 7 || liState == 0)
+        {
+            lrVoice.mu16Age = 0;
+            continue;
+        }
+
+        CGS_ASSERT(lrVoice.mDataEntry.mu8MixerOutput <= 9,
+                   "lrVoice.mDataEntry.mu8MixerOutput <= 9");
+        const f32 lfGain = GetMixerOutputValue(
+            lrVoice.mDataEntry.mu8MixerOutput, Nicotine::DMixIO::DMX_VOL) / 32767.0f;
+        ++lrVoice.mu16Age;
+        lrVoice.mVoice.SetGain(0, lfGain, &luSendName);
+
+        if (lrVoice.mDataEntry.mu16Splice == PresentationEntry::KU16_SPECIAL_SPLICE_WAVE)
+            lrVoice.mVoice.SetParameter(0, 1.0f, &luRwacPitchName);
+        else if (lrVoice.mDataEntry.mu16Splice != PresentationEntry::KU16_SPECIAL_SPLICE_STREAM)
+            lrVoice.mVoice.SetParameter(0, 1.0f, &luSplicerPitchName);
+    }
+
+    for (s32 liInput = 0; liInput < 10; ++liInput)
+        SetMixerInputValue(liInput, 0);
 }
 
 // ---------------------------------------------------------------------------

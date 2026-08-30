@@ -15,7 +15,12 @@ class SpeechEffect : public BrnEffectObject,
                      public Streaming::IStreamUser
 {
 public:
-    enum EPlayState { E_STOPPED = 0, E_PLAYING = 1 };
+    enum EPlayState
+    {
+        E_STOPPED = 0,
+        E_PLAY_REQUESTED = 1,
+        E_PLAYING = 2
+    };
 
     SpeechEffect();
     virtual ~SpeechEffect();
@@ -36,6 +41,7 @@ public:
     void StreamStopped() override;
 
     bool PlaySpeechMapping(u32 auMappingName, bool abFirstTimeTip = false);
+    bool PlayFirstTimeTip(s32 aiTrainingType);
     void PlayStream(u32 auContentSpec, bool abFirstTimeTip = false);
     const char* CompassDirectionToString(int aiDirection);
     const char* GameModeToString(int aiUnused, int aiMode);

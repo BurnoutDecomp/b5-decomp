@@ -28,10 +28,10 @@
 // ============================================================================
 
 // SPLICE_SampleRef -- the per-sample descriptor a SpliceSample plays from (SpliceSample::
-// mpData). All fields are 4-byte scalars (no pointers), so the x64 layout equals the X360
-// layout; the fields below are recovered by offset/usage from the X360 bodies that read
-// them (Play / Update / GetEnvelopeVolume / FreeVoice). The record may be larger on disk;
-// only the read fields are modelled (the sample is reached by pointer, not by stride).
+// mpData). It contains no pointers, so the x64 layout equals the X360 layout.  The float
+// fields are recovered by offset/usage from the X360 bodies; the two trailing bytes are
+// named by the DecFIGS DWARF.  The complete 44-byte shape is load-bearing because
+// SpliceManager walks an array of these records.
 struct SPLICE_SampleRef
 {
     u16 muSampleId;      // +0x00  sample index into the splice bank's table of contents
@@ -46,7 +46,13 @@ struct SPLICE_SampleRef
     f32 mfEnvDecay;      // +0x1C  envelope decay start time (GetEnvelopeVolume)
     f32 mfVolRandom;     // +0x20  volume-randomisation amount (Play)
     f32 mfPitchRandom;   // +0x24  pitch-randomisation amount (Play)
+    u8  muPriority;      // +0x28  Priority (DecFIGS SpliceStructs.h:58)
+    u8  muRollOffType;   // +0x29  eRollOffType (DecFIGS SpliceStructs.h:59)
+    u8  maPad2A[2];      // +0x2A  natural tail padding; sizeof == 44
 };
+
+static_assert( sizeof(SPLICE_SampleRef) == 44,
+               "serialized splice sample references must retain their 44-byte stride" );
 
 // SpliceObjects.h:16 (DWARF). One playing splice sample (owns a single RWAC voice).
 struct SpliceSample

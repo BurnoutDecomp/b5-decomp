@@ -36,7 +36,7 @@ namespace CgsSystem
 namespace
 {
     // ---- decoded-stream playback state (single movie at a time) -----------------
-    s16*            g_pcm      = nullptr;   // interleaved stereo, 48 kHz
+    s16*            g_pcm      = nullptr;   // interleaved stereo, X360 master-clock frames
     long            g_frames   = 0;         // total stereo frames in g_pcm
     long            g_cursor   = 0;         // next frame to output
     volatile bool   g_finished = true;
@@ -45,6 +45,12 @@ namespace
     const int kPacketBytes = 2048;
     const int kPacketBits  = kPacketBytes * 8;
     const int kPacketHeaderBits = 32;
+    // The X360 XAudio render driver and rw::audio Dac have one 48 kHz mastering
+    // clock.  Movie audio shares that sink; the EAAC rate remains decoder/source
+    // metadata and must never retime the final render driver (or the simultaneous
+    // engine mix).  The shipped movie streams corroborate this directly: their
+    // decoded sample counts match their VP6 timelines at 48 kHz.
+    const int kMasterSampleRate = 48000;
     // Set per-stream from the SNR header. The video logos are 48 kHz; the rest are
     // 44.1 kHz. Defaults to 48 kHz for the SNR-less fallback path.
     int       g_sampleRate  = 48000;
@@ -432,15 +438,16 @@ bool MovieAudioPC::Load(const char* lpSnsPath, int liChannels)
     // stamps the wall-clock. Opening the audio endpoint (CreateMasteringVoice) costs a few
     // hundred ms the first time; doing it here (with a silent fill) keeps the later Start()
     // instant, so audio and video begin together instead of the audio lagging by the open cost.
-    // If the MENU-MUSIC stream has the device open at a different rate, close it first (the
-    // single source voice is fixed-rate).
-    if (AudioOutputPC::IsOpen() && AudioOutputPC::GetOpenSampleRate() != g_sampleRate)
+    // The shared sink is the PC counterpart of the console's fixed 48 kHz mastering
+    // voice.  The SNR's source-rate field configures the XMA decoder above; it does
+    // not change this output clock.
+    if (AudioOutputPC::IsOpen() && AudioOutputPC::GetOpenSampleRate() != kMasterSampleRate)
         AudioOutputPC::Close();
     if (!AudioOutputPC::IsOpen())
-        AudioOutputPC::Open(g_sampleRate, 2, nullptr, nullptr);   // null fill -> silence until Start()
+        AudioOutputPC::Open(kMasterSampleRate, 2, nullptr, nullptr);   // null fill -> silence until Start()
 
     AUDIO_LOG << "[MovieAudio] loaded " << lpSnsPath << " (" << (int)g_frames << " frames, "
-              << (int)(g_frames / g_sampleRate) << " s)\n";
+              << (int)(g_frames / kMasterSampleRate) << " s @ 48 kHz master)\n";
     return true;
 }
 
@@ -473,7 +480,7 @@ void MovieAudioPC::Start()
     if (AudioOutputPC::IsOpen())
         AudioOutputPC::SetFill(&MovieAudioPC::FillStatic, nullptr);
     else
-        AudioOutputPC::Open(g_sampleRate, 2, &MovieAudioPC::FillStatic, nullptr);   // fallback
+        AudioOutputPC::Open(kMasterSampleRate, 2, &MovieAudioPC::FillStatic, nullptr);   // fallback
 }
 
 void MovieAudioPC::Stop()

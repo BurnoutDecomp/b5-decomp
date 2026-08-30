@@ -25,6 +25,7 @@ class NFSLiveLink;
 namespace Nicotine
 {
 class SnapshotMixer;
+struct DMixIO;
 
 class IDynamicMixer
 {
@@ -43,6 +44,13 @@ public:
     IDynamicMixer();                    // @0x82B44A78 -- zero-init + install the global instance
     virtual ~IDynamicMixer();           // @0x82B44DD0 -- vtable slot 0
 
+    // Game-owned callback surface consumed by NFSMixMap. The slot order is
+    // attested by ARTIST calls through +4/+8/+0x0C/+0x10.
+    virtual bool ConnectDMixIO(DMixIO* apDMixIO) = 0;
+    virtual int  GetStateCount(int aiState) = 0;
+    virtual int  DMixPrintf(const char* apFormat, ...) = 0;
+    virtual void DMixAssert(bool abCondition, const char* apFormat, ...) = 0;
+
     // @0x82B44AB8 -- the process-wide IDynamicMixer instance (set by the ctor).
     static IDynamicMixer* GetInstance();
 
@@ -52,13 +60,13 @@ public:
 
     void InitMap(int* lpMapData);                 // @0x82B44C40
     void DestroyMap();                            // @0x82B44D20
-    void InitSnapshots();                         // @0x82B44D68
+    void InitSnapshots(void* apSnapshotData);     // @0x82B44D68
     void ProcessMixMap(int liUnused, float lfDeltaTime); // @0x82B44CA8
 
     // @0x825487C0 -- set the camera/mix state index; returns this (X360 returns r3).
     IDynamicMixer* SetCameraState(int liState);
 
-    void SetSnapshot();                           // @0x82B44DB8
+    void SetSnapshot(int aiSnapshot, bool abActive); // @0x82B44DB8
 
     // vtable pointer occupies +0x00.
     int               miCamState;       // +0x04

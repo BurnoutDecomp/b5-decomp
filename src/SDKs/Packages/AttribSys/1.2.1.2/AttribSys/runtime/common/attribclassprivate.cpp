@@ -108,21 +108,21 @@ Attrib::ClassPrivate::ClassPrivate(const ClassLoadData& lrLoad, Vault* lpSource)
             const Definition& lrDef = lpSelf->mDefinitions[luIndex];
             if ((lrDef.mFlags & 2) != 0 && (lrDef.mFlags & 8) == 0)
             {
-                // X360 stages Add(key, typeKey, {offset,size} word, 0, addFlags,
-                // 1, 0): the layout node's payload is the def's packed
-                // {mOffset << 16 | mSize} word (the X360's 32-bit load at
-                // def+16), the type rides as the 64-bit key (the Node ctor
-                // resolves the index), the laid-out rebase is OFF (r7 = 0), and
-                // the node flags are (flags&1)<<1 | (laid-out ? 0x10 : 0x20).
-                const u32 luPacked =
-                    (static_cast<u32>(lrDef.mOffset) << 16) | lrDef.mSize;
+                // X360 stages Add(key, typeKey, mOffset, 0, addFlags, 1, 0):
+                // `lhz r6,0x10(r11)` loads ONLY Definition::mOffset.  The prior
+                // reconstruction used a packed {offset,size} word; for an array at
+                // offset zero that made Node::GetPointer address layout+4 and caused
+                // Collection's type-index stamp to overwrite the first element.
+                // The type rides as the 64-bit key (the Node ctor resolves the
+                // index), the laid-out rebase is OFF (r7 = 0), and the node flags
+                // are (flags&1)<<1 | (laid-out ? 0x10 : 0x20).
                 const u8 lu8AddFlags = static_cast<u8>(
                     ((lrDef.mFlags & 1) << 1) |
                     (((lrDef.mFlags & 2) != 0) ? 0x10 : 0x20));
                 lpSelf->mLayoutTable.Add(lrDef.mKey,
                                          lrDef.mType,
                                          reinterpret_cast<void*>(
-                                             static_cast<uintptr_t>(luPacked)),
+                                             static_cast<uintptr_t>(lrDef.mOffset)),
                                          false,
                                          lu8AddFlags,
                                          true,

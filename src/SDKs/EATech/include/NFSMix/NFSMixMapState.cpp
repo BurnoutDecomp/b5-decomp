@@ -212,15 +212,6 @@ void NFSMixMapState::CreateMixCtls()
         // AssignMixCtlDataPtrs links the freshly-allocated shared+unique records into lpProc.
         lpMap->AssignMixCtlDataPtrs(lpProc, lpEntry, m_ObjectIndex, liChannel);
 
-        // FLAG (stub interaction guard, 2026-08-25 wave 1): AssignMixCtlDataPtrs is
-        // currently an empty link-stub (NFSMixMapLinkStubs.cpp @0x82B4A1D8 pending),
-        // so lpProc->psdata stays null and the stores below would null-deref the
-        // moment CreateMixCtls first runs. Bail out until the real body lands (the
-        // X360 has no such branch -- remove the guard with the stub; `break`, not
-        // `continue`, because the entry-stride advance sits at the loop bottom).
-        if (lpProc == 0 || lpProc->psdata == 0)
-            break;
-
         stMixCtlSharedData* lpShared = lpProc->psdata;
         lpShared->MIXCTLOBJID    = (lpMap->m_MapType << 8)
                                  | ((lpEntry[0] >> 16) & 0xE000)
@@ -255,6 +246,64 @@ void NFSMixMapState::CreateMixCtls()
         lpEntry += ((laParam[1] >> 16) & 0x1F) + 2;
     }
     while (liChannel < m_pMixCtlHdr->NumMixCtls);
+}
+
+void NFSMixMapState::Create3DMixCtls()
+{
+    NFSMixMap* lpMap = m_pNFSMixMap;
+    m_3DMixCtlsAdded = 0;
+    const int liOffset = m_pMMStateHdr->Offset3DMixCtlData;
+    if (liOffset < 0)
+        return;
+
+    st3DMixCtlHdr* lpHdr = reinterpret_cast<st3DMixCtlHdr*>(
+        reinterpret_cast<char*>(m_pMMStateHdr) + liOffset);
+    m_p3DMixCtlHdr = lpHdr;
+    if (lpHdr->Num3DMixCtls <= 0)
+        return;
+
+    u8* lpEntry = reinterpret_cast<u8*>(lpHdr + 1);
+    m_MixStateParams.p3DMixCtlProc = lpMap->GetNext3DMixCtlProc(0);
+    for (int liCtl = 0; liCtl < lpHdr->Num3DMixCtls; ++liCtl)
+    {
+        st3DMixCtlSharedData* lpShared;
+        if (m_ObjectIndex)
+        {
+            lpShared = m_pFirstInstance->m_MixStateParams.p3DMixCtlProc[liCtl].p3DMixCtlData_S;
+        }
+        else
+        {
+            lpShared = lpMap->GetNext3DMixCtlShared(1);
+            lpShared->pMapParams = reinterpret_cast<st3DMixCtlParams*>(lpEntry);
+            lpShared->msSinceCamTrans = 0;
+            lpShared->CurCamState = 0;
+            lpShared->PrevCamState = 0;
+        }
+
+        st3DMixCtlProc* lpProc = lpMap->GetNext3DMixCtlProc(1);
+        st3DMixCtlUniqueData* lpUnique = lpMap->GetNext3DMixCtlUnique(1);
+        lpProc->p3DMixCtlData_S = lpShared;
+        lpProc->p3DMixCtlData_U = lpUnique;
+        lpShared->pCurStateParams = reinterpret_cast<st3DStateParams*>(lpEntry + 4);
+
+        lpUnique->azimuth = 0;
+        lpUnique->dBRolloff = 0;
+        lpUnique->q15Rolloff = 0x7FFF;
+        lpUnique->DopplerCents = 0;
+        lpUnique->fPrevDist = 1.0f;
+        lpUnique->fPrevDeltaDist = 1.0f;
+        const int liInputId = lpShared->pMapParams->nINPUTID;
+        lpUnique->nINPUTID = (liInputId & 0xFFFF07FF) | (m_ObjectIndex << 11);
+        lpUnique->pInputs = reinterpret_cast<int*>(static_cast<intptr_t>(
+            0x60000000u | ((m_ObjectIndex << 11) & 0x1FFFF800) |
+            (liInputId & 0x1FFFFFFF)));
+
+        ++m_3DMixCtlsAdded;
+        // ARTIST advances by `24 * (lbz(0(entry)) & 0xF) + 4`. Because the
+        // converted blob preserves the dword value, that byte is bits 24..31.
+        const int liCameraStates = (static_cast<u32>(liInputId) >> 24) & 0xF;
+        lpEntry += 4 + liCameraStates * static_cast<int>(sizeof(st3DStateParams));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -400,7 +449,7 @@ void NFSMixMapState::CreateSubMixChannels()
     m_MixStateParams.pSubMixChProcs = lpMap->GetNextSubMixProc(0);
 
     // Serialised channel entries follow the 16-byte section header (external blob;
-    // stride = (entry[0]&0xFF)+2 dwords).
+    // stride = ((entry[0] >> 16) & 0xFF) + 2 dwords).
     int* lpEntry = reinterpret_cast<int*>(lpHdr + 1);
 
     int liChannel = 0;
@@ -424,7 +473,7 @@ void NFSMixMapState::CreateSubMixChannels()
             lpShared->MIXCHINID  = ((lpEntry[0] << 8) & 0xFF0000) | 0x20000000
                                  | (lpEntry[0] & 0x10000000) | liChannel;
             lpShared->pMapParams = reinterpret_cast<stSubMixChParams*>(lpEntry);
-            lpShared->NumInputs  = lpEntry[0] & 0xFF;
+            lpShared->NumInputs  = (lpEntry[0] >> 16) & 0xFF;
         }
 
         lpProc->pMixChData_S = lpShared;
@@ -434,7 +483,7 @@ void NFSMixMapState::CreateSubMixChannels()
 
         ++liChannel;
         ++m_SubMixChannelsAdded;
-        lpEntry += (lpEntry[0] & 0xFF) + 2;
+        lpEntry += ((lpEntry[0] >> 16) & 0xFF) + 2;
     }
     while (liChannel < m_pSubChHdr->NumMixChannels);
 }
@@ -491,7 +540,7 @@ void NFSMixMapState::CreateMasterMixChannels()
             lpShared->pPRESETS   = 0;
             lpShared->MIXCHINID  = ((lpEntry[0] << 8) & 0xFF0000) | 0x20000000
                                  | (lpEntry[0] & 0x10000000) | liChannel;
-            lpShared->NumInputs  = lpEntry[0] & 0xFF;
+            lpShared->NumInputs  = (lpEntry[0] >> 16) & 0xFF;
         }
 
         lpProc->pMixChData_S = lpShared;
@@ -514,7 +563,7 @@ void NFSMixMapState::CreateMasterMixChannels()
         lpProc->pMixChData_U = lpUnique;
         liPrevSFXOBJID = liSFXOBJID;
         ++m_MasterChannelsAdded;
-        lpEntry += (lpEntry[0] & 0xFF) + 3;
+        lpEntry += ((lpEntry[0] >> 16) & 0xFF) + 3;
     }
     while (liChannel < m_pMixChHdr->NumMixChannels);
 }
@@ -538,7 +587,7 @@ void NFSMixMapState::InitializeSubChannels()
         stMixChSharedData* lpShared = lpProc->pMixChData_S;
 
         const int* lpParams = reinterpret_cast<const int*>(lpShared->pMapParams);
-        int liCount = lpParams[0] & 0xFF;
+        int liCount = (lpParams[0] >> 16) & 0xFF;
 
         // Pass 1: total (expanded) input count.
         int liNumInputs = 0;
@@ -551,13 +600,13 @@ void NFSMixMapState::InitializeSubChannels()
                 liNumInputs += lpMap->m_StateRefCount[liStateId];
         }
 
-        int* lpInputs = lpMap->GetSubChannelInputPtr(liNumInputs);
+        int** lpInputs = lpMap->GetSubChannelInputPtr(liNumInputs);
         lpProc->pMixChData_U->pInputs = lpInputs;
         lpShared->NumInputs = liNumInputs;
 
         // Pass 2: emit the (expanded) input id list.
         const int* lpSrc = &lpParams[2];
-        int* lpDst = lpInputs;
+        int** lpDst = lpInputs;
         for (int li = 0; li < liNumInputs; ++li)
         {
             int liDesc    = *lpSrc++;
@@ -565,7 +614,7 @@ void NFSMixMapState::InitializeSubChannels()
             int liStateId = (liDesc >> 16) & 0xFF;
             if (liStateId == m_StateIndex)
             {
-                *lpDst++ = (m_ObjectIndex << 11) | liMasked;
+                *lpDst++ = reinterpret_cast<int*>(static_cast<intptr_t>((m_ObjectIndex << 11) | liMasked));
             }
             else
             {
@@ -575,7 +624,7 @@ void NFSMixMapState::InitializeSubChannels()
                 {
                     li += liCopies;
                     for (int liCopy = 0; liCopy < liCopies; ++liCopy)
-                        *lpDst++ = (liCopy << 11) | liMasked;
+                        *lpDst++ = reinterpret_cast<int*>(static_cast<intptr_t>((liCopy << 11) | liMasked));
                 }
             }
         }
@@ -608,7 +657,7 @@ void NFSMixMapState::InitializeMasterChannels()
         lpShared->pPRESETS = const_cast<int*>(lpPresets);
 
         const int* lpParams   = reinterpret_cast<const int*>(lpShared->pMapParams);
-        int liCount     = lpParams[0]   & 0xFF;
+        int liCount     = (lpParams[0] >> 16) & 0xFF;
         int liPresetCnt = lpPresets[0]  & 0xFF;
 
         // Pass 1: split into master (SFXOBJ-flagged) and (copy-expanded) state inputs.
@@ -631,7 +680,7 @@ void NFSMixMapState::InitializeMasterChannels()
             }
         }
 
-        int* lpInputs = lpMap->GetMasterChannelInputPtr(liMasterInputs + liStateInputs);
+        int** lpInputs = lpMap->GetMasterChannelInputPtr(liMasterInputs + liStateInputs);
         lpUnique->pInputs = lpInputs;
         if (liMasterInputs > 0)
             lpUnique->p3DData = reinterpret_cast<st3DMixCtlProc**>(lpInputs + liStateInputs);
@@ -642,14 +691,15 @@ void NFSMixMapState::InitializeMasterChannels()
         // Pass 2 (shared descriptor cursor): master group first, then state group.
         const int* lpSrc = &lpParams[3];
 
-        int* lpMaster = reinterpret_cast<int*>(lpUnique->p3DData);
+        st3DMixCtlProc** lpMaster = lpUnique->p3DData;
         for (int li = 0; li < liMasterInputs; ++li)
         {
             int liMasked = *lpSrc++ & 0xFFFF07FF;
-            *lpMaster++ = liMasked | (m_ObjectIndex << 11);
+            *lpMaster++ = reinterpret_cast<st3DMixCtlProc*>(
+                static_cast<intptr_t>(liMasked | (m_ObjectIndex << 11)));
         }
 
-        int* lpDst = lpUnique->pInputs;
+        int** lpDst = lpUnique->pInputs;
         for (int li = 0; li < liStateInputs; ++li)
         {
             int liDesc    = *lpSrc++;
@@ -657,7 +707,7 @@ void NFSMixMapState::InitializeMasterChannels()
             int liStateId = (liDesc >> 16) & 0xFF;
             if (liStateId == m_StateIndex)
             {
-                *lpDst++ = (m_ObjectIndex << 11) | liMasked;
+                *lpDst++ = reinterpret_cast<int*>(static_cast<intptr_t>((m_ObjectIndex << 11) | liMasked));
             }
             else
             {
@@ -667,7 +717,7 @@ void NFSMixMapState::InitializeMasterChannels()
                 {
                     li += liCopies;
                     for (int liCopy = 0; liCopy < liCopies; ++liCopy)
-                        *lpDst++ = (liCopy << 11) | liMasked;
+                        *lpDst++ = reinterpret_cast<int*>(static_cast<intptr_t>((liCopy << 11) | liMasked));
                 }
             }
         }

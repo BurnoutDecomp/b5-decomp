@@ -107,7 +107,7 @@ namespace Gen
         // Treating +0x4D8 as the start of a generic RefSpec shifts the key by
         // one qword and resolves an unrelated following attribute.
         static const u64 KU_PRESENTATION_ACTION_LIST_CLASS =
-            0x8B2D1E2F781A4522ull;
+            0x781A45228B2D1E2Full;
         const u64 luCollectionKey = *reinterpret_cast<const u64*>(
             static_cast<const u8*>(mpAttributeData) + 0x4D8u);
         return RefSpec(KU_PRESENTATION_ACTION_LIST_CLASS, luCollectionKey);

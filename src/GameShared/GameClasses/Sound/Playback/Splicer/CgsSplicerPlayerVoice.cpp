@@ -70,7 +70,7 @@ void* SplicerPlayerVoice::operator new(size_t auSize, Factory& arFactory,
 
 // @ 0x826E10D0. Feature zero is the Splicer control feature. Voice owns the
 // authored tables, while the GenericRwacVoice half receives a temporary spec
-// containing only features 1..N and processing stage 1.
+// containing only features 1..N and voice type E_SUBMIX_VOICE.
 SplicerPlayerVoice::SplicerPlayerVoice(Factory& arFactory,
                                        const VoiceSpec& arVoiceSpec,
                                        u32 au32Ident)
@@ -103,7 +103,11 @@ SplicerPlayerVoice::SplicerPlayerVoice(Factory& arFactory,
     VoiceSpec* lpRwacSpec = reinterpret_cast<VoiceSpec*>(laSpecStorage.data());
     std::memcpy(lpRwacSpec, &arVoiceSpec, luSpecBytes);
     lpRwacSpec->mpVoiceSchema = lpRwacSchema;
-    lpRwacSpec->mu8ProcessingStage = 1;
+    // ARTIST @ 0x826E1294-0x826E12A4 stores byte 1 at VoiceSpec +0x0F.
+    // +0x0F is mu8VoiceType (the preceding +0x0D byte is processing stage), so
+    // the featureless RWAC half is an internal submix voice.  This creates its
+    // SubMix plug-in at stage zero and makes the first send stage index one.
+    lpRwacSpec->mu8VoiceType = E_SUBMIX_VOICE;
 
     SplicerFactory& lrFactory = static_cast<SplicerFactory&>(arFactory);
     const bool lbCreated = CreateVoiceInstance(*lpRwacSpec, *this,

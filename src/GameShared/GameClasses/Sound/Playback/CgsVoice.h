@@ -348,6 +348,11 @@ private:
 class PlayerVoice : public Voice
 {
 public:
+    // CgsVoice.h. Authored slot-name key used by every PlayerVoice schema.
+    // ARTIST static initializer @ 0x82C65270 hashes this exact literal into
+    // dword_830080A8.
+    static const Name SK_PLAYER_SLOT_NAME;
+
     PlayerVoice(size_t auClientSize, Factory& arFactory,
                 const VoiceSpec& arVoiceSpec, u32 au32Ident)
         : Voice(auClientSize, arFactory, arVoiceSpec, au32Ident) {}

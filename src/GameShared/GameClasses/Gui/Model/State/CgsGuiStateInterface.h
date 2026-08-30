@@ -28,14 +28,17 @@ namespace CgsGui
         GuiEventPlayAptMovie() : GuiEvent<18>(8, 12) {}
     };
 
-    struct GuiEventPlayAptLoadingMovie : public GuiEvent<19>
+    // Empty payload tags boxed by GuiEventWrapper<...,40>.  On X360 sizeof(T)
+    // is 1, producing the exact 16-byte {1,type,12,payload/pad} wire record in
+    // PlayLoadingScreen / StopLoadingScreen.
+    struct GuiEventPlayAptLoadingMovie : public CgsModule::Event
     {
-        GuiEventPlayAptLoadingMovie() : GuiEvent<19>(1, 12) {}
+        s32 GetEventType() const { return 19; }
     };
 
-    struct GuiEventStopAptLoadingMovie : public GuiEvent<20>
+    struct GuiEventStopAptLoadingMovie : public CgsModule::Event
     {
-        GuiEventStopAptLoadingMovie() : GuiEvent<20>(1, 12) {}
+        s32 GetEventType() const { return 20; }
     };
 
     // The view's clear-screen (black backdrop) control record (DecFIGS

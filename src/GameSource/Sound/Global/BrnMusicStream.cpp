@@ -15,7 +15,8 @@ MusicStream::MusicStream()
     : mCreateParams(), mpStreamingManager(0), meState(E_STOPPED), mfFadeTime(0.0f),
       mfFadeDuration(0.25f), mfVolume(1.0f), mfHighPassFrequency(0.0f),
       mfLowPassFrequency(96000.0f), muPriority(6), muQueuedContentSpec(0),
-      mbInternalPause(false), mbStreamPaused(false), mbSongQueued(false) {}
+      mbInternalPause(false), mbStreamPaused(false), mbSongQueued(false),
+      mu8QueuedOutputSlot(0), mu8OutputSlot(0) {}
 
 void MusicStream::Prepare(Module::SoundLogicModule* apModule,
                           Streaming::StreamingStateManager* apStreamingManager,
@@ -42,15 +43,18 @@ void MusicStream::Prepare(Module::SoundLogicModule* apModule,
     mbInternalPause = false;
     mbStreamPaused = false;
     mbSongQueued = false;
+    mu8QueuedOutputSlot = 0;
+    mu8OutputSlot = 0;
 }
 
-void MusicStream::Queue(u32 auContentSpec, u32 auPriority)
+void MusicStream::Queue(u32 auContentSpec, u8 auOutputSlot, u32 auPriority)
 {
     if (meState != E_STOPPED)
         Stop();
     mCreateParams.mContentSpecName = auContentSpec;
     muQueuedContentSpec = auContentSpec;
     muPriority = auPriority;
+    mu8QueuedOutputSlot = auOutputSlot;
     if (!mbSongQueued)
         SetSongQueued(true);
 }
@@ -77,6 +81,7 @@ void MusicStream::Update(f32 afDeltaTime)
             Streaming::StreamRequest(this, muPriority, 0.1f));
         SetSongQueued(false);
         mbInternalPause = false;
+        mu8OutputSlot = mu8QueuedOutputSlot;
         meState = E_PLAYING;
     }
     else if (meState == E_STOP_REQUESTED)
