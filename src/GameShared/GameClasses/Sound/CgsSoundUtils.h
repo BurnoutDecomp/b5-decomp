@@ -137,8 +137,7 @@ struct Curve
     };
 
     // Map a [0..1] interpolation fraction through the selected curve shape (DWARF
-    // CgsSoundUtils.h:276). Used by PathLine / InterpolateLine stage interpolation. Body
-    // lives in its own recon slice; declared here so the stage machines can call it by name.
+    // CgsSoundUtils.h:276). Used by PathLine / InterpolateLine stage interpolation.
     static f32 GetOutput(f32 lfFraction, ECurveType leCurve);
 };
 

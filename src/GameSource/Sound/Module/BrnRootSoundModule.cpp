@@ -2,7 +2,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor (START stage)
 #include "GameShared/GameClasses/Sound/CgsTestBedAllocator.h"            // CgsSound::TestBed::Allocator (the four carve globals)
-#include "GameShared/GameClasses/System/PC/CgsStreamHeadersPC.h"         // StreamHeadersPC::Preload (the REGISTRY_LOAD stage's data half)
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"       // AllocatorList (the bank carves)
 #include "rw/rwcore_general_alloc.h"                                     // rw::core::GeneralResourceAllocator (bank 0x18/0x19)
 #include "rw/audio/core/PlugIn.h"                                        // rw::audio::core::System (CreateInstance/Lock/...)
@@ -578,25 +577,9 @@ namespace Module
         }
         case E_PREPARESTAGE_REGISTRY_LOAD:
             mePrepareStage = E_PREPARESTAGE_REGISTRY_LOAD;
-            // [gated] X360: if (!RegistryLoad(this, lpLogicOutputBuffer)) { LockForWrite(
-            //   lpSoundModuleOutputBuffer); LockForRead(lpLogicOutputBuffer); BridgeLogicToRoot
-            //   (lpLogicOutputBuffer, lpSoundModuleOutputBuffer); unlock both; -> still
-            //   preparing }. RegistryLoad (0x826EBA08) streams the CSIS/AEMS registries through
-            //   the playback module; blocked on the playback stage above + the RootOutputBuffer
-            //   request interfaces.
-            //
-            // ⭐ WHAT IS NOT BLOCKED IS THE TIMING, restored 2026-08-16 (boot audit
-            // F-P5-11/F7). The console reads SOUND\STREAMS\StreamHeaders.bundle and the
-            // StreamsRegistry HERE -- RegistryLoad merges the registry's ContentSpecs into
-            // the playback Registry, and StreamingStateManager::Prepare @0x826EE680 loads
-            // the headers bundle beside it -- i.e. during loading-screen stage 4, with the
-            // loading screen up. The PC read the same two files LAZILY, on the first
-            // lookup, which in practice was "when the first boot video asks for its audio":
-            // several seconds and a whole flow transition later, and inside the very frame
-            // that wanted to start playing. StreamHeadersPC::Preload does that read now.
-            // The full stage stays [gated] on the rw::audio engine; this is its data half.
-            // FLAG (PC leaf): host-only call, no @0x82 anchor of its own -- the console
-            // equivalent is the RegistryLoad + StreamingStateManager::Prepare pair above.
+            // X360 RegistryLoad @0x826EBA08: merge the converted native registries
+            // into Playback, forwarding any outstanding resource requests before
+            // retrying this stage.
             if (!RegistryLoad(lpLogicOutputBuffer))
             {
                 lpSoundModuleOutputBuffer->LockForWrite();
@@ -606,7 +589,6 @@ namespace Module
                 lpSoundModuleOutputBuffer->UnlockForWrite();
                 break;
             }
-            CgsSystem::StreamHeadersPC::Preload();
             meReleaseStage = E_RELEASESTAGE_REGISTRY_LOAD;
             // fall through
         case E_PREPARESTAGE_LOGIC_MODULE:

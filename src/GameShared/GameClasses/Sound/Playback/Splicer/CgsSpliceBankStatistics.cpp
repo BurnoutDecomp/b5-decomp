@@ -20,6 +20,21 @@ namespace CgsSound { namespace Playback {
 
 SpliceBankStatistics* SpliceBankStatistics::spHead = 0;
 
+SpliceBankStatistics::Stats::Stats()
+    : muPlayCount(0)
+{
+}
+
+SpliceBankStatistics::SpliceBankStatistics()
+    : mpSpliceContent(0)
+    , mpSpliceBank(0)
+    , mpaStats(0)
+    , muStatCount(0)
+    , mpNext(0)
+    , muIndex(0)
+{
+}
+
 SpliceBankStatistics::SpliceBankStatistics(const SpliceManager::SpliceContainer* lpSpliceBank,
                                            const SplicerContent* lpSpliceContent, u32 luIndex)
 {
@@ -89,6 +104,12 @@ SpliceBankStatistics::~SpliceBankStatistics()
 
     mpSpliceBank = 0; // +0x04
     muStatCount  = 0; // +0x0C
+}
+
+void SpliceBankStatistics::DoPlay(u16 lu16SpliceIndex)
+{
+    if (mpaStats && lu16SpliceIndex < muStatCount)
+        ++mpaStats[lu16SpliceIndex].muPlayCount;
 }
 
 }} // namespace CgsSound::Playback

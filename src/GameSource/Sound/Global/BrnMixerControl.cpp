@@ -23,6 +23,32 @@ namespace BrnSound
 namespace Logic
 {
 
+CgsSound::Logic::EffectControl* MixerControl::CreateObject(u32)
+{
+    return new MixerControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* MixerControl::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo(
+        0x00, "MixerControl", CgsSound::Logic::EffectControl::GetStaticTypeInfo(),
+        &MixerControl::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* MixerControl::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+const char* MixerControl::GetTypeName() const
+{
+    return "MixerControl";
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* const gpMixerControlReg =
+    CgsSound::Logic::EffectControl::AddToClassTypeInfoArray(MixerControl::GetStaticTypeInfo());
+
 // ---------------------------------------------------------------------------
 // ~MixerControl  @ 0x826BAED8  (the X360 `vector deleting destructor')
 //

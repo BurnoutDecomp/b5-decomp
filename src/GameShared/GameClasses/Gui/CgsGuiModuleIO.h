@@ -105,12 +105,21 @@ namespace CgsGuiModuleIO
         {
         };
 
-        // FLAG: BaseGameActionQueue<13312> (foreign home). Trailing member; sized to the
-        // GameAction queue inline buffer plus its small bookkeeping header.
-        struct GameActionQueueStorage
+        // BaseGameActionQueue<13312> is a thin typed wrapper around this same queue image.
+        // Its event-builder API belongs to the foreign owning home, but the OutputBuffer
+        // lifecycle calls VariableEventQueue<13312,16>::Construct/Clear at +0x5024, so the
+        // storage must retain that real base rather than remain opaque.
+        struct GameActionQueueStorage : public CgsModule::VariableEventQueue<13312, 16>
         {
-            unsigned char maBytes[13312 + 16];
         };
+
+        // X360 0x82857420 / 0x82852BF8. Construct brings up the IOBuffer status and all
+        // three embedded queues; Clear empties the same three queues each sub-step.
+        void Construct();
+        void Clear();
+        // ICF-folded on X360 with the base-only IOBuffer::Destruct: the queue images own
+        // no external storage, so teardown is only the unlocked-status assertion + clear.
+        void Destruct();
 
         // ---- accessors owned/bodied by this group --------------------------------------
         // X360 0x8284F388: write-lock (bit 3) handle to the resource-request queue.

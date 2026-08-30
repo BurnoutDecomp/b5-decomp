@@ -38,11 +38,6 @@ namespace Playback
     // Acquire/Release (from Object) and BeginRemove() are load-bearing for this TU.
     struct Content;
 
-    // FLAG (DEFER): begin removing the content from the playback graph. Called on the
-    // held content in Content::Destruct (X360 bl CgsSound::Playback::Content::BeginRemove).
-    // Declared BY NAME to match the `bl`; real body is a separate Playback::Content slice.
-    // Free shim keeps Content incomplete here (the member fn lives on Playback::Content).
-    void ContentBeginRemove(Content* lpContent);
 }
 
 namespace Logic
@@ -61,22 +56,6 @@ namespace Logic
     // shims (mirroring the deferred style in CgsVoice.cpp) so this TU bodies + compiles.
     // Fold onto the Module keystone when it exposes these directly.
     class Module;
-
-    // vtable-slot-0x48 virtual: the module's content ident. X360:
-    //   r11 = *lpModule; r11 = *(r11 + 0x48); ident = (*r11)(lpModule);
-    Command::QueueElement ModuleGetContentIdent(Module* lpModule);
-
-    // The content-create helper. X360 `bl CgsSound::Playback::Module::Module_` with
-    //   r3 = &out-handle, r4 = &lpModule->mPlaybackModule (+0x238),
-    //   r5 = ident, r6 = aQueueElementA, r7 = aQueueElementB.
-    // Returns the out-handle (r3). Deferred; the real Module_ home is the
-    // Playback::Module TU. Declared BY NAME here to match the single `bl`.
-    Playback::Handle<CgsSound::Playback::Content>* ModuleCreateContent(
-        Playback::Handle<CgsSound::Playback::Content>* lphOut,
-        Module* lpModule,
-        Command::QueueElement lIdent,
-        Command::QueueElement aQueueElementA,
-        Command::QueueElement aQueueElementB);
 
     // CgsContent.h:74 (DWARF). Logic-side handle onto one refcounted playback content.
     struct Content
@@ -107,9 +86,14 @@ namespace Logic
         // CgsContent.h:213. Created == the handle owns a content object.
         bool IsCreated() const { return mContentHandle.GetObject() != 0; }
 
-        // CgsContent.h:231. Deferred body -- returns true (the specs are asserted loaded
-        // on the boot path that reaches the accessor). Kept from the prior commit.
-        bool IsLoaded() const { return true; }
+        bool IsLoaded() const;
+
+        // Named form of the handle assignment in VoiceWrapper::Create/Release.
+        void Adopt(CgsSound::Playback::Content* apContent, Module* apModule)
+        {
+            mContentHandle.SetObject(apContent);
+            mpModule = apModule;
+        }
 
     private:
         // Non-copyable (CgsContent.h:142/147 -- private copy ctor / assign, declared-only).

@@ -41,6 +41,7 @@ namespace rw { namespace audio { namespace core { class Voice; class PlugIn; } }
 // Forward-declared splice-runtime collaborator (home internal/SpliceObjects.cpp). The
 // pool allocator takes it by pointer only and its body ignores it, so a fwd decl suffices.
 struct SpliceSample;
+struct SPLICE_SampleRef;
 
 // SPLICE_TYPE (DWARF, global scope) -- selects one of the eight per-source splice banks.
 // Homed here (the low-level splice header) so both SpliceManager and SplicerContent see
@@ -50,19 +51,23 @@ enum SPLICE_TYPE
     E_SPLICE_TYPE_INVALID = 0
 };
 
-// SPLICE_Data (DWARF) -- one loaded splice record. The 24-byte stride is grounded in
-// FindSplice (returns mpHeadSplice + 24*index). The two fields the splice-object bodies
-// read (SpliceObjects.cpp: Splice::Play/Update/IsPlaying/GetCpuTicks) are recovered by
-// name from those bodies' X360 asm; the remainder of the 24-byte record is external
-// loaded-blob data preserved as opaque padding (external-serialised-data exception).
+// SPLICE_Data (DWARF) -- one runtime splice record. The first 24 bytes are the
+// serialized SpliceHeader; mpSampleRefList is the pointer the console writes over
+// the serialized +0x14 scratch word while loading. On the x64 host it is widened
+// and kept after that header, so LoadSpliceData copies each 24-byte disk header into
+// this native runtime record before resolving the pointer.
 struct SPLICE_Data
 {
-    u8  mau8Header[7];     // +0x00..0x06  (unrecovered blob header)
-    u8  mucNumSampleRefs;  // +0x07  splice sample-slot count (Play/IsPlaying/GetCpuTicks loop bound)
-    f32 mfVolumeScale;     // +0x08  master volume scale applied to Play/Update input volume
-    u8  mau8Tail[12];      // +0x0C..0x17  (unrecovered) -> total 24-byte stride
+    u32 muNameHash;        // +0x00 serialized
+    u16 muSpliceIndex;     // +0x04 serialized
+    s8  mcSpliceType;      // +0x06 resolved to the owning bank during load
+    u8  mucNumSampleRefs;  // +0x07
+    f32 mfVolumeScale;     // +0x08
+    f32 mfRandomPitch;     // +0x0C
+    f32 mfRandomVolume;    // +0x10
+    u32 muSerializedSpare; // +0x14 (console pointer lane; disk scratch)
+    SPLICE_SampleRef* mpSampleRefList; // native-width resolved runtime pointer
 };
-static_assert( sizeof( SPLICE_Data ) == 24, "SPLICE_Data must keep its 24-byte FindSplice stride" );
 
 // (The former SpliceManagerDetail::Heap/AllocationRequest console-ABI view is
 // RETIRED -- AEMS-cascade slice 3: the +0x6C4 member IS the DWARF
@@ -152,6 +157,11 @@ struct SpliceManager
     // empty) and return the addressed SPLICE_Data record.
     SPLICE_Data* FindSplice( SPLICE_TYPE aeType, int aiIndex );
 
+    // @ 0x826C3320 / helper @ 0x826A3130. Validate the v1 Splicer image,
+    // materialize native runtime headers, resolve their sample-ref lists and the
+    // sample-data table, and install the selected bank.
+    bool LoadSplice( void* apData, SPLICE_TYPE aeType );
+
     // @ 0x826A3488. Assert the pair/voice are non-null and are NOT one of the pooled
     // voices, then release the voice through the RWAC engine and null the pair.
     void DestroyVoice( VoicePluginPair* apVoicePluginPair );
@@ -169,6 +179,17 @@ struct SpliceManager
     // Free a block previously handed out by Allocate, through the same heap (declared
     // only; own ledger func -- de-inlined call site in ~SpliceBankStatistics).
     void  Free( void* lpMemory );
+
+    // Native-width counterpart of the console helper called by LoadSplice.
+    bool LoadSpliceData( const char* apData, SPLICE_TYPE aeType,
+                         s32 aiDataSize, s32 aiNumSplices );
+
+    const SpliceContainer& GetSpliceContainer( SPLICE_TYPE aeType ) const
+    {
+        return m_Splices[aeType];
+    }
+
+    void ClearSplice( SPLICE_TYPE aeType ) { m_Splices[aeType].Clear(); }
 
     // Fill a MONO (voice, plug-in-chain) pair -- the four-stage splice chain.
     // ⭐ ADDED 2026-08-29: the header declared only the stereo builder, but the DWARF
@@ -196,6 +217,17 @@ struct SpliceManager
     VoicePluginPair* AllocateStereoVoicePluginPair( SpliceSample* apSpliceSample )
     {
         return mStereoVoicePool.AllocateVoicePluginPairToSpliceSample( apSpliceSample );
+    }
+
+    VoicePluginPair* AllocateMonoVoicePluginPair( SpliceSample* apSpliceSample )
+    {
+        return mMonoVoicePool.AllocateVoicePluginPairToSpliceSample( apSpliceSample );
+    }
+
+    char* GetSampleData( SPLICE_TYPE aeType, u16 auSampleIndex ) const
+    {
+        const SpliceContainer& lrContainer = m_Splices[aeType];
+        return lrContainer.mpSampleData + lrContainer.mpTableOfContents[auSampleIndex];
     }
 
 private:

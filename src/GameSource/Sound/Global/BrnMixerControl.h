@@ -73,8 +73,15 @@ struct GuiEventAudioSettings
 // structurally from the dual-base layout of BrnEffectControl.
 struct MixerControl : public BrnSound::Logic::BrnEffectControl
 {
-    MixerControl() {}
+    MixerControl()
+        : mpMixerData(nullptr), mpcNicotineBundle(nullptr), mpcNicotineAsset(nullptr),
+          mpcNicotineSnapshotAsset(nullptr), mCachedSettings() {}
     virtual ~MixerControl();
+
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const override;
+    const char* GetTypeName() const override;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 auType);
 
     // MixerControl-owned members observed in the DWARF (BrnMixerControl.h:80-87),
     // pinned BY NAME. The destructor does not tear these down (non-owning), so

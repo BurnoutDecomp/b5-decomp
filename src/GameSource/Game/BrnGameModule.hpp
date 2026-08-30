@@ -951,18 +951,10 @@ namespace BrnGame
         // until the first pass runs.
         CgsMemory::LinearMalloc* mpReusableLoadingScreenAllocator;
         bool mbGuiPreAccept;            // @ +10094153 (command 71 -- resume-world-load)
-        // FLAG sound stand-in (no console member): a GUI voice-over request (out-event
-        // 466) seen by BridgeGuiToGame is answered on the next sub-step -- see the block
-        // in DoUpdate_Gui that consumes it. muGuiVoiceOverHash carries the request's
-        // CgsSound::Playback::Name::MakeHash payload through to the speech player (on the
-        // console the hash travels the same way, out-queue -> BridgeGuiToSound ->
-        // SoundLogicModule::ProcessGuiEvents case 466 -> Io::Message 36 -> SpeechEffect).
+        // PC scheduler latch: acknowledge a GUI voice-over request on the next GUI
+        // sub-step. Playback and the 467 completion now travel through the real
+        // BridgeGuiToSound -> SpeechEffect -> sound pre-update route.
         bool mbGuiVoiceOverPending;
-        u32  muGuiVoiceOverHash;
-        // Set once a line is actually sounding, so the 467 completion is posted when the
-        // line ENDS (the console's SpeechEffect::UpdateParams @0x826F8074) instead of in
-        // the same sub-step as the 466.
-        bool mbGuiVoiceOverSounding;
 
         // [FLAG PC bring-up] (no console member): true while the DIRECTOR is the thing driving
         // the world camera -- i.e. from the frame the GUI's game-intro fly-by request reaches

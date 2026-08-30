@@ -27,6 +27,8 @@ namespace Gen
     {
     public:
         explicit languagestreamconfiguration(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit languagestreamconfiguration(const RefSpec& lrRefSpec, void* lpOwner = nullptr)
+            : Instance(lrRefSpec, lpOwner) {}
 
         // Resolve the per-index data pointer for this instance's ContentSpecs array
         // attribute. REAL X360 function @0x82686D80. Bounds-checks luIndex against the
@@ -36,6 +38,10 @@ namespace Gen
         // (count/capacity words) followed by 4-byte-stride elements, i.e.
         // &((u32*)mpAttributeData)[luIndex + 2].
         const void* GetContentSpecsData(u32 luIndex) const;
+        u32 ContentSpec(u32 luIndex) const
+        {
+            return *static_cast<const u32*>(GetContentSpecsData(luIndex));
+        }
     };
 
     // Chain the Instance ctor, assert the collection's class is

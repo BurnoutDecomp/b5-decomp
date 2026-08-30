@@ -14,6 +14,7 @@
 // this is a minimal, X360-faithful recon (class identity + ctor). Derives from
 // Attrib::Instance.
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribute.h"
 
 namespace Attrib
 {
@@ -23,6 +24,42 @@ namespace Gen
     {
     public:
         explicit streamsettings(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+
+        unsigned int Num_ContentSpecs() const
+        {
+            static const u64 KU_KEY = 0x5D2793AB142060E8ull;
+            AttributeValue lCursor;
+            streamsettings* lpSelf = const_cast<streamsettings*>(this);
+            Attribute* lpAttribute = reinterpret_cast<Attribute*>(
+                lpSelf->Get(&lCursor, reinterpret_cast<int*>(lpSelf), KU_KEY));
+            return lpAttribute ? static_cast<unsigned int>(lpAttribute->GetLength()) : 0u;
+        }
+
+        unsigned int Num_Volumes() const
+        {
+            static const u64 KU_KEY = 0x8E163B6D7B027C7Eull;
+            AttributeValue lCursor;
+            streamsettings* lpSelf = const_cast<streamsettings*>(this);
+            Attribute* lpAttribute = reinterpret_cast<Attribute*>(
+                lpSelf->Get(&lCursor, reinterpret_cast<int*>(lpSelf), KU_KEY));
+            return lpAttribute ? static_cast<unsigned int>(lpAttribute->GetLength()) : 0u;
+        }
+
+        u32 ContentSpecs(unsigned int auIndex) const
+        {
+            static const u64 KU_KEY = 0x5D2793AB142060E8ull;
+            const void* lpValue = GetAttributePointer(KU_KEY, auIndex);
+            return lpValue ? *static_cast<const u32*>(lpValue) : 0u;
+        }
+
+        f32 Volumes(unsigned int auIndex) const
+        {
+            static const u64 KU_KEY = 0x8E163B6D7B027C7Eull;
+            const void* lpValue = GetAttributePointer(KU_KEY, auIndex);
+            return lpValue ? *static_cast<const f32*>(lpValue) : 0.0f;
+        }
+
+        using Instance::GetCollection;
     };
 
     // Chain the Instance ctor, then assert the collection's class is

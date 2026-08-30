@@ -44,6 +44,69 @@ namespace CgsFileSystem
     {
     }
 
+    ReadStream FileSystem::OpenReadStream(
+        const char* lpcName, void* lpBuffer, u32 luBufferSize, u32 luNumBlocks,
+        s32 liNormalPriority, s32 liHighPriority, bool lbUseHDCache)
+    {
+        mFileSystemFutex.Lock();
+        ReadStream lStream = OpenReadStreamInternal(
+            lpcName, lpBuffer, luBufferSize, luNumBlocks,
+            liNormalPriority, liHighPriority, lbUseHDCache);
+        mFileSystemFutex.Unlock();
+        return lStream;
+    }
+
+    // ARTIST @0x82906950. Reject exhaustion, select the first stream whose
+    // effective status is CLOSED, configure its async stream device and return
+    // the one-pointer ReadStream handle.
+    ReadStream FileSystem::OpenReadStreamInternal(
+        const char* lpcName, void* lpBuffer, u32 luBufferSize, u32 luNumBlocks,
+        s32 liNormalPriority, s32 liHighPriority, bool /*lbUseHDCache*/)
+    {
+        CGS_ASSERT(muNumUsedReadStreams < KU_MAX_READ_STREAMS,
+                   "Out of read streams\n");
+
+        ReadStream lResult;
+        lResult.Construct(nullptr);
+        for (u32 luIndex = 0; luIndex < KU_MAX_READ_STREAMS; ++luIndex)
+        {
+            StreamDeviceDiskRead& lrDevice = maReadStreams[luIndex];
+            if (GetEffectiveStreamStatus(&lrDevice) !=
+                StreamDeviceDiskRead::E_STATUS_CLOSED)
+                continue;
+
+            lrDevice.Open(lpcName, lpBuffer, luBufferSize, luNumBlocks,
+                          liNormalPriority, liHighPriority, false, -1);
+            lResult.Construct(&lrDevice);
+            ++muNumUsedReadStreams;
+            break;
+        }
+        CGS_ASSERT(lResult.IsValid(), "Failed to set device on stream\n");
+        return lResult;
+    }
+
+    void FileSystem::CloseReadStream(ReadStream lStream)
+    {
+        mFileSystemFutex.Lock();
+        CloseReadStreamInternal(lStream);
+        mFileSystemFutex.Unlock();
+    }
+
+    // ARTIST @0x82903EC8. Only a handle into the owned eight-stream table is
+    // closable; the used count drops as soon as the asynchronous close begins.
+    void FileSystem::CloseReadStreamInternal(ReadStream lStream)
+    {
+        for (u32 luIndex = 0; luIndex < KU_MAX_READ_STREAMS; ++luIndex)
+        {
+            if (lStream.mpStreamDevice != &maReadStreams[luIndex])
+                continue;
+            maReadStreams[luIndex].Close();
+            CGS_ASSERT(muNumUsedReadStreams > 0, "muNumUsedReadStreams > 0");
+            --muNumUsedReadStreams;
+            return;
+        }
+    }
+
     // @0x8264AE28.
     FileState FileSystem::GetStatus(u32 luFileId)
     {
@@ -88,11 +151,20 @@ namespace CgsFileSystem
         return GetEffectiveStreamStatus(lpStream) == StreamDeviceDiskRead::E_STATUS_CLOSED;
     }
 
-    void FileSystem::Construct() {}
+    void FileSystem::Construct()
+    {
+        for (u32 luIndex = 0; luIndex < KU_MAX_READ_STREAMS; ++luIndex)
+            maReadStreams[luIndex].Construct(this, &mLog);
+        muNumUsedReadStreams = 0;
+    }
 
     bool FileSystem::Prepare()
     {
         EnsureDeviceManagerUp();
+        // The X360 installs maFilePrefix here. The PC physical device maps this
+        // qualified root to the game's working directory.
+        GetDeviceManager()->SetDefaultPath("p_dvd:");
+        mbPrepared = true;
         return true;
     }
 

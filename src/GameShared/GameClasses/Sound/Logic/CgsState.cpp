@@ -18,11 +18,15 @@
 
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h"
 
 namespace CgsSound
 {
 namespace Logic
 {
+
+static ClassTypeInfo<State>* gapStateTypeInfo[State::KU_SIZEOF_CLASS_ARRAY] = { 0 };
 
 // ---------------------------------------------------------------------------
 // State::AddToClassTypeInfoArray  @ 0x8268DF08  (static array dword_82FFBC18)
@@ -39,15 +43,13 @@ namespace Logic
 // ---------------------------------------------------------------------------
 ClassTypeInfo<State>* State::AddToClassTypeInfoArray(ClassTypeInfo<State>* apTypeInfo)
 {
-    static ClassTypeInfo<State>* saClassTypeInfoArray[KU_SIZEOF_CLASS_ARRAY] = { 0 };
-
     // Scan for the first empty slot, capped at the class-array size (0x10).
     u32 lu32Index = 0;
     for (lu32Index = 0; lu32Index < KU_SIZEOF_CLASS_ARRAY; ++lu32Index)
     {
-        if (saClassTypeInfoArray[lu32Index] == 0)
+        if (gapStateTypeInfo[lu32Index] == 0)
         {
-            saClassTypeInfoArray[lu32Index] = apTypeInfo;
+            gapStateTypeInfo[lu32Index] = apTypeInfo;
             return apTypeInfo;
         }
     }
@@ -58,6 +60,22 @@ ClassTypeInfo<State>* State::AddToClassTypeInfoArray(ClassTypeInfo<State>* apTyp
     CGS_ASSERT(lu32Index < (4u * KU_SIZEOF_CLASS_ARRAY),
                "Too Many Class registations. Increase KU_SIZEOF_CLASS_ARRAY");
     return apTypeInfo;
+}
+
+ClassTypeInfo<State>* State::GetRegisteredTypeInfo(u32 auIndex)
+{
+    return auIndex < KU_SIZEOF_CLASS_ARRAY ? gapStateTypeInfo[auIndex] : 0;
+}
+
+ClassTypeInfo<State>* State::GetTypeInfo() const
+{
+    static ClassTypeInfo<State> sTypeInfo(0, "State", 0, 0);
+    return &sTypeInfo;
+}
+
+const char* State::GetTypeName() const
+{
+    return "State";
 }
 
 // CgsState.h:370. Zero/seed the State base members. This mirrors the inline base
@@ -92,6 +110,348 @@ State::State()
 bool State::IsAttachedToThis(void* apvAttachment)
 {
     return mpvAttachment == apvAttachment;
+}
+
+void State::CreateSFXObjs()
+{
+    for (s32 liEffect = 0; liEffect < MAX_NUM_SFXOBJS_PER_STATE; ++liEffect)
+    {
+        if ((miSFXFlags & (1 << liEffect)) != 0)
+            NewSFXObj(liEffect);
+    }
+}
+
+void State::ForceCreateEffectControls(s32 liMask)
+{
+    for (s32 liEffect = 0; liEffect < MAX_NUM_SFXOBJS_PER_STATE; ++liEffect)
+    {
+        if ((liMask & (1 << liEffect)) != 0)
+            NewSFXCtrl(liEffect);
+    }
+}
+
+EffectBase* State::HasCtrlBeenAdded(s32 liEffectId)
+{
+    for (EffectBase* lpEffect = mpHeadEffectControl; lpEffect; lpEffect = lpEffect->mpNextEffectBase)
+    {
+        if (lpEffect->GetEffectID() == liEffectId)
+            return lpEffect;
+    }
+    return 0;
+}
+
+void State::CreateSFXCtrls()
+{
+    for (EffectBase* lpEffect = mpHeadEffectObject; lpEffect; lpEffect = lpEffect->mpNextEffectBase)
+    {
+        for (s32 liController = 0; ; ++liController)
+        {
+            const s32 liEffectId = lpEffect->GetController(liController);
+            if (liEffectId == -1)
+                break;
+            EffectBase* lpControl = HasCtrlBeenAdded(liEffectId);
+            if (!lpControl)
+                lpControl = NewSFXCtrl(liEffectId);
+            lpEffect->AttachController(lpControl);
+        }
+    }
+
+    for (EffectBase* lpEffect = mpHeadEffectControl; lpEffect; lpEffect = lpEffect->mpNextEffectBase)
+    {
+        for (s32 liController = 0; ; ++liController)
+        {
+            const s32 liEffectId = lpEffect->GetController(liController);
+            if (liEffectId == -1)
+                break;
+            EffectBase* lpControl = HasCtrlBeenAdded(liEffectId);
+            if (!lpControl)
+                lpControl = NewSFXCtrl(liEffectId);
+            lpEffect->AttachController(lpControl);
+        }
+    }
+    SortSFXCtl();
+}
+
+void State::NewSFXObj(s32 liEffectId)
+{
+    EffectBase* lpEffect = mpStateManager->CreateEffectObject(miInstNum, liEffectId);
+    if (!lpEffect)
+        return;
+    ++miNumLoadedEffectObjects;
+    if (!mpHeadEffectObject)
+    {
+        mpHeadEffectObject = lpEffect;
+        return;
+    }
+    EffectBase* lpTail = mpHeadEffectObject;
+    while (lpTail->mpNextEffectBase)
+        lpTail = lpTail->mpNextEffectBase;
+    lpTail->mpNextEffectBase = lpEffect;
+}
+
+EffectBase* State::NewSFXCtrl(s32 liEffectId)
+{
+    if (liEffectId == -1)
+        return 0;
+    EffectBase* lpEffect = mpStateManager->CreateEffectControl(miInstNum, liEffectId);
+    CGS_ASSERT(lpEffect != 0, "SND_ERROR: Could not find EffectControl");
+    if (!lpEffect)
+        return 0;
+    ++miNumLoadedEffectControls;
+    if (!mpHeadEffectControl)
+        mpHeadEffectControl = lpEffect;
+    else
+    {
+        EffectBase* lpTail = mpHeadEffectControl;
+        while (lpTail->mpNextEffectBase)
+            lpTail = lpTail->mpNextEffectBase;
+        lpTail->mpNextEffectBase = lpEffect;
+    }
+    return lpEffect;
+}
+
+void State::SortSFXCtl()
+{
+    EffectBase* lapEffects[EffectBase::KI_MAX_SFX_CTLS] = { 0 };
+    s32 liCount = 0;
+    for (EffectBase* lpEffect = mpHeadEffectControl;
+         lpEffect && liCount < EffectBase::KI_MAX_SFX_CTLS;
+         lpEffect = lpEffect->mpNextEffectBase)
+        lapEffects[liCount++] = lpEffect;
+
+    mpHeadEffectControl = 0;
+    EffectBase* lpTail = 0;
+    for (;;)
+    {
+        s32 liBest = -1;
+        s32 liBestId = EffectBase::KI_MAX_SFX_CTLS;
+        for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+        {
+            if (lapEffects[liIndex] && lapEffects[liIndex]->GetEffectID() < liBestId)
+            {
+                liBestId = lapEffects[liIndex]->GetEffectID();
+                liBest = liIndex;
+            }
+        }
+        if (liBest < 0)
+            break;
+        EffectBase* lpEffect = lapEffects[liBest];
+        lapEffects[liBest] = 0;
+        lpEffect->mpNextEffectBase = 0;
+        if (!mpHeadEffectControl)
+            mpHeadEffectControl = lpEffect;
+        else
+            lpTail->mpNextEffectBase = lpEffect;
+        lpTail = lpEffect;
+    }
+}
+
+bool State::Prepare(s32 liSfxFlags, StateManager* apStateManager)
+{
+    if (mePrepareState == E_PREPARE_STATE_CREATE_OBJECTS)
+    {
+        miSFXFlags = liSfxFlags;
+        mpStateManager = apStateManager;
+        mpLogicModule = apStateManager->GetLogicModule();
+        mpvAttachment = 0;
+        mbIsAttached = false;
+        CreateSFXObjs();
+        CreateSFXCtrls();
+        mpCurrentEffect = mpHeadEffectObject;
+        mePrepareState = E_PREPARE_STATE_OBJECTS;
+    }
+
+    if (mePrepareState == E_PREPARE_STATE_OBJECTS)
+    {
+        while (mpCurrentEffect && mpCurrentEffect->Prepare(this))
+            mpCurrentEffect = mpCurrentEffect->mpNextEffectBase;
+        if (mpCurrentEffect)
+            return false;
+        mpCurrentEffect = mpHeadEffectControl;
+        mePrepareState = E_PREPARE_STATE_CONTROLS;
+    }
+
+    if (mePrepareState == E_PREPARE_STATE_CONTROLS)
+    {
+        while (mpCurrentEffect && mpCurrentEffect->Prepare(this))
+            mpCurrentEffect = mpCurrentEffect->mpNextEffectBase;
+        if (mpCurrentEffect)
+            return false;
+        mePrepareState = E_PREPARE_STATE_DONE;
+    }
+    return true;
+}
+
+void State::Attach(void* apvAttachment)
+{
+    CGS_ASSERT(mauUpdateState[0] == E_UPDATE_UNATTACHED ||
+               mauUpdateState[0] == E_UPDATE_DETATCHING,
+               "meUpdateState == E_UPDATE_UNATTACHED || meUpdateState == E_UPDATE_DETATCHING");
+    const u32 luPreviousState = mauUpdateState[0];
+    mpvAttachment = apvAttachment;
+    mbIsAttached = true;
+    mpCurrentEffect = 0;
+    if (luPreviousState == E_UPDATE_UNATTACHED)
+    {
+        mauUpdateState[0] = E_INITIALIZE_CONTROLS;
+        mauUpdateState[1] = luPreviousState;
+    }
+}
+
+bool State::AttachEffect()
+{
+    CGS_ASSERT(mePrepareState == E_PREPARE_STATE_DONE, "E_PREPARE_STATE_DONE == mePrepareState");
+    if (!mpCurrentEffect)
+        return true;
+    switch (mpCurrentEffect->GetAttachState())
+    {
+    case EffectBase::E_ATTACH_STATE_NONE:
+        mpCurrentEffect->SetAttachState(EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA);
+        // X360 0x8268D6A8/0x8268D6AC: a fresh attachment invalidates the
+        // previous data-ready latch before SetupLoadData is dispatched.
+        mpCurrentEffect->ClearLoadedData();
+        mpCurrentEffect->SetupLoadData();
+        CGS_ASSERT(mpCurrentEffect->GetAttachState() ==
+                       EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA ||
+                   mpCurrentEffect->GetAttachState() ==
+                       EffectBase::E_ATTACH_STATE_PREPARING,
+                   "mpCurrentEffect->GetAttachState() == EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA ||mpCurrentEffect->GetAttachState() == EffectBase::E_ATTACH_STATE_PREPARING");
+        if (mpCurrentEffect->GetAttachState() ==
+            EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA)
+            return false;
+        // SetupLoadData may synchronously advance a no-data effect to
+        // PREPARING. ARTIST falls directly into the Attach call in that case.
+        // fall through
+    case EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA:
+        if (mpCurrentEffect->GetAttachState() ==
+            EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA)
+            return false;
+        // fall through
+    case EffectBase::E_ATTACH_STATE_PREPARING:
+        mpCurrentEffect->UpdateTime(mfCurTime, mfDeltaTime);
+        if (!mpCurrentEffect->Attach())
+            return false;
+        break;
+    case EffectBase::E_ATTACH_STATE_FINISHED:
+        break;
+    default:
+        CGS_ASSERT(false, "Invalid State");
+        break;
+    }
+    mpCurrentEffect->SetAttachState(EffectBase::E_ATTACH_STATE_FINISHED);
+    mpCurrentEffect = mpCurrentEffect->mpNextEffectBase;
+    return true;
+}
+
+void State::UpdateParams(f32 af32DeltaTime)
+{
+    mfDeltaTime = af32DeltaTime;
+    switch (mauUpdateState[0])
+    {
+    case E_INITIALIZE_CONTROLS:
+        mpCurrentEffect = mpHeadEffectControl;
+        mauUpdateState[0] = E_INITIALIZE_CONTROLS_UPDATE;
+        // fall through
+    case E_INITIALIZE_CONTROLS_UPDATE:
+        while (mpCurrentEffect && AttachEffect()) {}
+        if (mpCurrentEffect)
+            return;
+        mpCurrentEffect = mpHeadEffectObject;
+        mauUpdateState[0] = E_INITIALIZE_EFFECTS;
+        // fall through
+    case E_INITIALIZE_EFFECTS:
+    case E_INITIALIZE_EFFECTS_UPDATE:
+        mauUpdateState[0] = E_INITIALIZE_EFFECTS_UPDATE;
+        while (mpCurrentEffect && AttachEffect()) {}
+        if (mpCurrentEffect)
+            return;
+        mauUpdateState[0] = E_UPDATE_ATTACHED;
+        // fall through
+    case E_UPDATE_ATTACHED:
+        for (EffectBase* lpEffect = mpHeadEffectControl; lpEffect; lpEffect = lpEffect->mpNextEffectBase)
+        {
+            lpEffect->UpdateTime(mfCurTime, af32DeltaTime);
+            lpEffect->UpdateParams(af32DeltaTime);
+        }
+        for (EffectBase* lpEffect = mpHeadEffectObject; lpEffect; lpEffect = lpEffect->mpNextEffectBase)
+        {
+            lpEffect->UpdateTime(mfCurTime, af32DeltaTime);
+            lpEffect->UpdateParams(af32DeltaTime);
+        }
+        break;
+    case E_UPDATE_DETATCHING:
+    {
+        bool lbStillDetaching = false;
+        for (EffectBase* lpEffect = mpHeadEffectObject; lpEffect;
+             lpEffect = lpEffect->mpNextEffectBase)
+        {
+            lpEffect->UpdateTime(mfCurTime, af32DeltaTime);
+            if (!lpEffect->Detach())
+                lbStillDetaching = true;
+        }
+        for (EffectBase* lpEffect = mpHeadEffectControl; lpEffect;
+             lpEffect = lpEffect->mpNextEffectBase)
+        {
+            lpEffect->UpdateTime(mfCurTime, af32DeltaTime);
+            if (!lpEffect->Detach())
+                lbStillDetaching = true;
+        }
+        if (!lbStillDetaching)
+        {
+            const u32 luPreviousState = mauUpdateState[0];
+            if (mbIsAttached)
+            {
+                mauUpdateState[0] = E_INITIALIZE_CONTROLS;
+                mauUpdateState[1] = luPreviousState;
+                UpdateParams(0.0f);
+            }
+            else
+            {
+                mauUpdateState[0] = E_UPDATE_UNATTACHED;
+                mauUpdateState[1] = luPreviousState;
+            }
+        }
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+void State::ProcessUpdate()
+{
+    if (mauUpdateState[0] != E_UPDATE_ATTACHED)
+        return;
+    for (EffectBase* lpEffect = mpHeadEffectObject; lpEffect; lpEffect = lpEffect->mpNextEffectBase)
+    {
+        if (lpEffect->GetAttachState() == EffectBase::E_ATTACH_STATE_FINISHED)
+            lpEffect->ProcessUpdate();
+    }
+}
+
+bool State::Detach()
+{
+    mauUpdateState[0] = E_UPDATE_DETATCHING;
+    mbIsAttached = false;
+    return true;
+}
+
+void State::DestroyEffects()
+{
+    while (mpHeadEffectControl)
+    {
+        EffectBase* lpNext = mpHeadEffectControl->mpNextEffectBase;
+        mpHeadEffectControl->Destroy();
+        mpHeadEffectControl = lpNext;
+    }
+    while (mpHeadEffectObject)
+    {
+        EffectBase* lpNext = mpHeadEffectObject->mpNextEffectBase;
+        mpHeadEffectObject->Destroy();
+        mpHeadEffectObject = lpNext;
+    }
+    miNumLoadedEffectControls = 0;
+    miNumLoadedEffectObjects = 0;
 }
 
 // ---------------------------------------------------------------------------

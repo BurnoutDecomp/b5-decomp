@@ -22,8 +22,6 @@
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers (flow interface wiring)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"       // CgsGui::AptAuxPointer (the AptAux singleton)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // CgsGui::AptCommunicator (the per-frame trigger publish)
-#include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h"             // CgsSystem::MenuMusicPC (the menu-stream music player)
-#include "GameShared/GameClasses/System/PC/CgsGuiSoundPC.h"               // CgsSystem::GuiSoundPC (the GUI presentation blips)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash (event-155 keys)
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"                // FLApt live-instance allocator
 #include "GameSource/Resource/BrnGameDataModuleIO.h"                      // BrnResource::GameDataIO::Input/OutputBuffer (the colour-calibration screen's IO)
@@ -918,69 +916,7 @@ namespace BrnGui
 namespace BrnGui
 {
     GuiModule*      gpActiveGuiModule      = 0;
-
-    // The current menu-music stream hash (X360 dword_830082A8; 0 == silence). The
-    // menu-music consumer below keeps it current; the post-title intro reads it.
-    s32 gCurrentMenuMusicHash = 0;
-
-    // ---- BF_LEGAL-era audio consumers (events 155 / 201; PC sound leaves) -------------
-    // The console consumers are BrnSound::Logic::MusicStream (the menu stream, fed through
-    // SndStream) and the AEMS GUI sound logic (the trigger patches) -- both deferred
-    // behavioural clusters. These PC leaves reproduce the OBSERVABLES on the same event
-    // protocol:
-    //   155 (GuiEventPlayMusicOnMenuStream): miHash @+0x0C. A known sound-name hash
-    //        (CgsSound::Playback::Name::MakeHash -- homed) -> play/loop that stream;
-    //        hash 0 -> stop (the X360 posts 0 before the attract video).
-    //   201 (GuiAudioTriggerEvent): resolved through the presentationactionlist data to a
-    //        splice in the presentation Splicer bank (CgsGuiSoundPC).
-    static void HandleMenuMusicEvent(s32 liHash)
-    {
-        // Event name -> ContentSpec name. FLAG (the MusicEffect data layer): the
-        // console maps the posted event name to a StreamsRegistry ContentSpec via
-        // the music database (MusicEffect::GetEventStartContentSpec @0x8269CFC0
-        // reads it from game data); that table is not reconstructed, so the one
-        // title-screen pairing is carried here. The SPEC then resolves through
-        // the real registry chain (CgsSystem::StreamHeadersPC) -- the .SNS file
-        // and its SNR header both come from the ORIGINAL X360 bundles.
-        struct MenuStreamKey { const char* lpacName; const char* lpacSpecName; };
-        static const MenuStreamKey KA_MENU_STREAMS[] =
-        {
-            // The title screen's menu stream (BootLegal E_STAGE_START_MOVIE posts it).
-            { "GunsAndRoses", "Guns_And_Roses" },
-        };
-
-        gCurrentMenuMusicHash = liHash;
-        if (liHash == 0)
-        {
-            if (CgsSystem::MenuMusicPC::IsActive())
-            {
-                CgsDev::Log::WriteToLog("[GuiModule] menu-music 155 hash 0 -> stop.\n");
-                CgsSystem::MenuMusicPC::Stop();
-            }
-            return;
-        }
-        for (u32 lu = 0; lu < sizeof(KA_MENU_STREAMS) / sizeof(KA_MENU_STREAMS[0]); ++lu)
-        {
-            const s32 liKey = static_cast<s32>(
-                CgsSound::Playback::Name::MakeHash(KA_MENU_STREAMS[lu].lpacName));
-            if (liHash == liKey)
-            {
-                char lac[160];
-                std::snprintf(lac, sizeof(lac), "[GuiModule] menu-music 155 '%s' -> spec '%s'\n",
-                              KA_MENU_STREAMS[lu].lpacName, KA_MENU_STREAMS[lu].lpacSpecName);
-                CgsDev::Log::WriteToLog(lac);
-                CgsSystem::MenuMusicPC::PlaySpec(KA_MENU_STREAMS[lu].lpacSpecName);
-                return;
-            }
-        }
-        {
-            char lac[120];
-            std::snprintf(lac, sizeof(lac),
-                          "[GuiModule] menu-music 155 hash 0x%08X unknown -- no stream mapped (FLAG).\n",
-                          static_cast<u32>(liHash));
-            CgsDev::Log::WriteToLog(lac);
-        }
-    }
+    s32             gCurrentMenuMusicHash  = 0;
 
     // The exact eight packed colours passed to ViewModule::Construct by ARTIST
     // (0x82F27F84, count 8).
@@ -2585,9 +2521,14 @@ void GuiModule::Destruct()
                 }
 
                 case 155:  // menu-music request (0 = stop)
-                    HandleMenuMusicEvent(static_cast<s32>(
+                    // The model channel is 155, while the typed sound event carried
+                    // by it is GuiEventPlayMusicOnMenuStream (23). Publish the typed
+                    // id so BridgeGuiToSound reaches MusicEffect::Notify.
+                    CGS_ASSERT(mpOutputBuffer != 0, "mpOutputBuffer");
+                    gCurrentMenuMusicHash = static_cast<s32>(
                         reinterpret_cast<const CgsGui::GuiEventPlayMusicOnMenuStream*>(
-                            lpEvent)->muStreamNameHash));
+                            lpEvent)->muStreamNameHash);
+                    mpOutputBuffer->AddEvent(lpEvent, 23, liSize);
                     break;
 
                 case 201:  // GUI audio trigger -> the module output event channel
@@ -3256,10 +3197,6 @@ void GuiModule::Destruct()
             CgsDev::Log::WriteToLog("[GuiModule] video finished -> fed 510 to the flow.\n");
         }
 
-        // Per-frame: let the menu-music stream (re)claim the audio output once the
-        // movie stream is idle (the attract/intro video borrows the single device voice).
-        CgsSystem::MenuMusicPC::Update();
-
         // ---- 7. the view frame (the real per-frame owner) -----------------------------
         // Post the frame time step (view event 26) onto the view-state queue and run
         // CgsGui::ViewModule::Update -- which dispatches the view events (incl. the
@@ -3385,9 +3322,8 @@ void GuiModule::Destruct()
             CgsGui::AptCommunicator::FlushTriggerEventsTo(mViewOutputBuffer.GetGuiEventQueue());
             mViewOutputBuffer.UnlockForWrite();
             // Deliver this frame's SOUND triggers (event 22 -- the AS SendAptSoundEvent
-            // records: type[32] action[32] label[32] + layer) to the GUI sound leaf --
-            // the console route is the sound-logic message layer (blocked cluster);
-            // GuiSoundPC keys the same presentationactionlist data (CgsGuiSoundPC.h).
+            // records: type[32] action[32] label[32] + layer) through the sound-logic
+            // message route as typed GuiAudioTriggerEvent records.
             mViewOutputBuffer.LockForRead();
             {
                 const CgsModule::VariableEventQueue<18432, 16>* lpTrigQueue =
@@ -3407,12 +3343,45 @@ void GuiModule::Destruct()
                     }
                     else if (liTrigId == 22 && liTrigSize >= 100)
                     {
-                        // {type[32], action[32], label[32], layer}. Key rule (the
-                        // trigger-resolve): string key = label unless 'uninitialised',
-                        // then the component/type name; the enum parses from the AS
-                        // action string ('ON_FOCUS' -> OnFocus).
+                        // Convert Apt's {type[32], action[32], label[32], layer}
+                        // record into the real GuiAudioTriggerEvent consumed by the
+                        // presentation effect. The action table is the ARTIST
+                        // OnEnter..OnRightSweep enum, with Apt underscores ignored.
                         const char* lpacT = reinterpret_cast<const char*>(lpTrig);
-                        CgsSystem::GuiSoundPC::OnTrigger(lpacT + 64, lpacT + 32, lpacT, -1);
+                        static const char* const KAPC_ACTIONS[14] = {
+                            "OnEnter", "OnExit", "OnFocus", "OnLoseFocus", "OnAccept", "OnCancel",
+                            "OnTick", "OnChange", "OnUp", "OnDown", "OnLeft", "OnLeftSweep",
+                            "OnRight", "OnRightSweep"
+                        };
+                        s32 liAction = -1;
+                        for (s32 liCandidate = 0; liCandidate < 14 && liAction < 0; ++liCandidate)
+                        {
+                            const char* lpSource = lpacT + 32;
+                            const char* lpTarget = KAPC_ACTIONS[liCandidate];
+                            bool lbSame = true;
+                            while (lbSame && (*lpSource || *lpTarget))
+                            {
+                                if (*lpSource == '_') { ++lpSource; continue; }
+                                const char lcSource = (*lpSource >= 'A' && *lpSource <= 'Z')
+                                    ? static_cast<char>(*lpSource + 32) : *lpSource;
+                                const char lcTarget = (*lpTarget >= 'A' && *lpTarget <= 'Z')
+                                    ? static_cast<char>(*lpTarget + 32) : *lpTarget;
+                                if (lcSource != lcTarget) { lbSame = false; break; }
+                                ++lpSource;
+                                ++lpTarget;
+                            }
+                            if (lbSame)
+                                liAction = liCandidate;
+                        }
+                        if (liAction >= 0)
+                        {
+                            BrnGui::GuiAudioTriggerEvent lAudio;
+                            lAudio.Construct(liAction, lpacT, lpacT + 64, "");
+                            CGS_ASSERT(mpOutputBuffer != 0, "mpOutputBuffer");
+                            mpOutputBuffer->AddEvent(
+                                reinterpret_cast<const CgsModule::Event*>(&lAudio),
+                                201, static_cast<s32>(sizeof(lAudio)));
+                        }
                     }
                     const CgsModule::Event* lpTrigNext = 0;
                     liTrigId = lpTrigQueue->GetNextEvent(lpTrig, &lpTrigNext, &liTrigSize);

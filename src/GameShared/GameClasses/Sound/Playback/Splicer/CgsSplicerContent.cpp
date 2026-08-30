@@ -15,17 +15,100 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerContent.h"
+#include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerFactory.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint / gxMessageFilterFlags / StrStreamBase
+
+#include <new>
 
 namespace CgsSound
 {
 namespace Playback
 {
 
-// The Name stream inserter (X360 `CgsSound::Playback::operator<<`, called by DumpToTty
-// to render a content name). Its body lives in its own (not-yet-done) TU; declared here
-// as a cross-TU callee and resolved at link/consolidation -- NOT defined.
-CgsDev::StrStreamBase& operator<<(CgsDev::StrStreamBase& arStream, const Name& arName);
+SplicerContent::SplicerContent(Factory& arFactory, const ContentSpec& akrSpec,
+                               u32 au32Ident)
+    : Content(arFactory, akrSpec, au32Ident)
+    , mStatistics()
+    , mLoader()
+    , mpSplicerData(0)
+{
+}
+
+bool SplicerContent::DoLoad()
+{
+    return mLoader.Load(*this, GetContentSpec());
+}
+
+bool SplicerContent::DoUnload()
+{
+    return mLoader.Unload(*this, GetContentSpec());
+}
+
+void SplicerContent::DoUpdate(f32 /*af32DeltaTime*/)
+{
+    mLoader.Update(*this, GetContentSpec());
+}
+
+void* SplicerContent::DoGetData()
+{
+    void* lpData = mLoader.GetData();
+    CGS_ASSERT(lpData != 0, "lpvData");
+    return lpData;
+}
+
+// @ 0x826D5AB0. Claim the first of eight bank slots, resolve the endian-mapped
+// v1 Splicer image through the owning factory's manager, then attach the bank's
+// play-count statistics.
+bool SplicerContent::DoOnPostLoad()
+{
+    void* lpData = Content::GetData(E_CONTENT_STATE_LOADING);
+    CGS_ASSERT(mpSplicerData == 0, "0 == mpSplicerData");
+    mpSplicerData = lpData;
+
+    SplicerFactory& lrFactory = static_cast<SplicerFactory&>(GetFactory());
+    SpliceManager* lpManager = lrFactory.GetManager();
+    CGS_ASSERT(lpManager != 0, "mpManager");
+
+    s32 liBank = -1;
+    for (s32 li = 0; li < 8; ++li)
+    {
+        if (lpManager->GetSpliceContainer(static_cast<SPLICE_TYPE>(li)).mpSampleData == 0)
+        {
+            liBank = li;
+            break;
+        }
+    }
+    meType = static_cast<SPLICE_TYPE>(liBank);
+    CGS_ASSERT(liBank != -1, "No more Splicer Banks available!");
+    if (liBank == -1)
+        return false;
+
+    const bool lbLoaded = lpManager->LoadSplice(mpSplicerData, meType);
+    CGS_ASSERT(lbLoaded, "Splicer Bank failed to Load");
+    if (!lbLoaded)
+        return false;
+
+    mStatistics.~SpliceBankStatistics();
+    ::new (&mStatistics) SpliceBankStatistics(
+        &lpManager->GetSpliceContainer(meType), this, static_cast<u32>(liBank));
+    return true;
+}
+
+// @ 0x826D5998. Unregister statistics, release the selected bank and clear the
+// loaded-data latch before ContentLoader drops the BinaryFileResource.
+bool SplicerContent::DoOnPreUnload()
+{
+    mStatistics.~SpliceBankStatistics();
+    ::new (&mStatistics) SpliceBankStatistics();
+    CGS_ASSERT(mpSplicerData != 0, "mpSplicerData");
+
+    SplicerFactory& lrFactory = static_cast<SplicerFactory&>(GetFactory());
+    SpliceManager* lpManager = lrFactory.GetManager();
+    CGS_ASSERT(lpManager != 0, "mpManager");
+    lpManager->ClearSplice(meType);
+    mpSplicerData = 0;
+    return true;
+}
 
 // ---------------------------------------------------------------------------
 // SpliceBankStatistics::DumpToTty  @ 0x826A2F78
@@ -41,7 +124,8 @@ void SpliceBankStatistics::DumpToTty() const
     if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
     {
         const Name& lrName = mpSpliceContent->GetContentSpec().GetName();
-        *CgsDev::Log::gpDebugPrint << "Name: " << lrName << "\n"
+        *CgsDev::Log::gpDebugPrint << "Name hash: "
+                                   << static_cast<u32>(lrName.GetValue()) << "\n"
                                    << "SpliceCount: " << muStatCount << "\n";
     }
 
@@ -85,6 +169,63 @@ bool SplicerContentSlot::DoStop(const Slot& /*arSlot*/, PlayerVoice& arVoice, Co
 
     lrVoice.mpSplice = 0;          // stored whether or not a splice was present
     return true;
+}
+
+// @ 0x826FA648. Count the authored splice, replace the voice's current Splice,
+// and start it with the three named Splicer parameters.
+bool SplicerContentSlot::DoPlay(const Slot& /*arSlot*/, PlayerVoice& arVoice,
+                                Content& arContent, u32 au32Param)
+{
+    SplicerPlayerVoice& lrVoice = static_cast<SplicerPlayerVoice&>(arVoice);
+    SplicerContent& lrContent = static_cast<SplicerContent&>(arContent);
+    lrContent.mStatistics.DoPlay(static_cast<u16>(au32Param));
+    lrVoice.ForceParameterUpdate();
+
+    if (lrVoice.mpSplice)
+    {
+        delete lrVoice.mpSplice;
+        lrVoice.mpSplice = 0;
+    }
+
+    SplicerFactory& lrFactory =
+        static_cast<SplicerFactory&>(lrContent.GetFactory());
+    SPLICE_Data* lpData = lrFactory.GetManager()->FindSplice(
+        lrContent.GetSpliceType(), static_cast<int>(au32Param));
+    if (lpData)
+        lrVoice.mpSplice = new Splice(lpData, lrVoice.mpInternalSubmix);
+
+    if (lrVoice.mpSplice)
+    {
+        const f32 lfSpread = lrVoice.GetParameter(
+            Name("~SplicerPlayerVoice::Spread~"));
+        const f32 lfAzimuth = lrVoice.GetParameter(
+            Name("~SplicerPlayerVoice::Azimuth~"));
+        const f32 lfPitch = lrVoice.GetParameter(
+            Name("~SplicerPlayerVoice::Pitch~"));
+        lrVoice.mpSplice->Play(1.0f, lfPitch, lfAzimuth, lfSpread);
+    }
+    return lrVoice.mpSplice != 0;
+}
+
+// @ 0x826E9D58. Advance the active splice and keep the slot playing while any
+// of its samples remain live.
+bool SplicerContentSlot::DoUpdatePlaying(System* apSystem, const Slot& /*arSlot*/,
+                                         PlayerVoice& arVoice,
+                                         Content& /*arContent*/, f32 af32Dt)
+{
+    SplicerPlayerVoice& lrVoice = static_cast<SplicerPlayerVoice&>(arVoice);
+    if (!lrVoice.mpSplice)
+        return false;
+
+    const f32 lfSpread = lrVoice.GetParameter(
+        Name("~SplicerPlayerVoice::Spread~"));
+    const f32 lfAzimuth = lrVoice.GetParameter(
+        Name("~SplicerPlayerVoice::Azimuth~"));
+    const f32 lfPitch = lrVoice.GetParameter(
+        Name("~SplicerPlayerVoice::Pitch~"));
+    lrVoice.mpSplice->Update(apSystem, 1.0f, lfPitch, lfAzimuth,
+                             af32Dt, lfSpread);
+    return lrVoice.mpSplice->IsPlaying();
 }
 
 // ---------------------------------------------------------------------------

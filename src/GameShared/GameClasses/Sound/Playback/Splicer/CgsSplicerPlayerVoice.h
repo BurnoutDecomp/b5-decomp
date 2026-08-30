@@ -9,6 +9,9 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsEnvironment.h"    // Environment (real home, :89)
 #include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"        // Factory (real home, :55)
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"          // PlayerVoice (the primary base)
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacVoice.h"
+
+struct Splice;
 
 // ============================================================================
 // CgsSplicerPlayerVoice.h  (MINIMAL home for the splicer player-voice TUs).
@@ -31,10 +34,6 @@ namespace CgsSound
 namespace Playback
 {
 
-// The per-voice splice object (real home Splicer/internal/SpliceObjects.h:101;
-// only the pointer is held here).
-struct Splice;
-
 // ---------------------------------------------------------------------------
 // CgsSplicerPlayerVoice.h. The splicer player voice (allocation + dtor surface).
 //
@@ -47,12 +46,14 @@ struct Splice;
 // PlayerVoice primary base is real (CgsVoice.h); the GenericRwacVoice base is the
 // ledgered un-homed keystone, modelled as an opaque span at its console extent.
 // ---------------------------------------------------------------------------
-struct SplicerPlayerVoice : public PlayerVoice
+struct SplicerPlayerVoice : public PlayerVoice, public GenericRwacVoice
 {
     // @ 0x826AFC48 (placement new). ARTIST size = 20*(slots + inputParams) +
     // 12*(sends + outputParams) + 140; the host uses the corresponding native
     // sizeof values and compiler-supplied client size.
     void* operator new(size_t auSize, Factory& arFactory, const VoiceSpec& arVoiceSpec);
+
+    SplicerPlayerVoice(Factory& arFactory, const VoiceSpec& arVoiceSpec, u32 au32Ident);
 
     // @ 0x826E1838. Null the two own members, then run the base dtor chain: the
     // implicit ~PlayerVoice/~Voice here matches the console; the console's
@@ -60,15 +61,13 @@ struct SplicerPlayerVoice : public PlayerVoice
     // below) and is NOT emitted on the host yet.
     virtual ~SplicerPlayerVoice();
 
-    // FLAG (un-homed base keystone): the GenericRwacVoice base subobject, console
-    // +0x2C..+0x83 (mpFactory/mpVoice/mppPlugin/parameter map -- DWARF
-    // CgsGenericRwacVoice.h:421-428). Opaque span until the RWAC voice keystone
-    // lands; then this becomes the second base of the MI shape above.
-    u8 mauGenericRwacVoiceBase[0x58];
+    virtual f32 GetCpuTicks();
+    virtual EProfileVoiceType GetProfileVoiceType();
+    virtual void DoUpdate(System* apSystem, f32 af32DeltaTime);
+    virtual bool DoConnectSend(u32 au32Index, SubmixVoice* apSubmix);
 
-    void* mpInternalSubmix;   // X360 +0x84 (a1[33]) -- rw::audio::core::PlugIn* per
-                              // DWARF :177; held void* until the rw submix slice
-    Splice* mpSplice;         // X360 +0x88 (a1[34]) -- DWARF :178; nulled by the dtor
+    rw::audio::core::PlugIn* mpInternalSubmix; // X360 +0x84, DWARF :177
+    ::Splice* mpSplice;       // X360 +0x88 (a1[34]) -- DWARF :178; nulled by the dtor
 };
 
 } // namespace Playback

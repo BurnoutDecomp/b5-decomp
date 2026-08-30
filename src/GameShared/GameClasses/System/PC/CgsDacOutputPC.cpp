@@ -85,6 +85,7 @@ namespace
             // saturating f32 -> s16 (the sum can exceed the clipped per-channel range).
             const f32* lpFrame = rw::audio::core::DacGetInterleaveBuffer();
             const int liChannels = rw::audio::core::DacGetChannelCount();
+            f32 lfPeak = 0.0f;
             for (int liSample = 0; liSample < liFrames; ++liSample)
             {
                 f32 lfLeft;
@@ -113,8 +114,26 @@ namespace
                 if (lfLeft  < -1.0f) lfLeft  = -1.0f;
                 if (lfRight >  1.0f) lfRight =  1.0f;
                 if (lfRight < -1.0f) lfRight = -1.0f;
+                const f32 lfAbsLeft  = (lfLeft  < 0.0f) ? -lfLeft  : lfLeft;
+                const f32 lfAbsRight = (lfRight < 0.0f) ? -lfRight : lfRight;
+                if (lfAbsLeft  > lfPeak) lfPeak = lfAbsLeft;
+                if (lfAbsRight > lfPeak) lfPeak = lfAbsRight;
                 lpOut[liSample * 2 + 0] = static_cast<s16>(lfLeft  * 32767.0f);
                 lpOut[liSample * 2 + 1] = static_cast<s16>(lfRight * 32767.0f);
+            }
+
+            // A valid frame can still be an all-zero submix graph. Keep a second one-shot
+            // witness for the Phase-G retirement gate: this is sampled before the movie
+            // fill is added, so it proves an audible engine voice—not movie audio—reached
+            // the PC speaker path.
+            static bool s_bLoggedFirstNonSilent = false;
+            if (!s_bLoggedFirstNonSilent && lfPeak > 0.00001f)
+            {
+                s_bLoggedFirstNonSilent = true;
+                if (CgsDev::Log::gpDebugPrint)
+                    (*CgsDev::Log::gpDebugPrint)
+                        << "[Audio] engine fill: first NON-SILENT mixed frame reached the device, peak="
+                        << lfPeak << "\n";
             }
         }
         else

@@ -20,6 +20,30 @@ namespace Gen
     {
     public:
         explicit streammappings(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit streammappings(const RefSpec& lrRefSpec, void* lpOwner = nullptr)
+            : Instance(lrRefSpec, lpOwner) {}
+
+        bool Find(u32 auUserStringHash, RefSpec& arConfiguration) const
+        {
+            static const u64 KU_LANGUAGE_STREAM_CONFIGURATIONS = 0x68C1540Dull;
+            static const u64 KU_USER_STRINGS_HASHED = 0xC32E1A1Dull;
+            for (u32 luIndex = 0; luIndex < 1024; ++luIndex)
+            {
+                const u32* lpuUser = static_cast<const u32*>(
+                    GetAttributePointer(KU_USER_STRINGS_HASHED, luIndex));
+                if (!lpuUser)
+                    return false;
+                if (*lpuUser != auUserStringHash)
+                    continue;
+                const RefSpec* lpConfig = static_cast<const RefSpec*>(
+                    GetAttributePointer(KU_LANGUAGE_STREAM_CONFIGURATIONS, luIndex));
+                if (!lpConfig)
+                    return false;
+                arConfiguration = *lpConfig;
+                return true;
+            }
+            return false;
+        }
     };
 
     // Chain the Instance ctor, then assert the collection's class is

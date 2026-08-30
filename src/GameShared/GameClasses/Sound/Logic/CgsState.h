@@ -6,6 +6,8 @@
 
 #include "GameShared/GameClasses/Sound/CgsMemBase.h" // CgsSound::MemBase (the base)
 
+namespace CgsSound { namespace Io { class MessageHeader; } }
+
 // =============================================================================
 // GameShared/GameClasses/Sound/Logic/CgsState.h  (DWARF home)
 //
@@ -105,7 +107,12 @@ struct State : public CgsSound::MemBase
     // derived TrafficState::Attach (X360 `bl ...State::Attach` @0x826CB270) and
     // EmitterState::Attach; the body is a separate un-homed sound-logic recon slice.
     // FLAG: declaration-only un-homed base member (do not body here).
-    void Attach(void* apvAttachment);
+    virtual void Attach(void* apvAttachment);
+    bool Prepare(s32 liSfxFlags, StateManager* apStateManager);
+    virtual void UpdateParams(f32 af32DeltaTime);
+    virtual void ProcessUpdate();
+    virtual bool Detach();
+    virtual void Notify(const CgsSound::Io::MessageHeader* /*apkMessage*/) {}
 
     // True once the state is bound to an attachment -- the mbIsAttached flag at
     // +72 (0x48), i.e. the `lbz 0x48(state)` byte the derived accessors test
@@ -124,6 +131,31 @@ struct State : public CgsSound::MemBase
     // (cap KU_SIZEOF_CLASS_ARRAY == 16); only asserts "Too Many Class registations"
     // once the 16-bit slot counter reaches 4*KU. Returns the registered descriptor.
     static ClassTypeInfo<State>* AddToClassTypeInfoArray(ClassTypeInfo<State>* apTypeInfo);
+    static ClassTypeInfo<State>* GetRegisteredTypeInfo(u32 auIndex);
+
+    s32 GetInstanceID() const { return miInstNum; }
+    s32 GetStateType() const { return miStateInstType; }
+    State* GetNextState() const { return mpNextState; }
+    State* GetPreviousState() const { return mpPrevState; }
+    EffectBase* GetHeadEffectObject() const { return mpHeadEffectObject; }
+    EffectBase* GetHeadEffectControl() const { return mpHeadEffectControl; }
+    StateManager* GetStateManager() const { return mpStateManager; }
+    Module* GetLogicModule() const { return mpLogicModule; }
+    void* GetAttachment() const { return mpvAttachment; }
+
+protected:
+    void CreateSFXObjs();
+    void CreateSFXCtrls();
+    void ForceCreateEffectControls(s32 liMask);
+    bool AttachEffect();
+    void NewSFXObj(s32 liEffectId);
+    EffectBase* NewSFXCtrl(s32 liEffectId);
+    EffectBase* HasCtrlBeenAdded(s32 liEffectId);
+    void SortSFXCtl();
+
+    friend class StateManager;
+
+public:
 
     // --- members (DWARF order; X360 offsets in comments) ---
     s32           miInstNum;                // +4   CgsState.h:284

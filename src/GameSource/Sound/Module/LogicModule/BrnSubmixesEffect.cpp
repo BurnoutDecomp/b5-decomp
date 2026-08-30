@@ -38,6 +38,32 @@ namespace BrnSound
 namespace Logic
 {
 
+CgsSound::Logic::EffectObject* SubmixesEffect::CreateObject(u32)
+{
+    return new SubmixesEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SubmixesEffect::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
+        0x40, "SubmixesEffect", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
+        &SubmixesEffect::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SubmixesEffect::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+const char* SubmixesEffect::GetTypeName() const
+{
+    return "SubmixesEffect";
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpSubmixesEffectReg =
+    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(SubmixesEffect::GetStaticTypeInfo());
+
 SubmixesEffect::~SubmixesEffect()
 {
 }

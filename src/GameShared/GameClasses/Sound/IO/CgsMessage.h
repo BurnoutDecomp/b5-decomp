@@ -52,20 +52,79 @@ typedef u32 QueueElement;
 class MessageHeader
 {
 public:
+    enum eEffectTypes
+    {
+        E_EFFECT_TYPE_NONE    = 0,
+        E_EFFECT_TYPE_OBJECT  = 1,
+        E_EFFECT_TYPE_CONTROL = 2,
+    };
+
+    static const u16 KU16_NO_DESTINATION  = 0xFFFF;
+    static const u16 KU16_ALL_DESTINATIONS = 0xFFFE;
+
+    MessageHeader()
+        : muLeadingOpaque0(0)
+        , meEffectType(E_EFFECT_TYPE_NONE)
+        , mi16EventId(0)
+        , mu16StateManagerId(KU16_NO_DESTINATION)
+        , mu16InstanceID(KU16_NO_DESTINATION)
+        , mu16EffectId(KU16_NO_DESTINATION)
+    {
+    }
+
+    explicit MessageHeader(s16 ai16EventId) { Construct(ai16EventId); }
+
+    void Construct(s16 ai16EventId)
+    {
+        SetDestination(KU16_NO_DESTINATION, KU16_NO_DESTINATION,
+                       KU16_NO_DESTINATION, E_EFFECT_TYPE_NONE);
+        mi16EventId = ai16EventId;
+    }
+
+    void Construct(s16 ai16EventId, u16 au16StateManagerId)
+    {
+        SetDestination(au16StateManagerId, KU16_NO_DESTINATION,
+                       KU16_NO_DESTINATION, E_EFFECT_TYPE_NONE);
+        mi16EventId = ai16EventId;
+    }
+
+    void Construct(s16 ai16EventId, u16 au16StateManagerId,
+                   u16 au16InstanceId, u16 au16EffectId,
+                   eEffectTypes aeEffectType)
+    {
+        SetDestination(au16StateManagerId, au16InstanceId,
+                       au16EffectId, aeEffectType);
+        mi16EventId = ai16EventId;
+    }
+
+    void SetDestination(u16 au16StateManagerId, u16 au16InstanceId,
+                        u16 au16EffectId, eEffectTypes aeEffectType)
+    {
+        muLeadingOpaque0   = 0;
+        meEffectType       = aeEffectType;
+        mu16StateManagerId = au16StateManagerId;
+        mu16InstanceID     = au16InstanceId;
+        mu16EffectId       = au16EffectId;
+    }
+
     // Reset the two trailing 16-bit fields to their "destructed" values:
     // mu16Field08 = 0, mu16Id = 0xFFFF (invalid). Returns `this`.
     // Recovered from the X360 in-place destructor at 0x82689868.
     MessageHeader* Destruct()
     {
-        mu16Field08 = 0;
-        mu16Id      = 0xFFFF;
+        mi16EventId         = 0;
+        mu16StateManagerId  = KU16_NO_DESTINATION;
         return this;
     }
 
     // FLAG (additive accessor exposure, 2026-08-25 wave 5): named access for the
     // +0x08 event-id read (DWARF mi16EventId) message consumers dispatch on --
     // e.g. SubmixesEffect::Notify @0x82687EE8 (`lhz r11, 8(r4)`).
-    u16 GetEventId() const { return mu16Field08; }
+    s16          GetEventId() const        { return mi16EventId; }
+    u16          GetStateManagerId() const { return mu16StateManagerId; }
+    u16          GetInstanceId() const     { return mu16InstanceID; }
+    u16          GetEffectId() const       { return mu16EffectId; }
+    eEffectTypes GetEffectType() const     { return meEffectType; }
 
 private:
     // +0x00: leading block untouched by Destruct (opaque, not fabricated).
@@ -73,12 +132,12 @@ private:
     // reset fields below land at +0x08/+0x0A without alignment padding. DWARF:
     // X360 vtable pointer slot (+0x00) and meEffectType (+0x04).
     u32 muLeadingOpaque0;
-    u32 muLeadingOpaque1;
+    eEffectTypes meEffectType;
     // +0x08: 16-bit field reset to 0 on destruct (DWARF mi16EventId).
-    u16 mu16Field08;
+    s16 mi16EventId;
     // +0x0A: 16-bit message id, reset to 0xFFFF ("invalid") on destruct
     // (DWARF mu16StateManagerId; 0xFFFF == KU16_NO_DESTINATION).
-    u16 mu16Id;
+    u16 mu16StateManagerId;
     // +0x0C/+0x0E: the two trailing destination fields (DWARF mu16InstanceID /
     // mu16EffectId). NOT written by Destruct (its asm halfword stores touch only
     // +0x08/+0x0A); modelled for SIZE correctness -- see the SIZE note above. Their
@@ -103,6 +162,8 @@ template <typename T>
 class Message : public MessageHeader
 {
 public:
+    Message() : MessageHeader(), mData() {}
+    explicit Message(const T& arData) : MessageHeader(), mData(arData) {}
     T mData;
 };
 

@@ -52,6 +52,8 @@ struct GenericRwacVoice
     void AddParameterMap(u8 au8ParameterIndex, u8 au8PluginOffset,
                          u8 au8Attribute, u8 au8Direction);
 
+    void ForceParameterUpdate() { mu8Flags |= 2u; }
+
     rw::audio::core::Voice* GetRwacVoice() const { return mpVoice; }
     u32 GetPluginCount() const { return mu16PluginCount; }
 

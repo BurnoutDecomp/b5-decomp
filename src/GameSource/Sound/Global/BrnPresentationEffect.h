@@ -5,6 +5,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (@+0/+4) BY NAME
 #include "GameSource/Sound/Streaming/BrnIStreamUser.h"             // BrnSound::Logic::Streaming::IStreamUser (third base @+0x38)
 #include "GameShared/GameClasses/Sound/Logic/CgsVoiceWrapper.h"    // CgsSound::Logic::VoiceWrapper (embedded in AgingVoice)
+#include "GameSource/AttribSys/Generated/classes/presentationactionlist.h"
 
 // =============================================================================
 // BrnSound::Logic::PresentationEffect
@@ -99,8 +100,29 @@ struct PresentationEffect : public BrnEffectObject,
     virtual ~PresentationEffect(); // out-of-line anchor; @ 0x826E78A8 vector deleting
                                    // destructor + @ 0x826E7728 adjustor{4} forward to it
 
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
+    virtual const char* GetTypeName() const override;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
+
+    virtual bool Attach() override;
+    virtual void UpdateParams(f32 afDeltaTime) override;
+    virtual void ProcessUpdate() override;
+    virtual void Notify(const CgsSound::Io::MessageHeader* apMessage) override;
+
+    virtual const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
+    virtual void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
+                                   f32 afGain, f32 afElapsedTime) override;
+    virtual void StreamStopped() override;
+
     // DWARF :286; X360 this+0x40, stride 0x80 (attested). The ctor constructs all 4.
     AgingVoice maVoices[4];
+
+    u8 mau8DataOffsets[14];
+    u8 mau8DataEnds[14];
+    CgsSound::Logic::VoiceWrapper::CreateParams mStreamParams;
+    Attrib::Gen::presentationactionlist mActions;
+    u8 mu8StreamOutput;
 
     // FLAG: mau8DataOffsets[14] (:287), mau8DataEnds[14] (:288), mStreamParams
     // (VoiceWrapper::CreateParams, :289), mActions (Attrib::Gen::presentationactionlist,
@@ -110,6 +132,9 @@ struct PresentationEffect : public BrnEffectObject,
     // StreamingEffect::streamsettings).
 
 private:
+    bool Resolve(s32 aiAction, u64 auStringId, u64 auScreenId,
+                 PresentationEntry& arEntry) const;
+    void Play(const PresentationEntry& arEntry);
     // @ 0x82687D68 (DWARF BrnPresentationEffect.cpp:554). First maVoices[] slot whose
     // per-VoiceWrapper state word (slot+0x4C) is 0 (unused) or 7 (idle), else null.
     AgingVoice* FindFreeVoice();

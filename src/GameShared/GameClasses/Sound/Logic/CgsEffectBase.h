@@ -40,6 +40,7 @@
 
 namespace CgsSound
 {
+namespace Io { class MessageHeader; }
 namespace Logic
 {
 
@@ -109,6 +110,35 @@ struct EffectBase : public CgsSound::MemBase
     // attach count. Returns true.
     virtual bool Attach();
 
+    virtual s32  GetController(s32 /*aiIndex*/) { return -1; }
+    virtual void AttachController(EffectBase* /*apController*/) {}
+    virtual void SetupLoadData()
+    {
+        meAttachState = E_ATTACH_STATE_PREPARING;
+    }
+    virtual void UpdateParams(f32 /*af32DeltaTime*/) {}
+    virtual void ProcessUpdate() {}
+    virtual bool Detach()
+    {
+        mbHasLoadedData = false;
+        meDetachState = E_DETACH_STATE_FINISHED;
+        meAttachState = E_ATTACH_STATE_NONE;
+        return true;
+    }
+    virtual void Notify(const CgsSound::Io::MessageHeader* /*apkMessage*/) {}
+    virtual void Destroy() { delete this; }
+
+    s32 GetStateId() const;
+    s32 GetInstanceId() const;
+    s32 GetEffectID() const { return (miObjectId >> 4) & 0x7F; }
+    s32 GetId() const { return miObjectId; }
+    void SetId(s32 aiId) { miObjectId = aiId; }
+    void UpdateTime(f32 af32RunningTime, f32 af32DeltaTime)
+    {
+        mfRunningTime = af32RunningTime;
+        mfDeltaTime = af32DeltaTime;
+    }
+
     // Recovered teardown reset shared by the EffectControl/EffectObject deleting
     // destructors (@ 0x826963D8 / 0x826965D0). The X360 thunks store, by member:
     //   meDetachState = E_DETACH_STATE_FINISHED (stw 3, 0x24)
@@ -125,6 +155,7 @@ struct EffectBase : public CgsSound::MemBase
 
     EAttachState GetAttachState() const { return meAttachState; }
     void         SetAttachState(EAttachState aeState) { meAttachState = aeState; }
+    void         ClearLoadedData() { mbHasLoadedData = false; }
     State*       GetStateBase() const { return mpState; }
     void         SetStateBase(State* apState) { mpState = apState; }
     Module*      GetLogicModule() const { return mpLogicModule; }
@@ -149,7 +180,7 @@ protected:
     f32          mfDeltaTime;        // CgsEffectBase.h:742
     EAttachState meAttachState;      // CgsEffectBase.h:746
     EDetachState meDetachState;      // CgsEffectBase.h:747  (+0x24 X360)
-private:
+protected:
     Module*      mpLogicModule;      // CgsEffectBase.h:752  (+0x28 X360)
     bool         mbEnabled;          // CgsEffectBase.h:753
     bool         mbHasLoadedData;    // CgsEffectBase.h:754
@@ -200,6 +231,7 @@ struct EffectControl : public EffectBase
     // (cap KU_SIZEOF_CLASS_ARRAY); asserts "Too Many Class registations" only past
     // 0x100. Returns the registered descriptor.
     static ClassTypeInfo<EffectControl>* AddToClassTypeInfoArray(ClassTypeInfo<EffectControl>* apTypeInfo);
+    static ClassTypeInfo<EffectControl>* GetRegisteredTypeInfo(u32 auIndex);
 };
 
 // CgsEffectBase.h:772 (DWARF): EffectObject : public EffectBase.
@@ -224,6 +256,7 @@ struct EffectObject : public EffectBase
     // into this class's static ClassTypeInfo array (separate array from EffectControl's).
     // Same scan/assert logic as EffectControl::AddToClassTypeInfoArray.
     static ClassTypeInfo<EffectObject>* AddToClassTypeInfoArray(ClassTypeInfo<EffectObject>* apTypeInfo);
+    static ClassTypeInfo<EffectObject>* GetRegisteredTypeInfo(u32 auIndex);
 };
 
 } // namespace Logic

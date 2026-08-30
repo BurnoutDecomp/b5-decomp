@@ -27,6 +27,24 @@ namespace CgsSound
 namespace Playback
 {
 
+const ISlotFactory* ISlotFactory::spHead = 0;
+
+// CgsVoice.h:144. Static slot factories register by prepending themselves to
+// the process-wide list; SetupConf performs the corresponding name lookup.
+ISlotFactory::ISlotFactory(Name aName)
+    : mName(aName), mpNext(spHead)
+{
+    spHead = this;
+}
+
+const ISlotFactory* ISlotFactory::GetFactory(Name aName)
+{
+    const ISlotFactory* lpFactory = spHead;
+    while (lpFactory && lpFactory->mName != aName)
+        lpFactory = lpFactory->mpNext;
+    return lpFactory;
+}
+
 void* Voice::operator new(size_t auClientSize, Factory& arFactory,
                           const VoiceSpec& arVoiceSpec)
 {
@@ -154,6 +172,16 @@ bool Slot::Attach(Voice& arVoice, Handle<Content> ahContent)
     }
 
     return false;
+}
+
+// ARTIST @ 0x826C78C8. Resolve the authored slot name and let that slot enforce
+// its ContentClass contract before binding the content handle.
+bool Voice::Attach(Name akName, Handle<Content>& arhContent)
+{
+    Slot* lpSlot = FindNamedSlot(akName);
+    if (!lpSlot)
+        return false;
+    return lpSlot->Attach(*this, Handle<Content>(arhContent.GetObject()));
 }
 
 // @ 0x826ACA78. Notify the bound content, release the handle, and clear the

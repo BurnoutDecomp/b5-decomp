@@ -21,6 +21,32 @@ namespace BrnSound
 namespace Logic
 {
 
+CgsSound::Logic::EffectObject* HUDEffect::CreateObject(u32)
+{
+    return new HUDEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* HUDEffect::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
+        0x10, "HUDEffect", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
+        &HUDEffect::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* HUDEffect::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+const char* HUDEffect::GetTypeName() const
+{
+    return "HUDEffect";
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpHUDEffectReg =
+    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(HUDEffect::GetStaticTypeInfo());
+
 // ---------------------------------------------------------------------------
 // HUDEffect::GameModeData::GameModeData  @ 0x826AFE88  (the DWARF Construct)
 //

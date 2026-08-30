@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Sound/Logic/CgsClassTypeInfo.h"  // ClassTypeInfo<T> (canonical)
+#include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Sound/BrnResourceRegistrar.h"   // BrnSound::Logic::IResourceRequester + ResourceRegistrar (canonical home)
 
@@ -29,6 +30,7 @@
 // only and absolute offsets are NOT static_asserted across pointer members.
 // =============================================================================
 
+#if 0 // RETIRED: the former minimal rival engine-effect definitions; canonical CgsEffectBase.h is used above.
 namespace CgsSound
 {
 namespace Logic
@@ -122,6 +124,7 @@ struct EffectObject : public EffectBase
 
 } // namespace Logic
 } // namespace CgsSound
+#endif
 
 namespace BrnSound
 {

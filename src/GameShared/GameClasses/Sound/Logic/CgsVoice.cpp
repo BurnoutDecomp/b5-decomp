@@ -103,15 +103,8 @@ void Voice::Destruct()
     // by name).
     lpVoice->SetRemoveState(Playback::E_VOICE_REMOVE_REMOVING);
 
-    // FLAG: STUB -- the X360 calls CgsSound::Playback::Object::Release() to drop the
-    // ref count and (at zero) dispose the playback voice.
-    //   BLOCKS ON: CgsSound::Playback::Object::Release (the playback ref-count drop;
-    //              the Playback::Voice/Object teardown path is not reconstructed).
-    // We model the intent (null the handle) without driving the playback teardown.
-    // Playback::Handle's dtor would do the Release once that layer exists; here we
-    // only clear the owned pointer to match `*(a1+4) = 0`.
-    // (mVoiceHandle clear: no public setter on Handle -- the real Release is the
-    //  Playback dep above. Left as-is; the handle is freed by its dtor.)
+    lpVoice->Release();
+    mVoiceHandle.SetObject(0);
 }
 
 // ----------------------------------------------------------------------------
@@ -200,9 +193,9 @@ f32 Voice::GetGain(const s32* lpSendName) const
 {
     CGS_ASSERT(mVoiceHandle.GetObject(), "Voice not yet created!");
     CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
-    (void)lpSendName;
-    // flt_82F93D88 default gain (1.0f). FLAG: Playback::Voice::FindNamedSend missing.
-    return 1.0f;
+    Playback::Send* lpSend = mVoiceHandle.GetObject()->FindNamedSend(
+        Playback::Name(static_cast<uintptr_t>(*lpSendName)));
+    return lpSend ? lpSend->Get() : 1.0f;
 }
 
 // ----------------------------------------------------------------------------
@@ -218,11 +211,11 @@ f32 Voice::GetGain(const s32* lpSendName) const
 void Voice::SetGain(u32 luSendNameHash, f32 lfGain, s32 liReserved, const u32* lpSendName)
 {
     CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
-    (void)luSendNameHash;
-    (void)lfGain;
     (void)liReserved;
-    (void)lpSendName;
-    // No-op until Playback::Voice::GetSend exists.
+    Playback::Send& lrSend = mVoiceHandle.GetObject()->GetSend(luSendNameHash);
+    CGS_ASSERT(lrSend.GetName() == Playback::Name(static_cast<uintptr_t>(*lpSendName)),
+               "lSend.GetName() == lSendName");
+    lrSend.Set(lfGain);
 }
 
 // ----------------------------------------------------------------------------
@@ -238,11 +231,11 @@ void Voice::SetGain(u32 luSendNameHash, f32 lfGain, s32 liReserved, const u32* l
 void Voice::SetParameter(u32 luSendNameHash, f32 lfValue, s32 liReserved, const u32* lpSendName)
 {
     CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
-    (void)luSendNameHash;
-    (void)lfValue;
     (void)liReserved;
-    (void)lpSendName;
-    // No-op until the Playback parameter-set path exists.
+    mVoiceHandle.GetObject()->SetParameter(
+        static_cast<s32>(luSendNameHash),
+        lfValue,
+        Playback::Name(static_cast<uintptr_t>(*lpSendName)));
 }
 
 // ----------------------------------------------------------------------------
@@ -283,11 +276,25 @@ Voice::~Voice()
 //   BLOCKS ON: CgsSound::Playback::Module::Module::AttachVoice +
 //              CgsSound::Playback::Object::Release. Not reconstructed.
 // ----------------------------------------------------------------------------
-s32 Voice::Attach(s32 liSlotName, s32* lppOther)
+s32 Voice::Attach(s32 liSlotName, Playback::Handle<Playback::Content>* lphContent)
 {
     CGS_ASSERT(mVoiceHandle.GetObject(), "Voice not yet created!");
-    (void)liSlotName;
-    (void)lppOther;
+
+    Playback::Content* lpContent = lphContent->GetObject();
+    if (lpContent)
+        lpContent->Acquire();
+    Playback::Handle<Playback::Content> lhContent(lpContent);
+
+    Playback::Voice* lpVoice = mVoiceHandle.GetObject();
+    if (lpVoice)
+        lpVoice->Acquire();
+    Playback::Handle<Playback::Voice> lhVoice(lpVoice);
+
+    mpOwnerModule->GetPlaybackModule().AttachVoice(
+        &lhVoice, &lhContent, static_cast<u32>(liSlotName));
+
+    if (lphContent->GetObject())
+        lphContent->GetObject()->Release();
     return 0;
 }
 
@@ -304,8 +311,12 @@ void* Voice::Detach(s32 liSlotName)
 {
     CGS_ASSERT(mVoiceHandle.GetObject(), "Voice not yet created!");
     CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
-    (void)liSlotName;
-    return 0;
+    Playback::Slot* lpSlot = mVoiceHandle.GetObject()->FindNamedSlot(
+        Playback::Name(static_cast<uintptr_t>(liSlotName)));
+    if (lpSlot)
+        lpSlot->Detach(*mVoiceHandle.GetObject());
+    CGS_ASSERT(lpSlot != 0, "mVoiceHandle->Detach( lSlotName )");
+    return lpSlot;
 }
 
 // ----------------------------------------------------------------------------
@@ -321,7 +332,16 @@ s32 Voice::Play(s32 liParam)
 {
     CGS_ASSERT(mVoiceHandle.GetObject(), "Voice not yet created!");
     CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
-    (void)liParam;
+    Playback::Voice* lpVoice = mVoiceHandle.GetObject();
+    lpVoice->Acquire();
+    if (lpVoice->GetRemoveState() == Playback::E_VOICE_REMOVE_ALIVE)
+    {
+        Playback::Slot& lrSlot = lpVoice->GetSlot(0);
+        if (lrSlot.Play(static_cast<Playback::PlayerVoice&>(*lpVoice),
+                        static_cast<u32>(liParam)))
+            lpVoice->SetPlaybackState(Playback::E_PLAYBACK_STATE_PLAYING);
+    }
+    lpVoice->Release();
     return 0;
 }
 
@@ -338,6 +358,15 @@ s32 Voice::Stop()
 {
     CGS_ASSERT(mVoiceHandle.GetObject(), "Voice not yet created!");
     CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
+    Playback::Voice* lpVoice = mVoiceHandle.GetObject();
+    lpVoice->Acquire();
+    if (lpVoice->GetRemoveState() == Playback::E_VOICE_REMOVE_ALIVE)
+    {
+        Playback::Slot& lrSlot = lpVoice->GetSlot(0);
+        if (lrSlot.Stop(static_cast<Playback::PlayerVoice&>(*lpVoice)))
+            lpVoice->SetPlaybackState(Playback::E_PLAYBACK_STATE_STOPPED);
+    }
+    lpVoice->Release();
     return 0;
 }
 

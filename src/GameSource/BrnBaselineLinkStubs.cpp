@@ -155,22 +155,6 @@ namespace BrnGameState
 
 namespace CgsSound
 {
-namespace Utils
-{
-    // Link stub for the curve-shape mapper (DWARF CgsSoundUtils.h:276) that the wave-26
-    // PathLine<2>::Update stage interpolation calls. The real body (the per-ECurveType
-    // fraction shaping) is its own recon slice; NOT exercised on the boot path (no
-    // PathLine stage machine runs until the roadnoise/transition-envelope layers go
-    // real). Inert linear-identity fallback: return the fraction unshaped.
-    f32 Curve::GetOutput(f32 lfFraction, ECurveType /*leCurve*/)
-    {
-        return lfFraction;
-    }
-}
-}
-
-namespace CgsSound
-{
 namespace TestBed
 {
     // Testbed-allocator tail. (2026-08-25, faithful-audio-engine phase A4: the RWAC/LOGIC
@@ -557,14 +541,6 @@ namespace CgsSound
 {
 namespace Playback
 {
-    // Voice::Attach (DWARF CgsVoice.h:501; real body = the slot-resolve +
-    // Slot::Attach walk, its own slice). Reached only from Module::AttachVoice
-    // (voice-attach traffic -- none until content). False = "did not attach".
-    bool Voice::Attach(Name /*akName*/, Handle<Content>& /*arhContent*/)
-    {
-        return false;
-    }
-
     // Environment::Allocate (DWARF CgsEnvironment.h; the environment's carve
     // helper). Same allocator route the dispose walk attests (the env's rw
     // allocator), expressed through the committed <5>-descriptor idiom.
@@ -617,30 +593,17 @@ namespace Playback
     // the console dword_83008650 (the wave-3 decode: GetR's "type tag" compares
     // voice->mFactory.mName against it) -- now the real
     // "~GenericRwacFactory::SK_NAME~" intern (writer sub_82C654A8, AEMS-cascade
-    // wave). dword_830080A8 (the FindNamedSlot Name) stays un-decoded; zero
-    // matches nothing, so that path stays cold.
+    // wave). dword_830080A8 is PlayerVoice::SK_PLAYER_SLOT_NAME: the same global
+    // is used by GenericRwacVoice::CreateVoiceInstance and every streaming voice
+    // attach/detach call, pinning its interned literal.
     const u32 gu32VoiceTypeTag      = Name("~GenericRwacFactory::SK_NAME~").GetValue();
-    const u32 gu32NamedSlotSentinel = 0;
+    const u32 gu32NamedSlotSentinel = Name("~PlayerVoice::SK_PLAYER_SLOT_NAME~").GetValue();
 
     // The serialised-entity type names Registry::GetEntity<T> compares slots
     // against -- interned from the type-name literals, the convention the
     // committed VoiceSchema::SK_TYPE_NAME("VoiceSchema") definition attests.
     const Name ContentSpec::SK_TYPE_NAME("~ContentSpec~");
     const Name VoiceSpec::SK_TYPE_NAME("~VoiceSpec~");
-}
-}
-
-namespace CgsSound
-{
-namespace Logic
-{
-    // Logic Environment::Notify (DWARF CgsEnvironment.h; the per-message state-
-    // manager dispatch, its own phase-C slice). Reached from the engine
-    // Module::ProcessMessageQueue -- which only runs once the per-frame pump
-    // (phase C) drives Module::Update.
-    void Environment::Notify(const CgsSound::Io::MessageHeader* /*apkMessage*/) const
-    {
-    }
 }
 }
 

@@ -19,6 +19,9 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor / Start/StopMonitor
 #include "SDKs/EATech/include/NFSMix/MixerAllocator.hpp"                  // Nicotine mixer-allocator face
 #include "rw/rwcore_structs.h"                                            // rw::IResourceAllocator / Resource
+#include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsState.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
 
 namespace
 {
@@ -206,6 +209,71 @@ void Environment::Update(f32 af32GameDt, f32 af32SimDt)
     CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miProcessUpdate);
 
     CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miEnvironmentUpdate);
+}
+
+static void NotifyStateAndEffects(State* apState,
+                                  const CgsSound::Io::MessageHeader* apkMessage)
+{
+    apState->Notify(apkMessage);
+    const u16 luEffectId = apkMessage->GetEffectId();
+    if (luEffectId == CgsSound::Io::MessageHeader::KU16_NO_DESTINATION)
+        return;
+
+    EffectBase* lpHead = 0;
+    if (apkMessage->GetEffectType() == CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT)
+        lpHead = apState->GetHeadEffectObject();
+    else if (apkMessage->GetEffectType() == CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL)
+        lpHead = apState->GetHeadEffectControl();
+    else
+    {
+        CGS_ASSERT(false, "Unknown sound effect type\n");
+        return;
+    }
+
+    if (luEffectId == CgsSound::Io::MessageHeader::KU16_ALL_DESTINATIONS)
+    {
+        for (EffectBase* lpEffect = lpHead; lpEffect; lpEffect = lpEffect->mpNextEffectBase)
+            lpEffect->Notify(apkMessage);
+        return;
+    }
+
+    for (EffectBase* lpEffect = lpHead; lpEffect; lpEffect = lpEffect->mpNextEffectBase)
+    {
+        if (lpEffect->GetEffectID() == luEffectId)
+        {
+            lpEffect->Notify(apkMessage);
+            return;
+        }
+    }
+}
+
+void Environment::Notify(const CgsSound::Io::MessageHeader* apkMessage) const
+{
+    CGS_ASSERT(apkMessage != 0, "lpMessageHeader");
+    if (!apkMessage)
+        return;
+
+    const u16 luManagerId = apkMessage->GetStateManagerId();
+    const u16 luInstanceId = apkMessage->GetInstanceId();
+    const u32 luBegin = (luManagerId == CgsSound::Io::MessageHeader::KU16_NO_DESTINATION)
+                      ? 0u : static_cast<u32>(luManagerId);
+    const u32 luEnd = (luManagerId == CgsSound::Io::MessageHeader::KU16_NO_DESTINATION)
+                    ? mu32StateManagerCount : luBegin + 1u;
+
+    for (u32 luManager = luBegin; luManager < luEnd; ++luManager)
+    {
+        StateManager* lpManager = GetStateManager(static_cast<s32>(luManager));
+        if (!lpManager)
+            continue;
+        lpManager->Notify(apkMessage);
+
+        for (State* lpState = lpManager->GetHeadState(); lpState; lpState = lpState->GetNextState())
+        {
+            if (luInstanceId == CgsSound::Io::MessageHeader::KU16_NO_DESTINATION ||
+                lpState->GetInstanceID() == static_cast<s32>(luInstanceId))
+                NotifyStateAndEffects(lpState, apkMessage);
+        }
+    }
 }
 
 // The one rodata ModuleParams record (X360 unk_820AA480, XEX-recovered big-endian

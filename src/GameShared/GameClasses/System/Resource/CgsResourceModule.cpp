@@ -133,6 +133,7 @@ namespace CgsResource
         mMemoryModule.Construct(
             const_cast<CgsMemory::MemoryModule::InitOptions*>(&lpOptions->mMemoryInitOptions),
             lpRwAllocator);
+        mFileSystem.Construct();
         // PoolModule front half (rw-allocator-independent: base + 128 Pool::Construct + stage init).
         // It receives its own mPoolInitOptions; the front half ignores it (the type-registry /
         // ScratchPool / region allocations that consume it are deferred to the back half).
@@ -171,9 +172,140 @@ namespace CgsResource
                 lpPoolQ->AddEvent(lpEvent, 4, liSize);
             else if (liId == 5)   // AcquireResourceList -> pool input (X360 routes id 5 -> pool tag 5)
                 lpPoolQ->AddEvent(lpEvent, 5, liSize);
+            else if (liId == 16)  // OpenReadStream -> asynchronous FileSystem + pending response
+                AddOpenReadStreamRequest(
+                    reinterpret_cast<const Events::OpenReadStreamRequest*>(lpEvent));
+            else if (liId == 18)  // CloseReadStream -> asynchronous FileSystem + pending response
+                AddCloseReadStreamRequest(
+                    reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent));
             const CgsModule::Event* lpNext = 0;
             liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
             lpEvent = lpNext;
+        }
+    }
+
+    // ARTIST @0x829070B0. Start the asynchronous read-stream open, build the
+    // response carrying the returned handle, and retain it in the 16-slot
+    // pending pool until FileSystem reports the stream OPEN.
+    bool ResourceModule::AddOpenReadStreamRequest(
+        const Events::OpenReadStreamRequest* lpRequest)
+    {
+        CgsFileSystem::ReadStream lStream = mFileSystem.OpenReadStream(
+            lpRequest->GetFileName(), lpRequest->GetBuffer(),
+            lpRequest->GetBufferSize(), lpRequest->GetNumBlocks(),
+            lpRequest->GetNormalPriority(), lpRequest->GetHighPriority(),
+            lpRequest->GetUseHDCache());
+
+        Events::OpenReadStreamResponse* lpResponse =
+            new Events::OpenReadStreamResponse;
+        CGS_ASSERT(lpResponse != 0,
+                   "Failed to allocate temporary memory for file system request\n");
+        if (!lpResponse)
+            return false;
+        lpResponse->Construct(lpRequest->GetUser(), lpRequest->GetEventId(), lStream);
+
+        PendingFileResponse* lpPending = mPendingFileResponses.Pop();
+        CGS_ASSERT(lpPending != 0,
+                   "Failed to allocate record for file system request\n");
+        if (!lpPending)
+        {
+            delete lpResponse;
+            return false;
+        }
+        lpPending->mpResponse = lpResponse;
+        lpPending->meEvent = 16;
+        lpPending->muFileId = 0xFFFFFFFFu;
+        return lStream.IsValid();
+    }
+
+    // ARTIST @0x82905428. Retain the close response and its stream-table index,
+    // then begin the asynchronous close. Completion is published only after the
+    // FileSystem slot reaches CLOSED.
+    bool ResourceModule::AddCloseReadStreamRequest(
+        const Events::CloseReadStreamRequest* lpRequest)
+    {
+        const CgsFileSystem::ReadStream lStream = lpRequest->GetStream();
+        Events::CloseReadStreamResponse* lpResponse =
+            new Events::CloseReadStreamResponse;
+        CGS_ASSERT(lpResponse != 0,
+                   "Failed to allocate temporary memory for file system request\n");
+        if (!lpResponse)
+            return false;
+        lpResponse->Construct(lpRequest->GetUser(), lpRequest->GetEventId(), lStream);
+
+        PendingFileResponse* lpPending = mPendingFileResponses.Pop();
+        CGS_ASSERT(lpPending != 0,
+                   "Failed to allocate record for file system request\n");
+        if (!lpPending)
+        {
+            delete lpResponse;
+            return false;
+        }
+        lpPending->mpResponse = lpResponse;
+        lpPending->meEvent = 18;
+        lpPending->muFileId = mFileSystem.GetReadStreamIndex(lStream);
+        mFileSystem.CloseReadStream(lStream);
+        return true;
+    }
+
+    // ARTIST @0x828F42B8. Snapshot the live pending records so completing one
+    // can safely return its index to the pool during the walk.
+    void ResourceModule::ProcessPendingFileSystemResponses()
+    {
+        PendingFileResponse*
+            lapPending[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES] = {};
+        const s32 liCount = mPendingFileResponses.Get(
+            lapPending, KI_MAX_PENDING_FILE_SYSTEM_RESPONSES);
+
+        for (s32 li = 0; li < liCount; ++li)
+        {
+            PendingFileResponse* lpPending = lapPending[li];
+            bool lbComplete = false;
+            CgsModule::BaseEventReceiverQueue* lpUser = 0;
+            s32 liResponseSize = 0;
+
+            if (lpPending->meEvent == 16)
+            {
+                Events::OpenReadStreamResponse* lpResponse =
+                    static_cast<Events::OpenReadStreamResponse*>(
+                        lpPending->mpResponse);
+                lbComplete = mFileSystem.IsReadStreamOpen(lpResponse->GetStream());
+                lpUser = lpResponse->GetUser();
+                liResponseSize = sizeof(*lpResponse);
+            }
+            else if (lpPending->meEvent == 18)
+            {
+                Events::CloseReadStreamResponse* lpResponse =
+                    static_cast<Events::CloseReadStreamResponse*>(
+                        lpPending->mpResponse);
+                lbComplete = mFileSystem.IsReadStreamClosed(
+                    static_cast<s32>(lpPending->muFileId));
+                lpUser = lpResponse->GetUser();
+                liResponseSize = sizeof(*lpResponse);
+            }
+            else
+            {
+                CGS_ASSERT(false, "Unexpected pending file response\n");
+            }
+
+            if (!lbComplete)
+                continue;
+
+            if (lpUser)
+                lpUser->AddEvent(
+                    static_cast<const CgsModule::Event*>(
+                        lpPending->mpResponse),
+                    lpPending->meEvent, liResponseSize);
+
+            if (lpPending->meEvent == 16)
+                delete static_cast<Events::OpenReadStreamResponse*>(
+                    lpPending->mpResponse);
+            else
+                delete static_cast<Events::CloseReadStreamResponse*>(
+                    lpPending->mpResponse);
+
+            const s8 liIndex = mPendingFileResponses.GetObjectIndex(lpPending);
+            mPendingFileResponses.Push(liIndex);
         }
     }
 
@@ -225,6 +357,8 @@ namespace CgsResource
         ResourceIO::InputBuffer* lpResIn = static_cast<ResourceIO::InputBuffer*>(lpInputBuffer);
         if (lpResIn == 0)
             return false;
+
+        ProcessPendingFileSystemResponses();
 
         static PoolIO::InputBuffer               s_poolIn;
         static PoolIO::OutputBuffer              s_poolOut;

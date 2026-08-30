@@ -46,23 +46,11 @@ int                     g_channels    = 2;
 int                     g_openRate    = 0;      // sample rate the voice was opened at (0 = closed)
 AudioOutputPC::FillFn   g_fill        = nullptr;
 void*                   g_user        = nullptr;
-// The additive OVERLAY fill (the one-shot GUI blips): mixed saturating on top of
-// the primary stream each refill. Persistent across Open/Close (the primary fill
-// owner churns as the movie/music streams swap the voice; the overlay must not).
-AudioOutputPC::FillFn   g_overlayFill = nullptr;
-void*                   g_overlayUser = nullptr;
-// The additive VOICE fill (the speech / voice-over stream). Its own slot: on the
-// console speech is a separate effect with a separate voice, sounding concurrently
-// with the music stream AND the presentation blips.
-AudioOutputPC::FillFn   g_voiceFill   = nullptr;
-void*                   g_voiceUser   = nullptr;
 // The additive ENGINE fill (the rw::audio Dac's mixed frame; phase D). Persistent
-// across Open/Close like the overlay/voice slots.
+// across Open/Close while the movie-owned primary slot churns.
 AudioOutputPC::FillFn   g_engineFill  = nullptr;
 void*                   g_engineUser  = nullptr;
 s16                     g_buf[kBuffers][kFrames * kMaxChannels];
-s16                     g_overlayBuf[kFrames * kMaxChannels];
-s16                     g_voiceBuf[kFrames * kMaxChannels];
 s16                     g_engineBuf[kFrames * kMaxChannels];
 
 // Saturating add of one already-filled mix source into the outgoing buffer.
@@ -86,16 +74,6 @@ void SubmitBuffer(int liIndex)
         std::memset(lpBuf, 0, sizeof(s16) * kFrames * g_channels);
 
     const int liValues = kFrames * g_channels;
-    if (g_overlayFill)
-    {
-        g_overlayFill(g_overlayBuf, kFrames, g_overlayUser);
-        MixInto(lpBuf, g_overlayBuf, liValues);
-    }
-    if (g_voiceFill)
-    {
-        g_voiceFill(g_voiceBuf, kFrames, g_voiceUser);
-        MixInto(lpBuf, g_voiceBuf, liValues);
-    }
     if (g_engineFill)
     {
         g_engineFill(g_engineBuf, kFrames, g_engineUser);
@@ -317,15 +295,22 @@ void AudioOutputPC::Close()
     g_openRate = 0;
 }
 
+void AudioOutputPC::ReleasePrimaryFill()
+{
+    // Destroying the source voice synchronises with any Fill callback that may
+    // still be reading the movie PCM. The engine fill is deliberately not
+    // cleared by Close(), so restore its native device after that barrier.
+    const bool lbKeepEngine = g_engineFill != nullptr;
+    Close();
+    if (lbKeepEngine)
+        Open(48000, 2, nullptr, nullptr);
+}
+
 bool AudioOutputPC::IsOpen() { return g_pSource != nullptr; }
 
 int AudioOutputPC::GetOpenSampleRate() { return g_openRate; }
 
 void AudioOutputPC::SetFill(FillFn lpFill, void* lpUser) { g_fill = lpFill; g_user = lpUser; }
-
-void AudioOutputPC::SetOverlayFill(FillFn lpFill, void* lpUser) { g_overlayFill = lpFill; g_overlayUser = lpUser; }
-
-void AudioOutputPC::SetVoiceFill(FillFn lpFill, void* lpUser) { g_voiceFill = lpFill; g_voiceUser = lpUser; }
 
 void AudioOutputPC::SetEngineFill(FillFn lpFill, void* lpUser) { g_engineFill = lpFill; g_engineUser = lpUser; }
 

@@ -12,6 +12,19 @@ namespace BrnSound
 namespace Logic
 {
 
+BrnEffectObject::BrnEffectObject()
+    : CgsSound::Logic::EffectObject()
+    , IResourceRequester()
+    , mbResourceRequestActive(false)
+    , mbResourcesReady(false)
+{
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* BrnEffectObject::GetTypeInfo() const
+{
+    return CgsSound::Logic::EffectObject::GetStaticTypeInfo();
+}
+
 // ---------------------------------------------------------------------------
 // GetTypeName  @ 0x82682BF8
 //

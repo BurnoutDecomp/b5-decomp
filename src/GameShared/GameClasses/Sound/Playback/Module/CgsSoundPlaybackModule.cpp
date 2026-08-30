@@ -846,20 +846,6 @@ namespace
         }
     };
 
-    // The content-load response record (receiver event type 4) -- the resource
-    // side's echo of the request DoServiceContentLoadRequest posts. Console word
-    // view (the ProcessResourceReceiverQueue asm): [1] the requester's resource
-    // pointer (the load request's lpUserData), [6..] the embedded ResourceHandle
-    // whose mpResourceMemory the cpp:598 assert dereferences. Host contract:
-    // the same fields at host widths (the PC producer -- the item-3 content
-    // slice -- builds this record).
-    struct ContentLoadResponse
-    {
-        void*                        mpUser;       // [0]  the receiver-queue route echo
-        CgsResource::BaseResourcePtr* mpTarget;    // [1]  the requester's ResourcePtr
-        void*                        mapReserved[4];// [2..5]
-        CgsResource::ResourceHandle  mHandle;      // [6..] the resolved resource
-    };
 }
 
 // ---------------------------------------------------------------------------
@@ -927,10 +913,23 @@ void Module::ProcessResourceReceiverQueue()
             {
             case 4:   // content-load response
             {
-                const ContentLoadResponse* lpResponse =
-                    reinterpret_cast<const ContentLoadResponse*>(lpEvent);
-                ResourcePtrBinder::Bind(lpResponse->mpTarget, &lpResponse->mHandle);
-                CGS_ASSERT(*static_cast<void* const*>(lpResponse->mHandle.mpResourceMemory) != 0,
+                const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                    reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+
+                // The console stores lpUserData in PoolEvent::miEventId, a 32-bit word.
+                // The PC resource/content heaps are intentionally carved below 4 GB, so
+                // reconstruct the same pointer from that echoed word after the producer's
+                // range check in DoServiceContentLoadRequest.
+                CgsResource::BaseResourcePtr* lpTarget =
+                    reinterpret_cast<CgsResource::BaseResourcePtr*>(
+                        static_cast<uintptr_t>(static_cast<u32>(lpResponse->miEventId)));
+                CgsResource::ResourceHandle lHandle;
+                lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+                lHandle.mpSourceEntry = lpResponse->mpSourceEntry;
+                CGS_ASSERT(lpTarget != 0, "lpResponse->GetUserData()");
+                ResourcePtrBinder::Bind(lpTarget, &lHandle);
+                CGS_ASSERT(lHandle.mpResourceMemory != 0 &&
+                           *static_cast<void* const*>(lHandle.mpResourceMemory) != 0,
                            "lpResponse->GetHandle().GetResource()->GetMemoryResource()");
                 break;
             }
@@ -1067,9 +1066,10 @@ s32 Module::FindStreamBuffer(const CgsFileSystem::ReadStream* lpReadStream)
 // override; bodied phase B4)
 //
 // RESOURCE_MODULE loads only: assert the user data (cpp:1171), hash the content
-// name, and post the 24-byte load request {&mResourceReceiverQueue, lpUserData,
-// mi32PoolId, hash64} as event type 4 into the attached output buffer's request
-// queue. The console widens the 32-bit hash into the trailing 64-bit id slot.
+// name, and post the AcquireResourceRequest {&mResourceReceiverQueue, lpUserData
+// in the event-id word, mi32PoolId, hash64} as event type 4 into the attached
+// output buffer's request queue. The console widens the 32-bit hash into the
+// trailing 64-bit id slot.
 // ---------------------------------------------------------------------------
 bool Module::DoServiceContentLoadRequest(u32 lu32Ident, EContentLoadMethod leMethod,
                                          const char* lpcName, void* lpUserData)
@@ -1084,18 +1084,18 @@ bool Module::DoServiceContentLoadRequest(u32 lu32Ident, EContentLoadMethod leMet
     const s32 liHash = CgsResource::ID::HashString(
         reinterpret_cast<const u8*>(lpcName));
 
-    // The 24-byte console request record: {route, userData, poolId, hash64}.
-    struct ContentLoadRequest
-    {
-        CgsModule::BaseEventReceiverQueue* mpUser;
-        void*                              mpUserData;
-        s32                                miPoolId;
-        u64                                muResourceId;
-    } lRequest;
-    lRequest.mpUser       = &mResourceReceiverQueue;
-    lRequest.mpUserData   = lpUserData;
-    lRequest.miPoolId     = mi32PoolId;
-    lRequest.muResourceId = static_cast<u64>(static_cast<u32>(liHash));
+    const uintptr_t luUserData = reinterpret_cast<uintptr_t>(lpUserData);
+    CGS_ASSERT(luUserData <= 0xFFFFFFFFull,
+               "content loader user data must live in the low-address arena");
+    if (luUserData > 0xFFFFFFFFull)
+        return false;
+
+    CgsResource::Events::AcquireResourceRequest lRequest = {};
+    lRequest.mpUser = &mResourceReceiverQueue;
+    lRequest.miEventId = static_cast<s32>(static_cast<u32>(luUserData));
+    lRequest.miPoolId = mi32PoolId;
+    lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(liHash)));
+    lRequest.mbCheckRefCount = false;
 
     CGS_ASSERT(mpOutputBuffer != 0, "mpOutputBuffer");
     return mpOutputBuffer->GetResourceRequestQueue().AddEvent(
@@ -1127,17 +1127,17 @@ CgsFileSystem::ReadStream* Module::DoOpenStream(IStreamProvider::StreamSpec& lrS
         return 0;
     }
 
-    // Resolve the requesting plug-in's content out of the environment.
-    Handle<Content> lhContent = GetEnvironment()->GetR(
-        static_cast<u32>(reinterpret_cast<uintptr_t>(lrSpec.mpPlugin)));
-    CGS_ASSERT(lhContent.GetObject() != 0, "lHandle");
+    // Resolve the requesting plug-in's owning voice out of the environment.
+    Handle<Voice> lhVoice =
+        GetEnvironment()->GetRwacVoiceByPlugin(lrSpec.mpPlugin);
+    CGS_ASSERT(lhVoice.GetObject() != 0, "lHandle");
 
     // Seed the record and hand the carve buffer back through the spec.
     StreamBuffer& lrBuffer = maStreamBuffers[liIndex];
     lrBuffer.mfGraceWaitTime  = 0.0f;
     lrBuffer.mReadStream      = CgsFileSystem::ReadStream();
     lrBuffer.mBufferStatus    = StreamBuffer::E_USING_BUFFER;
-    lrBuffer.mVoiceId         = lhContent.GetObject()->mIdent;
+    lrBuffer.mVoiceId         = lhVoice.GetObject()->GetIdent();
     lrBuffer.mbQueuedForClose = false;
     *lrSpec.mppvBuffer = lrBuffer.mpBuffer;
 
@@ -1158,9 +1158,9 @@ CgsFileSystem::ReadStream* Module::DoOpenStream(IStreamProvider::StreamSpec& lrS
         CGS_ASSERT(false, "mDeferredResourceRequestQueue.OpenReadStream( lRequest )");
     }
 
-    // Release the transient content reference (the console's inline refcount
+    // Release the transient voice reference (the console's inline refcount
     // decrement + DoDispose-at-zero == Object::Release).
-    lhContent.GetObject()->Release();
+    lhVoice.GetObject()->Release();
 
     mStreamMutex.Unlock();
     return &lrBuffer.mReadStream;

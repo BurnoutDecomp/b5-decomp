@@ -442,6 +442,16 @@ GenericRwacVoiceConfig* GenericRwacFactory::SetupConfig(
                 Slot& lrSlot = arBaseVoice.GetSlot(luSlotIndex);
                 lrSlot.SetPluginOffset(luFeaturePluginBase +
                     lrImplementation.GetSlotMapOffset(luSlotMap));
+
+                const Name lRuntimeClass =
+                    lrImplementation.GetSlotMapRuntimeClass(luSlotMap);
+                const ISlotFactory* lpSlotFactory =
+                    ISlotFactory::GetFactory(lRuntimeClass);
+                CGS_ASSERT(lpSlotFactory != 0,
+                           "Could not find Slot Factory with requested name");
+                if (lpSlotFactory)
+                    lrSlot.SetImplementation(
+                        lpSlotFactory->DoCreateSlot(arBaseVoice));
             }
         }
 
@@ -561,6 +571,97 @@ bool GenericRwacFactory::DoCreateVoice(const VoiceSpec& akrSpec,
     return true;
 }
 
+// ARTIST @0x826D8748. A plug-in event command optionally consumes the next
+// queued parameter command and translates the compact cross-thread payload into
+// the concrete RWAC event record. Player-play is the only multi-field record;
+// the send/reverb/ginsu parameter records each contain one pointer.
+void GenericRwacFactory::HandlePluginEvent(
+    u32 au32CommandCount, const uintptr_t* apuCommandWords)
+{
+    CGS_ASSERT(au32CommandCount == 4u,
+               "Plugin-event command word count");
+    const RwacCommandPluginEvent& lrEvent =
+        *reinterpret_cast<const RwacCommandPluginEvent*>(apuCommandWords);
+    rw::audio::core::PlugIn* lpPlugin =
+        reinterpret_cast<rw::audio::core::PlugIn*>(lrEvent.mpPlugin);
+    const int liEvent = static_cast<int>(lrEvent.maOperand1);
+    if (lrEvent.maOperand2 == 0u)
+    {
+        rw::audio::core::PlugIn::Event(lpPlugin, liEvent, 0);
+        return;
+    }
+
+    CGS_ASSERT(!mCommandQueue.IsEmpty(),
+               "Parameterized plug-in event has no parameter command");
+    uintptr_t luParamCount = 0;
+    mCommandQueue.GetCommand(&luParamCount);
+    CGS_ASSERT(luParamCount > 0u && luParamCount <= 16u,
+               "luCommandCount > 0 && luCommandCount <= 16");
+
+    uintptr_t lauParamWords[16] = {};
+    for (u32 luWord = 0; luWord < static_cast<u32>(luParamCount); ++luWord)
+        mCommandQueue.GetCommand(&lauParamWords[luWord]);
+
+    switch (static_cast<ERwacCommandType>(lauParamWords[0]))
+    {
+    case E_RWAC_COMMAND_PLAYER_PLAY_PARAMETERS:
+    {
+        RwacCommandPlayerPlayParameters lParameters(
+            static_cast<u32>(luParamCount),
+            *reinterpret_cast<const RwacCommandPlayerPlayParameters*>(
+                lauParamWords));
+        CGS_ASSERT(lParameters.mpRequestHandle != 0,
+                   "lParameters.GetRequestHandleAddress()");
+        CGS_ASSERT(lParameters.mpWaveContent != 0, "mpObject");
+
+        char lacStreamPath[128] = {};
+        const char* lpcStreamPath = 0;
+        if (lParameters.mpWaveContent->GetStreamPath(
+                lacStreamPath, sizeof(lacStreamPath)))
+            lpcStreamPath = lacStreamPath;
+
+        rw::audio::core::SndPlayer1::PlayParams lPlayParams = {};
+        lPlayParams.startTime = 0.0;
+        lPlayParams.streamFileOffset = 0.0;
+        lPlayParams.pStreamFilePath = lpcStreamPath;
+        lPlayParams.pRamData = lParameters.mpWaveContent->GetData(
+            E_CONTENT_STATE_LOADED);
+        lPlayParams.streamPoolGuid = 0u;
+        lPlayParams.expelMode = 0.0f;
+        lPlayParams.requestHandle = 0.0f;
+
+        rw::audio::core::PlugIn::Event(lpPlugin, liEvent, &lPlayParams);
+        *lParameters.mpRequestHandle = lPlayParams.requestHandle;
+        break;
+    }
+    case E_RWAC_COMMAND_PLAYER_IS_REQUEST_DONE_PARAMETERS:
+    {
+        RwacCommandPlayerIsRequestDoneParameters lParameters(
+            static_cast<u32>(luParamCount),
+            *reinterpret_cast<const RwacCommandPlayerIsRequestDoneParameters*>(
+                lauParamWords));
+        rw::audio::core::PlugIn::Event(lpPlugin, liEvent,
+                                       lParameters.mpParams);
+        break;
+    }
+    case E_RWAC_COMMAND_SEND_CONNECT_PARAMETERS:
+    case E_RWAC_COMMAND_REVERBIR_APPLY_IR_DATA:
+    case E_RWAC_COMMAND_GINSU_ATTACH_DATA_PARAMETERS:
+    {
+        // Each source record is a one-pointer parameter struct. The compact
+        // command stores that pointer; the engine event receives its address.
+        CGS_ASSERT(luParamCount == 2u,
+                   "Single-pointer parameter command word count");
+        void* lpParameter = reinterpret_cast<void*>(lauParamWords[1]);
+        rw::audio::core::PlugIn::Event(lpPlugin, liEvent, &lpParameter);
+        break;
+    }
+    default:
+        CGS_ASSERT(false, "Invalid Command");
+        break;
+    }
+}
+
 void GenericRwacFactory::DoUpdate(f32 /*af32DeltaTime*/)
 {
     while (!mCommandQueue.IsEmpty())
@@ -617,6 +718,9 @@ void GenericRwacFactory::DoUpdate(f32 /*af32DeltaTime*/)
             CGS_ASSERT(luWordCount == 2, "Voice-release command word count");
             rw::audio::core::Voice::Release(
                 reinterpret_cast<rw::audio::core::Voice*>(lauWords[1]));
+            break;
+        case E_RWAC_COMMAND_PLUGIN_EVENT:
+            HandlePluginEvent(static_cast<u32>(luWordCount), lauWords);
             break;
         case E_RWAC_COMMAND_PLUGIN_GET_ATTRIBUTE:
             CGS_ASSERT(luWordCount == 4, "Get-attribute command word count");

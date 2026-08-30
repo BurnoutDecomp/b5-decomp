@@ -1,6 +1,5 @@
-#include "GameShared/GameClasses/System/PC/CgsStreamHeadersPC.h"
+#include "GameShared/GameClasses/System/PC/CgsMovieStreamHeaderLookup.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"   // CgsSound::Playback::Name::MakeHash
 
 #include <cctype>
 #include <algorithm>
@@ -18,7 +17,7 @@ namespace CgsSystem
 {
 namespace
 {
-    // ---- big-endian readers (the staged bundles are the X360 originals) -----
+    // ---- container readers (platform-2 X360 and native platform-4) ----------
     inline u32 Be32(const u8* p) { return (u32(p[0]) << 24) | (u32(p[1]) << 16) | (u32(p[2]) << 8) | u32(p[3]); }
     inline u16 Be16(const u8* p) { return u16((u16(p[0]) << 8) | u16(p[1])); }
     inline u16 Le16(const u8* p) { return u16(u16(p[0]) | (u16(p[1]) << 8)); }
@@ -27,7 +26,6 @@ namespace
 
     struct WaveSpec
     {
-        u32         muNameHash;    // interned ContentSpec name (Playback::Name::MakeHash)
         u32         muHeaderId;    // crc32(lowercase(gamedb url)) == the StreamHeaders id
         std::string mSnsFile;      // path zone 1 (the .SNS under SOUND\STREAMS\)
     };
@@ -123,16 +121,25 @@ namespace
             AUDIO_LOG << "[StreamHeaders] STREAMHEADERS.bundle missing/invalid -- header lookups disabled\n";
             return;
         }
-        const u32 luHN = Be32(&hdr[0x10]);
-        const u32 luHE = Be32(&hdr[0x14]);
+        const bool lbNative = Le32(&hdr[8]) == 4;
+        const bool lbX360 = Be32(&hdr[8]) == 2;
+        if (!lbNative && !lbX360)
+        {
+            AUDIO_LOG << "[StreamHeaders] STREAMHEADERS.bundle has unsupported platform -- header lookups disabled\n";
+            return;
+        }
+        const u32 luHN = lbNative ? Le32(&hdr[0x10]) : Be32(&hdr[0x10]);
+        const u32 luHE = lbNative ? Le32(&hdr[0x14]) : Be32(&hdr[0x14]);
         g_pHeaders->reserve(luHN);
         for (u32 e = 0; e < luHN; ++e)
         {
             const u32 b = luHE + 0x40 * e;
             if (b + 0x40 > hdr.size()) break;
             HeaderRes lRes;
-            lRes.muId = Be32(&hdr[b + 4]);       // low u32 of the big-endian u64 id
-            if (LoadResource(hdr, b, lRes.mData) && lRes.mData.size() >= 0x18)
+            lRes.muId = lbNative ? Le32(&hdr[b]) : Be32(&hdr[b + 4]);
+            const bool lbLoaded = lbNative ? LoadResourceLE(hdr, b, lRes.mData)
+                                           : LoadResource(hdr, b, lRes.mData);
+            if (lbLoaded && lRes.mData.size() >= 0x18)
                 g_pHeaders->push_back(std::move(lRes));
         }
 
@@ -193,7 +200,6 @@ namespace
                     lpacBar < lpacPath + luPathLength)
                 {
                     WaveSpec lSpec;
-                    lSpec.muNameHash = Le32(&reg[pos]);
                     // headerId = crc32 of the LOWERCASED url (CgsResource::ID::HashString)
                     std::string lUrl(lpacPath, lpacBar);
                     for (char& c : lUrl) c = char(std::tolower(u8(c)));
@@ -239,35 +245,8 @@ namespace
     }
 }   // anonymous namespace
 
-// ⭐ 2026-08-16 (boot audit F-P5-11/F7). See the header: this is the same one-shot Init the
-// resolvers run lazily, exposed so the boot can run it AT THE CONSOLE'S POINT --
-// RootSoundModule::Prepare's REGISTRY_LOAD stage, loading-screen stage 4. On the console
-// that stage is RegistryLoad @0x826EBA08 streaming the CSIS/AEMS registries through the
-// playback module, and StreamingStateManager::Prepare @0x826EE680 loading
-// "sound\streams\StreamHeaders.bundle" beside it; both are blocked here on the rw::audio
-// engine. What is NOT blocked is the TIMING of reading the same two files, so that is what
-// this restores. Idempotent.
-void StreamHeadersPC::Preload()
-{
-    Init();
-}
-
-bool StreamHeadersPC::ResolveBySpecName(const char* lpacSpecName,
-                                        const u8** lppSnr, u32* lpuSnrLen,
-                                        char* lpacSnsFile, u32 luSnsCap)
-{
-    Init();
-    if (!g_bReady || lpacSpecName == nullptr)
-        return false;
-    const u32 luName = u32(CgsSound::Playback::Name::MakeHash(lpacSpecName));
-    for (const WaveSpec& s : *g_pSpecs)
-        if (s.muNameHash == luName)
-            return FillFromSpec(s, lppSnr, lpuSnrLen, lpacSnsFile, luSnsCap);
-    return false;
-}
-
-bool StreamHeadersPC::ResolveBySnsName(const char* lpacSnsFile,
-                                       const u8** lppSnr, u32* lpuSnrLen)
+bool MovieStreamHeaderLookup::ResolveBySnsName(const char* lpacSnsFile,
+                                               const u8** lppSnr, u32* lpuSnrLen)
 {
     Init();
     if (!g_bReady || lpacSnsFile == nullptr)

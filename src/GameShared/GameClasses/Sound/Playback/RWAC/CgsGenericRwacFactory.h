@@ -140,6 +140,8 @@ private:
     GenericRwacVoiceConfig* SetupConfig(const VoiceSpec& akrSpec,
                                         Voice& arBaseVoice,
                                         GenericRwacVoice& arVoiceOut);
+    void HandlePluginEvent(u32 au32CommandCount,
+                           const uintptr_t* apuCommandWords);
     const GenericRwacFeatureImplementation& GetFeatureImplementation(Name aName) const;
 
     rw::audio::core::System* mpSystem;                    // console +0x10

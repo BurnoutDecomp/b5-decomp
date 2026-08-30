@@ -3,6 +3,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerFactory.h"  // the REAL SplicerFactory : public Factory
 #include "GameShared/GameClasses/Sound/Playback/Splicer/SpliceManager.h"      // the trailing-arena SpliceManager (slice 3)
+#include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerContent.h"
+#include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerPlayerVoice.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 #include "rw/rwcore_structs.h"   // rw::IResourceAllocator / BaseResourceDescriptors (the carve)
 
 #include <new>   // placement new (the in-carve constructs)
@@ -171,6 +174,53 @@ SplicerFactory::SplicerFactory(Environment& arEnvironment,
     // one-argument sink type discards it -- the console callers do too.
     mpManager->SetAssertCallbackFunction(
         reinterpret_cast<SpliceManager::AssertCallbackFunc>(&SplicerFactory::SplicerAssertFunc));
+}
+
+GenericRwacFactory& SplicerFactory::GetRwacFactory() const
+{
+    return *static_cast<GenericRwacFactory*>(mpRwacFactory);
+}
+
+// @ 0x826E9C88. A SplicerFactory owns the single SplicerContent class. The
+// console checks the authored ContentType, then uses FactoryNew to allocate and
+// construct this exact object and publishes one owned handle reference.
+bool SplicerFactory::DoCreateContent(const ContentSpec& akrSpec,
+                                     Handle<Content>& arHandleOut,
+                                     u32 au32Ident)
+{
+    SplicerContent* lpContent = new (*this, akrSpec)
+        SplicerContent(*this, akrSpec, au32Ident);
+    if (lpContent)
+        lpContent->Acquire();
+    arHandleOut.SetObject(lpContent);
+    return lpContent != 0;
+}
+
+// @ 0x826FA578. Splicer voices are player voices. The concrete constructor
+// builds the slot implementation and delegates its render graph to RWAC.
+bool SplicerFactory::DoCreateVoice(const VoiceSpec& akrSpec,
+                                   Handle<Voice>& arHandleOut,
+                                   u32 au32Ident)
+{
+    arHandleOut.SetObject(0);
+    CGS_ASSERT(akrSpec.mu8VoiceType == E_PLAYER_VOICE,
+               "E_PLAYER_VOICE == lVoiceSpec.GetVoiceType()");
+    if (akrSpec.mu8VoiceType != E_PLAYER_VOICE)
+        return false;
+
+    SplicerPlayerVoice* lpVoice = new (*this, akrSpec)
+        SplicerPlayerVoice(*this, akrSpec, au32Ident);
+    if (lpVoice)
+        lpVoice->Acquire();
+    arHandleOut.SetObject(lpVoice);
+    return lpVoice != 0;
+}
+
+// @ 0x8268AB60. The retail body brackets no work between the Splicer monitor
+// calls; the environment owns the monitor front, so there is no factory state to
+// advance here.
+void SplicerFactory::DoUpdate(f32 /*af32DeltaTime*/)
+{
 }
 
 } // namespace Playback

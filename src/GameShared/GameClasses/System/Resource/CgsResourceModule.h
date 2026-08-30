@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"
 #include "GameShared/GameClasses/Memory/CgsMemoryModule.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsFileSystem.h"
+#include "GameShared/GameClasses/Containers/CgsIndexedPool.h"
 #include "rw/rwcore_structs.h"                                       // rw::IResourceAllocator (DebugComponentParams)
 
 // CgsResource::ResourceModule - the resource-streaming engine: the container module that owns
@@ -42,7 +43,13 @@ namespace CgsResource
     namespace PoolIO { struct OutputBuffer; struct InputBuffer; }   // shuttle buffers
     namespace ResourceIO { struct InputBuffer; }                    // the module's request input
     // The write-stream request event types (deprecated adders take these by pointer only).
-    namespace Events { struct OpenWriteStreamRequest; struct CloseWriteStreamRequest; }
+    namespace Events
+    {
+        struct OpenReadStreamRequest;
+        struct CloseReadStreamRequest;
+        struct OpenWriteStreamRequest;
+        struct CloseWriteStreamRequest;
+    }
 
     // CgsResource::DebugComponentParams (DWARF CgsResourceDebugComponent.h:57) - the debug-component
     // bring-up params carried in ResourceModule::InitOptions. The X360 callback signature is
@@ -60,6 +67,17 @@ namespace CgsResource
     class ResourceModule : public CgsModule::ModuleSingleBuffered
     {
     public:
+        static const s32 KI_MAX_PENDING_FILE_SYSTEM_RESPONSES = 16;
+
+        // DecFIGS CgsResourceModule.h:209-213. A pending asynchronous file
+        // response, its resource-queue event tag, and the file/stream slot id.
+        struct PendingFileResponse
+        {
+            void* mpResponse;
+            s32   meEvent;
+            u32   muFileId;
+        };
+
         // The bring-up order is base -> Memory -> FileSystem -> Bundle -> Pool (Release reverses it).
         enum EPrepareStage
         {
@@ -90,7 +108,13 @@ namespace CgsResource
         };
 
         // "New module": skip ModuleSingleBuffered's old DataStructure IO path (X360 *(this+4)=1).
-        ResourceModule() { mbIsNewModule = true; }
+        ResourceModule()
+        {
+            mbIsNewModule = true;
+            mPendingFileResponses.Construct(
+                maPendingFileResponses, maiPendingFileResponseFreeIndices,
+                static_cast<s8>(KI_MAX_PENDING_FILE_SYSTEM_RESPONSES));
+        }
 
         void Construct(const void* lpInitOptions, void* lpAllocator);  // deferred
         bool Prepare();    // 0x828F4140
@@ -135,6 +159,9 @@ namespace CgsResource
         // to grow coherently, same disposition as wave44's blocked BinaryFileResource members).
         bool AddOpenWriteStreamRequest(const Events::OpenWriteStreamRequest* lpRequest);   // @0x828D8310
         bool AddCloseWriteStreamRequest(const Events::CloseWriteStreamRequest* lpRequest); // @0x828D83A0
+        bool AddOpenReadStreamRequest(const Events::OpenReadStreamRequest* lpRequest);     // @0x829070B0
+        bool AddCloseReadStreamRequest(const Events::CloseReadStreamRequest* lpRequest);   // @0x82905428
+        void ProcessPendingFileSystemResponses();                                           // @0x828F42B8
 
     private:
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
@@ -145,5 +172,10 @@ namespace CgsResource
         CgsMemory::MemoryModule   mMemoryModule;        // +0x46580 (a1+72032)
         CgsFileSystem::FileSystem mFileSystem;          // +0x4684C (a1+72204)
         DebugComponent            mDebugComponent;      // +0x14B96 ... (a1+84806)
+        PendingFileResponse       maPendingFileResponses[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
+        s8                        maiPendingFileResponseFreeIndices[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
+        CgsContainers::IndexedPool<PendingFileResponse,
+                                   KI_MAX_PENDING_FILE_SYSTEM_RESPONSES, s8>
+                                  mPendingFileResponses;
     };
 }

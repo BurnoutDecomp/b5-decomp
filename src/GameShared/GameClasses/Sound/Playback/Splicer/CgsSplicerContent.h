@@ -39,7 +39,16 @@ struct SplicerContent : public Content
     // @ 0x826D5A60. Empty out-of-line dtor (member + Content base dtors run implicitly).
     virtual ~SplicerContent();
 
+    virtual bool  DoLoad();
+    virtual bool  DoUnload();
+    virtual bool  DoOnPostLoad();
+    virtual bool  DoOnPreUnload();
+    virtual void  DoUpdate(f32 af32DeltaTime);
+    virtual void* DoGetData();
+
     SpliceBankStatistics mStatistics;   // :158 public
+
+    SPLICE_TYPE GetSpliceType() const { return meType; }
 
 private:
     ContentLoader<CgsResource::BinaryFileResource> mLoader; // :238

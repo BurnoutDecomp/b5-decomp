@@ -2,6 +2,7 @@
 #define BRN_SOUND_LOGIC_STREAMING_BRN_ISTREAM_USER_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Sound/Logic/CgsVoiceWrapper.h"
 
 // =============================================================================
 // BrnSound::Logic::Streaming::IStreamUser  (minimal interface home)
@@ -34,7 +35,10 @@ namespace Streaming
 struct IStreamUser
 {
     IStreamUser() {}
-    virtual ~IStreamUser() {}
+    virtual const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const = 0;
+    virtual void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
+                                   f32 afGain, f32 afElapsedTime) = 0;
+    virtual void StreamStopped() = 0;
 };
 
 } // namespace Streaming

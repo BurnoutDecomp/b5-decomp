@@ -1,5 +1,7 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsContent.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsContent.h"
 
 // CgsSound::Logic::Content -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //   Construct @ 0x826C4CA0
@@ -37,12 +39,17 @@ void Content::Construct(Module* lpModule,
     CGS_ASSERT(lpModule && !IsCreated(), "( lpModule ) && ( !IsCreated() )");
 
     // Module supplies the content ident (X360 virtual dispatch, module vtable +0x48).
-    Command::QueueElement lIdent = ModuleGetContentIdent(lpModule);
+    Command::QueueElement lIdent = lpModule->GetUniqueId();
 
     // Build the new content into a temporary handle via the content-create helper
     // (X360 bl Module_ with r4 == lpModule + 0x238 == &mPlaybackModule).
-    ContentHandle lhNewContent;
-    ModuleCreateContent(&lhNewContent, lpModule, lIdent, aQueueElementA, aQueueElementB);
+    CgsSound::Playback::Content* lpCreatedContent = 0;
+    lpModule->GetPlaybackModule().CreateContent(
+        &lpCreatedContent,
+        lIdent,
+        CgsSound::Playback::Name(static_cast<uintptr_t>(aQueueElementA)),
+        CgsSound::Playback::Name(static_cast<uintptr_t>(aQueueElementB)));
+    ContentHandle lhNewContent(lpCreatedContent);
 
     // Acquire the freshly-created content (X360 ++*(content+4)).
     CgsSound::Playback::Content* lpNewContent = lhNewContent.GetObject();
@@ -85,12 +92,19 @@ void Content::Destruct()
     // The X360 reaches the content through mContentHandle-> (the operator-> null
     // guard is the CgsHandle.h:287 "mpObject" assert) to begin its removal.
     CGS_ASSERT(mContentHandle.GetObject() != 0, "mpObject");
-    CgsSound::Playback::ContentBeginRemove(mContentHandle.GetObject());
+    mContentHandle.GetObject()->BeginRemove();
 
     // Drop this handle's reference and null the slot.
     if (mContentHandle.GetObject() != 0)
         reinterpret_cast<CgsSound::Playback::Object*>(mContentHandle.GetObject())->Release();
     mContentHandle.SetObject(0);
+}
+
+bool Content::IsLoaded() const
+{
+    return mContentHandle.GetObject() != 0 &&
+           mContentHandle.GetObject()->GetContentState() ==
+               CgsSound::Playback::E_CONTENT_STATE_LOADED;
 }
 
 } // namespace Logic

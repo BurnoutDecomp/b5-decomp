@@ -22,6 +22,32 @@ namespace BrnSound
 namespace Logic
 {
 
+CgsSound::Logic::EffectObject* FxEffect::CreateObject(u32)
+{
+    return new FxEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* FxEffect::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
+        0x30, "FxEffect", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
+        &FxEffect::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* FxEffect::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+const char* FxEffect::GetTypeName() const
+{
+    return "FxEffect";
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpFxEffectReg =
+    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(FxEffect::GetStaticTypeInfo());
+
 // ---------------------------------------------------------------------------
 // FxEffect::FxEffect  @ 0x826C9288
 //

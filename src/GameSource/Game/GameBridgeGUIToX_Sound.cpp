@@ -16,7 +16,7 @@
 // ============================================================================
 
 #include "GameSource/Game/BrnGameModule.hpp"
-#include "GameSource/Game/GameBridgeGUIToX.h"                 // GetGuiOutEventQueue (the +0x814 view)
+#include "GameSource/Game/GameBridgeGUIToX.h"                 // typed GetGuiOutEventQueue bridge
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"     // RootInputBuffer + GuiEventQueue
 
@@ -34,7 +34,6 @@ namespace BrnGame
         const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue =
             GetGuiOutEventQueue(lpGuiOutputBuffer);
         CGS_ASSERT(lpGuiEventQueue != 0, "lpGuiEventQueue");
-
         lpSoundModuleInputBuffer->SetGuiEventQueue(
             reinterpret_cast<const BrnSound::Module::Io::RootInputBuffer::GuiEventQueue*>(
                 lpGuiEventQueue));

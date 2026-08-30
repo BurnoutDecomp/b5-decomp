@@ -25,6 +25,7 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsObject.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"     // complete Factory (GetR's name compare)
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacPlayerVoice.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // the Update sub-pass monitors (phase B4)
 #include "rw/audio/core/PlugIn.h"                                  // rw::audio::core::System (muDeferredRingHighWater)
 #include "rw/rwcore_structs.h"                                     // rw::Resource / ResourceDescriptor / IResourceAllocator
@@ -202,19 +203,23 @@ Handle<Voice> Environment::GetVoice(u32 au32Id)
     return lhResult;
 }
 
-// @ 0x826BFE50. Walk the voice table for the tagged factory's voice whose named
-// slot resolves and whose plug-in table contains au32Plugin. Decoded by name
-// (2026-08-25 wave 3):
+// @ 0x826BFE50. Walk the voice table for the tagged factory's player voice whose
+// named slot resolves and whose GenericRwacVoice plug-in table contains apPlugin.
+// Decoded by name:
 //   * the "type tag" check is `voice->mFactory.mName == dword_83008650` (the asm
 //     loads voice+8 -> factory, factory+8 -> mName) -- i.e. the voice belongs to a
 //     SPECIFIC factory, matched by interned name;
 //   * FindNamedSlot receives the interned Name at dword_830080A8 (one word built
 //     on the stack and passed by the non-trivial-class reference ABI) -- the real
 //     Voice::FindNamedSlot(Name) member.
-// Returns an acquired handle to the first match, or an empty handle.
-Handle<Content> Environment::GetR(u32 au32Plugin)
+// Returns an acquired Voice handle to the first match, or an empty handle. The
+// console reaches the GenericRwacVoice secondary base at Voice+0x2C; the host
+// expresses that same adjustment through the concrete player wrapper so pointer
+// width and multiple-inheritance layout remain native.
+Handle<Voice> Environment::GetRwacVoiceByPlugin(
+    const rw::audio::core::PlugIn* apPlugin)
 {
-    Handle<Content> lhResult(static_cast<Content*>(0));
+    Handle<Voice> lhResult(static_cast<Voice*>(0));
     if (mu32VoiceCount == 0)
     {
         lhResult.SetObject(0);
@@ -239,28 +244,23 @@ Handle<Content> Environment::GetR(u32 au32Plugin)
         CGS_ASSERT(lpVoice, "mpObject");
         lpVoice->Acquire();
 
-        // FLAG (offset reach into the voice's un-homed tail region): the matched
-        // voice's plug-in table -- a sub-object at console voice+0x2C with the
-        // plug-in array at +0x08 and its u16 count at +0x0C -- lies past the homed
-        // Voice members (mOffsets ends the named layout at +0x2C; DWARF SubmixVoice
-        // adds only mpSubmix there). Which concrete voice subclass owns this table
-        // is not yet attested, so the walk stays byte-addressed until that home
-        // lands. The assert strings are verbatim.
-        u8* lpu8Named = reinterpret_cast<u8*>(lpVoice);
-        u16 lu16PluginCount = *reinterpret_cast<u16*>(lpu8Named + 0x38);
-        u8* lpPluginTable = lpu8Named + 0x2C;
+        GenericRwacPlayerVoice* lpPlayerVoice =
+            static_cast<GenericRwacPlayerVoice*>(lpVoice);
+        GenericRwacVoice& lrRwacVoice = *lpPlayerVoice;
+        const u32 lu32PluginCount = lrRwacVoice.GetPluginCount();
         bool lbMatched = false;
-        for (u32 lu32P = 0; lu32P < lu16PluginCount; ++lu32P)
+        for (u32 lu32P = 0; lu32P < lu32PluginCount; ++lu32P)
         {
-            CGS_ASSERT(lu32P < *reinterpret_cast<u16*>(lpPluginTable + 0x0C), "lu32I < mu16PluginCount");
-            void** lppPlugins = *reinterpret_cast<void***>(lpPluginTable + 0x08);
-            CGS_ASSERT(lppPlugins[lu32P], "mppPlugin[lu32I]");
-            if (reinterpret_cast<uintptr_t>(lppPlugins[lu32P]) == au32Plugin) { lbMatched = true; break; }
+            if (lrRwacVoice.GetPlugin(lu32P) == apPlugin)
+            {
+                lbMatched = true;
+                break;
+            }
         }
 
         if (lbMatched)
         {
-            lhResult.SetObject(reinterpret_cast<Content*>(lpVoice));
+            lhResult.SetObject(lpVoice);
             lpVoice->Acquire();
             lpVoice->Release();
             return lhResult;

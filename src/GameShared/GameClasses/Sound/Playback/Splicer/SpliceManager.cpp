@@ -6,6 +6,9 @@
 #include "rw/rwcore_structs.h"     // rw::IResourceAllocator / BaseResourceDescriptors (Allocate)
 #include "GameShared/GameClasses/Sound/Playback/CgsEnvironment.h"           // Environment::GetAllocator
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GetDefaultRwacSystem + RwacLock
+#include "GameShared/GameClasses/Sound/Playback/Splicer/internal/SpliceObjects.h"
+
+#include <cstring>
 
 // The RWAC engine's 3-arg plug-in event form (X360 rw::audio::core::PlugIn::Event with
 // (self, event, arg)). Declared BY NAME here exactly as in CgsEnvironment.h, mirroring
@@ -66,6 +69,20 @@ void* SpliceManager::Allocate( u32 luSize, const char* lpcTag )
         const_cast<CgsSound::Playback::Environment*>( mpEnvironment )->GetAllocator()->DoAllocate(
             reinterpret_cast<const rw::ResourceDescriptor&>( lDescriptor ), lpcTag );
     return lResource.m_baseResources[0];
+}
+
+void SpliceManager::Free( void* lpMemory )
+{
+    if ( !lpMemory )
+        return;
+
+    rw::Resource lResource;
+    lResource.m_baseResources[0] = lpMemory;
+    lResource.m_baseResources[1] = 0;
+    lResource.m_baseResources[2] = 0;
+    lResource.m_baseResources[3] = 0;
+    const_cast<CgsSound::Playback::Environment*>( mpEnvironment )
+        ->GetAllocator()->DoFree( lResource );
 }
 
 // ============================================================================
@@ -232,6 +249,96 @@ SpliceManager::SpliceContainer::SpliceContainer()
     , mNumSamples( 0 )
     , mpHeadSplice( 0 )
 {
+}
+
+void SpliceManager::SpliceContainer::Init( SPLICE_Data* apHeadData,
+                                           int aiNumSplices )
+{
+    mpHeadSplice = apHeadData;
+    mNumSplices = aiNumSplices;
+}
+
+void SpliceManager::SpliceContainer::Clear()
+{
+    if ( mpHeadSplice )
+        gpSpliceManager->Free( mpHeadSplice );
+    mpSampleData = 0;
+    mpTableOfContents = 0;
+    mNumSplices = 0;
+    mNumSamples = 0;
+    mpHeadSplice = 0;
+}
+
+int SpliceManager::SpliceContainer::Size()
+{
+    return mNumSplices;
+}
+
+SPLICE_Data* SpliceManager::SpliceContainer::GetSplice( int aiIndex )
+{
+    return mpHeadSplice + aiIndex;
+}
+
+bool SpliceManager::LoadSplice( void* apData, SPLICE_TYPE aeType )
+{
+    const u32* lpHeader = static_cast<const u32*>( apData );
+    if ( lpHeader[0] != 1u )
+    {
+        AssertCallbackFunc lpfnAssert = gpSpliceManager
+            ? gpSpliceManager->mAssertCallbackFunc : 0;
+        if ( lpfnAssert )
+            lpfnAssert( "Splicer Data does not match runtime code version number." );
+    }
+    return LoadSpliceData( static_cast<const char*>( apData ) + 12, aeType,
+                           static_cast<s32>( lpHeader[1] ),
+                           static_cast<s32>( lpHeader[2] ) );
+}
+
+bool SpliceManager::LoadSpliceData( const char* apData, SPLICE_TYPE aeType,
+                                    s32 aiDataSize, s32 aiNumSplices )
+{
+    if ( aeType < 0 || aeType >= 8 || aiNumSplices < 0 )
+        return false;
+
+    SpliceContainer& lrContainer = m_Splices[aeType];
+    lrContainer.Clear();
+
+    SPLICE_Data* lpRuntime = 0;
+    if ( aiNumSplices > 0 )
+    {
+        lpRuntime = static_cast<SPLICE_Data*>(
+            Allocate( sizeof(SPLICE_Data) * aiNumSplices, "SplicerData" ) );
+        if ( !lpRuntime )
+            return false;
+        std::memset( lpRuntime, 0, sizeof(SPLICE_Data) * aiNumSplices );
+    }
+    lrContainer.Init( lpRuntime, aiNumSplices );
+
+    const char* lpRefBytes = apData + 24 * aiNumSplices;
+    SPLICE_SampleRef* lpRefs =
+        reinterpret_cast<SPLICE_SampleRef*>( const_cast<char*>( lpRefBytes ) );
+    u32 luRef = 0;
+    for ( s32 liSplice = 0; liSplice < aiNumSplices; ++liSplice )
+    {
+        const char* lpDisk = apData + 24 * liSplice;
+        SPLICE_Data& lrSplice = lpRuntime[liSplice];
+        std::memcpy( &lrSplice, lpDisk, 24 );
+        lrSplice.mcSpliceType = static_cast<s8>( aeType );
+        lrSplice.mpSampleRefList = lpRefs + luRef;
+        for ( u32 luLocal = 0; luLocal < lrSplice.mucNumSampleRefs; ++luLocal )
+            lpRefs[luRef + luLocal].mcSpliceType = static_cast<s8>( aeType );
+        luRef += lrSplice.mucNumSampleRefs;
+    }
+
+    const char* lpSampleTable = apData + aiDataSize;
+    u32 luNumSamples = 0;
+    std::memcpy( &luNumSamples, lpSampleTable, sizeof(luNumSamples) );
+    lrContainer.mNumSamples = static_cast<s32>( luNumSamples );
+    lrContainer.mpTableOfContents = reinterpret_cast<s32*>(
+        const_cast<char*>( lpSampleTable + 4 ) );
+    lrContainer.mpSampleData = const_cast<char*>(
+        lpSampleTable + 4 + 4 * luNumSamples );
+    return true;
 }
 
 // ============================================================================

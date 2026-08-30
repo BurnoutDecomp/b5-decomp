@@ -33,6 +33,49 @@ namespace Utils
 // flt_820AD47C -- the degenerate-span epsilon used by this ctor (1e-6f).
 static const f32 KF_MIN_INPUT_SPAN = 0.000001f;
 
+// ARTIST @ 0x82689698.  The original indexes a 512-entry table containing
+// sin(index * pi / (2 * 511)); preserve its integer-indexed shape here while
+// deriving the value instead of carrying the generated lookup data.
+f32 Curve::GetOutput(f32 lfFraction, ECurveType leCurve)
+{
+    CGS_ASSERT(lfFraction <= 1.0f && lfFraction >= 0.0f,
+               "( lfInput <= 1.0f ) && ( lfInput >= 0.0f )");
+
+    const f32 lfHalfPi = 1.57079632679489661923f;
+    const s32 lnLastTableIndex = 511;
+
+    switch (leCurve)
+    {
+        case E_LINEAR:
+            return lfFraction;
+
+        case E_POWER:
+        {
+            const s32 lnIndex = static_cast<s32>(lfFraction * lnLastTableIndex);
+            return std::sin(static_cast<f32>(lnIndex) *
+                            (lfHalfPi / static_cast<f32>(lnLastTableIndex)));
+        }
+
+        case E_EQ_PWR_SQ:
+        {
+            const f32 lfPower = GetOutput(lfFraction, E_POWER);
+            return lfPower * lfPower;
+        }
+
+        case E_ONE_MINUS_EQPWR:
+            return 1.0f - GetOutput(1.0f - lfFraction, E_POWER);
+
+        case E_ONE_MINUS_EQPWR_SQ:
+        {
+            const f32 lfOneMinus = GetOutput(lfFraction, E_ONE_MINUS_EQPWR);
+            return lfOneMinus * lfOneMinus;
+        }
+
+        default:
+            return 0.0f;
+    }
+}
+
 Slope::Slope(const SlopeParams& params)
     : mParams(params)
 {

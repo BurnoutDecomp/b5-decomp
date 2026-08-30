@@ -38,6 +38,7 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacCommands.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacContent.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace CgsSound
@@ -127,19 +128,33 @@ void RwacCommandQueue::PostCommand(uintptr_t auWord)
 //   pointer) is non-null, ++mpPlayRequest->mu32RefCount; assert count == 3, tag == 6.
 // ---------------------------------------------------------------------------
 RwacCommandPlayerPlayParameters::RwacCommandPlayerPlayParameters(
+        GenericRwacWaveContent* apWaveContent, f32* apRequestHandle)
+{
+    muCommandType = E_RWAC_COMMAND_PLAYER_PLAY_PARAMETERS;
+    mpWaveContent = apWaveContent;
+    mpRequestHandle = apRequestHandle;
+    if (mpWaveContent)
+        mpWaveContent->Acquire();
+}
+
+RwacCommandPlayerPlayParameters::RwacCommandPlayerPlayParameters(
         u32 luCommandCount, const RwacCommandPlayerPlayParameters& arSource)
 {
     muCommandType = arSource.muCommandType;  // lwz r11,0(r5); stw r11,0(r31)
-    mpPlayRequest = arSource.mpPlayRequest;  // lwz r11,4(r5); stw r11,4(r31)
-    if (mpPlayRequest != 0)                  // cmplwi cr6,r11,0; beq
-    {
-        ++mpPlayRequest->mu32RefCount;       // lwz r10,4(r11); addi r10,r10,1; stw r10,4(r11)
-    }
-    maOperand = arSource.maOperand;          // lwz r11,8(r5); stw r11,8(r31)
+    mpWaveContent = arSource.mpWaveContent;  // lwz r11,4(r5); stw r11,4(r31)
+    if (mpWaveContent != 0)
+        mpWaveContent->Acquire();            // ++Object::mu32RefCount
+    mpRequestHandle = arSource.mpRequestHandle; // lwz/stw word 2
 
     CGS_ASSERT(luCommandCount == 3u, "sizeof(*this) / sizeof(uintptr_t) == luCommandCount");
     CGS_ASSERT(GetCommandType() == E_RWAC_COMMAND_PLAYER_PLAY_PARAMETERS,
                "E_RWAC_COMMAND_PLAYER_PLAY_PARAMETERS == GetCommandType()");
+}
+
+RwacCommandPlayerPlayParameters::~RwacCommandPlayerPlayParameters()
+{
+    if (mpWaveContent)
+        mpWaveContent->Release();
 }
 
 // ---------------------------------------------------------------------------
@@ -147,10 +162,17 @@ RwacCommandPlayerPlayParameters::RwacCommandPlayerPlayParameters(
 //   copy 2 words (tag + 1 operand) from arSource; assert count == 2, tag == 7.
 // ---------------------------------------------------------------------------
 RwacCommandPlayerIsRequestDoneParameters::RwacCommandPlayerIsRequestDoneParameters(
+        void* apParams)
+{
+    muCommandType = E_RWAC_COMMAND_PLAYER_IS_REQUEST_DONE_PARAMETERS;
+    mpParams = apParams;
+}
+
+RwacCommandPlayerIsRequestDoneParameters::RwacCommandPlayerIsRequestDoneParameters(
         u32 luCommandCount, const RwacCommandPlayerIsRequestDoneParameters& arSource)
 {
     muCommandType = arSource.muCommandType; // stw r11,0(this)
-    maOperand     = arSource.maOperand;     // stw r11,4(this)
+    mpParams      = arSource.mpParams;      // stw r11,4(this)
 
     CGS_ASSERT(luCommandCount == 2u, "sizeof(*this) / sizeof(uintptr_t) == luCommandCount");
     CGS_ASSERT(GetCommandType() == E_RWAC_COMMAND_PLAYER_IS_REQUEST_DONE_PARAMETERS,

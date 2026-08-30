@@ -26,6 +26,7 @@ namespace Playback
 {
 
 class GenericRwacFactory;
+struct SplicerContent;
 
 // The sizing spec Create/ctor consume (console spec words +0 the retained RWAC
 // factory handle / +4 entityCount / +8 dataBytes / +0xC stringBytes -- the same
@@ -68,6 +69,16 @@ struct SplicerFactory : public Factory
 
     // The nested registry (console +0x10), by name.
     Registry* GetRegistry() { return mpRegistry; }
+
+    SpliceManager* GetManager() const { return mpManager; }
+    GenericRwacFactory& GetRwacFactory() const;
+
+protected:
+    virtual bool DoCreateVoice(const VoiceSpec& akrSpec,
+                               Handle<Voice>& arHandleOut, u32 au32Ident);
+    virtual bool DoCreateContent(const ContentSpec& akrSpec,
+                                 Handle<Content>& arHandleOut, u32 au32Ident);
+    virtual void DoUpdate(f32 af32DeltaTime);
 
 private:
     Registry*      mpRegistry;     // CgsSplicerFactory.h:128 (console +0x10 -> the in-place Registry @ +0x1C)

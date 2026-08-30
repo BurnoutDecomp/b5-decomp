@@ -54,6 +54,7 @@ struct GlobalState : public BrnSound::Logic::BrnState
     // typeName "GlobalState" is PROVEN (descriptor unk_82F2F86C+4 = off_82F2F870, the
     // committed GetTypeName literal).
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetStaticTypeInfo();
+    static CgsSound::Logic::State* CreateObject(u32 auType);
 };
 
 } // namespace Logic

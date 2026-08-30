@@ -167,6 +167,27 @@ public:
     virtual void DoPreDetach(const Slot& arSlot, Voice& arVoice, Content& arContent) {}  // slot 4 (:136)
 };
 
+// CgsVoice.h:141 (DecFIGS). Process-wide registry that maps an authored slot
+// runtime-class Name to the allocator-backed implementation constructor. The
+// ARTIST GenericRwacFactory::SetupConf walk follows spHead through mpNext and
+// dispatches DoCreateSlot when it mounts each feature slot.
+class ISlotFactory
+{
+public:
+    explicit ISlotFactory(Name aName);
+
+    static const ISlotFactory* GetFactory(Name aName);
+    Name GetName() const { return mName; }
+
+    virtual ISlotImplementation* DoCreateSlot(Voice& arVoice) const = 0;
+
+private:
+    Name mName;
+    const ISlotFactory* mpNext;
+
+    static const ISlotFactory* spHead;
+};
+
 // ---------------------------------------------------------------------------
 // Minimal Playback::Voice / PlayerVoice slice. Voice derives from Object. Slot
 // Release resolves the same Factory -> Environment -> allocator chain by name so
@@ -280,8 +301,7 @@ public:
     void SetIdent(u32 au32Ident) { mIdent = au32Ident; }
 
     // @ (DWARF CgsVoice.h:501). Resolve akName to a Slot, then Slot::Attach the
-    // content handle. FLAG (DEFER): declared-only -- bodied with the Voice slices
-    // (caller: Module::AttachVoice @0x826D7D80).
+    // content handle (caller: Module::AttachVoice @0x826D7D80).
     bool Attach(Name akName, Handle<Content>& arhContent);
 
     // Owning-factory read. INLINE in the original (Environment::GetR @0x826BFE50

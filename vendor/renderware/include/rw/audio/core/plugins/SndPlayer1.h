@@ -94,6 +94,17 @@ public:
         f32 requestHandle;
     };
 
+    // sndplayer1.h:82/113 (DecFIGS). ARTIST's generic-RWAC command bridge uses
+    // these source-level names for the same play record and its two-float
+    // completion query. Splicer keeps the historical PlayLegacyParams spelling.
+    typedef PlayLegacyParams PlayParams;
+
+    struct IsRequestDoneParams
+    {
+        f32 requestHandle;
+        f32 isRequestDone;
+    };
+
     enum Attribute
     {
         ATTRIBUTE_GETCURRENTREQUEST  = 0,   // f32 slot

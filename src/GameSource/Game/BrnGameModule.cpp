@@ -5,8 +5,6 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiAudioTriggerEvent (GUI-out event 201) + GuiEventProgressionProfileData (350)
 #include "GameSource/Game/GameBridgeGameStateToX.h"  // BrnGame::BridgeGameStateToGui_EventStatus (the GUI-leg status seam)
 #include "GameSource/GameState/Progression/BrnProfile.h" // BrnProgression::Profile (the action-193 payload's first word)
-#include "GameShared/GameClasses/System/PC/CgsGuiSoundPC.h" // GUI presentation-sound PC consumer
-#include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h" // SpeechAudioPC -- the voice-over leaf
 
 #include <cstring>   // memset
 #include <string.h>  // _stricmp (RenderMetricsMessageHandler; MSVC canonical, not declared by <cstring>)
@@ -611,8 +609,6 @@ namespace BrnGame
         mbGuiPhaseComplete = false;
         mbGuiPreAccept     = false;
         mbGuiVoiceOverPending  = false;
-        muGuiVoiceOverHash     = 0;
-        mbGuiVoiceOverSounding = false;
         mbDirectorCameraLive   = false;
         mbPlayerCarCrashing    = false;
         mbWorldDataPrepared    = false;
@@ -849,7 +845,6 @@ namespace BrnGame
                         // The payload word (record +12) is the line's
                         // CgsSound::Playback::Name::MakeHash id -- carry it through so the
                         // speech player can resolve and sound the actual stream.
-                        muGuiVoiceOverHash    = reinterpret_cast<const u32*>(lpEvent)[3];
                         mbGuiVoiceOverPending = true;
                         break;
                     case 90:   // profile-first-boot flag (X360 +10094136: 0 -> 1)
@@ -943,13 +938,6 @@ namespace BrnGame
                     default:
                         break;
                 }
-            }
-            else if (liId == 201)
-            {
-                const BrnGui::GuiAudioTriggerEvent* lpAudio =
-                    reinterpret_cast<const BrnGui::GuiAudioTriggerEvent*>(lpEvent);
-                CgsSystem::GuiSoundPC::OnTrigger(
-                    lpAudio->macLabel, 0, lpAudio->macComponent, lpAudio->meAction);
             }
             const CgsModule::Event* lpNext = 0;
             liId = lpGuiOutQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
@@ -3605,6 +3593,20 @@ namespace BrnGame
                 // miUT_Replay @+0x40) that handle is miUT_GameState.
                 PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
                 CreateStaticIOBuffers();
+
+                // The PC host drives the active flow state's sound slice before it drives
+                // GuiModule::Update below. Publish the GUI records retained from the previous
+                // sub-step into the newly-created scheduler output so that sound sees every
+                // event once. The GUI leg clears the retained model queue before producing the
+                // next batch, giving this hand-off exactly one sub-step of latency.
+                if (mGuiModule.IsPrepared())
+                {
+                    CGS_ASSERT(mpGuiOutputBuffer != 0, "GUI output buffer was not created");
+                    mpGuiOutputBuffer->LockForWrite();
+                    mpGuiOutputBuffer->AddGuiOutEvents(mGuiModule.GetGuiOutQueue());
+                    mpGuiOutputBuffer->UnlockForWrite();
+                }
+
                 mFrameRateManager.miPrevNumSimulationStepsRequired = liStep + 1;
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
 
@@ -4375,7 +4377,7 @@ namespace BrnGame
                     // dwell floor back. Replace with the real bridge when the sound
                     // module's GUI legs land.
                     // WHAT THIS DOES NOW: the request's name hash is handed to the PC
-                    // speech player (CgsSystem::SpeechAudioPC -- the SpeechEffect leaf),
+                    // engine-owned SpeechEffect,
                     // which resolves it to its stream and sounds it on the audio output's
                     // dedicated voice slot. 466 goes back as soon as the line starts and
                     // 467 only when it has PLAYED OUT, which is the console's own timing
@@ -4388,27 +4390,11 @@ namespace BrnGame
                     if (mbGuiVoiceOverPending)
                     {
                         mbGuiVoiceOverPending = false;
-                        const bool lbSounding =
-                            CgsSystem::SpeechAudioPC::PlayByNameHash(muGuiVoiceOverHash);
-
+                        // Acknowledge the request immediately; the same GUI output
+                        // event is bridged to SoundLogicModule, where SpeechEffect
+                        // owns playback and posts 467 on stream completion.
                         CgsGui::GuiEvent<466> lVoiceOverStarted;
                         CgsGui::GuiModule::AddGuiEvent(lVoiceOverStarted, mpGuiInputBuffer);
-
-                        if (lbSounding)
-                        {
-                            mbGuiVoiceOverSounding = true;   // 467 follows when it ends
-                        }
-                        else
-                        {
-                            CgsGui::GuiEvent<467> lVoiceOverFinished;
-                            CgsGui::GuiModule::AddGuiEvent(lVoiceOverFinished, mpGuiInputBuffer);
-                        }
-                    }
-                    else if (mbGuiVoiceOverSounding && CgsSystem::SpeechAudioPC::ConsumeFinished())
-                    {
-                        mbGuiVoiceOverSounding = false;
-                        CgsGui::GuiEvent<467> lVoiceOverFinished;
-                        CgsGui::GuiModule::AddGuiEvent(lVoiceOverFinished, mpGuiInputBuffer);
                     }
                     mpGuiInputBuffer->UnlockForWrite();
                     mPcInputOutputBuffer.UnlockForRead();

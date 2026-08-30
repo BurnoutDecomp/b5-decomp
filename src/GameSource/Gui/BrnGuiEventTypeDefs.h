@@ -108,6 +108,20 @@ struct GuiAudioTriggerEvent : public CgsGui::GuiEvent<201>
 static_assert(sizeof(GuiAudioTriggerEvent) == 112,
               "GuiAudioTriggerEvent is a 100-byte payload plus the 12-byte PC GuiEvent header");
 
+// ARTIST wire id 457 carries the same 100-byte payload without the PC
+// GuiEvent<201> header. OutputGuiEvent wraps this record with its own 12-byte
+// queue header before publication.
+struct GuiAudioTriggerWirePayload457
+{
+    char macComponent[32];
+    s32  meAction;
+    char macLabel[32];
+    char macMovie[32];
+};
+
+static_assert(sizeof(GuiAudioTriggerWirePayload457) == 100,
+              "ARTIST GUI audio trigger payload is exactly 100 bytes");
+
 // BrnGuiEventTypeDefs.h:912 -- HUD FSM selector carried by GuiEventRunFsm.
 enum EHUDFSMs
 {

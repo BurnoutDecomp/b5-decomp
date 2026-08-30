@@ -99,60 +99,6 @@ TrafficInAir::~TrafficInAir()
 {
 }
 
-// ---------------------------------------------------------------------------
-// JunkyardInAirEffect::CreateObject(u32)  @ 0x826FDB78   (the factory hook)
-//
-// The X360 allocates a 1016-byte (0x3F8) block through CgsSound::MemBase::operator
-// new(size, tag, flavour) tagged "JunkyardInAirEffect" and placement-constructs a
-// JunkyardInAirEffect, handing it back through its EffectObject base sub-object (the
-// `addi r3,r3,4`). The `a1` argument only selects the operator-new flavour (0/1).
-// DWARF (BrnInAirEffect.cpp:39) attests `EffectObject* CreateObject(uint32_t)`.
-//
-// FLAG (allocator gate): CgsSound::MemBase does NOT model operator new(size, tag,
-// flavour) here, so this uses the host `new`; the observable result matches. Mirrors
-// the committed Collision3DControl::CreateObject. The 0x3F8 size is documentation only.
-// ---------------------------------------------------------------------------
-CgsSound::Logic::EffectObject* JunkyardInAirEffect::CreateObject( u32 /*luType*/ )
-{
-    return new JunkyardInAirEffect();
-}
-
-// ---------------------------------------------------------------------------
-// JunkyardInAirEffect::JunkyardInAirEffect  @ 0x826F4200  (field-init ctor)
-//
-//   bl   InAirEffect::InAirEffect                 ; base sub-object ctor
-//   stw  off_820B7344, 0(this)                    ; primary vptr (EffectObject path)
-//   stw  off_820B7310, 4(this)                    ; IResourceRequester sub-object vptr
-//   stb  0, 0x3F0(this)                           ; mbIsVehicleValid.mCurrentValue = false
-//   stb  0, 0x3F1(this)                           ; mbIsVehicleValid.mPreviousValue = false
-//   return this
-//
-// The two leading vptr stores (+0/+4) are the compiler-emitted leaf final-overrider
-// vptr installs, produced implicitly here by C++ construction. The base InAirEffect
-// sub-object is built by the base ctor (BY NAME). The only leaf field the X360 writes
-// is DataPoint<bool> mbIsVehicleValid @ +0x3F0 (two zeroed bytes), which is exactly
-// what the default DataPoint<bool>() member init produces. meJunkyardAmbience (@ +0x3F4)
-// is left untouched by the X360 ctor -- default-initialised here (E_JUNKYARD_AMBIENCE_
-// NONE) to keep the field defined without fabricating a store the asm does not make.
-// ---------------------------------------------------------------------------
-JunkyardInAirEffect::JunkyardInAirEffect()
-    : InAirEffect()                                        // base sub-object, BY NAME
-    // mbIsVehicleValid: default DataPoint<bool>() -> both bytes 0 (stb 0,0x3F0/0x3F1)
-    , meJunkyardAmbience(BrnSound::Logic::MusicEffect::E_JUNKYARD_AMBIENCE_NONE)
-{
-}
-
-// ---------------------------------------------------------------------------
-// ~JunkyardInAirEffect  @ 0x826FDBD8  (anchor for the X360 `vector deleting destructor').
-// The inner ~InAirEffect is the inherited base teardown; this leaf adds no member
-// teardown of its own (mbIsVehicleValid is a trivial DataPoint<bool>, meJunkyardAmbience
-// a trivial enum), so the hand-written body is empty. The (a2 & 1) allocator-free tail
-// is re-synthesised by the host toolchain.
-// ---------------------------------------------------------------------------
-JunkyardInAirEffect::~JunkyardInAirEffect()
-{
-}
-
 } // namespace Wheels
 } // namespace Vehicles
 } // namespace BrnSound

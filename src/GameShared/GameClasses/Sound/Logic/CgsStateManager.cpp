@@ -1,5 +1,7 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsState.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
 
 // CgsSound::Logic::StateManager -- owning keystone base bodies.
 //
@@ -85,10 +87,11 @@ StateManager::StateManager()
     , mfTimeStepGame(0.0f)       // +0x0C
     , mfTimeStepSimulation(0.0f) // +0x10
     , meMapState(-1)             // +0x14  (the X360 li r10,-1 ; stw r10,0x14(r3))
-    , mu24(0)                    // +0x18
-    , mu28(0)                    // +0x1C
-    , mu36(0)                    // +0x24
-    , mu40(0)                    // +0x28
+    , mpHeadState(0)             // +0x18
+    , miNumStates(0)             // +0x1C
+    , miStateManId(0)            // +0x20 (left semantically unused until stamped by a leaf)
+    , mePrepareState(E_PREPARE_NONE) // +0x24
+    , meStatePrepareState(E_STATE_PREPARE_STATE_CREATE) // +0x28
     , mpLogicModule(0)           // +0x2C  (stamped later by CreateStateMan)
     // mContentPool: default-constructed (the four RegisteredContent vtable+null
     // sub-objects). Free-queue/count/bitarray seed gap -- see FLAG above.
@@ -149,8 +152,13 @@ bool StateManager::Prepare()
 // dispatched from the base. The owning manager that actually has children overrides
 // this. NOT an X360-faithful body -- shape only.
 // ---------------------------------------------------------------------------
-StateManager* StateManager::GetChildStateManager(s32 /*liIndex*/)
+State* StateManager::GetFreeState(void* /*apvAttachment*/)
 {
+    for (State* lpState = mpHeadState; lpState; lpState = lpState->mpNextState)
+    {
+        if (!lpState->IsAttached())
+            return lpState;
+    }
     return 0;
 }
 
@@ -167,11 +175,157 @@ StateManager* StateManager::GetChildStateManager(s32 /*liIndex*/)
 // the real body belongs to the State-machine group (CgsState.*). Returns true as a
 // non-cascading placeholder. NOT reconstructed here.
 // ---------------------------------------------------------------------------
-bool StateManager::PrepareStates(s32 /*liStateMask*/,
-                                 s32 /*liInstancesPerState*/,
-                                 s32 /*liStartState*/)
+bool StateManager::PrepareStates(s32 liStateMask,
+                                 s32 liInstancesPerState,
+                                 s32 liStartState)
 {
-    return true;
+    bool lbPrepared = true;
+    if (meStatePrepareState == E_STATE_PREPARE_STATE_CREATE)
+    {
+        for (s32 liInstance = 0; liInstance < liInstancesPerState; ++liInstance)
+        {
+            State* lpState = CreateState(0);
+            CGS_ASSERT(lpState != 0, "lpState");
+            if (lpState)
+                lpState->ForceCreateEffectControls(liStartState);
+        }
+        meStatePrepareState = E_STATE_PREPARE_STATE_PREPARING;
+    }
+
+    for (State* lpState = mpHeadState; lpState; lpState = lpState->mpNextState)
+        lbPrepared = lpState->Prepare(liStateMask, this) && lbPrepared;
+    return lbPrepared;
+}
+
+void StateManager::UpdateParams(f32 af32GameDt)
+{
+    if (mePrepareState != E_PREPARE_FINISHED)
+        return;
+    mfDeltaTime = af32GameDt;
+    for (State* lpState = mpHeadState; lpState; lpState = lpState->mpNextState)
+    {
+        lpState->mfCurTime = mfCurrentTime;
+        lpState->UpdateParams(af32GameDt);
+    }
+}
+
+void StateManager::ProcessUpdate()
+{
+    if (mePrepareState != E_PREPARE_FINISHED)
+        return;
+    for (State* lpState = mpHeadState; lpState; lpState = lpState->mpNextState)
+        lpState->ProcessUpdate();
+}
+
+State* StateManager::CreateState(s32 liStateType)
+{
+    ClassTypeInfo<State>* lpMatch = 0;
+    for (u32 luSlot = 0; luSlot < State::KU_SIZEOF_CLASS_ARRAY; ++luSlot)
+    {
+        ClassTypeInfo<State>* lpDescriptor = State::GetRegisteredTypeInfo(luSlot);
+        if (!lpDescriptor)
+            break;
+        // PPC @ 0x826A595C loads the descriptor's leading halfword and keeps
+        // its low byte.  ObjectID is a native u32, so that is bits 16..23 of
+        // the numeric value (for example StreamingState == 0x00060000 -> 6).
+        const s32 liDescriptorState = (lpDescriptor->ObjectID >> 16) & 0xFF;
+        if (!IsStateAlias(liDescriptorState))
+            continue;
+        if (!lpMatch || lpDescriptor->ObjectID == meMapState)
+            lpMatch = lpDescriptor;
+        if ((lpDescriptor->ObjectID & 0xFFFF) == liStateType)
+        {
+            if (!lpMatch || (lpMatch->ObjectID & 0xFFFF) != liStateType)
+                lpMatch = lpDescriptor;
+            else
+            {
+                for (ClassTypeInfo<State>* lpBase = lpDescriptor->baseTypeInfo;
+                     lpBase; lpBase = lpBase->baseTypeInfo)
+                {
+                    if (lpBase == lpMatch)
+                    {
+                        lpMatch = lpDescriptor;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    CGS_ASSERT(lpMatch != 0, "Failed to find State Object");
+    if (!lpMatch)
+        return 0;
+    State* lpState = lpMatch->CreateObject(0);
+    if (!lpState)
+        return 0;
+    lpState->mpStateManager = this;
+    lpState->miInstNum = miNumStates;
+    lpState->meMapState = meMapState;
+    lpState->miStateInstType = liStateType;
+    lpState->mpLogicModule = GetLogicModule();
+    if (!mpHeadState)
+        mpHeadState = lpState;
+    else
+    {
+        State* lpTail = mpHeadState;
+        while (lpTail->mpNextState)
+            lpTail = lpTail->mpNextState;
+        lpState->mpPrevState = lpTail;
+        lpTail->mpNextState = lpState;
+    }
+    ++miNumStates;
+    return lpState;
+}
+
+template <typename TEffect>
+static EffectBase* CreateEffectFromRegistry(StateManager* apManager,
+                                            s32 liInstanceId, s32 liEffectId)
+{
+    ClassTypeInfo<TEffect>* lpMatch = 0;
+    for (u32 luSlot = 0; luSlot < TEffect::KU_SIZEOF_CLASS_ARRAY; ++luSlot)
+    {
+        ClassTypeInfo<TEffect>* lpDescriptor = TEffect::GetRegisteredTypeInfo(luSlot);
+        if (!lpDescriptor)
+            break;
+        if (((lpDescriptor->ObjectID >> 4) & 0x7F) != liEffectId)
+            continue;
+        const s32 liDescriptorState = (lpDescriptor->ObjectID >> 16) & 0xFF;
+        if (apManager->IsStateAlias(liDescriptorState) && !lpMatch)
+            lpMatch = lpDescriptor;
+        if (liDescriptorState == apManager->GetStateType())
+        {
+            if (!lpMatch || ((lpMatch->ObjectID >> 16) & 0xFF) != liDescriptorState)
+                lpMatch = lpDescriptor;
+            else
+            {
+                for (ClassTypeInfo<TEffect>* lpBase = lpDescriptor->baseTypeInfo;
+                     lpBase; lpBase = lpBase->baseTypeInfo)
+                {
+                    if (lpBase == lpMatch)
+                    {
+                        lpMatch = lpDescriptor;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    CGS_ASSERT(lpMatch != 0, "Failed to find Effect Object");
+    if (!lpMatch)
+        return 0;
+    TEffect* lpEffect = lpMatch->CreateObject(0);
+    if (lpEffect)
+        lpEffect->SetId(16 * ((((32 * apManager->GetStateType()) | liInstanceId) << 7) | liEffectId));
+    return lpEffect;
+}
+
+EffectBase* StateManager::CreateEffectObject(s32 liInstanceId, s32 liEffectId)
+{
+    return CreateEffectFromRegistry<EffectObject>(this, liInstanceId, liEffectId);
+}
+
+EffectBase* StateManager::CreateEffectControl(s32 liInstanceId, s32 liEffectId)
+{
+    return CreateEffectFromRegistry<EffectControl>(this, liInstanceId, liEffectId);
 }
 
 // ---------------------------------------------------------------------------
