@@ -17,8 +17,8 @@
 // cursor + the resolved path). Open claims a pool slot and stores the record there; Close returns
 // the slot. The op methods therefore receive a FileHandleRecord* (the resolved pool element),
 // matching the asm (`lwz r3, 8(r30)` reads the HANDLE at record+8). The Device base's
-// worker-dispatched virtuals take an int handle; here that int is the pool index — Open hands one
-// out, the op methods resolve it back through the pool to the FileHandleRecord by NAME.
+// worker-dispatched virtuals take the opaque native-width DeviceHandle; here it is the resolved
+// FileHandleRecord pointer itself, exactly matching the asm's direct record dereferences.
 //
 // LAYOUT NOTE (asm): the FileHandleRecord stride is 0x110 (272), proven by the pool's
 // GetObjectIndex divide-by-272 (@0x828EAE38) and Open's element write (`*(rec+8)=HANDLE`,
@@ -69,21 +69,25 @@ namespace CgsFileSystem
         // extent is a placeholder, the bodies are capacity-driven through the pool).
         static const s32 KI_MAX_OPEN_FILES = 256;
 
-        // ---- worker-dispatched ops (Device base vtable order; int handle == pool index) ----
+        // ---- worker-dispatched ops (Device base vtable order) ----
         int Connect() override;                                                                  // Init @0x828DE998 (debug trace)
-        int Open(const char* lpcPath, int liMode, int* lpiOutHandle) override;                   // @0x828F9728
-        int Close(int liHandle) override;                                                        // @0x828F9D90
-        int Read(int liHandle, u64 lu64Offset, u32 luSize, void* lpBuffer, int* lpiOutResult) override;  // @0x828DE9F0
-        int Seek(int liHandle, u64 lu64Offset, int* lpiOutResult) override;                      // @0x828DEB98
+        int Open(const char* lpcPath, u32 luMode, Handle::DeviceHandle* lppOutHandle) override; // @0x828F9728
+        int Close(Handle::DeviceHandle lpHandle) override;                                      // @0x828F9D90
+        int Read(Handle::DeviceHandle lpHandle, void* lpBuffer, u32 luSize,
+                 u32* lpuOutResult) override;                                                    // @0x828DE9F0
+        int Seek(Handle::DeviceHandle lpHandle, u64 lu64Offset,
+                 u64* lpu64OutPosition) override;                                                // @0x828DEB98
 
         // ---- directory enumeration (Device base directory virtuals) ----
-        int OpenDirectory(const char* lpcPath, void* lpEntryBuffer, int liMaxEntries, int* lpiOutCount, int* lpiOutHandle) override; // @0x828F9E40
-        int CloseDirectory(int liHandle) override;                                               // @0x828FA8B0
-        int ReadDirectory(int liHandle, void* lpEntryBuffer, int liMaxEntries, int* lpiOutCount) override; // @0x828DEC30
+        int OpenDirectory(const char* lpcPath, void* lpEntryBuffer, u32 luMaxEntries,
+                          u32* lpuOutCount, Handle::DeviceHandle* lppOutHandle) override;          // @0x828F9E40
+        int CloseDirectory(Handle::DeviceHandle lpHandle) override;                              // @0x828FA8B0
+        int ReadDirectory(Handle::DeviceHandle lpHandle, void* lpEntryBuffer, u32 luMaxEntries,
+                          u32* lpuOutCount) override;                                             // @0x828DEC30
 
     private:
-        // Embedded handle pool (this+16; byte-indexed, element stride 0x110). Resolves an int
-        // handle to its FileHandleRecord and recovers a record's index for Close/CloseDirectory.
+        // Embedded handle pool (this+16; byte-indexed, element stride 0x110). The opaque handle
+        // is a live FileHandleRecord*; Close/CloseDirectory recover its index when returning it.
         CgsContainers::IndexedPool<FileHandleRecord, KI_MAX_OPEN_FILES, s8> mHandlePool;  // X360 this+0x10
     };
 

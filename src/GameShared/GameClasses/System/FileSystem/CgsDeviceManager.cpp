@@ -139,6 +139,156 @@ namespace CgsFileSystem
         return true;
     }
 
+    // Open @0x828F11B8. Resolve the optional "prefix:" selector (or prepend the configured
+    // default path), retain the selected logical device in the operation, and enqueue it on
+    // the root physical device's worker queue.
+    void DeviceManager::Open(const char* lpcFileName, u32 luFlags,
+                             AsyncCompletionCallback lpfCallback, void* lpContext,
+                             s32 liPriority)
+    {
+        CGS_ASSERT(lpcFileName != nullptr, "File name required\n");
+
+        const char* lpcColon = strchr(lpcFileName, ':');
+        if (!lpcColon)
+        {
+            char lacFullPath[256];
+            const size_t luDefaultLength = strlen(macDefaultPath);
+            const size_t luNameLength = strlen(lpcFileName);
+            CGS_ASSERT(luDefaultLength + luNameLength < sizeof(lacFullPath) - 1,
+                       "Default path and file name are too long\n");
+            memcpy(lacFullPath, macDefaultPath, luDefaultLength);
+            memcpy(lacFullPath + luDefaultLength, lpcFileName, luNameLength + 1);
+            Open(lacFullPath, luFlags, lpfCallback, lpContext, liPriority);
+            return;
+        }
+
+        mDeviceListFutex.Lock();
+
+        const size_t luNameLength = strlen(lpcFileName);
+        CGS_ASSERT(luNameLength < 256, "File name is too long\n");
+
+        char lacFileName[256];
+        memcpy(lacFileName, lpcFileName, luNameLength + 1);
+
+        const size_t luPrefixLength = static_cast<size_t>(lpcColon - lpcFileName);
+        lacFileName[luPrefixLength] = 0;
+        Device* lpDevice = FindDevice(lacFileName);
+        CGS_ASSERT(lpDevice != nullptr, "Could not find device\n");
+
+        Device* lpPhysicalDevice = lpDevice ? lpDevice->GetPhysicalParent() : nullptr;
+        s32 liDeviceIndex = 0;
+        while (liDeviceIndex < KI_MAX_PHYSICAL_DEVICES &&
+               maPhysicalDevices[liDeviceIndex].mpDevice != lpPhysicalDevice)
+            ++liDeviceIndex;
+        CGS_ASSERT(liDeviceIndex < KI_MAX_PHYSICAL_DEVICES,
+                   "Could not find physical device\n");
+
+        if (lpDevice && liDeviceIndex < KI_MAX_PHYSICAL_DEVICES)
+        {
+            Operation lOperation = {};
+            lOperation.miType = E_OP_OPEN;
+            strncpy(lOperation.macPath, lacFileName + luPrefixLength + 1,
+                    sizeof(lOperation.macPath) - 1);
+            lOperation.macPath[sizeof(lOperation.macPath) - 1] = 0;
+            lOperation.muFlags = luFlags;
+            lOperation.mHandle = Handle::Make(lpDevice, nullptr);
+            lOperation.mpfCallback = lpfCallback;
+            lOperation.mpContext = lpContext;
+            lOperation.miPriority = liPriority;
+            maPhysicalDevices[liDeviceIndex].mOperations.AddOperation(&lOperation);
+        }
+
+        mDeviceListFutex.Unlock();
+    }
+
+    // Read/Write/Close @0x828F1AA0/0x828F1BF8/0x828F1D58. The compound Handle selects
+    // both the logical device receiving the op and the physical queue that services it.
+    void DeviceManager::Read(Handle lHandle, u64 luPosition, void* lpBuffer, u32 luBufferSize,
+                             AsyncCompletionCallback lpfCallback, void* lpContext,
+                             s32 liPriority)
+    {
+        mDeviceListFutex.Lock();
+        Device* lpDevice = lHandle.GetDevice();
+        Device* lpPhysicalDevice = lpDevice ? lpDevice->GetPhysicalParent() : nullptr;
+        s32 liDeviceIndex = 0;
+        while (liDeviceIndex < KI_MAX_PHYSICAL_DEVICES &&
+               maPhysicalDevices[liDeviceIndex].mpDevice != lpPhysicalDevice)
+            ++liDeviceIndex;
+        CGS_ASSERT(liDeviceIndex < KI_MAX_PHYSICAL_DEVICES,
+                   "Could not find physical device\n");
+
+        if (lpDevice && liDeviceIndex < KI_MAX_PHYSICAL_DEVICES)
+        {
+            Operation lOperation = {};
+            lOperation.miType = E_OP_READ;
+            lOperation.mHandle = lHandle;
+            lOperation.mu64Offset = luPosition;
+            lOperation.muSize = luBufferSize;
+            lOperation.mpReadBuffer = lpBuffer;
+            lOperation.mpfCallback = lpfCallback;
+            lOperation.mpContext = lpContext;
+            lOperation.miPriority = liPriority;
+            maPhysicalDevices[liDeviceIndex].mOperations.AddOperation(&lOperation);
+        }
+        mDeviceListFutex.Unlock();
+    }
+
+    void DeviceManager::Write(Handle lHandle, u64 luPosition, const void* lpBuffer, u32 luBufferSize,
+                              AsyncCompletionCallback lpfCallback, void* lpContext,
+                              s32 liPriority)
+    {
+        mDeviceListFutex.Lock();
+        Device* lpDevice = lHandle.GetDevice();
+        Device* lpPhysicalDevice = lpDevice ? lpDevice->GetPhysicalParent() : nullptr;
+        s32 liDeviceIndex = 0;
+        while (liDeviceIndex < KI_MAX_PHYSICAL_DEVICES &&
+               maPhysicalDevices[liDeviceIndex].mpDevice != lpPhysicalDevice)
+            ++liDeviceIndex;
+        CGS_ASSERT(liDeviceIndex < KI_MAX_PHYSICAL_DEVICES,
+                   "Could not find physical device\n");
+
+        if (lpDevice && liDeviceIndex < KI_MAX_PHYSICAL_DEVICES)
+        {
+            Operation lOperation = {};
+            lOperation.miType = E_OP_WRITE;
+            lOperation.mHandle = lHandle;
+            lOperation.mu64Offset = luPosition;
+            lOperation.muSize = luBufferSize;
+            lOperation.mpWriteBuffer = lpBuffer;
+            lOperation.mpfCallback = lpfCallback;
+            lOperation.mpContext = lpContext;
+            lOperation.miPriority = liPriority;
+            maPhysicalDevices[liDeviceIndex].mOperations.AddOperation(&lOperation);
+        }
+        mDeviceListFutex.Unlock();
+    }
+
+    void DeviceManager::Close(Handle lHandle, AsyncCompletionCallback lpfCallback,
+                              void* lpContext, s32 liPriority)
+    {
+        mDeviceListFutex.Lock();
+        Device* lpDevice = lHandle.GetDevice();
+        Device* lpPhysicalDevice = lpDevice ? lpDevice->GetPhysicalParent() : nullptr;
+        s32 liDeviceIndex = 0;
+        while (liDeviceIndex < KI_MAX_PHYSICAL_DEVICES &&
+               maPhysicalDevices[liDeviceIndex].mpDevice != lpPhysicalDevice)
+            ++liDeviceIndex;
+        CGS_ASSERT(liDeviceIndex < KI_MAX_PHYSICAL_DEVICES,
+                   "Could not find physical device\n");
+
+        if (lpDevice && liDeviceIndex < KI_MAX_PHYSICAL_DEVICES)
+        {
+            Operation lOperation = {};
+            lOperation.miType = E_OP_CLOSE;
+            lOperation.mHandle = lHandle;
+            lOperation.mpfCallback = lpfCallback;
+            lOperation.mpContext = lpContext;
+            lOperation.miPriority = liPriority;
+            maPhysicalDevices[liDeviceIndex].mOperations.AddOperation(&lOperation);
+        }
+        mDeviceListFutex.Unlock();
+    }
+
     // PhysicalDeviceThread @0x828F1EA8 — the per-physical-device worker. It drains the slot's
     // OperationPool (15ms poll-sleep when empty) and dispatches each op to the slot's device,
     // then fires the op's completion callback. The X360 dispatched by raw vtable byte-offset
@@ -162,66 +312,97 @@ namespace CgsFileSystem
                 EA::Thread::ThreadSleep(&luPollMs);
             }
 
-            Device* lpDevice = lOp.mpDevice;
+            Device* lpDevice = lOp.mHandle.GetDevice();
             switch (lOp.miType)
             {
             case E_OP_READ:
             {
-                int  liResult = 0;
-                char lacCheck[8] = { 0 };
-                if (lpDevice->CheckOp(lOp.miHandle, lOp.mu64Offset, lacCheck) == 0)
-                    lpDevice->Read(lOp.miHandle, lOp.mu64Offset, lOp.muSize, lOp.mpBuffer, &liResult);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liResult, lOp.mpContext);
+                u32 liResultSize = 0;
+                u64 lu64Position = 0;
+                int liResult = lpDevice->Seek(lOp.mHandle.GetDeviceHandle(), lOp.mu64Offset,
+                                              &lu64Position);
+                if (liResult == 0)
+                    liResult = lpDevice->Read(lOp.mHandle.GetDeviceHandle(), lOp.mpReadBuffer,
+                                              lOp.muSize, &liResultSize);
+                if (lOp.mpfCallback)
+                    lOp.mpfCallback(liResult, lOp.mHandle,
+                                    static_cast<u64>(liResultSize), lOp.mpContext);
                 break;
             }
             case E_OP_WRITE:
             {
-                int  liResult = 0;
-                char lacCheck[8] = { 0 };
-                if (lpDevice->CheckOp(lOp.miHandle, lOp.mu64Offset, lacCheck) == 0)
-                    lpDevice->Write(lOp.miHandle, lOp.mu64Offset, lOp.muSize, lOp.mpBuffer, &liResult);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liResult, lOp.mpContext);
+                u32 liResultSize = 0;
+                u64 lu64Position = 0;
+                int liResult = lpDevice->Seek(lOp.mHandle.GetDeviceHandle(), lOp.mu64Offset,
+                                              &lu64Position);
+                if (liResult == 0)
+                    liResult = lpDevice->Write(lOp.mHandle.GetDeviceHandle(), lOp.mpWriteBuffer,
+                                               lOp.muSize, &liResultSize);
+                if (lOp.mpfCallback)
+                    lOp.mpfCallback(liResult, lOp.mHandle,
+                                    static_cast<u64>(liResultSize), lOp.mpContext);
                 break;
             }
             case E_OP_OPEN:
             {
-                int liResult = 0;
-                lpDevice->Open(lOp.macPath, lOp.miHandle, &liResult);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liResult, lOp.mpContext);
+                Handle::DeviceHandle lpDeviceHandle = nullptr;
+                const int liResult = lpDevice->Open(lOp.macPath, lOp.muFlags, &lpDeviceHandle);
+                if (lOp.mpfCallback)
+                    lOp.mpfCallback(liResult, Handle::Make(lpDevice, lpDeviceHandle), 0,
+                                    lOp.mpContext);
                 break;
             }
             case E_OP_CLOSE:
-                lpDevice->Close(lOp.miHandle);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, 0, lOp.mpContext);
+            {
+                const int liResult = lpDevice->Close(lOp.mHandle.GetDeviceHandle());
+                Handle lClosedHandle;
+                lClosedHandle.Clear();
+                if (lOp.mpfCallback)
+                    lOp.mpfCallback(liResult, lClosedHandle, 0,
+                                    lOp.mpContext);
                 break;
+            }
             case E_OP_GETFILESIZE:
             {
                 u64 lu64Size = 0;
-                lpDevice->GetFileSize(lOp.miHandle, &lu64Size);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, static_cast<int>(lu64Size), lOp.mpContext);
+                const int liResult = lpDevice->GetFileSize(lOp.mHandle.GetDeviceHandle(), &lu64Size);
+                if (lOp.mpfCallback)
+                    lOp.mpfCallback(liResult, lOp.mHandle, lu64Size,
+                                    lOp.mpContext);
                 break;
             }
-            case E_OP_OPENEX:
+            case E_OP_OPEN_DIRECTORY:
             {
-                int liResult = 0, liC = 0;
-                lpDevice->OpenEx(lOp.macPath, lOp.muSize, static_cast<u32>(lOp.miHandle), &liC, &liResult);
-                // FLAG: ARTIST 0x828F1EA8 case 5 reports OpenEx's FIRST out-param (r7=&liC,
-                // sign-extended: `extsw r5, lwz var_1E8`) as the callback result, NOT the
-                // second out-param. (Was passing liResult, which is the wrong out value.)
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liC, lOp.mpContext);
+                u32 luCount = 0;
+                Handle::DeviceHandle lpDirectoryHandle = lOp.mHandle.GetDeviceHandle();
+                const int liResult = lpDevice->OpenDirectory(lOp.macPath, lOp.mpReadBuffer,
+                                                              lOp.muSize, &luCount,
+                                                              &lpDirectoryHandle);
+                if (lOp.mpfCallback)
+                    lOp.mpfCallback(liResult, Handle::Make(lpDevice, lpDirectoryHandle),
+                                    static_cast<u64>(luCount), lOp.mpContext);
                 break;
             }
-            case E_OP_SEEK:
+            case E_OP_READ_DIRECTORY:
             {
-                int liResult = 0;
-                lpDevice->Seek(lOp.miHandle, lOp.mu64Offset, &liResult);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liResult, lOp.mpContext);
+                u32 luCount = 0;
+                const int liResult = lpDevice->ReadDirectory(lOp.mHandle.GetDeviceHandle(),
+                                                              lOp.mpReadBuffer, lOp.muSize,
+                                                              &luCount);
+                if (lOp.mpfCallback)
+                    lOp.mpfCallback(liResult, lOp.mHandle, static_cast<u64>(luCount),
+                                    lOp.mpContext);
                 break;
             }
-            case E_OP_OP7:
-                lpDevice->Op7(lOp.miHandle);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, 0, lOp.mpContext);
+            case E_OP_CLOSE_DIRECTORY:
+            {
+                const int liResult = lpDevice->CloseDirectory(lOp.mHandle.GetDeviceHandle());
+                Handle lClosedHandle;
+                lClosedHandle.Clear();
+                if (lOp.mpfCallback)
+                    lOp.mpfCallback(liResult, lClosedHandle, 0, lOp.mpContext);
                 break;
+            }
             case E_OP_DISCONNECT:
                 lpDevice->Connect();   // X360 op8 -> vtable[0] (no completion callback)
                 break;
@@ -243,15 +424,17 @@ namespace CgsFileSystem
         struct SyncCompletion
         {
             EA::Thread::Semaphore* mpDone;
-            int                    miResult;
-            int                    miHandle;
+            s32                    miResult;
+            Handle                 mHandle;
+            u64                    muSize;
         };
 
-        void SyncOpCallback(Device* /*lpDevice*/, s32 liHandle, s32 liResult, void* lpContext)
+        void SyncOpCallback(s32 liResult, Handle lHandle, u64 luSize, void* lpContext)
         {
             SyncCompletion* lpComp = static_cast<SyncCompletion*>(lpContext);
             lpComp->miResult = liResult;
-            lpComp->miHandle = liHandle;
+            lpComp->mHandle  = lHandle;
+            lpComp->muSize   = luSize;
             lpComp->mpDone->Post(1);
         }
 
@@ -284,44 +467,43 @@ namespace CgsFileSystem
         SyncCompletion lComp;
         lComp.mpDone   = &lDone;
         lComp.miResult = 0;
-        lComp.miHandle = -1;
+        lComp.mHandle.Clear();
+        lComp.muSize   = 0;
         const u32 luWaitForever = 0xFFFFFFFFu;
 
         // OPEN (read mode == 1). The worker delivers the file handle in the callback's result.
         Operation lOp;
         memset(&lOp, 0, sizeof(lOp));
         lOp.miType   = E_OP_OPEN;
-        lOp.mpDevice = lpDevice;
+        lOp.mHandle = Handle::Make(lpDevice, nullptr);
         strncpy(lOp.macPath, lpcPath, sizeof(lOp.macPath) - 1);
         lOp.macPath[sizeof(lOp.macPath) - 1] = 0;
-        lOp.miHandle    = 1;
+        lOp.muFlags     = 1;
         lOp.mpfCallback = SyncOpCallback;
         lOp.mpContext   = &lComp;
         lpPool->AddOperation(&lOp);
         lDone.Wait(&luWaitForever);
-        const int liHandle = lComp.miResult;
-        if (liHandle < 0)
+        const Handle lHandle = lComp.mHandle;
+        if (lComp.miResult != 0 || lHandle.IsNull())
             return -1;
 
         // READ the first luMaxSize bytes.
         memset(&lOp, 0, sizeof(lOp));
         lOp.miType     = E_OP_READ;
-        lOp.mpDevice   = lpDevice;
-        lOp.miHandle   = liHandle;
+        lOp.mHandle    = lHandle;
         lOp.mu64Offset = 0;
         lOp.muSize     = luMaxSize;
-        lOp.mpBuffer   = lpBuffer;
+        lOp.mpReadBuffer = lpBuffer;
         lOp.mpfCallback = SyncOpCallback;
         lOp.mpContext   = &lComp;
         lpPool->AddOperation(&lOp);
         lDone.Wait(&luWaitForever);
-        const int liBytes = lComp.miResult;
+        const int liBytes = lComp.miResult == 0 ? static_cast<int>(lComp.muSize) : -1;
 
         // CLOSE.
         memset(&lOp, 0, sizeof(lOp));
         lOp.miType      = E_OP_CLOSE;
-        lOp.mpDevice    = lpDevice;
-        lOp.miHandle    = liHandle;
+        lOp.mHandle     = lHandle;
         lOp.mpfCallback = SyncOpCallback;
         lOp.mpContext   = &lComp;
         lpPool->AddOperation(&lOp);
@@ -348,27 +530,29 @@ namespace CgsFileSystem
         SyncCompletion lComp;
         lComp.mpDone   = &lDone;
         lComp.miResult = 0;
-        lComp.miHandle = -1;
+        lComp.mHandle.Clear();
+        lComp.muSize   = 0;
 
         Operation lOp;
 
         // OPEN (read mode == 1). The worker delivers the file handle in the callback's result.
         memset(&lOp, 0, sizeof(lOp));
         lOp.miType   = E_OP_OPEN;
-        lOp.mpDevice = lpDevice;
+        lOp.mHandle = Handle::Make(lpDevice, nullptr);
         strncpy(lOp.macPath, lpcPath, sizeof(lOp.macPath) - 1);
         lOp.macPath[sizeof(lOp.macPath) - 1] = 0;
-        lOp.miHandle = 1;
-        const int liHandle = EnqueueAndWait(lpPool, &lOp, &lComp);
-        if (liHandle < 0)
+        lOp.muFlags = 1;
+        const int liOpenResult = EnqueueAndWait(lpPool, &lOp, &lComp);
+        const Handle lHandle = lComp.mHandle;
+        if (liOpenResult != 0 || lHandle.IsNull())
             return nullptr;
 
         // GETFILESIZE (the worker passes the size as the callback result).
         memset(&lOp, 0, sizeof(lOp));
         lOp.miType   = E_OP_GETFILESIZE;
-        lOp.mpDevice = lpDevice;
-        lOp.miHandle = liHandle;
-        const int liSize = EnqueueAndWait(lpPool, &lOp, &lComp);
+        lOp.mHandle = lHandle;
+        const int liSizeResult = EnqueueAndWait(lpPool, &lOp, &lComp);
+        const int liSize = liSizeResult == 0 ? static_cast<int>(lComp.muSize) : -1;
 
         void* lpBuffer = nullptr;
         u32   luBytes  = 0;
@@ -380,12 +564,12 @@ namespace CgsFileSystem
                 // READ the whole file.
                 memset(&lOp, 0, sizeof(lOp));
                 lOp.miType     = E_OP_READ;
-                lOp.mpDevice   = lpDevice;
-                lOp.miHandle   = liHandle;
+        lOp.mHandle    = lHandle;
                 lOp.mu64Offset = 0;
                 lOp.muSize     = static_cast<u32>(liSize);
-                lOp.mpBuffer   = lpBuffer;
-                const int liRead = EnqueueAndWait(lpPool, &lOp, &lComp);
+        lOp.mpReadBuffer = lpBuffer;
+                const int liReadResult = EnqueueAndWait(lpPool, &lOp, &lComp);
+                const int liRead = liReadResult == 0 ? static_cast<int>(lComp.muSize) : -1;
                 if (liRead == liSize)
                 {
                     luBytes = static_cast<u32>(liSize);
@@ -401,8 +585,7 @@ namespace CgsFileSystem
         // CLOSE.
         memset(&lOp, 0, sizeof(lOp));
         lOp.miType   = E_OP_CLOSE;
-        lOp.mpDevice = lpDevice;
-        lOp.miHandle = liHandle;
+        lOp.mHandle = lHandle;
         EnqueueAndWait(lpPool, &lOp, &lComp);
 
         if (lpBuffer && lpuOutSize)

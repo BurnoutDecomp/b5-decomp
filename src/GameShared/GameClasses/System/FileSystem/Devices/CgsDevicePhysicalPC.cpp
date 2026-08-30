@@ -3,8 +3,8 @@
 // The X360 PhysicalX360Device used the XDK CreateFileA/ReadFile against the DVD/HDD; this is
 // the host-API reconstruction of that leaf. The async machinery above it (DeviceManager
 // OperationPool + per-device worker thread) is the faithful X360 engine — these methods run ON
-// the device's worker thread and perform the actual byte transfer. The integer file handle the
-// worker passes is this device's handle-table index (Open hands one out; Read/Close use it).
+// the device's worker thread and perform the actual byte transfer. DeviceHandle is the native-
+// width opaque Win32 HANDLE itself; the table below exists only for validation and shutdown.
 
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevicePhysicalPC.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -26,11 +26,12 @@ namespace CgsFileSystem
         Shutdown();
     }
 
-    void* DevicePhysicalPC::HandleFor(int liHandle) const
+    void* DevicePhysicalPC::HandleFor(Handle::DeviceHandle lpHandle) const
     {
-        if (liHandle < 0 || liHandle >= KI_MAX_OPEN_FILES)
-            return INVALID_HANDLE_VALUE;
-        return mapHandles[liHandle];
+        for (int liIndex = 0; liIndex < KI_MAX_OPEN_FILES; ++liIndex)
+            if (mapHandles[liIndex] == lpHandle)
+                return lpHandle;
+        return INVALID_HANDLE_VALUE;
     }
 
     // Worker-start hook: nothing to bring up for a Win32 file device.
@@ -39,88 +40,87 @@ namespace CgsFileSystem
         return 0;
     }
 
-    // Open: claim a free table slot, CreateFileA, hand back the slot index in *lpiOutHandle
-    // (the worker forwards that to the op's completion callback as the file handle).
-    int DevicePhysicalPC::Open(const char* lpcPath, int liMode, int* lpiOutHandle)
+    // Open: claim a tracking slot, CreateFileA, and return the native HANDLE through the opaque
+    // DeviceHandle out-param. The operation status is independently returned as zero on success.
+    int DevicePhysicalPC::Open(const char* lpcPath, u32 luMode, Handle::DeviceHandle* lppOutHandle)
     {
         int liSlot = -1;
         for (int liIndex = 0; liIndex < KI_MAX_OPEN_FILES; ++liIndex)
             if (mapHandles[liIndex] == INVALID_HANDLE_VALUE) { liSlot = liIndex; break; }
         if (liSlot < 0)
         {
-            if (lpiOutHandle) *lpiOutHandle = -1;
+            if (lppOutHandle) *lppOutHandle = nullptr;
             return -1;
         }
 
-        // liMode follows FileAccess (CgsFile.h): 2 == WRITE, else READ.
-        const DWORD ldwAccess = (liMode == 2) ? GENERIC_WRITE : GENERIC_READ;
+        // luMode follows FileAccess (CgsFile.h): 2 == WRITE, else READ.
+        const DWORD ldwAccess = (luMode == 2) ? GENERIC_WRITE : GENERIC_READ;
         const DWORD ldwShare  = FILE_SHARE_READ;
-        const DWORD ldwDisp   = (liMode == 2) ? CREATE_ALWAYS : OPEN_EXISTING;
+        const DWORD ldwDisp   = (luMode == 2) ? CREATE_ALWAYS : OPEN_EXISTING;
 
         HANDLE lhFile = CreateFileA(lpcPath, ldwAccess, ldwShare, NULL, ldwDisp, FILE_ATTRIBUTE_NORMAL, NULL);
         if (lhFile == INVALID_HANDLE_VALUE)
         {
-            if (lpiOutHandle) *lpiOutHandle = -1;
+            if (lppOutHandle) *lppOutHandle = nullptr;
             return -1;
         }
 
         mapHandles[liSlot] = lhFile;
-        if (lpiOutHandle) *lpiOutHandle = liSlot;
-        return liSlot;
+        if (lppOutHandle) *lppOutHandle = lhFile;
+        return 0;
     }
 
-    int DevicePhysicalPC::Close(int liHandle)
+    int DevicePhysicalPC::Close(Handle::DeviceHandle lpHandle)
     {
-        HANDLE lhFile = HandleFor(liHandle);
+        HANDLE lhFile = HandleFor(lpHandle);
         if (lhFile != INVALID_HANDLE_VALUE)
         {
             CloseHandle(lhFile);
-            mapHandles[liHandle] = INVALID_HANDLE_VALUE;
+            for (int liIndex = 0; liIndex < KI_MAX_OPEN_FILES; ++liIndex)
+                if (mapHandles[liIndex] == lpHandle)
+                {
+                    mapHandles[liIndex] = INVALID_HANDLE_VALUE;
+                    break;
+                }
         }
         return 0;
     }
 
-    int DevicePhysicalPC::Read(int liHandle, u64 lu64Offset, u32 luSize, void* lpBuffer, int* lpiOutResult)
+    int DevicePhysicalPC::Read(Handle::DeviceHandle lpHandle, void* lpBuffer, u32 luSize,
+                               u32* lpuOutResult)
     {
-        HANDLE lhFile = HandleFor(liHandle);
+        HANDLE lhFile = HandleFor(lpHandle);
         if (lhFile == INVALID_HANDLE_VALUE)
         {
-            if (lpiOutResult) *lpiOutResult = -1;
+            if (lpuOutResult) *lpuOutResult = 0;
             return -1;
         }
-
-        LARGE_INTEGER lPos;
-        lPos.QuadPart = static_cast<LONGLONG>(lu64Offset);
-        SetFilePointerEx(lhFile, lPos, NULL, FILE_BEGIN);
 
         DWORD ldwRead = 0;
         const BOOL lbOk = ReadFile(lhFile, lpBuffer, luSize, &ldwRead, NULL);
-        if (lpiOutResult) *lpiOutResult = static_cast<int>(ldwRead);
+        if (lpuOutResult) *lpuOutResult = static_cast<u32>(ldwRead);
         return lbOk ? 0 : -1;
     }
 
-    int DevicePhysicalPC::Write(int liHandle, u64 lu64Offset, u32 luSize, const void* lpBuffer, int* lpiOutResult)
+    int DevicePhysicalPC::Write(Handle::DeviceHandle lpHandle, const void* lpBuffer, u32 luSize,
+                                u32* lpuOutResult)
     {
-        HANDLE lhFile = HandleFor(liHandle);
+        HANDLE lhFile = HandleFor(lpHandle);
         if (lhFile == INVALID_HANDLE_VALUE)
         {
-            if (lpiOutResult) *lpiOutResult = -1;
+            if (lpuOutResult) *lpuOutResult = 0;
             return -1;
         }
 
-        LARGE_INTEGER lPos;
-        lPos.QuadPart = static_cast<LONGLONG>(lu64Offset);
-        SetFilePointerEx(lhFile, lPos, NULL, FILE_BEGIN);
-
         DWORD ldwWritten = 0;
         const BOOL lbOk = WriteFile(lhFile, lpBuffer, luSize, &ldwWritten, NULL);
-        if (lpiOutResult) *lpiOutResult = static_cast<int>(ldwWritten);
+        if (lpuOutResult) *lpuOutResult = static_cast<u32>(ldwWritten);
         return lbOk ? 0 : -1;
     }
 
-    int DevicePhysicalPC::GetFileSize(int liHandle, u64* lpu64OutSize)
+    int DevicePhysicalPC::GetFileSize(Handle::DeviceHandle lpHandle, u64* lpu64OutSize)
     {
-        HANDLE lhFile = HandleFor(liHandle);
+        HANDLE lhFile = HandleFor(lpHandle);
         if (lhFile == INVALID_HANDLE_VALUE)
             return -1;
 
@@ -131,12 +131,13 @@ namespace CgsFileSystem
         return 0;
     }
 
-    int DevicePhysicalPC::Seek(int liHandle, u64 lu64Offset, int* lpiOutResult)
+    int DevicePhysicalPC::Seek(Handle::DeviceHandle lpHandle, u64 lu64Offset,
+                               u64* lpu64OutPosition)
     {
-        HANDLE lhFile = HandleFor(liHandle);
+        HANDLE lhFile = HandleFor(lpHandle);
         if (lhFile == INVALID_HANDLE_VALUE)
         {
-            if (lpiOutResult) *lpiOutResult = -1;
+            if (lpu64OutPosition) *lpu64OutPosition = 0;
             return -1;
         }
 
@@ -144,10 +145,10 @@ namespace CgsFileSystem
         lPos.QuadPart = static_cast<LONGLONG>(lu64Offset);
         if (!SetFilePointerEx(lhFile, lPos, &lNew, FILE_BEGIN))
         {
-            if (lpiOutResult) *lpiOutResult = -1;
+            if (lpu64OutPosition) *lpu64OutPosition = 0;
             return -1;
         }
-        if (lpiOutResult) *lpiOutResult = static_cast<int>(lNew.QuadPart);
+        if (lpu64OutPosition) *lpu64OutPosition = static_cast<u64>(lNew.QuadPart);
         return 0;
     }
 

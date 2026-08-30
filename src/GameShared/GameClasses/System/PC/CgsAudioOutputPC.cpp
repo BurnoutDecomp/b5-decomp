@@ -187,9 +187,15 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
         Close();
         return false;
     }
-    if (FAILED(g_pXAudio2->CreateMasteringVoice(&g_pMaster, liChannels, liSampleRate)))
+    const HRESULT lMasterResult =
+        g_pXAudio2->CreateMasteringVoice(&g_pMaster, liChannels, liSampleRate);
+    if (FAILED(lMasterResult))
     {
-        AUDIO_LOG << "[Audio] CreateMasteringVoice failed -- running muted\n";
+        char lacResult[16];
+        sprintf_s(lacResult, "0x%08X", static_cast<unsigned>(lMasterResult));
+        AUDIO_LOG << "[Audio] CreateMasteringVoice failed (" << lacResult
+                  << ", " << liSampleRate << " Hz, " << liChannels
+                  << " ch) -- running muted\n";
         Close();
         return false;
     }

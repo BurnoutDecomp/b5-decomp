@@ -23,6 +23,7 @@
 // carries mpfErrorCallback (set by DeviceManager::AddPhysicalDevice). Members are by name.
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/FileSystem/CgsDeviceOperation.h"
 
 namespace CgsFileSystem
 {
@@ -33,21 +34,21 @@ namespace CgsFileSystem
     class Device
     {
     public:
+        Device() : mpParent(nullptr), mpfErrorCallback(nullptr) {}
         virtual ~Device() {}
 
         // ---- the worker-dispatched async op interface (X360 vtable order) -------------
         // Base defaults are "Not implemented" (assert + -2); concrete devices override.
         virtual int Connect();                                                       // op8 + worker start
-        virtual int Open(const char* lpcPath, int liMode, int* lpiOutHandle);        // op2
-        virtual int Close(int liHandle);                                             // op3
-        virtual int Read(int liHandle, u64 lu64Offset, u32 luSize, void* lpBuffer, int* lpiOutResult);        // op0
-        virtual int Write(int liHandle, u64 lu64Offset, u32 luSize, const void* lpBuffer, int* lpiOutResult); // op1
-        virtual int CheckOp(int liHandle, u64 lu64Offset, void* lpOut);              // op0/op1 pre-check
-        virtual int GetFileSize(int liHandle, u64* lpu64OutSize);                    // op4
-        virtual int OpenEx(const char* lpcPath, u32 luA, u32 luB, int* lpiOutC, int* lpiOutResult); // op5
-        virtual int Op7(int liHandle);                                              // op7
-        virtual int Seek(int liHandle, u64 lu64Offset, int* lpiOutResult);          // op6
-        virtual int Shutdown();                                                     // op9
+        virtual int Open(const char* lpcPath, u32 luMode, Handle::DeviceHandle* lppOutHandle); // op2
+        virtual int Close(Handle::DeviceHandle lpHandle);                            // op3
+        virtual int Read(Handle::DeviceHandle lpHandle, void* lpBuffer, u32 luSize,
+                         u32* lpuOutResult);                                          // op0
+        virtual int Write(Handle::DeviceHandle lpHandle, const void* lpBuffer, u32 luSize,
+                          u32* lpuOutResult);                                         // op1
+        virtual int Seek(Handle::DeviceHandle lpHandle, u64 lu64Offset,
+                         u64* lpu64OutPosition);                                      // op0/op1 pre-seek
+        virtual int GetFileSize(Handle::DeviceHandle lpHandle, u64* lpu64OutSize);   // op4
 
         // ---- directory enumeration interface (X360 base defaults @0x828DDEE0/F70/000) ----
         // Not part of the worker async-op opcode table; the directory subsystem calls these on
@@ -55,9 +56,12 @@ namespace CgsFileSystem
         // concrete devices that can walk a directory (the physical disc device) override them.
         // luMaxEntries is the caller's entry-buffer capacity; *lpiOutCount returns how many were
         // written. lpiOutHandle (Open) yields a find-handle Read/CloseDirectory then use.
-        virtual int OpenDirectory(const char* lpcPath, void* lpEntryBuffer, int liMaxEntries, int* lpiOutCount, int* lpiOutHandle);
-        virtual int CloseDirectory(int liHandle);
-        virtual int ReadDirectory(int liHandle, void* lpEntryBuffer, int liMaxEntries, int* lpiOutCount);
+        virtual int OpenDirectory(const char* lpcPath, void* lpEntryBuffer, u32 luMaxEntries,
+                                  u32* lpuOutCount, Handle::DeviceHandle* lppOutHandle); // op5
+        virtual int CloseDirectory(Handle::DeviceHandle lpHandle);                    // op7
+        virtual int ReadDirectory(Handle::DeviceHandle lpHandle, void* lpEntryBuffer,
+                                  u32 luMaxEntries, u32* lpuOutCount);                 // op6
+        virtual int Shutdown();                                                       // op9
 
         // ---- non-virtual helpers ----
         // @0x828D65F0. If an error callback is registered, invoke it with liError and remember
@@ -69,7 +73,21 @@ namespace CgsFileSystem
         // = callback, *(dev+4) = 0).
         void SetErrorCallback(ErrorCallback lpfErrorCallback) { mpfErrorCallback = lpfErrorCallback; }
 
+        // CgsDevice.h:113/127 (DecFIGS). Virtual devices form a short parent chain;
+        // DeviceManager queues their work on the root physical device's worker while retaining
+        // the logical device in Handle so its overrides still receive the operation.
+        Device* GetParent() const { return mpParent; }
+        Device* GetPhysicalParent()
+        {
+            Device* lpPhysical = this;
+            while (lpPhysical->mpParent)
+                lpPhysical = lpPhysical->mpParent;
+            return lpPhysical;
+        }
+        void SetParent(Device* lpParent) { mpParent = lpParent; }
+
     protected:
+        Device*       mpParent;         // X360 this+4 (32-bit build)
         ErrorCallback mpfErrorCallback;  // asm 8(this) in CallErrorCallback; 0 when none installed
     };
 

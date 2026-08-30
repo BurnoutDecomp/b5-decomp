@@ -17,6 +17,7 @@
 // the array by value and reaches members BY NAME), so the follow-on layout is free to land.
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/FileSystem/CgsDeviceOperation.h"
 // Committed vendor Futex: CRITICAL_SECTION-backed fast mutex.
 #include "eathread/eathread_futex.h"
 
@@ -34,11 +35,6 @@ namespace CgsFileSystem
 
     class FileSystem;
     class FileLog;
-
-    // The async device file handle (X360 CgsDeviceManager Handle). Identical to the typedef in
-    // CgsDeviceManager.h; declared here too so the stream can store/pass it without pulling in the
-    // whole DeviceManager header (a repeated identical typedef is legal in the same namespace).
-    typedef s32 Handle;
 
     // ---- DWARF CgsStreamDeviceDiskRead.h:99 ----
     // One entry of the read-stream's block ring: where in the file it maps, how much has been

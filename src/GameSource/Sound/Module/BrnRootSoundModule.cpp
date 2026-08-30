@@ -55,7 +55,9 @@ namespace
     struct RwacCoreAllocatorBridge : public EA::Allocator::ICoreAllocator
     {
         explicit RwacCoreAllocatorBridge(CgsSound::TestBed::Allocator* lpTestBed)
-            : mpTestBed(lpTestBed) {}
+            : mpTestBed(lpTestBed)
+            , muSuccessfulBytes(0)
+            , muSuccessfulAllocations(0) {}
 
         virtual void* Alloc(size_t nSize, const char* pName, unsigned int nFlags)
         {
@@ -76,7 +78,26 @@ namespace
 
             rw::IResourceAllocator* lpBase = mpTestBed;   // the tracked DoAllocate path
             rw::Resource lResource = lpBase->DoAllocate(lDescriptor, pName ? pName : "Rwac");
-            return lResource.m_baseResources[0];
+            void* lpBlock = lResource.m_baseResources[0];
+            if (lpBlock)
+            {
+                muSuccessfulBytes += nSize;
+                ++muSuccessfulAllocations;
+            }
+            else
+            {
+                // Host bring-up diagnostic: the PC/x64 forms of the RWAC objects are
+                // wider than their X360 counterparts, while the memory-map capacity is
+                // still the retail 32-bit value. Keep the failed request observable so
+                // a capacity correction remains measured instead of guessed.
+                *CgsDev::Log::gpDebugPrint
+                    << "[rwac] allocation FAILED: "
+                    << static_cast<u64>(nSize) << " bytes for "
+                    << (pName ? pName : "Rwac") << " after "
+                    << static_cast<u64>(muSuccessfulBytes) << " bytes in "
+                    << static_cast<u64>(muSuccessfulAllocations) << " allocations\n";
+            }
+            return lpBlock;
         }
 
         virtual void Free(void* lpBlock, size_t /*nSize*/)
@@ -86,6 +107,8 @@ namespace
         }
 
         CgsSound::TestBed::Allocator* mpTestBed;
+        size_t muSuccessfulBytes;
+        size_t muSuccessfulAllocations;
     };
 
     RwacCoreAllocatorBridge gRwacCoreBridge(&gRwacTestBedAlloc);
