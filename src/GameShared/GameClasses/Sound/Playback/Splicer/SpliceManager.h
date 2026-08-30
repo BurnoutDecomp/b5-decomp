@@ -170,6 +170,14 @@ struct SpliceManager
     // only; own ledger func -- de-inlined call site in ~SpliceBankStatistics).
     void  Free( void* lpMemory );
 
+    // Fill a MONO (voice, plug-in-chain) pair -- the four-stage splice chain.
+    // ⭐ ADDED 2026-08-29: the header declared only the stereo builder, but the DWARF
+    // (SpliceManager.h:191-192) and the X360 both carry this one too; the constructor's
+    // staging loop calls it auMonoVoiceCount times (@0x826C329C). Signature confirmed by
+    // the DWARF and by the X360's use of r4 as the output pair (@0x826A3300/0x826A330C):
+    // a member void function taking only the implicit this and the output pair.
+    void  CreateMonoVoice( VoicePluginPair* apOutPair );
+
     // Fill a stereo (voice, plug-in-chain) pair for a splice sample that could not be
     // served from the stereo pool -- the dynamic-voice fallback path. @ own ledger func;
     // called by StereoSpliceSample::StartVoice (r3=this, r4=&sample->mDynamicVoicePluginPair).

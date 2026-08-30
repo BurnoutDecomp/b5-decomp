@@ -1,7 +1,8 @@
 #include "GameShared/GameClasses/Sound/Playback/Splicer/SpliceManager.h"
 
-#include "rw/audio/core/Voice.h"   // rw::audio::core::Voice::Release
+#include "rw/audio/core/Voice.h"   // rw::audio::core::Voice::CreateInstance / Release + VoiceStageConfig
 #include "rw/audio/core/PlugIn.h"  // System::GetPlugInRegistry / PlugInRegistry::GetPlugInHandle
+#include "rw/audio/core/plugins/SndPlayer1.h" // SndPlayer1::ConstructorParams (stage 0's context)
 #include "rw/rwcore_structs.h"     // rw::IResourceAllocator / BaseResourceDescriptors (Allocate)
 #include "GameShared/GameClasses/Sound/Playback/CgsEnvironment.h"           // Environment::GetAllocator
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GetDefaultRwacSystem + RwacLock
@@ -75,20 +76,8 @@ void* SpliceManager::Allocate( u32 luSize, const char* lpcTag )
 // (+0x610), the environment saved (+0x6C4), the global published (off_82FFB9F0),
 // then -- with the global system locked -- the four plug-in handle lookups
 // ('SnP1' +0x6B4, 'Rsp0' +0x6B8, 'Sen0' +0x6C0 stored BEFORE 'Pn21' +0x6BC,
-// exactly the asm's non-monotonic order), the two pool count words zeroed, the
-// voice staging, and the two pool Prepares.
-//
-// FLAG [the voice staging is DEFERRED]: the console builds auMonoVoiceCount
-// four-stage pairs via CreateMonoVoice (stage configs {&1.0f (flt_82001C98),
-// 'SnP1', 1ch} {0,'Rsp0',1} {0,'Pn21',6} {0,'Sen0',6}) and auStereoVoiceCount
-// three-stage pairs via CreateStereoVoice ({&2.0f (flt_82001D9C), 'SnP1', 2}
-// {0,'Rsp0',2} {0,'Sen0',2}), then VoicePool::Prepare's them (@0x8268AC40,
-// bodied below). On this build the 'SnP1'/'Rsp0'/'Pn21' handles are still null
-// (SndPlayer1 has no PC home; Resample::Process / Pan2D1::CreateInstance decode
-// in flight) and Voice::CreateInstance dereferences the descriptor a handle IS
-// -- staging would crash rather than fail guarded. The pools stay EMPTY with
-// their free stacks parked at -1, so every Allocate*VoicePluginPair pops null
-// through its guarded path. Light the staging when the three plug-ins register.
+// exactly the asm's non-monotonic order), voice staging, the two pool count words
+// zeroed, and the two pool Prepares.
 // ============================================================================
 
 SpliceManager::SpliceManager( const CgsSound::Playback::Environment& arEnvironment,
@@ -111,16 +100,127 @@ SpliceManager::SpliceManager( const CgsSound::Playback::Environment& arEnvironme
         sendHandle      = rw::audio::core::PlugInRegistry::GetPlugInHandle( lpRegistry, 0x53656E30 ); // 'Sen0' +0x6C0
         pannerHandle    = rw::audio::core::PlugInRegistry::GetPlugInHandle( lpRegistry, 0x506E3231 ); // 'Pn21' +0x6BC
 
-        mMonoVoicePool.muPooledVoiceCount   = 0;   // +0x300 (the console pre-Prepare zero)
-        mStereoVoicePool.muPooledVoiceCount = 0;   // +0x608
+        for ( u32 luVoice = 0; luVoice < auMonoVoiceCount; ++luVoice )
+            CreateMonoVoice( &mMonoVoicePool.maVoicePluginPairs[luVoice] );
+        for ( u32 luVoice = 0; luVoice < auStereoVoiceCount; ++luVoice )
+            CreateStereoVoice( &mStereoVoicePool.maVoicePluginPairs[luVoice] );
 
-        // FLAG [deferred voice staging -- see the banner]: the free stacks park
-        // at -1 (VoicePool::Prepare seeds count-1 when the staging lands).
-        mMonoVoicePool.miPooledVoiceStackFreeIndex   = -1;
-        mStereoVoicePool.miPooledVoiceStackFreeIndex = -1;
-        (void)auMonoVoiceCount;
-        (void)auStereoVoiceCount;
+        mMonoVoicePool.muPooledVoiceCount = 0;   // +0x300 (pre-Prepare zero)
+        mMonoVoicePool.Prepare( mMonoVoicePool.maVoicePluginPairs,
+                                auMonoVoiceCount );
+        mStereoVoicePool.muPooledVoiceCount = 0;   // +0x608 (after mono Prepare)
+        mStereoVoicePool.Prepare( mStereoVoicePool.maVoicePluginPairs,
+                                  auStereoVoiceCount );
     }   // ~RwacLock == the console unlock
+}
+
+// ============================================================================
+// The two splice VOICE BUILDERS.
+//
+// Decode + verification: progress/scratch_dossiers/splice_staging_decoderfactory_codex.md
+// (every claim there is keyed to an instruction address).
+//
+// Each builds one fixed plug-in chain and hands it to Voice::CreateInstance, which does
+// all the allocation and writes the pair's plug-in array back through the out-pointer.
+// Neither helper allocates anything itself: the stage configs and the SndPlayer1
+// constructor parameter are stack locals, exactly as on console.
+//
+// ⚠️ THE FIRST CONFIG FIELD IS NOT `const f32*`. An earlier revision of the banner below
+// described these chains as `{&1.0f, 'SnP1', 1}`, which reads as a float-pointer field.
+// It is the GENERIC create-context pointer (VoiceStageConfig::mpContext, the console
+// PlugInConfig's void* constructor-parameter slot). What stage zero points it at happens
+// to be a one-float SndPlayer1::ConstructorParams -- the depth of that voice's request
+// ring. Mono passes 1.0f (flt_82001C98) and stereo 2.0f (flt_82001D9C); both constants
+// were re-read from rodata at file 0x4C98 / 0x4D9C and are exactly 1.0f / 2.0f.
+//
+// ⚠️ The per-stage trailing number is the stage's OUTPUT channel count, and
+// Voice::CreateInstance threads it: it starts the input count at 0 and feeds each stage's
+// output byte in as the next stage's input. Mono therefore walks 0->1, 1->1, 1->6, 6->6
+// and stereo 0->2, 2->2, 2->2. The stereo chain has NO panner stage.
+//
+// ⚠️ NO NULL GUARD ON THE HANDLES, deliberately. Voice::CreateInstance dereferences the
+// descriptor a handle resolves to on its very first sizing pass (`lwz` config+0x04
+// @0x82B6EC98, then the GetSize hook at descriptor+0x04 @0x82B6ECA0), so an unregistered
+// plug-in FAULTS here rather than returning null. The console has no check and none is
+// added; what keeps it safe is that the constructor's staging only runs once all four
+// tags are registered. See the constructor.
+// ============================================================================
+
+void SpliceManager::CreateMonoVoice( VoicePluginPair* apOutPair )
+{
+    rw::audio::core::SndPlayer1::ConstructorParams lCtorParams = { 1.0f };  // flt_82001C98
+    rw::audio::core::VoiceStageConfig laPlugInChain[4];
+
+    laPlugInChain[0].mpContext      = &lCtorParams;
+    laPlugInChain[0].mpDesc         =
+        static_cast<rw::audio::core::PlugInDescRunTime*>( sndplayerHandle );  // 'SnP1'
+    laPlugInChain[0].mFlagAndField8 = 1u;
+
+    laPlugInChain[1].mpContext      = 0;
+    laPlugInChain[1].mpDesc         =
+        static_cast<rw::audio::core::PlugInDescRunTime*>( resampleHandle );   // 'Rsp0'
+    laPlugInChain[1].mFlagAndField8 = 1u;
+
+    laPlugInChain[2].mpContext      = 0;
+    laPlugInChain[2].mpDesc         =
+        static_cast<rw::audio::core::PlugInDescRunTime*>( pannerHandle );     // 'Pn21'
+    laPlugInChain[2].mFlagAndField8 = 6u;
+
+    laPlugInChain[3].mpContext      = 0;
+    laPlugInChain[3].mpDesc         =
+        static_cast<rw::audio::core::PlugInDescRunTime*>( sendHandle );       // 'Sen0'
+    laPlugInChain[3].mFlagAndField8 = 6u;
+
+    apOutPair->mpVoice = rw::audio::core::Voice::CreateInstance(
+        0,                                   // r3 = priority 0
+        4,                                   // r4 = stage count (@0x826A3318)
+        laPlugInChain,
+        &apOutPair->mppPlugIn,
+        CgsSound::Playback::GetDefaultRwacSystem() );
+
+    if ( apOutPair->mpVoice == 0 )           // @0x826A3378
+    {
+        SpliceManager::AssertCallbackFunc lpfnAssert =
+            gpSpliceManager ? gpSpliceManager->mAssertCallbackFunc : 0;
+        if ( lpfnAssert )
+            lpfnAssert( "failed to create mono voice" );   // @0x826A3394
+    }
+}
+
+void SpliceManager::CreateStereoVoice( VoicePluginPair* apOutPair )
+{
+    rw::audio::core::SndPlayer1::ConstructorParams lCtorParams = { 2.0f };  // flt_82001D9C
+    rw::audio::core::VoiceStageConfig laPlugInChain[3];
+
+    laPlugInChain[0].mpContext      = &lCtorParams;
+    laPlugInChain[0].mpDesc         =
+        static_cast<rw::audio::core::PlugInDescRunTime*>( sndplayerHandle );  // 'SnP1'
+    laPlugInChain[0].mFlagAndField8 = 2u;
+
+    laPlugInChain[1].mpContext      = 0;
+    laPlugInChain[1].mpDesc         =
+        static_cast<rw::audio::core::PlugInDescRunTime*>( resampleHandle );   // 'Rsp0'
+    laPlugInChain[1].mFlagAndField8 = 2u;
+
+    laPlugInChain[2].mpContext      = 0;
+    laPlugInChain[2].mpDesc         =
+        static_cast<rw::audio::core::PlugInDescRunTime*>( sendHandle );       // 'Sen0'
+    laPlugInChain[2].mFlagAndField8 = 2u;
+
+    apOutPair->mpVoice = rw::audio::core::Voice::CreateInstance(
+        0,                                   // r3 = priority 0
+        3,                                   // r4 = stage count (@0x826A33EC)
+        laPlugInChain,
+        &apOutPair->mppPlugIn,
+        CgsSound::Playback::GetDefaultRwacSystem() );
+
+    if ( apOutPair->mpVoice == 0 )           // @0x826A3444
+    {
+        SpliceManager::AssertCallbackFunc lpfnAssert =
+            gpSpliceManager ? gpSpliceManager->mAssertCallbackFunc : 0;
+        if ( lpfnAssert )
+            lpfnAssert( "Failed to create stereo voice" ); // @0x826A3450 -- capital F, as shipped
+    }
 }
 
 // The eight-splice-bank zero ctor (SpliceManager.h:22; the manager ctor inlines
