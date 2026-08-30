@@ -22,6 +22,7 @@ extern "C" {
 #include <libavutil/channel_layout.h>
 #include <libavutil/error.h>
 #include <libavutil/frame.h>
+#include <libswresample/swresample.h>
 }
 
 // The EA-XMA deblock + XMA-frame extraction here is the proven logic from
@@ -46,10 +47,9 @@ namespace
     const int kPacketBits  = kPacketBytes * 8;
     const int kPacketHeaderBits = 32;
     // The X360 XAudio render driver and rw::audio Dac have one 48 kHz mastering
-    // clock.  Movie audio shares that sink; the EAAC rate remains decoder/source
+    // clock. Movie audio shares that sink; the EAAC rate remains decoder/source
     // metadata and must never retime the final render driver (or the simultaneous
-    // engine mix).  The shipped movie streams corroborate this directly: their
-    // decoded sample counts match their VP6 timelines at 48 kHz.
+    // engine mix). Source-rate PCM is converted into this master-clock domain.
     const int kMasterSampleRate = 48000;
     // Set per-stream from the SNR header. The video logos are 48 kHz; the rest are
     // 44.1 kHz. Defaults to 48 kHz for the SNR-less fallback path.
@@ -287,6 +287,81 @@ namespace
                   << " XMA frames -> " << (int)(pcm.size() / 2) << " samples\n";
         return pcm;
     }
+
+    // The console mixer performs this source-voice conversion before feeding its
+    // fixed 48 kHz mastering voice. Keep the PC shared sink on that same clock and
+    // convert only movie PCM whose SNR declares a different authored rate.
+    bool ResampleStereoS16(const std::vector<std::int16_t>& arSource, int aiSourceRate,
+                           int aiDestRate, std::vector<std::int16_t>& arDest)
+    {
+        if (aiSourceRate <= 0 || aiDestRate <= 0 || arSource.empty() ||
+            (arSource.size() & 1) != 0)
+            return false;
+        if (aiSourceRate == aiDestRate) {
+            arDest = arSource;
+            return true;
+        }
+
+        const std::size_t luInputFrames = arSource.size() / 2;
+        if (luInputFrames > std::size_t(std::numeric_limits<int>::max()))
+            return false;
+
+        AVChannelLayout lStereo = AV_CHANNEL_LAYOUT_STEREO;
+        SwrContext* lpResampler = nullptr;
+        if (swr_alloc_set_opts2(&lpResampler,
+                                &lStereo, AV_SAMPLE_FMT_S16, aiDestRate,
+                                &lStereo, AV_SAMPLE_FMT_S16, aiSourceRate,
+                                0, nullptr) < 0 || lpResampler == nullptr) {
+            swr_free(&lpResampler);
+            return false;
+        }
+        if (swr_init(lpResampler) < 0) {
+            swr_free(&lpResampler);
+            return false;
+        }
+
+        const int liInputFrames = static_cast<int>(luInputFrames);
+        const int liOutputCapacity = swr_get_out_samples(lpResampler, liInputFrames);
+        if (liOutputCapacity <= 0 ||
+            std::size_t(liOutputCapacity) > arDest.max_size() / 2) {
+            swr_free(&lpResampler);
+            return false;
+        }
+
+        arDest.resize(std::size_t(liOutputCapacity) * 2);
+        const std::uint8_t* lapInput[1] = {
+            reinterpret_cast<const std::uint8_t*>(arSource.data())
+        };
+        std::uint8_t* lapOutput[1] = {
+            reinterpret_cast<std::uint8_t*>(arDest.data())
+        };
+        const int liConverted = swr_convert(lpResampler, lapOutput, liOutputCapacity,
+                                            lapInput, liInputFrames);
+        if (liConverted < 0) {
+            swr_free(&lpResampler);
+            arDest.clear();
+            return false;
+        }
+        arDest.resize(std::size_t(liConverted) * 2);
+
+        // Drain the resampler's filter delay so the tail is not clipped.
+        std::int16_t laTail[1024 * 2];
+        for (;;) {
+            std::uint8_t* lpTail = reinterpret_cast<std::uint8_t*>(laTail);
+            const int liFlushed = swr_convert(lpResampler, &lpTail, 1024, nullptr, 0);
+            if (liFlushed < 0) {
+                swr_free(&lpResampler);
+                arDest.clear();
+                return false;
+            }
+            if (liFlushed == 0)
+                break;
+            arDest.insert(arDest.end(), laTail, laTail + std::size_t(liFlushed) * 2);
+        }
+
+        swr_free(&lpResampler);
+        return !arDest.empty();
+    }
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -428,6 +503,20 @@ bool MovieAudioPC::Load(const char* lpSnsPath, int liChannels)
     if (!DecodeSnsFileToPcm(lpSnsPath, liChannels, "[MovieAudio]", pcm, g_sampleRate))
         return false;
 
+    if (g_sampleRate != kMasterSampleRate) {
+        const std::size_t luSourceFrames = pcm.size() / 2;
+        std::vector<std::int16_t> lMasterPcm;
+        if (!ResampleStereoS16(pcm, g_sampleRate, kMasterSampleRate, lMasterPcm)) {
+            AUDIO_LOG << "[MovieAudio] resample failed: " << g_sampleRate << " -> "
+                      << kMasterSampleRate << " Hz\n";
+            return false;
+        }
+        pcm.swap(lMasterPcm);
+        AUDIO_LOG << "[MovieAudio] resampled " << g_sampleRate << " -> "
+                  << kMasterSampleRate << " Hz (" << (int)luSourceFrames << " -> "
+                  << (int)(pcm.size() / 2) << " frames)\n";
+    }
+
     g_frames = long(pcm.size() / 2);
     g_pcm = static_cast<s16*>(std::malloc(std::size_t(g_frames) * 2 * sizeof(s16)));
     if (g_pcm == nullptr) { g_frames = 0; return false; }
@@ -447,7 +536,8 @@ bool MovieAudioPC::Load(const char* lpSnsPath, int liChannels)
         AudioOutputPC::Open(kMasterSampleRate, 2, nullptr, nullptr);   // null fill -> silence until Start()
 
     AUDIO_LOG << "[MovieAudio] loaded " << lpSnsPath << " (" << (int)g_frames << " frames, "
-              << (int)(g_frames / kMasterSampleRate) << " s @ 48 kHz master)\n";
+              << (int)(g_frames / kMasterSampleRate) << " s @ 48 kHz master, source "
+              << g_sampleRate << " Hz)\n";
     return true;
 }
 
