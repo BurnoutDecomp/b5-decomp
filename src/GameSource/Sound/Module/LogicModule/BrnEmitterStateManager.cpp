@@ -1,4 +1,6 @@
 #include "GameSource/Sound/Module/LogicModule/BrnEmitterStateManager.h"
+#include "GameSource/Sound/Module/LogicModule/BrnEmitterState.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 // =============================================================================
@@ -44,7 +46,10 @@ namespace World
 // ---------------------------------------------------------------------------
 EmitterStateManager::EmitterStateManager()
     : BrnSound::Logic::BrnStateManager()
+    , mSoundScene()
+    , mCameraPos()
 {
+    mCameraPos.SetZero();
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +220,37 @@ const char* EmitterStateManager::GetTypeName() const
 // ---------------------------------------------------------------------------
 bool EmitterStateManager::Prepare()
 {
-    return true;
+    switch (mePrepareState)
+    {
+    case E_PREPARE_NONE:
+    case E_PREPARE_RELEASED:
+        mePrepareState = E_PREPARE_NONE;
+        // fall through
+    case E_PREPARE_BEGIN:
+    {
+        mePrepareState = E_PREPARE_BEGIN;
+        BrnSound::Module::SoundLogicModule* lpLogicModule =
+            static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+        CGS_ASSERT(lpLogicModule != 0, "lpLogicModule");
+        mSoundScene.Construct();
+        mSoundScene.Prepare(lpLogicModule, "_Emitter");
+        LoadAsset("sound\\world\\emitters.bundle", 0,
+                  BrnSound::Logic::ResourceRegistrar::E_DATA);
+        mePrepareState = E_PREPARE_UPDATING;
+        return false;
+    }
+    case E_PREPARE_UPDATING:
+        return false;
+    case E_PREPARE_STATES:
+        if (!PrepareStates(1, 4, 0))
+            return false;
+        mePrepareState = E_PREPARE_FINISHED;
+        return true;
+    case E_PREPARE_FINISHED:
+        return true;
+    default:
+        return false;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -233,6 +268,7 @@ bool EmitterStateManager::Prepare()
 // ---------------------------------------------------------------------------
 void EmitterStateManager::ResourcesAreReady()
 {
+    mePrepareState = E_PREPARE_STATES;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,11 +289,72 @@ void EmitterStateManager::ResourcesAreReady()
 // ---------------------------------------------------------------------------
 BrnSound::Logic::ResourceRegistrar& EmitterStateManager::GetResourceRegistrar()
 {
-    CGS_ASSERT( false,
-                "EmitterStateManager::GetResourceRegistrar reached without a homed "
-                "SoundLogicModule (boot path does not call this)" );
-    static BrnSound::Logic::ResourceRegistrar sUnhomedRegistrar;
-    return sUnhomedRegistrar;
+    return BrnSound::Logic::BrnStateManager::GetResourceRegistrar();
+}
+
+void EmitterStateManager::UpdateParams(f32 lfDeltaTime)
+{
+    mSoundScene.Update();
+    BrnSound::Logic::BrnStateManager::UpdateParams(lfDeltaTime);
+
+    BrnSound::Module::SoundLogicModule* lpLogicModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    mCameraPos = lpLogicModule->GetFrameInformation().mPlayerTransform.Pos();
+
+    BrnSound::World::StaticSoundEntity laEntities[8];
+    const s32 liEntities = mSoundScene.Query(mCameraPos, 100.0f, laEntities, 8, false);
+    for (s32 liEntity = 0; liEntity < liEntities; ++liEntity)
+    {
+        bool lbAttached = false;
+        for (CgsSound::Logic::State* lpState = mpHeadState;
+             lpState; lpState = lpState->GetNextState())
+        {
+            if (lpState->IsAttached() && lpState->IsAttachedToThis(&laEntities[liEntity]))
+            {
+                lbAttached = true;
+                break;
+            }
+        }
+        if (!lbAttached)
+        {
+            CgsSound::Logic::State* lpState = GetFreeState(&laEntities[liEntity]);
+            if (lpState)
+                lpState->Attach(&laEntities[liEntity]);
+        }
+    }
+}
+
+CgsSound::Logic::State* EmitterStateManager::GetFreeState(void* lpvAttachment)
+{
+    CgsSound::Logic::State* lpFree =
+        BrnSound::Logic::BrnStateManager::GetFreeState(lpvAttachment);
+    if (lpFree)
+        return lpFree;
+
+    CGS_ASSERT(lpvAttachment != 0, "lpvObjectPtr");
+    const BrnSound::World::StaticSoundEntity* lpNewEntity =
+        static_cast<const BrnSound::World::StaticSoundEntity*>(lpvAttachment);
+    const Vector3 lNewPos = lpNewEntity->GetPos();
+    const f32 lfNewDx = mCameraPos.x - lNewPos.x;
+    const f32 lfNewDy = mCameraPos.y - lNewPos.y;
+    const f32 lfNewDz = mCameraPos.z - lNewPos.z;
+    const f32 lfNewDistance =
+        lfNewDx * lfNewDx + lfNewDy * lfNewDy + lfNewDz * lfNewDz;
+
+    for (CgsSound::Logic::State* lpState = mpHeadState;
+         lpState; lpState = lpState->GetNextState())
+    {
+        EmitterState* lpEmitterState = static_cast<EmitterState*>(lpState);
+        const Vector3 lOldPos = lpEmitterState->GetSoundEntity().GetPos();
+        const f32 lfOldDx = mCameraPos.x - lOldPos.x;
+        const f32 lfOldDy = mCameraPos.y - lOldPos.y;
+        const f32 lfOldDz = mCameraPos.z - lOldPos.z;
+        const f32 lfOldDistance =
+            lfOldDx * lfOldDx + lfOldDy * lfOldDy + lfOldDz * lfOldDz;
+        if (lfOldDistance > lfNewDistance && lpState->Detach())
+            return lpState;
+    }
+    return 0;
 }
 
 } // namespace World

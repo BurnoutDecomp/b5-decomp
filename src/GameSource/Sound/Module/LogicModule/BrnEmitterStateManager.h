@@ -2,7 +2,9 @@
 #define BRN_SOUND_LOGIC_WORLD_BRN_EMITTER_STATE_MANAGER_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"
 #include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"   // BrnSound::Logic::BrnStateManager (canonical base) -> CgsSound::Logic::StateManager + IResourceRequester
+#include "SharedClasses/Sound/World/BrnSoundWorldScene.h"
 
 // =============================================================================
 // BrnSound::Logic::World::EmitterStateManager
@@ -88,6 +90,8 @@ public:
 
     // @ 0x826F5AC0 (vtable +0x0C). The per-manager boot bring-up state machine.
     virtual bool Prepare();
+    virtual void UpdateParams(f32 lfDeltaTime) override;
+    virtual CgsSound::Logic::State* GetFreeState(void* lpvAttachment) override;
 
     // ---- IResourceRequester overrides (pure in IResourceRequester; BrnStateManager
     // declares but does not body them, so the concrete leaf must override+body them to
@@ -95,6 +99,10 @@ public:
     // EmitterStateManager). ----
     virtual void                            ResourcesAreReady();    // @ 0x826867C8 (stub -- world/Content cascade)
     virtual BrnSound::Logic::ResourceRegistrar& GetResourceRegistrar(); // (stub -- module not homed)
+
+private:
+    BrnSound::Logic::World::SoundWorldScene mSoundScene;
+    Vector3 mCameraPos;
 };
 
 } // namespace World

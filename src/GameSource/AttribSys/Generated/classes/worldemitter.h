@@ -15,10 +15,41 @@ namespace Attrib
 {
 namespace Gen
 {
-    class worldemitter : private Instance
+    class worldemitter : public Instance
     {
     public:
         explicit worldemitter(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit worldemitter(const RefSpec& lrRefSpec, void* lpOwner = nullptr)
+            : Instance(lrRefSpec, lpOwner) {}
+
+        void ChangeWithDefault(const RefSpec& lrRefSpec)
+        {
+            RefSpec& lrMutable = const_cast<RefSpec&>(lrRefSpec);
+            Change(const_cast<Collection*>(lrMutable.GetCollectionWithDefault()));
+        }
+
+        const char* EmitterName() const
+        {
+            return static_cast<const Layout*>(mpAttributeData)->mpEmitterName;
+        }
+        bool IsStream() const
+        {
+            return static_cast<const Layout*>(mpAttributeData)->mbIsStream;
+        }
+        bool AffectedByDoppler() const
+        {
+            return static_cast<const Layout*>(mpAttributeData)->mbAffectedByDoppler;
+        }
+
+    private:
+        // libapt2/AttribSys native-8 data keeps Text as a native pointer.  The
+        // two generated Bool fields follow it in source declaration order.
+        struct Layout
+        {
+            const char* mpEmitterName;
+            bool mbIsStream;
+            bool mbAffectedByDoppler;
+        };
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::worldemitter,
@@ -30,7 +61,7 @@ namespace Gen
         if (GetClass() != KI_WORLDEMITTER_CLASS && GetClass() != 0)
             AssertOnClassCheck(GetClass(), KI_WORLDEMITTER_CLASS, GetCollection());
         if (!mpAttributeData)
-            mpAttributeData = DefaultDataArea(0x8u);
+            mpAttributeData = DefaultDataArea(sizeof(Layout));
     }
 }
 }

@@ -27,6 +27,25 @@ struct StaticSoundEntity
         u32 mu32Bits;          // :138
     };
 
+    const Vector3Plus& GetPosPlus() const { return mPosPlus; }
+    Vector3 GetPos() const
+    {
+        Vector3 lPosition = { mPosPlus.x, mPosPlus.y, mPosPlus.z, 0.0f };
+        return lPosition;
+    }
+    f32 GetRadius() const
+    {
+        UFloatHelper lPacked;
+        lPacked.mfPlusComponent = mPosPlus.w;
+        return static_cast<f32>(static_cast<u16>(lPacked.mu32Bits & 0xffffu));
+    }
+    u16 GetType() const
+    {
+        UFloatHelper lPacked;
+        lPacked.mfPlusComponent = mPosPlus.w;
+        return static_cast<u16>(lPacked.mu32Bits >> 16);
+    }
+
 protected:
     // BrnStaticSoundMap.h:152 (DWARF). Position + packed w payload.
     Vector3Plus mPosPlus;
@@ -44,7 +63,18 @@ static_assert(sizeof(StaticSoundEntity) == 16,
 // DEFERRED to the SubRegionDescriptor TU — grow this struct additively there.
 struct SubRegionDescriptor
 {
-    u32 muData;   // opaque 4-byte cell (stride proven by 0x8267AF10 `slwi …,2`)
+    union
+    {
+        u32 muData;
+        struct
+        {
+            u16 mu16FirstEntity;
+            u16 mu16NumEntities;
+        };
+    };
+
+    u16 GetFirstEntity() const { return mu16FirstEntity; }
+    u16 GetNumEntities() const { return mu16NumEntities; }
 };
 
 // The serialised StaticSoundMap DATA type. Shape recovered from the DecFIGS DWARF
@@ -91,6 +121,12 @@ struct StaticSoundMap
     // (operates purely on its arguments); kept a member to match the DWARF decl.
     bool IsInRange(const Vector3& lrPosition, f32 lfRadius,
                    const Vector4& lrPackedMinAndMax) const;
+
+    const Vector2& GetMin() const { return mMin; }
+    const Vector2& GetMax() const { return mMax; }
+    f32 GetSubRegionSize() const { return mfSubRegionSize; }
+    s32 GetNumEntities() const { return miNumEntities; }
+    eRootType GetRootType() const { return meRootType; }
 
     // The resource-type handler relocates mpSubRegions/mpEntities and validates
     // mpEntities/miNumEntities during FixUp. Grant it friendship rather than

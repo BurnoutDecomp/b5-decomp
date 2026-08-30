@@ -597,6 +597,43 @@ namespace Logic
         }
     }
 
+    // BrnResourceRegistrar.cpp:398.  A zone can leave the streaming set while
+    // its resource-only request is still pending.  Mark the matching queued
+    // request relinquished so UpdateRequests retires it without notifying the
+    // requester, then clear an already-loaded reference to the same resource.
+    void ResourceRegistrar::RemoveRefsToResource(IResourceRequester* lpRequester,
+                                                  const char* lpcResourceName)
+    {
+        const u32 lu32NameHash =
+            rw::RwHash32String(lpcResourceName, KU_FNV_OFFSET_BASIS);
+
+        for (QueuedNode* lpQueuedIterator = mLoadingQueuedResourceList.GetHead();
+             lpQueuedIterator;
+             lpQueuedIterator =
+                 static_cast<QueuedNode*>(lpQueuedIterator->GetNextNode()))
+        {
+            QueuedResource& lrData = lpQueuedIterator->mData;
+            if (lrData.muResourceNameHash == lu32NameHash &&
+                lrData.mpRequester == lpRequester)
+            {
+                lrData.mpRequester = 0;
+                lrData.mbRelinquished = true;
+            }
+        }
+
+        for (RequestedNode* lpIterator = mLoadedResourceList.GetHead();
+             lpIterator;
+             lpIterator = static_cast<RequestedNode*>(lpIterator->GetNextNode()))
+        {
+            RequestedResource& lrData = lpIterator->mData;
+            if (lrData.miResourceType == static_cast<s32>(lu32NameHash) &&
+                lrData.ClearReferencesToResource(lpRequester))
+            {
+                AddNodeToRemoveResourceCandidateList(lpIterator);
+            }
+        }
+    }
+
     // 0x82695860 -- queue a requested-resource node for removal once its reference count hits 0.
     void ResourceRegistrar::AddNodeToRemoveResourceCandidateList(RequestedNode* lpNode)
     {

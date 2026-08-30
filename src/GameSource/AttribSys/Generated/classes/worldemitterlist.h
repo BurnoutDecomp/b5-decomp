@@ -32,25 +32,26 @@
 
 namespace Attrib
 {
-    // Opaque RefSpec element sized to the X360-attested 24-byte array stride (asm:
-    // slwi r11,r31,1; add r11,r31,r11 => *3; slwi r11,r11,3 => *24). DWARF attests the
-    // real field set {Attribute::Key mClassKey; Attribute::Key mCollectionKey; const
-    // Collection* mCollectionPtr;} where Attribute::Key == uint64_t (attribsys.h:73/77),
-    // i.e. 8+8+4 padded to 24 — consistent with the stride. Kept opaque here (no committed
-    // RefSpec body exists; the real body lands with its own TU). Camera.h forward-declares
-    // the same Attrib::RefSpec.
-    struct alignas(8) RefSpec
-    {
-        u8 macOpaquePayload[24];
-    };
-
 namespace Gen
 {
-    class worldemitterlist : private Instance
+    class worldemitterlist : public Instance
     {
     public:
+        explicit worldemitterlist(const RefSpec& lrRefSpec, void* lpOwner = nullptr)
+            : Instance(lrRefSpec, lpOwner) {}
+
+        void ChangeWithDefault(const RefSpec& lrRefSpec)
+        {
+            RefSpec& lrMutable = const_cast<RefSpec&>(lrRefSpec);
+            Change(const_cast<Collection*>(lrMutable.GetCollectionWithDefault()));
+        }
+
         // DWARF worldemitterlist.h:82: `const Attrib::RefSpec & mWorldEmitters(unsigned int) const;`
         const RefSpec& mWorldEmitters(unsigned int uiIndex) const;
+        unsigned int Num_mWorldEmitters() const
+        {
+            return static_cast<const Private*>(GetLayoutPointer())->GetLength();
+        }
     };
 
     // Bounds-checked flat-array accessor into the RefSpec[50] payload. Reads the Private

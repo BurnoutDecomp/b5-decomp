@@ -67,7 +67,7 @@ struct Cgs3dEffectControl : public CgsSound::Logic::EffectControl
         bool mbEnable;                       // Cgs3dEffectControl.h:166
     };
 
-    Cgs3dEffectControl() {}                   // Cgs3dEffectControl.cpp:51
+    Cgs3dEffectControl();                     // Cgs3dEffectControl.cpp:51
 
     // --- RTTI / control surface (DEFERRED bodies; declared for vtable shape) ----
     // DWARF virtual order: GetTypeInfo, GetTypeName, UpdateParams, AttachEmitter*,
@@ -96,6 +96,7 @@ protected:
     // Cgs3dEffectControl.cpp:166 @ (deferred). Panning angle emitter->mic. DEFERRED body.
     s32 GetPanningAngle(MicrophoneSystem& arMicSystem,
                         MicrophoneSystem::EMicPositions aePosition);
+    void UpdateDoppler(f32 afDeltaTime, s32 aiPlayer);
 
     // --- members (DWARF order; X360 offsets, not asserted on host) -------------
     CgsSound::Utils::DataPoint<f32> mfDistanceToMic[2];   // Cgs3dEffectControl.h:141

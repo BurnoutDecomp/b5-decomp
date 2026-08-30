@@ -185,6 +185,18 @@ const RootInputBuffer::UpdateInfo* RootInputBuffer::GetUpdateInfo() const
     return &mUpdateInfo;
 }
 
+const AudioCarLoadedDataQueue* RootInputBuffer::GetAudioCarDataLoadedQueueForRead() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mAudioCarDataLoadedQueue;
+}
+
+const RootInputBuffer::SoundWorldLoadInterface* RootInputBuffer::GetWorldLoadInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mWorldLoadInterface;
+}
+
 // X360 0x826947F0 (folded bare BrnSound::Module::Io::RootI) -- read-lock accessor for the
 // online-scoring output interface @ +0xEA30.
 const RootInputBuffer::OnlineScoringOutputInterface* RootInputBuffer::GetOnlineScoringInterface() const
@@ -292,11 +304,12 @@ void RootInputBuffer::SetOnlineScoringInterface(const OnlineScoringOutputInterfa
     std::memcpy(&mOnlineScoringInterface, lpInterface, sizeof(OnlineScoringOutputInterface));
 }
 
-// X360 0x823C92A8 @ +0xEAD4 (reset-count-then-Append modelled as memcpy over inline queue).
+// X360 0x823C92A8 @ +0xEAD4: reset the destination count, then append the source.
 void RootInputBuffer::SetWorldLoadInterface(const SoundWorldLoadInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(&mWorldLoadInterface, lpInterface, sizeof(SoundWorldLoadInterface));
+    mWorldLoadInterface.Clear();
+    mWorldLoadInterface.Append(*lpInterface);
 }
 
 // X360 0x823B89B8 @ +0xEBA8 -- stores the caller's queue pointer (not a copy).

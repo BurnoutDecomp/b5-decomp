@@ -514,15 +514,12 @@ void MassiveAdClient3::CMassiveAdObjectSubscriber::operator delete(void *)
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
-void BrnSound::Module::Io::SoundWorldLoadEvent::Construct(enum BrnSound::Module::Io::SoundWorldLoadEvent::eLoadEvent,unsigned short)
+void BrnSound::Module::Io::SoundWorldLoadEvent::Construct(
+    enum BrnSound::Module::Io::SoundWorldLoadEvent::eLoadEvent leEvent,
+    unsigned short lu16Zone)
 {
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnSound::Module::Io::SoundWorldLoadEvent::Construct: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
+    meEvent = leEvent;
+    mu16Zone = lu16Zone;
 }
 
 // -------------------------------------------------------------------------
@@ -554,7 +551,7 @@ class CgsModule::VariableEventQueue<32768,16> * BrnTraffic::BrnTrafficIO::InputB
 //     ⚠️ Behaviour change on a live path, toward the console: the gate Constructs
 //     memset the buffer and never called CgsModule::IOBuffer::Construct, leaving
 //     eStatusConstructed CLEAR; the real ones open with `stb 1,0(r3)`. The two setters
-//     silently dropped WorldModule::GenerateDispatchLists' stores and now store.
+//     discarded WorldModule::GenerateDispatchLists' stores and now store.
 
 // -------------------------------------------------------------------------
 // BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare
