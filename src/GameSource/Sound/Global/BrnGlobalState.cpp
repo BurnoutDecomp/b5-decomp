@@ -71,15 +71,23 @@ GlobalState::~GlobalState()
 // ---------------------------------------------------------------------------
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GlobalState::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo =
-    {
-        0,             // ObjectID        (FLAG: State-side id unrecovered)
-        "GlobalState", // mpcTypeName     (PROVEN: unk_82F2F86C+4 = off_82F2F870, committed GetTypeName)
-        nullptr,       // mpBaseTypeInfo  (DEFERRED — BrnState descriptor chain)
-        nullptr,       // mpfnCreateObject(DEFERRED)
-    };
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
+        0, "GlobalState", 0, &GlobalState::CreateObject);
     return &sTypeInfo;
 }
+
+CgsSound::Logic::State* GlobalState::CreateObject(u32 /*auType*/)
+{
+    return new GlobalState();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GlobalState::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const gpGlobalStateReg =
+    CgsSound::Logic::State::AddToClassTypeInfoArray(GlobalState::GetStaticTypeInfo());
 
 } // namespace Logic
 } // namespace BrnSound

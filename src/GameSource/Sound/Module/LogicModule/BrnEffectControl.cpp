@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 
 // =============================================================================
 // BrnSound::Logic::BrnEffectControl — out-of-line bodies.
@@ -22,6 +23,50 @@ namespace BrnSound
 {
 namespace Logic
 {
+
+BrnEffectControl::BrnEffectControl()
+    : CgsSound::Logic::EffectControl()
+    , IResourceRequester()
+    , mbResourceRequestActive(false)
+    , mbResourcesReady(false)
+{
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>*
+BrnEffectControl::GetTypeInfo() const
+{
+    return CgsSound::Logic::EffectControl::GetStaticTypeInfo();
+}
+
+const char* BrnEffectControl::GetTypeName() const
+{
+    return "BrnEffectControl";
+}
+
+void BrnEffectControl::ResourcesAreReady()
+{
+    mbResourcesReady = true;
+    CGS_ASSERT(GetAttachState() == CgsSound::Logic::EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA,
+               "GetAttachState() == E_ATTACH_STATE_WAITING_FOR_DATA");
+    meAttachState = CgsSound::Logic::EffectBase::E_ATTACH_STATE_PREPARING;
+}
+
+ResourceRegistrar& BrnEffectControl::GetResourceRegistrar()
+{
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    return lpModule->GetResourceRegistrar();
+}
+
+bool BrnEffectControl::Detach()
+{
+    if (mbResourceRequestActive)
+        GetResourceRegistrar().RemoveRequests(static_cast<IResourceRequester*>(this));
+    mbResourceRequestActive = false;
+    meAttachState = CgsSound::Logic::EffectBase::E_ATTACH_STATE_FINISHED;
+    mfDeltaTime = 0.0f;
+    return true;
+}
 
 // ---------------------------------------------------------------------------
 // ~BrnEffectControl  @ 0x826AEF68  (the X360 `vector deleting destructor`)

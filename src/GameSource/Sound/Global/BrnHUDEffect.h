@@ -96,6 +96,11 @@ struct HUDEffect : public BrnSound::Logic::BrnEffectObject
     // this virtual dtor (compiler-synthesised; empty leaf anchor in the .cpp).
     virtual ~HUDEffect();
 
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
+    const char* GetTypeName() const override;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
+
     // @ 0x82686BA8. Slipstream-audio proximity/alignment weight for the car in front.
     // The three Vector3 args arrive in vector registers (v1/v2/v3); `this` (r3) is
     // unused by the body. DWARF renders the return as `double`.

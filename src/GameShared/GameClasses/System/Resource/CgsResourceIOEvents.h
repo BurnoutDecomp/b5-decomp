@@ -146,6 +146,7 @@ namespace Events
         void  SetHighPriority(s32 liPriority)  { miHighPriority = liPriority; }   // :1005
         void  SetBuffer(void* lpBuffer)        { mpBuffer = lpBuffer; }           // :1008
         void  SetUseHDCache(bool lbUseHDCache) { mbUseHDCache = lbUseHDCache; }   // (the +156 byte the DoOpenStream build zeroes)
+        bool  GetUseHDCache() const             { return mbUseHDCache; }
 
     protected:
         char  macFileName[128];   // :1019  NUL-terminated path to stream
@@ -183,6 +184,16 @@ namespace Events
 
     // DWARF: the read-side close request -- structurally the ReadStreamEvent (no extra fields).
     struct CloseReadStreamRequest : public ReadStreamEvent
+    {
+    };
+
+    // DWARF CgsResourceIOEvents.h:1149/1175. Both responses carry the
+    // requester/event-id/read-stream triple from ReadStreamEvent.
+    struct OpenReadStreamResponse : public ReadStreamEvent
+    {
+    };
+
+    struct CloseReadStreamResponse : public ReadStreamEvent
     {
     };
 

@@ -16,6 +16,7 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h" // CgsSound::Logic::Module -- the REAL engine base (phase B5)
 #include "GameShared/GameClasses/Sound/Logic/CgsVoice.h"            // the three stage-2 logic voices
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"           // Io::PreUpdateOutput (the by-value pre-update block; phase C1)
+#include "GameSource/AttribSys/Generated/classes/burnoutglobaldata.h"
 
 // =============================================================================
 // BrnSound::Module::SoundLogicModule
@@ -136,6 +137,10 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
                  CgsModule::IOBuffer* apInputBuffer,
                  CgsModule::IOBuffer* apOutputBuffer);
 
+    virtual void Update(f32 af32GameDt, f32 af32SimDt,
+                        CgsModule::IOBuffer* apInputBuffer,
+                        CgsModule::IOBuffer* apOutputBuffer) override;
+
     // The engine base sizes the LOGIC Environment's state-manager map from this
     // (Prepare's CreateEnvironment stage: {allocator, GetNumberOfStates()}); the 9
     // AddStateManager registrations in CreateStateManagers demand exactly the 9.
@@ -184,11 +189,13 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     // embedded registrar by reference. X360 0x826838C0: &mResourceRegistrar.
     virtual BrnSound::Logic::ResourceRegistrar& GetResourceRegistrar();
 
-    // IResourceRequester override (makes the class concrete). FLAG: minimal stub -- the
-    // X360 dumped no standalone SoundLogicModule::ResourcesAreReady; the real body lives in
-    // the un-modeled CgsSound::Logic::Module base (this slice inherits only IResourceRequester).
-    // The broker does not drive it on the minimal path; grown with the Voice/LoadAsset path.
-    virtual void ResourcesAreReady() {}
+    // IResourceRequester completion callback. BurnoutGlobalData is loaded during
+    // Prepare stage 2; this callback rebinds the generated instance to the now-live
+    // AttribSys collection so the global effects can consume its RefSpecs.
+    virtual void ResourcesAreReady() override;
+
+    Attrib::Gen::burnoutglobaldata& GetGlobalData() { return mBurnoutGlobalData; }
+    const Attrib::Gen::burnoutglobaldata& GetGlobalData() const { return mBurnoutGlobalData; }
 
     // The freed-ids list, by reference (the root Update's append target).
     CgsSound::Playback::Module::Io::OutputBuffer::FreedBuffersArray& GetFreedStreamBufferIds()
@@ -202,6 +209,8 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     // assert when null, then returns it. Non-const overload (the const overload at
     // h:431 is its own function and is not part of this slice).
     Io::LogicInputBuffer* GetBrnInputStructure();
+
+    void ProcessGuiEvents(const CgsModule::VariableEventQueue<18432, 16>* apGuiEvents);
 
 private:
     // Members in DWARF source order (BrnSoundLogicModule.h:365-383). Only the two
@@ -223,6 +232,11 @@ private:
     CgsSound::Logic::Voice mSubmixVoice;       // X360 this+0x5208, ident -16
 
     BrnSound::Logic::ResourceRegistrar mResourceRegistrar; // h:383 (+0x588 from the IResourceRequester sub-object == X360 this+0x5218)
+
+    // DecFIGS BrnSoundLogicModule.h: the generated view over BurnoutGlobalData.bin.
+    // It is constructed before the asset is available and rebound by
+    // ResourcesAreReady once the registrar completes the load.
+    Attrib::Gen::burnoutglobaldata mBurnoutGlobalData;
 
     // (phase B5: the by-value lEnvironment member is RETIRED -- the LOGIC Environment is
     // the ENGINE base's mEnvironment @+0x2950, reached via GetEnvironment().)

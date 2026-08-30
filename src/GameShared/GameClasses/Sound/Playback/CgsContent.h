@@ -146,6 +146,15 @@ namespace Playback
         // ContentLoader<>::UpdateResourceModuleLoading on the FINISHED transition.
         void SetContentState(int liState);
 
+        // @ 0x82680CC8. Enter the remove lifecycle and ask the concrete content
+        // implementation to begin unloading.
+        bool BeginRemove()
+        {
+            CGS_ASSERT(mu16LoadCount <= 1, "!IsAttached()");
+            mu8RemoveState = E_CONTENT_REMOVE_REMOVING;
+            return DoUnload();
+        }
+
         // DWARF CgsContent.h:431. The X360 inlines this masked byte read at
         // Slot::Update @0x82693B10 before committing a pending attachment.
         EContentState GetContentState() const

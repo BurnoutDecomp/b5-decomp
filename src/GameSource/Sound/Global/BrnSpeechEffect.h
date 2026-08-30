@@ -2,94 +2,58 @@
 #define BRN_SOUND_LOGIC_BRN_SPEECH_EFFECT_H
 
 #include "types.hpp"
-#include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (BY NAME)
-#include "GameSource/Sound/Streaming/BrnIStreamUser.h"             // BrnSound::Logic::Streaming::IStreamUser (third base)
-#include "GameSource/AttribSys/Generated/classes/speechdata.h"     // Attrib::Gen::speechdata (X360 +0x74 sub-object, now homed)
-
-// =============================================================================
-// BrnSound::Logic::SpeechEffect
-//   GameSource/Sound/Global/BrnSpeechEffect.h (DWARF home) +
-//   GameSource/Sound/Global/BrnSpeechEffect.cpp
-//
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity, not byte match).
-// SpeechEffect is the sound-logic EFFECT OBJECT that drives spoken content. It is a
-// multiple-inheritance effect-object leaf: the X360 ctor (@ 0x826BB4E8) settles THREE
-// vptr slots (@0 primary off_820B23B0, @4 off_820B237C, @0x38 off_820B2370) and the
-// class has a `vector deleting destructor' adjustor{4} @ 0x826BB5D0 (a `this - 4`
-// thunk), which only exists for a base sub-object at +4. So SpeechEffect derives from
-// the committed BrnEffectObject dual base (EffectObject primary @ +0, IResourceRequester
-// sub-object @ +4) AND the streaming IStreamUser interface (third sub-object @ +0x38) --
-// mirroring StreamingEffect/PresentationEffect. (DWARF renders only the single
-// IStreamUser base, the documented dwarfdump-drops-a-base false-negative; the ctor's
-// 3-vptr layout + the adjustor{4} thunk are asm-authoritative and pin the MI shape.)
-//
-// This TU's recon'd function set:
-//   SpeechEffect()                            @ 0x826BB4E8  (ctor)
-//   `vector deleting destructor'              @ 0x826BB668  (compiler-synthesised)
-//   `vector deleting destructor'`adjustor{4}' @ 0x826BB5D0  (compiler-synthesised)
-//   CompassDirectionToString(int)             @ 0x82687000  (leaf switch->string)
-//   GameModeToString(int)                     @ 0x82687148  (leaf switch->string)
-//   GetCr()                                   @ 0x82687F78  (take-address accessor)
-//
-// FLAG (shape vs full surface): the full DWARF member set (mePlayState, mParams
-// (VoiceWrapper::CreateParams), mbFlagSpeechIsStillPlaying, mbFirstTimeTipPlaying,
-// mSpeechData (Attrib::Gen::speechdata @ +0x74), meLanguage, muNextRoadRageIntroIndex,
-// muNextStuntRunIntroIndex, muQueuedContentSpec, mbQueuedSpeechIsFirstTimeTip) uses
-// un-homed types and is DEFERRED / declaration-only -- NOT fabricated as concrete
-// members here (matching the ExplosionEffect/StreamingEffect minimal-home convention).
-// Only the +0x08 sub-object address GetCr() returns is modelled (as the opaque Cr).
-//
-// LAYOUT NOTE (X360 32-bit vs host 64-bit): members are pinned BY NAME + SEQUENCE;
-// absolute offsets are NOT static_asserted across pointer members on the 64-bit host.
-// =============================================================================
+#include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"
+#include "GameSource/Sound/Streaming/BrnIStreamUser.h"
 
 namespace BrnSound
 {
 namespace Logic
 {
+namespace Streaming { class StreamingStateManager; }
 
-// SpeechEffect : BrnEffectObject (dual base @ +0/+4) + Streaming::IStreamUser (@ +0x38).
-struct SpeechEffect : public BrnEffectObject,
-                      public BrnSound::Logic::Streaming::IStreamUser
+class SpeechEffect : public BrnEffectObject,
+                     public Streaming::IStreamUser
 {
-    // Opaque sub-object whose address GetCr() returns at +0x08. Real type UNVERIFIED
-    // (the asm merely takes the address); size/layout DEFERRED.
-    struct Cr;
+public:
+    enum EPlayState { E_STOPPED = 0, E_PLAYING = 1 };
 
-    SpeechEffect();                // @ 0x826BB4E8
-    virtual ~SpeechEffect();       // out-of-line anchor; @ 0x826BB668 vector deleting
-                                   // destructor + @ 0x826BB5D0 adjustor{4} forward to it
+    SpeechEffect();
+    virtual ~SpeechEffect();
 
-    // @ 0x82687F78. Return the address of the sub-object @ +0x08.
-    Cr* GetCr();
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
+    const char* GetTypeName() const override;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
 
-    // @ 0x82687000 / @ 0x82687148. Leaf switch-to-string helpers (the `this` r3 arg is
-    // never dereferenced; kept as members to match the X360 mangled names
-    // BrnSound::Logic::SpeechEffect::CompassDirectionToString / ::GameModeToString).
-    const char* CompassDirectionToString( int liDirection );
-    const char* GameModeToString( int a1, int a2 );
+    bool Attach() override;
+    bool Detach() override;
+    void UpdateParams(f32 afDeltaTime) override;
+    void Notify(const CgsSound::Io::MessageHeader* apMessage) override;
 
-    // The Cr sub-object GetCr() returns the address of (X360 +0x08, past the base
-    // vptr region). Modelled as a named opaque member AFTER the BrnEffectObject base
-    // (whose leading vptr/data region the ctor zeroes); GetCr returns &maCr[0]. Element
-    // type DEFERRED (the asm merely takes its address).
-    u8 maCr[1];
+    const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
+    void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
+                           f32 afGain, f32 afElapsedTime) override;
+    void StreamStopped() override;
 
-    // X360 +0x74: the embedded Attrib::Gen::speechdata sub-object. Now a real named
-    // member (Attrib::Gen::speechdata landed since this TU was first minimal-homed) --
-    // its default ctor (speechdata(nullptr, nullptr)) exactly matches the X360 ctor's
-    // `Attrib::Gen::speechdata::speechdata(this+0x74, 0, 0)` call, and its implicit
-    // member dtor exactly matches ~SpeechEffect's `Attrib::Instance::~Instance(this+0x74)`
-    // asm call -- so no explicit code is needed in either SpeechEffect() or
-    // ~SpeechEffect(), the compiler-generated member lifetime does the work. The
-    // remaining DWARF members (mePlayState, mParams (VoiceWrapper::CreateParams),
-    // mbFlagSpeechIsStillPlaying, mbFirstTimeTipPlaying, meLanguage,
-    // muNextRoadRageIntroIndex, muNextStuntRunIntroIndex, muQueuedContentSpec,
-    // mbQueuedSpeechIsFirstTimeTip) still use un-homed types and stay DEFERRED.
-    Attrib::Gen::speechdata mSpeechData;
+    bool PlaySpeechMapping(u32 auMappingName, bool abFirstTimeTip = false);
+    void PlayStream(u32 auContentSpec, bool abFirstTimeTip = false);
+    const char* CompassDirectionToString(int aiDirection);
+    const char* GameModeToString(int aiUnused, int aiMode);
+
+private:
+    u32 GetSpeechMapping(u32 auMappingName) const;
+    void PostSpeechFinished();
+
+    Streaming::StreamingStateManager* mpStreamingManager;
+    CgsSound::Logic::VoiceWrapper::CreateParams mCreateParams;
+    EPlayState mePlayState;
+    bool mbSpeechStillPlaying;
+    bool mbFirstTimeTipPlaying;
+    u32 muQueuedContentSpec;
+    bool mbQueuedSpeechIsFirstTimeTip;
 };
 
 } // namespace Logic
 } // namespace BrnSound
 
-#endif // BRN_SOUND_LOGIC_BRN_SPEECH_EFFECT_H
+#endif

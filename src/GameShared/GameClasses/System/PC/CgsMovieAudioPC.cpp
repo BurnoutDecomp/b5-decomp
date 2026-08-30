@@ -1,7 +1,6 @@
 #include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h"
 #include "GameShared/GameClasses/System/PC/CgsAudioOutputPC.h"
-#include "GameShared/GameClasses/System/PC/CgsStreamHeadersPC.h"   // the resident SNR table (console chain)
-#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"       // Name::MakeHash (the interned id)
+#include "GameShared/GameClasses/System/PC/CgsMovieStreamHeaderLookup.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 #include <algorithm>
@@ -288,7 +287,7 @@ namespace
 // In-memory SNR (GenericRwacWaveContent) sample -> interleaved stereo s16 PCM.
 // The presentation splice-bank samples are fully-resident SNR images (header +
 // inline EA-XMA data -- the same record shape as a prefetch-bearing stream
-// header, with ALL the audio inline). Shared by GuiSoundPC (the menu blips).
+// header, with ALL the audio inline). Used by the movie-owned audio path.
 // ---------------------------------------------------------------------------
 bool SnrSampleDecodePC(const std::uint8_t* lpData, std::size_t luLen,
                        std::vector<std::int16_t>& lrPcm, int& lrRate, int& lrChannels)
@@ -335,7 +334,7 @@ void MovieAudioPC::Release()
 
 // ---------------------------------------------------------------------------
 // Shared SNS(+staged SNR) -> interleaved stereo s16 PCM decode. Used by the
-// movie stream (Load) and the menu-music stream (MenuMusicPC::Play); lpacTag
+// movie stream loader; lpacTag
 // prefixes the log lines so each consumer keeps its probe identity.
 // ---------------------------------------------------------------------------
 static bool DecodeSnsFileToPcm(const char* lpSnsPath, int liChannels, const char* lpacTag,
@@ -359,7 +358,7 @@ static bool DecodeSnsFileToPcm(const char* lpSnsPath, int liChannels, const char
     // Resolve the stream's SNR (GenericRwacWaveContent) from the RESIDENT
     // StreamHeaders bundle by the .SNS file name (path zone 1) -- the console
     // chain (StreamsRegistry ContentSpec -> HashString(gamedb url) ->
-    // StreamHeaders resource; see CgsStreamHeadersPC.h). It supplies the
+    // StreamHeaders resource; see CgsMovieStreamHeaderLookup.h). It supplies the
     // authoritative channels / sample rate / total length plus the PREFETCHED
     // attack: without it the first ~0.3 s of audio is missing and everything
     // after plays EARLY (the reported intro desync), and an unknown rate
@@ -372,7 +371,7 @@ static bool DecodeSnsFileToPcm(const char* lpSnsPath, int liChannels, const char
         lpacBase = lpacBase ? (lpacBase + 1) : lpSnsPath;
         const u8* lpSnrData = nullptr;
         u32       luSnrLen  = 0;
-        if (StreamHeadersPC::ResolveBySnsName(lpacBase, &lpSnrData, &luSnrLen))
+        if (MovieStreamHeaderLookup::ResolveBySnsName(lpacBase, &lpSnrData, &luSnrLen))
         {
             std::vector<std::uint8_t> lSnrData(lpSnrData, lpSnrData + luSnrLen);
             snr = ParseSnr(lSnrData);
@@ -434,7 +433,7 @@ bool MovieAudioPC::Load(const char* lpSnsPath, int liChannels)
     // hundred ms the first time; doing it here (with a silent fill) keeps the later Start()
     // instant, so audio and video begin together instead of the audio lagging by the open cost.
     // If the MENU-MUSIC stream has the device open at a different rate, close it first (the
-    // single source voice is fixed-rate; MenuMusicPC::Update reclaims it after this stream stops).
+    // single source voice is fixed-rate).
     if (AudioOutputPC::IsOpen() && AudioOutputPC::GetOpenSampleRate() != g_sampleRate)
         AudioOutputPC::Close();
     if (!AudioOutputPC::IsOpen())
@@ -479,311 +478,15 @@ void MovieAudioPC::Start()
 
 void MovieAudioPC::Stop()
 {
-    // Close the device (DestroyVoice synchronises with the XAudio2 callback, so no fill runs
-    // afterwards -- making it safe for a following Load() to free the PCM buffer, and leaving the
-    // device off between movies so the next Start() opens fresh from frame 0).
-    AudioOutputPC::Close();
+    // Retire only the movie-owned producer. DestroyVoice still provides the
+    // callback barrier required before Load/Release frees g_pcm; when the RWAC
+    // Dac is present the shared backend immediately resumes at its native 48 kHz
+    // so deferred commands and the engine mix continue after the final movie.
+    AudioOutputPC::ReleasePrimaryFill();
     g_finished = true;
 }
 
 bool MovieAudioPC::IsLoaded() const   { return g_loaded; }
 bool MovieAudioPC::IsFinished() const { return g_finished; }
-
-// ===========================================================================
-//  MenuMusicPC -- the looping menu-music stream (see the header note). Shares
-//  this TU's decode; the MOVIE stream keeps fill priority (console parity: the
-//  menu stream is hash-0-stopped before any attract/boot video plays).
-// ===========================================================================
-namespace
-{
-    s16* m_musicPcm    = nullptr;   // interleaved stereo PCM (cached across Stop)
-    long m_musicFrames = 0;
-    long m_musicCursor = 0;
-    int  m_musicRate   = 44100;
-    bool m_musicActive = false;
-    char m_macMusicPath[300] = { 0 };
-
-    inline bool MovieStreamBusy() { return g_loaded && !g_finished; }
-}
-
-void MenuMusicPC::FillStatic(s16* lpOut, int liFrames, void* /*lpUser*/)
-{
-    // Realtime XAudio2 callback: copy from the decoded buffer, LOOPING at the end.
-    long li = 0;
-    if (m_musicPcm != nullptr && m_musicActive && m_musicFrames > 0) {
-        for (; li < liFrames; ++li) {
-            if (m_musicCursor >= m_musicFrames) m_musicCursor = 0;   // loop
-            *lpOut++ = m_musicPcm[m_musicCursor * 2 + 0];
-            *lpOut++ = m_musicPcm[m_musicCursor * 2 + 1];
-            ++m_musicCursor;
-        }
-    }
-    for (; li < liFrames; ++li) { *lpOut++ = 0; *lpOut++ = 0; }
-}
-
-bool MenuMusicPC::PlaySpec(const char* lpacSpecName)
-{
-    // ContentSpec name -> the registry's zone-1 .SNS file (the same resident
-    // chain the SNR lookup uses); then stream it from SOUND\STREAMS\.
-    char lacSns[96] = { 0 };
-    if (!StreamHeadersPC::ResolveBySpecName(lpacSpecName, nullptr, nullptr,
-                                            lacSns, sizeof(lacSns)))
-    {
-        AUDIO_LOG << "[MenuMusic] spec '" << lpacSpecName << "' not in StreamsRegistry\n";
-        return false;
-    }
-    char lacPath[160];
-    std::snprintf(lacPath, sizeof(lacPath), "SOUND\\STREAMS\\%s", lacSns);
-    return Play(lacPath);
-}
-
-bool MenuMusicPC::Play(const char* lpSnsPath)
-{
-    if (lpSnsPath == nullptr || lpSnsPath[0] == 0) return false;
-
-    if (!(m_musicPcm != nullptr && std::strcmp(m_macMusicPath, lpSnsPath) == 0))
-    {
-        // A different track: decode it (replacing the cached one). Close the device
-        // first when the fill could be ours -- DestroyVoice synchronises with the
-        // callback, making the free safe (same discipline as the movie stream).
-        if (AudioOutputPC::IsOpen() && !MovieStreamBusy())
-            AudioOutputPC::Close();
-        m_musicActive = false;
-        if (m_musicPcm) { std::free(m_musicPcm); m_musicPcm = nullptr; }
-        m_musicFrames = 0; m_macMusicPath[0] = 0;
-
-        std::vector<std::int16_t> pcm;
-        int liRate = 48000;
-        if (!DecodeSnsFileToPcm(lpSnsPath, 2, "[MenuMusic]", pcm, liRate))
-            return false;
-        m_musicFrames = long(pcm.size() / 2);
-        m_musicPcm = static_cast<s16*>(std::malloc(std::size_t(m_musicFrames) * 2 * sizeof(s16)));
-        if (m_musicPcm == nullptr) { m_musicFrames = 0; return false; }
-        std::memcpy(m_musicPcm, pcm.data(), std::size_t(m_musicFrames) * 2 * sizeof(s16));
-        m_musicRate = liRate;
-        std::strncpy(m_macMusicPath, lpSnsPath, sizeof(m_macMusicPath) - 1);
-        m_macMusicPath[sizeof(m_macMusicPath) - 1] = 0;
-        AUDIO_LOG << "[MenuMusic] decoded " << lpSnsPath << " (" << (int)m_musicFrames
-                  << " frames, " << (int)(m_musicRate > 0 ? m_musicFrames / m_musicRate : 0)
-                  << " s, rate " << m_musicRate << ", looping)\n";
-    }
-
-    m_musicCursor = 0;
-    m_musicActive = true;
-    Update();   // claim the output now if it is free
-    return true;
-}
-
-void MenuMusicPC::Stop()
-{
-    if (!m_musicActive) return;
-    m_musicActive = false;
-    // Release the device only when the fill is (at most) ours -- never yank a
-    // playing movie stream. The decoded PCM stays cached for the next Play.
-    if (AudioOutputPC::IsOpen() && !MovieStreamBusy())
-        AudioOutputPC::Close();
-    AUDIO_LOG << "[MenuMusic] stopped\n";
-}
-
-void MenuMusicPC::Update()
-{
-    if (!m_musicActive || m_musicPcm == nullptr) return;
-    if (MovieStreamBusy()) return;               // the movie stream owns the output
-    if (AudioOutputPC::IsOpen() && AudioOutputPC::GetOpenSampleRate() != m_musicRate)
-        AudioOutputPC::Close();                  // a finished movie left it at another rate
-    if (!AudioOutputPC::IsOpen())
-        AudioOutputPC::Open(m_musicRate, 2, &MenuMusicPC::FillStatic, nullptr);
-    else
-        AudioOutputPC::SetFill(&MenuMusicPC::FillStatic, nullptr);   // reclaim (idempotent)
-}
-
-bool MenuMusicPC::IsActive() { return m_musicActive; }
-
-// ===========================================================================
-//  SpeechAudioPC -- the one-shot voice-over stream (see the header note). Shares
-//  this TU's SNS decode. Unlike the movie/menu streams it NEVER claims the
-//  primary fill or re-opens the device: it mixes on AudioOutputPC's dedicated
-//  VOICE slot and resamples to whatever rate the device is already open at, so a
-//  line can sound over a playing movie or music track (which is what the console
-//  does -- SpeechEffect is its own effect with its own voice).
-// ===========================================================================
-namespace
-{
-    s16*   m_speechPcm     = nullptr;   // interleaved stereo PCM (cached across Stop)
-    long   m_speechFrames  = 0;
-    double m_speechCursor  = 0.0;       // fractional source cursor (resampling)
-    int    m_speechRate    = 48000;     // the STREAM's rate (device rate may differ)
-    bool   m_speechActive  = false;     // cleared by the audio thread at end of line
-    bool   m_speechRan     = false;     // a line was started (so a finish is expectable)
-    char   m_macSpeechPath[300] = { 0 };
-    // Wall-clock backstop for the completion. The cursor is advanced by the XAudio2
-    // callback, so if the device is CLOSED mid-line (the movie/menu-music primary owner
-    // churns it) the cursor freezes and the line would never report finished -- which
-    // would hang BrnGui::Intro, whose every timed transition waits on the 467. The line's
-    // own decoded duration is therefore the upper bound on how long it can hold the gate.
-    std::chrono::steady_clock::time_point m_speechEnd;
-}
-
-void SpeechAudioPC::FillStatic(s16* lpOut, int liFrames, void* /*lpUser*/)
-{
-    // Realtime XAudio2 callback. Nearest-source-frame resample from the stream's
-    // rate to the open device rate (the intro lines are 48 kHz, which is also the
-    // usual device rate, so the common case is a straight 1:1 copy).
-    int li = 0;
-    if (m_speechPcm != nullptr && m_speechActive && m_speechFrames > 0)
-    {
-        const int liDeviceRate = AudioOutputPC::GetOpenSampleRate();
-        const double lfStep = (liDeviceRate > 0)
-            ? (double(m_speechRate) / double(liDeviceRate)) : 1.0;
-        for (; li < liFrames; ++li)
-        {
-            const long liSrc = long(m_speechCursor);
-            if (liSrc >= m_speechFrames) { m_speechActive = false; break; }
-            *lpOut++ = m_speechPcm[liSrc * 2 + 0];
-            *lpOut++ = m_speechPcm[liSrc * 2 + 1];
-            m_speechCursor += lfStep;
-        }
-    }
-    for (; li < liFrames; ++li) { *lpOut++ = 0; *lpOut++ = 0; }
-}
-
-bool SpeechAudioPC::PlaySpec(const char* lpacSpecName)
-{
-    if (lpacSpecName == nullptr || lpacSpecName[0] == 0)
-        return false;
-
-    // ContentSpec name -> the registry's zone-1 .SNS file (the same resident chain
-    // the console's Registry::GetEntity<ContentSpec> + GetPathZone(spec,1) walks).
-    char lacSns[96] = { 0 };
-    if (!StreamHeadersPC::ResolveBySpecName(lpacSpecName, nullptr, nullptr,
-                                            lacSns, sizeof(lacSns)))
-    {
-        AUDIO_LOG << "[Speech] spec '" << lpacSpecName << "' not in StreamsRegistry\n";
-        return false;
-    }
-    char lacPath[160];
-    std::snprintf(lacPath, sizeof(lacPath), "SOUND\\STREAMS\\%s", lacSns);
-
-    if (!(m_speechPcm != nullptr && std::strcmp(m_macSpeechPath, lacPath) == 0))
-    {
-        // A different line: decode it, replacing the cached one. Silence the voice
-        // slot across the free so the audio thread cannot be mid-read of the buffer
-        // (the voice fill is the only reader, and clearing it is synchronous here in
-        // the sense that a fill already in flight only ever reads m_speechPcm while
-        // m_speechActive is true -- which is cleared first).
-        m_speechActive = false;
-        AudioOutputPC::SetVoiceFill(nullptr, nullptr);
-        if (m_speechPcm) { std::free(m_speechPcm); m_speechPcm = nullptr; }
-        m_speechFrames = 0; m_macSpeechPath[0] = 0;
-
-        std::vector<std::int16_t> pcm;
-        int liRate = 48000;
-        // The speech streams are MONO; DecodeAll duplicates the single plane into
-        // both output channels, so the cached buffer is interleaved stereo either way.
-        if (!DecodeSnsFileToPcm(lacPath, 1, "[Speech]", pcm, liRate))
-            return false;
-        m_speechFrames = long(pcm.size() / 2);
-        m_speechPcm = static_cast<s16*>(std::malloc(std::size_t(m_speechFrames) * 2 * sizeof(s16)));
-        if (m_speechPcm == nullptr) { m_speechFrames = 0; return false; }
-        std::memcpy(m_speechPcm, pcm.data(), std::size_t(m_speechFrames) * 2 * sizeof(s16));
-        m_speechRate = liRate;
-        std::strncpy(m_macSpeechPath, lacPath, sizeof(m_macSpeechPath) - 1);
-        m_macSpeechPath[sizeof(m_macSpeechPath) - 1] = 0;
-        AUDIO_LOG << "[Speech] decoded " << lacPath << " (" << (int)m_speechFrames
-                  << " frames, " << (int)(m_speechRate > 0 ? m_speechFrames / m_speechRate : 0)
-                  << " s, rate " << m_speechRate << ")\n";
-    }
-
-    // The voice slot is additive, so the device only has to be OPEN -- whoever owns
-    // the primary keeps it. Open it silently if nothing has yet.
-    if (!AudioOutputPC::IsOpen())
-        AudioOutputPC::Open(m_speechRate, 2, nullptr, nullptr);
-
-    m_speechCursor = 0.0;
-    m_speechRan    = true;
-    m_speechActive = true;
-    {
-        const long liMs = (m_speechRate > 0)
-            ? long((double(m_speechFrames) * 1000.0) / double(m_speechRate)) : 0;
-        m_speechEnd = std::chrono::steady_clock::now() + std::chrono::milliseconds(liMs + 250);
-    }
-    AudioOutputPC::SetVoiceFill(&SpeechAudioPC::FillStatic, nullptr);
-    AUDIO_LOG << "[Speech] playing '" << lpacSpecName << "' -> " << lacSns << "\n";
-    return true;
-}
-
-// ---------------------------------------------------------------------------
-// PlayByNameHash -- the GUI-facing entry. The request carries a
-// CgsSound::Playback::Name::MakeHash id, not a string, so the id is matched by
-// re-hashing each known voice-over NAME with the real runtime hash (no hard-coded
-// hash constants: Name::MakeHash is the same function the console interns with,
-// and BrnGui::Intro posts exactly these six names).
-//
-// The NAME -> STREAM binding below is the CONSOLE VAULT'S OWN, decoded from
-// SOUND\BURNOUTGLOBALDATA.BIN (2026-08-04): the streammappings collection
-// (key 0x019CEB4F7F236546) holds the parallel arrays UserStringsHashed
-// (attribhash64 0xE28BB454C32E1A1D, 229 u32 Playback::Name ids) and
-// LanguageStreamConfigurations (0xE9D833DF68C1540D, 229 RefSpecs, each to a
-// languagestreamconfiguration whose layout is ContentSpecs[6] -- column 0 is
-// the English ContentSpec name hash). The six intro ids sit at indices
-// 104-109, and their English specs are exactly the six below -- this is the
-// same resolve BrnSound::Logic::SpeechEffect::GetSpeechMapping @0x8269E918
-// performs at runtime. NB the previous revision of this table was inferred by
-// name correspondence and had Need_Picture/Take_Photo SWAPPED (int_cam vs
-// int_lic) -- the vault says the WELCOMETEXT line is int_lic (the long DJ
-// self-introduction) and the photo-booth line is int_cam.
-// ---------------------------------------------------------------------------
-bool SpeechAudioPC::PlayByNameHash(u32 luNameHash)
-{
-    struct VoiceOverBinding { const char* mpacName; const char* mpacSpec; };
-    static const VoiceOverBinding KA_BINDINGS[] =
-    {
-        { "Intro_Need_Picture",   "int_lic"      },   // vault mapping index 104
-        { "Intro_No_Cam",         "int_nocam"    },   // 105
-        { "Intro_Take_Photo",     "int_cam"      },   // 106
-        { "Intro_Learner_Permit", "int_lperm"    },   // 107
-        { "Intro_Go_To_Junkyard", "int_gotojunk" },   // 108
-        { "Intro_Show_Car",       "int_showcar"  },   // 109
-    };
-
-    for (unsigned lu = 0; lu < sizeof(KA_BINDINGS) / sizeof(KA_BINDINGS[0]); ++lu)
-    {
-        const u32 luId = static_cast<u32>(
-            CgsSound::Playback::Name::MakeHash(KA_BINDINGS[lu].mpacName));
-        if (luId == luNameHash)
-            return PlaySpec(KA_BINDINGS[lu].mpacSpec);
-    }
-
-    AUDIO_LOG << "[Speech] no stream bound to voice-over id " << (int)luNameHash << "\n";
-    return false;
-}
-
-void SpeechAudioPC::Stop()
-{
-    m_speechActive = false;
-    AudioOutputPC::SetVoiceFill(nullptr, nullptr);   // the decoded PCM stays cached
-}
-
-bool SpeechAudioPC::IsActive() { return m_speechActive; }
-
-bool SpeechAudioPC::ConsumeFinished()
-{
-    if (!m_speechRan)
-        return false;
-    // Finished when the fill ran the buffer out, OR when the line's own decoded
-    // duration has elapsed (the backstop for a device closed mid-line).
-    if (m_speechActive && std::chrono::steady_clock::now() < m_speechEnd)
-        return false;
-    // Report which path ended the line: `drained` means the XAudio2 callback consumed
-    // the whole decoded buffer (i.e. the samples really reached the device); `backstop`
-    // means the duration elapsed with the cursor short of the end (the device was shut
-    // under us). This is the difference between "the VO sounded" and "the VO was timed".
-    AUDIO_LOG << "[Speech] line ended (" << (m_speechActive ? "backstop" : "drained")
-              << ") " << (int)long(m_speechCursor) << "/" << (int)m_speechFrames << " frames\n";
-    m_speechActive = false;
-    m_speechRan    = false;
-    AudioOutputPC::SetVoiceFill(nullptr, nullptr);
-    return true;
-}
 
 } // namespace CgsSystem

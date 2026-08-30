@@ -37,7 +37,7 @@ struct SPLICE_SampleRef
     u16 muSampleId;      // +0x00  sample index into the splice bank's table of contents
     s8  mcSpliceType;    // +0x02  SPLICE_TYPE selecting the source bank (used by Update)
     u8  mPad03;          // +0x03
-    f32 mfField04;       // +0x04  (Update: resample-pitch scalar)
+    f32 mfField04;       // +0x04  base volume (Update)
     f32 mfBasePitch;     // +0x08  base playback pitch (Play)
     f32 mfTriggerDelay;  // +0x0C  time-to-trigger; ~0 => start immediately (Play)
     f32 mfAzimuth;       // +0x10  pan azimuth; == KI_STEREO_SAMPLE_AZIMUTH marks a stereo sample

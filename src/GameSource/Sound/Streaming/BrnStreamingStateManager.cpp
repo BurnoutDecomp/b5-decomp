@@ -1,5 +1,8 @@
 #include "GameSource/Sound/Streaming/BrnStreamingStateManager.h"
+#include "GameSource/Sound/Streaming/BrnStreamingState.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+
+namespace CgsSystem { namespace HardwareSku { s32 FindLanguage(); } }
 
 // =============================================================================
 // BrnSound::Logic::Streaming::StreamingStateManager -- out-of-line bodies.
@@ -29,6 +32,28 @@ namespace Logic
 namespace Streaming
 {
 
+StreamRequest::StreamRequest()
+    : mpAttachment(0), mu32Priority(0), mfLagTolerance(0.0f), mfTimeStamp(0.0f),
+      mu32UniqueId(0), mbDirty(false)
+{
+}
+
+StreamRequest::StreamRequest(IStreamUser* apAttachment, u32 auPriority, f32 afLagTolerance)
+    : mpAttachment(apAttachment), mu32Priority(auPriority), mfLagTolerance(afLagTolerance),
+      mfTimeStamp(0.0f), mu32UniqueId(0), mbDirty(false)
+{
+}
+
+StreamStopRequest::StreamStopRequest()
+    : mpAttachment(0), mfFadeOut(0.0f), mfTimeStamp(0.0f), mu32UniqueId(0)
+{
+}
+
+StreamStopRequest::StreamStopRequest(const IStreamUser* apAttachment, f32 afFadeOut)
+    : mpAttachment(apAttachment), mfFadeOut(afFadeOut), mfTimeStamp(0.0f), mu32UniqueId(0)
+{
+}
+
 // ---------------------------------------------------------------------------
 // StreamingStateManager::StreamingStateManager()  ctor @ 0x826FBFE0
 //
@@ -57,6 +82,10 @@ namespace Streaming
 // ---------------------------------------------------------------------------
 StreamingStateManager::StreamingStateManager()
     : BrnSound::Logic::BrnStateManager()
+    , muPlayRequestCount(0)
+    , muStopRequestCount(0)
+    , muNumRePostRequests(0)
+    , muUniqueId(0)
 {
 }
 
@@ -198,7 +227,50 @@ const char* StreamingStateManager::GetTypeName() const
 // ---------------------------------------------------------------------------
 bool StreamingStateManager::Prepare()
 {
-    return true;
+    switch (mePrepareState)
+    {
+    case E_PREPARE_NONE:
+    case E_PREPARE_RELEASED:
+        mePrepareState = E_PREPARE_NONE;
+        // fall through
+    case E_PREPARE_BEGIN:
+    {
+        mePrepareState = E_PREPARE_BEGIN;
+        const char* lpacBundle = 0;
+        switch (CgsSystem::HardwareSku::FindLanguage())
+        {
+        case 7:
+        case 8:  lpacBundle = "sound\\streams\\StreamHeaders.bundle"; break;
+        case 10: lpacBundle = "sound\\streams\\StreamHeaders_FR.bundle"; break;
+        case 11: lpacBundle = "sound\\streams\\StreamHeaders_DE.bundle"; break;
+        case 15: lpacBundle = "sound\\streams\\StreamHeaders_IT.bundle"; break;
+        case 16: lpacBundle = "sound\\streams\\StreamHeaders_JP.bundle"; break;
+        case 22: lpacBundle = "sound\\streams\\StreamHeaders_ES.bundle"; break;
+        default:
+            CGS_ASSERT(false, "Unhandled Language when loading Sound Stream Headers.");
+            lpacBundle = "sound\\streams\\StreamHeaders.bundle";
+            break;
+        }
+        LoadAsset(lpacBundle, 0, ResourceRegistrar::E_DATA);
+        mePrepareState = E_PREPARE_UPDATING;
+        return false;
+    }
+    case E_PREPARE_UPDATING:
+        return false;
+    case E_PREPARE_STATES:
+        if (!PrepareStates(1, 3, 0))
+            return false;
+        // fall through
+    case E_PREPARE_FINISHED:
+        muPlayRequestCount = 0;
+        muStopRequestCount = 0;
+        muNumRePostRequests = 0;
+        muUniqueId = 0;
+        mePrepareState = E_PREPARE_FINISHED;
+        return true;
+    default:
+        return false;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +285,8 @@ bool StreamingStateManager::Prepare()
 // ---------------------------------------------------------------------------
 void StreamingStateManager::ResourcesAreReady()
 {
+    if (mePrepareState == E_PREPARE_UPDATING)
+        mePrepareState = E_PREPARE_STATES;
 }
 
 // ---------------------------------------------------------------------------
@@ -233,13 +307,13 @@ void StreamingStateManager::ResourcesAreReady()
 // the module once the full StateManager view (mpLogicModule) + SoundLogicModule are
 // available.
 // ---------------------------------------------------------------------------
-BrnSound::Logic::ResourceRegistrar& StreamingStateManager::GetResourceRegistrar()
+bool StreamingStateManager::Release()
 {
-    CGS_ASSERT( false,
-                "StreamingStateManager::GetResourceRegistrar reached without a homed "
-                "SoundLogicModule (boot path does not call this)" );
-    static BrnSound::Logic::ResourceRegistrar sUnhomedRegistrar;
-    return sUnhomedRegistrar;
+    muPlayRequestCount = 0;
+    muStopRequestCount = 0;
+    muNumRePostRequests = 0;
+    mePrepareState = E_PREPARE_RELEASED;
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -306,6 +380,165 @@ void StreamingStateManager::RePostStreamRequest( const StreamRequest& request )
 
     maRePostRequests[muNumRePostRequests] = request;
     ++muNumRePostRequests;
+}
+
+void StreamingStateManager::PostStreamRequest(const StreamStopRequest& lStopRequest)
+{
+    CGS_ASSERT(muStopRequestCount < E_MAX_STREAM_REQUESTS,
+               "muStopRequestCount < E_MAX_STREAM_REQUESTS");
+    StreamStopRequest lStamped = lStopRequest;
+    lStamped.mfTimeStamp = mfCurrentTime;
+    lStamped.mu32UniqueId = muUniqueId++;
+    PostStreamRequestInternal(lStamped);
+}
+
+void StreamingStateManager::PostStreamRequestInternal(const StreamStopRequest& arRequest)
+{
+    CGS_ASSERT(muStopRequestCount < E_MAX_STREAM_REQUESTS,
+               "muStopRequestCount < E_MAX_STREAM_REQUESTS");
+    maStopRequests[muStopRequestCount++] = arRequest;
+}
+
+void StreamingStateManager::RemoveRequestsForUser(const StreamStopRequest& arRequest)
+{
+    for (u32 luIndex = 0; luIndex < muPlayRequestCount; ++luIndex)
+    {
+        StreamRequest& lrRequest = maPlayRequests[luIndex];
+        if (lrRequest.mpAttachment == arRequest.mpAttachment &&
+            lrRequest.mu32UniqueId < arRequest.mu32UniqueId)
+            lrRequest.mbDirty = true;
+    }
+}
+
+void StreamingStateManager::CheckForDuplicates(u32 auSourceIndex) const
+{
+    CGS_ASSERT(auSourceIndex < muPlayRequestCount,
+               "luSourceIndex < muPlayRequestCount");
+    if (auSourceIndex >= muPlayRequestCount)
+        return;
+    for (u32 luIndex = 0; luIndex < muPlayRequestCount; ++luIndex)
+    {
+        if (luIndex != auSourceIndex && !maPlayRequests[luIndex].mbDirty &&
+            maPlayRequests[luIndex].mpAttachment == maPlayRequests[auSourceIndex].mpAttachment)
+            CGS_ASSERT(false, "[Stream] User made multiple requests");
+    }
+}
+
+void StreamingStateManager::ProcessStopRequests()
+{
+    StreamStopRequest laReposts[E_MAX_REQUEST_RE_POSTS];
+    u32 luRepostCount = 0;
+
+    for (u32 luStop = 0; luStop < muStopRequestCount; ++luStop)
+    {
+        const StreamStopRequest& lrStop = maStopRequests[luStop];
+        for (CgsSound::Logic::State* lpBase = mpHeadState; lpBase;
+             lpBase = lpBase->GetNextState())
+        {
+            StreamingState* lpState = static_cast<StreamingState*>(lpBase);
+            if (!lpState->IsAttached())
+                continue;
+            const StreamRequest& lrActive = lpState->GetRequest();
+            if (lrActive.mpAttachment != lrStop.mpAttachment ||
+                lrActive.mu32UniqueId >= lrStop.mu32UniqueId)
+                continue;
+
+            if (lpState->Detach())
+            {
+                lpState->SetFadeOut(lrStop.mfFadeOut);
+            }
+            else
+            {
+                bool lbAlreadyReposted = false;
+                for (u32 luIndex = 0; luIndex < luRepostCount; ++luIndex)
+                    lbAlreadyReposted = lbAlreadyReposted ||
+                        laReposts[luIndex].mpAttachment == lrStop.mpAttachment;
+                if (!lbAlreadyReposted)
+                {
+                    CGS_ASSERT(luRepostCount < E_MAX_REQUEST_RE_POSTS,
+                               "luNumRePosts < E_MAX_REQUEST_RE_POSTS");
+                    if (luRepostCount < E_MAX_REQUEST_RE_POSTS)
+                        laReposts[luRepostCount++] = lrStop;
+                }
+            }
+        }
+        RemoveRequestsForUser(lrStop);
+    }
+
+    muStopRequestCount = 0;
+    for (u32 luIndex = 0; luIndex < luRepostCount; ++luIndex)
+        PostStreamRequestInternal(laReposts[luIndex]);
+}
+
+CgsSound::Logic::State* StreamingStateManager::GetFreeState(void* apRequest)
+{
+    const StreamRequest* lpRequest = static_cast<const StreamRequest*>(apRequest);
+    CGS_ASSERT(lpRequest != 0, "lpvObjectPtr");
+    if (!lpRequest)
+        return 0;
+
+    StreamingState* lpFree = 0;
+    for (CgsSound::Logic::State* lpBase = mpHeadState; lpBase;
+         lpBase = lpBase->GetNextState())
+    {
+        StreamingState* lpState = static_cast<StreamingState*>(lpBase);
+        if (!lpState->IsAttached() &&
+            (!lpFree || lpState->GetUpdateState() == CgsSound::Logic::State::E_UPDATE_UNATTACHED))
+            lpFree = lpState;
+    }
+    if (lpFree)
+        return lpFree;
+
+    StreamingState* lpVictim = 0;
+    for (CgsSound::Logic::State* lpBase = mpHeadState; lpBase;
+         lpBase = lpBase->GetNextState())
+    {
+        StreamingState* lpState = static_cast<StreamingState*>(lpBase);
+        CGS_ASSERT(lpState->IsAttached(), "lpStreamingState->IsAttached()");
+        if (lpState->GetRequest().mu32Priority < lpRequest->mu32Priority &&
+            (!lpVictim || lpState->GetRequest().mu32Priority < lpVictim->GetRequest().mu32Priority))
+            lpVictim = lpState;
+    }
+    if (!lpVictim)
+        return 0;
+
+    const StreamRequest lOldRequest = lpVictim->GetRequest();
+    if (!lpVictim->Detach())
+        return 0;
+    lpVictim->SetFadeOut(lpRequest->mfLagTolerance);
+    RePostStreamRequest(lOldRequest);
+    return lpVictim;
+}
+
+void StreamingStateManager::UpdateParams(f32 af32GameDt)
+{
+    CgsSound::Logic::StateManager::UpdateParams(af32GameDt);
+    CGS_ASSERT(mePrepareState == E_PREPARE_FINISHED,
+               "mePrepareState == E_PREPARE_FINISHED");
+    if (mePrepareState != E_PREPARE_FINISHED)
+        return;
+
+    ProcessStopRequests();
+    muNumRePostRequests = 0;
+    for (u32 luIndex = 0; luIndex < muPlayRequestCount; ++luIndex)
+    {
+        StreamRequest& lrRequest = maPlayRequests[luIndex];
+        if (lrRequest.mbDirty)
+            continue;
+        CheckForDuplicates(luIndex);
+        StreamingState* lpState = static_cast<StreamingState*>(GetFreeState(&lrRequest));
+        if (lpState)
+        {
+            lpState->Attach(&lrRequest);
+        }
+        else
+            RePostStreamRequest(lrRequest);
+    }
+
+    muPlayRequestCount = 0;
+    const u32 luRepostCount = muNumRePostRequests;
+    for (u32 luIndex = 0; luIndex < luRepostCount; ++luIndex)
+        PostStreamRequestInternal(maRePostRequests[luIndex]);
 }
 
 } // namespace Streaming

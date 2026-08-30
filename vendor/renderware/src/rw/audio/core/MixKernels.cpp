@@ -80,27 +80,40 @@ const f32 KF_CHANNEL_FOLD = 0.70700002f;
 const s32 KI_GAIN_DECLICK_FRAME_SIZE = 64;
 
 // =====================================================================================
-// FLAG (undecoded rodata): the ReChannelGainMix / ReChannelGainMixRamp channel-routing
-// descriptor block at 0x8214AFD0..0x8214B10x. The lookup CODE below is store-for-store,
-// but the table CONTENTS are data-segment rodata with no dump in this export set, so
-// they are zero-filled placeholders (family precedent: BandPassIir2's undecoded
-// descriptor). A zero descriptor routes ppDst[0] += ppSrc[0] * 0.0 -- value-neutral.
+// ReChannelGainMix / ReChannelGainMixRamp channel-routing descriptor block recovered
+// byte-for-byte from ARTIST rodata @0x8214AFD0..0x8214B050.
 //
-//   flt_8214AFD0 -- the gain-scale slots a descriptor's bits 6-7 select (byte offset
-//                   (b>>4)&0xC into the table). Slots 2/3 would alias the range table
-//                   that starts 8 bytes later at 0x8214AFD8, so only slots 0/1 are
-//                   addressable as floats in the shipped image.
+//   flt_8214AFD0 -- the two gain-scale slots selected by descriptor bit 6. No shipped
+//                   descriptor selects slots 2/3; the range table begins immediately
+//                   after these two floats.
 //   unk_8214AFD8 -- u8[6][6][2] {first,last} descriptor-range pairs, indexed
 //                   2 * (6*numSrcChannels + numDstChannels - 7) (72 bytes; the size is
 //                   attested by the indexing range over src/dst in 1..6 and by the pair
 //                   table starting exactly 72 bytes later at 0x8214B020).
-//   unk_8214B020 -- the packed pair descriptors: dst = b & 7, src = (b >> 3) & 7,
-//                   scale slot = (b >> 6) & 3. Upper size bound 0xE8 bytes (the next
-//                   attested rodata, flt_8214B108, the denormal-flush bias).
+//   unk_8214B020 -- 48 packed pair descriptors: dst = b & 7,
+//                   src = (b >> 3) & 7, scale slot = (b >> 6) & 3. The next rodata
+//                   object begins at 0x8214B050.
 // =====================================================================================
-const f32 gReChannelGainScaleTable[4] = { 0.0f, 0.0f, 0.0f, 0.0f }; // flt_8214AFD0
-const u8  gReChannelGainRangeTable[72] = { 0 };                     // unk_8214AFD8
-const u8  gReChannelGainPairTable[0xE8] = { 0 };                    // unk_8214B020
+const f32 gReChannelGainScaleTable[2] = { 1.0f, 0.70700002f }; // flt_8214AFD0
+const u8 gReChannelGainRangeTable[72] = {                       // unk_8214AFD8
+    0x28, 0x28, 0x00, 0x01, 0xFF, 0xFF, 0x02, 0x03,
+    0xFF, 0xFF, 0x04, 0x04, 0x05, 0x06, 0x28, 0x29,
+    0xFF, 0xFF, 0x07, 0x08, 0xFF, 0xFF, 0x09, 0x0A,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0x0B, 0x0E, 0x0F, 0x12,
+    0xFF, 0xFF, 0x28, 0x2B, 0xFF, 0xFF, 0x13, 0x16,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0x17, 0x1B, 0x1C, 0x21,
+    0xFF, 0xFF, 0x22, 0x27, 0xFF, 0xFF, 0x28, 0x2D,
+};
+const u8 gReChannelGainPairTable[48] = {                       // unk_8214B020
+    0x40, 0x41, 0x40, 0x41, 0x01, 0x00, 0x08, 0x00,
+    0x09, 0x00, 0x0A, 0x00, 0x08, 0x10, 0x18, 0x00,
+    0x09, 0x10, 0x19, 0x00, 0x0A, 0x13, 0x1C, 0x08,
+    0x10, 0x20, 0x18, 0x00, 0x48, 0x00, 0x18, 0x49,
+    0x11, 0x21, 0x48, 0x00, 0x1A, 0x49, 0x11, 0x23,
+    0x00, 0x09, 0x12, 0x1B, 0x24, 0x2D, 0x00, 0x00,
+};
 
 } // namespace
 
@@ -843,16 +856,18 @@ void GainVectorSine(f32 *pGainVector, s32 numSamples, f32 startGain,
 } // namespace rw
 
 // ---------------------------------------------------------------------------
-// FLAG PC link-closure stub (AEMS-cascade wave 2026-08-28): the 6->1 remap
-// kernel has no vendor body in the Feb-2007 tree (the dispatcher above calls
-// it). Reached only when a 6-channel source mixes to mono -- not on any current
-// path. Writes silence (the Write-family overwrite contract) until the kernel
-// is decoded from ARTIST.
+// ReChannelGainWrite6x1 @0x82B6B030 -- 5.1 -> mono fold-down. ARTIST copies
+// centre first, then accumulates front-right, rear-right, rear-left, front-left;
+// the LFE channel is deliberately omitted.
 // ---------------------------------------------------------------------------
 namespace rw { namespace audio { namespace core {
-void ReChannelGainWrite6x1(f32 **ppDst, f32 ** /*ppSrc*/, f32 /*gain*/, int numSamples)
+void ReChannelGainWrite6x1(f32 **ppDst, f32 **ppSrc, f32 gain, int numSamples)
 {
-    for (int i = 0; i < numSamples; ++i)
-        ppDst[0][i] = 0.0f;
+    f32 *dst0 = ppDst[0];
+    CopyWithGain(dst0, ppSrc[1], gain, numSamples);
+    MixWithGain(dst0, ppSrc[2], gain, numSamples);
+    MixWithGain(dst0, ppSrc[4], gain, numSamples);
+    MixWithGain(dst0, ppSrc[3], gain, numSamples);
+    MixWithGain(dst0, ppSrc[0], gain, numSamples);
 }
 } } }

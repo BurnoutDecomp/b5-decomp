@@ -47,6 +47,8 @@ namespace CgsSound
 namespace Playback
 {
 
+struct GenericRwacWaveContent;
+
 // CgsGenericRwacFactory.h (DWARF). The generic-RWAC command tags. The values
 // exercised by the command ctors in this home are confirmed against the X360 asm
 // (the remaining gaps are other RWAC commands not homed here):
@@ -81,41 +83,33 @@ struct RwacCommand
     uintptr_t muCommandType; // word 0 -- ERwacCommandType tag
 };
 
-// Reference-counted referent of a PlayerPlay command's first operand. The X360
-// ctor (@0x826AD578) treats word 1 as a pointer to an object whose dword at +4 is
-// a reference count: when the pointer is non-null it does lwz r10,4(r11) / addi
-// r10,r10,1 / stw r10,4(r11) -- i.e. ++referent->mu32RefCount. The referent's
-// other members are opaque to the ctor; only the +4 refcount word is touched, so
-// it is modelled by name with a single leading opaque word ahead of the count to
-// place the count at +4. (Documentation offset; not static_asserted.)
-struct RwacPlayRequest
-{
-    uintptr_t muReserved0;  // +0 -- opaque (not touched by the ctor)
-    u32       mu32RefCount; // +4 -- incremented when a PlayerPlay command copies it
-};
-
 // Player-play parameters: 3 words (tag + 2 operands). Tag == 6.
-// X360 ctor @0x826AD578: copies words 0,1,2; when operand 0 (the play-request
-// pointer) is non-null, increments its +4 refcount.
+// DecFIGS names the two operands: an owning GenericRwacWaveContent handle and
+// the address receiving SndPlayer1's request handle. X360 ctor @0x826AD578
+// copies words 0,1,2 and acquires the wave-content object.
 struct RwacCommandPlayerPlayParameters : public RwacCommand
 {
+    RwacCommandPlayerPlayParameters(GenericRwacWaveContent* apWaveContent,
+                                    f32* apRequestHandle);
     // @ 0x826AD578. Copy-construct from a source record of luCommandCount words.
     RwacCommandPlayerPlayParameters(u32 luCommandCount,
                                     const RwacCommandPlayerPlayParameters& arSource);
+    ~RwacCommandPlayerPlayParameters();
 
-    RwacPlayRequest* mpPlayRequest; // word 1 -- ref-counted; AddRef'd on copy
-    uintptr_t        maOperand;     // word 2 -- carried verbatim through the queue
+    GenericRwacWaveContent* mpWaveContent; // word 1 -- owning handle payload
+    f32* mpRequestHandle;                    // word 2 -- post-play handle destination
 };
 
 // Player-is-request-done parameters: 2 words (tag + 1 operand). Tag == 7.
 // X360 ctor @0x82681570: copies words 0,1 (no refcount step).
 struct RwacCommandPlayerIsRequestDoneParameters : public RwacCommand
 {
+    explicit RwacCommandPlayerIsRequestDoneParameters(void* apParams);
     // @ 0x82681570. Copy-construct from a source record of luCommandCount words.
     RwacCommandPlayerIsRequestDoneParameters(u32 luCommandCount,
                                              const RwacCommandPlayerIsRequestDoneParameters& arSource);
 
-    uintptr_t maOperand; // word 1 -- carried verbatim through the queue
+    void* mpParams; // word 1 -- SndPlayer1::IsRequestDoneParams*
 };
 
 // Apply-reverb-IR-file command: 2 words (tag + 1 operand). Tag == 9.

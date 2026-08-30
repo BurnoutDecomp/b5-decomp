@@ -19,6 +19,7 @@
 // surfacelist/propscrashbinlist).
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
 #include "GameSource/AttribSys/Generated/attrib_private.h"   // Attrib::Private (canonical)
+#include "GameSource/AttribSys/Generated/attrib_findcollection.h"
 
 namespace Attrib
 {
@@ -35,6 +36,19 @@ namespace Gen
         void* mPassbyBins(u32 luIndex);     // @0x826820B8
         void* ReverbSettings(u32 luIndex);  // @0x82682120
         void* ShiftPatterns(u32 luIndex);   // @0x82682188
+
+        // Named access to the three RefSpecs used by the global audio objects.
+        // The offsets are the generated _LayoutStruct positions from DecFIGS and
+        // the ARTIST call sites (Presentation +0x4d8, StreamMappings +0x458,
+        // SpeechData +0x470).
+        RefSpec PresentationActions() const;
+        const RefSpec& StreamMappings() const;
+        const RefSpec& SpeechData() const;
+
+        // The sound module is constructed before BurnoutGlobalData.bin is
+        // registered. Rebind the generated instance after the AttribSys load
+        // completion callback, matching SoundLogicModule::ResourcesAreReady.
+        bool ResolveLoadedCollection();
     };
 
     // X360 ctor @0x82695938: chain the Instance ctor, then give the instance a default
@@ -83,6 +97,49 @@ namespace Gen
         if (luIndex >= reinterpret_cast<const Private*>(lpData)->GetLength())
             return DefaultDataArea(0x18u);
         return lpData + luIndex * 0x18u + 8;
+    }
+
+    inline RefSpec burnoutglobaldata::PresentationActions() const
+    {
+        // PresentationEffect::Attach @ ARTIST 0x8269E2F0 constructs this
+        // reference explicitly: the generated class key is an immediate and
+        // only the collection key is loaded from BurnoutGlobalData +0x4D8.
+        // Treating +0x4D8 as the start of a generic RefSpec shifts the key by
+        // one qword and resolves an unrelated following attribute.
+        static const u64 KU_PRESENTATION_ACTION_LIST_CLASS =
+            0x8B2D1E2F781A4522ull;
+        const u64 luCollectionKey = *reinterpret_cast<const u64*>(
+            static_cast<const u8*>(mpAttributeData) + 0x4D8u);
+        return RefSpec(KU_PRESENTATION_ACTION_LIST_CLASS, luCollectionKey);
+    }
+
+    inline const RefSpec& burnoutglobaldata::StreamMappings() const
+    {
+        return *reinterpret_cast<const RefSpec*>(
+            static_cast<const u8*>(mpAttributeData) + 0x458u);
+    }
+
+    inline const RefSpec& burnoutglobaldata::SpeechData() const
+    {
+        return *reinterpret_cast<const RefSpec*>(
+            static_cast<const u8*>(mpAttributeData) + 0x470u);
+    }
+
+    inline bool burnoutglobaldata::ResolveLoadedCollection()
+    {
+        static const u64 KU_BURNOUTGLOBALDATA_CLASS_KEY =
+            0x03FAC7F352E51383ull;
+        // BurnoutGlobalData.bin contains one collection for this class.  The
+        // X360 constructor receives this key through r4 (the runtime
+        // mGlobalDataKey); it is not the zero/default collection.  The value is
+        // read directly from that vault's CollectionLoadData export.
+        static const u64 KU_BURNOUTGLOBALDATA_COLLECTION_KEY =
+            0x34690FE28DBD2FEFull;
+        Collection* lpCollection =
+            FindCollection(KU_BURNOUTGLOBALDATA_CLASS_KEY,
+                           KU_BURNOUTGLOBALDATA_COLLECTION_KEY);
+        Change(lpCollection);
+        return lpCollection != nullptr;
     }
 }
 }

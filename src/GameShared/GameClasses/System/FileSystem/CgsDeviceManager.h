@@ -73,6 +73,9 @@ namespace CgsFileSystem
         // Register a physical device under lpcPrefix and spawn its worker thread (step 2).
         bool AddPhysicalDevice(Device* lpDevice, const char* lpcPrefix, ErrorCallback lpfErrorCallback); // 0x828F9320
 
+        // FileSystem::Prepare installs the search path used by unqualified opens.
+        void SetDefaultPath(const char* lpcPath);
+
         // Synchronously read a whole file through the async engine (open -> read -> close,
         // blocking on each op's completion). The X360 had no single sync path — callers chained
         // async ops waiting on per-op completion callbacks; this reproduces that wait with a

@@ -44,7 +44,7 @@ namespace Streaming
 
 // Forward decl for StreamRequest.mpAttachment (pointer only; real home
 // BrnStreamingEffect.h -- an interface, not reconstructed here).
-class IStreamUser;
+struct IStreamUser;
 
 // BrnStreamingStateManager.h:49 (DWARF) -- 24 bytes / 6 dwords (== X360 slot stride).
 // The maPlayRequests / maRePostRequests ring element. ALSO the type of
@@ -60,6 +60,9 @@ struct StreamRequest
     f32          mfTimeStamp;    // +0x0C  (stamped in PostStreamRequest)
     u32          mu32UniqueId;   // +0x10  (stamped in PostStreamRequest)
     bool         mbDirty;        // +0x14  (+3 pad -> 24)
+
+    StreamRequest();
+    StreamRequest(IStreamUser* apAttachment, u32 auPriority, f32 afLagTolerance);
 };
 
 // BrnStreamingStateManager.h:81 (DWARF) -- 16-byte stop-request ring element.
@@ -69,6 +72,9 @@ struct StreamStopRequest
     f32                mfFadeOut;    // +0x04
     f32                mfTimeStamp;  // +0x08
     u32                mu32UniqueId; // +0x0C
+
+    StreamStopRequest();
+    StreamStopRequest(const IStreamUser* apAttachment, f32 afFadeOut);
 };
 
 class StreamingStateManager : public BrnSound::Logic::BrnStateManager
@@ -89,12 +95,11 @@ public:
     static CgsSound::Logic::StateManager* CreateObject( u32 luType );                     // @ 0x82700B68
 
     // ---- boot + lifecycle virtuals ----
-    virtual bool Prepare();                       // @ 0x826EE680  (vtable +0x0C; stub -- see .cpp FLAG)
-
-    // ---- IResourceRequester overrides (pure in IResourceRequester; BrnStateManager
-    // declares but does not body them, so the concrete leaf must override+body them). ----
-    virtual void                            ResourcesAreReady();    // (stub -- domain cascade; see .cpp FLAG)
-    virtual BrnSound::Logic::ResourceRegistrar& GetResourceRegistrar(); // (stub -- module not homed; see .cpp FLAG)
+    virtual bool Prepare();                       // @ 0x826EE680
+    virtual bool Release();
+    virtual void UpdateParams(f32 af32GameDt);    // @ 0x826B0D38
+    virtual CgsSound::Logic::State* GetFreeState(void* apRequest); // @ 0x826B0EB8
+    virtual void ResourcesAreReady();
 
     // ---- request-ring API (DWARF-attested) ----
     // Capacity of the play/stop/re-post rings (asm cmplwi cr6, count, 6).
@@ -103,26 +108,20 @@ public:
     // @ 0x826834F0 (DWARF h:255). Append a play request, stamp its timestamp + unique
     // id from the manager's running counters, then bump both.
     void PostStreamRequest( const StreamRequest& lStreamRequest );
+    void PostStreamRequest( const StreamStopRequest& lStopRequest );
 
 private:
     // @ 0x826836A8 (DWARF h:305). Append a play request to the ring + bump the count.
     void PostStreamRequestInternal( const StreamRequest& arRequest );
+    void PostStreamRequestInternal( const StreamStopRequest& arRequest );
 
     // @ 0x82683750 (DWARF h:347). Append a re-post request to the ring + bump the count.
     void RePostStreamRequest( const StreamRequest& request );
+    void ProcessStopRequests();
+    void RemoveRequestsForUser(const StreamStopRequest& arRequest);
+    void CheckForDuplicates(u32 auSourceIndex) const;
 
 private:
-    // FLAG (deferred body -- ~360 bytes): the X360 object is 552 bytes (0x228). The
-    // per-stream voice/parameter state (the dense f32 + int table the ctor zero-inits
-    // from +0x98 to +0x214 -- per-stream gains, fades, voice handles, the streaming
-    // bookkeeping driven by Prepare / the per-frame update) is NOT modelled in this
-    // minimal shell -- the streaming audio domain is not reconstructed. The shell
-    // exists only to be a CONCRETE, registrable leaf whose Prepare() returns true for
-    // PrepareStateManagersOnBoot. A single opaque pad keeps the deferred state honestly
-    // named without fabricating field meanings. Size is UNVERIFIED on host (the X360
-    // 0x228 is a 32-bit fact); NOT static_asserted.
-    u8 maDeferredStreamingState[1]; // placeholder for the un-reconstructed streaming-voice members
-
     // DWARF-attested request rings (BrnStreamingStateManager.h:229-237), in declaration
     // ORDER. The PostStreamRequest/PostStreamRequestInternal/RePostStreamRequest bodies
     // touch these BY NAME. mfCurrentTime (the timestamp source) is the committed base

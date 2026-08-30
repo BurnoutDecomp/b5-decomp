@@ -1,6 +1,7 @@
 #include "GameSource/Sound/Streaming/BrnStreamingEffect.h"
+#include "GameSource/Sound/Streaming/BrnIStreamUser.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (lpState / IsAttached tripwires)
-#include <cstring>                                    // std::memset (streamsettings placeholder zero-init)
+#include <algorithm>
 
 // =============================================================================
 // BrnSound::Logic::Streaming::StreamingEffect -- out-of-line bodies for the
@@ -68,17 +69,16 @@ namespace Streaming
 // ---------------------------------------------------------------------------
 StreamingEffect::StreamingEffect()
     : BrnEffectObject()   // installs the base vptrs + zero-inits the base members (BY NAME)
-    , mpState(nullptr)    // stw 0, 0xC(r31)
-    , mVoiceWrapper()     // tail `bl CgsSound::Logic::VoiceWrapper::VoiceWrapper(this+0x68)`
+    , mCreateParams()
+    , mVoice()
+    , mStreamSettings()
+    , mfElapsedTime(0.0f)
+    , mfTimeThroughFade(0.0f)
+    , mfGain(0.0f)
+    , mfGainPreFade(0.0f)
+    , mVoiceId(static_cast<CgsSound::Logic::Command::QueueElement>(-1))
+    , mbBufferReleased(false)
 {
-    // The remaining inlined leaf scalar zero-inits target un-homed leaf members
-    // (DECLARATION-ONLY; see header FLAG). NOT fabricated here.
-
-    // tail `bl Attrib::Gen::streamsettings::streamsettings(this+0xB8, 0, 0)`.
-    // streamsettings is [todo] (deferred TU); modelled as an opaque placeholder,
-    // zeroed to mirror the generated ctor's default-data-area construction without
-    // fabricating its real body.
-    std::memset(maStreamSettings, 0, sizeof(maStreamSettings));
 }
 
 // ---------------------------------------------------------------------------
@@ -98,8 +98,9 @@ StreamingEffect::StreamingEffect()
 const StreamRequest& StreamingEffect::GetRequest() const
 {
     CGS_ASSERT( mpState != nullptr, "lpState" );
-    CGS_ASSERT( mpState->IsAttached(), "IsAttached()" );
-    return mpState->GetRequest();
+    const StreamingState* lpState = static_cast<const StreamingState*>(mpState);
+    CGS_ASSERT( lpState->IsAttached(), "IsAttached()" );
+    return lpState->GetRequest();
 }
 
 // ---------------------------------------------------------------------------
@@ -121,6 +122,181 @@ const StreamRequest& StreamingEffect::GetRequest() const
 // ---------------------------------------------------------------------------
 StreamingEffect::~StreamingEffect()
 {
+}
+
+CgsSound::Logic::EffectObject* StreamingEffect::CreateObject(u32 /*auType*/)
+{
+    return new StreamingEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* StreamingEffect::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
+        0x60000, "StreamingEffect", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
+        &StreamingEffect::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* StreamingEffect::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+const char* StreamingEffect::GetTypeName() const
+{
+    return "StreamingEffect";
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpStreamingEffectReg =
+    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(StreamingEffect::GetStaticTypeInfo());
+
+bool StreamingEffect::Attach()
+{
+    if (!CgsSound::Logic::EffectBase::Attach())
+        return false;
+
+    const StreamRequest& lrRequest = GetRequest();
+    CGS_ASSERT(lrRequest.mpAttachment != 0, "GetRequest().mpAttachment");
+    if (!lrRequest.mpAttachment)
+        return false;
+
+    mCreateParams = lrRequest.mpAttachment->GetCreateParams();
+    mVoice.Create(mCreateParams);
+    mVoice.Play(0);
+
+    if (mStreamSettings.GetCollection())
+    {
+        CGS_ASSERT(mStreamSettings.Num_ContentSpecs() == mStreamSettings.Num_Volumes(),
+                   "mStreamSettings.Num_ContentSpecs() == mStreamSettings.Num_Volumes()");
+        mfGain = FindStreamSettings(mStreamSettings, mCreateParams.mContentSpecName);
+    }
+    else
+    {
+        mfGain = 1.0f;
+    }
+
+    mVoiceId = static_cast<CgsSound::Logic::Command::QueueElement>(mVoice.GetVoice().GetIdent());
+    mfElapsedTime = 0.0f;
+    mfTimeThroughFade = 0.0f;
+    mfGainPreFade = 0.0f;
+    mbBufferReleased = false;
+    return true;
+}
+
+void StreamingEffect::UpdateParams(f32 af32DeltaTime)
+{
+    mfElapsedTime += af32DeltaTime;
+    mfTimeThroughFade += af32DeltaTime;
+}
+
+void StreamingEffect::ProcessUpdate()
+{
+    const StreamRequest lRequest = GetRequest();
+    CGS_ASSERT(lRequest.mpAttachment != 0, "GetRequest().mpAttachment");
+    if (!lRequest.mpAttachment)
+        return;
+
+    mVoice.Update();
+    const CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE leStage = mVoice.GetUpdateStage();
+    if (leStage != CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_IDLE &&
+        leStage != CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_FINISHED)
+    {
+        lRequest.mpAttachment->UpdateVoiceParams(mVoice, mfGain, mfElapsedTime);
+        return;
+    }
+
+    StreamingState* lpState = static_cast<StreamingState*>(mpState);
+    if (lpState && lpState->Detach())
+        lRequest.mpAttachment->StreamStopped();
+}
+
+f32 StreamingEffect::GetFadeOut() const
+{
+    const StreamingState* lpState = static_cast<const StreamingState*>(mpState);
+    CGS_ASSERT(lpState != 0, "lpState");
+    CGS_ASSERT(lpState && lpState->GetUpdateState() == CgsSound::Logic::State::E_UPDATE_DETATCHING,
+               "lpState->GetUpdateState() == E_UPDATE_DETATCHING");
+    return lpState ? lpState->GetFadeOut() : 0.0f;
+}
+
+bool StreamingEffect::Detach()
+{
+    switch (meDetachState)
+    {
+    case E_DETACH_STATE_NONE:
+    {
+        mfTimeThroughFade = 0.0f;
+        const s32 liSendName = static_cast<s32>(mCreateParams.mSendName);
+        mfGainPreFade = mVoice.GetGain(&liSendName);
+        meDetachState = E_DETACH_STATE_BEGIN;
+        // fall through
+    }
+    case E_DETACH_STATE_BEGIN:
+    {
+        mfElapsedTime += mfDeltaTime;
+        mfTimeThroughFade += mfDeltaTime;
+        const f32 lfFadeOut = GetFadeOut();
+        const f32 lfFraction = lfFadeOut > 0.0f
+            ? std::min(1.0f, std::max(0.0f, mfTimeThroughFade / lfFadeOut))
+            : 1.0f;
+        const u32 luSendName = mCreateParams.mSendName;
+        mVoice.SetGain(static_cast<u32>(mCreateParams.miSendIndex),
+                       (1.0f - lfFraction) * mfGainPreFade, &luSendName);
+        if (mfTimeThroughFade < lfFadeOut)
+            return false;
+        mVoice.Release();
+        meDetachState = E_DETACH_STATE_UPDATING;
+        // fall through
+    }
+    case E_DETACH_STATE_UPDATING:
+        if (!mbBufferReleased)
+            return false;
+        meDetachState = E_DETACH_STATE_FINISHED;
+        // fall through
+    case E_DETACH_STATE_FINISHED:
+        return BrnEffectObject::Detach();
+    default:
+        return false;
+    }
+}
+
+void StreamingEffect::Notify(const CgsSound::Io::MessageHeader* apkMessage)
+{
+    CGS_ASSERT(apkMessage != 0, "lpMessageHeader");
+    if (!apkMessage)
+        return;
+    CGS_ASSERT(apkMessage->GetEventId() == 16,
+               "lpMessageHeader->GetEventId() == E_SOUNDMESSAGE_QUEUE_ELEMENT");
+    const CgsSound::Io::Message<CgsSound::Io::QueueElement>* lpMessage =
+        static_cast<const CgsSound::Io::Message<CgsSound::Io::QueueElement>*>(apkMessage);
+    if (lpMessage->mData == mVoiceId)
+        mbBufferReleased = true;
+}
+
+bool StreamingEffect::IsBusy() const
+{
+    const CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE leStage = mVoice.GetUpdateStage();
+    return leStage >= CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_CREATE &&
+           leStage <= CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_START;
+}
+
+f32 StreamingEffect::FindStreamSettings(const Attrib::Gen::streamsettings& arSettings,
+                                        CgsSound::Logic::Command::QueueElement auContentSpec) const
+{
+    s32 liLow = 0;
+    s32 liHigh = static_cast<s32>(arSettings.Num_ContentSpecs()) - 1;
+    while (liLow <= liHigh)
+    {
+        const s32 liMiddle = (liLow + liHigh) / 2;
+        const u32 luSpec = arSettings.ContentSpecs(static_cast<u32>(liMiddle));
+        if (auContentSpec < luSpec)
+            liHigh = liMiddle - 1;
+        else if (auContentSpec > luSpec)
+            liLow = liMiddle + 1;
+        else
+            return arSettings.Volumes(static_cast<u32>(liMiddle));
+    }
+    return 1.0f;
 }
 
 } // namespace Streaming

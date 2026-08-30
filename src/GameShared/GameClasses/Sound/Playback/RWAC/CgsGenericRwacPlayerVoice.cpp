@@ -10,8 +10,11 @@ namespace Playback
 GenericRwacPlayerVoice::GenericRwacPlayerVoice(
     GenericRwacFactory& arFactory, const VoiceSpec& akrSpec, u32 au32Ident)
     : PlayerVoice(sizeof(GenericRwacPlayerVoice), arFactory, akrSpec, au32Ident),
-      GenericRwacVoice()
+      GenericRwacVoice(),
+      mIsRequestDoneParams()
 {
+    mIsRequestDoneParams.requestHandle = 0.0f;
+    mIsRequestDoneParams.isRequestDone = 0.0f;
     AcknowledgePlaybackStateChange();
 }
 

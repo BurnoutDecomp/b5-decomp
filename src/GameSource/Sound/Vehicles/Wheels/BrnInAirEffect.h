@@ -50,10 +50,11 @@ struct InAirEffect : public BrnSound::Logic::BrnEffectObject
     InAirEffect() {}
     virtual ~InAirEffect();
 
-    // BrnInAirEffect.h:269 (DWARF). The per-frame update the subclasses override.
-    // Declared only (base body is a separate un-homed slice); TrafficInAir::ProcessUpdate
-    // tail-calls this BY NAME -- the declaration satisfies the per-TU compile gate.
-    virtual void ProcessUpdate();
+    // BrnInAirEffect.h:269's large vehicle-audio ProcessUpdate body remains in its
+    // own reconstruction slice. Until that surface is homed, this partial class
+    // inherits EffectBase::ProcessUpdate; the global Junkyard instance can therefore
+    // be created for the authored state table without mounting the unrelated Traffic
+    // implementation or inventing an abbreviated wheel-audio algorithm here.
 };
 
 // BrnInAirEffect.h:273 (DWARF): TrafficInAir : public InAirEffect. Overrides
@@ -77,6 +78,9 @@ struct JunkyardInAirEffect : public InAirEffect
 
     // @ 0x826FDB78 -- RTTI factory hook.
     static CgsSound::Logic::EffectObject* CreateObject( u32 luType );
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
+    const char* GetTypeName() const override;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
 
     // DWARF BrnInAirEffect.h:111/115. The only two leaf members the ctor writes.
     CgsSound::Utils::DataPoint<bool>            mbIsVehicleValid;   // @ +0x3F0 (both bytes 0)

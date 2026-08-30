@@ -5,6 +5,8 @@
 #include "GameSource/Sound/Streaming/BrnStreamingState.h"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // BrnSound::Logic::BrnEffectObject dual base (BY NAME)
 #include "GameShared/GameClasses/Sound/Logic/CgsVoiceWrapper.h"    // CgsSound::Logic::VoiceWrapper member (BY NAME)
+#include "GameSource/AttribSys/Generated/classes/streamsettings.h"
+#include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 
 // =============================================================================
 // BrnSound::Logic::Streaming::StreamingEffect
@@ -70,6 +72,17 @@ struct StreamingEffect : public BrnSound::Logic::BrnEffectObject
     // virtual to mirror the committed ExplosionEffect/CollisionEffect siblings.
     virtual ~StreamingEffect();
 
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
+
+    virtual bool Attach();
+    virtual void UpdateParams(f32 af32DeltaTime);
+    virtual void ProcessUpdate();
+    virtual bool Detach();
+    virtual void Notify(const CgsSound::Io::MessageHeader* apkMessage);
+
     // BrnStreamingEffect.cpp (DWARF assert site, "lpState") + BrnStreamingState.h
     // ("IsAttached()"). Asserts the owned state exists and is attached, then returns
     // a reference to the state's embedded request (the manager-ring StreamRequest
@@ -77,29 +90,26 @@ struct StreamingEffect : public BrnSound::Logic::BrnEffectObject
     // @ 0x82683B40.
     const StreamRequest& GetRequest() const;
 
-    // +0x0C. The owned StreamingState (asserted "lpState" by GetRequest; nulled by
-    // the ctor). Reached BY NAME; the intervening un-homed leaf-scalar gap between
-    // the BrnEffectObject base and mVoiceWrapper (see FLAG above) is not modelled.
-    StreamingState* mpState;
+    f32 GetElapsedTime() const { return mfElapsedTime; }
+    bool IsBusy() const;
+    f32 GetTimeThroughFade() const { return mfTimeThroughFade; }
+    CgsSound::Logic::VoiceWrapper& GetVoiceWrapper() { return mVoice; }
+    const CgsSound::Logic::VoiceWrapper& GetVoiceWrapper() const { return mVoice; }
 
-    // +0x68 (104). The embedded per-effect voice wrapper the ctor constructs (tail
-    // `bl CgsSound::Logic::VoiceWrapper::VoiceWrapper(this+0x68)`). Reused BY NAME
-    // from the minimal CgsVoiceWrapper home. Placed here BY SEQUENCE (ctor call
-    // order); the +0x0C..+0x67 gap is DEFERRED/un-homed (see FLAG).
-    CgsSound::Logic::VoiceWrapper mVoiceWrapper;
+protected:
+    f32 GetFadeOut() const;
+    f32 FindStreamSettings(const Attrib::Gen::streamsettings& arSettings,
+                           CgsSound::Logic::Command::QueueElement auContentSpec) const;
 
-    // +0xB8 (184). FLAG: the ctor's tail `bl Attrib::Gen::streamsettings::
-    // streamsettings(this+0xB8, 0, 0)` (lpCollection=nullptr, lpOwner=nullptr; same
-    // call shape as the committed debrisparams/surfacelist generated-ctor siblings)
-    // default-constructs a generated AttribSys settings block here.
-    // Attrib::Gen::streamsettings is [todo] in its own dossier slice (not yet homed),
-    // so it cannot be embedded BY NAME without fabricating its class. Modelled as an
-    // opaque byte span sized to the generated-ctor's known data-area width (0xE0,
-    // matching the debrisparams/surfacelist sibling pattern) so the layout stays
-    // honest; replace with a real `Attrib::Gen::streamsettings mStreamSettings;`
-    // member BY NAME once that TU lands. The ctor zeroes it (the generated ctor
-    // default-fills its data area on construction).
-    u8 maStreamSettings[0xE0]; // +0xB8 (opaque: Attrib::Gen::streamsettings, deferred TU)
+    CgsSound::Logic::VoiceWrapper::CreateParams mCreateParams;
+    CgsSound::Logic::VoiceWrapper mVoice;
+    Attrib::Gen::streamsettings mStreamSettings;
+    f32 mfElapsedTime;
+    f32 mfTimeThroughFade;
+    f32 mfGain;
+    f32 mfGainPreFade;
+    CgsSound::Logic::Command::QueueElement mVoiceId;
+    bool mbBufferReleased;
 };
 
 } // namespace Streaming

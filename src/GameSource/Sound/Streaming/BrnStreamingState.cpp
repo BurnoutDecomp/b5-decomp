@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Streaming/BrnStreamingState.h"
+#include "GameSource/Sound/Streaming/BrnStreamingEffect.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (IsAttached tripwire)
 
 // =============================================================================
@@ -88,6 +89,64 @@ const StreamRequest& StreamingState::GetRequest() const
     CGS_ASSERT( IsAttached(), "IsAttached()" );
     return mRequest;
 }
+
+void StreamingState::Attach(void* apvAttachment)
+{
+    CGS_ASSERT(apvAttachment != 0, "lpvAttachment");
+    if (!apvAttachment)
+        return;
+    mRequest = *static_cast<const StreamRequest*>(apvAttachment);
+    CgsSound::Logic::State::Attach(mRequest.mpAttachment);
+}
+
+bool StreamingState::Detach()
+{
+    if (mpHeadEffectObject)
+    {
+        StreamingEffect* lpEffect = static_cast<StreamingEffect*>(mpHeadEffectObject);
+        if (lpEffect->GetElapsedTime() < 0.25f)
+            return false;
+        if (lpEffect->IsBusy())
+            return false;
+    }
+    if (mauUpdateState[0] != E_UPDATE_ATTACHED)
+        return false;
+    mpvAttachment = 0;
+    mbIsAttached = false;
+    mauUpdateState[1] = mauUpdateState[0];
+    mauUpdateState[0] = E_UPDATE_DETATCHING;
+    return true;
+}
+
+StreamingStateManager* StreamingState::GetStreamingStateManager() const
+{
+    return static_cast<StreamingStateManager*>(mpStateManager);
+}
+
+CgsSound::Logic::State* StreamingState::CreateObject(u32 /*auType*/)
+{
+    return new StreamingState();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* StreamingState::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
+        0x60000, "StreamingState", 0, &StreamingState::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* StreamingState::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+const char* StreamingState::GetTypeName() const
+{
+    return "StreamingState";
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const gpStreamingStateReg =
+    CgsSound::Logic::State::AddToClassTypeInfoArray(StreamingState::GetStaticTypeInfo());
 
 } // namespace Streaming
 } // namespace Logic

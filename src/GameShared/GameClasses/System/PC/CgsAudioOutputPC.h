@@ -39,6 +39,9 @@ public:
     // false if XAudio2 is unavailable (the game then runs muted).
     static bool Open(int liSampleRate, int liChannels, FillFn lpFill, void* lpUser);
     static void Close();
+    // Release the movie/primary producer while preserving the engine producer.
+    // Recreates the shared device at the engine's native 48 kHz when required.
+    static void ReleasePrimaryFill();
     static bool IsOpen();
 
     // The sample rate the voice was opened at (0 when closed). The single source
@@ -48,22 +51,9 @@ public:
     // Swap the active fill source at runtime (e.g. test tone -> the real Dac pull).
     static void SetFill(FillFn lpFill, void* lpUser);
 
-    // Register the additive OVERLAY fill (the one-shot GUI blips), mixed saturating
-    // on top of the primary stream. Persists across Open/Close -- the primary fill
-    // owner churns as the movie/music streams swap the voice; the overlay must not.
-    static void SetOverlayFill(FillFn lpFill, void* lpUser);
-
-    // Register the additive VOICE fill (the speech/voice-over stream), mixed the
-    // same saturating way on top of the primary + overlay. A separate slot because
-    // on the console speech is its OWN effect (BrnSound::Logic::SpeechEffect) with
-    // its own voice, concurrent with both the music stream and the UI presentation
-    // blips -- DJ Atomika talks over whatever else is sounding. Persists across
-    // Open/Close for the same reason the overlay does.
-    static void SetVoiceFill(FillFn lpFill, void* lpUser);
-
     // Register the additive ENGINE fill (the rw::audio::core Dac's mixed frame --
     // phase D of the faithful-audio-engine campaign; producer CgsDacOutputPC.cpp).
-    // Mixed saturating like the overlay/voice slots and persistent across Open/Close
+    // Mixed saturating with the primary/movie slot and persistent across Open/Close
     // for the same reason: the primary owner churns with the movie/music streams,
     // the engine mix must not. End state (phase G): this is the only producer left
     // as the per-path fills retire onto the engine mix.

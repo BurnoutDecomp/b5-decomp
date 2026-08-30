@@ -70,8 +70,13 @@ namespace Logic
 // member clears).
 struct SubmixesEffect : public BrnSound::Logic::BrnEffectObject
 {
-    SubmixesEffect() {}
+    SubmixesEffect() : mbHoldVolumes(false) {}
     virtual ~SubmixesEffect();
+
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
+    const char* GetTypeName() const override;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
 
     // @ 0x82687EE8 -- overrides EffectBase::Notify. Type-15 messages carry a single-byte
     // hold-volumes flag in their body at +0x10 (past the 12-byte MessageHeader); Notify

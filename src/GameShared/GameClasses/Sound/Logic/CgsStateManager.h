@@ -101,10 +101,28 @@ namespace Logic
 // The owning sound-logic module (CgsSound::Logic::Module; full home is its own
 // keystone slice). Named here only for the GetLogicModule accessor's return type.
 class Module;
+struct State;
+struct EffectBase;
 
 class StateManager : public CgsSound::MemBase
 {
 public:
+    enum EPrepareState
+    {
+        E_PREPARE_NONE      = 0,
+        E_PREPARE_BEGIN     = 1,
+        E_PREPARE_UPDATING  = 2,
+        E_PREPARE_STATES    = 3,
+        E_PREPARE_FINISHED  = 4,
+        E_PREPARE_RELEASED  = 5,
+    };
+
+    enum EStatePrepareState
+    {
+        E_STATE_PREPARE_STATE_CREATE    = 0,
+        E_STATE_PREPARE_STATE_PREPARING = 1,
+    };
+
     // CgsStateManager.h:135 (DWARF). Static class-array capacity (matches the X360
     // scan bound 0x10 in AddToClassTypeInfoArray @ 0x8268DFE8).
     static const u16 KU_SIZEOF_CLASS_ARRAY = 16;
@@ -199,7 +217,7 @@ public:
     // non-cascading default bodies so the keystone is instantiable and the vtable is
     // emitted; leaves override Prepare. X360 addrs above.
     virtual bool          Prepare();                       // vtable +0x0C
-    virtual StateManager* GetChildStateManager(s32 liIndex); // vtable +0x14
+    virtual State* GetFreeState(void* apvAttachment);       // vtable +0x14
 
     // DWARF :181 / :184 -- the per-frame drive pair Environment::Update @0x826C3F78
     // dispatches on every registered manager (console vtable +0x18/+0x1C):
@@ -209,8 +227,8 @@ public:
     // console (managers exist that leave them un-overridden -- the same
     // implementer-shape argument as the ISlotImplementation reconcile), so the
     // base bodies are the empty defaults that shape implies.
-    virtual void UpdateParams(f32 /*af32GameDt*/) {}       // DWARF :181 (base default; leaves override)
-    virtual void ProcessUpdate() {}                        // DWARF :184 (base default; leaves override)
+    virtual void UpdateParams(f32 af32GameDt);             // @ 0x8268D800
+    virtual void ProcessUpdate();                          // @ 0x8268D888
 
     // DWARF :188 -- the message hook Environment::Notify routes through; the DWARF
     // renders the base body EMPTY inline, so this IS the attested base body.
@@ -255,6 +273,13 @@ public:
     // Declared here for home completeness; the body lives in CgsStateManager.cpp.
     static StateManager* CreateStateMan(u32 liStateManId, void* apModule);
 
+    EffectBase* CreateEffectObject(s32 liInstanceId, s32 liEffectId);
+    EffectBase* CreateEffectControl(s32 liInstanceId, s32 liEffectId);
+
+    State* GetHeadState() const { return mpHeadState; }
+    s32 GetStateObjCount() const { return miNumStates; }
+    EPrepareState GetPrepareState() const { return mePrepareState; }
+
 protected:
     // Leading scalar members (DWARF CgsStateManager.h:335..341). Modelled by name so
     // the ctor seeds them by name (mfCurrentTime..meMapState) and meMapState can be
@@ -272,10 +297,11 @@ protected:
     // NOT one of these (the ctor leaves +0x20 untouched besides... see ctor: it writes
     // +0x14=-1 and zeros +0x18,+0x1C,+0x24,+0x28). The module back-pointer the factory
     // stamps at +0x2C is mpLogicModule below.
-    u32 mu24;                   // +0x18 (ctor = 0)
-    u32 mu28;                   // +0x1C (ctor = 0)
-    u32 mu36;                   // +0x24 (ctor = 0)
-    u32 mu40;                   // +0x28 (ctor = 0)
+    State* mpHeadState;         // +0x18
+    s32 miNumStates;            // +0x1C
+    s32 miStateManId;           // +0x20
+    EPrepareState mePrepareState; // +0x24
+    EStatePrepareState meStatePrepareState; // +0x28
 
     // +0x2C: the owning logic module back-pointer the factory CreateStateMan stamps
     // (`*(result + 44) = a2`). Modelled by name as opaque storage (the module type is
@@ -287,6 +313,9 @@ protected:
     // the already-homed ObjectPool<RegisteredContent,4,int>::~ObjectPool @ 0x826EAC90
     // (instantiated in ObjectPool_StateManagerRegisteredContent_4.cpp).
     CgsContainers::ObjectPool<RegisteredContent, KI_NUM_CONTENT_SLOTS, int> mContentPool;
+
+    State* CreateState(s32 liStateType);
+    friend struct State;
 };
 
 }

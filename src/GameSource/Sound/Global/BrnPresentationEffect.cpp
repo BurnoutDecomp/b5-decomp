@@ -1,6 +1,14 @@
 #include "GameSource/Sound/Global/BrnPresentationEffect.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsState.h"
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"
+#include "GameSource/Sound/Global/BrnGlobalStateManager.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/Sound/Streaming/BrnStreamingStateManager.h"
+#include <cstring>
 
 // =============================================================================
 // BrnSound::Logic::PresentationEffect -- out-of-line bodies.
@@ -63,6 +71,11 @@ PresentationEffect::PresentationEffect()
     : BrnEffectObject()                       // primary vptr @+0 + IResourceRequester vptr @+4, base zero-init (BY NAME)
     , BrnSound::Logic::Streaming::IStreamUser() // IStreamUser interface vptr @+0x38 (BY NAME)
     , maVoices()                              // 4x { mu16Age = 0 ; VoiceWrapper ctor } -- this+0x40, stride 0x80
+    , mau8DataOffsets()
+    , mau8DataEnds()
+    , mStreamParams()
+    , mActions()
+    , mu8StreamOutput(9)
 {
     // The inlined leaf scalar zero-inits (mau8DataOffsets/mau8DataEnds/mStreamParams/
     // mMode/mu8StreamOutput region) and the Attrib::Gen::presentationactionlist mActions
@@ -89,6 +102,194 @@ PresentationEffect::PresentationEffect()
 // ---------------------------------------------------------------------------
 PresentationEffect::~PresentationEffect()
 {
+}
+
+CgsSound::Logic::EffectObject* PresentationEffect::CreateObject(u32)
+{
+    return new PresentationEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
+PresentationEffect::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
+        0x00, "PresentationEffect", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
+        &PresentationEffect::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
+PresentationEffect::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+const char* PresentationEffect::GetTypeName() const
+{
+    return "PresentationEffect";
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const
+    gpPresentationEffectReg = CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(
+        PresentationEffect::GetStaticTypeInfo());
+
+bool PresentationEffect::Attach()
+{
+    if (!CgsSound::Logic::EffectBase::Attach())
+        return false;
+
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    mActions.ChangeWithDefault(lpModule->GetGlobalData().PresentationActions());
+    mu8StreamOutput = 9;
+
+    mStreamParams.Clear();
+    mStreamParams.mpLogicModule = lpModule;
+    mStreamParams.mFactoryName = static_cast<u32>(
+        CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+    mStreamParams.mVoiceSpecName = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("StereoWavVoiceSpec"));
+    mStreamParams.mSlotName = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("Player"));
+    mStreamParams.mSendName = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("Send01"));
+    mStreamParams.mSubMixVoiceID = 1;
+    mStreamParams.miSendIndex = 0;
+    return true;
+}
+
+const CgsSound::Logic::VoiceWrapper::CreateParams&
+PresentationEffect::GetCreateParams() const
+{
+    return mStreamParams;
+}
+
+void PresentationEffect::UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
+                                           f32 afGain, f32)
+{
+    const u32 luSend = mStreamParams.mSendName;
+    arVoice.SetGain(static_cast<u32>(mStreamParams.miSendIndex), afGain, &luSend);
+}
+
+void PresentationEffect::StreamStopped()
+{
+    mu8StreamOutput = 9;
+}
+
+bool PresentationEffect::Resolve(s32 aiAction, u64 auStringId, u64 auScreenId,
+                                 PresentationEntry& arEntry) const
+{
+    Attrib::Gen::presentationactionlist::ResolvedAction lResolved;
+    if (!mActions.Resolve(static_cast<u32>(aiAction), auStringId, auScreenId, lResolved))
+        return false;
+    arEntry.mu64StringId = lResolved.muStringId;
+    arEntry.mu64ScreenId = lResolved.muScreenId;
+    arEntry.mu32ContentSpec = lResolved.muContentSpec;
+    arEntry.mu16Splice = lResolved.mu16Splice;
+    arEntry.mu8ChokeGroup = lResolved.mu8ChokeGroup;
+    arEntry.mu8Valid = lResolved.mu8Valid;
+    arEntry.mu8Behaviour = lResolved.mu8Behaviour;
+    arEntry.mu8MixerOutput = lResolved.mu8MixerOutput;
+    return true;
+}
+
+void PresentationEffect::Play(const PresentationEntry& arEntry)
+{
+    if (arEntry.mu16Splice == PresentationEntry::KU16_SPECIAL_SPLICE_STREAM)
+    {
+        BrnSound::Module::SoundLogicModule* lpModule =
+            static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+        Streaming::StreamingStateManager* lpStreaming =
+            static_cast<Streaming::StreamingStateManager*>(
+                lpModule->GetEnvironment().GetStateManager(6));
+        CGS_ASSERT(lpStreaming != 0, "lpStreamingStateManager");
+        if (lpStreaming)
+        {
+            mStreamParams.mContentSpecName = arEntry.mu32ContentSpec;
+            mu8StreamOutput = arEntry.mu8MixerOutput;
+            lpStreaming->PostStreamRequest(Streaming::StreamRequest(this, 6, 0.1f));
+        }
+        return;
+    }
+
+    AgingVoice* lpVoice = FindOrStealAVoice(arEntry);
+    if (!lpVoice)
+        return;
+
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    CgsSound::Logic::VoiceWrapper::CreateParams lParams;
+    lParams.mpLogicModule = lpModule;
+    lParams.mSendName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
+    lParams.mSubMixVoiceID = 1;
+    lParams.miSendIndex = 0;
+
+    if (arEntry.mu16Splice == PresentationEntry::KU16_SPECIAL_SPLICE_WAVE)
+    {
+        lParams.mFactoryName = static_cast<u32>(
+            CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+        lParams.mVoiceSpecName = static_cast<u32>(
+            CgsSound::Playback::Name::MakeHash("StereoWavVoiceSpec"));
+        lParams.mContentSpecName = arEntry.mu32ContentSpec;
+        lParams.mSlotName = static_cast<u32>(
+            CgsSound::Playback::Name::MakeHash("Player"));
+    }
+    else
+    {
+        GlobalStateManager* lpGlobal = static_cast<GlobalStateManager*>(
+            mpState->GetStateManager());
+        lParams.mFactoryName = static_cast<u32>(
+            CgsSound::Playback::Name::MakeHash("~SplicerFactory::SK_NAME~"));
+        lParams.mVoiceSpecName = static_cast<u32>(
+            CgsSound::Playback::Name::MakeHash("SplicerVoiceSpec"));
+        lParams.mpContent = &lpGlobal->GetPresentationSpliceBank();
+        lParams.mContentSpecName = 0;
+        lParams.mSlotName = static_cast<u32>(
+            CgsSound::Playback::Name::MakeHash("~SplicerPlayerVoice::Slot~"));
+    }
+
+    lpVoice->mDataEntry = arEntry;
+    lpVoice->mu16Age = 0;
+    lpVoice->mfTimeSinceLastTick = 0.0f;
+    lpVoice->mVoice.Create(lParams);
+    lpVoice->mVoice.Play(arEntry.mu16Splice);
+}
+
+void PresentationEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
+{
+    if (!apMessage || apMessage->GetEventId() != 6)
+        return;
+    const CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent>* lpMessage =
+        static_cast<const CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent>*>(apMessage);
+    const BrnGui::GuiAudioTriggerEvent& lrEvent = lpMessage->mData;
+    const char* lpString = std::strcmp(lrEvent.macLabel, "uninitialised") == 0
+        ? lrEvent.macComponent : lrEvent.macLabel;
+    const u64 luStringId = static_cast<u32>(CgsSound::Playback::Name::MakeHash(lpString));
+    const u64 luScreenId = static_cast<u32>(CgsSound::Playback::Name::MakeHash(lrEvent.macMovie));
+    PresentationEntry lEntry = {};
+    if (Resolve(lrEvent.meAction, luStringId, luScreenId, lEntry) && lEntry.mu8Valid)
+        Play(lEntry);
+}
+
+void PresentationEffect::UpdateParams(f32 afDeltaTime)
+{
+    for (s32 liVoice = 0; liVoice < 4; ++liVoice)
+    {
+        AgingVoice& lrVoice = maVoices[liVoice];
+        if (!lrVoice.mVoice.IsAlive())
+            continue;
+        ++lrVoice.mu16Age;
+        lrVoice.mfTimeSinceLastTick += afDeltaTime;
+        if (lrVoice.mDataEntry.mu8Behaviour == 1 &&
+            lrVoice.mfTimeSinceLastTick >= 1.25f)
+            lrVoice.mVoice.Release();
+    }
+}
+
+void PresentationEffect::ProcessUpdate()
+{
+    for (s32 liVoice = 0; liVoice < 4; ++liVoice)
+        maVoices[liVoice].mVoice.Update();
 }
 
 // ---------------------------------------------------------------------------

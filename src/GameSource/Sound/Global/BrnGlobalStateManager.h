@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"   // BrnSound::Logic::BrnStateManager (committed base)
+#include "GameShared/GameClasses/Sound/Logic/CgsContent.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsVoice.h"
 
 // =============================================================================
 // BrnSound::Logic::GlobalStateManager
@@ -71,19 +73,30 @@ public:
     // ---- IResourceRequester overrides (pure in IResourceRequester; BrnStateManager
     // declares but does not body them, so the concrete leaf must override+body them). ----
     virtual void                            ResourcesAreReady();    // (stub -- domain cascade; see .cpp FLAG)
-    virtual BrnSound::Logic::ResourceRegistrar& GetResourceRegistrar(); // (stub -- module not homed; see .cpp FLAG)
+    virtual void UpdateParams(f32 af32DeltaTime);
+
+    const CgsSound::Logic::Content& GetPresentationSpliceBank() const
+    {
+        return mPresentationSpliceBank;
+    }
+    const CgsSound::Logic::Content& GetFxSpliceBank() const
+    {
+        return mFxSpliceBank;
+    }
+    CgsSound::Logic::Voice& GetSubmixVoice(s32 aiVoice)
+    {
+        return maSubmixVoices[aiVoice];
+    }
+    const CgsSound::Logic::Voice& GetSubmixVoice(s32 aiVoice) const
+    {
+        return maSubmixVoices[aiVoice];
+    }
 
 private:
-    // FLAG (deferred body -- ~110 bytes): the X360 object is 208 bytes (0xD0). The
-    // global Voice/Content state (the two refcounted global-Voice sub-objects the ctor
-    // builds at +0x98/+0xA4 -- Voice::Construct/Connect/SetGain in Prepare -- the two
-    // splicer-bank Content sub-objects at +0xB0/+0xBC, and the +0xC8 tail word) is NOT
-    // modelled in this minimal shell -- the global audio domain is not reconstructed.
-    // The shell exists only to be a CONCRETE, registrable leaf whose Prepare() returns
-    // true for PrepareStateManagersOnBoot. A single opaque pad keeps the deferred state
-    // honestly named without fabricating field meanings. Size is UNVERIFIED on host
-    // (the X360 0xD0 is a 32-bit fact); NOT static_asserted.
-    u8 maDeferredGlobalState[1]; // placeholder for the un-reconstructed global Voice/Content members
+    CgsSound::Logic::Voice   maSubmixVoices[2];
+    CgsSound::Logic::Content mFxSpliceBank;
+    CgsSound::Logic::Content mPresentationSpliceBank;
+    bool                     mbResourcesAreLoaded;
 };
 
 } // namespace Logic

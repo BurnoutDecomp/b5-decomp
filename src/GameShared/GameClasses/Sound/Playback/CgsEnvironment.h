@@ -152,14 +152,14 @@ namespace Playback
         // declared-only -- bodied with the Environment slices.
         Handle<Factory> GetFactory(Name aName);
 
-        // @0x826BFAF0 / FE50. Look a voice up by ident / a content up by plugin key.
-        // (2026-08-25 wave 6: GetV renamed to its DWARF name GetVoice, h:289 --
-        // the param is the StreamBuffer::Ident u32. GetR keeps its truncated name
-        // for now: the DWARF candidate is GetRwacVoiceByPlugin (h:362) which
-        // returns Handle<Voice>, but the committed body builds a Handle<Content>
-        // from the matched voice's tail -- reconcile with the Environment slice.)
-        Handle<Voice>   GetVoice(u32 au32Id);     // @0x826BFAF0 (DWARF h:289)
-        Handle<Content> GetR(u32 au32Plugin);     // @0x826BFE50 (see the note above)
+        // @0x826BFAF0 / FE50. Look a voice up by ident / by its RWAC plug-in.
+        // DecFIGS names the latter GetRwacVoiceByPlugin (h:362), and the ARTIST
+        // result is one of mphVoice's Voice pointers (not Content): the match arm
+        // stores mphVoice[index] into the returned one-pointer Handle and acquires
+        // it before dropping the transient voice reference.
+        Handle<Voice> GetVoice(u32 au32Id); // @0x826BFAF0 (DWARF h:289)
+        Handle<Voice> GetRwacVoiceByPlugin(
+            const rw::audio::core::PlugIn* apPlugin); // @0x826BFE50 (DWARF h:362)
 
         // @0x82680F50 / FE8. Start/stop the DAC plug-in through the RWAC engine.
         void StartDac();                          // @0x82680F50

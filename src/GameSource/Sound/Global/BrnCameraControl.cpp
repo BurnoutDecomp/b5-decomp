@@ -14,6 +14,32 @@ namespace BrnSound
 namespace Logic
 {
 
+CgsSound::Logic::EffectControl* CameraControl::CreateObject(u32)
+{
+    return new CameraControl();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* CameraControl::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo(
+        0x10, "CameraControl", CgsSound::Logic::EffectControl::GetStaticTypeInfo(),
+        &CameraControl::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* CameraControl::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+const char* CameraControl::GetTypeName() const
+{
+    return "CameraControl";
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* const gpCameraControlReg =
+    CgsSound::Logic::EffectControl::AddToClassTypeInfoArray(CameraControl::GetStaticTypeInfo());
+
 // ---------------------------------------------------------------------------
 // ~CameraControl  (the out-of-line destructor that anchors the vtable)
 //

@@ -62,6 +62,7 @@ namespace Playback
 // mVoiceHandle. Its full definition lives in Sound/Playback/CgsVoice.h (RECONSTRUCTED
 // -- the .cpp includes it and reaches the fields by name). Only a Handle is held here.
 class Voice;
+struct Content;
 }
 
 namespace Logic
@@ -120,7 +121,7 @@ public:
 
     // ---- Playback-layer-dependent legs (see .cpp for the FLAGGED stubs) ----------
     // Attach  @ 0x826DC4C8 -> Playback::Module::Module::AttachVoice
-    s32 Attach(s32 liSlotName, s32* lppOther);
+    s32 Attach(s32 liSlotName, Playback::Handle<Playback::Content>* lphContent);
     // Detach  @ 0x826C4F98 -> Playback::Voice::FindNamedSlot + Playback::Slot::Detach
     void* Detach(s32 liSlotName);
     // Play    @ 0x826C5068 -> Playback::Voice::GetSlot + Playback::Slot::Play

@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Sound/Logic/CgsClassTypeInfo.h"  // ClassTypeInfo<T> (canonical)
+#include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Sound/BrnResourceRegistrar.h"   // BrnSound::Logic::IResourceRequester + ResourceRegistrar (canonical home)
 
@@ -45,6 +46,7 @@
 // CgsEffectBase.h home (DWARF CgsEffectBase.h:379) is DEFERRED.
 // =============================================================================
 
+#if 0 // RETIRED: the former minimal rival engine-effect definitions; canonical CgsEffectBase.h is used above.
 namespace CgsSound
 {
 namespace Logic
@@ -126,6 +128,7 @@ struct EffectControl : public EffectBase
 
 } // namespace Logic
 } // namespace CgsSound
+#endif
 
 namespace BrnSound
 {
@@ -161,9 +164,11 @@ struct BrnEffectControl : public CgsSound::Logic::EffectControl,
     // for the control vtable shape.
     virtual bool Detach();
 
-    // Member observed in the X360 dtor teardown (by name).
-    //   +0x31 -> mbResourcesReady (dtor stores false)
+    // Members observed in the X360 resource-request and dtor paths (by name).
+    //   +0x2D -> mbResourceRequestActive (Detach tests/clears it)
+    //   +0x31 -> mbResourcesReady        (dtor stores false)
     // FLAG: X360 byte offset (+0x31) not asserted on the 64-bit host.
+    bool mbResourceRequestActive;
     bool mbResourcesReady;
 };
 

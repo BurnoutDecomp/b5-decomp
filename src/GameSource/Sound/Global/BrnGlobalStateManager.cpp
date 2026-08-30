@@ -1,5 +1,8 @@
 #include "GameSource/Sound/Global/BrnGlobalStateManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h"
 
 // =============================================================================
 // BrnSound::Logic::GlobalStateManager -- out-of-line bodies.
@@ -60,6 +63,10 @@ namespace Logic
 // ---------------------------------------------------------------------------
 GlobalStateManager::GlobalStateManager()
     : BrnSound::Logic::BrnStateManager()
+    , maSubmixVoices()
+    , mFxSpliceBank()
+    , mPresentationSpliceBank()
+    , mbResourcesAreLoaded(false)
 {
 }
 
@@ -217,7 +224,73 @@ const char* GlobalStateManager::GetTypeName() const
 // ---------------------------------------------------------------------------
 bool GlobalStateManager::Prepare()
 {
-    return true;
+    switch (GetPrepareState())
+    {
+    case E_PREPARE_NONE:
+    case E_PREPARE_RELEASED:
+        mePrepareState = E_PREPARE_NONE;
+        // fall through
+    case E_PREPARE_BEGIN:
+    {
+        mePrepareState = E_PREPARE_BEGIN;
+        LoadAsset("Sound\\Splicer\\PresentationAsset.bundle", "PresentationAsset",
+                  ResourceRegistrar::E_DATA);
+        LoadAsset("Sound\\Splicer\\FX_SPLICE.bundle", "FX_splice",
+                  ResourceRegistrar::E_DATA);
+        LoadAsset("sound\\globalwaves.bundle", 0, ResourceRegistrar::E_DATA);
+
+        CgsSound::Logic::Module* lpModule = GetLogicModule();
+        const u32 luFactoryName = static_cast<u32>(
+            CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+        maSubmixVoices[0].Construct(
+            lpModule, lpModule->GetUniqueId(), luFactoryName,
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash(
+                "CollisionSubmixVoiceSpec")));
+        maSubmixVoices[1].Construct(
+            lpModule, lpModule->GetUniqueId(), luFactoryName,
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash(
+                "SubmixVoiceSpec")));
+        // fall through
+    }
+    case E_PREPARE_UPDATING:
+    {
+        mePrepareState = E_PREPARE_UPDATING;
+        if (!mbResourcesAreLoaded || !mPresentationSpliceBank.IsLoaded())
+            return false;
+
+        // The console probes both voices before wiring them, but deliberately
+        // proceeds after the probe pass; readiness is advanced by playback update.
+        for (s32 liVoice = 0; liVoice < 2; ++liVoice)
+        {
+            if (!maSubmixVoices[liVoice].IsReady())
+                break;
+        }
+
+        const u32 luSend01 = static_cast<u32>(
+            CgsSound::Playback::Name::MakeHash("Send01"));
+        const u32 luReverbSend = static_cast<u32>(
+            CgsSound::Playback::Name::MakeHash("ReverbSend"));
+        for (s32 liVoice = 0; liVoice < 2; ++liVoice)
+        {
+            maSubmixVoices[liVoice].Connect(luSend01, 1);
+            maSubmixVoices[liVoice].Connect(luReverbSend, 2);
+            maSubmixVoices[liVoice].SetGain(1, 0.0f, 0, &luReverbSend);
+            maSubmixVoices[liVoice].SetGain(0, 1.0f, 0, &luSend01);
+        }
+        // The profiling monitor has no gameplay semantics on the PC host.
+        // fall through
+    }
+    case E_PREPARE_STATES:
+        mePrepareState = E_PREPARE_STATES;
+        if (!PrepareStates(0x7f, 1, 3))
+            return false;
+        // fall through
+    case E_PREPARE_FINISHED:
+        mePrepareState = E_PREPARE_FINISHED;
+        return true;
+    default:
+        return false;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -232,33 +305,21 @@ bool GlobalStateManager::Prepare()
 // ---------------------------------------------------------------------------
 void GlobalStateManager::ResourcesAreReady()
 {
+    mbResourcesAreLoaded = true;
+    CgsSound::Logic::Module* lpModule = GetLogicModule();
+    const u32 luFactoryName = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("~SplicerFactory::SK_NAME~"));
+    mPresentationSpliceBank.Construct(
+        lpModule, luFactoryName,
+        static_cast<u32>(CgsSound::Playback::Name::MakeHash("PresentationAsset")));
+    mFxSpliceBank.Construct(
+        lpModule, luFactoryName,
+        static_cast<u32>(CgsSound::Playback::Name::MakeHash("FX_splice")));
 }
 
-// ---------------------------------------------------------------------------
-// GlobalStateManager::GetResourceRegistrar()  (IResourceRequester slot 1)
-//
-// Recovered semantically from the sibling BrnEffectObject::GetResourceRegistrar
-// @ 0x82696850: load this->mpLogicModule (+0x2C), tail-call the IResourceRequester
-// slot-1 of the module's embedded ResourceRegistrar. The state-manager leaves share
-// the +0x2C module back-pointer (stamped by CreateStateMan).
-//
-// FLAG (module opaque): the minimal CgsSound::Logic::StateManager view in this TU
-// (via BrnStateManager.h) does not expose mpLogicModule (+0x2C), and the
-// SoundLogicModule home is not reconstructed in this slice -- so this cannot be bodied
-// faithfully here. Provided as a non-cascading stub that abort-asserts if ever reached
-// on boot (PrepareStateManagersOnBoot does NOT call it; it is only used on the per-
-// frame attach/detach path this slice never exercises). Returns a TU-local empty
-// registrar purely to satisfy the non-void signature; NOT a faithful body. Body via
-// the module once the full StateManager view (mpLogicModule) + SoundLogicModule are
-// available.
-// ---------------------------------------------------------------------------
-BrnSound::Logic::ResourceRegistrar& GlobalStateManager::GetResourceRegistrar()
+void GlobalStateManager::UpdateParams(f32 af32DeltaTime)
 {
-    CGS_ASSERT( false,
-                "GlobalStateManager::GetResourceRegistrar reached without a homed "
-                "SoundLogicModule (boot path does not call this)" );
-    static BrnSound::Logic::ResourceRegistrar sUnhomedRegistrar;
-    return sUnhomedRegistrar;
+    CgsSound::Logic::StateManager::UpdateParams(af32DeltaTime);
 }
 
 } // namespace Logic

@@ -65,11 +65,31 @@ struct StreamingState : public BrnSound::Logic::BrnState
     // Bodied in BrnStreamingState.cpp.
     virtual ~StreamingState();
 
+    virtual void Attach(void* apvAttachment); // @ 0x826C9BC8
+    virtual bool Detach();                     // @ 0x826C9C58
+    virtual void UpdateParams(f32 af32DeltaTime)
+    {
+        CgsSound::Logic::State::UpdateParams(af32DeltaTime);
+    }
+
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetStaticTypeInfo();
+    static CgsSound::Logic::State* CreateObject(u32 auType);
+
     // @ 0x82683A00 (DWARF h:166: `const StreamRequest& GetRequest() const`).
     // Asserts IsAttached() (the State-base flag at +0x48, `lbz r11, 0x48(state)`;
     // assert cite BrnStreamingState.h:168 -- a non-gating tripwire) and returns
     // the embedded request at +0x54. Bodied in BrnStreamingState.cpp.
     const StreamRequest& GetRequest() const;
+
+    StreamingStateManager* GetStreamingStateManager() const;
+    void SetFadeOut(f32 afFadeOut) { mfFadeOut = afFadeOut; }
+    f32 GetFadeOut() const { return mfFadeOut; }
+    CgsSound::Logic::State::EUpdateState GetUpdateState() const
+    {
+        return static_cast<CgsSound::Logic::State::EUpdateState>(mauUpdateState[0]);
+    }
 
 private:
     // DWARF :105. The stream request this state is servicing (the manager-ring

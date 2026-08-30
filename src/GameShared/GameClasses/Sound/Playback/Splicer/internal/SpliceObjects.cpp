@@ -1,8 +1,11 @@
 #include "GameShared/GameClasses/Sound/Playback/Splicer/internal/SpliceObjects.h"
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // RwacSystemLock, GetDefaultRwacSystem
+#include "rw/audio/core/plugins/SndPlayer1.h"
 
 #include <math.h>   // cos, fabsf
+#include <new>
 #include <stdlib.h> // rand
 
 // The audio-core System unlock engine entry (X360 rw::audio::core::System::Unlock),
@@ -32,6 +35,90 @@ static const f32 KI_STEREO_SAMPLE_AZIMUTH = -127.0f;
 static bool IsApproxZero( f32 afValue )
 {
     return afValue <= 0.00000011920929f && afValue >= -0.00000011920929f;
+}
+
+SpliceSample::SpliceSample( SPLICE_SampleRef* apData,
+                            rw::audio::core::PlugIn* apSubMix )
+    : mDynamicVoicePluginPair()
+    , mpVoicePluginPair( 0 )
+    , mpSubMix( apSubMix )
+    , mpSendPlugIn( 0 )
+    , mpResamplePlugIn( 0 )
+    , mpPanningPlugIn( 0 )
+    , mLocPitch( 0.0f )
+    , mLocVol( 0.0f )
+    , mtTimeToTrigger( -1.0f )
+    , mtTimeIntoPlayback( 0.0f )
+    , mpData( apData )
+    , mLastPitch( 0.0f )
+    , mfPreviousAzimuth( 0.0f )
+    , mfPreviousVol( 0.0f )
+    , mfPreviousPitch( 0.0f )
+    , mbUsingDynamicVoice( false )
+    , mbStartVoice( false )
+{
+}
+
+SpliceSample::~SpliceSample()
+{
+    FreeVoice();
+}
+
+StereoSpliceSample::StereoSpliceSample(
+    SPLICE_SampleRef* apData, rw::audio::core::PlugIn* apSubMix )
+    : SpliceSample( apData, apSubMix )
+{
+}
+
+// @ 0x826A3930. Acquire a mono pooled voice or construct a dynamic fallback,
+// then cache its send/resample/panner stages.
+void SpliceSample::StartVoice()
+{
+    mtTimeIntoPlayback = 0.0f;
+    if ( mpVoicePluginPair )
+    {
+        SpliceManager::AssertCallbackFunc lpfnAssert =
+            gpSpliceManager->GetAssertCallbackFunction();
+        if ( lpfnAssert )
+            lpfnAssert( "SpliceSample already has a voice!" );
+    }
+
+    mpVoicePluginPair = gpSpliceManager->AllocateMonoVoicePluginPair( this );
+    if ( !mpVoicePluginPair )
+    {
+        rw::audio::core::System* lpSystem =
+            CgsSound::Playback::GetDefaultRwacSystem();
+        CgsSound::Playback::RwacLock lLock( lpSystem );
+        mpVoicePluginPair = &mDynamicVoicePluginPair;
+        gpSpliceManager->CreateMonoVoice( &mDynamicVoicePluginPair );
+        if ( !mpVoicePluginPair->mpVoice )
+        {
+            SpliceManager::AssertCallbackFunc lpfnAssert =
+                gpSpliceManager->GetAssertCallbackFunction();
+            if ( lpfnAssert )
+                lpfnAssert( "Failed to dynamically create mono voice" );
+        }
+        mbUsingDynamicVoice = true;
+    }
+
+    if ( !mpVoicePluginPair )
+    {
+        SpliceManager::AssertCallbackFunc lpfnAssert =
+            gpSpliceManager->GetAssertCallbackFunction();
+        if ( lpfnAssert )
+            lpfnAssert( "No plugin pair" );
+        return;
+    }
+    mpSendPlugIn = mpVoicePluginPair->mppPlugIn[3];
+    mpResamplePlugIn = mpVoicePluginPair->mppPlugIn[1];
+    mpPanningPlugIn = mpVoicePluginPair->mppPlugIn[2];
+    mbStartVoice = true;
+}
+
+u32 SpliceSample::GetCpuTicks()
+{
+    return (mpVoicePluginPair && mpVoicePluginPair->mpVoice)
+        ? static_cast<u32>(mpVoicePluginPair->mpVoice->miLastFrameCpuTicks) : 0u;
 }
 
 // ============================================================================
@@ -233,6 +320,68 @@ void StereoSpliceSample::StartVoice()
     mpResamplePlugIn = lpPair->mppPlugIn[1];
 }
 
+Splice::Splice( SPLICE_TYPE aeType, int aiIndex,
+                rw::audio::core::PlugIn* apSubMix )
+    : Splice( gpSpliceManager->FindSplice( aeType, aiIndex ), apSubMix )
+{
+}
+
+// @ 0x826DB208. Materialize one SpliceSample per serialized sample reference,
+// choosing the stereo subclass for the -127 degree sentinel.
+Splice::Splice( SPLICE_Data* apData, rw::audio::core::PlugIn* apSubMix )
+    : mpData( apData )
+{
+    for ( u32 lu = 0; lu < 15; ++lu )
+        mSampleRefs[lu] = 0;
+
+    if ( !apSubMix || !apData )
+    {
+        SpliceManager::AssertCallbackFunc lpfnAssert =
+            gpSpliceManager->GetAssertCallbackFunction();
+        if ( lpfnAssert )
+            lpfnAssert( !apSubMix ? "There's no sub mix plugin" : "There's no data" );
+    }
+    if ( !apData )
+        return;
+
+    for ( u32 lu = 0; lu < apData->mucNumSampleRefs && lu < 15; ++lu )
+    {
+        SPLICE_SampleRef* lpRef = apData->mpSampleRefList + lu;
+        if ( fabsf( lpRef->mfAzimuth - KI_STEREO_SAMPLE_AZIMUTH ) < 0.000015258789f )
+        {
+            void* lpMemory = gpSpliceManager->Allocate(
+                static_cast<u32>(sizeof(StereoSpliceSample)), "StereoSpliceSample" );
+            if ( lpMemory )
+                mSampleRefs[lu] = ::new (lpMemory)
+                    StereoSpliceSample( lpRef, apSubMix );
+        }
+        else
+        {
+            void* lpMemory = gpSpliceManager->Allocate(
+                static_cast<u32>(sizeof(SpliceSample)), "SpliceSample" );
+            if ( lpMemory )
+                mSampleRefs[lu] = ::new (lpMemory) SpliceSample( lpRef, apSubMix );
+        }
+    }
+}
+
+// @ 0x826E9E48. The retail destructor explicitly runs the base sample
+// destructor for both sample classes, returns each block, and clears the slot.
+Splice::~Splice()
+{
+    if ( !mpData )
+        return;
+    for ( u32 lu = 0; lu < mpData->mucNumSampleRefs && lu < 15; ++lu )
+    {
+        if ( mSampleRefs[lu] )
+        {
+            mSampleRefs[lu]->SpliceSample::~SpliceSample();
+            gpSpliceManager->Free( mSampleRefs[lu] );
+            mSampleRefs[lu] = 0;
+        }
+    }
+}
+
 // ============================================================================
 // Splice::operator new @ 0x826C33A0
 //
@@ -348,27 +497,136 @@ u32 Splice::GetCpuTicks()
 }
 
 // ============================================================================
-// BLOCKED (this TU): SpliceSample::Update @ 0x826A3A50
+// SpliceSample::Update @ 0x826A3A50
 //
-// PARTIAL UNBLOCK (re-attempt): the sample-source lookup that once blocked this func is now
-// homed. The X360 inline table math at 0x826A3D84..0x826A3DC4 resolves against the (now
-// committed) SpliceManager::m_Splices[8] bank array (SpliceContainer @ guest +0x614, 20-byte
-// stride): bankIdx = (s8)mpData->mcSpliceType, sampleId = mpData->muSampleId, and the source
-// pointer = m_Splices[bankIdx].mpSampleData + m_Splices[bankIdx].mpTableOfContents[sampleId]
-// (the +0x614 load is field +0x00 = mpSampleData; the (bankIdx+78)*20 load is that same
-// SpliceContainer's +0x04 = mpTableOfContents, indexed by sampleId*4). That part is fully
-// groundable now.
-//
-// STILL BLOCKED (irreducible): the voice-start branch (mbStartVoice, 0x826A3D00..0x826A3F88)
-// builds a ~40-byte rw::audio::core "SndPlayer" start-Event parameter record handed to
-// PlugIn::Event, whose leading 8 bytes are seeded with the rodata double dbl_82001CA8 -- a
-// constant with NO recovered value (no .ida-exports data segment covers 0x82001CA8; the only
-// other reference is an unrelated ChallengeManager round-to-nearest idiom, which does not
-// reveal the value). The record's remaining field semantics are likewise un-modelled, and
-// the deferred SetAttributeHandler command-queue path it shares writes into the RwacSystem's
-// private command buffer (guest System +0x20 base / +0x10B8 cursor) whose layout is not homed
-// in the vendor rw::audio::core headers. Emitting that payload + constant would be inventing a
-// layout and an attested constant -- a hard fidelity violation, worse than an honest gap. The
-// declaration stays homed in SpliceObjects.h; the body remains a link-time trap until
-// dbl_82001CA8 and the SndPlayer start-event parameter layout are recovered.
+// Advance a pending trigger or a live sample, stop completed voices, and enqueue only
+// changed panner/send/resample attributes. The voice-start payload is the exact
+// rw::audio::core::SndPlayer1::PlayLegacyParams record: the ARTIST stack image zeroes
+// it, writes only pRamData, and passes it to source-stage event 0. Mono chains route
+// through plug-in 3 after initializing panner 2; stereo chains route through plug-in 2.
 // ============================================================================
+void SpliceSample::Update( rw::audio::core::System* apRwacSystem,
+                           f32 afVol, f32 afPitch, f32 afAzimuth,
+                           f32 afTimeDelta, f32 afSpread )
+{
+    CGS_ASSERT( apRwacSystem != 0, "lpRwacSystem" );
+
+    if ( !mpVoicePluginPair && mtTimeToTrigger < 0.0f )
+        return;
+
+    const f32 lfPreviousInputPitch = mLastPitch;
+    const f32 lfPitch = mLocPitch * afPitch;
+    const f32 lfAzimuth = mpData->mfAzimuth * afSpread + afAzimuth;
+    f32 lfVolume = mpData->mfField04 * mLocVol * afVol;
+    mLastPitch = afPitch;
+
+    if ( mtTimeToTrigger > 0.0f )
+    {
+        mtTimeToTrigger -= afTimeDelta;
+        if ( mtTimeToTrigger <= 0.0f )
+            StartVoice();
+    }
+    else
+    {
+        if ( !mpVoicePluginPair )
+        {
+            SpliceManager::AssertCallbackFunc lpfnAssert =
+                gpSpliceManager->GetAssertCallbackFunction();
+            if ( lpfnAssert )
+                lpfnAssert( "No Voice Plug-in pair" );
+        }
+        else
+        {
+            mtTimeIntoPlayback += lfPreviousInputPitch * afTimeDelta;
+            GetEnvelopeVolume( lfVolume );
+
+            rw::audio::core::Voice* lpVoice = mpVoicePluginPair->mpVoice;
+            const bool lbFinished =
+                (mpData->mfBasePitch / mLocPitch) * mpData->mfEnvLength
+                    < mtTimeIntoPlayback
+                || (lpVoice && lpVoice->mucState == 2);
+            if ( lbFinished )
+            {
+                rw::audio::core::PlugIn::Event(
+                    mpVoicePluginPair->mppPlugIn[0], 1, 0 );
+                FreeVoice();
+            }
+            else
+            {
+                if ( mpPanningPlugIn && mfPreviousAzimuth != lfAzimuth )
+                {
+                    mfPreviousAzimuth = lfAzimuth;
+                    rw::audio::core::PlugIn::SetAttribute(
+                        mpPanningPlugIn, 0, lfAzimuth );
+                }
+
+                CGS_ASSERT( mpSendPlugIn != 0, "mpSendPlugIn" );
+                CGS_ASSERT( mpResamplePlugIn != 0, "mpResamplePlugIn" );
+                if ( mpSendPlugIn && mfPreviousVol != lfVolume )
+                {
+                    mfPreviousVol = lfVolume;
+                    rw::audio::core::PlugIn::SetAttribute(
+                        mpSendPlugIn, 0, lfVolume );
+                }
+                if ( mpResamplePlugIn && mfPreviousPitch != lfPitch )
+                {
+                    mfPreviousPitch = lfPitch;
+                    rw::audio::core::PlugIn::SetAttribute(
+                        mpResamplePlugIn, 0, lfPitch );
+                }
+            }
+        }
+    }
+
+    if ( !mbStartVoice )
+        return;
+
+    if ( !mpVoicePluginPair )
+    {
+        SpliceManager::AssertCallbackFunc lpfnAssert =
+            gpSpliceManager->GetAssertCallbackFunction();
+        if ( lpfnAssert )
+            lpfnAssert( "No Voice Plug-in pair" );
+        return;
+    }
+
+    rw::audio::core::PlugIn** lppPlugIns = mpVoicePluginPair->mppPlugIn;
+    rw::audio::core::SndPlayer1::PlayLegacyParams lPlay = {};
+    lPlay.pRamData = gpSpliceManager->GetSampleData(
+        static_cast<SPLICE_TYPE>(mpData->mcSpliceType), mpData->muSampleId );
+
+    rw::audio::core::PlugIn::Event( lppPlugIns[0], 0, &lPlay );
+    rw::audio::core::PlugIn::SetAttribute( lppPlugIns[1], 0, 0.0f );
+
+    void* lapRoute[1] = { mpSubMix };
+    if ( mpPanningPlugIn )
+    {
+        rw::audio::core::PlugIn::SetAttribute( lppPlugIns[2], 0, 0.0f );
+        rw::audio::core::PlugIn::Event( lppPlugIns[3], 0, lapRoute );
+        rw::audio::core::PlugIn::SetAttribute( lppPlugIns[3], 0, 0.0f );
+        mfPreviousAzimuth = lfAzimuth;
+        rw::audio::core::PlugIn::SetAttribute(
+            mpPanningPlugIn, 0, lfAzimuth );
+    }
+    else
+    {
+        rw::audio::core::PlugIn::Event( lppPlugIns[2], 0, lapRoute );
+        rw::audio::core::PlugIn::SetAttribute( lppPlugIns[2], 0, 0.0f );
+    }
+
+    CGS_ASSERT( mpSendPlugIn != 0, "mpSendPlugIn" );
+    CGS_ASSERT( mpResamplePlugIn != 0, "mpResamplePlugIn" );
+    if ( mpResamplePlugIn )
+    {
+        rw::audio::core::PlugIn::SetAttribute(
+            mpResamplePlugIn, 0, lfPitch );
+        mfPreviousPitch = lfPitch;
+    }
+    if ( mpSendPlugIn )
+    {
+        rw::audio::core::PlugIn::SetAttribute(
+            mpSendPlugIn, 0, lfVolume );
+        mfPreviousVol = lfVolume;
+    }
+    mbStartVoice = false;
+}

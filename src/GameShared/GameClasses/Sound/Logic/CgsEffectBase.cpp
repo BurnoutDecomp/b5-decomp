@@ -29,6 +29,9 @@ namespace CgsSound
 namespace Logic
 {
 
+static ClassTypeInfo<EffectControl>* gapEffectControlTypeInfo[EffectControl::KU_SIZEOF_CLASS_ARRAY] = { nullptr };
+static ClassTypeInfo<EffectObject>*  gapEffectObjectTypeInfo[EffectObject::KU_SIZEOF_CLASS_ARRAY] = { nullptr };
+
 // ---------------------------------------------------------------------------
 // AddToClassTypeInfoArray scan helper.
 //
@@ -95,6 +98,16 @@ bool EffectBase::Prepare(State* apState)
     return true;                                                // li r3, 1
 }
 
+s32 EffectBase::GetStateId() const
+{
+    return mpState ? mpState->miStateInstType : -1;
+}
+
+s32 EffectBase::GetInstanceId() const
+{
+    return mpState ? mpState->miInstNum : -1;
+}
+
 // ---------------------------------------------------------------------------
 // EffectBase::GetMixerOutputValue(slot, preset)  @ 0x82680720
 //   if (!mpDynamicMixIo) return 0.0f;
@@ -144,8 +157,12 @@ const char* EffectControl::GetTypeName() const
 // EffectControl::AddToClassTypeInfoArray @ 0x8268DD48 (array dword_82FFBB10).
 ClassTypeInfo<EffectControl>* EffectControl::AddToClassTypeInfoArray(ClassTypeInfo<EffectControl>* apTypeInfo)
 {
-    static ClassTypeInfo<EffectControl>* saClassTypeInfoArray[KU_SIZEOF_CLASS_ARRAY] = { nullptr };
-    return RegisterClassTypeInfo<EffectControl>(saClassTypeInfoArray, apTypeInfo);
+    return RegisterClassTypeInfo<EffectControl>(gapEffectControlTypeInfo, apTypeInfo);
+}
+
+ClassTypeInfo<EffectControl>* EffectControl::GetRegisteredTypeInfo(u32 auIndex)
+{
+    return auIndex < KU_SIZEOF_CLASS_ARRAY ? gapEffectControlTypeInfo[auIndex] : nullptr;
 }
 
 // ---------------------------------------------------------------------------
@@ -166,8 +183,12 @@ const char* EffectObject::GetTypeName() const
 // separate static array from EffectControl's).
 ClassTypeInfo<EffectObject>* EffectObject::AddToClassTypeInfoArray(ClassTypeInfo<EffectObject>* apTypeInfo)
 {
-    static ClassTypeInfo<EffectObject>* saClassTypeInfoArray[KU_SIZEOF_CLASS_ARRAY] = { nullptr };
-    return RegisterClassTypeInfo<EffectObject>(saClassTypeInfoArray, apTypeInfo);
+    return RegisterClassTypeInfo<EffectObject>(gapEffectObjectTypeInfo, apTypeInfo);
+}
+
+ClassTypeInfo<EffectObject>* EffectObject::GetRegisteredTypeInfo(u32 auIndex)
+{
+    return auIndex < KU_SIZEOF_CLASS_ARRAY ? gapEffectObjectTypeInfo[auIndex] : nullptr;
 }
 
 } // namespace Logic

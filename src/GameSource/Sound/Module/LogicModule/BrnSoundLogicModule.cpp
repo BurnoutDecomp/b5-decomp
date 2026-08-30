@@ -1,9 +1,14 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (attached-buffer guard)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log / Message filter
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // the "Resource Registrar" monitor (Prepare case 0)
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModuleIo.h"  // Io::LogicPreUpdateOutputBuffer (PreUpdate; phase C1)
+#include "GameShared/GameClasses/Sound/Logic/CgsState.h"
 
 // BrnSound::Module::SoundLogicModule -- accessor bodies recovered from
 // BURNOUT_X360_ARTIST.XEX. See BrnSoundLogicModule.h for the layout/slice notes.
@@ -12,6 +17,53 @@ namespace BrnSound
 {
 namespace Module
 {
+
+namespace
+{
+    struct GuiEventWireHeader
+    {
+        u32 muPayloadSize;
+        u32 muEventType;
+        u32 muPayloadOffset;
+    };
+
+    struct GuiAudioEventData
+    {
+        u8 maData[12];
+    };
+
+    const u8* GetGuiPayload(const CgsModule::Event* apEvent, s32 aiEventType,
+                            s32 aiEventSize)
+    {
+        const u8* lpuBytes = reinterpret_cast<const u8*>(apEvent);
+        if (aiEventSize >= static_cast<s32>(sizeof(GuiEventWireHeader)))
+        {
+            const GuiEventWireHeader* lpHeader =
+                reinterpret_cast<const GuiEventWireHeader*>(apEvent);
+            if (lpHeader->muEventType == static_cast<u32>(aiEventType) &&
+                lpHeader->muPayloadOffset >= sizeof(GuiEventWireHeader) &&
+                lpHeader->muPayloadOffset < static_cast<u32>(aiEventSize))
+            {
+                return lpuBytes + lpHeader->muPayloadOffset;
+            }
+        }
+        return lpuBytes;
+    }
+
+    template <typename T>
+    void QueueSoundMessage(CgsModule::VariableEventQueue<8192, 16>& arQueue,
+                           const CgsSound::Io::Message<T>& arMessage)
+    {
+        arQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&arMessage),
+                         arMessage.GetEventId(), static_cast<s32>(sizeof(arMessage)));
+    }
+}
+
+void SoundLogicModule::ResourcesAreReady()
+{
+    const bool lbResolved = mBurnoutGlobalData.ResolveLoadedCollection();
+    CGS_ASSERT(lbResolved, "mBurnoutGlobalData.IsValid()");
+}
 
 // X360 0x826AFF88. Search the per-frame trigger-action table for the entry whose
 // EntityId and result-type both match, returning it (or null when absent).
@@ -255,6 +307,121 @@ void SoundLogicModule::ResourceBridging()
         mResourceRegistrar.GetAttribSysRequestInterface().mRequestQueue);
 }
 
+void SoundLogicModule::ProcessGuiEvents(
+    const CgsModule::VariableEventQueue<18432, 16>* apGuiEvents)
+{
+    if (!apGuiEvents)
+        return;
+
+    const CgsModule::Event* lpEvent = 0;
+    s32 liSize = 0;
+    s32 liType = apGuiEvents->GetFirstEvent(&lpEvent, &liSize);
+    while (lpEvent)
+    {
+        const u8* lpuPayload = GetGuiPayload(lpEvent, liType, liSize);
+        switch (liType)
+        {
+        case 23:
+        {
+            const CgsGui::GuiEventPlayMusicOnMenuStream* lpGuiEvent =
+                reinterpret_cast<const CgsGui::GuiEventPlayMusicOnMenuStream*>(lpEvent);
+            CgsSound::Io::Message<CgsGui::GuiEventPlayMusicOnMenuStream> lMessage(*lpGuiEvent);
+            lMessage.Construct(13, 0, 0, 2, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
+            QueueSoundMessage(mMessageQueue, lMessage);
+            break;
+        }
+        case 201: // PC's typed GuiAudioTriggerEvent id
+        case 457: // ARTIST wire id
+        {
+            CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent> lMessage;
+            lMessage.Construct(6, 0, 0, 0, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
+            if (liType == 201 && liSize >= static_cast<s32>(sizeof(lMessage.mData)))
+            {
+                lMessage.mData =
+                    *reinterpret_cast<const BrnGui::GuiAudioTriggerEvent*>(lpEvent);
+            }
+            else
+            {
+                const BrnGui::GuiAudioTriggerWirePayload457& lrPayload =
+                    *reinterpret_cast<const BrnGui::GuiAudioTriggerWirePayload457*>(
+                        lpuPayload);
+                lMessage.mData.Construct(
+                    lrPayload.meAction, lrPayload.macComponent,
+                    lrPayload.macLabel, lrPayload.macMovie);
+            }
+            QueueSoundMessage(mMessageQueue, lMessage);
+            break;
+        }
+        case 456:
+        {
+            CgsSound::Io::Message<GuiAudioEventData> lMessage;
+            lMessage.Construct(5, 0, 0, 1, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
+            std::memcpy(lMessage.mData.maData, lpuPayload, sizeof(lMessage.mData.maData));
+            QueueSoundMessage(mMessageQueue, lMessage);
+            break;
+        }
+        case 466:
+        {
+            const u32 luName = *reinterpret_cast<const u32*>(lpuPayload);
+            CgsSound::Io::Message<CgsSound::Playback::Name> lMessage;
+            lMessage.Construct(36, 0, 0, 5, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
+            lMessage.mData = CgsSound::Playback::Name(static_cast<uintptr_t>(luName));
+            QueueSoundMessage(mMessageQueue, lMessage);
+            break;
+        }
+        case 468:
+        {
+            const u32 luName = *reinterpret_cast<const u32*>(lpuPayload);
+            CgsSound::Io::Message<CgsSound::Playback::Name> lMessage;
+            lMessage.Construct(28, 0, 0, 2, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
+            lMessage.mData = CgsSound::Playback::Name(static_cast<uintptr_t>(luName));
+            QueueSoundMessage(mMessageQueue, lMessage);
+            break;
+        }
+        case 469:
+        {
+            CgsSound::Io::Message<bool> lMessage;
+            lMessage.Construct(44, 0, 0, 1, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
+            lMessage.mData = (*lpuPayload != 0);
+            QueueSoundMessage(mMessageQueue, lMessage);
+            break;
+        }
+        default:
+            break;
+        }
+
+        liType = apGuiEvents->GetNextEvent(lpEvent, &lpEvent, &liSize);
+    }
+}
+
+void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
+                              CgsModule::IOBuffer* apInputBuffer,
+                              CgsModule::IOBuffer* apOutputBuffer)
+{
+    CGS_ASSERT(apInputBuffer != 0, "lpInputBuffer");
+    Io::RootInputBuffer* lpInput = static_cast<Io::RootInputBuffer*>(apInputBuffer);
+    lpInput->LockForRead();
+    const Io::RootInputBuffer::GuiEventQueue* lpGuiQueue = lpInput->GetGuiEventQueue();
+    ProcessGuiEvents(reinterpret_cast<const CgsModule::VariableEventQueue<18432, 16>*>(
+        lpGuiQueue));
+    lpInput->UnlockForRead();
+
+    CgsSound::Logic::Module::Update(af32GameDt, af32SimDt, apInputBuffer, apOutputBuffer);
+
+    // The resource broker must continue to drain after boot; effect and manager
+    // LoadAsset requests are resolved through this pass. X360 0x82702E14..0x82702E58
+    // brackets the final request-queue append with output-then-input write locks and
+    // releases them in the same order. ResourceBridging is the identical append pair
+    // factored by Prepare, with the registrar Update immediately ahead of it.
+    mpBrnLogicInputBuffer = reinterpret_cast<Io::LogicInputBuffer*>(apInputBuffer);
+    mpBrnLogicOutputBuffer = reinterpret_cast<Io::LogicOutputBuffer*>(apOutputBuffer);
+    mpBrnLogicOutputBuffer->LockForWrite();
+    mpBrnLogicInputBuffer->LockForWrite();
+    ResourceBridging();
+    mpBrnLogicOutputBuffer->UnlockForWrite();
+    mpBrnLogicInputBuffer->UnlockForWrite();
+}
+
 // X360 0x826AFEF8. Create the 9 sound-logic state managers and register them in the
 // embedded Environment. X360 store-for-store (a1 == this):
 //   v2 = a1 + 10576;            ; &lEnvironment
@@ -338,15 +505,15 @@ bool SoundLogicModule::PrepareStateManagersOnBoot(s32 luSkipMask)
         }
     }
 
-    // The mapStateManagers[0] child-prepare special-case.
+    // The mapStateManagers[0] global-state attach special-case. The vtable +0x14
+    // call is StateManager::GetFreeState(void*), and the returned State's +0x0C
+    // slot is State::Attach(void*) -- not a child-manager Prepare call.
     if (mapStateManagers[0] != 0)
     {
-        CgsSound::Logic::StateManager* lpChild =
-            mapStateManagers[0]->GetChildStateManager(0);   // vtable +0x14
-        if (lpChild != 0)
-        {
-            lpChild->Prepare();                             // vtable +0x0C
-        }
+        CgsSound::Logic::State* lpGlobalState =
+            mapStateManagers[0]->GetFreeState(0);           // vtable +0x14
+        if (lpGlobalState != 0)
+            lpGlobalState->Attach(0);                       // State vtable +0x0C
     }
 
     return true;

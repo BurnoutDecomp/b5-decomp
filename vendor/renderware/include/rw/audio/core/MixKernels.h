@@ -114,15 +114,10 @@ void ReChannelGainWrite4x1(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); 
 void ReChannelGainWrite4x2(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6AEE8
 void ReChannelGainWrite4x4(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6AF50
 void ReChannelGainWrite4x6(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6AFB0
+void ReChannelGainWrite6x1(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6B030
 void ReChannelGainWrite6x2(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6B0A0
 void ReChannelGainWrite6x4(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6B148
 void ReChannelGainWrite6x6(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6B1E8
-
-// ReChannelGainWrite6x1 @0x82B6B030 -- referenced by the ReChannelGainWrite dispatcher
-// (bl rw__audio__core__ReChannelGainWrite6x1) but NOT in this dump's per-function IDA
-// exports (0x82B6B030 has no export JSON), so only the declaration is reconstructed.
-// FLAGGED: body pending an export of 0x82B6B030.
-void ReChannelGainWrite6x1(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6B030
 
 // -------------------------------------------------------------------------------------
 // ReChannelGainWrite @0x82B6B268 -- the channel-remap dispatcher. Routes every

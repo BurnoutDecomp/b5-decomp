@@ -86,6 +86,13 @@ namespace CgsFileSystem
         // @0x828D6708. True when the read-stream slot `liIndex` is CLOSED.
         bool IsReadStreamClosed(s32 liIndex);
 
+        // DWARF CgsFileSystem.h:189/195. The public locked read-stream pair.
+        ReadStream OpenReadStream(const char* lpcName, void* lpBuffer,
+                                  u32 luBufferSize, u32 luNumBlocks,
+                                  s32 liNormalPriority, s32 liHighPriority,
+                                  bool lbUseHDCache);
+        void CloseReadStream(ReadStream lStream);
+
     private:
         // Shared effective-status read used by Is{Open,Closed}: the raw stream status, except that
         // any outstanding operation collapses it to E_STATUS_PENDING (the X360 asm: v=PENDING; if
@@ -100,6 +107,11 @@ namespace CgsFileSystem
         bool ReadInternal(u32 luFileID, void* lpOutputBuffer, u64 luFilePosition, u64 luSizeToRead);
         bool WriteInternal(u32 luFileID, const void* lpInputBuffer, u64 luFilePosition,
                            u64 luSizeToWrite);
+        ReadStream OpenReadStreamInternal(const char* lpcName, void* lpBuffer,
+                                          u32 luBufferSize, u32 luNumBlocks,
+                                          s32 liNormalPriority, s32 liHighPriority,
+                                          bool lbUseHDCache);
+        void CloseReadStreamInternal(ReadStream lStream);
 
         // FileHandle::Read/Write lock this->mFileSystemFutex and delegate to Read/WriteInternal.
         friend struct FileHandle;

@@ -654,7 +654,6 @@ s32 SndPlayer1_CgsStreamMod::PlayHandler(void* apCommand)
     external.pStreamLoopFileName = 0;
     self->mLastRequestHandleSuccessfullyProcessed = command->requestHandle;
     self->UnpackHeader(index, const_cast<void*>(command->pRamData));
-
     if (external.playType == 1 || external.playType == 2)
     {
         CgsSound::Playback::IStreamProvider::StreamSpec spec;

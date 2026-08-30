@@ -8,24 +8,18 @@
 // mOutEvents, a VariableEventQueue<18432,16> @ +0x814) and re-publishes /
 // translates the queued GUI events into a downstream subsystem's INPUT event queue.
 //
-// GUI-OUTPUT-QUEUE REACH (ODR): CgsGui::CgsGuiModuleIO::OutputBuffer is an empty
-// PLACEHOLDER in BrnGameModule.hpp, so this header cannot #include the real
-// CgsGuiModuleIO.h. We reach the out-event queue by its proven +0x814 byte offset
-// (committed CgsGuiModuleIO_OutputBuffer.cpp: mOutEvents @0x0814), mirroring the
-// GetGuiInputEventQueue precedent in GameBridgeReplayToX.h.
+// The former empty OutputBuffer placeholder has been retired. Reach the queue through
+// the real X360 accessor so its read-lock contract remains part of every bridge.
 // ============================================================================
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
-
-namespace CgsGui { namespace CgsGuiModuleIO { struct OutputBuffer; } }
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"
 
 namespace BrnGame
 {
     inline const CgsModule::VariableEventQueue<18432, 16>* GetGuiOutEventQueue(
         const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer)
     {
-        return reinterpret_cast<const CgsModule::VariableEventQueue<18432, 16>*>(
-            reinterpret_cast<const unsigned char*>(lpGuiOutputBuffer) + 0x814);
+        return lpGuiOutputBuffer->GetOutEventQueue();
     }
 }

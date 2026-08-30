@@ -52,6 +52,11 @@ struct CameraControl : public BrnSound::Logic::BrnEffectControl
 {
     CameraControl() {}
     virtual ~CameraControl();
+
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const override;
+    const char* GetTypeName() const override;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectControl* CreateObject(u32 auType);
 };
 
 } // namespace Logic

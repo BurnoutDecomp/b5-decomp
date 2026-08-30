@@ -4,6 +4,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Sound/Playback/CgsContent.h"      // CgsSound::Playback::Content
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"        // Slot implementation/factory surface
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h" // CgsResource::ResourcePtr<T>
 
 // ============================================================================
@@ -158,6 +159,23 @@ namespace Playback
 
     private:
         ContentLoader<CgsResource::BinaryFileResource> mLoader; // :70  (object +0x20)
+    };
+
+    // CgsGenericRwacWaveContent.h:103 (DecFIGS). The ordinary wave-content
+    // implementation mounted into authored GenericRwac player slots. ARTIST
+    // @0x826C1EA8/1FE8/20A8 routes play/stop/completion through the RWAC plug-in
+    // selected by Slot::mu16PluginOffset.
+    struct GenericRwacContentSlot : public ISlotImplementation
+    {
+        static const Name SK_SLOT_CLASSNAME;
+
+        virtual bool DoPlay(const Slot& arSlot, PlayerVoice& arVoice,
+                            Content& arContent, u32 au32Param);
+        virtual bool DoStop(const Slot& arSlot, PlayerVoice& arVoice,
+                            Content& arContent);
+        virtual bool DoUpdatePlaying(System* apSystem, const Slot& arSlot,
+                                     PlayerVoice& arVoice, Content& arContent,
+                                     f32 af32Dt);
     };
 
 } // namespace Playback

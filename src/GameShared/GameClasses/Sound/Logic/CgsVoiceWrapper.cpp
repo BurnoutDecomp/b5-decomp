@@ -1,100 +1,203 @@
-// ============================================================================
-// CgsVoiceWrapper.cpp -- CgsSound::Logic::VoiceWrapper runtime bodies.
-//
-// Bodied from BURNOUT_X360_ARTIST.XEX:
-//   VoiceWrapper::GetGain                              @ 0x826C5218
-//   VoiceWrapper::~VoiceWrapper (scalar deleting dtor) @ 0x826E0B88
-//
-// VoiceWrapper is the per-slot voice wrapper the sound-logic pool embeds. See
-// CgsVoiceWrapper.h for the layout (mVoice @+0x34, mpObject @+0x40).
-//
-// FLAG (Playback-layer reach): the embedded Voice's owned object and the wrapper's
-// +0x40 handle are ref-counted CgsSound::Playback objects. The embedded-Voice object
-// is fetched via Voice::GetVoiceObject() as a Playback::Voice* (incomplete type in
-// this layer); the X360 drops its reference through the {vptr, mu32RefCount} base it
-// shares with Playback::Object, so the drop is expressed through that shared base BY
-// NAME (reinterpret to the ref-counted Object base -- the ODR-compatible layout).
-// ============================================================================
-
 #include "GameShared/GameClasses/Sound/Logic/CgsVoiceWrapper.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"   // complete Playback::Voice (: public Object since the wave-3 fold)
+#include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsContent.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 
 namespace CgsSound
 {
 namespace Logic
 {
 
-// ---------------------------------------------------------------------------
-// VoiceWrapper::GetGain(lpSendName)  @ 0x826C5218
-//   If the embedded logic Voice has no playback voice yet (its handle's mpObject,
-//   read as *(this+0x38), is null) return 0.0f (flt_82001CC0). Otherwise spill the
-//   caller's send-name word into a local and forward to Voice::GetGain(&mVoice,
-//   &sendName), passing back whatever that leaves in fp1.
-//     asm: if (!*(this+0x38)) return 0.0f;      // mVoice.mVoiceHandle.mpObject
-//          v3 = *lpSendName;                     // spill the name word
-//          return Voice::GetGain(&mVoice, &v3);
-// ---------------------------------------------------------------------------
-f32 VoiceWrapper::GetGain(const s32* lpSendName) const
+// ARTIST @ 0x826EAEB0.
+void VoiceWrapper::Create(const CreateParams& arCreateParams)
 {
-    // *(this+0x38) == mVoice.mVoiceHandle.mpObject: the embedded Voice's owned
-    // playback-voice pointer. Null -> no voice yet -> 0.0f.
-    if (mVoice.GetVoiceObject() == 0)
-        return 0.0f;                    // flt_82001CC0
+    mCreateParams = arCreateParams;
+    CGS_ASSERT(!mContent.IsCreated(), "!mContent");
+    CGS_ASSERT(mCreateParams.mpLogicModule != 0,
+               "mCreateParams.mpLogicModule");
 
-    // Spill the send-name word into a local and forward by pointer, exactly as the
-    // X360 does (stw r11,var_10; addi r4,r1,var_10; addi r3,r3,0x34).
-    s32 liSendName = *lpSendName;
-    return mVoice.GetGain(&liSendName);
+    mVoice.Construct(mCreateParams.mpLogicModule,
+                     mCreateParams.mpLogicModule->GetUniqueId(),
+                     mCreateParams.mFactoryName,
+                     mCreateParams.mVoiceSpecName);
+    CGS_ASSERT(mVoice.GetVoiceObject() != 0, "mVoiceObject.IsCreated()");
+
+    if (mCreateParams.mContentSpecName != 0)
+    {
+        Playback::Content* lpContent = 0;
+        mCreateParams.mpLogicModule->GetPlaybackModule().CreateContent(
+            &lpContent,
+            mCreateParams.mpLogicModule->GetUniqueId(),
+            Playback::Name(static_cast<uintptr_t>(mCreateParams.mFactoryName)),
+            Playback::Name(static_cast<uintptr_t>(mCreateParams.mContentSpecName)));
+
+        if (lpContent)
+            lpContent->Acquire();
+        mContent.Adopt(lpContent, mCreateParams.mpLogicModule);
+        if (lpContent)
+            lpContent->Release();
+    }
+    else
+    {
+        CGS_ASSERT(mCreateParams.mpContent != 0, "mCreateParams.mpContent");
+        Playback::Content* lpContent =
+            mCreateParams.mpContent->GetContent().GetObject();
+        CGS_ASSERT(lpContent != 0, "Content not yet created!");
+        if (lpContent)
+            lpContent->Acquire();
+        mContent.Adopt(lpContent, mCreateParams.mpLogicModule);
+    }
+
+    CGS_ASSERT(mContent.IsCreated(), "mContent");
+    meUpdateStage = E_UPDATE_STAGE_CREATE;
 }
 
-// ---------------------------------------------------------------------------
-// VoiceWrapper::~VoiceWrapper   (anchor for the X360 `scalar deleting destructor'
-//   @ 0x826E0B88)
-//
-//   The X360 scalar-deleting-destructor is the canonical MSVC shape:
-//     ~VoiceWrapper(this);
-//     if (a2 & 1) <sound allocator>.Free(this);   // off_82FFB954, vtable slot +0x14
-//   The conditional allocator-routed free is the compiler-synthesised deleting tail
-//   (off_82FFB954 not homed in this group); the host `delete` stands in for it --
-//   exactly as in CgsEffectObjectDtor.cpp.
-//
-//   The OBSERVABLE class-destructor body is the teardown the pool dtor (0x826E5370)
-//   inlines per element: Release() the wrapper, drop the +0x40 ref-counted object
-//   handle, then tear down the embedded Voice's +0x38 handle, each with the
-//   CgsObject.h:117 "mu32RefCount > 0" assert. Mirrors
-//   StateManager::RegisteredContent::~RegisteredContent.
-// ---------------------------------------------------------------------------
+// ARTIST @ 0x826EB088.
+void VoiceWrapper::Play(u32 au32OptionalPlayParam)
+{
+    mbPlay = true;
+    mu32OptionalPlayParam = au32OptionalPlayParam;
+    CGS_ASSERT(meUpdateStage != E_UPDATE_STAGE_IDLE,
+               "Cannot 'Play' a voice wrapper if it hasn't been 'Created'\n");
+    if (meUpdateStage == E_UPDATE_STAGE_FINISHED)
+        Create(mCreateParams);
+}
+
+// ARTIST @ 0x826DC570.
+void VoiceWrapper::Stop()
+{
+    mbPlay = false;
+    if (meUpdateStage == E_UPDATE_STAGE_PLAYING && mVoice.GetVoiceObject())
+    {
+        mVoice.Stop();
+        meUpdateStage = E_UPDATE_STAGE_FINISHED;
+    }
+    if (meUpdateStage < E_UPDATE_STAGE_PLAYING)
+        Release();
+}
+
+f32 VoiceWrapper::GetGain(const s32* apSendName) const
+{
+    return mVoice.GetVoiceObject() ? mVoice.GetGain(apSendName) : 0.0f;
+}
+
+void VoiceWrapper::SetGain(u32 au32SendIndex, f32 af32Gain,
+                           const u32* apSendName)
+{
+    if (mVoice.GetVoiceObject())
+        mVoice.SetGain(au32SendIndex, af32Gain, 0, apSendName);
+}
+
+void VoiceWrapper::SetParameter(s32 as32ParamIndex, f32 af32Value,
+                                const u32* apParamName)
+{
+    if (mVoice.GetVoiceObject())
+        mVoice.SetParameter(static_cast<u32>(as32ParamIndex), af32Value,
+                            0, apParamName);
+}
+
+// ARTIST @ 0x826DC5E0.
+void VoiceWrapper::Update()
+{
+    if (meUpdateStage == E_UPDATE_STAGE_IDLE)
+        return;
+
+    CGS_ASSERT(mCreateParams.mpLogicModule != 0,
+               "mCreateParams.mpLogicModule != NULL");
+
+    switch (meUpdateStage)
+    {
+        case E_UPDATE_STAGE_CREATE:
+            meUpdateStage = E_UPDATE_STAGE_CREATE_WAIT;
+            break;
+
+        case E_UPDATE_STAGE_CREATE_WAIT:
+            if (mCreateParams.mpOnPostInit)
+                mCreateParams.mpOnPostInit->Call(*this);
+            meUpdateStage = E_UPDATE_STAGE_CONNECT;
+            // ARTIST continues through the connect leg in this tick.
+        case E_UPDATE_STAGE_CONNECT:
+        {
+            mVoice.Connect(mCreateParams.mSendName,
+                           mCreateParams.mSubMixVoiceID);
+            if (mCreateParams.mReverbSendName &&
+                mCreateParams.mReverbSubMixVoiceID)
+            {
+                mVoice.Connect(mCreateParams.mReverbSendName,
+                               mCreateParams.mReverbSubMixVoiceID);
+            }
+
+            Playback::Content* lpContent = mContent.GetContent().GetObject();
+            Playback::Handle<Playback::Content> lhContent(lpContent);
+            if (lpContent)
+                lpContent->Acquire();
+            mVoice.Attach(static_cast<s32>(mCreateParams.mSlotName), &lhContent);
+            meUpdateStage = E_UPDATE_STAGE_WAIT;
+            // ARTIST checks the content state immediately after attachment.
+        }
+        case E_UPDATE_STAGE_WAIT:
+            if (mContent.IsLoaded())
+                meUpdateStage = E_UPDATE_STAGE_START;
+            break;
+
+        case E_UPDATE_STAGE_START:
+            if (mbPlay)
+            {
+                u32 luSendName = mCreateParams.mSendName;
+                mVoice.SetGain(static_cast<u32>(mCreateParams.miSendIndex),
+                               0.0f, 0, &luSendName);
+                mVoice.Play(static_cast<s32>(mu32OptionalPlayParam));
+                meUpdateStage = E_UPDATE_STAGE_PLAYING;
+            }
+            break;
+
+        case E_UPDATE_STAGE_PLAYING:
+            if (!mVoice.IsPlaying())
+            {
+                Release();
+                meUpdateStage = E_UPDATE_STAGE_FINISHED;
+            }
+            break;
+
+        case E_UPDATE_STAGE_FINISHED:
+            meUpdateStage = E_UPDATE_STAGE_FINISHED;
+            break;
+
+        default:
+            CGS_ASSERT(false, "Unhandled case: meUpdateStage");
+            break;
+    }
+}
+
+// ARTIST @ 0x826C5270.
+void VoiceWrapper::Release()
+{
+    if (mVoice.GetVoiceObject())
+    {
+        if (mVoice.IsPlaying())
+            mVoice.Stop();
+        mVoice.Detach(static_cast<s32>(mCreateParams.mSlotName));
+        mVoice.Destruct();
+    }
+
+    Playback::Content* lpContent = mContent.GetContent().GetObject();
+    if (mCreateParams.mContentSpecName && lpContent)
+        lpContent->BeginRemove();
+    if (lpContent)
+        lpContent->Release();
+    mContent.Adopt(0, 0);
+
+    mbPlay = false;
+    mu32OptionalPlayParam = 0;
+    meUpdateStage = E_UPDATE_STAGE_IDLE;
+}
+
+// ARTIST @ 0x826C7E80; Release performs both owned-object drops.
 VoiceWrapper::~VoiceWrapper()
 {
-    // The wrapper's own detach step (X360 `bl VoiceWrapper::Release' right after the
-    // mid-teardown vtable install). Its body is a separate DEFERRED slice.
     Release();
-
-    // Drop the +0x40 ref-counted object handle FIRST: the X360 inlines the CgsObject
-    // Release (assert the count is still positive, --count, DoDispose at zero).
-    if (mpObject != 0)
-    {
-        CGS_ASSERT(mpObject->GetRefCount() > 0, "mu32RefCount > 0");
-        mpObject->Release();
-        if (mpObject->GetRefCount() == 0)
-            mpObject->DoDispose();      // (*(*v4+4))(v4): the virtual dispose slot
-    }
-
-    // The embedded logic Voice (+0x34) tears down last: its +0x38 handle drops its
-    // playback object the same way. The X360 inlines the identical assert-decrement-
-    // dispose sequence on *(this+0x38). Playback::Voice derives from the ONE
-    // Playback::Object since the wave-3 fold, so this is a real derived->base
-    // conversion now (was a reinterpret pun over an incomplete type).
-    if (Playback::Voice* lpVoice = mVoice.GetVoiceObject())
-    {
-        Playback::Object* lpVoiceObj = static_cast<Playback::Object*>(lpVoice);
-        CGS_ASSERT(lpVoiceObj->GetRefCount() > 0, "mu32RefCount > 0");
-        lpVoiceObj->Release();
-        if (lpVoiceObj->GetRefCount() == 0)
-            lpVoiceObj->DoDispose();
-    }
 }
 
 } // namespace Logic

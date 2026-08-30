@@ -107,6 +107,11 @@ struct FxEffect : public BrnEffectObject
     FxEffect();
     virtual ~FxEffect();
 
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
+    const char* GetTypeName() const override;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
+
     // +0x38 (X360), stride 0x50 per element. The do/while loop (r29 = 3 -> 0)
     // constructs 4 sub-objects at +0x38/+0x88/+0xD8/+0x128. Reused BY NAME from the
     // minimal CgsVoiceWrapper home (same wrapper the committed ExplosionEffect embeds

@@ -139,6 +139,17 @@ namespace CgsFileSystem
         return true;
     }
 
+    void DeviceManager::SetDefaultPath(const char* lpcPath)
+    {
+        CGS_ASSERT(lpcPath != nullptr, "Default path required\n");
+        if (!lpcPath)
+            return;
+        const size_t luLength = strlen(lpcPath);
+        CGS_ASSERT(luLength < sizeof(macDefaultPath), "Default path is too long\n");
+        strncpy(macDefaultPath, lpcPath, sizeof(macDefaultPath) - 1);
+        macDefaultPath[sizeof(macDefaultPath) - 1] = 0;
+    }
+
     // Open @0x828F11B8. Resolve the optional "prefix:" selector (or prepend the configured
     // default path), retain the selected logical device in the operation, and enqueue it on
     // the root physical device's worker queue.
