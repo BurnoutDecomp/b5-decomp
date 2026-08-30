@@ -1,5 +1,5 @@
 // =====================================================================================
-// rw::audio::core::SndPlayer1 -- the engine's sample player. CONSTRUCTION HALF.
+// rw::audio::core::SndPlayer1 -- the engine's sample player.
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm is authoritative for every
 // store and branch. Full body decode, adversarially verified:
@@ -12,19 +12,9 @@
 //   AdvanceCurrentRequest @0x82B9C2E8
 //   GetFeedSlot           @0x82BA0380
 //   GetPpuTicksEvent      @0x82BDD2D0 (vt[2])
-//
-// ⚠️ DELIBERATELY NOT REGISTERED YET. The streaming half -- Process, the event surface and
-// the whole decoder/stream chain -- needs ONE type this tree has not homed:
-// rw::audio::core::StreamPool. Those bodies are honest FLAG'd deferrals below and the
-// descriptor stays unregistered until every slot it would publish is real, which is the rule
-// the RWAC registration site has enforced since the descriptor wave.
-//
-// ⭐ CORRECTION 2026-08-29: an earlier revision of this banner also named
-// rw::core::filesys::Stream as un-homed. THAT WAS WRONG. It is homed, at
-// b5-decomp/src/SDKs/EATech/rwcore/filesys/stream.h, and it carries QueueFile / GetChunk /
-// ReleaseChunk / GetRequestState / GetState plus Chunk (muSize, mpData) and the
-// ChunkParseCallback typedef -- the exact shapes every SndPlayer1 call site uses. The
-// streaming half must reach for those BY NAME and invent nothing.
+// The full event, decoder, StreamPool, timer, and process paths are live. The console's
+// StreamPool registry is writer-less and therefore empty; the faithful host home preserves
+// that behavior instead of adding a null-pool guard absent from the binary.
 // See plugins/SndPlayer1.h for the layout and the per-field hazards.
 // =====================================================================================
 
@@ -32,9 +22,18 @@
 #include "rw/audio/core/Mixer.h"        // Mixer (the process context) + SampleBuffer + StackAllocator
 #include "rw/audio/core/TimerManager.h" // TimerManager::AddTimer
 #include "rw/audio/core/Decoder.h"      // Decoder::Decode / GetSamplesRemaining + DecoderBuffer
+#include "rw/audio/core/DecoderRegistry.h"
+#include "rw/audio/core/BitGetter.h"
+#include "rw/audio/core/SeekTableParser.h"
+#include "rw/audio/core/StreamPool.h"
+#include "rw/audio/core/Voice.h"
+#include "SDKs/EATech/rwcore/filesys/stream.h"
 
+#include <cassert>
 #include <cstddef> // offsetof (the SampleBuffer/DecoderBuffer aliasing pins)
 #include <cstring> // std::memset
+#include <limits>
+#include <new>
 
 namespace rw
 {
@@ -60,6 +59,150 @@ namespace
     inline u32 AlignUp(u32 auValue, u32 auAlign)
     {
         return (auValue + (auAlign - 1u)) & ~(auAlign - 1u);
+    }
+
+    struct SndPlayer1IsRequestDoneParams
+    {
+        f32 requestHandle;
+        f32 isRequestDone;
+    };
+
+    struct SndPlayer1GetRequestBufferedParams
+    {
+        f32 requestHandle;
+        f32 streamBytesBuffered;
+        f32 isFullyBuffered;
+    };
+
+    struct SndPlayer1ModifyStartTimeParams
+    {
+        f64 newStartTime;
+        f32 requestHandle;
+    };
+
+    struct SndPlayer1PlayLegacyParams
+    {
+        f64 startTime;
+        f64 streamFileOffset;
+        const char *pStreamFilePath;
+        const void *pRamData;
+        u32 streamPoolGuid;
+        f32 expelMode;
+        f32 requestHandle;
+    };
+
+    struct SndPlayer1PlayParams
+    {
+        f64 startTime;
+        f64 streamFileOffset;
+        f64 seekTime;
+        const char *pStreamFilePath;
+        const void *pRamData;
+        const void *pSeekData;
+        u32 streamPoolGuid;
+        f32 expelMode;
+        f32 requestHandle;
+    };
+
+    struct SndPlayer1StopCommand
+    {
+        int (*pHandler)(void *);
+        SndPlayer1 *pPlayer;
+    };
+
+    struct SndPlayer1ModifyStartTimeCommand
+    {
+        int (*pHandler)(void *);
+        SndPlayer1 *pPlayer;
+        f64 startTime;
+        f32 requestHandle;
+    };
+
+    struct SndPlayer1PlayCommand
+    {
+        int (*pHandler)(void *);
+        SndPlayer1 *pPlayer;
+        f64 startTime;
+        f64 streamFileOffset;
+        f64 seekTime;
+        u32 streamPoolGuid;
+        const void *pRamData;
+        const void *pSeekData;
+        u16 recordSize;
+        u8 expelMode;
+        f32 requestHandle;
+        char path[1];
+    };
+
+    inline size_t AlignUpSize(size_t value, size_t alignment)
+    {
+        return (value + alignment - 1u) & ~(alignment - 1u);
+    }
+
+    u64 PpcFctidzBits(f64 value)
+    {
+        if (value != value)
+            return 0x8000000000000000ULL;
+        if (value >= 9223372036854775808.0)
+            return 0x7FFFFFFFFFFFFFFFULL;
+        if (value <= -9223372036854775808.0)
+            return 0x8000000000000000ULL;
+        return static_cast<u64>(static_cast<s64>(value));
+    }
+
+    s32 PpcFctiwz(f64 value)
+    {
+        if (value != value || value >= 2147483648.0 || value < -2147483648.0)
+            return (std::numeric_limits<s32>::min)();
+        return static_cast<s32>(value);
+    }
+
+    u32 ReadBe32(const u8 *p)
+    {
+        return (static_cast<u32>(p[0]) << 24) |
+               (static_cast<u32>(p[1]) << 16) |
+               (static_cast<u32>(p[2]) << 8)  |
+                static_cast<u32>(p[3]);
+    }
+
+    void WriteBe32(u8 *p, u32 value)
+    {
+        p[0] = static_cast<u8>(value >> 24);
+        p[1] = static_cast<u8>(value >> 16);
+        p[2] = static_cast<u8>(value >> 8);
+        p[3] = static_cast<u8>(value);
+    }
+
+    u8 AdvanceRequestIndex(u8 index, u8 maxRequests)
+    {
+        u8 next = static_cast<u8>(index + 1u);
+        if (next == maxRequests)
+            next = 0;
+        return next;
+    }
+
+    f64 ReadDoubleAttribute(const PlugIn::Attribute_t &slot)
+    {
+        f64 value;
+        std::memcpy(&value, &slot, sizeof(value));
+        return value;
+    }
+
+    s32 StreamBytesBuffered(rw::core::filesys::Stream *stream)
+    {
+        return stream->miRemaining;
+    }
+
+    s32 StreamRequestBytesBuffered(rw::core::filesys::Stream *stream, u32 requestId)
+    {
+        rw::core::filesys::StreamState *state = stream->mpState;
+        const u32 slot = requestId & 0xFFu;
+        if (static_cast<s32>(slot) >= static_cast<s32>(state->muRequestCount))
+            return 0;
+        rw::core::filesys::Request &request = state->mpRequests[slot];
+        if (request.miId != requestId || request.miState == 0)
+            return 0;
+        return static_cast<s32>(request.muBufferedBytes);
     }
 }
 
@@ -389,18 +532,9 @@ int SndPlayer1::VFunc2()
 }
 
 // =====================================================================================
-// FLAG (DEFER) -- what is LEFT of the streaming half.  ⭐ SHRUNK 2026-08-29.
+// STREAMPOOL RETAIL BEHAVIOR
 //
-// Process @0x82BA0568 IS NOW BODIED (below). It was deferred on the belief that it reached
-// StreamPool; it does not. Its whole external surface -- Decoder, Mixer, the System's
-// StackAllocator, rw::core::filesys::Stream -- is homed.
-//
-// Still deferred: EventEvent @0x82BA5C48 (vt[1]), ReleaseEvent @0x82BA4178 (vt[0]) and
-// RwacTimerClient @0x82BA6980. These DO reach rw::audio::core::StreamPool -- EventEvent
-// through PlayHandler's stream open, ReleaseEvent through StreamLostCallback, the timer
-// through the pool entry's priority republish -- and that one type is not homed yet.
-//
-// ⭐ WHAT THE POOL DECODE FOUND, and it reframes this whole deferral
+// The pool decode
 // (progress/scratch_dossiers/streampool_decode_codex.md, verified three independent ways):
 // StreamPool::GetInstance @0x82B6BA68 reads its registry list head from the .bss global at
 // 0x83271C7C, and NO INSTRUCTION IN THE ENTIRE IMAGE EVER WRITES THAT GLOBAL. So it returns
@@ -415,26 +549,184 @@ int SndPlayer1::VFunc2()
 // game's own fork 'JStr' (SndPlayer1_CgsStreamMod) and the module's IStreamProvider, which
 // an independent decode confirmed never touches this pool.
 //
-// ⚠️ CONSEQUENCE FOR WHOEVER FINISHES THIS: the pool home must be FAITHFUL, not defensive.
+// The pool home is faithful, not defensive.
 // An empty registry whose lookup fails is EXACT -- it fails for the same reason the console's
 // does. Do NOT add a null-pool guard the console lacks; that would hide a genuine content
 // divergence behind silently different behaviour.
-//
-// These remain UNREACHABLE as committed: nothing constructs a SndPlayer1, because registration
-// 21 is still commented out at the RWAC site. The destructor's omitted teardown therefore
-// leaks nothing today -- but it WOULD if the type were registered before this note is
-// retired, which is precisely why it is not.
 // =====================================================================================
 SndPlayer1::~SndPlayer1()
 {
-    // ReleaseEvent @0x82BA4178: StreamLostCallback(this), then System::RemoveTimer when
-    // mbTimerAdded == 1, then System::Free(mpRequestHandle). Deferred with the stream half.
+    StreamLostCallback(this);
+    if (mbTimerAdded == 1)
+        System::RemoveTimer(mpSystemUseGetSystemAccessor, &mTimerClient);
+    if (mpRequestHandle != 0)
+        System::Free(mpSystemUseGetSystemAccessor, mpRequestHandle, 0);
 }
 
-int SndPlayer1::Event(int /*aiEventId*/, void * /*apParam*/)
+int SndPlayer1::Event(int aiEventId, void *apParam)
 {
-    // EventEvent @0x82BA5C48: six events (PLAY / STOP / ISREQUESTDONE / GETREQUESTBUFFERED
-    // / MODIFYSTARTTIME / PLAY1). Deferred with the stream half.
+    System *system = mpSystemUseGetSystemAccessor;
+    SndPlayer1PlayParams expanded;
+    SndPlayer1PlayParams *play = 0;
+
+    switch (aiEventId)
+    {
+    case 1:
+    {
+        SndPlayer1StopCommand *command = reinterpret_cast<SndPlayer1StopCommand *>(
+            system->mpDeferredRingBase + system->muDeferredRingCursor);
+        system->muDeferredRingCursor += static_cast<u32>(sizeof(*command));
+        command->pHandler = &SndPlayer1::StopHandler;
+        command->pPlayer = this;
+        return 0;
+    }
+    case 2:
+    {
+        SndPlayer1IsRequestDoneParams *query =
+            static_cast<SndPlayer1IsRequestDoneParams *>(apParam);
+        const f32 handle = query->requestHandle;
+        const f32 current = mAttribute[ATTRIBUTE_GETCURRENTREQUEST].mfValue;
+        bool done = handle < current;
+        if (!done)
+        {
+            const bool inWindow =
+                (handle == current) ||
+                (!(handle > mLastRequestHandleProcessed) &&
+                 !(handle <= mLastRequestHandleSuccessfullyProcessed));
+            done = inWindow &&
+                   ReadDoubleAttribute(mAttribute[ATTRIBUTE_GETSAMPLELENGTH]) == 0.0;
+        }
+        query->isRequestDone = done ? 1.0f : 0.0f;
+        return 0;
+    }
+    case 3:
+    {
+        SndPlayer1GetRequestBufferedParams *query =
+            static_cast<SndPlayer1GetRequestBufferedParams *>(apParam);
+        if (mMaxRequests == 0)
+            return 0;
+
+        const f32 handle = query->requestHandle;
+        for (u32 index = 0; index < mMaxRequests; ++index)
+        {
+            RequestInternal *request = GetRequestInternal(index);
+            if (request->requestHandle == handle && IsRequestActive(request->state))
+            {
+                RequestExternal &external = mpRequestExternal[index];
+                if (external.playType == 0)
+                {
+                    query->streamBytesBuffered = 0.0f;
+                    query->isFullyBuffered = 1.0f;
+                    return 0;
+                }
+                if (external.playType == 1 || external.playType == 2)
+                {
+                    query->isFullyBuffered = 0.0f;
+                    query->streamBytesBuffered =
+                        static_cast<f32>(static_cast<f64>(external.numBytesFed));
+                    rw::core::filesys::Stream *stream = external.pRwCoreStream;
+                    if (stream != 0)
+                    {
+                        s32 bytes;
+                        if (request->loopStart >= 0 &&
+                            static_cast<f32>(static_cast<f64>(static_cast<u64>(index))) ==
+                                mAttribute[ATTRIBUTE_GETCURRENTREQUEST].mfValue)
+                        {
+                            bytes = StreamBytesBuffered(stream);
+                        }
+                        else
+                        {
+                            bytes = StreamRequestBytesBuffered(stream,
+                                                               external.streamerRequestId);
+                        }
+                        query->streamBytesBuffered =
+                            static_cast<f32>(static_cast<f64>(bytes)) +
+                            query->streamBytesBuffered;
+                        if (stream->GetRequestState(external.streamerRequestId) != 3 &&
+                            stream->GetState() != 2)
+                            return 0;
+                    }
+                    query->isFullyBuffered = 1.0f;
+                    return 0;
+                }
+            }
+            query->streamBytesBuffered = 0.0f;
+            query->isFullyBuffered = 0.0f;
+        }
+        return 0;
+    }
+    case 4:
+    {
+        const SndPlayer1ModifyStartTimeParams *input =
+            static_cast<const SndPlayer1ModifyStartTimeParams *>(apParam);
+        SndPlayer1ModifyStartTimeCommand *command =
+            reinterpret_cast<SndPlayer1ModifyStartTimeCommand *>(
+                system->mpDeferredRingBase + system->muDeferredRingCursor);
+        system->muDeferredRingCursor += static_cast<u32>(sizeof(*command));
+        command->pHandler = &SndPlayer1::ModifyStartTimeHandler;
+        command->pPlayer = this;
+        command->startTime = input->newStartTime;
+        command->requestHandle = input->requestHandle;
+        return 0;
+    }
+    case 0:
+    {
+        const SndPlayer1PlayLegacyParams *legacy =
+            static_cast<const SndPlayer1PlayLegacyParams *>(apParam);
+        expanded.startTime = legacy->startTime;
+        expanded.streamFileOffset = legacy->streamFileOffset;
+        expanded.seekTime = 0.0;
+        expanded.pStreamFilePath = legacy->pStreamFilePath;
+        expanded.pRamData = legacy->pRamData;
+        expanded.pSeekData = 0;
+        expanded.streamPoolGuid = legacy->streamPoolGuid;
+        expanded.expelMode = legacy->expelMode;
+        expanded.requestHandle = legacy->requestHandle;
+        play = &expanded;
+        break;
+    }
+    case 5:
+        play = static_cast<SndPlayer1PlayParams *>(apParam);
+        break;
+    default:
+        return 0;
+    }
+
+    *mpRequestHandle = *mpRequestHandle + 1.0f;
+    if (!(*mpRequestHandle <= static_cast<f32>(KI_MAX_REQUEST_HANDLE_VALUE)))
+        *mpRequestHandle = 1.0f;
+    const f32 handle = *mpRequestHandle;
+    play->requestHandle = handle;
+    if (aiEventId == 0)
+        static_cast<SndPlayer1PlayLegacyParams *>(apParam)->requestHandle = handle;
+
+    size_t nameBytes = 1;
+    if (play->pStreamFilePath != 0)
+        nameBytes = std::strlen(play->pStreamFilePath) + 1;
+    const size_t recordSize = AlignUpSize(
+        offsetof(SndPlayer1PlayCommand, path) + nameBytes,
+        alignof(SndPlayer1PlayCommand));
+    assert(recordSize <= (std::numeric_limits<u16>::max)());
+
+    SndPlayer1PlayCommand *command = reinterpret_cast<SndPlayer1PlayCommand *>(
+        system->mpDeferredRingBase + system->muDeferredRingCursor);
+    system->muDeferredRingCursor += static_cast<u32>(recordSize);
+    command->pPlayer = this;
+    command->pHandler = &SndPlayer1::PlayHandler;
+    command->requestHandle = *mpRequestHandle;
+    command->startTime = play->startTime;
+    command->streamFileOffset = play->streamFileOffset;
+    command->seekTime = play->seekTime;
+    command->pRamData = play->pRamData;
+    command->pSeekData = play->pSeekData;
+    command->streamPoolGuid = play->streamPoolGuid;
+    command->recordSize = static_cast<u16>(recordSize);
+    command->expelMode = static_cast<u8>(PpcFctidzBits(play->expelMode));
+
+    if (nameBytes == 1)
+        command->path[0] = '\0';
+    else
+        std::memcpy(command->path, play->pStreamFilePath, nameBytes);
     return 0;
 }
 
@@ -442,6 +734,559 @@ void SndPlayer1::Destroy(int /*aFlags*/)
 {
     // vt[3] `vector deleting destructor' @0x82B9EAF8 -- the compiler generates the host
     // equivalent from ~SndPlayer1; this slot exists so the base's dispatch shape holds.
+}
+
+int SndPlayer1::PlayHandler(void *rawCommand)
+{
+    SndPlayer1PlayCommand *command = static_cast<SndPlayer1PlayCommand *>(rawCommand);
+    SndPlayer1 *self = command->pPlayer;
+    System *system = self->mpSystemUseGetSystemAccessor;
+
+    self->mLastRequestHandleProcessed = command->requestHandle;
+    const u8 index = self->mNextFreeRequest;
+    RequestInternal *request = self->GetRequestInternal(index);
+    if (request->state != REQUESTSTATE_FREE)
+        return command->recordSize;
+
+    RequestExternal &external = self->mpRequestExternal[index];
+    request->requestHandle = command->requestHandle;
+    request->pDecoder = 0;
+    request->startTime = command->startTime;
+    external.streamFileOffset = command->streamFileOffset;
+    external.expelMode = command->expelMode;
+    request->state = REQUESTSTATE_QUEUED;
+    external.numSamplesFed = 0;
+    external.numBytesFed = 0;
+    external.streamHandle = 0;
+    external.streamerRequestId = 0;
+    external.pStreamLoopFileName = 0;
+
+    UnpackHeader(self, self->mNextFreeRequest,
+                 static_cast<const u8 *>(command->pRamData));
+
+    s32 skipSamples = PpcFctiwz(
+        static_cast<f64>(request->sampleRate) * command->seekTime);
+    if (skipSamples > 0)
+    {
+        if (external.playType == 2)
+            skipSamples = 0;
+        if (request->loopStart >= 0)
+            skipSamples = 0;
+    }
+    else
+    {
+        skipSamples = 0;
+    }
+    if (request->numSamples <= skipSamples)
+        goto fail;
+
+    SetSeekData(self, self->mNextFreeRequest,
+                static_cast<const u8 *>(command->pSeekData), skipSamples);
+
+    if (external.playType == 1 || external.playType == 2)
+    {
+        external.pStreamPool = StreamPool::GetInstance(command->streamPoolGuid);
+        external.streamHandle = external.pStreamPool->AcquireStream(
+            self->mpVoice->mfPriority, &SndPlayer1::StreamLostCallback, self);
+        if (external.streamHandle == 0)
+            goto fail;
+        external.pRwCoreStream =
+            external.pStreamPool->GetRwCoreStream(external.streamHandle);
+
+        if (request->loopStart >= 0)
+        {
+            const u32 bytes = static_cast<u32>(std::strlen(command->path)) + 1u;
+            external.pStreamLoopFileName = static_cast<char *>(
+                System::Alloc(system, bytes, "SndPlayer1 StreamLoopFileName", 16, 0));
+            if (external.pStreamLoopFileName == 0)
+                goto fail;
+            std::memcpy(external.pStreamLoopFileName, command->path, bytes);
+        }
+
+        bool queueHead = true;
+        if (external.playType == 2 && request->loopStart >= 0 &&
+            external.gigaSamplesInRam > request->loopStart)
+            queueHead = false;
+        if (queueHead)
+        {
+            const u64 offset = PpcFctidzBits(external.streamFileOffset) +
+                               static_cast<u32>(external.mChunkOffset);
+            external.streamerRequestId = static_cast<u32>(
+                external.pRwCoreStream->QueueFile(
+                    command->path, 0, offset, &SndPlayer1::ChunkParsed, self));
+        }
+
+        if (request->loopStart >= 0)
+        {
+            bool queueLoop = true;
+            if (external.playType == 2 &&
+                external.gigaSamplesInRam >= request->numSamples)
+                queueLoop = false;
+            if (queueLoop)
+            {
+                for (int count = 2; count != 0; --count)
+                {
+                    const f64 offsetValue =
+                        static_cast<f64>(static_cast<s64>(external.loopStartStreamOffset)) +
+                        external.streamFileOffset;
+                    const u32 id = static_cast<u32>(external.pRwCoreStream->QueueFile(
+                        command->path, 0, PpcFctidzBits(offsetValue),
+                        &SndPlayer1::ChunkParsed, self));
+                    if (external.streamerRequestId == 0)
+                        external.streamerRequestId = id;
+                }
+            }
+        }
+    }
+
+    request->state = REQUESTSTATE_QUEUED;
+    self->mNextFreeRequest = AdvanceRequestIndex(self->mNextFreeRequest,
+                                                 self->mMaxRequests);
+    self->mLastRequestHandleSuccessfullyProcessed = command->requestHandle;
+    return command->recordSize;
+
+fail:
+    request->numSamples = 0;
+    request->state = REQUESTSTATE_FREE;
+    return command->recordSize;
+}
+
+int SndPlayer1::StopHandler(void *rawCommand)
+{
+    SndPlayer1 *self = static_cast<SndPlayer1StopCommand *>(rawCommand)->pPlayer;
+    for (u32 index = 0; index < self->mMaxRequests; ++index)
+    {
+        if (self->GetRequestInternal(index)->state != REQUESTSTATE_FREE)
+            RemoveRequest(self, index);
+    }
+    self->mCurrentRequest = 0;
+    self->mNextFreeRequest = 0;
+    self->mNextRequestToFree = 0;
+    self->mCurrentRequestSamplesPlayed = 0;
+    self->mCurrentRequestNumSamples = 0;
+    self->mNextFeedSlotToFill = 0;
+    self->mNextFeedSlotToFree = 0;
+    self->mNumDeclickSamples = 16;
+    return static_cast<int>(sizeof(SndPlayer1StopCommand));
+}
+
+int SndPlayer1::ModifyStartTimeHandler(void *rawCommand)
+{
+    const SndPlayer1ModifyStartTimeCommand *command =
+        static_cast<const SndPlayer1ModifyStartTimeCommand *>(rawCommand);
+    SndPlayer1 *self = command->pPlayer;
+    const u8 maxRequests = self->mMaxRequests;
+    for (u32 index = 0; index < maxRequests; ++index)
+    {
+        RequestInternal *request = self->GetRequestInternal(index);
+        if (request->requestHandle != command->requestHandle ||
+            !IsRequestActive(request->state))
+            continue;
+        if (!(request->startTime <= self->mpSystemUseGetSystemAccessor->mfSystemTime))
+            request->startTime = command->startTime;
+        break;
+    }
+    return static_cast<int>(sizeof(SndPlayer1ModifyStartTimeCommand));
+}
+
+void SndPlayer1::RemoveRequest(SndPlayer1 *self, u32 index)
+{
+    System *system = self->mpSystemUseGetSystemAccessor;
+    RequestInternal *request = self->GetRequestInternal(index);
+    RequestExternal &external = self->mpRequestExternal[index];
+
+    if (request->pDecoder != 0)
+    {
+        request->pDecoder->Release();
+        request->pDecoder = 0;
+    }
+
+    for (u32 slot = 0; slot < KU_MAX_DECODERFEEDS; ++slot)
+    {
+        SndPlayer1FeedDesc &feed = self->mFeedDesc[slot];
+        if (feed.requestIndex != index)
+            continue;
+        rw::core::filesys::Chunk *chunk = feed.pChunkInfo;
+        feed.feedState = FEEDSTATE_FREE;
+        if (chunk != 0)
+        {
+            external.numBytesFed = static_cast<s32>(
+                static_cast<u32>(external.numBytesFed) - chunk->muSize);
+            if (external.streamHandle != 0)
+                external.pRwCoreStream->ReleaseChunk(chunk);
+            feed.pChunkInfo = 0;
+        }
+    }
+
+    if (external.streamHandle != 0)
+    {
+        System::Lock(system);
+        external.pStreamPool->ReleaseStream(external.streamHandle);
+        System::Unlock(system);
+    }
+    if (external.pStreamLoopFileName != 0)
+        System::Free(system, external.pStreamLoopFileName, 0);
+    request->state = REQUESTSTATE_FREE;
+    if (external.expelMode == 1)
+        Voice::ExpelAfterDecay(self->mpVoice);
+}
+
+void SndPlayer1::StreamLostCallback(void *context)
+{
+    SndPlayer1 *self = static_cast<SndPlayer1 *>(context);
+    for (u32 index = 0; index < self->mMaxRequests; ++index)
+    {
+        if (self->GetRequestInternal(index)->state != REQUESTSTATE_FREE)
+            RemoveRequest(self, index);
+    }
+    self->mCurrentRequest = 0;
+    self->mNextFreeRequest = 0;
+    self->mNextRequestToFree = 0;
+}
+
+void SndPlayer1::RequestCleanup(SndPlayer1 *self)
+{
+    while (self->GetRequestInternal(self->mNextRequestToFree)->state ==
+           REQUESTSTATE_COMPLETE)
+    {
+        RemoveRequest(self, self->mNextRequestToFree);
+        self->mNextRequestToFree = AdvanceRequestIndex(self->mNextRequestToFree,
+                                                       self->mMaxRequests);
+    }
+}
+
+void SndPlayer1::FeedCleanup(SndPlayer1 *self)
+{
+    if (self->mNextFeedSlotToCleanup == self->mNextFeedSlotToFree)
+        return;
+    do
+    {
+        SndPlayer1FeedDesc &feed = self->mFeedDesc[self->mNextFeedSlotToCleanup];
+        if (feed.feedState == FEEDSTATE_DECODECOMPLETED)
+        {
+            Decoder *decoder = self->GetRequestInternal(feed.requestIndex)->pDecoder;
+            if (decoder->GetSamplesRemaining(feed.decoderRequestHandle) == 0)
+            {
+                rw::core::filesys::Chunk *chunk = feed.pChunkInfo;
+                feed.feedState = FEEDSTATE_FREE;
+                if (chunk != 0)
+                {
+                    RequestExternal &external = self->mpRequestExternal[feed.requestIndex];
+                    external.numBytesFed = static_cast<s32>(
+                        static_cast<u32>(external.numBytesFed) - chunk->muSize);
+                    if (feed.pRwCoreStream != 0)
+                        feed.pRwCoreStream->ReleaseChunk(chunk);
+                    feed.pChunkInfo = 0;
+                }
+            }
+        }
+        u8 next = static_cast<u8>(self->mNextFeedSlotToCleanup + 1u);
+        if (next == KU_MAX_DECODERFEEDS)
+            next = 0;
+        self->mNextFeedSlotToCleanup = next;
+    }
+    while (self->mNextFeedSlotToCleanup != self->mNextFeedSlotToFree);
+}
+
+s32 SndPlayer1::ChunkParsed(u8 *buffer, u32 available, u32 /*requestId*/,
+                            void * /*context*/, u32 /*handlerA*/, u32 /*handlerB*/,
+                            u32 *consumed)
+{
+    if (available < 8)
+        return 0;
+    const u32 raw = ReadBe32(buffer);
+    const u32 isLast = raw >> 31;
+    const u32 size = raw & 0x7FFFFFFFu;
+    if (size > available)
+        return 0;
+    *consumed = size;
+    if (isLast == 1)
+    {
+        WriteBe32(buffer, size);
+        return 2;
+    }
+    return 1;
+}
+
+void SndPlayer1::UnpackHeader(SndPlayer1 *self, u32 index, const u8 *header)
+{
+    RequestInternal *request = self->GetRequestInternal(index);
+    RequestExternal &external = self->mpRequestExternal[index];
+    BitGetter bits;
+    bits.mpBitBuffer = header;
+    bits.mBitPosition = 0;
+
+    (void)BitGetter::GetBits(&bits, 4);
+    external.codec = static_cast<u8>(BitGetter::GetBits(&bits, 4));
+    request->numChannels = static_cast<u8>(BitGetter::GetBits(&bits, 6) + 1u);
+    request->sampleRate = static_cast<f32>(
+        static_cast<f64>(static_cast<u64>(BitGetter::GetBits(&bits, 18))));
+    external.playType = static_cast<u8>(BitGetter::GetBits(&bits, 2));
+    const u32 loopFlag = BitGetter::GetBits(&bits, 1);
+    request->numSamples = static_cast<s32>(BitGetter::GetBits(&bits, 29));
+
+    if (static_cast<u8>(loopFlag) != 0)
+        request->loopStart = static_cast<s32>(BitGetter::GetBits(&bits, 32));
+    else
+        request->loopStart = -1;
+
+    if (external.playType == 2)
+        external.gigaSamplesInRam = static_cast<s32>(BitGetter::GetBits(&bits, 32));
+
+    if (loopFlag != 0)
+    {
+        if (external.playType == 1 ||
+            (external.playType == 2 && request->loopStart >= external.gigaSamplesInRam))
+        {
+            external.loopStartStreamOffset =
+                static_cast<s32>(BitGetter::GetBits(&bits, 32));
+        }
+        else
+        {
+            external.loopStartStreamOffset = 0;
+        }
+    }
+    external.pSampleData = const_cast<char *>(
+        reinterpret_cast<const char *>(header + (bits.mBitPosition >> 3)));
+}
+
+void SndPlayer1::SetSeekData(SndPlayer1 *self, u32 index,
+                             const u8 *seekTable, s32 targetSample)
+{
+    RequestInternal *request = self->GetRequestInternal(index);
+    RequestExternal &external = self->mpRequestExternal[index];
+    if (targetSample > 0 && seekTable != 0)
+    {
+        SeekTableParser parser;
+        (void)parser.Parse(const_cast<u8 *>(seekTable), targetSample);
+        request->numSamplesToSkipDecoder = parser.mDecoderSkip;
+        request->numSamplesToSkipStream = parser.mStreamSkip;
+        external.mPlayerSkip = parser.mPlayerSkip;
+        external.mChunkOffset = parser.mChunkOffset;
+        external.pSeekData = parser.mpSeekData;
+        external.mSeekDataVersion = parser.mSeekDataVersion;
+        external.mIsNewFeedChunk = parser.mIsNewFeedChunk;
+        request->numSamplesToSkipPlayer = 0;
+        external.numSamplesFed = request->numSamplesToSkipStream;
+    }
+    else
+    {
+        request->numSamplesToSkipDecoder = 0;
+        external.mPlayerSkip = 0;
+        external.mChunkOffset = 0;
+        external.pSeekData = 0;
+        external.mIsNewFeedChunk = 1;
+        request->numSamplesToSkipPlayer = 0;
+        request->numSamplesToSkipStream = 0;
+    }
+}
+
+u8 SndPlayer1::StartRequest(SndPlayer1 *self, u32 index)
+{
+    static const u32 kDecoderLookupWords[16] = {
+        0x58617330u, 0x454C3330u, 0x50364230u, 0x45586D30u,
+        0x58617331u, 0x454C3331u, 0x4C333250u, 0x4C333253u,
+        0x536E6450u, 0x6C617965u, 0x72312052u, 0x65717565u,
+        0x73744861u, 0x6E646C65u, 0x20616E64u, 0x20526571u
+    };
+
+    RequestInternal *request = self->GetRequestInternal(index);
+    RequestExternal &external = self->mpRequestExternal[index];
+    System *lockedSystem = self->mpSystemUseGetSystemAccessor;
+    System::Lock(lockedSystem);
+
+    DecoderRegistry *registry =
+        System::GetDecoderRegistry(self->mpSystemUseGetSystemAccessor);
+    DecoderDesc *descriptor = DecoderRegistry::GetDecoderHandle(
+        registry, static_cast<int>(kDecoderLookupWords[external.codec]));
+
+    request->pDecoder = DecoderRegistry::DecoderFactory(
+        registry, descriptor, request->numChannels, KU_MAX_DECODERFEEDS,
+        self->mpSystemUseGetSystemAccessor);
+    if (request->pDecoder == 0)
+    {
+        System::Unlock(lockedSystem);
+        return 0;
+    }
+
+    request->decoderInstanceSize =
+        static_cast<u16>(request->pDecoder->GetInstanceSize());
+    const u8 seekActive =
+        (request->numSamplesToSkipStream != 0 ||
+         request->numSamplesToSkipDecoder != 0 ||
+         external.mPlayerSkip != 0) ? 1u : 0u;
+
+    if (external.playType != 0 && external.playType != 2)
+    {
+        if (!StreamNextChunk(self, index, external.mIsNewFeedChunk, seekActive))
+        {
+            if (request->pDecoder != 0)
+            {
+                request->pDecoder->Release();
+                request->pDecoder = 0;
+            }
+            System::Unlock(lockedSystem);
+            return 0;
+        }
+    }
+    else
+    {
+        u32 slot;
+        self->GetFeedSlot(&slot);
+        external.feedSlotLatest = static_cast<u8>(slot);
+        external.pNextChunk = SubmitChunk(
+            self, external.pSampleData + external.mChunkOffset, index,
+            external.mIsNewFeedChunk, seekActive);
+    }
+
+    System::Unlock(lockedSystem);
+    return 1;
+}
+
+char *SndPlayer1::SubmitChunk(SndPlayer1 *self, char *block, u32 index,
+                              u8 isNewFeedChunk, u8 seekActive)
+{
+    RequestInternal *request = self->GetRequestInternal(index);
+    RequestExternal &external = self->mpRequestExternal[index];
+    const u32 blockBytes = ReadBe32(reinterpret_cast<const u8 *>(block));
+    const u32 numSamples = ReadBe32(reinterpret_cast<const u8 *>(block + 4));
+    const void *payload = block + 8;
+
+    SndPlayer1FeedDesc &feed = self->mFeedDesc[external.feedSlotLatest];
+    feed.requestIndex = static_cast<u8>(index);
+    feed.feedState = FEEDSTATE_FED;
+    feed.chunkSamplesPlayed = 0;
+    feed.pRwCoreStream = external.pRwCoreStream;
+
+    const u8 continueStream = (isNewFeedChunk == 0) ? 1u : 0u;
+    u8 decoderHandle;
+    if (seekActive == 0)
+    {
+        decoderHandle = request->pDecoder->Feed(
+            payload, static_cast<s32>(numSamples), continueStream, 0, 0, 0);
+    }
+    else
+    {
+        feed.chunkSamplesPlayed = request->numSamplesToSkipDecoder;
+        decoderHandle = request->pDecoder->Feed(
+            payload, static_cast<s32>(numSamples), continueStream,
+            request->numSamplesToSkipDecoder, external.pSeekData,
+            static_cast<u8>(external.mSeekDataVersion));
+    }
+    feed.decoderRequestHandle = decoderHandle;
+    external.numSamplesFed = static_cast<s32>(
+        static_cast<u32>(external.numSamplesFed) + numSamples);
+    return block + blockBytes;
+}
+
+u8 SndPlayer1::StreamNextChunk(SndPlayer1 *self, u32 index,
+                               u8 isNewFeedChunk, u8 seekActive)
+{
+    RequestInternal *request = self->GetRequestInternal(index);
+    RequestExternal &external = self->mpRequestExternal[index];
+    if (request->state == REQUESTSTATE_QUEUED && external.streamerRequestId != 0 &&
+        external.pRwCoreStream->GetRequestState(external.streamerRequestId) == 0)
+    {
+        request->numSamples = 0;
+        return 0;
+    }
+
+    rw::core::filesys::Chunk *chunk = external.pRwCoreStream->GetChunk();
+    if (chunk == 0)
+        return 0;
+    u32 slot;
+    const bool gotSlot = self->GetFeedSlot(&slot);
+    external.numBytesFed = static_cast<s32>(
+        static_cast<u32>(external.numBytesFed) + chunk->muSize);
+    if (!gotSlot)
+        return 0;
+
+    external.feedSlotLatest = static_cast<u8>(slot);
+    self->mFeedDesc[slot].pChunkInfo = chunk;
+    (void)SubmitChunk(self, reinterpret_cast<char *>(chunk->mpData), index,
+                      isNewFeedChunk, seekActive);
+    return 1;
+}
+
+u8 SndPlayer1::HandleLoopStart(SndPlayer1 *self, u32 index)
+{
+    RequestExternal &external = self->mpRequestExternal[index];
+    if (external.playType == 1)
+        return StreamNextChunk(self, index, 1, 0) ? 1u : 0u;
+    if (external.playType != 0)
+    {
+        RequestInternal *request = self->GetRequestInternal(index);
+        if (request->loopStart >= external.gigaSamplesInRam)
+            return StreamNextChunk(self, index, 1, 0) ? 1u : 0u;
+    }
+
+    external.pLoopStartChunk = external.pNextChunk;
+    u32 slot;
+    self->GetFeedSlot(&slot);
+    external.feedSlotLatest = static_cast<u8>(slot);
+    external.pNextChunk = SubmitChunk(self, external.pNextChunk, index, 1, 0);
+    return 1;
+}
+
+u8 SndPlayer1::HandleSampleEnd(SndPlayer1 *self, u32 index, u8 *finished)
+{
+    RequestInternal *request = self->GetRequestInternal(index);
+    RequestExternal &external = self->mpRequestExternal[index];
+    if (request->loopStart < 0)
+    {
+        *finished = 1;
+        return 1;
+    }
+    *finished = 0;
+
+    if (external.playType == 0)
+    {
+        if (request->loopStart == 0)
+            external.pLoopStartChunk = external.pSampleData;
+        u32 slot;
+        self->GetFeedSlot(&slot);
+        external.feedSlotLatest = static_cast<u8>(slot);
+        external.numSamplesFed = request->loopStart;
+        external.pNextChunk = SubmitChunk(self, external.pLoopStartChunk, index, 1, 0);
+        return 1;
+    }
+
+    if (external.playType == 1)
+    {
+        const f64 offsetValue =
+            static_cast<f64>(static_cast<s64>(external.loopStartStreamOffset)) +
+            external.streamFileOffset;
+        (void)external.pRwCoreStream->QueueFile(
+            external.pStreamLoopFileName, 0, PpcFctidzBits(offsetValue),
+            &SndPlayer1::ChunkParsed, self);
+        external.numSamplesFed = request->loopStart;
+        return StreamNextChunk(self, index, 1, 0) ? 1u : 0u;
+    }
+
+    external.numSamplesFed = request->loopStart;
+    if (request->loopStart < external.gigaSamplesInRam)
+    {
+        if (request->loopStart == 0)
+            external.pLoopStartChunk = external.pSampleData;
+        u32 slot;
+        self->GetFeedSlot(&slot);
+        external.feedSlotLatest = static_cast<u8>(slot);
+        external.pNextChunk = SubmitChunk(self, external.pLoopStartChunk, index, 1, 0);
+    }
+    if (external.gigaSamplesInRam >= request->numSamples)
+        return 1;
+
+    const f64 offsetValue =
+        static_cast<f64>(static_cast<s64>(external.loopStartStreamOffset)) +
+        external.streamFileOffset;
+    (void)external.pRwCoreStream->QueueFile(
+        external.pStreamLoopFileName, 0, PpcFctidzBits(offsetValue),
+        &SndPlayer1::ChunkParsed, self);
+    if (request->loopStart < external.gigaSamplesInRam)
+        return 1;
+
+    external.numSamplesFed = request->loopStart;
+    return StreamNextChunk(self, index, 1, 0) ? 1u : 0u;
 }
 
 // -------------------------------------------------------------------------------------
@@ -470,7 +1315,7 @@ static DecoderBuffer *AsDecoderBuffer(SampleBuffer *apBuffer)
 // -------------------------------------------------------------------------------------
 // SndPlayer1::Process @0x82BA0568 -- 428 instructions.
 //
-// ⭐ NO LONGER DEFERRED (2026-08-29). This body reaches the Decoder, the Mixer, the System's
+// This body reaches the Decoder, the Mixer, the System's
 // StackAllocator and rw::core::filesys::Stream -- every one of them homed. It does NOT touch
 // StreamPool; only the event surface does. See the streaming-half note above.
 //
@@ -731,18 +1576,129 @@ epilogue:
     return 1;
 }
 
-void SndPlayer1::RwacTimerClient(void * /*apContext*/, f32 /*afTimeToNextCall*/)
+void SndPlayer1::RwacTimerClient(void *apContext, f32 /*afTimeToNextCall*/)
 {
-    // @0x82BA6980: the per-frame pump -- request cleanup, feed cleanup, StartRequest, and
-    // the streaming read machine. Deferred with the stream half.
+    SndPlayer1 *self = static_cast<SndPlayer1 *>(apContext);
+    if (self->mpVoice->mucState == 2)
+        return;
+
+    FeedCleanup(self);
+    RequestCleanup(self);
+
+    u8 index = self->mCurrentRequest;
+    RequestInternal *request = self->GetRequestInternal(index);
+    self->mAttribute[ATTRIBUTE_GETCURRENTREQUEST].mfValue = self->mCurrentRequestHandle;
+    if (!IsRequestActive(request->state))
+    {
+        self->SetSampleLengthAttribute(0.0);
+        self->SetSamplePositionAttribute(0.0);
+        return;
+    }
+
+    const f32 rate = self->mCurrentRequestSampleRate;
+    self->SetSampleLengthAttribute(
+        static_cast<f64>(static_cast<s64>(self->mCurrentRequestNumSamples)) / rate);
+    self->SetSamplePositionAttribute(
+        static_cast<f64>(static_cast<s64>(self->mCurrentRequestSamplesPlayed)) / rate);
+
+    if (request->numSamples == 0)
+    {
+        const u8 zeroScanMaxRequests = self->mMaxRequests;
+        do
+        {
+            index = AdvanceRequestIndex(index, zeroScanMaxRequests);
+            request = self->GetRequestInternal(index);
+            if (!IsRequestActive(request->state))
+                return;
+        }
+        while (request->numSamples == 0);
+    }
+
+    for (;;)
+    {
+        if (!IsRequestActive(request->state))
+            return;
+        if (self->mFeedDesc[self->mNextFeedSlotToFill].feedState != FEEDSTATE_FREE)
+            return;
+
+        const u8 requestIndex = index;
+        RequestExternal &external = self->mpRequestExternal[requestIndex];
+        if (external.streamHandle != 0)
+        {
+            external.pStreamPool->SetStreamPriority(
+                external.streamHandle, self->mpVoice->mfPriority);
+        }
+
+        if (request->state == REQUESTSTATE_QUEUED)
+        {
+            if (!StartRequest(self, requestIndex))
+                return;
+            request->state = REQUESTSTATE_FEEDING;
+            if (external.codec == 3 && request->startTime == 0.0 &&
+                requestIndex == self->mCurrentRequest)
+            {
+                request->startTime =
+                    self->mpSystemUseGetSystemAccessor->mfSystemTime +
+                    0.005333333333333333;
+            }
+        }
+
+        if (request->state == REQUESTSTATE_FEEDING &&
+            self->mFeedDesc[self->mNextFeedSlotToFill].feedState == FEEDSTATE_FREE)
+        {
+            if (external.numSamplesFed == request->loopStart)
+            {
+                if (!HandleLoopStart(self, requestIndex))
+                    return;
+                continue;
+            }
+            if (external.numSamplesFed == request->numSamples)
+            {
+                u8 finished;
+                if (!HandleSampleEnd(self, requestIndex, &finished))
+                    return;
+                if (finished == 0)
+                    continue;
+                request->state = REQUESTSTATE_FEEDCOMPLETE;
+            }
+            else
+            {
+                if (!StreamNextChunk(self, requestIndex, 0, 0))
+                    return;
+                continue;
+            }
+        }
+
+        index = AdvanceRequestIndex(requestIndex, self->mMaxRequests);
+        if (index == self->mCurrentRequest)
+            return;
+        request = self->GetRequestInternal(index);
+    }
 }
+
+static int SndPlayer1CreateInstanceThunk(PlugIn *base, void *context)
+{
+    SndPlayer1 *self = ::new (static_cast<void *>(base)) SndPlayer1;
+    return SndPlayer1::CreateInstance(
+        self, static_cast<const SndPlayer1::ConstructorParams *>(context));
+}
+
+static PlugInDescRunTime g_SndPlayer1Desc = {
+    "SndPlayer1",
+    reinterpret_cast<void *>(&SndPlayer1::GetSize),
+    reinterpret_cast<void *>(&SndPlayer1CreateInstanceThunk),
+    reinterpret_cast<void *>(&SndPlayer1::PreProcess),
+    reinterpret_cast<void *>(&SndPlayer1::Process),
+    0, 0, 0, 0,
+    0,
+    SndPlayer1::KU_GUID,
+    0, 1, 3, 6, 0, 1,
+    0
+};
 
 char **SndPlayer1::GetPlugInDescRunTime()
 {
-    // @0x82B9BE60 -> off_82F901C4 'SnP1'. The real host record lands with the streaming
-    // half; returning null here would be registered as a poison descriptor, so this getter
-    // is deliberately absent from the registration site rather than returning a placeholder.
-    return 0;
+    return reinterpret_cast<char **>(&g_SndPlayer1Desc);
 }
 
 } // namespace core

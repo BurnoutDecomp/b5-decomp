@@ -43,8 +43,10 @@
 #include "rw/audio/core/DecoderRegistry.h"
 #include "rw/audio/core/Pcm16BigDec.h"
 #include "rw/audio/core/plugins/Dac.h"               // the output plug-in (phase D)
+#include "rw/audio/core/plugins/SndPlayer1.h"
 #include "GameShared/GameClasses/Sound/Playback/Plugins/GainArray/CgsGainArrayPlugin.h" // the game-side 'JGA0'
 #include "GameShared/GameClasses/Sound/Playback/Plugins/Ginsu/GinsuPlayer.h"            // the game-side 'Gns0'
+#include "GameShared/GameClasses/Sound/Playback/Plugins/Streaming/internal/sndplayer1shared.h"
 
 #include <cstdint> // intptr_t (the RwacPlugInEvent r5 ride-through)
 #include <new>   // placement new (the in-carve construct)
@@ -239,45 +241,8 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         PlugInRegistry* lpPlugInRegistry =
             rw::audio::core::System::GetPlugInRegistry(mpSystem);
 
-        // The 25 RegisterPlugInRunTime calls in EXACT console order. TWENTY-THREE are
-        // LIVE (descriptor-record wave 2026-08-28: their PlugInDescRunTime
-        // records are REAL host records -- XEX-recovered fields + host callback
-        // pointers, every callback bodied in its mounted vendor TU; proof
-        // progress/scratch_dossiers/plugindesc_layout_codex.md). The rest stay
-        // FLAG-deferred in place, each for a stated reason:
-        //   * SndPlayer1 -- ⭐ CORRECTION 2026-08-29: it DOES have a PC home now
-        //     (vendor/renderware/{include,src}/rw/audio/core/plugins/SndPlayer1.*,
-        //     boot-verified), so the old "no PC plug-in home yet" reason is stale.
-        //     What still defers it is narrower and stated at the site: its STREAMING
-        //     half -- Process, the event surface, the decoder/stream chain -- reaches
-        //     rw::audio::core::StreamPool, the one type this tree has not homed. Those
-        //     bodies are honest FLAG'd deferrals, so GetPlugInDescRunTime deliberately
-        //     returns null and this line stays commented rather than publishing a
-        //     record with dead slots. (Dac landed with the phase-D slice; GainFader,
-        //     LowPassButterworth and SubMix got theirs with the phase-E waves.)
-        //   * one of the three custom game descriptors (SndPlayer1_CgsStreamMod
-        //     off_82F2E124) -- its game-side body is not reconstructed yet.
-        //     GainArray off_82F2E664 and GinsuPlayer off_82F2D094 are both LIVE
-        //     (phase E): GainArray was folded onto the real PlugIn/Mixer types, and
-        //     GinsuPlayer -- the granular engine-sound synthesizer -- got a full home.
-        // An unregistered id makes GetPlugInHandle return null and the
-        // voice-create paths fail through their guarded callbacks.
-        //
-        // PHASE E CALLBACK WAVE 2026-08-28: the five that were deferred for a
-        // missing callback body are now LIVE -- HighPassIir2 (6), Limiter1 (9),
-        // Pan2D1 (14), Pause (15) and Resample (18). Each missing body was
-        // decoded store-for-store from the ARTIST asm and adversarially
-        // re-verified against it (plugin_callbacks_decode_codex.md +
-        // limiter1_configure_decode_codex.md), and the vendor Feb-2007
-        // rwaudiocore headers -- which DO cover these five -- supplied the
-        // authoritative member/enum names. Every slot in all five records now
-        // points at a real bodied callback, so none of them is the null-slot
-        // poison the deferral was guarding against.
-        // Limiter1's dynamics kernel (CompressorLimiter1::Process @0x82B64DB0,
-        // 2,294 instructions of hand-written VMX128) was the one honest gap in
-        // this wave; it is now DECODED AND BODIED too, so a registered Limiter1
-        // voice really limits. Its single marked deviation is the VMX estimate
-        // pair behind the gain curve, which has no bit-identical portable form.
+        // The 25 RegisterPlugInRunTime calls in exact console order. Every descriptor
+        // and every callback it publishes is now live on the host.
         #define CGS_RWAC_REGISTER(GETTER) \
             PlugInRegistry::RegisterPlugInRunTime(lpPlugInRegistry, \
                 reinterpret_cast<PlugInDescRunTime*>(GETTER))
@@ -301,10 +266,10 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         CGS_RWAC_REGISTER(rw::audio::core::Resample::GetPlugInDescRunTime());            // 18 @0x82B9A850 (phase E)
         CGS_RWAC_REGISTER(rw::audio::core::ReverbModel1::GetPlugInDescRunTime());        // 19 @0x82B9AD98
         CGS_RWAC_REGISTER(rw::audio::core::Send::GetPlugInDescRunTime());                // 20 @0x82B9B798
-        // 21 SndPlayer1 @0x82B9BE60 -- FLAG deferred (no PC home; off_82F901C4)
+        CGS_RWAC_REGISTER(rw::audio::core::SndPlayer1::GetPlugInDescRunTime());          // 21 @0x82B9BE60
         CGS_RWAC_REGISTER(rw::audio::core::SubMix::GetPlugInDescRunTime());              // 22 @0x82B9C370 (phase E)
         CGS_RWAC_REGISTER(rw::audio::core::GinsuPlayer::GetPlugInDescRunTime());         // 23 off_82F2D094 (phase E)
-        // 24 "SndPlayer1_CgsStreamMod" off_82F2E124 -- FLAG deferred (same)
+        CGS_RWAC_REGISTER(rw::audio::core::SndPlayer1_CgsStreamMod::GetPlugInDescRunTime()); // 24 off_82F2E124
         CGS_RWAC_REGISTER(CgsSound::Playback::Plugins::GainArray::GetPlugInDescRunTime()); // 25 off_82F2E664 (phase E)
         #undef CGS_RWAC_REGISTER
 

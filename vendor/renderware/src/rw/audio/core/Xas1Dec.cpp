@@ -33,9 +33,38 @@ namespace core
 //   +0x04 0x82B91EA0 CreateInstanceEvent (shared with XasDec -- identical body)
 //   +0x08 0 (no ReleaseEvent)            +0x0C 0x82B94308 Xas1Dec::DecodeEvent
 //   +0x10 mpNext = 0                     +0x14 muId = 0x58617331 'Xas1'
-// FLAG (host callback slots deferred): see the EaXmaDec.cpp descriptor note --
-// the header stays the opaque zeroed span until the dispatch consumer lands.
-extern "C" DecoderDesc off_82F8A544 = { {0}, 0, 0x58617331u /* 'Xas1' */ };
+static bool Xas1DecCreateThunk(Decoder *decoder)
+{
+    return Xas1Dec::CreateInstanceEvent(static_cast<Xas1Dec *>(decoder));
+}
+
+static s32 Xas1DecDecodeThunk(Decoder *decoder, DecoderBuffer *buffer, s32 /*count*/)
+{
+    return static_cast<Xas1Dec *>(decoder)->DecodeEvent(buffer);
+}
+
+extern "C" DecoderDesc off_82F8A544 = {
+    &Xas1Dec::GetSize,
+    &Xas1DecCreateThunk,
+    0,
+    &Xas1DecDecodeThunk,
+    0,
+    0x58617331u, // 'Xas1'
+    128
+};
+
+bool Xas1Dec::CreateInstanceEvent(Xas1Dec *pDecoder)
+{
+    pDecoder->miRemainingSamples = 0;
+    pDecoder->mpEncodedCursor = 0;
+    return true;
+}
+
+u32 Xas1Dec::GetSize(u32 /*uNumChannels*/, u32 *puAlignment)
+{
+    *puAlignment = 16;
+    return static_cast<u32>(sizeof(Xas1Dec));
+}
 
 // -------------------------------------------------------------------------------------
 // GetDecoderDesc @0x82B91E90

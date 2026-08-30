@@ -82,13 +82,30 @@ extern "C" System *off_83271928;
 //   +0x00 0x82B93C78 EaXmaDec::GetSize            +0x04 0x82B93C98 CreateInstanceEvent
 //   +0x08 0x82B8F7C0 ReleaseEvent                 +0x0C 0x82B96380 DecodeEvent
 //   +0x10 mpNext = 0                              +0x14 muId = 0x45586D30 'EXm0'
-// FLAG (host callback slots deferred): the four header words are GUEST function
-// addresses; the host must not store guest addresses in pointer slots, and NO
-// reconstructed code dispatches through the descriptor header yet (registration
-// touches only mpNext/muId). The header stays the opaque zeroed span until the
-// descriptor-dispatch consumer is reconstructed and types the slots to the host
-// functions named above.
-extern "C" DecoderDesc off_82F89394 = { {0}, 0, 0x45586D30u /* 'EXm0' */ };
+static bool EaXmaDecCreateThunk(Decoder *decoder)
+{
+    return EaXmaDec::CreateInstanceEvent(static_cast<EaXmaDec *>(decoder));
+}
+
+static void EaXmaDecReleaseThunk(Decoder *decoder)
+{
+    static_cast<EaXmaDec *>(decoder)->ReleaseEvent();
+}
+
+static s32 EaXmaDecDecodeThunk(Decoder *decoder, DecoderBuffer *buffer, s32 count)
+{
+    return static_cast<EaXmaDec *>(decoder)->DecodeEvent(buffer, count);
+}
+
+extern "C" DecoderDesc off_82F89394 = {
+    &EaXmaDec::GetSize,
+    &EaXmaDecCreateThunk,
+    &EaXmaDecReleaseThunk,
+    &EaXmaDecDecodeThunk,
+    0,
+    0x45586D30u, // 'EXm0'
+    0
+};
 
 // -------------------------------------------------------------------------------------
 // The shared XMA hardware buffer geometry, in bytes. Unlike a C++ record stride these are

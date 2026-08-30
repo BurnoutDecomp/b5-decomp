@@ -47,10 +47,12 @@ struct DecoderDesc;
 class Pcm16BigDec : public Decoder
 {
 public:
+    static bool CreateInstanceEvent(Pcm16BigDec *pDecoder);
+
     // @0x82B91E48 -- report the codec's per-instance allocation footprint: writes the
     // required alignment (16) to *puAlignment and returns the instance size (60 bytes).
     // The instance pointer is passed by the descriptor framework but unused here.
-    static s32 GetSize(Pcm16BigDec *pDecoder, u32 *puAlignment);
+    static u32 GetSize(u32 uNumChannels, u32 *puAlignment);
 
     // @0x82B91E38 -- return the address of this codec's static registration descriptor.
     static DecoderDesc *GetDecoderDesc();

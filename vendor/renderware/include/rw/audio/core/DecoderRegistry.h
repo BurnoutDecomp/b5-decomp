@@ -30,6 +30,15 @@ namespace audio
 namespace core
 {
 
+class Decoder;
+struct DecoderBuffer;
+
+typedef u32  (*DecoderGetSizeFn)(u32 auNumChannels, u32 *apuAlignment);
+typedef bool (*DecoderCreateInstanceEventFn)(Decoder *apDecoder);
+typedef void (*DecoderReleaseEventFn)(Decoder *apDecoder);
+typedef s32  (*DecoderDecodeEventFn)(Decoder *apDecoder, DecoderBuffer *apBuffer,
+                                     s32 aiNumSamples);
+
 // -------------------------------------------------------------------------------------
 // DecoderDesc -- the registration record for one codec. Codecs hand back the address of
 // their static instance from GetDecoderDesc(); the registry threads records into an
@@ -47,9 +56,13 @@ namespace core
 // -------------------------------------------------------------------------------------
 struct DecoderDesc
 {
-    char mHeader[0x10]; // +0x00 .. +0x0F -- opaque descriptor header (name + callbacks)
-    void *mpNext;       // +0x10 -- intrusive next link (registry node handle == &mpNext)
-    u32 muId;           // +0x14 -- registration GUID
+    DecoderGetSizeFn             pGetSize;             // +0x00
+    DecoderCreateInstanceEventFn pCreateInstanceEvent; // +0x04
+    DecoderReleaseEventFn        pReleaseEvent;        // +0x08 (nullable)
+    DecoderDecodeEventFn         pDecodeEvent;         // +0x0C
+    void                        *mpNext;                // +0x10 -- intrusive next link
+    u32                          muId;                  // +0x14 -- registration GUID
+    u16                          muMaxBlockSize;        // +0x18 -- zero for direct decoders
 };
 
 // The intrusive list threads DecoderDesc records by their +0x10 link. The registry's node
@@ -84,6 +97,8 @@ public:
     static DecoderDesc *GetDecoderHandle(DecoderRegistry *self, int id);
     static DecoderDesc *RegisterDecoder(DecoderRegistry *self, DecoderDesc *info);
     static DecoderDesc *RegisterStandardRunTimeDecoders(DecoderRegistry *self);
+    static Decoder *DecoderFactory(DecoderRegistry *self, void *decoderHandle,
+                                   u32 numChannels, u32 maxSlots, System *system);
 
     void *mpHead;       // +0x00
     void **mppTail;     // +0x04

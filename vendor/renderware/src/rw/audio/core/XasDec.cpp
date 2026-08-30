@@ -31,9 +31,25 @@ namespace core
 //   +0x00 0x82B91E70 XasDec::GetSize      +0x04 0x82B91EA0 XasDec::CreateInstanceEvent
 //   +0x08 0 (no ReleaseEvent)             +0x0C 0x82B94118 XasDec::DecodeEvent
 //   +0x10 mpNext = 0                      +0x14 muId = 0x58617330 'Xas0'
-// FLAG (host callback slots deferred): see the EaXmaDec.cpp descriptor note --
-// the header stays the opaque zeroed span until the dispatch consumer lands.
-extern "C" DecoderDesc off_82F8A528 = { {0}, 0, 0x58617330u /* 'Xas0' */ };
+static bool XasDecCreateThunk(Decoder *decoder)
+{
+    return XasDec::CreateInstanceEvent(static_cast<XasDec *>(decoder)) != 0;
+}
+
+static s32 XasDecDecodeThunk(Decoder *decoder, DecoderBuffer *buffer, s32 /*count*/)
+{
+    return static_cast<XasDec *>(decoder)->DecodeEvent(buffer);
+}
+
+extern "C" DecoderDesc off_82F8A528 = {
+    &XasDec::GetSize,
+    &XasDecCreateThunk,
+    0,
+    &XasDecDecodeThunk,
+    0,
+    0x58617330u, // 'Xas0'
+    32
+};
 
 // -------------------------------------------------------------------------------------
 // CreateInstanceEvent @0x82B91EA0
@@ -55,11 +71,10 @@ s32 XasDec::CreateInstanceEvent(XasDec *pDecoder)
 // returned. The descriptor framework passes the instance pointer in r3, but the asm
 // overwrites r3 with the return value without reading it, so it is unused here.
 // -------------------------------------------------------------------------------------
-s32 XasDec::GetSize(XasDec *pDecoder, u32 *puAlignment)
+u32 XasDec::GetSize(u32 /*uNumChannels*/, u32 *puAlignment)
 {
-    (void)pDecoder;
     *puAlignment = 4;
-    return 60;
+    return static_cast<u32>(sizeof(XasDec));
 }
 
 // -------------------------------------------------------------------------------------

@@ -49,6 +49,9 @@ namespace audio
 namespace core
 {
 
+class System;
+class DecoderRegistry;
+
 // -------------------------------------------------------------------------------------
 // Decoder::Request -- one entry of the inline request ring. A request names a half-open
 // sample range [miStartSample, miEndSample) the decoder still owes the consumer, together
@@ -69,8 +72,8 @@ namespace core
 //   * every consumer reaches the ring as RequestQueue()[i] (host array indexing), so they
 //     all stay in step automatically -- do NOT reintroduce a literal 0x14 anywhere;
 //   * whoever ALLOCATES the ring must size it with sizeof(DecoderRequest). That is
-//     DecoderRegistry::DecoderFactory @0x82B6C778 (`mulli r21, r26, 0x14`), itself an
-//     exporter gap and not yet bodied on the host;
+//     DecoderRegistry::DecoderFactory @0x82B6C778 (`mulli r21, r26, 0x14`), which uses
+//     sizeof(DecoderRequest) on the widened host;
 //   * SndPlayer1::Process indexes this ring directly (`mulli r10, r9, 0x14` @0x82BA0830
 //     and @0x82BA0AB4) and must use sizeof(DecoderRequest) when it is bodied;
 //   * Decoder+0x20 carries the whole decoder-instance size, which StartRequest truncates
@@ -115,11 +118,12 @@ struct DecoderRequest
 // -------------------------------------------------------------------------------------
 struct DecoderBuffer
 {
-    u32   muReserved00;   // +0x00
-    f32  *mpData;         // +0x04  interleaved sample data
-    u32   muReserved08;   // +0x08
-    u16   muSampleCursor; // +0x0C  valid samples staged in the buffer
-    u16   muStride;       // +0x0E  per-channel frame stride (in samples)
+    System *mpSystem;        // +0x00 -- owning audio System
+    f32    *mpData;          // +0x04 -- interleaved sample storage
+    usize   mpTempStore;     // +0x08 -- pointer-sized temporary-store word (factory leaves it stale)
+    u16     muSampleCursor;  // +0x0C -- valid samples staged in the buffer
+    u16     muStride;        // +0x0E -- per-channel frame stride (in samples)
+    u8      mucChannelCount; // +0x10 -- number of channels backed by this descriptor
 };
 
 // -------------------------------------------------------------------------------------
@@ -128,6 +132,7 @@ struct DecoderBuffer
 class Decoder
 {
 public:
+    friend class DecoderRegistry;
     // --- virtuals, in X360 vtable-slot order ---------------------------------------
     // The X360 Decoder vtable (off_8214B1CC, .rdata) is two slots:
     //   [0] @+0x00 -> 0x82AD5078, the image's shared empty thunk (a lone `blr`): the
@@ -180,6 +185,8 @@ public:
     u8 Feed(const void *pData, s32 iNumSamples, u8 ucContinue, s32 iStartSample,
             const u8 *apSeekData, u8 ucFlag11);
 
+    u32 GetInstanceSize() const { return muInstanceSize; }
+
 protected:
     // Base of the inline request ring: `this` + muRequestQueueOffset. Protected: codec
     // subclasses index the ring directly in the binary (EaXmaDec::DecodeEvent @0x82B96380
@@ -200,7 +207,8 @@ protected:
     }
 
     // --- fixed header (X360 offsets in the file-header comment) ---
-    u8    mPad04[8];                // +0x04 .. +0x0B  (opaque)
+    System *mpSystemUseGetSystemAccessor; // +0x04
+    Decoder *mpDecoder;                  // +0x08 -- self pointer seeded by DecoderFactory
 public:
     // The codec callbacks live at +0x0C / +0x14 in the X360 image; subclasses install them.
     void (*mpFinaliser)(Decoder *self);                          // +0x0C
@@ -210,9 +218,9 @@ public:
 protected:
     // Fixed-header state, exposed to codec subclasses (Xas1Dec, EaLayer3DecBase, ...)
     // that derive from Decoder and read/advance it from their own decode callbacks.
-    u8    mPad18[4];                // +0x18 .. +0x1B  (opaque)
+    u32   mGuid;                    // +0x18
     s32   miCurrentSampleOffset;    // +0x1C
-    u8    mPad20[4];                // +0x20 .. +0x23  (opaque)
+    u32   muInstanceSize;           // +0x20 -- whole inline decoder allocation
     u32   muRequestQueueOffset;     // +0x24
     u32   muSourceBufferOffset;     // +0x28
     u16   muCarrySamples;           // +0x2C

@@ -9,6 +9,8 @@
 
 #include <cstddef> // size_t (the host layout computation)
 
+namespace CgsFileSystem { struct ReadStream; }
+
 // ============================================================================
 // rw::audio::core::SndPlayer1_CgsStreamMod -- the streaming sound-player plugin
 // (the Burnout build of rwaudiocore's SndPlayer1, fed by the Cgs stream module).
@@ -40,7 +42,7 @@
 // 0x181/0x182 (mCurrentRequest / mMaxRequests), and +0x50 = mTimerHandle.mCpuTicks
 // (GetPpuTicksEvent @0x8268FE88).
 //
-// HOST-WIDTH FLAG: pointer members widen on the 64-bit host; members are pinned
+// HOST-WIDTH NOTE: pointer members widen on the 64-bit host; members are pinned
 // BY NAME + SEQUENCE (console offsets in comments only, no static_asserts). The
 // RequestInternal ring is reached via mRequestInternalOffset -- a runtime-seeded
 // BYTE offset into the object's tail allocation -- with sizeof(RequestInternal)
@@ -162,7 +164,7 @@ public:
         s32   numSamplesFed;           // +0x14
         s32   numBytesFed;             // +0x18
         char *pStreamLoopFileName;     // +0x1C
-        void *pReadStream;             // +0x20 -- CgsFileSystem::ReadStream* (un-homed here)
+        CgsFileSystem::ReadStream *pReadStream; // +0x20
         u32   streamState;             // +0x24 -- EStreamState
         u8   *pStreamBuffer;           // +0x28
         Chunk chunks[KU_NUM_CHUNKS];   // +0x2C .. +0x5B
@@ -181,6 +183,17 @@ public:
         u8   *pLoopStartChunk;         // +0x80
     };
 
+    virtual ~SndPlayer1_CgsStreamMod();
+    virtual int Event(int aiEventId, void *apParameter);
+    virtual int VFunc2();
+    virtual void Destroy(int aiFlags);
+
+    static char **GetPlugInDescRunTime();
+    static int CreateInstance(PlugIn *apBase, void *apContext);
+    static int Process(SndPlayer1_CgsStreamMod *apSelf, Mixer *apMixer,
+                       bool abDiscontinuity);
+    static void RwacTimerClient(void *apContext, f32 afTimeToNextCall);
+
     // @ 0x8268CD20. Advance the current-request cursor around the ring and cache
     // the new current request's parameters (if it is still active).
     SndPlayer1_CgsStreamMod* AdvanceCurrentRequest();
@@ -197,6 +210,19 @@ public:
     int  Declick(Mixer *ctx);                                            // @0x8268CB78
     bool GetFeedSlot(s32 *apiSlot);                                      // @0x826A4348
     void UnpackHeader(u32 auRequestIndex, void *apPacked);               // @0x8268C990
+
+    static s32 PlayHandler(void *apCommand);
+    static s32 StopHandler(void *apCommand);
+    static s32 ModifyStartTimeHandler(void *apCommand);
+    static void StreamLostCallback(void *apContext);
+    void RemoveRequest(u32 auIndex);
+    void RequestCleanup();
+    void FeedCleanup();
+    u8 *SubmitChunk(u8 *apChunk, u32 auRequestIndex, bool abResetDecoder);
+    bool StreamNextChunk(u32 auIndex, bool abResetDecoder);
+    bool HandleLoopStart(u32 auIndex);
+    bool HandleSampleEnd(u32 auIndex, bool *apbCompleted);
+    bool StartRequest(u32 auIndex);
 
     // ---- the instance's two variable-length tails --------------------------------------
     // Both live past the fixed object, at byte offsets recorded in the 16-bit fields the
@@ -238,7 +264,7 @@ public:
     //      vendor SndPlayer1) ----
     Attribute_t      mAttribute[3];                          // +0x28
     TimerHandle      mTimerHandle;                           // +0x40 (mCpuTicks @ +0x50)
-    void*            mpRequestExternal;                      // +0x58 (RequestExternal*, un-homed)
+    RequestExternal* mpRequestExternal;                      // +0x58
     SndPlayer1FeedDesc mFeedDesc[KU_MAX_DECODERFEEDS];       // +0x5C (20 slots, 12-byte stride)
     Decoder*         mpLoadedDecoder;                        // +0x14C
     f32              mCurrentRequestHandle;                  // +0x150 (asm stfs 0x150)
