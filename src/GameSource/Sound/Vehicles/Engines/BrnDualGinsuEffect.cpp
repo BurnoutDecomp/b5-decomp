@@ -406,17 +406,28 @@ void DualGinsuEffect::SetupLoadData()
     }
 
     CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
-    if (!mpPhysicsControl)
+    CGS_ASSERT(mpHybridControl != nullptr, "mpHybridControl");
+    if (!mpPhysicsControl || !mpHybridControl)
         return;
 
-    const char* lpcLoopModel =
-        mpPhysicsControl->GetVehicleEngineAttributes().LoopModel();
+    // ARTIST @ 0x826E41D8 reads the LoopModel through mpHybridControl (+0x34),
+    // whose attribute instance is +0x4C. PhysicsControl owns the exhaust
+    // collection and therefore cannot be used for the engine effect here.
+    const Attrib::Gen::vehicleengine& lrAttribs =
+        mpHybridControl->GetVehicleEngineAttributes();
+    const char* lpcLoopModel = lrAttribs.LoopModel();
     CGS_ASSERT(lpcLoopModel != nullptr && *lpcLoopModel != '\0', "Bad Engine Data");
     if (!lpcLoopModel || !*lpcLoopModel)
         return;
 
+    // The host registrar needs the explicit bundle name. The attached hybrid
+    // controller identity preserves the original engine/exhaust split.
+    const BrnSound::Vehicles::VehicleState::EEngineComponentType leComponent =
+        mpHybridControl->GetEffectID() == 6
+            ? BrnSound::Vehicles::VehicleState::E_ENGINE
+            : BrnSound::Vehicles::VehicleState::E_EXHAUST;
     const char* lpcEngineName = mpPhysicsControl->GetEngineComponentName(
-        BrnSound::Vehicles::VehicleState::E_EXHAUST);
+        leComponent);
     const u32 luEngineHash = static_cast<u32>(CgsResource::ID::HashString(
         reinterpret_cast<const u8*>(lpcEngineName)));
     char lacBundle[64];
@@ -481,8 +492,11 @@ bool DualGinsuEffect::Attach()
         mCarSubmix.Connect(guSend01Name, 1);
         mCarSubmix.Connect(guReverbSendName, 2);
 
+        CGS_ASSERT(mpHybridControl != nullptr, "mpHybridControl");
+        if (!mpHybridControl)
+            return false;
         const Attrib::Gen::vehicleengine& lrAttribs =
-            mpPhysicsControl->GetVehicleEngineAttributes();
+            mpHybridControl->GetVehicleEngineAttributes();
         mfLowShelfFreq = lrAttribs.EQ_LowShelf_Freq();
         mfLowShelfGain = lrAttribs.EQ_LowShelf_Gain();
         mfHighShelfFreq = lrAttribs.EQ_HighShelf_Freq();
@@ -493,8 +507,12 @@ bool DualGinsuEffect::Attach()
         mfMinRpm = lrAttribs.MinRpm();
         mfDecelMinRpm = lrAttribs.DecelMinRpm();
 
+        const BrnSound::Vehicles::VehicleState::EEngineComponentType leComponent =
+            mpHybridControl->GetEffectID() == 6
+                ? BrnSound::Vehicles::VehicleState::E_ENGINE
+                : BrnSound::Vehicles::VehicleState::E_EXHAUST;
         const char* lpcEngineName = mpPhysicsControl->GetEngineComponentName(
-            BrnSound::Vehicles::VehicleState::E_EXHAUST);
+            leComponent);
         const u32 luEngineHash = static_cast<u32>(CgsResource::ID::HashString(
             reinterpret_cast<const u8*>(lpcEngineName)));
         char lacBundle[64];
@@ -593,8 +611,11 @@ void DualGinsuEffect::UpdateParams(f32 /*afTimeStep*/)
 
     // ARTIST @ 0x826B3770 refreshes the authored EQ and RPM thresholds every
     // frame, then writes the six fixed PlayerCarSubmix panning coefficients.
+    CGS_ASSERT(mpHybridControl != nullptr, "mpHybridControl");
+    if (!mpHybridControl)
+        return;
     const Attrib::Gen::vehicleengine& lrAttribs =
-        mpPhysicsControl->GetVehicleEngineAttributes();
+        mpHybridControl->GetVehicleEngineAttributes();
     mfLowShelfFreq = lrAttribs.EQ_LowShelf_Freq();
     mfLowShelfGain = lrAttribs.EQ_LowShelf_Gain();
     mfHighShelfFreq = lrAttribs.EQ_HighShelf_Freq();

@@ -73,6 +73,12 @@ struct HybridExhaustControl : public BrnSound::Logic::BrnEffectControl
     // UpdateGinsuRPM @0x82699B98 inlines.
     f32 GetGinsuRPM() const { return mGinsuRpm.mCurrentValue; }
     const EngineMix& GetFinalEngineVolume() const { return mFinalEngineVolume; }
+    // DecFIGS BrnHybridEngineControl.h:253; ARTIST inlines this as the +0x4C
+    // attribute-instance read used by DualGinsuEffect.
+    Attrib::Gen::vehicleengine& GetVehicleEngineAttributes()
+    {
+        return mVehicleEngineAttributes;
+    }
 
     // ---- members in DWARF order (offsets are X360 facts, not asserted on host) ----
     // The controller back-pointers, typed per the DWARF (BrnHybridEngineControl.h:
