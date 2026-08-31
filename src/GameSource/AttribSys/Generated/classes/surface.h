@@ -22,6 +22,7 @@ namespace Gen
             u8      maLeadingAttributes[0x40];
             RefSpec mPhysicsSurface;
             RefSpec mGameplaySurface;
+            RefSpec mAudioSurface;
         };
 
         explicit surface(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
@@ -42,6 +43,14 @@ namespace Gen
         const RefSpec& GameplaySurface() const
         {
             return static_cast<const _LayoutStruct*>(GetLayoutPointer())->mGameplaySurface;
+        }
+        // DecFIGS surface.h:73/:75; RoadnoiseEffect::UpdateParams
+        // @0x826E5CE4 constructs the audiosurface instance from layout +0x70.
+        // PhysicsSurface and GameplaySurface occupy the preceding two 0x18-byte
+        // RefSpecs at +0x40/+0x58, so this named field closes exactly on that pin.
+        const RefSpec& AudioSurface() const
+        {
+            return static_cast<const _LayoutStruct*>(GetLayoutPointer())->mAudioSurface;
         }
     };
 

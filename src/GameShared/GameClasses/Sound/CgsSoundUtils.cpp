@@ -369,9 +369,60 @@ s32 PathLine<tuNumStages>::AddStage(f32 lfStart, f32 lfFinish, f32 lfLength,
     return mnNumStages;
 }
 
+// ARTIST @0x826A81C0 for PathLine<3>.  The two-argument update keeps the
+// currently-active destination live, advances through the ordinary path state
+// machine, then snaps a completed path to the supplied destination.
+template <u32 tuNumStages>
+void PathLine<tuNumStages>::Update(f32 lfDeltaTime, f32 lfFinish)
+{
+    maFinish[mnCurrentStage] = lfFinish;
+    Update(lfDeltaTime);
+    if (mbComplete)
+        mfCurrentValue = lfFinish;
+}
+
+// Generic update used by the three-stage airborne-throttle path.  This is the
+// same state machine as the independently exported PathLine<2> specialization.
+template <u32 tuNumStages>
+void PathLine<tuNumStages>::Update(f32 lfDeltaTime)
+{
+    if (mbComplete || mnNumStages == 0)
+        return;
+
+    const s32 lnStage = mnCurrentStage;
+    CGS_ASSERT(maLength[lnStage], "maLength[mnCurrentStage]");
+    mfElapsedTime += lfDeltaTime;
+
+    if (mfElapsedTime > maLength[lnStage])
+    {
+        mfCurrentValue = maFinish[lnStage];
+        if (lnStage >= mnNumStages - 1)
+        {
+            mbComplete = true;
+        }
+        else
+        {
+            const s32 lnNext = lnStage + 1;
+            mfElapsedTime -= maLength[lnStage];
+            mnCurrentStage = lnNext;
+            if (maIsLinked[lnNext])
+                maStart[lnNext] = maFinish[lnNext - 1];
+        }
+    }
+    else
+    {
+        f32 lfFraction = mfElapsedTime / maLength[lnStage];
+        lfFraction = (std::max)(0.0f, (std::min)(1.0f, lfFraction));
+        mfCurrentValue = Curve::GetOutput(lfFraction, maCurveTypes[lnStage]) *
+                         (maFinish[lnStage] - maStart[lnStage]) + maStart[lnStage];
+    }
+}
+
 // Per-member explicit instantiation for the X360-attested PathLine<3> instance.
 template void PathLine<3u>::ClearStages();
 template s32  PathLine<3u>::AddStage(f32, f32, f32, Curve::ECurveType);
+template void PathLine<3u>::Update(f32);
+template void PathLine<3u>::Update(f32, f32);
 
 // ============================================================================================
 // CgsSound::Utils::SelectionHistory<512u,u16,u16,65536ull> -- the recently-used-selection

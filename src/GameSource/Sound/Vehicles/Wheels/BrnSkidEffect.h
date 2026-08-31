@@ -2,49 +2,48 @@
 #define BRN_SOUND_VEHICLES_WHEELS_SKID_EFFECT_H
 
 #include "types.hpp"
-#include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (BY NAME)
-#include "GameShared/GameClasses/Sound/Logic/CgsVoiceWrapper.h"    // CgsSound::Logic::VoiceWrapper member (BY NAME)
-
-// =============================================================================
-// BrnSound::Vehicles::Wheels::SkidEffect
-//   GameSource/Sound/Vehicles/Wheels/BrnSkidEffect.{h,cpp}  (DWARF home)
-//
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity, not byte match).
-// SkidEffect is the player-car skid sound EFFECT OBJECT. DWARF (BrnSkidEffect.h:41):
-// SkidEffect : public BrnEffectObject -- it reuses the committed BrnEffectObject dual
-// base BY NAME (primary vptr @ this+0, IResourceRequester sub-object @ this+4) and
-// embeds a CgsSound::Logic::VoiceWrapper (mSkidsVoice @ +0x54).
-//
-// FLAG (MINIMAL home): this slice bodies only the leaf constructor (@ 0x826C8C78).
-// The DWARF NAMES SkidEffect's remaining leaf members (mDataHandle: ResourceHandle;
-// mpWheelControl: WheelControl*; mpPhysicsControl: PhysicsControl*; mfOverallMax /
-// mfSkidAzimuth: f32; mbSkidsLatched: DataPoint<bool>; mSkidFunctorPointer:
-// VoiceWrapper::FunctorPointer<SkidEffect> @ +0xA8), but their TYPES are UN-HOMED, so
-// they are DECLARATION-ONLY / DEFERRED -- NOT emitted as real members. Only the base
-// (BY NAME) + the embedded VoiceWrapper (mSkidsVoice) are materialised, matching the
-// committed ExplosionEffect / TrafficSkid / TrafficHorn minimal-home convention.
-//
-// LAYOUT NOTE (X360 32-bit vs host 64-bit): members are pinned BY NAME + SEQUENCE;
-// absolute offsets are NOT static_asserted across pointer members on the 64-bit host.
-// =============================================================================
+#include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsVoiceWrapper.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
 
 namespace BrnSound
 {
 namespace Vehicles
 {
+namespace Engines { struct PhysicsControl; }
 namespace Wheels
 {
 
-// BrnSkidEffect.h:41 (DWARF). Reuses the committed BrnEffectObject dual base BY NAME
-// and embeds mSkidsVoice (the ctor's tail `bl VoiceWrapper::VoiceWrapper(this+0x54)`).
+struct WheelControl;
+
+// The player-car skid AEMS effect. The member order is the DecFIGS
+// BrnSkidEffect.h declaration; ARTIST fixes the controller IDs, voice wiring,
+// parameter indices and dynamic-mixer routing used by the implementation.
 struct SkidEffect : public BrnSound::Logic::BrnEffectObject
 {
-    SkidEffect();               // @ 0x826C8C78
-    virtual ~SkidEffect();      // DWARF BrnSkidEffect.cpp:60 (anchor; empty leaf)
+    SkidEffect();
+    virtual ~SkidEffect();
 
-    // +0x54 (X360). Embedded per-skid voice wrapper the ctor constructs. Reused BY
-    // NAME from the minimal VoiceWrapper home.
+    virtual const char* GetTypeName() const override;
+    virtual s32 GetController(s32 aiSlot) override;
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController) override;
+    virtual bool Attach() override;
+    virtual void UpdateParams(f32 afTimeStep) override;
+    virtual void ProcessUpdate() override;
+    virtual bool Detach() override;
+
+    void OnPostInit(CgsSound::Logic::VoiceWrapper& arVoice);
+
+private:
+    CgsResource::ResourceHandle mDataHandle;
+    WheelControl* mpWheelControl;
+    BrnSound::Vehicles::Engines::PhysicsControl* mpPhysicsControl;
+    f32 mfOverallMax;
+    f32 mfSkidAzimuth;
+    CgsSound::Utils::DataPoint<bool> mbSkidsLatched;
     CgsSound::Logic::VoiceWrapper mSkidsVoice;
+    CgsSound::Logic::VoiceWrapper::FunctorPointer<SkidEffect> mSkidFunctorPointer;
 };
 
 } // namespace Wheels
