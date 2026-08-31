@@ -93,6 +93,16 @@ OutputBuffer_PreScene::GetAudioCarLoadedDataQueue()
     return &mAudioCarLoadedDataQueue;
 }
 
+// X360 0x8279D850 (R, :307) -- const per-car audio (un)load REQUEST queue
+// accessor. WorldModule::BridgeRaceCarEntityInfoToOutput_PreScene reads this queue
+// after RaceCarAudioStreamer has filled it for the frame.
+const RaceCarEntityModuleIO::AudioCarLoadedDataQueue*
+OutputBuffer_PreScene::GetAudioCarLoadedDataQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mAudioCarLoadedDataQueue;
+}
+
 // X360 0x822B4ED0 (W, :283) -- mutable vehicle-input accessor.
 OutputBuffer_PreScene::VehicleInputInterface*
 OutputBuffer_PreScene::GetVehicleInputInterface()

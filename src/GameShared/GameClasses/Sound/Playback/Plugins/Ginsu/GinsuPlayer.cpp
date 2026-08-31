@@ -17,12 +17,20 @@
 // =====================================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/Plugins/Ginsu/GinsuPlayer.h"
+#include "GameShared/GameClasses/Sound/Playback/Plugins/Ginsu/CgsGinsuSlot.h"
+
+#include "GameShared/GameClasses/Sound/Playback/CgsContent.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacCommands.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacPlayerVoice.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 
 #include "rw/audio/core/Mixer.h" // Mixer (the process context) + SampleBuffer
 #include "rw/audio/core/Voice.h" // VoiceStageConfig (GetSize's config argument)
 
 #include <cstdio>  // std::printf (the console's GetSamples failure diagnostic)
 #include <cstring> // std::memcpy / std::memcmp / std::memset
+#include <new>
 
 namespace rw
 {
@@ -906,3 +914,73 @@ int GinsuPlayer::Process(GinsuPlayer *self, Mixer *ctx, bool /*isLastInput*/)
 } // namespace core
 } // namespace audio
 } // namespace rw
+
+namespace CgsSound
+{
+namespace Playback
+{
+namespace Plugins
+{
+
+const Name GinsuSlot::SK_SLOT_CLASSNAME("~GinsuSlot~");
+
+namespace
+{
+class GinsuSlotFactory : public ISlotFactory
+{
+public:
+    GinsuSlotFactory() : ISlotFactory(GinsuSlot::SK_SLOT_CLASSNAME) {}
+
+    virtual ISlotImplementation* DoCreateSlot(Voice& arVoice) const
+    {
+        Factory& lrFactory = const_cast<Factory&>(arVoice.GetFactory());
+        void* lpMemory = lrFactory.GetEnvironment().Allocate(
+            static_cast<u32>(sizeof(GinsuSlot)), 4, "SlotImplementation");
+        CGS_ASSERT(lpMemory != 0, "lpvMem");
+        return lpMemory ? ::new (lpMemory) GinsuSlot() : 0;
+    }
+};
+
+const GinsuSlotFactory sGinsuSlotFactory;
+}
+
+// DecFIGS GinsuSlot::DoPlay @0x8FF4C4, cross-checked against ARTIST's
+// GinsuPlayer event/command ABI.  Force the voice parameters current, then post
+// event 0 followed by the loaded .gin data pointer.
+bool GinsuSlot::DoPlay(const Slot& arSlot, PlayerVoice& arVoice,
+                       Content& arContent, u32 /*au32Param*/)
+{
+    GenericRwacPlayerVoice& lrVoice =
+        static_cast<GenericRwacPlayerVoice&>(arVoice);
+    lrVoice.ForceParameterUpdate();
+
+    void* lpRamData = arContent.GetData(E_CONTENT_STATE_LOADED);
+    rw::audio::core::PlugIn* lpPlugin =
+        lrVoice.GetPlugin(arSlot.GetPluginOffset());
+    RwacCommandPluginEvent lEvent(
+        reinterpret_cast<uintptr_t>(lpPlugin), 0u, 1u);
+    RwacCommandGinsuAttachDataParameters lParameters(lpRamData);
+
+    GenericRwacFactory& lrFactory = lrVoice.GetRwacFactory();
+    lrFactory.GetCommandQueue().Post(lEvent);
+    lrFactory.GetCommandQueue().Post(lParameters);
+    return true;
+}
+
+// ARTIST GinsuSlot::DoStop @0x826C3618: plug-in event 1, no parameter record.
+bool GinsuSlot::DoStop(const Slot& arSlot, PlayerVoice& arVoice,
+                       Content& /*arContent*/)
+{
+    GenericRwacPlayerVoice& lrVoice =
+        static_cast<GenericRwacPlayerVoice&>(arVoice);
+    rw::audio::core::PlugIn* lpPlugin =
+        lrVoice.GetPlugin(arSlot.GetPluginOffset());
+    RwacCommandPluginEvent lEvent(
+        reinterpret_cast<uintptr_t>(lpPlugin), 1u, 0u);
+    lrVoice.GetRwacFactory().GetCommandQueue().Post(lEvent);
+    return true;
+}
+
+} // namespace Plugins
+} // namespace Playback
+} // namespace CgsSound

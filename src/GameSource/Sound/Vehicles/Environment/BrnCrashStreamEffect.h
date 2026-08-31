@@ -27,6 +27,7 @@ namespace BrnSound
 {
 namespace Vehicles
 {
+namespace Engines { struct PhysicsControl; }
 namespace Environment
 {
 
@@ -49,6 +50,16 @@ struct CrashStreamEffect : public BrnSound::Logic::BrnEffectObject,
 
     // @ 0x8269B908 (DWARF h:135). Build a rotating content-spec name and intern it.
     const CgsSound::Playback::Name GetContentSpecToPlay( bool bShowTime ) const;
+
+    s32 GetController(s32 aiIndex) override;
+    void AttachController(CgsSound::Logic::EffectBase* apController) override;
+
+    const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
+    void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
+                           f32 afGain, f32 afElapsedTime) override;
+
+    CgsSound::Logic::VoiceWrapper::CreateParams mParams;
+    BrnSound::Vehicles::Engines::PhysicsControl* mpPhysicsControl;
 
     ePrepareState mePrepareState;   // @ +0x80 (DWARF h:47; ctor seeds E_PREPARE_STATE_CONSTRUCT_VOICE)
 };

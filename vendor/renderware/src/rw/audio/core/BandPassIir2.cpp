@@ -107,6 +107,8 @@ BandPassIir2 *BandPassIir2::CreateInstance(BandPassIir2 *self)
     for (int i = 0; i < KI_IIR2_MAX_CHANNELS; ++i)
         Iir2::ClearBuffer(&self->mState[i]);
 
+    self->mBase.mpAttributes = &self->mfFreqLo;       // Initialize<T>(self, 0x28)
+
     const f32 oldAttr = self->mBase.mDecaySamples;       // lfs 0x18
 
     self->mfFreqLo = 1000000.0f;                      // stfs flt_820068C0 -> 0x28

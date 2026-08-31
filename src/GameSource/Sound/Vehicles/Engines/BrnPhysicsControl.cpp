@@ -1,7 +1,13 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameSource/Sound/Vehicles/Brn3dCarPosition.h"
+#include "GameSource/Sound/Vehicles/Wheels/BrnWheelControl.h"
+#include "GameSource/Sound/Vehicles/BrnVehicleStateManager.h"
+#include "GameSource/AttribSys/Generated/attrib_findcollection.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"
 
-#include <cstring>   // std::memset
+#include <cmath>
+#include <cstdio>
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::PhysicsControl -- out-of-line bodies.
@@ -35,26 +41,38 @@ namespace Engines
 // spans, so their construction + the intro block are reproduced by zeroing the spans +
 // setting the attested flag byte rather than by ctor calls (see header FLAG).
 // ---------------------------------------------------------------------------
-PhysicsControl::PhysicsControl()
-    : BrnSound::Logic::BrnEffectControl()   // inlined dual-vptr install + base zero-init
-    , mpVehicleState(nullptr)               // +0x0C stw 0
-    , mfOscillator(0.0f)                    // +0x1C stfs 0.0
-    , mfAngularVelocityAccumulator(0.0f)    // +0x20 stfs 0.0
-    , mpVehiclePhysicsData(nullptr)         // +0x38 stw 0
+PhysicsControl::PhysicsData::PhysicsData()
+    : mbJustShifted(false)
+    , mfDurationInGear(0.0f)
+    , mfMaxRpm(0.0f)
+    , mfIdleRpm(0.0f)
+    , mfTimeSinceRespawn(0.0f)
+    , IsBlueBoost(false)
+    , mfBoostRemaining(0.0f)
+    , mfRotation(0.0f)
 {
-    // Opaque base-region / gap scratch cleared by the inlined base zero-init.
-    std::memset(mau8BaseGap, 0, sizeof(mau8BaseGap));                          // +0x08..+0x0B
-    std::memset(mau8Gap0x10, 0, sizeof(mau8Gap0x10));                          // +0x10..+0x1B
-    std::memset(mau8Gap0x24, 0, sizeof(mau8Gap0x24));                          // +0x24..+0x37
+    Matrix44Affine lIdentity;
+    lIdentity.SetIdentity();
+    mTransform.Flush(lIdentity);
+}
 
-    // PhysicsData::PhysicsData(this+0x40) + vehicleengine(this+0x228,0,0):
-    // deferred sub-object types -> zero their spans.
-    std::memset(mau8ProcessedPhysicsData, 0, sizeof(mau8ProcessedPhysicsData));
-    std::memset(mau8VehicleEngineAttributes, 0, sizeof(mau8VehicleEngineAttributes));
-
-    // Intro-reving / start-line block: +0x248..+0x280 cleared, trailing flag @+0x284 = 1.
-    std::memset(maIntroRevingBlock, 0, sizeof(maIntroRevingBlock));
-    maIntroRevingBlock[KU_INTRO_FLAG_REL] = 1;   // +0x284 stb 1
+PhysicsControl::PhysicsControl()
+    : BrnSound::Logic::BrnEffectControl()
+    , mpVehiclePhysicsData(nullptr)
+    , mProcessedPhysicsData()
+    , mp3dCarControl(nullptr)
+    , mpWheelControl(nullptr)
+    , mVehicleEngineAttributes(nullptr, nullptr)
+    , mAttachInfo()
+    , mfOscillator(0.0f)
+    , mfAngularVelocityAccumulator(0.0f)
+    , meIntroRevingState(E_NIS_REVING_STATE_OFF)
+    , mEngineDataSet()
+    , mEngineStartLineRPM()
+{
+    mAttachInfo.mpVehicleAsset = nullptr;
+    mAttachInfo.muVehicleIndex = 0;
+    mAttachInfo.mAttachToken = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +83,152 @@ PhysicsControl::PhysicsControl()
 // (off_82FFB954 not homed here).
 // ---------------------------------------------------------------------------
 PhysicsControl::~PhysicsControl()
+{
+}
+
+s32 PhysicsControl::GetController(s32 aiSlot)
+{
+    if (aiSlot == 0)
+        return 7;
+    if (aiSlot == 1)
+        return 1;
+    CGS_ASSERT(aiSlot < 3, "liIndex < 3");
+    return -1;
+}
+
+void PhysicsControl::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    const s32 liControllerId = apController->GetEffectID();
+    if (liControllerId == 1)
+    {
+        mpWheelControl = static_cast<BrnSound::Vehicles::Wheels::WheelControl*>(apController);
+        return;
+    }
+    if (liControllerId == 7)
+    {
+        mp3dCarControl = static_cast<BrnSound::Vehicles::Car3DControl*>(apController);
+        return;
+    }
+    CGS_ASSERT(false, "Cound't attach controller ");
+}
+
+void PhysicsControl::SetupLoadData()
+{
+    BrnSound::Vehicles::VehicleState* lpVehicleState =
+        static_cast<BrnSound::Vehicles::VehicleState*>(GetStateBase());
+    CGS_ASSERT(lpVehicleState != nullptr, "lpVehicleState");
+    if (!lpVehicleState)
+        return;
+
+    mpVehiclePhysicsData = lpVehicleState->GetVehicleData();
+    CGS_ASSERT(mpVehiclePhysicsData != nullptr, "mpVehiclePhysicsData");
+
+    if (GetStateId() != 1)
+    {
+        SetAttachState(CgsSound::Logic::EffectBase::E_ATTACH_STATE_PREPARING);
+        return;
+    }
+
+    for (s32 liComponent = 0; liComponent < BrnSound::Vehicles::VehicleState::E_MAX_TYPES; ++liComponent)
+    {
+        const char* lpcComponent = GetEngineComponentName(
+            static_cast<BrnSound::Vehicles::VehicleState::EEngineComponentType>(liComponent));
+        char lacBundle[64];
+        char lacRegistry[64];
+        const u32 luHash = static_cast<u32>(CgsResource::ID::HashString(
+            reinterpret_cast<const u8*>(lpcComponent)));
+        std::snprintf(lacBundle, sizeof(lacBundle), "Engines\\%08x.bundle", luHash);
+        std::snprintf(lacRegistry, sizeof(lacRegistry), "%sRegistry", lpcComponent);
+        LoadAsset(lacBundle, lpcComponent, BrnSound::Logic::ResourceRegistrar::E_ATTRIBSYS);
+        LoadAsset(lacBundle, lacRegistry, BrnSound::Logic::ResourceRegistrar::E_DATA);
+    }
+}
+
+bool PhysicsControl::Attach()
+{
+    if (!CgsSound::Logic::EffectBase::Attach())
+        return false;
+
+    BrnSound::Vehicles::VehicleState* lpVehicleState =
+        static_cast<BrnSound::Vehicles::VehicleState*>(GetStateBase());
+    CGS_ASSERT(lpVehicleState != nullptr, "lpVehicleState");
+    if (!lpVehicleState)
+        return false;
+
+    mpVehiclePhysicsData = lpVehicleState->GetVehicleData();
+    mAttachInfo = lpVehicleState->GetAttachInfo();
+    mVehicleEngineAttributes.Change(Attrib::FindCollectionWithDefault(
+        0x7F161D94482CB3BFull,
+        GetEngineComponentKey(BrnSound::Vehicles::VehicleState::E_EXHAUST)));
+    mfOscillator.Flush(0.0f);
+    mfAngularVelocityAccumulator.Flush(0.0f);
+    mProcessedPhysicsData.mfTimeSinceRespawn = 0.0f;
+    SetMixerInputValue(7, 0);
+
+    if (GetStateId() == 1)
+    {
+        BrnSound::Vehicles::VehicleStateManager* lpManager =
+            static_cast<BrnSound::Vehicles::VehicleStateManager*>(
+                lpVehicleState->GetStateManager());
+        CGS_ASSERT(lpManager != nullptr, "lpVehicleStateManager");
+        if (lpManager)
+        {
+            lpManager->AddRegistry(GetEngineComponentName(BrnSound::Vehicles::VehicleState::E_ENGINE), false);
+            lpManager->AddRegistry(GetEngineComponentName(BrnSound::Vehicles::VehicleState::E_EXHAUST), false);
+        }
+    }
+    return true;
+}
+
+void PhysicsControl::UpdateParams(f32 afTimeStep)
+{
+    if (!mpVehiclePhysicsData)
+        return;
+
+    const BrnSound::Vehicles::VehicleData& lrRaw = *mpVehiclePhysicsData;
+    PhysicsData& lrData = mProcessedPhysicsData;
+
+    const s32 liGear = static_cast<s32>(lrRaw.mi8Gear);
+    lrData.mbJustShifted = lrData.mGear.GetCurrent() != liGear;
+    lrData.mGear.Update(liGear);
+    lrData.mfDurationInGear = lrData.mbJustShifted ? 0.0f : lrData.mfDurationInGear + afTimeStep;
+
+    lrData.mfMaxRpm = lrRaw.mfUpShiftRPM > 0.0f ? lrRaw.mfUpShiftRPM : 10000.0f;
+    lrData.mfIdleRpm = 1000.0f;
+    const f32 lfRpmRange = lrData.mfMaxRpm - lrData.mfIdleRpm;
+    f32 lfUnityRpm = lfRpmRange > 0.0f ? (lrRaw.mfRPM - lrData.mfIdleRpm) / lfRpmRange : 0.0f;
+    if (lfUnityRpm < 0.0f) lfUnityRpm = 0.0f;
+    if (lfUnityRpm > 1.0f) lfUnityRpm = 1.0f;
+    lrData.mUnityRpm.Update(lfUnityRpm);
+    lrData.mNormalizedRpm.Update(lfUnityRpm * 9000.0f + 1000.0f);
+
+    lrData.mThrottle.Update(lrRaw.mfGas);
+    lrData.mDeltaThrottle.Record(lrData.mThrottle.GetCurrent() - lrData.mThrottle.GetPrevious());
+    lrData.mIsAccelerating.Update(lrRaw.mfGas > 0.15f);
+    lrData.IsBoosting.Update(lrRaw.mfTimeBoosting > 0.0f);
+    lrData.IsCrashing.Update(lrRaw.mbCrashing);
+    lrData.IsDeforming.Update(lrRaw.mbStartedDeforming);
+    lrData.mTransform.Update(lrRaw.mTransform);
+    lrData.mPosition3d.Update(lrRaw.mTransform.Pos());
+    Vector2 lPosition2d = { lrRaw.mTransform.Pos().x, lrRaw.mTransform.Pos().z, 0.0f, 0.0f };
+    lrData.mPosition2d.Update(lPosition2d);
+    lrData.mVelocity3d.Update(lrRaw.mLinearVelocity);
+    Vector2 lVelocity2d = { lrRaw.mLinearVelocity.x, lrRaw.mLinearVelocity.z, 0.0f, 0.0f };
+    lrData.mVelocity2d.Update(lVelocity2d);
+    const f32 lfVelocity = std::sqrt(lrRaw.mLinearVelocity.x * lrRaw.mLinearVelocity.x +
+                                     lrRaw.mLinearVelocity.y * lrRaw.mLinearVelocity.y +
+                                     lrRaw.mLinearVelocity.z * lrRaw.mLinearVelocity.z);
+    lrData.mVelocityMagnitude.Update(lfVelocity);
+    lrData.mSpeedMPH.Update(lrRaw.mfSpeedMPH);
+    lrData.mSpeedMPS.Update(lrRaw.mfSpeedMPH * 0.44704f);
+    lrData.mDrifting.Update(lrRaw.mfAbsDriftScale);
+    lrData.mfTimeSinceRespawn += afTimeStep;
+
+    SetMixerInputValue(4, lrRaw.mbCrashing ? 0x7FFF : 0);
+    SetMixerInputValue(8, lrRaw.mbIsDriveable ? 0x7FFF : 0);
+}
+
+void PhysicsControl::ProcessUpdate()
 {
 }
 
@@ -80,9 +244,10 @@ PhysicsControl::~PhysicsControl()
 const char* PhysicsControl::GetEngineComponentName(
     BrnSound::Vehicles::VehicleState::EEngineComponentType aeComponentType )
 {
-    CGS_ASSERT(mpVehicleState != nullptr, "lpVehicleState");
-
-    return mpVehicleState->GetEngineComponentName( aeComponentType );
+    const BrnSound::Vehicles::VehicleState* lpVehicleState =
+        static_cast<const BrnSound::Vehicles::VehicleState*>(GetStateBase());
+    CGS_ASSERT(lpVehicleState != nullptr, "lpVehicleState");
+    return lpVehicleState->GetEngineComponentName(aeComponentType);
 }
 
 // ---------------------------------------------------------------------------
@@ -98,12 +263,13 @@ const char* PhysicsControl::GetEngineComponentName(
 // BY NAME inside VehicleState::GetEngineComponentKey (BrnVehicleState.cpp),
 // including the non-zero guard; this forwarder keeps only its own null assert.
 // ---------------------------------------------------------------------------
-Attribute::Key PhysicsControl::GetEngineComponentKey(
+u64 PhysicsControl::GetEngineComponentKey(
     BrnSound::Vehicles::VehicleState::EEngineComponentType aeComponentType )
 {
-    CGS_ASSERT(mpVehicleState != nullptr, "lpVehicleState");
-
-    return mpVehicleState->GetEngineComponentKey( aeComponentType );
+    const BrnSound::Vehicles::VehicleState* lpVehicleState =
+        static_cast<const BrnSound::Vehicles::VehicleState*>(GetStateBase());
+    CGS_ASSERT(lpVehicleState != nullptr, "lpVehicleState");
+    return lpVehicleState->GetEngineComponentKey(aeComponentType);
 }
 
 // ---------------------------------------------------------------------------

@@ -43,13 +43,10 @@ namespace BrnSound
 namespace Vehicles
 {
 
-// The raw per-car physics data blob. FLAG (DWARF type stand-in): the DWARF member
-// mVehiclePhysicsData is typed `VehicleData` (:169), whose own layout is un-homed;
-// the ctor clears it via RaceCarState::Clear @0x8229FFC8 and every attested access
-// goes through its leading RaceCarState, so it is modelled AS that leading
-// RaceCarState until the VehicleData slice lands. PhysicsControl vends it as an
-// opaque VehicleData*.
-struct VehicleData;
+// VehicleData is the sound-side name for the RaceCarState snapshot published by
+// the vehicle manager. The X360 producer copies exactly that 1120-byte record and
+// every sound consumer reads its named RaceCarState fields.
+typedef BrnPhysics::Vehicle::RaceCarState VehicleData;
 
 // DWARF BrnVehicleState.h:41. The per-vehicle engine-sound state.
 struct VehicleState : public BrnSound::Logic::BrnState
@@ -94,6 +91,14 @@ struct VehicleState : public BrnSound::Logic::BrnState
     VehicleState();
     virtual ~VehicleState() {}
 
+    // BrnVehicleState.cpp:238/62/254.  Attach is the base State forwarder;
+    // UpdateParams refreshes the live vehicle/boost snapshots and watches for a
+    // streamed-asset replacement; Detach performs the console's attached-only
+    // transition before clearing the vehicle-specific payload.
+    virtual void Attach(void* apvAttachment);
+    virtual void UpdateParams(f32 af32DeltaTime);
+    virtual bool Detach();
+
     // DWARF :191. Resolve the human-readable component name for a component type.
     // FLAG (DEFER): declared-only -- its body is a separate recon slice.
     const char* GetEngineComponentName( EEngineComponentType aeComponentType ) const;
@@ -101,7 +106,18 @@ struct VehicleState : public BrnSound::Logic::BrnState
     // DWARF :200. The component attribute key (the (type+0xA2)*8 walk == this
     // member array, by name) with the console's non-zero guard. Bodied in
     // BrnVehicleState.cpp (the PhysicsControl forwarder inlines it on X360).
-    Attribute::Key GetEngineComponentKey( EEngineComponentType aeComponentType ) const;
+    u64 GetEngineComponentKey( EEngineComponentType aeComponentType ) const;
+
+    BrnPhysics::Vehicle::RaceCarState* GetVehicleData() { return &mVehiclePhysicsData; }
+    const BrnPhysics::Vehicle::RaceCarState* GetVehicleData() const { return &mVehiclePhysicsData; }
+    const u8* GetBoostInfo() const { return mauVehicleBoostInfo; }
+    u64 GetAttribKey() const { return mVehiclePhysicsData.mCarAssetAttribKey; }
+    u8 GetVehicleIndex() const { return static_cast<u8>(mAttachInfo.muVehicleIndex); }
+    f32 GetMaxRPM() const { return mfMaxRpm; }
+    void SetCollisionOccured(bool abOccurred) { mbCollisionOccuredFlag = abOccurred; }
+    bool GetCollisionOccured() const { return mbCollisionOccuredFlag; }
+    AttachInfo GetAttachInfo() const { return mAttachInfo; }
+    virtual bool IsAttachedToThis(void* apvAttachment);
 
     // ---- members (DWARF order/names; console offsets in the banner) ----
 protected:
@@ -141,6 +157,8 @@ private:
 
     // DWARF :183.
     CgsSound::Utils::DataPoint<bool> bIsRaceCarActive;       // +1317
+
+    void Clear();
 };
 
 } // namespace Vehicles

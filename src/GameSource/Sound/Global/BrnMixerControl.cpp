@@ -102,7 +102,7 @@ void MixerControl::UpdateParams(f32)
 
     SetMixerInputValue(0, lrFrame.meImpactTime.GetCurrent() == 1 ? 0 : 0x7FFF);
     SetMixerInputValue(1, lrFrame.meFatality.GetCurrent() == E_FATAL_OFF ? 0 : 0x7FFF);
-    SetMixerInputValue(2, (!lrFrame.maPaused.IsZero() || lrFrame.mbInReplay) ? 0 : 0x7FFF);
+    SetMixerInputValue(2, (lrFrame.maPaused.IsZero() || lrFrame.mbInReplay) ? 0 : 0x7FFF);
     SetMixerInputValue(3, 0x7FFF * mCachedSettings.miMusicVolume / 11);
     SetMixerInputValue(4, 0x7FFF * mCachedSettings.miSFXVolume / 11);
 }

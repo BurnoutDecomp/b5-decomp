@@ -127,6 +127,9 @@ struct RwacCommandApplyReverbIRFile : public RwacCommand
 // X360 ctor @0x82681738: copies words 0,1 (no refcount step).
 struct RwacCommandGinsuAttachDataParameters : public RwacCommand
 {
+    // CgsGinsuSlot.cpp:73 / DecFIGS DoPlay: build the two-word command from
+    // GinsuPlayer::PlayParams (whose sole field is the loaded .gin data pointer).
+    explicit RwacCommandGinsuAttachDataParameters(void* apRamData);
     // @ 0x82681738. Copy-construct from a source record of luCommandCount words.
     RwacCommandGinsuAttachDataParameters(u32 luCommandCount,
                                          const RwacCommandGinsuAttachDataParameters& arSource);

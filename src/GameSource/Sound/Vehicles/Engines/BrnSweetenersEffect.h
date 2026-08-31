@@ -5,6 +5,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (BY NAME)
 #include "GameShared/GameClasses/Sound/Logic/CgsVoiceWrapper.h"    // CgsSound::Logic::VoiceWrapper members (BY NAME)
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"            // CgsSound::Utils::PathLine<2> member (BY NAME)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::SweetenersEffect
@@ -31,10 +32,18 @@ namespace Vehicles
 namespace Engines
 {
 
+struct PhysicsControl;
+struct ShiftControl;
+
 struct SweetenersEffect : public BrnSound::Logic::BrnEffectObject
 {
     SweetenersEffect();             // @ 0x826CF290
     virtual ~SweetenersEffect();    // anchor for the vector deleting destructor @ 0x826E4B18
+
+    virtual s32  GetController(s32 aiSlot); // @ 0x82685558
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController); // @ 0x82685580
+    virtual bool Attach(); // @ 0x826FD7A0
+    virtual void UpdateParams(f32 afTimeStep); // @ 0x826FCEE8
 
     // @ 0x826CF5A0 -- RTTI factory hook. Returns the +4 IResourceRequester base view.
     static BrnSound::Logic::IResourceRequester* CreateObjec( u32 luFlavour );
@@ -47,6 +56,16 @@ struct SweetenersEffect : public BrnSound::Logic::BrnEffectObject
     CgsSound::Logic::VoiceWrapper mVoice4;   // @ +0x28C
     f32                           mafJitterTable[8]; // @ +0x120 (per-effect RNG jitter)
     CgsSound::Utils::PathLine<2u> mPathLine; // @ +0x2DC
+
+    // DWARF BrnSweetenersEffect.h:227,245,246,259. These are the members used by
+    // the player-engine mix gate in Attach/UpdateParams. They are pinned by name
+    // and sequence on the 64-bit host; the X360 offsets are +0x34, +0x14C,
+    // +0x150, and +0x1C0 respectively.
+    bool mbEnableSweetners;
+    PhysicsControl* mpPhysicsControl;
+    ShiftControl* mpShiftingControl;
+    CgsSound::Utils::DataPoint<
+        BrnWorld::RaceCarEntityModuleIO::EActiveRaceCarEngineState> meRaceCarEngineState;
 };
 
 } // namespace Engines

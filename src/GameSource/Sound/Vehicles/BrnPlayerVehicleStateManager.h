@@ -2,7 +2,9 @@
 #define BRN_SOUND_VEHICLES_PLAYER_VEHICLE_STATE_MANAGER_H
 
 #include "types.hpp"
-#include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"   // BrnSound::Logic::BrnStateManager (committed base)
+#include "GameSource/Sound/Vehicles/BrnVehicleStateManager.h"
+#include "SharedClasses/Sound/World/BrnSoundWorldScene.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsContent.h"
 
 // =============================================================================
 // BrnSound::Vehicles::PlayerVehicleStateManager
@@ -54,7 +56,7 @@ namespace BrnSound
 namespace Vehicles
 {
 
-class PlayerVehicleStateManager : public BrnSound::Logic::BrnStateManager
+class PlayerVehicleStateManager : public BrnSound::Vehicles::VehicleStateManager
 {
 public:
     // PlayerVehicleStateManager @ 0x82700BE8. Forwards to the BrnStateManager base
@@ -74,26 +76,23 @@ public:
     static CgsSound::Logic::StateManager* CreateObject( u32 luType );                     // @ 0x827022D8
 
     // ---- boot + lifecycle virtuals ----
-    virtual bool Prepare();                       // @ 0x826EF428  (vtable +0x0C; stub -- see .cpp FLAG)
+    virtual bool Prepare();                       // @ 0x826EF428
+    virtual bool Release();                       // @ 0x826EFBB8
+    virtual void UpdateParams(f32 af32DeltaTime); // @ 0x826EF7E8
 
     // ---- IResourceRequester overrides (pure in IResourceRequester; BrnStateManager
     // declares but does not body them, so the concrete leaf must override+body them). ----
-    virtual void                            ResourcesAreReady();    // (stub -- domain cascade; see .cpp FLAG)
-    virtual BrnSound::Logic::ResourceRegistrar& GetResourceRegistrar(); // (stub -- module not homed; see .cpp FLAG)
+    virtual void ResourcesAreReady();             // @ 0x826CA4E0
 
 private:
-    // FLAG (deferred body -- ~1KB): the X360 object is 1152 bytes (0x480). The player-
-    // vehicle voice/content state (the seven refcounted content sub-objects the ctor
-    // builds at +0x42C..+0x47C -- the player engine + component banks Prepare's
-    // Content::Construct seeds, the +0x41C.. scalar tail, the world-scene-driven 3D
-    // voice placement, AND the additional +0x98 secondary base sub-object noted in the
-    // header BASE-CHAIN FLAG) is NOT modelled in this minimal shell -- the player
-    // vehicle audio domain is not reconstructed. The shell exists only to be a
-    // CONCRETE, registrable leaf whose Prepare() returns true for
-    // PrepareStateManagersOnBoot. A single opaque pad keeps the deferred state honestly
-    // named without fabricating field meanings. Size is UNVERIFIED on host (the X360
-    // 0x480 is a 32-bit fact); NOT static_asserted.
-    u8 maDeferredPlayerVehicleState[1]; // placeholder for the un-reconstructed player-vehicle members
+    BrnSound::Logic::World::SoundWorldScene mSoundScene;
+    CgsSound::Logic::Content mCsisDeformationInterface;
+    CgsSound::Logic::Content mCsisBoostInterface;
+    CgsSound::Logic::Content mCsisSkidInterface;
+    CgsSound::Logic::Content mCsisInAirInteface;
+    CgsSound::Logic::Content mCsisSurfaces;
+    CgsSound::Logic::Content mCsisTurbo;
+    CgsSound::Logic::Content mCsisGearWhine;
 };
 
 } // namespace Vehicles

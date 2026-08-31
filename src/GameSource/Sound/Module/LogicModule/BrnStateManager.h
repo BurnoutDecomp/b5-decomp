@@ -111,7 +111,7 @@ struct BrnStateManager : public CgsSound::Logic::StateManager,
     // declares protected/by-name).
     virtual ResourceRegistrar& GetResourceRegistrar();
 
-private:
+protected:
     // BrnStateManager.h:94 (DWARF): the CPU-monitor handle used by the
     // performance-monitor bookkeeping. Pinned by name.
     s32 miCpuMonitor;

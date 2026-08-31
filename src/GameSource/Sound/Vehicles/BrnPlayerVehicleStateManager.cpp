@@ -1,26 +1,28 @@
 #include "GameSource/Sound/Vehicles/BrnPlayerVehicleStateManager.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameSource/Sound/Vehicles/BrnVehicleState.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 
 // =============================================================================
 // BrnSound::Vehicles::PlayerVehicleStateManager -- out-of-line bodies.
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity, not byte match).
-// This canonical home brings the PLAYER-car engine/vehicle sound-logic state manager
-// up as a CONCRETE, registrable leaf the StateManager factory CreateStateMan
-// @ 0x826A5B60 can construct. The deepest vehicle-audio cascade (player engine
-// voices, per-component content, world-scene 3D placement) is deferred -- see the
-// per-function FLAGs.
+// This canonical home restores the player-car engine/vehicle sound-logic state
+// manager constructed by StateManager::CreateStateMan @ 0x826A5B60, including its
+// content banks, world-scene placement, state preparation, and per-frame attach path.
 //
 // Sources:
-//   PlayerVehicleStateManager::CreateObject  @ 0x827022D8  (real)
-//   PlayerVehicleStateManager::Prepare       @ 0x826EF428  (stub -- deep vehicle cascade)
-//   PlayerVehicleStateManager::ctor          @ 0x82700BE8  (minimal -- global-table + sub-obj cascade)
-//   PlayerVehicleStateManager::dtor          @ 0x82700D30  (minimal -- content-release cascade)
-// GetTypeInfo / GetTypeName / GetStaticTypeInfo / GetResourceRegistrar /
-// ResourcesAreReady were NOT individually exported; reconstructed from the
-// established in-tree RTTI pattern + the sibling BrnEffectObject::GetResourceRegistrar
-// @ 0x82696850. GetTypeName returns the "PlayerVehicleStateManager" literal
-// (off_82F2E880, the tag CreateObject's operator new uses).
+//   PlayerVehicleStateManager::CreateObject  @ 0x827022D8
+//   PlayerVehicleStateManager::Prepare       @ 0x826EF428
+//   PlayerVehicleStateManager::UpdateParams  @ 0x826EF7E8
+//   PlayerVehicleStateManager::Release       @ 0x826EFBB8
+//   PlayerVehicleStateManager::ctor          @ 0x82700BE8
+//   PlayerVehicleStateManager::dtor          @ 0x82700D30
+// DecFIGS supplies the registration names/ObjectIDs and declaration shape where
+// ARTIST stripped the corresponding symbols.
 // =============================================================================
 
 namespace BrnSound
@@ -35,43 +37,28 @@ namespace Vehicles
 //   *(result+144) = off_820AB608;                             ; (transient) +0x90 vtable
 //   *result       = off_820B87A0;                             ; primary vtable @ +0
 //   *(result+144) = off_820B8798;                             ; IResourceRequester vtable @ +0x90
-//   *(result+152) = off_820B1738;                             ; THIRD secondary vtable @ +0x98 (see FLAG)
+//   *(result+152) = off_820B1738;                             ; VehicleStateManager base leg
 //   <build seven content sub-objects at +0x42C..+0x47C, each {&off_820B3250,0,0}>
 //   <seed scalar tail at +0x41C..+0x428>
 //   <THREE global-static table init loops: dword_82FFB350[8]=0; qword_82FFB3C8[8]=self;
 //    qword_82FFB380[8]=self; + qword_82FFB370/408/378 = &unk_83000000 sentinel>
 //   return result;
 //
-// The vtable stores at +0/+0x90 are the compiler's devirtualisation of the base/
-// derived (primary) + IResourceRequester sub-object vptrs; produced implicitly by
-// constructing a polymorphic class deriving from BrnStateManager.
-//
-// FLAG (minimal -- multi-leg cascade): the X360 ctor does THREE things this minimal
-// shell does NOT reproduce faithfully:
-//   1. installs a THIRD secondary sub-object vtable @ +0x98 (off_820B1738) -- an
-//      ADDITIONAL secondary base beyond IResourceRequester (see header BASE-CHAIN
-//      FLAG); not modelled (the shell derives only BrnStateManager), so that base
-//      sub-object is absent.
-//   2. builds SEVEN refcounted CgsSound::Logic::Content sub-objects (+0x42C..+0x47C,
-//      each {&off_820B3250, 0, 0}) -- the player engine/component banks; these are the
-//      deferred maDeferredPlayerVehicleState (see header) and are NOT individually
-//      modelled.
-//   3. initialises THREE PROCESS-GLOBAL static tables (dword_82FFB350 -- 8 zeroed
-//      words; qword_82FFB3C8 + qword_82FFB380 -- 8 self-linked nodes each; plus the
-//      qword_82FFB370/82FFB408/82FFB378 sentinels = &unk_83000000). These are GLOBAL
-//      audio-subsystem registries (NOT `this` members) seeded by the player manager's
-//      construction; reproducing them requires those global homes, which are not
-//      reconstructed in this slice -- DEFERRED. (They are side-effects on global state,
-//      so omitting them leaves those registries un-seeded; only the per-frame player-
-//      vehicle path consumes them, which boot does not exercise.)
-// This ctor therefore reproduces only the base construction; the deferred pad + global
-// tables are left untouched. NOT a faithful body -- the seven content sub-objects, the
-// +0x98 base, and the global-table seeding are all deferred with the player vehicle
-// audio domain. The content sub-objects are never constructed-into by this slice
-// (Prepare stubbed), so there is nothing for the dtor to release.
+// The host declaration expresses the secondary base through VehicleStateManager and
+// names the seven Content members explicitly. Their constructors reproduce the seven
+// refcounted sub-object initialisations; normal C++ member teardown supplies the
+// reverse release order in the destructor.
 // ---------------------------------------------------------------------------
 PlayerVehicleStateManager::PlayerVehicleStateManager()
-    : BrnSound::Logic::BrnStateManager()
+    : BrnSound::Vehicles::VehicleStateManager()
+    , mSoundScene()
+    , mCsisDeformationInterface()
+    , mCsisBoostInterface()
+    , mCsisSkidInterface()
+    , mCsisInAirInteface()
+    , mCsisSurfaces()
+    , mCsisTurbo()
+    , mCsisGearWhine()
 {
 }
 
@@ -84,15 +71,9 @@ PlayerVehicleStateManager::PlayerVehicleStateManager()
 //   CgsSound::Logic::StateManager::RegisteredContent_4_int_::~ObjectPool(a1 + 12);     ; base pool teardown
 //   *a1 = &off_820AA820;                                                               ; MemBase vtable
 //
-// FLAG (minimal -- content-release cascade): the real dtor releases the seven
-// player-engine/component Content sub-objects (CgsSound::Playback::Object::Release),
-// then tears down the base RegisteredContent ObjectPool at +0xC (its ~ObjectPool) and
-// re-installs the MemBase vtable. The seven Content sub-objects are the deferred
-// maDeferredPlayerVehicleState (see header) and are never constructed by this slice's
-// stubbed Prepare, so there is nothing to release; the base pool teardown + vtable
-// re-install are re-synthesised by the host toolchain from this virtual destructor +
-// the base ~BrnStateManager. NOT a member-for-member faithful body -- the content
-// release legs are deferred with the player vehicle audio domain.
+// The empty body is intentional: the host compiler emits reverse member destruction
+// for the seven Content objects and then the VehicleStateManager/base teardown, which
+// is the semantic equivalent of the explicit console deleting-destructor sequence.
 // ---------------------------------------------------------------------------
 PlayerVehicleStateManager::~PlayerVehicleStateManager()
 {
@@ -134,21 +115,9 @@ CgsSound::Logic::StateManager* PlayerVehicleStateManager::CreateObject( u32 /*lu
 // baseTypeInfo, createObject) so the factory CreateStateMan can match
 // descriptor->ObjectID and call ->createObject.
 //
-// FLAG (ObjectID UNRESOLVED): the per-leaf registration static-init that calls
-// StateManager::AddToClassTypeInfoArray(@0x8268DFE8) with the explicit ObjectID was
-// NOT exported (CreateObject @ 0x827022D8 has no xrefs_to) and no map-state enum names
-// the id in-tree. Per the established in-tree placeholder convention (every committed
-// GetStaticTypeInfo uses 0), the ObjectID is seeded 0 here and MUST be replaced with
-// the real id at integration -- the id is this manager's slot in the
-// CreateStateManagers 0..8 sequence (@ 0x826AFEF8).
-//
-// FLAG (registry hookup deferred): the minimal CgsSound::Logic::StateManager view
-// pulled via BrnStateManager.h (this TU's base) does NOT declare
-// AddToClassTypeInfoArray (full CgsStateManager.h view only, ODR-incompatible with
-// BrnStateManager.h, not co-includable here). The descriptor is produced here but its
-// insertion into the static registry (dword_82FFBC58) must be done by a registration
-// site using the full StateManager view (the conductor-owned CreateStateMan TU).
-// &CreateObject is an ABI-compatible StateManager*(*)(u32) across both views.
+// DecFIGS' static initializer pins this manager's ObjectID to 1 and its base descriptor
+// to StateManager. The file-scope registration below reproduces the original registry
+// insertion before the sound module asks the factory to create its managers.
 // ---------------------------------------------------------------------------
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* PlayerVehicleStateManager::GetStaticTypeInfo()
 {
@@ -210,68 +179,147 @@ const char* PlayerVehicleStateManager::GetTypeName() const
 //   state 3: if (!StateManager::PrepareStates(...)) return 0;
 //   state 4: return 1;
 //
-// FLAG (stub -- deep vehicle-audio cascade): the real body is the deepest of the
-// state-manager Prepares; it cascades into
-//   * CgsSound::Logic::Content::Construct / Content::IsLoaded (the player engine +
-//     per-component splicer banks -- the deferred seven Content sub-objects),
-//   * CgsSound::Logic::StateManager::GetContent (the base content accessor feeding the
-//     per-component content),
-//   * BrnSound::Logic::World::SoundWorldScene::Prepare (the player 3D voice scene),
-//   * CgsSound::Playback::Name::MakeHash (the content-name hasher),
-//   * BrnSound::Logic::IResourceRequester::LoadAsset (the streaming-resource broker),
-//   * CgsDev::PerfMonCpu::AddMonitor (the CPU perf monitor), and
-//   * CgsSound::Logic::StateManager::PrepareStates @ 0x826EAD30 (the State machine,
-//     itself a declared-only stub in the foundation).
-// None reconstructed in this slice. PrepareStateManagersOnBoot (0x826837F8) only needs
-// Prepare() to return true to advance boot, so this stub returns true (boot-ready)
-// WITHOUT the player engine/voice bring-up. NOT an X360-faithful body -- the prepare
-// state machine + the player vehicle audio domain are deferred. X360 addr above.
+// The host body preserves that state machine: construct/load the component banks,
+// wait for both direct and broker-registered content, create the CPU monitor, prepare
+// the selected player-vehicle states, and only then report completion.
 // ---------------------------------------------------------------------------
 bool PlayerVehicleStateManager::Prepare()
 {
+    CgsSound::Logic::Module* lpModule = GetLogicModule();
+    const u32 luFactoryName = static_cast<u32>(
+        CgsSound::Playback::AemsFactorySkName().GetValue());
+
+    switch (GetPrepareState())
+    {
+    case E_PREPARE_NONE:
+    case E_PREPARE_RELEASED:
+        mePrepareState = E_PREPARE_NONE;
+        // fall through
+    case E_PREPARE_BEGIN:
+        mePrepareState = E_PREPARE_BEGIN;
+        mCsisDeformationInterface.Construct(lpModule, luFactoryName,
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash("CrumpleCsis")));
+        mCsisBoostInterface.Construct(lpModule, luFactoryName,
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash("BoostCsis")));
+        mCsisSkidInterface.Construct(lpModule, luFactoryName,
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash("SkidsCsis")));
+        mCsisInAirInteface.Construct(lpModule, luFactoryName,
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash("InAirCsis")));
+        mCsisSurfaces.Construct(lpModule, luFactoryName,
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash("SurfaceCsis")));
+        mCsisTurbo.Construct(lpModule, luFactoryName,
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash("TurboCsis")));
+        mCsisGearWhine.Construct(lpModule, luFactoryName,
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash("GearWhineCsis")));
+        LoadAsset("sound\\aems\\surface_patch_bank.bundle", 0,
+                  BrnSound::Logic::ResourceRegistrar::E_DATA);
+        LoadAsset("sound\\aems\\InAir.bundle", 0,
+                  BrnSound::Logic::ResourceRegistrar::E_DATA);
+        LoadAsset("sound\\aems\\Skids.bundle", 0,
+                  BrnSound::Logic::ResourceRegistrar::E_DATA);
+        mSoundScene.Prepare(
+            static_cast<BrnSound::Module::SoundLogicModule*>(lpModule), "_Passby");
+        // fall through
+    case E_PREPARE_UPDATING:
+    {
+        mePrepareState = E_PREPARE_UPDATING;
+        const CgsSound::Logic::Content* lapContent[] = {
+            &mCsisBoostInterface, &mCsisSkidInterface, &mCsisInAirInteface,
+            &mCsisSurfaces, &mCsisTurbo, &mCsisGearWhine,
+            &mCsisDeformationInterface
+        };
+        for (u32 luContent = 0; luContent < sizeof(lapContent) / sizeof(lapContent[0]); ++luContent)
+        {
+            if (!lapContent[luContent]->IsCreated() || !lapContent[luContent]->IsLoaded())
+                return false;
+        }
+
+        const char* lapRegisteredNames[] = {
+            "surface_patch_bank.abi", "inair.abi", "Skids.abi"
+        };
+        for (u32 luName = 0; luName < sizeof(lapRegisteredNames) / sizeof(lapRegisteredNames[0]); ++luName)
+        {
+            CgsSound::Playback::Name lName(lapRegisteredNames[luName]);
+            CgsSound::Logic::Content* lpContent = GetContent(lName);
+            if (!lpContent || !lpContent->IsCreated() || !lpContent->IsLoaded())
+                return false;
+        }
+        miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor("Player Car", 14, 0, 1.0, 0, 1);
+        // fall through
+    }
+    case E_PREPARE_STATES:
+        mePrepareState = E_PREPARE_STATES;
+        if (!PrepareStates(0x1BFF9, 1, 0x4481))
+            return false;
+        // fall through
+    case E_PREPARE_FINISHED:
+        mePrepareState = E_PREPARE_FINISHED;
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool PlayerVehicleStateManager::Release()
+{
+    mSoundScene.Release();
+    mePrepareState = E_PREPARE_RELEASED;
     return true;
 }
 
 // ---------------------------------------------------------------------------
 // PlayerVehicleStateManager::ResourcesAreReady()  (IResourceRequester completion callback)
 //
-// FLAG (stub -- deep vehicle-audio cascade): the IResourceRequester completion
-// callback (invoked by the resource broker once the player engine/component banks
-// resolve) seeds the player voice/content state -- the deferred player vehicle audio
-// domain. Not reconstructed in this slice and not needed for boot: it is invoked only
-// AFTER LoadAsset resolves, which this slice's Prepare stub never issues. Bodied as a
-// no-op so the leaf is concrete; NOT X360-faithful. Deferred with the player vehicle
-// audio domain.
+// The resource broker invokes this after the three AEMS bundles resolve. Each asset is
+// registered under its ABI content name and constructed through the original AEMS
+// factory, making the readiness checks in Prepare's updating state meaningful.
 // ---------------------------------------------------------------------------
 void PlayerVehicleStateManager::ResourcesAreReady()
 {
+    CgsSound::Logic::Module* lpModule = GetLogicModule();
+    const u32 luFactoryName = static_cast<u32>(
+        CgsSound::Playback::AemsFactorySkName().GetValue());
+    const char* lapNames[] = {
+        "surface_patch_bank.abi", "inair.abi", "Skids.abi"
+    };
+    for (u32 luName = 0; luName < sizeof(lapNames) / sizeof(lapNames[0]); ++luName)
+    {
+        CgsSound::Playback::Name lName(lapNames[luName]);
+        CgsSound::Logic::Content* lpContent = RegisterContent(lName);
+        lpContent->Construct(lpModule, luFactoryName, lName.GetValue());
+    }
 }
 
-// ---------------------------------------------------------------------------
-// PlayerVehicleStateManager::GetResourceRegistrar()  (IResourceRequester slot 1)
-//
-// Recovered semantically from the sibling BrnEffectObject::GetResourceRegistrar
-// @ 0x82696850: load this->mpLogicModule (+0x2C), tail-call the IResourceRequester
-// slot-1 of the module's embedded ResourceRegistrar. The state-manager leaves share
-// the +0x2C module back-pointer (stamped by CreateStateMan).
-//
-// FLAG (module opaque): the minimal CgsSound::Logic::StateManager view in this TU
-// (via BrnStateManager.h) does not expose mpLogicModule (+0x2C), and the
-// SoundLogicModule home is not reconstructed in this slice -- so this cannot be bodied
-// faithfully here. Provided as a non-cascading stub that abort-asserts if ever reached
-// on boot (PrepareStateManagersOnBoot does NOT call it; it is only used on the per-
-// frame attach/detach path this slice never exercises). Returns a TU-local empty
-// registrar purely to satisfy the non-void signature; NOT a faithful body. Body via
-// the module once the full StateManager view (mpLogicModule) + SoundLogicModule are
-// available.
-// ---------------------------------------------------------------------------
-BrnSound::Logic::ResourceRegistrar& PlayerVehicleStateManager::GetResourceRegistrar()
+void PlayerVehicleStateManager::UpdateParams(f32 af32DeltaTime)
 {
-    CGS_ASSERT( false,
-                "PlayerVehicleStateManager::GetResourceRegistrar reached without a homed "
-                "SoundLogicModule (boot path does not call this)" );
-    static BrnSound::Logic::ResourceRegistrar sUnhomedRegistrar;
-    return sUnhomedRegistrar;
+    CgsDev::PerfMonCpu::StartMonitor(miCpuMonitor);
+    mSoundScene.Update();
+    CgsSound::Logic::StateManager::UpdateParams(af32DeltaTime);
+
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+    BrnSound::Module::Io::LogicInputBuffer* lpInput = lpModule->GetBrnInputStructure();
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+        lpVehicles = lpInput->GetVehicleInterface();
+    if (lpVehicles->IsPlayerCarActive())
+    {
+        const EActiveRaceCarIndex lePlayer = lpVehicles->GetPlayerActiveRaceCarIndex();
+        const u32 luPlayer = static_cast<u32>(lePlayer);
+        if (GetLoadedAssetId(luPlayer) != 0 &&
+            IsDesiredEntryPlayer(luPlayer) && !IsAssetAttached(luPlayer))
+        {
+            CgsSound::Logic::State* lpState = GetFreeState(0);
+            if (lpState)
+            {
+                VehicleState::AttachInfo lInfo;
+                lInfo.Construct(GetLoadedAssetId(luPlayer),
+                    const_cast<BrnResource::VehicleListEntry*>(GetLoadedVehicleEntry(luPlayer)),
+                    luPlayer);
+                lpState->Attach(&lInfo);
+            }
+        }
+    }
+    CgsDev::PerfMonCpu::StopMonitor(miCpuMonitor);
 }
 
 } // namespace Vehicles

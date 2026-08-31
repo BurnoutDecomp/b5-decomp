@@ -161,6 +161,11 @@ Registry* GetAemsFactoryRegistry(Factory* lpAemsFactory)
     return static_cast<AemsFactory*>(lpAemsFactory)->GetRegistry();
 }
 
+const Name& AemsFactorySkName()
+{
+    return skAemsFactoryName;
+}
+
 // ARTIST @0x826E9AC8. AEMS only accepts player voices. The constructed voice
 // immediately queues its CSIS class binding and delegates the render graph to
 // the retained GenericRwacFactory.

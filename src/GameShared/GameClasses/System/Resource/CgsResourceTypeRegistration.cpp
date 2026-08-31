@@ -45,6 +45,7 @@
 #include "SharedClasses/AI/AISectionsResourceType.h"                           // BrnAI::AISectionsResourceType (0x10001)
 #include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"                  // BrnTraffic::TrafficDataResourceType (0x10002)
 #include "SharedClasses/Traffic/BrnTrafficGraphicsStubResourceType.h"          // BrnTraffic::GraphicsStubResourceType (0x10015)
+#include "SharedClasses/Sound/Engines/BrnSoundLoopModelResourceType.h"         // Vehicles::Engines::LoopModelResourceType (0x10000)
 #include "SharedClasses/DataLists/VehicleListResourceType.h"                   // BrnResource::VehicleListResourceType (0x10005)
 #include "SharedClasses/DataLists/WheelListResourceType.h"                     // BrnResource::WheelListResourceType (0x10009)
 #include "SharedClasses/DataLists/ChallengeListResourceType.h"                 // BrnResource::ChallengeListResourceType (0x1001F)
@@ -209,6 +210,11 @@ namespace CgsResource
         // offsets {0x0, 0x4}.
         static BrnTraffic::GraphicsStubResourceType   sTrafficGraphicsStub;  // 0x10015 (65557)
         TypeRegistry::Register(&sTrafficGraphicsStub, "TrafficGraphicsStub");
+        // The next console registration is the engine LoopModel (0x10000).  It
+        // owns the RPM/throttle partial graph in every Engines/<hash>.bundle;
+        // without its FixUp, the partial/graph/point pointers remain file offsets.
+        static BrnSound::Vehicles::Engines::LoopModelResourceType sLoopModel; // 0x10000 (65536)
+        TypeRegistry::Register(&sLoopModel, "LoopModel");
 
         // ---- the vehicle/wheel LIST types ----------------------------------------------------
         // GameDataModule::Prepare stages 9 and 12 stream Vehicles/VehicleList.bundle and

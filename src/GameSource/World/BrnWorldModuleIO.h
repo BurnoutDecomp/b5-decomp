@@ -678,6 +678,7 @@ namespace BrnWorldIO
         const PropUpdateNotificationQueue* GetPropUpdateNotificationQueue() const;            // :739 R (0x823B6A88, "Up")
         // phase C3b -- the two remaining BridgeWorldToSound @0x823CD580 read accessors:
         const AudioCarLoadedDataQueue*     GetAudioCarLoadedDataQueue() const;                 // :604 R (0x823B67E8, +142632)
+        AudioCarLoadedDataQueue*           GetAudioCarLoadedDataQueue();                       // :605 W (0x827A4D60, +142632)
         const PropBecamePhysicalEventQueue* GetPropBecamePhysicalEventQueue() const;           // :612 R (0x823B69E0, +202960)
         void AppendPropUpdateNotificationQueue(const PropUpdateNotificationQueue* lpQueue);   // :618 W (0x827AA9F0)
 

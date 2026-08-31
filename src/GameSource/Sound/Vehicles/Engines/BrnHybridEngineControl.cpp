@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnHybridEngineControl.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::HybridEngineControl -- out-of-line bodies.
@@ -65,6 +66,25 @@ CgsSound::Logic::EffectControl* HybridEngineControl::CreateObject( u32 /*luType*
 // ---------------------------------------------------------------------------
 HybridEngineControl::~HybridEngineControl()
 {
+}
+
+s32 HybridEngineControl::GetController(s32 aiSlot)
+{
+    static const s32 kaiControllers[] = { 0, 4, 2, 3, 5, 13 };
+    return (aiSlot >= 0 && aiSlot < static_cast<s32>(sizeof(kaiControllers) / sizeof(kaiControllers[0])))
+        ? kaiControllers[aiSlot] : -1;
+}
+
+void HybridEngineControl::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    if (apController->GetEffectID() == 5)
+    {
+        mpHybridExhaustControl = static_cast<HybridExhaustControl*>(apController);
+        return;
+    }
+    if (apController->GetEffectID() == 13)
+        return;
+    HybridExhaustControl::AttachController(apController);
 }
 
 } // namespace Engines

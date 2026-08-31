@@ -15,6 +15,10 @@ namespace Playback
 
 class GenericRwacFactory;
 
+// ARTIST dword_83008664, initialised from
+// "~AemsFactory::SK_NAME~" by sub_82C65788.
+const Name& AemsFactorySkName();
+
 // CgsAemsFactory.h:68 (DecFIGS). One registered AEMS patch monitor.
 struct PatchMonitor
 {

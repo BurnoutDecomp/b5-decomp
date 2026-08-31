@@ -36,7 +36,7 @@ namespace Engines
 
 struct HybridEngineControl : public HybridExhaustControl
 {
-    HybridEngineControl() {}
+    HybridEngineControl() : mpHybridExhaustControl(nullptr) {}
     virtual ~HybridEngineControl();     // anchor for the scalar deleting destructor @ 0x826CC7F0
 
     // @ 0x826CC738 -- RTTI factory hook.
@@ -46,6 +46,9 @@ struct HybridEngineControl : public HybridExhaustControl
     // frame, sampling the paired exhaust control's current Ginsu RPM
     // (mpHybridExhaustControl->GetGinsuRPM(), the inlined `lfs 0x8C(control)`).
     virtual void UpdateGinsuRPM();
+
+    virtual s32 GetController(s32 aiSlot); // @ 0x82684AB0
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController); // @ 0x82684B20
 
     // DWARF BrnHybridEngineControl.h:208 -- the ONLY own data member (console +0x130,
     // the first slot past the 0x130-byte base): the paired HybridExhaustControl this

@@ -1,5 +1,15 @@
 #include "GameSource/Sound/Vehicles/BrnVehicleState.h"
+#include "GameSource/Sound/Vehicles/BrnVehicleStateManager.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+#include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"
+#include "GameSource/AttribSys/Generated/classes/physicsvehicleengineattribs.h"
+#include "SharedClasses/DataLists/VehicleListEntry.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+
+#include <algorithm>
+#include <cstring>
 
 // =============================================================================
 // BrnSound::Vehicles::VehicleState out-of-line bodies.
@@ -56,11 +66,117 @@ VehicleState::VehicleState()
 // The component attribute key, by name (the console (type+0xA2)*8 walk == this
 // member array: 0xA2*8 == 0x510 == +1296) with the console's non-zero guard
 // (see the PhysicsControl forwarder @0x82682D10, which inlines this read).
-Attribute::Key VehicleState::GetEngineComponentKey( EEngineComponentType aeComponentType ) const
+u64 VehicleState::GetEngineComponentKey( EEngineComponentType aeComponentType ) const
 {
-    const Attribute::Key lKey = mEngineComponentKey[aeComponentType].mKey;
+    CGS_ASSERT(aeComponentType >= E_ENGINE && aeComponentType < E_MAX_TYPES,
+               "leComponentType >= E_ENGINE && leComponentType < E_MAX_TYPES");
+    u64 lKey = 0;
+    std::memcpy(&lKey, &mEngineComponentKey[aeComponentType], sizeof(lKey));
     CGS_ASSERT(lKey != 0, "mEngineComponentKey != 0");
     return lKey;
+}
+
+const char* VehicleState::GetEngineComponentName(EEngineComponentType aeComponentType) const
+{
+    CGS_ASSERT(aeComponentType >= E_ENGINE && aeComponentType < E_MAX_TYPES,
+               "leComponentType >= E_ENGINE && leComponentType < E_MAX_TYPES");
+    const char* lpcName = &mcaEngineComponentName[aeComponentType][0];
+    CGS_ASSERT(lpcName[0] != '\0',
+               "strcmp(&mcaEngineComponentName[leComponentType][0],\"\") != 0");
+    return lpcName;
+}
+
+void VehicleState::Attach(void* apvAttachment)
+{
+    CgsSound::Logic::State::Attach(apvAttachment);
+}
+
+bool VehicleState::IsAttachedToThis(void* apvAttachment)
+{
+    if (!IsAttached() || !apvAttachment)
+        return false;
+    const AttachInfo* lpInfo = static_cast<const AttachInfo*>(apvAttachment);
+    return lpInfo->mAttachToken == mAttachInfo.mAttachToken
+        && lpInfo->muVehicleIndex == mAttachInfo.muVehicleIndex;
+}
+
+void VehicleState::Clear()
+{
+    bIsRaceCarActive.Flush(false);
+    mVehiclePhysicsData.Clear();
+    mAttachInfo.mpVehicleAsset = 0;
+    mAttachInfo.muVehicleIndex = 0;
+    mAttachInfo.mAttachToken = 0;
+    mcaEngineComponentName[E_ENGINE][0] = '\0';
+    mcaEngineComponentName[E_EXHAUST][0] = '\0';
+    std::memset(mEngineComponentKey, 0, sizeof(mEngineComponentKey));
+    mfMaxRpm = 0.0f;
+}
+
+void VehicleState::UpdateParams(f32 af32DeltaTime)
+{
+    CgsSound::Logic::State::UpdateParams(af32DeltaTime);
+    if (!IsAttached() || mauUpdateState[0] != CgsSound::Logic::State::E_UPDATE_ATTACHED)
+        return;
+
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+    BrnSound::Module::Io::LogicInputBuffer* lpInput = lpModule->GetBrnInputStructure();
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpVehicles =
+        lpInput->GetVehicleInterface();
+    const EActiveRaceCarIndex leIndex = static_cast<EActiveRaceCarIndex>(mAttachInfo.muVehicleIndex);
+    const BrnPhysics::Vehicle::RaceCarState* lpState = lpVehicles->GetRaceCarState(leIndex);
+    const bool lbActive = lpVehicles->IsRaceCarActive(leIndex)
+        && lpState != 0 && lpState->mCarAssetAttribKey != 0;
+    bIsRaceCarActive.Update(lbActive);
+
+    if (lbActive)
+    {
+        const BrnWorld::RaceCarEntityModuleIO::BoostOutputInfo* lpBoost =
+            lpVehicles->GetBoostOutputInfoN(leIndex);
+        CGS_ASSERT(lpBoost != 0, "lpBoostInfo");
+        mVehiclePhysicsData = *lpState;
+        if (lpBoost)
+            std::memcpy(mauVehicleBoostInfo, lpBoost, sizeof(mauVehicleBoostInfo));
+
+        if (!bIsRaceCarActive.GetPrevious())
+        {
+            const BrnResource::VehicleListEntry* lpVehicle =
+                static_cast<const BrnResource::VehicleListEntry*>(mAttachInfo.mpVehicleAsset);
+            CGS_ASSERT(lpVehicle != 0 && lpVehicle->GetAttribCollectionKeyHash() != 0,
+                       "mAttachInfo.mpVehicleAsset->GetAttribCollectionKey()->GetHashKey()");
+            if (lpVehicle)
+            {
+                Attrib::Gen::burnoutcarasset lCarAsset(lpVehicle->GetAttribCollectionKeyHash(), 0);
+                Attrib::RefSpec* lpHandlingSpec = lCarAsset.GetPhysicsVehicleHandlingRefSpec();
+                Attrib::Gen::physicsvehiclehandling lHandling(
+                    lpHandlingSpec ? const_cast<Attrib::Collection*>(lpHandlingSpec->GetCollection()) : 0, 0);
+                Attrib::Gen::physicsvehicleengineattribs lEngine(
+                    const_cast<Attrib::Collection*>(
+                        lHandling.PhysicsVehicleEngineAttribs().GetCollection()), 0);
+                mfMaxRpm = -1.0f;
+                // ARTIST reduces the two authored GearUpRPM vec3s' six lanes.
+                for (u32 luGear = 0; luGear < 6; ++luGear)
+                    mfMaxRpm = (std::max)(mfMaxRpm, lEngine.GetGearUpRPM(luGear));
+            }
+        }
+    }
+
+    if (IsAttached()
+        && VehicleStateManager::GetLoadedAssetId(mAttachInfo.muVehicleIndex)
+            != mAttachInfo.mAttachToken)
+    {
+        Detach();
+    }
+}
+
+bool VehicleState::Detach()
+{
+    if (mauUpdateState[0] != CgsSound::Logic::State::E_UPDATE_ATTACHED)
+        return false;
+    CgsSound::Logic::State::Detach();
+    Clear();
+    return true;
 }
 
 // =============================================================================

@@ -31,6 +31,14 @@ RootInputBuffer::GetVehicleInterface() const
     return &mVehicleData;
 }
 
+// X360 0x82694B38. Read-lock accessor for the complete director camera copied
+// into the root sound input at +0x2F20.
+const RootInputBuffer::DirectorCamera* RootInputBuffer::GetDirectorCamera() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mDirectorCamera;
+}
+
 // X360 0x823B87C0 (write-lock; h:466; bodied 2026-08-25, faithful-audio-engine
 // phase C3b). Copy the active-race-car output interface in (the console
 // XMemCpy(this+0x620, src, 10480) == the host by-value assign), re-check the
@@ -258,7 +266,7 @@ void RootInputBuffer::SetReplayStatusInterface(const ReplayStatusInterface* lpIn
 void RootInputBuffer::SetCameraInput(const DirectorCamera* lpCamera)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(&mDirectorCamera, lpCamera, sizeof(DirectorCamera));
+    mDirectorCamera = *lpCamera;
 }
 
 // X360 0x823B8908 @ +0x3080.

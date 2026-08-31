@@ -6,6 +6,9 @@
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"        // committed BrnEffectObject dual base (BY NAME)
 #include "GameShared/GameClasses/Sound/Logic/CgsVoice.h"                // CgsSound::Logic::Voice member (BY NAME)
 #include "GameShared/GameClasses/Sound/Logic/CgsVoiceWrapper.h"         // CgsSound::Logic::VoiceWrapper member (BY NAME)
+#include "GameShared/GameClasses/Sound/Logic/CgsContent.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::DualGinsuEffect  (+ nested LoopInputs / LoopOutputs)
@@ -29,8 +32,6 @@
 
 // mapLoopContentSpecs holds pointers to CgsSound::Logic::Content (the per-loop content
 // SPEC descriptor). Pointer-only here, so a forward declaration avoids re-homing it.
-namespace CgsSound { namespace Logic { struct Content; } }
-
 namespace BrnSound
 {
 namespace Vehicles
@@ -92,15 +93,32 @@ struct DualGinsuEffect : public BrnSound::Logic::BrnEffectObject
     enum EDualGinsuPrepareState
     {
         E_GINSU_PREPARE_STATE_NONE = 0,
+        E_GINSU_PREPARE_STATE_INITIALIZE_SUBMIX = 1,
+        E_GINSU_PREPARE_STATE_WAIT_FOR_CREATE = 2,
+        E_GINSU_PREPARE_STATE_CREATE_VOICES = 3,
+        E_GINSU_PREPARE_STATE_VOICES_ARE_PLAYING = 4,
+        E_GINSU_PREPARE_STATE_FINISHED = 5,
     };
 
-    DualGinsuEffect();               // @ 0x826C8980 (BLOCKED -- see .cpp)
+    DualGinsuEffect();               // @ 0x826C8980
     virtual ~DualGinsuEffect();      // @ 0x826E0EF0 (scalar deleting destructor anchor)
+
+    virtual s32 GetController(s32 aiSlot); // @ 0x82684E88
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController); // @ 0x82684EC0
+    virtual void SetupLoadData(); // @ 0x826E41D8
+    virtual bool Attach(); // @ 0x826F14C0
+    virtual void UpdateParams(f32 afTimeStep); // @ 0x826B3770
+    virtual void ProcessUpdate(); // @ 0x826FC7C8
+    virtual bool Detach(); // @ 0x826EBF00
 
     // @ 0x826EC090 -- bind partial<->voice both ways, attach content, start the voice.
     void AttachPartialToVoice( s32 liPartial, s32 liVoice );
     // @ 0x826E0F78 -- evict the quietest loop voice under a gain threshold; returns its slot.
     s32  GetFreeLoopModelVoice( f32 afThreshold );
+    void DetachPartialFromVoice(s32 aiVoice);
+    void UpdateLoopModelParams();
+    void UpdateAccelGinsu();
+    void UpdateDecelGinsu();
 
     // ---- members (DWARF order; offsets are X360 facts, not asserted on host) ----
     HybridExhaustControl* mpHybridControl;   // h:102
@@ -112,9 +130,47 @@ struct DualGinsuEffect : public BrnSound::Logic::BrnEffectObject
     s32  maiPartialToVoice[KI_MAX_LOOPS];         // h:203
     LoopOutputs mLoopModelOutput[KI_MAX_LOOPS];   // h:205
     u32  miNumberOfLoops;                         // h:206
+    CgsSound::Logic::Content maLoopContentSpecs[KI_MAX_LOOPS]; // h:208
     const CgsSound::Logic::Content* mapLoopContentSpecs[KI_MAX_LOOPS]; // h:209
     CgsSound::Logic::VoiceWrapper mAccelGinsuVoice;  // h:212
     CgsSound::Logic::VoiceWrapper mDecelGinsuVoice;  // h:213
+    CgsSound::Logic::Voice mCarSubmix;
+    CgsSound::Logic::Voice mAICarReverbSubmix;
+    CgsSound::Logic::Command::QueueElement mSubmixIdent;
+    s8 miCarSubmixSend01Index;
+    s8 miCarSubmixReverbIndex;
+    s8 miCarSubmixPanningAngleIndex;
+    s8 miCarSubmixPanningDistanceIndex;
+    s8 miCarSubmixPanningSizeIndex;
+    s8 miCarSubmixPanningTwistIndex;
+    s8 miCarSubmixPanningCentreLevelIndex;
+    s8 miCarSubmixPanningMainLevelIndex;
+    s8 miCarSubmixPanningLfeLevelIndex;
+    s8 miCarSubmixCutoffFreq;
+    s8 miCarSubmixLowShelfFreq;
+    s8 miCarSubmixLowShelfGain;
+    s8 miCarSubmixHighShelfFreq;
+    s8 miCarSubmixHighShelfGain;
+    s8 miCarSubmixPeakingFreq;
+    s8 miCarSubmixPeakingGain;
+    s8 miCarSubmixPeakingQ;
+    CgsResource::ResourceHandle mLoopModelResource;
+    CgsResource::ResourceHandle mAccGinsuResource;
+    CgsResource::ResourceHandle mDecGinsuResource;
+    CgsResource::ResourceHandle mAttribs;
+    CgsSound::Utils::DataPoint<f32> mfAccelGinsuRPM;
+    CgsSound::Utils::DataPoint<f32> mfDecelGinsuRPM;
+    CgsSound::Utils::DataPoint<f32> mfLoopModelRPM;
+    f32 mfMinRpm;
+    f32 mfDecelMinRpm;
+    f32 mfLowShelfFreq;
+    f32 mfLowShelfGain;
+    f32 mfHighShelfFreq;
+    f32 mfHighShelfGain;
+    f32 mfPeakingFreq;
+    f32 mfPeakingGain;
+    f32 mfPeakingQ;
+    s32 miAIEngineIndex;
 };
 
 } // namespace Engines

@@ -215,15 +215,17 @@ bool ApplyCsisRelocations(ModuleBank* apBank, const ModuleBank* apSource)
         lId.muInterfaceId = *reinterpret_cast<const u16*>(lpSource + luId + 0x02);
         lId.mpName = reinterpret_cast<const char*>(lpSource + luId + 0x04);
 
-        Csis::Result leResult;
         if (luKind == 0)
-            leResult = reinterpret_cast<Csis::ClassHandle*>(lpBase + luTarget)->SetFast(&lId);
+            reinterpret_cast<Csis::ClassHandle*>(lpBase + luTarget)->SetFast(&lId);
         else if (luKind == 1)
-            leResult = reinterpret_cast<Csis::FunctionHandle*>(lpBase + luTarget)->SetFast(&lId);
+            reinterpret_cast<Csis::FunctionHandle*>(lpBase + luTarget)->SetFast(&lId);
         else
-            leResult = reinterpret_cast<Csis::GlobalVariableHandle*>(lpBase + luTarget)->SetFast(&lId);
-        if (static_cast<s32>(leResult) < 0)
-            return false;
+            reinterpret_cast<Csis::GlobalVariableHandle*>(lpBase + luTarget)->SetFast(&lId);
+
+        // XB1 sub_14096C510 dispatches each relocation and deliberately ignores
+        // the resolver's return value.  CSIS content and AEMS banks are streamed
+        // independently, so an interface may not be subscribed yet when the bank
+        // first arrives; that is not a malformed-bank result at this layer.
     }
     return true;
 }
@@ -1655,12 +1657,11 @@ extern "C" s32 SNDAEMS_addmodulebank(void* apBank, s32 aiStreamFileOffset,
 
         lpRecord->mConstructorNode.mpfnConstructor = &Snd9::Aems::AemsConstructorCallback;
         lpRecord->mConstructorNode.mpClientData = lpRecord;
-        if (Csis::Class::SubscribeConstructorFast(
-                &lpRecord->mClassHandle, &lpRecord->mConstructorNode) < 0)
-        {
-            RollbackConstructors();
-            return -6;
-        }
+        // XB1 sub_14096C510 calls the constructor subscription and continues
+        // without inspecting its result.  Keep that ordering: bank admission is
+        // independent of whether its CSIS class has arrived in the registry yet.
+        Csis::Class::SubscribeConstructorFast(
+            &lpRecord->mClassHandle, &lpRecord->mConstructorNode);
         ++luSubscribedModules;
 
         s32* lpOffsets = Snd9::Aems::ModuleRecordOffsets(lpRecord);
@@ -1684,15 +1685,10 @@ extern "C" s32 SNDAEMS_addmodulebank(void* apBank, s32 aiStreamFileOffset,
     if (lpBank->mLink.mpNext)
         lpBank->mLink.mpNext->mppPrev = &lpBank->mLink.mpNext;
     Snd9::Aems::gpModuleBankListHead = &lpBank->mLink;
-    if (!Snd9::Aems::AddAemsTimer())
-    {
-        Snd9::Aems::gpModuleBankListHead = lpBank->mLink.mpNext;
-        if (Snd9::Aems::gpModuleBankListHead)
-            Snd9::Aems::gpModuleBankListHead->mppPrev =
-                &Snd9::Aems::gpModuleBankListHead;
-        RollbackConstructors();
-        return -6;
-    }
+    // Native sub_14096C510 returns the timer-manager status to its caller, but
+    // SNDAEMS_addmodulebank (sub_14096C960) ignores that value and returns the
+    // bank handle.  Do not turn timer registration into a bank-format failure.
+    Snd9::Aems::AddAemsTimer();
     Snd9::Aems::gbAemsActive = true;
     return lpBank->miBankHandle;
 }

@@ -558,6 +558,14 @@ const UpdateOutputBuffer::AudioCarLoadedDataQueue* UpdateOutputBuffer::GetAudioC
     return &mAudioCarLoadedDataQueue;
 }
 
+// X360 0x827A4D60 (write-lock; h:605) -- mutable twin used by
+// BridgeRaceCarEntityInfoToOutput_PreScene to merge the race-car streamer's requests.
+UpdateOutputBuffer::AudioCarLoadedDataQueue* UpdateOutputBuffer::GetAudioCarLoadedDataQueue()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return &mAudioCarLoadedDataQueue;
+}
+
 // X360 0x823B69E0 (read-lock; h:612; the IDA-truncated "BrnWorldI") -- the prop-became-
 // physical event queue @ +202960; same BridgeWorldToSound consumer (phase C3b).
 const UpdateOutputBuffer::PropBecamePhysicalEventQueue* UpdateOutputBuffer::GetPropBecamePhysicalEventQueue() const

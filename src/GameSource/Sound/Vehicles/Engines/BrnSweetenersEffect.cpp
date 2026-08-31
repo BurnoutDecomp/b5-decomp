@@ -1,4 +1,9 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnSweetenersEffect.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnShiftControl.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include <cstring>   // std::memcpy
 
@@ -57,6 +62,11 @@ SweetenersEffect::SweetenersEffect()
     , mVoice3()           // bl VoiceWrapper::VoiceWrapper(this+0x228)
     , mVoice4()           // bl VoiceWrapper::VoiceWrapper(this+0x28C)
     , mPathLine()         // bl PathLine<2>::PathLine/ClearStages(this+0x2DC)
+    , mbEnableSweetners(false)
+    , mpPhysicsControl(nullptr)
+    , mpShiftingControl(nullptr)
+    , meRaceCarEngineState(
+        BrnWorld::RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_COUNT)
 {
     // ----- per-effect random-jitter table seed (attestable; store-for-store) --------
     // X360 (0x826CF3B0..0x826CF57C): slot[0] = 1.0f, then SEVEN computed writes fill
@@ -90,6 +100,96 @@ SweetenersEffect::SweetenersEffect()
 // ---------------------------------------------------------------------------
 SweetenersEffect::~SweetenersEffect()
 {
+}
+
+// X360 0x82685558. The effect consumes PhysicsControl in controller slot 0 and
+// ShiftControl in slot 1.
+s32 SweetenersEffect::GetController(s32 aiSlot)
+{
+    if (aiSlot == 0)
+        return 0;
+    if (aiSlot == 1)
+        return 2;
+    return -1;
+}
+
+// X360 0x82685580. The effect-id field is the middle seven bits of ObjectId;
+// EffectBase::GetEffectID exposes that authored identity directly.
+void SweetenersEffect::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    CGS_ASSERT(apController != nullptr, "apController");
+    if (!apController)
+        return;
+
+    switch (apController->GetEffectID())
+    {
+    case 0:
+        mpPhysicsControl = static_cast<PhysicsControl*>(apController);
+        break;
+    case 2:
+        mpShiftingControl = static_cast<ShiftControl*>(apController);
+        break;
+    default:
+        CGS_ASSERT(false, "Unexpected control.");
+        break;
+    }
+}
+
+// X360 0x826FD7A0. The complete sweetener-bank voice preparation is independent
+// of the engine bed, but the authored no-bank branch is load-bearing: it opens
+// dynamic-mixer input 1 immediately. When a bank is present UpdateParams owns
+// that input and follows the player's engine state instead.
+bool SweetenersEffect::Attach()
+{
+    if (!CgsSound::Logic::EffectBase::Attach())
+        return false;
+
+    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    if (!mpPhysicsControl)
+        return false;
+
+    const Attrib::Gen::vehicleengine& lrVehicleEngine =
+        mpPhysicsControl->GetVehicleEngineAttributes();
+    mbEnableSweetners = lrVehicleEngine.SweetenersAsset() != 0;
+    if (!mbEnableSweetners)
+        SetMixerInputValue(1, 0x7FFF);
+
+    return true;
+}
+
+// X360 0x826FCEE8. The player SweetenersEffect is the authoritative trigger for
+// mix input 1. The original reads the copied active-race-car output interface,
+// latches current/previous engine state, and opens the gate only for RUNNING(2).
+void SweetenersEffect::UpdateParams(f32 afTimeStep)
+{
+    SetMixerInputValue(0, 0);
+    mPathLine.Update(afTimeStep);
+
+    if (!mbEnableSweetners || GetStateId() != 1)
+        return;
+
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+    CGS_ASSERT(lpModule != nullptr, "mpLogicModule");
+    if (!lpModule)
+        return;
+
+    BrnSound::Module::Io::LogicInputBuffer* lpInput = lpModule->GetBrnInputStructure();
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpVehicles =
+        lpInput->GetVehicleInterface();
+
+    BrnWorld::RaceCarEntityModuleIO::EActiveRaceCarEngineState leEngineState =
+        BrnWorld::RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_COUNT;
+    if (lpVehicles->GetPlayerActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        leEngineState = lpVehicles->GetPlayerEngineState();
+
+    meRaceCarEngineState.Update(leEngineState);
+    SetMixerInputValue(
+        1,
+        leEngineState ==
+                BrnWorld::RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING
+            ? 0x7FFF
+            : 0);
 }
 
 } // namespace Engines

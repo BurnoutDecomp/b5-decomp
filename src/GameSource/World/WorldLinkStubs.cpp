@@ -2187,22 +2187,6 @@ void WorldModule::BridgePhysicsModuleToAIModule_PostPhysics(void *,struct BrnAI:
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AF318 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeRaceCarEntityInfoToOutput_PreScene(void *,struct BrnWorldIO::UpdateOutputBuffer *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarEntityInfoToOutput_PreScene: inert [FLAG PC boot gate]\n";
-    }
-}
-
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
 // X360 the _PrePhysics sibling's pre-scene twin -- reconstruct and DELETE this gate.
 // One-shot log + inert: the module/interface it would feed is itself gated
 // inert, so dropping the transfer is the consistent observable.

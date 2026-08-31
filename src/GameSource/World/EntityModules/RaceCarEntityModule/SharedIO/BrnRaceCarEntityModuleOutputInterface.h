@@ -209,7 +209,15 @@ namespace RaceCarEntityModuleIO
         }
         bool IsPlayerCarDeforming() const;                                                   // :299 (own TU)
         bool IsThePlayerDrivableFromCrash() const;                                           // :302 (own TU)
-        bool IsPlayerCarFatalyCrashing() const;                                              // :305 (own TU)
+        // :305 -- HEADER INLINE. UpdateFrameInformation @0x826B0040 expands this
+        // as the same sentinel-guarded element read as IsPlayerCarCrashing above,
+        // but from RaceCarState::mbIsFatalyCrashing (element +1099).
+        bool IsPlayerCarFatalyCrashing() const
+        {
+            if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+                return false;
+            return maRaceCarStates[mePlayerActiveRaceCarIndex].mbIsFatalyCrashing;
+        }
         bool IsPlayerInAir() const;                                                          // :308 (own TU)
         f32  TimePlayerInAir() const;                                                        // :311 (own TU)
         bool IsPlayerInReverseGear() const;                                                  // :314 (own TU)

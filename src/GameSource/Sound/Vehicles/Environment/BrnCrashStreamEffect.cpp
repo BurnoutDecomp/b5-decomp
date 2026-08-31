@@ -1,5 +1,9 @@
 #include "GameSource/Sound/Vehicles/Environment/BrnCrashStreamEffect.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 
 // =============================================================================
 // BrnSound::Vehicles::Environment::CrashStreamEffect -- out-of-line bodies.
@@ -37,11 +41,51 @@ namespace Environment
 CrashStreamEffect::CrashStreamEffect()
     : BrnEffectObject()                         // primary vptr @+0 + IResourceRequester vptr @+4, base zero-init (BY NAME)
     , BrnSound::Logic::Streaming::IStreamUser() // IStreamUser interface vptr @+0x38 (BY NAME)
+    , mParams()
+    , mpPhysicsControl(nullptr)
     , mePrepareState(E_PREPARE_STATE_CONSTRUCT_VOICE) // stw 0, 0x80
 {
     // The remaining inlined leaf zero-inits (mParams / mbShowTime / mbIsCrashing /
     // mpPhysicsControl / mSubmix region, +0x3C..+0x74, incl. the -1 @ +0x68) target
     // un-homed leaf-member types (DECLARATION-ONLY / DEFERRED; see header FLAG).
+}
+
+s32 CrashStreamEffect::GetController(s32 aiIndex)
+{
+    return aiIndex == 0 ? 0 : -1;
+}
+
+void CrashStreamEffect::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    CGS_ASSERT(apController != nullptr && apController->GetEffectID() == 0,
+               "Unexpected control.");
+    if (apController && apController->GetEffectID() == 0)
+        mpPhysicsControl = static_cast<BrnSound::Vehicles::Engines::PhysicsControl*>(apController);
+}
+
+const CgsSound::Logic::VoiceWrapper::CreateParams&
+CrashStreamEffect::GetCreateParams() const
+{
+    return mParams;
+}
+
+void CrashStreamEffect::UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
+                                           f32 afGain, f32 /*afElapsedTime*/)
+{
+    // DecFIGS @ 0x873DE0 / ARTIST vehicle-stream shape: both authored voice
+    // specs clear PauseControl. MusicVoiceSpec then applies DMX volume to send 0;
+    // CrashStreamVoiceSpec applies the stream gain directly before driving its
+    // additional time sliders.
+    const u32 luPauseControl = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("PauseControl"));
+    arVoice.SetParameter(1, 0.0f, &luPauseControl);
+    const u32 luSend = mParams.mSendName;
+    const u32 luMusicVoiceSpec = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("MusicVoiceSpec"));
+    const f32 lfGain = mParams.mVoiceSpecName == luMusicVoiceSpec
+        ? afGain * GetRWACMixerOutputValue(0, Nicotine::DMixIO::DMX_VOL)
+        : afGain;
+    arVoice.SetGain(0, lfGain, &luSend);
 }
 
 // ---------------------------------------------------------------------------

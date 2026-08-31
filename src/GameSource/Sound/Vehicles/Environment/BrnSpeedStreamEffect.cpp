@@ -1,4 +1,8 @@
 #include "GameSource/Sound/Vehicles/Environment/BrnSpeedStreamEffect.h"
+#include "GameSource/Sound/Vehicles/Environment/BrnSpeedStreamControl.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 
 // =============================================================================
 // BrnSound::Vehicles::Environment::SpeedStreamEffect -- out-of-line bodies.
@@ -59,10 +63,45 @@ BrnSound::Logic::IResourceRequester* SpeedStreamEffect::Create( int aiFlavour )
 SpeedStreamEffect::SpeedStreamEffect()
     : BrnEffectObject()                         // primary vptr @+0 + IResourceRequester vptr @+4, base zero-init (BY NAME)
     , BrnSound::Logic::Streaming::IStreamUser() // IStreamUser interface vptr @+0x38 (BY NAME)
+    , mParams()
+    , mpSpeedStreamControl(nullptr)
 {
     // The leaf region +0x3C..+0x68 (including the `stw -1, +0x68`) is the deferred
     // mParams (VoiceWrapper::CreateParams) sub-object default-init, and mpSpeedStreamControl
     // is DECLARATION-ONLY / DEFERRED (see FLAGs) -- NOT fabricated here.
+}
+
+s32 SpeedStreamEffect::GetController(s32 aiIndex)
+{
+    return aiIndex == 0 ? 15 : -1;
+}
+
+void SpeedStreamEffect::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    CGS_ASSERT(apController != nullptr && apController->GetEffectID() == 15,
+               "Unexpected control.");
+    if (apController && apController->GetEffectID() == 15)
+        mpSpeedStreamControl = static_cast<SpeedStreamControl*>(apController);
+}
+
+const CgsSound::Logic::VoiceWrapper::CreateParams&
+SpeedStreamEffect::GetCreateParams() const
+{
+    return mParams;
+}
+
+void SpeedStreamEffect::UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
+                                           f32 afGain, f32 /*afElapsedTime*/)
+{
+    // ARTIST @ 0x826BA370: MusicVoiceSpec parameter 1 is PauseControl; send 0
+    // receives the streamed gain multiplied by DMX_VOL output 0.
+    const u32 luPauseControl = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("PauseControl"));
+    arVoice.SetParameter(1, 0.0f, &luPauseControl);
+    const u32 luSend = mParams.mSendName;
+    arVoice.SetGain(0,
+                    afGain * GetRWACMixerOutputValue(0, Nicotine::DMixIO::DMX_VOL),
+                    &luSend);
 }
 
 // ---------------------------------------------------------------------------

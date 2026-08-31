@@ -108,6 +108,8 @@ LowPassIir2 *LowPassIir2::CreateInstance(LowPassIir2 *self)
     for (int i = 0; i < KI_IIR2_MAX_CHANNELS; ++i)
         Iir2::ClearBuffer(&self->mState[i]);
 
+    self->mBase.mpAttributes = &self->mfCutoffFreq;   // Initialize<T>(self, 0x28)
+
     const f32 oldAttr = self->mBase.mDecaySamples;       // lfs 0x18
 
     self->mfCutoffFreq = 1000000.0f;                  // stfs flt_820068C0 -> 0x28

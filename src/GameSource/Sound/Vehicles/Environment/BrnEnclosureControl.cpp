@@ -49,7 +49,7 @@ int EnclosureControl::ConvertRegionTypeToIndex( int liRegionType ) const
 // FLAG (allocator gate): CgsSound::MemBase::operator new is not homed here, so this uses
 // the host `new`; observable result matches. The 0x50 size is documentation only.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::EffectObject* EnclosureControl::Create( bool /*lbFlavour*/ )
+CgsSound::Logic::EffectControl* EnclosureControl::Create( bool /*lbFlavour*/ )
 {
     return new EnclosureControl();
 }

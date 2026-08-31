@@ -5,6 +5,7 @@
 #include "BrnCommonTypes.h"
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
+#include "GameSource/AttribSys/Enums/eImpactTime.h"
 
 // =============================================================================
 // BrnSound::Logic::FrameInformation
@@ -65,7 +66,7 @@ struct FrameInformation
 {
     FrameInformation()
         : meFatality(E_FATAL_OFF)
-        , meImpactTime(0)
+        , meImpactTime(AttribSys::Enums::eImpactTime::False)
         , mbInReplay(false)
         , mu32FatalStartCount(0)
         , mIsHardStop(false)
@@ -91,7 +92,8 @@ struct FrameInformation
     //   ...  -> mIsHardStop
     Matrix44Affine                           mPlayerTransform;     // :73
     CgsSound::Utils::DataPoint<EFatalityFlag> meFatality;          // :74
-    CgsSound::Utils::DataPoint<s32>          meImpactTime;         // :75 (eImpactTime enum -> s32)
+    CgsSound::Utils::DataPoint<AttribSys::Enums::eImpactTime::eImpactTime>
+                                                meImpactTime;       // :75
     CgsContainers::BitArray<3>               maPaused;             // :76
     bool                                     mbInReplay;           // :77
     u32                                      mu32FatalStartCount;  // :78

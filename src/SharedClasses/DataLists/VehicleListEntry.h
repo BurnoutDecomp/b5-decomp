@@ -205,6 +205,18 @@ struct VehicleListEntry
     u8 GetDefaultPaintColour() const;
     u8 GetDefaultPaintFinish() const;
 
+    // BrnResource::VehicleListEntryAudioData (DWARF h:154..164).  The player
+    // vehicle path consumes the component ids/keys directly; the AI manager
+    // uses the three exhaust choices when assigning the six shared AI voices.
+    CgsID GetExhaustName() const { return mExhaustName; }
+    CgsID GetEngineName() const { return mEngineName; }
+    u64 GetExhaustKey() const;
+    u64 GetEngineKey() const;
+    u8 GetAIExhaustIndex() const { return muiAIExhaustIndex; }
+    u8 GetAIExhaustIndex2ndPick() const { return muiAIExhaustIndex2ndPick; }
+    u8 GetAIExhaustIndex3rdPick() const { return muiAIExhaustIndex3rdPick; }
+    u32 GetAIMusicLoop() const { return muiMusicLoopContentSpec; }
+
     // ---- on-disk layout (recovered from FixUp's key destructs); sizeof == 0xF0 (240) ----
     u8 maPad0[0x9B];                                                      // +0x00
     u8 mu8StrengthRating;                                                 // +0x9B
@@ -225,7 +237,18 @@ struct VehicleListEntry
     u8 maPad200[8];                                                       // +0xC8
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mWonCarVoiceOverKey;         // +0xD0
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mRivalReleasedVoiceOverKey;  // +0xD8
-    u8 maPad224[16];                                                      // +0xE0..0xEF
+    u32 muiMusicLoopContentSpec;                                          // +0xE0
+    u8  muiAIExhaustIndex;                                                // +0xE4
+    u8  muiAIExhaustIndex2ndPick;                                         // +0xE5
+    u8  muiAIExhaustIndex3rdPick;                                         // +0xE6
+    u8  mu8AudioPad;                                                       // +0xE7
+    u8  mu8CarType;                                                        // +0xE8
+    u8  mu8LiveryType;                                                     // +0xE9
+    u8  mau8TailPad[2];                                                    // +0xEA
+    u8  mu8TopSpeedNormalGUIStat;                                          // +0xEC
+    u8  mu8TopSpeedBoostGUIStat;                                           // +0xED
+    u8  mu8DefaultPaintColour;                                             // +0xEE
+    u8  mu8DefaultPaintFinish;                                             // +0xEF
 };
 
 } // namespace BrnResource

@@ -45,6 +45,7 @@ namespace Gen
         const RefSpec& StreamMappings() const;
         const RefSpec& SpeechData() const;
         const RefSpec& WorldEmitterList() const;
+        const RefSpec& GlobalEngineData() const;
 
         // The sound module is constructed before BurnoutGlobalData.bin is
         // registered. Rebind the generated instance after the AttribSys load
@@ -130,6 +131,13 @@ namespace Gen
     {
         return *reinterpret_cast<const RefSpec*>(
             static_cast<const u8*>(mpAttributeData) + 0x488u);
+    }
+
+    inline const RefSpec& burnoutglobaldata::GlobalEngineData() const
+    {
+        // Brn3DEffectControl::Prepare @ ARTIST 0x82696870 reads this RefSpec.
+        return *reinterpret_cast<const RefSpec*>(
+            static_cast<const u8*>(mpAttributeData) + 0x518u);
     }
 
     inline bool burnoutglobaldata::ResolveLoadedCollection()

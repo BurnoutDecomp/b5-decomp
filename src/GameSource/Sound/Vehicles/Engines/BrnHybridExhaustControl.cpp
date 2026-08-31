@@ -1,4 +1,10 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnHybridExhaustControl.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnEngineControl.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnShiftControl.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnClutchControl.h"
+#include "GameSource/AttribSys/Generated/attrib_findcollection.h"
 
 #include <cstring>   // std::memset
 
@@ -77,6 +83,102 @@ HybridExhaustControl::HybridExhaustControl()
 // ---------------------------------------------------------------------------
 HybridExhaustControl::~HybridExhaustControl()
 {
+}
+
+s32 HybridExhaustControl::GetController(s32 aiSlot)
+{
+    static const s32 kaiControllers[] = { 0, 4, 2, 3, 12 };
+    if (aiSlot < 0 || aiSlot >= static_cast<s32>(sizeof(kaiControllers) / sizeof(kaiControllers[0])))
+        return -1;
+    if (aiSlot == 4 && GetStateId() != 1)
+        return -1;
+    return kaiControllers[aiSlot];
+}
+
+void HybridExhaustControl::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    switch (apController->GetEffectID())
+    {
+    case 0: mpPhysicsControl = static_cast<PhysicsControl*>(apController); break;
+    case 2: mpShiftControl = static_cast<ShiftControl*>(apController); break;
+    case 3: mpClutchControl = static_cast<ClutchControl*>(apController); break;
+    case 4: mpEngineControl = static_cast<EngineControl*>(apController); break;
+    case 1:
+    case 5:
+    case 6:
+    case 7:
+    case 8:
+    case 9:
+    case 10:
+    case 11:
+    case 12:
+        break;
+    default:
+        CGS_ASSERT(false, "I don't know how to handle attaching this type of EffectBase.");
+        break;
+    }
+}
+
+bool HybridExhaustControl::Attach()
+{
+    if (!CgsSound::Logic::EffectBase::Attach())
+        return false;
+
+    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    if (!mpPhysicsControl)
+        return false;
+
+    const BrnSound::Vehicles::VehicleState::EEngineComponentType leComponent =
+        (GetId() & 0x7F0) != 0x60
+            ? BrnSound::Vehicles::VehicleState::E_ENGINE
+            : BrnSound::Vehicles::VehicleState::E_EXHAUST;
+    const u64 luCollectionKey = mpPhysicsControl->GetEngineComponentKey(leComponent);
+    Attrib::Collection* lpCollection = Attrib::FindCollectionWithDefault(
+        0x7F161D94482CB3BFull, luCollectionKey);
+    mVehicleEngineAttributes.Change(lpCollection);
+    mMasterVehicleEngineComponentAttributes.Change(lpCollection);
+
+    CGS_ASSERT(mVehicleEngineAttributes.LoopModel() != nullptr,
+               "mVehicleEngineAttributes.LoopModel()");
+    CGS_ASSERT(mVehicleEngineAttributes.GinsuFileAccel() != nullptr,
+               "mVehicleEngineAttributes.GinsuFileAccel()");
+    CGS_ASSERT(mVehicleEngineAttributes.GinsuFileDecel() != nullptr,
+               "mVehicleEngineAttributes.GinsuFileDecel()");
+
+    mPhysicsDeltaRpm.Flush(0.0f);
+    mAudioDeltaRpm.Flush(0.0f);
+    mGinsuRpm.Flush(mpPhysicsControl->GetPhysicsData().mNormalizedRpm.GetCurrent());
+    return true;
+}
+
+void HybridExhaustControl::UpdateParams(f32 /*afTimeStep*/)
+{
+    if (!mpPhysicsControl)
+        return;
+
+    const PhysicsControl::PhysicsData& lrPhysics = mpPhysicsControl->GetPhysicsData();
+    const f32 lfRpm = lrPhysics.mNormalizedRpm.GetCurrent();
+    mPhysicsDeltaRpm.Update(lfRpm - mGinsuRpm.GetCurrent());
+    mAudioDeltaRpm.Update(mPhysicsDeltaRpm.GetCurrent());
+    mAverageDeltaRPM.Record(mPhysicsDeltaRpm.GetCurrent());
+    mGinsuRpm.Update(lfRpm);
+
+    // UpdateMix @ 0x826CC878 applies the authored master/component gains to
+    // the loop/Ginsu mix before the effect-side dynamic-mixer gains.  Preserve
+    // that data-driven volume leg while the recovered crossfade graph supplies
+    // the three source weights.
+    const f32 lfMaster = mVehicleEngineAttributes.MasterGain() *
+                         mMasterVehicleEngineComponentAttributes.MasterCarVolume();
+    const f32 lfThrottle = lrPhysics.mThrottle.GetCurrent();
+    mFinalEngineMix.Loop = 1.0f;
+    mFinalEngineMix.AccelGinsu = lfThrottle;
+    mFinalEngineMix.DecelGinsu = 1.0f - lfThrottle;
+    mFinalEngineMix.Cutoff = 25000.0f;
+    mFinalEngineVolume.Loop = lfMaster * mFinalEngineMix.Loop;
+    mFinalEngineVolume.AccelGinsu = lfMaster * mFinalEngineMix.AccelGinsu;
+    mFinalEngineVolume.DecelGinsu = lfMaster * mFinalEngineMix.DecelGinsu;
+    mFinalEngineVolume.Cutoff = 25000.0f;
+
 }
 
 } // namespace Engines

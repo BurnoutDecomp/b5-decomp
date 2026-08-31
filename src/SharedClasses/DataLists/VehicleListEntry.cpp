@@ -115,25 +115,25 @@ u8 VehicleListEntry::GetUnlockRank() const
 // The car's boost class (+0xE8) -- raw byte, mapped by the caller.
 u8 VehicleListEntry::GetCarType() const
 {
-    return maPad224[KU_OFFSET_CAR_TYPE];
+    return mu8CarType;
 }
 
 // The livery/"Finish Type" tag (+0xE9) -- raw byte, mapped by the caller.
 u8 VehicleListEntry::GetLiveryType() const
 {
-    return maPad224[KU_OFFSET_LIVERY_TYPE];
+    return mu8LiveryType;
 }
 
 // The car-select speed gauge rating (+0xEC) -- raw byte, scaled by the caller's stats bar.
 u8 VehicleListEntry::GetSpeedStat() const
 {
-    return maPad224[KU_OFFSET_SPEED_STAT];
+    return mu8TopSpeedNormalGUIStat;
 }
 
 // The car-select boost gauge rating (+0xED) -- raw byte.
 u8 VehicleListEntry::GetBoostStat() const
 {
-    return maPad224[KU_OFFSET_BOOST_STAT];
+    return mu8TopSpeedBoostGUIStat;
 }
 
 // The car's FACTORY paint colour index (+0xEE) -- raw byte. See the header note: read by
@@ -141,14 +141,28 @@ u8 VehicleListEntry::GetBoostStat() const
 // by its HandleControllerInput restore arm (as *(entry + 238)).
 u8 VehicleListEntry::GetDefaultPaintColour() const
 {
-    return maPad224[KU_OFFSET_DEF_COLOUR];
+    return mu8DefaultPaintColour;
 }
 
 // The car's FACTORY paint FINISH index (+0xEF, a BrnWorld::EPalettesTypes value) -- raw byte.
 // Read by the same two CarSelectLivery sites (LOBYTE of +0xEC / *(entry + 239)).
 u8 VehicleListEntry::GetDefaultPaintFinish() const
 {
-    return maPad224[KU_OFFSET_DEF_FINISH];
+    return mu8DefaultPaintFinish;
+}
+
+u64 VehicleListEntry::GetExhaustKey() const
+{
+    CgsAttribSys::AttribSysCollectionKey lKey;
+    std::memcpy(&lKey, mExhaustEntityKey.maStorage, sizeof(lKey));
+    return lKey.GetHashKey();
+}
+
+u64 VehicleListEntry::GetEngineKey() const
+{
+    CgsAttribSys::AttribSysCollectionKey lKey;
+    std::memcpy(&lKey, mEngineEntityKey.maStorage, sizeof(lKey));
+    return lKey.GetHashKey();
 }
 
 

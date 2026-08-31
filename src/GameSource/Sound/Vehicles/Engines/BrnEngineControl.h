@@ -64,8 +64,11 @@ namespace Engines
 // GetStartRPM returns and the dtor anchor are reconstructed in this group.
 struct EngineControl : public BrnSound::Logic::BrnEffectControl
 {
-    EngineControl() {}
+    EngineControl() : mfStartRPM(0.0f) {}
     virtual ~EngineControl();   // anchor for the vector deleting destructor @ 0x826B2BA0
+
+    virtual s32 GetController(s32 aiSlot); // @ 0x826845C0
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController); // @ 0x82684628
 
     // @ 0x82698FC8 — return the cached engine start RPM (lfs f1, 0x18(this) on X360).
     f32 GetStartRPM() const;

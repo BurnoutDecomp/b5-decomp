@@ -12,8 +12,10 @@ namespace World
 // BrnStaticSoundMap.h:59): a single `Vector3Plus mPosPlus` — the position xyz with
 // the radius/type payload packed into the w lane (the :136 UFloatHelper union is
 // the pack/unpack view; Construct(Vector3, f32, u16) packs both). 16 bytes,
-// pointer-free — the platform-4 serialised element `{f32 x,y,z, u16, u16}` (see
-// the porter contract note below) is this record verbatim. COMPLETED 2026-08-25
+// pointer-free — the platform-4 serialised element is `{f32 x,y,z, u32 packed}`
+// with packed = `(type << 16) | radius` (see the porter contract note below).
+// Its W lane therefore endian-flips as one u32, not as two u16 fields.
+// COMPLETED 2026-08-25
 // (audio-faithfulness wave 2; was a forward-decl that forced GetEntity into a
 // hardcoded byte-stride walk). The accessor/FixUp bodies (GetPos @h:89, GetRadius
 // @h:103, GetType @h:110, FixUp @h:117, Construct @h:74) stay DEFERRED to the

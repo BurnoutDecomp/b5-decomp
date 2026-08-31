@@ -257,6 +257,10 @@ struct CameraEffects
     f32  GetBloomLuminanceModifier() const      { return mfBloomLuminance; }
     void SetBloomLuminanceModifier(f32 lfValue) { mfBloomLuminance = lfValue; }
 
+    // DWARF BrnCameraEffects.h:289. Header-inline in the original; sound uses
+    // this value to distinguish impact-time and ordinary slow motion.
+    f32 GetSimTimeScale() const { return mfSimTimeScale; }
+
     // ADDITIVE GROW (MomentPlayerJumping::Update @0x82275AA4..: the moment registers
     // its "Jump_Effect" start hook on the stack camera it is about to adopt with the
     // inlined triple store -- HookNameStringWrapper::Set on mStartHookNameString, the

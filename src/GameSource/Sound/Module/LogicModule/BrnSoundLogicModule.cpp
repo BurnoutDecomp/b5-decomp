@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/Sound/Vehicles/BrnVehicleStateManager.h"
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
@@ -414,11 +415,144 @@ void SoundLogicModule::ProcessStreamFreedQueue(
     }
 }
 
+void SoundLogicModule::ProcessCarDataLoadingQueue(
+    const Io::AudioCarLoadedDataQueue& arEvents)
+{
+    using BrnWorld::RaceCarEntityModuleIO::AudioCarDataLoadedEvent;
+    for (s32 liEvent = 0; liEvent < arEvents.GetLength(); ++liEvent)
+    {
+        const AudioCarDataLoadedEvent& lrEvent = arEvents.GetEvent(liEvent);
+        CGS_ASSERT(lrEvent.meMessageType == AudioCarDataLoadedEvent::E_REQUEST_LOAD_DATA ||
+                   lrEvent.meMessageType == AudioCarDataLoadedEvent::E_REQUEST_UNLOAD_DATA,
+                   "lAudioCarDataLoadedEvent.GetMessageType() == AudioCarDataLoadedEvent::E_REQUEST_LOAD_DATA || lAudioCarDataLoadedEvent.GetMessageType() == AudioCarDataLoadedEvent::E_REQUEST_UNLOAD_DATA");
+        if (lrEvent.meMessageType == AudioCarDataLoadedEvent::E_REQUEST_LOAD_DATA)
+        {
+            BrnSound::Vehicles::VehicleStateManager::AddEntry(
+                lrEvent.mAssetID, lrEvent.mpVehicleListEntry,
+                lrEvent.miActiveRaceCarIndex, lrEvent.mbIsPlayer);
+        }
+        else if (lrEvent.meMessageType == AudioCarDataLoadedEvent::E_REQUEST_UNLOAD_DATA)
+        {
+            BrnSound::Vehicles::VehicleStateManager::RemoveEntry(
+                lrEvent.mAssetID, lrEvent.miActiveRaceCarIndex);
+        }
+    }
+}
+
+// ARTIST 0x826978A0 / 0x826978B8. SoundLogicModule mirrors the generic logic
+// engine's buffer pair into its typed Burnout pair. State managers use the typed
+// input during Environment::Update, so both pairs must have the same lifetime.
+void SoundLogicModule::AttachBuffers(CgsModule::IOBuffer* apInputBuffer,
+                                     CgsModule::IOBuffer* apOutputBuffer)
+{
+    CgsSound::Logic::Module::AttachBuffers(apInputBuffer, apOutputBuffer);
+    mpBrnLogicInputBuffer = static_cast<Io::LogicInputBuffer*>(apInputBuffer);
+    mpBrnLogicOutputBuffer = static_cast<Io::LogicOutputBuffer*>(apOutputBuffer);
+}
+
+void SoundLogicModule::DetachBuffers()
+{
+    CgsSound::Logic::Module::DetachBuffers();
+    mpBrnLogicInputBuffer = 0;
+    mpBrnLogicOutputBuffer = 0;
+}
+
+// ARTIST 0x826C9860. Camera microphone 0 receives the director camera matrix.
+// When the player car is active, player microphone 0 uses the same orientation
+// at the player-car position. The original KVF_CAR_MIC_OFFSET at 0x830060B0 is
+// a zero broadcast in ARTIST, so the flattened/normalised camera-at offset term
+// evaluates to zero while retaining the source operation's structure here.
+void SoundLogicModule::UpdateMicrophones(const Io::LogicInputBuffer* apLogicInputBuffer)
+{
+    const Io::RootInputBuffer::DirectorCamera* lpCamera =
+        apLogicInputBuffer->GetDirectorCamera();
+    CgsSound::Logic::MicrophoneSystem& lrMicrophones =
+        GetEnvironment().GetMicrophoneSystem();
+
+    const rw::math::vpu::Matrix44Affine lCameraTransform = lpCamera->GetTransform();
+    lrMicrophones.GetMicrophone(CgsSound::Logic::MicrophoneSystem::E_MIC_CAMERA,
+                               CgsSound::Logic::MicrophoneSystem::E_PLAYER_1)
+        ->SetMicrophoneMatrix(lCameraTransform);
+
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+        lpVehicles = apLogicInputBuffer->GetVehicleInterface();
+    if (lpVehicles->IsPlayerCarActive())
+    {
+        const EActiveRaceCarIndex lePlayerIndex =
+            apLogicInputBuffer->GetPlayerActiveRaceCarIndex();
+        const BrnPhysics::Vehicle::RaceCarState* lpPlayerVehicle =
+            lpVehicles->GetRaceCarState(lePlayerIndex);
+
+        rw::math::vpu::Vector3 lvCameraAt = lCameraTransform.At();
+        lvCameraAt.y = 0.0f;
+        lvCameraAt = rw::math::vpu::Normalize(lvCameraAt);
+
+        const rw::math::vpu::Vector3 lvNewCarPos =
+            lpPlayerVehicle->mTransform.Pos() - (lvCameraAt * 0.0f);
+        rw::math::vpu::Matrix44Affine lCarTransform = lCameraTransform;
+        lCarTransform.Pos() = lvNewCarPos;
+        lrMicrophones.GetMicrophone(CgsSound::Logic::MicrophoneSystem::E_MIC_PLAYER,
+                                   CgsSound::Logic::MicrophoneSystem::E_PLAYER_1)
+            ->SetMicrophoneMatrix(lCarTransform);
+    }
+
+    lrMicrophones.SetNumberOfPlayers(1);
+}
+
+// ARTIST 0x826B0040. Build the per-frame player/camera snapshot consumed by
+// collision, world-emitter, passby, and global mixer logic.
+void SoundLogicModule::UpdateFrameInformation(
+    f32 af32SimDt,
+    const Io::LogicInputBuffer* apLogicInputBuffer,
+    BrnUpdateSet aeUpdateSet,
+    EActiveRaceCarIndex aePlayerCarIndex)
+{
+    static const f32 KF_IMPACT_TIME_THRESHOLD = 0.0033333336f;
+    static const f32 KF_SLOW_MO_THRESHOLD = 0.012500001f;
+
+    const f32 lfSimTimeScale =
+        apLogicInputBuffer->GetDirectorCamera()->GetEffects().GetSimTimeScale();
+    const bool lbImpactTime =
+        af32SimDt < KF_IMPACT_TIME_THRESHOLD && lfSimTimeScale < 1.0f;
+    const bool lbSlowMo =
+        af32SimDt < KF_SLOW_MO_THRESHOLD && lfSimTimeScale < 1.0f;
+
+    mFrameInformation.meImpactTime.Update(
+        lbImpactTime ? AttribSys::Enums::eImpactTime::VSlow
+                     : (lbSlowMo ? AttribSys::Enums::eImpactTime::True
+                                 : AttribSys::Enums::eImpactTime::False));
+
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+        lpVehicles = apLogicInputBuffer->GetVehicleInterface();
+    mFrameInformation.mIsHardStop.Update(lpVehicles->IsPlayerCarCrashing());
+    mFrameInformation.mbInReplay = (aeUpdateSet & 0x0100u) != 0;
+
+    if (lpVehicles->IsPlayerCarActive())
+    {
+        const BrnPhysics::Vehicle::RaceCarState* lpPlayerVehicle =
+            lpVehicles->GetRaceCarState(aePlayerCarIndex);
+        mFrameInformation.UpdateFatalityFlag(lpVehicles->IsPlayerCarFatalyCrashing());
+        mFrameInformation.mPlayerTransform = lpPlayerVehicle->mTransform;
+    }
+}
+
 void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
                               CgsModule::IOBuffer* apInputBuffer,
                               CgsModule::IOBuffer* apOutputBuffer)
 {
+    Update(af32GameDt, af32SimDt, apInputBuffer, apOutputBuffer,
+           static_cast<BrnUpdateSet>(0));
+}
+
+void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
+                              CgsModule::IOBuffer* apInputBuffer,
+                              CgsModule::IOBuffer* apOutputBuffer,
+                              BrnUpdateSet aeUpdateSet)
+{
     CGS_ASSERT(apInputBuffer != 0, "lpInputBuffer");
+    CGS_ASSERT(apOutputBuffer != 0, "lpOutputBuffer");
+
+    AttachBuffers(apInputBuffer, apOutputBuffer);
 
     // ARTIST 0x82702A78..0x82702A90 starts every logic tick by emptying the
     // per-frame outputs: maTriggerActions' count @+0x4EA0, the GuiOut queue
@@ -433,9 +567,13 @@ void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
 
     Io::RootInputBuffer* lpInput = static_cast<Io::RootInputBuffer*>(apInputBuffer);
     lpInput->LockForRead();
+    UpdateMicrophones(lpInput);
+    const EActiveRaceCarIndex lePlayerCarIndex = lpInput->GetPlayerActiveRaceCarIndex();
+    UpdateFrameInformation(af32SimDt, lpInput, aeUpdateSet, lePlayerCarIndex);
     const Io::RootInputBuffer::GuiEventQueue* lpGuiQueue = lpInput->GetGuiEventQueue();
     ProcessGuiEvents(reinterpret_cast<const CgsModule::VariableEventQueue<18432, 16>*>(
         lpGuiQueue));
+    ProcessCarDataLoadingQueue(*lpInput->GetAudioCarDataLoadedQueueForRead());
     lpInput->UnlockForRead();
 
     CgsSound::Logic::Module::Update(af32GameDt, af32SimDt, apInputBuffer, apOutputBuffer);
@@ -451,13 +589,13 @@ void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
     // brackets the final request-queue append with output-then-input write locks and
     // releases them in the same order. ResourceBridging is the identical append pair
     // factored by Prepare, with the registrar Update immediately ahead of it.
-    mpBrnLogicInputBuffer = reinterpret_cast<Io::LogicInputBuffer*>(apInputBuffer);
-    mpBrnLogicOutputBuffer = reinterpret_cast<Io::LogicOutputBuffer*>(apOutputBuffer);
+    AttachBuffers(apInputBuffer, apOutputBuffer);
     mpBrnLogicOutputBuffer->LockForWrite();
     mpBrnLogicInputBuffer->LockForWrite();
     ResourceBridging();
     mpBrnLogicOutputBuffer->UnlockForWrite();
     mpBrnLogicInputBuffer->UnlockForWrite();
+    DetachBuffers();
 }
 
 // X360 0x826AFEF8. Create the 9 sound-logic state managers and register them in the
