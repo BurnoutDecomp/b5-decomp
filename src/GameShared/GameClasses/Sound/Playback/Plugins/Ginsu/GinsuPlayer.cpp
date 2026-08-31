@@ -270,10 +270,15 @@ void GinsuSynthData::DecodeBlock(int aiBlock, bool abUseOldData, System * /*apSy
         ? (mOldDataBlock + KI_GINSU_RECORD_BYTES * (aiBlock - mOldDataBlockIndex))
         : (mSampleData + KI_GINSU_RECORD_BYTES * aiBlock);
 
-    mSample[0] = static_cast<f32>((static_cast<unsigned>(lpRecord[1]) << 8)
-                                  | (lpRecord[0] & 0xF0u));
-    mSample[1] = static_cast<f32>((static_cast<unsigned>(lpRecord[3]) << 8)
-                                  | (lpRecord[2] & 0xF0u));
+    // ARTIST uses `extsb` on the high byte before shifting it into place.  These
+    // are signed 12-bit predictor seeds, not unsigned magnitudes; losing that
+    // sign turns every negative block boundary into a large positive impulse.
+    const s16 lsSeed0 = static_cast<s16>(
+        (static_cast<u16>(lpRecord[1]) << 8) | (lpRecord[0] & 0xF0u));
+    const s16 lsSeed1 = static_cast<s16>(
+        (static_cast<u16>(lpRecord[3]) << 8) | (lpRecord[2] & 0xF0u));
+    mSample[0] = static_cast<f32>(lsSeed0);
+    mSample[1] = static_cast<f32>(lsSeed1);
 
     const unsigned luPredictor = lpRecord[0] & 0x0Fu;
     const unsigned luShift = lpRecord[2] & 0x0Fu;
