@@ -58,6 +58,11 @@ struct HybridExhaustControl : public BrnSound::Logic::BrnEffectControl
     HybridExhaustControl();             // @ 0x826AF938
     virtual ~HybridExhaustControl();    // anchor for the vector deleting destructor @ 0x826AFA60
 
+    virtual s32 GetController(s32 aiSlot); // @ 0x826849B0
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController); // @ 0x82684A20
+    virtual bool Attach(); // @ 0x826997B0
+    virtual void UpdateParams(f32 afTimeStep); // @ 0x826E3DE0
+
     // @ 0x826B34E0 -- RTTI factory hook. Returns the +4 IResourceRequester base view.
     // NOTE: Create allocates 0x130 == sizeof(HybridExhaustControl) -- the fact that
     // pins +0x130 as the FIRST derived-class member slot (see HybridEngineControl).
@@ -67,6 +72,7 @@ struct HybridExhaustControl : public BrnSound::Logic::BrnEffectControl
     // sample -- the `lfs 0x8C(control)` read the paired HybridEngineControl's
     // UpdateGinsuRPM @0x82699B98 inlines.
     f32 GetGinsuRPM() const { return mGinsuRpm.mCurrentValue; }
+    const EngineMix& GetFinalEngineVolume() const { return mFinalEngineVolume; }
 
     // ---- members in DWARF order (offsets are X360 facts, not asserted on host) ----
     // The controller back-pointers, typed per the DWARF (BrnHybridEngineControl.h:

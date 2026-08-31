@@ -2,7 +2,7 @@
 #define BRN_SOUND_VEHICLES_ENVIRONMENT_ENCLOSURE_CONTROL_H
 
 #include "types.hpp"
-#include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (BY NAME)
+#include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Environment::EnclosureControl
@@ -24,7 +24,7 @@ namespace Vehicles
 namespace Environment
 {
 
-struct EnclosureControl : public BrnSound::Logic::BrnEffectObject
+struct EnclosureControl : public BrnSound::Logic::BrnEffectControl
 {
     EnclosureControl() {}
     virtual ~EnclosureControl();    // anchor for the vector deleting destructor @ 0x826B94A8
@@ -32,7 +32,7 @@ struct EnclosureControl : public BrnSound::Logic::BrnEffectObject
     // @ 0x82685FA0 -- map a region type (19..31) to an enclosure index (pure; `this` unused).
     int ConvertRegionTypeToIndex( int liRegionType ) const;
     // @ 0x826D0A30 -- allocate + construct factory. Returns the EffectObject* base view.
-    static CgsSound::Logic::EffectObject* Create( bool lbFlavour );
+    static CgsSound::Logic::EffectControl* Create( bool lbFlavour );
 };
 
 } // namespace Environment

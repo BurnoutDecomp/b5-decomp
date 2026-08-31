@@ -4,6 +4,9 @@
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"   // committed BrnEffectControl dual base (BY NAME)
 #include "GameSource/Sound/Vehicles/BrnVehicleState.h"              // VehicleState::EEngineComponentType / GetEngineComponentName / VehicleData (BY NAME)
+#include "GameSource/AttribSys/Generated/classes/vehicleengine.h"
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
+#include "BrnCommonTypes.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attribute::Key (BY NAME)
 
 // =============================================================================
@@ -30,12 +33,69 @@ namespace BrnSound
 {
 namespace Vehicles
 {
+struct Car3DControl;
+namespace Wheels { struct WheelControl; }
 namespace Engines
 {
 
 // BrnPhysicsControl.h:41 (DWARF). Reuses the committed BrnEffectControl dual base BY NAME.
 struct PhysicsControl : public BrnSound::Logic::BrnEffectControl
 {
+    struct PhysicsData
+    {
+        PhysicsData();
+
+        CgsSound::Utils::DataPoint<bool> mIsAccelerating;
+        bool mbJustShifted;
+        CgsSound::Utils::DataPoint<s32> mGear;
+        f32 mfDurationInGear;
+        CgsSound::Utils::DataPoint<f32> mUnityRpm;
+        CgsSound::Utils::DataPoint<f32> mNormalizedRpm;
+        f32 mfMaxRpm;
+        f32 mfIdleRpm;
+        f32 mfTimeSinceRespawn;
+        CgsSound::Utils::DataPoint<f32> mThrottle;
+        CgsSound::Utils::Average<5u, f32> mDeltaThrottle;
+        CgsSound::Utils::DataPoint<bool> IsBoosting;
+        bool IsBlueBoost;
+        f32 mfBoostRemaining;
+        CgsSound::Utils::DataPoint<bool> IsCrashing;
+        CgsSound::Utils::DataPoint<bool> IsDeforming;
+        CgsSound::Utils::DataPoint<Vector3> mPosition3d;
+        CgsSound::Utils::DataPoint<Vector2> mPosition2d;
+        CgsSound::Utils::DataPoint<Vector3> mVelocity3d;
+        CgsSound::Utils::DataPoint<Vector2> mVelocity2d;
+        CgsSound::Utils::DataPoint<f32> mVelocityMagnitude;
+        CgsSound::Utils::DataPoint<f32> mSpeedMPH;
+        CgsSound::Utils::DataPoint<Vector3> mAcceleration3d;
+        CgsSound::Utils::DataPoint<Vector2> mAcceleration2d;
+        CgsSound::Utils::DataPoint<f32> mAccelerationMagnitude;
+        CgsSound::Utils::DataPoint<Matrix44Affine> mTransform;
+        CgsSound::Utils::DataPoint<f32> mYaw;
+        CgsSound::Utils::DataPoint<f32> mSpeedMPS;
+        f32 mfRotation;
+        CgsSound::Utils::DataPoint<f32> mDrifting;
+    };
+
+    struct EngineRevEntry
+    {
+        EngineRevEntry() : mfTime(0.0f), mfRpm(0.0f), mfThrottle(0.0f) {}
+        EngineRevEntry(f32 afTime, f32 afRpm, f32 afThrottle)
+            : mfTime(afTime), mfRpm(afRpm), mfThrottle(afThrottle) {}
+        f32 mfTime;
+        f32 mfRpm;
+        f32 mfThrottle;
+    };
+
+    struct EngRevDataSet
+    {
+        EngRevDataSet() : mnNumPoints(0), mpDataPoints(nullptr), mfTime(0.0f), mnCurrentPoint(0) {}
+        s32 mnNumPoints;
+        const EngineRevEntry* mpDataPoints;
+        f32 mfTime;
+        s32 mnCurrentPoint;
+    };
+
     // BrnPhysicsControl.h:278 (DWARF). Intro-reving (start-line rev) sub-state.
     enum eIntroRevingState
     {
@@ -47,12 +107,22 @@ struct PhysicsControl : public BrnSound::Logic::BrnEffectControl
     PhysicsControl();               // @ 0x826C8890
     virtual ~PhysicsControl();      // anchor for the vector deleting destructor @ 0x826AF8B0
 
+    virtual s32 GetController(s32 aiSlot); // @ 0x82684388
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController); // @ 0x82684448
+    virtual void SetupLoadData(); // @ 0x826E35C0
+    virtual bool Attach(); // @ 0x826CB540
+    virtual void UpdateParams(f32 afTimeStep); // @ 0x826CB710
+    virtual void ProcessUpdate(); // @ 0x826E3B68
+
     // @ 0x82682CA8 (DWARF h:266). Forward to VehicleState::GetEngineComponentName.
     const char* GetEngineComponentName( BrnSound::Vehicles::VehicleState::EEngineComponentType aeComponentType );
     // @ 0x82682D10 (DWARF h:269). Read VehicleState's mEngineComponentKey[type].
-    Attribute::Key GetEngineComponentKey( BrnSound::Vehicles::VehicleState::EEngineComponentType aeComponentType );
+    u64 GetEngineComponentKey( BrnSound::Vehicles::VehicleState::EEngineComponentType aeComponentType );
     // @ 0x82682DA0 (DWARF h:260). Return the cached raw physics blob.
     const BrnSound::Vehicles::VehicleData* GetRawPhysicsData() const;
+    const PhysicsData& GetPhysicsData() const { return mProcessedPhysicsData; }
+    const Attrib::Gen::vehicleengine& GetVehicleEngineAttributes() const { return mVehicleEngineAttributes; }
+    BrnSound::Vehicles::VehicleState::AttachInfo GetAttachInfo() const { return mAttachInfo; }
 
     // @ 0x82684368 (DWARF h:218). Per-class static RTTI descriptor ("PhysicsControl").
     // 2-instruction leaf returning &sTypeInfo (function-local static ClassTypeInfo<
@@ -60,27 +130,17 @@ struct PhysicsControl : public BrnSound::Logic::BrnEffectControl
     // (ExplosionState::GetStaticTypeInfo precedent).
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
 
-    // ---- named scalar members (BY NAME) + opaque spans (X360 sizes) ----
-    // Base BrnEffectControl occupies +0x00..~+0x34.
-    u8    mau8BaseGap[4];                 // +0x08..+0x0B: base-region scratch (inlined base zero-init)
-    // +0x0C: the owning VehicleState. Typed BY NAME since the wave-5 (2026-08-25)
-    // VehicleState reconciliation (was `void*` + a byte-view walk in
-    // GetEngineComponentKey while VehicleState was un-homed).
-    BrnSound::Vehicles::VehicleState* mpVehicleState;
-    u8    mau8Gap0x10[12];                // +0x10..+0x1B: base-region scratch
-    f32   mfOscillator;                   // +0x1C
-    f32   mfAngularVelocityAccumulator;   // +0x20
-    u8    mau8Gap0x24[20];                // +0x24..+0x37: base-region scratch
-    const BrnSound::Vehicles::VehicleData* mpVehiclePhysicsData; // +0x38 (DWARF first own member)
-
-    // +0x40: PhysicsControl::PhysicsData mProcessedPhysicsData (un-homed aggregate; span).
-    u8    mau8ProcessedPhysicsData[0x1E8]; // +0x40..+0x227 (0x228 - 0x40)
-    // +0x228: Attrib::Gen::vehicleengine mVehicleEngineAttributes (un-homed; span).
-    u8    mau8VehicleEngineAttributes[0x20]; // +0x228..+0x247 (0x248 - 0x228)
-
-    // +0x248..+0x287: intro-reving / start-line block. Cleared, trailing flag @ +0x284 = 1.
-    static const u32 KU_INTRO_FLAG_REL = 0x284 - 0x248; // relative index of the flag byte (= 0x3C)
-    u8    maIntroRevingBlock[0x40];       // +0x248..+0x287
+    const BrnSound::Vehicles::VehicleData* mpVehiclePhysicsData;
+    PhysicsData mProcessedPhysicsData;
+    const BrnSound::Vehicles::Car3DControl* mp3dCarControl;
+    const BrnSound::Vehicles::Wheels::WheelControl* mpWheelControl;
+    Attrib::Gen::vehicleengine mVehicleEngineAttributes;
+    BrnSound::Vehicles::VehicleState::AttachInfo mAttachInfo;
+    CgsSound::Utils::DataPoint<f32> mfOscillator;
+    CgsSound::Utils::DataPoint<f32> mfAngularVelocityAccumulator;
+    eIntroRevingState meIntroRevingState;
+    EngRevDataSet mEngineDataSet;
+    CgsSound::Utils::InterpolateLine mEngineStartLineRPM;
 };
 
 } // namespace Engines

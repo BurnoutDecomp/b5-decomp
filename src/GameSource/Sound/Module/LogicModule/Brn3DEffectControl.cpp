@@ -1,4 +1,6 @@
 #include "GameSource/Sound/Module/LogicModule/Brn3DEffectControl.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 
 // =============================================================================
 // BrnSound::Logic::Brn3DEffectControl — out-of-line bodies.
@@ -19,6 +21,40 @@ namespace BrnSound
 {
 namespace Logic
 {
+
+Brn3DEffectControl::Brn3DEffectControl()
+    : CgsSound::Logic::Cgs3dEffectControl()
+    , mEngineDataAtrib(nullptr, nullptr)
+    , mDrawSphere()
+{
+}
+
+bool Brn3DEffectControl::Prepare(CgsSound::Logic::State* apState)
+{
+    if (!CgsSound::Logic::EffectBase::Prepare(apState))
+        return false;
+
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+    mDrawSphere = DrawSphere();
+    mEngineDataAtrib.ChangeWithDefault(lpModule->GetGlobalData().GlobalEngineData());
+    return true;
+}
+
+void Brn3DEffectControl::UpdateParams(f32 afDeltaTime)
+{
+    CgsSound::Logic::Cgs3dEffectControl::UpdateParams(afDeltaTime);
+    mDrawSphere.mfDurationVisible -= afDeltaTime;
+}
+
+void Brn3DEffectControl::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
+{
+    if (apMessageHeader && apMessageHeader->GetEventId() == 1)
+    {
+        mDrawSphere =
+            static_cast<const CgsSound::Io::Message<DrawSphere>*>(apMessageHeader)->mData;
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Brn3DEffectControl::`scalar deleting destructor'  @ 0x826C85F8

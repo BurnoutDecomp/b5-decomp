@@ -199,6 +199,14 @@ RwacCommandApplyReverbIRFile::RwacCommandApplyReverbIRFile(
 //   copy 2 words (tag + 1 operand) from arSource; assert count == 2, tag == 10.
 // ---------------------------------------------------------------------------
 RwacCommandGinsuAttachDataParameters::RwacCommandGinsuAttachDataParameters(
+        void* apRamData)
+{
+    muCommandType = E_RWAC_COMMAND_GINSU_ATTACH_DATA_PARAMETERS;
+    maOperand = reinterpret_cast<uintptr_t>(apRamData);
+    CGS_ASSERT(maOperand != 0, "mpvRamData");
+}
+
+RwacCommandGinsuAttachDataParameters::RwacCommandGinsuAttachDataParameters(
         u32 luCommandCount, const RwacCommandGinsuAttachDataParameters& arSource)
 {
     muCommandType = arSource.muCommandType; // stw r11,0(this)

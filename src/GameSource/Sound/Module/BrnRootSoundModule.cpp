@@ -738,14 +738,14 @@ namespace Module
     //       check), and the dump one-shot (X360 dword_82FFB814 +
     //       DebugAudioMemoryDump) is debug-page surface; documented, not run.
     //   [8] destroy the scratches (playback in, playback out, logic out).
-    // The trailing BrnUpdateSet is carried but unread, exactly as the console
-    // body never touches its copy.
+    // The root itself does not inspect BrnUpdateSet, but forwards it in r8 to
+    // SoundLogicModule::Update exactly as the console does.
     void RootSoundModule::Update(f32 af32GameTimeStep, f32 af32SimTimeStep,
                                  CgsModule::IOBufferStack* lpInputBufferStack,
                                  CgsModule::IOBufferStack* lpOutputBufferStack,
                                  Io::RootInputBuffer* lpSoundModuleInputBuffer,
                                  Io::RootOutputBuffer* lpSoundModuleOutputBuffer,
-                                 BrnUpdateSet /*leUpdateSet*/)
+                                 BrnUpdateSet leUpdateSet)
     {
         CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");
         CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");
@@ -763,7 +763,8 @@ namespace Module
 
         CgsDev::PerfMonCpu::StartMonitor(miLogicUpdate);
         mLogicModule.Update(af32GameTimeStep, af32SimTimeStep,
-                            lpSoundModuleInputBuffer, lpLogicOutputBuffer);
+                            lpSoundModuleInputBuffer, lpLogicOutputBuffer,
+                            leUpdateSet);
         CgsDev::PerfMonCpu::StopMonitor(miLogicUpdate);
 
         lpLogicOutputBuffer->LockForRead();

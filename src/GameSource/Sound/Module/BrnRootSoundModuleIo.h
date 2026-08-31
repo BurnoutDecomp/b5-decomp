@@ -12,6 +12,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // AudioCarDataLoadedEvent (queue element)
 #include "GameSource/Sound/Module/SharedIO/BrnSoundRootSharedIO.h"
 #include "GameSource/Replays/BrnReplayRequestInterface.h" // BrnReplays::ReplayIO::RequestInterface (the replay request member; phase C1)
+#include "GameSource/Director/Camera/Camera.h"            // BrnDirector::Camera::Camera (mDirectorCamera)
 
 // =============================================================================
 // BrnSound::Module::Io buffer accessors
@@ -226,7 +227,7 @@ namespace Io
         // RootInputBuffer::X). Sizes are the X360-attested copy widths where available,
         // else nominal (absorbed by pads).
         struct ReplayStatusInterface         { u8 mData[4]; };
-        struct DirectorCamera                { u8 mData[4]; };
+        typedef BrnDirector::Camera::Camera DirectorCamera;
         struct InputContactSpyQueueInterface { u32 mData; };
         // ⭐ TYPED (faithful-audio-engine phase C4; was opaque u8[4] + pad). Two-source
         // attestation, same arithmetic as GameActionQueue below: the console
@@ -279,6 +280,9 @@ namespace Io
         const OnlineScoringOutputInterface* GetOnlineScoringInterface() const;
         // X360 0x826945F8 -- the game-mode output interface @ +0xEBAC (folded bare class).
         const GameModeOutputInterface* GetGameModeInterface() const;
+        // X360 0x82694B38 -- the complete director camera copied into the
+        // sound root input at +0x2F20.
+        const DirectorCamera* GetDirectorCamera() const;
         // X360 0x82694748 -- the scoring output interface @ +0xDF80 (folded bare class).
         const ScoringOutputInterface* GetScoringInterface() const;
         // X360 0x82694E80 -- the deformation output interface @ +0xB490 (by reference, folded bare class).
@@ -341,7 +345,6 @@ namespace Io
         EActiveRaceCarIndex           mePlayerActiveRaceCarIndex;  // @ +0x02F10
         u8 maPad2[0x2F20 - (0x2F10 + sizeof(EActiveRaceCarIndex))];
         DirectorCamera                mDirectorCamera;             // @ +0x02F20
-        u8 maPad3[0x3080 - (0x2F20 + sizeof(DirectorCamera))];
         InputContactSpyQueueInterface mContactSpyQueueInterface;   // @ +0x03080
         GameActionQueue               mGameActionQueue;            // @ +0x03084 (carved from the old pad)
         // (no pad: GameActionQueue is sized 0x3084..0x6494 exactly, so mGameEventQueue @ +0x06494)
@@ -434,6 +437,7 @@ namespace Io
     {
         CgsModule::IOBuffer::Construct();
         mVehicleData.Clear();                       // @0x8227D550 -- the interface's own Clear
+        mDirectorCamera.Construct();                 // Camera::Construct(this+0x2F20)
         mGameActionQueue.Construct();               // VEQ Construct runs Clear() itself
         mGameEventQueue.Construct();                // the C4 fix: BridgeWorldToSound's append target
         mWorldLoadInterface.Construct();            // EventQueue<SoundWorldLoadEvent,25>

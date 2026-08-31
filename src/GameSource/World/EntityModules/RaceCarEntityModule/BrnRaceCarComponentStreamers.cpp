@@ -457,6 +457,11 @@ void RaceCarAudioStreamer::OnAssetLoaded( s32 liActiveRaceCar, const BrnResource
 {
     (void)lpEvent;
     mpStreamer->OnAudioLoaded( liActiveRaceCar );
+
+    RaceCarStreamingSound& lEntry = maEntries[liActiveRaceCar];
+    CGS_ASSERT( lEntry.meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACHED,
+                "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACHED" );
+    lEntry.meState = RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_LOADEDANDATTACHED;
 }
 
 void RaceCarAudioStreamer::OnAssetUnloading( s32 liActiveRaceCar )

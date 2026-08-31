@@ -115,6 +115,11 @@ PeakingIir2 *PeakingIir2::CreateInstance(PeakingIir2 *self)
     for (int i = 0; i < KI_IIR2_MAX_CHANNELS; ++i)
         Iir2::ClearBuffer(&self->mState[i]);
 
+    // PlugIn::Initialize<T>(self, 0x28) stores self+0x28 in the base attribute-table
+    // slot (ARTIST helper @0x82BA1540, stw r11,0xC). The three authored attributes are
+    // deliberately eight bytes apart: cutoff +0x28, gain +0x30, Q +0x38.
+    self->mBase.mpAttributes = &self->mfCutoffFreq;
+
     const f32 oldAttr = self->mBase.mDecaySamples;       // lfs 0x18
 
     self->mbActive = 0;                               // stw 0 -> 0xA0

@@ -119,6 +119,10 @@ public:
     MicrophoneSystem();
     void UpdateMicrophones(f32 lfTimeStep);
 
+    // DWARF CgsMicrophone.h:117. Inlined to the single miNumPlayers store in
+    // SoundLogicModule::UpdateMicrophones (ARTIST 0x826C9A00).
+    void SetNumberOfPlayers(s32 liNumberOfPlayers) { miNumPlayers = liNumberOfPlayers; }
+
     // @ 0x826804E0. Address-of accessor into the 2x2 microphone grid.
     Microphone* GetMicrophone(EMicPositions aePosition, EPlayer aePlayer);
 

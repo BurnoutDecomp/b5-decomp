@@ -24,6 +24,12 @@ namespace Gen
     {
     public:
         explicit globalenginedata(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+
+        void ChangeWithDefault(const RefSpec& lrRefSpec)
+        {
+            RefSpec& lrMutable = const_cast<RefSpec&>(lrRefSpec);
+            Change(const_cast<Collection*>(lrMutable.GetCollectionWithDefault()));
+        }
     };
 
     // Chain the Instance ctor, assert the collection's class is

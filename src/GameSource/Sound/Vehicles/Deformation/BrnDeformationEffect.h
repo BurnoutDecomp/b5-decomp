@@ -68,13 +68,6 @@ struct DeformationEffect : public BrnSound::Logic::BrnEffectObject
     virtual void        ProcessUpdate();                     // (DEFERRED body)
     virtual bool        Detach();                            // @ 0x826F39C8
 
-    // FLAG (un-homed back-reference): the Attach voice-creation gate reads a vehicle
-    // game-mode/context word the X360 reaches through r30(=this+0x88)+0x48 == this+0xD0
-    // (Hex-Rays *(a1+208)) -- outside this object's own layout, via an un-homed
-    // vehicle-state link. Exposed BY NAME so the (deferred) Attach gate is expressed
-    // rather than a raw offset fabricated; its own reconstruction is a separate slice.
-    s32 GetGameModeWord() const;
-
     // ---- members in DWARF order (BrnDeformationEffect.h:89..100). X360 offsets are
     //      facts (comments); not static_asserted across the 32/64 pointer boundary. ----
     CgsSound::Utils::DataPoint<bool>       mbDeforming;            // +0x38 (:89)

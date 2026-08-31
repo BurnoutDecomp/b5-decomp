@@ -2,6 +2,7 @@
 #define BRN_SOUND_VEHICLES_BRN_3D_CAR_POSITION_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"
 #include "GameSource/Sound/Module/LogicModule/Brn3DEffectControl.h"
 
 // =============================================================================
@@ -70,13 +71,28 @@ namespace BrnSound
 namespace Vehicles
 {
 
+namespace Engines { struct PhysicsControl; }
+
 // Brn3dCarPosition.h:34 (DWARF). Reuses the Brn3DEffectControl base by name; the
 // virtual deleting destructor @ 0x826CF838 runs the inherited teardown (incl. the
 // Attrib::Instance member via Attrib::Instance::~Instance).
 struct Car3DControl : public BrnSound::Logic::Brn3DEffectControl
 {
-    Car3DControl() {}
+    Car3DControl();
     virtual ~Car3DControl();
+
+    virtual s32 GetController(s32 aiIndex) override;
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController) override;
+    virtual bool Prepare(CgsSound::Logic::State* apState) override;
+    virtual bool Attach() override;
+    virtual void UpdateParams(f32 afDeltaTime) override;
+
+protected:
+    virtual Vector3 GetPositionOffset() const;
+
+    Vector3 mCarPosition;
+    Engines::PhysicsControl* mpPhysicsControl;
+    bool mbIsStereo;
 };
 
 // Brn3dCarPosition.h:84 (DWARF). Engine3dControl : Car3DControl.
@@ -84,6 +100,9 @@ struct Engine3dControl : public Car3DControl
 {
     Engine3dControl() {}
     virtual ~Engine3dControl();
+
+protected:
+    virtual Vector3 GetPositionOffset() const override;
 };
 
 // Brn3dCarPosition.h:94 (DWARF). Exhaust3dControl : Car3DControl.
@@ -91,6 +110,9 @@ struct Exhaust3dControl : public Car3DControl
 {
     Exhaust3dControl() {}
     virtual ~Exhaust3dControl();
+
+protected:
+    virtual Vector3 GetPositionOffset() const override;
 };
 
 // Brn3dCarPosition.h:104 (DWARF). LeftSide3dControl : Car3DControl.
@@ -98,6 +120,9 @@ struct LeftSide3dControl : public Car3DControl
 {
     LeftSide3dControl() {}
     virtual ~LeftSide3dControl();
+
+protected:
+    virtual Vector3 GetPositionOffset() const override;
 };
 
 // Brn3dCarPosition.h:114 (DWARF). RightSide3dControl : Car3DControl.
@@ -105,6 +130,9 @@ struct RightSide3dControl : public Car3DControl
 {
     RightSide3dControl() {}
     virtual ~RightSide3dControl();
+
+protected:
+    virtual Vector3 GetPositionOffset() const override;
 };
 
 } // namespace Vehicles

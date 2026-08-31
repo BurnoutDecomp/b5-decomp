@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnEngineControl.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::EngineControl -- out-of-line bodies.
@@ -54,6 +55,29 @@ f32 EngineControl::GetStartRPM() const
 // ---------------------------------------------------------------------------
 EngineControl::~EngineControl()
 {
+}
+
+s32 EngineControl::GetController(s32 aiSlot)
+{
+    static const s32 kaiControllers[] = { 0, 3, 2, 7, 1 };
+    return (aiSlot >= 0 && aiSlot < static_cast<s32>(sizeof(kaiControllers) / sizeof(kaiControllers[0])))
+        ? kaiControllers[aiSlot] : -1;
+}
+
+void EngineControl::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    switch (apController->GetEffectID())
+    {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    case 7:
+        return;
+    default:
+        CGS_ASSERT(false, "false");
+        return;
+    }
 }
 
 } // namespace Engines

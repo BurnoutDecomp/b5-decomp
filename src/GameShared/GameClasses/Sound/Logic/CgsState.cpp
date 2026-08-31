@@ -349,7 +349,10 @@ void State::UpdateParams(f32 af32DeltaTime)
     switch (mauUpdateState[0])
     {
     case E_INITIALIZE_CONTROLS:
+        mauUpdateState[1] = mauUpdateState[0];
+        mauUpdateState[0] = E_INITIALIZE_CONTROLS;
         mpCurrentEffect = mpHeadEffectControl;
+        mauUpdateState[1] = mauUpdateState[0];
         mauUpdateState[0] = E_INITIALIZE_CONTROLS_UPDATE;
         // fall through
     case E_INITIALIZE_CONTROLS_UPDATE:
@@ -357,17 +360,25 @@ void State::UpdateParams(f32 af32DeltaTime)
         if (mpCurrentEffect)
             return;
         mpCurrentEffect = mpHeadEffectObject;
+        mauUpdateState[1] = mauUpdateState[0];
         mauUpdateState[0] = E_INITIALIZE_EFFECTS;
         // fall through
     case E_INITIALIZE_EFFECTS:
     case E_INITIALIZE_EFFECTS_UPDATE:
+        mauUpdateState[1] = mauUpdateState[0];
         mauUpdateState[0] = E_INITIALIZE_EFFECTS_UPDATE;
         while (mpCurrentEffect && AttachEffect()) {}
         if (mpCurrentEffect)
             return;
+        mauUpdateState[1] = mauUpdateState[0];
         mauUpdateState[0] = E_UPDATE_ATTACHED;
         // fall through
     case E_UPDATE_ATTACHED:
+        // DataPoint<EUpdateState>::Set writes the old value to its history word
+        // even when the new value is unchanged. PlayerVehicleState relies on this
+        // to observe HasChangedTo(E_UPDATE_ATTACHED) for exactly one update.
+        mauUpdateState[1] = mauUpdateState[0];
+        mauUpdateState[0] = E_UPDATE_ATTACHED;
         for (EffectBase* lpEffect = mpHeadEffectControl; lpEffect; lpEffect = lpEffect->mpNextEffectBase)
         {
             lpEffect->UpdateTime(mfCurTime, af32DeltaTime);
@@ -381,6 +392,8 @@ void State::UpdateParams(f32 af32DeltaTime)
         break;
     case E_UPDATE_DETATCHING:
     {
+        mauUpdateState[1] = mauUpdateState[0];
+        mauUpdateState[0] = E_UPDATE_DETATCHING;
         bool lbStillDetaching = false;
         for (EffectBase* lpEffect = mpHeadEffectObject; lpEffect;
              lpEffect = lpEffect->mpNextEffectBase)
@@ -414,6 +427,8 @@ void State::UpdateParams(f32 af32DeltaTime)
         break;
     }
     default:
+        mauUpdateState[1] = mauUpdateState[0];
+        mauUpdateState[0] = E_UPDATE_UNATTACHED;
         break;
     }
 }

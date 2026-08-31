@@ -18,6 +18,7 @@
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"           // Io::PreUpdateOutput (the by-value pre-update block; phase C1)
 #include "GameSource/AttribSys/Generated/classes/burnoutglobaldata.h"
 #include "GameSource/Sound/Collision/BrnCollisionFrameInformation.h"
+#include "SharedClasses/BrnSharedConstants.h"                    // BrnUpdateSet
 
 // =============================================================================
 // BrnSound::Module::SoundLogicModule
@@ -142,6 +143,19 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
                         CgsModule::IOBuffer* apInputBuffer,
                         CgsModule::IOBuffer* apOutputBuffer) override;
 
+    // BrnSoundLogicModule.cpp:522 (DWARF). The Burnout update carries the
+    // frame's update-set in addition to the generic logic-engine arguments.
+    void Update(f32 af32GameDt, f32 af32SimDt,
+                CgsModule::IOBuffer* apInputBuffer,
+                CgsModule::IOBuffer* apOutputBuffer,
+                BrnUpdateSet aeUpdateSet);
+
+    // ARTIST 0x826978A0 / 0x826978B8. The derived attachment mirrors the
+    // generic engine buffer pointers into the Burnout-specific typed pair.
+    void AttachBuffers(CgsModule::IOBuffer* apInputBuffer,
+                       CgsModule::IOBuffer* apOutputBuffer) override;
+    void DetachBuffers() override;
+
     // The engine base sizes the LOGIC Environment's state-manager map from this
     // (Prepare's CreateEnvironment stage: {allocator, GetNumberOfStates()}); the 9
     // AddStateManager registrations in CreateStateManagers demand exactly the 9.
@@ -216,10 +230,19 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     void ProcessGuiEvents(const CgsModule::VariableEventQueue<18432, 16>* apGuiEvents);
 
 private:
+    // ARTIST 0x826C9860 / 0x826B0040. Populate the two listener matrices and
+    // the collision/world per-frame player snapshot before state-manager update.
+    void UpdateMicrophones(const Io::LogicInputBuffer* apLogicInputBuffer);
+    void UpdateFrameInformation(f32 af32SimDt,
+                                const Io::LogicInputBuffer* apLogicInputBuffer,
+                                BrnUpdateSet aeUpdateSet,
+                                EActiveRaceCarIndex aePlayerCarIndex);
+
     // ARTIST 0x826EC250. Broadcast each playback-freed stream voice id to the
     // three StreamingState instances as sound message 16.
     void ProcessStreamFreedQueue(
         const CgsSound::Playback::Module::Io::OutputBuffer::FreedBuffersArray& arFreedIds);
+    void ProcessCarDataLoadingQueue(const Io::AudioCarLoadedDataQueue& arEvents);
 
     // Members in DWARF source order (BrnSoundLogicModule.h:365-383). Only the two
     // touched members are real typed members; the rest of the class tail is omitted

@@ -10,6 +10,8 @@
 // pattern as physicsvehiclebaseattribs/debrisparams/surfacelist. Derives from Attrib::Instance.
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
 
+#include <cstring>
+
 namespace Attrib
 {
 namespace Gen
@@ -23,6 +25,22 @@ namespace Gen
         // consumer (VehicleAttribs::SetupAttribs @0x825F4CD8) reads the record through
         // `lwz +4` == mpAttributeData, which is what GetLayoutPointer returns.
         using Instance::GetLayoutPointer;
+
+        // The two authored GearUpRPM vec3s occupy +0x20/+0x30 in the generated
+        // layout (three gears apiece). VehicleState::UpdateParams reduces these
+        // six values to the audio graph's maximum RPM, exactly as ARTIST does.
+        f32 GetGearUpRPM(u32 auGear) const
+        {
+            if (auGear >= 6 || !GetLayoutPointer())
+                return 0.0f;
+            const u32 luGroup = auGear / 3;
+            const u32 luLane = auGear % 3;
+            f32 lfValue = 0.0f;
+            const u8* lpData = static_cast<const u8*>(GetLayoutPointer());
+            std::memcpy(&lfValue, lpData + 0x20 + luGroup * 0x10 + luLane * 4,
+                        sizeof(lfValue));
+            return lfValue;
+        }
     };
 
     // Chain the Instance ctor, assert the collection's class is

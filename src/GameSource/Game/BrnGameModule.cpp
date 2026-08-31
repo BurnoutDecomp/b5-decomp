@@ -1283,13 +1283,10 @@ namespace BrnGame
             BridgeWorldToSound(lpSoundInputBuffer, lpWorldOutputBuffer, leUpdateSet);
 
         // @0x823DCFA0/AC -- the director camera into the root input (+0x2F20 on console).
-        // FLAG width: mDirectorCamera is still the nominal 4-byte opaque model, so this
-        // install copies the model's span, not the console Camera::operator= full image;
-        // widen with the member when a PC reader appears (none exists yet).
+        // SetCameraInput invokes Camera::operator= on the complete by-value camera,
+        // matching the console root-input member at +0x2F20.
         if (lpDirectorOutputBuffer != 0)
-            lpSoundInputBuffer->SetCameraInput(
-                reinterpret_cast<const RootIn::DirectorCamera*>(
-                    lpDirectorOutputBuffer->GetCameraOutput()));
+            lpSoundInputBuffer->SetCameraInput(lpDirectorOutputBuffer->GetCameraOutput());
 
         // @0x823DCFBC -- the game-state bridge (this leg is its ONLY console caller).
         if (lpGameStateOutputBuffer != 0)

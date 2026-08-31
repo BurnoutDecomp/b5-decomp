@@ -1,4 +1,12 @@
 #include "GameSource/Sound/Vehicles/BrnPlayerVehicleState.h"
+#include "GameSource/Sound/Vehicles/BrnVehicleStateManager.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+#include "SharedClasses/DataLists/VehicleListEntry.h"
+#include "GameShared/GameClasses/Core/CgsID.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+
+#include <cstring>
 
 // =============================================================================
 // BrnSound::Vehicles::PlayerVehicleState -- out-of-line deleting-destructor body.
@@ -30,6 +38,103 @@ namespace Vehicles
 PlayerVehicleState::~PlayerVehicleState()
 {
     DestroyEffects();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*
+PlayerVehicleState::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
+        0x10000, "PlayerVehicleState", 0, &PlayerVehicleState::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::State* PlayerVehicleState::CreateObject(u32 /*auType*/)
+{
+    return new PlayerVehicleState();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*
+PlayerVehicleState::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+const char* PlayerVehicleState::GetTypeName() const
+{
+    return "PlayerVehicleState";
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const
+    gpPlayerVehicleStateReg = CgsSound::Logic::State::AddToClassTypeInfoArray(
+        PlayerVehicleState::GetStaticTypeInfo());
+
+void PlayerVehicleState::Attach(void* apvAttachment)
+{
+    CGS_ASSERT(apvAttachment != 0, "lpAttachInfo");
+    const AttachInfo* lpInfo = static_cast<const AttachInfo*>(apvAttachment);
+    mAttachInfo = *lpInfo;
+
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+    BrnSound::Module::Io::LogicInputBuffer* lpInput = lpModule->GetBrnInputStructure();
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpVehicles =
+        lpInput->GetVehicleInterface();
+    const EActiveRaceCarIndex leIndex = static_cast<EActiveRaceCarIndex>(mAttachInfo.muVehicleIndex);
+    const BrnPhysics::Vehicle::RaceCarState* lpState = lpVehicles->GetRaceCarState(leIndex);
+    CGS_ASSERT(lpState != 0, "lpRaceCarState");
+    if (lpState)
+        mVehiclePhysicsData = *lpState;
+
+    std::memset(mauVehicleBoostInfo, 0, sizeof(mauVehicleBoostInfo));
+    const BrnResource::VehicleListEntry* lpVehicle =
+        static_cast<const BrnResource::VehicleListEntry*>(mAttachInfo.mpVehicleAsset);
+    CGS_ASSERT(lpVehicle != 0 && lpVehicle->GetAttribCollectionKeyHash() != 0,
+               "mAttachInfo.mpVehicleAsset->GetAttribCollectionKey()");
+    if (lpVehicle)
+    {
+        CgsIDConvertToString(lpVehicle->GetEngineName(),
+                             mcaEngineComponentName[E_ENGINE]);
+        CgsIDConvertToString(lpVehicle->GetExhaustName(),
+                             mcaEngineComponentName[E_EXHAUST]);
+        const u64 luEngineKey = lpVehicle->GetEngineKey();
+        const u64 luExhaustKey = lpVehicle->GetExhaustKey();
+        std::memcpy(&mEngineComponentKey[E_ENGINE], &luEngineKey, sizeof(luEngineKey));
+        std::memcpy(&mEngineComponentKey[E_EXHAUST], &luExhaustKey, sizeof(luExhaustKey));
+    }
+
+    CgsSound::Logic::State::Attach(apvAttachment);
+}
+
+void PlayerVehicleState::UpdateParams(f32 af32DeltaTime)
+{
+    VehicleState::UpdateParams(af32DeltaTime);
+
+    if (mauUpdateState[0] == CgsSound::Logic::State::E_UPDATE_ATTACHED
+        && mauUpdateState[1] != mauUpdateState[0])
+    {
+        VehicleStateManager* lpManager =
+            static_cast<VehicleStateManager*>(GetStateManager());
+        lpManager->OnAssetLoaded(mAttachInfo.mAttachToken,
+                                 mAttachInfo.muVehicleIndex, true);
+    }
+
+    if (IsAttached()
+        && mauUpdateState[0] == CgsSound::Logic::State::E_UPDATE_ATTACHED
+        && !VehicleStateManager::IsDesiredEntryPlayer(mAttachInfo.muVehicleIndex))
+    {
+        Detach();
+    }
+}
+
+bool PlayerVehicleState::Detach()
+{
+    const AttachInfo lInfo = mAttachInfo;
+    if (!VehicleState::Detach())
+        return false;
+    VehicleStateManager* lpManager =
+        static_cast<VehicleStateManager*>(GetStateManager());
+    lpManager->OnAssetUnloaded(lInfo.mAttachToken, lInfo.muVehicleIndex);
+    return true;
 }
 
 } // namespace Vehicles

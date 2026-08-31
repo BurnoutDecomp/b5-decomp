@@ -20,6 +20,8 @@
 
 #include "GameSource/Sound/Vehicles/Deformation/BrnDeformationEffect.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h" // complete PhysicsControl for the AttachController downcast (BY NAME)
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 
 namespace BrnSound
 {
@@ -51,6 +53,18 @@ DeformationEffect::DeformationEffect()
     // mfAemsIntensity(+0x64)/mfTimeDeforming(+0x84)/mpPhysicsControl(+0x88): intentionally
     // UNINITIALIZED -- the X360 ctor writes nothing there (seeded on Attach/AttachController).
 {
+}
+
+DeformationEffect::~DeformationEffect()
+{
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
+DeformationEffect::GetTypeInfo() const
+{
+    // The original returns DeformationEffect::sTypeInfo.  The native build keeps
+    // the same descriptor in EffectObject's registration slot 15.
+    return CgsSound::Logic::EffectObject::GetRegisteredTypeInfo(15);
 }
 
 // ---------------------------------------------------------------------------
@@ -86,6 +100,13 @@ void DeformationEffect::SetupLoadData()
 // band is a mis-attached controller and trips the assert.
 static const s32 KI_CONTROLLER_CLASS_MASK = 0x7F0;
 
+s32 DeformationEffect::GetController(s32 aiSlot)
+{
+    // DecFIGS @ 0x823E44: slot zero requests PhysicsControl; every other slot
+    // terminates the controller walk.
+    return aiSlot == 0 ? 0 : -1;
+}
+
 // ---------------------------------------------------------------------------
 // DeformationEffect::AttachController  @ 0x82685740   (override of EffectBase::AttachController)
 //
@@ -105,7 +126,7 @@ static const s32 KI_CONTROLLER_CLASS_MASK = 0x7F0;
 // ---------------------------------------------------------------------------
 void DeformationEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    if ((apController->GetObjectId() & KI_CONTROLLER_CLASS_MASK) != 0)
+    if ((apController->GetId() & KI_CONTROLLER_CLASS_MASK) != 0)
     {
         CGS_ASSERT(false, "Cound't attach controller ");
     }
@@ -113,6 +134,86 @@ void DeformationEffect::AttachController(CgsSound::Logic::EffectBase* apControll
     {
         mpPhysicsControl = static_cast<BrnSound::Vehicles::Engines::PhysicsControl*>(apController);
     }
+}
+
+bool DeformationEffect::Attach()
+{
+    // ARTIST @ 0x826F37E8.  The base Attach sequence is inlined in the original.
+    CgsSound::Logic::EffectBase::Attach();
+
+    mFadeOut.mfElapsedTime = 0.0f;
+    mFadeOut.mfLength = 0.01f;
+    mFadeOut.mfStart = 1.0f;
+    mFadeOut.mfFinish = 1.0f;
+    mFadeOut.meCurveTypes = CgsSound::Utils::Curve::E_LINEAR;
+    mFadeOut.mfCurrentValue = 1.0f;
+    mFadeOut.mbComplete = false;
+    mfAemsIntensity = 0.0f;
+
+    const CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE leStage =
+        mPatchVoice.GetUpdateStage();
+    if (leStage == CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_IDLE ||
+        leStage == CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_FINISHED)
+    {
+        CgsSound::Logic::VoiceWrapper::CreateParams lParams;
+        lParams.mpLogicModule = GetLogicModule();
+        lParams.mFactoryName = static_cast<u32>(
+            CgsSound::Playback::AemsFactorySkName().GetValue());
+        lParams.mVoiceSpecName = static_cast<u32>(
+            CgsSound::Playback::Name::MakeHash("AEMS_crumple"));
+        lParams.mContentSpecName = static_cast<u32>(
+            CgsSound::Playback::Name::MakeHash("CrumplePatchBank.abi"));
+        lParams.mSlotName = static_cast<u32>(
+            CgsSound::Playback::Name::MakeHash("AEMS_Slot"));
+        lParams.mSendName = static_cast<u32>(
+            CgsSound::Playback::Name::MakeHash("Send01"));
+        lParams.mSubMixVoiceID = 1;
+        lParams.mReverbSendName = static_cast<u32>(
+            CgsSound::Playback::Name::MakeHash("ReverbSend"));
+        lParams.mReverbSubMixVoiceID = 2;
+        lParams.miSendIndex = 0;
+        mPatchVoice.Create(lParams);
+        mPatchVoice.Play(0);
+    }
+
+    mfTimeDeforming = 0.0f;
+    mDeformAmount.Flush(0.0f);
+    mDeformDeltaAverage.Flush(0.0f);
+    mDeformIntensityLagged.Flush(0.0f);
+    mbDeforming.Flush(false);
+    return true;
+}
+
+void DeformationEffect::UpdateParams(f32 /*afTimeStep*/)
+{
+    // The full deformation-sensor accumulation is independent of the vehicle
+    // engine/road voice path. Preserve the original AEMS output writes using the
+    // current value until that physics producer is homed.
+    static const u32 luIntensity = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("AEMS_intensity"));
+    static const u32 luVolume = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("AEMS_volume"));
+    static const u32 luPitch = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("AEMS_pitch"));
+    static const u32 luAzimuth = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("AEMS_azimuth"));
+    static const u32 luSend01 = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("Send01"));
+    static const u32 luReverbSend = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("ReverbSend"));
+
+    mPatchVoice.SetParameter(2, mfAemsIntensity, &luIntensity);
+    mPatchVoice.SetParameter(0, GetMixerOutputValue(0, 0), &luVolume);
+    mPatchVoice.SetParameter(3, GetMixerOutputValue(1, 3), &luAzimuth);
+    mPatchVoice.SetParameter(1, GetMixerOutputValue(2, 1), &luPitch);
+    mPatchVoice.SetGain(0, 1.0f, &luSend01);
+    mPatchVoice.SetGain(1, 0.0f, &luReverbSend);
+}
+
+void DeformationEffect::ProcessUpdate()
+{
+    // DecFIGS @ 0x8A206C is this exact tail-forwarder.
+    mPatchVoice.Update();
 }
 
 // ---------------------------------------------------------------------------

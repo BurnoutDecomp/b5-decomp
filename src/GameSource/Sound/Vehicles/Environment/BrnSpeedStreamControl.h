@@ -2,7 +2,7 @@
 #define BRN_SOUND_VEHICLES_ENVIRONMENT_BRN_SPEED_STREAM_CONTROL_H
 
 #include "types.hpp"
-#include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"
+#include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Environment::SpeedStreamControl
@@ -62,7 +62,7 @@ namespace Environment
 // Reuses the BrnEffectObject dual base by name; the virtual `vector deleting
 // destructor' @ 0x826BA0A0 runs the inherited BrnEffectObject teardown (both vptr
 // settles + the attach/detach/resources-ready member clears).
-struct SpeedStreamControl : public BrnSound::Logic::BrnEffectObject
+struct SpeedStreamControl : public BrnSound::Logic::BrnEffectControl
 {
     SpeedStreamControl() {}
     virtual ~SpeedStreamControl();

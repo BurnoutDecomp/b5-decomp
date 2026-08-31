@@ -61,7 +61,7 @@ struct Cgs3dEffectControl : public CgsSound::Logic::EffectControl
     struct DebugRendererMessage
     {
         DebugRendererMessage()               // Cgs3dEffectControl.h:158
-            : mfYOffset(0.0f), mfRadius(0.0f), mbEnable(false) {}
+            : mfYOffset(2.0f), mfRadius(0.5f), mbEnable(false) {}
         f32  mfYOffset;                      // Cgs3dEffectControl.h:164
         f32  mfRadius;                       // Cgs3dEffectControl.h:165
         bool mbEnable;                       // Cgs3dEffectControl.h:166

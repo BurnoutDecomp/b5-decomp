@@ -488,6 +488,45 @@ void BridgeRaceCarEntityInfoToOutput_PostPhysics(
         *lpRaceCarOutput_PostPhysics->GetGameEventQueue());
 }
 
+// ----------------------------------------------------------------------------
+// BridgeRaceCarEntityInfoToOutput_PreScene  @ 0x827AF318
+//
+// The race-car audio streamer publishes load/unload requests into its pre-scene
+// output queue. The console appends that queue to the world output here; the
+// subsequent World-to-Sound bridge carries it into VehicleStateManager.
+//
+// The original also posts a one-byte game event when a rival update is requested.
+// Its final loop posts per-car event 592 from eight trailing bools which are not yet
+// represented in OutputBuffer_PreScene's host layout, so that independent leg remains
+// parked rather than reaching through the object by a console offset.
+// [FLAG] the console CPU monitor surrounding this bridge is not modelled.
+// ----------------------------------------------------------------------------
+void BridgeRaceCarEntityInfoToOutput_PreScene(
+    void* lpWorldModule,
+    BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+    const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutput_PreScene)
+{
+    (void)lpWorldModule;
+
+    CGS_ASSERT(lpOutputBuffer != 0, "lpWorldOutput != NULL");
+    CGS_ASSERT(lpRaceCarOutput_PreScene != 0, "lpRaceCarOutputBuffer_PreScene != NULL");
+
+    if (lpOutputBuffer == 0 || lpRaceCarOutput_PreScene == 0)
+    {
+        return;
+    }
+
+    if (lpRaceCarOutput_PreScene->IsRequestingRivalUpdate())
+    {
+        u8 lRivalUpdateEvent;
+        lpOutputBuffer->GetGameEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRivalUpdateEvent), 12, 1);
+    }
+
+    lpOutputBuffer->GetAudioCarLoadedDataQueue()->Append(
+        *lpRaceCarOutput_PreScene->GetAudioCarLoadedDataQueue());
+}
+
 
 // ----------------------------------------------------------------------------
 // BridgeWorldResourceRequestsToOutput_Prepare  @ 0x827ADA28

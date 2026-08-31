@@ -38,7 +38,10 @@ struct IStreamUser
     virtual const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const = 0;
     virtual void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
                                    f32 afGain, f32 afElapsedTime) = 0;
-    virtual void StreamStopped() = 0;
+    // DecFIGS @ 0x823288: the interface default is an empty hook.  Leaves that
+    // need completion bookkeeping override it (SpeechEffect/MusicStream); the
+    // vehicle stream effects use the inherited default.
+    virtual void StreamStopped() {}
 };
 
 } // namespace Streaming

@@ -30,7 +30,9 @@ namespace Gen
 
         const char* EmitterName() const
         {
-            return static_cast<const Layout*>(mpAttributeData)->mpEmitterName;
+            const u32 luAddress =
+                static_cast<const Layout*>(mpAttributeData)->muEmitterName;
+            return reinterpret_cast<const char*>(static_cast<uintptr_t>(luAddress));
         }
         bool IsStream() const
         {
@@ -42,14 +44,20 @@ namespace Gen
         }
 
     private:
-        // libapt2/AttribSys native-8 data keeps Text as a native pointer.  The
-        // two generated Bool fields follow it in source declaration order.
+        // The ARTIST generated data area keeps its console layout on PC: Text
+        // is a four-byte resolved pointer slot followed by the two Bool fields.
+        // Vault::Initialize resolves the slot into the low-4-GB resource arena;
+        // widen only after reading it, just like the vehicleengine Text fields.
+        // Reading a native pointer here consumes the Bool bytes as its high
+        // word (for example 0x00000100xxxxxxxx when Doppler is enabled).
         struct Layout
         {
-            const char* mpEmitterName;
+            u32 muEmitterName;
             bool mbIsStream;
             bool mbAffectedByDoppler;
+            u8 mau8Padding[2];
         };
+        static_assert(sizeof(Layout) == 8, "ARTIST worldemitter data layout");
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::worldemitter,

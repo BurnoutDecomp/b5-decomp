@@ -2,7 +2,7 @@
 #define BRN_SOUND_VEHICLES_PLAYER_VEHICLE_STATE_H
 
 #include "types.hpp"
-#include "GameSource/Sound/Module/LogicModule/BrnState.h"
+#include "GameSource/Sound/Vehicles/BrnVehicleState.h"
 
 // =============================================================================
 // BrnSound::Vehicles::PlayerVehicleState
@@ -28,7 +28,7 @@ namespace BrnSound
 namespace Vehicles
 {
 
-struct PlayerVehicleState : public BrnSound::Logic::BrnState
+struct PlayerVehicleState : public BrnSound::Vehicles::VehicleState
 {
     PlayerVehicleState() {}
 
@@ -42,6 +42,12 @@ struct PlayerVehicleState : public BrnSound::Logic::BrnState
     // -- per-class RTTI. DEFERRED bodies (declared for the state vtable shape).
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetStaticTypeInfo();
+    static CgsSound::Logic::State* CreateObject(u32 auType);
+
+    virtual void Attach(void* apvAttachment);
+    virtual void UpdateParams(f32 af32DeltaTime);
+    virtual bool Detach();
 };
 
 } // namespace Vehicles

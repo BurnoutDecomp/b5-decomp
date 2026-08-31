@@ -1,4 +1,10 @@
 #include "GameSource/Sound/Vehicles/Brn3dCarPosition.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsEnvironment.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "rw/math/vpu/matrix44affine_operation.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Car3DControl (+ Engine/Exhaust/LeftSide/RightSide3dControl)
@@ -29,6 +35,99 @@ namespace BrnSound
 {
 namespace Vehicles
 {
+
+Car3DControl::Car3DControl()
+    : BrnSound::Logic::Brn3DEffectControl()
+    , mpPhysicsControl(nullptr)
+{
+}
+
+s32 Car3DControl::GetController(s32 aiIndex)
+{
+    // ARTIST uses the ICF-folded MusicEffect::GetController body @ 0x82685D38.
+    return aiIndex == 0 ? 0 : -1;
+}
+
+void Car3DControl::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    CGS_ASSERT(apController != nullptr, "lpEffectControl");
+    if (!apController)
+        return;
+
+    CGS_ASSERT(apController->GetEffectID() == 0, "Cound't attach controller ");
+    if (apController->GetEffectID() == 0)
+        mpPhysicsControl = static_cast<Engines::PhysicsControl*>(apController);
+}
+
+bool Car3DControl::Prepare(CgsSound::Logic::State* apState)
+{
+    if (!BrnSound::Logic::Brn3DEffectControl::Prepare(apState))
+        return false;
+
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+    CgsSound::Playback::Environment* lpEnvironment =
+        lpModule->GetPlaybackModule().GetEnvironment();
+    CGS_ASSERT(lpEnvironment != nullptr, "mpObject");
+    mbIsStereo = lpEnvironment &&
+        lpEnvironment->GetAudioMode() ==
+            CgsSound::Playback::Environment::E_AUDIO_MODE_STEREO;
+    return true;
+}
+
+bool Car3DControl::Attach()
+{
+    if (!CgsSound::Logic::EffectBase::Attach())
+        return false;
+    AttachEmitterPosition(&mCarPosition);
+    return true;
+}
+
+void Car3DControl::UpdateParams(f32 afDeltaTime)
+{
+    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    if (!mpPhysicsControl)
+        return;
+
+    const BrnSound::Vehicles::VehicleData* lpVehiclePhysicsData =
+        mpPhysicsControl->GetRawPhysicsData();
+    CGS_ASSERT(lpVehiclePhysicsData != nullptr, "mpVehiclePhysicsData");
+    if (!lpVehiclePhysicsData)
+        return;
+
+    mCarPosition = rw::math::vpu::TransformPoint(
+        lpVehiclePhysicsData->mTransform, GetPositionOffset());
+    BrnSound::Logic::Brn3DEffectControl::UpdateParams(afDeltaTime);
+}
+
+Vector3 Car3DControl::GetPositionOffset() const
+{
+    Vector3 lOffset;
+    lOffset.SetZero();
+    return lOffset;
+}
+
+Vector3 Engine3dControl::GetPositionOffset() const
+{
+    // Both ARTIST constants (external and in-car) are zero vectors.
+    return Car3DControl::GetPositionOffset();
+}
+
+Vector3 Exhaust3dControl::GetPositionOffset() const
+{
+    // K_EXHAUST_POSITION_OFFSET and the stereo in-car alternative are zero.
+    return Car3DControl::GetPositionOffset();
+}
+
+Vector3 LeftSide3dControl::GetPositionOffset() const
+{
+    return Car3DControl::GetPositionOffset();
+}
+
+Vector3 RightSide3dControl::GetPositionOffset() const
+{
+    return Car3DControl::GetPositionOffset();
+}
 
 // ~Car3DControl  @ 0x826CF838  (the X360 `scalar deleting destructor')
 Car3DControl::~Car3DControl()

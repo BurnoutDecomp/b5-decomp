@@ -108,6 +108,8 @@ HighShelfIir2 *HighShelfIir2::CreateInstance(HighShelfIir2 *self)
     for (int i = 0; i < KI_IIR2_MAX_CHANNELS; ++i)
         Iir2::ClearBuffer(&self->mState[i]);
 
+    self->mBase.mpAttributes = &self->mfCutoffFreq;   // Initialize<T>(self, 0x28)
+
     const f32 oldAttr = self->mBase.mDecaySamples;       // lfs 0x18
 
     self->mbActive = 0;                               // stw 0 -> 0x98

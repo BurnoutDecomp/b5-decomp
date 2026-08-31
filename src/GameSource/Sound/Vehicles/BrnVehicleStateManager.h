@@ -2,6 +2,9 @@
 #define BRN_SOUND_VEHICLES_VEHICLE_STATE_MANAGER_H
 
 #include "types.hpp"
+#include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"
+
+namespace BrnResource { struct VehicleListEntry; }
 
 // =============================================================================
 // BrnSound::Vehicles::VehicleStateManager
@@ -23,21 +26,39 @@ namespace BrnSound
 {
 namespace Vehicles
 {
-namespace VehicleStateManager
+class VehicleStateManager : public BrnSound::Logic::BrnStateManager
 {
+public:
 
 // BrnVehicleStateManager.h (assert-cited region). Number of active race-car slots;
 // the asm bounds-checks the index against this (cmpwi r31, 8 ; the assert text is
 // "liVehicleIndex >= 0 && liVehicleIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT").
-const s32 E_ACTIVE_RACE_CAR_INDEX_COUNT = 8;
+    static const s32 KI_ACTIVE_RACE_CAR_COUNT = 8;
 
 // BrnVehicleStateManager.h:143 (assert site). Map an active-race-car index to its
 // AI engine-voice assignment via the static lookup table. Asserts the index is in
 // [0, E_ACTIVE_RACE_CAR_INDEX_COUNT). Returns the assigned voice (a u8 from the
 // table). @ 0x82682050.
-u8 GetAIEngineAssignment( u32 luVehicleIndex );
+    static u8 GetAIEngineAssignment( u32 luVehicleIndex );
+    static bool AddEntry(CgsID lAssetId,
+                         const BrnResource::VehicleListEntry* lpVehicleEntry,
+                         u64 luUserId, bool lbIsPlayer);
+    static bool RemoveEntry(CgsID lAssetId, u64 luUserId);
+    static const BrnResource::VehicleListEntry* GetLoadedVehicleEntry(u32 luUserId);
+    static CgsID GetLoadedAssetId(u32 luUserId);
+    static bool IsLoadedEntryPlayer(u32 luUserId);
+    static bool IsEntryAdded(u32 luUserId);
+    static bool IsDesiredEntryPlayer(u32 luUserId);
+    static bool IsAssetAttached(u32 luUserId);
 
-} // namespace VehicleStateManager
+    void OnAssetLoaded(CgsID lAssetId, u32 luUserId, bool lbIsPlayer);
+    void OnAssetUnloaded(CgsID lAssetId, u32 luUserId);
+    void AddRegistry(const char* lpcEngineName, bool lbUseFilePath); // @ 0x826CA070
+
+private:
+    static u8 GenerateAIEngineAssignment(const BrnResource::VehicleListEntry* lpVehicleEntry,
+                                         u32 luVehicleIndex);
+};
 } // namespace Vehicles
 } // namespace BrnSound
 

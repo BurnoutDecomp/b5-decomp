@@ -161,8 +161,13 @@ public:
     virtual bool DoPlay(const Slot& arSlot, PlayerVoice& arVoice, Content& arContent,
                         u32 au32Param) = 0;                     // slot 0 (DWARF :101)
     virtual bool DoStop(const Slot& arSlot, PlayerVoice& arVoice, Content& arContent) = 0; // slot 1 (:110)
-    virtual bool DoUpdatePlaying(System* apSystem, const Slot& arSlot, PlayerVoice& arVoice,
-                                 Content& arContent, f32 af32Dt) = 0; // slot 2 (:121)
+    // GinsuSlot's DecFIGS class shape overrides only DoPlay/DoStop.  The base
+    // inline therefore keeps a continuously synthesised slot playing unless a
+    // concrete implementation (ordinary streamed RWAC/AEMS/splicer) supplies a
+    // completion query.
+    virtual bool DoUpdatePlaying(System* /*apSystem*/, const Slot& /*arSlot*/,
+                                 PlayerVoice& /*arVoice*/, Content& /*arContent*/,
+                                 f32 /*af32Dt*/) { return true; } // slot 2 (:121)
     virtual void DoPostAttach(const Slot& arSlot, Voice& arVoice, Content& arContent) {} // slot 3 (:130)
     virtual void DoPreDetach(const Slot& arSlot, Voice& arVoice, Content& arContent) {}  // slot 4 (:136)
 };
