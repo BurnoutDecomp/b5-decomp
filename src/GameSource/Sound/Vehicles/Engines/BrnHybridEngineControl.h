@@ -46,6 +46,7 @@ struct HybridEngineControl : public HybridExhaustControl
     // frame, sampling the paired exhaust control's current Ginsu RPM
     // (mpHybridExhaustControl->GetGinsuRPM(), the inlined `lfs 0x8C(control)`).
     virtual void UpdateGinsuRPM();
+    virtual bool Attach(); // @ 0x82699BB0
 
     virtual s32 GetController(s32 aiSlot); // @ 0x82684AB0
     virtual void AttachController(CgsSound::Logic::EffectBase* apController); // @ 0x82684B20

@@ -18,6 +18,7 @@
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"           // Io::PreUpdateOutput (the by-value pre-update block; phase C1)
 #include "GameSource/AttribSys/Generated/classes/burnoutglobaldata.h"
 #include "GameSource/Sound/Collision/BrnCollisionFrameInformation.h"
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"
 #include "SharedClasses/BrnSharedConstants.h"                    // BrnUpdateSet
 
 // =============================================================================
@@ -213,6 +214,11 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     const Attrib::Gen::burnoutglobaldata& GetGlobalData() const { return mBurnoutGlobalData; }
     BrnSound::Logic::FrameInformation& GetFrameInformation() { return mFrameInformation; }
     const BrnSound::Logic::FrameInformation& GetFrameInformation() const { return mFrameInformation; }
+    CgsNumeric::Random& GetRandomGenerator() { return mRandomGenerator; }
+    const Attrib::RefSpec& GetSampleTags(u32 auTag) const
+    {
+        return mBurnoutGlobalData.SampleTags(auTag);
+    }
 
     // The freed-ids list, by reference (the root Update's append target).
     CgsSound::Playback::Module::Io::OutputBuffer::FreedBuffersArray& GetFreedStreamBufferIds()
@@ -269,6 +275,7 @@ private:
     // ResourcesAreReady once the registrar completes the load.
     Attrib::Gen::burnoutglobaldata mBurnoutGlobalData;
     BrnSound::Logic::FrameInformation mFrameInformation;
+    CgsNumeric::Random mRandomGenerator;
 
     // (phase B5: the by-value lEnvironment member is RETIRED -- the LOGIC Environment is
     // the ENGINE base's mEnvironment @+0x2950, reached via GetEnvironment().)

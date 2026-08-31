@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"   // committed BrnEffectControl dual base (BY NAME)
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Wheels::WheelControl  (+ leaf AIWheelControl)
@@ -15,16 +16,10 @@
 // dual-vptr pair -- primary EffectControl @ this+0, IResourceRequester sub-object
 // @ this+4 -- plus a third IShiftingActivator sub-object vptr @ +0x38).
 //
-// FLAG (MINIMAL home): this slice bodies WheelControl's own vector deleting
-// destructor anchor (@ 0x826D00A0), AIWheelControl's ctor (@ 0x826E55A8), and its
-// vector deleting destructor anchor (@ 0x826E5608). AIWheelControl adds NO data
-// members over WheelControl (DWARF BrnWheelControl.h:129 -- only the RTTI factory +
-// overrides). WheelControl's full member surface (WheelSide[2], the road-noise/skid
-// effect sub-objects, the IShiftingActivator interface) is UN-HOMED and DEFERRED;
-// only the base spine needed to construct/destroy the leaves is modelled here,
-// mirroring the committed ClutchControl / TrafficControl minimal-home convention.
-// The tri-base vptr installs are produced STRUCTURALLY by the WheelControl base +
-// the virtual dtors, not by hand.
+// This home still defers the road-noise/skid producer surface, but materialises the
+// DWARF-named in-air modifiers consumed directly by EngineControl. Keeping that
+// boundary typed prevents the engine selector from silently bypassing authored
+// in-air RPM/throttle/volume data while the rest of WheelControl is recovered.
 //
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): members are pinned BY NAME + SEQUENCE;
 // absolute offsets are NOT static_asserted across pointer members on the 64-bit host.
@@ -38,13 +33,38 @@ namespace Wheels
 {
 
 // BrnWheelControl.h (DWARF). The wheel/skid sound control base. Reuses the committed
-// BrnEffectControl dual base BY NAME. Only the polymorphic surface needed to
-// construct/destroy the AIWheelControl leaf is materialised (full member set
-// DEFERRED -- see FLAG).
+// BrnEffectControl dual base BY NAME.
 struct WheelControl : public BrnSound::Logic::BrnEffectControl
 {
-    WheelControl() {}
+    enum EInAirRevState
+    {
+        E_IN_AIR_REV_STATE_NONE = 0,
+        E_IN_AIR_REV_STATE_ASCENDING = 1,
+        E_IN_AIR_REV_STATE_DESCENDING = 2,
+    };
+
+    WheelControl()
+        : meInAirRevState(E_IN_AIR_REV_STATE_NONE)
+        , mfAudioRPM(0.0f)
+        , mInAirRevThrottlePath()
+        , mInAirRevRpmInterpolate()
+        , mInAirRevVolumeInterpolate()
+    {
+    }
     virtual ~WheelControl();   // anchor for the vector deleting destructor @ 0x826D00A0
+
+    bool IsActive() const { return meInAirRevState != E_IN_AIR_REV_STATE_NONE; }
+    f32 GetAudioRPM() const { return mfAudioRPM; }
+    f32 GetModifiedRpm() const { return mInAirRevRpmInterpolate.GetValueFloat(); }
+    f32 GetModifiedThrottle() const { return mInAirRevThrottlePath.mfCurrentValue; }
+    f32 GetModifiedVolume() const { return mInAirRevVolumeInterpolate.GetValueFloat(); }
+
+private:
+    EInAirRevState meInAirRevState;
+    f32 mfAudioRPM;
+    CgsSound::Utils::PathLine<3u> mInAirRevThrottlePath;
+    CgsSound::Utils::InterpolateLine mInAirRevRpmInterpolate;
+    CgsSound::Utils::InterpolateLine mInAirRevVolumeInterpolate;
 };
 
 // BrnWheelControl.h:129 (DWARF): AIWheelControl : public WheelControl. Adds no data

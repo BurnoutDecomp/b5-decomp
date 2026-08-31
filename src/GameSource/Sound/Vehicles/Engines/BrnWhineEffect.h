@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (BY NAME)
+#include "GameShared/GameClasses/Sound/Logic/CgsVoiceWrapper.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::WhineEffect
@@ -11,9 +12,7 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Engine-whine sound EFFECT OBJECT.
 // Reuses the committed BrnEffectObject dual base BY NAME.
 //
-// FLAG (MINIMAL home): deleting-destructor-only slice. The full DWARF surface
-// (mWhineVoice VoiceWrapper, mpPhysicsControl, mfWhineVolume, RTTI/Attach/UpdateParams)
-// is DEFERRED. Only the base (BY NAME) is materialised.
+namespace CgsSound { namespace Io { class MessageHeader; } }
 // =============================================================================
 
 namespace BrnSound
@@ -23,10 +22,26 @@ namespace Vehicles
 namespace Engines
 {
 
+struct PhysicsControl;
+
 struct WhineEffect : public BrnSound::Logic::BrnEffectObject
 {
-    WhineEffect() {}
-    virtual ~WhineEffect();     // anchor for the scalar deleting destructor @ 0x826E49A8
+    WhineEffect();
+    virtual ~WhineEffect();
+
+    virtual const char* GetTypeName() const;
+    virtual s32 GetController(s32 aiSlot);
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController);
+    virtual void SetupLoadData();
+    virtual bool Attach();
+    virtual void UpdateParams(f32 afTimeStep);
+    virtual void ProcessUpdate();
+    virtual bool Detach();
+    virtual void Notify(const CgsSound::Io::MessageHeader* apMessage);
+
+    CgsSound::Logic::VoiceWrapper mWhineVoice;
+    PhysicsControl* mpPhysicsControl;
+    f32 mfWhineVolume;
 };
 
 } // namespace Engines

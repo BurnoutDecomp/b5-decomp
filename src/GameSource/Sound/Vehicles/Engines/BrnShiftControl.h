@@ -2,31 +2,9 @@
 #define BRN_SOUND_VEHICLES_ENGINES_SHIFT_CONTROL_H
 
 #include "types.hpp"
-#include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"   // committed BrnEffectControl dual base (BY NAME)
-#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"            // CgsSound::Utils::InterpolateLine (BY NAME)
-
-// =============================================================================
-// BrnSound::Vehicles::Engines::ShiftControl
-//   GameSource/Sound/Vehicles/Engines/BrnShiftControl.{h,cpp}  (DWARF home)
-//
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity; store-for-store against
-// the ctor asm @ 0x826AF010). ShiftControl is the gear-shift sound CONTROL (DWARF
-// BrnShiftControl.h:23: ShiftControl : public BrnEffectControl). It drives per-shift
-// LFO decay + throttle/RPM/volume interpolation ramps.
-//
-// InterpolateLine stride verified = 0x1C (28 bytes): the 5 mbComplete stb-1 markers
-// @0x90/0xAC/0xD4/0xF0/0x10C give block starts 0x78/0x94/0xBC/0xD8/0xF4.
-//
-// FLAG (opaque shiftpattern span): mShiftingPatternData is DWARF-typed Attrib::Gen::
-// shiftpattern, which has NO homed type in src (not in AttribSys/Generated). Per the
-// anti-fabrication rule it is modelled as an opaque byte span (documented X360 size)
-// rather than a fabricated Attrib::Instance; the ctor zeroes it (the X360 constructs it
-// with (0,0), i.e. an empty/unbound attribute instance). Named scalar members + the
-// InterpolateLine ramps are pinned BY NAME. mpShiftingActivator points at the un-homed
-// IShiftingActivator interface (opaque forward). Absolute offsets are NOT static_asserted.
-//
-// LAYOUT NOTE (X360 32-bit vs host 64-bit): members are pinned BY NAME + SEQUENCE.
-// =============================================================================
+#include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
+#include "GameSource/AttribSys/Generated/classes/shiftpattern.h"
 
 namespace BrnSound
 {
@@ -35,62 +13,113 @@ namespace Vehicles
 namespace Engines
 {
 
-// The control siblings the back-pointers reference (DWARF BrnShiftControl.h:199-201;
-// full homes in their own headers -- pointers only, so fwd-decls suffice).
 struct PhysicsControl;
 struct EngineControl;
 struct HybridExhaustControl;
 
 struct ShiftControl : public BrnSound::Logic::BrnEffectControl
 {
-    // DWARF BrnShiftControl.h:25. The shift stage the sound state machine tracks.
     enum EShiftStage
     {
         E_SHFT_NONE = 0,
+        E_SHFT_UP_DISENGAGE = 1,
+        E_SHFT_UP_ENGAGING = 2,
+        E_SHFT_UP_LFO = 3,
+        E_SHFT_DOWN_DISENGAGE = 4,
+        E_SHFT_DOWN_ENGAGING_RISE = 5,
+        E_SHFT_DOWN_ENGAGING_FALL = 6,
+        E_SHFT_DOWN_ENGAGING_REATTACH = 7,
     };
 
-    // DWARF BrnShiftControl.h:37. The post-shift LFO variant.
     enum EPostShiftLFO
     {
         E_SHIFT_LFO_NONE = 0,
+        E_SHIFT_LFO_ON = 1,
     };
 
-    // DWARF BrnShiftControl.h:42. The shift-activator interface (un-homed; opaque).
-    struct IShiftingActivator;
+    struct IShiftingActivator
+    {
+        virtual ~IShiftingActivator() {}
+        virtual f32 GetStartRPM() = 0;
+        virtual f32 GetTargetRPM() = 0;
+        virtual f32 GetRiseFromRPM() = 0;
+    };
 
-    ShiftControl();             // @ 0x826AF010
-    virtual ~ShiftControl();    // anchor for the scalar deleting destructor @ 0x826AF200
+    ShiftControl();
+    virtual ~ShiftControl();
 
-    // ---- members in DWARF order (offsets are X360 facts, not asserted on host) ----
-    // The control back-pointers, typed per the DWARF (BrnShiftControl.h:62-64;
-    // 2026-08-25 wave 6 -- were untyped void*). Held as fwd-declared pointers only.
-    PhysicsControl*       mpPhysicsControl;   // +0x38
+    virtual s32 GetController(s32 aiSlot);
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController);
+    virtual bool Attach();
+    virtual void SetupLoadData();
+    virtual void UpdateParams(f32 afTimeStep);
+    virtual void ProcessUpdate() {}
+
+    static CgsSound::Logic::EffectControl* CreateObject(u32 luType);
+
+    bool IsActive() const
+    {
+        return meShiftState != E_SHFT_NONE;
+    }
+    bool IsUpshifting() const
+    {
+        return meShiftState == E_SHFT_UP_DISENGAGE || meShiftState == E_SHFT_UP_ENGAGING;
+    }
+    bool IsDownShifting() const
+    {
+        return meShiftState >= E_SHFT_DOWN_DISENGAGE &&
+               meShiftState <= E_SHFT_DOWN_ENGAGING_REATTACH;
+    }
+    f32 GetShiftingRPM() const { return mInterpShiftRPM.GetValueFloat(); }
+    f32 GetShiftingThrottle() const { return mInterpShiftThrottle.GetValueFloat(); }
+    f32 GetShiftingVolume() const { return mInterpShiftVol.GetValueFloat(); }
+    EShiftStage GetShiftingState() const { return meShiftState; }
+    EShiftStage GetShiftingStateChange() const { return meShiftStageChanged; }
+    f32 GetVolLFO_Amplitude() const { return mfVOL_LFO_AMP; }
+    f32 GetVolLFO_Frequency() const { return mfVOL_LFO_FRQ; }
+    f32 GetRPM_LFO_Amplitude() const { return mfRPM_LFO_AMP; }
+    f32 GetRPM_LFO_Frequncy() const { return mfRPM_LFO_FRQ; }
+    f32 GetLastUpShiftTime() const { return mfLastUpShift; }
+
+    void BeginUpShift(IShiftingActivator* lpShiftingActivator);
+    void BeginDownShift(IShiftingActivator* lpShiftingActivator);
+
+private:
+    void UpdateGearShiftState(f32 afTimeStep);
+    void EndShifting();
+    void PostShiftFX_Init();
+    void PostShiftFX_Update(f32 afTimeStep);
+    void PostShiftFX_End();
+    void UpdateThrottle(f32 afTimeStep);
+    void UpdateRPM(f32 afTimeStep);
+
+    PhysicsControl*       mpPhysicsControl;
     EngineControl*        mpEngineControl;
     HybridExhaustControl* mpHybridControl;
-    bool          mbNeed_ShiftGearSnd;      // +0x44
-    bool          mbNeed_DisengageSnd;      // +0x45
-    bool          mbNeed_EngageSnd;         // +0x46
-    u8            mau8ShiftingPatternData[16]; // +0x48: Attrib::Gen::shiftpattern (opaque span; see FLAG)
-    EShiftStage   meShiftState;             // +0x58
-    EShiftStage   meShiftStageChanged;      // +0x5C
-    s32           miRaceCarIndex;           // +0x60
-    EPostShiftLFO meShift_LFO;              // +0x64
-    f32           mfVOL_LFO_AMP;            // +0x68
-    f32           mfVOL_LFO_FRQ;            // +0x6C
-    f32           mfRPM_LFO_AMP;            // +0x70
-    f32           mfRPM_LFO_FRQ;            // +0x74
-    CgsSound::Utils::InterpolateLine mInterpRPM_LFODecay;  // +0x78
-    CgsSound::Utils::InterpolateLine mInterpVol_LFODecay;  // +0x94
-    f32           mfRPMAtShift;             // +0xB0
-    f32           mfLastUpShift;            // +0xB4
-    IShiftingActivator* mpShiftingActivator; // +0xB8
-    CgsSound::Utils::InterpolateLine mInterpShiftThrottle; // +0xBC
-    CgsSound::Utils::InterpolateLine mInterpShiftRPM;      // +0xD8
-    CgsSound::Utils::InterpolateLine mInterpShiftVol;      // +0xF4
+    bool                  mbNeed_ShiftGearSnd;
+    bool                  mbNeed_DisengageSnd;
+    bool                  mbNeed_EngageSnd;
+    Attrib::Gen::shiftpattern mShiftingPatternData;
+    EShiftStage           meShiftState;
+    EShiftStage           meShiftStageChanged;
+    s32                   miRaceCarIndex;
+    EPostShiftLFO         meShift_LFO;
+    f32                   mfVOL_LFO_AMP;
+    f32                   mfVOL_LFO_FRQ;
+    f32                   mfRPM_LFO_AMP;
+    f32                   mfRPM_LFO_FRQ;
+    CgsSound::Utils::InterpolateLine mInterpRPM_LFODecay;
+    CgsSound::Utils::InterpolateLine mInterpVol_LFODecay;
+    f32                   mfRPMAtShift;
+    f32                   mfLastUpShift;
+    IShiftingActivator*   mpShiftingActivator;
+    CgsSound::Utils::InterpolateLine mInterpShiftThrottle;
+    CgsSound::Utils::InterpolateLine mInterpShiftRPM;
+    CgsSound::Utils::InterpolateLine mInterpShiftVol;
 };
 
 } // namespace Engines
 } // namespace Vehicles
 } // namespace BrnSound
 
-#endif // BRN_SOUND_VEHICLES_ENGINES_SHIFT_CONTROL_H
+#endif

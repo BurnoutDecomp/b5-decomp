@@ -46,6 +46,7 @@ namespace Gen
         const RefSpec& SpeechData() const;
         const RefSpec& WorldEmitterList() const;
         const RefSpec& GlobalEngineData() const;
+        const RefSpec& SampleTags(u32 luIndex) const;
 
         // The sound module is constructed before BurnoutGlobalData.bin is
         // registered. Rebind the generated instance after the AttribSys load
@@ -138,6 +139,18 @@ namespace Gen
         // Brn3DEffectControl::Prepare @ ARTIST 0x82696870 reads this RefSpec.
         return *reinterpret_cast<const RefSpec*>(
             static_cast<const u8*>(mpAttributeData) + 0x518u);
+    }
+
+    inline const RefSpec& burnoutglobaldata::SampleTags(u32 luIndex) const
+    {
+        // SoundLogicModule::GetSampleTags @ ARTIST 0x82683900: five RefSpecs,
+        // variable-array header at +0xF8 and first 24-byte entry at +0x100.
+        CGS_ASSERT(luIndex < 5u,
+                   "leSampleTags < AttribSys::Enums::eSampleTags::SampleTagCount");
+        const u8* lpData = static_cast<const u8*>(mpAttributeData);
+        if (luIndex >= reinterpret_cast<const Private*>(lpData + 0x0F8u)->GetLength())
+            return *static_cast<const RefSpec*>(DefaultDataArea(sizeof(RefSpec)));
+        return *reinterpret_cast<const RefSpec*>(lpData + 0x100u + luIndex * sizeof(RefSpec)); // serialized AttribSys array
     }
 
     inline bool burnoutglobaldata::ResolveLoadedCollection()

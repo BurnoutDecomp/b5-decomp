@@ -24,6 +24,7 @@ namespace Gen
         explicit vehicleengine(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
 
         void Change(Collection* lpCollection) { Instance::Change(lpCollection); }
+        u64 CollectionKey() const { return Instance::GetCollection(); }
 
         // These accessors are inlined in ARTIST.  Their consumer instructions read the
         // generated layout directly (for example HybridExhaustControl::Attach
@@ -33,6 +34,9 @@ namespace Gen
         const char* GinsuFileDecel() const { return Text(0x160u); }
         const char* GinsuFileAccel() const { return Text(0x164u); }
         const char* SweetenersAssetName() const { return Text(0x140u); }
+        const char* WhineAssetName() const { return Text(0x150u); }
+        const char* TurboAssetName() const { return Text(0x154u); }
+        const char* BoostBank() const { return Text(0x158u); }
 
         u64 SweetenersAsset() const
         {
@@ -50,10 +54,27 @@ namespace Gen
         Matrix44 VolumeOverRPM() const { return Matrix(0x000u); }
         Matrix44 PhysicsRpmMap() const { return Matrix(0x040u); }
 
+        Vector4 INF_TimeMulti() const { return Vector(0x0E0u); }
+        Vector4 INF_TimeBeforeReachingMaxSpeed() const { return Vector(0x0F0u); }
+        Vector4 INF_RpmDropPercentage() const { return Vector(0x100u); }
+        Vector4 INF_RpmDrop() const { return Vector(0x110u); }
+        Vector4 INF_MaxRpmBeforeStart() const { return Vector(0x120u); }
+        Vector4 INF_MaxRpmBeforeShift() const { return Vector(0x130u); }
+
+        // ARTIST SweetenersEffect::UpdateSweetenerInfo @ 0x826F33C0 loads the
+        // two four-element count vectors and their matching gain vectors directly
+        // from these generated-layout offsets.
+        Vector4 SweetenerVolumes1() const { return Vector(0x090u); }
+        Vector4 SweetenerVolumes0() const { return Vector(0x0A0u); }
+        Vector4 SweetenerCounts1() const { return Vector(0x0C0u); }
+        Vector4 SweetenerCounts0() const { return Vector(0x0D0u); }
+
         f32 RotationVolRear() const { return Float(0x174u); }
         f32 RotationVolFront() const { return Float(0x178u); }
         f32 RotationMixRear() const { return Float(0x17Cu); }
         f32 RotationMixFront() const { return Float(0x180u); }
+
+        s32 ShiftPatternType() const { return Int32(0x170u); }
 
         f32 MinRpm() const { return Float(0x188u); }
         f32 MaxRpm() const { return Float(0x18Cu); }
@@ -129,6 +150,18 @@ namespace Gen
         Matrix44 Matrix(u32 auOffset) const
         {
             Matrix44 lValue;
+            lValue.SetZero();
+            if (mpAttributeData)
+            {
+                const u8* lpData = static_cast<const u8*>(mpAttributeData);
+                std::memcpy(&lValue, lpData + auOffset, sizeof(lValue));
+            }
+            return lValue;
+        }
+
+        Vector4 Vector(u32 auOffset) const
+        {
+            Vector4 lValue;
             lValue.SetZero();
             if (mpAttributeData)
             {

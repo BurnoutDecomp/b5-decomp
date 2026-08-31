@@ -297,6 +297,11 @@ namespace Logic
     // LoadAsset's EType parameter resolves.
     struct IResourceRequester
     {
+        enum EResourcePool
+        {
+            E_SOUND_DATA_POOL = 6,
+        };
+
         virtual void               ResourcesAreReady() = 0;
         virtual ResourceRegistrar& GetResourceRegistrar() = 0;
 
@@ -305,6 +310,12 @@ namespace Logic
         // SetupLoadData tail-forwards here (X360 0x826E4C88: r5=0 -> lpcResourceName null, r6=0 ->
         // E_DATA).
         void LoadAsset(const char* lpcBundleName, const char* lpcResourceName,
+                       ResourceRegistrar::EType leType);
+
+        // ARTIST @ 0x826E23D0. Queue a resource by name without an enclosing
+        // bundle. Engine loop-model data uses this overload; the explicit pool
+        // argument is part of the original request record.
+        void LoadAsset(const char* lpcResourceName, EResourcePool lePool,
                        ResourceRegistrar::EType leType);
     };
 }

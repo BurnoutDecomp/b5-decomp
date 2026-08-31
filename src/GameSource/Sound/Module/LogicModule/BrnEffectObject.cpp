@@ -1,5 +1,6 @@
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"  // the concrete module (GetResourceRegistrar dispatch)
+#include "GameSource/AttribSys/Generated/classes/sampletags.h"
 
 // =============================================================================
 // BrnSound::Logic::BrnEffectObject — out-of-line bodies.
@@ -11,6 +12,12 @@ namespace BrnSound
 {
 namespace Logic
 {
+
+void BrnEffectObject::SampleTag::Construct()
+{
+    mfVolume = 0.0f;
+    miSampleIndex = 0;
+}
 
 BrnEffectObject::BrnEffectObject()
     : CgsSound::Logic::EffectObject()
@@ -70,6 +77,32 @@ ResourceRegistrar& BrnEffectObject::GetResourceRegistrar()
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
     return lpModule->GetResourceRegistrar();
+}
+
+// ARTIST @ 0x82696660. Resolve one tagged splice range, select from it using
+// the caller's round-robin/random value, and return the authored gain.
+bool BrnEffectObject::GetSampleTag(u32 eTag, u32 uIndex, u32 uSelection,
+                                   SampleTag& rTag) const
+{
+    const BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<const BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    if (!lpModule)
+        return false;
+
+    Attrib::Gen::sampletags lTags(lpModule->GetSampleTags(eTag));
+    const s16 liFirst = *static_cast<const s16*>(lTags.FirstIndices(uIndex));
+    const s16 liLast = lTags.LastIndices(uIndex);
+    if (liFirst < 0 || liLast < 0)
+        return false;
+
+    const u32 luCount = static_cast<u32>(liLast - liFirst + 1);
+    CGS_ASSERT(luCount > 0, "luMod > 0");
+    if (!luCount)
+        return false;
+
+    rTag.miSampleIndex = static_cast<s16>(liFirst + (uSelection % luCount));
+    rTag.mfVolume = *static_cast<const f32*>(lTags.Volumes(uIndex));
+    return true;
 }
 
 // ---------------------------------------------------------------------------
