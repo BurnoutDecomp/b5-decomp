@@ -10,6 +10,7 @@
 // vehicleengine function in the ledger (minimal X360-faithful recon). Derives from
 // Attrib::Instance.
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
+#include "BrnCommonTypes.h"
 
 #include <cstring>
 
@@ -43,17 +44,50 @@ namespace Gen
             return luAsset;
         }
 
-        f32 DecelMinRpm() const { return Float(0x1DCu); }
-        f32 MinRpm() const { return Float(0x1E0u); }
-        f32 EQ_Peaking_Q() const { return Float(0x1E4u); }
+        // ARTIST vehicleengine BinData layout.  These offsets are consumed directly
+        // by the vehicle-audio code (for example DualGinsuExhaustEffect::UpdateParams
+        // @ 0x826B3770 and HybridExhaustControl::UpdateMix @ 0x826CC878).
+        Matrix44 VolumeOverRPM() const { return Matrix(0x000u); }
+        Matrix44 PhysicsRpmMap() const { return Matrix(0x040u); }
+
+        f32 RotationVolRear() const { return Float(0x174u); }
+        f32 RotationVolFront() const { return Float(0x178u); }
+        f32 RotationMixRear() const { return Float(0x17Cu); }
+        f32 RotationMixFront() const { return Float(0x180u); }
+
+        f32 MinRpm() const { return Float(0x188u); }
+        f32 MaxRpm() const { return Float(0x18Cu); }
+        f32 MasterGain() const { return Float(0x190u); }
+        f32 MasterCarVolume() const { return Float(0x194u); }
+        f32 LoopModelDecelSmallRpmGain() const { return Float(0x198u); }
+        f32 LoopModelDecelLargeRpmGain() const { return Float(0x19Cu); }
+        f32 LoopModelDecelGain() const { return Float(0x1A0u); }
+        f32 LoopModelAccelSmallRpmGain() const { return Float(0x1A4u); }
+        f32 LoopModelAccelLargeRpmGain() const { return Float(0x1A8u); }
+        f32 LoopModelAccelGain() const { return Float(0x1ACu); }
+        f32 IdleRpm() const { return Float(0x1B0u); }
+        f32 IdleGain() const { return Float(0x1B4u); }
+        s32 GinsuSampleRate() const { return Int32(0x1B8u); }
+        f32 GinsuDecelSmallRpmGain() const { return Float(0x1BCu); }
+        f32 GinsuDecelLargeRpmGain() const { return Float(0x1C0u); }
+        f32 GinsuDecelGain() const { return Float(0x1C4u); }
+        f32 GinsuAccelSmallRpmGain() const { return Float(0x1C8u); }
+        f32 GinsuAccelNegSmallRpmGain() const { return Float(0x1CCu); }
+        f32 GinsuAccelNegLargeRpmGain() const { return Float(0x1D0u); }
+        f32 GinsuAccelLargeRpmGain() const { return Float(0x1D4u); }
+        f32 GinsuAccelGain() const { return Float(0x1D8u); }
+        f32 EQ_Peaking_Q() const { return Float(0x1DCu); }
+        f32 EQ_Peaking_Gain() const { return Float(0x1E0u); }
+        f32 EQ_Peaking_Freq() const { return Float(0x1E4u); }
         f32 EQ_LowShelf_Gain() const { return Float(0x1E8u); }
         f32 EQ_LowShelf_Freq() const { return Float(0x1ECu); }
         f32 EQ_HighShelf_Gain() const { return Float(0x1F0u); }
         f32 EQ_HighShelf_Freq() const { return Float(0x1F4u); }
-        f32 EQ_Peaking_Freq() const { return Float(0x188u); }
-        f32 MasterGain() const { return Float(0x190u); }
-        f32 MasterCarVolume() const { return Float(0x194u); }
-        f32 EQ_Peaking_Gain() const { return Float(0x210u); }
+        f32 DecelMinRpm() const { return Float(0x210u); }
+        f32 DecelMaxRpm() const { return Float(0x214u); }
+        s32 DecelGinsuSampleRate() const { return Int32(0x218u); }
+        f32 DecelDeltaRpmThreshold() const { return Float(0x21Cu); }
+        f32 AccelDeltaRpmThreshold() const { return Float(0x220u); }
 
     private:
         const char* Text(u32 auOffset) const
@@ -80,6 +114,28 @@ namespace Gen
             const u8* lpData = static_cast<const u8*>(mpAttributeData);
             std::memcpy(&lfValue, lpData + auOffset, sizeof(lfValue));
             return lfValue;
+        }
+
+        s32 Int32(u32 auOffset) const
+        {
+            if (!mpAttributeData)
+                return 0;
+            s32 liValue = 0;
+            const u8* lpData = static_cast<const u8*>(mpAttributeData);
+            std::memcpy(&liValue, lpData + auOffset, sizeof(liValue));
+            return liValue;
+        }
+
+        Matrix44 Matrix(u32 auOffset) const
+        {
+            Matrix44 lValue;
+            lValue.SetZero();
+            if (mpAttributeData)
+            {
+                const u8* lpData = static_cast<const u8*>(mpAttributeData);
+                std::memcpy(&lValue, lpData + auOffset, sizeof(lValue));
+            }
+            return lValue;
         }
     };
 

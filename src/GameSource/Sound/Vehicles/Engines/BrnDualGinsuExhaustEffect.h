@@ -31,11 +31,23 @@ struct DualGinsuExhaustEffect : public DualGinsuEffect
     // construction/lifecycle state; the ctor seeds it to E_CONSTRUCTED (0).
     enum EState
     {
-        E_CONSTRUCTED = 0,
+        E_CONSTRUCTED          = 0,
+        E_ATTACHING_BASE_CLASS = 1,
+        E_CONSTRUCTING_VOICE   = 2,
+        E_ATTACHED             = 3,
+        E_DETACHING_BASE_CLASS = 4,
+        E_DETACHED             = 5,
+        E_STATE_COUNT          = 6,
     };
 
     DualGinsuExhaustEffect();           // @ 0x826E0E90
     virtual ~DualGinsuExhaustEffect();  // anchor for the vector deleting destructor @ 0x826EC000
+
+    virtual s32 GetController(s32 aiSlot); // @ 0x82684F88
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController); // @ 0x82684FC0
+    virtual bool Attach(); // @ 0x826F2690
+    virtual bool Detach(); // @ 0x826F27C8
+    virtual void ProcessUpdate(); // @ 0x826FCDA0
 
     // @ 0x826E4178 -- RTTI factory hook. Returns the +4 IResourceRequester base view.
     static BrnSound::Logic::IResourceRequester* Creat( s32 aiFlavour );

@@ -141,6 +141,11 @@ struct PhysicsControl : public BrnSound::Logic::BrnEffectControl
     eIntroRevingState meIntroRevingState;
     EngRevDataSet mEngineDataSet;
     CgsSound::Utils::InterpolateLine mEngineStartLineRPM;
+
+protected:
+    // BrnPhysicsControl.cpp:940, ARTIST @ 0x826B2860.  Converts the raw
+    // physics RPM through the per-car cubic PhysicsRpmMap into [0,1].
+    f32 UnityPhysicsRpm(f32 afPhysicsRPM) const;
 };
 
 } // namespace Engines
