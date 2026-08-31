@@ -7,6 +7,7 @@
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"
 
 #include <cstring>   // std::memset
+#include <algorithm>
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::HybridExhaustControl -- out-of-line bodies.
@@ -129,7 +130,7 @@ bool HybridExhaustControl::Attach()
         return false;
 
     const BrnSound::Vehicles::VehicleState::EEngineComponentType leComponent =
-        (GetId() & 0x7F0) != 0x60
+        (GetId() & 0x7F0) == 0x60
             ? BrnSound::Vehicles::VehicleState::E_ENGINE
             : BrnSound::Vehicles::VehicleState::E_EXHAUST;
     const u64 luCollectionKey = mpPhysicsControl->GetEngineComponentKey(leComponent);
@@ -151,17 +152,59 @@ bool HybridExhaustControl::Attach()
     return true;
 }
 
-void HybridExhaustControl::UpdateParams(f32 /*afTimeStep*/)
+void HybridExhaustControl::UpdateParams(f32 afTimeStep)
 {
     if (!mpPhysicsControl)
         return;
 
+    CGS_ASSERT(mVehicleEngineAttributes.LoopModel() != nullptr,
+               "mVehicleEngineAttributes.LoopModel()");
+    CGS_ASSERT(mVehicleEngineAttributes.GinsuFileAccel() != nullptr,
+               "mVehicleEngineAttributes.GinsuFileAccel()");
+    CGS_ASSERT(mVehicleEngineAttributes.GinsuFileDecel() != nullptr,
+               "mVehicleEngineAttributes.GinsuFileDecel()");
+
+    // ARTIST @ 0x826E3DE0: delta tracking, the virtual Ginsu-RPM mapping, then
+    // the data-driven source mix.  The previous interim body skipped the middle
+    // controller and fed normalized 1k..10k RPM directly to the Ginsu voices.
+    UpdateDeltaRPM();
+    UpdateGinsuRPM();
+    UpdateMix(afTimeStep);
+}
+
+void HybridExhaustControl::UpdateDeltaRPM()
+{
     const PhysicsControl::PhysicsData& lrPhysics = mpPhysicsControl->GetPhysicsData();
-    const f32 lfRpm = lrPhysics.mNormalizedRpm.GetCurrent();
-    mPhysicsDeltaRpm.Update(lfRpm - mGinsuRpm.GetCurrent());
-    mAudioDeltaRpm.Update(mPhysicsDeltaRpm.GetCurrent());
+    mPhysicsDeltaRpm.Update(lrPhysics.mNormalizedRpm.GetCurrent() -
+                            lrPhysics.mNormalizedRpm.GetPrevious());
+
+    const f32 lfAudioDelta = mpEngineControl
+        ? mpEngineControl->GetAudioRPM().GetCurrent() -
+          mpEngineControl->GetAudioRPM().GetPrevious()
+        : mPhysicsDeltaRpm.GetCurrent();
+    mAudioDeltaRpm.Update(lfAudioDelta);
+
+    // The ordinary (not shifting, clutch-off) branch at 0x826B36C0 records the
+    // physics delta.  ShiftControl/ClutchControl replace this sample while their
+    // authored transition state machines are active.
     mAverageDeltaRPM.Record(mPhysicsDeltaRpm.GetCurrent());
-    mGinsuRpm.Update(lfRpm);
+}
+
+void HybridExhaustControl::UpdateGinsuRPM()
+{
+    const f32 lfAudioRpm = mpEngineControl
+        ? mpEngineControl->GetAudioRPM().GetCurrent()
+        : mpPhysicsControl->GetPhysicsData().mNormalizedRpm.GetCurrent();
+    const f32 lfUnity = ((std::max)(1000.0f, (std::min)(10000.0f, lfAudioRpm)) -
+                         1000.0f) * (1.0f / 9000.0f);
+    const f32 lfIdleRpm = mVehicleEngineAttributes.IdleRpm();
+    const f32 lfMaxRpm = mVehicleEngineAttributes.MaxRpm();
+    mGinsuRpm.Update(lfIdleRpm + (lfMaxRpm - lfIdleRpm) * lfUnity);
+}
+
+void HybridExhaustControl::UpdateMix(f32 /*afTimeStep*/)
+{
+    const PhysicsControl::PhysicsData& lrPhysics = mpPhysicsControl->GetPhysicsData();
 
     // UpdateMix @ 0x826CC878 applies the authored master/component gains to
     // the loop/Ginsu mix before the effect-side dynamic-mixer gains.  Preserve
@@ -178,7 +221,6 @@ void HybridExhaustControl::UpdateParams(f32 /*afTimeStep*/)
     mFinalEngineVolume.AccelGinsu = lfMaster * mFinalEngineMix.AccelGinsu;
     mFinalEngineVolume.DecelGinsu = lfMaster * mFinalEngineMix.DecelGinsu;
     mFinalEngineVolume.Cutoff = 25000.0f;
-
 }
 
 } // namespace Engines

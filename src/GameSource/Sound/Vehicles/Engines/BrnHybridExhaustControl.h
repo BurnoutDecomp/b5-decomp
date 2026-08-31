@@ -93,6 +93,11 @@ struct HybridExhaustControl : public BrnSound::Logic::BrnEffectControl
     f32                      mfPercentOfDecelThreshold;                  // h:126
     EngineMix                mFinalEngineMix;                           // h:129
     EngineMix                mFinalEngineVolume;                        // h:132
+
+protected:
+    void UpdateDeltaRPM();             // @ 0x826B3548
+    virtual void UpdateGinsuRPM();     // @ 0x826999F0
+    void UpdateMix(f32 afTimeStep);    // @ 0x826CC878
 };
 
 } // namespace Engines

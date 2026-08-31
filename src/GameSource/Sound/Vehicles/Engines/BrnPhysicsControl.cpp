@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <algorithm>
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::PhysicsControl -- out-of-line bodies.
@@ -44,8 +45,8 @@ namespace Engines
 PhysicsControl::PhysicsData::PhysicsData()
     : mbJustShifted(false)
     , mfDurationInGear(0.0f)
-    , mfMaxRpm(0.0f)
-    , mfIdleRpm(0.0f)
+    , mfMaxRpm(7000.0f)
+    , mfIdleRpm(997.0f)
     , mfTimeSinceRespawn(0.0f)
     , IsBlueBoost(false)
     , mfBoostRemaining(0.0f)
@@ -193,16 +194,17 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
     lrData.mGear.Update(liGear);
     lrData.mfDurationInGear = lrData.mbJustShifted ? 0.0f : lrData.mfDurationInGear + afTimeStep;
 
-    lrData.mfMaxRpm = lrRaw.mfUpShiftRPM > 0.0f ? lrRaw.mfUpShiftRPM : 10000.0f;
-    lrData.mfIdleRpm = 1000.0f;
-    const f32 lfRpmRange = lrData.mfMaxRpm - lrData.mfIdleRpm;
-    f32 lfUnityRpm = lfRpmRange > 0.0f ? (lrRaw.mfRPM - lrData.mfIdleRpm) / lfRpmRange : 0.0f;
-    if (lfUnityRpm < 0.0f) lfUnityRpm = 0.0f;
-    if (lfUnityRpm > 1.0f) lfUnityRpm = 1.0f;
+    // ARTIST keeps the PhysicsData ctor's 7000/997 normalization limits and
+    // applies the authored PhysicsRpmMap cubic.  The former interim body replaced
+    // these every frame with the current gear's upshift RPM and a linear map,
+    // which drove the audio controller to redline much too early.
+    const f32 lfUnityRpm = UnityPhysicsRpm(lrRaw.mfRPM);
     lrData.mUnityRpm.Update(lfUnityRpm);
     lrData.mNormalizedRpm.Update(lfUnityRpm * 9000.0f + 1000.0f);
 
-    lrData.mThrottle.Update(lrRaw.mfGas);
+    // Reverse gear uses the brake control as its engine throttle in ARTIST.
+    const f32 lfThrottle = liGear != 0 ? lrRaw.mfGas : lrRaw.mfBrake;
+    lrData.mThrottle.Update(lfThrottle);
     lrData.mDeltaThrottle.Record(lrData.mThrottle.GetCurrent() - lrData.mThrottle.GetPrevious());
     lrData.mIsAccelerating.Update(lrRaw.mfGas > 0.15f);
     lrData.IsBoosting.Update(lrRaw.mfTimeBoosting > 0.0f);
@@ -226,6 +228,26 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
 
     SetMixerInputValue(4, lrRaw.mbCrashing ? 0x7FFF : 0);
     SetMixerInputValue(8, lrRaw.mbIsDriveable ? 0x7FFF : 0);
+}
+
+f32 PhysicsControl::UnityPhysicsRpm(f32 afPhysicsRPM) const
+{
+    const f32 lfRange = mProcessedPhysicsData.mfMaxRpm -
+                        mProcessedPhysicsData.mfIdleRpm;
+    f32 lfUnity = lfRange != 0.0f
+        ? (afPhysicsRPM - mProcessedPhysicsData.mfIdleRpm) / lfRange
+        : 0.0f;
+    lfUnity = (std::max)(0.0f, (std::min)(1.0f, lfUnity));
+
+    // ARTIST @ 0x826B28C0 builds [x^3,x^2,x,0], evaluates the four
+    // PhysicsRpmMap vectors with Horner's rule, and returns the Y lane.
+    const Matrix44 lMap = mVehicleEngineAttributes.PhysicsRpmMap();
+    const f32 lfUnity2 = lfUnity * lfUnity;
+    const f32 lfMapped = lMap.xAxis.y * (lfUnity2 * lfUnity) +
+                         lMap.yAxis.y * lfUnity2 +
+                         lMap.zAxis.y * lfUnity +
+                         lMap.wAxis.y;
+    return (std::max)(0.0f, (std::min)(1.0f, lfMapped));
 }
 
 void PhysicsControl::ProcessUpdate()

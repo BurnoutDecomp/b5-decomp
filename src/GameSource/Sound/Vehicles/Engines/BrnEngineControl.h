@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"   // committed BrnEffectControl dual base (BY NAME)
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::EngineControl
@@ -52,8 +53,14 @@ namespace BrnSound
 {
 namespace Vehicles
 {
+struct Car3DControl;
+namespace Wheels { struct WheelControl; }
 namespace Engines
 {
+
+struct PhysicsControl;
+struct ShiftControl;
+struct ClutchControl;
 
 // MINIMAL home (full layout in the EngineControl keystone TU). Reuses the committed
 // BrnEffectControl dual base BY NAME (mirrors ClutchControl / WheelControl). The DWARF-
@@ -64,18 +71,65 @@ namespace Engines
 // GetStartRPM returns and the dtor anchor are reconstructed in this group.
 struct EngineControl : public BrnSound::Logic::BrnEffectControl
 {
-    EngineControl() : mfStartRPM(0.0f) {}
+    enum eRedlingState
+    {
+        E_REDLINING_STATE_OFF = 0,
+        E_REDLINING_STATE_HIGH = 1,
+        E_REDLINING_STATE_LOW = 2,
+    };
+
+    enum eDistortionState
+    {
+        E_DISTORTION_NONE = 0,
+        E_DISTORTION_SLOW_ON = 1,
+        E_DISTORTION_FAST_ON = 2,
+        E_DISTORTION_INSTANT_ON = 3,
+    };
+
+    EngineControl();
     virtual ~EngineControl();   // anchor for the vector deleting destructor @ 0x826B2BA0
 
     virtual s32 GetController(s32 aiSlot); // @ 0x826845C0
     virtual void AttachController(CgsSound::Logic::EffectBase* apController); // @ 0x82684628
+    virtual bool Attach(); // @ 0x82698FD0
+    virtual void UpdateParams(f32 afTimeStep); // @ 0x826B2C58
 
     // @ 0x82698FC8 — return the cached engine start RPM (lfs f1, 0x18(this) on X360).
     f32 GetStartRPM() const;
+    const CgsSound::Utils::DataPoint<f32>& GetAudioRPM() const { return mfAudioRpm; }
+    const CgsSound::Utils::DataPoint<f32>& GetAudioThrottle() const { return mfAudioThrottle; }
+    const CgsSound::Utils::DataPoint<f32>& GetAudioEngVolume() const { return mfAudioEngineVolume; }
 
-    // The single f32 field GetStartRPM reads (X360 +0x18, pre-IShiftingActivator-base
-    // layout). FLAG: byte offset not asserted on the 64-bit host; pinned by name only.
-    f32 mfStartRPM;
+    PhysicsControl* mpPhysicsControl;
+    ShiftControl* mpShiftControl;
+    ClutchControl* mpClutchControl;
+    BrnSound::Vehicles::Car3DControl* mpCar3DControl;
+    BrnSound::Vehicles::Wheels::WheelControl* mpWheelControl;
+    CgsSound::Utils::DataPoint<f32> mfAudioRpm;
+    CgsSound::Utils::DataPoint<f32> mfAudioThrottle;
+    CgsSound::Utils::DataPoint<f32> mfAudioEngineVolume;
+    CgsSound::Utils::InterpolateLine mAudioPitch;
+    CgsSound::Utils::InterpolateLine mAudioDistortion;
+    bool mbClutchStateOn;
+    f32 mfVOL_LFO;
+    f32 mfRPM_LFO;
+    f32 mfAngleRPM_LFO;
+    f32 mfAngleVOL_LFO;
+    eRedlingState meRedLiningState;
+    f32 mfRedlingRPMOffset;
+    f32 mfRedlingVolumeScale;
+    f32 mfRedliningTime;
+    eDistortionState meDistortionState;
+    f32 mfRPMRamping;
+
+protected:
+    virtual void UpdateRPM(f32 afTimeStep);
+    virtual void UpdateThrottle(f32 afTimeStep);
+    virtual void UpdateVolume(f32 afTimeStep);
+    virtual void UpdateEnginePitch(f32 afTimeStep);
+    virtual void UpdateDistortion(f32 afTimeStep);
+    virtual void UpdateRedLiningRPM(f32 afTimeStep);
+    virtual void UpdateEngineLFO(f32 afTimeStep);
 };
 
 } // namespace Engines
