@@ -2,6 +2,7 @@
 #define CGS_SOUND_CGSSOUNDUTILS_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"   // CgsNumeric::Random (SelectionHistory mRandom)
 
 #include <cmath>
@@ -196,10 +197,10 @@ struct PathLine
 // interpolation ramp: start->finish over a length with a curve, plus the running
 // elapsed-time / current-value cursor and a completed flag. sizeof = 28 (0x1C) --
 // four f32 + the s32 curve enum + f32 current + bool, padded to alignof 4.
-// FLAG (MINIMAL home): the ramp bodies (Initialize / Reset / GetValueFloat / Update)
-// live in their own recon slice and are DECLARATION-ONLY here; embedding classes
-// (ShiftControl, ...) default-construct the member. mbComplete defaults to true (the
-// X360 default ctor's `stb 1` @ +0x18). Additive, zero-risk.
+// The ramp bodies (Initialize / Reset / GetValueFloat / Update) are reconstructed
+// in CgsSoundUtils.cpp from ARTIST/DecFIGS. Embedding classes (ShiftControl, ...)
+// default-construct the member. mbComplete defaults to true (the X360 default
+// ctor's `stb 1` @ +0x18).
 struct InterpolateLine
 {
     InterpolateLine()
@@ -216,6 +217,20 @@ struct InterpolateLine
     void Initialize(f32 lfStart, f32 lfFinish, f32 lfLength, Curve::ECurveType leCurve);
     void Reset(f32 lfValue);
     f32  GetValueFloat() const;
+    s32  GetValueInt() const { return static_cast<s32>(mfCurrentValue); }
+    void Update(f32 lfDeltaTime);
+    void Update(f32 lfDeltaTime, f32 lfFinish)
+    {
+        mfFinish = lfFinish;
+        Update(lfDeltaTime);
+    }
+    bool IsFinished() const { return mbComplete; }
+    f32  GetElapsedTime() const { return mfElapsedTime; }
+    f32  GetTotalDuration() const { return mfLength; }
+    f32  GetTimeRemaining() const
+    {
+        return mbComplete ? 0.0f : (mfLength - mfElapsedTime);
+    }
 
     // ORDER mirrors the DWARF.
     f32               mfElapsedTime;   // CgsSoundUtils.h:243  (+0x00)
@@ -225,6 +240,73 @@ struct InterpolateLine
     Curve::ECurveType meCurveTypes;    // CgsSoundUtils.h:247  (+0x10)
     f32               mfCurrentValue;  // CgsSoundUtils.h:249  (+0x14)
     bool              mbComplete;      // CgsSoundUtils.h:250  (+0x18)
+};
+
+// CgsSoundUtils.h:387. Piecewise-linear graph over an authored Vector2 table.
+// ARTIST's HybridExhaustControl embeds this exact type with a Vector2[6] table;
+// Vector2 is a four-lane RenderWare value, but only x/y participate here.
+#ifdef GetYValue
+#undef GetYValue // wingdi.h CMYK helper collides with the original sound-utility method
+#endif
+struct Graph
+{
+    Graph(Vector2* lpaPoints, u8 luNumOfPoints)
+        : maPoints(lpaPoints), muNumOfPoints(luNumOfPoints) {}
+
+    f32 GetYValue(f32 lfX) const;
+
+    Vector2* maPoints;
+    u8       muNumOfPoints;
+};
+
+// CgsSoundUtils.h:526/557. The original spelling is "SqaureWave". It is a
+// random-period boolean oscillator used by the damaged-engine throttle/window
+// logic. The embedded Random supplies the exact buffered LCG used by ARTIST.
+struct MinMax
+{
+    MinMax() : mfMin(0.0f), mfMax(0.0f) {}
+    MinMax(f32 lfMin, f32 lfMax) : mfMin(lfMin), mfMax(lfMax) {}
+
+    f32 mfMin;
+    f32 mfMax;
+};
+
+struct SqaureWave
+{
+    SqaureWave()
+        : mUpTimeWindow(), mDownTimeWindow(), mfTime(0.0f), mbValueIsHigh(false)
+    {
+        mRandom.Construct();
+    }
+
+    void Construct(u64 luSeed, MinMax lUpTimeWindow, MinMax lDownTimeWindow)
+    {
+        mUpTimeWindow = lUpTimeWindow;
+        mDownTimeWindow = lDownTimeWindow;
+        mfTime = 0.0f;
+        mbValueIsHigh = false;
+        mRandom.Construct();
+        mRandom.SetSeed(luSeed);
+    }
+
+    DataPoint<bool> Update(f32 lfDeltaTime)
+    {
+        mfTime -= lfDeltaTime;
+        if (mfTime >= 0.0f)
+            return DataPoint<bool>(mbValueIsHigh, mbValueIsHigh);
+
+        const bool lbPrevious = mbValueIsHigh;
+        const MinMax& lrWindow = mbValueIsHigh ? mDownTimeWindow : mUpTimeWindow;
+        mbValueIsHigh = !mbValueIsHigh;
+        mfTime = mRandom.RandomFloat(lrWindow.mfMin, lrWindow.mfMax);
+        return DataPoint<bool>(mbValueIsHigh, lbPrevious);
+    }
+
+    MinMax             mUpTimeWindow;
+    MinMax             mDownTimeWindow;
+    f32                mfTime;
+    bool               mbValueIsHigh;
+    CgsNumeric::Random mRandom;
 };
 
 // Slope input/output range parameters (DWARF CgsSoundUtils.h:258). Four f32:

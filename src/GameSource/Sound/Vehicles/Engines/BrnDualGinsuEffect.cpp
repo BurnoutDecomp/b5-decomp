@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -227,30 +228,22 @@ bool DualGinsuEffect::LoopOutputs::UpdateGainGraph( f64 afInput,
 void DualGinsuEffect::LoopOutputs::UpdatePitchGraph(
     f64 afInput, const BrnSound::Vehicles::Engines::Graph* apGraph)
 {
-    CGS_ASSERT(apGraph->mu8NumOfPoints > 1, "lGraph.mu8NumOfPoints > 1");
-    CGS_ASSERT(apGraph->mi8XAxis != LoopInputs::E_UNKNOWN,
-               "lGraph.mi8XAxis != LoopInputs::E_UNKNOWN");
+    CGS_ASSERT(apGraph->mu8NumOfPoints == 2, "lGraph.mu8NumOfPoints == 2");
     CGS_ASSERT(apGraph->mi8YAxis == E_PITCH,
-               "lGraph.mi8YAxis == LoopOutputs::E_PITCH");
+               "lGraph.mi8YAxis == E_PITCH");
 
     const BrnSound::Vehicles::Engines::Point* lpaPoints = apGraph->mpaPoints;
-    const s32 liCount = apGraph->mu8NumOfPoints;
     const f32 lfInput = static_cast<f32>(afInput);
     f32 lfValue = lfInput < lpaPoints[0].mfXpos ? lpaPoints[0].mfXpos : lfInput;
-    if (lfValue > lpaPoints[liCount - 1].mfXpos)
-        lfValue = lpaPoints[liCount - 1].mfXpos;
+    if (lfValue > lpaPoints[1].mfXpos)
+        lfValue = lpaPoints[1].mfXpos;
 
-    s32 liSegment = 0;
-    while (liSegment + 1 < liCount - 1 &&
-           lfValue >= lpaPoints[liSegment + 1].mfXpos)
-        ++liSegment;
-
-    const f32 lfX0 = lpaPoints[liSegment].mfXpos;
-    const f32 lfDX = lpaPoints[liSegment + 1].mfXpos - lfX0;
+    const f32 lfX0 = lpaPoints[0].mfXpos;
+    const f32 lfDX = lpaPoints[1].mfXpos - lfX0;
     CGS_ASSERT(!IsZero(lfDX), "!RwMathFPU::IsZero( lfDeltaX )");
     const f32 lfT = (lfValue - lfX0) / lfDX;
-    mafOutputs[E_PITCH] = lpaPoints[liSegment].mfYpos +
-        lfT * (lpaPoints[liSegment + 1].mfYpos - lpaPoints[liSegment].mfYpos);
+    mafOutputs[E_PITCH] = lpaPoints[0].mfYpos +
+        lfT * (lpaPoints[1].mfYpos - lpaPoints[0].mfYpos);
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +322,7 @@ void DualGinsuEffect::AttachPartialToVoice(s32 liPartial, s32 liVoice)
 // threshold (afThreshold), stop+detach that voice, clear its partial<->voice mapping
 // both ways, and return the freed slot index. Otherwise return -1 (nothing evicted).
 // The scan stops early at the first maiVoiceToPartial[i] == -1 (an unused slot),
-// returning 0, and only evicts once all KI_LOOP_VOICE_COUNT slots are examined.
+// returning that slot, and only evicts once all KI_LOOP_VOICE_COUNT slots are examined.
 // ---------------------------------------------------------------------------
 s32 DualGinsuEffect::GetFreeLoopModelVoice(f32 afThreshold)
 {
@@ -365,7 +358,7 @@ s32 DualGinsuEffect::GetFreeLoopModelVoice(f32 afThreshold)
         }
     }
 
-    return 0;
+    return liSlot;
 }
 
 // ---------------------------------------------------------------------------
@@ -420,19 +413,8 @@ void DualGinsuEffect::SetupLoadData()
     if (!lpcLoopModel || !*lpcLoopModel)
         return;
 
-    // The host registrar needs the explicit bundle name. The attached hybrid
-    // controller identity preserves the original engine/exhaust split.
-    const BrnSound::Vehicles::VehicleState::EEngineComponentType leComponent =
-        mpHybridControl->GetEffectID() == 6
-            ? BrnSound::Vehicles::VehicleState::E_ENGINE
-            : BrnSound::Vehicles::VehicleState::E_EXHAUST;
-    const char* lpcEngineName = mpPhysicsControl->GetEngineComponentName(
-        leComponent);
-    const u32 luEngineHash = static_cast<u32>(CgsResource::ID::HashString(
-        reinterpret_cast<const u8*>(lpcEngineName)));
-    char lacBundle[64];
-    std::snprintf(lacBundle, sizeof(lacBundle), "Engines\\%08x.bundle", luEngineHash);
-    LoadAsset(lacBundle, lpcLoopModel, BrnSound::Logic::ResourceRegistrar::E_DATA);
+    LoadAsset(lpcLoopModel, E_SOUND_DATA_POOL,
+              BrnSound::Logic::ResourceRegistrar::E_DATA);
 }
 
 bool DualGinsuEffect::Attach()
@@ -507,18 +489,8 @@ bool DualGinsuEffect::Attach()
         mfMinRpm = lrAttribs.MinRpm();
         mfDecelMinRpm = lrAttribs.DecelMinRpm();
 
-        const BrnSound::Vehicles::VehicleState::EEngineComponentType leComponent =
-            mpHybridControl->GetEffectID() == 6
-                ? BrnSound::Vehicles::VehicleState::E_ENGINE
-                : BrnSound::Vehicles::VehicleState::E_EXHAUST;
-        const char* lpcEngineName = mpPhysicsControl->GetEngineComponentName(
-            leComponent);
-        const u32 luEngineHash = static_cast<u32>(CgsResource::ID::HashString(
-            reinterpret_cast<const u8*>(lpcEngineName)));
-        char lacBundle[64];
-        std::snprintf(lacBundle, sizeof(lacBundle), "Engines\\%08x.bundle", luEngineHash);
         CgsResource::ResourceHandle* lpHandle = GetResourceRegistrar().GetResource(
-            lacBundle, lrAttribs.LoopModel());
+            nullptr, lrAttribs.LoopModel());
         if (!lpHandle)
             return false;
         mLoopModelResource = *lpHandle;
@@ -668,7 +640,8 @@ void DualGinsuEffect::ProcessUpdate()
                             &guPeakingGainName);
     mCarSubmix.SetParameter(miCarSubmixPeakingQ, mfPeakingQ, 0,
                             &guPeakingQName);
-    mCarSubmix.SetGain(miCarSubmixSend01Index, lfSubmixGain, 0, &guSend01Name);
+    mCarSubmix.SetGain(miCarSubmixReverbIndex, lfSubmixGain, 0,
+                       &guReverbSendName);
     mCarSubmix.SetParameter(miCarSubmixCutoffFreq, lfCutoff, 0,
                             &guCutoffFreqName);
 
@@ -708,12 +681,16 @@ void DualGinsuEffect::UpdateLoopModelParams()
     const LoopModelData* lpLoopModel = lLoopModel.GetMemoryResource();
 
     const f32 lfRpm = mpHybridControl->GetGinsuRPM();
+    CGS_ASSERT(mpEngineControl != nullptr, "mpEngineControl");
+    if (!mpEngineControl)
+        return;
     const f32 lfAccelerator =
-        mpPhysicsControl->GetPhysicsData().mThrottle.GetCurrent();
+        mpEngineControl->GetAudioThrottle().GetCurrent();
     mfLoopModelRPM.Update(lfRpm);
 
     const f32 lfPitchScale =
-        GetRWACMixerOutputValue(3, Nicotine::DMixIO::DMX_PITCH);
+        GetRWACMixerOutputValue(3, Nicotine::DMixIO::DMX_PITCH) *
+        mpEngineControl->GetAudioPitch();
     const f32 lfGainScale =
         GetRWACMixerOutputValue(2, Nicotine::DMixIO::DMX_VOL) *
         mpHybridControl->GetFinalEngineVolume().Loop;
@@ -741,8 +718,8 @@ void DualGinsuEffect::UpdateLoopModelParams()
             {
                 const f32 lfGain =
                     lrOutput.mafOutputs[LoopOutputs::E_GAIN] * lfGainScale;
-                const f32 lfPitch =
-                    lrOutput.mafOutputs[LoopOutputs::E_PITCH] * lfPitchScale;
+                const f32 lfPitch = (std::max)(0.0f, (std::min)(4.0f,
+                    lrOutput.mafOutputs[LoopOutputs::E_PITCH] * lfPitchScale));
                 mLoopModelVoice[liVoice].SetGain(0, lfGain, 0, &guSend01Name);
                 mLoopModelVoice[liVoice].SetParameter(
                     0, lfPitch, 0, &guLoopPitchParameterName);
@@ -761,7 +738,11 @@ void DualGinsuEffect::UpdateAccelGinsu()
         return;
 
     f32 lfRpm = mpHybridControl->GetGinsuRPM();
-    f32 lfPitch = GetRWACMixerOutputValue(3, Nicotine::DMixIO::DMX_PITCH);
+    CGS_ASSERT(mpEngineControl != nullptr, "mpEngineControl");
+    if (!mpEngineControl)
+        return;
+    f32 lfPitch = GetRWACMixerOutputValue(3, Nicotine::DMixIO::DMX_PITCH) *
+        mpEngineControl->GetAudioPitch();
     if (lfRpm < mfMinRpm && mfMinRpm > 0.0f)
     {
         lfPitch = (lfPitch / mfMinRpm) * lfRpm;
@@ -773,12 +754,6 @@ void DualGinsuEffect::UpdateAccelGinsu()
     const f32 lfGain =
         GetRWACMixerOutputValue(1, Nicotine::DMixIO::DMX_VOL) *
         mpHybridControl->GetFinalEngineVolume().AccelGinsu;
-    if (std::fabs(lfGain) < 0.01f)
-    {
-        mAccelGinsuVoice.SetParameter(3, 1.0f, &guGinsuPauseName);
-        return;
-    }
-
     mAccelGinsuVoice.SetParameter(3, 0.0f, &guGinsuPauseName);
     mAccelGinsuVoice.SetGain(0, lfGain, &guSend01Name);
     mAccelGinsuVoice.SetParameter(0, lfRpm, &guGinsuFrequencyName);
@@ -792,24 +767,17 @@ void DualGinsuEffect::UpdateDecelGinsu()
         return;
 
     f32 lfRpm = mpHybridControl->GetGinsuRPM();
-    f32 lfPitch = GetRWACMixerOutputValue(3, Nicotine::DMixIO::DMX_PITCH);
-    if (lfRpm < mfDecelMinRpm && mfDecelMinRpm > 0.0f)
-    {
-        lfPitch = (lfPitch / mfDecelMinRpm) * lfRpm;
-        if (lfRpm < 0.0f)
-            lfRpm = 0.0f;
-    }
+    CGS_ASSERT(mpEngineControl != nullptr, "mpEngineControl");
+    if (!mpEngineControl)
+        return;
+    const f32 lfPitch =
+        GetRWACMixerOutputValue(3, Nicotine::DMixIO::DMX_PITCH) *
+        mpEngineControl->GetAudioPitch();
     mfDecelGinsuRPM.Update(lfRpm);
 
     const f32 lfGain =
         GetRWACMixerOutputValue(1, Nicotine::DMixIO::DMX_VOL) *
         mpHybridControl->GetFinalEngineVolume().DecelGinsu;
-    if (std::fabs(lfGain) < 0.01f)
-    {
-        mDecelGinsuVoice.SetParameter(3, 1.0f, &guGinsuPauseName);
-        return;
-    }
-
     mDecelGinsuVoice.SetParameter(3, 0.0f, &guGinsuPauseName);
     mDecelGinsuVoice.SetGain(0, lfGain, &guSend01Name);
     mDecelGinsuVoice.SetParameter(0, lfRpm, &guGinsuFrequencyName);

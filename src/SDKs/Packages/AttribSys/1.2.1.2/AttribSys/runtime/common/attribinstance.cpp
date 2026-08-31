@@ -56,13 +56,15 @@ namespace Attrib
         return lpCollection ? lpCollection->Release() : 0;
     }
 
-    // Still un-landed (own TU); trap stub. Types are declared in attribinstance.h
-    // (reconstructed header), not forked locally here.
-    // (Collection_Get and Collection_GetData were two more of these until 2026-07-31.
-    // Collection_Get is now real in attribute.cpp; Collection_GetData is GONE -- its only
-    // caller was the phantom no-argument GetAttributePointer, and the real
-    // Collection::GetData(key, index) is bodied by name in attribcollection.cpp.)
-    int         RefSpec_GetCollectionWithDefault(int*) { __debugbreak(); return 0; }
+    // This layering seam keeps Instance independent of the TU that owns RefSpec's lazy
+    // database lookup.  On X360 the returned Collection* is 32 bits; the native PC port
+    // must preserve the pointer width rather than transcribing the console register as int.
+    Collection* RefSpec_GetCollectionWithDefault(RefSpec* lpRefSpec)
+    {
+        return lpRefSpec
+            ? const_cast<Collection*>(lpRefSpec->GetCollectionWithDefault())
+            : nullptr;
+    }
 
     // Attrib::Instance (and Collection / AttributeValue) are declared in attribinstance.h.
 
@@ -233,10 +235,9 @@ namespace Attrib
         return lResult;
     }
 
-    Collection* Instance::ChangeWithDefault(int* lpRefSpec)
+    Collection* Instance::ChangeWithDefault(RefSpec* lpRefSpec)
     {
-        int liCollection = RefSpec_GetCollectionWithDefault(lpRefSpec);
-        return Change(reinterpret_cast<Collection*>(liCollection));
+        return Change(RefSpec_GetCollectionWithDefault(lpRefSpec));
     }
 
     // @0x828081B0 -- resolve luAttributeKey against the instance whose address arrives in

@@ -25,6 +25,15 @@ namespace Gen
     {
     public:
         explicit sampletags(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit sampletags(const RefSpec& lrRefSpec, void* lpOwner = nullptr)
+            : Instance(lrRefSpec, lpOwner)
+        {
+            static const int KI_SAMPLETAGS_CLASS = -1630207590;
+            if (GetClass() != KI_SAMPLETAGS_CLASS && GetClass() != 0)
+                AssertOnClassCheck(GetClass(), KI_SAMPLETAGS_CLASS, GetCollection());
+            if (!mpAttributeData)
+                mpAttributeData = DefaultDataArea(0x118u);
+        }
 
         // &FirstIndices[luIndex] (u16 element) if in range, else DefaultDataArea(2).
         void* FirstIndices(unsigned int luIndex);

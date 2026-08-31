@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // VariableEventQueue<8192,16> (mMessageQueue)
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"     // Environment / EnvironmentSpec / ModuleParams
 #include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h" // the embedded Playback::Module::Module
+#include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 
 namespace rw { struct IResourceAllocator; }
 namespace CgsModule { struct IOBuffer; }
@@ -119,6 +120,16 @@ public:
     // @ 0x826C45A8. Walk the queue, handing each event's header (payload - 4) to
     // Environment::Notify.
     void ProcessMessageQueue(CgsModule::VariableEventQueue<8192, 16>* apQueue);
+
+    // CgsSoundLogicModule.h:357. Effects post typed messages into the module's
+    // deferred dispatch queue; Update drains the queue through Environment::Notify.
+    template <typename T>
+    bool PostMessage(const CgsSound::Io::Message<T>& arMessage)
+    {
+        return mMessageQueue.AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&arMessage),
+            arMessage.GetEventId(), static_cast<s32>(sizeof(arMessage)));
+    }
 
     // @ 0x8268D3F0 / @ 0x8268D400 (DWARF :116/:119, virtual). Bind / clear the
     // logic IO buffer pointers.

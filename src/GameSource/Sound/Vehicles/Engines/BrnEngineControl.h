@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"   // committed BrnEffectControl dual base (BY NAME)
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnShiftControl.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::EngineControl
@@ -20,27 +21,9 @@
 // 0x826AEF68) PLUS a third ShiftControl::IShiftingActivator sub-object vptr
 // (off_820AF228) written at this+0x38, matching DWARF's "derives from
 // BrnSound::Vehicles::Engines::ShiftControl::IShiftingActivator" note. EngineControl
-// also carries the physics/shift/clutch/car3d/wheel control pointers plus the audio
-// DataPoints (mfAudioRpm/Throttle/EngineVolume), the interpolators (mAudioPitch/
-// mAudioDistortion), the redline + distortion state machines and the LFO scratch --
-// all DEFERRED (see FLAG).
-//
-// FLAG (MINIMAL home): this group reconstructs exactly TWO ledger functions:
-//   EngineControl::GetStartRPM                    @ 0x82698FC8  (lfs f1,0x18(r3); blr)
-//   EngineControl::`vector deleting destructor'    @ 0x826B2BA0  (-> ~EngineControl anchor)
-// The full EngineControl surface (RTTI CreateObject/GetTypeInfo, the attach/
-// detach/update pipeline UpdateRPM/Throttle/Volume/Pitch/Distortion/RedLiningRPM,
-// the physics/shift/clutch/car3d/wheel control pointers, and the
-// ShiftControl::IShiftingActivator interface's own members) is its own keystone TU
-// and is DEFERRED, mirroring the committed ClutchControl / WheelControl minimal-home
-// convention exactly: EngineControl inherits ONLY the committed BrnEffectControl base
-// in code here; the third IShiftingActivator sub-object vptr write is documented as
-// STRUCTURAL commentary (same as the ClutchControl / WheelControl homes) rather than
-// modelled with a hand-declared base, since ShiftControl (and its nested
-// IShiftingActivator) already has its own real header home (BrnShiftControl.h) that
-// this minimal home must not re-fork/redefine. Only the single f32 field GetStartRPM
-// reads and the dtor's inherited-BrnEffectControl-base teardown are modelled here, BY
-// NAME.
+// also carries the physics/shift/clutch/car3d/wheel control pointers, audio
+// DataPoints, pitch/distortion ramps, redline state and shift LFO state. Those
+// runtime paths are materialised here by their DWARF names and ARTIST behavior.
 //
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): the X360 asm reads the start-RPM at the
 // absolute byte offset +0x18 and installs the IShiftingActivator sub-object vptr at
@@ -59,17 +42,12 @@ namespace Engines
 {
 
 struct PhysicsControl;
-struct ShiftControl;
 struct ClutchControl;
 
-// MINIMAL home (full layout in the EngineControl keystone TU). Reuses the committed
-// BrnEffectControl dual base BY NAME (mirrors ClutchControl / WheelControl). The DWARF-
-// attested third base (ShiftControl::IShiftingActivator, real home BrnShiftControl.h)
-// contributes only a structural sub-object vptr write at +0x38 in the X360 dtor; per the
-// ClutchControl / WheelControl convention that is left as commentary, not a hand-declared
-// base, to avoid re-forking ShiftControl's own header home. Only the start-RPM field
-// GetStartRPM returns and the dtor anchor are reconstructed in this group.
-struct EngineControl : public BrnSound::Logic::BrnEffectControl
+// Reuses the committed BrnEffectControl dual base BY NAME and the DWARF-attested
+// ShiftControl::IShiftingActivator interface.
+struct EngineControl : public BrnSound::Logic::BrnEffectControl,
+                       public ShiftControl::IShiftingActivator
 {
     enum eRedlingState
     {
@@ -95,10 +73,14 @@ struct EngineControl : public BrnSound::Logic::BrnEffectControl
     virtual void UpdateParams(f32 afTimeStep); // @ 0x826B2C58
 
     // @ 0x82698FC8 — return the cached engine start RPM (lfs f1, 0x18(this) on X360).
-    f32 GetStartRPM() const;
+    virtual f32 GetStartRPM();
+    virtual f32 GetTargetRPM();
+    virtual f32 GetRiseFromRPM() { return mfAudioRpm.GetCurrent(); }
     const CgsSound::Utils::DataPoint<f32>& GetAudioRPM() const { return mfAudioRpm; }
     const CgsSound::Utils::DataPoint<f32>& GetAudioThrottle() const { return mfAudioThrottle; }
     const CgsSound::Utils::DataPoint<f32>& GetAudioEngVolume() const { return mfAudioEngineVolume; }
+    f32 GetAudioPitch() const { return mAudioPitch.GetValueFloat(); }
+    bool GetClutchState() const { return mbClutchStateOn; }
 
     PhysicsControl* mpPhysicsControl;
     ShiftControl* mpShiftControl;
@@ -130,6 +112,7 @@ protected:
     virtual void UpdateDistortion(f32 afTimeStep);
     virtual void UpdateRedLiningRPM(f32 afTimeStep);
     virtual void UpdateEngineLFO(f32 afTimeStep);
+    bool ShouldTurnOnClutch(f32 afTargetRpm) const;
 };
 
 } // namespace Engines

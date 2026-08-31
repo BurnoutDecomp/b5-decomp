@@ -16,15 +16,10 @@
 // The hybrid (loop + Ginsu) exhaust engine sound CONTROL. It cross-fades a loop-model
 // bank against accel/decel Ginsu grains, tracking physics/audio RPM deltas.
 //
-// FLAG (opaque crossfade span): mDecelCrossfadeMix is DWARF-typed
-// BrnSound::Vehicles::Engines::Graph and maCrossFadesPoints is Vector2[6]; the
-// committed Graph's mpaPoints is Point* (not Vector2*), so the ctor's
-// `mpaPoints = &maCrossFadesPoints[0]` is a CONTESTED type binding. Per the anti-
-// fabrication rule the crossfade-mix + its point array are modelled as an opaque byte
-// span (documented) rather than forcing an incompatible Graph/Vector2 binding. The
-// cleanly-homed members (the two Attrib::Gen::vehicleengine attribute instances, the
-// Average<3,f32>, the three DataPoint<f32>, the EngineMix pair, the scalar thresholds,
-// and the four control back-pointers) are pinned BY NAME. Absolute offsets NOT asserted.
+// CgsSound::Utils::Graph is the sound-utility graph from CgsSoundUtils.h. ARTIST
+// constructs it over the embedded Vector2[6] table and fills those points from the
+// selected vehicleengine attributes in Attach; this is distinct from the serialized
+// BrnSoundLoopModelData Graph used by the loop-model resource.
 //
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): members are pinned BY NAME + SEQUENCE.
 // =============================================================================
@@ -72,6 +67,8 @@ struct HybridExhaustControl : public BrnSound::Logic::BrnEffectControl
     // sample -- the `lfs 0x8C(control)` read the paired HybridEngineControl's
     // UpdateGinsuRPM @0x82699B98 inlines.
     f32 GetGinsuRPM() const { return mGinsuRpm.mCurrentValue; }
+    f32 GetDeltaRPM() const { return mAverageDeltaRPM.GetAverage(); }
+    const EngineMix& GetEngineMix() const { return mFinalEngineVolume; }
     const EngineMix& GetFinalEngineVolume() const { return mFinalEngineVolume; }
     // DecFIGS BrnHybridEngineControl.h:253; ARTIST inlines this as the +0x4C
     // attribute-instance read used by DualGinsuEffect.
@@ -94,7 +91,8 @@ struct HybridExhaustControl : public BrnSound::Logic::BrnEffectControl
     CgsSound::Utils::DataPoint<f32>   mPhysicsDeltaRpm;                  // h:108
     CgsSound::Utils::DataPoint<f32>   mAudioDeltaRpm;                    // h:111
     CgsSound::Utils::DataPoint<f32>   mGinsuRpm;                         // h:114
-    u8                       mau8DecelCrossfadeMix[8 + 6 * 8];           // h:117 Graph + h:120 Vector2[6] (opaque; see FLAG)
+    CgsSound::Utils::Graph            mDecelCrossfadeMix;                // h:117
+    Vector2                           maCrossFadesPoints[6];              // h:120
     f32                      mfPercentOfAccelThreshold;                  // h:123
     f32                      mfPercentOfDecelThreshold;                  // h:126
     EngineMix                mFinalEngineMix;                           // h:129
@@ -104,6 +102,9 @@ protected:
     void UpdateDeltaRPM();             // @ 0x826B3548
     virtual void UpdateGinsuRPM();     // @ 0x826999F0
     void UpdateMix(f32 afTimeStep);    // @ 0x826CC878
+    void UpdateIdleVolume(f32& arfVolume);     // @ 0x82699AF0
+    void UpdateRpmVolume(f32& arfVolume);      // inlined in ARTIST UpdateMix
+    void UpdateRotationVolume(f32& arfVolume); // @ 0x82699A78
 };
 
 } // namespace Engines

@@ -224,7 +224,7 @@ namespace Attrib
     // intact; the body lives in attribute.cpp where both types are complete.
     void*       Collection_Get(void* lpOut, Collection* lpCollection,
                                const Instance* lpInstance, u64 luKey);
-    int         RefSpec_GetCollectionWithDefault(int* lpRefSpec);
+    Collection* RefSpec_GetCollectionWithDefault(RefSpec* lpRefSpec);
     // (third argument WIDENED to the collection KEY: Instance::GetCollection
     // @0x82802F40 hands over a 64-bit `ld` and the diagnostic formats it as a
     // %08x%08x hi/lo pair -- it was never a host pointer.)
@@ -296,7 +296,7 @@ namespace Attrib
         Instance& operator=(const Instance& lrOther);
 
         Collection* Change(Collection* lpNewCollection);
-        Collection* ChangeWithDefault(int* lpRefSpec);
+        Collection* ChangeWithDefault(RefSpec* lpRefSpec);
         // Resolve luAttributeKey into a 16-byte Attrib::Attribute cursor written through
         // pOut (the X360 sret shape: r3 = the cursor, r4 = the instance, r5 = the key).
         // ⚠️ luAttributeKey is 64 BITS. It was `int` until 2026-07-31, and that silently

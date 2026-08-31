@@ -34,11 +34,9 @@ namespace Wheels
 // deleting destructor (@ 0x826AEF68) -- meDetachState (+0x28), mbResourcesReady
 // (+0x31), meAttachState (+0x24) -- plus the leading vptr stores, which are the
 // compiler-emitted devirtualization of the WheelControl / BrnEffectControl /
-// IResourceRequester / IShiftingActivator base sub-objects (produced implicitly by
-// the destructor chain here, so the BODY is the observable member teardown, which
-// is empty: WheelControl adds no data members of its own to this dtor's ledger
-// function -- the full WheelSide/WheelData/etc. member surface is UN-HOMED and
-// DEFERRED per the FLAG in BrnWheelControl.h, so it is not torn down here).
+// IResourceRequester / IShiftingActivator base sub-objects. The body is empty because
+// the materialised in-air modifiers are value members with compiler-generated
+// teardown; the wider WheelSide/WheelData producer surface remains in its own slice.
 // FLAG: the (a2 & 1) tail invokes the global sound allocator (off_82FFB954) to free
 // the object; that allocator is not homed here, so operator-delete dispatch is left
 // to the host toolchain (the `delete` half of the X360 vector deleting destructor),

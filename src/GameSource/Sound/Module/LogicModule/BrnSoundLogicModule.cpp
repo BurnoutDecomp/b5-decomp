@@ -127,6 +127,8 @@ void SoundLogicModule::Construct()
 {
     CgsSound::Logic::Module::Construct();
 
+    mRandomGenerator.Construct();
+
     mpBrnLogicInputBuffer  = 0;
     mpBrnLogicOutputBuffer = 0;
 

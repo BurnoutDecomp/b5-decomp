@@ -32,6 +32,30 @@ public:
         virtual void Call(VoiceWrapper& arVoice) = 0;
     };
 
+    // CgsVoice.h:296/798. The original helper retains a member-function pointer
+    // and its target object, then invokes that pair when voice creation reaches
+    // the post-initialisation stage.
+    template <typename T>
+    struct FunctorPointer : public AbstractFunctionPointer
+    {
+        typedef void (T::*Function)(VoiceWrapper&);
+
+        FunctorPointer() : mpFunctionPointer(0), mpObject(0) {}
+        void Construct(T* apObject, Function apFunction)
+        {
+            mpFunctionPointer = apFunction;
+            mpObject = apObject;
+        }
+        virtual void Call(VoiceWrapper& arVoice)
+        {
+            if (mpObject && mpFunctionPointer)
+                (mpObject->*mpFunctionPointer)(arVoice);
+        }
+
+        Function mpFunctionPointer;
+        T* mpObject;
+    };
+
     struct CreateParams
     {
         CreateParams() { Clear(); }

@@ -23,6 +23,34 @@ namespace Module
 {
 namespace Io
 {
+    enum eEffectsMessageTypes
+    {
+        E_EFFECTS_MESSAGE_TYPES_INVALID = 0,
+        E_EFFECTS_MESSAGE_TYPES_POP = 1,
+        E_EFFECTS_MESSAGE_TYPES_VOICEOVER_FINISHED = 2,
+        E_EFFECTS_MESSAGE_TYPES_COUNT = 3
+    };
+
+    template <eEffectsMessageTypes teEventType>
+    struct AudioEffectsMessageEvent : public CgsModule::Event
+    {
+        eEffectsMessageTypes GetEventType() const { return teEventType; }
+    };
+
+    struct PopEffectsMessage
+        : public AudioEffectsMessageEvent<E_EFFECTS_MESSAGE_TYPES_POP>
+    {
+        PopEffectsMessage() : muRaceCarID(0), mfIntensity(0.0f) {}
+        void Construct(u8 auRaceCarID, f32 afIntensity)
+        {
+            muRaceCarID = auRaceCarID;
+            mfIntensity = afIntensity;
+        }
+
+        u8 muRaceCarID;
+        f32 mfIntensity;
+    };
+
     // DWARF BrnPreUpdateSharedIo.h:56 -- verbatim empty subclass.
     struct AudioEffectsMessageQueue : public CgsModule::VariableEventQueue<128, 16>
     {

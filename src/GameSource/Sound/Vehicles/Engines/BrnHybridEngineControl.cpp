@@ -1,5 +1,6 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnHybridEngineControl.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/AttribSys/Generated/attrib_findcollection.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::HybridEngineControl -- out-of-line bodies.
@@ -66,6 +67,23 @@ CgsSound::Logic::EffectControl* HybridEngineControl::CreateObject( u32 /*luType*
 // ---------------------------------------------------------------------------
 HybridEngineControl::~HybridEngineControl()
 {
+}
+
+bool HybridEngineControl::Attach()
+{
+    if (!HybridExhaustControl::Attach())
+        return false;
+
+    CGS_ASSERT(mpHybridExhaustControl != nullptr, "mpHybridExhaustControl");
+    if (!mpHybridExhaustControl)
+        return false;
+
+    const u64 luMasterCollection =
+        mpHybridExhaustControl->GetVehicleEngineAttributes().CollectionKey();
+    Attrib::Collection* lpMasterCollection = Attrib::FindCollectionWithDefault(
+        0x7F161D94482CB3BFull, luMasterCollection);
+    mMasterVehicleEngineComponentAttributes.Change(lpMasterCollection);
+    return true;
 }
 
 s32 HybridEngineControl::GetController(s32 aiSlot)

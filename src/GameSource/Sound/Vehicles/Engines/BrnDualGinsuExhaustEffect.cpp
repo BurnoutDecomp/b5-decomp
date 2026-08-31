@@ -196,7 +196,7 @@ void DualGinsuExhaustEffect::ProcessUpdate()
     mReverseWhineVoice.SetGain(0, lfGain, &KU_SEND_NAME);
 
     const f32 lfSpeed = (std::min)(
-        (std::max)(mpPhysicsControl->GetPhysicsData().mVelocityMagnitude.GetPrevious(),
+        (std::max)(mpPhysicsControl->GetPhysicsData().mVelocityMagnitude.GetCurrent(),
                    0.0f),
         KF_MAX_REVERSE_SPEED);
     const f32 lfPitch = KF_MIN_REVERSE_PITCH +

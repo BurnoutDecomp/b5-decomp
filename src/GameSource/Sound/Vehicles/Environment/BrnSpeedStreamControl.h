@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Environment::SpeedStreamControl
@@ -56,6 +57,7 @@ namespace BrnSound
 {
 namespace Vehicles
 {
+namespace Engines { struct PhysicsControl; }
 namespace Environment
 {
 
@@ -64,8 +66,25 @@ namespace Environment
 // settles + the attach/detach/resources-ready member clears).
 struct SpeedStreamControl : public BrnSound::Logic::BrnEffectControl
 {
-    SpeedStreamControl() {}
+    SpeedStreamControl();
     virtual ~SpeedStreamControl();
+
+    virtual s32 GetController(s32 aiSlot);
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController);
+    virtual bool Attach();
+    virtual void UpdateParams(f32 afTimeStep);
+
+    const CgsSound::Utils::DataPoint<bool>& GetSpeedStreamStatus() const { return mSpeedStreamOn; }
+    const CgsSound::Utils::DataPoint<bool>& GetBoostStreamStatus() const { return mBoostStreamOn; }
+
+private:
+    void UpdateDuckers();
+
+    BrnSound::Vehicles::Engines::PhysicsControl* mpPhysicsControl;
+    f32 mfSpeedHighTime;
+    f32 mfBoostHighTime;
+    CgsSound::Utils::DataPoint<bool> mSpeedStreamOn;
+    CgsSound::Utils::DataPoint<bool> mBoostStreamOn;
 };
 
 } // namespace Environment

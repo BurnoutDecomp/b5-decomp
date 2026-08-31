@@ -76,6 +76,84 @@ f32 Curve::GetOutput(f32 lfFraction, ECurveType leCurve)
     }
 }
 
+// InterpolateLine @ ARTIST 0x826A1E90 and its inlined Initialize/Reset accessors.
+// Lengths supplied to this utility are milliseconds in the authored controls.
+void InterpolateLine::Initialize(f32 lfStart, f32 lfFinish, f32 lfLength,
+                                 Curve::ECurveType leCurve)
+{
+    mfElapsedTime = 0.0f;
+    mfLength = lfLength * 0.001f;
+    if (mfLength <= 0.0f)
+        mfLength = 0.01f;
+    mfStart = lfStart;
+    mfFinish = lfFinish;
+    meCurveTypes = leCurve;
+    mfCurrentValue = lfStart;
+    mbComplete = false;
+}
+
+void InterpolateLine::Reset(f32 lfValue)
+{
+    mfElapsedTime = 0.0f;
+    mbComplete = false;
+    if (lfValue == 0.0f)
+    {
+        mfCurrentValue = mfStart;
+    }
+    else
+    {
+        mfStart = lfValue;
+        mfCurrentValue = lfValue;
+    }
+}
+
+f32 InterpolateLine::GetValueFloat() const
+{
+    return mfCurrentValue;
+}
+
+void InterpolateLine::Update(f32 lfDeltaTime)
+{
+    if (mbComplete)
+        return;
+
+    CGS_ASSERT(mfLength != 0.0f, "mfLength != 0.0f");
+    mfElapsedTime += lfDeltaTime;
+    if (mfElapsedTime <= mfLength)
+    {
+        f32 lfFraction = mfElapsedTime / mfLength;
+        lfFraction = (std::max)(0.0f, (std::min)(1.0f, lfFraction));
+        mfCurrentValue = Curve::GetOutput(lfFraction, meCurveTypes) *
+                         (mfFinish - mfStart) + mfStart;
+    }
+    else
+    {
+        mfCurrentValue = mfFinish;
+        mbComplete = true;
+    }
+}
+
+f32 Graph::GetYValue(f32 lfX) const
+{
+    if (!maPoints || muNumOfPoints == 0)
+        return 0.0f;
+    if (lfX <= maPoints[0].x)
+        return maPoints[0].y;
+
+    for (u8 luPoint = 1; luPoint < muNumOfPoints; ++luPoint)
+    {
+        if (lfX <= maPoints[luPoint].x)
+        {
+            const Vector2& lrLeft = maPoints[luPoint - 1];
+            const Vector2& lrRight = maPoints[luPoint];
+            const f32 lfWidth = lrRight.x - lrLeft.x;
+            const f32 lfFraction = lfWidth != 0.0f ? (lfX - lrLeft.x) / lfWidth : 0.0f;
+            return lrLeft.y + (lrRight.y - lrLeft.y) * lfFraction;
+        }
+    }
+    return maPoints[muNumOfPoints - 1].y;
+}
+
 Slope::Slope(const SlopeParams& params)
     : mParams(params)
 {

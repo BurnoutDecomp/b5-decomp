@@ -914,5 +914,15 @@ namespace Logic
             lpcResourceName, lpcBundleName, this, 6, leType);
         GetResourceRegistrar().AddRequest(lRequest);
     }
+
+    void IResourceRequester::LoadAsset(const char* lpcResourceName,
+                                       EResourcePool lePool,
+                                       ResourceRegistrar::EType leType)
+    {
+        CGS_ASSERT(lpcResourceName, "lpcResourceName");
+        ResourceRegistrar::QueuedResource lRequest(
+            lpcResourceName, 0, this, static_cast<s32>(lePool), leType);
+        GetResourceRegistrar().AddRequest(lRequest);
+    }
 }
 }
