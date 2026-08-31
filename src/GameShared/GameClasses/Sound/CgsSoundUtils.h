@@ -179,6 +179,11 @@ struct PathLine
     // DWARF -- void return (the X360 body advances the cursor / stage and updates
     // mfCurrentValue in place; no caller uses a return value).
     void    Update(f32 lfDeltaTime);
+    // CgsSoundUtils.h:177.  Before advancing, replace the active stage's finish
+    // value; when the path completes, keep the output pinned to that live target.
+    // WheelControl uses this while merging its airborne throttle envelope back
+    // into the driver's current throttle.
+    void    Update(f32 lfDeltaTime, f32 lfFinish);
 
     // ORDER mirrors the DWARF (PathLine<2u>). Public for the embedding envelope's seed.
     f32               maLength[tuNumStages];      // CgsSoundUtils.h:170

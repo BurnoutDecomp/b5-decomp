@@ -1,5 +1,18 @@
 #include "GameSource/Sound/Vehicles/Wheels/BrnRoadNoise.h"
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsState.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h"
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
+#include "GameSource/AttribSys/Generated/classes/audiosurface.h"
+#include "GameSource/AttribSys/Generated/classes/surface.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
+#include "GameSource/Sound/Vehicles/Wheels/BrnWheelControl.h"
+#include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"
+
+#include <algorithm>
+
 // =============================================================================
 // BrnSound::Vehicles::Wheels::RoadnoiseEffect -- out-of-line bodies.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX + DWARF (BrnRoadNoise.h,
@@ -17,6 +30,39 @@ namespace Vehicles
 {
 namespace Wheels
 {
+
+namespace
+{
+const u32 KAU_ROADNOISE_PARAMETERS[9] =
+{
+    static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_pitch")),
+    static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_volume")),
+    static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_volume_railtrack")),
+    static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_car_speed")),
+    static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_surface_type_front")),
+    static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_surface_type_back")),
+    static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_azimuth")),
+    static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_surface_type_previous")),
+    static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_volume_transition")),
+};
+
+const u32 KU_SEND01 = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
+const u32 KU_REVERB_SEND = static_cast<u32>(CgsSound::Playback::Name::MakeHash("ReverbSend"));
+const u64 KU_SURFACE_LIST_COLLECTION = Attrib::StringToKey("340654");
+
+Attrib::Gen::audiosurface GetAudioSurface(const Attrib::Gen::surfacelist& arSurfaceList,
+                                          u8 auSurface)
+{
+    const void* lpSurfaceRefData = arSurfaceList.Surfaces(auSurface);
+    if (!lpSurfaceRefData)
+        lpSurfaceRefData = Attrib::DefaultDataArea(sizeof(Attrib::RefSpec));
+
+    const Attrib::RefSpec& lrSurfaceRef =
+        *static_cast<const Attrib::RefSpec*>(lpSurfaceRefData);
+    const Attrib::Gen::surface lSurface(lrSurfaceRef);
+    return Attrib::Gen::audiosurface(lSurface.AudioSurface());
+}
+}
 
 // ---------------------------------------------------------------------------
 // RoadnoiseEffect::RoadnoiseEffect  @ 0x826E56C0   (MSVC inlined full-object ctor)
@@ -129,6 +175,189 @@ void RoadnoiseEffect::TransitionEnvelope::Setup( f32 lfAttackTime,
 // ---------------------------------------------------------------------------
 RoadnoiseEffect::~RoadnoiseEffect()
 {
+}
+
+const char* RoadnoiseEffect::GetTypeName() const
+{
+    return "RoadnoiseEffect";
+}
+
+s32 RoadnoiseEffect::GetController(s32 aiSlot)
+{
+    if (aiSlot == 0)
+        return 1;
+    if (aiSlot == 1)
+        return 0;
+    return -1;
+}
+
+void RoadnoiseEffect::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    switch (apController->GetEffectID())
+    {
+    case 0:
+        mpPhysicsControl =
+            static_cast<BrnSound::Vehicles::Engines::PhysicsControl*>(apController);
+        break;
+    case 1:
+        mpWheelControl = static_cast<WheelControl*>(apController);
+        break;
+    default:
+        break;
+    }
+}
+
+bool RoadnoiseEffect::Attach()
+{
+    if (!CgsSound::Logic::EffectBase::Attach())
+        return false;
+
+    mSurfaceList.ChangeWithDefault(KU_SURFACE_LIST_COLLECTION);
+
+    CgsSound::Logic::Content* lpSurfaceContent = nullptr;
+    if (GetStateBase() && GetStateBase()->GetStateManager())
+    {
+        const CgsSound::Playback::Name lContentName("surface_patch_bank.abi");
+        lpSurfaceContent = GetStateBase()->GetStateManager()->GetContent(lContentName);
+    }
+    CGS_ASSERT(lpSurfaceContent != nullptr,
+               "lpPlayerStateManager->GetContent( K_SURFACES_BANK_NAME )");
+
+    CgsSound::Logic::VoiceWrapper::CreateParams lParams;
+    lParams.mpLogicModule = GetLogicModule();
+    lParams.mFactoryName =
+        static_cast<u32>(CgsSound::Playback::AemsFactorySkName().GetValue());
+    lParams.mVoiceSpecName =
+        static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_surface_class"));
+    lParams.mpContent = lpSurfaceContent;
+    lParams.mSlotName =
+        static_cast<u32>(CgsSound::Playback::Name::MakeHash("AEMS_Slot"));
+    lParams.mSendName = KU_SEND01;
+    lParams.mSubMixVoiceID = 1;
+    lParams.mReverbSendName = KU_REVERB_SEND;
+    lParams.mReverbSubMixVoiceID = 2;
+    lParams.miSendIndex = 0;
+
+    for (s32 liSide = 0; liSide < E_MAX_SIDES; ++liSide)
+    {
+        mRoadNoiseVoice[liSide].Create(lParams);
+        mRoadNoiseVoice[liSide].Play(0);
+    }
+    return true;
+}
+
+void RoadnoiseEffect::UpdateParams(f32 afTimeStep)
+{
+    SetMixerInputValue(0, 0);
+
+    CGS_ASSERT(mpWheelControl != nullptr, "mpWheelControl");
+    if (!mpWheelControl)
+        return;
+
+    for (s32 liSide = 0; liSide < E_MAX_SIDES; ++liSide)
+    {
+        const s32 liWheelNumber = liSide == E_LEFT_HAND_SIDE ? 0 : 1;
+        const WheelControl::SingleWheelStatus lWheelStatus =
+            mpWheelControl->GetSingleWheelStatus(liWheelNumber);
+        const u8 luCurrentSurface = lWheelStatus.mSurfaceType.GetCurrent();
+        const u8 luPreviousSurface = lWheelStatus.mSurfaceType.GetPrevious();
+
+        if (luCurrentSurface != luPreviousSurface)
+        {
+            const Attrib::Gen::audiosurface lAudioSurface =
+                GetAudioSurface(mSurfaceList, luCurrentSurface);
+            const s32 liRoadnoiseLoop = lAudioSurface.mRoadnoiseLoop();
+            muRoadnoiseLoop[liSide].Update(liRoadnoiseLoop);
+            mpWheelControl->SetRoadnoiseLoop(liRoadnoiseLoop,
+                                             static_cast<u8>(liSide));
+            maLoopEnvelope[liSide].Setup(lAudioSurface.EnvelopeAttackTime(),
+                                         lAudioSurface.EnvelopeDecayTime(),
+                                         lAudioSurface.EnvelopeVolume());
+            mafLoopBaseVolume[liSide] = lAudioSurface.SurfaceLoopVolume();
+
+            // The shipped build constructs the old surface's audiosurface instance
+            // here even though transition one-shots were compiled out. Preserve that
+            // lifetime/resolve side effect and the current-surface latch.
+            const Attrib::Gen::audiosurface lPreviousAudioSurface =
+                GetAudioSurface(mSurfaceList, luPreviousSurface);
+            (void)lPreviousAudioSurface;
+            muSurfaceID[liSide] = luCurrentSurface;
+            SetMixerInputValue(0, 0x7FFF);
+        }
+
+        mRoadNoiseVoice[liSide].Update();
+        maLoopEnvelope[liSide].mManilla.Update(afTimeStep);
+        maLoopEnvelope[liSide].mVolume.Update(
+            maLoopEnvelope[liSide].mManilla.mfCurrentValue);
+    }
+
+    for (s32 liVoice = 0; liVoice < KI_NUMBER_OF_TRANSITION_VOICES; ++liVoice)
+        mTransitionsSounds[liVoice].mTransitionVoice.Update();
+}
+
+void RoadnoiseEffect::ProcessUpdate()
+{
+    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    if (!mpPhysicsControl)
+        return;
+
+    const f32 lfReverbSend =
+        GetMixerOutputValue(8, Nicotine::DMixIO::DMX_VOL) / 32767.0f;
+    const f32 lfOverallVolume = GetMixerOutputValue(0, Nicotine::DMixIO::DMX_VOL);
+
+    for (s32 liSide = 0; liSide < E_MAX_SIDES; ++liSide)
+    {
+        const f32 lfAzimuth =
+            GetMixerOutputValue(liSide + 3, Nicotine::DMixIO::DMX_AZIM);
+        const f32 lfLoopVolume = (std::min)(32767.0f, (std::max)(0.0f,
+            mafLoopBaseVolume[liSide] * maLoopEnvelope[liSide].mVolume.GetCurrent() *
+            lfOverallVolume * 0.70710677f));
+        const f32 lfTransitionVolume =
+            GetMixerOutputValue(6, Nicotine::DMixIO::DMX_VOL);
+        const f32 lfPitch =
+            GetMixerOutputValue(liSide + 1, Nicotine::DMixIO::DMX_PITCH);
+        const f32 lfSpeed =
+            mpPhysicsControl->GetPhysicsData().mSpeedMPH.GetCurrent();
+        const f32 lfSurface =
+            static_cast<f32>(muRoadnoiseLoop[liSide].GetCurrent());
+        const f32 lfPreviousSurface =
+            static_cast<f32>(muRoadnoiseLoop[liSide].GetPrevious());
+
+        CgsSound::Logic::VoiceWrapper& lrVoice = mRoadNoiseVoice[liSide];
+        lrVoice.SetParameter(6, lfAzimuth, &KAU_ROADNOISE_PARAMETERS[6]);
+        lrVoice.SetParameter(1, lfLoopVolume, &KAU_ROADNOISE_PARAMETERS[1]);
+        lrVoice.SetParameter(8, lfTransitionVolume, &KAU_ROADNOISE_PARAMETERS[8]);
+        lrVoice.SetParameter(0, lfPitch, &KAU_ROADNOISE_PARAMETERS[0]);
+        lrVoice.SetParameter(3, lfSpeed, &KAU_ROADNOISE_PARAMETERS[3]);
+        lrVoice.SetParameter(4, lfSurface, &KAU_ROADNOISE_PARAMETERS[4]);
+        lrVoice.SetParameter(5, lfSurface, &KAU_ROADNOISE_PARAMETERS[5]);
+        lrVoice.SetParameter(7, lfPreviousSurface, &KAU_ROADNOISE_PARAMETERS[7]);
+        lrVoice.SetGain(1, lfReverbSend, &KU_REVERB_SEND);
+        lrVoice.SetGain(0, 2.0f, &KU_SEND01);
+    }
+}
+
+bool RoadnoiseEffect::Detach()
+{
+    for (s32 liVoice = 0; liVoice < KI_NUMBER_OF_TRANSITION_VOICES; ++liVoice)
+        mTransitionsSounds[liVoice].mTransitionVoice.Release();
+    for (s32 liSide = 0; liSide < E_MAX_SIDES; ++liSide)
+        mRoadNoiseVoice[liSide].Release();
+    return BrnSound::Logic::BrnEffectObject::Detach();
+}
+
+void RoadnoiseEffect::PlayTransitionSound(EWheelSide aeSide,
+                                          u8,
+                                          u8)
+{
+    miLastVoiceUsed = static_cast<u8>((miLastVoiceUsed + 1u) %
+                                      KI_NUMBER_OF_TRANSITION_VOICES);
+    TransitionSound& lrTransition = mTransitionsSounds[miLastVoiceUsed];
+    const s32 liState = lrTransition.mTransitionVoice.GetState();
+    if (liState >= CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_CREATE &&
+        liState <= CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_PLAYING)
+        lrTransition.mTransitionVoice.Release();
+    lrTransition.meSide = aeSide;
 }
 
 } // namespace Wheels

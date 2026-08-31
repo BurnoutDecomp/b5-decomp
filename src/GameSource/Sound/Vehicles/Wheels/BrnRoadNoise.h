@@ -89,6 +89,14 @@ struct RoadnoiseEffect : public BrnSound::Logic::BrnEffectObject
     RoadnoiseEffect();               // @ 0x826E56C0
     virtual ~RoadnoiseEffect();      // anchor for the vector deleting destructor @ 0x826E5AC8
 
+    virtual const char* GetTypeName() const override;
+    virtual s32 GetController(s32 aiSlot) override;
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController) override;
+    virtual bool Attach() override;
+    virtual void UpdateParams(f32 afTimeStep) override;
+    virtual void ProcessUpdate() override;
+    virtual bool Detach() override;
+
     // ---- members (DWARF-attested; declared order == DWARF BrnRoadNoise.h) ----
     WheelControl*                    mpWheelControl;                       // :157
     BrnSound::Vehicles::Engines::PhysicsControl* mpPhysicsControl;         // :158
@@ -100,6 +108,9 @@ struct RoadnoiseEffect : public BrnSound::Logic::BrnEffectObject
     TransitionSound                  mTransitionsSounds[KI_NUMBER_OF_TRANSITION_VOICES]; // :168
     u8                               miLastVoiceUsed;                      // :169
     Attrib::Gen::surfacelist         mSurfaceList;                         // :171
+
+private:
+    void PlayTransitionSound(EWheelSide aeSide, u8 auOntoSurface, u8 auOffOfSurface);
 };
 
 } // namespace Wheels
