@@ -17,13 +17,17 @@ namespace rw
         return lEmpty;
     }
 
-    // Base default (vtbl[3] +24, ?Free@IResourceAllocator@rw@@UEAAXPEAX_K@Z): the concrete
-    // game allocator overrides this. The default is a no-op (matching the elided PC-LEAF
-    // allocators, whose frees happen en masse via re-Initialize, not per-block).
-    // FLAG PC-platform leaf: base-interface default of the [PC-LEAF, user-approved 2026-06-20]
-    // allocator reconstruction (see the file header) -- the rwcore.lib chunk engine is elided.
-    void IResourceAllocator::Free(void* /*lpBlock*/, uint64_t /*luSizeOrFlags*/)
+    // ARTIST @ 0x8227D048 / x64 rwcore_master.obj @ 0x7B28. The convenience
+    // Free(pointer) entry constructs a resource with the pointer in lane zero,
+    // clears every other lane, and dispatches virtual DoFree. This dispatch is
+    // essential: TestBed allocators inherit this function and override DoFree.
+    void IResourceAllocator::Free(void* lpBlock, uint64_t /*luSizeOrFlags*/)
     {
+        Resource lResource;
+        lResource.m_baseResources[0] = lpBlock;
+        for (uint32_t luLane = 1; luLane < 4; ++luLane)
+            lResource.m_baseResources[luLane] = 0;
+        DoFree(lResource);
     }
 
     // A linear allocator keeps its bookkeeping in its own object (m_currentUsage), not inside the
@@ -222,6 +226,29 @@ namespace core
             lResult.m_baseResources[luPool] = lpOwner->Alloc(luPool, luSize, luAlignment);
         }
         return lResult;
+    }
+
+    // ARTIST @ 0x82BC0DA8. Walk the serialised resource lanes in reverse;
+    // lane two belongs to the physical allocator and every other lane belongs
+    // to the main allocator. The PC Resource has four lanes rather than the
+    // console's five, so the equivalent walk begins at lane three.
+    void GeneralResourceAllocator::ResourceAllocatorBridge::DoFree(
+        const ::rw::Resource& lrResource)
+    {
+        GeneralResourceAllocator* lpOwner =
+            reinterpret_cast<GeneralResourceAllocator*>(this);
+
+        for (int liLane = 3; liLane >= 0; --liLane)
+        {
+            void* lpBlock = lrResource.m_baseResources[liLane];
+            if (!lpBlock)
+                continue;
+
+            if (liLane == 2)
+                lpOwner->m_physicalAllocator.Free(lpBlock);
+            else
+                lpOwner->m_mainAllocator.Free(lpBlock);
+        }
     }
 }
 }

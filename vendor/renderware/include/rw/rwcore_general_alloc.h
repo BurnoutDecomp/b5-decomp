@@ -6,7 +6,8 @@
 // rw::core::GeneralResourceAllocator - the general-purpose resource allocator (supports per-block
 // Free, unlike the bump LinearResourceAllocator). The X360 (rw::core::GeneralResourceAllocator ctor
 // 0x82BC0AA8 / dtor 0x82BC0A50 / scalar deleting dtor 0x82BC0BB8 / Initialize 0x82BC0E00 /
-// GetResourceDescriptor 0x82BC0E28 / DoAllocate 0x82BC0C08 / GetPhysicalGeneralAllocator 0x82BC0AA0)
+// GetResourceDescriptor 0x82BC0E28 / DoAllocate 0x82BC0C08 / DoFree 0x82BC0DA8 /
+// GetPhysicalGeneralAllocator 0x82BC0AA0)
 // wraps TWO EA::Allocator::GeneralAllocators: a main heap over the resource's first region and an
 // optional physical/graphics heap over a second region. [PC-LEAF, user-approved 2026-06-20]:
 // faithful structure (two EA GeneralAllocators + a has-physical flag), bodies backed by the working
@@ -71,6 +72,9 @@ namespace core
         // below. (The old note here left the slot on the DEFAULT IResourceAllocator::DoAllocate
         // -- an EMPTY-Resource stub -- which made every virtual carve through this allocator
         // silently return null bases; the boost-bar mount was the first caller to notice.)
+        // DoFree @0x82BC0DA8 performs the inverse operation in reverse lane order: lane 2 is
+        // returned to m_physicalAllocator and all other populated lanes to m_mainAllocator.
+        // ResourceAllocatorBridge below preserves that dispatch on the PC's four-lane Resource.
 
         EA::Allocator::GeneralAllocator& GetPhysicalGeneralAllocator() { return m_physicalAllocator; }
 
@@ -82,6 +86,7 @@ namespace core
         {
             ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor,
                                       const char* lpcName) override;
+            void DoFree(const ::rw::Resource& lrResource) override;
         };
 
         ResourceAllocatorBridge         field_0x0;            // X360 +0    vptr (IS-A IResourceAllocator)
