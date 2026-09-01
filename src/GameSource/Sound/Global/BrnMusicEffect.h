@@ -66,7 +66,9 @@ public:
     enum EJunkyardAmbience
     {
         E_JUNKYARD_AMBIENCE_NONE = 0,
-        E_JUNKYARD_AMBIENCE_NEW_PROFILE = 1
+        E_JUNKYARD_AMBIENCE_NEW_PROFILE = 1,
+        E_JUNKYARD_AMBIENCE_STANDARD = 2,
+        E_JUNKYARD_AMBIENCE_COUNT = 3
     };
 
     struct EaTraxData

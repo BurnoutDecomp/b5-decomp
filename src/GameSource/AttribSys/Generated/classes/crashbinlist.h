@@ -10,6 +10,8 @@
 // generated accessor / `using` API away, so the constructor is the only crashbinlist
 // function in the ledger (minimal X360-faithful recon). Derives from Attrib::Instance.
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
+#include "GameSource/AttribSys/Generated/attrib_findcollection.h"
+#include "GameSource/AttribSys/Generated/attrib_private.h"
 
 namespace Attrib
 {
@@ -18,7 +20,33 @@ namespace Gen
     class crashbinlist : private Instance
     {
     public:
+        static const u64 KU_CLASS_KEY = 0xF86D8C0755C79CC2ull;
         explicit crashbinlist(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+
+        Collection* ChangeWithDefault(u64 luCollectionKey)
+        {
+            return Change(FindCollectionWithDefault(KU_CLASS_KEY, luCollectionKey));
+        }
+
+        u32 mNumCrashBins() const
+        {
+            return *reinterpret_cast<const u32*>(
+                static_cast<const u8*>(mpAttributeData) + 0x4D0u);
+        }
+
+        const void* GetCrashBinRefData(u32 luIndex) const
+        {
+            const u8* lpData = static_cast<const u8*>(mpAttributeData);
+            if (luIndex >= reinterpret_cast<const Private*>(lpData)->GetLength())
+                return DefaultDataArea(0x18u);
+            return lpData + 8u + luIndex * 24u;
+        }
+
+        u64 GetCrashBinCollectionKey(u32 luIndex) const
+        {
+            return *reinterpret_cast<const u64*>(
+                static_cast<const u8*>(GetCrashBinRefData(luIndex)) + 8u);
+        }
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::crashbinlist,

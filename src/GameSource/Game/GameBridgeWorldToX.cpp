@@ -589,8 +589,7 @@ namespace BrnGame
 
         // [2] the interface installs (each opaque view cast onto its twin).
         lpSoundInputBuffer->SetContactSpyQueueInterface(
-            reinterpret_cast<const RootIn::InputContactSpyQueueInterface*>(
-                lpWorldOutputBuffer->GetContactSpyInterface()));
+            lpWorldOutputBuffer->GetContactSpyInterface());
         lpSoundInputBuffer->SetTrafficOutputInterface(
             reinterpret_cast<const RootIn::TrafficSoundOutputInterface*>(
                 lpWorldOutputBuffer->GetTrafficSoundOutputInterface()));

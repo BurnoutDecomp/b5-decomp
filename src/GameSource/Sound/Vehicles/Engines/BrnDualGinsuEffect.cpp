@@ -307,9 +307,7 @@ void DualGinsuEffect::AttachPartialToVoice(s32 liPartial, s32 liVoice)
     CGS_ASSERT(lpContent != nullptr, "mapLoopContentSpecs[liPartial]");
     if (!lpContent)
         return;
-    CgsSound::Logic::Content::ContentHandle& lrHandle =
-        const_cast<CgsSound::Logic::Content::ContentHandle&>(lpContent->GetContent());
-    lpVoice->Attach(guLoopModelSlotName, &lrHandle);
+    lpVoice->Attach(guLoopModelSlotName, *lpContent);
 
     lpVoice->Play(0);
 }

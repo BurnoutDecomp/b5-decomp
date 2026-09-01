@@ -39,6 +39,21 @@ const RootInputBuffer::DirectorCamera* RootInputBuffer::GetDirectorCamera() cons
     return &mDirectorCamera;
 }
 
+// X360 0x82694898. Read-lock accessor for the physical-traffic state queue.
+const RootInputBuffer::PhysicalTrafficStateQueue*
+RootInputBuffer::GetPhysicalTrafficStates() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mPhysicalTrafficStates;
+}
+
+const RootInputBuffer::InputContactSpyQueueInterface&
+RootInputBuffer::GetContactSpyQueueInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return mContactSpyQueueInterface;
+}
+
 // X360 0x823B87C0 (write-lock; h:466; bodied 2026-08-25, faithful-audio-engine
 // phase C3b). Copy the active-race-car output interface in (the console
 // XMemCpy(this+0x620, src, 10480) == the host by-value assign), re-check the
@@ -273,7 +288,7 @@ void RootInputBuffer::SetCameraInput(const DirectorCamera* lpCamera)
 void RootInputBuffer::SetContactSpyQueueInterface(const InputContactSpyQueueInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(&mContactSpyQueueInterface, lpInterface, sizeof(InputContactSpyQueueInterface));
+    mContactSpyQueueInterface = *lpInterface;
 }
 
 // X360 0x823B8710 @ +0x6AB0.
@@ -283,12 +298,14 @@ void RootInputBuffer::SetTrafficOutputInterface(const TrafficSoundOutputInterfac
     std::memcpy(&mTrafficOutputInterface, lpInterface, sizeof(TrafficSoundOutputInterface));
 }
 
-// X360 0x823C9088 @ +0x74C0 (reset-count-then-Append modelled as a wholesale memcpy over
-// pointer-free inline queue storage; stride not attested, start offset exact).
+// X360 0x823C9088 @ +0x74C0: clear the destination queue then append the
+// source's live PhysicalTrafficState events.  A raw aggregate copy would retain
+// the source queue's backing pointer on the 64-bit host.
 void RootInputBuffer::SetPhysicalTrafficStates(const PhysicalTrafficStateQueue* lpStates)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(&mPhysicalTrafficStates, lpStates, sizeof(PhysicalTrafficStateQueue));
+    mPhysicalTrafficStates.Clear();
+    mPhysicalTrafficStates.Append(*lpStates);
 }
 
 // X360 0x823C91F0 @ +0xB490.

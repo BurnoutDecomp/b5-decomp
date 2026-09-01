@@ -43,6 +43,7 @@ namespace Collision
 // Opaque forward decls (linked BY POINTER only; homed in their own headers).
 struct Collision3DControl;
 struct CollisionControl;
+struct CollisionState;
 
 // The per-scrape descriptor MapScrapeToMaterial reads (maObjectId pair); full home
 // is BrnCollisionDataStructures.h.
@@ -52,8 +53,20 @@ struct ScrapeInfo;
 // embeds a CgsSound::Logic::VoiceWrapper.
 struct ScrapeEffect : public BrnSound::Logic::BrnEffectObject
 {
-    ScrapeEffect() {}
+    ScrapeEffect();
     virtual ~ScrapeEffect();   // BrnScrapeEffect.cpp:73 (DWARF virtual); anchor in .cpp
+
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
+    virtual const char* GetTypeName() const override;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 auAllocator);
+
+    virtual s32 GetController(s32 aiIndex) override;
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController) override;
+    virtual bool Attach() override;
+    virtual void UpdateParams(f32 afDeltaTime) override;
+    virtual void ProcessUpdate() override;
+    virtual bool Detach() override;
 
 private:
     // @ 0x8269EC18 (DWARF BrnScrapeEffect.h:158: uint8_t MapScrapeToMaterial(const
@@ -62,6 +75,9 @@ private:
     // owner==1 + entity index == player slot). The OTHER object's owner byte then
     // selects the material (1 -> 1, 2 -> 2, else 0). Body in BrnScrapeEffect.cpp.
     u8 MapScrapeToMaterial(const ScrapeInfo& lScrapeInfo) const;
+    f32 GetIntensity(CollisionState* apState, const ScrapeInfo& arScrapeInfo);
+    f32 GetGain() const;
+    f32 GetPitch() const;
 
 public:
     // Members (DWARF BrnScrapeEffect.h:105..119, order as listed):

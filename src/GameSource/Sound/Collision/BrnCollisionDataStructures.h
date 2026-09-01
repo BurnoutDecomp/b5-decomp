@@ -2,6 +2,13 @@
 #define BRN_SOUND_LOGIC_COLLISION_DATA_STRUCTURES_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
+#include "GameSource/AttribSys/Enums/eAction.h"
+#include "GameSource/AttribSys/Enums/eImpactTime.h"
+#include "GameSource/AttribSys/Enums/eOrientation.h"
+#include "GameSource/Sound/Collision/BrnCollisionFrameInformation.h"
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"
 
 // =============================================================================
 // BrnSound::Logic::Collision::ScrapeInfo
@@ -46,9 +53,29 @@ namespace Logic
 namespace Collision
 {
 
-// BrnCollisionDataStructures.h (assert-cited home). Per-scrape descriptor.
+enum ESize
+{
+    E_SIZE_LARGE  = 0,
+    E_SIZE_MEDIUM = 1,
+    E_SIZE_SMALL  = 2,
+};
+
+// BrnCollisionStateManager.h:280. Per-scrape descriptor.
 struct ScrapeInfo
 {
+    ScrapeInfo()
+        : mEntityIdA{0}
+        , mEntityIdB{0}
+        , mfTimeStamp(0.0f)
+        , mCollisionTagB{0}
+        , meOrientation(AttribSys::Enums::eOrientation::Front)
+        , mfIntensity(0.0f)
+        , mbCrashing(false)
+        , mbValid(false)
+    {
+        mRelativeVelocity.SetZero();
+    }
+
     // BrnCollisionDataStructures.h:108 (assert-cited region). True iff the two
     // descriptors identify the same scrape: same kind (mu32Kind) and the same
     // unordered pair of object identifiers ({A,B} matches {A,B} or {B,A}). Asserts
@@ -60,23 +87,94 @@ struct ScrapeInfo
     // @ 0x826822C8.
     void UpdateHistory( const ScrapeInfo& lInfo );
 
-    // -- FLAGGED layout (offsets/widths are X360 facts; field names descriptive) --
+    Vector3 mRelativeVelocity;                                      // +0x00
+    EntityId mEntityIdA;                                           // +0x10
+    EntityId mEntityIdB;                                           // +0x14
+    f32 mfTimeStamp;                                                // +0x18
+    CollisionTag mCollisionTagB;                                   // +0x1C
+    AttribSys::Enums::eOrientation::eOrientation meOrientation;    // +0x20
+    f32 mfIntensity;                                                // +0x24
+    bool mbCrashing;                                                // +0x28
+    bool mbValid;                                                   // +0x29
+};
 
-    u8  maReserved0x00[0x10];   // @0x00..0x0F: scrape state untouched by these fns
+// BrnCollisionStateManager.h:376. Normalized collision presented to the resolver.
+struct InputCollision
+{
+    enum EPipeline
+    {
+        E_REGULAR = 0,
+        E_PROP = 1,
+        E_MAX_PIPELINES = 2,
+    };
 
-    u32 maObjectId[2];          // @0x10 / 0x14: unordered object-pair "key"
+    InputCollision()
+        : maMaterial{0, 0}
+        , maEntityID{{0}, {0}}
+        , mfPriorityAddition(0.0f)
+        , meAction(AttribSys::Enums::eAction::Collision)
+        , meOrientation(AttribSys::Enums::eOrientation::Front)
+        , mePipeline(E_REGULAR)
+        , mbCull(false)
+    {
+        for (u32 luIndex = 0; luIndex < 3; ++luIndex)
+            maParameter[luIndex] = VecFloat();
+        mPosition.SetZero();
+    }
 
-    f32 mfParam0x18;            // @0x18: scrape audio parameter (rolled in UpdateHistory)
+    ScrapeInfo mScrapeInfo;
+    VecFloat maParameter[3];
+    Vector3 mPosition;
+    u64 maMaterial[2];
+    EntityId maEntityID[2];
+    f32 mfPriorityAddition;
+    AttribSys::Enums::eAction::eAction meAction;
+    AttribSys::Enums::eOrientation::eOrientation meOrientation;
+    EPipeline mePipeline;
+    bool mbCull;
+};
 
-    u8  maReserved0x1C[4];      // @0x1C..0x1F: untouched
+// BrnCollisionStateManager.h:486. Fully-resolved collision copied into a state.
+struct OutputCollision
+{
+    OutputCollision()
+        : meBankType(0)
+        , mePipeline(InputCollision::E_REGULAR)
+        , maMaterial{0, 0}
+        , maEntityID{{0}, {0}}
+        , meAction(AttribSys::Enums::eAction::Collision)
+        , meOrientation(AttribSys::Enums::eOrientation::Front)
+        , meSize(E_SIZE_LARGE)
+        , meFatality(E_FATAL_OFF)
+        , meImpactTime(AttribSys::Enums::eImpactTime::False)
+        , mBinKey(0)
+        , mfPriority(0.0f)
+        , miBinIndex(-1)
+        , miSampleID(-1)
+    {
+        mPosition.SetZero();
+        for (u32 luIndex = 0; luIndex < 3; ++luIndex)
+            maParameter[luIndex] = VecFloat();
+        mNormalizedImpulse = VecFloat();
+    }
 
-    u32 mu32Kind;               // @0x20: scrape kind / material key (exact match)
-
-    f32 mfParam0x24;            // @0x24: scrape audio parameter (rolled in UpdateHistory)
-
-    u8  maReserved0x28[1];      // @0x28: untouched
-
-    u8  mbValid;                // @0x29: validity flag (asserted set in operator==)
+    s32 meBankType;
+    InputCollision::EPipeline mePipeline;
+    u64 maMaterial[2];
+    EntityId maEntityID[2];
+    Vector3 mPosition;
+    AttribSys::Enums::eAction::eAction meAction;
+    AttribSys::Enums::eOrientation::eOrientation meOrientation;
+    ESize meSize;
+    BrnSound::Logic::EFatalityFlag meFatality;
+    AttribSys::Enums::eImpactTime::eImpactTime meImpactTime;
+    VecFloat maParameter[3];
+    VecFloat mNormalizedImpulse;
+    u64 mBinKey;
+    ScrapeInfo mScrapeInfo;
+    f32 mfPriority;
+    s8 miBinIndex;
+    s32 miSampleID;
 };
 
 } // namespace Collision

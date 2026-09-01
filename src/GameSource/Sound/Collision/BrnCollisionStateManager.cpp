@@ -1,26 +1,44 @@
 #include "GameSource/Sound/Collision/BrnCollisionStateManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsID.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
+#include "GameSource/Director/Camera/Camera.h"
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"
+#include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"
+#include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"
+#include "GameSource/Sound/Collision/BrnCollisionState.h"
+#include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
+#include "GameSource/Sound/Module/LogicModule/BrnMessageData.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <type_traits>
 
 // =============================================================================
 // BrnSound::Logic::Collision::CollisionStateManager -- out-of-line bodies.
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity, not byte match).
-// This canonical home brings the collision / crash sound-logic state manager up as a
-// CONCRETE, registrable leaf the StateManager factory CreateStateMan @ 0x826A5B60
-// can construct. The collision audio domain (per-material collision generators, crash
-// attribute tables, crash voices) is the LARGEST of the managers and is deferred WHOLE
-// -- see the per-function FLAGs.
+// This canonical home brings up the collision/crash manager's resource binding,
+// contact import, material/bin resolution, state allocation, and authored playback.
 //
 // Sources:
 //   CollisionStateManager::CreateObject  @ 0x82701FA8  (real)
-//   CollisionStateManager::Prepare       @ 0x826F8B78  (stub -- collision-domain cascade)
-//   CollisionStateManager::ctor          @ 0x826FFAC0  (MINIMAL -- heavy construction deferred)
-//   CollisionStateManager::dtor          @ 0x826FFD48  (minimal -- collision-domain cascade)
-// GetTypeInfo / GetTypeName / GetStaticTypeInfo / GetResourceRegistrar /
-// ResourcesAreReady were NOT individually exported; reconstructed from the
-// established in-tree RTTI pattern + the sibling BrnEffectObject::GetResourceRegistrar
-// @ 0x82696850. GetTypeName returns the "CollisionStateManager" literal (off_82F2F950,
-// the tag CreateObject's operator new uses).
+//   CollisionStateManager::Prepare       @ 0x826F8B78
+//   CollisionStateManager::ctor          @ 0x826FFAC0
+//   CollisionStateManager::dtor          @ 0x826FFD48
+//   CollisionStateManager::ResourcesAreReady @ 0x826D3788
+//   CollisionStateManager::Notify        @ 0x826F8E68
+// GetTypeInfo / GetTypeName / GetStaticTypeInfo / GetResourceRegistrar are
+// reconstructed from the established in-tree RTTI pattern + the sibling
+// BrnEffectObject::GetResourceRegistrar @ 0x82696850. GetTypeName returns the
+// "CollisionStateManager" literal (off_82F2F950, the tag CreateObject's operator
+// new uses).
 // =============================================================================
 
 namespace BrnSound
@@ -29,6 +47,15 @@ namespace Logic
 {
 namespace Collision
 {
+
+namespace
+{
+bool CollisionAudioDiagEnabled()
+{
+    static const bool sbEnabled = std::getenv("BRN_COLLISION_AUDIO_DIAG") != nullptr;
+    return sbEnabled;
+}
+}
 
 // ---------------------------------------------------------------------------
 // CollisionStateManager::CollisionStateManager()  ctor @ 0x826FFAC0  (HEAVY)
@@ -51,26 +78,31 @@ namespace Collision
 //   <seed tail @ +0x8264..>
 //   return a1;
 //
-// The two vtable stores at +0/+0x90 are produced implicitly by constructing a
-// polymorphic class deriving from BrnStateManager.
-//
-// FLAG (MINIMAL ctor -- heavy construction DEFERRED, do NOT pull the collision domain):
-// per the task constraint, this shell does a MINIMAL ctor that only forwards to the
-// BrnStateManager base (which value-inits the modelled base members). The X360 ctor's
-// heavy construction -- the SelectionHistory<512>, the four zeroed tables, the TWO
-// 64-entry arrays of CgsSceneManager::CgsCollision::BaseCollisionGenerator (vector-
-// constructed via _vector_constructor_iterator_), the three Attrib::Gen attribute
-// tables (crashbinlist / propscrashbinlist / proptomaterialmappings), and the crash
-// Content sub-objects -- is NOT reproduced here: doing so would require pulling in the
-// entire collision domain (CgsSceneManager::CgsCollision + the AttribSys-generated
-// crash tables), which this slice deliberately does NOT do. Those members are the
-// deferred maDeferredCollisionState (see header) and are left default-initialised. NOT
-// a member-for-member faithful body -- the whole collision construction is deferred.
-// The crash Content sub-objects are never constructed-into by this slice (Prepare
-// stubbed), so there is nothing for the dtor to release.
+// The host object keeps the same named runtime state needed by the recovered paths;
+// console absolute offsets are intentionally not imposed on the 64-bit layout.
 // ---------------------------------------------------------------------------
 CollisionStateManager::CollisionStateManager()
     : BrnSound::Logic::BrnStateManager()
+    , maSelectionHistory()
+    , maPropToMaterialMappings()
+    , maInputCollision()
+    , maOutputCollision()
+    , mCameraInfo()
+    , mu32InputCollisionCount(0)
+    , mu32OutputCollisionCount(0)
+    , mFrameInformation()
+    , maScrapeHistory()
+    , mScrapesCsisInterface()
+    , mScrapesAemsBank()
+    , mCollisionSplicerBank()
+    , mCrashBinList()
+    , mPropsCrashBinList()
+    , mPropMaterialMappings()
+    , mbResourcesAreLoaded(false)
+    , mbBoundToProps(false)
+    , mPropDataResourceHandle(CgsResource::NULLResourceHandle)
+    , mx32CameraBinFlags(1)
+    , mx32GameModeBinFlags(1)
 {
 }
 
@@ -87,17 +119,8 @@ CollisionStateManager::CollisionStateManager()
 //   CgsSound::Logic::StateManager::RegisteredContent_4_int_::~ObjectPool(a1 + 12);   ; base pool teardown
 //   *a1 = &off_820AA820;                                                             ; MemBase vtable
 //
-// FLAG (minimal -- collision-domain cascade): the real dtor destructs the three
-// Attrib::Instance crash tables, drops one refcounted CgsSound::Playback object (the
-// CgsObject.h refcount drop at line 117) and releases two CgsSound::Playback::Object
-// Content sub-objects, then tears down the base RegisteredContent ObjectPool at +0xC
-// (its ~ObjectPool) and re-installs the MemBase vtable. The Attrib tables + Content
-// sub-objects are the deferred maDeferredCollisionState (see header) and are never
-// constructed by this slice's MINIMAL ctor / stubbed Prepare, so there is nothing to
-// destruct or release; the base pool teardown + vtable re-install are re-synthesised
-// by the host toolchain from this virtual destructor + the base ~BrnStateManager. NOT
-// a member-for-member faithful body -- the collision teardown legs are deferred with
-// the collision audio domain.
+// The generated attributes, Content handles, histories, and base pool are RAII members
+// on PC, so their recovered teardown order is synthesized by the host compiler.
 // ---------------------------------------------------------------------------
 CollisionStateManager::~CollisionStateManager()
 {
@@ -140,13 +163,8 @@ CgsSound::Logic::StateManager* CollisionStateManager::CreateObject( u32 /*luType
 // baseTypeInfo, createObject) so the factory CreateStateMan can match
 // descriptor->ObjectID and call ->createObject.
 //
-// FLAG (ObjectID UNRESOLVED): the per-leaf registration static-init that calls
-// StateManager::AddToClassTypeInfoArray(@0x8268DFE8) with the explicit ObjectID was
-// NOT exported (CreateObject @ 0x82701FA8 has no xrefs_to) and no map-state enum names
-// the id in-tree. Per the established in-tree placeholder convention (every committed
-// GetStaticTypeInfo uses 0), the ObjectID is seeded 0 here and MUST be replaced with
-// the real id at integration -- the id is this manager's slot in the
-// CreateStateManagers 0..8 sequence (@ 0x826AFEF8).
+// DecFIGS static initialization @ 0x85FA1C pins this manager's ObjectID to 5 and
+// its base descriptor to StateManager::GetStaticTypeInfo().
 //
 // FLAG (registry hookup deferred): the minimal CgsSound::Logic::StateManager view
 // pulled via BrnStateManager.h (this TU's base) does NOT declare
@@ -216,37 +234,120 @@ const char* CollisionStateManager::GetTypeName() const
 //   state 3: if (!StateManager::PrepareStates(...)) return 0;
 //   state 4: return 1;
 //
-// FLAG (stub -- collision-domain cascade): the real body cascades into
-//   * BrnSound::Logic::Collision::CollisionStateManager::SetCollisionBinList (seeds the
-//     per-material collision-generator/crash-bin lists -- the deferred collision domain),
-//   * CgsSound::Logic::Content::Construct / Content::IsLoaded (the crash splicer banks),
-//   * CgsSound::Playback::Name::MakeHash (the content-name hasher),
-//   * BrnSound::Logic::IResourceRequester::LoadAsset (the streaming-resource broker),
-//   * CgsDev::PerfMonCpu::AddMonitor (the CPU perf monitor), and
-//   * CgsSound::Logic::StateManager::PrepareStates @ 0x826EAD30 (the State machine,
-//     itself a declared-only stub in the foundation).
-// None reconstructed in this slice. PrepareStateManagersOnBoot (0x826837F8) only needs
-// Prepare() to return true to advance boot, so this stub returns true (boot-ready)
-// WITHOUT the crash-bin / content bring-up. NOT an X360-faithful body -- the prepare
-// state machine + the collision audio domain are deferred. X360 addr above.
 // ---------------------------------------------------------------------------
 bool CollisionStateManager::Prepare()
 {
-    return true;
+    switch (GetPrepareState())
+    {
+    case E_PREPARE_NONE:
+    case E_PREPARE_RELEASED:
+        mePrepareState = E_PREPARE_NONE;
+        // fall through
+    case E_PREPARE_BEGIN:
+        mePrepareState = E_PREPARE_BEGIN;
+        {
+            BrnSound::Module::SoundLogicModule* lpModule =
+                static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+            CGS_ASSERT(lpModule != nullptr, "lpSoundLogicModule");
+            if (!lpModule)
+                return false;
+            const Attrib::Gen::burnoutglobaldata& lrGlobalData =
+                lpModule->GetGlobalData();
+            SetCollisionBinList(lrGlobalData.CollisionCrashBinListKey(),
+                                lrGlobalData.PropsCrashBinListKey(),
+                                lrGlobalData.PropToMaterialMappingsKey());
+        }
+        LoadAsset("Sound\\Splicer\\CollisionSpliceBank.bundle",
+                  "CollisionSpliceBank", ResourceRegistrar::E_DATA);
+        LoadAsset("SOUND\\AEMS\\SCRAPEPATCHBANK.BUNDLE", nullptr,
+                  ResourceRegistrar::E_DATA);
+        // fall through
+    case E_PREPARE_UPDATING:
+        mePrepareState = E_PREPARE_UPDATING;
+        if (!mbResourcesAreLoaded ||
+            !mCollisionSplicerBank[E_COLLISION_SPLICE_BANK_COLLISION].IsLoaded() ||
+            !mScrapesCsisInterface.IsLoaded() ||
+            !mScrapesAemsBank.IsLoaded())
+            return false;
+        // fall through
+    case E_PREPARE_STATES:
+        mePrepareState = E_PREPARE_STATES;
+        if (!PrepareStates(3, 7, 0))
+            return false;
+        // fall through
+    case E_PREPARE_FINISHED:
+        mePrepareState = E_PREPARE_FINISHED;
+        return true;
+    default:
+        return false;
+    }
 }
 
 // ---------------------------------------------------------------------------
-// CollisionStateManager::ResourcesAreReady()  (IResourceRequester completion callback)
+// CollisionStateManager::ResourcesAreReady() @ 0x826D3788
+// (IResourceRequester completion callback)
 //
-// FLAG (stub -- collision-domain cascade): the IResourceRequester completion callback
-// (invoked by the resource broker once the crash splicer banks resolve) seeds the
-// crash voice/content state -- the deferred collision audio domain. Not reconstructed
-// in this slice and not needed for boot: it is invoked only AFTER LoadAsset resolves,
-// which this slice's Prepare stub never issues. Bodied as a no-op so the leaf is
-// concrete; NOT X360-faithful. Deferred with the collision audio domain.
 // ---------------------------------------------------------------------------
 void CollisionStateManager::ResourcesAreReady()
 {
+    if (!mbResourcesAreLoaded)
+    {
+        CgsSound::Logic::Module* lpModule = GetLogicModule();
+        const u32 luAemsFactory = static_cast<u32>(
+            CgsSound::Playback::AemsFactorySkName().GetValue());
+        const u32 luSplicerFactory = static_cast<u32>(
+            CgsSound::Playback::Name::MakeHash("~SplicerFactory::SK_NAME~"));
+
+        mScrapesCsisInterface.Construct(
+            lpModule, luAemsFactory,
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash("ScrapesCsis")));
+        mScrapesAemsBank.Construct(
+            lpModule, luAemsFactory,
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash("ScrapePatchBank.abi")));
+        mCollisionSplicerBank[E_COLLISION_SPLICE_BANK_COLLISION].Construct(
+            lpModule, luSplicerFactory,
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash("CollisionSpliceBank")));
+        mbResourcesAreLoaded = true;
+    }
+
+    if (mbBoundToProps &&
+        mPropDataResourceHandle == CgsResource::NULLResourceHandle)
+    {
+        char lacResourceName[KI_CGSID_STRING_LEN] = {};
+        CgsIDUnCompress(0xA773D7113DF454BFull, lacResourceName);
+        mPropDataResourceHandle = GetAsset(nullptr, lacResourceName);
+        if (mPropDataResourceHandle != CgsResource::NULLResourceHandle)
+        {
+            BuildPropToMaterialTable();
+            if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+            {
+                u32 luValidMappings = 0;
+                for (u32 luIndex = 0; luIndex < 500u; ++luIndex)
+                    luValidMappings += maPropToMaterialMappings[luIndex].mbValid ? 1u : 0u;
+                *CgsDev::Log::gpDebugPrint
+                    << "[collision-audio] prop resource bound mappings="
+                    << static_cast<s32>(luValidMappings) << "\n";
+            }
+        }
+    }
+}
+
+void CollisionStateManager::Notify(const CgsSound::Io::MessageHeader* apkMessage)
+{
+    CGS_ASSERT(apkMessage != nullptr, "lpkMessage");
+    if (!apkMessage)
+        return;
+
+    if (apkMessage->GetEventId() ==
+            BrnSound::E_SOUNDMESSAGE_COLLISION_BIND_TO_PROPS &&
+        !mbBoundToProps)
+    {
+        char lacResourceName[KI_CGSID_STRING_LEN] = {};
+        CgsIDUnCompress(0xA773D7113DF454BFull, lacResourceName);
+        LoadAsset(lacResourceName, E_PHYSICS_DATA_POOL,
+                  ResourceRegistrar::E_DATA);
+        mbBoundToProps = true;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -257,23 +358,10 @@ void CollisionStateManager::ResourcesAreReady()
 // slot-1 of the module's embedded ResourceRegistrar. The state-manager leaves share
 // the +0x2C module back-pointer (stamped by CreateStateMan).
 //
-// FLAG (module opaque): the minimal CgsSound::Logic::StateManager view in this TU
-// (via BrnStateManager.h) does not expose mpLogicModule (+0x2C), and the
-// SoundLogicModule home is not reconstructed in this slice -- so this cannot be bodied
-// faithfully here. Provided as a non-cascading stub that abort-asserts if ever reached
-// on boot (PrepareStateManagersOnBoot does NOT call it; it is only used on the per-
-// frame attach/detach path this slice never exercises). Returns a TU-local empty
-// registrar purely to satisfy the non-void signature; NOT a faithful body. Body via
-// the module once the full StateManager view (mpLogicModule) + SoundLogicModule are
-// available.
 // ---------------------------------------------------------------------------
 BrnSound::Logic::ResourceRegistrar& CollisionStateManager::GetResourceRegistrar()
 {
-    CGS_ASSERT( false,
-                "CollisionStateManager::GetResourceRegistrar reached without a homed "
-                "SoundLogicModule (boot path does not call this)" );
-    static BrnSound::Logic::ResourceRegistrar sUnhomedRegistrar;
-    return sUnhomedRegistrar;
+    return BrnSound::Logic::BrnStateManager::GetResourceRegistrar();
 }
 
 // ---------------------------------------------------------------------------
@@ -313,27 +401,513 @@ CollisionStateManager::FindInScrapeHistory( const BrnSound::Logic::Collision::Sc
 // ---------------------------------------------------------------------------
 // CollisionStateManager::PlayCollision(OutputCollision*)  @ 0x82704028
 //
-// FLAG (STUB -- deferred collision-audio domain; NOT X360-faithful): this is the
-// runtime "play a collision sound" entry point of the SAME collision-audio domain the
-// class ctor / dtor / Prepare / ResourcesAreReady / GetResourceRegistrar already defer
-// wholesale. A byte-faithful body needs types/globals NOT homed anywhere in the
-// committed tree and with no recovered host layout: OutputCollision (fields), the
-// GetRandomSampleID<Attrib::Gen::crashbin/propscrashbin> template methods over the
-// deferred crash-bin tables, the crash-splicer "voice" type (slot getters +0x14/+0xC
-// and the +0x54/+0x58 priority pair), the SoundLogicModule back-pointer (+0x2C) linked
-// list, and the collision-audio debug globals (dword_82FFB91C / off_82F2F9BC). Bodied
-// as a safe stub matching this class's established deferred-domain convention: it
-// asserts + returns 0 (the X360 abort-safe value; the boot path never calls this -- only
-// UpdateParams does, which this slice does not exercise). Revisit once the whole
-// collision-audio domain is homed together.
+// Allocates a collision state, chooses a sample through the correct authored bin type,
+// then attaches the resolved output. A bin with no eligible sample is a successful
+// no-op, matching ARTIST.
 // ---------------------------------------------------------------------------
-int CollisionStateManager::PlayCollision( OutputCollision* /*lpCollision*/ )
+int CollisionStateManager::PlayCollision(OutputCollision* lpCollision)
 {
-    CGS_ASSERT( false,
-                "CollisionStateManager::PlayCollision reached without the homed collision-audio "
-                "domain (OutputCollision / GetRandomSampleID<Attrib::Gen::*> / crash-voice type / "
-                "SoundLogicModule back-pointer are all deferred -- see header FLAG)" );
-    return 0;
+    CGS_ASSERT(lpCollision != nullptr, "lpCollision");
+    if (!lpCollision || lpCollision->miSampleID == -1)
+        return 1;
+
+    CollisionState* lpState = static_cast<CollisionState*>(GetFreeState(lpCollision));
+    if (!lpState)
+        return 0;
+
+    switch (lpCollision->mePipeline)
+    {
+    case InputCollision::E_REGULAR:
+        GetRandomSampleID<Attrib::Gen::crashbin>(*lpCollision);
+        break;
+    case InputCollision::E_PROP:
+        GetRandomSampleID<Attrib::Gen::propscrashbin>(*lpCollision);
+        break;
+    default:
+        CGS_ASSERT(false, "lCollision.mePipeline < InputCollision::E_MAX_PIPELINES");
+        return 0;
+    }
+
+    if (lpCollision->miSampleID < 0)
+        return 1;
+
+    if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+    {
+        static u32 suPrintCount = 0;
+        if (suPrintCount++ < 32u)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[collision-audio] play pipeline="
+                << static_cast<s32>(lpCollision->mePipeline)
+                << " bin=" << static_cast<s32>(lpCollision->miBinIndex)
+                << " size=" << static_cast<s32>(lpCollision->meSize)
+                << " sample=" << lpCollision->miSampleID
+                << " impulse=" << lpCollision->mNormalizedImpulse.x << "\n";
+        }
+    }
+
+    lpState->Attach(lpCollision);
+    lpState->SetLifetime(CollisionState::E_COLLISION);
+    return 1;
+}
+
+void CollisionStateManager::SetCollisionBinList(
+    u64 luCollisionBinListKey,
+    u64 luPropsCollisionBinListKey,
+    u64 luPropsMappingKey)
+{
+    mCrashBinList.ChangeWithDefault(luCollisionBinListKey);
+    CGS_ASSERT(mCrashBinList.mNumCrashBins() != 0, "mCrashBinList.mNumCrashBins() != 0");
+    for (u32 luIndex = 0; luIndex < mCrashBinList.mNumCrashBins(); ++luIndex)
+    {
+        Attrib::Gen::crashbin lBin(
+            mCrashBinList.GetCrashBinCollectionKey(luIndex), nullptr);
+        const s32 liBank = SelectBin(0, lBin.mSpliceBankAsset(), 0, 0, 0);
+        CGS_ASSERT(liBank >= E_COLLISION_SPLICE_BANK_COLLISION &&
+                   liBank < E_COLLISION_SPLICE_BANK_MAX,
+                   "leSpliceBankType < E_COLLISION_SPLICE_BANK_MAX");
+    }
+
+    mPropsCrashBinList.ChangeWithDefault(luPropsCollisionBinListKey);
+    CGS_ASSERT(mPropsCrashBinList.mNumCrashBins() != 0,
+               "mPropsCrashBinList.mNumCrashBins() != 0");
+    for (u32 luIndex = 0; luIndex < mPropsCrashBinList.mNumCrashBins(); ++luIndex)
+    {
+        Attrib::Gen::propscrashbin lBin(
+            mPropsCrashBinList.GetCrashBinCollectionKey(luIndex), nullptr);
+        const s32 liBank = SelectBin(0, lBin.mSpliceBankAsset(), 0, 0, 0);
+        CGS_ASSERT(liBank >= E_COLLISION_SPLICE_BANK_COLLISION &&
+                   liBank < E_COLLISION_SPLICE_BANK_MAX,
+                   "leSpliceBankType < E_COLLISION_SPLICE_BANK_MAX");
+    }
+
+    mPropMaterialMappings.ChangeWithDefault(luPropsMappingKey);
+}
+
+void CollisionStateManager::BuildPropToMaterialTable()
+{
+    const u32 luMappingCount = mPropMaterialMappings.MappingCount();
+    CGS_ASSERT(luMappingCount < 500u, "mPropMaterialMappings.MappingCount() < KU_MAX_PROP_TYPES");
+
+    for (u32 luIndex = 0; luIndex < 500u; ++luIndex)
+        maPropToMaterialMappings[luIndex] = PropToMaterialMapping();
+
+    const BrnPhysics::Props::PropPhysicsDataHeader* lpPropPhysics = nullptr;
+    if (mPropDataResourceHandle.mpResourceMemory)
+    {
+        lpPropPhysics = *reinterpret_cast<
+            BrnPhysics::Props::PropPhysicsDataHeader* const*>(
+                mPropDataResourceHandle.mpResourceMemory);
+    }
+    CGS_ASSERT(lpPropPhysics != nullptr, "lpPropPhysicsData");
+    if (!lpPropPhysics)
+        return;
+
+    for (u32 luMapping = 0; luMapping < luMappingCount; ++luMapping)
+    {
+        const u64 luCgsId = mPropMaterialMappings.CgsIds(luMapping);
+        for (u32 luType = 0;
+             luType < lpPropPhysics->GetNumberOfPropTypes(); ++luType)
+        {
+            const BrnPhysics::Props::PropTypeData* lpType =
+                lpPropPhysics->GetType(luType);
+            if (lpType && lpType->GetResourceId().GetHash() == luCgsId)
+            {
+                CGS_ASSERT(!maPropToMaterialMappings[luType].mbValid,
+                           "!maPropToMaterialMappings[luType].mbValid");
+                maPropToMaterialMappings[luType].muMaterialIndex =
+                    mPropMaterialMappings.MaterialIndices(luMapping);
+                maPropToMaterialMappings[luType].mbValid = true;
+                break;
+            }
+        }
+    }
+}
+
+bool CollisionStateManager::MapPropTypeToMaterial(
+    u16 luPropType, u64& lruMaterial) const
+{
+    if (luPropType >= 500u || !maPropToMaterialMappings[luPropType].mbValid)
+        return false;
+
+    const u16 luMaterialIndex =
+        maPropToMaterialMappings[luPropType].muMaterialIndex;
+    CGS_ASSERT(luMaterialIndex < 64u, "luMaterialIndex < 64");
+    lruMaterial = 1ull << luMaterialIndex;
+    return true;
+}
+
+u64 CollisionStateManager::MapEntityIdToMaterial(
+    const EntityId& lrEntityId,
+    const BrnSound::Module::Io::RootInputBuffer& lrInput) const
+{
+    const u32 luOwner = lrEntityId.muValue >> 24;
+    const u32 luIndex = (lrEntityId.muValue >> 10) & 0x3FFFu;
+    switch (luOwner)
+    {
+    case 0u: // world
+        return 0x10ull;
+    case 1u: // race car
+        return luIndex == static_cast<u32>(
+            lrInput.GetPlayerActiveRaceCarIndex()) ? 0x2ull : 0x4ull;
+    case 2u: // traffic
+    {
+        const BrnSound::Module::Io::RootInputBuffer::PhysicalTrafficStateQueue*
+            lpTraffic = lrInput.GetPhysicalTrafficStates();
+        if (lpTraffic)
+        {
+            for (s32 liIndex = 0; liIndex < lpTraffic->GetLength(); ++liIndex)
+            {
+                const BrnPhysics::Vehicle::PhysicalTrafficState& lrState =
+                    lpTraffic->GetEvent(liIndex);
+                if (lrState.mEntityID.muValue != lrEntityId.muValue)
+                    continue;
+                if (lrState.mbIsFatallyCrashing)
+                    return 0x1000000ull;
+                if (lrState.mbIsDeforming)
+                    return 0x800000ull;
+                break;
+            }
+        }
+        return 0x8ull;
+    }
+    default:
+        return 0x1ull;
+    }
+}
+
+void CollisionStateManager::MakeBaseInputCollision(
+    InputCollision& lrOut,
+    const BrnPhysics::ContactSpy::BaseContact& lrContact,
+    const BrnSound::Module::Io::RootInputBuffer& lrInput,
+    f32 afDeltaTime) const
+{
+    lrOut = InputCollision();
+    lrOut.mePipeline = InputCollision::E_REGULAR;
+    lrOut.maEntityID[0] = lrContact.mEntityIdA;
+    lrOut.maEntityID[1] = lrContact.mEntityIdB;
+    lrOut.mPosition = lrContact.mPointOnA;
+    lrOut.maMaterial[0] = MapEntityIdToMaterial(lrOut.maEntityID[0], lrInput);
+    // InputCollision::InputCollision @ 0x826BDAE8 ORs this authored category
+    // into the second material after MapEntityIdToMaterial.  The crash-bin
+    // material pairs include that bit; omitting it prevents every regular
+    // collision from reaching a bin.
+    lrOut.maMaterial[1] =
+        MapEntityIdToMaterial(lrOut.maEntityID[1], lrInput) |
+        0x2000000000ull;
+
+    // ARTIST flt_830083E0: the stress-to-per-second normalisation used by both
+    // regular and prop InputCollision constructors.
+    // ARTIST computes this static from KF_FASTEST_COLLISION (200) and
+    // KF_BIGGEST_THING_MASS (1600) during global initialization.
+    static const f32 KF_BIGGEST_COLLISION_IN_SECOND = 320000.0f;
+    const f32 lfDt = std::max(afDeltaTime, 0.000001f);
+    const f32 lfStress = std::sqrt(
+        lrContact.mNormalStress.x * lrContact.mNormalStress.x +
+        lrContact.mNormalStress.y * lrContact.mNormalStress.y +
+        lrContact.mNormalStress.z * lrContact.mNormalStress.z);
+    const f32 lfImpulse =
+        lfStress / (KF_BIGGEST_COLLISION_IN_SECOND * lfDt);
+    lrOut.maParameter[0] = VecFloat{lfImpulse, lfImpulse, lfImpulse, lfImpulse};
+
+    const Vector3 lToContact{
+        lrOut.mPosition.x - mCameraInfo.mTransform.Pos().x,
+        lrOut.mPosition.y - mCameraInfo.mTransform.Pos().y,
+        lrOut.mPosition.z - mCameraInfo.mTransform.Pos().z,
+        0.0f};
+    const f32 lfDistanceSquared =
+        lToContact.x * lToContact.x + lToContact.y * lToContact.y +
+        lToContact.z * lToContact.z;
+    lrOut.maParameter[1] = VecFloat{lfDistanceSquared, lfDistanceSquared,
+                                    lfDistanceSquared, lfDistanceSquared};
+    f32 lfFacing = 0.0f;
+    if (lfDistanceSquared > 0.0f)
+    {
+        const f32 lfInvDistance = 1.0f / std::sqrt(lfDistanceSquared);
+        lfFacing = (lToContact.x * lrContact.mNormal.x +
+                    lToContact.y * lrContact.mNormal.y +
+                    lToContact.z * lrContact.mNormal.z) * lfInvDistance;
+    }
+    lrOut.maParameter[2] = VecFloat{lfFacing, lfFacing, lfFacing, lfFacing};
+}
+
+void CollisionStateManager::MakePropInputCollision(
+    InputCollision& lrOut,
+    const BrnPhysics::ContactSpy::PropContact& lrContact,
+    const BrnSound::Module::Io::RootInputBuffer& lrInput,
+    f32 afDeltaTime) const
+{
+    MakeBaseInputCollision(lrOut, lrContact, lrInput, afDeltaTime);
+    lrOut.mePipeline = InputCollision::E_PROP;
+    lrOut.maMaterial[1] =
+        MapEntityIdToMaterial(lrContact.mEntityIdB, lrInput);
+    lrOut.mbCull = !MapPropTypeToMaterial(lrContact.muType,
+                                          lrOut.maMaterial[0]);
+    if (lrContact.muBeganMoving == 1u)
+        lrOut.mfPriorityAddition = 1.0f;
+}
+
+void CollisionStateManager::AddInputCollision(const InputCollision& lrCollision)
+{
+    if (lrCollision.mbCull)
+        return;
+    CGS_ASSERT(mu32InputCollisionCount < 64u,
+               "mu32InputCollisionCount < KU_MAX_INPUT_COLLISIONS");
+    if (mu32InputCollisionCount < 64u)
+        maInputCollision[mu32InputCollisionCount++] = lrCollision;
+}
+
+void CollisionStateManager::SetCameraInfo(
+    const BrnDirector::Camera::Camera& lrCamera)
+{
+    mCameraInfo.mTransform = lrCamera.GetTransform();
+    mCameraInfo.mfFieldOfView = lrCamera.GetFOV();
+    mCameraInfo.mfCosineHalfFov = std::cos(
+        mCameraInfo.mfFieldOfView * 0.0087266462f);
+    mCameraInfo.mfAspectRatio = lrCamera.mfAspectRatio;
+    mCameraInfo.mfZoom = BrnDirector::Camera::Utils::GetZoomFromFOVDegs(
+        mCameraInfo.mfFieldOfView);
+}
+
+u32 CollisionStateManager::MapCameraStateToBinFlags(
+    const BrnDirector::Camera::Camera& lrCamera) const
+{
+    const BrnDirector::Camera::CameraState& lrState = lrCamera.GetState();
+    u32 luFlags = 0;
+    if (lrState.IsFlagSet(0))  luFlags |= 0x001u;
+    if (lrState.IsFlagSet(3))  luFlags |= 0x002u;
+    if (lrState.IsFlagSet(4))  luFlags |= 0x004u;
+    if (lrState.IsFlagSet(5))  luFlags |= 0x008u;
+    if (lrState.IsFlagSet(7))  luFlags |= 0x010u;
+    if (lrState.IsFlagSet(8))  luFlags |= 0x020u;
+    if (lrState.IsFlagSet(9))  luFlags |= 0x040u;
+    if (lrState.IsFlagSet(10)) luFlags |= 0x080u;
+    if (lrState.IsFlagSet(11)) luFlags |= 0x100u;
+    if (lrState.IsFlagSet(12)) luFlags |= 0x200u;
+    return luFlags ? luFlags : 1u;
+}
+
+u32 CollisionStateManager::MapGameModesToBinFlags(const void* lpGameMode) const
+{
+    if (!lpGameMode)
+        return 1u;
+
+    const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface*
+        lpInterface = static_cast<const
+            BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface*>(
+                lpGameMode);
+    s32 liState = 0;
+    std::memcpy(&liState, lpInterface->mData + 8u, sizeof(liState));
+    switch (liState)
+    {
+    case 0:  return 0x0002u;
+    case 2:
+    case 16: return 0x0004u;
+    case 3:  return 0x0008u;
+    case 4:  return 0x0010u;
+    case 5:  return 0x0020u;
+    case 6:  return 0x0040u;
+    case 8:  return 0x0080u;
+    case 9:  return 0x0100u;
+    case 10: return 0x0200u;
+    case 11: return 0x0400u;
+    case 12:
+    case 14:
+    case 17: return 0x0800u;
+    case 7:  return 0x1000u;
+    case 13: return 0x2000u;
+    case 15: return 0x8000u;
+    default: return 0x0001u;
+    }
+}
+
+void CollisionStateManager::UpdateResolver(
+    const BrnSound::Module::Io::RootInputBuffer& lrInput,
+    const BrnSound::Logic::FrameInformation& lrFrame,
+    f32 afDeltaTime)
+{
+    mFrameInformation = lrFrame;
+    const BrnDirector::Camera::Camera* lpCamera = lrInput.GetDirectorCamera();
+    CGS_ASSERT(lpCamera != nullptr, "lpDirectorCamera");
+    if (!lpCamera)
+        return;
+
+    mx32CameraBinFlags = MapCameraStateToBinFlags(*lpCamera);
+    mx32GameModeBinFlags = MapGameModesToBinFlags(lrInput.GetGameModeInterface());
+    SetCameraInfo(*lpCamera);
+    mu32InputCollisionCount = 0;
+
+    const BrnPhysics::ContactSpy::ContactSpyInterface& lrContacts =
+        lrInput.GetContactSpyQueueInterface();
+    s32 liPropCount = 0;
+    if (lrContacts.IsValid())
+    {
+        const BrnPhysics::ContactSpy::ContactSpyData::RaceCarContactQueue*
+            lpRaceCars = lrContacts.GetRaceCarContacts();
+        for (s32 liIndex = 0; lpRaceCars && liIndex < lpRaceCars->GetLength(); ++liIndex)
+        {
+            InputCollision lCollision;
+            MakeBaseInputCollision(lCollision,
+                *lpRaceCars->GetBaseContact(liIndex), lrInput, afDeltaTime);
+            AddInputCollision(lCollision);
+        }
+
+        const BrnPhysics::ContactSpy::ContactSpyData::TrafficContactQueue*
+            lpTraffic = lrContacts.GetTrafficContacts();
+        for (s32 liIndex = 0; lpTraffic && liIndex < lpTraffic->GetLength(); ++liIndex)
+        {
+            InputCollision lCollision;
+            MakeBaseInputCollision(lCollision,
+                *lpTraffic->GetBaseContact(liIndex), lrInput, afDeltaTime);
+            AddInputCollision(lCollision);
+        }
+
+        const BrnPhysics::ContactSpy::ContactSpyData::PropContactQueue*
+            lpProps = lrContacts.GetPropContacts();
+        liPropCount = lpProps ? lpProps->GetLength() : 0;
+        for (s32 liIndex = 0; lpProps && liIndex < lpProps->GetLength(); ++liIndex)
+        {
+            InputCollision lCollision;
+            MakePropInputCollision(lCollision,
+                lpProps->GetEvent(liIndex), lrInput, afDeltaTime);
+            AddInputCollision(lCollision);
+        }
+    }
+
+    ProcessCollisions();
+    if (mu32InputCollisionCount != 0u && CollisionAudioDiagEnabled() &&
+        CgsDev::Log::gpDebugPrint)
+    {
+        static u32 suPrintCount = 0;
+        if (suPrintCount++ < 32u)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[collision-audio] resolve inputs="
+                << static_cast<s32>(mu32InputCollisionCount)
+                << " outputs=" << static_cast<s32>(mu32OutputCollisionCount)
+                << " props=" << liPropCount << "\n";
+        }
+    }
+}
+
+bool CollisionStateManager::ProcessCollision(
+    OutputCollision& lrOutput, const InputCollision& lrInput)
+{
+    lrOutput = OutputCollision();
+    lrOutput.mePipeline = lrInput.mePipeline;
+    lrOutput.maMaterial[0] = lrInput.maMaterial[0];
+    lrOutput.maMaterial[1] = lrInput.maMaterial[1];
+    lrOutput.maEntityID[0] = lrInput.maEntityID[0];
+    lrOutput.maEntityID[1] = lrInput.maEntityID[1];
+    lrOutput.mPosition = lrInput.mPosition;
+    lrOutput.meAction = lrInput.meAction;
+    lrOutput.meOrientation = lrInput.meOrientation;
+    lrOutput.maParameter[0] = lrInput.maParameter[0];
+    lrOutput.maParameter[1] = lrInput.maParameter[1];
+    lrOutput.maParameter[2] = lrInput.maParameter[2];
+    lrOutput.mScrapeInfo = lrInput.mScrapeInfo;
+    lrOutput.mfPriority = lrInput.mfPriorityAddition;
+    lrOutput.meFatality = mFrameInformation.meFatality.GetCurrent();
+    lrOutput.meImpactTime = mFrameInformation.meImpactTime.GetCurrent();
+
+    switch (lrInput.mePipeline)
+    {
+    case InputCollision::E_REGULAR:
+        SelectCollisionBin<Attrib::Gen::crashbinlist, Attrib::Gen::crashbin>(
+            lrOutput, mCrashBinList);
+        break;
+    case InputCollision::E_PROP:
+        SelectCollisionBin<Attrib::Gen::propscrashbinlist, Attrib::Gen::propscrashbin>(
+            lrOutput, mPropsCrashBinList);
+        break;
+    default:
+        CGS_ASSERT(false, "lrInput.mePipeline < InputCollision::E_MAX_PIPELINES");
+        return false;
+    }
+    return true;
+}
+
+void CollisionStateManager::ProcessCollisions()
+{
+    mu32OutputCollisionCount = 0;
+    for (u32 luIndex = 0;
+         luIndex < mu32InputCollisionCount && mu32OutputCollisionCount < 64u;
+         ++luIndex)
+    {
+        if (ProcessCollision(maOutputCollision[mu32OutputCollisionCount],
+                             maInputCollision[luIndex]))
+            ++mu32OutputCollisionCount;
+    }
+}
+
+bool CollisionStateManager::LessThanPriority(
+    const OutputCollision* lpLeft, const OutputCollision* lpRight)
+{
+    return lpLeft->mfPriority < lpRight->mfPriority;
+}
+
+CgsSound::Logic::State* CollisionStateManager::GetFreeState(void* apvAttachment)
+{
+    CGS_ASSERT(apvAttachment != nullptr, "lpCollision");
+    if (!apvAttachment)
+        return nullptr;
+
+    for (CgsSound::Logic::State* lpBase = GetHeadState(); lpBase;
+         lpBase = lpBase->GetNextState())
+    {
+        if (!lpBase->IsAttached())
+            return lpBase;
+    }
+
+    CollisionState* lpLowestPriority = nullptr;
+    for (CgsSound::Logic::State* lpBase = GetHeadState(); lpBase;
+         lpBase = lpBase->GetNextState())
+    {
+        CollisionState* lpState = static_cast<CollisionState*>(lpBase);
+        if (!lpLowestPriority ||
+            lpState->GetOutputCollision().mfPriority <
+                lpLowestPriority->GetOutputCollision().mfPriority)
+            lpLowestPriority = lpState;
+    }
+
+    const OutputCollision& lrIncoming =
+        *static_cast<const OutputCollision*>(apvAttachment);
+    if (lpLowestPriority &&
+        lrIncoming.mfPriority > lpLowestPriority->GetOutputCollision().mfPriority &&
+        lpLowestPriority->Detach())
+        return lpLowestPriority;
+    return nullptr;
+}
+
+void CollisionStateManager::UpdateParams(f32 afDeltaTime)
+{
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+    CGS_ASSERT(lpModule != nullptr, "lpSoundLogicModule");
+    if (lpModule)
+    {
+        BrnSound::Module::Io::LogicInputBuffer* lpInput =
+            lpModule->GetBrnInputStructure();
+        if (lpInput &&
+            lpInput->GetPlayerActiveRaceCarIndex() !=
+                E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        {
+            UpdateResolver(*lpInput, lpModule->GetFrameInformation(), afDeltaTime);
+
+            OutputCollision* lapCollisions[64] = {};
+            for (u32 luIndex = 0; luIndex < mu32OutputCollisionCount; ++luIndex)
+                lapCollisions[luIndex] = &maOutputCollision[luIndex];
+            std::sort(lapCollisions,
+                      lapCollisions + mu32OutputCollisionCount,
+                      &CollisionStateManager::LessThanPriority);
+            for (u32 luIndex = 0; luIndex < mu32OutputCollisionCount; ++luIndex)
+            {
+                if (!PlayCollision(lapCollisions[luIndex]))
+                    break;
+            }
+        }
+    }
+    CgsSound::Logic::StateManager::UpdateParams(afDeltaTime);
 }
 
 // ---------------------------------------------------------------------------
@@ -433,6 +1007,179 @@ unsigned int CrashBinUtils< CrashBin >::GetSampleIds(
     }
 
     return luNumCollisions;
+}
+
+template <typename ListType, typename BinType>
+void CollisionStateManager::SelectCollisionBin(
+    OutputCollision& lrOutput, const ListType& lrList)
+{
+    lrOutput.miSampleID = -1;
+    const f32 lfDistanceSquared = lrOutput.maParameter[1].x;
+    const f32 lfImpulse = lrOutput.maParameter[0].x;
+
+    // NOT IN X360 BINARY: opt-in host diagnostics for auditing the recovered
+    // resolver.  Each counter is cumulative, so the first counter that stops
+    // advancing identifies the original authored-bin predicate rejecting a hit.
+    u32 luValidBins = 0;
+    u32 luMaterialBins = 0;
+    u32 luCameraBins = 0;
+    u32 luGameModeBins = 0;
+    u32 luImpactTimeBins = 0;
+    u32 luFatalityBins = 0;
+    u32 luOrientationBins = 0;
+    u32 luActionBins = 0;
+    u32 luDistanceBins = 0;
+    u32 luImpulseBins = 0;
+
+    for (u32 luIndex = 0; luIndex < lrList.mNumCrashBins(); ++luIndex)
+    {
+        BinType lBin(lrList.GetCrashBinCollectionKey(luIndex), nullptr);
+        if (!lBin.IsValid())
+            continue;
+        ++luValidBins;
+
+        const bool lbMaterialsForward =
+            (lBin.mMaterialA() & lrOutput.maMaterial[0]) != 0 &&
+            (lBin.mMaterialB() & lrOutput.maMaterial[1]) != 0;
+        const bool lbMaterialsReverse =
+            lrOutput.mePipeline == InputCollision::E_REGULAR &&
+            (lBin.mMaterialA() & lrOutput.maMaterial[1]) != 0 &&
+            (lBin.mMaterialB() & lrOutput.maMaterial[0]) != 0;
+        if (!lbMaterialsForward && !lbMaterialsReverse)
+            continue;
+        ++luMaterialBins;
+        if ((lBin.mCameras() & mx32CameraBinFlags) == 0)
+            continue;
+        ++luCameraBins;
+        if ((lBin.mGameModes() & mx32GameModeBinFlags) == 0)
+            continue;
+        ++luGameModeBins;
+        if ((lBin.mImpactTime() & static_cast<u32>(lrOutput.meImpactTime)) == 0)
+            continue;
+        ++luImpactTimeBins;
+        if ((lBin.mFatalityFlag() &
+             (1u << static_cast<u32>(lrOutput.meFatality))) == 0)
+            continue;
+        ++luFatalityBins;
+        if ((lBin.mOrientation() &
+             static_cast<u32>(lrOutput.meOrientation)) == 0)
+            continue;
+        ++luOrientationBins;
+        if ((lBin.mAction() & static_cast<u32>(lrOutput.meAction)) == 0)
+            continue;
+        ++luActionBins;
+        const f32 lfDistanceMin = lBin.DistanceFactor_Min();
+        const f32 lfDistanceMax = lBin.DistanceFactor_Max();
+        if (lfDistanceSquared < lfDistanceMin * lfDistanceMin ||
+            lfDistanceSquared > lfDistanceMax * lfDistanceMax)
+            continue;
+        ++luDistanceBins;
+        if (lfImpulse < lBin.PhysicsImpulseNormalization_MIN())
+            continue;
+        ++luImpulseBins;
+
+        const f32 lfDenominator =
+            lBin.PhysicsImpulseNormalization_MAX() -
+            lBin.PhysicsImpulseNormalization_MIN();
+        const f32 lfNormalized = lfDenominator > 0.0f
+            ? std::max(0.0f, std::min(1.0f,
+                (lfImpulse - lBin.PhysicsImpulseNormalization_MIN()) /
+                    lfDenominator))
+            : 0.0f;
+        lrOutput.mNormalizedImpulse =
+            VecFloat{lfNormalized, lfNormalized, lfNormalized, lfNormalized};
+
+        if (lfNormalized > lBin.IntensityThreshold().y &&
+            lBin.mNumCollisionsLarge() > 0)
+            lrOutput.meSize = E_SIZE_LARGE;
+        else if (lfNormalized > lBin.IntensityThreshold().x &&
+                 lBin.mNumCollisionsMedium() > 0)
+            lrOutput.meSize = E_SIZE_MEDIUM;
+        else if (lBin.mNumCollisionsSmall() > 0)
+            lrOutput.meSize = E_SIZE_SMALL;
+        else
+            continue;
+
+        lrOutput.miSampleID = 0;
+        lrOutput.mBinKey = lrList.GetCrashBinCollectionKey(luIndex);
+        lrOutput.meBankType = SelectBin(0, lBin.mSpliceBankAsset(), 0, 0, 0);
+        CGS_ASSERT(lrOutput.meBankType >= E_COLLISION_SPLICE_BANK_COLLISION &&
+                   lrOutput.meBankType < E_COLLISION_SPLICE_BANK_MAX,
+                   "leSpliceBankType < E_COLLISION_SPLICE_BANK_MAX");
+        lrOutput.miBinIndex = static_cast<s8>(luIndex);
+        lrOutput.mfPriority += lBin.Priority();
+        return;
+    }
+
+    if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+    {
+        static u32 suRejectPrintCount = 0;
+        if (suRejectPrintCount++ < 32u)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[collision-audio] reject pipeline="
+                << static_cast<s32>(lrOutput.mePipeline)
+                << " bins=" << static_cast<s32>(lrList.mNumCrashBins())
+                << " gates=" << static_cast<s32>(luValidBins)
+                << "/" << static_cast<s32>(luMaterialBins)
+                << "/" << static_cast<s32>(luCameraBins)
+                << "/" << static_cast<s32>(luGameModeBins)
+                << "/" << static_cast<s32>(luImpactTimeBins)
+                << "/" << static_cast<s32>(luFatalityBins)
+                << "/" << static_cast<s32>(luOrientationBins)
+                << "/" << static_cast<s32>(luActionBins)
+                << "/" << static_cast<s32>(luDistanceBins)
+                << "/" << static_cast<s32>(luImpulseBins)
+                << " camera=" << static_cast<s32>(mx32CameraBinFlags)
+                << " mode=" << static_cast<s32>(mx32GameModeBinFlags)
+                << " impact=" << static_cast<s32>(lrOutput.meImpactTime)
+                << " fatal=" << static_cast<s32>(lrOutput.meFatality)
+                << " orient=" << static_cast<s32>(lrOutput.meOrientation)
+                << " action=" << static_cast<s32>(lrOutput.meAction)
+                << " distance2=" << lfDistanceSquared
+                << " impulse=" << lfImpulse << "\n";
+        }
+    }
+}
+
+template <typename BinType>
+void CollisionStateManager::GetRandomSampleID(OutputCollision& lrOutput)
+{
+    BinType lBin(lrOutput.mBinKey, nullptr);
+    CGS_ASSERT(lBin.IsValid(), "lCrashBin.IsValid()");
+
+    const int& (BinType::*lpGetCount)() const =
+        lrOutput.meSize == E_SIZE_LARGE
+            ? &BinType::mNumCollisionsLarge
+            : (lrOutput.meSize == E_SIZE_MEDIUM
+                ? &BinType::mNumCollisionsMedium
+                : &BinType::mNumCollisionsSmall);
+    const int& (BinType::*lpGetItem)(u32) const =
+        lrOutput.meSize == E_SIZE_LARGE
+            ? &BinType::mCollisionsLarge
+            : (lrOutput.meSize == E_SIZE_MEDIUM
+                ? &BinType::mCollisionsMedium
+                : &BinType::mCollisionsSmall);
+
+    u16 lauSampleIds[32] = {};
+    CrashBinUtils<BinType> lUtils;
+    const u16 luNumSamples = static_cast<u16>(lUtils.GetSampleIds(
+        &lBin, lpGetCount, lpGetItem, lauSampleIds, 32u));
+    if (luNumSamples == 0)
+    {
+        lrOutput.miSampleID = -1;
+        return;
+    }
+
+    CGS_ASSERT(lrOutput.meBankType >= E_COLLISION_SPLICE_BANK_COLLISION &&
+               lrOutput.meBankType < E_COLLISION_SPLICE_BANK_MAX,
+               "leSpliceBankType < E_COLLISION_SPLICE_BANK_MAX");
+    CgsSound::Utils::SelectionHistory<512, u16, u16, 65536>& lrHistory =
+        maSelectionHistory[lrOutput.meBankType];
+    const u16 luSampleId =
+        lrHistory.FindRandomOldest<u16, 32>(lauSampleIds, luNumSamples);
+    lrHistory.Update(luSampleId);
+    lrOutput.miSampleID = static_cast<s32>(luSampleId);
 }
 
 // Explicit instantiations (the two crash-bin specialisations the X360 build emits).

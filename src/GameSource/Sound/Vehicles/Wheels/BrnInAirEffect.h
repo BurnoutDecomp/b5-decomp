@@ -2,93 +2,144 @@
 #define BRN_SOUND_VEHICLES_WHEELS_IN_AIR_EFFECT_H
 
 #include "types.hpp"
-#include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (BY NAME)
-#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"            // CgsSound::Utils::DataPoint<T> (BY NAME)
-#include "GameSource/Sound/Global/BrnMusicEffect.h"                // BrnSound::Logic::MusicEffect::EJunkyardAmbience (BY NAME)
+#include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsVoicePool.h"
+#include "GameSource/AttribSys/Generated/classes/crashbin.h"
+#include "GameSource/Sound/Global/BrnMusicEffect.h"
 
-// =============================================================================
-// BrnSound::Vehicles::Wheels::InAirEffect  (+ TrafficInAir, JunkyardInAirEffect)
-//   GameSource/Sound/Vehicles/Wheels/BrnInAirEffect.{h,cpp}  (DWARF home)
-//
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity, not byte match).
-// InAirEffect is the wheels-in-air landing/suspension sound EFFECT OBJECT. DWARF
-// (BrnInAirEffect.h:163): InAirEffect : public BrnEffectObject. It is subclassed by
-// TrafficInAir (traffic-car landings) and JunkyardInAirEffect (junkyard landings).
-//
-// FLAG (MINIMAL base home): InAirEffect's own body slice (GetSampleLandingId @
-// 0x8269AA68) is BLOCKED in this wave -- it needs the un-homed
-// BrnSound::Logic::Collision::ECollisionSpliceTags enum and the AttribSys
-// CrashBinUtils<Attrib::Gen::crashbin>::GetSampleIds helper + crashbin Attribute::Key
-// constants, none of which are homed anywhere in src (see .cpp BLOCK note). The base's
-// full member surface (SuspensionStatus / InAirPhysicsData / mBin crashbin /
-// muRoundRobin) is therefore DECLARATION-DEFERRED; only the polymorphic surface the
-// two subclasses need (ProcessUpdate override slot + the virtual dtor) is modelled.
-//
-// LAYOUT NOTE (X360 32-bit vs host 64-bit): members are pinned BY NAME + SEQUENCE;
-// absolute offsets are NOT static_asserted across pointer members on the 64-bit host.
-// =============================================================================
-
-// (2026-08-25, audio-faithfulness wave 5): the former `namespace BrnReplays {
-// namespace SoundSerialiser { GetTrafficEnt(void*, void*) } }` shim is RETIRED --
-// it declared a NAMESPACE with the same qualified name as the real `class
-// BrnReplays::SoundSerialiser` (BrnReplaySoundSerialiser.h, fully homed since
-// wave 4), an outright ill-formed collision if ever co-included. The .cpp now
-// calls the real member GetTrafficEnt(u32) on the serialiser object embedded in
-// the sound logic module.
+namespace BrnPhysics { namespace Vehicle { struct RaceCarState; } }
+namespace BrnTraffic { namespace BrnTrafficIO { struct TrafficSoundEntity; } }
 
 namespace BrnSound
 {
+namespace Logic { namespace Collision { class CollisionStateManager; enum ECollisionSpliceTags : int; } }
 namespace Vehicles
 {
+namespace Engines { struct PhysicsControl; }
+namespace Environment { struct EnclosureControl; }
 namespace Wheels
 {
 
-// BrnInAirEffect.h:163 (DWARF). Reuses the committed BrnEffectObject dual base BY NAME.
-// Minimal: only the two virtuals the subclasses drive are declared here.
+struct WheelControl;
+
+// Player/traffic/junkyard airborne, suspension-compression and landing audio.
+// The declaration order is the DecFIGS BrnInAirEffect.h shape; ARTIST fixes the
+// control ids, state transitions, sample-tag routing and voice parameters.
 struct InAirEffect : public BrnSound::Logic::BrnEffectObject
 {
-    InAirEffect() {}
+    struct SuspensionStatus
+    {
+        enum eSuspensionLatchedState
+        {
+            E_NONE = 0,
+            E_COMPRESSED = 1,
+            E_UNCOMPRESSED = 2,
+        };
+
+        SuspensionStatus() { Clear(); }
+        void Clear();
+
+        f32 mfSuspensionHeight;
+        eSuspensionLatchedState meSuspensionLatchedState;
+        CgsSound::Utils::Average<3u, f32> mSuspensionDelta;
+    };
+
+    struct InAirPhysicsData
+    {
+        InAirPhysicsData();
+
+        CgsSound::Utils::DataPoint<bool> mIsOnGround;
+        CgsSound::Utils::DataPoint<bool> maWheelOnGround[4];
+        f32 mafSuspensionHeights[4];
+        CgsSound::Utils::DataPoint<f32> mfTimeInAir;
+        f32 mfTimeSinceReset;
+        bool mbIsCrashing;
+    };
+
+    InAirEffect();
     virtual ~InAirEffect();
 
-    // BrnInAirEffect.h:269's large vehicle-audio ProcessUpdate body remains in its
-    // own reconstruction slice. Until that surface is homed, this partial class
-    // inherits EffectBase::ProcessUpdate; the global Junkyard instance can therefore
-    // be created for the authored state table without mounting the unrelated Traffic
-    // implementation or inventing an abbreviated wheel-audio algorithm here.
+    const char* GetTypeName() const override;
+    s32 GetController(s32 aiSlot) override;
+    void AttachController(CgsSound::Logic::EffectBase* apController) override;
+    void SetupLoadData() override;
+    bool Attach() override;
+    void UpdateParams(f32 afTimeStep) override;
+    void ProcessUpdate() override;
+    bool Detach() override;
+
+protected:
+    virtual void UpdatePhysicsData(f32 afTimeStep);
+    void UpdateWheelLandings(f32 afTimeStep);
+    void UpdateSuspensionSqueeks(f32 afTimeStep);
+    void PlayLanding(BrnSound::Logic::Collision::ECollisionSpliceTags aeTag,
+                     f32 afVolumeModifier);
+    void PlayJumpCamLanding();
+    BrnSound::Logic::BrnEffectObject::SampleTag GetSampleLandingId(
+        BrnSound::Logic::Collision::ECollisionSpliceTags aeTag);
+
+    WheelControl* mpWheelControl;
+    BrnSound::Vehicles::Engines::PhysicsControl* mpPhysicsControl;
+    BrnSound::Vehicles::Environment::EnclosureControl* mpEnclosureControl;
+    CgsSound::Logic::VoiceWrapper mInAirVoice;
+    CgsSound::Logic::VoicePool<4> mLandingVoices;
+    CgsSound::Logic::VoiceWrapper mHardLandingVoice;
+    CgsSound::Logic::VoiceWrapper mJunkyardLandingSweetnerVoice;
+    CgsSound::Logic::VoiceWrapper mJumpCamLandingVoice;
+    CgsSound::Logic::VoiceWrapper::FunctorPointer<InAirEffect> mLaunchFunctionPointer;
+    f32 mfHardLandingVoiceSecondGain;
+    f32 mfJumpCamLandingVoiceSecondGain;
+    f32 mfJunkyardLandingSweetnerVoiceSecondGain;
+    f32 mfSuspensionSensitivity;
+    f32 mfSuspensionThreshold;
+    Attrib::Gen::crashbin mBin;
+    u32 muRoundRobin;
+    SuspensionStatus mSuspensionStatus[4];
+    BrnSound::Logic::Collision::CollisionStateManager* mpCollisionMgr;
+    f32 mfTimeSinceJumpCamera;
+    InAirPhysicsData mPhysicsData;
 };
 
-// BrnInAirEffect.h:273 (DWARF): TrafficInAir : public InAirEffect. Overrides
-// ProcessUpdate to stamp the per-traffic-car replay record. mpTrafficEntity (DWARF
-// h:289) uses the un-homed nested type TrafficStateManager::Slot::TrafficSoundEntity
-// and is DECLARATION-DEFERRED (not touched by this slice's functions).
 struct TrafficInAir : public InAirEffect
 {
-    TrafficInAir() {}
-    virtual ~TrafficInAir();                 // anchor for the scalar deleting destructor @ 0x826FDD18
+    TrafficInAir();
+    virtual ~TrafficInAir();
 
-    virtual void ProcessUpdate();            // @ 0x826B7340 (real override)
+    const char* GetTypeName() const override;
+    bool Attach() override;
+    void ProcessUpdate() override;
+
+protected:
+    void UpdatePhysicsData(f32 afTimeStep) override;
+    void Clear();
+
+    const BrnTraffic::BrnTrafficIO::TrafficSoundEntity* mpTrafficEntity;
 };
 
-// BrnInAirEffect.h:104 (DWARF): JunkyardInAirEffect : public InAirEffect. Adds the
-// two DWARF leaf members mbIsVehicleValid (DataPoint<bool>) + meJunkyardAmbience.
 struct JunkyardInAirEffect : public InAirEffect
 {
-    JunkyardInAirEffect();                   // @ 0x826F4200
-    virtual ~JunkyardInAirEffect();          // anchor for the vector deleting destructor @ 0x826FDBD8
+    JunkyardInAirEffect();
+    virtual ~JunkyardInAirEffect();
 
-    // @ 0x826FDB78 -- RTTI factory hook.
-    static CgsSound::Logic::EffectObject* CreateObject( u32 luType );
+    static CgsSound::Logic::EffectObject* CreateObject(u32 luType);
     CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
     const char* GetTypeName() const override;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
 
-    // DWARF BrnInAirEffect.h:111/115. The only two leaf members the ctor writes.
-    CgsSound::Utils::DataPoint<bool>            mbIsVehicleValid;   // @ +0x3F0 (both bytes 0)
-    BrnSound::Logic::MusicEffect::EJunkyardAmbience meJunkyardAmbience; // @ +0x3F4
+    bool Attach() override;
+    void Notify(const CgsSound::Io::MessageHeader* apkMessage) override;
+
+protected:
+    void UpdatePhysicsData(f32 afTimeStep) override;
+    void FlushData(const BrnPhysics::Vehicle::RaceCarState* apkVehicleData);
+
+    CgsSound::Utils::DataPoint<bool> mbIsVehicleValid;
+    BrnSound::Logic::MusicEffect::EJunkyardAmbience meJunkyardAmbience;
 };
 
 } // namespace Wheels
 } // namespace Vehicles
 } // namespace BrnSound
 
-#endif // BRN_SOUND_VEHICLES_WHEELS_IN_AIR_EFFECT_H
+#endif

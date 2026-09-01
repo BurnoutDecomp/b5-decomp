@@ -86,6 +86,14 @@ static const s32 KI_VOICE_STATE_STOPPED = 7;
 class VoicePoolBase
 {
 public:
+    VoicePoolBase()
+        : mpLogicModule(nullptr)
+        , mpaPooledVoices(nullptr)
+        , muPooledVoiceCount(0)
+        , muDebugFrameIndex(0)
+    {
+    }
+
     // Bind + reset a caller-supplied PooledVoice array. @ 0x826B6528.
     bool Prepare(PooledVoice* lpaPooledVoices, u32 luNumVoiceProxies);
 
@@ -127,6 +135,15 @@ class VoicePool : public VoicePoolBase
 public:
     VoicePool();            // @ 0x826E5328 for N==4  (binds maVoices via Prepare)
     virtual ~VoicePool();   // @ 0x826E5370 for N==4  (Release + per-slot teardown)
+
+    // InAirEffect::Attach supplies the owning logic module after the effect has
+    // been prepared.  The console stores that pointer in VoicePoolBase and then
+    // re-prepares the embedded slots in one operation.
+    bool Prepare(Module* apLogicModule)
+    {
+        mpLogicModule = apLogicModule;
+        return VoicePoolBase::Prepare(maVoices, N);
+    }
 
 private:
     // +0x14. The N embedded pool slots (stride 0x5C). Bound into the base by the ctor

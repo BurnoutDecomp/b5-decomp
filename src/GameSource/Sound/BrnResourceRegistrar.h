@@ -299,6 +299,9 @@ namespace Logic
     {
         enum EResourcePool
         {
+            // CollisionStateManager::Notify @ ARTIST 0x826F8E68 passes r5=1;
+            // this is GameDataIO::E_POOL_PHYSICS.
+            E_PHYSICS_DATA_POOL = 1,
             E_SOUND_DATA_POOL = 6,
         };
 
@@ -317,6 +320,12 @@ namespace Logic
         // argument is part of the original request record.
         void LoadAsset(const char* lpcResourceName, EResourcePool lePool,
                        ResourceRegistrar::EType leType);
+
+        // ARTIST @ 0x826B0C00. Resolve a previously requested asset and return
+        // its two-word resource handle by value. The filename is null for
+        // bundle-less resources such as PRP_PHYSICS_.
+        CgsResource::ResourceHandle GetAsset(const char* lpcFilename,
+                                             const char* lpcResourceName);
     };
 }
 }

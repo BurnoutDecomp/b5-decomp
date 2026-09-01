@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"   // committed BrnEffectControl base (BY NAME)
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
+#include "GameSource/Sound/Collision/BrnCollisionDataStructures.h"
 
 // =============================================================================
 // BrnSound::Logic::Collision::CollisionControl
@@ -41,12 +43,15 @@ namespace Logic
 namespace Collision
 {
 
+struct Collision3DControl;
+struct CollisionState;
+
 // BrnCollisionControl.h:38 (DWARF). Reuses the committed BrnEffectControl dual base
 // BY NAME. The two leaf vptrs the X360 ctor installs are produced structurally by the
 // dual-base + virtual-destructor declaration.
 struct CollisionControl : public BrnSound::Logic::BrnEffectControl
 {
-    CollisionControl() {}
+    CollisionControl();
     virtual ~CollisionControl();   // out-of-line anchor (empty); vector deleting
                                    // destructor @ 0x826BD4D8 forwards to it
 
@@ -55,10 +60,28 @@ struct CollisionControl : public BrnSound::Logic::BrnEffectControl
     // mpfnCreateObject); returns the EffectControl* base view.
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );
 
-    // FLAG: DWARF members mpCollision3DControl (Collision3DControl*), mpCollisionState
-    // (CollisionState*), mScrapeInfo (DataPoint<ScrapeInfo>), mbCollisionFinished, and
-    // the Attach/UpdateParams/GetController/AttachController RTTI surface are DEFERRED
-    // to their own recon slices -- NOT fabricated as concrete typed members here.
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const override;
+    virtual const char* GetTypeName() const override;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+
+    virtual bool Attach() override;
+    virtual void UpdateParams(f32 afDeltaTime) override;
+    virtual s32 GetController(s32 aiIndex) override;
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController) override;
+
+    CollisionState* GetCollisionState() const { return mpCollisionState; }
+    const CgsSound::Utils::DataPoint<ScrapeInfo>& GetScrapeInfo() const
+    {
+        return mScrapeInfo;
+    }
+    void SetCollisionFinished(bool abFinished) { mbCollisionFinished = abFinished; }
+    bool GetCollisionFinished() const { return mbCollisionFinished; }
+
+private:
+    Collision3DControl* mpCollision3DControl;
+    CollisionState* mpCollisionState;
+    CgsSound::Utils::DataPoint<ScrapeInfo> mScrapeInfo;
+    bool mbCollisionFinished;
 };
 
 } // namespace Collision

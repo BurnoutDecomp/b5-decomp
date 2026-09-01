@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Collision/BrnCollisionState.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // =============================================================================
 // BrnSound::Logic::Collision::CollisionState -- out-of-line bodies.
@@ -41,6 +42,67 @@ CollisionState::~CollisionState()
 {
     DestroyEffects();
 }
+
+// ARTIST @0x826D3420. The supplied attachment is a complete OutputCollision;
+// copy it into the state before entering the common State attach machine, then
+// clear both lifetime samples and remember the state clock at attachment time.
+void CollisionState::Attach(void* apvAttachment)
+{
+    CGS_ASSERT(apvAttachment != nullptr, "lpAttachment");
+    if (!apvAttachment)
+        return;
+
+    mOutputCollision = *static_cast<const OutputCollision*>(apvAttachment);
+    CgsSound::Logic::State::Attach(apvAttachment);
+    meLifetime.Flush(E_NONE);
+    mfTimeWeAttached = mfCurTime;
+}
+
+// ARTIST @0x826D57E0 is a direct tail-call to the common State update.
+void CollisionState::UpdateParams(f32 afDeltaTime)
+{
+    CgsSound::Logic::State::UpdateParams(afDeltaTime);
+}
+
+bool CollisionState::Detach()
+{
+    const bool lbDetached = CgsSound::Logic::State::Detach();
+    if (lbDetached)
+        meLifetime.Update(E_NONE);
+    return lbDetached;
+}
+
+// ARTIST CreateObject @ 0x826D3218 allocates and constructs one CollisionState;
+// its allocator selector does not alter the constructed object. DecFIGS static-init
+// @ 0x864250 pins the descriptor to ObjectID 0x50000, name "CollisionState", and
+// registers it in State::ClassTypeInfoArray.
+CgsSound::Logic::State* CollisionState::CreateObject(u32 /*auAllocator*/)
+{
+    return new CollisionState();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*
+CollisionState::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
+        0x50000, "CollisionState", nullptr, &CollisionState::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*
+CollisionState::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+const char* CollisionState::GetTypeName() const
+{
+    return "CollisionState";
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const
+    gpCollisionStateReg = CgsSound::Logic::State::AddToClassTypeInfoArray(
+        CollisionState::GetStaticTypeInfo());
 
 } // namespace Collision
 } // namespace Logic

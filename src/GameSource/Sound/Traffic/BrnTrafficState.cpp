@@ -61,7 +61,7 @@ TrafficState::~TrafficState()
 void TrafficState::Attach(void* lpvAttachment)
 {
     CGS_ASSERT(lpvAttachment != 0, "lpvAttachment");
-    mpTrafficEntity = lpvAttachment;
+    mpTrafficEntity = static_cast<const BrnTraffic::BrnTrafficIO::TrafficSoundEntity*>(lpvAttachment);
     State::Attach(lpvAttachment);
 }
 

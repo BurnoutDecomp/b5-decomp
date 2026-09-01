@@ -148,6 +148,7 @@ Slot::Slot(const SlotSchema& arSchema)
 // Handle destructor.
 bool Slot::Attach(Voice& arVoice, Handle<Content> ahContent)
 {
+    Content* lpIncoming = ahContent.GetObject();
     if (ahContent)                              // non-empty incoming handle
     {
         Content& lrContent = *ahContent;        // *a3 (non-null here)
@@ -166,12 +167,29 @@ bool Slot::Attach(Voice& arVoice, Handle<Content> ahContent)
         if (lbMatch)
         {
             Detach(arVoice);          // drop any content currently bound
-            mhContent = ahContent;    // Handle::operator= into mhContent
+
+            // Handle<Content>::operator= @ 0x826A7070: acquire the incoming
+            // object before releasing the old one, then store the pointer.  The
+            // shared Handle scaffold is still deliberately non-owning, so spell
+            // out this exact inlined helper at its ownership boundary.
+            lpIncoming->Acquire();
+            Content* lpOld = mhContent.GetObject();
+            if (lpOld)
+                lpOld->Release();
+            mhContent.SetObject(lpIncoming);
+
             mhContent->OnAttach(arVoice, *this);
+
+            // ARTIST 0x826C7890-0x826C789C: destroy the by-value input handle.
+            lpIncoming->Release();
             return true;
         }
     }
 
+    // ARTIST 0x826C78AC-0x826C78B8: the mismatch path destroys the same
+    // by-value input handle.
+    if (lpIncoming)
+        lpIncoming->Release();
     return false;
 }
 
@@ -184,7 +202,13 @@ bool Voice::Attach(Name akName, Handle<Content>& arhContent)
     {
         return false;
     }
-    return lpSlot->Attach(*this, Handle<Content>(arhContent.GetObject()));
+
+    // Construct the by-value Slot::Attach argument.  The original Handle copy
+    // constructor takes this reference; Slot::Attach destroys it on all paths.
+    Content* lpContent = arhContent.GetObject();
+    if (lpContent)
+        lpContent->Acquire();
+    return lpSlot->Attach(*this, Handle<Content>(lpContent));
 }
 
 // @ 0x826ACA78. Notify the bound content, release the handle, and clear the
@@ -194,7 +218,13 @@ void Slot::Detach(Voice& arVoice)
     if (mhContent)
     {
         mhContent->OnDetach(arVoice, *this);
-        mhContent = Handle<Content>(0);
+
+        // The null Handle assignment in ARTIST routes through the same
+        // Handle::operator= helper @ 0x826A7070, releasing this slot's owned
+        // reference before clearing its pointer.
+        Content* lpContent = mhContent.GetObject();
+        lpContent->Release();
+        mhContent.SetObject(0);
         mu8Attach = 0;
     }
 }

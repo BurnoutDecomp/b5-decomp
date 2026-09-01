@@ -1,4 +1,6 @@
 #include "GameSource/Sound/Module/LogicModule/Brn3DUserSpaceEffectControl.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "rw/math/vpu/matrix44affine_operation.h"
 
 // =============================================================================
 // BrnSound::Logic::Brn3DUserSpaceEffectControl -- out-of-line bodies.
@@ -76,6 +78,57 @@ CgsSound::Logic::EffectControl* Brn3DUserSpaceEffectControl::CreateObject( u32 /
 // ---------------------------------------------------------------------------
 Brn3DUserSpaceEffectControl::~Brn3DUserSpaceEffectControl()
 {
+}
+
+// ARTIST @0x82682CA0.
+void Brn3DUserSpaceEffectControl::AttachTransform(const Matrix44Affine* apTransform)
+{
+    mpTransform = apTransform;
+}
+
+// ARTIST @0x826968E8. Positions supplied by collision states are in the
+// attached transform's user space; the Cgs3d base always receives the stable
+// generated world-space member.
+void Brn3DUserSpaceEffectControl::AttachEmitterPosition(const Vector3* apPosition)
+{
+    CGS_ASSERT(mpTransform != nullptr, "mpTransform");
+    CGS_ASSERT(apPosition != nullptr, "lpPosition");
+    if (!mpTransform || !apPosition)
+        return;
+
+    mPositionInUserSpace = *apPosition;
+    mGeneratedPosition = rw::math::vpu::TransformPoint(
+        *mpTransform, mPositionInUserSpace);
+    CgsSound::Logic::Cgs3dEffectControl::AttachEmitterPosition(&mGeneratedPosition);
+}
+
+// ARTIST @0x82696C20. Direction transformation deliberately excludes translation.
+void Brn3DUserSpaceEffectControl::AttachEmitterDirection(const Vector3* apDirection)
+{
+    CGS_ASSERT(mpTransform != nullptr, "mpTransform");
+    CGS_ASSERT(apDirection != nullptr, "lpDirection");
+    if (!mpTransform || !apDirection)
+        return;
+
+    mDirectionInUserSpace = *apDirection;
+    mGeneratedDirection = rw::math::vpu::TransformVector(
+        *mpTransform, mDirectionInUserSpace);
+    CgsSound::Logic::Cgs3dEffectControl::AttachEmitterDirection(&mGeneratedDirection);
+}
+
+// ARTIST @0x826FB7C8. Rebuild the generated world-space emitter values each
+// frame before the common 3D control publishes mixer distance/pan inputs.
+void Brn3DUserSpaceEffectControl::UpdateParams(f32 afDeltaTime)
+{
+    if (mpTransform)
+    {
+        mGeneratedPosition = rw::math::vpu::TransformPoint(
+            *mpTransform, mPositionInUserSpace);
+        mGeneratedDirection = rw::math::vpu::TransformVector(
+            *mpTransform, mDirectionInUserSpace);
+    }
+
+    BrnSound::Logic::Brn3DEffectControl::UpdateParams(afDeltaTime);
 }
 
 } // namespace Logic

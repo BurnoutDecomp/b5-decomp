@@ -223,7 +223,7 @@ void VoicePoolBase::SetParameter(s32 liSendNameHash, f32 lfValue, s32 liReserved
 template <u32 N>
 VoicePool<N>::VoicePool()
 {
-    Prepare(maVoices, N);
+    VoicePoolBase::Prepare(maVoices, N);
 }
 
 // ----------------------------------------------------------------------------

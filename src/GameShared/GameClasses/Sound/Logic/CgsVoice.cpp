@@ -33,6 +33,7 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsVoice.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsContent.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"  // Playback::Name::MakeHash (reused)
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"   // the REAL Playback::Voice layout
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
@@ -41,6 +42,21 @@ namespace CgsSound
 {
 namespace Logic
 {
+
+// Public overload @ 0x826EAE38.  This is the source-level path used when an
+// authored Logic::Content is attached to a voice: validate the content, copy its
+// handle (taking one reference), then pass that owned by-value handle to the
+// private overload @ 0x826DC4C8, which consumes the copy.
+void Voice::Attach(s32 liSlotName, const Content& arContent)
+{
+    CGS_ASSERT(arContent.IsCreated(), "Content not yet created!");
+
+    Playback::Content* lpContent = arContent.GetContent().GetObject();
+    if (lpContent)
+        lpContent->Acquire();
+    Playback::Handle<Playback::Content> lhContent(lpContent);
+    Attach(liSlotName, &lhContent);
+}
 
 // ----------------------------------------------------------------------------
 // Voice::Construct(lpOwnerModule, liIndex, lpGlobalSpecTable, luNameHash)

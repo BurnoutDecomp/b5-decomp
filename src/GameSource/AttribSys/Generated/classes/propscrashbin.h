@@ -115,6 +115,10 @@
 #include "types.hpp"                                                          // s32 / u8 / u32 / u64
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
 #include "GameSource/AttribSys/Generated/attrib_private.h"   // Attrib::Private (array-length header)
+#include "GameSource/AttribSys/Generated/attrib_findcollection.h"
+#include "BrnCommonTypes.h"
+
+#include <cstring>
 
 namespace Attrib
 {
@@ -155,7 +159,9 @@ namespace Gen
         static const u32 KU_OFFSET_NUM_MEDIUM          = 0x164u;
         static const u32 KU_OFFSET_NUM_LARGE           = 0x168u;
 
-        // DECLARATION ONLY -- see the "NOT RECONSTRUCTED HERE" note in the banner.
+        // The by-key overload used by GetRandomSampleID. The generated constructor
+        // resolves this class's collection and then applies its 0x190-byte default
+        // layout when the collection has no data block.
         // Build the instance over the propscrashbin collection named by luCollectionKey
         // (GetRandomSampleID<propscrashbin> @0x82703A6C passes the OutputCollision's
         // 64-bit key from +0x90 -- `ld r4,0x90(r31)`, a 64-bit load). DWARF declares FIVE
@@ -168,7 +174,13 @@ namespace Gen
         // (Instance(Collection*, void* lpOwner)). NOTE: `using Instance::IsValid;` makes
         // bin.IsValid() CALLABLE (all GetRandomSampleID @0x82703A78 does) but
         // &propscrashbin::IsValid cannot be formed through the private base (C2247).
-        propscrashbin(u64 luCollectionKey, void* lpOwner);
+        propscrashbin(u64 luCollectionKey, void* lpOwner)
+            : Instance(FindCollectionWithDefault(KU_PROPSCRASHBIN_CLASS_KEY,
+                                                 luCollectionKey), lpOwner)
+        {
+            if (!mpAttributeData)
+                mpAttributeData = DefaultDataArea(KU_LAYOUT_SIZE);
+        }
 
         // ------------------------------------------------------------------------
         // THE FOUR LEDGER FUNCTIONS.
@@ -228,6 +240,23 @@ namespace Gen
             return *reinterpret_cast<const u64*>(LayoutBytes() + KU_OFFSET_MATERIAL_B);
         }
 
+        const Vector3& Volumes() const { return VectorAt(0x000u); }
+        const Vector3& Pitch() const { return VectorAt(0x010u); }
+        const Vector3& IntensityThreshold() const { return VectorAt(0x020u); }
+        const char* mSpliceBankAsset() const { return TextAt(0x030u); }
+        f32 Priority() const { return FloatAt(0x150u); }
+        f32 PhysicsImpulseNormalization_MIN() const { return FloatAt(0x154u); }
+        f32 PhysicsImpulseNormalization_MAX() const { return FloatAt(0x158u); }
+        u32 mOrientation() const { return DwordAt(0x15Cu); }
+        s32 MixerSlider() const { return static_cast<s32>(DwordAt(0x16Cu)); }
+        u32 mImpactTime() const { return DwordAt(0x170u); }
+        u32 mGameModes() const { return DwordAt(0x174u); }
+        u32 mFatalityFlag() const { return DwordAt(0x178u); }
+        u32 mCameras() const { return DwordAt(0x17Cu); }
+        u32 mAction() const { return DwordAt(0x180u); }
+        f32 DistanceFactor_Min() const { return FloatAt(0x184u); }
+        f32 DistanceFactor_Max() const { return FloatAt(0x188u); }
+
         // The base's validity test, re-exported past the private inheritance (same
         // using-declaration precedent as boostparamsasset.h:213 / shotgroup.h). It is the
         // `lCrashBin.IsValid()` assert GetRandomSampleID<propscrashbin> fires at
@@ -240,6 +269,28 @@ namespace Gen
         const u8* LayoutBytes() const
         {
             return static_cast<const u8*>(GetLayoutPointer());
+        }
+
+        u32 DwordAt(u32 luOffset) const
+        {
+            return *reinterpret_cast<const u32*>(LayoutBytes() + luOffset);
+        }
+
+        f32 FloatAt(u32 luOffset) const
+        {
+            return *reinterpret_cast<const f32*>(LayoutBytes() + luOffset);
+        }
+
+        const Vector3& VectorAt(u32 luOffset) const
+        {
+            return *reinterpret_cast<const Vector3*>(LayoutBytes() + luOffset);
+        }
+
+        const char* TextAt(u32 luOffset) const
+        {
+            u32 luAddress = 0;
+            std::memcpy(&luAddress, LayoutBytes() + luOffset, sizeof(luAddress));
+            return reinterpret_cast<const char*>(static_cast<uintptr_t>(luAddress));
         }
 
         // A 4-byte scalar attribute slot.
