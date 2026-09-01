@@ -1,4 +1,17 @@
 #include "GameSource/Sound/Collision/BrnCollisionEffect.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameSource/Sound/Collision/BrnCollisionControl.h"
+#include "GameSource/Sound/Collision/BrnCollisionState.h"
+#include "GameSource/Sound/Collision/BrnCollisionStateManager.h"
+#include "GameSource/AttribSys/Generated/classes/crashbin.h"
+#include "GameSource/AttribSys/Generated/classes/propscrashbin.h"
+#include "GameSource/Sound/Global/BrnGlobalStateManager.h"
+
+#include <algorithm>
+#include <cstdlib>
 
 // =============================================================================
 // BrnSound::Logic::Collision::CollisionEffect -- out-of-line bodies.
@@ -39,7 +52,7 @@ namespace Collision
 // nulled by the X360 (stw 0,0x34) -- see header FLAG on the DWARF name divergence.
 // ---------------------------------------------------------------------------
 CollisionEffect::CollisionEffect()
-    : mpCollisionDMixIo(nullptr)          // stw 0, 0x34
+    : mpCollisionControl(nullptr)         // stw 0, 0x34
     , mePrepareState(E_PREPARE_STATE_CONSTRUCT_VOICE) // +0x38 zero-region
     , mbFirstUpdate(false)                // +0x3C zero-region
     , mbUseAzimuth(false)                 // +0x3C zero-region
@@ -77,6 +90,248 @@ CollisionEffect::~CollisionEffect()
 {
 }
 
+CgsSound::Logic::EffectObject* CollisionEffect::CreateObject(u32 /*auAllocator*/)
+{
+    return new CollisionEffect();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
+CollisionEffect::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
+        0x50000, "CollisionEffect",
+        CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
+        &CollisionEffect::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
+CollisionEffect::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+const char* CollisionEffect::GetTypeName() const
+{
+    return "CollisionEffect";
+}
+
+s32 CollisionEffect::GetController(s32 aiIndex)
+{
+    return aiIndex == 0 ? 0 : -1;
+}
+
+void CollisionEffect::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    CGS_ASSERT(apController != nullptr, "lpController");
+    if (!apController)
+        return;
+    if (apController->GetEffectID() == 0)
+        mpCollisionControl = static_cast<CollisionControl*>(apController);
+    else
+        CGS_ASSERT(false, "Cound't attach controller");
+}
+
+bool CollisionEffect::Prepare(CgsSound::Logic::State* apState)
+{
+    switch (mePrepareState)
+    {
+    case E_PREPARE_STATE_CONSTRUCT_VOICE:
+        if (!CgsSound::Logic::EffectBase::Prepare(apState))
+            return false;
+
+        mCrashVoice.Construct(
+            GetLogicModule(), GetLogicModule()->GetUniqueId(),
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash(
+                "~SplicerFactory::SK_NAME~")),
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash(
+                "SplicerVoiceSpec")));
+        mePrepareState = E_PREPARE_STATE_CONNECT_VOICE;
+        // ARTIST falls through: a voice created synchronously can be connected on
+        // this pass; an asynchronously created voice returns false until ready.
+    case E_PREPARE_STATE_CONNECT_VOICE:
+    {
+        if (!mCrashVoice.IsReady())
+            return false;
+
+        BrnSound::Logic::GlobalStateManager* lpGlobalStateManager =
+            static_cast<BrnSound::Logic::GlobalStateManager*>(
+                GetLogicModule()->GetEnvironment().GetStateManager(0));
+        CGS_ASSERT(lpGlobalStateManager != nullptr, "lpGlobalStateManager");
+        if (!lpGlobalStateManager)
+            return false;
+
+        const s32 liCollisionSubmixIdent =
+            lpGlobalStateManager->GetSubmixVoice(
+                BrnSound::Logic::GlobalStateManager::E_SUBMIX_VOICE_COLLISION)
+                .GetIdent();
+        mCrashVoice.Connect(
+            static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01")),
+            static_cast<u32>(liCollisionSubmixIdent));
+        return true;
+    }
+    default:
+        return true;
+    }
+}
+
+bool CollisionEffect::Attach()
+{
+    mbUseAzimuth = true;
+    CgsSound::Logic::EffectBase::Attach();
+    CGS_ASSERT(mpCollisionControl != nullptr, "mpCollisionControl");
+    if (!mpCollisionControl)
+        return false;
+    if (mpCollisionControl->GetCollisionFinished())
+        return true;
+
+    CollisionState* lpState = mpCollisionControl->GetCollisionState();
+    CGS_ASSERT(lpState != nullptr, "lpCollisionState");
+    CGS_ASSERT(mCrashVoice.GetVoiceObject() != nullptr, "mCrashVoice.IsCreated()");
+    if (!lpState || !mCrashVoice.GetVoiceObject())
+        return false;
+
+    const OutputCollision& lrCollision = lpState->GetOutputCollision();
+    CollisionStateManager* lpManager =
+        static_cast<CollisionStateManager*>(lpState->GetStateManager());
+    CGS_ASSERT(lpManager != nullptr, "lpCollisionStateManager");
+    if (!lpManager)
+        return false;
+
+    meNicotinePitchSlider = 1;
+    if (lrCollision.mePipeline == InputCollision::E_REGULAR)
+    {
+        const Attrib::Gen::crashbin lBin(lrCollision.mBinKey, nullptr);
+        CGS_ASSERT(lBin.IsValid(), "lCrashBin.IsValid()");
+        meNicotineVolumeSlider = lBin.MixerSlider();
+        CGS_ASSERT(meNicotineVolumeSlider > 2,
+                   "meNicotineVolumeSlider > AttribSys::Enums::eCollisionMixerSliders::Pitch");
+        switch (lrCollision.meSize)
+        {
+        case E_SIZE_LARGE:
+            mSizeSettings.mfVolume = lBin.Volumes().z;
+            mSizeSettings.mfPitch = lBin.Pitch().z;
+            break;
+        case E_SIZE_MEDIUM:
+            mSizeSettings.mfVolume = lBin.Volumes().y;
+            mSizeSettings.mfPitch = lBin.Pitch().y;
+            break;
+        case E_SIZE_SMALL:
+            mSizeSettings.mfVolume = lBin.Volumes().x;
+            mSizeSettings.mfPitch = lBin.Pitch().x;
+            break;
+        }
+    }
+    else
+    {
+        CGS_ASSERT(lrCollision.mePipeline == InputCollision::E_PROP,
+                   "lCollision.mePipeline == InputCollision::E_PROP");
+        const Attrib::Gen::propscrashbin lBin(lrCollision.mBinKey, nullptr);
+        CGS_ASSERT(lBin.IsValid(), "lCrashBin.IsValid()");
+        meNicotineVolumeSlider = lBin.MixerSlider();
+        CGS_ASSERT(meNicotineVolumeSlider > 2,
+                   "meNicotineVolumeSlider > AttribSys::Enums::eCollisionMixerSliders::Pitch");
+        switch (lrCollision.meSize)
+        {
+        case E_SIZE_LARGE:
+            mSizeSettings.mfVolume = lBin.Volumes().z;
+            mSizeSettings.mfPitch = lBin.Pitch().z;
+            break;
+        case E_SIZE_MEDIUM:
+            mSizeSettings.mfVolume = lBin.Volumes().y;
+            mSizeSettings.mfPitch = lBin.Pitch().y;
+            break;
+        case E_SIZE_SMALL:
+            mSizeSettings.mfVolume = lBin.Volumes().x;
+            mSizeSettings.mfPitch = lBin.Pitch().x;
+            break;
+        }
+    }
+
+    mCrashVoice.Attach(
+        static_cast<s32>(CgsSound::Playback::Name::MakeHash(
+            "~SplicerPlayerVoice::Slot~")),
+        lpManager->GetSplicerBank(
+            static_cast<ECollisionSpliceBankType>(lrCollision.meBankType)));
+    mCrashVoice.Play(lrCollision.miSampleID);
+
+    if (std::getenv("BRN_COLLISION_AUDIO_DIAG") != nullptr &&
+        CgsDev::Log::gpDebugPrint)
+    {
+        static u32 suPrintCount = 0;
+        if (suPrintCount++ < 32u)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[collision-audio] voice attached sample="
+                << lrCollision.miSampleID
+                << " mixer=" << static_cast<s32>(meNicotineVolumeSlider)
+                << " volume=" << mSizeSettings.mfVolume
+                << " pitch=" << mSizeSettings.mfPitch << "\n";
+        }
+    }
+
+    mfIntensity = std::max(0.0f, lrCollision.mNormalizedImpulse.x);
+    SetMixerInputValue(0, 0x7FFF);
+    const f32 lfDucking = std::min(32767.0f, mfIntensity * 327.67001f);
+    SetMixerInputValue(1, static_cast<s32>(32767.0f - lfDucking));
+    if (lrCollision.meAction == AttribSys::Enums::eAction::Detach)
+        mbUseAzimuth = false;
+    mbFirstUpdate = true;
+    return true;
+}
+
+void CollisionEffect::UpdateParams(f32 /*afDeltaTime*/)
+{
+}
+
+void CollisionEffect::ProcessUpdate()
+{
+    if (GetDMixIOPtr())
+        GetDMixIOPtr()->SetDMixInput(0, 0);
+    if (!mpCollisionControl || mpCollisionControl->GetCollisionFinished())
+        return;
+
+    const f32 lfGain = GetGain();
+    const f32 lfPitch = GetPitch();
+    f32 lfAzimuth = 0.0f;
+    if (mbUseAzimuth && GetDMixIOPtr())
+    {
+        lfAzimuth = static_cast<f32>(
+            GetDMixIOPtr()->GetDMixOutput(0, 3)) *
+            0.0054932479f;
+    }
+    mbFirstUpdate = false;
+
+    if (!mCrashVoice.IsPlaying())
+    {
+        mpCollisionControl->SetCollisionFinished(true);
+        return;
+    }
+
+    const u32 luSend01 = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("Send01"));
+    const u32 luPitch = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("~SplicerPlayerVoice::Pitch~"));
+    const u32 luAzimuth = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("~SplicerPlayerVoice::Azimuth~"));
+    mCrashVoice.SetGain(0, lfGain, 0, &luSend01);
+    mCrashVoice.SetParameter(1, lfAzimuth, 0, &luAzimuth);
+    mCrashVoice.SetParameter(0, lfPitch, 0, &luPitch);
+}
+
+bool CollisionEffect::Detach()
+{
+    if (mCrashVoice.GetVoiceObject())
+    {
+        mCrashVoice.Stop();
+        mCrashVoice.Detach(static_cast<s32>(
+            CgsSound::Playback::Name::MakeHash("~SplicerPlayerVoice::Slot~")));
+    }
+    if (GetDMixIOPtr())
+        GetDMixIOPtr()->SetDMixInput(1, 0);
+    return BrnSound::Logic::BrnEffectObject::Detach();
+}
+
 // ---------------------------------------------------------------------------
 // GetGain  @ 0x82688138
 //
@@ -109,11 +364,13 @@ f32 CollisionEffect::GetGain() const
     const f32 KF_Q15_TO_NORMALISED = 0.000030518509f;
 
     f32 lfMixerOutput;
-    if (mpCollisionDMixIo != nullptr) // lwz r3,0x34; cmplwi; beq
+    Nicotine::DMixIO* lpDmix =
+        mpCollisionControl ? mpCollisionControl->GetDMixIOPtr() : nullptr;
+    if (lpDmix != nullptr) // lwz r3,0x34; cmplwi; beq
     {
         // GetDMixOutput(slot, preset): preset 0 == DMX_VOL. extsw -> signed s32.
         const s32 liOutput =
-            mpCollisionDMixIo->GetDMixOutput(meNicotineVolumeSlider, Nicotine::DMixIO::DMX_VOL);
+            lpDmix->GetDMixOutput(meNicotineVolumeSlider, Nicotine::DMixIO::DMX_VOL);
         lfMixerOutput = static_cast<f32>(liOutput) * KF_Q15_TO_NORMALISED;
     }
     else
@@ -123,6 +380,25 @@ f32 CollisionEffect::GetGain() const
 
     return mSizeSettings.mfVolume * lfMixerOutput; // fmuls f1, f13, f0
 }
+
+f32 CollisionEffect::GetPitch() const
+{
+    Nicotine::DMixIO* lpDmix =
+        mpCollisionControl ? mpCollisionControl->GetDMixIOPtr() : nullptr;
+    f32 lfMixerOutput = 0.0f;
+    if (lpDmix)
+    {
+        lfMixerOutput = static_cast<f32>(lpDmix->GetDMixOutput(
+            meNicotinePitchSlider, Nicotine::DMixIO::DMX_PITCH)) *
+            0.00024414062f;
+    }
+    return mSizeSettings.mfPitch * lfMixerOutput;
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const
+    gpCollisionEffectReg =
+        CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(
+            CollisionEffect::GetStaticTypeInfo());
 
 // =============================================================================
 // BrnSound::Logic::Collision::Collision3DControl -- out-of-line bodies.
@@ -212,6 +488,32 @@ CgsSound::Logic::EffectControl* Collision3DControl::CreateObject( u32 /*luType*/
 Collision3DControl::~Collision3DControl()
 {
 }
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>*
+Collision3DControl::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo(
+        0x50010, "Collision3DControl",
+        CgsSound::Logic::EffectControl::GetStaticTypeInfo(),
+        &Collision3DControl::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>*
+Collision3DControl::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+const char* Collision3DControl::GetTypeName() const
+{
+    return "Collision3DControl";
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* const
+    gpCollision3DControlReg =
+        CgsSound::Logic::EffectControl::AddToClassTypeInfoArray(
+            Collision3DControl::GetStaticTypeInfo());
 
 } // namespace Collision
 } // namespace Logic

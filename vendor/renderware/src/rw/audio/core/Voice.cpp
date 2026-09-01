@@ -9,7 +9,20 @@
 // =====================================================================================
 
 #include "rw/audio/core/Voice.h"
+
+#include "rw/audio/core/AiffWriter.h"
+#include "rw/audio/core/Gain.h"
+#include "rw/audio/core/Rechannel.h"
+#include "rw/audio/core/Resample.h"
+#include "rw/audio/core/Route.h"
 #include "rw/audio/core/Send.h"
+#include "rw/audio/core/plugins/HighPassButterworth.h"
+#include "rw/audio/core/plugins/Limiter1.h"
+#include "rw/audio/core/plugins/LowPassButterworth.h"
+#include "rw/audio/core/plugins/Pan2D.h"
+#include "rw/audio/core/plugins/Pan2D1.h"
+#include "rw/audio/core/plugins/Pause.h"
+#include "rw/audio/core/plugins/ReverbModel1.h"
 
 #include <cstddef> // offsetof, size_t
 #include <cstdint> // uintptr_t
@@ -39,6 +52,84 @@ static inline uintptr_t AlignUp(uintptr_t v, uintptr_t a)
 // the GetSize dispatch cast happens at the one call site, exactly where the
 // console's generic dispatch is.)
 typedef u32 (*VoiceStageGetSizeFn)(const VoiceStageConfig *config);
+
+// The console stores callable PPC vtables in every stage.  Several reconstructed
+// vendor plug-ins deliberately retain their original composition layout through
+// PlugInBaseView, whose first word is a console-vtable token rather than a native
+// C++ vptr.  Dispatch those stages by their canonical descriptor identity while
+// preserving ReleaseImmediate's exact vt[0], then vt[3](flags=0), sequence.
+static bool ReleaseComposedStage(PlugIn *apStage, const PlugInDescRunTime *apDesc)
+{
+    if (!apDesc)
+        return false;
+
+    switch (apDesc->muId)
+    {
+    case 0x41695730u: // 'AiW0' AiffWriter: ReleaseEvent, deleting dtor
+        AiffWriter::ReleaseEvent(reinterpret_cast<AiffWriter*>(apStage));
+        AiffWriter::ScalarDeletingDestructor(reinterpret_cast<AiffWriter*>(apStage), 0);
+        return true;
+    case 0x526F7530u: // 'Rou0' Route
+        Route::ReleaseEvent(reinterpret_cast<Route*>(apStage));
+        Route::ScalarDeletingDestructor(apStage, 0);
+        return true;
+    case 0x53656E30u: // 'Sen0' Send
+        Send::ReleaseEvent(reinterpret_cast<Send*>(apStage));
+        Send::ScalarDeletingDestructor(apStage, 0);
+        return true;
+    case 0x524D3130u: // 'RM10' ReverbModel1
+        ReverbModel1::ReleaseEvent(reinterpret_cast<ReverbModel1*>(apStage));
+        ReverbModel1::VectorDeletingDestructor(
+            reinterpret_cast<ReverbModel1*>(apStage), 0);
+        return true;
+
+    // These stages' vt[0] is the shared trivial hook; vt[3] only restores the
+    // base token when flags==0.  Invoke the recovered deleting-destructor body.
+    case 0x47616930u: // 'Gai0'
+        Gain::VectorDeletingDestructor(reinterpret_cast<Gain*>(apStage), 0);
+        return true;
+    case 0x52636830u: // 'Rch0'
+        Rechannel::ScalarDeletingDestructor(reinterpret_cast<Rechannel*>(apStage), 0);
+        return true;
+    case 0x52737030u: // 'Rsp0'
+        Resample::VectorDeletingDestructor(reinterpret_cast<Resample*>(apStage), 0);
+        return true;
+    case 0x48504230u: // 'HPB0'
+        HighPassButterworth::VectorDeletingDestructor(
+            reinterpret_cast<HighPassButterworth*>(apStage), 0);
+        return true;
+    case 0x4C693130u: // 'Li10'
+        Limiter1::ScalarDeletingDestructor(reinterpret_cast<Limiter1*>(apStage), 0);
+        return true;
+    case 0x4C504230u: // 'LPB0'
+        LowPassButterworth::VectorDeletingDestructor(
+            reinterpret_cast<LowPassButterworth*>(apStage), 0);
+        return true;
+    case 0x506E3230u: // 'Pn20'
+        Pan2D::VectorDeletingDestructor(reinterpret_cast<Pan2D*>(apStage), 0);
+        return true;
+    case 0x506E3231u: // 'Pn21'
+        Pan2D1::ScalarDeletingDestructor(reinterpret_cast<Pan2D1*>(apStage), 0);
+        return true;
+    case 0x50617530u: // 'Pau0'
+        Pause::ScalarDeletingDestructor(reinterpret_cast<Pause*>(apStage), 0);
+        return true;
+
+    // The six Iir2 shapes have no owned teardown state.  Their ARTIST deleting
+    // destructors are the same flag-zero base-vtable restore; the enclosing Voice
+    // allocation is freed immediately after this loop, so the dead token store is
+    // the only elided operation.
+    case 0x42493230u: // 'BI20'
+    case 0x48493230u: // 'HI20'
+    case 0x48533230u: // 'HS20'
+    case 0x4C493230u: // 'LI20'
+    case 0x4C533230u: // 'LS20'
+    case 0x50493230u: // 'PI20'
+        return true;
+    default:
+        return false;
+    }
+}
 
 // The deferred-command records the Voice methods push into the System ring buffer. Each is
 // { handler, voice[, payload] }; replayed later by the matching *Handler.
@@ -316,16 +407,7 @@ Voice *Voice::ReleaseImmediate(Voice *self, u8 keepInList)
         if (stage)
         {
             PlugInDescRunTime *lpDesc = stage->mpPlugInDescRunTime;
-            // Send retains the middleware's explicit four-word console vtable in
-            // its PlugInBaseView rather than deriving from the host PlugIn class.
-            // Dispatch its two ARTIST slots by descriptor identity; treating that
-            // stored console-table sentinel as a native C++ vptr executes data.
-            if (lpDesc && lpDesc->muId == 0x53656E30u) // 'Sen0'
-            {
-                Send::ReleaseEvent(reinterpret_cast<Send*>(stage));       // vt[0]
-                Send::ScalarDeletingDestructor(stage, 0);                 // vt[3]
-            }
-            else
+            if (!ReleaseComposedStage(stage, lpDesc))
             {
                 stage->~PlugIn();  // vt[0]
                 stage->Destroy(0); // vt[3]

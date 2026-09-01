@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnState.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficSoundInterfaces.h"
 
 // =============================================================================
 // BrnSound::Logic::Traffic::TrafficState
@@ -48,9 +49,14 @@ struct TrafficState : public BrnSound::Logic::BrnState
     // then chains to the base State::Attach (reused BY NAME, the DestroyEffects idiom).
     virtual void Attach(void* lpvAttachment);
 
+    const BrnTraffic::BrnTrafficIO::TrafficSoundEntity* GetTrafficEntity() const
+    {
+        return mpTrafficEntity;
+    }
+
 private:
     // +0x54  DWARF: const TrafficStateManager::Slot::TrafficSoundEntity* (un-homed -> const void*).
-    const void* mpTrafficEntity;
+    const BrnTraffic::BrnTrafficIO::TrafficSoundEntity* mpTrafficEntity;
 };
 
 } // namespace Traffic

@@ -5,6 +5,17 @@
 #include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"   // BrnSound::Logic::BrnStateManager (committed base)
 #include "GameSource/Sound/Collision/BrnCollisionDataStructures.h" // BrnSound::Logic::Collision::ScrapeInfo (committed; maScrapeHistory element)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"       // CgsSound::Playback::Name::MakeHash (SelectBin helper)
+#include "GameShared/GameClasses/Sound/Logic/CgsContent.h"
+#include "GameSource/AttribSys/Generated/classes/crashbin.h"
+#include "GameSource/AttribSys/Generated/classes/propscrashbin.h"
+#include "GameSource/AttribSys/Generated/classes/crashbinlist.h"
+#include "GameSource/AttribSys/Generated/classes/propscrashbinlist.h"
+#include "GameSource/AttribSys/Generated/classes/proptomaterialmappings.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
+
+namespace BrnDirector { namespace Camera { struct Camera; } }
+namespace BrnPhysics { namespace ContactSpy { struct BaseContact; struct PropContact; } }
+namespace BrnSound { namespace Module { namespace Io { struct RootInputBuffer; } } }
 
 // =============================================================================
 // BrnSound::Logic::Collision::CollisionStateManager
@@ -34,16 +45,15 @@
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): the X360 object is 33408 bytes (0x8280)
 // behind 4-byte pointers/vptrs (CreateObject @ 0x82701FA8 allocates 33408); on the
 // 64-bit host the layout differs, so members are pinned BY NAME only and the 0x8280
-// size / absolute offsets are NOT static_asserted. No recovered body in this slice
-// names an individual data member by a recovered field name; the ~33KB of collision-
-// audio state is deferred (see FLAG) and a single opaque pad honestly names it.
+// size / absolute offsets are NOT static_asserted. Runtime members are represented by
+// their recovered names and roles rather than console padding or raw-offset access.
 // =============================================================================
 
-// AttribSys-generated crash-bin containers (forward declarations only). CrashBinUtils
-// takes them as pointer parameters; the accessor member-pointers are invoked through
-// them only inside the template body in the .cpp, so a forward decl suffices here.
-// Both crashbin.h and propscrashbin.h are committed under AttribSys/Generated/classes/.
-namespace Attrib { namespace Gen { class crashbin; class propscrashbin; } }
+// The crash-bin classes must be complete before CrashBinUtils is declared. On MSVC x64
+// a pointer-to-member of an incomplete class uses the general 24-byte representation,
+// while these single-inheritance generated classes use the 8-byte representation. The
+// ARTIST helper is called with pointers to their concrete accessors, so both the caller
+// and the explicit-instantiation site must compile against the same complete types.
 
 namespace BrnSound
 {
@@ -51,6 +61,22 @@ namespace Logic
 {
 namespace Collision
 {
+
+enum ECollisionSpliceTags : int
+{
+    E_COLLISION_SPLICE_SMALL_LANDINGS = 0,
+    E_COLLISION_SPLICE_SUSPENSION = 1,
+    E_COLLISION_SPLICE_HARD_LANDINGS = 2,
+    E_COLLISION_SPLICE_CRASH_LANDINGS = 3,
+    E_COLLISION_SPLICE_JUNKYARD_LANDING_SWEETNER = 4,
+    E_COLLISION_SPLICE_CRASH_IN_WATER = 5,
+};
+
+enum ECollisionSpliceBankType
+{
+    E_COLLISION_SPLICE_BANK_COLLISION = 0,
+    E_COLLISION_SPLICE_BANK_MAX = 1,
+};
 
 // ---------------------------------------------------------------------------
 // BrnSound::Logic::Collision::CrashBinUtils<CrashBin> -- a STATELESS utility struct
@@ -86,9 +112,33 @@ struct CrashBinUtils
         u16                         luMaxSize );
 };
 
-// Deferred collision-event descriptor (homed elsewhere; PlayCollision takes a pointer
-// only). DWARF (BrnCollisionStateManager.h:143/:511) declares it `struct OutputCollision`.
+// Collision-event descriptor is defined in BrnCollisionDataStructures.h.
 struct OutputCollision;
+
+struct CameraInfo
+{
+    CameraInfo()
+        : mfFieldOfView(0.0f)
+        , mfCosineHalfFov(0.0f)
+        , mfAspectRatio(0.0f)
+        , mfZoom(0.0f)
+    {
+        mTransform.SetIdentity();
+    }
+
+    Matrix44Affine mTransform;
+    f32 mfFieldOfView;
+    f32 mfCosineHalfFov;
+    f32 mfAspectRatio;
+    f32 mfZoom;
+};
+
+struct PropToMaterialMapping
+{
+    PropToMaterialMapping() : muMaterialIndex(0), mbValid(false) {}
+    u16 muMaterialIndex;
+    bool mbValid;
+};
 
 // SelectBin name->bin-index helper  @ 0x826A0598. Free function (the asm never uses
 // its r3 as `this`) -- the shared body both CollisionStateManager::SelectBin<>
@@ -100,8 +150,7 @@ int SelectBin( int a1, const char* lkpacName, int a3, int a4, int a5 );
 class CollisionStateManager : public BrnSound::Logic::BrnStateManager
 {
 public:
-    // CollisionStateManager @ 0x826FFAC0 (HEAVY -- builds collision generator lists +
-    // crash-bin attribute tables; this shell does a MINIMAL ctor, see .cpp FLAG).
+    // CollisionStateManager @ 0x826FFAC0.
     CollisionStateManager();
 
     // ~CollisionStateManager @ 0x826FFD48 (the X360 `vector deleting destructor`).
@@ -117,39 +166,81 @@ public:
     static CgsSound::Logic::StateManager* CreateObject( u32 luType );                     // @ 0x82701FA8
 
     // ---- boot + lifecycle virtuals ----
-    virtual bool Prepare();                       // @ 0x826F8B78  (vtable +0x0C; stub -- see .cpp FLAG)
+    virtual bool Prepare();                       // @ 0x826F8B78  (vtable +0x0C)
+    virtual CgsSound::Logic::State* GetFreeState(void* apvAttachment) override;
+    virtual void UpdateParams(f32 afDeltaTime) override;
+    virtual void Notify(const CgsSound::Io::MessageHeader* apkMessage) override;
 
     // ---- IResourceRequester overrides (pure in IResourceRequester; BrnStateManager
     // declares but does not body them, so the concrete leaf must override+body them). ----
-    virtual void                            ResourcesAreReady();    // (stub -- domain cascade; see .cpp FLAG)
-    virtual BrnSound::Logic::ResourceRegistrar& GetResourceRegistrar(); // (stub -- module not homed; see .cpp FLAG)
+    virtual void                            ResourcesAreReady();
+    virtual BrnSound::Logic::ResourceRegistrar& GetResourceRegistrar();
 
     // FindInScrapeHistory @ 0x826889E0 (DWARF h:880 -- the NON-const overload). Linear
     // scan of the 16-slot scrape history; returns the first VALID slot that compares
     // equal to rScrapeInfo, else nullptr.
     BrnSound::Logic::Collision::ScrapeInfo* FindInScrapeHistory( const BrnSound::Logic::Collision::ScrapeInfo& rScrapeInfo );
 
-    // PlayCollision @ 0x82704028 (STUB -- collision-audio domain not homed; see .cpp
-    // FLAG). Non-virtual; called only by UpdateParams. Hex-Rays signature is int; kept.
+    // PlayCollision @ 0x82704028. Non-virtual; called by UpdateParams.
     int PlayCollision( OutputCollision* lpCollision );
 
+    const CgsSound::Logic::Content& GetSplicerBank(
+        ECollisionSpliceBankType aeBank) const
+    {
+        CGS_ASSERT(aeBank >= E_COLLISION_SPLICE_BANK_COLLISION &&
+                   aeBank < E_COLLISION_SPLICE_BANK_MAX,
+                   "leSpliceBankType < E_COLLISION_SPLICE_BANK_MAX");
+        return mCollisionSplicerBank[aeBank];
+    }
+
+    const CgsSound::Logic::Content& GetScrapeAemsBank() const
+    {
+        return mScrapesAemsBank;
+    }
+
 private:
-    // FLAG (deferred body -- ~33KB; the WHOLE collision domain): the X360 object is
-    // 33408 bytes (0x8280). The collision-audio state -- a SelectionHistory<512>
-    // (+0x8B0), a 32-entry table (+0x1300, stride 28), a 500-entry table (+0x1670), a
-    // 16-entry table (+0x1E69, stride 48), TWO 64-entry arrays of vector-constructed
-    // CgsSceneManager::CgsCollision::BaseCollisionGenerator (+0x2170/+0x4990, the
-    // per-material collision generators), three Attrib::Gen tables
-    // (crashbinlist / propscrashbinlist / proptomaterialmappings @ +0x8234..), and the
-    // crash splicer-bank Content sub-objects (+0x8210..) -- is NOT modelled in this
-    // minimal shell. Per the task constraint, this shell does NOT pull in the collision
-    // domain (CgsSceneManager::CgsCollision, the Attrib::Gen crash tables); the heavy
-    // construction is DEFERRED (see ctor FLAG). The shell exists only to be a CONCRETE,
-    // registrable leaf whose Prepare() returns true for PrepareStateManagersOnBoot. A
-    // single opaque pad keeps the deferred state honestly named without fabricating
-    // field meanings. Size is UNVERIFIED on host (the X360 0x8280 is a 32-bit fact);
-    // NOT static_asserted.
-    u8 maDeferredCollisionState[1]; // placeholder for the un-reconstructed collision-audio members
+    void SetCollisionBinList(u64 luCollisionBinListKey,
+                             u64 luPropsCollisionBinListKey,
+                             u64 luPropsMappingKey);
+    void BuildPropToMaterialTable();
+    void UpdateResolver(const BrnSound::Module::Io::RootInputBuffer& lrInput,
+                        const BrnSound::Logic::FrameInformation& lrFrame,
+                        f32 afDeltaTime);
+    void AddInputCollision(const InputCollision& lrCollision);
+    bool ProcessCollision(OutputCollision& lrOutput, const InputCollision& lrInput);
+    void ProcessCollisions();
+    u64 MapEntityIdToMaterial(const EntityId& lrEntityId,
+                              const BrnSound::Module::Io::RootInputBuffer& lrInput) const;
+    bool MapPropTypeToMaterial(u16 luPropType, u64& lruMaterial) const;
+    void MakeBaseInputCollision(InputCollision& lrOut,
+                                const BrnPhysics::ContactSpy::BaseContact& lrContact,
+                                const BrnSound::Module::Io::RootInputBuffer& lrInput,
+                                f32 afDeltaTime) const;
+    void MakePropInputCollision(InputCollision& lrOut,
+                                const BrnPhysics::ContactSpy::PropContact& lrContact,
+                                const BrnSound::Module::Io::RootInputBuffer& lrInput,
+                                f32 afDeltaTime) const;
+    void SetCameraInfo(const BrnDirector::Camera::Camera& lrCamera);
+    u32 MapCameraStateToBinFlags(const BrnDirector::Camera::Camera& lrCamera) const;
+    u32 MapGameModesToBinFlags(const void* lpGameMode) const;
+    static bool LessThanPriority(const OutputCollision* lpLeft,
+                                 const OutputCollision* lpRight);
+
+    template <typename ListType, typename BinType>
+    void SelectCollisionBin(OutputCollision& lrOutput, const ListType& lrList);
+
+    template <typename BinType>
+    void GetRandomSampleID(OutputCollision& lrOutput);
+
+    CgsSound::Utils::SelectionHistory<512, u16, u16, 65536>
+        maSelectionHistory[E_COLLISION_SPLICE_BANK_MAX];
+    PropToMaterialMapping maPropToMaterialMappings[500];
+    InputCollision maInputCollision[64];
+    OutputCollision maOutputCollision[64];
+    CameraInfo mCameraInfo;
+    u32 mu32InputCollisionCount;
+    u32 mu32OutputCollisionCount;
+    BrnSound::Logic::FrameInformation mFrameInformation;
 
     // DWARF (BrnCollisionStateManager.h:639). The 16-entry scrape history ring
     // FindInScrapeHistory scans (X360 offset +0x1E40, stride 48). Modelled with the
@@ -159,6 +250,21 @@ private:
     // shape (it defers several fields), so the exact per-slot layout is a semantic-parity
     // approximation; members are pinned BY NAME, offsets NOT static_asserted on host.
     BrnSound::Logic::Collision::ScrapeInfo maScrapeHistory[16];
+
+    // The three ref-counted content handles built at the tail of the ARTIST
+    // constructor.  They are the runtime-visible part of the otherwise deferred
+    // collision-manager payload and are required by landing/scrape voices.
+    CgsSound::Logic::Content mScrapesCsisInterface;
+    CgsSound::Logic::Content mScrapesAemsBank;
+    CgsSound::Logic::Content mCollisionSplicerBank[E_COLLISION_SPLICE_BANK_MAX];
+    Attrib::Gen::crashbinlist mCrashBinList;
+    Attrib::Gen::propscrashbinlist mPropsCrashBinList;
+    Attrib::Gen::proptomaterialmappings mPropMaterialMappings;
+    bool mbResourcesAreLoaded;
+    bool mbBoundToProps;
+    CgsResource::ResourceHandle mPropDataResourceHandle;
+    u32 mx32CameraBinFlags;
+    u32 mx32GameModeBinFlags;
 };
 
 } // namespace Collision

@@ -45,7 +45,11 @@ namespace Gen
         const RefSpec& StreamMappings() const;
         const RefSpec& SpeechData() const;
         const RefSpec& WorldEmitterList() const;
+        const RefSpec& InAirCrashBin() const;
         const RefSpec& GlobalEngineData() const;
+        u64 CollisionCrashBinListKey() const;
+        u64 PropsCrashBinListKey() const;
+        u64 PropToMaterialMappingsKey() const;
         const RefSpec& SampleTags(u32 luIndex) const;
 
         // The sound module is constructed before BurnoutGlobalData.bin is
@@ -134,11 +138,41 @@ namespace Gen
             static_cast<const u8*>(mpAttributeData) + 0x488u);
     }
 
+    inline const RefSpec& burnoutglobaldata::InAirCrashBin() const
+    {
+        // InAirEffect::Attach @ ARTIST 0x826F46F8 reads the RefSpec at the
+        // BurnoutGlobalData layout's fixed +0x4E8 slot.
+        return *reinterpret_cast<const RefSpec*>(
+            static_cast<const u8*>(mpAttributeData) + 0x4E8u);
+    }
+
     inline const RefSpec& burnoutglobaldata::GlobalEngineData() const
     {
         // Brn3DEffectControl::Prepare @ ARTIST 0x82696870 reads this RefSpec.
         return *reinterpret_cast<const RefSpec*>(
             static_cast<const u8*>(mpAttributeData) + 0x518u);
+    }
+
+    inline u64 burnoutglobaldata::CollisionCrashBinListKey() const
+    {
+        // CollisionStateManager::Prepare @ ARTIST 0x826F8B78 loads the
+        // collection key from the global layout's +0x538 slot.
+        return *reinterpret_cast<const u64*>(
+            static_cast<const u8*>(mpAttributeData) + 0x538u);
+    }
+
+    inline u64 burnoutglobaldata::PropsCrashBinListKey() const
+    {
+        // Same call stages the props-crash list key from +0x4C0.
+        return *reinterpret_cast<const u64*>(
+            static_cast<const u8*>(mpAttributeData) + 0x4C0u);
+    }
+
+    inline u64 burnoutglobaldata::PropToMaterialMappingsKey() const
+    {
+        // Same call stages the prop-material mapping key from +0x4A8.
+        return *reinterpret_cast<const u64*>(
+            static_cast<const u8*>(mpAttributeData) + 0x4A8u);
     }
 
     inline const RefSpec& burnoutglobaldata::SampleTags(u32 luIndex) const

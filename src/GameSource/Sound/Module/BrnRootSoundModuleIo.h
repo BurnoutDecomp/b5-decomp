@@ -13,6 +13,7 @@
 #include "GameSource/Sound/Module/SharedIO/BrnSoundRootSharedIO.h"
 #include "GameSource/Replays/BrnReplayRequestInterface.h" // BrnReplays::ReplayIO::RequestInterface (the replay request member; phase C1)
 #include "GameSource/Director/Camera/Camera.h"            // BrnDirector::Camera::Camera (mDirectorCamera)
+#include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"
 
 // =============================================================================
 // BrnSound::Module::Io buffer accessors
@@ -228,7 +229,8 @@ namespace Io
         // else nominal (absorbed by pads).
         struct ReplayStatusInterface         { u8 mData[4]; };
         typedef BrnDirector::Camera::Camera DirectorCamera;
-        struct InputContactSpyQueueInterface { u32 mData; };
+        typedef BrnPhysics::ContactSpy::ContactSpyInterface
+            InputContactSpyQueueInterface;
         // ⭐ TYPED (faithful-audio-engine phase C4; was opaque u8[4] + pad). Two-source
         // attestation, same arithmetic as GameActionQueue below: the console
         // RootInputBuffer::Construct @0x826C81D8 calls VariableEventQueue<1536,16>::
@@ -238,7 +240,8 @@ namespace Io
         // the Construct was missing). Span 0x610 = 1536+16 inside the 0x6494..0x6AB0 gap.
         typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
         struct TrafficSoundOutputInterface   { u8 mData[4]; };
-        struct PhysicalTrafficStateQueue     { u8 mData[16]; };
+        typedef CgsModule::EventQueue<BrnPhysics::Vehicle::PhysicalTrafficState, 20>
+                                                PhysicalTrafficStateQueue;
         struct DeformationInterface          { u8 mData[4]; };
         struct ScoringOutputInterface        { u8 mData[0xAB0]; };   // XMemCpy 0xAB0 (SetScoringInterface)
         struct OnlineScoringOutputInterface  { u8 mData[0xA4]; };    // memcpy 0xA4  (SetOnlineScoringInterface)
@@ -287,6 +290,8 @@ namespace Io
         const ScoringOutputInterface* GetScoringInterface() const;
         // X360 0x82694E80 -- the deformation output interface @ +0xB490 (by reference, folded bare class).
         const DeformationInterface& GetDeformationInterface() const;
+        const PhysicalTrafficStateQueue* GetPhysicalTrafficStates() const;
+        const InputContactSpyQueueInterface& GetContactSpyQueueInterface() const;
         // X360 0x82694C88 (read) / 0x823B8668 (write) -- the game-action queue @ +0x3084 (by reference).
         const GameActionQueue& GetGameActionQueue() const;
         GameActionQueue&       GetGameActionQueue();
@@ -353,7 +358,10 @@ namespace Io
         TrafficSoundOutputInterface   mTrafficOutputInterface;     // @ +0x06AB0
         u8 maPad6[0x74C0 - (0x6AB0 + sizeof(TrafficSoundOutputInterface))];
         PhysicalTrafficStateQueue     mPhysicalTrafficStates;      // @ +0x074C0
-        u8 maPad7[0xB490 - (0x74C0 + sizeof(PhysicalTrafficStateQueue))];
+        // The console queue exactly fills 0x74C0..0xB490. On x64 its BaseEventQueue
+        // pointer widens by four bytes and the base is padded to eight-byte alignment,
+        // making the typed host queue eight bytes wider; there is therefore no host pad
+        // before the next by-name member.
         DeformationInterface          mDeformationInterface;       // @ +0x0B490
         u8 maPad8[0xDF80 - (0xB490 + sizeof(DeformationInterface))];
         ScoringOutputInterface        mScoringInterface;           // @ +0x0DF80
@@ -438,8 +446,10 @@ namespace Io
         CgsModule::IOBuffer::Construct();
         mVehicleData.Clear();                       // @0x8227D550 -- the interface's own Clear
         mDirectorCamera.Construct();                 // Camera::Construct(this+0x2F20)
+        mContactSpyQueueInterface.Construct();       // ContactSpyInterface::Construct(this+0x3080)
         mGameActionQueue.Construct();               // VEQ Construct runs Clear() itself
         mGameEventQueue.Construct();                // the C4 fix: BridgeWorldToSound's append target
+        mPhysicalTrafficStates.Construct();         // PhysicalTrafficState,20 @0x826C82CC
         mWorldLoadInterface.Construct();            // EventQueue<SoundWorldLoadEvent,25>
         mpGuiEventQueue = 0;
         std::memset(&mGameModeInterface, 0xFF, sizeof(mGameModeInterface));   // -1 x4 words

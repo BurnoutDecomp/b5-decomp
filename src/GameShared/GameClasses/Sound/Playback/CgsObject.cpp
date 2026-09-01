@@ -27,6 +27,18 @@ Object::~Object()
     CGS_ASSERT(mu32RefCount == 0, "0 == mu32RefCount");
 }
 
+// @ 0x82680938. The reference-count release is also the playback object's
+// ownership boundary: the final reference dispatches the class-specific
+// DoDispose hook, which destroys the allocator-backed carve and returns it to
+// the owning sound Environment.
+void Object::Release()
+{
+    CGS_ASSERT(mu32RefCount > 0, "mu32RefCount > 0");
+    --mu32RefCount;
+    if (mu32RefCount == 0)
+        DoDispose();
+}
+
 }
 }
 

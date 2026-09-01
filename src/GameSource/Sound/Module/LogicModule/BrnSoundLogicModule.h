@@ -249,6 +249,9 @@ private:
     void ProcessStreamFreedQueue(
         const CgsSound::Playback::Module::Io::OutputBuffer::FreedBuffersArray& arFreedIds);
     void ProcessCarDataLoadingQueue(const Io::AudioCarLoadedDataQueue& arEvents);
+    void ProcessGameActionQueue(
+        EActiveRaceCarIndex aePlayerCarIndex,
+        const Io::RootInputBuffer::GameActionQueue& arEvents);
 
     // Members in DWARF source order (BrnSoundLogicModule.h:365-383). Only the two
     // touched members are real typed members; the rest of the class tail is omitted

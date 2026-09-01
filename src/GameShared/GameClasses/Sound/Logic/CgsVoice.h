@@ -68,6 +68,7 @@ struct Content;
 namespace Logic
 {
 class Module;
+struct Content;
 
 // CgsVoice.h. The sound-logic voice. Virtual (the X360 scalar-deleting dtor installs
 // a vtable at +0), so it carries an implicit vptr at +0.
@@ -119,8 +120,14 @@ public:
     // IsReady  @ 0x82694378. true iff (playbackState & 0x7F) != 0.
     bool IsReady() const;
 
-    // ---- Playback-layer-dependent legs (see .cpp for the FLAGGED stubs) ----------
-    // Attach  @ 0x826DC4C8 -> Playback::Module::Module::AttachVoice
+    // ---- Playback-layer-dependent legs (see .cpp) --------------------------
+    // Public Attach @ 0x826EAE38 takes the authored Logic::Content, copies its
+    // playback handle, and delegates to the private by-value handle overload.
+    void Attach(s32 liSlotName, const Content& arContent);
+
+    // Private handle overload @ 0x826DC4C8 -> Playback::Module::AttachVoice.
+    // Kept public temporarily for the VoiceWrapper staging path, whose content
+    // is already represented as the exact acquired by-value handle.
     s32 Attach(s32 liSlotName, Playback::Handle<Playback::Content>* lphContent);
     // Detach  @ 0x826C4F98 -> Playback::Voice::FindNamedSlot + Playback::Slot::Detach
     void* Detach(s32 liSlotName);

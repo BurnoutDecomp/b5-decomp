@@ -51,6 +51,13 @@ namespace Logic
 class GlobalStateManager : public BrnSound::Logic::BrnStateManager
 {
 public:
+    enum eSubmixVoice
+    {
+        E_SUBMIX_VOICE_COLLISION = 0,
+        E_SUBMIX_VOICE_PASSBY = 1,
+        E_SUBMIX_VOICE_COUNT = 2,
+    };
+
     // GlobalStateManager @ 0x826FBB50. Forwards to the BrnStateManager base ctor and
     // builds the two global-Voice + two Content sub-objects.
     GlobalStateManager();
@@ -83,17 +90,17 @@ public:
     {
         return mFxSpliceBank;
     }
-    CgsSound::Logic::Voice& GetSubmixVoice(s32 aiVoice)
+    CgsSound::Logic::Voice& GetSubmixVoice(eSubmixVoice aeVoice)
     {
-        return maSubmixVoices[aiVoice];
+        return maSubmixVoices[static_cast<s32>(aeVoice)];
     }
-    const CgsSound::Logic::Voice& GetSubmixVoice(s32 aiVoice) const
+    const CgsSound::Logic::Voice& GetSubmixVoice(eSubmixVoice aeVoice) const
     {
-        return maSubmixVoices[aiVoice];
+        return maSubmixVoices[static_cast<s32>(aeVoice)];
     }
 
 private:
-    CgsSound::Logic::Voice   maSubmixVoices[2];
+    CgsSound::Logic::Voice   maSubmixVoices[E_SUBMIX_VOICE_COUNT];
     CgsSound::Logic::Content mFxSpliceBank;
     CgsSound::Logic::Content mPresentationSpliceBank;
     bool                     mbResourcesAreLoaded;

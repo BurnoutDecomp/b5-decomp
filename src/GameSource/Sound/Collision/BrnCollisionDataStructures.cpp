@@ -46,10 +46,12 @@ bool ScrapeInfo::operator==( const ScrapeInfo& lInfo ) const
 
     bool lbEqual = false;
 
-    if ( lInfo.mu32Kind == mu32Kind )
+    if ( lInfo.meOrientation == meOrientation )
     {
-        if ( ( lInfo.maObjectId[0] == maObjectId[0] && lInfo.maObjectId[1] == maObjectId[1] )
-          || ( lInfo.maObjectId[0] == maObjectId[1] && lInfo.maObjectId[1] == maObjectId[0] ) )
+        if ( ( lInfo.mEntityIdA.muValue == mEntityIdA.muValue &&
+               lInfo.mEntityIdB.muValue == mEntityIdB.muValue )
+          || ( lInfo.mEntityIdA.muValue == mEntityIdB.muValue &&
+               lInfo.mEntityIdB.muValue == mEntityIdA.muValue ) )
         {
             lbEqual = true;
         }
@@ -72,8 +74,8 @@ void ScrapeInfo::UpdateHistory( const ScrapeInfo& lInfo )
 {
     CGS_ASSERT( *this == lInfo, "*this == lInfo" );
 
-    mfParam0x24 = lInfo.mfParam0x24;
-    mfParam0x18 = lInfo.mfParam0x18;
+    mfIntensity = lInfo.mfIntensity;
+    mfTimeStamp = lInfo.mfTimeStamp;
 }
 
 } // namespace Collision

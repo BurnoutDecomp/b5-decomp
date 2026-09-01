@@ -9,6 +9,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log / Message filter
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // the "Resource Registrar" monitor (Prepare case 0)
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModuleIo.h"  // Io::LogicPreUpdateOutputBuffer (PreUpdate; phase C1)
+#include "GameSource/Sound/Module/LogicModule/BrnMessageData.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
 
 // BrnSound::Module::SoundLogicModule -- accessor bodies recovered from
@@ -441,6 +442,38 @@ void SoundLogicModule::ProcessCarDataLoadingQueue(
     }
 }
 
+// ARTIST 0x826EC400, collision-binding case of ProcessGameActionQueue.
+// Game action 297 constructs Message<ESoundMessages> with event 2, addressed
+// to state-manager 5 (CollisionStateManager), and payload value 2.  That
+// message makes the manager request PRP_PHYSICS_, whose prop-type table is the
+// authoritative source for prop crash materials.  The other switch cases are
+// independent sound features and remain owned by their respective effects.
+void SoundLogicModule::ProcessGameActionQueue(
+    EActiveRaceCarIndex /*aePlayerCarIndex*/,
+    const Io::RootInputBuffer::GameActionQueue& arEvents)
+{
+    const CgsModule::Event* lpEvent = nullptr;
+    s32 liSize = 0;
+    s32 liType = arEvents.GetFirstEvent(&lpEvent, &liSize);
+    while (lpEvent)
+    {
+        if (liType == 297)
+        {
+            CgsSound::Io::Message<BrnSound::ESoundMessages> lMessage;
+            lMessage.Construct(
+                BrnSound::E_SOUNDMESSAGE_COLLISION_BIND_TO_PROPS,
+                5,
+                CgsSound::Io::MessageHeader::KU16_NO_DESTINATION,
+                CgsSound::Io::MessageHeader::KU16_NO_DESTINATION,
+                CgsSound::Io::MessageHeader::E_EFFECT_TYPE_NONE);
+            lMessage.mData = BrnSound::E_SOUNDMESSAGE_COLLISION_BIND_TO_PROPS;
+            QueueSoundMessage(mMessageQueue, lMessage);
+        }
+
+        liType = arEvents.GetNextEvent(lpEvent, &lpEvent, &liSize);
+    }
+}
+
 // ARTIST 0x826978A0 / 0x826978B8. SoundLogicModule mirrors the generic logic
 // engine's buffer pair into its typed Burnout pair. State managers use the typed
 // input during Environment::Update, so both pairs must have the same lifetime.
@@ -572,6 +605,8 @@ void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
     UpdateMicrophones(lpInput);
     const EActiveRaceCarIndex lePlayerCarIndex = lpInput->GetPlayerActiveRaceCarIndex();
     UpdateFrameInformation(af32SimDt, lpInput, aeUpdateSet, lePlayerCarIndex);
+    const Io::RootInputBuffer* lpReadInput = lpInput;
+    ProcessGameActionQueue(lePlayerCarIndex, lpReadInput->GetGameActionQueue());
     const Io::RootInputBuffer::GuiEventQueue* lpGuiQueue = lpInput->GetGuiEventQueue();
     ProcessGuiEvents(reinterpret_cast<const CgsModule::VariableEventQueue<18432, 16>*>(
         lpGuiQueue));

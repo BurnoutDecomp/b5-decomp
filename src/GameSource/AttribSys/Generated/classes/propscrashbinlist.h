@@ -11,6 +11,7 @@
 // function in the ledger (minimal X360-faithful recon). Derives from Attrib::Instance.
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
 #include "GameSource/AttribSys/Generated/attrib_private.h"   // Attrib::Private (array-length header)
+#include "GameSource/AttribSys/Generated/attrib_findcollection.h"
 
 namespace Attrib
 {
@@ -19,7 +20,13 @@ namespace Gen
     class propscrashbinlist : private Instance
     {
     public:
+        static const u64 KU_CLASS_KEY = 0x963577B14F10D01Full;
         explicit propscrashbinlist(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+
+        Collection* ChangeWithDefault(u64 luCollectionKey)
+        {
+            return Change(FindCollectionWithDefault(KU_CLASS_KEY, luCollectionKey));
+        }
 
         // GROWN for BrnSound::Logic::Collision::BinLookupCache::Build<propscrashbinlist,
         // propscrashbin> @0x826A8710 (the crash-bin cache builder reads these two inlined
@@ -49,6 +56,12 @@ namespace Gen
             if (luIndex >= static_cast<const Private*>(lpArrayData)->GetLength())
                 return DefaultDataArea(0x18u);
             return reinterpret_cast<const u8*>(lpArrayData) + 8 + luIndex * 24;
+        }
+
+        u64 GetCrashBinCollectionKey(u32 luIndex) const
+        {
+            return *reinterpret_cast<const u64*>(
+                static_cast<const u8*>(GetCrashBinRefData(luIndex)) + 8u);
         }
     };
 

@@ -47,6 +47,9 @@ namespace Logic
 namespace Collision
 {
 
+struct CollisionControl;
+struct CollisionState;
+
 struct CollisionEffect : public BrnSound::Logic::BrnEffectObject
 {
     // BrnCollisionEffect.h:115 (DWARF). Per-collision-size volume/pitch pair. Its
@@ -77,9 +80,23 @@ struct CollisionEffect : public BrnSound::Logic::BrnEffectObject
     // thunk is emitted in this class's own TU.
     virtual ~CollisionEffect();
 
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
+    virtual const char* GetTypeName() const override;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 auAllocator);
+
+    virtual bool Prepare(CgsSound::Logic::State* apState) override;
+    virtual s32 GetController(s32 aiIndex) override;
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController) override;
+    virtual bool Attach() override;
+    virtual void UpdateParams(f32 afDeltaTime) override;
+    virtual void ProcessUpdate() override;
+    virtual bool Detach() override;
+
     // @ 0x82688138 -- collision crash gain. Bodied in BrnCollisionEffect.cpp.
     // DWARF (BrnCollisionEffect.cpp:231) declares this `float GetGain() const`.
     f32 GetGain() const;
+    f32 GetPitch() const;
 
     // ---- DEFERRED virtuals (declared for the effect vtable shape; outside this
     // TU's recon'd function set -- not bodied by this group). The DWARF home lists
@@ -105,7 +122,7 @@ private:
     // overrides the DWARF name (rung 2): the slot is modelled by its proven runtime
     // type (Nicotine::DMixIO*) so GetGain can be bodied without re-homing the
     // un-reconstructed CollisionControl. The ctor nulls it (X360 stw 0,+0x34).
-    Nicotine::DMixIO* mpCollisionDMixIo;
+    CollisionControl* mpCollisionControl;
 
     // BrnCollisionEffect.h:152 (DWARF). Voice bring-up state. The X360 ctor leaves
     // this in the +0x38 region (one of the zero stores); init to CONSTRUCT_VOICE.
@@ -168,6 +185,9 @@ struct Collision3DControl : public BrnSound::Logic::Brn3DUserSpaceEffectControl
     // BrnCollisionEffect.h:199 (DWARF) -- the RTTI factory hook (@ 0x826F80E8).
     // Non-virtual, non-const; returns the EffectControl* base view.
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const override;
+    virtual const char* GetTypeName() const override;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
 };
 
 } // namespace Collision

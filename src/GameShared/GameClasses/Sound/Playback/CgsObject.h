@@ -39,9 +39,9 @@ public:
     // dependents can name it; any guard assert is unverified and omitted.
     void Acquire() { ++mu32RefCount; }
 
-    // CgsObject.h:115. Drop a reference. FLAG: shape-only (see Acquire); no
-    // fabricated precondition assert.
-    void Release() { --mu32RefCount; }
+    // CgsObject.h:115 / ARTIST @ 0x82680938. Assert a live reference, drop it,
+    // and dispose the object through the virtual hook when the count reaches zero.
+    void Release();
 
     // CgsObject.h:82. Subsystem dispose hook (overridden by Content & friends).
     virtual void DoDispose() {}

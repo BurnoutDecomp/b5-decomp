@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnState.h"
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
+#include "GameSource/Sound/Collision/BrnCollisionDataStructures.h"
 
 // =============================================================================
 // BrnSound::Logic::Collision::CollisionState
@@ -40,7 +42,19 @@ namespace Collision
 // slot is declared; the remaining RTTI hook bodies are DEFERRED.
 struct CollisionState : public BrnSound::Logic::BrnState
 {
-    CollisionState() {}
+    enum ELifetime
+    {
+        E_NONE      = 0,
+        E_COLLISION = 1,
+        E_SCRAPE    = 2,
+    };
+
+    CollisionState()
+        : meLifetime(E_NONE)
+        , mOutputCollision()
+        , mfTimeWeAttached(0.0f)
+    {
+    }
 
     // @ 0x826D3380 -- scalar/deleting destructor. The X360 thunk installs
     // CollisionState's own vtable (off_820AE1F4), calls State::DestroyEffects() to
@@ -52,11 +66,32 @@ struct CollisionState : public BrnSound::Logic::BrnState
     // in for off_82FFB954). Bodied out-of-line in BrnCollisionState.cpp.
     virtual ~CollisionState();
 
-    // -- per-class RTTI. DEFERRED bodies (declared for the state vtable shape;
-    // sTypeInfo static-init lives in its own recon slice). DWARF-confirmed
-    // return type/virtualness/const.
+    // -- per-class RTTI. ARTIST supplies the name and factory; the DecFIGS static
+    // initializer pins ObjectID 0x50000 and registers this descriptor as a BrnState.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetStaticTypeInfo();
+    static CgsSound::Logic::State* CreateObject(u32 auAllocator);
+
+    virtual void Attach(void* apvAttachment) override;
+    virtual void UpdateParams(f32 afDeltaTime) override;
+    virtual bool Detach() override;
+
+    const CgsSound::Utils::DataPoint<ELifetime>& GetLifetime() const
+    {
+        return meLifetime;
+    }
+
+    void SetLifetime(ELifetime aeLifetime) { meLifetime.Update(aeLifetime); }
+    const OutputCollision& GetOutputCollision() const { return mOutputCollision; }
+    OutputCollision& GetOutputCollision() { return mOutputCollision; }
+    f32 GetTimeWeAttached() const { return mfTimeWeAttached; }
+    f32 GetCurrentTime() const { return mfCurTime; }
+
+private:
+    CgsSound::Utils::DataPoint<ELifetime> meLifetime;
+    OutputCollision mOutputCollision;
+    f32 mfTimeWeAttached;
 };
 
 } // namespace Collision

@@ -62,6 +62,11 @@ struct Brn3DUserSpaceEffectControl : public BrnSound::Logic::Brn3DEffectControl
     // Vector deleting destructor @ 0x826E0D60 -- out-of-line; see .cpp (empty body).
     virtual ~Brn3DUserSpaceEffectControl();
 
+    virtual void UpdateParams(f32 afDeltaTime) override;
+    virtual void AttachEmitterPosition(const Vector3* apPosition) override;
+    virtual void AttachEmitterDirection(const Vector3* apDirection) override;
+    virtual void AttachTransform(const Matrix44Affine* apTransform);
+
     // BrnEffectControl.cpp:46 -- the RTTI factory hook (@ 0x826E0E10). Non-virtual;
     // it is the createObject function pointer seeded into the ClassTypeInfo descriptor.
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );

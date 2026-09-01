@@ -1,4 +1,9 @@
 #include "GameSource/Sound/Collision/BrnCollisionControl.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsMicrophone.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
+#include "GameSource/Sound/Collision/BrnCollisionEffect.h"
+#include "GameSource/Sound/Collision/BrnCollisionState.h"
 
 // =============================================================================
 // BrnSound::Logic::Collision::CollisionControl -- out-of-line bodies.
@@ -16,6 +21,15 @@ namespace Logic
 {
 namespace Collision
 {
+
+CollisionControl::CollisionControl()
+    : BrnSound::Logic::BrnEffectControl()
+    , mpCollision3DControl(nullptr)
+    , mpCollisionState(nullptr)
+    , mScrapeInfo()
+    , mbCollisionFinished(false)
+{
+}
 
 // ---------------------------------------------------------------------------
 // CollisionControl::CreateObject(u32)  @ 0x826D34B0   (the factory hook)
@@ -60,6 +74,96 @@ CgsSound::Logic::EffectControl* CollisionControl::CreateObject( u32 /*luType*/ )
 CollisionControl::~CollisionControl()
 {
 }
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>*
+CollisionControl::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo(
+        0x50000, "CollisionControl",
+        CgsSound::Logic::EffectControl::GetStaticTypeInfo(),
+        &CollisionControl::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>*
+CollisionControl::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+const char* CollisionControl::GetTypeName() const
+{
+    return "CollisionControl";
+}
+
+s32 CollisionControl::GetController(s32 aiIndex)
+{
+    return aiIndex == 0 ? 1 : -1;
+}
+
+void CollisionControl::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    CGS_ASSERT(apController != nullptr, "lpController");
+    if (!apController)
+        return;
+
+    if (apController->GetEffectID() == 1)
+        mpCollision3DControl = static_cast<Collision3DControl*>(apController);
+    else
+        CGS_ASSERT(false, "Cound't attach controller");
+}
+
+// ARTIST @0x826BD580.
+bool CollisionControl::Attach()
+{
+    CgsSound::Logic::EffectBase::Attach();
+    mpCollisionState = static_cast<CollisionState*>(GetStateBase());
+    CGS_ASSERT(mpCollisionState != nullptr, "mpCollisionState");
+    CGS_ASSERT(mpCollision3DControl != nullptr, "mpCollision3DControl");
+    if (!mpCollisionState || !mpCollision3DControl)
+        return false;
+
+    mbCollisionFinished =
+        mpCollisionState->GetLifetime().GetCurrent() == CollisionState::E_SCRAPE;
+
+    CgsSound::Logic::MicrophoneSystem& lrMicrophones =
+        GetLogicModule()->GetEnvironment().GetMicrophoneSystem();
+    const Matrix44Affine& lrCameraTransform =
+        lrMicrophones.GetMicrophone(CgsSound::Logic::MicrophoneSystem::E_MIC_CAMERA,
+                                    CgsSound::Logic::MicrophoneSystem::E_PLAYER_1)
+            ->GetMicrophoneMatrix();
+    mpCollision3DControl->AttachTransform(&lrCameraTransform);
+    mpCollision3DControl->AttachEmitterPosition(
+        &mpCollisionState->GetOutputCollision().mPosition);
+    return true;
+}
+
+// ARTIST @0x826F83E8. Keep the two scrape samples in lockstep with the attached
+// collision state and release a completed collision once its scrape has ended or
+// has not been refreshed for half a second.
+void CollisionControl::UpdateParams(f32 /*afDeltaTime*/)
+{
+    if (!mpCollisionState)
+        return;
+
+    const ScrapeInfo& lrScrape =
+        mpCollisionState->GetOutputCollision().mScrapeInfo;
+    mScrapeInfo.Update(lrScrape);
+
+    const CollisionState::ELifetime leLifetime =
+        mpCollisionState->GetLifetime().GetCurrent();
+    if (mbCollisionFinished &&
+        (leLifetime != CollisionState::E_SCRAPE ||
+         mpCollisionState->GetCurrentTime() - lrScrape.mfTimeStamp > 0.5f))
+    {
+        mpCollisionState->Detach();
+    }
+}
+
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* const
+    gpCollisionControlReg =
+        CgsSound::Logic::EffectControl::AddToClassTypeInfoArray(
+            CollisionControl::GetStaticTypeInfo());
 
 } // namespace Collision
 } // namespace Logic
