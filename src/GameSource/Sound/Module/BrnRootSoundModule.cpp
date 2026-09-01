@@ -107,9 +107,9 @@ namespace
     // serves both the rw DoAllocate face and the ICoreAllocator face System::CreateInstance
     // consumes. The host rwcore_structs.h models the interfaces separately, so this adapter
     // presents the testbed through the ICoreAllocator face; every allocation still flows
-    // through the testbed's tracked DoAllocate (guards/history intact). Free is the
-    // IResourceAllocator::Free default (a no-op on the host testbed) -- the engine frees only
-    // on teardown/failure paths, FLAG'd as a host leak-on-teardown until the testbed models it.
+    // through the testbed's tracked DoAllocate (guards/history intact). Free follows ARTIST's
+    // IResourceAllocator::Free path: wrap the pointer as resource lane zero, then dispatch the
+    // testbed's DoFree into its backing GeneralResourceAllocator.
     // -----------------------------------------------------------------------------------------
     struct RwacCoreAllocatorBridge : public EA::Allocator::ICoreAllocator
     {
@@ -162,7 +162,7 @@ namespace
         virtual void Free(void* lpBlock, size_t /*nSize*/)
         {
             rw::IResourceAllocator* lpBase = mpTestBed;
-            lpBase->Free(lpBlock, 0);   // host default no-op (see the FLAG above)
+            lpBase->Free(lpBlock, 0);
         }
 
         CgsSound::TestBed::Allocator* mpTestBed;
