@@ -52,7 +52,7 @@ Environment::eAudioMode Environment::GetAudioMode() const
 void* Environment::Allocate(u32 lu32Size, u32 lu32Alignment, const char* lpcName)
 {
     rw::ResourceDescriptor lDescriptor;
-    for (u32 lu = 0; lu < 4u; ++lu)
+    for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
     {
         lDescriptor.m_baseResourceDescriptors[lu].m_size = 0;
         lDescriptor.m_baseResourceDescriptors[lu].m_alignment = 1;
@@ -340,8 +340,8 @@ Environment::~Environment()
 // allocator's console vtable slot 5 == DoFree(const Resource&) (slot 4 right
 // beside it is DoAllocate, proven by operator new below passing a
 // BaseResourceDescriptor and receiving a Resource; the retail console vtable has
-// no AllocDebug pair -- the x64 rwcore.pdb puts DoAllocate/DoFree at 6/7 behind
-// them). By name on the host 4-slot Resource. (2026-08-25 wave 3: the raw
+// no intervening debug-allocation pair; DoAllocate/DoFree are slots 4/5).
+// They are called by name on the host five-lane Resource. (2026-08-25 wave 3: the raw
 // vtable-index dispatch is retired.)
 void Environment::operator delete(void* lpMemory, rw::IResourceAllocator* lpAllocator)
 {
@@ -398,7 +398,7 @@ void* Environment::operator new(size_t luSize, const EnvironmentSpec& lrSpec)
     rw::ResourceDescriptor lDescriptor;
     lDescriptor.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(luTotal);
     lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4u;   // console align word
-    for (u32 lu = 1; lu < 4u; ++lu)
+    for (u32 lu = 1; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
     {
         lDescriptor.m_baseResourceDescriptors[lu].m_size      = 0u;
         lDescriptor.m_baseResourceDescriptors[lu].m_alignment = 1u;

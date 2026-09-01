@@ -41,7 +41,7 @@
 // (its head's next/prev both point back at the head sentinel), an atomic
 // reference count seeded to zero, and an initialised OS critical section.
 //
-// LAYOUT NOTE (cross-build): the committed PC struct is the x64 rwcore.pdb form
+// LAYOUT NOTE: the committed PC struct is the host-pointer-widened form
 // (mOSGlobalList[24], mRefCount[4], mcsLock[40], sizeof=72). The X360 stores land
 // at the 32-bit offsets +0/+4 (the two list-head pointers), +0x10 (the atomic
 // word) and +0x14 (the CRITICAL_SECTION). The two foreign fields are committed as

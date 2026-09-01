@@ -81,8 +81,8 @@ u32 Factory::CreateContent(const ContentSpec& akrSpec, Handle<Content>& arHandle
 // counterpart of `operator new(size_t, Environment&)` (DWARF h:224) carving it.
 // FLAG (vtable-slot inference): slot 5 is read as the console IResourceAllocator's
 // DoFree(const Resource&) (the retail console vtable has no AllocDebug pair; the
-// x64 rwcore.pdb vtable puts DoFree at slot 7 behind two AllocDebug entries). The
-// host body calls DoFree by name with the host 4-slot Resource; if the console
+// Paradise vtable puts DoFree at slot 5). The
+// host body calls DoFree by name with the host five-lane Resource; if the console
 // slot is ever attested otherwise, revisit here.
 void Factory::DoDispose()
 {

@@ -56,7 +56,7 @@ void* System::Allocate(size_t auSize, const char* apcName, u32 auAlignment)
     rw::ResourceDescriptor lDescriptor = {};
     lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(auSize);
     lDescriptor.m_baseResourceDescriptors[0].m_alignment = auAlignment;
-    for (u32 luLane = 1; luLane < 4; ++luLane)
+    for (u32 luLane = 1; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
         lDescriptor.m_baseResourceDescriptors[luLane].m_alignment = 1;
     return gpCsisAllocator->DoAllocate(lDescriptor, apcName).m_baseResources[0];
 }

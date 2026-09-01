@@ -10,7 +10,7 @@ namespace CgsResource
 // base as the relocation delta. The X360 build read this as the first dword of
 // the rw::Resource object (*(const u32*)&resource); on the x64 PC layout that is
 // the low 32 bits of m_baseResources[0]. Naming it here replaces the per-handler
-// blob pokes recovered from rwcore.pdb.
+// raw offset pokes.
 inline u32 GetLoadBase(const rw::Resource& lrResource)
 {
     return static_cast<u32>(reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]));

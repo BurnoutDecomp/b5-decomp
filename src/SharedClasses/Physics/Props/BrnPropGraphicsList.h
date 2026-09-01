@@ -31,7 +31,7 @@
 
 namespace rw
 {
-    struct Resource;   // rw::Resource : BaseResources<4> (rw/rwcore_structs.h)
+    struct Resource;   // Paradise rw::Resource : BaseResources<5>
 }
 
 namespace CgsGraphics { class Model; }

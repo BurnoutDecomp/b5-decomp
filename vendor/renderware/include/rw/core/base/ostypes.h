@@ -7,12 +7,8 @@
 // DWARF (SDKs/EATech/include/cmn/rw/core/base/ostypes.h:846-857).
 //
 // This is the legacy RW3.x global C type (struct tag RwRGBARealTag + typedef), distinct
-// from the PC RW4 rw::RGBA in the generated rwcore_structs.h (that is a 4-byte packed
-// integer colour; this is four floating-point channels, 16 bytes). The PC rwcore.pdb does
-// NOT expose RwRGBAReal (it lives only in the X360 rwcore.lib), so the data-driven
-// generator cannot emit it -- hence this hand-maintained header. tools/renderware/generate_headers.py
-// only writes rw/rwcore_enums.h / rw/rwcore_structs.h / rw/rwcore.h and never touches
-// rw/core/, so (like the sibling rw/math/vpu/ headers) this file is immune to regeneration.
+// from the RW4 rw::RGBA in rwcore_structs.h (that is a 4-byte packed integer
+// colour; this is four floating-point channels, 16 bytes).
 //
 // RwReal is the RenderWare scalar (typedef float); modelled here as plain float so the
 // header is self-contained and free of project primitives, matching the vendor convention

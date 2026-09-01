@@ -100,77 +100,6 @@ namespace
     CgsSound::TestBed::Allocator gPlaybackTestBedAlloc("Playback", 0);
     CgsSound::TestBed::Allocator gLogicTestBedAlloc("Logic", 0);
 
-    // -----------------------------------------------------------------------------------------
-    // FLAG [host interface seam, 2026-08-25 faithful-audio-engine phase A4]: on the console
-    // rw::IResourceAllocator's vtable HEAD is ICoreAllocator-shaped (rwcore.pdb
-    // IResourceAllocator_vtbl: {dtor, Alloc, Alloc, Free, ...}) -- i.e. the ONE testbed object
-    // serves both the rw DoAllocate face and the ICoreAllocator face System::CreateInstance
-    // consumes. The host rwcore_structs.h models the interfaces separately, so this adapter
-    // presents the testbed through the ICoreAllocator face; every allocation still flows
-    // through the testbed's tracked DoAllocate (guards/history intact). Free follows ARTIST's
-    // IResourceAllocator::Free path: wrap the pointer as resource lane zero, then dispatch the
-    // testbed's DoFree into its backing GeneralResourceAllocator.
-    // -----------------------------------------------------------------------------------------
-    struct RwacCoreAllocatorBridge : public EA::Allocator::ICoreAllocator
-    {
-        explicit RwacCoreAllocatorBridge(CgsSound::TestBed::Allocator* lpTestBed)
-            : mpTestBed(lpTestBed)
-            , muSuccessfulBytes(0)
-            , muSuccessfulAllocations(0) {}
-
-        virtual void* Alloc(size_t nSize, const char* pName, unsigned int nFlags)
-        {
-            return Alloc(nSize, pName, nFlags, 16, 0);
-        }
-
-        virtual void* Alloc(size_t nSize, const char* pName, unsigned int /*nFlags*/,
-                            unsigned int nAlignment, unsigned int /*nAlignmentOffset*/)
-        {
-            rw::ResourceDescriptor lDescriptor;
-            for (u32 lu = 0; lu < 4; ++lu)
-            {
-                lDescriptor.m_baseResourceDescriptors[lu].m_size      = 0;
-                lDescriptor.m_baseResourceDescriptors[lu].m_alignment = 1;
-            }
-            lDescriptor.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(nSize);
-            lDescriptor.m_baseResourceDescriptors[0].m_alignment = nAlignment ? nAlignment : 16;
-
-            rw::IResourceAllocator* lpBase = mpTestBed;   // the tracked DoAllocate path
-            rw::Resource lResource = lpBase->DoAllocate(lDescriptor, pName ? pName : "Rwac");
-            void* lpBlock = lResource.m_baseResources[0];
-            if (lpBlock)
-            {
-                muSuccessfulBytes += nSize;
-                ++muSuccessfulAllocations;
-            }
-            else
-            {
-                // Host bring-up diagnostic: the PC/x64 forms of the RWAC objects are
-                // wider than their X360 counterparts, while the memory-map capacity is
-                // still the retail 32-bit value. Keep the failed request observable so
-                // a capacity correction remains measured instead of guessed.
-                *CgsDev::Log::gpDebugPrint
-                    << "[rwac] allocation FAILED: "
-                    << static_cast<u64>(nSize) << " bytes for "
-                    << (pName ? pName : "Rwac") << " after "
-                    << static_cast<u64>(muSuccessfulBytes) << " bytes in "
-                    << static_cast<u64>(muSuccessfulAllocations) << " allocations\n";
-            }
-            return lpBlock;
-        }
-
-        virtual void Free(void* lpBlock, size_t /*nSize*/)
-        {
-            rw::IResourceAllocator* lpBase = mpTestBed;
-            lpBase->Free(lpBlock, 0);
-        }
-
-        CgsSound::TestBed::Allocator* mpTestBed;
-        size_t muSuccessfulBytes;
-        size_t muSuccessfulAllocations;
-    };
-
-    RwacCoreAllocatorBridge gRwacCoreBridge(&gRwacTestBedAlloc);
 }
 
 // The Csis mutex thunks the hooks below forward to (rw::audio::core, System.cpp).
@@ -491,17 +420,15 @@ namespace Module
             //   the host GeneralResourceAllocator yet; behaviourally inert for bring-up.
             rw::core::GeneralResourceAllocator* lpRwacBank =
                 lpAllocatorList->GetRWGeneralResourceAllocator(0x18);
-            // field_0x0 = the +0 IResourceAllocator interface subobject (the host
-            // composition stand-in for the console IS-A base; established pattern).
-            gRwacTestBedAlloc.SetAllocator(&lpRwacBank->field_0x0);
+            gRwacTestBedAlloc.SetAllocator(lpRwacBank);
             gRwacTestBedAlloc.SetVerbose(KB_TESTBED_ALLOCATORS_VERBOSE);
             gRwacTestBedAlloc.SetSanityCheck(KB_TESTBED_ALLOCATORS_SANITY);
 
             // * rw::audio::core::System::CreateInstance(&gRwacTestBedAlloc, 0x30000) ->
-            //   mpSystem (assert "mpSystem", cpp:336). The bridge presents the testbed
-            //   through the ICoreAllocator face (see RwacCoreAllocatorBridge above);
+            //   mpSystem (assert "mpSystem", cpp:336). IResourceAllocator is the
+            //   Paradise ICoreAllocator-derived interface, so the same testbed object is passed.
             //   byte_82FFBF89 = 1 == the testbed's rwac-locked test toggle.
-            mpSystem = rw::audio::core::System::CreateInstance(&gRwacCoreBridge, 196608);
+            mpSystem = rw::audio::core::System::CreateInstance(&gRwacTestBedAlloc, 196608);
             CGS_ASSERT(mpSystem != 0, "mpSystem");
             gRwacTestBedAlloc.EnableRwacLockedTest(true);
 
@@ -518,7 +445,7 @@ namespace Module
             //   native Class records through this testbed wrapper and returns them on
             //   the zero-reference path.
             gCsisTestBedAlloc.SetAllocator(
-                &lpAllocatorList->GetRWGeneralResourceAllocator(9)->field_0x0);
+                lpAllocatorList->GetRWGeneralResourceAllocator(9));
             gCsisTestBedAlloc.SetVerbose(KB_TESTBED_ALLOCATORS_VERBOSE);
             gCsisTestBedAlloc.SetSanityCheck(KB_TESTBED_ALLOCATORS_SANITY);
             Csis::System::SetAllocator(&gCsisTestBedAlloc);
@@ -552,7 +479,7 @@ namespace Module
             // [deferred slice] the console's no-coalesce heap tuning on the bank-9 carve is
             // elided here for the same reason as the RWAC stage's (see above).
             gPlaybackTestBedAlloc.SetAllocator(
-                &lpAllocatorList->GetRWGeneralResourceAllocator(9)->field_0x0);
+                lpAllocatorList->GetRWGeneralResourceAllocator(9));
             gPlaybackTestBedAlloc.SetVerbose(KB_TESTBED_ALLOCATORS_VERBOSE);
             gPlaybackTestBedAlloc.SetSanityCheck(KB_TESTBED_ALLOCATORS_SANITY);
 
@@ -598,7 +525,7 @@ namespace Module
             // gLogicTestBedAlloc. [deferred slice] the console's no-coalesce heap tuning
             // is elided here for the same reason as the RWAC stage's (see above).
             gLogicTestBedAlloc.SetAllocator(
-                &lpAllocatorList->GetRWGeneralResourceAllocator(0x19)->field_0x0);
+                lpAllocatorList->GetRWGeneralResourceAllocator(0x19));
             gLogicTestBedAlloc.SetVerbose(KB_TESTBED_ALLOCATORS_VERBOSE);
             gLogicTestBedAlloc.SetSanityCheck(KB_TESTBED_ALLOCATORS_SANITY);
 

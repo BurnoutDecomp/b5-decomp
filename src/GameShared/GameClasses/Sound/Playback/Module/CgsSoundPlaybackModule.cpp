@@ -386,7 +386,7 @@ bool Module::Release()
             Environment* lpEnvironment = GetEnvironment();
             rw::Resource lResource;
             lResource.m_baseResources[0] = mpStringTable;
-            for (u32 lu = 1; lu < 4; ++lu)
+            for (u32 lu = 1; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
                 lResource.m_baseResources[lu] = 0;
             lpEnvironment->GetAllocator()->DoFree(lResource);
             mpStringTable = lpNext;
@@ -427,7 +427,7 @@ bool Module::Release()
                 CGS_ASSERT(lpMainAllocator != 0, "lpMainAllocator");
                 rw::Resource lResource;
                 lResource.m_baseResources[0] = lpBuffer;
-                for (u32 luI = 1; luI < 4; ++luI)
+                for (u32 luI = 1; luI < rw::KU_RESOURCE_LANE_COUNT; ++luI)
                     lResource.m_baseResources[luI] = 0;
                 lpMainAllocator->DoFree(lResource);
             }

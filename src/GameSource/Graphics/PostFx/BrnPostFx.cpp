@@ -159,7 +159,7 @@ BrnPostFx::BrnPostFx()
 //
 // THE ALLOCATION IDIOM, which repeats six times. The X360 writes a 5-entry rw::BaseResourceDescriptors
 // on the stack -- entry 0 = {size, alignment}, entries 1..4 = the identity {0, 1} -- and calls the
-// allocator's vtable slot +0x10, which rwcore.pdb names DoAllocate(const ResourceDescriptor&,
+// allocator's Paradise vtable slot +0x10, DoAllocate(const ResourceDescriptor&,
 // const char*). The name argument is 0 at every one of the six call sites (`li r6, 0`).
 //
 // ⚠⚠ THE FIVE BYTE SIZES ARE **HOST** sizeofs, NOT THE X360 IMMEDIATES, AND THAT IS A CORRECTNESS
@@ -185,12 +185,8 @@ BrnPostFx::BrnPostFx()
 // record size, and Tint's 0x80 is the console's own vector/constant-buffer alignment. Neither
 // depends on pointer width.
 //
-// ⚠ THE HOST DESCRIPTOR HAS FOUR ENTRIES, NOT FIVE. rw::ResourceDescriptor is
-// BaseResourceDescriptors<4> on the PC (rwcore.pdb, x64); the X360 SERIALISED form is <5>. Per
-// AGENTS.md that is a documented cross-build delta, so the console's fifth identity pair is dropped
-// rather than replicated -- entry 0 carries the request and the rest stay identity, exactly as
-// CgsDepthStencilStateFactory::CreateDepthStencilState already does in this tree. (Same widening
-// rule, applied to the entry COUNT instead of the byte size.)
+// The host descriptor retains Paradise's five entries. Entry 0 carries the request and
+// entries 1..4 stay identity, exactly as CgsDepthStencilStateFactory already does.
 // ================================================================================================
 
 namespace
@@ -207,7 +203,7 @@ namespace
         rw::ResourceDescriptor lDescriptor;
         lDescriptor.m_baseResourceDescriptors[0].m_size      = lu32Size;
         lDescriptor.m_baseResourceDescriptors[0].m_alignment = lu32Alignment;
-        for (u32 luEntry = 1u; luEntry < 4u; ++luEntry)
+        for (u32 luEntry = 1u; luEntry < rw::KU_RESOURCE_LANE_COUNT; ++luEntry)
         {
             lDescriptor.m_baseResourceDescriptors[luEntry].m_size      = 0u;
             lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1u;
@@ -331,7 +327,7 @@ void BrnPostFx::Construct(rw::IResourceAllocator* lpAllocator)
     // SHIPPED BINARY: scanning the assembly of all 30,095 function exports for 82FAEE88 returns
     // exactly two instructions, the `lis` and the `stw` on these two lines, and no load anywhere. So
     // there is no consumer to be faithful to; minting a host global for it would be an invention with
-    // no reader. Recorded in REPORT.md rather than silently dropped.
+    // no reader. The omission is recorded in REPORT.md.
     rw::graphics::postfx::Tint::InitializePixelProgram(lpAllocator);
 
     rw::graphics::postfx::Tint::Parameters lTintParameters;

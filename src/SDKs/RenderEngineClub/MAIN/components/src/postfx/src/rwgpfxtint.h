@@ -28,8 +28,8 @@
 // (Offsets are the X360 4-byte-pointer image; the PC build lays the named members out for its own
 // pointer width -- semantic parity, not byte-matching, so the layout is intentionally not pinned.)
 
-// The rw resource allocator the post-fx effects are handed is rw::IResourceAllocator (rwcore_structs.h,
-// from rwcore.pdb): its DoAllocate(descriptor, name) -> rw::Resource is the PC-semantic equivalent of
+// The rw resource allocator the post-fx effects are handed is rw::IResourceAllocator:
+// its DoAllocate(descriptor, name) -> rw::Resource is the host equivalent of
 // the X360 create path's allocator virtual (the X360 vtable+0x10 call that fills a handle array).
 
 namespace rw

@@ -9,7 +9,7 @@
 // This is the DWARF/source path the X360 build compiled the resource templates
 // from (DecFIGS attributes the inlined `rw::BaseResourceDescriptors<N>` /
 // `rw::BaseResources<N>` code to this header). The Burnout PC decomp homes that
-// `rw::` type vocabulary -- layout-faithful to rwcore.pdb -- in the canonical
+// Paradise `rw::` type vocabulary in the canonical
 // vendor header rw/rwcore_structs.h, which ~50 committed TUs already include by
 // name. To avoid an ODR fork this SDK-path header does NOT redefine those
 // templates; it re-roots the canonical home so a `#include` of the EATech path
@@ -19,14 +19,12 @@
 //   rw::BaseResourceDescriptor          { uint32_t m_size; uint32_t m_alignment; }   (rwcore_structs.h)
 //   rw::BaseResources<Count>            { void* m_baseResources[Count]; }            (rwcore_structs.h)
 //   rw::BaseResourceDescriptors<Count>  { BaseResourceDescriptor[Count]; ... += }    (rwcore_structs.h)
-//   rw::Resource           : BaseResources<4>                                        (rwcore_structs.h)
-//   rw::ResourceDescriptor : BaseResourceDescriptors<4>                              (rwcore_structs.h)
+//   rw::Resource           : BaseResources<5>                                        (rwcore_structs.h)
+//   rw::ResourceDescriptor : BaseResourceDescriptors<5>                              (rwcore_structs.h)
 //   CgsResource::ResourceDescriptor = rw::BaseResourceDescriptors<5>   (CgsResourceType.h)
 //
-// CROSS-BUILD DRIFT (already documented in rwcore_structs.h): the X360 game build
-// instantiates the *serialised* descriptor with FIVE entries
-// (rw::BaseResourceDescriptors<5>, 40B); the PC rwcore.lib narrowed
-// rw::ResourceDescriptor to <4> (32B). The committed generic per-Count
+// The X360 game build instantiates the serialised descriptor with five entries
+// (rw::BaseResourceDescriptors<5>, 40 bytes). The committed generic per-Count
 // `operator+=` reproduces the X360 asm store-for-store (round size up to the
 // other entry's alignment, widen alignment to the max, add size); see
 // renderware/src/rw/BaseResourceDescriptors_3.cpp for the proven out-of-line

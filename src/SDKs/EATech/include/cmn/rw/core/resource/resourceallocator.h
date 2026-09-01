@@ -10,34 +10,27 @@
 //
 // This is the DWARF/source path the X360 build compiled the allocator interface
 // from (DecFIGS attributes the inlined rw::IResourceAllocator code to this
-// header). The Burnout PC decomp homes that rw:: allocator vocabulary --
-// layout-faithful to rwcore.pdb -- in the canonical vendor header
+// header). The Burnout PC decomp homes that Paradise allocator vocabulary in the canonical vendor header
 // rw/rwcore_structs.h. To avoid an ODR fork this SDK-path header does NOT
 // redefine those types; it re-roots the canonical home so a `#include` of the
 // EATech path resolves to the one true definition. This mirrors the sibling
 // re-root resource.h exactly (same include spelling).
 //
 // COMMITTED & REUSED BY NAME (do not re-home / redefine):
-//   rw::IResourceAllocator        : sizeof 8 (one vptr). Pure-virtual-ish resource
-//                                   allocator interface, base EA::Allocator::ICoreAllocator
-//                                   in the X360 DWARF; modelled minimally on PC with
-//                                   DoAllocate + Free (rwcore_structs.h).         (rwcore_structs.h)
-//   rw::IResourceAllocator_vtbl   : 9-slot vtable image (Alloc x2 / Free / AllocDebug x2
-//                                   / DoAllocate / DoFree / DoFreeDisposable).    (rwcore_structs.h)
-//   rw::LinearResourceAllocator   : sizeof 144 (bump allocator over the 4 pools). (rwcore_structs.h)
+//   rw::IResourceAllocator        : sizeof 8 (one vptr), derived from
+//                                   EA::Allocator::ICoreAllocator.                (rwcore_structs.h)
+//   rw::IResourceAllocator_vtbl   : seven slots: destructor, Alloc x2, Free,
+//                                   DoAllocate, DoFree, DoFreeDisposable.          (rwcore_structs.h)
+//   rw::LinearResourceAllocator   : bump allocator over five resource lanes.      (rwcore_structs.h)
 //   rw::ResourceAllocatorRegistry : process-wide default-allocator slot +
 //                                   Get/SetDefaultAllocator.                      (rwcore_structs.h)
 //   rw::SystemAllocatorGeneric / rw::core::GeneralResourceAllocator               (rwcore_structs.h)
 //   rw::Resource / rw::ResourceDescriptor / rw::MemoryResource /
 //   rw::DisposableResource                                                        (rwcore_structs.h)
 //
-// CROSS-BUILD DRIFT (already documented in rwcore_structs.h): the X360 build's
-// inline allocator helpers carve/free a FIVE-entry serialised descriptor
-// (rw::BaseResourceDescriptors<5>, 40B); the PC rwcore.lib narrowed
-// rw::ResourceDescriptor to <4> (32B). The committed IResourceAllocator is
-// therefore modelled with the minimal <4> DoAllocate/Free surface the engine
-// dispatches through (a single vptr, sizeof 8 per rwcore.pdb); the bit-exact
-// rwcore.lib chunk layout of the X360 <5> path is intentionally elided there.
+// Paradise's inline allocator helpers carve/free a five-entry descriptor
+// (rw::BaseResourceDescriptors<5>, 40 bytes); the PC reconstruction retains
+// that structure and substitutes only the platform-native allocation leaf.
 //
 // ---------------------------------------------------------------------------
 // THIS TU's DOSSIER FUNCTIONS (56) -- NONE is an inline accessor newly homed in

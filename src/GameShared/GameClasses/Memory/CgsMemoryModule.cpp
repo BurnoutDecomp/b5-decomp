@@ -42,7 +42,7 @@ namespace CgsMemory
         if (lpBank == 0)
             return false;
         // rw::Resource carries 4 base pointers; the pool memory types in use (0=main, 1=graphics) fit.
-        for (s32 lt = 0; lt < 4; ++lt)
+        for (s32 lt = 0; lt < MemoryBank::KI_NUM_TYPES; ++lt)
             lrOut.m_baseResources[lt] = lpBank->GetData(lt);
         return true;
     }
@@ -305,9 +305,9 @@ namespace CgsMemory
     // Resource). Shape decoded: build a CreateBankRequest from the request's rw::ResourceDescriptor ->
     // CreateBank -> create the rw allocator over the bank's data via rw::LinearResourceAllocator::
     // GetResourceDescriptor/Initialize or rw::core::GeneralResourceAllocator::Initialize -> return the
-    // allocator in the response. Blocked on the rwcore rw::allocator layer: rwcore.lib is NOT linked into
-    // build_game_exe.bat and those factory methods aren't reconstructed (same situation as the EA PPMalloc
-    // HeapMalloc body). Kept as inert stubs (the dispatch isn't driven until the GameDataModule runs).
+    // allocator in the response. The required allocator primitives are now reconstructed; these request
+    // handlers themselves remain reconstruction debt. A closed rwcore archive is deliberately not a
+    // fallback link provider. Kept as inert stubs (the dispatch isn't driven until the GameDataModule runs).
     void MemoryModule::ProcessCreateLinearAllocatorRequest(const MemoryIO::MemoryRequest*, MemoryIO::OutputBuffer*) {}
     void MemoryModule::ProcessCreateGeneralAllocatorRequest(const MemoryIO::MemoryRequest*, MemoryIO::OutputBuffer*) {}
     // @ 0x8286D9F0 - create a bank sized for the caller's allocator, then construct that (caller-supplied)
@@ -553,7 +553,7 @@ namespace CgsMemory
         // {m_size = total, m_alignment = 16} on pool 0; the returned Resource's main-memory pointer is
         // the backing block.
         rw::ResourceDescriptor lDescriptor;
-        for (u32 li = 0; li < 4; ++li)
+        for (u32 li = 0; li < rw::KU_RESOURCE_LANE_COUNT; ++li)
         {
             lDescriptor.m_baseResourceDescriptors[li].m_size      = 0;
             lDescriptor.m_baseResourceDescriptors[li].m_alignment = 1;

@@ -229,7 +229,7 @@ void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDM
             rw::ResourceDescriptor lAllocDescriptor;
             lAllocDescriptor.m_baseResourceDescriptors[0].m_size      = lauDescriptor[0];
             lAllocDescriptor.m_baseResourceDescriptors[0].m_alignment = lauDescriptor[1];
-            for (u32 luSlot = 1; luSlot < 4; ++luSlot)
+            for (u32 luSlot = 1; luSlot < rw::KU_RESOURCE_LANE_COUNT; ++luSlot)
             {
                 lAllocDescriptor.m_baseResourceDescriptors[luSlot].m_size      = 0u;
                 lAllocDescriptor.m_baseResourceDescriptors[luSlot].m_alignment = 1u;

@@ -44,14 +44,14 @@
 //
 // The stored "pointers" are byte offsets pre-relocation, so the rebase is pointer
 // arithmetic on a byte delta -- modelled BY NAME on byte-addressed members. The
-// Resource parameter is the REAL vendor rw::Resource (rw/rwcore_structs.h:73,
-// : public BaseResources<4>); the X360/PS3 first-word load (`lwz r11,0(r4)`) is
+// Resource parameter is the canonical vendor rw::Resource
+// (: public BaseResources<5>); the X360/PS3 first-word load (`lwz r11,0(r4)`) is
 // its m_baseResources[0] slot, read by name below. (An earlier revision of this TU
 // fabricated a local single-word rw::Resource -- an ODR violation against the
 // vendor type, retired 2026-08-25 audio-faithfulness wave 1.)
 // ============================================================================
 
-#include "rw/rwcore_structs.h"   // the REAL rw::Resource (BaseResources<4>)
+#include "rw/rwcore_structs.h"   // the canonical five-lane rw::Resource
 
 namespace CgsSound
 {
@@ -107,7 +107,7 @@ private:
 void VoiceHierarchyNode::FixUp(const rw::Resource& lrResource)
 {
     // delta = base address of the deserialised blob -- the resource's first word
-    // (the PS3 `*a2` == rw::BaseResources<4>::m_baseResources[0], read by name).
+    // (the PS3 `*a2` == rw::BaseResources<5>::m_baseResources[0], read by name).
     const uintptr_t luDelta = reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]);
 
     // Relocate the debug-name offset into a live pointer (only if present).

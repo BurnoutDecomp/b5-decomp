@@ -37,10 +37,7 @@ uint32_t RwHash32String(const char* lpcString, uint32_t luSeed);
 // (m_alignment is left as copied from lrLhs). Used by
 // rw::LinearResourceAllocator::GetAvailable to compute capacity - usage.
 //
-// The committed PC rw::ResourceDescriptor is BaseResourceDescriptors<4> (32B),
-// so this reconstruction subtracts the four committed entries' m_size by name;
-// the X360 fifth-entry store is documented in the .cpp and FLAGGED (widening
-// the committed type to <5> is non-additive and NOT applied here).
+// Paradise uses five entries on every platform in this reconstruction.
 ResourceDescriptor operator-(const ResourceDescriptor& lrLhs, const ResourceDescriptor& lrRhs);
 
 }  // namespace rw

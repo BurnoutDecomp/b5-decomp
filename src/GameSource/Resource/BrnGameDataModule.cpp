@@ -388,7 +388,7 @@ namespace BrnResource
                 }
 
                 rw::Resource lMem;
-                for (s32 lr = 0; lr < 4; ++lr)
+                for (s32 lr = 0; lr < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++lr)
                     lMem.m_baseResources[lr] = 0;
                 const bool lbFromBank = lbAnyType && lrMemoryModule.CreatePoolBank(&lParams, lMem);
 
@@ -401,7 +401,7 @@ namespace BrnResource
                     if (!lbFromBank)
                     {
                         rw::ResourceDescriptor lDesc;
-                        for (u32 lu = 0; lu < 4; ++lu)
+                        for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
                         {
                             lDesc.m_baseResourceDescriptors[lu].m_size      = 0;
                             lDesc.m_baseResourceDescriptors[lu].m_alignment = 1;
@@ -605,7 +605,7 @@ namespace BrnResource
                                const char* lpcName)
             {
                 rw::ResourceDescriptor lDesc;
-                for (u32 lu = 0; lu < 4; ++lu)
+                for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
                 {
                     lDesc.m_baseResourceDescriptors[lu].m_size      = 0;
                     lDesc.m_baseResourceDescriptors[lu].m_alignment = 1;
@@ -625,7 +625,7 @@ namespace BrnResource
 
             rw::Resource&           lrRes  = maGeneratedRawResources[li];
             rw::ResourceDescriptor& lrDesc = maGeneratedRawResourceDescriptors[li];
-            for (u32 lu = 0; lu < 4; ++lu)
+            for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
             {
                 lrRes.m_baseResources[lu] = 0;
                 lrDesc.m_baseResourceDescriptors[lu].m_size      = lrDef.mauSize[lu];
@@ -712,7 +712,7 @@ namespace BrnResource
             rw::Resource           lRes;
             rw::ResourceDescriptor lCapacity;
             bool lbAllocOk = true;
-            for (u32 lu = 0; lu < 4; ++lu)
+            for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
             {
                 const u32 luHostSize = lrDef.mauSize[lu] * KU_HOST_RWLINEAR_HEADROOM;
                 lCapacity.m_baseResourceDescriptors[lu].m_size      = luHostSize;
@@ -764,7 +764,7 @@ namespace BrnResource
             rw::Resource           lRes;
             rw::ResourceDescriptor lCapacity;
             bool lbAllocOk = true;
-            for (u32 lu = 0; lu < 4; ++lu)
+            for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
             {
                 lCapacity.m_baseResourceDescriptors[lu].m_size      = lrDef.mauSize[lu];
                 lCapacity.m_baseResourceDescriptors[lu].m_alignment = lrDef.mauAlign[lu];
@@ -1580,7 +1580,7 @@ namespace BrnResource
         const u32 KU_TYPE0    = 0x0A000000u;   // 160 MB main  (2560 blocks)
         const u32 KU_TYPE1    = 0x0E000000u;   // 224 MB gfx   (3584 blocks)
         rw::ResourceDescriptor lRegionDesc;
-        for (u32 li = 0; li < 4; ++li)
+        for (u32 li = 0; li < rw::KU_RESOURCE_LANE_COUNT; ++li)
         {
             lRegionDesc.m_baseResourceDescriptors[li].m_size      = 0;
             lRegionDesc.m_baseResourceDescriptors[li].m_alignment = 1;

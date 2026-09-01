@@ -17,8 +17,8 @@
 // Surface recovered from the X360 DWARF
 // (references/DecFIGS/dwarfdump/SDKs/EATech/include/coreallocator/icoreallocator_interface.h):
 //   vtable = { ~ICoreAllocator,
-//              Alloc(size_t, const char*, unsigned int),
 //              Alloc(size_t, const char*, unsigned int, unsigned int, unsigned int),
+//              Alloc(size_t, const char*, unsigned int),
 //              Free(void*, size_t) }
 //   + a static GetDefaultAllocator(). The AllocFlags enum / kMinAlignment values are the
 //   standard EA CoreAllocator contract (the same one EASTL's CoreAllocatorAdapter documents
@@ -60,12 +60,12 @@ namespace Allocator
         // compiler emits.
         virtual ~ICoreAllocator();
 
-        /// Allocate `nSize` bytes. `pName` is an optional debug tag, `nFlags` an AllocFlags value.
-        virtual void* Alloc(size_t nSize, const char* pName, unsigned int nFlags) = 0;
-
         /// Allocate `nSize` bytes with explicit alignment / alignment offset.
         virtual void* Alloc(size_t nSize, const char* pName, unsigned int nFlags,
                             unsigned int nAlignment, unsigned int nAlignmentOffset = 0) = 0;
+
+        /// Allocate `nSize` bytes. `pName` is an optional debug tag, `nFlags` an AllocFlags value.
+        virtual void* Alloc(size_t nSize, const char* pName, unsigned int nFlags) = 0;
 
         /// Free a block previously returned by Alloc. `nSize` is the (optional) original size.
         virtual void  Free(void* pBlock, size_t nSize = 0) = 0;

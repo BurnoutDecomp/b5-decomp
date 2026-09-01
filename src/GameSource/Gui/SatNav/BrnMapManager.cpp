@@ -26,7 +26,7 @@
 //     li r11,0 ; stw r11,0(r3) ; stw r11,4(r3) ; stw r11,8(r3) ; stw r11,0xC(r3)
 //     stw r11,0x10(r3) ; stw r11,0(r3) ; blr
 // i.e. it ZEROES the whole 20-byte X360 rw::Resource -- exactly what value-initialising
-// `rw::Resource()` does on the host (BaseResources<4>: four null base-resource pointers), so
+// `rw::Resource()` does on the host (BaseResources<5>: five null base-resource pointers), so
 // the semantics are preserved, not approximated.
 //
 // ⚠️ The old ctor also walked the object through RAW X360 BYTE OFFSETS (`new (lp + 0x2C8)`

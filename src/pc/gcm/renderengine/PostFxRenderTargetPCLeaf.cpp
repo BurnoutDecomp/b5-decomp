@@ -610,7 +610,7 @@ namespace
             return nullptr;
 
         rw::ResourceDescriptor lDescriptor;
-        for (u32 luLane = 0; luLane < 4u; ++luLane)
+        for (u32 luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
         {
             lDescriptor.m_baseResourceDescriptors[luLane].m_size      = (luLane == 0) ? luSize : 0u;
             lDescriptor.m_baseResourceDescriptors[luLane].m_alignment = (luLane == 0) ? luAlignment : 1u;
@@ -1018,7 +1018,7 @@ namespace
     // unconditional latch would have set guCreatedFormat = 0 / gbCreatedHardwareCompare = false
     // the moment it was built. renderengine::ShadowSampler_ApplyState (XenonD3D9Shims.cpp:2909)
     // reads exactly that flag to choose sampler 15's filter, so shadow sampling would have
-    // silently dropped from LINEAR (the hardware PCF the depth-compare formats give us) to POINT,
+    // fallen from LINEAR (the hardware PCF the depth-compare formats give us) to POINT,
     // and guCreatedSections would have fallen 3 -> 1 and mis-reported the cascade atlas.
     // Nothing would have crashed, nothing would have printed a warning, and the shadows would
     // just have got worse -- the same shape of single-consumer-global bug as the shadow campaign's

@@ -340,9 +340,7 @@ void ActiveRaceCar::AddToScene(
     //     lvx128 v1, r0, r10(=var_240) ; the half-extents Vector3
     //     bl   BoxVolume::Initialize   ; r3 = &var_260
     // Initialize reads only word 0 (`lwz r3, 0(r3)`) and hands it to the ctor, so the X360's
-    // FIVE-entry record vs the PC's rw::Resource == BaseResources<4> is inert here -- the same
-    // <4>-vs-<5> drift AGENTS.md records for rw::ResourceDescriptor, and the same note
-    // CollisionVolume.hpp:75-81 carries. Every word is zeroed first, exactly as the console
+    // five-entry record is retained by the PC rw::Resource. Every word is zeroed first, exactly as the console
     // does, so nothing but word 0 is ever meaningful.
     //
     // The block stays 128 bytes even though sizeof(BoxVolume) == 96: AddDynamicVolume

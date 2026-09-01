@@ -415,7 +415,7 @@ void PropManager::Construct()
     lDescriptor.m_baseResourceDescriptors[0].m_size =
         static_cast<u32>(KI_MAX_DEBUG_WORLD_CONTACTS * sizeof(DebugWorldContactInfo));
     lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
-    for (u32 luIndex = 1; luIndex < 4; ++luIndex)
+    for (u32 luIndex = 1; luIndex < rw::KU_RESOURCE_LANE_COUNT; ++luIndex)
     {
         lDescriptor.m_baseResourceDescriptors[luIndex].m_size      = 0;
         lDescriptor.m_baseResourceDescriptors[luIndex].m_alignment = 1;

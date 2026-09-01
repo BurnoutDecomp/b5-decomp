@@ -569,9 +569,8 @@ namespace postfx
     // inside Release. The rw::Resource handed to DoFree is REBUILT FROM THE OBJECT POINTER: the
     // console zeroes a five-word block and stores the pointer in word 0
     // (`stw r31, 0..0x10(r11)` then `stw r10, 0(r11)`), which is the same allocator convention
-    // rwcore_structs.h pins (DoFree is the vtbl+0x14 slot). The host descriptor has FOUR entries,
-    // not five -- rw::Resource is BaseResources<4> on the PC (rwcore.pdb, x64) against the X360's
-    // serialised <5>; the documented cross-build delta, same one BrnPostFx::Construct's carve applies.
+    // rwcore_structs.h pins (DoFree is the vtbl+0x14 slot). The host retains the
+    // same five-lane Paradise Resource shape.
     template< class T >
     void PfxHelper::SafeRelease(T*& lprObject)
     {
@@ -580,7 +579,7 @@ namespace postfx
             ReleaseObject(lprObject);
 
             rw::Resource lResource;
-            for (u32 luSlot = 0u; luSlot < 4u; ++luSlot)
+            for (u32 luSlot = 0u; luSlot < rw::KU_RESOURCE_LANE_COUNT; ++luSlot)
             {
                 lResource.m_baseResources[luSlot] = nullptr;
             }
@@ -825,7 +824,7 @@ namespace postfx
             lDescriptor.m_baseResourceDescriptors[0].m_size =
                 static_cast<u32>(sizeof(rw::graphics::postfx::RenderTargetDebugger));   // X360: 0xC
             lDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10u;
-            for (u32 luEntry = 1u; luEntry < 4u; ++luEntry)
+            for (u32 luEntry = 1u; luEntry < rw::KU_RESOURCE_LANE_COUNT; ++luEntry)
             {
                 lDescriptor.m_baseResourceDescriptors[luEntry].m_size      = 0u;
                 lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1u;

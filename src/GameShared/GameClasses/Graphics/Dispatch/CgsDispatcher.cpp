@@ -160,7 +160,7 @@ void DispatchBin::Construct(u32 luSizeBytes, rw::IResourceAllocator* lpAllocator
     rw::ResourceDescriptor lDescriptor;
     lDescriptor.m_baseResourceDescriptors[0].m_size      = ((luSizeBytes + 127u) & ~127u) + 128u;
     lDescriptor.m_baseResourceDescriptors[0].m_alignment = 128u;
-    for (u32 luLane = 1; luLane < 4; ++luLane)
+    for (u32 luLane = 1; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
     {
         lDescriptor.m_baseResourceDescriptors[luLane].m_size      = 0u;
         lDescriptor.m_baseResourceDescriptors[luLane].m_alignment = 1u;

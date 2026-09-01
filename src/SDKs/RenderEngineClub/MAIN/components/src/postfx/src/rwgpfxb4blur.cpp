@@ -160,13 +160,12 @@ namespace
             lpProgram, reinterpret_cast<const u8*>(lpcName), &lrHandle);
     }
 
-    // rw::Resource has no constructor in this tree (it is BaseResources<4>, a POD); the console
-    // spells the same thing as rw::Resource::Resource(), which the DWARF shows SafeRelease<> calling
+    // Paradise's rw::Resource constructor clears all five lanes, which the DWARF shows SafeRelease<> calling
     // and which the B4Blur constructor runs five times up front (the five `*(a1+N) = 0` runs at
     // 0x823FEA00-0x823FEA6C, each writing five words then re-writing word 0).
     void ClearResource(rw::Resource& lrResource)
     {
-        for (u32 luSlot = 0u; luSlot < 4u; ++luSlot)
+        for (u32 luSlot = 0u; luSlot < rw::KU_RESOURCE_LANE_COUNT; ++luSlot)
         {
             lrResource.m_baseResources[luSlot] = nullptr;
         }
@@ -262,9 +261,8 @@ namespace postfx
     // `sizeof(rw::graphics::postfx::B4Blur)` and therefore fixes itself with this header, exactly as
     // the driver's banner predicted.
     //
-    // Every member is reached BY NAME; no guest offset survives to the host, and the four leading
-    // `rw::Resource` members are host-width (4 slots, rwcore.pdb x64) against the console's 5 --
-    // the documented cross-build delta.
+    // Every member is reached by name; no guest offset survives to the host, and
+    // `rw::Resource` retains all five lanes with host-width pointers.
     // ============================================================================================
     void B4Blur::SetState(const State& lrState)
     {

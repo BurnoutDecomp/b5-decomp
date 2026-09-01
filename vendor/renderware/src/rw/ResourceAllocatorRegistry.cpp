@@ -19,7 +19,7 @@
 //
 // unk_8327F06C is the static DefaultSystemAllocatorInitializer instance (sizeof 1) and
 // dword_8327F070 is its compiler once-guard. Running its ctor points s_defaultAllocator
-// at the static SystemAllocatorGeneric the first time, if still null (see
+// at the static platform-native system allocator the first time, if still null (see
 // DefaultSystemAllocatorInitializer.cpp). The guard is the compiler's local-static
 // initialisation fence; the bit test is non-atomic, matching the X360's single-threaded
 // bring-up call site. s_defaultAllocator itself is defined in

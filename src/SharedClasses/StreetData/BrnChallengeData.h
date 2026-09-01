@@ -54,8 +54,8 @@ namespace BrnStreetData
         void Construct();
         void SetScore( ScoreType leScoreType, int32_t liScore );
 
-        // Endian fix-up shims (declared-only; bodies land with a caller TU -- rw::EndianSwap
-        // lives in prebuilt rwcore.lib so no body is emitted here).
+        // Endian fix-up shims (declared-only; bodies land with a caller TU). Any required
+        // rw::EndianSwap body must be reconstructed from ARTIST.
         void FixUp();
         void FixDown();
     };

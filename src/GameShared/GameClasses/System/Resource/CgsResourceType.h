@@ -19,8 +19,7 @@ namespace rw
 namespace CgsResource
 {
     // The X360/PS3 serialised descriptor is five (size, alignment) entries
-    // (rw::BaseResourceDescriptors<5>). The PC rwcore.lib narrowed rw::ResourceDescriptor
-    // to <4>; we target the X360 spine, so the descriptor type is fixed at <5> here.
+    // (rw::BaseResourceDescriptors<5>), which is also the canonical host form.
     typedef rw::BaseResourceDescriptors<5> ResourceDescriptor;
 
     // Recovered from the DecFIGS DWARF (CgsResourceType.h).
