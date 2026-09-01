@@ -983,17 +983,9 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
                     }
                 }
             }
-            // ...and ALWAYS prefer the dedicated ticker face when it arrives.
-            // The console compares the first 8 chars against "B5DOTMAT" (name read at
-            // Font+0x150). FLAG (ported-asset name shift): the font porter byte-swapped
-            // the FIRST u32 of every typeface-name field ("B5Do|tMat" -> "oD5B|tMat" on
-            // disk), and the committed macTypefaceFamilyName member starts 4 bytes past
-            // that swapped word -- so the PC-visible family name for the ticker face is
-            // "tMat" (FixUp-lowercased "tmat"), exactly as the FontCollection registers
-            // it ("GuiViewModule: loaded font tmat ..."). Accept BOTH spellings so the
-            // match survives a future asset re-conversion that repairs the name.
-            if (_strnicmp(lpcFontName, "B5DOTMAT", 8) == 0 ||
-                _strnicmp(lpcFontName, "tMat", 4) == 0)
+            // ...and ALWAYS prefer the dedicated ticker face when it arrives. ARTIST
+            // compares the first eight characters against "B5DOTMAT" (Font+0x150).
+            if (_strnicmp(lpcFontName, "B5DOTMAT", 8) == 0)
             {
                 mTextObject.mpFont = lFont;
                 if (CgsDev::Log::gpDebugPrint != 0)

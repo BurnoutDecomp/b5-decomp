@@ -265,7 +265,7 @@ namespace MemoryIO
         void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId)
         {
             MemoryResponse::Construct(lpUser, liEventId, E_EVENT_TYPE_CREATE_RESOURCE);
-            for (s32 lt = 0; lt < 4; ++lt) mResource.m_baseResources[lt] = 0;   // null on failure paths
+            for (s32 lt = 0; lt < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++lt) mResource.m_baseResources[lt] = 0;   // null on failure paths
             mpAllocator = 0;
         }
         void SetAllocator(rw::LinearResourceAllocator* lpA) { mpAllocator = lpA; }

@@ -16,5 +16,7 @@ vendor/xaudio2redist/
 vendor/lua/obj/
 vendor/lua/lua515.lib
 
+vendor/renderware/lib/
+
 # --- Agent-local session state (never committed) ---
 .claude/

@@ -99,7 +99,7 @@ namespace CgsResource
     //   renderengine::Texture::Parameters params;  // v5[8], v5[0] = the DIMENSION word = -1, rest 0
     //   renderengine::Texture::GetParameters(resource, &params);
     //   renderengine::Texture::GetResourceDescriptor(out, &params);
-    // Descriptor written into rw::ResourceDescriptor (BaseResourceDescriptors<4>).
+    // Descriptor written into the five-lane rw::ResourceDescriptor.
     ResourceDescriptor RwRasterResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
     {
         ResourceDescriptor lDescriptor;

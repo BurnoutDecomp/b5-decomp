@@ -443,7 +443,7 @@ namespace CgsResource
         lRequest.SetParentBankId(liParentBankId);
 
         rw::ResourceDescriptor lDesc;                   // <4>; pool uses memory types 0..2 (type 3 unused)
-        for (s32 lt = 0; lt < 4; ++lt)
+        for (s32 lt = 0; lt < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++lt)
         {
             lDesc.m_baseResourceDescriptors[lt].m_size      = (lt < 3) ? lauRegion[lt] : 0u;
             lDesc.m_baseResourceDescriptors[lt].m_alignment = (lt < 3) ? lauAlign[lt]  : 1u;

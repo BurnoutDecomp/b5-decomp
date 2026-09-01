@@ -51,7 +51,7 @@ void ICEMemory::Construct(void* lpBuffer, s32 lnBufferSize)
     rw::ResourceDescriptor lDescriptor = {};
     lDescriptor.m_baseResourceDescriptors[0].m_size      = (u32)KI_ICE_DEBUG_MEMORY_SIZE;
     lDescriptor.m_baseResourceDescriptors[0].m_alignment = (u32)KI_ICE_DEBUG_MEMORY_ALIGNMENT;
-    for (u32 luIndex = 1; luIndex < 4; ++luIndex)
+    for (u32 luIndex = 1; luIndex < rw::KU_RESOURCE_LANE_COUNT; ++luIndex)
     {
         lDescriptor.m_baseResourceDescriptors[luIndex].m_size      = 0;
         lDescriptor.m_baseResourceDescriptors[luIndex].m_alignment = 1;

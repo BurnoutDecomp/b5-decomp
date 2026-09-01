@@ -34,11 +34,8 @@
 //
 // The matched name lives on the resolved CgsResource::Font: the X360 reads it at the
 // handle's deref + 0x150 (sub_827EF870 == SafeResourceHandle::operator-> inlined; the
-// + 0x150 is the typeface family-name string). The committed Font models that string as
-// macTypefaceFamilyName (DWARF/wiki) at [c:+0x14C]; this ARTIST build reads [c:+0x150]
-// (a 4-byte skew vs the DWARF layout). We access the named member for x64 parity.
-// FLAG: [c:+0x150] vs the committed Font's macTypefaceFamilyName @ [c:+0x14C] -- a
-// console-build offset skew; the NAMED field is the correct, portable target.
+// + 0x150 is the typeface family-name string). The named member is used so the same
+// source follows the naturally widened x64 layout while preserving that ARTIST field.
 //
 // DWARF attests FindFont as a const method returning
 // `const SafeResourceHandle<CgsResource::Font>&` (CgsGuiFontCollection.h:65); nothing

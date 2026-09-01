@@ -387,7 +387,7 @@ namespace
         rw::Resource DoAllocate(const rw::ResourceDescriptor& lrDescriptor, const char* /*lpcName*/) override
         {
             rw::Resource lResult;
-            for (u32 lu = 0; lu < 4; ++lu)
+            for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
                 lResult.m_baseResources[lu] = nullptr;
 
             const u32 luSize  = lrDescriptor.m_baseResourceDescriptors[0].m_size;

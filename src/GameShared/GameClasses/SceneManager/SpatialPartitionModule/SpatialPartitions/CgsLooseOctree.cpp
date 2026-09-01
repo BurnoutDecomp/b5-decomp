@@ -128,7 +128,7 @@ namespace CgsSceneManager
     void* LooseOctree::operator new(size_t luSize, rw::IResourceAllocator* lpAllocator)
     {
         rw::ResourceDescriptor lDescriptor;
-        for (u32 li = 0; li < 4; ++li)
+        for (u32 li = 0; li < rw::KU_RESOURCE_LANE_COUNT; ++li)
         {
             lDescriptor.m_baseResourceDescriptors[li].m_size      = 0;
             lDescriptor.m_baseResourceDescriptors[li].m_alignment = 1;
@@ -148,7 +148,7 @@ namespace CgsSceneManager
                                          u32 luSize, u32 luAlignment)
         {
             rw::ResourceDescriptor lDescriptor;
-            for (u32 li = 0; li < 4; ++li)
+            for (u32 li = 0; li < rw::KU_RESOURCE_LANE_COUNT; ++li)
             {
                 lDescriptor.m_baseResourceDescriptors[li].m_size      = 0;
                 lDescriptor.m_baseResourceDescriptors[li].m_alignment = 1;

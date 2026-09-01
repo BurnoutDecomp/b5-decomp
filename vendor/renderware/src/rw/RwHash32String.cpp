@@ -38,16 +38,11 @@ uint32_t RwHash32String(const char* lpcString, uint32_t luSeed)
 // result = lhs; then for the (X360) five entries subtract rhs.m_size from
 // result.m_size at the 8-byte BaseResourceDescriptor stride (the asm subtracts
 // only the first dword of each entry; m_alignment is carried over from lhs by
-// the opening memcpy). The committed PC type is BaseResourceDescriptors<4>, so
-// the four committed entries are subtracted by name. FLAGGED: the X360 form is
-// the 5-entry serialised descriptor (memcpy length 0x28 = 40 = 5*8 and the loop
-// runs 5 times); widening rw::ResourceDescriptor to <5> would retype the
-// committed PC layout (and break RW_SIZE_ASSERT==32), so it is reported, not
-// applied. Member-by-name access only over the committed four entries.
+// the opening memcpy). The loop count and 0x28-byte copy both establish five lanes.
 ResourceDescriptor operator-(const ResourceDescriptor& lrLhs, const ResourceDescriptor& lrRhs)
 {
     ResourceDescriptor lResult = lrLhs;  // memcpy(result, lhs) -- carries m_size + m_alignment
-    for (uint32_t luIndex = 0; luIndex < 4; ++luIndex)
+    for (uint32_t luIndex = 0; luIndex < KU_RESOURCE_LANE_COUNT; ++luIndex)
     {
         lResult.m_baseResourceDescriptors[luIndex].m_size -=
             lrRhs.m_baseResourceDescriptors[luIndex].m_size;

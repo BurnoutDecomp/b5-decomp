@@ -83,12 +83,12 @@ namespace BrnResource
             if (lpRegion)
             {
                 rw::Resource lResource;
-                for (uint32_t lu = 0; lu < 4; ++lu)
+                for (uint32_t lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
                     lResource.m_baseResources[lu] = 0;
                 lResource.m_baseResources[0] = lpRegion;
 
                 rw::ResourceDescriptor lCapacity;
-                for (uint32_t lu = 0; lu < 4; ++lu)
+                for (uint32_t lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
                 {
                     lCapacity.m_baseResourceDescriptors[lu].m_size      = 0;
                     lCapacity.m_baseResourceDescriptors[lu].m_alignment = 1;
@@ -122,7 +122,7 @@ namespace BrnResource
     {
         EnsureDebugHeapBacked();
         rw::Resource lResource;
-        for (uint32_t lu = 0; lu < 4; ++lu)
+        for (uint32_t lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
             lResource.m_baseResources[lu] = 0;
 
         const uint32_t luSize  = lDescriptor.m_baseResourceDescriptors[0].m_size;

@@ -75,9 +75,9 @@ namespace CgsResource
         renderengine::Texture**     mpapTextures;         // +0x130 imported atlas pages (FixUp-rebased)
         renderengine::TextureState* mpTextureState;       // +0x134 runtime; FixUp nulls it
         rw::Resource mTextureStateResource;               // +0x138 backing resource for the texture state
-        u32          muFontHeightInPixels;                // +0x148
-        char         macTypefaceFamilyName[128];          // +0x14C FixUp lowercases this
-        char         macTypefaceStyleName[128];           // +0x1CC
+        u32          muFontHeightInPixels;                // X360 +0x14C; x64 +0x170
+        char         macTypefaceFamilyName[128];          // X360 +0x150; x64 +0x174; FixUp lowercases this
+        char         macTypefaceStyleName[128];           // X360 +0x1D0; x64 +0x1F4
 
         u32 GetHeightInPixels() const { return muFontHeightInPixels; }
 

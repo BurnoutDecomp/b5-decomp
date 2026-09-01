@@ -692,16 +692,10 @@ void CrashNavIconRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEven
             }
         }
 
-        // ...and always prefer the dedicated road-sign face when it arrives. The console
-        // compares the first 11 chars against "B5EACONDISS" (DWARF KAC_ROAD_SIGN_FONT_NAME,
-        // char[12]).
-        // FLAG (ported-asset name shift, the ticker's B5DOTMAT -> "tMat" precedent): the
-        // font porter byte-swapped the FIRST u32 of every typeface-name field and the
-        // committed macTypefaceFamilyName member starts four bytes past that swapped word,
-        // so the PC-visible family name for this face is "CONDISS". Accept BOTH spellings
-        // so the match survives a future asset re-conversion that repairs the name.
-        if (_strnicmp(lpcFontName, "B5EACONDISS", 11) == 0 ||
-            _strnicmp(lpcFontName, "CONDISS", 7) == 0)
+        // ...and always prefer the dedicated road-sign face when it arrives. ARTIST
+        // compares the first 11 characters against "B5EACONDISS"
+        // (DWARF KAC_ROAD_SIGN_FONT_NAME, char[12]).
+        if (_strnicmp(lpcFontName, "B5EACONDISS", 11) == 0)
         {
             mTextObject.mpFont = lFont;
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 &&

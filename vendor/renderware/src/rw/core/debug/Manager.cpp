@@ -27,17 +27,13 @@
 // return value is always 0 (a success sentinel; callers read the singleton back through the
 // global rather than through the return).
 //
-// [PC MODEL] rwcore_structs.h models rw::core::debug::IFormatter / Formatter as
-// layout-faithful POD-with-raw-vptr structs (a single `void* __vftable` field), not as a
-// C++ polymorphic hierarchy. The Format vtable slot belongs to Formatter, whose Format body
-// is a separate (not-yet-reconstructed) TU. We therefore carve and publish the singleton
-// exactly as the binary does, but leave the concrete vtable pointer unresolved: off_82181110
-// is rodata we do not have, and the rules forbid fabricating it. The vptr is left null
-// (flagged below); wiring it is the Formatter TU's job, which owns ??_7Formatter@...@.
+// The host class hierarchy is polymorphic, so placement construction of Formatter performs
+// the same vtable installation as the explicit X360 store at 0x82BBD3B0.
 // =====================================================================================
 
 #include "rw/rwcore_structs.h"  // rw::core::debug::Manager / IFormatter, rw::IResourceAllocator
 #include "rw/core/debug/ManagerAllocator.h"
+#include <new>
 
 namespace rw { namespace core { namespace debug {
 
@@ -63,17 +59,11 @@ namespace rw { namespace core { namespace debug {
 
         // operator new carves one IFormatter (4 bytes on the X360 build = one vptr) through
         // the subsystem allocator.
-        IFormatter* lpFormatter =
-            static_cast<IFormatter*>(IFormatter::operator new(sizeof(IFormatter)));
+        void* lpStorage = IFormatter::operator new(sizeof(Formatter));
 
-        if (lpFormatter)
+        if (lpStorage)
         {
-            // X360: *v1 = off_82181110 -- install the concrete Formatter vtable into the
-            // carved storage. off_82181110 (??_7Formatter@debug@core@rw@@6B@) is rodata we do
-            // not have; the rules forbid fabricating a vtable pointer, and Formatter::Format
-            // (the slot it points at) is a separate TU. Left as a flagged placeholder.
-            lpFormatter->__vftable = nullptr;  // FLAGGED: unresolved off_82181110 (Formatter vtable)
-            detail::spFormatterInstance = lpFormatter;
+            detail::spFormatterInstance = ::new (lpStorage) Formatter;
         }
         else
         {

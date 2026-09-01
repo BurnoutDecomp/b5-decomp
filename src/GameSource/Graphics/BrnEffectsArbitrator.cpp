@@ -318,7 +318,7 @@ void EffectsArbitrator::Construct(rw::IResourceAllocator* lpAllocator)
         // the four-entry rw::ResourceDescriptor (the trailing fifth X360 entry is inert),
         // matching the CgsResource::Type::new path.
         rw::ResourceDescriptor lDescriptor;
-        for (u32 luEntry = 0; luEntry < 4; ++luEntry)
+        for (u32 luEntry = 0; luEntry < rw::KU_RESOURCE_LANE_COUNT; ++luEntry)
         {
             lDescriptor.m_baseResourceDescriptors[luEntry].m_size      = 0;
             lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1;

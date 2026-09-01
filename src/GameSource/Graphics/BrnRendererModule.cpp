@@ -766,7 +766,7 @@ namespace
 
         rw::Resource lHeapResource;
         rw::ResourceDescriptor lHeapCapacity;
-        for (u32 luLane = 0; luLane < 4; ++luLane)
+        for (u32 luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
         {
             lHeapResource.m_baseResources[luLane] = (luLane == 0) ? lpHeap : 0;
             lHeapCapacity.m_baseResourceDescriptors[luLane].m_size      = (luLane == 0) ? luHeapBytes : 0u;
