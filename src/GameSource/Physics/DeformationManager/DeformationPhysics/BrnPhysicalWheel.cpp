@@ -128,18 +128,9 @@ namespace Deformation
         }
     }
 
-    // ----- OutUpdateRigidBody byte offsets the asm indexes (event type un-homed) -----------------
-    namespace
-    {
-        // The rigid-body update event's field offsets (asm-authoritative; struct not yet homed).
-        static const u32 KU_EVENT_TRANSLATION   = 32;   // rigid-body translation row -> render wAxis
-        static const u32 KU_EVENT_LINEAR_VEL    = 48;   // new linear velocity -> mLinearVelocity
-        static const u32 KU_EVENT_BASIS_X_AXIS  = 80;   // rigid-body basis xAxis row
-        static const u32 KU_EVENT_BASIS_Y_AXIS  = 96;   // rigid-body basis yAxis row
-        static const u32 KU_EVENT_BASIS_Z_AXIS  = 112;  // rigid-body basis zAxis row
-        static const u32 KU_EVENT_FLAGS         = 156;  // flag byte
-        static const u8  KU_EVENT_FLAG_FROZEN   = 0x2;  // bit 1: wheel is now frozen / settled
-    }
+    // ----- (the OutUpdateRigidBody byte-offset table that used to sit here was RETIRED 2026-09-02:
+    //        Update reads the homed CgsPhysics event by name; see its banner for the console offsets
+    //        and the x64 ghost the table hid.) --------------------------------------------------
 
     // X360 @ 0x825E81C0. Force the cached render transform from a rigid-body transform and, if the
     // wheel is currently in the scene, republish it.
@@ -198,18 +189,35 @@ namespace Deformation
     //   live    : reassemble the rigid-body transform from the event's basis/translation rows,
     //             push it through SetRigidBodyTransform, and add the wheel to the scene if it is
     //             not in it yet.
+    // ⛔⛔ CORRECTED 2026-09-02 (deform close-out wave) -- an x64-WIDENING GHOST, measured. The
+    // console reads the frozen bit as `lwz r11, 0x9C(event) ; extrwi r11, r11, 1, 30` @0x826156B4
+    // == bit 1 (FROZEN_BODY) of the RigidBody's mState, which the CONSOLE packs into mIsplt.w at
+    // RigidBody+0x8C (event+0x9C). This body used to dereference that console byte offset on the
+    // PC event -- but the PC rw::physics::RigidBody PROMOTES mState to its own member after the
+    // eleven registers (rigidbody.h:292), so event+0x9C on the PC is mIsplt.w == unused padding
+    // == 0, and mbFrozen could never become true. MEASURED (run wheelw_r3, the first wheel ever
+    // to detach on this build): the wheel rolled 12 m and settled at (3166.17, -3.96, -2015.12),
+    // the sim put its body to sleep, DoDetachedWheelWorldContactGeneration (which skips on
+    // IsFrozen, like the console) kept generating wheel-vs-world pairs for a sleeping body, and
+    // PhysicsSimulationModule::ProcessAddContactQueue's "Rigid Body A: " both-asleep tripwire
+    // (CgsPhysicsSimulationModule.cpp:1302) fired 839,983 times in one run and starved the
+    // harness. Same shape as PhysicalBodyPart::Update, which already reads the state BY NAME.
+    // Every field is read by name now; the event IS the CgsPhysics OutUpdateRigidBody (the
+    // Deformation-namespace forward declaration on the header is the same type plumbing the
+    // body-part twin carries).
     void PhysicalWheel::Update(const OutUpdateRigidBody* lpUpdateEvent,
                                CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface)
     {
-        const char* lpEvent = reinterpret_cast<const char*>(lpUpdateEvent);
+        const rw::physics::RigidBody& lrRigidBody =
+            reinterpret_cast<const CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody*>(lpUpdateEvent)
+                ->mRigidBody;
 
-        // v6 = (flags >> 1) & 1 ; mbFrozen = (flags & 0x2) != 0  -- both are flag bit 1.
-        const u8 lu8Flags = *reinterpret_cast<const u8*>(lpEvent + KU_EVENT_FLAGS);
-        const bool lbFrozen = (lu8Flags & KU_EVENT_FLAG_FROZEN) != 0;
+        // 0x826156B4  lwz 0x9C(event) ; extrwi 1,30 ; stb 0x80(this)  -- FROZEN_BODY (bit 1) of mState.
+        const bool lbFrozen = (lrRigidBody.GetState() & rw::physics::FROZEN_BODY) != 0;
         mbFrozen = lbFrozen;
 
-        // mLinearVelocity = event linear velocity (lvx128 event+48 ; stvx128 this+96).
-        mLinearVelocity = *reinterpret_cast<const Vector3*>(lpEvent + KU_EVENT_LINEAR_VEL);
+        // 0x826156D4  lvx128 v0, event, 0x30 ; stvx128 this+0x60  -- the body's linear velocity (mVel).
+        mLinearVelocity = lrRigidBody.GetLinearVelocity();
 
         if ( lbFrozen )
         {
@@ -222,13 +230,9 @@ namespace Deformation
         }
         else
         {
-            // Reassemble the rigid-body transform from the event rows the asm staged on the stack:
-            //   xAxis = event+80, yAxis = event+96, zAxis = event+112, wAxis = event+32.
-            Matrix44Affine lRigidBodyTransform;
-            lRigidBodyTransform.xAxis = *reinterpret_cast<const Vector3*>(lpEvent + KU_EVENT_BASIS_X_AXIS);
-            lRigidBodyTransform.yAxis = *reinterpret_cast<const Vector3*>(lpEvent + KU_EVENT_BASIS_Y_AXIS);
-            lRigidBodyTransform.zAxis = *reinterpret_cast<const Vector3*>(lpEvent + KU_EVENT_BASIS_Z_AXIS);
-            lRigidBodyTransform.wAxis = *reinterpret_cast<const Vector3*>(lpEvent + KU_EVENT_TRANSLATION);
+            // 0x826156F8..0x82615724: the basis rows (event+0x50/+0x60/+0x70 == mRi/mUp/mAt) and
+            // the translation (event+0x20 == mCom) staged on the stack -- RigidBody::GetTransform.
+            const Matrix44Affine lRigidBodyTransform = lrRigidBody.GetTransform();
 
             SetRigidBodyTransform(lRigidBodyTransform, lpSceneInterface);
 
