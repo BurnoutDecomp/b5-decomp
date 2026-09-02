@@ -53,7 +53,7 @@ namespace BrnReplays
 {
     ReplayModule::ReplayModule()
     {
-        miPrepareStage = 0;   // the module has not prepared (X360 base +0x228)
+        mbPrepared     = false;   // the module has not prepared (X360 base +0x228)
         mpLinearMalloc = 0;   // ReplayModule::Prepare acquires it (X360 +0x878)
 
         // Base (ModuleSingleBuffered: both vtables + the two RWMutexes) and the
