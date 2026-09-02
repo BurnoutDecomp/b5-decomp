@@ -451,15 +451,6 @@ const UpdateOutputBuffer::DeformationOutputInterface* UpdateOutputBuffer::GetDef
     return &mDeformationOutputInterface;
 }
 
-// X360 sub_823B6938 (the unnamed read half; same read-lock assert as its siblings) -- the
-// triangle-cache interface the effects bridge hands EffectsIO::InputBuffer::
-// SetTriangleCacheInterface (BridgeEntityToEffects @0x823CDF00).
-const UpdateOutputBuffer::OutTriangleCacheInterface* UpdateOutputBuffer::GetTriangleCacheInterface() const
-{
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-    return &mTriangleCacheInterface;
-}
-
 // X360 0x827AA658 (:580 W) -- copy the source deformation output (+158080) via the
 // hand-written DeformationOutputInterface::operator= (DWARF :154; X360 @ 0x823C8900,
 // ledger-truncated to "DeformationOutputI"; bodied by its own TU).

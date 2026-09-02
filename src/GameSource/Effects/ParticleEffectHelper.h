@@ -4,8 +4,6 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                  // Matrix44Affine
 #include "GameSource/Effects/Particles/ParticleModule.h"    // BrnParticle::ParticleModule, LionEffect
-#include "GameSource/GameState/BrnGameStateSharedIO.h"        // BrnGameState::GameStateModuleIO::EGameModeType
-#include "rw/core/base/ostypes.h"                             // RwRGBAReal
 
 // ============================================================================
 // GameSource/Effects/ParticleEffectHelper.h
@@ -46,13 +44,6 @@ namespace BrnEffects
     class ParticleEffectHelper
     {
     public:
-        // DWARF ParticleEffectHelper.h:9 `ParticleEffectHelper(BrnParticle::ParticleModule&)`.
-        // EffectsModule::UpdateActiveRaceCars @0x8229DB30 builds one on its stack (the one
-        // word at sp+0x78, `v99 = &mParticleModule`) for ActiveRaceCarData::Reset.
-        explicit ParticleEffectHelper(BrnParticle::ParticleModule& lrParticleModule)
-            : mpParticleModule(&lrParticleModule) {}
-        ParticleEffectHelper() : mpParticleModule(0) {}
-
         // ParticleModule() (DWARF :46/:186). The wrapped module. A non-const overload
         // is provided so the boost-effect helpers can resolve + tweak playing slots
         // (the X360 stores a single module reference and pokes through it).
@@ -80,35 +71,6 @@ namespace BrnEffects
     class RaceCarParticleEffectHelper : public ParticleEffectHelper
     {
     public:
-        // DWARF ParticleEffectHelper.h:66 -- the 9-argument constructor, in the DWARF's
-        // parameter order. EffectsModule::UpdateActiveRaceCars @0x8229DB30 builds the
-        // 12-word record on its stack (v120[0..11]: module, active car, effects module,
-        // race-car state, debug component, world index, the 4 colour lanes, the game
-        // mode, the vehicle locators).
-        RaceCarParticleEffectHelper(EffectsModule& lrEffectsModule,
-                                    ActiveRaceCarData& lrActiveRaceCar,
-                                    const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState,
-                                    BrnParticle::ParticleModule& lrParticleModule,
-                                    const EffectsDebugComponent* lpDebugComponent,
-                                    u32 luWorldIndex,
-                                    const RwRGBAReal& lrCarColour,
-                                    BrnGameState::GameStateModuleIO::EGameModeType leCurrentGameMode,
-                                    const BrnPhysics::Deformation::VehicleLocatorOutput* lpVehicleLocators)
-            : ParticleEffectHelper(lrParticleModule)
-            , mpActiveRaceCar(&lrActiveRaceCar)
-            , mpEffectsModule(&lrEffectsModule)
-            , mpRaceCarState(lpRaceCarState)
-            , mpDebugComponent(lpDebugComponent)
-            , muWorldIndex(luWorldIndex)
-            , meCurrentGameMode(static_cast<u32>(leCurrentGameMode))
-            , mpVehicleLocators(lpVehicleLocators)
-        {
-            maCarColour[0] = lrCarColour.red;
-            maCarColour[1] = lrCarColour.green;
-            maCarColour[2] = lrCarColour.blue;
-            maCarColour[3] = lrCarColour.alpha;
-        }
-
         // Accessors (DWARF :166..:210). Declared-only (bodies own their TU); the
         // ones this TU needs are spelled out for the call sites.
         const EffectsDebugComponent*                     DebugComponent() const { return mpDebugComponent; }

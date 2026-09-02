@@ -8,7 +8,6 @@
 #include "GameSource/Game/BrnLoadingScreenRenderer.h"    // BrnGame::ELoadingScreenCommand (meLoadingScreenCommand)
 #include "BrnCommonTypes.h"                              // Matrix44 (rw::math::vpu::Matrix44, the occlusion view-projection)
 #include "GameSource/Effects/Particles/ParticleModule.h" // BrnParticle::ParticleModule::{DispatchThreadUpdateData,ParticleRenderData}
-#include "GameSource/Effects/BrnCrashTriangleCache.h"  // BrnEffects::BrnCrashTriangleCache (BY VALUE, DWARF h:196 -- real type, 2026-09-02)
 
 namespace CgsModule { struct IOBufferStack; }            // the manager Construct's stack (pointer-only here)
 
@@ -51,6 +50,19 @@ namespace CgsModule { struct IOBufferStack; }            // the manager Construc
 // `BrnParticle::ParticleModule::DispatchThreadUpdateData` / `...::ParticleRenderData` and every
 // accessor signature are identical -- they just resolve to nested types instead of namespace
 // members now.
+
+namespace BrnEffects
+{
+    // FLAG (ad-hoc opaque): BrnEffects::BrnCrashTriangleCache is bodied only in
+    // GameSource/Effects/BrnCrashTriangleCache.cpp (no includable committed struct home yet, DWARF
+    // h:196). Modelled here as a by-value opaque so &mBufferCrashTriangleCache yields the correct
+    // pointer type for GetBufferCrashTriangleCache's const/non-const overloads. True size UNKNOWN;
+    // replaced when BrnCrashTriangleCache gets a committed header home.
+    struct BrnCrashTriangleCache
+    {
+        u8 maStorage[1];   // FLAG: opaque, true size unknown
+    };
+}
 
 namespace BrnGame
 {
