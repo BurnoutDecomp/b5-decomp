@@ -24,6 +24,8 @@
 #include "GameSource/Effects/Curves.h"                        // BrnEffects::Curves::SmoothStep
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"  // BrnPhysics::Vehicle::RaceCarState
 #include <cmath>
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the NOT-RECONSTRUCTED announcement
+#include <cstdio>   // snprintf
 
 namespace BrnEffects
 {
@@ -101,4 +103,65 @@ void JumpStateMachine::SetVapourBlend(f32 lfFadeTime,
     lHelper.SetEffectStateBlend(lpuVapourHandle, 1, lfBlend);
 }
 
+
+    // =====================================================================================
+    // The three EffectsStateMachine overrides. X360:
+    //   OnDetermineNextState @0x8229B9F8 (211 pseudocode lines)
+    //   OnChangeState        @0x82299510 (54)
+    //   OnTick               -- no export; the base's empty slot, ICF-folded
+    //
+    // ⛔ NOT RECONSTRUCTED IN THIS WAVE, and announced rather than faked. Both bodied halves
+    // exist only to start and follow LION effects: OnChangeState's entry actions are
+    // StartLionEffect / StopLionEffect on the jump and landing effects, and
+    // OnDetermineNextState's transitions are driven by those handles plus FireWheelSparks
+    // @0x82299670 / FireWheelDebris @0x822939D8. On this build StartLionEffect always returns
+    // KU_HANDLE_INVALID (BrnParticle::ParticleDescriptionCollection has no committed layout --
+    // see ParticleModule_Lifecycle.cpp), so a faithful transcription of the transition ladder
+    // would drive a machine whose every effect handle is invalid. The honest shape is to leave
+    // the machine in its current state and say so once.
+    //
+    // This is REACHABLE code (ActiveRaceCarData::Tick ticks the jump machine every frame for
+    // every active car), which is why it is a loud no-op and not a trap stub.
+    // =====================================================================================
+    namespace
+    {
+        void LogJumpNotReconstructed(bool& lrbLogged, const char* lpcWhat)
+        {
+            if (lrbLogged)
+                return;
+            lrbLogged = true;
+            char lacMsg[224];
+            std::snprintf(lacMsg, sizeof(lacMsg), "[effects] NOT RECONSTRUCTED: %s\n", lpcWhat);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
+
+    EffectsState JumpStateMachine::OnDetermineNextState(CarState& /*lCarState*/,
+                                                        bool /*lbStateTimerExpired*/,
+                                                        EffectsState leCurrentState,
+                                                        RaceCarParticleEffectHelper& /*lHelper*/)
+    {
+        static bool sbLogged = false;
+        LogJumpNotReconstructed(sbLogged,
+            "JumpStateMachine::OnDetermineNextState @0x8229B9F8 (its transitions key on Lion "
+            "effect handles, and StartLionEffect returns KU_HANDLE_INVALID on this build); the "
+            "jump machine holds its current state");
+        return leCurrentState;
+    }
+
+    void JumpStateMachine::OnChangeState(EffectsState /*leNewState*/,
+                                         RaceCarParticleEffectHelper& /*lHelper*/,
+                                         CarState& /*lCarState*/)
+    {
+        static bool sbLogged = false;
+        LogJumpNotReconstructed(sbLogged,
+            "JumpStateMachine::OnChangeState @0x82299510 (Start/StopLionEffect on the jump and "
+            "landing effects)");
+    }
+
+    void JumpStateMachine::OnTick(CarState& /*lCarState*/,
+                                  RaceCarParticleEffectHelper& /*lHelper*/)
+    {
+        // No X360 export: the base's empty slot, ICF-folded. Empty is faithful.
+    }
 } // namespace BrnEffects

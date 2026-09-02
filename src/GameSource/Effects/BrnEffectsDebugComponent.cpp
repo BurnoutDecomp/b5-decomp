@@ -29,6 +29,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 #include "rw/math/vpu/types.h"
 #include "rw/rwcore_structs.h"
+#include "GameSource/Graphics/BrnCoronaManager.h"   // BrnCoronaTypeParams::smParams (the corona archetype table OnActivate edits)
 
 namespace BrnEffects
 {
@@ -39,52 +40,33 @@ namespace BrnEffects
     static const char* const KP_SUBMENU_JUMP  = "Jump";
     static const char* const KP_SUBMENU_PROPS = "Props";
 
-    // --- Player-RaceCar corona tuning globals (registered by OnActivate). -----------------
-    // These f32s live in the coronas/lighting module (X360 .data @ 0x82F246xx-0x82F247xx);
-    // OnActivate exposes them in the debug menu so artists can tune the player car's
-    // head/spot/blues/PS3 light coronas. Owned elsewhere (their defining TU is not this one);
-    // referenced here by extern so OnActivate can take their addresses.
-    extern "C++" {
-        // SpotLights
-        extern f32 gSpotLightsSmoothStepMin;
-        extern f32 gSpotLightsSmoothStepMid;
-        extern f32 gSpotLightsSmoothStepMax;
-        extern f32 gSpotLightsScaleFactorMin;
-        extern f32 gSpotLightsScaleFactorMax;
-        extern f32 gSpotLightsSizeX;
-        extern f32 gSpotLightsSizeY;
-        // HeadLights
-        extern f32 gHeadLightsSmoothStepMin;
-        extern f32 gHeadLightsSmoothStepMid;
-        extern f32 gHeadLightsSmoothStepMax;
-        extern f32 gHeadLightsScaleFactorMin;
-        extern f32 gHeadLightsScaleFactorMax;
-        extern f32 gHeadLightsSizeX;
-        extern f32 gHeadLightsSizeY;
-        // Blues2s Red
-        extern f32 gBlues2sRedSmoothStepMin;
-        extern f32 gBlues2sRedSmoothStepMid;
-        extern f32 gBlues2sRedSmoothStepMax;
-        extern f32 gBlues2sRedScaleFactorMin;
-        extern f32 gBlues2sRedScaleFactorMax;
-        extern f32 gBlues2sRedSizeX;
-        extern f32 gBlues2sRedSizeY;
-        // Blues2s Blue
-        extern f32 gBlues2sBlueSmoothStepMin;
-        extern f32 gBlues2sBlueSmoothStepMid;
-        extern f32 gBlues2sBlueSmoothStepMax;
-        extern f32 gBlues2sBlueScaleFactorMin;
-        extern f32 gBlues2sBlueScaleFactorMax;
-        extern f32 gBlues2sBlueSizeX;
-        extern f32 gBlues2sBlueSizeY;
-        // PS3Lights
-        extern f32 gPS3LightsSmoothStepMin;
-        extern f32 gPS3LightsSmoothStepMid;
-        extern f32 gPS3LightsSmoothStepMax;
-        extern f32 gPS3LightsScaleFactorMin;
-        extern f32 gPS3LightsScaleFactorMax;
-        extern f32 gPS3LightsSizeX;
-        extern f32 gPS3LightsSizeY;
+    // --- Player-RaceCar corona tuning fields (registered by OnActivate). ------------------
+    // ⚠ CORRECTED 2026-09-02 (tyre-mark wave). This file used to declare THIRTY-FIVE
+    // `extern f32 gXxx;` globals for these and said "owned elsewhere (their defining TU is not
+    // this one)". No such TU exists, and none ever could: THE CONSOLE ADDRESSES ARE FIELDS OF
+    // THE CORONA ARCHETYPE TABLE, which is already reconstructed in BrnCoronaTypeParams.cpp.
+    // OnActivate @0x8228F3E8 registers, in order,
+    //     unk_82F24610/14        unk_82F24628..38        (HeadLights)
+    //     unk_82F24700/04        unk_82F24718..28        (Blues2s Red)
+    //     unk_82F24730/34        unk_82F24748..58        (Blues2s Blue)
+    //     unk_82F24760/64        unk_82F24778..88        (SpotLights)
+    //     unk_82F24790/94        unk_82F247A8..B8        (PS3Lights)
+    // and the table is `unk_82F24310`, 25 records of 48 bytes. (addr - 0x82F24310) / 48 gives
+    // 16, 21, 22, 23, 24 -- exactly eCoronaTypePlayerCarHeadLight, ...BluesTwosRed,
+    // ...BluesTwosBlue, ...Spotlights, ...PS3BluRayLights; the intra-record offsets are +0x00/
+    // +0x04 (mvSize.x/y) and +0x18/+0x1C/+0x20/+0x24/+0x28 (mScaleCurve's mCurveParams.xyz and
+    // mScaleFactors.xy). So the debug menu edits THE LIVE ARCHETYPE, which is the whole point of
+    // it -- 35 separate globals would have edited copies nothing renders from, and would have
+    // left the link short by 35 symbols (measured: it did).
+    namespace
+    {
+        BrnCoronaTypeParams& CoronaParams(BrnCoronaType leType)
+        {
+            // GetCoronaTypeParams is the table's own accessor (smParams is private); the debug
+            // menu edits the archetype in place, exactly as the console's &unk_82F24xxx does.
+            return const_cast<BrnCoronaTypeParams&>(
+                BrnCoronaTypeParams::GetCoronaTypeParams(leType));
+        }
     }
 
     // Number of junkyard-VFX slots the editor cycles through (mirrors
@@ -214,84 +196,84 @@ namespace BrnEffects
         RegisterVariable(&mbForceNonPlayerEffects,  "Force non player effects");
 
         // Player-RaceCar corona tuning (SpotLights).
-        RegisterVariable(&gSpotLightsSmoothStepMin,  "Coronas\\Player RaceCar", "SpotLightsSmooth Step Min");
-        SetStep(&gSpotLightsSmoothStepMin, 100.0f);
-        RegisterVariable(&gSpotLightsSmoothStepMid,  "Coronas\\Player RaceCar", "SpotLightsSmooth Step Mid");
-        SetStep(&gSpotLightsSmoothStepMid, 100.0f);
-        RegisterVariable(&gSpotLightsSmoothStepMax,  "Coronas\\Player RaceCar", "SpotLightsSmooth Step Max");
-        SetStep(&gSpotLightsSmoothStepMax, 100.0f);
-        RegisterVariable(&gSpotLightsScaleFactorMin, "Coronas\\Player RaceCar", "SpotLightsScale Factor Min");
-        SetStep(&gSpotLightsScaleFactorMin, 0.025f);
-        RegisterVariable(&gSpotLightsScaleFactorMax, "Coronas\\Player RaceCar", "SpotLightsScale Factor Max");
-        SetStep(&gSpotLightsScaleFactorMax, 0.025f);
-        RegisterVariable(&gSpotLightsSizeX,          "Coronas\\Player RaceCar", "SpotLightsSize X");
-        SetStep(&gSpotLightsSizeX, 0.025f);
-        RegisterVariable(&gSpotLightsSizeY,          "Coronas\\Player RaceCar", "SpotLightsSize Y");
-        SetStep(&gSpotLightsSizeY, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarSpotlights).mScaleCurve.mCurveParams.x,  "Coronas\\Player RaceCar", "SpotLightsSmooth Step Min");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarSpotlights).mScaleCurve.mCurveParams.x, 100.0f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarSpotlights).mScaleCurve.mCurveParams.y,  "Coronas\\Player RaceCar", "SpotLightsSmooth Step Mid");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarSpotlights).mScaleCurve.mCurveParams.y, 100.0f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarSpotlights).mScaleCurve.mCurveParams.z,  "Coronas\\Player RaceCar", "SpotLightsSmooth Step Max");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarSpotlights).mScaleCurve.mCurveParams.z, 100.0f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarSpotlights).mScaleCurve.mScaleFactors.x, "Coronas\\Player RaceCar", "SpotLightsScale Factor Min");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarSpotlights).mScaleCurve.mScaleFactors.x, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarSpotlights).mScaleCurve.mScaleFactors.y, "Coronas\\Player RaceCar", "SpotLightsScale Factor Max");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarSpotlights).mScaleCurve.mScaleFactors.y, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarSpotlights).mvSize.x,          "Coronas\\Player RaceCar", "SpotLightsSize X");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarSpotlights).mvSize.x, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarSpotlights).mvSize.y,          "Coronas\\Player RaceCar", "SpotLightsSize Y");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarSpotlights).mvSize.y, 0.025f);
 
         // HeadLights.
-        RegisterVariable(&gHeadLightsSmoothStepMin,  "Coronas\\Player RaceCar", "HeadLightsSmooth Step Min");
-        SetStep(&gHeadLightsSmoothStepMin, 100.0f);
-        RegisterVariable(&gHeadLightsSmoothStepMid,  "Coronas\\Player RaceCar", "HeadLightsSmooth Step Mid");
-        SetStep(&gHeadLightsSmoothStepMid, 100.0f);
-        RegisterVariable(&gHeadLightsSmoothStepMax,  "Coronas\\Player RaceCar", "HeadLightsSmooth Step Max");
-        SetStep(&gHeadLightsSmoothStepMax, 100.0f);
-        RegisterVariable(&gHeadLightsScaleFactorMin, "Coronas\\Player RaceCar", "HeadLightsScale Factor Min");
-        SetStep(&gHeadLightsScaleFactorMin, 0.025f);
-        RegisterVariable(&gHeadLightsScaleFactorMax, "Coronas\\Player RaceCar", "HeadLightsScale Factor Max");
-        SetStep(&gHeadLightsScaleFactorMax, 0.025f);
-        RegisterVariable(&gHeadLightsSizeX,          "Coronas\\Player RaceCar", "HeadLightsSize X");
-        SetStep(&gHeadLightsSizeX, 0.025f);
-        RegisterVariable(&gHeadLightsSizeY,          "Coronas\\Player RaceCar", "HeadLightsSize Y");
-        SetStep(&gHeadLightsSizeY, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarHeadLight).mScaleCurve.mCurveParams.x,  "Coronas\\Player RaceCar", "HeadLightsSmooth Step Min");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarHeadLight).mScaleCurve.mCurveParams.x, 100.0f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarHeadLight).mScaleCurve.mCurveParams.y,  "Coronas\\Player RaceCar", "HeadLightsSmooth Step Mid");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarHeadLight).mScaleCurve.mCurveParams.y, 100.0f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarHeadLight).mScaleCurve.mCurveParams.z,  "Coronas\\Player RaceCar", "HeadLightsSmooth Step Max");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarHeadLight).mScaleCurve.mCurveParams.z, 100.0f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarHeadLight).mScaleCurve.mScaleFactors.x, "Coronas\\Player RaceCar", "HeadLightsScale Factor Min");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarHeadLight).mScaleCurve.mScaleFactors.x, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarHeadLight).mScaleCurve.mScaleFactors.y, "Coronas\\Player RaceCar", "HeadLightsScale Factor Max");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarHeadLight).mScaleCurve.mScaleFactors.y, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarHeadLight).mvSize.x,          "Coronas\\Player RaceCar", "HeadLightsSize X");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarHeadLight).mvSize.x, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarHeadLight).mvSize.y,          "Coronas\\Player RaceCar", "HeadLightsSize Y");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarHeadLight).mvSize.y, 0.025f);
 
         // Blues2s Red.
-        RegisterVariable(&gBlues2sRedSmoothStepMin,  "Coronas\\Player RaceCar", "Blues2s RedSmooth Step Min");
-        SetStep(&gBlues2sRedSmoothStepMin, 100.0f);
-        RegisterVariable(&gBlues2sRedSmoothStepMid,  "Coronas\\Player RaceCar", "Blues2s RedSmooth Step Mid");
-        SetStep(&gBlues2sRedSmoothStepMid, 100.0f);
-        RegisterVariable(&gBlues2sRedSmoothStepMax,  "Coronas\\Player RaceCar", "Blues2s RedSmooth Step Max");
-        SetStep(&gBlues2sRedSmoothStepMax, 100.0f);
-        RegisterVariable(&gBlues2sRedScaleFactorMin, "Coronas\\Player RaceCar", "Blues2s RedScale Factor Min");
-        SetStep(&gBlues2sRedScaleFactorMin, 0.025f);
-        RegisterVariable(&gBlues2sRedScaleFactorMax, "Coronas\\Player RaceCar", "Blues2s RedScale Factor Max");
-        SetStep(&gBlues2sRedScaleFactorMax, 0.025f);
-        RegisterVariable(&gBlues2sRedSizeX,          "Coronas\\Player RaceCar", "Blues2s RedSize X");
-        SetStep(&gBlues2sRedSizeX, 0.025f);
-        RegisterVariable(&gBlues2sRedSizeY,          "Coronas\\Player RaceCar", "Blues2s RedSize Y");
-        SetStep(&gBlues2sRedSizeY, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mScaleCurve.mCurveParams.x,  "Coronas\\Player RaceCar", "Blues2s RedSmooth Step Min");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mScaleCurve.mCurveParams.x, 100.0f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mScaleCurve.mCurveParams.y,  "Coronas\\Player RaceCar", "Blues2s RedSmooth Step Mid");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mScaleCurve.mCurveParams.y, 100.0f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mScaleCurve.mCurveParams.z,  "Coronas\\Player RaceCar", "Blues2s RedSmooth Step Max");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mScaleCurve.mCurveParams.z, 100.0f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mScaleCurve.mScaleFactors.x, "Coronas\\Player RaceCar", "Blues2s RedScale Factor Min");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mScaleCurve.mScaleFactors.x, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mScaleCurve.mScaleFactors.y, "Coronas\\Player RaceCar", "Blues2s RedScale Factor Max");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mScaleCurve.mScaleFactors.y, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mvSize.x,          "Coronas\\Player RaceCar", "Blues2s RedSize X");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mvSize.x, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mvSize.y,          "Coronas\\Player RaceCar", "Blues2s RedSize Y");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mvSize.y, 0.025f);
 
         // Blues2s Blue.
-        RegisterVariable(&gBlues2sBlueSmoothStepMin,  "Coronas\\Player RaceCar", "Blues2s BlueSmooth Step Min");
-        SetStep(&gBlues2sBlueSmoothStepMin, 100.0f);
-        RegisterVariable(&gBlues2sBlueSmoothStepMid,  "Coronas\\Player RaceCar", "Blues2s BlueSmooth Step Mid");
-        SetStep(&gBlues2sBlueSmoothStepMid, 100.0f);
-        RegisterVariable(&gBlues2sBlueSmoothStepMax,  "Coronas\\Player RaceCar", "Blues2s BlueSmooth Step Max");
-        SetStep(&gBlues2sBlueSmoothStepMax, 100.0f);
-        RegisterVariable(&gBlues2sBlueScaleFactorMin, "Coronas\\Player RaceCar", "Blues2s BlueScale Factor Min");
-        SetStep(&gBlues2sBlueScaleFactorMin, 0.025f);
-        RegisterVariable(&gBlues2sBlueScaleFactorMax, "Coronas\\Player RaceCar", "Blues2s BlueScale Factor Max");
-        SetStep(&gBlues2sBlueScaleFactorMax, 0.025f);
-        RegisterVariable(&gBlues2sBlueSizeX,          "Coronas\\Player RaceCar", "Blues2s BlueSize X");
-        SetStep(&gBlues2sBlueSizeX, 0.025f);
-        RegisterVariable(&gBlues2sBlueSizeY,          "Coronas\\Player RaceCar", "Blues2s BlueSize Y");
-        SetStep(&gBlues2sBlueSizeY, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mScaleCurve.mCurveParams.x,  "Coronas\\Player RaceCar", "Blues2s BlueSmooth Step Min");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mScaleCurve.mCurveParams.x, 100.0f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mScaleCurve.mCurveParams.y,  "Coronas\\Player RaceCar", "Blues2s BlueSmooth Step Mid");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mScaleCurve.mCurveParams.y, 100.0f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mScaleCurve.mCurveParams.z,  "Coronas\\Player RaceCar", "Blues2s BlueSmooth Step Max");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mScaleCurve.mCurveParams.z, 100.0f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mScaleCurve.mScaleFactors.x, "Coronas\\Player RaceCar", "Blues2s BlueScale Factor Min");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mScaleCurve.mScaleFactors.x, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mScaleCurve.mScaleFactors.y, "Coronas\\Player RaceCar", "Blues2s BlueScale Factor Max");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mScaleCurve.mScaleFactors.y, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mvSize.x,          "Coronas\\Player RaceCar", "Blues2s BlueSize X");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mvSize.x, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mvSize.y,          "Coronas\\Player RaceCar", "Blues2s BlueSize Y");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mvSize.y, 0.025f);
 
         // PS3Lights.
-        RegisterVariable(&gPS3LightsSmoothStepMin,  "Coronas\\Player RaceCar", "PS3LightsSmooth Step Min");
-        SetStep(&gPS3LightsSmoothStepMin, 100.0f);
-        RegisterVariable(&gPS3LightsSmoothStepMid,  "Coronas\\Player RaceCar", "PS3LightsSmooth Step Mid");
-        SetStep(&gPS3LightsSmoothStepMid, 100.0f);
-        RegisterVariable(&gPS3LightsSmoothStepMax,  "Coronas\\Player RaceCar", "PS3LightsSmooth Step Max");
-        SetStep(&gPS3LightsSmoothStepMax, 100.0f);
-        RegisterVariable(&gPS3LightsScaleFactorMin, "Coronas\\Player RaceCar", "PS3LightsScale Factor Min");
-        SetStep(&gPS3LightsScaleFactorMin, 0.025f);
-        RegisterVariable(&gPS3LightsScaleFactorMax, "Coronas\\Player RaceCar", "PS3LightsScale Factor Max");
-        SetStep(&gPS3LightsScaleFactorMax, 0.025f);
-        RegisterVariable(&gPS3LightsSizeX,          "Coronas\\Player RaceCar", "PS3LightsSize X");
-        SetStep(&gPS3LightsSizeX, 0.025f);
-        RegisterVariable(&gPS3LightsSizeY,          "Coronas\\Player RaceCar", "PS3LightsSize Y");
-        SetStep(&gPS3LightsSizeY, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mScaleCurve.mCurveParams.x,  "Coronas\\Player RaceCar", "PS3LightsSmooth Step Min");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mScaleCurve.mCurveParams.x, 100.0f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mScaleCurve.mCurveParams.y,  "Coronas\\Player RaceCar", "PS3LightsSmooth Step Mid");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mScaleCurve.mCurveParams.y, 100.0f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mScaleCurve.mCurveParams.z,  "Coronas\\Player RaceCar", "PS3LightsSmooth Step Max");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mScaleCurve.mCurveParams.z, 100.0f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mScaleCurve.mScaleFactors.x, "Coronas\\Player RaceCar", "PS3LightsScale Factor Min");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mScaleCurve.mScaleFactors.x, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mScaleCurve.mScaleFactors.y, "Coronas\\Player RaceCar", "PS3LightsScale Factor Max");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mScaleCurve.mScaleFactors.y, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mvSize.x,          "Coronas\\Player RaceCar", "PS3LightsSize X");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mvSize.x, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mvSize.y,          "Coronas\\Player RaceCar", "PS3LightsSize Y");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mvSize.y, 0.025f);
 
         // Feature sub-menus.
         SetupLionMenu();

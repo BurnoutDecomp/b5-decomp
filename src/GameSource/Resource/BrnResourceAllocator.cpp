@@ -2,6 +2,7 @@
 #include "ppmalloc/EAGeneralAllocator.h"   // the backing EA general allocator
 #include "rw/rwcore_general_alloc.h"       // rw::core::GeneralResourceAllocator (GetGameDataGeneralAllocator)
 #include "GameShared/GameClasses/Memory/PC/CgsLowMemoryPC.h"   // LowMemory::Reserve (low-4GB root block)
+#include <new>   // std::nothrow (the GlobalGraphics arena carve)
 
 // BrnResource::Allocators / HeapResourceAllocator - the engine's root debug resource allocator,
 // the heap the whole GameData resource system (ConstructResourceModule -> ResourceModule::Construct)
@@ -132,5 +133,58 @@ namespace BrnResource
         if (luSize)
             lResource.m_baseResources[0] = s_DebugGeneralAllocator.MallocAligned(luSize, luAlign);
         return lResource;
+    }
+
+    // =====================================================================================
+    // GetGlobalGraphicsAllocator -- the process-wide "GlobalGraphics" linear resource
+    // allocator (X360 object @ dword_82F2C814). ADDITIVE 2026-09-02 (tyre-mark wave):
+    // BrnResourceAllocator.h has declared it since the shadow wave, BrnRendererMemory.cpp's
+    // banner has called it out as "declaration-only, defined nowhere" ever since, and the
+    // effects link is the first consumer that cannot proceed without it (LNK2019, measured).
+    //
+    // ⚠ FLAG PC-platform leaf. The console builds this object in
+    // Allocators::ConstructGlobalGraphicsMemory @0x82666B70 over an XPhysicalAlloc'd region --
+    // physically contiguous, GPU-visible memory sized from the X360 memory map
+    // (Allocators::InitMemoryMap @0x82664728). Neither exists on the host and neither is
+    // reconstructed. What every CALLER needs is the abstract rw::IResourceAllocator contract
+    // (DoAllocate hands back a lane-0 block), so this supplies exactly that over one host heap
+    // block -- the SAME shape BrnRendererModule.cpp's `sWorldDispatchAllocator` already uses for
+    // the sky dome's buffers. A platform substitution, not a stand-in for game logic.
+    //
+    // WHO TAKES IT: ParticleModule::Prepare @0x8229BEA0 hands `off_82F2C814` to all five
+    // contained Im3d renderers; the one that matters for the tyre mark, Im3dSkidsRenderer::
+    // Construct @0x82295150, allocates the skid vertex/pixel ProgramBuffers through it (456 +
+    // 228 bytes of microcode plus their headers). 256 KB leaves room for the rest of that family
+    // as it lands; the arena is carved lazily, so a build that never touches effects pays nothing.
+    // =====================================================================================
+    namespace
+    {
+        rw::LinearResourceAllocator sGlobalGraphicsAllocator;
+        bool                        sbGlobalGraphicsReady = false;
+        const uint32_t              KU_GLOBAL_GRAPHICS_ARENA_BYTES = 256u * 1024u;
+    }
+
+    rw::IResourceAllocator* Allocators::GetGlobalGraphicsAllocator()
+    {
+        if (sbGlobalGraphicsReady)
+            return &sGlobalGraphicsAllocator;
+
+        void* lpHeap = ::operator new(KU_GLOBAL_GRAPHICS_ARENA_BYTES, std::nothrow);
+        if (lpHeap == 0)
+            return 0;
+
+        rw::Resource           lHeapResource;
+        rw::ResourceDescriptor lHeapCapacity;
+        for (uint32_t luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
+        {
+            lHeapResource.m_baseResources[luLane] = (luLane == 0) ? lpHeap : 0;
+            lHeapCapacity.m_baseResourceDescriptors[luLane].m_size =
+                (luLane == 0) ? KU_GLOBAL_GRAPHICS_ARENA_BYTES : 0u;
+            lHeapCapacity.m_baseResourceDescriptors[luLane].m_alignment = (luLane == 0) ? 16u : 1u;
+        }
+        sGlobalGraphicsAllocator.Initialize(lHeapResource, lHeapCapacity);
+
+        sbGlobalGraphicsReady = true;
+        return &sGlobalGraphicsAllocator;
     }
 }

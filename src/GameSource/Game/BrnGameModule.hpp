@@ -135,7 +135,21 @@ namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue
 namespace CgsInput     { class InputModule     : public CgsModule::ModuleSingleBuffered {}; }
 // BrnGui::GuiModule is now the REAL module (hosts the MovieManager) -- included above (BrnGuiModule.h),
 // no longer the opaque stub.
-namespace BrnEffects   { class EffectsModule   : public CgsModule::ModuleSingleBuffered {}; }
+// BrnEffects::EffectsModule is now the REAL module (the effects spine: the per-car
+// ActiveRaceCarData + its four state machines -> HandleWheels -> the particle module's
+// TrailSystem). It was an ODR stub here exactly like GameStateModule / DirectorModule /
+// GuiModule / RootSoundModule / ReplayModule were, and while it was, mEffectsModule was a
+// 1-byte hollow shell: DoUpdate_Effects could not have called Update() on it at all.
+#include "GameSource/Effects/EffectsModule.h"
+// EffectsIO::InputBuffer / OutputBuffer are POINTER-ONLY here (a parameter and a member
+// pointer), so they stay forward-declared. ⛔ Do NOT include the real headers from this
+// keystone: BrnEffectsModuleIO_InputBuffer.h -> BrnWorldModuleIO.h ->
+// BrnPropEntityModuleIO.h -> BrnGuiEventTypeDefs.h, and the canonical GUI event structs
+// there collide (C2011) with ~24 opaque ODR FORKS that GameBridgeNetworkToX.h and
+// GameBridgeReplayToX.h still carry. Those forks are a real latent defect -- they are
+// invisible only because no TU pulls both in -- but retiring them is the network/replay
+// bridges own change, not this one. Measured 2026-09-02.
+namespace BrnEffects { namespace EffectsIO { struct InputBuffer; } }
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"   // BrnSound::Module::RootSoundModule (real class)
 #include "GameSource/Replays/BrnReplayModule.h"   // BrnReplays::ReplayModule (real class -- was an ODR stub)
 namespace BrnNetwork   { class BrnNetworkModule : public CgsModule::ModuleSingleBuffered {}; }
@@ -246,6 +260,39 @@ namespace BrnGame
         // lbPostGui selects the third pass; the first two run together on the pre-GUI call.
         void DoUpdate_Director(bool lbPostGui);
 
+        // @0x823DD0A8 -- the EFFECTS leg of the per-frame cascade (DoUpdate's post-world
+        // position: after DoUpdate_DirectorPostGUI, before DoUpdate_Sound). Register decode
+        // of the console prologue, NOT the Hex-Rays parameter list (which invents 34):
+        //   r4  inStack   r5  outStack   r6  input(pad) out   r7  gameState out
+        //   r8  world out r9  director out  r10 replays pre-sim out
+        //   [sp+0x54] sound pre-update out   [sp+0x5C] effects out
+        //   [sp+0x67] the suspend bool       [sp+0x6E] the update set (u16)
+        // Body: perfmon; self-carve an EffectsIO::InputBuffer "Effects" off the INPUT stack;
+        // LockBuffersForIO (sub_823B78A0: W effectsIn + R director/input/world/gameState/
+        // replays/soundPreUpdate); SetTimerStatusInterface(gm+0x9A0B0C); SetCameraInput(the
+        // director's camera output); pad 0 button bit 1 -> EffectsModule::RestartEffects;
+        // BridgeEntityToEffects; append the game-state action queue; SetReplayStatusInterface;
+        // SetAudioEffectsMessageQueue(soundPreUpdate + 0x2A0); store the suspend bool at
+        // +0xE494; UnlockBuffersForIO (sub_823B7A10); then the module's vtable +0x44 Update.
+        void DoUpdate_Effects(CgsModule::IOBufferStack* lpInputBufferStack,
+                              CgsModule::IOBufferStack* lpOutputBufferStack,
+                              const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
+                              BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutputBuffer,
+                              BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer,
+                              BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutputBuffer,
+                              BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplaysPreSimOutputBuffer,
+                              BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutputBuffer,
+                              BrnEffects::EffectsIO::OutputBuffer* lpEffectsOutputBuffer,
+                              bool lbSuspendEffects,
+                              BrnUpdateSet leUpdateSet);
+
+        // @0x823CDF00 -- the WORLD -> EFFECTS bridge, called by DoUpdate_Effects inside the
+        // effects input buffer's write lock. Six installs plus the eight-slot boost copy;
+        // the update set's bit 0x100 selects the REPLAY active-race-car interface.
+        void BridgeEntityToEffects(const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer,
+                                   BrnEffects::EffectsIO::InputBuffer* lpEffectsInputBuffer,
+                                   BrnUpdateSet leUpdateSet);
+
         // @0x823BCFD0 -- tick the game and sim timers once per sim sub-step. The console
         // first drains the game-state and director TimerRequests queues through
         // TimerRequestInterface::ApplyToTimers; both producers are un-staged on this build,
@@ -275,6 +322,8 @@ namespace BrnGame
         // Fold into the real DoUpdate cascade when the module scheduler moves under the game
         // module's own spines.
         BrnWorldIO::UpdateOutputBuffer* GetWorldUpdateOutputBuffer() { return mpWorldUpdateOutputBuffer; }
+        BrnEffects::EffectsIO::OutputBuffer* GetEffectsOutputBuffer() { return mpEffectsOutputBuffer; }
+        BrnEffects::EffectsModule& GetEffectsModule() { return mEffectsModule; }
         // The PC pad fill's output buffer (driving-input wave 2026-08-11): the live world
         // drive (DriveWorldUpdateFrame) needs it to run BridgeControllerToWorld, exactly as
         // GetWorldUpdateOutputBuffer above serves the same caller.
@@ -901,6 +950,12 @@ namespace BrnGame
         // other per-sub-step static IO buffers instead. Same lifetime either way.
         // See GetWorldUpdateOutputBuffer() above.
         BrnWorldIO::UpdateOutputBuffer*        mpWorldUpdateOutputBuffer;
+        // ⭐ THIS SUB-STEP'S EFFECTS OUTPUT BUFFER. The console's DoUpdate @0x823F0AF8
+        // creates ONE EffectsIO::OutputBuffer near the top (pseudocode :387) and destroys it
+        // at the very bottom (:1159), threading it through DoUpdate_Effects and (as a
+        // lock-only participant) DoUpdate_Sound. DoUpdate is a PC leaf here, so it lives with
+        // the other per-sub-step buffers in CreateStaticIOBuffers.
+        BrnEffects::EffectsIO::OutputBuffer*   mpEffectsOutputBuffer;
         // ---- ⚠️ FLAG PC quality-of-life: the dispatch camera latch (no console members) ---
         // The last two simulation ticks' worth of the director's published camera, plus the
         // frame-local blend of them. See LatchDispatchCamera / GetInterpolatedDispatchCamera.

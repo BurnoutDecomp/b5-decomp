@@ -38,4 +38,15 @@ namespace CgsDev
     {
         mpFont = lrFont;
     }
+
+    // DrawAxis (CgsDebug3DImmediateRender.h:83) -- the coordinate-axis gizmo
+    // EffectsDebugComponent::RenderWorld @0x82278DB8 draws over every playing LION effect's
+    // transform. Empty here for the same reason Begin/End above are: this whole renderer is
+    // the PC bring-up shell -- it has no vertex path yet, so every draw entry is a no-op.
+    // Bodied (rather than left declaration-only) because mounting the effects module made
+    // RenderWorld a link consumer of it. Fill in with the rest of the renderer.
+    void Debug3DImmediateRender::DrawAxis(const rw::math::vpu::Matrix44Affine& /*lrTransform*/,
+                                          const rw::RGBA& /*lrColour*/)
+    {
+    }
 }

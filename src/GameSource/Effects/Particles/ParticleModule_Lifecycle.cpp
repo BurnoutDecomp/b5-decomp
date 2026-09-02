@@ -347,11 +347,12 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
                 "ParticleModule::Prepare's BrnDebrisRenderer::Construct -- its renderer "
                 "argument is mWorldTexRenderer, a ContainedInterface placeholder");
         }
-        for (u32 luArray = 0; luArray < KU_NUM_DEBRIS_ARRAYS; ++luArray)
-        {
-            maDebris[luArray].Construct(&mBucketManager,
-                                        static_cast<Native::EDebrisArrayID>(luArray));
-        }
+        // ...and the five BrnDebrisArray::Construct calls beside it. NOT CALLED: the array's
+        // Construct binds `mpParams = &_gaDebrisArrayParams[type]`, and that table is an
+        // `extern const` with no definition anywhere in the tree -- writing a zero-filled one
+        // would be a fabricated constant, and the debris family is not on this wave's path.
+        // Announced with its sibling above; both go live with the debris pass.
+        (void)KU_NUM_DEBRIS_ARRAYS;
 
         // --- simple particles ---------------------------------------------------------------
         // BrnSimpleParticleRenderer::Construct(this+0x228B8, mpHeapMalloc, this+0x9274) and,
