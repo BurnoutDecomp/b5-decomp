@@ -90,6 +90,29 @@ namespace Vehicle
     //   [kerb-imp]  one line per world impulse the solver applies (BrnDeformableObject.cpp)
     // Each tag is budget-limited and SAYS SO when the budget runs out -- a silent stop reads
     // exactly like "the kerb never touched anything".
+    //
+    // MEASURED 2026-09-02 (kerb waves r1/r2, Waterfront pavement kerb x~3391.5 z -1620..-1660, a
+    // 0.15 m step; runs scratch/flow_run/kerbw_r1, kerbw_r2, BRN_KERB_PROBE=1, every frame):
+    //   * The kerb FACE triangle (triN (-0.999, 0, 0.039), vertex y 0.27/0.285/0.12) classifies
+    //     CURB on every contact -- h = -0.000 / -0.000 / -0.150 against kvfMaxCurbHeight 0.25.
+    //     The harvest normal arrives TILTED, not the face normal: (-0.48, 0.87, 0.02) and
+    //     (-0.71, 0.71, 0.03) -- the sensor sphere rides the kerb's top edge.
+    //   * BOTH culls fire on every kerb-face contact: (a) dA 0.06..0.08 < wpH 0.0 + cullH 0.4
+    //     (mbMinWheelDistValid 1), (b) upDotAg 0.9992 > 0.8 and dB 0.000002..0.000004 < 0.4.
+    //     The contact is re-pointed to the body Up axis and the solver then applies NO impulse
+    //     ([kerb-imp] is empty through the whole crossing) -- the kerb is NOT treated as a wall.
+    //   * Cull (a) alone already catches every one of them, and its inputs (CalculateNewWheelPlane,
+    //     e312c005 2026-08-07; this whale 43bb9c20 2026-08-14) predate the above-ground-ray fix
+    //     (c6cb403f). So "the missing ray disabled the second cull and kerbs became walls" is
+    //     REFUTED by chronology: pre-fix, cull (a) was re-pointing them just the same.
+    //   * The car's response through a 25-degree, 30-38 mph forward crossing (r2 f1013-1040): body
+    //     +0.10 m per axle step, roll rate peak +0.48 / -0.58 rad/s, pitch |0.10| rad/s, velocity
+    //     heading 25.1 -> 25.8 deg, NO speed loss (accelerating 30.2 -> 39.7 mph throughout).
+    //   * The one sharp event on film is NOT in this function: reversing over the same kerb at
+    //     106 mph (r1 f2578-2588) the car lost 6.2 mph in ONE frame and yawed at 0.47 rad/s at
+    //     the exact frame the FRONT wheel mounted (traction hit y 0.125 -> 0.276), with zero body
+    //     impulses -- that is the wheel/suspension path (ApplyWheelWeight -> UpdateSuspensionSprings
+    //     -> tyre forces), not the world-contact validation. Open lead, un-audited.
     u32 guKerbProbeFrame = 0u;
 
     bool KerbProbeArmed()
