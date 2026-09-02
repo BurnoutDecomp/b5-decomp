@@ -120,6 +120,77 @@ namespace Vehicle
     //     discarded the kerb face reaches the solver as a wall: 51 impulses of 950..1121 along
     //     (-1.00, 0.00, 0.04), the wheels never mount (y 0.444 -> 0.445), the car is steered along
     //     the kerb 23 -> 16 deg. That is the failure the culls prevent, and NOT the owner's symptom.
+    //
+    // ==============================================================================================
+    // MEASURED 2026-09-02, WAVE 2 (runs kerbX_r1..r4). Two INDEPENDENT kerb hypotheses tested; both
+    // REFUTED. Nothing here changed a constant or a gate -- the whole wave is measurement.
+    //
+    // (A) "A WHEEL IS A CUBE AND A CUBE CANNOT CLIMB A STEP, SO THE GAME MUST HAVE A HOP THRESHOLD
+    //     THE DECOMP IS MISSING." The premise is wrong on this build. An ATTACHED wheel's
+    //     world-collision proxy is a SPHERE, written every frame by DeformableObject::
+    //     UpdatePostPhysics @0x825DFEB0 into maWorldSensorSpheres[nSens + wheel] (radius =
+    //     WheelSpec::mScale.x / 2; see the [kerb-wsph] banner in BrnDeformableObject_Update.cpp),
+    //     and GetSpheresForCar hands the world test all nSens + 4 of them. MEASURED LIVE: nSens 20,
+    //     wheel spheres at indices 20..23, radius 0.128 / 0.130 / 0.150 m, while the tyre's actual
+    //     rolling radius is 0.331 / 0.342 m ([wsus-attr] "rad"). So the wheel primitive is a small
+    //     hub-level sphere whose lowest point rides ~0.25 m ABOVE the road: it is not what meets the
+    //     kerb at all. In four runs the wheel spheres produced 319 world contacts, none of them on a
+    //     kerb face -- the kerb is met by the BODY-SHELL deformation sensors (indices 4..13).
+    //
+    // (B) "THE THRESHOLD IS THE GROUND CONTACT CULL HEIGHT AND IT IS 0.4, NOT 0.25." Both numbers
+    //     are real, they are DIFFERENT constants, and this TU already has both right:
+    //       * "Ground Contact Cull Height" is flt_82F2A148. The console NAMES IT ITSELF --
+    //         VehicleManagerDebugComponent::OnActivate @0x825B5D90 calls
+    //           CgsDev::DebugComponent::RegisterVariable(this, &flt_82F2A148, "Crashes",
+    //                                                    "Ground Contact Cull Height");
+    //           SetRange(&flt_82F2A148, 0.0, 1.0);  SetStep(&flt_82F2A148, 0.01);
+    //         which is exactly the debug slider a retail-build experimenter would move. Image byte
+    //         value (x360rd) 0x3ECCCCCD == 0.4 -> KF_GROUND_CONTACT_CULL_HEIGHT below. Its two live
+    //         consumers are this function and HandleTrafficCarWorldPotentialContact @0x8263F0F0
+    //         (BrnVehicleManager_TrafficCrashArms.cpp:77, also 0.4). Nothing writes it at runtime.
+    //       * kvfMaxCurbHeight is a SEPARATE literal. The load is unambiguous in the asm --
+    //         0x825C6684  lfs f0, (flt_8208F834 - 0x8208F9C8)(r14)  -- and x360rd reads
+    //         0x8208F834 == 0x3E800000 == 0.25. (The other seven functions that reference that word
+    //         are unrelated 0.25s: GetAftertouchValues, Engine::Update, UpdateFreezing,
+    //         ApplyEngineForces, SetupAttribsForAI, VehicleManager::Construct.) So "we picked the
+    //         wrong pool entry" is refuted from the image, not argued.
+    //     The two are not interchangeable: 0.25 is compared against TRIANGLE VERTEX HEIGHTS ABOVE
+    //     THE ROAD (curb vs wall), 0.4 against a DISTANCE from the wheel/above-ground plane (cull or
+    //     not). Lowering the 0.4 makes cull (a) miss and kerb faces reach the solver -- which is why
+    //     moving that slider makes a retail car catch on everything, and is evidence FOR the
+    //     mechanism, not against our value.
+    //
+    // (C) THE KERB IS HOPPED, MEASURED TWICE, AT BOTH ENDS OF THE SPEED RAMP (Waterfront kerb,
+    //     x ~3391.5, face triN (-1.000, 0.000, 0.023), top y 0.24, road y 0.075..0.081 -> a
+    //     0.158..0.165 m step):
+    //       kerbX_r2  60 mph, ~10 deg oblique: ~200 contacts f1140-1175, every one curb 1 / wall 0,
+    //                 cull (a) fires (dA 0.13..0.16 < 0.4), re-pointed, ZERO impulses, speed
+    //                 58.2 -> 64.3 mph (still ACCELERATING), yaw 0.01 rad/s, roll +-0.5 rad/s.
+    //       kerbX_r4  24 mph, HEAD-ON (perpendicular): kerb-face contacts f1007-1022 from sensors
+    //                 4/6/8/10..13, every one curb 1 / wall 0, dA 0.038..0.095 < cullH, re-pointed,
+    //                 ZERO impulses; front wheels mount at f1010 (road contact y 0.081 -> 0.239);
+    //                 speed 22.4 -> 28.9 mph, again NO loss. At f1034 the car meets the building
+    //                 beyond the pavement: wall 1, 3 impulses, 28.6 -> 10.6 mph. Correct, and the
+    //                 contrast is the control -- this function CAN stop a car, and does, for a wall.
+    //     ⭐ The speed ramp is corroborated to three decimals in the same run: cullH 0.372 at
+    //     23.95 mph, 0.381 at 24.27, 0.389 at 24.59, 0.400 at >= 25 -- i.e. 0.4*(v-10)/15 exactly.
+    //
+    // (D) mi8NumWorldCollisions "3..15 on ~7% of flat-tarmac frames" is EXPLAINED, not a bug:
+    //     [wsus] nwc over run r4 is 0 on 59322 steps and 6 on 8019 (11.8% non-zero), and the
+    //     matching [kerb] lines show them to be body-shell sensor spheres touching the ROAD
+    //     (triN ~ (0, 1, 0)), classified curb, culled to the wheel plane, no impulse. That is what
+    //     gfGroundContactCullHeight exists for; the console produces them too.
+    //
+    // ⛔ WHAT THIS WAVE DID NOT DO. It did not reproduce the 106 mph one-step 6.2 mph loss (open).
+    //     It did not re-decode the raw words of UpdatePostPhysics's wheel-sphere block (the geometry
+    //     is read from the committed transcription, not re-derived). It did not test a kerb TALLER
+    //     than 0.25 m -- above that the classifier says WALL by design and the culls are suppressed,
+    //     which is the console's own behaviour and the remaining candidate for "weird kerbs".
+    // ⚠️ AND IT LOST A RUN TO EXACTLY THE TRAP THE LAST WAVE FLAGGED. kerbX_r3 showed a textbook
+    //     15.7 -> 4.0 mph one-step-ish stop "at the kerb"; the FRAMES show a stationary orange
+    //     traffic car parked across the approach at (~3390, -1639). The log alone was persuasive and
+    //     wrong. Open the frames.
+    // ==============================================================================================
     u32 guKerbProbeFrame = 0u;
 
     bool KerbProbeArmed()
