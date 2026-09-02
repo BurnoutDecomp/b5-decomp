@@ -309,31 +309,42 @@ namespace Deformation
     // UpdateSkinningOffsets @0x825DFA90
     //
     // Drive the IK driven points into each IK part's skin. The asm runs in three passes:
-    //  (1) Build the per-frame clamp box from the vehicle body's suspension extents (body +1744 /
-    //      +1760 / +1768) -- used by the box-clamped parts.
-    //  (2) If miNumDrivenPoints > 0, walk the live driven points; the running base into
-    //      maVerletOffsets_Scratch (v4) advances per live driven point.
+    //  (1) Build the per-frame clamp box from the attached vehicle's DEFORMED bounding box
+    //      (`lwz r10, 0x194C(this)` = mVehicleBody's vehicle; `addi r9, r10, 0x6D0` = mDeformableAABB
+    //      .mMin, +0x10 = .mMax) inflated by unk_82FB9550 -- used by the box-clamped parts.
+    //  (2) Walk the live TAG points (`lwz r9, 0x4B10(this)` == miNumTagPoints; base 0x3B10, stride
+    //      0x20); for each SKINNED one (`lbz 0x41(spec)`) gather (mPos - initial, w = scratch) into
+    //      maVerletOffsets_Scratch (this+0x10E0); the running row (r29) advances per skinned tag.
     //  (3) Walk every IK part (miNumIKBodyParts): skip parts in state E_PART_STATE_DETATCHED (4);
     //      bonnet/boot parts (GetPartType == 24/25) skin through UpdateSkinningOffsetsWithinBox with the
-    //      clamp box, all others through UpdateSkinningOffsets. v4 advances by each part's
+    //      clamp box, all others through UpdateSkinningOffsets. r29 advances by each part's
     //      GetNumberOfDrivenPoints so the scratch slice handed to each part is its own window.
-    // The clamp-box construction is the dense VMX (modelled); the part walk + the running driven-point
-    // index + the per-part-type dispatch are exact.
+    //
+    // ⭐⭐ 2026-09-02 (rest-rows wave) -- TWO TRANSCRIPTION DEFECTS RETIRED HERE, both measured:
+    //   (a) The clamp box was built from FLAGGED-ZERO "suspension extents", so the box was
+    //       [-0.1,+0.1] x [0,0] x [0,0] around the car origin and UpdateSkinningOffsetsWithinBox
+    //       clamped every bonnet/boot driven point INTO it: the player's rows 40/41 read
+    //       (-0.782, 0.148, 0.004) / (0.819, 0.148, 0.004) at rest == (0.1,0,0) - p0 exactly, the
+    //       sedan's row 49 (-0.756, 0.326, 0) is the same arithmetic on its own spec. Those are the
+    //       "phantom rest rows" that sailed the panel and tripped the fatal test at first sight.
+    //       The console reads vehicle+0x6D0/+0x6E0 == SimpleVehiclePhysics::mDeformableAABB (the
+    //       same pair ApplySensorImpulse's crash rows use) -- an ordinary box around the whole car.
+    //       A flagged zero is only safe where 0 is the identity; here it was a clamp target.
+    //   (b) The gather loop bound is miNumTagPoints (this+0x4B10 -- the word ResetDeformation
+    //       @0x82639FD8 stores the tag count into), not miNumDrivenPoints.
     // =============================================================================================
     void DeformableObject::UpdateSkinningOffsets()
     {
-        // --- (1) clamp box from the body suspension extents (modelled VMX) ------------------------
-        // asm 7783-7810: load the FLAGGED inflation row (unk_82FB9550), then the body suspension-extent
-        // rows -- v27 = body +1744 (the extent-min row), v28 packs body +1760 / +1768 (the extent-max
-        // row). The clamp box the WithinBox parts consume is
-        //     box.min = bodyExtentMin - margin ; box.max = bodyExtentMax + margin
-        // (vsubfp v13 = v13 - v0 ; vaddfp v0 = v12 + v0). The margin row is the FLAGGED-0
-        // KVF_SKINNING_CLAMP_MARGIN. FLAG: the body suspension-extent rows (body +1744/+1760/+1768) are
-        // NOT pinned on the minimal VehiclePhysics/ExternalPhysicsBody slice -- they are carried as zero
-        // extents here, so the box is (-margin, +margin) and stays inert; the subtract/add SHAPE is exact.
-        // Promote bodyExtentMin/Max to the real suspension-extent reads when that slice grows.
-        const Vector3 lBodyExtentMin = { 0.0f, 0.0f, 0.0f, 0.0f };  // FLAG: body +1744 (suspension extent min)
-        const Vector3 lBodyExtentMax = { 0.0f, 0.0f, 0.0f, 0.0f };  // FLAG: body +1760/+1768 (suspension extent max)
+        // --- (1) clamp box from the vehicle's deformed AABB (0x825DFAB4..0x825DFB0C) ---------------
+        //   0x825DFAB4  lwz r10, 0x194C(r31)      ; mVehicleBody's attached VehiclePhysics
+        //   0x825DFAB8  lvx128 v0, unk_82FB9550   ; the inflation row {0.1, 0, 0, 0}
+        //   0x825DFAC4  addi r9, r10, 0x6D0       ; mDeformableAABB.mMin   (+0x10 == .mMax)
+        //   0x825DFAF4  vsubfp v13, v13, v0       ; box.min = aabb.min - row
+        //   0x825DFB00  vaddfp v0, v12, v0        ; box.max = aabb.max + row
+        // The console reads the vehicle unconditionally (Prepare binds it before any reset).
+        const BrnPhysics::Vehicle::VehiclePhysics* lpClampVehicle = mVehicleBody.GetVehiclePhysics();
+        const Vector4& lBodyExtentMin = lpClampVehicle->GetDeformableAABB().mMin;   // vehicle + 0x6D0
+        const Vector4& lBodyExtentMax = lpClampVehicle->GetDeformableAABB().mMax;   // vehicle + 0x6E0
         CgsGeometric::AxisAlignedBox lClampBox;
         lClampBox.mMin.x = lBodyExtentMin.x - KVF_SKINNING_CLAMP_MARGIN.x;
         lClampBox.mMin.y = lBodyExtentMin.y - KVF_SKINNING_CLAMP_MARGIN.y;
@@ -344,19 +355,19 @@ namespace Deformation
         lClampBox.mMax.z = lBodyExtentMax.z + KVF_SKINNING_CLAMP_MARGIN.z;
         lClampBox.mMax.w = 0.0f;
 
-        // --- (2) gather the driven tag-point offsets into the Verlet scratch (v4) ------------------
-        // asm 7811-7851: when miNumDrivenPoints > 0, walk the live tag points (maTagPoints, byte +15120,
-        // 32-byte stride; the loop bound is result[4804] == miNumDrivenPoints). For each tag point whose
-        // spec carries the skinned-point flag (*(*v15 + 65) == TagPointSpec::mbSkinnedPoint), compute the
-        // offset-from-rest ((mPos - spec.mInitialPosition), vsubfp v0 = v0 - v12) and store it into
-        // maVerletOffsets_Scratch[scratchBase] with the w lane carrying the tag point's scratch amount
-        // (_R10[7] == mfScratchAmount); the scratch base (v4) advances by one Vector3Plus ONLY when the
-        // flag is set. The part walk in (3) then consumes this gathered slice through &maVerletOffsets_
-        // Scratch[liRunning].
+        // --- (2) gather the skinned tag-point offsets into the Verlet scratch (0x825DFB10..0x825DFB88)
+        // `lwz r9, 0x4B10(r31)` is miNumTagPoints (this+0x4B10 -- the tag pool's count word, stored by
+        // ResetDeformation @0x82639FD8 straight after the tag count is read; the tag base is 0x3B10 and
+        // the driven pool starts at 0x4B20). Walk EVERY live tag point; for each whose spec carries the
+        // skinned-point flag (`lbz r6, 0x41(spec)` == TagPointSpec::mbSkinnedPoint) store
+        // (mPos - spec.mInitialPosition) with w = mfScratchAmount (`lfs f0, 0x1C(tag)`) into
+        // maVerletOffsets_Scratch[row]; the row (r29 / r11 += 0x10) advances ONLY when the flag is set.
+        // The part walk in (3) then consumes the rows that follow.
+        // (Was `li < miNumDrivenPoints` -- the wrong count word; retired 2026-09-02.)
         s32 liScratchBase = 0;
-        if ( miNumDrivenPoints > 0 )
+        if ( miNumTagPoints > 0 )
         {
-            for ( s32 li = 0; li < miNumDrivenPoints; ++li )
+            for ( s32 li = 0; li < miNumTagPoints; ++li )
             {
                 TagPoint& lrTagPoint = maTagPoints[li];
                 const TagPointSpec* lpSpec = lrTagPoint.GetSpec();   // *v15 == mpSpec (TagPoint +0x10)
@@ -1466,6 +1477,34 @@ namespace Deformation
                 lrScratch.y = (lTarget.y - lrInitial.y) + lfSuspensionY;   // vperm<0,5,2,3> Y swap
                 lrScratch.z = lTarget.z - lrInitial.z;
                 // w lane preserved (vperm<0,1,2,7>).
+
+                // ---- [restrow-wheel] NOT X360; opt-in BRN_RESTROW_PROBE=1. DELETE-WHEN attributed.
+                {
+                    static s32 siWheelProbe = -1;
+                    if ( siWheelProbe < 0 )
+                    {
+                        const char* lpcEnv = getenv( "BRN_RESTROW_PROBE" );
+                        siWheelProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+                    }
+                    static s32 siWheelLines = 0;
+                    if ( siWheelProbe == 1 && siWheelLines < 48 && CgsDev::Log::gpDebugPrint != 0 )
+                    {
+                        ++siWheelLines;
+                        const s32 liA = static_cast<s32>(lrTag.GetDeformationSensorA() - &maDeformationSensors[0]);
+                        const s32 liB = static_cast<s32>(lrTag.GetDeformationSensorB() - &maDeformationSensors[0]);
+                        *CgsDev::Log::gpDebugPrint
+                            << "[restrow-wheel] obj " << static_cast<s32>(mu16DeformableObjectIndex)
+                            << " owner " << static_cast<s32>(GetHandlingBodyIdHighByte())
+                            << " wheel " << liWheel << " tag " << static_cast<s32>(lu8Tag)
+                            << " A " << liA << " (" << lrPosA.x << "," << lrPosA.y << "," << lrPosA.z << ")"
+                            << " B " << liB << " (" << lrPosB.x << "," << lrPosB.y << "," << lrPosB.z << ")"
+                            << " target (" << lTarget.x << "," << lTarget.y << "," << lTarget.z << ")"
+                            << " init (" << lrInitial.x << "," << lrInitial.y << "," << lrInitial.z << ")"
+                            << " wheelPos.y " << lrWheel.mPosition.y
+                            << " streamed.y " << lrWheel.mStreamedPositionPlusTwistAmount.y
+                            << " row (" << lrScratch.x << "," << lrScratch.y << "," << lrScratch.z << ", w " << lrScratch.w << ")\n";
+                    }
+                }
             }
         }
     }
