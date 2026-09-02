@@ -1465,10 +1465,11 @@ namespace Vehicle
         //   -> BridgeArticulatedJointRequestsToSim -> DeallocateInternalBuffers.
         // The two BasePriorityQueue::Clear calls are the assert StrStream constructions at
         // :2911/:2912, not queue drains. sub_8259D670 / CgsScen are EventQueue<T>::GetEvent(s32).
-        // THREE NAMED GATES remain inside the landed body, none on the race-car-vs-traffic path:
-        //   HandleTrafficCarTrafficCarPotentialContact @0x8263EC90 (279)  -- unbodied
-        //   HandleTrafficCarWorldPotentialContact      @0x8263F0F0 (220)  -- unbodied
+        // ONE NAMED GATE remains inside the landed body, not on the race-car-vs-traffic path:
         //   the mbForceNoSlowMo triangle-cache clear                      -- no cache reader yet
+        // RETIRED 2026-09-02 (traffic crash wave): HandleTrafficCarTrafficCarPotentialContact
+        //   @0x8263EC90 and HandleTrafficCarWorldPotentialContact @0x8263F0F0 are bodied in
+        //   BrnVehicleManager_TrafficCrashArms.cpp and called from queue [13] / queue [9].
         // RETIRED 2026-09-02 (crash wave): HandleCrashPredictionForRaceCarAndWorld @0x82640C28 is
         //   mounted and CALLED -- its two callees (HandleRaceCarWorldPotentialContact @0x8263E3B8,
         //   PredictCarWorldContactTime @0x825B5300) are bodied in BrnVehicleManager_WorldCrashArm.cpp.
@@ -1514,6 +1515,28 @@ namespace Vehicle
             f32 lfTimestep);
 
         VecFloat PredictCarWorldContactTime(const CgsSceneManager::SceneManagerIO::PotentialContact& lContact);
+
+        // BODIED 2026-09-02 (traffic crash wave) in BrnVehicleManager_TrafficCrashArms.cpp -- the two
+        // traffic-side arms DoCrashPrediction dispatches from queue [13] / queue [9]. Signatures are
+        // the DecFIGS mangles verbatim (0x797750 / 0x7972AC); DoCrashPrediction's own outgoing-arg
+        // stores (r19 request / r20 vehicle-out / r17 manager-out / r21 deformation, f1 timestep)
+        // confirm the order. Neither body reads the request interface; the WORLD arm reads none of
+        // the four and commits nothing on the console (see that TU's banner before "fixing" it).
+        void HandleTrafficCarTrafficCarPotentialContact(
+            CgsSceneManager::SceneManagerIO::PotentialContact lContact,
+            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+            f32 lfTimestep);
+
+        void HandleTrafficCarWorldPotentialContact(
+            CgsSceneManager::SceneManagerIO::PotentialContact lContact,
+            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+            f32 lfTimestep);
 
         // ==========================================================================================
         // WAVE T3 ROUND 2, OWNER B -- the RACE-CAR-vs-PHYSICAL-TRAFFIC contact branch of the
