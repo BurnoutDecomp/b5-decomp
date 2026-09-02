@@ -91,3 +91,35 @@ EffectsVertexBufferLocked& EffectsVertexBufferLocked::EndBatch(
 
     return *this;
 }
+
+// ---------------------------------------------------------------------------------------------
+// EffectsVertexBuffer::Construct(void*, u32) / ::UnLock
+//
+// No X360 export -- both are inlined into EffectsVertexBufferManager (Construct @0x822807D0
+// captures each buffer's locked GPU write address and hands it here; Lock @0x82279B18 /
+// UnLock @0x82279BA8 open and close the write window). Construct seats the write cursor at
+// the base of the mapped range and records its extent; UnLock closes the window by clearing
+// the cursor, which is what makes the manager's `!mbLocked` assert (EffectsVertexBufferManager.h)
+// meaningful. Both are spelled against this type's own members -- see its header for the
+// per-member attestation.
+// ---------------------------------------------------------------------------------------------
+void EffectsVertexBuffer::Construct(void* lpBuffer, u32 luBufferSize)
+{
+    u8* const lpBase = static_cast<u8*>(lpBuffer);
+    mpLockedBufferBaseAddress    = lpBase;
+    mpLockedBufferCurrentAddress = lpBase;
+    mpLockedBufferTopAddress     = lpBase + luBufferSize;
+    mxFlags                      = 0;   // neither locked nor in a batch
+}
+
+void EffectsVertexBuffer::Destruct()
+{
+    // Nothing owned: the locked span is the manager's vertex-buffer memory, borrowed.
+}
+
+void EffectsVertexBuffer::UnLock()
+{
+    CGS_ASSERT((mxFlags & (KX_FLAG_LOCKED | KX_FLAG_IN_BATCH)) == KX_FLAG_LOCKED,
+               "( mxFlags & ( KX_FLAG_LOCKED | KX_FLAG_IN_BATCH ) ) == KX_FLAG_LOCKED");
+    mxFlags = static_cast<u8>(mxFlags & ~KX_FLAG_LOCKED);
+}

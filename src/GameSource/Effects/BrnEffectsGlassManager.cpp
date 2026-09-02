@@ -29,7 +29,11 @@ namespace BrnEffects
     // faithful without fabricating a value; NAME the global properly and drop this
     // placeholder once its home lands. Almost certainly the invalid-entity sentinel
     // (0xFFFFFFFF) but that is NOT proven here, so it is left as an external read.
-    extern const u32 guResetVehicleId_82CDAFA0;                    // dword_82CDAFA0
+    // ⭐ READ OUT OF THE IMAGE 2026-09-02 (tyre-mark wave), so it is no longer an external
+    // with no home: `x360rd.py 82CDAFA0` returns 0xFFFFFFFF. The comment above guessed exactly
+    // that and was right, but the guess is now a measurement -- and the link needed the
+    // definition (LNK2019 on the first effects link). It is the invalid-entity sentinel.
+    const u32 guResetVehicleId_82CDAFA0 = 0xFFFFFFFFu;              // dword_82CDAFA0
 
     // Reset @ 0x8228F298
     //   Stop any LION effect this slot still owns, then clear the slot to idle:
@@ -221,5 +225,36 @@ namespace BrnEffects
                 }
             }
         }
+    }
+
+    // =====================================================================================
+    // Construct(ParticleModule*) / Destruct  (DWARF BrnEffectsGlassManager.h:63)
+    //
+    // No X360 export: both are INLINED into EffectsModule::Construct @0x8228FE98 /
+    // ::Destruct @0x8227FD78. Construct binds the module the slots start and stop their LION
+    // effects through and puts every slot in the idle state -- which is BrnGlassSmashEffect::
+    // Reset @0x8228F298 without the StopLionEffect leg, since a fresh slot owns no effect yet
+    // (its handle is not KU_HANDLE_INVALID until this runs). The round-robin cursor starts at 0.
+    // Destruct has nothing to release: the slot array is embedded and the module pointer is
+    // borrowed.
+    // =====================================================================================
+    void BrnEffectsGlassManager::Construct(BrnParticle::ParticleModule* lpParticleModule)
+    {
+        mpParticleModule  = lpParticleModule;
+        muNextGlassEffect = 0;
+
+        for (u32 luEffect = 0; luEffect < KU_MAX_GLASS_EFFECTS; ++luEffect)
+        {
+            BrnGlassSmashEffect& lrEffect = maGlassEffects[luEffect];
+            lrEffect.mLocalTransform.SetIdentity();
+            lrEffect.mGlassEffectHandle = BrnParticle::LionEffect::KU_HANDLE_INVALID;
+            lrEffect.mfEffectEndTime    = 0.0f;
+            lrEffect.mbEffectActive     = false;
+            lrEffect.mVehicleID.muValue = guResetVehicleId_82CDAFA0;
+        }
+    }
+
+    void BrnEffectsGlassManager::Destruct()
+    {
     }
 }

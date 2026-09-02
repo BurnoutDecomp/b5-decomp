@@ -30,6 +30,8 @@
 #include "GameSource/AttribSys/Generated/classes/visualfxsurface.h"  // Attrib::Gen::visualfxsurface
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"  // Attrib::{Collection, DefaultDataArea}
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the NOT-RECONSTRUCTED announcement
+#include <cstdio>   // snprintf
 #include "rw/math/vpu/vector3_operation.h"                    // rw::math::vpu::{Magnitude, operator*, operator-}
 #include "rw/math/fpu/scalar_operation.h"                     // rw::math::fpu::{Max, Clamp, Abs}
 
@@ -255,4 +257,40 @@ void WheelStateMachine::Update(const CarState& lCarState,
     }
 }
 
+
+    // =====================================================================================
+    // FireNativeParticle  @0x82288C30 (DWARF WheelStateMachine.h:87)
+    //
+    // ⛔ NOT RECONSTRUCTED, announced not faked. The body builds one randomised spawn vector
+    // from the wheel's position/velocity and the module's LCG ring, and its terminal call is
+    //     BrnParticle::ParticleModule::SpawnWheelSmoke(arrayId, size, spawnPosition)
+    // which pushes into ParticleModule::maSimpleParticles -- and BrnSimpleParticleArray is an
+    // honest PARTIAL in this tree (only AcquireTexture's mbDirty + mpTextureNameRef are
+    // modelled; there is no particle pool to push into and no Construct that would give it
+    // one). Transcribing the arithmetic would end in a call with no destination.
+    //
+    // This is SKID SMOKE, not the skid MARK: HandleWheels @0x82296C80 lays the tyre mark
+    // through TrailSystem::AddTrailSegment on a completely separate limb, and that limb is
+    // live. Reachable (WheelStateMachine::Update calls this once the per-layer particle
+    // accumulator passes 1.0), hence a loud no-op rather than a trap.
+    // =====================================================================================
+    void WheelStateMachine::FireNativeParticle(Vector3 /*lWheelPosition*/, Vector3 /*lWheelVelocity*/,
+                                               u32 /*leParticleType*/, Vector3 /*lSpawnPosition*/,
+                                               const RaceCarParticleEffectHelper& /*lEffectHelper*/,
+                                               const CarState& /*lCarState*/,
+                                               f32 /*lfSpawnTime*/, f32 /*lfKickUpSpeed*/,
+                                               Vector3 /*lvBackwardEmissionBias*/,
+                                               f32 /*lfAngularVelocityScale*/)
+    {
+        static bool sbLogged = false;
+        if (!sbLogged)
+        {
+            sbLogged = true;
+            CgsDev::Log::WriteToLog(
+                "[effects] NOT RECONSTRUCTED: WheelStateMachine::FireNativeParticle @0x82288C30 "
+                "(its terminal ParticleModule::SpawnWheelSmoke pushes into maSimpleParticles, and "
+                "BrnSimpleParticleArray is a partial layout with no particle pool). Skid SMOKE only "
+                "-- the tyre MARK goes through HandleWheels -> TrailSystem::AddTrailSegment.\n");
+        }
+    }
 } // namespace BrnEffects

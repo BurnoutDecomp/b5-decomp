@@ -61,4 +61,34 @@ namespace BrnEffects
         // Per-frame hook.
         OnTick(lCarState, lHelper);
     }
+
+    // =====================================================================================
+    // The three base virtuals (DWARF EffectsStateMachine.h:76/:80/:83).
+    //
+    // NONE of them has an X360 export -- the ARTIST build carries only OnConstruct @0x822798D0
+    // and Tick @0x82280468 for this class. The base slots are therefore empty defaults that
+    // ICF folded away (every derived machine overrides all three; Tick reaches them only
+    // through the vtable). Empty is what the console does, so empty is what is written here --
+    // with the one exception the compiler forces: OnDetermineNextState must return a state,
+    // and "the state we are already in" is the console's own no-transition value (Tick's
+    // `leNextState != mState` test then does nothing).
+    // =====================================================================================
+    EffectsState EffectsStateMachine::OnDetermineNextState(CarState& /*lCarState*/,
+                                                          bool /*lbStateTimerExpired*/,
+                                                          EffectsState leCurrentState,
+                                                          RaceCarParticleEffectHelper& /*lHelper*/)
+    {
+        return leCurrentState;
+    }
+
+    void EffectsStateMachine::OnChangeState(EffectsState /*leNewState*/,
+                                            RaceCarParticleEffectHelper& /*lHelper*/,
+                                            CarState& /*lCarState*/)
+    {
+    }
+
+    void EffectsStateMachine::OnTick(CarState& /*lCarState*/,
+                                     RaceCarParticleEffectHelper& /*lHelper*/)
+    {
+    }
 }
