@@ -61,6 +61,11 @@ namespace BrnPhysics
     // [crash-response] DIAG -- defined in ExternalPhysicsBody.cpp; see its banner. NOT X360.
     extern const ExternalPhysicsBody* gpCrashResponseDiagBody;
 
+    // [dv] DIAG -- the one-step velocity witness's watched body, defined in
+    // ExternalPhysicsBody.cpp (see its banner). Armed here because this is the only place that
+    // knows which race-car slot is the player. NOT X360.
+    extern const ExternalPhysicsBody* gpDvWatchBody;
+
 namespace Vehicle
 {
     namespace vpu = rw::math::vpu;
@@ -667,6 +672,14 @@ namespace Vehicle
             {
                 gpCrashResponseDiagBody =
                     maRaceCarVehicles[liCar].IsCrashing() ? &maRaceCarVehicles[liCar] : nullptr;
+            }
+
+            // ---- [dv] arm the one-step velocity witness on the PLAYER's body (opt-in; the
+            // witness itself no-ops unless BRN_DV_PROBE names a threshold). Unconditional on
+            // crashing, unlike the arm above: the events it hunts happen while DRIVING.
+            if (liCar == mePlayerActiveRaceCarIndex)
+            {
+                gpDvWatchBody = &maRaceCarVehicles[liCar];
             }
 
             CgsDev::PerfMonCpu::StartMonitor(gs_iUpdateVehiclesPM);
