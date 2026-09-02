@@ -1644,9 +1644,32 @@ namespace Deformation
             if (!lpVehiclePhysics->IsCrashing())   // lbz 0x710
                 continue;
 
+            // [wheel-probe] NOT IN THE X360 BINARY -- opt-in bring-up witness (BRN_WHEEL_PROBE=1):
+            // both sides of every gate this ladder takes, per wheel, on every crashing frame
+            // (capped), plus every Twist / Detach transition. DELETE-WHEN the wheel ladder is
+            // banked on film.
+            static s32 siWheelProbe = -1;
+            if ( siWheelProbe < 0 )
+            {
+                const char* lpcEnv = getenv( "BRN_WHEEL_PROBE" );
+                siWheelProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+            }
+            static s32 siWheelProbeLines = 0;
+            const bool lbProbe = ( siWheelProbe == 1 && CgsDev::Log::gpDebugPrint != 0 );
+
             if (!lpWheel->IsBeingTwisted())
             {
                 // ---- ATTACHED arm (0x826264E8..0x826265F4) ----
+                if ( lbProbe && siWheelProbeLines < 400 )
+                {
+                    ++siWheelProbeLines;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[wheel-probe] obj " << static_cast<s32>(mu16DeformableObjectIndex)
+                        << " wheel " << liWheel << " state 0 offSq "
+                        << rw::math::vpu::MagnitudeSquared(lpTagPoint->GetOffsetFromInitialPosition())
+                        << " vs thrSq " << lpTagPoint->GetDetachThresholdSquared()
+                        << " force " << (mbForceWheelsToDetach ? 1 : 0) << "\n";
+                }
                 if (ShouldDetachWheel(lpTagPoint) || mbForceWheelsToDetach)
                 {
                     lpWheel->Twist();
@@ -1659,6 +1682,11 @@ namespace Deformation
                         default: mWheelTwistLimits.w = lfTwistLimit; break;
                     }
                     ++miNumBrokenWheels;   // +0x6770
+                    if ( lbProbe )
+                        *CgsDev::Log::gpDebugPrint
+                            << "[wheel-probe] TWIST obj " << static_cast<s32>(mu16DeformableObjectIndex)
+                            << " wheel " << liWheel << " limit " << lfTwistLimit
+                            << " broken " << static_cast<s32>(miNumBrokenWheels) << "\n";
                 }
                 continue;
             }
@@ -1698,6 +1726,20 @@ namespace Deformation
             }
             if (!lbDetach && mbForceWheelsToDetach)                                        // lbz 0x672D
                 lbDetach = true;
+
+            if ( lbProbe && ( siWheelProbeLines < 400 || lbDetach ) )
+            {
+                ++siWheelProbeLines;
+                *CgsDev::Log::gpDebugPrint
+                    << "[wheel-probe] obj " << static_cast<s32>(mu16DeformableObjectIndex)
+                    << " wheel " << liWheel << " state 1 twist " << lfTwistAmount
+                    << " limit " << lfTwistLimit << " clamped " << lfClampedTwist
+                    << " speed " << lpVehiclePhysics->GetNormLinearVelocityMag().GetPlus()
+                    << " vs " << KVF_MIN_SPEED_FOR_WHEEL_DETACH.x
+                    << " showtime " << (lpVehiclePhysics->IsPlayerVehicleInShowtime() ? 1 : 0)
+                    << " force " << (mbForceWheelsToDetach ? 1 : 0)
+                    << (lbDetach ? " -> DETACH\n" : "\n");
+            }
             if (!lbDetach)
                 continue;
 
