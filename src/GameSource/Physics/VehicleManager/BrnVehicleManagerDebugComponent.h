@@ -84,6 +84,17 @@ namespace Vehicle
         // ------------------------------------------------------------------------------------
         void Construct(VehicleManager* lpVehicleManager);
 
+        // ------------------------------------------------------------------------------------
+        // @0x825B7880 (114 insns; DWARF BrnVehicleManagerDebugComponent.cpp:1045..1065 by its
+        // assert lines). AN EXPORT HOLE: no .ida-exports JSON exists for it and identity.json has
+        // no row -- decoded from the raw image words 0x825B7880..0x825B7A44 (tools/re/x360rd.py).
+        // Called by VehicleManager::HandleRaceCarWorldPotentialContact @0x8263EC3C on every
+        // committed world crash. Snapshots the PLAYER car's transform / deformable half-extents /
+        // linear velocity and the 80-byte contact into the mLastCrashContact_* slots below --
+        // only for the player's slot, and only while that car is not already crashing.
+        // ------------------------------------------------------------------------------------
+        void RecordCrashContact(const CgsSceneManager::SceneManagerIO::PotentialContact* lpPotentialContact);
+
         // read access to the two contact-classification render
         // gates ValidateRaceCarWorldContact checks (the console reads the component's bytes
         // +597/+598 directly from inside the VehicleManager method; the host goes through these

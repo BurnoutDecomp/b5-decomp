@@ -67,20 +67,19 @@
 // (BrnVehicleManager_DriverArms.cpp's `lpVehicleOutForTakedown`, and the SetRaceCarCrashing call
 // in BrnVehicleManager_UpdateVehiclePhysics.cpp) are deleted with it.
 //
-// REMAINING FORK DEBT (NOT this wave's scope, but the same mangle evidence applies):
-// `HandleCrashPredictionForRaceCarAndWorld` (:1296) and `HandleRaceCarWorldPotentialContact`
-// (:1200) below still carry the GameStateModuleIO spelling, and so does
-// BrnGameState::MugshotManager (BrnMugshotManager.h). Their DWARF mangles are
-// `...PNS0_22VehicleOutputInterfaceE...` and `PKN10BrnPhysics7Vehicle22VehicleOutputInterfaceE`
-// respectively -- i.e. the SAME wrong-namespace fork -- but they were not in the verified set,
-// so the forward declaration below stays alive until their own wave retires them.
+// REMAINING FORK DEBT -- the same mangle evidence applies. `HandleCrashPredictionForRaceCarAndWorld`
+// (:1296) and `HandleRaceCarWorldPotentialContact` (:1200) carried the GameStateModuleIO spelling
+// until 2026-09-02, when the crash wave bodied the world arm and retired it (DWARF mangles
+// `...PNS0_22VehicleOutputInterfaceE...`, NS0_ == BrnPhysics::Vehicle); the forward declaration of
+// the phantom type that lived here is gone with it. The ONE remaining carrier is
+// BrnGameState::MugshotManager (BrnMugshotManager.h, mangle
+// `PKN10BrnPhysics7Vehicle22VehicleOutputInterfaceE`) -- it declares its own copy of the fork.
 namespace BrnPhysics { namespace Vehicle { struct VehicleOutputRequestInterface; } }
 namespace BrnPhysics { namespace Deformation { class DeformationInputInterface; } }
 // The embedding host. Declared only so VehicleManager can befriend it (see the friend block at
 // the end of the public section); BrnPhysicsModule.h includes THIS header, so it must not be
 // included back.
 namespace BrnPhysics { class PhysicsModule; }
-namespace BrnGameState { namespace GameStateModuleIO { class VehicleOutputInterface; } }
 
 // Crash-prediction (race-car-vs-world) collaborators -- forward-declared in their real
 // namespaces (homed by their own TUs; HandleCrashPredictionForRaceCarAndWorld only takes/forwards
@@ -1466,13 +1465,13 @@ namespace Vehicle
         //   -> BridgeArticulatedJointRequestsToSim -> DeallocateInternalBuffers.
         // The two BasePriorityQueue::Clear calls are the assert StrStream constructions at
         // :2911/:2912, not queue drains. sub_8259D670 / CgsScen are EventQueue<T>::GetEvent(s32).
-        // FOUR NAMED GATES remain inside the landed body, none on the race-car-vs-traffic path:
+        // THREE NAMED GATES remain inside the landed body, none on the race-car-vs-traffic path:
         //   HandleTrafficCarTrafficCarPotentialContact @0x8263EC90 (279)  -- unbodied
         //   HandleTrafficCarWorldPotentialContact      @0x8263F0F0 (220)  -- unbodied
-        //   HandleCrashPredictionForRaceCarAndWorld    @0x82640C28        -- bodied but unmountable
-        //      (HandleRaceCarWorldPotentialContact @0x8263E3B8 and PredictCarWorldContactTime
-        //       @0x825B5300 are declare-only, :1393/:1402)
         //   the mbForceNoSlowMo triangle-cache clear                      -- no cache reader yet
+        // RETIRED 2026-09-02 (crash wave): HandleCrashPredictionForRaceCarAndWorld @0x82640C28 is
+        //   mounted and CALLED -- its two callees (HandleRaceCarWorldPotentialContact @0x8263E3B8,
+        //   PredictCarWorldContactTime @0x825B5300) are bodied in BrnVehicleManager_WorldCrashArm.cpp.
         // DWARF signature (BrnVehicleManager.h:899): as declared at :1019 above.
         // ==========================================================================================
 
@@ -1485,23 +1484,30 @@ namespace Vehicle
         // to HandleRaceCarWorldPotentialContact. The two callees are bodied by their own TUs; declared
         // here (declare-only) so this slice can call them.
         // ------------------------------------------------------------------------------------------
-        // @0x82640C28 -- the crash-prediction driver bodied by THIS slice.
+        // @0x82640C28 -- the crash-prediction driver bodied by BrnVehicleManagerCrashPrediction.cpp.
+        // FORK RETIRED 2026-09-02 (crash wave): arg 4 was the phantom
+        // `BrnGameState::GameStateModuleIO::VehicleOutputInterface*` (see the banner at the top of
+        // this header); the DWARF mangle is `PNS0_22VehicleOutputInterfaceE` == BrnPhysics::Vehicle::,
+        // the same type SetRaceCarCrashing takes, and the arm now forwards it there unchanged.
         void HandleCrashPredictionForRaceCarAndWorld(
             f32 lfTimestep,
             BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContactInterface,
             const VehicleInputInterface* lpVehicleInputInterface,
-            BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
+            BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
             BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
             VehicleManagerOutputInterface* lpManagerOutputInterface,
             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
 
-        // Declare-only callees (bodied by their own TUs). Signatures are DWARF-authoritative
-        // (:1200 / :1215). The tri-cache arg is the nested VehicleInputInterface::InTriangleCacheInterface,
-        // which is CgsSceneManager::SceneManagerIO::TriangleCacheInterface.
+        // BODIED 2026-09-02 (crash wave) in BrnVehicleManager_WorldCrashArm.cpp -- these two were
+        // declare-only for the whole life of the tree, which is exactly why the world arm above was
+        // unmountable and a wall could not crash the car. Signatures are DWARF-authoritative
+        // (:1200 / :1215), with the same fork retirement on arg 3 as above. The tri-cache arg is the
+        // nested VehicleInputInterface::InTriangleCacheInterface, which is
+        // CgsSceneManager::SceneManagerIO::TriangleCacheInterface; the console body never reads it.
         void HandleRaceCarWorldPotentialContact(
             CgsSceneManager::SceneManagerIO::PotentialContact lContact,
             BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
-            BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
+            BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
             VehicleManagerOutputInterface* lpManagerOutputInterface,
             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
             const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,
@@ -1622,6 +1628,15 @@ namespace Vehicle
         // `friend class VehicleManager;` in BrnPhysicalTrafficManager.h:953: routing them through
         // accessors would add asserts the console does not fire there.
         friend class BrnPhysics::PhysicsModule;
+
+        // 2026-09-02 (crash wave). VehicleManagerDebugComponent::RecordCrashContact @0x825B7880
+        // reads this class BARE through its mpVehicleManager -- `lwzx r9, mgr, 0x2A0AC`
+        // (mePlayerActiveRaceCarIndex) and `lbz 0xE50(mgr + 0x1460*idx)` (maRaceCarVehicles[idx]
+        // .mbCrashing) -- and the export set has NO getter for the player slot (only
+        // SetPlayerActiveRaceCarIndex @0x8259C028 exists). Same reasoning as the grant above:
+        // friendship reproduces the console's bare reads by name instead of inventing accessors.
+        // The grant is mutual (the component already befriends this class for the slam/shunt seats).
+        friend class VehicleManagerDebugComponent;
 
     private:
         // DecFIGS BrnVehicleManager.h:1454/:1459; both are X360-attested calls in

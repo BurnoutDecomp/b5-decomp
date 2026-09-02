@@ -29,6 +29,8 @@
 //     ifc + 1474720 -> [ 9] traffic-with-world          (count at +1474728)
 //
 // THREE NAMED GATES, each at its seat below. None of them is on the race-car-vs-traffic path.
+// (A fourth -- the race-car-vs-WORLD driver at seat (2b) -- was DISCHARGED 2026-09-02 by the crash
+// wave; its two callees are bodied in BrnVehicleManager_WorldCrashArm.cpp.)
 // =================================================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
@@ -141,14 +143,19 @@ void VehicleManager::DoCrashPrediction(
         lpVehicleOutputInterface, lpRequestOutputInterface,
         lpManagerOutputInterface, lpDeformationInterface);
 
-    // GATE: VehicleManager::HandleCrashPredictionForRaceCarAndWorld @0x82640C28 -- its body exists
-    // (BrnVehicleManagerCrashPrediction.cpp) but is UNMOUNTABLE: its own two callees
-    // HandleRaceCarWorldPotentialContact @0x8263E3B8 and PredictCarWorldContactTime @0x825B5300
-    // are declare-only (BrnVehicleManager.h:1393/:1402) -- no body anywhere in the tree.
-    // DELETE-WHEN both land; then mount that TU and restore the call, whose console argument list
-    // is (timestep, contactIfc, inputIfc, vehicleOut, requestOut, managerOut, deformIn) with the
-    // BrnGameState::GameStateModuleIO fork spelling on arg 4 (BrnVehicleManager.h:71-77).
-    (void)lpInputInterface;   // consumed only by the gated world arm above.
+    // ---- (2b) race-car-vs-WORLD (@0x82646428+): the validated queue [6], grouped per car and
+    //      ordered by predicted impact time, then classified + committed contact by contact.
+    // GATE DISCHARGED 2026-09-02 (crash wave). The DELETE-WHEN that stood here ("both callees are
+    // declare-only") is met: HandleRaceCarWorldPotentialContact @0x8263E3B8 and
+    // PredictCarWorldContactTime @0x825B5300 are bodied in BrnVehicleManager_WorldCrashArm.cpp and
+    // BrnVehicleManagerCrashPrediction.cpp is mounted. Argument order is the console's
+    // (timestep, contactIfc, inputIfc, vehicleOut, requestOut, managerOut, deformIn); the
+    // GameStateModuleIO fork spelling on arg 4 was retired with it (BrnVehicleManager.h banner).
+    // THIS IS THE LINE THAT MAKES HITTING A WALL ACTUALLY CRASH THE CAR.
+    HandleCrashPredictionForRaceCarAndWorld(
+        lfTimeStep, lpContactInterface, lpInputInterface,
+        lpVehicleOutputInterface, lpRequestOutputInterface,
+        lpManagerOutputInterface, lpDeformationInterface);
 
     // ---- (3) the force-no-slow-mo clear (0x82646450..0x82646B8C) ---------------------------
     // GATE: the ~410-insn VMX128 block guarded by
