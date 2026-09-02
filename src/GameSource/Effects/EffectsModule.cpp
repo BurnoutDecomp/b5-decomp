@@ -421,7 +421,10 @@ bool EffectsModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllo
         CGS_ASSERT(lbCreated, "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");   // CgsModuleIOHelper.h:52
         (void)lbCreated;
 
-        const bool lbParticlePrepared = mParticleModule.Prepare(lpAllocatorList);
+        // ⚠ TWO arguments (corrected 2026-09-02): the console's own call site is
+        // `mr r4,r29; mr r5,r30; lwz r11,0x40(vtbl); bctrl` @0x8229E73C -- r5 IS the
+        // "Particles" prepare output buffer, and the FIGS DWARF (:422) declares the pair.
+        const bool lbParticlePrepared = mParticleModule.Prepare(lpAllocatorList, lpParticleOutput);
         if (!lbParticlePrepared)
         {
             lpOutputBuffer->LockForWrite();

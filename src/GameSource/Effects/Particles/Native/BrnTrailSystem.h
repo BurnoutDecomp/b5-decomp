@@ -183,6 +183,17 @@ namespace Native
 
         bool IsReady() const { return mbIsReady; }
 
+        // The two stores ParticleModule::LoadFXBundle @0x8229C950 makes into this object,
+        // inline, on the acquire reply whose TextureNameMap entry hashes equal to
+        // HashString("fxskid"):  `*(module + 139668) = descriptor` (mTrailTexture) and
+        // `*(module + 141320) = 1` (mbIsReady). Named here so the loader never pokes them
+        // by offset -- this is THE gate TrailSystem::Render tests before drawing a tyre mark.
+        void SetTrailTexture(const CgsResource::SafeResourceHandle<renderengine::Texture>& lrTexture)
+        {
+            mTrailTexture = lrTexture;
+        }
+        void SetReady() { mbIsReady = true; }
+
     private:
         TrailSegmentCollection                          maSegments[2 * KN_TRAIL_EMITTER_POOL_SIZE]; // [+0]      (:346) two 96-collection buffers
         TrailEmitter                                    maEmitterPool[KN_TRAIL_EMITTER_POOL_SIZE];  // [+98304]  (:348)

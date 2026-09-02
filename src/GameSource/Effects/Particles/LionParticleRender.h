@@ -92,6 +92,14 @@ namespace BrnParticle
         void AcquireTexture(U32 auTextureMapHandle,
                             CgsResource::SafeResourceHandle<renderengine::Texture> aTexture);
 
+        // ParticleModule::LoadFXBundle stage 4 stores the acquired TextureNameMap handle
+        // into this renderer inline (`*(module + 21116) = *(module + 16988)`, i.e.
+        // mLionRenderer + 0x0C). Named so the loader never forms that address itself.
+        void SetTextureNameMap(const CgsResource::SafeResourceHandle<BrnParticle::TextureNameMap>& lrMap)
+        {
+            mTextureNameMap = lrMap;
+        }
+
     private:
         // Find the acquired texture for a texture-map hash via the name map (X360 0x822895D8).
         renderengine::Texture* FindTexture(U32 auTextureMapHandle) const;

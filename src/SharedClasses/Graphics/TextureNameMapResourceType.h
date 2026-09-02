@@ -20,7 +20,10 @@ struct TextureNameMap
 
         // FNV-1a (offset basis 0x811C9DC5, prime 0x01000193) over the lowercased
         // characters of a NUL-terminated string. X360 @0x82277CD0; body in the .cpp.
-        u32 HashString( const char* lpcName );
+        // ⚠ STATIC (corrected 2026-09-02): the X360 prologue is `mr r27, r3` and then reads
+        // the STRING out of r3 -- there is no implicit `this`. Existing call sites that spell
+        // it through an instance still compile.
+        static u32 HashString( const char* lpcName );
     };
 
     Entry* GetEntries() const { return mpEntries; }
