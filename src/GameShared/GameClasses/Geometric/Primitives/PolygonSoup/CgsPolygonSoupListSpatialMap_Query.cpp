@@ -175,4 +175,88 @@ namespace CgsGeometric
 
         return static_cast<s32>(lu16NumCandidates);
     }
+
+    // ------------------------------------------------------------------------
+    // RunQuery @0x82843A80 (261) -- scene-query wave 1b, 2026-09-02.
+    //
+    // The synchronous twin of RunJobQuery above, read off the same shape:
+    //   0x82843AAC  lwz  r11, 0x5C(this)   -> miNumLevels; zero -> `li r3, 0`, no writes
+    //               ping = mapQueryBuffers[0] (+0x50), pong = mapQueryBuffers[1] (+0x54);
+    //               `sth 0 -> ping[0]`, count = 1
+    //               cursor over mapParentNodes[] from this+8;
+    //               node = level + 48*idx  (`16*(x + rol(x,1))` == 48x, the console
+    //                                       sizeof(PolygonSoupSpacialNode)). NO
+    //                                       ReadOnlyObjectCache here, unlike RunJobQuery,
+    //                                       and so none of its asserts.
+    //               six vcmpgefp lanes, vpermwi 0x4B/0x87, vspltw 0 -> BoxesOverlapXYZ,
+    //               then `lhz 0x24(node)` != 0 before any capacity test
+    //   :447        "Too many results in level %d of %d / BoxMin: x y z / BoxMax: x y z" (streamed)
+    //               when count >= miQueryBufferSize (+0x60), compared 32-bit
+    //   tail        ping<->pong per level; mpOutputQueryBuffer (+0x58) = the buffer the last
+    //               level wrote, miLastQueryResultCount (+0x64) = count; return count (u16)
+    //
+    // BuildSpacialPartition never writes mpOutputQueryBuffer (its own FLAG at
+    // CgsPolygonSoupListSpatialMap_Build.cpp:453); this is the function that does.
+    // ------------------------------------------------------------------------
+    s32 PolygonSoupListSpatialMap::RunQuery(const AxisAlignedBox& lrQueryBox)
+    {
+        if (miNumLevels == 0)
+        {
+            return 0;   // the `li r3, 0` exit; the output fields are untouched
+        }
+
+        u16* lpaPing = mapQueryBuffers[0];
+        u16* lpaPong = mapQueryBuffers[1];
+
+        // Seed: the single root node of level 0.
+        lpaPing[0] = 0;
+        u16 lu16NumCandidates = 1;
+
+        for (s32 liLevel = 0; liLevel < miNumLevels; ++liLevel)
+        {
+            const PolygonSoupSpacialNode* lpaLevelNodes = mapParentNodes[liLevel];
+
+            const u16 lu16CandidatesThisLevel = lu16NumCandidates;
+            lu16NumCandidates = 0;
+
+            if (lu16CandidatesThisLevel != 0)
+            {
+                for (u32 luCandidate = 0; luCandidate < lu16CandidatesThisLevel; ++luCandidate)
+                {
+                    const PolygonSoupSpacialNode& lrNode = lpaLevelNodes[lpaPing[luCandidate]];
+
+                    if (!BoxesOverlapXYZ(lrQueryBox, lrNode.mBox))
+                    {
+                        continue;
+                    }
+
+                    if (lrNode.mu16NumIndices == 0)
+                    {
+                        continue;
+                    }
+
+                    for (u32 luIndex = 0; luIndex < lrNode.mu16NumIndices; ++luIndex)
+                    {
+                        // .cpp:447 -- the console streams "level N of M" and both box corners
+                        // into the message; CGS_ASSERT here takes a literal.
+                        CGS_ASSERT(static_cast<s32>(lu16NumCandidates) < miQueryBufferSize,
+                                   "Too many results in level ");
+
+                        lpaPong[lu16NumCandidates] = lrNode.mpaIndices[luIndex];
+                        ++lu16NumCandidates;
+                    }
+                }
+            }
+
+            u16* lpaSwap = lpaPing;
+            lpaPing      = lpaPong;
+            lpaPong      = lpaSwap;
+        }
+
+        // The buffer the last level WROTE (the swap has already happened), and its count.
+        mpOutputQueryBuffer    = lpaPing;
+        miLastQueryResultCount = static_cast<s32>(lu16NumCandidates);
+
+        return static_cast<s32>(lu16NumCandidates);
+    }
 }

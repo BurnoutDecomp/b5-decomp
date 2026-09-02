@@ -90,10 +90,13 @@ namespace CgsCollision
         // @0x828D3BB0 and ProcessTriangleCollisionLineTestNearests @0x828D4AD0 (both pass
         // tagA == 0, tagB == 0). The X360 asserts CgsGeometric::Line::IsValid on entry
         // (CgsCollisionGenerator.cpp:1023 "Invalid line"). Signature: r4 = const Line& (two
-        // 16-byte lanes), r5 = const PolygonSoupListSpatialMap*, r6 = u32 tagA, r7 = u16 tagB.
-        // Defined in CgsCollisionGenerator_wSQ1.cpp (scene-query wave 1).
+        // 16-byte lanes), r5 = PolygonSoupListSpatialMap* -- NOT const: the short-line arm calls
+        // the map's RunQuery @0x82843A80, which DecFIGS mangles _ZN (non-const `this`; it
+        // publishes into mpOutputQueryBuffer / miLastQueryResultCount) -- r6 = u32 tagA,
+        // r7 = u16 tagB. Defined in CgsCollisionGenerator_wSQ1.cpp (scene-query wave 1; the
+        // short-line arm bodied in wave 1b, the 20 m+ arm is a loud trap).
         u16 CollideLineAgainstPolySoupListNearest(const CgsGeometric::Line& lrLine,
-                                                  const CgsGeometric::PolygonSoupListSpatialMap* lpPolySoupListSpacialMap,
+                                                  CgsGeometric::PolygonSoupListSpatialMap* lpPolySoupListSpacialMap,
                                                   u32 lu32UserTagA,
                                                   u16 lu16UserTagB);
 
