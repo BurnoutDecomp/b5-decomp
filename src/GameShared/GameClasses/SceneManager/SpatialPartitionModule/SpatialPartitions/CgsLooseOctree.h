@@ -198,6 +198,11 @@ namespace CgsSceneManager
         virtual void Destruct();
         virtual bool Prepare();                                        // @ 0x828CA2D0
         virtual bool Release();
+        // @ 0x828D01F0 -- slot 6. Brackets LineTestOptimized with the "Octree VP LineTest"
+        // monitor (_miVPLineTestPerfMon, DWARF CgsLooseOctree.h:120 == X360 dword_82F33F20,
+        // registered by Construct @0x828CA18C). Bodied in CgsLooseOctree_wSQ1.cpp.
+        virtual bool LineTest(u32 lx32EntityTypeFlags, Vector3 lLineStart, Vector3 lLineEnd,
+                              CoarseQueryResultBuffer<16384>* lpResultBufferOut);
         virtual void Update();                                         // @ 0x828D0180
         virtual void SetEntityPosition(u16 lu16Id, Vector3 lPosition); // @ 0x828C9820
         virtual void SetEntityRadius(u16 lu16Id, f32 lfRadius);        // @ 0x828BC740
@@ -228,6 +233,19 @@ namespace CgsSceneManager
                            const Matrix44& lrViewProjection,
                            CoarseQueryResultBuffer<16384>* lpResultBuffer);
 
+
+        // @ 0x828CA5F8 (128 insns) -- the VMX line walk LineTest wraps (DWARF :328); its
+        // recursion is LineTestRecursive @0x828BCF50 (731 insns). NOT reconstructed: a LOUD
+        // trap in CgsLooseOctree_wSQ1.cpp (see the note there).
+        bool LineTestOptimized(u32 lx32EntityTypeFlags, Vector3 lLineStart, Vector3 lLineEnd,
+                               CoarseQueryResultBuffer<16384>* lpResultBufferOut);
+
+        // DWARF CgsLooseOctree.h:120 -- the "Octree VP LineTest" CPU monitor (X360
+        // dword_82F33F20). The X360 Construct @0x828C99D8 registers the octree's twelve
+        // monitors (0x828CA18C for this one); the tree's Construct does not register any of
+        // them yet, so this stays -1 and StartMonitor/StopMonitor are no-ops (IsValidHandle).
+        // Defined in CgsLooseOctree_wSQ1.cpp.
+        static s32 _miVPLineTestPerfMon;
     private:
         // The per-query traversal parameter block (X360 stack image; see FrustumTestVp).
         // Exactly one of the two sinks is set: the synchronous entry point collects into

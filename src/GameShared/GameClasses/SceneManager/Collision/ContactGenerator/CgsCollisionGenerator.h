@@ -41,7 +41,7 @@ namespace EA { namespace Jobs { struct Job; } }
 
 // RunFillTriangleCacheStream's query structure (pointer use only). Full home:
 // GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupListSpatialMap.h.
-namespace CgsGeometric { struct PolygonSoupListSpatialMap; }
+namespace CgsGeometric { struct PolygonSoupListSpatialMap; struct Line; }
 
 // ⭐ ADDED 2026-08-06 (big-five #2): the collide-stream family's collaborators, pointer use
 // only. Class keys match their homes (CgsDebugRenderStreamReader.h:23 -- class, in CgsDev).
@@ -80,6 +80,22 @@ namespace CgsCollision
         void Destruct();                         // h:70  / X360 0x8284CB38 (empty; ICF-folded)
         bool Prepare(void* lpResultBuffer, s32 liResultBufferSize); // h:73 / X360 0x82810660
         void Finish();                           // h:80  / X360 0x828128D8
+
+        // @ 0x828131C0 (494 insns) -- the SYNCHRONOUS nearest line-vs-static-world test: claim
+        // a one-result CollisionResultList (PrepareNewPrimitiveTestResultsList(1, tagA, tagB)),
+        // seed its line-parameter lane to 2.0, gather the poly-soup leaves the line's box
+        // touches (PolygonSoupListSpatialMap::RunQuery for lines under 20 m, the line-slab walk
+        // otherwise) and keep the nearest IntersectLinePolygonSoupNearestSingleSided hit in it.
+        // Returns the result-list index. Callers: SceneManagerModule::ProcessLineTestNearest
+        // @0x828D3BB0 and ProcessTriangleCollisionLineTestNearests @0x828D4AD0 (both pass
+        // tagA == 0, tagB == 0). The X360 asserts CgsGeometric::Line::IsValid on entry
+        // (CgsCollisionGenerator.cpp:1023 "Invalid line"). Signature: r4 = const Line& (two
+        // 16-byte lanes), r5 = const PolygonSoupListSpatialMap*, r6 = u32 tagA, r7 = u16 tagB.
+        // Defined in CgsCollisionGenerator_wSQ1.cpp (scene-query wave 1).
+        u16 CollideLineAgainstPolySoupListNearest(const CgsGeometric::Line& lrLine,
+                                                  const CgsGeometric::PolygonSoupListSpatialMap* lpPolySoupListSpacialMap,
+                                                  u32 lu32UserTagA,
+                                                  u16 lu16UserTagB);
 
         // Copy of the luIndex'th result list (by value, bounds-checked against
         // mu16NumUsedResultLists). X360 0x825B2AE0. (Incomplete return type is fine

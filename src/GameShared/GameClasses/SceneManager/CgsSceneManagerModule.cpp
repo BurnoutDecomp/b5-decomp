@@ -100,16 +100,16 @@ static s32 siTriCache_FillTriangleCachePerfMon       = -1;
 static s32 siTriCache_ProcessCollisionResultsPerfMon = -1;
 static s32 siUpdateScenePerfMon                      = -1;
 static s32 siProcessSceneQueriesPerfMon              = -1;
-static s32 siProcessCoarseQueriesPerfMon             = -1;
-static s32 siProcessFineQueriesPerfMon               = -1;
-static s32 siProcessFineQueriesLineFinePerfMon       = -1;
-static s32 siProcessFineQueriesLineNearPerfMon       = -1;
-static s32 siProcessFineQueriesLineFastDSPerfMon     = -1;
-static s32 siProcessFineQueriesSphereFastPerfMon     = -1;
-static s32 siProcessFineQueriesVolFinePerfMon        = -1;
-static s32 siProcessFineQueriesVolNearPerfMon        = -1;
-static s32 siProcessTriCollisionLineTestsPerfMon     = -1;
-static s32 siProcessTriCollisionLineTestNearestsPerfMon = -1;
+s32 siProcessCoarseQueriesPerfMon             = -1;   // (file-external since scene-query wave 1: CgsSceneManagerModule_wSQ1.cpp)
+s32 siProcessFineQueriesPerfMon               = -1;   // (file-external since scene-query wave 1: CgsSceneManagerModule_wSQ1.cpp)
+s32 siProcessFineQueriesLineFinePerfMon       = -1;   // (file-external since scene-query wave 1: CgsSceneManagerModule_wSQ1.cpp)
+s32 siProcessFineQueriesLineNearPerfMon       = -1;   // (file-external since scene-query wave 1: CgsSceneManagerModule_wSQ1.cpp)
+s32 siProcessFineQueriesLineFastDSPerfMon     = -1;   // (file-external since scene-query wave 1: CgsSceneManagerModule_wSQ1.cpp)
+s32 siProcessFineQueriesSphereFastPerfMon     = -1;   // (file-external since scene-query wave 1: CgsSceneManagerModule_wSQ1.cpp)
+s32 siProcessFineQueriesVolFinePerfMon        = -1;   // (file-external since scene-query wave 1: CgsSceneManagerModule_wSQ1.cpp)
+s32 siProcessFineQueriesVolNearPerfMon        = -1;   // (file-external since scene-query wave 1: CgsSceneManagerModule_wSQ1.cpp)
+s32 siProcessTriCollisionLineTestsPerfMon     = -1;   // (file-external since scene-query wave 1: CgsSceneManagerModule_wSQ1.cpp)
+s32 siProcessTriCollisionLineTestNearestsPerfMon = -1;   // (file-external since scene-query wave 1: CgsSceneManagerModule_wSQ1.cpp)
 
 // ---------------------------------------------------------------------------
 // The swept-motion padding clamp the volume-instance TRANSFORM leg applies to the
@@ -1458,13 +1458,12 @@ bool SceneManagerModule::UpdateScene(CgsModule::IOBufferStack* lpInputBufferStac
 //                                              0x828D5960 stw r31, 0(r30)
 //      UnlockForWrite(sceneOut); StopMonitor.
 //
-// FLAG (honest park, unchanged by this wave): steps 3 and 4 are NOT landed --
-// ProcessCoarseQueries @0x828CE770 and ProcessFineQueries @0x828D5608 are their own console
-// functions with their own TUs and neither is reconstructed. They are a no-op on this build
-// anyway (both walk the coarse/fine query queues, and BridgePhysicsSceneQueriesToScene --
-// the only producer that would fill them -- is still an inert gate), which is precisely why
-// the publish can be landed on its own: it does not depend on either pass. DELETE-WHEN both
-// query passes land; this body then calls them where the banner marks them.
+// ⭐ STEPS 3 AND 4 LANDED 2026-09-02 (scene-query wave 1): ProcessCoarseQueries @0x828CE770 and
+// ProcessFineQueries @0x828D5608 are REAL in CgsSceneManagerModule_wSQ1.cpp and are called below
+// under their own monitors exactly where the console calls them. The FLAG that stood here ("they
+// are a no-op on this build anyway ... BridgePhysicsSceneQueriesToScene is still an inert gate")
+// was the DELETE-WHEN nobody fired: the bridge is real now too (WorldBridgePhysicsToScene.cpp),
+// so the race car's above-ground rays reach the fine pass every frame.
 // ===========================================================================
 void SceneManagerModule::ProcessSceneQueries(CgsModule::IOBufferStack* lpInputBufferStack,
                                              CgsModule::IOBufferStack* lpOutputBufferStack,
@@ -1483,8 +1482,17 @@ void SceneManagerModule::ProcessSceneQueries(CgsModule::IOBufferStack* lpInputBu
         return;
     }
 
-    // (steps 3/4 -- ProcessCoarseQueries @0x828CE770 / ProcessFineQueries @0x828D5608 --
-    //  go here when they land; see the FLAG above.)
+    // Step 3 (0x828D58A0..0x828D58D8): the coarse pass under its own monitor.
+    {
+        ScopedPerfMon lCoarse(siProcessCoarseQueriesPerfMon);
+        ProcessCoarseQueries(lpInputBufferStack, lpOutputBufferStack, lpQueryInput, lpQueryOutput);
+    }
+
+    // Step 4 (0x828D58DC..0x828D5914): the fine pass under its own monitor.
+    {
+        ScopedPerfMon lFine(siProcessFineQueriesPerfMon);
+        ProcessFineQueries(lpInputBufferStack, lpOutputBufferStack, lpQueryInput, lpQueryOutput);
+    }
 
     // Step 5: publish the triangle-cache manager on the scene output. This is the handoff
     // the world bridges then carry into the physics vehicle input and the world output.

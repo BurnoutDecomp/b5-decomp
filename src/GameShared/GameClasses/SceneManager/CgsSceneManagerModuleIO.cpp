@@ -43,19 +43,19 @@ bool CgsSceneManager::SceneManagerIO::SceneQueryInterface::HasData()
     }
     if (!lbHasData)
     {
-        lbHasData = (mpQueueAt0x14 != nullptr) && (mpQueueAt0x14->GetLength() != 0);
+        lbHasData = (mpFineVolumeTestQueue != nullptr) && (mpFineVolumeTestQueue->GetLength() != 0);
     }
     if (!lbHasData)
     {
-        lbHasData = (mpQueueAt0x18 != nullptr) && (mpQueueAt0x18->GetLength() != 0);
+        lbHasData = (mpTriangleCollisionLineTestQueue != nullptr) && (mpTriangleCollisionLineTestQueue->GetLength() != 0);
     }
     if (!lbHasData)
     {
-        lbHasData = (mpQueueAt0x1C != nullptr) && (mpQueueAt0x1C->GetLength() != 0);
+        lbHasData = (mpTriangleCollisionLineTestNearestQueue != nullptr) && (mpTriangleCollisionLineTestNearestQueue->GetLength() != 0);
     }
     if (!lbHasData)
     {
-        lbHasData = (mpQueueAt0x20 != nullptr) && (mpQueueAt0x20->GetLength() != 0);
+        lbHasData = (mpTriangleCollisionSphereTestQueue != nullptr) && (mpTriangleCollisionSphereTestQueue->GetLength() != 0);
     }
 
     return lbHasData;

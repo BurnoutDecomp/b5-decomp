@@ -23,7 +23,8 @@ namespace WorldModule
     // ---- ADDITIVE (world-drive wave 2026-07-27; same X360 TU) --------------
     // @ 0x827A8D20 -- stage the physics module's generated scene queries into the
     // scene manager's query input buffer (WorldModule::Update @0x827D63E8's
-    // physics/scene round trip). Body boot-gated in WorldLinkStubs.cpp.
+    // physics/scene round trip). REAL since 2026-09-02 (scene-query wave 1) -- bodied
+    // in WorldBridgePhysicsToScene.cpp; the WorldLinkStubs gate is retired.
     void BridgePhysicsSceneQueriesToScene(
         void* lpWorldModule,
         CgsSceneManager::SceneManagerIO::InputBuffer_Query* lpSceneInputBuffer_Query,

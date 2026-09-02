@@ -100,6 +100,18 @@ namespace CgsSceneManager
         virtual void Destruct() = 0;
         virtual bool Prepare() = 0;
         virtual bool Release() = 0;
+        // slot  6  LineTest(entityTypeFlags, lineStart, lineEnd, resultBufferOut)
+        //   ADDED 2026-09-02 (scene-query wave 1). X360 vtbl+24, dispatched by
+        //   SceneManagerModule::ProcessLineTestNearest @0x828D3970 / ProcessLineTestFastDoubleSided
+        //   @0x828D3EA0 (`lwz r11,0x280(this) ; lwz r10,0(r11) ; lwz r11,0x18(r10) ; bctrl` with
+        //   r4 = mx32EntityTypeFlags, r5 = the coarse result buffer, v1/v2 = start/end). DWARF
+        //   CgsSpatialPartition.h:221: `virtual bool LineTest(EntityTypeFlags, Vector3, Vector3,
+        //   CoarseQueryResultBufferDefault*)`. The DWARF puts DebugRender (slot 4) and SphereTest
+        //   (slot 5) before it and FrustumTest / VolumeTest / FrustumTestVp (slots 7/8/9) after it;
+        //   those five are still undeclared here (no mounted caller yet) -- add them IN THAT ORDER
+        //   when one lands. Host vtable order is not load-bearing (named virtual calls).
+        virtual bool LineTest(u32 lx32EntityTypeFlags, Vector3 lLineStart, Vector3 lLineEnd,
+                              CoarseQueryResultBuffer<16384>* lpResultBufferOut) = 0;
         virtual void Update() = 0;
         virtual void SetEntityPosition(u16 lu16Id, Vector3 lPosition) = 0;
         virtual void SetEntityRadius(u16 lu16Id, float32_t lfRadius) = 0;

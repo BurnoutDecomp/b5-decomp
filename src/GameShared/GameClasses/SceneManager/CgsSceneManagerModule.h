@@ -61,10 +61,32 @@
 namespace rw { struct IResourceAllocator; }
 namespace CgsMemory { class LinearMalloc; }
 
-namespace CgsModule { struct IOBufferStack; }
+namespace CgsModule
+{
+    struct IOBufferStack;
+    struct Event;                                   // the VariableEventQueue record base (coarse-queue records)
+    template <typename T, s32 N> class EventQueue;  // the typed fixed queues the fine passes drain
+}
 
 namespace CgsSceneManager
 {
+    // Scene-query pipeline pointer/reference parameter types (scene-query wave 1). Pointer use
+    // only in the declarations below; the full homes are pulled by CgsSceneManagerModule_wSQ1.cpp.
+    namespace SpatialPartitionIO { struct OutputBuffer; }
+    namespace SceneManagerIO
+    {
+        struct TriCacheQueryBuffer;
+        struct InEventLineTestFine;
+        struct InEventLineTestNearest;
+        struct InEventLineTestFastDoubleSided;
+        struct InEventSphereTestFast;
+        struct InEventVolumeTestDeepest;
+        struct InEventVolumeTestFine;
+        struct InEventTriangleCollisionLineTest;
+        struct InEventTriangleCollisionLineTestNearest;
+        struct InEventTriangleCollisionSphereTest;
+    }
+
     // Max in-flight frustum-test job queries the module tracks (DWARF
     // CgsSceneManagerModule.h:84).
     const u32 KU_MAX_FRUSTUM_TEST_JOB_QUERIES = 16;
@@ -150,6 +172,72 @@ namespace CgsSceneManager
                                   CgsModule::IOBufferStack* lpOutputBufferStack,
                                   SceneManagerIO::InputBuffer_Query* lpQueryInput,
                                   SceneManagerIO::OutputBuffer* lpQueryOutput );
+
+        // ---- THE SCENE-QUERY PIPELINE (scene-query wave 1, 2026-09-02) -------------------
+        // The two passes ProcessSceneQueries runs and the handlers under them. All bodied in
+        // CgsSceneManagerModule_wSQ1.cpp (banner there); the ones marked TRAP are loud
+        // CGS_ASSERT(false) stubs carrying their console address, never quiet no-ops.
+        // Argument ORDER is the console's register order, read off each call site's asm.
+
+        // @ 0x828CE770 -- coarse pass: stack a SpatialPartitionIO::OutputBuffer, lock, dispatch.
+        void ProcessCoarseQueries( CgsModule::IOBufferStack* lpInputBufferStack,
+                                   CgsModule::IOBufferStack* lpOutputBufferStack,
+                                   SceneManagerIO::InputBuffer_Query* lpSceneInputBuffer,
+                                   SceneManagerIO::OutputBuffer* lpSceneOutputBuffer );
+        // @ 0x828CDB80 -- walk the coarse queue, switch on the record type id (0..4).
+        void ProcessCoarseSpatialPartitionQueries( const SceneManagerIO::InputBuffer_Query* lpSceneInputBuffer,
+                                                   SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
+                                                   SceneManagerIO::OutputBuffer* lpSceneOutputBuffer );
+        void ProcessCoarseLineTest( SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer* );   // @0x828C6D78 TRAP
+        void ProcessCoarseSphereTest( SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer* ); // @0x828C6B48 TRAP
+        void ProcessCoarseVolumeTest( const CgsModule::Event*, SpatialPartitionIO::OutputBuffer*, SceneManagerIO::OutputBuffer* ); // @0x828C62C0 TRAP
+        void ProcessCoarseFrustumTest( SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer* );// @0x828C6918 TRAP
+        void ProcessCoarseFrustumTestVp( SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*,
+                                         void* lpScratchA, void* lpScratchB, SceneManagerIO::OutputBuffer* );                    // @0x828C6518 TRAP
+
+        // @ 0x828D5608 -- fine pass: stack the three pass buffers + a CollisionGenerator, lock,
+        // run ProcessFineQueriesDirectly, tear down in reverse.
+        void ProcessFineQueries( CgsModule::IOBufferStack* lpInputBufferStack,
+                                 CgsModule::IOBufferStack* lpOutputBufferStack,
+                                 SceneManagerIO::InputBuffer_Query* lpSceneInputBuffer,
+                                 SceneManagerIO::OutputBuffer* lpSceneOutputBuffer );
+        // @ 0x828D4F80 -- the six fine loops, the tri-collision merge, the three tri passes.
+        void ProcessFineQueriesDirectly( const SceneManagerIO::InputBuffer_Query* lpSceneInputBuffer,
+                                         CgsCollision::BaseCollisionGenerator* lpCollisionGenerator,
+                                         SceneManagerIO::TriCacheQueryBuffer* lpTriCacheQueryBuffer,
+                                         SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
+                                         FineIntersectionTestIO::OutputBuffer* lpFineTestOutputBuffer,
+                                         SceneManagerIO::OutputBuffer* lpSceneOutputBuffer );
+        void ProcessLineTestFine( CgsCollision::BaseCollisionGenerator*, SceneManagerIO::TriCacheQueryBuffer*,
+                                  SpatialPartitionIO::OutputBuffer*, const SceneManagerIO::InEventLineTestFine*,
+                                  SceneManagerIO::OutputBuffer*, FineIntersectionTestIO::OutputBuffer* );                 // @0x828CDCD0 TRAP
+        // @ 0x828D38C0 -- the nearest line test (world-only short-cut / octree + fine module / world race).
+        void ProcessLineTestNearest( CgsCollision::BaseCollisionGenerator* lpCollisionGenerator,
+                                     SceneManagerIO::TriCacheQueryBuffer* lpTriCacheQueryBuffer,
+                                     SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
+                                     const SceneManagerIO::InEventLineTestNearest* lpQuery,
+                                     SceneManagerIO::OutputBuffer* lpSceneOutputBuffer );
+        void ProcessLineTestFastDoubleSided( CgsCollision::BaseCollisionGenerator*, SceneManagerIO::TriCacheQueryBuffer*,
+                                             SpatialPartitionIO::OutputBuffer*, const SceneManagerIO::InEventLineTestFastDoubleSided*,
+                                             SceneManagerIO::OutputBuffer* );                                              // @0x828D3DB0 TRAP
+        void ProcessSphereTestFast( CgsCollision::BaseCollisionGenerator*, SceneManagerIO::TriCacheQueryBuffer*,
+                                    const SceneManagerIO::InEventSphereTestFast*, SpatialPartitionIO::OutputBuffer*,
+                                    SceneManagerIO::OutputBuffer* );                                                       // @0x828D4090 TRAP
+        void ProcessVolumeTestDeepest( CgsCollision::BaseCollisionGenerator*, SceneManagerIO::TriCacheQueryBuffer*,
+                                       const SceneManagerIO::InEventVolumeTestDeepest*, SpatialPartitionIO::OutputBuffer*,
+                                       SceneManagerIO::OutputBuffer* );                                                    // @0x828D4460 TRAP
+        void ProcessFineVolumeTest( const SceneManagerIO::InEventVolumeTestFine*, SpatialPartitionIO::OutputBuffer*,
+                                    SceneManagerIO::OutputBuffer*, FineIntersectionTestIO::OutputBuffer* );                // @0x828CE328 TRAP
+        void ProcessTriangleCollisionLineTests( CgsCollision::BaseCollisionGenerator*,
+                                                CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionLineTest, 256>*,
+                                                SceneManagerIO::OutputBuffer* );                                           // @0x828C6FB0 TRAP (when non-empty)
+        // @ 0x828D4880 -- the world line tests, synchronously (< 100) or via jobs (>= 100, TRAP).
+        void ProcessTriangleCollisionLineTestNearests( CgsCollision::BaseCollisionGenerator*,
+                                                       CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionLineTestNearest, 256>*,
+                                                       SceneManagerIO::OutputBuffer* );
+        void ProcessTriangleCollisionSphereTests( CgsCollision::BaseCollisionGenerator*,
+                                                  CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionSphereTest, 256>*,
+                                                  SceneManagerIO::OutputBuffer* );                                         // @0x828B0B30 TRAP (when non-empty)
 
         // @ 0x828D4C28 -- the X360 vtbl+64 entry: fan the scene input's update
         // interface out into the spatial-partition + overlap-generation sub-modules,

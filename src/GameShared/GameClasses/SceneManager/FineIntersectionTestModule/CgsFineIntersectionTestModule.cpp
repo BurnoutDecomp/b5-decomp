@@ -155,44 +155,15 @@ bool FineIntersectionTestModule::Release()
 }
 
 // ---------------------------------------------------------------------------
-// Compute* narrow-phase queries.
+// Compute* narrow-phase queries -- ComputeLineTestFine @0x828C7D70, ComputeLineTestNearest
+// @0x828C8CC8, ComputeVolumeTestDeepest @0x828C90D0, ComputeVolumeTestFine @0x828C93C8.
 //
-// These four functions are NOT reconstructed in this pass. Their X360 bodies are large
-// VMX128-heavy loops (ComputeLineTestFine @ 0x828C7D70 alone is ~700 lines of pseudocode
-// with raw vector intrinsics) that drive RenderWare collision queries against per-entity
-// volume instances. They depend on several SceneManager/RenderWare types that have no
-// reconstructed callable home yet:
-//   - CgsSceneManager::EntityManager / VolumeManager / VolumeInstance / SceneManagerEntity
-//   - rw::collision::VolumeVolumeQuery / VolumeLineQuery runtime API (InitQuery,
-//     GetIntersectionResultsBuffer, GetAllIntersections, ...)
-//   - rw::collision::ClusteredMesh / KdTreeLineQuery / ClusteredMeshCluster
-//   - the InEvent*/OutEvent* query payload structs (mostly undefined in the tree)
-// Reconstructing those would require fabricating multiple large shared headers, which the
-// reconstruction rules forbid. They are left as empty bodies (declared faithfully in the
-// header) and reported in stubs_needed so a follow-up pass can implement them once the
-// dependency types land.
+// MOVED 2026-09-02 (scene-query wave 1) to CgsFineIntersectionTestModule_wSQ1.cpp, which is
+// MOUNTED (this TU is not: its Construct/Prepare are still WorldLinkStubs boot gates). They
+// were EMPTY bodies here -- silent-drop stubs whose callers read an untouched result record as
+// "no hit" -- and are LOUD traps there until the rw::collision query objects they drive are
+// real on this host (VolumeLineQuery::GetIntersections is a link-stub). See that TU's banner.
 // ---------------------------------------------------------------------------
-void FineIntersectionTestModule::ComputeLineTestFine(const InEventLineTestFine* /*lpQuery*/,
-                                                     OutEventLineTestFineResult* /*lpOutResult*/,
-                                                     void* /*lpResultsOut*/)
-{
-}
-
-void FineIntersectionTestModule::ComputeLineTestNearest(const InEventLineTestNearest* /*lpQuery*/,
-                                                        OutEventLineTestNearestResult* /*lpOutResult*/)
-{
-}
-
-void FineIntersectionTestModule::ComputeVolumeTestDeepest(const InEventVolumeTestDeepest* /*lpQuery*/,
-                                                          OutEventVolumeTestDeepestResult* /*lpOutResult*/)
-{
-}
-
-void FineIntersectionTestModule::ComputeVolumeTestFine(const InEventVolumeTestFine* /*lpQuery*/,
-                                                       OutEventVolumeTestFineResult* /*lpOutResult*/,
-                                                       void* /*lpEntityBuffer*/)
-{
-}
 
 // Never called at runtime; pins the asm-attested member byte offsets.
 void FineIntersectionTestModule::_AssertLayout()

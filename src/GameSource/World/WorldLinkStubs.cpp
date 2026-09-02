@@ -1634,21 +1634,10 @@ void CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::AddVolumeInstance(
 //  2026-07-27: the real (partial-slice) body now lives in CgsSceneManagerIO.h,
 //  matching the X360 0x828C7BC0 status + coarse-query-queue bring-up.)
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void CgsSceneManager::SceneManagerIO::InputBuffer_Query::Destruct()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::SceneManagerIO::InputBuffer_Query::Destruct: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-09-02 (scene-query wave 1): InputBuffer_Query::Destruct is header-inline
+// in CgsSceneManagerIO.h beside the FULL query-buffer layout -- the console body is the
+// ICF-folded bare `b CgsModule::IOBuffer::Destruct` (DestroyIOBuffer<InputBuffer_Query>
+// @0x823AF240 bl's the PropEntityIO::OutputBuffer_PreScene fold @0x823AF2E4).
 
 // (InputBuffer_Query::GetInCoarseQueryQueue gate RETIRED 2026-07-29, culling wave:
 //  it returned NULL, so the first real frustum query null-dereferenced it. The member
@@ -2334,21 +2323,15 @@ void WorldModule::BridgeAIModuleToPhysicsModule(void *,class BrnPhysics::Physics
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827A8D20 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgePhysicsSceneQueriesToScene(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePhysicsSceneQueriesToScene: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-09-02 (scene-query wave 1): WorldModule::BridgePhysicsSceneQueriesToScene
+// @0x827A8D20 is REAL in GameSource/World/Bridges/WorldBridgePhysicsToScene.cpp (mounted this
+// commit). The note that stood here -- "the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable" -- had been FALSE since the
+// triangle-cache wave made SceneManagerModule::ProcessSceneQueries real: this gate was the
+// reason every race car's above-ground down-ray (VehicleManager::GenerateAboveGroundLineTests
+// @0x82633990, event type 6) never reached the scene manager, AboveGroundTestResult.mbValid
+// stayed 0 on every frame, and UpdateDriftState guard 8 killed every brake+steer drift on
+// the frame it was entered (134 of 134, measured).
 
 // ⛔ GATE RETIRED 2026-08-11 (triangle-cache wiring wave): WorldModule::
 // BridgeSceneQueryResultsToPhysics @0x827A8E88 now has its REAL body in
