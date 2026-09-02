@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Matrix44Affine
+#include "GameSource/Replays/BrnReplayBaseSerialiser.h"   // BrnReplays::BaseSerialiser (the real base; EMode)
 
 // ============================================================================
 // GameSource/Replays/Serialisers/BrnReplayEffectsSerialiser.h
@@ -18,10 +19,9 @@
 // (race-car index < 8, boost-locator count < 16) come straight from those bodies.
 // GetStaticLayout (0x82278698) returns the serialiser's static buffer reinterpreted
 // as the layout. The full EffectsSerialiser body (Construct / Read / Write) lives in
-// BrnReplayEffectsSerialiser.cpp; only the slice the effects state machines call is
-// declared here. GROW additively; do NOT fork the type. NOTE: the .cpp currently
-// keeps a file-local EffectsSerialiser shape for its own bodies -- migrate it onto
-// this header when that TU is next revisited.
+// BrnReplayEffectsSerialiser.cpp against THIS declaration (the .cpp's former
+// file-local shape is gone -- see the class note below). GROW additively; do NOT
+// fork the type.
 // ============================================================================
 
 namespace BrnReplays
@@ -109,35 +109,30 @@ namespace BrnReplays
                               const void* lpVec2, const void* lpVec3, const void* lpVec4);
     };
 
-    // The effects replay-serialiser channel. Only the slice the effects state machines
-    // reach (the current EMode + GetStaticLayout) is declared; the rest (BaseSerialiser
-    // derivation, Construct / Read / Write) lives in the .cpp.
-    class EffectsSerialiser
+    // The effects replay-serialiser channel (DWARF BrnReplayEffectsSerialiser.h; a
+    // BaseSerialiser leaf). 2026-09-02 (tyre-mark wave): this used to be a 4-byte
+    // `{ EMode meMode; }` SLICE while the .cpp kept a SECOND, private 3-member
+    // BaseSerialiser + EffectsSerialiser pair for its own bodies -- an ODR fork
+    // that put mpStaticBuffer at +0x04 in one definition and +0x18 in the other.
+    // EffectsModule embeds the real object BY VALUE (X360 +0x2F550, 0x58 bytes,
+    // EffectsModule::Construct @0x8228FE98 calls EffectsSerialiser::Construct on it
+    // and Update @0x8229EC28 early-outs on a null GetStaticLayout()), so the type is
+    // now the real derivation and the .cpp's bodies run on it. EMode / GetMode come
+    // from BaseSerialiser (the same enum, the same leading word).
+    class EffectsSerialiser : public BaseSerialiser
     {
     public:
-        // BaseSerialiser EMode (DWARF BrnReplayBaseSerialiser.h:54). The leading word
-        // of the serialiser object; the effects state machines branch on whether it is
-        // RECORDING (1/2/3) or PLAYING (4/5/6).
-        enum EMode
-        {
-            E_MODE_IDLE                = 0,
-            E_MODE_RECORDING_PREPARING = 1,
-            E_MODE_RECORDING           = 2,
-            E_MODE_RECORDING_STALLED   = 3,
-            E_MODE_PLAYING_PREPARING   = 4,
-            E_MODE_PLAYING             = 5,
-            E_MODE_PLAYING_STALLED     = 6,
-        };
-
-        // The current serialiser mode (the object's leading word).
-        EMode GetMode() const { return meMode; }
+        // X360 0x8264C9D8: BaseSerialiser::Construct(8, 0, 4816, 4784, "Effects", 0).
+        s32 Construct();
 
         // X360 0x82278698. The serialiser's per-frame static buffer, viewed as the
         // structured boost-locator layout (asserts the buffer is large enough).
         EffectsSerialiserStaticLayout* GetStaticLayout();
 
-    protected:
-        EMode meMode;   // +0x00 (BaseSerialiser mode)
+        // X360 0x82650508 / 0x82650600 -- the per-update transfer of the static layout
+        // (write it out while RECORDING, read it in while PLAYING).
+        s32 Read();
+        s32 Write();
     };
 }
 
