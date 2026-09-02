@@ -318,6 +318,19 @@ void PropManager::ClampAcceleration( Vector3                                    
 {
     namespace vpu = rw::math::vpu;
 
+    // [DIAG] NOT IN THE X360 BINARY -- 2026-09-02 props-at-speed EXPERIMENT KNOB. BRN_PROP_NOCLAMP=1
+    // skips this whole clamp (and its re-post) so a boot-drive can measure what the 30 m/s^2 /
+    // 80 rad/s^2 ceiling costs a flung prop. The console value and argument order were re-verified
+    // against the image the same day (thunk 0x82C5E830 = 30.0f; v3 = dt, v4 = 1/dt), so with the
+    // knob OFF this function is the console's. DELETE-WHEN the prop-launch question is settled.
+    {
+        static const bool sbNoClamp = ( getenv( "BRN_PROP_NOCLAMP" ) != 0 );
+        if ( sbNoClamp )
+        {
+            return;
+        }
+    }
+
     // :1191
     bool lbUpdateBody = false;
 
@@ -1207,11 +1220,39 @@ void PropManager::ReadUpdatedBodies(
             }
             else
             {
+                // [DIAG] NOT IN THE X360 BINARY -- 2026-09-02 props-at-speed: the raw sim
+                // velocity BEFORE the acceleration clamp, next to the stored previous one and
+                // the step, so a boot-drive can see who changes a flung prop's velocity (the
+                // sim, or the clamp's re-post). Whole props only, BRN_PROP_DIAG, first-N.
+                // DELETE-WHEN the high-speed prop reaction is confirmed on screen.
+                const Vector3 lDiagSimLinearVelocity = lUpdatedLinearVelocity;
+
                 // v1 = lpProp->mLinearVelocity (+0x40), v2 = lpProp->mAngularVelocity (+0x50).
                 ClampAcceleration( lpProp->GetLinearVelocity(), lpProp->GetAngularVelocity(),
                                    lRigidBodyId, lpUpdateBodyEvent,
                                    lUpdatedLinearVelocity, lUpdatedAngularVelocity,
                                    lvfTimeStep, lvfOneOverTimeStep, lpSimModuleInputBuffer );
+
+                {
+                    static s32 siDiagClampLinesLeft = 200;
+                    if ( sbPropDiag && siDiagClampLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+                    {
+                        --siDiagClampLinesLeft;
+                        const Vector3 lPrev = lpProp->GetLinearVelocity();
+                        const Vector3 lPos  = lUpdatedTransform.Pos();
+                        *CgsDev::Log::gpDebugPrint
+                            << "[Q6-clamp] prop " << lEntityId.GetValue()
+                            << " pos (" << lPos.x << "," << lPos.y << "," << lPos.z << ")"
+                            << " sim v=(" << lDiagSimLinearVelocity.x << "," << lDiagSimLinearVelocity.y
+                            << "," << lDiagSimLinearVelocity.z << ")"
+                            << " prev v=(" << lPrev.x << "," << lPrev.y << "," << lPrev.z << ")"
+                            << " out v=(" << lUpdatedLinearVelocity.x << "," << lUpdatedLinearVelocity.y
+                            << "," << lUpdatedLinearVelocity.z << ")"
+                            << " dt=" << lvfTimeStep.x
+                            << " moveState=" << static_cast<s32>( lpProp->GetMovementState() )
+                            << "\n";
+                    }
+                }
             }
 
             lpProp->SetTransform( lUpdatedTransform );

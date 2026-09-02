@@ -363,11 +363,14 @@ namespace Vehicle
     // gravity + IntegrateTransform step, not a read-back -- see that TU's banner. If a gate for
     // it ever reappears here the link will say so (LNK2005).
 
-    void VehicleManager::GetUpdatedVehicleBodies(
-        CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InUpdateExternalBody, 60>*)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::GetUpdatedVehicleBodies @0x82619340 (export hole)");
-    }
+    // GATE DELETED 2026-09-02 (the props-at-speed fix): VehicleManager::GetUpdatedVehicleBodies
+    // @0x82619340 is REAL, in BrnVehicleManager_GetUpdatedVehicleBodies.cpp, together with the
+    // PhysicalTrafficManager::GetUpdatedVehicleBodies @0x825EEF70 it tail-calls. The "export hole"
+    // was an export-RUN gap only: the function was pulled headless from the IDB (EXPORT_ADDR_FILE)
+    // and its JSON sits beside the others now. It is the ONLY writer of the sim's PROP_COLLISION
+    // proxy bodies' pose/velocity -- with it gated every prop-vs-car contact was solved against a
+    // proxy parked at the car's creation pose. If a gate for it ever reappears here the link will
+    // say so (LNK2005).
 
     // UpdateVehiclePhysicsPostSimulation @0x826426E0 is real now. These two independent
     // line-test consumers remain named deferrals in its closure.
