@@ -4578,6 +4578,23 @@ namespace BrnGame
                 // "returning to the front end / loading" gate, which has no producer here yet;
                 // FALSE is the console's value while a race is running, and it is what keeps
                 // the effects system live rather than suspended.
+                // ---- ADOPT WHATEVER REGISTERED ITSELF LAST FRAME ------------------------
+                // ReplayModule::StoreSerialisers @0x8264B600 is what hands every registered
+                // BaseSerialiser its stream and STATIC buffers out of the replay module's linear
+                // region. On the console it runs from ReplayModule::Update_PostSim @0x8265F618;
+                // that leg is not reconstructed, so it runs here instead -- immediately before
+                // the effects leg, whose Update both REGISTERS mEffectsSerialiser (through the
+                // output buffer's replay request interface) and then reads GetStaticLayout().
+                // The console's own ordering is the same one frame apart: register, adopt, use.
+                // It is idempotent by construction (it only touches slots whose pointer changed),
+                // so running it every frame costs one null compare per slot.
+                // DELETE-WHEN ReplayModule::Update_PostSim lands: the call moves there.
+                if (mpEffectsOutputBuffer != 0)
+                {
+                    mReplayModule.StoreSerialisers(
+                        *mpEffectsOutputBuffer->GetReplayRequestInterface());
+                }
+
                 DoUpdate_Effects(mpUpdateInputBufferStack,
                                  mpUpdateOutputBufferStack,
                                  /*input   out*/ 0,

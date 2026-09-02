@@ -56,6 +56,9 @@
 #include "GameShared/GameClasses/Memory/DataStream/CgsDataStreamCommandPoster.h" // CgsMemory::DataStreamCommandPoster (embedded @ +0x5A80)
 #include "eathread/eathread_futex.h"                                 // EA::Thread::Futex (CRITICAL_SECTION-backed; its ctor does RtlInitializeCriticalSection)
 
+namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // Prepare's argument
+namespace CgsMemory { class LinearMalloc; }                               // mpLinearMalloc
+
 namespace BrnReplays
 {
     // The live per-serialiser book-keeping objects the overlay snapshots each frame
@@ -88,16 +91,30 @@ namespace BrnReplays
         E_STREAM_STAGE_COUNT   = 5,
     };
 
+    namespace ReplayIO { struct RequestInterface; }   // StoreSerialisers' argument
+
     class ReplayModule : public CgsModule::ModuleSingleBuffered
     {
     public:
         // Number of serialiser slots the overlay snapshots == ESerialiserId count.
         static const s32 KI_NUM_SERIALISERS = E_ID_COUNT; // 11
+        // ReplayModule::Prepare @0x82652768: `GetLinearAllocator(list, 48)`.
+        static const s32 KI_REPLAY_LINEAR_BANK = 48;
 
         ReplayModule();
 
         // X360 0x8265D1B0. Dispatch the GPU disk write stream (BrnGameModule::DispatchThread).
         void Update_Dispatch();
+
+        // X360 0x82652768 -- the module prepare: base prepare, then the linear allocator and
+        // the module's own stream buffers. Takes the game-data allocator list, exactly as the
+        // scripted load's stage 8 passes it.
+        bool Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
+
+        // X360 0x8264B600 -- adopt every serialiser the request interface has collected and
+        // give each one its stream buffer and its STATIC buffer out of the module's linear
+        // region. Nothing else in the engine allocates them.
+        void StoreSerialisers(const ReplayIO::RequestInterface& lrRequestInterface);
 
         // X360 0x8264B4A8. If a serialise job is in flight, wait for it, close the command
         // poster, and clear the in-flight flags. (UpdateRecording_PostSim drives this.)
@@ -137,13 +154,23 @@ namespace BrnReplays
         // pure padding. All access is BY NAME, so the bodies are faithful regardless.
 
         // meState directly follows the ModuleSingleBuffered base sub-object (@0x230 on X360).
+        // The console keeps its prepare stage in the module base at +0x228 (`v4 = a1[138]`,
+        // `a1[138] = 1`, `a1[139] = 0`). This port's CgsModule base does not expose that
+        // slot, so the same two-state machine is carried here BY NAME. Same meaning, same
+        // guard: run the allocations once, then report ready every call.
+        s32                  miPrepareStage;          // @0x228 (module base on X360)
         EStreamState         meState;                 // @0x230
         EStreamStage         meStreamStage;           // @0x234
         u8                   maPad238[0x23C - 0x238];  // @0x238
         bool                 mbFlag23C;                // @0x23C  (ctor stores 0)
         u8                   maPad23D[0x84C - 0x23D];  // @0x23D
         BaseSerialiser*      mapSerialisers[KI_NUM_SERIALISERS]; // @0x84C..@0x874 (11 ptrs)
-        u8                   maPad878[0x89C - 0x878];  // @0x878
+        // @0x878 (2168): the module's LINEAR allocator -- ReplayModule::Prepare @0x82652768
+        // takes it from the game-data allocator list (`GetLinearAllocator(list, 48)`, then
+        // `SetAlignment(16)`) and StoreSerialisers @0x8264B600 carves every serialiser's stream
+        // and static buffers out of it (`Malloc(*(a1 + 2168), size)`).
+        CgsMemory::LinearMalloc* mpLinearMalloc;       // @0x878
+        u8                   maPad87C[0x89C - 0x87C];  // @0x87C
         WriteStream*         mpWriteStream;            // @0x89C
         u8                   maPad8A0[0x8C0 - 0x8A0];  // @0x8A0
         s32                  miWriteIndex;             // @0x8C0

@@ -219,6 +219,15 @@ namespace BrnReplays
         // is set the owning module SKIPS its own inline serialiser Read/Write.
         bool SkipModuleSerialise() const { return mbSkipModuleSerialise; }
 
+        // ReplayModule::StoreSerialisers @0x8264B600 writes both of these from OUTSIDE the
+        // serialiser (`*(*v5 + 8) = Malloc(...)`, `*(*v5 + 32) = Malloc(...)`): the module owns
+        // the linear region every serialiser's buffers are carved from. Named accessors rather
+        // than a friend declaration, so the store is spelled the same way every other member is.
+        void  SetBuffer(void* lpBuffer)             { mpBuffer = lpBuffer; }
+        void  SetStaticBuffer(void* lpBuffer)       { mpStaticBuffer = lpBuffer; }
+        void* GetBuffer() const                     { return mpBuffer; }
+        void* GetStaticBufferPtr() const            { return mpStaticBuffer; }
+
     protected:
         // SetMode @ 0x8264B0F8. Private in the leak; protected here so the embed
         // check and (future) construction path can drive the mode while it stays
@@ -233,16 +242,22 @@ namespace BrnReplays
         s32                miBufferSize;       // @0x0C
         s32                miBufferUsed;       // @0x10
         s32                miBufferRead;       // @0x14
-        void*              mpStaticBuffer;     // @0x18
-        // FLAG (X360 overrides DWARF): the X360 SKU extended the serialiser (ESerialiserId
-        // E_ID_COUNT 5->11) with TWO words the DWARF does not name, and they sit HERE -- between
-        // mpStaticBuffer and miStaticBufferSize. Measured from Construct @0x8264C280, which zeroes
-        // +0x1C and +0x20 and then stores its static-buffer-size argument at +0x24 (full listing
-        // in the layout note at the top of this file); corroborated by RegisterSerialiser
-        // @0x821F34A0 reading meId at `lwz 0x28(r31)` and by PreUpdateRecord @0x8264BD08 reading
-        // the static-buffer size at live+0x24. Modelled as a sized placeholder so miStaticBufferSize,
-        // meId and the whole tail land at their X360-attested offsets.
-        u8                 maX360Extension1C[8]; // @0x1C (unmodeled X360-extension fields)
+        // CORRECTED 2026-09-02 (tyre-mark wave) -- mpStaticBuffer IS AT +0x20, NOT +0x18.
+        // The old model put the pointer at +0x18 and the two unnamed X360-extension words at
+        // +0x1C/+0x20, on the strength of a label in the Construct listing ("stw r30, 0x18(this)
+        // mpStaticBuffer = 0"). Two functions read the field directly and both say +0x20:
+        //   EffectsSerialiser::GetStaticLayout @0x82278698
+        //       lwz  r11, 0x24(r28)      ; miStaticBufferSize
+        //       cmpwi cr6, r11, 0x12B0   ; >= 4784
+        //       ...  return *(a1 + 32)   ; <-- THE STATIC BUFFER, at +0x20
+        //   ReplayModule::StoreSerialisers @0x8264B600
+        //       v14 = *(serialiser + 36) ; miStaticBufferSize (+0x24)
+        //       *(serialiser + 32) = LinearMalloc::Malloc(module linear, v14)
+        // -- pointer immediately followed by its size, exactly like mpBuffer(+0x08) /
+        // miBufferSize(+0x0C). So the two X360-extension words are at +0x18/+0x1C and the
+        // Construct listing's label was on the wrong store. The pad moves; nothing else does.
+        u8                 maX360Extension18[8]; // @0x18 (unmodeled X360-extension fields)
+        void*              mpStaticBuffer;     // @0x20 -- GetStaticLayout's `*(a1 + 32)`
         s32                miStaticBufferSize; // @0x24 -- Construct `stw r7, 0x24(r31)`
         ESerialiserId      meId;               // @0x28 -- read by RegisterSerialiser (lwz 0x28)
         ESerialiserContext meContext;          // @0x2C

@@ -307,6 +307,9 @@ namespace BrnGame
         // The per-frame update IO stacks. The scripted module loads (LoadingScriptedState::
         // LoadXxxModule) create their per-frame module IO buffers on these, exactly as the
         // X360 reads them off the game-module global (e.g. LoadSoundModule 0x823E75A8).
+        // The scripted load's stage 8 prepares this module (ReplayModule::Prepare @0x82652768):
+        // it is what acquires the linear region every BaseSerialiser's buffers are carved from.
+        BrnReplays::ReplayModule& GetReplayModule() { return mReplayModule; }
         CgsModule::IOBufferStack* GetUpdateInputBufferStack()  { return mpUpdateInputBufferStack; }
         CgsModule::IOBufferStack* GetUpdateOutputBufferStack() { return mpUpdateOutputBufferStack; }
 

@@ -1419,12 +1419,29 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         // mGameDataModule.Prepare to completion before GameMain runs). Keeping the call here is
         // therefore harmless (the module's own resumable machine reports done immediately) and
         // it is the Replays prepare that is [deferred].
+        // NO LONGER DEFERRED (2026-09-02, tyre-mark wave). The note above already said what
+        // this stage is -- `(*(*(gm+0x8BD300) + 0x40))(gm+0x8BD300, GetAllocatorList(gameDataOut))`
+        // is ReplayModule::Prepare @0x82652768 -- and it now runs. It is not a replay feature:
+        // Prepare acquires the module's LINEAR REGION, and StoreSerialisers @0x8264B600 is the
+        // ONLY place in the engine that gives any BaseSerialiser its stream and static buffers.
+        // With no region, BrnEffects::EffectsModule::Update @0x8229EC28 returns at its
+        // `GetStaticLayout() == 0` guard before the wheel loop -- so every tyre mark, spark,
+        // piece of debris and Lion effect was behind this one stage. Measured before the change
+        // (BRN_SKID_PROBE): "[skid-gate] EffectsModule::Update RETURNED EARLY at:
+        // mEffectsSerialiser.GetStaticLayout() == 0".
         if (!g_bLoggedGameDataPrepare)
         {
             g_bLoggedGameDataPrepare = true;
             if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: stage 8 (Replays prepare [deferred])\n";
+                *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: stage 8 (Replays prepare -- real)\n";
         }
+        {
+            const BrnResource::GameDataIO::AllocatorList* lpReplayAllocators =
+                lpGameDataOutput ? lpGameDataOutput->GetAllocatorList() : 0;
+            BrnGame::GetMainGameModule()->GetReplayModule().Prepare(lpReplayAllocators);
+        }
+        // The GameDataModule pump keeps its place in the ladder: BrnGameModule::GamePrepare has
+        // already driven it to completion, so it reports done immediately (see the note above).
         if (BrnGame::GetMainGameDataModule()->Prepare(0, 0))
             AdvanceLoadingStage(E_LOADINGSTAGE_DONE);
         break;

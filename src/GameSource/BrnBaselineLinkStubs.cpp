@@ -55,7 +55,21 @@ namespace BrnReplays
     // Link stub for the replay module ctor (BrnGameModule constructs mReplayModule). The
     // member sub-objects default-construct; the real ctor body is in BrnReplayModule.cpp
     // (out of the exe build -- see the header audit note).
-    ReplayModule::ReplayModule() {}
+    // STILL NEEDED 2026-09-02 (tyre-mark wave). BrnReplayModule.cpp is STILL not on the build
+    // list: mounting it pulls Update_Dispatch -> GPUDiskWriteStream::Dispatch, and
+    // Stream/BrnReplayGPUDiskWriteStream.cpp does not compile today (two u64 ->
+    // CgsFileSystem::Handle casts at :186/:220 -- it has never been compiled, so nobody had
+    // seen them). The two functions that wave needed -- ReplayModule::Prepare @0x82652768 and
+    // ::StoreSerialisers @0x8264B600 -- are therefore in their own TU,
+    // Replays/BrnReplayModule_Prepare.cpp, which is on the list. This ctor stub still stands.
+    ReplayModule::ReplayModule()
+    {
+        // The two members ReplayModule::Prepare / StoreSerialisers depend on. The real ctor
+        // (BrnReplayModule.cpp) zeroes them too; this stub is what actually runs in this build,
+        // and an unzeroed mpLinearMalloc would be read as a live allocator on the first frame.
+        miPrepareStage = 0;
+        mpLinearMalloc = 0;
+    }
 }
 
 // RETIRED 2026-08-01 (camera wave). BrnPhysics::Vehicle::RaceCarState::operator= used to be
