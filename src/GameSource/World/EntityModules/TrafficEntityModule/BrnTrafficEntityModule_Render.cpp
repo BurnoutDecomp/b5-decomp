@@ -788,8 +788,39 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
         // The console's Vector3Plus* overload @0x822B3458 is the same 16-byte-row copy as the
         // Vector4* one this tree bodies; the race-car render TU passes its Vector3Plus block
         // through the same cast.
-        CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData(
-            22, reinterpret_cast< const Vector4* >( lpPhysicsInfo->maSkinningOffsets_Scratch ) );
+        //
+        // ---- [tdef-scale] NOT X360; opt-in BRN_TDEF_SCALE=<f> publishes the block with every
+        // row's xyz multiplied by <f> (0 == a published all-zero block). The discriminator for
+        // the panel sail seen in run tdef_r4: if a ZERO block still sails, the vertex stream's
+        // bone indices reach past c127 (the stale-register mechanism the race-car TU measured)
+        // and the values are innocent; if the sail scales with <f>, the values are the cause.
+        // DELETE-WHEN the traffic sail is attributed.
+        static f32 sfUploadScale = -1.0f;
+        if ( sfUploadScale < 0.0f )
+        {
+            const char* lpcEnv = getenv( "BRN_TDEF_SCALE" );
+            sfUploadScale = ( lpcEnv != 0 ) ? static_cast< f32 >( atof( lpcEnv ) ) : 1.0f;
+            if ( sfUploadScale < 0.0f ) { sfUploadScale = 1.0f; }
+        }
+        if ( sfUploadScale != 1.0f )
+        {
+            static Vector3Plus saScaledBlock[ TrafficPhysicsInfo::KU_NUM_SKINNING_OFFSETS ];
+            for ( u32 luRow = 0; luRow < TrafficPhysicsInfo::KU_NUM_SKINNING_OFFSETS; ++luRow )
+            {
+                const Vector3Plus& lrRow = lpPhysicsInfo->maSkinningOffsets_Scratch[ luRow ];
+                saScaledBlock[ luRow ].x = lrRow.x * sfUploadScale;
+                saScaledBlock[ luRow ].y = lrRow.y * sfUploadScale;
+                saScaledBlock[ luRow ].z = lrRow.z * sfUploadScale;
+                saScaledBlock[ luRow ].w = lrRow.w;
+            }
+            CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData(
+                22, reinterpret_cast< const Vector4* >( saScaledBlock ) );
+        }
+        else
+        {
+            CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData(
+                22, reinterpret_cast< const Vector4* >( lpPhysicsInfo->maSkinningOffsets_Scratch ) );
+        }
         {
             const Vector4 lv4DamageConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
             CgsGraphics::mShaderConstantTable.SetShaderConstantData( 23, lv4DamageConstants );
