@@ -34,7 +34,7 @@ namespace Vehicle
         f32 lfTimestep,
         BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContactInterface,
         const VehicleInputInterface* lpVehicleInputInterface,
-        BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
+        BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,   // fork retired 2026-09-02, see BrnVehicleManager.h
         BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
         VehicleManagerOutputInterface* lpManagerOutputInterface,
         BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface)

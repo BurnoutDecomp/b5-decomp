@@ -11,6 +11,10 @@
 
 #include <cstddef>                                          // offsetof (layout asserts)
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"                   // VehicleManager (RecordCrashContact's two bare reads; friend)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"       // RaceCarPhysics (GetTransform / GetDeformableAABB / GetLinearVelocity)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"         // CgsGeometric::AxisAlignedBox
+#include "GameSource/World/BrnEntityTypes.h"                                        // BrnWorld::E_ENTITYTYPE_*
 
 namespace BrnPhysics
 {
@@ -145,6 +149,72 @@ namespace Vehicle
     const char* VehicleManagerDebugComponent::GetName() const
     {
         return "Vehicle Manager";
+    }
+
+    // ========================================================================================
+    // VehicleManagerDebugComponent::RecordCrashContact   @ 0x825B7880   (114 instructions)
+    //
+    // AN EXPORT HOLE -- decoded from the raw image words (tools/re/x360rd.py 825B7880 456); the
+    // next export starts at 0x825B7A48 and the body's `b __restgprlr_26` sits at 0x825B7A44.
+    // Word-by-word:
+    //   825B788C  mr r29, r4 ; mr r31, r3            lpPotentialContact / this
+    //   825B7898  cmplwi r29, 0 -> assert :1045       "lpPotentialContact != NULL"
+    //   825B78C0  ld 0x30 / ld 0x38 ; srdi 32          the two entity words (r28 = A, r27 = B)
+    //   825B78D8  srwi r28, 24 ; cmplwi 1 -> :1053     "lEntityIdA.GetOwner() == BrnWorld::E_ENTITYTYPE_RACECAR"
+    //   825B7900  srwi r27, 24 ; cmplwi 0 ; bne RET    B not WORLD -> silent return (a test, not an assert)
+    //   825B7908  rlwinm r10, r28, 22,18,31            idx = (A >> 10) & 0x3FFF
+    //   825B7914  lwz r11, 0x1D8(this)                 mpVehicleManager
+    //   825B791C  lwzx r9, r11, 0x2A0AC ; cmpw ; bne   idx != mePlayerActiveRaceCarIndex -> return
+    //   825B7928  mulli r30, r10, 0x1460 ; lbz 0xE50   maRaceCarVehicles[idx].mbCrashing -> return if set
+    //   825B793C  ld 0x400 / ld 0x408 (this)           mLastCrashContact_Contact.muVolumeInstanceId{A,B}
+    //             cmplw B, last.A ; cmplw A, last.B -> assert :1065 (fires only if BOTH match)
+    //   825B79A8  addi r10, rec, 0x10 ; 4 x lvx128/stvx128 -> +0x370  (mTransform -> _RaceCarTransform)
+    //   825B79F4  lvx128 rec+0x6D0 / rec+0x6E0 ; vsubfp ; vrefp(2.0) + 2 NR ; vmulfp128 ; stvx128 +0x3B0
+    //             (max - min) / 2  -> _RaceCarHalfExt   (vcfsx v0,2 / vcfsx v13,1 are the 2.0 and 1.0)
+    //   825B7A18  mtctr 10 ; ld/std x10                 80-byte contact -> +0x3D0 (_Contact)
+    //   825B7A38  lvx128 rec+0x50 ; stvx128 +0x3C0      mLinearVelocity -> _RaceCarVelocity
+    // The friend grant in BrnVehicleManager.h carries the two bare manager reads.
+    // ========================================================================================
+    void VehicleManagerDebugComponent::RecordCrashContact(
+        const CgsSceneManager::SceneManagerIO::PotentialContact* lpPotentialContact)
+    {
+        CGS_ASSERT(lpPotentialContact != 0, "lpPotentialContact != NULL");   // :1045
+
+        const u32 luEntityIdA = static_cast<u32>(lpPotentialContact->muVolumeInstanceIdA.muId >> 32);   // r28
+        const u32 luEntityIdB = static_cast<u32>(lpPotentialContact->muVolumeInstanceIdB.muId >> 32);   // r27
+
+        CGS_ASSERT((luEntityIdA >> 24) == static_cast<u32>(BrnWorld::E_ENTITYTYPE_RACECAR),
+                   "lEntityIdA.GetOwner() == BrnWorld::E_ENTITYTYPE_RACECAR");   // :1053
+
+        // 0x825B7904: a race-car-vs-non-world contact is simply not recorded here.
+        if ((luEntityIdB >> 24) != static_cast<u32>(BrnWorld::E_ENTITYTYPE_WORLD))
+            return;
+
+        // 0x825B7908..0x825B7938: the player's slot only, and only before it is crashing.
+        const u32 luRaceCarIndex = (luEntityIdA >> 10) & 0x3FFFu;
+        if (luRaceCarIndex != static_cast<u32>(mpVehicleManager->mePlayerActiveRaceCarIndex))
+            return;
+
+        const RaceCarPhysics& lrRaceCar = mpVehicleManager->maRaceCarVehicles[luRaceCarIndex];
+        if (lrRaceCar.IsCrashing())
+            return;
+
+        // 0x825B793C..0x825B797C (:1065) -- the same pair, mirrored, must not already be the record.
+        CGS_ASSERT(luEntityIdB != static_cast<u32>(mLastCrashContact_Contact.muVolumeInstanceIdA.muId >> 32)
+                   || luEntityIdA != static_cast<u32>(mLastCrashContact_Contact.muVolumeInstanceIdB.muId >> 32),
+                   "lEntityIdB != mLastCrashContact_Contact.muVolumeInstanceIdA.GetEntityId() || "
+                   "lEntityIdA != mLastCrashContact_Contact.muVolumeInstanceIdB.GetEntityId()");
+
+        mLastCrashContact_RaceCarTransform = lrRaceCar.GetTransform();                     // rec +0x10 -> +0x370
+
+        const CgsGeometric::AxisAlignedBox& lrBox = lrRaceCar.GetDeformableAABB();         // rec +0x6D0 / +0x6E0
+        mLastCrashContact_RaceCarHalfExt = Vector3{ (lrBox.mMax.x - lrBox.mMin.x) / 2.0f,   // -> +0x3B0
+                                                    (lrBox.mMax.y - lrBox.mMin.y) / 2.0f,
+                                                    (lrBox.mMax.z - lrBox.mMin.z) / 2.0f,
+                                                    (lrBox.mMax.w - lrBox.mMin.w) / 2.0f };
+
+        mLastCrashContact_Contact         = *lpPotentialContact;                           // 80 bytes -> +0x3D0
+        mLastCrashContact_RaceCarVelocity = lrRaceCar.GetLinearVelocity();                 // rec +0x50 -> +0x3C0
     }
 
     // ========================================================================================
