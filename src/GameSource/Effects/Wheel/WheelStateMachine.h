@@ -50,19 +50,40 @@ namespace BrnEffects
     struct WheelStateMachine
     {
     public:
-        // ---- construction / lifetime (bodies own their own TUs) -------------
-        WheelStateMachine();
-        void Construct(u32 luWheelIndex);   // DWARF: Construct(BrnPhysics::Vehicle::EVehicleDrivenWheel)
-        void Reset();
+        // ---- construction / lifetime -----------------------------------------
+        // None of these has an X360 export: the ARTIST build inlines them into their
+        // one owner, BrnEffects::ActiveRaceCarData (Construct @0x82287E08 -- the 32-byte-
+        // stride loop storing the index then three zero floats then a zero vector;
+        // Reset @0x8229B618 / Initialise @0x8229D7C8 -- the same three floats + vector
+        // zeroed with the index kept). Bodied here from those stores.
+        WheelStateMachine() {}
+        void Construct(u32 luWheelIndex)   // DWARF: Construct(BrnPhysics::Vehicle::EVehicleDrivenWheel)
+        {
+            mWheelIndex                  = luWheelIndex;
+            mfSurfaceParticleAccumulator = 0.0f;
+            mfSkidSmokeAccumulators[0]   = 0.0f;
+            mfSkidSmokeAccumulators[1]   = 0.0f;
+            mvPreviousPosition.SetZero();
+        }
+        void Reset()
+        {
+            mfSurfaceParticleAccumulator = 0.0f;
+            mfSkidSmokeAccumulators[0]   = 0.0f;
+            mfSkidSmokeAccumulators[1]   = 0.0f;
+            mvPreviousPosition.SetZero();
+        }
 
         // Update @ 0x82293EB8. Per-frame: derive this wheel's road speed / skid
         // factors / reverse-thrust velocity, resolve the contact surface's visual-FX
         // attributes, and drive the (up to two) skid-smoke particle layers.
         void Update(const CarState& lCarState, const RaceCarParticleEffectHelper& lEffectHelper);
 
-        // The previous-frame contact position (bodies own their own TU).
-        Vector3& GetPreviousPosition();
-        void     SetPreviousPosition(Vector3 lPosition);
+        // The previous-frame contact position. EffectsModule::HandleWheels @0x82296C80 reads
+        // it (lvx128 at ActiveRaceCarData +0x10 + 0x20*i) for the "moved along the contact
+        // normal" gate and overwrites it with the wheel position every wheel every frame.
+        Vector3&       GetPreviousPosition()       { return mvPreviousPosition; }
+        const Vector3& GetPreviousPosition() const { return mvPreviousPosition; }
+        void           SetPreviousPosition(Vector3 lPosition) { mvPreviousPosition = lPosition; }
 
     private:
         // FireNativeParticle (DWARF WheelStateMachine.h:87). Spawns one native

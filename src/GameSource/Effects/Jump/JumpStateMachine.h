@@ -38,6 +38,9 @@ namespace BrnEffects
     // ------------------------------------------------------------------------
     class JumpStateMachine : public EffectsStateMachine
     {
+        // ActiveRaceCarData::Construct / ::ExtractTags zero mState / mTime directly (the
+        // inlined Construct; the console reaches them by offset).
+        friend class ActiveRaceCarData;
     protected:
         // ---- EffectsStateMachine virtual overrides --------------------------
         // OnDetermineNextState (DWARF JumpStateMachine.cpp:47). The jump-effects
