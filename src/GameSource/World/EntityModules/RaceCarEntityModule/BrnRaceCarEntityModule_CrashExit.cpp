@@ -282,4 +282,83 @@ void RaceCarEntityModule::PostSceneUpdate(
     lpOutput->UnlockForWrite();
 }
 
+// =================================================================================================
+// ProcessRaceCarCrashEvents_PostPhysics @ 0x822BD8B0   (127 insns)   -- crash wave 2026-09-02
+// DWARF BrnRaceCarEntityModule.h:668  void (const InputBuffer_PostPhysics*, OutputBuffer_PostPhysics*)
+//
+// The crash ENTRY consumer: drains the physics module's RaceCarCrashEvent queue (the input
+// buffer's VehicleManagerOutputInterface image, queue @+0x3A0) once per post-physics tick.
+//   0x822BD8CC  RaceCarEntityModuleIO::Input(lpInput) ; addi r26, r3, 0x3A0   -> the crash queue
+//   0x822BD940  EventQueue<RaceCarCrashEvent,8>::GetEvent(i)  (the truncated `BrnPhysics::Vehicl`)
+//   0x822BD948  ld 0(event) ; srdi 32 ; extrwi 14,8                 -> the victim's active index
+//   0x822BD954  asserts :5251 / :5252 (index in [0,8)) and :5255 (mePlayerActiveRaceCarIndex >= 0)
+//   0x822BD9BC  index == mePlayerActiveRaceCarIndex ->
+//     0x822BD9D4    CGS_ASSERT(IsAttached())                             BrnActiveRaceCar.h:1418
+//     0x822BD9FC    lbz 0x52A(player) -> mPhysicsState.mbCrashing: only while NOT yet crashing:
+//     0x822BDA20      stdx event.mRaceCarVolumeInstanceID -> this+0x18108
+//                       == mCrashPlayManager (+0x180F0) + 0x18 == mPlayerCarVolumeInstanceID
+//     0x822BDA18      meGameModeType (+0x18368) in {3 ROAD_RAGE, 8, 10} and event +0x38
+//                     (mbIsPrimaryCrash) set -> player ActiveRaceCar::mbIsWrecked = true (stb r14=1, 0x782)
+//   0x822BDA5C  GetActiveRaceCar(index)->OnCrash(event.mbIsPrimaryCrash, event,
+//                 lpOutput->GetSceneInputInterface() [sub_822B63E0: +8224, "Not locked for
+//                 writing" assert IO.h:576], event.mbRemoveHandlingVolumeFromScene (lbz 0x39),
+//                 f1 = this+0x183A0 == mfSimTime)
+//   0x822BDA90  re-reads miLength every iteration (`lwz r11, 8(r26)`), reproduced by the loop test.
+// =================================================================================================
+void RaceCarEntityModule::ProcessRaceCarCrashEvents_PostPhysics(
+    const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
+    RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput )
+{
+    typedef BrnPhysics::Vehicle::VehicleManagerOutputInterface::RaceCarCrashEventQueue CrashQueue;
+
+    const CrashQueue* lpQueue = lpInput->GetVehicleManagerOutputInterface()->GetRaceCarCrashEventQueue();
+
+    for( s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent )
+    {
+        const BrnPhysics::Vehicle::RaceCarCrashEvent& lrEvent = lpQueue->GetEvent( liEvent );
+
+        const u32 luEntityWord = static_cast<u32>( lrEvent.mRaceCarVolumeInstanceID.muId >> 32 );
+        const s32 liActiveRaceCarIndex = static_cast<s32>( ( luEntityWord >> 10 ) & 0x3FFFu );
+
+        CGS_ASSERT( liActiveRaceCarIndex >= 0,
+                    "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0" );                  // :5251
+        CGS_ASSERT( liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                    "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" );               // :5252
+        CGS_ASSERT( static_cast<s32>( mePlayerActiveRaceCarIndex ) >= 0,
+                    "mePlayerActiveRaceCarIndex >= 0" );                                    // :5255
+
+        if( static_cast<s32>( mePlayerActiveRaceCarIndex ) == liActiveRaceCarIndex )
+        {
+            ActiveRaceCar* lpPlayerCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
+            CGS_ASSERT( lpPlayerCar->IsAttached(), "IsAttached()" );                       // BrnActiveRaceCar.h:1418
+
+            if( !lpPlayerCar->GetPhysicsState()->mbCrashing )                              // lbz 0x52A
+            {
+                // The crash-play manager's player id -- the value its Update was starving on.
+                mCrashPlayManager.mPlayerCarVolumeInstanceID = lrEvent.mRaceCarVolumeInstanceID;   // stdx -> +0x18108
+
+                if( meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE
+                    || static_cast<s32>( meGameModeType ) == 8
+                    || static_cast<s32>( meGameModeType ) == 10 )
+                {
+                    if( lrEvent.mbIsPrimaryCrash )                                         // lbz 0x38(event)
+                    {
+                        // The console's bare `stb r14(1), 0x782(player)`; there is no setter in
+                        // the export set, so the module writes the member by name (friend grant
+                        // in BrnActiveRaceCar.h, reasoned there).
+                        lpPlayerCar->mbIsWrecked = true;
+                    }
+                }
+            }
+        }
+
+        ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liActiveRaceCarIndex ) );
+        lpActiveRaceCar->OnCrash( lrEvent.mbIsPrimaryCrash,
+                                  lrEvent,
+                                  lpOutput->GetSceneInputInterface(),
+                                  lrEvent.mbRemoveHandlingVolumeFromScene,
+                                  mfSimTime );
+    }
+}
+
 }   // namespace BrnWorld
