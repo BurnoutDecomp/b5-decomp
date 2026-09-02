@@ -114,6 +114,14 @@ const s32 KI_PREV_TRANSFORM_BUFFER_SIZE = 4;
 
 class ActiveRaceCar
 {
+    // 2026-09-02 (crash wave). The module writes this class's crash latches BARE on the console:
+    // ProcessRaceCarCrashEvents_PostPhysics @0x822BDA50 `stb r14(1), 0x782(car)` (mbIsWrecked),
+    // CheckForResetOnTrackConditions @0x822CED44/@0x822CED64 (the same byte) and
+    // ProcessTakedownEvents @0x822F6D8C. The export set has no SetWrecked() and the DWARF lists
+    // none, so the stores are reproduced by name under a friend grant rather than by inventing an
+    // accessor -- the same reasoning VehicleManager uses for PhysicsModule.
+    friend class RaceCarEntityModule;
+
 public:
     // X360: returns meActiveRaceCarIndex (this+0x748). DWARF BrnActiveRaceCar.h:736.
     EActiveRaceCarIndex GetActiveRaceCarIndex() const;
@@ -271,6 +279,22 @@ public:
     // X360 0x822BF3A0 (77 insns). Re-seat every piece of crash bookkeeping once a crash is over:
     // restore body-part visibility, re-arm the invulnerability window, and clear the wreck flags.
     void ResetAfterCrash(bool lbKeepVerletOffsets);
+
+    // X360 0x822A4D60 (75 insns), DWARF BrnActiveRaceCar.h:701. The crash ENTRY hook, called by
+    // RaceCarEntityModule::ProcessRaceCarCrashEvents_PostPhysics once per RaceCarCrashEvent the
+    // physics module posted. Latches mCrashData.mbFirstCrash = lbIsPrimaryCrash and, on a primary
+    // crash of a car the physics snapshot does not yet show crashing, snapshots the snapshot's
+    // transform (mPhysicsState.mTransform, this+0x2D0) into mCrashData.mInitialTransform. The
+    // event, the trailing bool and the float are accepted and unused by the console body (only
+    // r3/r4/r6 are read); they are kept so the call is the console's. The scene-interface type is
+    // spelled by its own name: OutputBuffer_PreScene::SceneInputInterface is a typedef of
+    // CgsSceneManager::SceneManagerIO::InSceneUpdateInterface (BrnRaceCarEntityModuleIO.h :71),
+    // and the enclosing buffer is only forward-declared where this header is seen.
+    void OnCrash(bool lbIsPrimaryCrash,
+                 const BrnPhysics::Vehicle::RaceCarCrashEvent& lrEvent,
+                 CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
+                 bool lbRemoveHandlingVolumeFromScene,
+                 f32 lfSimTime);
 
     // X360 0x822A4E90 (48 insns). Zero all KU_MAX_RACE_CAR_VERLET_POINTS render verlet offsets
     // (the per-body-part wobble the deformation renderer accumulates).

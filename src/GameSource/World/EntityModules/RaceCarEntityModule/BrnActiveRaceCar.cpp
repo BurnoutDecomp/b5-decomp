@@ -1885,6 +1885,56 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
 }
 
 
+// -------------------------------------------------------------------------------------------------
+// OnCrash @ 0x822A4D60   (75 insns)   -- crash wave 2026-09-02
+//
+//   0x822A4D78  CGS_ASSERT(IsActive())                       BrnActiveRaceCar.cpp:991
+//   0x822A4DAC  CGS_ASSERT(lpSceneInterface != NULL)         BrnActiveRaceCar.cpp:992
+//   0x822A4DD4  stb r4, 0x580(this)                          mCrashData.mbFirstCrash = lbIsPrimaryCrash
+//   0x822A4DDC  !lbIsPrimaryCrash -> return
+//   0x822A4DE4  CGS_ASSERT(IsAttached())                     BrnActiveRaceCar.h:1418
+//   0x822A4E14  lbz 0x52A(this) -> mPhysicsState.mbCrashing: set -> the dev-log warning
+//               ("Warning: crashing an active race car that is already crashing") and return
+//   0x822A4E50  four lvx128/stvx128 pairs this+0x2D0 -> this+0x540:
+//               mCrashData.mInitialTransform = mPhysicsState.mTransform  (RaceCarState @496)
+// r5 (the event), r7 (the remove-volume bool) and f1 (sim time) are never read by the body.
+// -------------------------------------------------------------------------------------------------
+void ActiveRaceCar::OnCrash(bool lbIsPrimaryCrash,
+                            const BrnPhysics::Vehicle::RaceCarCrashEvent& lrEvent,
+                            CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
+                            bool lbRemoveHandlingVolumeFromScene,
+                            f32 lfSimTime)
+{
+    (void)lrEvent;
+    (void)lbRemoveHandlingVolumeFromScene;
+    (void)lfSimTime;
+
+    CGS_ASSERT( IsActive(), "IsActive()" );                              // :991
+    CGS_ASSERT( lpSceneInterface != 0, "lpSceneInterface != NULL" );     // :992
+
+    mCrashData.mbFirstCrash = lbIsPrimaryCrash;                          // stb r4, 0x580
+
+    if( !lbIsPrimaryCrash )
+    {
+        return;
+    }
+
+    CGS_ASSERT( IsAttached(), "IsAttached()" );                          // BrnActiveRaceCar.h:1418
+
+    if( mPhysicsState.mbCrashing )                                       // lbz 0x52A
+    {
+        // The console's dev-log warning (gxMessageFilterFlags bit 0); log only, no state change.
+        if( CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "Warning: crashing an active race car that is already crashing\n";
+        }
+        return;
+    }
+
+    mCrashData.mInitialTransform = mPhysicsState.mTransform;            // +0x2D0 -> +0x540, 4 rows
+}
+
 // =================================================================================================
 // THE CRASH-EXIT SET   (crash exit wave, 2026-08-25)
 //

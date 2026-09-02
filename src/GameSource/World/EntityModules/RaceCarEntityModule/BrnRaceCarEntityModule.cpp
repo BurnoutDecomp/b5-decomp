@@ -49,6 +49,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"                  // AcquireResourceRequest / *Response
 #include "GameShared/GameClasses/System/Resource/CgsResourceId.h"                        // CgsResource::ID::HashString
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                               // CgsDev::Log::gpDebugPrint
+#include "SharedClasses/World/BrnCollisionTag.h"                                        // BrnWorld::KU_COLLISION_FLAG_FATAL ([crash-verdict] witness)
 #include "SharedClasses/Graphics/BrnGlobalColourPalette.h"                               // BrnWorld::GlobalColourPalette
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"                              // GameDataAssetEvent (reply shape)
 #include "SharedClasses/DataLists/VehicleList.h"                                         // BrnResource::VehicleList
@@ -959,6 +960,39 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         bool lbCrashResetDeformation    = false;
         bool lbCrashResettingAfterWreck = false;
         bool lbIsCrashingReset          = false;
+
+        // ---- [crash-verdict] BOTH SIDES OF THE DRIVE-AWAY / WRECK DECISION ----------------------
+        // DIAG. NOT IN THE X360 BINARY. Opt-in (BRN_CRASH_VERDICT_DIAG=1). Prints every input the
+        // console's classification below reads, for a crashing car, so a run can say WHICH arm
+        // kept returning "drive away": the mbIsWrecked latch, the physics snapshot's mbIsDriveable
+        // (deformation beyond drive limits / a wheel off), mbFullyDrivableFromCrash, the fatal
+        // collision tag, time in air, the up-vector dot, the front-ray occlusion and the game-mode
+        // gate. One line per crash-completion, not per frame. DELETE-WHEN-STABLE.
+        if( lpActiveRaceCar->IsCrashing() && getenv( "BRN_CRASH_VERDICT_DIAG" ) != 0
+            && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            const BrnPhysics::Vehicle::RaceCarState* lpState = lpActiveRaceCar->GetPhysicsState();
+            const Matrix44Affine lTransform = lpActiveRaceCar->GetTransform();
+            const Vector3 lWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
+            *CgsDev::Log::gpDebugPrint
+                << "[crash-verdict] car=" << static_cast<s32>( leActiveRaceCarIndex )
+                << " verdict=" << ( lpActiveRaceCar->IsDriveableAfterCrash() ? "DRIVE_AWAY"
+                                   : lpActiveRaceCar->IsDeformationFixedAfterCrash() ? "WRECK_RESET_DEFORM"
+                                   : "RESET_TRANSFORM_ONLY" )
+                << " IsWrecked=" << ( lpActiveRaceCar->IsWrecked() ? 1 : 0 )
+                << " isDriveable=" << ( lpState->mbIsDriveable ? 1 : 0 )
+                << " fullyDrivable=" << ( lpState->mbFullyDrivableFromCrash ? 1 : 0 )
+                << " fatalTag=" << ( ( lpState->mAboveGroundTestResult.mCollisionTag.muValue
+                                       & BrnWorld::KU_COLLISION_FLAG_FATAL ) ? 1 : 0 )
+                << " agValid=" << ( lpState->mAboveGroundTestResult.mbValid ? 1 : 0 )
+                << " timeInAir=" << lpState->mfTimeInAir
+                << " upDot=" << rw::math::vpu::Dot( lTransform.Up(), lWorldUp )
+                << " frontRayOccluded=" << ( lpState->mbIsFrontRayOccluded ? 1 : 0 )
+                << " isPlayer=" << ( lpActiveRaceCar->IsPlayer() ? 1 : 0 )
+                << " canDriveAwayLatch=" << ( lpActiveRaceCar->CanDriveAwayFromCrash() ? 1 : 0 )
+                << " speedMPH=" << lpState->mfSpeedMPH
+                << "\n";
+        }
 
         if( lpActiveRaceCar->IsCrashing() )
         {
@@ -4772,6 +4806,14 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     // the same two values from the same two sources. Keeping both would post the director a
     // duplicate NewVehicleEvent the console never emits, so the stand-in and its edge latch are
     // deleted rather than left beside the real leg.
+    //
+    // ⭐ 2026-09-02 (crash wave): THE CRASH-ENTRY CONSUMER, at its own console slot (@0x823075E8,
+    // the `bl` immediately BEFORE ProcessCreateVehicleEvents @0x823075F8). Until now nothing on
+    // the PC read the physics module's RaceCarCrashEvent queue on this side, so the crash-play
+    // manager's mPlayerCarVolumeInstanceID stayed invalid forever (its own [FLAG PC bring-up]
+    // print) and ActiveRaceCar::OnCrash / mCrashData were never written.
+    ProcessRaceCarCrashEvents_PostPhysics( lpInput, lpOutput );
+
     ProcessCreateVehicleEvents( lpInput, lpOutput );
 
     // ⭐⭐ THE PHYSICS READBACK, at the console's own position (`bl` at 0x8230761C, before

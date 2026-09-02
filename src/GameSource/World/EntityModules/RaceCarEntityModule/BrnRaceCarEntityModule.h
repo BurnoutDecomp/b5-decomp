@@ -159,6 +159,18 @@ public:
         void ProcessRaceCarCrashCompleteEvents(
             const RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput );
 
+        // ---- THE CRASH ENTRY, consumer side (crash wave 2026-09-02). X360 0x822BD8B0
+        //      (127 insns), DWARF :668. Body in BrnRaceCarEntityModule_CrashExit.cpp beside its
+        //      exit twin. Drains the physics module's RaceCarCrashEvent queue every post-physics
+        //      tick: for the PLAYER's first event of a crash it latches the crash-play manager's
+        //      mPlayerCarVolumeInstanceID (the value CrashPlayManager::Update was starving on)
+        //      and, in ROAD_RAGE / mode 8 / mode 10, sets mbIsWrecked on a primary crash; then
+        //      every event reaches ActiveRaceCar::OnCrash. Called from PostPhysicsUpdate at the
+        //      console's own slot (@0x823075E8, before ProcessCreateVehicleEvents).
+        void ProcessRaceCarCrashEvents_PostPhysics(
+            const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
+            RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput );
+
         // ---- THE RESET-ON-TRACK PUMP (resetpump wave 2026-08-26). All three bodies live in
         //      BrnRaceCarEntityModule_ResetPump.cpp. Together they are the round trip that was
         //      missing between "a heavy crash ends" and "the car is put back on the road":
@@ -797,7 +809,15 @@ private:
     // (+0x34 amount, +0x38 type) into the player ActiveRaceCar's +0x7CC/+0x7C8 AND into this
     // pair (+99536 type / +99544 amount); AddRaceCarToStartingGridOrFreeburnLobby @0x82300B38
     // (0x823011D0..0x823011D8) writes the same two module seats on the mode-start path.
-    u8  maTailPadB1a[0x184D0 - 0x18398];   // +0x18398 (99224) .. +0x184D0 (99536)
+    // 2026-09-02 (crash wave): the pad is split again to name mfSimTime. DWARF :405-:408 run
+    // mfSimTimerTimeStep / mfIntroTimer / mfSimTime / mfTimeStepMultiplier from +0x18398; the
+    // first is the trailing `mfTimeStep` below (same seat, kept where it is), and
+    // ProcessRaceCarCrashEvents_PostPhysics @0x822BDA68 reads the third (`lfs f31, 0(r16)`,
+    // r16 == this + 0x183A0) to hand ActiveRaceCar::OnCrash its f1. Nothing in this build
+    // writes it yet (the console's PreSceneUpdate accumulator is not landed), so it reads 0.0f.
+    u8  maTailPadB1a0[0x183A0 - 0x18398];  // +0x18398 (99224) .. +0x183A0 (99232)  mfSimTimerTimeStep / mfIntroTimer seats
+    f32 mfSimTime;                          // +0x183A0 (99232)  DWARF :407
+    u8  maTailPadB1a[0x184D0 - 0x183A4];   // +0x183A4 (99236) .. +0x184D0 (99536)
     s32 miPlayerBaseDeformationTypeMirror; // +0x184D0 (99536) -- the reset-type mirror
     u8  maTailPadB1b[4];                   // +0x184D4 (99540)
     f32 mfPlayerBaseDeformAmountMirror;    // +0x184D8 (99544) -- the amount mirror
