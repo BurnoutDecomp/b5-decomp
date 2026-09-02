@@ -68,6 +68,10 @@
 // CgsShaderConstants TU). Same extern the traffic render TU carries.
 namespace CgsGraphics { extern ::ShaderConstantTable mShaderConstantTable; }
 
+// [DIAG] the renderer's present counter (BRN_FRAME_DUMP names its BMPs bb_<guPresentCount>.bmp);
+// stamped on the [tdef] witness so it pairs with the frame file. NOT X360.
+namespace renderengine { extern u32 guPresentCount; }
+
 namespace BrnTraffic
 {
 
@@ -231,7 +235,8 @@ void TrafficEntityModule::ProcessDeformationData(
                                 ++sluLines;
                                 sfLastSum = lfSum;
                                 *CgsDev::Log::gpDebugPrint
-                                    << "[tdef] veh " << luVehicle
+                                    << "[tdef] frame=" << static_cast< s32 >( renderengine::guPresentCount )
+                                    << " veh " << luVehicle
                                     << " phys " << liPhysicalIndex
                                     << " maxVerlet " << lfMax
                                     << " sumVerlet " << lfSum

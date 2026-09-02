@@ -36,6 +36,10 @@ namespace BrnTrafficIO
         // Appends every embedded EventQueue), so their queues must be Constructed here.
         mVehicleOutputInterface.Construct();
         mVehicleManagerOutputInterface.Construct();
+        // The deformation-for-entity-modules seat: bridge leg 3 (LIVE 2026-09-02) assigns it
+        // every frame and its operator= Clears+Appends the two embedded EventQueues, which
+        // only Construct seats.
+        mDeformationOutputInterfaceForEntityModules.Construct();
     }
 
 
