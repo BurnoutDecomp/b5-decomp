@@ -51,6 +51,11 @@ namespace Vehicle
 extern s32 gT5RamFramesLeft;
 extern s32 gT5RamTrafficSlot;
 extern s32 gT5RamGlobalIndex;
+extern f32 gT5PlayerVel[3];
+extern f32 gT5ArmedPlayerSpeed;
+extern f32 gT5MaxImpulseMag;
+extern f32 gT5SumImpulseMag;
+extern f32 gT5MaxClosing;
 
 namespace
 {
@@ -61,19 +66,53 @@ namespace
         return sbEnabled;
     }
 
-    // [T5-ram] arm the post-hit measurement window on the FIRST outcome only, so a later
-    // secondary contact cannot re-point the probe at a different car mid-measurement.
-    // 180 frames at 60 Hz == the 3 s the finisher round asks for.
-    void ArmT5RamWindow(u16 lu16TrafficSlot, EntityId lGlobalTrafficID)
+    // [T5-ram] arm the post-hit measurement window. 180 frames at 60 Hz == 3 s.
+    // RE-ARM POLICY (2026-09-02, traffic crash wave): the first version armed on the FIRST
+    // outcome of the run and never again -- on the standard recipe that is a 37 mph brush 20 m
+    // after the teleport, so a 100+ mph hit a minute later was never measured. Now a NEW outcome
+    // takes the window when (a) no window is open, (b) it is the run's first CRASHING outcome, or
+    // (c) the player is at least 20 % faster than at the last arming. A secondary contact at the
+    // same speed still cannot re-point the probe mid-measurement.
+    bool s_bT5ArmedCrashing = false;
+
+    void ArmT5RamWindow(u16 lu16TrafficSlot, EntityId lGlobalTrafficID, bool lbCrashingOutcome)
     {
-        if (gT5RamTrafficSlot >= 0)
+        const f32 lfPlayerSpeed = sqrtf(gT5PlayerVel[0] * gT5PlayerVel[0]
+                                        + gT5PlayerVel[1] * gT5PlayerVel[1]
+                                        + gT5PlayerVel[2] * gT5PlayerVel[2]);
+        if (gT5RamTrafficSlot >= 0 && gT5RamFramesLeft > 0)
         {
-            return;
+            const bool lbFirstCrash = lbCrashingOutcome && !s_bT5ArmedCrashing;
+            const bool lbHarder     = lfPlayerSpeed > gT5ArmedPlayerSpeed * 1.2f;
+            if (!lbFirstCrash && !lbHarder)
+            {
+                return;
+            }
         }
-        gT5RamTrafficSlot = static_cast<s32>(lu16TrafficSlot);
-        gT5RamGlobalIndex = static_cast<s32>((lGlobalTrafficID.muValue >> 10) & 0x3FFFu);
-        gT5RamFramesLeft  = 180;
+        gT5RamTrafficSlot   = static_cast<s32>(lu16TrafficSlot);
+        gT5RamGlobalIndex   = static_cast<s32>((lGlobalTrafficID.muValue >> 10) & 0x3FFFu);
+        gT5RamFramesLeft    = 180;
+        gT5ArmedPlayerSpeed = lfPlayerSpeed;
+        s_bT5ArmedCrashing  = lbCrashingOutcome;
+        gT5MaxImpulseMag    = 0.0f;
+        gT5SumImpulseMag    = 0.0f;
+        gT5MaxClosing       = 0.0f;
+        if (TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[T5-arm] slot=" << static_cast<s32>(lu16TrafficSlot)
+                << " global=" << gT5RamGlobalIndex
+                << " crashing=" << (lbCrashingOutcome ? 1 : 0)
+                << " playerSpeed=" << lfPlayerSpeed
+                << " mph=" << (lfPlayerSpeed * 2.2369363f)
+                << "\n";
+        }
     }
+
+    // [T4-hit] outcome lines: a BUDGET rather than a once-per-kind latch, so a run with several
+    // hits reports each of them (SLAMMED/CRASHING fire once per car by construction; CHECKED is
+    // per contact and is what the budget bounds).
+    s32 s_iT4OutcomeBudget = 40;
 
     // [T4-hit] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One latch PER OUTCOME so the
     // first crash does not mask the first check/slam/near-miss.
@@ -291,11 +330,12 @@ void PhysicalTrafficManager::SetTrafficVehicleCrashing(
 
     // [T5-ram] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Open the post-hit
     // measurement window on this car.
-    ArmT5RamWindow(lu16TrafficIndex, lGlobalTrafficID);
+    ArmT5RamWindow(lu16TrafficIndex, lGlobalTrafficID, true);
 
-    // [T4-hit] DIAG. NOT IN THE X360 BINARY. Per-outcome latch. DELETE-WHEN-STABLE.
-    if (!s_bT4CrashingReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+    // [T4-hit] DIAG. NOT IN THE X360 BINARY. Budgeted. DELETE-WHEN-STABLE.
+    if (s_iT4OutcomeBudget > 0 && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
     {
+        --s_iT4OutcomeBudget;
         s_bT4CrashingReported = true;
         *CgsDev::Log::gpDebugPrint
             << "[T4-hit] outcome=CRASHING trafficSlot=" << static_cast<s32>(lu16TrafficIndex)
@@ -369,11 +409,12 @@ void PhysicalTrafficManager::SetTrafficVehicleChecked(
 
     // [T5-ram] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Open the post-hit
     // measurement window on this car.
-    ArmT5RamWindow(lu16TrafficIndex, lGlobalTrafficID);
+    ArmT5RamWindow(lu16TrafficIndex, lGlobalTrafficID, false);
 
-    // [T4-hit] DIAG. NOT IN THE X360 BINARY. Per-outcome latch. DELETE-WHEN-STABLE.
-    if (!s_bT4CheckedReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+    // [T4-hit] DIAG. NOT IN THE X360 BINARY. Budgeted. DELETE-WHEN-STABLE.
+    if (s_iT4OutcomeBudget > 0 && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
     {
+        --s_iT4OutcomeBudget;
         s_bT4CheckedReported = true;
         *CgsDev::Log::gpDebugPrint
             << "[T4-hit] outcome=CHECKED trafficSlot=" << static_cast<s32>(lu16TrafficIndex)
@@ -449,11 +490,12 @@ void PhysicalTrafficManager::SetTrafficVehicleSlammed(
 
     // [T5-ram] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Open the post-hit
     // measurement window on this car.
-    ArmT5RamWindow(lu16TrafficIndex, lGlobalTrafficID);
+    ArmT5RamWindow(lu16TrafficIndex, lGlobalTrafficID, false);
 
-    // [T4-hit] DIAG. NOT IN THE X360 BINARY. Per-outcome latch. DELETE-WHEN-STABLE.
-    if (!s_bT4SlammedReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+    // [T4-hit] DIAG. NOT IN THE X360 BINARY. Budgeted. DELETE-WHEN-STABLE.
+    if (s_iT4OutcomeBudget > 0 && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
     {
+        --s_iT4OutcomeBudget;
         s_bT4SlammedReported = true;
         *CgsDev::Log::gpDebugPrint
             << "[T4-hit] outcome=SLAMMED trafficSlot=" << static_cast<s32>(lu16TrafficIndex)

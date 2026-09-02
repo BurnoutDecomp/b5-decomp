@@ -36,6 +36,9 @@ namespace Vehicle
     extern u32 gT5CarCarApplied;
     extern f32 gT5LastImpulseMag;
     extern f32 gT5LastClosing;
+    extern f32 gT5MaxImpulseMag;
+    extern f32 gT5SumImpulseMag;
+    extern f32 gT5MaxClosing;
 
     // [kerb] PC bring-up instrument -- DELETE-WHEN the kerb response is proven 1:1. Owned by
     // BrnVehicleManager_ValidateRaceCarWorldContact.cpp (banner + definitions there); this TU only
@@ -143,6 +146,8 @@ namespace Deformation
         // [T5-imp] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Recorded BEFORE the gate so a
         // rejected contact still prints the number it was rejected on.
         BrnPhysics::Vehicle::gT5LastClosing = lfClosingSpeed;
+        if (lfClosingSpeed > BrnPhysics::Vehicle::gT5MaxClosing)
+            BrnPhysics::Vehicle::gT5MaxClosing = lfClosingSpeed;
 
         // Separating (or at rest): nothing to do (asm: the `0 >= closingSpeed` early `_restvmx_122(0)`).
         if (lfClosingSpeed <= 0.0f)
@@ -326,6 +331,11 @@ namespace Deformation
         // shaped impulse LENGTH both halves are about to receive.
         ++BrnPhysics::Vehicle::gT5CarCarApplied;
         BrnPhysics::Vehicle::gT5LastImpulseMag = lfImpulseLength;
+        // The sample-period trap, closed: the T5 line samples every 10th frame and the impact
+        // impulse lands between samples. MAX and SUM since the window was armed survive that.
+        if (lfImpulseLength > BrnPhysics::Vehicle::gT5MaxImpulseMag)
+            BrnPhysics::Vehicle::gT5MaxImpulseMag = lfImpulseLength;
+        BrnPhysics::Vehicle::gT5SumImpulseMag += lfImpulseLength;
 
         // This car: apply the impulse as-is at the contact (sensor liSensorIndex), adding to the spy.
         DeformationSensor* lpSensor = GetDeformationSensor(liSensorIndex);
