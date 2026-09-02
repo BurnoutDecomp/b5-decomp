@@ -57,6 +57,8 @@ namespace BrnParticle
         // Handle layout / per-effect flags (DWARF ParticleModule.h:90-100,184-187).
         static const u32 KU_HANDLE_INVALID    = 0xFFFFFFFFu;
         static const u32 KU_HANDLE_INDEX_MASK = 127u;   // handle & this -> slot index
+        static const u32 KU_HANDLE_INCREMENT  = 128u;   // DWARF :99 -- the generation step StopLionEffect adds
+        static const u32 KU_HANDLE_VALID_MASK = 0x7FFFFFFFu; // DWARF :100
 
         // muFlags bits (DWARF "ePPEFlag*").
         static const u16 EPPE_FLAG_IN_USE           = 1;
@@ -67,6 +69,25 @@ namespace BrnParticle
         static const u16 EPPE_FLAG_OVERRIDE_VELOCITY= 32;
 
         const rw::math::vpu::Matrix44Affine& GetTransform() const { return mTransform; }
+
+        // X360 0x82289908 (called per slot by ParticleModule::Construct @0x82294220 and by
+        // StopLionEffect @0x8228A238 for a CREATE-flagged slot). Store-for-store: the four
+        // identity rows into mTransform (+0x10..+0x4F), then +0x50/+0x54/+0x58 = 0.0 (the
+        // velocity), +0x5C = 0 (muWorldIndex), +0x0C = 0.0 (mfStateBlend), +0x64 = 0
+        // (muFlags), +0x04/+0x08 = 0 (the name hash / definition slots). muHandle (+0x00)
+        // is NOT touched -- the caller stamps it.
+        void Construct()
+        {
+            mTransform.SetIdentity();
+            mPad50[0] = mPad50[1] = mPad50[2] = mPad50[3] = 0;     // +0x50 velocity.x
+            mPad50[4] = mPad50[5] = mPad50[6] = mPad50[7] = 0;     // +0x54 velocity.y
+            mPad50[8] = mPad50[9] = mPad50[10] = mPad50[11] = 0;   // +0x58 velocity.z
+            muWorldIndex = 0;
+            mfStateBlend = 0.0f;
+            muFlags      = 0;
+            mPad04[0] = mPad04[1] = mPad04[2] = mPad04[3] = 0;     // +0x04
+            mPad04[4] = mPad04[5] = mPad04[6] = mPad04[7] = 0;     // +0x08
+        }
 
         // Set the effect's world transform and mark it CHANGED so the render pass re-reads it
         // (X360 UpdateVehicleEffectPositions/FireGlassEffect inline: store 4 rows to

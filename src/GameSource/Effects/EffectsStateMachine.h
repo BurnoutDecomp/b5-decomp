@@ -55,6 +55,7 @@ namespace BrnEffects
 
     class EffectsStateMachine
     {
+        friend class ActiveRaceCarData;   // owner-side inlined Construct / ExtractTags stores
     public:
         // CurrentState (DWARF EffectsStateMachine.h:68). Own-TU body.
         EffectsState CurrentState() const { return mState; }

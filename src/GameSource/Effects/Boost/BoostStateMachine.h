@@ -40,6 +40,10 @@ namespace BrnEffects
     // ------------------------------------------------------------------------
     class BoostStateMachine : public EffectsStateMachine
     {
+        // ActiveRaceCarData::Construct @0x82287E08 calls OnConstruct through the vtable and
+        // ::ExtractTags @0x8229B6C0 writes the tag list / state / timer directly (the console
+        // reaches these members by offset; the owner is the only outside writer).
+        friend class ActiveRaceCarData;
     public:
         // DWARF BoostStateMachine.h:38. The boost effect slots are a fixed array of 4.
         static const u32 KU_MAX_BOOST_EFFECTS = 4;
