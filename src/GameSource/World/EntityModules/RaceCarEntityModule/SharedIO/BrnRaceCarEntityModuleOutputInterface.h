@@ -159,7 +159,15 @@ namespace RaceCarEntityModuleIO
         EGlobalRaceCarIndex GetGlobalRaceCarIndex(EActiveRaceCarIndex) const;                // :236 (own TU)
         CgsID GetCarModelId(EActiveRaceCarIndex) const;                                      // :240 (own TU)
         bool IsRaceCarActive(EActiveRaceCarIndex) const;                                     // :244 (own TU)
-        bool IsRaceCarLoaded(EActiveRaceCarIndex) const;                                     // :248 (own TU)
+        // :248. Bit 4 (E_RACE_CAR_OUTPUT_FLAG_LOADED). No out-of-line export carries it; the
+        // X360 inlines `(maxRaceCarFlags[idx] >> 4) & 1` at its readers (EffectsModule::
+        // UpdateActiveRaceCars @0x8229DB30, twice). Inline here (additive, 2026-09-02).
+        bool IsRaceCarLoaded(EActiveRaceCarIndex leActiveRaceCarIndex) const
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            return (maxRaceCarFlags[leActiveRaceCarIndex] & E_RACE_CAR_OUTPUT_FLAG_LOADED) != 0;
+        }
         bool IsRaceCarRival(EActiveRaceCarIndex) const;                                      // :252 (own TU)
         bool IsRaceCarPlayer(EActiveRaceCarIndex) const;                                     // :256 (own TU)
         bool IsRaceCarNetwork(EActiveRaceCarIndex) const;                                    // :260 (own TU)

@@ -40,7 +40,18 @@ namespace Gen
 
         // Construct over the sparkeffect collection, optionally owned by lpOwner.
         explicit sparkeffect(void* lpOwner = nullptr);
+        // The X360 ctor's r4 IS the collection key (it is passed straight through to
+        // FindCollection(class, key)); EffectsModule::Prepare @0x8229E690 hands it
+        // Attrib::StringToKey("376835"/"376836"/"376837"/"554431"). Additive (2026-09-02).
+        sparkeffect(u64 luCollectionKey, void* lpOwner);
     };
+
+    inline sparkeffect::sparkeffect(u64 luCollectionKey, void* lpOwner)
+        : Instance(FindCollection(KU_SPARKEFFECT_CLASS_KEY, luCollectionKey), lpOwner)
+    {
+        if (!mpAttributeData)
+            mpAttributeData = DefaultDataArea(0x90u);
+    }
 
     // X360 ctor @0x8227EC10: Collection = FindCollection(KI_SPARKEFFECT_CLASS); chain the
     // Instance ctor over it; then give the instance a default data area (0x90 bytes) if

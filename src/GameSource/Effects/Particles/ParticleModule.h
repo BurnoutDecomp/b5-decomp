@@ -27,6 +27,7 @@ namespace BrnGame { struct DispatchThreadInputBuffer; }                  // Gene
 namespace BrnDirector { namespace Camera { class Camera; } }              // Update's camera (pointer-only)
 class cTime;                                                              // Lion SDK time (mpLionCurrentTime, pointer-only)
 namespace BrnParticle { namespace ParticleIO { struct PrepareOutputBuffer; } }   // ParticleModuleIO.h (the prepare payload; pointer-only here)
+namespace BrnParticle { namespace ParticleIO { struct DispatchInputBuffer; } }    // ParticleModuleIO.h (the dispatch payload; pointer-only here)
 
 // ============================================================================
 // GameSource/Effects/Particles/ParticleModule.h
@@ -348,6 +349,18 @@ namespace BrnParticle
         // drive this). DECLARE-ONLY: its body depends on BrnParticle::Native::SparkFrameDataSet
         // (no committed layout) and three un-recovered rodata constant vectors; see the .cpp.
         void ResetSparkFrameData();
+
+        // X360 0x8227A2B8 / 0x8228A320 -- the suspend/resume pair EffectsModule::Update's
+        // suspend ladder drives (states 3 and 2). Bodies in ParticleModule.cpp.
+        void SuspendPlayingEffects();
+        void ResumePlayingEffects();
+
+        // X360 0x82281BD8 -- publish this frame's render data into the dispatch-thread
+        // input buffer, from the particle dispatch input the effects module just filled.
+        // Called by EffectsModule::GenerateDispatchLists @0x82296668 between that buffer's
+        // LockForRead and the dispatch buffer's LockForWrite. Body in ParticleModule.cpp.
+        void GenerateRenderRequests(const ParticleIO::DispatchInputBuffer* lpDispatchInput,
+                                    BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInput);
 
         // The skid / tyre-mark system and its renderer, by name (HandleWheels / the renderer).
         Native::TrailSystem&            TrailSystem()            { return mTrailSystem; }
