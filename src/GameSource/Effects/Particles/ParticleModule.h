@@ -4,13 +4,29 @@
 #include "types.hpp"
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Matrix44Affine
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h" // CgsModule::ModuleSingleBuffered (the base; vtable + the two RWMutexes the ctor constructs inline via its DataBuffers)
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // CgsModule::EventReceiverQueue<16384,16> (mReceiverQueue)
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::SafeResourceHandle<T>
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"                 // CgsNumeric::Random (mRandom, BY VALUE)
 #include "SDKs/Packages/Lion/Final/Allocator/include/CoreAllocator/ITaggedAllocator.h" // EA::Allocator::ITaggedAllocator (IInternalAllocator's base)
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"   // CgsGraphics::Camera (ParticleRenderData::mCgsCamera, BY VALUE)
+#include "SharedClasses/Graphics/TextureNameMapResourceType.h"         // BrnParticle::TextureNameMap (mTextureNameMap handle target)
+#include "GameSource/Effects/Particles/LionParticleRender.h"           // BrnParticle::LionParticleRender (mLionRenderer, BY VALUE)
+#include "GameSource/Effects/Particles/EffectsVertexBufferManager.h"   // EffectsVertexBufferManager (x3, BY VALUE)
+#include "GameSource/Effects/Particles/Native/FXBuckets.h"             // BrnParticle::FXBucketManager (mBucketManager, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnIm3dSkidsRenderer.h"  // BrnGraphics::Im3dSkidsRenderer (mSkidsRenderer, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnTrailSystem.h"        // BrnParticle::Native::TrailSystem (mTrailSystem, BY VALUE)
+#include "GameSource/Effects/Particles/Native/BrnDebrisRenderer.h"     // BrnParticle::Native::BrnDebrisRenderer (mDebrisRenderer, BY VALUE)
+#include "GameSource/Effects/Particles/Native/BrnDebrisArray.h"        // BrnParticle::Native::BrnDebrisArray (maDebris[5], BY VALUE)
+#include "GameSource/Effects/Particles/Native/BrnSimpleParticleRenderer.h" // BrnParticle::Native::BrnSimpleParticleRenderer (BY VALUE)
+#include "GameSource/Effects/Particles/Native/BrnSimpleParticleArray.h"    // BrnParticle::Native::BrnSimpleParticleArray (maSimpleParticles[13], BY VALUE)
 
 namespace CgsMemory { class HeapMalloc; }   // GameShared/GameClasses/Memory/CgsHeapMalloc.h (fwd; avoids a cross-module include cycle)
 namespace renderengine { class Texture; }   // ParticleRenderData::mpEnvironmentMap (pointer-only)
+namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // Prepare's allocator list (pointer-only)
+namespace BrnGame { struct DispatchThreadInputBuffer; }                  // GenerateRenderRequests / PreRenderUpdate target (pointer-only)
+namespace BrnDirector { namespace Camera { class Camera; } }              // Update's camera (pointer-only)
+class cTime;                                                              // Lion SDK time (mpLionCurrentTime, pointer-only)
+namespace BrnParticle { namespace ParticleIO { struct PrepareOutputBuffer; } }   // ParticleModuleIO.h (the prepare payload; pointer-only here)
 
 // ============================================================================
 // GameSource/Effects/Particles/ParticleModule.h
@@ -25,32 +41,34 @@ namespace renderengine { class Texture; }   // ParticleRenderData::mpEnvironment
 //       translation row is read at the +0x30/+0x34/+0x38 X/Y/Z), +0x64 muFlags.
 //     sizeof == 0x70 (the array stride the asm uses: 112 * (handle & 0x7F)).
 //
-//   * ParticleModule - now a full CgsModule::ModuleSingleBuffered (its first two
+//   * ParticleModule - a full CgsModule::ModuleSingleBuffered (its first two
 //     stored words in the X360 ctor @0x827E2218 are the base ModuleSingleBuffered
 //     vtable off_820CE500 then the derived ParticleModule vtable off_820D0400, and
 //     it constructs the two EA::Thread::RWMutex members the base owns at +0x10 /
-//     +0x118 == exactly the ModuleSingleBuffered base sub-object construction). The
-//     constructor body (in ParticleModule.cpp) reproduces, BY NAMED MEMBER, every
-//     store the X360 asm makes past the base: an intrusive list + a 500-entry zeroed
-//     pair table, the embedded LionParticleRender, several contained-interface
-//     vtable + empty-list stamps, the playing-effect slot array's sentinel words,
-//     the EA::Jobs::Job sub-objects, and the two SparkFrameDataSet sets.
+//     +0x118 == exactly the ModuleSingleBuffered base sub-object construction).
 //
-// LAYOUT MODEL (same discipline as BrnPhysics::PhysicsModule). The constructor's
-// X360 asm touches members at large absolute offsets. The heavy embedded types
-// (BrnParticle::LionParticleRender, BrnParticle::Native::SparkFrameDataSet) have NO
-// complete reconstructed layout yet, so they (and the un-touched gaps between the
-// stores) are modelled as correctly-named, asm-sized OPAQUE PLACEHOLDER members so
-// every ctor-touched offset lands where the X360 asm proves it and the body
-// reproduces every store BY NAME (no raw-offset pointer hacks). Each placeholder is
-// FLAGGED. When the LionParticleRender / SparkFrameDataSet layout passes land they
-// fold into the real typed members. X360 byte offsets are the 4-byte-pointer console
-// ABI; member access here is by name, so the body is faithful regardless of host
-// pointer width.
+// LAYOUT MODEL (same discipline as BrnPhysics::PhysicsModule). Members are the DWARF's
+// (ParticleModule.h:4-175), in the DWARF's order, typed with the committed type wherever
+// one exists; the console byte offset each one was pinned at is given per member. The
+// sub-objects that have NO reconstructed type yet (the Im3d family bar the skids
+// renderer, the spark renderer + arrays, the Lion batch array, the EA::Jobs::Job jobs
+// and their data, the two spawn-buffer headers) stay as correctly-named, asm-sized
+// OPAQUE PLACEHOLDERS so that every ctor-touched offset lands where the X360 asm proves
+// it. Each placeholder is FLAGGED; they fold into real members as those passes land.
+// Console offsets are the 4-byte-pointer ABI; member access is by name, so the bodies
+// are faithful regardless of host pointer width.
+//
+// 2026-09-02 (tyre-mark wave): the head of the object (the four stage / count words,
+// the heap, the 16 KB receiver queue and the two resource handles that LoadFXBundle
+// @0x8229C950 drives), the Lion renderer, the playing-effect bookkeeping, the render
+// data record, the random generator, the enable bytes, the bucket manager, the three
+// vertex-buffer managers, the debris / simple-particle families are typed by name.
 // ============================================================================
 
 namespace BrnParticle
 {
+    struct ParticleDescriptionCollection;   // SharedClasses/Graphics/ParticleDescriptionResourceType.h (handle target; pointer-only here)
+
     // A single playing LION (particle) effect slot. DWARF home ParticleModule.h:87.
     struct LionEffect
     {
@@ -186,6 +204,41 @@ namespace BrnParticle
         // GetLionEffect asserts (handle & 0x7F) < this before indexing maPlayingEffects.
         // X360 immediate 0x80 (GetLionEffect 0x82278380 asm: cmplwi r30,0x80).
         static const u32 KU_MAX_PLAYING_EFFECTS = 128;
+        static const u32 KU_NUM_DEBRIS_ARRAYS   = 5;    // DWARF maDebris[5]
+        static const u32 KU_NUM_SIMPLE_ARRAYS   = 13;   // DWARF maSimpleParticles[13]
+        static const u32 KU_NUM_SPARK_ARRAYS    = 4;    // DWARF maSparks[4] (eSparkArray_Max)
+
+        // DWARF ParticleModule.h:4-13 -- the four stage / count words the lifecycle drives.
+        enum EPrepareStage      { E_PREPARESTAGE_START = 0, E_PREPARESTAGE_MANAGER = 1, E_PREPARESTAGE_LOADING = 2, E_PREPARESTAGE_DONE = 3 };
+        enum EReleaseStage      { E_RELEASESTAGE_START = 0, E_RELEASESTAGE_MANAGER = 1, E_RELEASESTAGE_DONE = 2 };
+        // LoadFXBundle @0x8229C950's stage ladder (the switch's case labels; the DWARF names
+        // the enum, the X360 body is the authority for the values and the order):
+        //   0/1 load the bundle -> 2 wait -> 13 acquire vfx_props_collection -> 14 wait ->
+        //   3 acquire texture_name_map -> 4 wait -> 9 acquire particle_description_collection ->
+        //   10 wait -> 5 acquire the 5 mesh collections -> 6 wait -> 7 acquire their textures ->
+        //   8 wait -> 11 acquire every name-map texture -> 12 wait + bind -> 17 load the prop
+        //   VFX collisions -> 18 wait + bind -> 19 done.
+        enum EInitialLoadStage
+        {
+            E_LOADSTAGE_START                     = 0,
+            E_LOADSTAGE_LOAD_BUNDLE               = 1,
+            E_LOADSTAGE_WAIT_BUNDLE               = 2,
+            E_LOADSTAGE_ACQUIRE_TEXTURE_NAME_MAP  = 3,
+            E_LOADSTAGE_WAIT_TEXTURE_NAME_MAP     = 4,
+            E_LOADSTAGE_ACQUIRE_MESH_COLLECTIONS  = 5,
+            E_LOADSTAGE_WAIT_MESH_COLLECTIONS     = 6,
+            E_LOADSTAGE_ACQUIRE_MESH_TEXTURES     = 7,
+            E_LOADSTAGE_WAIT_MESH_TEXTURES        = 8,
+            E_LOADSTAGE_ACQUIRE_DESCRIPTIONS      = 9,
+            E_LOADSTAGE_WAIT_DESCRIPTIONS         = 10,
+            E_LOADSTAGE_ACQUIRE_TEXTURES          = 11,
+            E_LOADSTAGE_WAIT_TEXTURES             = 12,
+            E_LOADSTAGE_ACQUIRE_VFX_PROPS         = 13,
+            E_LOADSTAGE_WAIT_VFX_PROPS            = 14,
+            E_LOADSTAGE_LOAD_PROP_COLLISIONS      = 17,
+            E_LOADSTAGE_WAIT_PROP_COLLISIONS      = 18,
+            E_LOADSTAGE_DONE                      = 19,
+        };
 
         // ==============================================================================
         // THE TWO IO PAYLOADS THIS MODULE EXCHANGES WITH THE DISPATCH THREAD.
@@ -197,34 +250,22 @@ namespace BrnParticle
         // because BrnGame::DispatchThreadInputBuffer's DWARF spells its two members with the
         // fully-qualified nested names `BrnParticle::ParticleModule::DispatchThreadUpdateData`
         // and `...::ParticleRenderData`.
-        //
-        // ⚠ THEY USED TO LIVE IN BrnDispatchThreadInputBuffer.h, WHICH DECLARED
-        // `namespace BrnParticle { namespace ParticleModule { ... } }` -- i.e. it modelled
-        // `BrnParticle::ParticleModule` as a NAMESPACE while THIS header models it as a
-        // struct. That is a split-brain, and not a harmless one: it is a hard
-        // `error C2757: a symbol with this name already exists` in any translation unit that
-        // includes both headers. Nothing did yet, which is the only reason it had not fired.
-        // Moving the two types to their DWARF home retires the namespace and the conflict
-        // together (2026-08-15, post-fx step-6 producers wave).
         // ==============================================================================
 
-        // DWARF ParticleModule.h:565. FLAG (ad-hoc opaque, MOVED VERBATIM, not recovered this
-        // wave): the DWARF gives it mfCurrentTime / mfCurrentTimeStep / muChangedEffects /
-        // Matrix44Affine mViewMatrix / Matrix44 mProjectionMatrix / LionEffect[128]
-        // maChangedLionEffects (:566-571), which sizes to 0x90 + 128 * 0x70 == 0x3890 -- and
-        // that is EXACTLY the console's gap between DispatchThreadInputBuffer's mParticleData
-        // (+0x10) and mParticleRenderData (+0x38A0). So the real layout is known and
-        // corroborated; recovering it is a separate change (LionEffect's own 0x70 stride is
-        // already pinned above), and until then the 1-byte placeholder is kept EXACTLY as it
-        // was so nothing about the enclosing buffer changes by accident.
+        // DWARF ParticleModule.h:565. FLAG (ad-hoc opaque, not recovered): the DWARF gives it
+        // mfCurrentTime / mfCurrentTimeStep / muChangedEffects / Matrix44Affine mViewMatrix /
+        // Matrix44 mProjectionMatrix / LionEffect[128] maChangedLionEffects (:566-571), which
+        // sizes to 0x90 + 128 * 0x70 == 0x3890 -- EXACTLY the console's gap between
+        // DispatchThreadInputBuffer's mParticleData (+0x10) and mParticleRenderData (+0x38A0).
+        // Recovering it is the Lion dispatch pass's job; the 1-byte placeholder is kept so
+        // nothing about the enclosing buffer changes by accident.
         struct DispatchThreadUpdateData
         {
             u8 maStorage[1];   // FLAG: opaque, true size is 0x3890 -- see above
         };
 
         // DWARF ParticleModule.h:576-606 -- the render-side snapshot this module publishes
-        // once a frame for the dispatch/render thread. RECOVERED 2026-08-15 (post-fx step-6
-        // producers wave); it was an ad-hoc `u8 maStorage[1]` opaque before.
+        // once a frame for the dispatch/render thread.
         //
         // OFFSET ATTESTATION: BrnRendererModule::Render @0x8240BFA8 reads exactly three of
         // these off the read-locked buffer (asm 0x8240DD04-0x8240DD0C): `lfs f1, 0xC(r24)` ==
@@ -234,23 +275,10 @@ namespace BrnParticle
         // adjustment -- +0x0C is the fourth 4-byte scalar, +0x60 is where mCgsCamera starts
         // once mCameraTransform is 16-aligned at +0x20, and +0xA0 is mCgsCamera's own
         // m_projectionMatrix at its +0x40 (CgsCamera.h pins that offset with a static_assert).
-        // Three independent offsets agreeing with a layout derived only from the DWARF member
-        // list is the check that this is the right struct.
         //
         // FLAG (guest tail): the console places the NEXT member of the enclosing buffer
         // (mBufferCrashTriangleCache) at +0x3B00 while this layout ends at +0x210 from
-        // +0x38A0 == +0x3AB0. The 0x50-byte gap is NOT accounted for -- either the X360
-        // CgsGraphics::Camera is larger than the 368 bytes the PS3 DWARF and the X360 Camera
-        // copy-constructor attest, or the X360 struct carries members the FIGS DWARF does not.
-        // It changes nothing here (parity is by named member and every offset any code reads
-        // is confirmed above), but it is recorded rather than rounded away.
-        //
-        // FLAG (mpParticleModule's type): the DWARF types it `BrnParticle::ParticleModule*`.
-        // It cannot be spelled that way inside the class itself without the class being
-        // complete, and it is not -- so it is carried as a host `void*` of the same width,
-        // with the name and the slot intact. Re-type it to `ParticleModule*` once this
-        // declaration is moved after the closing brace, or leave it: nothing in this tree
-        // dereferences it.
+        // +0x38A0 == +0x3AB0. The 0x50-byte gap is NOT accounted for; recorded, not rounded.
         struct ParticleRenderData
         {
             // DWARF ParticleModule.h:579-586 -- the muFlags bits.
@@ -263,7 +291,7 @@ namespace BrnParticle
             static const u16 eRenderDataFlagReducedFrameRate = 64;
             static const u16 eRenderDataFlagInSlowMotion     = 128;
 
-            void*                         mpParticleModule;      // DWARF :589 (guest +0x00)
+            ParticleModule*               mpParticleModule;      // DWARF :589 (guest +0x00)
             u32                           muCurrentFrame;        // DWARF :592 (guest +0x04)
             f32                           mfCurrentTime;         // DWARF :593 (guest +0x08)
             f32                           mfCurrentTimeStep;     // DWARF :594 (guest +0x0C) <- Update's f1
@@ -281,6 +309,28 @@ namespace BrnParticle
 
         ParticleModule();
 
+        // ---- the module lifecycle (ParticleModule_Lifecycle.cpp) ----------------------------
+        // X360 0x82294220 -- CgsModule::Module::Construct override (vtable slot 0 on the console).
+        void Construct() override;
+        // DWARF :425 `bool Prepare(const AllocatorList*)` -- X360 0x8229BEA0. The heap / RW
+        // allocators, the Im3d renderers, the Lion renderer, the buckets, the trail system,
+        // the debris / simple-particle arrays. Returns false while still preparing.
+        bool Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
+        // X360 0x8229E5D0 -- the second prepare pass: drive LoadFXBundle until the bundle is bound.
+        bool PostPreparePrepare(ParticleIO::PrepareOutputBuffer* lpOutput);
+        // X360 0x8229C950 -- the 19-stage FX-bundle load ladder over lpOutput's request queue.
+        bool LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput);
+        // DWARF :434 `virtual void Update(float32_t, float32_t, float32_t, const Camera*)` --
+        // X360 0x822817D8 (the render-data record + muFlags rebuild, once per sim sub-step).
+        void Update(f32 lfTimeStep, f32 lfTime, f32 lfTimeStepMultiplier, const BrnDirector::Camera::Camera* lpCamera);
+        // X360 0x82294C30 -- the frame's end: latch mbStalled, then the trail system's buffer flip.
+        void EndOfFrame(bool lbStalled);
+        // X360 0x8228AC20 -- render thread: the trail system's per-frame time + view-projection
+        // (+ the Lion vertex buffers, carved out on PC -- see the .cpp).
+        void BuildLionVertexBuffers(const ParticleRenderData* lpRenderData);
+        // X360 0x8229AFD0 -- render thread: the trail strips (RenderTrails), debris, sparks, Lion.
+        void RenderFullResParticles(const ParticleRenderData* lpRenderData);
+
         // X360 0x82278380. Resolve a handle to its playing-effect slot, or NULL when the
         // slot has been recycled (its stored handle no longer equals luHandle).
         LionEffect* GetLionEffect(u32 luHandle);
@@ -291,7 +341,7 @@ namespace BrnParticle
         u32 StartLionEffect(u32 luNameHash, const char* lpcEffectName, u32 luWorldIndex);
 
         // X360 0x8228A238. Stop a playing LION effect, given its resolved slot pointer
-        // (asserts the slot is non-NULL and in use). Own-TU body.
+        // (asserts the slot is non-NULL and in use). Body in ParticleModule.cpp.
         void StopLionEffect(LionEffect* lpEffect);
 
         // X360 0x8227EAC8. Reset both spark-frame data sets (Prepare / EffectsModule::Update
@@ -299,22 +349,37 @@ namespace BrnParticle
         // (no committed layout) and three un-recovered rodata constant vectors; see the .cpp.
         void ResetSparkFrameData();
 
+        // The skid / tyre-mark system and its renderer, by name (HandleWheels / the renderer).
+        Native::TrailSystem&            TrailSystem()            { return mTrailSystem; }
+        BrnGraphics::Im3dSkidsRenderer& SkidsRenderer()          { return mSkidsRenderer; }
+        const ParticleRenderData&       RenderData() const       { return mRenderData; }
+        bool                            IsSuspended() const      { return mbPlayingEffectsSuspended; }
+        bool                            IsFXBundleLoaded() const { return meInitialLoadStage == E_LOADSTAGE_DONE; }
+
     public:
         // ===================================================================
         // Constructor-faithful layout. Members are named where the X360 ctor /
-        // GetLionEffect asm touch them; the un-touched gaps are asm-sized opaque
-        // placeholders. Offsets in comments are absolute from `this` on the X360
-        // 4-byte-pointer ABI (the base ModuleSingleBuffered occupies the head).
+        // Construct / Prepare / GetLionEffect asm touch them; the un-touched gaps are
+        // asm-sized opaque placeholders. Offsets in comments are absolute from `this`
+        // on the X360 4-byte-pointer ABI (the base ModuleSingleBuffered occupies the head).
         // ===================================================================
 
-        // Gap from the base sub-object end to the first ctor-touched member at +0x4270.
-        // FLAG: PLACEHOLDER (un-touched module state between the base and the list).
-        u8 maPadBaseTo4270[0x4270 - sizeof(CgsModule::ModuleSingleBuffered)]; // -> +0x4270
+        // ---- the head: DWARF :4-25 (Construct @0x82294220 / Prepare @0x8229BEA0 / LoadFXBundle) ----
+        EPrepareStage                                          mePrepareStage;         // +0x228 (552)   Construct: 0
+        EReleaseStage                                          meReleaseStage;         // +0x22C (556)   Construct: 2
+        EInitialLoadStage                                      meInitialLoadStage;     // +0x230 (560)   Construct: 0
+        s32                                                    miResourceCount;        // +0x234 (564)   the pending-request count LoadFXBundle waits on
+        CgsMemory::HeapMalloc*                                 mpHeapMalloc;           // +0x238 (568)   Prepare: GetHeapAllocator(0x29)
+        CgsModule::EventReceiverQueue<16384, 16>               mReceiverQueue;         // +0x23C (572)   Construct: buffer @+596, 0x4000, align 16
+        CgsResource::SafeResourceHandle<ParticleDescriptionCollection> mDescriptionCollection; // +0x4254 (16980)
+        CgsResource::SafeResourceHandle<TextureNameMap>        mTextureNameMap;        // +0x425C (16988)
+        u8                                                     maPadHeadTo4270[0x4270 - 0x4264]; // -> +0x4270 (decorative on the host)
 
-        // +0x4270: a contained interface-with-intrusive-list sub-object. The ctor
-        // empty-initialises it: three head ints at +0x4270/+0x4274/+0x4278 (the asm
-        // re-stores head0), then self-referencing next/prev/iter at +0x427C/+0x4280/
-        // +0x4284 (all == &miListHead0), then a count word at +0x4288 == 0.
+        // +0x4270: DWARF :28 BrnEffects::PropCollisions mPropCollisions. FLAG: PropCollisions
+        // has no reconstructed type (GameSource/Effects/Props/PropCollisions.h declares only
+        // VFXRuntimeMaterialLef); what the ctor stamps here is its intrusive list head (three
+        // ints, then next/prev/iter -> self, then a count) and a 500-entry pair table, kept
+        // as the named sub-objects the ctor writes.
         struct ContainedListInterface
         {
             s32   miListHead0;   // +0x00 (+0x4270)
@@ -325,62 +390,73 @@ namespace BrnParticle
             void* mpListIter;    // +0x14 (+0x4284): &miListHead0 (self)
             s32   miListCount;   // +0x18 (+0x4288): 0
         };
-        ContainedListInterface mList;                 // +0x4270
+        ContainedListInterface mList;                 // +0x4270 (PropCollisions head)
 
         // +0x4298: a 500-entry table the ctor zeroes pair-by-pair (v3 = +0x4298,
         // 500 iterations writing two zero dwords each: the asm's `li r9,0x1F3`
         // counter == 499 with a `>= 0` do/while == 500 entries x 8 bytes).
         struct EffectPair { u32 mu0; u32 mu1; };      // +0x00 / +0x04 (both zeroed)
         static const u32 KU_NUM_EFFECT_PAIRS = 500;
-        EffectPair maEffectPairs[KU_NUM_EFFECT_PAIRS]; // +0x4298 .. +0x5258
+        EffectPair maEffectPairs[KU_NUM_EFFECT_PAIRS]; // +0x4298 .. +0x5258 (PropCollisions body)
 
         // Gap to the embedded LionParticleRender at +0x5270.
         u8 maPad5258To5270[0x5270 - (0x4298 + KU_NUM_EFFECT_PAIRS * sizeof(EffectPair))]; // -> +0x5270
 
-        // +0x5270: the embedded BrnParticle::LionParticleRender. FLAG: PLACEHOLDER --
-        // no complete reconstructed layout; sized to the next named member (+0x53F0).
-        // Its sub-constructor (X360 BrnParticle::LionParticleRender::LionParticleRender)
-        // is DEFERRED in the .cpp (see note) -- chaining it would require fabricating
-        // its type/vtable, which the project rules forbid.
-        u8 maLionParticleRenderPlaceholder[0x53F0 - 0x5270]; // +0x5270
+        // +0x5270 (21104): DWARF :31 the embedded LION renderer -- the real committed type
+        // (LionParticleRender.h; its X360 ctor is chained by this module's ctor, Prepare
+        // stores its heap (+0x08) and its renderer (+0x160), Setup builds its state library,
+        // LoadFXBundle hands it every acquired texture through AcquireTexture).
+        LionParticleRender mLionRenderer;             // +0x5270 .. +0x53E0
+        // +0x53E0 (21472): DWARF :34 -- Construct stores &dword_82FAD274, the Lion runtime's
+        // process-wide current-time cell. FLAG: the cell is the Lion core's static (not landed);
+        // left null until cLionFX lands.
+        cTime* mpLionCurrentTime;                     // +0x53E0
+        u8     maPad53E4To53F0[0x53F0 - 0x53E4];      // -> +0x53F0
 
-        // +0x53F0: the playing-effect slot array (GetLionEffect base, stride 0x70).
-        LionEffect maPlayingEffects[KU_MAX_PLAYING_EFFECTS]; // +0x53F0 .. +0x9000-ish
+        // +0x53F0: DWARF :37 maUpdateThreadLionEffects -- the playing-effect slot array
+        // (GetLionEffect base, stride 0x70). Kept under the name every committed reader uses.
+        LionEffect maPlayingEffects[KU_MAX_PLAYING_EFFECTS]; // +0x53F0 .. +0x8BF0
 
-        // Gap to the first contained-interface vtable stamp at +0x9010 (36880).
-        u8 maPadEffectsTo9010[0x9010 - (0x53F0 + KU_MAX_PLAYING_EFFECTS * sizeof(LionEffect))]; // -> +0x9010
+        u32   muUpdateThreadNextLionEffect;           // +0x8BF0 (35824)  DWARF :40  Construct: 0
+        // DWARF :43 cLionEffectInstance*[128] -- the dispatch-thread twins. FLAG: the Lion
+        // instance type is not reconstructed; carried as untyped host pointers (Construct zeroes them).
+        void* mapDispatchThreadLionEffects[KU_MAX_PLAYING_EFFECTS]; // +0x8BF4 (35828)
+        bool  mbPlayingEffectsSuspended;              // +0x8DF4 (36340)  DWARF :46  Update/PreRender/BuildLion gate
+        bool  mbStalled;                              // +0x8DF5 (36341)  DWARF :49  EndOfFrame latches it
+        u8    maPad8DF6To8E00[0x8E00 - 0x8DF6];       // -> +0x8E00 (16-aligned)
 
-        // The five contained-interface sub-objects the ctor stamps. Each is a vtable
-        // pointer at its base then two zeroed words; modelled as named placeholders so
-        // each store lands by name. FLAG: the owning interface types / vtables
-        // (off_820CF69C / off_820CEBE0 / off_820CEBE4 / off_820CEBE8 / off_820CFA1C)
-        // are not reconstructed; each mpVTable is left null here.
+        // +0x8E00 (36352): DWARF :52 the module-side render-data record Update refreshes and
+        // GenerateRenderRequests copies into the dispatch-thread input buffer (528 bytes on
+        // the console). Construct: mpParticleModule = this, muCurrentFrame = 0,
+        // mfCurrentTimeStep = 0.0.
+        ParticleRenderData mRenderData;               // +0x8E00 .. +0x9010
+
+        // The five contained Im3d renderers the ctor stamps (each: its vtable then two zero
+        // words == the ImRenderer<V> base's own construction). Only the skids renderer has a
+        // reconstructed type; the other four stay named placeholders. FLAG.
         struct ContainedInterface
         {
             void* mpVTable;   // +0x00 : the X360 vtable symbol (left null -- FLAGGED)
             u32   mu04;       // +0x04 : 0
             u32   mu08;       // +0x08 : 0
         };
-        ContainedInterface mInterfaceA;                // +0x9010 (36880) off_820CF69C
+        ContainedInterface mImmediateModeRenderer;     // +0x9010 (36880) DWARF :55 CgsGraphics::Im3d          (off_820CF69C)
         u8 maPadIfaceAToB[0x91A0 - (0x9010 + sizeof(ContainedInterface))]; // -> +0x91A0
-        ContainedInterface mInterfaceB;                // +0x91A0 (37280) off_820CEBE0
+        ContainedInterface mWorldTexRenderer;          // +0x91A0 (37280) DWARF :58 BrnGraphics::Im3dTexPlusLighting (off_820CEBE0)
         u8 maPadIfaceBToC[0x9210 - (0x91A0 + sizeof(ContainedInterface))]; // -> +0x9210
-        // +0x9210 (37392): BrnGraphics::Im3dSkidsRenderer mSkidsRenderer (DWARF ParticleModule.h:771)
-        // -- the skid / tyre-mark immediate-mode renderer, 100 bytes on the console (0x9210..
-        // +0x9274), constructed by ParticleModule::Prepare @0x8229BEA0 (`Im3dSkidsRenderer::
-        // Construct(this + 37392, heap)`) and handed to the trail system's renderer. The "vtable
-        // + two zero words" the ctor stamps here are its ImRenderer<SkidVertex> base's own
-        // construction (off_820CEBE4 is that vtable), reproduced by the base sub-object itself.
+        // +0x9210 (37392): DWARF :61 BrnGraphics::Im3dSkidsRenderer mSkidsRenderer -- the skid /
+        // tyre-mark immediate-mode renderer, 100 bytes on the console, constructed by
+        // ParticleModule::Prepare @0x8229BEA0 and handed to the trail system's renderer.
         BrnGraphics::Im3dSkidsRenderer mSkidsRenderer; // +0x9210 .. +0x9274
-        ContainedInterface mInterfaceD;                // +0x9274 (37492) off_820CEBE8
+        ContainedInterface mSmokeRenderer;             // +0x9274 (37492) DWARF :64 BrnGraphics::Im3dSmokeRenderer (off_820CEBE8)
         u8 maPadIfaceDToE[0x92E0 - (0x9274 + sizeof(ContainedInterface))]; // -> +0x92E0
-        ContainedInterface mInterfaceE;                // +0x92E0 (37600) off_820CFA1C
+        ContainedInterface mLionImmediateModeRenderer; // +0x92E0 (37600) DWARF :67 LionBlendRenderer (Im3dBlend base, off_820CFA1C)
 
-        // Gap to the trail system at +0x9710 (the DWARF's mLionImmediateModeRenderer /
-        // mSparkRenderer / maSparks[4] -- :773-776 -- not yet typed). FLAG: PLACEHOLDER.
+        // Gap to the trail system at +0x9710: DWARF :70 SparkRenderer mSparkRenderer (+0x94C0)
+        // and :73 SparkArray maSparks[4] -- not typed. FLAG: PLACEHOLDER.
         u8 maPadIfaceETo9710[0x9710 - (0x92E0 + sizeof(ContainedInterface))]; // -> +0x9710
 
-        // +0x9710 (38672): BrnParticle::Native::TrailSystem mTrailSystem (DWARF :778), 102652
+        // +0x9710 (38672): DWARF :76 BrnParticle::Native::TrailSystem mTrailSystem, 102652
         // bytes on the console (.. +0x2280C). The 0x7FFFFFFF the ctor stamps at +0x22190
         // (139664 == 38672 + 100608 + 384) is this object's mFreeEmitters Stack length --
         // the inlined Stack<TrailEmitter*,96> constructor, reproduced by TrailSystem's own
@@ -389,16 +465,41 @@ namespace BrnParticle
         // (`this + 0xA80 + 0x9710`) all address it here.
         Native::TrailSystem mTrailSystem;              // +0x9710 .. +0x2280C
 
-        // Gap to the first job/sentinel cluster at +0x249C4: the debris renderer + arrays
-        // (DWARF :780..; BrnDebrisRenderer::Construct(this + 141328 == +0x22810)). FLAG:
-        // PLACEHOLDER.
-        u8 maPad2280CTo249C4[0x249C4 - 0x2280C];       // -> +0x249C4
+        // DWARF :79-88 -- the debris / simple-particle families (Prepare constructs them).
+        Native::BrnDebrisRenderer          mDebrisRenderer;                          // +0x22810 (141328)
+        Native::BrnDebrisArray             maDebris[KU_NUM_DEBRIS_ARRAYS];           // +0x22818 (141336), stride 32
+        Native::BrnSimpleParticleRenderer  mSimpleParticleRenderer;                  // +0x228B8 (141496)
+        // FLAG: the committed BrnSimpleParticleArray is a partial layout (its X360 stride is 160;
+        // Prepare's per-array spawn-time seeding needs its full shape and is carved out).
+        Native::BrnSimpleParticleArray     maSimpleParticles[KU_NUM_SIMPLE_ARRAYS];  // +0x228D0 (141520), stride 160
 
-        // +0x249C4 (149956): -1 sentinel, then an EA::Jobs::Job at +0x249D0 (149968).
-        s32 miJobSentinel249C4;                        // +0x249C4 == -1
+        // DWARF :91-121 -- the frame-rate scale, the generator, the enables, the spark accumulator.
+        f32                mfSimulationRate;             // +0x230F0 (143600)  Construct: 1.0
+        u8                 maPad230F4To23100[0x23100 - 0x230F4];
+        CgsNumeric::Random mRandom;                      // +0x23100 (143616)  Construct: the inlined LCG priming
+        bool               mbSparksEnabled;              // +0x23130 (143664)  Construct: 1
+        bool               mbTrailsEnabled;              // +0x23131 (143665)  Construct: 1
+        bool               mbDebrisEnabled;              // +0x23132 (143666)  Construct: 1
+        bool               mbSimpleEnabled;              // +0x23133 (143667)  Construct: 1
+        bool               mbLionEnabled;                // +0x23134 (143668)  Construct: 1
+        bool               mbZFadeEnabled;               // +0x23135 (143669)  Construct: 0
+        bool               mbIsInJunkyard;               // +0x23136 (143670)  Construct: 0
+        bool               mbHasCameraSwitched;          // +0x23137 (143671)  Construct: 1 (the camera-switched latch, seeded SET)
+        f32                mrSparkAccumulator;           // +0x23138 (143672)  Construct: 0.9999
+        // DWARF :124-133 -- the bucket manager and the three vertex-buffer managers.
+        FXBucketManager            mBucketManager;                 // +0x2313C (143676)  Prepare: Construct(heap, 819200)
+        EffectsVertexBufferManager mVertexBufferManagerLion;       // +0x2315C (143692)  Prepare: Construct(rw, 196608, 1)
+        EffectsVertexBufferManager mVertexBufferManagerSparks;     // +0x23184 (143732)  Prepare: Construct(rw, 0x80000, 0)
+        EffectsVertexBufferManager mVertexBufferManagerParticles;  // +0x231AC (143772)  Prepare: Construct(rw, 163840, 0)
+
+        // +0x231D4 (143812): DWARF :136 LionBatchArray mLionBatchArray .. +0x249C8 (its trailing
+        // count word at +0x249C4 is the -1 the ctor stamps / the 0 BuildLionVertexBuffers
+        // resets). FLAG: PLACEHOLDER (the Lion batch array type is the Lion core's).
+        u8  maLionBatchArrayPlaceholder[0x249C4 - 0x231D4];
+        s32 miLionBatchCount;                          // +0x249C4 == -1 (ctor)
         u8  maPad249C8To249D0[0x249D0 - (0x249C4 + 4)];// -> +0x249D0
-        // FLAG: PLACEHOLDER. EA::Jobs::Job sub-object (sizeof 0x350 == 848). Its
-        // EA::Jobs::Job::Job(this, 0) sub-construction is DEFERRED (see .cpp note).
+        // FLAG: PLACEHOLDER. EA::Jobs::Job mParticleRenderJobSparks (DWARF :139, sizeof 0x350 ==
+        // 848). Its EA::Jobs::Job::Job(this, 0) sub-construction is DEFERRED (see the .cpp).
         u8  maJob0Placeholder[0x350];                  // +0x249D0
 
         // +0x24FD0 (151504): -1, +0x25008 (151560): -1, then SparkFrameDataSet @+0x25030.
@@ -416,17 +517,12 @@ namespace BrnParticle
         u8  maJob1Placeholder[0x350];                  // +0x25700
 
         // +0x25CD0 (154832): -1, +0x25D08 (154888): -1, then SparkFrameDataSet @+0x25D30.
-        // The asm anchors both stores off r11 = this + 0x25A80 (addis r31,2 / addi
-        // 0x5A80): stw r10,0x250(r11) -> +0x25CD0 and stw r9,0x288(r11) -> +0x25D08
-        // (both r9/r10 == r29 == -1). Earlier this pair was mislabeled +0x25D50/+0x25D88.
         u8  maPad25700EndTo25CD0[0x25CD0 - (0x25700 + 0x350)]; // -> +0x25CD0
         s32 miSentinel25CD0;                           // +0x25CD0 == -1
         u8  maPad25CD4To25D08[0x25D08 - (0x25CD0 + 4)];// -> +0x25D08
         s32 miSentinel25D08;                           // +0x25D08 == -1
         u8  maPad25D0CTo25D30[0x25D30 - (0x25D08 + 4)];// -> +0x25D30 (0x24, mirrors set0's pad)
         // FLAG: PLACEHOLDER. The second BrnParticle::Native::SparkFrameDataSet.
-        // ResetSparkFrameData asm (0x8227EBF0 addi r3,r3,0x5D30) targets a1 + 154928 == +0x25D30
-        // (154928 == 0x25D30, NOT 0x25D70 — sits 0x24 after the +0x25D08 sentinel+4, mirroring set0).
         u8  maSparkFrameDataSet1Placeholder[0x26400 - 0x25D30]; // +0x25D30 (size 0x6D0, mirrors set0)
 
         // +0x26400 (156672): an array of 5 EA::Jobs::Job (stride 0x350; the ctor loops
@@ -435,12 +531,27 @@ namespace BrnParticle
         static const s32 KI_NUM_FRAME_JOBS = 5;
         u8  maFrameJobsPlaceholder[KI_NUM_FRAME_JOBS * 0x350]; // +0x26400
 
-        // Gap to the trailing bool sentinel at +0x27784.
-        u8  maPad26400EndTo27784[0x27784 - (0x26400 + KI_NUM_FRAME_JOBS * 0x350)]; // -> +0x27784
+        // Gap to the trailing members at +0x27780.
+        u8  maPad26400EndTo27780[0x27780 - (0x26400 + KI_NUM_FRAME_JOBS * 0x350)]; // -> +0x27780
 
-        // +0x27784 (161668): a bool the ctor zeroes last (stbx r30 == 0).
-        bool mbFlag27784;                              // +0x27784 == false
+        // +0x27780 (161664): DWARF :160 muNumDebrisUpdateJobsToWaitOn (Construct: -1).
+        // NOTE: the earlier model called the byte at +0x27784 "a bool the ctor zeroes last";
+        // the ctor's `stbx r30` is the low byte of this word's store neighbour -- the DWARF
+        // places the debris-job wait count here and the inter-thread queue right after.
+        s32 miNumDebrisUpdateJobsToWaitOn;             // +0x27780 == -1
+        bool mbFlag27784;                              // +0x27784 == false (the ctor's trailing byte store)
+        u8  maPad27785To27788[0x27788 - 0x27785];
+        // +0x27784 (161668): DWARF :163 CappedInterThreadEventQueue mInterThreadEventQueue
+        // (VariableEventQueue<16384,16>, Construct'd by ParticleModule::Construct). FLAG:
+        // PLACEHOLDER on the host (its consumer is the Lion dispatch pass, not landed).
+        u8  maInterThreadEventQueuePlaceholder[0x2B7A0 - 0x27788];
+        // +0x2B7A0 (178080): DWARF :166 SparkBatchSpawnEvent mSparkSpawnBufferHeader (16 bytes:
+        // count first) and :169 mpSparkSpawnBuffer (+0x2B7B0, Prepare: Malloc(2560, 16)).
+        u32   muSparkSpawnCount;                       // +0x2B7A0 (the header's leading count; Prepare: 0)
+        u8    maSparkSpawnHeaderTail[0x2B7B0 - 0x2B7A4];
+        void* mpSparkSpawnBuffer;                      // +0x2B7B0 (178096)
     };
+
 }
 
 #endif // GAMESOURCE_EFFECTS_PARTICLES_PARTICLEMODULE_H
