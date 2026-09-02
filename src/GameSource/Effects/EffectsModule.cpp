@@ -113,6 +113,12 @@ namespace
     // (the same offsets WheelStateMachine::Update reads its layers at; the two colours lead).
     const u32 KU_VFX_SKID_MARK_START_COLOUR = 0x00;   // Vector4 (lvx128 v1, r0, r11)
     const u32 KU_VFX_SKID_MARK_END_COLOUR   = 0x10;   // Vector4 (lvx128 v2, r11, r28 == +16)
+    // The world's surfacelist COLLECTION key, as a string: sub_82C4A1F8 stores
+    // `Attrib::StringToKey("340654")` into qword_82FAB7A8, which PostWorldPreparePrepare
+    // passes to FindCollectionWithDefault. Spelled as the string the console spells, not as
+    // a baked hash, so it reads the way every other collection key in this tree does
+    // (BrnDirectorResourceManager.cpp:492 `Attrib::StringToKey("430819")`).
+    const char* const KAC_WORLD_SURFACELIST_COLLECTION = "340654";
     const u32 KU_VFX_SKID_MARK_THRESHOLD    = 0x48;   // f32   (`*(v31 + 72)`)
     const u32 KU_VFX_SKID_MARKS_ENABLED     = 0x4E;   // bool  (`*(v31 + 78)`)
     const u32 KU_VFX_SKID_MARK_TYPE_ID      = 0x58;   // s16   (`*(v31 + 88)`)
@@ -658,11 +664,33 @@ void EffectsModule::LoadNativeParticleParams()
 // =============================================================================
 void EffectsModule::PostWorldPreparePrepare()
 {
-    // Attrib::Instance::Change(mSurfaceList, FindCollectionWithDefault(surfacelist class,
-    // qword_82FAB7A8)). FLAG: qword_82FAB7A8 (the world's current surface-list collection
-    // key) is not modelled on the host; the class's default collection (key 0) is the one
-    // ReadSurfaceProperties / WorldModule::Prepare already bind to on this build.
-    mSurfaceList.ChangeWithDefault(0);
+    // ⭐⭐ THE COLLECTION KEY IS "340654", AND THE ZERO THAT STOOD HERE EMPTIED THE SURFACE LIST.
+    //
+    //   BrnEffects::EffectsModule::PostWorldPreparePrepare @0x822902F0
+    //       CollectionWithDefault = Attrib::FindCollectionWithDefault(-2051685132, qword_82FAB7A8);
+    //       Attrib::Instance::Change(a1 + 185288, CollectionWithDefault);
+    //   and qword_82FAB7A8's ONE writer is a dynamic initialiser:
+    //       sub_82C4A1F8:  qword_82FAB7A8 = Attrib::StringToKey("340654");
+    // -- a literal, not a runtime value. (-2051685132 == 0x85B5C4F4 is the low word of
+    // surfacelist::KU_SURFACELIST_CLASS_KEY, which ChangeWithDefault already passes, so the
+    // collection key is the only argument that was ever missing.)
+    //
+    // The FLAG that stood here said the key "is not modelled on the host" and passed 0, which
+    // resolves the class's DEFAULT collection. MEASURED CONSEQUENCE (run 15, BRN_SKID_PROBE,
+    // the probe extended to print the surface count and whether the lookup resolved):
+    //     [skid] ... surf=1/0 ref=0 en=0 skid=0.0440 > thr=0.0000 type=0 ready=1
+    //     [skid] ... surf=2/0 ref=0 en=0 skid=0.0452 > thr=0.0000 type=0 ready=1
+    //     324 lines, every one of them, across both surfaces the wheels touched
+    // -- `/0` is Num_Surfaces() and `ref=0` is Surfaces(id) returning null. The list was EMPTY.
+    // HandleWheels then took the console's own `Attrib::DefaultDataArea(24)` fallback, whose
+    // area is ZEROED, so SkidMarksEnabled read false, the threshold read 0.0 and the type read
+    // 0 -- three adjacent zeros that look exactly like a surface with skid marks switched off.
+    // A "count 0 / empty array" defect wearing the costume of a design decision.
+    //
+    // It also silently disabled the loop below: Num_Surfaces() == 0 means
+    // TrailSystem::UpdateTrailType never ran for any surface, so even a segment that HAD been
+    // laid would have drawn with the trail types' construct-time colours.
+    mSurfaceList.ChangeWithDefault(Attrib::StringToKey(KAC_WORLD_SURFACELIST_COLLECTION));
 
     {
         // Surface element 1's leading 4-vector must carry a magnitude: |lane| > epsilon in
