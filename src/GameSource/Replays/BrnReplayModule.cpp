@@ -1,4 +1,11 @@
 #include "GameSource/Replays/BrnReplayModule.h"
+#include "GameSource/Replays/BrnReplayRequestInterface.h"   // ReplayIO::RequestInterface
+#include "GameSource/Replays/BrnReplayBaseSerialiser.h"   // BaseSerialiser
+#include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"   // AllocatorList
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // CgsMemory::LinearMalloc
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // WriteToLog
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include <cstdio>   // snprintf
 
 // ============================================================================
 // GameSource/Replays/BrnReplayModule.cpp
@@ -46,6 +53,9 @@ namespace BrnReplays
 {
     ReplayModule::ReplayModule()
     {
+        miPrepareStage = 0;   // the module has not prepared (X360 base +0x228)
+        mpLinearMalloc = 0;   // ReplayModule::Prepare acquires it (X360 +0x878)
+
         // Base (ModuleSingleBuffered: both vtables + the two RWMutexes) and the
         // embedded mGpuWriteStream / mLockA / mLockB / mCommandPoster construct
         // automatically before this body. mLockA / mLockB's Futex ctors perform the
@@ -80,4 +90,5 @@ namespace BrnReplays
         }
         mbSerialiseActive = false;
     }
+
 }
