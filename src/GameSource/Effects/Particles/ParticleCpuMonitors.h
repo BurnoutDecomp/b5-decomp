@@ -22,6 +22,15 @@
 
 namespace BrnParticle
 {
+    struct ParticleCpuMonitors;
+
+    // The two process-wide sets ParticleModule::Construct @0x82294220 registers
+    // (`unk_82FAB598` "Race" / `unk_82FAB5D8` "Crash") and RenderFullResParticles
+    // @0x8229AFD0 selects between on the render data's reduced-frame-rate flag.
+    // Defined in ParticleModule_Lifecycle.cpp.
+    extern ParticleCpuMonitors gRaceCpuMonitors;
+    extern ParticleCpuMonitors gCrashCpuMonitors;
+
     struct ParticleCpuMonitors
     {
         // 16 monitor handles, in the order Construct registers them

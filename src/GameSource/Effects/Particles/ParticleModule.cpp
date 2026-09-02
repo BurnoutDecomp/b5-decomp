@@ -197,7 +197,7 @@ namespace BrnParticle
             // same way LionEffect::Construct clears it (the two pad words at +0x04/+0x08
             // are the hashed name / description slots; only +0x08 is cleared here).
             LionEffect& lrEffect = maPlayingEffects[luSlot];
-            lrEffect.mPad04[4] = lrEffect.mPad04[5] = lrEffect.mPad04[6] = lrEffect.mPad04[7] = 0;
+            lrEffect.mpDescription = 0;
         }
     }
 

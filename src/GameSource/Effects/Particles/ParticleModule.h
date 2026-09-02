@@ -104,8 +104,8 @@ namespace BrnParticle
             muWorldIndex = 0;
             mfStateBlend = 0.0f;
             muFlags      = 0;
-            mPad04[0] = mPad04[1] = mPad04[2] = mPad04[3] = 0;     // +0x04
-            mPad04[4] = mPad04[5] = mPad04[6] = mPad04[7] = 0;     // +0x08
+            muNameHash   = 0;   // +0x04
+            mpDescription = 0;  // +0x08
         }
 
         // Set the effect's world transform and mark it CHANGED so the render pass re-reads it
@@ -118,14 +118,24 @@ namespace BrnParticle
         }
 
         u32 muHandle;                              // +0x00 - the handle this slot holds
-        u8  mPad04[0x08];                          // +0x04 - hashed name / definition ptr
+        // +0x04 / +0x08 -- NAMED 2026-09-02 (tyre-mark wave) from StartLionEffect @0x82289F50:
+        //   `*(v19 + 21492) = a2`  == slot+0x04, the ParticleDescription name hash
+        //   `*(v19 + 21496) = v12` == slot+0x08, the resolved cLionParticleEffect description
+        // (they were a `u8 mPad04[8]` blob; ResumePlayingEffects cleared the +0x08 lane
+        // byte-by-byte through it). The description is a Lion-core object with no committed
+        // layout, so it is carried as an opaque host pointer -- it widens to 8 bytes here,
+        // which is the ordinary host widening: every reader reaches it BY NAME.
+        u32 muNameHash;                            // +0x04
+        const void* mpDescription;                 // +0x08 - cLionParticleEffect (opaque)
         f32 mfStateBlend;                          // +0x0C - state blend factor (BoostStateMachine
                                                    //         SetBlendValue stores here; +0x53FC)
         rw::math::vpu::Matrix44Affine mTransform;  // +0x10 - the effect's world transform
         u8  mPad50[0x0C];                          // +0x50 - velocity / death time
         u32 muWorldIndex;                          // +0x5C - world index (SetWorldIndex stores
                                                    //         here; slot +0x5C / module +0x544C)
-        u8  mPad60[0x04];                          // +0x60
+        // +0x60 -- StartLionEffect's expiry stamp (`*(v19 + 21584) = 1.0e10` for an endless
+        // effect, else `lionCurrentTime * flt_82CDB018 + GetDurationMax()`).
+        f32 mfExpiryTime;                          // +0x60
         u16 muFlags;                               // +0x64 - ePPEFlag* bitmask
         u8  mPad66[0x0A];                          // +0x66 - pad to the 0x70 array stride
     };
@@ -316,7 +326,13 @@ namespace BrnParticle
         // DWARF :425 `bool Prepare(const AllocatorList*)` -- X360 0x8229BEA0. The heap / RW
         // allocators, the Im3d renderers, the Lion renderer, the buckets, the trail system,
         // the debris / simple-particle arrays. Returns false while still preparing.
-        bool Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
+        //   ⚠ TWO arguments. The ARTIST body never reads r5, but its ONLY call site does set it:
+        //   EffectsModule::Prepare @0x8229E73C is `r4 = allocatorList; r5 = the "Particles"
+        //   PrepareOutputBuffer; lwz r11,0x40(vtbl); bctrl`. The FIGS DWARF (:422) spells the
+        //   same pair. PostPreparePrepare relies on it: it calls LoadFXBundle with r4 UNTOUCHED,
+        //   i.e. the compiler forwarding its own second argument.
+        bool Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
+                     ParticleIO::PrepareOutputBuffer* lpOutput);
         // X360 0x8229E5D0 -- the second prepare pass: drive LoadFXBundle until the bundle is bound.
         bool PostPreparePrepare(ParticleIO::PrepareOutputBuffer* lpOutput);
         // X360 0x8229C950 -- the 19-stage FX-bundle load ladder over lpOutput's request queue.
@@ -368,6 +384,18 @@ namespace BrnParticle
         const ParticleRenderData&       RenderData() const       { return mRenderData; }
         bool                            IsSuspended() const      { return mbPlayingEffectsSuspended; }
         bool                            IsFXBundleLoaded() const { return meInitialLoadStage == E_LOADSTAGE_DONE; }
+
+        // The acquired TextureNameMap, or null while the FX bundle's stage-4 reply has not
+        // landed. SafeResourceHandle::operator-> asserts the double-deref, so LoadFXBundle
+        // needs a form that can ask "is it bound yet" without firing that assert -- the
+        // console reaches the same object as `*(this + 16988)` and is inside the ladder that
+        // just bound it. This is the guard, not an invented arm.
+        const TextureNameMap* TextureNameMapOrNull() const
+        {
+            if (mTextureNameMap.mpResourceMemory == 0)
+                return 0;
+            return *reinterpret_cast<TextureNameMap* const*>(mTextureNameMap.mpResourceMemory);
+        }
 
     public:
         // ===================================================================
