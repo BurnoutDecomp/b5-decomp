@@ -783,9 +783,19 @@ namespace Deformation
                 // transform @ 96*wheel; on-ground byte @ 0x180+wheel}; those two fields are
                 // filled per live wheel. FLAG: the remaining per-wheel scalars (velocities /
                 // forces inside the 96-byte entry) stay zero-seeded until the interior is homed.
-                std::memcpy(reinterpret_cast<char*>(&lWheelStates) + 96 * liWheel,
-                            &lWheelTransform, sizeof(Matrix44Affine));
-                reinterpret_cast<char*>(&lWheelStates)[0x180 + liWheel] = 1;   // on-ground/exists
+                // 2026-09-02 (traffic-deformation wave): BY NAME, now that WheelPhysicalStates
+                // is homed -- and the SECOND byte the console's live arm writes is restored:
+                //     0x82609114  stb r24, -4(r11)   mabWheelExists[w]   = 1
+                //     0x82609118  stb r29,  0(r11)   mabWheelAttached[w] = 1
+                // (r11 = block + 0x184 + w). The old raw-offset transcription wrote only the
+                // exists byte; TrafficEntityModule::ProcessDeformationData reads
+                // "exists && !attached" as a torn-off wheel and marks the car FATALLY CRASHING,
+                // so with the attached byte left zero every physical traffic car would have been
+                // flagged fatal on its first deformation frame. The detached-wheel arm above
+                // (`stb 1,-4 ; stb 0,0`: exists, not attached) stays un-homed with its record.
+                lWheelStates.maStates[liWheel].mWorldSpaceTransform = lWheelTransform;
+                lWheelStates.mabWheelExists[liWheel]   = true;
+                lWheelStates.mabWheelAttached[liWheel] = true;
 
                 // Fold the wheel's DISTANCE FROM THE VEHICLE into the running entity radius (the
                 // dist <= kMax gate + max(size, dist + r) cascade). FLAG: the per-wheel radius

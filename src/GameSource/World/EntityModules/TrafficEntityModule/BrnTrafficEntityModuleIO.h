@@ -330,6 +330,12 @@ namespace BrnTrafficIO
         void SetActiveRaceCarOutputInterface(const ActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface);
         // X360 0x827AA0B8 (:362): write-lock; mDeformationOutputInterfaceForEntityModules = *src.
         void SetDeformationOutputInterfaceForEntityModules(const DeformationOutputInterfaceForEntityModules* lpDeformationOutputInterface);
+        // X360 0x827118F8 (:365, IDA-unnamed `BrnTraffic::BrnTraffi`): read-lock test, "Not locked
+        // for reading" @ BrnTrafficEntityModuleIO.h:365, then `addi r3, this, 0x151B0` == 86448 ==
+        // &mDeformationOutputInterfaceForEntityModules. Sole consumer: PostPhysicsUpdate
+        // @0x8274E898, feeding ProcessDeformationData. Body in
+        // BrnTrafficEntityModuleIO_InputBuffer_Getters.cpp.
+        const DeformationOutputInterfaceForEntityModules* GetDeformationOutputInterfaceForEntityModules() const;
         // X360 0x827A0778 (:366): write-lock; mContactSpyInterface = *src (single-word copy).
         void SetContactSpyInterface(const ContactSpyInterface* lpContactSpyInterface);
 

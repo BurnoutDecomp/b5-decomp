@@ -59,7 +59,9 @@
 #include "GameSource/Director/Camera/Camera.h"      // BrnDirector::Camera::Camera (mCameraLastFrame, DWARF :881)
 
 namespace CgsModule { struct IOBufferStack; }
-namespace BrnPhysics { namespace Deformation { class StreamedDeformationSpec; } }
+namespace BrnPhysics { namespace Deformation { class StreamedDeformationSpec;
+                                               struct DeformationOutputInterfaceForEntityModules; } }
+#include "GameSource/Physics/DeformationManager/BrnDeformationConstants.h" // KU_MAX_DETACHED_PARTS_PER_VEHICLE
 // Wave-T3 promotion collaborators, pointer-only. Class keys match their single homes:
 // BrnVehicleDriverControls.h:289 spells BrnTrafficDriverControls struct, and
 // BrnVehicleInputInterface.h:29 spells VehicleInputInterface struct (the alignas belongs to
@@ -101,6 +103,18 @@ namespace BrnTraffic
 namespace BrnTrafficIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_Dispatch; class InputBuffer_PreDispatch; class OutputBuffer_PreDispatch; }
 
 namespace BrnTrafficIO { class OutputBuffer_Prepare; }
+
+    // @0x82714848 (BrnTraffic::SetGlassFractureConstants) -- the traffic module's own copy of
+    // BrnWorld::SetGlassFractureConstants @0x822BD280 (same body, not ICF-folded: the linker
+    // kept both). Publishes the three glass-fracture shader constants 30/31/32. Sole caller:
+    // TrafficEntityModule::RenderTrafficCar @0x82728B08. Body in
+    // BrnTrafficEntityModule_ProcessDeformationData.cpp. Signature is the DWARF's for the
+    // BrnWorld twin (BrnRaceCarEntityModule.cpp:4): two f32s in f1/f2, the Vector2 by const
+    // reference in r3, the Vector4 by value in v1.
+    void SetGlassFractureConstants(f32 lfFractureStrength,
+                                   f32 lfEqualisationFactor,
+                                   const Vector2& lvUVScale,
+                                   Vector4 lvUVOffsets);
 // ADDITIVE (world-drive wave: WorldModule::EntityModulePreSceneUpdate @0x827BD1F0
 // and EntityModulePostPhysicsUpdate @0x827D3F10 name these IO buffers).
 namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene;
@@ -266,12 +280,32 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
     // render side needs for a traffic car that has been promoted to a real physics body.
     // One of these per KU_MAX_PHYSICAL_TRAFFIC_VEHICLES slot (maTrafficPhysicsInfoList).
     //
-    // mDetachedPartQueue is an EventQueue, so it needs Construct() called on it.
-    // TrafficPhysicsInfo::Construct(s32) (:214) is where the console does that.
+    // :153/:169 mDetachedPartQueue -- ARTIST DIVERGES FROM THE DWARF HERE (2026-09-02,
+    // traffic-deformation wave). DecFIGS spells it `EventQueue<DetachedPartRenderEvent,20>`
+    // (an 80-byte-stride event array + length), but every ARTIST access to the span
+    // +0x000..+0x520 is the compact per-vehicle record below, and three independent X360
+    // sites agree on its layout:
+    //   * the writer, ProcessDeformationData @0x8271EA94..0x8271EB10: `lbz r29, 0(info)` as
+    //     the slot (asserted < KU_MAX_DETACHED_PARTS_PER_VEHICLE == 20), `stbx partIndex` at
+    //     info+1+slot, the event's four transform rows at info+32+64*slot, `stb ++count, 0(info)`;
+    //     and its per-frame reset `stb 0, 0(info)` over all 25 records @0x8271E984;
+    //   * TrafficPhysicsInfo::Construct @0x82751EB0 `stb 0, 0(r3)` -- the count, not the top
+    //     byte of a 32-bit mpEvents as an earlier wave read it;
+    //   * the reader, RenderTrafficCar pseudocode :1319-:1345: `if (*info)` count,
+    //     `info[1 + n]` part index, `info + 32 + 64*n` the transform.
+    // The DWARF type would be 1612 bytes; the span the ARTIST stride leaves it is 1312, which
+    // is exactly 32 + 20 * 64. mvRoadTestNormal_HeightAboveRoad follows at +0x520 on both.
+    // The record's ARTIST name is not recovered (no symbol touches it); the DWARF typedef
+    // name is kept for the member's sake.
     struct TrafficPhysicsInfo
     {
-        // :153 -- the queue instantiation, spelled as the typedef the DWARF names.
-        typedef CgsModule::EventQueue<DetachedPartRenderEvent, 20> DetachedPartRenderQueue;
+        struct DetachedPartRenderQueue
+        {
+            u8             muNumParts;                                                            // +0x00
+            u8             mau8PartIndex[BrnPhysics::Deformation::KU_MAX_DETACHED_PARTS_PER_VEHICLE]; // +0x01
+            // 11 bytes of alignment to the first 16-byte row (Matrix44Affine is 16-aligned).
+            Matrix44Affine maTransforms[BrnPhysics::Deformation::KU_MAX_DETACHED_PARTS_PER_VEHICLE]; // +0x20
+        };
 
         // :173 -- KU_MAX_VERLET_POINTS worth of skinning scratch (the 128-point Verlet skin).
         static const u32 KU_NUM_SKINNING_OFFSETS = 128;
@@ -833,6 +867,17 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         // world vehicles. SIGN: the read-back applies Negate(mBBoxOffset) where
         // CalculateInitialPhysicalState added it.
         void HandleExternalResponses(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput);
+
+        // @0x8271DEB0 (883). DWARF: `void ProcessDeformationData(const BrnPhysics::Deformation::
+        // DeformationOutputInterfaceForEntityModules*)`. PostPhysicsUpdate's RUNNING head leg
+        // right after HandleExternalResponses (0x8274E8A4): pulls the physics side's
+        // per-frame deformation output for every PHYSICAL traffic vehicle into its
+        // TrafficPhysicsInfo -- the 128-point skinning offsets (and the fatal-deformation
+        // test), the four wheel transforms + mabWheelExists, the light-locator table, the
+        // detached-part records and the glass smash/crack state. Body in
+        // BrnTrafficEntityModule_ProcessDeformationData.cpp.
+        void ProcessDeformationData(
+            const BrnPhysics::Deformation::DeformationOutputInterfaceForEntityModules* lpDefInterface);
 
         // ---- the spawn legs. Bodies in BrnTrafficEntityModule_wT1_01.cpp; the address on
         //      each line is its ARTIST entry point. ----
