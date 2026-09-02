@@ -858,6 +858,85 @@ namespace Deformation
             }
         }
 
+        // -------------------------------------------------------------------------------------
+        // [wheelreset] NOT IN THE X360 BINARY -- opt-in witness, BRN_WHEELRESET_PROBE=1 (0/unset
+        // == inert). This is the ONE site in the program where BOTH SIDES of the "does the
+        // respawned car have four wheels" question exist on the SAME FRAME for the SAME wheel:
+        //   * the PHYSICS side -- Wheel::mu8State (0 attached / 1 twisting / 2 detached), read
+        //     from maWheels[w] two lines above;
+        //   * the PUBLISHED side -- mabWheelExists[w] / mabWheelAttached[w], which is what
+        //     ActiveRaceCar::UpdateWheelPhysicsState and TrafficEntityModule::
+        //     ProcessDeformationData actually consume ("exists && !attached" == torn off);
+        //   * the MANAGER side -- whether DetachedWheelManager still holds a record for this
+        //     vehicle+wheel, which is the state ResetDeformation's RemoveVehicleWheels clears.
+        // A log line that showed only one of the three could say "on the road" while the screen
+        // showed a three-wheeled car, and both would be true of different numbers.
+        // Emits only when the 4-wheel signature CHANGES, so a whole run costs a handful of lines
+        // and every transition (detach, reset, re-attach) is on the record.
+        // DELETE-WHEN the respawn-after-wheel-loss question is banked on film.
+        // -------------------------------------------------------------------------------------
+        {
+            static s32 siWheelResetProbe = -1;
+            if ( siWheelResetProbe < 0 )
+            {
+                const char* lpcEnv = getenv("BRN_WHEELRESET_PROBE");
+                siWheelResetProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+            }
+            if ( siWheelResetProbe == 1 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                EntityId lProbeVehicleId;
+                lProbeVehicleId.muValue = static_cast<u32>(static_cast<u64>(mHandlingBodyID) >> 32);
+
+                u32 luSignature = 0u;
+                for ( s32 liW = 0; liW < 4; ++liW )
+                {
+                    const u32 luState = lpSimple->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(liW))->mu8State;
+                    const u32 luRec   = ( lpWheelMgr->GetWheel(lProbeVehicleId, liW) != 0 ) ? 1u : 0u;
+                    const u32 luPub   = ( lWheelStates.mabWheelExists[liW] ? 2u : 0u )
+                                      | ( lWheelStates.mabWheelAttached[liW] ? 1u : 0u );
+                    luSignature = (luSignature << 8) | ((luState & 3u) << 4) | (luRec << 2) | (luPub & 3u);
+                }
+
+                static const void* sapProbeObj[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+                static u32         sauProbeSig[8] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu,
+                                                      0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
+                static u32         suProbeNext = 0u;
+
+                s32 liProbeSlot = -1;
+                for ( u32 luS = 0; luS < 8u; ++luS )
+                {
+                    if ( sapProbeObj[luS] == static_cast<const void*>(this) ) { liProbeSlot = static_cast<s32>(luS); break; }
+                }
+                if ( liProbeSlot < 0 )
+                {
+                    liProbeSlot = static_cast<s32>(suProbeNext % 8u);
+                    ++suProbeNext;
+                    sapProbeObj[liProbeSlot] = this;
+                    sauProbeSig[liProbeSlot] = 0xFFFFFFFFu;
+                }
+
+                if ( sauProbeSig[liProbeSlot] != luSignature )
+                {
+                    sauProbeSig[liProbeSlot] = luSignature;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[wheelreset] obj " << static_cast<s32>(mu16DeformableObjectIndex)
+                        << " entity " << static_cast<s32>(lProbeVehicleId.muValue)
+                        << " broken " << static_cast<s32>(miNumBrokenWheels)
+                        << " force " << (mbForceWheelsToDetach ? 1 : 0);
+                    for ( s32 liW = 0; liW < 4; ++liW )
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << " | w" << liW
+                            << " state " << static_cast<s32>(lpSimple->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(liW))->mu8State)
+                            << " exists " << (lWheelStates.mabWheelExists[liW] ? 1 : 0)
+                            << " attached " << (lWheelStates.mabWheelAttached[liW] ? 1 : 0)
+                            << " rec " << ((lpWheelMgr->GetWheel(lProbeVehicleId, liW) != 0) ? 1 : 0);
+                    }
+                    *CgsDev::Log::gpDebugPrint << "\n";
+                }
+            }
+        }
+
         // Tail: min-clamp + store the member's w lane (vminfp @0x8260917C; vrlimi mask 1 +
         // stvx this+0x66D0 @0x8260919C..0x826091A8), then the bounds tripwire ON THE MEMBER.
         // ⭐ KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE (unk_82FB8070) = splat(100.0), static-init
