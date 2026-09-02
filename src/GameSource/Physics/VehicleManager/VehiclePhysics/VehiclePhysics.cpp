@@ -6250,8 +6250,16 @@ namespace Vehicle
             std::min(maWheels[eRearLeftWheel ].mIntegrationVariables.x,
                      maWheels[eRearRightWheel].mIntegrationVariables.x);   // vminfp of the rear pair
 
+        // ⛔ D6 (drift-symmetry wave 2026-09-02, raw words 0x8261FD78..0x8261FDE0): the
+        // standing-still arm compares TimeStandingStill (+0x1060 .x, `vspltw v13, v12, 0`) against
+        // var_60, and the ONLY write to var_60 before the compare is `stfs f13, var_60` at
+        // 0x8261FD78 with f13 == flt_8208F834 == 0.25f (the same register the counter-steer block
+        // uses as its 0.25 floor -- one shared constant, two roles). The old `> 0.0f` let reverse
+        // engage the instant the car stopped; the console waits a quarter second.
+        static const f32 KF_TIME_STANDING_STILL_TO_ALLOW_REVERSE = 0.25f;   // flt_8208F834
         const bool lbAllowReverseDrive =
-            (mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.x > 0.0f)
+            (mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.x
+             > KF_TIME_STANDING_STILL_TO_ALLOW_REVERSE)
             || (mfSpeedMPH.x < -0.2f);                                 // flt_82020A84 == -0.2
 
         const f32 lfOmega  = lfWheelAngularVelocity;
