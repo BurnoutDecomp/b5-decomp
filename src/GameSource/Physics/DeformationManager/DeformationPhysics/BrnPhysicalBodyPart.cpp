@@ -879,27 +879,85 @@ namespace Deformation
             (lvBoundingBoxMax.z + lvBoundingBoxMin.z) * 0.5f,
             0.0f
         };
-        // FLAG: mesh-offset subtrahend (*(mpDeformableObject ...+6368) rows +1664/+1632) rodata not
-        // recovered -- carried as zero.
-        const Vector3 lMeshOffset = { 0.0f, 0.0f, 0.0f, 0.0f };
-        const Vector3 lLocalCentre_minus_offset = {
-            lLocalCentre.x - lMeshOffset.x,
-            lLocalCentre.y - lMeshOffset.y,
-            lLocalCentre.z - lMeshOffset.z,
+
+        // ⭐⭐⭐ RE-DECODED 2026-09-02 (deform close-out wave). What stood here was ONE affine
+        // transform and a subtrahend "carried as zero" behind a FLAG that called it unrecovered
+        // rodata. Both were wrong, and together they are why a shed panel is DRAWN in mid-air:
+        // this member is the COM term GetEventRenderTransform subtracts, so an error in it is an
+        // error in the drawn position of every detached part, and nothing else.
+        // MEASURED (run wrst_A2, [detach-pose], 16 parts / 2356 samples): the published render
+        // position and the physics body NEVER coincide -- separation min 0.873 m, median 2.101 m,
+        // max 2.517 m, and still 1.13-2.52 m once every part is at rest. A constant floor that
+        // high is the signature of a missing constant term, not of physics noise.
+        //
+        // The asm (0x8260AC48..0x8260ACAC), decoded with the VMX128 raw-field rule
+        // `vmaddfp D,A,B,C  =>  D = A*C + B`:
+        //   lwz    r3, 0x1E0(this)          ; mpDeformableObject
+        //   lwz    r4, 0x1DC(this)          ; mpIKPart
+        //   lwz    r8, 0x18E0(r3)           ; mpDeformableObject->mpDeformationSpec
+        //   lwz    r10, 8(r4)               ; mpIKPart->mpSpec   (IKBodyPart +0x08)
+        //   lvx128 v7, r8, 0x680  / v8, r8, 0x660 ; vsubfp v8, v7, v8
+        //                                  ; == spec.mRigidBodyOffset (+1664)
+        //                                  ;  - spec.mCurrentCOMOffset (+1632)
+        //   (transform 1) rows this+0x120/0x130/0x140 + translation this+0x150  == mBBoxOrientation
+        //   (transform 2) rows r10+0x00/0x10/0x20 + translation r10+0x30
+        //                                  ; == IKBodyPartSpec::mGraphicsTransform, which sits at
+        //                                  ;    OFFSET 0 of the spec -- the panel's rest graphics
+        //                                  ;    transform, already exposed as GetPartGraphicsTransform
+        //   vsubfp v0, v0, v8              ; the offset is subtracted AFTER both transforms
+        //   vrlimi128 v0, v9, 1, 0 ; stvx128 v0, this+0x180   ; w lane preserved
+        //
+        // So there were THREE faults in one expression: the second transform was absent; the
+        // subtrahend was called unrecovered when the asm reads it from two named spec members;
+        // and the old code applied its (zero) offset BEFORE the transform instead of after.
+        // With the subtrahend at zero the sign of the third fault was invisible.
+
+        // ---- transform 1: the part's own bbox orientation (this+0x120..0x150) ----------------
+        const Vector3 lBBoxSpaceCentre = {
+            mBBoxOrientation.xAxis.x * lLocalCentre.x +
+                mBBoxOrientation.yAxis.x * lLocalCentre.y +
+                mBBoxOrientation.zAxis.x * lLocalCentre.z + mBBoxOrientation.wAxis.x,
+            mBBoxOrientation.xAxis.y * lLocalCentre.x +
+                mBBoxOrientation.yAxis.y * lLocalCentre.y +
+                mBBoxOrientation.zAxis.y * lLocalCentre.z + mBBoxOrientation.wAxis.y,
+            mBBoxOrientation.xAxis.z * lLocalCentre.x +
+                mBBoxOrientation.yAxis.z * lLocalCentre.y +
+                mBBoxOrientation.zAxis.z * lLocalCentre.z + mBBoxOrientation.wAxis.z,
             0.0f
         };
+
+        // ---- transform 2: the panel's rest graphics transform (mpIKPart->mpSpec, rows @ +0) ---
+        const rw::math::vpu::Matrix44Affine& lrPartGraphics =
+            mpIKPart->GetSpec()->GetPartGraphicsTransform();
+        const Vector3 lGraphicsSpaceCentre = {
+            lrPartGraphics.xAxis.x * lBBoxSpaceCentre.x +
+                lrPartGraphics.yAxis.x * lBBoxSpaceCentre.y +
+                lrPartGraphics.zAxis.x * lBBoxSpaceCentre.z + lrPartGraphics.wAxis.x,
+            lrPartGraphics.xAxis.y * lBBoxSpaceCentre.x +
+                lrPartGraphics.yAxis.y * lBBoxSpaceCentre.y +
+                lrPartGraphics.zAxis.y * lBBoxSpaceCentre.z + lrPartGraphics.wAxis.y,
+            lrPartGraphics.xAxis.z * lBBoxSpaceCentre.x +
+                lrPartGraphics.yAxis.z * lBBoxSpaceCentre.y +
+                lrPartGraphics.zAxis.z * lBBoxSpaceCentre.z + lrPartGraphics.wAxis.z,
+            0.0f
+        };
+
+        // ---- the COM-space -> rigid-body-space shift, subtracted AFTER both transforms --------
+        const StreamedDeformationSpec* lpVehicleSpec = mpDeformableObject->GetDeformationSpec();
+        const Vector3 lComToRigidBody = {
+            lpVehicleSpec->mRigidBodyOffset.x - lpVehicleSpec->mCurrentCOMOffset.x,
+            lpVehicleSpec->mRigidBodyOffset.y - lpVehicleSpec->mCurrentCOMOffset.y,
+            lpVehicleSpec->mRigidBodyOffset.z - lpVehicleSpec->mCurrentCOMOffset.z,
+            0.0f
+        };
+
         const Vector3 lTransformedCentre = {
-            mBBoxOrientation.xAxis.x * lLocalCentre_minus_offset.x +
-                mBBoxOrientation.yAxis.x * lLocalCentre_minus_offset.y +
-                mBBoxOrientation.zAxis.x * lLocalCentre_minus_offset.z + mBBoxOrientation.wAxis.x,
-            mBBoxOrientation.xAxis.y * lLocalCentre_minus_offset.x +
-                mBBoxOrientation.yAxis.y * lLocalCentre_minus_offset.y +
-                mBBoxOrientation.zAxis.y * lLocalCentre_minus_offset.z + mBBoxOrientation.wAxis.y,
-            mBBoxOrientation.xAxis.z * lLocalCentre_minus_offset.x +
-                mBBoxOrientation.yAxis.z * lLocalCentre_minus_offset.y +
-                mBBoxOrientation.zAxis.z * lLocalCentre_minus_offset.z + mBBoxOrientation.wAxis.z,
+            lGraphicsSpaceCentre.x - lComToRigidBody.x,
+            lGraphicsSpaceCentre.y - lComToRigidBody.y,
+            lGraphicsSpaceCentre.z - lComToRigidBody.z,
             0.0f
         };
+
         // Store the box centre into mLocalInitialComPositionPlusMaxJointAngle (+384), xyz only --
         // vrlimi128 v0, v9, 1, 0 preserves the existing w lane (the max-joint-angle scalar).
         mLocalInitialComPositionPlusMaxJointAngle.SetVector3(lTransformedCentre);

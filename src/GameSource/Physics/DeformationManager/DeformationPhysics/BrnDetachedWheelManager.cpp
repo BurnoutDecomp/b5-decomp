@@ -255,15 +255,38 @@ namespace Deformation
             // (1) owner-type table match (maWheelOwnerType is at this+2880 -- v5[slot + 720]).
             if (static_cast<u32>(maWheelOwnerType[liSlot]) == luHandlingOwner)
             {
-                // (2) the asm's gate-2 is a test over the WHEEL's OWN packed word alone -- the
-                // handling id does NOT appear in it. v14 = HIDWORD(*&v5[36*slot+28]) is the wheel
-                // record's mWheelBodyId.muEntityWord (the +112 entity word; on big-endian X360 the
-                // high dword of the 8-byte mWheelBodyId load is the first 4 bytes). The asm test is
-                // `(((v14>>10) ^ WORD1(v14)) & 0x3FFF) == 0`, i.e. the low-14 of (word>>10) (the
-                // packed entityIndex field) XOR the low-14 of (word>>16), masked 0x3FFF, equal to
-                // zero -- transcribed below store-for-store.
+                // ⛔⛔⛔ GATE 2 RE-DECODED 2026-09-02 (deform close-out wave) -- THIS GATE COULD
+                // NEVER PASS, so RemoveVehicleWheels removed NOTHING, and every wheel a car shed
+                // stayed in this manager's slot table for the rest of the session.
+                //
+                // The note that stood here said, emphatically, "the asm's gate-2 is a test over the
+                // WHEEL's OWN packed word alone -- the handling id does NOT appear in it ... (an
+                // earlier transcription wrongly injected the handling entity index into gate-2 --
+                // corrected here)". THE "CORRECTION" WAS THE REGRESSION: the earlier transcription
+                // was right. Read the asm (0x82629ABC..0x82629AE8), with r14 established at
+                // 0x82629A60 as `srdi r11, r6, 32` == the HANDLING id's entity word:
+                //     0x82629AC0  srwi r10, r14, 10      ; HANDLING entityWord >> 10
+                //     0x82629AC4  add  r11, r31, r11     ; slot*9 ...
+                //     0x82629AC8  slwi r11, r11, 4       ; ... *16 == slot*144, the record stride
+                //     0x82629AD0  ld   r11, 0x70(r11)    ; the wheel record's 8-byte mWheelBodyId
+                //     0x82629AD4  srdi r11, r11, 32      ; its entity word
+                //     0x82629AD8  srwi r11, r11, 10      ; WHEEL entityWord >> 10
+                //     0x82629ADC  xor  r11, r11, r10     ; <- XOR WITH THE HANDLING INDEX, not itself
+                //     0x82629AE0  clrlwi r11, r11, 18    ; keep the low 14 bits
+                //     0x82629AE4  cmplwi cr6, r11, 0 ; bne -> skip
+                // i.e. "does this slot's wheel belong to the vehicle being reset" -- the ordinary
+                // 14-bit entity-index compare, written as an XOR. The self-XOR that stood here,
+                // `(w>>10) ^ (w>>16)`, is a property of one word's own bits and is zero only for a
+                // handful of accidental patterns.
+                //
+                // MEASURED, and this is what sent me back to the asm: with ResetDeformation's
+                // `bl RemoveVehicleWheels` finally emitted (4625e6a0), the [wheelreset] witness
+                // still showed `rec 1` for the reset wheel -- the record survived the reset in BOTH
+                // the fixed and the control build (runs wrst_A2 / wrst_CTL). The call was reaching
+                // a gate that cannot fire.
                 const u32 luWheelWord = maWheels[liSlot].GetWheelBodyId().muEntityWord;
-                if ((((luWheelWord >> 10) ^ (luWheelWord >> 16)) & 0x3FFFu) == 0u)
+                const u32 luHandlingWord = static_cast<u32>(static_cast<u64>(lHandlingBodyId) >> 32);
+                if ((((luWheelWord >> 10) ^ (luHandlingWord >> 10)) & 0x3FFFu) == 0u)
                 {
                     RemoveWheel(liSlot, lpSimInput, lpSceneInterface);
                 }
