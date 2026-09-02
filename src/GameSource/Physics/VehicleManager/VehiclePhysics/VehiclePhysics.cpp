@@ -400,25 +400,27 @@ namespace Vehicle
     // MEASURED: the settled body position is BIT-IDENTICAL with and without this function
     // (2986.941406 / -3.207705 / -2011.413696, vel 0/0/0, over a 275 s boot). Nothing drifts.
     //
-    // READ THIS BEFORE CONCLUDING THE TYRE MODEL IS BROKEN. The load term is
-    // `maWheels[i].mSpeedAndMassOnWheelVariables.z` -- the DWARF's MassOnWheel lane, with its own
-    // Wheel::SetMassOnWheel/GetMassOnWheel pair at Wheel.h:379/382 -- and **NOTHING IN THIS TREE
-    // WRITES IT**. The only store to that lane anywhere is Wheel::Reset zeroing it (Wheel.cpp:226).
-    // So today N == 0, and therefore longForce == latForce == 0 for every wheel on every frame, no
-    // matter how much slip there is. That is measured, not inferred: an instrumented boot printed
-    // `massOnWheel 0.000000 ... Flong -0.000000 Flat -0.000000` on a grounded wheel with real
-    // contact, a real radius (0.342469), a real tyre record ({staticFrictionCo 2.25,
-    // dynamicFrictionCo 2.25, adhesiveLimit 27000, longForceBias 0}, long curve {0.5, 1.0, 1.2,
-    // 1.0}) and a real surface grip (0.2). The SAME instrumented boot, with the load lane fed
-    // 397.25 kg/wheel (mfMass 1589 / 4) and the wheels spun to 20 rad/s, drove the car FORWARD
-    // ALONG ITS OWN HEADING -- velocity (-5.455, 0.249, -2.671) against At (-0.8976, 0.0354,
-    // -0.4395), unit-dot 0.999 -- and then converged on the wheel surface speed (|v| 6.71 m/s vs
-    // omega*r 6.75 m/s) with the slip decaying 0.143 -> 0.006 and the force decaying 1134 N -> 2.6 N,
-    // which is exactly what a correct longitudinal tyre model does. The model is right; the LOAD is
-    // missing. `SetMassOnWheel` appears in NO X360 export name (it is a trivial inlined setter), so
-    // its writer is an inlined `vrlimi128 mask 2` store into wheel+0x70 inside whichever suspension
-    // routine computes the per-corner mass. THAT is the next wave, and it is a small one.
-    // DELETE-WHEN mSpeedAndMassOnWheelVariables.z has a writer.
+    // ⛔ THE PARAGRAPH THAT USED TO SIT HERE IS RETIRED, AND ITS DELETE-WHEN IS DISCHARGED.
+    // It said, in bold, "**NOTHING IN THIS TREE WRITES** maWheels[i].mSpeedAndMassOnWheelVariables.z
+    // ... so today N == 0, and therefore longForce == latForce == 0 for every wheel on every frame".
+    // That was true when it was written and it is FALSE NOW: the writer landed in
+    // CalculateWeightTransfer @0x825F9DD0 (this file, `maWheels[liWheel].mSpeedAndMassOnWheelVariables.z
+    // = lfMass * lfScaler + KF_RECIP_GRAVITY * lafCornerTransfer[liWheel]`, gated on
+    // RoadContact.mbIsOnGround) -- exactly the `vrlimi128 mask 2` store the note predicted, found by
+    // scanning the exports' ASSEMBLY for the +0xED0 mvSpringMassScalers read instead of for the
+    // (inlined, unexported) SetMassOnWheel name. The old text's own DELETE-WHEN line named that
+    // condition; nobody came back to delete it.
+    // ⚠️ IT IS NOT A HARMLESS LEFTOVER. A stale banner that says the tyre model produces no force is
+    // a diagnosis handed to every later reader: the steering wave of 2026-09-02 read it mid-
+    // investigation and was one step from reporting "steering does nothing because the tyres carry no
+    // load" -- while the same build was measuring a clean 0 -> 0.90 rad/s yaw ramp at 60 mph under
+    // full lock with all four wheels loaded. [[diagnostics-that-lie]] / "a file's own comment can be
+    // the regression": the comment WAS the regression, and the code was right.
+    // ⭐ WHAT IS WORTH KEEPING FROM IT, because it is still the fastest way to falsify a "the tyre
+    // model is broken" claim: the load term is that lane, N = max(massOnWheel * g * mNormal.y, 0),
+    // and both grip curves return 0 at zero slip. If a wave sees zero tyre force, print
+    // massOnWheel FIRST -- a zero there is a LOAD failure (weight transfer / on-ground gate), not a
+    // model failure, and the two need completely different fixes.
     void VehiclePhysics::HandleWheelPairFriction(EVehicleDrivenWheel leWheelA,
                                                  EVehicleDrivenWheel leWheelB,
                                                  Vector3 lvRollDirection,
