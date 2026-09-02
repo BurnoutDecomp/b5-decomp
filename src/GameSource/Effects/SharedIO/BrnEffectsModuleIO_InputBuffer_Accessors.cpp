@@ -1,244 +1,241 @@
 #include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_InputBuffer.h"
-
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include <cstring>                                    // std::memcpy (the console's XMemCpy / memcpy setters)
 
-#include <cstring>   // std::memcpy
-
-// BrnEffects::EffectsIO::InputBuffer member functions, reconstructed from
-// BURNOUT_X360_ARTIST.XEX. The per-frame input aggregate the game bridges fill before the
-// effects module updates. OPAQUE-IMAGE idiom (committed BrnAIModuleIO_OutputBuffer /
-// BrnCrashModuleIO precedent): each accessor reinterprets its member at the X360-attested
-// byte offset over the buffer image. Every accessor shares the recurring CgsModule::IOBuffer
-// lock-guard prologue: getters test bit 4 (eStatusLockedForRead, "Not locked for reading\n"),
-// setters test bit 3 (eStatusLockedForWrite, "Not locked for writing\n"). (These Effects lock
-// strings carry the trailing \n per the X360 rodata.)
+// ============================================================================
+// BrnEffects::EffectsIO::InputBuffer -- lifecycle + accessors, reconstructed from
+// BURNOUT_X360_ARTIST.XEX. Every accessor shares the recurring CgsModule::IOBuffer
+// lock-guard prologue: read the status byte, test one lock bit -- const getters test
+// bit 4 (eStatusLockedForRead, "Not locked for reading\n"), the write-side getter
+// and every setter test bit 3 (eStatusLockedForWrite, "Not locked for writing\n") --
+// then touch one named member. The Effects lock strings carry the trailing \n per
+// the X360 rodata.
+//
+// 2026-09-02 (tyre-mark wave): the members are REAL TYPES now (see the header), so
+// each setter is the type's own copy: operator= where the console calls one
+// (Camera / DeformationOutputInterface / ReplayIO::StatusInterface), a bitwise copy
+// where the console XMemCpy's / memcpy's (the active-race-car interface, the timer
+// status, the audio message queue), one-word stores for the two pointer-sized
+// interfaces, and Clear + Append for the two fixed-capacity event queues.
+// ============================================================================
 
 namespace BrnEffects
 {
 namespace EffectsIO
 {
 
-// ---- InputBufferBaseEventQueueView::Append -------------------------------------------------
-// FLAG (foreign home): the concrete queue element types (BrnPhysics::Vehicle::
-// PhysicalTrafficState / BrnWorld::PropEntityIO::PropVFXLocatorEvent) and the packed-byte
-// merge are owned by the queue's own ledger TU (CgsModule::VariableEventQueue<>::Append).
-// Only the destination-offset + clear-count facts are attested by the two effects setters, so
-// this view models the "merge the source event count onto our tail" tail of that Append; the
-// byte-image copy of the packed records is deferred to the real queue type.
-void InputBufferBaseEventQueueView::Append(const InputBufferBaseEventQueueView& lrSource)
+// ---- Construct @ 0x82293618 ----------------------------------------------------------
+// The console order, store for store:
+//   *this = 1 (IOBuffer::Construct)                 mInEventQueue.Construct()     [+292]
+//   mContactSpyInterface.Construct()      [+31632]  mDeformationInterface.Construct() [+31648]
+//   mGameActionQueue.Construct()          [+42640]
+//   mReplayStatusInterface: mxStatusFlags = 0 [+55984]; the six reels' macName[0] = 0
+//     (the 257-byte stride loop from +56244); mfDebugHudAlpha = 0.0 [+57540];
+//     miCurrentRecordReel = miCurrentPlaybackReel = -1 [+57532 / +57536]
+//     (the inlined StatusInterface clear -- there is no out-of-line body for it)
+//   mPropVFXLocatorQueue.Construct()      [+57552]  mVehiclePhysicalStateQueue.Construct() [+14896]
+//   mActiveRaceCarInterface.Clear()       [+4416]   mCameraInput.Clear()           [+31232]
+//   mTimerStatusInterface.Clear()         [+31584]  mbSuspendEffects = 0           [+58516]
+// maBoostInfos / mEffectsEnvironmentInterface / mTriangleCacheInterface /
+// mAudioEffectsMessageQueue are NOT initialised by the console's Construct (the bridge
+// writes every one of them before Update reads them); reproduced.
+void InputBuffer::Construct()
 {
-    miLength += lrSource.miLength;
+    CgsModule::IOBuffer::Construct();
+    mInEventQueue.Construct();
+    mContactSpyInterface.Construct();
+    mDeformationInterface.Construct();
+    mGameActionQueue.Construct();
+
+    mReplayStatusInterface.mxStatusFlags = 0;
+    for (s32 liReel = 0; liReel < 6; ++liReel)
+    {
+        mReplayStatusInterface.maReels[liReel].macName[0] = '\0';
+    }
+    mReplayStatusInterface.mfDebugHudAlpha        = 0.0f;
+    mReplayStatusInterface.miCurrentRecordReel    = -1;
+    mReplayStatusInterface.miCurrentPlaybackReel  = -1;
+
+    mPropVFXLocatorQueue.Construct();
+    mVehiclePhysicalStateQueue.Construct();
+    mActiveRaceCarInterface.Clear();
+    mCameraInput.Clear();
+    mTimerStatusInterface.Clear();
+    mbSuspendEffects = false;
 }
 
-// ============================== getters (read-lock, status bit 4) ==============================
+// ============================== read-lock getters ==============================
 
-// X360 0x8227DBE0 (R, :138) -- read-lock handle to the game-action queue (this+0xA690).
-// [EffectsIO-bare accessor folded into the opaque-image idiom.]
 const InputBuffer::GameActionQueue* InputBuffer::GetGameActionQueue() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const GameActionQueue*>(MemberImage() + KU_GAME_ACTION_QUEUE_OFFSET);
+    return &mGameActionQueue;
 }
 
-// X360 0x8227DD30 (R, :152) -- read-lock handle to the triangle-cache interface (this+0xE400).
-// [EffectsIO-bare accessor folded into the opaque-image idiom.]
 const InputBuffer::InTriangleCacheInterface* InputBuffer::GetTriangleCacheInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const InTriangleCacheInterface*>(MemberImage() + KU_TRIANGLE_CACHE_INTERFACE_OFFSET);
+    return &mTriangleCacheInterface;
 }
 
-// X360 0x8227D940 (R, :119) -- read-lock; return &mCameraInput (this+0x7A00).
-const void* InputBuffer::GetCameraInput() const
+const BrnDirector::Camera::Camera* InputBuffer::GetCameraInput() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return MemberImage() + KU_CAMERA_INPUT_OFFSET;
+    return &mCameraInput;
 }
 
-// X360 0x8227D9E8 (R, :123) -- read-lock; return &mTimerStatusInterface (this+0x7B60).
-const void* InputBuffer::GetTimerStatusInterface() const
+const CgsSystem::TimerStatusInterface* InputBuffer::GetTimerStatusInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return MemberImage() + KU_TIMER_STATUS_INTERFACE_OFFSET;
+    return &mTimerStatusInterface;
 }
 
-// X360 0x8227DA90 (R, :127) -- read-lock; return &mContactSpyInterface (this+0x7B90).
-const void* InputBuffer::GetContactSpyInterface() const
+const BrnPhysics::ContactSpy::ContactSpyInterface* InputBuffer::GetContactSpyInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return MemberImage() + KU_CONTACT_SPY_INTERFACE_OFFSET;
+    return &mContactSpyInterface;
 }
 
-// X360 0x8227DB38 (R, :131) -- read-lock; return &mDeformationInterface (this+0x7BA0).
-const void* InputBuffer::G() const
+const BrnPhysics::Deformation::DeformationOutputInterface* InputBuffer::GetDeformationInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return MemberImage() + KU_DEFORMATION_INTERFACE_OFFSET;
+    return &mDeformationInterface;
 }
 
-// X360 0x8227DDD8 (R, :156) -- read-lock; return &mAudioEffectsMessageQueue (this+0xE404).
-const void* InputBuffer::GetAud() const
+const InputBuffer::AudioEffectsMessageQueue* InputBuffer::GetAudioEffectsMessageQueue() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return MemberImage() + KU_AUDIO_EFFECTS_MESSAGE_QUEUE_OFFSET;
+    return &mAudioEffectsMessageQueue;
 }
 
-// X360 0x8227D7F0 (R, :111) -- read-lock; return &mActiveRaceCarInterface (this+0x1140).
-// Const read-lock counterpart of SetActiveRaceCarInterface (0x823BA490 :109).
-const void* InputBuffer::GetActiveRaceCarInterface() const
+const InputBuffer::RCEntityActiveRaceCarOutputInterface* InputBuffer::GetActiveRaceCarInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return MemberImage() + KU_ACTIVE_RACE_CAR_INTERFACE_OFFSET;
+    return &mActiveRaceCarInterface;
 }
 
-// X360 0x8227D898 (R, :115) -- read-lock; return &mVehiclePhysicalStateQueue (this+0x3A30).
-// Const read-lock counterpart of SetVehiclePhysicalStateQueue (0x823C96B8 :113).
-const void* InputBuffer::GetVehiclePhysicalStateQueue() const
+const InputBuffer::PhysicalTrafficStateQueue* InputBuffer::GetVehiclePhysicalStateQueue() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return MemberImage() + KU_VEHICLE_PHYSICAL_STATE_QUEUE_OFFSET;
+    return &mVehiclePhysicalStateQueue;
 }
 
-// X360 0x8227DC88 (R, :149) -- read-lock; return &mPropVFXLocatorQueue (this+0xE0D0).
-// The asm forms the offset as addis+1/-0x1F30 (== +0xE0D0). Const read-lock counterpart of
-// SetPropVFXLocatorQueue (0x823C98D0 :147).
-const void* InputBuffer::GetPropVFXLocatorQueue() const
+const InputBuffer::PropVFXLocatorQueue* InputBuffer::GetPropVFXLocatorQueue() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return MemberImage() + KU_PROP_VFX_LOCATOR_QUEUE_OFFSET;
+    return &mPropVFXLocatorQueue;
 }
 
-// ============================== getters (write-lock, status bit 3) =============================
-// The non-const overload faithfully tests the WRITE bit as the asm names it.
+const InputBuffer::ReplayStatusInterface* InputBuffer::GetReplayStatusInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mReplayStatusInterface;
+}
 
-// X360 0x823BA708 (W, :137) -- write-lock handle to the game-action queue (this+0xA690).
-// [EffectsIO-bare accessor folded into the opaque-image idiom.]
+const EffectsEnvironmentInterface* InputBuffer::GetEffectsEnvironmentInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mEffectsEnvironmentInterface;
+}
+
+// ============================== write-lock getter ==============================
+
+// X360 0x823BA708 (:142) -- the game-action queue for the bridge's Append.
 InputBuffer::GameActionQueue* InputBuffer::GetGameActionQueue()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    return reinterpret_cast<GameActionQueue*>(MemberImage() + KU_GAME_ACTION_QUEUE_OFFSET);
+    return &mGameActionQueue;
 }
 
-// ============================== setters (write-lock, status bit 3) =============================
+// ============================== setters (write-lock) ==============================
 
-// X360 0x823BA490 (:109) -- assert write-lock, XMemCpy 10480 bytes into
-// mActiveRaceCarInterface (this+0x1140).
-void InputBuffer::SetActiveRaceCarInterface(const void* lpInterface)
+// X360 0x823BA490 (:82) -- XMemCpy(&mActiveRaceCarInterface, lpInterface, 0x28F0): the
+// console copies the interface bitwise; the host copy is the same object bitwise.
+void InputBuffer::SetActiveRaceCarInterface(const RCEntityActiveRaceCarOutputInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(MemberImage() + KU_ACTIVE_RACE_CAR_INTERFACE_OFFSET, lpInterface,
-                KU_ACTIVE_RACE_CAR_INTERFACE_SIZE);
+    std::memcpy(&mActiveRaceCarInterface, lpInterface, sizeof(mActiveRaceCarInterface));
 }
 
-// X360 0x823C96B8 (:113) -- assert write-lock, clear mVehiclePhysicalStateQueue's live count
-// (miLength @ queue+8), then Append(source) onto its tail (queue @ this+0x3A30). The queue
-// element type (BrnPhysics::Vehicle::PhysicalTrafficState) is owned by another TU, so the
-// clear+append is modelled on the queue's BaseEventQueue view.
-void InputBuffer::SetVehiclePhysicalStateQueue(const void* lpQueue)
+// X360 0x823C96B8 (:91) -- `stw 0, 8(queue)` (Clear) then BaseEventQueue::Append(source).
+void InputBuffer::SetVehiclePhysicalStateQueue(const PhysicalTrafficStateQueue* lpQueue)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-
-    InputBufferBaseEventQueueView& lDest = *reinterpret_cast<InputBufferBaseEventQueueView*>(
-        MemberImage() + KU_VEHICLE_PHYSICAL_STATE_QUEUE_OFFSET);
-    const InputBufferBaseEventQueueView& lSource =
-        *static_cast<const InputBufferBaseEventQueueView*>(lpQueue);
-
-    lDest.miLength = 0;   // X360: stw 0, 8(queue) -- reset live count before the merge
-    lDest.Append(lSource);
+    mVehiclePhysicalStateQueue.Clear();
+    mVehiclePhysicalStateQueue.Append(*lpQueue);
 }
 
-// X360 0x823C9770 (:117) -- assert write-lock, then mCameraInput = *lpCameraInput
-// (this+0x7A00). The X360 build calls BrnDirector::Camera::Camera::operator= out-of-line;
-// modelled here as a byte-image copy of the CameraInput sub-object at its attested offset.
-void InputBuffer::SetCameraInput(const void* lpCameraInput)
+// X360 0x823C9770 (:100) -- mCameraInput = *lpCameraInput (Camera::operator=).
+void InputBuffer::SetCameraInput(const BrnDirector::Camera::Camera* lpCameraInput)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(MemberImage() + KU_CAMERA_INPUT_OFFSET, lpCameraInput,
-                KU_CAMERA_INPUT_SIZE);
+    mCameraInput = *lpCameraInput;
 }
 
-// X360 0x823BA548 (:121) -- assert write-lock, then mTimerStatusInterface = *lpTimer
-// (this+0x7B60). The X360 build expands the TimerStatusInterface operator= as two 24-byte
-// field runs (word/f32/f32/byte/word/f32); modelled here as a 48-byte struct-image copy.
-void InputBuffer::SetTimerStatusInterface(const void* lpTimer)
+// X360 0x823BA548 (:109) -- the 48-byte (two 24-byte TimerStatus) copy.
+void InputBuffer::SetTimerStatusInterface(const CgsSystem::TimerStatusInterface* lpTimer)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(MemberImage() + KU_TIMER_STATUS_INTERFACE_OFFSET, lpTimer,
-                KU_TIMER_STATUS_INTERFACE_SIZE);
+    std::memcpy(&mTimerStatusInterface, lpTimer, sizeof(mTimerStatusInterface));
 }
 
-// X360 0x823BA658 (:125) -- assert write-lock, then copy one word (*lpInterface) into
-// mContactSpyInterface (this+0x7B90). The interface holds a single pointer/word.
-void InputBuffer::SetContactSpyInterface(const void* lpInterface)
+// X360 0x823BA658 (:118) -- one word: the interface IS its ContactSpyData pointer.
+void InputBuffer::SetContactSpyInterface(const BrnPhysics::ContactSpy::ContactSpyInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(MemberImage() + KU_CONTACT_SPY_INTERFACE_OFFSET, lpInterface,
-                sizeof(u32));
+    mContactSpyInterface = *lpInterface;
 }
 
-// X360 0x823C9820 (:129) -- assert write-lock, then mDeformationInterface = *lpInterface
-// (this+0x7BA0). The X360 build calls DeformationOutputInterface::operator= out-of-line;
-// modelled here as a byte-image copy of the sub-object at its attested offset.
-void InputBuffer::SetDeformationInterface(const void* lpInterface)
+// X360 0x823C9820 (:127) -- mDeformationInterface = *lpInterface (its operator=).
+void InputBuffer::SetDeformationInterface(const BrnPhysics::Deformation::DeformationOutputInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(MemberImage() + KU_DEFORMATION_INTERFACE_OFFSET, lpInterface,
-                KU_DEFORMATION_INTERFACE_SIZE);
+    mDeformationInterface = *lpInterface;
 }
 
-// X360 0x823BA7B0 (:141) -- assert write-lock, then mReplayStatusInterface = *lpStatus
-// (this+0xDAB0). The X360 build calls BrnReplays::ReplayIO::StatusInterface::operator=
-// out-of-line; modelled here as a byte-image copy at the attested offset.
-void InputBuffer::SetReplayStatusInterface(const void* lpStatus)
+// DWARF :136 -- one BoostOutputInfo slot (the bridge copies all eight inline instead).
+void InputBuffer::SetBoostInfoN(s32 liIndex, const BoostOutputInfo* lpBoostInfo)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(MemberImage() + KU_REPLAY_STATUS_INTERFACE_OFFSET, lpStatus,
-                KU_REPLAY_STATUS_INTERFACE_SIZE);
+    CGS_ASSERT(liIndex >= 0 && liIndex < static_cast<s32>(KU_NUM_BOOST_INFOS), "liIndex < KU_NUM_BOOST_INFOS");
+    maBoostInfos[liIndex] = *lpBoostInfo;
 }
 
-// X360 0x823BA868 (:143) -- assert write-lock, then mEffectsEnvironmentInterface =
-// *lpEnv (this+0xDAA0), a 16-byte copy (two 8-byte runs). The interface is a single
-// 16-byte-aligned Vector2 (BrnEffects::EffectsEnvironmentInterface, DWARF-attested 16 bytes).
-void InputBuffer::SetEffectsEnvironmentInterface(const void* lpEnv)
+// X360 0x823BA7B0 (:151) -- mReplayStatusInterface = *lpStatus (its operator=).
+void InputBuffer::SetReplayStatusInterface(const ReplayStatusInterface* lpStatus)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(MemberImage() + KU_EFFECTS_ENVIRONMENT_INTERFACE_OFFSET, lpEnv,
-                KU_EFFECTS_ENVIRONMENT_INTERFACE_SIZE);
+    mReplayStatusInterface = *lpStatus;
 }
 
-// X360 0x823C98D0 (:147) -- assert write-lock, clear mPropVFXLocatorQueue's live count
-// (miLength @ queue+8), then Append(source) onto its tail (queue @ this+0xE0D0). The queue
-// element type (BrnWorld::PropEntityIO::PropVFXLocatorEvent) is owned by another TU, so the
-// clear+append is modelled on the queue's BaseEventQueue view.
-void InputBuffer::SetPropVFXLocatorQueue(const void* lpQueue)
+// X360 0x823BA868 (:154) -- the 16-byte (one Vector2) copy.
+void InputBuffer::SetEffectsEnvironmentInterface(const EffectsEnvironmentInterface* lpEnv)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-
-    InputBufferBaseEventQueueView& lDest = *reinterpret_cast<InputBufferBaseEventQueueView*>(
-        MemberImage() + KU_PROP_VFX_LOCATOR_QUEUE_OFFSET);
-    const InputBufferBaseEventQueueView& lSource =
-        *static_cast<const InputBufferBaseEventQueueView*>(lpQueue);
-
-    lDest.miLength = 0;   // X360: stw 0, 8(queue) -- reset live count before the merge
-    lDest.Append(lSource);
+    mEffectsEnvironmentInterface = *lpEnv;
 }
 
-// X360 0x823BA928 (:151) -- assert write-lock, then copy one word (*lpInterface) into
-// mTriangleCacheInterface (this+0xE400). The interface holds a single pointer/word.
-void InputBuffer::SetTriangleCacheInterface(const void* lpInterface)
+// X360 0x823C98D0 (:163) -- `stw 0, 8(queue)` (Clear) then BaseEventQueue::Append(source).
+void InputBuffer::SetPropVFXLocatorQueue(const PropVFXLocatorQueue* lpQueue)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(MemberImage() + KU_TRIANGLE_CACHE_INTERFACE_OFFSET, lpInterface,
-                sizeof(u32));
+    mPropVFXLocatorQueue.Clear();
+    mPropVFXLocatorQueue.Append(*lpQueue);
 }
 
-// X360 0x823BA9E0 (:154) -- assert write-lock, memcpy 144 bytes into
-// mAudioEffectsMessageQueue (this+0xE404).
-void InputBuffer::SetAudioEffectsMessageQueue(const void* lpQueue)
+// X360 0x823BA928 (:172) -- one word: the interface IS its TriangleCacheManager pointer.
+void InputBuffer::SetTriangleCacheInterface(const InTriangleCacheInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(MemberImage() + KU_AUDIO_EFFECTS_MESSAGE_QUEUE_OFFSET, lpQueue,
-                KU_AUDIO_EFFECTS_MESSAGE_QUEUE_SIZE);
+    mTriangleCacheInterface = *lpInterface;
+}
+
+// X360 0x823BA9E0 (:178) -- memcpy(&mAudioEffectsMessageQueue, lpQueue, 0x90): a bitwise
+// copy of the whole VariableEventQueue<128,16> (its buffer is inline -- no pointer to alias).
+void InputBuffer::SetAudioEffectsMessageQueue(const AudioEffectsMessageQueue* lpQueue)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    std::memcpy(&mAudioEffectsMessageQueue, lpQueue, sizeof(mAudioEffectsMessageQueue));
 }
 
 }   // namespace EffectsIO
