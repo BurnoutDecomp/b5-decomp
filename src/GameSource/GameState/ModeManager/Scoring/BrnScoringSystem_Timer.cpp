@@ -45,10 +45,13 @@
 //       (vtable slot +0x14) is now a named virtual, and CarScoreData::SetEliminated (the +0xD9 write)
 //       exists -- so the online/offline scorer pick + the eliminated-flag write all resolve by name.
 //
-// BLOCKED (omitted -- left declare-only) and why:
-//   - OnRoadRagePlayerCrashed (0x823444B0): dereferences the GameStateModuleIO::OutputBuffer
-//       param (forward-declared only in the keystone) and CgsModule::VariableEventQueue<13312,16>
-//       (no committed home), to push road-rage crash events.
+// FORMERLY BLOCKED, NOW LANDED ELSEWHERE:
+//   - OnRoadRagePlayerCrashed (0x823444B0): was left declare-only here because it dereferences
+//       the GameStateModuleIO::OutputBuffer param and CgsModule::VariableEventQueue<13312,16>,
+//       neither of which had a committed home. Both do now (OutputBuffer::GetGameActionQueue in
+//       BrnGameStateModuleIO.h/.cpp; the GameActionQueue typedef in BrnGameStateSharedIO.h), and
+//       the body lives in its own partfile BrnScoringSystem_RoadRage.cpp (2026-09-02) so this
+//       file's include set stays free of the heavy IO header.
 //
 // DEFERRED (no standalone X360 export -- inlined away on X360, so no authoritative body):
 //   SetCheckPointsForCarsWithinRace, UpdateTimerForEliminator, HasCrashModeEnded.

@@ -340,7 +340,9 @@ public:
     // ---- END OF THE CONSOLE VTABLE ------------------------------------------------------------
 
     void    SetCurrentState(s32 liState);
-    s32     CalculateMaxPlayerWrecks();
+    // [road-rage wave 2026-09-02] DWARF shape restored: X360 0x82315BD8 takes the StartGameModeParams*
+    // and reads the player car entry (+828) -> VehicleListEntry::GetStrengthStat() (+0x9B).
+    s32     CalculateMaxPlayerWrecks(const StartGameModeParams* lpStartGameModeParams);
     bool    HasCountdownDisplayChanged(s32* lpiNewCountdownDisplay);
 
     // -- Inline accessors/setters used by the nested GameModeState states -----------------

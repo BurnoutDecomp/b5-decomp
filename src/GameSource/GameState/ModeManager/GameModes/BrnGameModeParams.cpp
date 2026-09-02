@@ -664,3 +664,12 @@ void StartGameModeParams::SetPlayerBaseDeformation(f32 lfPlayerBaseDeformation)
     mfPlayerBaseDeformation = lfPlayerBaseDeformation;
 }
 }
+
+// [road-rage wave 2026-09-02] X360 inlines this getter at every site (e.g. GameMode::
+// CalculateMaxPlayerWrecks 0x82315BD8: `lwz r30, 0x33C(r4)` == +828 mpPlayerCarVehicleListEntry, with the
+// assert "mpPlayerCarVehicleListEntry != NULL" baked at BrnGameModeParams.h:992). De-inlined here.
+const BrnResource::VehicleListEntry* BrnGameState::StartGameModeParams::GetPlayerVehicleGamePlayData() const
+{
+    CGS_ASSERT(mpPlayerCarVehicleListEntry != NULL, "mpPlayerCarVehicleListEntry != NULL");   // .h:992
+    return mpPlayerCarVehicleListEntry;
+}

@@ -589,6 +589,10 @@ namespace BrnWorldIO
         const VehicleOutputInterface* GetVehicleOutputInterface() const;                   // :528 R (0x823B58D0, "GetVehicleOut")
         VehicleOutputInterface*       GetVehicleOutputInterface();                         // :529 W (0x827A44E8, "GetVehicleOutputInt")
         const VehicleManagerOutputInterface* GetVehicleManagerOutputInterface() const;     // :531 R (0x823B5978, "GetVeh")
+        // [road-rage wave 2026-09-02] the WRITE half (DWARF :532; X360 symbol truncated to
+        // "BrnWorldIO::UpdateOutputBuffer::GetVehicleMa", the `bl` @0x827AEBB0 in BridgePhysicsToOutput
+        // whose result is the destination of VehicleManagerOutputInterface::operator= @0x827A9B20).
+        VehicleManagerOutputInterface*       GetVehicleManagerOutputInterface();           // :532 W
 
         // ---- director vehicle input interface ----
         const DirectorVehicleInputInterface* GetDirectorVehicleInputInterface() const;     // :535 R (0x823B5A20, "GetDirector")

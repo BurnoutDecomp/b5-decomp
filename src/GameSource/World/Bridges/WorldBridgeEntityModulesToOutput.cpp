@@ -690,6 +690,17 @@ void BridgePhysicsToOutput(
     // ---- leg 2: publish the frame's contact spy (0x827AEB68..0x827AEB78) ---------------
     *lpOutputBuffer->GetContactSpyInterface() =
         *lpPhysicsOutputBuffer->GetContactSpyInterface();
+
+    // ---- leg 3: the vehicle-manager output interface (0x827AEB9C..0x827AEBB8) ------------
+    // [road-rage wave 2026-09-02] LANDED. `sub_8279F4F0` == PhysicsModuleIO::OutputBuffer::
+    // GetVehicleManagerOutputInterface() const (+41952), `GetVehicleMa` == the world output's write
+    // half, and `VehicleManagerOutputInt` == VehicleManagerOutputInterface::operator= @0x827A9B20
+    // (the tree's body: clear + Append each of the eight queues, copy the three GUI bools and the
+    // two FF-spring floats). This is what carries the RaceCarCrashEvent queue (+0x3A0) that
+    // SetRaceCarCrashing posts into out of the physics buffer, so ModeManager::ProcessPlayerCrashes
+    // (via the game-state post-world seam) can see a player wreck. Legs 1 and 4-6 stay parked.
+    *lpOutputBuffer->GetVehicleManagerOutputInterface() =
+        *lpPhysicsOutputBuffer->GetVehicleManagerOutputInterface();
 }
 
 }   // namespace WorldModule

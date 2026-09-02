@@ -2469,6 +2469,38 @@ static_assert(__builtin_offsetof(GuiCrashScoreUpdate, miComboMultiplier)   == 0x
               "GuiCrashScoreUpdate wire drift (RecEvent case 54 @0x82510AF4/0x82510B10/0x82510B18)");
 
 // =========================================================================================
+// [road-rage wave 2026-09-02] RECOVERED (was the opaque `{ u8 maData[8]; }` shell in
+// BrnGuiDemangledEventTypes.h). THE RECORD IS RAW: AddGuiEvent<GuiRoadRageScoreUpdate>
+// @0x823D0F60 ends
+//     li r6, 8 ; li r5, 0x1AA ; mr r4, r27 ; bl VariableEventQueue<32768,16>::AddEvent
+// with r27 == the object AS PASSED (no +12), so the 8 queued bytes OPEN with the takedown
+// count. Size 8 and id 426 are unchanged, so the AddGuiEvent<T> instantiation
+// (CgsGuiModule_AddGuiEvent_Inst.cpp:263) is unaffected.
+//
+// ⛔ THE ID IS 426, NOT THE DWARF'S 421 (the same +5 family shift as every sibling listed on
+// GuiCrashScoreUpdate above). 421-380 == 41 sits inside jpt_825101AC's DEFAULT case list.
+//
+// Pinned at BOTH ends, field for field:
+//   producer  BrnGameModule::BridgeGameStateToGui @0x823EEDD8..0x823EEDF4 (the mode-3 arm
+//             of jpt_823EED94 -- jump-table case 1, the table being indexed by mode-2):
+//             `lwz r11, 0xA4C(r27) ; stw var_25B0` and `lwz r11, 0xA50(r27) ; stw var_25B0+4`,
+//             r27 == ScoringOutputInterface, i.e. miRoadRageNumTakedowns -> +0x00 and
+//             miRoadRageTakedownTarget -> +0x04.
+//   consumer  GuiCache::RecEvent @0x82510888..0x825108E4 (jpt_825101AC case 46 == id 426)
+//             reads +0x00 -> cache 0x9FBC miTakedownsCurrent, +0x04 -> 0x9FC0 miTakedownTarget.
+// The NAMES are the DWARF's own (BrnGuiEventTypeDefs.h:4862-4863).
+struct GuiRoadRageScoreUpdate
+{
+    s32 miCurrentTakedowns;    // +0x00  <- ScoringOutputInterface::miRoadRageNumTakedowns
+    s32 miTargetTakedowns;     // +0x04  <- ::miRoadRageTakedownTarget
+
+    s32 GetEventType() const { return 426; }
+};
+static_assert(sizeof(GuiRoadRageScoreUpdate) == 8, "X360 AddGuiEvent size 8 (id 426) @0x823D0F60");
+static_assert(__builtin_offsetof(GuiRoadRageScoreUpdate, miTargetTakedowns) == 0x04,
+              "GuiRoadRageScoreUpdate wire drift (RecEvent case 46 @0x825108D4)");
+
+// =========================================================================================
 // [A9 mode-type arm 2026-08-27] RECOVERED (was the opaque `GuiEvent<93> + u8[140]` shell in
 // BrnGuiDemangledEventTypes.h, which mis-modelled the wire as a 12-byte GuiEvent header plus
 // 140 payload bytes). THE RECORD IS RAW: AddGuiEvent<GuiEventPrepareForModeStart> @0x823D27D0

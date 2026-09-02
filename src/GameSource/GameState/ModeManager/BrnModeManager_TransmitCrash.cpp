@@ -437,6 +437,13 @@ void ModeManager::ProcessPlayerCrashes(const GameStateModuleIO::PostWorldInputBu
         reinterpret_cast<const VehicleManagerOutputInterface::RaceCarCrashEventQueue*>(
             lpPostWorldInputBuffer->GetRaceCarCrashEventQueue());
 
+    ProcessPlayerCrashes(lpRaceCarCrashEventQueue);
+}
+
+// The body proper, on the queue itself (see the overload note in BrnModeManager.h). The queue
+// walk below is the console's, statement for statement; only the argument changed.
+void ModeManager::ProcessPlayerCrashes(const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue)
+{
     mbPlayerCrashedLastFrame = false;   // X360 `stb r31(=0), 0(this+0x950A)` -- BEFORE the scan
 
     // The X360 re-reads the queue length every iteration (`lwz r11, 8(r30)` @0x8231E6B0).

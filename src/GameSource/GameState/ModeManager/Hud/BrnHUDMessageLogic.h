@@ -168,6 +168,13 @@ public:
     // whole image. Runs for the offline stunt-attack mode and the online stunt-run family.
     void GenerateStuntMessage(ScoringSystem* lpScoringSystem);
 
+    // X360 0x82395BA8 (DWARF BrnHUDMessageLogic.h:199). The ROAD RAGE arm (mode 3): when the
+    // player's car is not mid-crash and the road-rage scorer has a critical-damage message
+    // armed, queue one DamageCriticalMessageAction (id 52, 1 byte, `true`) and disarm the
+    // scorer's flag. PostWorldUpdate's case 3 is its only caller (console 0x8239D998).
+    void GenerateCriticalDamageMessage(const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+                                       ScoringSystem* lpScoringSystem);
+
     // ------------------------------------------------------------------------
     // Online stunt-run per-frame message generators (this TU). Each takes the live
     // ScoringSystem and the local player's active-race-car index, examines the relevant

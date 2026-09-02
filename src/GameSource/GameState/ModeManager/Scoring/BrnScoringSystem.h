@@ -313,6 +313,12 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     class ScoringSystem
     {
+        // [road-rage wave 2026-09-02] ModeManager::SetupGameMode @0x8234B5C8..0x8234B5D8 writes the
+        // medal seed (mauiMedalScores[0..2] @ss+0x4B60, meCurrentMedalTarget @0x5D08,
+        // meCurrentMedalAchieved @0x5D0C) directly -- the DWARF declares no setter for them, so the
+        // only shape that reproduces those stores by name is a friend grant. Additive; no member moves.
+        friend class ModeManager;
+
     public:
         // X360 0x827E0998. Default constructor. The X360 body sets each embedded sub-object's
         // vtable + its internal -1 sentinels and runs the per-car array element ctors (all of

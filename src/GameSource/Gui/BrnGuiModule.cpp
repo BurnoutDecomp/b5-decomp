@@ -1877,6 +1877,7 @@ void GuiModule::Destruct()
                 case 424:   // [E1] GuiEventScoreUpdate    -- THE EVENT TIMER (mfEventTime/mfTargetTime)
                 case 428:   // [E1] GuiAttackScoreUpdate   -- THE STUNT SCORE (current/target/combo/multiplier)
                 case 434:   // [showtime] GuiCrashScoreUpdate -- THE SHOWTIME SCORE (cars crashed + distance)
+                case 426:   // [road-rage] GuiRoadRageScoreUpdate -- THE TAKEDOWN COUNT (current/target)
                 case 203:   // [event-starts] GuiEventUpdateEventStarts -- THE EVENT-START TABLE
                 case 93:    // [A9] GuiEventPrepareForModeStart -- THE MODE-TYPE SEED (meGameModeType)
                 case 289:   // [results] GuiEventOfflinePostEvent -- THE OFFLINE RESULT RECORD

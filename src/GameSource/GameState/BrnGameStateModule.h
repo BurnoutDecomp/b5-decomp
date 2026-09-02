@@ -68,6 +68,12 @@ namespace CgsModule      { struct IOBufferStack; }
 // this very widely-included header off the timer chain; the .cpp includes the real header.
 namespace CgsSystem      { struct TimerRequests; }
 namespace BrnResource    { namespace GameDataIO { class AllocatorList; } }
+// [road-rage wave, agent C] ProcessTakedownEvents takes the takedown-event queue by pointer only.
+// Forward-declared rather than including BrnTakedownManagerTypes.h here: that header defines a
+// SECOND `enum EActiveRaceCarIndex` inside namespace BrnGameState, which would re-bind every
+// unqualified EActiveRaceCarIndex in this widely-included header (see BrnModeManager.h:86 /
+// BrnGameMode.h:64 for the same rule). The partfile includes the real header.
+namespace BrnGameState   { struct TakedownEvent; }
 
 namespace BrnGameState
 {
@@ -367,7 +373,11 @@ public:
                                                       lpActiveRaceCarOutputInterface,
         const CgsModule::VariableEventQueue<1536, 16>* lpWorldGameEventQueue,
         f32                                           lfDelta,
-        const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpyInterface);
+        const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpyInterface,
+        // [road-rage wave 2026-09-02] the world output's race-car crash-event queue
+        // (VehicleManagerOutputInterface +0x3A0) -- what BridgeWorldToGameState leg 1 would
+        // copy into PostWorldInputBuffer +0x10; feeds ModeManager::ProcessPlayerCrashes.
+        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue);
 
     // ==========================================================================================
     // ⭐⭐⭐ [showtime score wave 2026-08-29] ProcessContacts -- X360 0x8236BC68, DWARF :853.
@@ -475,6 +485,37 @@ public:
     // copy earlier. DELETE-WHEN DoUpdate_GameStatePreWorld stages a real PreWorldInputBuffer.
     void CopyScoringDataToOutput(GameStateModuleIO::OutputBuffer* lpOutput,
                                  const CgsSystem::TimerStatusInterface& lrTimerStatusInterface);
+
+    // ⭐⭐⭐ [road-rage wave, agent C] ProcessTakedownEvents -- X360 0x8238FC50, REAL, whole. Body
+    // in GameStateModule_gRR_00.cpp. The per-frame drain of the takedown-event queue: for every
+    // takedown the player scored it calls ScoringSystem::OnPlayerDoesATakedown (-> RoadRageModeScoring::
+    // IncrementPlayerNumTakedowns, THE road-rage counter), the profile / achievement /
+    // developer-challenge / telemetry hooks, and for a takedown the player SUFFERED in Marked Man it
+    // requests training tip 56. Four hooks are parked with log-once FLAGs -- see the partfile banner.
+    //
+    // DWARF BrnGameStateModule.h:709:
+    //     void ProcessTakedownEvents(InputBuffer::GameActionQueue*, const InputBuffer::TakedownEventQueue*,
+    //                                GameStateModuleIO::OutputBuffer*);
+    // Asm 0x8238FC58..0x8238FC70 pins r4 = action queue, r5 = takedown queue, r6 = output buffer.
+    // InputBuffer::TakedownEventQueue IS EventQueue<TakedownEvent,8> (BrnScoringSystemEventQueues.h
+    // completes it as exactly that); spelled as the base here, the type every other GameState
+    // consumer of the queue (MugshotManager / ImageManager / PaybackManager) already takes.
+    //
+    // CONSOLE CALL SITE, exact: PreWorldUpdate @0x823A5328, inside its `if (!IsSimPaused)` arm,
+    // as the LAST of {SetFromVehicleOutputInterface, TakedownManager::Update, module-queue Clear +
+    // Append(lpOutput->GetTakedownEventOutputQueue()), MugshotManager::Update,
+    // PaybackManager::Update, ProcessTakedownEvents(this, actionQ, gsm+249936, lpOutput)} -- after
+    // ProcessGameEvents (#68) and BEFORE EmmPreWorldUpdate (#86). Staged at that point in
+    // PreWorldUpdateStuntBringUp.
+    //
+    // [FLAG PC signature deviation] the FOURTH parameter, the same one CopyScoringDataToOutput
+    // above carries and for the same measured reason: the console's Time is gsm+208368, the module's
+    // copy of the PreWorldInputBuffer timer block, which nothing on PC fills. DELETE-WHEN
+    // DoUpdate_GameStatePreWorld stages a real PreWorldInputBuffer.
+    void ProcessTakedownEvents(GameStateModuleIO::GameActionQueue*            lpGameActionQueue,
+                               const CgsModule::EventQueue<TakedownEvent, 8>* lpTakedownEventQueue,
+                               GameStateModuleIO::OutputBuffer*               lpOutputBuffer,
+                               const CgsSystem::TimerStatusInterface&         lrTimerStatusInterface);
 
     // ⭐⭐ [D4 stuntrace WAVE D] X360 ProcessGameEvents @0x823A0A18, THE CASE-20 ARM
     // (E_EVENT_PLAYER_ACCEPTED_MODE; asm 0x823A2680..0x823A2718, source BrnGameStateModule.cpp:2456

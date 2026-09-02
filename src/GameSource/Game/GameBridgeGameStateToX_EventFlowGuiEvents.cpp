@@ -11,7 +11,9 @@
 //                                                  and the member TranslateGameActionsToGuiEvents
 //                                                  itself, carrying arms 58 / 59 / 60 / 112 / 148.
 //   THIS FILE                                   -- the EVENT-FLOW arms: 23, 30, 37, 38, 39, 44,
-//                                                  47, 75, 200, 201.
+//                                                  47, 75, 200, 201 -- and, since 2026-09-02, the
+//                                                  three ROAD RAGE arms 103 / 255 / 205 (-> GUI
+//                                                  168 / 427 / 348), on the same terms as arm 75.
 //
 // ⭐⭐⭐ ARM 75 IS NOT AN EVENT-FLOW ARM AND IS HERE ON PURPOSE (returning-player wave,
 // 2026-08-28). It belongs to the CAR-SELECT band, but the same three reasons that put every arm
@@ -400,6 +402,93 @@ namespace
     };
     static_assert(sizeof(OfflinePostEventWire289) == 192,
                   "X360 AddGuiEvent<GuiEventOfflinePostEvent> posts 192 bytes (id 289)");
+
+    // =====================================================================================
+    // ⭐⭐ [road-rage wave 2026-09-02] THE THREE ROAD RAGE TRANSLATE ARMS -- wire records.
+    // Same TU-local precedent as every record above (BrnGuiDemangledEventTypes.h is a C2011
+    // from this TU, and its 168/348/427 shells are opaque `u8 maData[N]` anyway). Every id
+    // below is the AddGuiEvent<T> instantiation's own `li r5`, every size its `li r6`; the
+    // field NAMES are the DWARF's (BrnGuiEventTypeDefs.h:4355 / :2546-2548 / :4874), and the
+    // field OFFSETS are the arms' own store maps. GAME ACTION ids are the X360 jump-table
+    // cases (103 / 255 / 205 of jpt_823EA1F0) -- their own id space, NOT the GUI ids.
+    // =====================================================================================
+
+    // id 168 size 1 -- AddGuiEvent<GuiEventPlayerReachedRoadRageTarget> @0x823D1DC0
+    // (`li r6, 1` @0x823D1E5C / `li r5, 0xA8` @0x823D1E60). The case-103 arm posts
+    // `addi r4, r1, var_354B` @0x823EA938 with NO preceding store -- one uninitialised stack
+    // byte, exactly like FinishedModeResultsWire321. Reproduced as a zeroed byte; the consumer
+    // (HudMessageAnalyzer case 168, BrnGuiHudMessageAnalyzer_wB_12.cpp:114) reads only the id.
+    // DWARF: `struct GuiEventPlayerReachedRoadRageTarget : public GuiEvent<166> {}` -- empty.
+    struct PlayerReachedRoadRageTargetWire168
+    {
+        u8 mu8Unused;                          // +0x00  never written by the arm
+        s32 GetEventType() const { return 168; }
+    };
+    static_assert(sizeof(PlayerReachedRoadRageTargetWire168) == 1,
+                  "X360 AddGuiEvent<GuiEventPlayerReachedRoadRageTarget> posts 1 byte (id 168)");
+
+    // id 427 size 4 -- AddGuiEvent<GuiEventRoadRageTimeExtended> @0x823D64E8
+    // (`li r6, 4` @0x823D6584 / `li r5, 0x1AB` @0x823D6588).
+    // Store map: the case-255 arm, `lwz r11, 0(r31) ; stw r11, var_35D8` @0x823EC494/0x823EC4A4.
+    // DWARF: `uint32_t muExtensiontime` (BrnGuiEventTypeDefs.h:4874).
+    struct RoadRageTimeExtendedWire427
+    {
+        u32 muExtensiontime;                   // +0x00  action+0x00
+        s32 GetEventType() const { return 427; }
+    };
+    static_assert(sizeof(RoadRageTimeExtendedWire427) == 4,
+                  "X360 AddGuiEvent<GuiEventRoadRageTimeExtended> posts 4 bytes (id 427)");
+
+    // id 348 size 8 -- AddGuiEvent<GuiEventRoadRagePlayerDamage> @0x823D2210
+    // (`li r6, 8` @0x823D22AC / `li r5, 0x15C` @0x823D22B0).
+    // Store map: the case-205 arm's var_34E0-based frame @0x823EAB7C..0x823EAB9C:
+    //   lfs f0,  0(r31) -> stfs var_34E0     (+0x00)
+    //   lbz r11, 4(r31) -> stb  var_34DC     (+0x04)
+    //   lbz r11, 5(r31) -> stb  var_34DB     (+0x05)
+    // DWARF: mfHowCloseToTotalled / mbOneMoreCrashToTotalled / mbPlayerTotalled
+    // (BrnGuiEventTypeDefs.h:2546-2548). +0x06..+0x07 are never written by the arm; zeroed
+    // here so the host never posts uninitialised bytes. The mounted consumer
+    // (HudMessageAnalyzer case 348, BrnGuiHudMessageAnalyzer_wB_12.cpp:262) reads the byte at
+    // record+4 -- mbOneMoreCrashToTotalled -- which is exactly where this record puts it.
+    struct RoadRagePlayerDamageWire348
+    {
+        f32 mfHowCloseToTotalled;              // +0x00  action+0x00
+        u8  mbOneMoreCrashToTotalled;          // +0x04  action+0x04
+        u8  mbPlayerTotalled;                  // +0x05  action+0x05
+        u8  maPad06[2];                        // +0x06..+0x07 never written by the arm
+
+        s32 GetEventType() const { return 348; }
+    };
+    static_assert(sizeof(RoadRagePlayerDamageWire348) == 8,
+                  "X360 AddGuiEvent<GuiEventRoadRagePlayerDamage> posts 8 bytes (id 348)");
+
+    // [stale as of 2026-09-02, verify V2: BrnGameActions.h NOW defines E_ACTION_ROAD_RAGE_PLAYER_DAMAGE (205),
+    //  E_ACTION_HUD_MESSAGE_ROAD_RAGE_TIME_EXTENSION (255) and their records; the *Mirror structs below
+    //  duplicate those shapes and should collapse onto the header types in a follow-up.]
+    // The two road-rage ACTION payloads the arms above read. BrnGameActions.h carries neither
+    // enumerator nor struct for X360 actions 205 / 255 yet (the scorer lane owns that header
+    // this wave -- see the header request in the wave report), so the DWARF shapes are
+    // mirrored here, names and all, and read by NAME:
+    //   RoadRagePlayerDamageAction          DWARF BrnGameActions.h:2453-2457 (8 bytes)
+    //   HUDMessageRoadRageTimeExtensionAction DWARF BrnGameActions.h:4616      (4 bytes)
+    // Producers (X360): ScoringSystem::OnRoadRagePlayerCrashed @0x823444B0 posts 205
+    // (`li r5, 0xCD` @0x823445BC); RoadRageModeScoring::IncrementPlayerNumTakedowns @0x823445D0
+    // posts 103 (`li r5, 0x67` @0x82344644, size 1) and 255 twice (`li r5, 0xFF` @0x823446BC /
+    // @0x823446D4, size 4, the word being `lhz r11, 0xA(r31)` -- the extension seconds).
+    struct RoadRagePlayerDamageActionMirror
+    {
+        f32 mfHowCloseToTotalled;              // +0x00
+        u8  mbOneMoreCrashToTotalled;          // +0x04
+        u8  mbPlayerTotalled;                  // +0x05
+        u8  maPad06[2];                        // +0x06
+    };
+    static_assert(sizeof(RoadRagePlayerDamageActionMirror) == 8, "X360 action 205 size 8");
+
+    struct HUDMessageRoadRageTimeExtensionActionMirror
+    {
+        u32 muExtensionTime;                   // +0x00
+    };
+    static_assert(sizeof(HUDMessageRoadRageTimeExtensionActionMirror) == 4, "X360 action 255 size 4");
 
     // ---------------------------------------------------------------------------------------
     // GuiEventRunFsm posts through the raw queue (24-byte controller record, not a PushGuiEvent
@@ -1111,6 +1200,85 @@ namespace
                     << (lpResults->mbIsOnlinePostEvent != 0 ? 320 : 291)
                     << (lbBuildResultsRecord ? " + 289" : "")
                     << " (mode " << static_cast<s32>(lpResults->meGameModeType) << ")\n";
+            }
+            return true;
+        }
+
+        // =====================================================================================
+        // ⭐⭐ [road-rage wave 2026-09-02] THE THREE ROAD RAGE ARMS. Not event-flow arms, and
+        // here for the same three reasons as arm 75: the parent TU cannot be mounted, the member
+        // function has one definition (in the stunt TU), and this is the wired dispatch seam.
+        // Action ids are LITERAL X360 jump-table cases: BrnGameActions.h carries no enumerator
+        // for 103 / 255 / 205 yet (DWARF E_ACTION_PLAYER_REACHED_ROAD_RAGE_TARGET 98 (+5),
+        // E_ACTION_HUD_MESSAGE_ROAD_RAGE_TIME_EXTENSION 248 (+7), E_ACTION_ROAD_RAGE_PLAYER_DAMAGE
+        // 197 (+8)) -- the value is the console's, the name is the header request's.
+        // =====================================================================================
+
+        // ---- 103  the TARGET REACHED (1 byte, no payload) -----------------------------------
+        // @0x823EA934..0x823EA944: `mr r5, r20 ; addi r4, r1, var_354B ; add r3, r29, r30 ;
+        // AddGuiEvent<GuiEventPlayerReachedRoadRageTarget>` (id 168, size 1). No load off the
+        // action, no store into the frame: the post IS the message.
+        case 103:
+        {
+            PlayerReachedRoadRageTargetWire168 lEvent;
+            lEvent.mu8Unused = 0;
+            PushGuiEvent(lEvent, lpGuiInput);
+
+            if ( sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                --siDiagLinesLeft;
+                *CgsDev::Log::gpDebugPrint << "[evt-flow] action 103 -> gui 168 (road rage target reached)\n";
+            }
+            return true;
+        }
+
+        // ---- 255  the TIME EXTENDED (4 bytes) -----------------------------------------------
+        // @0x823EC494..0x823EC4A8: `lwz r11, 0(r31) ; stw r11, var_35D8 ;
+        // AddGuiEvent<GuiEventRoadRageTimeExtended>` (id 427, size 4). One word, straight through.
+        case 255:
+        {
+            const HUDMessageRoadRageTimeExtensionActionMirror* lpExtension =
+                reinterpret_cast<const HUDMessageRoadRageTimeExtensionActionMirror*>(lpAction);
+
+            RoadRageTimeExtendedWire427 lEvent;
+            lEvent.muExtensiontime = lpExtension->muExtensionTime;
+            PushGuiEvent(lEvent, lpGuiInput);
+
+            if ( sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                --siDiagLinesLeft;
+                *CgsDev::Log::gpDebugPrint
+                    << "[evt-flow] action 255 -> gui 427 (time extended "
+                    << lEvent.muExtensiontime << ")\n";
+            }
+            return true;
+        }
+
+        // ---- 205  the PLAYER DAMAGE (8 bytes) -----------------------------------------------
+        // @0x823EAB7C..0x823EABA0, in the console's own order: `lbz r11, 4(r31)` first, then
+        // `lfs f0, 0(r31) ; stfs var_34E0 ; stb r11, var_34DC ; lbz r11, 5(r31) ;
+        // stb r11, var_34DB ; AddGuiEvent<GuiEventRoadRagePlayerDamage>` (id 348, size 8).
+        case 205:
+        {
+            const RoadRagePlayerDamageActionMirror* lpDamage =
+                reinterpret_cast<const RoadRagePlayerDamageActionMirror*>(lpAction);
+
+            RoadRagePlayerDamageWire348 lEvent;
+            lEvent.mfHowCloseToTotalled     = lpDamage->mfHowCloseToTotalled;       // stfs +0x00
+            lEvent.mbOneMoreCrashToTotalled = lpDamage->mbOneMoreCrashToTotalled;   // stb  +0x04
+            lEvent.mbPlayerTotalled         = lpDamage->mbPlayerTotalled;           // stb  +0x05
+            lEvent.maPad06[0] = 0;
+            lEvent.maPad06[1] = 0;
+            PushGuiEvent(lEvent, lpGuiInput);
+
+            if ( sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                --siDiagLinesLeft;
+                *CgsDev::Log::gpDebugPrint
+                    << "[evt-flow] action 205 -> gui 348 (damage "
+                    << lEvent.mfHowCloseToTotalled
+                    << " oneMore " << static_cast<s32>(lEvent.mbOneMoreCrashToTotalled)
+                    << " totalled " << static_cast<s32>(lEvent.mbPlayerTotalled) << ")\n";
             }
             return true;
         }

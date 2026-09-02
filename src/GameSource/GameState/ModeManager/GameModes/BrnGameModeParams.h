@@ -261,6 +261,14 @@ public:
     // other way to express that one instruction by name.
     u64  GetFlags() const                               { return muFlags; }
 
+    // [road-rage wave 2026-09-02] setters RoadRageMode::Start @0x82330678 inlines (DWARF :438-450/:483;
+    // `li r8,5 / li r11,2` -> stw 0x840/0x844/0x848/0x84C @0x823309AC-BC, `stw r3,0x858` @0x823309D0):
+    void SetDefaultPlayerRouteFindingStyle(ERouteFindingStyle_Stub leStyle) { meDefaultPlayerRouteFindingStyle = leStyle; }
+    void SetDefaultAIRouteFindingStyle(ERouteFindingStyle_Stub leStyle)     { meDefaultAIRouteFindingStyle = leStyle; }
+    void SetAISpeedSelectionMethod(EAISpeedSelMethod_Stub leMethod)         { meAISpeedSelectionMethod = leMethod; }
+    void SetAIAggresiveCarCount(s32 liCount)                                { miAIAggressiveCarCount = liCount; }   // sic, DWARF spelling
+    void SetPlayerWreckCount(s32 liWreckCount)                              { miPlayerWreckCount = liWreckCount; }
+
     // ===========================================================================================
     // [!!] OFFSET RUN CORRECTED 2026-08-26 (wave-B fix round) -- THIS WAS A LIVE DEFECT, not a
     // comment tidy. The committed block here read the run as
