@@ -3802,6 +3802,69 @@ namespace Vehicle
 
     // ============================ C03 suspension/downforce/weight group ============================
 
+    // ---- [wsus] PC bring-up instrument -- DELETE-WHEN the kerb response is proven 1:1 ------------
+    // OPT-IN (BRN_WHEEL_SUS_PROBE=1, flow_run.ps1 -DiagEnv BRN_WHEEL_SUS_PROBE=1). NOT console code.
+    // Off by default: the latch reads 0 once and every print is unreachable thereafter.
+    //
+    // WHY. The kerb wave (2026-09-02, kerbw_r1..r4) proved the world-contact path applies NO body
+    // impulse at a kerb; the one sharp event on film (6.2 mph lost in ONE frame at the frame the
+    // front wheel mounted) had zero solver impulses behind it and therefore lives in THIS chain --
+    // ApplyWheelWeight -> UpdateSuspensionSprings -> ApplySuspensionForces -> UpdateWheels' tyre
+    // pass -> UpdateSuspensionPostSimulation. No existing probe sees it: [traction] prints only the
+    // hit height (no normal, no spring state) and [tyre] prints every 20th call. This prints, for
+    // the PLAYER car only, EVERY physics step:
+    //   [wsus]      per frame: pose, velocity, mph, angular velocity, air/crash/world-collision state
+    //   [wsus-w]    per wheel: ground flags, hit position + NORMAL, line distance, wheel y vs the
+    //               streamed seat and both travel stops, the spring's eight lanes after the
+    //               integrate, and the mass-on-wheel lane
+    //   [wsus-t]    per wheel, after UpdateWheels: tyre long/lat force (pre-cone / post-cone), slip,
+    //               wheel spin vs road speed
+    //   [wsus-post] per frame, UpdateSuspensionPostSimulation: the compressed-spring flags, the
+    //               deepest penetration and its normal, the body translation applied
+    //   [wsus-rep]  the first-loop "wheel above its plane" repair, when it fires
+    //   [wsus-imp]  each inanimate-world recovery impulse, with the normal velocity it answered
+    //   [wsus-attr] every 600 frames: the suspension attribs the maths above consumes
+    // Budget-limited and SAYS SO when the budget runs out -- a silent stop reads exactly like
+    // "nothing happened". All numbers are the members the console reads, printed unmodified.
+    namespace
+    {
+        const u32 KU_WSUS_BUDGET_LINES = 600000u;
+        u32 guWheelSusFrame = 0u;
+        u32 guWheelSusLines = 0u;
+
+        bool WheelSusProbeArmed()
+        {
+            static s32 siArmed = -1;
+            if (siArmed < 0)
+            {
+                const char* lpcEnv = getenv("BRN_WHEEL_SUS_PROBE");
+                siArmed = (lpcEnv != NULL && lpcEnv[0] != '0') ? 1 : 0;
+            }
+            return (siArmed == 1) && (CgsDev::Log::gpDebugPrint != NULL);
+        }
+
+        // One line of budget. Prints the exhaustion notice exactly once.
+        bool WheelSusTakeLine()
+        {
+            if (guWheelSusLines < KU_WSUS_BUDGET_LINES)
+            {
+                ++guWheelSusLines;
+                return true;
+            }
+            if (guWheelSusLines == KU_WSUS_BUDGET_LINES)
+            {
+                ++guWheelSusLines;
+                *CgsDev::Log::gpDebugPrint
+                    << "[wsus] BUDGET EXHAUSTED after " << static_cast<s32>(KU_WSUS_BUDGET_LINES)
+                    << " lines at frame " << static_cast<s32>(guWheelSusFrame)
+                    << " -- every later [wsus*] line is DROPPED, the run is not silent because "
+                       "nothing happened\n";
+            }
+            return false;
+        }
+    }
+    // ---- end [wsus] helpers ---------------------------------------------------------------------
+
 // [clean] UpdateSuspension  @0x8261F698
     // @0x8261F698  BrnPhysics::Vehicle::VehiclePhysics::UpdateSuspension  (virtual)
     //   The driving-path suspension spine. The X360 first advances the hard-landing timer: it loads the
@@ -3839,6 +3902,93 @@ namespace Vehicle
 
         // 5) emit the spring push forces + recompute velocity.
         ApplySuspensionForces(lvfTimeStep);
+
+        // ---- [wsus] the per-step suspension witness (player car only) ------------------------
+        if (WheelSusProbeArmed() && mPreviousControls.GetType() == E_DRIVER_TYPE_PLAYER)
+        {
+            ++guWheelSusFrame;
+            const u32 luF = guWheelSusFrame;
+
+            if (WheelSusTakeLine())
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[wsus] f " << static_cast<s32>(luF)
+                    << " car " << static_cast<u32>(reinterpret_cast<u64>(this))
+                    << " pos " << mTransform.Pos().x << " " << mTransform.Pos().y << " " << mTransform.Pos().z
+                    << " vel " << mLinearVelocity.x << " " << mLinearVelocity.y << " " << mLinearVelocity.z
+                    << " mph " << mfSpeedMPH.x
+                    << " ang " << mAngularVelocity.x << " " << mAngularVelocity.y << " " << mAngularVelocity.z
+                    << " up " << mTransform.Up().x << " " << mTransform.Up().y << " " << mTransform.Up().z
+                    << " at " << mTransform.At().x << " " << mTransform.At().y << " " << mTransform.At().z
+                    << " air " << (mbHasAir ? 1 : 0)
+                    << " crash " << (mbCrashing ? 1 : 0)
+                    << " nwc " << static_cast<s32>(mi8NumWorldCollisions)
+                    << " dt " << lfDeltaTime
+                    << "\n";
+            }
+
+            for (s32 liW = 0; liW < eNumDrivenWheels && WheelSusTakeLine(); ++liW)
+            {
+                const Wheel& lrW = maWheels[liW];
+                const Wheel::RoadContact& lrC = lrW.GetRoadContact();
+                const SuspensionSpring& lrS = maSprings[liW];
+                // What ApplySuspensionForces pushed with this frame (mass * acceleration, > 0 only,
+                // traction only) -- recomputed from the same lanes it read.
+                const f32 lfPush = (lrW.mbHasTraction && lrW.mu8State != 2)
+                    ? lrS.mvStiffness_Damping_Mass_Position.z
+                      * lrS.mvVelocity_Acceleration_DampingForce_SpringForce.y
+                    : 0.0f;
+                *CgsDev::Log::gpDebugPrint
+                    << "[wsus-w] f " << static_cast<s32>(luF) << " w " << liW
+                    << " onG " << (lrC.mbIsOnGround ? 1 : 0)
+                    << " close " << (lrC.mbIsCloseToGround ? 1 : 0)
+                    << " hasT " << (lrW.mbHasTraction ? 1 : 0)
+                    << " st " << static_cast<s32>(lrW.mu8State)
+                    << " hit " << lrC.mPosition.x << " " << lrC.mPosition.y << " " << lrC.mPosition.z
+                    << " n " << lrC.mNormal.x << " " << lrC.mNormal.y << " " << lrC.mNormal.z
+                    << " ld " << lrC.mfLineDistanceToRoad
+                    << " wy " << lrW.mPosition.y
+                    << " sy " << lrW.mStreamedPositionPlusTwistAmount.y
+                    << " tdn " << lrW.mSuspensionAndInertiaVariables.x
+                    << " tup " << lrW.mSuspensionAndInertiaVariables.y
+                    << " k " << lrS.mvStiffness_Damping_Mass_Position.x
+                    << " c " << lrS.mvStiffness_Damping_Mass_Position.y
+                    << " m " << lrS.mvStiffness_Damping_Mass_Position.z
+                    << " p " << lrS.mvStiffness_Damping_Mass_Position.w
+                    << " v " << lrS.mvVelocity_Acceleration_DampingForce_SpringForce.x
+                    << " a " << lrS.mvVelocity_Acceleration_DampingForce_SpringForce.y
+                    << " Fd " << lrS.mvVelocity_Acceleration_DampingForce_SpringForce.z
+                    << " Fs " << lrS.mvVelocity_Acceleration_DampingForce_SpringForce.w
+                    << " push " << (lfPush > 0.0f ? lfPush : 0.0f)
+                    << " mow " << lrW.mSpeedAndMassOnWheelVariables.z
+                    << "\n";
+            }
+
+            if ((luF % 600u) == 1u && WheelSusTakeLine())
+            {
+                const VehicleAttribs::SuspensionAttribs& lrSus = mpAttribs->mSuspensionAttribs;
+                *CgsDev::Log::gpDebugPrint
+                    << "[wsus-attr] f " << static_cast<s32>(luF)
+                    << " car " << static_cast<u32>(reinterpret_cast<u64>(this))
+                    << " mass " << mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x
+                    << " mfMass " << mfMass.x
+                    << " rest " << lrSus.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.x
+                    << " damp " << lrSus.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.y
+                    << " upMov " << lrSus.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.z
+                    << " dnMov " << lrSus.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.w
+                    << " frontOff " << lrSus.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.x
+                    << " rearOff " << lrSus.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.y
+                    << " inAir " << lrSus.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.z
+                    << " scal " << mvSpringMassScalers.x << " " << mvSpringMassScalers.y
+                    << " " << mvSpringMassScalers.z << " " << mvSpringMassScalers.w
+                    << " rad " << maWheels[0].mSlipVariables.w << " " << maWheels[1].mSlipVariables.w
+                    << " " << maWheels[2].mSlipVariables.w << " " << maWheels[3].mSlipVariables.w
+                    << " unsprung " << maWheels[0].mIntegrationVariables.w
+                    << " tll " << mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.w
+                    << "\n";
+            }
+        }
+        // ---- end [wsus] -----------------------------------------------------------------------
     }
 
 // [clean] ApplyWheelWeight  @0x825F7898
@@ -4796,6 +4946,18 @@ namespace Vehicle
                              vpu::Subtract(lWheelContactPoint, lRoadContactPoint));
                 if (lfDistanceToRoad > 0.0f)
                 {
+                    // ---- [wsus-rep] the above-plane repair, when it fires ---------------------
+                    if (WheelSusProbeArmed() && mPreviousControls.GetType() == E_DRIVER_TYPE_PLAYER
+                        && WheelSusTakeLine())
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[wsus-rep] f " << static_cast<s32>(guWheelSusFrame) << " w " << liWheel
+                            << " d " << lfDistanceToRoad
+                            << " wyBefore " << lrWheel.mPosition.y
+                            << " n " << lrPlaneNormal.x << " " << lrPlaneNormal.y << " " << lrPlaneNormal.z
+                            << "\n";
+                    }
+                    // ---- end [wsus-rep] -------------------------------------------------------
                     lrWheel.mPosition.y = std::max(
                         lrWheel.mPosition.y + lfDistanceToRoad,
                         lfMinSuspensionHeight);
@@ -4831,6 +4993,29 @@ namespace Vehicle
                 }
             }
         }
+
+        // ---- [wsus-post] the post-simulation half of the witness (player car only) -----------
+        const bool lbWheelSusProbe =
+            WheelSusProbeArmed() && mPreviousControls.GetType() == E_DRIVER_TYPE_PLAYER;
+        if (lbWheelSusProbe && WheelSusTakeLine())
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[wsus-post] f " << static_cast<s32>(guWheelSusFrame)
+                << " comp " << (labCompressedSpring[0] ? 1 : 0) << (labCompressedSpring[1] ? 1 : 0)
+                << (labCompressedSpring[2] ? 1 : 0) << (labCompressedSpring[3] ? 1 : 0)
+                << " upMov " << lfUpwardMovement
+                << " disp " << (maWheels[0].mPosition.y - maWheels[0].mStreamedPositionPlusTwistAmount.y)
+                << " " << (maWheels[1].mPosition.y - maWheels[1].mStreamedPositionPlusTwistAmount.y)
+                << " " << (maWheels[2].mPosition.y - maWheels[2].mStreamedPositionPlusTwistAmount.y)
+                << " " << (maWheels[3].mPosition.y - maWheels[3].mStreamedPositionPlusTwistAmount.y)
+                << " maxPen " << lfMaximumSuspensionPenetration
+                << " penN " << lMaximumPenetrationNormal.x << " " << lMaximumPenetrationNormal.y
+                << " " << lMaximumPenetrationNormal.z
+                << " nwc " << static_cast<s32>(mi8NumWorldCollisions)
+                << " vel " << mLinearVelocity.x << " " << mLinearVelocity.y << " " << mLinearVelocity.z
+                << "\n";
+        }
+        // ---- end [wsus-post] ------------------------------------------------------------------
 
         // @0x825F72A0..7398: move the body out along the selected contact normal, then pull every
         // attached grounded wheel back by the same amount in suspension-y space.
@@ -4913,6 +5098,21 @@ namespace Vehicle
                     CalculateCollisionImpulseWithInanimateObject(
                         lSusPointWorld, lPointVelocity, lrCollisionNormal, lvfRestitution,
                         &lImpulse, &lvfInvInertia);
+                    // ---- [wsus-imp] one line per recovery impulse, both sides -----------------
+                    if (lbWheelSusProbe && WheelSusTakeLine())
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[wsus-imp] f " << static_cast<s32>(guWheelSusFrame) << " w " << liWheel
+                            << " vDotN " << vpu::Dot(lPointVelocity, lrCollisionNormal)
+                            << " n " << lrCollisionNormal.x << " " << lrCollisionNormal.y
+                            << " " << lrCollisionNormal.z
+                            << " pv " << lPointVelocity.x << " " << lPointVelocity.y << " " << lPointVelocity.z
+                            << " J " << lImpulse.x << " " << lImpulse.y << " " << lImpulse.z
+                            << " velBefore " << mLinearVelocity.x << " " << mLinearVelocity.y
+                            << " " << mLinearVelocity.z
+                            << "\n";
+                    }
+                    // ---- end [wsus-imp] -------------------------------------------------------
                     AddLocalImpulse(lImpulse, rw::physics::WORLD_SPACE,
                                     lSusPointLocal, rw::physics::BODY_SPACE);
                     CalculateNewVelocity(lvfTimeStep);
@@ -6808,6 +7008,28 @@ namespace Vehicle
                 lrWheel.mIntegrationVariables.z = lfAngle;   // vrlimi 2 (z)
             }
         }
+
+        // ---- [wsus-t] the tyre half of the witness (player car only; same frame index) -------
+        if (WheelSusProbeArmed() && mPreviousControls.GetType() == E_DRIVER_TYPE_PLAYER)
+        {
+            for (s32 liW = 0; liW < eNumDrivenWheels && WheelSusTakeLine(); ++liW)
+            {
+                const Wheel& lrW = maWheels[liW];
+                *CgsDev::Log::gpDebugPrint
+                    << "[wsus-t] f " << static_cast<s32>(guWheelSusFrame) << " w " << liW
+                    << " Flong " << lrW.mForceVariables.x << " Flat " << lrW.mForceVariables.y
+                    << " FlongC " << lrW.mForceVariables.z << " FlatC " << lrW.mForceVariables.w
+                    << " slip " << lrW.mSlipVariables.y << " latSpd " << lrW.mSlipVariables.x
+                    << " omega " << lrW.mIntegrationVariables.x
+                    << " roadLong " << lrW.mSpeedAndMassOnWheelVariables.x
+                    << " surfSpd " << lrW.mSpeedAndMassOnWheelVariables.w
+                    << " mow " << lrW.mSpeedAndMassOnWheelVariables.z
+                    << " broke " << (lrW.mbBrokenAdhesiveLimit ? 1 : 0)
+                    << " vel " << mLinearVelocity.x << " " << mLinearVelocity.y << " " << mLinearVelocity.z
+                    << "\n";
+            }
+        }
+        // ---- end [wsus-t] ---------------------------------------------------------------------
     }
 
 // [clean] SetAttributes  @0x8262DE58

@@ -139,6 +139,11 @@ namespace
         return (siArmed == 1) && (CgsDev::Log::gpDebugPrint != NULL);
     }
 
+    // The sampling PERIOD in frames. BRN_TRACTION_PROBE=<n> with n >= 1 is the period, so `1` is
+    // EVERY frame. ⚠️ Until 2026-09-02 this treated `<= 1` as "use the default 60": a switch the
+    // harness documents as "-TractionProbe 1 = every frame" silently sampled every 60th frame,
+    // which is 29 m at top speed -- one wave lost a kerb crossing to it. Only a non-numeric or
+    // zero value (the bare "on" spelling) falls back to the default.
     u32 TractionProbePeriod()
     {
         static u32 suPeriod = 0u;
@@ -149,7 +154,7 @@ namespace
             if (lpcEnv != NULL)
             {
                 const int liValue = atoi(lpcEnv);
-                if (liValue > 1)
+                if (liValue >= 1)
                 {
                     suPeriod = static_cast<u32>(liValue);
                 }
