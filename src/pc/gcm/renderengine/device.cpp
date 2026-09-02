@@ -436,11 +436,28 @@ static void DumpBackBufferIfRequested()
                     // the log ticks on SIM frames while this ticks on PRESENTS, so pairing
                     // them by time means guessing a frame rate. Stamped here, each frame
                     // names the value it is supposed to be drawing.
-                    std::fprintf(lpCsv, "%u,%.6f,%.6f,%.6f\n",
+                    // Columns 5-10 are THE CHAIN-CRASHING TRAFFIC CAR: its index, its
+                    // sympathetic-crash state (1 HEADON 2 ACCEL 3 HANDBRAKE 4 LOCKUP), its
+                    // live world position, and the publish counter. Same argument as columns
+                    // 2-4 and the same reason they exist: a bitmap of a pile-up cannot say
+                    // WHICH car chose to crash, and pairing a log line to a frame means
+                    // guessing a frame rate (the log ticks on SIM frames, this ticks on
+                    // PRESENTS). With the position stamped into the row, a marker can be
+                    // projected from the car's own coordinates into its own frame -- the
+                    // trick that turned "a traffic car swerved" into a measured 56 deg over
+                    // 13.2 m. Column 10 makes staleness visible: a row whose count equals the
+                    // previous row's carries a position nothing refreshed that frame.
+                    std::fprintf(lpCsv, "%u,%.6f,%.6f,%.6f,%d,%d,%.3f,%.3f,%.3f,%u\n",
                                  renderengine::guPresentCount,
                                  BrnDiag::gFilmLatch.mfLiveSimScale,
                                  BrnDiag::gFilmLatch.mfLiveSimStep,
-                                 BrnDiag::gFilmLatch.mfLiveBoostFraction);
+                                 BrnDiag::gFilmLatch.mfLiveBoostFraction,
+                                 BrnTraffic::gSwerveWatch.miSympVehicle,
+                                 BrnTraffic::gSwerveWatch.miSympState,
+                                 BrnTraffic::gSwerveWatch.mfSympPosX,
+                                 BrnTraffic::gSwerveWatch.mfSympPosY,
+                                 BrnTraffic::gSwerveWatch.mfSympPosZ,
+                                 BrnTraffic::gSwerveWatch.muSympPublishes);
                     std::fclose(lpCsv);
                 }
             }

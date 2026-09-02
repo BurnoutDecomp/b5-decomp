@@ -5384,22 +5384,50 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     static f32     sfPathAngle        = 0.0f;
     static bool    sbSwerveCamLatched = false;
     static s32     siSwerveCam        = -1;
+    //
+    // ⭐ =3 and =4 ARE THE CHAIN-CRASH ARMS (2026-08-30, traffic-crash wave 2), on exactly the
+    // reasoning above one behaviour over: the SYMPATHETIC crash is the pile-up, it commits in
+    // roughly one drive out of four, and no frame had ever shown one. =3 latches on the
+    // COMMIT-BOUND edge (UpdateSympatheticCrashing entering HANDBRAKE/LOCKUP, 0.1 s / 1.1 s
+    // before the impact and past every test that could still call it off) -- tight, and every
+    // latch is a crash. =4 latches on the FIRST frame any car is sympathetically crashing --
+    // several seconds of approach, at the cost of sometimes filming a car that gives up
+    // instead. Both frame the crasher, not the player, for the same reason the swerve arm does:
+    // every camera on this build follows a player who is driving away from the pile-up.
     if ( siSwerveCam < 0 )
     {
         const char* lpcSwerveEnv = std::getenv( "BRN_WORLD_CAMTRAFFIC" );
-        siSwerveCam = ( lpcSwerveEnv != 0 && lpcSwerveEnv[0] != '0' )
-                    ? ( lpcSwerveEnv[0] == '2' ? 2 : 1 )
-                    : 0;
+        siSwerveCam = 0;
+        if ( lpcSwerveEnv != 0 && lpcSwerveEnv[0] != '0' )
+        {
+            switch ( lpcSwerveEnv[0] )
+            {
+            case '2':  siSwerveCam = 2; break;
+            case '3':  siSwerveCam = 3; break;
+            case '4':  siSwerveCam = 4; break;
+            default:   siSwerveCam = 1; break;
+            }
+        }
     }
     if ( siSwerveCam != 0 && !sbSwerveCamLatched )
     {
-        const u32 luTrigger = ( siSwerveCam == 2 ) ? BrnTraffic::gSwerveWatch.muBehaviour2
-                                                   : BrnTraffic::gSwerveWatch.muPublishes;
+        u32 luTrigger = 0u;
+        switch ( siSwerveCam )
+        {
+        case 2:  luTrigger = BrnTraffic::gSwerveWatch.muBehaviour2;     break;
+        case 3:  luTrigger = BrnTraffic::gSwerveWatch.muSympCommits;    break;
+        case 4:  luTrigger = BrnTraffic::gSwerveWatch.muSympPublishes;  break;
+        default: luTrigger = BrnTraffic::gSwerveWatch.muPublishes;      break;
+        }
         if ( luTrigger != 0u )
         {
-            sPathOrigin.x = BrnTraffic::gSwerveWatch.mfPosX;
-            sPathOrigin.y = BrnTraffic::gSwerveWatch.mfPosY;
-            sPathOrigin.z = BrnTraffic::gSwerveWatch.mfPosZ;
+            const bool lbSymp = ( siSwerveCam >= 3 );
+            sPathOrigin.x = lbSymp ? BrnTraffic::gSwerveWatch.mfSympPosX
+                                   : BrnTraffic::gSwerveWatch.mfPosX;
+            sPathOrigin.y = lbSymp ? BrnTraffic::gSwerveWatch.mfSympPosY
+                                   : BrnTraffic::gSwerveWatch.mfPosY;
+            sPathOrigin.z = lbSymp ? BrnTraffic::gSwerveWatch.mfSympPosZ
+                                   : BrnTraffic::gSwerveWatch.mfPosZ;
             sPathOrigin.w = 0.0f;
             sfPathRadius       = 9.0f;
             sbFramingCar       = true;
@@ -5409,12 +5437,25 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             BrnTraffic::gSwerveWatch.muCameraLatched = 1u;
             if ( CgsDev::Log::gpDebugPrint != 0 )
             {
+                // ⭐ The eye and the framing are printed with the origin, because the whole
+                // point of this shot is that a world position can be PROJECTED into the frame
+                // afterwards and checked against the pixels. Recomputing the eye from the
+                // constants below in an offline script means re-deriving them by hand and
+                // being wrong silently; printing them means the projection uses the game's own
+                // numbers. (The static shot is eye = origin + (0, R*0.45*camDist,
+                // -R*1.15*camDist) looking AT the origin, vertical FOV 60 deg -- see the
+                // projection block further down. camDist is BRN_WORLD_CAMDIST, default 1.)
                 *CgsDev::Log::gpDebugPrint
-                    << "[T5-swervecam] LATCHED on traffic vehicle "
-                    << BrnTraffic::gSwerveWatch.miVehicle
-                    << " behaviour " << BrnTraffic::gSwerveWatch.miBehaviour << " at ("
-                    << sPathOrigin.x << ", " << sPathOrigin.y << ", " << sPathOrigin.z
-                    << ") -- the camera is now STATIC; the car drives through the frame\n";
+                    << ( lbSymp ? "[T6-sympcam] LATCHED on CHAIN-CRASHING traffic vehicle "
+                                : "[T5-swervecam] LATCHED on traffic vehicle " )
+                    << ( lbSymp ? BrnTraffic::gSwerveWatch.miSympVehicle
+                                : BrnTraffic::gSwerveWatch.miVehicle )
+                    << ( lbSymp ? " sympState " : " behaviour " )
+                    << ( lbSymp ? BrnTraffic::gSwerveWatch.miSympState
+                                : BrnTraffic::gSwerveWatch.miBehaviour )
+                    << " at (" << sPathOrigin.x << ", " << sPathOrigin.y << ", "
+                    << sPathOrigin.z << ") radius " << sfPathRadius
+                    << " -- the camera is now STATIC; the car drives through the frame\n";
             }
         }
     }
