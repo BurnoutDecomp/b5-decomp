@@ -1265,6 +1265,7 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
         bool lbTrailEnded = true;
         f32  lfNormalDrift = 0.0f;   // [skid probe] hoisted so the OFFGATE arm can print it
         u32  luSurfaceId   = 0;      // [skid probe] ditto
+        bool lbSurfaceResolved = false;  // [skid probe] did mSurfaceList.Surfaces() return a ref?
         if (lrWheel.mRoadContact.mbIsOnGround                       // +40
             && lrWheel.mbHasTraction                                // +97
             && lrWheel.mbAttached)                                  // +96
@@ -1277,6 +1278,12 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
                 luSurfaceId =
                     (lrWheel.mRoadContact.mCollisionTag.muValue >> KU_SURFACE_ID_SHIFT) & KU_SURFACE_ID_MASK;
                 void* lpSurfaceRef = mSurfaceList.Surfaces(luSurfaceId);
+                // [skid probe] the ONE thing the gate line could not tell apart: whether the
+                // surface resolved at all. The console's own fallback is
+                // Attrib::DefaultDataArea(24) -- a ZEROED area -- so a failed lookup reads back
+                // as en=0, thr=0.0, type=0, which is indistinguishable from a surface that
+                // genuinely has skid marks turned off. Record which it was.
+                lbSurfaceResolved = (lpSurfaceRef != 0);
                 if (!lpSurfaceRef)
                     lpSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_SIZE);
                 Attrib::Gen::surface lSurface(*static_cast<const Attrib::RefSpec*>(lpSurfaceRef), 0);
@@ -1310,8 +1317,9 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
                     {
                         char lacMsg[400];
                         std::snprintf(lacMsg, sizeof(lacMsg),
-                            "[skid] f=%u w=%u %s grnd=%d trac=%d att=%d |drift|=%.5f<=%.5f surf=%u "
-                            "en=%d skid=%.4f %s thr=%.4f type=%d ready=%d t=%.3f pos=%.2f,%.2f,%.2f\n",
+                            "[skid] f=%u w=%u %s grnd=%d trac=%d att=%d |drift|=%.5f<=%.5f "
+                            "surf=%u/%d ref=%d en=%d skid=%.4f %s thr=%.4f type=%d ready=%d t=%.3f "
+                            "pos=%.2f,%.2f,%.2f\n",
                             gauSkidProbeFrame, luWheel,
                             lbEdge ? (lbNowLaying ? "START" : "STOP ") : "     ",
                             lrWheel.mRoadContact.mbIsOnGround ? 1 : 0,
@@ -1319,7 +1327,8 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
                             lrWheel.mbAttached ? 1 : 0,
                             static_cast<double>(std::fabs(lfNormalDrift)),
                             static_cast<double>(KF_TRAIL_NORMAL_DRIFT_MAX),
-                            luSurfaceId,
+                            luSurfaceId, mSurfaceList.Num_Surfaces(),
+                            lbSurfaceResolved ? 1 : 0,
                             lbSkidMarksEnabled ? 1 : 0,
                             static_cast<double>(lfSkidFactor),
                             (lfSkidFactor > lfSkidThreshold) ? ">" : "<=",
