@@ -383,4 +383,81 @@ namespace BrnGui
 
         mabCellFlags[liCell] = lbUseColour;   // X360 stb value, 0x440(this + index)
     }
+
+    // =====================================================================================
+    // Landed 2026-09-02 with the online custom-match mount (Table::Update / SetupTable are
+    // the first mounted callers).
+    // =====================================================================================
+
+    namespace
+    {
+        // off_82F27444 -- the apt state name per TableRowStates value, read from the image
+        // (7 slots; UNUSED and INVISIBLE share the "Invisible" literal @0x8204B13C).
+        const char* const KAPC_ROW_STATE_APT_STATES[TableRow::E_TABLEROWSTATES_COUNT] =
+        {
+            "Invisible",       // 0 UNUSED
+            "Invisible",       // 1 INVISIBLE
+            "Disabled",        // 2 DISABLED
+            "Unselected",      // 3 UNHIGHLIGHTED
+            "Selected",        // 4 HIGHLIGHTED
+            "showing_sel",     // 5 SHOWING_HIGHLIGHTED
+            "showing_unsel",   // 6 SHOWING_UNHIGHLIGHTED
+        };
+
+        const char KAC_APT_STATE_NAME[] = "apt_state";   // 0x824E9A6C
+    }
+
+    // Header-inline on the console (Table::SetupTable's `stb 0x32BF(table) -> 0x301(row)`).
+    void TableRow::SetEnableShowingAnim(bool lbEnable)
+    {
+        mbEnableShowingAnim = lbEnable;
+    }
+
+    // @0x824E99C8 (158 insns) -- the row's component-slot-5 Update. When the row is queried,
+    // resolve its apt state (FindState) and publish it to the row's clip, remembering it as
+    // the previous state; then refresh every cell from the bound data set (text cells: the
+    // text plus the optional colour; icon cells: the icon state) and Update() each cell
+    // (cell vtable slot 1). The queried bit is TOGGLED at the end (`xori 0x10`,
+    // unconditional -- reproduced, not normalised to a clear).
+    void TableRow::Update()
+    {
+        if ((muFlags & KU_FLAG_QUERIED) != 0)
+        {
+            const TableRowStates leState = FindState();
+            CGS_ASSERT(leState != E_TABLEROWSTATES_COUNT,
+                       "Unable to find a relevant state for this TableRow");                // cpp:155
+
+            mGuiComponentBase.AddOutputAptViewState(KAC_APT_STATE_NAME,
+                                                    KAPC_ROW_STATE_APT_STATES[leState], false);
+            mePreviousState = leState;
+        }
+
+        for (s8 liCell = 0; liCell < miNumColumns; ++liCell)
+        {
+            TableCell& lrCell = maCells[liCell];
+
+            if (lrCell.IsText())
+            {
+                CGS_ASSERT(mpData->GetText(liCell) != 0,
+                           "TableRow::Update() Invalid text in dataset");                   // cpp:167
+
+                lrCell.SetText(mpData->GetText(liCell));
+                if (mpData->GetUseColour(liCell))
+                {
+                    lrCell.SetColourValue(static_cast<u32>(mpData->GetColourValue(liCell)));
+                }
+            }
+            else if (lrCell.IsIcon())
+            {
+                CGS_ASSERT(mpData->GetInteger(liCell) >= 0,
+                           "TableRow::Update() Invalid icon state in dataset");             // cpp:178
+
+                lrCell.SetIconState(static_cast<u32>(mpData->GetInteger(liCell)));
+            }
+
+            lrCell.Update();   // cell vtable slot 1, every column
+        }
+
+        muFlags = static_cast<u8>(muFlags ^ KU_FLAG_QUERIED);   // 0x824E9BF8 xori, unconditional
+    }
 }

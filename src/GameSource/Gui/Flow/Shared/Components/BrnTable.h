@@ -187,7 +187,7 @@ namespace BrnGui
         // DWARF BrnTable.h:233. Header-inline on the console (no out-of-line symbol); it is
         // `mpData != 0` -- e.g. inlined at 0x824A3568 as a load of mTable+0x32B8 tested
         // against zero. Declared non-const, as DWARF has it.
-        bool HasData();
+        bool HasData() { return mpData != 0; }   // the attested inline (see above)
 
         // @0x824895F8 (DWARF BrnTable.h:262) -- assert the row exists ("Invalid selectable
         // specified") and lpacText is non-null ("Invalid text specified"), then
@@ -209,6 +209,27 @@ namespace BrnGui
         // for Table objects, which is the console behaviour (different vtable slots).
         bool HighlightNext();
         bool HighlightPrevious();
+
+        // @0x824E4940 (DWARF BrnTable.cpp:166) -- the table's own component-slot-6 Clear:
+        // SelectableGroup::Clear, drop the wrap flag (dirtying), reset the data-set window
+        // (miFirstRowDataSet = -1, mpData = 0), then slot 6 on every row. Plain per the
+        // flat-vtable convention; HIDES SelectableGroup::Clear on a Table as the console's
+        // override does. Landed 2026-09-02 (BrnTable.cpp).
+        void Clear();
+
+        // @0x824E49C8 (DWARF BrnTable.cpp:266) -- bind row i to data set
+        // (miFirstRowDataSet + i) for every row inside the data set's count, then dirty.
+        // Private on the console (called by SetupTable / HighlightNext / HighlightPrevious).
+        void SetRowData();
+
+        // @0x824E4890 (DWARF BrnTable.cpp:135) -- the table's own component-slot-5 Update:
+        // drop the group's queried bit, then, when a data set is bound and rows exist,
+        // Update() every row whose own queried bit is set. Plain (not virtual) per the
+        // flat-vtable convention above; callers that reach the console's slot 5 on a Table
+        // spell `mTable.Update()` (OnlineCustomMatch::Update @0x824ACF74). Landed 2026-09-02
+        // in BrnTable.cpp. NOTE: this HIDES SelectableGroup::Update on a Table, which is
+        // exactly the console's override.
+        void Update();
 
         // (Other DWARF-declared members -- GetText/GetIconState/SelectRow/Update/Clear/
         //  AppendExpectedAptComponent/SetEnableShowingAnim/SetRowData -- land in later waves.)

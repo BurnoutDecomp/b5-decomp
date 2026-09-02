@@ -116,6 +116,14 @@ bool TableCell::IsText()
     return meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD;
 }
 
+// The icon twin, recovered the same way: TableRow::Update @0x824E99C8 branches its icon arm
+// on `*(cell + 4) == 2` (0x824E9AD8), and every icon-only method above guards on
+// `meComponentType == E_TABLECELLCOMPONENTTYPES_ICON`. Landed 2026-09-02 (first mounted caller).
+bool TableCell::IsIcon()
+{
+    return meComponentType == E_TABLECELLCOMPONENTTYPES_ICON;
+}
+
 // @ 0x82483020 -- the localised-text face of the cell. Four entry guards (BrnTableCell.h
 // lines 232/233/234/235) then a fifth inside the parameterised arm (line 243), in the X360's
 // order, then ONE OF TWO TextField overloads depending on whether parameters were supplied:

@@ -128,6 +128,15 @@ namespace BrnGui
         // The flag byte as the owning screen states sample it (`*(group + 0xC) & 8`).
         bool IsHighlighted() const { return (muFlags & 0x08) != 0; }
 
+        // ADDITIVE GROW (Table::Update @0x824E4890, 2026-09-02). The queried/dirty bit as
+        // the table's own Update samples it on EACH ROW (`lbz 0x244 ; rlwinm 0,27,27` --
+        // row+0xC) and clears it on itself (`lbz 0xC ; xori 0x10 ; stb`). muFlags is
+        // private, and a derived Table may not touch a sibling TableRow's copy, so the two
+        // bit operations Update performs are exposed by name. Same byte, same bit as
+        // SelectableGroup::Update's own `muFlags ^= KU_FLAG_QUERIED`.
+        bool IsQueried() const     { return (muFlags & KU_FLAG_QUERIED) != 0; }
+        void ClearQueriedFlag()    { muFlags = static_cast<u8>(muFlags ^ KU_FLAG_QUERIED); }
+
     private:
         // The shared body of the four Selectable flag setters: no-op (returning false) when
         // the bit already reads the requested way, otherwise flip it, dirty the component and
