@@ -6,6 +6,7 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"              // SimpleVehiclePhysics::GetGraphicsVehicleTransform / GetWheelsWorldTransfrom
 #include "GameShared/GameClasses/Physics/Deformation/BrnWheelPhysicalStates.h"                     // WheelPhysicalStates
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.h"       // DetachedPartManager -> PhysicalBodyPart (UpdateAndOutputJointStates)
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedWheelManager.h"      // DetachedWheelManager::GetWheel -> PhysicalWheel (OutputWheelData's detached arm)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                                 // CGS_ASSERT
 
 #include "rw/math/vpu/vector3_operation.h"            // rw::math::vpu::{Subtract, MagnitudeSquared, ...}
@@ -762,12 +763,57 @@ namespace Deformation
 
             if (lu8WheelPhysState == 2)
             {
-                // Detached: look up the detached-wheel record for this wheel against the wheel
-                // manager (sub_825E8308). FLAG: the lookup + the record's transform math are not
-                // homed; the live-vehicle branch below is the faithful path. The detached record's
-                // world transform is carried as identity (honest placeholder) until homed.
-                (void)lpWheelMgr;
-                // (no observable output produced for the un-homed detached path; state stays zero)
+                // ---- DETACHED arm, LANDED 2026-09-02 (deform close-out wave) ----
+                // 0x82608F74  bl sub_825E8308 == DetachedWheelManager::GetWheel(EntityId, liWheel)
+                //   (r4 = the handling id's entity word, r5 = the wheel index; the callee matches
+                //   owner byte, entity index AND the packed part index == wheel index).
+                // 0x82608FDC..0x82608FFC  the record's four render-transform rows -> the output row
+                //   (+0x00..+0x30), rec+0x60 mLinearVelocity -> +0x40, a zero vector -> +0x50.
+                // 0x82609000..0x826090D0  wheels 0 and 2 (the LEFT pair) are pre-multiplied by
+                //   lInverseX (DWARF :3445) == diag(-1, 1, -1) with a zero translation row, i.e.
+                //   (-xAxis, yAxis, -zAxis, wAxis): the wheel mesh is authored for the right side.
+                // 0x82609114 / 0x82609118  stb 1,-4 ; stb 0,0  ->  exists = 1, attached = 0.
+                // 0x826090D4..0x82609154  |rec pos - car pos| (vrsqrtefp + two Newton steps,
+                //   zero-guarded) ; radius = rec+0x7C ; if (dist <= KVF_MAX) size = max(size,
+                //   dist + radius) -- the SAME fold as the live arm, with the radius term.
+                // r4 = the high dword of the handling id (RigidBodyId::GetEntityId, DWARF :3442).
+                EntityId lVehicleEntityId;
+                lVehicleEntityId.muValue = static_cast<u32>(static_cast<u64>(mHandlingBodyID) >> 32);
+                const PhysicalWheel* lpPhysWheel = lpWheelMgr->GetWheel(lVehicleEntityId, liWheel);   // :3442
+                if (lpPhysWheel != 0)
+                {
+                    Matrix44Affine lWheelTransform = *lpPhysWheel->GetRenderTransform();
+                    if (liWheel == 0 || liWheel == 2)
+                    {
+                        // lInverseX * M, row-vector convention: rows x and z negated, y and the
+                        // translation row untouched (the four vmaddfp chains @0x82609090..0x826090C0).
+                        lWheelTransform.xAxis.x = -lWheelTransform.xAxis.x;
+                        lWheelTransform.xAxis.y = -lWheelTransform.xAxis.y;
+                        lWheelTransform.xAxis.z = -lWheelTransform.xAxis.z;
+                        lWheelTransform.zAxis.x = -lWheelTransform.zAxis.x;
+                        lWheelTransform.zAxis.y = -lWheelTransform.zAxis.y;
+                        lWheelTransform.zAxis.z = -lWheelTransform.zAxis.z;
+                    }
+                    lWheelStates.maStates[liWheel].mWorldSpaceTransform       = lWheelTransform;
+                    lWheelStates.maStates[liWheel].mWorldSpaceVelocity        = lpPhysWheel->GetLinearVelocity();
+                    lWheelStates.maStates[liWheel].mWorldSpaceAngularVelocity = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+                    lWheelStates.mabWheelExists[liWheel]   = true;    // stb 1, -4
+                    lWheelStates.mabWheelAttached[liWheel] = false;   // stb 0,  0
+
+                    const Vector3 lToWheel = vpu::Subtract(lpPhysWheel->GetRenderTransform()->Pos(),
+                                                           lpSimple->GetTransform().Pos());
+                    const f32 lfDist = vpu::Magnitude(lToWheel);
+                    if (lfDist <= KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE)
+                    {
+                        const f32 lfReach = lfDist + lpPhysWheel->GetRadius();
+                        if (lfReach > lfEntitySphereSize)
+                        {
+                            lfEntitySphereSize = lfReach;
+                        }
+                    }
+                }
+                // No record (the slot was reclaimed): the row stays zero-seeded, exists = 0 --
+                // the console leaves the block's seed too (0x82608F7C beq -> loc_82609160).
             }
             else
             {
