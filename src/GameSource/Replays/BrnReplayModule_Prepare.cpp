@@ -202,7 +202,7 @@ namespace BrnReplays
                 CgsDev::Log::WriteToLog(
                     "[replays] StoreSerialisers before ReplayModule::Prepare -- no linear region "
                     "yet, so NOTHING is adopted this call (adopting now would record the slot and "
-                    "silently skip its buffers for ever)\n");
+                    "leave its buffers unallocated for ever)\n");
             }
             return;
         }
