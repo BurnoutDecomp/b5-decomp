@@ -67,7 +67,7 @@ namespace BrnReplays
         // The two members ReplayModule::Prepare / StoreSerialisers depend on. The real ctor
         // (BrnReplayModule.cpp) zeroes them too; this stub is what actually runs in this build,
         // and an unzeroed mpLinearMalloc would be read as a live allocator on the first frame.
-        miPrepareStage = 0;
+        mbPrepared     = false;
         mpLinearMalloc = 0;
     }
 }

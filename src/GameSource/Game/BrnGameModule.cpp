@@ -4578,23 +4578,6 @@ namespace BrnGame
                 // "returning to the front end / loading" gate, which has no producer here yet;
                 // FALSE is the console's value while a race is running, and it is what keeps
                 // the effects system live rather than suspended.
-                // ---- ADOPT WHATEVER REGISTERED ITSELF LAST FRAME ------------------------
-                // ReplayModule::StoreSerialisers @0x8264B600 is what hands every registered
-                // BaseSerialiser its stream and STATIC buffers out of the replay module's linear
-                // region. On the console it runs from ReplayModule::Update_PostSim @0x8265F618;
-                // that leg is not reconstructed, so it runs here instead -- immediately before
-                // the effects leg, whose Update both REGISTERS mEffectsSerialiser (through the
-                // output buffer's replay request interface) and then reads GetStaticLayout().
-                // The console's own ordering is the same one frame apart: register, adopt, use.
-                // It is idempotent by construction (it only touches slots whose pointer changed),
-                // so running it every frame costs one null compare per slot.
-                // DELETE-WHEN ReplayModule::Update_PostSim lands: the call moves there.
-                if (mpEffectsOutputBuffer != 0)
-                {
-                    mReplayModule.StoreSerialisers(
-                        *mpEffectsOutputBuffer->GetReplayRequestInterface());
-                }
-
                 DoUpdate_Effects(mpUpdateInputBufferStack,
                                  mpUpdateOutputBufferStack,
                                  /*input   out*/ 0,
@@ -4606,6 +4589,39 @@ namespace BrnGame
                                  mpEffectsOutputBuffer,
                                  /*lbSuspendEffects*/ false,
                                  ConstructUpdateSetFromFsm());
+
+                // ---- ADOPT THE SERIALISERS THE EFFECTS LEG JUST REGISTERED ----------------
+                // ReplayModule::StoreSerialisers @0x8264B600 is what hands every registered
+                // BaseSerialiser its stream and STATIC buffers out of the replay module's linear
+                // region. On the console it runs from ReplayModule::Update_PostSim @0x8265F618;
+                // that leg is not reconstructed, so it runs here.
+                //
+                // ⚠ AFTER DoUpdate_Effects, NOT BEFORE -- MEASURED (run 9). The first version ran
+                // it just above and adopted NOTHING across a whole 35-second run: the effects
+                // OUTPUT buffer's replay request interface is rebuilt every frame, so before the
+                // effects leg its eleven slots are all null. EffectsModule::Update @0x8229EC28
+                // registers mEffectsSerialiser at its very first statement, so straight after the
+                // leg is the one point in the frame where the interface is populated. (Run 9 also
+                // proves it is not merely stale-by-a-frame: nothing was ever adopted, on any
+                // frame, which only a per-frame clear explains.)
+                //
+                // ⚠ AND UNDER THE READ LOCK, through the CONST accessor. The first version used
+                // the write-lock accessor @0x8227E280 with no lock at all: 3,895 "Not locked for
+                // writing" assertions in one run. This leg only READS the eleven slots, so the
+                // const overload @0x823BAD40 is the right one -- the same read/write pairing
+                // mistake this file's own DoUpdate_Effects made against the game-action queue,
+                // one commit earlier.
+                //
+                // Idempotent by construction (only slots whose pointer changed are touched), so
+                // running it every frame costs one null compare per slot.
+                // DELETE-WHEN ReplayModule::Update_PostSim lands: the call moves there.
+                if (mpEffectsOutputBuffer != 0)
+                {
+                    mpEffectsOutputBuffer->LockForRead();
+                    const BrnEffects::EffectsIO::OutputBuffer* lpcEffectsOut = mpEffectsOutputBuffer;
+                    mReplayModule.StoreSerialisers(*lpcEffectsOut->GetReplayRequestInterface());
+                    mpEffectsOutputBuffer->UnlockForRead();
+                }
 
                 // ⚠️ FLAG PC quality-of-life: LATCH THIS TICK'S CAMERA.
                 // Last thing in the sub-step, after the director's final pass has published

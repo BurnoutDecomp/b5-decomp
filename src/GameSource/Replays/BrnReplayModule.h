@@ -158,7 +158,10 @@ namespace BrnReplays
         // `a1[138] = 1`, `a1[139] = 0`). This port's CgsModule base does not expose that
         // slot, so the same two-state machine is carried here BY NAME. Same meaning, same
         // guard: run the allocations once, then report ready every call.
-        s32                  miPrepareStage;          // @0x228 (module base on X360)
+        // The console reads its prepare stage out of the module base at +0x228 (`v4 = a1[138]`),
+        // and the BASE is what advances it past 1 so the allocations never run twice. This port's
+        // base does not expose that slot, so the same "already done" fact is carried by name.
+        bool                 mbPrepared;              // stands in for the base stage at +0x228
         EStreamState         meState;                 // @0x230
         EStreamStage         meStreamStage;           // @0x234
         u8                   maPad238[0x23C - 0x238];  // @0x238
