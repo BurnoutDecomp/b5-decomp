@@ -319,15 +319,12 @@ namespace BrnGui
     // @0x82496C10, OnLeave @0x824970D0, Update @0x824AC808).
     // =====================================================================================
 
-    // ---- ON_CUST_MAT --------------------------------------------------------------------
-    // FLAG link scaffold: REAL BODY EXISTS, unmounted -- b5-decomp 62f56950 landed it at
-    // BrnOnlineCustomMatch_wJ_06.cpp:214 while this stub was being written. Mounting that TU
-    // (and its five siblings) REQUIRES deleting this line.
-    void OnlineCustomMatch::OnEnter() { LogUnreconstructedState("OnlineCustomMatch", "OnEnter"); }
-    // FLAG link scaffold: no definition anywhere in src/ (@0x824970D0, foreign ledger TU).
-    void OnlineCustomMatch::OnLeave() {}
-    // FLAG link scaffold: no definition anywhere in src/ (@0x824AC808, foreign ledger TU).
-    void OnlineCustomMatch::Update() {}
+    // ---- ON_CUST_MAT: SCAFFOLDS RETIRED 2026-09-02 ----------------------------------------
+    // The three stubs that stood here (OnEnter / OnLeave / Update) are GONE: OnLeave
+    // @0x824970D0 and Update @0x824AC808 are reconstructed in
+    // BrnOnlineCustomMatch_wJ_07.cpp, OnEnter @0x82496C10 was already real in _wJ_06, and all
+    // seven _wJ_ partfiles are MOUNTED (build_game_exe.bat). Re-adding a body here is
+    // LNK2005.
 
     // =====================================================================================
     // ⛔ THE SAME REGRESSION, A FOURTH TIME -- ONLINE_PLAY / ON_SELECT_ROUTE, ADDED 2026-08-07
