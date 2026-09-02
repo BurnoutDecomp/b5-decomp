@@ -32,6 +32,53 @@ namespace math
 {
 namespace vpu
 {
+    // -- 3x3 orthonormality tripwires ---------------------------------------------------
+    // DWARF names rw::math::vpu::IsOrthogonal3x3 / IsNormal3x3 (resolved by
+    // DeformableObject::UpdateWheels @0x826254C0 and DetachedWheelManager::DetachWheel
+    // @0x8260E430, both console-inline). The X360 shape of each (UpdateWheels 0x82625E40..
+    // 0x82625F30 and 0x82625FA0..0x82626008):
+    //   IsOrthogonal3x3: R = M * transpose(M) over the three rotation rows; d_i = R_i - e_i;
+    //                    total = |d_0|^2 + |d_1|^2 + |d_2|^2 (three vmsum3fp128 + one more over
+    //                    the packed triple); vandc sign-clear; NOT (total > tol).
+    //   IsNormal3x3:     total = sum_i (|row_i|^2 - 1)^2 (vmsum3fp128, vsubfp128 vs a 1.0 splat,
+    //                    packed, vmsum3fp128); NOT (total > tol).
+    // Both are debug-only assert conditions on the console; kept as real predicates so the
+    // CGS_ASSERT lines that consume them read the same as the console's.
+    inline bool IsOrthogonal3x3(const Matrix44Affine& lrMatrix, f32 lfTolerance)
+    {
+        const Vector3 laRows[3] = { lrMatrix.xAxis, lrMatrix.yAxis, lrMatrix.zAxis };
+        f32 lfTotal = 0.0f;
+        for (s32 liRow = 0; liRow < 3; ++liRow)
+        {
+            for (s32 liCol = 0; liCol < 3; ++liCol)
+            {
+                const f32 lfDot = laRows[liRow].x * laRows[liCol].x
+                                + laRows[liRow].y * laRows[liCol].y
+                                + laRows[liRow].z * laRows[liCol].z;
+                const f32 lfDelta = lfDot - ((liRow == liCol) ? 1.0f : 0.0f);
+                lfTotal += lfDelta * lfDelta;
+            }
+        }
+        if (lfTotal < 0.0f) { lfTotal = -lfTotal; }   // vandc sign-clear
+        return !(lfTotal > lfTolerance);
+    }
+
+    inline bool IsNormal3x3(const Matrix44Affine& lrMatrix, f32 lfTolerance)
+    {
+        const Vector3 laRows[3] = { lrMatrix.xAxis, lrMatrix.yAxis, lrMatrix.zAxis };
+        f32 lfTotal = 0.0f;
+        for (s32 liRow = 0; liRow < 3; ++liRow)
+        {
+            const f32 lfMagSq = laRows[liRow].x * laRows[liRow].x
+                              + laRows[liRow].y * laRows[liRow].y
+                              + laRows[liRow].z * laRows[liRow].z;
+            const f32 lfDelta = lfMagSq - 1.0f;
+            lfTotal += lfDelta * lfDelta;
+        }
+        if (lfTotal < 0.0f) { lfTotal = -lfTotal; }   // vandc sign-clear
+        return !(lfTotal > lfTolerance);
+    }
+
     // -- affine transforms --------------------------------------------------------------
 
     // TransformVector(m, v): rotate the vector by the affine's upper 3x3 (rows

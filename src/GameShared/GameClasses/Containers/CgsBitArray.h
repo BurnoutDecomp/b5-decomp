@@ -199,6 +199,30 @@ public:
         return true;
     }
 
+    // Index of the lowest CLEAR bit, or KI_INVALID_BITINDEX(-1) if every one of the tuNumBits
+    // is set. DWARF-attested name (BitArray<20u>::GetFirstZeroBit, resolved by
+    // DetachedWheelManager::DetachWheel @0x8260E430, where the console inlines it as: walk the
+    // 64-bit fields for one that is not all-ones (`cmpdi -1`), take the complement's lowest set
+    // bit (`~w & (~w - 1)` / cntlzd -> `64*field + 63 - clz`), and treat an index >= tuNumBits
+    // as "no free slot" (0x8260E7A0 `cmplwi r30, 0x14`).
+    s32 GetFirstZeroBit() const
+    {
+        for (u32 luField = 0; luField < kuNumberOfBitFields; ++luField)
+        {
+            if (maxBits[luField] != ~static_cast<u64>(0))
+            {
+                const s32 liBit = static_cast<s32>(luField) * static_cast<s32>(kuNumberOfBitsInBitField)
+                                + GetZeroBitInInt(~maxBits[luField]);
+                if (static_cast<u32>(liBit) >= tuNumBits)
+                {
+                    return KI_INVALID_BITINDEX;
+                }
+                return liBit;
+            }
+        }
+        return KI_INVALID_BITINDEX;
+    }
+
     // Index of the lowest set bit, or KI_INVALID_BITINDEX(-1) if none.
     s32 GetFirstNonZeroBit() const
     {

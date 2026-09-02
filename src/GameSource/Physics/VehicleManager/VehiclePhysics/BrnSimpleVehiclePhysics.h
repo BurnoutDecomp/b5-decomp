@@ -465,6 +465,11 @@ namespace Vehicle
         // Declaration + inline body only: no member, layout or existing signature is touched, and
         // VehiclePhysics::GetWheel continues to hide this one for every existing caller.
         const Wheel* GetWheel(EVehicleDrivenWheel leWheel) const { return &maWheels[leWheel]; }
+        // Mutable twin (DWARF BrnSimpleVehiclePhysics.h: `Wheel* GetWheel(EVehicleDrivenWheel)`,
+        // resolved by DeformableObject::UpdateWheels @0x826254C0, which walks
+        // `<physics>+0x130 + 224*i` and WRITES the wheel: SetPosition, the state byte, the
+        // twist lane). Same seam as the const one; no member or layout is touched.
+        Wheel* GetWheel(EVehicleDrivenWheel leWheel) { return &maWheels[leWheel]; }
     };
 
     // The console sizes this block closes on, exported so the layout gate and the VehiclePhysics

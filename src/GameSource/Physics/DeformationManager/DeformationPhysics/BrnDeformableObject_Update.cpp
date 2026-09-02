@@ -16,6 +16,9 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"  // VehicleAttribs::mCollisionAttribs (the P4 car-car impulse scale, 2026-08-24)
 #include <cmath>                                                              // std::sqrt (the P4 tangential magnitude)
 #include "GameSource/World/BrnEntityTypes.h"                                  // BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE (the ApplySensorImpulse owner test)
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedWheelManager.h"   // DetachedWheelManager::DetachWheel (UpdateWheels' detach arm)
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"                           // CgsNumeric::Random::RandomFloat (UpdateWheels' twist-limit draw)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"             // BrnPhysics::Vehicle::Wheel (UpdateWheels seats / twists / detaches it)
 
 // =================================================================================================
 // BrnPhysics::Deformation::DeformableObject -- the per-frame UPDATE core (group "update").
@@ -1517,21 +1520,239 @@ namespace Deformation
     }
 
     // =============================================================================================
+    // File-scope constants of BrnDeformableObject.cpp (DWARF :2765 / :2766). On the X360 both are
+    // .bss dyn-init splats -- unk_82FB9740 / unk_82FB9530 read 0 in the image BY DEFINITION -- and
+    // their initialiser thunks are export holes, so they were lifted from the raw image
+    // (tools/re/x360rd.py, scanned for the `lis 0x82FC ; addi -0x68C0/-0x6AD0` store pairs):
+    //   0x82C5D9C0  lis r11,0x820A ; lfs f0,-0x28C4(r11)   ; flt_8209D73C = 0x3FC8F5C3 = 1.57
+    //               lis r11,0x82FC ; stfs/lvlx/vspltw       ; stvx128 -> unk_82FB9740
+    //   0x82C5D9E8  lis r11,0x820A ; lfs f0,-0x28C0(r11)   ; flt_8209D740 = 0x410F0D84 = 8.9408
+    //               lis r11,0x82FC ; ...                    ; stvx128 -> unk_82FB9530
+    // 1.57 is pi/2 in radians (the twist band is a quarter turn); 8.9408 m/s is EXACTLY
+    // 20 mph * 0.44704. PS3 second witness: DecFIGS __static_initialization_and_destruction_0
+    // @0x6C2CCC stores both from the same vector pair (0x6C5C74 / 0x6C5C8C).
+    // =============================================================================================
+    static const VecFloat KVF_MAX_TWIST_ANGLE            = { 1.57f, 1.57f, 1.57f, 1.57f };        // :2765
+    static const VecFloat KVF_MIN_SPEED_FOR_WHEEL_DETACH = { 8.9408f, 8.9408f, 8.9408f, 8.9408f }; // :2766
+
+    // =============================================================================================
+    // ShouldDetachWheel (DWARF BrnDeformableObject.h:814). No X360 emission -- UpdateWheels
+    // inlines it three times (0x82625CB8..0x82625D14, 0x82625D98..0x82625DD4, 0x82626500..
+    // 0x82626544): `tag pos - spec initial (spec+0x20)`, vmsum3fp128 with itself, vcmpgtfp
+    // against the spec's mfDetachThresholdSquared (lfs 0x38(spec)).
+    // =============================================================================================
+    bool DeformableObject::ShouldDetachWheel(const TagPoint* lpTagPoint)
+    {
+        return rw::math::vpu::MagnitudeSquared(lpTagPoint->GetOffsetFromInitialPosition())
+             > lpTagPoint->GetDetachThresholdSquared();
+    }
+
+    // =============================================================================================
+    // UpdateWheels @0x826254C0 (1125 insns; PS3 DecFIGS 0x763658, 1778) -- the per-frame wheel
+    // deformation pass: seat each wheel on its tag point, and while the car is crashing drive the
+    // attached -> twisting -> detached ladder. Bodied 2026-09-02 (deform close-out wave) from the
+    // X360 asm with the PS3 twin as second witness; DWARF local names kept (:2777-:2862).
+    //
+    // X360 flow, store for store (wheel = <physics>+0x130 + 224*i, spec = <spec>+0x50 + 48*i,
+    // tag = this+0x3B10 + 32*tagIndex):
+    //   assert mVehicleBody.GetVehiclePhysics()                                     (:2775)
+    //   for liWheel in 0..3:
+    //     assert lpWheel (:2781); if (wheel state == 2 /*detached*/) continue        (0x82625684)
+    //     assert mpDeformationSpec (:2788); lpWheelSpec = spec->GetWheelSpec(i) (inline, asserts
+    //       "liWheel < eNumWheels" BrnStreamedDeformationSpec.h:257); assert lpWheelSpec (:2790)
+    //     if (lpWheelSpec->liTagPointIndex == -1) continue                            (0x8262570C)
+    //     assert IsValid(tag pos)   "Invalid wheel tag point position: <v>. Please tell Graham D" (:2795)
+    //     assert IsValid(wheel pos) "Invalid wheel position: <v>. Please tell Graham D"           (:2796)
+    //     lWheelPos = tag pos with the WHEEL's own y   (vrlimi128 v1(tag), v0(wheel), 4 == y lane)
+    //     Wheel::SetPosition(lWheelPos)                                              (0x82625C88)
+    //     if (!vehicle->mbCrashing /*lbz 0x710*/) continue                           (0x82625C90)
+    //     if (state != 1):                                        -- ATTACHED arm, 0x826264E8
+    //       if (ShouldDetachWheel(tag) || mbForceWheelsToDetach /*lbz 0x672D*/):
+    //         Wheel::Twist()  (stb 1,0xD7 ; +0x30 x lane = 0)
+    //         mWheelTwistLimits[i] = Random::RandomFloat() * KVF_MAX_TWIST_ANGLE   (the inlined
+    //           LCG + mantissa-splice draw minus 1.0, times unk_82FB9740, vperm'd into lane i via
+    //           the unk_8327F140 lane-insert table)
+    //         ++miNumBrokenWheels (+0x6770)
+    //     else:                                                   -- TWISTING arm, 0x82625CB4
+    //       lvfDistanceFromLimitSq = |tag pos - initial|^2 - thresholdSq
+    //       lvfTwistAmount = that * 2 * 2 * 2   (three vmulfp128 by vcfsx(2))
+    //       lvfTwistLimit  = mWheelTwistLimits[i]
+    //       Wheel::SetTwistAmount(Min(lvfTwistLimit, Max(0, lvfTwistAmount)))  (+0x90 w lane)
+    //       detach if  (lvfTwistAmount > lvfTwistLimit && speed(+0x1340.w) > KVF_MIN_SPEED_FOR_WHEEL_DETACH)
+    //              or  (vehicle->IsPlayerVehicleInShowtime() /*vtbl+0x10*/ && ShouldDetachWheel(tag))
+    //              or  mbForceWheelsToDetach
+    //       on detach (0x82625DF8):
+    //         Wheel::Detach() (stb 2,0xD7)
+    //         lVehicleTransform = vehicle->mTransform (+0x10..+0x40)
+    //         assert IsOrthogonal3x3(lVehicleTransform, 0.01) (:2832, message = the matrix)
+    //         assert IsNormal3x3(lVehicleTransform, 0.01)     (:2833, message = the matrix)
+    //         lPartLocalTransform = identity rotation, translation = wheel pos  (:2827)
+    //         assert IsNormal3x3(lPartLocalTransform)         (:2838)
+    //         assert IsOrthogonal3x3(lPartLocalTransform)     (:2839)
+    //         lPartRenderTransform = vehicle->GetWheelsWorldTransfrom(i, TRUE /*li r6,1*/)  (:2828)
+    //         lLinVel = vehicle->mLinearVelocity (+0x50)                                     (:2845)
+    //         lAngVel = TransformVector(lVehicleTransform, (sign * wheel spin, 0, 0))       (:2846)
+    //             sign = (wheel pos x > 0) ? + : -   (vmsum3fp128 with (1,0,0,0), vcmpgtfp vs 0,
+    //             vxor with the sign mask on the not-greater path; spin = +0x30 x lane)
+    //         lfHalfHeight = GetW(i)->mScale.x * 0.5 ; lfRadius = GetW(i)->mScale.y * 0.5 (:2861/:2862)
+    //         DetachedWheelManager::DetachWheel(simIn, mHandlingBodyID (ld 0x6710),
+    //             mu16DeformableObjectIndex (lhz 0x66B2), i, lfHalfHeight, lfRadius,
+    //             lPartRenderTransform, lVehicleTransform, lLinVel, lAngVel)
+    //
+    // The timestep (f1) is never read by the body. DWARF :2777 liNumWheels is the eNumWheels
+    // bound of the loop. RandomVecFloat (DWARF) is the ring-buffer draw the tree spells
+    // Random::RandomFloat -- same LCG, same mantissa splice, same "-1.0".
+    // =============================================================================================
+    void DeformableObject::UpdateWheels(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
+                                        DetachedWheelManager* lpWheelMgr, f32 lfTimeStep,
+                                        CgsNumeric::Random* lpRandom)
+    {
+        (void)lfTimeStep;   // f1: passed by UpdateIKAndLocators, never read (no use in the asm)
+
+        BrnPhysics::Vehicle::VehiclePhysics* lpVehiclePhysics = mVehicleBody.GetVehiclePhysics();
+        CGS_ASSERT(lpVehiclePhysics != 0, "mVehicleBody.GetVehiclePhysics()");   // :2775
+
+        const s32 liNumWheels = static_cast<s32>(BrnPhysics::Vehicle::eNumDrivenWheels);   // :2777
+        for (s32 liWheel = 0; liWheel < liNumWheels; ++liWheel)                              // :2778
+        {
+            // The DWARF resolves Vehicle::SimpleVehiclePhysics::GetWheel here (:2780) -- the
+            // base's mutable accessor, which VehiclePhysics' const-ref overload hides.
+            BrnPhysics::Vehicle::Wheel* lpWheel =
+                lpVehiclePhysics->SimpleVehiclePhysics::GetWheel(static_cast<BrnPhysics::Vehicle::EVehicleDrivenWheel>(liWheel));   // :2780
+            CGS_ASSERT(lpWheel != 0, "lpWheel");   // :2781
+            if (lpWheel->IsDetached())            // lbz 0xD7 == 2
+                continue;
+
+            CGS_ASSERT(mpDeformationSpec != 0, "mpDeformationSpec");                       // :2788
+            const WheelSpec* lpWheelSpec = mpDeformationSpec->GetWheelSpec(liWheel);       // :2789
+            CGS_ASSERT(lpWheelSpec != 0, "lpWheelSpec");                                   // :2790
+            if (lpWheelSpec->liTagPointIndex == -1)                                        // lwz 0x20(spec)
+                continue;
+
+            const TagPoint* lpTagPoint = &maTagPoints[lpWheelSpec->liTagPointIndex];       // :2793
+            CGS_ASSERT(rw::math::vpu::IsValid(lpTagPoint->GetPosition()),
+                       "Invalid wheel tag point position: <tag position>. Please tell Graham D");   // :2795
+            CGS_ASSERT(rw::math::vpu::IsValid(lpWheel->GetPosition()),
+                       "Invalid wheel position: <wheel position>. Please tell Graham D");           // :2796
+
+            // :2798 -- the tag point's xz with the wheel's own y (SetY<VectorAxisY> in the DWARF;
+            // vrlimi128 mask 4 on the X360).
+            Vector3 lWheelPos = lpTagPoint->GetPosition();
+            lWheelPos.y = lpWheel->GetPosition().y;
+            lpWheel->SetPosition(lWheelPos);
+
+            if (!lpVehiclePhysics->IsCrashing())   // lbz 0x710
+                continue;
+
+            if (!lpWheel->IsBeingTwisted())
+            {
+                // ---- ATTACHED arm (0x826264E8..0x826265F4) ----
+                if (ShouldDetachWheel(lpTagPoint) || mbForceWheelsToDetach)
+                {
+                    lpWheel->Twist();
+                    const f32 lfTwistLimit = lpRandom->RandomFloat() * KVF_MAX_TWIST_ANGLE.x;
+                    switch (liWheel)   // vperm lane-insert (unk_8327F140 + 64*i) into +0x6760
+                    {
+                        case 0:  mWheelTwistLimits.x = lfTwistLimit; break;
+                        case 1:  mWheelTwistLimits.y = lfTwistLimit; break;
+                        case 2:  mWheelTwistLimits.z = lfTwistLimit; break;
+                        default: mWheelTwistLimits.w = lfTwistLimit; break;
+                    }
+                    ++miNumBrokenWheels;   // +0x6770
+                }
+                continue;
+            }
+
+            // ---- TWISTING arm (0x82625CB4..0x82625DF4) ----
+            f32 lfTwistLimit;   // :2815
+            switch (liWheel)     // vperm lane-select (lvsl 4*i) out of +0x6760
+            {
+                case 0:  lfTwistLimit = mWheelTwistLimits.x; break;
+                case 1:  lfTwistLimit = mWheelTwistLimits.y; break;
+                case 2:  lfTwistLimit = mWheelTwistLimits.z; break;
+                default: lfTwistLimit = mWheelTwistLimits.w; break;
+            }
+
+            const f32 lfDistanceFromLimitSq =
+                rw::math::vpu::MagnitudeSquared(lpTagPoint->GetOffsetFromInitialPosition())
+                - lpTagPoint->GetDetachThresholdSquared();                                 // :2808
+            const f32 lfTwistAmount = lfDistanceFromLimitSq * 2.0f * 2.0f * 2.0f;          // :2809
+
+            // Clamp(twist, 0, limit): vmaxfp128 vs zero, then vminfp vs the limit.
+            f32 lfClampedTwist = (lfTwistAmount > 0.0f) ? lfTwistAmount : 0.0f;
+            if (lfClampedTwist > lfTwistLimit) { lfClampedTwist = lfTwistLimit; }
+            lpWheel->SetTwistAmount(lfClampedTwist);
+
+            bool lbDetach = false;
+            if (lfTwistAmount > lfTwistLimit)                                              // vcmpgtfp. 0x82625D28
+            {
+                // +0x1340 w lane == |v| against the .bss splat unk_82FB9530.
+                const f32 lfSpeed = lpVehiclePhysics->GetNormLinearVelocityMag().GetPlus();
+                if (lfSpeed > KVF_MIN_SPEED_FOR_WHEEL_DETACH.x)
+                    lbDetach = true;
+            }
+            if (!lbDetach && lpVehiclePhysics->IsPlayerVehicleInShowtime())               // vtbl +0x10
+            {
+                if (ShouldDetachWheel(lpTagPoint))
+                    lbDetach = true;
+            }
+            if (!lbDetach && mbForceWheelsToDetach)                                        // lbz 0x672D
+                lbDetach = true;
+            if (!lbDetach)
+                continue;
+
+            // ---- DETACH (0x82625DF8..0x826264E0) ----
+            lpWheel->Detach();
+
+            const Matrix44Affine lVehicleTransform = lpVehiclePhysics->GetTransform();    // :2826
+            CGS_ASSERT(rw::math::vpu::IsOrthogonal3x3(lVehicleTransform, 0.01f),
+                       "IsOrthogonal3x3( lVehicleTransform, 0.01f )");                       // :2832 (message = the matrix)
+            CGS_ASSERT(rw::math::vpu::IsNormal3x3(lVehicleTransform, 0.01f),
+                       "IsNormal3x3( lVehicleTransform, 0.01f )");                           // :2833 (message = the matrix)
+
+            Matrix44Affine lPartLocalTransform;                                            // :2827
+            lPartLocalTransform.SetIdentity();
+            lPartLocalTransform.wAxis = lpWheel->GetPosition();
+            CGS_ASSERT(rw::math::vpu::IsNormal3x3(lPartLocalTransform, 0.01f),
+                       "IsNormal3x3( lPartLocalTransform, 0.01f )");                         // :2838
+            CGS_ASSERT(rw::math::vpu::IsOrthogonal3x3(lPartLocalTransform, 0.01f),
+                       "IsOrthogonal3x3( lPartLocalTransform, 0.01f )");                     // :2839
+
+            const Matrix44Affine lPartRenderTransform = lpVehiclePhysics->GetWheelsWorldTransfrom(
+                static_cast<BrnPhysics::Vehicle::EVehicleDrivenWheel>(liWheel), true);      // :2828 (li r6,1)
+
+            const Vector3 lLinVel = lpVehiclePhysics->GetLinearVelocity();                  // :2845 (+0x50)
+
+            // :2846 -- the wheel spins about the car's x axis; the side flips the sign.
+            const f32 lfSpin = lpWheel->mIntegrationVariables.x;
+            const Vector3 lLocalSpin = { (lpWheel->GetPosition().x > 0.0f) ? lfSpin : -lfSpin, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAngVel = rw::math::vpu::TransformVector(lVehicleTransform, lLocalSpin);
+
+            const f32 lfHalfHeight = lpWheelSpec->mScale.x * 0.5f;   // :2861  GetW(i)+0x10 lane 0
+            const f32 lfRadius     = lpWheelSpec->mScale.y * 0.5f;   // :2862  GetW(i)+0x10 lane 1
+
+            lpWheelMgr->DetachWheel(lpInput, mHandlingBodyID, mu16DeformableObjectIndex, liWheel,
+                                    lfHalfHeight, lfRadius, lPartRenderTransform, lVehicleTransform,
+                                    lLinVel, lAngVel);
+        }
+    }
+
+    // =============================================================================================
     // UpdateIKAndLocators @0x82642230 (117; PS3 0x765220, 740) -- the IK/locator/wheel/glass pass
     // the manager budgets per frame. X360 flow, call for call:
     //   assert mbActive (:1801); assert mbIKUpdateRequired || gboEnableDeformationDebug (:1806);
     //   CheckForDetachment(simIn, physOut, partMgr, timeStep);
     //   UpdateIK(0.05); UpdateIK(0.1); UpdateIK(0.5); UpdateIK(1.0);   (the four-step relaxation)
     //   UpdateSkinningOffsets();
-    //   UpdateWheels(simIn, wheelMgr, timeStep, random);   [GATED -- see below]
+    //   UpdateWheels(simIn, wheelMgr, timeStep, random);   (bodied above, 2026-09-02)
     //   UpdateGlass(timeStep, <the two deformation output interfaces off the module output>);
     //   UpdateDeformedBBox();
     //   mbIKUpdateRequired = false;
     //
-    // TWO NAMED GATES (honest partials, censused):
-    //   * UpdateWheels @0x826254C0 (1125; PS3 0x763658, 1778) is the wheel-deformation whale --
-    //     NOT reconstructed this wave. Log-once gate; the traction/steering wheel path is a
-    //     different system and unaffected.
+    // ONE NAMED GATE left (honest partial, censused):
+    //   * UpdateWheels @0x826254C0 was the second gate here until 2026-09-02 (deform close-out
+    //     wave); it is reconstructed above, together with DetachedWheelManager::DetachWheel and
+    //     PhysicalWheel::Prepare / AddToSim, which its detach arm needs to link.
     //   * UpdateGlass's two output interfaces come off the physics-module output buffer through
     //     accessors not yet homed on the host PhysicsModuleIO::OutputBuffer -- glass pane updates
     //     are dead on the junkyard path (no glass impacts); log-once gate.
@@ -1554,19 +1775,8 @@ namespace Deformation
 
         UpdateSkinningOffsets();
 
-        {
-            static bool sbLoggedWheelsGate = false;
-            if ( !sbLoggedWheelsGate )
-            {
-                sbLoggedWheelsGate = true;
-                if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                    *CgsDev::Log::gpDebugPrint
-                        << "conductor gate: DeformableObject::UpdateWheels @0x826254C0 (1125) "
-                           "reached but not reconstructed -- wheel deformation inert "
-                           "[FLAG PC boot gate]\n";
-            }
-            (void)lpWheelMgr; (void)lpRandom;
-        }
+        // 0x82642290..0x826422A8: r4 = simIn, r5 = wheelMgr, f1 = timestep lane, r7 = random.
+        UpdateWheels(lpInput, lpWheelMgr, lvfTimeStep.x, lpRandom);
 
         {
             static bool sbLoggedGlassGate = false;
