@@ -12,6 +12,12 @@
 // forward-declared before; no cycle -- the pool/part headers reference DeformableObject by
 // forward-decl only).
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.h"     // DetachedPartManager (GetPartFromIndex)
+// ⭐ 2026-09-02 (deform close-out wave): ResetDeformation's OWN `bl RemoveVehicleWheels`
+// @0x82639EA4 was documented-but-not-emitted behind a "would risk an include cycle" note. There is
+// no cycle -- BrnDeformableObject_GlassState.cpp and _Update.cpp already include this same header
+// (OutputWheelData's detached arm, UpdateWheels' detach arm), so the cycle claim was stale.
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedWheelManager.h"    // DetachedWheelManager::RemoveVehicleWheels
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"                     // VehiclePhysics::GetWheel / Wheel::Attach (the re-seat loop)
 
 // =====================================================================================================
 // BrnPhysics::Deformation::DeformableObject -- LIFECYCLE / SETUP group.
@@ -592,12 +598,25 @@ namespace Deformation
             ResetJointVelocities(lpPartMgr);
         }
 
-        // Remove the detached wheels for this body (asm: DetachedWheelManager::RemoveVehicleWheels).
-        // FLAG: DetachedWheelManager is forward-declared only on the frozen header; the call
-        // DetachedWheelManager::RemoveVehicleWheels(lpWheelMgr, lpInput, mHandlingBodyID, mGlobalEntityId)
-        // is documented but not emitted here (the manager header would risk an include cycle). Restored
-        // when the manager header is in-tree.
-        (void)lpWheelMgr;
+        // ⭐⭐⭐ 2026-09-02 (deform close-out wave) -- THE CALL IS EMITTED NOW. It stood here as a
+        // bare `(void)lpWheelMgr;` behind the note "documented but not emitted (the manager header
+        // would risk an include cycle)". THAT IS THE `A RESPAWNED CAR STILL HAS THE MISSING WHEEL`
+        // BUG: a shed wheel lives in DetachedWheelManager's slot table, and OutputWheelData's
+        // detached arm keeps publishing that slot as `exists=1 attached=0` for the car's wheel
+        // index for the rest of the session, because nothing ever removed it. Reset gave the car
+        // its wheel back in the deformation model and left the detached RECORD standing.
+        //
+        // The console does it here, before it touches anything else about the car:
+        //   0x82639E94  mr r5, r28        ; lpScene   (r5 == this function's own a3)
+        //   0x82639E98  ld r6, 0x6710(r31); mHandlingBodyID (the whole 8-byte handle)
+        //   0x82639E9C  mr r4, r29        ; lpInput   (a2)
+        //   0x82639EA0  mr r3, r25        ; lpWheelMgr (a5)
+        //   0x82639EA4  bl DetachedWheelManager::RemoveVehicleWheels
+        // -- which is EXACTLY the frozen three-argument signature, so the second half of the old
+        // FLAG ("the de-inlined call site is RemoveVehicleWheels(lpWheelMgr, lpInput,
+        // mHandlingBodyID, mGlobalEntityId)", quoted in BrnDetachedWheelManager.cpp) is also wrong:
+        // there is no fourth argument, r7 is never set at this call site.
+        lpWheelMgr->RemoveVehicleWheels(lpInput, lpScene, mHandlingBodyID);   // asm 0x82639EA4
 
         // ⭐ UN-PINNED 2026-08-14 (deformation-mount wave). The old FLAG pinned the scratch values
         // and modelled the damage point as a bare +/-0.3 -- the asm (0x82639EA8..0x82639F94) says
@@ -877,16 +896,69 @@ namespace Deformation
 
         // Re-seat the four wheels: for each wheel read its spec tag point, assert the world position is
         // valid (asm: the "Invalid wheel position: ... please tell Graham D." StrStream assert), then
-        // Wheel::SetPosition + reset the wheel's broken latch. FLAG: the wheel-spec/tag-point walk + the
-        // Wheel accessor live on VehiclePhysics (not exposed here); kept structurally with the verbatim
-        // bounds assert. The valid-position message is built at runtime in the asm; modelled as a fixed
-        // tripwire string here (no original file/line).
-        for (s32 liWheel = 0; liWheel < 4; ++liWheel)
+        // ⭐⭐⭐ THE WHEEL RE-SEAT LOOP -- BODIED 2026-09-02 (deform close-out wave).
+        // What stood here was an EMPTY loop: a bounds assert and three COMMENTED-OUT lines, behind
+        // "FLAG: the wheel-spec/tag-point walk + the Wheel accessor live on VehiclePhysics (not
+        // exposed here)". Both halves of that excuse are now stale -- SimpleVehiclePhysics::GetWheel
+        // (mutable) landed for UpdateWheels @0x826254C0 on 2026-09-02, and Wheel::Attach() /
+        // SetTwistAmount() have been on Wheel.h all along.
+        //
+        // ⛔ THIS IS THE OTHER HALF OF `A RESPAWNED CAR STILL HAS THE MISSING WHEEL`. The console's
+        // `stb r28, 0xD7(r27)` is the ONLY write that puts a wheel back into E_WHEEL_ATTACHED once
+        // UpdateWheels' detach arm has written 2 there. With the loop empty, a wheel that detached
+        // stayed state==2 forever: UpdateWheels skips it (`if (lpWheel->IsDetached()) continue`),
+        // so it is never re-seated either, and every consumer that reads the state byte -- the
+        // OutputWheelData publish, mbAnyWheelsDetatched, the driveability grant -- keeps seeing a
+        // three-wheeled car after the respawn.
+        //
+        // X360 0x8263A37C..0x8263A528, store for store (r16 == liWheel, r25 == 0xE0*liWheel,
+        // r17 == 0x30*liWheel, r27 == &wheel, r30 == mpDeformationSpec, r15 == 0x3B10, r28 == 0):
+        //   lwz  r11, 0x194C(r31)              ; mVehicleBody's VehiclePhysics
+        //   addi r27, r11+r25, 0x130           ; &maWheels[liWheel]  (0x130 + 224*i)
+        //   cmpwi r16, 4 ; blt ; <assert>      ; "liWheel < eNumWheels", BrnDeformableObject.cpp:257
+        //   lwz  r30, 0x18E0(r31)              ; mpDeformationSpec
+        //   lwz  r11, 0x70(r30 + 0x30*i)       ; wheelSpec[i].liTagPointIndex (spec+0x50 + 48*i + 0x20)
+        //   lvx128 v127, (this + 32*idx), 0x3B10 ; maTagPoints[idx].mPosition
+        //   lvx128 v0,  wheel+0x80             ; the wheel's own mPosition
+        //   <three vcmpeqfp. lanes + assert>   ; "Invalid wheel position: (%f, %f, %f), please tell
+        //                                      ;  Graham D.", ...GameSource\Physics/Vehicle... :412
+        //   vrlimi128 v1(tag), v0(wheel), 4, 0 ; lane mask 4 == y  -> tag xz with the WHEEL's y
+        //   bl   Wheel::SetPosition
+        //   stb  r28, 0xD7(r27)                ; mu8State = 0  == Attach()
+        //   lvx128 v0, wheel+0x90 ; vrlimi128 v0, v126(zero), 1, 0 ; stvx128
+        //                                      ; the w lane of mStreamedPositionPlusTwistAmount = 0
+        //                                      ; == SetTwistAmount(0.0f)
+        //   addi r25, 0xE0 ; cmpwi r25, 0x380 ; blt              ; 4 wheels, stride 224
+        //
+        // ⚠️ NOTE, faithfully preserved: unlike UpdateWheels, this loop does NOT skip a wheel whose
+        // liTagPointIndex is -1 -- there is no branch between the `lwz 0x70` and the `lvx128` in the
+        // asm. On the console that would index maTagPoints[-1]. Every shipped wheel spec carries a
+        // real tag index, so it never fires; it is transcribed as-is rather than "fixed", because an
+        // invented guard here is exactly the class of defect this project treats as a failure.
+        BrnPhysics::Vehicle::VehiclePhysics* lpResetVehiclePhysics = mVehicleBody.GetVehiclePhysics();
+        for (s32 liWheel = 0; liWheel < static_cast<s32>(BrnPhysics::Vehicle::eNumDrivenWheels); ++liWheel)
         {
-            CGS_ASSERT(liWheel < 4, "liWheel < eNumWheels");
-            // Wheel* lpWheel = GetVehiclePhysics()->GetWheel(liWheel);                          // FLAG
-            // CGS_ASSERT(vpu::IsValid(lWheelPos), "Invalid wheel position: , please tell Graham D.");
-            // lpWheel->SetPosition(lWheelPos); lpWheel->Attach();                               // FLAG
+            CGS_ASSERT(liWheel < static_cast<s32>(BrnPhysics::Vehicle::eNumDrivenWheels),
+                       "liWheel < eNumWheels");                                          // :257
+
+            BrnPhysics::Vehicle::Wheel* lpWheel =
+                lpResetVehiclePhysics->SimpleVehiclePhysics::GetWheel(
+                    static_cast<BrnPhysics::Vehicle::EVehicleDrivenWheel>(liWheel));
+
+            const WheelSpec* lpWheelSpec = mpDeformationSpec->GetWheelSpec(liWheel);
+            const TagPoint* lpTagPoint   = &maTagPoints[lpWheelSpec->liTagPointIndex];
+
+            CGS_ASSERT(rw::math::vpu::IsValid(lpWheel->GetPosition()),
+                       "Invalid wheel position: <wheel position>, please tell Graham D.");   // :412
+
+            // The tag point's xz with the wheel's own y -- the same vrlimi128 mask-4 splice
+            // UpdateWheels @0x82625C7C makes when it seats a wheel every crashing frame.
+            Vector3 lWheelPos = lpTagPoint->GetPosition();
+            lWheelPos.y = lpWheel->GetPosition().y;
+            lpWheel->SetPosition(lWheelPos);
+
+            lpWheel->Attach();              // stb 0, 0xD7 -- back to E_WHEEL_ATTACHED
+            lpWheel->SetTwistAmount(0.0f);  // wheel+0x90 w lane = 0
         }
 
         // Clear the 10 glass-pane states again (asm repeats the +26420 clear after the wheel loop).
@@ -971,9 +1043,63 @@ namespace Deformation
         // (the old "+26415 has no named member" note was the same off-by-one block).
         mbIKUpdateRequired          = lbDamagePresent;   // asm: +26409 = v43 (damage present)
         mbDontPlayGlassPaneEffects  = lbDamagePresent;   // asm: +26415 = v43
-        mbHasBouncedThisFrame        = 0u;      // asm: +26414 = 0
-        mbBounceRandomParity         = 0u;      // asm: +26413 = 0
+
+        // ⭐⭐ TWO BYTES RE-SEATED 2026-09-02 (deform close-out wave). These two stores used to go to
+        // mbHasBouncedThisFrame / mbBounceRandomParity -- the two INVENTED trailing members declared
+        // AFTER miNumBrokenWheels for the cross-car bounce slice, i.e. at host offsets that are not
+        // +26413/+26414 at all. The DWARF member order in this class, checked against every anchor
+        // this function's own asm provides, puts real members on those two console bytes:
+        //     0x671C mfNoDamageTimer          `stfs f0, 0x671C`      @0x8263A664
+        //     0x6720 miNumAttachedExhausts    `sth  r17, 0x6720`     @0x8263A250
+        //     0x6722 mbActive                 (rig+26402, this header :543)
+        //     0x6724 mCullGroup               `stw  r11(1), 0x6724`  @0x8263A5A0
+        //     0x6728 mbHasDeformedThisFrame   (model+26408, @0x82649BD4)
+        //     0x6729 mbIKUpdateRequired       `stb  r10, 0x6729`     @0x8263A630
+        //     0x672B mbBonnetHasOpened        `stb  r11, 0x672B`     @0x8263A60C
+        //     0x672C mbBonnetLatchedDown      `stb  r11, 0x672C`     @0x8263A628
+        //     0x672D mbForceWheelsToDetach    `stb  r28, 0x672D`     @0x8263A63C   <-- HERE
+        //     0x672E mbShowtimeShunting       `stb  r28, 0x672E`     @0x8263A640   <-- HERE
+        //     0x672F mbDontPlayGlassPaneEffects `stb r10, 0x672F`    @0x8263A634
+        //     0x6731 mi8NumPartsToForceHinging `stb ..., 0x6731`     @0x8263A5E0/E8
+        //     0x6734 maGlassPaneStates[10]    10x `stw`              @0x8263A53C
+        //     0x675C meAbsorptionSet          `stw`                  @0x8263A648/668
+        //     0x6760 mWheelTwistLimits        `stvx128 v126`         @0x8263A64C
+        //     0x6770 miNumBrokenWheels        `stb  r28, 0x6770`     @0x8263A650
+        // Zero slack anywhere in that chain, and 0x672D is the SAME byte UpdateWheels reads as
+        // mbForceWheelsToDetach (`lbz 0x672D`, BrnDeformableObject_Update.cpp:1601). So the console's
+        // reset disarms the force-detach latch, and ours did not -- a latch left armed makes the
+        // NEXT crash shed all four wheels immediately.
+        mbForceWheelsToDetach       = false;    // asm: +26413 = 0
+        mbShowtimeShunting          = false;    // asm: +26414 = 0
+        // ⚠️ FORK, not a second console store. mbBounceRandomParity / mbHasBouncedThisFrame are a
+        // HOST-ONLY duplicate of these same two console bytes (see the header's own FLAG block: they
+        // were minted for the ApplyCarCarImpulse slice when +26413/+26414 "had no named member").
+        // One console byte, two PC names -- so clearing only the real member would leave the bounce
+        // readers on a stale copy. Both halves are cleared until the fork is retired.
+        // DELETE-WHEN the bounce slice is re-read against mbForceWheelsToDetach/mbShowtimeShunting.
+        mbBounceRandomParity        = 0u;
+        mbHasBouncedThisFrame       = 0u;
+
         meAbsorptionSet              = E_ABSORPTIONSET_NORMAL;   // asm: +26460 = 0 (the absorption set slot)
+
+        // ⭐ THREE MORE STORES THE TREE NEVER MADE (2026-09-02). All three are on the wheel path.
+        //   0x8263A64C  li r11, 0x6760 ; stvx128 v126, r31, r11   -- v126 is the zero vector
+        //   0x8263A650  stb r28, 0x6770(r31)                      -- r28 == 0
+        // mWheelTwistLimits is the per-wheel random twist band UpdateWheels' ATTACHED arm writes on
+        // every twist, and miNumBrokenWheels is the counter it increments there; neither was ever
+        // reset, so miNumBrokenWheels climbed monotonically for the life of the session and each
+        // reset car inherited the previous wreck's twist limits.
+        mWheelTwistLimits  = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };   // asm: +0x6760 = 0
+        miNumBrokenWheels  = 0;                                   // asm: +0x6770 = 0
+        //   0x8263A594  stb r28, 0x712(r9)   with r9 == *(this+0x194C) == the attached VehiclePhysics
+        // -- the vehicle's own "has started deforming" latch, which DeformableObject::
+        // ApplySensorImpulse @0x82607F28 sets for every owner and nothing here cleared.
+        mVehicleBody.GetVehiclePhysics()->ClearStartedDeforming();   // asm: vehicle+0x712 = 0
+        //   0x8263A5A0  stw r11(1), 0x6724(r31)
+        // FLAG: the member at +0x6724 is DWARF-named mCullGroup and nothing in the tree reads it
+        // yet, so this store is inert today; it is landed because it is unambiguous in the asm and
+        // the seat is pinned with zero slack on both sides (mbActive @0x6722, +26408 @0x6728).
+        mCullGroup = 1u;                                          // asm: +0x6724 = 1
 
         // A type-1 (full-crash) reset arms the absorption cooldown timer band (asm: if (a28==1) {
         // +26396 = 1.5; +26460 = 4 }). +26460 == meAbsorptionSet here maps onto E_ABSORPTIONSET_INVINCIBLE(4).

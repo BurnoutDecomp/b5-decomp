@@ -469,6 +469,11 @@ namespace Vehicle
         // DeformableObject::ResetDeformation (@0x8263A594).
         void     SetStartedDeforming()       { mbStartedDeforming = true; }         // @0x712
         void     SetStartedFatallyCrashing() { mbStartedFatallyCrashing = true; }   // @0x711
+        // The matching CLEAR, same seam (2026-09-02, deform close-out wave). X360
+        // DeformableObject::ResetDeformation @0x8263A594 `stb r28, 0x712(r9)` with
+        // r9 == *(model+0x194C) == this VehiclePhysics -- the reset drops the latch
+        // ApplySensorImpulse @0x82607F28 raised. Nothing in the tree cleared it.
+        void     ClearStartedDeforming()     { mbStartedDeforming = false; }        // @0x712
         const AboveGroundTestResult* GetAboveGroundTestResult() const                // @0x570 (`addi r11,r31,0x570`)
         {
             return &mAboveGroundTestResult;
