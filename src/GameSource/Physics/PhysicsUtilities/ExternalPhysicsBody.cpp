@@ -7,7 +7,11 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags (CheckState's failure print)
 
 #include <cmath>   // std::pow (models the VMX exp2/log2 pow-curve in the damp funcs)
-#include <cstdlib> // getenv -- the opt-in [bank] bring-up probe only
+#include <cstdlib> // getenv / atof -- the opt-in [bank] and [dv] bring-up probes only
+#ifdef _MSC_VER
+#include <intrin.h>          // _ReturnAddress -- the [dv] drain witness's call-site tag
+#pragma intrinsic(_ReturnAddress)
+#endif
 
 // BrnPhysics::ExternalPhysicsBody -- the 7 functions owned by the BrnPhysics-bodies group.
 //
@@ -220,6 +224,229 @@ namespace BrnPhysics
     // without BRN_CRASH_RESPONSE_DIAG=1).
     const ExternalPhysicsBody* gpCrashResponseDiagBody = nullptr;
 
+    // ---- [dv] THE ONE-STEP VELOCITY WITNESS -- PC bring-up instrument ---------------------------
+    // OPT-IN (BRN_DV_PROBE=<threshold m/s>, e.g. 2). NOT IN THE X360 BINARY. Off by default: the
+    // latch reads 0 once and every print is unreachable thereafter, so a default run and every
+    // golden gate stay byte-identical to a build without it.
+    //
+    // WHY THIS EXISTS, AND WHY IT IS NOT ANOTHER PER-FRAME DUMP. Two measured events survive four
+    // kerb waves: a one-physics-step loss of ~9.5 m/s on flat tarmac (st_scoutB f1011->f1012) and a
+    // 6.2 mph loss at 106 mph with a DIAGONAL delta and zero body impulses. Both were found by
+    // reading a log after the fact; neither has ever been reproduced on purpose. Every existing
+    // probe answers a DIFFERENT question -- [kerb] prints contact classification, [kerb-imp] prints
+    // world impulses the deformation solver applies, [wsus] prints the suspension state -- and the
+    // st_scoutB event fired with [kerb-imp] SILENT for the whole losing step, i.e. the mechanism is
+    // not on any instrumented path. So instead of another sampler, this arms a witness ON THE EVENT
+    // ITSELF: it samples the watched body's velocity at each named stage boundary of
+    // PhysicsModule::Update, records EVERY accumulator drain in between, and prints the whole
+    // ledger for a step ONLY when that step's |dv| crosses the threshold. A quiet run means the
+    // event did not happen; it does not mean the probe saw nothing.
+    //
+    // WHAT IT CAN AND CANNOT SEE.
+    //   * CAN: every velocity change made through CalculateNewVelocity -- the ONE funnel that turns
+    //     the four accumulators (mTotalLinearForce/-Torque/-LinearImpulse/-AngularImpulse) into
+    //     velocity -- with the banked J and F*dt that produced it and the caller's return address.
+    //   * CAN: any velocity change made by anything else, as a gap between two stage marks (a
+    //     direct SetLinearVelocity write, e.g. the showtime launch/cap arms, shows up as a mark-to-
+    //     mark delta with no drain between the two marks).
+    //   * CANNOT: name the writer inside such a gap. The stage marks bracket it; they do not
+    //     identify it. Narrowing a gap is a matter of adding a mark, not of reading harder.
+    //   * The position is carried alongside the velocity for exactly one reason: the post-sim
+    //     bump-stop translation (VehiclePhysics::UpdateSuspensionPostSimulation @0x825F6BB0) moves
+    //     mTransform.wAxis WITHOUT touching velocity, so a pose jump with no velocity change is a
+    //     different mechanism and must be visible as such.
+    const ExternalPhysicsBody* gpDvWatchBody = nullptr;
+
+    namespace
+    {
+        // The [kerb]/[kerb-car] frame counter, so a [dv] step number lines up with the contact
+        // lines for the same step without a second correlation pass.
+        const s32 KI_DV_MAX_ENTRIES = 256;
+
+        struct DvEntry
+        {
+            const char* mpcPhase;
+            const void* mpReturnAddress;   // 0 for a stage mark
+            bool        mbDrain;
+            Vector3     mV;                // velocity AFTER this entry
+            Vector3     mP;                // position  AFTER this entry
+            Vector3     mDv;               // change this entry made (drains only)
+            Vector3     mJ;                // banked linear impulse   (drains only)
+            Vector3     mFdt;              // banked force * dt       (drains only)
+            f32         mfInvMass;
+        };
+
+        DvEntry     gaDvRing[KI_DV_MAX_ENTRIES];
+        s32         giDvUsed        = 0;
+        s32         giDvDropped     = 0;
+        u32         guDvStep        = 0;
+        u32         guDvDumps       = 0;
+        bool        gbDvStepOpen    = false;
+        Vector3     gDvStartV       = { 0.0f, 0.0f, 0.0f, 0.0f };
+        Vector3     gDvStartP       = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const char* gpcDvPhase      = "-";
+        const u32   KU_DV_MAX_DUMPS = 400u;
+
+        // -1 == not yet read; 0 == disarmed; otherwise the threshold in m/s scaled by 1000.
+        f32 DvThreshold()
+        {
+            static f32  sfThreshold = -1.0f;
+            if ( sfThreshold < 0.0f )
+            {
+                const char* lpcEnv = getenv( "BRN_DV_PROBE" );
+                sfThreshold = 0.0f;
+                if ( lpcEnv != 0 && lpcEnv[0] != '0' )
+                {
+                    const f32 lfParsed = static_cast<f32>( atof( lpcEnv ) );
+                    sfThreshold = ( lfParsed > 0.0f ) ? lfParsed : 2.0f;   // "1"/"on" -> 2 m/s
+                }
+            }
+            return sfThreshold;
+        }
+
+        bool DvArmed()
+        {
+            return DvThreshold() > 0.0f && gpDvWatchBody != 0 && CgsDev::Log::gpDebugPrint != 0;
+        }
+
+        f32 DvMagnitude( const Vector3& lrV )
+        {
+            return std::sqrt( lrV.x * lrV.x + lrV.y * lrV.y + lrV.z * lrV.z );
+        }
+
+        DvEntry* DvPush()
+        {
+            if ( giDvUsed >= KI_DV_MAX_ENTRIES )
+            {
+                ++giDvDropped;
+                return 0;
+            }
+            return &gaDvRing[giDvUsed++];
+        }
+    }
+
+    // Open a step: latch the watched body's velocity/position as the step's zero.
+    void DvWitnessBeginStep()
+    {
+        if ( !DvArmed() )
+        {
+            gbDvStepOpen = false;
+            return;
+        }
+        ++guDvStep;
+        giDvUsed     = 0;
+        giDvDropped  = 0;
+        gbDvStepOpen = true;
+        gpcDvPhase   = "begin";
+        gDvStartV    = gpDvWatchBody->GetLinearVelocity();
+        gDvStartP    = gpDvWatchBody->GetPosition();
+    }
+
+    // Record a stage boundary. The phase name also tags every drain that follows it.
+    void DvWitnessMark( const char* lpcPhase )
+    {
+        if ( !gbDvStepOpen || !DvArmed() )
+        {
+            return;
+        }
+        gpcDvPhase = lpcPhase;
+        DvEntry* lpEntry = DvPush();
+        if ( lpEntry == 0 )
+        {
+            return;
+        }
+        lpEntry->mpcPhase        = lpcPhase;
+        lpEntry->mpReturnAddress = 0;
+        lpEntry->mbDrain         = false;
+        lpEntry->mV              = gpDvWatchBody->GetLinearVelocity();
+        lpEntry->mP              = gpDvWatchBody->GetPosition();
+        lpEntry->mDv             = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        lpEntry->mJ              = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        lpEntry->mFdt            = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        lpEntry->mfInvMass       = 0.0f;
+    }
+
+    // Close a step. Prints the whole ledger only when the step's |dv| crosses the threshold.
+    void DvWitnessEndStep( f32 lfTimeStep, u32 luFrame )
+    {
+        if ( !gbDvStepOpen || !DvArmed() )
+        {
+            gbDvStepOpen = false;
+            return;
+        }
+        gbDvStepOpen = false;
+
+        const Vector3 lEndV = gpDvWatchBody->GetLinearVelocity();
+        const Vector3 lEndP = gpDvWatchBody->GetPosition();
+        const Vector3 lStepDv{ lEndV.x - gDvStartV.x, lEndV.y - gDvStartV.y,
+                               lEndV.z - gDvStartV.z, 0.0f };
+        const f32 lfStepDv = DvMagnitude( lStepDv );
+        if ( lfStepDv < DvThreshold() )
+        {
+            return;
+        }
+        if ( guDvDumps >= KU_DV_MAX_DUMPS )
+        {
+            if ( guDvDumps == KU_DV_MAX_DUMPS )
+            {
+                ++guDvDumps;
+                *CgsDev::Log::gpDebugPrint
+                    << "[dv] BUDGET EXHAUSTED (" << static_cast<s32>( KU_DV_MAX_DUMPS )
+                    << " dumps) at step " << static_cast<s32>( guDvStep )
+                    << " -- every later [dv] step is DROPPED; a later silence is the budget, "
+                       "not the physics\n";
+            }
+            return;
+        }
+        ++guDvDumps;
+
+        *CgsDev::Log::gpDebugPrint
+            << "[dv] STEP " << static_cast<s32>( guDvStep ) << " f " << static_cast<s32>( luFrame )
+            << " dt " << lfTimeStep
+            << " |dv| " << lfStepDv
+            << " v0 " << gDvStartV.x << " " << gDvStartV.y << " " << gDvStartV.z
+            << " v1 " << lEndV.x << " " << lEndV.y << " " << lEndV.z
+            << " p0 " << gDvStartP.x << " " << gDvStartP.y << " " << gDvStartP.z
+            << " p1 " << lEndP.x << " " << lEndP.y << " " << lEndP.z
+            << " entries " << giDvUsed << " dropped " << giDvDropped << "\n";
+
+        Vector3 lPrevV = gDvStartV;
+        Vector3 lPrevP = gDvStartP;
+        for ( s32 liEntry = 0; liEntry < giDvUsed; ++liEntry )
+        {
+            const DvEntry& lrE = gaDvRing[liEntry];
+            const Vector3 lSegDv{ lrE.mV.x - lPrevV.x, lrE.mV.y - lPrevV.y, lrE.mV.z - lPrevV.z, 0.0f };
+            const Vector3 lSegDp{ lrE.mP.x - lPrevP.x, lrE.mP.y - lPrevP.y, lrE.mP.z - lPrevP.z, 0.0f };
+            if ( lrE.mbDrain )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[dv]   drain  @" << lrE.mpcPhase
+                    << " ra " << reinterpret_cast<u64>( lrE.mpReturnAddress )
+                    << " J " << lrE.mJ.x << " " << lrE.mJ.y << " " << lrE.mJ.z
+                    << " Fdt " << lrE.mFdt.x << " " << lrE.mFdt.y << " " << lrE.mFdt.z
+                    << " invM " << lrE.mfInvMass
+                    << " dv " << lrE.mDv.x << " " << lrE.mDv.y << " " << lrE.mDv.z
+                    << " |dv| " << DvMagnitude( lrE.mDv )
+                    << " v " << lrE.mV.x << " " << lrE.mV.y << " " << lrE.mV.z
+                    << "\n";
+            }
+            else
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[dv]   mark   @" << lrE.mpcPhase
+                    << " v " << lrE.mV.x << " " << lrE.mV.y << " " << lrE.mV.z
+                    << " segDv " << lSegDv.x << " " << lSegDv.y << " " << lSegDv.z
+                    << " |segDv| " << DvMagnitude( lSegDv )
+                    << " p " << lrE.mP.x << " " << lrE.mP.y << " " << lrE.mP.z
+                    << " segDp " << lSegDp.x << " " << lSegDp.y << " " << lSegDp.z
+                    << "\n";
+            }
+            lPrevV = lrE.mV;
+            lPrevP = lrE.mP;
+        }
+    }
+    // ---- end [dv] -------------------------------------------------------------------------------
+
     void ExternalPhysicsBody::CalculateNewVelocity(VecFloat lvfDeltaTime)
     {
         const f32 lfDt      = lvfDeltaTime.x;   // broadcast VecFloat -> scalar (de-modelled lane)
@@ -258,11 +485,43 @@ namespace BrnPhysics
         CGS_ASSERT(vpu::IsValid(mAngularVelocity), "rw::math::IsValid(mAngularVelocity)");
         CGS_ASSERT(vpu::IsValid(mLinearVelocity),  "rw::math::IsValid(mLinearVelocity)");
 
+        // [dv] the drain witness -- see the banner on gpDvWatchBody. Captures the operands the
+        // drain below is about to use, and the caller's return address, so a step dump names WHICH
+        // of the seven CalculateNewVelocity call sites moved the velocity.
+        const bool    lbDvDrain  = ( this == gpDvWatchBody ) && gbDvStepOpen && DvArmed();
+        const Vector3 lDvBefore  = mLinearVelocity;
+#ifdef _MSC_VER
+        const void*   lpDvCaller = lbDvDrain ? _ReturnAddress() : 0;
+#else
+        const void*   lpDvCaller = 0;
+#endif
+
         // Linear: the force accumulator becomes an impulse over the step, joins the impulse
         // accumulator, and divides by mass.
         const Vector3 lvLinearImpulse =
             vpu::Add(vpu::Mult(mTotalLinearForce, lfDt), mTotalLinearImpulse);
         mLinearVelocity = vpu::Add(mLinearVelocity, vpu::Mult(lvLinearImpulse, lfInvMass));
+
+        if ( lbDvDrain )
+        {
+            DvEntry* lpDvEntry = DvPush();
+            if ( lpDvEntry != 0 )
+            {
+                lpDvEntry->mpcPhase        = gpcDvPhase;
+                lpDvEntry->mpReturnAddress = lpDvCaller;
+                lpDvEntry->mbDrain         = true;
+                lpDvEntry->mV              = mLinearVelocity;
+                lpDvEntry->mP              = mTransform.wAxis;
+                lpDvEntry->mDv             = Vector3{ mLinearVelocity.x - lDvBefore.x,
+                                                      mLinearVelocity.y - lDvBefore.y,
+                                                      mLinearVelocity.z - lDvBefore.z, 0.0f };
+                lpDvEntry->mJ              = mTotalLinearImpulse;
+                lpDvEntry->mFdt            = Vector3{ mTotalLinearForce.x * lfDt,
+                                                      mTotalLinearForce.y * lfDt,
+                                                      mTotalLinearForce.z * lfDt, 0.0f };
+                lpDvEntry->mfInvMass       = lfInvMass;
+            }
+        }
 
         // Angular: same shape, but through the world inverse-inertia tensor rather than 1/m.
         // (asm: splat the three lanes of the angular impulse and combine the three tensor rows.)
