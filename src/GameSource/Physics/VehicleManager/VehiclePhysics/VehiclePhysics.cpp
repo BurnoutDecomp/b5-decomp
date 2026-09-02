@@ -3508,11 +3508,22 @@ namespace Vehicle
             lrDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.y;
         if (lfMaxDriftAngle > std::fabs(lfDriftAngle))
         {
-            lfTorque = lrDriftAttribs.mDriftScaleToYawTorque.GetInterped(lvfAbsDriftScale).x;
+            // 0x825D2888..0x825D28EC: the curve is evaluated at |+0x1000.w| -- the MEMBER DriftScale,
+            // which UpdateDriftScale has already advanced this frame -- not at the lvfAbsDriftScale
+            // argument (that is UpdateDrift's pre-update snapshot; the console only reads v2 for the
+            // fall-off sqrt below). D4 of the drift-symmetry wave, 2026-09-02.
+            lfTorque = lrDriftAttribs.mDriftScaleToYawTorque.GetInterped(
+                VecFloat{ lfAbsCurrentDriftScale, lfAbsCurrentDriftScale,
+                          lfAbsCurrentDriftScale, lfAbsCurrentDriftScale }).x;
 
             if (KF_LOW_STEER > lvfAbsSteering.x)
             {
-                if (lfAbsCurrentDriftScale > 0.0f)
+                // ⛔ D3 (0x825D2918..0x825D2968): `vspltw v0, +0x1000, 3 ; vcmpgtfp. v0, v0, 0.0` --
+                // the SIGNED DriftScale is tested against zero and the torque is negated only when
+                // it is positive. The old `lfAbsCurrentDriftScale > 0.0f` was true on every frame
+                // that reached this line (the eps gate above guarantees it), so the low-steer torque
+                // was negated for BOTH drift directions.
+                if (lfDriftScale > 0.0f)
                     lfTorque = -lfTorque;
 
                 const f32 lfDriftTorqueFallOff =
@@ -3522,14 +3533,29 @@ namespace Vehicle
             }
             else
             {
+                // ⛔⛔ D2 -- THE "CAN ONLY DRIFT LEFT" DEFECT (0x825D2A0C..0x825D2A70). The console
+                // multiplies the curve torque by (-Steering * |Steering|) UNCONDITIONALLY:
+                //   vspltw v11,+0xFE0,1 ; vandc v0 = |Steering| ; vxor v13 = -Steering ;
+                //   vmulfp128 v0 = v13*v0 ; vmulfp128 v12 = v12*v0        @0x825D2A54
+                // and only THEN tests `0 > DriftScale*Steering` (counter-steering) to scale the
+                // result by CounterSteerTorqueScaleFactor (+0x170.z, @0x825D2A68-70). The old body
+                // applied the -Steering*|Steering| product only inside the counter-steer arm, so a
+                // normal (steer-with-the-drift) drift got an UNSIGNED, always-positive yaw torque:
+                // correct by accident for one steer sign, fighting the steering for the other.
+                // Measured before the fix (drw_right3): full-right + brake at 81 mph latched
+                // state 1 and DriftScale +1.0, yet yaw rate went -0.31 -> +0.73 rad/s (turning
+                // LEFT) with slipX ~ +0.01 -- no slide ever built. The mirrored left run
+                // (sq1_drift2) reached slipX -1.0 and yaw +2.0.
                 const f32 lfSteering =
                     mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.y;
+                lfTorque *= -lfSteering * std::fabs(lfSteering);
+
                 const bool lbCounterSteering = (lfDriftScale * lfSteering) < 0.0f;
                 if (lbCounterSteering)
                 {
                     const f32 lfCounterSteerTorqueScale =
                         lrDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.z;
-                    lfTorque *= -lfSteering * std::fabs(lfSteering) * lfCounterSteerTorqueScale;
+                    lfTorque *= lfCounterSteerTorqueScale;
                 }
             }
         }
@@ -8138,7 +8164,8 @@ namespace Vehicle
     //    signed speed is kept.
     // 3) THE MAX-STEER TARGET (+0x1030.z), four-way (0x825D3984..0x825D3C40):
     //    a. rear wheels sliding (both mbBrokenAdhesiveLimit) AND |GetMaxSteeringAngleDuring-
-    //       Drift(steer)| > |currentRad| AND turning into the slide (sideSpeed*30 < 0):
+    //       Drift(steer)| > |currentRad| AND turning into the slide (sideSpeed*STEER < 0 --
+    //       the steer input, not 30: see D1 at the gate):
     //       GROW  -- current + 0.5deg/frame (unk_82FB9090 = splat(0.5 * pi/180), static-init
     //       @0x82C5CA30 = flt_82001DA0 * flt_8208F5F4), capped at the drift max.
     //    b. |currentRad| > |attribs MaxAngle in rad|: SHRINK -- current - 0.5deg/frame.
@@ -8217,9 +8244,17 @@ namespace Vehicle
                 .mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.w;
 
         f32 lfMaxSteerDeg;
+        // ⛔ D1 (drift-symmetry wave 2026-09-02, asm 0x825D38D4..0x825D395C): the third operand
+        // of this gate is `sideSpeed * lfSteering` -- `stfs f31, var_130` at 0x825D38D4 OVERWRITES
+        // the 30.0 (flt_82004F5C) that the same stack slot held at 0x825D387C, and it is the
+        // steering splat (`lvx128 v11, var_130 ; vspltw v11,v11,0 ; vmulfp128 v11, v0(sideSpeed),
+        // v11`) that feeds `vcmpgtfp128. v12, v119(0), v11`. The old `* 30.0f` was a stack-slot
+        // reuse misread: it made the gate `sideSpeed < 0` -- one-sided -- so only one drift
+        // direction could grow the steering lock toward the drift max. The console's product with
+        // the steer input is symmetric: "turning INTO the slide".
         if (lbRearSliding &&
             std::fabs(lfDriftMaxRad) > std::fabs(lfCurrentRad) &&
-            (0.0f > lfSideSpeed * 30.0f))
+            (0.0f > lfSideSpeed * lfSteering))
         {
             // a. grow toward the drift max, 0.5 deg per frame.
             lfMaxSteerDeg = std::min(lfCurrentRad + KF_HALF_DEG_RAD, std::fabs(lfDriftMaxRad))
