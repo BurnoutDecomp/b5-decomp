@@ -49,6 +49,10 @@ u32 gT5CarCarCalls    = 0;     // DeformableObject::ApplyCarCarImpulse entries
 u32 gT5CarCarApplied  = 0;     // ...that returned true (an impulse actually went into both bodies)
 f32 gT5LastImpulseMag = 0.0f;  // the last car-car impulse LENGTH handed to ApplySensorImpulse
 f32 gT5LastClosing    = 0.0f;  // ...and the closing speed it was solved from
+f32 gT5MaxImpulseMag  = 0.0f;  // the LARGEST car-car impulse length since the window was (re)armed
+f32 gT5SumImpulseMag  = 0.0f;  // ...and their running sum -- the momentum actually delivered
+f32 gT5MaxClosing     = 0.0f;  // the largest closing speed a car-car solve ran on since (re)arming
+f32 gT5ArmedPlayerSpeed = 0.0f; // |player velocity| at the instant the window was (re)armed
 
 namespace
 {
@@ -86,6 +90,16 @@ namespace
             << " tvel=(" << lvVel.x << "," << lvVel.y << "," << lvVel.z << ")"
             << " |tv|=" << lfSpeed;
 
+        // The three numbers a "does it crash hard" claim needs beside the speed: is the body in
+        // its crashing state at all, how fast is it spinning, and has it left the upright.
+        {
+            const Vector3 lvW = lpBody->GetAngularVelocity();
+            *CgsDev::Log::gpDebugPrint
+                << " crashing=" << static_cast<s32>(lpBody->IsCrashing() ? 1 : 0)
+                << " |w|=" << sqrtf(lvW.x * lvW.x + lvW.y * lvW.y + lvW.z * lvW.z)
+                << " upY=" << lpBody->GetTransform().yAxis.y;
+        }
+
         if (lpDriver != 0)
         {
             const BrnPlayerDriverControls* const lpControls = lpDriver->GetControls();
@@ -106,6 +120,10 @@ namespace
             << " ccApplied=" << static_cast<s32>(gT5CarCarApplied)
             << " lastMag=" << gT5LastImpulseMag
             << " lastClose=" << gT5LastClosing
+            << " maxMag=" << gT5MaxImpulseMag
+            << " sumMag=" << gT5SumImpulseMag
+            << " maxClose=" << gT5MaxClosing
+            << " armedPv=" << gT5ArmedPlayerSpeed
             << "\n";
     }
 }
@@ -159,7 +177,8 @@ void PhysicalTrafficManager::UpdateTrafficPhysics(f32 lfSimTimeStep, f32 lfGameT
         --gT5RamFramesLeft;
         static s32 s_iT5Frame = 0;
         liT5Frame = ++s_iT5Frame;
-        lbT5Print = ((liT5Frame % 10) == 1) && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0;
+        // Every frame for the first half second (the impact lives there), then every 10th.
+        lbT5Print = (liT5Frame <= 30 || (liT5Frame % 10) == 1) && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0;
     }
     if (lbT5Print && gT5RamTrafficSlot >= 0
         && static_cast<u32>(gT5RamTrafficSlot) < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC

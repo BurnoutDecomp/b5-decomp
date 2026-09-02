@@ -51,6 +51,8 @@
 #include "GameSource/World/BrnEntityTypes.h"                                       // BrnWorld::E_ENTITYTYPE_*
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"  // BrnTraffic::GetVehicleSpecies
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [T13] witness (opt-in)
+#include <cstdlib>   // getenv (BRN_TRAFFIC_DIAG)
 
 namespace BrnPhysics
 {
@@ -58,6 +60,12 @@ namespace Vehicle
 {
 namespace
 {
+    // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Same switch as the traffic response arms.
+    bool TrafficArmsDiagEnabled()
+    {
+        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
+        return sbEnabled;
+    }
     // flt_82092BC4 * flt_82F31928 (`fmuls f0, f0, f13` @0x8263EEE0): the closing speed, along the
     // contact normal, above which a traffic-vs-traffic contact CRASHES both cars instead of
     // slamming them. 60 mph, converted at the call site, not a pre-baked m/s literal.
@@ -153,6 +161,32 @@ void VehicleManager::HandleTrafficCarTrafficCarPotentialContact(
         (BrnTraffic::GetVehicleSpecies(EntityIndexOfWord(luTrafficAGlobalWord)) == BrnTraffic::Vehicle::E_SPECIES_TRAILER);   // r23
     const bool lbBIsTrailer =
         (BrnTraffic::GetVehicleSpecies(EntityIndexOfWord(luTrafficBGlobalWord)) == BrnTraffic::Vehicle::E_SPECIES_TRAILER);   // r18
+
+    // ---- [T13] DIAG. NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG). DELETE-WHEN-STABLE. ----
+    // What reaches this arm and what it does with it: the two slots, both states, the closing
+    // speed against its 60 mph gate, the trailer bits. PredictCarCarIntersection is still the
+    // tree's `true` stand-in, so this is also the count of pairs a real predictor would have had
+    // the chance to reject. First 40 arrivals, then every 200th.
+    {
+        static u32 s_uArrivals = 0u;
+        ++s_uArrivals;
+        if (TrafficArmsDiagEnabled() && CgsDev::Log::gpDebugPrint != 0
+            && (s_uArrivals <= 40u || (s_uArrivals % 200u) == 0u))
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[T13] n=" << static_cast<s32>(s_uArrivals)
+                << " slotA=" << static_cast<s32>(lu16TrafficAIndex)
+                << " stateA=" << static_cast<s32>(lpTrafficA->mePhysicalTrafficState)
+                << " slotB=" << static_cast<s32>(lu16TrafficBIndex)
+                << " stateB=" << static_cast<s32>(lpTrafficB->mePhysicalTrafficState)
+                << " closing=" << lfClosingSpeed
+                << " vs " << (KF_TRAFFIC_TRAFFIC_CRASH_SPEED_MPH * KF_TRAFFIC_MPH_TO_MPS)
+                << " hard=" << (lbHardHit ? 1 : 0)
+                << " trailerA=" << (lbAIsTrailer ? 1 : 0) << " trailerB=" << (lbBIsTrailer ? 1 : 0)
+                << " massA=" << lpBodyA->GetMass().x << " massB=" << lpBodyB->GetMass().x
+                << "\n";
+        }
+    }
 
     // ---- the A half (0x8263EF40..0x8263F008): A is the victim, B the crasher --------------------
     if (lbHardHit || lbAIsTrailer)

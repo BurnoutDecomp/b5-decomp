@@ -12,6 +12,11 @@
 #include "GameSource/Jobs/Traffic/BrnTrafficSwerveWatch.h"  // [diag] BRN_FRAME_DUMP_ARM
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [diag] BRN_FRAME_DUMP_ARM=slomo
 
+// [diag] BRN_FRAME_DUMP_ARM=ram -- the [T5-ram] post-hit window (BrnPhysicalTrafficManager_
+// UpdateTrafficPhysics.cpp). >= 0 from the first race-car-vs-traffic outcome onwards. NOT in the
+// X360 binary; declared locally by the same convention as the two latches above.
+namespace BrnPhysics { namespace Vehicle { extern s32 gT5RamTrafficSlot; extern f32 gT5ArmedPlayerSpeed; } }
+
 // PC / D3D9 renderengine device bring-up, reversed from TUB (Burnout Paradise: The
 // Ultimate Box):
 //   renderengine::Device::Initialize  @ TUB 0x7CC080  - display + settings init
@@ -335,9 +340,14 @@ static void DumpBackBufferIfRequested()
         //   unset / "0"  -- no arm; dump from the first present (the original behaviour)
         //   "slomo"      -- hold until the simulation timestep leaves real time
         //                   (BrnDiag::gFilmLatch, raised by BrnGameModule::UpdateTimers)
+        //   "ram[:<mps>]" -- hold until a race-car-vs-traffic outcome opens the [T5-ram]
+        //                   window (gT5RamTrafficSlot >= 0) with the player at or above <mps>
+        //                   metres per second (default 0), so a traffic-hit film starts at THE
+        //                   impact that matters instead of at boot or at the first brush
         //   anything else truthy -- hold until the traffic swerve camera latches (the
         //                   original arm; unchanged, so every existing recipe still works)
-        static int siArm = -1;      // 0 none, 1 swerve camera, 2 slomo
+        static int siArm = -1;      // 0 none, 1 swerve camera, 2 slomo, 3 traffic ram
+        static f32 sfRamMinSpeed = 0.0f;
         static u32 suMax = 0u;
         if (siArm < 0)
         {
@@ -350,6 +360,11 @@ static void DumpBackBufferIfRequested()
             else if (_stricmp(lacArm, "slomo") == 0)
             {
                 siArm = 2;
+            }
+            else if (_strnicmp(lacArm, "ram", 3) == 0)
+            {
+                siArm = 3;
+                if (lacArm[3] == ':') { sfRamMinSpeed = static_cast<f32>(atof(lacArm + 4)); }
             }
             else
             {
@@ -369,6 +384,11 @@ static void DumpBackBufferIfRequested()
             return;
         }
         if (siArm == 2 && BrnDiag::gFilmLatch.muSlomoLatched == 0u)
+        {
+            return;
+        }
+        if (siArm == 3 && (BrnPhysics::Vehicle::gT5RamTrafficSlot < 0
+                           || BrnPhysics::Vehicle::gT5ArmedPlayerSpeed < sfRamMinSpeed))
         {
             return;
         }
