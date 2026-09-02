@@ -1727,7 +1727,10 @@ namespace Deformation
             if (!lbDetach && mbForceWheelsToDetach)                                        // lbz 0x672D
                 lbDetach = true;
 
-            if ( lbProbe && ( siWheelProbeLines < 400 || lbDetach ) )
+            // The twisting arm prints UNCAPPED: it only runs for a wheel that has already twisted
+            // (a handful of frames per crash), and the 400-line cap above is spent by the state-0
+            // lines long before it (measured wheelw_r4: cap gone, the twisting frames invisible).
+            if ( lbProbe )
             {
                 ++siWheelProbeLines;
                 *CgsDev::Log::gpDebugPrint
