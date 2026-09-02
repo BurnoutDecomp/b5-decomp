@@ -663,8 +663,14 @@ namespace Deformation
 		           "mVehicleBody.GetVehiclePhysics() != NULL");   // BrnDeformableObject.cpp:4075 (non-gating)
 
 		// limits = mpAttribs->mBaseAttribs.mDrivetimeDeformLimits (`*(vehiclePhysics+0x720) + 0x40`).
-		const char* lpAttribs =
-			*reinterpret_cast<const char* const*>(reinterpret_cast<const char*>(lpPhysics) + KU_VEHICLE_ATTRIBS_PTR_OFFSET);
+		// ⭐⭐ CORRECTED 2026-09-02 (deformation wave): read the NAMED member. This body used to
+		// dereference the CONSOLE byte offset 0x720 on the x64 VehiclePhysics object, where the
+		// widened layout does not keep mpAttribs -- so it read a zero word and took the NULL arm on
+		// EVERY reset (run deformw_B1: the gate fired for owner 1 at present 1491 while the witness
+		// in the same ResetDeformation read GetAttribs() == {0.05,0.2,0.15,0.4}). Result: the
+		// drive-time box was never widened; lim == rest box for the whole run, so with the owner
+		// gate fixed a 1 cm dent would have read as "beyond limits".
+		const BrnPhysics::Vehicle::VehicleAttribs* lpAttribs = lpPhysics->GetAttribs();
 		// [marked deviation, 2026-08-14 deformation-mount wave] mpAttribs NULL-guard. On the
 		// console mpAttribs is never null here (VehiclePhysics::Construct seeds it at the embedded
 		// attrib set before any car exists); on this build the per-car Construct chain is still
@@ -690,8 +696,7 @@ namespace Deformation
 			mDriveTimeBBoxLimitMax = lvMax;
 			return;
 		}
-		const Vector4& lvLimits =
-			*reinterpret_cast<const Vector4*>(lpAttribs + KU_DRIVETIME_DEFORM_LIMITS_OFFSET);
+		const Vector4& lvLimits = lpAttribs->mBaseAttribs.mDrivetimeDeformLimits;   // attribs + 0x40
 
 		// Widen per axis (the recovered vrlimi128 lane writes):
 		//   max.x -= limits.x ; max.y -= limits.y ; max.z -= limits.w
