@@ -1,6 +1,6 @@
 #include "types.hpp"
-
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/Replays/Serialisers/BrnReplayEffectsSerialiser.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   (BrnReplays::EffectsSerialiser)
@@ -23,107 +23,63 @@
 // BaseSerialiser: Construct parameterises BaseSerialiser::Construct with this
 // stream's id (8), buffer size (4816), static size (4784) and channel name
 // ("Effects"); the rest forward into the shared lock/transfer machinery.
-// BaseSerialiser is reconstructed by its own TU; here a semantic-parity slice is
-// declared for the compile-only gate (named members only, NOT byte-exact — the
-// full layout + bodies live in BaseSerialiser's TU).
-
+//
+// 2026-09-02 (tyre-mark wave): this TU used to carry its OWN 3-member
+// `struct BaseSerialiser { meMode; mpStaticBuffer; miStaticBufferSize; }` and a
+// private EffectsSerialiser over it -- a fork of the real BrnReplayBaseSerialiser.h
+// layout (mpStaticBuffer @+0x18 there, @+0x04 here). The bodies now run on the real
+// class the header declares; nothing else changed.
 namespace BrnReplays
 {
-    struct BaseSerialiser
-    {
-        // DWARF: BrnReplayBaseSerialiser.h:54 — full mode enum.
-        enum EMode
-        {
-            E_MODE_IDLE                = 0,
-            E_MODE_RECORDING_PREPARING = 1,
-            E_MODE_RECORDING           = 2,
-            E_MODE_RECORDING_STALLED   = 3,
-            E_MODE_PLAYING_PREPARING   = 4,
-            E_MODE_PLAYING             = 5,
-            E_MODE_PLAYING_STALLED     = 6,
-            E_MODE_RESTORING           = 7,
-            E_MODE_COUNT               = 8
-        };
-
-        // Only the members EffectsSerialiser actually touches are modelled here.
-        // BaseSerialiser owns several more (mbLocked, mpBuffer, miBufferSize,
-        // macName, mfTime, ...); deferred to its own TU.
-        EMode meMode;
-        void* mpStaticBuffer;
-        s32   miStaticBufferSize;
-
-        // Declare-only: defined in BaseSerialiser's TU.
-        int Construct(int nId, int nMode, int nBufferSize, int nStaticSize,
-                      const char* pName, int nFlag);
-        void Lock();
-        int  Unlock();
-
-        // Sized transfer overloads (used by Read() and Write()).
-        int Write(const void* lpData, int nSize);
-        int Read(void* lpData, int nSize);
-    };
-
-    struct EffectsSerialiser : BaseSerialiser
-    {
-        int   Construct();
-        void* GetStaticLayout();
-        int   Read();
-        int   Write();
-    };
-
-    int EffectsSerialiser::Construct()
+    s32 EffectsSerialiser::Construct()
     {
         return BaseSerialiser::Construct(8, 0, 4816, 4784, "Effects", 0);
     }
 
-    void* EffectsSerialiser::GetStaticLayout()
+    EffectsSerialiserStaticLayout* EffectsSerialiser::GetStaticLayout()
     {
-        CGS_ASSERT(miStaticBufferSize >= 4784, "Static buffer size is too small\n");
-        return mpStaticBuffer;
+        CGS_ASSERT(miStaticBufferSize >= EffectsSerialiserStaticLayout::KI_STATIC_LAYOUT_SIZE,
+                   "Static buffer size is too small\n");
+        return reinterpret_cast<EffectsSerialiserStaticLayout*>(mpStaticBuffer);
     }
 
-    int EffectsSerialiser::Read()
+    s32 EffectsSerialiser::Read()
     {
         BaseSerialiser::Lock();
-
-        void* lpStatic = GetStaticLayout();
+        EffectsSerialiserStaticLayout* lpStatic = GetStaticLayout();
         CGS_ASSERT(lpStatic != nullptr, "lpStatic");
-
         switch (meMode)
         {
         case E_MODE_RECORDING:
-            BaseSerialiser::Write(lpStatic, 4784);
+            BaseSerialiser::Write(lpStatic, EffectsSerialiserStaticLayout::KI_STATIC_LAYOUT_SIZE);
             break;
         case E_MODE_PLAYING:
-            BaseSerialiser::Read(lpStatic, 4784);
+            BaseSerialiser::Read(lpStatic, EffectsSerialiserStaticLayout::KI_STATIC_LAYOUT_SIZE);
             break;
         default:
             break;
         }
-
-        return BaseSerialiser::Unlock();
+        return BaseSerialiser::Unlock() ? 1 : 0;
     }
 
-    int EffectsSerialiser::Write()
+    s32 EffectsSerialiser::Write()
     {
         BaseSerialiser::Lock();
-
-        void* lpStatic = GetStaticLayout();
+        EffectsSerialiserStaticLayout* lpStatic = GetStaticLayout();
         if (lpStatic)
         {
             switch (meMode)
             {
             case E_MODE_RECORDING:
-                BaseSerialiser::Write(lpStatic, 4784);
+                BaseSerialiser::Write(lpStatic, EffectsSerialiserStaticLayout::KI_STATIC_LAYOUT_SIZE);
                 break;
             case E_MODE_PLAYING:
-                BaseSerialiser::Read(lpStatic, 4784);
+                BaseSerialiser::Read(lpStatic, EffectsSerialiserStaticLayout::KI_STATIC_LAYOUT_SIZE);
                 break;
             default:
                 break;
             }
         }
-
-        return BaseSerialiser::Unlock();
+        return BaseSerialiser::Unlock() ? 1 : 0;
     }
 }
