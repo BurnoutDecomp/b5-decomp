@@ -435,6 +435,28 @@ namespace Vehicle
         // it BY NAME instead of by offset; it invents no API surface beyond the read.
         const CgsGeometric::AxisAlignedBox& GetDeformableAABB() const { return mDeformableAABB; }
 
+        // ------------------------------------------------------------------------------------
+        // ResetDeformableAABB -- DWARF BrnSimpleVehiclePhysics.h:348 (declared by name in the
+        // DecFIGS class outline; the X360 has no out-of-line copy because the ONE caller inlines
+        // it). Snap the deformed box back onto the undeformed one.
+        //
+        // X360 attestation -- VehicleManager::SetRaceCarCrashing @0x82635438..0x82635468, the
+        // whole inlined body, load for store (r11 == the SimpleVehiclePhysics sub-object base):
+        //     0x82635438  addi r10, r11, 0x6F0     ; src = &mOriginalAABB
+        //     0x8263543C  addi r9,  r11, 0x6D0     ; dst = &mDeformableAABB
+        //     0x8263544C  ld   r9, 0(r11)   0x82635450  ld r7, 8(r11)
+        //     0x82635454  ld   r6, 0x10(r11) 0x82635458  ld r11, 0x18(r11)
+        //     0x8263545C  std  r9, 0(r10)   0x82635460  std r7, 8(r10)
+        //     0x82635464  std  r6, 0x10(r10) 0x82635468  std r11, 0x18(r10)
+        // -- four `ld`/`std` pairs == the 32 bytes X360Layout::KU_SVP_AABB_SIZE below, i.e. one
+        // whole AxisAlignedBox. Same additive-seam shape as the accessors around it: no member,
+        // no layout, no existing signature is touched.
+        // ⭐ ADDED 2026-09-02 (deform close-out wave). Until now NOTHING in the tree restored
+        // mDeformableAABB, so the box a crash grew stayed grown -- and since 97c3a7e1 made it the
+        // CLAMP SOURCE for UpdateSkinningOffsets, a stale one also mis-clamps the next impact.
+        // ------------------------------------------------------------------------------------
+        void ResetDeformableAABB() { mDeformableAABB = mOriginalAABB; }   // DWARF :348
+
         bool     IsFatallyCrashing() const { return mbStartedFatallyCrashing; }      // @0x711 (`lbz r11,0x711(r30)`)
         bool     HasStartedDeforming() const { return mbStartedDeforming; }          // @0x712 (`lbz r11,0x712(r30)`)
         // ADDITIVE named seats (2026-09-02, traffic-deformation wave) for the two latches
