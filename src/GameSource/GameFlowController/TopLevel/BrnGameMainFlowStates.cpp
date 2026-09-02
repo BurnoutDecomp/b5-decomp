@@ -252,13 +252,27 @@ bool LoadingScriptedState::LoadWorldModule(BrnResource::GameDataIO::InputBuffer*
 // into the GameData input buffer. That forward is what carries the "TRK_COLL" LoadBundle and
 // then the 396 "TRK_CLIL<n>" AcquireResourceList requests into the GameData pump.
 //
-// The X360's true arm calls BrnEffects::EffectsModule::PostWorldPreparePrepare @0x822902F0
-// (136 insns). NOT LANDED: that body is 100% AttribSys reads (GetCollectionWithDefault /
-// GetAttributePointer / GetCollection) storing into EffectsModule's members, and the PC
-// EffectsModule is still `u8 mOpaqueBody[0x2F550]` -- writing into an opaque slice at console
-// byte offsets is the memory-bug class this project forbids. It configures debris/particle
-// attributes and feeds nothing on the collision path, so its absence cannot block the load.
-// [deferred: EffectsModule::PostWorldPreparePrepare -- EffectsModule layout is opaque]
+// ⭐⭐ THE X360's TRUE ARM CALLS BrnEffects::EffectsModule::PostWorldPreparePrepare @0x822902F0,
+// AND IT NOW RUNS. The deferral note that stood here said "the PC EffectsModule is still
+// `u8 mOpaqueBody[0x2F550]` -- writing into an opaque slice at console byte offsets is the
+// memory-bug class this project forbids". That was true when it was written and is STALE: the
+// real EffectsModule, with named members (mSurfaceList at EffectsModule.h:381), has been on the
+// build list since the effects wave, and this file's own stage 2 already drives its Prepare.
+//
+// The note also said its absence "cannot block the load" -- true, and beside the point. It is
+// the ONLY writer of mSurfaceList, and the surface list is the tyre mark's LAST GATE:
+// HandleWheels @0x82296C80 reads SkidMarksEnabled / the threshold / the type out of the
+// surface's visualfxsurface sub-collection, and falls back to a ZEROED
+// Attrib::DefaultDataArea(24) when the lookup fails. MEASURED with it deferred (runs 14-16,
+// BRN_SKID_PROBE, 368 gate lines on the road):
+//     [skid] ... surf=1/0 ref=0 en=0 skid=0.0440 > thr=0.0000 type=0 ready=1
+//     [skid] ... surf=2/0 ref=0 en=0 skid=0.0452 > thr=0.0000 type=0 ready=1
+// `/0` is Num_Surfaces() and `ref=0` is Surfaces(id) returning null -- an EMPTY list, because
+// nothing had ever pointed the instance at the world's surfacelist collection. Three adjacent
+// zeros that read exactly like a surface with skid marks deliberately switched off.
+//
+// A "gate is stale, not dead" case, and the question that found it is the one that note could
+// not answer: WHEN DID THIS LAST RUN? Never.
 // ⭐ ARITY from the DecFIGS DWARF (BrnGameMainFlowStates.h:52 --
 // `bool LoadWorldCollision(InputBuffer*, const OutputBuffer*)`), NOT from the IDA export
 // prototype, which reports only `(a1, a2)`: the console body never reads the GameData
@@ -282,14 +296,20 @@ bool LoadingScriptedState::LoadWorldCollision(BrnResource::GameDataIO::InputBuff
 
     if (lbPrepared)
     {
+        // The console's own position: the collision prepare has finished, so the world's
+        // surfacelist collection exists and the effects module can point its instance at it
+        // and push every surface's skid-mark colour pair into the trail system.
+        lpGameModule->GetEffectsModule().PostWorldPreparePrepare();
+
         static bool s_bLoggedPostWorldPrepare = false;
         if (!s_bLoggedPostWorldPrepare)
         {
             s_bLoggedPostWorldPrepare = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "LoadWorldCollision: EffectsModule::PostWorldPreparePrepare (0x822902F0) "
-                       "skipped -- EffectsModule body is opaque [FLAG PC boot gate]\n";
+            char lacMsg[160];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[skid-ready] PostWorldPreparePrepare ran -- surface list now has %d surfaces\n",
+                lpGameModule->GetEffectsModule().SurfaceList().Num_Surfaces());
+            CgsDev::Log::WriteToLog(lacMsg);
         }
     }
     else if (lpGameDataInputBuffer != 0)
