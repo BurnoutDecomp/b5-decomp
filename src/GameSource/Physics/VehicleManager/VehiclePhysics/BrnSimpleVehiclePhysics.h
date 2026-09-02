@@ -437,6 +437,16 @@ namespace Vehicle
 
         bool     IsFatallyCrashing() const { return mbStartedFatallyCrashing; }      // @0x711 (`lbz r11,0x711(r30)`)
         bool     HasStartedDeforming() const { return mbStartedDeforming; }          // @0x712 (`lbz r11,0x712(r30)`)
+        // ADDITIVE named seats (2026-09-02, traffic-deformation wave) for the two latches
+        // DeformableObject::ApplySensorImpulse @0x826078B0 pokes STRAIGHT into the body it owns
+        // (`lwz r10, 0x194C(this)` == mpVehicle, then `stb 1, 0x712(r10)` @0x82607F28 for every
+        // owner and `stb 1, 0x711(r10)` @0x82607F44 when the owner byte is TRAFFIC_VEHICLE).
+        // Read back by VehicleOutputInterface::WriteOut* as PhysicalTrafficState::mbIsDeforming /
+        // mbIsFatallyCrashing and by TrafficPhysics::Update. Same seam shape as the read-only
+        // accessors above; no layout change. Cleared by Prepare (@0x8262FE90) and
+        // DeformableObject::ResetDeformation (@0x8263A594).
+        void     SetStartedDeforming()       { mbStartedDeforming = true; }         // @0x712
+        void     SetStartedFatallyCrashing() { mbStartedFatallyCrashing = true; }   // @0x711
         const AboveGroundTestResult* GetAboveGroundTestResult() const                // @0x570 (`addi r11,r31,0x570`)
         {
             return &mAboveGroundTestResult;

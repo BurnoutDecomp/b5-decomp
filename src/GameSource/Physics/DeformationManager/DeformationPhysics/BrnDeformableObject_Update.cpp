@@ -15,6 +15,7 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"  // CgsGeometric::Sphere (walls leg 9: the sensor radius the limit rows pad by)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"  // VehicleAttribs::mCollisionAttribs (the P4 car-car impulse scale, 2026-08-24)
 #include <cmath>                                                              // std::sqrt (the P4 tangential magnitude)
+#include "GameSource/World/BrnEntityTypes.h"                                  // BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE (the ApplySensorImpulse owner test)
 
 // =================================================================================================
 // BrnPhysics::Deformation::DeformableObject -- the per-frame UPDATE core (group "update").
@@ -843,11 +844,22 @@ namespace Deformation
             CGS_ASSERT(lfProjection == lfProjection,
                        "Invalid sensor impulse magnitude:\nlfImpulseMagnitude = ");   // line 1430
 
-            // latch the deformation flag: this deformed this frame (this +26408). The vehicle's
-            // received-impulse (+1810) and the GetHandlingBodyIdHighByte()==2 crashed-contact (+1809,
-            // gated on HIBYTE(*(this+26384)) per asm 1919) latches live on the physics body (un-named on
-            // the minimal slice -- documented, not poked).
+            // latch the deformation flags (0x82607F1C..0x82607F44): this deformed this frame
+            // (this +26408); the owning body has STARTED DEFORMING (`stb 1, 0x712(mpVehicle)`);
+            // and, when the owner byte of mGlobalEntityId (+26384) is TRAFFIC_VEHICLE (2), the
+            // body has STARTED FATALLY CRASHING (`stb 1, 0x711(mpVehicle)`) -- on the console a
+            // traffic car that takes ANY sensor impulse is a wreck.
+            // ⭐ 2026-09-02 (traffic-deformation wave): the two body latches were "documented,
+            // not poked" here -- a silent drop. MEASURED (run tdef_r2): 526 [impulse] applies
+            // into a traffic car, mbIsDeforming 0 on every PhysicalTrafficState it published,
+            // so RenderTrafficCar's deforming arm (constant 22 = the live skin block) never ran
+            // and no traffic dent could reach the mesh. Both live now, by name.
             mbHasDeformedThisFrame = true;   // this +26408 (deformed-this-frame latch)
+            lpVehicle->SetStartedDeforming();                                   // vehicle +0x712
+            if ( GetHandlingBodyIdHighByte() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE )   // HIBYTE(this+26384) == 2
+            {
+                lpVehicle->SetStartedFatallyCrashing();                         // vehicle +0x711
+            }
 
             // dispatch into the sensor body: lpSensor->ApplyLocalImpulse(&v215). CollidableBody vtable
             // slot 0 (the `(**a37)(a37, v215)` indirect call).
