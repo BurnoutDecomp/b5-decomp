@@ -255,6 +255,42 @@ namespace BrnPhysics
     //     bump-stop translation (VehiclePhysics::UpdateSuspensionPostSimulation @0x825F6BB0) moves
     //     mTransform.wAxis WITHOUT touching velocity, so a pose jump with no velocity change is a
     //     different mechanism and must be visible as such.
+    //
+    // ⛔⛔ THIS PROBE HAS NEVER BEEN SEEN TO FIRE. It compiles, it is gated, and its arming and
+    // print paths are un-exercised: four runs were spent trying to reproduce the event and the
+    // harness's DRIVE verdict said "*** THE CAR NEVER MOVED ***" on every one. So before drawing
+    // ANY conclusion from a quiet [dv] run, make the probe fail first: drive into something at
+    // speed with BRN_DV_PROBE=2 and confirm a [dv] STEP line appears. A verification you have not
+    // seen fail is not a verification.
+    //
+    // ⚠️⚠️ AND HERE IS WHY THOSE FOUR RUNS DIED, written down so the next wave does not re-spend
+    // them. All four were in the isolated worktree D:\wt1; none of it was the game code.
+    //   run 1  b5 adafe4e7            asserts 3967 ("Not locked for writing",
+    //                                 BrnEffectsModuleIO_OutputBuffer.cpp:76). DRIVING reached at
+    //                                 74.2 s (the main tree does it in 27.6 s), then the PHYSICS
+    //                                 froze: [kerb-car] stopped at frame 2076 while [motion] ran
+    //                                 on to present 9600 with a bit-identical pose.
+    //   run 2  b5 f8f5920c            asserts 4359, wedged at CARSELECT; 7622 of them were
+    //                                 "Not locked for writing" at BrnGameStateModuleIO.cpp:455,
+    //                                 fired from BrnGameModule::GameMain once per frame.
+    //   -- then the worktree's CONVERTED DATA was found to be incomplete: D:\wt1\build\game held
+    //      10153 files against the main tree's 11745, and 1749 world `obj` bundles were missing.
+    //      Syncing the main tree's data in CHANGED WHICH ASSERT FIRES rather than curing it. --
+    //   run 3  b5 6cce3745            the GameState storm gone; 5838 asserts of "Not Constructed"
+    //                                 (CgsVariableEventQueue.h:367) from
+    //                                 EffectsModule::UpdateActiveRaceCars. Wedged at CARSELECT.
+    //   run 4  b5 08b7c3fd + this     THE SAME ASSERT, 21380 of them, wedged at the junkyard spawn.
+    // ⭐ Run 4 is the one that settles the attribution: 08b7c3fd is the EXACT base the st_scoutB
+    // run drove on, and st_scoutB logged asserts=0. Same b5 commit, same parent mount set, same
+    // recipe, opposite outcome ⇒ THE VARIABLE IS NOT THE b5 COMMIT. It is the environment, and two
+    // candidates remain UNISOLATED: (a) a worktree's converted game data is not the same set as the
+    // main tree's (all four worktrees are short of `obj`: wt1 4362, wt2 3900, wt3 3884,
+    // wt_deformw 4256 against main's 6111), and (b) a second wave's harness was live on the box
+    // throughout (two pwsh harness processes started 23:36 and 23:38 alongside these runs), which
+    // is exactly the one-harness-at-a-time rule _box_lock.ps1 exists to enforce.
+    // ⇒ DO NOT read any of this as "the effects/replay waves broke the build". That claim was
+    //   made and withdrawn inside this same wave once already, on run 1's evidence, and it was
+    //   wrong: reproducible was not attributable.
     const ExternalPhysicsBody* gpDvWatchBody = nullptr;
 
     namespace

@@ -178,8 +178,23 @@ namespace Vehicle
     // (D) mi8NumWorldCollisions "3..15 on ~7% of flat-tarmac frames" is EXPLAINED, not a bug:
     //     [wsus] nwc over run r4 is 0 on 59322 steps and 6 on 8019 (11.8% non-zero), and the
     //     matching [kerb] lines show them to be body-shell sensor spheres touching the ROAD
-    //     (triN ~ (0, 1, 0)), classified curb, culled to the wheel plane, no impulse. That is what
+    //     (triN ~ (0, 1, 0)), classified curb, culled to the wheel plane. That is what
     //     gfGroundContactCullHeight exists for; the console produces them too.
+    //     ⚠️ CORRECTED 2026-09-03: this used to end "culled to the wheel plane, NO IMPULSE", and
+    //     that half cannot be true. mi8NumWorldCollisions (+0x1353) has exactly three writers in
+    //     the whole tree -- ApplyWallContactImpulse @0x825FEA18 (unconditional),
+    //     ApplyCrashedContactImpulse @0x825D4D50 and ApplyShowtimeContactImpulse @0x825D4E00
+    //     (both on their zero-response arm) -- and ALL THREE bank an impulse through
+    //     AddWorldSpaceImpulse before returning; the counter is zeroed at the top of
+    //     DeformableObject::UpdateContacts @0x826478B0's apply phase. So `nwc == 6` MEANS six
+    //     world impulses were applied that step. They are the culled contacts re-pointed to the
+    //     car's up axis, i.e. the ground pushing the car UP -- benign, and exactly what the cull
+    //     is for -- but they are impulses, and [kerb-imp] prints one line for each of them.
+    //     ⭐ AND THE CORRECTION HAS A CONSEQUENCE, which is why it is worth the paragraph:
+    //     UpdateSuspensionPostSimulation @0x825F6BB0 gates its inanimate-world RECOVERY IMPULSE
+    //     arm on `mi8NumWorldCollisions == 0`. So the two arms ALTERNATE on flat tarmac: on the
+    //     11.8% of steps the world-contact arm fires, the recovery arm is suppressed; on the
+    //     other 88.2% the recovery arm is the only thing applying impulses at all.
     //
     // (E) A KERB TALLER THAN 0.25 m -- TESTED 2026-09-02, AND `wall` IS THE CONSOLE'S OWN ANSWER.
     //     The previous wave left this as the leading remaining candidate for "the curbs are still
@@ -243,7 +258,81 @@ namespace Vehicle
     //       empty road, the raised pavement, the fence and a "NO TOWING" sign, and NO traffic car
     //       anywhere. Eight of those frames are kept beside the run under frames/keep/.
     //
-    // ⛔ WHAT THIS WAVE DID NOT DO. It did not reproduce the 106 mph one-step 6.2 mph loss (open).
+    // ==============================================================================================
+    // (F) THE ONE-STEP SPEED LOSS, RE-READ FROM THE COMMITTED st_scoutB LOG (2026-09-03). No new
+    //     run: every number below is in scratch/flow_run/st_scoutB/BrnGame.log, which the previous
+    //     wave already captured. Two things it was believed to show are wrong.
+    //
+    //     ⭐ (F1) "28.7 -> 8.1 mph IN ONE STEP at f1012->f1013" IS A DISPLAY ARTEFACT. The mph
+    //     field in [kerb]/[kerb-car] is mfSpeedMPH, a CACHE recomputed once per step, and it lags
+    //     the live velocity by one step. The f1012 line says so on its own face:
+    //         [kerb-car] f 1012 ... vel -0.228203 -0.593689 -3.206746 mph 28.650387
+    //     -- a 3.26 m/s velocity (7.3 mph) printed beside a 28.65 mph label. Read the VELOCITY:
+    //         f1011  vel (-0.166688, -0.595939, -12.654400)   pos (3384.4275, 0.21091, -1709.7499)
+    //         f1012  vel (-0.228203, -0.593689,  -3.206746)   pos (3384.4231, 0.20468, -1709.7620)
+    //     The real event is f1011 -> f1012: 9.45 m/s lost in ONE step, essentially all of it
+    //     along +z, i.e. straight against travel. The mph column then catches up at f1013 (7.997)
+    //     and that catch-up is what four reads mistook for the event.
+    //
+    //     ⛔ (F2) THE DEFORMATION-ARM LEAD IS REFUTED FOR THIS EVENT. The standing hypothesis was
+    //     that a culled contact still feeds the deformation route, and the evidence offered was
+    //     "[kerb-imp] recorded impulses of 590 and 256 N.s". Those lines are at f1013 --
+    //     grep says there is NO [kerb-imp] line at f1011 or f1012 at all -- and their normals are
+    //     (-0.494, 0.862, 0.114) / (-0.004, 1.000, -0.017) / (-0.006, 1.000, -0.021) with negative
+    //     closing speeds: the car SETTLING onto the ground after it had already stopped. They are
+    //     the aftermath, not the cause. f1011 carried 3 world contacts and f1012 carried 2, every
+    //     one curb 1 / wall 0, both culls firing, re-pointed to the up axis.
+    //     ⇒ 9.45 m/s left the car in a step with ZERO world impulses. The mechanism is not on the
+    //       world-contact path, so no amount of re-reading [kerb]/[kerb-imp] can name it.
+    //
+    //     ⚠️ (F3) AND THE POSE MOVED TOO, by something other than the integrate. dp over that step
+    //     is (-0.004394, -0.006230, -0.012085). Against v_before that implies dt = 0.0264 / 0.0104
+    //     / 0.00096 s on the three axes; against v_after, 0.0193 / 0.0105 / 0.0038. No single dt
+    //     fits either, so mTransform.wAxis was written by more than IntegrateTransform. The
+    //     post-sim bump-stop translation (UpdateSuspensionPostSimulation @0x825F6BB0,
+    //     `mTransform.wAxis += penetrationNormal * dot(up*maxPen, penetrationNormal)`) is the only
+    //     other writer in the step and is the obvious suspect -- UNMEASURED, stated as a lead.
+    //
+    //     ⭐ (F4) THE MECHANISM INVENTORY -- every way a race car's velocity can change in one
+    //     PhysicsModule::Update, so the next wave starts from a closed list instead of a hunch:
+    //       * ExternalPhysicsBody::CalculateNewVelocity @(PS3 twin; X360 called from 7 sites) --
+    //         THE funnel: v += (F*dt + J) / m, then the four accumulators are cleared. Everything
+    //         that calls itself an "impulse" arrives here.
+    //       * ReadUpdatedBodies @0x82619A10 -- v.y -= KF_GRAVITY*dt, then IntegrateTransform. The
+    //         only place the pose advances.
+    //       * ⭐ UpdateSuspensionPostSimulation @0x825F6BB0, the `mi8NumWorldCollisions == 0` arm:
+    //         per COMPRESSED TRACTION spring, CalculateCollisionImpulseWithInanimateObject with
+    //         restitution unk_8208FB10 == 0xBF333333 == -0.7 (image-read this wave) along THAT
+    //         WHEEL'S ROAD-CONTACT NORMAL, then AddLocalImpulse + CalculateNewVelocity, up to four
+    //         times. Wheel::SetRoadContact @0x825D6C08 only requires `normal.y > 0.5` for
+    //         traction, so that normal may be ~60 deg off vertical and the impulse up to ~83%
+    //         HORIZONTAL. Magnitude is 0.3 * |v.n| * m_eff: at |v.n| = 12 m/s and m = 1400 kg that
+    //         is ~3.6 m/s PER WHEEL -- four wheels span the whole 9.45 m/s. This arm prints
+    //         nothing unless BRN_WHEEL_SUS_PROBE is set ([wsus-imp]), which is why five waves of
+    //         [kerb] logs could not see it.
+    //       * ⭐ StabiliseAfterHardLanding (called from the same function, just above): a DIRECT
+    //         VELOCITY REWRITE, not an impulse --
+    //             mLinearVelocity -= agNormal * (dot(v, agNormal) * pow(damp, dt*60))
+    //         gated on `TimeSinceHardLanding < TimeToDampAfterLanding`. No impulse probe anywhere
+    //         can see this one; only a before/after sample can.
+    //       * The showtime arms (SetPlayerVehicleInShowtime's 20 m/s launch overwrite,
+    //         CapShowtimeVelocities, UpdateShowtimePhysics's vertical floor) -- all direct writes,
+    //         all dead on the free-burn path.
+    //     ⇒ THE WITNESS FOR THIS IS [dv] (BRN_DV_PROBE=<m/s>), landed 2026-09-03 in
+    //       ExternalPhysicsBody.cpp: it samples the player body at eight stage boundaries of
+    //       PhysicsModule::Update, records every drain in between with its banked J / F*dt / the
+    //       caller's return address, and prints the ledger ONLY for a step whose |dv| crosses the
+    //       threshold. A direct rewrite shows up as a mark-to-mark delta with no drain in it.
+    //
+    // ⛔ WHAT THIS WAVE DID NOT DO. IT DID NOT REPRODUCE EITHER EVENT. Four runs were spent and
+    //     none of them drove: the harness's own DRIVE verdict said
+    //     "*** THE CAR NEVER MOVED ***" on every one. The blocker is environmental, not the
+    //     game code, and it is written up so the next wave does not re-spend the same four runs --
+    //     see the [dv] banner in ExternalPhysicsBody.cpp. So the [dv] witness is LANDED AND
+    //     COMPILE-GATED BUT NEVER SEEN TO FIRE: treat it as untested instrumentation, and the
+    //     first thing to check on the next run is that a deliberate hard stop DOES produce a
+    //     [dv] STEP line at all.
+    // ⛔ It did not reproduce the 106 mph one-step 6.2 mph loss either (open).
     //     It did not re-decode the raw words of UpdatePostPhysics's wheel-sphere block (the geometry
     //     is read from the committed transcription, not re-derived).
     // ⚠️ AND IT LOST A RUN TO EXACTLY THE TRAP THE LAST WAVE FLAGGED. kerbX_r3 showed a textbook
