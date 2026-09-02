@@ -689,15 +689,25 @@ void PhysicalTrafficVehicle::OnChecked(EActiveRaceCarIndex leOwner,
                    "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
         if (mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL)
         {
-            // Arm the full body's crashing state (X360: VehiclePhysics::SetCrashing on GetFullTraffic()).
-            reinterpret_cast<VehiclePhysics*>(GetFullTrafficPhysics())->SetCrashing();
-
-            // FLAG (delegated crash-impulse math): the console then reads SetCrashing()'s returned
-            // sub-object pointer and folds a crash impulse into its +0x50 vector -- a VMX dot/max/FMA
-            // cascade using RaceCarPhysics +0x1340 (the checker's linear-velocity direction) and
-            // lContactPointOnTraffic. That impulse lands in the opaque TrafficPhysics slice + un-homed
-            // RaceCarPhysics velocity and is owned by the full-physics TU (this TU only arms the
-            // crash). Not fabricated here.
+            // 0x8261E430..0x8261E47C -- the inlined TrafficPhysics::SetCrashingFromCheck (DWARF
+            // TrafficPhysics.h:66). LANDED 2026-09-02 (traffic crash wave); the FLAG that stood here
+            // called the fold "delegated" and dropped it, so a strong-car check armed the crash and
+            // left the traffic body's velocity untouched.
+            //   0x8261E430  addi r11, r28, 0x1340 ; lvx128 v0     ; the CHECKER's mNormLinearVelocityMag
+            //   0x8261E43C  vspltw128 v126, v0, 3                 ; splat(w) == |checker velocity|
+            //   0x8261E440  vmr128 v127, v0                       ; xyz == its unit direction
+            //   0x8261E444  bl GetFullTraffic
+            //   0x8261E448  bl VehiclePhysics::SetCrashing        ; }
+            //   0x8261E44C  vspltisw v0,1 ; vcfsx v0,v0,1 (0.5)   ; } SetCrashingFromCheck(dir,
+            //   0x8261E45C  vmulfp128 v13, v126, v0               ; }   splat(w) * 0.5)
+            //   ...        the dot / max / fold into +0x50       ; }   (TrafficPhysics_Construct.cpp)
+            // lContactPointOnTraffic (v3 on entry) is NOT read by the body -- the fold is along the
+            // checker's heading, not through the contact point.
+            const Vector3Plus lCheckerVelocity = lpRaceCarPhysics->GetNormLinearVelocityMag();
+            const f32 lfHalfCheckerSpeed = lCheckerVelocity.GetPlus() * 0.5f;
+            GetFullTrafficPhysics()->SetCrashingFromCheck(
+                lCheckerVelocity.GetVector3(),
+                VecFloat{ lfHalfCheckerSpeed, lfHalfCheckerSpeed, lfHalfCheckerSpeed, lfHalfCheckerSpeed });
             (void)lContactPointOnTraffic;
         }
     }

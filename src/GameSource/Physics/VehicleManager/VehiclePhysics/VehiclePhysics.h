@@ -1625,6 +1625,9 @@ namespace Vehicle
         {
             return mNormLinearVelocityMag.GetVector3();
         }
+        // The whole +0x1340 register (direction xyz + |v| in the plus lane) -- what
+        // PhysicalTrafficVehicle::OnChecked @0x8261E430 loads with one lvx128.
+        const Vector3Plus& GetNormLinearVelocityMag() const { return mNormLinearVelocityMag; }
 
         // DecFIGS VehiclePhysics.h:1180/:1267/:1318. Breaker inlines all three
         // against their named members: HasAir at +0x1350 in SetCurrentCarInAirStatus,

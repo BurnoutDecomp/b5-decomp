@@ -123,6 +123,18 @@ namespace Vehicle
                    "lu8StrengthStat < KU8_MAX_STRENGTH");                            // :192
 
         mu8StrengthStat = lu8StrengthStat;                                           // stb  0x140E
+        // [DIAG] BRN_STRENGTH_STAT_OVERRIDE=<0..10>. NOT IN THE X360 BINARY. Opt-in stand-in for
+        // driving a strength-9/10 car: the console reads this byte from the vehicle list
+        // (VehicleListEntry+155) and the harness can only spawn the junkyard car (strength 5).
+        // OnChecked @0x8261E3F4 gates the checked car's crash on `> 8`. DELETE-WHEN the harness
+        // can pick a car.
+        {
+            const char* lpcOverride = getenv("BRN_STRENGTH_STAT_OVERRIDE");
+            if (lpcOverride != 0)
+            {
+                mu8StrengthStat = static_cast<u8>(atoi(lpcOverride));
+            }
+        }
 
         SetTransformFromPositionOnRoad(lOnRoadTransform);
 
