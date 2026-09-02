@@ -177,8 +177,12 @@ bool VehicleManager::ShouldRaceCarCrashOnCarImpact(EActiveRaceCarIndex leVictimA
     // so "the traffic car did not crash hard" has to be read against these operands, not guessed.
     // DELETE-WHEN-STABLE.
     {
-        static s32 s_iCrashTestBudget = 60;
-        if (s_iCrashTestBudget > 0 && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+        // Budget 200, and only for an impact of >= 5 m/s: the low-speed contact tail of one
+        // shove (60 rows of 0.3 m/s in run tw_ram1) used to exhaust the budget before the hit
+        // that mattered, so the 109 mph CHECK in that run has no operands on record.
+        static s32 s_iCrashTestBudget = 200;
+        if (s_iCrashTestBudget > 0 && lvfImpactSpeed.x >= 5.0f
+            && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
         {
             --s_iCrashTestBudget;
             *CgsDev::Log::gpDebugPrint
@@ -339,12 +343,24 @@ void VehicleManager::DecideOutcomeOfRaceCarTrafficContact(u16 luActiveRaceCarInd
         f32 lfScale = 1.0f;
         if (!lpTrafficBody->IsCrashing())
         {
-            // FLAG (VMX operand order): the scale cascade at 0x825C73D8..0x825C7434 is
-            // reproduced from the vmaddfp/vnmsubfp convention this file's rsqrt chains pin
-            // (vD = vA*vC + vB / vB - vA*vC). It only tunes WHEN THE RACE CAR crashes -- the
-            // traffic-side arms do not read it.
+            // The scale cascade at 0x825C73D8..0x825C7434, CORRECTED 2026-09-02 (traffic crash
+            // wave). The old FLAG read `vmaddcfp128 v12, v13, v12, v126` in AltiVec vmaddfp order
+            // (vA*vC + vB == v13*v126 + v12 == (hd+1)*0.5 + 0.25). The raw image word at
+            // 0x825C7408 is 0x158DF113: VD128 = v12, VA128 = v13, VB128 = v126 (bits 16-20 =
+            // 11110, VB128h = 11 -> 126) -- three register fields, and IDA prints the implied
+            // accumulator vD as the third operand. The VMX128 form is vD = vA*vD + vB, i.e.
+            //     v12 = v13 * v12 + v126 = (headingDot + 1.0) * 0.25 + 0.5
+            // (v12 == 0.5*0.5 from 0x825C73DC, v13 == headingDot + 1.0 from 0x825C7400, v126 == 0.5).
+            // The PS3 DecFIGS twin @0x70CB74..0x70CB84 spells the same thing in plain AltiVec:
+            //     vaddfp  v1, v3(1.0), v1(hd) ; vmaddfp v1, v1, v31(0), v9(0.25) ; vaddfp v1, v1, v12(0.5)
+            // So the console's align lies in [0.5, 1.0] and the scale in [0.875, 1.0]; the old
+            // reading put align in [0.25, 1.25], which crashed BOTH cars on an oncoming hit at a
+            // closing speed 34 % below the console's (scale 0.578 vs 0.875) and let the scale exceed
+            // 1.0 on a same-direction hit (measured 1.0156 in run tw_ram1). It only tunes WHEN THE
+            // RACE CAR crashes -- and through CRASH_RACECAR|CRASH_TRAFFIC, when the traffic car
+            // crashes with it; the SLAM/CHECK arms do not read it.
             const f32 lfHeadingDot = Dot3(lRaceCarTransform.zAxis, lpTrafficBody->GetTransform().zAxis);
-            const f32 lfAlign      = lfHeadingDot * 0.5f + 0.5f + 0.25f;   // vmaddcfp on 0.25/0.5
+            const f32 lfAlign      = (lfHeadingDot + 1.0f) * 0.25f + 0.5f;   // vmaddcfp128 @0x825C7408
             f32 lfTrafficSpeed     = lpTrafficBody->GetSpeedMPH().x * 0.447039992f * 0.5f * 0.5f;
             if (lfTrafficSpeed < 0.0f) lfTrafficSpeed = 0.0f;              // vmaxfp against 0
             if (lfTrafficSpeed > 1.0f) lfTrafficSpeed = 1.0f;              // vminfp against 1
