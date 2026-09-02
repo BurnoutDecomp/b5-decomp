@@ -449,9 +449,22 @@ namespace Vehicle
             f32     mfLongFinal;            // post-cone
             f32     mfLatFinal;             // post-cone
             f32     mfWheelTorque;          // -longFinal * radius
+            f32     mfSlipDenom;            // max(|longSpeed|, 1) -- NOT zeroed by the enable gate
             bool    mbConeExceeded;
             bool    mbEnabled;
         };
+        // ⛔ D7 (drift-symmetry wave 2026-09-02, raw words 0x825FBF4C..0x825FBFBC wheel A /
+        // 0x825FC070..0x825FC0E8 wheel B): the console writes a THIRD slip lane the old body never
+        // wrote -- mSlipVariables.z, the skid factor BrnVehicleOutputInterface copies into
+        // WheelLite::mfSkidFactor (the VFX/audio skid input):
+        //   z = min(1, (|latSpeed| * K_LAT + |longSlip * K_SLIP|) * min(1, denom * (1/K_DENOM)))
+        // with K_DENOM = unk_82FB9BF0 (0.5, flt_82001DA0), K_SLIP = unk_82FB83F0 (0.9,
+        // flt_82005450), K_LAT = unk_82FB9150 (1/15, flt_8200D4E0). The lat speed and the slip are
+        // the ENABLE-GATED lanes (v29/v21 after the mask-8 / mask-4 zeroing), the denominator is
+        // the ungated v22; both reciprocals are vrefp + two Newton steps.
+        static const f32 KF_SKID_DENOM_SCALE = 0.5f;          // unk_82FB9BF0
+        static const f32 KF_SKID_SLIP_SCALE  = 0.9f;          // unk_82FB83F0
+        static const f32 KF_SKID_LAT_SCALE   = 0.0666666701f; // unk_82FB9150
         WheelSolve laSolve[2];
 
         // ---- phase 1: solve both wheels (the console's 2-wide SIMD body) --------------------
@@ -566,6 +579,7 @@ namespace Vehicle
             lrOut.mvLongDir           = lvLong;
             lrOut.mvLatDir            = lvLat;
             lrOut.mfWheelSurfaceSpeed = lfSurfSpd;
+            lrOut.mfSlipDenom         = lfDenom;      // D7: the ungated v22 lane
             lrOut.mbEnabled           = lbEnabled;
 
             // A disabled lane is zeroed by `vrlimi128 vX, 0, 8|4, 0` on EVERY solved register, and
@@ -622,6 +636,15 @@ namespace Vehicle
             // mSlipVariables: .x = lateral speed, .y = longitudinal slip, .w = radius (untouched).
             lrWheel.mSlipVariables.x = lrIn.mfLatSpeed;
             lrWheel.mSlipVariables.y = lrIn.mfLongSlip;
+            {
+                // D7 -- the skid factor lane (see the banner above the solve loop).
+                f32 lfDenomScale = lrIn.mfSlipDenom * (1.0f / KF_SKID_DENOM_SCALE);
+                if (lfDenomScale > 1.0f) lfDenomScale = 1.0f;                  // vminfp vs 1.0
+                f32 lfSkid = (std::fabs(lrIn.mfLatSpeed) * KF_SKID_LAT_SCALE
+                              + std::fabs(lrIn.mfLongSlip * KF_SKID_SLIP_SCALE)) * lfDenomScale;
+                if (lfSkid > 1.0f) lfSkid = 1.0f;                              // vminfp vs 1.0
+                lrWheel.mSlipVariables.z = lfSkid;                              // vrlimi 2,2 -> .z
+            }
             // GATED: mSlipVariables.z (WheelLite::mfSkidFactor). The console computes
             //       min( (|latSpeed| * unk_82FB9150 + |longSlip * unk_82FB83F0|)
             //            * min(max(|longSpeed|,1) / unk_82FB9BF0, 1.0), 1.0 )
