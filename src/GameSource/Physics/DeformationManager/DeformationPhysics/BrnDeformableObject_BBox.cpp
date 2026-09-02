@@ -7,6 +7,8 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"              // VehiclePhysics (mfSpeedMPH/IsCrashing/GetTransform/mpAttribs)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                                // gpDebugPrint / gxMessageFilterFlags (the null-attribs gate)
+#include "GameSource/World/BrnEntityTypes.h"                                              // BrnWorld::E_ENTITYTYPE_RACECAR (the UpdateDeformedBBox owner gate)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"              // VehicleAttribs::mBaseAttribs.mDrivetimeDeformLimits ([deform-bbox] attr lanes, DIAG)
 
 #include <cstdlib>                                                                        // getenv (the [sweptsel] opt-in probe)
 #include <cmath>                                                                          // std::fabs ([deform-bbox] change detection, DIAG only)
@@ -130,6 +132,10 @@ namespace Deformation
 
 		// unk_82FB9B30 <- flt_82002138 = 0.01, static-init splat @0x82C5DAA0.
 		static const Vector4 KVF_DEFORMED_BBOX_TOLERANCE = { 0.00999999978f, 0.00999999978f, 0.00999999978f, 0.00999999978f };
+
+		// flt_82001CC0 == 0.0f, read from the image (.rdata; `lfs f0, flt_82001CC0` @0x82609EDC).
+		// CalculateDriveTimeLimits adds it -- not an attrib lane -- to the drive-time box's min.y.
+		static const f32 KF_DRIVE_TIME_LIMIT_MIN_Y_ADDEND = 0.0f;
 
 		// ⭐ RECOVERED 2026-08-03. unk_82FB95E0's initialiser @0x82C5B798 is NOT a splat -- it builds a
 		// genuinely PER-AXIS row from three different .rdata scalars: flt_82004014 (0.1),
@@ -424,9 +430,21 @@ namespace Deformation
 		*reinterpret_cast<Vector4*>(lpDeformPhysBytes + KU_DEFORMABLE_BBOX_MIN_OFFSET) = lvMinPositions;
 		*reinterpret_cast<Vector4*>(lpDeformPhysBytes + KU_DEFORMABLE_BBOX_MAX_OFFSET) = lvMaxPositions;
 
-		// HIBYTE(*(this + 26384)) == 1 -- the "deformed in crash" gate.
-		const u32 lu32GateWord =
-			*reinterpret_cast<const u32*>(reinterpret_cast<const char*>(this) + KU_DEFORMED_BBOX_GATE_WORD_OFFSET);
+		// ⭐⭐ CORRECTED 2026-09-02 (deformation wave). The gate is NOT a "deformed in crash" flag:
+		//     0x825E0DB4  ld    r11, 0x6710(r3)      ; the 8-byte handling RigidBodyId (+26384)
+		//     0x825E0DB8  srdi  r11, r11, 32
+		//     0x825E0DBC  srwi  r11, r11, 24         ; bits 56..63 == the entity OWNER byte
+		//     0x825E0DC0  cmplwi cr6, r11, 1         ; == BrnWorld::E_ENTITYTYPE_RACECAR
+		//     0x825E0DC4  bnelr cr6
+		// i.e. "this deformable object is a RACE CAR's" (traffic and props skip the drive-time
+		// verdict). This body used to read it as `*(u32*)(this+26384) >> 24` -- a leftover of the
+		// 4-byte handle stand-in that BrnDeformableObject.h:282 retired on 2026-08-11. On the x64
+		// port that reads bits 24..31 of the LOW dword of the id (the index half), never the owner
+		// byte, so the compare below never ran and mbDeformedBeyondDriveTimeLimitsInCrash could not
+		// be written: every crash, however hard, read back mbIsDriveable == true (measured: a 153 mph
+		// head-on -> [crash-verdict] DRIVE_AWAY, run crashwave_w3). Same two shifts, named.
+		const bool lbHandlingBodyIsRaceCar =
+			( GetHandlingBodyIdHighByte() == static_cast<u8>(BrnWorld::E_ENTITYTYPE_RACECAR) );
 
 		// -----------------------------------------------------------------------------------------
 		// [deform-bbox] NOT IN THE X360 BINARY -- host-side witness, opt-in on BRN_DEFORM_TRACE (the
@@ -501,6 +519,10 @@ namespace Deformation
 				const bool lbPeriodic = ( (sluTraceCalls % static_cast<u32>(siBBoxTracePeriod)) == 0u );
 				if ( lbMoved || lbPeriodic )
 				{
+					// `gateRaw` == the retired 4-byte-stand-in read (`*(u32*)(this+26384) >> 24`), kept
+					// in the witness ONLY so a log shows what the old gate compared against 1.
+					const u32 lu32GateWord = *reinterpret_cast<const u32*>(
+						reinterpret_cast<const char*>(this) + KU_DEFORMED_BBOX_GATE_WORD_OFFSET);
 					for ( s32 liL = 0; liL < 6; ++liL ) { safTraceLast[liSlot][liL] = lafNow[liL]; }
 					saiTraceLastBeyond[liSlot] = liBeyondNow;
 					const u32 luArmsDrive = guDeformLimitRowArmApplies[0] - sauArmsAtLast[0];
@@ -521,14 +543,29 @@ namespace Deformation
 						<< " dMin (" << lafDMin[0] << "," << lafDMin[1] << "," << lafDMin[2] << ")"
 						<< " dMax (" << lafDMax[0] << "," << lafDMax[1] << "," << lafDMax[2] << ")"
 						<< " tol " << KVF_DEFORMED_BBOX_TOLERANCE.x
-						<< " beyond " << liBeyondNow << " axis " << liBeyondAxis
+						<< " beyond " << liBeyondNow << " axis " << liBeyondAxis;
+					// the live attrib band the limits were (or were not) widened by -- so "lim == rest
+					// box" can be told apart as "attribs NULL at reset" vs "attribs carry zero limits".
+					const BrnPhysics::Vehicle::VehicleAttribs* lpAttribsNow =
+						( lpDeformPhysics != 0 ) ? lpDeformPhysics->GetAttribs() : 0;
+					if ( lpAttribsNow != 0 )
+					{
+						const Vector4& lrBand = lpAttribsNow->mBaseAttribs.mDrivetimeDeformLimits;
+						*CgsDev::Log::gpDebugPrint
+							<< " attr (" << lrBand.x << "," << lrBand.y << "," << lrBand.z << "," << lrBand.w << ")";
+					}
+					else
+					{
+						*CgsDev::Log::gpDebugPrint << " attr null";
+					}
+					*CgsDev::Log::gpDebugPrint
 						<< " arms drive " << static_cast<s32>(luArmsDrive) << " crash " << static_cast<s32>(luArmsCrash)
 						<< "\n";
 				}
 			}
 		}
 
-		if ( static_cast<u8>(lu32GateWord >> 24) == 1 )
+		if ( lbHandlingBodyIsRaceCar )
 		{
 			// dMin = driveMin - deformedMin ; dMax = driveMax - deformedMax.
 			const Vector3 lDMin = {
@@ -645,7 +682,9 @@ namespace Deformation
 					*CgsDev::Log::gpDebugPrint
 						<< "conductor gate: CalculateDriveTimeLimits with NULL mpAttribs (per-car "
 						   "VehiclePhysics::Construct still gated in PrepareData) -- drive-time "
-						   "limits left unwidened [FLAG PC boot gate]. Reported once\n";
+						   "limits left unwidened [FLAG PC boot gate]. Reported once"
+						<< " (owner " << static_cast<s32>(GetHandlingBodyIdHighByte())
+						<< " present " << static_cast<s32>(renderengine::guPresentCount) << ")\n";
 			}
 			mDriveTimeBBoxLimitMin = lvMin;
 			mDriveTimeBBoxLimitMax = lvMax;
@@ -659,12 +698,21 @@ namespace Deformation
 		lvMax.x -= lvLimits.x;
 		lvMax.y -= lvLimits.y;
 		lvMax.z -= lvLimits.w;
-		//   min.x += limits.x ; min.y += limits.x ; min.z += limits.z
-		// FLAG: the asm seeds min.y's addend from a separately-stacked GetDriveTimeDeformLimitX VecFloat
-		// (the `v9 = splat(stack,0)`); its lane resolves to limits.x in the recovered sequence. The
-		// min.y addend is the one lane not byte-pinned -- revisit if the call-site register map is recovered.
+		//   min.x += limits.x ; min.y += 0.0 (flt_82001CC0) ; min.z += limits.z
+		// ⭐ CORRECTED 2026-09-02 (deformation wave): the min.y addend is NOT limits.x. The console
+		// stacks a scalar loaded from .rdata and splats it:
+		//     0x82609ECC  lis  r11, flt_82001CC0@ha
+		//     0x82609EDC  lfs  f0, flt_82001CC0@l(r11)     ; 0x82001CC0 == 0x00000000 == 0.0f (image)
+		//     0x82609EE8  stfs f0, var_60(r1)              ; + three `stw r28(0)` -> {c,0,0,0}
+		//     0x82609F14  lvx128 v13, var_60 ; 0x82609F18 vspltw v9, v13, 0
+		//     0x82609F74  vaddfp v0, v0, v9 ; 0x82609F78 vrlimi128 v13, v0, 4, 0   ; -> min.y
+		// limits.x is v13 (`vspltw v13, v13, 0` @0x82609F20 off the attribs row) and feeds ONLY
+		// min.x (0x82609F60) and max.x (0x82609F28). The PS3 twin @0x6BD0C4 agrees in shape: its y
+		// lane adds a TOC scalar (dword_100A564) stacked at var_60, not an attrib lane. So the floor
+		// of the drive-time box is the rest floor itself: a car whose underside sensors lift by more
+		// than the 0.01 tolerance is beyond limits in -Y, whatever mDrivetimeDeformLimits.x says.
 		lvMin.x += lvLimits.x;
-		lvMin.y += lvLimits.x;
+		lvMin.y += KF_DRIVE_TIME_LIMIT_MIN_Y_ADDEND;
 		lvMin.z += lvLimits.z;
 
 		mDriveTimeBBoxLimitMin = lvMin;

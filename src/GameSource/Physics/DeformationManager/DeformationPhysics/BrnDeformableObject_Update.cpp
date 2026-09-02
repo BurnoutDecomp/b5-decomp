@@ -709,10 +709,23 @@ namespace Deformation
         //   0x82607AC4/AE4/AEC/AF4/AFC/B04  stvx v13,v0,v13,v0,v13,v0 -> var_1D0..var_180
         //     i.e. rows {+X,-X,+Y,-Y,+Z,-Z} alternate POSITIVE-limit / NEGATIVE-limit, which is
         //     exactly the ENextSensorDirection order KA_IMPULSE_DIRECTIONS uses.
-        // ⚠️ FLAG (marked, not buried): the CRASHING arm's pair lives at vehicle+0x6D0 / +0x6E0 and
-        // VehiclePhysics has no named member there yet, so that arm falls back to the drive-time
-        // rows WITH the console's +0.5 radius pad. The junkyard path never crashes; promote the two
-        // vehicle rows when VehiclePhysics' suspension-limit block is homed.
+        // ⭐⭐ CORRECTED 2026-09-02 (deformation wave): the CRASHING arm's pair IS named --
+        // vehicle+0x6D0/+0x6E0 is SimpleVehiclePhysics::mDeformableAABB (min @+0, max @+0x10), the
+        // very box UpdateDeformedBBox @0x825E0D20 accumulates from the sensors' CURRENT spheres and
+        // stores back every frame. The old FLAG fell back to the DRIVE-TIME pair here, and that is
+        // load-bearing: ApplyLocalImpulse bounds a sensor's travel by dot3(mLimitVector - centre,
+        // hitDir), so with the drive-time rows a sensor stops EXACTLY at the drive-time limit (row =
+        // limit -/+ radius) and the deformed box can never exceed it by more than the +0.5 pad. The
+        // console's crash rows are measured from the current DEFORMED box instead -- 0.5 m inside
+        // its far face -- so in a crash the box constraint effectively re-arms every apply and the
+        // per-direction compression limits (spec x scale[set] x 1.0) are what bound the dent.
+        //     0x82607A78  vspltisw v0, 1 ; vcfsx v0, v0, 1        ; 0.5
+        //     0x82607A7C  lwz r10, 0x19C(r30) ; lvx128 v13 ; vspltw v13, v13, 3   ; radius
+        //     0x82607A94  lvx128 v11, r11(vehicle), 0x6D0       ; mDeformableAABB.mMin
+        //     0x82607A98  lvx128 v12, r11(vehicle), 0x6E0       ; mDeformableAABB.mMax
+        //     0x82607A9C  vaddfp v13, v13, v0                   ; radius + 0.5
+        //     0x82607AA0  vsubfp v0, v12, v13                   ; max - (r + 0.5)  (ODD rows)
+        //     0x82607AA4  vaddfp v13, v11, v13                  ; min + (r + 0.5)  (EVEN rows)
         Vector3 laLimitRows[KI_NUM_APPLY_DIRECTIONS];
         {
             // `lwz r11, 0x19C(lpSensor) ; lvx v0, r11 ; vspltw v13, v0, 3` -- the sensor's LOCAL
@@ -724,8 +737,18 @@ namespace Deformation
             const f32 lfPad    = lbCrashed ? 0.5f : 0.0f;          // vcfsx(vspltisw 1,1) == 0.5
             const f32 lfRadius = lfSphereRadius + lfPad;
             ++guDeformLimitRowArmApplies[lbCrashed ? 1 : 0];       // [deform-bbox] arm counter (DIAG)
-            const Vector3& lrMin = GetDriveTimeLimitsMin();        // this + 0x66F0
-            const Vector3& lrMax = GetDriveTimeLimitsMax();        // this + 0x6700
+            const Vector3& lrDriveMin = GetDriveTimeLimitsMin();   // this + 0x66F0
+            const Vector3& lrDriveMax = GetDriveTimeLimitsMax();   // this + 0x6700
+            const Vector3 lDeformedMin = ( lbCrashed && lpVehicle != nullptr )
+                ? Vector3{ lpVehicle->GetDeformableAABB().mMin.x, lpVehicle->GetDeformableAABB().mMin.y,
+                           lpVehicle->GetDeformableAABB().mMin.z, lpVehicle->GetDeformableAABB().mMin.w }
+                : lrDriveMin;                                       // vehicle + 0x6D0
+            const Vector3 lDeformedMax = ( lbCrashed && lpVehicle != nullptr )
+                ? Vector3{ lpVehicle->GetDeformableAABB().mMax.x, lpVehicle->GetDeformableAABB().mMax.y,
+                           lpVehicle->GetDeformableAABB().mMax.z, lpVehicle->GetDeformableAABB().mMax.w }
+                : lrDriveMax;                                       // vehicle + 0x6E0
+            const Vector3& lrMin = lDeformedMin;
+            const Vector3& lrMax = lDeformedMax;
             const Vector3 lPositive = { lrMin.x + lfRadius, lrMin.y + lfRadius,
                                         lrMin.z + lfRadius, lrMin.w + lfRadius };   // vaddfp v13
             const Vector3 lNegative = { lrMax.x - lfRadius, lrMax.y - lfRadius,
