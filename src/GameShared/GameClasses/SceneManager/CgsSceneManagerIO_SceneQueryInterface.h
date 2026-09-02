@@ -9,17 +9,26 @@
 // MEMBER OFFSETS (X360-attested by the four decompiled members of this class):
 //   +0x00  mpFineLineTestQueue          BaseEventQueue<InEventLineTestFine>*        (LineTestFine: lwz r11,0(this); HasData slot 0)
 //   +0x04  mpFineLineTestNearestQueue   BaseEventQueue<InEventLineTestNearest>*     (LineTestNearest: lwz r11,4(this); HasData slot 1)
-//   +0x08, +0x0C : two further query queues NOT attested by any decompiled member -- NOT fabricated;
-//                  left as raw pointer-sized placeholders so the attested offsets stay pinned.
+//   +0x08  mpFineLineTestFastDoubleSidedQueue
+//   +0x0C  mpFineSphereTestFastQueue
 //   +0x10  mpFineVolumeTestDeepestQueue BaseEventQueue<InEventVolumeTestDeepest>*   (VolumeTestDeepest: lwz r11,0x10(this); HasData slot 4)
-//   +0x14,+0x18,+0x1C,+0x20 : four further query queues HasData also reads (slots 5..8).
-//                  Their element types are NOT attested by any decompiled member, so each is
-//                  typed as a STRUCTURAL BaseEventQueue<> stand-in: HasData only calls
-//                  GetLength(), which reads miLength@+0x08 of the pointee regardless of the
-//                  element type T (BaseEventQueue<T> layout is {T* mpEvents; s32 miMaxLength;
-//                  s32 miLength;}), so any instantiation yields byte-identical codegen. The
-//                  concrete element types are deliberately NOT fabricated.
+//   +0x14  mpFineVolumeTestQueue
+//   +0x18  mpTriangleCollisionLineTestQueue
+//   +0x1C  mpTriangleCollisionLineTestNearestQueue
+//   +0x20  mpTriangleCollisionSphereTestQueue
 // (HasData @ 0x82204E48 reads slots 0,1,4,5,6,7,8; gaps at +0x08/+0x0C exist in its scan.)
+//
+// ⭐ ALL NINE SLOTS ATTESTED (scene-query wave 1, 2026-09-02). The six slots that used to be
+// "NOT attested / structural stand-ins" are pinned by the ONE writer of this table,
+// SceneManagerIO::InputBuffer_Query::Construct @0x828C7BC0 (0x828C7C74..0x828C7C94): it stores
+// the addresses of the buffer's nine typed fine/triangle-collision queues into this+4..+36 --
+// i.e. into THIS interface, which is InputBuffer_Query's first member (DWARF
+// CgsSceneManagerModuleIO.h:540) -- in exactly the order of the buffer's own members
+// (DWARF :547..:555): FineLineTest(+28752), FineLineTestNearest(+45152),
+// FineLineTestFastDoubleSided(+61552), FineSphereTestFast(+62592), FineVolumeTestDeepest(+63376),
+// FineVolumeTest(+120736), TriangleCollisionLineTest(+135088),
+// TriangleCollisionLineTestNearest(+147392), TriangleCollisionSphereTest(+159696). The element
+// type of each slot is therefore the element type of the queue whose address it holds.
 //
 // The bodies of LineTestFine / LineTestNearest / VolumeTestDeepest live in their own TUs
 // (CgsSceneManagerIO_SceneQueryInterface.cpp, CgsSceneManagerIO_SceneQueryInterface_LineTestNearest.cpp);
@@ -33,6 +42,11 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTest.h"          // InEventLineTestFine + EExclusionMode
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTestNearest.h"   // InEventLineTestNearest + ENearestExclusionMode
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventVolumeTestDeepest.h" // InEventVolumeTestDeepest
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventSphereTest.h"                        // InEventSphereTestFast
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventVolumeTestFine.h"                    // InEventVolumeTestFine
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventTriangleCollisionLineTest.h"        // InEventTriangleCollisionLineTest
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventTriangleCollisionLineTestNearest.h" // InEventTriangleCollisionLineTestNearest
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventTriangleCollisionSphereTest.h"      // InEventTriangleCollisionSphereTest
 
 namespace CgsSceneManager
 {
@@ -41,17 +55,18 @@ namespace SceneManagerIO
     struct SceneQueryInterface
     {
         // ---- query-queue table (offsets X360-attested; see file header) ----
-        CgsModule::BaseEventQueue<InEventLineTestFine>*        mpFineLineTestQueue;          // +0x00
-        CgsModule::BaseEventQueue<InEventLineTestNearest>*     mpFineLineTestNearestQueue;   // +0x04
-        void*                                                 mpUnattestedQueue08;          // +0x08 (not attested; HasData does NOT read it)
-        void*                                                 mpUnattestedQueue0C;          // +0x0C (not attested; HasData does NOT read it)
-        CgsModule::BaseEventQueue<InEventVolumeTestDeepest>*   mpFineVolumeTestDeepestQueue; // +0x10
-        // +0x14..+0x20: HasData reads ptr->GetLength() on these four; element types unattested,
-        // typed as structural BaseEventQueue<> stand-ins (GetLength reads miLength@+8 for any T).
-        CgsModule::BaseEventQueue<InEventLineTestFine>*        mpQueueAt0x14;                // +0x14
-        CgsModule::BaseEventQueue<InEventLineTestFine>*        mpQueueAt0x18;                // +0x18
-        CgsModule::BaseEventQueue<InEventLineTestFine>*        mpQueueAt0x1C;                // +0x1C
-        CgsModule::BaseEventQueue<InEventLineTestFine>*        mpQueueAt0x20;                // +0x20
+        // Slot ORDER and element TYPES are pinned by InputBuffer_Query::Construct @0x828C7BC0,
+        // the table's only writer (see the file header). Names follow the DWARF names of the
+        // queues each slot points at (CgsSceneManagerModuleIO.h:547..:555).
+        CgsModule::BaseEventQueue<InEventLineTestFine>*                        mpFineLineTestQueue;                      // +0x00
+        CgsModule::BaseEventQueue<InEventLineTestNearest>*                     mpFineLineTestNearestQueue;               // +0x04
+        CgsModule::BaseEventQueue<InEventLineTestFastDoubleSided>*             mpFineLineTestFastDoubleSidedQueue;       // +0x08
+        CgsModule::BaseEventQueue<InEventSphereTestFast>*                      mpFineSphereTestFastQueue;                // +0x0C
+        CgsModule::BaseEventQueue<InEventVolumeTestDeepest>*                   mpFineVolumeTestDeepestQueue;             // +0x10
+        CgsModule::BaseEventQueue<InEventVolumeTestFine>*                      mpFineVolumeTestQueue;                    // +0x14
+        CgsModule::BaseEventQueue<InEventTriangleCollisionLineTest>*           mpTriangleCollisionLineTestQueue;         // +0x18
+        CgsModule::BaseEventQueue<InEventTriangleCollisionLineTestNearest>*    mpTriangleCollisionLineTestNearestQueue;  // +0x1C
+        CgsModule::BaseEventQueue<InEventTriangleCollisionSphereTest>*         mpTriangleCollisionSphereTestQueue;       // +0x20
 
         // ---- producer methods (bodies in their own TUs) ----
         // @ 0x82216EF0 -- stages an InEventLineTestFine and pushes it onto mpFineLineTestQueue.

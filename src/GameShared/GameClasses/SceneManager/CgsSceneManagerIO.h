@@ -13,6 +13,9 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneQueryResultsQueue.h" // OutSceneQueryResultsQueue<32768> (:303)
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"   // SceneManagerIO::PotentialContact (:290 element)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventOutOverlapPair.h" // SceneManagerIO::OutOverlapPair (:300 element)
+// InputBuffer_Query's twelve queues + its leading SceneQueryInterface (scene-query wave 1):
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneQueryInterface.h"                    // SceneQueryInterface (:540) -- pulls the nine fine/tri-collision element homes
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTestQuery.h"                     // InEventLineTest (:168 element, 0x30)
 
 // CgsSceneManager::SceneManagerIO - the scene-manager module's IO buffers the world
 // bridges drive. X360 anchors:
@@ -95,43 +98,175 @@ namespace SceneManagerIO
         InSceneUpdateInterface mInSceneUpdateInterface;   // +16
     };
 
-    // The scene-manager output buffer (query results side).
     // ------------------------------------------------------------------------
     // SceneManagerIO::InputBuffer_Query -- the per-module scene-query input buffer
     // the entity-module spines stack-allocate for each query round-trip
-    // (WorldModule::EntityModulePostSceneUpdate @0x827C3C58 does three of them).
+    // (WorldModule::EntityModulePostSceneUpdate @0x827C3C58 does three of them, and
+    // WorldModule::Update's physics round trip a fourth -- the one that carries the race
+    // car's above-ground down-rays).
     //
-    // FLAG (minimal-complete slice, size NOT X360-attested): this buffer's real
-    // aggregate is the coarse/line-test/etc. query queues (see the sibling
-    // CgsSceneManagerIO_*Query.h element homes); that layout belongs to this
-    // buffer's own TU and is NOT recovered here. The slice exists so the spines'
-    // CreateIOBuffer<InputBuffer_Query> instantiates against a real type. GROW it
-    // (and re-check every CreateIOBuffer call site) when the query-buffer TU lands
-    // -- do NOT treat maDeferredPayload's size as fact.
+    // ⭐ FULL LAYOUT (scene-query wave 1, 2026-09-02). The "minimal-complete slice, size NOT
+    // X360-attested" that stood here -- the coarse queue alone, 16 KB -- is RETIRED. The
+    // aggregate is the DWARF's (CgsSceneManagerModuleIO.h:540..:555) and every member's
+    // console offset is pinned by the buffer's own Construct @0x828C7BC0, which brings the
+    // twelve queues up in member order and then writes the nine fine/tri-collision queue
+    // addresses into the leading SceneQueryInterface (this+4..+36):
+    //
+    //   console  member                                   DWARF   console span
+    //   +0       IOBuffer status byte
+    //   +4       mSceneQueryInterface   (9 x 4-byte ptr)   :540    36
+    //   +40      mCoarseQueryQueue      VEQ<16384,16>      :543    16408  Construct @0x828C7BD4
+    //   +16448   mCoarseLineTestQueue   EQ<LineTest,256>   :546    12304  (0x4040)
+    //   +28752   mFineLineTestQueue     EQ<LineTestFine,256>          :547 16400 (0x7050)
+    //   +45152   mFineLineTestNearestQueue EQ<LineTestNearest,256>    :548 16400 (0xB060)
+    //   +61552   mFineLineTestFastDoubleSidedQueue EQ<...,16>         :549  1040 (0xF070)
+    //   +62592   mFineSphereTestFastQueue EQ<SphereTestFast,16>       :550   784 (0xF480)
+    //   +63376   mFineVolumeTestDeepestQueue EQ<VolumeTestDeepest,256> :551 57360 (0xF790)
+    //   +120736  mFineVolumeTestQueue   EQ<VolumeTestFine,64>         :552 14352 (0x1D7A0)
+    //   +135088  mTriangleCollisionLineTestQueue EQ<...,256>          :553 12304 (0x20FB0)
+    //   +147392  mTriangleCollisionLineTestNearestQueue EQ<...,256>   :554 12304 (0x23FC0)
+    //   +159696  mTriangleCollisionSphereTestQueue EQ<...,256>        :555  2060 (0x26FD0)
+    //   = 161756 bytes on the console (every span == 16-byte header + N * element, except
+    //     the 8-byte-element sphere queue whose header stays at 12 -- see the element homes).
+    //
+    // Those numbers are provenance, not code: the host reaches every seat by NAME. (The
+    // console's per-queue read getters, 0x828AF270..0x828AF858, return exactly these seats;
+    // WorldModule::BridgePhysicsSceneQueriesToScene @0x827A8D20 AddEvents into +45152 /
+    // +63376 -- the nearest-line and deepest-volume seats -- and ProcessFineQueriesDirectly
+    // @0x828D4F80 walks +28752 / +45152 / +61552 / +62592 / +63376 / +120736.)
+    //
+    // Element homes: CgsSceneManagerIO_EventLineTestQuery.h (InEventLineTest, 0x30),
+    // _EventLineTest.h (Fine + FastDoubleSided, 0x40), _EventLineTestNearest.h (0x40),
+    // _EventSphereTest.h (0x30), _EventVolumeTestDeepest.h (0xE0), _EventVolumeTestFine.h
+    // (0xE0), the three _EventTriangleCollision*.h (0x30 / 0x30 / 0x08).
     // ------------------------------------------------------------------------
     struct InputBuffer_Query : public CgsModule::IOBuffer
     {
-        // X360 0x828C7BC0 -- IOBuffer status, then VariableEventQueue<16384,16>::Construct
-        // on the coarse-query queue (this+40) followed by the nine typed line/volume/sphere
-        // test queues and the nine cached pointers to them (this+4..+36). Only the coarse
-        // queue is committed on this side, so the PARTIAL SLICE below runs the base status +
-        // that queue; the nine typed sub-queues land with their own TUs [marked deviation].
-        // (Was a declaration-only accessor whose WorldLinkStubs body asserted; every
-        // per-frame scene-query block Locks this buffer, so the trap stopped the drive.)
+        // The DWARF's queue typedefs (CgsSceneManagerModuleIO.h:165..:178).
+        typedef InCoarseQueryQueue<16384>                                               InSmCoarseQueryQueue;                     // :165
+        typedef CgsModule::EventQueue<InEventLineTest, 256>                             InCoarseLineTestQueue;                    // :168
+        typedef CgsModule::EventQueue<InEventLineTestFine, 256>                         InFineLineTestQueue;                      // :169
+        typedef CgsModule::EventQueue<InEventLineTestNearest, 256>                      InFineLineTestNearestQueue;               // :170
+        typedef CgsModule::EventQueue<InEventLineTestFastDoubleSided, 16>               InFineLineTestFastDoubleSidedQueue;       // :171
+        typedef CgsModule::EventQueue<InEventSphereTestFast, 16>                        InFineSphereTestFastQueue;                // :172
+        typedef CgsModule::EventQueue<InEventVolumeTestDeepest, 256>                    InFineVolumeTestDeepestQueue;             // :173
+        typedef CgsModule::EventQueue<InEventVolumeTestFine, 64>                        InFineVolumeTestQueue;                    // :174
+        typedef CgsModule::EventQueue<InEventTriangleCollisionLineTest, 256>            InTriangleCollisionLineTestQueue;         // :176
+        typedef CgsModule::EventQueue<InEventTriangleCollisionLineTestNearest, 256>     InTriangleCollisionLineTestNearestQueue;  // :177
+        typedef CgsModule::EventQueue<InEventTriangleCollisionSphereTest, 256>          InTriangleCollisionSphereTestQueue;       // :178
+
+        // @ 0x828C7BC0 (DWARF :486). Bodied in CgsSceneManagerIO_InputBuffer_Query.cpp.
+        void Construct();
+        // DWARF :490. The console body is ICF-folded onto the bare `b CgsModule::IOBuffer::Destruct`
+        // (DestroyIOBuffer<InputBuffer_Query> @0x823AF240 bl's the PropEntityIO::OutputBuffer_PreScene
+        // fold @0x823AF2E4; the EventQueue/VariableEventQueue members have no Destruct work).
+        void Destruct() { CgsModule::IOBuffer::Destruct(); }
+
+        // The producer entry points (DWARF :494/:498/:502/:506). None is emitted out of line on
+        // the console: every producer inlines `m<Queue>.AddEvent(event)` on the member seat --
+        // e.g. BridgePhysicsSceneQueriesToScene @0x827A8E58 `add r3, r26, 0xB060 ; bl
+        // BaseEventQueue<InEventLineTestNearest>::AddEvent` is AddLineTestNearestQuery, and
+        // @0x827A8E4C `add r3, r26, 0xF790 ; bl ...VolumeTestDeepest...AddEvent` is
+        // AddVolumeTestDeepestQuery. Header-inline here, matching that.
+        void AddLineTestFineQuery(const InEventLineTestFine& lrQuery)             { mFineLineTestQueue.AddEvent(lrQuery); }
+        void AddLineTestNearestQuery(const InEventLineTestNearest& lrQuery)       { mFineLineTestNearestQueue.AddEvent(lrQuery); }
+        void AddVolumeTestDeepestQuery(const InEventVolumeTestDeepest& lrQuery)   { mFineVolumeTestDeepestQueue.AddEvent(lrQuery); }
+        void AddVolumeTestFineQuery(const InEventVolumeTestFine& lrQuery)         { mFineVolumeTestQueue.AddEvent(lrQuery); }
+
+        // READ-locked getters (DWARF :509..:519). Each console body is the same 41-insn shape:
+        // test status bit 4, stream "Not locked for reading\n" + FireAssert(...ModuleIO.h, <line>)
+        // when clear, return the member seat. Bodied in CgsSceneManagerIO_InputBuffer_Query.cpp.
+        const InSmCoarseQueryQueue*                    GetCoarseQueryQueue() const;                     // :509  @0x828AF270 (+40)
+        const InCoarseLineTestQueue*                   GetCoarseLineTestQueue() const;                  // :510  (no out-of-line X360 emission)
+        const InFineLineTestQueue*                     GetFineLineTestQueue() const;                    // :511  @0x828AF318 (+28752)
+        const InFineLineTestNearestQueue*              GetFineLineTestNearestQueue() const;             // :512  @0x828AF3C0 (+45152)
+        const InFineLineTestFastDoubleSidedQueue*      GetFineLineTestFastDoubleSidedQueue() const;     // :513  @0x828AF468 (+61552)
+        const InFineSphereTestFastQueue*               GetFineSphereTestFastQueue() const;              // :514  @0x828AF510 (+62592)
+        const InFineVolumeTestDeepestQueue*            GetFineVolumeTestDeepestQueue() const;           // :515  @0x828AF5B8 (+63376)
+        const InFineVolumeTestQueue*                   GetFineVolumeTestQueue() const;                  // :516  @0x828AF660 (+120736)
+        const InTriangleCollisionLineTestQueue*        GetTriangleCollisionLineTestQueue() const;       // :517  @0x828AF708 (+135088)
+        const InTriangleCollisionLineTestNearestQueue* GetTriangleCollisionLineTestNearestQueue() const;// :518  @0x828AF7B0 (+147392)
+        const InTriangleCollisionSphereTestQueue*      GetTriangleCollisionSphereTestQueue() const;     // :519  @0x828AF858 (+159696)
+
+        // WRITE-side getters (DWARF :522..:526). The producers reach these while the buffer is
+        // write-locked. None of the five is emitted out of line in the X360 IDB, so no lock
+        // tripwire is attested for them; header-inline, no assert (the pre-existing
+        // GetInCoarseQueryQueue() alias below kept that same contract).
+        InSmCoarseQueryQueue*                    GetCoarseQueryQueue()                      { return &mCoarseQueryQueue; }                    // :522
+        InFineLineTestQueue*                     GetFineLineTestQueue()                     { return &mFineLineTestQueue; }                   // :523
+        InTriangleCollisionLineTestQueue*        GetTriangleCollisionLineTestQueue()        { return &mTriangleCollisionLineTestQueue; }      // :524
+        InTriangleCollisionLineTestNearestQueue* GetTriangleCollisionLineTestNearestQueue() { return &mTriangleCollisionLineTestNearestQueue; } // :525
+        InTriangleCollisionSphereTestQueue*      GetTriangleCollisionSphereTestQueue()      { return &mTriangleCollisionSphereTestQueue; }    // :526
+
+        // DWARF :528 -- the producer-facing pointer table (filled by Construct).
+        SceneQueryInterface* GetSceneQueryInterface() { return &mSceneQueryInterface; }
+
+        // Pre-existing spelling of the write-side coarse-queue getter (X360 this+0x28), kept
+        // for the mounted frustum-query producers in BrnWorldModule.cpp / the frustum job
+        // dispatcher in CgsSceneManagerModule.cpp.
+        InSmCoarseQueryQueue* GetInCoarseQueryQueue() { return &mCoarseQueryQueue; }
+
+    private:
+        SceneQueryInterface                     mSceneQueryInterface;                    // :540  console +4
+        InSmCoarseQueryQueue                    mCoarseQueryQueue;                       // :543  console +40
+        InCoarseLineTestQueue                   mCoarseLineTestQueue;                    // :546  console +16448
+        InFineLineTestQueue                     mFineLineTestQueue;                      // :547  console +28752
+        InFineLineTestNearestQueue              mFineLineTestNearestQueue;               // :548  console +45152
+        InFineLineTestFastDoubleSidedQueue      mFineLineTestFastDoubleSidedQueue;       // :549  console +61552
+        InFineSphereTestFastQueue               mFineSphereTestFastQueue;                // :550  console +62592
+        InFineVolumeTestDeepestQueue            mFineVolumeTestDeepestQueue;             // :551  console +63376
+        InFineVolumeTestQueue                   mFineVolumeTestQueue;                    // :552  console +120736
+        InTriangleCollisionLineTestQueue        mTriangleCollisionLineTestQueue;         // :553  console +135088
+        InTriangleCollisionLineTestNearestQueue mTriangleCollisionLineTestNearestQueue;  // :554  console +147392
+        InTriangleCollisionSphereTestQueue      mTriangleCollisionSphereTestQueue;       // :555  console +159696
+    };
+
+    // ------------------------------------------------------------------------
+    // SceneManagerIO::TriCacheQueryBuffer (DWARF CgsSceneManagerModuleIO.h:664) -- the
+    // per-pass buffer SceneManagerModule::ProcessFineQueries @0x828D5608 stacks
+    // ("TriCacheQuery") to COLLECT the triangle-collision tests of one query pass: the
+    // fine-query dispatchers push the world-only tests here (ProcessLineTestNearest
+    // @0x828D38C0 AddEvents the world-flag nearest line tests into +12320), then
+    // ProcessFineQueriesDirectly appends the input buffer's own three tri-collision queues
+    // onto these and hands each to its ProcessTriangleCollision* pass.
+    //
+    // Console layout, from CreateIOBuffer<TriCacheQueryBuffer> @0x828CC940 (26688 bytes):
+    //   +0      status byte  (`*v8 = 1`)
+    //   +16     mTriangleCollisionLineTestQueue         EQ<...LineTest,256>::Construct(v8 + 16)
+    //   +12320  mTriangleCollisionLineTestNearestQueue  EQ<...Nearest,256>::Construct(v9 + 12320)
+    //   +24624  mTriangleCollisionSphereTestQueue       EQ<...SphereTest,256>::Construct(v9 + 24624)
+    // DestroyIOBuffer<TriCacheQueryBuffer> @0x828C57A8 bl's CgsModule::IOBuffer::Destruct
+    // directly -- the Destruct is the base's.
+    // ------------------------------------------------------------------------
+    struct TriCacheQueryBuffer : public CgsModule::IOBuffer
+    {
+        // DWARF :669 -- inlined into the CreateIOBuffer instantiation @0x828CC940.
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
-            mInCoarseQueryQueue.Construct();
+            mTriangleCollisionLineTestQueue.Construct();
+            mTriangleCollisionLineTestNearestQueue.Construct();
+            mTriangleCollisionSphereTestQueue.Construct();
         }
-        void Destruct();
+        // DWARF :673 -- the base Destruct (DestroyIOBuffer @0x828C57A8 calls it directly).
+        void Destruct() { CgsModule::IOBuffer::Destruct(); }
 
-        // @ 0x828AF270 -- the read-locked handle to the embedded coarse-query queue
-        // (X360 this+0x28). SceneManagerModule::ProcessFrustumTestJobRequests walks it;
-        // the query PRODUCERS reach it write-locked, so the lock bit is not asserted here
-        // (the X360 getter has one overload per lock state and the IDB keeps only one).
-        InCoarseQueryQueue<16384>* GetInCoarseQueryQueue() { return &mInCoarseQueryQueue; }
+        // READ-locked getters (DWARF :675..:677; no out-of-line X360 emission).
+        const InputBuffer_Query::InTriangleCollisionLineTestQueue*        GetTriangleCollisionLineTestQueue() const;
+        const InputBuffer_Query::InTriangleCollisionLineTestNearestQueue* GetTriangleCollisionLineTestNearestQueue() const;
+        const InputBuffer_Query::InTriangleCollisionSphereTestQueue*      GetTriangleCollisionSphereTestQueue() const;
 
-        InCoarseQueryQueue<16384> mInCoarseQueryQueue;   // (see FLAG: position not attested)
+        // WRITE-locked getters (DWARF :678..:680). Console bodies: @0x828AFBA0 (:678, +16),
+        // @0x828AFC48 (:679, +12320), @0x828AFCF0 (:680, +24624) -- each tests status bit 3 and
+        // streams "Not locked for writing\n". Bodied in CgsSceneManagerIO_InputBuffer_Query.cpp.
+        InputBuffer_Query::InTriangleCollisionLineTestQueue*        GetTriangleCollisionLineTestQueue();
+        InputBuffer_Query::InTriangleCollisionLineTestNearestQueue* GetTriangleCollisionLineTestNearestQueue();
+        InputBuffer_Query::InTriangleCollisionSphereTestQueue*      GetTriangleCollisionSphereTestQueue();
+
+    private:
+        InputBuffer_Query::InTriangleCollisionLineTestQueue        mTriangleCollisionLineTestQueue;         // :684  console +16
+        InputBuffer_Query::InTriangleCollisionLineTestNearestQueue mTriangleCollisionLineTestNearestQueue;  // :685  console +12320
+        InputBuffer_Query::InTriangleCollisionSphereTestQueue      mTriangleCollisionSphereTestQueue;       // :686  console +24624
     };
 
     // ------------------------------------------------------------------------

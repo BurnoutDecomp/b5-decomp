@@ -516,6 +516,12 @@ namespace Vehicle
         // VariableEventQueue<13440,16>::AddEvent<InEventLineTestNearest> on it -- i.e. the
         // console inlined this accessor at that call site, and +0x28C0 is mRequestFineLineQueue.
         OutFineQueryQueue*             GetRequestFineLineQueue()        { return &mRequestFineLineQueue; }
+        // ADDITIVE 2026-09-02 (scene-query wave 1): the READ-side twin. WorldModule::
+        // BridgePhysicsSceneQueriesToScene @0x827A8D20 holds the physics OUTPUT buffer const
+        // (read-locked getter @0x8279F448) and forms `addi r27, r3, 0x28C0` on the interface it
+        // returns -- the same inlined accessor on a const receiver -- then walks the queue with
+        // GetFirstEvent/GetNextEvent (both const).
+        const OutFineQueryQueue*       GetRequestFineLineQueue() const  { return &mRequestFineLineQueue; }
 
         InRemoveRigidBodyQueue*        GetRemoveRigidBodyQueue()        { return &mRemoveRigidBodyQueue; }
         InAddRigidBodyQueue*           GetRequiredRigidBodiesQueue()    { return &mRequiredRigidBodiesQueue; }

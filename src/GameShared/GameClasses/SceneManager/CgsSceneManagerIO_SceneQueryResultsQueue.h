@@ -14,18 +14,30 @@
 // pushes it with event-type id 2.
 //
 //   a1 = this (queue)                                  (r3 -> r27)
-//   a2 = (s32) spilled to var_48; never read back      -> no observable effect
-//   a3 = (s64) spilled to var_50; never read back      -> no observable effect
-//   a4 = lpIntersection: pointer to a triangle-collision intersection record. This is NOT an
-//        OutEventLineTestNearestResult (that type is only 0x40 bytes; this asm reads it at +0x60).
-//        It is a larger narrow-phase intersection record whose concrete type is not yet
-//        identified in the corpus -- modelled here as an opaque source read via raw byte offsets.
+//   a2 = lQueryId          (r4)  -> STORED at rec+0x28 (`stw r4, var_48`)  == mQueryId
+//   a3 = lVolumeInstanceId (r6, 64-bit) -> STORED at rec+0x20 (`std r6, var_50`) == mVolumeInstanceId
+//   a2b= lEntityId         (r5)  -> STORED at rec+0x2C (`stw r5, var_44`)  == mEntityId
+//   a4 = lpIntersection (r7): pointer to a CgsCollision::CollisionResult -- the 112-byte record a
+//        poly-soup line test writes (CollisionResultList::GetResult stride 0x70). This asm reads it
+//        at +0x30 / +0x40 / +0x50 / +0x60; the record's field-level DWARF is not in the corpus, so
+//        those reads stay documented raw offsets (the standing rule for job-output blobs).
 //   a5 = lbHasIntersection (r8, clrlwi 24 -> bool). Stored UNCONDITIONALLY into rec+0x38
 //        (mbIntersection) before the branch (stb r8, var_38(r1) @ 0x828D1EB4). When true, ALSO
 //        copy fields from a4 (after asserting a4 != 0); when false, skip the copy and push the
-//        rest of the record UNINITIALISED (the asm does NOT memset/zero the stack image --
-//        mbIntersection plus, on the true path, the four copied fields are the only bytes
-//        written; on the false path only mbIntersection is written, the rest is garbage).
+//        rest of the record with only the three ids + mbIntersection written (the asm does NOT
+//        memset/zero the stack image -- mPosition/mNormal/mfLineParam/tags are stack garbage on
+//        the miss path).
+//
+// ⛔ CORRECTED 2026-09-02 (scene-query wave 1). The previous reading of this body said a2 and a3
+//    were "spilled and never read back -> no observable effect" and typed them (s32, s64). The
+//    three spills at 0x828D1EA0 / 0x828D1EA8 / 0x828D1EB0 land INSIDE the record being built
+//    (the record is the sp+0x60 image `addi r4, r1, 0xD0+var_70` that AddEvent copies): var_48
+//    == rec+0x28 == mQueryId, var_50 == rec+0x20 == mVolumeInstanceId, var_44 == rec+0x2C ==
+//    mEntityId. Dropping them shipped every triangle-collision nearest result with a GARBAGE
+//    query id -- the consumer (VehicleManager::ProcessAboveGroundLineTestsResults) decodes the
+//    request type and car index out of exactly that word. Four callers pass the ids:
+//    ProcessLineTestNearest @0x828D3C90 (queryId, INVALID entity, INVALID volume instance) and
+//    ProcessTriangleCollisionLineTestNearests @0x828D4A48 / @0x828D4B20 (queryId, 0, 0).
 //
 // SOURCE reads (relative to a4):  +0x40 -> mPosition (rec+0x00), +0x30 -> mNormal (rec+0x10),
 //   +0x50 -> mfLineParam (rec+0x30), +0x60 (packed u32): high16 -> mu16MaterialTag (rec+0x34),
@@ -43,10 +55,11 @@ namespace SceneManagerIO
     public:
         // @ X360 0x828D1E90 (SizeBytes == 32768). a2/a3 are accepted (the X360 signature
         // spills them) but have no observable effect in this function body.
-        bool AddTriangleCollisionLineTestNearestResult(s32 /*lUnused2*/,
-                                                       s64 /*lUnused3*/,
-                                                       const void* lpIntersection,
-                                                       bool lbHasIntersection);
+        bool AddTriangleCollisionLineTestNearestResult(SceneQueryId     lQueryId,
+                                                       EntityId         lEntityId,
+                                                       VolumeInstanceId lVolumeInstanceId,
+                                                       const void*      lpIntersection,
+                                                       bool             lbHasIntersection);
 
         // @ X360 0x828C4A08 (SizeBytes == 32768). Reserve a variable-length RESULT event sized
         // for a 16-byte header + liNumIntersections 64-byte intersection records, write the two
@@ -61,13 +74,19 @@ namespace SceneManagerIO
 
     template <s32 SizeBytes>
     bool OutSceneQueryResultsQueue<SizeBytes>::AddTriangleCollisionLineTestNearestResult(
-        s32 /*lUnused2*/,
-        s64 /*lUnused3*/,
-        const void* lpIntersection,
-        bool lbHasIntersection)
+        SceneQueryId     lQueryId,
+        EntityId         lEntityId,
+        VolumeInstanceId lVolumeInstanceId,
+        const void*      lpIntersection,
+        bool             lbHasIntersection)
     {
         // The asm builds the record on an UNINITIALISED stack image -- no memset.
         OutEventLineTestNearestResult lEvent;
+
+        // The three argument spills ARE the record's id fields (0x828D1EA0 / 0x828D1EA8 / 0x828D1EB0).
+        lEvent.mQueryId          = lQueryId;           // rec+0x28 <- r4
+        lEvent.mEntityId         = lEntityId;          // rec+0x2C <- r5
+        lEvent.mVolumeInstanceId = lVolumeInstanceId;  // rec+0x20 <- r6 (std)
 
         // stb r8, var_38(r1) at 0x828D1EB4 writes lbHasIntersection into rec+0x38
         // (mbIntersection) UNCONDITIONALLY, before the branch on lbHasIntersection.

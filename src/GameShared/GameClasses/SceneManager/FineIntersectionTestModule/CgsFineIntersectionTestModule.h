@@ -26,6 +26,18 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerTypes.h"  // CgsSceneManager::LineTestIntersection
+// The module's IO vocabulary -- the four In*/Out* records the Compute* entry points take.
+// ⛔ PHANTOM-TYPE FORK RETIRED (scene-query wave 1, 2026-09-02): this header used to
+// forward-declare `CgsSceneManager::InEventLineTestNearest` & co. at CgsSceneManager scope --
+// types that exist NOWHERE (the DWARF puts them in the nested FineIntersectionTestIO
+// namespace, CgsFineIntersectionTestModuleIO.h:80 etc.), so the Compute* signatures below
+// mangled to symbols no caller could ever produce. Same class of defect as the
+// CgsPhysics::CollisionGenerator / InTriangleCacheInterface forks that blocked the
+// detached-parts chain. The DWARF signatures are `ComputeLineTestNearest(const
+// InEventLineTestNearest*, OutEventLineTestNearestResult*)` resolved inside namespace
+// CgsSceneManager with `using namespace FineIntersectionTestIO` in scope -- i.e. the
+// FineIntersectionTestIO types, which is what the X360 body reads (see the IO header).
+#include "GameShared/GameClasses/SceneManager/FineIntersectionTestModule/CgsFineIntersectionTestModuleIO.h"
 
 namespace rw
 {
@@ -43,19 +55,17 @@ namespace CgsSceneManager
     class EntityManager;
     class VolumeManager;
 
-    // Forward declarations for the per-query event payloads (defined in the SceneManager
-    // IO headers). The Compute* methods take them only by pointer.
-    struct InEventLineTestFine;
-    struct OutEventLineTestFineResult;
-    struct InEventLineTestNearest;
-    struct OutEventLineTestNearestResult;
-    struct InEventVolumeTestDeepest;
-    struct OutEventVolumeTestDeepestResult;
-    struct InEventVolumeTestFine;
-    struct OutEventVolumeTestFineResult;
-
     struct FineIntersectionTestModule
     {
+        typedef FineIntersectionTestIO::InEventLineTestFine             InEventLineTestFine;
+        typedef FineIntersectionTestIO::OutEventLineTestFineResult      OutEventLineTestFineResult;
+        typedef FineIntersectionTestIO::InEventLineTestNearest          InEventLineTestNearest;
+        typedef FineIntersectionTestIO::OutEventLineTestNearestResult   OutEventLineTestNearestResult;
+        typedef FineIntersectionTestIO::InEventVolumeTestDeepest        InEventVolumeTestDeepest;
+        typedef FineIntersectionTestIO::OutEventVolumeTestDeepestResult OutEventVolumeTestDeepestResult;
+        typedef FineIntersectionTestIO::InEventVolumeTestFine           InEventVolumeTestFine;
+        typedef FineIntersectionTestIO::OutEventVolumeTestFineResult    OutEventVolumeTestFineResult;
+
         // Memory budget for the two embedded query scratch buffers (CgsFineIntersectionTestModule.h:55-56).
         static const u32 KU_VOLUME_VOLUME_QUERY_MEM_SIZE = 299008;
         static const u32 KU_VOLUME_LINE_QUERY_MEM_SIZE   = 67584;

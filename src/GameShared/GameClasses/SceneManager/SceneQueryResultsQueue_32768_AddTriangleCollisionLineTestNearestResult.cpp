@@ -8,4 +8,5 @@
 // forces the SizeBytes==32768 specialisation the boot path uses.
 template bool
 CgsSceneManager::SceneManagerIO::OutSceneQueryResultsQueue<32768>::AddTriangleCollisionLineTestNearestResult(
-    s32, s64, const void*, bool);
+    CgsSceneManager::SceneQueryId, CgsSceneManager::EntityId, CgsSceneManager::VolumeInstanceId,
+    const void*, bool);
