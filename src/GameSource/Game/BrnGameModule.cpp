@@ -29,7 +29,8 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOOutputBuffer.hpp" // DirectorIO::OutputBuffer::GetCameraOutput (DoUpdate_Sound)
 #include "GameSource/Replays/BrnReplayModuleIO.h"                            // ReplayIO::OutputBuffer_PreSim::GetStatusInterface (DoUpdate_Sound)
 #include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_OutputBuffer.h"     // EffectsIO::OutputBuffer (DoUpdate_Sound lock-only participant)
-#include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_InputBuffer.h"      // EffectsIO::InputBuffer (DoUpdate_Effects / BridgeEntityToEffects)
+#include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_InputBuffer.h"
+#include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h"   // AudioEffectsMessageQueue (the empty-queue construct in DoUpdate_Effects)      // EffectsIO::InputBuffer (DoUpdate_Effects / BridgeEntityToEffects)
 #include "GameSource/GameState/BrnGameStateModuleIO.h" // GameStateModuleIO::OutputBuffer (BridgeGameStateToDirector)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // DirectorIO::SceneQuery{Input,Output}Buffer
 #include "GameSource/Effects/Particles/ParticleModuleBringUp.h"               // BrnParticle::PCBringUpProduceParticleRenderData (DoDispatch's particle-render-data seam)
@@ -1948,6 +1949,31 @@ namespace BrnGame
             const CgsInput::InputIO::PadOutputInformation* lpPad = lpInputOutputBuffer->GetPadInfo(0);
             if (lpPad != 0 && ((lpPad->maActionInfo[3].muStatus >> 1) & 1u) != 0)
                 BrnEffects::EffectsModule::RestartEffects();
+        }
+
+        // ---- THE SOUND -> EFFECTS AUDIO MESSAGE QUEUE ------------------------------------
+        // ⚠ FLAG PC bring-up, and it is a CONSTRUCT, not a value. EffectsIO::InputBuffer::
+        // Construct @0x82293618 deliberately does NOT construct mAudioEffectsMessageQueue --
+        // its own banner says so -- because on the console the sound bridge always writes it
+        // (SetAudioEffectsMessageQueue @0x823BA9E0, a 144-byte copy of BrnSound's own
+        // constructed queue) before EffectsModule::Update reads it. This build has no sound
+        // pre-update output buffer to bridge from (the leg goes in null, three arguments up),
+        // so the member stayed as CreateIOBuffer left it and
+        // VariableEventQueue<128,16>::GetNextEvent asserted "Not Constructed" from
+        // EffectsModule::UpdateActiveRaceCars -- 3,860 firings in one run, which stalled the
+        // boot at BOOT phase (measured, run 13).
+        //
+        // A CONSTRUCTED EMPTY queue is exactly what a silent sound module produces: the
+        // exhaust-pop walk reads "no events" and every lafExhaustPopIntensity stays at its
+        // frame default. That is a real value, not a placeholder zero -- the console's own
+        // behaviour on a frame where no car popped.
+        // DELETE-WHEN the sound pre-update output buffer is bridged in here: then the real
+        // queue arrives by copy and this construct goes with the null argument.
+        if (lpSoundPreUpdateOutputBuffer == 0)
+        {
+            BrnSound::Module::Io::AudioEffectsMessageQueue lEmptyAudioEffects;
+            lEmptyAudioEffects.Construct();
+            lpEffectsInputBuffer->SetAudioEffectsMessageQueue(&lEmptyAudioEffects);
         }
 
         // @0x823DD1A4/B8 -- the world -> effects bridge (it takes the update set, not the
