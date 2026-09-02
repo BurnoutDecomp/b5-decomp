@@ -77,6 +77,17 @@ namespace EffectsIO
         void              SetWhiteLevel(f32 lfWhiteLevel);                                      // @ 0x823BAB40
         f32               GetWhiteLevel() const;                                                // @ 0x8227DFD0
 
+        // The four fields EffectsModule::GenerateDispatchLists @0x82296668 copies into the
+        // particle dispatch input. The X360 does NOT call accessors there -- it loads them
+        // inline (`*(dst+4) = *(src+0x10)` then three lvx128/stvx128 pairs off src+0x20 /
+        // +0x30 / +0x40), i.e. these are the compiler-inlined reads of the same members the
+        // Set* twins above write under the write lock. Exposed by name (additive, 2026-09-02)
+        // so the producer stays off the raw offsets; no lock test, matching the asm.
+        CgsGraphics::DispatchFrame*    GetDispatchFrame() const          { return mpDispatchFrame; }
+        const rw::math::vpu::Vector3&  GetKeyLightDirection() const      { return mKeyLightDirection; }
+        const rw::math::vpu::Vector3&  GetKeyLightColour() const         { return mKeyLightColour; }
+        const rw::math::vpu::Vector3&  GetAverageIrradianceColour() const{ return mAverageIrradianceColour; }
+
         // NOTE: no offsetof _AssertLayout() -- the X360 byte offsets (mpBaseEffectsFrame @+0x4,
         // mCameraInput @+0x50, mpEnvironmentMap @+0x1B0, mfWhiteLevel @+0x1B4) are 32-bit-specific
         // (pointers widen on the x64 gate), so they cannot be pinned by static_assert. Parity is
