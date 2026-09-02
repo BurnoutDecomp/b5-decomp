@@ -135,10 +135,86 @@ namespace Deformation
             const Vector3& lrContactPosition = lpImpulseParams->mImpulsePosition;   // params+32 (v2)
             // 0x8260E088 `li r4,1` (BODY_SPACE impulse) and 0x8260E090 `lwz r5,0x50(r11)`
             // (== ImpulseParams::mePositionSpace) are set ONCE, above the three-way branch, so
-            // all three Apply*ContactImpulse variants receive the same pair. r6 is the bool.
+            // all three Apply*ContactImpulse variants receive the same pair.
+            //
+            // ⭐⭐ CORRECTED 2026-09-02 (crash-response wave): r6 is NOT a literal. Both console
+            // callers load it from the params block:
+            //     ApplyLocalImpulse       0x8260E0B4  lbz r6, 0xB8(r11)     ; params +0xB8
+            //     RecievePassedOnImpulse  0x8260E018  lbz r6, 0xB8(r31)     ; params +0xB8
+            // and +0xB8 is ImpulseParams::mbWorldContact -- the SAME byte the sibling branch below
+            // tests (`lbz r10, 0xB8` @0x8260E0D0). The tree passed `false` here, which in
+            // ApplyCrashedContactImpulse @0x825D4D50 selects the `beq` arm at 0x825D4DB4: the angular
+            // impulse is multiplied by mCollisionAttribs +0x280 lane .y (CarAngularImpulseScale) and
+            // neither mi8NumWorldCollisions (+0x1353) nor the SecondsSinceLastWallContact lane
+            // (+0x1070.w) is touched. On the console a WORLD contact against a crashing car takes the
+            // other arm (0x825D4D90..0x825D4DB0): counter bumped, wall-contact lane zeroed (so
+            // mbContactingWall reads true on the next UpdateCrashing), angular impulse applied RAW.
             lpVehicle->ApplyCrashedContactImpulse(liImpulse, rw::physics::BODY_SPACE,
                                                   lrContactPosition, lpImpulseParams->mePositionSpace,
-                                                  false);
+                                                  lpImpulseParams->mbWorldContact);
+
+            // ---- [crash-response] PC bring-up instrument -- DELETE WHEN the crash response is 1:1 -
+            // OPT-IN (BRN_CRASH_RESPONSE_DIAG=1). Every impulse the deformation system hands a
+            // CRASHING car, with the lever arm it will be applied through: the contact point in the
+            // car's own frame (so "bumper height" is a number, not a guess), the world impulse, the
+            // angular impulse r x J the kernel will bank, and the pitch rate the car already carries.
+            // A roof landing is a pitch budget; this prints every deposit into it.
+            {
+                static s32 siCrashRespProbe = -1;
+                if ( siCrashRespProbe < 0 )
+                {
+                    const char* lpcEnv = getenv( "BRN_CRASH_RESPONSE_DIAG" );
+                    siCrashRespProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+                }
+                static u32 suCrashArrivals = 0;
+                if ( siCrashRespProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && ++suCrashArrivals <= 1500u )
+                {
+                    const Matrix44Affine& lrT = lpVehicle->GetTransform();
+                    const Vector3 lPos = lrT.Pos();
+                    // the arm exactly as GetImpulsesFromLocalImpulse forms it for this tag pair
+                    Vector3 lArmW;
+                    if ( lpImpulseParams->mePositionSpace == rw::physics::WORLD_SPACE )
+                    {
+                        lArmW = Vector3{ lrContactPosition.x - lPos.x, lrContactPosition.y - lPos.y,
+                                         lrContactPosition.z - lPos.z, 0.0f };
+                    }
+                    else
+                    {
+                        lArmW = Vector3{
+                            lrT.xAxis.x * lrContactPosition.x + lrT.yAxis.x * lrContactPosition.y + lrT.zAxis.x * lrContactPosition.z,
+                            lrT.xAxis.y * lrContactPosition.x + lrT.yAxis.y * lrContactPosition.y + lrT.zAxis.y * lrContactPosition.z,
+                            lrT.xAxis.z * lrContactPosition.x + lrT.yAxis.z * lrContactPosition.y + lrT.zAxis.z * lrContactPosition.z,
+                            0.0f };
+                    }
+                    const Vector3 lJW{
+                        lrT.xAxis.x * liImpulse.x + lrT.yAxis.x * liImpulse.y + lrT.zAxis.x * liImpulse.z,
+                        lrT.xAxis.y * liImpulse.x + lrT.yAxis.y * liImpulse.y + lrT.zAxis.y * liImpulse.z,
+                        lrT.xAxis.z * liImpulse.x + lrT.yAxis.z * liImpulse.y + lrT.zAxis.z * liImpulse.z,
+                        0.0f };
+                    const Vector3 lRxJ{ lArmW.y * lJW.z - lArmW.z * lJW.y,
+                                        lArmW.z * lJW.x - lArmW.x * lJW.z,
+                                        lArmW.x * lJW.y - lArmW.y * lJW.x, 0.0f };
+                    const Vector3 lW = lpVehicle->GetAngularVelocity();
+                    const f32 lfPitchRate = lW.x * lrT.xAxis.x + lW.y * lrT.xAxis.y + lW.z * lrT.xAxis.z;
+                    const f32 lfPitchDep  = lRxJ.x * lrT.xAxis.x + lRxJ.y * lrT.xAxis.y + lRxJ.z * lrT.xAxis.z;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[crash-response] arrive n=" << static_cast<s32>(suCrashArrivals)
+                        << " world=" << ( lpImpulseParams->mbWorldContact ? 1 : 0 )
+                        << " dir=" << static_cast<s32>(lpImpulseParams->meImpulseDirection)
+                        << " mag=" << lfMagnitude
+                        << " Jbody=(" << liImpulse.x << "," << liImpulse.y << "," << liImpulse.z << ")"
+                        << " posSpace=" << static_cast<s32>(lpImpulseParams->mePositionSpace)
+                        << " armBody=(" << ( lArmW.x * lrT.xAxis.x + lArmW.y * lrT.xAxis.y + lArmW.z * lrT.xAxis.z )
+                        << "," << ( lArmW.x * lrT.yAxis.x + lArmW.y * lrT.yAxis.y + lArmW.z * lrT.yAxis.z )
+                        << "," << ( lArmW.x * lrT.zAxis.x + lArmW.y * lrT.zAxis.y + lArmW.z * lrT.zAxis.z ) << ")"
+                        << " rxJ=(" << lRxJ.x << "," << lRxJ.y << "," << lRxJ.z << ")"
+                        << " pitchDeposit=" << lfPitchDep
+                        << " pitchRate=" << lfPitchRate
+                        << " up.y=" << lrT.yAxis.y << " fwd.y=" << lrT.zAxis.y
+                        << " closing=" << lpImpulseParams->mvfVelocityAlongNormal.x
+                        << "\n";
+                }
+            }
         }
         else if ( lpImpulseParams->mbWorldContact )          // *(params+184)
         {
