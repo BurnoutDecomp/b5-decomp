@@ -58,6 +58,9 @@
 
 namespace BrnPhysics
 {
+    // [crash-response] DIAG -- defined in ExternalPhysicsBody.cpp; see its banner. NOT X360.
+    extern const ExternalPhysicsBody* gpCrashResponseDiagBody;
+
 namespace Vehicle
 {
     namespace vpu = rw::math::vpu;
@@ -650,6 +653,22 @@ namespace Vehicle
             //      showtime        = (meShowtimeBehaviour == 2) (cntlzw/extrwi idiom, r8)
             //      random          = mRandom (r9 = this+16)
             //      v1/v2           = splat(lfSimTimerTimeStep) / splat(lfGameTimerTimeStep)
+            // ---- [crash-response] PC bring-up instrument -- DELETE WHEN the crash response is
+            // 1:1. OPT-IN (BRN_CRASH_RESPONSE_DIAG=1). NOT IN THE X360 BINARY. Arms the drain
+            // witness in ExternalPhysicsBody::CalculateNewVelocity on the PLAYER's body for the
+            // frames it is crashing; the pose line itself is printed after the update below.
+            static s32 siCrashRespDiag = -1;
+            if (siCrashRespDiag < 0)
+            {
+                const char* lpcEnv = getenv("BRN_CRASH_RESPONSE_DIAG");
+                siCrashRespDiag = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
+            }
+            if (siCrashRespDiag == 1 && liCar == mePlayerActiveRaceCarIndex)
+            {
+                gpCrashResponseDiagBody =
+                    maRaceCarVehicles[liCar].IsCrashing() ? &maRaceCarVehicles[liCar] : nullptr;
+            }
+
             CgsDev::PerfMonCpu::StartMonitor(gs_iUpdateVehiclesPM);
             maRaceCarVehicles[liCar].Update(
                 VecFloat{ lfSimTimerTimeStep, lfSimTimerTimeStep,
@@ -663,6 +682,84 @@ namespace Vehicle
                 meShowtimeBehaviour == 2u,
                 mRandom);
             CgsDev::PerfMonCpu::StopMonitor(gs_iUpdateVehiclesPM);
+
+            // ---- [crash-response] pose witness (opt-in, see the arm above). One line per frame
+            // for the player while it is crashing and for 180 frames after; a 16-frame ring of
+            // pre-crash poses is dumped on the crash edge so the approach is on record too, and
+            // the crash edge prints the attribs the response is built from (mass, half extents,
+            // COM, CarAngularImpulseScale, CrashExtraVelocityFactors). Body-frame omega is
+            // (pitch about Right, yaw about Up, roll about At). NOT IN THE X360 BINARY.
+            if (siCrashRespDiag == 1 && liCar == mePlayerActiveRaceCarIndex
+                && CgsDev::Log::gpDebugPrint != 0)
+            {
+                struct PoseSample { u32 f; f32 mph, px, py, pz, upy, fwdy, rty, wp, wy, wr, vx, vy, vz; };
+                static PoseSample saRing[16];
+                static u32 suFrame = 0, suPostCrash = 0, suLines = 0;
+                static bool sbWasCrashing = false;
+                const RaceCarPhysics& lrCar = maRaceCarVehicles[liCar];
+                const Matrix44Affine& lrT = lrCar.GetTransform();
+                const Vector3 lW = lrCar.GetAngularVelocity();
+                const Vector3 lV = lrCar.GetLinearVelocity();
+                PoseSample lS;
+                lS.f = ++suFrame; lS.mph = lrCar.GetSpeedMPH().x;
+                lS.px = lrT.wAxis.x; lS.py = lrT.wAxis.y; lS.pz = lrT.wAxis.z;
+                lS.upy = lrT.yAxis.y; lS.fwdy = lrT.zAxis.y; lS.rty = lrT.xAxis.y;
+                lS.wp = vpu::Dot(lW, lrT.xAxis); lS.wy = vpu::Dot(lW, lrT.yAxis); lS.wr = vpu::Dot(lW, lrT.zAxis);
+                lS.vx = lV.x; lS.vy = lV.y; lS.vz = lV.z;
+                const bool lbCrashing = lrCar.IsCrashing();
+                auto lPrint = [&](const PoseSample& lrS, const char* lpcTag)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[crash-response] pose " << lpcTag << " f=" << static_cast<s32>(lrS.f)
+                        << " mph=" << lrS.mph
+                        << " pos=(" << lrS.px << "," << lrS.py << "," << lrS.pz << ")"
+                        << " up.y=" << lrS.upy << " fwd.y=" << lrS.fwdy << " right.y=" << lrS.rty
+                        << " Wbody=(" << lrS.wp << "," << lrS.wy << "," << lrS.wr << ")"
+                        << " v=(" << lrS.vx << "," << lrS.vy << "," << lrS.vz << ")"
+                        << "\n";
+                };
+                if (lbCrashing && !sbWasCrashing)
+                {
+                    for (u32 lu = 1; lu <= 16u; ++lu)
+                    {
+                        const PoseSample& lrOld = saRing[(suFrame + lu) & 15u];
+                        if (lrOld.f != 0) { lPrint(lrOld, "pre"); }
+                    }
+                    const VehicleAttribs* lpA = lrCar.GetAttribs();
+                    const Vector3 lHalf = lrCar.GetHalfExtent();
+                    *CgsDev::Log::gpDebugPrint
+                        << "[crash-response] entry f=" << static_cast<s32>(suFrame)
+                        << " mass=" << lrCar.GetMass().x
+                        << " half=(" << lHalf.x << "," << lHalf.y << "," << lHalf.z << ")"
+                        << " Iinv=(" << lrCar.mLocalInverseInertia.xAxis.x << "," << lrCar.mLocalInverseInertia.yAxis.y << "," << lrCar.mLocalInverseInertia.zAxis.z << ")";
+                    if (lpA != nullptr)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << " com=(" << lpA->mBaseAttribs.mCOMOffset.x << "," << lpA->mBaseAttribs.mCOMOffset.y << "," << lpA->mBaseAttribs.mCOMOffset.z << ")"
+                            << " carAngScale=" << lpA->mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.y
+                            << " crashSpeedMPS=" << lpA->mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.x
+                            << " crashExtra=(" << lpA->mBaseAttribs.mCrashExtraVelocityFactors.x << "," << lpA->mBaseAttribs.mCrashExtraVelocityFactors.y
+                            << "," << lpA->mBaseAttribs.mCrashExtraVelocityFactors.z << "," << lpA->mBaseAttribs.mCrashExtraVelocityFactors.w << ")"
+                            << " attrMass=" << lpA->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+                    }
+                    *CgsDev::Log::gpDebugPrint << "\n";
+                    suPostCrash = 0;
+                }
+                if (lbCrashing) { suPostCrash = 0; }
+                else if (sbWasCrashing) { suPostCrash = 1; }
+                else if (suPostCrash > 0) { ++suPostCrash; }
+                if ((lbCrashing || (suPostCrash > 0 && suPostCrash <= 180u)) && ++suLines <= 3000u)
+                {
+                    lPrint(lS, lbCrashing ? "crash" : "post");
+                }
+                else if ((suFrame % 10u) == 0u)
+                {
+                    lPrint(lS, "tick");   // the every-10th-frame baseline, so a NON-crash wall bump
+                                          // (the upright drive-away control) has a pose trace too
+                }
+                saRing[suFrame & 15u] = lS;
+                sbWasCrashing = lbCrashing;
+            }
 
             // Per-car debug component tick (asm 0x82645A68..78; f1 = lfSimTimerTimeStep).
             // FLAG (span cast, deliberate): maRaceCarDebugComponent is the opaque 8x1024

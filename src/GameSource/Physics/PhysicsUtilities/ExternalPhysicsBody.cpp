@@ -211,10 +211,49 @@ namespace BrnPhysics
     // either, and a guarded 0 would silently freeze a mass-less body instead of tripping the two
     // trailing IsValid asserts that exist precisely to catch it.
     // ---------------------------------------------------------------------------------------
+    // ---- [crash-response] PC bring-up instrument -- DELETE WHEN the crash response is 1:1 -------
+    // NOT IN THE X360 BINARY. The body the crash-response witness is watching (the player's car
+    // while it is crashing), set per frame by VehicleManager::UpdateVehiclePhysics and read by
+    // CalculateNewVelocity below so every accumulator drain of THAT body prints what it drained:
+    // the banked linear/angular impulse, the torque*dt, and the resulting change of angular
+    // velocity in the car's own axes. Null == nobody is watched (the default, and every run
+    // without BRN_CRASH_RESPONSE_DIAG=1).
+    const ExternalPhysicsBody* gpCrashResponseDiagBody = nullptr;
+
     void ExternalPhysicsBody::CalculateNewVelocity(VecFloat lvfDeltaTime)
     {
         const f32 lfDt      = lvfDeltaTime.x;   // broadcast VecFloat -> scalar (de-modelled lane)
         const f32 lfInvMass = 1.0f / mfMass.x;
+
+        // [crash-response] -- see the banner on gpCrashResponseDiagBody. Prints BEFORE the drain,
+        // from the same operands the drain uses, so the numbers are the ones integrated.
+        if ( this == gpCrashResponseDiagBody && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            static u32 suDrains = 0;
+            if ( ++suDrains <= 4000u )
+            {
+                const Vector3 lL = vpu::Add(vpu::Mult(mTotalTorque, lfDt), mTotalAngularImpulse);
+                const Vector3 lDW = vpu::Add(
+                    vpu::Add(vpu::Mult(mWorldInverseInertia.xAxis, lL.x),
+                             vpu::Mult(mWorldInverseInertia.yAxis, lL.y)),
+                    vpu::Mult(mWorldInverseInertia.zAxis, lL.z));
+                const Vector3& lR0 = mTransform.xAxis;
+                const Vector3& lR1 = mTransform.yAxis;
+                const Vector3& lR2 = mTransform.zAxis;
+                *CgsDev::Log::gpDebugPrint
+                    << "[crash-response] drain n=" << static_cast<s32>(suDrains)
+                    << " dt=" << lfDt
+                    << " J=(" << mTotalLinearImpulse.x << "," << mTotalLinearImpulse.y << "," << mTotalLinearImpulse.z << ")"
+                    << " Fdt=(" << mTotalLinearForce.x * lfDt << "," << mTotalLinearForce.y * lfDt << "," << mTotalLinearForce.z * lfDt << ")"
+                    << " Lang=(" << mTotalAngularImpulse.x << "," << mTotalAngularImpulse.y << "," << mTotalAngularImpulse.z << ")"
+                    << " Tdt=(" << mTotalTorque.x * lfDt << "," << mTotalTorque.y * lfDt << "," << mTotalTorque.z * lfDt << ")"
+                    << " dWbody=(" << vpu::Dot(lDW, lR0) << "," << vpu::Dot(lDW, lR1) << "," << vpu::Dot(lDW, lR2) << ")"
+                    << " Wbody=(" << vpu::Dot(mAngularVelocity, lR0) << "," << vpu::Dot(mAngularVelocity, lR1) << "," << vpu::Dot(mAngularVelocity, lR2) << ")"
+                    << " m=" << mfMass.x
+                    << " Iinv=(" << mLocalInverseInertia.xAxis.x << "," << mLocalInverseInertia.yAxis.y << "," << mLocalInverseInertia.zAxis.z << ")"
+                    << "\n";
+            }
+        }
 
         CGS_ASSERT(vpu::IsValid(mAngularVelocity), "rw::math::IsValid(mAngularVelocity)");
         CGS_ASSERT(vpu::IsValid(mLinearVelocity),  "rw::math::IsValid(mLinearVelocity)");
