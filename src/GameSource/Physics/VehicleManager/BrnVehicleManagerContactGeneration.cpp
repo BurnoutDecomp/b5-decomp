@@ -28,6 +28,8 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h" // DeformableObject (GetVehiclePhysics)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"              // VehiclePhysics (IsFrozen through the ExternallySimulatedBody base)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"     // SimpleVehiclePhysics (DoCarCar's GetVehiclePhysics receiver)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"              // RaceCarPhysics ([kerb-car] probe reads)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"                       // Wheel::RoadContact ([kerb-car] probe reads)
 #include "rw/math/vpu/vector3_operation.h"                                                // Magnitude / operator- (DoCarCar's relative-speed padding)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                                // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                 // Start/StopMonitor (DoRaceCarWorldContactValidation's own monitor)
@@ -1463,6 +1465,14 @@ namespace Vehicle
         }
     }
 
+    // [kerb] PC bring-up instrument -- DELETE-WHEN the kerb response is proven 1:1. Owned by the
+    // slice TU BrnVehicleManager_ValidateRaceCarWorldContact.cpp (banner + definitions there);
+    // declared locally here rather than in the manager header because a probe has no business in
+    // the class's declaration.
+    extern u32 guKerbProbeFrame;
+    bool KerbProbeArmed();
+    bool KerbProbeTake(u32& lruUsed, const char* lpcTag);
+
     // ==============================================================================================
     // DoRaceCarWorldContactValidation @0x825EB6C8 (416). PS3 DecFIGS 0x70FA74 (804).
     //
@@ -1505,6 +1515,12 @@ namespace Vehicle
         const s32 liNumContacts = lrRawQueue.GetLength();
         s32 liValidatedContacts = 0;
 
+        // [kerb] the shared frame counter for the three-tag probe (armed-only bump).
+        if (KerbProbeArmed())
+        {
+            ++guKerbProbeFrame;
+        }
+
         for (s32 liContact = 0; liContact < liNumContacts; ++liContact)
         {
             PotentialContact lContact = lrRawQueue.GetEvent(liContact);          // 80-byte copy
@@ -1542,6 +1558,67 @@ namespace Vehicle
             lpPotentialContactInterface->AddEvent(6u, lContact);
             ++liValidatedContacts;
         }
+
+        // ---- [kerb-car] one line per MOVING car per frame (the [kerb] banner in the slice TU) ----
+        // The car's vertical/angular response the kerb probe is measured against: position, velocity
+        // (world), the angular velocity dotted onto the body axes (pitch about Right, yaw about Up,
+        // roll about At), the wheel-plane and above-ground inputs the culls read, the four wheels'
+        // on-ground / line-valid bits and contact heights, and this frame's raw/valid contact counts.
+        if (KerbProbeArmed())
+        {
+            static u32 suKerbCarLines = 0u;
+            for (s32 liCar = 0; liCar < 8; ++liCar)
+            {
+                if (!mUsedRaceCars.IsBitSet(static_cast<u32>(liCar)))
+                {
+                    continue;
+                }
+                const RaceCarPhysics& lrCar = maRaceCarVehicles[liCar];
+                const f32 lfMph = lrCar.GetSpeedMPH().x;
+                if (lfMph < 0.5f && liNumContacts == 0)
+                {
+                    continue;   // parked cars say nothing
+                }
+                if (!KerbProbeTake(suKerbCarLines, "[kerb-car]"))
+                {
+                    break;
+                }
+                const Matrix44Affine& lrT = lrCar.GetTransform();
+                const Vector3& lrV = lrCar.GetLinearVelocity();
+                const Vector3& lrW = lrCar.GetAngularVelocity();
+                const AboveGroundTestResult& lrAg = *lrCar.GetAboveGroundTestResult();
+                s32 liOnGround  = 0;
+                s32 liLineValid = 0;
+                f32 lafWheelY[eNumDrivenWheels];
+                for (s32 liW = 0; liW < eNumDrivenWheels; ++liW)
+                {
+                    const Wheel::RoadContact& lrRc =
+                        lrCar.GetWheel(static_cast<EVehicleDrivenWheel>(liW)).GetRoadContact();
+                    liOnGround  |= (lrRc.mbIsOnGround ? 1 : 0) << liW;
+                    liLineValid |= (lrRc.mbLineTestIsValid ? 1 : 0) << liW;
+                    lafWheelY[liW] = lrRc.mPosition.y;
+                }
+                *CgsDev::Log::gpDebugPrint
+                    << "[kerb-car] f " << guKerbProbeFrame << " car " << liCar
+                    << " pos " << lrT.wAxis.x << " " << lrT.wAxis.y << " " << lrT.wAxis.z
+                    << " vel " << lrV.x << " " << lrV.y << " " << lrV.z
+                    << " mph " << lfMph
+                    << " angPYR " << (lrW.x * lrT.xAxis.x + lrW.y * lrT.xAxis.y + lrW.z * lrT.xAxis.z)
+                    << " " << (lrW.x * lrT.yAxis.x + lrW.y * lrT.yAxis.y + lrW.z * lrT.yAxis.z)
+                    << " " << (lrW.x * lrT.zAxis.x + lrW.y * lrT.zAxis.y + lrW.z * lrT.zAxis.z)
+                    << " upY " << lrT.yAxis.y << " atY " << lrT.zAxis.y << " rightY " << lrT.xAxis.y
+                    << " hasAir " << (lrCar.HasAir() ? 1 : 0)
+                    << " crash " << (lrCar.IsCrashing() ? 1 : 0)
+                    << " mwdv " << (lrCar.mbMinWheelDistValid ? 1 : 0)
+                    << " wpH " << lrCar.mWheelPlanePosAndHeight.w
+                    << " agValid " << (lrAg.mbValid ? 1 : 0)
+                    << " agNy " << lrAg.mIntersectionNormal.y << " agPy " << lrAg.mIntersectionPosition.y
+                    << " onG " << liOnGround << " lineV " << liLineValid
+                    << " wy " << lafWheelY[0] << " " << lafWheelY[1] << " " << lafWheelY[2] << " " << lafWheelY[3]
+                    << " raw " << liNumContacts << " valid " << liValidatedContacts << "\n";
+            }
+        }
+        // ---- end [kerb-car] -----------------------------------------------------------------------
 
         // ---- [cvalid] PC bring-up instrument -- DELETE WHEN world collision is proven map-wide ---
         // OPT-IN (BRN_WALL_PROBE=1, the switch that already arms the body-shell trace it pairs

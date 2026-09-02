@@ -36,6 +36,13 @@ namespace Vehicle
     extern u32 gT5CarCarApplied;
     extern f32 gT5LastImpulseMag;
     extern f32 gT5LastClosing;
+
+    // [kerb] PC bring-up instrument -- DELETE-WHEN the kerb response is proven 1:1. Owned by
+    // BrnVehicleManager_ValidateRaceCarWorldContact.cpp (banner + definitions there); this TU only
+    // prints the [kerb-imp] leg. NOT IN THE X360 BINARY.
+    extern u32 guKerbProbeFrame;
+    bool KerbProbeArmed();
+    bool KerbProbeTake(u32& lruUsed, const char* lpcTag);
 }
 
 namespace Deformation
@@ -480,6 +487,34 @@ namespace Deformation
         const f32 lfImpulseLength = vpu::NormalizeReturnMagnitude(lImpulse, lImpulseUnit);
         const VecFloat lvfShapedMagnitude =
             VecFloat{ lfImpulseLength, lfImpulseLength, lfImpulseLength, lfImpulseLength };
+
+        // ---- [kerb-imp] one line per world impulse the solver applies (the [kerb] banner in
+        //      BrnVehicleManager_ValidateRaceCarWorldContact.cpp). The RESULT the two culls decide:
+        //      the contact normal the sensor stored (rewritten or not), the point, the closing
+        //      speed, the solved magnitude, the shaped magnitude/direction handed to the sensor.
+        if ( BrnPhysics::Vehicle::KerbProbeArmed() )
+        {
+            static u32 suKerbImpLines = 0u;
+            if ( BrnPhysics::Vehicle::KerbProbeTake( suKerbImpLines, "[kerb-imp]" ) )
+            {
+                const Vector3 lPos = lpVehicle->GetPosition();
+                *CgsDev::Log::gpDebugPrint
+                    << "[kerb-imp] f " << BrnPhysics::Vehicle::guKerbProbeFrame
+                    << " sensor " << liSensorIndex
+                    << " iter " << lvfIteration.x
+                    << " n " << lContact.mNormal.x << " " << lContact.mNormal.y << " " << lContact.mNormal.z
+                    << " pA " << lContact.mPointOnA.x << " " << lContact.mPointOnA.y << " " << lContact.mPointOnA.z
+                    << " closing " << vpu::Dot( lRelativeMotion, lContact.mNormal )
+                    << " rest " << lvfRestitution.x
+                    << " solved " << lvfImpulseMagnitude.x
+                    << " invI " << lvfInvInertia.x
+                    << " shapedMag " << lfImpulseLength
+                    << " dir " << lImpulseUnit.x << " " << lImpulseUnit.y << " " << lImpulseUnit.z
+                    << " carPos " << lPos.x << " " << lPos.y << " " << lPos.z
+                    << "\n";
+            }
+        }
+        // ---- end [kerb-imp] ---------------------------------------------------------------------
 
         // ---- [worldimp] PC bring-up instrument -- DELETE WHEN the wall test is banked -----------
         // OPT-IN (BRN_IMPULSE_PROBE=1). The UPSTREAM question the downstream probes cannot answer:
