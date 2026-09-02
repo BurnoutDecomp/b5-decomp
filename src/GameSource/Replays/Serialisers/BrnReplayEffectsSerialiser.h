@@ -61,6 +61,25 @@ namespace BrnReplays
         // X360 0x82278738. Reset the whole static layout to cleared state.
         void Clear();
 
+        // The record head EffectsModule::Update @0x8229EC28 round-trips (asm 0x8229F20C-
+        // 0x8229F21C reads, 0x8229F284-0x8229F29C writes; +0x00 the game mode word, +0x04
+        // the event-intro byte, +0x05 the junkyard-camera byte, +0x06 the was-in-junkyard
+        // byte, +0x07 the showtime-bounce-pending byte). Additive accessors (2026-09-02).
+        static const s32 KI_OFF_GAME_MODE            = 0x00;
+        static const s32 KI_OFF_EVENT_INTRO_ACTIVE   = 0x04;
+        static const s32 KI_OFF_IN_JUNKYARD_CAMERA   = 0x05;
+        static const s32 KI_OFF_WAS_IN_JUNKYARD      = 0x06;
+        static const s32 KI_OFF_SHOWTIME_BOUNCE      = 0x07;
+        s32  GetGameMode() const          { return *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(this) + KI_OFF_GAME_MODE); }
+        void SetGameMode(s32 liMode)      { *reinterpret_cast<s32*>(reinterpret_cast<u8*>(this) + KI_OFF_GAME_MODE) = liMode; }
+        bool GetEventIntroActive() const  { return reinterpret_cast<const u8*>(this)[KI_OFF_EVENT_INTRO_ACTIVE] != 0; }
+        void SetEventIntroActive(bool lb) { reinterpret_cast<u8*>(this)[KI_OFF_EVENT_INTRO_ACTIVE] = lb ? 1 : 0; }
+        bool GetInJunkyardCamera() const  { return reinterpret_cast<const u8*>(this)[KI_OFF_IN_JUNKYARD_CAMERA] != 0; }
+        void SetInJunkyardCamera(bool lb) { reinterpret_cast<u8*>(this)[KI_OFF_IN_JUNKYARD_CAMERA] = lb ? 1 : 0; }
+        bool GetWasInJunkyard() const     { return reinterpret_cast<const u8*>(this)[KI_OFF_WAS_IN_JUNKYARD] != 0; }
+        void SetWasInJunkyard(bool lb)    { reinterpret_cast<u8*>(this)[KI_OFF_WAS_IN_JUNKYARD] = lb ? 1 : 0; }
+        bool GetShowtimeBouncePending() const { return reinterpret_cast<const u8*>(this)[KI_OFF_SHOWTIME_BOUNCE] != 0; }
+
         // X360 0x82278918. Read a race car's boost data (index < 8): active byte,
         // value float, and boost type (asserted in [-1,3)).
         void GetBoostData(u32 luRaceCarIndex, u8& lruActive, f32& lrfValue, s32& lriBoostType);

@@ -340,6 +340,12 @@ enum EGameActionType
     // The PS3 DWARF enumerator is also 15 (BrnGameActions.h:25), i.e. no X360 shift here --
     // consistent with every other sub-53 slot in this enum.
     E_ACTION_COMPLETED_STUNT            = 15,    // DWARF BrnGameActions.h:25 (X360-attested)
+    // DWARF BrnGameActions.h:26, same value on the X360: EffectsModule::HandleGameActions
+    // @0x82296FD8 handles it as `case 16` -- `(payload & 0x80) == 0x80 && payload[+28] != -1`
+    // then the "Cannot find the RaceCarInterface" / "Invalid RaceCarIndex" asserts at
+    // EffectsModule.cpp:2381 / :2383. The convoy slipstream in-progress notification.
+    // (Sub-53 slot, so no X360 shift -- same as COMPLETED_STUNT above.)
+    E_ACTION_INPROGRESS_STUNT           = 16,    // DWARF BrnGameActions.h:26 (X360-attested)
     // DecFIGS value 190 shifted to ARTIST 198. HandleGameActions' high jump
     // table reads the 24-byte SendCarStatsAction below.
     E_ACTION_UPDATE_CAR_STATS           = 198,

@@ -496,13 +496,32 @@ namespace Deformation
                     if (liXcm != saiLastX[liSlot] || liZcm != saiLastZ[liSlot])
                     {
                         saiLastX[liSlot] = liXcm; saiLastZ[liSlot] = liZcm;
+
+                        // ⭐ BOTH SIDES, SAME FRAME, SAME PART (2026-09-02, deform close-out wave).
+                        // The owner filmed a torn-off body panel PARKED IN MID-AIR above a
+                        // stationary car. The rest-proof this wave inherited was read from a
+                        // per-slot log line carrying only the number below marked `render` -- and
+                        // if the two transforms have diverged, "frozen on the road" and "floating"
+                        // are BOTH TRUE, of different numbers. So print the physics body's own
+                        // transform (mRwBody, what the sim integrates and freezes) beside the
+                        // published one (GetEventRenderTransform, what BrnRaceCarEntityModule_
+                        // Render.cpp:625 assigns straight into lPartWorldMatrix), plus the offset
+                        // that separates them -- localGraphicsPos - localInitialComPos, the term
+                        // GetEventRenderTransform adds and GetRenderTransform does not.
+                        // A car-height gap between the two columns indicts the offset; no gap at
+                        // all indicts the physics rest state instead.
+                        const Matrix44Affine lPhysics = lrPart.GetRigidBodyTransform();
                         *CgsDev::Log::gpDebugPrint
                             << "[detach-pose] present " << renderengine::guPresentCount
                             << " slot " << liSlot
                             << " mesh " << lpIKPart->GetMeshId()
                             << " attached " << (lrPart.IsJoinedToVehicle() ? 1 : 0)
-                            << " world (" << lTransform.wAxis.x << ", " << lTransform.wAxis.y
-                            << ", " << lTransform.wAxis.z << ")\n";
+                            << " render (" << lTransform.wAxis.x << ", " << lTransform.wAxis.y
+                            << ", " << lTransform.wAxis.z << ")"
+                            << " physics (" << lPhysics.wAxis.x << ", " << lPhysics.wAxis.y
+                            << ", " << lPhysics.wAxis.z << ")"
+                            << " dy " << (lTransform.wAxis.y - lPhysics.wAxis.y)
+                            << "\n";
                     }
                 }
             }

@@ -569,6 +569,10 @@ namespace BrnWorldIO
         // (a typedef of the same CgsSceneManager type routed through the not-yet-committed
         // BrnPhysics::Vehicle::VehicleInputInterface); no lock-bit test in the X360 body.
         void AppendTriangleCacheInterface(const OutTriangleCacheInterface* lpTriangleCacheInterface); // :518 (0x8279BAF8)
+        // The read-locked getter (X360 sub_823B6938, the unnamed const half: asserts the read
+        // lock, returns &mTriangleCacheInterface). Its one caller is BrnGameModule::
+        // BridgeEntityToEffects @0x823CDF00 (-> EffectsIO::InputBuffer::SetTriangleCacheInterface).
+        const OutTriangleCacheInterface* GetTriangleCacheInterface() const;                   // (0x823B6938)
 
         // ---- resource request interface ----
         // X360 ledger names both getters GetResourceRequestResourceInterface (a post-FIGS

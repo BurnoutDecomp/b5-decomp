@@ -48,7 +48,17 @@ namespace Gen
 
         // Construct over the junkyardlocators collection, optionally owned by lpOwner.
         explicit junkyardlocators(void* lpOwner = nullptr);
+        // The X360 ctor's r4 IS the collection key (FindCollection(class, key));
+        // EffectsModule::Prepare @0x8229E690 hands it StringToKey("601979"). Additive.
+        junkyardlocators(u64 luCollectionKey, void* lpOwner);
     };
+
+    inline junkyardlocators::junkyardlocators(u64 luCollectionKey, void* lpOwner)
+        : Instance(FindCollection(KU_JUNKYARDLOCATORS_CLASS_KEY, luCollectionKey), lpOwner)
+    {
+        if (!mpAttributeData)
+            mpAttributeData = DefaultDataArea(4u);
+    }
 
     // X360 ctor @0x8227F018: Collection = FindCollection(KI_JUNKYARDLOCATORS_CLASS); chain
     // the Instance ctor over it; then give the instance a default data area (4 bytes) if

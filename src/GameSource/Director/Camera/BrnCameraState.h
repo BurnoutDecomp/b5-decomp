@@ -42,6 +42,47 @@ public:
     // The bit sets are 30-bit (the X360 bound the asserts compare: luIndex < 30).
     static const u32 KU_NUM_FLAGS = 30;
 
+    // The flag-index enum (DecFIGS DWARF BrnCameraState.h:56 -- the declaration shape;
+    // E_FLAG_COUNT == 30 is exactly the KU_NUM_FLAGS bound the X360 asserts compare
+    // against). Corroborated in the ARTIST asm at the three indices its readers inline:
+    // EffectsModule::Update @0x8229EC28 tests `(*(camera+81) & 8)` == index 3
+    // (RACING_GAMEPLAY_CAMERA), `& 0x10` == index 4 (BUMPER_CAM) and `& 0x400000` ==
+    // index 22 (IN_JY_CAMERA). Added 2026-09-02 so consumers stop passing bare integers.
+    enum EFlag
+    {
+        E_FLAG_WIDESCREEN                 = 0,
+        E_FLAG_VALID                      = 1,
+        E_FLAG_HIDE_PLAYER                = 2,
+        E_FLAG_RACING_GAMEPLAY_CAMERA     = 3,
+        E_FLAG_BUMPER_CAM                 = 4,
+        E_FLAG_SUPER_WIDE                 = 5,
+        E_FLAG_NEW_THIS_FRAME             = 6,
+        E_FLAG_JUMP_CAMERA                = 7,
+        E_FLAG_HARD_STOP_CAMERA           = 8,
+        E_FLAG_TUMBLING_PLAYER_FOCUSED    = 9,
+        E_FLAG_CRASH_CAMERA               = 10,
+        E_FLAG_TAKEDOWN_CAMERA            = 11,
+        E_FLAG_INTERNAL_CAR_CAMERA        = 12,
+        E_FLAG_DONT_UPDATE_SCENESPACE     = 13,
+        E_FLAG_IS_PICTURE_PARADISE        = 14,
+        E_FLAG_CRASH_STUNT                = 15,
+        E_FLAG_SMALL_NEAR_CLIP            = 16,
+        E_FLAG_RECORD_METRICS             = 17,
+        E_FLAG_SEND_METRICS               = 18,
+        E_FLAG_APPLYING_RACE_END_EFFECT   = 19,
+        E_FLAG_JUMP_PHOTO                 = 20,
+        E_FLAG_JY_FLASH                   = 21,
+        E_FLAG_IN_JY_CAMERA               = 22,
+        E_FLAG_JY_NEW_CAR_INTRO           = 23,
+        E_FLAG_ONLINE_RACE_INTRO_START    = 24,
+        E_FLAG_ONLINE_RACE_INTRO_RIVAL    = 25,
+        E_FLAG_ONLINE_RACE_INTRO_FINISHED = 26,
+        E_FLAG_ROAD_FOLLOWING_CAM         = 27,
+        E_FLAG_SHOWING_ONLINE_INTRO       = 28,
+        CONSISTENCY_TEST                  = 29,
+        E_FLAG_COUNT                      = 30
+    };
+
     // Zero-initialise the state (clears the head book-keeping word and both bit sets).
     // The director Camera::Construct asm @0x82255E68 calls this out-of-line on the
     // state sub-object at camera +0x138 (`bl BrnDirector__Camera__CameraState__Construct`).

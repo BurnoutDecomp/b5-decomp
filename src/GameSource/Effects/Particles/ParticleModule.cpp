@@ -1,6 +1,9 @@
 #include "GameSource/Effects/Particles/ParticleModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include <cstddef>                                   // offsetof
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog (the NOT-RECONSTRUCTED announcements)
+#include "GameSource/Effects/Particles/ParticleModuleIO.h"   // BrnParticle::ParticleIO::DispatchInputBuffer
+#include "GameSource/Game/BrnDispatchThreadInputBuffer.h"    // BrnGame::DispatchThreadInputBuffer
 
 // ============================================================================
 // GameSource/Effects/Particles/ParticleModule.cpp
@@ -154,6 +157,133 @@ namespace BrnParticle
             lpEffect->muFlags |= (LionEffect::EPPE_FLAG_KILL | LionEffect::EPPE_FLAG_CHANGED);
         }
         lpEffect->muHandle = (lpEffect->muHandle + LionEffect::KU_HANDLE_INCREMENT) & LionEffect::KU_HANDLE_VALID_MASK;
+    }
+
+    // =========================================================================
+    // SuspendPlayingEffects  @0x8227A2B8
+    //   Raise the suspended latch, then walk all 128 playing slots: any slot that
+    //   already has a live dispatch-thread Lion instance has it destroyed
+    //   (cLionFX::EffectDestroy) and its pointer cleared, and EVERY slot's cached
+    //   description lane (LionEffect +0x08) is zeroed so the resume pass re-resolves it.
+    //   ASM: `*(this+36340) = 1`, then a 128-iteration do/while with two cursors --
+    //   v2 = this+35828 stepping 4 (mapDispatchThreadLionEffects) and v1 = this+21496
+    //   stepping 112 (maPlayingEffects[i] + 8).
+    // =========================================================================
+    void ParticleModule::SuspendPlayingEffects()
+    {
+        mbPlayingEffectsSuspended = true;
+
+        for (u32 luSlot = 0; luSlot < KU_MAX_PLAYING_EFFECTS; ++luSlot)
+        {
+            if (mapDispatchThreadLionEffects[luSlot] != 0)
+            {
+                // cLionFX::EffectDestroy(mapDispatchThreadLionEffects[luSlot]) -- NOT
+                // RECONSTRUCTED: the Lion runtime core has no committed body. The pointer
+                // is still cleared, which is what every reader of this array tests, so the
+                // suspended module cannot hand a stale instance to the dispatch thread.
+                // Announced once so a run that suspends effects says so.
+                static bool sbLogged = false;
+                if (!sbLogged)
+                {
+                    sbLogged = true;
+                    CgsDev::Log::WriteToLog(
+                        "[particles] NOT RECONSTRUCTED: cLionFX::EffectDestroy in "
+                        "ParticleModule::SuspendPlayingEffects @0x8227A2B8 (the Lion core is not landed); "
+                        "the dispatch-thread instance pointer is cleared without it\n");
+                }
+                mapDispatchThreadLionEffects[luSlot] = 0;
+            }
+            // maPlayingEffects[luSlot] + 0x08 -- the cached description lane. Cleared the
+            // same way LionEffect::Construct clears it (the two pad words at +0x04/+0x08
+            // are the hashed name / description slots; only +0x08 is cleared here).
+            LionEffect& lrEffect = maPlayingEffects[luSlot];
+            lrEffect.mPad04[4] = lrEffect.mPad04[5] = lrEffect.mPad04[6] = lrEffect.mPad04[7] = 0;
+        }
+    }
+
+    // =========================================================================
+    // ResumePlayingEffects  @0x8228A320
+    //   Walk all 128 slots; for every slot still IN_USE, re-resolve its description
+    //   from mDescriptionCollection by the slot's hashed name (LionEffect +0x04) into
+    //   the description lane (+0x08), then flag it CHANGED|CREATE (0xC) so the dispatch
+    //   pass re-creates it. Finally drop the suspended latch.
+    //   ASM: v3 = this+21492 (maPlayingEffects[i]+4) stepping 112, test `*(v3+96) & 1`
+    //   (== muFlags & ePPEFlagInUse), linear search over the collection's entry array
+    //   (*coll -> entries, *(coll+4) -> count) for `**entry == *v3`, store `entry[1]`
+    //   into `*(v3+4)`, then `*(v3+96) |= 0xC`; tail `*(this+36340) = 0`.
+    // =========================================================================
+    void ParticleModule::ResumePlayingEffects()
+    {
+        for (u32 luSlot = 0; luSlot < KU_MAX_PLAYING_EFFECTS; ++luSlot)
+        {
+            LionEffect& lrEffect = maPlayingEffects[luSlot];
+            if ((lrEffect.muFlags & LionEffect::EPPE_FLAG_IN_USE) == 0)
+                continue;
+
+            // The description re-resolve (the linear search through
+            // mDescriptionCollection's entry array, storing the found entry's second word
+            // into the slot's +0x08 description lane) is NOT RECONSTRUCTED:
+            // BrnParticle::ParticleDescriptionCollection has no committed layout in the
+            // tree (it is a forward declaration only), so there are no named members to
+            // walk. The flag store below IS reproduced, so a resumed slot is still marked
+            // for re-creation -- it just re-creates from a null description until the
+            // collection's layout lands. Announced once.
+            static bool sbLogged = false;
+            if (!sbLogged)
+            {
+                sbLogged = true;
+                CgsDev::Log::WriteToLog(
+                    "[particles] NOT RECONSTRUCTED: the description re-resolve in "
+                    "ParticleModule::ResumePlayingEffects @0x8228A320 "
+                    "(ParticleDescriptionCollection has no committed layout); slots resume flagged "
+                    "CREATE|CHANGED with a null description\n");
+            }
+
+            lrEffect.muFlags |= (LionEffect::EPPE_FLAG_CHANGED | LionEffect::EPPE_FLAG_CREATE);   // 0xC
+        }
+
+        mbPlayingEffectsSuspended = false;
+    }
+
+    // =========================================================================
+    // GenerateRenderRequests  @0x82281BD8
+    //   Fold this frame's dispatch input (the three light lanes + the environment map +
+    //   the white level) into mRenderData, consume the camera-switched latch, stamp the
+    //   reduced-frame-rate flag from the dispatch-thread buffer's full-frame-rate bool,
+    //   bump the frame counter, and publish the whole record into the dispatch-thread
+    //   input buffer.
+    //   ASM (offsets from `this`): src+0x10 -> +0x8FD0 (mRenderData.mvSunDirection),
+    //   src+0x20 -> +0x8FE0 (mvSunColour), src+0x30 -> +0x8FF0 (mvAmbientColour),
+    //   *(this+0x9004) = *(src+0x40) (mpEnvironmentMap), *(this+0x9008) = *(src+0x44)
+    //   (mfWhiteLevel); `if (*(this+0x23137)) { *(this+0x23137) = 0; *(this+0x9000) |= 1; }`
+    //   (mbHasCameraSwitched -> eRenderDataFlagCameraSwitched); `if (!*(a3+0x99B0))
+    //   *(this+0x9000) |= 0x40` (mbIsRenderingAtFullFrameRate -> eRenderDataFlagReducedFrameRate);
+    //   `++*(this+0x8E04)` (muCurrentFrame); `memcpy(GetParticleRenderData(a3), this+0x8E00, 528)`.
+    //
+    //   x64 NOTE: the console's 528-byte memcpy is the whole ParticleRenderData record. On
+    //   the host the record is wider (two pointers widen), so it is published as a typed
+    //   struct assignment -- same meaning, correct size, per the x64-gate rule.
+    // =========================================================================
+    void ParticleModule::GenerateRenderRequests(const ParticleIO::DispatchInputBuffer* lpDispatchInput,
+                                                BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInput)
+    {
+        mRenderData.mvSunDirection    = lpDispatchInput->GetKeyLightDirection();
+        mRenderData.mvSunColour       = lpDispatchInput->GetKeyLightColour();
+        mRenderData.mvAmbientColour   = lpDispatchInput->GetAverageIrradianceColour();
+        mRenderData.mpEnvironmentMap  = lpDispatchInput->GetEnvironmentMap();
+        mRenderData.mfWhiteLevel      = lpDispatchInput->GetWhiteLevel();
+
+        if (mbHasCameraSwitched)
+        {
+            mbHasCameraSwitched = false;
+            mRenderData.muFlags |= ParticleRenderData::eRenderDataFlagCameraSwitched;   // 1
+        }
+        if (!lpDispatchThreadInput->GetIsRenderingAtFullFrameRate())
+            mRenderData.muFlags |= ParticleRenderData::eRenderDataFlagReducedFrameRate; // 0x40
+
+        ++mRenderData.muCurrentFrame;
+
+        *lpDispatchThreadInput->GetParticleRenderData() = mRenderData;
     }
 
     // Layout pin. Never executed (offsetof checks resolved at compile time inside an
