@@ -1423,8 +1423,9 @@ namespace Deformation
     //   * re-blend the tag scratch from the two sensors' accumulators (scalar spec weights).
     //   * if the spec is a SKINNED point: replace the offset's Y with the suspension-corrected Y
     //     ((pos.y - initial.y) + (wheel.mPosition.y - wheel.mStreamedPositionPlusTwistAmount.y) --
-    //     the live suspension compression), and write {corrected xyz, keep w} into the tag's
-    //     verlet scratch row (maVerletOffsets_Scratch[tag], the vperm<0,1,2,7> keep-w store).
+    //     the live suspension compression), and write {corrected xyz, w = tag scratch} into the
+    //     tag's verlet scratch row (maVerletOffsets_Scratch[tag] -- indexed by the RAW tag index,
+    //     `slwi r11, r8, 5` / `(r6 + 0x10E) << 4` on both consoles).
     // =============================================================================================
     void DeformableObject::UpdateIKSuspensionOffsets()
     {
@@ -1476,7 +1477,13 @@ namespace Deformation
                 lrScratch.x = lTarget.x - lrInitial.x;
                 lrScratch.y = (lTarget.y - lrInitial.y) + lfSuspensionY;   // vperm<0,5,2,3> Y swap
                 lrScratch.z = lTarget.z - lrInitial.z;
-                // w lane preserved (vperm<0,1,2,7>).
+                // w lane = the tag's re-blended scratch amount. ⭐ CORRECTED 2026-09-02 (rest-rows
+                // wave): the old note said "w preserved (vperm<0,1,2,7>)" -- that perm only builds
+                // the STACK temp; both consoles then overwrite its w with tag+0x1C and store the
+                // temp over the row (X360 0x826084C0 `lfs f0, 0x3B2C(r5)` / 0x826084C8 `stfs f0,
+                // -0x24(r1)` / 0x826084D4 stvx128; PS3 0x6D7670 `v23 = *(tag+28)`), exactly as the
+                // gather in UpdateSkinningOffsets does.
+                lrScratch.w = lrTag.GetScratchAmount();
 
                 // ---- [restrow-wheel] NOT X360; opt-in BRN_RESTROW_PROBE=1. DELETE-WHEN attributed.
                 {
