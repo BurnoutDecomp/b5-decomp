@@ -126,6 +126,42 @@ namespace Vehicle
     // both read it as one scalar), so the all-lane test and the .x test agree; .x is written here
     // because it is the value the rest of the tree reads by name.
     // ---------------------------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------------------------
+    // SetCrashingFromCheck  (DWARF TrafficPhysics.h:66; inlined into PhysicalTrafficVehicle::
+    // OnChecked @0x8261E444..0x8261E47C -- the ONLY copy in the ARTIST image). Landed 2026-09-02
+    // (traffic crash wave): the tree used to arm SetCrashing() and drop the fold as a FLAG.
+    //
+    //   0x8261E444  bl GetFullTraffic                 ; r3 = this (the full TrafficPhysics)
+    //   0x8261E448  bl VehiclePhysics::SetCrashing    ; the NON-virtual base call (a direct bl)
+    //   0x8261E44C  vspltisw v0,1 ; vcfsx v0,v0,1     ; 0.5 (folded into the caller's argument here)
+    //   0x8261E450  addi r11, r3, 0x50                ; &mLinearVelocity
+    //   0x8261E458  lvx128 v12, [r11]                 ; v   = mLinearVelocity
+    //   0x8261E45C  vmulfp128 v13, v126, v0           ; min = speed.w * 0.5   (the VecFloat arg)
+    //   0x8261E464  vmsum3fp128 v0, v127, v0          ; d   = dot3(dir, v)
+    //   0x8261E468  vmulfp128 v11, v127, v0           ; dir * d
+    //   0x8261E46C  vmaxfp v0, v0, v13                ; a   = max(d, min)
+    //   0x8261E470  vsubfp v13, v12, v11              ; perp = v - dir*d
+    //   0x8261E474  stvx128 v13, [r11]                ; (intermediate store, kept)
+    //   0x8261E478  vmaddfp128 v13, v127, v0, v13     ; v = dir * a + perp   (VMX128: vD = vA*vB + vD)
+    //   0x8261E47C  stvx128 v13, [r11]
+    //
+    // i.e. the checked car goes CRASHING and its velocity component along the checker's heading is
+    // floored at the caller's minimum (half the checker's speed). v126/v127 are the caller's
+    // splat(w) / xyz of RaceCarPhysics::mNormLinearVelocityMag (+0x1340).
+    // ---------------------------------------------------------------------------------------------
+    void TrafficPhysics::SetCrashingFromCheck(Vector3 lDirection, VecFloat lvfMinSpeedAlong)
+    {
+        VehiclePhysics::SetCrashing();                                     // 0x8261E448
+
+        const f32 lfAlong = vpu::Dot(lDirection, mLinearVelocity);         // vmsum3fp128
+        const Vector3 lvPerpendicular =
+            vpu::Subtract(mLinearVelocity, vpu::Mult(lDirection, lfAlong)); // vsubfp
+        mLinearVelocity = lvPerpendicular;                                 // 0x8261E474
+
+        const f32 lfFloored = (lfAlong > lvfMinSpeedAlong.x) ? lfAlong : lvfMinSpeedAlong.x;   // vmaxfp
+        mLinearVelocity = vpu::Add(vpu::Mult(lDirection, lfFloored), lvPerpendicular);         // vmaddfp128
+    }
+
     void TrafficPhysics::SetFreakedOut(f32 lfDirection, f32 lfSeveritySpeedSquared)
     {
         mfFreakOutDirection = lfDirection;                                   // +0x13F8

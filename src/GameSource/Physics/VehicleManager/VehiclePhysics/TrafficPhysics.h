@@ -138,6 +138,12 @@ namespace Vehicle
 
         bool IsFreakedOut() const { return mu8FreakOutState != E_FREAK_OUT_STATE_OFF; }
 
+        // DWARF TrafficPhysics.h:66 `void SetCrashingFromCheck(Vector3, VecFloat)`. No out-of-line
+        // copy survives in ARTIST: its only caller, PhysicalTrafficVehicle::OnChecked @0x8261E360,
+        // carries it INLINED at 0x8261E444..0x8261E47C (GetFullTraffic ; bl VehiclePhysics::
+        // SetCrashing ; the velocity fold). Bodied in TrafficPhysics_Construct.cpp.
+        void SetCrashingFromCheck(Vector3 lDirection, VecFloat lvfMinSpeedAlong);
+
         // Never called and never defined outside TrafficPhysics_layout_check.cpp -- it exists so
         // that TU can take offsetof() of the private members below. Same shape as
         // VehiclePhysics::_AssertOwnBlockLayout.
