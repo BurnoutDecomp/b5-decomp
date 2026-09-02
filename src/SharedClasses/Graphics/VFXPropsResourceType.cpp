@@ -17,17 +17,19 @@
 // stored file-relative index into an absolute pointer. The collection is accessed
 // by raw dword offset (the serialised header layout, not a host struct).
 
-// X360 COMDAT fold / dual-attribution: the Hex-Rays view of DeSerialise shows the
-// body merged with CgsSound::Playback::Content::DoOnPostLoad (identical machine
-// code at the folded address). Reproduce the fold via a TU-local stub so it is
-// faithful without pulling in the sound subsystem (matches the
-// ParticleDescriptionResourceType precedent). Given INTERNAL linkage (static) so
-// it does not duplicate the byte-identical stub in that precedent at link time
-// (the placeholder is superseded once the real Sound::Content::DoOnPostLoad lands).
-namespace CgsSound { namespace Playback { namespace Content
-{
-    static int DoOnPostLoad(void* pContent) { (void)pContent; __debugbreak(); return 0; }
-}}}
+// ⭐⭐ CORRECTED 2026-09-02 (tyre-mark wave) -- THE ICF FOLD WAS READ AS A CALL.
+// The banner above said DeSerialise's "body merged with CgsSound::Playback::Content::
+// DoOnPostLoad (identical machine code at the folded address)" and reproduced that by
+// CALLING a __debugbreak() stub. It is not a call to un-decompiled sound code, and the
+// fold does not make it one. DeSerialise @0x826757D8 is ONE instruction:
+//     0x826757D8  48 5B 3E F0     b  0x82C296C8
+// and the target is the universal ICF thunk:
+//     0x82C296C8  38 60 00 01     li  r3, 1
+//     0x82C296CC  4E 80 00 20     blr
+// (read straight out of the image with tools/re/x360rd.py). So the console body is
+// `return true` -- IDA merely named the shared thunk after one of the many functions
+// folded onto it. The trap was REACHABLE: it fired the moment particles.bundle was
+// fixed up, taking the boot down inside CgsResource::Pool::FixUpEntry (measured).
 
 namespace BrnParticle
 {
@@ -104,12 +106,12 @@ namespace BrnParticle
         return lDescriptor;
     }
 
-    // X360 passes `this` (the resource type) to Content::DoOnPostLoad in the folded
+    // The folded ICF thunk: `return true`. (Was "X360 passes `this` to Content::DoOnPostLoad
     // view; lpResource is unused (matches the ParticleDescription precedent).
     bool VFXPropCollectionResourceType::DeSerialise(void* /*lpResource*/) const
     {
-        return CgsSound::Playback::Content::DoOnPostLoad(
-            const_cast<VFXPropCollectionResourceType*>(this)) != 0;
+        // `b 0x82C296C8` -> `li r3,1; blr`. See the ICF note at the top of this file.
+        return true;
     }
 
     void VFXPropCollectionResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const

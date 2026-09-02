@@ -282,6 +282,9 @@ namespace BrnEffects
 
         // Prepare's ladder position (the loading spine logs it).
         EPrepareStage GetPrepareStage() const { return mePrepareStage; }
+        // [effects-load] the trace in LoadingScriptedState::LoadEffectsModule needs the
+        // particle module's FX-bundle ladder position; it is the half that can stall.
+        BrnParticle::ParticleModule& ParticleModuleRef() { return mParticleModule; }
 
     private:
         // ---- the private lifecycle helpers (DWARF :632 / :653 / :1197 / :588 / :2946) ----

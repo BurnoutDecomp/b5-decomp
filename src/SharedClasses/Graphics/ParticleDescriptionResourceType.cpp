@@ -1,5 +1,6 @@
 #include "SharedClasses/Graphics/ParticleDescriptionResourceType.h"
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the NOT-RECONSTRUCTED announcement
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnParticle::ParticleDescriptionCollectionResourceType::FixUp            @ 0x8267DF40
@@ -26,7 +27,9 @@ namespace cLionFX
 namespace CgsSound { namespace Playback { namespace Content
 {
     int DoOnPostLoad(void* pContent);
-    int DoOnPostLoad(void*) { __debugbreak(); return 0; }
+    // ⭐ CORRECTED 2026-09-02: this is the universal ICF thunk `li r3,1; blr`
+    // (0x82C296C8), not un-decompiled sound code -- see VFXPropsResourceType.cpp's note.
+    int DoOnPostLoad(void*) { return 1; }
 }}}
 
 namespace BrnParticle
@@ -108,11 +111,27 @@ namespace BrnParticle
     // LionFX payload is loaded in place.
     bool ParticleDescriptionResourceType::DeSerialise(void* lpResource) const
     {
-        uintptr_t lRes = reinterpret_cast<uintptr_t>(lpResource);
-        *reinterpret_cast<u32*>(lRes + 4) =
-            reinterpret_cast<u32>(cLionFX::BinLoad(reinterpret_cast<void*>(*reinterpret_cast<u32*>(lRes + 4))));
-        return CgsSound::Playback::Content::DoOnPostLoad(
-            const_cast<ParticleDescriptionResourceType*>(this)) != 0;
+        // ⛔ cLionFX::BinLoad IS A TRAP AND THIS PATH IS REACHABLE: it runs the moment
+        // particles.bundle is fixed up (CgsResource::Pool::FixUpEntry), which is stage 2 of
+        // ParticleModule::LoadFXBundle -- i.e. on the way to the tyre mark, every boot.
+        // The Lion core is not landed, so the in-place blob conversion is ANNOUNCED and the
+        // serialised pointer is left exactly as it was. Nothing in this build consumes it:
+        // ParticleModule::StartLionEffect returns KU_HANDLE_INVALID because the collection
+        // has no committed layout either. Loud, once, never a silent zero.
+        (void)lpResource;
+        {
+            static bool sbLogged = false;
+            if (!sbLogged)
+            {
+                sbLogged = true;
+                CgsDev::Log::WriteToLog(
+                    "[particles] NOT RECONSTRUCTED: ParticleDescriptionResourceType::DeSerialise's "
+                    "cLionFX::BinLoad (the Lion core is not landed); the description collection is "
+                    "left in its serialised form and no Lion effect can start from it\n");
+            }
+        }
+        // The tail is the ICF thunk `li r3,1; blr` -- see VFXPropsResourceType.cpp's note.
+        return true;
     }
 
     void* ParticleDescriptionResourceType::Serialise(const void* lpResource, const rw::Resource& lrDest) const

@@ -107,6 +107,16 @@ protected:
     // -- while it reports "still preparing" -- forward the world's staged resource
     // requests (RequestInterface<4096>) and AttribSys vault requests (<2048> queue) into
     // the GameData input buffer. Returns true once the module reports prepared.
+    // @0x823E7820 -- one frame of the EFFECTS-module load (scripted-load stage 2). Same shape
+    // as LoadWorldModule below: carve a scratch EffectsIO::OutputBuffer on the update output
+    // stack, drive EffectsModule::Prepare (vtable +64) with the GameData allocator list, and --
+    // while it reports "still preparing" -- forward the effects output's staged AttribSys vault
+    // requests and resource requests into the GameData input buffer. That forward is what
+    // carries ParticleModule::LoadFXBundle's particles.bundle load and its texture acquires
+    // into the GameData pump; without it the FX-bundle ladder never advances.
+    bool LoadEffectsModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+                           const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
+
     bool LoadWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                          const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
 

@@ -87,6 +87,21 @@ namespace BrnParticle
         // Build the process-wide depth-stencil state table (called by ParticleModule::Prepare).
         void Setup();
 
+        // ParticleModule::Prepare @0x8229BEF8/@0x8229C0F8 makes both of these stores INLINE,
+        // immediately before Setup:
+        //     stw r11, 0x5278(r31)   ; mLionRenderer + 0x08 == mpHeapMalloc
+        //     stw r30, 0x53D0(r31)   ; mLionRenderer + 0x160 == mpRenderer (&the Im3dBlend)
+        // De-inlined to one named operation so the module never forms those addresses itself.
+        // ⚠ THE HEAP IS LOAD-BEARING: Setup's very first act is mpHeapMalloc->Malloc, so a
+        // Setup() called before this binder faults inside GeneralAllocator (measured
+        // 2026-09-02 -- an AV at MallocAlignedInternal on the first effects prepare).
+        void BindPrepareState(CgsMemory::HeapMalloc* lpHeapMalloc,
+                              BrnGraphics::LionBlendRenderer* lpRenderer)
+        {
+            mpHeapMalloc = lpHeapMalloc;
+            mpRenderer   = lpRenderer;
+        }
+
         // Acquire / register the textures into the process-wide texture table. AcquireTexture
         // takes the texture-map hash plus the resolved texture handle (X360 0x82280B60).
         void AcquireTexture(U32 auTextureMapHandle,

@@ -186,6 +186,15 @@ void ParticleModule::Construct()
         mapDispatchThreadLionEffects[luSlot] = 0;
     }
 
+    // ⭐ `*(a1 + 4) = 1` -- CgsModule::Module::mbIsNewModule. MEASURED CONSEQUENCE of leaving
+    // it out (first run, 2026-09-02): ModuleSingleBuffered::Prepare takes the OLD-module arm,
+    // CreateInputDataStructure asserts "This is a new module type" and returns null, Prepare
+    // returns FALSE FOR EVER -- so ParticleModule::Prepare never got past its first line,
+    // EffectsModule::Prepare never returned true, and the scripted load parked at stage 2.
+    // 889 repeats of that assert and then an access violation in ValidateProfile, because
+    // stage 3 (LoadGameState2 -> PROGRESSION.DAT) is behind stage 2 and never ran.
+    mbIsNewModule = true;               // base +0x04
+
     muUpdateThreadNextLionEffect = 0;   // +0x8BF0
 
     mRenderData.mpParticleModule  = this;    // +0x8E00
@@ -304,13 +313,20 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         // `stw r30, 0x53D0(r31)` (mLionRenderer + 0x160 = &mLionImmediateModeRenderer) and
         // `stw r11, 0x5278(r31)` (mLionRenderer + 0x08 = mpHeapMalloc), then Setup, then
         // cLionFX::Init(allocatorAdapter, &mLionRenderer, 0, 256, 4096, 4096).
+        // ⚠ THE HEAP STORE IS NOT OPTIONAL. Setup's first act is mpHeapMalloc->Malloc, so an
+        // earlier draft that announced BOTH stores and still called Setup faulted inside
+        // GeneralAllocator on the very first effects prepare (measured 2026-09-02). The heap
+        // pointer is a real named member and is bound here; the renderer pointer's target,
+        // mLionImmediateModeRenderer, is still a ContainedInterface placeholder, so null goes
+        // in and is announced.
+        mLionRenderer.BindPrepareState(mpHeapMalloc, 0);
         mLionRenderer.Setup();
         {
             static bool sbLogged = false;
             LogNotReconstructed(sbLogged,
-                "ParticleModule::Prepare's cLionFX::Init + the two mLionRenderer pointer "
-                "stores (+0x08 heap, +0x160 blend renderer) -- the Lion core is not landed "
-                "and the blend renderer is a placeholder");
+                "ParticleModule::Prepare's cLionFX::Init, and mLionRenderer's +0x160 blend-renderer "
+                "pointer (its target mLionImmediateModeRenderer is a ContainedInterface placeholder, "
+                "so the bind passes null); the +0x08 heap store IS made");
         }
 
         // --- the FX bucket pool -----------------------------------------------------------
@@ -557,6 +573,19 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
         const TextureNameMap* lpMap = TextureNameMapOrNull();
         const u32 luEntryCount = (lpMap != 0) ? lpMap->GetEntryCount() : 0u;
         const u32 luTrailNameHash = TextureNameMap::Entry::HashString(KAC_TRAIL_TEXTURE_NAME);
+        {
+            static bool sbLogged = false;
+            if (!sbLogged)
+            {
+                sbLogged = true;
+                char lacMsg[224];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[skid-ready] FX texture stage: map=%p entries=%u wanted hash=0x%08X "
+                    "(\"fxskid\") replies>=%d\n",
+                    static_cast<const void*>(lpMap), luEntryCount, luTrailNameHash, miResourceCount);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
 
         for (const AcquireResponse* lpReply = NextAcquireResponse(mReceiverQueue, 0);
              lpReply != 0;
@@ -590,6 +619,12 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
             {
                 mTrailSystem.SetTrailTexture(lTexture);   // module +139668
                 mTrailSystem.SetReady();                  // module +141320 = 1
+                char lacMsg[224];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[skid-ready] TrailSystem::mbIsReady RAISED: entry %u/%u hash=0x%08X == "
+                    "HashString(\"fxskid\") res=%p\n",
+                    luEntryIndex, luEntryCount, luEntryHash, lpReply->mpResourceMemory);
+                CgsDev::Log::WriteToLog(lacMsg);
             }
 
             // (d) the 13 native simple-particle arrays.
@@ -631,9 +666,21 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
         meInitialLoadStage = E_LOADSTAGE_WAIT_PROP_COLLISIONS;
         // fall through
     case E_LOADSTAGE_DONE:
+    {
+        static bool sbLogged = false;
+        if (!sbLogged)
+        {
+            sbLogged = true;
+            char lacMsg[160];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[skid-ready] LoadFXBundle DONE -- TrailSystem::IsReady()=%d\n",
+                mTrailSystem.IsReady() ? 1 : 0);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
         meInitialLoadStage = E_LOADSTAGE_DONE;
         lbDone = true;
         break;
+    }
     default:
         CGS_ASSERT(false, "Invalid Stage\n");
         break;

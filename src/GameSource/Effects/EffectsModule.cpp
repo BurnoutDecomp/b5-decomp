@@ -29,7 +29,8 @@
 #include "rw/math/vpu/vector3_operation.h"                                         // rw::math::vpu::{operator-, Dot}
 
 #include <cmath>    // std::fabs
-#include <cstdio>   // std::snprintf
+#include <cstdio>
+#include <cstdlib>   // getenv (the [skid] probe gate)   // std::snprintf
 
 // ============================================================================
 // GameSource/Effects/EffectsModule.cpp
@@ -130,6 +131,38 @@ namespace
         std::snprintf(lacMsg, sizeof(lacMsg), "[effects] NOT RECONSTRUCTED: %s\n", lpcWhat);
         CgsDev::Log::WriteToLog(lacMsg);
     }
+
+    // =========================================================================================
+    // [skid] THE HANDLE-WHEELS GATE PROBE  (BRN_SKID_PROBE=1)
+    //
+    // Prints BOTH SIDES of every compare HandleWheels makes, per wheel, and -- the part that
+    // matters -- an EDGE line the frame a mark starts and the frame it stops. Off unless the
+    // env var is set, so it costs a single cached read otherwise.
+    //
+    // Fields, in the order the gate tests them:
+    //   grnd/trac/att   the three WheelLite bits (+40 mbIsOnGround, +97 mbHasTraction, +96 mbAttached)
+    //   drift           dot(contactPos - prevPos, contactNormal) vs the 0.02 m limit -- the wheel
+    //                   leaving its own contact plane ends the trail
+    //   surf            (mCollisionTag.muValue >> KU_SURFACE_ID_SHIFT) & 0x3F, the raw operand
+    //   en/thr/skid     visualfxsurface SkidMarksEnabled, SkidMarkThreshold, and WheelLite::
+    //                   mfSkidFactor (+80) -- `skid > thr` is THE gate
+    //   ready           TrailSystem::mbIsReady, which LoadFXBundle raises on the "fxskid" reply;
+    //                   Render early-outs while it is false, so a mark can be LAID and not drawn
+    //   t               ParticleModule::mRenderData.mfCurrentTime (+0x8E08), AddTrailSegment's
+    //                   lrCurrentTime argument
+    // =========================================================================================
+    bool SkidProbeEnabled()
+    {
+        static int siEnabled = -1;
+        if (siEnabled < 0)
+        {
+            const char* lpcValue = std::getenv("BRN_SKID_PROBE");
+            siEnabled = (lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0') ? 1 : 0;
+        }
+        return siEnabled != 0;
+    }
+
+    u32 gauSkidProbeFrame = 0;
 
     inline f32 ReadF32(const void* lpBase, u32 luOffset)
     {
@@ -346,27 +379,70 @@ bool EffectsModule::PrepareResources(EffectsIO::OutputBuffer* lpOutputBuffer)
             const AcquireResponse* lpVaultReply = GetNextAcquireResourceResponse(0);
             mSchemaResourceHandle.mpResourceMemory = lpVaultReply->mpResourceMemory;
             mSchemaResourceHandle.mpSourceEntry    = lpVaultReply->mpSourceEntry;
-            CgsResource::ResourceHandle lVaultHandle;
-            lVaultHandle.mpResourceMemory = lpVaultReply->mpResourceMemory;
-            lVaultHandle.mpSourceEntry    = lpVaultReply->mpSourceEntry;
-            lpOutputBuffer->GetVaultRequestInterface()->RegisterVault(
-                &mReceiverQueue, lVaultHandle, 1, CgsAttribSys::AttribSysIO::E_VAULT_TYPE_RESIDENT);
+
+            // ⚠ FLAG PC null-tolerance (2026-09-02, tyre-mark wave -- MEASURED, not defensive
+            // dressing). On the console this reply always carries a resource: the vault bundle
+            // loads. On this build it does not --
+            //     [bundle] 'PostFx/postfxvault.bin' via async-FS (5504 bytes)
+            //     [stream] LoadBundle 'PostFx/postfxvault.bin' -> pool 7: -1 resources
+            // -- BundleLoader::LoadBundle REJECTS that bundle (negative == failed), so the
+            // acquire reply comes back with a null resource. Handing that null on to
+            // RegisterVault faults inside CgsAttribSys::VaultArray::GetFreeSlotIndex ->
+            // ResourceHandle::GetResourceId (measured: an access violation on the first
+            // effects prepare that got this far). The vault is the POST-FX schema and has
+            // nothing to do with the trail system, so the ladder says so once and walks on
+            // rather than taking the whole boot down with it.
+            // DELETE-WHEN 'PostFx/postfxvault.bin' loads: this is an ASSET/LOADER defect, not
+            // an effects one, and the guard is here only so it stops blocking everything
+            // behind it.
+            const bool lbVaultResourceValid = (lpVaultReply->mpResourceMemory != 0);
+            if (lbVaultResourceValid)
+            {
+                CgsResource::ResourceHandle lVaultHandle;
+                lVaultHandle.mpResourceMemory = lpVaultReply->mpResourceMemory;
+                lVaultHandle.mpSourceEntry    = lpVaultReply->mpSourceEntry;
+                lpOutputBuffer->GetVaultRequestInterface()->RegisterVault(
+                    &mReceiverQueue, lVaultHandle, 1, CgsAttribSys::AttribSysIO::E_VAULT_TYPE_RESIDENT);
+            }
+            else
+            {
+                static bool sbLogged = false;
+                LogNotReconstructed(sbLogged,
+                    "EffectsModule::PrepareResources' RegisterVault -- SKIPPED because "
+                    "'PostFx/postfxvault.bin' failed to load (the loader logs 'pool 7: -1 "
+                    "resources'), so the acquire reply carries a null resource. ASSET/LOADER "
+                    "defect, not an effects one");
+            }
 
             // The second reply: its main-memory pointer IS the default colour cube
-            // (`**(reply + 24)` -- the resource's main-memory lane).
+            // (`**(reply + 24)` -- the resource's main-memory lane). Same tolerance, same
+            // reason: a failed dictionary load double-dereferences a null here.
             const AcquireResponse* lpCubeReply = GetNextAcquireResourceResponse(lpVaultReply);
-            rw::graphics::postfx::ColourCube* lpDefaultCube =
-                *reinterpret_cast<rw::graphics::postfx::ColourCube* const*>(lpCubeReply->mpResourceMemory);
-            // dword_82FAF6E8 = 5; flt_82FAF6D0..E0 = 0.2f; dword_82FAF6BC..CC = the cube.
-            msPostFx.SetTintBlendNumber(KI_DEFAULT_TINT_BLEND_NUMBER);
-            for (int li = 0; li < KI_DEFAULT_TINT_BLEND_NUMBER; ++li)
+            if (lpCubeReply != 0 && lpCubeReply->mpResourceMemory != 0)
             {
-                msPostFx.SetTintBlendFactor(li, KF_DEFAULT_TINT_FACTOR);
-                msPostFx.SetColourCube(li, lpDefaultCube);
+                rw::graphics::postfx::ColourCube* lpDefaultCube =
+                    *reinterpret_cast<rw::graphics::postfx::ColourCube* const*>(lpCubeReply->mpResourceMemory);
+                // dword_82FAF6E8 = 5; flt_82FAF6D0..E0 = 0.2f; dword_82FAF6BC..CC = the cube.
+                msPostFx.SetTintBlendNumber(KI_DEFAULT_TINT_BLEND_NUMBER);
+                for (int li = 0; li < KI_DEFAULT_TINT_BLEND_NUMBER; ++li)
+                {
+                    msPostFx.SetTintBlendFactor(li, KF_DEFAULT_TINT_FACTOR);
+                    msPostFx.SetColourCube(li, lpDefaultCube);
+                }
+            }
+            else
+            {
+                static bool sbLogged = false;
+                LogNotReconstructed(sbLogged,
+                    "EffectsModule::PrepareResources' default colour-cube seed -- SKIPPED "
+                    "(the colourcubedictionary acquire reply carries no resource)");
             }
 
             mReceiverQueue.Clear();
-            meResourceStage = E_RESOURCESTAGE_REGISTERING_VAULT;
+            // If RegisterVault was skipped there is no reply to wait for, so the next stage
+            // would park for ever -- go straight to DONE in that case.
+            meResourceStage = lbVaultResourceValid ? E_RESOURCESTAGE_REGISTERING_VAULT
+                                                   : E_RESOURCESTAGE_DONE;
         }
         break;
     case E_RESOURCESTAGE_REGISTERING_VAULT:
@@ -1117,6 +1193,8 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
     ActiveRaceCarData&  lrData  = *lrHelper.ActiveRaceCar();
     const RaceCarState* lpState = lrHelper.RaceCarState();
 
+    ++gauSkidProbeFrame;   // [skid probe] one tick per HandleWheels entry
+
     for (u32 luWheel = 0; luWheel < ActiveRaceCarData::KU_NUM_WHEELS; ++luWheel)
         lrData.mWheelStateMachine[luWheel].Update(lrCarState, lrHelper);
 
@@ -1130,16 +1208,18 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
             lrEmitter.mrLastTrailTime = -1.0f;
 
         bool lbTrailEnded = true;
+        f32  lfNormalDrift = 0.0f;   // [skid probe] hoisted so the OFFGATE arm can print it
+        u32  luSurfaceId   = 0;      // [skid probe] ditto
         if (lrWheel.mRoadContact.mbIsOnGround                       // +40
             && lrWheel.mbHasTraction                                // +97
             && lrWheel.mbAttached)                                  // +96
         {
             // |dot(pos - prevPos, normal)| > 0.02 -> the wheel left its contact plane.
             const Vector3 lvDelta = lrWheel.mRoadContact.mPosition - lrMachine.GetPreviousPosition();
-            const f32 lfNormalDrift = rw::math::vpu::Dot(lvDelta, lrWheel.mRoadContact.mNormal);
+            lfNormalDrift = rw::math::vpu::Dot(lvDelta, lrWheel.mRoadContact.mNormal);
             if (!(std::fabs(lfNormalDrift) > KF_TRAIL_NORMAL_DRIFT_MAX))
             {
-                const u32 luSurfaceId =
+                luSurfaceId =
                     (lrWheel.mRoadContact.mCollisionTag.muValue >> KU_SURFACE_ID_SHIFT) & KU_SURFACE_ID_MASK;
                 void* lpSurfaceRef = mSurfaceList.Surfaces(luSurfaceId);
                 if (!lpSurfaceRef)
@@ -1164,7 +1244,64 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
                         mParticleModule.mRenderData.mfCurrentTime);                   // module +0x8E08
                     lbTrailEnded = false;
                 }
+
+                // [skid] both sides of the gate, on the frames it matters.
+                if (SkidProbeEnabled())
+                {
+                    const bool lbWasLaying = (lrEmitter.mrLastTrailTime >= 0.0f);
+                    const bool lbNowLaying = !lbTrailEnded;
+                    const bool lbEdge      = (lbWasLaying != lbNowLaying);
+                    if (lbEdge || (gauSkidProbeFrame % 30u) == 0u)
+                    {
+                        char lacMsg[400];
+                        std::snprintf(lacMsg, sizeof(lacMsg),
+                            "[skid] f=%u w=%u %s grnd=%d trac=%d att=%d |drift|=%.5f<=%.5f surf=%u "
+                            "en=%d skid=%.4f %s thr=%.4f type=%d ready=%d t=%.3f pos=%.2f,%.2f,%.2f\n",
+                            gauSkidProbeFrame, luWheel,
+                            lbEdge ? (lbNowLaying ? "START" : "STOP ") : "     ",
+                            lrWheel.mRoadContact.mbIsOnGround ? 1 : 0,
+                            lrWheel.mbHasTraction ? 1 : 0,
+                            lrWheel.mbAttached ? 1 : 0,
+                            static_cast<double>(std::fabs(lfNormalDrift)),
+                            static_cast<double>(KF_TRAIL_NORMAL_DRIFT_MAX),
+                            luSurfaceId,
+                            lbSkidMarksEnabled ? 1 : 0,
+                            static_cast<double>(lfSkidFactor),
+                            (lfSkidFactor > lfSkidThreshold) ? ">" : "<=",
+                            static_cast<double>(lfSkidThreshold),
+                            static_cast<int>(ReadS16(lpVfxData, KU_VFX_SKID_MARK_TYPE_ID)),
+                            mParticleModule.TrailSystem().IsReady() ? 1 : 0,
+                            static_cast<double>(mParticleModule.mRenderData.mfCurrentTime),
+                            static_cast<double>(lrWheel.mRoadContact.mPosition.x),
+                            static_cast<double>(lrWheel.mRoadContact.mPosition.y),
+                            static_cast<double>(lrWheel.mRoadContact.mPosition.z));
+                        CgsDev::Log::WriteToLog(lacMsg);
+                    }
+                }
             }
+            else if (SkidProbeEnabled() && (gauSkidProbeFrame % 30u) == 0u)
+            {
+                // The wheel is on the ground with traction, but it LEFT ITS CONTACT PLANE --
+                // the |dot| <= 0.02 test failed, so no surface is even looked up.
+                char lacMsg[240];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[skid] f=%u w=%u DRIFTOUT |drift|=%.5f > %.5f (grnd/trac/att all set)\n",
+                    gauSkidProbeFrame, luWheel,
+                    static_cast<double>(std::fabs(lfNormalDrift)),
+                    static_cast<double>(KF_TRAIL_NORMAL_DRIFT_MAX));
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
+        else if (SkidProbeEnabled() && (gauSkidProbeFrame % 30u) == 0u)
+        {
+            char lacMsg[240];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[skid] f=%u w=%u OFFGATE grnd=%d trac=%d att=%d (no surface lookup)\n",
+                gauSkidProbeFrame, luWheel,
+                lrWheel.mRoadContact.mbIsOnGround ? 1 : 0,
+                lrWheel.mbHasTraction ? 1 : 0,
+                lrWheel.mbAttached ? 1 : 0);
+            CgsDev::Log::WriteToLog(lacMsg);
         }
         if (lbTrailEnded)
             lrEmitter.mrLastTrailTime = -1.0f;
