@@ -39,6 +39,7 @@ namespace Vehicle
     extern f32 gT5MaxImpulseMag;
     extern f32 gT5SumImpulseMag;
     extern f32 gT5MaxClosing;
+    extern s32 gT5RamFramesLeft;
 
     // [kerb] PC bring-up instrument -- DELETE-WHEN the kerb response is proven 1:1. Owned by
     // BrnVehicleManager_ValidateRaceCarWorldContact.cpp (banner + definitions there); this TU only
@@ -170,6 +171,28 @@ namespace Deformation
         const VecFloat lvfImpulseMagnitude = lThisBody.CalculateCollisionImpulseWithBody(
             lOtherBody, lContact.mPointOnA, lContact.mPointOnB, lRelativeMotion, lNegatedNormal,
             lvfRestitution, &lImpulse, &lvfInvInertiaA, &lvfInvInertiaB);
+
+        // [T5-solve] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. The two-body solve's
+        // operands while a [T5-ram] window is open: both inverse effective-mass terms (what each
+        // sensor's displacement is multiplied by) beside the masses and the closing speed.
+        {
+            static s32 s_iT5SolveBudget = 240;
+            if (BrnPhysics::Vehicle::gT5RamFramesLeft > 0 && s_iT5SolveBudget > 0
+                && CgsDev::Log::gpDebugPrint != 0)
+            {
+                --s_iT5SolveBudget;
+                *CgsDev::Log::gpDebugPrint
+                    << "[T5-solve] thisOwner=" << static_cast<s32>(GetHandlingBodyIdHighByte())
+                    << " otherOwner=" << static_cast<s32>(lOtherCar.GetHandlingBodyIdHighByte())
+                    << " closing=" << lfClosingSpeed
+                    << " j=" << lvfImpulseMagnitude.x
+                    << " |imp|=" << vpu::Magnitude(lImpulse)
+                    << " invA=" << lvfInvInertiaA.x << " invB=" << lvfInvInertiaB.x
+                    << " mA=" << lThisBody.GetMass().x << " mB=" << lOtherBody.GetMass().x
+                    << " sensor=" << liSensorIndex
+                    << "\n";
+            }
+        }
 
         // -------- showtime / bounce-boost shaping --------
         // The asm gates the shaping on a virtual showtime predicate on THIS car's physics body (the

@@ -80,6 +80,10 @@
 // execution continues past a failed assert, so the C++ falls through identically.
 // =================================================================================================
 
+// [T5-sens] DIAG state, DEFINED in BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp.
+// NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+namespace BrnPhysics { namespace Vehicle { extern s32 gT5ApplyOwner; extern s32 gT5ApplyGlobal; } }
+
 namespace BrnPhysics
 {
 namespace Deformation
@@ -850,7 +854,13 @@ namespace Deformation
             if ( lpSensor != nullptr )
             {
                 ++gChainProbe.muDispatched;   // [chain] probe
+                // [T5-sens] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Tag the dispatch with
+                // this object's owner byte + global index for the sensor-side [impulse] probe.
+                BrnPhysics::Vehicle::gT5ApplyOwner  = static_cast<s32>(GetHandlingBodyIdHighByte());
+                BrnPhysics::Vehicle::gT5ApplyGlobal = static_cast<s32>((GetGlobalEntityId().muValue >> 10) & 0x3FFFu);
                 lpSensor->ApplyLocalImpulse(&lParams);
+                BrnPhysics::Vehicle::gT5ApplyOwner  = -1;
+                BrnPhysics::Vehicle::gT5ApplyGlobal = -1;
             }
             else
             {

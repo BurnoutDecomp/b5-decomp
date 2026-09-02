@@ -53,6 +53,14 @@ f32 gT5MaxImpulseMag  = 0.0f;  // the LARGEST car-car impulse length since the w
 f32 gT5SumImpulseMag  = 0.0f;  // ...and their running sum -- the momentum actually delivered
 f32 gT5MaxClosing     = 0.0f;  // the largest closing speed a car-car solve ran on since (re)arming
 f32 gT5ArmedPlayerSpeed = 0.0f; // |player velocity| at the instant the window was (re)armed
+s32 gT5ApplyOwner     = -1;    // [T5-sens] the handling-body OWNER byte of the DeformableObject whose
+s32 gT5ApplyGlobal    = -1;    //   ApplySensorImpulse is dispatching into a sensor right now, and its
+                               //   global entity index -- so the sensor-side [impulse] probe can tag
+                               //   the traffic car's applies apart from the player's.
+s32 gT5WindowFrame    = 0;     // frames since the window was (re)armed -- reset by ArmT5RamWindow, so
+                               // the every-frame impact stretch is per WINDOW (the old global
+                               // counter left a re-armed window sampling every 10th frame: the
+                               // 109 mph CHECK in run tw_ram1 has no impact-frame rows).
 
 namespace
 {
@@ -98,6 +106,32 @@ namespace
                 << " crashing=" << static_cast<s32>(lpBody->IsCrashing() ? 1 : 0)
                 << " |w|=" << sqrtf(lvW.x * lvW.x + lvW.y * lvW.y + lvW.z * lvW.z)
                 << " upY=" << lpBody->GetTransform().yAxis.y;
+        }
+
+        // The traffic body's DEFORMED AABB (SimpleVehiclePhysics::mDeformableAABB @+0x6D0/+0x6E0,
+        // the pair DeformableObject::UpdateDeformedBBox writes back for every model, traffic
+        // included) and its drift from the first sample of this window -- the traffic-side
+        // deformation reading. NOTE the console's drive-time-limit compare in UpdateDeformedBBox
+        // (0x825E0DB4..DC4) runs for RACE CAR owners only; a traffic model has no limit verdict.
+        {
+            static f32 s_afFirstBox[6] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+            static s32 s_iFirstBoxSlot = -1;
+            static s32 s_iFirstBoxArm  = -1;
+            const CgsGeometric::AxisAlignedBox& lrBox = lpBody->GetDeformableAABB();
+            const f32 lafNow[6] = { lrBox.mMin.x, lrBox.mMin.y, lrBox.mMin.z,
+                                    lrBox.mMax.x, lrBox.mMax.y, lrBox.mMax.z };
+            if (s_iFirstBoxSlot != liSlot || s_iFirstBoxArm != gT5RamGlobalIndex)
+            {
+                s_iFirstBoxSlot = liSlot;
+                s_iFirstBoxArm  = gT5RamGlobalIndex;
+                for (s32 li = 0; li < 6; ++li) s_afFirstBox[li] = lafNow[li];
+            }
+            *CgsDev::Log::gpDebugPrint
+                << " dmin=(" << lafNow[0] << "," << lafNow[1] << "," << lafNow[2] << ")"
+                << " dmax=(" << lafNow[3] << "," << lafNow[4] << "," << lafNow[5] << ")"
+                << " ddelta=(" << (lafNow[0] - s_afFirstBox[0]) << "," << (lafNow[1] - s_afFirstBox[1])
+                << "," << (lafNow[2] - s_afFirstBox[2]) << "," << (lafNow[3] - s_afFirstBox[3])
+                << "," << (lafNow[4] - s_afFirstBox[4]) << "," << (lafNow[5] - s_afFirstBox[5]) << ")";
         }
 
         if (lpDriver != 0)
@@ -175,8 +209,7 @@ void PhysicalTrafficManager::UpdateTrafficPhysics(f32 lfSimTimeStep, f32 lfGameT
     if (gT5RamFramesLeft > 0)
     {
         --gT5RamFramesLeft;
-        static s32 s_iT5Frame = 0;
-        liT5Frame = ++s_iT5Frame;
+        liT5Frame = ++gT5WindowFrame;
         // Every frame for the first half second (the impact lives there), then every 10th.
         lbT5Print = (liT5Frame <= 30 || (liT5Frame % 10) == 1) && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0;
     }
