@@ -3829,8 +3829,38 @@ namespace Vehicle
     namespace
     {
         const u32 KU_WSUS_BUDGET_LINES = 600000u;
-        u32 guWheelSusFrame = 0u;
+        u32 guWheelSusFrame = 0u;      // the most recently advanced per-car counter (for the notice)
         u32 guWheelSusLines = 0u;
+
+        // PER-INSTANCE frame counters. UpdateSuspension/UpdateWheels run per car inside that car's
+        // UpdateDriving, but UpdateSuspensionPostSimulation runs in a LATER pass over all cars, so a
+        // single shared counter mis-labels every post-sim line with the last car's frame (measured
+        // on wsus_r30: parked full-physics traffic carries driver type 0 == PLAYER, three
+        // instances printed, and the post lines landed on the wrong car). Every line carries `car`.
+        struct WheelSusSlot
+        {
+            const void* mpCar;
+            u32         muFrame;
+        };
+        const s32 KI_WSUS_SLOTS = 16;
+        WheelSusSlot gaWheelSusSlots[KI_WSUS_SLOTS] = { { NULL, 0u } };
+        u32 guWheelSusOverflowFrame = 0u;
+
+        u32& WheelSusFrameFor(const void* lpCar)
+        {
+            for (s32 liS = 0; liS < KI_WSUS_SLOTS; ++liS)
+            {
+                if (gaWheelSusSlots[liS].mpCar == lpCar)
+                    return gaWheelSusSlots[liS].muFrame;
+                if (gaWheelSusSlots[liS].mpCar == NULL)
+                {
+                    gaWheelSusSlots[liS].mpCar = lpCar;
+                    gaWheelSusSlots[liS].muFrame = 0u;
+                    return gaWheelSusSlots[liS].muFrame;
+                }
+            }
+            return guWheelSusOverflowFrame;   // a 17th instance shares one counter; visible by `car`
+        }
 
         bool WheelSusProbeArmed()
         {
@@ -3906,14 +3936,17 @@ namespace Vehicle
         // ---- [wsus] the per-step suspension witness (player car only) ------------------------
         if (WheelSusProbeArmed() && mPreviousControls.GetType() == E_DRIVER_TYPE_PLAYER)
         {
-            ++guWheelSusFrame;
-            const u32 luF = guWheelSusFrame;
+            u32& lruFrame = WheelSusFrameFor(this);
+            ++lruFrame;
+            const u32 luF = lruFrame;
+            guWheelSusFrame = luF;
+            const u32 luCar = static_cast<u32>(reinterpret_cast<u64>(this));
 
             if (WheelSusTakeLine())
             {
                 *CgsDev::Log::gpDebugPrint
                     << "[wsus] f " << static_cast<s32>(luF)
-                    << " car " << static_cast<u32>(reinterpret_cast<u64>(this))
+                    << " car " << luCar
                     << " pos " << mTransform.Pos().x << " " << mTransform.Pos().y << " " << mTransform.Pos().z
                     << " vel " << mLinearVelocity.x << " " << mLinearVelocity.y << " " << mLinearVelocity.z
                     << " mph " << mfSpeedMPH.x
@@ -3939,7 +3972,7 @@ namespace Vehicle
                       * lrS.mvVelocity_Acceleration_DampingForce_SpringForce.y
                     : 0.0f;
                 *CgsDev::Log::gpDebugPrint
-                    << "[wsus-w] f " << static_cast<s32>(luF) << " w " << liW
+                    << "[wsus-w] f " << static_cast<s32>(luF) << " car " << luCar << " w " << liW
                     << " onG " << (lrC.mbIsOnGround ? 1 : 0)
                     << " close " << (lrC.mbIsCloseToGround ? 1 : 0)
                     << " hasT " << (lrW.mbHasTraction ? 1 : 0)
@@ -3969,7 +4002,7 @@ namespace Vehicle
                 const VehicleAttribs::SuspensionAttribs& lrSus = mpAttribs->mSuspensionAttribs;
                 *CgsDev::Log::gpDebugPrint
                     << "[wsus-attr] f " << static_cast<s32>(luF)
-                    << " car " << static_cast<u32>(reinterpret_cast<u64>(this))
+                    << " car " << luCar
                     << " mass " << mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x
                     << " mfMass " << mfMass.x
                     << " rest " << lrSus.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.x
@@ -4951,7 +4984,9 @@ namespace Vehicle
                         && WheelSusTakeLine())
                     {
                         *CgsDev::Log::gpDebugPrint
-                            << "[wsus-rep] f " << static_cast<s32>(guWheelSusFrame) << " w " << liWheel
+                            << "[wsus-rep] f " << static_cast<s32>(WheelSusFrameFor(this))
+                            << " car " << static_cast<u32>(reinterpret_cast<u64>(this))
+                            << " w " << liWheel
                             << " d " << lfDistanceToRoad
                             << " wyBefore " << lrWheel.mPosition.y
                             << " n " << lrPlaneNormal.x << " " << lrPlaneNormal.y << " " << lrPlaneNormal.z
@@ -4997,10 +5032,12 @@ namespace Vehicle
         // ---- [wsus-post] the post-simulation half of the witness (player car only) -----------
         const bool lbWheelSusProbe =
             WheelSusProbeArmed() && mPreviousControls.GetType() == E_DRIVER_TYPE_PLAYER;
+        const u32 luWheelSusF   = lbWheelSusProbe ? WheelSusFrameFor(this) : 0u;
+        const u32 luWheelSusCar = static_cast<u32>(reinterpret_cast<u64>(this));
         if (lbWheelSusProbe && WheelSusTakeLine())
         {
             *CgsDev::Log::gpDebugPrint
-                << "[wsus-post] f " << static_cast<s32>(guWheelSusFrame)
+                << "[wsus-post] f " << static_cast<s32>(luWheelSusF) << " car " << luWheelSusCar
                 << " comp " << (labCompressedSpring[0] ? 1 : 0) << (labCompressedSpring[1] ? 1 : 0)
                 << (labCompressedSpring[2] ? 1 : 0) << (labCompressedSpring[3] ? 1 : 0)
                 << " upMov " << lfUpwardMovement
@@ -5102,7 +5139,8 @@ namespace Vehicle
                     if (lbWheelSusProbe && WheelSusTakeLine())
                     {
                         *CgsDev::Log::gpDebugPrint
-                            << "[wsus-imp] f " << static_cast<s32>(guWheelSusFrame) << " w " << liWheel
+                            << "[wsus-imp] f " << static_cast<s32>(luWheelSusF) << " car " << luWheelSusCar
+                            << " w " << liWheel
                             << " vDotN " << vpu::Dot(lPointVelocity, lrCollisionNormal)
                             << " n " << lrCollisionNormal.x << " " << lrCollisionNormal.y
                             << " " << lrCollisionNormal.z
@@ -7012,11 +7050,13 @@ namespace Vehicle
         // ---- [wsus-t] the tyre half of the witness (player car only; same frame index) -------
         if (WheelSusProbeArmed() && mPreviousControls.GetType() == E_DRIVER_TYPE_PLAYER)
         {
+            const u32 luF   = WheelSusFrameFor(this);
+            const u32 luCar = static_cast<u32>(reinterpret_cast<u64>(this));
             for (s32 liW = 0; liW < eNumDrivenWheels && WheelSusTakeLine(); ++liW)
             {
                 const Wheel& lrW = maWheels[liW];
                 *CgsDev::Log::gpDebugPrint
-                    << "[wsus-t] f " << static_cast<s32>(guWheelSusFrame) << " w " << liW
+                    << "[wsus-t] f " << static_cast<s32>(luF) << " car " << luCar << " w " << liW
                     << " Flong " << lrW.mForceVariables.x << " Flat " << lrW.mForceVariables.y
                     << " FlongC " << lrW.mForceVariables.z << " FlatC " << lrW.mForceVariables.w
                     << " slip " << lrW.mSlipVariables.y << " latSpd " << lrW.mSlipVariables.x
