@@ -113,6 +113,13 @@ namespace Vehicle
     //     the exact frame the FRONT wheel mounted (traction hit y 0.125 -> 0.276), with zero body
     //     impulses -- that is the wheel/suspension path (ApplyWheelWeight -> UpdateSuspensionSprings
     //     -> tyre forces), not the world-contact validation. Open lead, un-audited.
+    //   * CONTROLS (kerbw_r4 / r4B / r4AB, one deterministic recipe, an uncommitted switch that
+    //     discards a cull's verdict AFTER it has printed): with cull (b) discarded the crossing is
+    //     frame-identical to the shipped build (52/52 re-pointed, 0 impulses, same mounts, same
+    //     roll peak 0.35 rad/s) -- i.e. the pre-ray-fix state was already correct here. With BOTH
+    //     discarded the kerb face reaches the solver as a wall: 51 impulses of 950..1121 along
+    //     (-1.00, 0.00, 0.04), the wheels never mount (y 0.444 -> 0.445), the car is steered along
+    //     the kerb 23 -> 16 deg. That is the failure the culls prevent, and NOT the owner's symptom.
     u32 guKerbProbeFrame = 0u;
 
     bool KerbProbeArmed()
