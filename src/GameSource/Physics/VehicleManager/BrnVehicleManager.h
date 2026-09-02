@@ -1099,8 +1099,13 @@ namespace Vehicle
         // @0x8261A8D0 (DWARF :679; 217 insns).
         void ClearSnappedNetworkCarContacts(Deformation::DeformationManager* lpDeformationManager);
 
-        // @0x82619340 (DWARF :361 -- .ida-exports HOLE, image-only). Harvest every live
-        // vehicle body into the sim's InUpdateExternalBody queue.
+        // @0x82619340 (DWARF :361; 435 insns -- was an .ida-exports hole, pulled headless from
+        // the IDB 2026-09-02). Harvest every live vehicle body into the sim's
+        // InUpdateExternalBody queue: ONE event per live race car, addressed to the car's
+        // E_ENTITYTYPE_PROP_COLLISION_RACECAR (11) proxy body (the handling-body handle with the
+        // owner byte re-stamped), velocities divided by the AI-crash slow-mo factor while
+        // mbAISlowMo is set (and mbWroteIntoRWInSlowMo latched either way); then the traffic
+        // twin. Body: BrnVehicleManager_GetUpdatedVehicleBodies.cpp.
         void GetUpdatedVehicleBodies(
             CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InUpdateExternalBody, 60>* lpUpdatedBodyQueue);
 

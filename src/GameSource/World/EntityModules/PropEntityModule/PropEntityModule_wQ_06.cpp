@@ -170,7 +170,7 @@ namespace BrnWorld
                 // UpdatePropEvent. `[Q6-read] props=N` upstream only proves the event was
                 // QUEUED; this proves a POSE arrived and, across consecutive lines, whether
                 // it is actually changing. Budgeted, opt-in, whole props only (part index 0).
-                static s32 siWholePropLinesLeft = 24;
+                static s32 siWholePropLinesLeft = 200;   // 24 -> 200, 2026-09-02 (props-at-speed)
                 for ( s32 liScan = 0; siWholePropLinesLeft > 0 && liScan < liQueueLength;
                       ++liScan )
                 {
@@ -187,6 +187,9 @@ namespace BrnWorld
                             << ", "     << lScanPosition.z
                             << ") |linVel|="
                             << rw::math::vpu::Magnitude( lrScanEvent.mLinearVelocity )
+                            << " v=(" << lrScanEvent.mLinearVelocity.x << ","
+                            << lrScanEvent.mLinearVelocity.y << ","
+                            << lrScanEvent.mLinearVelocity.z << ")"
                             << " frozen=" << ( lrScanEvent.mbFrozen ? 1 : 0 )
                             << "\n";
                     }

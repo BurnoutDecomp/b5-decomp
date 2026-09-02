@@ -30,6 +30,7 @@
 #include "rw/math/fpu/scalar_operation.h"        // rw::math::fpu::IsValid(float)
 
 #include <cstddef>   // offsetof (layout gate)
+#include <stdlib.h>  // getenv (the opt-in [extbody] miss witness, host only)
 #include <cfloat>    // FLT_MAX  (rw::physics::Inertia's default max velocity/omega)
 
 // CgsPhysics::PhysicsSimulationModule and its slot tables RigidBodyData /
@@ -2028,6 +2029,25 @@ namespace CgsPhysics
             const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mID });
             if (liBodyIndex == -1)
             {
+                // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_PROP_DIAG), first-N witness of the
+                // console's silent skip: an update addressed to a body the sim never received.
+                // Added 2026-09-02 with VehicleManager::GetUpdatedVehicleBodies -- the PROP_COLLISION
+                // proxies are the first external bodies this drain has ever been fed, and "the
+                // proxy was never created" and "the proxy is fed" must be distinguishable in a log.
+                // DELETE-WHEN the high-speed prop reaction is confirmed on screen.
+                {
+                    static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
+                    static s32        siMissLinesLeft = 8;
+                    if (sbPropDiag && siMissLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        --siMissLinesLeft;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[extbody] update for entity " << CgsDev::E_PRINTMODE_HEXONCE
+                            << static_cast<u32>(lrEvent.mID >> 32)
+                            << " index " << static_cast<u32>(lrEvent.mID & 0xFFFFu)
+                            << " has NO sim body -- skipped silently, as on the console\n";
+                    }
+                }
                 continue;   // SILENT -- 0x828A3D8C, no assert on this path
             }
 

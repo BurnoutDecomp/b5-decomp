@@ -738,6 +738,16 @@ public:
     // X360 0x825B4980: pack a physics-traffic EntityId from a traffic index.
     EntityId GetPhysicsEntityId(s32 liTrafficIndex) const;
 
+    // X360 0x825EEF70 -- the TRAFFIC half of the per-frame external-body publish, and the tail
+    // call of VehicleManager::GetUpdatedVehicleBodies @0x82619340 (`addis r3,r20,1 ; addi r3,r3,
+    // -0x5120` == this + 44768, r4 = the same 60-slot queue). Walks mUsedTrafficVehicles and
+    // AddEvents one InUpdateExternalBody per live slot, addressed to that slot's
+    // E_ENTITYTYPE_PROP_COLLISION_TRAFFIC (12) proxy body: mpVehicleBody's transform / linear /
+    // angular velocity, three IsValid tripwires (.cpp:1844-1846). DWARF h:162 declares it const.
+    // Body: BrnVehicleManager_GetUpdatedVehicleBodies.cpp.
+    void GetUpdatedVehicleBodies(
+        CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InUpdateExternalBody, 60>* lpUpdatedBodyQueue) const;
+
     // X360 0x825C2C38: look up the GLOBAL entity id stored for a traffic-car slot.
     EntityId GetGlobalTrafficEntityId(u16 lu16TrafficCarIndex) const;
 
