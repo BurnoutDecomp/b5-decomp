@@ -1,6 +1,7 @@
 #include "GameSource/Effects/EffectsStateMachine.h"
-#include "GameSource/Effects/EffectsModule.h"          // BrnEffects::CarState (+0x10 mfExhaustSmokeBlendDelta, +0x4E mPad4E)
-#include "GameSource/Effects/ParticleEffectHelper.h"   // RaceCarParticleEffectHelper::RaceCarState()
+#include "GameSource/Effects/EffectsModule.h"          // BrnEffects::CarState (+0x10 mDt, +0x4E mbJumping)
+#include "GameSource/Effects/BrnEffectsDebugComponent.h" // EffectsDebugComponent::JumpParams().IsForceJumping()
+#include "GameSource/Effects/ParticleEffectHelper.h"   // RaceCarParticleEffectHelper::DebugComponent()
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
 
 // BrnEffects::EffectsStateMachine out-of-line bodies, reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -19,21 +20,27 @@ namespace BrnEffects
     // X360 0x82280468 -- one tick of the effects state machine.
     void EffectsStateMachine::Tick(CarState& lCarState, RaceCarParticleEffectHelper& lHelper)
     {
-        // Propagate the race-car's force flag into the car state. The X360 reads the byte at
-        // RaceCarState+0x64 directly (lbz r11,0x64(r11)); RaceCarState() returns a pointer to the
-        // (incomplete-in-scope) RaceCarState, so read the raw byte to avoid fabricating a member
-        // name (offset 0x64 lies inside maWheels[0]).
-        const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState = lHelper.RaceCarState();
-        if (*(reinterpret_cast<const u8*>(lpRaceCarState) + 0x64) != 0)
+        // ⚠ CORRECTED 2026-09-02 (tyre-mark wave). The old body read
+        // `*(RaceCarState* + 0x64)` and stored through `*(u8*)(&lCarState + 0x4E)`, calling it
+        // "the race-car's force flag". It is the DEBUG COMPONENT's force-jump toggle, and it
+        // was reading the WRONG OBJECT: the asm is
+        //     lwz  r11, 0x10(r28)   ; r28 == the helper -> helper+0x10 == mpDebugComponent
+        //     lbz  r11, 0x64(r11)   ; EffectsDebugComponent+0x64 == mJumpParams.mbForceJumping
+        //     stb  1,   0x4E(r29)   ; CarState+0x4E == mbJumping
+        // helper+0x10 is mpDebugComponent (base mpParticleModule +0x00, mpActiveRaceCar +0x04,
+        // mpEffectsModule +0x08, mpRaceCarState +0x0C, mpDebugComponent +0x10), and
+        // RaceCarState+0x64 is padding inside maWheels[0] -- so the old read was garbage.
+        // Both ends are named members now; the raw-offset hacks are gone.
+        if (lHelper.DebugComponent()->JumpParams().IsForceJumping())
         {
-            *(reinterpret_cast<u8*>(&lCarState) + 0x4E) = 1;   // CarState +0x4E
+            lCarState.mbJumping = true;   // CarState +0x4E
         }
 
         // Count the state timer down; note whether it expired this frame.
         bool lbStateTimerExpired = false;
         if (mTime > 0.0f)
         {
-            mTime -= lCarState.mfExhaustSmokeBlendDelta;   // CarState +0x10 (frame delta)
+            mTime -= lCarState.GetDt();   // asm `lfs f13, 0x10(r29)` == EffectsModuleParams::mDt
             lbStateTimerExpired = (mTime <= 0.0f);
         }
 

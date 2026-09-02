@@ -126,8 +126,8 @@ void WheelStateMachine::HandleSmokeLayer(u32 luLayer, const CarState& lCarState,
         return;
     }
 
-    const f32 lfTimeStep    = lCarState.mfFrameTimeStep;   // +0x10
-    const f32 lfCurrentTime = lCarState.mfCurrentTime;     // +0x14
+    const f32 lfTimeStep    = lCarState.GetDt();           // CarState +0x10 (EffectsModuleParams::mDt)
+    const f32 lfCurrentTime = lCarState.GetTime();         // CarState +0x14 (EffectsModuleParams::mTime)
     const f32 lfNumToSpawn  = std::floor(lrfAccumulator);
 
     // One randomised backward-emission bias, shared by every particle spawned this call.
@@ -194,7 +194,7 @@ void WheelStateMachine::Update(const CarState& lCarState,
     const f32 lfWheelSurfaceSpeed = lWheel.mfRadius * lWheel.mfRadiansPerSecond;
     const f32 lfWheelSpeed        = rw::math::vpu::Magnitude(lWheelVelocity);
     const f32 lfWheelMaxSpeed     = rw::math::fpu::Max(lfWheelSpeed, lfWheelSurfaceSpeed);
-    const f32 lfMaxWheelTravel    = lCarState.mfFrameTimeStep * lfWheelMaxSpeed;
+    const f32 lfMaxWheelTravel    = lCarState.GetDt() * lfWheelMaxSpeed;   // +0x10
     if (lfWheelMaxSpeed < KF_WHEEL_VELOCITY_THRESHOLD)
     {
         return;

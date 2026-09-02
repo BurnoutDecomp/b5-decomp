@@ -282,7 +282,10 @@ void ActiveRaceCarData::Tick(CarState& lCarState, const BrnPhysics::Vehicle::Rac
 
     if (JustStartedCrashing())
     {
-        mfTimeCrashStarted = lCarState.mfCurrentTime;
+        // asm 0x82288048/4C: `lfs f0, 0x14(r30)` / `stfs f0, 0x134(r31)` -- the CarState's
+        // EffectsModuleParams::mTime (+0x14), NOT a `mfCurrentTime` member (CarState has none;
+        // the old spelling never compiled -- this TU had never been through the gate).
+        mfTimeCrashStarted = lCarState.GetTime();
     }
 }
 

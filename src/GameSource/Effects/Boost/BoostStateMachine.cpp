@@ -328,7 +328,7 @@ void BoostStateMachine::OnChangeState(EffectsState leNewState,
         {
             StartEffects(lHelper, KAC_BOOST_RECHARGE_EFFECT, lHelper.WorldIndex());
             // blend = max(0, 1 - rechargeBlend)  (fsel f1, -(1-x), 0.0, 1-x)
-            f32 lfBlend = 1.0f - lCarState.mfExhaustPopRechargeBlend;
+            f32 lfBlend = 1.0f - lCarState.mfExhaustPopIntensity;   // CarState +0x48 (`*(a4 + 72)`)
             if (lfBlend <= 0.0f)
             {
                 lfBlend = 0.0f;
@@ -370,15 +370,15 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
             {
                 return EffectsStateBoosting;
             }
-            if (lCarState.mbCrashing)
+            if (lCarState.mbExhaustPopThisFrame)   // +0x4C (`*(a2 + 76)`)
             {
                 return EffectsStateExhaustPopRestart;
             }
             // Engine running, below the exhaust-pop speed cap, not jumping -> start the
             // exhaust smoke; otherwise stay put.
             if (lCarState.mbEngineRunning
-                && lCarState.mfSpeedMS < KF_EXHAUST_MAX_VEHICLE_SPEED
-                && !lCarState.mbJumping)
+                && lCarState.mfSpeedMPH < KF_EXHAUST_MAX_VEHICLE_SPEED
+                && !lCarState.mbCrashing)   // +0x4D (`*(a2 + 77)`)
             {
                 return EffectsStateExhaustSmokeOn;
             }
@@ -389,7 +389,7 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
             // Stay boosting while still boosting and (not jumping, or in one of the two
             // game modes where jumping keeps boost VFX: game mode 16 or 2).
             const bool lbKeepBoosting =
-                (!lCarState.mbJumping
+                (!lCarState.mbCrashing   // +0x4D (`*(a2 + 77)`)
                  || lHelper.CurrentGameMode() == 16
                  || lHelper.CurrentGameMode() == 2)
                 && lCarState.mbIsBoosting;
@@ -413,7 +413,7 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
             const Vector2 lvScale  = { 0.0f, 1.0f, 0.0f, 0.0f };
             BrnEffects::Curves::SmoothStep lCurve;
             const f32 lfBlend = 1.0f - lCurve.Evaluate(lvParams, lvScale,
-                                                       lCarState.mfBoostTransitionProgress);
+                                                       lCarState.mfBoostAmount);   // CarState +0x3C (`v14 = *(a2 + 60)`)
             SetBlendValue(lHelper, lfBlend);
             return leCurrentState;
         }
@@ -424,14 +424,14 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
             {
                 return EffectsStateBoosting;
             }
-            if (lCarState.mbCrashing)
+            if (lCarState.mbExhaustPopThisFrame)   // +0x4C (`*(a2 + 76)`)
             {
                 return EffectsStateExhaustPopRestart;
             }
             // Over the speed cap, engine off, or jumping -> begin stopping the smoke.
-            if (lCarState.mfSpeedMS >= KF_EXHAUST_MAX_VEHICLE_SPEED
+            if (lCarState.mfSpeedMPH >= KF_EXHAUST_MAX_VEHICLE_SPEED
                 || !lCarState.mbEngineRunning
-                || lCarState.mbJumping)
+                || lCarState.mbCrashing)   // +0x4D (`*(a2 + 77)`)
             {
                 return EffectsStateExhaustSmokeStopping;
             }
@@ -471,12 +471,12 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
             {
                 return EffectsStateBoosting;
             }
-            if (lCarState.mbCrashing)
+            if (lCarState.mbExhaustPopThisFrame)   // +0x4C (`*(a2 + 76)`)
             {
                 return EffectsStateExhaustPopRestart;
             }
             // Fade the smoke out; once fully blended (>= 1.0) the effects are all off.
-            mfExhaustSmokeBlend += lCarState.mfExhaustSmokeBlendDelta;
+            mfExhaustSmokeBlend += lCarState.GetDt();   // `*(a1+32) = *(a2+16) + *(a1+32)` == CarState +0x10
             SetBlendValue(lHelper, mfExhaustSmokeBlend);
             if (mfExhaustSmokeBlend < 1.0f)
             {
@@ -500,7 +500,7 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
             {
                 return EffectsStateBoosting;
             }
-            if (lCarState.mbCrashing)
+            if (lCarState.mbExhaustPopThisFrame)   // +0x4C (`*(a2 + 76)`)
             {
                 return EffectsStateExhaustPopRestart;
             }
