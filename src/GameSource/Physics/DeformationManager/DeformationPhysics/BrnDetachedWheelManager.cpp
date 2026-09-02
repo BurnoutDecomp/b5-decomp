@@ -388,17 +388,26 @@ namespace Deformation
                 continue;
             }
 
-            static bool sbLoggedWheelPostPhysicsGate = false;
-            if ( !sbLoggedWheelPostPhysicsGate )
+            // ---- inner update, LANDED 2026-09-02 (deform close-out wave) from @0x82627150 ----
+            //   0x826271E4  ld r11, 0(event)         ; the 8-byte packed BurnoutWheelBodyID
+            //   0x826271E8  srdi 32 ; srwi 24        ; owner byte == 9 (racecar wheel) or 10 (traffic)
+            //   0x82627200  clrlwi r29, r11, 16      ; lBodyId.GetPartPoolIndex() == the low 16 bits (muSubB)
+            //   0x82627204  cmplwi r29, 0x14         ; the BitArray "invalid index : N < 20" tripwire (CgsBitArray.h:203)
+            //   0x82627310  IsBitSet(slot)           ; assert "mUsedWheels.IsBitSet(lBodyId.GetPartPoolIndex())" (:150)
+            //   0x82627360  r3 = this + 144*slot ; r4 = event ; r5 = scene  ; bl PhysicalWheel::Update
+            // (DWARF BrnDetachedWheelManager.cpp:148 names the local lBodyId.)
+            const u32 luSlot = static_cast<u32>(lrEvent.mID & 0xFFFFu);
+            CGS_ASSERT(luSlot < static_cast<u32>(KI_MAX_DETACHED_WHEELS), "invalid index : lBodyId.GetPartPoolIndex() < 20");
+            CGS_ASSERT(mUsedWheels.IsBitSet(luSlot), "mUsedWheels.IsBitSet(lBodyId.GetPartPoolIndex())");
+            if ( luSlot < static_cast<u32>(KI_MAX_DETACHED_WHEELS) )
             {
-                sbLoggedWheelPostPhysicsGate = true;
-                if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                    *CgsDev::Log::gpDebugPrint
-                        << "conductor gate: DetachedWheelManager::UpdatePostPhysics inner wheel "
-                           "update reached but not reconstructed [FLAG PC boot gate]\n";
+                // FLAG (type plumbing, same shape as PhysicalBodyPartPool -> PhysicalBodyPart::Update):
+                // PhysicalWheel::Update is declared on the Deformation-namespace forward declaration
+                // of OutUpdateRigidBody (BrnPhysicalWheel.h:57) and reads the CgsPhysics event by
+                // byte offset; the queue element IS that event, so the pointer is re-labelled here.
+                maWheels[luSlot].Update(reinterpret_cast<const OutUpdateRigidBody*>(&lrEvent), lpSceneInterface);
             }
         }
-        (void)lpSceneInterface;
     }
 
     // =============================================================================================
