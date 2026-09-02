@@ -59,6 +59,10 @@
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"                          // ShaderConstantTable
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                       // CGS_ASSERT
 #include "rw/math/vpu/vector4_operation.h"                                               // rw::math::vpu::Max
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                               // CgsDev::Log::gpDebugPrint ([tdef] witness, opt-in)
+
+#include <cstdlib>   // getenv / atoi ([tdef] witness)
+#include <cmath>     // sqrtf ([tdef] witness)
 
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable; bodied by the
 // CgsShaderConstants TU). Same extern the traffic render TU carries.
@@ -194,6 +198,52 @@ void TrafficEntityModule::ProcessDeformationData(
                         lpPhysInfo->maSkinningOffsets_Scratch[ luPoint ] = lrOffset;
                         lv4MaxOffset = rw::math::vpu::Max(
                             lv4MaxOffset, Vector4{ lrOffset.x, lrOffset.y, lrOffset.z, lrOffset.w } );
+                    }
+
+                    // ---- [tdef] NOT X360; opt-in on BRN_DEFORM_TRACE. The physics side's
+                    // reading of THIS car's skin block at the instant it lands in
+                    // TrafficPhysicsInfo: max / sum / non-zero rows plus the fatal inputs.
+                    // Printed only when the sum changes; pairs with the render TU's
+                    // [tdef-upload] line for the same vehicle. DELETE-WHEN banked.
+                    {
+                        static s32 siTraceOn = -1;
+                        if ( siTraceOn < 0 )
+                        {
+                            const char* lpcEnv = getenv( "BRN_DEFORM_TRACE" );
+                            siTraceOn = ( lpcEnv != 0 && atoi( lpcEnv ) > 0 ) ? 1 : 0;
+                        }
+                        if ( siTraceOn == 1 && CgsDev::Log::gpDebugPrint != 0 )
+                        {
+                            static f32 sfLastSum = -1.0f;
+                            static u32 sluLines  = 0;
+                            f32 lfMax = 0.0f;
+                            f32 lfSum = 0.0f;
+                            s32 liNnz = 0;
+                            for ( u32 luRow = 0; luRow < TrafficPhysicsInfo::KU_NUM_SKINNING_OFFSETS; ++luRow )
+                            {
+                                const Vector3Plus& lrRow = lpPhysInfo->maSkinningOffsets_Scratch[ luRow ];
+                                const f32 lfMag = sqrtf( lrRow.x * lrRow.x + lrRow.y * lrRow.y + lrRow.z * lrRow.z );
+                                if ( lfMag > lfMax ) { lfMax = lfMag; }
+                                if ( lfMag > 0.0f ) { lfSum += lfMag; ++liNnz; }
+                            }
+                            if ( lfSum != sfLastSum && sluLines < 400u )
+                            {
+                                ++sluLines;
+                                sfLastSum = lfSum;
+                                *CgsDev::Log::gpDebugPrint
+                                    << "[tdef] veh " << luVehicle
+                                    << " phys " << liPhysicalIndex
+                                    << " maxVerlet " << lfMax
+                                    << " sumVerlet " << lfSum
+                                    << " nnz " << liNnz
+                                    << " laneMax (" << lv4MaxOffset.x << ", " << lv4MaxOffset.y
+                                    << ", " << lv4MaxOffset.z << ")"
+                                    << " deforming " << ( lpPhysInfo->mbIsDeforming ? 1 : 0 )
+                                    << " fatal " << ( lpPhysInfo->mbIsFatallyCrashing ? 1 : 0 )
+                                    << " alive " << ( lpVehicle->IsAlive() ? 1 : 0 )
+                                    << "\n";
+                            }
+                        }
                     }
 
                     // `lbz r11, 5(vehicle) ; clrlwi 31` -- E_FLAG_ALIVE.
