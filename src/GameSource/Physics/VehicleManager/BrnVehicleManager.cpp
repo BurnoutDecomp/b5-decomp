@@ -617,7 +617,13 @@ namespace Vehicle
         const s32 liVictimIndex = static_cast<s32>((lVictimEntityId.muValue >> 10) & 0x3FFF);
         VehicleDriver& lrDriver = maRaceCarDrivers[liVictimIndex];   // asm 224*v36 + this
         const s32 liCrashState = maeRaceCarTypes[liVictimIndex];      // asm v44 = maeRaceCarTypes[v36]
-        const bool lbWasInCrashState1 = (liCrashState == 1);             // asm v45 -> AddRaceCarCrashEvent arg
+        // RETIRED 2026-09-02 (deform close-out wave): `lbWasInCrashState1 = (liCrashState == 1)`
+        // -- Hex-Rays' v45 -- used to be forwarded to BOTH AddRaceCarCrashEvent sites as the r8
+        // argument. It is not that argument: v45 is one of the four AND terms of the
+        // RaceCarPhysics::SetCrashing latch (`cntlzw r9, r7 ; extrwi ; and r11, r11, r9`
+        // @0x826353C4..0x826353D4), which this body already models as `liCrashState == 1` inside
+        // lbLatchPhysics. The real r8 is a hard 0 on path (A) and the post-SetCrashing mbCrashing
+        // re-read on path (B); both sites now pass that.
 
         // The cause sub-code = the OWNER byte of the aggressor id (RACECAR=1, remap-required=2, ...).
         // asm: v42 = HIBYTE(a2).
@@ -683,15 +689,20 @@ namespace Vehicle
 
         if (lrVictimRecord.mbCrashing)
         {
-            // (A) REMOTE / already-handled path: fire the LIGHT crash event and fall through to the
-            // crash-data slot alloc. asm: AddRaceCarCrashEvent(sink, 0, id, a3, 0,0, v45, 0, vCrashPos).
+            // (A) ALREADY-CRASHING path: fire the LIGHT crash event and fall through to the
+            // crash-data slot alloc. asm loc_826354EC..0x82635530 -- the whole argument block is
+            // `li r10,0 ; li r8,0 ; li r7,0`, i.e. BOTH bool arguments are hard zeros here.
+            // (RE-NAMED 2026-09-02: this branch is not "remote", it is `mbCrashing` already TRUE
+            // at 0x82635320 -- the victim is mid-crash and gets a second, lighter event.)
             if (lpManagerOutputInterface)
             {
                 lpManagerOutputInterface->AddRaceCarCrashEvent(
                     lValidatedVictimId,
                     /*lbLocalPhysicalCrash=*/false,
                     lrVictimRecord.mCrashNormal,          // asm v1 == the crash normal register
-                    lbWasInCrashState1,
+                    // ⭐ CORRECTED 2026-09-02: was `lbWasInCrashState1` (maeRaceCarTypes==1); the
+                    // console passes `li r8, 0` @0x82635504. See the path-(B) note below.
+                    /*lbWasInCrashState1=*/false,
                     // this argument used to be a phantom `mvCrashPosition`. Both
                     // AddRaceCarCrashEvent sites do `lvx128 ; vspltw v0,v0,0 ; stvx128 ; lfs f1`
                     // on record+0xEF0 -- they pass LANE .x as the scalar float f1, and +0xEF0 is
@@ -750,19 +761,43 @@ namespace Vehicle
             // RE-SEATED 2026-08-03: the flag this used to set was `mbCrashCommitted` at +3097.
             // The asm store is `stb r20(1), 0x1359(r11)` and r11 was made the RECORD base two
             // instructions earlier (`addi r11, r11, 0x740`), so the seat is in-record 4953 and the
-            // member is VehiclePhysics::mbDeformationModelIsActive. AND ITS GUARD IS INVERTED
-            // HERE: the console sets it (together with an inlined ResetDeformableAABB, a 32-byte
-            // copy of mOriginalAABB over mDeformableAABB) only when the RE-READ mbCrashing is
-            // NON-zero, i.e. on the already-crashing path -- not on this local one. FLAG: left on
-            // this branch pending the SetRaceCarCrashing control-flow re-decode noted below.
-            lrVictimRecord.mbDeformationModelIsActive = 1;          // asm *(record+4953) = 1
+            // member is VehiclePhysics::mbDeformationModelIsActive.
+            //
+            // ⭐⭐ CONTROL FLOW RE-DECODED 2026-09-02 (deform close-out wave) -- the FLAG that used
+            // to sit here ("ITS GUARD IS INVERTED HERE ... only when the RE-READ mbCrashing is
+            // NON-zero, i.e. on the already-crashing path -- not on this local one") was WRONG
+            // about WHICH path, and it hid a store the tree never made at all. The asm:
+            //     0x82635320  lbz    r11, 0xE50(r31)   ; mbCrashing BEFORE anything -- the A/B split
+            //     0x82635330  bne    cr6, loc_826354EC ; already crashing -> path (A), the light event
+            //     ...         (path B) bl RaceCarPhysics::SetCrashing @0x826353E0
+            //     0x82635424  lbz    r10, 0xE50(r11)   ; RE-READ, after SetCrashing
+            //     0x8263542C  beq    cr6, loc_82635470 ; not crashing -> skip, r8 = r23 (0)
+            //     0x82635430  addi   r11, r11, 0x740   ; the SimpleVehiclePhysics sub-object
+            //     0x82635440  stb    r20, 0x1359(r11)  ; mbDeformationModelIsActive = 1
+            //     0x82635438/3C + 0x8263544C..68        ; ResetDeformableAABB() inlined
+            //     0x8263546C  b      loc_82635474      ; r8 = r20 (1)
+            // So the re-read gate is on path (B) -- THIS branch -- and it is a COMMON TAIL after
+            // SetCrashing, exactly as the second FLAG below said. It is also DEAD in one direction:
+            // SimpleVehiclePhysics::SetCrashing @0x825D990C stores `stb 1, 0x710(r3)` (mbCrashing)
+            // UNCONDITIONALLY, and path B always calls it, so the re-read is always non-zero here
+            // and the taken arm always runs. The bool is kept as the console spells it rather than
+            // constant-folded, so the shape stays readable against the asm.
+            const bool lbCrashingAfterLatch = lrVictimRecord.mbCrashing;   // asm 0x82635424 re-read
+            if (lbCrashingAfterLatch)
+            {
+                lrVictimRecord.mbDeformationModelIsActive = 1;      // asm *(record+4953) = 1
+
+                // ⭐ THE MISSING STORE (deform close-out wave, 2026-09-02). NOTHING in the tree
+                // ever restored mDeformableAABB: UpdateDeformedBBox @0x825E0D20 is the only other
+                // writer and it only ever GROWS it from the live sensor spheres, and it runs only
+                // on the IK-budgeted frames. The console snaps the box back onto mOriginalAABB the
+                // moment a crash latches, so each impact starts from the undeformed box. Since
+                // 97c3a7e1 made mDeformableAABB the CLAMP SOURCE for UpdateSkinningOffsets
+                // @0x825DFA90, a box left grown by the previous wreck does not just read wrong --
+                // it mis-clamps the next hit's driven points.
+                lrVictimRecord.ResetDeformableAABB();               // asm 0x82635438..0x82635468
+            }
             lrVictimRecord.mEntityCausingCrash = lValidatedVictimId; // asm *(record+5200) = v34
-            // FLAG (structural, recorded 2026-08-03): this body models TWO AddRaceCarCrashEvent
-            // calls split by `mbCrashing`. There ARE two call sites (@0x826354BC with r7=1 and
-            // @0x82635530 with r7=0), but the `mbCrashing` re-read at 0x82635424 gates only the
-            // deformation flag + AABB reset and the r8 argument -- it is a COMMON TAIL after
-            // RaceCarPhysics::SetCrashing, not the branch that selects the call site. Re-decoding
-            // that control flow is a separate wave; the member seats above are settled regardless.
 
             // Fire the FULL crash event (asm arg `1` + the matrix vs the light path's 0/0).
             if (lpManagerOutputInterface)
@@ -771,7 +806,13 @@ namespace Vehicle
                     lValidatedVictimId,
                     /*lbLocalPhysicalCrash=*/true,
                     lrVictimRecord.mCrashNormal,
-                    lbWasInCrashState1,
+                    // ⭐ CORRECTED 2026-09-02: this used to pass `lbWasInCrashState1`, i.e.
+                    // maeRaceCarTypes[victim] == 1 -- Hex-Rays' v45, which is a term of the
+                    // SetCrashing latch (`and r11, r11, r9` @0x826353D4), NOT this argument. The
+                    // r8 the console passes at 0x826354BC is the re-read gate's own result:
+                    // `mr r8, r20` (1) on the taken arm, `mr r8, r23` (0) at loc_82635470 -- and
+                    // `li r8, 0` on path (A) below.
+                    lbCrashingAfterLatch,
                     lrVictimRecord.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.x);
 
                 // Push the 64-byte crash record onto the IO VariableEventQueue<1536,16> @ sink+26096
