@@ -88,9 +88,8 @@ namespace BrnParticle
         mInterfaceB.mpVTable = nullptr;  // X360 off_820CEBE0
         mInterfaceB.mu04 = 0;
         mInterfaceB.mu08 = 0;
-        mInterfaceC.mpVTable = nullptr;  // X360 off_820CEBE4
-        mInterfaceC.mu04 = 0;
-        mInterfaceC.mu08 = 0;
+        // (+0x9210 off_820CEBE4 + two zero words == mSkidsRenderer's ImRenderer<SkidVertex>
+        // base constructing itself; the member is now the real Im3dSkidsRenderer.)
         mInterfaceD.mpVTable = nullptr;  // X360 off_820CEBE8
         mInterfaceD.mu04 = 0;
         mInterfaceD.mu08 = 0;
@@ -99,7 +98,9 @@ namespace BrnParticle
         mInterfaceE.mu08 = 0;
 
         // --- sentinel words ------------------------------------------------------
-        miSentinel22190    = 0x7FFFFFFF;
+        // (+0x22190 == 0x7FFFFFFF is mTrailSystem.mFreeEmitters' unconstructed Stack
+        // sentinel -- the inlined Stack<TrailEmitter*,96> ctor, now stamped by
+        // Native::TrailSystem's own constructor.)
         miJobSentinel249C4 = -1;
         // Job @+0x249D0 sub-construction DEFERRED (see FLAG).
         miSentinel24FD0    = -1;
@@ -147,19 +148,19 @@ namespace BrnParticle
     static void _AssertLayout()
     {
         #define PM_TAIL_DELTA(member) \
-            (offsetof(ParticleModule, member) - offsetof(ParticleModule, miSentinel22190))
+            (offsetof(ParticleModule, member) - offsetof(ParticleModule, miJobSentinel249C4))
 
-        static_assert(PM_TAIL_DELTA(miJobSentinel249C4)              == 0x249C4 - 0x22190, "-1 sentinel @ +0x249C4");
-        static_assert(PM_TAIL_DELTA(maJob0Placeholder)              == 0x249D0 - 0x22190, "job 0 @ +0x249D0");
-        static_assert(PM_TAIL_DELTA(miSentinel24FD0)                == 0x24FD0 - 0x22190, "-1 sentinel @ +0x24FD0");
-        static_assert(PM_TAIL_DELTA(miSentinel25008)                == 0x25008 - 0x22190, "-1 sentinel @ +0x25008");
-        static_assert(PM_TAIL_DELTA(maSparkFrameDataSet0Placeholder) == 0x25030 - 0x22190, "spark set 0 @ +0x25030");
-        static_assert(PM_TAIL_DELTA(maJob1Placeholder)              == 0x25700 - 0x22190, "job 1 @ +0x25700");
-        static_assert(PM_TAIL_DELTA(miSentinel25CD0)                == 0x25CD0 - 0x22190, "-1 sentinel @ +0x25CD0");
-        static_assert(PM_TAIL_DELTA(miSentinel25D08)                == 0x25D08 - 0x22190, "-1 sentinel @ +0x25D08");
-        static_assert(PM_TAIL_DELTA(maSparkFrameDataSet1Placeholder) == 0x25D30 - 0x22190, "spark set 1 @ +0x25D30");
-        static_assert(PM_TAIL_DELTA(maFrameJobsPlaceholder)         == 0x26400 - 0x22190, "frame jobs @ +0x26400");
-        static_assert(PM_TAIL_DELTA(mbFlag27784)                    == 0x27784 - 0x22190, "bool sentinel @ +0x27784");
+        static_assert(PM_TAIL_DELTA(miJobSentinel249C4)              == 0x249C4 - 0x249C4, "-1 sentinel @ +0x249C4");
+        static_assert(PM_TAIL_DELTA(maJob0Placeholder)              == 0x249D0 - 0x249C4, "job 0 @ +0x249D0");
+        static_assert(PM_TAIL_DELTA(miSentinel24FD0)                == 0x24FD0 - 0x249C4, "-1 sentinel @ +0x24FD0");
+        static_assert(PM_TAIL_DELTA(miSentinel25008)                == 0x25008 - 0x249C4, "-1 sentinel @ +0x25008");
+        static_assert(PM_TAIL_DELTA(maSparkFrameDataSet0Placeholder) == 0x25030 - 0x249C4, "spark set 0 @ +0x25030");
+        static_assert(PM_TAIL_DELTA(maJob1Placeholder)              == 0x25700 - 0x249C4, "job 1 @ +0x25700");
+        static_assert(PM_TAIL_DELTA(miSentinel25CD0)                == 0x25CD0 - 0x249C4, "-1 sentinel @ +0x25CD0");
+        static_assert(PM_TAIL_DELTA(miSentinel25D08)                == 0x25D08 - 0x249C4, "-1 sentinel @ +0x25D08");
+        static_assert(PM_TAIL_DELTA(maSparkFrameDataSet1Placeholder) == 0x25D30 - 0x249C4, "spark set 1 @ +0x25D30");
+        static_assert(PM_TAIL_DELTA(maFrameJobsPlaceholder)         == 0x26400 - 0x249C4, "frame jobs @ +0x26400");
+        static_assert(PM_TAIL_DELTA(mbFlag27784)                    == 0x27784 - 0x249C4, "bool sentinel @ +0x27784");
 
         #undef PM_TAIL_DELTA
         (void)&_AssertLayout;  // suppress unused-function diagnostics

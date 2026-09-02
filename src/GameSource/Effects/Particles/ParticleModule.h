@@ -6,6 +6,8 @@
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h" // CgsModule::ModuleSingleBuffered (the base; vtable + the two RWMutexes the ctor constructs inline via its DataBuffers)
 #include "SDKs/Packages/Lion/Final/Allocator/include/CoreAllocator/ITaggedAllocator.h" // EA::Allocator::ITaggedAllocator (IInternalAllocator's base)
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"   // CgsGraphics::Camera (ParticleRenderData::mCgsCamera, BY VALUE)
+#include "GameSource/Effects/Particles/Native/BrnIm3dSkidsRenderer.h"  // BrnGraphics::Im3dSkidsRenderer (mSkidsRenderer, BY VALUE)
+#include "GameSource/Effects/Particles/Native/BrnTrailSystem.h"        // BrnParticle::Native::TrailSystem (mTrailSystem, BY VALUE)
 
 namespace CgsMemory { class HeapMalloc; }   // GameShared/GameClasses/Memory/CgsHeapMalloc.h (fwd; avoids a cross-module include cycle)
 namespace renderengine { class Texture; }   // ParticleRenderData::mpEnvironmentMap (pointer-only)
@@ -342,20 +344,34 @@ namespace BrnParticle
         u8 maPadIfaceAToB[0x91A0 - (0x9010 + sizeof(ContainedInterface))]; // -> +0x91A0
         ContainedInterface mInterfaceB;                // +0x91A0 (37280) off_820CEBE0
         u8 maPadIfaceBToC[0x9210 - (0x91A0 + sizeof(ContainedInterface))]; // -> +0x9210
-        ContainedInterface mInterfaceC;                // +0x9210 (37392) off_820CEBE4
-        u8 maPadIfaceCToD[0x9274 - (0x9210 + sizeof(ContainedInterface))]; // -> +0x9274
+        // +0x9210 (37392): BrnGraphics::Im3dSkidsRenderer mSkidsRenderer (DWARF ParticleModule.h:771)
+        // -- the skid / tyre-mark immediate-mode renderer, 100 bytes on the console (0x9210..
+        // +0x9274), constructed by ParticleModule::Prepare @0x8229BEA0 (`Im3dSkidsRenderer::
+        // Construct(this + 37392, heap)`) and handed to the trail system's renderer. The "vtable
+        // + two zero words" the ctor stamps here are its ImRenderer<SkidVertex> base's own
+        // construction (off_820CEBE4 is that vtable), reproduced by the base sub-object itself.
+        BrnGraphics::Im3dSkidsRenderer mSkidsRenderer; // +0x9210 .. +0x9274
         ContainedInterface mInterfaceD;                // +0x9274 (37492) off_820CEBE8
         u8 maPadIfaceDToE[0x92E0 - (0x9274 + sizeof(ContainedInterface))]; // -> +0x92E0
         ContainedInterface mInterfaceE;                // +0x92E0 (37600) off_820CFA1C
 
-        // Gap to the +0x22190 sentinel word.
-        u8 maPadIfaceETo22190[0x22190 - (0x92E0 + sizeof(ContainedInterface))]; // -> +0x22190
+        // Gap to the trail system at +0x9710 (the DWARF's mLionImmediateModeRenderer /
+        // mSparkRenderer / maSparks[4] -- :773-776 -- not yet typed). FLAG: PLACEHOLDER.
+        u8 maPadIfaceETo9710[0x9710 - (0x92E0 + sizeof(ContainedInterface))]; // -> +0x9710
 
-        // +0x22190 (139664): a 0x7FFFFFFF (s32 max) sentinel the ctor stamps.
-        s32 miSentinel22190;                           // +0x22190 == 0x7FFFFFFF
+        // +0x9710 (38672): BrnParticle::Native::TrailSystem mTrailSystem (DWARF :778), 102652
+        // bytes on the console (.. +0x2280C). The 0x7FFFFFFF the ctor stamps at +0x22190
+        // (139664 == 38672 + 100608 + 384) is this object's mFreeEmitters Stack length --
+        // the inlined Stack<TrailEmitter*,96> constructor, reproduced by TrailSystem's own
+        // ctor. RenderFullResParticles @0x8229AFD0 (`TrailSystem::Render(this + 38672)`),
+        // ParticleModule::Prepare @0x8229BEA0 and EffectsModule::HandleWheels @0x82296C80
+        // (`this + 0xA80 + 0x9710`) all address it here.
+        Native::TrailSystem mTrailSystem;              // +0x9710 .. +0x2280C
 
-        // Gap to the first job/sentinel cluster at +0x249C4.
-        u8 maPad22194To249C4[0x249C4 - (0x22190 + 4)]; // -> +0x249C4
+        // Gap to the first job/sentinel cluster at +0x249C4: the debris renderer + arrays
+        // (DWARF :780..; BrnDebrisRenderer::Construct(this + 141328 == +0x22810)). FLAG:
+        // PLACEHOLDER.
+        u8 maPad2280CTo249C4[0x249C4 - 0x2280C];       // -> +0x249C4
 
         // +0x249C4 (149956): -1 sentinel, then an EA::Jobs::Job at +0x249D0 (149968).
         s32 miJobSentinel249C4;                        // +0x249C4 == -1
