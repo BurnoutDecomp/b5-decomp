@@ -28,6 +28,9 @@
 #include "GameShared/GameClasses/SceneManager/Zones/Resources/ZoneListResourceType.h" // CgsResource::ZoneListResourceType (0xB000)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIdListResourceType.h"     // CgsResource::IdListResourceType (0x25)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsAptDataHeaderType.h"
+#include "SharedClasses/Graphics/TextureNameMapResourceType.h"        // BrnParticle::TextureNameMapResourceType (0x1000B)
+#include "SharedClasses/Graphics/VFXPropsResourceType.h"              // BrnParticle::VFXPropCollectionResourceType (0x1001B)
+#include "SharedClasses/Graphics/ParticleDescriptionResourceType.h"   // BrnParticle::ParticleDescriptionCollectionResourceType (0x10008)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiHudMessageType.h"  // CgsResource::HudMessageResourceType (0x2C == 44)
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"   // CgsResource::LuaCodeResourceType (0x22)
 #include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h" // CgsResource::LanguageResourceType (0x27)
@@ -345,5 +348,26 @@ namespace CgsResource
         TypeRegistry::Register(&sLanguage, "Language");
         static BrnFlapt::FlaptFileResourceType sFlaptFile;     // 0x10020 FLApt (GUI-owned vendor movie)
         TypeRegistry::Register(&sFlaptFile, "FlaptFile");
+
+        // ---- PARTICLES.BUNDLE (2026-09-02, tyre-mark wave) --------------------------------------
+        // The three handlers BrnParticle::ParticleModule::LoadFXBundle @0x8229C950 needs FIXED UP:
+        // the name map (its Entry table / name pointers), the prop VFX tables and the .lef import
+        // table. All three keep the console's 32-bit slots on the host (their FixUp rebases u32
+        // words in place -- the low-4 GB convention), which is why the bundle port is an endian
+        // swap (tools/assets/bundles/particles_transcode.py). The console registers them from
+        // GameDataModule::RegisterResourceTypes like everything above.
+        // NOT registered, on purpose:
+        //   * ParticleDescription (0x1001D, the LION .lef): its DeSerialise calls cLionFX::BinLoad,
+        //     which is a __debugbreak stub (the LION core is not reconstructed) -- registering it
+        //     would trap the first bundle load. Unregistered, the pool keeps the raw bytes.
+        //   * BrnVFXMeshCollection (0x10019): its FixUp needs x64-ported VB/IB pairs the porter
+        //     does not produce yet (passthrough), and only the absent debris renderer reads it.
+        // FLAG PC: DELETE-WHEN cLionFX / the debris renderer land -- register both and port both.
+        static BrnParticle::TextureNameMapResourceType                sTextureNameMap;      // 0x1000B
+        TypeRegistry::Register(&sTextureNameMap, "TextureNameMap");
+        static BrnParticle::VFXPropCollectionResourceType             sVFXPropCollection;   // 0x1001B
+        TypeRegistry::Register(&sVFXPropCollection, "VFXPropCollection");
+        static BrnParticle::ParticleDescriptionCollectionResourceType sParticleDescriptionCollection; // 0x10008
+        TypeRegistry::Register(&sParticleDescriptionCollection, "ParticleDescriptionCollection");
     }
 }
