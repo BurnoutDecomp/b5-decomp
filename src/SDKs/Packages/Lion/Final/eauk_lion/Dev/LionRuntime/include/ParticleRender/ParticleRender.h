@@ -29,7 +29,13 @@
 
 // EA / Lion scalar spellings used by the Lion runtime declarations.
 typedef float    float32_t;
+// bool8_t: EABase (vendor/EABase/.../eabase.h) defines the same name under the cooperative
+// BOOL8_T_DEFINED guard, and every TU that embeds the effects module reaches both headers.
+// Honour the guard both ways (whichever comes first defines it; both are one byte).
+#ifndef BOOL8_T_DEFINED
+#define BOOL8_T_DEFINED
 typedef u8       bool8_t;
+#endif
 typedef u32      U32;
 typedef float    FP32;
 

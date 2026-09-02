@@ -60,7 +60,7 @@ namespace BrnParticle
         // Base (ModuleSingleBuffered: both vtables + mInputBuffer/mOutputBuffer's
         // RWMutexes) is constructed automatically before this body runs.
 
-        // --- intrusive list @+0x4270 -> empty / self-referencing ----------------
+        // --- intrusive list @+0x4270 (the PropCollisions head) -> empty / self-referencing --
         mList.miListHead0 = 0;
         mList.miListHead1 = 0;
         mList.miListHead2 = 0;
@@ -79,29 +79,29 @@ namespace BrnParticle
             maEffectPairs[luEntry].mu1 = 0;
         }
 
-        // mLionParticleRender (@+0x5270) sub-construction is DEFERRED (see FLAG).
+        // mLionRenderer (@+0x5270): its own constructor runs as a member (the X360 chains
+        // BrnParticle::LionParticleRender::LionParticleRender here).
 
-        // --- 5 contained-interface stamps: vtable (left null -- FLAG) + 2 zeros --
-        mInterfaceA.mpVTable = nullptr;  // X360 off_820CF69C
-        mInterfaceA.mu04 = 0;
-        mInterfaceA.mu08 = 0;
-        mInterfaceB.mpVTable = nullptr;  // X360 off_820CEBE0
-        mInterfaceB.mu04 = 0;
-        mInterfaceB.mu08 = 0;
-        // (+0x9210 off_820CEBE4 + two zero words == mSkidsRenderer's ImRenderer<SkidVertex>
-        // base constructing itself; the member is now the real Im3dSkidsRenderer.)
-        mInterfaceD.mpVTable = nullptr;  // X360 off_820CEBE8
-        mInterfaceD.mu04 = 0;
-        mInterfaceD.mu08 = 0;
-        mInterfaceE.mpVTable = nullptr;  // X360 off_820CFA1C
-        mInterfaceE.mu04 = 0;
-        mInterfaceE.mu08 = 0;
+        // --- 4 contained-interface stamps: vtable (left null -- FLAG) + 2 zeros; the
+        //     skids renderer (@+0x9210) constructs itself as the real type -----------
+        mImmediateModeRenderer.mpVTable = nullptr;      // X360 off_820CF69C
+        mImmediateModeRenderer.mu04 = 0;
+        mImmediateModeRenderer.mu08 = 0;
+        mWorldTexRenderer.mpVTable = nullptr;           // X360 off_820CEBE0
+        mWorldTexRenderer.mu04 = 0;
+        mWorldTexRenderer.mu08 = 0;
+        mSmokeRenderer.mpVTable = nullptr;              // X360 off_820CEBE8
+        mSmokeRenderer.mu04 = 0;
+        mSmokeRenderer.mu08 = 0;
+        mLionImmediateModeRenderer.mpVTable = nullptr;  // X360 off_820CFA1C
+        mLionImmediateModeRenderer.mu04 = 0;
+        mLionImmediateModeRenderer.mu08 = 0;
 
         // --- sentinel words ------------------------------------------------------
         // (+0x22190 == 0x7FFFFFFF is mTrailSystem.mFreeEmitters' unconstructed Stack
         // sentinel -- the inlined Stack<TrailEmitter*,96> ctor, now stamped by
         // Native::TrailSystem's own constructor.)
-        miJobSentinel249C4 = -1;
+        miLionBatchCount   = -1;   // +0x249C4
         // Job @+0x249D0 sub-construction DEFERRED (see FLAG).
         miSentinel24FD0    = -1;
         miSentinel25008    = -1;
@@ -162,7 +162,7 @@ namespace BrnParticle
     // +0x25D08 is anchored off r11 = this + 0x25A80 (stw r10,0x250 / stw r9,0x288;
     // r9==r10==-1).
     //
-    // The whole tail (from miSentinel22190 onward) is pointer-free (s32 sentinels and
+    // The whole tail (from miLionBatchCount onward, up to the spawn-buffer pointer) is pointer-free (s32 sentinels and
     // u8[] pads/placeholders), so its byte offsets are identical on the X360 4-byte-
     // pointer ABI and on the gate's host ABI. We therefore pin every tail member as a
     // delta from the +0x22190 anchor: each delta == the X360 absolute offset minus
@@ -173,9 +173,9 @@ namespace BrnParticle
     static void _AssertLayout()
     {
         #define PM_TAIL_DELTA(member) \
-            (offsetof(ParticleModule, member) - offsetof(ParticleModule, miJobSentinel249C4))
+            (offsetof(ParticleModule, member) - offsetof(ParticleModule, miLionBatchCount))
 
-        static_assert(PM_TAIL_DELTA(miJobSentinel249C4)              == 0x249C4 - 0x249C4, "-1 sentinel @ +0x249C4");
+        static_assert(PM_TAIL_DELTA(miLionBatchCount)                 == 0x249C4 - 0x249C4, "-1 sentinel @ +0x249C4");
         static_assert(PM_TAIL_DELTA(maJob0Placeholder)              == 0x249D0 - 0x249C4, "job 0 @ +0x249D0");
         static_assert(PM_TAIL_DELTA(miSentinel24FD0)                == 0x24FD0 - 0x249C4, "-1 sentinel @ +0x24FD0");
         static_assert(PM_TAIL_DELTA(miSentinel25008)                == 0x25008 - 0x249C4, "-1 sentinel @ +0x25008");
@@ -185,6 +185,7 @@ namespace BrnParticle
         static_assert(PM_TAIL_DELTA(miSentinel25D08)                == 0x25D08 - 0x249C4, "-1 sentinel @ +0x25D08");
         static_assert(PM_TAIL_DELTA(maSparkFrameDataSet1Placeholder) == 0x25D30 - 0x249C4, "spark set 1 @ +0x25D30");
         static_assert(PM_TAIL_DELTA(maFrameJobsPlaceholder)         == 0x26400 - 0x249C4, "frame jobs @ +0x26400");
+        static_assert(PM_TAIL_DELTA(miNumDebrisUpdateJobsToWaitOn)   == 0x27780 - 0x249C4, "debris job wait count @ +0x27780");
         static_assert(PM_TAIL_DELTA(mbFlag27784)                    == 0x27784 - 0x249C4, "bool sentinel @ +0x27784");
 
         #undef PM_TAIL_DELTA
