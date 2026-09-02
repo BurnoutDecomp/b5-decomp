@@ -485,6 +485,14 @@ namespace Vehicle
                 << " nIn " << lKerbNormalIn.x << " " << lKerbNormalIn.y << " " << lKerbNormalIn.z
                 << " pA " << lPointOnCar.x << " " << lPointOnCar.y << " " << lPointOnCar.z
                 << " pB " << lPointOnWorld.x << " " << lPointOnWorld.y << " " << lPointOnWorld.z
+                // sphA == mu16PrimitiveIndexA, the CAR-side primitive the narrow phase hit
+                // (ContactGeneratorJob::ExecuteSphereListWithTriangleList writes muPrimitive1Index
+                // = the sphere index; SwapEntityOrder moved it to the A slot). The car's world
+                // sphere list is GetWorldSpaceSpheres() == GetNumSensors() == the deformation
+                // spec's sensor count PLUS FOUR APPENDED WHEEL SPHERES, so sphA >= nSens means
+                // "a WHEEL sphere generated this contact". Pair with [kerb-wsph], which prints
+                // nSens and the four wheel spheres' geometry for the same frame.
+                << " sphA " << static_cast<s32>(lpInOutContact->mu16PrimitiveIndexA)
                 << " tri " << static_cast<s32>(lu16TriangleIndex)
                 << " triN " << lTriangle.mNormal.x << " " << lTriangle.mNormal.y << " " << lTriangle.mNormal.z
                 << " vy " << lTriangle.mVertex0.y << " " << lTriangle.mVertex1.y << " " << lTriangle.mVertex2.y
