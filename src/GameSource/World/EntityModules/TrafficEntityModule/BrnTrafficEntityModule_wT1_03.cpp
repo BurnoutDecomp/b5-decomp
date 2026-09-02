@@ -59,7 +59,7 @@ namespace
 //   0x82751EB4  stfs f0, 0xFD8(r3)      4056   mfTimeNotDriving      = 0.0f
 //   0x82751EA8  stfs f0, 0xFDC(r3)      4060   mfSteeringDirection   = 0.0f
 //   0x82751EAC  stfs f0, 0xFE0(r3)      4064   mfDrivingDirection    = 0.0f
-//   0x82751EB0  stb  r11, 0(r3)            0   <inside mDetachedPartQueue -- GATED, below>
+//   0x82751EB0  stb  r11, 0(r3)            0   mDetachedPartQueue.muNumParts = 0
 //   0x82751EC0  stb  r11, 0xFE4(r3)     4068   miNumLightLocators    = 0
 //   0x82751EB8  stb  r11, 0xFE5(r3)     4069   mbIsDeforming         = false
 //   0x82751EBC  stb  r11, 0xFE6(r3)     4070   mbIsFatallyCrashing   = false
@@ -82,22 +82,14 @@ namespace
 // ----------------------------------------------------------------------------
 void TrafficPhysicsInfo::Construct( s32 liOwningVehicleIndex )
 {
-
-    {
-        // GATED LEG -- `stb r11, 0(r3)` @0x82751EB0, the one zero byte at record +0x00.
-        // Offset 0 is the top byte of the console's 4-byte mDetachedPartQueue.mpEvents
-        // (CgsModule::BaseEventQueue<T> = { T* mpEvents; s32 miMaxLength; s32 miLength; }).
-        // The host pointer is 8 bytes, so that is not the same storage, and the alternative
-        // reading -- a leading member the DecFIGS DWARF lacks -- has no reader to confirm it.
-        // DELETE WHEN: an xref walk finds a reader of TrafficPhysicsInfo +0x00..+0x03.
-        static bool sbLogged = false;
-        LogMissingLeg( sbLogged,
-            "Construct's `stb 0, 0(this)` -- the one zero byte at record +0x00. It lands on the "
-            "MOST SIGNIFICANT byte of the console's 4-byte mDetachedPartQueue.mpEvents, which on "
-            "this LP64 host is not the same storage, and no reader was found that names a "
-            "leading member the DecFIGS DWARF lacks. UNBLOCKED BY: one xref walk for a reader of "
-            "TrafficPhysicsInfo +0x00..+0x03" );
-    }
+    // `stb r11, 0(r3)` @0x82751EB0 -- the detached-part record COUNT. RESOLVED 2026-09-02
+    // (traffic-deformation wave): the xref walk the old gate asked for found the readers and
+    // the writer. ProcessDeformationData @0x8271DEB0 uses this byte as the slot index
+    // (`lbz r29, 0(info)`, asserted < KU_MAX_DETACHED_PARTS_PER_VEHICLE), zeroes it for all
+    // 25 records every frame @0x8271E984, and `stb ++count` @0x8271EB10; RenderTrafficCar
+    // reads it as the record count (pseudocode :1319). It was never the top byte of an
+    // EventQueue pointer -- ARTIST's record is the compact struct the header now declares.
+    mDetachedPartQueue.muNumParts = 0;
 
     mfStuckTimeFront      = 0.0f;
     mfStuckTimeBack       = 0.0f;

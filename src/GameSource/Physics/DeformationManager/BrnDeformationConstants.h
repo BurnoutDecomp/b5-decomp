@@ -28,5 +28,9 @@ namespace Deformation
     const s32 KI_MAX_NUM_IK_PARTS_PER_DEFORMABLE_OBJECT      = 50;
     // BrnDeformationConstants.h:48
     const s32 KI_MAX_NUM_COLLIDABLE_BODIES_PER_DEFORMABLE_OBJECT = 25;
+    // BrnDeformationConstants.h:57 -- the per-vehicle detached-part record bound. X360:
+    // TrafficEntityModule::ProcessDeformationData @0x8271EA98 `cmplwi cr6, r29, 0x14` under
+    // the assert "luSlot < BrnPhysics::Deformation::KU_MAX_DETACHED_PARTS_PER_VEHICLE".
+    const u32 KU_MAX_DETACHED_PARTS_PER_VEHICLE              = 20;
 }
 }

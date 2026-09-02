@@ -86,5 +86,16 @@ namespace BrnTrafficIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return &mGameActionQueue;
     }
+
+    // X360 0x827118F8 (:365, IDA truncates the symbol to `BrnTraffic::BrnTraffi`) -- read-lock
+    // (`lbz r11,0(this); extrwi 1,27`); return &mDeformationOutputInterfaceForEntityModules
+    // (`addi r3, r31, 0x151B0` == 86448). Consumer: TrafficEntityModule::PostPhysicsUpdate
+    // @0x8274E898, whose result goes straight into ProcessDeformationData's r4.
+    const InputBuffer_PostPhysics::DeformationOutputInterfaceForEntityModules*
+    InputBuffer_PostPhysics::GetDeformationOutputInterfaceForEntityModules() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mDeformationOutputInterfaceForEntityModules;
+    }
 }
 }

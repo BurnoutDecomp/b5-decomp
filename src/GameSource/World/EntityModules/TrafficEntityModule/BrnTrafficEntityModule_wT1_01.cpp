@@ -1793,14 +1793,20 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         // their gate below.
         HandleExternalResponses(lpInput);
 
+        // 0x8274E894..0x8274E8A4: `GetDeformationOutputInterfaceForEntityModules(lpInput)` ->
+        // ProcessDeformationData(this, r3). LIVE as of 2026-09-02 (traffic-deformation wave);
+        // body in BrnTrafficEntityModule_ProcessDeformationData.cpp.
+        ProcessDeformationData(lpInput->GetDeformationOutputInterfaceForEntityModules());
+
         {
             static bool sbLogged = false;
             LogMissingLeg(sbLogged,
-                "PostPhysicsUpdate E_STATE_RUNNING head legs -- HandleRecycledTraffic "
-                "@0x82741AF8 / HandleResetRaceCarEvents / HandleContactPoints / "
-                "ProcessDeformationData. None is bodied in this tree; all four consume crash / "
-                "deformation input rings (later T3 rounds). HandleExternalResponses is LIVE "
-                "as of wave T3 round 1");
+                "PostPhysicsUpdate E_STATE_RUNNING head leg -- HandleRecycledTraffic "
+                "@0x82741AF8 (0x8274E884, fed by the InputBuffer getter @0x8274E874 + 0x7A0) "
+                "is not bodied in this tree. HandleExternalResponses (T3 round 1) and "
+                "ProcessDeformationData (2026-09-02) are LIVE; the console's head-leg order at "
+                "0x8274E870..0x8274E8A4 is exactly those three calls -- HandleResetRaceCarEvents "
+                "/ HandleContactPoints are NOT in this arm");
         }
 
         // 0x8274E710 `clrlwi r27, r30, 31` -- bit 0 of the update set is the sim-paused bit,
