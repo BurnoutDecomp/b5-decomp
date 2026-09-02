@@ -131,6 +131,31 @@ namespace BrnParticle
         return lpEffect;
     }
 
+    // X360 0x8228A238. Stop a playing LION effect given its resolved slot. Three advisory
+    // asserts (slot non-NULL, IN_USE set, KILL clear); then a slot still waiting on its
+    // CREATE is simply re-Constructed (it never reached the dispatch thread), otherwise it
+    // is flagged KILL | CHANGED (0x14) for the dispatch side to tear down. Either way the
+    // slot's handle advances by KU_HANDLE_INCREMENT under KU_HANDLE_VALID_MASK so a stale
+    // handle can never resolve to it again.
+    void ParticleModule::StopLionEffect(LionEffect* lpEffect)
+    {
+        CGS_ASSERT(lpEffect != NULL, "lpEffect != NULL");
+        CGS_ASSERT((lpEffect->muFlags & LionEffect::EPPE_FLAG_IN_USE) != 0,
+                   "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagInUse ) != 0");
+        CGS_ASSERT((lpEffect->muFlags & LionEffect::EPPE_FLAG_KILL) == 0,
+                   "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagKill ) == 0");
+
+        if ((lpEffect->muFlags & LionEffect::EPPE_FLAG_CREATE) != 0)
+        {
+            lpEffect->Construct();
+        }
+        else
+        {
+            lpEffect->muFlags |= (LionEffect::EPPE_FLAG_KILL | LionEffect::EPPE_FLAG_CHANGED);
+        }
+        lpEffect->muHandle = (lpEffect->muHandle + LionEffect::KU_HANDLE_INCREMENT) & LionEffect::KU_HANDLE_VALID_MASK;
+    }
+
     // Layout pin. Never executed (offsetof checks resolved at compile time inside an
     // uncalled function) -- fails the gate compile if any tail placeholder/pad drifts
     // from the X360 ctor (@0x827E2218) store offsets. The sentinel pair at +0x25CD0/
