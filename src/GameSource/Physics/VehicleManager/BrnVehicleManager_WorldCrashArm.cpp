@@ -52,6 +52,8 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"
 #include "GameSource/World/BrnEntityTypes.h"                                       // BrnWorld::E_ENTITYTYPE_*
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [world-crash] diag (opt-in)
+#include <cstdlib>   // getenv (BRN_WORLD_CRASH_DIAG)
 #include <cmath>     // sqrtf / fabsf
 
 namespace BrnPhysics
@@ -78,6 +80,13 @@ namespace
 
     // flt_82005450 -- the "this normal is the ground" cosine PredictCarWorldContactTime tests.
     const f32 KF_GROUND_NORMAL_UP_COSINE        = 0.899999976f;
+
+    // Opt-in witness for the classification below (same shape as BRN_TRAFFIC_DIAG next door).
+    bool WorldCrashDiagEnabled()
+    {
+        static const bool sbEnabled = (getenv("BRN_WORLD_CRASH_DIAG") != 0);
+        return sbEnabled;
+    }
 
     inline u32 EntityWordOf(const CgsSceneManager::VolumeInstanceId& lrId)
     {
@@ -234,6 +243,37 @@ void VehicleManager::HandleRaceCarWorldPotentialContact(
         {
             lbRolledOntoWorld = lContactNormal.y > KF_ROLLED_CRASH_MIN_NORMAL_Y;    // vspltw128 v9, v125, 1 ; > unk_82FB82B0
         }
+    }
+
+    // ---- [world-crash] the DECISION, both sides of every compare ------------------------------
+    // DIAG. NOT IN THE X360 BINARY. Opt-in (BRN_WORLD_CRASH_DIAG=1). Prints every classified
+    // contact that got past the separating test -- crash or not -- so a run can show WHY a wall
+    // hit did or did not commit: the head-on cosine vs the normal's forward component, the two
+    // scaled closing speeds vs their thresholds, the world point in the car's frame, the roll
+    // cosine. Budget: one line per validated contact per frame; a wall hit is a handful of
+    // lines, a scrape along a barrier can be tens. DELETE-WHEN-STABLE.
+    if (WorldCrashDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+    {
+        const f32 lfNormalForward = rw::math::vpu::Dot(lContactNormal, lTransform.zAxis);
+        const f32 lfUpY           = rw::math::vpu::Dot(lTransform.yAxis, Vector3{ 0.0f, 1.0f, 0.0f, 0.0f });
+        const f32 lfClosingLin    = rw::math::vpu::Dot(rw::math::vpu::Negate(lContactNormal), lLinearVelocity);
+        const f32 lfClosingPt     = rw::math::vpu::Dot(rw::math::vpu::Negate(lContactNormal), lvPointVelocity);
+        *CgsDev::Log::gpDebugPrint
+            << "[world-crash] car=" << static_cast<s32>(lu16RaceCarIndex)
+            << " decision=" << (lbHeadOnCrash ? "HEAD_ON" : lbSideOnCrash ? "SIDE_ON" : lbRolledOntoWorld ? "ROLLED" : "NONE")
+            << " front=" << (lbOnFrontFace ? 1 : 0) << " headOn=" << (lbHeadOn ? 1 : 0)
+            << " nDotFwd=" << lfNormalForward << " vs cone=" << lfHeadOnCosine
+            << " fwdSpeed=" << lfForwardSpeed
+            << " closingLin*vf=" << (lfClosingLin * lfVulnerabilityFactor) << " vs headOnThr=" << mfHeadOnWorldCrashThreshold
+            << " closingPt*vf=" << (lfClosingPt * lfVulnerabilityFactor) << " vs sideOnThr=" << mfSideOnWorldCrashThreshold
+            << " vf=" << lfVulnerabilityFactor
+            << " localB=(" << lvWorldPointLocal.x << "," << lvWorldPointLocal.y << "," << lvWorldPointLocal.z << ")"
+            << " box.x=[" << lrBox.mMin.x << "," << lrBox.mMax.x << "] box.maxZ=" << lrBox.mMax.z
+            << " upY=" << lfUpY << " vs rollCos=" << KF_ROLLED_CRASH_UP_COSINE
+            << " n.y=" << lContactNormal.y << " vs " << KF_ROLLED_CRASH_MIN_NORMAL_Y
+            << " crashing=" << (lrRaceCar.IsCrashing() ? 1 : 0)
+            << " speedMPH=" << (lfForwardSpeed * 2.2369363f)
+            << "\n";
     }
 
     // 0x8263EB68..0x8263EB88: none of the three fired -> not a crash.
