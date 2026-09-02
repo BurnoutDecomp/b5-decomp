@@ -63,6 +63,7 @@
 #include "rw/math/vpu/matrix44affine_operation.h"                           // Mult / MakeRotationX/Y/Z / Inverse / TransformPoint
 
 #include <cmath>    // powf / sqrtf
+#include <cstdlib>  // getenv / atoi ([tdef-upload] witness, opt-in)
 
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable; bodied by
 // the CgsShaderConstants TU). Same extern the sibling render TUs carry.
@@ -719,8 +720,59 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     {
         ++*lpiUpdatedNumDamagedVehiclesRendered;
         SetGlassFractureConstants( 0.0f, 1.0f, lv2NoFractureUVScale, lv4NoFractureUVOffsets );
+
+        // ---- [tdef-upload] NOT X360; opt-in on the BRN_DEFORM_TRACE latch (the same one the
+        // race car's [deform-upload] control shares). The statistic the GPU is about to see --
+        // max / sum / non-zero count over the 128 rows -- off the very array handed to
+        // constant 22, printed only when it CHANGES, so a deforming traffic car's upload can
+        // be read against the physics side's [tdef] line for the same car on the same frame.
+        // DELETE-WHEN the traffic-deformation question is banked.
+        {
+            static s32 siUploadOn = -1;
+            if ( siUploadOn < 0 )
+            {
+                const char* lpcEnv = getenv( "BRN_DEFORM_TRACE" );
+                siUploadOn = ( lpcEnv != 0 && atoi( lpcEnv ) > 0 ) ? 1 : 0;
+            }
+            if ( siUploadOn == 1 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                static f32 sfLastSum = -1.0f;
+                static u32 sluLines  = 0;
+                const Vector3Plus* lpV = lpPhysicsInfo->maSkinningOffsets_Scratch;
+                f32 lfMax = 0.0f;
+                f32 lfSum = 0.0f;
+                s32 liNnz = 0;
+                for ( u32 luRow = 0; luRow < TrafficPhysicsInfo::KU_NUM_SKINNING_OFFSETS; ++luRow )
+                {
+                    const f32 lfMag = sqrtf( lpV[ luRow ].x * lpV[ luRow ].x
+                                           + lpV[ luRow ].y * lpV[ luRow ].y
+                                           + lpV[ luRow ].z * lpV[ luRow ].z );
+                    if ( lfMag > lfMax ) { lfMax = lfMag; }
+                    if ( lfMag > 0.0f ) { lfSum += lfMag; ++liNnz; }
+                }
+                if ( lfSum != sfLastSum && sluLines < 400u )
+                {
+                    ++sluLines;
+                    sfLastSum = lfSum;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[tdef-upload] veh " << luEntityIdx
+                        << " technique " << ( lbShadowPass ? 3 : 0 )
+                        << " budget " << *lpiUpdatedNumDamagedVehiclesRendered
+                        << " maxVerlet " << lfMax
+                        << " sumVerlet " << lfSum
+                        << " nnz " << liNnz
+                        << " fatal " << ( lpPhysicsInfo->mbIsFatallyCrashing ? 1 : 0 )
+                        << " glassFlags " << static_cast< u32 >( lpPhysicsInfo->mu8RenderDamageFlags )
+                        << "\n";
+                }
+            }
+        }
+
+        // The console's Vector3Plus* overload @0x822B3458 is the same 16-byte-row copy as the
+        // Vector4* one this tree bodies; the race-car render TU passes its Vector3Plus block
+        // through the same cast.
         CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData(
-            22, lpPhysicsInfo->maSkinningOffsets_Scratch );
+            22, reinterpret_cast< const Vector4* >( lpPhysicsInfo->maSkinningOffsets_Scratch ) );
         {
             const Vector4 lv4DamageConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
             CgsGraphics::mShaderConstantTable.SetShaderConstantData( 23, lv4DamageConstants );
