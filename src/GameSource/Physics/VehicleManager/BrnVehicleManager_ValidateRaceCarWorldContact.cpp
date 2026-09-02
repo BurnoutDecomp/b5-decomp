@@ -181,11 +181,71 @@ namespace Vehicle
     //     (triN ~ (0, 1, 0)), classified curb, culled to the wheel plane, no impulse. That is what
     //     gfGroundContactCullHeight exists for; the console produces them too.
     //
+    // (E) A KERB TALLER THAN 0.25 m -- TESTED 2026-09-02, AND `wall` IS THE CONSOLE'S OWN ANSWER.
+    //     The previous wave left this as the leading remaining candidate for "the curbs are still
+    //     weird". It is now measured, and separately settled from the asm.
+    //     THE EDGE (Waterfront, found by driving, not by hunting): x ~3386.8, z ~-1724.5, face
+    //     triN (-0.951, 0.000, 0.310) -- a vertical pavement edge with a fence behind it. Triangle
+    //     vertex world y: road side -0.240, an intermediate ledge -0.015, pavement top +0.225, i.e.
+    //     a TWO-STEP rise of 0.465 m from the road; the fence's base triangle shares it at +2.535.
+    //     BOTH SIDES OF THE COMPARE, run kerbT_30, f1056, 44.7 mph, head-on (approach heading 108
+    //     deg == along -triN), sensors 5/7/9:
+    //       h 0.456 / 0.690 / 0.217  vs maxCurb 0.250  -> curb 0  wall 1
+    //       h 0.450 / 0.217 / 0.690  vs maxCurb 0.250  -> curb 0  wall 1
+    //       h 0.217 / 0.450 / -0.008 vs maxCurb 0.250  -> curb 0  wall 1   (ONE vertex over)
+    //       h 0.690 / 0.456 / 2.999  vs maxCurb 0.250  -> curb 0  wall 1   (the fence)
+    //     cullA 0 / cullB 0 on every one -- and dA was 0.128 / 0.141 / 0.224 / 0.250 / 0.277 on five
+    //     of them, i.e. BELOW cullH 0.400, so cull (a) WOULD have fired: it is the wall flag that
+    //     suppresses it. repointed 0, accept 1.
+    //     THE EFFECT: 44.7 -> 37.7 -> 6.8 mph in about half a second, the car does NOT climb it, and
+    //     it sits against the face at 2.4 mph on full throttle for the rest of the run. Set that
+    //     against (C): the 0.16 m kerb is hopped at 24 AND 60 mph with ZERO impulses and no loss.
+    //     THE SAME EDGE OBLIQUELY, run st_scoutB f1108, 33.5 mph, ~18 deg closing angle: identical
+    //     h/curb/wall/cull values, accepted unmodified -- and the car did NOT lose speed (33.5 ->
+    //     36.0, still accelerating). So the wall CLASSIFICATION alone does not stop a car; a
+    //     near-normal closing angle into a wall-classified edge does.
+    //
+    //     ⭐ IS `wall` THE CONSOLE'S OWN VERDICT, OR IS OUR TRANSCRIPTION MISSING AN ARM? It is the
+    //     console's, settled from the image rather than from feel, three ways:
+    //       1. r27 (curb, 0x825C6750) and r28 (wall, 0x825C6794) are consumed at EXACTLY four sites
+    //          in the whole 988-instruction function:
+    //            0x825C68B4  r27 -> the mbRenderGroundContacts debug draw
+    //            0x825C69A0  r29 (== r28) -> SetLastWallTriangle into the debug component
+    //            0x825C6A9C  r29 -> suppress cull (a)
+    //            0x825C6B60  r29 -> suppress cull (b)
+    //          At 0x825C6B70 r29 is reloaded with the constant 0x30 and is dead as a boolean
+    //          thereafter. There is NO step-up arm, no ride-over, no swept test and no speed term
+    //          keyed on the classification.
+    //       2. The sole caller, DoRaceCarWorldContactValidation @0x825EB6C8, adds none either: swap
+    //          entity order, call this, append the survivors to queue [6].
+    //       3. THE CONSOLE NAMES ONLY TWO CLASSES. VehicleManagerDebugComponent::OnActivate
+    //          @0x825B5D90 registers 92 debug variables; its world-contact ones are exactly
+    //          "Ground Contact Cull Height", "Draw wall contacts", "Draw ground contacts",
+    //          "Head-on world crash factor", "Side-on world crash factor", "Modify traffic
+    //          contacts", "Draw last RC-traffic contact", "Draw last crash contact", "Draw World
+    //          Contact Spies", "Num traction tests" and the "Reset Rays..." trio. Not one of those
+    //          92 -- nor of Vehicle::DebugComponent's 28 (0x82620730), DeformationDebugComponent's
+    //          58 (0x82623198), CollisionDebugComponent's 4 (0x822A8B80) or
+    //          TriangleCollisionDebugComponent's 17 (0x828AAA68) -- is kerb-, step- or ride-related.
+    //          The retail tuning surface has TWO world-contact classes and this function produces
+    //          exactly those two. (Same trick that named the 0.4: the registrations name things.)
+    //     ⇒ The owner's "the curbs are still weird" is NOT an unimplemented hop threshold above
+    //       0.25 m. A raised edge more than 0.25 m above the car's wheel plane is a wall on the
+    //       console too, and it stops the car on the console too.
+    //     ⚠️ WHAT THIS EVIDENCE CANNOT DISTINGUISH. The stopped car's contact set at f1056 holds
+    //       BOTH the kerb triangles (vy -0.240 .. +0.225) and the base triangle of the fence behind
+    //       the pavement (vy 2.535). The kerb triangles alone classify as wall, so the
+    //       classification result stands either way -- but this run cannot apportion the 44.7 ->
+    //       6.8 mph between the kerb face and the fence. A head-on crossing into a >0.25 m edge
+    //       with NOTHING behind it is still not measured.
+    //     ⭐ AND THE FRAMES WERE OPENED, because the last wave lost a run to exactly this trap.
+    //       kerbT_30 dumped 325 frames; presents 1700-1950 (the whole approach and impact) show an
+    //       empty road, the raised pavement, the fence and a "NO TOWING" sign, and NO traffic car
+    //       anywhere. Eight of those frames are kept beside the run under frames/keep/.
+    //
     // ⛔ WHAT THIS WAVE DID NOT DO. It did not reproduce the 106 mph one-step 6.2 mph loss (open).
     //     It did not re-decode the raw words of UpdatePostPhysics's wheel-sphere block (the geometry
-    //     is read from the committed transcription, not re-derived). It did not test a kerb TALLER
-    //     than 0.25 m -- above that the classifier says WALL by design and the culls are suppressed,
-    //     which is the console's own behaviour and the remaining candidate for "weird kerbs".
+    //     is read from the committed transcription, not re-derived).
     // ⚠️ AND IT LOST A RUN TO EXACTLY THE TRAP THE LAST WAVE FLAGGED. kerbX_r3 showed a textbook
     //     15.7 -> 4.0 mph one-step-ish stop "at the kerb"; the FRAMES show a stationary orange
     //     traffic car parked across the approach at (~3390, -1639). The log alone was persuasive and
