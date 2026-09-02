@@ -9,6 +9,11 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                                // gpDebugPrint / gxMessageFilterFlags (the null-attribs gate)
 
 #include <cstdlib>                                                                        // getenv (the [sweptsel] opt-in probe)
+#include <cmath>                                                                          // std::fabs ([deform-bbox] change detection, DIAG only)
+
+// [deform-bbox] host-side present counter for exact frame correlation (same extern the other
+// correlated instruments use: BrnActiveRaceCar.cpp:60, CgsIm2d.cpp:24). DIAG only.
+namespace renderengine { extern u32 guPresentCount; }
 
 // ============================================================================================
 // GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject_BBox.cpp
@@ -78,6 +83,10 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
+	// [deform-bbox] DIAG only -- defined in BrnDeformableObject_Update.cpp: ApplySensorImpulse calls
+	// whose limit rows came from the drive-time pair ([0]) vs the crash pair ([1]).
+	extern u32 guDeformLimitRowArmApplies[2];
+
 	namespace
 	{
 		// ---- console byte offsets (asm-proven) -------------------------------------------------
@@ -418,6 +427,107 @@ namespace Deformation
 		// HIBYTE(*(this + 26384)) == 1 -- the "deformed in crash" gate.
 		const u32 lu32GateWord =
 			*reinterpret_cast<const u32*>(reinterpret_cast<const char*>(this) + KU_DEFORMED_BBOX_GATE_WORD_OFFSET);
+
+		// -----------------------------------------------------------------------------------------
+		// [deform-bbox] NOT IN THE X360 BINARY -- host-side witness, opt-in on BRN_DEFORM_TRACE (the
+		// value is a sampling PERIOD in calls, shared with [deform-trace] / [part-rest]). Prints BOTH
+		// SIDES of the drive-time-limit compare the console makes below -- the deformed extents AND
+		// the limits, per axis, plus the slack (dMin/dMax) and the tolerance -- and BOTH readings of
+		// the gate byte: the raw 32-bit read this body makes today (`gateRaw`) and the console's
+		// bits-56..63 owner byte (`gateOwner`, RigidBodyId::GetEntityIDOwner, E_ENTITYTYPE_RACECAR ==
+		// 1). It computes the slack UNCONDITIONALLY so a run can tell "the box never exceeded the
+		// limit" apart from "the gate never let the compare run". `arms` is the number of
+		// ApplySensorImpulse calls since the last line whose six limit rows came from the DRIVE-TIME
+		// pair vs the CRASH pair (BrnDeformableObject_Update.cpp guDeformLimitRowArmApplies).
+		// Emits on a change of any extent lane (> 1 mm), a change of the verdict, or the period.
+		// DELETE-WHEN the wreck-vs-drive-away question is banked.
+		// -----------------------------------------------------------------------------------------
+		{
+			static s32 siBBoxTracePeriod = -1;
+			if ( siBBoxTracePeriod < 0 )
+			{
+				const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
+				siBBoxTracePeriod = ( lpcEnv != 0 ) ? atoi(lpcEnv) : 0;
+				if ( siBBoxTracePeriod < 0 ) { siBBoxTracePeriod = 0; }
+			}
+			if ( siBBoxTracePeriod > 0 && CgsDev::Log::gpDebugPrint != 0 )
+			{
+				static const void* sapTraceObj[8]   = { 0, 0, 0, 0, 0, 0, 0, 0 };
+				static f32         safTraceLast[8][6];
+				static s32         saiTraceLastBeyond[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
+				static u32         sluTraceNext  = 0;
+				static u32         sluTraceCalls = 0;
+				static u32         sauArmsAtLast[2] = { 0u, 0u };
+				++sluTraceCalls;
+
+				s32 liSlot = -1;
+				for ( u32 luS = 0; luS < 8u; ++luS )
+				{
+					if ( sapTraceObj[luS] == static_cast<const void*>(this) ) { liSlot = static_cast<s32>(luS); break; }
+				}
+				if ( liSlot < 0 )
+				{
+					liSlot = static_cast<s32>(sluTraceNext % 8u);
+					++sluTraceNext;
+					sapTraceObj[liSlot] = this;
+					for ( s32 liL = 0; liL < 6; ++liL ) { safTraceLast[liSlot][liL] = -1.0e9f; }
+					saiTraceLastBeyond[liSlot] = -1;
+				}
+
+				const f32 lafNow[6] = { lvMinPositions.x, lvMinPositions.y, lvMinPositions.z,
+				                        lvMaxPositions.x, lvMaxPositions.y, lvMaxPositions.z };
+				const f32 lafDMin[3] = { mDriveTimeBBoxLimitMin.x - lvMinPositions.x,
+				                         mDriveTimeBBoxLimitMin.y - lvMinPositions.y,
+				                         mDriveTimeBBoxLimitMin.z - lvMinPositions.z };
+				const f32 lafDMax[3] = { mDriveTimeBBoxLimitMax.x - lvMaxPositions.x,
+				                         mDriveTimeBBoxLimitMax.y - lvMaxPositions.y,
+				                         mDriveTimeBBoxLimitMax.z - lvMaxPositions.z };
+				s32 liBeyondAxis = -1;
+				for ( s32 liA = 0; liA < 3 && liBeyondAxis < 0; ++liA )
+				{
+					if ( -KVF_DEFORMED_BBOX_TOLERANCE.x > lafDMin[liA] ) { liBeyondAxis = liA; }
+				}
+				for ( s32 liA = 0; liA < 3 && liBeyondAxis < 0; ++liA )
+				{
+					if ( lafDMax[liA] > KVF_DEFORMED_BBOX_TOLERANCE.x ) { liBeyondAxis = 3 + liA; }
+				}
+				const s32 liBeyondNow = ( liBeyondAxis >= 0 ) ? 1 : 0;
+
+				bool lbMoved = ( liBeyondNow != saiTraceLastBeyond[liSlot] );
+				for ( s32 liL = 0; liL < 6 && !lbMoved; ++liL )
+				{
+					if ( std::fabs(lafNow[liL] - safTraceLast[liSlot][liL]) > 1.0e-3f ) { lbMoved = true; }
+				}
+				const bool lbPeriodic = ( (sluTraceCalls % static_cast<u32>(siBBoxTracePeriod)) == 0u );
+				if ( lbMoved || lbPeriodic )
+				{
+					for ( s32 liL = 0; liL < 6; ++liL ) { safTraceLast[liSlot][liL] = lafNow[liL]; }
+					saiTraceLastBeyond[liSlot] = liBeyondNow;
+					const u32 luArmsDrive = guDeformLimitRowArmApplies[0] - sauArmsAtLast[0];
+					const u32 luArmsCrash = guDeformLimitRowArmApplies[1] - sauArmsAtLast[1];
+					sauArmsAtLast[0] = guDeformLimitRowArmApplies[0];
+					sauArmsAtLast[1] = guDeformLimitRowArmApplies[1];
+					*CgsDev::Log::gpDebugPrint
+						<< "[deform-bbox] call " << static_cast<s32>(sluTraceCalls)
+						<< " present " << static_cast<s32>(renderengine::guPresentCount)
+						<< " obj " << liSlot
+						<< " crashing " << ( ( lpDeformPhysics != 0 && lpDeformPhysics->IsCrashing() ) ? 1 : 0 )
+						<< " gateRaw " << static_cast<s32>(static_cast<u8>(lu32GateWord >> 24))
+						<< " gateOwner " << static_cast<s32>(GetHandlingBodyIdHighByte())
+						<< " defMin (" << lvMinPositions.x << "," << lvMinPositions.y << "," << lvMinPositions.z << ")"
+						<< " limMin (" << mDriveTimeBBoxLimitMin.x << "," << mDriveTimeBBoxLimitMin.y << "," << mDriveTimeBBoxLimitMin.z << ")"
+						<< " defMax (" << lvMaxPositions.x << "," << lvMaxPositions.y << "," << lvMaxPositions.z << ")"
+						<< " limMax (" << mDriveTimeBBoxLimitMax.x << "," << mDriveTimeBBoxLimitMax.y << "," << mDriveTimeBBoxLimitMax.z << ")"
+						<< " dMin (" << lafDMin[0] << "," << lafDMin[1] << "," << lafDMin[2] << ")"
+						<< " dMax (" << lafDMax[0] << "," << lafDMax[1] << "," << lafDMax[2] << ")"
+						<< " tol " << KVF_DEFORMED_BBOX_TOLERANCE.x
+						<< " beyond " << liBeyondNow << " axis " << liBeyondAxis
+						<< " arms drive " << static_cast<s32>(luArmsDrive) << " crash " << static_cast<s32>(luArmsCrash)
+						<< "\n";
+				}
+			}
+		}
+
 		if ( static_cast<u8>(lu32GateWord >> 24) == 1 )
 		{
 			// dMin = driveMin - deformedMin ; dMax = driveMax - deformedMax.

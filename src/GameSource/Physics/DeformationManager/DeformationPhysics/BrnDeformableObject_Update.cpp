@@ -504,6 +504,15 @@ namespace Deformation
         }
     }
 
+    // [deform-bbox] NOT IN THE X360 BINARY -- host-side counters read by the opt-in [deform-bbox]
+    // witness in BrnDeformableObject_BBox.cpp (BRN_DEFORM_TRACE). They count how many
+    // ApplySensorImpulse calls built their six limit rows from the DRIVE-TIME pair ([0], the
+    // 0x82607A50 arm) vs the CRASH pair ([1], the 0x82607A78 arm), so a run can say WHICH arm the
+    // impulses of a given crash went through -- the drive-time rows bound every sensor at exactly
+    // the drive-time limit, so an impulse applied through [0] can never take the deformed box past
+    // it. DELETE-WHEN the wreck-vs-drive-away question is banked.
+    u32 guDeformLimitRowArmApplies[2] = { 0u, 0u };
+
     // =============================================================================================
     // ApplySensorImpulse @0x826078B0 -- the heavy per-sensor apply.
     //
@@ -714,6 +723,7 @@ namespace Deformation
                                      ? lpLocalSphere->mPositionRadius.w : 0.0f;
             const f32 lfPad    = lbCrashed ? 0.5f : 0.0f;          // vcfsx(vspltisw 1,1) == 0.5
             const f32 lfRadius = lfSphereRadius + lfPad;
+            ++guDeformLimitRowArmApplies[lbCrashed ? 1 : 0];       // [deform-bbox] arm counter (DIAG)
             const Vector3& lrMin = GetDriveTimeLimitsMin();        // this + 0x66F0
             const Vector3& lrMax = GetDriveTimeLimitsMax();        // this + 0x6700
             const Vector3 lPositive = { lrMin.x + lfRadius, lrMin.y + lfRadius,
