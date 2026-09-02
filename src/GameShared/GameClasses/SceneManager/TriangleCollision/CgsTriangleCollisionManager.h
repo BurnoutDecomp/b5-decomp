@@ -72,6 +72,14 @@ namespace CgsSceneManager
         const CgsGeometric::PolygonSoupList* GetPolySoupList(s32 liIndex) const;
         // CgsTriangleCollisionManager.h:93
         const CgsGeometric::PolygonSoupListSpatialMap* GetPolySoupListSpacialMap() const;
+        // HOST OVERLOAD (scene-query wave 1b, 2026-09-02): the non-const view the synchronous
+        // nearest line test needs -- BaseCollisionGenerator::CollideLineAgainstPolySoupListNearest
+        // @0x828131C0 runs PolygonSoupListSpatialMap::RunQuery @0x82843A80 on it, and RunQuery is
+        // non-const in DecFIGS (_ZN12CgsGeometric25PolygonSoupListSpatialMap8RunQueryE...; it
+        // publishes mpOutputQueryBuffer / miLastQueryResultCount). On the console the caller
+        // (SceneManagerModule::ProcessLineTestNearest @0x828D3BB0) passes this member's address,
+        // which is the manager's own (+0x00). Not attested as a DWARF declaration by itself.
+        CgsGeometric::PolygonSoupListSpatialMap* GetPolySoupListSpacialMap() { return &mPolySoupListSpacialMap; }
         // CgsTriangleCollisionManager.h:96
         s32 GetNumPolySoupLists() const;
 

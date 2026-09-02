@@ -124,6 +124,22 @@ namespace CgsGeometric
             s32  miQueryBufferSize; // +0x08  capacity in ENTRIES (RunBoxQuery passes 2048)
         };
 
+        // RunQuery @0x82843A80 (261) -- the SYNCHRONOUS box query (scene-query wave 1b,
+        // 2026-09-02; body in CgsPolygonSoupListSpatialMap_Query.cpp). The same breadth-first
+        // level sweep as RunJobQuery but through the map's OWN ping-pong buffers
+        // (mapQueryBuffers[0]/[1], capacity miQueryBufferSize), publishing the buffer the last
+        // level wrote into mpOutputQueryBuffer and its count into miLastQueryResultCount. Returns
+        // the count; a map with no levels returns 0 and writes nothing. Its overflow assert is
+        // CgsPolygonSoupListSpatialMap.cpp:447 and prints the query box. The one caller is
+        // BaseCollisionGenerator::CollideLineAgainstPolySoupListNearest @0x828131C0 (the short-line
+        // arm), which then reads mpOutputQueryBuffer[i] as LEAF indices into GetLeafNodes().
+        s32 RunQuery(const AxisAlignedBox& lrQueryBox);
+
+        // The last RunQuery's leaf-index list (+0x58 / +0x64 on the console; the caller reads both
+        // fields directly at 0x8281328C/0x82813294).
+        const u16* GetOutputQueryBuffer() const { return mpOutputQueryBuffer; }
+        s32 GetLastQueryResultCount() const { return miLastQueryResultCount; }
+
         s32 RunJobQuery(const AxisAlignedBox&                                      lrQueryBox,
                         PolygonSoupJobQueryParams*                                 lpParams,
                         u16**                                                      lppaOutResults,
