@@ -2591,6 +2591,7 @@ namespace Vehicle
     static const f32  KF_DRIFT_SCALE_GROW_LIMIT    = 90.0f;          // unk_82FB80F0 <- flt_82004F64
     static const f32  KF_HANDBRAKE_TIME_CAP        = 10000.0f;       // unk_82FB9080 <- flt_82005D9C (splat)
     static const f32  KF_HANDBRAKE_ONTIME_RELEASE  = 0.275f;         // unk_82FB8B00 <- flt_8209D720 (splat)
+    static const f32  KF_HANDBRAKE_STOPPED_EPSILON = 1.1920928955078125e-07f; // stru_8208F620 lane 0 == FLT_EPSILON (UpdateHandBrake's "car has stopped" release arm, 0x825CFB0C)
     static const f32  KF_RAD_TO_DEG                = 57.29578f;     // inline literal (asm 57.29578)
     static const f32  KF_DEG_TO_RAD                = 0.017453292f;  // inline literal (deg->rad)
     static const f32  KF_QUARTIC_STIFFEN           = 1.25f;         // inline literal (s^4 * 1.25)
@@ -2866,16 +2867,19 @@ namespace Vehicle
                 // nearly every frame (onTime only grows). unk_82FB8B00 is 0.275 s and the plain
                 // comparison is now the faithful one.
                 const bool lbReleaseByOnTime = (lfOnTime > KF_HANDBRAKE_ONTIME_RELEASE);
-                if (lbReleaseByDrift || lbReleaseByOnTime)
+                // THE THIRD RELEASE ARM (0x825CFAEC..0x825CFB48), MISSING until 2026-09-02: a car
+                // that is STANDING STILL releases at once. The console splats |mfSpeedMPH| (+0x6C0,
+                // vandc sign mask), compares it against stru_8208F620 lane 0 (FLT_EPSILON,
+                // 0x34000000) with a non-recording vcmpgtfp, vperm's lane 0 out and `bnelr`s --
+                // i.e. it RETURNS WITHOUT RELEASING only while the car is moving. The old
+                // "vperm store branch" reading was wrong: nothing is stored on that path; the
+                // vperm is the lane extract of the compare mask.
+                const bool lbReleaseByStopped = !(std::fabs(mfSpeedMPH.x) > KF_HANDBRAKE_STOPPED_EPSILON);
+                if (lbReleaseByDrift || lbReleaseByOnTime || lbReleaseByStopped)
                 {
                     mbHandBrake = false;
                     lrTimers.z = 0.0f;   // TimeHandbrakeHasBeenOn cleared
                     lrTimers.w = 0.0f;   // restart TimeSinceLastHandBrake
-                }
-                else
-                {
-                    // not yet releasing: keep accumulating the since-last timer (the vperm store branch).
-                    lrTimers.w = lrTimers.w;   // unchanged (faithful no-op store the asm performs)
                 }
             }
         }
@@ -3174,11 +3178,82 @@ namespace Vehicle
     //   `(void)` no-op. `vsel` selects between {0,0,0,0} and {~0,~0,~0,~0} -- the two halves of the
     //   static-init table at unk_8327F240 (0x82C74368), read out of the IDB -- so it is a plain
     //   conditional select, not a blend.
+
+    // ---- [drift] PC bring-up instrument -- DELETE WHEN drift entry/exit is proven 1:1 -----------
+    // OPT-IN (BRN_DRIFT_PROBE=1, flow_run.ps1 -DiagEnv "BRN_DRIFT_PROBE=1"). Prints BOTH SIDES of
+    // every compare CheckForEnteringDrift / UpdateDriftState make, every frame the brake or the
+    // steering is past the 0.1 dead zone or a drift is latched (else every 60th frame), plus the
+    // guard id of every ExitDrift the battery fires. A verdict-only print has lied to three waves;
+    // this one prints the operands. Nothing here is console state.
+    namespace
+    {
+        bool DriftProbeArmed()
+        {
+            static s32 siArmed = -1;
+            if (siArmed < 0)
+            {
+                const char* lpcEnv = getenv("BRN_DRIFT_PROBE");
+                siArmed = (lpcEnv != NULL && lpcEnv[0] != '0') ? 1 : 0;
+            }
+            return (siArmed == 1) && (CgsDev::Log::gpDebugPrint != NULL);
+        }
+        u32 s_uDriftProbeFrame = 0u;
+    }
+
     void VehiclePhysics::UpdateDriftState(const BrnPlayerDriverControls* lpControls, f32 lfAbsSteering,
                                           f32 lfAbsDriftScale, f32 lfSpeedMPS, VecFloat lvfTimeStep)
     {
         // CheckForEnteringDrift may latch a NEW drift this frame; every argument is forwarded.
         CheckForEnteringDrift(lpControls, lfAbsSteering, lfAbsDriftScale, lfSpeedMPS, lvfTimeStep);
+
+        // [drift] probe (opt-in, see DriftProbeArmed above). Only the PLAYER car is printed.
+        const bool lbDriftProbe = DriftProbeArmed()
+                               && (lpControls == NULL || lpControls->GetType() == E_DRIVER_TYPE_PLAYER);
+        if (lbDriftProbe)
+        {
+            ++s_uDriftProbeFrame;
+            const f32 lfBrakeIn = (lpControls != NULL) ? lpControls->mfBrake : -1.0f;
+            const f32 lfGasIn   = (lpControls != NULL) ? lpControls->mfGas   : -1.0f;
+            const f32 lfSteerIn = (lpControls != NULL) ? lpControls->mfSteering : -1.0f;
+            const f32 lfHBIn    = (lpControls != NULL) ? lpControls->mfHandBrake : -1.0f;
+            const bool lbActive = (lfBrakeIn > 0.1f) || (lfAbsSteering > 0.1f) || (mu8DriftState != eDriftState_None);
+            if (lbActive || (s_uDriftProbeFrame % 60u) == 0u)
+            {
+                const f32 lfRecip = (lfSpeedMPS != 0.0f) ? (1.0f / lfSpeedMPS) : 0.0f;
+                const Vector3 lUnit{ mLinearVelocity.x * lfRecip, mLinearVelocity.y * lfRecip, mLinearVelocity.z * lfRecip, 0.0f };
+                *CgsDev::Log::gpDebugPrint
+                    << "[drift] n " << static_cast<s32>(s_uDriftProbeFrame)
+                    << " st " << static_cast<s32>(mu8DriftState)
+                    << " in g/b/hb/s " << lfGasIn << " " << lfBrakeIn << " " << lfHBIn << " " << lfSteerIn
+                    << " absS " << lfAbsSteering
+                    << " force " << static_cast<s32>(lpControls != NULL ? lpControls->mbForceDrift : 0)
+                    << " hb " << static_cast<s32>(mbHandBrake)
+                    << " allTr " << static_cast<s32>(mbAllWheelsHaveTraction)
+                    << " agValid " << static_cast<s32>(mAboveGroundTestResult.mbValid)
+                    << " mph " << mfSpeedMPH.x
+                    << " mps " << lfSpeedMPS
+                    << " minDrift " << mpAttribs->mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x
+                    << " nWC " << static_cast<s32>(mi8NumWorldCollisions)
+                    << " nC " << miNumCollisions
+                    << " tHBon " << mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.z
+                    << " tHBoff " << mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.w
+                    << " tStatic " << mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.y
+                    << " tDrift " << mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z
+                    << " brkScale " << mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.w
+                    << " tNoTr " << mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z
+                    << " dScale " << mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w
+                    << " broken " << static_cast<s32>(maWheels[eFrontLeftWheel].mbBrokenAdhesiveLimit)
+                    << static_cast<s32>(maWheels[eFrontRightWheel].mbBrokenAdhesiveLimit)
+                    << static_cast<s32>(maWheels[eRearLeftWheel].mbBrokenAdhesiveLimit)
+                    << static_cast<s32>(maWheels[eRearRightWheel].mbBrokenAdhesiveLimit)
+                    << " yaw " << vpu::Dot(mAngularVelocity, mTransform.yAxis)
+                    << " slipX " << vpu::Dot(lUnit, mTransform.xAxis)
+                    << " cosZ " << vpu::Dot(lUnit, mTransform.zAxis)
+                    << " steerReg " << mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x
+                    << " " << mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.y
+                    << "\n";
+            }
+        }
 
         // only run the exit battery while drifting and not being HELD in drift. 0x8261F74C:
         // `lbz r11,0x3E(r31)` where r31 == controls -> mbForceDrift.
@@ -3189,12 +3264,12 @@ namespace Vehicle
         // 1. the handbrake has been held down too long to still count as a drift.
         if (mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.z
             > KF_DRIFT_HANDBRAKE_ON_LIMIT)
-        { ExitDrift(); return; }
+        { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 1\n"; ExitDrift(); return; }
 
         // 2. the handbrake is down and was released too recently (vcfsx v0,1,1 == 0.5f).
         if (mbHandBrake
             && 0.5f > mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.w)
-        { ExitDrift(); return; }
+        { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 2\n"; ExitDrift(); return; }
 
         // 3. NOT an exit test: the static-friction dwell timer. It accumulates by the time-step while
         //    all four wheels still have adhesive grip (wheel+0xD5, stride 0xE0) and resets otherwise.
@@ -3215,28 +3290,28 @@ namespace Vehicle
         if (mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z > 1.0f
             && mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.y
                > 0.0625f)
-        { ExitDrift(); return; }
+        { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 3\n"; ExitDrift(); return; }
 
         // 5. exit collision counters.
-        if (mi8NumWorldCollisions > 0) { ExitDrift(); return; }
-        if (miNumCollisions       > 0) { ExitDrift(); return; }
+        if (mi8NumWorldCollisions > 0) { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 4\n"; ExitDrift(); return; }
+        if (miNumCollisions       > 0) { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 5\n"; ExitDrift(); return; }
 
         // 6. below the per-car minimum drift speed. mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x is in MPH, the parameter is in
         //    m/s -- see the KF_MPS_TO_MPH note. This is the same lane, same threshold and same unit
         //    that CheckForEnteringDrift tests the other way round to allow entry.
         if (mpAttribs->mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x > lfSpeedMPS * KF_MPS_TO_MPH)
-        { ExitDrift(); return; }
+        { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 6\n"; ExitDrift(); return; }
 
         // 7. off the ground too long (lane .z, and NOT gated on the handbrake).
         if (mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z > 1.0f)
-        { ExitDrift(); return; }
+        { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 7\n"; ExitDrift(); return; }
 
         // 8. above-ground result invalid -> exit.
-        if (!mAboveGroundTestResult.mbValid) { ExitDrift(); return; }
+        if (!mAboveGroundTestResult.mbValid) { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 8\n"; ExitDrift(); return; }
 
         // 9. speed too low (mfSpeedMPH is the splatted body speed at +0x6C0).
         if (KF_DRIFT_SPEED_EXIT_LIMIT > mfSpeedMPH.x)
-        { ExitDrift(); return; }
+        { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 9\n"; ExitDrift(); return; }
 
         // 10. steering crossed centre for the latched direction. The slip term is computed HERE, from
         //     the speed parameter and the body basis -- dot3(mLinearVelocity / speed, mTransform.xAxis)
@@ -3258,12 +3333,12 @@ namespace Vehicle
             if (mu8DriftState == eDriftState_FacingRight)
             {
                 if (lfLateralSlip >= -0.0099999998f && lfSteer >= -0.0049999999f)
-                { ExitDrift(); return; }
+                { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 10\n"; ExitDrift(); return; }
             }
             else
             {
                 if (lfLateralSlip <= 0.0099999998f && lfSteer <= 0.0049999999f)
-                { ExitDrift(); return; }
+                { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 11\n"; ExitDrift(); return; }
             }
         }
 
