@@ -357,15 +357,18 @@ namespace Deformation
         if (!gbDeformationPartsEnabled)
             maPartStates[liIndex] = static_cast<u8>(E_PART_STATE_NON_DETACHABLE);
 
-        // The part's first-tag-point index in this car's tag-point pool (asm: v8 = result[117], where
-        // `result` is the part's driven-part spec from StreamedDeformationSpec). The found left/right
-        // index is added to this base to give the absolute wheel tag-point index.
-        // FLAG: StreamedDeformationSpec::GetDrivenPartSpec + IKBodyPartSpec::GetStartIndexOfTagPoints
-        // are the DWARF-named lookups; not exposed on the frozen StreamedDeformationSpec, so the base
-        // index is read off the part's own spec (GetSpec) which IS available.
-        const s32 liStartIndexOfTagPoints = 0;   // FLAG: = mpSpec->GetStartIndexOfTagPoints() (accessor
-                                                 //       not exposed on frozen spec); pinned 0 here.
-        (void)lrPart.GetSpec();
+        // The part's first-tag-point index in this car's tag-point pool (asm: v8 = result[117] ==
+        // IKBodyPartSpec +468 == miStartIndexOfTagPoints, where `result` is the part's driven-part
+        // spec from StreamedDeformationSpec::GetDrivenPartSpec(liIndex)). The found left/right index
+        // is RELATIVE to the part's own tag window and is added to this base to give the absolute
+        // wheel tag-point index.
+        // ⭐ UN-PINNED 2026-09-02 (rest-rows wave): the old FLAG pinned this to 0 -- "accessor not
+        // exposed" -- but IKBodyPart::Construct has consumed GetStartIndexOfTagPoints() since the
+        // deformation mount. Measured on the Cavalry: wheel map {1,1,1,2} (every wheel bound to the
+        // first two tag points of the whole car, both at the FRONT axle) where the spec says
+        // {82,84,95,96}; the rear wheels' arches never received the suspension term at all.
+        const s32 liStartIndexOfTagPoints =
+            mpDeformationSpec->GetDrivenPartSpec(liIndex)->GetStartIndexOfTagPoints();
 
         // Only the wheel part types map a tag point into the wheel tag-point index array. The switch
         // keys are the asm part-type codes (see the FLAGGED enum above). The writes land in this car's
