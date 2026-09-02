@@ -106,10 +106,16 @@ void VehicleManager::DoCrashPrediction(
                            "Found a traffic-world potential contact outside of traffic-world queue");    // :2912
             }
 
-            // GATE VehicleManager::HandleTrafficCarTrafficCarPotentialContact @0x8263EC90 (279)
-            //   blocker: unbodied. Args are (contact BY VALUE, request, vehicle, manager,
-            //   deformation, timestep) -- same shape as the race-car arm. DELETE-WHEN it lands.
-            (void)(lu8OwnerA == 2u && lu8OwnerB == 2u);
+            // 0x826462FC..0x8264630C: both owners TRAFFIC_VEHICLE -> the traffic-traffic arm, with
+            // the 80-byte record copied to the outgoing-arg area (r4..r10 + the 24-byte memcpy).
+            // GATE DISCHARGED 2026-09-02 (traffic crash wave): bodied in
+            // BrnVehicleManager_TrafficCrashArms.cpp.
+            if (lu8OwnerA == 2u && lu8OwnerB == 2u)
+            {
+                HandleTrafficCarTrafficCarPotentialContact(
+                    lContact, lpRequestOutputInterface, lpVehicleOutputInterface,
+                    lpManagerOutputInterface, lpDeformationInterface, lfTimeStep);
+            }
         }
     }
 
@@ -168,10 +174,23 @@ void VehicleManager::DoCrashPrediction(
     // statement later (BrnPhysicsModuleUpdateFunctions.cpp:438/447), so the gate can only inhibit
     // slow-mo for the single frame of a traffic hit that the console would have un-inhibited.
 
-    // ---- (4) traffic-vs-world, custom queue [9] ---------------------------------------------
-    // GATE: VehicleManager::HandleTrafficCarWorldPotentialContact @0x8263F0F0 (220) -- unbodied.
-    // Drains ifc+1474720 with (contact BY VALUE, request, vehicle, manager, deformation, timestep).
-    // DELETE-WHEN that body lands; it is the traffic-car-hits-scenery arm, not this round's.
+    // ---- (4) traffic-vs-world, custom queue [9] (0x82646B8C..0x82646C08) ----------------------
+    // GATE DISCHARGED 2026-09-02 (traffic crash wave): HandleTrafficCarWorldPotentialContact
+    // @0x8263F0F0 is bodied in BrnVehicleManager_TrafficCrashArms.cpp. The console re-reads
+    // miLength every iteration (`lwz r11, 8(r29)` @0x82646BFC) and copies the record to the
+    // outgoing-arg area before each call; the by-value local reproduces both. NOTE: on the console
+    // this arm commits NOTHING (no store leaves its stack frame) -- traffic knocked into scenery is
+    // not crashed here; see the TU banner before reading this loop as a "wall crash" for traffic.
+    {
+        const Queue& lrQueue = lpContactInterface->GetTrafficWithWorldQueue();
+        for (s32 liIndex = 0; liIndex < lrQueue.GetLength(); ++liIndex)
+        {
+            const PotentialContact lContact = lrQueue.GetEvent(liIndex);
+            HandleTrafficCarWorldPotentialContact(
+                lContact, lpRequestOutputInterface, lpVehicleOutputInterface,
+                lpManagerOutputInterface, lpDeformationInterface, lfTimeStep);
+        }
+    }
 
     // ---- tail --------------------------------------------------------------------------------
     // The console inlines BridgeArticulatedJointRequestsToSim here; its two asserts are the ones
