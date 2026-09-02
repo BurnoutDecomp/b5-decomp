@@ -35,6 +35,8 @@
 
 #include "rw/math/vpu/vector3_operation.h"                                               // vpu::{Dot, Subtract, Normalize}
 
+#include <cstdlib>                                                                       // getenv -- the [kerb] probe's opt-in latch
+
 namespace BrnPhysics
 {
 namespace Vehicle
@@ -68,6 +70,59 @@ namespace Vehicle
             return lrV.x == lrV.x && lrV.y == lrV.y && lrV.z == lrV.z;
         }
     }
+
+    // ---- [kerb] PC bring-up instrument -- DELETE-WHEN the kerb response is proven 1:1 -------------
+    // OPT-IN (BRN_KERB_PROBE=1, flow_run.ps1 -DiagEnv BRN_KERB_PROBE=1). NOT console code. Off by
+    // default: the latch reads 0 once and every print is unreachable thereafter, so a default run
+    // and every golden gate stay byte-identical to a build without it.
+    //
+    // WHY. The owner's kerb symptom ("the car reacts way too much to the curb") is decided in THIS
+    // function: every race-car-vs-world contact passes through it, and the two ground culls are
+    // what turn a kerb face into a wheel-plane push instead of a wall hit. The [drift]/[cvalid]
+    // probes sample 1 frame in 60 and print only counts -- a kerb crossing is ~10 frames long, so
+    // they cannot see it. This prints BOTH SIDES of every gate the function takes, per contact,
+    // every frame: the incoming normal, the triangle's vertex heights vs kvfMaxCurbHeight, the
+    // curb/wall verdict, both cull distances vs the scaled cull height, the above-ground normal and
+    // its up-dot vs 0.8, the rewritten normal/point, and the verdict. Three tags share one frame
+    // counter (bumped by DoRaceCarWorldContactValidation, the per-frame caller in the sibling TU):
+    //   [kerb]      one line per contact, this function          (this TU)
+    //   [kerb-car]  one line per moving car per frame             (BrnVehicleManagerContactGeneration.cpp)
+    //   [kerb-imp]  one line per world impulse the solver applies (BrnDeformableObject.cpp)
+    // Each tag is budget-limited and SAYS SO when the budget runs out -- a silent stop reads
+    // exactly like "the kerb never touched anything".
+    u32 guKerbProbeFrame = 0u;
+
+    bool KerbProbeArmed()
+    {
+        static s32 siArmed = -1;
+        if (siArmed < 0)
+        {
+            const char* lpcEnv = getenv("BRN_KERB_PROBE");
+            siArmed = (lpcEnv != nullptr && lpcEnv[0] != '0') ? 1 : 0;
+        }
+        return siArmed == 1 && CgsDev::Log::gpDebugPrint != nullptr;
+    }
+
+    // One budget per tag; the (budget+1)th call prints the exhaustion notice, later calls are silent.
+    bool KerbProbeTake(u32& lruUsed, const char* lpcTag)
+    {
+        const u32 KU_KERB_PROBE_BUDGET = 40000u;
+        if (lruUsed < KU_KERB_PROBE_BUDGET)
+        {
+            ++lruUsed;
+            return true;
+        }
+        if (lruUsed == KU_KERB_PROBE_BUDGET)
+        {
+            ++lruUsed;
+            *CgsDev::Log::gpDebugPrint
+                << lpcTag << " BUDGET EXHAUSTED (" << KU_KERB_PROBE_BUDGET << " lines) at frame "
+                << guKerbProbeFrame << " -- this tag prints nothing further; a later silence is "
+                   "the budget, not the physics\n";
+        }
+        return false;
+    }
+    // ---- end [kerb] globals ------------------------------------------------------------------------
 
     // The whale writes the wall triangle into the per-car debug component through the same
     // span cast Construct stores (BrnVehicleManager_Construct.cpp:265, the FLAGGED opaque
@@ -104,6 +159,12 @@ namespace Vehicle
                        || fabsf(lpInOutContact->mNormal.y) > KF_NORMAL_ZERO_EPSILON
                        || fabsf(lpInOutContact->mNormal.z) > KF_NORMAL_ZERO_EPSILON,
                    "Normal zero on entry to validate\n");                          // :7422
+
+        // [kerb] probe captures (no behaviour): the harvest normal as it arrived (already
+        // sign-flipped by the caller's SwapEntityOrder, i.e. pointing OUT of the world into the car),
+        // and this TU's line budget.
+        const Vector3 lKerbNormalIn = lpInOutContact->mNormal;
+        static u32    suKerbLines   = 0u;
 
         // ---- the wall-normal flatten: near-horizontal normals become PURE horizontal ----------
         if (KF_WALL_NORMAL_DOT_THRESHOLD > fabsf(lpInOutContact->mNormal.y))
@@ -201,6 +262,19 @@ namespace Vehicle
         {
             if (KVF_GROUND_CLEARANCE_MIN_SPEED_MPH > lfSpeedMph)
             {
+                // [kerb] the fast path is a verdict too -- say so rather than vanish.
+                if (KerbProbeArmed() && KerbProbeTake(suKerbLines, "[kerb]"))
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[kerb] f " << guKerbProbeFrame << " car " << luRaceCarIndex
+                        << " SUB10 mph " << lfSpeedMph << " min " << KVF_GROUND_CLEARANCE_MIN_SPEED_MPH
+                        << " nIn " << lKerbNormalIn.x << " " << lKerbNormalIn.y << " " << lKerbNormalIn.z
+                        << " pB " << lPointOnWorld.x << " " << lPointOnWorld.y << " " << lPointOnWorld.z
+                        << " tri " << static_cast<s32>(lu16TriangleIndex)
+                        << " h " << lfHeight0 << " " << lfHeight1 << " " << lfHeight2
+                        << " curb " << (lbIsCurb ? 1 : 0) << " wall " << (lbIsWall ? 1 : 0)
+                        << " accept 1 (every contact accepted below 10 mph, unrewritten)\n";
+                }
                 return true;   // below 10 mph EVERY contact is accepted (li r3,1 fast path)
             }
             // 10..25 mph: scale the cull height by (speed-10)/15 (vrefp + 2 Newton reciprocal).
@@ -212,6 +286,13 @@ namespace Vehicle
         // ---- the two ground-cull candidates (both suppressed for walls) ------------------------
         bool lbCullToPlane = false;   // r30
 
+        // [kerb] both-sides captures of the two culls (probe only; no behaviour).
+        f32  lfKerbDistA = 0.0f;
+        bool lbKerbCullA = false;
+        f32  lfKerbDistB = 0.0f;
+        bool lbKerbCullB = false;
+        f32  lfKerbHeightAbovePlane = 0.0f;
+
         // (a) the wheel-plane test, gated on mbMinWheelDistValid (car+0x714): is the world-side
         //     point within the (scaled) cull height of the car's wheel plane?
         if (lrCar.mbMinWheelDistValid)
@@ -219,14 +300,17 @@ namespace Vehicle
             const Vector3 lDelta = vpu::Subtract(lPointOnWorld,
                                                  lrCar.mWheelPlanePosAndHeight.GetVector3());
             const f32 lfDist = vpu::Dot(lDelta, lUpAxis);
+            lfKerbDistA = lfDist;                                    // [kerb]
             if (lrCar.mWheelPlanePosAndHeight.w + lfCullHeight > lfDist && !lbIsWall)
             {
                 lbCullToPlane = true;
+                lbKerbCullA   = true;                                // [kerb]
             }
         }
 
         // (b) the above-ground-test plane (car+0x570), when its normal is up-ish (dot > 0.8).
         const AboveGroundTestResult& lrAboveGround = *lrCar.GetAboveGroundTestResult();
+        const f32 lfKerbUpDotAg = vpu::Dot(lUpAxis, lrAboveGround.mIntersectionNormal);   // [kerb] the gate's raw operand
         if (vpu::Dot(lUpAxis, lrAboveGround.mIntersectionNormal) > KF_UP_DOT_GROUND_NORMAL_MIN)
         {
             // The console re-reads mPointOnB here and asserts it against the register-cached
@@ -236,9 +320,11 @@ namespace Vehicle
             const f32 lfDist = vpu::Dot(
                 vpu::Subtract(lPointOnWorld, lrAboveGround.mIntersectionPosition),
                 lrAboveGround.mIntersectionNormal);
+            lfKerbDistB = lfDist;                                    // [kerb]
             if (lfCullHeight > lfDist && !lbIsWall)
             {
                 lbCullToPlane = true;
+                lbKerbCullB   = true;                                // [kerb]
             }
         }
 
@@ -267,6 +353,7 @@ namespace Vehicle
             const f32 lfHeightAbovePlane =
                 vpu::Dot(vpu::Subtract(lPointOnCar, lPlanePoint), lUpAxis)
                 - KVF_CAR_BOTTOM_PLANE_MODIFIER;
+            lfKerbHeightAbovePlane = lfHeightAbovePlane;             // [kerb]
             lpInOutContact->mPointOnA.x = lPointOnCar.x - lUpAxis.x * lfHeightAbovePlane;
             lpInOutContact->mPointOnA.y = lPointOnCar.y - lUpAxis.y * lfHeightAbovePlane;
             lpInOutContact->mPointOnA.z = lPointOnCar.z - lUpAxis.z * lfHeightAbovePlane;
@@ -356,6 +443,43 @@ namespace Vehicle
         {
             lbAccept = false;
         }
+
+        // ---- [kerb] the per-contact witness: every gate above, both sides (TU-scope banner) ------
+        if (KerbProbeArmed() && KerbProbeTake(suKerbLines, "[kerb]"))
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[kerb] f " << guKerbProbeFrame << " car " << luRaceCarIndex
+                << " mph " << lfSpeedMph
+                << " nIn " << lKerbNormalIn.x << " " << lKerbNormalIn.y << " " << lKerbNormalIn.z
+                << " pA " << lPointOnCar.x << " " << lPointOnCar.y << " " << lPointOnCar.z
+                << " pB " << lPointOnWorld.x << " " << lPointOnWorld.y << " " << lPointOnWorld.z
+                << " tri " << static_cast<s32>(lu16TriangleIndex)
+                << " triN " << lTriangle.mNormal.x << " " << lTriangle.mNormal.y << " " << lTriangle.mNormal.z
+                << " vy " << lTriangle.mVertex0.y << " " << lTriangle.mVertex1.y << " " << lTriangle.mVertex2.y
+                << " h " << lfHeight0 << " " << lfHeight1 << " " << lfHeight2 << " maxCurb " << kvfMaxCurbHeight
+                << " curb " << (lbIsCurb ? 1 : 0) << " wall " << (lbIsWall ? 1 : 0)
+                << " cullH " << lfCullHeight
+                << " mwdv " << (lrCar.mbMinWheelDistValid ? 1 : 0)
+                << " wpH " << lrCar.mWheelPlanePosAndHeight.w
+                << " dA " << lfKerbDistA << " cullA " << (lbKerbCullA ? 1 : 0)
+                << " agValid " << (lrAboveGround.mbValid ? 1 : 0)
+                << " agN " << lrAboveGround.mIntersectionNormal.x << " "
+                << lrAboveGround.mIntersectionNormal.y << " " << lrAboveGround.mIntersectionNormal.z
+                << " agPy " << lrAboveGround.mIntersectionPosition.y
+                << " upDotAg " << lfKerbUpDotAg << " min " << KF_UP_DOT_GROUND_NORMAL_MIN
+                << " dB " << lfKerbDistB << " cullB " << (lbKerbCullB ? 1 : 0)
+                << " repointed " << (lbCullToPlane ? 1 : 0)
+                << " nOut " << lpInOutContact->mNormal.x << " " << lpInOutContact->mNormal.y << " "
+                << lpInOutContact->mNormal.z
+                << " pAout " << lpInOutContact->mPointOnA.x << " " << lpInOutContact->mPointOnA.y << " "
+                << lpInOutContact->mPointOnA.z
+                << " hAbovePlane " << lfKerbHeightAbovePlane
+                << " local " << lfLocalX << " " << lfLocalY << " " << lfLocalZ
+                << " aabb " << (lbInsideAabb ? 1 : 0)
+                << " hasAir " << (lrCar.mbHasAir ? 1 : 0)
+                << " accept " << (lbAccept ? 1 : 0) << "\n";
+        }
+        // ---- end [kerb] ------------------------------------------------------------------------
 
         return lbAccept;
     }
