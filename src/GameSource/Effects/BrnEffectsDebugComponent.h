@@ -94,27 +94,6 @@ namespace BrnEffects
         const EffectsDebugProps&   PropParams() const { return mPropParams; }
         bool ForceNonPlayerEffects() const       { return mbForceNonPlayerEffects; }
 
-        // The per-system enable bytes EffectsModule::Update @0x8229EC28 copies into the
-        // particle module every step (asm 0x8229EF2C-0x8229EFC0: component +0x11/+0x12/
-        // +0x13/+0x16/+0x17/+0x19 -> ParticleModule +0x23130..+0x23135), the bypass byte
-        // (+0x10) its first branch tests, the dump latch (+0x21) it consumes, and the
-        // enable byte (+0x1D) HandleQADebugTests @0x82291700 gates on. Additive (2026-09-02).
-        bool BypassAllVFXProcessing() const      { return mbBypassAllVFXProcessing; }
-        bool SparksEnabled() const               { return mbSparksEnabled; }
-        bool TrailsEnabled() const               { return mbTrailsEnabled; }
-        bool DebrisEnabled() const               { return mbDebrisEnabled; }
-        bool SimpleEnabled() const               { return mbSimpleEnabled; }
-        bool LionEnabled() const                 { return mbLionEnabled; }
-        bool UseZFade() const                    { return mbUseZFade; }
-        bool IsEnabled() const                   { return mbEnabled; }
-        // Update: `if (mbDumpRunningLionEffects) { mbDumpRunningLionEffects = 0; return; }`.
-        bool ConsumeDumpRunningLionEffects()
-        {
-            const bool lbSet = mbDumpRunningLionEffects;
-            mbDumpRunningLionEffects = false;
-            return lbSet;
-        }
-
     protected:
         // X360 0x82278EB8 / 0x8228F3E8 (DebugComponent virtual overrides).
         virtual const char* GetName() const;
