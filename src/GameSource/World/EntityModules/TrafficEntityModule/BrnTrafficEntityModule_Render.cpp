@@ -85,23 +85,21 @@ namespace BrnTraffic
 // the debug variable's upper bound (identical to the race car's KU_WHEELS_TO_RENDER_MAX).
 static const s32 KI_TRAFFIC_WHEELS_TO_RENDER_MAX = 4;
 
-// GATE G-WHEELEXISTS -- TrafficPhysicsInfo::mabWheelExists (console info+4040 == +0xFC8) has no
-// writer in this tree. The ONLY store to that offset in the whole XEX is
-// ProcessDeformationData @0x8271DEB0 (`addi r25, r22, 0xFC8` at
-// 0x8271E41C), and that function is still gated in _wT1_01.cpp's PostPhysicsUpdate leg list.
-// Honouring the always-false array would draw every promoted car with zero wheels, so the arm
-// draws the composed wheels under this named gate instead.
-// DELETE-WHEN ProcessDeformationData @0x8271DEB0 lands.
-static const bool KB_T3_FORCE_PHYSICAL_WHEEL_EXISTS = true;
+// (G-WHEELEXISTS closed 2026-09-02: TrafficPhysicsInfo::mabWheelExists is written every frame
+// by ProcessDeformationData @0x8271DEB0, now bodied and live in _wT1_01.cpp; the physical
+// wheel arm below reads the array directly, as the console does.)
 
 // The verlet-offset array length shader constant 22 declares (128 registers). Same block the
 // race car publishes; see the deliberate-deviation note at the publish site.
 static const u32 KU_VERLET_OFFSET_COUNT = 128u;
 
 // g_NullVerletOffsets -- the leak names this global verbatim at BrnTrafficEntityModule.cpp
-// :8580 (`SetShaderConstantArrayData( E_VERLET_OFFSETS, g_NullVerletOffsets )`). TRAFFIC
-// NEVER DEFORMS, so its verlet block is identically zero; the console folds that into a
-// shared all-zero .rodata block. Zero-initialised here, which is the value, not a stand-in.
+// :8580 (`SetShaderConstantArrayData( E_VERLET_OFFSETS, g_NullVerletOffsets )`). In the
+// Feb-2007 leak traffic never deformed and this all-zero block was the only one it published;
+// the SHIP publishes the live TrafficPhysicsInfo::maSkinningOffsets_Scratch block for a
+// deforming car (see the deforming arm in RenderTrafficCar) and this zero block is the PC
+// backend's stand-in for "not published" on every other car (deviation noted at the site).
+// Zero-initialised here, which is the value, not a stand-in.
 static const Vector4 gaNullVerletOffsets[ KU_VERLET_OFFSET_COUNT ] = {};
 
 // ---- the four unrecovered dyn-init constants (see the file banner) ----------------------
@@ -686,40 +684,52 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     const bool lbShadowPass = lpShadowMap->IsRenderingShadowMap()
                            && lpShadowMap->IsUsingZOnlyRenderingPath();
 
-    // ---- G3: glass fracture + the damaged-vehicle budget -------------------
-    // NAMED GATE. The console's shape at pseudocode :1254-1281:
-    //     if ( physicsInfo && physicsInfo->mbDamaged && *lpiUpdated... < 5 )
+    // ---- the deforming-vehicle arm: glass-fracture reset, the LIVE verlet block, the
+    //      damaged-vehicle budget and the technique index (0x82729794..0x8272984C) ------------
+    // G3 CLOSED 2026-09-02 (traffic-deformation wave). The console:
+    //     if ( physicsInfo && physicsInfo->mbIsDeforming            // `lbz 0xFE5(info)`
+    //          && *lpiUpdatedNumDamagedVehiclesRendered < 5 )
     //     {
     //         ++*lpiUpdatedNumDamagedVehiclesRendered;
-    //         BrnWorld::SetGlassFractureConstants( 0.0f, 1.0f, {0,0}, {0,0,0,0} );
-    //         SetShaderConstantArrayData( 22, <physicsInfo + 1328> );   // the live verlet block
+    //         BrnTraffic::SetGlassFractureConstants( 0.0f, 1.0f, {0,0}, {0,0,0,0} ); // f31, f30, v127
+    //         SetShaderConstantArrayData( 22, &physicsInfo->maSkinningOffsets_Scratch[0] ); // info+0x530
     //         SetShaderConstantData( 23, {0,0,0,0} );
+    //         technique = shadow ? 3 : 0;
     //     }
-    //     else { BrnWorld::SetGlassFractureConstants( 0.0f, 1.0f, ... ); }
-    // ONE blocker now, link-level: BrnWorld::SetGlassFractureConstants is defined only in
-    // BrnRaceCarEntityModule_GlassFracture.cpp, which is not on tools/build/build_game_exe.bat,
-    // so calling it is an unresolved external. (The second blocker used to be G2; G2 is closed,
-    // and the verlet block it named is TrafficPhysicsInfo::maSkinningOffsets_Scratch.)
-    // CONSEQUENCE: shader constants 30/31/32 go unpublished on this build, and an unset external
-    // constant is SKIPPED rather than zeroed, so the glass programs read the previous draw's
-    // registers. DELETE-WHEN the GlassFracture TU is mounted.
-    (void)lpiUpdatedNumDamagedVehiclesRendered;
-
-    // ---- the technique index -----------------------------------------------
-    // Two bits, exactly the race car's scheme: bit 0 == "not damaged", bit 1 == "shadow pass"
-    // (`v188 = damaged ? (shadow ? 3 : 0) : (shadow ? 2 : 1)`).
-    // GATE (damaged arm) -- the damage source is now reachable
-    // (TrafficPhysicsInfo::mu8RenderDamageFlags, console info+4071) but selecting technique 0/3
-    // without the glass-fracture constants G3 still parks would draw a damaged car with the
-    // previous draw's registers. DELETE-WHEN G3 closes.
-    const bool lbDamaged = false;
+    //     else
+    //     {
+    //         BrnTraffic::SetGlassFractureConstants( 0.0f, 1.0f, {0,0}, {0,0,0,0} );
+    //         technique = shadow ? 2 : 1;
+    //     }
+    // The callee is the traffic module's OWN SetGlassFractureConstants @0x82714848 (not the
+    // BrnWorld twin the old note named), bodied in
+    // BrnTrafficEntityModule_ProcessDeformationData.cpp; mbIsDeforming is OR-accumulated by
+    // HandleExternalResponses and the skinning offsets are copied by ProcessDeformationData
+    // (both live), so the arm's three inputs all exist on this build now.
+    //
+    // The technique index is two bits, exactly the race car's scheme: bit 0 == "not
+    // deforming", bit 1 == "shadow pass".
+    const Vector2 lv2NoFractureUVScale   = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const Vector4 lv4NoFractureUVOffsets = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const bool lbDeforming = ( lpPhysicsInfo != 0 )
+                          && lpPhysicsInfo->mbIsDeforming
+                          && ( *lpiUpdatedNumDamagedVehiclesRendered < 5 );
     u8 lu8Technique;
-    if ( lbDamaged )
+    if ( lbDeforming )
     {
+        ++*lpiUpdatedNumDamagedVehiclesRendered;
+        SetGlassFractureConstants( 0.0f, 1.0f, lv2NoFractureUVScale, lv4NoFractureUVOffsets );
+        CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData(
+            22, lpPhysicsInfo->maSkinningOffsets_Scratch );
+        {
+            const Vector4 lv4DamageConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
+            CgsGraphics::mShaderConstantTable.SetShaderConstantData( 23, lv4DamageConstants );
+        }
         lu8Technique = lbShadowPass ? 3u : 0u;
     }
     else
     {
+        SetGlassFractureConstants( 0.0f, 1.0f, lv2NoFractureUVScale, lv4NoFractureUVOffsets );
         lu8Technique = lbShadowPass ? 2u : 1u;
     }
 
@@ -761,18 +771,22 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
         CgsGraphics::mShaderConstantTable.SetShaderConstantData( 24, lv4SelfIlluminationMask );
     }
 
-    // ---- shader constants 22 / 23: the verlet block -----------------------
+    // ---- shader constants 22 / 23 on the NON-deforming arm ------------------
     // The leak publishes g_NullVerletOffsets here unconditionally (:8580) and a zeroed damage
-    // vector as 23 (:8577); the ship folds the live block into the damaged arm, which is G3.
+    // vector as 23 (:8577); the ship folds the live block into the deforming arm above, and
+    // publishes NOTHING for 22/23 on a car that is not deforming.
     //
-    // DELIBERATE DEVIATION, the same one the race-car render TU carries: the ship folds the
-    // constant-22 publish into the damaged arm only. Leaving it unpublished is not neutral.
-    // Sixteen vertex programs in SHADERS_PC.BNDL declare g_verletOffsets at c0 count 128, and an
-    // external constant whose source pointer is null is SKIPPED, not zeroed
-    // (shadowingdevice.cpp:847), so the program reads whatever the preceding world draws left in
-    // c0..c127 -- the panel-stretch defect. The null block costs one 2 KB copy per car.
-    CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData( 22, gaNullVerletOffsets );
+    // DELIBERATE DEVIATION, the same one the race-car render TU carries: leaving the block
+    // unpublished is not neutral on the PC backend. Sixteen vertex programs in SHADERS_PC.BNDL
+    // declare g_verletOffsets at c0 count 128, and an external constant whose source pointer
+    // is null is SKIPPED, not zeroed (shadowingdevice.cpp:847), so the program reads whatever
+    // the preceding draw left in c0..c127 -- the panel-stretch defect. The null block costs one
+    // 2 KB copy per car. It is published ONLY when the deforming arm did not just publish the
+    // live block (2026-09-02: it used to follow unconditionally, which would have overwritten
+    // the live offsets with zeros on the very cars that deform).
+    if ( !lbDeforming )
     {
+        CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData( 22, gaNullVerletOffsets );
         const Vector4 lv4DamageConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
         CgsGraphics::mShaderConstantTable.SetShaderConstantData( 23, lv4DamageConstants );
     }
@@ -1018,21 +1032,11 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
                 // so a shed wheel simply does not draw.
                 if ( lpPhysicsInfo != 0 )
                 {
-                    // GATE G-WHEELEXISTS. Console: `if (info[4040 + i])` -- the wheel's
-                    // on-ground/still-attached byte. NOTHING IN THIS TREE WRITES IT: the sole
-                    // console writer is ProcessDeformationData @0x8271DEB0
-                    // (0x8271E41C addi r25,r22,0xFC8 == info+4040, from deformation byte
-                    // +624+24*i), which has no body and whose call site stays gated in
-                    // _wT1_01.cpp. TrafficPhysicsInfo::Construct deliberately leaves the array
-                    // bulk-cleared (_wT1_03.cpp:78), so honouring it draws a promoted car with
-                    // ZERO WHEELS. Forced true until the writer lands; a wheel torn off in a
-                    // crash cannot happen yet either way.
-                    // DELETE-WHEN ProcessDeformationData @0x8271DEB0 lands: drop lbWheelExists
-                    // and test lpPhysicsInfo->mabWheelExists[liWheel] directly.
-                    const bool lbWheelExists = KB_T3_FORCE_PHYSICAL_WHEEL_EXISTS
-                                                   ? true
-                                                   : lpPhysicsInfo->mabWheelExists[ liWheel ];
-                    if ( !lbWheelExists )
+                    // Console: `if (info[4040 + i])` -- mabWheelExists[i], written every frame
+                    // by ProcessDeformationData @0x8271DEB0 from the deformation wheel state
+                    // (LIVE since 2026-09-02; the G-WHEELEXISTS force is gone). A wheel the
+                    // physics side reports as not existing simply does not draw.
+                    if ( !lpPhysicsInfo->mabWheelExists[ liWheel ] )
                     {
                         continue;
                     }
