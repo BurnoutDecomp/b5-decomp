@@ -88,6 +88,15 @@
 // NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
 namespace BrnPhysics { namespace Vehicle { extern s32 gT5ApplyOwner; extern s32 gT5ApplyGlobal; } }
 
+// [kerb-wsph] joins the three-tag kerb probe owned by
+// GameSource/Physics/VehicleManager/BrnVehicleManager_ValidateRaceCarWorldContact.cpp (see the
+// banner there). Same latch, same frame counter, same per-tag budget. NOT IN THE X360 BINARY.
+namespace BrnPhysics { namespace Vehicle {
+    extern u32 guKerbProbeFrame;
+    bool KerbProbeArmed();
+    bool KerbProbeTake(u32& lruUsed, const char* lpcTag);
+} }
+
 namespace BrnPhysics
 {
 namespace Deformation
@@ -2062,6 +2071,60 @@ namespace Deformation
                        + lrT.zAxis.z * lvLocal.z + lrT.wAxis.z;
             lrSphere.w = lfScale * 0.5f;   // the second vrlimi w write wins
         }
+
+        // ---- [kerb-wsph] the WHEEL COLLISION PRIMITIVE, witnessed ------------------------------
+        // OPT-IN (BRN_KERB_PROBE=1). NOT console code; the latch reads 0 once and every print is
+        // unreachable thereafter.
+        //
+        // WHY. A collaborator's kerb hypothesis says "a wheel in Paradise is just a cube, and a
+        // cube cannot climb a step". On THIS build the wheel's world-collision proxy is a SPHERE,
+        // written three lines above: centre = bodyTransform * {pos.x, STREAMED y + scale/4, pos.z},
+        // radius = scale/2, appended at maWorldSensorSpheres[nSens + wheel] and fed to the world
+        // test by GetSpheresForCar -> GetWorldSpaceSpheres (count == GetNumSensors() == nSens + 4).
+        // Everything about that sphere comes from ONE asset number, the deformation spec's
+        // WheelSpec::mScale.x, so a bad port makes the wheel primitive the wrong size with no
+        // symptom the compile or link gate can see. This prints the number and the geometry it
+        // produces, so "the wheel primitive is right" stops being an assumption.
+        //
+        // Pairs with [kerb]'s sphA field: sphA >= nSens means a WHEEL sphere generated that
+        // contact; sphA < nSens means a body-shell deformation sensor did.
+        if ( BrnPhysics::Vehicle::KerbProbeArmed() )
+        {
+            static u32 suKerbWsphLines = 0u;
+            // One line per car per frame, and only while it is worth reading: a parked car
+            // republishes the same four spheres for ever.
+            const f32 lfSpeedSq = vpu::Dot(lpVehicle->GetLinearVelocity(),
+                                           lpVehicle->GetLinearVelocity());
+            if ( lfSpeedSq > 1.0f
+                 && BrnPhysics::Vehicle::KerbProbeTake(suKerbWsphLines, "[kerb-wsph]") )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[kerb-wsph] f " << BrnPhysics::Vehicle::guKerbProbeFrame
+                    << " nSens " << liNumSensors
+                    << " swept " << (mbDoSweptSphereTests ? 1 : 0);
+                for ( s32 liWheel = 0; liWheel < 4; ++liWheel )
+                {
+                    const BrnPhysics::Vehicle::Wheel& lrWheel =
+                        lpVehicle->GetWheel(static_cast<BrnPhysics::Vehicle::EVehicleDrivenWheel>(liWheel));
+                    const f32 lfScale = mpDeformationSpec->GetWheelSpec(liWheel)->mScale.x;
+                    const Vector4& lrSphere =
+                        maWorldSensorSpheres[liNumSensors + liWheel].mPositionRadius;
+                    *CgsDev::Log::gpDebugPrint
+                        << " | w" << liWheel
+                        << " idx " << (liNumSensors + liWheel)
+                        << " scale " << lfScale
+                        << " r " << lrSphere.w
+                        << " c " << lrSphere.x << " " << lrSphere.y << " " << lrSphere.z
+                        << " bot " << (lrSphere.y - lrSphere.w)
+                        << " streamY " << lrWheel.mStreamedPositionPlusTwistAmount.y
+                        << " posY " << lrWheel.mPosition.y
+                        << " rcY " << lrWheel.GetRoadContact().mPosition.y
+                        << " onG " << (lrWheel.GetRoadContact().mbIsOnGround ? 1 : 0);
+                }
+                *CgsDev::Log::gpDebugPrint << "\n";
+            }
+        }
+        // ---- end [kerb-wsph] --------------------------------------------------------------------
 
         // ---- (4) swept-sphere re-seed (the ResetSensors phase-3 math, gated) --------------------
         if ( mbDoSweptSphereTests )
