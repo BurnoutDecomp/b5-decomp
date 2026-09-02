@@ -303,6 +303,51 @@ namespace BrnParticle
     }
 
     // =========================================================================
+    // BuildLionVertexBuffers  @0x8228AC20 -- render thread, BEFORE the world passes.
+    //   BrnRendererModule::Render @0x8240BFA8 :453-454 calls BeginParticleRenderJob and
+    //   then this, both under the same v295 gate, well before the scene geometry. The
+    //   console body builds the Lion batches' vertex buffers -- and, INLINED at its head,
+    //   runs TrailSystem::Update:
+    //       *(trailSystem + 102644) = renderData->mfCurrentTimeStep;
+    //       *(trailSystem + 102640) = renderData->mfCurrentTime;
+    //       TrailRenderer::Update(currentTime, viewProjection);
+    //
+    //   WHERE THE MATRIX COMES FROM, pinned by offsets rather than guessed: the asm loads
+    //   four 16-byte rows from `a2 + 224` (renderData +0xE0) and four more from `a2 + 96`
+    //   (+0x60). ParticleRenderData::mCgsCamera sits at +0x60, and CgsGraphics::Camera
+    //   carries `static_assert(offsetof(Camera, mViewProjection) == 0x80)` -- so +0x60+0x80
+    //   == +0xE0 IS mViewProjection, and +0x60 itself is the view matrix. The trail
+    //   renderer wants the view-projection.
+    //
+    //   ⭐ WHY THIS MATTERS FOR A TYRE MARK: TrailRenderer::Update is the ONLY writer of the
+    //   matrix TrailRenderer::Render transforms its strips by, and of the time the strips
+    //   fade against. Without it TrailSystem::Render draws every segment through a matrix
+    //   that was never written. AddTrailSegment can be laying segments perfectly and
+    //   nothing appears -- a silent, plausible nothing, which is exactly the failure shape
+    //   this project keeps finding.
+    //
+    //   THE LION HALF IS NOT LANDED (the batch/vertex-buffer members are asm-sized
+    //   placeholders and cLionFX is absent) and says so once.
+    // =========================================================================
+    void ParticleModule::BuildLionVertexBuffers(const ParticleRenderData* lpRenderData)
+    {
+        if (lpRenderData == 0)
+            return;
+
+        mTrailSystem.Update(lpRenderData->mfCurrentTimeStep,
+                            lpRenderData->mfCurrentTime,
+                            lpRenderData->mCgsCamera.GetViewProjectionMatrix());
+
+        {
+            static bool sbLogged = false;
+            LogNotReconstructed(sbLogged,
+                "ParticleModule::BuildLionVertexBuffers' LION half (the per-batch vertex "
+                "buffer build; the batch members are asm-sized placeholders and cLionFX is "
+                "not landed). THE INLINED TrailSystem::Update IS REAL AND RUNS");
+        }
+    }
+
+    // =========================================================================
     // RenderFullResParticles  @0x8229AFD0  -- THE RENDER THREAD'S PARTICLE PASS.
     //   Its ONLY caller is BrnRendererModule::Render @0x8240BFA8 (pseudocode :899), on the
     //   render thread, between the corona pass and ResolveMSAA. The argument is the

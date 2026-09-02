@@ -162,6 +162,33 @@ namespace
         return siEnabled != 0;
     }
 
+    // [skid-gate] WHICH EXIT OF EffectsModule::Update FIRED -- one line per DISTINCT reason,
+    // once each. Run 7 measured zero [skid] lines with the flow in DRIVING and the trail
+    // system READY, which says only that the wheel loop was never reached; it does not say
+    // WHERE. Every early return in Update now names itself, so one run turns a guess into a
+    // measurement. DELETE with the tyre-mark bring-up.
+    void SkidGateExit(const char* lpcWhere)
+    {
+        if (!SkidProbeEnabled())
+            return;
+        static const char* sapcSeen[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        for (int li = 0; li < 8; ++li)
+        {
+            if (sapcSeen[li] == lpcWhere)
+                return;
+            if (sapcSeen[li] == 0)
+            {
+                sapcSeen[li] = lpcWhere;
+                char lacMsg[224];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[skid-gate] EffectsModule::Update RETURNED EARLY at: %s\n", lpcWhere);
+                CgsDev::Log::WriteToLog(lacMsg);
+                return;
+            }
+        }
+    }
+
+
     u32 gauSkidProbeFrame = 0;
 
     inline f32 ReadF32(const void* lpBase, u32 luOffset)
@@ -747,10 +774,16 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
 {
     // +0x2C340 -- the debug component's "bypass all VFX processing" byte.
     if (mDebugComponent.BypassAllVFXProcessing())
+    {
+        SkidGateExit("mDebugComponent.BypassAllVFXProcessing()");
         return;
+    }
     // +0x2C351 -- the "dump running lion effects" latch: consumed, and the step skipped.
     if (mDebugComponent.ConsumeDumpRunningLionEffects())
+    {
+        SkidGateExit("mDebugComponent.ConsumeDumpRunningLionEffects()");
         return;
+    }
 
     lpOutputBuffer->LockForWrite();
     lpOutputBuffer->GetReplayRequestInterface()->RegisterSerialiser(&mEffectsSerialiser);
@@ -819,12 +852,32 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
 
     if (!lbRunStep)
     {
+        SkidGateExit("the suspend/resume ladder (siEffectsSuspendState != 0)");
         lpInputBuffer->UnlockForRead();
         lpOutputBuffer->UnlockForWrite();
         return;
     }
 
     // ---- the per-system enables, debug component -> particle module (asm 0x8229EF2C..C0) ----
+    // [skid-gate] the POSITIVE witness: no exit fired, the per-system enables are about to be
+    // copied. Prints once with the values, because mbTrailsEnabled is what puts
+    // eRenderDataFlagRenderTrails (0x20) into the render-data flag word.
+    if (SkidProbeEnabled())
+    {
+        static bool sbLogged = false;
+        if (!sbLogged)
+        {
+            sbLogged = true;
+            char lacMsg[224];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[skid-gate] Update REACHED the per-system enables: trails=%d sparks=%d "
+                "debris=%d simple=%d lion=%d\n",
+                mDebugComponent.TrailsEnabled() ? 1 : 0, mDebugComponent.SparksEnabled() ? 1 : 0,
+                mDebugComponent.DebrisEnabled() ? 1 : 0, mDebugComponent.SimpleEnabled() ? 1 : 0,
+                mDebugComponent.LionEnabled() ? 1 : 0);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
     mParticleModule.mbSparksEnabled = mDebugComponent.SparksEnabled();   // +0x2C341 -> +0x23BB0
     mParticleModule.mbTrailsEnabled = mDebugComponent.TrailsEnabled();   // +0x2C342 -> +0x23BB1
     mParticleModule.mbDebrisEnabled = mDebugComponent.DebrisEnabled();   // +0x2C343 -> +0x23BB2
@@ -838,6 +891,8 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
 
     if (mEffectsSerialiser.GetStaticLayout() == 0)
     {
+        SkidGateExit("mEffectsSerialiser.GetStaticLayout() == 0 -- the replay module never "
+                     "gave the effects serialiser its static buffer");
         lpInputBuffer->UnlockForRead();
         lpOutputBuffer->UnlockForWrite();
         return;
