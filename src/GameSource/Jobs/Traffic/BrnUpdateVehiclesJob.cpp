@@ -40,7 +40,9 @@ namespace BrnTraffic
 {
 // [DIAG] NOT IN THE X360 BINARY. The one definition of the swerve watch the world module's
 // bring-up camera reads under BRN_WORLD_CAMTRAFFIC. DELETE-WHEN-STABLE.
-SwerveWatch gSwerveWatch = { 0.0f, 0.0f, 0.0f, -1, -1, 0u, 0u, 0u };
+SwerveWatch gSwerveWatch = { 0.0f, 0.0f, 0.0f, -1, -1, 0u, 0u, 0u,
+                             // the chain-crash arm (see the header)
+                             0.0f, 0.0f, 0.0f, -1, 0, 0u, 0u };
 
 namespace
 {

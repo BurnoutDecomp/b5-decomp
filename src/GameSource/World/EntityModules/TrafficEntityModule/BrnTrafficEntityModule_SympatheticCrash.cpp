@@ -107,6 +107,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameSource/Jobs/Traffic/BrnTrafficSwerveWatch.h"   // [DIAG] the chain-crash film arm
 
 #include "rw/math/vpu/vector3_operation.h"   // Dot, Normalize, IsValid
 #include "rw/math/vpu/vector4_operation.h"   // Splat
@@ -132,6 +133,27 @@ namespace
     const f32 KF_ONE                       = 1.0f;    // flt_82001C98
     const f32 KF_MINUS_ONE                 = -1.0f;   // flt_820037C8
     const f32 KF_ZERO                      = 0.0f;    // flt_82001CC0
+
+    // ---- [DIAG] THE CHAIN-CRASH FILM ARM. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. ------
+    // Publish where the sympathetic crasher IS, so (a) BRN_WORLD_CAMTRAFFIC=3/4 can stage a
+    // static wide shot on it, (b) BRN_FRAME_DUMP_ARM can start filming at that instant, and
+    // (c) every dumped frame carries the position in frames.csv, which is what lets a marker
+    // be projected from the car's OWN logged coordinates instead of a crash being asserted
+    // from a log line. Three float stores and two counters; no branch in the sim's control
+    // flow, and it is gated on the same BRN_TRAFFIC_DIAG the [T6-symp] rungs already use.
+    void PublishSympCrasher(u32 luVehicle, s32 liState, const Vector3& lvPos, bool lbCommitBound)
+    {
+        BrnTraffic::gSwerveWatch.mfSympPosX    = lvPos.x;
+        BrnTraffic::gSwerveWatch.mfSympPosY    = lvPos.y;
+        BrnTraffic::gSwerveWatch.mfSympPosZ    = lvPos.z;
+        BrnTraffic::gSwerveWatch.miSympVehicle = static_cast<s32>(luVehicle);
+        BrnTraffic::gSwerveWatch.miSympState   = liState;
+        ++BrnTraffic::gSwerveWatch.muSympPublishes;
+        if (lbCommitBound)
+        {
+            ++BrnTraffic::gSwerveWatch.muSympCommits;
+        }
+    }
 
     // The `% 101` reduction the console does with the 0x446F8657 magic-multiply reciprocal at
     // 0x8273D910..0x8273D92C, and the `< 50` split at 0x8273D930. Same pair
@@ -295,6 +317,14 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
     TrafficPhysicsInfo* const lpPhysicsInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);
     CGS_ASSERT(lpPhysicsInfo != 0, "lpPhysicsInfo");                  // :16310
 
+    // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Where the crasher is, THIS frame --
+    // published before the give-up arm so a give-up frame is stamped too.
+    if (TrafficDiagEnabled())
+    {
+        PublishSympCrasher(luVehicle, static_cast<s32>(lpVehicle->GetSympCrashState()),
+                           lvVehiclePos, false);
+    }
+
     // ---- 3. the GIVE-UP arm (0x8273D5AC..0x8273D634) ------------------------------------------
     // Threshold RECOVERED 2026-08-30 from its dyn-init thunk (banner): 2 MPH in m/s. The
     // SetPhysicalReason(NORMAL) below is this state machine's ONLY non-crashing exit -- it is
@@ -391,6 +421,16 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
             lpOutControls->mfBrake = KF_ZERO;
             if (lpVehicle->GetPhysicalReason() != E_PHYSICALREASON_CRASHED)
             {
+                // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. HEADON's commit edge. It
+                // has no lead time at all (the car is already nose-first into the wreck), so a
+                // camera latched here films the aftermath rather than the approach -- still an
+                // impact on film, just a later one than the ACCELERATE tail gives.
+                if (TrafficDiagEnabled())
+                {
+                    PublishSympCrasher(luVehicle,
+                                       static_cast<s32>(Vehicle::E_SYMPATHETIC_HEADON),
+                                       lvVehiclePos, true);
+                }
                 CrashVehicleForSympatheticCrashState(luVehicle, lpOutput);
             }
             return;
@@ -424,6 +464,25 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
         lpVehicle->SetSympCrashState(liRoll < KI_SYMP_HANDBRAKE_PERCENT
                                          ? Vehicle::E_SYMPATHETIC_HANDBRAKE
                                          : Vehicle::E_SYMPATHETIC_LOCKUP);
+
+        // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. THE COMMIT-BOUND EDGE: from here
+        // the car crashes in 0.1 s (HANDBRAKE) or 1.1 s (LOCKUP) with no further test that can
+        // call it off. This is the last instant a camera can be staged for the impact, so it is
+        // where BRN_WORLD_CAMTRAFFIC=3 latches.
+        if (TrafficDiagEnabled())
+        {
+            PublishSympCrasher(luVehicle, static_cast<s32>(lpVehicle->GetSympCrashState()),
+                               lvVehiclePos, true);
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[T6-symp] COMMIT-BOUND vehicle=" << static_cast<s32>(luVehicle)
+                    << " -> state=" << static_cast<s32>(lpVehicle->GetSympCrashState())
+                    << " (3 HANDBRAKE 4 LOCKUP) fwdDist=" << lfForwardDistance
+                    << " pos=(" << lvVehiclePos.x << "," << lvVehiclePos.y << ","
+                    << lvVehiclePos.z << ") [DELETE-WHEN-STABLE]\n";
+            }
+        }
         return;
     }
 
