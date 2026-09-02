@@ -106,7 +106,7 @@ namespace Vehicle
     // One budget per tag; the (budget+1)th call prints the exhaustion notice, later calls are silent.
     bool KerbProbeTake(u32& lruUsed, const char* lpcTag)
     {
-        const u32 KU_KERB_PROBE_BUDGET = 40000u;
+        const u32 KU_KERB_PROBE_BUDGET = 150000u;
         if (lruUsed < KU_KERB_PROBE_BUDGET)
         {
             ++lruUsed;
@@ -262,8 +262,10 @@ namespace Vehicle
         {
             if (KVF_GROUND_CLEARANCE_MIN_SPEED_MPH > lfSpeedMph)
             {
-                // [kerb] the fast path is a verdict too -- say so rather than vanish.
-                if (KerbProbeArmed() && KerbProbeTake(suKerbLines, "[kerb]"))
+                // [kerb] the fast path is a verdict too -- say so rather than vanish. Filtered to a
+                // MOVING car (>= 3 mph): a parked car's body shell posts ~24 ground contacts a frame
+                // (measured, junkyard, kerb run r1), which ate the whole budget before the drive.
+                if (lfSpeedMph >= 3.0f && KerbProbeArmed() && KerbProbeTake(suKerbLines, "[kerb]"))
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "[kerb] f " << guKerbProbeFrame << " car " << luRaceCarIndex
