@@ -1,7 +1,8 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                    // gpDebugPrint -- the opt-in [passer] bring-up probe only
-#include <cstdlib>                                                           // getenv -- the opt-in [passer] bring-up probe only
+#include <cstdlib>
+#include <cmath>                                                             // sqrtf -- the opt-in [restrow] probe only                                                           // getenv -- the opt-in [passer] bring-up probe only
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                    // CgsNumeric::Random
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu::AddMonitor
@@ -721,6 +722,151 @@ namespace Deformation
                 UpdateIK(lvfOne);
         }
         UpdateSkinningOffsets();
+
+        // ---- [restrow] PC bring-up instrument -- NOT X360. OPT-IN (BRN_RESTROW_PROBE=1). ---------
+        // DELETE-WHEN the phantom rest rows are attributed. Every tag point's rest state printed
+        // BESIDE the spec bytes it was built from: the two bound sensors' LIVE local-sphere centres
+        // against the spec's mInitialOffset, the blend against the spec's initial position. A row
+        // whose blend != initial names the sensor (and the side) that moved.
+        {
+            static s32 siRestRowProbe = -1;
+            if ( siRestRowProbe < 0 )
+            {
+                const char* lpcEnv = getenv( "BRN_RESTROW_PROBE" );
+                siRestRowProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+            }
+            static s32 siRestRowObjects = 0;
+            if ( siRestRowProbe == 1 && siRestRowObjects < 6 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                ++siRestRowObjects;
+                *CgsDev::Log::gpDebugPrint
+                    << "[restrow] obj " << static_cast<s32>(mu16DeformableObjectIndex)
+                    << " owner " << static_cast<s32>(GetHandlingBodyIdHighByte())
+                    << " damage " << lvfTime.x << " type " << static_cast<s32>(leResetType)
+                    << " scale (" << lv3pCompressionScale_Scratch.x << "," << lv3pCompressionScale_Scratch.y
+                    << "," << lv3pCompressionScale_Scratch.z << "," << lv3pCompressionScale_Scratch.w << ")"
+                    << " pos (" << lvPosLimits.x << "," << lvPosLimits.y << "," << lvPosLimits.z << ")"
+                    << " neg (" << lvNegLimits.x << "," << lvNegLimits.y << "," << lvNegLimits.z << ")"
+                    << " dmgPt (" << lDamagePoint.x << "," << lDamagePoint.y << "," << lDamagePoint.z << ")"
+                    << " nTags " << liNumTagPoints
+                    << " nSensors " << static_cast<s32>(mpDeformationSpec->mu8NumDeformationSensors)
+                    << "\n";
+                s32 liBad = 0;
+                for (s32 liTag = 0; liTag < liNumTagPoints; ++liTag)
+                {
+                    const TagPoint& lrTag = maTagPoints[liTag];
+                    const TagPointSpec* lpTS = mpDeformationSpec->GetTagPointSpec(liTag);
+                    const s32 liA = static_cast<s32>(lrTag.GetDeformationSensorA() - &maDeformationSensors[0]);
+                    const s32 liB = static_cast<s32>(lrTag.GetDeformationSensorB() - &maDeformationSensors[0]);
+                    const Vector4& lCA = lrTag.GetDeformationSensorA()->GetLocalSpaceSphere()->mPositionRadius;
+                    const Vector4& lCB = lrTag.GetDeformationSensorB()->GetLocalSpaceSphere()->mPositionRadius;
+                    const Vector3& lSA = mpDeformationSpec->GetDeformationSensorSpec(liA)->mInitialOffset;
+                    const Vector3& lSB = mpDeformationSpec->GetDeformationSensorSpec(liB)->mInitialOffset;
+                    const Vector3& lInit = lpTS->GetInitialPosition();
+                    const Vector3& lPos  = lrTag.GetPosition();
+                    const f32 ldx = lPos.x - lInit.x, ldy = lPos.y - lInit.y, ldz = lPos.z - lInit.z;
+                    const f32 lfDelta = sqrtf(ldx*ldx + ldy*ldy + ldz*ldz);
+                    const bool lbWheel = (liTag == mu8WheelTagPointIndices[0] || liTag == mu8WheelTagPointIndices[1]
+                                       || liTag == mu8WheelTagPointIndices[2] || liTag == mu8WheelTagPointIndices[3]);
+                    if ( lfDelta > 1.0e-4f || lbWheel )
+                    {
+                        if ( lfDelta > 1.0e-4f ) ++liBad;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[restrow] tag " << liTag << (lbWheel ? " WHEEL" : "")
+                            << " skinned " << (lpTS->IsSkinned() ? 1 : 0)
+                            << " A " << liA << " live (" << lCA.x << "," << lCA.y << "," << lCA.z << ")"
+                            << " spec (" << lSA.x << "," << lSA.y << "," << lSA.z << ")"
+                            << " offA (" << lpTS->GetOffsetAndWeightA().x << "," << lpTS->GetOffsetAndWeightA().y
+                            << "," << lpTS->GetOffsetAndWeightA().z << " w " << lpTS->GetOffsetAndWeightA().w << ")"
+                            << " | B " << liB << " live (" << lCB.x << "," << lCB.y << "," << lCB.z << ")"
+                            << " spec (" << lSB.x << "," << lSB.y << "," << lSB.z << ")"
+                            << " offB (" << lpTS->GetOffsetAndWeightB().x << "," << lpTS->GetOffsetAndWeightB().y
+                            << "," << lpTS->GetOffsetAndWeightB().z << " w " << lpTS->GetOffsetAndWeightB().w << ")"
+                            << " | pos (" << lPos.x << "," << lPos.y << "," << lPos.z << ")"
+                            << " init (" << lInit.x << "," << lInit.y << "," << lInit.z << ")"
+                            << " delta " << lfDelta << "\n";
+                    }
+                }
+                *CgsDev::Log::gpDebugPrint << "[restrow] obj " << static_cast<s32>(mu16DeformableObjectIndex)
+                    << " rows off rest at construct: " << liBad << " / " << liNumTagPoints << "\n";
+            }
+        }
+
+        // [restrow] the scratch rows UpdateSkinningOffsets just produced from that rest state.
+        {
+            static s32 siRestRowProbe2 = -1;
+            if ( siRestRowProbe2 < 0 )
+            {
+                const char* lpcEnv = getenv( "BRN_RESTROW_PROBE" );
+                siRestRowProbe2 = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+            }
+            static s32 siRestRowObjects2 = 0;
+            if ( siRestRowProbe2 == 1 && siRestRowObjects2 < 6 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                ++siRestRowObjects2;
+                s32 liNnz = 0;
+                for (s32 liRow = 0; liRow < 128; ++liRow)
+                {
+                    const Vector3Plus& lrRow = maVerletOffsets_Scratch[liRow];
+                    const f32 lfMag = sqrtf(lrRow.x*lrRow.x + lrRow.y*lrRow.y + lrRow.z*lrRow.z);
+                    if ( lfMag > 1.0e-4f )
+                    {
+                        ++liNnz;
+                        if ( liNnz <= 40 )
+                            *CgsDev::Log::gpDebugPrint << "[restrow] scratch row " << liRow << " (" << lrRow.x << "," << lrRow.y
+                                << "," << lrRow.z << ", w " << lrRow.w << ")\n";
+                    }
+                }
+                // [restrow] every driven point beside its spec: rest distances vs the spec's desired
+                // distances, the part window it skins into, and the two endpoint tags.
+                {
+                    s32 liRun = 0;
+                    for (s32 liT = 0; liT < miNumTagPoints; ++liT)
+                    {
+                        const TagPointSpec* lpTS = maTagPoints[liT].GetSpec();
+                        if (lpTS != nullptr && lpTS->IsSkinned()) ++liRun;
+                    }
+                    *CgsDev::Log::gpDebugPrint << "[restrow] gather rows " << liRun << " (skinned tags among all " << miNumTagPoints << ")\n";
+                    for (s32 liP = 0; liP < miNumIKBodyParts; ++liP)
+                    {
+                        const IKBodyPart& lrPart = maIKParts[liP];
+                        const s32 liN = lrPart.GetNumberOfDrivenPoints();
+                        *CgsDev::Log::gpDebugPrint << "[restrow] part " << liP << " type " << static_cast<s32>(lrPart.GetPartType())
+                            << " state " << static_cast<s32>(maPartStates[liP]) << " rows [" << liRun << "," << (liRun + liN)
+                            << ") tags start "
+                            << static_cast<s32>(lrPart.GetTagPoint(0) - &maTagPoints[0]) << " n " << lrPart.GetNumberOfTagPoints() << "\n";
+                        liRun += liN;
+                    }
+                    for (s32 liD = 0; liD < miNumDrivenPoints; ++liD)
+                    {
+                        const IKDrivenPoint& lrDP = maDrivenPoints[liD];
+                        const IKDrivenPointSpec* lpDS = mpDeformationSpec->GetDrivenPointSpec(liD);
+                        const Vector3 lP0 = lrDP.GetOriginalPosition();
+                        const Vector3& lP  = lrDP.GetPosition();
+                        const s32 liA = lpDS->GetTagPointAIndex();
+                        const s32 liB = lpDS->GetTagPointBIndex();
+                        const Vector3& lA = maTagPoints[liA].GetPosition();
+                        const Vector3& lB = maTagPoints[liB].GetPosition();
+                        const f32 ldA = sqrtf((lP0.x-lA.x)*(lP0.x-lA.x)+(lP0.y-lA.y)*(lP0.y-lA.y)+(lP0.z-lA.z)*(lP0.z-lA.z));
+                        const f32 ldB = sqrtf((lP0.x-lB.x)*(lP0.x-lB.x)+(lP0.y-lB.y)*(lP0.y-lB.y)+(lP0.z-lB.z)*(lP0.z-lB.z));
+                        const f32 loff = sqrtf((lP.x-lP0.x)*(lP.x-lP0.x)+(lP.y-lP0.y)*(lP.y-lP0.y)+(lP.z-lP0.z)*(lP.z-lP0.z));
+                        *CgsDev::Log::gpDebugPrint << "[restrow] driven " << liD << " A " << liA << " B " << liB
+                            << " p0 (" << lP0.x << "," << lP0.y << "," << lP0.z << ")"
+                            << " p (" << lP.x << "," << lP.y << "," << lP.z << ")"
+                            << " off " << loff
+                            << " |p0-A| " << ldA << " wantA " << lpDS->GetDesiredDistanceFromTagPointA()
+                            << " |p0-B| " << ldB << " wantB " << lpDS->GetDesiredDistanceFromTagPointB()
+                            << " A (" << lA.x << "," << lA.y << "," << lA.z << ")"
+                            << " B (" << lB.x << "," << lB.y << "," << lB.z << ")\n";
+                    }
+                }
+                *CgsDev::Log::gpDebugPrint << "[restrow] obj " << static_cast<s32>(mu16DeformableObjectIndex)
+                    << " scratch nnz after reset: " << liNnz
+                    << " wheelTags " << static_cast<s32>(mu8WheelTagPointIndices[0]) << " " << static_cast<s32>(mu8WheelTagPointIndices[1])
+                    << " " << static_cast<s32>(mu8WheelTagPointIndices[2]) << " " << static_cast<s32>(mu8WheelTagPointIndices[3])
+                    << " nDriven " << miNumDrivenPoints << " nIK " << miNumIKBodyParts << "\n";
+            }
+        }
 
         // Clear the 10 glass-pane states (asm: the +26420 10-dword clear).
         for (s32 liGlass = 0; liGlass < 10; ++liGlass)
