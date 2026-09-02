@@ -30,10 +30,13 @@
 //   (record type 2) -> BridgeSceneQueryResultsToPhysics -> ProcessAboveGroundLineTestsResults.
 //
 // ⛔ WHAT THIS WAVE DOES NOT LAND (named, not hidden):
-//   * BaseCollisionGenerator::CollideLineAgainstPolySoupListNearest @0x828131C0 -- the actual
-//     ray-vs-world kernel (494 insns over PolygonSoupListSpatialMap::RunQuery @0x82843A80 and
-//     CgsGeometric::IntersectLinePolygonSoupNearestSingleSided @0x8283BC98). It is declared and
-//     a LOUD trap in CgsCollisionGenerator_wSQ1.cpp until reconstructed; see that banner.
+//   * (LANDED in wave 1b, same day, b5 c6cb403f) BaseCollisionGenerator::
+//     CollideLineAgainstPolySoupListNearest @0x828131C0 -- the ray-vs-world kernel over
+//     PolygonSoupListSpatialMap::RunQuery @0x82843A80 and CgsGeometric::
+//     IntersectLinePolygonSoupNearestSingleSided @0x8283BC98 -- is now a BODY for lines under
+//     20 m (CgsCollisionGenerator_wSQ1.cpp + CgsPolygonSoupTests_LineNearest.cpp). Measured:
+//     2165 HIT / 0 MISS, mbValid 274/274, drift held 97 frames, exit guard 4 (run sq1_drift2).
+//     Only its 20 m+ arm (sub_82843E98) is still a loud trap.
 //   * the job arm of ProcessTriangleCollisionLineTestNearests (>= 100 tests a pass).
 //   * the octree arm's callees (LooseOctree::LineTestOptimized, the fine module's Compute*)
 //     -- both LOUD traps in their own TUs; the race car's world-only rays never reach them.
