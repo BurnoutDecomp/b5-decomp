@@ -218,27 +218,36 @@ void TrafficEntityModule::ProcessDeformationData(
                         }
                         if ( siTraceOn == 1 && CgsDev::Log::gpDebugPrint != 0 )
                         {
-                            static f32 sfLastSum = -1.0f;
-                            static u32 sluLines  = 0;
-                            f32 lfMax = 0.0f;
-                            f32 lfSum = 0.0f;
-                            s32 liNnz = 0;
+                            // Per-SLOT change latch + budget (a global one exhausted itself on the
+                            // first promoted cars in run tdef_r2 and the rammed car never printed),
+                            // and the worst row's index so an asset-side offset can be named.
+                            static f32 safLastSum[ KU_MAX_PHYSICAL_TRAFFIC_VEHICLES ] = { 0 };
+                            static u32 saluLines[ KU_MAX_PHYSICAL_TRAFFIC_VEHICLES ] = { 0 };
+                            f32 lfMax  = 0.0f;
+                            f32 lfSum  = 0.0f;
+                            s32 liNnz  = 0;
+                            s32 liArgMax = -1;
                             for ( u32 luRow = 0; luRow < TrafficPhysicsInfo::KU_NUM_SKINNING_OFFSETS; ++luRow )
                             {
                                 const Vector3Plus& lrRow = lpPhysInfo->maSkinningOffsets_Scratch[ luRow ];
                                 const f32 lfMag = sqrtf( lrRow.x * lrRow.x + lrRow.y * lrRow.y + lrRow.z * lrRow.z );
-                                if ( lfMag > lfMax ) { lfMax = lfMag; }
+                                if ( lfMag > lfMax ) { lfMax = lfMag; liArgMax = static_cast< s32 >( luRow ); }
                                 if ( lfMag > 0.0f ) { lfSum += lfMag; ++liNnz; }
                             }
-                            if ( lfSum != sfLastSum && sluLines < 400u )
+                            const u32 luSlot = static_cast< u32 >( liPhysicalIndex ) % KU_MAX_PHYSICAL_TRAFFIC_VEHICLES;
+                            if ( lfSum != safLastSum[ luSlot ] && saluLines[ luSlot ] < 300u )
                             {
-                                ++sluLines;
-                                sfLastSum = lfSum;
+                                ++saluLines[ luSlot ];
+                                safLastSum[ luSlot ] = lfSum;
+                                const Vector3Plus lWorst = ( liArgMax >= 0 )
+                                    ? lpPhysInfo->maSkinningOffsets_Scratch[ liArgMax ]
+                                    : Vector3Plus{ 0.0f, 0.0f, 0.0f, 0.0f };
                                 *CgsDev::Log::gpDebugPrint
                                     << "[tdef] frame=" << static_cast< s32 >( renderengine::guPresentCount )
                                     << " veh " << luVehicle
                                     << " phys " << liPhysicalIndex
-                                    << " maxVerlet " << lfMax
+                                    << " maxVerlet " << lfMax << " @" << liArgMax
+                                    << " (" << lWorst.x << ", " << lWorst.y << ", " << lWorst.z << ", w " << lWorst.w << ")"
                                     << " sumVerlet " << lfSum
                                     << " nnz " << liNnz
                                     << " laneMax (" << lv4MaxOffset.x << ", " << lv4MaxOffset.y

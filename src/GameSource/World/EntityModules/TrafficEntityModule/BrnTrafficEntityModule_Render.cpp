@@ -717,9 +717,20 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     // deforming", bit 1 == "shadow pass".
     const Vector2 lv2NoFractureUVScale   = { 0.0f, 0.0f, 0.0f, 0.0f };
     const Vector4 lv4NoFractureUVOffsets = { 0.0f, 0.0f, 0.0f, 0.0f };
+    // ---- [tdef-control] NOT X360; opt-in BRN_TDEF_NO_UPLOAD=1 restores the pre-2026-09-02
+    // gate (the deforming arm never taken, constant 22 = the null block) so the same hit can be
+    // filmed WITHOUT the upload. A control that has not been seen to fail is not a control.
+    // DELETE-WHEN the traffic-deformation evidence is banked.
+    static s32 siNoUploadControl = -1;
+    if ( siNoUploadControl < 0 )
+    {
+        const char* lpcEnv = getenv( "BRN_TDEF_NO_UPLOAD" );
+        siNoUploadControl = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+    }
     const bool lbDeforming = ( lpPhysicsInfo != 0 )
                           && lpPhysicsInfo->mbIsDeforming
-                          && ( *lpiUpdatedNumDamagedVehiclesRendered < 5 );
+                          && ( *lpiUpdatedNumDamagedVehiclesRendered < 5 )
+                          && ( siNoUploadControl == 0 );
     u8 lu8Technique;
     if ( lbDeforming )
     {
