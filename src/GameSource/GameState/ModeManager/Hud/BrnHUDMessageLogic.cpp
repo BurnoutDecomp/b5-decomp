@@ -2,6 +2,8 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // StuntModeScoring::IsComboInProgress
+#include "GameSource/GameState/ModeManager/Scoring/BrnRoadRageModeScoring.h" // RoadRageModeScoring::DoesDamageCriticalMessageNeedToBeSent / ResetDamageCriticalMessageFlag
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface::IsPlayerCarCrashing (inline)
 
 // ============================================================================
 // b5-decomp/src/GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp
@@ -140,13 +142,15 @@ void HUDMessageLogic::PreWorldUpdate(GameStateModuleIO::GameActionQueue* lpOutpu
 //   CGS_ASSERT(a5, "lpScoringSystem != NULL")           (BrnHUDMessageLogic.cpp:145)
 //   if (*(a1+448) != a3) { Prepare(a1); *(a1+448) = a3; }
 //   *(a1+452) += a9;
-//   switch (*(a1+448)) { case 7: GenerateStuntMessage(a1, a5); break;
+//   switch (*(a1+448)) { case 3: GenerateCriticalDamageMessage(a1, a2, a5); break;
+//                        case 7: GenerateStuntMessage(a1, a5); break;
 //                        case 12/14/17: GenerateStuntMessage(a1, a5); ... break; }
 // Note the switch tests the LATCHED member, not the incoming argument -- they differ only on the
 // frame the mode changes, and the console reads the member. Faithfully kept.
+// (case 3 added by the road-rage wave 2026-09-02: it reads only a2 and a5, both carried here.)
 //
 // [X] NOT REPRODUCED, named rather than faked -- the other switch arms and the tail:
-//   case 0/10  GenerateRaceModeMessages;            case 3  GenerateCriticalDamageMessage;
+//   case 0/10  GenerateRaceModeMessages;
 //   case 11    GenerateOnlineBlueTeamEscapingMessage + ...AreBehindYouMessage + ...LeaderMilestone;
 //   case 12/14 (not 17) GenerateOnlineStuntRunVictoryMessages + ...LeadingMessages;
 //   case 12/14/17 GenerateOnlineStuntRunEliminationMessages + ...TimeMessages + ...ScoreMessages;
@@ -178,6 +182,10 @@ void HUDMessageLogic::PostWorldUpdate(
 
     switch (meCurrentGameModeType)
     {
+        case GameStateModuleIO::E_MODE_ROAD_RAGE:           // case 3
+            GenerateCriticalDamageMessage(lpActiveRaceCarInterface, lpScoringSystem);
+            break;
+
         case GameStateModuleIO::E_MODE_STUNT_ATTACK:        // case 7
             GenerateStuntMessage(lpScoringSystem);
             break;
@@ -276,6 +284,41 @@ void HUDMessageLogic::GenerateStuntMessage(ScoringSystem* lpScoringSystem)
         StuntTimeUpMessage lTimeUpMessage;
         mActionQueue.AddEvent(&lTimeUpMessage, E_HUD_MESSAGE_STUNT_TIME_UP,
                               sizeof(StuntTimeUpMessage));
+    }
+}
+
+// X360 0x82395BA8 (DWARF BrnHUDMessageLogic.h:199 / .cpp:1450). The road-rage critical-damage
+// notification. Reproduced statement for statement from the asm:
+//   0x82395BB8  lwz   r11, 0x2858(r4)        mePlayerActiveRaceCarIndex
+//   0x82395BC0  cmpwi r11, -1 / mulli 0x460 / lbz 0x77A(r11)   == the inlined
+//                                            RCEntityActiveRaceCarOutputInterface::IsPlayerCarCrashing()
+//                                            (invalid index -> false; else maRaceCarStates[i].mbCrashing)
+//   0x82395BE8  lbz   r11, 0x4B54(r31)       ss.mRoadRageModeScoring.mbDamageCriticalMessageNeedToBeSent
+//                                            (== GetRoadRageScoring()->DoesDamageCriticalMessageNeedToBeSent();
+//                                             0x4B54 sits directly under miMaximumPlayerCrashedNumber @0x4B58)
+//   0x82395BF4  li r11,1 / stb var_20 / li r6,1 / li r5,0x34 / bl AddEvent
+//   0x82395C10  stb   0, 0x4B54(r31)         ResetDamageCriticalMessageFlag()
+// Only the crash gate and the flag are read -- the scorer's crash counters
+// (GetPlayerCrashesRemaining etc.) are NOT consulted here.
+void HUDMessageLogic::GenerateCriticalDamageMessage(
+    const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+    ScoringSystem* lpScoringSystem)
+{
+    if (lpActiveRaceCarInterface->IsPlayerCarCrashing())
+    {
+        return;
+    }
+
+    RoadRageModeScoring* lpRoadRageScoring = lpScoringSystem->GetRoadRageScoring();
+    if (lpRoadRageScoring->DoesDamageCriticalMessageNeedToBeSent())
+    {
+        GameStateModuleIO::DamageCriticalMessageAction lDamageAction;
+        lDamageAction.mbPlayerCarIsDamageCritical = true;
+
+        // The typed overload: liSize == sizeof(DamageCriticalMessageAction) == 1 == `li r6, 1`.
+        mActionQueue.AddEvent(&lDamageAction, GameStateModuleIO::E_ACTION_DAMAGE_CRITICAL);
+
+        lpRoadRageScoring->ResetDamageCriticalMessageFlag();
     }
 }
 

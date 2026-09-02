@@ -3,13 +3,12 @@
 // ============================================================================
 // b5-decomp/src/GameSource/GameState/ModeManager/Scoring/BrnRoadRageModeScoring.h
 // ============================================================================
-// Minimal sized-stub home for BrnGameState::RoadRageModeScoring.
+// Home of BrnGameState::RoadRageModeScoring (bodies: BrnRoadRageModeScoring.cpp).
 //
 // PURPOSE: ScoringSystem embeds this Road-Rage sub-scorer BY VALUE and drives it
-// through the lifecycle/query methods declared below. This is a MINIMAL SLICE --
-// a complete, compilable placeholder so ScoringSystem (and its dependents) can name
-// the type and call into it; the full member layout + the method BODIES land with
-// this type's own TU later. Single owner: grow this slice, do not fork.
+// through the lifecycle/query methods declared below. The full DWARF member run is
+// named here and the method BODIES live in this type's own TU. Single owner: grow
+// this header, do not fork.
 //
 // SHAPE is DWARF-authoritative
 // (references/DecFIGS/dwarfdump/GameSource/GameState/ModeManager/Scoring/BrnRoadRageModeScoring.h):
@@ -18,18 +17,27 @@
 //     so we name ALL of them in order -- no padding blob needed; the run is small and fully
 //     typed. The X360 trailing tail pad (struct alignment) is not asserted (by-value embed,
 //     named access -> MSVC computes the stride; no sizeof assert).
-//   - All methods are reproduced DECLARE-ONLY (bodies belong to this type's own TU).
+//   - All methods are declared here; bodies are in BrnRoadRageModeScoring.cpp.
 //
 // The DWARF emits two per-using-TU instances of this struct that differ ONLY in
 // IncrementPlayerNumTakedowns' GameActionQueue param namespace (InputBuffer:: vs
-// OutputBuffer::). Both resolve to the same not-yet-committed GameActionQueue type;
-// per the sibling StuntManager slice convention we model the as-yet-uncommitted
-// pointer params as `void* /* RealType */` so the slice stays self-contained and
-// compilable on its own. When GameActionQueue / RCEntityActiveRaceCarOutputInterface
-// land their real homes, swap the void* placeholders for the typed pointers.
+// OutputBuffer::). Both are the ONE real typedef GameStateModuleIO::GameActionQueue
+// (BrnGameStateSharedIO.h, == CgsModule::VariableEventQueue<13312,16>), and the X360
+// caller ScoringSystem::OnPlayerDoesATakedown @0x8234CE08 hands the output buffer's
+// queue straight through -- so the param is the typed pointer now.
+// [2026-09-02] The two former `void* /* RealType */` placeholders are RETIRED: the
+// GameActionQueue typedef and RCEntityActiveRaceCarOutputInterface both have committed
+// homes. Bodies live in BrnRoadRageModeScoring.cpp (this type's own TU).
 
 #include "types.hpp"                                          // f32, s32/u32, s16/u16
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"      // CgsSystem::Time (committed home)
+#include "GameSource/GameState/BrnGameStateSharedIO.h"        // GameStateModuleIO::GameActionQueue (real typedef)
+
+// Pointer-only param of Update (DWARF PostWorldInputBuffer::RCEntityActiveRaceCarOutputInterface
+// == BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface, the same forward the
+// BrnGameStateModuleIO.h / BrnChallengeManager.h precedents use). Full home:
+// GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h
+namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
 
 namespace BrnGameState
 {
@@ -41,28 +49,30 @@ namespace BrnGameState
     struct RoadRageModeScoring
     {
     public:
-        // ---- lifecycle (declare-only; bodies belong to this type's own TU) ----
+        // ---- lifecycle (bodies in BrnRoadRageModeScoring.cpp) ----
         void Construct();                                  // DWARF .h:52
         bool Prepare(s32 liTargetNumTakedowns,
                      u16 luRoadRageExtensionTime);          // DWARF .h:58
-        // DWARF .h:64. param0 is PostWorldInputBuffer::RCEntityActiveRaceCarOutputInterface*
-        // (== BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface, not yet
-        // committed here) -> modelled void*; second param is the frame delta (DWARF float32_t -> f32).
-        void Update(const void* /* RCEntityActiveRaceCarOutputInterface* */ lpRaceCarOutput,
-                    f32 lfDeltaTime);                       // DWARF .h:64
+        // DWARF .h:64 (.cpp:88 names the params lpActiveRaceCarInterface / lfSimTimeStep).
+        // param0 is PostWorldInputBuffer::RCEntityActiveRaceCarOutputInterface* (== the BrnWorld
+        // RaceCarEntityModuleIO interface forward-declared above); param1 is the sim time step.
+        void Update(const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+                    f32 lfSimTimeStep);                     // DWARF .h:64
         bool Release();                                    // DWARF .h:68
         void Destruct();                                   // DWARF .h:72
         void ClearData();                                  // DWARF .h:76
 
-        // DWARF .h:83. Bumps miNumTakedownsAchieved and, when a threshold is crossed, queues the
-        // appropriate game action. The GameActionQueue param is uncommitted (DWARF emits it under
-        // InputBuffer:: in one TU instance and OutputBuffer:: in the other) -> modelled void*.
-        // Time is passed BY VALUE (committed CgsSystem::Time home).
+        // DWARF .h:83 / X360 0x823445D0 (the type's only out-of-line symbol). Bumps the takedown
+        // counters and, on threshold crossings, posts PlayerReachedRoadRageTarget (103) and the
+        // time-extension HUD message (255, twice). The queue is the real GameStateModuleIO typedef
+        // (the DWARF's InputBuffer::/OutputBuffer:: split names the same type). Time stays BY VALUE
+        // here to match the committed caller ScoringSystem::OnPlayerDoesATakedown (the DWARF .cpp:170
+        // spells it `Time&`; on the X360 both forms pass r5 as a pointer, so the asm cannot tell).
         void IncrementPlayerNumTakedowns(ScoringSystem* lpScoringSystem,
-                                         CgsSystem::Time lTime,
-                                         void* /* GameActionQueue* */ lpGameActionQueue); // DWARF .h:83
+                                         CgsSystem::Time lCurrentTime,
+                                         GameStateModuleIO::GameActionQueue* lpOutputActionQueue); // DWARF .h:83
 
-        // ---- queries (declare-only; const where the DWARF says const) ----
+        // ---- queries (const where the DWARF says const) ----
         s32  GetNumTakedownsAchieved() const;              // DWARF .h:86
         s32  GetTargetNumTakedowns() const;                // DWARF .h:89
         bool PlayerCarWasDestroyed() const;                // DWARF .h:92

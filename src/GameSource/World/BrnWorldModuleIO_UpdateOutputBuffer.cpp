@@ -54,6 +54,14 @@ void UpdateOutputBuffer::Construct()
     CgsModule::IOBuffer::Construct();                       // X360 *this = 1
 
     // -- the committed queue constructs, in the X360 call order --
+    // [road-rage wave 2026-09-02] ONE MORE of the banner's "covered by the zero-fill" interfaces made
+    // real -- and, as with the director vehicle interface below, a zero-fill is exactly wrong for it:
+    // VehicleManagerOutputInterface is eight EventQueues whose mpEvents must point at their own
+    // inline buffers (VehicleManagerOutputInterface::Construct @0x822E6790). BridgePhysicsToOutput
+    // leg 3 now operator=s the physics interface onto this one every frame, and that operator
+    // Appends into these queues. X360 UpdateOutputBuffer::Construct calls it at 0x827CA14C, the
+    // fourth `bl` of the chain (after the +16 VehicleOutputInterface interior constructs).
+    mVehicleManagerOutputInterface.Construct();             // X360 +27680 (0x827CA14C)
     mTriggerEntityOutputInterface.Construct();              // X360 VEQ<1024,16> +50816 (Construct+Clear)
     mRouteResponseQueue.Construct();                        // X360 RouteResponse<16> +60440
     mResourceRequestInterface.mRequestQueue.Construct();    // X360 VEQ<4096,16> +146660 (Construct+Clear)
@@ -188,6 +196,14 @@ UpdateOutputBuffer::VehicleOutputInterface* UpdateOutputBuffer::GetVehicleOutput
 const UpdateOutputBuffer::VehicleManagerOutputInterface* UpdateOutputBuffer::GetVehicleManagerOutputInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mVehicleManagerOutputInterface;
+}
+
+// [road-rage wave 2026-09-02] the write half, mirroring the other W accessors of this buffer
+// (lock discipline: BridgePhysicsToOutput runs inside LockBuffersForIO(out, phys)).
+UpdateOutputBuffer::VehicleManagerOutputInterface* UpdateOutputBuffer::GetVehicleManagerOutputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
     return &mVehicleManagerOutputInterface;
 }
 

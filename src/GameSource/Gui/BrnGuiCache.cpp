@@ -1422,6 +1422,39 @@ namespace BrnGui
             break;
 
         // ================================================================================
+        // ⭐⭐ [road-rage wave 2026-09-02] THE ROAD RAGE TAKEDOWN FEED, consumer half.
+        //
+        // X360 jpt_825101AC case 46 @0x82510888..0x825108E4 -- GuiRoadRageScoreUpdate. The
+        // third sub-switch rebases by 0x17C (380), so case 46 == GUI event id 426. Producer:
+        // BridgeGameStateToGui's mode-3 arm @0x823EEDD8, landed in
+        // GameSource/Game/GameBridgeGameStateToX_EventStatusGuiEvents.cpp.
+        //
+        // ⛔ THE ID IS 426, NOT THE DWARF'S 421 (see the type's banner in BrnGuiEventTypeDefs.h).
+        //
+        // Two stores, in the console's own order:
+        //     lwz r11, 0(r30) ; ori r10, 0x9FBC ; stwx    -- miTakedownsCurrent
+        //     lwz r11, 4(r30) ; ori r9,  0x9FC0 ; stwx    -- miTakedownTarget
+        // These are the two words GetCurrentTakedownsInEvent / GetTargetTakedownsInEvent
+        // (@0x8240F4B0 / @0x8240F550, below) hand the HUD.
+        // ================================================================================
+        case 426:
+            {
+                const BrnGui::GuiRoadRageScoreUpdate* lpRoadRageScore =
+                    reinterpret_cast<const BrnGui::GuiRoadRageScoreUpdate*>(lpEvent);
+
+                // @0x82510888..0x825108B8 -- `cmpwi r11, 3` on meGameModeType. Spelled as a
+                // literal for the same reason every other assert in this switch is: this TU
+                // cannot include BrnGameStateSharedIO.h (see the header note at the top of the
+                // file). Non-gating, exactly like the console's: it fires and then stores anyway.
+                CGS_ASSERT(meGameModeType == 3,
+                           "BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE == meGameModeType"); // cpp:2256
+
+                miTakedownsCurrent = lpRoadRageScore->miCurrentTakedowns;   // stwx +0x9FBC
+                miTakedownTarget   = lpRoadRageScore->miTargetTakedowns;    // stwx +0x9FC0
+            }
+            break;
+
+        // ================================================================================
         // ⭐⭐⭐ [showtime score wave 2026-08-29] THE SHOWTIME SCORE FEED, consumer half.
         //
         // X360 jpt_825101AC case 54 @0x82510AA0..0x82510B28 -- GuiCrashScoreUpdate. The third

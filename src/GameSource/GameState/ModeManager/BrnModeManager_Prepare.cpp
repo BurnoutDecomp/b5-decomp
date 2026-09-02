@@ -409,8 +409,32 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // BEHAVIOURAL IMPACT: ROAD RAGE ONLY (this whole arm is gated on
         // meCurrentGameModeType == E_MODE_ROAD_RAGE). Zero impact on the stunt-race campaign.
         // --------------------------------------------------------------------------------------
-        (void)liTakedownTarget;
-        (void)lpProgressionData;
+        // ⭐ [road-rage wave 2026-09-02, conductor] SEED UN-PARKED. All three blockers above are gone:
+        //   (a) ProgressionManager::GetProgressionRankForGameMode -- bodied (BrnProgressionManager.cpp:1299);
+        //   (b) ProgressionRankData::GetRoadRageExtensionTime  -- BrnProgressionRankData.h:145 (rank+0x56);
+        //   (c) the medal stores -- written by name under the friend grant in BrnScoringSystem.h.
+        // Store for store against 0x8234B544..0x8234B5D8 (asm re-read this wave); the block is
+        // what makes RoadRageModeScoring::IsActive() true, i.e. what lets WriteDataToOutput publish
+        // the takedown target instead of 0/0 (run1 witness: 10,373 HUD "Invalid takedown target"
+        // asserts from exactly this park).
+        const BrnProgression::ProgressionRankData* lpProgressionRankDataRank =
+            lpProgressionData->GetProgressionRankData(static_cast<u32>(
+                mpProgressionManager->GetProgressionRankForGameMode(
+                    GameStateModuleIO::E_MODE_ROAD_RAGE)));                           // 0x8234B544..0x8234B55C
+        CGS_ASSERT(lpProgressionRankDataRank != NULL, "lpProgressionRankDataRank");  // :1241
+
+        // ss+0x4B40..0x4B57 -- the inlined RoadRageModeScoring::Prepare (0x8234B588..0x8234B5C4).
+        mScoringSystem.GetRoadRageScoring()->Prepare(
+            liTakedownTarget, lpProgressionRankDataRank->GetRoadRageExtensionTime());
+
+        // ss+0x5D08 / 0x5D0C (0x8234B5C8 / 0x8234B5CC): medal target GOLD, achieved NONE.
+        mScoringSystem.meCurrentMedalTarget   = E_CURRENT_MEDAL_TARGET_TIME_GOLD;      // 0
+        mScoringSystem.meCurrentMedalAchieved = E_CURRENT_MEDAL_TARGET_TIME_NONE;      // 3
+
+        // ss+0x4B60/64/68 (0x8234B5D0..0x8234B5D8): the road-rage medal SCORES, target / -1 / -2.
+        mScoringSystem.mauiMedalScores[0] = static_cast<u32>(liTakedownTarget);
+        mScoringSystem.mauiMedalScores[1] = static_cast<u32>(liTakedownTarget - 1);
+        mScoringSystem.mauiMedalScores[2] = static_cast<u32>(liTakedownTarget - 2);
 
         CGS_ASSERT(muNumLandmarks == 0, "muNumLandmarks == 0");
         return;

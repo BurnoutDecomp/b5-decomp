@@ -89,8 +89,13 @@
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // TQM::GetTriggerData / GetTrafficData
 // The race-car output interfaces are completed here so GetActiveRaceCarIndex can be called by name.
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+#include "GameSource/GameState/Progression/BrnProgressionManager.h"           // ProgressionManager::{GetProgressionData, GetProgressionRankForGameMode, GetRankThresholdForEvent, GetProfile}
+#include "GameSource/GameState/Progression/BrnProfile.h"                     // Profile::GetNumRankWinsForGameMode
+#include "SharedClasses/Progression/BrnProgressionData.h"                    // ProgressionData::{GetProgressionRankData, GetProgressionRankCount}
+#include "SharedClasses/Progression/BrnProgressionRankData.h"                // ProgressionRankData::GetRoadRageTakedownTarget
 #include "GameShared/GameClasses/Core/CgsAssert.h"                           // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                   // the two parked one-shot logs
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                   // GetRoadRageTakedownTarget's gated debug prints + the parked one-shot log
+#include <cmath>                                                             // std::floor (the de-inlined fsel/magic-constant floor, same precedent as BrnChallengeManager_wC_06.cpp)
 
 // [X][X] DELIBERATELY NOT INCLUDED: GameSource/GameState/BrnGameStateModuleIO.h. It reaches a
 // SECOND `enum EActiveRaceCarIndex : s32` inside namespace BrnGameState (through
@@ -404,17 +409,19 @@ s32 ModeManager::GetOnlineCurrentRound() const
 }
 
 // ============================================================================================
-// 7. THE TWO PARKED X360 SYMBOLS -- both blocked on declarations OUTSIDE agent 9's edit lane
+// 7. THE TWO X360 SYMBOLS THAT WERE PARKED -- one now LIVE, one still blocked
 // ============================================================================================
-// Both are FULLY RECONSTRUCTED below, as an ARMED-BODY block the conductor pastes in one edit the
-// moment the named declarations land. Neither is guessed and neither is half-written into the live
-// body: an accessor that silently answers a plausible number is exactly the failure mode the
-// campaign's "gate-green != closeable" lesson is about.
+// Both were FULLY RECONSTRUCTED here as ARMED-BODY blocks to be pasted the moment their missing
+// declarations landed. Neither is guessed and neither was half-written into the live body: an
+// accessor that silently answers a plausible number is exactly the failure mode the campaign's
+// "gate-green != closeable" lesson is about.
 
 // --------------------------------------------------------------------------------------------
-// GetRoadRageTakedownTarget -- X360 0x82327518.  [X] PARKED: THREE MISSING DECLARATIONS.
+// GetRoadRageTakedownTarget -- X360 0x82327518.  [LIVE 2026-09-02] UN-PARKED.
 // --------------------------------------------------------------------------------------------
-// FULL CONSOLE RECONSTRUCTION (asm read end to end this wave; every assert literal and every baked
+// The armed reconstruction below (kept as the annotated reading of the asm) is now the LIVE body
+// further down; every line of the body was re-verified against 0x82327518 when it was un-parked.
+// FULL CONSOLE RECONSTRUCTION (asm read end to end; every assert literal and every baked
 // line number below is verbatim from 0x82327518):
 //
 //   u32 ModeManager::GetRoadRageTakedownTarget()
@@ -502,15 +509,14 @@ s32 ModeManager::GetOnlineCurrentRound() const
 //
 // [!!] STATUS 2026-08-26 (wave-B fix round). ALL THREE DECLARATIONS BELOW HAVE NOW LANDED, each
 // re-derived from the asm rather than pasted from the request:
-//   (a) BrnProgression::ProgressionRankData::GetRoadRageTakedownTarget()  -> BrnGameModeParams.h
+//   (a) BrnProgression::ProgressionRankData::GetRoadRageTakedownTarget()  -> BrnProgressionRankData.h:136
 //   (b) BrnProgression::ProgressionManager::GetProgressionRankForGameMode -> BrnProgressionManager.h
 //   (c) BrnProgression::ProgressionManager::GetRankThresholdForEvent      -> BrnProgressionManager.h
-// THE BODY IS STILL PARKED, and the reason has MOVED: (b) X360 0x8237B4E8 and (c) X360 0x82370260
-// are declare-only -- no BODY exists anywhere in src/ -- so un-parking today buys two LNK2019s
-// instead of a working takedown target. The remaining blocker is therefore
-// "reconstruct ProgressionManager::GetProgressionRankForGameMode + ::GetRankThresholdForEvent",
-// which is a ProgressionManager-TU item, and it is on the conductor's BLOCKING list for any
-// road-rage boot test (verify batch 5, MF5). Un-park this in the SAME change as those two bodies.
+// The body then stayed parked because (b) X360 0x8237B4E8 and (c) X360 0x82370260 were
+// declare-only. [!!] STATUS 2026-09-02: BOTH BODIES EXIST (BrnProgressionManager.cpp:1299 and
+// :972), so the armed body below is LIVE. Signatures used, verbatim from BrnProgressionManager.h:
+//   s8  GetProgressionRankForGameMode(EGameModeType) const;
+//   s32 GetRankThresholdForEvent(s32 liProgressionRank, EGameModeType) const;
 //
 // The original filing, kept for the evidence it carries:
 //   (a) BrnProgression::ProgressionRankData::GetRoadRageTakedownTarget() -- the u16 at
@@ -529,29 +535,113 @@ s32 ModeManager::GetOnlineCurrentRound() const
 // inline at :403; see the maiRankWinsPerOfflineGameMode note above),
 // ProgressionData::GetProgressionRankData()/GetProgressionRankCount() (BrnProgressionData.h:73/:79).
 //
-// UNTIL (a)(b)(c) LAND this answers 0 behind a one-shot log. That is a REAL BEHAVIOURAL DIVERGENCE
-// and it is stated here rather than hidden: a road-rage event started on this build has a takedown
-// target of zero, i.e. its "enough takedowns" condition is satisfied from frame one. Road rage is
-// off the stunt-race campaign path, which is why parking it is acceptable; it is NOT acceptable to
-// leave it looking finished.
+// LIVE BODY. Verified line by line against 0x82327518 on un-parking (2026-09-02):
+//   0x82327538..0x8232758C  GetProgressionData() + "lpProgressionData != NULL" (:1315 == 0x523)
+//   0x82327590..0x823275EC  re-fetch, `lwz 0x14` == GetProgressionRankCount(), -1, extsb -> liLastRank;
+//                           inlined GetProgressionRankData's own "luIndex < muProgressionRankCount"
+//   0x823275F0..0x8232761C  `mulli 0x70` + base -> lpProgressionRankDataLastRank, assert (:1320 == 0x528)
+//   0x82327620..0x82327658  GetProgressionRankForGameMode(3) ; extsb ; both -> f32 ; fcmpu ; blt
+//   0x8232765C              not-less: `lhz r3, 0x50(last)` == GetRoadRageTakedownTarget(), return
+//   0x82327670..0x82327700  this-rank / next-rank records + asserts (:1331 == 0x533, :1335 == 0x537)
+//   0x82327704..0x82327770  the two gated integer prints
+//   0x82327774..0x823277A8  GetRankThresholdForEvent(rank, 3) -> f30 ; GetRankThresholdForEvent(rank+1, 3)
+//   0x823277AC..0x82327838  `lwz 0x378(progmgr)` == Profile::GetNumRankWinsForGameMode(3) ; the
+//                           four int->f32 conversions ; ratio ; fmadds ; + 0.5f
+//   0x8232783C..0x82327878  the fsel/magic-constant floor -> f27
+//   0x8232787C..0x82327994  the seven gated float prints, banner first and last
+//   0x8232799C..0x823279A4  fctiwz / stfiwx / lwz r3 -> return
 u32 ModeManager::GetRoadRageTakedownTarget()
 {
-    // The one leg that IS reachable today: the console's leading manager check. Keeping it means
-    // the build's first symptom on this path is still the console's own diagnostic.
-    CGS_ASSERT(mpProgressionManager != nullptr, "mpProgressionManager");
+    const BrnProgression::ProgressionData* lpProgressionData = mpProgressionManager->GetProgressionData();
+    CGS_ASSERT(lpProgressionData != nullptr, "lpProgressionData != NULL");   // BrnModeManager.cpp:1315
 
-    static bool sbLoggedRoadRageTakedownTargetParked = false;
-    if (!sbLoggedRoadRageTakedownTargetParked && (CgsDev::Message::gxMessageFilterFlags & 1))
+    // The console re-fetches the resource pointer for the count read and inlines
+    // ProgressionData::GetProgressionRankData (whose own bound assert is baked at
+    // BrnProgressionData.h:330); the committed accessor carries that assert.
+    const s32 liLastRank = static_cast<s8>(lpProgressionData->GetProgressionRankCount() - 1);
+    const BrnProgression::ProgressionRankData* lpProgressionRankDataLastRank =
+        lpProgressionData->GetProgressionRankData(static_cast<u32>(liLastRank));
+    CGS_ASSERT(lpProgressionRankDataLastRank != nullptr, "lpProgressionRankDataLastRank");   // :1320
+
+    const s32 liThisRankForGameMode = static_cast<s8>(
+        mpProgressionManager->GetProgressionRankForGameMode(GameStateModuleIO::E_MODE_ROAD_RAGE));
+
+    // At or past the last rank: the flat last-rank target, no interpolation. (The console
+    // promotes both sides to f32 before the fcmpu; value-identical over the s8 domain.)
+    if (liThisRankForGameMode >= liLastRank)
     {
-        sbLoggedRoadRageTakedownTargetParked = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[stuntrace] ModeManager::GetRoadRageTakedownTarget PARKED -> 0."
-               " Blocked on ProgressionRankData::GetRoadRageTakedownTarget,"
-               " ProgressionManager::GetProgressionRankForGameMode (X360 0x8237B4E8) and"
-               " ProgressionManager::GetRankThresholdForEvent. The armed body is in"
-               " BrnModeManager_Accessors.cpp.\n";
+        return lpProgressionRankDataLastRank->GetRoadRageTakedownTarget();   // lhz 0x50(rank)
     }
-    return 0;
+
+    const BrnProgression::ProgressionRankData* lpProgressionRankDataThisRank =
+        lpProgressionData->GetProgressionRankData(static_cast<u32>(liThisRankForGameMode));
+    CGS_ASSERT(lpProgressionRankDataThisRank != nullptr, "lpProgressionRankDataThisRank");   // :1331
+    const s32 liNextRankForGameMode = static_cast<s8>(liThisRankForGameMode + 1);
+    const BrnProgression::ProgressionRankData* lpProgressionRankDataNextRank =
+        lpProgressionData->GetProgressionRankData(static_cast<u32>(liNextRankForGameMode));
+    CGS_ASSERT(lpProgressionRankDataNextRank != nullptr, "lpProgressionRankDataNextRank");   // :1335
+
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+    {
+        *CgsDev::Log::gpDebugPrint << "liThisRankForGameMode: " << liThisRankForGameMode << "\n";
+    }
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+    {
+        *CgsDev::Log::gpDebugPrint << "liNextRankForGameMode: " << liNextRankForGameMode << "\n";
+    }
+
+    const f32 lfThisRankThreshold = static_cast<f32>(
+        mpProgressionManager->GetRankThresholdForEvent(liThisRankForGameMode,
+                                                       GameStateModuleIO::E_MODE_ROAD_RAGE));
+    const f32 lfNextRankThreshold = static_cast<f32>(
+        mpProgressionManager->GetRankThresholdForEvent(liThisRankForGameMode + 1,
+                                                       GameStateModuleIO::E_MODE_ROAD_RAGE));
+    const f32 lfThisRoadRageTakedownTarget =
+        static_cast<f32>(lpProgressionRankDataThisRank->GetRoadRageTakedownTarget());
+    const f32 lfNextRoadRageTakedownTarget =
+        static_cast<f32>(lpProgressionRankDataNextRank->GetRoadRageTakedownTarget());
+    // progmgr+0x378 == mProfile + maiRankWinsPerOfflineGameMode[E_MODE_ROAD_RAGE]: the compiler
+    // folded Profile::GetNumRankWinsForGameMode(E_MODE_ROAD_RAGE)'s index (see the note above).
+    const f32 lfCurrentEventWins = static_cast<f32>(
+        mpProgressionManager->GetProfile()->GetNumRankWinsForGameMode(GameStateModuleIO::E_MODE_ROAD_RAGE));
+
+    const f32 lfCurrentRelativeEventRatio =
+        (lfCurrentEventWins - lfThisRankThreshold) / (lfNextRankThreshold - lfThisRankThreshold);
+    // (x +- 2^52) -+ 2^52 then -1.0 on overshoot == floor(x), applied to (lerp + 0.5f): round-half-up.
+    const f32 lfRoadRageFinalTarget = static_cast<f32>(std::floor(
+        ((lfNextRoadRageTakedownTarget - lfThisRoadRageTakedownTarget) * lfCurrentRelativeEventRatio
+         + lfThisRoadRageTakedownTarget) + 0.5f));
+
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+    {
+        *CgsDev::Log::gpDebugPrint << "******************************\n";
+    }
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+    {
+        *CgsDev::Log::gpDebugPrint << "lfThisRoadRageTakedownTarget : " << lfThisRoadRageTakedownTarget << "\n";
+    }
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+    {
+        *CgsDev::Log::gpDebugPrint << "lfNextRoadRageTakedownTarget: " << lfNextRoadRageTakedownTarget << "\n";
+    }
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+    {
+        *CgsDev::Log::gpDebugPrint << "lfCurrentRelativeEventRatio: " << lfCurrentRelativeEventRatio << "\n";
+    }
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+    {
+        *CgsDev::Log::gpDebugPrint << "lfCurrentEventWins: " << lfCurrentEventWins << "\n";
+    }
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+    {
+        *CgsDev::Log::gpDebugPrint << "lfRoadRageFinalTarget: " << lfRoadRageFinalTarget << "\n";
+    }
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+    {
+        *CgsDev::Log::gpDebugPrint << "******************************\n";
+    }
+
+    return static_cast<u32>(lfRoadRageFinalTarget);   // fctiwz f0,f27 ; stfiwx ; lwz r3
 }
 
 // --------------------------------------------------------------------------------------------

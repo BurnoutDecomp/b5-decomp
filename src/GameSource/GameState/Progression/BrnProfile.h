@@ -452,6 +452,11 @@ public:
     // offset arithmetic; nothing is widened or moved.
     s32  GetTotalTakedownCount() const                  { return miTotalTakedownCount; }
     s32  GetTotalOnlineVerticleTakedownCount() const    { return miTotalOnlineVerticleTakedownCount; }  // sic -- DWARF spelling
+    // ⭐ [road-rage wave, agent C] the writer half of the tally above. X360 inlines it into
+    // GameStateModule::ProcessTakedownEvents @0x8238FF40..0x8238FF50 (`lwz/addi 1/stw 0x19C` off
+    // gsm+48288 == the embedded Profile) for an online VERTICAL takedown. No symbol exists in the
+    // image; de-inlined here beside its reader so no body pokes Profile+412.
+    void IncrementTotalOnlineVerticleTakedownCount()    { ++miTotalOnlineVerticleTakedownCount; }
     // Profile+114. OnTrophyUnlock loads it with `lbz` + `extsb` (a SIGNED byte) for the
     // E_UNLOCKTYPE_NUM_PERCENTAGE_PARALLELPARK_ONLINE trophy.
     s8   GetPowerParkingBetweenOtherPlayersBestRating() const { return mi8PowerParkingBetweenOtherPlayersBestRating; }

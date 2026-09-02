@@ -100,6 +100,15 @@ enum EGameActionType
     // than a shift inference. DWARF 222 + 8, the same shift this enum already records for the
     // freeburn-challenge block and REQUEST_GAME_TRAINING (141 -> 149).
     E_ACTION_ONLINE_ROUND_RESULT        = 230,   // DWARF 222 (+8 X360); size 68
+    // ⭐ [road-rage wave, agent C] two more of the same +8 block, both producer-pinned in
+    // GameStateModule::ProcessTakedownEvents @0x8238FC50:
+    //   `li r5, 0xE4 / li r6, 0x14` @0x8238FF80 -- the network telemetry hook, payload = the
+    //   20-byte BrnNetwork::BrnNetworkModuleIO::TelemetryData (DWARF BrnNetworkSharedIO.h:542);
+    //   `li r5, 0xEE / li r6, 1`    @0x8238FE28 -- "you caught fever" (a takedown on a fevered
+    //   car in an online mode), one uninitialised byte.
+    // DWARF BrnGameActions.h: E_ACTION_SEND_TELEMETRY = 220, E_ACTION_NETWORK_CAUGHT_FEVER = 230.
+    E_ACTION_SEND_TELEMETRY             = 228,   // DWARF 220 (+8 X360); size 20
+    E_ACTION_NETWORK_CAUGHT_FEVER       = 238,   // DWARF 230 (+8 X360); size 1
     // ⛔ VALUE CORRECTION 2026-08-28 (driver-details pause wave) -- was the raw PS3-DWARF value
     // (173), which is not what the X360 posts or consumes. PRODUCER-PINNED AND CONSUMER-PINNED,
     // with the size matching at both ends:
@@ -268,6 +277,10 @@ enum EGameActionType
     //   ProcessGameEvents jump table exactly); this shift is the ACTION enum only.
     // The two were inert until this wave (GameAction<T> is an empty tag and nothing posted through
     // the enum); ProcessStuntElement posts through them now, so a wrong value is a live defect.
+    // X360 HUDMessageLogic::GenerateCriticalDamageMessage @0x82395BA8 (`li r5, 0x34`, size 1).
+    // DecFIGS :57 gives 47 -- the same +5 PS3->X360 shift this enum records for the stunt
+    // element ids below. [verify V2 2026-09-02] NO game-action arm consumes 52 (TranslateGameActionsToGuiEvents @0x823E9CE0 has no case 52; GUI 348 is produced by case 205 only) -- consumer unpinned.
+    E_ACTION_DAMAGE_CRITICAL            = 52,
     E_ACTION_ON_JUMP_START              = 56,    // X360 UpdateJumps @0x8239D460 (`li r5,0x38`, size 24)
     E_ACTION_SHOW_JUMP_NAME             = 57,    // X360 UpdateJumps @0x8239D460 (`li r5,0x39`, size 8)
     E_ACTION_ON_STUNT_ELEMENT_COMPLETE  = 58,    // X360 0x8239D384 (DWARF :63 gives 53 -- PS3 value)
@@ -661,6 +674,31 @@ enum EGameActionType
     E_ACTION_RACE_CAR_REACHED_FINISH                     = 114,  // DWARF 109 (+5 X360); size 8  BAND
     E_ACTION_PLAYER_REACHED_PENULTIMATE_CHECKPOINT       = 115,  // DWARF 110 (+5 X360); size 1  BAND
     E_ACTION_SET_WAYPOINT_DISTANCES_TO_FINISH            = 118,  // DWARF 113 (+5 X360); size 68 BAND
+    // ---- [road-rage scorer, 2026-09-02] the three ids the offline road-rage scoring posts -------
+    // 103: RoadRageModeScoring::IncrementPlayerNumTakedowns @0x823445D0, `li r5,0x67` + `li r6,1`
+    //      @0x82344640..0x82344644, posted the frame miNumTakedownsAchieved reaches the target.
+    //      DWARF :98 E_ACTION_PLAYER_REACHED_ROAD_RAGE_TARGET (+5, the band both neighbours 98->103
+    //      sit in: PAINT_SHOP_DRIVE_THRU is DWARF 93 -> 98 above). The DWARF body hint for the
+    //      producer names the record (`PlayerReachedRoadRageTarget`, .cpp:188), so the name is the
+    //      producer's own, not a band extrapolation.
+    E_ACTION_PLAYER_REACHED_ROAD_RAGE_TARGET             = 103,  // DWARF 98  (+5 X360); size 1  PINNED
+    // 205: ScoringSystem::OnRoadRagePlayerCrashed @0x823444B0, `li r5,0xCD` + `li r6,8`
+    //      @0x823445BC/0x823445B8. DWARF :197 E_ACTION_ROAD_RAGE_PLAYER_DAMAGE (+8, the same +8 the
+    //      whole 200-band takes: UPDATE_PLAYER_MEDALS 192->200, TROPHY_UNLOCK 196->204). The DWARF
+    //      record RoadRagePlayerDamageAction {f32, bool, bool} is exactly the 8 bytes the producer
+    //      writes at record+0/+4/+5.
+    E_ACTION_ROAD_RAGE_PLAYER_DAMAGE                     = 205,  // DWARF 197 (+8 X360); size 8  BAND
+    // 255: RoadRageModeScoring::IncrementPlayerNumTakedowns @0x823445D0, `li r5,0xFF` + `li r6,4`
+    //      @0x823446BC/0x823446B8 AND again @0x823446D4/0x823446D0 (the console posts it twice,
+    //      back to back). DWARF :248 E_ACTION_HUD_MESSAGE_ROAD_RAGE_TIME_EXTENSION. [!] That is a
+    //      +7 shift, which does NOT follow the +8 band at 197 -- the identity is pinned by the DWARF
+    //      PRODUCER BODY instead: the DWARF hint for 0x823445D0 lists
+    //      AddGameAction<HUDMessageRoadRageTimeExtensionAction> exactly twice, matching the two
+    //      AddEvent(255, 4) sites, and that record is one uint32_t muExtensionTime == the 4 bytes
+    //      posted (`lhz r11, 0xA(this)` -> `stw` @0x823446C8). Nothing else in the tree claims 255
+    //      (E_ACTION_MODE_TIME_UP's banner above considered and rejected DWARF 255 for id 262 on the
+    //      same monotone-band argument; the band evidently has a PS3-only entry between 197 and 248).
+    E_ACTION_HUD_MESSAGE_ROAD_RAGE_TIME_EXTENSION        = 255,  // DWARF 248 (+7 X360); size 4  PINNED (producer body)
 };
 
 template <EGameActionType T>
@@ -710,6 +748,16 @@ struct AllowBoostEarningAction : public GameAction<E_ACTION_ALLOW_BOOST_EARNING>
 // DecFIGS names an empty tag record for case 71; ARTIST consumes no payload.
 struct StopBoostingAction : public GameAction<E_ACTION_STOP_BOOSTING>
 {
+};
+
+// DecFIGS BrnGameActions.h:3717. The road-rage "one more crash totals the car" notification.
+// PRODUCER  HUDMessageLogic::GenerateCriticalDamageMessage @0x82395BA8: `li r11, 1` /
+//           `stb r11, var_20(r1)` then AddEvent(&record, 0x34, 1) -- a one-byte record holding
+//           `true` (GameAction<T> is an empty tag, so sizeof == 1 matches `li r6, 1`).
+// CONSUMER  the game-state->GUI bridge (GUI event 348, GuiEventRoadRagePlayerDamage).
+struct DamageCriticalMessageAction : public GameAction<E_ACTION_DAMAGE_CRITICAL>
+{
+    bool mbPlayerCarIsDamageCritical;
 };
 
 // =============================================================================================
@@ -2039,5 +2087,40 @@ static_assert(offsetof(ShowModeResultsAction, maBlock58) == 0x58 &&
               offsetof(ShowModeResultsAction, mu64FieldC8) == 0xC8 &&
               offsetof(ShowModeResultsAction, mbIsOnlinePostEvent) == 0xE4,
               "action-37 offsets are the @0x823EA984 consumer loads");
+
+// ---- 103 / 205 / 255 -- the offline road-rage scoring records [2026-09-02] ---------------------
+// DecFIGS BrnGameActions.h:3680. Empty record: the producer (RoadRageModeScoring::
+// IncrementPlayerNumTakedowns @0x823445D0) posts an uninitialised stack byte with size 1
+// (`li r6,1` @0x82344640) -- exactly what an empty struct is on the wire.
+struct PlayerReachedRoadRageTarget : public GameAction<E_ACTION_PLAYER_REACHED_ROAD_RAGE_TARGET>
+{
+};
+static_assert(sizeof(PlayerReachedRoadRageTarget) == 1,
+              "X360 posts action 103 with size 1");
+
+// DecFIGS BrnGameActions.h:2455-2457. Producer ScoringSystem::OnRoadRagePlayerCrashed @0x823444B0:
+// `stfs f0, record+0` (the clamped crashes/allowance ratio), `stb 1, record+4` when exactly one
+// crash remains, `stb 1, record+5` when none remains; posted with size 8 (`li r6,8` @0x823445B8).
+struct RoadRagePlayerDamageAction : public GameAction<E_ACTION_ROAD_RAGE_PLAYER_DAMAGE>
+{
+    f32  mfHowCloseToTotalled;      // +0x00  current/max + 0.1, clamped to [0,1]
+    bool mbOneMoreCrashToTotalled;  // +0x04
+    bool mbPlayerTotalled;          // +0x05
+                                    // +0x06..+0x07 tail padding; the console never writes them
+};
+static_assert(sizeof(RoadRagePlayerDamageAction) == 8 &&
+              offsetof(RoadRagePlayerDamageAction, mbOneMoreCrashToTotalled) == 4 &&
+              offsetof(RoadRagePlayerDamageAction, mbPlayerTotalled) == 5,
+              "X360 posts action 205 with size 8; flags at +4/+5 (@0x82344508/0x8234450C)");
+
+// DecFIGS BrnGameActions.h:4616. Producer RoadRageModeScoring::IncrementPlayerNumTakedowns
+// @0x823445D0: `lhz r11, 0xA(this)` (muRoadRageExtensionTime) -> `stw r11, record+0`, posted TWICE
+// with size 4 (`li r6,4` @0x823446B8 and @0x823446D0).
+struct HUDMessageRoadRageTimeExtensionAction : public GameAction<E_ACTION_HUD_MESSAGE_ROAD_RAGE_TIME_EXTENSION>
+{
+    u32 muExtensionTime;   // +0x00  seconds granted (without the KU_TAKEDOWN_COVER_TIME cover)
+};
+static_assert(sizeof(HUDMessageRoadRageTimeExtensionAction) == 4,
+              "X360 posts action 255 with size 4");
 }
 }

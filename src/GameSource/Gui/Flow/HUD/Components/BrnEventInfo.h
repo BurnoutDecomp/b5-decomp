@@ -227,6 +227,12 @@ namespace BrnGui
         // X360-only (not in the DWARF method list).
         void SetTakedownsDigitsState();
 
+        // @0x82421758 (DWARF :368) -- set the road-rage takedown text state on
+        // mTextStateAnimatorRRage ("Normal" once current >= target, else "Warning").
+        // ADDITIVE DECLARATION (road-rage wave 2026-09-02): UpdateRoadRage @0x82429A48
+        // calls it by symbol (`bl` @0x82429BF4). Bodied in BrnEventInfo_wRR.cpp.
+        void SetTakedownsTextState();
+
         // @0x82421980 (DWARF :396) -- lerp the field colour KV4_SAFECOLOUR -> KV4_DANGERCOLOUR
         // over the last KF_DANGERTIME_START (10.0f) seconds and apply it.
         void SetTextFieldDangerColour(TextFieldComponentType* lpTextField, f32 lfTimeLeft);

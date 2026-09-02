@@ -3932,7 +3932,10 @@ namespace BrnGame
                         lpcWorldOutput->GetActiveRaceCarOutputInterface(),
                         lpcWorldOutput->GetGameEventQueue(),
                         mGameTimer.GetRate() * mGameTimer.GetScaleCurrent(),
-                        lpcWorldOutput->GetContactSpyInterface());
+                        lpcWorldOutput->GetContactSpyInterface(),
+                        // [road-rage wave 2026-09-02] leg 1 of BridgeWorldToGameState, by the
+                        // same one-feed rule: the race-car crash-event queue the buffer would carry.
+                        lpcWorldOutput->GetVehicleManagerOutputInterface()->GetRaceCarCrashEventQueue());
                     mpWorldUpdateOutputBuffer->UnlockForRead();
                 }
 

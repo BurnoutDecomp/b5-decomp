@@ -464,7 +464,12 @@ namespace BrnGui
     // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :5690, sizeof 12).
     // The opaque placeholder that stood here was DELETED rather than left to shadow it.
     struct GuiReplayStatusEvent : public CgsGui::GuiEvent<524> { u8 maPayload[1548]; };  // id 524 size 1560 (12B GuiEvent header + opaque payload)
-    struct GuiRoadRageScoreUpdate { u8 maData[8]; s32 GetEventType() const { return 426; } };  // id 426 size 8 (raw; size not GuiEvent-shaped)
+    // [road-rage wave 2026-09-02] GuiRoadRageScoreUpdate (id 426) has been RECOVERED and now
+    // lives in BrnGuiEventTypeDefs.h as the real 8-byte RAW record (miCurrentTakedowns /
+    // miTargetTakedowns, DWARF :4862-4863). The opaque `u8 maData[8]` shell that stood here was
+    // DELETED rather than left to shadow it, for the same reason as GuiCrashScoreUpdate above:
+    // GuiCache::RecEvent (its only consumer) cannot include THIS header. sizeof (8) and
+    // GetEventType (426) are unchanged, so CgsGuiModule_AddGuiEvent_Inst.cpp:263 is unaffected.
     struct GuiSetEasyDriveNotAllowedEvent { u8 maData[1]; s32 GetEventType() const { return 96; } };  // id 96 size 1 (raw; size not GuiEvent-shaped)
     // [showtime-score wave 2026-08-29] RECOVERED (was `u8 maData[2]`). DWARF
     // BrnGuiEventTypeDefs.h:4519/:4520 (PS3 GuiEvent<397>; X360 id 402, record 2 bytes --

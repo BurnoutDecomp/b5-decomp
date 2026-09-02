@@ -141,6 +141,9 @@ struct LightTriggerStartData;
 
 namespace BrnNetwork { namespace BrnNetworkModuleIO { struct InGamePlayerStatusInterface; } }
 
+namespace CgsModule { template <typename T> class BaseEventQueue; }          // ProcessPlayerCrashes(queue) overload
+namespace BrnPhysics { namespace Vehicle { struct RaceCarCrashEvent; } }      // (element type; complete in the .cpp)
+
 namespace BrnGameState
 {
 class GameStateModule;
@@ -273,6 +276,14 @@ public:
                          f32                                            lfDelta);
 
     void ProcessPlayerCrashes(const GameStateModuleIO::PostWorldInputBuffer* lpPostWorldInputBuffer);                 // DWARF :160 / X360 0x8231E638
+    // [road-rage wave 2026-09-02, conductor] THE SAME BODY, taking the queue the buffer version
+    // reads (PostWorldInputBuffer +0x10 == the world output's VehicleManagerOutputInterface
+    // +0x3A0 crash queue, copied there by BridgeWorldToGameState leg 1). Nothing on this build
+    // creates a PostWorldInputBuffer (see GameStateModule_gUI_00.cpp's extracted post-world
+    // leg), so the leg hands the world's queue straight in -- "THE ARGUMENTS ARE THE DEVIATION,
+    // NOT THE BODY". The buffer version delegates here. DELETE-WHEN the real post-world pass
+    // (DoUpdate_GameStatePostWorld @0x823E92A8 + the buffer) lands.
+    void ProcessPlayerCrashes(const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue);
     void CheckForOutOfRangeCarsReachingFinish(const GameStateModuleIO::PostWorldInputBuffer* lpPostWorldInputBuffer); // DWARF :164 / X360 0x82340800
 
     // X360 0x82340AB8 (DWARF :735 plus an X360-only THIRD parameter). ASM BEATS DWARF: the X360 body

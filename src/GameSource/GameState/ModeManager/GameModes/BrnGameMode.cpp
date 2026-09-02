@@ -1,4 +1,5 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"
+#include "SharedClasses/DataLists/VehicleListEntry.h"   // VehicleListEntry::GetStrengthStat (CalculateMaxPlayerWrecks)
 
 #include "GameSource/GameState/ModeManager/GameModeStates/BrnGameModeState.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"   // ScoringSystem::GetPlayerNoInputTime / GetPlayerStationaryTime (slot 13)
@@ -489,7 +490,7 @@ void GameMode::SetCurrentState(s32 liState)
 //   strength <= 7  -> 4 wrecks   (medium)
 //   strength  > 7  -> 5 wrecks   (strong)
 //
-// SHAPE NOTE (kept class shape): the committed (gated) PC class declares
+// SHAPE NOTE (RETIRED 2026-09-02, road-rage wave -- the DWARF shape is restored below): the committed (gated) PC class declared
 // CalculateMaxPlayerWrecks() with no parameters; the X360 build takes the
 // const StartGameModeParams* it reads the player car entry from. StartGameModeParams
 // and the vehicle-list-entry / gameplay-data types are out of scope for this TU and
@@ -498,13 +499,23 @@ void GameMode::SetCurrentState(s32 liState)
 // is reproduced exactly; widening the signature later only requires substituting the
 // strength read below.
 // ===========================================================================
-s32 GameMode::CalculateMaxPlayerWrecks()
+s32 GameMode::CalculateMaxPlayerWrecks(const StartGameModeParams* lpStartGameModeParams)
 {
-    // STUB (dropped input): car strength is read from the player car's gameplay data
-    // off the StartGameModeParams* the no-arg shape does not carry. Defaulted to the
-    // weakest bucket until StartGameModeParams is threaded in; the bucketing below is
-    // the faithful X360 logic.
-    const s32 liStrength = 0;
+    // [road-rage wave 2026-09-02] THE PLACEHOLDER IS GONE: the DWARF shape is restored and the
+    // strength read is the console's -- StartGameModeParams +828 (mpPlayerCarVehicleListEntry,
+    // assert BrnGameModeParams.h:992 inside the inlined getter, then BrnGameMode.cpp:414) ->
+    // mGamePlayData +0xB (`lbz 0xB(r30+0x90)` == VehicleListEntry::GetStrengthStat(), +0x9B).
+    // The console also asserts the +144 sub-object pointer (cpp:417) -- always true for an
+    // embedded block; reproduced as the tripwire it is.
+    const BrnResource::VehicleListEntry* lpPlayerCarVehicleListEntry =
+        lpStartGameModeParams->GetPlayerVehicleGamePlayData();
+    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL, "lpPlayerCarVehicleListEntry != NULL");   // cpp:414
+    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL, "lpPlayerCarVehicleListEntryGamePlayData != NULL"); // cpp:417
+    if (lpPlayerCarVehicleListEntry == NULL)
+    {
+        return KI_NUM_WEAKEST_CAR_CRASHES;   // [PC GUARD] assert-is-not-a-guard; console would deref NULL
+    }
+    const s32 liStrength = static_cast<s32>(lpPlayerCarVehicleListEntry->GetStrengthStat());
 
     if (liStrength <= KI_HIGHEST_WEAKEST_CAR_STRENGTH)
     {

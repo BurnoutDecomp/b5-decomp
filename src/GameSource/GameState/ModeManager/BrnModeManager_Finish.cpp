@@ -290,8 +290,14 @@ s32 ModeManager::GetPlayersFinishPosition()
 
         // jumptable case 4 == mode 3. Console: `lwz 0x58F0` (ScoringSystem+0x4B40, the player's
         // road-rage takedowns) vs `lwz 0x58FC` (ScoringSystem+0x4B4C, the target), both inlined.
-        // FLAG: ScoringSystem names the takedown side (GetPlayerModeTakedowns) but not the target,
-        // so the comparison is reached through the named predicate that IS declared for it.
+        // [x] FLAG CLEARED (road-rage wave, agent C): the two offsets ARE the named predicate.
+        // ScoringSystem embeds mRoadRageModeScoring at ss+0x4B40 (BrnScoringSystem.h:727, and the
+        // header's own "+0x4B40 == the player's road-rage takedowns" note), whose member run is
+        // +0 miNumTakedownsAchieved / +4 ...ForNextExtention / +8 s16 / +0xA u16 /
+        // +0xC miTargetNumTakedowns (BrnRoadRageModeScoring.h:112-116). So ss+0x4B40 >= ss+0x4B4C
+        // is exactly RoadRageModeScoring::HasBeatenRoadRageTarget's
+        // `miNumTakedownsAchieved >= miTargetNumTakedowns`, which ScoringSystem::
+        // HasBeatenRoadRageTarget forwards to (BrnScoringSystem_Lookup.cpp:604).
         case GameStateModuleIO::E_MODE_ROAD_RAGE:
             return mScoringSystem.HasBeatenRoadRageTarget() ? KI_FINISH_POSITION_PASSED
                                                             : KI_FINISH_POSITION_FAILED;
@@ -468,32 +474,33 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
         // ---- jumptable case 3: road rage --------------------------------------------------
         case GameStateModuleIO::E_MODE_ROAD_RAGE:
         {
-            // [X] PARKED LEG (one store), header_request filed. Console @0x8234BB90..0x8234BBB0:
+            // ⭐ [road-rage wave, agent C] UN-PARKED (was "PARKED LEG (one store), header_request
+            // filed"). Console @0x8234BB90..0x8234BBB0:
             //     lwz r11, 0x58F0(r31)                       // ss+0x4B40, the FIRST of two reads
             //     r10 = mpProgressionManager(+0x6D5C) + 0x170 + 0x20000 - 0x32FC == Profile+118020
             //     lwz r9, 0(r10) / cmpw / ble / stw r11, 0(r10)
             // i.e. BrnProfile.h's `s32 miHighestNumberOfTakeDownsInRoadRage`, and
             //     if (liTakedowns > that) that = liTakedowns;
-            // The member EXISTS and is at the proven offset, but it sits below BrnProfile.h:563's
-            // `private:` and has no accessor pair. Requested:
-            //     s32  GetHighestNumberOfTakeDownsInRoadRage() const;
-            //     void SetHighestNumberOfTakeDownsInRoadRage(s32 liTakedowns);
-            // Behavioural cost while parked: the profile's road-rage takedown high score never
-            // rises. Nothing on the stunt-race path reads it.
-            // Re-arm as:
-            //     const s32 liTakedowns = mScoringSystem.GetPlayerModeTakedowns();  // ss+0x4B40
-            //     if (liTakedowns > lpProfile->GetHighestNumberOfTakeDownsInRoadRage())
-            //     {
-            //         lpProfile->SetHighestNumberOfTakeDownsInRoadRage(liTakedowns);
-            //     }
-            // [!] FIX ROUND 2026-08-26: that GetPlayerModeTakedowns() call USED TO BE EMITTED here
-            // and its result immediately discarded with `(void)liTakedowns;`. Deleted.
-            // ScoringSystem::GetPlayerModeTakedowns is DECLARE-ONLY tree-wide (declared in
-            // BrnScoringSystem.h, no definition anywhere in src/), so the live call bought an
-            // LNK2019 for a value nothing
-            // consumed. The console's SECOND read of ss+0x4B40, at 0x8234BBB4, is the one the
-            // HasBeatenRoadRageTarget predicate below owns -- no console read is lost by moving this
-            // one into the park with the store it belongs to.
+            // BOTH blockers are gone: the Profile accessor pair the park requested now exists
+            // (BrnProfile.h:646/647), and ss+0x4B40 is reached through the scorer that OWNS it --
+            // ScoringSystem embeds mRoadRageModeScoring at ss+0x4B40 and its +0 member is
+            // miNumTakedownsAchieved (BrnRoadRageModeScoring.h:112), so GetRoadRageScoring()->
+            // GetNumTakedownsAchieved() (declared BrnRoadRageModeScoring.h:76, bodied by the
+            // RoadRageModeScoring TU -- agent B's BrnRoadRageModeScoring.cpp this wave, which
+            // replaces the old LinkStubs file) IS the console's load.
+            // ScoringSystem::GetPlayerModeTakedowns (the declare-only twin of that
+            // read, no definition tree-wide) is deliberately NOT used, for the LNK2019 the
+            // 2026-08-26 fix round already paid for once.
+            // The console's SECOND read of ss+0x4B40, at 0x8234BBB4, is the HasBeatenRoadRageTarget
+            // predicate below; this leg owns the first.
+            {
+                BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
+                const s32 liTakedowns = mScoringSystem.GetRoadRageScoring()->GetNumTakedownsAchieved();
+                if (liTakedowns > lpProfile->GetHighestNumberOfTakeDownsInRoadRage())
+                {
+                    lpProfile->SetHighestNumberOfTakeDownsInRoadRage(liTakedowns);
+                }
+            }
 
             if (mScoringSystem.HasBeatenRoadRageTarget())    // console 0x8234BBB4-0x8234BBC4:
                                                              // ss+0x4B40 >= ss+0x4B4C, inlined

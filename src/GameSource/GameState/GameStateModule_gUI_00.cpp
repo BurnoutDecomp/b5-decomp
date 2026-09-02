@@ -97,7 +97,8 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
                                                       lpActiveRaceCarOutputInterface,
         const CgsModule::VariableEventQueue<1536, 16>* lpWorldGameEventQueue,
         f32                                           lfDelta,
-        const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpyInterface)
+        const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpyInterface,
+        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue)
 {
     // ---- leg 1: refresh the cached active-race-car snapshot ---------------------------------
     // âš ï¸ COPIED BY ASSIGNMENT, NEVER AT THE CONSOLE'S LITERAL 10480 BYTES. 10480 is the X360
@@ -349,6 +350,20 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
             lpModeManager->GetScoringSystem()->GetStuntScorer()->Update(
                 &mLastActiveRaceCarInterface, lfDelta);
         }
+    }
+
+    // ---- [road-rage wave 2026-09-02, conductor] the player-crash scan ---------------------
+    // ModeManager::PostWorldUpdate's LAST call (BrnModeManager_WorldTick.cpp:1138, console
+    // 0x8234B138: `bl ProcessPlayerCrashes` after the OnPlayerInShortCut hook), lifted into this
+    // extracted leg for the same reason as the scorer fork above -- the committed body needs the
+    // PostWorldInputBuffer nothing on this build creates. It recomputes mbPlayerCrashedLastFrame
+    // from the race-car crash-event queue, which is what UpdateCurrentMode's road-rage arm (13)
+    // reads next frame to bank a player wreck (ScoringSystem::OnRoadRagePlayerCrashed). The queue
+    // is the world output's own (VehicleManagerOutputInterface +0x3A0), handed in by the caller.
+    // DELETE-WHEN this block collapses into the real ModeManager::PostWorldUpdate.
+    if (lpRaceCarCrashEventQueue != 0)
+    {
+        GetModeManager()->ProcessPlayerCrashes(lpRaceCarCrashEventQueue);
     }
 
     // ============================================================================
@@ -1038,6 +1053,42 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     ProcessGameEventsStartGameModeBringUp(&mGameEventCarryQueue, mpOutputBuffer);
     ProcessGameEventsModeIntroBringUp(&mGameEventCarryQueue);
     mGameEventCarryQueue.Clear();
+
+    // ---- 1a) THE TAKEDOWN FEED (console: the `if (!IsSimPaused)` block between #68 and #86) --
+    // ⭐⭐⭐ [road-rage wave, agent C] GameStateModule::ProcessTakedownEvents @0x8238FC50. X360
+    // PreWorldUpdate @0x823A5328, after ProcessGameEvents / CarSelectManager / OnlineCarSelect /
+    // ImageManager::PreWorldUpdate and BEFORE EmmPreWorldUpdate (leg 1b below), runs -- under the
+    // IsSimPaused(this,1,0) it computed at the top --
+    //     CrashingRaceCarInterface::SetFromVehicleOutputInterface(...)
+    //     TakedownManager::Update(gsm+568, ...)                           [X] not reconstructed
+    //     *(gsm+249944) = 0;  TakedownEvent_::Append(gsm+249936, lpOutput->GetTakedownEventOutputQueue())
+    //     MugshotManager::Update(...)  /  PaybackManager::Update(...)     [X] not staged (other lanes)
+    // [FLAG PC 2026-09-02, verify V2] THE QUEUE THIS DRAINS IS NEVER FED ON THIS BUILD: the console
+    // producer is TakedownManager::Update @0x8239FAC0 (gsm+568; DetectTakedowns -> ProcessTakedownEvent
+    // @0x82393D40 -> TakedownEventOutputQueue @+0x4040), none of which is reconstructed. A run showing
+    // 0 takedowns is that hole, not this drain. DELETE-WHEN TakedownManager lands.
+    //     ProcessTakedownEvents(this, lpActionQueue, gsm+249936, lpOutput)   <-- THIS CALL
+    // POSITION IS THE CONSOLE'S: it must run after the game-event drain (a takedown's UI/GUI
+    // events are the same frame's) and before the ModeManager tick, which reads the road-rage
+    // counter OnPlayerDoesATakedown just advanced (HasBeatenRoadRageTarget in UpdateCurrentMode).
+    //
+    // [FLAG PC bring-up] THE QUEUE IS THE OUTPUT BUFFER'S OWN, NOT THE MODULE'S COPY. The console
+    // Clear()s its module-owned EventQueue<TakedownEvent,8> at gsm+249936 and Appends the output
+    // buffer's takedown-event output queue into it every frame, then hands the COPY to
+    // ProcessTakedownEvents. This tree does not model gsm+249936, so the source queue is passed
+    // directly -- byte-identical content, one copy fewer. DELETE-WHEN the module queue is
+    // modelled (the Mugshot / Payback legs will need it). The write-lock accessor is the
+    // console's own (`GameStateModuleIO::Out` @0x82362B80 asserts "Not locked for writing", and
+    // this function holds that lock); the cross-home cast is the same one BrnGameModule.cpp:1788
+    // carries for the same forward-declared TakedownEventOutputQueueType, and the target type is
+    // proven by the console's own TakedownEvent_::Append on it.
+    if (!IsSimPaused(true, false))
+    {
+        const CgsModule::EventQueue<TakedownEvent, 8>* lpTakedownEvents =
+            reinterpret_cast<const CgsModule::EventQueue<TakedownEvent, 8>*>(
+                mpOutputBuffer->GetTakedownEventOutputQueue());
+        ProcessTakedownEvents(lpActionQueue, lpTakedownEvents, mpOutputBuffer, lrTimerStatusInterface);
+    }
 
     // ---- 1b) THE MODE MANAGER'S PRE-WORLD TICK (console #86) ---------------------------------
     // â­â­â­ [D4 stuntrace WAVE D] X360 PreWorldUpdate @0x823A5328 reaches ModeManager through ONE

@@ -154,6 +154,11 @@ public:
     u8 GetNumWinsToRankUpRoadRage() const  { return muNumWinsToRankUpRoadRage; }
     u8 GetNumWinsToRankUpMarkedMan() const { return muNumWinsToRankUpMarkedMan; }
 
+    // [road-rage wave 2026-09-02] three accessors RoadRageMode::Start @0x82330678 inlines:
+    f32 GetTrafficDensityRoadRage() const { return mfTrafficDensityRoadRage; } // DWARF :156; Start `lfs f13,0xC(r24)` @0x823307E4
+    u16 GetRoadRageTime() const           { return muRoadRageTime; }           // DWARF :132; Start `lhz r10,0x52(r24)` @0x823309F4
+    u32 GetRoadRageRivalsNumber() const   { return muRoadRageRivalsNumber; }   // DWARF :111; Start `lbz r11,0x5E(r24)` @0x82330938
+
 private:
     // ===========================================================================================
     // THE 112-BYTE SERIALISED RECORD. Pointer-free scalar run -> the console byte offsets hold on

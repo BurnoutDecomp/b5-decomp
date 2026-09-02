@@ -72,10 +72,11 @@
 // id-434 build. NOT reproduced, and each is a real named gap:
 //   * GuiEventRaceDistanceRemaining (239) / GuiEventRaceDistanceToCheckpoint (240)
 //     @0x823EEA04..0x823EEB1C -- the per-car race-position feed.
-//   * two SIBLING arms of the same jpt_823EED94 switch: mode 3 -> GuiRoadRageScoreUpdate
-//     (426), mode 4 -> GuiPursuitScoreUpdate (432). Each needs its own payload reshape AND
-//     its own GuiCache::RecEvent arm (cases 46 / 52 of jpt_825101AC), i.e. its own slice.
-//     CONSEQUENCE: Road Rage / Pursuit still show no mode-specific score.
+//   * ONE remaining SIBLING arm of the same jpt_823EED94 switch: mode 4 ->
+//     GuiPursuitScoreUpdate (432), which needs its own payload reshape AND its own
+//     GuiCache::RecEvent arm (case 52 of jpt_825101AC). CONSEQUENCE: Pursuit still shows no
+//     mode-specific score. (Mode 3 -> GuiRoadRageScoreUpdate (426) LANDED 2026-09-02, road-rage
+//     wave: the arm below, RecEvent case 46, and the id on BrnGuiModule's forward list.)
 //     ⛔⛔ THE ROAD-RAGE ID IN THIS BANNER WAS WRONG UNTIL 2026-08-29: it said 429 (and the
 //     case list said 46/50/52). 429 is the DecFIGS DWARF id of GuiCrashScoreUpdate, not the
 //     X360 id of anything on this switch. AddGuiEvent<GuiRoadRageScoreUpdate> @0x823D0F60
@@ -420,10 +421,37 @@ namespace
                 PushGuiEvent(lAttackScore, lpGuiInput);                           // id 428, 40 bytes
                 break;
             }
+            // ---------------------------------------------------------------------
+            // ⭐⭐ [road-rage wave 2026-09-02] THE ROAD RAGE SCORE PRODUCER.
+            // @0x823EEDD8..0x823EEDF8 -- "jumptable 823EED94 case 1", i.e. the arm for
+            // E_MODE_ROAD_RAGE (3) once the table's `addi r11, r11, -2` bias is undone.
+            //
+            // Two loads, two stores, in the console's own order:
+            //   0x823EEDD8  lwz  r11, 0xA4C(r27)  -> stw  var_25B0    (payload +0x00)
+            //   0x823EEDEC  lwz  r11, 0xA50(r27)  -> stw  var_25B0+4  (payload +0x04)
+            // r27 is the ScoringOutputInterface, so both sources are named members
+            // (BrnGameStateSharedIO.h:1070-1071, published by ScoringSystem::WriteDataToOutput).
+            // Then AddGuiEvent<GuiRoadRageScoreUpdate> @0x823D0F60: `li r6, 8 ; li r5, 0x1AA`
+            // -- id 426, 8 bytes. Consumer: GuiCache::RecEvent jpt_825101AC case 46
+            // (@0x82510888), which stores the pair into miTakedownsCurrent / miTakedownTarget.
+            // ---------------------------------------------------------------------
+            case BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE:          // 3
+            {
+                BrnGui::GuiRoadRageScoreUpdate lRoadRageScore;
+
+                lRoadRageScore.miCurrentTakedowns =                                           // +0x00
+                    lpScoringOutputInterface->miRoadRageNumTakedowns;
+                lRoadRageScore.miTargetTakedowns =                                            // +0x04
+                    lpScoringOutputInterface->miRoadRageTakedownTarget;
+
+                PushGuiEvent(lRoadRageScore, lpGuiInput);                         // id 426, 8 bytes
+                break;
+            }
+
             default:
-                // [FLAG] modes 3 (GuiRoadRageScoreUpdate 426) and 4 (GuiPursuitScoreUpdate
-                // 432) still fall through with nothing posted -- see the SCOPE note in the
-                // file banner. Modes 2/16 no longer do (the showtime arm above).
+                // [FLAG] mode 4 (GuiPursuitScoreUpdate 432, jumptable case 2 @0x823EEDFC) still
+                // falls through with nothing posted -- see the SCOPE note in the file banner.
+                // Modes 2/16 (showtime) and 3 (road rage) no longer do.
                 break;
             }
         }

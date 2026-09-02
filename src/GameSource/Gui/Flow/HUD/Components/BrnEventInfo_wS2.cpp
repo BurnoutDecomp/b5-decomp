@@ -902,7 +902,6 @@ namespace
 void EventInfoComponent::UpdateRace(GuiCache*)         { LogDeferredModeArm("UpdateRace"); }
 void EventInfoComponent::UpdateOnlineRace(GuiCache*)   { LogDeferredModeArm("UpdateOnlineRace"); }
 void EventInfoComponent::UpdateFreeBurnLobby(GuiCache*){ LogDeferredModeArm("UpdateFreeBurnLobby"); }
-void EventInfoComponent::UpdateRoadRage(GuiCache*)     { LogDeferredModeArm("UpdateRoadRage"); }
 void EventInfoComponent::UpdateBurningRoute(GuiCache*) { LogDeferredModeArm("UpdateBurningRoute"); }
 void EventInfoComponent::UpdateSurvivor(GuiCache*)     { LogDeferredModeArm("UpdateSurvivor"); }
 

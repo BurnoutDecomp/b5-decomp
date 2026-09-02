@@ -237,7 +237,10 @@ namespace BrnGui
         // @0x8251D0E8 -- "you were eliminated" with the finish-position string id.
         void HandleEliminatedEvent(const GuiEventCarEliminatedFromEvent* lpEvent) const;
 
-        void HandleRoadRagePlayerDamageEvent(const GuiEventRoadRagePlayerDamage* lpEvent);  // h:296 (not in this fan-out)
+        // h:296 -- NO X360 symbol: the console inlines it into Update @0x82525FC0's case 348
+        // (`if (byte +4) stb 1, 0x3D9`). Bodied as the de-inlined form in
+        // BrnGuiHudMessageAnalyzer_wRR.cpp; the switch keeps the console's inline arm.
+        void HandleRoadRagePlayerDamageEvent(const GuiEventRoadRagePlayerDamage* lpEvent);
 
         // @0x8251D1A0 -- burning-route could-not-start (special car id message).
         void HandleFailedToStartBurningRoute(const GuiEventFailedToStartEvent* lpEvent);
@@ -305,7 +308,10 @@ namespace BrnGui
         void HandleBurningHomeRunCheckpointReached(const GuiBHRCheckpointReachedEvent* lpEvent);  // h:463 (not in this fan-out)
         void HandleRaceCheckpointReached(const GuiRaceCheckpointReached* lpEvent);                // h:468 (not in this fan-out)
         void HandleBurningHomeRunRunnerCrashes(const GuiHUDMessageBHRRunnerCrashed* lpEvent);     // h:473 (not in this fan-out)
-        void HandleRoadRageTargetReached(const GuiEventPlayerReachedRoadRageTarget* lpEvent);     // h:478 (not in this fan-out)
+        // h:478 -- NO X360 symbol: the console inlines it into Update @0x82525FC0's case 168
+        // (`stb 1, 0x3DA`). Bodied as the de-inlined form in BrnGuiHudMessageAnalyzer_wRR.cpp;
+        // the switch keeps the console's inline arm.
+        void HandleRoadRageTargetReached(const GuiEventPlayerReachedRoadRageTarget* lpEvent);
 
         // @0x8251B608 -- skill/stunt chatter off the stunt snapshot's flag masks.
         void HandleStuntPerformed(const GuiHUDMessageStuntPerformed* lpEvent);
