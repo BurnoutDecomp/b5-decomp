@@ -4582,6 +4582,23 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // and every pass no-ops.
     if (lbDispatchReady)
     {
+        // ==========================================================================================
+        // ParticleModule::BuildLionVertexBuffers @0x8228AC20 -- and, inlined at its head,
+        // TrailSystem::Update. CONSOLE POSITION: Render @0x8240BFA8 :453-454, under the same gate
+        // as the full-res pass below and BEFORE any scene geometry. It publishes this frame's time
+        // and VIEW-PROJECTION into the trail renderer -- the matrix TrailSystem::Render transforms
+        // its strips by. Without it the tyre marks are transformed by a matrix nobody wrote.
+        // Same null test, same DELETE-WHEN, as the full-res pass -- see its banner.
+        if (mbRenderParticles && lpDispatchThreadInputBuffer != 0)
+        {
+            const BrnParticle::ParticleModule::ParticleRenderData* lpPreRenderData =
+                lpDispatchThreadInputBuffer->GetParticleRenderData();
+            if (lpPreRenderData != 0 && lpPreRenderData->mpParticleModule != 0)
+            {
+                lpPreRenderData->mpParticleModule->BuildLionVertexBuffers(lpPreRenderData);
+            }
+        }
+
         RenderWorldPasses(lpDispatchThreadInputBuffer, &lDispatchContext);
 
         // ==========================================================================================

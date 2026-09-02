@@ -1958,8 +1958,17 @@ namespace BrnGame
         // @0x823DD1BC/D4 -- the game-state action queue, appended (NOT replaced).
         if (lpGameStateOutputBuffer != 0)
         {
+            // ⚠ THE CONST OVERLOAD, DELIBERATELY. MEASURED (runs 4-6, 2026-09-02): the
+            // non-const GetGameActionQueue @0x8231D4B8 asserts "Not locked for writing" and
+            // this buffer is read-locked three lines up -- 15,333 firings in one boot, which
+            // by themselves slowed the boot roughly four-fold (13.6s -> 53s to the new-profile
+            // mark) and left the flow parked at CARSELECT. The console calls the READ-lock
+            // accessor here (sub_823B96F0, BrnGameStateModuleIO.h:265): this leg only COPIES
+            // the queue out of the game-state output buffer.
+            const BrnGameState::GameStateModuleIO::OutputBuffer* lpcGameStateOutputBuffer =
+                lpGameStateOutputBuffer;
             lpEffectsInputBuffer->GetGameActionQueue()->Append<13312, 16>(
-                *lpGameStateOutputBuffer->GetGameActionQueue());
+                *lpcGameStateOutputBuffer->GetGameActionQueue());
         }
 
         // @0x823DD1D8/E8 -- the replay status interface.
