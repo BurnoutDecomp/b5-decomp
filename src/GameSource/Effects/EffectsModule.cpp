@@ -690,7 +690,34 @@ void EffectsModule::PostWorldPreparePrepare()
     // It also silently disabled the loop below: Num_Surfaces() == 0 means
     // TrailSystem::UpdateTrailType never ran for any surface, so even a segment that HAD been
     // laid would have drawn with the trail types' construct-time colours.
-    mSurfaceList.ChangeWithDefault(Attrib::StringToKey(KAC_WORLD_SURFACELIST_COLLECTION));
+    Attrib::Collection* const lpSurfaceCollection =
+        mSurfaceList.ChangeWithDefault(Attrib::StringToKey(KAC_WORLD_SURFACELIST_COLLECTION));
+
+    // ⚠ FLAG PC bring-up, and it is an ASSET/LOADER gap, not an effects one. MEASURED (run 17):
+    // with the key above and this function finally called, the boot took an access violation
+    //     Attrib::Instance::GetClass + 0x11
+    //     BrnEffects::EffectsModule::PostWorldPreparePrepare + 0x22F
+    //     LoadingScriptedState::Update -> MainGameFlowStateCompleteLoading::Update
+    // -- FindCollectionWithDefault(surfacelist class, StringToKey("340654")) resolved to
+    // NOTHING on this build, so Change() left the instance with no collection and the very next
+    // Num_Surfaces() walked a null class. The console cannot reach this: the world's surfacelist
+    // collection is loaded by the time the collision prepare reports done.
+    //
+    // Announced and stepped over rather than reverted, because the wiring above is right and the
+    // measurement is the useful part: the surface list stays empty (Num_Surfaces() == 0), so
+    // HandleWheels keeps taking Attrib::DefaultDataArea's zeros and no tyre mark can be laid --
+    // but the boot survives to say so instead of dying inside AttribSys.
+    // DELETE-WHEN the world's "340654" surfacelist collection is actually loaded on this build.
+    if (lpSurfaceCollection == 0)
+    {
+        static bool sbLogged = false;
+        LogNotReconstructed(sbLogged,
+            "the world's surfacelist COLLECTION -- Attrib::FindCollectionWithDefault(surfacelist, "
+            "StringToKey(\"340654\")) resolves to nothing on this build, so mSurfaceList has no "
+            "collection. Num_Surfaces() stays 0, every HandleWheels surface lookup falls back to "
+            "Attrib::DefaultDataArea's zeros, and NO TYRE MARK CAN BE LAID. ASSET/LOADER gap");
+        return;
+    }
 
     {
         // Surface element 1's leading 4-vector must carry a magnitude: |lane| > epsilon in
