@@ -2953,14 +2953,6 @@ namespace Vehicle
     void VehiclePhysics::MaintainDriftSpeed(const BrnPlayerDriverControls* lpControls,
                                              Vector3 lvDirection, VecFloat lvfSpeed)
     {
-        // gate 1: the maintain-speed flag bit (mDriftFlags & 1).
-        if (!mDriftFlags.DoMaintainSpeed())
-        {
-            // the asm's LABEL_16 still stores the current speed into the MaintainedSpeed lane (.y).
-            mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.y = mfSpeedMPH.x;
-            return;
-        }
-
         // ⭐ R3 (deform-land wave 2026-08-24, blindfns audit leg 5) -- three divergences + a
         // micro fixed against the asm @0x825D2270:
         //   D1 the console BAILS when the handbrake is held (0x1358) -- the gate was missing;
@@ -2969,20 +2961,32 @@ namespace Vehicle
         //   D3 the velocity-direction term is gated on |speedParam| > FLT_EPSILON (skipped at
         //      standstill) -- the old unconditional Normalize was a NaN risk;
         //   micro: the console proceeds on maintained >= speed (the old body used strict >).
-        if (mbHandBrake)
-        {
-            return;   // D1 -- the console's 0x1358 bail
-        }
-
-        // gate 2: MaintainedSpeed (.y) must be at least the current frame speed.
+        //
+        // ⛔ D5 (drift-symmetry wave 2026-09-02, raw words 0x825D2270..0x825D25A0): EVERY failing
+        // gate -- the maintain flag (0x825D22A4), speed > MaintainedSpeed (0x825D22CC), no traction
+        // (0x825D22D8), gas < 0.3 (0x825D22EC), handbrake (0x825D22F8), invalid ground (0x825D2304)
+        // -- branches to loc_825D2578, which stores the SPEED PARAMETER (v2, m/s) into the
+        // MaintainedSpeed lane: `lvx128 v0,+0x1000 ; vrlimi128 v0, v2, 4, 0 ; stvx128` (lane .y).
+        // Only the success path skips it (`b loc_825D2588` at 0x825D2574). The old body stored on
+        // the flag gate ALONE, and stored mfSpeedMPH.x there -- MPH into a lane EnterDrift seeds
+        // with CheckForEnteringDrift's lfSpeedMPS (m/s). So a drift that lost gas or traction for a
+        // moment kept pushing back toward the ENTRY speed instead of re-basing to the current one.
         const f32 lfMaintained = mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.y;
         const f32 lfSpeed      = lvfSpeed.x;
-        if (lfMaintained >= lfSpeed)   // micro: >= per the asm
+        const f32 lfThrottle   = (lpControls != NULL) ? lpControls->mfGas : 0.0f;   // lfs f13,4(r4)
+        const bool lbMaintain  = mDriftFlags.DoMaintainSpeed()          // 0x825D229C flags & 1
+                              && !(lfSpeed > lfMaintained)              // 0x825D22BC vcmpgtfp. v2, .y
+                              && mbAllWheelsHaveTraction                // 0x825D22D0 +0x135B
+                              && !(lfThrottle < 0.30000001f)            // 0x825D22E8 flt_82004740
+                              && !mbHandBrake                           // 0x825D22F0 +0x1358
+                              && mAboveGroundTestResult.mbValid;        // 0x825D22FC +0x598
+        if (!lbMaintain)
         {
-            // gate 3: throttle >= 0.3 (*(controls+4) = mfGas) AND grounded AND not airborne AND
-            //         mAboveGroundTestResult.mbValid.
-            const f32 lfThrottle = lpControls ? lpControls->mfGas : 0.0f;
-            if (mbAllWheelsHaveTraction && lfThrottle >= 0.30000001f && mAboveGroundTestResult.mbValid)
+            mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.y = lfSpeed;   // loc_825D2578
+            return;
+        }
+
+        {
             {
                 // deficit-scaled impulse direction = blend of body Z (forward) and velocity, weighted by
                 // mvPropSpeedMaintainAlongZ (.x) / mvPropSpeedMaintainAlongVel (.y). The deficit =
