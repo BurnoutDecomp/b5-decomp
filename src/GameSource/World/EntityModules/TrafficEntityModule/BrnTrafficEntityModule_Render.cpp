@@ -69,6 +69,11 @@
 // the CgsShaderConstants TU). Same extern the sibling render TUs carry.
 namespace CgsGraphics { extern ::ShaderConstantTable mShaderConstantTable; }
 
+// [DIAG] the renderer's present counter -- BRN_FRAME_DUMP names its BMPs bb_<guPresentCount>.bmp,
+// so a [tdef-upload] line stamped with it names the very frame file its upload is drawn in.
+// NOT X360. Same extern BrnUpdateVehiclesJob.cpp carries.
+namespace renderengine { extern u32 guPresentCount; }
+
 // dword_82CDB4A0 -- "Graphics/Vehicles.../Wheels to Render", shipped value 4. It is
 // DELIBERATELY NON-STATIC in BrnRaceCarEntityModule_Render.cpp because THIS function shares
 // it (the console re-reads it at pseudocode :2218 and :2798), so it is declared, not
@@ -755,7 +760,8 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
                     ++sluLines;
                     sfLastSum = lfSum;
                     *CgsDev::Log::gpDebugPrint
-                        << "[tdef-upload] veh " << luEntityIdx
+                        << "[tdef-upload] frame=" << static_cast< s32 >( renderengine::guPresentCount )
+                        << " veh " << luEntityIdx
                         << " technique " << ( lbShadowPass ? 3 : 0 )
                         << " budget " << *lpiUpdatedNumDamagedVehiclesRendered
                         << " maxVerlet " << lfMax

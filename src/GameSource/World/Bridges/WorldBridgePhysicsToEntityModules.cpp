@@ -179,27 +179,21 @@ namespace WorldModule
         lpTrafficInputBuffer_PostPhysics->SetVehicleManagerOutputInterface(
             lpPhysicsModuleOutputBuffer->GetVehicleManagerOutputInterface());
 
+        // Leg 3 -- the deformation output for entity modules (skin offsets / wheel states /
+        // locators / detached-part + glass events): GetDeformationOutputInterfaceForEntityModules
+        // @0x8279F790 -> SetDeformationOutputInterfaceForEntityModules @0x827AA0B8, at the console's
+        // position between legs 2 and 4 (0x827AB910 pseudocode). ⭐ LIVE 2026-09-02
+        // (traffic-deformation wave). The gate that stood here had EXPIRED: its blocker -- the
+        // OutputBuffer seat being 1-byte opaque storage -- was retired on 2026-08-24 when the
+        // race-car sibling's leg 3 went live one function up, and nobody came back for this
+        // one. MEASURED: run tdef_r1 -- traffic sensors took 519 impulses ([impulse] owner 2)
+        // while ProcessDeformationData saw ZERO traffic skin entries, because the traffic
+        // module's copy of the interface was never written.
+        lpTrafficInputBuffer_PostPhysics->SetDeformationOutputInterfaceForEntityModules(
+            lpPhysicsModuleOutputBuffer->GetDeformationOutputInterfaceForEntityModules());
+
         // Leg 4 -- the contact-spy handle (read-locked const twin @0x8279F8E0).
         lpTrafficInputBuffer_PostPhysics->SetContactSpyInterface(
             lpPhysicsModuleOutputBuffer->GetContactSpyInterface());
-
-        // GATE leg 3 GetDeformationOutputInterfaceForEntityModules @0x8279F790 -> Set... @0x827AA0B8.
-        // BLOCKER: PhysicsModuleIO::OutputBuffer models that seat as 1-byte opaque storage
-        // (BrnPhysicsModuleIO.h:114) while the traffic setter takes the real
-        // BrnPhysics::Deformation::DeformationOutputInterfaceForEntityModules; bridging today is a
-        // 1-byte-onto-multi-KB copy. Same blocker as the race-car sibling's leg 3.
-        // DELETE-WHEN that seat is promoted to its real type.
-        {
-            static bool sbLoggedDeformationPark = false;
-            if (!sbLoggedDeformationPark && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbLoggedDeformationPark = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[FLAG PC bring-up] BridgePhysicsModuleToTrafficModule_PostPhysics: legs 1/2/4 LIVE; "
-                       "leg 3 (deformation-for-entity-modules @0x8279F790) parked -- "
-                       "PhysicsModuleIO::OutputBuffer still models that seat as 1-byte opaque "
-                       "storage [FLAG PC partial gate]\n";
-            }
-        }
     }
 }
