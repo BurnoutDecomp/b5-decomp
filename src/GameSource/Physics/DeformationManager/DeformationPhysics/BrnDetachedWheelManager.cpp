@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint / gxMessageFilterFlags (walls leg 4 gates)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "rw/math/vpu/matrix44affine_operation.h"    // rw::math::vpu::IsOrthogonal3x3 / IsNormal3x3 (DetachWheel's :95/:96 tripwires)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"   // InSceneUpdateInterface::UpdateCachedObjectPosition (the real tri-cache producer)
 
 #include <cmath>   // std::sqrt (the vrsqrtefp velocity-magnitude refinement converges to this)
@@ -141,6 +142,68 @@ namespace Deformation
         // Clear the slot's used bit (the :241 "luIndex < NUMBITS" tripwire fires inline, non-gating).
         CGS_ASSERT(static_cast<u32>(liSlot) < KI_MAX_DETACHED_WHEELS, "luIndex < NUMBITS");
         mUsedWheels.UnSetBit(static_cast<u32>(liSlot));
+    }
+
+    // ============================================================================================
+    // DetachWheel @ 0x8260E430 (369 insns) -- bodied 2026-09-02 (deform close-out wave), the
+    // detach arm of DeformableObject::UpdateWheels @0x826254C0. X360 flow, store for store:
+    //   r3 this, r4 simIn, r5 = the 8-byte handling RigidBodyId (one `ld` at the call site,
+    //   0x826264B4), r6 = deformable index (lhz 0x66B2), r7 = wheel index, f1 = half-height,
+    //   f2 = radius, r10 = &lRenderTransform, stack = &lVehicleTransform, v1/v2 = velocities.
+    //
+    //   assert IsOrthogonal3x3(lVehicleTransform, 0.01)  (:95, message = the matrix, sub_821F0FC0)
+    //   assert IsNormal3x3(lVehicleTransform, 0.01)      (:96, message = the matrix)
+    //   liSlot = mUsedWheels.GetFirstZeroBit()           (:99, inlined -- see CgsBitArray.h)
+    //   if (liSlot >= 20 /*0x8260E7A0 cmplwi 0x14*/): debug print "Run out of space for
+    //       detached wheels\n" (gxMessageFilterFlags & 1) and return
+    //   assert !mUsedWheels.IsBitSet(liSlot)             (:103)
+    //   lBodyId.Set(entity word = high dword of the handling id (srdi 32), partIndex = wheel
+    //       index (clrlwi 16 of the r7 spill), subA = deformable index (r14), subB = liSlot)
+    //       -- 0x8260E8A0..0x8260E8C0
+    //   maWheels[liSlot] (144*slot): PhysicalWheel::Prepare INLINED at 0x8260E8FC..0x8260E930:
+    //       +0x70 id (std), +0x00..+0x30 lRenderTransform (four lvx128/stvx128 off r19),
+    //       +0x78 half-height (f30 = f1), +0x7C radius (f29 = f2), +0x80/+0x81 = 0 (mbFrozen,
+    //       mbAddedToScene), +0x60 mLinearVelocity = zero (stvx128 v0(zero), r31, r6(0x60))
+    //   maWheelOwnerType[liSlot] = entity word >> 24   (stwx r5, (slot+0x2D0)*4, this)
+    //   mUsedWheels.SetBit(liSlot)                        (the 64-bit `or` on +0xB90)
+    //   maWheels[liSlot].AddToSim(simIn, lVehicleTransform, v1, v2)   (0x8260E9F0)
+    // The DWARF prototype (BrnDetachedWheelManager.cpp:93) takes both matrices by const&; the
+    // frozen header here passes them by value -- same bytes, kept as declared.
+    // ============================================================================================
+    void DetachedWheelManager::DetachWheel(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
+                                           RigidBodyId lHandlingBodyId, u16 lu16DeformableIndex, s32 liWheelIndex,
+                                           f32 lfHalfHeight, f32 lfRadius,
+                                           Matrix44Affine lRenderTransform, Matrix44Affine lVehicleTransform,
+                                           Vector3 lInitialLinearVelocity, Vector3 lInitialAngularVelocity)
+    {
+        CGS_ASSERT(rw::math::vpu::IsOrthogonal3x3(lVehicleTransform, 0.01f),
+                   "IsOrthogonal3x3( lVehicleTransform, 0.01f )");   // :95 (message = the matrix)
+        CGS_ASSERT(rw::math::vpu::IsNormal3x3(lVehicleTransform, 0.01f),
+                   "IsNormal3x3( lVehicleTransform, 0.01f )");       // :96 (message = the matrix)
+
+        const s32 liSlot = mUsedWheels.GetFirstZeroBit();   // :99
+        if (liSlot < 0 || liSlot >= KI_MAX_DETACHED_WHEELS)
+        {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "Run out of space for detached wheels\n";
+            return;
+        }
+        CGS_ASSERT(!mUsedWheels.IsBitSet(static_cast<u32>(liSlot)), "!mUsedWheels.IsBitSet(liSlot)");   // :103
+
+        // :106 -- the packed wheel id. The owning-vehicle word is the entity half of the handling
+        // id (its HIGH dword -- `srdi r11, r15, 32 ; clrlwi r31, r11, 0`).
+        const u32 luVehicleEntityWord = static_cast<u32>(static_cast<u64>(lHandlingBodyId) >> 32);
+        BurnoutWheelBodyID lBodyId;
+        lBodyId.Set(luVehicleEntityWord, static_cast<u16>(liWheelIndex), lu16DeformableIndex,
+                    static_cast<u16>(liSlot));
+
+        PhysicalWheel& lrWheel = maWheels[liSlot];
+        lrWheel.Prepare(lBodyId, lfRadius, lfHalfHeight, lRenderTransform);
+
+        maWheelOwnerType[liSlot] = static_cast<BrnWorld::EEntityTypeID>(luVehicleEntityWord >> 24);   // +0xB40
+        mUsedWheels.SetBit(static_cast<u32>(liSlot));                                                 // +0xB90
+
+        lrWheel.AddToSim(lpSimInput, lVehicleTransform, lInitialLinearVelocity, lInitialAngularVelocity);
     }
 
     // ============================================================================================

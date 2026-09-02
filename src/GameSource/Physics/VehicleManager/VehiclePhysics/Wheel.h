@@ -156,6 +156,26 @@ namespace Vehicle
         // Wheel.cpp. DWARF Wheel.h:372 spells it SetPosition(Vector3).
         void SetPosition(Vector3 lNewPos);
 
+        // ----- console-inline wheel-state API (DWARF Wheel.h:463-487; no X360 emission) -----
+        // Attested by DeformableObject::UpdateWheels @0x826254C0, which inlines every one of
+        // these on the wheel record: `lbz 0xD7` state reads (== 2 skips a detached wheel,
+        // == 1 selects the twisting arm), `stb 1,0xD7` + `vrlimi128 <+0x30>, zero, 8` (Twist:
+        // state 1 and the x lane of mIntegrationVariables -- the spin rate -- zeroed),
+        // `stb 2,0xD7` (Detach), `vrlimi128 <+0x90>, amount, 1` (SetTwistAmount: the w lane of
+        // mStreamedPositionPlusTwistAmount), and the +0x80 read behind the "Invalid wheel
+        // position: ... please tell Graham D." tripwire (GetPosition, DWARF Wheel.h:412).
+        // State values: 0 attached, 1 being twisted, 2 detached -- the same 2 every
+        // `mu8State == 2` consumer in VehiclePhysics.cpp already tests.
+        const Vector3& GetPosition() const { return mPosition; }
+        bool IsAttached() const     { return mu8State == 0; }
+        bool IsBeingTwisted() const { return mu8State == 1; }
+        bool IsDetached() const     { return mu8State == 2; }
+        void Attach()               { mu8State = 0; }
+        void Twist()                { mu8State = 1; mIntegrationVariables.x = 0.0f; }
+        void Detach()               { mu8State = 2; }
+        void SetTwistAmount(f32 lfAmount) { mStreamedPositionPlusTwistAmount.w = lfAmount; }
+        f32  GetTwistAmount() const       { return mStreamedPositionPlusTwistAmount.w; }
+
         // @0x825D6C08: stamp this frame's road-contact result (on-ground / close-to-ground flags,
         // position, normal, two collision-tag halfwords, line distance) and derive mbHasTraction
         // from the contact normal's up component vs a 0.5 threshold. Bodied in Wheel.cpp.

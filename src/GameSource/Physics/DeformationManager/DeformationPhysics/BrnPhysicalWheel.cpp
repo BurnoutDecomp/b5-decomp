@@ -6,6 +6,9 @@
 #include "rw/rwcore_structs.h"                              // rw::Resource (the Initialize slot record)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsCylinder.h"   // CgsGeometric::Cylinder (GetCylinder out-param)
 #include "rw/physics/rigidbody.h"                           // rw::physics::ACTIVE_BODY (AddForCollision's body state)
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"    // InputBuffer::GetAddRigidBodyQueue (AddToSim)
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"   // InAddRigidBody / NewRigidBody (AddToSim)
+#include "rw/physics/inertia.h"                                             // rw::physics::Inertia setters (AddToSim)
 
 // ============================================================================
 // BrnPhysics::Deformation::PhysicalWheel -- per-frame body for the lean detached-wheel
@@ -415,6 +418,107 @@ namespace Deformation
         lCylinderTransform.wAxis   =  mRenderTransform.wAxis;     // row 3 <- render row 3
 
         lCylinderOut.Set(lCylinderTransform, mfRadius, mfHalfHeight);
+    }
+
+    // ==============================================================================================
+    // Prepare (DWARF BrnPhysicalWheel.h:132 / .cpp) -- no standalone X360 emission: the console
+    // inlines it into DetachedWheelManager::DetachWheel @0x8260E8FC..0x8260E930, seven stores on
+    // the 144-byte record:
+    //   std   r7,  0x70(wheel)      mWheelBodyId       (the packed id Set just built)
+    //   stvx128 x4 0x00..0x30       mRenderTransform   (the four rows off the lRenderTransform ptr)
+    //   stfs  f30, 0x78(wheel)      mfHalfHeight       (f30 == f1 == lfHalfHeight)
+    //   stfs  f29, 0x7C(wheel)      mfRadius           (f29 == f2 == lfRadius)
+    //   stb   0,   0x80 / 0x81      mbFrozen / mbAddedToScene
+    //   stvx128 zero, 0x60(wheel)   mLinearVelocity
+    // mComOffset (+0x40) and mBoundingBoxDimensions (+0x50) are NOT written here.
+    // ==============================================================================================
+    void PhysicalWheel::Prepare(BurnoutWheelBodyID lWheelBodyId, f32 lfRadius, f32 lfHalfHeight,
+                                Matrix44Affine lRenderTransform)
+    {
+        mWheelBodyId     = lWheelBodyId;
+        mRenderTransform = lRenderTransform;
+        mfHalfHeight     = lfHalfHeight;
+        mfRadius         = lfRadius;
+        mbFrozen         = false;
+        mbAddedToScene   = false;
+        mLinearVelocity  = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+    }
+
+    // ==============================================================================================
+    // File-scope constants of BrnPhysicalWheel.cpp (DWARF :116-:119, names verbatim). All four are
+    // .bss dyn-init splats on the X360 (unk_82FB9610 / unk_82FB9640 / unk_82FB9510 / unk_82FB9710
+    // read 0 in the image BY DEFINITION); their thunks are export holes, lifted from the raw image:
+    //   0x82C5DDF0  lfs flt_82004A20 -> unk_82FB9610   0x41200000 = 10.0        kvfMass
+    //   0x82C5DE18  lfs flt_82094724 -> unk_82FB9640   0x3DAAAAAB = 1/12        kvfOneOverTwelve
+    //   0x82C5DE40  lfs flt_8208F834 -> unk_82FB9510   0x3E800000 = 0.25        kvfOneOverFour
+    //   0x82C5DE68  lfs flt_82020A90 -> unk_82FB9710   0x3F7AE148 = 0.98        kvfInnerRadiusProportion
+    // ==============================================================================================
+    static const VecFloat kvfMass                  = { 10.0f, 10.0f, 10.0f, 10.0f };                              // :116
+    static const VecFloat kvfOneOverTwelve         = { 0.0833333358f, 0.0833333358f, 0.0833333358f, 0.0833333358f }; // :117
+    static const VecFloat kvfOneOverFour           = { 0.25f, 0.25f, 0.25f, 0.25f };                              // :118
+    static const VecFloat kvfInnerRadiusProportion = { 0.98f, 0.98f, 0.98f, 0.98f };                              // :119
+
+    // ==============================================================================================
+    // AddToSim @ 0x8260C7B8 (156 insns) -- bodied 2026-09-02 (deform close-out wave). Register the
+    // detached wheel as a free rigid body: a HOLLOW cylinder (tube) about the car's x axis, inner
+    // radius = kvfInnerRadiusProportion * mfRadius. X360, store for store (event at r1+0x90):
+    //   lvfOuterRadiusSquared = r*r                     (lfs 0x7C ; fmuls)
+    //   lvfInnerRadius        = kvfInnerRadiusProportion * splat(r)      (vmulfp128 v11)
+    //   lvfInnerRadiusSquared + outer: vmaddfp v10 = v11*v11 + v8(r*r)   (radii sum, "A")
+    //   lvfHeightSquared      = (2*hh) * (2*hh)          (vcfsx(2) twice, vmulfp128)
+    //   axial      I_x  = (0.5 * kvfMass) * A                            (v12)
+    //   transverse I_yz = (kvfOneOverTwelve*kvfMass)*h^2 + (kvfOneOverFour*kvfMass)*A   (v13)
+    //     == the tube formulas 1/2 m (r1^2+r2^2) and 1/12 m (3(r1^2+r2^2) + h^2)
+    //   +0x70 inverse inertia = (1/I_x, 1/I_yz, 1/I_yz, 0)   (vrefp + two Newton steps per lane,
+    //     assembled by vrlimi128 8 / 4 / 2 into the {r,0,0,0} scratch -> exact reciprocals here)
+    //   +0x84 spherical = 1 / min(the three inverse lanes)   (two fcmpu/fmr picks, fdivs 1.0/min)
+    //     -- Inertia::SetInverseInertia maintains exactly that (see inertia.h), so one call
+    //   +0x00 mID        = mWheelBodyId (ld 0x70)
+    //   +0x10..+0x40     = mRenderTransform (lvx128 this+0/0x10/0x20/0x30) -- NOT the matrix
+    //                      argument: lVehicleTransform is never read by the body (dead param)
+    //   +0x50 / +0x60    = v1 / v2 (the two velocity args)
+    //   +0x80 inv mass   = flt_82004014 = 0.1     (mass 10 == kvfMass)
+    //   +0x88 / +0x8C    = flt_82092BC4 = 60.0 max linear, flt_82004A20 = 10.0 max angular
+    //   +0x90 / +0x94    = flt_82013F90 = 0.001 linear + angular drag
+    //   +0xA0 spy        = 1 ; +0xB0 state = 4 (ACTIVE_BODY)
+    //   GetAddRigidBodyQueue(simIn)->AddEvent(&event)   (0x8260CA0C / 0x8260CA14)
+    // ==============================================================================================
+    void PhysicalWheel::AddToSim(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput, Matrix44Affine lVehicleTransform,
+                                 Vector3 lLinearVelocity, Vector3 lAngularVelocity)
+    {
+        (void)lVehicleTransform;   // dead on the console: the body reads mRenderTransform (this+0..0x30)
+
+        CgsPhysics::PhysicsSimulationIO::InAddRigidBody lAddRigidBodyEvent;   // :126
+
+        const f32 lfOuterRadiusSquared = mfRadius * mfRadius;                                   // :128
+        const f32 lfInnerRadius        = kvfInnerRadiusProportion.x * mfRadius;                 // :129
+        const f32 lfInnerRadiusSquared = lfInnerRadius * lfInnerRadius;                         // :130
+        const f32 lfHeight             = 2.0f * mfHalfHeight;
+        const f32 lfHeightSquared      = lfHeight * lfHeight;                                   // :127
+        const f32 lfRadiiSquaredSum    = lfInnerRadiusSquared + lfOuterRadiusSquared;           // vmaddfp v10
+
+        const f32 lfAxialInertia      = (0.5f * kvfMass.x) * lfRadiiSquaredSum;                 // v12
+        const f32 lfTransverseInertia = (kvfOneOverTwelve.x * kvfMass.x) * lfHeightSquared
+                                      + (kvfOneOverFour.x   * kvfMass.x) * lfRadiiSquaredSum;   // v13
+
+        // The three vrefp + Newton reciprocals, converged (see inertia.h precedent).
+        const Vector3 lInverseInertia = { 1.0f / lfAxialInertia, 1.0f / lfTransverseInertia,
+                                          1.0f / lfTransverseInertia, 0.0f };
+
+        lAddRigidBodyEvent.mID = GetVolumeInstanceId().muId;                 // ld 0x70 -> +0x00 (the packed id IS the rigid-body id)
+        lAddRigidBodyEvent.mRigidBody.mTransform       = mRenderTransform;   // +0x10..+0x40
+        lAddRigidBodyEvent.mRigidBody.mVelocity        = lLinearVelocity;    // +0x50 (v1)
+        lAddRigidBodyEvent.mRigidBody.mAngularVelocity = lAngularVelocity;   // +0x60 (v2)
+        lAddRigidBodyEvent.mRigidBody.mInertia.SetInverseInertia(lInverseInertia);   // +0x70 (+ the +0x84 spherical)
+        lAddRigidBodyEvent.mRigidBody.mInertia.SetInverseMass(0.1f);                 // +0x80  flt_82004014
+        lAddRigidBodyEvent.mRigidBody.mInertia.SetMaxLinearVelocity(60.0f);          // +0x88  flt_82092BC4
+        lAddRigidBodyEvent.mRigidBody.mInertia.SetMaxAngularVelocity(10.0f);         // +0x8C  flt_82004A20
+        lAddRigidBodyEvent.mRigidBody.mInertia.SetLinearDrag(0.001f);                // +0x90  flt_82013F90
+        lAddRigidBodyEvent.mRigidBody.mInertia.SetAngularDrag(0.001f);               // +0x94  flt_82013F90
+        lAddRigidBodyEvent.mRigidBody.mbSpy = true;                                   // +0xA0  stb 1
+        lAddRigidBodyEvent.meState = rw::physics::ACTIVE_BODY;                        // +0xB0  li 4
+
+        lpSimInput->GetAddRigidBodyQueue()->AddEvent(lAddRigidBodyEvent);
     }
 
 }
