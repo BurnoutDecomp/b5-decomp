@@ -56,6 +56,7 @@ extern f32 gT5ArmedPlayerSpeed;
 extern f32 gT5MaxImpulseMag;
 extern f32 gT5SumImpulseMag;
 extern f32 gT5MaxClosing;
+extern s32 gT5WindowFrame;
 
 namespace
 {
@@ -97,6 +98,7 @@ namespace
         gT5MaxImpulseMag    = 0.0f;
         gT5SumImpulseMag    = 0.0f;
         gT5MaxClosing       = 0.0f;
+        gT5WindowFrame      = 0;
         if (TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
         {
             *CgsDev::Log::gpDebugPrint
@@ -420,6 +422,10 @@ void PhysicalTrafficManager::SetTrafficVehicleChecked(
             << "[T4-hit] outcome=CHECKED trafficSlot=" << static_cast<s32>(lu16TrafficIndex)
             << " raceCarIdx=" << static_cast<s32>(EntityIndexOf(lCrasherEntityID))
             << " relSpeed=" << RelativeSpeed(*lpRaceCarPhysics, *lpVehicle->mpVehicleBody)
+            // OnChecked @0x8261E3F0 gates the crash arm on the CHECKER's strength stat (> 8);
+            // print it beside the outcome so a non-crashing checked car can be read against it.
+            << " checkerStrength=" << static_cast<s32>(lpRaceCarPhysics->GetStrengthStat())
+            << " trafficCrashingAfter=" << (lpVehicle->mpVehicleBody->IsCrashing() ? 1 : 0)
             << "\n";
     }
 }

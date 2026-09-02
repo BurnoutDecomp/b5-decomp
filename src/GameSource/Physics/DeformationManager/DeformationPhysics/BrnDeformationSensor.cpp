@@ -12,6 +12,12 @@
 #include "rw/math/vpu/vector3_operation.h"                    // rw::math::vpu::Magnitude (Prepare's guarded |d|)
 
 #include <cmath>   // std::pow -- ApplyLocalImpulse's vlogefp/vexptefp + minimax refinement IS powf
+
+// [T5-sens] DIAG state, DEFINED in BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp.
+// NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+namespace BrnPhysics { namespace Vehicle {
+    extern s32 gT5RamFramesLeft; extern s32 gT5RamGlobalIndex; extern s32 gT5ApplyOwner; extern s32 gT5ApplyGlobal;
+} }
                    // (the image's coefficient rows are the log2 / 2^-x series; see its banner)
 #include <cstdlib> // getenv -- the opt-in [impulse] bring-up probe only
 
@@ -773,10 +779,21 @@ namespace Deformation
 			const bool lbInteresting   = ( suCalls <= 30u )
 			                          || ( lbHorizontalDir && lfProbeMag > 1.0f
 			                               && ++suHorizontal <= 600u );
-			if ( siImpulseProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && lbInteresting )
+			// [T5-sens] arm (traffic crash wave, 2026-09-02): while the [T5-ram] window is open, every
+			// apply into the HIT TRAFFIC CAR's sensors prints regardless of the two windows above.
+			static u32 suT5Lines = 0;
+			const bool lbT5Traffic = ( BrnPhysics::Vehicle::gT5RamFramesLeft > 0
+			                        && BrnPhysics::Vehicle::gT5ApplyOwner == 2
+			                        && BrnPhysics::Vehicle::gT5ApplyGlobal == BrnPhysics::Vehicle::gT5RamGlobalIndex
+			                        && ++suT5Lines <= 400u );
+			if ( siImpulseProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && ( lbInteresting || lbT5Traffic ) )
 			{
 				*CgsDev::Log::gpDebugPrint
 					<< "[impulse] n " << static_cast<s32>(suCalls)
+					<< " owner " << BrnPhysics::Vehicle::gT5ApplyOwner
+					<< " global " << BrnPhysics::Vehicle::gT5ApplyGlobal
+					<< " specLim " << lfSpecLimit << " compLim " << lfCompressionLimit
+					<< " used " << lfClampedUsed << " toLimit " << lfToLimit
 					<< " dir " << liDir << " set " << static_cast<s32>(leSet)
 					<< " lvl " << static_cast<s32>(lu8AbsorptionLevel)
 					<< " mag " << lpImpulseParams->mvfImpulseMagnitude.x
