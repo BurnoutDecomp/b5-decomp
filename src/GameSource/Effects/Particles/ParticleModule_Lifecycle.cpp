@@ -559,7 +559,7 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
         {
             lpOutput->GetResourceRequestInterface()->AcquireResource(
                 &mReceiverQueue, miResourceCount++, KI_FX_BUNDLE_POOL,
-                lpMap->GetEntries()[luEntry].mpGDBTextureName);
+                lpMap->GetEntries()[luEntry].GDBTextureName());
         }
         mReceiverQueue.Clear();
         // fall through
@@ -578,12 +578,29 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
             if (!sbLogged)
             {
                 sbLogged = true;
-                char lacMsg[224];
+                // * Print the blob RAW HEADER WORDS beside the struct-read count. A bare
+                // "entries=0" cannot tell a layout mismatch from an empty payload -- these can:
+                // if w1 (the +4 slot) is a sane count and w2 is junk, the reader was wrong;
+                // if w0/w1 are both 0, particles.bundle really did ship an empty map.
+                const u32* lpuWords = reinterpret_cast<const u32*>(lpMap);
+                char lacMsg[320];
                 std::snprintf(lacMsg, sizeof(lacMsg),
                     "[skid-ready] FX texture stage: map=%p entries=%u wanted hash=0x%08X "
-                    "(\"fxskid\") replies>=%d\n",
-                    static_cast<const void*>(lpMap), luEntryCount, luTrailNameHash, miResourceCount);
+                    "(\"fxskid\") replies>=%d raw=[%08X %08X %08X %08X]\n",
+                    static_cast<const void*>(lpMap), luEntryCount, luTrailNameHash, miResourceCount,
+                    (lpuWords != 0) ? lpuWords[0] : 0u, (lpuWords != 0) ? lpuWords[1] : 0u,
+                    (lpuWords != 0) ? lpuWords[2] : 0u, (lpuWords != 0) ? lpuWords[3] : 0u);
                 CgsDev::Log::WriteToLog(lacMsg);
+                // and the first four entries by name, so a mismatch on "fxskid" is visible.
+                for (u32 luDump = 0; luDump < luEntryCount && luDump < 4u; ++luDump)
+                {
+                    const TextureNameMap::Entry& lrEntry = lpMap->GetEntries()[luDump];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                        "[skid-ready]   entry %u: hash=0x%08X name='%s'\n",
+                        luDump, lrEntry.muHashedLionTextureName,
+                        (lrEntry.mpGDBTextureName != 0) ? lrEntry.GDBTextureName() : "(null)");
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
             }
         }
 

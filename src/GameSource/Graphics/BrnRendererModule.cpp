@@ -7,6 +7,7 @@
 #include "GameSource/Gui/BrnGuiModule.h"         // BrnGui::gpActiveGuiModule (the GUI render drive)
 #include "GameSource/Graphics/BrnRendererModulePostFx.h"  // Render's effects-frame -> BrnPostFx apply block
 #include "GameSource/Director/Camera/Camera.h"            // BrnDirector::Camera::Camera -- the staged camera-input record
+#include "GameSource/Effects/Particles/ParticleModule.h"     // BrnParticle::ParticleModule::RenderFullResParticles (the full-res particle pass)
 #include "GameSource/Effects/Particles/ParticleModuleBringUp.h"  // BrnParticle::PCBringUpParticleRenderDataProduced (the motion-blur render-data latch)
 #include "pc/gcm/renderengine/renderstates.h"    // renderengine::TextureState::Parameters (the sampler-13 env-map state)
 
@@ -4611,6 +4612,71 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         {
             PCBringUpPublishCoronaCamera(mCoronaManager);
             mCoronaManager.Render(lfFrameWhiteLevel);
+        }
+
+        // ==========================================================================================
+        // THE FULL-RES PARTICLE PASS -- ParticleModule::RenderFullResParticles @0x8229AFD0.
+        // This is the TYRE MARKS (and, when they land, the debris / sparks / Lion).
+        //
+        // CONSOLE POSITION, exactly: Render @0x8240BFA8 pseudocode :887 draws the coronas, :894
+        // waits on the particle render job, :899 calls RenderFullResParticles -- then the 2D
+        // immediate-mode dispatches, then :920 ResolveMSAA. So it belongs HERE: after the corona
+        // pass, still inside the scene bracket, before the resolve. Drawn into the scene target,
+        // so the post-fx grade sees it -- which is what the console does too.
+        //
+        // HOW THE CONSOLE REACHES THE MODULE (asm/pseudocode :444-448):
+        //     v52 = sub_8227F640(dispatchThreadInputBuffer);   // GetParticleRenderData()
+        //     v53 = *(_DWORD *)v52;                            // renderData->mpParticleModule
+        //     ... RenderFullResParticles(v53, v52);
+        // i.e. the module pointer is the record's FIRST WORD -- ParticleModule::Construct writes
+        // `mRenderData.mpParticleModule = this` (+0x8E00) and GenerateRenderRequests publishes the
+        // whole record. That is why no renderer-side module handle is needed, and why the pointer
+        // is trustworthy exactly when a real producer has run.
+        //
+        // THE GATE IS THE CONSOLE'S OWN v295 (:442): mbRenderParticles && the dispatch buffer's
+        // CalibrationUnfriendlyEnablePostFx && !GetIsStalled(). The same three reads already drive
+        // lbEffectsAllowed / the sun corona in this function.
+        //
+        // ⚠ THE NULL TEST ON mpParticleModule IS NOT INVENTED DEFENSIVE DRESSING, AND IT IS
+        // TEMPORARY. Two producers can stamp this record on this build: the real
+        // ParticleModule::GenerateRenderRequests (mpParticleModule = the module) and the older PC
+        // bring-up stand-in BrnParticle::PCBringUpProduceParticleRenderData, which deliberately
+        // leaves that word NULL (its own banner says so). Until the bring-up producer is deleted,
+        // a frame stamped by it would have the renderer dereference NULL. DELETE-WHEN
+        // PCBringUpProduceParticleRenderData is gone: the console has no such test.
+        // ==========================================================================================
+        if (lbSceneBracketOpen && mbRenderParticles && lpDispatchThreadInputBuffer != 0)
+        {
+            const BrnParticle::ParticleModule::ParticleRenderData* lpFullResRenderData =
+                lpDispatchThreadInputBuffer->GetParticleRenderData();
+            if (lpFullResRenderData != 0 && lpFullResRenderData->mpParticleModule != 0
+                && lpDispatchThreadInputBuffer->GetCalibrationUnfriendlyEnablePostFx()
+                && !lpDispatchThreadInputBuffer->GetIsStalled())
+            {
+                // [trailpass] FLAG PC bring-up diagnostic -- the tyre-mark wave's render-side
+                // witness. Printed on the FIRST frame this pass runs and then whenever the trail
+                // bit flips, so the log says on which frames a mark could be drawn at all.
+                // DELETE with the tyre-mark bring-up.
+                {
+                    static s32 siLastTrailBit = -1;
+                    const s32 liTrailBit = ((lpFullResRenderData->muFlags
+                        & BrnParticle::ParticleModule::ParticleRenderData::eRenderDataFlagRenderTrails) != 0)
+                        ? 1 : 0;
+                    if (liTrailBit != siLastTrailBit)
+                    {
+                        siLastTrailBit = liTrailBit;
+                        char lacMsg[192];
+                        std::snprintf(lacMsg, sizeof(lacMsg),
+                            "[trailpass] RenderFullResParticles live: trailBit=%d flags=0x%04X "
+                            "white=%.3f frame=%u\n",
+                            liTrailBit, static_cast<unsigned>(lpFullResRenderData->muFlags),
+                            lpFullResRenderData->mfWhiteLevel, lpFullResRenderData->muCurrentFrame);
+                        CgsDev::Log::WriteToLog(lacMsg);
+                    }
+                }
+
+                lpFullResRenderData->mpParticleModule->RenderFullResParticles(lpFullResRenderData);
+            }
         }
     }
 
