@@ -347,6 +347,12 @@ namespace
     // range by construction, so a fragment that lands exactly on the cleared 1.0 (which a
     // 9500-unit dome under a 12000-unit far plane does to within a few ULPs) has to pass.
     ImBlendState        sSkyDomeBlendState        = { FALSE, D3DBLEND_ONE, D3DBLEND_ZERO, FALSE, FALSE };
+    // X360 dword_83010F20 == ImRendererBase::ConstructBlendState(alloc, 6, 7, 0) in
+    // ConstructOnceOnly @0x827F1C20: source SRCALPHA (Xenon blend enum 6), destination
+    // INVSRCALPHA (7), op ADD (0) -- the immediate-mode library's standard alpha blend. The
+    // skid-mark pass (BrnTrailRender.cpp) binds it between its depth-stencil (F4C) and
+    // cull-none rasteriser (F3C) binds, exactly as the sky dome binds its own trio.
+    ImBlendState        sImStandardAlphaBlendState = { TRUE, D3DBLEND_SRCALPHA, D3DBLEND_INVSRCALPHA, FALSE, FALSE };
     ImRasterizerState   sSkyDomeRasterizerState   = { D3DCULL_NONE, D3DFILL_SOLID };
     ImDepthStencilState sSkyDomeDepthStencilState = { TRUE, FALSE, D3DCMP_LESSEQUAL };
     // The env-map faces are rendered into a freshly cleared face with nothing else in
@@ -406,6 +412,9 @@ void* gpSkyDomeBlendState              = &sSkyDomeBlendState;
 void* gpSkyDomeRasterizerState         = &sSkyDomeRasterizerState;
 void* gpSkyDomeDepthStencilState       = &sSkyDomeDepthStencilState;
 void* gpSkyDomeEnvMapDepthStencilState = &sSkyDomeEnvMapDepthStencilState;
+// X360 dword_83010F20 -- the library's standard alpha blend (see the object above). Bound by the
+// skid-mark pass (BrnTrailRender.cpp) through ImDeviceSetBlendState.
+void* gpImStandardAlphaBlendState      = &sImStandardAlphaBlendState;
 
 // X360 dword_8301090C -- the shadow pass's shared depth/stencil state (see the object above).
 renderengine::DepthStencilState* gpShadowDepthStencilState = &sShadowDepthStencilState;
