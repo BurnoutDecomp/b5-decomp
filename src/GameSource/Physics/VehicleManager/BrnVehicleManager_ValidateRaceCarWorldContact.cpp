@@ -282,8 +282,36 @@ namespace Vehicle
     //     closing speeds: the car SETTLING onto the ground after it had already stopped. They are
     //     the aftermath, not the cause. f1011 carried 3 world contacts and f1012 carried 2, every
     //     one curb 1 / wall 0, both culls firing, re-pointed to the up axis.
-    //     ⇒ 9.45 m/s left the car in a step with ZERO world impulses. The mechanism is not on the
-    //       world-contact path, so no amount of re-reading [kerb]/[kerb-imp] can name it.
+    //     ⇒ 9.45 m/s left the car in a step with ZERO world impulses.
+    //
+    //     ⭐⭐⭐ (F2b) AND HERE IS WHAT "ZERO IMPULSES" ACTUALLY MEANT -- MEASURED 2026-09-03, run
+    //     dv_r8, with the new [dv] one-step witness armed. IT WAS A BLIND SPOT IN THE PROBE, NOT AN
+    //     ABSENCE OF IMPULSES, AND FOUR WAVES REASONED FROM IT.
+    //       * UpdateContacts @0x826478B0 sorts the frame's contacts and routes EACH ONE to ONE OF
+    //         TWO arms: ApplyCarWorldImpulse (which prints [kerb-imp]) and ApplyCarCarImpulse
+    //         (which printed NOTHING until this commit). Both end in the same
+    //         GetVehicleBody().CalculateNewVelocity(timeStep).
+    //       * So "[kerb-imp] is empty" never meant "no impulse". It meant "no WORLD impulse" --
+    //         exactly what the tag's own banner says, and exactly not how it was read.
+    //       * THE PROOF IS A SINGLE RUN, four frames of it. [dv] records every accumulator drain
+    //         with the caller's return address; all of these resolve to
+    //         DeformableObject::UpdateContacts +0x4bd:
+    //             f6355  1 drain  |dv| 2.92   [kerb-imp] lines: 1
+    //             f6473  2 drains |dv| 2.96 + 2.88   [kerb-imp] lines: 2
+    //             f7094  3 drains |dv| 3.24 + 3.21 + 2.29   [kerb-imp] lines: 3
+    //             f6386  1 drain  |dv| 7.50, J = (5592.9, -115.1, -10519.6) N.s
+    //                                             [kerb-imp] lines: ZERO
+    //         Same function, same drain site, one visible arm and one invisible one. The invisible
+    //         one took 7.5 m/s out of the car in a single step -- the same shape and the same order
+    //         of magnitude as the st_scoutB event.
+    //     ⇒ THE LIKELY ANSWER TO (F1)/(F2) IS A CAR-CAR CONTACT (traffic), and the whole four-wave
+    //       mystery is a DIAGNOSTIC GAP, not a transcription defect. ⚠️ LIKELY, NOT PROVEN: nothing
+    //       instrumented the car-car arm in the st_scoutB run, so that specific event still cannot
+    //       be attributed from its log. The gap is closed as of this commit ([kerb-imp] now prints
+    //       a CARCAR leg from BrnDeformableObject.cpp), so ONE re-run of the recipe decides it.
+    //     ⭐ And it is the campaign's own standing hazard, met from the other side: the brief warns
+    //       "four kerb catches across two waves were REAR-ENDING TRAFFIC -- open the frames". The
+    //       probe could not have told anyone.
     //
     //     ⚠️ (F3) AND THE POSE MOVED TOO, by something other than the integrate. dp over that step
     //     is (-0.004394, -0.006230, -0.012085). Against v_before that implies dt = 0.0264 / 0.0104
@@ -324,15 +352,17 @@ namespace Vehicle
     //       caller's return address, and prints the ledger ONLY for a step whose |dv| crosses the
     //       threshold. A direct rewrite shows up as a mark-to-mark delta with no drain in it.
     //
-    // ⛔ WHAT THIS WAVE DID NOT DO. IT DID NOT REPRODUCE EITHER EVENT. Four runs were spent and
-    //     none of them drove: the harness's own DRIVE verdict said
-    //     "*** THE CAR NEVER MOVED ***" on every one. The blocker is environmental, not the
-    //     game code, and it is written up so the next wave does not re-spend the same four runs --
-    //     see the [dv] banner in ExternalPhysicsBody.cpp. So the [dv] witness is LANDED AND
-    //     COMPILE-GATED BUT NEVER SEEN TO FIRE: treat it as untested instrumentation, and the
-    //     first thing to check on the next run is that a deliberate hard stop DOES produce a
-    //     [dv] STEP line at all.
-    // ⛔ It did not reproduce the 106 mph one-step 6.2 mph loss either (open).
+    // ⛔ WHAT THIS WAVE DID NOT DO. IT DID NOT REPRODUCE EITHER ORIGINAL EVENT ON PURPOSE. Seven
+    //     runs were spent; six ended with the harness's own verdict "*** THE CAR NEVER MOVED ***"
+    //     for three reasons that had nothing to do with the physics (a real, now-fixed effects boot
+    //     assert; a -Teleport recipe that places the car and then leaves it inert on a held
+    //     throttle; one self-inflicted double-launch) -- all three written up in the [dv] banner in
+    //     ExternalPhysicsBody.cpp so nobody re-spends them. The SEVENTH drove 571 m and produced
+    //     the 13 step dumps that (F2b) rests on, but on ordinary traffic and world collisions along
+    //     a free-burn route -- NOT the Waterfront recipe, and NOT the st_scoutB event itself.
+    //     It did not reproduce the 106 mph one-step 6.2 mph loss either (open).
+    //     It did not measure the (F3) pose anomaly; the bump-stop translation is a named suspect
+    //     and nothing more.
     //     It did not re-decode the raw words of UpdatePostPhysics's wheel-sphere block (the geometry
     //     is read from the committed transcription, not re-derived).
     // ⚠️ AND IT LOST A RUN TO EXACTLY THE TRAP THE LAST WAVE FLAGGED. kerbX_r3 showed a textbook

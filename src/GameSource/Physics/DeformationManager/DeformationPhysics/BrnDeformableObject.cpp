@@ -360,6 +360,43 @@ namespace Deformation
             BrnPhysics::Vehicle::gT5MaxImpulseMag = lfImpulseLength;
         BrnPhysics::Vehicle::gT5SumImpulseMag += lfImpulseLength;
 
+        // ---- [kerb-imp] THE CAR-CAR LEG. ⭐⭐⭐ ADDED 2026-09-03, AND ITS ABSENCE COST FOUR WAVES A
+        //      WRONG CONCLUSION. The tag's banner (BrnVehicleManager_ValidateRaceCarWorldContact.cpp)
+        //      said "one line per WORLD impulse the solver applies", which is literally true and was
+        //      read as "one line per impulse the solver applies". UpdateContacts @0x826478B0 routes
+        //      each sorted contact to ONE OF TWO arms -- ApplyCarWorldImpulse (instrumented) and this
+        //      one (silent) -- and both end in the same CalculateNewVelocity. So a car-car hit moved
+        //      the car with [kerb-imp] EMPTY, and "the losing step had zero impulses" was inferred
+        //      from a probe that only ever watched half the solver.
+        //      MEASURED THE DAY THIS LANDED (run dv_r8, [dv] witness): at f6386 a SINGLE drain at
+        //      DeformableObject::UpdateContacts +0x4bd banked J = (5592.9, -115.1, -10519.6) N.s and
+        //      took 7.50 m/s out of the car in one step -- and that frame has ZERO [kerb-imp] lines,
+        //      while f6355 / f6473 / f7094 have exactly one per drain. Same function, same drain
+        //      site, opposite visibility. [[diagnostics-that-lie]], textbook.
+        //      The line is deliberately the SAME SHAPE as the world leg's, with `other` naming the
+        //      second car, so one grep covers both arms.
+        if ( BrnPhysics::Vehicle::KerbProbeArmed() )
+        {
+            static u32 suKerbCarCarLines = 0u;
+            if ( BrnPhysics::Vehicle::KerbProbeTake( suKerbCarCarLines, "[kerb-imp]" ) )
+            {
+                const Vector3 lPos = lThisBody.GetPosition();
+                *CgsDev::Log::gpDebugPrint
+                    << "[kerb-imp] f " << BrnPhysics::Vehicle::guKerbProbeFrame
+                    << " CARCAR sensor " << liSensorIndex
+                    << " other " << static_cast<u32>( reinterpret_cast<u64>( lContact.mpOtherVehicle ) )
+                    << " iter " << lvfIteration.x
+                    << " n " << lContact.mNormal.x << " " << lContact.mNormal.y << " " << lContact.mNormal.z
+                    << " pA " << lContact.mPointOnA.x << " " << lContact.mPointOnA.y << " " << lContact.mPointOnA.z
+                    << " closing " << lfClosingSpeed
+                    << " shapedMag " << lfImpulseLength
+                    << " dir " << lImpulseUnit.x << " " << lImpulseUnit.y << " " << lImpulseUnit.z
+                    << " carPos " << lPos.x << " " << lPos.y << " " << lPos.z
+                    << "\n";
+            }
+        }
+        // ---- end [kerb-imp] car-car leg ------------------------------------------------------------
+
         // This car: apply the impulse as-is at the contact (sensor liSensorIndex), adding to the spy.
         DeformationSensor* lpSensor = GetDeformationSensor(liSensorIndex);
         ApplySensorImpulse(lvfTimeStep, lContact, lParams, lRelativeMotion, lImpulseUnit,

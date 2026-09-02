@@ -256,41 +256,72 @@ namespace BrnPhysics
     //     mTransform.wAxis WITHOUT touching velocity, so a pose jump with no velocity change is a
     //     different mechanism and must be visible as such.
     //
-    // ⛔⛔ THIS PROBE HAS NEVER BEEN SEEN TO FIRE. It compiles, it is gated, and its arming and
-    // print paths are un-exercised: four runs were spent trying to reproduce the event and the
-    // harness's DRIVE verdict said "*** THE CAR NEVER MOVED ***" on every one. So before drawing
-    // ANY conclusion from a quiet [dv] run, make the probe fail first: drive into something at
-    // speed with BRN_DV_PROBE=2 and confirm a [dv] STEP line appears. A verification you have not
-    // seen fail is not a verification.
+    // ✅ THE PROBE WORKS, AND IT IS DISCRIMINATING (run dv_r8, 2026-09-03: 571 m driven, 13 step
+    // dumps at threshold 2 m/s). Every return address it recorded resolves to a real
+    // CalculateNewVelocity caller, and each one matches the accumulator type observed -- which is
+    // what makes the resolution trustworthy rather than a plausible-looking lookup. Resolved
+    // against build/game/Burnout_PC.map (the image base is 64 KB aligned, so a candidate sweep
+    // pins it; only one base puts ALL SIX inside functions that call CalculateNewVelocity):
+    //     UpdateSuspension +0x1d6                  force drain, Fdt ~ (0, +500, 0)   -- the
+    //                                              inlined ApplySuspensionForces tail, the up-axis
+    //                                              spring push
+    //     UpdateWheels +0x11e7 / +0x1392           force drains, Fdt horizontal      -- the tyres
+    //     UpdateDriving +0xacb                     force drain, Fdt ~ (0, -44, 0)
+    //     UpdateContacts +0x4bd                    IMPULSE drain, J in the thousands -- the
+    //                                              deformation contact solver
+    //     UpdateSuspensionPostSimulation +0xe5e    IMPULSE drain, J ~ (10, +1935, -34), up to
+    //                                              4 per step -- ⭐ the -0.7 inanimate-world
+    //                                              RECOVERY arm, confirmed live and confirmed
+    //                                              capable of ~1.5 m/s per wheel per step
+    // ⭐ WHAT IT PROVED ON ITS FIRST RUN: at f6386 a single UpdateContacts drain took 7.50 m/s out
+    // of the car (J = (5592.9, -115.1, -10519.6) N.s) with ZERO [kerb-imp] lines that frame, while
+    // f6355 / f6473 / f7094 printed exactly one per drain. That is the CAR-CAR arm of the same
+    // solver, which was uninstrumented -- see the (F2b) paragraph in
+    // BrnVehicleManager_ValidateRaceCarWorldContact.cpp and the new CARCAR leg in
+    // BrnDeformableObject.cpp.
+    // ⚠️ STILL MAKE IT FAIL BEFORE YOU TRUST A QUIET RUN. A [dv]-silent run means the threshold was
+    // never crossed; it does not mean the probe was armed. Confirm a "[dv] STEP" line appears at
+    // all before reading anything into silence.
     //
-    // ⚠️⚠️ AND HERE IS WHY THOSE FOUR RUNS DIED, written down so the next wave does not re-spend
-    // them. All four were in the isolated worktree D:\wt1; none of it was the game code.
-    //   run 1  b5 adafe4e7            asserts 3967 ("Not locked for writing",
-    //                                 BrnEffectsModuleIO_OutputBuffer.cpp:76). DRIVING reached at
-    //                                 74.2 s (the main tree does it in 27.6 s), then the PHYSICS
-    //                                 froze: [kerb-car] stopped at frame 2076 while [motion] ran
-    //                                 on to present 9600 with a bit-identical pose.
-    //   run 2  b5 f8f5920c            asserts 4359, wedged at CARSELECT; 7622 of them were
-    //                                 "Not locked for writing" at BrnGameStateModuleIO.cpp:455,
-    //                                 fired from BrnGameModule::GameMain once per frame.
-    //   -- then the worktree's CONVERTED DATA was found to be incomplete: D:\wt1\build\game held
-    //      10153 files against the main tree's 11745, and 1749 world `obj` bundles were missing.
-    //      Syncing the main tree's data in CHANGED WHICH ASSERT FIRES rather than curing it. --
-    //   run 3  b5 6cce3745            the GameState storm gone; 5838 asserts of "Not Constructed"
-    //                                 (CgsVariableEventQueue.h:367) from
-    //                                 EffectsModule::UpdateActiveRaceCars. Wedged at CARSELECT.
-    //   run 4  b5 08b7c3fd + this     THE SAME ASSERT, 21380 of them, wedged at the junkyard spawn.
-    // ⭐ Run 4 is the one that settles the attribution: 08b7c3fd is the EXACT base the st_scoutB
-    // run drove on, and st_scoutB logged asserts=0. Same b5 commit, same parent mount set, same
-    // recipe, opposite outcome ⇒ THE VARIABLE IS NOT THE b5 COMMIT. It is the environment, and two
-    // candidates remain UNISOLATED: (a) a worktree's converted game data is not the same set as the
-    // main tree's (all four worktrees are short of `obj`: wt1 4362, wt2 3900, wt3 3884,
-    // wt_deformw 4256 against main's 6111), and (b) a second wave's harness was live on the box
-    // throughout (two pwsh harness processes started 23:36 and 23:38 alongside these runs), which
-    // is exactly the one-harness-at-a-time rule _box_lock.ps1 exists to enforce.
-    // ⇒ DO NOT read any of this as "the effects/replay waves broke the build". That claim was
-    //   made and withdrawn inside this same wave once already, on run 1's evidence, and it was
-    //   wrong: reproducible was not attributable.
+    // ⚠️⚠️ AND HERE IS WHY THOSE RUNS DIED -- written down because it cost this wave its whole
+    // measurement budget and NONE of it was the physics. Everything below is in an isolated
+    // worktree (D:\wt1) driving tools/diagnostics/flow_run.ps1.
+    //
+    //   (1) A REAL, NOW-FIXED BOOT BUG ATE FOUR RUNS. EffectsModule::UpdateActiveRaceCars fired
+    //       "Not Constructed" (CgsVariableEventQueue.h:367) on a zero-filled VariableEventQueue,
+    //       5838 times in one run and 21380 in another, and the flow wedged at CARSELECT. Another
+    //       wave fixed it mid-session in b5 7290e837 ("fix(effects): construct the audio-effects
+    //       queue the sound bridge would have written"). With that commit in, the very next run
+    //       booted at the ORIGINAL timings -- newprof 16.7 s, car select 22.3 s, DRIVING 37.7 s,
+    //       against 74 s / never before it. ⇒ If a physics run will not reach DRIVING, check the
+    //       assert HISTOGRAM by source file before blaming data, hardware or the recipe: one
+    //       repeated assert from a module you are not working on is the likeliest single cause.
+    //
+    //   (2) ⭐ AND THEN THE TELEPORT RECIPE STILL WOULD NOT DRIVE, which is a SEPARATE harness
+    //       finding worth more than the runs it cost. With -Teleport armed, the car drives the 8 m
+    //       that arms the placement, is placed at the destination -- and then sits there with the
+    //       throttle HELD: [motion] reads `gas 0.000000` for the rest of the run, and the DRIVE
+    //       verdict measures "from sample N, after the last >20m placement jump" and correctly
+    //       reports 0.1 m. Two runs (dv_r5, dv_r6) died this way at DRIVING phase. The marks also
+    //       show the input applied at `t+54.16s` despite `delay=6,0s`, so the harness's own drive
+    //       clock is suspect as well. ⇒ A -Teleport run that reaches DRIVING is NOT evidence the
+    //       car can be driven; read the DRIVE line, and prefer a plain -Drive run when what you
+    //       need is motion rather than a specific place.
+    //
+    //   (3) ⛔ MY OWN ERROR, recorded so it is not repeated: a Stop-Process that did not actually
+    //       kill the previous run's Burnout_PC left TWO game instances writing one BrnGame.log for
+    //       16 minutes, voiding both that run and the next. _box_lock.ps1 serialises HARNESSES, not
+    //       orphaned game processes -- verify the kill (`Get-Process Burnout_PC` returns nothing)
+    //       before launching the next run.
+    //
+    //   ⚠️ ONE ANOMALY IS LEFT UNEXPLAINED, deliberately. Run 4 used b5 08b7c3fd + this probe with
+    //   the matching parent mount set -- the EXACT base the st_scoutB run drove on, which logged
+    //   asserts=0 -- and it fired 21380 of the (1) assert. Same commit, same mounts, same recipe,
+    //   opposite outcome. Do not build on either reading of that until someone reproduces it.
+    //   ⇒ AND DO NOT READ ANY OF THIS AS "another wave broke the build". That exact claim was
+    //     made and withdrawn INSIDE this wave: the first run's 3967 "Not locked for writing"
+    //     asserts were filed against the effects wave, and a rerun of the same binary with the
+    //     main tree's complete converted data fired 17. Reproducible was not attributable.
     const ExternalPhysicsBody* gpDvWatchBody = nullptr;
 
     namespace
