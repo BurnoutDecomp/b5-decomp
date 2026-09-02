@@ -20,19 +20,12 @@ namespace BrnParticle
     static u32 AddressFromPointer(const void* lpPointer) { return static_cast<u32>(reinterpret_cast<uintptr_t>(lpPointer)); }
     static uintptr_t Align16(uintptr_t luValue) { return (luValue + 15) & ~static_cast<uintptr_t>(15); }
 
-    struct SerialisedTextureNameMap
-    {
-        struct Entry
-        {
-            u32 muHashedLionTextureName;
-            u32 mpGDBTextureName;
-        };
-
-        Entry* GetEntries() const { return PointerFromU32<Entry>(mpEntries); }
-
-        u32 mpEntries;
-        u32 muEntryCount;
-    };
+    // The serialised layout IS BrnParticle::TextureNameMap (corrected 2026-09-02): this TU
+    // had it right -- u32 entry-table slot at +0, u32 count at +4, Entry stride 8 -- while the
+    // header declared an x64 shape over the same bytes, so every CONSUMER read a plausible
+    // zero out of it. One struct now, in the header, and this name kept as an alias so the
+    // bodies below still read as the console's own serialisation code.
+    typedef TextureNameMap SerialisedTextureNameMap;
 
     static const uint32_t KU_TEXTURE_NAME_MAP_RESOURCE_TYPE_ID = 65547;
 

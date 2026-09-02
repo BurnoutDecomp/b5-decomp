@@ -1,6 +1,7 @@
 #include "GameSource/Effects/Particles/ParticleModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include <cstddef>                                   // offsetof
+#include <cstdio>                                    // snprintf (the announcement)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog (the NOT-RECONSTRUCTED announcements)
 #include "GameSource/Effects/Particles/ParticleModuleIO.h"   // BrnParticle::ParticleIO::DispatchInputBuffer
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"    // BrnGame::DispatchThreadInputBuffer
@@ -284,6 +285,82 @@ namespace BrnParticle
         ++mRenderData.muCurrentFrame;
 
         *lpDispatchThreadInput->GetParticleRenderData() = mRenderData;
+    }
+
+    // One line, once, for an arm this build does not carry. Never an assert. (The twin in
+    // ParticleModule_Lifecycle.cpp is in that TU anonymous namespace, hence the local copy.)
+    namespace
+    {
+        void LogNotReconstructed(bool& lrbLogged, const char* lpcWhat)
+        {
+            if (lrbLogged)
+                return;
+            lrbLogged = true;
+            char lacMsg[256];
+            std::snprintf(lacMsg, sizeof(lacMsg), "[particles] NOT RECONSTRUCTED: %s\n", lpcWhat);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
+
+    // =========================================================================
+    // RenderFullResParticles  @0x8229AFD0  -- THE RENDER THREAD'S PARTICLE PASS.
+    //   Its ONLY caller is BrnRendererModule::Render @0x8240BFA8 (pseudocode :899), on the
+    //   render thread, between the corona pass and ResolveMSAA. The argument is the
+    //   ParticleRenderData the update thread published into the dispatch-thread input
+    //   buffer; the console reaches THIS module through that record's first word
+    //   (`v53 = *(_DWORD *)v52`, i.e. mpParticleModule), which is why the call reads
+    //   `RenderFullResParticles(renderData->mpParticleModule, renderData)`.
+    //
+    //   The console body, in order (asm/pseudocode 0x8229AFD0):
+    //     v4 = (flags & 0x40) ? &unk_82FAB5D8 : &unk_82FAB598   -- the "Crash"/"Race" monitor set
+    //     StartMonitor(v4[8])
+    //     v5 = *(renderData + 520)                              -- mfWhiteLevel (+0x208)
+    //     if (flags & 0x20) { StartMonitor(v4[9]);
+    //                         TrailSystem::Render(this + 38672, v5);
+    //                         StopMonitor(v4[9]); }              <-- THE TYRE MARKS
+    //     EndSimulateDebris(this, renderData)
+    //     if (flags & 4)   { the debris renderer's five arrays + the mgpActiveRenderer assert }
+    //     if (flags & 2)   { SparkRenderer::Dispatch(...) }
+    //     if (this[143670]) { cLionFX::Dispatch(...) }
+    //     StopMonitor(v4[8])
+    //
+    //   FOUR of those five branches cannot run on this build and say so once each rather
+    //   than dropping silently -- EndSimulateDebris, the debris arrays, the spark dispatch
+    //   and the Lion dispatch all reach placeholder-sized members or un-landed subsystems
+    //   (BrnDebrisRenderer's array params, SparkFrameDataSet, cLionFX). The TRAIL branch is
+    //   the one that is fully landed on both sides, so it is reproduced exactly.
+    //
+    //   THE PERFMON BRACKET IS NOT REPRODUCED, for this file's standing reason: nothing on
+    //   this build calls PerfMonCpu::AddMonitor for the render-thread sets, so every id in
+    //   both monitor blocks is 0 and a bracket here would time one shared id. (Same call
+    //   BrnRendererModule.cpp makes for the corona pass, same paragraph.)
+    // =========================================================================
+    void ParticleModule::RenderFullResParticles(const ParticleRenderData* lpRenderData)
+    {
+        if (lpRenderData == 0)
+            return;
+
+        const f32 lfWhiteLevel = lpRenderData->mfWhiteLevel;   // renderData +0x208
+
+        // ---- (flags & 0x20) -- eRenderDataFlagRenderTrails ----------------------------
+        if ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagRenderTrails) != 0)
+        {
+            mTrailSystem.Render(lfWhiteLevel);   // this + 38672 == +0x9710
+        }
+
+        // ---- the four branches this build cannot run ---------------------------------
+        // EndSimulateDebris is UNCONDITIONAL on the console and closes the debris
+        // simulation jobs before the debris renderer reads their output; the jobs are
+        // asm-sized placeholders here (maJob0Placeholder / maFrameJobsPlaceholder), so
+        // there is nothing to end.
+        {
+            static bool sbLogged = false;
+            LogNotReconstructed(sbLogged,
+                "ParticleModule::RenderFullResParticles' EndSimulateDebris + the debris "
+                "(flags & 4), spark (flags & 2) and Lion (cLionFX::Dispatch) branches -- "
+                "their job/frame-data members are asm-sized placeholders and cLionFX is "
+                "not landed. THE TRAIL BRANCH (flags & 0x20) IS REAL AND RUNS");
+        }
     }
 
     // Layout pin. Never executed (offsetof checks resolved at compile time inside an

@@ -2543,6 +2543,38 @@ namespace BrnGame
                     lfSimTime,
                     mSimTimer.GetScaleCurrent());
             }
+
+            // ---- THE REAL PRODUCER, RUNNING AFTER THE STAND-IN (tyre-mark wave, 2026-09-02) ----
+            // EffectsModule::GenerateDispatchLists @0x82296668 has had a complete body since the
+            // effects module landed and NO CALLER. It is the console's own once-per-frame producer:
+            // it fills the "Particles" dispatch input from the effects dispatch input, then calls
+            // ParticleModule::GenerateRenderRequests @0x82281BD8, which publishes the module's
+            // mRenderData into DispatchThreadInputBuffer::mParticleRenderData under that buffer's
+            // write lock. THAT record is what carries mpParticleModule (the module `this`, written
+            // by Construct) and the muFlags word ParticleModule::Update rebuilt this frame --
+            // including eRenderDataFlagRenderTrails (0x20), the bit BrnRendererModule::Render tests
+            // before drawing a tyre mark. The PC stand-in above writes NEITHER, which is precisely
+            // why the trail pass could never run.
+            //
+            // ORDER IS DELIBERATE AND THIS IS THE HALF-STEP, NOT THE END STATE. The stand-in runs
+            // FIRST and the real producer overwrites it, so a frame where the real one is skipped
+            // (the effects module not yet prepared) still leaves MotionBlurState::Update the record
+            // it has been fed since the rung-7 producers wave -- no regression to a live feature
+            // while this one is being brought up.
+            // DELETE-WHEN the [trailpass]/[skid] evidence shows the real record is stamped every
+            // frame: then PCBringUpProduceParticleRenderData goes, per its own DELETE-WHEN, and the
+            // console's single producer is all that remains.
+            //
+            // The second argument is the EFFECTS dispatch input, which does not exist on this build
+            // (BridgeRendererToEffects @0x823C1168 is not reconstructed) -- GenerateDispatchLists
+            // takes its documented null arm, which announces once and uses white level 1.0, the
+            // identity for the trail colour scale.
+            if (mEffectsModule.GetPrepareStage() == BrnEffects::EffectsModule::E_PREPARESTAGE_DONE
+                && mpUpdateInputBufferStack != 0)
+            {
+                mEffectsModule.GenerateDispatchLists(mpUpdateInputBufferStack, 0,
+                                                     mDispatchThreadInputBufferManager.GetWriteBuffer());
+            }
         }
 
         if (lpDispatchCamera != 0 && mbDirectorCameraLive)
