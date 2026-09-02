@@ -6,15 +6,20 @@
 // since it landed; ParticleModule::LoadFXBundle is the first consumer that needs the
 // bodies, so this is the TU the header's own note said would come.
 //
-// SHAPE, from the console's sibling accessors on every other IO buffer (e.g.
-// EffectsIO::OutputBuffer::GetResourceRequestInterface, BrnRootSoundModuleIo's
-// ::G @0x823B8A68 / ::GetReso @0x826951D0): assert the buffer is locked the right way,
-// then return &mResourceRequestInterface (the console's `addi r3, this, 4`). The
-// CreateIOBuffer<PrepareOutputBuffer> instantiation @0x8228E4F0 pins the member at +4.
+// SHAPE: a bare `return &mResourceRequestInterface`. NO LOCK ASSERT.
+//
+// ⚠ CORRECTED after the first run (2026-09-02). The first draft asserted the buffer was
+// locked, by analogy with the sibling accessors on other IO buffers -- and that was an
+// INVENTED ARM that fired 889 times in one boot. The console does not: EffectsModule::Prepare
+// @0x8229E768 inlines this accessor as one instruction,
+//     addi r4, r30, 4        ; &lpParticleOutput->mResourceRequestInterface
+//     bl   EffectsIO::OutputBuffer::SetResourceRequestInterface
+// with no call and no test, and it does it while only the OTHER buffer is write-locked. An
+// assert the binary does not have is exactly the defect class this project keeps re-finding.
+// The CreateIOBuffer<PrepareOutputBuffer> instantiation @0x8228E4F0 pins the member at +4.
 // ============================================================================
 
 #include "GameSource/Effects/Particles/ParticleModuleIO.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 namespace BrnParticle
 {
@@ -22,14 +27,12 @@ namespace ParticleIO
 {
     PrepareOutputBuffer::ResourceRequestInterface* PrepareOutputBuffer::GetResourceRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         return &mResourceRequestInterface;
     }
 
     const PrepareOutputBuffer::ResourceRequestInterface*
     PrepareOutputBuffer::GetResourceRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
         return &mResourceRequestInterface;
     }
 }

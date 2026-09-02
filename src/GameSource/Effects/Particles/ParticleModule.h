@@ -384,6 +384,7 @@ namespace BrnParticle
         const ParticleRenderData&       RenderData() const       { return mRenderData; }
         bool                            IsSuspended() const      { return mbPlayingEffectsSuspended; }
         bool                            IsFXBundleLoaded() const { return meInitialLoadStage == E_LOADSTAGE_DONE; }
+        EInitialLoadStage               GetInitialLoadStage() const { return meInitialLoadStage; }
 
         // The acquired TextureNameMap, or null while the FX bundle's stage-4 reply has not
         // landed. SafeResourceHandle::operator-> asserts the double-deref, so LoadFXBundle

@@ -7,6 +7,7 @@
 #include "GameSource/Resource/BrnGameDataModuleIO.h" // GameDataIO::InputBuffer/OutputBuffer (LoadSoundModule args)
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"   // RootSoundModule + BrnGame::GetMainSoundModule() (stage 4)
 #include "GameSource/Game/BrnGameModule.hpp"         // BrnGame::GetMainGameModule() (the update IO stacks)
+#include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_OutputBuffer.h"   // EffectsIO::OutputBuffer (LoadEffectsModule scratch buffer)
 #include "GameSource/World/BrnWorldModuleIO.h"       // BrnWorldIO::UpdateOutputBuffer (LoadWorldModule scratch buffer)
 #include "GameSource/World/BrnWorldModule.h"         // BrnWorld::WorldModule::Update (the per-frame world drive)
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h" // CgsMemory::LinearMalloc (the world frame allocator)
@@ -120,6 +121,81 @@ void LoadingScriptedState::ResumeLoadingWorld()
     CGS_ASSERT(gBrnScriptedLoadStage == E_LOADINGSTATESTAGE_START,
                "meLoadingStateStage == E_LOADINGSTATESTAGE_START");   // X360 h:209
     gBrnScriptedLoadPaused = false;
+}
+
+// @ 0x823E7820 -- one frame of the EFFECTS-module load (scripted-load stage 2).
+//
+// ⭐ REAL since 2026-09-02 (tyre-mark wave). It was `LogScriptedStageOnce(2,
+// "LoadEffectsModule [deferred]")` and a fall-through, which is why EffectsModule::Prepare had
+// never run: the trail system was never Constructed, the FX bundle was never requested, and
+// TrailSystem::mbIsReady could not have been raised by anything.
+//
+// Console body, statement for statement:
+//     CreateIOBuffer<EffectsIO::OutputBuffer>(updateOutputStack, &effectsOut)   (h:52 assert)
+//     if (effectsModule->vtbl+0x40(gameDataOut->GetAllocatorList(), updateOutputStack, effectsOut))
+//         { DestroyIOBuffer (h:57 assert); return true; }
+//     LockForRead(effectsOut);
+//     gameDataIn->attribQueue.Append<2048,16>(effectsOut->GetVaultRequestInterface()->queue);
+//     gameDataIn->AppendRequestInterface<4096>(*effectsOut->GetResourceRequestInterface());
+//     UnlockForRead(effectsOut);
+//     DestroyIOBuffer; return false;
+bool LoadingScriptedState::LoadEffectsModule(
+        BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+        const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer)
+{
+    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
+
+    BrnEffects::EffectsIO::OutputBuffer* lpEffectsOutput = 0;
+    const bool lbCreated = lpUpdateOutputStack->CreateIOBuffer(&lpEffectsOutput, "Effects");
+    CGS_ASSERT(lbCreated, "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");   // CgsModuleIOHelper.h:52
+    (void)lbCreated;
+    if (lpEffectsOutput == 0)
+        return false;
+
+    const BrnResource::GameDataIO::AllocatorList* lpAllocatorList =
+        lpGameDataOutputBuffer ? lpGameDataOutputBuffer->GetAllocatorList() : 0;
+
+    const bool lbPrepared = lpGameModule->GetEffectsModule().Prepare(
+        lpAllocatorList, lpUpdateOutputStack, lpEffectsOutput);
+
+    // [effects-load] WHERE THE LADDER IS, once per stage change. This stage BLOCKS the whole
+    // scripted load (the console's own `if (!LoadEffectsModule(...)) break;`), so a ladder that
+    // stops advancing stops the boot -- and the first symptom is a null-progression crash three
+    // stages later, not anything that names the effects module. Say it out loud instead.
+    if (!lbPrepared)
+    {
+        static s32 siLastEffectsStage  = -1;
+        static s32 siLastParticleStage = -1;
+        const s32 liEffectsStage  = static_cast<s32>(lpGameModule->GetEffectsModule().GetPrepareStage());
+        const s32 liParticleStage = static_cast<s32>(
+            lpGameModule->GetEffectsModule().ParticleModuleRef().GetInitialLoadStage());
+        if (liEffectsStage != siLastEffectsStage || liParticleStage != siLastParticleStage)
+        {
+            siLastEffectsStage  = liEffectsStage;
+            siLastParticleStage = liParticleStage;
+            char lacMsg[192];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[effects-load] EffectsModule::Prepare stage=%d  ParticleModule FX-load stage=%d "
+                "(19 == DONE)\n", liEffectsStage, liParticleStage);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
+
+    if (!lbPrepared && lpGameDataInputBuffer != 0)
+    {
+        lpEffectsOutput->LockForRead();
+        lpGameDataInputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
+            lpEffectsOutput->GetVaultRequestInterface()->mRequestQueue);
+        lpGameDataInputBuffer->AppendRequestInterface<4096>(
+            *lpEffectsOutput->GetResourceRequestInterface());
+        lpEffectsOutput->UnlockForRead();
+    }
+
+    const bool lbDestroyed = lpUpdateOutputStack->DestroyIOBuffer(&lpEffectsOutput);
+    CGS_ASSERT(lbDestroyed, "mpStack->DestroyIOBuffer( &mpBuffer )");   // CgsModuleIOHelper.h:57
+    (void)lbDestroyed;
+    return lbPrepared;
 }
 
 // @ 0x823E72F0 -- one frame of the world-module load. Create a scratch BrnWorldIO::
@@ -768,8 +844,13 @@ void LoadingScriptedState::Update()
                 // fall through
             case 2:
                 gBrnScriptedLoadStage = 2;
-                // X360: LoadEffectsModule. [deferred: effects module placeholder]
-                LogScriptedStageOnce(2, "LoadEffectsModule [deferred]");
+                // ⭐ REAL since 2026-09-02 (tyre-mark wave). X360:
+                // `if (!LoadEffectsModule(this, gameDataIn, gameDataOut)) break;`
+                // Was `[deferred: effects module placeholder]` -- and it was, literally: the
+                // module was a 1-byte ODR stub in BrnGameModule.hpp until this change.
+                LogScriptedStageOnce(2, "LoadEffectsModule -- real");
+                if (!LoadEffectsModule(&s_GameDataInput, &s_GameDataOutput))
+                    break;
                 // fall through
             case 3:
                 gBrnScriptedLoadStage = 3;
