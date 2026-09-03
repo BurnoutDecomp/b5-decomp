@@ -1264,8 +1264,34 @@ namespace Deformation
 	// =============================================================================================
 	// StoredImpulseContact::GetInverse (DWARF :68) -- 2026-08-14 (walls leg 4). The role-swapped
 	// record for the equal-and-opposite car-car apply, per its own declaration gloss: point-on-A
-	// <-> point-on-B, normal negated; ownership/time/id fields carry over. Dead at runtime today
-	// (no car-car contacts on the junkyard path).
+	// <-> point-on-B, normal negated; ownership/time/id fields carry over.
+	//
+	// ⚠️⚠️ TWO CLAIMS THAT USED TO STAND HERE ARE FALSIFIED BY MEASUREMENT (2026-09-03).
+	//
+	// (1) "Dead at runtime today (no car-car contacts on the junkyard path)" -- it is NOT dead.
+	//     Five instrumented runs produced 741 race-car car-car sensor rows and 12,891 traffic
+	//     ones; ApplyCarCarImpulse reaches this function on every one of them.
+	//
+	// (2) The carry-over of mpOtherVehicle makes the victim's record SELF-REFERENTIAL, and that
+	//     is now observed rather than reasoned. ApplyCarCarImpulse applies `lContact` to this car
+	//     (mpOtherVehicle == the other car, correct), then hands the other car this inverse --
+	//     whose mpOtherVehicle is still the other car, i.e. the receiver itself. Measured with
+	//     the [st-mag] gid/oGid fields, over runs tr_N1510b / tr_N1555b / tr_N1600b / tr_OGID:
+	//     both halves of every race-car/traffic collision are logged on the SAME present with
+	//     mirrored directions (74/74, 50/50 and 7/7 race-car presents), and while the race car
+	//     (gid 0) names oGid 587/239/404/452 correctly, traffic gid 587 names oGid 587, gid 239
+	//     names 239, gid 404 names 404 and gid 452 names 452 -- every traffic car names ITSELF.
+	//     Zero rows anywhere carry owner 2 with oOwner 1.
+	//     ⇒ The showtime x15 victim gain in ApplySensorImpulse therefore cannot fire on traffic:
+	//       its first predicate asks the victim whether the VICTIM is in showtime, and its second
+	//       (HasBouncedThisFrame on "the other") is self-referential for the same reason.
+	//
+	// ⛔ THE BODY IS DELIBERATELY LEFT AS IT IS. Whether the console's GetInverse swaps the
+	//    ownership fields is a question for its assembly, not for a symmetry argument -- changing
+	//    it here on inference is exactly the invented arm this project keeps paying for. Note
+	//    that mpOtherSensor's carry-over IS right by construction (ApplyCarCarImpulse passes
+	//    lContact.mpOtherSensor as the other car's sensor at the call site), so the two fields
+	//    are not obviously the same case. Recorded for a wave that can read the image.
 	// =============================================================================================
 	void StoredImpulseContact::GetInverse(StoredImpulseContact& lrInverse) const
 	{
