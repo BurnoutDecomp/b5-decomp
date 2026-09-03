@@ -33,6 +33,9 @@ namespace Gen
         // FX reads the surface's visual-FX sub-collection off this (WheelStateMachine::
         // Update 0x82293EB8: LODWORD(surfaceInstance[1]) + 16). Additive re-export.
         const void* GetAttributeData() const { return GetLayoutPointer(); }
+        // [FLAG PC bring-up, additive host helper] the resolved collection's key, so the
+        // [skid-bind] probe can name WHICH surface collection each element resolved to.
+        using Instance::GetCollection;
 
         // DecFIGS surface.h:89/:96; Breaker ReadSurfaceProperties addresses the
         // PhysicsSurface and GameplaySurface RefSpecs at layout +0x40/+0x58.
