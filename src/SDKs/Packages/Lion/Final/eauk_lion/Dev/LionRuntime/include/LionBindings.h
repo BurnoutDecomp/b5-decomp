@@ -39,6 +39,11 @@ public:
 
     void SetLocatorCount(u32 aCount);
 
+    // DWARF LionBindings.h:57. The emitter's locator, i.e. the transform a particle spawns
+    // in. cParticleEmitter::InitialiseParticle @0x82911978 reaches it with `lwz r11, 0x1FC(r25)`
+    // (mpBindings) then `lwz r3, 0xC(r11)` (mpLocator) -- inline, as an accessor compiles.
+    cParticleLocator* GetpLocator() const { return mpLocator; }
+
     cLionBindings* GetNextBinding() { return mpNext; }
     void           SetNextBinding(cLionBindings* apNext) { mpNext = apNext; }
 

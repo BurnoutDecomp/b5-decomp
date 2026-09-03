@@ -27,6 +27,7 @@
 // waiting to happen (this project has already paid for that twice in this subsystem).
 // ============================================================================================
 
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleLocator.h"
 #include "types.hpp"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitter.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitterManager.h"
@@ -44,6 +45,29 @@ u32 cParticleEmitter::Update(const cTime& /*arTime*/)
     CGS_ASSERT(false, "cParticleEmitter::Update @0x829153D8 -- NOT RECONSTRUCTED (the Lion simulation core)");
     return 0;
 }
+
+// ----------------------------------------------------------------------------
+// cParticleLocator::GetMat @0x8290E288 -- LOUD TRAP, not a body.
+//
+// Reached by cParticleEmitter::InitialiseParticle's DO_WORLD_ACC arm (descriptor flag 0x80),
+// which rotates a particle's authored world-space acceleration into the emitter's locator
+// frame. Its owning TU (ParticleLocator.cpp) is not in the exe build's source list, so this
+// definition is what keeps the link whole.
+//
+// THE OLD "UNRECOVERABLE" REASON IS REFUTED, and this trap stands on a plainer one: 158
+// instructions of quaternion-to-matrix keyframe blend that this wave ran out of room for. The
+// VMX mask it was said to be blocked on, unk_820FEBD0, reads out of the image as
+// { FFFFFFFF, FFFFFFFF, FFFFFFFF, 00000000 } -- the ordinary xyz-keep / w-drop vsel selector.
+// Returning a fabricated identity here would be WORSE than trapping: every DO_WORLD_ACC
+// particle would silently get its acceleration in the wrong space and look almost right.
+// ----------------------------------------------------------------------------
+const cMatrix& cParticleLocator::GetMat(const cTime& /*arKeyTime*/) const
+{
+    CGS_ASSERT(false, "cParticleLocator::GetMat @0x8290E288 -- NOT RECONSTRUCTED (the keyframe "
+                      "quaternion blend). Reached by InitialiseParticle's DO_WORLD_ACC arm.");
+    return mMatrix;
+}
+
 
 // cParticleEmitter::DeInit @0x82913330 -- releases the emitter's buckets and behaviours back to
 // their pools (cParticleBucketManager::Free, cLionParticleEffectManager::Free). Reached only

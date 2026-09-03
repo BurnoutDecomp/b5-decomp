@@ -32,14 +32,22 @@
 // @0x82913470 allocates and indexes with (`mulli r10, r10, 0x2D0`). A table that agrees with
 // the asm on nineteen offsets and on sizeof is not a guess.
 //
-// ⚠ WHAT IS STILL A SPAN, AND WHY IT IS A SPAN RATHER THAN A NAME. Three of the wiki's members
-// have types that live in ParticleBucket.h -- cMatrix (mParentBaseMatrix), sParticleNucleus
-// (mParentEmitterNucleus) and ParticleBuildData (mPrecalculatedParticleBuildData). That header's
-// HONEST-PLACEHOLDER `struct cMatrix` collides with ParticleRender.h's
-// `typedef rw::math::vpu::Matrix44 cMatrix`, and this header is reached (via
-// ParticleEmitterManager.h) from LionFX.cpp, which needs ParticleRender.h. So including it here
-// would break the compile gate for the whole Lion front door. Those three are reserved spans of
-// the wiki's own size, each named in a comment. DELETE-WHEN the Lion matrix home is unified.
+// ⭐⭐ NOTHING IN THIS RECORD IS A RESERVED SPAN ANY MORE (2026-09-03). Three members used to
+// be `u8 maXxx[N]` because their types lived in ParticleBucket.h, whose HONEST-PLACEHOLDER
+// `struct cMatrix` collided with ParticleRender.h's `typedef rw::math::vpu::Matrix44 cMatrix`
+// -- and this header is reached from LionFX.cpp, which needs both. That collision is retired:
+// cMatrix has ONE home (eauk_common/Maths/Matrix.h) and sParticleNucleus has ONE home
+// (sParticle.h), so the three are now declared as what they are --
+//   cMatrix                  mParentBaseMatrix             (was maParentBaseMatrix[0x40])
+//   sParticleNucleus         mParentEmitterNucleus         (was maParentEmitterNucleus[0xE0])
+//   ParticleBuildData        mPrecalculatedParticleBuildData (was maPrecalculated...[0xB0])
+// and this header includes ParticleBucket.h for the bucket type the simulation walks.
+//
+// ⭐ ParticleBuildData IS THE DWARF'S OWN NESTED STRUCT (ParticleEmitter.h:277) and its size
+// closes the record independently: eleven members, every one a 16-byte VMX lane register
+// (Vector4 / Vector2 / Vector3 / Vector3Plus / VecFloat are all one register on PPC), so
+// 11 * 16 == 176 == 0xB0 -- exactly the span it replaces, and 0x220 + 0xB0 == 0x2D0, the
+// stride cParticleEmitterManager::AppInit @0x82913470 allocates with (`mulli r10,r10,0x2D0`).
 //
 // X360 pointers are 32-bit; on the host they widen, so the console offsets above are NOT host
 // layout facts. Members are pinned BY NAME and SEQUENCE.
@@ -47,17 +55,51 @@
 
 #include "types.hpp"
 #include "SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h"   // cVector (mParentVel / mForce)
+#include "SDKs/Packages/Lion/Final/eauk_common/Maths/Matrix.h"   // cMatrix (mParentBaseMatrix)
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRandomSeed.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/sParticle.h"      // sParticleNucleus
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleBucket.h"  // cParticleBucket
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/ext-include/GameStructs/cTime.h"
+
+#include "rw/math/vpu/types.h"   // the lane-register spellings ParticleBuildData's DWARF uses
 
 class  cParticleDescriptor;
-struct cParticleBucket;
 struct cParticleBehaviour;
-struct cTime;   // monotonic game-time stamp (ParticleBucket.h placeholder home) -- ref only here
 struct cLionBindings;   // LionBindings.h (sibling home) -- Bind() attaches one to this emitter
 
 class cParticleEmitter
 {
 public:
+    // ParticleEmitter.h:266 (DWARF) -- what one call to ParticleBuild concluded about a
+    // particle. cParticleEmitter::ParticleBuild returns it and the Simulate* family switches
+    // on it to keep, skip or retire a slot.
+    enum EParticleBuildResult
+    {
+        eParticleBuildResultNotBornYet = 0,
+        eParticleBuildResultAlive      = 1,
+        eParticleBuildResultDead       = 2,
+    };
+
+    // ParticleEmitter.h:277 (DWARF) -- the per-emitter constants PrecalculateParticleBuildData
+    // @0x8290E018 works out ONCE per behaviour change, so that ParticleBuild does not redo
+    // them per particle per frame. Every member is one 16-byte VMX lane register; the DWARF's
+    // Vector2 / Vector3 / Vector3Plus / Vector4 / VecFloat spellings say how many of the four
+    // lanes carry meaning, not how wide the slot is (see the banner's size proof).
+    struct ParticleBuildData
+    {
+        rw::math::vpu::Vector4     mvDeltaTimeAndCurrentTime;              // :278
+        rw::math::vpu::Vector2     mvAlphaFadeInAndFadeOut;                // :281
+        rw::math::vpu::Vector3     mvScaleAndProportionalScaleYXAndZX;     // :282
+        rw::math::vpu::Vector2     mvOrientStepAndDragFrameRateConstants;  // :283
+        rw::math::vpu::Vector3     mvDragFactorsVelRotScale;               // :284
+        rw::math::vpu::Vector3Plus mvRGBADiff;                             // :287
+        rw::math::vpu::Vector3Plus mvRGBA0;                                // :288
+        rw::math::vpu::Vector3Plus mvRGBAVar;                              // :289
+        rw::math::vpu::Vector3Plus mvRGBABase;                             // :290
+        rw::math::vpu::Vector4     mvfFrameCount;                          // :293 (VecFloat)
+        rw::math::vpu::Vector4     mvfOneOverFrameCount;                   // :294 (VecFloat)
+    };
+
     // The descriptor this emitter is playing (console +0x1F8). LionParticleRender::Render
     // switches on its render mode to pick the draw shape.
     const cParticleDescriptor* GetDescriptor() const { return mpDescriptor; }
@@ -97,21 +139,39 @@ public:
     cParticleEmitter*& GetNextEmitter()           { return mpNext; }
 
 private:
+    // ParticleEmitter.h:306 -- fill one freshly allocated particle from the current
+    // behaviour's base/variance pairs, the emitter's material and the spawn transform.
+    // X360 @0x829116A8. RECONSTRUCTED (ParticleEmitter.cpp).
+    //
+    // The parameter NAMES are the DecFIGS DWARF's own (ParticleEmitter.cpp:1300):
+    // lParticleNucleus, lpParticleVector, lpParticleMatrix, locator, velocity, aSeed, aTime,
+    // lCurrentLocatorTime. The const-ness is the HEADER dump's (ParticleEmitter.h:306) --
+    // the .cpp dump prints an extra `const` on every reference, including the two this
+    // function writes through.
+    void InitialiseParticle(sParticleNucleus& arParticleNucleus,
+                            cVector* apParticleVector,
+                            cMatrix* apParticleMatrix,
+                            const cMatrix& arLocator,
+                            const cVector& arVelocity,
+                            cParticleRandomSeed& arSeed,
+                            const cTime& arTime,
+                            const cTime& arCurrentLocatorTime);
+
     // ---- members (burnout.wiki cParticleEmitter, every offset below re-checked against
     //      cParticleEmitter::Init @0x82913228 / AppInit @0x82913470 -- see the banner) ----
     u32                  mBucketsUsed;              // 0x000
     u8                   maPad004[0x0C];            // 0x004  (wiki: explicit padding)
-    u8                   maParentBaseMatrix[0x40];  // 0x010  cMatrix mParentBaseMatrix
+    cMatrix              mParentBaseMatrix;         // 0x010  DWARF ParticleEmitter.h:334
     cVector              mParentVel;                // 0x050
     cVector              mForce;                    // 0x060
-    u8                   maParentEmitterNucleus[0xE0]; // 0x070 sParticleNucleus
+    sParticleNucleus     mParentEmitterNucleus;     // 0x070  DWARF ParticleEmitter.h:337
     cParticleRandomSeed  mParentRandomSeed;         // 0x150  (console span 0x40)
     u8                   maPadParentSeed[0x10];     // 0x180  the seed's tail padding to 0x190
     u32                  mParentIndex;              // 0x190
     cParticleEmitter*    mpParentEmitter;           // 0x194
-    u32                  mParentTime;               // 0x198  wiki cTime, a 32-bit tick stamp
-    u32                  mLastTime;                 // 0x19C  ditto
-    u32                  mUpdateLastTime;           // 0x1A0  ditto
+    cTime                mParentTime;               // 0x198  DWARF ParticleEmitter.h:341
+    cTime                mLastTime;                 // 0x19C  DWARF ParticleEmitter.h:342
+    cTime                mUpdateLastTime;           // 0x1A0  DWARF ParticleEmitter.h:343
     s32                  mNextEmissionTime;         // 0x1A4
     f32                  m_age;                     // 0x1A8
     f32                  mDt;                       // 0x1AC
@@ -128,7 +188,7 @@ private:
     cParticleBehaviour*  mpTempBehaviour;           // 0x210
     f32                  mBlendLast;                // 0x214
     u8                   maPad218[0x08];            // 0x218  (wiki: explicit padding)
-    u8                   maPrecalculatedParticleBuildData[0xB0];  // 0x220 ParticleBuildData
+    ParticleBuildData    mPrecalculatedParticleBuildData;         // 0x220 DWARF :363
 
     // ⚠ THE TWO SEED PADS ABOVE ARE THE CONSOLE'S, NOT OURS. The wiki sizes cParticleRandomSeed
     // 0x40 (0x30 of Random + mSeed + 0xC of padding) and the emitter's two seed slots span

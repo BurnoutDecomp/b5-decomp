@@ -7,10 +7,13 @@
 // Reconstructed store-for-store from the X360 asm for:
 //   cParticleLocator::Init   @ 0x82909810
 //
-// cParticleLocator::GetMat @ 0x8290E288 is declared in the header but BLOCKED here:
-// its keyframe blend masks each rotated basis row through the un-exported VMX mask
-// blob unk_820FEBD0 (+ vsel to splice the identity w-row), an un-recoverable rodata
-// permute/mask table. It is left for when that pool is homed.
+// cParticleLocator::GetMat @ 0x8290E288 is declared in the header but not bodied here. THE
+// REASON THIS FILE USED TO GIVE WAS WRONG and is corrected: it said the blend masks each
+// rotated basis row "through the un-exported VMX mask blob unk_820FEBD0 ... an un-recoverable
+// rodata permute/mask table". tools/re/x360rd.py reads that address straight out of the image
+// as { FFFFFFFF, FFFFFFFF, FFFFFFFF, 00000000 } -- the ordinary xyz-keep / w-drop vsel
+// selector, with 1.0f x4 in the quadword after it. What is left is 158 instructions of
+// quaternion-to-matrix keyframe blend, and nothing about it is unrecoverable.
 // ============================================================================
 
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleLocator.h"

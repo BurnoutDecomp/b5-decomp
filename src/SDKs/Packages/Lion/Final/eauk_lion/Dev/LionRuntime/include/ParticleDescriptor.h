@@ -57,6 +57,13 @@ public:
         // a descriptor); name inferred -- sub/child descriptors are spawned by their parent
         // emitter, so they are excluded from top-level binding attach.
         E_FLAG_SKIP_AUTO_EMITTER = 0x8000,
+        // The two bits cParticleEmitter::InitialiseParticle @0x829116A8 tests
+        // (`rlwinm r10,r16,0,24,24` -> 0x80 at 0x8291195C, `rlwinm r11,r16,0,23,23` -> 0x100
+        // at 0x82911B18). These names are NOT inferred: they are the Lion authoring token
+        // table's own (X360 cLionTokenTable @0x82F36A34, transcribed in LionParticleParser.cpp),
+        // which binds DO_WORLD_ACC to 0x80 and DO_IGNORE_ROT to 0x100 on the +32 flags word.
+        E_FLAG_WORLD_ACC         = 0x80,     // token DO_WORLD_ACC
+        E_FLAG_IGNORE_ROT        = 0x100,    // token DO_IGNORE_ROT
     };
 
     // cParticleDescriptor::GetRequiredBucketType @ 0x82908660. Decides which bucket
@@ -76,6 +83,15 @@ public:
     // serialisation path can relink the descriptor chain by name.
     cParticleDescriptor* GetNextDescriptor() const { return mpNext.Get(); }
     cParticleBehaviour*  GetBehaviours()    const { return mpBehaviours.Get(); }
+
+    // DWARF ParticleDescriptor.h:166 / :172 -- the two accessors
+    // cParticleEmitter::InitialiseParticle reaches (its DWARF call list names
+    // cParticleDescriptor::Flags and cParticleDescriptor::Material). The X360 build reads
+    // the fields directly (`lwz r16, 0x20(r11)` / `lwz r26, 0x4C(r11)` @0x829116F4), so
+    // they are inline by construction; they are re-outlined here to their DWARF names
+    // rather than left as raw member reads at the call site.
+    u32                Flags()    const { return mFlags; }
+    cParticleMaterial* Material() const { return mpMaterial.Get(); }
 
     // ---- serialise / relocate path (out-of-line in ARTIST; bodies in ParticleDescriptor's
     // own TUs). cLionParticleEffect walks these over its descriptor chain. ----

@@ -57,6 +57,59 @@ struct cMatrix
     const cVector& GetAxisY() const { return ya; }
     const cVector& GetAxisZ() const { return za; }
     const cVector& GetAxisW() const { return wa; }
+
+    // ---- the four methods cParticleEmitter::InitialiseParticle @0x829116A8 reaches -------
+    // Every one of these is INLINED at its X360 call site (none has an out-of-line body in
+    // the image), so the arithmetic below is read out of that call site and de-inlined back
+    // to the owning type -- which is where the DWARF says the source put it. The DWARF names
+    // for InitialiseParticle list exactly BuildIdentity / SetTrans / Transpose3x3 /
+    // ApplyAxes, in this order, so these are the original's own four methods, not helpers
+    // invented to tidy the asm up.
+
+    // DWARF Matrix.h:125. Asm 0x82911B24..0x82911B70: sixteen `stfs` of flt_82001C98 (1.0,
+    // read out of the image) on the diagonal and flt_82001CC0 (0.0) everywhere else.
+    void BuildIdentity()
+    {
+        xa.x = 1.0f; xa.y = 0.0f; xa.z = 0.0f; xa.w = 0.0f;
+        ya.x = 0.0f; ya.y = 1.0f; ya.z = 0.0f; ya.w = 0.0f;
+        za.x = 0.0f; za.y = 0.0f; za.z = 1.0f; za.w = 0.0f;
+        wa.x = 0.0f; wa.y = 0.0f; wa.z = 0.0f; wa.w = 1.0f;
+    }
+
+    // DWARF Matrix.h:32. Asm 0x82911B74..0x82911B8C: three `stfs` into +0x30/+0x34/+0x38
+    // followed by 1.0 into +0x3C -- the w lane is FORCED to 1, not left as it was (the store
+    // is emitted even though BuildIdentity has just written the same value there).
+    void SetTrans(f32 afX, f32 afY, f32 afZ)
+    {
+        wa.x = afX; wa.y = afY; wa.z = afZ; wa.w = 1.0f;
+    }
+
+    // DWARF Matrix.h:176. Transpose of the upper-left 3x3; the w row and the w lanes are
+    // carried through untouched. InitialiseParticle composes this with ApplyAxes below, and
+    // the composition is what its asm actually emits: `out.x = m0*v.x + m1*v.y + m2*v.z`
+    // (0x829119D4 fmadds chain) is ApplyAxes over the TRANSPOSED axes, and the console just
+    // never materialises the intermediate.
+    cMatrix Transpose3x3() const
+    {
+        cMatrix lResult = *this;
+        lResult.xa.x = xa.x; lResult.xa.y = ya.x; lResult.xa.z = za.x;
+        lResult.ya.x = xa.y; lResult.ya.y = ya.y; lResult.ya.z = za.y;
+        lResult.za.x = xa.z; lResult.za.y = ya.z; lResult.za.z = za.z;
+        return lResult;
+    }
+
+    // DWARF Matrix.h:191. Rotate a vector by the 3x3 axes -- v.x*xa + v.y*ya + v.z*za, w
+    // untouched. Asm 0x829119A8..0x829119F0: three interleaved fmadds chains, one per output
+    // lane, over the axes' x/y/z components; the source vector's w never enters.
+    cVector ApplyAxes(cVector avVector) const
+    {
+        cVector lResult;
+        lResult.x = xa.x * avVector.x + ya.x * avVector.y + za.x * avVector.z;
+        lResult.y = xa.y * avVector.x + ya.y * avVector.y + za.y * avVector.z;
+        lResult.z = xa.z * avVector.x + ya.z * avVector.y + za.z * avVector.z;
+        lResult.w = avVector.w;
+        return lResult;
+    }
 };
 
 // 64 bytes, 16-aligned: the stride cParticleBucket::AllocateParticle @0x82908750 indexes
