@@ -1463,7 +1463,31 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
                 Attrib::Gen::visualfxsurface lVfx(VfxSurfaceRef(lSurface.GetAttributeData()), 0);
                 const void* lpVfxData = lVfx.GetAttributeData();
 
-                const bool lbSkidMarksEnabled = ReadBool(lpVfxData, KU_VFX_SKID_MARKS_ENABLED);
+                bool lbSkidMarksEnabled = ReadBool(lpVfxData, KU_VFX_SKID_MARKS_ENABLED);
+                // [DIAG] BRN_SKID_DISABLE -- THE CONTROL. NOT IN THE X360 BINARY, inert unless
+                // the variable names a value. DELETE-WHEN-STABLE.
+                //
+                // The shipped surfaces all turn skid marks ON, so the only way to run the
+                // negative half of the claim is to force the flag the console reads out of
+                // visualfxsurface to false and check that the marks disappear. Two earlier
+                // waves correctly declined to run this control while nothing was visible --
+                // a control that cannot fail proves nothing. Now that a mark is on film it
+                // discriminates, so it is armable. It forces exactly ONE bool and nothing
+                // else: the surface still resolves, the threshold is still read, the wheel
+                // state machine still runs, only the lay decision flips.
+                {
+                    static int siSkidDisabled = -1;
+                    if (siSkidDisabled < 0)
+                    {
+                        const char* lpcValue = std::getenv("BRN_SKID_DISABLE");
+                        siSkidDisabled = (lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0') ? 1 : 0;
+                        if (siSkidDisabled == 1)
+                            CgsDev::Log::WriteToLog("[skid] BRN_SKID_DISABLE=1 CONTROL ARMED:"
+                                                    " SkidMarksEnabled forced false\n");
+                    }
+                    if (siSkidDisabled == 1)
+                        lbSkidMarksEnabled = false;
+                }
                 const f32  lfSkidThreshold    = ReadF32(lpVfxData, KU_VFX_SKID_MARK_THRESHOLD);
                 const f32  lfSkidFactor       = lrWheel.mfSkidFactor;                 // +80
                 if (lbSkidMarksEnabled && lfSkidFactor > lfSkidThreshold)

@@ -35,7 +35,25 @@ namespace BrnDiag
     // Print the currently bound colour target 0, depth/stencil surface and back buffer, with
     // each one's D3DSURFACE_DESC, tagged with lpcLabel. Cheap and silent when the probe is off.
     // Defined in pc/gcm/renderengine/XenonD3D9Shims.cpp (the TU that owns the device).
-    void LogBoundSurfaces(const char* lpcLabel);
+    // luSamplePeriod: print only every Nth call for this label. It exists because the first
+    // "world-draw" call site spent its whole budget inside the SHADOW-MAP cascade pass -- four
+    // lines all reading rt=1280x1920 fmt=NULL depth=D16 cw=0x0, which is the depth-only cascade
+    // and not the scene at all. A prefix budget on a call site that runs thousands of times a
+    // frame measures whichever pass happens to go first; a sampled one walks across all of them.
+    // lbColourPassesOnly: skip the call entirely when colour writes are masked off, i.e. when
+    // this is a DEPTH-ONLY pass. Needed for the same reason as the sampling: the world mesh
+    // submit runs about 1,200 times a frame for the three shadow cascades before it runs for
+    // the scene, so both a prefix budget AND a sampled one report the cascade and never the
+    // scene. A depth-only pass has cw = 0; the scene pass has cw = 0xF.
+    void LogBoundSurfaces(const char* lpcLabel, u32 luSamplePeriod = 1u,
+                          bool lbColourPassesOnly = false);
+
+    // True when the device is currently drawing into a SCENE COLOUR target: colour writes are
+    // unmasked and the bound render target is the 1280x720 multisampled anti-alias buffer. It
+    // exists so a probe on a call site shared by the shadow cascades, the env-map faces and the
+    // scene can say WHICH of them it is looking at -- the distinction that made three separate
+    // ladders in this campaign describe the shadow pass and call it the world.
+    bool IsSceneColourPass();
 }
 
 #endif

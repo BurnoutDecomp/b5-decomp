@@ -80,6 +80,7 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"     // DispatchFrame / DispatchList
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::operator- / Magnitude (CalculateVehicleLODs)
 #include "GameSource/Director/Camera/Utils/CameraUtils.h" // Utils::GetZoomFromFOVDegs (the bring-up LOD zoom)
+#include "GameSource/Director/Camera/Camera.h"      // BrnDirector::Camera::KF_DEFAULT_NEAR_CLIP_DISTANCE
 #include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h" // ⚠️ FLAG PC QoL: GetFrameSeconds (the tour camera's advance)
 #include <cmath>    // sqrtf / tanf ([FLAG PC bring-up] the dispatch producer's camera) + std::sqrt (vehicle LODs)
 #include <cstddef>  // offsetof (the VehicleRenderInfo layout pins)
@@ -5859,7 +5860,22 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         ? ( static_cast< f32 >( renderengine::gDisplayWidth )
             / static_cast< f32 >( renderengine::gDisplayHeight ) )
         : ( 16.0f / 9.0f );
-    const f32 lfNear = 0.5f;
+    // ⭐ THE NEAR PLANE IS THE DIRECTOR CAMERA'S, NOT A STAND-IN CONSTANT (2026-09-03).
+    // This was a hard-coded 0.5f while the camera the rest of the frame projects with --
+    // the one BrnDirector::Camera::CopyToCgsCamera stamps and BrnDirectorModule publishes
+    // into ParticleRenderData -- carries GetNearClipDistance()'s 0.15. Two near planes
+    // means two different depths for the same world point: measured, the gap was 0.087 of
+    // the depth range at 4 m, and it is why the tyre-mark trail (which projects with the
+    // director camera) landed behind a road drawn with this one at EVERY fragment.
+    // Camera.cpp:55 asked for exactly this check -- "check it against the near plane the
+    // world actually renders with the day that path lights up" -- and the arithmetic is
+    // the second witness that single-sourced 0.15f never had.
+    // The FAR plane deliberately stays this camera's own: the sky dome sits 9500 units
+    // from the eye and the director default is 10000, which is 500 units of margin
+    // instead of 2500. Its contribution to the depth disagreement is 2.5e-6 -- three
+    // hundred times smaller than the 7.5e-4 a 3 cm decal lift is worth at 4 m -- so
+    // matching the near alone closes the gap without moving the dome.
+    const f32 lfNear = BrnDirector::Camera::Camera::KF_DEFAULT_NEAR_CLIP_DISTANCE;
     // ⚠ The floor has to clear the SKY DOME. BrnSkyDomeManager pushes the dome's vertices
     // out to KF_SKY_SCALE = 9500 world units from the eye (flt_820473B0, the sky scale in
     // ViewPositionAndSkyScale.w), and this stand-in camera's old 4000-unit floor -- and the
@@ -5980,10 +5996,14 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     // lane (0), which loses the -n*f/(f-n) depth bias from the view-projection.
     sBringUpCamera.mProjection.xAxis = Vector4{ lfCotHalfFov / lfAspect, 0.0f, 0.0f, 0.0f };
     sBringUpCamera.mProjection.yAxis = Vector4{ 0.0f, lfCotHalfFov, 0.0f, 0.0f };
-    sBringUpCamera.mProjection.zAxis = Vector4{ 0.0f, 0.0f, lfFar / ( lfFar - lfNear ), 1.0f };
-    sBringUpCamera.mProjection.wAxis = Vector4{ 0.0f, 0.0f,
-                                                -lfNear * lfFar / ( lfFar - lfNear ), 0.0f };
-    sBringUpCamera.UpdateViewProjectionMatrix();
+    // ⭐ THE HAND-INSTALLED DEPTH ROW IS GONE (2026-09-03). It has moved into
+    // CgsGraphics::Camera::UpdatePerspectiveProjectionMatrix, which SetFovHorizontal above
+    // already calls -- same two expressions, same FLAG, same reasoning, but in the one
+    // place every consumer of a CgsGraphics::Camera goes through. Installing it only here
+    // is what let the world write D3D depth while the trail pass tested the console's
+    // OpenGL depth against it. The scalars are stamped after SetFovHorizontal, so the
+    // projection is rebuilt once more with the final near/far before it is used.
+    sBringUpCamera.UpdatePerspectiveProjectionMatrix();
 
     // ROW-VECTOR convention throughout the dispatch path (DrawRenderable::Interpret
     // computes WVP = world * viewProjection and the draw leaf evaluates

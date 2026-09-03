@@ -3260,7 +3260,27 @@ namespace
 // =============================================================================
 namespace BrnDiag
 {
-    void LogBoundSurfaces(const char* lpcLabel)
+    bool IsSceneColourPass()
+    {
+        IDirect3DDevice9* const lpDevice = Dev();
+        if (lpDevice == nullptr)
+            return false;
+        DWORD luCw = 0;
+        lpDevice->GetRenderState(D3DRS_COLORWRITEENABLE, &luCw);
+        if (luCw == 0u)
+            return false;                     // a depth-only pass (the shadow cascades)
+        IDirect3DSurface9* lpRt = nullptr;
+        if (FAILED(lpDevice->GetRenderTarget(0, &lpRt)) || lpRt == nullptr)
+            return false;
+        D3DSURFACE_DESC lDesc;
+        const bool lbScene = SUCCEEDED(lpRt->GetDesc(&lDesc))
+                          && lDesc.Width  == 1280u && lDesc.Height == 720u
+                          && lDesc.MultiSampleType != D3DMULTISAMPLE_NONE;
+        lpRt->Release();
+        return lbScene;                       // not an env-map face, not a down-sample
+    }
+
+    void LogBoundSurfaces(const char* lpcLabel, u32 luSamplePeriod, bool lbColourPassesOnly)
     {
         if (!DiagRtProbeEnabled())
             return;
@@ -3273,9 +3293,24 @@ namespace BrnDiag
         // literal POINTER, which is what every call site passes -- the same convention LogOnce
         // above uses, and the same caveat: two different literals with equal text get separate
         // budgets, which is what is wanted here.
+        if (lbColourPassesOnly)
+        {
+            IDirect3DDevice9* const lpProbeDevice = Dev();
+            if (lpProbeDevice == nullptr)
+                return;
+            DWORD luProbeCw = 0;
+            lpProbeDevice->GetRenderState(D3DRS_COLORWRITEENABLE, &luProbeCw);
+            if (luProbeCw == 0u)
+                return;   // a depth-only pass (the shadow cascades) -- not what this asked for
+        }
+        static std::unordered_map<const char*, u32> sSeen;
         static std::unordered_map<const char*, u32> sBudget;
+        u32& lruSeen = sSeen[lpcLabel];
+        ++lruSeen;
+        if (luSamplePeriod > 1u && (lruSeen % luSamplePeriod) != 0u)
+            return;
         u32& lruUsed = sBudget[lpcLabel];
-        if (lruUsed >= 4u)
+        if (lruUsed >= 6u)
             return;
         ++lruUsed;
 
@@ -3295,13 +3330,95 @@ namespace BrnDiag
 
         D3DVIEWPORT9 lVp; std::memset(&lVp, 0, sizeof(lVp)); lpDevice->GetViewport(&lVp);
 
-        char lacMsg[448];
+        // [DIAG] ...and the DEPTH STATE, because "the trail is rejected by the depth test" is a
+        // claim about two passes and this probe was only ever printing one side's surfaces. If the
+        // world pass draws with the test off, or with writes off, or with a different function,
+        // then what the trail is testing against is not what anyone assumed it was.
+        DWORD luZ = 0, luZW = 0, luZFunc = 0, luCw = 0, luCull = 0;
+        // ⚠ AND THE TWO DEPTH BIASES. Measured 2026-09-03: the trail's fragments miss the
+        // depth test by a CONSTANT amount in NDC -- every one of 73,567 flips at a bias of
+        // 1e-1 and none at 1e-2, across a strip 30 m deep. A geometry offset produces a gap
+        // that shrinks with distance; a constant one is what a DEPTH BIAS left on during
+        // the world pass would produce. The trail's own rasteriser applier zeroes both
+        // biases before its draw, so the [ImVerts] ladder reads 0 and can never see the
+        // world's. This reads them where the world sets them.
+        DWORD luBiasBits = 0, luSlopeBits = 0;
+        lpDevice->GetRenderState(D3DRS_DEPTHBIAS, &luBiasBits);
+        lpDevice->GetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, &luSlopeBits);
+        f32 lfBias = 0.0f, lfSlopeBias = 0.0f;
+        std::memcpy(&lfBias, &luBiasBits, sizeof(lfBias));
+        std::memcpy(&lfSlopeBias, &luSlopeBits, sizeof(lfSlopeBias));
+        lpDevice->GetRenderState(D3DRS_ZENABLE, &luZ);
+        lpDevice->GetRenderState(D3DRS_ZWRITEENABLE, &luZW);
+        lpDevice->GetRenderState(D3DRS_ZFUNC, &luZFunc);
+        lpDevice->GetRenderState(D3DRS_COLORWRITEENABLE, &luCw);
+        lpDevice->GetRenderState(D3DRS_CULLMODE, &luCull);
+
+        char lacMsg[512];
         std::snprintf(lacMsg, sizeof(lacMsg),
-                      "[rtid] %-12s rt=[%s] depth=[%s] back=[%s] vp=%lux%lu@%lu,%lu z%.2f-%.2f\n",
+                      "[rtid] %-12s rt=[%s] depth=[%s] back=[%s] vp=%lux%lu@%lu,%lu z%.2f-%.2f"
+                      " | z=%lu zw=%lu zfunc=%lu cw=0x%lX cull=%lu dbias=%.7f slope=%.7f\n",
                       lpcLabel, lacRt, lacDepth, lacBack,
                       lVp.Width, lVp.Height, lVp.X, lVp.Y,
-                      static_cast<double>(lVp.MinZ), static_cast<double>(lVp.MaxZ));
+                      static_cast<double>(lVp.MinZ), static_cast<double>(lVp.MaxZ),
+                      luZ, luZW, luZFunc, luCw, luCull,
+                      static_cast<double>(lfBias), static_cast<double>(lfSlopeBias));
         CgsDev::Log::WriteToLog(lacMsg);
+
+        // [DIAG] ...and the first four VERTEX CONSTANT registers. For every pass in this
+        // ladder those are the world-view-projection rows, and comparing the WORLD pass's
+        // against the TRAIL pass's is the one remaining way a fragment can be behind
+        // geometry it is physically above: two passes projecting the same world point
+        // through different near/far planes write different depths for it. If the two
+        // matrices are equal to the last digit, that explanation is dead and the
+        // disagreement is in the GEOMETRY, not the transform.
+        // ⚠ SIXTEEN registers, not four. c0..c3 at a scene world draw came back as an AFFINE
+        // matrix (fourth column 0,0,0,1) -- the per-object `world` matrix, not a projection.
+        // The view-projection the world writes depth with is somewhere further up the file,
+        // and finding it is the point: a row whose fourth column is neither 0 nor 1 is a
+        // perspective row, and its m22/m23 ratio and the translation row give the near and
+        // far planes the world pass is using -- the one thing that can put a fragment that
+        // is physically ABOVE the road BEHIND it in the depth buffer.
+        {
+            float lafVs[16 * 4] = { 0 };
+            lpDevice->GetVertexShaderConstantF(0, lafVs, 16);
+            char lacVs[420];
+            for (u32 luBlock = 0; luBlock < 4u; ++luBlock)
+            {
+                const u32 luFirst = luBlock * 4u;
+                std::snprintf(lacVs, sizeof(lacVs),
+                              "[rtid] %-12s vs c%u={%g %g %g %g} c%u={%g %g %g %g}"
+                              " c%u={%g %g %g %g} c%u={%g %g %g %g}\n",
+                              lpcLabel,
+                              luFirst + 0u, lafVs[luFirst * 4 + 0],  lafVs[luFirst * 4 + 1],  lafVs[luFirst * 4 + 2],  lafVs[luFirst * 4 + 3],
+                              luFirst + 1u, lafVs[luFirst * 4 + 4],  lafVs[luFirst * 4 + 5],  lafVs[luFirst * 4 + 6],  lafVs[luFirst * 4 + 7],
+                              luFirst + 2u, lafVs[luFirst * 4 + 8],  lafVs[luFirst * 4 + 9],  lafVs[luFirst * 4 + 10], lafVs[luFirst * 4 + 11],
+                              luFirst + 3u, lafVs[luFirst * 4 + 12], lafVs[luFirst * 4 + 13], lafVs[luFirst * 4 + 14], lafVs[luFirst * 4 + 15]);
+                CgsDev::Log::WriteToLog(lacVs);
+            }
+            // ...and c240..c243, which is where Device::SetObjectTransformPC publishes the
+            // PER-OBJECT world-view-projection for every world draw (the fallback shader's
+            // WVP registers -- see KU_FALLBACK_WVP_REGISTER). For a static world object the
+            // `world` half is a placement, so this row set carries the WORLD PASS'S OWN z
+            // coefficients -- the last term needed to explain why a decal 3 cm above the
+            // road lands behind it. Effective near = -m32/m22 with the projection this
+            // engine builds (CgsCamera.cpp UpdatePerspectiveProjectionMatrix, verified
+            // against ARTIST 0x827EC778); the trail's own is 0.305 m.
+            {
+                float lafObj[4 * 4] = { 0 };
+                lpDevice->GetVertexShaderConstantF(240, lafObj, 4);
+                char lacObj[420];
+                std::snprintf(lacObj, sizeof(lacObj),
+                              "[rtid] %-12s objWvp c240={%g %g %g %g} c241={%g %g %g %g}"
+                              " c242={%g %g %g %g} c243={%g %g %g %g}\n",
+                              lpcLabel,
+                              lafObj[0],  lafObj[1],  lafObj[2],  lafObj[3],
+                              lafObj[4],  lafObj[5],  lafObj[6],  lafObj[7],
+                              lafObj[8],  lafObj[9],  lafObj[10], lafObj[11],
+                              lafObj[12], lafObj[13], lafObj[14], lafObj[15]);
+                CgsDev::Log::WriteToLog(lacObj);
+            }
+        }
 
         if (lpRt)      lpRt->Release();
         if (lpDepth)   lpDepth->Release();
@@ -4218,6 +4335,220 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
         if (lpTexSurf) lpTexSurf->Release();
         if (lpTex0)    lpTex0->Release();
         if (lpRt)      lpRt->Release();
+    }
+
+    // ============================================================================================
+    // [DIAG] THE DEPTH-RELATIONSHIP CENSUS. NOT IN THE X360 BINARY, gated on BRN_ZCMP_PROBE and on
+    // the skid stride, budget six. DELETE-WHEN-STABLE.
+    //
+    // WHY: the tyre mark is now known to be eaten by the DEPTH TEST -- it draws with the test
+    // disabled and does not draw with it enabled, everything else held constant. What is NOT known
+    // is the SIGN or the SIZE of the disagreement, and no diagnostic on this platform can read the
+    // scene depth buffer: it is D3DFMT_D24S8, 2x multisampled, and D3D9 will neither lock it nor
+    // GetRenderTargetData it.
+    //
+    // An occlusion query can. Re-issuing the SAME draw three times with colour writes off and depth
+    // writes already off -- so not one of the three changes a single pixel of colour or depth --
+    // and counting the fragments that survive gives the whole relationship in one line:
+    //
+    //     all  ZENABLE off          the fragments the strip covers at all (the denominator)
+    //     le   ZFUNC LESSEQUAL      the fragments in front of, or level with, what the world wrote
+    //     gt   ZFUNC GREATER        the fragments strictly behind it
+    //
+    // le == 0 and gt == all says the strip is entirely BEHIND the world at those pixels -- which is
+    // a claim about the geometry or the world's depth, not about the render state. le + gt < all
+    // says the remainder tied exactly. Nothing else has to be inferred.
+    //
+    // ⚠ WHAT THIS COVERS: colour target 0's depth surface, this draw's fragments, this frame. It
+    // does not say WHAT wrote the depth it is comparing against, and it cannot distinguish "the
+    // mark is below the road" from "the road's depth is nearer than the road". Those need the next
+    // probe, not this one.
+    // ⚠ IT STALLS THE GPU: each GetData spins until the query retires. That is why the budget is
+    // six draws in a whole run -- this simulation is frame-coupled and a probe that costs frames
+    // can suppress the event it is measuring.
+    // ============================================================================================
+    {
+        static int  siZCmpEnabled = -1;
+        if (siZCmpEnabled < 0)
+        {
+            const char* lpcValue = std::getenv("BRN_ZCMP_PROBE");
+            siZCmpEnabled = (lpcValue != nullptr && lpcValue[0] != 0 && lpcValue[0] != '0') ? 1 : 0;
+        }
+        // ⚠ THE BUDGET IS A SAMPLE, NOT A PREFIX, AND THAT CORRECTION IS THE WHOLE POINT.
+        // The first version took the first six skid draws. Every one of them is the moment the
+        // trail is BORN -- two emitters, two segments each, a strip a metre and a half long lying
+        // directly under the car's own rear bumper -- so all six measured the car occluding its own
+        // tyre marks and reported "the strip is 0.2-1 m below the depth buffer", which is the
+        // CAR's height, not the road's. The same shape as the ImVerts ladder spending its four
+        // slots at boot. Sampling every 120th draw spreads the six across the whole drift, where
+        // most of the strip is on open road.
+        static u32 suZCmpSeen  = 0u;
+        static u32 suZCmpRuns  = 0u;
+        const bool lbZCmpSample = (suImVertsStride == 28u) && ((++suZCmpSeen % 120u) == 0u);
+        if (siZCmpEnabled == 1 && lbZCmpSample && suZCmpRuns < 8u)
+        {
+            {
+                ++suZCmpRuns;
+
+                DWORD luSaveZ = 0, luSaveZFunc = 0, luSaveCw = 0;
+                lpDevice->GetRenderState(D3DRS_ZENABLE, &luSaveZ);
+                lpDevice->GetRenderState(D3DRS_ZFUNC, &luSaveZFunc);
+                lpDevice->GetRenderState(D3DRS_COLORWRITEENABLE, &luSaveCw);
+                lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE, 0u);
+
+                // One counted draw. The caller has already set ZENABLE/ZFUNC.
+                // ⚠ THE HRESULT IS CHECKED. The first version of this probe reported `all=0` --
+                // zero fragments with the depth test DISABLED -- alongside `gt=6479` on the very
+                // same geometry, which is not a possible pair. The cause was the spin breaking on
+                // any non-S_FALSE return and keeping the untouched zero, so a query that answered
+                // E_FAIL or was read before the device had started reported "no coverage". A probe
+                // that cannot fail visibly is not a probe; it now returns whether the read worked.
+                // ⚠⚠ ONE FRESH QUERY OBJECT PER COUNT, AND THAT CORRECTION IS LOAD-BEARING.
+                // The version that reused a single query across nine back-to-back Issue cycles
+                // produced a self-contradicting line: `all=0` under ZFUNC=ALWAYS beside
+                // `gt=28817` under GREATER, on the same vertices in the same call -- ALWAYS
+                // cannot pass fewer fragments than GREATER. Every GetData returned S_OK, so the
+                // spin was not the culprit; re-issuing BEGIN on a query whose previous result had
+                // just been read was. A probe that reports an impossible pair has to be repaired
+                // before anything it says is used, and both numbers it produced were being read
+                // as evidence.
+                struct CountedDraw
+                {
+                    static bool Do(IDirect3DDevice9* lpDev, DWORD* lpuOut)
+                    {
+                        *lpuOut = 0u;
+                        IDirect3DQuery9* lpQ = nullptr;
+                        if (FAILED(lpDev->CreateQuery(D3DQUERYTYPE_OCCLUSION, &lpQ)) || lpQ == nullptr)
+                            return false;
+                        lpQ->Issue(D3DISSUE_BEGIN);
+                        lpDev->DrawPrimitiveUP(seImVertsPrimitive, suImVertsPrimCount,
+                                               sauImVertsScratch, suImVertsStride);
+                        lpQ->Issue(D3DISSUE_END);
+                        bool lbGot = false;
+                        for (int liSpin = 0; liSpin < 2000000; ++liSpin)
+                        {
+                            const HRESULT lhrQ = lpQ->GetData(lpuOut, sizeof(DWORD), D3DGETDATA_FLUSH);
+                            if (lhrQ == S_OK)   { lbGot = true; break; }
+                            if (lhrQ != S_FALSE) { break; }
+                        }
+                        lpQ->Release();
+                        return lbGot;
+                    }
+                };
+
+                // Warm-up: the first Issue/GetData cycle on a freshly created query is discarded,
+                // so a driver that needs one submit before it will answer cannot masquerade as a
+                // measurement of zero coverage.
+                // ⚠ THE DENOMINATOR PASS USES ZFUNC=ALWAYS WITH THE TEST *ENABLED*, not ZENABLE
+                // off. Measured: with D3DRS_ZENABLE = D3DZB_FALSE this query returned 0 on the very
+                // same geometry that answered 2596 under GREATER -- not a possible pair. D3D9
+                // occlusion queries count fragments that PASS THE Z AND STENCIL TESTS, and with the
+                // test switched off there is no test to pass, so the counter never increments.
+                // ALWAYS keeps the test in the pipeline and passes everything, which is the
+                // coverage number this line needs.
+                DWORD luWarm = 0;
+                lpDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+                lpDevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+                (void)CountedDraw::Do(lpDevice, &luWarm);
+
+                // ⚠⚠ THE DENOMINATOR IS DERIVED, NOT MEASURED, AND THAT IS THE SECOND REPAIR OF
+                // THIS PROBE. Both attempts to measure total coverage DIRECTLY came back ZERO on
+                // geometry that GREATER counted in the tens of thousands -- first with the depth
+                // test DISABLED, then with it enabled at ZFUNC=ALWAYS, with a fresh query object
+                // per count and every GetData returning S_OK. Both of those forms leave the depth
+                // unit with nothing to do (no test that can fail, no depth write, colour writes
+                // off), and a driver is free to skip the unit that owns the occlusion counter.
+                // Coverage is therefore the SUM of three mutually exclusive REAL tests -- LESS,
+                // EQUAL, GREATER -- none of which can be elided, and which partition every
+                // fragment exactly once. le is then lt + eq, by definition rather than by a
+                // fourth draw.
+                DWORD luLt = 0, luEq = 0, luGt = 0;
+                bool  lbOk  = true;
+                lpDevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESS);
+                lbOk = CountedDraw::Do(lpDevice, &luLt) && lbOk;
+                lpDevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_EQUAL);
+                lbOk = CountedDraw::Do(lpDevice, &luEq) && lbOk;
+                lpDevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_GREATER);
+                lbOk = CountedDraw::Do(lpDevice, &luGt) && lbOk;
+                const DWORD luAll = luLt + luEq + luGt;
+                const DWORD luLe  = luLt + luEq;
+
+                // ---- THE LIFT SWEEP -------------------------------------------------------------
+                // How far BELOW the world's depth is the strip, in metres? The scratch block still
+                // holds this draw's vertices in world space (7 floats each: pos.xyz then
+                // uv/time/alpha), and DrawPrimitiveUP copies at submit, so the y lane can be raised
+                // by a known amount, re-counted under LESSEQUAL, and put back. Five rungs in one
+                // draw's worth of stalls answers what would otherwise be five separate runs -- and
+                // the rung where `le` stops being zero IS the burial depth.
+                //
+                // ⚠ IT MEASURES, IT DOES NOT FIX. A lift shipped in the renderer would be tuning by
+                // eye; the number is what points at the real cause (a mark laid on the collision
+                // surface under a visual road drawn higher, versus a precision tie, versus a depth
+                // buffer holding something that is not the road at all).
+                const f32 kafLiftRungs[5] = { 0.05f, 0.30f, 1.00f, 2.50f, 6.00f };
+                DWORD lauLift[5] = { 0u, 0u, 0u, 0u, 0u };
+                {
+                    const u32 luFloats = suImVertsStride / 4u;
+                    f32* const lpfScratch = reinterpret_cast<f32*>(sauImVertsScratch);
+                    const u32 luVertices = static_cast<u32>(suImVertsPrimCount) + 2u;   // strip
+                    f32 lfApplied = 0.0f;
+                    lpDevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+                    for (int liRung = 0; liRung < 5; ++liRung)
+                    {
+                        const f32 lfStep = kafLiftRungs[liRung] - lfApplied;
+                        for (u32 luVertex = 0; luVertex < luVertices; ++luVertex)
+                            lpfScratch[luVertex * luFloats + 1u] += lfStep;
+                        lfApplied = kafLiftRungs[liRung];
+                        lbOk = CountedDraw::Do(lpDevice, &lauLift[liRung]) && lbOk;
+                    }
+                    for (u32 luVertex = 0; luVertex < luVertices; ++luVertex)
+                        lpfScratch[luVertex * luFloats + 1u] -= lfApplied;   // put the block back
+                }
+
+                // ---- THE DEPTH-BIAS SWEEP -- THE GAP IN DEPTH UNITS ------------------------------
+                // The lift sweep answers "how many metres", which mixes the geometry and the
+                // projection together. D3DRS_DEPTHBIAS adds a constant straight to the fragment's
+                // NDC z, so sweeping it and finding where LESSEQUAL starts passing measures the
+                // disagreement in the depth buffer's OWN units, with no geometry in the way. The
+                // trail's own z is already known exactly ([trailpass] xform prints ndc.z = 0.925
+                // for the freshest segment), so the rung that flips gives the WORLD's z at the same
+                // pixel -- and 1 - zn/z inverts that into the near plane the world pass is using.
+                // A gap of a few times 1e-6 is a precision tie; 0.05 is two different projections.
+                const f32 kafBiasRungs[5] = { -1.0e-5f, -1.0e-4f, -1.0e-3f, -1.0e-2f, -1.0e-1f };
+                DWORD lauBias[5] = { 0u, 0u, 0u, 0u, 0u };
+                {
+                    DWORD luSaveBias = 0;
+                    lpDevice->GetRenderState(D3DRS_DEPTHBIAS, &luSaveBias);
+                    lpDevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+                    for (int liRung = 0; liRung < 5; ++liRung)
+                    {
+                        const f32 lfBias = kafBiasRungs[liRung];
+                        DWORD luBiasBits = 0;
+                        std::memcpy(&luBiasBits, &lfBias, sizeof(luBiasBits));   // D3D9 takes the float bits
+                        lpDevice->SetRenderState(D3DRS_DEPTHBIAS, luBiasBits);
+                        lbOk = CountedDraw::Do(lpDevice, &lauBias[liRung]) && lbOk;
+                    }
+                    lpDevice->SetRenderState(D3DRS_DEPTHBIAS, luSaveBias);
+                }
+
+                lpDevice->SetRenderState(D3DRS_ZENABLE, luSaveZ);
+                lpDevice->SetRenderState(D3DRS_ZFUNC, luSaveZFunc);
+                lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE, luSaveCw);
+
+                char lacZ[448];
+                std::snprintf(lacZ, sizeof(lacZ),
+                              "[zcmp] skid draw %u: prims=%u cover=%lu lt=%lu eq=%lu gt=%lu le=%lu"
+                              " | lift 5cm=%lu 30cm=%lu 1m=%lu 2.5m=%lu 6m=%lu"
+                              " | bias 1e-5=%lu 1e-4=%lu 1e-3=%lu 1e-2=%lu 1e-1=%lu%s\n",
+                              static_cast<unsigned>(suZCmpRuns),
+                              static_cast<unsigned>(suImVertsPrimCount),
+                              luAll, luLt, luEq, luGt, luLe,
+                              lauLift[0], lauLift[1], lauLift[2], lauLift[3], lauLift[4],
+                              lauBias[0], lauBias[1], lauBias[2], lauBias[3], lauBias[4],
+                              lbOk ? "" : "  ⚠ A QUERY READ FAILED -- counts above are not all real");
+                CgsDev::Log::WriteToLog(lacZ);
+            }
+        }
     }
 
     // [DIAG] The ladder below is a one-shot budget of FOUR runs, and every one of them is spent
