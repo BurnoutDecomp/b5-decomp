@@ -40,6 +40,9 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleMaterial.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleSystem.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitterManager.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleLocator.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleScaler.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleTrigger.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRender/ParticleRender.h"
 #include "GameSource/Effects/Particles/LionParticleRender.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -404,4 +407,80 @@ int cLionFX::BinSave(void* apData, int aiEndianTwiddleFlag, void* apStream)
     (void)apStream;
     __debugbreak();
     return 0;
+}
+
+// ================================================================================================
+// THE BINDING REGISTRIES -- cLionFX's locator / scaler / trigger surface.
+//
+// These are the five entry points the GAME uses to drive a playing effect: it registers a
+// sub-object out of one of the three module pools above, then pushes a transform, a scale or a
+// run/stop edge into it every frame. cLionParticleEffectManager::BindingsAttach hands the
+// registered objects to an emitter as its cLionBindings.
+//
+// ⭐ EVERY ONE IS A THREE-TO-SEVENTEEN INSTRUCTION FACADE, and they were declared "not
+// reconstructed" only because their CALLEES were. Those callees now exist
+// (cParticleLocator::Update @0x829098D0 landed 2026-09-03, cParticleTrigger::Update
+// @0x82908808 was already bodied, cParticleScaler::Update is three instructions inlined into
+// its own facade), so the facades follow.
+//
+// ⚠ THE DWARF GIVES EACH REGISTER A `const char*` NAME AND THE CONSOLE IGNORES IT. Both
+// LocatorRegister @0x8290AC20 and TriggerRegister @0x8290ACA8 overwrite r3 with the allocator
+// address as their FIRST instruction, so the name never reaches anything. It is a debug/tools
+// parameter that survived into the shipping signature; it is kept (the DWARF is the authority
+// for declaration shape) and the fact that it is dead is recorded here rather than dropped.
+//
+// ⚠ TriggerRegister DOES NOT CALL cParticleTrigger::Init -- it clears the four fields INLINE
+// (`stb r11, 0xC` then `stw r11` at 0, 4 and 8, asm 0x8290ACC8..0x8290ACD8), which is the same
+// object state. It is de-inlined back onto the trigger below rather than written as four raw
+// stores through a void*, because the fields have names.
+// ================================================================================================
+
+// cLionFX::LocatorRegister @0x8290AC20 (DWARF LionFX.h:23).
+cParticleLocator* cLionFX::LocatorRegister(const char* /*apcName*/)
+{
+    cParticleLocator* lpLocator = static_cast<cParticleLocator*>(gLionLocatorAllocator.Alloc());
+    if (lpLocator != nullptr)
+    {
+        lpLocator->Init();
+    }
+    return lpLocator;
+}
+
+// cLionFX::LocatorUpdate @0x8290AC58 (DWARF LionFX.h:29). A null check and a tail call.
+void cLionFX::LocatorUpdate(cParticleLocator* apLocator, const cMatrix& arMat, const cTime& arTime)
+{
+    if (apLocator != nullptr)
+    {
+        apLocator->Update(arMat, arTime);
+    }
+}
+
+// cLionFX::TriggerRegister @0x8290ACA8 (DWARF LionFX.h:41).
+cParticleTrigger* cLionFX::TriggerRegister(const char* /*apcName*/)
+{
+    cParticleTrigger* lpTrigger = static_cast<cParticleTrigger*>(gLionTriggerAllocator.Alloc());
+    if (lpTrigger != nullptr)
+    {
+        lpTrigger->Init();
+    }
+    return lpTrigger;
+}
+
+// cLionFX::TriggerUpdate @0x82908888 (DWARF LionFX.h:50).
+void cLionFX::TriggerUpdate(cParticleTrigger* apTrigger, u32 auFlags, const cTime& arTime)
+{
+    if (apTrigger != nullptr)
+    {
+        apTrigger->Update(auFlags, arTime);
+    }
+}
+
+// cLionFX::ScalerUpdate @0x82908878 (DWARF LionFX.h:38). The console inlines
+// cParticleScaler::Update to a single `stfs`; it is de-inlined onto the scaler.
+void cLionFX::ScalerUpdate(cParticleScaler* apScaler, f32 afScale, const cTime& arTime)
+{
+    if (apScaler != nullptr)
+    {
+        apScaler->Update(afScale, arTime);
+    }
 }

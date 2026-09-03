@@ -24,11 +24,17 @@
 // disassembled straight out of the packed .i64 via tools/re/x360rd.py and cross-checked
 // against the DecFIGS DWARF, which declares both with full parameter names.
 //
+// ⭐ ADDED 2026-09-03: the LOCATOR / SCALER / TRIGGER REGISTRY SURFACE -- LocatorRegister,
+// LocatorUpdate, TriggerRegister, TriggerUpdate and ScalerUpdate. Each is a three-to-
+// seventeen instruction facade over a pool allocation and one call; they were parked only
+// because their callees were, and cParticleLocator::Update @0x829098D0 landing removes the
+// last of that.
+//
 // STILL NOT DECLARED, deliberately -- a declaration with no definition is how a caller
-// gets to fail at link instead of against a quiet body: DeInit, Flush, the locator /
-// scaler / trigger registries, EffectCreate/EffectDestroy, the Text/Bin (un)load pair
-// beyond BinLoad/BinSave, and the fog/lod setters. Each reaches Lion simulation or
-// effect-instance code that is not landed.
+// gets to fail at link instead of against a quiet body: DeInit, Flush, the three
+// UnRegisters, ScalerRegister (an export-set hole), EffectCreate/EffectDestroy/
+// EffectSetWorldIndex (all three need cLionEffectInstance, which is not homed), the
+// Text/Bin (un)load pair beyond BinLoad/BinSave, and the fog/lod setters.
 // ============================================================================
 
 #include "types.hpp"
@@ -36,9 +42,14 @@
 #include "SDKs/Packages/Lion/Final/Allocator/include/CoreAllocator/ITaggedAllocator.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRender/LionBatch.h"  // LionBatchArray (a typedef, so it cannot be forward-declared)
 
+#include "SDKs/Packages/Lion/Final/eauk_common/Maths/Matrix.h"   // cMatrix (LocatorUpdate)
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/ext-include/GameStructs/cTime.h"
+
 struct cLionEffectDefinition;   // LionEffect.h (sibling home)
 class  iParticleRender;         // ParticleRender/ParticleRender.h
-struct cTime;                   // ext-include/GameStructs/cTime.h (the real home, 2026-09-03)
+struct cParticleLocator;        // ParticleLocator.h (sibling home)
+struct cParticleScaler;         // ParticleScaler.h  (sibling home)
+struct cParticleTrigger;        // ParticleTrigger.h (sibling home)
 struct EffectsVertexBufferLocked;   // EffectsVertexBuffer.h
 namespace renderengine { class VertexBuffer; class TextureState; }
 
@@ -99,6 +110,18 @@ struct cLionFX
                          f32 afDepthSamplerOffsetU,
                          f32 afDepthSamplerOffsetV,
                          renderengine::TextureState* apDepthTextureState);
+
+    // ---- the binding registries (DWARF LionFX.h:23 / :29 / :38 / :41 / :50) ----------
+    // ⚠ The two Register entry points take a `const char*` NAME that the console IGNORES:
+    // both overwrite r3 with their pool's address as their first instruction. The DWARF is
+    // the authority for declaration shape, so the parameter stays; that it is dead is
+    // recorded rather than dropped.
+    static cParticleLocator* LocatorRegister(const char* apcName);
+    static void LocatorUpdate(cParticleLocator* apLocator, const cMatrix& arMat,
+                              const cTime& arTime);
+    static cParticleTrigger* TriggerRegister(const char* apcName);
+    static void TriggerUpdate(cParticleTrigger* apTrigger, u32 auFlags, const cTime& arTime);
+    static void ScalerUpdate(cParticleScaler* apScaler, f32 afScale, const cTime& arTime);
 
     // cLionFX::BinLoad @0x82914388 (DWARF LionFX.h:99). Take a saved LION effect blob,
     // check its version word, re-base the effect graph inside it and build it, then link
