@@ -62,17 +62,41 @@ namespace
     // by CarState::meBoostType (BrnWorld::EBoostType: 0=Danger, 1=Aggression, 2=Stunt).
     // The count is the number of boost TYPES (3), distinct from KU_MAX_BOOST_EFFECTS
     // (the 4 effect SLOTS).
-    // UNCERTAIN: the IDA string export truncates these three pointers to the shared
-    // prefix "gamedb://burnout5/Burnout/Effects/Boost"; the per-type suffix could not be
-    // recovered from the binary. The placeholders below preserve the verified prefix and
-    // the known per-type ordering -- the exact .lef asset IDs need confirming from the
-    // game database.
+    //
+    // ⭐ CORRECTED 2026-09-03 (boost-exhaust wave). The three strings that stood here
+    // ("BoostDanger" / "BoostAggression" / "BoostStunt") were INVENTED placeholders whose
+    // own banner said the suffixes "could not be recovered from the binary". They CAN be
+    // read out of the image, and they are none of those three names. The pointer array is
+    // at rodata 0x82CDAE4C (OnChangeState @0x8229E3D8 indexes `off_82CDAE4C[meBoostType]`);
+    // its three words and the strings they point at, read with tools/re/x360rd.py:
+    //     0x82CDAE4C -> 0x8200D818  "...BoostYellow.lef...?ID=560104"
+    //     0x82CDAE50 -> 0x8200D7C0  "...BoostRed.lef...?ID=559640"
+    //     0x82CDAE54 -> 0x8200D768  "...BoostGreen.lef...?ID=560102"
+    // (0x82CDAE48 -> 0x8200D870 is the ExhaustSmoke string above, so the array base is
+    // right; the three that follow at 0x82CDAE58/5C/60 are the Cam_* effects of a
+    // neighbouring table, so the array is exactly 3 long.)
+    //
+    // ⭐⭐ THE NAME IS THE LOOKUP KEY, SO A WRONG NAME IS A SILENT TOTAL FAILURE.
+    // StartEffects hashes the string with ParticleDescription::HashString (FNV-1a,
+    // case-folded) and ParticleModule::StartLionEffect @0x82289F50 matches that hash
+    // against the ParticleDescriptionCollection; a miss takes the console's
+    // "Couldn't locate lion effect description ... Does the Particles Bundle need
+    // rebuilding ?" exit and returns KU_HANDLE_INVALID. MEASURED both ways against the
+    // shipped X360 PARTICLES.BUNDLE and our ported copy:
+    //     BoostYellow  0x82B1D830  present (X360 BE @2868, ported LE @2864)
+    //     BoostRed     0xD07A9AFA  present (X360 BE @4916, ported LE @4912)
+    //     BoostGreen   0x658A7FD9  present (X360 BE @2420, ported LE @2416)
+    //     "BoostDanger" 0x7DAC27A0 ABSENT FROM BOTH BUNDLES
+    // so the placeholders could never have started a boost effect on any build.
     const u32 KU_NUM_BOOST_TYPES = 3;
     const char* const KAC_BOOST_EFFECTS[KU_NUM_BOOST_TYPES] =
     {
-        "gamedb://burnout5/Burnout/Effects/BoostDanger.lef.BurnoutFXLionEffectFile",      // EBoostType 0
-        "gamedb://burnout5/Burnout/Effects/BoostAggression.lef.BurnoutFXLionEffectFile",  // EBoostType 1
-        "gamedb://burnout5/Burnout/Effects/BoostStunt.lef.BurnoutFXLionEffectFile",       // EBoostType 2
+        // EBoostType 0 == E_BOOST_TYPE_DANGER      (rodata 0x8200D818)
+        "gamedb://burnout5/Burnout/Effects/BoostYellow.lef.BurnoutFXLionEffectFile?ID=560104",
+        // EBoostType 1 == E_BOOST_TYPE_AGGRESSION  (rodata 0x8200D7C0)
+        "gamedb://burnout5/Burnout/Effects/BoostRed.lef.BurnoutFXLionEffectFile?ID=559640",
+        // EBoostType 2 == E_BOOST_TYPE_STUNT       (rodata 0x8200D768)
+        "gamedb://burnout5/Burnout/Effects/BoostGreen.lef.BurnoutFXLionEffectFile?ID=560102",
     };
 
     // The boost-recharge effect started on entry to ExhaustPopRestart (rodata,
