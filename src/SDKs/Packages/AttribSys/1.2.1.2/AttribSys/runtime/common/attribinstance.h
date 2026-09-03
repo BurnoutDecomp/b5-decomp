@@ -172,6 +172,11 @@ namespace Attrib
     struct RefSpec
     {
         u64 GetClassKey() const { return mClassKey; }
+        // [FLAG PC bring-up, additive host helper] the ref's collection key, so a probe can
+        // print BOTH SIDES of a lazy resolve (which key was asked for vs. what came back)
+        // without a second database lookup. Read-only; no console counterpart is needed
+        // because the console never has to prove its own resolves.
+        u64 GetCollectionKey() const { return mCollectionKey; }
 
         // GROWN for MomentPlayerStunt::Update @0x82272750 (the stunt moment builds
         // stack references to its "World_Signature_%i" ICE takes): raw-key

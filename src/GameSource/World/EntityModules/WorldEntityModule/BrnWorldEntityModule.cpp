@@ -44,6 +44,7 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"
 
 #include <cmath>   // sqrtf (the [FLAG PC bring-up] loaded-world bounds helper)
+#include <cstdio>  // snprintf (the [skid-bind] surfacelist resolve probe)
 
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable;
 // bodied by the CgsShaderConstants TU). Slot 0 holds the per-draw world transform.
@@ -1067,6 +1068,24 @@ WorldEntityModule::PrepareSurfaceList( WorldEntityIO::OutputBuffer_Prepare* lpOu
             // come from the CURRENT attribsys-vault converter (build_game_data.py --only
             // "SURFACELIST.BIN" --force). Data from the pre-built drop predates it.
             mSurfaceList.ChangeWithDefault( gs_uSurfaceListKey );
+
+            // [skid-bind] BOTH SIDES OF THIS RESOLVE, once. This is the FIRST of the two
+            // instances that bind the world's surfacelist (the other is
+            // BrnEffects::EffectsModule::mSurfaceList, bound from
+            // PostWorldPreparePrepare one load stage later), so if the tyre-mark chain ever
+            // reads an empty list again this line says whether the collection was there at
+            // all or only went missing between here and there. Diagnostic only -- it takes
+            // no branch the console does not take.
+            {
+                char lacMsg[256];
+                std::snprintf( lacMsg, sizeof( lacMsg ),
+                    "[skid-bind] WorldEntityModule::PrepareSurfaceList: key=%016llX "
+                    "boundCollectionKey=%016llX Num_Surfaces=%d\n",
+                    static_cast<unsigned long long>( gs_uSurfaceListKey ),
+                    static_cast<unsigned long long>( mSurfaceList.GetCollection() ),
+                    mSurfaceList.Num_Surfaces() );
+                CgsDev::Log::WriteToLog( lacMsg );
+            }
 
             // Breaker loads the first four floats of surface element 1 as a genuine
             // Vector4 sample colour. The comparison threshold is the scalar epsilon

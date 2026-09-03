@@ -122,10 +122,25 @@ namespace
     const u32 KU_VFX_SKID_MARK_THRESHOLD    = 0x48;   // f32   (`*(v31 + 72)`)
     const u32 KU_VFX_SKID_MARKS_ENABLED     = 0x4E;   // bool  (`*(v31 + 78)`)
     const u32 KU_VFX_SKID_MARK_TYPE_ID      = 0x58;   // s16   (`*(v31 + 88)`)
-    const u32 KU_VFX_SUBCOLLECTION_OFFSET   = 16;     // the visualfxsurface sub-collection inside a surface
+    // ⭐⭐ RENAMED 2026-09-03 from KU_VFX_SUBCOLLECTION_OFFSET, because the old name WAS the
+    // bug. +0x10 in a surface's layout block is an Attrib::RefSpec (the ref to that surface's
+    // visualfxsurface collection), not a collection: the console hands `surfaceLayout + 16`
+    // to Attrib::Gen::visualfxsurface @0x8227FC00, whose Instance ctor is sub_8280A248 --
+    // `bl Attrib__RefSpec__GetCollection` on the argument. Reading it as an
+    // Attrib::Collection* dereferenced +0x28/+0x30 past the end of a 24-byte record and made
+    // GetClass() load a garbage class pointer. See visualfxsurface.h for the full asm.
+    const u32 KU_VFX_SURFACE_REF_OFFSET     = 16;     // the visualfxsurface RefSpec inside a surface's layout
     const u32 KU_SURFACE_ID_SHIFT           = 4;      // (tag >> 4) & 0x3F
     const u32 KU_SURFACE_ID_MASK            = 0x3F;
     const u32 KU_SURFACE_REFSPEC_SIZE       = 24;     // Attrib::DefaultDataArea(24) fallback
+
+    // The surface layout's visualfxsurface reference: `surfaceInstance.mpAttributeData + 16`
+    // read as the Attrib::RefSpec it is. One spelling for all four call sites.
+    const Attrib::RefSpec& VfxSurfaceRef(const void* lpSurfaceLayout)
+    {
+        return *reinterpret_cast<const Attrib::RefSpec*>(
+            reinterpret_cast<const u8*>(lpSurfaceLayout) + KU_VFX_SURFACE_REF_OFFSET);
+    }
 
     // One line, once, for an arm this build does not carry. Never an assert: see the banner.
     void LogNotReconstructed(bool& lrbLogged, const char* lpcWhat)
@@ -693,40 +708,68 @@ void EffectsModule::PostWorldPreparePrepare()
     Attrib::Collection* const lpSurfaceCollection =
         mSurfaceList.ChangeWithDefault(Attrib::StringToKey(KAC_WORLD_SURFACELIST_COLLECTION));
 
-    // ⚠ FLAG PC bring-up, and it is an ASSET/LOADER gap, not an effects one. MEASURED (run 17):
-    // with the key above and this function finally called, the boot took an access violation
-    //     Attrib::Instance::GetClass + 0x11
-    //     BrnEffects::EffectsModule::PostWorldPreparePrepare + 0x22F
-    //     LoadingScriptedState::Update -> MainGameFlowStateCompleteLoading::Update
-    // -- FindCollectionWithDefault(surfacelist class, StringToKey("340654")) resolved to
-    // NOTHING on this build, so Change() left the instance with no collection and the very next
-    // Num_Surfaces() walked a null class. The console cannot reach this: the world's surfacelist
-    // collection is loaded by the time the collision prepare reports done.
+    // ⭐⭐ THE BOOT FAULT OF RUNS 17/18 WAS NOT HERE, AND IT WAS NOT AN ASSET/LOADER GAP.
+    // The note that stood here said "FindCollectionWithDefault(surfacelist, StringToKey(
+    // \"340654\")) resolved to NOTHING on this build" and guarded on Change()'s return value.
+    // Both halves were wrong:
+    //   * Attrib::Instance::Change @0x8280D1A8 returns the collection the instance held
+    //     BEFORE the swap on the null path (`lResult = mpCollection` never reassigned when
+    //     lpNewCollection is 0), so `Change(...) == 0` is not a test of whether the resolve
+    //     succeeded. That is why the guard "did not fire".
+    //   * The record IS in the shipped data: SURFACELIST.BIN carries a CollectionLoadData
+    //     with mKey = B96A0FF96535775A (= StringToKey("340654")), mClass = 42C25F4985B5C4F4
+    //     (= StringToKey("surfacelist")) and one entry, key 0ADCE56EF3DA7F1F (= "Surfaces"),
+    //     type Attrib::RefSpec -- and the bundle loads (BrnGame.log: "LoadBundle
+    //     'surfacelist.bin' -> pool 7: 1 resources").
+    // The real fault was the visualfxsurface constructor in the loop below taking an
+    // Attrib::Collection* where the console passes an Attrib::RefSpec -- see visualfxsurface.h.
     //
-    // Announced and stepped over rather than reverted, because the wiring above is right and the
-    // measurement is the useful part: the surface list stays empty (Num_Surfaces() == 0), so
-    // HandleWheels keeps taking Attrib::DefaultDataArea's zeros and no tyre mark can be laid --
-    // but the boot survives to say so instead of dying inside AttribSys.
-    // DELETE-WHEN the world's "340654" surfacelist collection is actually loaded on this build.
-    if (lpSurfaceCollection == 0)
+    // [skid-bind] BOTH SIDES OF THE RESOLVE, once. Never control flow: the console has no
+    // guard here, and an invented early-out is what hid the real defect for two runs.
     {
-        static bool sbLogged = false;
-        LogNotReconstructed(sbLogged,
-            "the world's surfacelist COLLECTION -- Attrib::FindCollectionWithDefault(surfacelist, "
-            "StringToKey(\"340654\")) resolves to nothing on this build, so mSurfaceList has no "
-            "collection. Num_Surfaces() stays 0, every HandleWheels surface lookup falls back to "
-            "Attrib::DefaultDataArea's zeros, and NO TYRE MARK CAN BE LAID. ASSET/LOADER gap");
-        return;
+        static bool sbLoggedBind = false;
+        if (!sbLoggedBind)
+        {
+            sbLoggedBind = true;
+            void* const lpSurface1 = mSurfaceList.Surfaces(1);
+            const Attrib::RefSpec* const lpRef1 =
+                static_cast<const Attrib::RefSpec*>(lpSurface1);
+            char lacMsg[400];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[skid-bind] PostWorldPreparePrepare: key=%016llX prevCollection=%p "
+                "boundCollectionKey=%016llX Num_Surfaces=%d Surfaces(1)=%p "
+                "ref1{class=%016llX collection=%016llX resolved=%d}\n",
+                static_cast<unsigned long long>(
+                    Attrib::StringToKey(KAC_WORLD_SURFACELIST_COLLECTION)),
+                static_cast<const void*>(lpSurfaceCollection),
+                static_cast<unsigned long long>(mSurfaceList.GetCollection()),
+                mSurfaceList.Num_Surfaces(),
+                lpSurface1,
+                lpRef1 ? static_cast<unsigned long long>(lpRef1->GetClassKey()) : 0ull,
+                lpRef1 ? static_cast<unsigned long long>(lpRef1->GetCollectionKey()) : 0ull,
+                lpRef1 ? (lpRef1->HasResolvedCollection() ? 1 : 0) : -1);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
     }
 
     {
         // Surface element 1's leading 4-vector must carry a magnitude: |lane| > epsilon in
         // at least one lane (vandc sign-clear, vcmpgtfp against unk_8200D990, CR6 "all
         // false" fires the assert).
+        //
+        // ⭐ SPELLING FOLLOWS THE CONSOLE, which distinguishes the two generated surface
+        // constructors: here it resolves the ref itself and calls the Collection* form
+        //     Collection = Attrib::RefSpec::GetCollection(AttributePointer);
+        //     Attrib::Gen::surface::surface(v47, Collection, 0);      // @0x8227FAB0
+        // whereas HandleWheels @0x82296C80 / WheelStateMachine::Update @0x82293EB8 call the
+        // RefSpec form (sub_8227FB58) directly. The two land in the same place; keeping the
+        // spellings distinct keeps each site mapped 1:1 onto the symbol it really calls.
         void* lpSurfaceRef = mSurfaceList.Surfaces(1);
         if (!lpSurfaceRef)
             lpSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_SIZE);
-        Attrib::Gen::surface lSurface(*static_cast<const Attrib::RefSpec*>(lpSurfaceRef), 0);
+        Attrib::Collection* lpSurfaceCollectionForRef = const_cast<Attrib::Collection*>(
+            static_cast<Attrib::RefSpec*>(lpSurfaceRef)->GetCollection());
+        Attrib::Gen::surface lSurface(lpSurfaceCollectionForRef, 0);
         const f32* lpfLeading = reinterpret_cast<const f32*>(lSurface.GetAttributeData());
         const f32 KF_EPSILON = 1.1920929e-07f;   // unk_8200D990 (FLT_EPSILON splat)
         const bool lbAnyLane = std::fabs(lpfLeading[0]) > KF_EPSILON || std::fabs(lpfLeading[1]) > KF_EPSILON
@@ -740,10 +783,13 @@ void EffectsModule::PostWorldPreparePrepare()
         void* lpSurfaceRef = mSurfaceList.Surfaces(luSurface);
         if (!lpSurfaceRef)
             lpSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_SIZE);
-        Attrib::Gen::surface lSurface(*static_cast<const Attrib::RefSpec*>(lpSurfaceRef), 0);
-        Attrib::Collection* lpVfxCollection = reinterpret_cast<Attrib::Collection*>(
-            reinterpret_cast<u8*>(const_cast<void*>(lSurface.GetAttributeData())) + KU_VFX_SUBCOLLECTION_OFFSET);
-        Attrib::Gen::visualfxsurface lVfx(lpVfxCollection, 0);
+        Attrib::Collection* lpElementCollection = const_cast<Attrib::Collection*>(
+            static_cast<Attrib::RefSpec*>(lpSurfaceRef)->GetCollection());
+        Attrib::Gen::surface lSurface(lpElementCollection, 0);
+        // The visualfxsurface REF embedded in the surface layout at +0x10 (console:
+        // `visualfxsurface(v49, v52 + 16, 0)` with v52 == the surface instance's
+        // mpAttributeData, into the ctor whose Instance overload is sub_8280A248).
+        Attrib::Gen::visualfxsurface lVfx(VfxSurfaceRef(lSurface.GetAttributeData()), 0);
         const void* lpVfxData = lVfx.GetAttributeData();
 
         mParticleModule.TrailSystem().UpdateTrailType(
@@ -881,9 +927,7 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
             if (!lpSurfaceRef)
                 lpSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_SIZE);
             Attrib::Gen::surface lSurface(*static_cast<const Attrib::RefSpec*>(lpSurfaceRef), 0);
-            Attrib::Collection* lpVfxCollection = reinterpret_cast<Attrib::Collection*>(
-                reinterpret_cast<u8*>(const_cast<void*>(lSurface.GetAttributeData())) + KU_VFX_SUBCOLLECTION_OFFSET);
-            Attrib::Gen::visualfxsurface lVfx(lpVfxCollection, 0);
+            Attrib::Gen::visualfxsurface lVfx(VfxSurfaceRef(lSurface.GetAttributeData()), 0);
             const void* lpVfxData = lVfx.GetAttributeData();
             mParticleModule.TrailSystem().UpdateTrailType(
                 ReadS16(lpVfxData, KU_VFX_SKID_MARK_TYPE_ID),
@@ -1341,10 +1385,11 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
                 lbSurfaceResolved = (lpSurfaceRef != 0);
                 if (!lpSurfaceRef)
                     lpSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_SIZE);
+                // sub_8227FB58 -- the surface ctor's RefSpec overload, then the
+                // visualfxsurface REF at layout+0x10 (console: `sub_8227FB58(v32,
+                // AttributePointer, 0); visualfxsurface(v30, v33 + 16, 0)`).
                 Attrib::Gen::surface lSurface(*static_cast<const Attrib::RefSpec*>(lpSurfaceRef), 0);
-                Attrib::Collection* lpVfxCollection = reinterpret_cast<Attrib::Collection*>(
-                    reinterpret_cast<u8*>(const_cast<void*>(lSurface.GetAttributeData())) + KU_VFX_SUBCOLLECTION_OFFSET);
-                Attrib::Gen::visualfxsurface lVfx(lpVfxCollection, 0);
+                Attrib::Gen::visualfxsurface lVfx(VfxSurfaceRef(lSurface.GetAttributeData()), 0);
                 const void* lpVfxData = lVfx.GetAttributeData();
 
                 const bool lbSkidMarksEnabled = ReadBool(lpVfxData, KU_VFX_SKID_MARKS_ENABLED);
