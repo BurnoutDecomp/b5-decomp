@@ -38,9 +38,9 @@
 // (ParticleRandomSeed.h), cMatrix (eauk_common/Maths/Matrix.h) and sParticleNucleus
 // (sParticle.h). cParticleEmitter stays an opaque forward declaration (a pointer member
 // only), which is not a fork.
-// WHAT IS STILL A PLACEHOLDER HERE: `struct cTime` (mLatestBirthTime), modelled as an
-// opaque 8 bytes. It is the ONE remaining forked type in this header, and it is the type
-// every Lion entry point takes by reference, so homing it is the next unification.
+// NOTHING IN THIS HEADER IS A FORK ANY MORE: cTime was the last one, and it is homed at
+// ext-include/GameStructs/cTime.h as of the same day (it had been modelled here as an
+// opaque EIGHT bytes against the console's four -- see that header's banner).
 // ⛔ THE OLD NOTE SAYING THIS HEADER "does NOT include ParticleBehaviour.h" TO AVOID AN
 // ODR CLASH IS RETIRED WITH THE FORKS IT DESCRIBED -- both headers now name the same
 // cVector -- but the include is still not added, because nothing here needs it.
@@ -58,6 +58,7 @@
 // PLACEHOLDERS in this header until 2026-09-03; see their banners).
 #include "SDKs/Packages/Lion/Final/eauk_common/Maths/Matrix.h"   // cMatrix (mpMatrices)
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/sParticle.h"  // sParticleNucleus
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/ext-include/GameStructs/cTime.h"   // cTime -- the real home (fork retired 2026-09-03)
 
 class cParticleEmitter;         // owning emitter (chained list head) -- opaque here
 struct cParticleBucketManager;  // pool owner (ParticleBucketManager.h) -- befriended below
@@ -71,14 +72,12 @@ struct cParticleBucketManager;  // pool owner (ParticleBucketManager.h) -- befri
 // forks of the type (ParticleLocator.h had a second, ParticleRender.h a third), and two
 // of them were a hard redefinition of each other -- see the Matrix.h banner.
 
-// ----------------------------------------------------------------------------
-// HONEST PLACEHOLDER: monotonic game time stamp (mLatestBirthTime). Not touched
-// by this TU's bodied function; modelled opaque (8 bytes) for shape only.
-// ----------------------------------------------------------------------------
-struct cTime
-{
-    u64 muTicks;
-};
+// cTime now comes from its real home, ext-include/GameStructs/cTime.h (included above).
+// The `struct cTime { u64 muTicks; }` that used to sit here was EIGHT bytes against the
+// console's four, and it was a silent ODR fork of ParticleTrigger.h's four-byte
+// `struct cTime { s32 mi32Ticks; }` -- whose own banner had already reasoned to the right
+// width from cParticleTrigger::Update @0x82908808 while this one stayed 8. See the cTime.h
+// banner for the four independent attestations that settle it at one S32.
 
 // cParticleRandomSeed (mRandomSeed) now comes from its real home,
 // ParticleRandomSeed.h (included above); the former opaque placeholder is retired.

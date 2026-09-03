@@ -40,7 +40,10 @@ void cParticleTrigger::Update(u32 auFlags, const cTime& arTime)
 {
     if (auFlags != 0)
     {
-        if (!mbEnabled || arTime.mi32Ticks < mTimeStart.mi32Ticks)
+        // `cmpw` -- a SIGNED word compare, which is what GetTicks() hands back (the member
+        // was `mi32Ticks` on this header's own retired cTime fork; it is `mTicks`, read
+        // through GetTicks(), on the one home).
+        if (!mbEnabled || arTime.GetTicks() < mTimeStart.GetTicks())
             mTimeStart = arTime;
         mTime     = arTime;
         mbEnabled = true;
