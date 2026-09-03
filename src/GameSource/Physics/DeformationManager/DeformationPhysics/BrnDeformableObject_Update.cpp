@@ -18,6 +18,10 @@
 #include "GameSource/World/BrnEntityTypes.h"                                  // BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE (the ApplySensorImpulse owner test)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedWheelManager.h"   // DetachedWheelManager::DetachWheel (UpdateWheels' detach arm)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                           // CgsNumeric::Random::RandomFloat (UpdateWheels' twist-limit draw)
+
+// The present counter, so an [st-mag] line names the dumped frame it belongs to (the dump writes
+// bb_<present>.bmp). Same extern the [deform-bbox] witness takes (BrnDeformableObject_BBox.cpp:19).
+namespace renderengine { extern u32 guPresentCount; }
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"             // BrnPhysics::Vehicle::Wheel (UpdateWheels seats / twists / detaches it)
 
 // =================================================================================================
@@ -917,13 +921,27 @@ namespace Deformation
             {
                 f32 lfShapedMagnitude = lfProjection;
 
+                // [st-mag] probe scratch -- NOT IN THE X360 BINARY, and it costs the console path
+                // nothing: every value below is one the block already computes, copied into a named
+                // local. It exists because the shaping is otherwise UNOBSERVABLE -- the shaped value
+                // is written into lParams.mvfImpulseMagnitude and never read again in this loop, so
+                // no downstream probe can distinguish x1 from x15 after the fact.
+                s32 liStArm   = 0;      // 0 = untouched, 1 = attacker (in showtime), 2 = victim
+                f32 lfStScale = 1.0f;   // GetShowtimeDeformationScale()
+                f32 lfStDamp  = 1.0f;   // the attacker arm's 0.1 car-car damp, when it fires
+                f32 lfStFade  = 1.0f;   // clamp(1.5 - strength, 0.5, 1.5)
+                f32 lfStGain  = 1.0f;   // the victim arm's 15.0, when it fires
+
                 if ( lpVehicle != nullptr && lpVehicle->IsPlayerVehicleInShowtime() )   // vtbl +0x10
                 {
-                    lfShapedMagnitude *= lpVehicle->GetShowtimeDeformationScale();      // vtbl +0x1C
+                    const f32 lfShowtimeScale = lpVehicle->GetShowtimeDeformationScale();  // vtbl +0x1C
+                    lfShapedMagnitude *= lfShowtimeScale;
+                    liStArm = 1; lfStScale = lfShowtimeScale;
 
                     if ( lContact.mpOtherVehicle != nullptr )
                     {
                         lfShapedMagnitude *= KF_SHOWTIME_MAG_CARCAR_DAMP;               // 0.1
+                        lfStDamp = KF_SHOWTIME_MAG_CARCAR_DAMP;
                     }
 
                     // fade = min(max(1.5 - strength, 0.5), 1.5)   -- the two fsel at 0x82607D40/D48
@@ -938,6 +956,7 @@ namespace Deformation
                         lfFade = KF_SHOWTIME_STRENGTH_FADE_MAX;
                     }
                     lfShapedMagnitude *= lfFade;
+                    lfStFade = lfFade;
                 }
                 else if ( lContact.mpOtherVehicle != nullptr )
                 {
@@ -947,11 +966,49 @@ namespace Deformation
                          || lContact.mpOtherVehicle->HasBouncedThisFrame() )             // other +0x672E
                     {
                         lfShapedMagnitude *= KF_SHOWTIME_MAG_VICTIM_GAIN;               // 15.0
+                        liStArm = 2; lfStGain = KF_SHOWTIME_MAG_VICTIM_GAIN;
                     }
                 }
 
                 lParams.mvfImpulseMagnitude = VecFloat{ lfShapedMagnitude, lfShapedMagnitude,
                                                         lfShapedMagnitude, lfShapedMagnitude };
+
+                // ---- [st-mag] PC bring-up instrument -- DELETE WHEN the showtime shaping is banked.
+                // OPT-IN (BRN_SHOWTIME_WATCH), so a default run is byte-identical to a build without
+                // it. ⚠️ It prints EVERY shaped direction, arm 0 included, precisely so that "no x15
+                // line" can be told apart from "no impulse at all" -- the difference between a
+                // refuted fix and a test that never fired. `owner` is this object's entity-type high
+                // byte (1 = race car, 2 = traffic), so the victim's identity is on the line.
+                {
+                    static s32 siStMagProbe = -1;
+                    if ( siStMagProbe < 0 )
+                    {
+                        const char* lpcEnv = getenv( "BRN_SHOWTIME_WATCH" );
+                        siStMagProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+                    }
+                    static u32 suStMagLines = 0;
+                    if ( siStMagProbe == 1 && CgsDev::Log::gpDebugPrint != 0
+                         && ++suStMagLines <= 4000u )
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[st-mag] n "   << static_cast<s32>(suStMagLines)
+                            << " present "     << static_cast<s32>(renderengine::guPresentCount)
+                            << " owner "       << static_cast<s32>(GetHandlingBodyIdHighByte())
+                            << " dir "         << liDir
+                            << " arm "         << liStArm
+                            << " raw "         << lfProjection
+                            << " shaped "      << lfShapedMagnitude
+                            << " x "           << ( lfProjection != 0.0f
+                                                    ? lfShapedMagnitude / lfProjection : 0.0f )
+                            << " scale "       << lfStScale
+                            << " damp "        << lfStDamp
+                            << " fade "        << lfStFade
+                            << " gain "        << lfStGain
+                            << " other "       << ( lContact.mpOtherVehicle != nullptr ? 1 : 0 )
+                            << "\n";
+                    }
+                }
+                // ---- end [st-mag] -------------------------------------------------------------
 
                 // magnitude validation tripwire (line 1430) -- non-gating. The asm self-compares the
                 // SHAPED magnitude vector (`vcmpeqfp. v0,v0,v0` @0x82607DE8, reading var_280 after
