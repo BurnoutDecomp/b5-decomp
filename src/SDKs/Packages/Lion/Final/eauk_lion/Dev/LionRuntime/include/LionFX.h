@@ -30,11 +30,15 @@
 // because their callees were, and cParticleLocator::Update @0x829098D0 landing removes the
 // last of that.
 //
+// ⭐⭐ ADDED 2026-09-03 (boost-exhaust wave): ScalerRegister, EffectCreate, EffectDestroy and
+// EffectSetWorldIndex. The first was an EXPORT-SET HOLE (disassembled out of the image at
+// 0x8290AC68); the other three were parked on cLionEffectInstance not being homed, and it is
+// homed now (LionEffect.h). Between them they are the entire path from
+// ParticleModule::DispatchThreadUpdate to a registered emitter.
+//
 // STILL NOT DECLARED, deliberately -- a declaration with no definition is how a caller
 // gets to fail at link instead of against a quiet body: DeInit, Flush, the three
-// UnRegisters, ScalerRegister (an export-set hole), EffectCreate/EffectDestroy/
-// EffectSetWorldIndex (all three need cLionEffectInstance, which is not homed), the
-// Text/Bin (un)load pair beyond BinLoad/BinSave, and the fog/lod setters.
+// UnRegisters, the Text/Bin (un)load pair beyond BinLoad/BinSave, and the fog/lod setters.
 // ============================================================================
 
 #include "types.hpp"
@@ -46,6 +50,7 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/ext-include/GameStructs/cTime.h"
 
 struct cLionEffectDefinition;   // LionEffect.h (sibling home)
+struct cLionEffectInstance;     // LionEffect.h (sibling home)
 class  iParticleRender;         // ParticleRender/ParticleRender.h
 struct cParticleLocator;        // ParticleLocator.h (sibling home)
 struct cParticleScaler;         // ParticleScaler.h  (sibling home)
@@ -121,7 +126,30 @@ struct cLionFX
                               const cTime& arTime);
     static cParticleTrigger* TriggerRegister(const char* apcName);
     static void TriggerUpdate(cParticleTrigger* apTrigger, u32 auFlags, const cTime& arTime);
+
+    // cLionFX::ScalerRegister @0x8290AC68 -- an EXPORT-SET HOLE (no 0x<addr>.json; the name
+    // comes from ParticleModule::DispatchThreadUpdate's xrefs_from). Sixteen instructions:
+    // carve a cParticleScaler out of gLionScalerAllocator and, if it came back, store 1.0f
+    // (`lfs f0, 0x1C98(r11)` -> flt_82001C98) through it -- i.e. cParticleScaler::Init,
+    // inlined. Unlike its two siblings this one takes NO name parameter: the DWARF gives it
+    // none and r3 is loaded with the pool address as the first instruction with nothing
+    // clobbered.
+    static cParticleScaler* ScalerRegister();
+
     static void ScalerUpdate(cParticleScaler* apScaler, f32 afScale, const cTime& arTime);
+
+    // ---- the effect-instance surface (DWARF LionFX.h) --------------------------------------
+    // Three facades over cLionEffectManager::mSingleton, all reconstructed 2026-09-03.
+    //   EffectCreate       @0x82914CB8   one tail call, arguments straight through
+    //   EffectDestroy      @0x82915148   one tail call
+    //   EffectSetWorldIndex@0x82908898   four instructions: null check, `stw r4, 0x14(r3)`
+    static cLionEffectInstance* EffectCreate(cLionEffectDefinition* apDefinition,
+                                             cParticleLocator* apLocator,
+                                             cParticleScaler* apScaler,
+                                             cParticleTrigger* apTrigger,
+                                             u32 auWorldIndex);
+    static void EffectDestroy(cLionEffectInstance* apInstance);
+    static void EffectSetWorldIndex(cLionEffectInstance* apInstance, u32 auWorldIndex);
 
     // cLionFX::BinLoad @0x82914388 (DWARF LionFX.h:99). Take a saved LION effect blob,
     // check its version word, re-base the effect graph inside it and build it, then link

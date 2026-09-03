@@ -475,6 +475,31 @@ void cLionFX::TriggerUpdate(cParticleTrigger* apTrigger, u32 auFlags, const cTim
     }
 }
 
+// cLionFX::ScalerRegister @0x8290AC68 -- an EXPORT-SET HOLE, disassembled out of the image:
+//     8290AC74  lis  r11, 0x8312          ; r3 = &gLionScalerAllocator (0x83122DD0)
+//     8290AC78  addi r3, r11, 0x2DD0
+//     8290AC7C  bl   cLionBlockAlloc::Alloc
+//     8290AC80  cmplwi cr6, r3, 0
+//     8290AC84  beq  cr6, 0x8290AC94
+//     8290AC8C  lfs  f0, 0x1C98(r11)      ; flt_82001C98 == 1.0f
+//     8290AC90  stfs f0, 0(r3)            ; scaler->mScale = 1.0f
+// The store is cParticleScaler::Init inlined -- the scaler's whole record is that one float,
+// and 1.0f (not 0) is its identity, which is exactly why an unbound scaler leaves an effect
+// playing its behaviour stack unscaled rather than collapsed.
+//
+// ⚠ NO NAME PARAMETER, unlike LocatorRegister/TriggerRegister. Those two take a `const char*`
+// the console throws away; this one is not given one at all (the DWARF declares none and the
+// first instruction loads r3 from the image with nothing to clobber).
+cParticleScaler* cLionFX::ScalerRegister()
+{
+    cParticleScaler* lpScaler = static_cast<cParticleScaler*>(gLionScalerAllocator.Alloc());
+    if (lpScaler != nullptr)
+    {
+        lpScaler->Init();
+    }
+    return lpScaler;
+}
+
 // cLionFX::ScalerUpdate @0x82908878 (DWARF LionFX.h:38). The console inlines
 // cParticleScaler::Update to a single `stfs`; it is de-inlined onto the scaler.
 void cLionFX::ScalerUpdate(cParticleScaler* apScaler, f32 afScale, const cTime& arTime)
@@ -482,5 +507,48 @@ void cLionFX::ScalerUpdate(cParticleScaler* apScaler, f32 afScale, const cTime& 
     if (apScaler != nullptr)
     {
         apScaler->Update(afScale, arTime);
+    }
+}
+
+// ================================================================================================
+// THE EFFECT-INSTANCE SURFACE.
+//
+// All three are facades over the cLionEffectManager singleton, and all three were parked on
+// cLionEffectInstance having no home. It has one now (LionEffect.h), and the manager's
+// EffectCreate/EffectDestroy landed with it (LionEffectManager.cpp).
+// ================================================================================================
+
+// cLionFX::EffectCreate @0x82914CB8 -- ten instructions, one tail call:
+//     return cLionEffectManager::EffectCreate(&dword_83121D94, a1, a2, a3, a4, a5);
+// The five arguments are (definition, locator, scaler, trigger, worldIndex): the manager body
+// stores a3/a4/a5 into mBindings' mpLocator/mpScaler/mpTrigger and a6 into mWorldIndex, and
+// its only caller ParticleModule::DispatchThreadUpdate @0x8229C5F0 passes exactly the values
+// LocatorRegister / ScalerRegister / TriggerRegister just returned, in that order.
+cLionEffectInstance* cLionFX::EffectCreate(cLionEffectDefinition* apDefinition,
+                                           cParticleLocator* apLocator,
+                                           cParticleScaler* apScaler,
+                                           cParticleTrigger* apTrigger,
+                                           u32 auWorldIndex)
+{
+    return cLionEffectManager::GetMe()->EffectCreate(apDefinition, apLocator, apScaler,
+                                                     apTrigger, auWorldIndex);
+}
+
+// cLionFX::EffectDestroy @0x82915148 -- four instructions, one tail call:
+//     return cLionEffectManager::EffectDestroy(&dword_83121D94, a1);
+void cLionFX::EffectDestroy(cLionEffectInstance* apInstance)
+{
+    cLionEffectManager::GetMe()->EffectDestroy(apInstance);
+}
+
+// cLionFX::EffectSetWorldIndex @0x82908898 -- the whole function is four instructions:
+//     cmplwi cr6, r3, 0 ; beqlr cr6 ; stw r4, 0x14(r3) ; blr
+// instance+0x14 is mBindings(+0x10) + mWorldIndex(+0x04), so this is one setter on the
+// bindings and is written as that rather than as a raw offset store.
+void cLionFX::EffectSetWorldIndex(cLionEffectInstance* apInstance, u32 auWorldIndex)
+{
+    if (apInstance != nullptr)
+    {
+        apInstance->GetBindings().SetWorldIndex(auWorldIndex);
     }
 }

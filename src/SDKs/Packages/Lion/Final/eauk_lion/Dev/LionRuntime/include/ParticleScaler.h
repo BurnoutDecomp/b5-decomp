@@ -23,10 +23,14 @@
 // DWARF ParticleScaler.h:26.
 struct cParticleScaler
 {
-    // DWARF ParticleScaler.h:28. No standalone X360 body (the register path is an
-    // export-set hole); declared, not defined, so a caller fails at link rather than
-    // against a quiet body.
-    void Init();
+    // DWARF ParticleScaler.h:28. RECOVERED 2026-09-03 from the export-set hole it was
+    // inlined into: cLionFX::ScalerRegister @0x8290AC68 does `lfs f0, 0x1C98(r11)` /
+    // `stfs f0, 0(r3)`, and 0x82001C98 reads 3F800000 == 1.0f. So the initial scale is ONE,
+    // not zero -- 1.0 is the identity of the multiply cParticleEmitter::Blend applies it in,
+    // which is why an effect whose scaler is never driven plays its behaviour stack unscaled
+    // instead of collapsed. (This header previously declared Init without defining it,
+    // precisely so a caller would fail at link rather than against a guessed body.)
+    void Init() { mScale = 1.0f; }
 
     // DWARF ParticleScaler.h:30. INLINED at its only reachable call site: cLionFX::
     // ScalerUpdate @0x82908878 stores the float straight through the pointer and never

@@ -31,19 +31,22 @@
 // X360 pointers are 32-bit; on the 64-bit host they widen, so the ABSOLUTE offsets above
 // are NOT host layout facts. Members are pinned BY NAME and SEQUENCE.
 //
-// Vendor code (eauk_lion), reconstructed in its canonical Lion home. Only AppInit/GetMe/
-// GetpAllocator are bodied here; the manager's create/destroy/update/render surface is
-// declared as its own TUs land (EffectCreate @0x829149E8, EffectDestroy @0x82914FF0 are
-// real ledger rows and are NOT declared until they are reconstructed -- a declaration with
-// no definition is how a caller fails at link instead of at the honest place).
+// Vendor code (eauk_lion), reconstructed in its canonical Lion home. AppInit/GetMe/
+// GetpAllocator plus -- added 2026-09-03 by the boost-exhaust wave -- EffectCreate
+// @0x829149E8 and EffectDestroy @0x82914FF0, the pair that carves a cLionEffectInstance out
+// of mAllocator and wires (or unwires) it onto the runtime. The manager's update/render
+// surface is still undeclared until its own TUs land.
 // ============================================================================
 
 #include "types.hpp"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionBlockAlloc.h"
 #include "SDKs/Packages/Lion/Final/Allocator/include/CoreAllocator/ITaggedAllocator.h"
 
-class cLionEffectDefinition;   // LionEffect.h (sibling home)
-class cLionEffectInstance;     // LionEffect.h -- NOT homed in this tree yet (see AppInit)
+struct cLionEffectDefinition;  // LionEffect.h (sibling home)
+struct cLionEffectInstance;    // LionEffect.h (sibling home, as of 2026-09-03)
+struct cParticleLocator;       // ParticleLocator.h
+struct cParticleScaler;        // ParticleScaler.h
+struct cParticleTrigger;       // ParticleTrigger.h
 
 // DecFIGS DWARF LionEffectManager.h:30.
 struct cLionEffectManager
@@ -59,6 +62,22 @@ public:
     // DWARF h:67. The allocator cLionBindings::DeInit @0x82908240 frees its locator array
     // through (off_83121DA4 == this + 0x10).
     EA::Allocator::ITaggedAllocator* GetpAllocator() { return mpAllocator; }
+
+    // X360 @0x829149E8. Carve a cLionEffectInstance out of mAllocator for apDefinition,
+    // point its bindings at the three sub-objects the caller registered, attach those
+    // bindings to every descriptor of the definition's effect (which is what actually
+    // registers an EMITTER), push the binding onto the definition's chain and the instance
+    // onto mpEffects. NULL when apDefinition is NULL or the pool is exhausted.
+    cLionEffectInstance* EffectCreate(cLionEffectDefinition* apDefinition,
+                                      cParticleLocator* apLocator,
+                                      cParticleScaler* apScaler,
+                                      cParticleTrigger* apTrigger,
+                                      u32 auWorldIndex);
+
+    // X360 @0x82914FF0. The exact inverse: give the three sub-objects back to their pools,
+    // DeInit the bindings, unlink them from the definition's chain, unregister every emitter
+    // they bound, unlink the instance from mpEffects and return it to the pool.
+    void EffectDestroy(cLionEffectInstance* apInstance);
 
 private:
     // ----- members (DWARF order; every offset attested in cLionFX::Init) -----
