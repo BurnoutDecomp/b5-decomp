@@ -28,9 +28,12 @@
 
 #include "types.hpp"
 
-struct cParticleBehaviour;   // ParticleBehaviour.h (sibling home) -- behaviour chain node
-class  cParticleMaterial;    // ParticleMaterial.h (sibling home)
-class  cLionSerialiser;      // LionSerialiser.h (sibling home)
+struct cParticleBehaviour;      // ParticleBehaviour.h (sibling home) -- behaviour chain node
+class  cParticleMaterial;       // ParticleMaterial.h (sibling home)
+class  cLionSerialiser;         // LionSerialiser.h (sibling home)
+// Pointer-only back-reference to the owning definition (DWARF :289); LionEffect.h includes
+// this header for its own descriptor walk, so a forward declaration breaks that cycle.
+struct cLionEffectDefinition;   // LionEffect.h (sibling home)
 
 class cParticleDescriptor
 {
@@ -60,10 +63,11 @@ public:
     // cParticleEmitter::Emit.
     BucketType GetRequiredBucketType() const;
 
-    // The draw/render-mode selector (console +0x2C). LionParticleRender::Render switches on
-    // it to pick the geometry shape (0 sprites, 1 quads, 3/4 tilts; 2/other = none). Inline
-    // accessor -- the X360 build reads the field directly (no out-of-line call).
-    u32 GetRenderMode() const { return mRenderMode; }
+    // The draw/render-mode selector (console +0x2C; the DWARF and the Lion token table both
+    // call the member SHAPE / mShape). LionParticleRender::Render switches on it to pick the
+    // geometry shape (0 sprites, 1 quads, 3/4 tilts; 2/other = none). Inline accessor -- the
+    // X360 build reads the field directly (no out-of-line call).
+    u32 GetRenderMode() const { return mShape; }
 
     // Chain / child accessors (DecFIGS DWARF attests GetNextDescriptor / GetBehaviours;
     // the X360 build reads the fields directly). Members are public (as with the sibling
@@ -86,34 +90,58 @@ public:
     // DWARF: U32 IsChildOf(const cParticleDescriptor&) const (ParticleDescriptor.h:219).
     u32 IsChildOf(const cParticleDescriptor& arOther) const;
 
-    // ----- serialised record members (console offsets; host pointer widths differ, so the
-    // absolute offsets are NOT host-asserted -- members are accessed BY NAME). -----
-    // Opaque leading record preceding mFlags at console +0x20 (32).
-    u8  maReserved0[0x20];
+    // ----- the record, in full -------------------------------------------------------
+    // ⭐ COMPLETED 2026-09-03 (boost-exhaust wave). Everything except mFlags/mShape used to
+    // be `maReservedN[]` opaque spans. It does not have to be: the DecFIGS DWARF
+    // (ParticleDescriptor.h:262-293) declares the WHOLE record, member for member, and every
+    // one of its offsets is confirmed twice over --
+    //   (a) by the X360 asm that reaches them: Relocate @0x8290F488 rebases words 14/16/17/
+    //       19/20/21/22/23 and ends `word18 = word16`; Delocate @0x8290CE50 twiddles word 15
+    //       but never delocates it (so it is a value, not a pointer -- DWARF: mBehaviourCount);
+    //       GetDurationMax @0x82909698 reads +4/+8/+20/+24 and returns -1 on +28;
+    //       Serialise @0x8290F640 copies exactly 96 bytes, which is sizeof this record;
+    //   (b) by the Lion authoring token table (X360 cLionTokenTable @0x82F36A34, transcribed
+    //       in LionParticleParser.cpp), which NAMES the first thirteen fields: PAUSE_TIME +4,
+    //       PAUSE_TIME_VARIANCE +8, REPEAT_TIME +12, REPEAT_TIME_VARIANCE +16,
+    //       EMITTER_LIFE_BASE +20, EMITTER_LIFE_VARIANCE +24, EMITTER_LIFE_INFINITE +28,
+    //       the DO_* flag bits +32, LODGROUP +36, RENDERGROUP +40, SHAPE +44,
+    //       COLLISION_TYPE +48, NAME +56.
+    // Console offsets are the 4-byte-pointer ABI; on the x64 host the pointer half widens, so
+    // the absolute offsets are NOT host-asserted -- members are reached BY NAME.
+    u32  mID;                          // console +0x00 (0)   DWARF :262
+    f32  mPauseTime;                   // console +0x04 (4)   token PAUSE_TIME
+    f32  mPauseTimeVariance;           // console +0x08 (8)   token PAUSE_TIME_VARIANCE
+    f32  mRepeatTime;                  // console +0x0C (12)  token REPEAT_TIME
+    f32  mRepeatTimeVariance;          // console +0x10 (16)  token REPEAT_TIME_VARIANCE
+    f32  mEmitterLifeBase;             // console +0x14 (20)  token EMITTER_LIFE_BASE
+    f32  mEmitterLifeVariance;         // console +0x18 (24)  token EMITTER_LIFE_VARIANCE
+    u32  mEmitterLifeInfiniteFlag;     // console +0x1C (28)  token EMITTER_LIFE_INFINITE
+    u32  mFlags;                       // console +0x20 (32)  the DO_* bits
+    u32  mLodGroup;                    // console +0x24 (36)  token LODGROUP
+    u32  mRenderGroup;                 // console +0x28 (40)  token RENDERGROUP
+    // token SHAPE. The DWARF spells this member mShape; GetRenderMode() below keeps the
+    // name the committed readers already use.
+    u32  mShape;                       // console +0x2C (44)
+    u32  mCollisionType;               // console +0x30 (48)  token COLLISION_TYPE
+    f32  mBlendLast;                   // console +0x34 (52)  DWARF :278
+    char* mpName;                      // console +0x38 (56)  token NAME (LionChar*)
 
-    u32 mFlags;       // console +0x20 (32)
-
-    // Opaque span between mFlags (+0x20, 4 bytes) and mRenderMode (+0x2C, 44).
-    u8  maReserved1[0x2C - 0x24];
-
-    u32 mRenderMode;  // console +0x2C (44) -- 0..9 draw/render mode selector
-
-    // Opaque span between mRenderMode (+0x2C) and mpBehaviours (+0x40, 64).
-    u8  maReserved2[0x40 - 0x30];
-
-    cParticleBehaviour* mpBehaviours;  // console +0x40 (64) -- behaviour chain head
-
-    // Opaque span between mpBehaviours (+0x40) and mpMaterial (+0x4C, 76).
-    u8  maReserved3[0x4C - 0x44];
-
-    cParticleMaterial*  mpMaterial;    // console +0x4C (76) -- the descriptor's material
-
-    // Opaque span between mpMaterial (+0x4C) and mpNext (+0x54, 84).
-    u8  maReserved4[0x54 - 0x50];
-
-    cParticleDescriptor* mpNext;       // console +0x54 (84) -- next descriptor in the chain
-
-    cParticleDescriptor* mpParent;     // console +0x58 (88) -- parent descriptor (DWARF
-                                       // ParticleDescriptor.h:292 mpParent). RegisterSubEmitter
-                                       // reads it to locate the used emitter to attach under.
+    // DWARF :282-293 -- private in the original; kept public here for the same reason the
+    // sibling cParticleBehaviour / cParticleMaterial records are, so cLionParticleEffect's
+    // serialise path can relink the chain by name.
+    s32  mBehaviourCount;              // console +0x3C (60)  twiddled, never delocated
+    cParticleBehaviour* mpBehaviours;  // console +0x40 (64)  behaviour chain head
+    cParticleBehaviour* mpBehaviourTemp;   // console +0x44 (68)  the scratch/blend behaviour
+    const cParticleBehaviour* mpBehaviour; // console +0x48 (72)  the current layer; Relocate
+                                           //   and Serialise both end by setting it to
+                                           //   mpBehaviours, and Delocate never touches it
+    cParticleMaterial*  mpMaterial;    // console +0x4C (76)  the descriptor's material
+    cLionEffectDefinition* mpDef;      // console +0x50 (80)  owning definition (DWARF :289)
+    cParticleDescriptor* mpNext;       // console +0x54 (84)  next descriptor in the chain
+    cParticleDescriptor* mpParent;     // console +0x58 (88)  parent (RegisterSubEmitter reads
+                                       //   it to locate the emitter to attach under)
+    cParticleDescriptor* mpChild;      // console +0x5C (92)  first child descriptor
 };
+// Console sizeof == 96, pinned by cParticleDescriptor::Serialise @0x8290F640
+// (`cLionSerialiser::DataStore(a2, a1, 96)`) and GetSerialiseSize @0x8290D100
+// (`*(a2 + 20) += 96`). The host record is larger only because its nine pointers widen.

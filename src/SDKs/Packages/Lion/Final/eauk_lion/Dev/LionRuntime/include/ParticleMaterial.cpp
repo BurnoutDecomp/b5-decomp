@@ -18,21 +18,25 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleMaterial.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionSerialiser.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionTokeniser.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionParticleParser.h"
 #include "GameSource/Effects/Particles/LionParticleRender.h"
 
 #include <cstring>
 
 // ----------------------------------------------------------------------------
-// HONEST PLACEHOLDERS.
-//   gpLionParticleRender  -- the Lion particle-render singleton (X360 dword_83121D60);
-//                            the render-side TU that owns it is not yet homed.
-//   gLionParticleMaterialTokenTable -- the cParticleMaterial member token table
-//                            (X360 off_82F36A3C), a cLionTokenTable instance owned by
-//                            the Lion token-table registration unit (not yet homed).
-// Declared extern here so the calls reconstruct faithfully; flagged for homing.
+//   gpLionParticleRender -- the Lion particle-render singleton (X360 dword_83121D60).
+//     HOMED 2026-09-03 in LionFX.cpp, whose cLionFX::Init takes the iParticleRender*
+//     that writes it. ⚠ Init is NOT reconstructed, so the pointer is still NULL at
+//     runtime and cParticleMaterial::Build's TextureRegister call does not fire -- the
+//     console guards that call with the same null test, so the shape here is faithful;
+//     what is missing is the writer, and LionFX.cpp says so out loud.
+//   gLionParticleParserMatTokenTable (X360 off_82F36A3C) -- the cParticleMaterial
+//     member token table. HOMED 2026-09-03 in LionParticleParser.cpp, transcribed from
+//     the X360 .rdata, under the name the DecFIGS DWARF gives it. It used to be an
+//     `extern` under an INVENTED name with no definition anywhere in the tree, so this
+//     TU could never link.
 // ----------------------------------------------------------------------------
 extern BrnParticle::LionParticleRender* gpLionParticleRender;          // dword_83121D60
-extern const cLionTokenTable gLionParticleMaterialTokenTable;          // off_82F36A3C
 
 // ----------------------------------------------------------------------------
 // cParticleMaterial::Build  @ 0x8290E500
@@ -108,7 +112,7 @@ void cParticleMaterial::Delocate(U32 aEndianTwiddleFlag)
         mpNormalMapName = reinterpret_cast<char*>(reinterpret_cast<u8*>(mpNormalMapName) - reinterpret_cast<uintptr_t>(lpBase));
 
     if (lbTwiddle)
-        gLionParticleMaterialTokenTable.EndianTwiddle(this);
+        gLionParticleParserMatTokenTable.EndianTwiddle(this);
 
     for (u32 luIndex = 0; luIndex < 5; ++luIndex)
     {

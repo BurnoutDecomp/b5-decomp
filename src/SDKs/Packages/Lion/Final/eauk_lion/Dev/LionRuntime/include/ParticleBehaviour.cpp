@@ -22,15 +22,15 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // ----------------------------------------------------------------------------
-// HONEST PLACEHOLDERS: the two Lion token tables the Delocate/endian path walks.
+// The two Lion token tables the Delocate/endian path walks:
 //   off_82F36A40 -- the cParticleWaveForm member token table (per wave-form).
 //   off_82F36A38 -- the cParticleBehaviour member token table (the node itself).
-// These are external cLionTokenTable instances owned by the Lion token-table
-// registration unit (not yet homed in the project). Declared extern here so the
-// EndianTwiddle calls reconstruct faithfully; flagged for proper homing.
+// HOMED 2026-09-03: both are now real data in LionParticleParser.cpp, transcribed
+// from the X360 .rdata, under the names the DecFIGS DWARF gives them
+// (LionParticleParser.cpp:132-141). They used to be `extern` under INVENTED names
+// with no definition anywhere in the tree, so this TU could never link.
 // ----------------------------------------------------------------------------
-extern const cLionTokenTable gLionParticleWaveFormTokenTable;  // off_82F36A40
-extern const cLionTokenTable gLionParticleBehaviourTokenTable; // off_82F36A38
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionParticleParser.h"
 
 // ----------------------------------------------------------------------------
 // small store-for-store helpers (a cVector lane-set is one aligned vector store on
@@ -467,15 +467,15 @@ void cParticleBehaviour::Delocate(u32 aEndianTwiddleFlag)
     const bool lbTwiddle = (aEndianTwiddleFlag != 0);
 
     if (lbTwiddle && mpWaveFormX != 0)
-        gLionParticleWaveFormTokenTable.EndianTwiddle(mpWaveFormX);
+        gLionParticleParserWaveTokenTable.EndianTwiddle(mpWaveFormX);
     if (lbTwiddle && mpWaveFormY != 0)
-        gLionParticleWaveFormTokenTable.EndianTwiddle(mpWaveFormY);
+        gLionParticleParserWaveTokenTable.EndianTwiddle(mpWaveFormY);
     if (lbTwiddle && mpWaveFormZ != 0)
-        gLionParticleWaveFormTokenTable.EndianTwiddle(mpWaveFormZ);
+        gLionParticleParserWaveTokenTable.EndianTwiddle(mpWaveFormZ);
     if (lbTwiddle && mpWaveFormAlpha != 0)
-        gLionParticleWaveFormTokenTable.EndianTwiddle(mpWaveFormAlpha);
+        gLionParticleParserWaveTokenTable.EndianTwiddle(mpWaveFormAlpha);
     if (lbTwiddle && mpWaveFormRGB != 0)
-        gLionParticleWaveFormTokenTable.EndianTwiddle(mpWaveFormRGB);
+        gLionParticleParserWaveTokenTable.EndianTwiddle(mpWaveFormRGB);
 
     // Convert each present pointer to a base-relative byte offset from `this`.
     u8* lpBase = reinterpret_cast<u8*>(this);
@@ -496,7 +496,7 @@ void cParticleBehaviour::Delocate(u32 aEndianTwiddleFlag)
     {
         // Twiddle the behaviour's own member image, then byte-swap the six now-
         // offset pointer words in place (big->little, byte-reversed).
-        gLionParticleBehaviourTokenTable.EndianTwiddle(this);
+        gLionParticleParserBehTokenTable.EndianTwiddle(this);
 
         u8* lp = reinterpret_cast<u8*>(&mpWaveFormX);
         for (u32 luWord = 0; luWord < 6; ++luWord)

@@ -33,6 +33,14 @@
 enum ELionMemberType
 {
     E_LION_MEMBER_NONE   = 0,
+    // mType 1 -> a single BYTE member. EndianTwiddle's jump table has no case for it,
+    // which is correct -- one byte has no byte order. Named from the members that carry
+    // it in the shipped tables: in gLionParticleParserMatTokenTable it tags XFRAMES @56,
+    // YFRAMES @57, BLEND_MODE @58, ALPHA_TEST_MODE @59, ALPHA_TEST_VALUE @60,
+    // Z_TEST_MODE @61, U_COORD_OPTION @63, V_COORD_OPTION @64, TEX_ANIM_OPTIONS @65,
+    // SHADER @66 and NORMAL_OPTION @67 -- twelve consecutive one-byte slots, and
+    // cParticleMaterial::Build @0x8290E500 writes SHADER with an `stb` at +0x42 == 66.
+    E_LION_MEMBER_U8     = 1,
     // mType 3,4 -> a 16-bit value.
     E_LION_MEMBER_S16    = 3,
     E_LION_MEMBER_U16    = 4,
