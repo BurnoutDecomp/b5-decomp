@@ -8,6 +8,13 @@
 #include <cstdlib>   // getenv ([powertrain] probe)
 #include <cstring>   // std::memcpy
 
+// ⭐ The present counter, so a [powertrain] line NAMES THE DUMPED FRAME it belongs to: the frame
+// dump writes bb_<present>.bmp, so `present 7380` is inside bb_007380.bmp's period. Without it a
+// log number and a picture can only be aligned by wall-clock guesswork, which is exactly how a
+// "108 mph crash" turned out to be a 16.6 m/s yard pile-up. Same extern the [deform-bbox] witness
+// takes (BrnDeformableObject_BBox.cpp:19).
+namespace renderengine { extern u32 guPresentCount; }
+
 // BrnPhysics::Vehicle::Engine -- the two ledger functions owned by the Vehicle-physics group.
 // The X360 build is VMX128 inline asm; these are the de-SIMD'd named-member equivalents
 // recovered store-for-store from the asm at 0x825F3EE8 (Construct) and 0x825F3F38 (Prepare).
@@ -568,24 +575,42 @@ namespace
         // to a build without it. One line every 30 calls: the whole torque chain plus the three
         // per-gear attribs lanes it read, so a wrong lane shows up as a wrong NUMBER, not a guess.
         {
-            static s32 siPowertrainProbe = -1;
-            if (siPowertrainProbe < 0)
+            // ⚠️ THE VALUE IS A SAMPLING PERIOD IN PEDALLED CALLS, not a boolean (changed
+            // 2026-09-03, same convention as BRN_DEFORM_TRACE / -TractionProbe). It used to be
+            // an on/off arm with the period hard-wired to 30 -- one sample every half second,
+            // which is too coarse to resolve a two-second clutch event: a state that is entered
+            // and left inside four samples cannot be told apart from a sampling artefact.
+            // 0 or unset == fully off, exactly as before.
+            static s32 siPowertrainPeriod = -1;
+            if (siPowertrainPeriod < 0)
             {
                 const char* lpcEnv = getenv("BRN_ENGINE_PROBE");
-                siPowertrainProbe = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
+                siPowertrainPeriod = (lpcEnv != 0) ? atoi(lpcEnv) : 0;
+                if (siPowertrainPeriod < 0) { siPowertrainPeriod = 0; }
             }
-            // Sample on a counter that only advances for THROTTLED calls. A single global
+            // Sample on a counter that only advances for PEDALLED calls. A single global
             // counter aliases: several vehicles call Update in a fixed order every tick, so
             // `count % 30` lands on the same slot forever and the player is never sampled.
+            //
+            // ⚠️⚠️ WIDENED 2026-09-03 (reverse-gear film wave). This used to gate on
+            // `lfGas > 0.0f` ALONE -- which makes the probe STRUCTURALLY BLIND to the one
+            // state the gear FSM's first link governs. Reverse is entered and held on the
+            // BRAKE with no gas at all (link 2 needs `lfGas * lfBrake < 0.05`), so every
+            // reverse frame had gas == 0 and the probe printed nothing: an instrument that
+            // cannot observe the behaviour it is pointed at. Now any pedal input samples,
+            // and reverse gear samples even coasting, so the clutch/drive collapse the flat
+            // chain fixes is visible frame by frame rather than inferred.
             static u32 suPowertrainCount = 0;
-            const bool lbUnderPower = (lfGas > 0.0f);
+            const bool lbUnderPower = (lfGas > 0.0f) || (lfBrake > 0.0f) || (liGear == 0);
             if (lbUnderPower)
                 ++suPowertrainCount;
-            if (siPowertrainProbe == 1 && lbUnderPower && (suPowertrainCount % 30u) == 0u
+            if (siPowertrainPeriod > 0 && lbUnderPower
+                && (suPowertrainCount % static_cast<u32>(siPowertrainPeriod)) == 0u
                 && CgsDev::Log::gpDebugPrint != 0)
             {
                 *CgsDev::Log::gpDebugPrint
                     << "[powertrain] n " << static_cast<s32>(suPowertrainCount)
+                    << " present " << static_cast<s32>(renderengine::guPresentCount)
                     << " gear " << liGear
                     << " rpm " << lfRPM
                     << " fly " << lfFlyWheel
@@ -594,6 +619,8 @@ namespace
                     << " curveT " << lfCurveT
                     << " drive " << lfEngineDrive
                     << " gas " << lfGas
+                    << " brake " << lfBrake
+                    << " allowRev " << (lbAllowReverseDrive ? 1 : 0)
                     << " wOmega " << lvfWheelAngularVelocity.x
                     << " wRPM " << lfWheelRPM
                     << " fwd " << lfForwardSpeed
