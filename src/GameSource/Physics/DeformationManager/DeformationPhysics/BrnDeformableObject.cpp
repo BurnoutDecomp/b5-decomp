@@ -407,6 +407,38 @@ namespace Deformation
         // and its own inverse-inertia term -- the equal-and-opposite half of the shunt.
         StoredImpulseContact lReverseContact;
         lContact.GetInverse(lReverseContact);
+        // ⭐⭐⭐ THE OWNERSHIP HALF OF THE INVERSE -- ASM-ATTESTED, AND IT WAS MISSING (2026-09-03).
+        // GetInverse is an inline member of StoredImpulseContact whose only argument is the output
+        // record (DWARF BrnDeformationSensor.h:68), so it structurally CANNOT name the attacker:
+        // the contact record holds one vehicle pointer, "the other one". The console therefore
+        // writes the attacker's identity HERE, at the call site, from the enclosing frame:
+        //
+        //     0x82624C24  mr   r30, r3                     ; r30 = this  (the attacking car)
+        //     0x82625100  addi r11, r22, 0xF               ; r22 = liSensorIndex
+        //     0x82625104  mulli r11, r11, 0x1B0            ; 432-byte DeformationSensor stride
+        //     0x82625114  add  r28, r11, r30               ; r28 = &this->maDeformationSensors[idx]
+        //     0x8262511C  mr   r6, r28                     ; ...which is ALSO arg 4 of call #1
+        //     ---- the reversed record is built at var_1D0 (sp+0xE0) ----
+        //     0x82625188  stw  r30, var_1A0(r1)  ; sp+0x110 == reverse +0x30 == mpOtherVehicle
+        //     0x8262518C  stw  r28, var_19C(r1)  ; sp+0x114 == reverse +0x34 == mpOtherSensor
+        //
+        // ⛔ SO THE CARRY-OVER WAS THE DEFECT, AND IT WAS OBSERVABLE. With the fields copied
+        // through, the victim's record named the VICTIM as its own attacker -- measured across
+        // five runs and 12,891 traffic contact rows: gid 587 -> oGid 587 (462 rows), 239 -> 239,
+        // 404 -> 404, 452 -> 452, and ZERO rows anywhere with owner 2 / oOwner 1. Both halves of
+        // each collision are logged on the same present with mirrored sensor directions, so they
+        // were provably one impact seen twice.
+        // ⇒ Consequence: ApplySensorImpulse's showtime VICTIM arm -- @0x82607D78..0x82607DD0, i.e.
+        //   `lwz r11,0x30(contact)` (mpOtherVehicle) -> `lwz r3,0x194C(r11)` -> vtbl+0x10
+        //   IsPlayerVehicleInShowtime, `|| lbz r11,0x672E(r11)` HasBouncedThisFrame, then the x15
+        //   `vmulfp128` -- read BOTH of those off the victim itself. Self-referential on both
+        //   terms, so the arm could never fire on a car-car hit. This is the fix that arms it.
+        // ⚠️ Note what the asm does NOT settle: whether GetInverse ITSELF copies or swaps these two
+        // fields is invisible, because it is inlined and these two stores kill whatever it wrote.
+        // The body in BrnDeformationSensor.cpp is left copying them -- dead either way -- and the
+        // observable console behaviour is exactly the two lines below.
+        lReverseContact.mpOtherVehicle = this;        // 0x82625188 (stw r30 == this)
+        lReverseContact.mpOtherSensor  = lpSensor;    // 0x8262518C (stw r28 == the sensor arg of call #1)
         lParams.mvfInverseInertia      = lvfInvInertiaB;
         lParams.mWorldImpulseDirection = lReverseContact.mNormal;
         // ⭐ The passer is RE-POINTED at the OTHER car for the reversed half -- the console repeats
