@@ -80,6 +80,19 @@ namespace BrnDiag
         f32 mfLastSegX;
         f32 mfLastSegY;
         f32 mfLastSegZ;
+
+        // ⭐ WHERE ON THE SCREEN THAT SEGMENT LANDED. The world position above cannot be
+        // pointed at in a bitmap without the frame's camera, and the log has no camera. The
+        // trail renderer already runs the skid vertex program's own transform
+        // (oPos = pos.x*c0 + pos.y*c1 + pos.z*c2 + c3) on the first vertex of every batch it
+        // submits, so it stamps the NDC here and frames.csv carries it: a marker can then be
+        // drawn at exactly the pixel a mark was submitted to, and "no mark visible" becomes a
+        // claim about a named pixel rather than about a whole picture. w <= 0 means behind
+        // the camera; |x| or |y| > 1 means off-screen -- both are legitimate reasons for a
+        // frame to show nothing, and both are now visible instead of guessed at.
+        f32 mfSegNdcX;
+        f32 mfSegNdcY;
+        f32 mfSegClipW;
     };
 
     // Defined in GameSource/Game/BrnGameModule.cpp (the only writer).

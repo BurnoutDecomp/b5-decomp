@@ -499,7 +499,10 @@ static void DumpBackBufferIfRequested()
                                  BrnDiag::gFilmLatch.muTrailSegments,
                                  BrnDiag::gFilmLatch.mfLastSegX,
                                  BrnDiag::gFilmLatch.mfLastSegY,
-                                 BrnDiag::gFilmLatch.mfLastSegZ);
+                                 BrnDiag::gFilmLatch.mfLastSegZ,
+                                 BrnDiag::gFilmLatch.mfSegNdcX,
+                                 BrnDiag::gFilmLatch.mfSegNdcY,
+                                 BrnDiag::gFilmLatch.mfSegClipW);
                     std::fclose(lpCsv);
                 }
             }

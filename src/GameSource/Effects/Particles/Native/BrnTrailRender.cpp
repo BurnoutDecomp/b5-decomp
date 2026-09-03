@@ -35,6 +35,7 @@
 #include "GameSource/Effects/Particles/Native/BrnIm3dSkidsRenderer.h"  // BrnGraphics::Im3dSkidsRenderer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // [diag] CgsDev::Log::WriteToLog
+#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"       // [diag] BrnDiag::gFilmLatch (frames.csv NDC columns)
 
 #include <cstdio>   // [diag] snprintf (the [trailpass] transform probe)
 #include "rw/math/vpu/vector3_operation.h"                             // rw::math::vpu::{operator+,operator*}
@@ -269,15 +270,22 @@ namespace Native
             // sane NDC inside the frustum clears it and moves the search below the draw.
             // Read the matrix as its 16 floats -- it is being handed to the shader as raw
             // bytes by SetTransform, so this reads it exactly as the program does.
+            const f32* const lpM = reinterpret_cast<const f32*>(&mViewProjectionMatrix);
+            const Vector3& lrP = laVertices[0].mv3Pos;
+            const f32 lfX = lrP.x * lpM[0] + lrP.y * lpM[4] + lrP.z * lpM[8]  + lpM[12];
+            const f32 lfY = lrP.x * lpM[1] + lrP.y * lpM[5] + lrP.z * lpM[9]  + lpM[13];
+            const f32 lfZ = lrP.x * lpM[2] + lrP.y * lpM[6] + lrP.z * lpM[10] + lpM[14];
+            const f32 lfW = lrP.x * lpM[3] + lrP.y * lpM[7] + lrP.z * lpM[11] + lpM[15];
+
+            // Stamp the NDC into the film latch so frames.csv carries the SCREEN position of
+            // a submitted mark (columns 15-17). See BrnDiagFilmLatch.h.
+            BrnDiag::gFilmLatch.mfSegNdcX  = (lfW != 0.0f) ? (lfX / lfW) : 0.0f;
+            BrnDiag::gFilmLatch.mfSegNdcY  = (lfW != 0.0f) ? (lfY / lfW) : 0.0f;
+            BrnDiag::gFilmLatch.mfSegClipW = lfW;
+
             if (guProbeFirstVertex != 0u)
             {
                 --guProbeFirstVertex;
-                const f32* const lpM = reinterpret_cast<const f32*>(&mViewProjectionMatrix);
-                const Vector3& lrP = laVertices[0].mv3Pos;
-                const f32 lfX = lrP.x * lpM[0] + lrP.y * lpM[4] + lrP.z * lpM[8]  + lpM[12];
-                const f32 lfY = lrP.x * lpM[1] + lrP.y * lpM[5] + lrP.z * lpM[9]  + lpM[13];
-                const f32 lfZ = lrP.x * lpM[2] + lrP.y * lpM[6] + lrP.z * lpM[10] + lpM[14];
-                const f32 lfW = lrP.x * lpM[3] + lrP.y * lpM[7] + lrP.z * lpM[11] + lpM[15];
                 char lacMsg[400];
                 std::snprintf(lacMsg, sizeof(lacMsg),
                     "[trailpass] xform: v0=(%.2f,%.2f,%.2f) clip=(%.3f,%.3f,%.3f,%.3f) "
