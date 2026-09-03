@@ -382,16 +382,55 @@ void cParticleBehaviour::CompileBaseVariance()
 // and the compiled base-variance table, and precomputes the alpha-fade reciprocals
 // and the (near-zero) divisor guard values.
 //
-// COLOUR DERIVATION (asm 0x8290B02C..0x8290B160, VMX): mRGBA0 and mRGBA1 are
-// expanded to per-channel floats and scaled by a constant colour-normalisation
-// vector (X360 unk_82FAC100) and a re-pack vector (unk_82FAC220). The asm then
-// computes, per channel: min(c0,c1) -> mRGBABase, (max-min) -> mRGBAVar (both
-// re-packed to u8 via vctuxs), and (c1-c0)*repack -> mRGBADiff (kept as a float
-// vector). The two VMX constant pools are not in the exports, so the exact scale
-// factors are unresolved; the per-channel min / range / signed-diff semantics are
-// reconstructed faithfully by named channel. FLAGGED: resolve unk_82FAC100 /
-// unk_82FAC220 when the Lion colour constant pool is homed.
+// COLOUR DERIVATION (asm 0x8290B02C..0x8290B160, VMX). ⭐ THE TWO SCALE VECTORS THIS
+// COMMENT USED TO CALL "unresolved" ARE RECOVERED (2026-09-03), AND RESOLVING THEM TURNED
+// UP A REAL DIVERGENCE IN THIS FUNCTION. Both are dynamically-initialised .bss, so a
+// literal scan of the image finds only readers; tools/re/findinit.py finds the CRT thunk:
+//
+//   unk_82FAC100  <- 0x82C4A110: lfs flt_82010C1C ; vspltw ; stvx128
+//                    flt_82010C1C == 0x3B808081 == 0.003921568859368563 == 1/255
+//   unk_82FAC220  <- 0x82C4A0B0: lfs flt_82010C20 ; vspltw ; stvx128
+//                    flt_82010C20 == 0x437F0000 == 255.0
+//
+// So the console normalises both colours to 0..1, does the min / max / difference there,
+// and multiplies back by 255 before re-quantising with `vctuxs` -- which TRUNCATES toward
+// zero, after a `vminfp` clamp at 255. That round trip is not the identity, and it is not
+// uniformly harmless either. Measured over every input, in exact float arithmetic:
+//
+//   mRGBABase = trunc(min(c0,c1)/255 * 255) ... 0 of 256 values differ from min(c0,c1).
+//               The identity holds, so `min` is a PROVEN-exact reconstruction.
+//   mRGBAVar  = trunc((max/255 - min/255) * 255) ... 16,612 of 65,536 channel pairs
+//               differ from (max - min), always low by one count -- c0=3, c1=4 gives
+//               0.99999994, which truncates to 0, not 1.
+//   mRGBADiff = (c1/255 - c0/255) * 255 ... 49,398 of 65,536 pairs differ from (c1 - c0),
+//               by about a ulp (c0=0, c1=3 gives 3.000000238).
+//
+// The previous reconstruction wrote (max - min) and (c1 - c0) directly, so it was right
+// for mRGBABase and wrong for the other two. Both are now written as the console's own
+// arithmetic. The variance one is behavioural, not cosmetic: it is the per-particle colour
+// spread, and a quarter of all channel pairs were getting one extra count of it.
 // ----------------------------------------------------------------------------
+namespace
+{
+// unk_82FAC100 / unk_82FAC220, splat across all four lanes. Written as the image's exact
+// floats rather than as 1.0f/255.0f, because the truncation above is sensitive to the last
+// bit: 0x3B808081 is slightly ABOVE the true 1/255, which is what makes the mRGBABase
+// round trip exact.
+const f32 KF_COLOUR_U8_TO_UNIT = 0.003921568859368563f;   // 0x3B808081
+const f32 KF_COLOUR_UNIT_TO_U8 = 255.0f;                  // 0x437F0000
+
+// `vmulfp128 <255>` + `vminfp <255>` + `vctuxs ...,0`: scale back up, clamp, truncate.
+inline u8 PackUnitChannel(f32 afUnit)
+{
+    f32 lfScaled = afUnit * KF_COLOUR_UNIT_TO_U8;
+    if (lfScaled > KF_COLOUR_UNIT_TO_U8)
+    {
+        lfScaled = KF_COLOUR_UNIT_TO_U8;
+    }
+    return static_cast<u8>(lfScaled);      // vctuxs rounds toward zero
+}
+}  // namespace
+
 void cParticleBehaviour::Build()
 {
     CGS_ASSERT((mFlags & E_DO_WAVEALPHA) == 0,
@@ -400,28 +439,47 @@ void cParticleBehaviour::Build()
     const cColour8 lC0 = mRGBA0;
     const cColour8 lC1 = mRGBA1;
 
-    // Per-channel min (base), range (variance) and signed difference (diff). The
-    // X360 scales through the colour-normalisation / re-pack constant vectors
-    // before re-quantising; without the pooled constants the scaling factor is
-    // unresolved, so the channel-wise relationship is reconstructed directly.
-    mRGBABase.r = (lC0.r < lC1.r) ? lC0.r : lC1.r;
-    mRGBABase.g = (lC0.g < lC1.g) ? lC0.g : lC1.g;
-    mRGBABase.b = (lC0.b < lC1.b) ? lC0.b : lC1.b;
-    mRGBABase.a = (lC0.a < lC1.a) ? lC0.a : lC1.a;
+    // asm 0x8290B0A0..0x8290B0B4 -- both colours expanded to floats and normalised.
+    const f32 lfC0[4] = { static_cast<f32>(lC0.r) * KF_COLOUR_U8_TO_UNIT,
+                          static_cast<f32>(lC0.g) * KF_COLOUR_U8_TO_UNIT,
+                          static_cast<f32>(lC0.b) * KF_COLOUR_U8_TO_UNIT,
+                          static_cast<f32>(lC0.a) * KF_COLOUR_U8_TO_UNIT };
+    const f32 lfC1[4] = { static_cast<f32>(lC1.r) * KF_COLOUR_U8_TO_UNIT,
+                          static_cast<f32>(lC1.g) * KF_COLOUR_U8_TO_UNIT,
+                          static_cast<f32>(lC1.b) * KF_COLOUR_U8_TO_UNIT,
+                          static_cast<f32>(lC1.a) * KF_COLOUR_U8_TO_UNIT };
 
-    const u8 lMaxR = (lC0.r > lC1.r) ? lC0.r : lC1.r;
-    const u8 lMaxG = (lC0.g > lC1.g) ? lC0.g : lC1.g;
-    const u8 lMaxB = (lC0.b > lC1.b) ? lC0.b : lC1.b;
-    const u8 lMaxA = (lC0.a > lC1.a) ? lC0.a : lC1.a;
-    mRGBAVar.r = static_cast<u8>(lMaxR - mRGBABase.r);
-    mRGBAVar.g = static_cast<u8>(lMaxG - mRGBABase.g);
-    mRGBAVar.b = static_cast<u8>(lMaxB - mRGBABase.b);
-    mRGBAVar.a = static_cast<u8>(lMaxA - mRGBABase.a);
+    // asm 0x8290B0B8..0x8290B0CC -- vminfp / vmaxfp / vsubfp, all in unit space.
+    f32 lfMin[4];
+    f32 lfRange[4];
+    f32 lfDiff[4];
+    for (u32 luChannel = 0; luChannel < 4; ++luChannel)
+    {
+        const f32 lfA = lfC0[luChannel];
+        const f32 lfB = lfC1[luChannel];
+        lfMin[luChannel]   = (lfA < lfB) ? lfA : lfB;
+        lfRange[luChannel] = ((lfA > lfB) ? lfA : lfB) - lfMin[luChannel];
+        lfDiff[luChannel]  = lfB - lfA;
+    }
 
-    mRGBADiff.x = static_cast<f32>(lC1.r) - static_cast<f32>(lC0.r);
-    mRGBADiff.y = static_cast<f32>(lC1.g) - static_cast<f32>(lC0.g);
-    mRGBADiff.z = static_cast<f32>(lC1.b) - static_cast<f32>(lC0.b);
-    mRGBADiff.w = static_cast<f32>(lC1.a) - static_cast<f32>(lC0.a);
+    // asm 0x8290B0C4..0x8290B108 -- min re-packed into mRGBABase.
+    mRGBABase.r = PackUnitChannel(lfMin[0]);
+    mRGBABase.g = PackUnitChannel(lfMin[1]);
+    mRGBABase.b = PackUnitChannel(lfMin[2]);
+    mRGBABase.a = PackUnitChannel(lfMin[3]);
+
+    // asm 0x8290B10C..0x8290B154 -- range re-packed into mRGBAVar.
+    mRGBAVar.r = PackUnitChannel(lfRange[0]);
+    mRGBAVar.g = PackUnitChannel(lfRange[1]);
+    mRGBAVar.b = PackUnitChannel(lfRange[2]);
+    mRGBAVar.a = PackUnitChannel(lfRange[3]);
+
+    // asm 0x8290B158..0x8290B160 -- the signed difference, scaled back to 0..255 units and
+    // left as a float vector (no re-quantisation).
+    mRGBADiff.x = lfDiff[0] * KF_COLOUR_UNIT_TO_U8;
+    mRGBADiff.y = lfDiff[1] * KF_COLOUR_UNIT_TO_U8;
+    mRGBADiff.z = lfDiff[2] * KF_COLOUR_UNIT_TO_U8;
+    mRGBADiff.w = lfDiff[3] * KF_COLOUR_UNIT_TO_U8;
 
     BuildColourSteps();
 

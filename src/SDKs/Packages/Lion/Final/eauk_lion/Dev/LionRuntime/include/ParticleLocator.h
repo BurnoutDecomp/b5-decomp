@@ -36,6 +36,8 @@
 // NAME regardless -- everything before mpPosEvaluator is f32/u32 and so agrees on both.
 // ============================================================================
 
+#include <cstddef>   // offsetof -- the record's offset pins at the bottom of this file
+
 #include "types.hpp"
 #include "SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h"   // cVector -- the real eauk_common home (fork retired 2026-09-03)
 #include "SDKs/Packages/Lion/Final/eauk_common/Maths/Matrix.h"   // cMatrix -- ditto (fork retired 2026-09-03)
@@ -108,3 +110,29 @@ struct cParticleLocator
     u32     mFlags;               // 0xA0 Init sets bit 0
     iLionPosEvaluator* mpPosEvaluator;   // 0xA4 console word; widens on the host
 };
+
+// Every member up to mpPosEvaluator is f32/u32, so the console offsets ARE the host offsets
+// and each one is pinned to the instruction that proves it. Only the trailing pointer widens,
+// which is why sizeof is deliberately not asserted. Break a member and the gate fails here,
+// not in the game.
+static_assert(offsetof(cParticleLocator, mVel)        == 0x40,
+              "Init @0x82909874 zeroes +0x40..+0x4C right after the identity matrix");
+static_assert(offsetof(cParticleLocator, mCacheQuat)  == 0x50,
+              "GetMat @0x8290E354 forms the rotation key address as 16*(index+5)+this");
+static_assert(offsetof(cParticleLocator, mCachePos)   == 0x70,
+              "GetMat @0x8290E398 forms the translation key address as 16*(index+7)+this");
+static_assert(offsetof(cParticleLocator, mCacheTime)  == 0x90,
+              "GetMat @0x8290E2BC indexes the key times at 4*(index+0x24)+this");
+static_assert(offsetof(cParticleLocator, mTime)       == 0x98,
+              "GetMat @0x8290E2A4 reads the cached time with lwz 0x98(r31)");
+static_assert(offsetof(cParticleLocator, mIndex)      == 0x9C,
+              "GetMat @0x8290E2B4 reads the key index with lwz 0x9C(r31)");
+static_assert(offsetof(cParticleLocator, mFlags)      == 0xA0,
+              "Init @0x8290988C stores 1 here -- flag bit 0, NOT a phantom mKeyCount");
+
+// ⚠ mpPosEvaluator IS THE ONE MEMBER WITH NO OFFSET PIN, AND THAT IS DELIBERATE. The console
+// puts it at +0xA4, straight after a u32; on the host it is an 8-byte pointer, so the compiler
+// pads mFlags out and it lands at +0xA8. Asserting the console offset here FAILS THE GATE --
+// which is how this note came to be written, and it is the corroboration that the assert block
+// above is live rather than decorative. Nothing may dereference this record at a console byte
+// offset. (Init @0x82909890 nulls the word; it is what this header used to call mFlags.)
