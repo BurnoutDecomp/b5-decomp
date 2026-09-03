@@ -51,6 +51,7 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionEffect.h"          // cLionEffectDefinition
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionParticleEffect.h"  // cLionParticleEffect::GetDurationMax
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleDescriptor.h"    // the [lionstart] witness walks the chain
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionFX.h"                // cLionFX::Init (Prepare builds the Lion runtime)
 
 #include <cstdio>    // snprintf (the announcements)
 #include <cstring>   // memset
@@ -79,6 +80,12 @@ namespace
     const u32 KU_FX_BUCKET_POOL_BYTES      = 819200;  // `lis r5,0xC / ori 0x8000` (0xC8000)
     const u32 KU_SPARK_SPAWN_BUFFER_BYTES  = 0xA00;   // `li r4, 0xA00`  -> HeapMalloc::Malloc(.., 2560, 16)
     const u32 KU_SPARK_SPAWN_BUFFER_ALIGN  = 16;      // `li r5, 0x10`
+
+    // cLionFX::Init's four literals, from the call at the foot of Prepare:
+    //     cLionFX::Init(&dword_82FAD27C, a1 + 21104, 0, 256, 4096, 4096)
+    const u32 KU_LION_EMITTER_COUNT          = 256;   // `li r6, 0x100`
+    const u32 KU_LION_PARTICLE_COUNT         = 4096;  // `li r7, 0x1000`
+    const u32 KU_LION_DYNAMIC_PARTICLE_COUNT = 4096;  // `li r8, 0x1000`
 
     // ---- LoadFXBundle's literal operands ---------------------------------------------
     const s32   KI_FX_BUNDLE_POOL          = 13;      // every request in the ladder uses pool 13
@@ -400,9 +407,33 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         {
             static bool sbLogged = false;
             LogNotReconstructed(sbLogged,
-                "ParticleModule::Prepare's cLionFX::Init, and mLionRenderer's +0x160 blend-renderer "
-                "pointer (its target mLionImmediateModeRenderer is a ContainedInterface placeholder, "
-                "so the bind passes null); the +0x08 heap store IS made");
+                "ParticleModule::Prepare's mLionRenderer +0x160 blend-renderer pointer (its target "
+                "mLionImmediateModeRenderer is a ContainedInterface placeholder, so the bind passes "
+                "null); the +0x08 heap store IS made, and cLionFX::Init IS CALLED below");
+        }
+
+        // --- cLionFX::Init: BUILD THE LION RUNTIME ---------------------------------------
+        //     cLionFX::Init(&dword_82FAD27C, a1 + 21104, 0, 256, 4096, 4096)
+        // The first argument is a FUNCTION-LOCAL STATIC that the console constructs inline
+        // immediately above this call -- its magic-static guard is dword_82FAD288 and its
+        // construction is three stores: the two vtable pointers (off_82011E14 primary,
+        // off_82011E00 for the IAllocator sub-object at +4) and mpHeapMalloc at +8. Those
+        // vtables are what NAME the class: their slots are
+        // BrnParticle::IInternalAllocator::Alloc / Free / the deleting-destructor thunks. So
+        // this is the module's own IInternalAllocator, held by value as a Prepare-scope static,
+        // and re-outlined here as exactly that.
+        //
+        // ⚠ THE STATIC OUTLIVES THE MODULE, ON THE CONSOLE TOO. It is registered with atexit
+        // and never destroyed at module release; the Lion pools it backs hold its address for
+        // the process lifetime. Reproduced as-is rather than "improved" into a member.
+        //
+        // The four literals are the console's: 256 emitters, 4096 particles, 4096 dynamic
+        // particles, and a null `apPhysics` (unread on this build -- see cLionFX::Init).
+        {
+            static IInternalAllocator lsInternalAllocator(mpHeapMalloc);   // guard dword_82FAD288
+            cLionFX::Init(&lsInternalAllocator, &mLionRenderer, 0,
+                          KU_LION_EMITTER_COUNT, KU_LION_PARTICLE_COUNT,
+                          KU_LION_DYNAMIC_PARTICLE_COUNT);
         }
 
         // --- the FX bucket pool -----------------------------------------------------------

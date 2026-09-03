@@ -354,3 +354,32 @@ cParticleDescriptor* cParticleDescriptor::Serialise(cLionSerialiser& aSer) const
     lpCopy->mpName.Set(lpName);
     return lpCopy;
 }
+
+// ----------------------------------------------------------------------------
+// cParticleDescriptor::IsChildOf  @ 0x82909768
+//
+// Walk this descriptor's mpParent chain (console +0x58); return 1 the moment a link equals
+// arOther, 0 when the chain runs out. Note the console starts at THIS descriptor's parent, so a
+// descriptor is never a child of itself -- the loop reads `*(a1 + 88)` before any compare.
+//
+// Reconstructed 2026-09-03 (Lion install wave): cParticleEmitterManager::RegisterSubEmitter
+// @0x82913668 and UnRegister(descriptor,...) @0x829146D0 both call it, and both are on the link
+// as soon as the emitter manager is mounted.
+// ----------------------------------------------------------------------------
+u32 cParticleDescriptor::IsChildOf(const cParticleDescriptor& arOther) const
+{
+    const cParticleDescriptor* lpCurrent = this;
+    for (;;)
+    {
+        const cParticleDescriptor* lpParent = lpCurrent->mpParent.Get();
+        if (lpParent == 0)
+        {
+            return 0;
+        }
+        if (lpParent == &arOther)
+        {
+            return 1;
+        }
+        lpCurrent = lpParent;
+    }
+}

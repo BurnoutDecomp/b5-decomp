@@ -187,12 +187,12 @@ namespace BrnParticle
         // released here (mpHeapMalloc is owned elsewhere).
         virtual ~IInternalAllocator();
 
-        // ITaggedAllocator overrides. DECLARE-ONLY: not attested individually in
-        // the X360 ledger (only Free and the dtor thunks are function-tracked
-        // for this TU) -- bodying them would fabricate behavior. HeapMalloc-
-        // backed allocation only exposes a 2-arg Malloc(size, alignment), so a
-        // faithful Alloc body cannot be written without guessing the tag/name/
-        // flags -> alignment mapping.
+        // ITaggedAllocator overrides. BODIED 2026-09-03 in
+        // ParticleModule_InternalAllocator.cpp -- see that file for the vtable that names
+        // them and the corrected note. (This used to say they were unattested and that a
+        // faithful body would need a guessed tag->alignment mapping. Both were wrong:
+        // Alloc @0x82289810 is a ledger row with pseudocode, and the console maps nothing --
+        // the tagged form ignores its tag list and passes a literal 16.)
         virtual void* Alloc(size_t anSize, const char* apName, u32 auFlags) override;
         virtual void* Alloc(size_t anSize, const char* apName, u32 auFlags,
                             u32 auAlign, u32 auAlignOffset) override;

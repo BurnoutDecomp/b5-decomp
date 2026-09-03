@@ -12,6 +12,7 @@
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"  // CgsGraphics::ImRendererBase (mgpActiveRenderer)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the one-shot CreateInternalMaterial announcement
 #include "GameSource/Effects/Particles/LionParticleRender.h"   // LionParticleRender::CreateInternalMaterial / cParticleMaterial (the Lion trap stubs below)
 
 namespace renderengine { class BlendMaterialState; }
@@ -124,29 +125,56 @@ namespace BrnGraphics
 }
 
 // =================================================================================================
-// ONE more Lion-render-path symbol the link needs and nothing can reach -- same trap policy, same
-// reason, homed here beside the blend renderer rather than pulling another TU onto the build list.
+// ONE more Lion-render-path symbol, homed here beside the blend renderer rather than pulling
+// another TU onto the build list.
 //
-//   * LionParticleRender::CreateInternalMaterial @ LionParticleRenderMaterial.cpp -- reached only
-//     from LionParticleRender::TextureRegister / SetMaterial, i.e. cLionFX's own dispatch.
+//   * LionParticleRender::CreateInternalMaterial @0x82280C30 (LionParticleRenderMaterial.cpp) --
+//     reached from LionParticleRender::TextureRegister and ::SetMaterial.
 //
-// cLionFX::Init is announced and never called on this build (ParticleModule_Lifecycle.cpp), so no
-// emitter, material or effect instance exists to reach it.
+// ⛔ IT IS NO LONGER UNREACHABLE, AND THAT IS WHY IT IS NO LONGER AN ASSERT. As of the Lion
+// install landing, ParticleModule::Prepare calls cLionFX::Init, so gpLionParticleRender is
+// non-null and cParticleMaterial::Build @0x8290E500 calls TextureRegister for EVERY material in
+// every .lef in PARTICLES.BUNDLE -- which reaches here once per material. A CGS_ASSERT(false)
+// there is an assert storm: this project has measured a run drowned by 839,983 of them, and an
+// assert storm starves the harness so badly that the failure is reported as the game's.
 //
-// ⭐ THE OTHER TWO ARE GONE (2026-09-03, boost-exhaust wave). cParticleMaterial::
-// SetTextureMapHandle / SetNormalMapHandle used to be trap stand-ins here as well, because their
-// real TU -- ParticleMaterial.cpp, which has both real bodies (@0x82909DD8 / @0x82909DE0) --
-// "would drag four further un-homed Lion SDK symbols (cLionSerialiser::StringStore,
-// gpLionParticleRender, gLionParticleMaterialTokenTable and the unnamed rodata off_82000D08)".
-// All four are now homed, ParticleMaterial.cpp is mounted, and the duplicate definitions here
-// were an LNK2005 the moment it was -- which is how they were found. A stand-in that outlives
-// its reason is a fork waiting to happen.
+// So it is a ONE-SHOT NAMED ANNOUNCEMENT instead, never a silent zero. What is actually missing:
+// the console body builds a renderengine::BlendStateParameters from the material's blend mode
+// (a 20-case switch over material +0x3A writing packed bitfields, plus a second 8-case switch
+// over +0x3B when material flag 4 is set), calls BlendState::GetResourceDescriptor +
+// BlendState::Initialize, and appends {materialHash, blendState} to the process-wide table at
+// qword_82FAAD80 (capacity 256, "Out of space for more blend states" at
+// LionParticleRender.cpp:687). That is a self-contained pass over renderengine::BlendState and
+// is deliberately out of this wave's slice.
+//
+// WHAT RETURNING 0 COSTS, EXACTLY: cParticleMaterial::mMaterialHandle stays 0, so
+// LionParticleRender::SetMaterial cannot bind a per-material blend state. It does NOT cost the
+// texture: TextureRegister's other half -- SetTextureMapHandle / SetNormalMapHandle from the
+// name hashes -- runs normally, and that is what FindTexture resolves against.
+//
+// ⭐ THE OTHER TWO STAND-INS ARE GONE (2026-09-03). cParticleMaterial::SetTextureMapHandle /
+// SetNormalMapHandle used to be trap stand-ins here as well, because their real TU --
+// ParticleMaterial.cpp, which has both real bodies (@0x82909DD8 / @0x82909DE0) -- "would drag
+// four further un-homed Lion SDK symbols (cLionSerialiser::StringStore, gpLionParticleRender,
+// gLionParticleMaterialTokenTable and the unnamed rodata off_82000D08)". All four are now
+// homed, ParticleMaterial.cpp is mounted, and the duplicate definitions here were an LNK2005 the
+// moment it was -- which is how they were found. A stand-in that outlives its reason is a fork
+// waiting to happen.
 // =================================================================================================
 namespace BrnParticle
 {
     U32 LionParticleRender::CreateInternalMaterial(const cParticleMaterial* /*apMaterial*/)
     {
-        CGS_ASSERT(false, "BrnParticle::LionParticleRender::CreateInternalMaterial -- NOT RECONSTRUCTED (Lion render path)");
+        static bool sbLogged = false;
+        if (!sbLogged)
+        {
+            sbLogged = true;
+            CgsDev::Log::WriteToLog(
+                "[effects] NOT RECONSTRUCTED: BrnParticle::LionParticleRender::"
+                "CreateInternalMaterial @0x82280C30 (the renderengine::BlendState build + the "
+                "256-entry internal-material table). Every material gets mMaterialHandle 0, so no "
+                "per-material blend state is bound; the texture-map/normal-map handles ARE set.\n");
+        }
         return 0;
     }
 }
