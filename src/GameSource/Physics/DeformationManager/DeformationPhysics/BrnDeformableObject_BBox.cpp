@@ -487,6 +487,36 @@ namespace Deformation
 		// pair vs the CRASH pair (BrnDeformableObject_Update.cpp guDeformLimitRowArmApplies).
 		// Emits on a change of any extent lane (> 1 mm), a change of the verdict, or the period.
 		// DELETE-WHEN the wreck-vs-drive-away question is banked.
+		//
+		// ⚠️⚠️ HOW TO READ dMin/dMax WITHOUT MEASURING A PARKED CAR (2026-09-03, and this wave
+		// nearly published the mistake). dMax is the SLACK, not the crush: dMax = limitMax -
+		// deformedMax, so an UNDEFORMED car reads dMax == -attr exactly (-0.05, -0.20, -0.40 with
+		// the shipped drive-time band), because its own box sits the full band outside the shrunken
+		// limit box. So `max(-dMax.z)` over a run returns 0.400 FOR EVERY CAR IN THE WORLD,
+		// including forty parked ones -- which is what a first pass at the crush series produced.
+		//   FRONT CRUSH = attr.w - |dMax.z|      (0 at rest, attr.w when `beyond` is about to fire)
+		//   SIDE  CRUSH = attr.x - |dMax.x|      (same shape per axis)
+		// ⚠️ And the sibling metric has the mirror-image trap: [tdef]'s maxVerlet carries a STEADY
+		// 0.125 m in -Y on rows marked `deforming 0` (184 such rows in run q1_ST3, sumVerlet exactly
+		// 0.5 == 4 x 0.125). That is a resting pose, not damage, and 0.125 m is 31 % of the 0.400 m
+		// band -- so a crush series taken off maxVerlet without filtering `deforming 1` measures the
+		// suspension of stationary traffic.
+		//
+		// ⭐ WHAT THE CORRECTED SERIES SAYS (run q1_ST3, 21 traffic cars carrying BOTH an [st-mag]
+		// impulse witness and a [deform-bbox] witness, joined ON THE GLOBAL ENTITY ID -- never on
+		// [deform-trace]'s `obj`, which is a rotating 8-slot cache index):
+		//     max sensor impulse   1.49 .. 7009.84   (a 4700x range)
+		//     deepest front crush  0.0000 .. 0.1872 m against the 0.400 m band, 0 cars `beyond`
+		//     Pearson r(maxImpulse, frontCrush) = 0.390
+		//     lower half: impulse mean 1383 -> crush mean 0.0015 m
+		//     upper half: impulse mean 4150 -> crush mean 0.0424 m
+		// So there IS a relation and it is weak, and it is dominated by cars that take a large
+		// impulse and register EXACTLY ZERO front crush: gid 180 took the run's biggest impulse
+		// (7010) with 0.0000 m, and gid 370 (4173, 0.0000 m) sits beside gid 320 (4842, 0.1382 m)
+		// and gid 369 (4485, 0.1872 m). Two cars an impulse apart differ by the whole range.
+		// ⇒ The brief's "impact speed does not predict crush" reproduces one rung further in: the
+		//   IMPULSE does not predict crush either, so the scatter is not in the speed->impulse
+		//   step. ⛔ NOT YET ATTRIBUTED, and this comment is not a claim that it is.
 		// -----------------------------------------------------------------------------------------
 		{
 			static s32 siBBoxTracePeriod = -1;
