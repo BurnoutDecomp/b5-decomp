@@ -70,9 +70,29 @@ struct iLionPosEvaluator;
 
 struct cParticleLocator
 {
+    // mFlags bits, both read off the branch each one guards in
+    // cParticleLocator::Update @0x829098D0. The masks are asm facts; the NAMES are this
+    // project's, chosen from what the guarded code does.
+    enum Flags
+    {
+        // `clrlwi r11, r11, 31` @0x82909940. Set by Init (mFlags = 1). While set, Update
+        // publishes a ZERO velocity and clears the bit, so no velocity is ever measured
+        // across a discontinuity. The DWARF's Teleport is the obvious other setter --
+        // inference, not an assertion: Teleport is not reconstructed.
+        E_FLAG_VELOCITY_INVALID  = 0x1,
+        // `rlwinm r11, r11, 0,30,30` @0x82909930. While set, Update stores the keyframe and
+        // returns -- it neither derives nor clears mVel, so the velocity is somebody else's.
+        E_FLAG_EXTERNAL_VELOCITY = 0x2,
+    };
+
     // Reset to authoring defaults: identity matrix, two identity-rotation /
-    // zero-translation keyframes, key count 1, everything else cleared. :0x82909810
+    // zero-translation keyframes, mFlags bit 0 set, everything else cleared. :0x82909810
     void Init();
+
+    // Push a new keyframe (arMat's translation + rotation, stamped arTime) into the
+    // ping-pong pair, flip mIndex, and derive mVel from the two stamps that now bracket
+    // the present. X360 @0x829098D0 (DWARF ParticleLocator.h:41). RECONSTRUCTED.
+    void Update(const cMatrix& arMat, const cTime& arTime);
 
     // Sample the animated frame for game time arKeyTime: when the requested key differs
     // from the cached one, interpolate the two keyframes (quaternion -> matrix blend) into

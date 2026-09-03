@@ -45,7 +45,17 @@
 struct cParticleTrigger
 {
 public:
-    void Init();
+    // ParticleTrigger.h:31 (DWARF). NO STANDALONE X360 BODY -- inlined into
+    // cLionFX::TriggerRegister @0x8290ACA8, which clears the four fields directly
+    // (`stb r11, 0xC(r3)` then `stw r11` at 0, 4 and 8, asm 0x8290ACC8..0x8290ACD8).
+    // De-inlined back onto the owning type, because the fields have names.
+    void Init()
+    {
+        mTime.BuildZero();
+        mTimeStart.BuildZero();
+        mTimeStop.BuildZero();
+        mbEnabled = false;
+    }
 
     // Advances the trigger by the elapsed time for the given update flags.
     // (declared here; bodied in its own TU)
@@ -70,25 +80,12 @@ private:
     bool  mbEnabled;    // running flag
 };
 
-// ----------------------------------------------------------------------------
-// cLionFX -- Lion FX dispatch helpers (free functions).
-// ----------------------------------------------------------------------------
-namespace cLionFX
-{
-    // cLionFX::TriggerUpdate @ 0x82908888
-    //
-    //   cmplwi r3,0 ; beqlr   -- if (apTrigger == 0) return apTrigger;
-    //   b cParticleTrigger__Update -- tail-call Update, forwarding the already
-    //                                 set-up r4 (flags) / r5 (time ref).
-    //
-    // Returns the trigger pointer (r3 is preserved through the tail-call), matching
-    // the Hex-Rays "return result" on the null path and the b/blr tail on the other.
-    inline cParticleTrigger* TriggerUpdate(cParticleTrigger* apTrigger,
-                                           u32 auFlags,
-                                           const cTime& arTime)
-    {
-        if (apTrigger != nullptr)
-            apTrigger->Update(auFlags, arTime);
-        return apTrigger;
-    }
-}
+// ⛔⛔ AN ODR FORK USED TO END THIS FILE, AND IT IS RETIRED (2026-09-03). It was:
+//
+//     namespace cLionFX { inline cParticleTrigger* TriggerUpdate(...) { ... } }
+//
+// cLionFX is a STRUCT (LionFX.h, DWARF LionFX.h:45), not a namespace. Two entities of
+// different kinds under one name is a hard redefinition, and the only reason it never
+// produced a diagnostic is that no TU had yet included both headers -- the exact shape of
+// "ODR forks link silently". cLionFX::TriggerUpdate @0x82908888 now lives on the real
+// cLionFX, in LionFX.cpp, beside its four sibling registry entry points.
