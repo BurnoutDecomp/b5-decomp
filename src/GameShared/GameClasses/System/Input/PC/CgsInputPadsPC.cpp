@@ -421,8 +421,57 @@ namespace
     const int KAI_KEYS_STEER_LEFT[]  = { 0x25 /*VK_LEFT*/,  'A', 0 };
     const int KAI_KEYS_STEER_RIGHT[] = { 0x27 /*VK_RIGHT*/, 'D', 0 };
 
+    // ⛔⛔⛔ AN UNATTENDED RUN MUST NOT READ THE PHYSICAL KEYBOARD (2026-09-03, harness wave).
+    //   GetAsyncKeyState is GLOBAL key state. The only thing standing between it and this game's
+    //   controls is IsProcessForeground() -- and an unattended harness run ALWAYS has the game
+    //   foreground, for minutes, while the box is being used for everything else. So any 'M' or
+    //   'P' typed anywhere on the machine lands on action 46 GUI_BACK / 45 GUI_START, which are
+    //   InGame::PauseGame(true,false) / (true,true): the map or the driver-details screen opens,
+    //   GuiEventActivateCrashNav(false) becomes game event 93 -> RequestPause(4) -> mbSimPaused,
+    //   AND THE WORLD FREEZES for the rest of the run.
+    //   ⭐ THIS IS MEASURED, not theorised, and the measurement is the [input-src] line below it:
+    //       [input-src] action 46 PRESSED -- key 1 padbtn 0 harness 0 (foreground 1 xpad 0 ...)
+    //   Three such presses in scratch/flow_run/hw1 and three in scratch/flow_run/tcrash1, with no
+    //   controller attached and the harness never touching either channel. In
+    //   scratch/flow_run/stA_right the same thing fired EARLY and voided the entire run: 145
+    //   BIT-IDENTICAL [motion] samples that three separate waves read as a physics or teleport
+    //   failure, and that one wave turned into a published "harness steering does essentially
+    //   nothing" conclusion. A stimulus that silently did not happen is worse than no stimulus.
+    //   ⭐ THE RULE: when BRN_INPUT_ALLOW_BACKGROUND is set, this process is being driven by the
+    //   named-event channel and by nothing else, so the host keyboard is not an input device --
+    //   it is noise from whatever else the box is doing. Suppressed, announced ONCE (a silent
+    //   behaviour change is the thing this whole file's banners exist to prevent), and escapable
+    //   with BRN_INPUT_KEEP_KEYBOARD=1 for anyone who wants to type at a harness-launched build.
+    //   ⚠️ IT DOES NOT TOUCH THE ASSERT-DISMISS FALLBACK. flow_run.ps1's [KBFLOW]::Tap(0x23) is
+    //   read by CgsAssertManager.cpp:316/323 with its own GetAsyncKeyState(VK_END), not through
+    //   KA_BINDINGS, and VK_END is in no KAI_KEYS_* row. Checked, not assumed.
+    //   ⚠️ AND IT DOES NOT TOUCH THE PAD. XInput is a real device someone deliberately attached;
+    //   only the global-key-state read is noise. The [input-src] line still names both sources.
+    bool HostKeyboardSuppressed()
+    {
+        static s32 siSuppressed = -1;
+        if (siSuppressed < 0)
+        {
+            const bool lbHarness = (std::getenv("BRN_INPUT_ALLOW_BACKGROUND") != nullptr);
+            const bool lbKeep    = (std::getenv("BRN_INPUT_KEEP_KEYBOARD") != nullptr);
+            siSuppressed = (lbHarness && !lbKeep) ? 1 : 0;
+            if (siSuppressed == 1)
+            {
+                CgsDev::Log::WriteToLog(
+                    "[input] HOST KEYBOARD SUPPRESSED -- BRN_INPUT_ALLOW_BACKGROUND is set, so this "
+                    "run takes input ONLY from the harness's named-event channel (and an XInput pad "
+                    "if one is attached). A stray 'M'/'P' on this box can no longer open the map or "
+                    "driver details and freeze the world mid-measurement. BRN_INPUT_KEEP_KEYBOARD=1 "
+                    "restores the old behaviour.\n");
+            }
+        }
+        return siSuppressed == 1;
+    }
+
     bool AnyKeyDown(const int* lpiKeys)
     {
+        if (HostKeyboardSuppressed())
+            return false;
         for (const int* lpiKey = lpiKeys; *lpiKey != 0; ++lpiKey)
         {
             if ((GetAsyncKeyState(*lpiKey) & 0x8000) != 0)
