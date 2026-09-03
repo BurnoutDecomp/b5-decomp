@@ -79,6 +79,14 @@ public:
     cLionBindings* GetNextBinding() { return mpNext; }
     void           SetNextBinding(cLionBindings* apNext) { mpNext = apNext; }
 
+    // DWARF LionBindings.h:68 / :73 -- the back-link to the emitter these bindings drive.
+    // Both are single field accesses the console inlines: cLionParticleEffectManager::
+    // BindingsAttach @0x82914584 writes it (`stw r3, 0x64(r29)`, the second half of
+    // cParticleEmitter::Bind) and cParticleEmitterManager::UnRegister(descriptor,...)
+    // @0x82914768 rewrites it when it re-binds rather than unregisters.
+    cParticleEmitter* GetEmitter() const              { return mpEmitter; }
+    void SetEmitter(cParticleEmitter* apEmitter)      { mpEmitter = apEmitter; }
+
 private:
     u32                mLocatorCount;  // +0x00  LionBindings.h:103
     u32                mWorldIndex;    // +0x04  LionBindings.h:104

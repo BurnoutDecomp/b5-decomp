@@ -5,26 +5,36 @@
 // this build cannot reach. Every one is a real, unreconstructed X360 ledger body; each is a
 // LOUD trap, never a quiet return.
 //
-// ⭐ WHY THESE EXIST AT ALL, AND WHY THEY ARE SAFE. ParticleModule::Prepare now calls
-// cLionFX::Init, so cParticleSystem::AppInit and with it cParticleEmitterManager::AppInit,
-// cParticleBucketManager::AppInit and cLionParticleEffectManager::AppInit are on the link. Those
-// three TUs also carry their register/unregister/update surface, which references the emitter
-// bodies below. NONE of that surface RUNS on this build:
+// ⭐⭐ THE ORIGINAL SAFETY ARGUMENT FOR THIS FILE IS NOW HALF FALSE, AND FOUR ENTRIES LEFT IT
+// (2026-09-03). It used to read: "Nothing registers an emitter. cLionFX::EffectCreate
+// @0x82914CB8 is not reconstructed, so no cLionEffectInstance is ever created, so
+// cLionParticleEffectManager::BindingsAttach is never called, so cParticleEmitterManager::
+// Register is never called." EffectCreate IS reconstructed now (LionEffectManager.cpp), so
+// every one of those steps CAN run, and the four bodies that sat behind that argument had to
+// land with it or become a live trap on the first effect the game starts:
 //
-//   * Nothing registers an emitter. cLionFX::EffectCreate @0x82914CB8 is not reconstructed, so
-//     no cLionEffectInstance is ever created, so cLionParticleEffectManager::BindingsAttach is
-//     never called, so cParticleEmitterManager::Register is never called.
-//   * Nothing steps the runtime. cLionFX::Update / cLionFX::Render are called only from
-//     ParticleModule::BuildLionVertexBuffers @0x8228AC20, whose LION half is parked; and
-//     cLionFX::Dispatch only from RenderFullResParticles @0x8229AFD0, whose Lion branch is
-//     parked too. Both say so in their own log line every run.
+//     cParticleEmitter::Bind                              -> ParticleEmitter.cpp
+//     cParticleEmitter::BucketRemove        @0x82909790   -> ParticleEmitter.cpp
+//     cParticleEmitterManager::UnRegister(emitter)        @0x82913760
+//                                                         -> ParticleEmitterManager.cpp
+//     cParticleEmitterManager::UnRegister(descriptor,...) @0x829146D0
+//                                                         -> ParticleEmitterManager.cpp
 //
-// So the free list built by AppInit is populated and never drawn from. If one of these traps
-// ever fires, that is real news: it means an arm was unparked without its callee.
+// ⚠ ONE HALF OF THE ARGUMENT STILL HOLDS, and it is what keeps cParticleEmitter::Update's
+// trap unreachable: NOTHING STEPS THE RUNTIME. cLionFX::Update / cLionFX::Render are called
+// only from ParticleModule::BuildLionVertexBuffers @0x8228AC20, whose LION half is parked, and
+// cLionFX::Dispatch only from RenderFullResParticles @0x8229AFD0, whose Lion branch is parked
+// too. Both say so in their own log line every run. So an emitter registered by the create
+// path above is initialised and linked onto the used list, and never advanced -- which is
+// exactly the state the console would be in with those two arms parked.
 //
 // ⛔ THIS FILE IS A HOLDING PEN, NOT A HOME. Each body below belongs in the TU named beside it.
 // Delete each entry as its real body lands -- a stand-in that outlives its reason is a fork
 // waiting to happen (this project has already paid for that twice in this subsystem).
+// ⛔ AND ITS OWN COMMENTS GO STALE. Two of the four entries removed today were parked on
+// reasons that had already expired: UnRegister(emitter) said "its DeInit is not bodied either"
+// when cParticleEmitter::DeInit @0x82913330 has been bodied in ParticleEmitter.cpp for some
+// time. Re-derive the reason before trusting it.
 // ============================================================================================
 
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleLocator.h"
@@ -34,8 +44,6 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleBehaviour.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
-// ---- cParticleEmitter (home: ParticleEmitter.cpp) --------------------------------------------
 
 // ---- cParticleBehaviour (home: ParticleBehaviour.cpp) ---------------------------------------
 
@@ -56,6 +64,11 @@
 // selected outright -- a scaler at or within 1% of an integer position, which includes every
 // single-layer effect and every effect whose scaler is never driven -- are UNAFFECTED, because
 // Blend snaps to a real layer on those paths and never calls this.
+//
+// ⚠ THE "never driven" CASE IS NOW A REAL ONE, NOT A HYPOTHETICAL. cLionFX::ScalerRegister
+// @0x8290AC68 (landed 2026-09-03) initialises a fresh scaler to 1.0f, and nothing on this build
+// calls ScalerUpdate, so every effect the create path starts today sits at scale 1.0 -- an
+// integral position, which snaps.
 void cParticleBehaviour::Lerp(const cParticleBehaviour* /*apLo*/,
                               const cParticleBehaviour* /*apHi*/,
                               f32 /*afWeight*/)
@@ -73,52 +86,24 @@ void cParticleBehaviour::Lerp(const cParticleBehaviour* /*apLo*/,
 }
 
 
-// cParticleEmitter::Update @0x829153D8 -- 190 pseudocode lines, and the head of the whole Lion
-// SIMULATION core: IsGenerating -> Generate -> Emit -> ParticleBuild (1,417 lines) ->
-// InitialiseParticle (366) -> Blend (131) -> cParticleBehaviour::Lerp (817). That closure is
-// what stands between this build and a boost particle on screen; it is measured at 37 functions
-// / ~6,400 pseudocode lines from the four cLionFX entry points.
+// ---- cParticleEmitter (home: ParticleEmitter.cpp) --------------------------------------------
+
+// cParticleEmitter::Update @0x829153D8 -- 201 instructions, and the head of the whole Lion
+// SIMULATION core: IsGenerating -> Generate -> Emit -> ParticleBuild (1,142) ->
+// InitialiseParticle -> Blend -> cParticleBehaviour::Lerp (1,530), plus the three
+// SimulateParticlesInBucketGeneral<> kernels (549). That closure is what stands between this
+// build and a boost particle on screen.
+//
+// ⛔ IT IS STILL AN ASSERT AND IT IS STILL UNREACHABLE, for one reason only: nothing calls
+// cLionFX::Update. cParticleEmitterManager::Update is its only caller and cLionFX::Update is
+// that function's only caller, and the arm that would call THAT
+// (ParticleModule::BuildLionVertexBuffers' Lion half) is parked and announces itself. If this
+// trap ever fires, an arm was unparked without its callee -- which is real news, and is why
+// this one is not softened to a log line.
 u32 cParticleEmitter::Update(const cTime& /*arTime*/)
 {
     CGS_ASSERT(false, "cParticleEmitter::Update @0x829153D8 -- NOT RECONSTRUCTED (the Lion simulation core)");
     return 0;
-}
-
-// cLionBindings::SetEmitter. Inlined at its only call site (BindingsAttach @0x82914530), so it
-// has no standalone X360 body to transcribe; it lands with the effect-instance path.
-void cParticleEmitter::Bind(cLionBindings& /*arBindings*/)
-{
-    CGS_ASSERT(false, "cParticleEmitter::Bind -- NOT RECONSTRUCTED (the effect-instance binding path)");
-}
-
-// cParticleEmitter::BucketRemove @0x82909790 -- an EXPORT-SET HOLE (IDA names it in
-// cParticleBucketManager::Free's xrefs; no JSON). Unlinks a bucket from the emitter's list.
-void cParticleEmitter::BucketRemove(cParticleBucket* /*apBucket*/)
-{
-    CGS_ASSERT(false, "cParticleEmitter::BucketRemove @0x82909790 -- NOT RECONSTRUCTED (export-set hole)");
-}
-
-// ---- cParticleEmitterManager (home: ParticleEmitterManager.cpp) -------------------------------
-
-// cParticleEmitterManager::UnRegister(cParticleEmitter*) @0x82913760 -- also an EXPORT-SET HOLE.
-// Disassembled out of the image: it unlinks the emitter from mpUsed by walking the +0x204 next
-// chain, calls cParticleEmitter::DeInit, then pushes it onto mpFree and decrements mUsedCount.
-// NOT bodied here because its DeInit is not bodied either -- a faithful UnRegister that calls a
-// trap is worse than the trap, because it does its list surgery FIRST and leaves the pool
-// half-modified when the trap fires.
-void cParticleEmitterManager::UnRegister(cParticleEmitter* /*apEmitter*/)
-{
-    CGS_ASSERT(false, "cParticleEmitterManager::UnRegister(emitter) @0x82913760 -- NOT RECONSTRUCTED (export-set hole)");
-}
-
-// cParticleEmitterManager::UnRegister(descriptor, bindings, bindBase) @0x829146D0 -- walks the
-// used list unregistering (or re-binding) every emitter whose descriptor is, or descends from,
-// the given one. Reached only from cLionParticleEffectManager::BindingsRemove.
-void cParticleEmitterManager::UnRegister(const cParticleDescriptor& /*arDescriptor*/,
-                                         cLionBindings& /*arBindings*/,
-                                         cLionBindings* /*apBindBase*/)
-{
-    CGS_ASSERT(false, "cParticleEmitterManager::UnRegister(descriptor,...) @0x829146D0 -- NOT RECONSTRUCTED");
 }
 
 // ---- cParticleRender::Dispatch's platform surface (home: a renderengine PC leaf) --------------

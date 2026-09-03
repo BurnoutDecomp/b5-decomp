@@ -812,3 +812,90 @@ void cParticleEmitter::DeInit()
 
     Init(nullptr);
 }
+
+// ================================================================================================
+// cParticleEmitter::Bind  (DWARF ParticleEmitter.h:158)
+//
+// NO STANDALONE X360 BODY -- fully inlined at its only call site, cLionParticleEffectManager::
+// BindingsAttach @0x82914530, where it is the two stores that follow a successful Register:
+//
+//     82914580  stw  r29, 0x1FC(r3)      ; emitter->mpBindings = &bindings
+//     82914584  stw  r3,  0x64(r29)      ; bindings.m_p_emitter = emitter
+//
+// Re-outlined onto the owning class rather than left as two offset pokes in the manager (the
+// DWARF names the method, and the same pair appears again inside cParticleEmitterManager::
+// UnRegister(descriptor,...) @0x82914764 on its re-bind path).
+//
+// ⭐ IT LANDS NOW BECAUSE ITS CALLER CAN NOW RUN. This was a trap in LionRuntimeLinkStubs.cpp
+// under the reasoning that "nothing registers an emitter"; cLionEffectManager::EffectCreate
+// @0x829149E8 landing is exactly what changes that, and BindingsAttach reaches here on the
+// first effect the game starts.
+// ================================================================================================
+void cParticleEmitter::Bind(cLionBindings& arBindings)
+{
+    mpBindings = &arBindings;
+    arBindings.SetEmitter(this);
+}
+
+// ================================================================================================
+// cParticleEmitter::BucketRemove  @0x82909790      (DWARF ParticleEmitter.h:149)
+//
+// AN EXPORT-SET HOLE: IDA names it in cParticleBucketManager::Free's xrefs_to but emits no
+// 0x82909790.json, so it had no ledger row and no pseudocode. Disassembled out of the image
+// (tools/re/ppcdis.py); the whole function is 31 instructions and reads:
+//
+//     r11 = this->mpBucket (0x200)     ; if (!r11) return
+//     if (!apBucket) return
+//     if (apBucket == r11) {           ; head case
+//         this->mpBucket = r11->mpEmitterNext (+8)
+//         apBucket->mpEmitterNext = 0 ; apBucket->mpEmitter = 0
+//         return
+//     }
+//     r10 = r11
+//     loop: if (r11 == apBucket) goto found
+//           r10 = r11 ; r11 = r11->mpEmitterNext ; if (r11) goto loop
+//           apBucket->mpEmitterNext = 0 ; apBucket->mpEmitter = 0 ; return   <-- NOT FOUND
+//     found: if (r11) r10->mpEmitterNext = r11->mpEmitterNext
+//            apBucket->mpEmitterNext = 0 ; apBucket->mpEmitter = 0
+//
+// ⭐ THE CLEAR HAPPENS ON THE NOT-FOUND PATH TOO. 0x829097E0/E4 stores zero into both fields
+// after a walk that fell off the end, so a bucket handed in that this emitter never owned is
+// still detached from whatever it thinks it belongs to. That is the console's behaviour and it
+// is transcribed; it is also why cParticleBucketManager::Free can call this unconditionally.
+//
+// ⚠ THE TWO STORES ARE +8 THEN +4, IN THAT ORDER, on every one of the three exits. Field order
+// in a clear is not usually load-bearing, but this one is written out as the asm has it because
+// the pair is what tells a reader the second field is mpEmitter and not more of the link.
+// ================================================================================================
+void cParticleEmitter::BucketRemove(cParticleBucket* apBucket)
+{
+    cParticleBucket* lpNode = mpBucket;
+    if (lpNode == 0)
+        return;
+    if (apBucket == 0)
+        return;
+
+    if (apBucket == lpNode)
+    {
+        // Head of this emitter's bucket list.
+        mpBucket = lpNode->GetEmitterNext();
+    }
+    else
+    {
+        cParticleBucket* lpPrev = lpNode;
+        while (lpNode != apBucket)
+        {
+            lpPrev = lpNode;
+            lpNode = lpNode->GetEmitterNext();
+            if (lpNode == 0)
+                break;
+        }
+        if (lpNode != 0)
+        {
+            lpPrev->SetEmitterNext(lpNode->GetEmitterNext());
+        }
+    }
+
+    apBucket->SetEmitterNext(0);
+    apBucket->ClearEmitter();
+}

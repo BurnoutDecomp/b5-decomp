@@ -228,3 +228,162 @@ cParticleEmitterManager& cParticleEmitterManager::Instance()
 {
     return gEmitterManagerSingleton;
 }
+
+// ================================================================================================
+// cParticleEmitterManager::UnRegister(cParticleEmitter*)  @0x82913760
+//
+// AN EXPORT-SET HOLE -- IDA names it in cParticleEmitter::DeInit's and Update's xrefs but emits
+// no 0x82913760.json, so it had no ledger row and no pseudocode. Disassembled out of the image
+// (tools/re/ppcdis.py); 39 instructions:
+//
+//     if (!apEmitter) return;
+//     r11 = mpUsed (0x18), r10 = &mpUsed
+//     ...prev-link walk over mpNext (+0x204), unlinking apEmitter and zeroing its link...
+//     cParticleEmitter::DeInit(apEmitter)          bl 0x82913330
+//     apEmitter->mpNext = mpFree (0x14)            lwz r11,0x14(r30) ; stw r11,0x204(r31)
+//     mpFree = apEmitter                           stw r31,0x14(r30)
+//     --mUsedCount (0x04)                          lwz/addi -1/stw 4(r30)
+//
+// ⭐ WHY IT WAS PARKED AND WHY THAT REASON IS GONE. LionRuntimeLinkStubs.cpp refused to body
+// this one on the grounds that "its DeInit is not bodied either -- a faithful UnRegister that
+// calls a trap is worse than the trap, because it does its list surgery FIRST and leaves the
+// pool half-modified when the trap fires". cParticleEmitter::DeInit @0x82913330 IS bodied
+// (ParticleEmitter.cpp), and has been; the note went stale. The hazard it describes is real and
+// is exactly why the check was worth redoing rather than trusting the comment.
+//
+// ⭐ THE UNLINK IS ATTEMPTED EVEN WHEN THE EMITTER IS NOT ON mpUsed, and the walk simply falls
+// off the end (0x829137B8 branches past the surgery to the DeInit). So an emitter that is
+// already off the list is still DeInit'd and still pushed onto mpFree -- which is what makes
+// this safe to call from cParticleEmitterManager::Update's "returned 0" path and from
+// UnRegister(descriptor,...) in the same frame.
+// ================================================================================================
+void cParticleEmitterManager::UnRegister(cParticleEmitter* apEmitter)
+{
+    if (apEmitter == 0)
+        return;
+
+    // Unlink from the used list (link field is mpNext, console +0x204).
+    if (mpUsed != 0)
+    {
+        cParticleEmitter* lpPrev = 0;
+        cParticleEmitter* lpNode = mpUsed;
+        while (lpNode != 0 && lpNode != apEmitter)
+        {
+            lpPrev = lpNode;
+            lpNode = lpNode->GetNextEmitter();
+        }
+        if (lpNode != 0)
+        {
+            if (lpPrev != 0)
+                lpPrev->SetNext(lpNode->GetNextEmitter());
+            else
+                mpUsed = lpNode->GetNextEmitter();
+            lpNode->SetNext(0);
+        }
+    }
+
+    apEmitter->DeInit();
+
+    // Push onto the free list and drop the live count.
+    apEmitter->SetNext(mpFree);
+    mpFree = apEmitter;
+    --mUsedCount;
+}
+
+// ================================================================================================
+// cParticleEmitterManager::UnRegister(const cParticleDescriptor&, cLionBindings&, cLionBindings*)
+//                                                                                    @0x829146D0
+// (X360 exports it unnamed as sub_829146D0; the DWARF names it, ParticleEmitterManager.h:64.)
+//
+// Reached only from cLionParticleEffectManager::BindingsRemove, once per descriptor of the
+// effect being destroyed. It walks the USED list and retires -- or RE-BINDS -- every emitter
+// whose descriptor is, or descends from, arDescriptor.
+//
+// THE TWO ARMS ARE SELECTED BY THE DESCRIPTOR'S BEHAVIOUR FLAG 0x1000 (asm 0x829146EC:
+// `lwz r11, 0x40(r30)` == arDescriptor.mpBehaviours, then `lwz r11, 0x2C4(r11)` ==
+// cParticleBehaviour::mFlags, `rlwinm r11,r11,0,19,19` == bit 12). That is the same
+// SINGLE-INSTANCE bit cParticleEmitterManager::Register tests at 0x82913590.
+//
+//   SINGLE-INSTANCE arm (flag set): match on the DESCRIPTOR alone, ignoring which binding set
+//   the emitter belongs to -- because there is only supposed to be one emitter for it. When a
+//   sibling binding chain exists (apBindBase non-null), the emitter is not destroyed but
+//   HANDED OVER to that chain (0x82914764/68 -- the same two stores as cParticleEmitter::Bind),
+//   unless the descriptor is flagged 0x8000 (E_FLAG_SKIP_AUTO_EMITTER), in which case it is
+//   unregistered outright.
+//
+//   ORDINARY arm (flag clear): match on the BINDINGS first (`lwz r11,0x1FC(r31)` compared
+//   against arBindings at 0x829147A0) and only then on the descriptor, and always unregister.
+//
+// ⭐ THE ANCESTRY TEST IS `emitterDescriptor.mpParent->IsChildOf(arDescriptor)`, NOT the other
+// way round, and Hex-Rays hides it: it renders the call with no arguments at all. The asm is
+// unambiguous -- r3 comes from `lwz r3, 0x58(r11)` (the EMITTER's descriptor's mpParent) and r4
+// from the incoming descriptor. There are three ways to match, tested in order: the emitter's
+// descriptor IS arDescriptor; its mpParent IS arDescriptor; its mpParent descends from
+// arDescriptor. A null mpParent fails the whole test (0x829147B8).
+//
+// ⚠ THE SUCCESSOR IS CACHED BEFORE THE BODY, on both arms (`lwz r29, 0x204(r31)` at 0x82914710
+// and 0x8291479C, i.e. before any call). It has to be: UnRegister(emitter) below zeroes the
+// node's mpNext and pushes it onto the free list, so re-reading the link afterwards would walk
+// the FREE list instead.
+// ================================================================================================
+namespace
+{
+    // The three-way descriptor match both arms run, factored out so each arm can call it
+    // exactly where the console does (the ordinary arm tests the BINDINGS first, and running
+    // this eagerly would call IsChildOf on emitters the console never asks about).
+    bool DescriptorMatches(const cParticleDescriptor* apEmitterDescriptor,
+                           const cParticleDescriptor& arDescriptor)
+    {
+        if (apEmitterDescriptor == &arDescriptor)
+            return true;
+
+        const cParticleDescriptor* lpParent = apEmitterDescriptor->mpParent.Get();
+        if (lpParent == 0)
+            return false;
+
+        return (lpParent == &arDescriptor) || (lpParent->IsChildOf(arDescriptor) != 0);
+    }
+}
+
+void cParticleEmitterManager::UnRegister(const cParticleDescriptor& arDescriptor,
+                                         cLionBindings& arBindings,
+                                         cLionBindings* apBindBase)
+{
+    // arDescriptor.mpBehaviours->mFlags & 0x1000 -- the single-instance selector.
+    const cParticleBehaviour* lpBehaviour = arDescriptor.GetBehaviours();
+    const bool lbSingleInstance =
+        (lpBehaviour->mFlags & KU_BEHAVIOUR_FLAG_SINGLE_INSTANCE) != 0;
+
+    cParticleEmitter* lpEmit = mpUsed;
+    while (lpEmit != 0)
+    {
+        // Cache the successor BEFORE anything can recycle this node.
+        cParticleEmitter* lpNext = lpEmit->GetNextEmitter();
+
+        if (lbSingleInstance)
+        {
+            if (DescriptorMatches(lpEmit->GetDescriptor(), arDescriptor))
+            {
+                if (apBindBase == 0
+                    || lpEmit->mpBindings == apBindBase
+                    || (arDescriptor.mFlags & cParticleDescriptor::E_FLAG_SKIP_AUTO_EMITTER) != 0)
+                {
+                    UnRegister(lpEmit);
+                }
+                else
+                {
+                    // Hand the emitter over to the sibling binding chain rather than
+                    // destroying it -- the same two stores as cParticleEmitter::Bind.
+                    lpEmit->Bind(*apBindBase);
+                }
+            }
+        }
+        else if (lpEmit->mpBindings == &arBindings
+                 && DescriptorMatches(lpEmit->GetDescriptor(), arDescriptor))
+        {
+            UnRegister(lpEmit);
+        }
+
+        lpEmit = lpNext;
+    }
+}
