@@ -348,16 +348,65 @@ cParticleBucketManager& cParticleBucketManager::Instance()
 }
 
 // ------------------------------------------------------------------------------------------------
-// cParticleBucketManager::MatrixBucketAlloc @0x8290CD60 -- LOUD TRAP, not a body.
+// cParticleBucketManager::MatrixBucketAlloc @0x8290CD60
 //
-// An EXPORT-SET HOLE: IDA names it in AllocateBucket's xrefs and emits no JSON for it, so it has
-// no ledger row and no pseudocode. It is the 1024-byte twin of VectorBucketAlloc -- claim a free
-// matrix-bucket slot from the shared side pool and mark its bit -- and it is reached only when a
-// descriptor asks for the heavyweight bucket type, i.e. only once emitters actually run. Defined
-// here, in its own class's TU, because the Lion install path put AllocateBucket on the link.
+// AN EXPORT-SET HOLE: IDA names it in AllocateBucket's xrefs and emits no JSON for it, so it has
+// no ledger row, no pseudocode and no dossier. Disassembled out of the packed .i64
+// (tools/re/ppcdis.py); 30 instructions, and it is the 1024-byte twin of VectorBucketAlloc above.
+//
+//     8290CD6C  r11 = mMatrixBucketCount (+4) ; blelr  -- SIGNED <= 0, not == 0
+//     8290CD88  r9  = (i << 2) & 0x1C          rlwinm r9, r6, 2, 27, 29
+//     8290CD90  r11 = (i >> 1) & 0x3FFFFFFC    rlwinm r11, r6, 31, 1, 29   == (i >> 3) * 4
+//     8290CD94  r8  = 0xF0000000 >>> r9        srw    -- a FOUR-BIT mask, 8 nibbles per word
+//     8290CD98  r9  = bits[i >> 3] & r8
+//     8290CDAC  r3  = mpMatrices + i * 0x400   (the byte cursor r5, stepped at 8290CDC8)
+//     8290CDBC  bits[i >> 3] |= r8
+//
+// ⭐ FOUR BITS PER MATRIX BUCKET, ONE PER VECTOR BUCKET, IN THE SAME BITMAP. That is not two
+// allocators sharing a name -- it is one pool with two granularities, which this class's header
+// already states: the side pool is sized as mMatrixBucketCount * 1024, and one matrix bucket is
+// exactly four 256-byte vector buckets, so a matrix claim sets the NIBBLE its four vector
+// siblings would each set a bit of. The nibble arithmetic here and the bit arithmetic in
+// VectorBucketAlloc index the same words; that is what keeps the two from handing out
+// overlapping storage.
+//
+// ⚠ IT WALKS FORWARD WHERE VectorBucketAlloc WALKS BACKWARD (i from 0 up, against
+// mVectorBucketCount down to 0). Both are transcribed as the console has them: the direction
+// decides which slot a mixed workload gets, and "tidying" them to match would be a behaviour
+// change dressed as symmetry.
+//
+// ⚠ THE COUNT TEST IS SIGNED (`blelr cr6` after `cmpwi`-style semantics on r11), so a negative
+// count returns null rather than looping ~2 billion times. VectorBucketAlloc's is not. Kept.
 // ------------------------------------------------------------------------------------------------
 cMatrix* cParticleBucketManager::MatrixBucketAlloc()
 {
-    CGS_ASSERT(false, "cParticleBucketManager::MatrixBucketAlloc @0x8290CD60 -- NOT RECONSTRUCTED (export-set hole)");
-    return 0;
+    if (static_cast<s32>(mMatrixBucketCount) <= 0)
+    {
+        return nullptr;
+    }
+
+    cMatrix* lpResult = nullptr;
+    s32 lByteOffset = 0;
+    for (u32 lIndex = 0; lIndex < mMatrixBucketCount; ++lIndex)
+    {
+        if (lpResult)
+        {
+            break;
+        }
+
+        // The nibble this matrix bucket owns: four consecutive vector-bucket bits.
+        const u32 luNibble = 0xF0000000u >> ((lIndex << 2) & 0x1Cu);
+        u32& lruWord = mpVectorBucketActiveBits[lIndex >> 3];
+
+        if ((lruWord & luNibble) == 0)
+        {
+            lpResult = reinterpret_cast<cMatrix*>(
+                reinterpret_cast<u8*>(mpMatrices) + lByteOffset);
+            lruWord |= luNibble;
+        }
+
+        lByteOffset += static_cast<s32>(KU_MATRIX_BUCKET_STRIDE);
+    }
+
+    return lpResult;
 }

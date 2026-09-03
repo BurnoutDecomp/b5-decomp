@@ -29,6 +29,7 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRandomSeed.h"
 
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // the two CgsRandom.h range asserts Build(s32,s32) fires
 
 #include "rw/math/vpu/vector4_operation.h"  // Vector4 operator+/operator*, Splat
 
@@ -312,3 +313,60 @@ rw::math::vpu::Vector3Plus cParticleRandomSeed::Build(rw::math::vpu::Vector4 avB
 // Build(cVector&,const cVector&,const cVector&); none of those has an X360 body, so per
 // the attestation rule they are neither declared nor written.
 // ----------------------------------------------------------------------------
+
+// ================================================================================================
+// cParticleRandomSeed::Build(S32, S32)  @0x8290A438      (DWARF ParticleRandomSeed.h:87)
+//
+// Unnamed in the idb (sub_8290A438); the DWARF names it and cParticleEmitter::Generate
+// @0x82915158 is the caller that matters -- it asks this for the particle COUNT of an emission
+// burst, twice, from the behaviour's base/variance pair.
+//
+// Store for store from the asm:
+//
+//   0x8290A464  liMax = aiBase + aiVariance
+//   0x8290A474  assert(liMax >= liMin)                 CgsRandom.h:320
+//   0x8290A49C  luMod = liMax - aiBase + 1
+//   0x8290A4A4  assert(luMod > 0)                      CgsRandom.h:323
+//   0x8290A4C4  state = mu64State
+//   0x8290A4E4  hi    = (u32)(state >> 32)             -- the PRE-step high word
+//   0x8290A4DC  mu64State = state * 0x5851F42D4C957F2D + 1
+//   0x8290A4F0  StopMonitor                            -- BEFORE the modulo, as with Build(f32,f32)
+//   0x8290A4F4  return hi % luMod + aiBase             divwu / mullw / subf / add
+//
+// ⭐ THE MULTIPLIER IS BUILT IN TWO HALVES AND IS THE SAME MMIX CONSTANT the rest of this class
+// uses: `lis r9, 0x5851 ; ori r9, r9, 0xF42D` gives the high word and `ori r10, r10, 0x7F2D`
+// the low, spliced by `insrdi r10, r9, 32, 0` into 0x5851F42D4C957F2D. It is written as
+// KU64_LCG_MULTIPLIER here rather than re-derived.
+//
+// ⭐ THE HIGH WORD IS TAKEN BEFORE THE STEP, not after (the `srdi` at 0x8290A4E4 reads r11,
+// which was loaded at 0x8290A4C4 and is never overwritten -- the stepped value goes to r10).
+// The same pre-step convention as Build(f32,f32)'s cache refill.
+//
+// ⚠ THE PERF MONITOR STOPS BEFORE THE ARITHMETIC, exactly as in the f32 overload: the monitor
+// brackets the DRAW, not the range fold. Reproduced in that order.
+//
+// ⚠ THE MODULO IS UNSIGNED (`divwu`), on a value whose top bit is uniformly random, so the
+// result is very slightly biased toward the low end of the range for a luMod that does not
+// divide 2^32. That is the console's generator and it is not "improved" here -- a different
+// distribution is a different game.
+// ================================================================================================
+s32 cParticleRandomSeed::Build(s32 aiBase, s32 aiVariance)
+{
+    const s32 liMonitor = guBuildMonitor;          // dword_82FAB68C, loaded once
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+    const s32 liMax = aiBase + aiVariance;
+    CGS_ASSERT(liMax >= aiBase, "liMax >= liMin");
+
+    const u32 luMod = static_cast<u32>(liMax - aiBase) + 1u;
+    CGS_ASSERT(luMod > 0, "luMod > 0");
+
+    // The raw LCG high word -- this overload never touches mafRandom / muIndex.
+    const u64 lu64State = mu64State;
+    const u32 luHigh    = static_cast<u32>(lu64State >> 32);
+    mu64State = lu64State * KU64_LCG_MULTIPLIER + 1;
+
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+
+    return static_cast<s32>(luHigh % luMod) + aiBase;
+}

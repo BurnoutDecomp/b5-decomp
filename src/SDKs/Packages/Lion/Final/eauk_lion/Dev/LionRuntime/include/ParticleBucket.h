@@ -147,13 +147,31 @@ public:
     void ClearEmitter()                          { mpEmitter = nullptr; }
     cParticleEmitter* GetEmitter() const         { return mpEmitter; }
 
+    // ParticleBucket.h:112 / :208 -- the two the sub-emitter path reads. cParticleEmitter::
+    // SubEmitterInit @0x829112F0 copies this bucket's SEED into the child emitter's
+    // mParentRandomSeed and its slot's NUCLEUS into mParentEmitterNucleus, so the child
+    // inherits its parent particle's random stream and state.
+    sParticleNucleus& GetNucleus(u32 auIndex)          { return mParticles[auIndex]; }
+    const cParticleRandomSeed& GetRandomSeed() const   { return mRandomSeed; }
+
 private:
     // ----- members (DWARF order; offsets verified against the X360 asm) -----
     cParticleBucket*    mpManagerNext;                // 0x00  ParticleBucket.h:219
     cParticleEmitter*   mpEmitter;                    // 0x04  ParticleBucket.h:222
     cParticleBucket*    mpEmitterNext;                // 0x08  ParticleBucket.h:225
     cTime               mLatestBirthTime;             // 0x0C  ParticleBucket.h:229
-    cParticleRandomSeed mRandomSeed;                  // 0x1C  ParticleBucket.h:232
+    // ⭐ THE SEED STARTS AT 0x10, NOT 0x1C (corrected 2026-09-03 from the asm). This line used
+    // to read `// 0x1C`, which was back-derived from placing the tree's 0x34-wide
+    // cParticleRandomSeed model so that its END landed on mnNextParticlePositionToFill's
+    // attested 0x50. cParticleEmitter::SubEmitterInit @0x829112F0 settles it directly: it
+    // copies SIXTY-FOUR bytes from `bucket + 0x10` (asm 0x82911308, an 8-iteration ld/std
+    // loop) into the child emitter's mParentRandomSeed, whose own slot is 0x150..0x190 --
+    // 0x40 wide. So the console record is a 0x40 seed at 0x10, exactly like the emitter's two
+    // seed slots, and the leftover 0x0C is padding AFTER it rather than a gap before it. The
+    // pad is carried here explicitly for the same reason ParticleEmitter.h carries its two:
+    // so this type's own sizeof is not changed for every other user of it.
+    cParticleRandomSeed mRandomSeed;                  // 0x10  ParticleBucket.h:232 (span 0x40)
+    u8                  maPadSeed[0x0C];              // 0x44  the seed's tail padding to 0x50
     u32                 mnNextParticlePositionToFill; // 0x50  ParticleBucket.h:235
     u32                 mActiveBits;                  // 0x54  ParticleBucket.h:236
     sParticleNucleus    mParticles[KU_MAX_PARTICLES]; // 0x60  ParticleBucket.h:239

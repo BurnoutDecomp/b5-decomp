@@ -112,6 +112,17 @@ struct cParticleRandomSeed
     // quirk; its real home is this class, per the DWARF).
     f32 Build(f32 afBase, f32 afVariance);
 
+    // ParticleRandomSeed.h:87 -- the INTEGER draw: a uniform value in
+    // [aiBase, aiBase + aiVariance] inclusive. X360 sub_8290A438 (unnamed in the idb; named
+    // by the DWARF, and reached from cParticleEmitter::Generate @0x82915158 twice to decide
+    // how many particles an emission burst produces).
+    //
+    // ⚠ IT DOES NOT TOUCH THE FLOAT CACHE. Unlike every other draw on this class it reads the
+    // raw 64-bit LCG state's high word directly (`srdi r11, r11, 32` @0x8290A4E4) and never
+    // reads, refills or advances mafRandom / muIndex -- so an integer draw and a float draw
+    // interleaved do NOT consume the same stream position.
+    s32 Build(s32 aiBase, s32 aiVariance);
+
     // ParticleRandomSeed.h:117 -- the PER-LANE sibling of BuildLerp: consume the whole
     // 16-byte cache half at slot (muIndex+3)&4 as FOUR independent randoms, refill all
     // four slots from three LCG steps, and return avBase + avVariance * t per lane.

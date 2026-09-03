@@ -147,6 +147,25 @@ public:
     // masks it with `clrlwi r10, r10, 31`, and SetActiveFlag(1) is its writer.
     static const u32 KU_FLAG_ACTIVE = 0x1;
 
+    // mFlags bit 3 -- "this emitter follows a PARENT PARTICLE, not the effect's locator".
+    // cParticleEmitter::SubEmitterInit @0x82911328 is its only writer (`ori r8, r11, 8`), and
+    // cParticleEmitter::Update @0x829153D8 is the reader that matters: `*(this + 496) & 8`
+    // selects the branch that builds the spawn transform out of mParentEmitterNucleus /
+    // mParentBaseMatrix instead of calling cParticleLocator::GetMat.
+    static const u32 KU_FLAG_SUB_EMITTER = 0x8;
+
+    // ParticleEmitter.h:230 -- register one sub-emitter per CHILD descriptor of this emitter's
+    // descriptor, each following the particle in apBucket's slot auSlot, and bind every one of
+    // them to this emitter's own bindings. X360 @0x82914640. RECONSTRUCTED (ParticleEmitter.cpp).
+    void SpawnSubEmitter(cParticleBucket* apBucket, u32 auSlot, const cTime& arTime);
+
+    // ParticleEmitter.h:245 -- make this emitter a sub-emitter of the particle in apBucket's
+    // slot auSlot: raise KU_FLAG_SUB_EMITTER, inherit the bucket's random seed and the
+    // particle's nucleus, decorrelate the seed by the particle's birth time in ticks, and take
+    // the particle's world transform as this emitter's base. X360 @0x829112F0 (an EXPORT-SET
+    // HOLE). RECONSTRUCTED (ParticleEmitter.cpp).
+    void SubEmitterInit(cParticleBucket* apBucket, u32 auSlot, const cTime& arTime);
+
     // Set the "active" flag word (bit 0 == active). The X360 folds SetActiveFlag(1) into
     // `mFlags |= 1` at its call sites; re-outlined here.
     void SetActiveFlag(u32 auFlag)                { mFlags |= auFlag; }

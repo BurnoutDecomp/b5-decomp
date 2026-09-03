@@ -31,6 +31,7 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionParticleEffectManager.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleScaler.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleBucketManager.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitterManager.h"   // SpawnSubEmitter registers through the manager singleton
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -898,4 +899,108 @@ void cParticleEmitter::BucketRemove(cParticleBucket* apBucket)
 
     apBucket->SetEmitterNext(0);
     apBucket->ClearEmitter();
+}
+
+// ================================================================================================
+// cParticleEmitter::SubEmitterInit  @0x829112F0      (DWARF ParticleEmitter.h:245)
+//
+// AN EXPORT-SET HOLE -- IDA names it in cParticleEmitter::SpawnSubEmitter's xrefs and emits no
+// 0x829112F0.json, so it had no ledger row and no pseudocode. Disassembled out of the packed
+// .i64 (tools/re/ppcdis.py); 60 instructions, and it is what makes a spawned child emitter
+// follow the PARENT PARTICLE that spawned it instead of the effect's locator:
+//
+//     82911328  mFlags |= 8                            -- the sub-emitter bit
+//     82911330  mParentRandomSeed = bucket[+0x10]      -- 8x ld/std == 64 bytes (see below)
+//     82911358  memcpy(&mParentEmitterNucleus,         -- 0xE0 == one sParticleNucleus
+//                      &bucket->mParticles[auSlot], 0xE0)
+//     82911384  f13 = mParentEmitterNucleus.BirthTime()  (nucleus + 0xDC == this + 0x14C)
+//     8291138C  f0  = 3000.0f  (flt_820FEC3C)
+//     82911394  r4  = (s32)(BirthTime * 3000.0)        -- fmuls / fctidz / stfiwx
+//     829113A4  mParentRandomSeed.Offset(r4)
+//     829113D8  cParticleBucket::GetpMatrix(bucket, auSlot, &mParentBaseMatrix, arTime)
+//
+// ⭐ THE OFFSET IS THE PARENT PARTICLE'S BIRTH TIME IN TICKS. 3000.0f is cTime's
+// msfTicksPerSecond, and BirthTime is stored in seconds -- so two children spawned off the same
+// bucket at different times get DIFFERENT random streams, and a replay of the same particle
+// gets the same one. That is the whole point of seeding from the parent rather than the clock.
+//
+// ⭐ THE SEED COPY IS 64 BYTES FROM bucket + 0x10, AND THAT IS WHAT PINS cParticleBucket'S SEED
+// OFFSET. See the note on cParticleBucket::mRandomSeed -- this loop is the attestation that
+// corrected it from 0x1C.
+//
+// ⚠ THE CONSOLE ROUND-TRIPS THE SEED THROUGH A STACK TEMPORARY (this+0x150 -> sp+0x60, Offset
+// on the temporary, sp+0x60 -> this+0x150, asm 0x8291135C / 0x829113A8). That is the compiler
+// materialising a by-value copy for a by-pointer call, not an observable step: the net effect
+// is mParentRandomSeed.Offset(ticks), which is what is written.
+//
+// ⚠ mParentIndex / mpParentEmitter ARE NOT WRITTEN HERE. The asm touches neither +0x190 nor
+// +0x194. Whatever sets the child's parent link, it is not this function; recorded so nobody
+// "completes" it by inventing the two stores.
+// ================================================================================================
+void cParticleEmitter::SubEmitterInit(cParticleBucket* apBucket,
+                                      u32 auSlot,
+                                      const cTime& arTime)
+{
+    // mFlags bit 3 -- "this emitter follows a parent particle". cParticleEmitter::Update
+    // @0x829153D8 branches on it (`*(this + 496) & 8`) to build its spawn transform from
+    // mParentEmitterNucleus instead of from the bindings' locator.
+    mFlags |= KU_FLAG_SUB_EMITTER;
+
+    // Inherit the parent bucket's random stream and the parent particle's whole nucleus.
+    mParentRandomSeed     = apBucket->GetRandomSeed();
+    mParentEmitterNucleus = apBucket->GetNucleus(auSlot);
+
+    // Decorrelate that stream by the parent particle's birth time, in ticks.
+    const s32 liBirthTicks =
+        static_cast<s32>(mParentEmitterNucleus.BirthTime() * msfTicksPerSecond);
+    mParentRandomSeed.Offset(static_cast<u32>(liBirthTicks));
+
+    // And take the parent particle's world transform as this emitter's base.
+    apBucket->GetpMatrix(auSlot, &mParentBaseMatrix, arTime);
+}
+
+// ================================================================================================
+// cParticleEmitter::SpawnSubEmitter  @0x82914640      (DWARF ParticleEmitter.h:230)
+//
+// Walk this emitter's descriptor's CHILD chain and, for each child, register a sub-emitter and
+// point it at the particle in apBucket's slot auSlot:
+//
+//     8291465C  for (d = mpDescriptor->mpChild (+0x5C); d; d = d->mpNext (+0x54))
+//     82914674      if (!apBucket) continue;                -- the guard is INSIDE the loop
+//     8291468C      e = cParticleEmitterManager::RegisterSubEmitter(&mSingleton, d)
+//     829146A8      if (e) { e->SubEmitterInit(apBucket, auSlot, arTime);
+//     829146AC              e->mpBindings = mpBindings;      -- lwz 0x1FC / stw 0x1FC
+//     829146B4              mpBindings->m_p_emitter = e; }   -- stw r31, 0x64(r11)
+//
+// ⭐ THE LAST TWO STORES ARE cParticleEmitter::Bind, INLINED -- the same pair
+// cLionParticleEffectManager::BindingsAttach @0x82914580/84 emits. The child is bound to the
+// PARENT'S bindings object, so a sub-emitter shares its parent effect's locator/scaler/trigger
+// and is torn down by the same BindingsRemove walk.
+//
+// ⚠ THE NULL-BUCKET TEST IS RE-EVALUATED EVERY ITERATION (0x82914674, inside the loop, with the
+// loop's own back-edge at 0x829146C0 jumping to it). apBucket cannot change inside the loop, so
+// this is the compiler keeping a loop-invariant test rather than a hoisting opportunity taken --
+// transcribed as a `continue` so the control flow reads as the asm does.
+// ================================================================================================
+void cParticleEmitter::SpawnSubEmitter(cParticleBucket* apBucket,
+                                       u32 auSlot,
+                                       const cTime& arTime)
+{
+    for (cParticleDescriptor* lpChild = mpDescriptor->mpChild.Get();
+         lpChild != 0;
+         lpChild = lpChild->mpNext.Get())
+    {
+        if (apBucket == 0)
+            continue;
+
+        cParticleEmitter* lpChildEmitter =
+            cParticleEmitterManager::Instance().RegisterSubEmitter(lpChild);
+        if (lpChildEmitter != 0)
+        {
+            lpChildEmitter->SubEmitterInit(apBucket, auSlot, arTime);
+
+            // cParticleEmitter::Bind, inlined by the console at 0x829146AC/B0/B4.
+            lpChildEmitter->Bind(*mpBindings);
+        }
+    }
 }
