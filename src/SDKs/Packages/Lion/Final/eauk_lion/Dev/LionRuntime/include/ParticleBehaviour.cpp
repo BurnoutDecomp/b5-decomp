@@ -137,17 +137,17 @@ void cParticleBehaviour::Init()
     mCellSize = 1.0f;
     mFlags = 0;
     mCloneScaleInTime = 0.0f;
-    mpWaveFormAlpha = 0;
+    mpWaveFormAlpha.SetRaw(0);
     mDragFactorVel = 0.0f;
-    mpWaveFormRGB = 0;
+    mpWaveFormRGB.SetRaw(0);
     mDragFactorRot = 0.0f;
-    mpWaveFormX = 0;
+    mpWaveFormX.SetRaw(0);
     mDragFactorScale = 0.0f;
-    mpWaveFormY = 0;
+    mpWaveFormY.SetRaw(0);
     mDragFactor = 0.0f;
-    mpWaveFormZ = 0;
+    mpWaveFormZ.SetRaw(0);
     mMass = 0.0f;
-    mpNext = 0;
+    mpNext.SetRaw(0);
     mLifeBase = 1.0f;
     mLifeVariance = 0.0f;
     mEmissionRateBase = 7.0f;
@@ -466,31 +466,24 @@ void cParticleBehaviour::Delocate(u32 aEndianTwiddleFlag)
 {
     const bool lbTwiddle = (aEndianTwiddleFlag != 0);
 
-    if (lbTwiddle && mpWaveFormX != 0)
-        gLionParticleParserWaveTokenTable.EndianTwiddle(mpWaveFormX);
-    if (lbTwiddle && mpWaveFormY != 0)
-        gLionParticleParserWaveTokenTable.EndianTwiddle(mpWaveFormY);
-    if (lbTwiddle && mpWaveFormZ != 0)
-        gLionParticleParserWaveTokenTable.EndianTwiddle(mpWaveFormZ);
-    if (lbTwiddle && mpWaveFormAlpha != 0)
-        gLionParticleParserWaveTokenTable.EndianTwiddle(mpWaveFormAlpha);
-    if (lbTwiddle && mpWaveFormRGB != 0)
-        gLionParticleParserWaveTokenTable.EndianTwiddle(mpWaveFormRGB);
+    if (lbTwiddle && mpWaveFormX)
+        gLionParticleParserWaveTokenTable.EndianTwiddle(mpWaveFormX.Get());
+    if (lbTwiddle && mpWaveFormY)
+        gLionParticleParserWaveTokenTable.EndianTwiddle(mpWaveFormY.Get());
+    if (lbTwiddle && mpWaveFormZ)
+        gLionParticleParserWaveTokenTable.EndianTwiddle(mpWaveFormZ.Get());
+    if (lbTwiddle && mpWaveFormAlpha)
+        gLionParticleParserWaveTokenTable.EndianTwiddle(mpWaveFormAlpha.Get());
+    if (lbTwiddle && mpWaveFormRGB)
+        gLionParticleParserWaveTokenTable.EndianTwiddle(mpWaveFormRGB.Get());
 
-    // Convert each present pointer to a base-relative byte offset from `this`.
-    u8* lpBase = reinterpret_cast<u8*>(this);
-    if (mpWaveFormX != 0)
-        mpWaveFormX = reinterpret_cast<cParticleWaveForm*>(reinterpret_cast<u8*>(mpWaveFormX) - lpBase);
-    if (mpWaveFormY != 0)
-        mpWaveFormY = reinterpret_cast<cParticleWaveForm*>(reinterpret_cast<u8*>(mpWaveFormY) - lpBase);
-    if (mpWaveFormZ != 0)
-        mpWaveFormZ = reinterpret_cast<cParticleWaveForm*>(reinterpret_cast<u8*>(mpWaveFormZ) - lpBase);
-    if (mpWaveFormAlpha != 0)
-        mpWaveFormAlpha = reinterpret_cast<cParticleWaveForm*>(reinterpret_cast<u8*>(mpWaveFormAlpha) - lpBase);
-    if (mpWaveFormRGB != 0)
-        mpWaveFormRGB = reinterpret_cast<cParticleWaveForm*>(reinterpret_cast<u8*>(mpWaveFormRGB) - lpBase);
-    if (mpNext != 0)
-        mpNext = reinterpret_cast<cParticleBehaviour*>(reinterpret_cast<u8*>(mpNext) - lpBase);
+    // Convert each present link to a base-relative byte offset from `this`.
+    mpWaveFormX.Delocate(this);
+    mpWaveFormY.Delocate(this);
+    mpWaveFormZ.Delocate(this);
+    mpWaveFormAlpha.Delocate(this);
+    mpWaveFormRGB.Delocate(this);
+    mpNext.Delocate(this);
 
     if (lbTwiddle)
     {
@@ -498,7 +491,7 @@ void cParticleBehaviour::Delocate(u32 aEndianTwiddleFlag)
         // offset pointer words in place (big->little, byte-reversed).
         gLionParticleParserBehTokenTable.EndianTwiddle(this);
 
-        u8* lp = reinterpret_cast<u8*>(&mpWaveFormX);
+        u8* lp = reinterpret_cast<u8*>(mpWaveFormX.RawAddress());
         for (u32 luWord = 0; luWord < 6; ++luWord)
         {
             const u8 b0 = lp[0];
@@ -521,19 +514,13 @@ void cParticleBehaviour::Delocate(u32 aEndianTwiddleFlag)
 // ----------------------------------------------------------------------------
 void cParticleBehaviour::Relocate()
 {
-    u8* lpBase = reinterpret_cast<u8*>(this);
-    if (mpWaveFormX != 0)
-        mpWaveFormX = reinterpret_cast<cParticleWaveForm*>(lpBase + reinterpret_cast<uintptr_t>(mpWaveFormX));
-    if (mpWaveFormY != 0)
-        mpWaveFormY = reinterpret_cast<cParticleWaveForm*>(lpBase + reinterpret_cast<uintptr_t>(mpWaveFormY));
-    if (mpWaveFormZ != 0)
-        mpWaveFormZ = reinterpret_cast<cParticleWaveForm*>(lpBase + reinterpret_cast<uintptr_t>(mpWaveFormZ));
-    if (mpWaveFormAlpha != 0)
-        mpWaveFormAlpha = reinterpret_cast<cParticleWaveForm*>(lpBase + reinterpret_cast<uintptr_t>(mpWaveFormAlpha));
-    if (mpWaveFormRGB != 0)
-        mpWaveFormRGB = reinterpret_cast<cParticleWaveForm*>(lpBase + reinterpret_cast<uintptr_t>(mpWaveFormRGB));
-    if (mpNext != 0)
-        mpNext = reinterpret_cast<cParticleBehaviour*>(lpBase + reinterpret_cast<uintptr_t>(mpNext));
+    // asm words 178..183 -- each a 32-bit slot re-based against `this`.
+    mpWaveFormX.Relocate(this);
+    mpWaveFormY.Relocate(this);
+    mpWaveFormZ.Relocate(this);
+    mpWaveFormAlpha.Relocate(this);
+    mpWaveFormRGB.Relocate(this);
+    mpNext.Relocate(this);
 }
 
 // ----------------------------------------------------------------------------
@@ -551,15 +538,15 @@ void cParticleBehaviour::Relocate()
 void cParticleBehaviour::GetSerialiseSize(cLionSerialiser& aSer) const
 {
     aSer.mDataSize += 1216;
-    if (mpWaveFormX != 0)
+    if (mpWaveFormX)
         aSer.mDataSize += 64;
-    if (mpWaveFormY != 0)
+    if (mpWaveFormY)
         aSer.mDataSize += 64;
-    if (mpWaveFormZ != 0)
+    if (mpWaveFormZ)
         aSer.mDataSize += 64;
-    if (mpWaveFormAlpha != 0)
+    if (mpWaveFormAlpha)
         aSer.mDataSize += 64;
-    if (mpWaveFormRGB != 0)
+    if (mpWaveFormRGB)
         aSer.mDataSize += 64;
 }
 
@@ -578,29 +565,29 @@ cParticleBehaviour* cParticleBehaviour::Serialise(cLionSerialiser& aSer) const
         reinterpret_cast<cParticleBehaviour*>(aSer.DataStore(this, 1216));
 
     cParticleWaveForm* lpStoredX = 0;
-    if (mpWaveFormX != 0)
-        lpStoredX = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormX, 56));
-    lpCopy->mpWaveFormX = lpStoredX;
+    if (mpWaveFormX)
+        lpStoredX = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormX.Get(), 56));
+    lpCopy->mpWaveFormX.Set(lpStoredX);
 
     cParticleWaveForm* lpStoredY = 0;
-    if (mpWaveFormY != 0)
-        lpStoredY = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormY, 56));
-    lpCopy->mpWaveFormY = lpStoredY;
+    if (mpWaveFormY)
+        lpStoredY = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormY.Get(), 56));
+    lpCopy->mpWaveFormY.Set(lpStoredY);
 
     cParticleWaveForm* lpStoredZ = 0;
-    if (mpWaveFormZ != 0)
-        lpStoredZ = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormZ, 56));
-    lpCopy->mpWaveFormZ = lpStoredZ;
+    if (mpWaveFormZ)
+        lpStoredZ = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormZ.Get(), 56));
+    lpCopy->mpWaveFormZ.Set(lpStoredZ);
 
     cParticleWaveForm* lpStoredAlpha = 0;
-    if (mpWaveFormAlpha != 0)
-        lpStoredAlpha = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormAlpha, 56));
-    lpCopy->mpWaveFormAlpha = lpStoredAlpha;
+    if (mpWaveFormAlpha)
+        lpStoredAlpha = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormAlpha.Get(), 56));
+    lpCopy->mpWaveFormAlpha.Set(lpStoredAlpha);
 
     cParticleWaveForm* lpStoredRGB = 0;
-    if (mpWaveFormRGB != 0)
-        lpStoredRGB = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormRGB, 56));
-    lpCopy->mpWaveFormRGB = lpStoredRGB;
+    if (mpWaveFormRGB)
+        lpStoredRGB = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormRGB.Get(), 56));
+    lpCopy->mpWaveFormRGB.Set(lpStoredRGB);
 
     return lpCopy;
 }

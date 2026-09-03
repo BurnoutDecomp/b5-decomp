@@ -40,7 +40,7 @@ void cLionParticleEffect::Build()
     if (this == nullptr)   // ARTIST guards a null effect pointer before touching the chain
         return;
 
-    for (cParticleDescriptor* lpDes = mpDescriptors; lpDes != nullptr;
+    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != nullptr;
          lpDes = lpDes->GetNextDescriptor())
     {
         const u32 luRenderMode = lpDes->GetRenderMode();
@@ -52,7 +52,7 @@ void cLionParticleEffect::Build()
         lpDes->mpMaterial->Build();
 
         for (cParticleBehaviour* lpBeh = lpDes->GetBehaviours(); lpBeh != nullptr;
-             lpBeh = lpBeh->mpNext)
+             lpBeh = lpBeh->mpNext.Get())
         {
             lpBeh->Build();
         }
@@ -69,7 +69,7 @@ void cLionParticleEffect::Delocate(U32 aEndianTwiddleFlag)
     if (this == nullptr)
         return;
 
-    cParticleDescriptor* lpDes = mpDescriptors;
+    cParticleDescriptor* lpDes = mpDescriptors.Get();
     while (lpDes != nullptr)
     {
         cParticleDescriptor* lpDesNext = lpDes->GetNextDescriptor();
@@ -78,11 +78,7 @@ void cLionParticleEffect::Delocate(U32 aEndianTwiddleFlag)
     }
 
     // Pointer -> self-relative offset for the descriptor-list head (serialised form).
-    if (mpDescriptors != nullptr)
-    {
-        mpDescriptors = reinterpret_cast<cParticleDescriptor*>(
-            reinterpret_cast<uintptr_t>(mpDescriptors) - reinterpret_cast<uintptr_t>(this));
-    }
+    mpDescriptors.Delocate(this);
 
     if (aEndianTwiddleFlag != 0)
     {
@@ -96,10 +92,10 @@ void cLionParticleEffect::Delocate(U32 aEndianTwiddleFlag)
                   | (static_cast<U32>(lpBY[2]) << 8)  |  static_cast<U32>(lpBY[3]);
         }
         {
-            U8* lpBY = reinterpret_cast<U8*>(&mpDescriptors);
+            U8* lpBY = reinterpret_cast<U8*>(mpDescriptors.RawAddress());
             const U32 luOffset = (static_cast<U32>(lpBY[0]) << 24) | (static_cast<U32>(lpBY[1]) << 16)
                                | (static_cast<U32>(lpBY[2]) << 8)  |  static_cast<U32>(lpBY[3]);
-            mpDescriptors = reinterpret_cast<cParticleDescriptor*>(static_cast<uintptr_t>(luOffset));
+            mpDescriptors.SetRaw(luOffset);
         }
     }
 }
@@ -112,7 +108,7 @@ FP32 cLionParticleEffect::GetDurationMax() const
 {
     FP32 lDurationMax = 0.0f;
 
-    for (cParticleDescriptor* lpDes = mpDescriptors; lpDes != nullptr;
+    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != nullptr;
          lpDes = lpDes->GetNextDescriptor())
     {
         if (lDurationMax < 0.0f)
@@ -138,7 +134,7 @@ void cLionParticleEffect::GetSerialiseSize(cLionSerialiser& aSer) const
 
     aSer.mDataSize += 16;
 
-    for (cParticleDescriptor* lpDes = mpDescriptors; lpDes != nullptr;
+    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != nullptr;
          lpDes = lpDes->GetNextDescriptor())
     {
         lpDes->GetSerialiseSize(aSer);
@@ -155,13 +151,9 @@ void cLionParticleEffect::Relocate()
         return;
 
     // Self-relative offset -> pointer for the descriptor-list head.
-    if (mpDescriptors != nullptr)
-    {
-        mpDescriptors = reinterpret_cast<cParticleDescriptor*>(
-            reinterpret_cast<uintptr_t>(this) + reinterpret_cast<uintptr_t>(mpDescriptors));
-    }
+    mpDescriptors.Relocate(this);
 
-    for (cParticleDescriptor* lpDes = mpDescriptors; lpDes != nullptr;
+    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != nullptr;
          lpDes = lpDes->GetNextDescriptor())
     {
         lpDes->Relocate();
@@ -184,12 +176,12 @@ cLionParticleEffect* cLionParticleEffect::Serialise(cLionSerialiser& aSer) const
 
     // Rebuild the descriptor chain in the copy: link the first descriptor copy through the
     // copied effect's head, each subsequent copy through the previous copy's next pointer.
-    cParticleDescriptor** lppLast = &lpEff->mpDescriptors;
-    for (cParticleDescriptor* lpDes = mpDescriptors; lpDes != nullptr;
+    tLionSerialisedPtr<cParticleDescriptor>* lppLast = &lpEff->mpDescriptors;
+    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != nullptr;
          lpDes = lpDes->GetNextDescriptor())
     {
         cParticleDescriptor* lpCopy = lpDes->Serialise(aSer);
-        *lppLast = lpCopy;
+        lppLast->Set(lpCopy);
         lppLast = &lpCopy->mpNext;
     }
 

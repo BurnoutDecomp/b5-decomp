@@ -303,7 +303,7 @@ void LionParticleRender::TextureRegister(cParticleMaterial* apMaterial, char* ap
     const u32 luTextureHash = lHasher.HashString(apcTextureName);
     apMaterial->SetTextureMapHandle(luTextureHash);
 
-    char* lpcNormalMapName = apMaterial->mpNormalMapName;
+    char* lpcNormalMapName = apMaterial->mpNormalMapName.Get();
     if (lpcNormalMapName != 0)
     {
         const u32 luNormalHash = lHasher.HashString(lpcNormalMapName);

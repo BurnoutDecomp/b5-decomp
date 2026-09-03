@@ -145,7 +145,7 @@ cParticleEmitter* cParticleEmitterManager::RegisterSubEmitter(cParticleDescripto
 
     // Locate the used emitter this sub-emitter attaches under: the one whose descriptor is
     // apDescriptor's parent, or a descriptor the parent is an ancestor of.
-    cParticleDescriptor* lpParent = apDescriptor->mpParent;
+    cParticleDescriptor* lpParent = apDescriptor->mpParent.Get();
     for (;;)
     {
         cParticleEmitter* lpNext = lpEmit->GetNextEmitter();

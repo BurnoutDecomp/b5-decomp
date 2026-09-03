@@ -29,9 +29,10 @@
 //   +0x4C  cLionBindings*         mpBindings    (Delocate clears it)
 //   +0x50  cLionEffectDefinition* mpNext        (Delocate clears it)
 //
-// X360 pointers are 32-bit; on the x64 host the three pointer members widen, so the
-// absolute byte offsets differ by design -- members are reached BY NAME. Grow this
-// record additively as further Lion effect TUs land.
+// ⭐ 2026-09-03: the three links are tLionSerialisedPtr, NOT host pointers. This record is
+// read verbatim out of a .lef, so a widened link would move m_name's successors and make
+// `BinSave`'s attested 84 unrepresentable; the static_assert below is what says so. See
+// LionSerialisedPtr.h for the whole argument. Members are still reached BY NAME.
 //
 // ONLY THE MEMBERS AND THE TWO TRIVIAL ACCESSORS ARE DECLARED HERE. Of this class's
 // DWARF method list, the X360 ledger attests exactly one function --
@@ -41,6 +42,7 @@
 // ============================================================================
 
 #include "types.hpp"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionSerialisedPtr.h"
 
 #ifndef LION_SCALAR_TYPEDEFS
 #define LION_SCALAR_TYPEDEFS
@@ -66,14 +68,22 @@ struct cLionEffectDefinition
     // LionEffect.h:47 / :55 / :106 -- trivial field reads the X360 build inlines.
     U32 Version() const { return mVersion; }
     U32 Key() const { return m_key; }
-    cLionParticleEffect* GetParticles() const { return mpParticles; }
+    cLionParticleEffect* GetParticles() const { return mpParticles.Get(); }
 
     U32                    mVersion;                     // console +0x00
     U32                    m_key;                        // console +0x04 (LionHash)
     // LionChar is the Lion 16-bit character type; the shipped .lef names are UTF-16, and
     // cLionEffectDefinition::Delocate byte-swaps this span as 32 x 16-bit units.
     u16                    m_name[KU_MAX_NAME_LENGTH];   // console +0x08 .. +0x47
-    cLionParticleEffect*   mpParticles;                  // console +0x48
-    cLionBindings*         mpBindings;                   // console +0x4C
-    cLionEffectDefinition* mpNext;                       // console +0x50
+    tLionSerialisedPtr<cLionParticleEffect>   mpParticles;   // console +0x48
+    tLionSerialisedPtr<cLionBindings>         mpBindings;    // console +0x4C
+    tLionSerialisedPtr<cLionEffectDefinition> mpNext;        // console +0x50
 };
+
+// cLionFX::BinSave @0x82914438 does `DataStore(this, 84)`; the record IS 84 bytes and the
+// host must agree, because BinLoad reads a .lef image of exactly this shape.
+static_assert(sizeof(cLionEffectDefinition) == 84,
+              "cLionEffectDefinition is the 84-byte serialised .lef header "
+              "(cLionFX::BinSave @0x82914438 DataStore(this, 84))");
+static_assert(offsetof(cLionEffectDefinition, mpParticles) == 0x48,
+              "mpParticles is the word cLionFX::BinLoad @0x82914388 rebases");

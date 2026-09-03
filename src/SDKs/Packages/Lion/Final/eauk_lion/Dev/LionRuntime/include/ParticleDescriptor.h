@@ -27,6 +27,7 @@
 // ============================================================================
 
 #include "types.hpp"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionSerialisedPtr.h"
 
 struct cParticleBehaviour;      // ParticleBehaviour.h (sibling home) -- behaviour chain node
 class  cParticleMaterial;       // ParticleMaterial.h (sibling home)
@@ -73,8 +74,8 @@ public:
     // the X360 build reads the fields directly). Members are public (as with the sibling
     // cParticleMaterial / cParticleBehaviour records) so the owning cLionParticleEffect
     // serialisation path can relink the descriptor chain by name.
-    cParticleDescriptor* GetNextDescriptor() const { return mpNext; }
-    cParticleBehaviour*  GetBehaviours()    const { return mpBehaviours; }
+    cParticleDescriptor* GetNextDescriptor() const { return mpNext.Get(); }
+    cParticleBehaviour*  GetBehaviours()    const { return mpBehaviours.Get(); }
 
     // ---- serialise / relocate path (out-of-line in ARTIST; bodies in ParticleDescriptor's
     // own TUs). cLionParticleEffect walks these over its descriptor chain. ----
@@ -106,8 +107,12 @@ public:
     //       EMITTER_LIFE_BASE +20, EMITTER_LIFE_VARIANCE +24, EMITTER_LIFE_INFINITE +28,
     //       the DO_* flag bits +32, LODGROUP +36, RENDERGROUP +40, SHAPE +44,
     //       COLLISION_TYPE +48, NAME +56.
-    // Console offsets are the 4-byte-pointer ABI; on the x64 host the pointer half widens, so
-    // the absolute offsets are NOT host-asserted -- members are reached BY NAME.
+    // ⭐ 2026-09-03 (second half of the same wave): the nine links below are
+    // tLionSerialisedPtr, not host pointers, so the console offsets in these comments are
+    // ALSO the host offsets and the static_asserts at the bottom of this file check them.
+    // A .lef payload is read verbatim -- widening the links moved every member after +0x38
+    // and made cParticleDescriptor::Relocate fault at +0xE on the first descriptor.
+    // Members are still reached BY NAME.
     u32  mID;                          // console +0x00 (0)   DWARF :262
     f32  mPauseTime;                   // console +0x04 (4)   token PAUSE_TIME
     f32  mPauseTimeVariance;           // console +0x08 (8)   token PAUSE_TIME_VARIANCE
@@ -124,24 +129,42 @@ public:
     u32  mShape;                       // console +0x2C (44)
     u32  mCollisionType;               // console +0x30 (48)  token COLLISION_TYPE
     f32  mBlendLast;                   // console +0x34 (52)  DWARF :278
-    char* mpName;                      // console +0x38 (56)  token NAME (LionChar*)
+    tLionSerialisedPtr<char> mpName;   // console +0x38 (56)  token NAME (LionChar*)
 
     // DWARF :282-293 -- private in the original; kept public here for the same reason the
     // sibling cParticleBehaviour / cParticleMaterial records are, so cLionParticleEffect's
     // serialise path can relink the chain by name.
     s32  mBehaviourCount;              // console +0x3C (60)  twiddled, never delocated
-    cParticleBehaviour* mpBehaviours;  // console +0x40 (64)  behaviour chain head
-    cParticleBehaviour* mpBehaviourTemp;   // console +0x44 (68)  the scratch/blend behaviour
-    const cParticleBehaviour* mpBehaviour; // console +0x48 (72)  the current layer; Relocate
-                                           //   and Serialise both end by setting it to
-                                           //   mpBehaviours, and Delocate never touches it
-    cParticleMaterial*  mpMaterial;    // console +0x4C (76)  the descriptor's material
-    cLionEffectDefinition* mpDef;      // console +0x50 (80)  owning definition (DWARF :289)
-    cParticleDescriptor* mpNext;       // console +0x54 (84)  next descriptor in the chain
-    cParticleDescriptor* mpParent;     // console +0x58 (88)  parent (RegisterSubEmitter reads
-                                       //   it to locate the emitter to attach under)
-    cParticleDescriptor* mpChild;      // console +0x5C (92)  first child descriptor
+    tLionSerialisedPtr<cParticleBehaviour>  mpBehaviours;     // +0x40 (64) chain head
+    tLionSerialisedPtr<cParticleBehaviour>  mpBehaviourTemp;  // +0x44 (68) scratch/blend
+    tLionSerialisedPtr<cParticleBehaviour>  mpBehaviour;      // +0x48 (72) current layer;
+                                           //   Relocate and Serialise both end by setting
+                                           //   it to mpBehaviours, Delocate never touches it
+    tLionSerialisedPtr<cParticleMaterial>   mpMaterial;   // +0x4C (76) the material
+    tLionSerialisedPtr<cLionEffectDefinition> mpDef;      // +0x50 (80) owning definition
+    tLionSerialisedPtr<cParticleDescriptor> mpNext;       // +0x54 (84) next in the chain
+    tLionSerialisedPtr<cParticleDescriptor> mpParent;     // +0x58 (88) parent
+                                       //   (RegisterSubEmitter reads it to locate the
+                                       //   emitter to attach under)
+    tLionSerialisedPtr<cParticleDescriptor> mpChild;      // +0x5C (92) first child
 };
+
 // Console sizeof == 96, pinned by cParticleDescriptor::Serialise @0x8290F640
 // (`cLionSerialiser::DataStore(a2, a1, 96)`) and GetSerialiseSize @0x8290D100
-// (`*(a2 + 20) += 96`). The host record is larger only because its nine pointers widen.
+// (`*(a2 + 20) += 96`). With 32-bit links the host record is the same 96 bytes, and the
+// eight offsets Relocate @0x8290F488 rebases (asm word indices 14, 16, 17, 19, 20, 21, 22,
+// 23) are checked one by one so a future member insertion fails the gate, not the game.
+static_assert(sizeof(cParticleDescriptor) == 96,
+              "cParticleDescriptor is the 96-byte serialised record "
+              "(cParticleDescriptor::Serialise @0x8290F640 DataStore(this, 96))");
+static_assert(offsetof(cParticleDescriptor, mFlags)          == 0x20, "Relocate/asm word 8");
+static_assert(offsetof(cParticleDescriptor, mShape)          == 0x2C, "GetRequiredBucketType");
+static_assert(offsetof(cParticleDescriptor, mpName)          == 0x38, "Relocate asm word 14");
+static_assert(offsetof(cParticleDescriptor, mpBehaviours)    == 0x40, "Relocate asm word 16");
+static_assert(offsetof(cParticleDescriptor, mpBehaviourTemp) == 0x44, "Relocate asm word 17");
+static_assert(offsetof(cParticleDescriptor, mpBehaviour)     == 0x48, "Relocate asm word 18");
+static_assert(offsetof(cParticleDescriptor, mpMaterial)      == 0x4C, "Relocate asm word 19");
+static_assert(offsetof(cParticleDescriptor, mpDef)           == 0x50, "Relocate asm word 20");
+static_assert(offsetof(cParticleDescriptor, mpNext)          == 0x54, "Relocate asm word 21");
+static_assert(offsetof(cParticleDescriptor, mpParent)        == 0x58, "Relocate asm word 22");
+static_assert(offsetof(cParticleDescriptor, mpChild)         == 0x5C, "Relocate asm word 23");

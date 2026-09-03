@@ -939,7 +939,7 @@ u32 ParticleModule::StartLionEffect(u32 luNameHash, const char* lpcEffectName, u
     // `*mpLionCurrentTime * (1/3000) + duration`, i.e. the Lion clock (which
     // ParticleModule::Update writes as `simTime * 3000` ticks) converted back to seconds.
     f32 lfDurationMax = 0.0f;   // flt_82001CC0
-    cLionParticleEffect* lpEffect = lpDefinition->mpParticles;
+    cLionParticleEffect* lpEffect = lpDefinition->mpParticles.Get();
     if (lpEffect != 0)
         lfDurationMax = lpEffect->GetDurationMax();
 
@@ -964,7 +964,7 @@ u32 ParticleModule::StartLionEffect(u32 luNameHash, const char* lpcEffectName, u
         u32 luDescriptors = 0;
         if (lpEffect != 0)
         {
-            for (const cParticleDescriptor* lpDes = lpEffect->mpDescriptors;
+            for (const cParticleDescriptor* lpDes = lpEffect->GetDescriptors();
                  lpDes != 0; lpDes = lpDes->GetNextDescriptor())
             {
                 ++luDescriptors;

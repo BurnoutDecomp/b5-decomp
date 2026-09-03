@@ -71,7 +71,7 @@ void cLionParticleEffectManager::BindingsAttach(const cLionParticleEffect* apEff
 
     // Walk the effect's descriptor chain; register + bind an emitter for each
     // descriptor that is not flagged as a sub/child descriptor.
-    for (cParticleDescriptor* lpDes = apEffect->mpDescriptors; lpDes != nullptr;
+    for (cParticleDescriptor* lpDes = apEffect->GetDescriptors(); lpDes != nullptr;
          lpDes = lpDes->GetNextDescriptor())
     {
         if ((lpDes->mFlags & KU_DESC_FLAG_SKIP_AUTO_EMITTER) != 0)
@@ -100,7 +100,7 @@ void cLionParticleEffectManager::BindingsRemove(const cLionParticleEffect* apEff
     }
 
     // Unregister the emitter bound to every descriptor of the effect.
-    for (cParticleDescriptor* lpDes = apEffect->mpDescriptors; lpDes != nullptr;
+    for (cParticleDescriptor* lpDes = apEffect->GetDescriptors(); lpDes != nullptr;
          lpDes = lpDes->GetNextDescriptor())
     {
         cParticleEmitterManager::Instance().UnRegister(*lpDes, arBindings, apBindBase);
