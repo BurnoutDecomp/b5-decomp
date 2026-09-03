@@ -356,27 +356,17 @@ namespace CgsResource
         // words in place -- the low-4 GB convention), which is why the bundle port is an endian
         // swap (tools/assets/bundles/particles_transcode.py). The console registers them from
         // GameDataModule::RegisterResourceTypes like everything above.
+        // ⭐ ParticleDescription (0x1001D, the LION .lef) IS REGISTERED as of 2026-09-03.
+        // The DELETE-WHEN that stood here is discharged: it said "delete this when those five
+        // records hold u32 slots", and they now do (LionSerialisedPtr.h + a sizeof
+        // static_assert per record, 84 / 12 / 96 / 1216 / 164 -- note 164, not the 176 this
+        // comment used to claim; 176 is the slack GetSerialiseSize reserves, and
+        // cParticleMaterial::Serialise @0x8290E720 stores 164). With host pointers the load
+        // access-violated in cParticleDescriptor::Relocate + 0xE reading 0xFFFFFFFFFFFFFFFF,
+        // because a .lef is console-layout serialised data read verbatim and every member
+        // after the first widened link sat at the wrong offset.
+        //
         // NOT registered, on purpose:
-        //   * ParticleDescription (0x1001D, the LION .lef). ⭐ THE REASON CHANGED ON 2026-09-03
-        //     and the new one is specific, so nobody re-derives the old one. It used to be
-        //     "cLionFX::BinLoad is a __debugbreak stub"; BinLoad @0x82914388 is now reconstructed
-        //     (SDKs/.../LionRuntime/include/LionFX.cpp), the .lef payloads are byte-order-ported
-        //     (tools/assets/bundles/lef_transcode.py), FixUp rebases the blob slot, and MEASURED
-        //     WITH THE TYPE REGISTERED all 41 descriptions get past BinLoad's version check.
-        //     What they do NOT get past is the first member read:
-        //         EXCEPTION_ACCESS_VIOLATION reading 0xFFFFFFFFFFFFFFFF
-        //         cParticleDescriptor::Relocate + 0xE
-        //         cLionParticleEffect::Relocate -> cLionFX::BinLoad -> DeSerialise -> FixUpEntry
-        //     because the committed Lion runtime records (cLionParticleEffect,
-        //     cParticleDescriptor, cParticleBehaviour, cParticleMaterial, cLionEffectDefinition)
-        //     model their links as HOST pointers. A .lef payload is CONSOLE-LAYOUT SERIALISED
-        //     DATA loaded verbatim: cParticleDescriptor is 96 bytes with nine 4-byte links
-        //     (pinned by Serialise @0x8290F640's `DataStore(this, 96)`), so on the x64 host every
-        //     member after the first link is read at the wrong offset. The fix is the project's
-        //     standing rule -- serialised slots stay 32-bit, converted at an accessor -- applied
-        //     to all five records, with a sizeof static_assert per record (96 / 1216 / 176 / 12 /
-        //     84) so the next drift fails the gate instead of the game.
-        //     FLAG PC: DELETE-WHEN those five records hold u32 slots. One line, right here.
         //   * BrnVFXMeshCollection (0x10019): its FixUp needs x64-ported VB/IB pairs the porter
         //     does not produce yet (passthrough), and only the absent debris renderer reads it.
         //     FLAG PC: DELETE-WHEN the debris renderer lands -- register it and port its meshes.
@@ -386,5 +376,7 @@ namespace CgsResource
         TypeRegistry::Register(&sVFXPropCollection, "VFXPropCollection");
         static BrnParticle::ParticleDescriptionCollectionResourceType sParticleDescriptionCollection; // 0x10008
         TypeRegistry::Register(&sParticleDescriptionCollection, "ParticleDescriptionCollection");
+        static BrnParticle::ParticleDescriptionResourceType           sParticleDescription;  // 0x1001D
+        TypeRegistry::Register(&sParticleDescription, "ParticleDescription");
     }
 }

@@ -8,7 +8,9 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"                  // CgsResource::ResourcePtr / NULLResourcePtr
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                               // CgsNumeric::Random
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the [boost*] witnesses
 #include <cfloat>                                                                   // FLT_MAX
+#include <cstdio>                                             // snprintf (witnesses)
 
 // =============================================================================
 // BrnEffects::BurstAccumulator / BrnEffects::ActiveRaceCarData (X360 ARTIST)
@@ -198,8 +200,30 @@ void ActiveRaceCarData::Initialise(CgsID lID,
 void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
                                     const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>& lrPhysicsResource)
 {
+    // ---- [boosttag] witness. NOT console behaviour: ours, bounded, log-only. --------
+    // BoostStateMachine::StartEffects loops `for (lu = 0; lu < muNumBoostTags; ++lu)`, so a
+    // zero tag count starts NOTHING and leaves no trace at all -- the loop body simply never
+    // runs. Every line below therefore prints OUTSIDE any loop and on EVERY exit, including
+    // the early one, so the log distinguishes the four outcomes that look identical
+    // downstream: never called / called with the NULL resource / called with locators but no
+    // FXBOOSTPOINT among them / called and counted N. DELETE-WHEN-STABLE.
+    static u32 suExtractWitness = 0;
+    const u32 KU_EXTRACT_WITNESS_LIMIT = 8;
+    const bool lbWitness = (suExtractWitness < KU_EXTRACT_WITNESS_LIMIT);
+    if (lbWitness)
+        ++suExtractWitness;
+
     if (CgsResource::NULLResourcePtr.IsEqual(&lrPhysicsResource))
     {
+        if (lbWitness)
+        {
+            char lacMsg[192];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[boosttag] #%u ExtractTags EARLY-OUT: the deformation spec is the NULL "
+                "resource, so muNumBoostTags stays %u and no boost effect can start.\n",
+                suExtractWitness, mBoostMachine.muNumBoostTags);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
         return;
     }
 
@@ -213,9 +237,24 @@ void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
 
     BrnParticle::ParticleModule& lrParticleModule = lHelper.ParticleModule();
 
+    // [boosttag] the tag types actually present, so "no FXBOOSTPOINT" is distinguishable
+    // from "no locators at all" and from "the tag enum decodes to something else". The mask
+    // is 64 bits ON PURPOSE: FXBOOSTPOINT1..4 are 41..44, and a 32-bit mask could not have
+    // shown them at all.
+    u64 luTagTypeMask = 0;
+    u32 luHighestTag  = 0;
+
     for (u32 luTag = 0; luTag < luNumLocators; ++luTag)
     {
         const BrnPhysics::Deformation::LocatorPointSpec lLocator = lrGenericTags.CreateLo(luTag);
+        if (lbWitness)
+        {
+            const u32 luTagType = static_cast<u32>(lLocator.meTagPointType);
+            if (luTagType < 64)
+                luTagTypeMask |= (1ull << luTagType);
+            if (luTagType > luHighestTag)
+                luHighestTag = luTagType;
+        }
         if (!IsBoostPointTag(lLocator.meTagPointType))
         {
             continue;
@@ -233,6 +272,18 @@ void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
 
         lruHandle = BrnParticle::LionEffect::KU_HANDLE_INVALID;
         ++mBoostMachine.muNumBoostTags;
+    }
+
+    if (lbWitness)
+    {
+        char lacMsg[320];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+            "[boosttag] #%u ExtractTags RAN: locators=%u boostTags=%u "
+            "tagTypesSeen(bit n == tag n, only n<32)=%08X. FXBOOSTPOINT1..4 are tags "
+            "41..44, which do NOT fit that mask -- a mask of 0 with locators>0 means the "
+            "list is populated and none of its low tags is a boost point.\n",
+            suExtractWitness, luNumLocators, mBoostMachine.muNumBoostTags, luTagTypeMask);
+        CgsDev::Log::WriteToLog(lacMsg);
     }
 
     mBoostMachine.mState = EffectsStateAllOff;
