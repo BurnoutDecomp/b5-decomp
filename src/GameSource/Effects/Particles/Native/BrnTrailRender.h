@@ -71,6 +71,8 @@ namespace Native
         // members: nothing about the console object changes. DELETE-WHEN-STABLE.
         static u32 guProbeVertices;
         static u32 guProbeDraws;
+        // Countdown: how many more submitted batches print the one-vertex transform line.
+        static u32 guProbeFirstVertex;
     };
 }
 }
