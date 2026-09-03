@@ -10,12 +10,16 @@
 // image (all three are inlined into cLionFX::Init @0x82914A98, itself an export-set hole; see
 // the block above their definitions).
 //
-// The other three LEDGER functions in this TU are still declared-only, for the reasons recorded
-// below so the next pass can pick them up. ⭐ ONE OF THE THREE REASONS HAS GONE STALE and is
-// corrected in place: EmitterRender was blocked on the cVector fork, which is retired --
-// cVector now has its real home at eauk_common/Maths/Vector.h and ParticleBucket.h includes it.
-// The cMatrix half of that conflict is REAL and remains (this header typedefs cMatrix to
-// rw::math::vpu::Matrix44; ParticleBucket.h still carries its own `struct cMatrix`).
+// The other three LEDGER functions in this TU are still declared-only, and the reasons below are
+// RESTATED as of 2026-09-03 rather than left to describe a tree that no longer exists -- the
+// second time in two days this banner has needed that, which is the warning.
+// ⭐⭐ THE TYPE CONFLICT IS GONE. This banner used to say "the cMatrix half of that conflict is
+// REAL and remains (this header typedefs cMatrix to rw::math::vpu::Matrix44; ParticleBucket.h
+// still carries its own `struct cMatrix`)". Both halves are retired: cVector and cMatrix each
+// have ONE home now (eauk_common/Maths/Vector.h and .../Matrix.h), and this header includes the
+// matrix home instead of typedef'ing over it. cParticleRender::EmitterRender is NO LONGER BLOCKED
+// ON A TYPE -- it is blocked on the three cParticleEmitter::SimulateParticlesInBucketGeneral<>
+// kernels it calls (578 pseudocode lines between them), which have no bodies.
 //
 //   * cParticleRender::Render          (0x829147F8) -- BLOCKED. The per-emitter frustum cull
 //     is VMX128: it loads two un-recovered rodata constant tables (unk_8327F110, a vperm
@@ -26,15 +30,13 @@
 //     is VMX128 (lvx128/stvx128/vsubfp/vmsum3fp128/fsel/fnmsubs over the bucket vectors) and
 //     multiplies by an un-recovered rodata float constant (flt_82F357F4); the snap-to-plane
 //     math cannot be reproduced without that constant's value.
-//   * cParticleRender::EmitterRender   (0x82913928) -- BLOCKED on a committed-header type
-//     conflict, now HALF cleared. Its body walks cParticleBucket (mpMatrices/mpVectors/
-//     mpEmitterNext), which is only reachable by #including ParticleBucket.h. That header used
-//     to define HONEST-PLACEHOLDER `cVector` AND `cMatrix` AND `cTime`; cVector is now the one
-//     shared eauk_common home and is no longer a conflict. What REMAINS is `struct cMatrix`
-//     (ParticleBucket.h) vs `typedef rw::math::vpu::Matrix44 cMatrix` (this header) -- two
-//     different 64-byte types under one name, which is still a hard redefinition in a TU that
-//     includes both. Unifying them is a cross-header refactor of committed code outside this
-//     TU's scope. Deferred until the bucket's matrix home is unified.
+//   * cParticleRender::EmitterRender   (0x82913928) -- the type conflict that used to park it is
+//     GONE (see the banner). Its remaining blocker is its three callees: the
+//     cParticleEmitter::SimulateParticlesInBucketGeneral<> kernels for the Matrix (212 lines),
+//     Vector (132) and Local (234) bucket types. Everything else it needs now exists --
+//     LionParticleRender::RenderGroupBeginLite / GetVertexStride / Render / RenderGroupEndLite
+//     are bodied, cParticleBucket::GetpMatrix is bodied, and the bucket walk it does
+//     (mpMatrices -> mpVectors -> locator) is the same three-way GetpMatrix documents.
 //
 // Dispatch's device path: the X360 build inlines the shadow-device sampler-state bind (the
 // dword_830109A8 compare + sub_827E8950 + store block) that shadow::Device::SetState owns;

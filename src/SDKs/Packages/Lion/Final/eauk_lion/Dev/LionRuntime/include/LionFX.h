@@ -38,7 +38,7 @@
 
 struct cLionEffectDefinition;   // LionEffect.h (sibling home)
 class  iParticleRender;         // ParticleRender/ParticleRender.h
-struct cTime;                   // ParticleBucket.h (placeholder home)
+struct cTime;                   // ext-include/GameStructs/cTime.h (the real home, 2026-09-03)
 struct EffectsVertexBufferLocked;   // EffectsVertexBuffer.h
 namespace renderengine { class VertexBuffer; class TextureState; }
 
