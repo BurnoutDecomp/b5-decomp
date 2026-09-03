@@ -134,6 +134,11 @@ public:
     // bucket manager's eviction pass is the reader.
     void SetLatestBirthTime(const cTime& arTime) { mLatestBirthTime = arTime; }
 
+    // ParticleBucket.h:225 -- the owning emitter's bucket-list link. cParticleEmitter::DeInit
+    // @0x82913360 drains that list with `lwz r5, 8(r4)` BEFORE freeing each node, so the
+    // accessor is needed by name; the X360 reads the field directly.
+    cParticleBucket* GetEmitterNext() const { return mpEmitterNext; }
+
 private:
     // ----- members (DWARF order; offsets verified against the X360 asm) -----
     cParticleBucket*    mpManagerNext;                // 0x00  ParticleBucket.h:219

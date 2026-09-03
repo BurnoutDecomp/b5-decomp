@@ -60,6 +60,20 @@ cParticleBehaviour* cLionParticleEffectManager::CreateBehaviour()
         mpAllocator->Alloc(sizeof(cParticleBehaviour), lLine + lFile + lName));
 }
 
+// cLionParticleEffectManager::Free(cParticleBehaviour*) -- DWARF LionParticleEffectManager.h:74.
+//
+// NO STANDALONE X360 BODY: inlined into cParticleEmitter::DeInit @0x82913380, which loads this
+// object's mpAllocator (`lwz r3, off_83123798`) and calls the ITaggedAllocator::Free(ptr, size)
+// virtual through it (slot +0xC) with a size of 0. De-inlined back onto the owning method.
+//
+// ⚠ THE SIZE ARGUMENT IS ZERO, not sizeof(cParticleBehaviour). `li r5, 0` at 0x82913384 is
+// unambiguous, and it is asymmetric with CreateBehaviour above, which allocates with the real
+// size. Reproduced as the console asks it rather than "corrected".
+void cLionParticleEffectManager::Free(cParticleBehaviour* apBehaviour)
+{
+    mpAllocator->Free(apBehaviour, 0);
+}
+
 // cLionParticleEffectManager::BindingsAttach @ 0x82914530
 void cLionParticleEffectManager::BindingsAttach(const cLionParticleEffect* apEffect,
                                                 cLionBindings& arBindings)

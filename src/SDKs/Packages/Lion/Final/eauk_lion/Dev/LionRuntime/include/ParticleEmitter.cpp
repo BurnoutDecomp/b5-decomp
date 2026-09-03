@@ -29,7 +29,12 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionBindings.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleTrigger.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionParticleEffectManager.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleScaler.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleBucketManager.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+
+#include <cmath>   // floorf / fabsf -- Blend's de-optimised magic-number floor
 
 #include <cstdio>
 #include <cstdlib>   // rand -- InitialiseParticle's random start frame is the C library's
@@ -51,15 +56,11 @@ const f32 KF_BLEND_LAST_NONE = 100.12529754638672f;   // flt_820FF0D0
 // a single behaviour binds that behaviour directly and precalculates its build data, while one
 // with several allocates a blend behaviour from the effect manager and starts a blend.
 //
-// ⛔ THAT TAIL IS NOT RECONSTRUCTED, AND IT IS ANNOUNCED, NOT DROPPED. Both of its arms need
-// cParticleEmitter bodies this build does not have (PrecalculateParticleBuildData @0x8290E018
-// and Blend @0x8290F730). It is unreachable on this build -- nothing registers an emitter,
-// because cLionFX::EffectCreate is not reconstructed -- and the only caller that DOES run,
+// ⭐ THAT TAIL IS NOW LANDED. It was parked because both of its arms needed bodies this tree did
+// not have -- PrecalculateParticleBuildData @0x8290E018 and Blend @0x8290F730 -- and both landed
+// in this wave. It is still not REACHED on this build (nothing registers an emitter, because
+// cLionFX::EffectCreate is not reconstructed), and the only caller that does run,
 // cParticleEmitterManager::AppInit, passes nullptr and never enters it.
-// ⭐ ONE HALF OF THAT REASON HAS GONE STALE AND IS CORRECTED IN PLACE: this note also said
-// "mPrecalculatedParticleBuildData is still a reserved span". It is not, as of 2026-09-03 --
-// it is the DWARF's own cParticleEmitter::ParticleBuildData (ParticleEmitter.h:277), eleven
-// named lane registers. What still blocks the tail is the two missing BODIES, nothing else.
 // ----------------------------------------------------------------------------
 void cParticleEmitter::Init(cParticleDescriptor* apDescriptor)
 {
@@ -94,15 +95,32 @@ void cParticleEmitter::Init(cParticleDescriptor* apDescriptor)
         return;
     }
 
-    static bool sbLogged = false;
-    if (!sbLogged)
+    // ⭐ THE DESCRIPTOR TAIL IS LANDED (2026-09-03). It was announced-not-reconstructed because
+    // both of its arms reached bodies this tree did not have; both now exist
+    // (PrecalculateParticleBuildData @0x8290E018 and Blend @0x8290F730, this wave).
+    //
+    // asm 0x829132C0..0x82913308. mBehaviourCount decides which emitter this is: a ONE-LAYER
+    // descriptor binds its single behaviour outright, a MULTI-LAYER one allocates a scratch
+    // behaviour to blend into and hands the choice to Blend.
+    if (apDescriptor->mBehaviourCount > 1)
     {
-        sbLogged = true;
-        CgsDev::Log::WriteToLog(
-            "[effects] NOT RECONSTRUCTED: cParticleEmitter::Init's descriptor tail @0x82913228 "
-            "(the single-behaviour bind + PrecalculateParticleBuildData @0x8290E018 arm, and the "
-            "multi-behaviour CreateBehaviour + Blend @0x8290F730 arm). Reached only by a "
-            "REGISTERED emitter; the pooling path (Init(nullptr)) above is complete.\n");
+        mpTempBehaviour = cLionParticleEffectManager::Instance().CreateBehaviour();
+        if (mpTempBehaviour != nullptr)
+        {
+            mpTempBehaviour->Init();
+            mpTempBehaviour->Build();
+        }
+        Blend();
+    }
+    else
+    {
+        // ⚠ mBlendLast IS RESET TO 0 HERE, not left at the KF_BLEND_LAST_NONE sentinel the head
+        // of this function wrote (`stfs f31, 0x214` at 0x82913304, and f31 is the 0.0 this
+        // function keeps in a register throughout). A single-layer emitter never blends, so the
+        // "always run the first Blend" sentinel would be meaningless on it.
+        mBlendLast = 0.0f;
+        mpCurrentBehaviour = apDescriptor->GetBehaviours();
+        PrecalculateParticleBuildData();
     }
 }
 
@@ -598,4 +616,199 @@ void cParticleEmitter::PrecalculateParticleBuildData()
     lrData.mvDragFactorsVelRotScale.y = lrBehaviour.mDragFactorRot;
     lrData.mvDragFactorsVelRotScale.z = lrBehaviour.mDragFactorScale;
     lrData.mvDragFactorsVelRotScale.w = 0.0f;
+}
+
+// ================================================================================================
+// cParticleEmitter::Blend  @ 0x8290F730        (DWARF ParticleEmitter.h -- Blend)
+//
+// Pick the behaviour layer this emitter is currently playing. A descriptor with more than one
+// behaviour is a STACK of layers, and the effect's SCALER binding chooses a position along that
+// stack: an integral position selects one layer outright, a fractional one interpolates the two
+// it falls between into mpTempBehaviour.
+//
+// ⭐ THE SCALER IS THE BLEND AXIS, and that is the one thing the asm makes you work for. At
+// 0x8290F774 the chain is mpBindings -> +0x10 -> the float at +0x00, and LionBindings.h already
+// names +0x10 mpScaler while ParticleScaler.h (added this wave) says the scaler IS one float.
+// So this is `mpBindings->GetpScaler()->GetScale()` -- no offsets, three names.
+//
+// ⭐ mBlendLast IS A POSITION, WHICH IS WHY ITS SENTINEL IS 100.1253f. cParticleEmitter::Init
+// seeds it with flt_820FF0D0 == 100.12529754638672, and the first thing this function does with
+// it is `|position - mBlendLast| < 0.01 -> return`. A sentinel that far outside any real stack
+// position simply guarantees the first Blend after an Init always runs. The value is not a
+// tunable and it is never interpolated toward.
+//
+// ⭐ THE FOUR fsel PAIRS ARE CLAMPS AND A floorf, de-optimised back to what they mean:
+//   0x8290F7BC  fsel f0,  -pos, 0.0, pos          ->  pos = max(pos, 0)
+//   0x8290F7D8  fsel f31, (n-1)-pos, pos, n-1     ->  pos = min(pos, behaviourCount - 1)
+//   0x8290F818..0x8290F83C and again 0x8290F890..0x8290F8AC -- the classic magic-number floorf:
+//       m    = (x >= 0) ? +2^52 : -2^52          (dbl_82001CB0 / dbl_82001CB8)
+//       r    = (x - m) + m                        -- round to nearest even
+//       frac = (x - r >= 0) ? 0.0 : 1.0           (dbl_82001CA8 / dbl_82001CA0)
+//       out  = r - frac                           -- floor
+//   All six constants were read out of the image; the two doubles are exactly +/-2^52 and the
+//   other two exactly 0.0 and 1.0, which is what makes it floor rather than round or trunc.
+//
+// ⚠ THE EPSILON IS 0.01, TWICE OVER: flt_82002138 == 0.009999999776482582 and flt_8201FDB8 is
+// its exact negation. It is used three times -- "position unchanged", "fraction is 0" and
+// "fraction is 1" -- so a blend within 1% of a layer boundary snaps to that layer instead of
+// running the interpolator.
+//
+// ⚠ THE PERFMON BRACKET IS REPRODUCED, in the style ParticleRandomSeed.cpp already uses:
+// dword_82FAB63C is LionPerfMon + 4, and LionPerfMon's member order (LionPerfMon.cpp) puts
+// miEmitterBlend exactly there.
+//
+// ⛔ cParticleBehaviour::Lerp @0x8290B1F8 IS NOT RECONSTRUCTED -- 1,530 instructions, a wave of
+// its own. It is a LOUD, LOG-ONCE stub in LionRuntimeLinkStubs.cpp rather than an assert,
+// deliberately: Blend runs per frame for any multi-layer effect, and an assert here is the
+// 840,000-line storm that has starved a harness before. What the miss costs is stated there.
+// ================================================================================================
+namespace
+{
+// dword_82FAB63C -- the CPU perfmon handle this body brackets itself with. It is LionPerfMon's
+// miEmitterBlend (base 0x82FAB638, second member by declaration order). LionPerfMon has no
+// global instance in this tree yet, so the handle is carried here the same way
+// cParticleRandomSeed::Update carries guUpdateMonitor.
+s32 giEmitterBlendMonitor = -1;   // X360 dword_82FAB63C
+
+// flt_82002138 / flt_8201FDB8 -- the blend snap epsilon and its negation.
+const f32 KF_BLEND_EPSILON = 0.009999999776482582f;
+
+// The console walks the behaviour chain link by link FIVE times in this one function
+// (0x8290F874, 0x8290F8FC, 0x8290F950, 0x8290F984, 0x8290F9A8), each time with the same
+// null-tolerant "advance auCount links" shape. That is one helper inlined five times, so it is
+// re-outlined once here. It yields null when the chain is shorter than auCount, which the
+// console relies on: mpCurrentBehaviour is then set to null rather than to a wrong layer.
+cParticleBehaviour* AdvanceBehaviours(cParticleBehaviour* apHead, u32 auCount)
+{
+    cParticleBehaviour* lpBehaviour = apHead;
+    for (u32 luIndex = 0; luIndex < auCount && lpBehaviour != nullptr; ++luIndex)
+    {
+        lpBehaviour = lpBehaviour->mpNext.Get();
+    }
+    return lpBehaviour;
+}
+}  // namespace
+
+void cParticleEmitter::Blend()
+{
+    CgsDev::PerfMonCpu::StartMonitor(giEmitterBlendMonitor);
+
+    const cParticleDescriptor& lrDescriptor = *mpDescriptor;
+    const s32 liBehaviourCount = lrDescriptor.mBehaviourCount;
+
+    // asm 0x8290F768 -- a single-layer descriptor has nothing to blend.
+    if (liBehaviourCount > 1)
+    {
+        // asm 0x8290F774..0x8290F7A0.
+        f32 lfPosition = 0.0f;
+        if (mpBindings != nullptr)
+        {
+            const cParticleScaler* lpScaler = mpBindings->GetpScaler();
+            if (lpScaler != nullptr && mpTempBehaviour != nullptr)
+            {
+                lfPosition = lpScaler->GetScale();
+            }
+        }
+
+        // asm 0x8290F7BC / 0x8290F7D8 -- clamp into [0, behaviourCount - 1].
+        const f32 lfLastLayer = static_cast<f32>(liBehaviourCount - 1);
+        if (lfPosition <= 0.0f)
+        {
+            lfPosition = 0.0f;
+        }
+        if (lfPosition > lfLastLayer)
+        {
+            lfPosition = lfLastLayer;
+        }
+
+        // asm 0x8290F7DC..0x8290F7F8 -- the position has not moved since the last blend.
+        if (fabsf(lfPosition - mBlendLast) >= KF_BLEND_EPSILON)
+        {
+            cParticleBehaviour* lpHead = lrDescriptor.GetBehaviours();
+
+            const f32 lfFloor  = floorf(lfPosition);
+            const s32 liLayer  = static_cast<s32>(lfFloor);
+            const s32 liLayerN = liLayer + 1;
+
+            cParticleBehaviour* lpChosen = nullptr;
+            f32 lfNewBlendLast = lfPosition;
+
+            if (liLayer >= liBehaviourCount - 1)
+            {
+                // asm 0x8290F858..0x8290F884 -- at or past the top of the stack: the last layer.
+                lpChosen = AdvanceBehaviours(lpHead, static_cast<u32>(liBehaviourCount - 1));
+            }
+            else
+            {
+                const f32 lfFraction = lfPosition - lfFloor;
+
+                if (lfFraction <= KF_BLEND_EPSILON && lfFraction >= -KF_BLEND_EPSILON)
+                {
+                    // asm 0x8290F8E4..0x8290F910 -- within 1% of the lower layer: snap to it.
+                    lpChosen = AdvanceBehaviours(lpHead, static_cast<u32>(liLayer));
+                    lfNewBlendLast = lfFloor;
+                }
+                else if (fabsf(1.0f - lfFraction) < KF_BLEND_EPSILON)
+                {
+                    // asm 0x8290F938..0x8290F964 -- within 1% of the upper layer: snap to it.
+                    lpChosen = AdvanceBehaviours(lpHead, static_cast<u32>(liLayerN));
+                    lfNewBlendLast = lfFloor + 1.0f;
+                }
+                else
+                {
+                    // asm 0x8290F968..0x8290F9C0 -- a genuine interpolation into the temp layer.
+                    // No null check on mpTempBehaviour: the console does not make one either.
+                    const cParticleBehaviour* lpLo =
+                        AdvanceBehaviours(lpHead, static_cast<u32>(liLayer));
+                    const cParticleBehaviour* lpHi =
+                        AdvanceBehaviours(lpHead, static_cast<u32>(liLayerN));
+                    mpTempBehaviour->Lerp(lpLo, lpHi, lfFraction);
+                    lpChosen = mpTempBehaviour;
+                }
+            }
+
+            // asm 0x8290F9C4..0x8290F9D0 -- both the snap arms and the interpolating arm land
+            // here: publish the layer, remember where the blend stopped, and re-derive the
+            // per-behaviour constants for it.
+            mBlendLast = lfNewBlendLast;
+            mpCurrentBehaviour = lpChosen;
+            PrecalculateParticleBuildData();
+        }
+    }
+
+    CgsDev::PerfMonCpu::StopMonitor(giEmitterBlendMonitor);
+}
+
+// ================================================================================================
+// cParticleEmitter::DeInit  @ 0x82913330
+//
+// Give the emitter's buckets back to the bucket pool, give its blend behaviour back to the
+// effect manager's allocator, and re-run Init(nullptr) so the record is pool-clean again.
+//
+// ⭐ THE BUCKET WALK CAPTURES THE LINK BEFORE FREEING (asm 0x82913360 reads +0x08 into r5, THEN
+// calls Free with r4) -- the ordinary use-after-free-safe list drain, and it has to be written
+// that way here too because cParticleBucketManager::Free really does recycle the node.
+//
+// ⚠ THE BEHAVIOUR FREE IS AN INLINED cLionParticleEffectManager::Free(cParticleBehaviour*)
+// (DWARF LionParticleEffectManager.h:74). The console reaches the manager's mpAllocator and
+// calls the ITaggedAllocator::Free(ptr, 0) virtual through it (`lwz r11,0(r3)` then slot +0xC);
+// that is de-inlined back onto the owning method rather than written as a vtable poke.
+// ================================================================================================
+void cParticleEmitter::DeInit()
+{
+    cParticleBucket* lpBucket = mpBucket;
+    while (lpBucket != nullptr)
+    {
+        cParticleBucket* lpNext = lpBucket->GetEmitterNext();
+        cParticleBucketManager::Instance().Free(lpBucket);
+        lpBucket = lpNext;
+    }
+
+    if (mpTempBehaviour != nullptr)
+    {
+        cLionParticleEffectManager::Instance().Free(mpTempBehaviour);
+        mpTempBehaviour = nullptr;
+    }
+
+    Init(nullptr);
 }

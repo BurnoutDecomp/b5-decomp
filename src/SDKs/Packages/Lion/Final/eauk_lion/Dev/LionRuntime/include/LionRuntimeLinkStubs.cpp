@@ -31,9 +31,47 @@
 #include "types.hpp"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitter.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitterManager.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleBehaviour.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // ---- cParticleEmitter (home: ParticleEmitter.cpp) --------------------------------------------
+
+// ---- cParticleBehaviour (home: ParticleBehaviour.cpp) ---------------------------------------
+
+// cParticleBehaviour::Lerp @0x8290B1F8 -- 1,530 instructions, a wave of its own: it interpolates
+// EVERY channel of two behaviour layers (position/velocity/acceleration/rotation/size/colour
+// base-and-variance pairs, the colour steps, the compiled base-variance pack and the AABB) into
+// a third.
+//
+// ⛔ IT IS A LOG-ONCE STUB, NOT AN ASSERT, AND THAT IS DELIBERATE. cParticleEmitter::Blend
+// @0x8290F730 reaches this once per frame for any effect whose descriptor has more than one
+// behaviour layer AND whose scaler sits strictly between two of them. An assert there is the
+// 840,000-line storm that has starved a harness on this project before, so this announces itself
+// once and returns.
+//
+// WHAT THE MISS COSTS, precisely, so nobody has to guess: mpTempBehaviour keeps whatever
+// cParticleEmitter::Init left in it (a real Init()+Build() behaviour, not zeros), so a
+// mid-blend effect plays that layer instead of an interpolation of its two neighbours. Layers
+// selected outright -- a scaler at or within 1% of an integer position, which includes every
+// single-layer effect and every effect whose scaler is never driven -- are UNAFFECTED, because
+// Blend snaps to a real layer on those paths and never calls this.
+void cParticleBehaviour::Lerp(const cParticleBehaviour* /*apLo*/,
+                              const cParticleBehaviour* /*apHi*/,
+                              f32 /*afWeight*/)
+{
+    static bool sbLogged = false;
+    if (!sbLogged)
+    {
+        sbLogged = true;
+        CgsDev::Log::WriteToLog(
+            "[effects] NOT RECONSTRUCTED: cParticleBehaviour::Lerp @0x8290B1F8 (1,530 "
+            "instructions). cParticleEmitter::Blend reached a FRACTIONAL blend position; the "
+            "temp behaviour keeps its Init()+Build() state, so this effect plays one layer "
+            "instead of an interpolation of two. Integral layer positions are unaffected.\n");
+    }
+}
+
 
 // cParticleEmitter::Update @0x829153D8 -- 190 pseudocode lines, and the head of the whole Lion
 // SIMULATION core: IsGenerating -> Generate -> Emit -> ParticleBuild (1,417 lines) ->
@@ -46,15 +84,6 @@ u32 cParticleEmitter::Update(const cTime& /*arTime*/)
     return 0;
 }
 
-// cParticleEmitter::DeInit @0x82913330 -- releases the emitter's buckets and behaviours back to
-// their pools (cParticleBucketManager::Free, cLionParticleEffectManager::Free). Reached only
-// from cParticleEmitterManager::UnRegister.
-void cParticleEmitter::DeInit()
-{
-    CGS_ASSERT(false, "cParticleEmitter::DeInit @0x82913330 -- NOT RECONSTRUCTED");
-}
-
-// cParticleEmitter::Bind @ ParticleEmitter.cpp:206 -- stores mpBindings and back-links
 // cLionBindings::SetEmitter. Inlined at its only call site (BindingsAttach @0x82914530), so it
 // has no standalone X360 body to transcribe; it lands with the effect-instance path.
 void cParticleEmitter::Bind(cLionBindings& /*arBindings*/)
