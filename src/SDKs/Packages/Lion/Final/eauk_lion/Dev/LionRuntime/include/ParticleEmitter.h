@@ -130,15 +130,37 @@ public:
     // LionRuntimeLinkStubs.cpp.
     u32 Update(const cTime& arTime);
 
+    // mFlags bit 0 -- "this emitter is active". cParticleEmitter::IsGenerating @0x8290D564
+    // masks it with `clrlwi r10, r10, 31`, and SetActiveFlag(1) is its writer.
+    static const u32 KU_FLAG_ACTIVE = 0x1;
+
     // Set the "active" flag word (bit 0 == active). The X360 folds SetActiveFlag(1) into
     // `mFlags |= 1` at its call sites; re-outlined here.
     void SetActiveFlag(u32 auFlag)                { mFlags |= auFlag; }
+
+    // ParticleEmitter.h:186 -- should this emitter emit anything in the window
+    // [arStartTime, arEndTime]? X360 @0x8290D538. RECONSTRUCTED (ParticleEmitter.cpp).
+    bool IsGenerating(cParticleRandomSeed& arSeed,
+                      const cTime& arStartTime,
+                      const cTime& arEndTime);
 
     // Manager free/used list link (console +0x204).
     void SetNext(cParticleEmitter* apNext)        { mpNext = apNext; }
     cParticleEmitter*& GetNextEmitter()           { return mpNext; }
 
 private:
+    // ParticleEmitter.h:303 -- reserve the next free slot in apBucket and initialise the
+    // particle that lands in it; false when the bucket is full or the allocator refuses.
+    // X360 @0x829133C8. RECONSTRUCTED (ParticleEmitter.cpp) -- InitialiseParticle's only
+    // caller.
+    bool ParticleInsert(cParticleBucket* apBucket,
+                        cMatrix* apMatrix,
+                        const cVector& arVector,
+                        const cTime& arTime,
+                        cParticleRandomSeed& arSeed,
+                        u32 auSlot,
+                        const cTime& arCurrentLocatorTime);
+
     // ParticleEmitter.h:306 -- fill one freshly allocated particle from the current
     // behaviour's base/variance pairs, the emitter's material and the spawn transform.
     // X360 @0x829116A8. RECONSTRUCTED (ParticleEmitter.cpp).
@@ -189,6 +211,20 @@ private:
     f32                  mBlendLast;                // 0x214
     u8                   maPad218[0x08];            // 0x218  (wiki: explicit padding)
     ParticleBuildData    mPrecalculatedParticleBuildData;         // 0x220 DWARF :363
+
+    // Pin ParticleBuildData's size where it is reachable (the type is public, its uses are
+    // not). 11 lane registers * 16 == 0xB0 is the span this member replaced, and
+    // 0x220 + 0xB0 == 0x2D0 is the emitter stride cParticleEmitterManager::AppInit
+    // @0x82913470 allocates with. Break a member and the gate fails here.
+    static void _AssertBuildDataLayout()
+    {
+        static_assert(sizeof(ParticleBuildData) == 0xB0,
+                      "cParticleEmitter::ParticleBuildData is 11 lane registers == 0xB0 "
+                      "(cParticleEmitterManager::AppInit @0x82913470 mulli r10,r10,0x2D0, "
+                      "with the record's fixed head at 0x220)");
+        static_assert(alignof(ParticleBuildData) == 16,
+                      "every ParticleBuildData member is a VMX lane register");
+    }
 
     // ⚠ THE TWO SEED PADS ABOVE ARE THE CONSOLE'S, NOT OURS. The wiki sizes cParticleRandomSeed
     // 0x40 (0x30 of Random + mSeed + 0xC of padding) and the emitter's two seed slots span

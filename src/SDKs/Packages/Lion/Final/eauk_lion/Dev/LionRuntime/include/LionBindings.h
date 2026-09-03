@@ -44,6 +44,11 @@ public:
     // (mpBindings) then `lwz r3, 0xC(r11)` (mpLocator) -- inline, as an accessor compiles.
     cParticleLocator* GetpLocator() const { return mpLocator; }
 
+    // DWARF LionBindings.h -- the emitter's trigger (start/stop clock).
+    // cParticleEmitter::IsGenerating @0x8290D568 reaches it with `lwz r11, 0x1FC(r31)`
+    // (mpBindings) then `lwz r28, 0x14(r11)` (mpTrigger).
+    cParticleTrigger* GetpTrigger() const { return mpTrigger; }
+
     cLionBindings* GetNextBinding() { return mpNext; }
     void           SetNextBinding(cLionBindings* apNext) { mpNext = apNext; }
 

@@ -62,6 +62,14 @@ const f32 msfOneOverTicksPerSecond = 1.0f / 3000.0f;
 // DWARF cTime.h (struct cTime).
 struct cTime
 {
+    // cTime.h:24 / :29 -- the two constructors the reconstructed Lion bodies reach. The
+    // default one is `= default` (trivial) rather than a body: cParticleEmitter objects are
+    // carved out of a pool and never constructed, and cParticleEmitter::Init @0x82913228 is
+    // what zeroes their stamps. The U32 one is what cParticleEmitter::IsGenerating
+    // @0x8290D65C emits as `fctiwz` + `stfiwx` -- a float seconds value converted to ticks.
+    cTime() = default;
+    explicit cTime(u32 auTicks) : mTicks(static_cast<s32>(auTicks)) {}
+
     // cTime.h:31. The raw signed tick count. Attested by the `lwz` + `extsw` pair at
     // cParticleEmitter::InitialiseParticle @0x82911700.
     s32 GetTicks() const { return mTicks; }

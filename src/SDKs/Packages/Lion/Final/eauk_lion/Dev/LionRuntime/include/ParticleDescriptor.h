@@ -62,6 +62,9 @@ public:
         // at 0x82911B18). These names are NOT inferred: they are the Lion authoring token
         // table's own (X360 cLionTokenTable @0x82F36A34, transcribed in LionParticleParser.cpp),
         // which binds DO_WORLD_ACC to 0x80 and DO_IGNORE_ROT to 0x100 on the +32 flags word.
+        // Token DO_REPEAT. cParticleEmitter::IsGenerating @0x8290D624 masks it with
+        // `rlwinm r10, r10, 0,29,29` (bit 2 == 0x4) to pick the repeating schedule.
+        E_FLAG_REPEAT            = 0x4,      // token DO_REPEAT
         E_FLAG_WORLD_ACC         = 0x80,     // token DO_WORLD_ACC
         E_FLAG_IGNORE_ROT        = 0x100,    // token DO_IGNORE_ROT
     };

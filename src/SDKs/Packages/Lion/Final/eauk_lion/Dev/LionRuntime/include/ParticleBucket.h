@@ -118,6 +118,16 @@ public:
                           cVector** appVector,
                           cMatrix** appMatrix);
 
+    // ParticleBucket.h:84 -- "no free slot left". cParticleEmitter::ParticleInsert
+    // @0x829133F8 spells it `cmplwi r11, 0x10 ; beq`: an EQUALITY against the capacity, not
+    // a >=. Kept as the console asks it.
+    bool IsFull() const { return mnNextParticlePositionToFill == KU_MAX_PARTICLES; }
+
+    // ParticleBucket.h:105 -- record when this bucket's youngest particle was born.
+    // cParticleEmitter::ParticleInsert @0x82913454 (`stw r11, 0xC(r31)`) is the writer; the
+    // bucket manager's eviction pass is the reader.
+    void SetLatestBirthTime(const cTime& arTime) { mLatestBirthTime = arTime; }
+
 private:
     // ----- members (DWARF order; offsets verified against the X360 asm) -----
     cParticleBucket*    mpManagerNext;                // 0x00  ParticleBucket.h:219
