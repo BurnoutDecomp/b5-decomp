@@ -50,34 +50,36 @@ const AStar::DistanceFunctionPtr AStar::KAP_DISTANCE_FUNCTIONS[E_ASTAR_DISTANCE_
     &AStar::DiagonalDistance,           // E_ASTAR_DISTANCE_DIAGONAL
 };
 
-// PLACEHOLDER (flt_820C47C0): per-quality cost weight. The literals are not visible in
-// the disassembly (rodata floats); 1.0f keeps f = g + h (true A*) until recovered.
+// flt_820C47C0 -- per-quality cost weight. RECOVERED 2026-09-03 (aiwave A5) from the image
+// bytes (file offset 0xC47C0 = 3E800000 3F000000, big-endian): {0.25f, 0.5f}. Both < 1, so
+// the search is deliberately GREEDY (f = 0.25*g + h at LOW quality, 0.5*g + h at MEDIUM) --
+// which is why a race route completes inside the 12-iteration budget on a 7,639-section map.
 const f32 AStar::KAF_QUALITY_COST_WEIGHTS[E_ASTAR_QUALITY_COUNT] =
 {
-    1.0f,   // E_ASTAR_QUALITY_LOW    -- PLACEHOLDER
-    1.0f,   // E_ASTAR_QUALITY_MEDIUM -- PLACEHOLDER
+    0.25f,  // E_ASTAR_QUALITY_LOW
+    0.5f,   // E_ASTAR_QUALITY_MEDIUM
 };
 
-// PLACEHOLDER (dword_820C4790): per-iteration live-node budget. Not visible in the asm;
-// KU_MAX_OPEN_NODES keeps the loop bounded by the pool capacity until recovered.
+// dword_820C4790 -- per-iteration live-node budget. RECOVERED 2026-09-03 from the image bytes
+// (file offset 0xC4790, twelve big-endian s32). The pool holds KU_MAX_NODES == 1024 nodes, so
+// iterations 0..10 cap the live set at 128,256,...,960 and the LAST iteration (11) is
+// unbounded (0x7FFFFFFF) -- the search then runs until the pool itself refuses NewNode
+// (E_STATUS_PARTIAL) or the open set empties (E_STATUS_BLOCKED).
 const s32 AStar::KAI_ITERATION_NODE_BUDGET[KI_MAX_ITERATIONS] =
 {
-    AStarNodePool::KU_MAX_OPEN_NODES, AStarNodePool::KU_MAX_OPEN_NODES,
-    AStarNodePool::KU_MAX_OPEN_NODES, AStarNodePool::KU_MAX_OPEN_NODES,
-    AStarNodePool::KU_MAX_OPEN_NODES, AStarNodePool::KU_MAX_OPEN_NODES,
-    AStarNodePool::KU_MAX_OPEN_NODES, AStarNodePool::KU_MAX_OPEN_NODES,
-    AStarNodePool::KU_MAX_OPEN_NODES, AStarNodePool::KU_MAX_OPEN_NODES,
-    AStarNodePool::KU_MAX_OPEN_NODES, AStarNodePool::KU_MAX_OPEN_NODES,
+    128, 256, 384, 512, 576, 640, 704, 768, 832, 896, 960, 0x7FFFFFFF,
 };
 
 // Construct's default/sentinel cost weight (flt_820037C8). Hex-Rays resolves the rodata
 // float to -1.0 (an "unset" sentinel; Prepare overwrites it from the quality preset).
 const f32 AStar::KF_DEFAULT_COST_WEIGHT = -1.0f;
 
-// PLACEHOLDER (flt_820C3B70): BuildRoute exit-portal per-axis reachability extent. The
-// rodata is a vector, not a clean literal; FLT_MAX disables the gate (accept all portals)
-// until recovered, leaving the directional dot-product selection intact.
-const f32 AStar::KF_BUILDROUTE_REACH_EXTENT = 3.4028235e38f;
+// flt_820C3B70 lane 0 == 0x34000000 == FLT_EPSILON (1.1920929e-07), read from the image
+// 2026-09-03. Every VMX user (BuildRoute @0x8277FC6C, RacingLineGenerator::GetForwardPortalIndex
+// @0x82781840, the Extrapolate* trio) does `lvlx v,flt_820C3B70 ; vspltw v,v,0` and then
+// `vandc(abs) ; vcmpgtfp` per lane -- i.e. RwMath::IsZero(v) == (|x| <= eps && |y| <= eps).
+// The previous FLT_MAX "reachability extent" was a misread of that idiom.
+const f32 AStar::KF_ZERO_EPSILON = 1.1920929e-07f;
 
 // -------------------------------------------------------------------------------------
 // BrnAI::AStarNodePool
@@ -212,6 +214,49 @@ AStarNode* AStarNodePool::ExtractBestOpenNode(u16* lpuBestNodeIndex, f32 lfCostW
 // BrnAI::AStar
 // -------------------------------------------------------------------------------------
 
+// BrnAI::AStarNodePool::FindNode @0x82767978  (ARTIST EXPORT HOLE -- no JSON; decoded
+// 2026-09-03 (aiwave A5) from the 50 image words at file offset 0x767978 with capstone PPC64-BE;
+// the only callers are Compute @0x82774F5C and the reset-on-track search).
+//
+//   r30 = this, r29 = luSectionIndex & 0xFFFF, r26 = luPortalIndex
+//   0x82767994  StartMonitor(dword_8300D534)                    ("A* Find node")
+//   0x827679A4  r11 = section & 3                               (KU_HASH_MASK bucket)
+//   0x827679A8  r31 = (bucket << 8) & 0xFFFF                    (first node of the bucket)
+//   0x827679AC  r9  = bucket + 0x3080 ; lhzx r9, r9*2, this     (mauNodeCount[bucket] -- the
+//               count array sits at this + 0x6100 == 1024 nodes * 24 + 128 open-list u16s)
+//   0x827679C4  r28 = (first + count) & 0xFFFF                  (one past the bucket's live set)
+//   0x827679CC  if (first >= end) -> result 0
+//   0x827679DC  loop: node = GetNode(this, i)                   (the asserting accessor)
+//   0x827679E0    if (node->muSectionIndex(+0x12) == section
+//   0x827679EC     && node->muPortalIndex(+0x16) == portal) -> result = node ; break
+//   0x82767A14  StopMonitor(dword_8300D534) ; return result
+//
+// The hash is the SAME `section & KU_HASH_MASK` NewNode buckets on, so a node is found in the
+// bucket it was created in. Linear over the bucket's live prefix; NULL when absent.
+AStarNode* AStarNodePool::FindNode(u16 luSectionIndex, u8 luPortalIndex)
+{
+    CgsDev::PerfMonCpu::StartMonitor(dword_8300D534);
+
+    AStarNode* lpResult = nullptr;
+
+    const u16 luBucket     = static_cast<u16>(luSectionIndex & KU_HASH_MASK);
+    const u16 luFirstIndex = static_cast<u16>(luBucket << 8);
+    const u16 luEndIndex   = static_cast<u16>(luFirstIndex + mauNodeCount[luBucket]);
+
+    for (u16 luNodeIndex = luFirstIndex; luNodeIndex < luEndIndex; ++luNodeIndex)
+    {
+        AStarNode* lpNode = GetNode(luNodeIndex);
+        if (lpNode->GetSectionIndex() == luSectionIndex && lpNode->GetPortalIndex() == luPortalIndex)
+        {
+            lpResult = lpNode;
+            break;
+        }
+    }
+
+    CgsDev::PerfMonCpu::StopMonitor(dword_8300D534);
+    return lpResult;
+}
+
 // BrnAI::AStar::Construct @0x82767A40.
 //
 // Bind the section graph and reset the per-search scratch. Stores lpAISectionsData,
@@ -282,6 +327,52 @@ bool AStar::Prepare(const AStarVector2& lStartPosition, const AStarVector2& lEnd
     mpBestNode->SetCost(0.0f);
     mpBestNode->SetHeuristic(mpDistanceFunction(mpBestNode->GetPosition(), lEndPosition));
     return true;
+}
+
+// BrnAI::AStar::IsBlockSection (inlined on the console; recovered from its one expansion in
+// Compute @0x82774EC0..0x82774EF4 (aiwave A5, 2026-09-03)):
+//   lwz  r11, 0x632C(this)   miBlockSectionCount ; ble -> false
+//   addi r10, this, 0x62EC   &maBlockSectionIds[0]
+//   loop: lwz r9,0(r10) ; cmpw r9, lpLinkSection->mId (+12) ; beq -> true ; addi r10,4 ; blt loop
+// A linear scan of the live prefix of maBlockSectionIds for the section id.
+bool AStar::IsBlockSection(u32 lSectionId)
+{
+    for (s32 liIndex = 0; liIndex < miBlockSectionCount; ++liIndex)
+    {
+        if (maBlockSectionIds[liIndex] == lSectionId)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// BrnAI::AStar::AddBlockSectionId (inlined on the console; its one expansion is
+// RouteMapModule::ProcessRaceRoute @0x8278C418..0x8278C45C):
+//   lwz r11, 0x636C(mAStar)  miBlockSectionCount ; cmpwi 0x10 ; blt -> skip the assert
+//   FireAssert("miBlockSectionCount < KI_MAX_BLOCK_SECTION_COUNT", BrnAStar.h, 522)
+//   stwx id, (count + 0x18CB) * 4, mAStar    == maBlockSectionIds[count]  (0x18CB*4 == 0x632C)
+//   miBlockSectionCount++
+// NON-GATING on the console (the store runs after the assert). [GUARD] the bail below is the
+// PC deviation: the 17th id would overwrite miBlockSectionCount itself on the host too.
+void AStar::AddBlockSectionId(u32 lSectionId)
+{
+    CGS_ASSERT(miBlockSectionCount < KI_MAX_BLOCK_SECTION_COUNT,
+               "miBlockSectionCount < KI_MAX_BLOCK_SECTION_COUNT");   // BrnAStar.h:522
+    if (miBlockSectionCount >= KI_MAX_BLOCK_SECTION_COUNT)
+    {
+        return;
+    }
+    maBlockSectionIds[miBlockSectionCount] = lSectionId;
+    ++miBlockSectionCount;
+}
+
+// BrnAI::AStar::IsInProgress (inlined on the console as `lbz 0x659D(module)` ==
+// RouteMapModule+552+25461 == this->mbInProgress; RouteMapModule::Update @0x8279402C and
+// ProcessRaceRoute @0x8278C2FC/0x8278C334/0x8278C470 read it that way).
+bool AStar::IsInProgress() const
+{
+    return mbInProgress;
 }
 
 // BrnAI::AStar::Compute @0x82774C90.
@@ -462,18 +553,17 @@ void AStar::BuildRoute(Route* lpOutRoute)
 //   3. If the route ended up with >= 2 nodes, append one extrapolated exit node: take the
 //      normalised travel direction of the final segment (lastNode - prevNode), then over
 //      the goal section's portals pick the portal whose flattened direction best aligns
-//      with travel (largest dot product, seeded at -2.0) subject to a reachability gate
-//      (BrnMath::Flatten of the portal direction, |dx|/|dy| compared against the rodata
-//      extent vector flt_820C3B70); add a final node at that portal's (x, z) tagging the
+//      with travel (largest dot product, seeded at -2.0), skipping a portal whose offset from
+//      the last node is zero (the RwMath::IsZero test against FLT_EPSILON == flt_820C3B70
+//      lane 0); add a final node at that portal's (x, z) tagging the
 //      BEST NODE'S OWN section index (node+0x12, NOT muEndSectionIndex) and chosen portal
 //      index into its w lane.
 //
 // SIMD note: the X360 vrsqrtefp + two Newton-Raphson refinement steps (vnmsubfp/vmaddfp)
 // are the hardware reciprocal-sqrt used to normalise the 2D direction; reconstructed here
-// as an exact ordinary normalise. The reachability gate's comparison vector lives in
-// rodata at flt_820C3B70 and is NOT a clean literal in the asm -- it is left as a flagged
-// placeholder constant (see open_questions); it only narrows which portals are eligible,
-// never the picked direction maths.
+// as an exact ordinary normalise. The IsZero epsilon (flt_820C3B70 lane 0) was read from the
+// image 2026-09-03 (it is FLT_EPSILON); it only excludes a zero-length offset, never the
+// picked direction maths.
 void AStar::BuildRoute(AStarNode* lpBestNode, Route* lpOutRoute)
 {
     CGS_ASSERT(lpBestNode != nullptr, "lpBestNode != NULL");
@@ -552,10 +642,11 @@ void AStar::BuildRoute(AStarNode* lpBestNode, Route* lpOutRoute)
             const f32 lfDeltaY = lpPortal->GetPositionZ() - lpLast->GetY();
             (void)lPortalFlat;   // Flatten is called for its X360 side-effect parity.
 
-            // Reachability gate: reject portals whose flattened offset exceeds the rodata
-            // extent (flt_820C3B70). Placeholder extent -- see open_questions.
-            if (fabsf(lfDeltaX) > KF_BUILDROUTE_REACH_EXTENT) continue;
-            if (fabsf(lfDeltaY) > KF_BUILDROUTE_REACH_EXTENT) continue;
+            // Zero-offset gate (asm 0x8277FC6C..0x8277FCF4): the portal that sits ON the last
+            // node -- |dx| <= eps AND |dy| <= eps, the RwMath::IsZero idiom over flt_820C3B70
+            // lane 0 -- has no direction to dot against and is skipped (`bne loc_8277FD6C`
+            // when both lane tests fail). Any non-zero offset proceeds.
+            if (!(fabsf(lfDeltaX) > KF_ZERO_EPSILON) && !(fabsf(lfDeltaY) > KF_ZERO_EPSILON)) continue;
 
             // Normalised portal direction, then dot against travel direction.
             const f32 lfDeltaLen = sqrtf((lfDeltaX * lfDeltaX) + (lfDeltaY * lfDeltaY));

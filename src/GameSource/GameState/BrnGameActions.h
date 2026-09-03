@@ -15,6 +15,8 @@
 #include "SharedClasses/Progression/BrnTrophyUnlockData.h"    // BrnProgression::TrophyUnlockData (TrophyUnlockAction::meUnlockType) -- see the note below
 #include "SharedClasses/Traffic/BrnTrafficVehicleType.h"      // [showtime-score] BrnTraffic::VehicleClass / VehicleScoreCategory (VehicleHitAction)
 #include "GameSource/World/BrnWorldSharedConstants.h"         // [takedown] BrnWorld::CarControl (SetPlayerCarDriverAction::meCarControl)
+#include "SharedClasses/Progression/BrnRival.h"                // [takedown P1] BrnProgression::Rival (RivalStateChangeAction::mRival)
+#include "GameSource/GameState/Progression/BrnProgressionRivalData.h" // [takedown P1] BrnProgression::RivalData (RivalStateChangeAction::mRivalSavedData)
 
 namespace BrnResource
 {
@@ -378,6 +380,12 @@ enum EGameActionType
     // DecFIGS value 190 shifted to ARTIST 198. HandleGameActions' high jump
     // table reads the 24-byte SendCarStatsAction below.
     E_ACTION_UPDATE_CAR_STATS           = 198,
+    // [takedown P1 wave 2026-09-03] PRODUCER-PINNED: ProgressionManager::OnPursuitWon @0x82389F40
+    // posts `li r5, 0xC5` (197) with `li r6, 0x78` (120) @0x8238A15C / 0x8238A158, and 120 is
+    // exactly sizeof(RivalStateChangeAction) below (Rival 56 + RivalData 56 + s32 + s8, padded to
+    // 8) -- the size match is the proof. DWARF BrnGameActions.h:199 E_ACTION_RIVAL_STATE_CHANGED
+    // == 189 (+8 X360), the same +8 UPDATE_CAR_STATS (190 -> 198) takes right above.
+    E_ACTION_RIVAL_STATE_CHANGED        = 197,   // DWARF 189 (+8 X360); size 120  PINNED (producer body)
 
     // X360-ATTESTED value: the DWARF (PS3) enumerator is 74, but every X360 producer posts
     // `li r5, 0x4F` (79) with size 8, and the X360 consumer is HandleGameActions' `case 79`.
@@ -729,6 +737,32 @@ enum EGameActionType
     //      (E_ACTION_MODE_TIME_UP's banner above considered and rejected DWARF 255 for id 262 on the
     //      same monotone-band argument; the band evidently has a PS3-only entry between 197 and 248).
     E_ACTION_HUD_MESSAGE_ROAD_RAGE_TIME_EXTENSION        = 255,  // DWARF 248 (+7 X360); size 4  PINNED (producer body)
+
+    // ---- ADDITIVE (aiwave lane A7, 2026-09-03) -- the six ids BrnAI::AIModule::HandleGameActions
+    //      @0x82791FD0 dispatches on that this enum did not carry yet. The console's jump table is
+    //      keyed on `type - 7` (asm 0x82792084 `addi r11, r3, -7`), so IDA's "case N" label is
+    //      N + 7; every value below is that sum, and every one lands on a FREE slot in this enum
+    //      (checked: no duplicate values). Each is DWARF + 5, the same shift this enum already
+    //      records for its 92..126 neighbours (E_ACTION_BODY_SHOP_DRIVE_THRU DWARF 92 -> 97,
+    //      PAINT_SHOP 93 -> 98, GAS_STATION 95 -> 100, PLAYER_INVULNERABLE 106 -> 111,
+    //      RACE_CAR_REACHED_CHECKPOINT 108 -> 113, RACE_CAR_REACHED_FINISH 109 -> 114,
+    //      SHUTDOWN 115 -> 120), and each is corroborated by what the AI arm DOES with it:
+    //        50  -> the arm builds a RouteMapModuleIO::RaceRouteRequest and AddEventSafe's it
+    //               into the transient "Route" input buffer  (DWARF 45 E_ACTION_REQUEST_ROUTE_INFO)
+    //        99  -> AICar::SetIsInJunkyard(record byte) + the BuzzBy junkyard flag
+    //               (DWARF 94 E_ACTION_DRIVE_THRU_JUNK_YARD; 99 is the free slot between the
+    //                already-committed 98 PAINT_SHOP and 100 GAS_STATION -- exact positional match)
+    //        106 -> logs "<AI> Is in startup junkyard" then SetIsInJunkyard(true)
+    //               (DWARF 101 E_ACTION_DRIVE_THRU_JUNK_YARD_ON_GAME_START)
+    //        122 -> player car behaviour -> E_AI_BEHAVIOUR_STOP     (DWARF 117 AWARD_SEQUENCE_START)
+    //        123 -> player car behaviour -> E_AI_BEHAVIOUR_CRUISING (DWARF 118 AWARD_SEQUENCE_END)
+    //        131 -> AICar::SetRoadRageMadness(record float) (DWARF 126 UPDATE_ROAD_RAGE_MADNESS)
+    E_ACTION_REQUEST_ROUTE_INFO                          = 50,   // DWARF 45  (+5 X360); AI reads +0..+0x2B
+    E_ACTION_DRIVE_THRU_JUNK_YARD                        = 99,   // DWARF 94  (+5 X360); AI reads 1 byte
+    E_ACTION_DRIVE_THRU_JUNK_YARD_ON_GAME_START          = 106,  // DWARF 101 (+5 X360); payload unread
+    E_ACTION_AWARD_SEQUENCE_START                        = 122,  // DWARF 117 (+5 X360); payload unread
+    E_ACTION_AWARD_SEQUENCE_END                          = 123,  // DWARF 118 (+5 X360); payload unread
+    E_ACTION_UPDATE_ROAD_RAGE_MADNESS                    = 131,  // DWARF 126 (+5 X360); AI reads +0 and +4
 };
 
 template <EGameActionType T>
@@ -789,6 +823,35 @@ struct DamageCriticalMessageAction : public GameAction<E_ACTION_DAMAGE_CRITICAL>
 {
     bool mbPlayerCarIsDamageCritical;
 };
+
+// =============================================================================================
+// [takedown P1 wave 2026-09-03] RivalStateChangeAction -- action 197, 120 bytes. DWARF
+// BrnGameActions.h:3062..3066 names the four members; the ONLY X360 producer is
+// ProgressionManager::OnPursuitWon @0x82389F40, which builds it on the stack at var_D0 and posts
+// it with `li r5, 0xC5 / li r6, 0x78` @0x8238A15C..0x8238A16C:
+//   0x8238A108..0x8238A128  7x ld/std copy of the ProgressionData Rival   -> +0x00 (56 B)
+//   0x8238A12C..0x8238A14C  7x ld/std copy of the Profile RivalData        -> +0x38 (56 B)
+//   0x8238A150/0x8238A168   `li r11, 2 ; stw r11, var_60` (var_60 - var_D0 == 0x70) -> +0x70 s32
+//                           == RivalData::E_STATE_FLEEING, the state the rival is leaving
+//   0x8238A154              `stb r25, var_5C`             (var_5C - var_D0 == 0x74) -> +0x74 s8
+//                           == the rival's ProgressionData index
+// MEMBER ORDER IS THE X360's, NOT THE DWARF's: DecFIGS declares miRivalIndex (:3065) BEFORE
+// mePreviousState (:3066), which would seat the byte at +0x70 and the enum at +0x74; the two
+// stores above are the other way round. Both orders are 120 bytes, so the size proof does not
+// separate them -- the stores do (a merge-window delta of this record). Rival
+// (SharedClasses/Progression/BrnRival.h) and RivalData (BrnProgressionRivalData.h) are both
+// pointer-free 56-byte records on the host, so the console layout survives verbatim.
+// No consumer in this tree yet (the console's is BrnGameModule::TranslateGameActionsToGuiEvents).
+// =============================================================================================
+struct RivalStateChangeAction : public GameAction<E_ACTION_RIVAL_STATE_CHANGED>
+{
+    BrnProgression::Rival             mRival;           // +0x00 (DWARF :3063)
+    BrnProgression::RivalData         mRivalSavedData;  // +0x38 (DWARF :3064)
+    BrnProgression::RivalData::EState mePreviousState;  // +0x70 (DWARF :3066; X360 order)
+    s8                                miRivalIndex;     // +0x74 (DWARF :3065; X360 order)
+    u8                                maPad[3];         // +0x75..0x77 -- never written by the console; posted size is 120
+};
+static_assert(sizeof(RivalStateChangeAction) == 120, "X360 posts RivalStateChangeAction as 120 bytes (li r6, 0x78 @0x8238A158)");
 
 // =============================================================================================
 // ⭐ THE THREE CRASH-PLAY ACTION RECORDS (added 2026-08-29 with BrnCrashPlayManager.cpp).
@@ -2252,5 +2315,95 @@ static_assert(sizeof(ShutdownAction) == 24 &&
               offsetof(ShutdownAction, mRivalID) == 8 &&
               offsetof(ShutdownAction, meVictimIndex) == 0x10,
               "X360 posts action 120 with size 24; victim car id @+0, victim index @+0x10");
+
+// =============================================================================================
+// ADDITIVE (aiwave lane A7, 2026-09-03) -- the four records BrnAI::AIModule::HandleGameActions
+// @0x82791FD0 reads and this header did not carry. Every field below is a load the AI arm
+// actually performs; each record's declared extent stops at the last byte that consumer reads,
+// which is stated per struct. Nothing beyond that is guessed at.
+// =============================================================================================
+
+// ---- 35 -------------------------------------------------------------------------------------
+// The action-35 NOTIFY record (E_ACTION_FINISHED_MODE_NOTIFY, X360 size 1 -- see this enum's own
+// banner above; it is NOT the 48-byte FinishedModeAction of action 36). Its ONE byte is read by
+// AIModule::OnModeFinished @0x8277B970 (`lbz r11, 0(r30)` @0x8277B9DC) and picks the player car's
+// post-race behaviour: E_AI_BEHAVIOUR_POST_RACE_WIN (9) when set, E_AI_BEHAVIOUR_POST_RACE_LOSE
+// (10) when clear.
+// [FLAG name] the DWARF spells AIModule::OnModeFinished's parameter `const FinishedModeAction*`,
+// which is the 48-byte record's name; action 35's posted size is 1 and the consumer reads only
+// byte 0, so the two are not the same record on this build. The member name below is this tree's,
+// taken from what the consumer does with it. DELETE-WHEN a producer of action 35 is reconstructed
+// and names the byte.
+struct FinishedModeNotifyAction : public GameAction<E_ACTION_FINISHED_MODE_NOTIFY>
+{
+    bool mbPlayerWon;   // +0x00
+};
+static_assert(sizeof(FinishedModeNotifyAction) == 1, "X360 posts action 35 with size 1");
+
+// ---- 114 ------------------------------------------------------------------------------------
+// DWARF BrnAIModule.h:251 names AIModule::OnRaceCarReachedFinish's parameter
+// `const RaceCarReachedFinishAction*`; this is that record. The AI consumer @0x8277B8D0 reads ONE
+// field -- `lwz r4, 0(r30)` @0x8277B8F0, straight into AIModule::GetAICar, i.e. a global race-car
+// index. The X360 posts action 114 with size 8 (this enum's own band note above), so the record
+// carries four more bytes this consumer never touches.
+struct RaceCarReachedFinishAction : public GameAction<E_ACTION_RACE_CAR_REACHED_FINISH>
+{
+    ::EGlobalRaceCarIndex meGlobalRaceCarIndex;   // +0x00
+    u8                    maPad04[4];             // +0x04  unread by the AI consumer
+};
+static_assert(sizeof(RaceCarReachedFinishAction) == 8, "X360 posts action 114 with size 8");
+
+// ---- 99 -------------------------------------------------------------------------------------
+// AIModule::HandleGameActions jump-table case 92 (== type 99), asm 0x82792504..0x82792534:
+// `lbz r11, 0(r27)` twice -- once to pick the BuzzBy junkyard flag, once as AICar::
+// SetIsInJunkyard's argument. Only byte 0 is read.
+struct DriveThruJunkYardAction : public GameAction<E_ACTION_DRIVE_THRU_JUNK_YARD>
+{
+    bool mbIsInJunkYard;   // +0x00
+};
+static_assert(sizeof(DriveThruJunkYardAction) == 1,
+              "the AI consumer of action 99 reads one byte at +0");
+
+// ---- 131 ------------------------------------------------------------------------------------
+// AIModule::HandleGameActions jump-table case 124 (== type 131), asm 0x8279237C..0x8279239C:
+// `lwz r4, 0(r27)` -> AIModule::GetAIDriver, `lfs f1, 4(r27)` -> AICar::SetRoadRageMadness.
+struct UpdateRoadRageMadnessAction : public GameAction<E_ACTION_UPDATE_ROAD_RAGE_MADNESS>
+{
+    ::EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00
+    f32                   mfMadness;              // +0x04
+};
+static_assert(sizeof(UpdateRoadRageMadnessAction) == 8,
+              "the AI consumer of action 131 reads +0 (s32) and +4 (f32)");
+
+// ---- 50 -------------------------------------------------------------------------------------
+// AIModule::HandleGameActions jump-table case 43 (== type 50), asm 0x827923E4..0x82792440. The arm
+// copies the record straight into a RouteMapModuleIO::RaceRouteRequest and AddEventSafe's it:
+//   lvx  v0, r0, r27           -> request.mStartPosition      (record +0x00, 16B)
+//   lvx  v0, r27, 0x10         -> request.mEndPosition        (record +0x10, 16B)
+//   lhz  r10, 0x20(r27)        -> request.muStartSectionIndex (record +0x20)
+//   lhz  r10, 0x22(r27)        -> request.muEndSectionIndex   (record +0x22)
+//   lhz  r11, 0x24(r27)        -> request.muEventId           (record +0x24)
+//   lwz  r11, 0x28(r27) (sth)  -> request.muOwnerId           (record +0x28: WORD load, HALFWORD store)
+// and zeroes the request's block-section count / quality / distance function / shortcut flag.
+// The last byte the consumer touches is +0x2B; whatever follows it is not read here.
+// [FLAG name] no DWARF record for E_ACTION_REQUEST_ROUTE_INFO is in the mirrored dump, so the
+// member names below are this tree's, taken 1:1 from the RaceRouteRequest field each one feeds.
+// DELETE-WHEN the producer of action 50 is reconstructed.
+struct RequestRouteInfoAction : public GameAction<E_ACTION_REQUEST_ROUTE_INFO>
+{
+    Vector3 mStartPosition;        // +0x00
+    Vector3 mEndPosition;          // +0x10
+    u16     muStartSectionIndex;   // +0x20
+    u16     muEndSectionIndex;     // +0x22
+    u16     muEventId;             // +0x24
+                                   // +0x26 .. +0x27 alignment
+    s32     miOwnerId;             // +0x28  (stored into the request's u16 muOwnerId)
+};
+static_assert(offsetof(RequestRouteInfoAction, mEndPosition)        == 0x10 &&
+              offsetof(RequestRouteInfoAction, muStartSectionIndex) == 0x20 &&
+              offsetof(RequestRouteInfoAction, muEndSectionIndex)   == 0x22 &&
+              offsetof(RequestRouteInfoAction, muEventId)           == 0x24 &&
+              offsetof(RequestRouteInfoAction, miOwnerId)           == 0x28,
+              "action-50 offsets are the @0x827923E4 consumer loads");
 }
 }

@@ -62,6 +62,10 @@ namespace Attrib
             CGS_ASSERT(lpCollection != NULL, "NULL object found in garbage bag.");
 
             // X360 reads the collection's shared refcount at +0x08 (HashMap base's muRefCount).
+            // ⚠️ [FLAG PC known defect, 2026-09-03 lane A10] on x64 +0x08 is HashMap::muCapacity, NOT the refcount:
+            // only EMPTY collections reach the destructor. Reading GetRefCount() by name is the fix, but it must
+            // wait for attribhashmap.cpp's Remove/Transfer/UpdateSearchLength (still console byte offsets) --
+            // Collection::Clear phase 1 would be their first live caller and would corrupt the buckets.
             const u16 lu16RefCount =
                 *reinterpret_cast<const u16*>(reinterpret_cast<const u8*>(lpCollection) + 0x08);
             if (lu16RefCount == 0)
@@ -69,7 +73,8 @@ namespace Attrib
                 lpCollection->~Collection();
                 // Unconditional census-and-free of the 40-byte collection object (already inside
                 // the should-free branch; the object is non-NULL, so no null guard is emitted).
-                HashMapTablePolicy::FreeWithCensus(lpCollection, 40, NULL);
+                // (host size, 2026-09-03: the console literal 40 is the X360 sizeof; the x64 Collection is 48.)
+                HashMapTablePolicy::FreeWithCensus(lpCollection, sizeof(Attrib::Collection), NULL);
             }
 
             // Unlink the (first) node from the ring and free it.

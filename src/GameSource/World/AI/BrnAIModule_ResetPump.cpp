@@ -48,6 +48,10 @@
 #include "GameSource/World/AI/SharedIO/BrnRaceCarAIInterfaces.h"       // RaceCarAIInterface
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface
 
+#include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"           // the transient "Route" IO pair
+#include "GameSource/World/AI/BrnAIModule_Routes.h"                   // AIModuleRoutes:: legs (lane A5)
+#include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"           // CgsModule::IOHelper<T>
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // the game-event queue (event 113)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -293,19 +297,92 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
             }
         }
 
-        ProcessRequestInterface(lpInputBuffer, lpOutputBuffer, lUpdateSet);
-
+        // ================================================================================
+        // ⭐ 2026-09-03 (aiwave): THE FULL CONSOLE SPINE, rows 7..37 of scratch/aiwave/A1_update_spine.md
+        // (AIModule::Update @0x8279B478). The reset pump (rows 29..31) keeps its place in the order.
+        // The transient "Route" IO buffer pair: IOHelper<InputBuffer> is created on the INPUT stack
+        // before the body (row 4, @0x8279B4F8) and destroyed at the tail (row 40); the OUTPUT one
+        // spans rows 19..27. Both are hoisted here, inside the mbPlayerDataSet gate, which is the
+        // only observable difference (an empty create/destroy pair on the frames the gate is shut).
+        // ================================================================================
         const CgsSystem::TimerStatusInterface* lpTimers = lpInputBuffer->GetTimerInterface();
+        f32 lfDt = 0.0f;                                                                   // row 7
         if (lpTimers != 0)
         {
-            const CgsSystem::Time lSimTime = lpTimers->GetSimTimerStatus()->GetTime();
-            const f32 lfTime = static_cast<f32>(lSimTime.GetSeconds()) + lSimTime.GetFraction();
-
-            UpdateResetOnTrackManager(
-                reinterpret_cast<AIModuleIO::AIModuleResultInterface*>(
-                    lpOutputBuffer->GetAIModuleResultInterfaceForWrite()),
-                lfTime);
+            const CgsSystem::TimerStatus* lpSim = lpTimers->GetSimTimerStatus();
+            lfDt = lpSim->GetTimeStepMultiplier() * lpSim->GetBaseTimeStep();
         }
+        const Vector3 lPlayerCarPosition = lpRaceCarAI->GetPlayerCarPosition();            // row 8 (v127)
+        (void)lpRaceCarAI->GetPlayerCarDirection();                                       // row 9 (dead)
+
+        // row 11: mePlayerGlobalRaceCarIndex from the player's active driver (0x8279B640..0x8279B6A0)
+        {
+            AIDriver* lpPlayerDriver = GetAIDriver(mePlayerActiveRaceCarIndex);
+            if (lpPlayerDriver != 0 && lpPlayerDriver->IsActive())
+            {
+                mePlayerGlobalRaceCarIndex = (lpPlayerDriver->GetCar() != 0)
+                    ? static_cast<EGlobalRaceCarIndex>(lpPlayerDriver->GetCar()->GetRaceCarIndex())
+                    : E_GLOBAL_RACE_CAR_INDEX_INVALID;
+            }
+        }
+        AICar* lpPlayerCar = (mePlayerGlobalRaceCarIndex != E_GLOBAL_RACE_CAR_INDEX_INVALID)
+                                 ? GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex)) : 0;   // row 12
+        // (row 12's AIDebugComponent timer block: no named home -- [FLAG PC bring-up], see the banner)
+
+        {
+            CgsModule::IOHelper<RouteMapModuleIO::InputBuffer> lRouteIn(lpInputBufferStack, "Route");   // row 4
+            RouteMapModuleIO::InputBuffer* lpRouteIn = lRouteIn;
+
+            lpRouteIn->LockForWrite();                                                    // row 13
+            HandleGameActions(lpInputBuffer, lpOutputBuffer, lpRouteIn);                  // row 14
+            lpRouteIn->UnlockForWrite();                                                  // row 15
+            HandleManagementEvents(lpInputBuffer);                                        // row 16
+            StoreDrivenCarData(lpInputBuffer);                                            // row 17
+            SortTrafficIntoAICars(lpInputBuffer);                                         // row 18
+
+            {
+                CgsModule::IOHelper<RouteMapModuleIO::OutputBuffer> lRouteOut(lpOutputBufferStack, "Route");   // row 19
+                RouteMapModuleIO::OutputBuffer* lpRouteOut = lRouteOut;
+
+                lpRouteIn->LockForWrite();                                                // row 20
+                AIModuleRoutes::AppendRaceRouteRequests(lpRouteIn, lpInputBuffer);
+                UpdateCars(lfDt, lpRouteIn, lpOutputBuffer);                              // row 21
+                mRouteRequestManager.Update(maAICars, lpPlayerCar, GetAISectionsData(),   // row 22
+                                            lpRouteIn, &mBuzzBy);
+                lpRouteIn->UnlockForWrite();                                              // row 23
+
+                mRouteMapModule.Update(lpInputBufferStack, lpOutputBufferStack, lpRouteIn, lpRouteOut);   // row 24
+
+                AIModuleRoutes::ProcessRouteResponses(this, lpOutputBuffer, lpRouteOut, lpPlayerCar);   // rows 25..27
+            }
+
+            UpdateDrivers(lpInputBuffer, lpOutputBuffer, lPlayerCarPosition, lfDt);       // row 28
+
+            ProcessRequestInterface(lpInputBuffer, lpOutputBuffer, lUpdateSet);           // row 29
+            if (lpTimers != 0)                                                            // rows 30..31
+            {
+                const CgsSystem::Time lSimTime = lpTimers->GetSimTimerStatus()->GetTime();
+                const f32 lfTime = static_cast<f32>(lSimTime.GetSeconds()) + lSimTime.GetFraction();
+                UpdateResetOnTrackManager(
+                    reinterpret_cast<AIModuleIO::AIModuleResultInterface*>(
+                        lpOutputBuffer->GetAIModuleResultInterfaceForWrite()),
+                    lfTime);
+            }
+
+            ProcessAIVehicleInputs(lpOutputBuffer);                                       // row 32
+            ProcessOutOfRangeVehicles(lpOutputBuffer);                                    // row 33
+            ProcessInRangeVehicles(lpOutputBuffer);                                       // row 34
+            ExportCarData(lpOutputBuffer);                                                // row 35
+
+            bool lbBuzzOccured = false;                                                   // row 36
+            mBuzzBy.Update(lfDt, lpPlayerCar, mpClosestCar, &lbBuzzOccured);
+            if (lbBuzzOccured)                                                            // row 37: event 113, payload 16
+            {
+                const s32 liBuzzPayload = 16;
+                reinterpret_cast<CgsModule::VariableEventQueue<1536, 16>*>(lpOutputBuffer->GetGameEventQueue())
+                    ->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liBuzzPayload), 113, sizeof(liBuzzPayload));
+            }
+        }   // ~IOHelper<InputBuffer> -- row 40
     }
 
     lpInputBuffer->UnlockForRead();

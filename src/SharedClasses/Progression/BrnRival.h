@@ -54,7 +54,13 @@ struct Rival
     void           Construct(CgsID lId, CgsID lCarId, s16 liPersonalityIndex, s16 liPursuitTarget, s8 liDistrictIndex);
     void           Construct(CgsID lId);
     void           SetName(const char* lpcName);
-    CgsID          GetCarId() const;
+    // ---- ADDITIVE (takedown P1 wave, 2026-09-03) -------------------------------------------
+    // BODIED (it was in the declared-only list and defined nowhere in the tree -- the same latent
+    // unresolved-external state GetId / GetDistrict / GetIsUsedForRankUpGiftCar were in). No
+    // standalone X360 symbol: ProgressionManager::DefeatRivalAndUnlockCar @0x8237B238 reads it as
+    // a bare `ld r26, 8(r29)` on the 56-byte record, and Profile::AddRival is fed that same
+    // register (`ld r5, 8(r29)` @0x8237B29C). A header inline IS the faithful shape.
+    CgsID          GetCarId() const { return mCarId; }
     s16            GetPursuitTarget() const;
     const char*    GetName() const;
     s16            GetPersonalityIndex() const;

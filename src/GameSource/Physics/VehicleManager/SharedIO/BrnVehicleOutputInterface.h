@@ -171,6 +171,12 @@ namespace Vehicle
         // the cntlzw/extrwi of the same flag). Bodied in BrnVehicleOutputInterface.cpp.
         void FlagTakedownScoredForDriver(bool lbPlayerWon);
 
+        // ADDITIVE 2026-09-03 (crash-state wave): mutable access to the five per-frame flags for
+        // VehicleManager::UpdateAggressiveDriving @0x82640690, which the console emits as direct
+        // byte stores at +0x6C02/+0x6C03/+0x6C04 (mbPlayerWonGrindingThisFrame /
+        // mbPlayerLostGrindingThisFrame / mbRubbingThisFrame) -- same-TU member access on console.
+        AggressiveDrivingFlags& GetAggressiveDrivingFlags() { return mAggressiveDrivingFlags; }
+
     private:
         CgsContainers::BitArray<8u> mUsedRaceCars;            // @0x0000  (DWARF :382)
         RaceCarState                maRaceCarStates[8];       // @0x0010  (DWARF :383, stride 1120)
@@ -392,6 +398,12 @@ namespace Vehicle
             lEvent.mfDriveDirection     = lfDriveDirection;
             mSlammedTrafficEventQueue.AddEvent(lEvent);
         }
+
+        // ADDITIVE 2026-09-03 (crash-state wave): mutable access to the three GUI grinding/rubbing
+        // bytes for VehicleManager::UpdateAggressiveDriving @0x82640690, which the console emits
+        // as direct byte stores at +0x79C/+0x79D/+0x79E (mbPlayerGrindingOther /
+        // mbOtherGrindingPlayer / mbRubbing).
+        VehicleGuiOutputMessages& GetVehicleGuiOutputMessages() { return mVehicleGuiOutputMessages; }
 
     private:
         TrafficCrashedEventQueue     mCrashedTrafficEventQueue;     // @0x0000  (DWARF :176)

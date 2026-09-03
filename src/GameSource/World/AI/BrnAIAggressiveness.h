@@ -41,11 +41,28 @@ namespace BrnAI
         // @0x827647B0 -- store the speed-match time (asserts lfValue in [0,1]).
         void SetTimeForSpeedMatch(f32 lfValue);           // :56
 
-        f32  GetProximityToSpeedMatch() const;            // :59
-        f32  GetTimeForSpeedMatch() const;                // :62
-        f32  GetRelativeSpeedForMatch() const;            // :65
+        // The four speed-match READERS. None of them has an X360 symbol of its own (names.tsv
+        // carries only the three setters + GetAggressionLevel for this class), i.e. the console
+        // inlines every one of them at its call site -- so they are restored as header inlines
+        // rather than as out-of-line bodies in BrnAIAggressiveness.cpp. Each is the plain load
+        // of the member its same-named setter stores, addressed BY NAME:
+        //   GetProximityToSpeedMatch        <- SetProximityToSpeedMatch @0x827645E0 (this+0x08)
+        //   GetTimeForSpeedMatch            <- SetTimeForSpeedMatch @0x827647B0     (this+0x0C)
+        //   GetRelativeSpeedForMatch        <- SetRelativeSpeedForMatch             (this+0x10)
+        //   GetAcclerationRateForSpeedMatch <- SetAcclerationRateForSpeedMatch @0x827646C8 (this+0x14)
+        // mAggressiveness sits at AICar+0x140C, so every one of these loads shows up in the
+        // asm as an `lfs` off the AICar pointer. The four call sites that pin them:
+        //   0x1414 (== +0x08 proximity)  GetSpeedMatchSpeed @0x8277E24C,
+        //                                OutOfSpeedMatchRange @0x8278B6BC and @0x8278B728
+        //   0x1418 (== +0x0C time)       UpdateAggressionStateFallPast @0x827937A0
+        //   0x141C (== +0x10 rel. speed) GetSpeedMatchSpeed @0x8277E330,
+        //                                SetSlowFallbackSpeed @0x82770AEC
+        //   0x1420 (== +0x14 accel rate) CalcSpeedMatchSpeed @0x8278B814
+        f32  GetProximityToSpeedMatch() const        { return mfProximitySpeedMatch; }          // :59
+        f32  GetTimeForSpeedMatch() const            { return mfTimeForSpeedMatch; }            // :62
+        f32  GetRelativeSpeedForMatch() const        { return mfRelativeSpeedForSpeedMatch; }   // :65
         void SetRelativeSpeedForMatch(f32 lfValue);       // :68
-        f32  GetAcclerationRateForSpeedMatch() const;     // :71
+        f32  GetAcclerationRateForSpeedMatch() const { return mfAcclerationRateForSpeedMatch; } // :71
         // @0x827646C8 -- store the speed-match acceleration rate (asserts lfValue in [0,1]).
         void SetAcclerationRateForSpeedMatch(f32 lfValue); // :74
 

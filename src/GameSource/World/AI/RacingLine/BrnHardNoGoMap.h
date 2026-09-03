@@ -19,7 +19,7 @@
 // only to the offsets the bodied asm attests. Members reached by name.
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"   // Vector2 (rw::math::vpu alias)
+#include "BrnCommonTypes.h"   // Vector2 / Vector4 (rw::math::vpu aliases)
 
 namespace BrnAI
 {
@@ -50,22 +50,31 @@ public:
     // mauMap[height] |= (1<<width).
     void SetMapSquare(u32 luWidth, u32 luHeight);
 
+    // RacingLine::ClearSectionCache @0x8276E090 resets miSectionIndex / mbReady by name.
+    friend class RacingLine;
+
 private:
-    // Opaque object head (other members; not bodied in this TU). The map row
-    // words begin at +0x20, so the head spans the first 8 words.
-    u8  maPadHead[0x20];                 // +0x00 .. +0x1F
+    // DWARF BrnHardNoGoMap.h -- the two edge-history vectors that head the object (two
+    // Vector4 slots, +0x00 / +0x10); the map row words begin at +0x20.
+    Vector4 mCurrentAndPreviousLeft;      // +0x00
+    Vector4 mCurrentAndPreviousRight;     // +0x10
 
     // One 32-bit row per height index; bit (1<<width) per column.
     u32 mauMap[KU_HEIGHT];               // +0x20 .. +0x3F
 
-    // Opaque gap between the map words and the ready flag (other members).
-    u8  maPadGap[0x08];                  // +0x40 .. +0x47
+    // DWARF BrnHardNoGoMap.h -- the section this map was built for (ClearSectionCache
+    // resets it to 9999 == "no section") and its average width.
+    s32 miSectionIndex;                  // +0x40
+    f32 mfAverageWidth;                  // +0x44
 
     // Set once the section's map has been built; MapSquareOccupiedFast /
     // SetMapSquare assert this is non-zero ("Hard No Go Secton not ready").
     bool mbReady;                        // +0x48
-    // (object continues past +0x48 with members owned by the other TUs.)
+    // (16-byte SIMD alignment of the Vector4 head pads the object to 0x50 -- the stride
+    //  SectionData @0x50 .. @0xA0 attests.)
 };
+
+static_assert(sizeof(HardNoGoMap) == 0x50, "HardNoGoMap is 0x50 bytes (SectionData +0x50 .. +0xA0)");
 }
 
 #endif

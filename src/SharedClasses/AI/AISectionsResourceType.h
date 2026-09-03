@@ -102,6 +102,16 @@ struct AISection
     // crosses a polygon edge with the query parameter in [0,1] and the edge parameter >= 0).
     // X360 @0x826772A8.
     bool PassesThrough(Vector2 lStart, Vector2 lEnd) const;
+
+    // ---- ADDITIVE (aiwave A6, 2026-09-03; DWARF AISectionsData.h:377 / :380) --------------
+    // The two mx8Flags tests every inlined caller emits in the DWARF order IsShortcut,
+    // IsAIShortcut: `clrlwi r11,r11,31` (bit 0x01) then `extrwi r11,r10,1,25` (bit 0x40) --
+    // RacingLineGenerator::ExtrapolateRouteBackwards @0x827825F4..0x8278262C (DWARF locals
+    // lbUseShortcuts / lbUseAIShortcuts, BrnRacingLineGenerator.cpp:3092/:3093), Forwards
+    // @0x82781B48..0x82781B64, and IsUnsuitableForResetOnTrackLink @0x8276AC18 above, which is
+    // exactly IsShortcut() || IsAIShortcut(). Inline so no other TU has to grow.
+    bool IsShortcut() const   { return (mx8Flags & 0x01) != 0; }   // :377
+    bool IsAIShortcut() const { return (mx8Flags & 0x40) != 0; }   // :380
 };
 
 // KU_AI_SECTIONS_DATA_VERSION (DWARF AISectionsData.h). NOTE the console's
@@ -141,6 +151,35 @@ public:
     // whose middle is closest to the query position.
     AISectionPointMap* BuildAISectionPointMap(CgsMemory::LinearMalloc* lpMalloc) const;  // :626
     u16                FindNearestAISection(Vector3 lPosition, AISectionPointMap* lpMap) const; // :623
+};
+
+// BrnAI::EResetSpeedType -- DWARF AISectionsData.h:14 (values verbatim). The reset speed a
+// SectionResetPair / an AICar's reset-on-track section carries (AICar::meResetSpeedType
+// @+0x14D0; AICar::Reset stores E_RESET_SPEED_TYPE_COUNT there). Added additively by the
+// AICar::Update wave (2026-09-03); SectionResetPair::meResetSpeed below is left as u32.
+enum EResetSpeedType
+{
+    E_RESET_SPEED_TYPE_CUSTOM                = 0,
+    E_RESET_SPEED_TYPE_NONE                  = 1,
+    E_RESET_SPEED_TYPE_SLOW                  = 2,
+    E_RESET_SPEED_TYPE_FAST                  = 3,
+    E_RESET_SPEED_TYPE_SLOW_NORTH_FACE       = 4,
+    E_RESET_SPEED_TYPE_SLOW_SOUTH_FACE       = 5,
+    E_RESET_SPEED_TYPE_SLOW_EAST_FACE        = 6,
+    E_RESET_SPEED_TYPE_SLOW_WEST_FACE        = 7,
+    E_RESET_SPEED_TYPE_SLOW_REVERSE          = 8,
+    E_RESET_SPEED_TYPE_STOP_REVERSE          = 9,
+    E_RESET_SPEED_TYPE_STOP_NORTH_FACE       = 10,
+    E_RESET_SPEED_TYPE_STOP_SOUTH_FACE       = 11,
+    E_RESET_SPEED_TYPE_STOP_EAST_FACE        = 12,
+    E_RESET_SPEED_TYPE_STOP_WEST_FACE        = 13,
+    E_RESET_SPEED_TYPE_STOP_NORTH_EAST_FACE  = 14,
+    E_RESET_SPEED_TYPE_STOP_SOUTH_WEST_FACE  = 15,
+    E_RESET_SPEED_TYPE_NONE_AND_IGNORE       = 16,
+    E_RESET_SPEED_TYPE_WEST_AND_IGNORE       = 17,
+    E_RESET_SPEED_TYPE_REVERSE_AND_IGNORE    = 18,
+    E_RESET_SPEED_TYPE_REVERSE_AND_IGNORE_SLOW = 19,
+    E_RESET_SPEED_TYPE_COUNT                 = 20,
 };
 
 // BrnAI::SectionResetPair -- a start section plus the section a reset sends you to

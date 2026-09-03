@@ -15,13 +15,25 @@
 //   +0x00  Array<CollectedBillboard,5> maCollectedBillboards   (maElements[5] @+0x00, miCount @+0x50)
 //   +0x58  FifoQueue<float,10>         maRoadRageTakedownTimes  (maData[10]@+0x58, read@+0x80,
 //                                                                write@+0x84, length@+0x88)
-//   +0x90  u64                         mlPendingRoadRageEventData (8-byte; zeroed in Construct via
-//                                                                  `std 0x90`; the pending road-rage
-//                                                                  takedown payload PreWorldUpdate
-//                                                                  publishes + clears)
+//   +0x90  CgsContainers::FastBitArray<8>  maTakenDownRaceCars   (single u64 field; zeroed in Construct via
+//                                                                  `std 0x90`. OnTakedown @0x8238E208's
+//                                                                  mode-0 arm SetBit()s the victim's active
+//                                                                  index into it (`r22 = this+0x90`, the
+//                                                                  inlined FastBitArray<8>::SetBit with its
+//                                                                  CgsFastBitArray.h:431 range assert) and
+//                                                                  then counts its set bits against
+//                                                                  active cars - 1; OnEventEnd @0x82396968
+//                                                                  `std 0, 0x90` clears it per event.)
 //   +0x98  CgsContainers::FastBitArray<15> maCompletedChallenges (single u64 field; SetChallengeCompleted
 //                                                                  sets bit `liChallengeIndex`; zeroed in
-//                                                                  Construct via `std 0x98`)
+//                                                                  Construct via `std 0x98`. It is the
+//                                                                  PENDING-PUBLISH set: PreWorldUpdate
+//                                                                  @0x8238D7A0..0x8238D840 posts the raw
+//                                                                  u64 as action 298 when it is non-zero
+//                                                                  and then `std 0, 0x98` clears it.)
+//   [takedown P1 wave 2026-09-03] +0x90/+0x98 were swapped in the earlier recon (+0x90 read as a
+//   "pending road-rage payload" and +0x98 as a persisted set); the three writers/readers above
+//   (OnTakedown / OnEventEnd / PreWorldUpdate) pin the identities.
 //   +0xA0  f32                         mlfCurrentRaceTime        (PreWorldUpdate `stfs f0,0xA0`)
 //   +0xA4  ProgressionManager*         mpProgressionManager      (Construct `stw r29,0xA4`)
 //   +0xA8  StreetManager*              mpStreetManager           (Construct `stw r28,0xA8`)
@@ -140,9 +152,13 @@ public:
     // challenge (and the car-specific variant when the player car id matches "PUSRI01").
     void OnTakedownChain(s32 liChainLength);
 
-    // X360 0x8238E208. A single takedown occurred. liEventType selects: 0 == the per-player
-    // road-rage "all takedowns" sweep, 3 == buffer this road-rage takedown time for the burst check.
-    void OnTakedown(s32 liEventType, u32 luPlayerIndex);
+    // X360 0x8238E208. A single takedown occurred. liGameModeType is the CURRENT GAME MODE TYPE
+    // (GameStateModule::ProcessTakedownEvents @0x8238FEBC passes `lwz r4, 0x1DB4(r29)` ==
+    // meCurrentGameModeType, and r5 = the event's victim index): 0 == E_MODE_OFFLINE_RACE runs the
+    // "took every rival down once" sweep over maTakenDownRaceCars, 3 == E_MODE_ROAD_RAGE buffers this
+    // takedown's time for the burst check. Any other mode is a no-op. (s32, not the enum, so this
+    // header pulls no GameStateModuleIO dependency; the caller passes the enum's value.)
+    void OnTakedown(s32 liGameModeType, u32 luVictimActiveRaceCarIndex);
 
     // X360 0x8238D860. A road-rule score event. liRoadRuleType: 0 == time-based (car-specific
     // "PUSMC01" challenge when fast enough), 1 == score-based (E_DEV_CHALLENGE_ROAD_RULE_SET).
@@ -186,8 +202,8 @@ private:
     // ---- layout (X360-asm-recovered; see file header) ----
     Array<CollectedBillboard, 5>          maCollectedBillboards;     // +0x00 (count @ +0x50)
     FifoQueue<f32, 10>                    maRoadRageTakedownTimes;   // +0x58 (read@+0x80/write@+0x84/len@+0x88)
-    u64                                   mlPendingRoadRageEventData;// +0x90 (pending road-rage event payload)
-    CgsContainers::FastBitArray<15>       maCompletedChallenges;     // +0x98 (one u64 field)
+    CgsContainers::FastBitArray<8>        maTakenDownRaceCars;       // +0x90 (one u64 field: victims this event)
+    CgsContainers::FastBitArray<15>       maCompletedChallenges;     // +0x98 (one u64 field: pending publish)
     f32                                   mlfCurrentRaceTime;        // +0xA0
     BrnProgression::ProgressionManager*   mpProgressionManager;      // +0xA4
     StreetManager*                        mpStreetManager;           // +0xA8

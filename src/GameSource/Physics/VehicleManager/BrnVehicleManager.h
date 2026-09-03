@@ -382,13 +382,26 @@ namespace Vehicle
         // DWARF h:1239 -- the FIVE-argument overload; X360 @0x82635B78 (the unnamed sub the
         // export set skipped; identity proof in the slice TU banner). BODIED in the slice TU.
         // (The 6-arg + EntityId overload @0x82635B00, DWARF h:1242, is CrashFatalRaceCars'
-        // callee and lands with that body.)
+        // callee -- LANDED 2026-09-03 with that body in BrnVehicleManager_CrashState.cpp.)
         void ForceRaceCarCrash(
             BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
             VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
             VehicleOutputInterface* lpVehicleOutputInterface,
             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
             EActiveRaceCarIndex leRaceCarIndex);
+
+        // DWARF h:1242 -- the SIX-argument overload; X360 @0x82635B00 (28 insns). Same commit as
+        // the five-argument one (SetRaceCarCrashing with zero contact geometry and E_TAKEDOWN_NONE)
+        // but the AGGRESSOR is the EntityId argument (the world id from CrashFatalRaceCars) and
+        // the two driver invulnerability latches are left alone. BODIED in
+        // BrnVehicleManager_CrashState.cpp. ADDITIVE 2026-09-03 (crash-state wave).
+        void ForceRaceCarCrash(
+            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
+            VehicleOutputInterface* lpVehicleOutputInterface,
+            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+            EActiveRaceCarIndex leRaceCarIndex,
+            EntityId lAggressorEntityId);
 
         // ⭐⭐ X360 @0x82633990 -- THE PRODUCER HALF of the above-ground down-ray whose RESULT
         // half (ProcessAboveGroundLineTestsResults, below) has been live all along. Its ONLY
@@ -440,8 +453,11 @@ namespace Vehicle
         void ProcessAftertouchEvents(s32 liRaceCarIndex,
                                      CgsModule::VariableEventQueue<1536, 16>* lpOutputQueue);
 
-        // ---- named FLAG trap stubs (BrnVehicleManagerLinkStubs.cpp) until their bodies land:
-        // DWARF h:953; X360 @0x82635C00 (322 insns).
+        // DWARF h:953; X360 @0x82635C00 (322 insns). BODIED 2026-09-03 (crash-state wave) in
+        // BrnVehicleManager_CrashState.cpp: drains the frame's ImpactEvent queue and, for every
+        // impact the local player is a party to, records the impact type/score/cooldown against the
+        // other car, applies AddSlam (+ AddShunt for shunt kinds) to the PLAYER car when the player
+        // is the victim, and posts the 12-byte game event 31.
         void UpdateVehicleImpacts(
             const CgsModule::EventQueue<ImpactEvent, 16>* lpImpactEventQueue,   // == VehicleInputInterface::ImpactEventQueue
             VehicleOutputInterface* lpVehicleOutputInterface,
@@ -449,7 +465,9 @@ namespace Vehicle
             VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
 
-        // DWARF h:1236; X360 @0x82640690 (264 insns).
+        // DWARF h:1236; X360 @0x82640690 (264 insns). BODIED 2026-09-03 (crash-state wave) in
+        // BrnVehicleManager_CrashState.cpp: the per-slot grinding/rubbing ticker (GUI flags on the
+        // 1 s edges, GRINDING takedowns via InstantTakedown) plus the vulnerability-time decay.
         void UpdateAggressiveDriving(
             f32 lfTimeStep,
             BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
@@ -486,7 +504,11 @@ namespace Vehicle
         void EndVehicleTractionLineTests(CgsModule::IOBufferStack* lpInputBufferStack,
                                          const VehicleInputInterface* lpInputInterface);
 
-        // DWARF h:1287; X360 body is an export-set hole (image-only).
+        // DWARF h:1287; X360 @0x826361C0 (280 insns -- no .ida-exports JSON; named by IDA's xref
+        // table as ForceRaceCarCrash @0x82635B00's caller and decoded from image.bin). BODIED
+        // 2026-09-03 in BrnVehicleManager_CrashState.cpp: the world-surface fatal-crash detector
+        // (a wheel on a "crash on contact" triangle -> ForceRaceCarCrash(6-arg); a wheel on water ->
+        // mStuntOffencesManager CAR_HAS_BEEN_RESET).
         void CrashFatalRaceCars(
             BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
             VehicleManagerOutputInterface* lpVehicleManagerOutputInterface,
@@ -944,15 +966,13 @@ namespace Vehicle
 
         // ---- FLAG: gate-bodied (BrnPhysicsConductorGates.cpp) from here down ------------------
 
-        // THE TWO SIDE LEGS OF THE TRACTION-LINE PRODUCER, GATED IN MATCHED Add<->Read PAIRS
-        // StartVehicleTractionLineTests and
-        // EndVehicleTractionLineTests are REAL as of this wave and run every frame; these six are
-        // the traffic and player-stuck legs, which a race car on the ground does not need
-        // (1,319 console instructions measured). THEY MUST STAY PAIRED: each Add posts one
-        // command per live object and the matching Read consumes exactly that many records off a
-        // SHARED cursor. Landing an Add without its Read leaks records into the next harvest;
-        // landing a Read without its Add makes it consume the race-car leg's answers. Reconstruct
-        // a PAIR at a time and delete both gates together.
+        // THE TWO SIDE LEGS OF THE TRACTION-LINE PRODUCER, kept in MATCHED Add<->Read PAIRS because
+        // EndVehicleTractionLineTests hands ONE result cursor to the three harvests in turn -- an
+        // Add without its Read leaks records into the next harvest, a Read without its Add consumes
+        // the race-car leg's answers.
+        //
+        // ⭐ THE PLAYER-STUCK LEG IS REAL AS OF 2026-09-03 (aiwave lane P2b), all four bodies in
+        // BrnVehicleManager_PlayerStuck.cpp, gates DELETED from BrnPhysicsConductorGates.cpp:
         //   0x825E9B28 (171) AddPlayerStuckInCollisionLineTests   <-> 0x825C3898 (118) ReadPlayerStuck...
         //   0x825E9DD8  (87) UpdatePlayerStuckInCollisionTest      (same leg; drives the spheres)
         //   0x825C4AB8 (147) UpdatePlayerStuckInCollisionSpheres   (same leg)
@@ -1154,10 +1174,18 @@ namespace Vehicle
 
         // @0x82629F20 (DWARF h:1539 / :4507; 1002 insns). ADDED 2026-09-02 (takedown-chain wave):
         // ProcessContactSpies' second call -- the Showtime-mode shunt pass over the race-car AND
-        // traffic spy queues (ApplyShowtimeShunt per qualifying contact). NOT BODIED: a log-once
-        // conductor gate in BrnPhysicsConductorGates.cpp until its closure (ApplyShowtimeShunt,
-        // GetTrafficInterest, two unidentified subs) lands.
+        // traffic spy queues (ApplyShowtimeShunt per qualifying contact). BODIED 2026-09-03
+        // (crash-state wave) in BrnVehicleManager_CrashState.cpp; the gate is deleted.
         void ProcessShowtimeShunts(const ContactSpy::ContactSpyData* lpContactSpies);
+
+        // @0x82619D28 (DWARF h:1308; 129 insns). ADDITIVE 2026-09-03 (crash-state wave): the one
+        // callee of ProcessShowtimeShunts. Shunts a FULLY-physical traffic vehicle horizontally
+        // away from lpShunter (AddShunt on its TrafficPhysics) by lvfMagnitude scaled by the
+        // clamped shunter/traffic mass ratio, unless it is already being slammed or shunted.
+        // Bodied in BrnVehicleManager_CrashState.cpp.
+        void ApplyShowtimeShunt(PhysicalTrafficVehicle* lpTrafficVehicle,
+                                const VehiclePhysics* lpShunter,
+                                VecFloat lvfMagnitude);
 
         // The per-contact working set the impact classifiers read/populate. Verbatim DWARF
         // layout (BrnVehicleManager.h:763). Pointer members use the forward-declared collaborators.
@@ -2899,5 +2927,29 @@ namespace Vehicle
         CGS_ASSERT(false, "Attempting to get local physics ID of unsupported entity type");
         return CgsSceneManager::EntityId(0xFFFFFFFFu);
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // The player round-robin occlusion line-test control word's bit vocabulary (DWARF
+    // BrnVehicleManager.h:1091..:1097, file-scope `extern const uint8_t`). The word is
+    // VehicleManager::mn8RoundRobinControlWord (+172464, DWARF :1042):
+    //   bit 0     front plane occluded          (knVehicleRoundRobinFrontPlaneOccluded)
+    //   bit 1     rear plane occluded           (knVehicleRoundRobinRearPlaneOccluded)
+    //   bits 2-3  which test runs THIS frame    (knVehicleRoundRobinNextTest mask; 0 / 4 / 8)
+    // Consumer: VehicleManager::DoPlayerStuckLineTests @0x825C3A70 (BrnVehicleManager_PlayerStuck.cpp)
+    //   `rlwinm r10, r11, 0,28,29` == & knVehicleRoundRobinNextTest (0x825C3B90), the 0/4/8 arms at
+    //   0x825C4A38..0x825C4A54, `ori 1`/`clrrwi 1` @0x825C49F0/F8, `ori 2`/`andi 0xFD` @0x825C49BC/C8,
+    //   and the moving-car reset `rlwimi r9, r8, 3,28,23` @0x825C3B7C == (word & 0xF0) | 8.
+    // knVehicleRoundRobinFrontPlaneToTest carries no value in the DWARF dump (the dumper omits a
+    // zero initialiser); the asm's plane-0 arm (`cmpwi cr6, r30, 0` @0x825C4A38) IS the front-plane
+    // arm, so 0 is attested, not assumed.
+    // ADDED 2026-09-03 (aiwave lane P2b).
+    // ---------------------------------------------------------------------------------------------
+    const u8 knVehicleRoundRobinFrontPlaneOccluded = 1;    // :1091
+    const u8 knVehicleRoundRobinRearPlaneOccluded  = 2;    // :1092
+    const u8 knVehicleRoundRobinPlaneBools         = 3;    // :1093
+    const u8 knVehicleRoundRobinNextTest           = 12;   // :1094
+    const u8 knVehicleRoundRobinFrontPlaneToTest   = 0;    // :1095 (see note above)
+    const u8 knVehicleRoundRobinRearPlaneToTest    = 4;    // :1096
+    const u8 knVehicleRoundRobinFrontSensorToTest  = 8;    // :1097
 }
 }

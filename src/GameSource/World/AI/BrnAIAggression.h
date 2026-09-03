@@ -62,8 +62,16 @@ namespace BrnAI
     };
 
     // Forward-declared collaborators (referenced by pointer only; homed by their own TUs).
-    class AIDriver;
-    class AICar;
+    // The class-key MUST match the owning headers (BrnAICar.h:113 `struct AICar`,
+    // BrnAIDriver.h:137 `struct AIDriver`). MSVC encodes the key in the mangled name (`U`
+    // for struct, `V` for class) and takes it from the FIRST declaration each TU sees, so
+    // spelling either of these `class` here makes every AIAggression method taking an
+    // AICar*/AIDriver* mangle as `...PEAVAIDriver@2@...` inside BrnAIAggression.obj while
+    // BrnAIDriver.obj calls the `...PEAUAIDriver@2@...` form -- LNK2019 on Construct and
+    // Update, which DO have bodies here, with two spellings that read identically in the
+    // linker diagnostic.
+    struct AIDriver;
+    struct AICar;
 
     // BrnAIAggression.cpp file-scope helper (X360 BrnAI::CurveToKeepLarge @0x827669C0). Shapes a
     // raw speed/curve input through the aggression overtake-speed curve; bodied in
@@ -102,7 +110,11 @@ namespace BrnAI
         // Aggression suitability / mode queries.
         bool    NotSuitableForAggression();
         bool    IsSuitableForAggression();
-        void    SetSuitabilityForAggression(bool lbSuitable);
+        // The console has NO out-of-line AIAggression::SetSuitabilityForAggression (names.tsv
+        // carries only AIModule::SetSuitabilityForAggression @0x8276E7C0, whose body ends in a
+        // plain `stb` to driver+0x1C60 == this+0x60). Restored inline here so the module body
+        // can make the call by name instead of poking the offset.
+        void    SetSuitabilityForAggression(bool lbSuitable) { mbIsSuitableForAggression = lbSuitable; }
         bool    IsInAggressiveMode();
         bool    IsInMarkedMan();
         bool    IsInPursuit();
@@ -168,6 +180,24 @@ namespace BrnAI
         void    UpdateAggressionStateOvertakeFast();
         void    UpdateAggressionStateBeFodder();
         void    UpdateAggressionStateHangAboutAhead(const AICar* lpPlayerCar);
+
+        // Named reads of two private members the X360 AIDriver bodies load directly (no DWARF
+        // accessor is declared for either; the console inlines the field read):
+        //   AIDriver::SetDrivingFanBiases @0x82770428 / CheckForBoosting @0x827705E0 read
+        //   meAggressionState (driver+0x1C00 == this+0x00); AIDriver::InitialiseRacingLine /
+        //   GenerateRacingLine read mbTargetPosValid (driver+0x1C44 == this+0x44).
+        EAIAggressionState GetAggressionState() const { return meAggressionState; }
+        bool               IsTargetPosValid() const   { return mbTargetPosValid; }
+
+        // Two more the X360 AIDriver bodies read INLINE rather than by calling the same-named
+        // members (which exist at their own addresses but are not reconstructed yet):
+        //   AIDriver::UpdateBehaviour @0x8279A728 / @0x8279A784 does `lbz r11, 0x1C60(driver)`
+        //     == mbIsSuitableForAggression (this+0x60) -- NOT a `bl IsSuitableForAggression`;
+        //   AIDriver::CheckForSpeedMatch @0x82793048 does `lwz r11, 0x1C58(driver)` and tests it
+        //     against 0 == meSpeedMatchType != ESpeedMatch_Disabled (this+0x58).
+        // Spelt as named reads here so those bodies never poke a raw offset.
+        bool IsSuitableForAggressionFlag() const { return mbIsSuitableForAggression; }
+        bool IsSpeedMatchingType() const         { return meSpeedMatchType != ESpeedMatch_Disabled; }
 
     private:
         // mRandom is a STATIC member in the DWARF (extern/shared across instances), so it

@@ -24,7 +24,7 @@ public:
     // constructed lazily by AStarNodePool::NewNode), so leaving the lanes uninitialised
     // is faithful. Layout is unchanged (mX@+0, mY@+4; no vtable).
     Vector2Template() {}
-    Vector2Template(Type lX, Type lY);
+    Vector2Template(Type lX, Type lY) : mX(lX), mY(lY) {}   // (defined inline 2026-09-03: the two-lane init the X360 emits as two stfs; was declared-only -> LNK2019)
 
     // Additive grow (World-AI group): the canonical rwmath component readers.
     // BrnAStar's distance heuristics read x/y from a Vector2Template<float> &;

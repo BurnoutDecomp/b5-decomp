@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"     // CgsCore::SPrintf
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // the [hud-rr] witness (CgsDev::Log::gpDebugPrint)
 #include "GameSource/Gui/BrnGuiCache.h"                     // GuiCache::GetCurrentTimeInEvent / Get*TakedownsInEvent
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"      // TextFieldRef::SetText / SetLocalisedText(s32, format)
 
@@ -54,6 +55,24 @@
 // GetCurrentTimeInEvent() (which carries the "0.0f <= mfEventTime" assert,
 // BrnGuiCache.h:2962) for the change test, and once through the real call to refresh
 // mfTimeLeft. Both are restored as getter calls; the getter carries the assert.
+//
+// NO "+1" FLASH STATE EXISTS ON THE CONSOLE (re-verified 2026-09-03, lane H). The
+// takedown counter drives exactly two animators with exactly two states each:
+//   SetTakedownsTextState   @0x82421758: +0x130 mTextStateAnimatorRRage
+//                             "Warning" @0x82421884 (current < target, `cmpw ; bge`)
+//                             "Normal"  @0x82421898 (current >= target)
+//   SetTakedownsDigitsState @0x824218A8: +0x168 mTakedownNumbersAnimator
+//                             "SingleDigit" @0x8242195C (current < 10, `cmpwi 0xA ; bge`)
+//                             "MultipleDigits" @0x82421970
+// The DWARF EventInfoComponent (BrnEventInfo.h:151-160) carries no other road-rage
+// animator, and the only flashing pair ("flashing"/"notFlashing") belongs to the CLOCK.
+// The per-takedown feedback the player sees is elsewhere: the "TAKEDOWN" HUD message
+// (HudMessageAnalyzer::HandleTakedown @0x8251C3C0 -> HandleCrashedEvent @0x8251C7C0
+// state 2) and the above-car banking score (AboveCarRenderer @0x824544D8).
+//
+// WITNESS: `[hud-rr] takedowns text <cur>/<target>` is logged after the two Apt text
+// writes, on change only, first 8 occurrences ([FLAG PC witness]; delete when the HUD
+// readout has been screenshot-verified against a console capture).
 // ============================================================================
 
 namespace BrnGui
@@ -134,10 +153,12 @@ void EventInfoComponent::UpdateRoadRage(GuiCache* lpCache)
     }
 
     // ---- 2. current takedowns -> maTextField[2] @0x82429B90-0x82429BBC ---
+    bool lbTakedownTextWritten = false;
     if (lpCache->GetCurrentTakedownsInEvent() != miCurrentTakedowns)
     {
         miCurrentTakedowns = lpCache->GetCurrentTakedownsInEvent();
         maTextField[2].SetLocalisedText(miCurrentTakedowns, KI_FORMAT_INTEGER);
+        lbTakedownTextWritten = true;
     }
 
     // ---- 3. target takedowns -> maTextField[3] @0x82429BC0-0x82429BEC ----
@@ -145,6 +166,23 @@ void EventInfoComponent::UpdateRoadRage(GuiCache* lpCache)
     {
         miTargetTakedowns = lpCache->GetTargetTakedownsInEvent();
         maTextField[3].SetLocalisedText(miTargetTakedowns, KI_FORMAT_INTEGER);
+        lbTakedownTextWritten = true;
+    }
+
+    // [FLAG PC witness] the final Apt text write of the takedown readout. Fires only on
+    // the frames the console itself rewrites a field (the two change tests above), and
+    // at most 8 times per process. No console counterpart. DELETE-WHEN: the road-rage HUD
+    // has been screenshot-verified against a console capture.
+    if (lbTakedownTextWritten)
+    {
+        static s32 siWitnessLeft = 8;
+        if (siWitnessLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            --siWitnessLeft;
+            *CgsDev::Log::gpDebugPrint
+                << "[hud-rr] takedowns text " << miCurrentTakedowns
+                << "/" << miTargetTakedowns << " [FLAG PC witness]\n";
+        }
     }
 
     // ---- 4. the two animator states, every frame @0x82429BF0-0x82429BFC --

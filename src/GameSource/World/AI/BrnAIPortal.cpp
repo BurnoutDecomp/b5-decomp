@@ -62,4 +62,8 @@ namespace BrnAI
                 - reinterpret_cast<uintptr_t>(lpBaseData));
         }
     }
+    // GetLinkSectionIndex (DWARF BrnAIPortal.h:273): the console inlines the `lhz 0x10(portal)` read
+    // (AStar::Compute / RouteRequestManager); no out-of-line export. Conductor, 2026-09-03.
+    u16 Portal::GetLinkSectionIndex() const { return mu16LinkSection; }
+
 }

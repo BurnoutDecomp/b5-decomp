@@ -1,6 +1,7 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribute.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribarray.h"        // Attrib::Array (element count / element data)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribclassprivate.h" // Attrib::ClassPrivate (inherited static data area)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribdatabaseprivate.h" // Attrib::DatabasePrivate (Node::GetTypeDesc indexed-type table)
 
 #include <cstdint> // uintptr_t
 #include <cstring> // memset
@@ -111,6 +112,38 @@ namespace Attrib
             lpArray = reinterpret_cast<const Array*>(mpValue);   // full-width payload
         }
         return lpArray->muNumElements;
+    }
+
+    // ========================================================================
+    // Attrib::Node::GetTypeDesc @ 0x828079E8
+    // ========================================================================
+    // Resolve this node's schema TypeDesc from the process attribute database's
+    // BY-INDEX type table. Store-for-store from 0x828079E8..0x82807A5C: read the
+    // database singleton (the inlined 'Attribute database not initialized.' assert +
+    // sThis read that Database::Get emits), follow its mPrivates, clamp mTypeIndex
+    // (`lhz r10,0xC(r30)`, the console offset of mTypeIndex) to 0 when it is at or past
+    // mNumCompiledTypes (`lwz r10,0x14(r9)`), then index mCompiledTypes
+    // (`addi r3,r9,0x18`) through the bounds-checked EASTL vector::operator[] and return
+    // the stored TypeDesc* (`lwz r3,0(r3)`).
+    //
+    // Landed 2026-09-03 with Attrib::Collection::~Collection @0x8280C3F8 -- Clear()'s
+    // phase-2 (class-layout) teardown is its live caller, and this was a CGS_ASSERT(false)
+    // link stub in GameSource/World/WorldLinkStubs.cpp until then. Members are reached by
+    // name off the committed x64 DatabasePrivate layout; the sibling Array::GetTypeDesc
+    // @0x828078B8 still walks the same fields by their console byte offsets.
+    const TypeDesc* Node::GetTypeDesc() const
+    {
+        DatabasePrivate* lpPrivates = GetDatabasePrivate();
+
+        u32 luIndex = mTypeIndex;
+        if (luIndex >= lpPrivates->mNumCompiledTypes)
+            luIndex = 0;
+
+        // The inlined bounds-checked eastl::vector<const TypeDesc*>::operator[]
+        // (@0x82803D48) the X360 bl's.
+        CGS_ASSERT(luIndex < lpPrivates->mCompiledTypes.Size(),
+                   "vector::operator[] -- out of range");
+        return lpPrivates->mCompiledTypes.mpBegin[luIndex];
     }
 
     // Bind a cursor to (instance, collection, node). Cache the value pointer eagerly

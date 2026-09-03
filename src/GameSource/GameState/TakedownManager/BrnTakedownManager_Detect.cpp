@@ -2,6 +2,7 @@
 #include "GameSource/GameState/BrnGameActions.h"                                   // OnPlayerTakedownAction / ShutdownAction / SetPlayerCarDriverAction
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"                       // ModeManager (mode type, IsOnlineGameMode, the mode-params flags)
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"          // GameModeParams::KU_FLAG_*
+#include "GameSource/GameState/Progression/BrnProgressionManager.h"                // ProgressionManager::OnPursuitWon (the free-burn rival shutdown)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"           // RaceCarCrashEvent / RaceCarState
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // MarkedManInterface
@@ -564,20 +565,13 @@ namespace BrnGameState
                     static_cast<s32>(sizeof(lShutdown)));
 
                 const CgsID lRivalId = lpActiveCarInterface->GetRivalId(GlobalIndex(leVictimActiveRaceCarIndex));
-                // FLAG parked leg: BrnProgression::ProgressionManager::OnPursuitWon @0x82389F40
-                // (mpProgressionManager, lRivalId, lpOutput->GetGameActionQueue()) -- the console credits
-                // the pursuit win here (FindRivalIndexFromId on the progression data, then the rival's
-                // shutdown bookkeeping). ProgressionManager has no OnPursuitWon in this tree yet; logged
-                // once instead of a raw post. DELETE-WHEN OnPursuitWon lands in BrnProgressionManager.
-                (void)lRivalId;
-                static bool sbPursuitWonLogged = false;
-                if (!sbPursuitWonLogged && CgsDev::Log::gpDebugPrint != nullptr)
-                {
-                    sbPursuitWonLogged = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[takedown] FLAG: rival shut down but ProgressionManager::OnPursuitWon (X360 0x82389F40) "
-                           "is not reconstructed -- the pursuit win is not credited this session.\n";
-                }
+                // 0x823940E4..0x823940F8: r5 = lpOutput->GetGameActionQueue() (the write-locked queue
+                // accessor), r4 = the rival id just read, r3 = `lwz 0x290(r30)` == mpProgressionManager,
+                // bl ProgressionManager::OnPursuitWon @0x82389F40 -- the pursuit win: FindRivalIndexFromId
+                // on the progression data, DefeatRivalAndUnlockCar, the 197 rival-state-change record and
+                // the forced autosave. Body: BrnProgressionManager_Rivals.cpp. (mpProgressionManager is
+                // wired by TakedownManager::Construct from GameStateModule_gTD_00.cpp, as on the console.)
+                mpProgressionManager->OnPursuitWon(lRivalId, lpOutput->GetGameActionQueue());
             }
         }
 

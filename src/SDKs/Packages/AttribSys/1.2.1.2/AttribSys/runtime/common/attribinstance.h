@@ -114,9 +114,12 @@ namespace Attrib
         // Drop one shared reference via HashMap::Release; on the final drop, queue this
         // collection onto the attribute database's garbage list for deferred deletion.
         int         Release();                       // @0x8280C2E8  (attribcollection.cpp)
-        // The real destructor (releases the attribute table this collection owns). Own
-        // AttribSys ledger TU (todo); declared so the scalar-deleting-destructor thunk
-        // (Collection_ScalarDeletingDtor @0x8280C510) links against it.
+        // @0x8280C3F8 -- the real destructor: unregister from the owning class's
+        // collection table, drop the class layout-table / parent-collection / source-vault
+        // references, Clear() every attribute, then release the bucket array. It does NOT
+        // free the collection block -- the GC bag drain and the scalar-deleting-destructor
+        // thunk (Collection_ScalarDeletingDtor @0x8280C510) each own that.
+        // Body: attribcollection.cpp.
         ~Collection();
 
         // ---- attribute table access (bodies in attribcollection.cpp) -----------------

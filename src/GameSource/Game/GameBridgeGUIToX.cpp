@@ -49,20 +49,10 @@
 // (BrnGameStateModule.h, included via BrnGameModule.hpp above); the PC body lives in
 // GameStateModule_gUI_00.cpp and returns the carry queue (the named reduction there).
 
-namespace BrnNetwork
-{
-    namespace BrnNetworkModuleIO
-    {
-        // X360 BrnNetwork::BrnNetworkModuleIO::TelemetryData::AddParameter -- appends one
-        // (SPrintf'd) parameter string to the telemetry record the case-286 GUI event builds.
-        // The record layout + the AddParameter body are owned by the network telemetry TU;
-        // modelled here as an opaque record with the attested member (no fields invented).
-        struct TelemetryData
-        {
-            void AddParameter(const char* lpcParameter);
-        };
-    }
-}
+// (The file-local TelemetryData stub that stood here was retired 2026-09-03: the real record --
+//  DWARF BrnNetworkSharedIO.h:542, 20 B -- and AddParameter(const char*) @0x82354010 now live in
+//  Network/SharedIO/BrnNetworkSharedIO.h / BrnNetworkSharedIO_Telemetry.cpp.)
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"
 
 namespace BrnGame
 {

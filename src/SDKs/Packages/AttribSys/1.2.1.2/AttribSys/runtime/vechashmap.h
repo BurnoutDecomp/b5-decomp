@@ -213,8 +213,8 @@ namespace Attrib
         // X360 0x82808980 -- RemoveIndex(index): vacate the bucket at luIndex (running
         // UpdateSearchLength to preserve the probe-run invariant) and return the
         // collection that was removed, or NULL when the index does not name a live
-        // bucket. Own ledger TU (declaration-only here); Attrib::Class::RemoveCollection
-        // calls it.
+        // bucket. Body: vechashmap.cpp (landed 2026-09-03 with
+        // Attrib::Collection::~Collection); Attrib::Class::RemoveCollection calls it.
         Collection* RemoveIndex(u32 luIndex);
 
     private:

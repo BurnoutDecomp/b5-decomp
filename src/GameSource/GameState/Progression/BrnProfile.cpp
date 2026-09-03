@@ -1387,6 +1387,45 @@ void Profile::SetTrainingAlreadySeen(ETrainingType leTrainingType)
 }
 
 // ====================================================================================
+// Profile::IsDeveloperChallengeComplete   (declared BrnProfile.h:611)
+//
+// The read twin of SetDeveloperChallengeComplete below. It has NO out-of-line symbol in the
+// ARTIST image -- every call site folds it inline -- so the body is recovered from those folds.
+// The clearest is BrnGameState::DeveloperChallengeManager::OnEventWin @0x8238DB10, which folds it
+// FIVE times, once per challenge it can trip (0x8238DC00, 0x8238DCA4, 0x8238DD70, 0x8238DF38,
+// 0x8238DFD8). Each fold is byte-identical apart from the mask:
+//
+//     lwz     r11, 0xA4(this)        ; mpProgressionManager
+//     add     r11, r11, 0x1D970      ; + 121200
+//     ld      r11, 0(r11)            ; the ONE 64-bit bit field, loaded whole
+//     cmpldi  r11, 0 ; beq -> result = 0
+//     rlwinm  r11, r11, 0,<b>,<b>    ; isolate the challenge's bit in the low word
+//     cmpldi  r11, 0 ; result = (bit != 0)
+//
+// 121200 is the SAME slot SetDeveloperChallengeComplete writes: that function reaches the array
+// as `this + 0x20000 - 0x2800` == Profile+0x1D800 (asm 0x82362330), and DeveloperChallengeManager
+// holds the ProgressionManager, whose embedded Profile starts at +0x170 (the manager's own
+// `addic. r11, r11, 0x170` GetProfile() assert) -- 0x170 + 0x1D800 == 0x1D970 exactly.
+// The five masks decode straight onto the five challenge indices the same function then passes to
+// SetChallengeCompleted, which pins index == bit number:
+//     rlwinm 0,23,23 -> 1<<8  -> li r4,8      rlwinm 0,22,22 -> 1<<9  -> li r4,9
+//     rlwinm 0,17,17 -> 1<<14 -> li r4,0xE    rlwinm 0,28,28 -> 1<<3  -> li r4,3
+//     rlwinm 0,27,27 -> 1<<4  -> li r4,4
+// so the body is FastBitArray<15>::IsBitSet(liChallengeIndex) and nothing else. The console's
+// "whole field != 0" pre-test in front of the mask is the compiler's own fast reject on a
+// single-field array (a set bit implies a non-zero field); it changes no result.
+//
+// NO range assert is reproduced: unlike the Set twin, not one of the five folds emits the
+// "Out of range developer challnge" assert pair, and every fold has a constant index, so there is
+// no evidence either way about a guard the compiler would have folded away. Inventing one would be
+// inventing behaviour; the caller-side indices are the enum's own.
+// ====================================================================================
+bool Profile::IsDeveloperChallengeComplete(s32 liChallengeIndex) const
+{
+    return mDeveloperChallengesCompleted.IsBitSet(static_cast<u32>(liChallengeIndex));
+}
+
+// ====================================================================================
 // Profile::SetDeveloperChallengeComplete  @ 0x823621F0
 // Set one developer-challenge-completed bit. The two range asserts stream "Out of range
 // developer challnge<i>.\n" ('challnge' typo is X360 rodata); the third is the

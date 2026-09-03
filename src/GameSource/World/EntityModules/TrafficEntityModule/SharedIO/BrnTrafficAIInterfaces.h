@@ -12,6 +12,7 @@
 //
 // The X360 build instantiates EventQueue<RivalInTrafficUpdateEvent,34>::Construct (0x82760750)
 // against the RivalInTrafficUpdateEvent element type defined here.
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (GetTrafficEntity)
 #include "types.hpp"                                       // u16/s32/f32
 #include "BrnCommonTypes.h"                                // Vector2, Vector3
 #include "GameSource/BurnoutConstants.h"                   // EActiveRaceCarIndex, EGlobalRaceCarIndex
@@ -69,8 +70,14 @@ namespace BrnTrafficIO
     public:
         void                   Construct();                                          // :137
         void                   AddTrafficEntity(const TrafficAIEntity& lrEntity);    // :142
-        const TrafficAIEntity* GetTrafficEntity(u16 lu16Index) const;                // :145
-        u16                    GetTrafficEntityCount() const;                        // :148
+        // (inline 2026-09-03, aiwave lane A3 request: no X360 out-of-line symbol -- the console reads the
+        //  two fields inline; the :267 assert is the console's own bound check on the index.)
+        const TrafficAIEntity* GetTrafficEntity(u16 lu16Index) const                 // :145
+        {
+            CGS_ASSERT(lu16Index < mu16EntityCount, "lu16Index < mu16EntityCount");   // :267
+            return &maActiveEntityList[lu16Index];
+        }
+        u16                    GetTrafficEntityCount() const { return mu16EntityCount; }   // :148
         void                   SetRivalAddedToTraffic(EGlobalRaceCarIndex leIndex);  // :154
         void                   SetRivalRemovedFromTraffic(EGlobalRaceCarIndex leIndex); // :159
         void                   UpdateRivalInTrafficSystem(Vector3 lTargetPosition, Vector3 lTargetDirection,

@@ -302,6 +302,22 @@ public:
     void SetAIAggresiveCarCount(s32 liCount)                                { miAIAggressiveCarCount = liCount; }   // sic, DWARF spelling
     void SetPlayerWreckCount(s32 liWreckCount)                              { miPlayerWreckCount = liWreckCount; }
 
+    // ---- ADDITIVE (aiwave lane A7, 2026-09-03): the READ side of the four setters above, plus
+    //      the A* one. BrnAI::AIModule::OnModeStart @0x82791DB8 is the consumer and the X360
+    //      INLINES every read (there is no `bl` to any getter): asm 0x82791F38 `lbzx <- 0x84C`,
+    //      0x82791F44 `lwzx <- 0x840`, 0x82791F4C `lwzx <- 0x844`, 0x82791F54 `lwzx <- 0x848`,
+    //      0x82791E4C/0x82791E64 `lwz 0x854`. Same (de-inlined) treatment, and the same reason,
+    //      as SetFlag/GetFlag above: the four members are private and this class published only
+    //      mutators, so no consumer outside the ModeManager could read a mode's AI configuration.
+    //      Note miAIAggressiveCarCount is a WORD member the console reads with `lbz` at its
+    //      big-endian LOW byte (+0x84F); the getter returns the whole s32 and the one caller
+    //      narrows it, which is the same value for any count that fits in a byte.
+    ERouteFindingStyle_Stub GetDefaultPlayerRouteFindingStyle() const { return meDefaultPlayerRouteFindingStyle; }
+    ERouteFindingStyle_Stub GetDefaultAIRouteFindingStyle() const     { return meDefaultAIRouteFindingStyle; }
+    EAISpeedSelMethod_Stub  GetAISpeedSelectionMethod() const         { return meAISpeedSelectionMethod; }
+    s32                     GetAIAggressiveCarCount() const           { return miAIAggressiveCarCount; }
+    EAStarDistFunc_Stub     GetAStarDistanceFunction() const          { return meAStarDistanceFunction; }
+
     // ===========================================================================================
     // [!!] OFFSET RUN CORRECTED 2026-08-26 (wave-B fix round) -- THIS WAS A LIVE DEFECT, not a
     // comment tidy. The committed block here read the run as

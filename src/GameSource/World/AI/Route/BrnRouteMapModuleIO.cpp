@@ -23,12 +23,16 @@ namespace RouteMapModuleIO
 
     // X360 0x8276B0A0 (W, :617) -- write-lock (status bit 3, `lbz 0(this); extrwi
     // r11,r11,1,28` == (*p>>3)&1); on failure streams "Not locked for writing".
-    // Returns this + 4 (`addi r3,this,4`), i.e. &mRouteResponseQueue. Caller
-    // RouteMapModule::Update. Faithfully tests the WRITE bit (do not "fix" to read).
+    // Returns this + 4 on the CONSOLE (`addi r3,this,4`), which IS &mRouteResponseQueue there.
+    // On this host the queue sits at +8 (BaseEventQueue<T> opens with a pointer), so the
+    // member is returned BY NAME -- the `this + 4` this used to return pointed into the
+    // padding between the status byte and mpEvents (fixed 2026-09-03, aiwave A5; the
+    // AIModuleIO twin in BrnAIModuleIO_OutputBuffer_Accessors.cpp already did it this way).
+    // Caller RouteMapModule::Update. Faithfully tests the WRITE bit (do not "fix" to read).
     u8* OutputBuffer::GetRouteResponseQueueForWrite()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return reinterpret_cast<u8*>(this) + KU_ROUTE_RESPONSE_QUEUE_OFFSET;
+        return reinterpret_cast<u8*>(&mRouteResponseQueue);
     }
 }
 }

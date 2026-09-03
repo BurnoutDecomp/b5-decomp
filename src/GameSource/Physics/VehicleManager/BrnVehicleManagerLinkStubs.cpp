@@ -101,41 +101,11 @@ namespace Vehicle
     // the real 923-insn SetRaceCarCrashing @0x82634C90 owns the symbol, exactly the flip this
     // stub's own text prescribed ("mount that chain and DELETE this stub").
 
-    // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
-    void VehicleManager::UpdateVehicleImpacts(
-        const CgsModule::EventQueue<ImpactEvent, 16>*,
-        VehicleOutputInterface*,
-        BrnPhysics::Vehicle::VehicleOutputRequestInterface*,
-        VehicleManagerOutputInterface*,
-        BrnPhysics::Deformation::DeformationInputInterface*)
-    {
-        // BOOT GATE (conductor wave 2026-08-09): reached every frame by the landed
-        // UpdateVehiclePhysics. Reconstruct and DELETE this gate.
-        static bool s_bLogged = false;
-        if (!s_bLogged)
-        {
-            s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate: VehicleManager::UpdateVehicleImpacts @0x82635C00 (322) inert [FLAG PC boot gate]\n";
-        }
-    }
-
-    // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
-    void VehicleManager::UpdateAggressiveDriving(
-        f32, BrnPhysics::Vehicle::VehicleOutputRequestInterface*,
-        VehicleManagerOutputInterface*, VehicleOutputInterface*,
-        BrnPhysics::Deformation::DeformationInputInterface*)
-    {
-        // BOOT GATE (conductor wave 2026-08-09): reached every frame by the landed
-        // UpdateVehiclePhysics. Reconstruct and DELETE this gate.
-        static bool s_bLogged = false;
-        if (!s_bLogged)
-        {
-            s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate: VehicleManager::UpdateAggressiveDriving @0x82640690 (264) inert [FLAG PC boot gate]\n";
-        }
-    }
+    // BOOT GATES DELETED 2026-09-03 (crash-state wave, lane P2a): VehicleManager::UpdateVehicleImpacts
+    // @0x82635C00 and VehicleManager::UpdateAggressiveDriving @0x82640690 are REAL in
+    // BrnVehicleManager_CrashState.cpp (LNK2005 if either reappears here). The census line above
+    // that called sub_821F0EC8 "unidentified" is settled: it is StrStream::operator<<(u32), assert
+    // text only.
 
     // BOOT GATE DELETED 2026-09-02 (takedown-chain wave, agent P): VehicleManager::UpdateCrashes
     // @0x825EA640 is REAL, in BrnVehicleManager_UpdateCrashes.cpp (LNK2005 if it reappears here).
@@ -156,22 +126,12 @@ namespace Vehicle
     // ⚠️ The stub's OTHER claim -- "arity CORRECTED to 1 param" -- is RETRACTED; the caller sets
     // r5 and the PS3 DWARF types it. See BrnVehicleManager.h.
 
-    // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet (.ida-exports hole).
-    void VehicleManager::CrashFatalRaceCars(
-        BrnPhysics::Vehicle::VehicleOutputRequestInterface*,
-        VehicleManagerOutputInterface*, VehicleOutputInterface*,
-        BrnPhysics::Deformation::DeformationInputInterface*, CgsSceneManager::EntityId)
-    {
-        // BOOT GATE (conductor wave 2026-08-09): reached every frame by the landed
-        // UpdateVehiclePhysics. Reconstruct and DELETE this gate.
-        static bool s_bLogged = false;
-        if (!s_bLogged)
-        {
-            s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate: VehicleManager::CrashFatalRaceCars (export hole; mbCrashRaceCarWhenFatal seeds TRUE) inert [FLAG PC boot gate]\n";
-        }
-    }
+    // BOOT GATE DELETED 2026-09-03 (crash-state wave, lane P2a): VehicleManager::CrashFatalRaceCars
+    // is REAL in BrnVehicleManager_CrashState.cpp, together with its 6-arg ForceRaceCarCrash
+    // @0x82635B00. The "genuinely absent" line in the banner above is half right: there is no JSON,
+    // but IDA's xref table names the body at **0x826361C0, 280 insns** (the words between
+    // InstantTakedown's end and PhysicalTrafficManagerDebugComponent::RenderWorld), and it was
+    // decoded from image.bin -- see that TU's banner for the register map.
 
     // Breaker @0x825C7BB8; DecFIGS BrnVehicleManager.cpp:9410.
     // A STALE SURFACELIST.BIN makes this walk die in Attrib::Collection::GetData ("Cannot

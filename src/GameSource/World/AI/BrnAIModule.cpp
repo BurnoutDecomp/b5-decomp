@@ -236,6 +236,26 @@ void AIModule::Construct()
     mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
     mePlayerGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_0;
 
+    // ⭐ 2026-09-03 (aiwave): the rest of the console Construct @0x82794D08 that now has named homes --
+    // the +322400..+322435 flag block (lane A1's member map), the +294784 Random prime,
+    // RouteRequestManager::Construct(+270952) and the 8x AIDriver::Construct.
+    miLineUpdateTokenCounter = 0;
+    muNumAggressiveCars      = 3;
+    mbDoInRangeCatchup       = true;
+    mbDoOutOfRangeCatchup    = true;
+    mbDoAggressiveDriving    = true;
+    mbEnableDrivingInput     = true;
+    mbIsInOnlineGameMode     = false;
+    mbIsInGameMode           = false;
+    mbAIDrivesPlayer         = false;
+    mbAIPlayerInvulnerable   = true;
+    mRandom.Construct();
+    mRouteRequestManager.Construct();
+    for (s32 liDriver = 0; liDriver < KI_MAX_ACTIVE_RACE_CARS; ++liDriver)
+    {
+        maAIDrivers[liDriver].Construct();
+    }
+
     // 0x82795... `stw r11(1), 4(r3)` -- the base Construct above cleared it. LOAD-BEARING.
     mbIsNewModule = true;
 }
@@ -370,7 +390,19 @@ bool AIModule::Prepare( BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
 
         case E_PREPARESTAGE_AICARS:
         {
-            // [FLAG PC boot gate] stage 4 parked whole -- see the banner.
+            // ⭐ 2026-09-03 (aiwave): stage 4 un-parked -- AIDriver::Prepare over the 8 active race cars
+            // (BrnAIDriver.cpp is mounted), the round-robin / proximity cursors, the closest-car pair and
+            // BuzzBy::Prepare (lane A1's member map of the +322400..+322832 block).
+            for (s32 liDriver = 0; liDriver < KI_MAX_ACTIVE_RACE_CARS; ++liDriver)
+            {
+                maAIDrivers[liDriver].Prepare(GetAISectionsData(), liDriver, &mRandom);
+            }
+            meCurrentRoundRobin[0] = E_ACTIVE_RACE_CAR_INDEX_0;
+            meCurrentRoundRobin[1] = E_ACTIVE_RACE_CAR_INDEX_0;
+            meProximityGlobalRaceCarIndexRoundRobin = E_GLOBAL_RACE_CAR_INDEX_0;
+            mfClosestDistance = 3.4028235e38f;
+            mpClosestCar      = 0;
+            mBuzzBy.Prepare(maAICars, &mResetOnTrackManager);
             mePrepareStage++;
         }
         // fall through

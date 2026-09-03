@@ -45,6 +45,7 @@ enum EGameEventType
     // BrnGameActions.h): 111 matches the X360 ProcessGameEvents @0x823A0A18 jump table's case 111
     // exactly, so its DWARF-contiguous neighbour 112 is trustworthy as-is.
     E_EVENT_REQUEST_PROP_PROGRESSION = 112,  // DWARF BrnGameEvents.h:122
+    E_EVENT_PLAYER_ROUTE_UPDATED    = 117,   // DWARF BrnGameEvents.h:127; posted by AIModule::UpdateCarRoutes @0x827955F0 (1-byte payload)
     E_EVENT_OVERHEAD_SIGN_HIT       = 118,   // DWARF BrnGameEvents.h:76
     // [P1 sim-pause] the four pause-family events the ProcessGameEvents pause arm consumes.
     // ⚠️ X360 VALUES, not the PS3 DWARF's: in this region the PS3 ids sit ONE HIGHER

@@ -2042,19 +2042,12 @@ void Attrib::DecodeLiveLinkMessage(char const *)
     CGS_ASSERT(false, "Attrib::DecodeLiveLinkMessage: attrib gap G6 -- reconstruct");
 }
 
-// LINK STUB (attrib mount closure): hashmap removal (gap G2, edit/GC path).
-Attrib::Collection * Attrib::CollectionHashMap::RemoveIndex(unsigned int)
-{
-    CGS_ASSERT(false, "Attrib::CollectionHashMap::RemoveIndex: attrib gap G2 -- reconstruct");
-    return 0;
-}
-
-// LINK STUB (attrib mount closure): node schema lookup (gap G2, GC/Clear path).
-Attrib::TypeDesc const * Attrib::Node::GetTypeDesc(void) const
-{
-    CGS_ASSERT(false, "Attrib::Node::GetTypeDesc: attrib gap G2 -- reconstruct");
-    return 0;
-}
+// (attrib gap G2 CLOSED 2026-09-03, attrib teardown wave.) The two stubs that used to
+// sit here -- Attrib::CollectionHashMap::RemoveIndex and Attrib::Node::GetTypeDesc --
+// are both on Attrib::Collection::~Collection's teardown path and are now real bodies in
+// their canonical vendor homes:
+//   RemoveIndex   @0x82808980 -> SDKs/.../AttribSys/runtime/vechashmap.cpp
+//   GetTypeDesc   @0x828079E8 -> SDKs/.../AttribSys/runtime/common/attribute.cpp
 
 // ---------------------------------------------------------------------------
 // RealmcIface::MemcardInterface base ctor/dtor -- TRIVIAL REAL BODIES (the
@@ -2133,21 +2126,9 @@ RealmcIface::MemcardInterface::~MemcardInterface()
 // @0x827AB8B0 is REAL in GameSource/World/Bridges/WorldBridgeCrashInputs.cpp. 17 instructions --
 // and they are the ONLY route by which a RaceCarCrashEvent reaches the crash module.
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827A5680 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgePhysicsModuleToAIModule_PostPhysics(void *,struct BrnAI::AIModuleIO::InputBuffer_PostPhysics *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePhysicsModuleToAIModule_PostPhysics: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-09-03 (aiwave lane A4): WorldModule::BridgePhysicsModuleToAIModule_PostPhysics @0x827A5680 is REAL in
+// GameSource/World/Bridges/WorldBridgeAIModule.cpp -- the contact-spy handle
+// into the AI post-physics input buffer (InputBuffer_PostPhysics::AppendContacts).
 
 // GATE RETIRED 2026-08-25 (crash exit): WorldModule::BridgeTrafficToCrashModule_PostPhysics
 // @0x827AD708 is REAL in GameSource/World/Bridges/WorldBridgeCrashInputs.cpp.
@@ -2251,37 +2232,12 @@ void WorldModule::BridgeCrashModuleToOutput(void *,struct BrnWorldIO::UpdateOutp
 //  PhysicsModuleIO::InputBuffer did the same for its vehicle-effects interface -- this bridge
 //  Appends 5,284 and 1,792 bytes into them respectively.)
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AB738 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeInputToAIModule(void *,struct BrnAI::AIModuleIO::InputBuffer *,struct BrnWorldIO::UpdateInputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeInputToAIModule: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-09-03 (aiwave lane A4): WorldModule::BridgeInputToAIModule @0x827AB738 is REAL in
+// GameSource/World/Bridges/WorldBridgeAIModule.cpp -- game actions, timer, race
+// distances, takedown ring, player controls and route requests into the AI input buffer.
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827A5020 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeTrafficModuleToAIModule_Update(void *,struct BrnAI::AIModuleIO::InputBuffer *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeTrafficModuleToAIModule_Update: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-09-03 (aiwave lane A4): WorldModule::BridgeTrafficModuleToAIModule_Update @0x827A5020 is REAL in
+// GameSource/World/Bridges/WorldBridgeAIModule.cpp.
 
 // GATE RETIRED 2026-08-26 (resetpump): WorldModule::BridgeRaceCarModuleToAIModule_PostScene
 // @0x827AD688 is REAL in GameSource/World/Bridges/WorldBridgeEntityModulesToAI.cpp, which is
@@ -2291,37 +2247,15 @@ void WorldModule::BridgeTrafficModuleToAIModule_Update(void *,struct BrnAI::AIMo
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
 // GATE RETIRED 2026-08-18 (wave Q4 bridges): WorldModule::BridgeAIToEntityModules_PrePhysics @0x827AD540 is REAL in GameSource/World/Bridges/WorldBridgePropModule.cpp.
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827A4F58 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeAIToEntityModules_PostPhysics(void *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostPhysics *,struct BrnAI::AIModuleIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeAIToEntityModules_PostPhysics: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-09-03 (aiwave lane A4): WorldModule::BridgeAIToEntityModules_PostPhysics @0x827A4F58 is REAL in
+// GameSource/World/Bridges/WorldBridgeAIModule.cpp -- the AI race-car view
+// into the race-car module (SetAIRaceCarInterface @0x8279E470, bodied there too).
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 the AI -> physics staging -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeAIModuleToPhysicsModule(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct BrnAI::AIModuleIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeAIModuleToPhysicsModule: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-09-03 (aiwave lane A4): WorldModule::BridgeAIModuleToPhysicsModule @0x827AAAA8 is REAL in
+// GameSource/World/Bridges/WorldBridgeAIModule.cpp -- an ARTIST export
+// HOLE recovered from the image; it forwards the AI driver events of every car the world marks
+// E_CAR_CONTROL_AI_MODULE into the physics vehicle-driver input. This gate was the reason no AI
+// rival could ever drive.
 
 // GATE RETIRED 2026-09-02 (scene-query wave 1): WorldModule::BridgePhysicsSceneQueriesToScene
 // @0x827A8D20 is REAL in GameSource/World/Bridges/WorldBridgePhysicsToScene.cpp (mounted this
@@ -2409,21 +2343,9 @@ void BrnWorld::TriggerEntityModule::PreSceneUpdate(struct CgsModule::IOBufferSta
 // reset-on-track pump (ProcessRequestInterface -> ResetOnTrackManager::Update) and NAMES the
 // fourteen AI-opponent legs it does not run; see that file's banner.
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the AI post-physics tick.
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnAI::AIModule::PostPhysicsUpdate(struct BrnAI::AIModuleIO::InputBuffer_PostPhysics const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "AIModule::PostPhysicsUpdate: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-09-03 (aiwave lane A4): BrnAI::AIModule::PostPhysicsUpdate @0x8276E428 is REAL in
+// GameSource/World/Bridges/WorldBridgeAIModule.cpp (parked there beside the
+// bridges that feed it; home TU BrnAIModule.cpp).
 
 // ⭐⭐ 2026-08-11 (lifetime wave): the PhysicsModule::UpdateCachedPositions @0x8259C370 boot gate
 // that stood here since 2026-07-27 is DELETED. The real 34-instruction body is in
@@ -2558,6 +2480,11 @@ void BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene::Construct()
 {
     memset(this, 0, sizeof(*this));   // FLAG PC: stands in for the unrecovered body
     CgsModule::IOBuffer::Construct();
+    // [aiwave 2026-09-03, lane A4 request] the console body @0x82761830 inlines
+    // TrafficAIInterface::Construct (BrnTrafficAIInterfaces.cpp, DWARF :137): without it the
+    // mUpdateRivalQueue the AI input buffer copies via SetTrafficAIInterface has mpEvents == NULL.
+    // The rest of the body (the other post-scene legs) is still the memset stand-in above.
+    mTrafficAIInterface.Construct();
 }
 // GATE RETIRED 2026-08-18 (breakable-props wave Q mount): BrnWorld::PropEntityIO::InputBuffer_PostPhysics::Construct @0x822EFDC8 (BrnPropEntityModuleIO_InputBuffer_PostPhysics.cpp; the memset gate left its queues un-Constructed) is now REAL.
 // GATE RETIRED 2026-08-18 (breakable-props wave Q mount): BrnWorld::PropEntityIO::InputBuffer_PrePhysics::Construct @0x822EFD68 (BrnPropEntityModuleIO_InputBuffer_PrePhysics.cpp) is now REAL.

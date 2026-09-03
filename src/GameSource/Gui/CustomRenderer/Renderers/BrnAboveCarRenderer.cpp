@@ -104,11 +104,11 @@ void AboveCarRenderer::Construct()
         }
     }
 
-    miTimeExtension = 0;    // +1714 (X360: *(a1+1714) = 0)
-    miAboveCarRendererPM = -1; // +1716 (X360 pre-seeds -1 before AddMonitor overwrites it below;
-                                // mbTimeExtensionPending, DWARF h:214, is NOT touched by Construct
-                                // in the X360 body -- left at its default-initialised value here,
-                                // matching store-for-store parity with the asm)
+    // [verify H 2026-09-03] CORRECTED: the store at +1714 is `stb r30(=0, li r30,0 @0x8245439C), 0x6B2(this)`
+    // @0x82454478 -- a BYTE into mbTimeExtensionPending (DWARF h:214, +0x6B2). The s16 miTimeExtension
+    // sits at +0x6B0 (1712) and is NOT written by Construct (RecvEvent id 427 @0x8245499C writes it).
+    mbTimeExtensionPending = false;   // stb 0, 0x6B2 @0x82454478
+    miAboveCarRendererPM = -1; // +1716 (X360 pre-seeds -1 before AddMonitor overwrites it below)
 
     miAboveCarRendererPM = CgsDev::PerfMonCpu::AddMonitor("AboveCarRenderer", 3, 0, 2.0, 0, 0);
     if (miAboveCarRendererPM < 0)

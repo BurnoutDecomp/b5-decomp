@@ -7,7 +7,7 @@
 
 #include "GameSource/World/AI/RacingLine/BrnRacingLineGenerator.h"
 
-#include "GameSource/World/AI/Route/BrnRacingLine.h"   // RacingLine cursor/index/flag triple
+#include "GameSource/World/AI/Route/BrnRacingLine.h"   // RacingLine spread-cursor triple + SectionData
 
 namespace BrnAI
 {
@@ -44,24 +44,25 @@ void RacingLineGenerator::SetupSectionExit(RacingLine* lpRacingLine, s32 liNodeI
 }
 
 // @0x8278F600
-// GetSectionPointer(current cursor) -> HardNoGoMap::MakeMap over the next line
-// budget window; on success bump the placed-section count, otherwise advance the
-// per-frame line cursor by one budget.
+// GetSectionPointer(miSectionToSpread) -> HardNoGoMap::MakeMap over the next line
+// budget window starting at miHNGLineStart; on success step miBackwardsStep, otherwise
+// advance miHNGLineStart by one budget. (Member names: DWARF BrnRacingLine.h:103/:106/:109,
+// pinned to the 0xBC0/0xBC4/0xBC8 stores of ClearSectionCache @0x8276E090.)
 void RacingLineGenerator::DropHardNoGoLinesIntoMap(RacingLine* lpRacingLine)
 {
     SectionData* lpCurrentSectionData =
-        GetSectionPointer(lpRacingLine, lpRacingLine->miCursor);
+        GetSectionPointer(lpRacingLine, lpRacingLine->miSectionToSpread);
 
-    const s32 liStart = lpRacingLine->miFlags;
+    const s32 liStart = lpRacingLine->miHNGLineStart;
     const s32 liEnd   = liStart + KI_MAX_HNG_LINES_TO_PLACE_PER_FRAME;
 
-    if (lpCurrentSectionData->mHardNoGoMap.MakeMap(lpCurrentSectionData->mpAISection, liStart, liEnd))
+    if (lpCurrentSectionData->mHardNoGoMap.MakeMap(lpCurrentSectionData->mpLineSection, liStart, liEnd))
     {
-        ++lpRacingLine->miActiveIndex;
+        ++lpRacingLine->miBackwardsStep;
     }
     else
     {
-        lpRacingLine->miFlags += KI_MAX_HNG_LINES_TO_PLACE_PER_FRAME;
+        lpRacingLine->miHNGLineStart += KI_MAX_HNG_LINES_TO_PLACE_PER_FRAME;
     }
 }
 }

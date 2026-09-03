@@ -77,6 +77,8 @@
 
 #include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"            // RouteResponseQueue
 #include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h"     // AICarOutputInterface
+#include "GameSource/World/AI/SharedIO/BrnRaceCarAIInterfaces.h"      // AIRaceCarInterface (mAIRaceCarInterface, DWARF :240)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"  // BrnPhysics::Vehicle::VehicleDriverInputInterface (mVehicleDriverInterface, DWARF :239)
 #include "GameSource/World/AI/SharedIO/BrnAIModuleResultInterface.h"  // AIModuleResultInterface
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"      // RequestInterface<N>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // VariableEventQueue<N,A>
@@ -134,11 +136,25 @@ namespace AIModuleIO
         u8*                                            GetGameEventQueue();
 
         // X360 0x8276D9C8 (W, :402) / 0x8279CA00 (R, :409).
-        u8* GetVehicleDriverInterface();
-        u8* GetVehicleInterface();
+        // RETYPED 2026-09-03 (aiwave lane A4): the member is the real
+        // BrnPhysics::Vehicle::VehicleDriverInputInterface (DWARF :239, `OutputBuffer::
+        // VehicleDriverInputInterface mVehicleDriverInterface`; the console Construct
+        // @0x8278AD2C calls Vehicle::VehicleDriverInputInterface::Construct on it and
+        // host sizeof == the console's 5296). The DWARF pair is :197 (W) / :200 (R const);
+        // the R const twin is what WorldModule::BridgeAIModuleToPhysicsModule @0x827AAAA8
+        // walks (VariableEventQueue<5040,16>::GetLength/GetFirstEvent/GetNextEvent on it).
+        // GetVehicleInterface() keeps its pre-wave u8* spelling of the same read seat.
+        typedef BrnPhysics::Vehicle::VehicleDriverInputInterface VehicleDriverInputInterface;   // DWARF :~60
+        VehicleDriverInputInterface*       GetVehicleDriverInterface();           // :197 (W)
+        const VehicleDriverInputInterface* GetVehicleDriverInterface() const;     // :200 (R) X360 0x8279CA00
+        u8*                                GetVehicleInterface();                 // pre-wave spelling of the R seat (kept)
 
-        // X360 0x8276DBC0 (W, :444).
-        u8* GetAIRaceCarInterface();
+        // X360 0x8276DBC0 (W, :444) / 0x8279CBF8 (R, :451 -- export HOLE, disassembled from
+        // the image: bit-4 test, "Not locked for reading\n", returns this+0x165D0).
+        // RETYPED 2026-09-03 (aiwave lane A4): the member is the real AIRaceCarInterface
+        // (DWARF :240; host sizeof == the console's 0x490, pointer-free). DWARF pair :215 / :218.
+        AIRaceCarInterface*       GetAIRaceCarInterface();          // :215 (W)
+        const AIRaceCarInterface* GetAIRaceCarInterface() const;    // :218 (R) X360 0x8279CBF8
 
         // X360 0x8276DD10 (W, :472) / 0x8279CD48 (R, :479).
         u8* GetAIModuleResultInterfaceForWrite();
@@ -157,15 +173,13 @@ namespace AIModuleIO
         // @X360 +0x1014.
         RouteMapModuleIO::RouteResponseQueue mRouteResponseQueue;
 
-        // @X360 +0x15120 / +0x165D0. NOMINAL SIZE, FLAGGED: these two interiors have no
-        // reconstructed type yet, so each is sized by the difference between its own attested
-        // start offset and its successor's (0x165D0 - 0x15120 == 0x14B0; 0x16A60 - 0x165D0 ==
-        // 0x490). Those differences are console-word-sized, so the byte counts are a FLOOR for
-        // the host, not a match -- they exist so the accessors hand out storage this object
-        // actually owns instead of pointing past its end. Replace with the real types
-        // (VehicleDriverInterface / AIRaceCarInterface) when their own TUs land.
-        u8 maVehicleDriverInterface[0x14B0];
-        u8 maAIRaceCarInterface[0x490];
+        // @X360 +0x15120 / +0x165D0 -- REAL TYPES since 2026-09-03 (aiwave lane A4). They were
+        // u8[0x14B0] / u8[0x490] blobs ("replace with the real types when their own TUs land");
+        // both TUs are on the bat (BrnVehicleDriverInputInterface.cpp, BrnAIRaceCarInterface.cpp)
+        // and both types are pointer-free, so the console extents (0x14B0 == 5296, 0x490 ==
+        // 1168) are the host sizes too -- pinned by static_asserts in the .cpp.
+        VehicleDriverInputInterface mVehicleDriverInterface;    // DWARF :239
+        AIRaceCarInterface          mAIRaceCarInterface;        // DWARF :240
 
         // @X360 +0x16A60 / +0x17F50 / +0x1AF30 -- all three have real reconstructed types.
         AICarOutputInterface                   mAICarOutputInterface;
