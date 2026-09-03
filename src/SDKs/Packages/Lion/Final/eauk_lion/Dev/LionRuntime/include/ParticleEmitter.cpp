@@ -8,10 +8,14 @@
 // calls on every boot. So this is not a "for later" body -- it executes 256 times before the
 // first frame.
 //
-// 2026-09-03: cParticleEmitter::InitialiseParticle @0x829116A8 joins it -- the function that
-// fills a particle's fourteen nucleus channels, and the reason sParticleNucleus needed a real
-// layout at all. It is NOT YET REACHED (nothing calls ParticleInsert until Update lands), and
-// that is stated rather than implied.
+// 2026-09-03: three more bodies join it --
+//   * InitialiseParticle @0x829116A8 -- fills a particle's fourteen nucleus channels, and the
+//     reason sParticleNucleus needed a real layout at all;
+//   * ParticleInsert     @0x829133C8 -- its only caller: reserve a bucket slot, initialise it;
+//   * IsGenerating       @0x8290D538 -- the pause / life / repeat schedule that decides whether
+//     this emitter emits anything in a given time window.
+// ⚠ NONE OF THE THREE IS REACHED YET, and that is stated rather than implied: the chain above
+// them (Update -> Generate -> Emit) is not reconstructed, so nothing calls ParticleInsert.
 //
 // The rest of the emitter -- Update (the simulation core), DeInit, Bind, BucketRemove -- is not
 // reconstructed and is announced in LionRuntimeLinkStubs.cpp rather than faked here.
@@ -23,6 +27,7 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleMaterial.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleLocator.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionBindings.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleTrigger.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionParticleEffectManager.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -297,4 +302,153 @@ void cParticleEmitter::InitialiseParticle(sParticleNucleus& arParticleNucleus,
     {
         *apParticleVector = arLocator.wa;
     }
+}
+
+// ================================================================================================
+// cParticleEmitter::ParticleInsert  @ 0x829133C8      (DWARF ParticleEmitter.h:303)
+//
+// Reserve the next free slot in apBucket and initialise the particle that lands in it. Returns
+// false when the bucket is full or the allocator refuses, true when a particle was born.
+//
+// ⭐ THIS IS THE FUNCTION THAT MAKES InitialiseParticle REACHABLE -- it is its only caller. The
+// three out-parameters cParticleBucket::AllocateParticle fills (the nucleus and the two optional
+// per-particle side-array slots) are handed straight on as InitialiseParticle's first three
+// arguments, and the caller's own apMatrix -- the SPAWN transform -- goes in as its `locator`.
+// Reading the register shuffle at 0x82913424..0x82913448 is what proves those are two different
+// matrices and not one passed twice:
+//     r6 <- var_50  (AllocateParticle's cMatrix** out: the bucket's per-particle matrix slot)
+//     r7 <- r28     (this function's apMatrix parameter: the spawn transform)
+//
+// ⚠ THE FULL TEST IS AN EQUALITY, NOT A `>=`. `cmplwi cr6, r11, 0x10 ; beq` at 0x829133F8 --
+// the console asks "is the fill position exactly 16", which is what cParticleBucket::IsFull()
+// spells. Written that way rather than "tightened" to >=; a bucket whose count ever exceeded 16
+// would run past its array on the console too, and hiding that would hide a real defect.
+//
+// ⚠ auSlot IS PASSED BY VALUE AND ITS ADDRESS IS HANDED TO THE ALLOCATOR. `stw r9, arg_44` at
+// 0x829133D8 spills the U32 parameter to its home slot and 0x8291340C passes &arg_44 as
+// AllocateParticle's `U32&` -- so the allocator writes the chosen slot index into this
+// function's own copy, and the caller never sees it. That is the console's shape, kept.
+// ================================================================================================
+bool cParticleEmitter::ParticleInsert(cParticleBucket* apBucket,
+                                      cMatrix* apMatrix,
+                                      const cVector& arVector,
+                                      const cTime& arTime,
+                                      cParticleRandomSeed& arSeed,
+                                      u32 auSlot,
+                                      const cTime& arCurrentLocatorTime)
+{
+    if (apBucket->IsFull())
+    {
+        return false;
+    }
+
+    sParticleNucleus* lpNucleus = nullptr;
+    cVector*          lpVector  = nullptr;
+    cMatrix*          lpMatrix  = nullptr;
+    if (!apBucket->AllocateParticle(auSlot, &lpNucleus, &lpVector, &lpMatrix))
+    {
+        return false;
+    }
+
+    InitialiseParticle(*lpNucleus, lpVector, lpMatrix, *apMatrix, arVector, arSeed,
+                       arTime, arCurrentLocatorTime);
+
+    // The bucket remembers when its youngest particle was born; the bucket manager's eviction
+    // pass signed-compares against it (`stw r11, 0xC(r31)` at 0x82913454).
+    apBucket->SetLatestBirthTime(arTime);
+    return true;
+}
+
+// ================================================================================================
+// cParticleEmitter::IsGenerating  @ 0x8290D538      (DWARF ParticleEmitter.h:186)
+//
+// Should this emitter emit anything in the window [arStartTime, arEndTime]? Four cheap rejects,
+// then the pause / life / repeat schedule.
+//
+// THE SCHEDULE, store for store:
+//   * lPause = arSeed.Build(descriptor.mPauseTime, mPauseTimeVariance)      -- seconds of delay
+//     before the emitter starts at all, drawn per call.
+//   * lLife  = arSeed.Build(descriptor.mEmitterLifeBase, mEmitterLifeVariance) -- how long it
+//     then runs.
+//   * Both times are measured from the TRIGGER's start stamp, not from the emitter's:
+//     `lwz r11, 4(r28)` at 0x8290D5BC reads cParticleTrigger::mTimeStart.
+//
+// ⚠ THE TWO TIME PARAMETERS ARE A WINDOW, AND THE ORDER MATTERS. r5 (arStartTime) and r6
+// (arEndTime) are subtracted from the same trigger stamp into two separate elapsed values
+// (f13 from r5, f12 from r6) and the tail tests BOTH -- an emitter whose whole active window
+// falls between two frames still fires, because the "already over" test is on f13 while the
+// "not yet begun" rescue is on f12.
+//
+// ⭐ THE REPEAT PATH SEEDS ITS OWN CLOCK, and it does it through mLastTime. On the first pass
+// with a repeating descriptor (DO_REPEAT, flag 0x4) mLastTime is 0, and the console fills it
+// with `(S32)(lPause * 3000.0f)` -- flt_820FEC3C, read out of the image as exactly 3000.0,
+// which is msfTicksPerSecond. So the repeat clock starts at the END of the pause, expressed in
+// ticks. That constant landing on the tick rate the DWARF and cTime's own reciprocal already
+// agree on is the third independent confirmation of 3000 Hz.
+//
+// ⚠ `if (lfElapsedStart > 0.0f) return false;` LOOKS DEAD AND IS NOT WRITTEN AS IF IT WERE. The
+// function has already returned false for lfElapsedStart < 0, so the only value that survives
+// to the last two tests is exactly 0.0 -- but that is the console's control flow (fcmpu/bgt at
+// 0x8290D6FC), not a simplification opportunity, and a future behaviour change to the guard
+// above would make it live again.
+// ================================================================================================
+bool cParticleEmitter::IsGenerating(cParticleRandomSeed& arSeed,
+                                    const cTime& arStartTime,
+                                    const cTime& arEndTime)
+{
+    const cParticleTrigger* lpTrigger = mpBindings->GetpTrigger();
+
+    // Four rejects, in the console's own order (0x8290D560..0x8290D590).
+    if ((mFlags & KU_FLAG_ACTIVE) == 0)   return false;
+    if (mpDescriptor == nullptr)          return false;
+    if (lpTrigger == nullptr)             return false;
+    if (!lpTrigger->IsRunning())          return false;
+
+    const cParticleDescriptor& lrDescriptor = *mpDescriptor;
+
+    const f32 lfPause = arSeed.Build(lrDescriptor.mPauseTime, lrDescriptor.mPauseTimeVariance);
+    const f32 lfLife  = arSeed.Build(lrDescriptor.mEmitterLifeBase,
+                                     lrDescriptor.mEmitterLifeVariance);
+
+    // Seconds since the trigger started, minus the pause -- i.e. seconds INTO the emitter's own
+    // active life, negative while it is still waiting.
+    const s32 liStartTicks = arStartTime.GetTimeDiff(lpTrigger->GetTimeStart());
+    const s32 liEndTicks   = arEndTime.GetTimeDiff(lpTrigger->GetTimeStart());
+    const f32 lfElapsedStart = static_cast<f32>(liStartTicks) * msfOneOverTicksPerSecond - lfPause;
+    const f32 lfElapsedEnd   = static_cast<f32>(liEndTicks)   * msfOneOverTicksPerSecond - lfPause;
+
+    if (lfElapsedStart < 0.0f)
+    {
+        return false;   // still inside the pause
+    }
+
+    if ((lrDescriptor.mFlags & cParticleDescriptor::E_FLAG_REPEAT) != 0)
+    {
+        const f32 lfRepeat = arSeed.Build(lrDescriptor.mRepeatTime,
+                                          lrDescriptor.mRepeatTimeVariance);
+
+        if (mLastTime.GetTicks() == 0)
+        {
+            // First pass: start the repeat clock at the end of the pause, in ticks.
+            mLastTime = cTime(static_cast<u32>(lfPause * msfTicksPerSecond));
+        }
+
+        const f32 lfSinceRepeatEnd =
+            static_cast<f32>(arEndTime.GetTimeDiff(mLastTime)) * msfOneOverTicksPerSecond;
+        if (lfSinceRepeatEnd > lfRepeat)
+        {
+            mLastTime = arEndTime;     // a new repetition begins here
+            return true;
+        }
+
+        const f32 lfSinceRepeatStart =
+            static_cast<f32>(arStartTime.GetTimeDiff(mLastTime)) * msfOneOverTicksPerSecond;
+        return lfSinceRepeatStart < lfLife;
+    }
+
+    // Non-repeating.
+    if (lrDescriptor.mEmitterLifeInfiniteFlag != 0)  return true;
+    if (lfElapsedStart <= lfLife)                    return true;
+    if (lfElapsedStart > 0.0f)                       return false;   // see the banner
+    return lfElapsedEnd >= 0.0f;
 }
