@@ -1021,16 +1021,33 @@ namespace Deformation
                     // (mpOtherVehicle == 0, where no arm can fire by construction) and the log
                     // ended before the first traffic contact. The rows that can answer the
                     // question are the CAR-CAR ones; the world contacts are the noise floor.
+                    // ⚠️⚠️ AND A THIRD TIME, FOR THE SAME REASON (run q1_FIX, 2026-09-03). The
+                    // car-car budget was spent 6000/6000 by ONE traffic-on-traffic collision
+                    // (gid 72 <-> gid 394, 3000 rows each) before the player reached anything,
+                    // so a run whose whole question is "what happens when the PLAYER rams
+                    // traffic" logged not one player-involved car-car row. Splitting by
+                    // "car-car vs world" was still the wrong axis: the axis that matters is
+                    // WHETHER THE PLAYER IS ONE OF THE TWO CARS. Traffic-on-traffic rows are the
+                    // new noise floor, so they get their own small budget and the player's get a
+                    // reserved one no pile-up can eat.
+                    // (owner byte: 1 == race car / the player's, 2 == traffic.)
                     static u32 suStMagShaped = 0;   // an arm fired
-                    static u32 suStMagCarCar = 0;   // car-car, no arm -- the refutation rows
+                    static u32 suStMagPlayer = 0;   // car-car with the PLAYER on either side
+                    static u32 suStMagCarCar = 0;   // traffic-on-traffic -- the noise floor
                     static u32 suStMagWorld  = 0;   // world contact -- context only
+                    const bool lbStPlayerPair =
+                        ( lContact.mpOtherVehicle != nullptr )
+                        && ( GetHandlingBodyIdHighByte() == 1
+                             || lContact.mpOtherVehicle->GetHandlingBodyIdHighByte() == 1 );
                     bool lbStBudget;
                     if      ( liStArm != 0 )                      { lbStBudget = ( ++suStMagShaped <= 6000u ); }
-                    else if ( lContact.mpOtherVehicle != nullptr ) { lbStBudget = ( ++suStMagCarCar <= 6000u ); }
+                    else if ( lbStPlayerPair )                    { lbStBudget = ( ++suStMagPlayer <= 6000u ); }
+                    else if ( lContact.mpOtherVehicle != nullptr ) { lbStBudget = ( ++suStMagCarCar <= 1500u ); }
                     else                                          { lbStBudget = ( ++suStMagWorld  <=  300u ); }
                     if ( siStMagProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && lbStBudget )
                     {
-                        const u32 luStMagLine = suStMagShaped + suStMagCarCar + suStMagWorld;
+                        const u32 luStMagLine =
+                            suStMagShaped + suStMagPlayer + suStMagCarCar + suStMagWorld;
                         *CgsDev::Log::gpDebugPrint
                             << "[st-mag] n "   << static_cast<s32>(luStMagLine)
                             << " present "     << static_cast<s32>(renderengine::guPresentCount)

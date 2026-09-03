@@ -386,10 +386,34 @@ void VehicleAttribs::EngineAttribs::Construct()
 //     The previous body prepared (0, src+0x84 * 0.5, 0) -- a curve of three near-zero control
 //     points, i.e. essentially no engine torque at all.
 //
-// FLAG: the record's own field ORDER is not in the DWARF (which names the 6 RwVector3 +
-// 12 Float members but not their layout offsets), so the field NAMES above are the roles the asm's
-// destination lanes assign, cross-checked against the shipped record's magnitudes -- gear-up RPMs
-// in the thousands, torque scales near 1, one negative gear ratio for reverse.
+// ✅ THE FLAG THAT USED TO STAND HERE IS DISCHARGED (2026-09-03). It said the field NAMES were
+// "the roles the asm's destination lanes assign", because the DWARF names the 6 RwVector3 +
+// 12 Float members without their layout offsets. They are now NAME-ATTESTED: the generated
+// class (references/DecFIGS/dwarfdump/GameSource/AttribSys/Generated/classes/
+// physicsvehicleengineattribs.h) lists all 18 members, and the record is laid out
+// REVERSE-ALPHABETICALLY -- vectors first, then floats:
+//   0x00 TorqueScales2  0x10 TorqueScales1  0x20 GearUpRPMs2  0x30 GearUpRPMs1
+//   0x40 GearRatios2    0x50 GearRatios1
+//   0x60 TransmissionEfficiency  0x64 TorqueFallOffRPM  0x68 MaxTorque  0x6C MaxRPM
+//   0x70 LSDMGearUpSpeed         0x74 GearChangeTime     0x78 FlyWheelInertia
+//   0x7C FlyWheelFriction        0x80 EngineResistance   0x84 EngineLowEndTorqueFactor
+//   0x88 EngineBraking           0x8C Differential
+// All TWELVE asm offsets land on the right name, including the two that were only ever roles
+// (0x84 == EngineLowEndTorqueFactor, and 0x88 == EngineBraking, the one lane the console never
+// streams). The burnout.wiki dump of record 181394 lists its rows in exactly this order and
+// agrees value for value with the live dump below.
+//
+// ⭐⭐ AND THE RECORD'S OWN GearChangeTime IS 0.0 -- CONSOLE DATA, NOT A LOAD DEFECT.
+// Measured 2026-09-03 (run q1_FIX, BRN_ENGINE_PROBE=1) on three different shipped cars, the
+// 0x70 row reads:   45.0   0.000000   0.2   250.0
+//                   ^LSDM  ^GearChangeTime  ^FlyWheelInertia  ^FlyWheelFriction
+// i.e. the three lanes AROUND it are correct and distinct (and match the wiki record's 0.2 /
+// 250), so a broken load cannot be the explanation for the one zero between them; every wiki
+// physicsvehicleengineattribs table gives GearChangeTime 0 as well, and Construct's default
+// (flt_82001CC0) is 0.0 too. ⇒ Engine::Update's `if (GetGearChangeTime() > lfTimer)` clutch cut
+// and its `if (lfTimer >= GetGearChangeTime())` flywheel gate are UNREACHABLE-BY-DATA on every
+// car the game ships: the console's gearbox changes gear instantaneously. ⛔ Do not "fix" the
+// zero, and do not attribute a clutch drop to the gear-change cut -- see Engine.cpp's note.
 void VehicleAttribs::EngineAttribs::InitializeFromAttribs(const void* lpSourceWrapper)
 {
     const f32* lpSrc = static_cast<const f32*>(lpSourceWrapper);
@@ -415,7 +439,12 @@ void VehicleAttribs::EngineAttribs::InitializeFromAttribs(const void* lpSourceWr
             ++siAttribDumps;
             for( s32 liRow = 0; liRow < 9; ++liRow )
             {
-                *CgsDev::Log::gpDebugPrint << "[engine-attribs] +0x";
+                // ⚠️ THE LABEL USED TO LIE. It printed the literal text "+0x" and then the
+                // offset in DECIMAL, so row 1 read "+0x16" for byte 0x10 and row 7 read
+                // "+0x112" for byte 0x70 -- every row past the first named a byte that is not
+                // the byte it holds, and reading GearChangeTime off such a dump means counting
+                // rows and hoping. It prints "+<dec>" now; the map below is the authority.
+                *CgsDev::Log::gpDebugPrint << "[engine-attribs] +";
                 *CgsDev::Log::gpDebugPrint << ( liRow * 16 );
                 for( s32 liCol = 0; liCol < 4; ++liCol )
                     *CgsDev::Log::gpDebugPrint << "  " << lpSrc[ liRow * 4 + liCol ];
