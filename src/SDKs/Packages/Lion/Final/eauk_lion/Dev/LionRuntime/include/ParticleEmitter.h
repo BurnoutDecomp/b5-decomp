@@ -154,6 +154,11 @@ public:
     cParticleEmitter*& GetNextEmitter()           { return mpNext; }
 
 private:
+    // ParticleEmitter.h:299 (DWARF) -- work out, ONCE per behaviour change, the per-emitter
+    // constants ParticleBuild would otherwise redo per particle per frame. X360 @0x8290E018.
+    // RECONSTRUCTED (ParticleEmitter.cpp).
+    void PrecalculateParticleBuildData();
+
     // ParticleEmitter.h:303 -- reserve the next free slot in apBucket and initialise the
     // particle that lands in it; false when the bucket is full or the allocator refuses.
     // X360 @0x829133C8. RECONSTRUCTED (ParticleEmitter.cpp) -- InitialiseParticle's only

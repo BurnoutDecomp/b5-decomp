@@ -28,5 +28,9 @@ struct cQuat
     // Writes the quaternion's rotation into the upper-left 3x3 of lMatrix and clears the
     // translation row/column to an identity affine. Returns the quaternion unchanged.
     // @ 0x8290A9D8
-    static cQuat& ToMatrix(cQuat& lQuat, Matrix44& lMatrix);
+    // ⚠ The DWARF (eauk_common/Maths/quat_c.inl:103) declares this as a CONST MEMBER over
+    // cMatrix: `void ToMatrix(cMatrix&) const`. The body below does not touch the
+    // quaternion, so the parameter is const here; the member-vs-static and cMatrix-vs-
+    // Matrix44 halves of that correction are the open follow-up named in ParticleLocator.h.
+    static const cQuat& ToMatrix(const cQuat& lQuat, Matrix44& lMatrix);
 };

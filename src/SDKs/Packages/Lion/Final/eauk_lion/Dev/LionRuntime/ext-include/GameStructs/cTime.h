@@ -83,6 +83,13 @@ struct cTime
         return static_cast<f32>(mTicks) * msfOneOverTicksPerSecond;
     }
 
+    // cTime.h:39. Ticks -> whole milliseconds. Attested by cParticleLocator::GetMat
+    // @0x8290E308, which emits it as `li r9, 3 ; divw. r9, r11, r9 ; beq` -- a guard on the
+    // from-key being at least one millisecond past zero. The divisor is the DWARF's own
+    // msuTicksPerMilliSecond, not a magic 3, and `divw` is a SIGNED divide, which is what
+    // an S32 tick count and an S32 return mean.
+    s32 GetTimeMilliSeconds() const { return mTicks / msuTicksPerMilliSecond; }
+
     // cTime.h:49. Zero the stamp. cParticleEmitter::Init @0x82913228 stores an integer 0
     // into mLastTime / mUpdateLastTime (`stw r11` with r11 == 0 at +0x19C / +0x1A0); this is
     // the DWARF's own name for that, and it is what keeps mTicks private.

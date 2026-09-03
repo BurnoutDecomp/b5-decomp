@@ -452,3 +452,150 @@ bool cParticleEmitter::IsGenerating(cParticleRandomSeed& arSeed,
     if (lfElapsedStart > 0.0f)                       return false;   // see the banner
     return lfElapsedEnd >= 0.0f;
 }
+
+// ================================================================================================
+// cParticleEmitter::PrecalculateParticleBuildData  @ 0x8290E018   (DWARF ParticleEmitter.h:299)
+//
+// Work out, ONCE per behaviour change, the constants ParticleBuild would otherwise redo per
+// particle per frame, and park them in mPrecalculatedParticleBuildData. Called from
+// cParticleEmitter::Init's single-behaviour arm and from Blend @0x8290F730.
+//
+// ⭐⭐⭐ THIS FUNCTION IS WHY unk_82FAC100 HAD TO BE RECOVERED BEFORE ANYTHING DOWNSTREAM OF IT
+// COULD LAND. It is the vector every Lion colour is multiplied by, it has THREE readers in the
+// export set and NO writer, and it lives in dynamically-initialised .bss -- so it reads
+// 0x00000000 straight out of the image BY DEFINITION. Zero is not a multiply's identity: land
+// this with a flagged zero and every particle in the game comes out BLACK, and it reads as a
+// shader bug. The previous wave decoded this body and deliberately did not land it for exactly
+// that reason, calling "almost certainly 1/255 per lane" a guess. It is no longer a guess:
+//
+//     tools/re/findinit.py 82FAC100  ->  6 sites; five are 0x829xxxxx game code (this
+//                                        function, cParticleBehaviour::Build @0x8290B044 and
+//                                        ColourStepsBehaviour::Process x3), the outlier
+//                                        0x82C4A128 is the CRT init bank.
+//     tools/re/ppcdis.py 0x82C4A110  ->  lfs f0, flt_82010C1C ; stfs to the stack ; lvlx ;
+//                                        vspltw v0,v0,0 ; stvx128 v0 -> 0x82FAC100
+//     tools/re/x360rd.py 82010C1C 4  ->  0x3B808081 == 0.003921568859368563 == 1/255
+//
+// So unk_82FAC100 is splat4(1/255): the u8 -> normalised-float colour scale. Its sibling
+// unk_82FAC220, recovered the same way through 0x82C4A0B0, is splat4(255.0f) -- the re-pack
+// scale cParticleBehaviour::Build uses on the way back.
+//
+// ⚠ AND THE INIT-ORDER HAZARD WAS CHECKED, NOT ASSUMED. A dynamically-initialised constant is
+// only correct if its thunk runs before its readers, and retail does ship init-order bugs whose
+// genuinely-0.0 value is the faithful thing to reproduce. Not here: all five readers are at
+// 0x829xxxxx, i.e. ordinary game code called long after CRT startup, and none is itself in the
+// 0x82C4xxxx init bank. There is no init-order window for a reader to fall into, so 1/255 is
+// what every one of them sees, and a named constant is the faithful reconstruction.
+//
+// ⭐ THE MEMBER NAMES CONFIRM THE ARITHMETIC INDEPENDENTLY, which is the corroboration this
+// reconstruction rests on beyond the asm. The DWARF names slot 4 mvDragFactorsVelRotScale and
+// the asm fills it from behaviour +0x484/+0x488/+0x48C, which the committed cParticleBehaviour
+// record already names mDragFactorVel / mDragFactorRot / mDragFactorScale -- in that order. It
+// names slot 2 mvScaleAndProportionalScaleYXAndZX and the asm fills y with
+// mSizeXYZBase.y / mSizeXYZBase.x and z with mSizeXYZBase.z / mSizeXYZBase.x -- "proportional
+// scale Y-over-X and Z-over-X", exactly. Two names, two offset sets, no assumptions.
+//
+// ⚠ ONE HOST DIVERGENCE, STATED: mvfOneOverFrameCount is a `vrefp` + two Newton-Raphson
+// refinements + a multiply by 1.0f on the console (asm 0x8290E240..0x8290E254), i.e. the VMX
+// expansion of `1.0f / x`, correctly rounded to about a ulp rather than exactly. The host
+// writes the true divide. That is the PC leaf diverging by construction; the RESULT is the same
+// reciprocal to within a ulp and nothing downstream compares it for equality.
+//
+// ⚠ WHAT THIS DOES NOT WRITE: slot 0, mvDeltaTimeAndCurrentTime. It is per-frame state, filled
+// by the simulation step, not a per-behaviour constant.
+// ================================================================================================
+namespace
+{
+// unk_82FAC100 -- splat4(1/255). See the banner: CRT thunk @0x82C4A110 <- flt_82010C1C.
+// The exact bits matter, so it is written as the image's float, not as `1.0f / 255.0f`.
+const f32 KF_COLOUR_U8_TO_UNIT = 0.003921568859368563f;   // 0x3B808081
+
+// flt_820FEC48, loaded twice at 0x8290E038 into both live lanes of slot 3. The DWARF names the
+// slot mvOrientStepAndDragFrameRateConstants, so these are the orient step and the drag
+// frame-rate reference; the console stores the SAME literal in both.
+const f32 KF_ORIENT_STEP           = 0.05f;   // flt_820FEC48 == 0x3D4CCCCD
+const f32 KF_DRAG_FRAME_RATE_CONST = 0.05f;   // flt_820FEC48, the second lane
+
+// One `lwz` + four byte extracts + `vcfux` + `vmulfp128 <1/255>` group. The console unpacks the
+// packed word LOW BYTE FIRST into lane x -- and E_LION_MEMBER_COLOUR is byte-swapped as a
+// 32-BIT VALUE by sLionMemberToken::EndianTwiddle @0x82908B48, so the word's numeric value is
+// endian-invariant and its low byte is the FIRST channel on both platforms. On this
+// little-endian host that low byte is cColour8::r at +0, which is why this reads by name with
+// no shifting at all.
+inline void NormaliseColour(rw::math::vpu::Vector3Plus& arOut, const cColour8& arColour)
+{
+    arOut.x = static_cast<f32>(arColour.r) * KF_COLOUR_U8_TO_UNIT;
+    arOut.y = static_cast<f32>(arColour.g) * KF_COLOUR_U8_TO_UNIT;
+    arOut.z = static_cast<f32>(arColour.b) * KF_COLOUR_U8_TO_UNIT;
+    arOut.w = static_cast<f32>(arColour.a) * KF_COLOUR_U8_TO_UNIT;
+}
+}  // namespace
+
+void cParticleEmitter::PrecalculateParticleBuildData()
+{
+    const cParticleBehaviour& lrBehaviour = *mpCurrentBehaviour;   // lwz r11, 0x20C(r3)
+    ParticleBuildData& lrData = mPrecalculatedParticleBuildData;
+
+    // --- slot 1: mvAlphaFadeInAndFadeOut (+0x230) -- asm 0x8290E058 / 0x8290E084.
+    // Two lane inserts, so the z/w lanes keep whatever the previous behaviour left; that is
+    // what a Vector2 member assignment compiles to and it is reproduced, not tidied.
+    lrData.mvAlphaFadeInAndFadeOut.x = lrBehaviour.mAlphaFadeIn;
+    lrData.mvAlphaFadeInAndFadeOut.y = lrBehaviour.mAlphaFadeOut;
+
+    // --- slot 2: mvScaleAndProportionalScaleYXAndZX (+0x240) -- asm 0x8290E0A4..0x8290E0EC.
+    // Plain `fdivs`, no zero guard: a behaviour authored with mSizeXYZBase.x == 0 divides by
+    // zero on the console too.
+    lrData.mvScaleAndProportionalScaleYXAndZX.x = lrBehaviour.mScale;
+    lrData.mvScaleAndProportionalScaleYXAndZX.y =
+        lrBehaviour.mSizeXYZBase.y / lrBehaviour.mSizeXYZBase.x;
+    lrData.mvScaleAndProportionalScaleYXAndZX.z =
+        lrBehaviour.mSizeXYZBase.z / lrBehaviour.mSizeXYZBase.x;
+
+    // --- slot 3: mvOrientStepAndDragFrameRateConstants (+0x250) -- asm 0x8290E108, a full
+    // 16-byte store of the vector built at the top of the function: (K, K, 0, 0).
+    lrData.mvOrientStepAndDragFrameRateConstants.x = KF_ORIENT_STEP;
+    lrData.mvOrientStepAndDragFrameRateConstants.y = KF_DRAG_FRAME_RATE_CONST;
+    lrData.mvOrientStepAndDragFrameRateConstants.z = 0.0f;
+    lrData.mvOrientStepAndDragFrameRateConstants.w = 0.0f;
+
+    // --- slot 5: mvRGBADiff (+0x270) -- asm 0x8290E110..0x8290E11C. The behaviour's mRGBADiff
+    // is already a float vector in 0..255 units (cParticleBehaviour::Build @0x8290B15C writes
+    // it as (c1/255 - c0/255) * 255); this normalises it to 0..1.
+    lrData.mvRGBADiff.x = lrBehaviour.mRGBADiff.x * KF_COLOUR_U8_TO_UNIT;
+    lrData.mvRGBADiff.y = lrBehaviour.mRGBADiff.y * KF_COLOUR_U8_TO_UNIT;
+    lrData.mvRGBADiff.z = lrBehaviour.mRGBADiff.z * KF_COLOUR_U8_TO_UNIT;
+    lrData.mvRGBADiff.w = lrBehaviour.mRGBADiff.w * KF_COLOUR_U8_TO_UNIT;
+
+    // --- slots 6..8: the three packed colours (+0x280 / +0x290 / +0x2A0) -- asm 0x8290E120,
+    // 0x8290E15C and 0x8290E1C0. Note the ORDER: the console reads mRGBA0, then mRGBAVar, then
+    // mRGBABase, into the DWARF's mvRGBA0 / mvRGBAVar / mvRGBABase slots.
+    NormaliseColour(lrData.mvRGBA0,    lrBehaviour.mRGBA0);
+    NormaliseColour(lrData.mvRGBAVar,  lrBehaviour.mRGBAVar);
+    NormaliseColour(lrData.mvRGBABase, lrBehaviour.mRGBABase);
+
+    // --- slots 9/10: the animation frame count and its reciprocal (+0x2B0 / +0x2C0) --
+    // asm 0x8290E1FC..0x8290E258. `lwz 0x4C(descriptor)` is mpMaterial, `lwz 0x34(material)`
+    // is mFrameCount, and the `std`/`lfd`/`fcfid`/`frsp` chain is the SIGNED s32 -> f32
+    // convert (mFrameCount is S32). Both slots are splatted across all four lanes.
+    const cParticleMaterial& lrMaterial = *mpDescriptor->Material();
+    const f32 lfFrameCount = static_cast<f32>(lrMaterial.mFrameCount);
+
+    lrData.mvfFrameCount.x = lfFrameCount;
+    lrData.mvfFrameCount.y = lfFrameCount;
+    lrData.mvfFrameCount.z = lfFrameCount;
+    lrData.mvfFrameCount.w = lfFrameCount;
+
+    const f32 lfOneOverFrameCount = 1.0f / lfFrameCount;
+    lrData.mvfOneOverFrameCount.x = lfOneOverFrameCount;
+    lrData.mvfOneOverFrameCount.y = lfOneOverFrameCount;
+    lrData.mvfOneOverFrameCount.z = lfOneOverFrameCount;
+    lrData.mvfOneOverFrameCount.w = lfOneOverFrameCount;
+
+    // --- slot 4: mvDragFactorsVelRotScale (+0x260) -- asm 0x8290E25C..0x8290E280, and LAST in
+    // the console's own store order, which is why it is last here. A full 16-byte store, so the
+    // w lane is written zero rather than left alone.
+    lrData.mvDragFactorsVelRotScale.x = lrBehaviour.mDragFactorVel;
+    lrData.mvDragFactorsVelRotScale.y = lrBehaviour.mDragFactorRot;
+    lrData.mvDragFactorsVelRotScale.z = lrBehaviour.mDragFactorScale;
+    lrData.mvDragFactorsVelRotScale.w = 0.0f;
+}
