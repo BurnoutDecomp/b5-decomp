@@ -276,13 +276,13 @@ void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
 
     if (lbWitness)
     {
-        char lacMsg[320];
+        char lacMsg[384];
         std::snprintf(lacMsg, sizeof(lacMsg),
-            "[boosttag] #%u ExtractTags RAN: locators=%u boostTags=%u "
-            "tagTypesSeen(bit n == tag n, only n<32)=%08X. FXBOOSTPOINT1..4 are tags "
-            "41..44, which do NOT fit that mask -- a mask of 0 with locators>0 means the "
-            "list is populated and none of its low tags is a boost point.\n",
-            suExtractWitness, luNumLocators, mBoostMachine.muNumBoostTags, luTagTypeMask);
+            "[boosttag] #%u ExtractTags RAN: locators=%u boostTags=%u highestTag=%u "
+            "tagTypesSeen(bit n == tag type n, n<64)=%016llX  "
+            "FXBOOSTPOINT1..4 == bits 41..44 == mask 00001E0000000000.\n",
+            suExtractWitness, luNumLocators, mBoostMachine.muNumBoostTags, luHighestTag,
+            static_cast<unsigned long long>(luTagTypeMask));
         CgsDev::Log::WriteToLog(lacMsg);
     }
 
