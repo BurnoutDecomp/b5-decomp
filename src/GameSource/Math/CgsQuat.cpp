@@ -109,7 +109,7 @@ cQuat& cQuat::FromMatrix(cQuat& lResult, const Matrix44& lMatrix)
 // 2xz+2wy, 2xy+2wz, 1-2x2-2z2, 2yz-2wx, 2xz-2wy, 2yz+2wx, 1-2x2-2y2 -- is present in the
 // asm and matched to its destination lane). The translation row/column are cleared to the
 // identity affine (idx3/7/11/12/13/14 = 0, idx15 = 1).
-cQuat& cQuat::ToMatrix(cQuat& lQuat, Matrix44& lMatrix)
+const cQuat& cQuat::ToMatrix(const cQuat& lQuat, Matrix44& lMatrix)
 {
     const f32 lfX = lQuat.x;
     const f32 lfY = lQuat.y;
