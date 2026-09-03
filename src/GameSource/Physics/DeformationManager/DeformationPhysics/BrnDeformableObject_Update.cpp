@@ -22,6 +22,7 @@
 // The present counter, so an [st-mag] line names the dumped frame it belongs to (the dump writes
 // bb_<present>.bmp). Same extern the [deform-bbox] witness takes (BrnDeformableObject_BBox.cpp:19).
 namespace renderengine { extern u32 guPresentCount; }
+#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"                // [diag] BRN_FRAME_DUMP_ARM=x15
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"             // BrnPhysics::Vehicle::Wheel (UpdateWheels seats / twists / detaches it)
 
 // =================================================================================================
@@ -878,9 +879,19 @@ namespace Deformation
 
             // per-direction params: the direction index (`stw r30, var_290` @0x82607C8C) and this
             // direction's limit row (`lvx128 v11, dir*16(var_1D0) ; stvx128 v11, var_250`
-            // @0x82607C50/0x82607C58). The friendly-fire / double-bounce displacement scaling
-            // (other car +26414 / vehicle crashed -> the FLAGGED double-bounce damp row) folds in
-            // here; all rows are FLAGGED-0, so the shaping is inert.
+            // @0x82607C50/0x82607C58).
+            // ⚠️ THE SENTENCE THAT USED TO END THIS PARAGRAPH IS STALE AND WAS COSTING WAVES A
+            // WRONG CONCLUSION. It said the friendly-fire / double-bounce displacement scaling
+            // "folds in here; all rows are FLAGGED-0, so the shaping is inert". They are NOT
+            // flagged zeros any more: the four rows were resolved from their CRT init thunks and
+            // are named 270 lines below in this same file --
+            //   unk_82FB8060 @82C5D610 <- flt_8200426C == 5.0   (world-crash impulse row)
+            //   unk_82FB8300 @82C5D638 <- flt_8208F9D4 == 20.0  (car-car crash impulse row)
+            //   unk_82FB7F50 @82C5D5E8 <- flt_82005450 == 0.9   (local-force row)
+            //   unk_82FB9720 @82C5D840 <- flt_82002540 == 1e-4  (tangential gate)
+            // Only unk_82FB9D40 (@82C5D5C0 <- the shared 0.0) is genuinely zero, deliberately.
+            // A file's own comment can be the regression: this one was read as evidence that a
+            // 20x displacement row was dead, when the block that implements it is right there.
             lParams.meImpulseDirection = static_cast<ENextSensorDirection>(liDir);
             lParams.mLimitVector       = laLimitRows[liDir];   // 0x82607C50 / 0x82607C58
 
@@ -989,6 +1000,21 @@ namespace Deformation
                     {
                         lfShapedMagnitude *= KF_SHOWTIME_MAG_VICTIM_GAIN;               // 15.0
                         liStArm = 2; lfStGain = KF_SHOWTIME_MAG_VICTIM_GAIN;
+
+                        // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. The film arm --
+                        // BRN_FRAME_DUMP_ARM=x15 holds the back-buffer writer until this rises,
+                        // so a strip of the showtime victim gain starts at the frame it fires
+                        // instead of at boot. STICKY; four plain stores, no branch on an env
+                        // var, because the ONLY reader is itself opt-in. See BrnDiagFilmLatch.h.
+                        if ( BrnDiag::gFilmLatch.muVictimGainLatched == 0u )
+                        {
+                            BrnDiag::gFilmLatch.muVictimGainPresent =
+                                renderengine::guPresentCount;
+                            BrnDiag::gFilmLatch.miVictimGainGid =
+                                static_cast<s32>((GetGlobalEntityId().muValue >> 10) & 0x3FFFu);
+                            BrnDiag::gFilmLatch.mfVictimGainShaped = lfShapedMagnitude;
+                            BrnDiag::gFilmLatch.muVictimGainLatched = 1u;
+                        }
                     }
                 }
 

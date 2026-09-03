@@ -356,10 +356,21 @@ static void DumpBackBufferIfRequested()
         //                   never runs, the latch never rises and the writer holds for ever,
         //                   which is a SILENT no-dump; check for "[dv] STEP" in the log before
         //                   reading anything into an empty frame directory.
+        //   "x15"        -- hold until the SHOWTIME VICTIM GAIN fires (BrnDiag::gFilmLatch.
+        //                   muVictimGainLatched, raised by DeformableObject::ApplySensorImpulse
+        //                   the first time a car is struck BY a car that is in showtime, i.e.
+        //                   the x15 arm at @0x82607D78..0x82607DD0). That event needs three
+        //                   things at once that no harness flag can force -- the player in
+        //                   showtime, traffic in reach, and a contact between them -- so it is
+        //                   rare: one run in six, 48 sensor rows over 15 presents. ⛔ `dv` is
+        //                   NOT a substitute: in the run where the gain did fire, the dv latch
+        //                   rose 520 presents earlier and a 48-frame strip from it ended long
+        //                   before the event. Needs BRN_SHOWTIME_WATCH only for the matching log
+        //                   lines; the latch itself is unconditional.
         //   anything else truthy -- hold until the traffic swerve camera latches (the
         //                   original arm; unchanged, so every existing recipe still works)
         static int siArm = -1;      // 0 none, 1 swerve camera, 2 slomo, 3 traffic ram, 4 skid,
-                                    // 5 [dv] one-step velocity
+                                    // 5 [dv] one-step velocity, 6 showtime victim gain
         static f32 sfRamMinSpeed = 0.0f;
         static u32 suMax = 0u;
         if (siArm < 0)
@@ -386,6 +397,10 @@ static void DumpBackBufferIfRequested()
             else if (_stricmp(lacArm, "dv") == 0)
             {
                 siArm = 5;
+            }
+            else if (_stricmp(lacArm, "x15") == 0)
+            {
+                siArm = 6;
             }
             else
             {
@@ -418,6 +433,10 @@ static void DumpBackBufferIfRequested()
             return;
         }
         if (siArm == 5 && BrnDiag::gFilmLatch.muDvLatched == 0u)
+        {
+            return;
+        }
+        if (siArm == 6 && BrnDiag::gFilmLatch.muVictimGainLatched == 0u)
         {
             return;
         }
