@@ -38,8 +38,9 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"   // CgsResource::SafeResourceHandle
 #include "SharedClasses/Graphics/TextureNameMapResourceType.h"          // BrnParticle::TextureNameMap
 
-// cMatrix is the engine 4x4 matrix (typedef of rw::math::vpu::Matrix44) -- supplied by
-// ParticleRender.h (included above). GetCameraMatrix returns it by value.
+// cMatrix is the Lion (eauk_common) 4x4 matrix -- supplied by ParticleRender.h (included
+// above), which now includes its real home rather than typedef'ing it to Matrix44; same 64
+// bytes, four 16-aligned rows. GetCameraMatrix returns it by value.
 
 namespace CgsMemory { class HeapMalloc; }
 namespace renderengine { class Texture; class TextureState; }

@@ -40,9 +40,16 @@ typedef u8       bool8_t;
 typedef u32      U32;
 typedef float    FP32;
 
-// cMatrix -- the engine's 4x4 matrix (the RenderWare vpu Matrix44). Single typedef shared by
-// the renderer interface and its concrete implementations.
-typedef rw::math::vpu::Matrix44 cMatrix;
+// ⛔⛔ cMatrix WAS A TYPEDEF TO rw::math::vpu::Matrix44 HERE, AND THAT WAS THE THIRD FORK
+// OF THE TYPE -- the one that parked cParticleRender::EmitterRender / EmitterCubeRender for
+// two waves ("a committed-header type conflict"). The DecFIGS DWARF gives cMatrix its own
+// home and its own member names (eauk_common/Maths/Matrix.h:51, `cVector xa,ya,za,wa`), so
+// the typedef was not the engine's fact, it was this header's guess -- and a guess that was
+// a hard redefinition of two sibling Lion headers' `struct cMatrix`.
+// ⭐ THE SWAP CHANGES NO BYTE: Matrix44 is four 16-byte, 16-aligned Vector4 rows and cMatrix
+// is four 16-byte, 16-aligned cVector rows, both 64 bytes -- which is why the renderer's
+// mCameraTransform slot and every `const cMatrix*` parameter below keep their layout.
+#include "SDKs/Packages/Lion/Final/eauk_common/Maths/Matrix.h"   // cMatrix -- the one home
 
 class cParticleMaterial;            // ParticleMaterial.h
 class cParticleEmitter;             // owning emitter (opaque at this boundary)

@@ -31,15 +31,19 @@
 // nucleus array indexed by count, and the two optional side arrays indexed off
 // their base pointers.
 //
-// HONEST PLACEHOLDERS (flagged for proper homing -- see ParticleBucket.cpp
-// dep_flags): cVector, cMatrix, cTime, sParticleNucleus and cParticleEmitter are
-// vendor math / Lion runtime types not yet homed in the project. (cParticleRandomSeed
-// is now homed -- ParticleRandomSeed.h -- and pulled in by include, not forked here.) They are modelled here only as far as this TU's runtime touches them
-// (correct element STRIDE for the indexed arrays; opaque-but-named otherwise).
-// NOTE: a sibling Lion home (ParticleBehaviour.h) also defines HONEST-PLACEHOLDER
-// cVector/cColour8. To avoid a cross-header ODR clash this header does NOT include
-// ParticleBehaviour.h; if the two are ever pulled into one TU, both placeholders
-// must be replaced by the single real cVector home (grow additively there).
+// ⭐ THE PLACEHOLDER LIST IN THIS BANNER WAS ITSELF GOING STALE, so it is restated as of
+// 2026-09-03 rather than left to describe a header that no longer exists. FOUR of the five
+// types this header used to fork now come from their real homes and are pulled in by
+// #include above: cVector (eauk_common/Maths/Vector.h), cParticleRandomSeed
+// (ParticleRandomSeed.h), cMatrix (eauk_common/Maths/Matrix.h) and sParticleNucleus
+// (sParticle.h). cParticleEmitter stays an opaque forward declaration (a pointer member
+// only), which is not a fork.
+// WHAT IS STILL A PLACEHOLDER HERE: `struct cTime` (mLatestBirthTime), modelled as an
+// opaque 8 bytes. It is the ONE remaining forked type in this header, and it is the type
+// every Lion entry point takes by reference, so homing it is the next unification.
+// ⛔ THE OLD NOTE SAYING THIS HEADER "does NOT include ParticleBehaviour.h" TO AVOID AN
+// ODR CLASH IS RETIRED WITH THE FORKS IT DESCRIBED -- both headers now name the same
+// cVector -- but the include is still not added, because nothing here needs it.
 // ============================================================================
 
 #include "types.hpp"
@@ -50,6 +54,11 @@
 // mnNextParticlePositionToFill@0x50 -- so this is the type's owning header, not a fork.
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRandomSeed.h"
 
+// Real homes for the two types this record's arrays are made of (both were HONEST
+// PLACEHOLDERS in this header until 2026-09-03; see their banners).
+#include "SDKs/Packages/Lion/Final/eauk_common/Maths/Matrix.h"   // cMatrix (mpMatrices)
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/sParticle.h"  // sParticleNucleus
+
 class cParticleEmitter;         // owning emitter (chained list head) -- opaque here
 struct cParticleBucketManager;  // pool owner (ParticleBucketManager.h) -- befriended below
 
@@ -57,15 +66,10 @@ struct cParticleBucketManager;  // pool owner (ParticleBucketManager.h) -- befri
 // The private copy that used to live here -- and its "keep the three copies token-for-
 // token identical" warning -- are retired: the home exists, so there is one definition.
 
-// ----------------------------------------------------------------------------
-// HONEST PLACEHOLDER: 4x4 row-major matrix. AllocateParticle only computes the
-// address &mpMatrices[count]; the X360 stride is 64 bytes (slwi r10,r10,6), so a
-// 16xf32 element is the faithful size. Replace with the real cMatrix home.
-// ----------------------------------------------------------------------------
-struct cMatrix
-{
-    f32 m[16];
-};
+// cMatrix now comes from its real home, eauk_common/Maths/Matrix.h (included above).
+// The private `struct cMatrix { f32 m[16]; }` that used to sit here was one of THREE
+// forks of the type (ParticleLocator.h had a second, ParticleRender.h a third), and two
+// of them were a hard redefinition of each other -- see the Matrix.h banner.
 
 // ----------------------------------------------------------------------------
 // HONEST PLACEHOLDER: monotonic game time stamp (mLatestBirthTime). Not touched
@@ -79,18 +83,10 @@ struct cTime
 // cParticleRandomSeed (mRandomSeed) now comes from its real home,
 // ParticleRandomSeed.h (included above); the former opaque placeholder is retired.
 
-// ----------------------------------------------------------------------------
-// HONEST PLACEHOLDER: one particle "nucleus" (the per-particle simulation state).
-// AllocateParticle returns &mParticles[count]; the X360 element stride is 0xE0
-// (224) bytes (mulli r10,r10,0xE0). The internals are not touched by this TU, so
-// the slot is modelled as an opaque 224-byte blob with the correct STRIDE. The
-// 0x60 array base + 0xE0 stride together place the array tail (mpMatrices) at the
-// asm-verified a1[920]. Replace with the real sParticleNucleus home.
-// ----------------------------------------------------------------------------
-struct sParticleNucleus
-{
-    u8 mau8Opaque[0xE0];
-};
+// sParticleNucleus now comes from its real home, sParticle.h (included above): fourteen
+// named 16-byte lanes from the DecFIGS DWARF (sParticle.h:22), whose sum is the same 0xE0
+// stride the opaque placeholder that used to sit here was built around. The 0x60 array
+// base + 0xE0 stride still place the array tail (mpMatrices) at the asm-verified a1[920].
 
 // ParticleBucket.h:33
 struct cParticleBucket
