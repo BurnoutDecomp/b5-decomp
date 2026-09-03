@@ -117,6 +117,26 @@ namespace BrnDiag
         u32 muDvLatchedStep;
         u32 muDvLatchedFrame;
         f32 mfDvLatchedMagnitude;
+
+        // ⭐ THE SHOWTIME VICTIM-GAIN LATCH (BRN_FRAME_DUMP_ARM=x15), on exactly the argument
+        // muDvLatched is built on. The x15 arm in DeformableObject::ApplySensorImpulse
+        // (@0x82607D78..0x82607DD0) fires only when a car is struck BY a car that is in showtime
+        // -- three conditions at once, none of them controllable from the harness: the player in
+        // showtime, a traffic car in reach, and a contact between them. Measured across six runs
+        // it happened in ONE, for 48 sensor rows spanning 15 presents. A `dv` strip cannot be
+        // relied on to cover that: in the run where it did fire, the dv latch rose 520 presents
+        // EARLIER, so a 48-frame strip from dv ended 500 presents before the event.
+        // ⛔ AND FILMING THE WHOLE RUN IS NOT THE ALTERNATIVE -- see this header's banner: this
+        // simulation is frame-coupled and a run that films itself that hard stops producing the
+        // event. STICKY, like the other three, so the strip carries the gain AND its aftermath.
+        u32 muVictimGainLatched;
+
+        // Self-labelling, same rule as the fields above: WHICH car took the gain, at which
+        // present, and the shaped magnitude on the row that raised the latch -- so a bitmap and
+        // an [st-mag] line can be tied together without trusting a timestamp.
+        u32 muVictimGainPresent;
+        s32 miVictimGainGid;
+        f32 mfVictimGainShaped;
     };
 
     // Defined in GameSource/Game/BrnGameModule.cpp (the only writer).
