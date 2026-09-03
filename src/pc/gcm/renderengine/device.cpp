@@ -344,9 +344,13 @@ static void DumpBackBufferIfRequested()
         //                   window (gT5RamTrafficSlot >= 0) with the player at or above <mps>
         //                   metres per second (default 0), so a traffic-hit film starts at THE
         //                   impact that matters instead of at boot or at the first brush
+        //   "skid"       -- hold until the FIRST TYRE MARK is laid (BrnDiag::gFilmLatch.
+        //                   muSkidLatched, raised by EffectsModule::HandleWheels beside its
+        //                   TrailSystem::AddTrailSegment call), so a drift film starts at the
+        //                   frame a mark exists instead of at boot
         //   anything else truthy -- hold until the traffic swerve camera latches (the
         //                   original arm; unchanged, so every existing recipe still works)
-        static int siArm = -1;      // 0 none, 1 swerve camera, 2 slomo, 3 traffic ram
+        static int siArm = -1;      // 0 none, 1 swerve camera, 2 slomo, 3 traffic ram, 4 skid
         static f32 sfRamMinSpeed = 0.0f;
         static u32 suMax = 0u;
         if (siArm < 0)
@@ -365,6 +369,10 @@ static void DumpBackBufferIfRequested()
             {
                 siArm = 3;
                 if (lacArm[3] == ':') { sfRamMinSpeed = static_cast<f32>(atof(lacArm + 4)); }
+            }
+            else if (_stricmp(lacArm, "skid") == 0)
+            {
+                siArm = 4;
             }
             else
             {
@@ -389,6 +397,10 @@ static void DumpBackBufferIfRequested()
         }
         if (siArm == 3 && (BrnPhysics::Vehicle::gT5RamTrafficSlot < 0
                            || BrnPhysics::Vehicle::gT5ArmedPlayerSpeed < sfRamMinSpeed))
+        {
+            return;
+        }
+        if (siArm == 4 && BrnDiag::gFilmLatch.muSkidLatched == 0u)
         {
             return;
         }
@@ -467,7 +479,13 @@ static void DumpBackBufferIfRequested()
                     // trick that turned "a traffic car swerved" into a measured 56 deg over
                     // 13.2 m. Column 10 makes staleness visible: a row whose count equals the
                     // previous row's carries a position nothing refreshed that frame.
-                    std::fprintf(lpCsv, "%u,%.6f,%.6f,%.6f,%d,%d,%.3f,%.3f,%.3f,%u\n",
+                    // Columns 11-14 are THE TYRE MARK: the running count of trail segments
+                    // laid (EffectsModule::HandleWheels -> TrailSystem::AddTrailSegment) and
+                    // the last one's contact point. Same argument again -- the row where the
+                    // count first rises IS the frame the mark started, with no frame-rate
+                    // guess, and the position lets a marker be projected into the picture from
+                    // the game's own coordinates instead of pointed at by eye.
+                    std::fprintf(lpCsv, "%u,%.6f,%.6f,%.6f,%d,%d,%.3f,%.3f,%.3f,%u,%u,%.3f,%.3f,%.3f\n",
                                  renderengine::guPresentCount,
                                  BrnDiag::gFilmLatch.mfLiveSimScale,
                                  BrnDiag::gFilmLatch.mfLiveSimStep,
@@ -477,7 +495,11 @@ static void DumpBackBufferIfRequested()
                                  BrnTraffic::gSwerveWatch.mfSympPosX,
                                  BrnTraffic::gSwerveWatch.mfSympPosY,
                                  BrnTraffic::gSwerveWatch.mfSympPosZ,
-                                 BrnTraffic::gSwerveWatch.muSympPublishes);
+                                 BrnTraffic::gSwerveWatch.muSympPublishes,
+                                 BrnDiag::gFilmLatch.muTrailSegments,
+                                 BrnDiag::gFilmLatch.mfLastSegX,
+                                 BrnDiag::gFilmLatch.mfLastSegY,
+                                 BrnDiag::gFilmLatch.mfLastSegZ);
                     std::fclose(lpCsv);
                 }
             }

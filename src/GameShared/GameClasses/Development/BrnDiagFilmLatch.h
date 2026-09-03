@@ -60,6 +60,26 @@ namespace BrnDiag
         // BoostBarRenderer::RenderComponent draws. Read in ONE place, the back-buffer writer in
         // pc/gcm/renderengine/device.cpp. -1.0f means "no boost record has been published yet".
         f32 mfLiveBoostFraction;
+
+        // ⭐ THE TYRE-MARK LATCH, on exactly the argument the slomo latch above is built on.
+        // A tyre mark is laid by BrnEffects::EffectsModule::HandleWheels calling
+        // TrailSystem::AddTrailSegment, and that is a handful of frames in a run that is
+        // minutes long -- so filming the whole run to catch it writes tens of gigabytes AND,
+        // per the note above, can suppress the very event being filmed. muSkidLatched is
+        // STICKY and raised by the first segment ever laid, so BRN_FRAME_DUMP_ARM=skid starts
+        // the capture at the instant the first mark exists.
+        u32 muSkidLatched;
+
+        // ⭐ THE RUNNING SEGMENT COUNT AND THE LAST SEGMENT'S CONTACT POINT, stamped into
+        // frames.csv so each captured frame is SELF-LABELLING -- exactly the way the
+        // sympathetic-crash columns are. Two things a bitmap cannot say on its own: WHICH
+        // frame the mark started on (the row where the count first rises) and WHERE on the
+        // road it was laid (so a marker can be projected into the frame from the game's own
+        // coordinates rather than pointed at by eye).
+        u32 muTrailSegments;
+        f32 mfLastSegX;
+        f32 mfLastSegY;
+        f32 mfLastSegZ;
     };
 
     // Defined in GameSource/Game/BrnGameModule.cpp (the only writer).
