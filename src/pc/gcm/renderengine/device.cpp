@@ -485,7 +485,10 @@ static void DumpBackBufferIfRequested()
                     // count first rises IS the frame the mark started, with no frame-rate
                     // guess, and the position lets a marker be projected into the picture from
                     // the game's own coordinates instead of pointed at by eye.
-                    std::fprintf(lpCsv, "%u,%.6f,%.6f,%.6f,%d,%d,%.3f,%.3f,%.3f,%u,%u,%.3f,%.3f,%.3f\n",
+                    // Columns 15-17 are that segment's SCREEN position: the NDC the skid
+                    // vertex program's own transform put it at, and the clip w. They make
+                    // "no mark visible" a claim about a named pixel instead of a picture.
+                    std::fprintf(lpCsv, "%u,%.6f,%.6f,%.6f,%d,%d,%.3f,%.3f,%.3f,%u,%u,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f\n",
                                  renderengine::guPresentCount,
                                  BrnDiag::gFilmLatch.mfLiveSimScale,
                                  BrnDiag::gFilmLatch.mfLiveSimStep,
