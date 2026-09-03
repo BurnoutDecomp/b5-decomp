@@ -28,10 +28,22 @@
 //   mpWaveFormX..mpWaveFormRGB     @0x2C8..0x2D8
 //   mpNext                         @0x2DC (732)
 //   mBVCompiled                    @0x2E0 (736), size field @0x458 (1112)
+//   mAABBMin / mAABBMax            @0x4A0 (1184) / 0x4B0 (1200)
 //   sizeof(cParticleBehaviour)     == 1216 (0x4C0)  (Serialise/GetSerialiseSize)
 //
-// X360 pointers are 32-bit; on the host they are wider, so byte offsets differ.
-// Members are accessed BY NAME, never by raw offset.
+// ⭐ 2026-09-03: the six links are tLionSerialisedPtr, so the console offsets above are
+// ALSO the host offsets (a .lef behaviour is read verbatim) and the static_asserts at the
+// bottom of this file check them. Members are accessed BY NAME, never by raw offset.
+//
+// ⭐⭐ AND cVector IS 16-BYTE ALIGNED -- that is where the record's last four bytes live.
+// With a 4-aligned cVector the member set below sizes to 1212, not the attested 1216, and
+// the temptation is to go hunting for a missing member. There is none. cParticleBehaviour::
+// Lerp @0x8290B1F8 reads mAABBMin at 1184 (0x4A0) and mAABBMax at 1200 (0x4B0), while
+// cParticleBehaviour::Init @0x82908EA0 writes the last scalar before them, mEmitterVelWeight,
+// at 1176 -- so the compiler padded 1180 -> 1184 to give mAABBMin a 16-byte boundary, and
+// 1200 + 16 == 1216 closes the record. Every other cVector in this struct already sits on a
+// 16-byte boundary, which is the corroboration: they are PPC vector registers, not structs
+// of four floats that happen to be 16 bytes wide.
 //
 // HONEST PLACEHOLDERS (flagged for proper homing -- see ParticleBehaviour.cpp
 // dep_flags): cVector, cColour8, cParticleWaveForm and cLionParticleEffectManager
@@ -42,15 +54,25 @@
 // ============================================================================
 
 #include "types.hpp"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionSerialisedPtr.h"
 
 class cLionSerialiser;        // LionSerialiser.h (sibling home)
 
 // ----------------------------------------------------------------------------
 // HONEST PLACEHOLDER: minimal 4-float vector. The runtime here only stores whole
 // vectors and reads/writes individual f32 lanes (x,y,z,w), so a named 4-lane
-// struct is sufficient. Replace with the real cVector home when it is homed.
+// struct is sufficient.
+//
+// ⭐ THE alignas(16) IS AN ASM FACT, not a tidiness choice, and it is load-bearing:
+// it is the four bytes between cParticleBehaviour's 1212 and its attested 1216 (see
+// this header's banner). The real home is
+// SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h -- the DecFIGS DWARF declares it
+// there as `struct cVector { float q[4]; }` with the usual PPC vector accessor set
+// (GetX/SetX/GetSplatX/...). Growing that home is the follow-up; until then the two
+// sibling placeholders (ParticleBucket.h, ParticleLocator.h) MUST stay token-for-token
+// identical to this one -- three copies that disagree is an ODR fork that links silently.
 // ----------------------------------------------------------------------------
-struct cVector
+struct alignas(16) cVector
 {
     f32 x;
     f32 y;
@@ -190,12 +212,12 @@ struct cParticleBehaviour
     f32     mScale;                  // 0x2BC
     u32     mEmissionCountClamp;     // 0x2C0
     u32     mFlags;                  // 0x2C4
-    cParticleWaveForm* mpWaveFormX;     // 0x2C8
-    cParticleWaveForm* mpWaveFormY;     // 0x2CC
-    cParticleWaveForm* mpWaveFormZ;     // 0x2D0
-    cParticleWaveForm* mpWaveFormAlpha; // 0x2D4
-    cParticleWaveForm* mpWaveFormRGB;   // 0x2D8
-    cParticleBehaviour* mpNext;         // 0x2DC
+    tLionSerialisedPtr<cParticleWaveForm>  mpWaveFormX;     // 0x2C8 Relocate word 178
+    tLionSerialisedPtr<cParticleWaveForm>  mpWaveFormY;     // 0x2CC Relocate word 179
+    tLionSerialisedPtr<cParticleWaveForm>  mpWaveFormZ;     // 0x2D0 Relocate word 180
+    tLionSerialisedPtr<cParticleWaveForm>  mpWaveFormAlpha; // 0x2D4 Relocate word 181
+    tLionSerialisedPtr<cParticleWaveForm>  mpWaveFormRGB;   // 0x2D8 Relocate word 182
+    tLionSerialisedPtr<cParticleBehaviour> mpNext;          // 0x2DC Relocate word 183
     cParticleBehaviourBaseVarianceCompiled mBVCompiled; // 0x2E0
     bool    mEmissionRateHasBeenScaled; // 0x460
     u32     mEmissionCountClampVariance;
@@ -212,6 +234,21 @@ struct cParticleBehaviour
     f32     mEmitterStartWeight;
     f32     mEmitterEndWeight;
     f32     mEmitterVelWeight;
-    cVector mAABBMin;
-    cVector mAABBMax;
+    cVector mAABBMin;                   // 0x4A0 -- Lerp @0x8290B1F8 reads 1184/1188/1192
+    cVector mAABBMax;                   // 0x4B0 -- Lerp @0x8290B1F8 reads 1200/1204/1208
 };
+
+// cParticleBehaviour::Serialise @0x8290F098 does `DataStore(this, 1216)`, and
+// GetSerialiseSize @0x8290CCD0 adds the same 1216 per node.
+static_assert(sizeof(cParticleBehaviour) == 1216,
+              "cParticleBehaviour is the 1216-byte serialised record "
+              "(cParticleBehaviour::Serialise @0x8290F098 DataStore(this, 1216)) -- if this "
+              "reads 1212, cVector has lost its alignas(16)");
+static_assert(offsetof(cParticleBehaviour, mDivisors)       == 0x200, "CompileBaseVariance");
+static_assert(offsetof(cParticleBehaviour, mFlags)          == 0x2C4, "the rlwinm masks");
+static_assert(offsetof(cParticleBehaviour, mpWaveFormX)     == 0x2C8, "Relocate asm word 178");
+static_assert(offsetof(cParticleBehaviour, mpNext)          == 0x2DC, "Relocate asm word 183");
+static_assert(offsetof(cParticleBehaviour, mBVCompiled)     == 0x2E0, "CompileBaseVariance");
+static_assert(offsetof(cParticleBehaviour, mEmitterVelWeight) == 1176, "Init @0x82908EA0");
+static_assert(offsetof(cParticleBehaviour, mAABBMin)        == 1184, "Lerp @0x8290B1F8");
+static_assert(offsetof(cParticleBehaviour, mAABBMax)        == 1200, "Lerp @0x8290B1F8");

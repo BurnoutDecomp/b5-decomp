@@ -17,12 +17,16 @@
 //
 // The serialised on-disk record is 12 bytes (3 x 4-byte console words) -- Serialise copies
 // exactly 12 bytes via cLionSerialiser::DataStore and Delocate/Relocate byte-twiddle only
-// the first two words. X360 pointers are 32-bit; on the 64-bit host they widen, so absolute
-// byte offsets differ -- members are accessed BY NAME, never by raw offset. Grow this record
-// additively as further Lion effect TUs land; never reorder/retype the modelled members.
+// the first two words.
+//
+// ⭐ 2026-09-03: the two links are tLionSerialisedPtr, so the host record IS 12 bytes, as
+// the static_assert below states. A .lef is loaded verbatim, so a widened link would put
+// every descriptor chain head at the wrong address. Members are accessed BY NAME. Grow this
+// record additively as further Lion effect TUs land; never reorder/retype the members.
 // ============================================================================
 
 #include "types.hpp"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionSerialisedPtr.h"
 
 // Lion scalar spellings (kept local so this header is self-contained; the duplicate-typedef
 // rule allows the identical block that ParticleMaterial.h / other Lion headers also carry).
@@ -67,8 +71,16 @@ public:
 
     S32 GetGlobalDescriptorsCount();
 
+    // Chain head, as a usable pointer. The X360 reads the field directly.
+    cParticleDescriptor* GetDescriptors() const { return mpDescriptors.Get(); }
+
     // ----- serialised record members -----
-    U32                  mHash;          // console +0x00
-    cParticleDescriptor* mpDescriptors;  // console +0x04 -- descriptor chain head
-    cLionParticleEffect* mpNext;         // console +0x08 -- next effect in the global chain
+    U32                                       mHash;          // console +0x00
+    tLionSerialisedPtr<cParticleDescriptor>   mpDescriptors;  // console +0x04 chain head
+    tLionSerialisedPtr<cLionParticleEffect>   mpNext;         // console +0x08 next effect
 };
+
+// cLionParticleEffect::Serialise @0x82912CA8 does `DataStore(this, 12)`.
+static_assert(sizeof(cLionParticleEffect) == 12,
+              "cLionParticleEffect is the 12-byte serialised effect header "
+              "(cLionParticleEffect::Serialise @0x82912CA8 DataStore(this, 12))");

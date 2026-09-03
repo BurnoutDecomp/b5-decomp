@@ -64,18 +64,18 @@ void cParticleMaterial::Build()
     if ((luFlags & 0x20000) != 0)
         ++mNumMeshes;
 
-    if (mpNormalMapName != 0)
+    if (mpNormalMapName)
     {
-        if (::strcmp(mpNormalMapName, "(NULL)") != 0)
+        if (::strcmp(mpNormalMapName.Get(), "(NULL)") != 0)
             mShader = eSHADER_LION_NORM;   // stb 1, +0x42
         else
-            mpNormalMapName = 0;
+            mpNormalMapName.SetRaw(0);
     }
 
-    if (mpTextureName != 0)
+    if (mpTextureName)
     {
         if (gpLionParticleRender != 0)
-            gpLionParticleRender->TextureRegister(this, mpTextureName);
+            gpLionParticleRender->TextureRegister(this, mpTextureName.Get());
     }
 
     mFrameCount = static_cast<S32>(mYFrames) * static_cast<S32>(mXFrames);
@@ -100,30 +100,23 @@ void cParticleMaterial::Build()
 void cParticleMaterial::Delocate(U32 aEndianTwiddleFlag)
 {
     const bool lbTwiddle = (aEndianTwiddleFlag != 0);
-    u8* lpBase = reinterpret_cast<u8*>(this);
 
-    if (mpTextureName != 0)
-        mpTextureName = reinterpret_cast<char*>(reinterpret_cast<u8*>(mpTextureName) - reinterpret_cast<uintptr_t>(lpBase));
-    if (mpMeshName != 0)
-        mpMeshName = reinterpret_cast<char*>(reinterpret_cast<u8*>(mpMeshName) - reinterpret_cast<uintptr_t>(lpBase));
-    if (mpLayerGroupName != 0)
-        mpLayerGroupName = reinterpret_cast<char*>(reinterpret_cast<u8*>(mpLayerGroupName) - reinterpret_cast<uintptr_t>(lpBase));
-    if (mpNormalMapName != 0)
-        mpNormalMapName = reinterpret_cast<char*>(reinterpret_cast<u8*>(mpNormalMapName) - reinterpret_cast<uintptr_t>(lpBase));
+    mpTextureName.Delocate(this);
+    mpMeshName.Delocate(this);
+    mpLayerGroupName.Delocate(this);
+    mpNormalMapName.Delocate(this);
 
     if (lbTwiddle)
         gLionParticleParserMatTokenTable.EndianTwiddle(this);
 
     for (u32 luIndex = 0; luIndex < 5; ++luIndex)
     {
-        if (mpMeshNames[luIndex] != 0)
-            mpMeshNames[luIndex] =
-                reinterpret_cast<char*>(reinterpret_cast<u8*>(mpMeshNames[luIndex]) - reinterpret_cast<uintptr_t>(lpBase));
+        mpMeshNames[luIndex].Delocate(this);
 
         if (lbTwiddle)
         {
             // Big->little byte reversal of the now-offset pointer word in place.
-            u8* lp = reinterpret_cast<u8*>(&mpMeshNames[luIndex]);
+            u8* lp = reinterpret_cast<u8*>(mpMeshNames[luIndex].RawAddress());
             const u8 b0 = lp[0];
             const u8 b1 = lp[1];
             const u8 b2 = lp[2];
@@ -147,19 +140,19 @@ void cParticleMaterial::GetSerialiseSize(cLionSerialiser& aSer) const
 {
     aSer.mDataSize += 176;
 
-    if (mpTextureName != 0)
-        aSer.mStringSize += static_cast<u32>(::strlen(mpTextureName)) + 1;
-    if (mpMeshName != 0)
-        aSer.mStringSize += static_cast<u32>(::strlen(mpMeshName)) + 1;
-    if (mpLayerGroupName != 0)
-        aSer.mStringSize += static_cast<u32>(::strlen(mpLayerGroupName)) + 1;
-    if (mpNormalMapName != 0)
-        aSer.mStringSize += static_cast<u32>(::strlen(mpNormalMapName)) + 1;
+    if (mpTextureName)
+        aSer.mStringSize += static_cast<u32>(::strlen(mpTextureName.Get())) + 1;
+    if (mpMeshName)
+        aSer.mStringSize += static_cast<u32>(::strlen(mpMeshName.Get())) + 1;
+    if (mpLayerGroupName)
+        aSer.mStringSize += static_cast<u32>(::strlen(mpLayerGroupName.Get())) + 1;
+    if (mpNormalMapName)
+        aSer.mStringSize += static_cast<u32>(::strlen(mpNormalMapName.Get())) + 1;
 
     for (u32 luIndex = 0; luIndex < 5; ++luIndex)
     {
-        if (mpMeshNames[luIndex] != 0)
-            aSer.mStringSize += static_cast<u32>(::strlen(mpMeshNames[luIndex])) + 1;
+        if (mpMeshNames[luIndex])
+            aSer.mStringSize += static_cast<u32>(::strlen(mpMeshNames[luIndex].Get())) + 1;
     }
 }
 
@@ -171,23 +164,14 @@ void cParticleMaterial::GetSerialiseSize(cLionSerialiser& aSer) const
 // ----------------------------------------------------------------------------
 void cParticleMaterial::Relocate()
 {
-    u8* lpBase = reinterpret_cast<u8*>(this);
-
-    if (mpTextureName != 0)
-        mpTextureName = reinterpret_cast<char*>(lpBase + reinterpret_cast<uintptr_t>(mpTextureName));
-    if (mpMeshName != 0)
-        mpMeshName = reinterpret_cast<char*>(lpBase + reinterpret_cast<uintptr_t>(mpMeshName));
-    if (mpLayerGroupName != 0)
-        mpLayerGroupName = reinterpret_cast<char*>(lpBase + reinterpret_cast<uintptr_t>(mpLayerGroupName));
-    if (mpNormalMapName != 0)
-        mpNormalMapName = reinterpret_cast<char*>(lpBase + reinterpret_cast<uintptr_t>(mpNormalMapName));
+    // asm words 4, 7, 8, 6 then 24..28 -- each a 32-bit slot re-based against `this`.
+    mpTextureName.Relocate(this);
+    mpMeshName.Relocate(this);
+    mpLayerGroupName.Relocate(this);
+    mpNormalMapName.Relocate(this);
 
     for (u32 luIndex = 0; luIndex < 5; ++luIndex)
-    {
-        if (mpMeshNames[luIndex] != 0)
-            mpMeshNames[luIndex] =
-                reinterpret_cast<char*>(lpBase + reinterpret_cast<uintptr_t>(mpMeshNames[luIndex]));
-    }
+        mpMeshNames[luIndex].Relocate(this);
 }
 
 // ----------------------------------------------------------------------------
@@ -207,13 +191,13 @@ cParticleMaterial* cParticleMaterial::Serialise(cLionSerialiser& aSer) const
     cParticleMaterial* lpCopy =
         reinterpret_cast<cParticleMaterial*>(aSer.DataStore(this, 164));
 
-    lpCopy->mpTextureName    = aSer.StringStore(mpTextureName);
-    lpCopy->mpMeshName       = aSer.StringStore(mpMeshName);
-    lpCopy->mpLayerGroupName = aSer.StringStore(mpLayerGroupName);
-    lpCopy->mpNormalMapName  = aSer.StringStore(mpNormalMapName);
+    lpCopy->mpTextureName.Set(aSer.StringStore(mpTextureName.Get()));
+    lpCopy->mpMeshName.Set(aSer.StringStore(mpMeshName.Get()));
+    lpCopy->mpLayerGroupName.Set(aSer.StringStore(mpLayerGroupName.Get()));
+    lpCopy->mpNormalMapName.Set(aSer.StringStore(mpNormalMapName.Get()));
 
     for (u32 luIndex = 0; luIndex < 5; ++luIndex)
-        lpCopy->mpMeshNames[luIndex] = aSer.StringStore(mpMeshNames[luIndex]);
+        lpCopy->mpMeshNames[luIndex].Set(aSer.StringStore(mpMeshNames[luIndex].Get()));
 
     return lpCopy;
 }

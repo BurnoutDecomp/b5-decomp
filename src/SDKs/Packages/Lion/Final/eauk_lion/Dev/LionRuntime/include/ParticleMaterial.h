@@ -18,14 +18,17 @@
 //   mUCoordOption    @+0x3F  / mVCoordOption @+0x40 (TextureRegister flip-option asserts)
 //   mShader          @+0x42  (GetShaderType -- eSHADER_LION assert in every entry point)
 //
-// X360 pointers are 32-bit; on the host they widen, so absolute byte offsets differ.
-// Members are accessed BY NAME, never by raw offset. The method set is gated on the X360
-// ledger: GetShaderType / SetTextureMapHandle / SetNormalMapHandle are attested via the
-// LionParticleRender call sites; the rest of the DWARF method set is declared (out-of-line)
-// for the material's own TUs.
+// ⭐ 2026-09-03: the nine string links are tLionSerialisedPtr, so the console offsets above
+// are ALSO the host offsets (a .lef material is read verbatim), and the static_asserts at
+// the bottom of this file check the nine cParticleMaterial::Relocate @0x8290E660 rebases
+// word for word. Members are accessed BY NAME, never by raw offset. The method set is gated
+// on the X360 ledger: GetShaderType / SetTextureMapHandle / SetNormalMapHandle are attested
+// via the LionParticleRender call sites; the rest of the DWARF method set is declared
+// (out-of-line) for the material's own TUs.
 // ============================================================================
 
 #include "types.hpp"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionSerialisedPtr.h"
 
 typedef float    FP32_t;   // local alias avoided -- use the engine FP32 below.
 
@@ -83,11 +86,11 @@ public:
     U32   mMaterialHandle;      // +0x04
     U32   mMeshHandle;          // +0x08
     U32   mTextureHandle;       // +0x0C
-    char* mpTextureName;        // +0x10
+    tLionSerialisedPtr<char> mpTextureName;     // +0x10  Relocate asm word 4
     U32   mNormalMapHandle;     // +0x14
-    char* mpNormalMapName;      // +0x18
-    char* mpMeshName;           // +0x1C
-    char* mpLayerGroupName;     // +0x20
+    tLionSerialisedPtr<char> mpNormalMapName;   // +0x18  Relocate asm word 6
+    tLionSerialisedPtr<char> mpMeshName;        // +0x1C  Relocate asm word 7
+    tLionSerialisedPtr<char> mpLayerGroupName;  // +0x20  Relocate asm word 8
     U32   mFlags;               // +0x24
     U32   mFrameMask;           // +0x28
     S32   mFrameBase;           // +0x2C
@@ -108,7 +111,7 @@ public:
     U32   mLayer;               // +0x44
     FP32  mRibbonStretch;       // +0x48
     U32   mMeshHandles[5];      // +0x4C
-    char* mpMeshNames[5];       // +0x60
+    tLionSerialisedPtr<char> mpMeshNames[5];    // +0x60  Relocate asm words 24..28
     U32   mPercentages[5];      // +0x74
     U32   mNumMeshes;           // +0x88
     FP32  mNormalBlend;         // +0x8C
@@ -126,3 +129,22 @@ public:
         eUVOPTION_FLIPPED = 1,
     };
 };
+
+// ⛔ CORRECTION 2026-09-03. The wave that measured the .lef fault reported this record as
+// "172 vs 164 -- needs a layout look". It does not: cParticleMaterial::Serialise
+// @0x8290E720 does `cLionSerialiser::DataStore(a2, a1, 164)`, and every one of the nine
+// offsets Relocate @0x8290E660 rebases (asm word indices 4, 6, 7, 8 and 24..28) matches
+// the member set below exactly, as does Serialise's own `v14 = v13 + 96` mesh-name walk.
+// The record that was four bytes short was cParticleBehaviour, for an unrelated reason
+// (cVector alignment -- see ParticleBehaviour.h).
+static_assert(sizeof(cParticleMaterial) == 164,
+              "cParticleMaterial is the 164-byte serialised record "
+              "(cParticleMaterial::Serialise @0x8290E720 DataStore(this, 164))");
+static_assert(offsetof(cParticleMaterial, mpTextureName)    == 0x10, "Relocate asm word 4");
+static_assert(offsetof(cParticleMaterial, mpNormalMapName)  == 0x18, "Relocate asm word 6");
+static_assert(offsetof(cParticleMaterial, mpMeshName)       == 0x1C, "Relocate asm word 7");
+static_assert(offsetof(cParticleMaterial, mpLayerGroupName) == 0x20, "Relocate asm word 8");
+static_assert(offsetof(cParticleMaterial, mFlags)           == 0x24, "SetMaterial depth state");
+static_assert(offsetof(cParticleMaterial, mBlendMode)       == 0x3A, "HashMaterial FNV-1a run");
+static_assert(offsetof(cParticleMaterial, mShader)          == 0x42, "GetShaderType");
+static_assert(offsetof(cParticleMaterial, mpMeshNames)      == 0x60, "Relocate asm words 24..28");

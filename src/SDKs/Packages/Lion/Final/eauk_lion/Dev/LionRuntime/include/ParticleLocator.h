@@ -41,9 +41,16 @@
 // ----------------------------------------------------------------------------
 // HONEST PLACEHOLDER: 4-lane vector (x,y,z,w). Init stores whole vectors lane by
 // lane; a 4xf32 struct is the faithful element size (16 bytes, the X360 vector
-// stride). Replace with the real cVector home when it lands.
+// stride). Replace with the real cVector home when it lands
+// (SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h in the DecFIGS DWARF).
+//
+// ⭐ alignas(16) added 2026-09-03: it is an asm fact, pinned in cParticleBehaviour
+// (Lerp @0x8290B1F8 puts mAABBMin at 0x4A0, which is where the record's attested
+// 1216th byte comes from). This copy must stay TOKEN-FOR-TOKEN IDENTICAL to the ones
+// in ParticleBehaviour.h and ParticleBucket.h -- three copies that disagree is an ODR
+// fork, and an ODR fork links silently.
 // ----------------------------------------------------------------------------
-struct cVector
+struct alignas(16) cVector
 {
     f32 x;
     f32 y;

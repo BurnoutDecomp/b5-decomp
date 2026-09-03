@@ -17,8 +17,10 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionEffect.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionParticleEffect.h"
 #include "GameSource/Effects/Particles/LionParticleRender.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 #include <cstdint>
+#include <cstdio>
 
 // ----------------------------------------------------------------------------
 // gpLionParticleEffectChain -- X360 dword_831237BC, the head of the singly-linked
@@ -81,21 +83,46 @@ cLionEffectDefinition* cLionFX::BinLoad(void* apData)
     if (lpDefinition->mVersion != cLionEffectDefinition::KU_VERSION)
         return 0;
 
-    // Self-relative byte offset -> pointer.
-    if (lpDefinition->mpParticles != 0)
+    // ------------------------------------------------------------------------
+    // The one assumption the whole .lef graph rests on, said out loud.
+    //
+    // Every link in this blob is a 32-bit slot (see LionSerialisedPtr.h) and every
+    // Relocate below rebases it with `slot += (u32)&owner`. That is the console's own
+    // arithmetic and it is correct on the host ONLY while the resource heap stays below
+    // 4 GB -- the same convention ParticleDescriptionResourceType::FixUp @0x8267DF60
+    // already relies on. Above 4 GB the truncation is SILENT: the graph would relocate
+    // to plausible-looking addresses in the wrong place and fault somewhere unrelated.
+    // So say it once, here, at the one point where the whole payload is in hand. The
+    // console has no such test; this only writes a log line and changes nothing.
+    // DELETE-WHEN-STABLE (or when the resource heap gains a hard below-4 GB guarantee
+    // of its own).
+    // ------------------------------------------------------------------------
     {
-        lpDefinition->mpParticles = reinterpret_cast<cLionParticleEffect*>(
-            reinterpret_cast<u8*>(lpDefinition)
-            + reinterpret_cast<uintptr_t>(lpDefinition->mpParticles));
+        static bool sbAnnouncedHighBlob = false;
+        const uintptr_t lBlob = reinterpret_cast<uintptr_t>(lpDefinition);
+        if (!sbAnnouncedHighBlob && lBlob > 0xFFFFFFFFull)
+        {
+            sbAnnouncedHighBlob = true;
+            char lacMsg[256];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[lion] .lef payload at %p is ABOVE 4 GB -- every 32-bit link in it will "
+                "relocate to a truncated address. The LION records model serialised links "
+                "as u32 by design (they are 4 bytes in the file); what is broken is the "
+                "heap placement, not the records.\n", apData);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
     }
+
+    // Self-relative byte offset -> pointer.
+    lpDefinition->mpParticles.Relocate(lpDefinition);
 
     lpDefinition->mpParticles->Relocate();
     lpDefinition->mpParticles->Build();
 
-    cLionParticleEffect* lpEffect = lpDefinition->mpParticles;
+    cLionParticleEffect* lpEffect = lpDefinition->mpParticles.Get();
     if (lpEffect != 0)
     {
-        lpEffect->mpNext = gpLionParticleEffectChain;
+        lpEffect->mpNext.Set(gpLionParticleEffectChain);
         gpLionParticleEffectChain = lpEffect;
     }
 
