@@ -8133,11 +8133,16 @@ namespace Vehicle
     //     else:                  linear 0.9999 [flt_82F2A528]   angular 0.992  [flt_82F2A524]
     // The exponent scale 60.0 [flt_82092BC4] makes the decay frame-rate-correct against a
     // 60 Hz reference: v *= damp^(60*dt).
-    // FLAG (modelled, not bit-verified): the console computes the pow via the EARenderWare
-    // vlogefp/vexptefp polynomial (coefficient tables unk_82014AC0..82014AF0); per the
-    // committed DampenAngularVelocity/DampPitchYawRoll precedent the recovered DATA FLOW is
-    // reproduced with std::pow and the polynomial's bit pattern is intentionally not
-    // fabricated.
+    // ⭐⭐ FLAG RETIRED 2026-09-03 (drive-spine 1:1 audit). The pow here is the EARenderWare
+    // vlogefp/vexptefp polynomial, and THIS function is where it was finally read end to end
+    // (0x826388D4..0x82638AE0) -- see the long note on ExternalPhysicsBody::DampenAngularVelocity
+    // for the four coefficient rows (0x82014AC0/AD0/AE0/AF0, all readable .rdata) and the proof
+    // that they are a degree-8 log2(1+x) minimax and a degree-8 2^-f series whose reciprocal is
+    // taken. With the special-case fixup tail at 0x82638A54..0x82638AD0 (NaN for a negative base
+    // with a fractional exponent, signed zero / infinity for a zero base, 1.0 for a zero exponent,
+    // sign re-applied for an odd integer exponent) it is a complete IEEE-shaped powf, so std::pow
+    // is faithful to within float rounding. Bit-exactness is still not claimed: an
+    // estimate+Newton chain and a correctly-rounded CRT differ in the last ulp or two.
     //
     // The angular clamp: omega -> body axes (R^T via the vmrghw/vmrglw transpose), clamp each
     // lane to +/-6.5, back to world (R). The 6.5 splat is unk_82FB9DA0 -- BSS, seeded by the

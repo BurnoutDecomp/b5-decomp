@@ -1176,13 +1176,35 @@ namespace BrnPhysics
     // DampPitchYawRoll uses a separate coefficient per body axis (pitch=x, yaw=y, roll=z),
     // and each later projection observes the result of the previous removal.
     //
-    // FLAG (modelled, not bit-verified): the exact per-lane select machinery and the polynomial
-    // coefficients (unk_82014A*) are NOT reproduced -- they are the SDK's
-    // internal pow() approximation, with no project home. The recovered DATA FLOW (load
-    // mAngularVelocity, raise a damping base to the `dt * kvfSixty` power, then scale/project as
-    // described above) is reproduced with std::pow. DecFIGS' static initializer @0x12DF24 writes the
-    // literal 60.0 splat to BrnPhysics::kvfSixty; Breaker names that slot unk_82FB9AF0 and
-    // multiplies it by the incoming dt. The polynomial's final bit pattern is not reproduced.
+    // ⭐⭐ FLAG RETIRED 2026-09-03 (drive-spine 1:1 audit) -- THE POLYNOMIAL TABLES ARE NOW READ,
+    // AND std::pow IS A FAITHFUL MODEL. The standing text said the unk_82014A* coefficients were
+    // "not bit-verified" and treated that as a permanent gap. They are plain .rdata, and
+    // tools/re/x360rd.py reads them straight out of the image:
+    //
+    //   0x82014AF0  1.4426896, -0.72116578, 0.47868481, -0.34730542   log2(1+x), c1..c4
+    //   0x82014AE0  0.24187370, -0.13753121, 0.05206468, -0.00931049   log2(1+x), c5..c8
+    //   0x82014AD0  1.0, -0.69314718, 0.24022646, -0.05550364          2^-f, c0..c3
+    //   0x82014AC0  0.00961598, -0.00132824, 0.00014749, -1.08635e-05  2^-f, c4..c7
+    //
+    // c1 == 1/ln2 == log2(e) pins the first pair as the degree-8 minimax for log2(1+x); the second
+    // pair is Sum (-f*ln2)^k/k! -- exactly (ln2)^2/2 == 0.2402265 and (ln2)^3/6 == 0.0555041 at
+    // c2/c3 -- i.e. 2^-f, and the code takes its RECIPROCAL (vrefp + two Newton steps) before
+    // multiplying by the vexptefp'd integer part. Read against the inlined copy in
+    // VehiclePhysics::UpdateCrashing @0x82638810 (0x826388D4..0x82638AE0): mantissa-normalise via
+    // the vsel over the 0xFF800000 mask, vrfim the exponent, evaluate x*P(x)+e, multiply by the
+    // exponent argument, split into vrfim integer + fraction, vexptefp the integer, reciprocal of
+    // the fraction polynomial, multiply -- then a full special-case fixup tail
+    // (0x82638A54..0x82638AD0): base<0 with a non-integer exponent -> QNaN, base==0 -> signed zero
+    // or infinity, exponent==0 -> 1.0, and an odd-integer exponent re-applies the base's sign bit.
+    //
+    // That is a textbook base-2 log/exp pow with IEEE special cases and no hidden clamp, no other
+    // base and no restricted range -- so std::pow reproduces it to within float rounding, and the
+    // "we are modelling something we cannot see" caveat is refuted rather than carried. What is
+    // still NOT claimed is bit-exactness: the console's estimate+Newton chain and the CRT's
+    // correctly-rounded double path differ in the last ulp or two.
+    //
+    // DecFIGS' static initializer @0x12DF24 writes the literal 60.0 splat to BrnPhysics::kvfSixty;
+    // Breaker names that slot unk_82FB9AF0 and multiplies it by the incoming dt.
     // ---------------------------------------------------------------------------------------
     void ExternalPhysicsBody::DampenAngularVelocity(VecFloat lvfDampingPerSecond, VecFloat lvfDeltaTime)
     {
