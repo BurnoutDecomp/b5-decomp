@@ -22,7 +22,17 @@
 //     faked as padding;
 //   * and VehiclePhysics.h is explicitly NOT in DWARF declaration order (it grew additively, group
 //     by group), so even a RELATIVE host offsetof would not measure the console spacing.
-// An `offsetof` gate here would therefore either be false or be a tautology. What this TU asserts
+// An `offsetof` gate here would therefore either be false or be a tautology.
+// ⭐ AMENDED 2026-09-03 (traffic crash-severity wave): that is still true of the two blocks AS A
+// WHOLE, but it is NOT true of the SimpleVehiclePhysics TAIL, and the difference is load-bearing.
+// Two of its three stated reasons have expired -- SimpleVehicleAttribs has been the FULL
+// width-identical 240 since 2026-08-09, and the leaf vptr's 4->8 widening is absorbed by the
+// 16-aligned base sub-object -- so from mfSpeedMPH to the end of the block the host reproduces the
+// console byte-for-byte. MEASURED: 0x6C0 / 0x6D0 / 0x6F0 / 0x710 and sizeof 0x720, all five equal to
+// their console literals. Those five ARE offsetof-gated below (PART 2), because
+// DeformableObject::UpdateDeformedBBox is the only producer of mDeformableAABB and every consumer
+// reads it by name: a shift there would silently divorce them, and only a host gate can see that.
+// What this TU asserts
 // instead is the thing the wave actually recovered: **that walking the DWARF member ORDER with the
 // asm-literal sub-object SIZES reproduces every independently asm-literal ANCHOR, and lands exactly
 // on 0x13F0.** Every number on the right-hand side of every assert below is an X360 literal quoted
@@ -46,6 +56,8 @@
 //   FIRES  delete AboveGroundTestResult::mfVerticalDistance
 //   FIRES  move the record's meCarType by 4        (BrnVehicleManager_layout_check.cpp)
 //   FIRES  move the record's mCrashNormal by 16    (BrnVehicleManager_layout_check.cpp)
+//   FIRES  (2026-09-03, PART 2's new HOST asserts) mDeformableAABB expected at 0x6D0+16 -- proved
+//          the offsetof gate discriminates before it was trusted, then reverted
 //   SILENT drop one of the four bools FROM THE ARITHMETIC (0x10F5..0x10F8 is 11 bytes of pad)
 //   SILENT append an f32 after SlamEffect::mi8SlamNumber (trailing pad)
 //   SILENT append a bool after mpDebugComponent (0x13E8..0x13F0 is 8 bytes of pad)
@@ -320,6 +332,48 @@ namespace Vehicle
     // ==============================================================================================
     void VehiclePhysics::_AssertOwnBlockLayout()
     {
+        // ==========================================================================================
+        // ⭐ THE SimpleVehiclePhysics TAIL, PINNED ON THE HOST (added 2026-09-03, traffic
+        // crash-severity wave).
+        //
+        // These five were previously NOT gated -- BrnSimpleVehiclePhysics.h's own-member banner
+        // claimed "the absolute console offsets below are NOT reproducible as host offsetofs".
+        // MEASURED with offsetof on this tree's x64 build, every one of them IS: 1728/1744/1776/
+        // 1808/1824 == 0x6C0/0x6D0/0x6F0/0x710/0x720, identical to the console literals. This
+        // matters because DeformableObject::UpdateDeformedBBox (BrnDeformableObject_BBox.cpp) is
+        // the ONLY producer of mDeformableAABB and every consumer -- IsFrontCornerClip,
+        // PredictCarCarIntersection, the UpdateSkinningOffsets clamp (97c3a7e1), the [T5-ram]
+        // witness -- reads it BY NAME. A header edit that shifted the tail would silently divorce
+        // producer from consumers; now it cannot compile.
+        //
+        // This function is a member of VehiclePhysics, which derives from SimpleVehiclePhysics.
+        // ⚠️ The offsetof must name the DERIVED class -- `offsetof(SimpleVehiclePhysics, m)` is an
+        // access error even here (the naming class decides access, and these members are protected in
+        // the base); `offsetof(VehiclePhysics, m)` is the same number and is allowed, because single
+        // non-virtual inheritance puts the base sub-object at 0.
+        //
+        // ⚠️ The console literals live in X360Layout (BrnSimpleVehiclePhysics.h) so the two halves
+        // of each line are the two INDEPENDENT derivations, not one number typed twice: the
+        // right-hand side is the X360 asm literal, the left is what MSVC actually laid out.
+        // ==========================================================================================
+        static_assert(offsetof(VehiclePhysics, mfSpeedMPH) == X360LayoutCheck::KU_A_SPEEDMPH,
+                      "SVP HOST: mfSpeedMPH must land on the console's 0x6C0 (UpdateHandBrake "
+                      "`li r7,0x6C0`; IsUsingSweptSpheres `li r7,0x6C0`)");
+        static_assert(offsetof(VehiclePhysics, mDeformableAABB)
+                          == X360Layout::KU_SVP_DEFORMABLE_AABB_OFF,
+                      "SVP HOST: mDeformableAABB must land on the console's 0x6D0 -- the seat "
+                      "UpdateDeformedBBox writes and every consumer reads by name");
+        static_assert(offsetof(VehiclePhysics, mOriginalAABB)
+                          == X360Layout::KU_SVP_ORIGINAL_AABB_OFF,
+                      "SVP HOST: mOriginalAABB must land on the console's 0x6F0 "
+                      "(ResetDeformableAABB's copy SOURCE)");
+        static_assert(offsetof(VehiclePhysics, mbCrashing)
+                          == X360Layout::KU_SVP_MBCRASHING_OFF,
+                      "SVP HOST: mbCrashing must land on the console's 0x710");
+        static_assert(sizeof(SimpleVehiclePhysics) == X360Layout::KU_SVP_SIZEOF,
+                      "SVP HOST: sizeof(SimpleVehiclePhysics) must be the console's 0x720 -- the "
+                      "offset VehiclePhysics::Construct stores mpAttribs at (`stw r30,0x720(r31)`)");
+
         static_assert(sizeof(VehiclePhysics::SlamEffect) == 0x30,
                       "SlamEffect: Vector3 + six f32 + s8 -> 0x30 (the 0x1130 - 0x1100 gap)");
         // AddSlam @0x825D4870 addresses SIX of SlamEffect's seven fields by absolute offset off

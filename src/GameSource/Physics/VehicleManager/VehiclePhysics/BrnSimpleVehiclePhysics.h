@@ -339,10 +339,22 @@ namespace Vehicle
         // 16-aligned either way, so the base chain does NOT drift. Some sub-types embedded below
         // are MINIMAL OWNING SLICES in this tree (SweptSphere is an opaque 0x20 -- correct, see
         // the closure note on it -- and Wheel/AxisAlignedBox are their own reconstructions;
-        // SimpleVehicleAttribs is the FULL width-identical 240 as of 2026-08-09). So the
+        // SimpleVehicleAttribs is the FULL width-identical 240 as of 2026-08-09).
+        //
+        // ⭐ CORRECTED 2026-09-03 (traffic crash-severity wave). This banner used to end "So the
         // absolute console offsets below are NOT reproducible as host offsetofs and are NOT
-        // static_asserted. What IS gated (VehiclePhysics_layout_check.cpp) is the DWARF
-        // ORDER and every pointer-free RELATIVE run.
+        // static_asserted." The first half is FALSE and the second half is no longer true. MEASURED
+        // on this tree's x64 build: mfSpeedMPH 1728 == 0x6C0, mDeformableAABB 1744 == 0x6D0,
+        // mOriginalAABB 1776 == 0x6F0, mbCrashing 1808 == 0x710, sizeof 1824 == 0x720 -- every
+        // one IDENTICAL to the console literal beside it. Nothing in the tail of this block is a
+        // slice, and the leaf vptr's 4->8 widening is absorbed by the 16-aligned base, so the whole
+        // own-member run reproduces exactly. Those five are now HOST static_asserts in
+        // VehiclePhysics_layout_check.cpp::_AssertOwnBlockLayout, so a future edit that shifts them
+        // breaks the build instead of silently moving the deformed AABB out from under
+        // UpdateDeformedBBox. What is still only relatively gated is the interior of the head of
+        // the block (maWheels/maWheelSpheres strides), which the arithmetic half covers.
+        // ⛔ Do not re-derive this by reasoning -- it was measured with offsetof, and the previous
+        // reasoning-only claim sent this wave hunting a widening ghost that does not exist.
         //
         //   X360   member                       first-hand evidence
         //   -----  ---------------------------  ------------------------------------------------
@@ -456,6 +468,36 @@ namespace Vehicle
         // CLAMP SOURCE for UpdateSkinningOffsets, a stale one also mis-clamps the next impact.
         // ------------------------------------------------------------------------------------
         void ResetDeformableAABB() { mDeformableAABB = mOriginalAABB; }   // DWARF :348
+
+        // ------------------------------------------------------------------------------------
+        // SetDeformableBBox -- DWARF BrnSimpleVehiclePhysics.h:298
+        //     void SetDeformableBBox(const AxisAlignedBox &);
+        // (DecFIGS also shows the ONE call site: BrnDeformableObject.cpp:166 ->
+        // `Vehicle::SimpleVehiclePhysics::SetDeformableBBox(...)`, i.e. UpdateDeformedBBox.)
+        //
+        // The X360 has no out-of-line copy because that one caller INLINES it --
+        // DeformableObject::UpdateDeformedBBox @0x825E0D78..0x825E0DB0 stack-stages the
+        // accumulated v12/v13 and copies both 16-byte halves into the body:
+        //     0x825E0D7C  lwz  r10, 0x194C(r3)     ; the attached SimpleVehiclePhysics
+        //     0x825E0D84  addi r10, r10, 0x6D0     ; &mDeformableAABB
+        //     0x825E0D94..0x825E0DB0  four ld/std pairs == 32 bytes == one AxisAlignedBox
+        //
+        // ⭐ ADDED 2026-09-03 (traffic crash-severity wave). Until now UpdateDeformedBBox
+        // reproduced those stores as RAW HOST BYTE WRITES at +0x6D0/+0x6E0 -- console offsets
+        // applied to the x64 object, which the own-member banner above explicitly warns are "NOT
+        // reproducible as host offsetofs". They happen to be reproducible for THIS class (measured,
+        // and now GATED in VehiclePhysics_layout_check.cpp::_AssertOwnBlockLayout: host
+        // mfSpeedMPH 0x6C0, mDeformableAABB 0x6D0, mOriginalAABB 0x6F0, mbCrashing 0x710,
+        // sizeof 0x720 -- every one identical to the console), so the raw writes were landing on
+        // the right members; but a producer reaching a member by literal while every consumer
+        // reads it through GetDeformableAABB() is one header edit away from silently writing
+        // somewhere else, with nothing to catch it. This is the named seam the DWARF already
+        // declares, same additive shape as ResetDeformableAABB above: no member, no layout.
+        // ------------------------------------------------------------------------------------
+        void SetDeformableBBox(const CgsGeometric::AxisAlignedBox& lrNewBox)   // DWARF :298
+        {
+            mDeformableAABB = lrNewBox;
+        }
 
         bool     IsFatallyCrashing() const { return mbStartedFatallyCrashing; }      // @0x711 (`lbz r11,0x711(r30)`)
         bool     HasStartedDeforming() const { return mbStartedDeforming; }          // @0x712 (`lbz r11,0x712(r30)`)

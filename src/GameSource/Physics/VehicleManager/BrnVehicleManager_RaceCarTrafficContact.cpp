@@ -180,13 +180,28 @@ bool VehicleManager::ShouldRaceCarCrashOnCarImpact(EActiveRaceCarIndex leVictimA
         // Budget 200, and only for an impact of >= 5 m/s: the low-speed contact tail of one
         // shove (60 rows of 0.3 m/s in run tw_ram1) used to exhaust the budget before the hit
         // that mattered, so the 109 mph CHECK in that run has no operands on record.
+        //
+        // ⭐⭐ AND THE BUDGET ALONE IS STILL NOT ENOUGH -- measured 2026-09-03, run tsev_hard1. The
+        // player grinds along two traffic cars for ~40 s generating one contact per frame; the 200
+        // rows were spent on 10-19 m/s shoves, and when the run finally reached an 89.4 mph hit
+        // ([T5-arm] slot=9 playerSpeed=39.97) THE HARDEST HIT OF THE RUN HAD NO OPERANDS ON RECORD.
+        // A budget answers "what did the first N contacts do"; the question is "what did the
+        // HARDEST contact do", and those are different questions. So the gate is now
+        // budget OR a new running maximum: the max arm is monotonic, so it is self-limiting (a run
+        // cannot emit more lines than it has distinct record impacts), and it GUARANTEES that the
+        // single row a severity claim rests on is present in every log. DELETE-WHEN-STABLE.
+        static f32 s_fCrashTestMaxImpact = 0.0f;
+        const bool lbNewHardest = (lvfImpactSpeed.x > s_fCrashTestMaxImpact + 0.5f);
+        if (lbNewHardest) { s_fCrashTestMaxImpact = lvfImpactSpeed.x; }
+
         static s32 s_iCrashTestBudget = 200;
-        if (s_iCrashTestBudget > 0 && lvfImpactSpeed.x >= 5.0f
+        if ((s_iCrashTestBudget > 0 || lbNewHardest) && lvfImpactSpeed.x >= 5.0f
             && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
         {
-            --s_iCrashTestBudget;
+            if (s_iCrashTestBudget > 0) { --s_iCrashTestBudget; }
             *CgsDev::Log::gpDebugPrint
-                << "[T4-crash-test] impactSpeed=" << lvfImpactSpeed.x
+                << (lbNewHardest ? "[T4-crash-test] HARDEST-SO-FAR impactSpeed=" : "[T4-crash-test] impactSpeed=")
+                << lvfImpactSpeed.x
                 << " otherMass=" << lfOtherMass << " victimMass=" << lfVictimMass
                 << " vf=" << lfVulnerability
                 << " stress=" << lfStress
@@ -520,6 +535,14 @@ void VehicleManager::HandleRaceCarTrafficCarPotentialContact(
     {
         // Change-keyed (race car, traffic slot, flags) with a budget, instead of the original
         // once-per-kind latch: a run with several hits reports each hit's decision once.
+        // ⭐⭐ PLUS a running-max arm on the race car's speed (2026-09-03), for the same measured
+        // reason as [T4-crash-test]'s: in run tsev_hard1 the 80-line budget was spent on 29 mph
+        // grinding contacts and the run's 89 mph hit -- the only one a severity claim could rest on
+        // -- never printed its decision. Monotonic, so self-limiting. DELETE-WHEN-STABLE.
+        static f32 s_fDecidedMaxMPH  = 0.0f;
+        const bool lbDecidedHardest  = (lpRaceCarPhysics->GetSpeedMPH().x > s_fDecidedMaxMPH + 1.0f);
+        if (lbDecidedHardest) { s_fDecidedMaxMPH = lpRaceCarPhysics->GetSpeedMPH().x; }
+
         static u32 s_uLastDecidedKey = 0xFFFFFFFFu;
         static s32 s_iDecidedBudget  = 80;
 
@@ -533,12 +556,13 @@ void VehicleManager::HandleRaceCarTrafficCarPotentialContact(
         const u32 luDecidedKey = (static_cast<u32>(lu16RaceCarIndex) << 24)
                                | (static_cast<u32>(lu16TrafficIndex) << 16)
                                | (luImpactResponseFlags & 0xFFFFu);
-        if (luDecidedKey != s_uLastDecidedKey && s_iDecidedBudget > 0)
+        if (lbDecidedHardest || (luDecidedKey != s_uLastDecidedKey && s_iDecidedBudget > 0))
         {
             s_uLastDecidedKey = luDecidedKey;
-            --s_iDecidedBudget;
+            if (s_iDecidedBudget > 0) { --s_iDecidedBudget; }
             *CgsDev::Log::gpDebugPrint
-                << "[T4-hit] decided outcome="
+                << (lbDecidedHardest ? "[T4-hit] FASTEST-SO-FAR decided outcome="
+                                     : "[T4-hit] decided outcome=")
                 << (lbCrash    ? "CRASH_TRAFFIC"
                   : lbCheck    ? "CHECK_TRAFFIC"
                   : lbSlam     ? "SLAM_TRAFFIC"

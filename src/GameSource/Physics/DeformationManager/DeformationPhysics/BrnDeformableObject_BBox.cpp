@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"                        // CgsGeometric::Sphere (centre.xyz + radius.w)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSweptSphere.h"                   // CgsGeometric::SweptSphere
+#include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"                // CgsGeometric::AxisAlignedBox (SetDeformableBBox's argument)
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"                      // CgsSceneManager::VolumeInstanceId
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"              // VehiclePhysics (mfSpeedMPH/IsCrashing/GetTransform/mpAttribs)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"
@@ -67,16 +68,21 @@ namespace renderengine { extern u32 guPresentCount; }
 //     then the Vector4 at +0x40 within the attribs (== mBaseAttribs.mDrivetimeDeformLimits). Those
 //     are LIVE per-car attrib data (NOT rodata), reached by the asm-proven console offsets.
 //
-// FLAGGED-0 PLACEHOLDERS (rodata NOT in the per-function exports -- NEVER fabricated):
-//   * IsUsingSweptSpheres scales the body speed vector by &unk_83017FE0 before the > 6.0 test. That
-//     scale vector's value is not in the exports; it is carried as a correctly-shaped honest zero
-//     (KVF_SWEPT_SPHERE_SPEED_SCALE). The 6.0 threshold IS asm-visible and is the real constant. With
-//     the scale FLAGGED-0 the product is 0 and the speed gate fails (inert + honest) until the rodata
-//     is recovered -- the early-outs / member reads around it stay byte-faithful.
+// ⛔ THIS BLOCK USED TO SAY "FLAGGED-0 PLACEHOLDERS" FOR THE TWO CONSTANTS BELOW. IT WAS STALE, AND
+// THE CODE HAD BEEN RIGHT SINCE 2026-08-03 -- the banner outlived the fix by a month and cost the
+// 2026-09-03 traffic wave the first hour of its budget, chasing a dead swept-sphere gate that is not
+// dead. Both are RECOVERED; the seats are at :125 and :133. Corrected 2026-09-03:
+//   * IsUsingSweptSpheres scales the body speed vector by &unk_83017FE0 before the > 6.0 test.
+//     unk_83017FE0 is a static-init splat of flt_82F31928 == 0.447039992, the engine-wide MPH -> m/s
+//     factor (KVF_SWEPT_SPHERE_SPEED_SCALE, :125), so the test is "speed in m/s > 6 m/s" -- 13.4 mph.
+//     ⭐ CORROBORATED INDEPENDENTLY 2026-09-03: all eight image references to unk_83017FE0 pair it
+//     with a speed (mfSpeedMPH @+0x6C0 or a velocity), and one of them is VehicleAttribs::SetupAttribs
+//     @0x825F5190, which multiplies a collision attrib by it and stores the product into the slot
+//     ShouldRaceCarCrashOnCarImpact reads as GetCrashSpeedMPS() -- MPS. The name IS the unit proof.
+//     BrnBehaviourGameplayExternal.cpp:1546 carries the same address with the same value, byte-scanned.
 //   * UpdateDeformedBBox compares the deformed extents against the drive-time limits with a per-axis
-//     tolerance vector loaded from &unk_82FB9B30. Carried FLAGGED-0 (KVF_DEFORMED_BBOX_TOLERANCE):
-//     the comparison then reduces to a plain "deformed corner crossed the drive-time corner" test,
-//     exactly the zero-tolerance limit of the asm.
+//     tolerance vector loaded from &unk_82FB9B30 -- a static-init splat @0x82C5DAA0 of flt_82002138
+//     == 0.01 (KVF_DEFORMED_BBOX_TOLERANCE, :133). Also recovered; also not a placeholder.
 //
 // ASSERTS are non-gating tripwires (BeginAssert/FireAssert/EndAssert == one CGS_ASSERT): in the asm
 // execution continues past a failed assert, so the C++ falls through identically. NO file/line.
@@ -107,13 +113,9 @@ namespace Deformation
 		// No separately-named member in the frozen DWARF sequence; read by the asm-proven console offset.
 		static const u32 KU_DEFORMED_BBOX_GATE_WORD_OFFSET = 26384;
 
-		// The deformed-AABB corner pair SimpleVehiclePhysics::SetDeformableBBox(min,max) stores into the
-		// attached vehicle physics: min @ vehiclePhysics+0x6D0, max @ vehiclePhysics+0x6E0. These are the
-		// exact corners GetAlignedDeformedBoundingBox reads back (its +0x6D0/+0x6E0 reads). The setter was
-		// INLINED in UpdateDeformedBBox's first block (asm: stack-stage the accumulated min/max, then copy
-		// both Vector4s into the body), so it is modelled here as that same pair of stores by console offset.
-		static const u32 KU_DEFORMABLE_BBOX_MIN_OFFSET = 0x6D0;   // 1744
-		static const u32 KU_DEFORMABLE_BBOX_MAX_OFFSET = 0x6E0;   // 1760
+		// (The deformed-AABB corner pair the console stores at vehiclePhysics+0x6D0/+0x6E0 used to be
+		// reached from here by those two literals. RETIRED 2026-09-03: it goes through the DWARF-declared
+		// SimpleVehiclePhysics::SetDeformableBBox(const AxisAlignedBox&) now -- see UpdateDeformedBBox.)
 
 		// KI_MAX_NUM_WHEEL_POINTS_PER_DEFORMABLE_OBJECT -- the four wheel sensor slots that follow the
 		// streamed deformation sensors (the asm's `+ 4` / `< 4` bounds, DWARF asserts).
@@ -198,8 +200,10 @@ namespace Deformation
 	//   speedScaled = (*(vehiclePhysics + 0x6C0) /*mfSpeedMPH vector*/) * &unk_83017FE0;  (lane 0)
 	//   if (!(speedScaled.x > 6.0)) return 0;
 	//   return !*(vehiclePhysics + 0x710);                 (== !IsCrashing())
-	// FLAG: the speed-scale vector (&unk_83017FE0) is FLAGGED-0 -- the speed gate is honest-inert until
-	// recovered; mbDoSweptSphereTests / IsCrashing reads + early-out structure are byte-faithful.
+	// ⭐ &unk_83017FE0 == splat(0.447039992), the MPH -> m/s factor (see the file banner), so this reads
+	// "forward speed in m/s > 6 m/s" == 13.4 mph. NOT a placeholder -- the stale "FLAGGED-0" note that
+	// stood here was retired 2026-09-03; mbDoSweptSphereTests / IsCrashing reads + early-out structure
+	// are byte-faithful.
 	// =============================================================================================
 	bool DeformableObject::IsUsingSweptSpheres()
 	{
@@ -308,9 +312,11 @@ namespace Deformation
 	//   centreWorld = transform.right*cx + transform.up*cy + transform.at*cz + transform.pos
 	//   CgsGeometric::Box::Set(box, {right, up, at, centreWorld}, {halfDims, fatness = 0})
 	//
-	// FLAG: KVF_CAR_BBOX_SHRINK (&unk_82FB95E0) is unrecovered rodata -> FLAGGED-0 (the shrink term
-	// vanishes; honest). The deformed AABB corner pair is read off the asm-proven vehiclePhysics console
-	// offsets (+0x6D0 / +0x6E0; not a named VehiclePhysics member here). Box::Set modelled as the
+	// ⭐ KVF_CAR_BBOX_SHRINK (&unk_82FB95E0) is RECOVERED, not FLAGGED-0 -- its initialiser @0x82C5B798
+	// is a genuinely PER-AXIS row {0.1, 0.3, 0.05, 0} built from flt_82004014 / flt_82004740 /
+	// flt_820047C8 (see :140 and the file banner). The stale "unrecovered rodata -> FLAGGED-0" note that
+	// stood here was retired 2026-09-03. The deformed AABB corner pair is read BY NAME through
+	// SimpleVehiclePhysics::GetDeformableAABB() (console +0x6D0 / +0x6E0). Box::Set modelled as the
 	// raw-offset write (transform @ +0..+48, dims @ +64), per the committed
 	// BrnPhysicalBodyPart::GetBoundingBox precedent. ✅ That layout is CONFIRMED, not provisional --
 	// CgsGeometric::Box is homed at GameShared/GameClasses/Geometric/Primitives/CgsBox.h (see the
@@ -321,12 +327,14 @@ namespace Deformation
 		const BrnPhysics::Vehicle::VehiclePhysics* lpPhysics = mVehicleBody.GetVehiclePhysics();
 		const Matrix44Affine& lTransform = lpPhysics->GetTransform();
 
-		// Deformed AABB corners the vehicle physics maintains (SetDeformableBBox: min @ +0x6D0, max @ +0x6E0).
-		const char* lpPhysBytes = reinterpret_cast<const char*>(lpPhysics);
-		const Vector3& lvMin = *reinterpret_cast<const Vector3*>(lpPhysBytes + 0x6D0);
-		const Vector3& lvMax = *reinterpret_cast<const Vector3*>(lpPhysBytes + 0x6E0);
+		// Deformed AABB corners the vehicle physics maintains (SetDeformableBBox: min @ +0x6D0,
+		// max @ +0x6E0). Reached BY NAME since 2026-09-03; the two raw console-offset casts that stood
+		// here were the read half of the same producer/consumer-by-literal pair UpdateDeformedBBox had.
+		const CgsGeometric::AxisAlignedBox& lrDeformedAABB = lpPhysics->GetDeformableAABB();
+		const Vector4& lvMin = lrDeformedAABB.mMin;
+		const Vector4& lvMax = lrDeformedAABB.mMax;
 
-		// halfDims = (max - min) * 0.5 - KVF_CAR_BBOX_SHRINK (FLAGGED-0) ; centre = (min + max) * 0.5.
+		// halfDims = (max - min) * 0.5 - KVF_CAR_BBOX_SHRINK ; centre = (min + max) * 0.5.
 		const Vector3 lvHalfDims = {
 			(lvMax.x - lvMin.x) * 0.5f - KVF_CAR_BBOX_SHRINK.x,
 			(lvMax.y - lvMin.y) * 0.5f - KVF_CAR_BBOX_SHRINK.y,
@@ -377,13 +385,21 @@ namespace Deformation
 	//       +0x6D0, max @ +0x6E0 -- the producer of the corner pair GetAlignedDeformedBoundingBox reads back)
 	//   if (HIBYTE(*(this + 26384)) == 1):
 	//       dMin = mDriveTimeBBoxLimitMin - minAccum ; dMax = mDriveTimeBBoxLimitMax - maxAccum
-	//       beyond = any axis where (dMin < -tol) or (dMax > tol)   (tol = &unk_82FB9B30, FLAGGED-0)
+	//       beyond = any axis where (dMin < -tol) or (dMax > tol)   (tol = &unk_82FB9B30 == 0.01, recovered)
 	//       *(vehiclePhysics + 5174) = beyond                       (SetDeformedBeyondDriveTimeLimitsInCrash)
-	// FLAG: the per-axis tolerance vector is FLAGGED-0, so "beyond" becomes the plain corner-crossed
-	// test (the zero-tolerance limit of the asm). The accumulation, the SetDeformableBBox producer store,
-	// the gate, and the beyond-limits store target are byte-faithful (member reads by name; the deformed-bbox
-	// corner pair, the gate word + the bool store by asm-proven console offset). FLAG: SetDeformableBBox is
-	// not yet homed -> expressed as its inlined +0x6D0/+0x6E0 byte-stores until that setter lands.
+	// The accumulation, the SetDeformableBBox producer store, the gate, and the beyond-limits store target
+	// are byte-faithful (member reads by name; the gate word + the bool store by asm-proven console offset).
+	// ⭐ 2026-09-03: SetDeformableBBox IS homed now (BrnSimpleVehiclePhysics.h:298, DWARF-declared), so the
+	// producer no longer writes through +0x6D0/+0x6E0 literals; and the tolerance is 0.01, not a placeholder.
+	//
+	// ⭐⭐ WHO REACHES THE VERDICT AT ALL. The owner-byte gate is a RACE-CAR gate: `bnelr cr6` at
+	// 0x825E0DC4 returns for every owner != E_ENTITYTYPE_RACECAR. A TRAFFIC car (owner 2) therefore gets
+	// its deformed AABB stored and then LEAVES -- it never computes dMin/dMax, never writes
+	// mbDeformedBeyondDriveTimeLimitsInCrash, and has no drive-time "wrecked" verdict of any kind. That is
+	// the CONSOLE's design, not a gap in this port: measured 2026-09-03, a run logs 259 calls with
+	// gateOwner 1 and 315 with gateOwner 2, and only the first group reaches the compare. A traffic car's
+	// crash severity is decided somewhere else entirely -- VehicleManager::DecideOutcomeOfRaceCarTrafficContact
+	// @0x825C70A0, an impulse/mass/speed test (CRASH / CHECK / SLAM), never an extent test.
 	// =============================================================================================
 	void DeformableObject::UpdateDeformedBBox()
 	{
@@ -418,17 +434,29 @@ namespace Deformation
 			while ( lu32Index < lu32NumSensors );
 		}
 
-		// GetVehiclePhysics()->SetDeformableBBox(lvMinPositions, lvMaxPositions) -- store the accumulated
-		// deformed AABB back into the attached vehicle physics. This is the producer of the +0x6D0/+0x6E0
-		// corner pair GetAlignedDeformedBoundingBox reads back. The asm INLINES the setter here in the first
-		// block (DWARF BrnDeformableObject.cpp:143-166; dossier store at lines 7039-7050: stack-stage v12/v13
-		// then copy both Vector4s into the body), so it is modelled as that same pair of stores (min @ +0x6D0,
-		// max @ +0x6E0) by the asm-proven console offsets. FLAG: SimpleVehiclePhysics::SetDeformableBBox is not
-		// yet homed; expressed as its inlined byte-stores until that setter lands.
+		// GetVehiclePhysics()->SetDeformableBBox(box) -- store the accumulated deformed AABB back into
+		// the attached vehicle physics. This is the producer of the mDeformableAABB corner pair
+		// GetAlignedDeformedBoundingBox, IsFrontCornerClip, PredictCarCarIntersection, the
+		// UpdateSkinningOffsets clamp and the [T5-ram] witness all read back. The asm INLINES the
+		// setter here in the first block (DWARF BrnDeformableObject.cpp:166 names the call;
+		// 0x825E0D7C..0x825E0DB0: `lwz r10,0x194C(r3)` then `addi r10,r10,0x6D0` then four ld/std
+		// pairs == one whole 32-byte AxisAlignedBox).
+		//
+		// ⭐ CORRECTED 2026-09-03 (traffic crash-severity wave). This used to be a pair of RAW HOST
+		// BYTE WRITES through `(char*)physics + 0x6D0 / + 0x6E0` -- console literals applied to the
+		// x64 object -- carrying a FLAG that said "SetDeformableBBox is not yet homed". The DWARF
+		// declares it (BrnSimpleVehiclePhysics.h:298, `void SetDeformableBBox(const AxisAlignedBox&)`)
+		// and it is now homed, so the write goes BY NAME like every read of it already did. The two
+		// offsets were in fact correct on the host -- measured 0x6D0/0x6E0, and now static_asserted in
+		// VehiclePhysics_layout_check.cpp -- so this is a faithfulness fix, NOT a behaviour fix, and
+		// nothing downstream of it changes. Recorded so the next wave does not re-open the question:
+		// a producer-by-literal + consumers-by-name pair is a widening ghost waiting to happen, and
+		// this one was investigated as a suspect and cleared by measurement, not by argument.
 		BrnPhysics::Vehicle::VehiclePhysics* lpDeformPhysics = mVehicleBody.GetVehiclePhysics();
-		char* lpDeformPhysBytes = reinterpret_cast<char*>(lpDeformPhysics);
-		*reinterpret_cast<Vector4*>(lpDeformPhysBytes + KU_DEFORMABLE_BBOX_MIN_OFFSET) = lvMinPositions;
-		*reinterpret_cast<Vector4*>(lpDeformPhysBytes + KU_DEFORMABLE_BBOX_MAX_OFFSET) = lvMaxPositions;
+		CgsGeometric::AxisAlignedBox lDeformedBox;
+		lDeformedBox.mMin = lvMinPositions;
+		lDeformedBox.mMax = lvMaxPositions;
+		lpDeformPhysics->SetDeformableBBox(lDeformedBox);
 
 		// ⭐⭐ CORRECTED 2026-09-02 (deformation wave). The gate is NOT a "deformed in crash" flag:
 		//     0x825E0DB4  ld    r11, 0x6710(r3)      ; the 8-byte handling RigidBodyId (+26384)
@@ -582,7 +610,7 @@ namespace Deformation
 			};
 
 			// beyond if any axis where (-tol > dMin) i.e. deformedMin pushed below the limit, or
-			// (dMax > tol) i.e. deformedMax pushed above the limit. tol == FLAGGED-0 vector.
+			// (dMax > tol) i.e. deformedMax pushed above the limit. tol == 0.01 per axis (recovered).
 			const f32 lfNegTolX = -KVF_DEFORMED_BBOX_TOLERANCE.x;
 			const f32 lfNegTolY = -KVF_DEFORMED_BBOX_TOLERANCE.y;
 			const f32 lfNegTolZ = -KVF_DEFORMED_BBOX_TOLERANCE.z;
