@@ -561,6 +561,14 @@ namespace Deformation
 						<< "[deform-bbox] call " << static_cast<s32>(sluTraceCalls)
 						<< " present " << static_cast<s32>(renderengine::guPresentCount)
 						<< " obj " << liSlot
+						// ⚠️⚠️ `obj` IS A ROTATING 8-SLOT CACHE INDEX, NOT AN IDENTITY. A slot is
+						// recycled to a different vehicle -- and different traffic MODELS have
+						// different rest boxes -- so a run reads as a sudden 0.5 m of deformation
+						// the moment a sedan's slot is handed to a truck. Measured 2026-09-03: 623
+						// of 727 traffic rows in one run showed a "changed" z extent and almost all
+						// of it was slot reuse. `gid` is the object's own global entity index, so a
+						// crush series can be attributed to ONE CAR.
+						<< " gid " << static_cast<s32>((GetGlobalEntityId().muValue >> 10) & 0x3FFFu)
 						<< " crashing " << ( ( lpDeformPhysics != 0 && lpDeformPhysics->IsCrashing() ) ? 1 : 0 )
 						<< " gateRaw " << static_cast<s32>(static_cast<u8>(lu32GateWord >> 24))
 						<< " gateOwner " << static_cast<s32>(GetHandlingBodyIdHighByte())

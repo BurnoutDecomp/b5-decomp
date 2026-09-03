@@ -1035,6 +1035,9 @@ namespace Deformation
                             << "[st-mag] n "   << static_cast<s32>(luStMagLine)
                             << " present "     << static_cast<s32>(renderengine::guPresentCount)
                             << " owner "       << static_cast<s32>(GetHandlingBodyIdHighByte())
+                            // the same global entity index [deform-bbox] now prints, so an
+                            // impulse row and a crush row can be joined ON THE CAR.
+                            << " gid "         << static_cast<s32>((GetGlobalEntityId().muValue >> 10) & 0x3FFFu)
                             << " dir "         << liDir
                             << " arm "         << liStArm
                             << " selfShow "    << liStSelfShowtime
@@ -1050,6 +1053,17 @@ namespace Deformation
                             << " oOwner "      << ( lContact.mpOtherVehicle != nullptr
                                                     ? static_cast<s32>(lContact.mpOtherVehicle
                                                         ->GetHandlingBodyIdHighByte())
+                                                    : -1 )
+                            // ⭐ AND WHICH object, not just which KIND. Measured 2026-09-03: at
+                            // every race-car/traffic contact BOTH halves are logged on the same
+                            // present with mirrored directions (74/74, 50/50 and 7/7 presents in
+                            // three runs), yet the traffic half reports oOwner 2 -- so either its
+                            // mpOtherVehicle is not the race car, or it is and the owner byte
+                            // read against it is wrong. `oGid` separates those two, and they are
+                            // completely different defects.
+                            << " oGid "        << ( lContact.mpOtherVehicle != nullptr
+                                                    ? static_cast<s32>((lContact.mpOtherVehicle
+                                                        ->GetGlobalEntityId().muValue >> 10) & 0x3FFFu)
                                                     : -1 )
                             << " raw "         << lfProjection
                             << " shaped "      << lfShapedMagnitude
