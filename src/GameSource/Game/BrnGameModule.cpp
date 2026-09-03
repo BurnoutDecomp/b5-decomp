@@ -53,7 +53,14 @@ namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(
 // pc/gcm/renderengine/device.cpp under BRN_FRAME_DUMP_ARM=slomo. NOT in the X360 binary.
 // The trailing -1.0f is mfLiveBoostFraction's "nothing published yet" sentinel; its one
 // writer is BridgeWorldVehicleDataToGui (GameBridgeWorldToGui.cpp).
-namespace BrnDiag { FilmLatch gFilmLatch = { 0u, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f }; }
+// The last five fields are the TYRE-MARK latch/telemetry (muSkidLatched, muTrailSegments and
+// the last laid segment's contact point); their one writer is EffectsModule::HandleWheels,
+// beside its AddTrailSegment call.
+namespace BrnDiag
+{
+    FilmLatch gFilmLatch = { 0u, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f,
+                             0u, 0u, 0.0f, 0.0f, 0.0f };
+}
 
 namespace BrnGame
 {

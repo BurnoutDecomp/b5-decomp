@@ -26,6 +26,7 @@
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"                          // BrnGame::DispatchThreadInputBuffer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // CgsDev::Log::WriteToLog
+#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"                   // [diag] BRN_FRAME_DUMP_ARM=skid
 #include "rw/math/vpu/vector3_operation.h"                                         // rw::math::vpu::{operator-, Dot}
 
 #include <cmath>    // std::fabs
@@ -1405,6 +1406,17 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
                         lfSkidFactor,
                         mParticleModule.mRenderData.mfCurrentTime);                   // module +0x8E08
                     lbTrailEnded = false;
+
+                    // [DIAG] NOT IN THE X360 BINARY -- the tyre-mark film latch + telemetry
+                    // (BrnDiagFilmLatch.h). This is the ONE place a mark is laid, so it is the
+                    // one place that can arm a capture on it and the one place that knows where
+                    // the segment went. Five stores; read only by the back-buffer writer under
+                    // BRN_FRAME_DUMP_ARM=skid and by frames.csv. DELETE-WHEN-STABLE.
+                    BrnDiag::gFilmLatch.muSkidLatched = 1u;
+                    ++BrnDiag::gFilmLatch.muTrailSegments;
+                    BrnDiag::gFilmLatch.mfLastSegX = lrWheel.mRoadContact.mPosition.x;
+                    BrnDiag::gFilmLatch.mfLastSegY = lrWheel.mRoadContact.mPosition.y;
+                    BrnDiag::gFilmLatch.mfLastSegZ = lrWheel.mRoadContact.mPosition.z;
                 }
 
                 // [skid] both sides of the gate, on the frames it matters.
