@@ -3972,23 +3972,45 @@ namespace Vehicle
     // BRN_SUSV_PROBE is that threshold in m/s (a bare "1" means 1.0 m/s). One line per crossing.
     namespace
     {
+        // ⛔⛔⛔ THIS FUNCTION SHIPPED BROKEN ONCE, AND THE BUG IS WORTH THE BANNER (2026-09-03).
+        //   The first cut copied the repo's standard BOOLEAN probe idiom -- `lpcEnv[0] == '0'` means
+        //   off -- into a probe whose value is a THRESHOLD. `BRN_SUSV_PROBE=0.5` and `=0.01` both
+        //   START WITH '0', so both read as DISABLED, and three runs produced zero [susv] lines that
+        //   were about to be published as "UpdateSuspensionPostSimulation moved nothing". The probe
+        //   was never armed. ⭐ Nothing in the log said so: an unarmed probe and a quiet one look
+        //   identical, which is the whole reason a probe must be seen to FIRE before its silence is
+        //   read as a measurement. Parse the number and let the NUMBER decide.
         f32 SusVProbeThreshold()
         {
             static f32 sfThreshold = -1.0f;
             if (sfThreshold < 0.0f)
             {
                 const char* lpcEnv = getenv("BRN_SUSV_PROBE");
-                if (lpcEnv == NULL || lpcEnv[0] == '\0' || lpcEnv[0] == '0')
-                    sfThreshold = 0.0f;               // 0 == off (never crosses: the test is >=, gated below)
-                else
-                    sfThreshold = static_cast<f32>(std::atof(lpcEnv));
-                if (sfThreshold < 0.0f) sfThreshold = 0.0f;
+                sfThreshold = (lpcEnv != NULL && lpcEnv[0] != '\0')
+                                  ? static_cast<f32>(std::atof(lpcEnv))
+                                  : 0.0f;
+                if (sfThreshold < 0.0f) sfThreshold = 0.0f;   // <= 0 is off; see SusVProbeArmed
             }
             return sfThreshold;
         }
+        // ⭐ AND IT ANNOUNCES ITSELF, ONCE. An unarmed probe and a probe whose threshold was never
+        //   crossed are indistinguishable in a log -- that is how the bug above nearly got
+        //   published as a result. With this line, "[susv] ARMED" present + no [susv] rows IS a
+        //   measurement; its absence says the run never armed the probe at all.
         bool SusVProbeArmed()
         {
-            return SusVProbeThreshold() > 0.0f && CgsDev::Log::gpDebugPrint != NULL;
+            const bool lbArmed = SusVProbeThreshold() > 0.0f && CgsDev::Log::gpDebugPrint != NULL;
+            static bool sbAnnounced = false;
+            if (lbArmed && !sbAnnounced)
+            {
+                sbAnnounced = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[susv] ARMED at threshold " << SusVProbeThreshold()
+                    << " m/s -- one line per UpdateSuspensionPostSimulation call whose whole-function"
+                       " |dv| crosses it. No rows after this line means the threshold was never"
+                       " crossed; no ARMED line at all means the probe was never on.\n";
+            }
+            return lbArmed;
         }
 
         // Filled by StabiliseAfterHardLanding so the caller's ledger can separate that function's
