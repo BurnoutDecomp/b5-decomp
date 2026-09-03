@@ -174,6 +174,19 @@ namespace Deformation
         // (unk_82FB9D40 -- the not-showtime bank row -- initialises to splat(0.0) @82C5D5C0;
         //  spelled as a zero literal at the select site.)
 
+        // ⭐ RECOVERED 2026-09-03 (drive-spine 1:1 audit) -- the ApplySensorImpulse block-(2b)
+        // SHOWTIME MAGNITUDE rows. Both read 0x00000000 in the image (the silent-zero family);
+        // their CRT writers were found by sweeping .text for the `lis/@l` pair that materialises
+        // each address, then disassembling the thunk:
+        //     0x82C5D4D8  lfs f0, flt_82004014 (0.1)  ; vspltw ; stvx128 -> unk_82FB8080
+        //     0x82C5D4F8  lfs f0, flt_820047C4 (15.0) ; vspltw ; stvx128 -> unk_82FB8010
+        const f32 KF_SHOWTIME_MAG_CARCAR_DAMP = 0.1f;    // unk_82FB8080 @82C5D4E8 <- flt_82004014
+        const f32 KF_SHOWTIME_MAG_VICTIM_GAIN = 15.0f;   // unk_82FB8010 @82C5D510 <- flt_820047C4
+        // The strength-fade clamp bounds, plain .rdata scalars held in f30/f31 across the whole
+        // function (0x82607AD0 / 0x82607AE0):
+        const f32 KF_SHOWTIME_STRENGTH_FADE_MIN = 0.5f;  // flt_82001DA0 (f30)
+        const f32 KF_SHOWTIME_STRENGTH_FADE_MAX = 1.5f;  // flt_820945DC (f31)
+
         // ⭐⭐ RECOVERED 2026-08-15 (walls leg 8) -- the DRIVE-TIME DEFORMATION budget row,
         // &unk_82FB9520. Dynamic-init (zero in the image); initialiser @0x82C5D818..0x82C5D83C loads
         // flt_82004744 == 0.2, splats it (vspltw v0,v0,0) and stores the row. ApplySensorImpulse block
@@ -867,12 +880,88 @@ namespace Deformation
             lParams.meImpulseDirection = static_cast<ENextSensorDirection>(liDir);
             lParams.mLimitVector       = laLimitRows[liDir];   // 0x82607C50 / 0x82607C58
 
-            // magnitude validation tripwire (line 1430) -- non-gating. The asm self-compares the shaped
-            // magnitude vector (vcmpeqfp.) to catch a NaN, then streams the real diagnostic whose leading
-            // literal is "Invalid sensor impulse magnitude:\nlfImpulseMagnitude = " (asm 1856/1907-1911);
-            // the per-value AppendFormat tail is the streamed diagnostic body, not part of the condition.
-            CGS_ASSERT(lfProjection == lfProjection,
-                       "Invalid sensor impulse magnitude:\nlfImpulseMagnitude = ");   // line 1430
+            // ==========================================================================
+            // (2b) THE SHOWTIME MAGNITUDE SHAPING -- 0x82607C88..0x82607DE4.
+            //
+            // ⭐ LANDED 2026-09-03 (drive-spine 1:1 audit). THIS WHOLE BLOCK WAS ABSENT. The
+            // per-direction magnitude went into the sensor raw, so Showtime deformation was
+            // neither scaled by the attacking car's mass nor amplified on the car being hit.
+            // Every branch below is the console's, with its address:
+            //
+            //   0x82607C94  vtbl +0x10  vehicle->IsPlayerVehicleInShowtime()
+            //   ATTACKER ARM (in showtime):
+            //     0x82607CB4  vtbl +0x1C  GetShowtimeDeformationScale()  -- mag *= scale
+            //                 ⚠️ that override was ALSO missing (only the base's `return 1.0f`
+            //                 existed); it is landed this wave in RaceCarPhysics.h and is what
+            //                 makes this multiply mean anything.
+            //     0x82607CF0  if (lContact.mpOtherVehicle != 0)  mag *= 0.1   (car-car damp)
+            //     0x82607D20  vtbl +0x20  GetShowtimePlayerCarStrength()
+            //     0x82607D2C..D48  fade = clamp(1.5 - strength, 0.5, 1.5) ; mag *= fade
+            //   VICTIM ARM (not in showtime):
+            //     0x82607D7C  if (lContact.mpOtherVehicle != 0)
+            //     0x82607D90  vtbl +0x10 on the OTHER car, or its +0x672E bounced-this-frame byte
+            //     0x82607DD0  mag *= 15.0            <-- being hit BY a Showtime car
+            //
+            // ⭐ The 15.0 is the one that shows: a car rammed by a Showtime car takes fifteen
+            // times the sensor impulse. Neither multiplier existed in this build.
+            //
+            // AS-SHIPPED: the console dereferences the other object's VehiclePhysics without a
+            // null test (`lwz r3,0x194C(r11) ; lwz r11,0(r3) ; bctrl`); reproduced, so no guard
+            // is invented here beyond the mpOtherVehicle null test the console itself performs.
+            //
+            // NOTE what is deliberately NOT shaped: the per-direction accumulator below still
+            // uses the RAW projection. The console writes the shaped value only into
+            // lParams.mvfImpulseMagnitude (var_280) and never reads that slot again in the loop
+            // (its only other readers are the three stores in this block), so the accumulate runs
+            // on the register-held projection.
+            {
+                f32 lfShapedMagnitude = lfProjection;
+
+                if ( lpVehicle != nullptr && lpVehicle->IsPlayerVehicleInShowtime() )   // vtbl +0x10
+                {
+                    lfShapedMagnitude *= lpVehicle->GetShowtimeDeformationScale();      // vtbl +0x1C
+
+                    if ( lContact.mpOtherVehicle != nullptr )
+                    {
+                        lfShapedMagnitude *= KF_SHOWTIME_MAG_CARCAR_DAMP;               // 0.1
+                    }
+
+                    // fade = min(max(1.5 - strength, 0.5), 1.5)   -- the two fsel at 0x82607D40/D48
+                    f32 lfFade = KF_SHOWTIME_STRENGTH_FADE_MAX
+                                 - lpVehicle->GetShowtimePlayerCarStrength();           // vtbl +0x20
+                    if ( lfFade < KF_SHOWTIME_STRENGTH_FADE_MIN )
+                    {
+                        lfFade = KF_SHOWTIME_STRENGTH_FADE_MIN;
+                    }
+                    if ( lfFade > KF_SHOWTIME_STRENGTH_FADE_MAX )
+                    {
+                        lfFade = KF_SHOWTIME_STRENGTH_FADE_MAX;
+                    }
+                    lfShapedMagnitude *= lfFade;
+                }
+                else if ( lContact.mpOtherVehicle != nullptr )
+                {
+                    const BrnPhysics::Vehicle::VehiclePhysics* lpOtherVehicle =
+                        lContact.mpOtherVehicle->GetVehiclePhysics();
+                    if ( lpOtherVehicle->IsPlayerVehicleInShowtime()                    // vtbl +0x10
+                         || lContact.mpOtherVehicle->HasBouncedThisFrame() )             // other +0x672E
+                    {
+                        lfShapedMagnitude *= KF_SHOWTIME_MAG_VICTIM_GAIN;               // 15.0
+                    }
+                }
+
+                lParams.mvfImpulseMagnitude = VecFloat{ lfShapedMagnitude, lfShapedMagnitude,
+                                                        lfShapedMagnitude, lfShapedMagnitude };
+
+                // magnitude validation tripwire (line 1430) -- non-gating. The asm self-compares the
+                // SHAPED magnitude vector (`vcmpeqfp. v0,v0,v0` @0x82607DE8, reading var_280 after
+                // this block) to catch a NaN, then streams the real diagnostic whose leading literal
+                // is "Invalid sensor impulse magnitude:\nlfImpulseMagnitude = " (asm 1856/1907-1911);
+                // the per-value AppendFormat tail is the streamed diagnostic body, not the condition.
+                // ⚠️ It used to test the RAW projection -- which is not the value the console tests.
+                CGS_ASSERT(lfShapedMagnitude == lfShapedMagnitude,
+                           "Invalid sensor impulse magnitude:\nlfImpulseMagnitude = ");   // line 1430
+            }
 
             // latch the deformation flags (0x82607F1C..0x82607F44): this deformed this frame
             // (this +26408); the owning body has STARTED DEFORMING (`stb 1, 0x712(mpVehicle)`);
