@@ -131,10 +131,11 @@ struct cLionFX
     // comes from ParticleModule::DispatchThreadUpdate's xrefs_from). Sixteen instructions:
     // carve a cParticleScaler out of gLionScalerAllocator and, if it came back, store 1.0f
     // (`lfs f0, 0x1C98(r11)` -> flt_82001C98) through it -- i.e. cParticleScaler::Init,
-    // inlined. Unlike its two siblings this one takes NO name parameter: the DWARF gives it
-    // none and r3 is loaded with the pool address as the first instruction with nothing
-    // clobbered.
-    static cParticleScaler* ScalerRegister();
+    // inlined. It takes the same DEAD `const char*` name its two siblings do: the DWARF
+    // declares `cParticleScaler* ScalerRegister(const char*)` (LionFX.h:32) and
+    // DispatchThreadUpdate does pass r3, but the body overwrites r3 with the pool address as
+    // its first instruction so the name never reaches anything.
+    static cParticleScaler* ScalerRegister(const char* apcName);
 
     static void ScalerUpdate(cParticleScaler* apScaler, f32 afScale, const cTime& arTime);
 
