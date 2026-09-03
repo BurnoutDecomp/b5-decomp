@@ -16,6 +16,8 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionFX.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionEffect.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionParticleEffect.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleDescriptor.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleMaterial.h"
 #include "GameSource/Effects/Particles/LionParticleRender.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -124,6 +126,66 @@ cLionEffectDefinition* cLionFX::BinLoad(void* apData)
     {
         lpEffect->mpNext.Set(gpLionParticleEffectChain);
         gpLionParticleEffectChain = lpEffect;
+    }
+
+    // ---- [lionload] witness. NOT console behaviour: ours, bounded, log-only. ---------
+    // ⭐ WHY A *SUCCESS* WITNESS. The sibling failure line (ParticleDescriptionResourceType::
+    // DeSerialise's "[particles] BinLoad returned NULL") is one-shot and silent when nothing
+    // goes wrong -- so its ABSENCE proves nothing: a build where the resource type was never
+    // registered, and one where all 41 .lefs loaded perfectly, produce byte-identical logs.
+    // This line is the discriminator, and it is deliberately made of the things that would be
+    // WRONG if the record layout were wrong: the descriptor chain is walked to a count, and
+    // the first descriptor's name and its material's texture name are printed -- both reached
+    // through 32-bit slots at +0x38 and +0x4C/+0x10. A layout that had drifted would give a
+    // garbage count or an unreadable name here rather than nothing at all.
+    // DELETE-WHEN-STABLE.
+    {
+        static u32 suLoadWitness = 0;
+        const u32 KU_LOAD_WITNESS_LIMIT = 6;
+        if (suLoadWitness < KU_LOAD_WITNESS_LIMIT)
+        {
+            ++suLoadWitness;
+
+            u32 luDescriptors = 0;
+            const char* lpcFirstName = "<no descriptors>";
+            const char* lpcFirstTex  = "<none>";
+            if (lpEffect != 0)
+            {
+                for (cParticleDescriptor* lpDes = lpEffect->GetDescriptors(); lpDes != 0;
+                     lpDes = lpDes->GetNextDescriptor())
+                {
+                    if (luDescriptors == 0)
+                    {
+                        if (lpDes->mpName)
+                            lpcFirstName = lpDes->mpName.Get();
+                        if (lpDes->mpMaterial && lpDes->mpMaterial->mpTextureName)
+                            lpcFirstTex = lpDes->mpMaterial->mpTextureName.Get();
+                    }
+                    ++luDescriptors;
+                }
+            }
+
+            // The .lef name is LionChar (UTF-16); narrow it for the log.
+            char lacName[cLionEffectDefinition::KU_MAX_NAME_LENGTH + 1];
+            u32 luChar = 0;
+            for (; luChar < cLionEffectDefinition::KU_MAX_NAME_LENGTH; ++luChar)
+            {
+                const u16 lu16 = lpDefinition->m_name[luChar];
+                if (lu16 == 0)
+                    break;
+                lacName[luChar] = (lu16 < 0x80u) ? static_cast<char>(lu16) : '?';
+            }
+            lacName[luChar] = 0;
+
+            char lacMsg[512];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[lionload] #%u LOADED \"%s\" key=%08X def=%p effect=%p hash=%08X "
+                "descriptors=%u first=\"%s\" firstTexture=\"%s\"\n",
+                suLoadWitness, lacName, lpDefinition->Key(), lpDefinition, lpEffect,
+                (lpEffect != 0) ? lpEffect->mHash : 0u,
+                luDescriptors, lpcFirstName, lpcFirstTex);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
     }
 
     return lpDefinition;
