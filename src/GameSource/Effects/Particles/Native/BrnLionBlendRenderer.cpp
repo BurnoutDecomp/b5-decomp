@@ -11,7 +11,12 @@
 #include "GameSource/Effects/Particles/Native/BrnLionBlendRenderer.h"
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"  // CgsGraphics::ImRendererBase (mgpActiveRenderer)
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitter.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleLocator.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionBindings.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+
+#include <cmath>   // sqrtf -- the two normalisations
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the one-shot CreateInternalMaterial announcement
 #include "GameSource/Effects/Particles/LionParticleRender.h"   // LionParticleRender::CreateInternalMaterial / cParticleMaterial (the Lion trap stubs below)
 
@@ -56,6 +61,105 @@ void LionBlendRenderer::EndRendering()
 }  // namespace BrnGraphics
 
 // =================================================================================================
+// BrnGraphics::LionBlendRenderer::BuildCameraOrientatedLocator  @ 0x8227A478
+//                                                    (DWARF BrnLionBlendRenderer.h:138)
+//
+// Build the camera-facing basis the three Render* shapes billboard their geometry against:
+// take the emitter's locator frame, keep its translation, and replace its 3x3 with an
+// orthonormal basis whose Z axis points from the locator at the camera.
+//
+// ⭐ IT IS A LOOK-AT WITH A CONSTANT WORLD UP, and the constant is hiding in plain sight as a
+// register that never gets written. f0 is loaded with flt_82001CC0 == 0.0 at 0x8227A4C0 and
+// stays 0.0 all the way to 0x8227A56C, so the first cross product at 0x8227A540..0x8227A550 --
+// which reads like a general cross(A, N) -- is cross((0,1,0), N) == (N.z, 0, -N.x) with the
+// two multiplies by A.x and A.z folded to zero. That is the ONLY place the up vector appears;
+// there is no (0,1,0) literal anywhere in the function.
+//
+//     N = normalize(cameraPos - locatorPos)      -- 0x8227A4E8..0x8227A53C
+//     R = normalize(cross(worldUp, N))           -- 0x8227A540..0x8227A588
+//     U = cross(N, R)                            -- 0x8227A5C4..0x8227A5D8
+//
+// ⚠ THE SECOND CROSS IS cross(N, R), NOT cross(R, N), and the sign is the whole difference
+// between a right- and a left-handed basis. The three fmsubs at 0x8227A5C4/CC/D4 spell out
+// (R.z*N.y - R.y*N.z, N.z*R.x - R.z*N.x, R.y*N.x - N.y*R.x), which is the NEGATION of
+// cross(R, N) term for term.
+//
+// ⚠ BOTH NORMALISATIONS GUARD ON EXACTLY 0.0 AND LEAVE THE UNNORMALISED VALUE (0x8227A51C /
+// 0x8227A564 are `fcmpu` against 0.0 with the divide skipped, not clamped) -- so a degenerate
+// case yields a zero row rather than a NaN one. Reproduced as asked.
+//
+// The three basis rows are stored through unk_8200DCE0, read out of the image as
+// { FFFFFFFF, FFFFFFFF, FFFFFFFF, 00000000 } -- the same xyz-keep / w-drop selector
+// cParticleLocator::GetMat uses -- so each row lands with w == 0. The translation row is the
+// locator's own, copied verbatim before any of this and never masked.
+//
+// ⚠ `this` IS UNUSED: r3 is overwritten by the locator load at 0x8227A49C before anything
+// reads it. It is still a non-static member (the DWARF says so, and so does the r3 slot).
+// =================================================================================================
+namespace BrnGraphics
+{
+    void LionBlendRenderer::BuildCameraOrientatedLocator(cMatrix& arOut,
+                                                         const cParticleEmitter* apEmitter,
+                                                         const cMatrix& arCameraTransform,
+                                                         const cTime& arTime)
+    {
+        // asm 0x8227A48C..0x8227A4A0 -- the emitter's locator, sampled at this frame's time.
+        const cParticleLocator* lpLocator = apEmitter->GetBindings().GetpLocator();
+        const cMatrix& lrLocator = lpLocator->GetMat(arTime);
+
+        // asm 0x8227A4A8..0x8227A4E0 -- the whole locator frame first, including the
+        // translation row the basis rows below then overwrite.
+        arOut = lrLocator;
+
+        // asm 0x8227A4E8..0x8227A53C -- N, the axis from the locator to the camera.
+        f32 lfNx = arCameraTransform.wa.x - lrLocator.wa.x;
+        f32 lfNy = arCameraTransform.wa.y - lrLocator.wa.y;
+        f32 lfNz = arCameraTransform.wa.z - lrLocator.wa.z;
+        {
+            const f32 lfLength = sqrtf(lfNx * lfNx + lfNy * lfNy + lfNz * lfNz);
+            if (lfLength != 0.0f)
+            {
+                const f32 lfInv = 1.0f / lfLength;
+                lfNx *= lfInv;
+                lfNy *= lfInv;
+                lfNz *= lfInv;
+            }
+        }
+
+        // asm 0x8227A540..0x8227A588 -- R = normalize(cross(worldUp, N)), worldUp == (0,1,0).
+        f32 lfRx = lfNz;
+        f32 lfRy = 0.0f;
+        f32 lfRz = -lfNx;
+        {
+            const f32 lfLength = sqrtf(lfRx * lfRx + lfRy * lfRy + lfRz * lfRz);
+            if (lfLength != 0.0f)
+            {
+                const f32 lfInv = 1.0f / lfLength;
+                lfRx *= lfInv;
+                lfRy *= lfInv;
+                lfRz *= lfInv;
+            }
+        }
+
+        // asm 0x8227A5BC / 0x8227A5E8 / 0x8227A5F4 -- the three rows, each w-masked to 0.
+        arOut.xa.x = lfRx;
+        arOut.xa.y = lfRy;
+        arOut.xa.z = lfRz;
+        arOut.xa.w = 0.0f;
+
+        arOut.ya.x = lfRz * lfNy - lfRy * lfNz;
+        arOut.ya.y = lfNz * lfRx - lfRz * lfNx;
+        arOut.ya.z = lfRy * lfNx - lfNy * lfRx;
+        arOut.ya.w = 0.0f;
+
+        arOut.za.x = lfNx;
+        arOut.za.y = lfNy;
+        arOut.za.z = lfNz;
+        arOut.za.w = 0.0f;
+    }
+}  // namespace BrnGraphics
+
+// =================================================================================================
 // The seven remaining LionBlendRenderer methods -- TRAP STUBS, deliberately.
 //
 // Every one of them is on the LION particle RENDER path and nothing else:
@@ -69,7 +173,13 @@ void LionBlendRenderer::EndRendering()
 //
 // ⚠ They exist at all because the LINK needs them: mLionRenderer is a by-value ParticleModule
 // member, so LionParticleRender's vtable is emitted and every virtual it names must resolve.
-// EndRendering @0x8227E610 above is the one with a real body.
+// EndRendering @0x8227E610 and BuildCameraOrientatedLocator @0x8227A478 above are the two with
+// real bodies.
+//
+// ⛔ A NOTE FOR ANYONE QUERYING THE TREE FOR THIS SUBSYSTEM: tools/re/hasbody.py reports all
+// three Render* shapes as HAS BODY, because a trap IS a definition. The three draw halves
+// (RenderSprites 328 / RenderQuads 295 / RenderTilts 639 instructions) are still OPEN. Ask this
+// file, not the tool, and corroborate any "already done" claim about them here.
 // =================================================================================================
 namespace BrnGraphics
 {

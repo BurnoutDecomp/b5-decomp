@@ -20,6 +20,7 @@
 
 #include "types.hpp"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRender/ParticleRender.h"
+#include "SDKs/Packages/Lion/Final/eauk_common/Maths/Matrix.h"   // cMatrix -- BuildCameraOrientatedLocator's output
 
 namespace renderengine
 {
@@ -74,5 +75,12 @@ namespace BrnGraphics
         void RenderTilts(EffectsVertexBufferIterator& arIterator, RenderedParticle* apParticle,
                          const cMatrix* apMatrix, U32 auCount,
                          const cParticleEmitter* apEmitter, const cTime& arTime);
+
+    private:
+        // BrnLionBlendRenderer.h:138 (DWARF) -- build the camera-facing basis the three
+        // Render* shapes billboard their geometry against. X360 @0x8227A478.
+        // RECONSTRUCTED (BrnLionBlendRenderer.cpp).
+        void BuildCameraOrientatedLocator(cMatrix& arOut, const cParticleEmitter* apEmitter,
+                                          const cMatrix& arCameraTransform, const cTime& arTime);
     };
 }
