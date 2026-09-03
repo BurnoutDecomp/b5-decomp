@@ -1021,9 +1021,10 @@ void cParticleEmitter::SpawnSubEmitter(cParticleBucket* apBucket,
 // r6 = the cParticleRandomSeed -- four registers for the DWARF's four parameters, with nothing
 // left for an implicit first argument. Same for the other two below.
 //
-// ⛔ THREE OF SEVEN. SizeBehaviour (108 instructions), DragBehaviour (214), ColourStepsBehaviour
-// (147) and MultiFrameBehaviour (308) are NOT written -- 777 instructions still open. They are
-// listed here so the next wave counts the family, not the leftovers.
+// ⛔ FOUR OF SEVEN. DragBehaviour::Process @0x8290DBD0 (214 instructions),
+// ColourStepsBehaviour::Process @0x8290F9F8 (147) and MultiFrameBehaviour::Process @0x8290FC48
+// (308) are NOT written -- 669 of the family's 967 instructions still open. They are listed here
+// so the next wave counts the family, not the leftovers.
 //
 // The perf-monitor handles are LionPerfMon members reached off the same file-scope base
 // (0x82FAB638) that cParticleEmitter::Blend's giEmitterBlendMonitor uses; LionPerfMon has no
@@ -1035,6 +1036,7 @@ namespace
 s32 giBaseColourWithVarianceMonitor = -1;   // X360 dword_82FAB660 (LionPerfMon + 0x28)
 s32 giAlphaFadeMonitor             = -1;   // X360 dword_82FAB670 (LionPerfMon + 0x38)
 s32 giRotationMonitor              = -1;   // X360 dword_82FAB674 (LionPerfMon + 0x3C)
+s32 giSizeMonitor                  = -1;   // X360 dword_82FAB678 (LionPerfMon + 0x40)
 }  // namespace
 
 // ------------------------------------------------------------------------------------------------
@@ -1200,13 +1202,13 @@ struct RotationBehaviour
     static void Process(const cParticleBehaviour& arBehaviour,
                         sParticleNucleus& arNucleus,
                         RenderedParticle& arParticle,
-                        const cVector& arDeltaTime);
+                        f32 afDeltaTime);
 };
 
 void RotationBehaviour::Process(const cParticleBehaviour& arBehaviour,
                                 sParticleNucleus& arNucleus,
                                 RenderedParticle& arParticle,
-                                const cVector& arDeltaTime)
+                                f32 afDeltaTime)
 {
     const s32 liMonitor = giRotationMonitor;
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
@@ -1214,8 +1216,8 @@ void RotationBehaviour::Process(const cParticleBehaviour& arBehaviour,
     if ((arBehaviour.mFlags & cParticleBehaviour::E_BV_ROT) != 0)
     {
         // asm 0x8290D938..0x8290D9A4 -- the single-angle arm; every operand is lane 2.
-        const f32 lfNewRot    = arNucleus.mRotVel.z * arDeltaTime.z + arNucleus.mRot.z;
-        const f32 lfNewRotVel = arNucleus.mRotAcc.z * arDeltaTime.z + arNucleus.mRotVel.z;
+        const f32 lfNewRot    = arNucleus.mRotVel.z * afDeltaTime + arNucleus.mRot.z;
+        const f32 lfNewRotVel = arNucleus.mRotAcc.z * afDeltaTime + arNucleus.mRotVel.z;
 
         arParticle.mvRotPlusFrame.x = 0.0f;
         arParticle.mvRotPlusFrame.y = 0.0f;
@@ -1228,15 +1230,15 @@ void RotationBehaviour::Process(const cParticleBehaviour& arBehaviour,
     else if ((arBehaviour.mFlags & cParticleBehaviour::E_BV_ROTVELACC) != 0)
     {
         // asm 0x8290D9B4..0x8290D9EC -- the full XYZ arm; whole-vector integrate.
-        const f32 lfNewRotX = arNucleus.mRotVel.x * arDeltaTime.x + arNucleus.mRot.x;
-        const f32 lfNewRotY = arNucleus.mRotVel.y * arDeltaTime.y + arNucleus.mRot.y;
-        const f32 lfNewRotZ = arNucleus.mRotVel.z * arDeltaTime.z + arNucleus.mRot.z;
-        const f32 lfNewRotW = arNucleus.mRotVel.w * arDeltaTime.w + arNucleus.mRot.w;
+        const f32 lfNewRotX = arNucleus.mRotVel.x * afDeltaTime + arNucleus.mRot.x;
+        const f32 lfNewRotY = arNucleus.mRotVel.y * afDeltaTime + arNucleus.mRot.y;
+        const f32 lfNewRotZ = arNucleus.mRotVel.z * afDeltaTime + arNucleus.mRot.z;
+        const f32 lfNewRotW = arNucleus.mRotVel.w * afDeltaTime + arNucleus.mRot.w;
 
-        const f32 lfNewVelX = arNucleus.mRotAcc.x * arDeltaTime.x + arNucleus.mRotVel.x;
-        const f32 lfNewVelY = arNucleus.mRotAcc.y * arDeltaTime.y + arNucleus.mRotVel.y;
-        const f32 lfNewVelZ = arNucleus.mRotAcc.z * arDeltaTime.z + arNucleus.mRotVel.z;
-        const f32 lfNewVelW = arNucleus.mRotAcc.w * arDeltaTime.w + arNucleus.mRotVel.w;
+        const f32 lfNewVelX = arNucleus.mRotAcc.x * afDeltaTime + arNucleus.mRotVel.x;
+        const f32 lfNewVelY = arNucleus.mRotAcc.y * afDeltaTime + arNucleus.mRotVel.y;
+        const f32 lfNewVelZ = arNucleus.mRotAcc.z * afDeltaTime + arNucleus.mRotVel.z;
+        const f32 lfNewVelW = arNucleus.mRotAcc.w * afDeltaTime + arNucleus.mRotVel.w;
 
         arParticle.mvRotPlusFrame.x = lfNewRotX;
         arParticle.mvRotPlusFrame.y = lfNewRotY;
@@ -1260,6 +1262,128 @@ void RotationBehaviour::Process(const cParticleBehaviour& arBehaviour,
         arParticle.mvRotPlusFrame.x = 0.0f;
         arParticle.mvRotPlusFrame.y = 0.0f;
         arParticle.mvRotPlusFrame.z = 0.0f;
+    }
+
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+}
+
+// ------------------------------------------------------------------------------------------------
+// SizeBehaviour::Process  @ 0x8290DA20   (DWARF ParticleEmitter.cpp:1104)
+//
+// Integrate the particle's size for this frame, apply the emitter's scale, and publish it into the
+// render record. Three arms, selected by two bits of cParticleBehaviour::mFlags (+0x2C4):
+//
+//   mFlags & E_BV_SIZE_FULL (0x80)          `rlwinm r10, r11, 0,24,24` -- the FULL XYZ arm: whole
+//                                           vectors integrate and the whole xyz reaches the record.
+//   mFlags & E_BV_SIZE_PROPORTIONAL (1<<24) `rlwinm r11, r11, 0,7,7` -- only X integrates; Y and Z
+//                                           are derived from it through the build data's
+//                                           proportional lanes.
+//   neither                                 only X integrates and the record gets it uniformly.
+//
+// The nucleus lanes are mSize (+0x90), mSizeVel (+0xA0) and mSizeAcc (+0xB0); the scale and the two
+// proportional ratios are the x/y/z lanes of the build data's mvScaleAndProportionalScaleYXAndZX
+// (+0x20), which is what its name says they are. The record's w lane -- mvSizePlusNextFrame's NEXT
+// FRAME number -- is preserved in every arm (`vrlimi128 ..., v8/v10, 1, 0`); MultiFrameBehaviour
+// owns it.
+//
+// ⚠ THE SHARED TAIL AGAIN. `loc_8290DBB4`'s single `stvx128 v0, r0, r11` writes the nucleus's
+// mSizeVel in all three arms, but r11 is set separately in each (0x8290DA78 / 0x8290DAC0); written
+// out per arm rather than hoisted.
+//
+// ⭐ THE PROPORTIONAL ARM IS THE PROOF THAT THE DELTA TIME IS A BROADCAST. Its `vperm v0, v0, v12,
+// v7` takes word 0 from the scaled-size register and word 1 from the register holding
+// scaledSize * proportionalYX. The selector unk_82CDA350 reads out of the image as
+// { 00 01 02 03 | 14 15 16 17 | 00 01 02 03 | 00 01 02 03 } -- word 0 <- source A word 0, word 1 <-
+// source B word 1, words 2 and 3 <- source A word 0 (then both overwritten by the two vrlimi128s).
+// Word 1 is therefore lane Y of a register whose only MEANINGFUL lane is X: the integrate above it
+// splatted mSize/mSizeVel to lane 0 and multiplied by the UNSPLATTED delta-time register, so lane Y
+// carries mSizeVel.x * dt.y + mSize.x. That is the right answer only if dt.y == dt.x. The DWARF
+// types the parameter `VecFloat`, which in this tree means one broadcast float lane -- and this
+// vperm is what proves the console relies on it. Modelled as the scalar it is.
+// ------------------------------------------------------------------------------------------------
+struct SizeBehaviour
+{
+    static void Process(const cParticleBehaviour& arBehaviour,
+                        const cParticleEmitter::ParticleBuildData& arData,
+                        sParticleNucleus& arNucleus,
+                        RenderedParticle& arParticle,
+                        f32 afDeltaTime);
+};
+
+void SizeBehaviour::Process(const cParticleBehaviour& arBehaviour,
+                            const cParticleEmitter::ParticleBuildData& arData,
+                            sParticleNucleus& arNucleus,
+                            RenderedParticle& arParticle,
+                            f32 afDeltaTime)
+{
+    const s32 liMonitor = giSizeMonitor;
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+    // data +0x20 lane x -- the emitter's overall scale, splatted in every arm
+    // (`lvx128 v0, r0, <data+0x20>` then `vspltw v11, v0, 0`).
+    const f32 lfScale = arData.mvScaleAndProportionalScaleYXAndZX.x;
+
+    if ((arBehaviour.mFlags & cParticleBehaviour::E_BV_SIZE_FULL) != 0)
+    {
+        // asm 0x8290DA74..0x8290DAB0 -- whole-vector integrate, all four lanes.
+        const f32 lfSizeX = arNucleus.mSizeVel.x * afDeltaTime + arNucleus.mSize.x;
+        const f32 lfSizeY = arNucleus.mSizeVel.y * afDeltaTime + arNucleus.mSize.y;
+        const f32 lfSizeZ = arNucleus.mSizeVel.z * afDeltaTime + arNucleus.mSize.z;
+        const f32 lfSizeW = arNucleus.mSizeVel.w * afDeltaTime + arNucleus.mSize.w;
+
+        const f32 lfVelX = arNucleus.mSizeAcc.x * afDeltaTime + arNucleus.mSizeVel.x;
+        const f32 lfVelY = arNucleus.mSizeAcc.y * afDeltaTime + arNucleus.mSizeVel.y;
+        const f32 lfVelZ = arNucleus.mSizeAcc.z * afDeltaTime + arNucleus.mSizeVel.z;
+        const f32 lfVelW = arNucleus.mSizeAcc.w * afDeltaTime + arNucleus.mSizeVel.w;
+
+        arParticle.mvSizePlusNextFrame.x = lfSizeX * lfScale;
+        arParticle.mvSizePlusNextFrame.y = lfSizeY * lfScale;
+        arParticle.mvSizePlusNextFrame.z = lfSizeZ * lfScale;
+        // .w (the next frame) is carried through untouched.
+
+        arNucleus.mSize.x = lfSizeX;
+        arNucleus.mSize.y = lfSizeY;
+        arNucleus.mSize.z = lfSizeZ;
+        arNucleus.mSize.w = lfSizeW;
+
+        arNucleus.mSizeVel.x = lfVelX;
+        arNucleus.mSizeVel.y = lfVelY;
+        arNucleus.mSizeVel.z = lfVelZ;
+        arNucleus.mSizeVel.w = lfVelW;
+    }
+    else if ((arBehaviour.mFlags & cParticleBehaviour::E_BV_SIZE_PROPORTIONAL) != 0)
+    {
+        // asm 0x8290DAC8..0x8290DB48 -- X integrates, Y and Z follow it by ratio. Only word 0 of
+        // the two nucleus lanes is written back (`vrlimi128 ..., 8, 0` -- mask 8 == word 0).
+        const f32 lfSizeX = arNucleus.mSizeVel.x * afDeltaTime + arNucleus.mSize.x;
+        const f32 lfVelX   = arNucleus.mSizeAcc.x * afDeltaTime + arNucleus.mSizeVel.x;
+
+        const f32 lfScaledX = lfSizeX * lfScale;
+        arParticle.mvSizePlusNextFrame.x = lfScaledX;
+        arParticle.mvSizePlusNextFrame.y =
+            lfScaledX * arData.mvScaleAndProportionalScaleYXAndZX.y;   // proportional Y:X
+        arParticle.mvSizePlusNextFrame.z =
+            lfScaledX * arData.mvScaleAndProportionalScaleYXAndZX.z;   // proportional Z:X
+        // .w (the next frame) is carried through untouched.
+
+        arNucleus.mSize.x    = lfSizeX;
+        arNucleus.mSizeVel.x = lfVelX;
+    }
+    else
+    {
+        // asm 0x8290DB4C..0x8290DBB0 -- X integrates and the record gets it in all three lanes
+        // (the vperm's sources are the same register here, so every lane is the scaled X).
+        const f32 lfSizeX = arNucleus.mSizeVel.x * afDeltaTime + arNucleus.mSize.x;
+        const f32 lfVelX  = arNucleus.mSizeAcc.x * afDeltaTime + arNucleus.mSizeVel.x;
+
+        const f32 lfScaledX = lfSizeX * lfScale;
+        arParticle.mvSizePlusNextFrame.x = lfScaledX;
+        arParticle.mvSizePlusNextFrame.y = lfScaledX;
+        arParticle.mvSizePlusNextFrame.z = lfScaledX;
+        // .w (the next frame) is carried through untouched.
+
+        arNucleus.mSize.x    = lfSizeX;
+        arNucleus.mSizeVel.x = lfVelX;
     }
 
     CgsDev::PerfMonCpu::StopMonitor(liMonitor);

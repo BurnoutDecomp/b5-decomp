@@ -123,6 +123,12 @@ struct cParticleBehaviour
         E_BV_ROT             = 0x1,      // CompileBaseVariance rot (full) block
         E_BV_ROTVELACC       = 0x40,     // CompileBaseVariance rot vel/acc block
         E_BV_SIZE_FULL       = 0x80,     // CompileBaseVariance size (full) block
+        // DERIVED NAME (not from the DWARF -- cParticleBehaviour has no flag enum there, same as
+        // every E_BV_* above). SizeBehaviour::Process @0x8290DA20 tests it with
+        // `rlwinm r11, r11, 0,7,7` (bit 24) as the alternative to E_BV_SIZE_FULL and, when it is
+        // set, integrates only the X size lane and derives Y and Z from it through the build
+        // data's mvScaleAndProportionalScaleYXAndZX y/z ratios. The name says what that arm does.
+        E_BV_SIZE_PROPORTIONAL = 0x1000000,
     };
 
     void Init();
