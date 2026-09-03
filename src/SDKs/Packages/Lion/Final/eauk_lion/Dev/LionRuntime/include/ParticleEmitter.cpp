@@ -32,6 +32,7 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleScaler.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleBucketManager.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitterManager.h"   // SpawnSubEmitter registers through the manager singleton
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/RenderedParticle.h"   // the per-particle RENDER record the behaviour processors write
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -1003,4 +1004,263 @@ void cParticleEmitter::SpawnSubEmitter(cParticleBucket* apBucket,
             lpChildEmitter->Bind(*mpBindings);
         }
     }
+}
+
+// ================================================================================================
+// THE PER-PARTICLE BEHAVIOUR PROCESSORS  (DWARF ParticleEmitter.cpp:820 / :1023 / :1052)
+//
+// cParticleEmitter::ParticleBuild @0x82910118 -- the 1,142-instruction simulation kernel -- is the
+// ONLY caller of all seven of these; each is `xrefs_to == [ParticleBuild]`. They are file-local
+// helper structs in the console's own ParticleEmitter.cpp, which is why they are declared here
+// rather than in a header: nothing outside this TU can reach them.
+//
+// ⭐ `Process` IS STATIC, AND THE REGISTER FRAME IS WHY. The DecFIGS dump prints them as ordinary
+// public members, but every one of these structs has NO DATA MEMBERS and the call frames carry no
+// `this`: ParticleBuild's call site for BaseColourWithVariance @0x82911238..0x82911258 loads
+// r3 = the ParticleBuildData, r4 = the cParticleBehaviour, r5 = the RenderedParticle,
+// r6 = the cParticleRandomSeed -- four registers for the DWARF's four parameters, with nothing
+// left for an implicit first argument. Same for the other two below.
+//
+// ⛔ THREE OF SEVEN. SizeBehaviour (108 instructions), DragBehaviour (214), ColourStepsBehaviour
+// (147) and MultiFrameBehaviour (308) are NOT written -- 777 instructions still open. They are
+// listed here so the next wave counts the family, not the leftovers.
+//
+// The perf-monitor handles are LionPerfMon members reached off the same file-scope base
+// (0x82FAB638) that cParticleEmitter::Blend's giEmitterBlendMonitor uses; LionPerfMon has no
+// global instance in this tree yet, so each is carried as its own handle exactly as
+// ParticleRandomSeed.cpp already does.
+// ================================================================================================
+namespace
+{
+s32 giBaseColourWithVarianceMonitor = -1;   // X360 dword_82FAB660 (LionPerfMon + 0x28)
+s32 giAlphaFadeMonitor             = -1;   // X360 dword_82FAB670 (LionPerfMon + 0x38)
+s32 giRotationMonitor              = -1;   // X360 dword_82FAB674 (LionPerfMon + 0x3C)
+}  // namespace
+
+// ------------------------------------------------------------------------------------------------
+// BaseColourWithVarianceBehaviour::Process  @ 0x8290D720   (DWARF ParticleEmitter.cpp:820)
+//
+// Seed the particle's colour from the behaviour's RGBA base, optionally perturbed by the variance.
+// Three-way switch on cParticleBehaviour::mRGBAVarianceMode (+0x264, `lwz r11, 0x264(r30)`):
+//     mode 1  -> cParticleRandomSeed::Build(base, diff)      -- a PER-LANE draw (X360
+//                sub_8290A648, named by the DWARF at ParticleRandomSeed.h:117)
+//     mode 2  -> cParticleRandomSeed::BuildLerp(base, diff)  -- ONE scalar draw lerping the whole
+//                colour (X360 @0x8290A7A8)
+//     else    -> the base, unperturbed
+// The two vector arguments are the same pair in every arm: `lvx128 v1, r31, 0x60` == the build
+// data's mvRGBA0 and `lvx128 v2, r31, 0x50` == its mvRGBADiff, so the base/variance roles are
+// fixed by the load offsets, not chosen. The result lands whole at particle +0x50 (mvColour) --
+// `stvx128 v0, r29, r10` with r10 == 0x50, in both the default arm (0x8290D774) and the shared
+// random arm (0x8290D7C4).
+// ------------------------------------------------------------------------------------------------
+struct BaseColourWithVarianceBehaviour
+{
+    static void Process(const cParticleEmitter::ParticleBuildData& arData,
+                        const cParticleBehaviour& arBehaviour,
+                        RenderedParticle& arParticle,
+                        cParticleRandomSeed& arSeed);
+};
+
+void BaseColourWithVarianceBehaviour::Process(const cParticleEmitter::ParticleBuildData& arData,
+                                              const cParticleBehaviour& arBehaviour,
+                                              RenderedParticle& arParticle,
+                                              cParticleRandomSeed& arSeed)
+{
+    const s32 liMonitor = giBaseColourWithVarianceMonitor;
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+    // The console hands both draws the same two registers it just loaded (`lvx128 v1, r31, 0x60`
+    // and `lvx128 v2, r31, 0x50`); Vector3Plus and Vector4 are one and the same 16-byte lane
+    // register there, and only the host's type vocabulary distinguishes them, so the four lanes
+    // are carried across by name.
+    const rw::math::vpu::Vector4 lvBase = { arData.mvRGBA0.x, arData.mvRGBA0.y,
+                                            arData.mvRGBA0.z, arData.mvRGBA0.w };
+    const rw::math::vpu::Vector4 lvDiff = { arData.mvRGBADiff.x, arData.mvRGBADiff.y,
+                                            arData.mvRGBADiff.z, arData.mvRGBADiff.w };
+
+    rw::math::vpu::Vector3Plus lvColour;
+    if (arBehaviour.mRGBAVarianceMode == 1)
+    {
+        lvColour = arSeed.Build(lvBase, lvDiff);
+    }
+    else if (arBehaviour.mRGBAVarianceMode == 2)
+    {
+        lvColour = arSeed.BuildLerp(lvBase, lvDiff);
+    }
+    else
+    {
+        // The default arm does not draw at all: it stores mvRGBA0 straight through
+        // (0x8290D76C `lvx128 v0, r31, r11` with r11 == 0x60, then the same store).
+        lvColour = arData.mvRGBA0;
+    }
+
+    arParticle.mvColour.x = lvColour.x;
+    arParticle.mvColour.y = lvColour.y;
+    arParticle.mvColour.z = lvColour.z;
+    arParticle.mvColour.w = lvColour.w;
+
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+}
+
+// ------------------------------------------------------------------------------------------------
+// AlphaFadeBehaviour::Process  @ 0x8290D7D8   (DWARF ParticleEmitter.cpp:1023)
+//
+// Scale the particle's alpha lane by the fade-in / fade-out ramp for its current normalised life.
+//
+//   life   = particle.mvTimeScaleAndLifeScale.y   (`addi r11, r30, 0x60` then `vspltw v12, v13, 1`)
+//   fadeIn = data.mvAlphaFadeInAndFadeOut.x       (`addi r10, r31, 0x10` then `vspltw v13, v13, 0`)
+//   fadeOut= data.mvAlphaFadeInAndFadeOut.y       (the same load splatted at lane 1)
+//
+//        if (fadeIn > life)   alpha = life / fadeIn;
+//   else if (life > fadeOut)  alpha = 1 - (life - fadeOut) / (1 - fadeOut);
+//   else                      alpha = 1;
+//   particle.mvColour.w *= alpha;
+//
+// ⭐ THE TWO DIVISIONS ARE DE-OPTIMISED BACK. The console has no vector divide: each `/` is a
+// `vrefp` reciprocal estimate followed by TWO Newton-Raphson refinements
+// (`vnmsubfp`/`vmaddfp` pairs at 0x8290D848..0x8290D860 and 0x8290D888..0x8290D8A0). Per the
+// project's strength-reduction rule those are written as the divisions they compute, not
+// transcribed as the estimate-and-refine sequence. The `1.0` they refine against is
+// `vcfsx(vspltisw(1), 0)` -- an immediate 1 converted to float, not a loaded constant.
+//
+// ⚠ `vnmsubfp vD, vA, vB, vC` computes vB - vA*vC (raw field order), which is what makes the pair
+// an NR step: residual = 1 - r*x, then r = r*residual + r. Reading it in assembler order would
+// give a different expression and a different function.
+//
+// The alpha lane is read and written in place: `vspltw v13, v13, 3` takes the OLD alpha out of
+// mvColour, multiplies, and `vrlimi128 v13, v0, 1, 0` (mask 1 == word 3) puts only that lane back
+// -- the rgb lanes are untouched.
+// ------------------------------------------------------------------------------------------------
+struct AlphaFadeBehaviour
+{
+    static void Process(const cParticleEmitter::ParticleBuildData& arData,
+                        RenderedParticle& arParticle);
+};
+
+void AlphaFadeBehaviour::Process(const cParticleEmitter::ParticleBuildData& arData,
+                                 RenderedParticle& arParticle)
+{
+    const s32 liMonitor = giAlphaFadeMonitor;
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+    const f32 lfLife    = arParticle.mvTimeScaleAndLifeScale.y;
+    const f32 lfFadeIn  = arData.mvAlphaFadeInAndFadeOut.x;
+    const f32 lfFadeOut = arData.mvAlphaFadeInAndFadeOut.y;
+
+    f32 lfAlpha = 1.0f;
+    if (lfFadeIn > lfLife)
+    {
+        lfAlpha = lfLife / lfFadeIn;
+    }
+    else if (lfLife > lfFadeOut)
+    {
+        lfAlpha = 1.0f - (lfLife - lfFadeOut) / (1.0f - lfFadeOut);
+    }
+
+    arParticle.mvColour.w = arParticle.mvColour.w * lfAlpha;
+
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+}
+
+// ------------------------------------------------------------------------------------------------
+// RotationBehaviour::Process  @ 0x8290D8F0   (DWARF ParticleEmitter.cpp:1052)
+//
+// Integrate the particle's rotation for this frame and publish it into the render record. Three
+// arms, selected by two bits of cParticleBehaviour::mFlags (+0x2C4):
+//
+//   mFlags & E_BV_ROT (0x1)        `clrlwi r10, r11, 31` -- the SINGLE-ANGLE arm. Everything is
+//                                  splatted from lane 2 (`vspltw ..., 2`) and only word 2 is
+//                                  written back, so just the Z angle advances; the render record
+//                                  receives (0, 0, angle, frame). This is the billboard-sprite
+//                                  spin RenderSprites feeds to FastMatrix33FromEulerXYZ.
+//   mFlags & E_BV_ROTVELACC (0x40) `rlwinm r11, r11, 0,25,25` -- the FULL XYZ arm: the whole
+//                                  vectors integrate and the whole xyz reaches the record.
+//   neither                        the record's rotation lanes are zeroed.
+//
+// In all three arms the record's W lane is preserved (`vrlimi128 v9/v12/v0, <old>, 1, 0`): it is
+// mvRotPlusFrame's frame number, which MultiFrameBehaviour owns, not this one.
+//
+// ⚠ THE STORE AT THE TAIL IS SHARED BUT ITS TARGET IS NOT. `loc_8290DA00`'s single
+// `stvx128 v0, r0, r11` writes the NUCLEUS's mRotVel in the first two arms (r11 == nucleus+0x40)
+// and the PARTICLE's mvRotPlusFrame in the third (r11 == particle+0x30). It is one instruction
+// doing two different jobs, so it is written out as three explicit stores rather than hoisted.
+//
+// ⭐ `vperm v9, v0, v0, v7` (0x8290D97C) IS A NO-OP AND ITS SELECTOR NEED NOT BE READ: both
+// source registers are the zero vector `vspltisw v0, 0` from 0x8290D93C, so every permutation of
+// them is zero whatever unk_82CDA350 holds. The compiler kept a general shuffle whose inputs it
+// had already proved constant; the result is simply the zero vector the next two vrlimi128s
+// insert into.
+//
+// ⚠ `vmaddfp128 vD, vA, vB, vD` is the VMX128 THREE-REGISTER accumulate form -- vD = vA*vB + vD
+// -- not the classic four-operand raw-field-order shape. IDA prints the accumulator twice (as the
+// destination and again as the last source), which is the tell.
+// ------------------------------------------------------------------------------------------------
+struct RotationBehaviour
+{
+    static void Process(const cParticleBehaviour& arBehaviour,
+                        sParticleNucleus& arNucleus,
+                        RenderedParticle& arParticle,
+                        const cVector& arDeltaTime);
+};
+
+void RotationBehaviour::Process(const cParticleBehaviour& arBehaviour,
+                                sParticleNucleus& arNucleus,
+                                RenderedParticle& arParticle,
+                                const cVector& arDeltaTime)
+{
+    const s32 liMonitor = giRotationMonitor;
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+    if ((arBehaviour.mFlags & cParticleBehaviour::E_BV_ROT) != 0)
+    {
+        // asm 0x8290D938..0x8290D9A4 -- the single-angle arm; every operand is lane 2.
+        const f32 lfNewRot    = arNucleus.mRotVel.z * arDeltaTime.z + arNucleus.mRot.z;
+        const f32 lfNewRotVel = arNucleus.mRotAcc.z * arDeltaTime.z + arNucleus.mRotVel.z;
+
+        arParticle.mvRotPlusFrame.x = 0.0f;
+        arParticle.mvRotPlusFrame.y = 0.0f;
+        arParticle.mvRotPlusFrame.z = lfNewRot;
+        // .w (the frame) is carried through untouched.
+
+        arNucleus.mRot.z    = lfNewRot;
+        arNucleus.mRotVel.z = lfNewRotVel;
+    }
+    else if ((arBehaviour.mFlags & cParticleBehaviour::E_BV_ROTVELACC) != 0)
+    {
+        // asm 0x8290D9B4..0x8290D9EC -- the full XYZ arm; whole-vector integrate.
+        const f32 lfNewRotX = arNucleus.mRotVel.x * arDeltaTime.x + arNucleus.mRot.x;
+        const f32 lfNewRotY = arNucleus.mRotVel.y * arDeltaTime.y + arNucleus.mRot.y;
+        const f32 lfNewRotZ = arNucleus.mRotVel.z * arDeltaTime.z + arNucleus.mRot.z;
+        const f32 lfNewRotW = arNucleus.mRotVel.w * arDeltaTime.w + arNucleus.mRot.w;
+
+        const f32 lfNewVelX = arNucleus.mRotAcc.x * arDeltaTime.x + arNucleus.mRotVel.x;
+        const f32 lfNewVelY = arNucleus.mRotAcc.y * arDeltaTime.y + arNucleus.mRotVel.y;
+        const f32 lfNewVelZ = arNucleus.mRotAcc.z * arDeltaTime.z + arNucleus.mRotVel.z;
+        const f32 lfNewVelW = arNucleus.mRotAcc.w * arDeltaTime.w + arNucleus.mRotVel.w;
+
+        arParticle.mvRotPlusFrame.x = lfNewRotX;
+        arParticle.mvRotPlusFrame.y = lfNewRotY;
+        arParticle.mvRotPlusFrame.z = lfNewRotZ;
+        // .w (the frame) is carried through untouched.
+
+        arNucleus.mRot.x = lfNewRotX;
+        arNucleus.mRot.y = lfNewRotY;
+        arNucleus.mRot.z = lfNewRotZ;
+        arNucleus.mRot.w = lfNewRotW;
+
+        arNucleus.mRotVel.x = lfNewVelX;
+        arNucleus.mRotVel.y = lfNewVelY;
+        arNucleus.mRotVel.z = lfNewVelZ;
+        arNucleus.mRotVel.w = lfNewVelW;
+    }
+    else
+    {
+        // asm 0x8290D9F0..0x8290DA04 -- no rotation block compiled: zero the record's xyz and
+        // keep its frame lane.
+        arParticle.mvRotPlusFrame.x = 0.0f;
+        arParticle.mvRotPlusFrame.y = 0.0f;
+        arParticle.mvRotPlusFrame.z = 0.0f;
+    }
+
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
 }
