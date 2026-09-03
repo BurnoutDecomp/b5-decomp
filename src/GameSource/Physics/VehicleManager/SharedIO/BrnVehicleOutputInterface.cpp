@@ -352,6 +352,17 @@ namespace Vehicle
         mRemoveJointQueue.Append(lpSource->mRemoveJointQueue);                   // @0x825A3B58
     }
 
+    // CrashingRaceCarInterface::Clear -- DWARF BrnVehicleOutputInterface.h:399 declares it; the X360 emits
+    // no out-of-line symbol (its callers -- PostWorldInputBuffer::Construct @0x823769A8 among them --
+    // inline the 8-byte zero store). The eight flags are the whole object.
+    void CrashingRaceCarInterface::Clear()
+    {
+        for (s32 liCar = 0; liCar < 8; ++liCar)
+        {
+            mabCrashingRaceCars[liCar] = false;
+        }
+    }
+
     // @0x823625C0  CrashingRaceCarInterface::SetFromVehicleOutputInterface
     //   For every race-car slot in use (mUsedRaceCars bit set) copy that car's
     //   RaceCarState::mbResetCarTransform flag (byte @1098) into mabCrashingRaceCars[]. The

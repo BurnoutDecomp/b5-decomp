@@ -156,6 +156,19 @@ namespace BrnNetwork
         // ===================================================================
         struct MarkedManInterface
         {
+            // Reset every aggressor slot to INVALID. The X360 inlines this fill at the one site that
+            // builds the table on the stack (TakedownManager::ProcessTakedownEvent @0x82393DE0: an
+            // 8-count `stw r10(-1)` loop over the 32-byte local, immediately before
+            // SetFromPlayerStatusInterface) -- slots no in-game player occupies stay INVALID. Additive
+            // (no DWARF for this type); header inline.
+            void Construct()
+            {
+                for (s32 liSlot = 0; liSlot < ::E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+                {
+                    maMarkedManActiveRaceCarIndex[liSlot] = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
+                }
+            }
+
             // X360 0x82355758: does maMarkedManActiveRaceCarIndex[leAggressor] == leVictim?
             // (both slots range-asserted (> INVALID && < COUNT)). Body in this TU's .cpp.
             bool CheckForMarkedManTakedown(::EActiveRaceCarIndex leAggressorActiveRaceCarIndex,

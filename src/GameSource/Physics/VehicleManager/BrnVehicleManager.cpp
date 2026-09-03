@@ -176,7 +176,17 @@ namespace Vehicle
         const s32 liIndexB = static_cast<s32>((lContact.mEntityIdB.muValue >> 10) & 0x3FFF);   // asm v44
 
         // Master gate: the whole routine is a no-op unless takedowns are enabled. asm v45 = *(v39+171464).
-        if (!mbSlamsAndShuntsOn)
+        // [td-contact] PC witness (NOT X360), first 8 only: proves race-car-vs-race-car contacts reach
+        // the crash classifier now that ProcessContactSpies is real.
+        {
+            static s32 siWitnessed = 0;
+            if (siWitnessed < 8 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++siWitnessed;
+                *CgsDev::Log::gpDebugPrint << "[td-contact] race car " << liIndexA << " vs " << liIndexB
+                                           << " [FLAG PC witness]\n";
+            }
+        }
             return;   // asm: goto LABEL_92
 
         // Both cars must be live in the mUsedRaceCars bitset (asm reads the 64-bit word and tests the
@@ -847,25 +857,25 @@ namespace Vehicle
         }
         if (liSlot < 0)
         {
-            // Pool full: overwrite the HIGHEST-mfPriority occupied slot (asm: the "WARNING:
-            // Overwriting a RaceCarCrashData class" path scans +43816, the priority float, for the
-            // max and reuses that slot).
+            // Pool full: overwrite the OLDEST occupied slot (asm: the "WARNING:
+            // Overwriting a RaceCarCrashData class" path scans +43816 -- mfTimeSinceImpact, the
+            // float UpdateCrashes @0x825EA640 ages every frame -- for the max and reuses that slot).
             liSlot = 0;
-            f32 lfHighestPriority = maRaceCarCrashes[0].mfPriority;
+            f32 lfOldestTime = maRaceCarCrashes[0].mfTimeSinceImpact;
             for (s32 liScan = 1; liScan < 32; ++liScan)
             {
-                if (maRaceCarCrashes[liScan].mfPriority > lfHighestPriority)
+                if (maRaceCarCrashes[liScan].mfTimeSinceImpact > lfOldestTime)
                 {
-                    lfHighestPriority = maRaceCarCrashes[liScan].mfPriority;
+                    lfOldestTime = maRaceCarCrashes[liScan].mfTimeSinceImpact;
                     liSlot = liScan;
                 }
             }
         }
 
-        // Write the slot: { mEntityId = victim packed id, meType = takedown type, mfPriority = 0 }.
-        // asm: *(v150+43816)=0.0 (priority); *(12*(v138+3651)+v35)=v149 (== slot+43812, meType);
-        //      *(v150+43808)=a13 (== slot+43808, mEntityId, the packed victim id).
-        maRaceCarCrashes[liSlot].mfPriority = 0.0f;
+        // Write the slot: { mEntityId = victim packed id, meType = takedown type, mfTimeSinceImpact = 0 }.
+        // asm: *(v150+43816)=0.0 (the timer UpdateCrashes ages); *(12*(v138+3651)+v35)=v149
+        //      (== slot+43812, meType); *(v150+43808)=a13 (== slot+43808, mEntityId, the packed victim id).
+        maRaceCarCrashes[liSlot].mfTimeSinceImpact = 0.0f;
         maRaceCarCrashes[liSlot].meType     = static_cast<u32>(leTakedownType);   // FLAG: see header note
         maRaceCarCrashes[liSlot].mEntityId  = lVictimEntityId.muValue;            // asm a13 = packed victim id
         mUsedRaceCarCrashesList.SetBit(static_cast<u32>(liSlot));   // asm: set the allocation bit (v179 OR into field)

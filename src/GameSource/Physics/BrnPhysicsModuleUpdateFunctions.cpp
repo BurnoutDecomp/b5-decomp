@@ -870,20 +870,14 @@ namespace BrnPhysics
                 &mDeformationInput,
                 &mDeformationManager,
                 lfSimTimerTimeStep);
-            // ---- [wave4-B] the tail of ProcessContactSpies, hoisted out of the gate ------------
-            // VehicleManager::ProcessContactSpies @0x82646C98 is 118 instructions: the race-car
-            // spy loop, ProcessShowtimeShunts @0x82629F20, then -- as its LAST call, 0x82646E5C --
-            // PhysicalTrafficManager::DisposeOfNonCrashingTraffic @0x825EFB40 on `this + 44768`.
-            // That last call is the ONLY producer of mUnusedPotentialTrafficQueue in the image
-            // (xrefs_to on 0x825EFB40 is the single entry ProcessContactSpies), and without it
-            // every E_TRAFFIC_TYPE_POTENTIAL collision proxy the wave-4 overlap route creates
-            // keeps its physics slot for ever. ProcessContactSpies itself is still a
-            // BRN_CONDUCTOR_GATE in BrnPhysicsConductorGates.cpp (a file this wave must not
-            // touch), so the call is seated HERE -- the identical frame position, immediately
-            // after the gated ProcessContactSpies and before UpdateFatalCrashFlags, on the
-            // non-catchup leg only, exactly as the console runs it.
-            // DELETE-WHEN ProcessContactSpies gets a real body: the call moves inside it.
-            mVehicleManager.GetPhysicalTrafficManager().DisposeOfNonCrashingTraffic();
+            // ---- [wave4-B] stand-in RETIRED 2026-09-02 (takedown-chain wave, agent P) ----------
+            // A direct `mVehicleManager.GetPhysicalTrafficManager().DisposeOfNonCrashingTraffic()`
+            // stood here while ProcessContactSpies was a conductor gate, because that call is the
+            // ONLY producer of mUnusedPotentialTrafficQueue in the image and its console seat is
+            // the TAIL of ProcessContactSpies @0x82646E5C. ProcessContactSpies is REAL now
+            // (BrnVehicleManager_ProcessContactSpies.cpp) and makes that call itself, at the same
+            // frame position; a second call here would enqueue every potential-traffic slot TWICE
+            // per frame into an EventQueue<s8,50>. Do not re-add it.
 
             mVehicleManager.UpdateFatalCrashFlags(
                 lpPhysicsModuleOutputBuffer->GetVehicleOutputInterface());

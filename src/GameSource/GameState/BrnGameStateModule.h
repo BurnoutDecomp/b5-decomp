@@ -73,7 +73,8 @@ namespace BrnResource    { namespace GameDataIO { class AllocatorList; } }
 // SECOND `enum EActiveRaceCarIndex` inside namespace BrnGameState, which would re-bind every
 // unqualified EActiveRaceCarIndex in this widely-included header (see BrnModeManager.h:86 /
 // BrnGameMode.h:64 for the same rule). The partfile includes the real header.
-namespace BrnGameState   { struct TakedownEvent; }
+namespace BrnGameState   { struct TakedownEvent; struct TakedownManager; struct TakedownPostWorldCache; }
+namespace BrnTraffic     { namespace BrnTrafficIO { struct TrafficTypeResponse; } }   // [takedown wave] cache arg
 
 namespace BrnGameState
 {
@@ -377,7 +378,10 @@ public:
         // [road-rage wave 2026-09-02] the world output's race-car crash-event queue
         // (VehicleManagerOutputInterface +0x3A0) -- what BridgeWorldToGameState leg 1 would
         // copy into PostWorldInputBuffer +0x10; feeds ModeManager::ProcessPlayerCrashes.
-        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue);
+        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue,
+        // [takedown wave] the world output's traffic-type response queue, cached for
+        // TakedownManager::Update's "last traffic type response queue" argument.
+        const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue);
 
     // ==========================================================================================
     // ⭐⭐⭐ [showtime score wave 2026-08-29] ProcessContacts -- X360 0x8236BC68, DWARF :853.
@@ -485,6 +489,20 @@ public:
     // copy earlier. DELETE-WHEN DoUpdate_GameStatePreWorld stages a real PreWorldInputBuffer.
     void CopyScoringDataToOutput(GameStateModuleIO::OutputBuffer* lpOutput,
                                  const CgsSystem::TimerStatusInterface& lrTimerStatusInterface);
+
+    // [takedown wave 2026-09-02] the manager's plumbing, bodied in GameStateModule_gTD_00.cpp:
+    // Construct/Prepare at their console stages, the post-world input cache (the console's
+    // CacheTakedownManagerPostWorldInputData @0x82375E70), the !IsSimPaused pre-world leg
+    // (TakedownManager::Update + the module-queue copy + ProcessTakedownEvents), and the
+    // ClearRaceCarData hook (ProcessGameEvents cases 27 / 32).
+    void ConstructTakedownBringUp();
+    bool PrepareTakedownBringUp();
+    void CacheTakedownPostWorldInputs(
+        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue,
+        const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue);
+    void TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lpActionQueue, f32 lfGameTimestep,
+                             const CgsSystem::TimerStatusInterface& lrTimerStatusInterface, bool lbSimPaused);
+    void ClearTakedownRaceCarData();
 
     // ⭐⭐⭐ [road-rage wave, agent C] ProcessTakedownEvents -- X360 0x8238FC50, REAL, whole. Body
     // in GameStateModule_gRR_00.cpp. The per-frame drain of the takedown-event queue: for every
@@ -800,6 +818,13 @@ public:
     // console embeds it by value at this+46640; ModeManager::PreWorldUpdateClocksBringUp and the
     // two extracted arms above reach it through this named accessor.
     TrainingManager*       GetTrainingManager()       { return mpTrainingManager; }
+
+    // [takedown wave 2026-09-02] the takedown classifier (X360: embedded at gsm+568; heap-allocated
+    // here, see GameStateModule_gTD_00.cpp). ModeManager::UpdateCurrentMode reads IsInTakedownCamera.
+    TakedownManager*       GetTakedownManager()       { return mpTakedownManager; }
+    const TakedownManager* GetTakedownManager() const { return mpTakedownManager; }
+    // The one query ModeManager needs, exposed without the manager header (second-enum rule).
+    bool IsInTakedownCamera() const;   // TakedownManager::IsInTakedownCamera @0x82359620, GameStateModule_gTD_00.cpp
     const TrainingManager* GetTrainingManager() const { return mpTrainingManager; }
 
     // ⭐ X360 0x8236BAC8. The nearest junkyard's CgsID to lPosition -- the single input that turns
@@ -1650,6 +1675,8 @@ private:
     // DELETE-WHEN the cycle is broken (BrnTrainingManager.h forward-declaring GameStateModule and
     // moving its inline bodies out would do it) -- then this becomes `TrainingManager mTrainingManager;`.
     TrainingManager*                        mpTrainingManager = 0;
+    TakedownManager*        mpTakedownManager = 0;   // [takedown wave] X360 gsm+568 by value; heap here (GameStateModule_gTD_00.cpp)
+    TakedownPostWorldCache* mpTakedownCache = 0;     // [takedown wave] X360 gsm+249936/+250272/+250816 by value; heap here
 
     // ========================================================================================
     // ⭐⭐ [stuntrace wave D, D3] THE JUNCTION CACHE + THE HOLD TIMER (X360 +0x456C8..+0x456D2

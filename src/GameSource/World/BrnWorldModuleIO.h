@@ -650,6 +650,9 @@ namespace BrnWorldIO
 
         // ---- traffic type responses ----
         void AppendTrafficTypeResponseQueue(const TrafficTypeResponseQueue* lpQueue);      // :586 W (0x827AA710)
+        // [takedown wave 2026-09-02] the const READ half the console calls from BridgeWorldToGameState
+        // leg 3 (X360 0x823B63F8 -> +155616, BrnWorldModuleIO.h:585).
+        const TrafficTypeResponseQueue* GetTrafficTypeResponseQueue() const;                 // :585 R (0x823B63F8)
 
         // ---- effects environment ----
         const EffectsEnvironmentInterface* GetEffectsEnvironmentInterface() const;         // :588 R (0x823B64A0, "GetEffectsEnviron")

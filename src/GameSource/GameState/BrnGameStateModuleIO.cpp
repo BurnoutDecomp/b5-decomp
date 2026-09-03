@@ -141,6 +141,13 @@ TakedownEventInputQueueType* PreWorldInputBuffer::GetTakedownEventInputQueue()
     return reinterpret_cast<TakedownEventInputQueueType*>(&mTakedownEventInputQueueStorage);
 }
 
+// X360 0x82362778 - read-lock accessor for the takedown-event input queue (this+0x660).
+const TakedownEventInputQueueType* PreWorldInputBuffer::GetTakedownEventInputQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return reinterpret_cast<const TakedownEventInputQueueType*>(&mTakedownEventInputQueueStorage);
+}
+
 // X360 0x8231D020 - read-lock accessor for the network player-results interface (this+0x36B8).
 const NetworkPlayerResultsInterface* PreWorldInputBuffer::GetNetworkPlayerResultsInterface() const
 {
@@ -341,6 +348,15 @@ void OutputBuffer::Construct()
         lpRequests->mRequestQueue.Clear();
     }
 
+    // ⭐ 2026-09-03 (takedown wave, run 9): the console's
+    //     TakedownEvent<..,8>::Construct(this + 16448)          // TakedownEventOutputQ @ +0x4040
+    // was on the "STILL NOT MADE" list below; TakedownManager::ProcessTakedownEvent @0x82393D40
+    // AddEvents onto it, and the first real takedown fired "mpEvents != NULL" and wrote through
+    // null. Made by name through the forwarder in EventQueue_TakedownEvent_8.cpp (the type is
+    // incomplete in this TU on purpose -- see the header).
+    ConstructTakedownEventOutputQueue(
+        reinterpret_cast<TakedownEventOutputQueueType*>(&mTakedownEventOutputQueueStorage));
+
     // ⭐⭐ 2026-08-01 (BridgeGameStateToWorld wave): the console's construct list for the members
     // that bridge READS. Until now every one of these was inside an opaque blob, so none of them
     // could be built -- and BridgeGameStateToWorld hands five of them straight to the world's
@@ -424,13 +440,8 @@ void OutputBuffer::Construct()
     mbControllerActive                      = false;
 
     // ⚠️ STILL NOT MADE, and named so nobody has to re-derive them:
-    //   * TakedownEvent<..,8>::Construct(this + 16448) -- the takedown-event OUTPUT queue, which
-    //     BridgeGameStateToWorld also forwards. Its member is still opaque storage
-    //     (TakedownEventOutputQueueType is a forward-declared incomplete class here), so it
-    //     cannot be constructed from this TU. It is SAFE to forward unconstructed only because
-    //     BaseEventQueue<T>::Append early-outs on a zero-length source and the buffer's storage
-    //     starts zeroed -- that is a property of the container, not a design, so construct it the
-    //     moment that member is typed.
+    //   * TakedownEvent<..,8>::Construct(this + 16448) -- ⭐ MADE 2026-09-03 (takedown wave), see the
+    //     ConstructTakedownEventOutputQueue call above; no longer on this list.
     //   * DirtyTrickEvent<..,28>::Construct + GameStateToNetworkInterface::Clear (this + 16784),
     //     the two input bind/unbind request queues (this + 17324 / 17400),
     //     VariableEventQueue<18432,16>::Construct (this + 18496) -- all still opaque.

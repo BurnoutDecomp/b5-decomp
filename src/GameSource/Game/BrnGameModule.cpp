@@ -4177,7 +4177,9 @@ namespace BrnGame
                         lpcWorldOutput->GetContactSpyInterface(),
                         // [road-rage wave 2026-09-02] leg 1 of BridgeWorldToGameState, by the
                         // same one-feed rule: the race-car crash-event queue the buffer would carry.
-                        lpcWorldOutput->GetVehicleManagerOutputInterface()->GetRaceCarCrashEventQueue());
+                        lpcWorldOutput->GetVehicleManagerOutputInterface()->GetRaceCarCrashEventQueue(),
+                        // [takedown wave 2026-09-02] the traffic-type response queue, same rule.
+                        lpcWorldOutput->GetTrafficTypeResponseQueue());
                     mpWorldUpdateOutputBuffer->UnlockForRead();
                 }
 

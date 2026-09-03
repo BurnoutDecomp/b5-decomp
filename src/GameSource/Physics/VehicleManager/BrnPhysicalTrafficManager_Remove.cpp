@@ -127,8 +127,8 @@ namespace Vehicle
     //
     // CONSOLE CALL POSITION: the TAIL of VehicleManager::ProcessContactSpies @0x82646E5C, inside
     // PhysicsModule::Update's non-catchup contact-spy leg, AFTER WriteOutVehicleStats.
-    // ProcessContactSpies is still a conductor gate, so the call is seated at that same frame
-    // position in BrnPhysicsModuleUpdateFunctions.cpp. DELETE-WHEN ProcessContactSpies is bodied.
+    // 2026-09-02: ProcessContactSpies is REAL (BrnVehicleManager_ProcessContactSpies.cpp) and
+    // makes this call itself; the stand-in seat in BrnPhysicsModuleUpdateFunctions.cpp is retired.
     // =============================================================================================
     void PhysicalTrafficManager::DisposeOfNonCrashingTraffic()
     {

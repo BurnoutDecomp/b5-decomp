@@ -346,6 +346,21 @@ public:
     GameStateModuleIO::EGameModeType GetCurrentGameModeType() const { return meCurrentGameModeType; }
     const GameMode* GetCurrentGameMode() const                      { return mpCurrentGameMode; }
 
+    // DWARF :522 -- the embedded current-mode parameter block. HEADER INLINE on the X360: every
+    // reader folds it to `ldx this+0x8BE0` (== &mCurrentGameModeParams + muFlags @0x860), e.g.
+    // TakedownManager::Update @0x8239FD34 (KU_FLAG_DISABLE_ALL_TDS), ::ProcessTakedownEvent
+    // @0x82393EBC (KU_FLAG_ENFORCE_SOFT_TAKEDOWNS) and ::DetectStandardTakedown @0x8237A570
+    // (KU_FLAG_ALLOW_REVENGE_TAKEDOWNS); ModeManager_Finish.cpp's own assert names it verbatim.
+    const GameModeParams* GetCurrentGameModeParams() const           { return &mCurrentGameModeParams; }
+    // DWARF :321 -- HEADER INLINE on the X360 (no out-of-line symbol). Its one inlined site,
+    // TakedownManager::DetectStandardTakedown @0x8237A550..0x8237A594, is exactly
+    // `mpCurrentGameMode != NULL && (muFlags & (1 << 35)) != 0` (`extldi r12,r12,64,35`).
+    bool CurrentGameModeAllowsRevengeTakedowns() const
+    {
+        return mpCurrentGameMode != nullptr &&
+               mCurrentGameModeParams.GetFlag(GameModeParams::KU_FLAG_ALLOW_REVENGE_TAKEDOWNS);
+    }
+
     // [tut-ticker] THE THREE MODE CLOCKS. DWARF :1025/:1026/:1027; X360 +0x951C / +0x9520 / +0x9524
     // (== GameStateModule +42300 / +42304 / +42308). Identity proven from the WRITERS, not DWARF
     // order: PreWorldUpdate @0x823537B8 accumulates +0x951C only while no mode is running AND the

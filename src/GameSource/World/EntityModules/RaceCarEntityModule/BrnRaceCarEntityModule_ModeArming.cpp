@@ -456,12 +456,10 @@ void RaceCarEntityModule::SetAllCarsOnStartLine(ActiveRaceCar::ERaceStartState l
 // respectively -- they hold the same bits only because HandlePrepareForModeAction copies one
 // into the other three statements earlier, and that copy is itself only landed this wave.
 //
-// [X] TWO LEGS PARKED, both tree-wide-grep verified (declaration AND body absent):
-//     RaceCarEntityModule::RemoveRivals   @0x82305E00
-//     RaceCarEntityModule::SetUpAIForMode @0x82301620
-// DELETE-WHEN either lands: un-park its call exactly as quoted above. Neither is needed to
-// seat the player -- RemoveRivals only despawns RIVAL cars (an offline stunt run has none:
-// StuntAttackMode::Start sets miNumRivals to 0) and SetUpAIForMode configures AI drivers.
+// [x] THE TWO RIVAL LEGS ARE LIVE (rival-spawn wave R, 2026-09-02):
+//     RaceCarEntityModule::RemoveRivals   @0x82305E00   -> BrnRaceCarEntityModule_Rivals.cpp
+//     RaceCarEntityModule::SetUpAIForMode @0x82301620   -> BrnRaceCarEntityModule_Rivals.cpp
+// Both calls below are exactly as quoted in the asm table above.
 // ============================================================================================
 void RaceCarEntityModule::SetupOpponents(
     const BrnGameState::GameModeParams* lpGameModeParams,
@@ -492,17 +490,13 @@ void RaceCarEntityModule::SetupOpponents(
 
     if (GetGameModeFlag(BrnGameState::GameModeParams::KU_FLAG_REMOVE_RIVALS_FROM_WORLD))
     {
-        // [X] PARKED: RaceCarEntityModule::RemoveRivals @0x82305E00 has no declaration and no
-        // body on this tree.
-        //     RemoveRivals(lpOutput, false);
+        RemoveRivals(lpOutput, false);                                   // 0x82307EF4, r5 == 0
     }
 
     SetUpPlayerCarForMode(lpGameModeParams, lpOutput, lCarModelId, lWheelModelId,
                           lu16StartAISectionIndex);
 
-    // [X] PARKED: RaceCarEntityModule::SetUpAIForMode @0x82301620 has no declaration and no
-    // body on this tree.
-    //     SetUpAIForMode(lpGameModeParams, lpOutput, lu16StartAISectionIndex);
+    SetUpAIForMode(lpGameModeParams, lpOutput, lu16StartAISectionIndex);   // 0x82307F24
 
     // 0x82307F28..0x82307FB4. Showtime drives with the cars already RACING; every other mode
     // holds them on the line (or rolling) until game action 34 (START_PLAYING_MODE) flips them

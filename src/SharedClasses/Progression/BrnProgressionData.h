@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // CgsID
+#include "SharedClasses/Progression/BrnRaceEventData.h"   // EventRacerPersonality (complete: GetPersonality indexes the 16-byte table)
+#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT (GetPersonality's :497 guard)
 
 #include <cstdint>            // uintptr_t (the serialised 32-bit array-base slots below)
 
@@ -86,6 +88,22 @@ struct ProgressionData
     // operator-> -- so it is defined inline here, the same precedent as GetProgressionRankCount
     // and GetRivalCount. No layout change.
     u32 GetTrophyUnlockCount() const { return muTrophyUnlockCount; }
+
+    // ⭐ [rival-spawn wave R, 2026-09-02] DWARF BrnProgressionData.h:171 `const EventRacerPersonality*
+    // GetPersonality(uint32_t) const;`. INLINE ON PURPOSE (no standalone X360 symbol): the one
+    // reconstructed consumer, ModeManager::SetupOpponentData @0x82329348, carries the body at the
+    // call site -- `lwz r11, 0x3C(r27); cmplw; blt` then the assert whose baked line is
+    // BrnProgressionData.h:497 ("luIndex < muPersonalityCount", `li r5, 0x1F1`), then
+    // `lwz r9, 0x38(r27); slwi r10, r31, 4; add` == &personalities[luIndex] at the 16-byte stride.
+    // Same precedent as GetTrophyUnlock above (which the X360 did emit out of line). The assert
+    // is THIS body's; callers must not restate it. EventRacerPersonality is complete here because
+    // its owning header is included below (the forward declaration above is kept for the
+    // pointer-only readers that predate it).
+    const EventRacerPersonality* GetPersonality(u32 luIndex) const
+    {
+        CGS_ASSERT(luIndex < muPersonalityCount, "luIndex < muPersonalityCount");   // BrnProgressionData.h:497
+        return &GetPersonalities()[luIndex];
+    }
 
     // X360 0x82676820. Blends the ahead/behind graphs of two AI-balance entries by lfBlend and
     // returns the result by value (the catch-up cut-off ratio is left zeroed).
@@ -194,6 +212,7 @@ private:
     RaceEventData*         GetEvents() const           { return TableFromSlot<RaceEventData>(muaEvents); }
     Rival*                 GetRivals() const           { return TableFromSlot<Rival>(muaRivals); }
     OpponentBalanceData*   GetAIBalances() const       { return TableFromSlot<OpponentBalanceData>(muaAIBalances); }
+    EventRacerPersonality* GetPersonalities() const    { return TableFromSlot<EventRacerPersonality>(muaPersonalities); }
     TrophyUnlockData*      GetTrophyUnlocks() const    { return TableFromSlot<TrophyUnlockData>(muaTrophyUnlocks); }
     CarOpponentSet*        GetCarOpponentSets() const  { return TableFromSlot<CarOpponentSet>(muaCarOpponentSet); }
 };
