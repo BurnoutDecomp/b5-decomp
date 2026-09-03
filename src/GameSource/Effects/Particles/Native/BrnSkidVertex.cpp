@@ -77,13 +77,32 @@ namespace
     const u32 KU_SKID_VERTEX_STRIDE   = 28u;
     const u32 KU_FENCE_BYTE_THRESHOLD = 0x80000u;
 
-    // ---- per-module shadow caches (X360 .data block off_83010950) -----------------------------------
-    // One set per module (NOT per renderer), shared by BeginRendering and SetProgram in this TU.
-    // dword_8301095C (last vertex program), off_83010958 (last vertex descriptor), byte_83010A34
-    // (vertex-program-state dirty flag).
-    renderengine::ProgramBufferData*           spgLastVertexProgram   = nullptr;  // dword_8301095C
-    const renderengine::VertexDescriptorData*  spVertexDescriptorLast = nullptr;  // off_83010958
-    bool                                       sbVertexProgramDirty   = false;    // byte_83010A34
+    // ⭐⭐ THE THREE "PER-MODULE SHADOW CACHES" THAT USED TO LIVE HERE ARE GONE, AND THAT WAS
+    // THE TYRE MARK'S LAST GATE. This TU declared
+    //     renderengine::ProgramBufferData*          spgLastVertexProgram;   // dword_8301095C
+    //     const renderengine::VertexDescriptorData* spVertexDescriptorLast; // off_83010958
+    //     bool                                      sbVertexProgramDirty;   // byte_83010A34
+    // as its OWN file-scope statics. Those three console addresses are not TU-local: they are
+    // shadow::Device's own fields -- mpVertexProgramShadow / mpVertexDescriptor /
+    // mbVertexProgramStateDirty -- inside the one off_83010950 block (shadowingdevice.h; the
+    // PC leaf's own note says so, and CgsIm3dSkyDome.cpp was corrected for exactly this).
+    //
+    // The proof is three functions that all touch the SAME word:
+    //   shadow::Device::ResetShadowing  @0x82276970  `stw r10,(dword_8301095C-..)(r11)`  -> 0
+    //   shadow::Device::SetVertexProgram@0x82276BA0  reads dword_8301095C, binds on a miss, stores it
+    //   ImRenderer<SkidVertex>::BeginRendering @0x8227C1E8
+    //       bl shadow__Device__ResetShadowing          ; nulls dword_8301095C and off_83010958
+    //       lwz r11,(dword_8301095C-..)(r30) ; cmplw r11,r29 ; beq ...   ; so the compare is
+    //       ...                                        ; ALWAYS a miss and the bind ALWAYS happens
+    //
+    // Split into two variables the compare stops being a miss: from the second pass onward the
+    // TU-local copy still held the skid program, the bind was skipped, and Device::
+    // mpVertexProgramShadow / mpVertexDescriptor stayed NULL after ResetShadowing -- so
+    // Device::FlushVertexProgramState took its `both-null` early-out and the batch went to
+    // D3D with NO VERTEX SHADER and NO VERTEX DECLARATION bound. Measured: 8,391,520 vertices
+    // submitted over 37,274 draws, the first-vertex transform landing at NDC (0.25, -0.69,
+    // 0.92) with the authored near-black at alpha 1.0 -- and not one mark on the road.
+    // A symbol resolving locally IS the bug; only the compare-and-set through the device sees it.
 }
 
 } // namespace CgsGraphics
@@ -94,6 +113,7 @@ namespace shadow
 {
     void DeviceSetVertexProgramInternal(void* lpVertexProgram);
     void DeviceSetPixelProgram(void* lpPixelProgram);
+    void DeviceSetVertexDescriptor(void* lpVertexDescriptor);
 }
 
 // The D3D immediate-vertex ring API ImRenderer<V>::Render drives (X360 D3DDevice_* calls); minimal
@@ -285,21 +305,19 @@ void ImRenderer<V>::BeginRendering()
 
     mi8CurrentProgram = 0;
 
-    if (spgLastVertexProgram != reinterpret_cast<renderengine::ProgramBufferData*>(lpVertexProgram))
-    {
-        shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-        spgLastVertexProgram = reinterpret_cast<renderengine::ProgramBufferData*>(lpVertexProgram);
-    }
-
+    // (the compare against the last-bound vertex program is the DEVICE's -- dword_8301095C is
+    // Device::mpVertexProgramShadow, which ResetShadowing has just nulled, so the console's
+    // `lwz/cmplw/beq` is always a miss and the bind always happens. See the note above.)
+    shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
     shadow::DeviceSetPixelProgram(lpPixelProgram);
 
-    const renderengine::VertexDescriptorData* lpVertexDescriptor =
-        reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor);
-    if (spVertexDescriptorLast != lpVertexDescriptor)
-    {
-        sbVertexProgramDirty   = true;
-        spVertexDescriptorLast = lpVertexDescriptor;
-    }
+    // Shadow this renderer's vertex descriptor and mark the vertex-program state dirty when it
+    // changed (X360 off_83010958 / byte_83010A34 == Device::mpVertexDescriptor and
+    // mbVertexProgramStateDirty -- the compare-then-set + dirty flag IS Device::
+    // SetVertexDescriptor, so the shadow is kept where FlushVertexProgramState reads it).
+    shadow::DeviceSetVertexDescriptor(
+        const_cast<renderengine::VertexDescriptorData*>(
+            reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor)));
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -318,17 +336,11 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
                "mapPixelProgramBuffer[ li8Program ] != NULL");
 
     renderengine::ProgramBuffer* lpVertexProgram = mapVertexProgramBuffer[li8Program];
-    bool lbChanged;
-    if (spgLastVertexProgram == reinterpret_cast<renderengine::ProgramBufferData*>(lpVertexProgram))
-    {
-        lbChanged = false;
-    }
-    else
-    {
-        shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-        spgLastVertexProgram = reinterpret_cast<renderengine::ProgramBufferData*>(lpVertexProgram);
-        lbChanged = true;
-    }
+    // The device's own shadow answers "did this bind change anything?" -- Device::
+    // SetVertexProgram @0x82276BA0 IS the compare-and-set against dword_8301095C that this
+    // function used to keep a private copy of. See the note at the top of the TU.
+    const bool lbChanged = shadow::Device::SetVertexProgram(
+        reinterpret_cast<const renderengine::ProgramBufferData*>(lpVertexProgram));
 
     if (lbChanged)
     {
