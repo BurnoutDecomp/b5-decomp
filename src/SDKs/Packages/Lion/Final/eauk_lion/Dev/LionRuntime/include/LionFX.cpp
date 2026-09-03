@@ -487,10 +487,15 @@ void cLionFX::TriggerUpdate(cParticleTrigger* apTrigger, u32 auFlags, const cTim
 // and 1.0f (not 0) is its identity, which is exactly why an unbound scaler leaves an effect
 // playing its behaviour stack unscaled rather than collapsed.
 //
-// ⚠ NO NAME PARAMETER, unlike LocatorRegister/TriggerRegister. Those two take a `const char*`
-// the console throws away; this one is not given one at all (the DWARF declares none and the
-// first instruction loads r3 from the image with nothing to clobber).
-cParticleScaler* cLionFX::ScalerRegister()
+// ⚠ THE DEAD NAME PARAMETER IS REAL AND WAS NEARLY DROPPED. A first pass here read the asm --
+// r3 is overwritten with the pool address at 0x8290AC78, before anything can read it -- and
+// concluded the function takes no parameter at all. The DWARF says otherwise (LionFX.h:32,
+// `cParticleScaler* ScalerRegister(const char*)`), and so does the call site:
+// ParticleModule::DispatchThreadUpdate @0x8229C5F0 sets r3 before the call. The DWARF is the
+// authority for declaration SHAPE, so the parameter stays -- exactly as it does on
+// LocatorRegister @0x8290AC20 and TriggerRegister @0x8290ACA8, which discard theirs the same
+// way. That it is dead is recorded here rather than dropped.
+cParticleScaler* cLionFX::ScalerRegister(const char* /*apcName*/)
 {
     cParticleScaler* lpScaler = static_cast<cParticleScaler*>(gLionScalerAllocator.Alloc());
     if (lpScaler != nullptr)
