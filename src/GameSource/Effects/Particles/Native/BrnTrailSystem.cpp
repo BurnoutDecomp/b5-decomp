@@ -41,6 +41,7 @@
 #include "rw/math/vpu/vector3_operation.h"                               // rw::math::vpu::{operator+,operator-,MagnitudeSquared,Normalize,Cross,Dot}
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // [diag] CgsDev::Log::WriteToLog
+#include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"      // [diag] BrnDiag::LogBoundSurfaces (the pass-boundary RT probe)
 
 #include <cstring>   // memset / memcpy (the X360 calls both by name)
 #include <cstdio>    // [diag] snprintf (the [trailpass] render probe)
@@ -484,6 +485,14 @@ namespace Native
 
         renderengine::Texture* const lpTexture = mTrailTexture;
         mRenderer.BeginRender(lpTexture);
+
+        // [DIAG] WHICH SURFACE IS THIS PASS ABOUT TO DRAW INTO? Eight waves measured everything
+        // upstream of the raster -- geometry, matrix, colours, constants, texture, every render
+        // state, hr == S_OK -- and no wave ever compared the trail pass's colour target against
+        // the WORLD pass's. A correct draw into a surface nobody resolves is exactly "everything
+        // succeeds, nothing appears". Paired with the "world-begin" and "resolve-in" call sites
+        // in BrnRendererModule.cpp; see BrnDiagBoundSurfaces.h. DELETE-WHEN-STABLE.
+        BrnDiag::LogBoundSurfaces("trail");
 
         for (s32 lnTrailType = 0; lnTrailType < KI_MAX_NUM_TRAIL_TYPES; ++lnTrailType)
         {

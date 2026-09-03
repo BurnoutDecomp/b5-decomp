@@ -36,11 +36,14 @@
 #include "pc/gcm/renderengine/WorldGeometryPCLeaf.h" // the RETAINED dispatch-path geometry mirrors
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsXboxConditionalRenderShims.h" // the predicated-draw externs homed at the bottom of this TU
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h" // [diag] BrnDiag::LogBoundSurfaces (homed in this TU)
+#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"     // [diag] BrnDiag::gFilmLatch.muSkidLatched (the probe's arm)
 
 #include <Windows.h>
 #include <d3d9.h>
 #include <cstring>
 #include <cstdio>
+#include <cstdarg>   // [diag] va_list (the stride-aware vertex dump below)
 #include <cstdlib>
 #include <cmath>
 #include <unordered_map>
@@ -82,6 +85,41 @@ namespace
             sLogged[lpcKey] = true;
             CgsDev::Log::WriteToLog(lpcMessage);
         }
+    }
+
+    // ---- [DIAG] the bound-surface probe (BrnDiagBoundSurfaces.h) -----------------------------
+    // Format one surface as "ptr WxH fmt=N msaa=N" into lpcOut. A null surface prints as null
+    // rather than being skipped -- "the depth surface is NOT BOUND" is one of the answers this
+    // probe exists to give, and a missing line would read as a missing call site.
+    void DiagFormatSurface(IDirect3DSurface9* lpSurface, char* lpcOut, size_t luOut)
+    {
+        if (lpSurface == nullptr)
+        {
+            std::snprintf(lpcOut, luOut, "null");
+            return;
+        }
+        D3DSURFACE_DESC lDesc;
+        if (FAILED(lpSurface->GetDesc(&lDesc)))
+        {
+            std::snprintf(lpcOut, luOut, "%p ?desc", static_cast<void*>(lpSurface));
+            return;
+        }
+        std::snprintf(lpcOut, luOut, "%p %ux%u fmt=%u msaa=%u",
+                      static_cast<void*>(lpSurface),
+                      static_cast<unsigned>(lDesc.Width), static_cast<unsigned>(lDesc.Height),
+                      static_cast<unsigned>(lDesc.Format),
+                      static_cast<unsigned>(lDesc.MultiSampleType));
+    }
+
+    bool DiagRtProbeEnabled()
+    {
+        static int siEnabled = -1;
+        if (siEnabled < 0)
+        {
+            const char* lpcValue = std::getenv("BRN_RT_PROBE");
+            siEnabled = (lpcValue != nullptr && lpcValue[0] != 0 && lpcValue[0] != '0') ? 1 : 0;
+        }
+        return siEnabled != 0;
     }
 
     // ---- serialised world-buffer views (32-bit console images) --------------
@@ -3209,6 +3247,69 @@ namespace
 }
 
 // =============================================================================
+// [DIAG] BrnDiag::LogBoundSurfaces -- the pass-boundary render-target identity probe.
+// Declared in GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h; homed here because
+// this TU owns the live IDirect3DDevice9. See that header for why it exists.
+//
+// ⚠ WHAT THIS PROBE COVERS, stated up front so nobody reads more into a line than it holds:
+// colour target 0 ONLY, plus the depth/stencil surface and the swap chain's back buffer. It
+// says NOTHING about MRT slots 1..3, nothing about whether the surface is later resolved, and
+// nothing about the CONTENT of either surface. It answers exactly one question -- "is the
+// surface pair at call site A the same object as at call site B" -- and that question has
+// never been asked on this path.
+// =============================================================================
+namespace BrnDiag
+{
+    void LogBoundSurfaces(const char* lpcLabel)
+    {
+        if (!DiagRtProbeEnabled())
+            return;
+        // Spend the budget on the DRIFT, not on the title screen: nothing is printed until the
+        // first tyre-mark segment has been laid (the same latch BRN_FRAME_DUMP_ARM=skid uses).
+        if (gFilmLatch.muSkidLatched == 0u)
+            return;
+
+        // Per-label budget, so one boundary cannot eat another's lines. The map is keyed on the
+        // literal POINTER, which is what every call site passes -- the same convention LogOnce
+        // above uses, and the same caveat: two different literals with equal text get separate
+        // budgets, which is what is wanted here.
+        static std::unordered_map<const char*, u32> sBudget;
+        u32& lruUsed = sBudget[lpcLabel];
+        if (lruUsed >= 4u)
+            return;
+        ++lruUsed;
+
+        IDirect3DDevice9* const lpDevice = Dev();
+        if (lpDevice == nullptr)
+            return;
+
+        IDirect3DSurface9* lpRt      = nullptr; lpDevice->GetRenderTarget(0, &lpRt);
+        IDirect3DSurface9* lpDepth   = nullptr; lpDevice->GetDepthStencilSurface(&lpDepth);
+        IDirect3DSurface9* lpBackBuf = nullptr;
+        lpDevice->GetBackBuffer(0u, 0u, D3DBACKBUFFER_TYPE_MONO, &lpBackBuf);
+
+        char lacRt[96], lacDepth[96], lacBack[96];
+        DiagFormatSurface(lpRt,      lacRt,    sizeof(lacRt));
+        DiagFormatSurface(lpDepth,   lacDepth, sizeof(lacDepth));
+        DiagFormatSurface(lpBackBuf, lacBack,  sizeof(lacBack));
+
+        D3DVIEWPORT9 lVp; std::memset(&lVp, 0, sizeof(lVp)); lpDevice->GetViewport(&lVp);
+
+        char lacMsg[448];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[rtid] %-12s rt=[%s] depth=[%s] back=[%s] vp=%lux%lu@%lu,%lu z%.2f-%.2f\n",
+                      lpcLabel, lacRt, lacDepth, lacBack,
+                      lVp.Width, lVp.Height, lVp.X, lVp.Y,
+                      static_cast<double>(lVp.MinZ), static_cast<double>(lVp.MaxZ));
+        CgsDev::Log::WriteToLog(lacMsg);
+
+        if (lpRt)      lpRt->Release();
+        if (lpDepth)   lpDepth->Release();
+        if (lpBackBuf) lpBackBuf->Release();
+    }
+}
+
+// =============================================================================
 // The extern "C" Xenon fast-set surface.
 // =============================================================================
 extern "C"
@@ -4127,7 +4228,7 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
     // three entries of their own. DELETE-WHEN-STABLE, with the rest of the ladder.
     static u32 suDiagRuns     = 0u;
     static u32 suDiagSkidRuns = 0u;
-    const bool lbDiagSkidRun  = (suImVertsStride == 28u) && (suDiagSkidRuns < 3u);
+    const bool lbDiagSkidRun  = (suImVertsStride == 28u) && (suDiagSkidRuns < 6u);
     if (suDiagRuns < 4u || lbDiagSkidRun)
     {
         if (lbDiagSkidRun)
@@ -4141,6 +4242,18 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
         IDirect3DVertexDeclaration9* lpDecl = nullptr; lpDevice->GetVertexDeclaration(&lpDecl);
         IDirect3DBaseTexture9*       lpTex0 = nullptr; lpDevice->GetTexture(0, &lpTex0);
         DWORD luBlend = 0, luZ = 0, luZW = 0, luCull = 0, luCw = 0, luScis = 0, luFill = 0, luATest = 0, luSrc = 0, luDst = 0;
+        // [DIAG, trail wave] The four states the ladder never read, each of which can annihilate a
+        // draw that reports S_OK: a leftover ZFUNC (the trail asks for LESSEQUAL and rides 3 cm
+        // above a road the world already wrote, so GREATER/EQUAL kills every fragment), a
+        // non-ADD BLENDOP (MIN/REVSUBTRACT with a near-black source is a no-op or a brightener),
+        // an sRGB write conversion, and a depth BIAS left behind by a world technique -- the
+        // sky dome's own rasteriser applier documents that last one as a measured hazard.
+        DWORD luZFunc = 0, luBlendOp = 0, luSrgbW = 0, luDBias = 0, luSlopeBias = 0;
+        lpDevice->GetRenderState(D3DRS_ZFUNC, &luZFunc);
+        lpDevice->GetRenderState(D3DRS_BLENDOP, &luBlendOp);
+        lpDevice->GetRenderState(D3DRS_SRGBWRITEENABLE, &luSrgbW);
+        lpDevice->GetRenderState(D3DRS_DEPTHBIAS, &luDBias);
+        lpDevice->GetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, &luSlopeBias);
         lpDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &luBlend);
         lpDevice->GetRenderState(D3DRS_ZENABLE, &luZ);
         lpDevice->GetRenderState(D3DRS_ZWRITEENABLE, &luZW);
@@ -4166,27 +4279,98 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
                       luBlend, luSrc, luDst, luZ, luZW, luCull, luCw, luScis, lSc.left, lSc.top, lSc.right, lSc.bottom,
                       luFill, luATest, lVp.Width, lVp.Height, lVp.X, lVp.Y, (double)lVp.MinZ, (double)lVp.MaxZ);
         CgsDev::Log::WriteToLog(lacMsg);
-        // ...and the constant file the draw read: PS c0..c4 / VS c0..c1 (the composite's five + two).
+
+        // [DIAG, trail wave] The surface DESCS and the five extra states, on their own line so the
+        // line above keeps its shape for the runs already banked. Reading the descs is what turns
+        // "(OFF-SCREEN)" from an adjective into a comparison: a 1280x720 msaa=2 pair is the scene
+        // anti-alias buffer, a 320x180 pair is a post-fx down-sample, a small square is a shadow
+        // map or an env-map face -- and only the first of those is ever resolved to the screen.
+        {
+            char lacRtDesc[96], lacDepthDesc[96];
+            DiagFormatSurface(lpBoundRt, lacRtDesc,    sizeof(lacRtDesc));
+            DiagFormatSurface(lpDepth,   lacDepthDesc, sizeof(lacDepthDesc));
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[ImVerts diag %u] rt=[%s] depth=[%s] zfunc=%lu blendop=%lu srgbw=%lu"
+                          " dbias=0x%08lX slopebias=0x%08lX\n",
+                          static_cast<unsigned>(suDiagRuns), lacRtDesc, lacDepthDesc,
+                          luZFunc, luBlendOp, luSrgbW, luDBias, luSlopeBias);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+
+        // ...and the constant file the draw read: PS c0..c4 / VS c0..c5.
+        // ⭐ VS c0..c3 is the SKID PASS'S WHOLE POSITION MATH (oPos = pos.x*c0 + pos.y*c1 +
+        // pos.z*c2 + c3) and c4/c5 are gStartColour / gEndColour. The ladder used to read TWO
+        // vertex registers, so the translation row c3 -- the only one that can put a strip
+        // somewhere the camera is not while c0/c1 still look perfect -- has never once been
+        // read back off the device. Six registers costs one more line and closes that hole.
         float lafPs[5 * 4] = { 0 }; lpDevice->GetPixelShaderConstantF(0, lafPs, 5);
-        float lafVs[2 * 4] = { 0 }; lpDevice->GetVertexShaderConstantF(0, lafVs, 2);
+        float lafVs[6 * 4] = { 0 }; lpDevice->GetVertexShaderConstantF(0, lafVs, 6);
         std::snprintf(lacMsg, sizeof(lacMsg),
                       "[ImVerts diag %u] ps c0={%g %g %g %g} c1={%g %g %g %g} c2={%g %g %g %g} c3={%g %g %g %g}"
-                      " c4={%g %g %g %g} | vs c0={%g %g %g %g} c1={%g %g %g %g}\n",
+                      " c4={%g %g %g %g}\n",
                       static_cast<unsigned>(suDiagRuns),
                       lafPs[0], lafPs[1], lafPs[2], lafPs[3], lafPs[4], lafPs[5], lafPs[6], lafPs[7],
                       lafPs[8], lafPs[9], lafPs[10], lafPs[11], lafPs[12], lafPs[13], lafPs[14], lafPs[15],
-                      lafPs[16], lafPs[17], lafPs[18], lafPs[19],
-                      lafVs[0], lafVs[1], lafVs[2], lafVs[3], lafVs[4], lafVs[5], lafVs[6], lafVs[7]);
+                      lafPs[16], lafPs[17], lafPs[18], lafPs[19]);
         CgsDev::Log::WriteToLog(lacMsg);
-        // ...and the first vertex as written into the scratch (position xyz, uv).
-        const float* const lpfV0 = reinterpret_cast<const float*>(sauImVertsScratch);
         std::snprintf(lacMsg, sizeof(lacMsg),
-                      "[ImVerts diag %u] v0={%g %g %g | %g %g} v1={%g %g %g | %g %g} v3={%g %g %g | %g %g}\n",
+                      "[ImVerts diag %u] vs c0={%g %g %g %g} c1={%g %g %g %g} c2={%g %g %g %g}"
+                      " c3={%g %g %g %g} c4={%g %g %g %g} c5={%g %g %g %g}\n",
                       static_cast<unsigned>(suDiagRuns),
-                      lpfV0[0], lpfV0[1], lpfV0[2], lpfV0[3], lpfV0[4],
-                      lpfV0[5], lpfV0[6], lpfV0[7], lpfV0[8], lpfV0[9],
-                      lpfV0[15], lpfV0[16], lpfV0[17], lpfV0[18], lpfV0[19]);
+                      lafVs[0],  lafVs[1],  lafVs[2],  lafVs[3],  lafVs[4],  lafVs[5],  lafVs[6],  lafVs[7],
+                      lafVs[8],  lafVs[9],  lafVs[10], lafVs[11], lafVs[12], lafVs[13], lafVs[14], lafVs[15],
+                      lafVs[16], lafVs[17], lafVs[18], lafVs[19], lafVs[20], lafVs[21], lafVs[22], lafVs[23]);
         CgsDev::Log::WriteToLog(lacMsg);
+        // ...and the first three vertices as written into the scratch (position xyz, then the
+        // rest of the vertex).
+        // ⚠ THE STRIDE WAS HARDCODED AT FIVE FLOATS and this ladder now serves TWO strides: the
+        // post-fx composite's 20-byte quad (5 floats) and the skid strip's 28-byte vertex (7).
+        // On the skid runs "v1" and "v3" were therefore printed from the middle of a vertex --
+        // which is exactly how run skid32's line came to read `v1={0.028 0.759 3391.25 ...}`,
+        // three lanes of vertex 0's uv/time/alpha followed by vertex 1's position. The numbers
+        // were real; the LABELS were wrong, and a mis-labelled probe is the defect class this
+        // project keeps paying for. Stepped by the real stride now.
+        {
+            const float* const lpfBase = reinterpret_cast<const float*>(sauImVertsScratch);
+            const u32 luFloatsPerVertex = (suImVertsStride >= 4u) ? (suImVertsStride / 4u) : 1u;
+            const u32 luLanes = (luFloatsPerVertex > 7u) ? 7u : luFloatsPerVertex;
+            char lacVerts[448];
+            size_t luAt = 0;
+            // snprintf returns what it WOULD have written, so every advance is clamped to the
+            // remaining room -- otherwise a long run of %g would walk the cursor past the buffer
+            // and the next call's size argument would underflow into a huge size_t.
+            struct Append
+            {
+                static void Do(char* lpcBuffer, size_t luSize, size_t& lruAt, const char* lpcFormat, ...)
+                {
+                    if (lruAt + 1u >= luSize)
+                        return;
+                    va_list lArgs;
+                    va_start(lArgs, lpcFormat);
+                    const int liWrote = std::vsnprintf(lpcBuffer + lruAt, luSize - lruAt, lpcFormat, lArgs);
+                    va_end(lArgs);
+                    if (liWrote < 0)
+                        return;
+                    const size_t luWrote = static_cast<size_t>(liWrote);
+                    lruAt += (luWrote < (luSize - lruAt)) ? luWrote : (luSize - lruAt - 1u);
+                }
+            };
+            Append::Do(lacVerts, sizeof(lacVerts), luAt, "[ImVerts diag %u]",
+                       static_cast<unsigned>(suDiagRuns));
+            for (u32 luVertex = 0; luVertex < 3u; ++luVertex)
+            {
+                Append::Do(lacVerts, sizeof(lacVerts), luAt, " v%u={", static_cast<unsigned>(luVertex));
+                for (u32 luLane = 0; luLane < luLanes; ++luLane)
+                {
+                    Append::Do(lacVerts, sizeof(lacVerts), luAt,
+                               (luLane == 3u) ? " | %g" : ((luLane == 0u) ? "%g" : " %g"),
+                               static_cast<double>(lpfBase[luVertex * luFloatsPerVertex + luLane]));
+                }
+                Append::Do(lacVerts, sizeof(lacVerts), luAt, "}");
+            }
+            Append::Do(lacVerts, sizeof(lacVerts), luAt, "\n");
+            CgsDev::Log::WriteToLog(lacVerts);
+        }
 
         // [DIAG] ...and SAMPLER 0 + the texture the pixel program multiplies by. For the skid
         // pass this is the last unmeasured term: its whole pixel program is

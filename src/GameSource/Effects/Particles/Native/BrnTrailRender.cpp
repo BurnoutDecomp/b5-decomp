@@ -38,6 +38,7 @@
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"       // [diag] BrnDiag::gFilmLatch (frames.csv NDC columns)
 
 #include <cstdio>   // [diag] snprintf (the [trailpass] transform probe)
+#include <cstdlib>  // [diag] getenv / atoi (the BRN_SKID_LOUD discriminator)
 #include "rw/math/vpu/vector3_operation.h"                             // rw::math::vpu::{operator+,operator*}
 
 // The immediate-mode state library's three trail states, built by CgsGraphics::ImRendererBase::
@@ -59,6 +60,11 @@ extern void* gpSkyDomeRasterizerState;     // dword_83010F3C
 void ImDeviceSetDepthStencilState(void* lpState);
 void ImDeviceSetBlendState(void* lpState);
 void ImDeviceSetRasterizerState(void* lpState);
+
+// [DIAG] NOT IN THE X360 BINARY -- the two override state objects the BRN_SKID_LOUD discriminator
+// binds instead of the two above (ImmediateModePCLeaf.cpp). DELETE-WHEN-STABLE.
+extern void* gpDiagSkidNoDepthState;
+extern void* gpDiagSkidNoBlendState;
 
 namespace BrnParticle
 {
@@ -98,6 +104,55 @@ namespace Native
 
         // .rdata unk_82181510 == {0, 1, 0, 0}: the uv.y step to the second edge vertex.
         const Vector4 K_UV_SECOND_EDGE = { 0.0f, 1.0f, 0.0f, 0.0f };
+
+        // ============================================================================================
+        // [DIAG] BRN_SKID_LOUD -- THE DISCRIMINATOR. NOT IN THE X360 BINARY, inert unless the
+        // variable names a non-zero bit. DELETE-WHEN-STABLE.
+        //
+        // The trail pass has been measured correct at every point that can be measured from the
+        // CPU side: 12 real vertices in a triangle strip, gWorldViewProj resolved to c0..c3 and
+        // read back off the device, an on-screen NDC, a real DXT5 tread texture in sampler 0,
+        // SRCALPHA/INVSRCALPHA, cull none, full viewport, no scissor, hr == S_OK -- and no pixels.
+        // What remains between the vertex program and the frame buffer is a small set, and this
+        // takes its members out of the experiment ONE BIT AT A TIME so the survivor is named
+        // rather than guessed:
+        //
+        //   bit 0 (1)  depth test OFF   -- if the mark appears, the road's depth was rejecting it
+        //   bit 1 (2)  alpha blend OFF  -- if the mark appears, the source alpha was ~0 (texture
+        //                                  alpha, the age lerp, or the strength lane)
+        //   bit 2 (4)  colour OVERRIDE  -- opaque magenta start AND end, so the strip cannot be
+        //                                  lost in the road's own near-black
+        //
+        // BRN_SKID_LOUD=7 makes the geometry impossible to miss. If SEVEN still shows nothing,
+        // every remaining explanation is about the SURFACE, not the fragment -- which is the one
+        // half of the search this campaign has never been able to close.
+        // ⚠ WHAT THIS DOES NOT COVER: it changes only the depth-stencil and blend binds and the
+        // two colour constants. It does not touch the vertex positions, the declaration, the
+        // shaders, the texture bind or the render target -- so a null result convicts none of
+        // those individually, it only excludes depth and blend.
+        // ============================================================================================
+        u32 SkidLoudMask()
+        {
+            static s32 siMask = -1;
+            if (siMask < 0)
+            {
+                const char* lpcValue = std::getenv("BRN_SKID_LOUD");
+                siMask = (lpcValue != 0) ? std::atoi(lpcValue) : 0;
+                if (siMask < 0)
+                    siMask = 0;
+                if (siMask != 0)
+                {
+                    char lacMsg[160];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                        "[trailpass] BRN_SKID_LOUD=%d ARMED: depth%s blend%s colour%s\n", siMask,
+                        (siMask & 1) ? "=OFF" : "=normal",
+                        (siMask & 2) ? "=OFF" : "=normal",
+                        (siMask & 4) ? "=MAGENTA" : "=authored");
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+            }
+            return static_cast<u32>(siMask);
+        }
 
         inline Vector4 MakeUvTimeAlpha(f32 lfU, f32 lfV, f32 lfAge, f32 lfStrength)
         {
@@ -141,8 +196,10 @@ namespace Native
         mpRenderer->SetTransform(mViewProjectionMatrix);     // BeginShaderStates(this+88) + 4 x stvx128
 
         // sub_82276DA8(base, dword_83010F4C) / SetState(base, dword_83010F20) / sub_82276E48(base, dword_83010F3C)
-        ImDeviceSetDepthStencilState(gpSkyDomeDepthStencilState);
-        ImDeviceSetBlendState(gpImStandardAlphaBlendState);
+        // [DIAG] the two BRN_SKID_LOUD bits swap the bound object, not the applier -- see SkidLoudMask().
+        const u32 luLoud = SkidLoudMask();
+        ImDeviceSetDepthStencilState((luLoud & 1u) ? gpDiagSkidNoDepthState : gpSkyDomeDepthStencilState);
+        ImDeviceSetBlendState((luLoud & 2u) ? gpDiagSkidNoBlendState : gpImStandardAlphaBlendState);
         ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);
 
         mpRenderer->SetTexture(lpTexture);                   // ImRendererBase::SetTexture @0x82276EE8
@@ -172,8 +229,19 @@ namespace Native
         (void)lu8TrailTypeID;
 
         // The two colour constants: RGB scaled by the white level, alpha kept.
-        mpRenderer->SetBlendStartColour(ScaleRgb(lpParams->mStartColour, lfWhiteLevel));
-        mpRenderer->SetBlendEndColour(ScaleRgb(lpParams->mEndColour, lfWhiteLevel));
+        // [DIAG] BRN_SKID_LOUD bit 2 replaces both with opaque magenta so the strip cannot hide in
+        // the road's own near-black. Same two setters, same two registers -- only the value differs.
+        if ((SkidLoudMask() & 4u) != 0u)
+        {
+            const Vector4 lMagenta = { 1.0f, 0.0f, 1.0f, 1.0f };
+            mpRenderer->SetBlendStartColour(lMagenta);
+            mpRenderer->SetBlendEndColour(lMagenta);
+        }
+        else
+        {
+            mpRenderer->SetBlendStartColour(ScaleRgb(lpParams->mStartColour, lfWhiteLevel));
+            mpRenderer->SetBlendEndColour(ScaleRgb(lpParams->mEndColour, lfWhiteLevel));
+        }
 
         BrnGraphics::SkidVertex laVertices[KN_MAX_STRIP_VERTICES];
         s32                     lnVertexCount = 0;
