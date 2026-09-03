@@ -4187,6 +4187,65 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
                       lpfV0[5], lpfV0[6], lpfV0[7], lpfV0[8], lpfV0[9],
                       lpfV0[15], lpfV0[16], lpfV0[17], lpfV0[18], lpfV0[19]);
         CgsDev::Log::WriteToLog(lacMsg);
+
+        // [DIAG] ...and SAMPLER 0 + the texture the pixel program multiplies by. For the skid
+        // pass this is the last unmeasured term: its whole pixel program is
+        // `tex2D(gSkidSampler, uv) * colour`, the blend is SRCALPHA/INVSRCALPHA, and the strip's
+        // own colour is near-black at alpha ~0.74 -- so a texture whose ALPHA reads zero, or a
+        // sampler left addressing/filtering wrongly, produces a draw that succeeds with hr == 0
+        // and changes not one pixel. Note SetSamplerStateLowLevel in this same TU is a
+        // [PC bring-up] no-op, so whatever is in sampler 0 is either a D3D9 default or a
+        // leftover from an earlier pass -- which is exactly what needs saying out loud.
+        // The four corner texels are read back from the top mip through a lock; a texture that
+        // is entirely alpha 0 is then a fact rather than a suspicion.
+        {
+            DWORD luAddrU = 0, luAddrV = 0, luMin = 0, luMag = 0, luMip = 0, luSrgb = 0;
+            lpDevice->GetSamplerState(0, D3DSAMP_ADDRESSU, &luAddrU);
+            lpDevice->GetSamplerState(0, D3DSAMP_ADDRESSV, &luAddrV);
+            lpDevice->GetSamplerState(0, D3DSAMP_MINFILTER, &luMin);
+            lpDevice->GetSamplerState(0, D3DSAMP_MAGFILTER, &luMag);
+            lpDevice->GetSamplerState(0, D3DSAMP_MIPFILTER, &luMip);
+            lpDevice->GetSamplerState(0, D3DSAMP_SRGBTEXTURE, &luSrgb);
+
+            unsigned luW = 0, luH = 0, luLevels = 0, luFmt = 0;
+            unsigned lauTexel[4] = { 0, 0, 0, 0 };
+            unsigned luAlphaMax = 0;
+            if (lpTex0 != nullptr && lpTex0->GetType() == D3DRTYPE_TEXTURE)
+            {
+                IDirect3DTexture9* const lpTex = static_cast<IDirect3DTexture9*>(lpTex0);
+                D3DSURFACE_DESC lDesc;
+                if (SUCCEEDED(lpTex->GetLevelDesc(0, &lDesc)))
+                {
+                    luW = lDesc.Width; luH = lDesc.Height; luFmt = static_cast<unsigned>(lDesc.Format);
+                    luLevels = lpTex->GetLevelCount();
+                }
+                // Only an uncompressed lock can be read as texels; a DXT surface locks to
+                // BLOCKS, so report the first block words instead and say which it is.
+                D3DLOCKED_RECT lLock;
+                if (SUCCEEDED(lpTex->LockRect(0, &lLock, nullptr, D3DLOCK_READONLY)))
+                {
+                    const unsigned* const lpuWords = static_cast<const unsigned*>(lLock.pBits);
+                    for (int li = 0; li < 4; ++li) lauTexel[li] = lpuWords[li];
+                    // For A8R8G8B8 the top byte is alpha; for a DXT5 block the first two bytes
+                    // are the alpha endpoints. Report the maximum of the first 64 words' top
+                    // bytes either way -- zero there is the answer in both encodings.
+                    for (int li = 0; li < 64; ++li)
+                    {
+                        const unsigned luA = (lpuWords[li] >> 24) & 0xFFu;
+                        if (luA > luAlphaMax) luAlphaMax = luA;
+                    }
+                    lpTex->UnlockRect(0);
+                }
+            }
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[ImVerts diag %u] samp0 addr=%lu/%lu filt=%lu/%lu/%lu srgb=%lu | tex0 %ux%u "
+                          "fmt=%u levels=%u w0=%08X %08X %08X %08X aMax=%u\n",
+                          static_cast<unsigned>(suDiagRuns), luAddrU, luAddrV, luMin, luMag, luMip, luSrgb,
+                          luW, luH, luFmt, luLevels,
+                          lauTexel[0], lauTexel[1], lauTexel[2], lauTexel[3], luAlphaMax);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+
         if (lpBoundRt) lpBoundRt->Release();
         if (lpBackBuf) lpBackBuf->Release();
         if (lpDepth)   lpDepth->Release();
