@@ -266,3 +266,22 @@ void cParticleRender::_AssertLayout()
                   "sizeof(cParticleRender) == 0x460 -- the object at 0x82FACC20 ends exactly at "
                   "its magic-static guard word 0x82FAD080");
 }
+
+// ------------------------------------------------------------------------------------------------
+// cParticleRender::Render @0x829147F8 -- LOUD TRAP, not a body.
+//
+// Its blockers are recorded at the head of this file (the VMX128 frustum cull needs two
+// un-recovered rodata tables; EmitterRender needs the cParticleBucket layout, whose placeholder
+// cMatrix still collides with this header's Matrix44 typedef). It is DEFINED here, as a trap,
+// because the Lion install path put cLionFX::Render on the link: cLionFX::Render forwards to it,
+// and cLionFX::Render itself is called only from the parked LION half of
+// ParticleModule::BuildLionVertexBuffers, which announces itself every run. If this trap ever
+// fires, an arm was unparked without its callee.
+// ------------------------------------------------------------------------------------------------
+void cParticleRender::Render(EffectsVertexBufferLocked& /*arVertexBuffer*/,
+                             LionBatchArray& /*arBatchArray*/,
+                             cParticleEmitterManager& /*arEmitterManager*/,
+                             const cTime& /*arTime*/)
+{
+    CGS_ASSERT(false, "cParticleRender::Render @0x829147F8 -- NOT RECONSTRUCTED (VMX128 frustum cull)");
+}

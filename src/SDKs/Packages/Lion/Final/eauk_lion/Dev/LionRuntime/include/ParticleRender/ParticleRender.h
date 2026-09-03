@@ -48,11 +48,20 @@ class cParticleMaterial;            // ParticleMaterial.h
 class cParticleEmitter;             // owning emitter (opaque at this boundary)
 struct cParticleEmitterManager;     // ParticleEmitterManager.h -- Render takes it by reference
 class cLionFog;                     // fog descriptor (opaque)
-class cTime;                        // engine time stamp (opaque)
+// ⛔⛔ `struct`, NOT `class` -- AND THAT IS A LINK FACT, NOT A STYLE ONE. MSVC mangles the two
+// class-keys differently (`U` vs `V` in the decorated name), so a `class cTime;` forward
+// declaration here against the real `struct cTime` in ParticleBucket.h produced
+// `?Update@cParticleRender@@QEAAXAEBVcTime@@@Z` in the definition and
+// `...AEBUcTime@@@Z` at every call site: two DIFFERENT symbols, one defined and one
+// unresolved, from source that compiles clean (C4099 is level 2 and this build runs at /W1).
+// Measured 2026-09-03: it cost three LNK2019s on cParticleRender::AppInit / Update / Render
+// with the definitions sitting in the linked object the whole time. Same rule for
+// ITaggedAllocator below.
+struct cTime;                       // engine time stamp (opaque) -- ParticleBucket.h
 struct RenderedParticle;            // per-particle render record (opaque)
 
 namespace renderengine { class TextureState; class VertexBuffer; }
-namespace EA { namespace Allocator { class ITaggedAllocator; } }
+namespace EA { namespace Allocator { struct ITaggedAllocator; } }   // struct: see the note above
 
 // Locked particle vertex buffer (EffectsVertexBuffer.h) -- EmitterRender/EmitterCubeRender
 // stream vertices through it. Opaque at this boundary (used by reference only).

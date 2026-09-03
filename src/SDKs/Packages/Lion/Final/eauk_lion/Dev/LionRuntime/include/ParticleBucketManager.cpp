@@ -17,6 +17,7 @@
 // ============================================================================
 
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleBucketManager.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace
 {
@@ -345,4 +346,19 @@ namespace
 cParticleBucketManager& cParticleBucketManager::Instance()
 {
     return gBucketManagerSingleton;
+}
+
+// ------------------------------------------------------------------------------------------------
+// cParticleBucketManager::MatrixBucketAlloc @0x8290CD60 -- LOUD TRAP, not a body.
+//
+// An EXPORT-SET HOLE: IDA names it in AllocateBucket's xrefs and emits no JSON for it, so it has
+// no ledger row and no pseudocode. It is the 1024-byte twin of VectorBucketAlloc -- claim a free
+// matrix-bucket slot from the shared side pool and mark its bit -- and it is reached only when a
+// descriptor asks for the heavyweight bucket type, i.e. only once emitters actually run. Defined
+// here, in its own class's TU, because the Lion install path put AllocateBucket on the link.
+// ------------------------------------------------------------------------------------------------
+cMatrix* cParticleBucketManager::MatrixBucketAlloc()
+{
+    CGS_ASSERT(false, "cParticleBucketManager::MatrixBucketAlloc @0x8290CD60 -- NOT RECONSTRUCTED (export-set hole)");
+    return 0;
 }
