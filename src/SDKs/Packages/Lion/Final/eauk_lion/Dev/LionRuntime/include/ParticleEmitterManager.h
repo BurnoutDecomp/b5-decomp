@@ -43,7 +43,7 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleDescriptor.h"
 #include "SDKs/Packages/Lion/Final/Allocator/include/CoreAllocator/ITaggedAllocator.h"
 
-struct cTime;                  // ParticleBucket.h placeholder home -- Update takes it by ref
+struct cTime;                  // ext-include/GameStructs/cTime.h (the real home, 2026-09-03)
 struct sParticleEmitterClone;  // clone-pool record (DWARF sParticleEmitterClone) -- not homed;
                                // referenced only by pointer here
 struct cLionBindings;          // LionBindings.h (sibling home) -- UnRegister(descriptor,...) takes it

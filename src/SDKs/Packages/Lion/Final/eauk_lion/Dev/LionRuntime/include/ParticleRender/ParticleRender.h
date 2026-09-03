@@ -64,7 +64,7 @@ class cLionFog;                     // fog descriptor (opaque)
 // Measured 2026-09-03: it cost three LNK2019s on cParticleRender::AppInit / Update / Render
 // with the definitions sitting in the linked object the whole time. Same rule for
 // ITaggedAllocator below.
-struct cTime;                       // engine time stamp (opaque) -- ParticleBucket.h
+struct cTime;                       // engine time stamp -- ext-include/GameStructs/cTime.h
 struct RenderedParticle;            // per-particle render record (opaque)
 
 namespace renderengine { class TextureState; class VertexBuffer; }

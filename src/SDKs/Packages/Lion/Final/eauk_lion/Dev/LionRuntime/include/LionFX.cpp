@@ -57,12 +57,15 @@ cLionBlockAlloc gLionTriggerAllocator;   // X360 unk_83121D64 --  16-byte cParti
 
 // ----------------------------------------------------------------------------
 // The bucket size cLionFX::Init divides by. It is cParticleBucketManager::
-// KU_PARTICLES_PER_BUCKET, and this TU CANNOT include that class's header: ParticleBucketManager.h
+// KU_PARTICLES_PER_BUCKET, restated here with its owner named.
+// ⭐ THE REASON FOR THE RESTATEMENT HAS GONE (2026-09-03) AND IS CORRECTED RATHER THAN LEFT TO
+// MISLEAD. It used to read: "this TU CANNOT include that class's header: ParticleBucketManager.h
 // pulls ParticleBucket.h, whose HONEST-PLACEHOLDER `struct cMatrix` collides with
-// ParticleRender.h's `typedef rw::math::vpu::Matrix44 cMatrix` (two different 64-byte types under
-// one name -- the same fork that parks cParticleRender::EmitterRender; see ParticleRender.cpp).
-// So the value is restated here with its owner named, rather than the include being forced.
-// DELETE-WHEN the Lion matrix home is unified and this TU can include the manager directly.
+// ParticleRender.h's `typedef rw::math::vpu::Matrix44 cMatrix` ... the same fork that parks
+// cParticleRender::EmitterRender". There is no collision any more -- cMatrix has ONE home
+// (eauk_common/Maths/Matrix.h) and both headers use it -- so including the manager here is now
+// merely unnecessary, not impossible. Folding this constant back onto its owner is a safe
+// follow-up, left out so this wave's diff stays about bodies.
 // ----------------------------------------------------------------------------
 const u32 KU_PARTICLES_PER_BUCKET = 16;   // == cParticleBucketManager::KU_PARTICLES_PER_BUCKET
 
