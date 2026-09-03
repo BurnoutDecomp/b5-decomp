@@ -75,6 +75,11 @@ struct cTime
         return static_cast<f32>(mTicks) * msfOneOverTicksPerSecond;
     }
 
+    // cTime.h:49. Zero the stamp. cParticleEmitter::Init @0x82913228 stores an integer 0
+    // into mLastTime / mUpdateLastTime (`stw r11` with r11 == 0 at +0x19C / +0x1A0); this is
+    // the DWARF's own name for that, and it is what keeps mTicks private.
+    void BuildZero() { mTicks = 0; }
+
     // cTime.h:79. Elapsed ticks between two stamps. Attested by
     // cParticleBucketManager::AllocateBucket @0x829145A0, whose oldest-bucket eviction
     // signed-compares `now - bucket->mLatestBirthTime`.

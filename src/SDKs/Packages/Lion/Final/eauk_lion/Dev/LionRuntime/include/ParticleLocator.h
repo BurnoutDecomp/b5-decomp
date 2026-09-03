@@ -39,6 +39,7 @@
 #include "types.hpp"
 #include "SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h"   // cVector -- the real eauk_common home (fork retired 2026-09-03)
 #include "SDKs/Packages/Lion/Final/eauk_common/Maths/Matrix.h"   // cMatrix -- ditto (fork retired 2026-09-03)
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/ext-include/GameStructs/cTime.h"   // GetMat's key time
 
 // cVector now comes from its real home, eauk_common/Maths/Vector.h (included above);
 // the private copy that used to live here is retired, and with it the warning to keep
@@ -56,13 +57,26 @@ struct cParticleLocator
     // zero-translation keyframes, key count 1, everything else cleared. :0x82909810
     void Init();
 
-    // Sample the animated frame for game time *apKeyTime: when the requested key
-    // differs from the cached one, interpolate the two keyframes (quaternion ->
-    // matrix blend) into mMatrix, cache the key, and return `this`. Body lives in
-    // ParticleLocator.cpp. (Currently BLOCKED: the blend path masks each rotated
-    // basis row through the un-exported VMX mask blob unk_820FEBD0 + vsel, which is
-    // not recoverable from the exports -- see the campaign notes.)
-    cParticleLocator* GetMat(const u32* apKeyTime);
+    // Sample the animated frame for game time arKeyTime: when the requested key differs
+    // from the cached one, interpolate the two keyframes (quaternion -> matrix blend) into
+    // mMatrix, cache the key, and return it. X360 @0x8290E288.
+    //
+    // THE SIGNATURE IS CORRECTED TO THE DWARF'S (ParticleLocator.h:48):
+    // `const cMatrix& GetMat(const cTime&) const`. It used to read
+    // `cParticleLocator* GetMat(const u32*)`, which was the raw asm shape -- r3 comes back
+    // holding `this` because the returned reference IS this->mMatrix at +0x00, and the time
+    // argument looked like a `u32*` because it is a const reference to a one-word type. The
+    // caller cParticleEmitter::InitialiseParticle @0x82911978 uses the result as a MATRIX
+    // (it immediately reads +0x00..+0x28 as basis rows), not as a locator.
+    //
+    // STILL NOT BODIED -- but the reason recorded here was WRONG and is corrected. The old
+    // note said the blend "masks each rotated basis row through the un-exported VMX mask blob
+    // unk_820FEBD0 ... not recoverable from the exports". tools/re/x360rd.py reads it straight
+    // out of the image: 0x820FEBD0 == { FFFFFFFF, FFFFFFFF, FFFFFFFF, 00000000 }, the ordinary
+    // xyz-keep / w-drop selector, with 1.0f x4 in the quadword after it. Nothing about this
+    // function is unrecoverable; it is 158 instructions of quaternion-to-matrix keyframe blend
+    // that this wave ran out of room for. Its link trap is in LionRuntimeLinkStubs.cpp.
+    const cMatrix& GetMat(const cTime& arKeyTime) const;
 
     // ----- members (offsets verified against the X360 Init/GetMat asm) -----
     cMatrix mMatrix;              // 0x00 current interpolated frame

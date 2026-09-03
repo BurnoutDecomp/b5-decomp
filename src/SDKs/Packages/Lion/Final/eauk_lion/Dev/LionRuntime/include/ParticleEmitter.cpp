@@ -8,6 +8,11 @@
 // calls on every boot. So this is not a "for later" body -- it executes 256 times before the
 // first frame.
 //
+// 2026-09-03: cParticleEmitter::InitialiseParticle @0x829116A8 joins it -- the function that
+// fills a particle's fourteen nucleus channels, and the reason sParticleNucleus needed a real
+// layout at all. It is NOT YET REACHED (nothing calls ParticleInsert until Update lands), and
+// that is stated rather than implied.
+//
 // The rest of the emitter -- Update (the simulation core), DeInit, Bind, BucketRemove -- is not
 // reconstructed and is announced in LionRuntimeLinkStubs.cpp rather than faked here.
 // ============================================================================
@@ -15,10 +20,14 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitter.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleDescriptor.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleBehaviour.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleMaterial.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleLocator.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionBindings.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionParticleEffectManager.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 #include <cstdio>
+#include <cstdlib>   // rand -- InitialiseParticle's random start frame is the C library's
 
 namespace
 {
@@ -39,10 +48,13 @@ const f32 KF_BLEND_LAST_NONE = 100.12529754638672f;   // flt_820FF0D0
 //
 // ⛔ THAT TAIL IS NOT RECONSTRUCTED, AND IT IS ANNOUNCED, NOT DROPPED. Both of its arms need
 // cParticleEmitter bodies this build does not have (PrecalculateParticleBuildData @0x8290E018
-// and Blend @0x8290F730), and mPrecalculatedParticleBuildData is still a reserved span. It is
-// unreachable on this build -- nothing registers an emitter, because cLionFX::EffectCreate is
-// not reconstructed -- and the only caller that DOES run, cParticleEmitterManager::AppInit,
-// passes nullptr and never enters it.
+// and Blend @0x8290F730). It is unreachable on this build -- nothing registers an emitter,
+// because cLionFX::EffectCreate is not reconstructed -- and the only caller that DOES run,
+// cParticleEmitterManager::AppInit, passes nullptr and never enters it.
+// ⭐ ONE HALF OF THAT REASON HAS GONE STALE AND IS CORRECTED IN PLACE: this note also said
+// "mPrecalculatedParticleBuildData is still a reserved span". It is not, as of 2026-09-03 --
+// it is the DWARF's own cParticleEmitter::ParticleBuildData (ParticleEmitter.h:277), eleven
+// named lane registers. What still blocks the tail is the two missing BODIES, nothing else.
 // ----------------------------------------------------------------------------
 void cParticleEmitter::Init(cParticleDescriptor* apDescriptor)
 {
@@ -59,14 +71,14 @@ void cParticleEmitter::Init(cParticleDescriptor* apDescriptor)
     mpBucket           = nullptr;
     mpNext             = nullptr;
     mPhysicsHandle     = 0;
-    mLastTime          = 0;
+    mLastTime.BuildZero();
     mParentIndex       = 0;
     mBucketsUsed       = 0;
 
     mEmitterSeed.Init();
 
     m_age              = 0.0f;
-    mUpdateLastTime    = 0;
+    mUpdateLastTime.BuildZero();
     mpParentEmitter    = nullptr;
     mpCurrentBehaviour = nullptr;
     mpTempBehaviour    = nullptr;
@@ -86,5 +98,203 @@ void cParticleEmitter::Init(cParticleDescriptor* apDescriptor)
             "(the single-behaviour bind + PrecalculateParticleBuildData @0x8290E018 arm, and the "
             "multi-behaviour CreateBehaviour + Blend @0x8290F730 arm). Reached only by a "
             "REGISTERED emitter; the pooling path (Init(nullptr)) above is complete.\n");
+    }
+}
+
+// ------------------------------------------------------------------------------------------
+// THE ONE TYPE-SPELLING SEAM IN THIS FILE, said out loud rather than papered over.
+//
+// The console has ONE 16-byte lane register here. This tree carries two spellings of it: the
+// Lion records (cParticleBehaviour's base/variance pairs, sParticleNucleus's channels) are
+// `cVector` from eauk_common/Maths/Vector.h, while cParticleRandomSeed::Build's DWARF signature
+// (ParticleRandomSeed.h:117) is `Vector3Plus Build(Vector4, Vector4)` in the rw::math::vpu
+// spelling. Both are `{f32 x,y,z,w}`, 16 bytes, 16-aligned, and on PPC both are one `v` register
+// -- which is why the original could hand one to the other with no conversion at all.
+//
+// These two adapters exist ONLY because our tree has not unified those two spellings. They are
+// pure lane copies and compile to nothing. They are NOT a conversion the console performs, and
+// they are not a place to put behaviour: if the two homes are ever unified, both disappear and
+// the call sites below read exactly as they do now.
+// ------------------------------------------------------------------------------------------
+namespace
+{
+    inline rw::math::vpu::Vector4 LaneCast(const cVector& arV)
+    {
+        return rw::math::vpu::Vector4{ arV.x, arV.y, arV.z, arV.w };
+    }
+
+    inline cVector LaneCast(const rw::math::vpu::Vector3Plus& arV)
+    {
+        return cVector{ arV.x, arV.y, arV.z, arV.w };
+    }
+
+    // One `lvx128 v2,<variance>` / `lvx128 v1,<base>` / `bl sub_8290A648` / `stvx128` triple.
+    inline cVector DrawChannel(cParticleRandomSeed& arSeed,
+                               const cVector& arBase, const cVector& arVariance)
+    {
+        return LaneCast(arSeed.Build(LaneCast(arBase), LaneCast(arVariance)));
+    }
+}
+
+// ================================================================================================
+// cParticleEmitter::InitialiseParticle  @ 0x829116A8      (DWARF ParticleEmitter.h:306 /
+//                                                          ParticleEmitter.cpp:2199)
+//
+// Fill one freshly allocated particle: draw all thirteen nucleus channels from the current
+// behaviour's (base, variance) pairs, stamp its life / animation frame / birth time, and hand
+// back its spawn transform. This is the function the whole Lion simulation hangs off -- every
+// particle in the game starts here.
+//
+// ⭐ WHY IT READS AS A STRAIGHT RUN OF TWELVE IDENTICAL CALLS. The X360 body is one unrolled
+// sequence of `lvx128 v2, r31, <varianceOffset>` / `lvx128 v1, r31, <baseOffset>` /
+// `bl sub_8290A648` / `stvx128 v0, r29, <nucleusOffset>`, twelve times over (0x82911770 ..
+// 0x82911940). r31 is mpCurrentBehaviour and r29 is the nucleus, so each triple names a
+// behaviour member pair and a nucleus member -- and every one of the twelve pairs up BY NAME
+// (mPosBase/mPosVariance -> mPos, and so on down the record). That correspondence is what
+// pinned sParticleNucleus's layout; see sParticle.h.
+//
+// ⭐ sub_8290A648 IS cParticleRandomSeed::Build(Vector4, Vector4) -- the PER-LANE draw, not the
+// splat. Each of a particle's twelve channels therefore varies independently per axis. Its
+// sibling BuildLerp @0x8290A7A8, which splats one random across all four lanes, is NOT what
+// this calls, and the difference is visible: a splat would put every particle's spawn offset on
+// a single diagonal.
+//
+// PARAMETER NAMES are the DecFIGS DWARF's own (ParticleEmitter.cpp:1300). Register mapping:
+// r3=this, r4=nucleus, r5=apParticleVector (spilled to arg_24 at once), r6=apParticleMatrix,
+// r7=&arLocator, r8=&arVelocity, r9=&arSeed, r10=&arTime -- and arCurrentLocatorTime, the ninth
+// value and so the first STACK argument, at 0x120+arg_54.
+//
+// ⭐⭐ THE FOUR PACKED LANES OF THE LIFE VECTOR ARE NAMED TWICE OVER. The asm writes three of
+// them with `vrlimi128 vD, vS, <mask>, 0`, whose 4-bit mask selects a word MSB-first, and the
+// DWARF's call list for this function names Vector4::SetX, SetZ and SetW -- in that order, for
+// masks 8, 2 and 1. Two independent sources, the same three lanes:
+//     mask 8 -> word 0 -> SetX -> LifeTime  = arSeed.Build(bhv.mLifeBase, bhv.mLifeVariance)
+//     mask 2 -> word 2 -> SetZ -> FPS       = arSeed.Build(mat.mFPS,      mat.mFPSVariance)
+//     mask 1 -> word 3 -> SetW -> BirthTime = arTime.GetTimeSeconds()
+// Word 1 (FrameTime) is never written -- it keeps the zero the opening clear put there.
+//
+// ⚠ THE OPENING CLEAR IS ONLY THE LIFE VECTOR, NOT THE WHOLE NUCLEUS. `stvx128 v127, r0, r28`
+// at 0x829116FC stores a zeroed register to r28 == nucleus + 0xD0 and to nothing else; the
+// other thirteen channels are each fully overwritten by their own draw, so there is nothing to
+// clear. The DWARF names this sParticleNucleus::Init, inlined -- but Init has no X360 body of
+// its own, so writing one would be inventing a function to hold a single store.
+//
+// ⚠ WHAT THIS FUNCTION DOES *NOT* DO, said out loud because the parameter list invites the
+// assumption: it never derives the spawn matrix's rotation from the particle's own mRot, and it
+// never uses arVelocity for anything but the mLocatorVel scale. The spawn transform is either a
+// verbatim copy of arLocator or, under DO_IGNORE_ROT, an identity carrying arLocator's
+// translation. Orientation is ParticleBuild's job, per frame.
+// ================================================================================================
+void cParticleEmitter::InitialiseParticle(sParticleNucleus& arParticleNucleus,
+                                          cVector* apParticleVector,
+                                          cMatrix* apParticleMatrix,
+                                          const cMatrix& arLocator,
+                                          const cVector& arVelocity,
+                                          cParticleRandomSeed& arSeed,
+                                          const cTime& arTime,
+                                          const cTime& arCurrentLocatorTime)
+{
+    // DWARF locals ParticleEmitter.cpp:2201 / 2203 / 2205 / 2207.
+    const cParticleDescriptor& lrDescriptor = *mpDescriptor;
+    const cParticleBehaviour&  lrBhv        = *mpCurrentBehaviour;
+    const u32                  luFlags      = lrDescriptor.Flags();
+    cParticleMaterial*         lpMat        = lrDescriptor.Material();
+
+    // ---- the packed life / frame / FPS / birth vector (nucleus + 0xD0) ----------------------
+    // Cleared first (0x829116FC), then three of its four lanes filled. FrameTime (word 1) is
+    // deliberately left at zero -- the console never writes it here.
+    arParticleNucleus.mvLifeTimeAndFrameTimeAndFPSAndBirthTime = cVector{ 0.0f, 0.0f, 0.0f, 0.0f };
+    arParticleNucleus.BirthTime() = arTime.GetTimeSeconds();                             // SetW
+    arParticleNucleus.LifeTime()  = arSeed.Build(lrBhv.mLifeBase, lrBhv.mLifeVariance);  // SetX
+
+    // ---- the twelve vector channels, in the console's own order ----------------------------
+    // The behaviour offsets in the trailing comments are the ones ParticleBehaviour.h's
+    // static_asserts already pin; they are the `lvx128` displacements, read off the asm.
+    arParticleNucleus.mPos          = DrawChannel(arSeed, lrBhv.mPosBase,             lrBhv.mPosVariance);             // 0x100 / 0x110
+    arParticleNucleus.mVel          = DrawChannel(arSeed, lrBhv.mVelBase,             lrBhv.mVelVariance);             // 0x190 / 0x1A0
+    arParticleNucleus.mAcc          = DrawChannel(arSeed, lrBhv.mAccBase,             lrBhv.mAccVariance);             // 0x000 / 0x010
+    arParticleNucleus.mRot          = DrawChannel(arSeed, lrBhv.mRotXYZBase,          lrBhv.mRotXYZVariance);          // 0x090 / 0x0A0
+    arParticleNucleus.mRotVel       = DrawChannel(arSeed, lrBhv.mRotXYZVelBase,       lrBhv.mRotXYZVelVariance);       // 0x0B0 / 0x0C0
+    arParticleNucleus.mRotAcc       = DrawChannel(arSeed, lrBhv.mRotXYZAccBase,       lrBhv.mRotXYZAccVariance);       // 0x0D0 / 0x0E0
+    arParticleNucleus.mOffsetRot    = DrawChannel(arSeed, lrBhv.mOffsetRotXYZBase,    lrBhv.mOffsetRotXYZVariance);    // 0x030 / 0x040
+    arParticleNucleus.mOffsetRotVel = DrawChannel(arSeed, lrBhv.mOffsetRotXYZVelBase, lrBhv.mOffsetRotXYZVelVariance); // 0x050 / 0x060
+    arParticleNucleus.mOffsetRotAcc = DrawChannel(arSeed, lrBhv.mOffsetRotXYZAccBase, lrBhv.mOffsetRotXYZAccVariance); // 0x070 / 0x080
+    arParticleNucleus.mSize         = DrawChannel(arSeed, lrBhv.mSizeXYZBase,         lrBhv.mSizeXYZVariance);         // 0x130 / 0x140
+    arParticleNucleus.mSizeVel      = DrawChannel(arSeed, lrBhv.mSizeXYZVelBase,      lrBhv.mSizeXYZVelVariance);      // 0x150 / 0x160
+    arParticleNucleus.mSizeAcc      = DrawChannel(arSeed, lrBhv.mSizeXYZAccBase,      lrBhv.mSizeXYZAccVariance);      // 0x170 / 0x180
+
+    // ---- the animation frame rate (word 2 of the life vector) ------------------------------
+    arParticleNucleus.FPS() = arSeed.Build(lpMat->mFPS, lpMat->mFPSVariance);            // SetZ
+
+    // ---- DO_WORLD_ACC: acceleration is authored in WORLD space, so rotate it into the -------
+    // ---- emitter's locator frame. Descriptor flag 0x80 (Lion token DO_WORLD_ACC). ----------
+    // asm 0x8291195C `rlwinm r10, r16, 0,24,24` masks bit 0x80; the DWARF names the block's
+    // locals `aMat` / `lAcc` and its calls Transpose3x3 + ApplyAxes, which is exactly what the
+    // three interleaved fmadds chains at 0x829119D0..0x829119F0 compute.
+    if ((luFlags & cParticleDescriptor::E_FLAG_WORLD_ACC) != 0)
+    {
+        const cMatrix& lrLocatorFrame = mpBindings->GetpLocator()->GetMat(arCurrentLocatorTime);
+        const cMatrix  laMat          = lrLocatorFrame.Transpose3x3();
+        const cVector  lAcc           = laMat.ApplyAxes(arParticleNucleus.mAcc);
+        arParticleNucleus.mAcc        = lAcc;
+    }
+
+    // The acceleration's "plus" lane is cleared unconditionally, on BOTH arms of the branch
+    // above (0x82911A00: `vrlimi128 v0, v127(zero), 1, 0` -> word 3). DWARF: SetPlus.
+    arParticleNucleus.mAcc.w = 0.0f;
+
+    // ---- the animation start frame ---------------------------------------------------------
+    // cParticleMaterial::mAnimTexOptions (+0x41) == 1 selects a RANDOM start frame, and it is
+    // drawn with the C library's rand() -- NOT the Lion seed (`bl rand` at 0x82911A18 and
+    // 0x82911A70, two independent draws). The frame lands in the "plus" lane of mRotAcc and
+    // mOffsetRotAcc. Otherwise the two lanes start at 0.0 and 1.0 (0x82911ACC..0x82911AE8; the
+    // 1.0 is `vspltisw`+`vcfsx`, which the DWARF names GetVecFloat_One).
+    //
+    // ⚠ THE MODULO IS THE CONSOLE'S OWN `divw`/`mullw`/`subf` PAIR, TRAPS INCLUDED. `twllei
+    // r10, 0` is the compiler's divide-by-zero trap on mFrameCount; a material with
+    // mFrameCount == 0 traps on the console and is undefined here. Not guarded, because a
+    // guard would be behaviour this build does not have.
+    if (lpMat->mAnimTexOptions == 1)
+    {
+        arParticleNucleus.mRotAcc.w       = static_cast<f32>(std::rand() % lpMat->mFrameCount);
+        arParticleNucleus.mOffsetRotAcc.w = static_cast<f32>(std::rand() % lpMat->mFrameCount);
+    }
+    else
+    {
+        arParticleNucleus.mRotAcc.w       = 0.0f;
+        arParticleNucleus.mOffsetRotAcc.w = 1.0f;
+    }
+
+    // ---- inherited emitter velocity (nucleus + 0xC0) ---------------------------------------
+    // `lvlx v13, r31, 0x498` + `vspltw` + `vmulfp128` at 0x82911AEC..0x82911B04: the whole
+    // velocity vector scaled by ONE splatted behaviour scalar at +0x498 == 1176 ==
+    // mEmitterVelWeight (the offset ParticleBehaviour.h's static_assert already pins). The
+    // vrlimi that follows preserves the slot's existing "plus" lane, so only xyz are written.
+    arParticleNucleus.mLocatorVel.x = arVelocity.x * lrBhv.mEmitterVelWeight;
+    arParticleNucleus.mLocatorVel.y = arVelocity.y * lrBhv.mEmitterVelWeight;
+    arParticleNucleus.mLocatorVel.z = arVelocity.z * lrBhv.mEmitterVelWeight;
+
+    // ---- the spawn transform ---------------------------------------------------------------
+    // DO_IGNORE_ROT (descriptor flag 0x100, `rlwinm r11, r16, 0,23,23` @0x82911B18): the
+    // particle keeps the spawn POSITION but not the spawn ORIENTATION.
+    if (apParticleMatrix != nullptr)
+    {
+        if ((luFlags & cParticleDescriptor::E_FLAG_IGNORE_ROT) != 0)
+        {
+            apParticleMatrix->BuildIdentity();
+            apParticleMatrix->SetTrans(arLocator.wa.x, arLocator.wa.y, arLocator.wa.z);
+        }
+        else
+        {
+            *apParticleMatrix = arLocator;   // four `lvx128`/`stvx128` row copies
+        }
+    }
+
+    // The optional per-particle vector slot takes the spawn POSITION -- arLocator's w row,
+    // whole (`lvx128 v0, r15, r17(0x30)` / `stvx128 v0, r0, r11` @0x82911BC4). Note it is
+    // copied from arLocator, NOT from apParticleMatrix, so DO_IGNORE_ROT does not change it.
+    if (apParticleVector != nullptr)
+    {
+        *apParticleVector = arLocator.wa;
     }
 }
