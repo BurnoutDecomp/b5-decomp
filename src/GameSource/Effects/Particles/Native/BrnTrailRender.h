@@ -64,6 +64,13 @@ namespace Native
         BrnGraphics::Im3dSkidsRenderer* mpRenderer;              // +0x00
         f32                             mfCurrentTime;           // +0x04
         Matrix44                        mViewProjectionMatrix;   // +0x10
+
+        // [DIAG] NOT IN THE X360 BINARY. Running totals of what Render() actually handed to
+        // the immediate-mode renderer, so the [trailpass] line in TrailSystem::Render can
+        // state the DRAW side of the claim instead of only the LAY side. Statics, not
+        // members: nothing about the console object changes. DELETE-WHEN-STABLE.
+        static u32 guProbeVertices;
+        static u32 guProbeDraws;
     };
 }
 }
