@@ -435,6 +435,20 @@ namespace
             lfClutch = 0.0f;                                       // just braking
         if (lbHandBrake && lfForwardSpeed <= KVF_UPDATEENGINE_HANDBRAKE_MAX_SPEED)
             lfClutch = 0.0f;                                       // handbraking
+        // ⭐⭐ UNREACHABLE BY DATA, AND THAT IS THE CONSOLE'S OWN ARITHMETIC (settled 2026-09-03).
+        // GetGearChangeTime() reads 0.0 on every car the game ships, so this cut and the
+        // `lfTimer >= GetGearChangeTime()` flywheel gate below can never take their false branch:
+        // lfTimer starts at 0 and only grows. The record's 0x74 lane really is 0.0 -- read live
+        // out of the loaded `physicsvehicleengineattribs` on three different cars (run q1_FIX,
+        // BRN_ENGINE_PROBE=1), with LSDMGearUpSpeed 45 / FlyWheelInertia 0.2 / FlyWheelFriction
+        // 250 correct on either side of it; the wiki's dump of the shipped record says 0; and
+        // EngineAttribs::Construct's default is flt_82001CC0 == 0.0. The console's gearbox
+        // changes gear instantaneously. See VehicleAttribs.cpp, InitializeFromAttribs.
+        // ⛔ SO DO NOT ATTRIBUTE A CLUTCH DROP TO THIS LINE. The reverse-gear fix's commit
+        // message predicted the clutch cost through this cut; it is filmed and correct
+        // (clutch 0.000 -> 1.000, 144.74 m reversed vs 0.48 m on a failing control) but the
+        // stated MECHANISM was wrong -- the clutch dies through the handbrake cut two lines up.
+        // ⭐ A confirmed fix can carry a wrong causal story. Verify the mechanism, not the outcome.
         if (mAttribs.GetGearChangeTime() > lfTimer)
             lfClutch = 0.0f;                                       // still changing gear
 
