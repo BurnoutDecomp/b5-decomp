@@ -1286,12 +1286,26 @@ namespace Deformation
 	//       its first predicate asks the victim whether the VICTIM is in showtime, and its second
 	//       (HasBouncedThisFrame on "the other") is self-referential for the same reason.
 	//
-	// ⛔ THE BODY IS DELIBERATELY LEFT AS IT IS. Whether the console's GetInverse swaps the
-	//    ownership fields is a question for its assembly, not for a symmetry argument -- changing
-	//    it here on inference is exactly the invented arm this project keeps paying for. Note
-	//    that mpOtherSensor's carry-over IS right by construction (ApplyCarCarImpulse passes
-	//    lContact.mpOtherSensor as the other car's sensor at the call site), so the two fields
-	//    are not obviously the same case. Recorded for a wave that can read the image.
+	// ✅ SETTLED FROM THE IMAGE, 2026-09-03 -- AND THE ANSWER IS "NEITHER FIELD IS GetInverse's JOB".
+	//    The X360 build inlines this function into ApplyCarCarImpulse @0x82624C08, so the whole
+	//    reversed record is visible as stack stores at var_1D0 (sp+0xE0):
+	//        +0x00 <- mPointOnB          (lvx r24 == &lContact+0x10, stored 0x8262516C)
+	//        +0x10 <- mPointOnA          (lvx r31,                   stored 0x82625180)
+	//        +0x20 <- -mNormal           (vxor v0,v13,0x80000000,    stored 0x826251C8)
+	//        +0x30 <- r30 == `this`      (0x82625188)   <-- THE ATTACKING CAR
+	//        +0x34 <- r28 == this->maDeformationSensors[liSensorIndex]  (0x8262518C)
+	//        +0x38 <- lfs 0x38(r31)      mfImpactTimeInFrame (0x82625174)
+	//        +0x3C <- lwz 0x3C(r31)      mContactId          (0x82625178)
+	//    r30 and r28 are the ENCLOSING frame's values (`mr r30,r3` @0x82624C24;
+	//    `add r28, 0x1B0*(idx+0xF), r30` @0x82625114, the same register handed to call #1 as its
+	//    sensor argument). GetInverse's signature takes only the output record (DWARF :68), so it
+	//    cannot produce either of them: the ownership half is written BY THE CALL SITE, and that
+	//    is where the fix landed (BrnDeformableObject.cpp, ApplyCarCarImpulse).
+	//    ⇒ Whether the inlined GetInverse copied or swapped these two fields is UNKNOWABLE from
+	//      this image -- the call site's two stores kill whatever it wrote. The copy below is
+	//      therefore left exactly as it was: it is dead either way, and changing it would be a
+	//      cosmetic guess dressed as evidence. ⛔ Do not re-chase this; the behaviour question is
+	//      closed at the call site.
 	// =============================================================================================
 	void StoredImpulseContact::GetInverse(StoredImpulseContact& lrInverse) const
 	{
