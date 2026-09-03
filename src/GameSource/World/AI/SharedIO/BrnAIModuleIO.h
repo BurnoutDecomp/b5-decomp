@@ -4,162 +4,139 @@
 // b5-decomp/src/GameSource/World/AI/SharedIO/BrnAIModuleIO.h
 // ============================================================================
 // BrnAI::AIModuleIO -- the AI module's per-frame IO buffer slice the world bridges
-// drive. InputBuffer is a large CgsModule::IOBuffer payload (>110KB) the world
-// modules fill (write-locked) and the AI module reads (read-locked).
+// drive. InputBuffer is a large CgsModule::IOBuffer payload (~113 KB on the console)
+// the world bridges fill (write-locked) and the AI module reads (read-locked).
 //
-// MINIMAL SLICE (matches the sibling BrnAIModuleIO_OutputBuffer.h). The interior
-// member sizes and inter-member gaps are NOT independently attested, so no named
-// sub-members are declared; instead the payload is a single sized image blob and
-// every accessor returns `MemberImage() + <attested byte offset>` -- exactly the
-// X360 `addi this, N` return spine (each Get*/Set*/Append* is `unsigned __int8*`
-// arithmetic in the asm). The attested member start offsets are the EMemberOffset
-// enum below. Replace this slice with a fully named layout (without moving the
-// pinned offsets) when the owning-buffer DWARF lands.
+// NAMED LAYOUT 2026-09-03 (aiwave lane A4 -- the five AI world bridges).
+// Until this wave InputBuffer was an attested-offset IMAGE BLOB: every accessor
+// returned `MemberImage() + <X360 byte offset>` and Construct built exactly ONE of
+// the ten members. That model cannot survive the bridges going live on the x64 host:
+//   * CgsModule::EventQueue<T,N> leads with a pointer, so the host
+//     EventQueue<RaceRouteRequest,1> parked at the console's +0x137D0 is longer than
+//     the console's 144-byte gap to mRaceCarRaceDistanceInterface -- the very first
+//     AppendRaceRouteRequestQueue would have written the race-distance block;
+//   * the un-Constructed queues (game-action, takedown, race-route, scene-result)
+//     carry mpEvents == NULL, and the bridges' Append / Clear+Append go through it.
+// The DWARF (references/DecFIGS/dwarfdump/GameSource/World/AI/BrnAIModuleIO.h,
+// struct InputBuffer :158-:168) names all ten members and every one of them has a
+// reconstructed host home, so the blob is gone: members BY NAME in DWARF order,
+// accessors return `&mMember`, and Construct builds everything the console's
+// Construct @0x8278AB80 builds (see BrnAIModuleIO_InputBuffer_Accessors.cpp).
+//
+// Console member map -- documentation and identity evidence ONLY, never host
+// addressing (pointer widths and alignment differ; the host layout is whatever the
+// compiler gives these named members):
+//   +0x00010 mRaceCarAIInterface            RaceCarAIInterface                 (Set copies 0x43D0)
+//   +0x043E0 mTrafficAIInterface            TrafficAIInterface                 (Set copies 0xB7A0)
+//   +0x0FB80 mTimerInterface                CgsSystem::TimerStatusInterface    (Set copies 48)
+//   +0x0FBB0 mAIModuleRequestInterface      AIModuleRequestInterface
+//   +0x103BC mGameActionQueue               VariableEventQueue<13312,16>
+//   +0x137D0 mRaceRouteRequestQueue         EventQueue<RaceRouteRequest,1>
+//   +0x13860 mRaceCarRaceDistanceInterface  GameStateModuleIO::RaceCarRaceDistanceInterface (10 words)
+//   +0x13888 mSceneResultQueue              VariableEventQueue<32768,16>
+//   +0x1B898 mTakedownEventQueue            EventQueue<TakedownEvent,8>
+//   +0x1B9E8 mPlayerVehicleControls         BrnWorld::PlayerVehicleControls    (60 bytes)
 //
 // Lock-bit guard per the recurring IOBuffer prologue (the trailing "\n" matches the
 // X360 rodata aNotLockedForRe/aNotLockedForWr; the non-null asserts have NO "\n"):
 //   read-lock  (status>>4 & 1) => IsBufferLockedForReading()  ("Not locked for reading\n")
 //   write-lock (status>>3 & 1) => IsBufferLockedForWriting()  ("Not locked for writing\n")
-// getters read-lock (bit4) EXCEPT Get()/GetGameActionQueue() which asserts WRITE
-// (bit3), reproduced verbatim; setters/appends write-lock (bit3). The X360-baked
-// file path + line-number assert args are dropped per project policy.
+// getters read-lock (bit4) EXCEPT the MUTABLE game-action-queue getter @0x8279C4F8
+// (IDA-truncated to "InputBuffer::Get") which asserts WRITE (bit3), reproduced
+// verbatim; setters/appends write-lock (bit3). The X360-baked file path +
+// line-number assert args are dropped per project policy.
 //
-// Attested member byte offsets (base = this == MemberImage()):
-//   mRaceCarAIInterface           @ +0x00010 (Set copies 0x43D0 = 17360 bytes)
-//   mTrafficAIInterface           @ +0x043E0 (Set copies 0xB7A0 = 47008 bytes)
-//   mTimerInterface               @ +0x0FB80 (Set copies 48 = two 24-byte TimerStatus runs)
-//   mAIModuleRequestInterface     @ +0x0FBB0
-//   mGameActionQueue              @ +0x103BC
-//   mRaceRouteRequestQueue        @ +0x137D0
-//   mRaceCarRaceDistanceInterface @ +0x13860 (Set copies 40 = 10 words)
-//   mSceneResultQueue             @ +0x13888
-//   mTakedownEventQueue           @ +0x1B898
-//   mPlayerVehicleControls        @ +0x1B9E8 (Set copies 60)
+// Signature compatibility: every pre-wave accessor NAME is kept. Three read getters
+// that returned `const void*` (GetTrafficAI, GetGameActionQueue, GetPlayerVehicleControls)
+// and the mutable Get() now return the DWARF pointer type instead; a typed pointer
+// converts to the old void* implicitly, so existing callers still compile.
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer
-#include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"  // BrnPhysics::ContactSpy::ContactSpyInterface (embedded by value in InputBuffer_PostPhysics)
-#include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"  // BrnAI::RouteMapModuleIO::RaceRouteRequestQueue (GetRaceRouteRequestQueue return type)
-
-// Pointer-only return types for the read-locked getters; full homes are included by
-// the accessor .cpp (CgsTimerStatusInterface.h / BrnAIModuleRequestInterface.h).
-namespace CgsSystem { class TimerStatusInterface; }
+#include "GameShared/GameClasses/Module/CgsIOBuffer.h"                       // CgsModule::IOBuffer
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"                     // CgsModule::EventQueue<T,N>
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"             // CgsModule::VariableEventQueue<N,A>
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"     // CgsSystem::TimerStatusInterface (mTimerInterface, DWARF :160)
+#include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"          // BrnPhysics::ContactSpy::ContactSpyInterface (embedded by value in InputBuffer_PostPhysics)
+#include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"                   // BrnAI::RouteMapModuleIO::RaceRouteRequestQueue (DWARF :163)
+#include "GameSource/World/AI/SharedIO/BrnRaceCarAIInterfaces.h"             // BrnAI::AIModuleIO::RaceCarAIInterface (DWARF :158)
+#include "GameSource/World/AI/SharedIO/BrnAIModuleRequestInterface.h"        // BrnAI::AIModuleIO::AIModuleRequestInterface (DWARF :161)
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficAIInterfaces.h"      // BrnTraffic::BrnTrafficIO::TrafficAIInterface (DWARF :75/:159)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h"    // BrnWorld::PlayerVehicleControls (DWARF :168)
+#include "GameSource/GameState/BrnGameStateSharedIO.h"                       // GameStateModuleIO::GameActionQueue (DWARF :78) / RaceCarRaceDistanceInterface (DWARF :66)
+#include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"    // BrnGameState::TakedownEvent (DWARF :80 -> BrnTakedownManagerTypes.h:97)
 
 namespace BrnAI
 {
 namespace AIModuleIO
 {
-    struct RaceCarAIInterface;         // BrnRaceCarAIInterfaces.h
-    struct AIModuleRequestInterface;   // BrnAIModuleRequestInterface.h
-
     struct InputBuffer : public CgsModule::IOBuffer
     {
-        // Attested member start offsets (bytes from this) + copy sizes for the memcpy setters.
-        enum EMemberOffset
-        {
-            KU_RACE_CAR_AI_INTERFACE_OFFSET             = 0x00010,
-            KU_RACE_CAR_AI_INTERFACE_SIZE               = 0x043D0,   // 17360
-            KU_TRAFFIC_AI_INTERFACE_OFFSET              = 0x043E0,
-            KU_TRAFFIC_AI_INTERFACE_SIZE                = 0x0B7A0,   // 47008
-            KU_TIMER_INTERFACE_OFFSET                   = 0x0FB80,
-            KU_TIMER_INTERFACE_SIZE                     = 48,
-            KU_AI_MODULE_REQUEST_INTERFACE_OFFSET       = 0x0FBB0,
-            KU_GAME_ACTION_QUEUE_OFFSET                 = 0x103BC,
-            KU_RACE_ROUTE_REQUEST_QUEUE_OFFSET          = 0x137D0,
-            KU_RACE_CAR_RACE_DISTANCE_INTERFACE_OFFSET  = 0x13860,
-            KU_RACE_CAR_RACE_DISTANCE_INTERFACE_SIZE    = 40,
-            KU_SCENE_RESULT_QUEUE_OFFSET                = 0x13888,
-            KU_TAKEDOWN_EVENT_QUEUE_OFFSET              = 0x1B898,
-            KU_PLAYER_VEHICLE_CONTROLS_OFFSET           = 0x1B9E8,
-            KU_PLAYER_VEHICLE_CONTROLS_SIZE             = 60,
-        };
+        // ---- DWARF typedefs (BrnAIModuleIO.h:66-:80) ------------------------------------
+        typedef BrnTraffic::BrnTrafficIO::TrafficAIInterface                    TrafficAIInterface;            // :75
+        typedef BrnGameState::GameStateModuleIO::GameActionQueue                GameActionQueue;               // :78 (BaseGameActionQueue<13312> == VariableEventQueue<13312,16>)
+        typedef RouteMapModuleIO::RaceRouteRequestQueue                         RaceRouteRequestQueue;         // :163 (EventQueue<RaceRouteRequest,1>)
+        typedef BrnGameState::GameStateModuleIO::RaceCarRaceDistanceInterface   RaceCarRaceDistanceInterface;  // :66  (Construct calls ITS Clear @0x82357470)
+        // :72 `typedef OutputBuffer::OutSmSceneQueryResultsQueue SceneResultQueue` -- the
+        // console Construct calls VariableEventQueue<32768,16>::Construct on this member.
+        typedef CgsModule::VariableEventQueue<32768, 16>                        SceneResultQueue;
+        typedef CgsModule::EventQueue<BrnGameState::TakedownEvent, 8>           TakedownEventQueue;            // :80
+        typedef BrnWorld::PlayerVehicleControls                                 PlayerVehicleControls;         // :168
 
-        // ---- getters (read-lock bit4, except Get()/GetGameActionQueue() -> write-lock bit3) ----
-        // X360 0x8276D728 (R) -- the pre-scene race-car AI view (this+0x10).
-        const RaceCarAIInterface* GetRaceCarAIInterface() const;
-        // X360 0x8276D7D0 (R) -- the traffic-AI interface handle (this+0x43E0).
-        const void* GetTrafficAI() const;
-        // X360 0x8276D920 (R) -- the timer-status interface (this+0xFB80).
-        const CgsSystem::TimerStatusInterface* GetTimerInterface() const;
-        // X360 0x8276D878 (R) -- the AI-module request interface (this+0xFBB0).
-        const AIModuleRequestInterface* GetAIModuleRequestInterface() const;
-        // X360 0x8276D530 (R) -- the game-action queue (this+0x103BC). Read-lock twin of Get().
-        const void* GetGameActionQueue() const;
-        // X360 0x8276D5D8 (R) -- the player vehicle controls block (this+0x1B9E8).
-        const void* GetPlayerVehicleControls() const;
-        // X360 0x8276D488 (R) -- the race-route request queue (this+0x137D0).
-        const RouteMapModuleIO::RaceRouteRequestQueue* GetRaceRouteRequestQueue() const;
+        // X360 0x8278AB80 -- builds every member (see the .cpp for the console's own order).
+        void Construct();                                                                     // :95
 
-        // X360 0x8279C4F8 (W) -- the game-action queue (this+0x103BC). Asserts the WRITE lock.
-        void* Get();
+        // ---- setters / appends (write-lock bit3) ---------------------------------------
+        void SetRaceCarAIInterface(const RaceCarAIInterface* lpInterface);                    // 0x8279C700 :108
+        void SetTrafficAIInterface(const TrafficAIInterface* lpInterface);                    // 0x8279C7E0 :112
+        void AppendAIModuleRequestInterface(const AIModuleRequestInterface* lpRequestInterface); // 0x827AC960 :116 (Clear()+Append)
+        void SetTimerInterface(const CgsSystem::TimerStatusInterface* lpTimerInterface);      // 0x8279C8C0 :120
+        void AppendRaceRouteRequestQueue(const RaceRouteRequestQueue* lpQueue);               // 0x827A9560 :140
+        void SetRaceCarRaceDistanceInterface(const RaceCarRaceDistanceInterface* lpObject);   // 0x8279C428 :143 (10-word copy)
+        void SetTakedownEventQueue(const TakedownEventQueue* lpQueue);                        // 0x827A9618 :152 (Clear()+Append)
+        void SetPlayerVehicleControls(const PlayerVehicleControls* lpControls);               // 0x8279C5A0 :155 (60-byte copy)
 
-        // ---- setters / appends (write-lock bit3) ----
-        // X360 0x8279C700 (W) -- copies a RaceCarAIInterface into this+0x10.
-        void SetRaceCarAIInterface(const RaceCarAIInterface* lpInterface);
-        // X360 0x8279C7E0 (W) -- copies the traffic-AI interface into this+0x43E0.
-        void SetTrafficAIInterface(const void* lpInterface);
-        // X360 0x8279C8C0 (W) -- copies a TimerStatusInterface into this+0xFB80.
-        void SetTimerInterface(const void* lpTimerInterface);
-        // X360 0x8279C428 (W) -- copies the race-car race-distance interface into this+0x13860.
-        void SetRaceCarRaceDistanceInterface(const void* lpObject);
-        // X360 0x8279C5A0 (W) -- copies the player vehicle controls into this+0x1B9E8.
-        void SetPlayerVehicleControls(const void* lpControls);
-        // X360 0x827AC960 (W) -- Clear()+Append the reset-on-track request queue at this+0xFBB0.
-        void AppendAIModuleRequestInterface(const void* lpRequestInterface);
+        // ---- getters (read-lock bit4 unless noted) -------------------------------------
+        const RaceCarAIInterface*              GetRaceCarAIInterface() const;                 // 0x8276D728 :124
+        const TrafficAIInterface*              GetTrafficAIInterface() const;                 // 0x8276D7D0 :127
+        const TrafficAIInterface*              GetTrafficAI() const;                          // same seat, pre-wave spelling (kept)
+        const CgsSystem::TimerStatusInterface* GetTimerInterface() const;                     // 0x8276D920 :130
+        const AIModuleRequestInterface*        GetAIModuleRequestInterface() const;           // 0x8276D878 :133
+        AIModuleRequestInterface*              GetAIModuleRequestInterface();                 // :136 (W; no out-of-line X360 symbol -- inlined)
+        const RaceRouteRequestQueue*           GetRaceRouteRequestQueue() const;              // 0x8276D488 :138
+        RaceRouteRequestQueue*                 GetRaceRouteRequestQueue();                    // :139 (W; inlined on the console)
+        const RaceCarRaceDistanceInterface*    GetRaceCarRaceDistanceInterface() const;       // :142 (inlined on the console)
+        const SceneResultQueue*                GetSceneResultQueue() const;                   // :145 (inlined on the console)
+        SceneResultQueue*                      GetSceneResultQueue();                         // :146 (W; inlined on the console)
+        const GameActionQueue*                 GetGameActionQueue() const;                    // 0x8276D530 :148
+        GameActionQueue*                       GetGameActionQueue();                          // 0x8279C4F8 :149 -- asserts the WRITE lock
+        GameActionQueue*                       Get();                                         // the IDA-truncated spelling of :149 (kept); same seat
+        const TakedownEventQueue*              GetTakedownEventQueue() const;                 // :151 (inlined on the console)
+        const PlayerVehicleControls*           GetPlayerVehicleControls() const;              // 0x8276D5D8 :154
 
-        // ⛔⛔ X360 0x8278AB80 -- THE BUFFER'S OWN Construct, LANDED 2026-08-26 (aicar_reset
-        // wave), AND IT CLOSES A LATENT ACCESS VIOLATION OF EXACTLY THE CLASS ITS SIBLING
-        // BrnAIModuleIO_OutputBuffer.h's banner describes.
-        //
-        // CgsIOBufferStack::CreateIOBuffer<T> calls T::Construct(). This type declared none, so it
-        // inherited CgsModule::IOBuffer::Construct -- which writes ONE status byte and leaves every
-        // embedded queue UNCONSTRUCTED. The reset-on-track request queue at +0xFBB0 is a
-        // CgsModule::EventQueue<ResetOnTrackRequest,128>, whose base `mpEvents` is set ONLY by
-        // EventQueue::Construct. AppendAIModuleRequestInterface above does `Clear(); Append(src);`
-        // and Append memcpy's through mpEvents -- i.e. through whatever bytes happened to be in
-        // the allocation. That is a write through an uninitialised pointer the first time anything
-        // posts a reset-on-track request.
-        //
-        // ⭐ NOTHING HAD FIRED ONLY BECAUSE NOTHING HAD EVER POSTED ONE. [[un-gating a producer
-        // CREATES the fault]] -- the very next wave to land RaceCarEntityModule::
-        // SendResetOnTrackRequests would have been the first, and it would have looked like that
-        // wave's bug.
-        //
-        // ⚠️ PARTIAL, AND EVERY OMISSION IS NAMED IN THE .cpp: the console's Construct also builds
-        // eight OTHER queues/interfaces in this buffer (the traffic rival ring, three
-        // VariableEventQueues, the timer + race-distance interfaces, the takedown ring, the race
-        // route request ring) and zeroes ~30 scalars. Those members live inside this type's
-        // attested-offset IMAGE BLOB with no named homes, so constructing them would mean poking
-        // raw offsets into an opaque payload. The two the reset-on-track path touches are
-        // constructed by NAME through the same accessor spine the rest of the class uses.
-        void Construct();
-        // X360 0x827A9560 (W) -- Append the race-route request queue at this+0x137D0.
-        void AppendRaceRouteRequestQueue(const void* lpQueue);
-        // X360 0x827A9618 (W) -- Clear()+Append the takedown event queue at this+0x1B898.
-        void SetTakedownEventQueue(const void* lpQueue);
-
-    protected:
-        // Payload image: the buffer's members live at the attested EMemberOffset byte
-        // offsets from `this`. MemberImage() returns the base so the accessors reproduce
-        // the X360 `addi this, N` arithmetic verbatim. Sized to cover the last member.
-        u8* MemberImage()             { return reinterpret_cast<u8*>(this); }
-        const u8* MemberImage() const { return reinterpret_cast<const u8*>(this); }
+        // (DWARF :99 Destruct / :103 Clear are not reconstructed here: no caller in the
+        //  tree, and the IOBufferStack path binds DestroyIOBuffer to the base Destruct.)
 
     private:
-        // Storage that gives the buffer object its X360 size. Starts right after the
-        // IOBuffer base; spans through the trailing player-vehicle-controls block. The
-        // accessors index from `this` (MemberImage), so this blob only sizes the object.
-        u8 maImage[0x1BA30 - sizeof(CgsModule::IOBuffer)];
+        RaceCarAIInterface              mRaceCarAIInterface;            // :158  X360 +0x00010
+        TrafficAIInterface              mTrafficAIInterface;            // :159  X360 +0x043E0
+        CgsSystem::TimerStatusInterface mTimerInterface;                // :160  X360 +0x0FB80
+        AIModuleRequestInterface        mAIModuleRequestInterface;      // :161  X360 +0x0FBB0
+        GameActionQueue                 mGameActionQueue;               // :162  X360 +0x103BC
+        RaceRouteRequestQueue           mRaceRouteRequestQueue;         // :163  X360 +0x137D0
+        RaceCarRaceDistanceInterface    mRaceCarRaceDistanceInterface;  // :165  X360 +0x13860
+        SceneResultQueue                mSceneResultQueue;              // :166  X360 +0x13888
+        TakedownEventQueue              mTakedownEventQueue;            // :167  X360 +0x1B898
+        PlayerVehicleControls           mPlayerVehicleControls;         // :168  X360 +0x1B9E8
     };
 
     // ------------------------------------------------------------------------
     // InputBuffer_PostPhysics -- the AI module's post-physics INPUT buffer (a
     // SEPARATE, small CgsModule::IOBuffer from the large InputBuffer above). The
-    // physics side fills it with contact-spy results; the AI post-physics step
-    // drains it. Exactly one member per the DWARF (BrnAIModuleIO.h:286/:368):
-    // the embedded contact-spy interface at +0x04 (right after the 1-byte IOBuffer
-    // status flag). Construct/Destruct bodied in
-    // BrnAIModuleIO_InputBuffer_PostPhysics.cpp.
+    // physics side fills it with the frame's contact-spy handle; the AI post-physics
+    // step (AIModule::PostPhysicsUpdate @0x8276E428) drains it. Exactly one member
+    // per the DWARF (BrnAIModuleIO.h:263/:286): the embedded contact-spy interface
+    // at console +0x04 (right after the 1-byte IOBuffer status flag).
+    // Construct/Destruct bodied in BrnAIModuleIO_InputBuffer_PostPhysics.cpp.
     // ------------------------------------------------------------------------
     struct InputBuffer_PostPhysics : public CgsModule::IOBuffer
     {
@@ -167,6 +144,17 @@ namespace AIModuleIO
 
         void Construct();   // X360 0x8277BCD0
         void Destruct();    // X360 0x8277BCE8
+
+        // ---- ADDITIVE 2026-09-03 (aiwave lane A4) -- the two DWARF accessors the console
+        //      INLINES (no out-of-line symbol for either; neither carries a lock assert
+        //      at its inlined sites -- reproduced as plain inlines, not "fixed"): ----
+        // DWARF :278. Inlined into AIModule::PostPhysicsUpdate @0x8276E488
+        // (`lwz r10, 4(r31)` -- the handle word straight out of the buffer).
+        const ContactSpyInterface* GetContactSpyInterface() const { return &mContactInterface; }
+        // DWARF :282. Inlined into WorldModule::BridgePhysicsModuleToAIModule_PostPhysics
+        // @0x827A56EC..0x827A56F0 (`lwz r11, 0(r3); stw r11, 4(r30)`): the interface IS
+        // one handle word, so "append the contacts" is a copy of that handle.
+        void AppendContacts(const ContactSpyInterface* lpInterface) { mContactInterface = *lpInterface; }
 
     private:
         static void _AssertLayout();

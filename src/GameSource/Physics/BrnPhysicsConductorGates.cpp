@@ -245,10 +245,9 @@ namespace Deformation
 
 namespace Vehicle
 {
-    void VehicleManager::CheckState()
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::CheckState @0x825EADA8 (170)");
-    }
+    // GATE DELETED 2026-09-03 (crash-state wave, lane P2a): VehicleManager::CheckState @0x825EADA8
+    // is REAL in BrnVehicleManager_CrashState.cpp -- the per-live-car ExternalPhysicsBody::CheckState
+    // sweep. If a gate for it reappears here the link will say so (LNK2005).
 
     // ⭐⭐ 2026-08-11 (lifetime wave): the StartVehicleTractionLineTests @0x82629CE0 gate that
     // stood here is DELETED. The real 78-instruction body is in
@@ -257,47 +256,15 @@ namespace Vehicle
     // lifetime and can never be split; End dereferences mpTractionLineStreamProducer with no null
     // guard and UpdateVehiclePhysics reaches it unconditionally every frame).
     //
-    // What replaces it is SMALLER and PAIRED: six named gates for the two SIDE legs the race-car
-    // ground path does not need (1,319 console instructions measured this wave). ⛔ Each Add is
-    // gated WITH its own Read, because EndVehicleTractionLineTests hands ONE result cursor to the
-    // three harvests in turn -- an Add without its Read leaks records into the next harvest, and a
-    // Read without its Add consumes the race-car leg's answers.
-    //
-    // ⚠️ These six are reached EVERY FRAME as of this wave (the lifetime above them is live), so
-    // each is the repo's log-once boot-gate shape, not a silent no-op. The three that return a
-    // command count return 0, which is the truthful "posted nothing".
-
-    s32 VehicleManager::AddPlayerStuckInCollisionLineTests(
-            CgsSceneManager::CgsCollision::CollisionGenerator*,
-            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface*,
-            BrnPhysics::Deformation::DeformationManager*)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::AddPlayerStuckInCollisionLineTests @0x825E9B28 (171) "
-                           "-- PAIRED with ReadPlayerStuckTractionLineTestResults @0x825C3898; "
-                           "reconstruct and un-gate BOTH together");
-        return 0;
-    }
-
-    void VehicleManager::UpdatePlayerStuckInCollisionTest(
-            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface*, f32)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::UpdatePlayerStuckInCollisionTest @0x825E9DD8 (87) "
-                           "-- player-stuck leg (drives UpdatePlayerStuckInCollisionSpheres)");
-    }
-
-    void VehicleManager::UpdatePlayerStuckInCollisionSpheres(f32)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::UpdatePlayerStuckInCollisionSpheres @0x825C4AB8 (147) "
-                           "-- player-stuck leg");
-    }
-
-    void VehicleManager::ReadPlayerStuckTractionLineTestResults(
-            CgsMemory::SimpleDataStreamResultIterator*)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::ReadPlayerStuckTractionLineTestResults @0x825C3898 "
-                           "(118) -- PAIRED with AddPlayerStuckInCollisionLineTests @0x825E9B28; "
-                           "leaving it inert is CORRECT while the Add posts nothing");
-    }
+    // ⭐⭐ GATES DELETED 2026-09-03 (aiwave lane P2b): the PLAYER-STUCK leg's four gates that stood
+    // here -- AddPlayerStuckInCollisionLineTests @0x825E9B28 (171) paired with
+    // ReadPlayerStuckTractionLineTestResults @0x825C3898 (118), UpdatePlayerStuckInCollisionTest
+    // @0x825E9DD8 (87) and UpdatePlayerStuckInCollisionSpheres @0x825C4AB8 (147) -- are REAL in
+    // BrnVehicleManager_PlayerStuck.cpp, landed as the matched pair the note above demanded (the
+    // Add posts ONE four-line command only when the player has sat in the 2 m cache sphere for 5 s;
+    // the Read consumes exactly that record and does NOT advance the shared cursor, as shipped).
+    // The TRAFFIC pair (AddTraffic 418 <-> ReadTraffic 291) lives on PhysicalTrafficManager and is
+    // unaffected. If a gate for any of the four ever reappears here the link will say so (LNK2005).
 
     // ⭐⭐ GATE DELETED 2026-08-14 (walls leg 3): VehicleManager::EndVehicleContactGeneration
     // @0x8261AC38 (661) is REAL in BrnVehicleManagerContactGeneration.cpp — the harvest runs.
@@ -352,10 +319,9 @@ namespace Vehicle
     // it into mPreviousControls itself. The controls chain is CLOSED end to end as of this
     // wave. See the corrected closing banner in BrnVehicleManager_DriverArms.cpp.
 
-    void VehicleManager::ClearSnappedNetworkCarContacts(Deformation::DeformationManager*)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::ClearSnappedNetworkCarContacts @0x8261A8D0 (217)");
-    }
+    // GATE DELETED 2026-09-03 (crash-state wave, lane P2a): VehicleManager::ClearSnappedNetworkCarContacts
+    // @0x8261A8D0 is REAL in BrnVehicleManager_CrashState.cpp (race-car arm; the traffic arm
+    // PhysicalTrafficManager::ClearSnappedNetworkTrafficContacts @0x825F37F0 is a named park inside it).
 
     // ⭐⭐ GATE DELETED 2026-08-10 (create-path wave): VehicleManager::ReadUpdatedBodies
     // @0x82619A10 is REAL, in BrnVehicleManager_ReadUpdatedBodies.cpp, together with the
@@ -372,18 +338,14 @@ namespace Vehicle
     // proxy parked at the car's creation pose. If a gate for it ever reappears here the link will
     // say so (LNK2005).
 
-    // UpdateVehiclePhysicsPostSimulation @0x826426E0 is real now. These two independent
-    // line-test consumers remain named deferrals in its closure.
-    void VehicleManager::DoPlayerTractionLineTestsPostSimulation(const VehicleInputInterface*, f32)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::DoPlayerTractionLineTestsPostSimulation "
-                           "@0x826185A0 (548)");
-    }
-
-    void VehicleManager::DoPlayerStuckLineTests(const VehicleInputInterface*)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::DoPlayerStuckLineTests @0x825C3A70");
-    }
+    // ⭐⭐ GATES DELETED 2026-09-03 (aiwave lane P2b): UpdateVehiclePhysicsPostSimulation
+    // @0x826426E0's two player-only line-test consumers, DoPlayerTractionLineTestsPostSimulation
+    // @0x826185A0 (548) and DoPlayerStuckLineTests @0x825C3A70 (1041), are REAL in
+    // BrnVehicleManager_PlayerStuck.cpp -- the post-step PPU re-test of the player's four wheel
+    // traction lines (feeding AddTractionPoint, then CalculateNewWheelPlane +
+    // StoreLocalWheelPositions) and the one-line-per-frame front/rear/sensor occlusion round robin
+    // that writes mbIsWedgedInWorld / mbIsFrontRayOccluded. If a gate for either ever reappears
+    // here the link will say so (LNK2005).
 
     void VehicleManager::ProcessCrashingNetworkCars(
         const VehicleDriverInputInterface*, BrnPhysics::Vehicle::VehicleOutputRequestInterface*,
@@ -424,23 +386,16 @@ namespace Vehicle
     // wave4-B stand-in call that seated it in BrnPhysicsModuleUpdateFunctions.cpp is retired.
     // If a gate for it ever reappears here the link will say so (LNK2005).
     //
-    // NEW GATE, same wave: ProcessShowtimeShunts @0x82629F20 (1002 insns; DWARF h:1539 /
-    // BrnVehicleManager.cpp:4507) is ProcessContactSpies' second call and was neither declared nor
-    // bodied anywhere in the tree. It is reached every frame now that its caller is real, so it
-    // takes the sanctioned log-once shape. Its closure (xrefs_from): BaseEventQueue::GetEvent over
-    // BOTH the race-car and traffic spy queues, EntityId::SetEntityIndex, PhysicalTrafficManager::
-    // GetTrafficInterest, VehicleManager::ApplyShowtimeShunt (DWARF h:1546 -- absent from the tree),
-    // sub_821F0EC8 and sub_82368330 (unidentified). What inert means: in Showtime, race-car and
-    // traffic contacts do not shunt the traffic vehicles -- the crash-mode car bounces nothing.
-    void VehicleManager::ProcessShowtimeShunts(const ContactSpy::ContactSpyData*)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::ProcessShowtimeShunts @0x82629F20 (1002)");
-    }
-
-    void VehicleManager::UpdateFatalCrashFlags(VehicleOutputInterface*)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::UpdateFatalCrashFlags @0x825EA970 (173)");
-    }
+    // (2026-09-02 gated ProcessShowtimeShunts @0x82629F20 here as "neither declared nor bodied".
+    // That state lasted one day -- see the deletion note immediately below. Kept for the record:
+    // its closure was BaseEventQueue::GetEvent over BOTH spy queues, EntityId::SetEntityIndex,
+    // PhysicalTrafficManager::GetTrafficInterest, VehicleManager::ApplyShowtimeShunt (DWARF
+    // h:1546) and the two subs identified below.)
+    // GATES DELETED 2026-09-03 (crash-state wave, lane P2a): VehicleManager::ProcessShowtimeShunts
+    // @0x82629F20 (with its callee ApplyShowtimeShunt @0x82619D28) and VehicleManager::
+    // UpdateFatalCrashFlags @0x825EA970 are REAL in BrnVehicleManager_CrashState.cpp. The
+    // "two unidentified subs" the note above names were BaseEventQueue<TrafficContact>::GetEvent
+    // (sub_82368330) and StrStream::operator<<(u32) (sub_821F0EC8, assert text only).
 
     // GATES DELETED 2026-08-22 (traffic wave T3): the TRAFFIC traction-line pair,
     // PhysicalTrafficManager::AddTrafficTractionLineTests @0x8261D580 and

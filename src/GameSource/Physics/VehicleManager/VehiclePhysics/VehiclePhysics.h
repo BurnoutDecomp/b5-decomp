@@ -457,6 +457,19 @@ namespace Vehicle
         void SetAngularVelocity(const Vector3& lvAngularVelocity) { mAngularVelocity = lvAngularVelocity; }
         const VehicleAttribs* GetAttribs() const { return mpAttribs; }
 
+        // ----- [stuck] ADDED 2026-09-03 (aiwave lane P2b, the player-stuck leg). Additive, header-only
+        //       accessors, same shape and same reason as SetAngularVelocity above: the console reaches
+        //       these three members from VehicleManager BY RAW OFFSET inside its own friend/member
+        //       scope (`lfs/stfs 0x10F0(car)` in UpdatePlayerStuckInCollisionSpheres @0x825C4AB8 /
+        //       ReadPlayerStuckTractionLineTestResults @0x825C3898 / AddPlayerStuckInCollisionLineTests
+        //       @0x825E9B28; `stb ...,0x135F(car)` @0x825C3B70/@0x825C4A28 and `stb ...,0x1360(car)`
+        //       @0x825C498C/@0x825C4994 in DoPlayerStuckLineTests @0x825C3A70). Same members, reached
+        //       BY NAME. DWARF :936 / :961 / :962. -----
+        f32  GetTimeUntilStuckInCollisionTest() const          { return mfTimeUntilStuckInCollisionTest; }
+        void SetTimeUntilStuckInCollisionTest(f32 lfTime)      { mfTimeUntilStuckInCollisionTest = lfTime; }
+        void SetIsWedgedInWorld(bool lbWedged)                 { mbIsWedgedInWorld = lbWedged; }
+        void SetIsFrontRayOccluded(bool lbOccluded)            { mbIsFrontRayOccluded = lbOccluded; }
+
         // ----- @0x825FD218: re-seed every wheel's body-point velocity and spin rate from the body's
         //       current motion, then re-seed the engine from their average. Called on the three
         //       car-PLACEMENT paths: Reset (mpAttribs != NULL), TrafficPhysics::PreparePhysical, and

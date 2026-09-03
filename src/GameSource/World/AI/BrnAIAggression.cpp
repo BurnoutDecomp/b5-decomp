@@ -28,25 +28,37 @@ namespace BrnAI
 // Post-attack wait-time bounds, lerped by the car's aggression level in StopAttacking.
 // X360 rodata at unk_820C426C / unk_820C4270 (BrnAIAggression.cpp file-statics) -- values
 // not recoverable from the dossier asm.
-const f32 KF_MIN_POST_ATTACK_WAIT_TIME = 0.0f; // FLAG: rodata value unrecovered (unk_820C426C)
-const f32 KF_MAX_POST_ATTACK_WAIT_TIME = 0.0f; // FLAG: rodata value unrecovered (unk_820C4270)
+const f32 KF_MIN_POST_ATTACK_WAIT_TIME = 1.0f; // rodata 0x820C426C == 0x3F800000 (read from image.bin)
+const f32 KF_MAX_POST_ATTACK_WAIT_TIME = 1.0f; // rodata 0x820C4270 == 0x3F800000 (read from image.bin)
 
 // Minimum speed below which a candidate car is considered too slow to target (CarIsTooSlow).
 // X360 rodata at flt_8300D9A0 -- value not recoverable from the dossier asm.
-const f32 KF_CAR_TOO_SLOW_SPEED = 0.0f; // FLAG: rodata value unrecovered (flt_8300D9A0)
+const f32 KF_CAR_TOO_SLOW_SPEED = 0.0f; // FLAG: flt_8300D9A0 is .bss -- see the .bss note below
+
+// DecideToAttack @0x82770C50: in MARKED_MAN the AI attacks outright when the player's speed
+// drops below this. flt_8300D974 is .bss, so the image cannot attest the value (see below).
+const f32 KF_MARKED_MAN_ATTACK_SPEED = 0.0f; // FLAG: flt_8300D974 is .bss -- see the .bss note below
 
 // --- G2-geometry ---
 // CalcSeparationAcrossToTarget uses a small epsilon to reject a degenerate (near-zero) right
 // vector before normalising. The X360 loads it from rodata flt_820C3B70, an un-valued .rdata
 // float not present in the available exports.
-const f32 KF_QUERY_POS_EPSILON = 0.0f; // FLAG: rodata value (flt_820C3B70) unrecovered -- placeholder; guards an effectively-unreachable degenerate-right-vector branch
+const f32 KF_QUERY_POS_EPSILON = 1.1920929e-7f; // rodata 0x820C3B70 == 0x34000000 (read from image.bin) -- guards the degenerate-right-vector branch
 
 // --- G3-speedmatch ---
 // --- BrnAIAggression.cpp file-local speed-match tuning constants (group G3-speedmatch) ---
-// All of these are rodata floats referenced by ADDRESS in the X360 build (flt_8300xxxx /
-// unk_820C42xx). Their numeric VALUES are NOT present in the dossier (no immediate in the
-// asm), so they are declared here by KF_ name with the value FLAGGED UNKNOWN. Recover the
-// real values from the X360 .rdata at the listed addresses before final commit.
+//
+// ⚠️ THE .bss NOTE (checked 2026-09-03 against scratch/postfx_step9_final/envfix/work/image.bin,
+// file offset == VA - 0x82000000). The two address families in this file are NOT the same kind
+// of thing and must not be treated alike:
+//   * 0x820Cxxxx / 0x8201xxxx / 0x8200xxxx are the big-endian **rodata float literal pool**.
+//     Reading the image there IS the console value, and every KF_ below that carries an
+//     0x820Cxxxx address has been back-filled from it (with the raw big-endian word quoted).
+//   * 0x8300D6E8..0x8300DC00 is **.bss**: the whole region reads back as zero in the image,
+//     and a .bss zero is NOT evidence that the console value is zero -- these floats are
+//     written by a dynamic initialiser whose writer has no IDA export. They therefore KEEP
+//     their FLAG and their 0.0f placeholder. Do not "recover" them by reading the image.
+// Everything below that still says FLAG is in the second family.
 
 // GetMinFallBackSpeed -- per-route-finding-style minimum fall-back speed.
 const f32 KF_MIN_FALLBACK_SPEED_PURSUIT     = 0.0f; // flt_8300D988 -- FLAG: rodata value unrecovered
@@ -94,10 +106,15 @@ const f32 KF_SLOW_FALLBACK_RELSPEED_LO = 0.0f; // flt_8300D728 -- FLAG: rodata v
 // Shared speed-match RANGE tuning quad (proximity-lerped). Same four rodata floats are used by
 // OutOfSpeedMatchRange and the GetSpeedMatchSpeed default branch.
 //   lerp(*_PROX0, *_PROX1, mpCar->GetProximityToSpeedMatch())
-const f32 KF_SPEED_MATCH_LEAD_PROX1 = 0.0f; // unk_820C42E4 -- FLAG: rodata value unrecovered (leading-sep upper, prox=1)
-const f32 KF_SPEED_MATCH_LEAD_PROX0 = 0.0f; // unk_820C42E8 -- FLAG: rodata value unrecovered (leading-sep upper, prox=0)
-const f32 KF_SPEED_MATCH_SEP_PROX1  = 0.0f; // unk_820C42EC -- FLAG: rodata value unrecovered (separation threshold, prox=1)
-const f32 KF_SPEED_MATCH_SEP_PROX0  = 0.0f; // unk_820C42F0 -- FLAG: rodata value unrecovered (separation threshold, prox=0)
+// Read from image.bin. The lerp direction is pinned by OutOfSpeedMatchRange @0x8278B680:
+// the separation test builds (E[0x42EC] - E[0x42F0]) at 0x8278B6D8 and vmaddfp's it by the
+// proximity at 0x8278B6E4, i.e. threshold = lerp([0x42F0], [0x42EC], proximity); the leading
+// test does the same with [0x42E8] / [0x42E4] at 0x8278B758/0x8278B768. So the PROX0 members
+// really are the proximity==0 endpoints, and both of them are a genuine rodata 0.0.
+const f32 KF_SPEED_MATCH_LEAD_PROX1 = 40.0f; // rodata 0x820C42E4 == 0x42200000 (leading-sep upper, prox=1)
+const f32 KF_SPEED_MATCH_LEAD_PROX0 =  0.0f; // rodata 0x820C42E8 == 0x00000000 (leading-sep upper, prox=0)
+const f32 KF_SPEED_MATCH_SEP_PROX1  = 60.0f; // rodata 0x820C42EC == 0x42700000 (separation threshold, prox=1)
+const f32 KF_SPEED_MATCH_SEP_PROX0  =  0.0f; // rodata 0x820C42F0 == 0x00000000 (separation threshold, prox=0)
 
 // --- G4-states-slam ---
 // No NEW file-local constants required by these 7 functions -- every numeric used is a recoverable literal immediate visible in the asm/rodata (immediates: -1.0, 0.0, 1.0, 1.5, 2.0, 2.5, 4.0, 6.0, 7.5, -3.0, -8.0, 12.0, 16.0, 20.0, 1000.0; and the integer float-bit constants decoded: 1092616192=10.0f, 1086324736=6.0f, 1090519040=8.0f, 0x40000000=2.0f, -1082130432=-1.0f). The randomised state times use the static `mRandom` (CgsNumeric::Random, declared in BrnAIAggression.h) via mRandom.RandomFloat().
@@ -110,10 +127,26 @@ const f32 KF_SPEED_MATCH_SEP_PROX0  = 0.0f; // unk_820C42F0 -- FLAG: rodata valu
 // 12.0/20.0/30.0/5.0/130.0/1.0) are used inline in the bodies, not listed here.
 
 const f32 KF_FALL_PAST_SPURT_MIN_TIME = 0.0f;   // FLAG: rodata value unrecovered -- fsel floor (f31) for the re-rolled SPURT_FORWARD time in FallPast
-const f32 KF_FALL_PAST_TIME_LERP_LO   = 0.0f;   // FLAG: rodata value unrecovered -- low endpoint of the BE_FODDER state-time lerp in FallPast (&unk_820C4288)
-const f32 KF_FALL_PAST_TIME_LERP_HI   = 0.0f;   // FLAG: rodata value unrecovered -- high endpoint of the BE_FODDER state-time lerp in FallPast (&unk_820C428C)
-const f32 KF_CLIP_OFF_MIN_SPEED       = 0.0f;   // FLAG: rodata value unrecovered -- min target speed before CLIP_OFF_BEHIND bails (flt_8300D720)
-const f32 KF_SPURT_PASSING_SPEED_SCALE = 0.0f;  // FLAG: rodata value unrecovered -- multiplier (x130.0) for SpurtForward mFixedPassingSpeed (flt_82F31928)
+const f32 KF_FALL_PAST_TIME_LERP_LO   = 0.0f;   // rodata 0x820C4288 == 0x00000000 (read from image.bin) -- low endpoint of the BE_FODDER state-time lerp in FallPast
+const f32 KF_FALL_PAST_TIME_LERP_HI   = 2.0f;   // rodata 0x820C428C == 0x40000000 (read from image.bin) -- high endpoint of the BE_FODDER state-time lerp in FallPast
+const f32 KF_CLIP_OFF_MIN_SPEED       = 0.0f;   // FLAG: flt_8300D720 is .bss -- see the .bss note below
+// 0x82F31928 is INITIALISED .data (not .bss): 0x3EE4E26D == 0.44704, the mph -> m/s factor.
+// SpurtForward's 130.0 * this == 58.1 m/s == 130 mph, which is what the name says it is.
+const f32 KF_SPURT_PASSING_SPEED_SCALE = 0.44704f; // .data 0x82F31928 == 0x3EE4E26D (read from image.bin)
+
+    // ================================================================================
+    // The ONE definition of the static member declared in BrnAIAggression.h (DWARF :370).
+    //
+    // X360: the object lives in .bss at 0x8300D540 and its layout is CgsNumeric::Random
+    // store-for-store -- flt_8300D540..+0x1C is the 8-slot [1,2) float ring,
+    // qword_8300D560 (== +0x20) is muSeed and dword_8300D568 (== +0x28) is
+    // muOldestBufferIndex. It has NO C++ static initialiser and no CRT init entry: the image
+    // is zero-filled across that whole region, and AIAggression::Construct @0x8278B390 is
+    // what primes it -- it inlines Random::Construct over the static (seed 0x8FE06DC2, built
+    // by li r8, 0x6DC2 @0x8278B39C + oris r8, r8, 0x8FE0 @0x8278B3A4; index zeroed
+    // @0x8278B3DC; then the eight-iteration ring refill @0x8278B3E4..0x8278B438).
+    // ================================================================================
+    CgsNumeric::Random AIAggression::mRandom;
 
     // BrnAI::AIAggression::GetTargetPos @0x827656D0. Returns the cached world-space target
     // position by value; asserts mbTargetPosValid, then copies mTargetPos into the (ABI-hidden)
@@ -302,6 +335,52 @@ void AIAggression::CheckForCarVeeringAwayFromPlayer(f32 lfTimeStep)
     }
 }
 
+// BrnAI::AIAggression::DecideToAttack @0x82770C50.
+//
+// NOT in names.tsv and NOT in the per-function export set (0x82770C50..0x82770D84 sits between
+// the exported UpdateAggressionStateClipOffBehind @0x82770B88 and
+// UpdateAggressionStateHangAboutAhead @0x82770D88). The address comes from
+// UpdateAggressionStateOutOfRange @0x827965E8's xrefs_from, which names it; the body below is
+// decoded from the raw image bytes over that range.
+//
+// The attack die-roll: two hard rejects and one hard accept, then a random draw against this
+// car's aggression level.
+//   0x82770C68  lwz r10, 0x152C(mpCar) / cmpwi cr6, r10, 0 / bge -> miProximityIndex < 0
+//               rejects. cmpwi is a SIGNED compare, so this is the signed index test.
+//   0x82770C80  style == 6 (MARKED_MAN) and mpPlayerCar != NULL: bl AICar::GetSpeed
+//               @0x82764D68 and accept when the player's speed is below flt_8300D974.
+//   0x82770CB4  style == 1 (RACE) and mfDistanceToCheckpoint (0x14F0) < flt_820C417C (1000.0)
+//               rejects.
+//   0x82770CEC  the inlined mRandom ring draw at 0x8300D540 -- consume the current [1,2) slot
+//               into f31, refill that slot from the OLD seed's high word, mulld the 64-bit LCG
+//               by 0x5851F42D4C957F2D, advance the cursor and 7 -- then bl 0x82766A80
+//               (Aggressiveness::GetAggressionLevel, this == mpCar+0x140C) and finally
+//               fsubs f0, f31, flt_82001C98 (1.0) / fcmpu cr6, f1, f0 / bgt.
+//               f31 - 1.0f is exactly what Random::RandomFloat() returns, so the draw is
+//               spelt by name here instead of being re-inlined.
+// The console runs the RNG draw BEFORE the GetAggressionLevel() call; kept in that order
+// because the draw mutates the shared static mRandom.
+bool AIAggression::DecideToAttack()
+{
+    if (mpCar->miProximityIndex < 0)
+        return false;
+
+    if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN && mpPlayerCar != NULL)
+    {
+        if (mpPlayerCar->GetSpeed() < KF_MARKED_MAN_ATTACK_SPEED)
+            return true;
+    }
+
+    if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_RACE &&
+        mpCar->mfDistanceToCheckpoint < 1000.0f)
+    {
+        return false;
+    }
+
+    const f32 lfRoll = mRandom.RandomFloat();
+    return mpCar->GetAggressiveness()->GetAggressionLevel() > lfRoll;
+}
+
 // BrnAI::AIAggression::DetermineAttackSide @0x82771408.
 //
 // Returns the signed projection of (pos(lpCarB) - pos(lpCarA)) onto lpCarB's right axis.
@@ -354,6 +433,59 @@ bool AIAggression::FindTarget(const AICar* lpCandidateTarget)
     mpTargetCar = lpCandidateTarget;
     mfTargetSeparationAlong = GetLeadingSeparation(mpCar, lpCandidateTarget);
     return true;
+}
+
+// BrnAI::AIAggression::GetAcrossSeparation @0x82771118.
+//
+// UNSIGNED lateral separation between two cars: the ground-plane (XZ) offset from lpThisCar to
+// lpOtherCar, projected onto lpThisCar's normalised right axis, magnitude only.
+//
+// X360 ASM: asserts lpThisCar (BrnAIAggression.cpp:1742) and lpOtherCar (:1743) non-null and
+// carries on regardless. v127 = GetPosition(lpThisCar), v0 = GetPosition(lpOtherCar);
+// vsubfp128 v0, v0, v127 is other - this, stored to the stack quad whose Y lane is then
+// explicitly written 0.0 (flatten to XZ). right = GetRight(lpThisCar), normalised in place by
+// the standard vrsqrtefp + two Newton-Raphson steps (vmsum3fp128(right,right) = |right|^2,
+// with vcfsx v11,v0,0 = 1.0f and vcfsx v10,v0,1 = 0.5f as the Newton constants), then
+// vmsum3fp128 dots the flattened offset with the unit right axis.
+// The tail is the part that matters: vspltisw v12, -1 followed by vslw v12, v12, v12 builds
+// 0x80000000 in every lane and vandc v0, v0, v12 clears the sign bit -- i.e. fabs(). So this
+// returns a MAGNITUDE, which is why AcrossSeparationTooBig's `> 20.0f` is a one-sided test.
+// CalcSeparationAcrossToTarget @0x82771248 is the SIGNED sibling: same dot, no vandc.
+f32 AIAggression::GetAcrossSeparation(const AICar* lpThisCar, const AICar* lpOtherCar)
+{
+    CGS_ASSERT(lpThisCar != NULL, "lpThisCar != NULL");
+    CGS_ASSERT(lpOtherCar != NULL, "lpOtherCar != NULL");
+
+    Vector3 lvAcross = lpOtherCar->GetPosition() - lpThisCar->GetPosition();
+    lvAcross.y = 0.0f;
+
+    const f32 lfAcross = rw::math::vpu::Dot(lvAcross, rw::math::vpu::Normalize(lpThisCar->GetRight()));
+    return std::fabs(lfAcross);
+}
+
+// BrnAI::AIAggression::GetAheadness @0x82771020.
+//
+// Signed along-track "aheadness" of an arbitrary world position relative to lpPlayerCar: the
+// ground-plane (XZ) offset from that car's position to lPosition, projected onto the car's
+// normalised direction. Positive => lPosition is in front of the car.
+//
+// X360 ASM / CALLING CONVENTION: the Vector3 argument arrives in the VMX128 vector-argument
+// register v1 (moved to v127 at entry) -- Hex-Rays' `(int a1, int a2)` drops it entirely, so
+// only the asm gives the real arity. a2 (r4) is the AICar*, asserted non-null
+// (BrnAIAggression.cpp:1715) with the console carrying on regardless.
+// vsubfp128 v0, v127, v0 is lPosition - GetPosition(lpPlayerCar), stored to the stack quad
+// whose Y lane is then written 0.0. dir = GetDirection(lpPlayerCar), normalised by the same
+// vrsqrtefp + two Newton steps, and vmsum3fp128 dots the flattened offset against it.
+// NOTE the asymmetry with GetLeadingSeparation @0x8277DEA0, which flattens BOTH vectors: here
+// only the offset is flattened, the direction is normalised un-flattened.
+f32 AIAggression::GetAheadness(const AICar* lpPlayerCar, Vector3 lPosition)
+{
+    CGS_ASSERT(lpPlayerCar != NULL, "lpPlayerCar != NULL");
+
+    Vector3 lvOffset = lPosition - lpPlayerCar->GetPosition();
+    lvOffset.y = 0.0f;
+
+    return rw::math::vpu::Dot(lvOffset, rw::math::vpu::Normalize(lpPlayerCar->GetDirection()));
 }
 
 // BrnAI::AIAggression::GetLeadingSeparation @0x8277DEA0 (const).
@@ -989,6 +1121,61 @@ void BrnAI::AIAggression::UpdateAggressionStateClipOffBehind()
     }
 }
 
+// BrnAI::AIAggression::UpdateAggressionStateComeSlowFromBehind @0x8278B550.
+//
+// NOT in names.tsv and NOT in the per-function export set (0x8278B550..0x8278B678 sits between
+// the exported UpdateAggressionStateOvertakeFast @0x8278B440 and OutOfSpeedMatchRange
+// @0x8278B680); the address comes from Update @0x82799A98's xrefs_from (jump-table case 11)
+// and the body is decoded from the raw image bytes over that range.
+//
+// OVERTAKE_SLOWLY handler (state 11): sit behind the player at the slow passing speed. Every
+// frame it forces speed-match OvertakeSlowly (stw 5, 0x58) and drops target-pos validity
+// (stb 0, 0x44). With no player car it resets to OUT_OF_RANGE. Then it measures the leading
+// separation of OUR car relative to the PLAYER -- lwz r4, 0x10 (mpPlayerCar) and lwz r5, 8
+// (mpCar) before bl 0x8277DEA0, i.e. GetLeadingSeparation(mpPlayerCar, mpCar), so positive
+// means we are ahead of the player. In PURSUIT (style 3), once we have dropped more than 5 m
+// behind (< flt_820C42A8 == -5.0) the slow pass is abandoned for OVERTAKE_FAST. Finally, if we
+// are more than 12 m ahead (> flt_82013FB0 == 12.0) or the state has timed out, it resets to
+// OUT_OF_RANGE. The timeout test re-READS mfStateTime (lfs f0, 0x14(r31) @0x8278B618) after
+// the PURSUIT branch may have stored -1.0 into it, so it is deliberately not cached at the top
+// of the body the way UpdateAggressionStateOvertakeFast's is.
+void BrnAI::AIAggression::UpdateAggressionStateComeSlowFromBehind()
+{
+    const AICar* const lpPlayerCar = mpPlayerCar;
+
+    meSpeedMatchType = ESpeedMatch_OvertakeSlowly;   // +0x58 = 5
+    mbTargetPosValid = false;                        // +0x44
+
+    if (lpPlayerCar == NULL)
+    {
+        mfStateTime       = -1.0f;
+        meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;   // 0
+        return;
+    }
+
+    const f32 lfLeadingSeparation = GetLeadingSeparation(lpPlayerCar, mpCar);
+
+    if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_PURSUIT && lfLeadingSeparation < -5.0f)
+    {
+        mfStateTime       = -1.0f;
+        meAggressionState = E_AI_AGGRESSION_STATE_OVERTAKE_FAST;   // 10
+
+        // [FLAG PC bring-up] the console follows this transition with a dev log line,
+        // 0x8278B5E0..0x8278B604: ld r11, [0x82F31908] and test bit 0, and when it is set
+        // CgsDev::StrStreamBase::operator<< (@0x821F01A8) streams the literal at 0x820C7A20
+        // ("Slow overtake has fallen too far behind ->> drive past like the wind!") into the
+        // stream object at 0x82F31904. Neither global is named in the export set, so the log
+        // is not wired here; behaviour is unaffected either way.
+        // DELETE-WHEN the AI debug-stream globals (0x82F31904 / 0x82F31908) are identified.
+    }
+
+    if (lfLeadingSeparation > 12.0f || (mfStateTime != -1.0f && mfStateTime <= 0.0f))
+    {
+        mfStateTime       = -1.0f;
+        meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;   // 0
+    }
+}
+
 // ===== UpdateAggressionStateDropBackToSlam =====
 // BrnAI::AIAggression::UpdateAggressionStateDropBackToSlam @0x82796880.
 //
@@ -1465,4 +1652,65 @@ void BrnAI::AIAggression::UpdateAggressionStateWait()
     }
 }
 
+
+// ====================================================================================
+// BrnAI::AIAggression::Construct @0x8278B390  (called by AIDriver::Construct @0x82792C60)
+//
+// Bind the owning driver and zero the machine: mpDriver, mfStateTime=-1, mpCar=NULL,
+// mbIsSuitableForAggression=false, meAggressionState=OUT_OF_RANGE, mpTargetCar=NULL,
+// mfRelativePositionAhead=0, mbTargetPosValid=false, meSpeedMatchType=Disabled -- then the
+// inlined CgsNumeric::Random::Construct of the STATIC mRandom (seed 0x8FE06DC2 -- li r8,
+// 0x6DC2 @0x8278B39C then oris r8, r8, 0x8FE0 @0x8278B3A4 -- and the eight-float buffer
+// refilled by the LCG advance @0x8278B3E4..0x8278B438; qword_8300D560 / dword_8300D568 /
+// flt_8300D540 are its seed / oldest-index / float buffer). The mRandom definition itself
+// lives at the top of this file.
+// ====================================================================================
+void AIAggression::Construct(AIDriver* lpDriver)
+{
+    mpDriver                  = lpDriver;                            // +0x04
+    mfStateTime               = -1.0f;                               // +0x14
+    mpCar                     = 0;                                   // +0x08
+    mbIsSuitableForAggression = false;                               // +0x60
+    meAggressionState         = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;  // +0x00
+    mpTargetCar               = 0;                                   // +0x0C
+    mfRelativePositionAhead   = 0.0f;                                // +0x5C
+    mbTargetPosValid          = false;                               // +0x44
+    meSpeedMatchType          = ESpeedMatch_Disabled;                // +0x58
+
+    // [FLAG PC bring-up] the X360 seeds the static mRandom with 0x8FE06DC2 here (the inlined
+    // Random::Construct @0x8278B390..0x8278B438) and fills all eight ring slots from that seed;
+    // the host Random::Construct uses KU_RANDOM_DEFAULT_SEED and writes slot 0 as exactly 1.0f.
+    // Same shape, different sequence. Sequence-level parity of the aggression RNG is not a
+    // bring-up goal. DELETE-WHEN CgsNumeric::Random gains a seeded Construct.
+    mRandom.Construct();
+}
+
+// ====================================================================================
+// BrnAI::AIAggression::Prepare(AICar*)  (DWARF BrnAIAggression.h:90; INLINED on the X360 into
+// AIDriver::SetAICar @0x82796480..0x827964B0 -- there is no separate export, this is that
+// twelve-store block hoisted back into its declared home.)
+//
+// Seed the machine for a freshly bound car: mpCar, mfStateTime=-1, state=OUT_OF_RANGE,
+// mfRelativePositionAhead=0, mpTargetCar=NULL, mfHangingAroundTimer=0, mbTargetPosValid=false,
+// meSpeedMatchType=Disabled, mfNonSpeedMatchedSpeed=<.bss flt_8300DC64>, mpPlayerCar=NULL,
+// mfContinuousContactTimer=0, mfRecentHitTimer=0.
+// ====================================================================================
+void AIAggression::Prepare(AICar* lpCar)
+{
+    mpCar                    = lpCar;                             // driver+7176 == +0x08
+    mfStateTime              = -1.0f;                             // +7188 == +0x14
+    meAggressionState        = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;// +7168 == +0x00
+    mfRelativePositionAhead  = 0.0f;                              // +7260 == +0x5C
+    mpTargetCar              = 0;                                 // +7180 == +0x0C
+    mfHangingAroundTimer     = 0.0f;                              // +7272 == +0x68
+    mbTargetPosValid         = false;                             // +7236 == +0x44
+    meSpeedMatchType         = ESpeedMatch_Disabled;              // +7256 == +0x58
+    // [FLAG PC bring-up] flt_8300DC64 is a zero-initialised .bss tunable whose start-up writer is
+    // not in the export set (see BrnAIDriver_Constants.h); 0.0 is the only value the image
+    // attests. DELETE-WHEN the AI .bss initialiser is recovered.
+    mfNonSpeedMatchedSpeed   = 0.0f;                              // +7268 == +0x64
+    mpPlayerCar              = 0;                                 // +7184 == +0x10
+    mfContinuousContactTimer = 0.0f;                              // +7248 == +0x50
+    mfRecentHitTimer         = 0.0f;                              // +7244 == +0x4C
+}
 }

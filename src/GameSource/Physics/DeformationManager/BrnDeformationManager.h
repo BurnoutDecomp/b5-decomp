@@ -621,6 +621,12 @@ namespace Deformation
         // invent a friendship, the store is expressed through this named inline, which is
         // byte-identical to the console's and keeps every existing access rule intact.
         void SetPlayerModelIndex(s32 liModelIndex) { miPlayerModelIndex = liModelIndex; }
+        // ADDED 2026-09-03 (aiwave lane P2b): the READ twin. VehicleManager::AddPlayerStuckInCollision-
+        // LineTests @0x825E9B28 tests this seat from OUTSIDE the class (`lwzx r11, r25, 0x12908 ;
+        // cmpwi r11, -1` @0x825E9CB8..0x825E9CC4, r25 == lpDeformationManager, 0x12908 == 76040 ==
+        // miPlayerModelIndex, DWARF :367) before it asks GetPlayerCarModel for the model. Same
+        // justification as the setter above; header-only, no out-of-line symbol.
+        s32 GetPlayerModelIndex() const { return miPlayerModelIndex; }
     private:
         s32 FindModelIndexByGlobalEntityID(EntityId lGlobalEntityId);
         s32 FindModelIndexByPartID(CgsPhysics::RigidBodyId lPartBodyId);   // ⚠️ qualified -- see header note

@@ -127,6 +127,44 @@ f32 RaceBalancingManager::ComputeParSpeed(GraphType leGraphType, const AICar* lp
 }
 
 // ===========================================================================================
+// ComputeTargetSpeed (public overload) -- sub_82794AA0 (an IDA export hole; 56 insns decoded from
+// image.bin with capstone, 2026-09-03). Called from AICar::CalcDesiredSpeed @0x82796078 case 1.
+//   lbz 0x4878(this)          mbInRace == 0                     -> KF_DEFAULT_SPEED (f31 = flt_8300D7F8)
+//   lwz 0x14C0(car) != 1      meRouteFindingStyle != RACE       -> default
+//   0x1408 != 0 && 0x1400 > 0 HasValidRoute() false             -> default
+//   lbz 0x153A / addi r3,this,0x1C4 / bl Array<RaceBalancingRoute,7>::GetItem(miOpponentIndex)
+//   lwz 0x1524(car) >= lwz 0xA00(route)  miNextRouteNodeIndex >= miTimeCount -> default
+//   lfs 0x14F8(car) > flt_82004A18 (80.0f) ? GraphType 0 (AHEAD) : 1 (BEHIND) -> the private overload
+// The DWARF :92 third parameter (lbPlayerIsCrashing, r6) is never read by this body.
+// ===========================================================================================
+f32 RaceBalancingManager::ComputeTargetSpeed(const AICar* lpAICar,
+                                             const AISectionsData* lpAISectionsData,
+                                             bool /*lbPlayerIsCrashing*/) const
+{
+    if (!mbInRace)
+    {
+        return KF_DEFAULT_SPEED;
+    }
+    if (lpAICar->GetRouteFindingStyle() != E_ROUTE_FINDING_RACE)
+    {
+        return KF_DEFAULT_SPEED;
+    }
+    if (!lpAICar->HasValidRoute())
+    {
+        return KF_DEFAULT_SPEED;
+    }
+    const RaceBalancingRoute& lrRoute = maRaceBalancingRoutes[static_cast<u32>(lpAICar->GetOpponentIndex())];
+    if (lpAICar->GetNextRouteNodeIndex() >= lrRoute.GetTimeCount())
+    {
+        return KF_DEFAULT_SPEED;
+    }
+    const f32 KF_AHEAD_GRAPH_DISTANCE = 80.0f;   // flt_82004A18
+    const GraphType leGraphType = (lpAICar->GetDistanceAheadOfPlayer() > KF_AHEAD_GRAPH_DISTANCE)
+                                      ? E_GRAPH_TYPE_AHEAD : E_GRAPH_TYPE_BEHIND;
+    return ComputeTargetSpeed(leGraphType, lpAICar, lpAISectionsData);
+}
+
+// ===========================================================================================
 // ComputeTargetSpeed @0x827916E0  (private GraphType overload)
 // Turns the par speed into the speed the opponent should actually drive: nudges it up when the
 // racer is behind its scheduled par time and down when ahead, within a bounded multiplier band
@@ -243,4 +281,16 @@ void RaceBalancingManager::_AssertLayout()
     static_assert(offsetof(RaceBalancingManager, mbOnStartLine)         == 0x4879,
                   "mbOnStartLine @ +0x4879");
 }
+
+// ---- the extern tuning constants BrnRaceBalancingManager.h:56.. declares (DWARF :102..:108); defined here
+// 2026-09-03 (conductor). KF_DEFAULT_SPEED is .bss flt_8300D7F8 with its dyn-init in an export hole:
+// @0x82C69488 `lfs f13, flt_820C4158 (60.0) ; fmuls f0, f0, flt_82F31928 (0.44704) ; stfs f0, 0x8300D7F8`
+// -- 60 mph in m/s. The band limits are rodata, each read from image.bin at the address given.
+const f32 KF_DEFAULT_SPEED                       = 60.0f * 0.44704f;   // 26.8224 (flt_8300D7F8 <- flt_820C4158 * flt_82F31928)
+const f32 KF_SPEED_DIFFERENCE_MULTIPLIER         = 0.1f;               // flt_820C424C
+const f32 KF_MAX_SPEED_MULTIPLIER_IN_RANGE       = 1.1f;               // flt_820C3D90
+const f32 KF_MIN_SPEED_MULTIPLIER_IN_RANGE       = 0.9f;               // flt_820C48A0
+const f32 KF_MAX_SPEED_MULTIPLIER_OUT_OF_RANGE   = 1.2f;               // flt_820C48A4
+const f32 KF_MIN_SPEED_MULTIPLIER_OUT_OF_RANGE   = 0.8f;               // flt_820C4330
+
 }

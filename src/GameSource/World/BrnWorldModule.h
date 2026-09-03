@@ -534,6 +534,12 @@ namespace BrnWorld
         // range-guards nothing here, so neither does this accessor.
         s32  GetCarControl(s32 liActiveRaceCarIndex) const { return maeCarControls[liActiveRaceCarIndex]; }
         bool IsDEBUGPlayerCarAlwaysUnderAIControl() const  { return mbDEBUGPlayerCarAlwaysUnderAIControl; }
+        // ---- ADDITIVE 2026-09-03 (aiwave lane A4), the same door pattern for the same reason:
+        //      WorldModule::BridgeAIModuleToPhysicsModule @0x827AAAA8 (DWARF BrnWorldModule.h:599,
+        //      a member) reads meLocalPlayerActiveRaceCarIndex (`lwz r11, 0(this+0x5E1AE8)`,
+        //      +6167272) as its "is there a local player car at all" gate before consulting
+        //      maeCarControls[event->miVehicleID] == E_CAR_CONTROL_AI_MODULE. ----
+        EActiveRaceCarIndex GetLocalPlayerActiveRaceCarIndex() const { return meLocalPlayerActiveRaceCarIndex; }
 
     private:
         // @0x827A52B0 (DWARF BrnWorldModule.h:473 -- `void BridgeRaceCarModuleToWorldModule_

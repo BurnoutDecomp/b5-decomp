@@ -245,13 +245,21 @@ namespace BrnGameState
         EActiveRaceCarIndex GetActiveRaceCarIndex() const { return meRaceCarIndex; }      // :178 (scorers call this)
         BrnNetwork::NetworkPlayerID GetNetworkPlayerID() const { return mNetworkPlayerID; } // :181 (scorers call this)
 
-        // ADDITIVE GROW (declare-only) for the BrnGameState::DeveloperChallengeManager TU.
-        // OnEventWin (race win) reads the player's finish score word at CarData+252 ( > 0 == a real
-        // finishing score) and the flawless/no-damage flag at CarData+32 ( == 0 -> flawless). Bodies +
-        // the real members land with the ScoringSystem TU. FLAG: offsets +252 / +32, semantics inferred
-        // from the OnEventWin asm.
-        s32  GetFinishScore() const;
-        bool IsFlawless() const;
+        // ⭐ RETIRED 2026-09-03 (link-closure lane P3). Two declare-only grows stood here for the
+        // BrnGameState::DeveloperChallengeManager TU:
+        //     s32  GetFinishScore() const;    // "the finish score word at CarData+252"
+        //     bool IsFlawless() const;        // "the flawless/no-damage flag at CarData+32"
+        // Neither is in the DWARF and neither reading survives the asm:
+        //   * CarData+252 (0xFC) is inside the embedded CarScoreData and is already named there --
+        //     miBarrelRollCount, pinned by ScoringSystem::PlayerPerformedBarrelRolls @0x823634D0
+        //     (`lwz/add/stw 0xFC(GetCarData)`). DeveloperChallengeManager::OnEventWin @0x8238DE64
+        //     reads that same slot, so the call site now says GetScoreData()->GetBarrelRollCount().
+        //   * "CarData+32" was a mis-attribution: OnEventWin's flawless test @0x8238DF78..0x8238DF8C
+        //     reads +0x20 of a DIFFERENT object -- the BoostOutputInfo the ACTIVE-CAR OUTPUT
+        //     INTERFACE hands back (GetBoostOutputInfoN @0x823101C0 returns iface+0x210+36*idx, and
+        //     +0x20 of that 36-byte record is BoostOutputInfo::meBoostType). Nothing on CarData.
+        // Both had exactly one caller and no body anywhere in the tree, so they are removed rather
+        // than given invented bodies; the caller now reads the two real members by name.
 
         // ---- field setters (trivial writes; inline) ----
         void SetCarID(CgsID lCarId)                       { mCarId = lCarId; }                 // :186

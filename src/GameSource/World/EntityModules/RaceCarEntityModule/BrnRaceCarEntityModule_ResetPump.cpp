@@ -350,23 +350,32 @@ void RaceCarEntityModule::ProcessResetOnTrackResultQueue(
                 continue;
             }
 
+            // The pose that is actually handed to RequestPlaceOnTrack, latched so the witness
+            // below can print IT rather than re-deriving something adjacent to it.
+            Vector3 lAppliedPosition;
+            Vector3 lAppliedDirection;
+            f32     lfAppliedSpeed;
+
             if( lrResult.GetState() == BrnAI::AIModuleIO::ResetOnTrackResult::E_STATE_SUCCESS )
             {
-                lpActiveRaceCar->RequestPlaceOnTrack( lrResult.GetResetPosition(),
-                                                      lrResult.GetResetDirection(),
-                                                      lrResult.GetResetSpeed() );
+                lAppliedPosition  = lrResult.GetResetPosition();
+                lAppliedDirection = lrResult.GetResetDirection();
+                lfAppliedSpeed    = lrResult.GetResetSpeed();
+
+                lpActiveRaceCar->RequestPlaceOnTrack( lAppliedPosition,
+                                                      lAppliedDirection,
+                                                      lfAppliedSpeed );
             }
             else
             {
-                Vector3 lPosition;
-                Vector3 lDirection;
-                lpActiveRaceCar->GetResetCoords( &lPosition, &lDirection );
+                lpActiveRaceCar->GetResetCoords( &lAppliedPosition, &lAppliedDirection );
 
-                const f32 lfSpeed = ( lrResult.GetResetSpeed() >= KF_FAILURE_RESET_SPEED_CAP )
-                                        ? KF_FAILURE_RESET_SPEED_CAP
-                                        : lrResult.GetResetSpeed();
+                lfAppliedSpeed = ( lrResult.GetResetSpeed() >= KF_FAILURE_RESET_SPEED_CAP )
+                                     ? KF_FAILURE_RESET_SPEED_CAP
+                                     : lrResult.GetResetSpeed();
 
-                lpActiveRaceCar->RequestPlaceOnTrack( lPosition, lDirection, lfSpeed );
+                lpActiveRaceCar->RequestPlaceOnTrack( lAppliedPosition, lAppliedDirection,
+                                                      lfAppliedSpeed );
             }
 
             if( CgsDev::Log::gpDebugPrint != 0 )
@@ -374,16 +383,23 @@ void RaceCarEntityModule::ProcessResetOnTrackResultQueue(
                 // [DIAG resetpump] NOT IN THE X360 BINARY -- the other end of the witness pair
                 // opened by SendResetOnTrackRequests. Prints the POSE, because "a request came
                 // back" and "the car was told to go somewhere sane" are different claims.
-                Vector3 lWhere;
-                Vector3 lFacing;
-                lpActiveRaceCar->GetResetCoords( &lWhere, &lFacing );
+                //
+                // ⚠️ CORRECTED 2026-09-03 (aiwave A11). This used to print
+                // ActiveRaceCar::GetResetCoords ON BOTH ARMS -- i.e. on a SUCCESS it printed the
+                // car's OWN last-good pose while announcing "SUCCESS (AI pose)", so the one line
+                // that exists to tell the two apart printed the same thing either way. It could
+                // not have been noticed before this wave because nothing had ever produced a
+                // SUCCESS. It now prints the pose that was actually applied.
                 *CgsDev::Log::gpDebugPrint
                     << "[resetpump] RESULT applied: global car "
                     << static_cast<s32>( lrResult.GetGlobalRaceCarIndex() )
                     << ( lrResult.GetState() ==
                              BrnAI::AIModuleIO::ResetOnTrackResult::E_STATE_SUCCESS
                              ? " SUCCESS (AI pose)" : " FAILURE (own reset coords)" )
-                    << " -> (" << lWhere.x << "," << lWhere.y << "," << lWhere.z << ")\n";
+                    << " -> (" << lAppliedPosition.x << "," << lAppliedPosition.y
+                    << "," << lAppliedPosition.z << ") facing ("
+                    << lAppliedDirection.x << "," << lAppliedDirection.y
+                    << "," << lAppliedDirection.z << ") speed " << lfAppliedSpeed << "\n";
             }
 
             if( mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&

@@ -2,6 +2,8 @@
 
 #include "GameSource/Math/BrnMathUtils.h"                    // BrnMath::Flatten (XZ ground plane)
 #include "GameSource/World/AI/BrnAIPortal.h"                 // BrnAI::Portal (GetLinkSectionIndex)
+#include "GameSource/World/AI/BrnAIBuzzBy.h"                              // BuzzBy::IsPositionInNoBuzzZone
+#include "GameSource/World/AI/RacingLine/BrnRacingLineGenerator.h"      // RacingLineGenerator::GetForwardPortalIndex
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT + Begin/Fire/End
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // CgsDev::StrStream (default-case assert)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"        // CgsNumeric::Random (mRandom)
@@ -33,25 +35,11 @@
 
 namespace BrnAI
 {
-// Collaborators with their own (not-yet-committed) TUs. Declared TU-LOCAL here -- NOT in the shared
-// header -- to match the BrnRouteMapModule.cpp precedent and avoid an ODR clash: BrnRouteMapModule.cpp
-// already declares its own BrnAI::RacingLineGenerator (with a different member set) for its callers.
-// When the real RacingLineGenerator / BuzzBy homes land, these TU-local interface declarations are
-// removed and the calls reconcile against the committed types.
-//   ComputeSectionBehind            -> RacingLineGenerator::GetForwardPortalIndex (static)
-//   GenerateFreeRoamingDestination  -> BuzzBy::IsPositionInNoBuzzZone (member)
-class BuzzBy
-{
-public:
-    bool IsPositionInNoBuzzZone(Vector3 lPosition) const;   // own TU
-};
-
-class RacingLineGenerator
-{
-public:
-    static u8 GetForwardPortalIndex(const AISectionsData* lpAISectionData,
-                                    const AISection* lpAISection);   // own TU
-};
+// (The two TU-local collaborator shims that stood here -- `class BuzzBy` and `class RacingLineGenerator`
+//  -- were retired 2026-09-03: both homes exist now (BrnAIBuzzBy.h defines `struct BuzzBy`;
+//  RacingLine/BrnRacingLineGenerator.h declares GetForwardPortalIndex, bodied in
+//  BrnRacingLineGenerator_GetForwardPortalIndex.cpp). The `class` shim also mangled BuzzBy with the
+//  wrong class-key, which made RouteRequestManager::Update unresolvable from AIModule::Update.)
 
 // Module-global weight/bound table written during construction (guest 0x8300D570..).
 float gRouteRequestWeights[8] = {
@@ -169,10 +157,17 @@ u16 RouteRequestManager::ComputeSectionBehind(const AICar* lpAICar, const AISect
     const u16 luBestSectionIndex = lpAICar->GetBestSectionIndex();
     const AISection* lpBestSection = lpAISectionData->GetAISection(luBestSectionIndex);
 
-    // The X360 also flattens the car's (negated) direction + position here, but they are consumed
-    // only by GetForwardPortalIndex's internal racing-line query, so the named call subsumes them.
+    // 0x82789304..0x82789334: v2 = Flatten(-GetDirection()) (the `vspltisw -1 ; vslw ; vxor`
+    // trio flips the sign bits = negate), v1 = Flatten(GetPosition()). Looking BACKWARDS along
+    // the car's heading, the "forward" portal is the one behind the car.
+    const Vector3 lDirection = lpAICar->GetDirection();
+    const Vector3 lNegatedDirection = Vector3{ -lDirection.x, -lDirection.y, -lDirection.z };
+    const Vector2 lCarDirection2D = BrnMath::Flatten(lNegatedDirection);
+    const Vector2 lCarPosition2D  = BrnMath::Flatten(lpAICar->GetPosition());
+
     const u8 lu8ForwardPortalIndex =
-        RacingLineGenerator::GetForwardPortalIndex(lpAISectionData, lpBestSection);
+        RacingLineGenerator::GetForwardPortalIndex(lpAISectionData, lpBestSection,
+                                                   lCarPosition2D, lCarDirection2D);
 
     return lpBestSection->GetPortal(lu8ForwardPortalIndex)->GetLinkSectionIndex();
 }
@@ -458,9 +453,13 @@ void RouteRequestManager::Update(
     if (lpPlayerCar == nullptr)
         return;
 
-    AICar* lpAICar = lpaAICars;
     for (s32 liAICarIndex = 0; liAICarIndex < 35; ++liAICarIndex)
     {
+        // The console's `addi r31, r31, 0x1560` roster step is sizeof(AICar) on the console;
+        // on this host the subscript IS that step (sizeof(AICar) is static_asserted == 5472 in
+        // BrnAICar.h, but the subscript stays correct even if that ever changes).
+        AICar* lpAICar = &lpaAICars[liAICarIndex];
+
         // Eligible cars are IN_RANGE(0) or OUT_OF_RANGE(1); INACTIVE cars are skipped.
         const EAICarState leState = lpAICar->GetState();
         if (leState == E_AI_CAR_STATE_IN_RANGE || leState == E_AI_CAR_STATE_OUT_OF_RANGE)
@@ -472,9 +471,6 @@ void RouteRequestManager::Update(
                               lpRouteInputBuffer, lpBuzzByManager);
             }
         }
-
-        // Advance to the next AICar (0x1560-byte stride).
-        lpAICar = reinterpret_cast<AICar*>(reinterpret_cast<u8*>(lpAICar) + 0x1560);
     }
 }
 }

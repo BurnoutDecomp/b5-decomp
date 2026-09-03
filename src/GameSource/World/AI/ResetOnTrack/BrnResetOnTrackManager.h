@@ -27,10 +27,21 @@
 // request has been resolved by ProcessResetOnTrackRequest on a booted run --
 // `[rot] request resolved: car 0 type 1 -> FAILURE (consumer uses GetResetCoords) resetCount 1`
 // -- after which RCEM::ProcessResetOnTrackResultQueue put the car back on the road.
-// ⚠️ AND THE ANSWER IS STILL E_STATE_FAILURE ON EVERY REQUEST, exactly as this file's own
-// pump banner predicts: every AICar is INACTIVE, so ComputeInitialCoordinatesStandard refuses at
-// the console's own gate and the consumer falls back to the car's own ring. That is the console's
-// designed fallback, and it is what recovers the car today.
+// ⭐⭐⭐ UPDATED 2026-09-03 (aiwave A11): SIX OF THE SEVEN PLACEMENT STRATEGIES ARE REAL AND A
+// REQUEST CAN NOW RESOLVE TO E_STATE_SUCCESS WITH A ROAD POSE. The line that stood here --
+// "AND THE ANSWER IS STILL E_STATE_FAILURE ON EVERY REQUEST ... every AICar is INACTIVE" -- is
+// history: the AI car feed landed, and the strategies now live in
+// BrnResetOnTrackManager_Strategies.cpp (Scan{Backwards,Forwards}AlongExtrapolatedRoute,
+// GetRoadSideForStartingLine, ConvertNodesToPositionAndDirection, DeterminePositionBetweenNodes,
+// ResetNearRoutelessPlayer, ResetAwayFromPlayer, EnsureAIIsDrivingSameDirectionAsPlayer and the
+// three ResetFixedDistance* entry points) and BrnResetOnTrackManager_AvoidObstacles.cpp
+// (AvoidObstacles, TestSectionHNG, TestRecentResets). Still parked, each reporting itself once:
+// ResetAheadFromSideTurnings (reset type 5), PlayerIsLookingBackwards, TestCarHNG, and
+// ComputeInitialCoordinatesStandard's geometry arm (reset type 1, which therefore still answers
+// FAILURE and still recovers a crashed car through the consumer's GetResetCoords fallback).
+// ⭐ PushResetOnTrackRequest ALSO GREW ITS DE-DUPLICATION SCAN in the same wave; without it the
+// 35-slot queue overflowed in ~75 frames whenever more than one car was waiting, because the
+// sender re-posts every frame BY DESIGN. See that function's own banner.
 // ⭐ WHAT IS ACTUALLY LEFT (2026-08-26, measured):
 //     * [DONE] RaceCarEntityModule::WriteUpdatedAIData @0x822D1FC8 -- landed; mbPlayerDataSet is
 //       set every frame and AIModule::Update's body runs.
@@ -112,6 +123,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"               // Array<T,N> (global)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                 // CgsNumeric::Random (0x30)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"   // CgsResource::ResourcePtr
+#include "GameSource/World/AI/Route/BrnRoute.h"                     // BrnAI::RouteNode (mHelperNode*)
 
 namespace BrnAI
 {
@@ -125,6 +137,21 @@ namespace BrnAI
     // an ODR fork at worst. [[shadowing redeclarations]] / [[ODR forks link silently]].
     namespace AIModuleIO { struct AIModuleResultInterface; }
     using AIModuleIO::AIModuleResultInterface;
+
+    struct AISection;             // SharedClasses/AI/AISectionsResourceType.h (pointer-only here)
+    struct NearbyVehicles;        // the AI driver's nearby-vehicle set (TestCarHNG's 2nd argument)
+
+    // ---- ADDITIVE (aiwave A11, 2026-09-03) -----------------------------------------------
+    // DWARF BrnResetOnTrackManager.h:50 -- the extrapolation budget selector
+    // ScanBackwardsAlongExtrapolatedRoute takes in r7. The X360 turns it straight into the
+    // backwards generate-count: `subfic/subfe/clrrwi/addi` @0x827848BC..0x827848D4 computes
+    // (leExtrapolateType == eExtrapolateType_RaceStart) ? 16 : 8, and the same value gates the
+    // function's trailing "did we run out of road" arm (@0x82784BE4 `cmpwi r14, 1`).
+    enum EExtrapolateType
+    {
+        eExtrapolateType_RaceStart = 0,
+        eExtrapolateType_RoadRage  = 1,
+    };
 
     struct ResetOnTrackManager
     {
@@ -203,6 +230,96 @@ namespace BrnAI
     private:
         AICar* GetAICar(EGlobalRaceCarIndex leGlobalRaceCarIndex);   // @0x82765878 (this batch)
 
+        // =========================================================================================
+        // THE PLACEMENT STRATEGIES (aiwave A11, 2026-09-03). Bodied in
+        // BrnResetOnTrackManager_Strategies.cpp and BrnResetOnTrackManager_AvoidObstacles.cpp.
+        // Every prototype below is the DecFIGS DWARF's own
+        // (references/DecFIGS/.../BrnResetOnTrackManager.h:227-350), NOT inferred from a call
+        // site; the DWARF spells the out-parameter type `ResetData *`, which is this class's
+        // ResetOnTrackCoords (same three members, same order). Addresses from the ARTIST index.
+        //
+        // THE PPC FLOAT-ARG GPR SKIP BITES TWICE HERE. ComputeResetOnTrack's case-6 arm
+        // @0x82797EAC..0x82797EBC sets r4 (the out block), r6 (`lwz r6, 0(r25)` == the request's
+        // GLOBAL RACE CAR INDEX) and f1 (`lfs f1, 8(r25)` == the reset DISTANCE) -- r5 is never
+        // written because f1 burns it. Read as a C list that is
+        // (ResetData*, f32 lfResetDistance, EGlobalRaceCarIndex), exactly the DWARF's :239.
+        // Same shape in ScanBackwardsAlongExtrapolatedRoute: r4/r5 are the two out-references,
+        // f1 the distance, and the EExtrapolateType lands in r7 (r6 burned by f1).
+        // =========================================================================================
+
+        // @0x827908F0 (DWARF :239). Reset type 6 (E_RESET_TYPE_BEHIND_PLAYER_RACE_START): walk the
+        // road BEHIND the player until lfResetDistance metres of "aheadness" have been spent, then
+        // place the car across that portal pair at a per-car side of the road.
+        bool ResetFixedDistanceBehindPlayerAtStartOfRace(ResetOnTrackCoords* lpResetData,
+                                                        f32 lfResetDistance,
+                                                        EGlobalRaceCarIndex leCarIndex);
+
+        // @0x82790628 (DWARF :246). Reset types 2/3 -- the same backwards walk with the
+        // road-centre interpolant and the player's driving direction enforced.
+        bool ResetFixedDistanceBehindPlayer(ResetOnTrackCoords* lpResetData, f32 lfResetDistance);
+
+        // @0x827907D8 (DWARF :320). Reset type 4 -- forwards, then the direction is NEGATED
+        // (the car is placed on-coming).
+        bool ResetFixedDistanceAheadOfPlayer(ResetOnTrackCoords* lpResetData, f32 lfResetDistance);
+
+        // @0x827909F0 (DWARF :236). Reset type 5. PARKED -- see the body.
+        bool ResetAheadFromSideTurnings(ResetOnTrackCoords* lpResetData);
+
+        // @0x82784148 (DWARF :326). Reset type 7, and the fallback of the two fixed-distance
+        // strategies: pick a random AI section more than 2 km away and face its middle.
+        bool ResetAwayFromPlayer(ResetOnTrackCoords* lpResetData);
+
+        // @0x827844D8 (DWARF :306). The fallback of the RACE-START strategy: place the car across
+        // the player's own reset-on-track portal pair, forced BEHIND the player.
+        bool ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetData);
+
+        // @0x82778000. PARKED -- see the body (it reads mCamera).
+        bool PlayerIsLookingBackwards();
+
+        // @0x82778088 (DWARF :230). Flip the computed direction when it opposes the player's.
+        void EnsureAIIsDrivingSameDirectionAsPlayer(const AICar* lpPlayerAICar,
+                                                    ResetOnTrackCoords* lpResetData);
+
+        // @0x827847D0 / @0x82784C40 (DWARF :263 / :266). Walk the player's extrapolated route and
+        // return the portal pair straddling lfResetDistance metres of signed along-heading
+        // distance. Both write mHelperNodePrev/mHelperNodeNext and hand back pointers to them.
+        bool ScanBackwardsAlongExtrapolatedRoute(const RouteNode*& lrpPrevNode,
+                                                 const RouteNode*& lrpNextNode,
+                                                 f32 lfResetDistance,
+                                                 EExtrapolateType leExtrapolateType);
+        bool ScanForwardsAlongExtrapolatedRoute(const RouteNode*& lrpPrevNode,
+                                                const RouteNode*& lrpNextNode,
+                                                f32 lfResetDistance);
+
+        // @0x82784378 (DWARF :242). The [0.25, 0.75] lateral interpolant a starting-grid car gets:
+        // a jittered offset from the road centre, mirrored on odd car indices.
+        f32 GetRoadSideForStartingLine(const RouteNode* lpNextNode, s32 liRaceCarIndex);
+
+        // @0x82790300 (DWARF :294). Turn the two nodes into a world pose: interpolate each node's
+        // first boundary line at lfRoadSide, lerp between them by lfResetDistance, and normalise
+        // the prev->next direction.
+        bool ConvertNodesToPositionAndDirection(const RouteNode* lpPrevNode,
+                                                const RouteNode* lpNextNode,
+                                                f32 lfRoadSide, f32 lfResetDistance,
+                                                ResetOnTrackCoords* lpResetData);
+
+        // @0x82785DC8 (DWARF :330). Where between the two portals the requested along-heading
+        // distance falls (clamped to the segment ends).
+        Vector3 DeterminePositionBetweenNodes(Vector3 lPrevPortalPosition,
+                                              Vector3 lNextPortalPosition,
+                                              const AICar* lpPlayerAICar, f32 lfResetDistance);
+
+        // @0x827941E0 (DWARF :227). Sweep the pose sideways until it clears the hard-no-go lines,
+        // the recent resets and the nearby cars.
+        bool AvoidObstacles(const AIModuleIO::ResetOnTrackRequest* lpRequest,
+                            ResetOnTrackCoords* lpResetData);
+
+        // @0x82785F90 / @0x82790BD8 / @0x82778130 (DWARF :344 / :341 / :350).
+        bool TestSectionHNG(const AISection* lpAISection, Vector2 lStartPos, Vector2 lEndPos);
+        bool TestCarHNG(const AISection* lpAISection, const NearbyVehicles* lpaNearbyVehicles,
+                        Vector2 lPosition, Vector2 lDirection, f32 lfSpeed);
+        bool TestRecentResets(Vector3 lTestPosition);
+
     private:
         // +0x000 : 35 pending reset requests (16B each) + trailing s32 miCount@0x230.
         //          sizeof == 0x234. `Array` is the GLOBAL container (CgsArray.h).
@@ -227,9 +344,25 @@ namespace BrnAI
         // +0x4F0 : buffered PRNG for reset-position jitter.
         CgsNumeric::Random mRandom;
 
-        // +0x520 / +0x530 : two scratch route nodes (16B each; full RouteNode in BrnRoute.h).
-        u8 mHelperNodeNext[0x10];
-        u8 mHelperNodePrev[0x10];
+        // +0x520 / +0x530 : the two scratch route nodes the Scan* strategies fill and hand back
+        // by pointer. TYPED 2026-09-03 (aiwave A11) -- they were `u8[0x10]` blobs, which is why
+        // nothing could read them by name. DWARF BrnResetOnTrackManager.h:340/:341 declares both
+        // as `RouteNode`, and the X360 writes them field-for-field at the RouteNode offsets
+        // (ScanBackwards @0x82784B18..0x82784B3C: `stfs +0` x, `stfs +4` y, `stfs +8` distance,
+        // `sth +0xC` section index, `stb +0xE` PORTAL index).
+        //
+        // [FLAG header_request] THE PORTAL INDEX HAS NO NAME YET. BrnRoute.h models RouteNode's
+        // +14 as `u16 muPad0x0E` (that home only ever saw route nodes, where the field is unused);
+        // the reset-on-track nodes carry the section PORTAL index there as a single byte. The
+        // strategies read and write it through muPad0x0E, which is byte-correct on this
+        // little-endian host (a u16 store puts the low byte at +14, exactly where the console's
+        // `stb` puts it) and is self-consistent because ONLY this class touches these two nodes --
+        // every caller of ConvertNodesToPositionAndDirection / GetRoadSideForStartingLine is a
+        // ResetOnTrackManager member (checked against the X360 xrefs). The request filed against
+        // BrnRoute.h is to split that pad into `u8 mu8PortalIndex; u8 mu8Pad0x0F;`.
+        // DELETE-WHEN BrnRoute.h names the field.
+        RouteNode mHelperNodeNext;
+        RouteNode mHelperNodePrev;
 
         // +0x540 : embedded debug component (opaque; 0x870 bytes -- the manager footprint
         // runs to 0xDB0). See the SIZE CORRECTED note in the banner: this was 0x330.

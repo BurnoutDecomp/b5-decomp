@@ -21,6 +21,32 @@ namespace BrnAI
     {
         static_assert(offsetof(ResetOnTrackManager, mResetOnTrackRequestQueue) == 0x000,
                       "ROT queue offset drift");
+
+        // ADDITIVE 2026-09-03 (aiwave A11). The two helper nodes stopped being `u8[0x10]` blobs
+        // and became RouteNode -- the DWARF's own type for them (BrnResetOnTrackManager.h:340 /
+        // :341). These pins are what make that a RENAME rather than a re-layout: RouteNode is
+        // {f32,f32,f32,u16,u16} == 16 bytes at align 4, so it drops into exactly the seats the
+        // 1-aligned blobs occupied, immediately after the 16-aligned mRandom.
+        //
+        // ⚠️ THE PINS ARE RELATIVE, NOT ABSOLUTE, AND THAT IS THE POINT. The banner in
+        // BrnResetOnTrackManager.h quotes the CONSOLE's offsets (mHelperNodeNext @0x520,
+        // mHelperNodePrev @0x530, the debug component @0x540, footprint 0xDB0); on THIS host the
+        // same members sit 0x20 further along (measured: mRandom @0x510, mHelperNodeNext @0x540,
+        // sizeof 0xDD0), because mpAISectionData is a ResourcePtr whose two pointers widen 4->8.
+        // That gap is pre-existing and correct -- the object is never memcpy'd from console bytes
+        // and nothing indexes it by a console stride. Pinning the console numbers here would have
+        // pinned a lie; pinning the SPACING catches the only thing that could actually break
+        // (a member sneaking in between, or RouteNode's alignment shifting the pair).
+        static_assert(sizeof(RouteNode) == 0x10, "RouteNode is the console's 16-byte node");
+        static_assert(offsetof(ResetOnTrackManager, mHelperNodePrev) -
+                          offsetof(ResetOnTrackManager, mHelperNodeNext) == 0x10,
+                      "ROT helper nodes must be adjacent 16-byte RouteNodes");
+        static_assert(offsetof(ResetOnTrackManager, mResetOnTrackDebugComponent) -
+                          offsetof(ResetOnTrackManager, mHelperNodePrev) == 0x10,
+                      "ROT debug component follows mHelperNodePrev immediately");
+        static_assert(offsetof(ResetOnTrackManager, mHelperNodeNext) -
+                          offsetof(ResetOnTrackManager, mRandom) == 0x30,
+                      "ROT helper nodes follow mRandom immediately (no padding, no new member)");
     }
 
     // =============================================================================================
@@ -131,25 +157,47 @@ namespace BrnAI
     // ResetOnTrackResult, which is the last thing standing between a wrecked car and
     // ActiveRaceCar::RequestPlaceOnTrack.
     //
-    // ⛔⛔ READ THIS BEFORE READING "SUCCESS" INTO ANYTHING BELOW.
-    // On this build every request resolves to ResetOnTrackResult::E_STATE_FAILURE, and that is
-    // NOT a stub -- it is the console's own answer for a car the AI is not driving, arrived at
-    // through the console's own gates:
-    //     ComputeResetOnTrack -> ComputeInitialCoordinatesStandard -> `if (!IsActive()) return 0`
-    // AIModule::Construct puts all 35 AICars in E_AI_CAR_STATE_INACTIVE (the value AICar::Reset
-    // @0x82792800 writes) because nothing on this build activates one: StoreDrivenCarData,
-    // SortTrafficIntoAICars, UpdateCars and AICar::Update are all absent. On the CONSOLE the
-    // player's car IS an active AI car, so the console usually SUCCEEDS and places the car on the
-    // AI road network. The divergence is in the INPUT STATE, not in this code.
-    // ⇒ the FAILURE result is what makes the chain work today: RaceCarEntityModule::
-    // ProcessResetOnTrackResultQueue's failure arm calls ActiveRaceCar::GetResetCoords, i.e. the
-    // car's own four-deep "last places I was on the road" ring. That is the console's designed
-    // fallback, not an invention.
+    // ⚠⚠ THE PARAGRAPH THIS REPLACES IS 2026-08-26 HISTORY AND ITS HEADLINE IS NOW FALSE.
+    // It said "on this build every request resolves to ResetOnTrackResult::E_STATE_FAILURE", and
+    // it was true then for two independent reasons that have BOTH since gone away:
+    //   * every AICar was E_AI_CAR_STATE_INACTIVE, because StoreDrivenCarData / SortTrafficInto-
+    //     AICars / UpdateCars / AICar::Update were all absent. They have landed; the boot log
+    //     shows the player car IN_RANGE and the rivals OUT_OF_RANGE, i.e. ACTIVE either way;
+    //   * six of the seven placement strategies had no bodies. They have them now (aiwave A11).
+    // ⭐ THE FAILURE ARM IS STILL THE CONSOLE'S DESIGNED FALLBACK, not an error path:
+    // RaceCarEntityModule::ProcessResetOnTrackResultQueue answers a FAILURE by calling
+    // ActiveRaceCar::GetResetCoords -- the car's own four-deep "last places I was on the road"
+    // ring -- and that is what recovers a CRASHED car whose AI pose could not be computed. What
+    // it cannot do is place a car that has never been on the road: a rival being put on the
+    // STARTING GRID has an empty ring, which is why the type-6 strategy had to be real.
     // =============================================================================================
 
     // ---------------------------------------------------------------------------------------------
-    // PushResetOnTrackRequest @0x82783CE8. Append one request to the 35-deep pending array.
-    // (X360: assert miCount != -1 / miCount < 0x23 inside Array<T,35>::Append @0x82769E88.)
+    // PushResetOnTrackRequest @0x82783CE8
+    //
+    //   0x82783D10  for (luIndex = 0; luIndex < mResetOnTrackRequestQueue.GetLength(); ++luIndex)
+    //   0x82783D4C    if (queue[luIndex].meGlobalRaceCarIndex == lpRequest->meGlobalRaceCarIndex)
+    //   0x82783D6C      queue[luIndex] = *lpRequest      (four `lwz`/`stw` pairs, +0/+4/+8/+0xC)
+    //                   return
+    //   0x82783D9C  if (luIndex >= 0x23) FireAssert("Overflow in ResetOnTrackManager request
+    //                                                queue", BrnResetOnTrackManager.cpp:187)
+    //   0x82783DCC  return Array<ResetOnTrackRequest,35>::Append(lpRequest)
+    //
+    // ⭐⭐⭐ THE SCAN IS A **DE-DUPLICATOR KEYED ON THE GLOBAL RACE CAR INDEX**, AND ITS ABSENCE WAS
+    // THE `Array container out of space` OVERFLOW (aiwave A11, 2026-09-03). The whole reset pump is
+    // built on RE-SENDING: RaceCarEntityModule::SendResetOnTrackRequests @0x822CE178 deliberately
+    // does NOT clear mbToBeResetOnTrack (only the RESULT side does, at ProcessResetOnTrackResult-
+    // Queue's `stb r19, 0x90(r31)`), so every unanswered car re-posts its request EVERY FRAME. The
+    // manager drains exactly ONE request per frame (Update takes index count-1 and Erases it), so
+    // with five rivals waiting the queue grows by four a frame -- and with this scan missing it
+    // filled all 35 slots in ~75 frames and fired the container assert. WITH the scan the queue
+    // holds at most one entry per car, i.e. at most 35 by construction, which is exactly why the
+    // console's own overflow assert below can never fire on a 35-car world.
+    // ⇒ the SENDER is console-correct and must NOT be given a "pending" latch; the de-dup lives
+    // here. The X360 compares only the FIRST DWORD of the record (`lwz r11, 0(r29)` vs
+    // `lwz r10, 0(r3)`), which is ResetOnTrackRequest::meGlobalRaceCarIndex (+0x00), and then
+    // overwrites all four words -- so a newer request for the same car REPLACES the older one
+    // rather than queueing behind it.
     // ---------------------------------------------------------------------------------------------
     void ResetOnTrackManager::PushResetOnTrackRequest(const AIModuleIO::ResetOnTrackRequest* lpRequest)
     {
@@ -158,6 +206,20 @@ namespace BrnAI
         {
             return;
         }
+
+        u32 luIndex = 0;
+        for (; luIndex < mResetOnTrackRequestQueue.GetLength(); ++luIndex)
+        {
+            if (mResetOnTrackRequestQueue[luIndex].GetGlobalRaceCarIndex() ==
+                lpRequest->GetGlobalRaceCarIndex())
+            {
+                mResetOnTrackRequestQueue[luIndex] = *lpRequest;
+                return;
+            }
+        }
+
+        CGS_ASSERT(luIndex < 0x23u, "Overflow in ResetOnTrackManager request queue");   // :187
+
         mResetOnTrackRequestQueue.Append(*lpRequest);
     }
 
@@ -182,17 +244,24 @@ namespace BrnAI
     //               out->{mpAISection, mPosition, mDirection} = {sec, pos, dir} ; return true
     //   FAIL: return false
     //
-    // ⛔ [FLAG PC bring-up] THE GEOMETRY ARM IS PARKED, and it is UNREACHABLE on this build:
-    // the IsActive() gate above it is the console's own and every AICar is INACTIVE (see the pump
-    // banner). It needs FOUR functions none of which exists in this tree --
-    // AISectionsData::GetAISection @0x8230F6D0, AISection::GetPortal @0x8230F5D0,
-    // ComputeNearestPositionInSegment @0x82768908, ComputeAISectionWidth @0x82778250 -- plus a
-    // named AISection interior and two AICar members (muResetOnTrackSectionIndex @+0x1530 and the
-    // two portal indices @+0x1538/+0x1539) that live in BrnAICar.h's explicit pads.
-    // ⭐ The two console gates ARE reproduced rather than replaced by a bare `return false`, so
-    // the day the AI car feed lands this function starts refusing for the RIGHT reason and the
-    // park becomes the only thing left to fill in.
-    // DELETE-WHEN the AI section-data readers land and BrnAICar.h names the three members.
+    // ⛔ [FLAG PC bring-up] THE GEOMETRY ARM IS PARKED. ⚠ CORRECTED 2026-09-03 (aiwave A11) --
+    // the note that stood here was false in both of its claims. It said the arm is "UNREACHABLE
+    // ... every AICar is INACTIVE": the AI car feed has landed and the player's car is IN_RANGE,
+    // so the IsActive() gate now PASSES and this park is reached on every crash reset. And it
+    // said the arm "needs FOUR functions none of which exists in this tree": two of the four are
+    // now here (AISectionsData::GetAISection, AISection::GetPortal), as are the AISection
+    // interior and all three AICar members it named (muResetOnTrackSectionIndex @+0x1530,
+    // muResetOnTrackStartPortal/EndPortal @+0x1538/+0x1539 -- all three are named and
+    // static_asserted in BrnAICar.h now).
+    // WHAT IS ACTUALLY LEFT is two ResetOnTrackManager members that have never been reconstructed:
+    // ComputeNearestPositionInSegment @0x82768908 (DWARF BrnResetOnTrackManager.cpp:39) and
+    // ComputeAISectionWidth @0x82778250 (:96), ~320 instructions between them.
+    // ⭐ THE COST OF THE PARK IS BOUNDED AND KNOWN: reset type 1 keeps resolving to
+    // E_STATE_FAILURE, which sends RaceCarEntityModule::ProcessResetOnTrackResultQueue down the
+    // ActiveRaceCar::GetResetCoords arm -- the crash-recovery path that has been working since
+    // 2026-08-26. Landing it would upgrade a crashed player's reset from "where I last was" to
+    // "the nearest point on the road", not unblock anything.
+    // DELETE-WHEN ComputeNearestPositionInSegment and ComputeAISectionWidth land.
     // ---------------------------------------------------------------------------------------------
     bool ResetOnTrackManager::ComputeInitialCoordinatesStandard(ResetOnTrackCoords* lpOutCoords,
                                                                EGlobalRaceCarIndex leGlobalRaceCarIndex)
@@ -233,20 +302,22 @@ namespace BrnAI
     //   0x82797E94  if (!found) return false
     //               return (type == 5) ? true : AvoidObstacles(lpRequest, out)
     //
-    // ⭐ TYPE 1 IS THE ONE THE CRASH EXIT SENDS. RaceCarEntityModule::ProcessRaceCarCrashComplete-
-    // Events builds its RequestResetOnTrack with type 1 for the player (type 3 only for an AI car
-    // in a game mode with flag 0x80000000), so the STANDARD strategy is the reachable arm and the
-    // other six are cold on this build.
+    // ⭐ TYPE 1 IS WHAT THE CRASH EXIT SENDS; TYPE 6 IS WHAT THE STARTING GRID SENDS.
+    // RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents builds its RequestResetOnTrack with
+    // type 1 for the player (type 3 only for an AI car in a game mode with flag 0x80000000), and
+    // RaceCarEntityModule::PlaceRaceCarOnLoad @0x822CE588 sends every OPPONENT a type 6 with a
+    // negative distance. Both arms are live.
     //
-    // ⛔ [FLAG PC bring-up] SIX STRATEGIES + AvoidObstacles ARE PARKED (none exists in this tree:
-    // ResetFixedDistanceBehindPlayer @0x82790628, ...AheadOfPlayer @0x827907D8,
-    // ...AtStartOfRace @0x827908F0, ResetAheadFromSideTurnings @0x827909F0, ResetAwayFromPlayer
-    // @0x82784148, PlayerIsLookingBackwards @0x82778000, AvoidObstacles @0x827941E0 -- together
-    // ~1,000 pseudocode lines over the same absent AI section-data readers). They are reported
-    // once each rather than silently falling through to `false`: a silent false here would be
-    // indistinguishable from "the AI looked and found nothing", which is a DIFFERENT claim.
-    // ⭐ AvoidObstacles is unreachable for a second, independent reason: it only runs when a
-    // strategy SUCCEEDED, and none can today.
+    // ⭐⭐ 2026-09-03 (aiwave A11): THE SIX NON-STANDARD STRATEGIES AND AvoidObstacles ARE REAL.
+    // The block that stood here said all seven were parked "over the same absent AI section-data
+    // readers"; every one of those readers has since landed (AISectionsData::GetAISection,
+    // AISection::GetPortal/PassesThrough, Portal::GetBoundaryLine, BoundaryLine::GetInterp/
+    // GetLength, RacingLineGenerator::ExtrapolateRoute*), and BrnAICar.h now names the five AICar
+    // members they read. The bodies live in BrnResetOnTrackManager_Strategies.cpp and
+    // BrnResetOnTrackManager_AvoidObstacles.cpp. TWO leaves remain parked and BOTH report
+    // themselves once: ResetAheadFromSideTurnings (needs ScanForwardsAndAlongJunction) and
+    // PlayerIsLookingBackwards (reads mCamera, which nothing fills) -- type 5 is the only reset
+    // type that still cannot be answered.
     // [FLAG PC boot gate] the two PerfMonCpu Start/StopMonitor calls -- miInitialCoordinatesPM is
     // never registered (see Construct's flag), so starting a monitor on handle 0 would time an
     // unnamed row.
@@ -273,29 +344,56 @@ namespace BrnAI
             }
 
             case E_RESET_TYPE_BEHIND_PLAYER:
+            {
+                lbFoundCoordinates =
+                    ResetFixedDistanceBehindPlayer(lpOutCoords, lpRequest->GetResetDistance());
+                break;
+            }
+
             case E_RESET_TYPE_BEHIND_PLAYER_ROAD_RAGE:
+            {
+                // The console latches the distance into f31 BEFORE the branch (0x82797E5C), so the
+                // `looking backwards` arm still consumes it -- kept as one expression here.
+                if (PlayerIsLookingBackwards())
+                {
+                    lbFoundCoordinates = ResetAheadFromSideTurnings(lpOutCoords);
+                }
+                else
+                {
+                    lbFoundCoordinates =
+                        ResetFixedDistanceBehindPlayer(lpOutCoords, lpRequest->GetResetDistance());
+                }
+                break;
+            }
+
             case E_RESET_TYPE_AHEAD_PLAYER_ON_COMING:
+            {
+                lbFoundCoordinates =
+                    ResetFixedDistanceAheadOfPlayer(lpOutCoords, lpRequest->GetResetDistance());
+                break;
+            }
+
             case E_RESET_TYPE_FROM_TURNINGS_ROAD_RAGE:
+            {
+                lbFoundCoordinates = ResetAheadFromSideTurnings(lpOutCoords);
+                break;
+            }
+
             case E_RESET_TYPE_BEHIND_PLAYER_RACE_START:
+            {
+                // ⭐ The THIRD argument is the REQUESTING car's global index (X360 0x82797EB0
+                // `lwz r6, 0(r25)`), not the player's -- it is what gives each rival its own side
+                // of the starting grid. r5 is unset at the call site because f1 burns it.
+                lbFoundCoordinates =
+                    ResetFixedDistanceBehindPlayerAtStartOfRace(lpOutCoords,
+                                                                lpRequest->GetResetDistance(),
+                                                                lpRequest->GetGlobalRaceCarIndex());
+                break;
+            }
+
             case E_RESET_TYPE_AWAY_FROM_PLAYER:
             {
-                // [FLAG PC bring-up] the six parked strategies -- see the banner.
-                static bool sbReportedParkedStrategies = false;
-                if (!sbReportedParkedStrategies)
-                {
-                    sbReportedParkedStrategies = true;
-                    if (CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[rot] PARKED strategy: ResetOnTrackManager::ComputeResetOnTrack "
-                               "reset type " << static_cast<s32>(lpRequest->GetResetType())
-                            << " has no reconstructed placement function (X360 0x82790628 / "
-                               "0x827907D8 / 0x827908F0 / 0x827909F0 / 0x82784148). Answering "
-                               "'no coordinates', which is NOT the same claim as 'the AI looked "
-                               "and found none'.\n";
-                    }
-                }
-                lbFoundCoordinates = false;
+                lbFoundCoordinates = ResetAwayFromPlayer(lpOutCoords);
                 break;
             }
 
@@ -317,9 +415,11 @@ namespace BrnAI
             return true;
         }
 
-        // [FLAG PC bring-up] AvoidObstacles @0x827941E0 -- parked, and unreachable (nothing can
-        // set lbFoundCoordinates today). The console's `return AvoidObstacles(lpRequest, out)`.
-        return true;
+        // ⭐ 2026-09-03 (aiwave A11): AvoidObstacles @0x827941E0 is REAL now
+        // (BrnResetOnTrackManager_AvoidObstacles.cpp). It is not a tidy-up: it carries the
+        // console's own "is the AI even modelling this car" gate, so its answer IS
+        // ComputeResetOnTrack's answer for six of the seven reset types.
+        return AvoidObstacles(lpRequest, lpOutCoords);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -501,10 +601,9 @@ namespace BrnAI
             const u32 luIndex = static_cast<u32>(liPendingCount - 1);
             const AIModuleIO::ResetOnTrackRequest& lrRequest = mResetOnTrackRequestQueue[luIndex];
 
-            // Called for its two range asserts and (on the console) to have the pointer ready for
-            // the section read below; the read itself is type-gated.
+            // Called for its two range asserts and to have the pointer ready for the section read
+            // below; the read itself is type-gated (2026-09-03: it is a real read now).
             const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);
-            (void)lpPlayerAICar;
 
             CGS_ASSERT(!(lrRequest.GetGlobalRaceCarIndex() == mePlayerGlobalRaceCarIndex
                          && lrRequest.GetResetType() != E_RESET_TYPE_STANDARD),
@@ -514,24 +613,43 @@ namespace BrnAI
 
             if (!lbProcess)
             {
-                // [FLAG PC bring-up] the non-STANDARD gate reads the AI car's best/default section
-                // indices (AICar::GetBestSectionIndex(), +0x1534 falling back to +0x1532). Both
-                // members exist and are static_asserted in BrnAICar.h, and both are 0 on this
-                // build rather than KI_INVALID_SECTION_INDEX because AICar::Construct is an export
-                // hole (see AIModule::Construct). Reading them would therefore pass a gate the
-                // console's own initialisation would FAIL. Refusing is the honest answer and it
-                // costs nothing: the crash exit only ever sends type 1.
-                static bool sbReportedNonStandardGate = false;
-                if (!sbReportedNonStandardGate)
+                // ⭐⭐ 2026-09-03 (aiwave A11): THE CONSOLE'S OWN GATE, RESTORED.
+                // X360 0x8279A8F0..0x8279A910: `lhz r37, 0x1534(car)` (muBestSectionIndex), falling
+                // back to `lhz 0x1532` (muDefaultSectionIndex) when it holds the invalid sentinel,
+                // then `if (section != 0x7FFF) PROCESS`. The car it reads is the PLAYER'S AI car,
+                // not the requesting one -- every non-STANDARD strategy places relative to the
+                // player, so no player section means no frame of reference.
+                //
+                // ⚠️ WHAT THE PARK THAT STOOD HERE GOT WRONG, AND WHY IT MATTERED. It said both
+                // members "are 0 on this build rather than KI_INVALID_SECTION_INDEX because
+                // AICar::Construct is an export hole", and refused unconditionally. That premise
+                // has been false since AICar::Update landed: BrnAICar_Update.cpp writes both
+                // members from the under-car AI section and from the route node, and the boot log
+                // shows the player's car on a real section (`[route] extrapolated route done:
+                // owner 0 ... section 5557`). The refusal was therefore not conservative -- it was
+                // the reason EVERY rival's type-6 request sat in the queue forever, re-posted each
+                // frame by the (console-correct) sender until the array overflowed.
+                const u16 luPlayerSection = lpPlayerAICar->GetBestSectionIndex();
+                lbProcess = (luPlayerSection != AICar::KI_INVALID_SECTION_INDEX);
+
+                if (!lbProcess && CgsDev::Log::gpDebugPrint != 0)
                 {
-                    sbReportedNonStandardGate = true;
-                    if (CgsDev::Log::gpDebugPrint != 0)
+                    // [DIAG rot] NOT IN THE X360 BINARY. First-N only. Separates "the manager
+                    // declined" from "the manager never saw it", which is the exact ambiguity
+                    // this lane existed to remove.
+                    static s32 siReportedNoPlayerSection = 0;
+                    if (siReportedNoPlayerSection < 4)
                     {
+                        ++siReportedNoPlayerSection;
                         *CgsDev::Log::gpDebugPrint
                             << "[rot] non-STANDARD request (type "
                             << static_cast<s32>(lrRequest.GetResetType())
-                            << ") declined: its console gate reads AICar section indices that "
-                               "AICar::Construct (an ARTIST export hole) never seeded.\n";
+                            << ", car " << static_cast<s32>(lrRequest.GetGlobalRaceCarIndex())
+                            << ") HELD: the player AI car (global "
+                            << static_cast<s32>(mePlayerGlobalRaceCarIndex)
+                            << ") has no best/default AI section yet -- the console's own gate at "
+                               "X360 0x8279A900. It will resolve on the frame the player car "
+                               "acquires a section.\n";
                     }
                 }
             }

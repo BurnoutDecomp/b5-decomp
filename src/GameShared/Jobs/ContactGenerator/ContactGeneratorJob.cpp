@@ -172,8 +172,15 @@ namespace
     // mix is unobservable here and is not reproduced. If eps0 ever turns out to be written with
     // four DIFFERENT lanes, the mix has to come back.)
     // ---------------------------------------------------------------------------------------
-    const f32 KF_MIN_DETERMINANT = 0.0f;         // unk_8321D330, all four lanes
-    const f32 KF_BARYCENTRIC_TOLERANCE = 0.0f;   // unk_8321D310, all four lanes
+    // [aiwave 2026-09-03, lane P2b finding] NOT ZERO. unk_8321D330 / unk_8321D310 are .bss statics with
+    // a dyn-init writer in an export hole (@0x82C71D50 / @0x82C71D78), seeded from flt_8200D5F0 == 1e-8
+    // and flt_82004884 == 1e-5 (both read from image.bin). The VehicleManager player-stuck kernel
+    // (BrnVehicleManager_PlayerStuck.cpp) is seeded @0x82C5B650/@0x82C5B678 from the SAME two floats
+    // into its own twins 0x82FB9F10 (1e-8, the determinant floor) / 0x82FB9EF0 (1e-5, the barycentric
+    // tolerance); the pairing here follows that read (higher address = determinant). With 0.0 every
+    // near-parallel ray passed the determinant test. The lane-mix note above still holds (four equal lanes).
+    const f32 KF_MIN_DETERMINANT = 1.0e-8f;        // unk_8321D330, all four lanes (flt_8200D5F0)
+    const f32 KF_BARYCENTRIC_TOLERANCE = 1.0e-5f;  // unk_8321D310, all four lanes (flt_82004884)
 
     // flt_8210168C == 0x7F7FFFFF. Splatted into the per-line "nearest hit so far" array at
     // 0x82921B98..0x82921BCC before every command.

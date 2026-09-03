@@ -379,43 +379,8 @@ namespace BrnGameState
     }
 }
 
-// ---- DeveloperChallengeManager::OnEventEnd (stuntrace waveB mount closure, 2026-08-26) ----
-// FLAG link gate -- NOT a reconstruction.
-//
-// The wave's ModeManager::ShowModeResults path calls it (BrnModeManager_Finish.cpp:62 includes
-// BrnDeveloperChallengeManager.h for exactly this), so the mount needs the symbol.
-//
-// A REAL BODY EXISTS IN THE TREE -- BrnDeveloperChallengeManager.cpp:394 (the full 14-body TU) --
-// and it COMPILES STANDALONE (selfcheck pass). It is not mounted because MOUNTING IT WAS MEASURED
-// WORSE: cl /c of that TU + dumpbin /SYMBOLS of its obj, diffed against the defined-symbol set of
-// every obj in build\game\obj, leaves SEVEN unresolved externals -- it would close one hole and
-// open seven:
-//     BrnGameState::StuntModeScoring::GetBestStuntScore() const
-//     BrnGameState::ScoringSystem::GetCarCount() const
-//     BrnGameState::CarData::GetFinishScore() const
-//     BrnGameState::CarData::IsFlawless() const
-//     BrnGameState::GameStateModuleIO::OutputBuffer::GetGuiOutputQueue()
-//     BrnGameState::GameStateModule::IsActiveRaceCarStillPresent(EActiveRaceCarIndex) const
-//     BrnProgression::Profile::IsDeveloperChallengeComplete(int) const
-// (GetFinishScore / IsFlawless are the two BrnScoringSystem.h itself flags as an "ADDITIVE GROW
-// (declare-only) for the BrnGameState::DeveloperChallengeManager TU", offsets still FLAG'd.)
-//
-// WHY INERT IS SAFE TODAY: the developer-challenge subsystem is not merely off the offline path,
-// it is NOT CONSTRUCTED AT ALL. BrnGameStateModule.h marks mDeveloperChallengeManager
-// "NOT Construct()ed yet -- see the named deferral in GameStateModule::Construct", so every
-// member the real body reads (its progression manager / street manager / challenge tables) is
-// null. The real OnEventEnd opens with a progression-profile lookup; running it against an
-// unconstructed manager is strictly worse than not running it.
-//
-// DELETE-WHEN BrnDeveloperChallengeManager.cpp joins the exe source list -- which needs the seven
-// symbols above first. LNK2005 otherwise.
-#include "GameSource/GameState/DeveloperChallengeManager/BrnDeveloperChallengeManager.h"
-namespace BrnGameState
-{
-    void DeveloperChallengeManager::OnEventEnd(s32 /*liGameModeType*/, bool /*lbWon*/)
-    {
-    }
-}
+// (The DeveloperChallengeManager::OnEventEnd link gate that stood here was DELETED 2026-09-03: the
+//  real TU BrnDeveloperChallengeManager.cpp is mounted -- lane P3 closed its five externals.)
 
 // FLAG PC-platform leaf: XDK notification-listener creation; a null handle makes
 // SystemUserProfile::Update early-return (no sign-in/storage/invite events on PC).

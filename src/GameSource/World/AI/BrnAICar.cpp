@@ -47,13 +47,13 @@ namespace BrnAI
     const f32 KF_DESIRED_OPP_BASE_RACE      = 0.0f;    // flt_8300D7D4 -- FLAG: rodata value unrecovered (opponent-index base, race)
     const f32 KF_DESIRED_OPP_SCALE_DEFAULT  = 0.0f;    // flt_8300D968 -- FLAG: rodata value unrecovered (opponent-index scale, default)
     const f32 KF_DESIRED_OPP_BASE_DEFAULT   = 0.0f;    // flt_8300D708 -- FLAG: rodata value unrecovered (opponent-index base, default)
-    const f32 KF_DESIRED_PLAYER_DRIVEN_MUL  = 0.0f;    // flt_820C41A8 -- FLAG: rodata value unrecovered (mfMaxPlayerSpeed multiplier, player-driven)
-    const f32 KF_DESIRED_DEFAULT_MUL        = 0.0f;    // flt_820C41C0 -- FLAG: rodata value unrecovered (mfMaxPlayerSpeed multiplier, case 4)
+    const f32 KF_DESIRED_PLAYER_DRIVEN_MUL  = 0.7f;    // flt_820C41A8 == 0.69999999 (read from image.bin @0xC41A8, 2026-09-03; was a 0.0 placeholder)
+    const f32 KF_DESIRED_DEFAULT_MUL        = 4.0f;    // flt_820C41C0 == 4.0 (read from image.bin @0xC41C0, 2026-09-03; was a 0.0 placeholder; the same word is Update's wrong-way limit)
     const f32 KF_DESIRED_INRANGE_PLAYER     = 0.0f;    // flt_8300D980 -- FLAG: rodata value unrecovered (meBehaviour==1 player-car speed)
 
     // CalcPersonalitySpeed -- velocity-magnitude offset + speed scales + clamp band (UNRECOVERED).
     const f32 KF_PERSONALITY_SPEED_OFFSET   = 0.0f;    // flt_8300D788 -- FLAG: rodata value unrecovered (added to |velocity|)
-    const f32 KF_PERSONALITY_BASE_SCALE     = 0.0f;    // flt_82F31928 -- FLAG: rodata value unrecovered (base speed scale, x50/x80/x100)
+    const f32 KF_PERSONALITY_BASE_SCALE     = 0.44704f; // flt_82F31928 == 0.44704 (mph -> m/s; read from image.bin @0xF31928, 2026-09-03) -- the x50/x80/x100 are mph
     const f32 KF_PERSONALITY_CLAMP_LO       = 0.0f;    // flt_8300D93C -- FLAG: rodata value unrecovered (lower floor)
     const f32 KF_PERSONALITY_CLAMP_HI       = 0.0f;    // flt_8300D740 -- FLAG: rodata value unrecovered (upper cap)
 
@@ -61,7 +61,7 @@ namespace BrnAI
     const f32 KF_ROAD_RAGE_BEHIND_BIAS      = 0.0f;    // flt_8300D724 -- FLAG: rodata value unrecovered (added when behind / slow)
     const f32 KF_ROAD_RAGE_SLOW_FLOOR       = 0.0f;    // flt_8300D810 -- FLAG: rodata value unrecovered (min speed when player slow)
     const f32 KF_ROAD_RAGE_AHEAD_DROP       = 0.0f;    // flt_8300D83C -- FLAG: rodata value unrecovered (subtracted when ahead)
-    const f32 KF_ROAD_RAGE_BLEND_RATE       = 0.0f;    // flt_820047C8 -- FLAG: rodata value unrecovered (separation lerp rate)
+    const f32 KF_ROAD_RAGE_BLEND_RATE       = 0.05f;   // flt_820047C8 == 0.05 (== 1/20 m, read from image.bin @0x47C8, 2026-09-03) -- lerp over the [0,20] band
     const f32 KF_ROAD_RAGE_SEPARATION_RANGE = 20.0f;   // flt_820C4890 (== 20.0, separation upper bound)
 
     // UpdateRaceDistance -- speed/distance thresholds.
@@ -472,13 +472,10 @@ namespace BrnAI
         if (lpRoute->GetStatus() != Route::E_STATUS_BLOCKED)
             return mbRouteRequested;
 
-        // Distance-squared between two cached transform vectors (this+0x1430, this+0x1480):
-        // when the chased car has NOT moved far enough the route is still good -> do not re-ask.
-        const Vector3* lpFrom = reinterpret_cast<const Vector3*>(
-            reinterpret_cast<const u8*>(this) + 0x1430);
-        const Vector3* lpTo = reinterpret_cast<const Vector3*>(
-            reinterpret_cast<const u8*>(this) + 0x1480);
-        const Vector3 lDelta = *lpTo - *lpFrom;
+        // Distance-squared between where the route was built (mLastRoutePosition @+0x1480)
+        // and the car now (mPosition @+0x1430): when the car has NOT moved far enough the route
+        // is still good -> do not re-ask. (Named members since the Update wave, 2026-09-03.)
+        const Vector3 lDelta = mLastRoutePosition - mPosition;
         const f32 lfDistSq = vpu::Dot(lDelta, lDelta);
 
         // vcmpgtfp.: branch taken when KF_NEEDS_NEW_ROUTE_DIST_SQ > lfDistSq (still close).
@@ -519,11 +516,9 @@ namespace BrnAI
         mbHasBlockCheckpoints = 0;
         mbIsInMasterRoute     = false;
 
-        // X360 copies the cached transform vector this+0x1430 -> this+0x1480 (16-byte SIMD).
-        Vector3* lpCachedVec = reinterpret_cast<Vector3*>(
-            reinterpret_cast<u8*>(this) + 0x1480);
-        *lpCachedVec = *reinterpret_cast<const Vector3*>(
-            reinterpret_cast<const u8*>(this) + 0x1430); // lvx128 this+0x1430 -> stvx128 this+0x1480
+        // X360 snapshots mPosition (+0x1430) into mLastRoutePosition (+0x1480): the route-age
+        // tests measure the car's drift from here. (Named members since the Update wave.)
+        mLastRoutePosition = mPosition;   // lvx128 this+0x1430 -> stvx128 this+0x1480
 
         mfRouteTimer   = 0.0f;
         mfWrongWayTime = 0.0f;

@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h" // AttribSysPackageAllocator
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttribHashMapTablePolicy.h" // FreeWithCensusIf
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribclassprivate.h"       // Attrib::ClassPrivate (named mCollections)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"          // Attrib::Collection (named mKey -- Class::RemoveCollection)
 
 // AttribSys runtime -- the two live VecHashMap instantiations off the X360 spine:
 //   VecHashMap<Attrib::Key, Attrib::Class,      Attrib::Class::TablePolicy, false, 16u>
@@ -834,12 +835,69 @@ bool Class::RemoveCollection(Collection* lpCollection)
 {
     CGS_ASSERT(lpCollection != NULL, "Cannot remove NULL collection.");
 
-    const u64 luKey =
-        *reinterpret_cast<const u64*>(reinterpret_cast<const u8*>(lpCollection) + 0x10);
+    // FIXED (attrib teardown wave 2026-09-03): this used to read the key as
+    // `*(u64*)((u8*)lpCollection + 0x10)` -- the CONSOLE offset. Attrib::Collection
+    // derives from Attrib::HashMap, whose leading mpBuckets is 4 bytes on the X360 and
+    // 8 here, so on the host +0x10 is Collection::mpParent, not Collection::mKey: every
+    // unregister looked the table up under a POINTER VALUE, missed, and left the class
+    // collection table pointing at a collection ~Collection was about to free. Read it
+    // BY NAME (attribinstance.h pins mKey; the X360 `ld r11,0x10(r30)` is that member).
+    const u64 luKey = lpCollection->mKey;
 
     CollectionHashMap* lpTable = GetCollectionTable();
     const u32 luIndex = lpTable->FindIndex(luKey);
     return lpTable->RemoveIndex(luIndex) != NULL;
+}
+
+// ============================================================================
+// Attrib::CollectionHashMap::RemoveIndex @ 0x82808980
+// ============================================================================
+// Vacate the bucket at luIndex and return the collection it held (NULL when the index
+// is out of range or the bucket is already the self-pointer sentinel). Store-for-store
+// from 0x82808980..0x82808A90:
+//   0x8280899C  luIndex >= mTableSize            -> return NULL
+//   0x828089A8  node->mPtr == node (free bucket) -> return NULL
+//   0x828089DC  r30 = the removed collection, r10 = the removed key (both taken
+//               through the same sentinel test the Node accessors spell)
+//   0x82808A18  node->mPtr = node ; node->mKey = 0     (vacate the slot)
+//   0x82808A28  --mNumEntries                          (lhz/addis+1/addi-1/sth = -1)
+//   0x82808A34  home = (u32)key % mTableSize           (`clrlwi r10,r10,0` truncates
+//               the 64-bit key to its low word before the divwu, exactly as FindIndex
+//               does; `twllei r11,0` is the divide-by-zero trap)
+//   0x82808A4C  i = UpdateSearchLength(home, luIndex)          (r4 = home, r5 = slot)
+//   0x82808A5C  while (i < mTableSize) i = UpdateSearchLength(i, i)
+//   0x82808A78  return the removed collection
+// Landed 2026-09-03 with Attrib::Collection::~Collection @0x8280C3F8, whose
+// Class::RemoveCollection call is the only caller on the GC path (it was a
+// CGS_ASSERT(false) link stub in GameSource/World/WorldLinkStubs.cpp until then).
+Collection* CollectionHashMap::RemoveIndex(u32 luIndex)
+{
+    if (luIndex >= mTableSize)
+        return NULL;
+
+    Node* lpNode = &mTable[luIndex];
+    if (lpNode->IsEmpty())
+        return NULL;
+
+    Collection* lpRemoved = lpNode->Get();
+    const u64   luKey     = lpNode->Key();
+
+    // Vacate: the payload slot points back at the node (the X360 free sentinel) and the
+    // key word is zeroed.
+    lpNode->mPtr = reinterpret_cast<Collection*>(lpNode);
+    lpNode->mKey = 0;
+    mNumEntries  = static_cast<u16>(mNumEntries - 1);
+
+    // Repair the probe-run invariant from the removed key's home bucket, then keep
+    // compacting while UpdateSearchLength keeps reporting an in-range relocated slot.
+    const u32 luTableSize = mTableSize;
+    const u32 luHome      = static_cast<u32>(luKey) % luTableSize;
+
+    u32 luProbe = UpdateSearchLength(luHome, luIndex);
+    while (luProbe < mTableSize)
+        luProbe = UpdateSearchLength(luProbe, luProbe);
+
+    return lpRemoved;
 }
 
 // @ 0x82806320 (Attrib::Class::Ta... Find wrapper) -- resolve the slot via

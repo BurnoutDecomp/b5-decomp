@@ -219,11 +219,13 @@ namespace BrnGameState
         s32        GetComboScore() const;                                               // :163 (s32 from f32 mfComboScore -- conversion lives in .cpp)
         s32        GetComboMultiplier() const { return miComboMultiplier; }             // :166
 
-        // ADDITIVE GROW (declare-only) for the BrnGameState::DeveloperChallengeManager TU.
-        // OnEventWin (stunt run) reads a score word at scorer+456 for the multiplier-driven win
-        // challenge (E_DEV_CHALLENGE_EVENT_WIN_STUNT). Body + the real member land with the
-        // StuntModeScoring TU. FLAG: offset +456, semantics inferred from the OnEventWin asm.
-        s32        GetBestStuntScore() const;
+        // ⭐ RETIRED 2026-09-03 (link-closure lane P3): `s32 GetBestStuntScore() const;` stood here
+        // as a declare-only grow for the DeveloperChallengeManager TU, described as "a score word at
+        // scorer+456". It was never in the DWARF and it was never a score word: +456 == 0x1C8 lands
+        // inside the X360-proven maStuntTypeScoreCount[18] array at +0x1B0 (index 6 ==
+        // E_STUNT_TYPE_BILLBOARD). It had exactly one caller and no body anywhere in the tree, so it
+        // is removed rather than given an invented body; the caller now uses
+        // GetStuntTypeScoreCount(E_STUNT_TYPE_BILLBOARD) below.
         u32        GetCurrentStunts() const;                                            // :170 (X360 0x82310640 -- real body)
         u32        GetAllStuntTypesForInProgressStunt() const;                          // :174
         bool       HasTargetScoreBeenExceeded() const;                                  // :177
@@ -496,6 +498,21 @@ namespace BrnGameState
         // sibling-mode caller chain (deferred TUs) can consume it by name.
         bool GetStuntInfoEventPending() const    { return mbStuntInfoEventPending; }
         void SetStuntInfoEventPending(bool lbOn) { mbStuntInfoEventPending = lbOn; }
+
+        // ⭐ [link-closure lane P3 2026-09-03] Named access for the X360-proven, DWARF-silent
+        // per-stunt-type hit counter array maStuntTypeScoreCount[18] (+0x1B0). UpdateScore
+        // @0x823212D8 increments one entry; ClearData @0x82321108 zeroes all 18.
+        // READER recovered this wave: DeveloperChallengeManager::OnEventWin @0x8238DDA4
+        //   `lwz r10, 0x1C8(r24)`   with r24 == the selected StuntModeScoring
+        // and 0x1C8 == 0x1B0 + 4*6, i.e. maStuntTypeScoreCount[6] == the E_STUNT_TYPE_BILLBOARD
+        // slot. That read used to be spelled through a provisional `GetBestStuntScore()` whose
+        // "+456 == a best-score word" reading was wrong (it is inside this array, not a score);
+        // the declaration has been retired and the call site renamed onto this accessor.
+        // No range assert: the console's read is a folded constant-index load with no guard.
+        s32 GetStuntTypeScoreCount(EStuntType leStuntType) const
+        {
+            return maStuntTypeScoreCount[leStuntType];
+        }
 
         // ===== Online chainable-multiplier hand-off surface (X360-proven; DWARF-silent) =====
         //

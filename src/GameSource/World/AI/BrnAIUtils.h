@@ -9,9 +9,9 @@
 //   Calc2DIntersectionEquationData  @ 0x82771800 (BrnAIUtils.cpp:211)
 // The DWARF for this source path also declares the 2D geometry helpers DistancePointToLine,
 // GetInterpOnLine, IsPointOnLine, DistancePosVelToOrigin, Convert3DVectorTo2D / Convert2DVectorTo3D,
-// Rotate2DVectorByAngle and Find{Signed,Unsigned}AngleBetween2DVectors; those are reconstructed by
-// their own recon passes and are intentionally NOT declared here so this header stays to its owned
-// surface.
+// Rotate2DVectorByAngle and Find{Signed,Unsigned}AngleBetween2DVectors. The two angle helpers are
+// bodied in the partfile BrnAIUtils_Angles.cpp (AIDriver steering wave 2026-09-03) and declared
+// below; the rest are reconstructed by their own recon passes and intentionally NOT declared here.
 
 namespace BrnAI
 {
@@ -39,4 +39,15 @@ namespace BrnAI
     // of all four edges. lpSectionEdges points at four attested 4-lane vectors (edgeX0 @+0x00,
     // edgeY0 @+0x10, coefA @+0x20, coefB @+0x30).
     bool IsInsideSectionFast(const void* lpSectionEdges, f32 lfX, f32 lfY);
+
+    // 0x82766B20 - unsigned planar angle between two 2D unit vectors: acos(a.x*b.x + a.y*b.y),
+    // or 0.0 when |dot| >= 1.0 (the X360 returns ZERO there -- it does not clamp the acos).
+    // Bodied in BrnAIUtils_Angles.cpp (partfile of this TU).
+    f32 FindUnsignedAngleBetween2DVectors(Vector2 lA, Vector2 lB);
+
+    // 0x827716A8 - signed planar angle from lA to lB: the unsigned angle with the sign of
+    // -(a.x*b.y - a.y*b.x) (positive when lB lies clockwise of lA), asserting the cross
+    // product and the result are finite ("NAN error in AIDriver::FindSignedAngleBetween2DVectors").
+    // No IDA export exists for this address; recovered from the image bytes (see the .cpp).
+    f32 FindSignedAngleBetween2DVectors(Vector2 lA, Vector2 lB);
 }

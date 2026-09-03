@@ -58,15 +58,35 @@ namespace BrnAI
         void Update(f32 lfTimeStep, AICar* lpPlayerCar, AICar* lpBuzzCar, bool* lpbBuzzOccured);
 
         void Prepare(AICar* lpGlobalRaceCars, ResetOnTrackManager* lpResetOnTrackManager);
-        void SetInGameMode(bool lbInGameMode);
-        void SetInJunkyard(bool lbInJunkyard);
+        // ---- ADDITIVE (aiwave lane A7, 2026-09-03) -- BODIES for the five inlined-away DWARF
+        //      setters below. None of them has a standalone X360 symbol (the image exports only
+        //      MaintainAheadOrBehind / DrawBuzzTimer / IsPositionInNoBuzzZone / AICarCanBuzz /
+        //      ChooseAheadOrBehind / IsPlayerBuzzable / BuzzOccured / ResetActiveList /
+        //      StartABuzzBy / Update), and every call site is a single inline store the X360
+        //      performs directly on the AIModule's embedded mBuzzBy (module +322524):
+        //        SetInGameMode            -> +0x004  AIModule::OnModeStart  @0x82791FC0 (stb 1, +322528)
+        //                                            AIModule::OnModeEnd    @0x8277BC1C (stb 0, +322528)
+        //        SetInJunkyard            -> +0x005  HandleGameActions case 99  @0x82792510/0x82792518
+        //                                            HandleGameActions case 106 @0x827924FC (+322529)
+        //        RequestResetBuzzTimers   -> +0x006  HandleManagementEvents cases 0/3/5
+        //                                            @0x827988C0 / 0x82798C50 / 0x82798DC4 (stb 1, +322530)
+        //        ClearCarsAwaitingCollection -> +0x12C  HandleGameActions cases 99/106
+        //                                            @0x82792530 / 0x827924F8 (stw 0, +322824)
+        //        AddCarAwaitingCollection    -> +0x12C  HandleGameActions case 120
+        //                                            @0x82792478..0x82792480 (load, +1, store)
+        //      They were declaration-only, so any caller was an LNK2019 against a body that exists
+        //      nowhere in b5-decomp/src -- the same treatment, and the same reason, as
+        //      AICar::GetDriver and AIDriver::IsActive. SetCarsAwaitingCollection stays
+        //      declaration-only (no attested call site in this wave).
+        void SetInGameMode(bool lbInGameMode)  { mbIsInGameMode = lbInGameMode; }
+        void SetInJunkyard(bool lbInJunkyard)  { mbIsInJunkyard = lbInJunkyard; }
         void DrawBuzzTimer();
         void MaintainAheadOrBehind(AIModuleIO::ResetOnTrackRequest* lpRequest,
                                    Vector3 lPosition, Vector3 lDirection, Vector3 lPlayerPosition,
                                    Vector3 lPlayerVelocity, Vector3 lPlayerDirection);
         void SetCarsAwaitingCollection(s32 liCarsAwaitingCollection);
-        void AddCarAwaitingCollection();
-        void ClearCarsAwaitingCollection();
+        void AddCarAwaitingCollection()    { ++miCarsAwaitingCollection; }
+        void ClearCarsAwaitingCollection() { miCarsAwaitingCollection = 0; }
 
         // True when lPosition falls inside any of the KI_NUM_NO_BUZZ_ZONES no-buzz spheres
         // (distanceSq < radiusSq). X360 @0x82766FC0. Also called by
@@ -74,7 +94,7 @@ namespace BrnAI
         // this const -> the const qualifier is load-bearing for that sibling TU).
         bool IsPositionInNoBuzzZone(Vector3 lPosition) const;
 
-        void RequestResetBuzzTimers();
+        void RequestResetBuzzTimers()      { mbResetBuzzTimers = true; }
 
     private:
         void ChooseAheadOrBehind(AIModuleIO::ResetOnTrackRequest* lpRequest, f32 lfPlayerSpeed,

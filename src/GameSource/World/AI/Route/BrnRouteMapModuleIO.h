@@ -41,6 +41,7 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"        // CgsModule::EventQueue<T,N>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::Event (empty event base)
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"          // CgsModule::IOBuffer base
+#include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT (the lock-bit tripwires)
 #include "GameShared/GameClasses/Containers/CgsArray.h"         // Array<T,N> (block-section list)
 #include "GameSource/World/AI/Route/BrnAStar.h"                 // AStarQuality / AStarDistanceFunction
 #include "GameSource/World/AI/Route/BrnRoute.h"                 // BrnAI::Route (response view target)
@@ -102,20 +103,28 @@ namespace BrnAI
 
             // ---- builder (RouteRequestManager calls these by name) ----
             // RouteRequestManager passes (position, endMiddle, startSection, endSection,
-            // ownerId); the DWARF declares the canonical arg order (ownerId, eventId,
-            // startPos, endPos, startSection, endSection). The manager's call site uses
-            // (startPos, endPos, startSection, endSection, ownerId) -- this overload
-            // matches that exact signature so BrnRouteRequestManager.cpp compiles.
+            // raceCarIndex); the DWARF declares the canonical arg order (ownerId, eventId,
+            // startPos, endPos, startSection, endSection).
+            //
+            // ⭐ ID SEMANTICS CORRECTED 2026-09-03 (aiwave A5): every AI-side builder on the
+            // console stores muOwnerId = 0 == E_OWNER_AI and muEventId = AICar::miRaceCarIndex --
+            // GenerateStandardRouteRequest @0x82791568..0x82791578 (`li r28,0 ; sth r29(+0x14C4),
+            // +0x6A ; sth r28, +0x68`), GenerateAlternativeRouteRequest @0x82789028..0x82789038,
+            // and the two extrapolated builders (@0x82789128/0x8278915C, @0x82789248/0x8278927C
+            // for the 64-byte record). The consumer, AIModule::UpdateCarRoutes @0x827956B4, only
+            // accepts responses whose muOwnerId == 0 and looks the car up by muEventId. The
+            // previous overload stored the race-car index into muOwnerId, so no AI car could ever
+            // have received its route. The last parameter is therefore the EVENT id.
             void Construct(Vector3 lStartPosition, Vector3 lEndPosition,
-                           u16 luStartSectionIndex, u16 luEndSectionIndex, u16 luOwnerId)
+                           u16 luStartSectionIndex, u16 luEndSectionIndex, u16 luEventId)
             {
                 mStartPosition      = lStartPosition;
                 mEndPosition        = lEndPosition;
                 muStartSectionIndex = luStartSectionIndex;
                 muEndSectionIndex   = luEndSectionIndex;
                 mauBlockSections.Construct();           // live count -> 0
-                muOwnerId           = luOwnerId;
-                muEventId           = 0;
+                muOwnerId           = static_cast<u16>(E_OWNER_AI);
+                muEventId           = luEventId;
                 meQuality           = E_ASTAR_QUALITY_LOW;
                 meDistanceFunction  = E_ASTAR_DISTANCE_EUCLIDEAN;
                 mbUseAIShortcuts    = false;
@@ -158,12 +167,15 @@ namespace BrnAI
             EExtrapolatedType  meRouteType;                  // +0x34
 
             // RouteRequestManager calls Construct(direction2D, position2D, currentSection,
-            // ownerId). Matches that exact call site so BrnRouteRequestManager.cpp compiles.
+            // raceCarIndex). Same id correction as the race-route builder above (aiwave A5,
+            // 2026-09-03): GenerateExtrapolatedRouteRequest @0x82789128 `sth r30(+0x14C4), +2`
+            // (muEventId = race car index) and @0x8278915C `sth r10(0), +0` (muOwnerId =
+            // E_OWNER_AI); GenerateRouteFleeingRouteRequest @0x82789248/0x8278927C identical.
             void Construct(Vector2 lCarDirection, Vector2 lCarPosition,
-                           u16 luCurrentSectionIndex, u16 luOwnerId)
+                           u16 luCurrentSectionIndex, u16 luEventId)
             {
-                muOwnerId                    = luOwnerId;
-                muEventId                    = 0;
+                muOwnerId                    = static_cast<u16>(E_OWNER_AI);
+                muEventId                    = luEventId;
                 muNumberOfSectionsToGenerate = static_cast<u8>(
                     KI_MAX_PLAYER_ROUTE_EXTRAPOLATION_GENERATED_SECTIONS);
                 mCarDirection                = lCarDirection;
@@ -271,9 +283,24 @@ namespace BrnAI
             // GetLoadRequests()). The const overloads stay inline (no const getter was emitted
             // out-of-line in this batch).
             RaceRouteRequestQueue*                GetRaceRouteRequestQueue();                                                       // X360 0x8276AE00 (W)
-            const RaceRouteRequestQueue*          GetRaceRouteRequestQueue() const          { return &mRaceRouteRequestQueue; }
             ExtrapolatedRouteRequestQueue*        GetExtrapolatedRouteRequestQueue();                                               // X360 0x8276AF50 (W)
-            const ExtrapolatedRouteRequestQueue*  GetExtrapolatedRouteRequestQueue() const  { return &mExtrapolatedRouteRequestQueue; }
+
+            // The two const consumer getters the X360 emits out-of-line at 0x8276AEA8 (race) and
+            // 0x8276AFF8 (extrapolated), both ARTIST export holes; RouteMapModule::Update
+            // @0x82793FA0/0x82793FAC calls them on the read-locked input. Their sibling
+            // OutputBuffer::GetRouteResponseQueue const @0x8276B148 (exported) is the shape:
+            // `lbz 0(this); extrwi 1,27` == the READ bit, "Not locked for reading\n", then the
+            // member address. Reproduced here (asserts added 2026-09-03, aiwave A5).
+            const RaceRouteRequestQueue*          GetRaceRouteRequestQueue() const
+            {
+                CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+                return &mRaceRouteRequestQueue;
+            }
+            const ExtrapolatedRouteRequestQueue*  GetExtrapolatedRouteRequestQueue() const
+            {
+                CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+                return &mExtrapolatedRouteRequestQueue;
+            }
 
         private:
             RaceRouteRequestQueue         mRaceRouteRequestQueue;         // :282
@@ -305,15 +332,27 @@ namespace BrnAI
             // IOHelper<OutputBuffer>::~IOHelper @0x82791820.
             void Destruct() { CgsModule::IOBuffer::Destruct(); }
 
-            // X360-attested member start offset into the buffer payload (the IOBuffer FlagSet<s8>
-            // base pads to 4, so mRouteResponseQueue -- the first OutputBuffer member -- lands @+4).
-            enum EMemberOffset { KU_ROUTE_RESPONSE_QUEUE_OFFSET = 0x4 };  // == &mRouteResponseQueue
+            // X360 member offset of mRouteResponseQueue, for the record ONLY (the IOBuffer
+            // FlagSet<s8> base pads to 4 on the console, so the queue lands @+4 THERE). On this
+            // host BaseEventQueue<T> starts with a pointer, so the queue lands @+8 -- the
+            // accessors below return &mRouteResponseQueue BY NAME, never this + 4
+            // (fixed 2026-09-03, aiwave A5: the write accessor used to return this + 4).
+            enum EMemberOffset { KU_ROUTE_RESPONSE_QUEUE_OFFSET_X360 = 0x4 };
 
             RouteResponseQueue*       GetRouteResponseQueue()       { return &mRouteResponseQueue; }
-            const RouteResponseQueue* GetRouteResponseQueue() const { return &mRouteResponseQueue; }
 
-            // X360 0x8276B0A0 (W, :617) -- write-lock (status bit 3); returns this+4
-            // (&mRouteResponseQueue) as a raw u8*. Body in BrnRouteMapModuleIO.cpp.
+            // X360 0x8276B148 (R, BrnRouteMapModuleIO.h:624) -- read-lock (status bit 4, `lbz 0(this);
+            // extrwi r11,r11,1,27`), "Not locked for reading\n", returns &mRouteResponseQueue.
+            // Callers: AIModule::UpdateCarRoutes / Update / PausedUpdate on the read-locked
+            // transient "Route" output buffer.
+            const RouteResponseQueue* GetRouteResponseQueue() const
+            {
+                CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+                return &mRouteResponseQueue;
+            }
+
+            // X360 0x8276B0A0 (W, :617) -- write-lock (status bit 3); returns &mRouteResponseQueue
+            // as a raw u8*. Body in BrnRouteMapModuleIO.cpp. RouteMapModule::Update is the caller.
             u8* GetRouteResponseQueueForWrite();
 
         private:

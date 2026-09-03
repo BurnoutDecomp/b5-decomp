@@ -243,6 +243,11 @@ namespace Vehicle
     // GameShared/GameClasses/Module/VariableEventQueue_5040_16.cpp and are unchanged.
     struct BrnAIDriverControls : public BrnPlayerDriverControls
     {
+        // [aiwave 2026-09-03] The AI record is stamped E_DRIVER_TYPE_AI on construction, the way the
+        // base stamps PLAYER: AIModule::ProcessAIVehicleInputs @0x82795E10 builds one per active AI car
+        // and physics gates every AI read on `meDriverType == 1` (the three sites above).
+        BrnAIDriverControls() { meDriverType = E_DRIVER_TYPE_AI; }
+
         // [V] All three offsets are asm-literal, and BOTH consumers read them behind an
         // `meDriverType == E_DRIVER_TYPE_AI` gate -- i.e. the console checks the driver type and
         // then looks at the AI payload:

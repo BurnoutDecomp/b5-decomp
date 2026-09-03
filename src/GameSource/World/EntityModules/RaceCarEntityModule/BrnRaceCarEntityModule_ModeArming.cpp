@@ -123,15 +123,73 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
     // tree-wide grep, not an assumption -- so it read as zero for the whole process, which is
     // what made SetUpPlayerCarForMode's KU_FLAG_SET_CARS_TO_START_GRID gate unsatisfiable and
     // SetupOpponents' RemoveRivals gate always-false.
-    // [FLAG] the console's companion `stwx <miNumRivals>, r31, 0x18340` @0x8230947C is NOT
-    // reproduced: +0x18340 lands inside maTailPadA1b and this header names no member there.
-    // Nothing reconstructed reads it. DELETE-WHEN that word is named.
+    // ⭐ [aiwave lane A9, 2026-09-03] THE PARK ON THE LINE BELOW IS RETIRED. It read:
+    //   "[FLAG] the console's companion `stwx <miNumRivals>, r31, 0x18340` @0x8230947C is NOT
+    //    reproduced: +0x18340 lands inside maTailPadA1b and this header names no member there.
+    //    Nothing reconstructed reads it. DELETE-WHEN that word is named."
+    // The word IS named now -- miOpponentCount, DWARF BrnRaceCarEntityModule.h:367, the only
+    // int32 between mSurfaceList (:365) and mbIsInGameMode (:370 @+99140) and exactly the four
+    // bytes in front of it (see the header's own banner). AND SOMETHING DOES READ IT:
+    // PlaceRaceCarOnLoad @0x822CE588's start-grid arm divides by it
+    // (`lwzx r11, r31, 0x18340` @0x822CE928 followed by `fdivs` @0x822CE944), so leaving it
+    // unwritten would have been a DIVIDE BY ZERO on the arm this wave lands, not merely a
+    // dropped store.
+    //     0x82309464  lbz   r11, 0(r25)             ; GameModeParams+0 == the opponent count byte
+    //     0x82309470  extsb r11, r11                ; sign-extended -- it is an s8 on the params
+    //     0x8230947C  stwx  r11, r31, 0x18340       ; RaceCarEntityModule::miOpponentCount
+    miOpponentCount = lpGameModeParams->GetOpponentCount();
+
     mxGameModeFlags = lpGameModeParams->GetFlags();
 
     mbCarSelectAllowedInGameMode =
         lpGameModeParams->GetFlag(BrnGameState::GameModeParams::KU_FLAG_CAR_SELECT_ALLOWED);
+
+    // ⭐ [aiwave lane A9, 2026-09-03] THE THREE START-STYLE BYTES, at their console positions,
+    // between the car-select byte above and the mode type below. All three are read by
+    // PlaceRaceCarOnLoad @0x822CE588 -- they are what selects which of its five non-player arms
+    // a freshly loaded RIVAL takes -- and none of them had a writer anywhere in this tree, so
+    // every one of those arms would have answered with a zeroed module's "false".
+    //   0x823094A4  ld     r11, 0x860(r25)          ; muFlags
+    //   0x823094A8  rlwinm r11, r11, 0,17,17        ; bit 1 << 14 == KU_FLAG_AI_DRIVE_BY_START
+    //   0x823094C4  stbx   r11, r31, 0x18350        ; mbSpawnAIBehindStartGrid
+    //   0x823094CC  rlwinm r11, r11, 0, 4, 4        ; bit 1 << 27 == KU_FLAG_DONUT_START
+    //   0x823094EC  stbx   r10, r31, 0x18352        ; mbPlayerDonutsOnEventStart
+    //   0x823094F4  rlwinm r11, r11, 0, 5, 5        ; bit 1 << 26 == KU_FLAG_ROLLING_START
+    //   0x8230950C..0x82309524                      ; rolling || (the donut byte just stored)
+    //   0x82309534  stbx   r11, r31, 0x18351        ; mbPlayerRollsOnEventStart
+    // ⚠ THE OR IS THE ASM'S, NOT A PARAPHRASE: 0x82309510 branches to the "true" arm on the
+    // ROLLING bit, and 0x82309518 re-tests the byte stored at +0x18352 one instruction earlier,
+    // so a DONUT start also counts as "the player rolls". Reproduced through the member rather
+    // than re-reading the flag, because that is what the console reloads.
+    mbSpawnAIBehindStartGrid =
+        lpGameModeParams->GetFlag(BrnGameState::GameModeParams::KU_FLAG_AI_DRIVE_BY_START);
+    mbPlayerDonutsOnEventStart =
+        lpGameModeParams->GetFlag(BrnGameState::GameModeParams::KU_FLAG_DONUT_START);
+    mbPlayerRollsOnEventStart =
+        lpGameModeParams->GetFlag(BrnGameState::GameModeParams::KU_FLAG_ROLLING_START)
+        || mbPlayerDonutsOnEventStart;
+
     meGameModeType = lpGameModeParams->GetGameModeType();
     mbIsInGameMode = true;
+
+    if (CgsDev::Log::gpDebugPrint != 0)
+    {
+        // [FLAG PC witness] [ai-attach] ONE LINE PER PREPARE-FOR-MODE (not per frame). The
+        // start-style inputs PlaceRaceCarOnLoad's rival arms branch on, printed where they are
+        // latched, so the next run's log says WHICH arm every rival should be taking before the
+        // per-car lines below it say which one it took.
+        // DELETE-WHEN rivals drive and the AI lane closes.
+        *CgsDev::Log::gpDebugPrint
+            << "[ai-attach] mode armed: opponents " << miOpponentCount
+            << " mode " << static_cast<s32>(meGameModeType)
+            << " aiDriveByStart " << static_cast<s32>(mbSpawnAIBehindStartGrid)
+            << " playerRolls " << static_cast<s32>(mbPlayerRollsOnEventStart)
+            << " donut " << static_cast<s32>(mbPlayerDonutsOnEventStart)
+            << " resetBehind "
+            << static_cast<s32>(GetGameModeFlag(
+                   BrnGameState::GameModeParams::KU_FLAG_AI_RESET_ON_TRACK_BEHIND))
+            << " [FLAG PC witness]\n";
+    }
 
     // ========================================================================================
     // ARTIST 0x823098D8..0x82309958 -- THE CRASH-PLAY ARM, immediately before OnModeStart.

@@ -198,21 +198,24 @@ private:
     // Resolved by Prepare from leDistanceFunction (off_820C47C8), in enum order.
     static const DistanceFunctionPtr KAP_DISTANCE_FUNCTIONS[E_ASTAR_DISTANCE_FUNCTION_COUNT];
 
-    // Per-quality cost weight (flt_820C47C0; PLACEHOLDER values -- not in the asm).
+    // Per-quality cost weight (flt_820C47C0). RECOVERED 2026-09-03 (aiwave A5) from the
+    // image bytes at file offset 0xC47C0: {0.25f, 0.5f} -- see BrnAStar.cpp.
     static const f32 KAF_QUALITY_COST_WEIGHTS[E_ASTAR_QUALITY_COUNT];
 
     // Per-iteration live-node budget Compute compares the bucket-count sum against
-    // (dword_820C4790; PLACEHOLDER values -- not in the asm).
+    // (dword_820C4790). RECOVERED 2026-09-03 from the image bytes -- see BrnAStar.cpp.
     static const s32 KAI_ITERATION_NODE_BUDGET[KI_MAX_ITERATIONS];
 
     // Construct's default/sentinel cost weight (flt_820037C8 == -1.0; asm-attested).
     static const f32 KF_DEFAULT_COST_WEIGHT;
 
     // BuildRoute exit-portal selection: the dot-product seed (flt_820C4358 == -2.0, the
-    // asm-attested literal) and the per-axis reachability extent (flt_820C3B70, a rodata
-    // vector; PLACEHOLDER -- not a clean literal in the asm).
+    // asm-attested literal) and the RwMath::IsZero epsilon (flt_820C3B70 lane 0 == FLT_EPSILON,
+    // read from the image 2026-09-03; the `lvlx ; vspltw ..,0` splats lane 0 and the
+    // `vandc ; vcmpgtfp` pair is |d| > eps per lane). The gate is "skip a zero-length portal
+    // offset", NOT a reachability extent -- see BuildRoute.
     static constexpr f32 KF_BUILDROUTE_DOT_SEED    = -2.0f;
-    static const f32     KF_BUILDROUTE_REACH_EXTENT;
+    static const f32     KF_ZERO_EPSILON;
 
     AStarNodePool        mAStarNodePool;       // :280
     AStarVector2         mStartPosition;       // :281

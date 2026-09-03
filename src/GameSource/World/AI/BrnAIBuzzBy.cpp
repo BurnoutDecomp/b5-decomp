@@ -319,4 +319,23 @@ namespace BrnAI
             mafBuzzTimes[liChosenSlot] = mfTimeInFreeRoam + GetBuzzFrequency(lpChosenCar);
         }
     }
+    // GetBuzzFrequency (DWARF BrnAIBuzzBy.h:88) -- no export; inlined in ResetActiveList @0x82771C90
+    // (0x82771D30..: `lvlx unk_820C4324 / lvlx unk_820C4320 / vspltw x2 / lfs 0x1510(car) / vsubfp / vmaddfp`)
+    // == Lerp(10.0f, 180.0f, mfBuzzFrequencyRatio); both floats read from image.bin. Conductor, 2026-09-03.
+    f32 BuzzBy::GetBuzzFrequency(const AICar* lpAICar) const
+    {
+        const f32 KF_BUZZ_FREQUENCY_MIN = 10.0f;    // flt_820C4320
+        const f32 KF_BUZZ_FREQUENCY_MAX = 180.0f;   // flt_820C4324
+        return KF_BUZZ_FREQUENCY_MIN + (KF_BUZZ_FREQUENCY_MAX - KF_BUZZ_FREQUENCY_MIN) * lpAICar->GetBuzzFrequencyRatio();
+    }
+
+
+    // Prepare (DWARF BrnAIBuzzBy.h:60) -- no export; inlined in AIModule::Prepare @0x82798070 stage 4 as the
+    // two pointer stores into +0x008 / +0x128 of the module's BuzzBy (+322524). Conductor, 2026-09-03.
+    void BuzzBy::Prepare(AICar* lpGlobalRaceCars, ResetOnTrackManager* lpResetOnTrackManager)
+    {
+        mpGlobalRaceCars      = lpGlobalRaceCars;
+        mpResetOnTrackManager = lpResetOnTrackManager;
+    }
+
 }

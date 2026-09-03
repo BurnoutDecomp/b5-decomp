@@ -64,6 +64,7 @@
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"    // the Marked Man tip gauntlet
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"     // ProgressionManager::GetProfile
 #include "GameSource/GameState/Progression/BrnProfile.h"                // Profile::HasPlayerSeenTrainingType / the online vertical tally
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"           // TelemetryData / ETelemetryHook (the P4 post)
 #include "SharedClasses/Progression/BrnTrainingTypes.h"                 // E_TRAINING_TYPE_TAKEN_DOWN_IN_MARKED_MAN
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // GetRivalId
 
@@ -135,8 +136,6 @@ void GameStateModule::ProcessTakedownEvents(
 {
     static bool sbParkedOnTakedownTo      = false;   // P1
     static bool sbParkedAchievementHooks  = false;   // P2
-    static bool sbParkedDevChallengeHooks = false;   // P3
-    static bool sbParkedTelemetry         = false;   // P4
 
     for (s32 liEvent = 0; liEvent < lpTakedownEventQueue->GetLength(); ++liEvent)
     {
@@ -243,15 +242,11 @@ void GameStateModule::ProcessTakedownEvents(
             // 10 so the threshold is not lost with the park.
             (void)KI_TAKEDOWN_CHAIN_ACHIEVEMENT_MIN;
 
-            // [P3] FLAG PARKED: DeveloperChallengeManager::OnTakedownChain(liTakedownChainCount)
-            // @0x8238FEB0 and ::OnTakedown(GetCurrentGameModeType(), lrEvent.meVictimIndex)
-            // @0x8238FEC0 (this+0x2D570 == mDeveloperChallengeManager). Both bodies exist
-            // (BrnDeveloperChallengeManager.cpp:18 / :32) but the TU is unmounted AND the manager is
-            // never Construct()ed -- the OnEventEnd precedent in BrnBaselineLinkStubs.cpp.
-            LogParkedLegOnce(sbParkedDevChallengeHooks,
-                "DeveloperChallengeManager::OnTakedownChain / OnTakedown are unmounted and the "
-                "manager is not Construct()ed; the developer-challenge takedown hooks are skipped");
-            (void)liTakedownChainCount;
+            // [P3] LANDED 2026-09-03 (aiwave): 0x8238FEA4..0x8238FEC0 -- the developer-challenge hooks
+            // (this+0x2D570 == mDeveloperChallengeManager, Construct()ed since this wave).
+            mDeveloperChallengeManager.OnTakedownChain(liTakedownChainCount);                       // r4 = event+0x20
+            mDeveloperChallengeManager.OnTakedown(static_cast<s32>(GetCurrentGameModeType()),       // r4 = gsm+0x1DB4
+                                                  static_cast<u32>(lrEvent.meVictimIndex));         // r5 = event+4
 
             // [P2] 0x8238FEC4..0x8238FEF0: `if (!online) mAchievementManager.OnTakedown()` -- parked
             // with its siblings above (one latch, one line).
@@ -267,19 +262,27 @@ void GameStateModule::ProcessTakedownEvents(
                 mProgressionManager.GetProfile()->IncrementTotalOnlineVerticleTakedownCount();
             }
 
-            // [P4] FLAG PARKED: the E_ACTION_SEND_TELEMETRY post. 0x8238FF60..0x8238FFBC:
-            //     TelemetryData lData = { hook, 0 };                      // var_D0 / var_CC
-            //     lData.AddParameter(mLastActiveRaceCarInterface.GetPlayerPosition());   // sub_8236A8B8
-            //     actionQ.AddEvent(&lData, 228, 20);
-            //     if (lrEvent.mbMarkedManTakeDown) { TelemetryData lMarked = { 14, 0 }; AddEvent(228, 20); }
-            // BrnNetwork::BrnNetworkModuleIO::TelemetryData (DWARF BrnNetworkSharedIO.h:542, 20
-            // bytes: ETelemetryHook meHook + char macBuffer[16]; AddParameter(Vector3) SPrintf's
-            // "%i.%i" after range-asserting |x|,|z| < 10000) is not in the tree -> header_request.
-            // GetPlayerPosition() is deliberately NOT called while parked: it asserts
-            // IsPlayerCarActive() and its only consumer here is the parked record.
-            LogParkedLegOnce(sbParkedTelemetry,
-                "E_ACTION_SEND_TELEMETRY (228) needs BrnNetwork::BrnNetworkModuleIO::TelemetryData, "
-                "not in the tree; the takedown telemetry post is skipped");
+            // [P4] LANDED 2026-09-03 (aiwave, lane P1): 0x8238FF60..0x8238FFBC. TelemetryData is the
+            // DWARF record (BrnNetworkSharedIO.h:542, 20 B: ETelemetryHook + char[16]); hook 10 default,
+            // 13 T-bone (@0x8238FF58), 11 vertical (@0x8238FF14); AddParameter(Vector3) = sub_8236A8B8.
+            // r27 == the lpGameActionQueue parameter (`mr r27, r4` @0x8238FC6C), not the output buffer's.
+            {
+                BrnNetwork::ETelemetryHook leHook = BrnNetwork::E_TELEMETRY_TAKEDOWN;                        // li 0xA @0x8238FF0C
+                if (lrEvent.meType == E_TAKEDOWN_T_BONE)        leHook = BrnNetwork::E_TELEMETRY_TAKEDOWN_TBONE;    // 0xD
+                else if (lrEvent.meType == E_TAKEDOWN_VERTICAL) leHook = BrnNetwork::E_TELEMETRY_TAKEDOWN_VERTICAL; // 0xB
+                BrnNetwork::BrnNetworkModuleIO::TelemetryData lTelemetry;
+                lTelemetry.Construct(leHook);                                                      // stw var_D0 / stb 0 var_CC
+                lTelemetry.AddParameter(mLastActiveRaceCarInterface.GetPlayerPosition());          // sub_823102F0 -> sub_8236A8B8
+                lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lTelemetry),
+                                            GameStateModuleIO::E_ACTION_SEND_TELEMETRY, static_cast<s32>(sizeof(lTelemetry)));  // 0xE4, 0x14
+                if (lrEvent.mbMarkedManTakeDown)                                                  // lbz 0x24(r28)
+                {
+                    BrnNetwork::BrnNetworkModuleIO::TelemetryData lMarkedMan;
+                    lMarkedMan.Construct(BrnNetwork::E_TELEMETRY_TAKEDOWN_MARKED_MAN);             // li 0xE / stb 0, no parameter
+                    lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lMarkedMan),
+                                                GameStateModuleIO::E_ACTION_SEND_TELEMETRY, static_cast<s32>(sizeof(lMarkedMan)));
+                }
+            }
         }
         else
         {

@@ -76,7 +76,7 @@ public:
 
     // @0x827658F0 -- bodied in this TU.
     f32  GetTime(GraphType leGraphType, s32 liIndex) const;
-    s32  GetTimeCount() const;
+    s32  GetTimeCount() const { return miTimeCount; }   // (inline 2026-09-03: the console reads +0xA00 inline, no export)
     f32  GetTotalTime(GraphType leGraphType) const;
     bool IsValid() const;
 

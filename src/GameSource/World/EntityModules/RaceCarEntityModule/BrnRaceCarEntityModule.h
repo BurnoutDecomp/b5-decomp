@@ -1237,6 +1237,45 @@ private:
     bool mbSixaxisSteeringEnabled;      // +0x1834D (99149)
     bool mbPaybackSixaxisSteering;      // +0x1834E (99150)
 
+    // ========================================================================
+    // ADDITIVE (aiwave lane A9, 2026-09-03) -- the FOUR members PlaceRaceCarOnLoad
+    // @0x822CE588 reads on its NON-PLAYER arms, i.e. on every rival. They were the reason
+    // those arms were parked ("three unnamed module members"); all four are now pinned, and
+    // the pin is a four-point fit, not a guess:
+    //
+    //   * +0x18340 (99136)  miOpponentCount            DWARF :367 -- the ONLY int32 member
+    //     between mSurfaceList (:365) and mbIsInGameMode (:370 @+99140), and +99136 is
+    //     exactly the four bytes in front of +99140. HandlePrepareForModeAction @0x823092F0
+    //     writes it at 0x8230947C (`lbz r11, 0(r25); extsb r11, r11; stwx r11, r31, 0x18340`
+    //     -- GameModeParams+0 == the rival/opponent count byte), one instruction BEFORE the
+    //     `stdx` into mxGameModeFlags this header already names. That store is the one the
+    //     ModeArming banner listed as "NOT reproduced: +0x18340 lands inside maTailPadA1b
+    //     and this header names no member there" -- it does now.
+    //   * +0x18350 (99152)  mbSpawnAIBehindStartGrid   DWARF :382
+    //   * +0x18351 (99153)  mbPlayerRollsOnEventStart  DWARF :383
+    //   * +0x18352 (99154)  mbPlayerDonutsOnEventStart DWARF :384
+    //     -- entries 13/14/15 of the SAME seventeen-bool run this header already fits at both
+    //     ends (:370 @+99140 ... mbRenderRaceCarCoronas :381 @+99151). HandlePrepareForModeAction
+    //     writes all three from GameModeParams::muFlags, and each `rlwinm` names its own bit:
+    //       0x823094A8  rlwinm r11, r11, 0,17,17 -> 1 << 14 == KU_FLAG_AI_DRIVE_BY_START
+    //                   0x823094C4  stbx -> +0x18350
+    //       0x823094CC  rlwinm r11, r11, 0, 4, 4 -> 1 << 27 == KU_FLAG_DONUT_START
+    //                   0x823094EC  stbx -> +0x18352
+    //       0x823094F4  rlwinm r11, r11, 0, 5, 5 -> 1 << 26 == KU_FLAG_ROLLING_START, then
+    //                   0x8230950C..0x82309524  `rolling || donut`
+    //                   0x82309534  stbx -> +0x18351
+    //     Three consecutive DWARF entries landing on three consecutive asm-literal offsets in
+    //     the DWARF's own order, each carrying the flag whose NAME matches the member's --
+    //     that is what pins them.
+    //
+    // Same additive rule as the block above: console offsets recorded per member, the x64
+    // offsets are not load-bearing (named-member parity).
+    // ========================================================================
+    s32  miOpponentCount;               // +0x18340 (99136)   DWARF :367
+    bool mbSpawnAIBehindStartGrid;      // +0x18350 (99152)   DWARF :382
+    bool mbPlayerRollsOnEventStart;     // +0x18351 (99153)   DWARF :383
+    bool mbPlayerDonutsOnEventStart;    // +0x18352 (99154)   DWARF :384
+
     // X360 +0x18368 (99176). DWARF :395. Read as `lwzx r11, r28, 0x18368` and compared against
     // 0xA / 0xD -- E_MODE_ONLINE_RACE / E_MODE_ONLINE_BURNING_HOME_RUN, which is what identifies
     // the member (the two online modes with per-mode control tweaks).

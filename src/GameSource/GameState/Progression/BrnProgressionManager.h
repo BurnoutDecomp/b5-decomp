@@ -81,6 +81,18 @@ struct EventJunction;
 // "type seen using both class and struct") this owning definition is written with `class`
 // and an explicit `public:` section. When the full TU is reconstructed the keyword/layout
 // can be reconciled then -- it does not affect callers that only use the pointer + this method.
+// DWARF BrnProgressionManager.h:46. The unlock-sequence flavour DefeatRivalAndUnlockCar takes:
+// DEFAULT (0) seeds the new car's unlock deformation (0.85f) so the junkyard shows it wrecked;
+// NONE (1) marks the unlock sequence as already shown and, if the rival is not yet in the
+// Profile, adds it (the debug "defeat all rivals" path). OnPursuitWon passes DEFAULT (`li r5, 0`
+// @0x8238A0F8). [takedown P1 wave 2026-09-03, additive.]
+enum EUnlockSequenceType : s32
+{
+    E_UNLOCK_SEQUENCE_TYPE_DEFAULT = 0,
+    E_UNLOCK_SEQUENCE_TYPE_NONE    = 1,
+    E_UNLOCK_SEQUENCE_TYPE_COUNT   = 2,
+};
+
 class ProgressionManager
 {
 public:
@@ -145,6 +157,34 @@ public:
     // in one pass when the full ProgressionManager TU lands.
     // (Body in BrnProgressionManager.cpp, next to its bodied accessor siblings.)
     s32 GetCollectedStuntElementCount(BrnGameState::StuntElementType leStuntType) const;
+
+    // ------------------------------------------------------------------------
+    // [takedown P1 wave 2026-09-03] The rival-shutdown leg. Bodies in
+    // BrnProgressionManager_Rivals.cpp (together with GetProfileTotalTakedowns and
+    // GetCarChallengeWinCount above, which are BODIED there now -- their "declare-only" notes
+    // above are historical).
+    // ------------------------------------------------------------------------
+
+    // DWARF :360 (`void OnPursuitWon(CgsID, InputBuffer::GameActionQueue*)`; the Input/Output
+    // split names the same VariableEventQueue<13312,16> typedef). X360 0x82389F40; sole caller
+    // TakedownManager::ProcessTakedownEvent @0x823940F8 (`lwz r3, 0x290(r30)` == the takedown
+    // manager's mpProgressionManager, r4 = the victim's rival id, r5 = lpOutput->
+    // GetGameActionQueue()). Finds the rival in the ProgressionData, defeats it (below), and
+    // posts E_ACTION_RIVAL_STATE_CHANGED (197, 120 B) + the forced E_ACTION_REQUEST_AUTOSAVE.
+    void OnPursuitWon(CgsID lRivalId, BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue);
+
+    // DWARF :363. X360 0x8237B1D0; callers OnPursuitWon @0x8238A104 and
+    // ProgressionDebugComponent::DefeatAllRivals @0x8237EB58. Moves the Profile's RivalData for
+    // ProgressionData rival liRivalIndex to E_STATE_BEATEN (logging "Moving rival to beaten
+    // state: "), and if the rival's car is not owned yet AddCar()s it as
+    // E_UNLOCK_TYPE_SHUTDOWN_RIVAL, seeds the unlock deformation / already-shown flag per
+    // leUnlockSequenceType, then CheckForAllRivalsUnlocked().
+    void DefeatRivalAndUnlockCar(s32 liRivalIndex, EUnlockSequenceType leUnlockSequenceType);
+
+    // X360 0x8236FD90 (sole caller DefeatRivalAndUnlockCar). When GetNumberOfBeatenRivals() >=
+    // GetTrueNumberOfRivals() raises mbNeedToShowAllRivalsBeatenMessage and clears
+    // mbShowShutDownAllIfNeeded (`stbx 1, this+0x20980 ; stbx 0, this+0x20981`).
+    void CheckForAllRivalsUnlocked();
 
     // ADDITIVE GROW (declare-only) for the BrnTrainingManager TU.
     // X360 BrnProgression::ProgressionManager::GetProfile -- returns the embedded player Profile
@@ -916,6 +956,17 @@ private:
     // stored as the s32 the X360 writes (`stwx` of the event record's +0xEC mode BYTE, so the
     // stored value is a zero-extended byte). Construct seeds -1 (E_MODE_INVALID).
     s32       meModeToCheckForAllWinTypes = -1;                // X360 +133496 (0x20978)
+
+    // ---- [takedown P1 wave 2026-09-03] the "all rivals beaten" flag pair --------------------
+    // X360 +133504 (0x20980) / +133505 (0x20981), two consecutive bools in the DWARF's order
+    // (BrnProgressionManager.h:885 / :886). WRITER: CheckForAllRivalsUnlocked @0x8236FDD8/
+    // 0x8236FDDC stores `stbx 0 -> +0x20981` then `stbx 1 -> +0x20980` once every true rival is
+    // beaten. READER: ProgressionManager::PreWorldUpdate @0x823A4F68 polls both (`if (+133505)
+    // ... if (+133504)`) and clears both -- that reader is not reconstructed yet, so on PC the
+    // pair is written and never consumed (no HUD "all rivals beaten" message). Construct seeds
+    // are not attested here; false is the zero-initialised host value.
+    bool      mbNeedToShowAllRivalsBeatenMessage = false;      // X360 +133504 (0x20980)
+    bool      mbShowShutDownAllIfNeeded          = false;      // X360 +133505 (0x20981)
 
     // Pointer-INVARIANT layout facts only (host is the LLP64 gate target). The X360 byte offsets are
     // NOT asserted: they do not survive the 32->64-bit pointer widening of the embedded Profile.

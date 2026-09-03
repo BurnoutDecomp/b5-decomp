@@ -85,10 +85,10 @@ namespace Attrib
         // the value. (DWARF attribhashmap.h:326.)
         unsigned int GetCount(void* lpLayout, const Collection* lpCollection);
 
-        // GetTypeDesc @ own AttribSys TU (todo) — resolve this node's schema TypeDesc from
-        // the attribute database by its mTypeIndex. Declared here (TypeDesc from
-        // attribarray.h, forward-declared via attribinstance.h) so Collection::Clear's
-        // inherited-attribute teardown links against the real out-of-line call.
+        // GetTypeDesc @ 0x828079E8 — resolve this node's schema TypeDesc from the
+        // attribute database by its mTypeIndex (clamped to 0 when out of range, then read
+        // through the bounds-checked by-index type vector). Body: attribute.cpp (landed
+        // 2026-09-03); Collection::Clear's inherited-attribute teardown is its live caller.
         const TypeDesc* GetTypeDesc() const;
     };
 

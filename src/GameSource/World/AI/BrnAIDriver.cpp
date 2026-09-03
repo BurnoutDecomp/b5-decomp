@@ -1,99 +1,41 @@
 #include "GameSource/World/AI/BrnAIDriver.h"
-#include "GameSource/World/AI/BrnAICar.h"                  // AICar (committed minimal-slice home + accessors)
-#include "GameSource/World/AI/BrnAIUtils.h"                // BrnAI::StepTo (committed step-toward helper)
-#include "GameSource/World/AI/BrnAIAggression.h"           // AIAggression (committed embedded sub-machine @this+0x1C00)
-#include "GameSource/World/AI/Route/BrnRacingLine.h"       // RacingLine (committed embedded sub-object @this+0xF20)
+#include "GameSource/World/AI/BrnAIDriver_Constants.h"     // the file-scope KF_ tunables (both partfiles)
+#include "GameSource/World/AI/BrnAICar.h"                  // AICar (named members + accessors)
+#include "GameSource/World/AI/BrnAIUtils.h"                // StepTo / Find{Signed,Unsigned}AngleBetween2DVectors
+#include "GameSource/World/AI/BrnAIAggression.h"           // AIAggression (the embedded sub-machine)
+#include "GameSource/World/AI/Route/BrnRacingLine.h"       // RacingLine (the embedded sub-object)
+#include "GameSource/World/AI/Route/BrnRoute.h"            // Route / RouteNode (the car's route, AICar+0)
+#include "GameSource/World/AI/PID/BrnPIDController.h"      // PIDController (the two embedded controllers)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
 
 #include <cmath>   // std::sqrt (de-SIMD'd 2D normalise), std::isfinite (RwMath::IsValid)
 
-// BrnAI::AIDriver -- the STEERING + CAR-CONTROL link. This TU bodies the 15 members that turn a
-// navigation target (heading + desired speed) into the car's physics inputs (steer / throttle /
-// brake / hand-brake + boost). Reconstructed store-for-store from the X360 pseudocode/asm; the
-// inlined SIMD 2D-vector normalise (vrsqrtefp + two Newton-Raphson refine steps) and the inlined
-// vector lerps are reversed into the logical scalar/Vector2 maths they implement. Every call into
-// a collaborator is restored as a NAMED CALL.
+// BrnAI::AIDriver -- the STEERING + CAR-CONTROL link. This TU (BrnAIDriver.cpp + the partfile
+// BrnAIDriver_Update.cpp) bodies the members that turn a navigation target (heading + desired
+// speed) into the car's physics inputs (steer / throttle / brake / hand-brake + boost).
+// Reconstructed store-for-store from the X360 asm; the inlined SIMD 2D-vector normalise
+// (vrsqrtefp + two Newton-Raphson refine steps) and the inlined vector lerps are reversed into
+// the logical scalar/Vector2 maths they implement. Every call into a collaborator is a NAMED CALL.
 //
-// COLLABORATOR HOMES:
-//   * AICar (BrnAICar.h) and StepTo (BrnAIUtils.h) are committed -- used by name. The few AICar
-//     fields the X360 reads that BrnAICar.h does not yet expose are read through small TU-local
-//     offset accessors (CarFlagAt / CarFloatAt), documented as the de-inlined direct load and
-//     NOT growing AICar's layout.
-//   * The embedded sub-objects (SteeringFan @this+0x710, RacingLine @this+0xF20, the two
-//     PIDControllers @this+0x1B34 / +0x1B98, the AIAggression sub-machine @this+0x1C00) have no
-//     committed home; they are reached through minimal TU-LOCAL collaborator types built from
-//     these documented sub-object offsets (the BrnRouteMapModule.cpp precedent).
-//   * The free-function geometry helpers Find{Signed,Unsigned}AngleBetween2DVectors have no
-//     committed home; declared TU-locally in their real BrnAI namespace.
-//   * The remaining AIDriver members the bodies call (InitialiseRacingLine, CalculateDesiredSpeed,
-//     DoDrivingBehaviour, ...) are declared-only in the header and bodied by their own recon
-//     passes -- the faithful de-inlined form of the X360 `bl BrnAI__AIDriver__<name>` calls.
+// COLLABORATOR HOMES (all committed and reached BY NAME -- this file no longer performs any
+// `this + <guest offset>` reinterpret_cast):
+//   * AICar (BrnAICar.h) carries every field these bodies read as a named member.
+//   * The embedded sub-objects are named members of AIDriver: mSteeringFan (@0x710),
+//     mPIDController / mPIDControllerDrift (@0x1B34 / @0x1B98) sit at their guest offsets;
+//     the pointer-bearing RacingLine and AIAggression live in the HOST-ONLY tail and are
+//     reached through GetRacingLine() / GetAggression() (see BrnAIDriver.h's HOST-WIDTH RULE).
+//   * The car's Route is the AICar's own base (AICar::GetRoute()); node x/y come from
+//     Route::GetNode(i)->GetX()/GetY().
+//   * StepTo and Find{Signed,Unsigned}AngleBetween2DVectors are declared in BrnAIUtils.h and
+//     bodied in BrnAIUtils.cpp / BrnAIUtils_Angles.cpp.
 //
-// FLAGGED rodata: where a tuning float is referenced only by ADDRESS in the X360 build (no
-// immediate decoded by Hex-Rays) its VALUE is NOT recoverable from the dossier; it ships as a
-// flagged placeholder (KF_*, value 0.0f) and is listed in open_questions. Literal immediates
-// Hex-Rays decoded from the float bits (0.0/0.1/0.2/0.5/0.25/1.0/-1.0/2.0/3.0/4.0/50.0) are used
-// inline. The shared zero/one/neg-one rodata are spelt as literals.
+// TUNABLES: BrnAIDriver_Constants.h. Every KF_ there is a CONSOLE value -- the rodata ones read
+// straight from the image, the .bss ones evaluated from the unity-TU static initialisers at
+// 0x82C67F00..0x82C69500 (see that header's banner). No placeholder tunables remain.
 
 namespace BrnAI
 {
-    // ====================================================================================
-    // TU-LOCAL collaborator declarations (no committed home yet; declare-only).
-    // ====================================================================================
-
-    // Signed/unsigned planar angle between two 2D direction vectors (radians). BrnAIUtils DWARF
-    // surface (DistancePointToLine / ... / Find{Signed,Unsigned}AngleBetween2DVectors); bodied in
-    // their own recon passes, so declared TU-locally here.
-    f32 FindSignedAngleBetween2DVectors(Vector2 lFrom, Vector2 lTo);
-    f32 FindUnsignedAngleBetween2DVectors(Vector2 lFrom, Vector2 lTo);
-
-    // The embedded SteeringFan @this+0x710. Only the two entry points these bodies call are
-    // declared. GetDrivingTarget's X360 signature is
-    //   GetDrivingTarget(&out, fan, car, racingLine, racingLineGen, driver, 0)
-    // -- reconstructed here as the minimal called shape.
-    struct SteeringFanLocal
-    {
-        void    Prepare();
-        void    SetBiasMode(s32 leBiasMode);
-        Vector2 GetDrivingTarget(AICar* lpCar, void* lpRacingLine,
-                                 void* lpRacingLineGen, AIDriver* lpDriver, int liFlags);
-    };
-
-    // The embedded PIDController @this+0x1B34 (normal) / +0x1B98 (drift). Record(error, dt) then
-    // GetOutput() -- the classic PID step.
-    struct PIDControllerLocal
-    {
-        void Record(f32 lfError, f32 lfTimeStep);
-        f32  GetOutput();
-    };
-
-    // ====================================================================================
-    // file-local tuning constants (rodata referenced by address; values FLAGGED).
-    // ====================================================================================
-    // AttemptToDriveAtDesiredSpeed -- accelerator/brake ramp bands around the desired speed.
-    const f32 KF_ATDS_OVER_LO  = 0.0f;  // flt_8300D96C -- FLAG: rodata unrecovered (over-speed band lo)
-    const f32 KF_ATDS_OVER_HI  = 0.0f;  // flt_8300DB0C -- FLAG: rodata unrecovered (over-speed band hi)
-    const f32 KF_ATDS_UNDER    = 1.0f;  // flt_8300D9A8 -- FLAG: rodata unrecovered (under-speed accel band; 1.0 keeps the divide safe)
-
-    // CalculateCarControls -- case-0 (drive-to-line) full-brake speed threshold.
-    const f32 KF_CCC_FULLBRAKE_SPEED = 0.0f;  // flt_8300D984 -- FLAG: rodata unrecovered
-
-    // CorneringTopSpeed -- cornering-angle -> speed-fraction ramp.
-    const f32 KF_CORNER_ANGLE_SCALE = 0.0f;   // flt_820C41FC -- FLAG: rodata unrecovered (input-speed -> angle scale)
-    const f32 KF_CORNER_ANGLE_BASE  = 0.0f;   // flt_82F3038C -- FLAG: rodata unrecovered (angle subtract / threshold)
-    const f32 KF_CORNER_ANGLE_RANGE = 1.0f;   // flt_8300DC38 -- FLAG: rodata unrecovered (angle ramp width; 1.0 keeps the divide safe)
-
-    // ProximitySpeed -- proximity over-speed floor.
-    const f32 KF_PROX_SPEED_FLOOR = 0.0f;     // flt_8300DC34 -- FLAG: rodata unrecovered (min over-speed offset)
-
-    // UpdateSteeringAngle -- per-behaviour StepTo rates (rodata by address; UNRECOVERED).
-    const f32 KF_STEER_RATE_A = 1.0f;  // flt_820C4228 -- FLAG: rodata unrecovered (player car, beh 1/9/10)
-    const f32 KF_STEER_RATE_B = 1.0f;  // flt_820C422C -- FLAG: rodata unrecovered (player car, beh 2)
-    const f32 KF_STEER_RATE_C = 0.1f;  // flt_820C424C -- RECOVERED: the same address is decoded as an
-                                        // immediate 0.1 multiplier in ChooseRaceSteeringFan's asm
-                                        // (@0x827663B8, "*(v1+5400) * 0.1"); player car, default rate.
-
     // ====================================================================================
     // TU-LOCAL helpers.
     // ====================================================================================
@@ -101,99 +43,6 @@ namespace BrnAI
     // RwMath::IsValid( x ) -- the X360 finiteness check (vcmpeqfp x,x == "x is not NaN"; the
     // engine treats inf as invalid too).
     static inline bool IsFinite(f32 lfValue) { return std::isfinite(lfValue); }
-
-    // Reach the embedded sub-objects at their documented this-relative offsets (no committed home;
-    // de-inlined form of the X360 `addi r,this,<off>` sub-object address computation).
-    static inline SteeringFanLocal* Fan(AIDriver* lpD)
-    {
-        return reinterpret_cast<SteeringFanLocal*>(reinterpret_cast<u8*>(lpD) + 0x710);
-    }
-    static inline PIDControllerLocal* Pid(AIDriver* lpD, bool lbDrift)
-    {
-        const std::size_t luOff = lbDrift ? 0x1B98u : 0x1B34u;
-        return reinterpret_cast<PIDControllerLocal*>(reinterpret_cast<u8*>(lpD) + luOff);
-    }
-    // The embedded AIAggression sub-machine @this+0x1C00 -- a committed home (BrnAIAggression.h),
-    // reached by name instead of a raw offset poke.
-    static inline AIAggression* Aggression(AIDriver* lpD)
-    {
-        return reinterpret_cast<AIAggression*>(reinterpret_cast<u8*>(lpD) + 0x1C00);
-    }
-    // The embedded RacingLine sub-object @this+0xF20 -- a committed home (BrnRacingLine.h).
-    static inline RacingLine* DriverRacingLine(AIDriver* lpD)
-    {
-        return reinterpret_cast<RacingLine*>(reinterpret_cast<u8*>(lpD) + 0xF20);
-    }
-
-    // Read an unexposed AICar byte flag / float by its documented guest offset (de-inlined direct
-    // load of the X360 `lbz/lfs <off>(car)`; AICar's committed layout is NOT grown).
-    static inline u8  CarFlagAt(AICar* lpCar, std::size_t luOff)
-    {
-        return *(reinterpret_cast<const u8*>(lpCar) + luOff);
-    }
-    static inline f32 CarFloatAt(AICar* lpCar, std::size_t luOff)
-    {
-        return *reinterpret_cast<const f32*>(reinterpret_cast<const u8*>(lpCar) + luOff);
-    }
-    static inline void CarStoreFlagAt(AICar* lpCar, std::size_t luOff, u8 luValue)
-    {
-        *(reinterpret_cast<u8*>(lpCar) + luOff) = luValue;
-    }
-    static inline void CarStoreF32(AICar* lpCar, std::size_t luOff, f32 lfValue)
-    {
-        *reinterpret_cast<f32*>(reinterpret_cast<u8*>(lpCar) + luOff) = lfValue;
-    }
-    static inline void CarStoreS32(AICar* lpCar, std::size_t luOff, s32 liValue)
-    {
-        *reinterpret_cast<s32*>(reinterpret_cast<u8*>(lpCar) + luOff) = liValue;
-    }
-    // Read a 32-bit word from the car's route block by guest offset (miNodeCount @0x1400,
-    // route-valid flag @0x1408, miNextRouteNodeIndex @0x1524) -- de-inlined direct load.
-    static inline s32 CarFloatBitsS32(AICar* lpCar, std::size_t luOff)
-    {
-        return *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpCar) + luOff);
-    }
-
-    // Route node (x,y) for a node index. The X360 calls BrnAI::Route::GetNode(car's route, i) and
-    // reads node[0]/node[1] (x,y). The Route lives inside the AICar (committed BrnRoute home);
-    // declared TU-locally here as a free function so this slice does not pull in the Route home.
-    void RouteNodeXY(AICar* lpCar, s32 liNodeIndex, f32* lpfOutX, f32* lpfOutY);
-
-    // DriverReverseRequested mirrors the X360 `(_cntlzw(*(this+0x1C60)) & 0x20)==0` reverse-flag
-    // test (@0x8279A728-0x8279A73C) -- for an 8-bit-zero-extended-to-32 load, cntlzw==32 only when
-    // the byte is 0, so `(cntlzw&0x20)==0` reduces to "the byte is non-zero". Driver-local byte
-    // flag @this+0x1C60 (no committed name for it yet); de-inlined direct load.
-    static inline bool DriverReverseRequested(AIDriver* lpDriver)
-    {
-        return *(reinterpret_cast<const u8*>(lpDriver) + 0x1C60) != 0;
-    }
-    // AggressionUpdate ticks the embedded AIAggression sub-machine @this+0x1C00 (a committed home).
-    // X360 @0x8279A764/0x8279A7B4: r3=this+0x1C00, r5=*(this+0x1CE8) (mpAggressionVictim), f1=dt --
-    // BrnAI::AIAggression::Update(f32 lfTimeStep, const AICar* lpPlayerCar).
-    static inline void AggressionUpdate(AIDriver* lpDriver, f32 lfTimeStep)
-    {
-        Aggression(lpDriver)->Update(lfTimeStep, lpDriver->GetAggressionVictimCar());
-    }
-
-    // Read a float / 32-bit word from this driver's own block by guest offset, for the embedded
-    // sub-object scalars this slice does not name (RacingLine/avoidance proximity refs @0x1A3C /
-    // 0x1A40, the aggression-machine state word @0x1C00) -- de-inlined direct loads.
-    static inline f32 DriverFloatAtImpl(AIDriver* lpD, std::size_t luOff)
-    {
-        return *reinterpret_cast<const f32*>(reinterpret_cast<const u8*>(lpD) + luOff);
-    }
-    static inline s32 DriverS32AtImpl(AIDriver* lpD, std::size_t luOff)
-    {
-        return *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpD) + luOff);
-    }
-    static inline void DriverStoreS32At(AIDriver* lpD, std::size_t luOff, s32 liValue)
-    {
-        *reinterpret_cast<s32*>(reinterpret_cast<u8*>(lpD) + luOff) = liValue;
-    }
-    static inline void DriverStoreFlagAt(AIDriver* lpD, std::size_t luOff, u8 luValue)
-    {
-        *(reinterpret_cast<u8*>(lpD) + luOff) = luValue;
-    }
 
     // de-inlined planar (x,y) normalise -- v / |v| over the (x,y) lanes (the rsqrt + 2x
     // Newton-Raphson refine idiom the X360 emits inline).
@@ -209,7 +58,8 @@ namespace BrnAI
         return lResult;
     }
 
-    // 2D-flatten a Vector3 (drop z; the steering math is purely in the ground plane).
+    // 2D-flatten a Vector3 (drop z; the steering math is purely in the ground plane). This is
+    // BrnMath::Flatten, which the X360 calls out of line in several of these bodies.
     static Vector2 To2D(Vector3 lVector)
     {
         Vector2 lResult;
@@ -218,6 +68,14 @@ namespace BrnAI
         lResult.z = 0.0f;
         lResult.w = 0.0f;
         return lResult;
+    }
+
+    // clamp(x, 0, 1) -- the X360's `fsel max(x,0)` then `fsel min(.,1)` pair.
+    static inline f32 Saturate(f32 lfValue)
+    {
+        if (lfValue < 0.0f) return 0.0f;
+        if (lfValue > 1.0f) return 1.0f;
+        return lfValue;
     }
 
     // ====================================================================================
@@ -264,7 +122,7 @@ namespace BrnAI
         mBrakingRoadDir.SetZero();          // 0x1CB0
         m2DCarPos.SetZero();                // 0x1CD0
 
-        Aggression(this)->Construct(this);  // mAggression.Construct(this) @this+0x1C00
+        GetAggression()->Construct(this);   // mAggression.Construct(this) (the host-side member)
     }
 
     // ====================================================================================
@@ -282,10 +140,7 @@ namespace BrnAI
 
         mpCarHost = lpCar;
         lpCar->meCarState = E_AI_CAR_STATE_IN_RANGE;        // *(car+0x14C8) = 0
-        // BLOCKED (out of this TU's file scope): X360 @0x82796444 calls
-        // BrnAI::AICar::SetDriver(car, this) here to wire the car back to its driver. AICar's
-        // committed minimal-slice (BrnAICar.h) does not declare SetDriver -- adding the call
-        // needs a declaration added to BrnAICar.h, which this TU may not edit.
+        lpCar->SetDriver(this);                             // X360 @0x82796444
         InitialiseRacingLine();
 
         mfStuckTime        = 0.0f;          // 0x1D04
@@ -301,6 +156,11 @@ namespace BrnAI
         // member (BrnAIAggression.h has no public setter for this "seed for new car" bundle), so
         // this TU cannot write them without a new method declared on AIAggression -- out of scope.
 
+        // 0x82796480..0x827964B0: the twelve aggression stores (mpCar = car, state OUT_OF_RANGE, timers) --
+        // homed by lane A8 as AIAggression::Prepare(AICar*); the call was missing here (run4 AV:
+        // AIAggression::Update @0x82799ABC `lwz r11,8(agg) ; lbz 0x1549(r11)` on a null mpCar).
+        GetAggression()->Prepare(lpCar);
+
         ResetAttribSysValues();
     }
 
@@ -313,24 +173,26 @@ namespace BrnAI
     // inlined LCG advance + range-lerp), seed the perpendicular-target tuning, and prepare the
     // embedded SteeringFan.
     // ====================================================================================
-    void AIDriver::Prepare(void* lpSectionsData, s32 leRelatedActiveCarIndex, void* lpRandom)
+    void AIDriver::Prepare(AISectionsData* lpSectionsData, s32 leRelatedActiveCarIndex,
+                           CgsNumeric::Random* lpRandom)
     {
         (void)lpRandom;
         mpSectionsDataHost = lpSectionsData;            // 0x1CE4
         ResetAttribSysValues();
         meRelatedActiveCarIndexHost = leRelatedActiveCarIndex; // 0x1CF4
         mfPerpendicularTarget   = 0.0f;             // 0x1D48
-        DriverStoreS32At(this, 0x700, 0);           // mNearbyVehicles.miCount = 0
+        mNearbyVehicles.Reset();                    // stw 0, 0x700(this)
         mfHandBrake             = 0.0f;             // 0x1D30
         mbWantToEnterDrift      = 0;                // 0x1D65
         mActiveRouteTimeStamp   = 0;                // 0x1D5C
-        DriverStoreS32At(this, 0x1CEC, E_DRIFT_STATE_NORMAL_DRIVING);  // meDriftState
+        SetDriftState(E_DRIFT_STATE_NORMAL_DRIVING);   // stw 0, 0x1CEC(this)
 
-        DriverRacingLine(this)->ClearSectionCache();  // mRacingLine.ClearSectionCache() @this+0xF20
+        GetRacingLine().ClearSectionCache();           // mRacingLine.ClearSectionCache() (this+0xF20)
 
-        // byte flags @this+0x1AF0/+0x1AF1 = 0 (no committed names yet; de-inlined direct stores).
-        DriverStoreFlagAt(this, 0x1AF0, 0);
-        DriverStoreFlagAt(this, 0x1AF1, 0);
+        // stb 0, 0x1AF0 / 0x1AF1 == mRacingLine.mbIsInitialised / mbCentreLineHereKnown
+        // (RacingLine +0xBD0 / +0xBD1).
+        GetRacingLine().mbIsInitialised       = false;
+        GetRacingLine().mbCentreLineHereKnown = false;
 
         // X360 draws a per-car random tuning float in a [lo,hi] range (the inlined LCG advance:
         // multiplier 0x5851F42D, increment +1; then a vector lerp of two rodata bounds, minus 1.0)
@@ -339,7 +201,7 @@ namespace BrnAI
         // Restored store-for-store would require the Random + RacingLineGenerator homes, so the
         // perpendicular-tuning seed is left at its zero-init here and FLAGGED.
 
-        Fan(this)->Prepare();                        // mSteeringFan.Prepare() @this+0x710
+        mSteeringFan.Prepare();                      // @0x82778E40
 
         mfBoostTimeRemaining      = 0.0f;            // 0x1D44
         mfPlayerTimeSinceCrash    = 0.0f;            // 0x1D34
@@ -361,24 +223,45 @@ namespace BrnAI
     // racing-line init, UpdateBehaviour, (re)generate the line + braking anticipation, then
     // CalculateCarControls) and assert the steering angle is finite.
     // ====================================================================================
-    void AIDriver::Update(f32 lfTimeStep, bool lbActive, Vector3 lTargetMovement,
-                          AICar* lpPlayerCar, bool lbValidPlayer, void* lpRandom)
+    void AIDriver::Update(f32 lfTimeStep, bool lbLineUpdateToken, Vector3 lPlayerCarPosition,
+                          AICar* lpPlayerCar, bool lbDoInRangeCatchup, CgsNumeric::Random* lpRandom)
     {
-        (void)lbActive;
+        // r5 (lbLineUpdateToken == (slot == AIModule::miLineUpdateTokenCounter)) is set up by the
+        // caller but never read by the console body.
+        (void)lbLineUpdateToken;
 
         if (mbIsActive && lpPlayerCar)
         {
             UpdatePlayerTimers(lfTimeStep, lpPlayerCar);
             SetDrivingFanBiases(lpPlayerCar);
 
-            // (X360 here samples the racing-line centre when the line is generating; that path
-            //  reads the RacingLineGenerator @this+0xF20 and is bodied in its home.)
+            // 0x8279AF0C..0x8279AF50: while the racing line is initialised, cache the centre
+            // line under the car; otherwise clear the "known" flag.
+            if (GetRacingLine().mbIsInitialised)
+            {
+#if BRN_AI_RACINGLINE_STACK_PRESENT
+                GetRacingLine().mbCentreLineHereKnown =
+                    mRacingLineGenerator.GetCentreCentreLineHere(&GetRacingLine(),
+                                                                 &GetRacingLine().mCentreHere,
+                                                                 &GetRacingLine().mCentreAhead);
+#else
+                // [FLAG PC bring-up] RacingLineGenerator::GetCentreCentreLineHere has no body in
+                // this tree; the console's own "not known" state is the safe stand-in
+                // (GetQuickTurnSteering then takes its FindSignedAngleBetween2DVectors arm).
+                // DELETE-WHEN BrnRacingLineGenerator.cpp lands and the macro flips.
+                GetRacingLine().mbCentreLineHereKnown = false;
+#endif
+            }
+            else
+            {
+                GetRacingLine().mbCentreLineHereKnown = false;   // stb 0, 0x1AF1
+            }
 
             AICar* lpCar = mpCarHost;
             if (lpCar->IsCrashing())                       // *(car+0x1542)
             {
                 UpdateBehaviour(lfTimeStep, lpPlayerCar);
-                mfInvulnerableTime = 2.0f;                 // 0x1D0C (flt_820C41F4 == 2.0)
+                mfInvulnerableTime = KF_INVULNERABLE_AFTER_CRASH_TIME;  // 0x1D0C (flt_820C41F4)
             }
             else
             {
@@ -388,8 +271,8 @@ namespace BrnAI
                 m2DCarPos  = To2D(lpCar->GetPosition());   // 0x1CD0 (x,y)
                 mfCarSpeed = mpCarHost->GetSpeed();            // 0x1D00
 
-                // showtime-frozen flag @car+0x1541 (== car+5441).
-                if (CarFlagAt(lpCar, 0x1541) != 0)
+                // lbz 0x1541(car) == mbIsInAir -- an airborne car keeps its controls cleared.
+                if (lpCar->mbIsInAir)
                 {
                     mfAccelerator = 0.0f;  mbUseForcedSpeed = 0;
                     mfBrake       = 0.0f;  mbBoosting       = 0;
@@ -399,7 +282,7 @@ namespace BrnAI
                 }
                 else
                 {
-                    CalcDistanceFromPlayer(lTargetMovement);
+                    CalcDistanceFromPlayer(lPlayerCarPosition);
                     InitialiseRacingLine();
                     UpdateBehaviour(lfTimeStep, lpPlayerCar);
 
@@ -411,7 +294,7 @@ namespace BrnAI
                             UpdateBrakingAnticipationData();
                     }
 
-                    CalculateCarControls(lfTimeStep, lTargetMovement, lbValidPlayer, lpRandom);
+                    CalculateCarControls(lfTimeStep, lPlayerCarPosition, lbDoInRangeCatchup, lpRandom);
 
                     CGS_ASSERT(IsFinite(mfSteeringAngle), "RwMath::IsValid( mfSteeringAngle )");
                 }
@@ -444,10 +327,10 @@ namespace BrnAI
 
         if (lpCar->IsCrashing())
         {
-            const s32 liPrev = lpCar->meBehaviour;          // car+0x14B4
-            CarStoreF32(lpCar, 0x14E0, 0.0f);               // behaviour timer (car+5344) = 0
-            CarStoreS32(lpCar, 0x14B8, liPrev);             // previous behaviour (car+5304)
-            lpCar->meBehaviour = E_AI_BEHAVIOUR_CRASHING;
+            const EAIBehaviour lePrev  = lpCar->meBehaviour;   // lwz 0x14B4
+            lpCar->mfBehaviourTimer    = 0.0f;                 // stfs 0x14E0
+            lpCar->mePreviousBehaviour = lePrev;               // stw  0x14B8
+            lpCar->meBehaviour         = E_AI_BEHAVIOUR_CRASHING;   // stw 0x14B4, 7
         }
 
         switch (lpCar->meBehaviour)
@@ -464,26 +347,35 @@ namespace BrnAI
                 return;
 
             case 3:
-                // X360: (_cntlzw(*(this+0x1C60)) & 0x20)==0 -> the aggression reverse flag is set.
-                if (DriverReverseRequested(this))
+                // lbz 0x1C60(this) == mAggression.mbIsSuitableForAggression (AIAggression +0x60).
+                // The X360 spells the test `(_cntlzw(byte) & 0x20) == 0`, which for a byte load
+                // is exactly "the byte is non-zero".
+                if (GetAggression()->IsSuitableForAggressionFlag())
                 {
-                    CarStoreF32(lpCar, 0x14E0, 0.0f);
-                    CarStoreS32(lpCar, 0x14B8, E_AI_BEHAVIOUR_CRUISING);
-                    lpCar->meBehaviour = E_AI_BEHAVIOUR_FIGHTING;
+                    lpCar->mfBehaviourTimer    = 0.0f;                     // stfs 0x14E0
+                    lpCar->mePreviousBehaviour = E_AI_BEHAVIOUR_CRUISING;   // stw 0x14B8, 3
+                    lpCar->meBehaviour         = E_AI_BEHAVIOUR_FIGHTING;   // stw 0x14B4, 4
                 }
-                if (meAggressionVictimHost != -1)               // this+0x1CF0 (1852) != -1
-                    AggressionUpdate(this, lfTimeStep);
+                // [GUARD] 0x8279A768 `lwz r5, 0x1CE8(driver)` -- the aggression victim; the console never
+                // has it null here (the producer that stores +0x1CE8/+0x1CF0 runs first). On the host it
+                // can be (run1 AV in AIAggression::Update reading car+0x1549), so the tick is skipped.
+                if (meAggressionVictimHost != -1 && GetAggressionVictimCar() != 0)   // lwz 0x1CF0 != -1
+                    GetAggression()->Update(lfTimeStep, GetAggressionVictimCar());
                 UpdateStuck(lfTimeStep);
                 break;
 
             case 4:
-                if (!DriverReverseRequested(this))
+                if (!GetAggression()->IsSuitableForAggressionFlag())
                 {
-                    CarStoreF32(lpCar, 0x14E0, 0.0f);
-                    CarStoreS32(lpCar, 0x14B8, E_AI_BEHAVIOUR_FIGHTING);
-                    lpCar->meBehaviour = E_AI_BEHAVIOUR_CRUISING;
+                    lpCar->mfBehaviourTimer    = 0.0f;
+                    lpCar->mePreviousBehaviour = E_AI_BEHAVIOUR_FIGHTING;   // stw 0x14B8, 4
+                    lpCar->meBehaviour         = E_AI_BEHAVIOUR_CRUISING;   // stw 0x14B4, 3
                 }
-                AggressionUpdate(this, lfTimeStep);
+                // [GUARD] 0x8279A7BC (r5 not reloaded -- the case-3 victim) `lwz r5, 0x1CE8(driver)` -- the aggression victim; the console never
+                // has it null here (the producer that stores +0x1CE8/+0x1CF0 runs first). On the host it
+                // can be (run1 AV in AIAggression::Update reading car+0x1549), so the tick is skipped.
+                if (GetAggressionVictimCar() != 0)
+                    GetAggression()->Update(lfTimeStep, GetAggressionVictimCar());
                 UpdateStuck(lfTimeStep);
                 break;
 
@@ -505,10 +397,10 @@ namespace BrnAI
                 mfStuckTime = 0.0f;
                 if (!lpCar->IsCrashing())
                 {
-                    const s32 liPrev = lpCar->meBehaviour;
-                    CarStoreF32(lpCar, 0x14E0, 0.0f);
-                    CarStoreS32(lpCar, 0x14B8, liPrev);
-                    lpCar->meBehaviour = E_AI_BEHAVIOUR_CRUISING;
+                    const EAIBehaviour lePrev  = lpCar->meBehaviour;
+                    lpCar->mfBehaviourTimer    = 0.0f;
+                    lpCar->mePreviousBehaviour = lePrev;
+                    lpCar->meBehaviour         = E_AI_BEHAVIOUR_CRUISING;
                 }
                 break;
 
@@ -532,19 +424,19 @@ namespace BrnAI
             lfTargetAngle = -lfTargetAngle;     // reverse: flip the target
 
         f32 lfRate;
-        if (!mpCarHost->IsPlayerCar())              // *(car+0x1549)
+        if (!mpCarHost->IsPlayerCar())              // lbz 0x1549(car)
         {
-            lfRate = 1.0f;
+            lfRate = KF_AI_STEERING_STEP;           // flt_82001C98 == 1.0
         }
         else
         {
-            const s32 liBeh = mpCarHost->meBehaviour;   // car+0x14B4
+            const s32 liBeh = static_cast<s32>(mpCarHost->meBehaviour);   // lwz 0x14B4(car)
             if (liBeh == 1 || liBeh == 9 || liBeh == 10)
-                lfRate = KF_STEER_RATE_A;
+                lfRate = KF_PLAYER_ROLLING_START_STEERING_STEP;   // flt_820C4228 == 0.02
             else if (liBeh == 2)
-                lfRate = KF_STEER_RATE_B;
+                lfRate = KF_PLAYER_DRIVE_THRU_STEERING_STEP;      // flt_820C422C == 0.03
             else
-                lfRate = KF_STEER_RATE_C;
+                lfRate = KF_PLAYER_STEERING_STEP;                 // flt_820C424C == 0.1
         }
 
         mfSteeringAngle = StepTo(mfSteeringAngle, lfTargetAngle, lfRate);
@@ -568,7 +460,7 @@ namespace BrnAI
         if (!mbIsRacingLineInitialised)
             return;
 
-        const bool lbUseful = (CarFlagAt(mpCarHost, 0x1544) != 0);   // "use useful direction" (car+5444)
+        const bool lbUseful = mpCarHost->mbIsDrifting;   // lbz 0x1544(car) == mbIsDrifting
 
         // 1. current heading.
         Vector2 lHeading;
@@ -592,10 +484,11 @@ namespace BrnAI
         CGS_ASSERT(IsFinite(lfAngleToTarget), "RwMath::IsValid( lfAngleToTarget )");
         mfCalculatedSteeringAngle = lfAngleToTarget;             // 0x1D50
 
-        // 4. PID controller (drift controller on a useful-direction line, else normal).
-        PIDControllerLocal* lpPid = Pid(this, lbUseful);
-        lpPid->Record(lfAngleToTarget, lfTimeStep);
-        const f32 lfPidOut = lpPid->GetOutput();
+        // 4. PID controller (the drift controller while the car is drifting, else the normal
+        //    one). X360 @0x8277CE.. `addi r3, this, 0x1B98` vs `addi r3, this, 0x1B34`.
+        PIDController& lrPid = lbUseful ? mPIDControllerDrift : mPIDController;
+        lrPid.Record(lfAngleToTarget, lfTimeStep);
+        const f32 lfPidOut = lrPid.GetOutput();
 
         // 5. clamp(pidOut, -1, +1) -> mfPIDOutput; steer toward it. The X360 stores the PID
         // output clamped DIRECTLY (asm: f0=flt_820037C8=-1.0; fsubs/fsel max(out,-1) then
@@ -612,7 +505,7 @@ namespace BrnAI
     //
     // Clears the control outputs + flags, computes the desired speed (CalculateDesiredSpeed ->
     // mfDesiredSpeed), then dispatches on the CAR's behaviour (car+5300):
-    //   0  (drive-to-line): CalculateSteeringAngle; if speed past KF_CCC_FULLBRAKE_SPEED, force a
+    //   0  (drive-to-line): CalculateSteeringAngle; if speed past KF_STOP_BRAKE_SPEED, force a
     //                       full brake (brake=1, forcedSpeed=0, useForcedSpeed=1);
     //   1-4,10 (driving)  : DoDrivingBehaviour;
     //   5  (quick turn)   : UpdateSteeringAngle(mQuickTurnSteeringLock);
@@ -623,9 +516,10 @@ namespace BrnAI
     //   else              : assert "AI driver with unknown behaviour".
     // Finally asserts the steering angle is finite.
     // ====================================================================================
-    void AIDriver::CalculateCarControls(f32 lfTimeStep, Vector3 lTargetMovement,
-                                        bool lbValidPlayer, void* lpRandom)
+    void AIDriver::CalculateCarControls(f32 lfTimeStep, Vector3 lPlayerCarPosition,
+                                        bool lbDoInRangeCatchup, CgsNumeric::Random* lpRandom)
     {
+        // r6 (the module's Random) is set up by the caller and never read by the console body.
         (void)lpRandom;
 
         mfAccelerator      = 0.0f;  // 0x1D28
@@ -637,13 +531,15 @@ namespace BrnAI
         mbWantToExitDrift  = 0;     // 0x1D64
         mbWantToEnterDrift = 0;     // 0x1D65
 
-        CalculateDesiredSpeed(lTargetMovement, lbValidPlayer);   // -> mfDesiredSpeed
+        // X360 @0x827998E4 `mr r4, r5` -- CalculateDesiredSpeed(v1 = the player position it was
+        // handed, r4 = lbDoInRangeCatchup). Neither is read by that body (see the partfile).
+        CalculateDesiredSpeed(lPlayerCarPosition, lbDoInRangeCatchup);   // -> mfDesiredSpeed
 
         switch (mpCarHost->meBehaviour)
         {
             case 0:
                 CalculateSteeringAngle(lfTimeStep);
-                if (mpCarHost->GetSpeed() > KF_CCC_FULLBRAKE_SPEED)
+                if (mpCarHost->GetSpeed() > KF_STOP_BRAKE_SPEED)   // flt_8300D984 == 5 mph
                 {
                     mfForcedSpeed    = 0.0f;       // 0x1D18
                     mfBrake          = 1.0f;       // 0x1D2C
@@ -682,7 +578,7 @@ namespace BrnAI
             case 9:
                 CalculateSteeringAngle(lfTimeStep);
                 mbUseForcedSpeed = 0;          // 0x1D66
-                mfBrake          = 0.2f;       // 0x1D2C (flt_820C4300 == 0.2)
+                mfBrake          = KF_POST_RACE_BRAKE;   // 0x1D2C (flt_820C4300 == 0.2)
                 break;
 
             default:
@@ -705,38 +601,33 @@ namespace BrnAI
     {
         AICar* lpCar = mpCarHost;
 
-        // route validity: miRouteValid (car+0x1408 != 0) && miNodeCount (car+0x1400) > 1.
-        const s32 liRouteValid = CarFloatBitsS32(lpCar, 0x1408);
-        const s32 liNodeCount  = CarFloatBitsS32(lpCar, 0x1400);
-        if (!(liRouteValid != 0 && liNodeCount > 1))
+        // 0x82766518..0x82766540: route validity == (meStatus (car+0x1408) != UNINITIALISED &&
+        // miNodeCount (car+0x1400) > 0). The X360 is `cmpwi r11,0 ; bgt` -- strictly > 0, NOT > 1.
+        const Route* lpRoute = lpCar->GetRoute();   // mRoute is the AICar's own base
+        if (!(lpRoute->GetStatus() != Route::E_STATUS_UNINITIALISED && lpRoute->GetNodeCount() > 0))
         {
             return false;
         }
 
-        const s32 liNextNode = CarFloatBitsS32(lpCar, 0x1524);   // miNextRouteNodeIndex (car+0x1524)
+        const s32 liNextNode = lpCar->miNextRouteNodeIndex;   // lwz 0x1524(car)
 
-        // RouteGetNode(car, index) -> &node; node x@+0, y@+4. Reached through the committed
-        // BrnRoute home in the real call; here the node x/y are read via the car's route node
-        // accessor (TU-local declare-only) so the math is faithful without the Route home.
-        f32 lfFromX, lfFromY, lfToX, lfToY;
-        f32 lfNX, lfNY; RouteNodeXY(lpCar, liNextNode, &lfNX, &lfNY);
-
+        const RouteNode* lpNext = lpRoute->GetNode(liNextNode);
+        const RouteNode* lpFrom;
+        const RouteNode* lpTo;
         if (liNextNode <= 0)
         {
-            f32 lfN1X, lfN1Y; RouteNodeXY(lpCar, 1, &lfN1X, &lfN1Y);
-            lfFromX = lfNX;  lfFromY = lfNY;
-            lfToX   = lfN1X; lfToY   = lfN1Y;
+            lpFrom = lpNext;                 // node 0 -> aim at node 1
+            lpTo   = lpRoute->GetNode(1);
         }
         else
         {
-            f32 lfPX, lfPY; RouteNodeXY(lpCar, liNextNode - 1, &lfPX, &lfPY);
-            lfFromX = lfPX; lfFromY = lfPY;
-            lfToX   = lfNX; lfToY   = lfNY;
+            lpFrom = lpRoute->GetNode(liNextNode - 1);
+            lpTo   = lpNext;
         }
 
         Vector2 lDir;
-        lDir.x = lfToX - lfFromX;
-        lDir.y = lfToY - lfFromY;
+        lDir.x = lpTo->GetX() - lpFrom->GetX();
+        lDir.y = lpTo->GetY() - lpFrom->GetY();
         lDir.z = 0.0f; lDir.w = 0.0f;
         lrOutDirection = Normalize2D(lDir);
         return true;
@@ -754,7 +645,7 @@ namespace BrnAI
         AICar* lpCar = mpCarHost;
         Vector2 lResult;
 
-        if (CarFlagAt(lpCar, 0x154A) != 0)                       // mbIsDrivenByPlayer (car+5450)
+        if (lpCar->mbIsDrivenByPlayer)                           // lbz 0x154A(car)
         {
             const Vector3 lPos = lpCar->GetPosition();
             const Vector2 lDir = Normalize2D(To2D(lpCar->GetDirection()));
@@ -764,16 +655,36 @@ namespace BrnAI
         }
         else
         {
-            // mSteeringFan.GetDrivingTarget(car, mRacingLine, mRacingLineGen, this, 0). X360 asm:
-            //   SteeringFan::GetDrivingTarget(out, this+1808, car, this+3872, this+6960, this, 0)
-            // -- this+1808 == fan@0x710 (the implicit fan `this`); this+3872 == mRacingLine@0xF20;
-            // this+6960 == 0x1B30 (the RacingLineGenerator scratch, NOT 0x710); this == driver.
-            lResult = Fan(this)->GetDrivingTarget(
-                          lpCar,
-                          reinterpret_cast<u8*>(this) + 0xF20,   // mRacingLine        (this+3872)
-                          reinterpret_cast<u8*>(this) + 0x1B30,  // racing-line-gen     (this+6960)
-                          this,
-                          0);
+            // X360 asm: SteeringFan::GetDrivingTarget(out, this+1808 (== mSteeringFan @0x710),
+            // car, this+3872 (== mRacingLine @0xF20), this+6960 (== mRacingLineGenerator @0x1B30),
+            // this (the driver's NearbyVehicles @0x000), 0).
+#if BRN_AI_RACINGLINE_STACK_PRESENT
+            lResult = mSteeringFan.GetDrivingTarget(lpCar,
+                                                    &GetRacingLine(),
+                                                    &mRacingLineGenerator,
+                                                    GetNearbyVehicles(),
+                                                    false);
+#else
+            // [FLAG PC bring-up] SteeringFan::GetDrivingTarget @0x82779C30 and the 25 weighting
+            // contributors it drives have no bodies in this tree. FALLBACK (documented, NOT the
+            // console's): aim one metre along the car's ROUTE direction, i.e. the same look-ahead
+            // point the direct-target arm above builds, but steered by ComputeRouteDirection
+            // @0x82766500 (the console's own route heading) instead of the raw car facing. That
+            // keeps a rival driving its route while the fan is absent; when there is no usable
+            // route it degenerates to the car's own facing, exactly like the arm above.
+            // DELETE-WHEN BrnAISteeringFan.cpp's weighting half lands and the macro flips.
+            {
+                Vector2 lRouteDir;
+                if (!ComputeRouteDirection(lRouteDir))
+                {
+                    lRouteDir = Normalize2D(To2D(lpCar->GetDirection()));
+                }
+                lResult.x = m2DCarPos.x + lRouteDir.x;
+                lResult.y = m2DCarPos.y + lRouteDir.y;
+                lResult.z = 0.0f;
+                lResult.w = 0.0f;
+            }
+#endif
         }
 
         return lResult;
@@ -786,11 +697,12 @@ namespace BrnAI
     // boost-time slot doubles as a force-boost timer: if >0, count it down by lfSpeedDelta and
     // mark not-boosting; else if CheckForBoosting(), latch a 3.0s boost window and set boosting;
     // else clear boosting. Then close the speed loop: if currentSpeed < desiredSpeed, ramp the
-    // ACCELERATOR up across the KF_ATDS_UNDER band; if currentSpeed > desiredSpeed, ramp the BRAKE
-    // up across the [KF_ATDS_OVER_LO, KF_ATDS_OVER_HI] band. Each ramp = clamp(gap/width, 0, 1) --
+    // ACCELERATOR up across the KF_ACCELERATION_MAX_DIFF (20 mph) band; if currentSpeed >
+    // desiredSpeed, ramp the BRAKE up across the [KF_BRAKING_START_DIFF, KF_BRAKING_MAX_DIFF]
+    // (20 .. 40 mph) band. Each ramp = clamp(gap/width, 0, 1) --
     // i.e. the ramp GROWS with the speed gap (asm: fsel max(x,0) then fsel min(.,1); no '1-x').
     // ====================================================================================
-    void AIDriver::AttemptToDriveAtDesiredSpeed(f32 lfSpeedDelta)
+    void AIDriver::AttemptToDriveAtDesiredSpeed(f32 lfTimeStep)
     {
         const f32 lfBoostTimer = mfBoostTimeRemaining;       // 0x1D44
         mfBrake       = 0.0f;                                 // 0x1D2C
@@ -801,7 +713,7 @@ namespace BrnAI
         {
             if (CheckForBoosting())
             {
-                mfBoostTimeRemaining = 3.0f;                 // latch a 3.0s boost window
+                mfBoostTimeRemaining = KF_FORCED_BOOST_TIME;  // flt_820C4154 == 3.0 s
                 mbBoosting = 1;
             }
             else
@@ -812,7 +724,7 @@ namespace BrnAI
         else
         {
             mbBoosting = 1;
-            mfBoostTimeRemaining = lfBoostTimer - lfSpeedDelta;
+            mfBoostTimeRemaining = lfBoostTimer - lfTimeStep;
         }
 
         const f32 lfSpeed   = mpCarHost->GetSpeed();
@@ -820,19 +732,14 @@ namespace BrnAI
 
         if (lfSpeed < lfDesired)
         {
-            // under speed -> accelerate. ramp = clamp((desired-speed)/KF_ATDS_UNDER, 0, 1).
-            f32 lfRamp = (lfDesired - lfSpeed) / KF_ATDS_UNDER;
-            lfRamp = (lfRamp < 0.0f) ? 0.0f : lfRamp;
-            lfRamp = (lfRamp > 1.0f) ? 1.0f : lfRamp;
-            mfAccelerator = lfRamp;                           // 0x1D28
+            // under speed -> accelerate. ramp = clamp((desired - speed) / 20 mph, 0, 1).
+            mfAccelerator = Saturate((lfDesired - lfSpeed) / KF_ACCELERATION_MAX_DIFF);   // 0x1D28
         }
         else if (lfSpeed > lfDesired)
         {
-            // over speed -> brake. ramp = clamp(((over)-LO)/(HI-LO), 0, 1).
-            f32 lfRamp = ((lfSpeed - lfDesired) - KF_ATDS_OVER_LO) / (KF_ATDS_OVER_HI - KF_ATDS_OVER_LO);
-            lfRamp = (lfRamp < 0.0f) ? 0.0f : lfRamp;
-            lfRamp = (lfRamp > 1.0f) ? 1.0f : lfRamp;
-            mfBrake = lfRamp;                                 // 0x1D2C
+            // over speed -> brake across the [20 mph, 40 mph] over-speed band.
+            mfBrake = Saturate(((lfSpeed - lfDesired) - KF_BRAKING_START_DIFF)
+                               / (KF_BRAKING_MAX_DIFF - KF_BRAKING_START_DIFF));          // 0x1D2C
         }
     }
 
@@ -866,11 +773,10 @@ namespace BrnAI
         const f32 lfCorneringAngle = (lfAngle1 >= lfAngle2) ? lfAngle1 : lfAngle2;
         mfAngleToBrakingTarget = lfCorneringAngle;               // 0x1CFC
 
-        f32 lfRamp = (lfCorneringAngle - KF_CORNER_ANGLE_BASE) / KF_CORNER_ANGLE_RANGE;
-        lfRamp = (lfRamp < 0.0f) ? 0.0f : lfRamp;
-        lfRamp = (lfRamp > 1.0f) ? 1.0f : lfRamp;
+        const f32 lfRamp = Saturate((lfCorneringAngle - KF_MIN_BRAKING_ANGLE)   // flt_82F3038C, 30 deg
+                                    / KF_BRAKING_ANGLE_RANGE);                 // flt_8300DC38, 60 deg
 
-        const f32 lfScaled = lfInputSpeed * KF_CORNER_ANGLE_SCALE;
+        const f32 lfScaled = lfInputSpeed * KF_AI_MAX_BRAKING_SPEED_PROPORTION;   // flt_820C41FC
         // cap = inputSpeed + (scaled - inputSpeed) * ramp -- lerps from inputSpeed (ramp==0, no
         // cornering yet) toward the scaled-down speed (ramp==1, sharp corner).
         return lfInputSpeed + (lfScaled - lfInputSpeed) * lfRamp;
@@ -880,24 +786,23 @@ namespace BrnAI
     // ProximitySpeed @0x82770800
     //
     // Clamp the target speed by how close the car is to its proximity reference. t = clamp(
-    // (proximityRef - 4.0) * 0.25, 0, 1). v = max( (currentSpeed - speedRef - KF_PROX_SPEED_FLOOR),
+    // (proximityRef - 4.0) * 0.25, 0, 1). v = max( (currentSpeed - speedRef - 10 mph),
     // lfMinSpeed*0.5 ). Returns the lerp v + (lfMinSpeed - v) * t (drops toward lfMinSpeed as the
     // proximity ref grows; asm @0x827708C4/0x827708C8: vsubfp minSpeed-v, vmaddfp (minSpeed-v)*t+v).
     // ====================================================================================
     f32 AIDriver::ProximitySpeed(f32 lfMinSpeed)
     {
-        // proximityRef @this+0x1A3C ; speedRef @this+0x1A40 (both in the embedded
-        // RacingLine/avoidance block; de-inlined direct loads).
-        const f32 lfProxRef = DriverFloatAtImpl(this, 0x1A3C);
-        const f32 lfSpeedRef = DriverFloatAtImpl(this, 0x1A40);
+        // this+0x1A3C / +0x1A40 == mRacingLine.mfImmediateDistanceToTrafficImpact /
+        // mfImmmediateApproachSpeedOfTrafficAhead (RacingLine +0xB1C / +0xB20).
+        const f32 lfProxRef  = GetRacingLine().mfImmediateDistanceToTrafficImpact;
+        const f32 lfSpeedRef = GetRacingLine().mfImmmediateApproachSpeedOfTrafficAhead;
 
-        f32 lfT = (lfProxRef - 4.0f) * 0.25f;                 // flt_82003F40 == 0.25
-        lfT = (lfT < 0.0f) ? 0.0f : lfT;
-        lfT = (lfT > 1.0f) ? 1.0f : lfT;
+        const f32 lfT = Saturate((lfProxRef - KF_PROXIMITY_CLOSE)      // flt_820C41C0 == 4.0
+                                 * KF_PROXIMITY_FAR_RECIP);            // flt_82003F40 == 0.25
 
         const f32 lfSpeed = mpCarHost->GetSpeed();
-        f32 lfV = (lfSpeed - lfSpeedRef) - KF_PROX_SPEED_FLOOR;
-        const f32 lfFloor = lfMinSpeed * 0.5f;
+        f32 lfV = (lfSpeed - lfSpeedRef) - K_PROXIMITY_SPEED_REDUCTION;   // flt_8300DC34 == 10 mph
+        const f32 lfFloor = lfMinSpeed * KF_PROXIMITY_MIN_SPEED_SCALE;    // flt_820C4168 == 0.5
         if (lfV < lfFloor)
             lfV = lfFloor;
 
@@ -925,16 +830,14 @@ namespace BrnAI
         if (luRelLoc == 1 || luRelLoc == 0)
             return 0;
 
-        const f32 lfScheduleGate = CarFloatAt(lpCar, 0x1518);                // car+0x1518 (5400)
+        const f32 lfScheduleGate = lpCar->mfScheduleOffset0;                 // lfs 0x1518(car)
         if (lfScheduleGate > 0.0f)
         {
-            const f32 lfDistAhead = lpCar->mfDistanceAheadOfPlayer;          // car+0x14F8 (5368)
-            f32 lfClamped = lfScheduleGate * 0.1f;                           // flt_820C424C == 0.1
-            lfClamped = (lfClamped < 0.0f) ? 0.0f : lfClamped;
-            lfClamped = (lfClamped > 1.0f) ? 1.0f : lfClamped;
+            const f32 lfDistAhead = lpCar->mfDistanceAheadOfPlayer;          // lfs 0x14F8(car)
+            const f32 lfClamped   = Saturate(lfScheduleGate * 0.1f);         // flt_820C424C == 0.1
             if (lfDistAhead > 0.0f)
             {
-                if (lfDistAhead < lfClamped * 50.0f)                        // flt_820C4244 == 50.0
+                if (lfDistAhead < lfClamped * K_NORMAL_SPREAD_HNG)           // flt_820C4244 == 50.0
                     return 1;
             }
         }
@@ -961,45 +864,44 @@ namespace BrnAI
     // ====================================================================================
     void AIDriver::SetDrivingFanBiases(AICar* lpPlayerCar)
     {
-        (void)lpPlayerCar;
         AICar* lpCar = mpCarHost;
 
-        const bool lbPlayer         = lpCar->IsPlayerCar();          // car+0x1549 (5449)
-        const bool lbDrivenByPlayer = (CarFlagAt(lpCar, 0x154A) != 0); // car+0x154A (5450)
-        const bool lbForceStandard  = lpCar->ForceStandardRoute();   // car+0x1548 (5448)
-        const s32  liBehaviour      = lpCar->meBehaviour;            // car+0x14B4 (5300)
+        const bool lbPlayer         = lpCar->IsPlayerCar();            // lbz 0x1549(car)
+        const bool lbDrivenByPlayer = lpCar->mbIsDrivenByPlayer;      // lbz 0x154A(car)
+        const bool lbForceStandard  = lpCar->ForceStandardRoute();    // lbz 0x1548(car)
+        const s32  liBehaviour      = static_cast<s32>(lpCar->meBehaviour);   // lwz 0x14B4(car)
 
         if (lbPlayer && !lbDrivenByPlayer && (lbForceStandard || liBehaviour == 2))
         {
-            Fan(this)->SetBiasMode(8);
+            mSteeringFan.SetBiasMode(static_cast<EBiasMode>(8));
             return;
         }
 
         if (liBehaviour == 1)
         {
-            Fan(this)->SetBiasMode(4);
+            mSteeringFan.SetBiasMode(static_cast<EBiasMode>(4));
             return;
         }
 
-        // The aggression-machine state @this+0x1C00 (result[1792]).
-        const s32 liAggressionState = DriverS32AtImpl(this, 0x1C00);
-        if (liAggressionState == 3 && !IsPlayerProtected())
+        // lwz 0x1C00(this) == mAggression.meAggressionState (AIAggression +0x00).
+        const EAIAggressionState leAggressionState = GetAggression()->GetAggressionState();
+        if (leAggressionState == E_AI_AGGRESSION_STATE_ATTACK_SLAM && !IsPlayerProtected(lpPlayerCar))
         {
-            Fan(this)->SetBiasMode(2);
+            mSteeringFan.SetBiasMode(static_cast<EBiasMode>(2));
             return;
         }
 
-        if (liAggressionState == 13)
+        if (leAggressionState == E_AI_AGGRESSION_STATE_VEER_EXTREME)
         {
-            Fan(this)->SetBiasMode(9);
+            mSteeringFan.SetBiasMode(static_cast<EBiasMode>(9));
             return;
         }
 
-        const s32 leStyle = static_cast<s32>(lpCar->GetRouteFindingStyle()); // car+0x14C0 (5312)
+        const s32 leStyle = static_cast<s32>(lpCar->GetRouteFindingStyle()); // lwz 0x14C0(car)
         const bool lbAggressive = (leStyle == 2 || leStyle == 6);
-        const s32 leBias = lbAggressive ? ChooseAggressiveSteeringFan(lpCar)
+        const s32 leBias = lbAggressive ? ChooseAggressiveSteeringFan(lpPlayerCar)
                                         : ChooseRaceSteeringFan(lpCar);
-        Fan(this)->SetBiasMode(leBias);
+        mSteeringFan.SetBiasMode(static_cast<EBiasMode>(leBias));
     }
 
     // ====================================================================================
@@ -1018,7 +920,7 @@ namespace BrnAI
 
         if (mpCarHost->meRelativeLocation < 2)          // car+0x14D4 (behind player: 0 or 1)
         {
-            if (mfDistanceToPlayer > 30.0f)             // 0x1D08 (flt_820C3FA8 == 30.0)
+            if (mfDistanceToPlayer > KF_INVULNERABLE_BEHIND_DISTANCE)   // flt_820C3FA8 == 30.0
                 return true;
             if (mfInvulnerableTime > 0.0f)              // 0x1D0C (flt_82001CC0 == 0.0)
                 return true;

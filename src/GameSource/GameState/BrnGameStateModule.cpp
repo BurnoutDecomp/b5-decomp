@@ -247,16 +247,9 @@ void GameStateModule::Construct()
     // DELETE-WHEN PostWorldUpdate's snapshot leg lands (it XMemCpy's both interfaces).
     mLastGlobalRaceCarInterface.Clear();
 
-    // [FLAG PC bring-up] `DeveloperChallengeManager::Construct(a1 + 185712, a1 + 47920,
-    // a1 + 284520, a1 + 7632, a1)` -- i.e. (&mDeveloperChallengeManager, &mProgressionManager,
-    // &mStreetManager, mModeManager.GetScoringSystem(), this) -- is NOT called yet, for the same
-    // MEASURED link reason as the AchievementManagerBase / StreetManager pair documented above:
-    // its third argument goes through ModeManager::GetScoringSystem(), whose body lives in the
-    // unmounted BrnModeManager.cpp. The subobject is embedded (so it is zero-initialised rather
-    // than indeterminate -- BrnGameModule holds this module by value) and
-    // GetDeveloperChallengeManager() hands it back, which is what
-    // StuntManager::ProcessStuntElement's assert and OnCollectStunt call need.
-    // DELETE-WHEN BrnModeManager.cpp mounts; the call then goes on the line the console has it.
+    // (DeveloperChallengeManager::Construct @0x82380794 -- see the call after WireOwnerPointers below;
+    //  the "BrnModeManager.cpp unmounted" reason recorded here was stale: ModeManager::GetScoringSystem
+    //  is bodied in ModeManager_gUI_00.cpp, mounted.)
 
     // ⚠️⚠️ THE TWO PREPARE2 SUB-OBJECTS ARE NOT Construct()ed HERE (2026-08-11), and the reason in
     // BOTH cases is a MEASURED LINK COST -- not a missing body. The X360 Construct @0x82380388 runs
@@ -318,12 +311,25 @@ void GameStateModule::Construct()
     // well-defined because nothing dereferences the stored values until Prepare2.
     mStreetManager.WireOwnerPointers(this, &mProgressionManager);
 
+    // ⭐ 2026-09-03 (aiwave, lane P1): AchievementManagerBase.cpp is MOUNTED -- the eight externals the
+    // bat named are bodied (BrnScoringSystem_Accessors2.cpp / _Queries.cpp, BrnProgressionManager_Rivals.cpp),
+    // so the console's call goes back on its line (Construct @0x82380388: r4 = mProgressionManager,
+    // r5 = mStreetManager, r6 = mModeManager's ScoringSystem, r7 = this).
+    mAchievementManager.Construct(&mProgressionManager, &mStreetManager,
+                                  mModeManager.GetScoringSystem(), this);
+
+    // ⭐ 2026-09-03 (aiwave, lanes P1+P3): DeveloperChallengeManager::Construct @0x82380794 sits right after
+    // GameStateImageManagerBase::Construct @0x82380778 and before ClearData @0x823807A8 (r4 = r28
+    // mProgressionManager, r5 = r25 mStreetManager, r6 = r23 the ScoringSystem, r7 = r31 this). The TU is
+    // mounted now (its five externals landed), so the console's call goes back on its line.
+    mDeveloperChallengeManager.Construct(&mProgressionManager, &mStreetManager,
+                                         mModeManager.GetScoringSystem(), this);
+
     // DELETE-WHEN those two closures land (StreetManager::Construct additionally needs a
     // RoadRulesManager member, DWARF :229 / X360 this+183592, for its third argument) -- and
     // then the WireOwnerPointers call above, the helper itself, and the `= 0` initialisers
     // backing it all go with them:
-    //     mAchievementManager.Construct(&mProgressionManager, &mStreetManager,
-    //                                   mModeManager.GetScoringSystem(), this);
+    //     (mAchievementManager.Construct -- DONE above, 2026-09-03)
     //     mStreetManager.Construct(this, &mProgressionManager, &mRoadRulesManager);
 }
 

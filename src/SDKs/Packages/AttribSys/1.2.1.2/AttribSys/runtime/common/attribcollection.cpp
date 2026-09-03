@@ -55,12 +55,17 @@ namespace Attrib
     {
         AttribListBase* lpQueue = reinterpret_cast<AttribListBase*>(lpGarbageList);
 
-        // X360 reads the collection's shared refcount at +0x08 (the HashMap base's muRefCount).
+        // The X360 reads the collection's shared refcount at +0x08 (the HashMap base's
+        // muRefCount). FIXED (attrib teardown wave 2026-09-03): this used to transcribe
+        // that CONSOLE offset literally -- on the host mpBuckets is 8 bytes, so +0x08 is
+        // HashMap::muCapacity, and the "referenced" guard was reading the BUCKET COUNT of
+        // the table being queued. Read it BY NAME (the identical defect attribhashmap.cpp's
+        // HashMap::Release note documents).
         bool lbNullOrReferenced = (lpCollection == NULL);
         if (!lbNullOrReferenced)
         {
             const u16 lu16RefCount =
-                *reinterpret_cast<const u16*>(reinterpret_cast<const u8*>(lpCollection) + 0x08);
+                static_cast<const Collection*>(lpCollection)->GetRefCount();
             lbNullOrReferenced = (lu16RefCount != 0);
         }
         CGS_ASSERT(!lbNullOrReferenced,
@@ -85,15 +90,99 @@ namespace Attrib
 }
 
 // ============================================================================
-// Attrib::Collection::~Collection @ 0x8280C3F8 -- the full teardown (unlink from
-// the owning class, release the parent chain, clear the attribute table, drop
-// the source vault). Deferred to the Collection load/teardown TU with the load
-// ctor @0x82809740 (the container-layer x64 pass); the GC bag drain is the only
-// present caller and is itself unreached until vault unregistration.
+// Attrib::Collection::~Collection @ 0x8280C3F8
+// ============================================================================
+// The full teardown, store-for-store from 0x8280C3F8..0x8280C50C. In X360 order:
+//   0x8280C40C  assert the shared refcount (HashMap base +0x08) is zero
+//   0x8280C438  Class::RemoveCollection(mpClass, this)  -- unregister from the
+//               owning class's collection table
+//   0x8280C444  ClassPrivate::Release(mpClass->mpPrivates) -- drop the reference the
+//               load ctor took on the class's shared layout table
+//   0x8280C450  if (mpParent) mpParent->Release()       -- the parent/default chain
+//   0x8280C464  Clear()                                  -- free every attribute
+//   0x8280C46C  if (mpSource)  --vault->mRefCount, delete the vault on the final drop
+//               else if (mpData) Attrib::Free(mpData, classPrivate->mLayoutSize,
+//                                             "Attrib::layout")
+//   0x8280C4B8  ~HashMap, INLINED: assert the table is empty (attribhashmap.h:412)
+//               then release the bucket array
+// The object memory itself is NOT freed here: both callers own that -- the GC bag drain
+// (DatabasePrivate::CollectGarbageBag<Collection> @0x8280E3C0) and the scalar deleting
+// destructor (@0x8280C510) each run this body and then hand the collection block back
+// to the AttribSys package allocator themselves.
+//
+// Every field is reached BY NAME. The X360 byte offsets quoted above are the console's
+// (mpBuckets is 4 bytes there, 8 here), so none of them may be carried onto the host.
 // ============================================================================
 Attrib::Collection::~Collection()
 {
-    CGS_ASSERT(false, "Attrib::Collection::~Collection @0x8280C3F8: deferred TU (teardown path)");
+    // 0x8280C40C `lhz r11,8(r31)` -- the HashMap base's shared refcount.
+    CGS_ASSERT(muRefCount == 0,
+               "Destroying Attrib::Collection that is still referenced.");
+
+    // 0x8280C438 `mr r4,r31 ; lwz r3,0x18(r31) ; bl Attrib::Class::RemoveCollection`
+    // -- r3 = mpClass, r4 = this.
+    // [GUARD] mpClass == NULL: a collection built from an empty key (Attrib::Gen::* temporaries with key 0,
+    // e.g. AICar::SetDriver on a car whose asset key is unset) has no class; the console never garbage-
+    // collects such a collection, this build did (run2: AV in Class::RemoveCollection reading class+8).
+    // [GUARD] a CLASS-LESS collection (mpClass == NULL: an Attrib::Gen::* temporary built from key 0,
+    // e.g. AICar::SetDriver on a car whose asset key is unset) owns nothing the console's body would
+    // hand back -- no class registration, no layout, no attributes (Clear @0x8280C464 reads
+    // mpClass->mpPrivates) -- and the console never garbage-collects one (run2/run3: AVs in
+    // Class::RemoveCollection and Collection::Clear reading class+8). Only its own buckets go.
+    if (mpClass == NULL)
+    {
+        ReleaseBucketsForTeardown();
+        return;
+    }
+
+    ClassPrivate* lpClassPrivate = NULL;
+    if (mpClass != NULL)
+    {
+        mpClass->RemoveCollection(this);
+    
+        // 0x8280C444 `lwz r11,0x18(r31) ; lwz r3,8(r11) ; bl Attrib::ClassPrivate::Release`
+        // -- class+8 is the ClassPrivate; Release drops the layout table's shared refcount
+        // and queues the class for deferred deletion on the final drop.
+        lpClassPrivate = reinterpret_cast<ClassPrivate*>(mpClass)->mpPrivates;
+        lpClassPrivate->Release();
+    }
+
+    // 0x8280C450 `lwz r3,0xC(r31) ; cmplwi ; beq ; ld r4,0x10(r31) ; bl
+    // Attrib::Collection::Release`. The `ld r4,0x10(r31)` stages mKey into r4, which
+    // Collection::Release @0x8280C2E8 never reads (its whole body only touches r3 and
+    // the database singleton) -- a dead scheduled load, NOT a second argument.
+    if (mpParent != NULL)
+        mpParent->Release();
+
+    // 0x8280C464 -- free every attribute this collection owns, plus this instance's
+    // data for every laid-out/inherited attribute of the class layout table.
+    Clear();
+
+    if (mpSource != NULL)
+    {
+        // 0x8280C478 `lwz r11,0x10(r3) ; addic. r11,r11,-1 ; stw r11,0x10(r3) ; bne ;
+        // li r4,1 ; bl Attrib::Vault::`scalar deleting destructor`' -- the vault
+        // reference the load ctor took (Vault::mRefCount @ X360 +16), destroyed on the
+        // final drop. Same shape as ~ClassPrivate's source-vault release.
+        if (mpSource->Release(0))
+            Vault_ScalarDeletingDtor(mpSource, 1);
+    }
+    else if (mpData != NULL && lpClassPrivate != NULL)   // ([GUARD] no class -> no layout size to hand back)
+    {
+        // 0x8280C494 -- no source vault, so the layout block belongs to this collection:
+        // hand it back sized by the owning class's layout size (`lwz r10,0x18(r31) ;
+        // lwz r11,8(r10) ; lhz r4,0x28(r11)` == ClassPrivate::mLayoutSize).
+        Attrib::Free(mpData, lpClassPrivate->mLayoutSize, "Attrib::layout");
+    }
+
+    // ---- ~HashMap, inlined by the X360 at 0x8280C4B8..0x8280C4F8 ------------------
+    // `lhz r11,6(r31)` == muCount, then `lwz r3,0(r31) ; lhz r11,4(r31) ;
+    // rotlwi r4,r11,4 ; bl Attrib::HashMapTablePolicy::Free` == Free(mpBuckets,
+    // capacity * 16). The console's 16 is sizeof(Node) THERE; ReleaseBucketsForTeardown
+    // (attribhashmap.cpp -- the same seam ~ClassPrivate uses) is the sizeof-based host
+    // equivalent.
+    CGS_ASSERT(GetCount() == 0, "Attrib::HashMap not empty when destroyed.");
+    ReleaseBucketsForTeardown();
 }
 
 // ============================================================================

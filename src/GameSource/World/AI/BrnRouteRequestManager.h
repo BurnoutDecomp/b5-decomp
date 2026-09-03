@@ -41,7 +41,7 @@ namespace BrnAI
 {
 // Forward-declared collaborator (its real home is its own TU; the full interface is
 // declared TU-local in BrnRouteRequestManager.cpp). Pointer-only here.
-class BuzzBy;
+struct BuzzBy;   // (struct: matches the definition in BrnAIBuzzBy.h -- MSVC mangles the class-key; `class` here made RouteRequestManager::Update unresolvable)
 
 // DWARF BrnRouteRequestManager.h:31 -- whether a standard route may double back.
 enum EUTurns

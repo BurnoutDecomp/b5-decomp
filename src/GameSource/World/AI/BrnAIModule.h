@@ -5,9 +5,19 @@
 #include "GameSource/World/AI/Route/BrnRouteMapModule.h"
 #include "GameSource/World/AI/BrnAICar.h"                              // AICar (maAICars[35], BY VALUE)
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"   // ResetOnTrackManager
+// ---- ADDITIVE (aiwave lane A1, 2026-09-03): the drive spine's embedded state ----
+#include "GameSource/World/AI/BrnAIDriver.h"                          // AIDriver (maAIDrivers[8], BY VALUE)
+#include "GameSource/World/AI/BrnAIBuzzBy.h"                          // BuzzBy (mBuzzBy, BY VALUE)
+#include "GameSource/World/AI/BrnAISharedConstants.h"                 // ERoundRobinType
+#include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingManager.h"   // RaceBalancingManager (BY VALUE)
+#include "GameSource/World/AI/BrnRouteRequestManager.h"             // RouteRequestManager (mRouteRequestManager, BY VALUE)
+#include "GameSource/World/AI/Route/BrnRoute.h"                       // Route (mMasterRoute, BY VALUE)
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"                 // CgsNumeric::Random (mRandom)
+#include "GameSource/BurnoutConstants.h"                              // EActiveRaceCarIndex / EGlobalRaceCarIndex
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"     // the module base
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"   // EventReceiverQueue<1024,16>
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::ResourceHandle
+#include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"    // BrnPhysics::ContactSpy::ContactSpyInterface (mContactSpyInterface, DWARF :361)
 
 #include <eathread/eathread_rwmutex.h>
 
@@ -22,9 +32,38 @@ namespace BrnResource { namespace GameDataIO { template <int N> class AllocatorL
 
 namespace CgsModule { struct IOBufferStack; }
 
+// ---- ADDITIVE (aiwave lane A7, 2026-09-03) -- pointer-only parameter types of the eight
+//      game-action handlers below. Declared, not included: BrnGameActions.h /
+//      BrnGameModeParams.h are heavy GameState headers and this class only takes pointers.
+//      BrnAIModule_Events.cpp includes both for the complete types it dereferences.
+//      RaceCarReachedCheckpointAction is DECLARED ONLY ANYWHERE -- its handler is a park
+//      (BrnAI::AIModule::OnRaceCarReachedCheckpoint @0x8278A658 is an ARTIST export hole), so
+//      nothing in the tree dereferences it yet. ----
+namespace BrnGameState
+{
+    // CLASS KEY: BrnGameModeParams.h:138 defines it as a `class` -- MSVC mangles the key into the
+    // parameter type (V vs U), so a `struct` forward declaration here would emit an OnModeStart
+    // no caller can link against (the AllocatorList trap documented at the top of this file).
+    class GameModeParams;
+    namespace GameStateModuleIO
+    {
+        struct RaceCarReachedFinishAction;
+        struct RaceCarReachedCheckpointAction;
+        struct FinishedModeNotifyAction;
+        struct OnPlayerTakedownAction;
+    }
+}
+
 namespace BrnAI
 {
 namespace AIModuleIO { struct OutputBuffer; struct InputBuffer; struct InputBuffer_PostPhysics; }
+namespace AIModuleIO { struct RaceCarAIInterface; }      // SetSuitabilityForAggression arg (BrnRaceCarAIInterfaces.h)
+namespace RouteMapModuleIO { struct InputBuffer; }        // UpdateCars arg: the transient "Route" IO buffer (BrnRouteMapModuleIO.h:239)
+
+// DWARF BrnAIModule.h:58/:59 -- the two roster caps the module's arrays and loops are sized by.
+// The console bakes them as literals (35 / 8) into every GetAICar/GetAIDriver and loop bound.
+const s32 KI_MAX_OUT_OF_RANGE_RACE_CARS = 35;
+const s32 KI_MAX_ACTIVE_RACE_CARS       = 8;
 
 struct Route;
 struct AICar;
@@ -86,6 +125,81 @@ public:
         // apply its results to the AI cars.
         void UpdateResetOnTrackManager( AIModuleIO::AIModuleResultInterface* lpResults,
                                         f32 lfTime );
+
+        // ---- THE DRIVE LEGS of the per-frame spine (aiwave lane A1, 2026-09-03). Bodies in
+        //      BrnAIModule_Drive.cpp; the console-ordered call list of AIModule::Update is the
+        //      banner of that file and scratch/aiwave/A1_update_spine.md. ----
+
+        // X360 @0x8279A518 (89 insns) -- DWARF BrnAIModule.cpp:1118 `UpdateCars(float32_t,
+        // InputBuffer*, OutputBuffer*)`: f1 = the frame's sim time step, r5 = the transient
+        // RouteMapModuleIO "Route" input buffer, r6 = the AI's own output buffer. The body reads
+        // NEITHER buffer (only this + f1); they are carried for the prototype.
+        void UpdateCars( f32 lfTimeStep,
+                         RouteMapModuleIO::InputBuffer* lpRouteInputBuffer,
+                         AIModuleIO::OutputBuffer* lpOutputBuffer );
+        // X360 @0x8279B148 (204 insns) -- DWARF :1374 `UpdateDrivers(const InputBuffer*,
+        // OutputBuffer*, Vector3, float32_t)`: v1 = the player car position the caller read
+        // from RaceCarAIInterface::GetPlayerCarPosition, f1 = the sim time step.
+        void UpdateDrivers( const AIModuleIO::InputBuffer* lpInputBuffer,
+                            AIModuleIO::OutputBuffer* lpOutputBuffer,
+                            Vector3 lPlayerCarPosition,
+                            f32 lfTimeStep );
+        // X360 @0x827957F0 (392 insns) -- DWARF :1999. The INPUT side: copies each active
+        // driver's race-car snapshot (matrix/velocity/speed/section/8 flags) into its AICar.
+        void StoreDrivenCarData( const AIModuleIO::InputBuffer* lpInputBuffer );
+        // X360 @0x8278A970 (131 insns) -- DWARF :2309. Nearby traffic + nearby AI -> each
+        // driver's avoidance list.
+        void SortTrafficIntoAICars( const AIModuleIO::InputBuffer* lpInputBuffer );
+        // X360 @0x82795E10 (153 insns) -- DWARF :2130. THE OUTPUT SIDE: one BrnAIDriverControls
+        // record per active-car slot into the output buffer's VehicleDriverInputInterface queue.
+        void ProcessAIVehicleInputs( AIModuleIO::OutputBuffer* lpOutputBuffer );
+        // X360 @0x8276E910 (66) / @0x8276EA18 (67) -- DWARF :2189 / :2224.
+        void ProcessOutOfRangeVehicles( AIModuleIO::OutputBuffer* lpOutputBuffer );
+        void ProcessInRangeVehicles( AIModuleIO::OutputBuffer* lpOutputBuffer );
+        // X360 @0x8276EB28 (98 insns) -- DWARF :2264. Per-car distance-to-checkpoint + AI
+        // section into the AICarOutputInterface, plus the player's route.
+        void ExportCarData( AIModuleIO::OutputBuffer* lpOutputBuffer );
+
+        // X360 @0x82765B90 -- DWARF BrnAIModule.h:450. `assert(index < 8)` ("Invalid driver
+        // index: ") then `return this + 192080 + 7536 * index`, i.e. &maAIDrivers[index].
+        AIDriver* GetAIDriver( EActiveRaceCarIndex leActiveRaceCarIndex );
+
+        // ---- THE ACTIVATION / GAME-ACTION LEGS (aiwave lane A7, 2026-09-03). Bodies in
+        //      BrnAIModule_Events.cpp. These are AIModule::Update rows #14 and #16 (see
+        //      BrnAIModule_Drive.cpp's spine table) and the eight handlers row #14 dispatches to.
+        //      HandleManagementEvents is the ONLY writer of AIDriver::mbIsActive on this build --
+        //      without it every drive leg is a silent no-op. ----
+
+        // X360 @0x82791FD0 (280 insns) -- DWARF BrnAIModule.cpp:1552 `HandleGameActions(const
+        // InputBuffer*, OutputBuffer*, InputBuffer*)`. Drains lpInputBuffer->GetGameActionQueue()
+        // (VariableEventQueue<13312,16>) and dispatches 16 action ids. r5 (the AI OUTPUT buffer)
+        // is carried for the prototype -- the console body never touches it. r6 is the transient
+        // RouteMapModuleIO "Route" INPUT buffer that action 50 appends a race-route request to;
+        // the caller brackets this whole call in LockBuffersForIO/UnlockBuffersForIO on it.
+        void HandleGameActions( const AIModuleIO::InputBuffer* lpInputBuffer,
+                                AIModuleIO::OutputBuffer* lpOutputBuffer,
+                                RouteMapModuleIO::InputBuffer* lpRouteInputBuffer );
+
+        // X360 @0x82798620 (586 insns) -- DWARF BrnAIModule.cpp:1774 `HandleManagementEvents(
+        // const InputBuffer*)`. Drains lpInputBuffer->GetRaceCarAIInterface()->mManagementQueue
+        // (VariableEventQueue<16384,16> at console RaceCarAIInterface+0x2F8) and runs the eight
+        // BrnAI::AIModuleIO::EEvent arms -- attach / activate / deactivate / detach / player taken
+        // over / set up out of range / add car to mode / remove car from mode.
+        void HandleManagementEvents( const AIModuleIO::InputBuffer* lpInputBuffer );
+
+        // ---- the game-action handlers HandleGameActions calls (DWARF :251..:272) --------------
+        void OnRaceCarReachedFinish( const BrnGameState::GameStateModuleIO::RaceCarReachedFinishAction* lpAction );      // @0x8277B8D0
+        void OnRaceCarReachedCheckpoint( const BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction* lpAction ); // @0x8278A658 (ARTIST export hole -- parked)
+        void OnModeFinished( const BrnGameState::GameStateModuleIO::FinishedModeNotifyAction* lpAction );                // @0x8277B970
+        void OnPlayerTakedown( const BrnGameState::GameStateModuleIO::OnPlayerTakedownAction* lpAction );                // @0x8278A720
+        void OnModeStart( const BrnGameState::GameModeParams* lpGameModeParams );                                        // @0x82791DB8
+        void OnModeStartRacing( bool lbSkipPlayerCar );                                                                  // @0x8276E4B0
+        void OnRollingStart();                                                                                           // @0x8276E5C8
+        void OnModeEnd( bool lbRestoreDrivingInput );                                                                    // @0x8277BA80
+        // DWARF BrnAIModule.cpp:202. OnModeStart's one call; body is a NAMED PARK in
+        // BrnAIModule_Events.cpp (it builds a temporary Array<RaceBalancingGraph,7> out of the
+        // mode's OpponentData and hands it to RaceBalancingManager::OnRaceStart @0x82789AF8).
+        void SetupRaceBalancingManager( const BrnGameState::GameModeParams* lpGameModeParams );                          // @0x8278A460
 
     AIModule();
 
@@ -157,6 +271,19 @@ private:
     // X360 0x82795340 (167 insns) -- stage 2 of Prepare. LoadBundle("AI.dat") then acquire
     // "WorldMapData"; drains the reply into mMapDataHandle.
     bool LoadMapData( AIModuleIO::OutputBuffer* lpOutputBuffer );
+
+    // ---- private drive helpers (aiwave lane A1). Bodies in BrnAIModule_Drive.cpp. ----
+    // X360 @0x82798540 (55 insns) -- DWARF BrnAIModule.cpp:1324. Two RoundRobinDrivers passes.
+    void DoRoundRobins();
+    // X360 @0x82798408 (78 insns) -- DWARF :1168. Advances meCurrentRoundRobin[type] through the
+    // active drivers, calling AIDriver::DoRoundRobinWork on up to liMaxWork of them.
+    s32  RoundRobinDrivers( s32 liMaxWork, ERoundRobinType leType );
+    // X360 @0x8276E660 (88 insns) -- DWARF :1054. One car per frame: its proximity rank among
+    // the active cars + the module's closest-non-player car.
+    void UpdateOneProximityIndex();
+    // X360 @0x8276E7C0 (~70 insns) -- DWARF :1244.
+    void SetSuitabilityForAggression( EActiveRaceCarIndex leActiveRaceCarIndex,
+                                      const AIModuleIO::RaceCarAIInterface* lpCarInterface );
 
     struct RouteRequestSlot
     {
@@ -278,6 +405,125 @@ private:
     // it), which is what ProcessResetOnTrackRequest actually resolves against.
     EActiveRaceCarIndex mePlayerActiveRaceCarIndex;   // X360 +322040
     EGlobalRaceCarIndex mePlayerGlobalRaceCarIndex;   // X360 +322044
+
+    // ---- ADDITIVE (aiwave lane A4, 2026-09-03): DWARF BrnAIModule.h:361, X360 +322408
+    //      (0x4EB68). The contact-spy handle AIModule::PostPhysicsUpdate @0x8276E428 latches
+    //      every frame out of the post-physics input buffer (`addis r11,this,5 ; addi -0x1498 ;
+    //      stw 0 ; lwz r10,4(r31) ; stw r10`). Body in Bridges/WorldBridgeAIModule.cpp until
+    //      BrnAIModule.cpp takes it. DWARF order puts mCamera (:354) / miLineUpdateTokenCounter
+    //      (:356) / mfProgressionRankAsRatio (:358) between the cursors above and this member;
+    //      identity, not placement, as with everything in this block. ----
+    // ---- ADDITIVE (aiwave lane A7, 2026-09-03). DWARF BrnAIModule.h:119, X360 +322404
+    //      (0x4EBA4). AIModule::OnModeStart @0x82791E3C..0x82791E40 latches the mode's own
+    //      `lfs f0, 4(lpGameModeParams)` -- GameModeParams::mfProgressionRankAsRatio -- into this
+    //      seat, name for name. It is the same word the declared-only GetDifficulty() above says
+    //      it returns (`*(this + 0x4EBA4)`), so that accessor's body is `return
+    //      mfProgressionRankAsRatio;` when the AIModule TU lands it. ----
+    f32                 mfProgressionRankAsRatio;   // X360 +322404, DWARF :119
+
+    BrnPhysics::ContactSpy::ContactSpyInterface mContactSpyInterface;   // X360 +322408, DWARF :361
+
+    // ================================================================================
+    // ---- NAMED MEMBERS (aiwave lane A1, 2026-09-03) -- the DRIVE spine's state ----
+    // ================================================================================
+    // Same disposition as the block above: the X360 offset is the IDENTITY authority, not a
+    // placement. Every offset here is read straight out of the drive legs' asm (the
+    // `lis r11,4 ; ori r11,r11,0xEBxx ; lbzx/lwzx rN,this,r11` idiom), and the DWARF line is
+    // the name authority.
+    //
+    // NONE OF THESE IS SEEDED BY AIModule::Construct / Prepare YET (BrnAIModule.cpp is not
+    // this lane's file). The console's seeds, from Construct @0x82794D08 / Prepare @0x82798070:
+    //     miLineUpdateTokenCounter = 0 (both)         muNumAggressiveCars = 3
+    //     mbDoInRangeCatchup = mbDoOutOfRangeCatchup = mbDoAggressiveDriving = 1
+    //     mbEnableDrivingInput = 1                    mbIsInOnlineGameMode = 0
+    //     mbIsInGameMode = 0                          mbFullRollingStart = mbDonutStart = 0
+    //     mbAIDrivesPlayer = 0                        mbAIPlayerInvulnerable = 1
+    //     meCurrentRoundRobin[0..1] = 0 (Prepare)     meProximityGlobalRaceCarIndexRoundRobin = 0
+    //     mfClosestDistance = FLT_MAX, mpClosestCar = 0 (Prepare)
+    //     mRandom.Construct() (Construct, the +294784 prime, unrolled)
+    //     mBuzzBy.Prepare(maAICars, &mResetOnTrackManager) (Prepare stage 4 tail)
+    //     8x AIDriver::Construct (Construct) / 8x AIDriver::Prepare(sections, i, &mRandom) (Prepare stage 4)
+    // The conductor lands those in BrnAIModule.cpp; until then the flags rest at the host's
+    // zero-init, which is NOT the console's resting value for the five that default to 1.
+
+    // X360 +192080 (0x2EE50), stride 7536 -- GetAIDriver @0x82765B90 bakes both. DWARF :327.
+    // maAICars (35 * 5472 == 191520) ends exactly at 560 + 191520 == 192080, so this array
+    // follows it in the console, as here.
+    AIDriver            maAIDrivers[KI_MAX_ACTIVE_RACE_CARS];
+    // X360 +252368 (0x3D9D0) -- UpdateCars hands `this + 0x3D9D0` to AICar::Update as its
+    // RaceBalancingManager. DWARF :328. (8 * 7536 == 60288; 192080 + 60288 == 252368.)
+    RaceBalancingManager mRaceBalancingManager;
+    RouteRequestManager mRouteRequestManager;     // DWARF BrnAIModule.h:329, X360 +270952 (Construct @0x8278A3B0 from AIModule::Construct; Update row 22)
+    // X360 +289632 (0x46B60) -- UpdateCars hands `this + 0x46B60` to AICar::Update as its
+    // Route; RouteMapDebugComponent::RenderHUD reads the same seat. DWARF :337.
+    Route               mMasterRoute;
+    // X360 +294784 (0x47F80) -- UpdateDrivers hands `this + 0x47F80` to AIDriver::Update as
+    // its Random. DWARF :343.
+    CgsNumeric::Random  mRandom;
+    // X360 +322400 (0x4EB60) -- UpdateDrivers: the driver whose slot equals this counter gets
+    // `lbActive == true` this frame (asm `subf; cntlzw; extrwi ..,1,26` == (i == counter));
+    // incremented mod 8 at the tail. DWARF :356.
+    s32                 miLineUpdateTokenCounter;
+    // ---- ADDITIVE (aiwave lane A7, 2026-09-03) -- the three per-mode AI style cursors
+    //      OnModeStart @0x82791F18..0x82791F54 copies out of the GameModeParams and
+    //      HandleManagementEvents' ADD_CAR_TO_MODE arm / HandleGameActions' SET_PLAYER_CAR_DRIVER
+    //      arm read back. Offsets are the `lis r11,4 ; ori r11,r11,0xEB6C/0xEB70/0xEB74 ; lwzx`
+    //      idiom; names are DWARF BrnAIModule.h:125/:128/:131 and the GameModeParams member each
+    //      one is copied from is the same name (meAISpeedSelectionMethod /
+    //      meDefaultPlayerRouteFindingStyle / meDefaultAIRouteFindingStyle). ----
+    // X360 +322412 (0x4EB6C) -- AICar::OnModeStart's leSpeedSelectionMethod argument (r4).
+    EAISpeedSelectionMethod meSpeedSelectionMethod;          // DWARF :125
+    // X360 +322416 (0x4EB70) -- the style the PLAYER's AI car gets (AICar::mbIsPlayer arm of
+    // ADD_CAR_TO_MODE, and the style SET_PLAYER_CAR_DRIVER restores when the entity module
+    // takes the car back).
+    ERouteFindingStyle  meDefaultPlayerRouteFindingStyle;     // DWARF :128
+    // X360 +322420 (0x4EB74) -- the style every OTHER car gets; ADD_CAR_TO_MODE also gates
+    // AICar::OnModeStart's lbCanDeviateFromRoute on `this == E_ROUTE_FINDING_RACE`.
+    ERouteFindingStyle  meDefaultAIRouteFindingStyle;         // DWARF :131
+
+    // X360 +322424 (0x4EB78, lbzx) -- UpdateOneProximityIndex's `miProximityIndex = this - n`.
+    // DWARF :370.
+    u8                  muNumAggressiveCars;
+    // X360 +322425 (0x4EB79) -- UpdateDrivers passes it as AIDriver::Update's 5th arg (r7).
+    bool                mbDoInRangeCatchup;         // DWARF :373
+    bool                mbDoOutOfRangeCatchup;      // DWARF :374  +322426
+    bool                mbDoAggressiveDriving;      // DWARF :375  +322427 (SetSuitabilityForAggression reads 0x4EB7B)
+    // X360 +322428 (0x4EB7C) -- THE ProcessAIVehicleInputs GATE (and ProcessRequestInterface's
+    // driver-sweep gate). OnModeStart clears it when the mode's +148 word is non-zero; OnModeEnd
+    // restores 1. DWARF :376.
+    bool                mbEnableDrivingInput;
+    // X360 +322429 (0x4EB7D) -- UpdateDrivers / RoundRobinDrivers: "only the player's driver".
+    // DWARF :377.
+    bool                mbIsInOnlineGameMode;
+    // X360 +322430 (0x4EB7E) -- UpdateCars: 8 cars (a mode) vs 35 (free burn). DWARF :378.
+    bool                mbIsInGameMode;
+    bool                mbFullRollingStart;         // DWARF :379  +322431 (OnModeStart: flags & 0x4000000)
+    bool                mbDonutStart;               // DWARF :380  +322432 (OnModeStart: flags & 0x8000000)
+    // +322433 (0x4EB81) is a bool the X360 build HAS and the PS3 DWARF does NOT: Construct
+    // and Prepare zero it, and SetupRaceBalancingManager @0x8278A460 passes it as the third
+    // argument of RaceBalancingManager::OnRaceStart. It has no name to give it, so it is not
+    // declared; nothing in this tree reads it.
+    // X360 +322434 (0x4EB82) -- StoreDrivenCarData: `isPlayer && this` is the "driven by the
+    // AI" bool it hands AICar::UpdateInRangeData. DWARF :382.
+    bool                mbAIDrivesPlayer;
+    // X360 +322435 (0x4EB83) -- ProcessAIVehicleInputs: `isPlayer && this` -> the record's
+    // mbIsInvulnerableToWorld, OR'd with AIDriver::IsInvulnerable() into
+    // mbIsInvulnerableToVehicles. Construct seeds it to 1. DWARF :383.
+    bool                mbAIPlayerInvulnerable;
+    // X360 +322504 (0x4EBC8), one s32 per ERoundRobinType -- RoundRobinDrivers indexes it as
+    // `4 * (type + 80626) + this`. DWARF :387.
+    EActiveRaceCarIndex meCurrentRoundRobin[E_ROUND_ROBIN_COUNT];
+    // X360 +322520 (0x4EBD8) -- UpdateOneProximityIndex's cursor (`this + 0x50000 - 0x1428`),
+    // wrapped at 35. DWARF :392.
+    EGlobalRaceCarIndex meProximityGlobalRaceCarIndexRoundRobin;
+    // X360 +322524 (0x4EBDC) -- BuzzBy::Update's `this` and RouteRequestManager::Update's
+    // last arg. DWARF :394.
+    BuzzBy              mBuzzBy;
+    // X360 +322828 (0x4ED0C) / +322832 (0x4ED10) -- UpdateOneProximityIndex rewrites both every
+    // frame (FLT_MAX / NULL, then the nearest active non-player car); BuzzBy::Update reads
+    // mpClosestCar. DWARF :396 / :397.
+    f32                 mfClosestDistance;
+    AICar*              mpClosestCar;
 };
 
 // Free post-increment over the AI prepare-stage enum (DWARF BrnAIModule.h:417). X360 0x82765A10.

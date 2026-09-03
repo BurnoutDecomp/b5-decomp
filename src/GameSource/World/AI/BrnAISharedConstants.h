@@ -66,4 +66,47 @@ namespace BrnAI
         E_AI_CAR_STATE_INACTIVE     = 2,
         E_AI_CAR_STATE_COUNT        = 3,
     };
+
+    // DWARF BrnAISharedConstants.h:128 -- how an AI car picks its per-frame desired speed
+    // (AICar::CalcDesiredSpeed's switch discriminant, stored at AICar+0x14BC). Enumerator
+    // names/values are the DecFIGS DWARF. Added by the AICar::Update wave (2026-09-03).
+    enum EAISpeedSelectionMethod
+    {
+        E_AI_SPEED_SELECTION_METHOD_FREE_ROAM    = 0,
+        E_AI_SPEED_SELECTION_METHOD_RACE         = 1,
+        E_AI_SPEED_SELECTION_METHOD_MATCH_PLAYER = 2,
+        E_AI_SPEED_SELECTION_METHOD_PERSONALITY  = 3,
+        E_AI_SPEED_SELECTION_METHOD_POST_RACE    = 4,
+        E_AI_SPEED_SELECTION_METHOD_COUNT        = 5,
+    };
+
+    // DWARF BrnAISharedConstants.h:116 -- the AI car's personality (AICar+0x14CC; AICar::Reset
+    // indexes the per-personality base-aggression table with it). Enumerator names/values are
+    // the DecFIGS DWARF. Added by the AICar::Update wave (2026-09-03).
+    enum EPersonalityType
+    {
+        E_PERSONALITY_TYPE_RACING     = 0,
+        E_PERSONALITY_TYPE_AGGRESSION = 1,
+        E_PERSONALITY_TYPE_COUNT      = 2,
+    };
+
+    // DWARF BrnAISharedConstants.h:84 -- which of the AI driver's round-robin work lists a
+    // RoundRobinDrivers pass services (AIModule::meCurrentRoundRobin[E_ROUND_ROBIN_COUNT] keeps
+    // one cursor per type; AIDriver::DoRoundRobinWork takes the type). ADDITIVE (aiwave lane A1,
+    // 2026-09-03): AIModule::DoRoundRobins @0x82798540 passes the literals 1 then 0.
+    enum ERoundRobinType
+    {
+        E_ROUND_ROBIN_FIRST = 0,
+        E_ROUND_ROBIN_FAN   = 0,
+        E_ROUND_ROBIN_HNG   = 1,
+        E_ROUND_ROBIN_COUNT = 2,
+    };
+
+    // DWARF BrnAISharedConstants.h:145 -- what a NearbyVehicle (AIDriver avoidance list) is.
+    enum ENearbyType
+    {
+        E_NEARBY_TRAFFIC = 0,
+        E_NEARBY_AI      = 1,
+        E_NEARBY_PLAYER  = 2,
+    };
 }
