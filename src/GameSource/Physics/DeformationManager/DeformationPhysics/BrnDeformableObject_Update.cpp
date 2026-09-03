@@ -931,8 +931,22 @@ namespace Deformation
                 f32 lfStDamp  = 1.0f;   // the attacker arm's 0.1 car-car damp, when it fires
                 f32 lfStFade  = 1.0f;   // clamp(1.5 - strength, 0.5, 1.5)
                 f32 lfStGain  = 1.0f;   // the victim arm's 15.0, when it fires
+                // ⚠️⚠️ THE VICTIM ARM'S TWO PREDICATES, RECORDED SEPARATELY. Without them a run
+                // that shows no x15 cannot say WHICH of the three reasons it was -- no other
+                // vehicle, an other vehicle that is not the showtime player, or a genuinely
+                // broken arm -- and those are three completely different findings. Measured
+                // 2026-09-03: a showtime run produced 3,040 owner-2 rows at arm 0 and the probe
+                // could not distinguish "the traffic was hit by another traffic car" from "the
+                // gain is dead". -1 == the branch was never reached on this row.
+                s32 liStOtherShowtime = -1;   // other->GetVehiclePhysics()->IsPlayerVehicleInShowtime()
+                s32 liStOtherBounced  = -1;   // other->HasBouncedThisFrame()  (other +0x672E)
+                // And this object's own gate, so "the player was not in showtime" is on the row
+                // rather than inferred from arm != 1. ONE call, exactly as the console makes.
+                const bool lbSelfInShowtime =
+                    ( lpVehicle != nullptr && lpVehicle->IsPlayerVehicleInShowtime() );  // vtbl +0x10
+                const s32 liStSelfShowtime = lbSelfInShowtime ? 1 : 0;
 
-                if ( lpVehicle != nullptr && lpVehicle->IsPlayerVehicleInShowtime() )   // vtbl +0x10
+                if ( lbSelfInShowtime )
                 {
                     const f32 lfShowtimeScale = lpVehicle->GetShowtimeDeformationScale();  // vtbl +0x1C
                     lfShapedMagnitude *= lfShowtimeScale;
@@ -962,8 +976,16 @@ namespace Deformation
                 {
                     const BrnPhysics::Vehicle::VehiclePhysics* lpOtherVehicle =
                         lContact.mpOtherVehicle->GetVehiclePhysics();
-                    if ( lpOtherVehicle->IsPlayerVehicleInShowtime()                    // vtbl +0x10
-                         || lContact.mpOtherVehicle->HasBouncedThisFrame() )             // other +0x672E
+                    const bool lbOtherInShowtime = lpOtherVehicle->IsPlayerVehicleInShowtime();
+                    // ⚠️ INSTRUMENT-ONLY: the console short-circuits this read away when the
+                    // first term is true. Reading it unconditionally is a const byte load with
+                    // no side effect, and it is the only way a row can say WHICH term carried
+                    // the arm. It cannot change behaviour -- the `||` below is unchanged.
+                    const bool lbOtherBounced = lContact.mpOtherVehicle->HasBouncedThisFrame();
+                    liStOtherShowtime = lbOtherInShowtime ? 1 : 0;
+                    liStOtherBounced  = lbOtherBounced ? 1 : 0;
+                    if ( lbOtherInShowtime                                              // vtbl +0x10
+                         || lbOtherBounced )                                            // other +0x672E
                     {
                         lfShapedMagnitude *= KF_SHOWTIME_MAG_VICTIM_GAIN;               // 15.0
                         liStArm = 2; lfStGain = KF_SHOWTIME_MAG_VICTIM_GAIN;
@@ -986,16 +1008,49 @@ namespace Deformation
                         const char* lpcEnv = getenv( "BRN_SHOWTIME_WATCH" );
                         siStMagProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
                     }
-                    static u32 suStMagLines = 0;
-                    if ( siStMagProbe == 1 && CgsDev::Log::gpDebugPrint != 0
-                         && ++suStMagLines <= 4000u )
+                    // ⚠️⚠️ TWO BUDGETS, NOT ONE (measured 2026-09-03, run st_FIX1). A single
+                    // 4,000-line budget was spent by present 2981 -- entirely on arm-0 rows from
+                    // the world contacts of the launch bounce -- and the run's LATER car-car
+                    // contacts, the ones the x15 arm exists for, fell off the end of the log.
+                    // A budget answers "what did the first N contacts do"; the question here is
+                    // "what did the SHAPED contacts do", and those are different questions. So
+                    // the untouched rows get a small budget and the shaped rows get their own.
+                    // ⚠️ AND THE SPLIT HAS TO BE BY CAR-CAR, NOT BY ARM (second measurement, run
+                    // st_FIX2). Giving the untouched rows 1,500 lines still spent the whole
+                    // budget by present 2835 on the WORLD contacts of the launch bounce
+                    // (mpOtherVehicle == 0, where no arm can fire by construction) and the log
+                    // ended before the first traffic contact. The rows that can answer the
+                    // question are the CAR-CAR ones; the world contacts are the noise floor.
+                    static u32 suStMagShaped = 0;   // an arm fired
+                    static u32 suStMagCarCar = 0;   // car-car, no arm -- the refutation rows
+                    static u32 suStMagWorld  = 0;   // world contact -- context only
+                    bool lbStBudget;
+                    if      ( liStArm != 0 )                      { lbStBudget = ( ++suStMagShaped <= 6000u ); }
+                    else if ( lContact.mpOtherVehicle != nullptr ) { lbStBudget = ( ++suStMagCarCar <= 6000u ); }
+                    else                                          { lbStBudget = ( ++suStMagWorld  <=  300u ); }
+                    if ( siStMagProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && lbStBudget )
                     {
+                        const u32 luStMagLine = suStMagShaped + suStMagCarCar + suStMagWorld;
                         *CgsDev::Log::gpDebugPrint
-                            << "[st-mag] n "   << static_cast<s32>(suStMagLines)
+                            << "[st-mag] n "   << static_cast<s32>(luStMagLine)
                             << " present "     << static_cast<s32>(renderengine::guPresentCount)
                             << " owner "       << static_cast<s32>(GetHandlingBodyIdHighByte())
                             << " dir "         << liDir
                             << " arm "         << liStArm
+                            << " selfShow "    << liStSelfShowtime
+                            << " oShow "       << liStOtherShowtime
+                            << " oBnc "        << liStOtherBounced
+                            // ⚠️⚠️ THE DISCRIMINATOR. Without the OTHER object's entity-owner
+                            // byte, `oShow 0` on a traffic row is ambiguous between the two
+                            // findings that matter: "this traffic car was hit by another TRAFFIC
+                            // car, so the x15 correctly did not fire" (oOwner 2) and "this traffic
+                            // car was hit by the RACE CAR and the showtime predicate still read
+                            // false" (oOwner 1), which would be a live defect. 5,754 rows of the
+                            // first were nearly published as the second.
+                            << " oOwner "      << ( lContact.mpOtherVehicle != nullptr
+                                                    ? static_cast<s32>(lContact.mpOtherVehicle
+                                                        ->GetHandlingBodyIdHighByte())
+                                                    : -1 )
                             << " raw "         << lfProjection
                             << " shaped "      << lfShapedMagnitude
                             << " x "           << ( lfProjection != 0.0f
