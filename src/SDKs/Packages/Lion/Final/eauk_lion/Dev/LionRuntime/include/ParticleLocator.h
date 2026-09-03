@@ -38,17 +38,17 @@
 
 #include "types.hpp"
 #include "SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h"   // cVector -- the real eauk_common home (fork retired 2026-09-03)
+#include "SDKs/Packages/Lion/Final/eauk_common/Maths/Matrix.h"   // cMatrix -- ditto (fork retired 2026-09-03)
 
 // cVector now comes from its real home, eauk_common/Maths/Vector.h (included above);
 // the private copy that used to live here is retired, and with it the warning to keep
 // three copies token-for-token identical.
 
-// HONEST PLACEHOLDER: row-major 4x4 matrix (four cVector rows, 64 bytes). GetMat
-// writes the interpolated frame here; Init sets it to the identity.
-struct cMatrix
-{
-    cVector maRows[4];
-};
+// cMatrix now comes from its real home, eauk_common/Maths/Matrix.h (included above). The
+// private `struct cMatrix { cVector maRows[4]; }` that used to sit here was one of three
+// forks -- and it was a HARD REDEFINITION of ParticleBucket.h's `struct cMatrix { f32
+// m[16]; }`, which only ever escaped a diagnostic because no TU had reached both. Same
+// bytes, one definition now; the rows carry the DWARF's own names (xa/ya/za/wa).
 
 struct cParticleLocator
 {

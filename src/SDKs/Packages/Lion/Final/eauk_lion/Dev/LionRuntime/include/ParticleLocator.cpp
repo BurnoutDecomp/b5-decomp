@@ -40,10 +40,10 @@ namespace
 // ----------------------------------------------------------------------------
 void cParticleLocator::Init()
 {
-    SetVec(mMatrix.maRows[0], 1.0f, 0.0f, 0.0f, 0.0f);
-    SetVec(mMatrix.maRows[1], 0.0f, 1.0f, 0.0f, 0.0f);
-    SetVec(mMatrix.maRows[2], 0.0f, 0.0f, 1.0f, 0.0f);
-    SetVec(mMatrix.maRows[3], 0.0f, 0.0f, 0.0f, 1.0f);
+    SetVec(mMatrix.xa, 1.0f, 0.0f, 0.0f, 0.0f);
+    SetVec(mMatrix.ya, 0.0f, 1.0f, 0.0f, 0.0f);
+    SetVec(mMatrix.za, 0.0f, 0.0f, 1.0f, 0.0f);
+    SetVec(mMatrix.wa, 0.0f, 0.0f, 0.0f, 1.0f);
     SetVec(mReserved40, 0.0f, 0.0f, 0.0f, 0.0f);
 
     mCachedTime = 0;
