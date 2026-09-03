@@ -416,6 +416,23 @@ void* gpSkyDomeEnvMapDepthStencilState = &sSkyDomeEnvMapDepthStencilState;
 // skid-mark pass (BrnTrailRender.cpp) through ImDeviceSetBlendState.
 void* gpImStandardAlphaBlendState      = &sImStandardAlphaBlendState;
 
+// ============================================================================================
+// [DIAG] NOT IN THE X360 BINARY. The tyre-mark campaign's DISCRIMINATOR, reachable only when
+// BRN_SKID_LOUD names the bit (BrnTrailRender.cpp reads it; nothing else references these two).
+// DELETE-WHEN-STABLE, with the rest of the trail diagnostics.
+//
+// WHY: the skid pass reports hr == S_OK, correct geometry, a resolved matrix, an on-screen NDC
+// and every render state the console asks for -- and produces no pixels. Between the vertex
+// program and the frame buffer sit exactly three things that can swallow a fragment silently:
+// the DEPTH TEST (the trail rides 3 cm over a road the world already wrote), the ALPHA BLEND
+// against a near-black source, and the surface itself. The first two can be taken out of the
+// experiment one at a time; whatever remains is the third. Two state objects, same shape as
+// their real siblings above, applied through the same two appliers -- no new code path.
+ImDepthStencilState sDiagNoDepthState = { FALSE, FALSE, D3DCMP_ALWAYS };
+ImBlendState        sDiagNoBlendState = { FALSE, D3DBLEND_ONE, D3DBLEND_ZERO, FALSE, FALSE };
+void* gpDiagSkidNoDepthState = &sDiagNoDepthState;
+void* gpDiagSkidNoBlendState = &sDiagNoBlendState;
+
 // X360 dword_8301090C -- the shadow pass's shared depth/stencil state (see the object above).
 renderengine::DepthStencilState* gpShadowDepthStencilState = &sShadowDepthStencilState;
 

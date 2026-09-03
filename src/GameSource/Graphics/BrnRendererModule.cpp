@@ -8,6 +8,7 @@
 #include "GameSource/Graphics/BrnRendererModulePostFx.h"  // Render's effects-frame -> BrnPostFx apply block
 #include "GameSource/Director/Camera/Camera.h"            // BrnDirector::Camera::Camera -- the staged camera-input record
 #include "GameSource/Effects/Particles/ParticleModule.h"     // BrnParticle::ParticleModule::RenderFullResParticles (the full-res particle pass)
+#include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"  // [diag] BrnDiag::LogBoundSurfaces (the pass-boundary RT probe)
 #include "GameSource/Effects/Particles/ParticleModuleBringUp.h"  // BrnParticle::PCBringUpParticleRenderDataProduced (the motion-blur render-data latch)
 #include "pc/gcm/renderengine/renderstates.h"    // renderengine::TextureState::Parameters (the sampler-13 env-map state)
 
@@ -3066,6 +3067,11 @@ void BrnRendererModule::BeginRenderAntiAliased(f32 lfWhiteLevel, bool lbClearSte
         CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miScreenClear);
 #endif
     }
+
+    // [DIAG] THE WORLD PASS'S SURFACE PAIR, at the moment the bracket opens it. This is the
+    // reference the trail pass (BrnTrailSystem.cpp) and the resolve are compared against; on its
+    // own it says nothing. See BrnDiagBoundSurfaces.h. DELETE-WHEN-STABLE.
+    BrnDiag::LogBoundSurfaces("world-begin");
 }
 
 // 0x823FFBE0 -- resolve the anti-aliased scene out of EDRAM into the down-sample buffer.
@@ -3157,6 +3163,11 @@ void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
                                     mvBackgroundColour.z, mvBackgroundColour.w };
 
     void* const lpDevice = renderengine::gpD3DDevice;
+
+    // [DIAG] THE SURFACE PAIR THE RESOLVE IS ABOUT TO READ. Together with "world-begin" and
+    // "trail" this closes the identity question: a trail drawn into a surface this call does not
+    // read is a draw nothing ever presents. DELETE-WHEN-STABLE.
+    BrnDiag::LogBoundSurfaces("resolve-in");
 
     if (mbMultisampledBackbuffer)
     {
