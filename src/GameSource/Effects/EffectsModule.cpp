@@ -779,6 +779,15 @@ void EffectsModule::PostWorldPreparePrepare()
         (void)lbAnyLane;
     }
 
+    // [skid-bind] ONE LINE PER SURFACE on the FIRST pass only, printing BOTH SIDES of every
+    // pointer this loop follows. The question it answers is the one the per-frame gate line
+    // cannot: with Num_Surfaces() == 20, ref=1 and a real threshold of 0.3, `en=0` on every
+    // surface could equally be (a) authored -- these surfaces genuinely have skid marks off --
+    // or (b) all 20 resolving to ONE shared block (the class's default layout), which would
+    // make every surface read identically whatever the data says. DISTINCT vfxLayout pointers
+    // settle it in favour of (a); identical ones convict the resolve.
+    static bool sbLoggedSurfaces = false;
+
     for (u32 luSurface = 0; luSurface < static_cast<u32>(mSurfaceList.Num_Surfaces()); ++luSurface)
     {
         void* lpSurfaceRef = mSurfaceList.Surfaces(luSurface);
@@ -790,14 +799,40 @@ void EffectsModule::PostWorldPreparePrepare()
         // The visualfxsurface REF embedded in the surface layout at +0x10 (console:
         // `visualfxsurface(v49, v52 + 16, 0)` with v52 == the surface instance's
         // mpAttributeData, into the ctor whose Instance overload is sub_8280A248).
-        Attrib::Gen::visualfxsurface lVfx(VfxSurfaceRef(lSurface.GetAttributeData()), 0);
+        const Attrib::RefSpec& lrVfxRef = VfxSurfaceRef(lSurface.GetAttributeData());
+        Attrib::Gen::visualfxsurface lVfx(lrVfxRef, 0);
         const void* lpVfxData = lVfx.GetAttributeData();
+
+        if (!sbLoggedSurfaces)
+        {
+            const u8* lpBytes = static_cast<const u8*>(lpVfxData);
+            char lacMsg[420];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[skid-bind] surf %2u: surfCol=%016llX surfLayout=%p "
+                "vfxRef{class=%016llX col=%016llX res=%d} vfxCol=%016llX vfxLayout=%p "
+                "thr=%.4f en=%d smoke=%d/%d type=%d\n",
+                luSurface,
+                static_cast<unsigned long long>(lSurface.GetCollection()),
+                lSurface.GetAttributeData(),
+                static_cast<unsigned long long>(lrVfxRef.GetClassKey()),
+                static_cast<unsigned long long>(lrVfxRef.GetCollectionKey()),
+                lrVfxRef.HasResolvedCollection() ? 1 : 0,
+                static_cast<unsigned long long>(lVfx.GetCollection()),
+                lpVfxData,
+                static_cast<double>(ReadF32(lpVfxData, KU_VFX_SKID_MARK_THRESHOLD)),
+                lpBytes ? lpBytes[KU_VFX_SKID_MARKS_ENABLED] : -1,
+                lpBytes ? lpBytes[0x4C] : -1,
+                lpBytes ? lpBytes[0x4D] : -1,
+                static_cast<int>(ReadS16(lpVfxData, KU_VFX_SKID_MARK_TYPE_ID)));
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
 
         mParticleModule.TrailSystem().UpdateTrailType(
             ReadS16(lpVfxData, KU_VFX_SKID_MARK_TYPE_ID),
             ReadVector4(lpVfxData, KU_VFX_SKID_MARK_START_COLOUR),
             ReadVector4(lpVfxData, KU_VFX_SKID_MARK_END_COLOUR));
     }
+    sbLoggedSurfaces = true;
 }
 
 // =============================================================================
