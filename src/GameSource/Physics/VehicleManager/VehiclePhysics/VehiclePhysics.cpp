@@ -3948,6 +3948,66 @@ namespace Vehicle
             return false;
         }
     }
+
+    // ---- [susv] THE POST-SIM VELOCITY LEDGER -- DELETE-WHEN-STABLE -------------------------------
+    // OPT-IN (BRN_SUSV_PROBE=<metres per second>, flow_run.ps1 -DiagEnv BRN_SUSV_PROBE=1). NOT
+    // console code. Unset => the latch reads 0 once and every print below is unreachable.
+    //
+    // ⭐ WHY IT EXISTS. One one-step velocity drop in this campaign is still unexplained: the
+    // st_scoutB f1011->f1012 event, 9.45 m/s lost in a single 16.67 ms step at 28 mph, with
+    // `crash 0` on every surrounding frame and NO impulse on either solver arm. Every other
+    // one-step drop is now attributed (car-on-car traffic contacts, proven with a call-site tag).
+    // The closed mechanism list leaves exactly one function unwatched --
+    // VehiclePhysics::UpdateSuspensionPostSimulation @0x825F6BB0 -- and it holds TWO writers that
+    // leave no accumulator entry, no contact and no counter:
+    //   * StabiliseAfterHardLanding @0x825D1890, which OVERWRITES the velocity directly:
+    //       v -= agNormal * (dot(v, agNormal) * pow(damp, dt*60))
+    //   * the mi8NumWorldCollisions == 0 recovery impulses (restitution -0.7 @0x8208FB10)
+    // ⭐⭐ AND A PROBE CAN WATCH HALF A SOLVER. This one states its coverage on its face: it is a
+    // LEDGER, printing mLinearVelocity at every boundary INSIDE the function, so the residual
+    // column ("other") is the honest name for anything the named stages do not account for. It
+    // does NOT see writers outside this function; [dv] and the contact probes cover those.
+    //
+    // Threshold-gated on the WHOLE-FUNCTION |dv| so an ordinary step prints nothing: the value of
+    // BRN_SUSV_PROBE is that threshold in m/s (a bare "1" means 1.0 m/s). One line per crossing.
+    namespace
+    {
+        f32 SusVProbeThreshold()
+        {
+            static f32 sfThreshold = -1.0f;
+            if (sfThreshold < 0.0f)
+            {
+                const char* lpcEnv = getenv("BRN_SUSV_PROBE");
+                if (lpcEnv == NULL || lpcEnv[0] == '\0' || lpcEnv[0] == '0')
+                    sfThreshold = 0.0f;               // 0 == off (never crosses: the test is >=, gated below)
+                else
+                    sfThreshold = static_cast<f32>(std::atof(lpcEnv));
+                if (sfThreshold < 0.0f) sfThreshold = 0.0f;
+            }
+            return sfThreshold;
+        }
+        bool SusVProbeArmed()
+        {
+            return SusVProbeThreshold() > 0.0f && CgsDev::Log::gpDebugPrint != NULL;
+        }
+
+        // Filled by StabiliseAfterHardLanding so the caller's ledger can separate that function's
+        // OWN two halves -- its entry CalculateNewVelocity (which drains the ordinary accumulators)
+        // from its direct overwrite of mLinearVelocity. Without this split the whole of
+        // StabiliseAfterHardLanding reads as one opaque stage and the very distinction the probe
+        // was built to make would be lost.
+        Vector3 gvSusVStabAfterIntegrate = { 0.0f, 0.0f, 0.0f, 0.0f };
+        bool    gbSusVStabDamped         = false;
+        f32     gfSusVStabDampFactor     = 0.0f;
+        f32     gfSusVStabVDotN          = 0.0f;
+
+        f32 SusVMag(const Vector3& lrA, const Vector3& lrB)
+        {
+            const f32 lfX = lrA.x - lrB.x, lfY = lrA.y - lrB.y, lfZ = lrA.z - lrB.z;
+            return static_cast<f32>(std::sqrt(static_cast<double>(lfX * lfX + lfY * lfY + lfZ * lfZ)));
+        }
+    }
+    // ---- end [susv] helpers ---------------------------------------------------------------------
     // ---- end [wsus] helpers ---------------------------------------------------------------------
 
 // [clean] UpdateSuspension  @0x8261F698
@@ -4468,6 +4528,13 @@ namespace Vehicle
         // @0x825D18C4: pending force/impulse accumulators are integrated before the window test.
         CalculateNewVelocity(lvfTimeStep);
 
+        // [susv] the split point -- see the helper banner. Everything above this line is the
+        // ordinary accumulator drain; everything below is this function's OWN writing.
+        gvSusVStabAfterIntegrate = mLinearVelocity;
+        gbSusVStabDamped         = false;
+        gfSusVStabDampFactor     = 0.0f;
+        gfSusVStabVDotN          = 0.0f;
+
         const VehicleAttribs::SuspensionAttribs& lrSuspension = mpAttribs->mSuspensionAttribs;
         const f32 lfSecondsToDampAfterLanding =
             lrSuspension
@@ -4533,6 +4600,11 @@ namespace Vehicle
             mLinearVelocity = vpu::Subtract(
                 mLinearVelocity,
                 vpu::Mult(lrRoadNormal, lfVelocityAlongNormal * lfDampingFactor));
+            // [susv] THE DIRECT OVERWRITE FIRED. Recorded, not printed: the caller's ledger owns
+            // the print so the whole-function threshold can gate it.
+            gbSusVStabDamped     = true;
+            gfSusVStabDampFactor = lfDampingFactor;
+            gfSusVStabVDotN      = lfVelocityAlongNormal;
         }
     }
 
@@ -4988,6 +5060,13 @@ namespace Vehicle
         if (mbFrozen)   // @0x825F6BE8, VehiclePhysics+0x70
             return;
 
+        // [susv] entry snapshot -- see the helper banner. Player car only; the ledger prints at the
+        // bottom, gated on the WHOLE-FUNCTION |dv|.
+        const bool lbSusV = SusVProbeArmed()
+                            && mPreviousControls.GetType() == E_DRIVER_TYPE_PLAYER;
+        const Vector3 lSusV0 = mLinearVelocity;
+        gbSusVStabDamped = false;
+
         bool labCompressedSpring[eNumDrivenWheels] = { false, false, false, false };
 
         // @0x825F6C74..7130: project each wheel's suspension line onto its road plane and
@@ -5158,8 +5237,11 @@ namespace Vehicle
             }
         }
 
+        const Vector3 lSusV1 = mLinearVelocity;          // [susv] before StabiliseAfterHardLanding
         StabiliseAfterHardLanding(lvfTimeStep);
+        const Vector3 lSusV2 = mLinearVelocity;          // [susv] after it
         CalculateNewVelocity(lvfTimeStep);
+        const Vector3 lSusV3 = mLinearVelocity;          // [susv] after the following integrate
 
         // @0x825F74B8..7654: with no world collision response, compressed traction springs get
         // an inanimate-world recovery impulse at their streamed suspension point.
@@ -5213,6 +5295,8 @@ namespace Vehicle
             }
         }
 
+        const Vector3 lSusV4 = mLinearVelocity;          // [susv] after the recovery-impulse arm
+
         // @0x825F7658..7858: an unattached wheel resting on its lower stop contributes its
         // own weight at the wheel's body-space position.
         for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
@@ -5233,6 +5317,49 @@ namespace Vehicle
         }
 
         CalculateNewVelocity(lvfTimeStep);
+
+        // ---- [susv] THE LEDGER ------------------------------------------------------------------
+        // One line whenever this function moved the player car's velocity by more than the armed
+        // threshold, with every stage's contribution named. DELETE-WHEN-STABLE.
+        // ⭐ WHAT THIS PROBE COVERS, stated so it cannot be over-read: the stages BETWEEN the entry
+        //   and exit of UpdateSuspensionPostSimulation only.
+        //     bump   the pre-Stabilise section (the above-plane wheel repair and the bump-stop body
+        //            translation -- neither writes velocity, so a non-zero here is itself a finding)
+        //     stabI  StabiliseAfterHardLanding's ENTRY CalculateNewVelocity (the ordinary drain)
+        //     stabD  its DIRECT overwrite  v -= n * (dot(v,n) * pow(damp, dt*60))
+        //     integ  the CalculateNewVelocity that follows it
+        //     imp    the mi8NumWorldCollisions == 0 recovery-impulse arm (restitution -0.7)
+        //     wforce the unattached-wheel weight loop plus the tail integrate
+        //   `total` is v(exit) - v(entry) for this call. Anything a caller sees beyond `total` in
+        //   the same step was written somewhere else and this line says nothing about it.
+        if (lbSusV)
+        {
+            const Vector3 lSusV5 = mLinearVelocity;
+            const f32 lfTotal = SusVMag(lSusV5, lSusV0);
+            if (lfTotal >= SusVProbeThreshold())
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[susv] car " << static_cast<u32>(reinterpret_cast<u64>(this))
+                    << " total " << lfTotal
+                    << " v0 " << lSusV0.x << " " << lSusV0.y << " " << lSusV0.z
+                    << " v5 " << lSusV5.x << " " << lSusV5.y << " " << lSusV5.z
+                    << " | bump "   << SusVMag(lSusV1, lSusV0)
+                    << " stabI "    << SusVMag(gvSusVStabAfterIntegrate, lSusV1)
+                    << " stabD "    << SusVMag(lSusV2, gvSusVStabAfterIntegrate)
+                    << " integ "    << SusVMag(lSusV3, lSusV2)
+                    << " imp "      << SusVMag(lSusV4, lSusV3)
+                    << " wforce "   << SusVMag(lSusV5, lSusV4)
+                    << " | damped " << (gbSusVStabDamped ? 1 : 0)
+                    << " dampF "    << gfSusVStabDampFactor
+                    << " vDotN "    << gfSusVStabVDotN
+                    << " nwc "      << static_cast<s32>(mi8NumWorldCollisions)
+                    << " air "      << (mbHasAir ? 1 : 0)
+                    << " crash "    << (IsCrashing() ? 1 : 0)
+                    << " tSinceLand " << mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.x
+                    << "\n";
+            }
+        }
+        // ---- end [susv] -------------------------------------------------------------------------
     }
 
 

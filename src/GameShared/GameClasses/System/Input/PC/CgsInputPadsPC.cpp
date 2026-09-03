@@ -704,11 +704,21 @@ namespace CgsInput
         {
             const PcActionBinding& lrBinding = KA_BINDINGS[luBind];
 
+            // ⓘ The two source flags are hoisted out of the tests they used to be inlined in so
+            // that [input-src] below can NAME the source. The tests, their order and their
+            // short-circuiting are unchanged -- ConsumeHarnessAction is still not called when a key
+            // is already down, which matters because the menu channels are AUTO-RESET and a second
+            // call would consume the request a second time.
             f32 lfValue = 0.0f;
-            if (lbForeground && AnyKeyDown(lrBinding.paiVKeys))
+            const bool lbFromKey = lbForeground && AnyKeyDown(lrBinding.paiVKeys);
+            if (lbFromKey)
                 lfValue = 1.0f;
+            bool lbFromHarness = false;
             if (lfValue < 1.0f && ConsumeHarnessAction(lrBinding.iActionId))
+            {
+                lbFromHarness = true;
                 lfValue = 1.0f;
+            }
             if (lbXPad)
             {
                 if (lrBinding.uXPadButtons != 0
@@ -728,6 +738,41 @@ namespace CgsInput
             }
 
             const bool lbDown = (lfValue > KF_CONTROL_DOWN_THRESHOLD);
+
+            // ---- [input-src] WHO PRESSED THE BUTTON THAT PAUSED THE WORLD ----------------------
+            // DIAG. NOT IN THE X360 BINARY. Always on for the two ids that stop the simulation --
+            // 45 GUI_START (-> InGame::PauseGame(true,true) -> CrashNavDriverDetails) and 46
+            // GUI_BACK (-> PauseGame(true,false) -> CrashNavMapMain). Both post
+            // GuiEventActivateCrashNav(false), which becomes game event 93 -> RequestPause(4) ->
+            // mbSimPaused, and a paused world FREEZES THE CAR.
+            // ⭐ WHY IT IS WORTH A PERMANENT LINE. Measured 2026-09-03: unattended harness runs
+            // open one of those screens BY THEMSELVES -- once in scratch/flow_run/stA_right (early,
+            // which voided the whole run: 145 bit-identical [motion] samples that three waves read
+            // as a physics/teleport failure) and three times in scratch/flow_run/hw1 (late, after
+            // the car had already driven 403 m). The harness never touched either channel in
+            // either run. This line is the discriminator the logs did not have: a press has exactly
+            // three possible sources here and it names which one it was.
+            // These two ids fire at most a handful of times in a run, so there is no budget and no
+            // env gate -- an opt-in diagnostic is exactly what was missing when those runs were read.
+            // DELETE-WHEN the spontaneous press is explained.
+            if (lbDown && !sabWasDown[luBind]
+                && (lrBinding.iActionId == E_GAMEINPUTACTIONS_GUI_START
+                    || lrBinding.iActionId == E_GAMEINPUTACTIONS_GUI_BACK)
+                && CgsDev::Log::gpDebugPrint != 0)
+            {
+                const bool lbFromPad = lbXPad && lrBinding.uXPadButtons != 0
+                                       && (lXState.Gamepad.wButtons & lrBinding.uXPadButtons) != 0;
+                *CgsDev::Log::gpDebugPrint
+                    << "[input-src] action " << lrBinding.iActionId
+                    << " PRESSED -- key " << (lbFromKey ? 1 : 0)
+                    << " padbtn " << (lbFromPad ? 1 : 0)
+                    << " harness " << (lbFromHarness ? 1 : 0)
+                    << " (foreground " << (lbForeground ? 1 : 0)
+                    << " xpad " << (lbXPad ? 1 : 0)
+                    << " padButtons 0x" << static_cast<s32>(lXState.Gamepad.wButtons)
+                    << ") -- this press PAUSES THE SIMULATION\n";
+            }
+            // ---- end [input-src] ---------------------------------------------------------------
 
             u32 luStatus = 0;
             if (lbDown)
