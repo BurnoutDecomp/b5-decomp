@@ -60,10 +60,18 @@
 // Im2dBase<V>::maHandleOffsetXYZ[8] (+0x58) and Im2dBase<V>::mCurrentTransform (+0xE0, which is
 // exactly the "+0xE0" CgsIm2dColTex.cpp records for its transform store, four handle arrays
 // further down). Im3dSkidsRenderer names the SAME +0x58 word mWorldViewProjStateHandle. So the
-// two ImRenderer<V> members are a per-derived-class array under a generic alias. Three TUs
-// (CgsIm2dUntex.cpp, CgsIm2dColTex.cpp, CgsIm3d.cpp) write them by those names, which is why
-// this wave did not rename them: that is a four-file change in a shared template header and is
-// outside this slice. Nothing here reads them -- Im3dBlend reaches its own handles by name.
+// two ImRenderer<V> members are a per-derived-class array under a generic alias. SIX TUs
+// reference them by those names -- CgsIm3d.cpp, CgsIm3dZOnly.cpp, CgsIm3dSkyDome.cpp,
+// CgsIm2dUntex.cpp, CgsIm2dColTex.cpp and BrnIm3d.cpp -- so with CgsImRenderer.h itself the
+// rename is a SEVEN-FILE change, not the four an earlier draft of this note claimed (it had
+// counted only the three TUs this slice happened to open). That is why it was not done here.
+//
+// It is a FAITHFULNESS defect, not a live bug: the host build is offset-non-invariant by
+// convention, and no object is both an Im2d and an Im3d, so one hoisted array per object is
+// the same storage the console has -- under a name the console does not use. Whoever takes it
+// must land all seven at once; a partial rename in a shared template header compiles for the
+// TUs it touched and silently forks the rest. Nothing here reads them -- Im3dBlend reaches
+// its own handles by name.
 // ============================================================================================
 
 #include "types.hpp"
