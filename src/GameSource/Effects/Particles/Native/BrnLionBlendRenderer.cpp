@@ -124,19 +124,23 @@ namespace BrnGraphics
 }
 
 // =================================================================================================
-// Three more Lion-render-path symbols the link needs and nothing can reach -- same trap policy,
-// same reason, homed here beside the blend renderer rather than pulling two more TUs onto the
-// build list. Their real TUs would drag four further un-homed Lion SDK symbols
-// (cLionSerialiser::StringStore, gpLionParticleRender, gLionParticleMaterialTokenTable and the
-// unnamed rodata off_82000D08), measured on the effects link 2026-09-02.
+// ONE more Lion-render-path symbol the link needs and nothing can reach -- same trap policy, same
+// reason, homed here beside the blend renderer rather than pulling another TU onto the build list.
 //
 //   * LionParticleRender::CreateInternalMaterial @ LionParticleRenderMaterial.cpp -- reached only
 //     from LionParticleRender::TextureRegister / SetMaterial, i.e. cLionFX's own dispatch.
-//   * cParticleMaterial::SetTextureMapHandle / SetNormalMapHandle -- the Lion SDK setters
-//     TextureRegister calls on the material it just built.
 //
 // cLionFX::Init is announced and never called on this build (ParticleModule_Lifecycle.cpp), so no
-// emitter, material or effect instance exists to reach any of them.
+// emitter, material or effect instance exists to reach it.
+//
+// ⭐ THE OTHER TWO ARE GONE (2026-09-03, boost-exhaust wave). cParticleMaterial::
+// SetTextureMapHandle / SetNormalMapHandle used to be trap stand-ins here as well, because their
+// real TU -- ParticleMaterial.cpp, which has both real bodies (@0x82909DD8 / @0x82909DE0) --
+// "would drag four further un-homed Lion SDK symbols (cLionSerialiser::StringStore,
+// gpLionParticleRender, gLionParticleMaterialTokenTable and the unnamed rodata off_82000D08)".
+// All four are now homed, ParticleMaterial.cpp is mounted, and the duplicate definitions here
+// were an LNK2005 the moment it was -- which is how they were found. A stand-in that outlives
+// its reason is a fork waiting to happen.
 // =================================================================================================
 namespace BrnParticle
 {
@@ -145,14 +149,4 @@ namespace BrnParticle
         CGS_ASSERT(false, "BrnParticle::LionParticleRender::CreateInternalMaterial -- NOT RECONSTRUCTED (Lion render path)");
         return 0;
     }
-}
-
-void cParticleMaterial::SetTextureMapHandle(U32 /*auHandle*/)
-{
-    CGS_ASSERT(false, "cParticleMaterial::SetTextureMapHandle -- NOT RECONSTRUCTED (Lion render path)");
-}
-
-void cParticleMaterial::SetNormalMapHandle(U32 /*auHandle*/)
-{
-    CGS_ASSERT(false, "cParticleMaterial::SetNormalMapHandle -- NOT RECONSTRUCTED (Lion render path)");
 }

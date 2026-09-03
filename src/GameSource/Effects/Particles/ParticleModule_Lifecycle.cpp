@@ -47,6 +47,10 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // AcquireResourceResponse
 #include "SharedClasses/Graphics/TextureNameMapResourceType.h"  // BrnParticle::TextureNameMap
 #include "GameSource/Director/Camera/Camera.h"                  // BrnDirector::Camera::Camera
+#include "SharedClasses/Graphics/ParticleDescriptionResourceType.h"  // ParticleDescriptionCollection
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionEffect.h"          // cLionEffectDefinition
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionParticleEffect.h"  // cLionParticleEffect::GetDurationMax
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleDescriptor.h"    // the [lionstart] witness walks the chain
 
 #include <cstdio>    // snprintf (the announcements)
 #include <cstring>   // memset
@@ -87,6 +91,78 @@ namespace
 
     // ---- Update's float constants (read out of the image, not chosen) ----------------
     const f32 KF_LION_TIME_TICKS_PER_SECOND = 3000.0f;    // flt_8200DCD4
+    // StartLionEffect's two expiry-stamp literals, read out of the image:
+    //   flt_82CDB018 == 0.00033333332976326346 -- exactly 1/3000, the inverse of the
+    //     ticks-per-second above, so the stamp is "the Lion clock, back in seconds".
+    //   flt_82011E3C == 1.0e10 -- the "this effect never expires" stamp.
+    const f32 KF_LION_SECONDS_PER_TICK      = 0.00033333332976326346f;  // flt_82CDB018
+    const f32 KF_LION_EFFECT_NEVER_EXPIRES  = 1.0e10f;                  // flt_82011E3C
+
+    // The two console asserts StartLionEffect fires on a failed start. Both build their
+    // message with CgsDev::StrStream (`"...: " << name << "\r\n"`); reproduced as a single
+    // log line each so the name -- the thing that actually identifies the failure -- is
+    // present. Once per distinct reason, never per frame: a boost effect that cannot start
+    // is retried on every state change and would otherwise flood the log.
+    void LogEffectLookupMiss(u32 luNameHash, const char* lpcEffectName)
+    {
+        static bool sbLogged = false;
+        if (sbLogged)
+            return;
+        sbLogged = true;
+        char lacMsg[512];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[particles] ParticleModule: Couldn't locate lion effect description "
+                      "%s (hash %08X) Does the Particles Bundle need rebuilding ?\n",
+                      lpcEffectName ? lpcEffectName : "<NULLSTRING>", luNameHash);
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
+
+    void LogNoFreeSlot(const char* lpcEffectName)
+    {
+        static bool sbLogged = false;
+        if (sbLogged)
+            return;
+        sbLogged = true;
+        char lacMsg[512];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[particles] ParticleModule: No free effect instances available to play "
+                      "effect: %s\n", lpcEffectName ? lpcEffectName : "<NULLSTRING>");
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
+
+    // ---- the [lionstart] witness ------------------------------------------------------
+    // The console has no such line; this is OURS, and it exists because "the effect
+    // started" is otherwise invisible on a build with no Lion simulation to watch. It
+    // prints the four numbers that discriminate a real resolve from a plausible one: the
+    // hash that matched, the definition and effect addresses BinLoad produced, how many
+    // descriptors the effect graph actually carries, and the duration
+    // cParticleDescriptor::GetDurationMax computed from them. A miss cannot fake any of
+    // those -- StartLionEffect returns before reaching here.
+    //
+    // BOUNDED: the first KU_START_WITNESS_LIMIT starts of the run and no more. Boost
+    // effects restart on every state change, so an unbounded line would be per-second
+    // noise, and a budget that runs out before the subject appears is one of this
+    // project's recorded ways to measure nothing -- so the limit is generous and the
+    // line says which start index it is.
+    const u32 KU_START_WITNESS_LIMIT = 24;
+    u32 guStartWitnessCount = 0;
+
+    void LogEffectStarted(const char* lpcEffectName, u32 luNameHash, u32 luHandle,
+                          const void* lpDefinition, const void* lpEffect,
+                          u32 luDescriptors, f32 lfDurationMax, f32 lfExpiry)
+    {
+        if (guStartWitnessCount >= KU_START_WITNESS_LIMIT)
+            return;
+        ++guStartWitnessCount;
+        char lacMsg[640];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[lionstart] #%u STARTED %s hash=%08X handle=%u def=%p effect=%p "
+                      "descriptors=%u durationMax=%.4f expiry=%.4f\n",
+                      guStartWitnessCount, lpcEffectName ? lpcEffectName : "<NULLSTRING>",
+                      luNameHash, luHandle, lpDefinition, lpEffect, luDescriptors,
+                      lfDurationMax, lfExpiry);
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
     const f32 KF_SLOWMO_LOWER               = 0.03333333507180214f;  // flt_8200DB9C (1/30)
     const f32 KF_SLOWMO_UPPER               = 0.2857142984867096f;   // flt_8200DBA0 (2/7)
 
@@ -785,24 +861,120 @@ void ParticleModule::Update(f32 lfTimeStep, f32 lfTime, f32 lfTimeStepMultiplier
 // =========================================================================================
 u32 ParticleModule::StartLionEffect(u32 luNameHash, const char* lpcEffectName, u32 luWorldIndex)
 {
+    // `if ( *(a1 + 36340) ) return -1;`  -- mbPlayingEffectsSuspended.
     if (mbPlayingEffectsSuspended)
         return LionEffect::KU_HANDLE_INVALID;
 
-    // The description lookup walks the collection's {hash, description} entry array.
-    // ParticleDescriptionCollection has no committed layout, so the resolve cannot run:
-    // announced, then the console's own missing-description exit is taken.
+    // ---- the description lookup ---------------------------------------------------
+    // `v8 = *P(a1 + 16980); v9 = *(P(a1 + 16980) + 4);` -- the collection through the
+    // resource handle (BrnParticle::P @0x822867E0 is CgsResourceHandle's inlined
+    // "instance the pointer" accessor plus its own assert), then a linear walk comparing
+    // each entry's first word against the caller's hash. A miss fires the console's
+    // "Couldn't locate lion effect description <name> Does the Particles Bundle need
+    // rebuilding ?" assert at ParticleModule.cpp:1777 and returns -1.
+    const ParticleDescriptionCollection* lpCollection = mDescriptionCollection.Get();
+    CGS_ASSERT(lpCollection != 0,
+               "Can not instance resource pointer - it has no main memory resource\n");
+
+    cLionEffectDefinition* lpDefinition = 0;
+    if (lpCollection != 0)
     {
-        static bool sbLogged = false;
-        LogNotReconstructed(sbLogged,
-            "ParticleModule::StartLionEffect's description lookup "
-            "(BrnParticle::ParticleDescriptionCollection has no committed layout) -- every "
-            "Lion effect start returns KU_HANDLE_INVALID, which is the console's own "
-            "'Couldn't locate lion effect description' exit");
+        const u32 luCount = lpCollection->GetCount();
+        for (u32 lu = 0; lu < luCount; ++lu)
+        {
+            ParticleDescription* lpDescription = lpCollection->GetDescription(lu);
+            if (lpDescription != 0 && lpDescription->muNameHash == luNameHash)
+            {
+                lpDefinition = lpDescription->GetDefinition();
+                break;
+            }
+        }
     }
-    (void)luNameHash;
-    (void)lpcEffectName;
-    (void)luWorldIndex;
-    return LionEffect::KU_HANDLE_INVALID;
+
+    if (lpDefinition == 0)
+    {
+        CGS_ASSERT(false, "ParticleModule: Couldn't locate lion effect description ");
+        LogEffectLookupMiss(luNameHash, lpcEffectName);
+        return LionEffect::KU_HANDLE_INVALID;
+    }
+
+    // ---- claim a playing-effect slot ----------------------------------------------
+    // Round-robin from muUpdateThreadNextLionEffect over the 128 slots, skipping any
+    // whose ePPEFlagInUse bit is set; the cursor wraps with `& 0x7F` and 128 failed
+    // tries fires "No free effect instances available to play effect: " (line 1821).
+    u32 luTries = 0;
+    while ((maPlayingEffects[muUpdateThreadNextLionEffect].muFlags
+            & LionEffect::EPPE_FLAG_IN_USE) != 0)
+    {
+        ++luTries;
+        muUpdateThreadNextLionEffect =
+            (muUpdateThreadNextLionEffect + 1) & LionEffect::KU_HANDLE_INDEX_MASK;
+        if (luTries >= KU_MAX_PLAYING_EFFECTS)
+        {
+            CGS_ASSERT(false, "ParticleModule: No free effect instances available to play effect: ");
+            LogNoFreeSlot(lpcEffectName);
+            return LionEffect::KU_HANDLE_INVALID;
+        }
+    }
+
+    LionEffect& lrSlot = maPlayingEffects[muUpdateThreadNextLionEffect];
+
+    // The stamp, store for store (asm 0x8228A14C..):
+    //   slot+0x08 = the resolved definition,  slot+0x04 = the name hash,
+    //   slot+0x5C = the world index,          slot+0x64 = 15 == InUse|Enabled|Changed|Create
+    lrSlot.mpDescription = lpDefinition;
+    lrSlot.muNameHash    = luNameHash;
+    lrSlot.muWorldIndex  = luWorldIndex;
+    lrSlot.muFlags       = static_cast<u16>(LionEffect::EPPE_FLAG_IN_USE
+                                          | LionEffect::EPPE_FLAG_ENABLED
+                                          | LionEffect::EPPE_FLAG_CHANGED
+                                          | LionEffect::EPPE_FLAG_CREATE);
+
+    // ---- the expiry stamp ----------------------------------------------------------
+    // `f1 = 0.0; r3 = *(definition + 0x48); if (r3) f1 = cLionParticleEffect::
+    //  GetDurationMax(r3);` -- note the argument is the definition's EFFECT pointer, not
+    // the definition. A negative duration is the "never ends" sentinel
+    // cParticleDescriptor::GetDurationMax returns for an EMITTER_LIFE_INFINITE
+    // descriptor, and it takes the 1.0e10 branch; otherwise the expiry is
+    // `*mpLionCurrentTime * (1/3000) + duration`, i.e. the Lion clock (which
+    // ParticleModule::Update writes as `simTime * 3000` ticks) converted back to seconds.
+    f32 lfDurationMax = 0.0f;   // flt_82001CC0
+    cLionParticleEffect* lpEffect = lpDefinition->mpParticles;
+    if (lpEffect != 0)
+        lfDurationMax = lpEffect->GetDurationMax();
+
+    if (lpEffect != 0 && lfDurationMax < 0.0f)
+    {
+        lrSlot.mfExpiryTime = KF_LION_EFFECT_NEVER_EXPIRES;   // flt_82011E3C == 1.0e10
+    }
+    else
+    {
+        const s32 liLionTicks = (mpLionCurrentTime != 0)
+                              ? *reinterpret_cast<const s32*>(mpLionCurrentTime)
+                              : 0;
+        lrSlot.mfExpiryTime =
+            static_cast<f32>(liLionTicks) * KF_LION_SECONDS_PER_TICK + lfDurationMax;
+    }
+
+    // The [lionstart] witness (see LogEffectStarted). Not console behaviour -- ours,
+    // bounded, and the only way a build with no Lion simulation can show that an effect
+    // resolved at all. The descriptor count is walked here rather than stored because
+    // nothing else needs it.
+    {
+        u32 luDescriptors = 0;
+        if (lpEffect != 0)
+        {
+            for (const cParticleDescriptor* lpDes = lpEffect->mpDescriptors;
+                 lpDes != 0; lpDes = lpDes->GetNextDescriptor())
+            {
+                ++luDescriptors;
+            }
+        }
+        LogEffectStarted(lpcEffectName, luNameHash, lrSlot.muHandle, lpDefinition, lpEffect,
+                         luDescriptors, lfDurationMax, lrSlot.mfExpiryTime);
+    }
+
+    return lrSlot.muHandle;
 }
 
 // =========================================================================================

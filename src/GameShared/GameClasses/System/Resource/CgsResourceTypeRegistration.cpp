@@ -357,12 +357,29 @@ namespace CgsResource
         // swap (tools/assets/bundles/particles_transcode.py). The console registers them from
         // GameDataModule::RegisterResourceTypes like everything above.
         // NOT registered, on purpose:
-        //   * ParticleDescription (0x1001D, the LION .lef): its DeSerialise calls cLionFX::BinLoad,
-        //     which is a __debugbreak stub (the LION core is not reconstructed) -- registering it
-        //     would trap the first bundle load. Unregistered, the pool keeps the raw bytes.
+        //   * ParticleDescription (0x1001D, the LION .lef). ⭐ THE REASON CHANGED ON 2026-09-03
+        //     and the new one is specific, so nobody re-derives the old one. It used to be
+        //     "cLionFX::BinLoad is a __debugbreak stub"; BinLoad @0x82914388 is now reconstructed
+        //     (SDKs/.../LionRuntime/include/LionFX.cpp), the .lef payloads are byte-order-ported
+        //     (tools/assets/bundles/lef_transcode.py), FixUp rebases the blob slot, and MEASURED
+        //     WITH THE TYPE REGISTERED all 41 descriptions get past BinLoad's version check.
+        //     What they do NOT get past is the first member read:
+        //         EXCEPTION_ACCESS_VIOLATION reading 0xFFFFFFFFFFFFFFFF
+        //         cParticleDescriptor::Relocate + 0xE
+        //         cLionParticleEffect::Relocate -> cLionFX::BinLoad -> DeSerialise -> FixUpEntry
+        //     because the committed Lion runtime records (cLionParticleEffect,
+        //     cParticleDescriptor, cParticleBehaviour, cParticleMaterial, cLionEffectDefinition)
+        //     model their links as HOST pointers. A .lef payload is CONSOLE-LAYOUT SERIALISED
+        //     DATA loaded verbatim: cParticleDescriptor is 96 bytes with nine 4-byte links
+        //     (pinned by Serialise @0x8290F640's `DataStore(this, 96)`), so on the x64 host every
+        //     member after the first link is read at the wrong offset. The fix is the project's
+        //     standing rule -- serialised slots stay 32-bit, converted at an accessor -- applied
+        //     to all five records, with a sizeof static_assert per record (96 / 1216 / 176 / 12 /
+        //     84) so the next drift fails the gate instead of the game.
+        //     FLAG PC: DELETE-WHEN those five records hold u32 slots. One line, right here.
         //   * BrnVFXMeshCollection (0x10019): its FixUp needs x64-ported VB/IB pairs the porter
         //     does not produce yet (passthrough), and only the absent debris renderer reads it.
-        // FLAG PC: DELETE-WHEN cLionFX / the debris renderer land -- register both and port both.
+        //     FLAG PC: DELETE-WHEN the debris renderer lands -- register it and port its meshes.
         static BrnParticle::TextureNameMapResourceType                sTextureNameMap;      // 0x1000B
         TypeRegistry::Register(&sTextureNameMap, "TextureNameMap");
         static BrnParticle::VFXPropCollectionResourceType             sVFXPropCollection;   // 0x1001B

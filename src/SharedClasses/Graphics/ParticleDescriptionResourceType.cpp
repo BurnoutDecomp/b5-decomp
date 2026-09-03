@@ -1,6 +1,10 @@
 #include "SharedClasses/Graphics/ParticleDescriptionResourceType.h"
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the NOT-RECONSTRUCTED announcement
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionFX.h"       // cLionFX
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionEffect.h"   // cLionEffectDefinition
+
+#include <cstdio>   // snprintf (the BinLoad-failure diagnostic)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnParticle::ParticleDescriptionCollectionResourceType::FixUp            @ 0x8267DF40
@@ -16,13 +20,11 @@
 // to the destination resource's buffer (the leading word of the rw::Resource).
 // Serialised tables are accessed by offset.
 
-namespace cLionFX
-{
-    void* BinLoad(void* pData);
-    int   BinSave(void* pData, int liFlag, void* pStream);
-    void* BinLoad(void*) { __debugbreak(); return nullptr; }
-    int   BinSave(void*, int, void*) { __debugbreak(); return 0; }
-}
+// ⭐ 2026-09-03: cLionFX::BinLoad / ::BinSave used to be declared and defined RIGHT HERE
+// as free functions in a local `namespace cLionFX`, with __debugbreak bodies. That is an
+// ODR fork as well as a stub: the real cLionFX is a struct with static members (the asm
+// passes no `this`), so those two definitions could never have satisfied a call from any
+// other TU. Both now come from the class's own home.
 
 namespace CgsSound { namespace Playback { namespace Content
 {
@@ -107,29 +109,67 @@ namespace BrnParticle
         return KU_PARTICLE_DESCRIPTION_RESOURCE_TYPE_ID;
     }
 
-    // The X360 passes `this` (the resource type) to Content::DoOnPostLoad after the
-    // LionFX payload is loaded in place.
+    // FixUp @0x8267DF60 (ICF-folded; see the header's note for how the vtable pins it).
+    // `*(result + 4) += result` -- the blob slot is stored as the byte offset 16 and is
+    // rebased to `this + 16`, which is where ParticleDescriptionResourceType::Serialise
+    // @0x8267C220 put the cLionEffectDefinition. It runs immediately before DeSerialise
+    // (Pool::FixUpEntry @0x828EB860 calls FixUp then DeSerialise), which is the only
+    // reason DeSerialise can hand BinLoad a real address.
+    void ParticleDescriptionResourceType::FixUp(void* lpResource, const rw::Resource&) const
+    {
+        ParticleDescription* lpDescription = static_cast<ParticleDescription*>(lpResource);
+        lpDescription->muDefinition +=
+            static_cast<u32>(reinterpret_cast<uintptr_t>(lpResource));
+    }
+
+    // DeSerialise @0x82675868, in full:
+    //     *(res + 4) = cLionFX::BinLoad(*(res + 4));
+    //     return CgsSound::Playback::Content::DoOnPostLoad(this);
+    // The record's second word is the saved LION blob (Serialise wrote `(u32)this + 16`
+    // there); BinLoad rebases the effect graph inside it and hands back the blob itself
+    // as a cLionEffectDefinition*, which is stored straight back over the word.
+    //
+    // ⭐ THIS WAS THE STUB, AND IT IS NOT ANY MORE (2026-09-03). It used to announce
+    // "NOT RECONSTRUCTED ... no Lion effect can start from it" and leave the word as a
+    // file offset. Both reasons it gave are paid: cLionFX::BinLoad @0x82914388 is
+    // reconstructed, and the .lef payloads are byte-order-ported so its `mVersion ==
+    // 65539` test can pass at all. The path runs the moment particles.bundle is fixed up
+    // (CgsResource::Pool::FixUpEntry, stage 2 of ParticleModule::LoadFXBundle), i.e.
+    // every boot.
+    //
+    // BinLoad returning NULL is the console's own outcome for a blob that is not a LION
+    // effect, and it stores that NULL. Announced once here so a bad port shows up as a
+    // named line rather than as descriptions that quietly never resolve.
     bool ParticleDescriptionResourceType::DeSerialise(void* lpResource) const
     {
-        // ⛔ cLionFX::BinLoad IS A TRAP AND THIS PATH IS REACHABLE: it runs the moment
-        // particles.bundle is fixed up (CgsResource::Pool::FixUpEntry), which is stage 2 of
-        // ParticleModule::LoadFXBundle -- i.e. on the way to the tyre mark, every boot.
-        // The Lion core is not landed, so the in-place blob conversion is ANNOUNCED and the
-        // serialised pointer is left exactly as it was. Nothing in this build consumes it:
-        // ParticleModule::StartLionEffect returns KU_HANDLE_INVALID because the collection
-        // has no committed layout either. Loud, once, never a silent zero.
-        (void)lpResource;
+        ParticleDescription* lpDescription = static_cast<ParticleDescription*>(lpResource);
+        void* lpBlobIn = lpDescription->GetDefinition();
+        lpDescription->SetDefinition(cLionFX::BinLoad(lpBlobIn));
+
+        if (lpDescription->GetDefinition() == 0)
         {
+            // The message names WHICH of BinLoad's two exits was taken and prints the
+            // bytes that decided it -- a "rejected" line that cannot tell a null input
+            // from a wrong magic is the kind of diagnostic this project keeps being
+            // burned by.
             static bool sbLogged = false;
             if (!sbLogged)
             {
                 sbLogged = true;
-                CgsDev::Log::WriteToLog(
-                    "[particles] NOT RECONSTRUCTED: ParticleDescriptionResourceType::DeSerialise's "
-                    "cLionFX::BinLoad (the Lion core is not landed); the description collection is "
-                    "left in its serialised form and no Lion effect can start from it\n");
+                const u32* lpWords = reinterpret_cast<const u32*>(lpResource);
+                char lacMsg[512];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[particles] cLionFX::BinLoad returned NULL for a .lef: resource=%p "
+                    "word0(hash)=%08X word1(blob)=%08X word2=%08X word3=%08X blobPtr=%p "
+                    "magic=%08X -- no effect can start from this description. If the magic is "
+                    "byte-reversed, tools/assets/bundles/lef_transcode.py has not run over "
+                    "PARTICLES.BUNDLE.\n",
+                    lpResource, lpWords[0], lpWords[1], lpWords[2], lpWords[3], lpBlobIn,
+                    lpBlobIn ? *reinterpret_cast<const u32*>(lpBlobIn) : 0u);
+                CgsDev::Log::WriteToLog(lacMsg);
             }
         }
+
         // The tail is the ICF thunk `li r3,1; blr` -- see VFXPropsResourceType.cpp's note.
         return true;
     }
