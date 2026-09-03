@@ -32,8 +32,8 @@ struct cParticleScaler
     // ScalerUpdate @0x82908878 stores the float straight through the pointer and never
     // touches the time stamp. De-inlined back to the owning method, which is where the
     // DWARF says the source put it -- and the time parameter is kept because the DWARF
-    // declares it, with the fact that the console ignores it recorded here rather than
-    // silently dropped.
+    // declares it, and the fact that the console ignores it is recorded here rather than
+    // left for a later reader to rediscover.
     void Update(f32 afScale, const cTime& /*arTime*/) { mScale = afScale; }
 
     // DWARF ParticleScaler.h:36.
