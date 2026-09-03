@@ -23,6 +23,9 @@
 // uv Vector4 @20; GetStride()==36).
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
+#include "GameSource/Effects/Particles/Native/BrnLionBlendIm3d.h"   // BrnGraphics::Im3dBlend
+
+#include <cstring>   // memcpy -- the staged shader-constant copies (console lvx128/stvx128)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
@@ -30,6 +33,11 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
+
+// renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- the same minimal extern
+// surface BrnIm3dSkidsRenderer.cpp / BrnIm3d.cpp / BrnPostFxBloom.cpp declare (defined in
+// ImmediateModePCLeaf.cpp). Returns the staged row the caller copies the constant into.
+void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
 
 // The Lion-blend particle vertex format (BrnLionBlendVertex.h). Only its NAME is needed here -- the
 // template bodies never take sizeof(V) (the vertex descriptor is built from the asm immediates and the
@@ -377,3 +385,167 @@ template void ImRenderer<BrnGraphics::LionBlendVertex>::Construct(rw::IResourceA
 template bool ImRenderer<BrnGraphics::LionBlendVertex>::SetProgram(s8);
 
 } // namespace CgsGraphics
+
+// =================================================================================================
+// BrnGraphics::Im3dBlend::BeginRendering  @ 0x82282060   (DWARF BrnLionBlendIm3d.h:71)
+//
+// Start a Lion particle batch. Two paths, chosen by the bool8_t in r6:
+//   * abZFadeEnable == false -> program slot 0, the plain LionBlended pair. Push only
+//     worldViewProj (+0xC0) and colourScale (+0xC4).
+//   * abZFadeEnable == true  -> program slot 1, the LionBlendedZFade pair. Bind the scene depth
+//     texture on sampler unit 1, then push worldViewProj / colourScale / gOffset / gScale /
+//     gDepthConversion / gDepthFadeConstants (+0xC8 .. +0xDC).
+// Both paths finish through the SAME tail (loc_8228230C): one more 16-byte constant copy into the
+// cursor the last BeginShaderStates handed back. The compiler merged the two tails, which is why
+// the pseudocode looks like the colourScale write escapes the else branch -- it does not; each
+// path stages its own value into the same stack slot first.
+//
+// The eight handle offsets this body indexes (+0xC0..+0xDC) are the SECOND independent witness
+// for the Im3dBlend layout; the resolve site in Construct @0x8229B260 is the first and
+// LionBlendRenderer::SetCameraData @0x822824F8 (which starts writing at +0xE0) is the third.
+// See BrnLionBlendIm3d.h.
+//
+// SIGNATURE RECOVERED FROM THE CALL SITE. Hex-Rays types this `int(int a1 .. int a31)`.
+// LionParticleRender::BeginRendering @0x82289568 passes: r3 = &mLionImmediateModeRenderer,
+// r4 = &mViewProjection, f1..f6 = the six floats, r6 = the bool8_t, and the TextureState* in the
+// stack parameter slot this body reads at `arg_5C`. That is slot 9 of an 8-byte-slot parameter
+// area starting at +0x14 (0x14 + 8*9 == 0x5C, low word) -- each f32 argument consumes its GPR
+// slot without occupying the register, which is what pushes the ninth argument onto the stack
+// while r7..r10 sit unused.
+//
+// EVERY CONSTANT IS READ OUT OF THE IMAGE, none is fabricated:
+//     flt_82001CC0 == 00000000 == 0.0      flt_82001C98 == 3F800000 == 1.0
+//     flt_82001DA0 == 3F000000 == 0.5      flt_82004C78 == BF000000 == -0.5
+//     flt_82011668 == 3F7F0001 == 0.99609381      (255.0/256.0, rounded up in the last bit)
+//     flt_82011664 == 3B7F0001 == 0.0038909914    (== the above / 256)
+//     flt_82011660 == 377F0001 == 1.5199185e-05   (== the above / 65536)
+// The last three are the classic pack-depth-into-RGB triple K * (1, 1/256, 1/65536); the shader
+// variable they feed is literally named "gDepthConversion".
+// =================================================================================================
+
+namespace BrnGraphics
+{
+namespace
+{
+    // The console stages each constant with lvx128/stvx128 straight into the row
+    // BeginShaderStates handed back. On the host the staged row is an untyped byte cursor, so
+    // the two copies are spelled by size -- 64 bytes for the matrix (four rows), 16 for a
+    // Vector4 -- exactly as the asm does.
+    void StageShaderConstant(void* lpCursor, const void* lpSource, u32 luBytes)
+    {
+        if (lpCursor != nullptr)
+        {
+            memcpy(lpCursor, lpSource, luBytes);
+        }
+    }
+}
+
+void Im3dBlend::BeginRendering(const Matrix44& arViewProjection,
+                               float32_t afColourScale, bool8_t abZFadeEnable,
+                               float32_t afZFadeNear, float32_t afZFadeFar,
+                               float32_t afDepthRange,
+                               float32_t afHalfViewportWidth, float32_t afHalfViewportHeight,
+                               renderengine::TextureState* apDepthTextureState)
+{
+    // asm words 11-19: drop the device's shadowed state, then shadow this renderer's vertex
+    // descriptor (marking the vertex-program state dirty when it changed). The
+    // ImRenderer<V>::BeginRendering call below repeats both -- so does the console; not folded.
+    shadow::Device::ResetShadowing();
+    {
+        const renderengine::VertexDescriptorData* lpVertexDescriptor =
+            reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor);
+        if (CgsGraphics::spVertexDescriptorLast != lpVertexDescriptor)
+        {
+            CgsGraphics::sbVertexProgramDirty   = true;
+            CgsGraphics::spVertexDescriptorLast = lpVertexDescriptor;
+        }
+    }
+
+    // The staged shader-constant cursor renderengine::Device::BeginShaderStates advances
+    // (X360 var_B0; every call returns the next row through it).
+    void* lpConstantCursor = nullptr;
+
+    // The tail constant both paths share (X360 var_60..var_54, copied at loc_8228230C).
+    Vector4 lvTailConstant = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+    if (abZFadeEnable != 0)
+    {
+        // ---- program slot 1: the depth-fading pair -------------------------------------------
+        CgsGraphics::ImRenderer<LionBlendVertex>::BeginRendering(static_cast<s8>(1));
+
+        CGS_ASSERT(apDepthTextureState != nullptr, "lpDepthTextureState != NULL");
+        // asm words 27-29: bind the scene depth texture on sampler unit 1.
+        shadow::Device::SetState(apDepthTextureState, 1);
+
+        // asm words 30-63 -- the four staged constants, in the order the stores appear.
+        const f32 lfFadeRange = afZFadeNear - afZFadeFar;                        // fsubs f13
+
+        // "gOffset": the viewport half-extents biased by a half pixel, plus the far plane.
+        const Vector4 lvOffset = { afHalfViewportWidth  + 0.5f,                  // flt_82001DA0
+                                   afHalfViewportHeight + 0.5f,
+                                   afZFadeFar,
+                                   0.0f };                                       // flt_82001CC0
+        // "gScale": the half-viewport scale (y flipped) and the fade range.
+        const Vector4 lvScale = { 0.5f, -0.5f, lfFadeRange, 0.0f };              // 82001DA0/82004C78
+        // "gDepthConversion": the pack-depth-into-RGB triple scaled by the fade range, with the
+        // far plane carried in w.
+        const Vector4 lvDepthConversion = { lfFadeRange * 0.99609381f,
+                                            lfFadeRange * 0.0038909914f,
+                                            lfFadeRange * 1.5199185e-05f,
+                                            afZFadeFar };
+        // "gDepthFadeConstants": (near * far) / depthRange in x, zero elsewhere.
+        lvTailConstant.x = (afZFadeNear * afZFadeFar) / afDepthRange;
+        lvTailConstant.y = 0.0f;
+        lvTailConstant.z = 0.0f;
+        lvTailConstant.w = 0.0f;
+
+        const Vector4 lvColourScale = { afColourScale, afColourScale, afColourScale, 1.0f };
+
+        // +0xC8 "worldViewProj" -- the whole 64-byte matrix (four lvx128/stvx128 pairs).
+        RenderEngineDeviceBeginShaderStates(&mViewProjectionMatrixStateHandle_ZFade,
+                                            &lpConstantCursor);
+        StageShaderConstant(lpConstantCursor, &arViewProjection, sizeof(Matrix44));
+
+        // +0xCC "colourScale".
+        RenderEngineDeviceBeginShaderStates(&mColourScaleStateHandle_ZFade, &lpConstantCursor);
+        StageShaderConstant(lpConstantCursor, &lvColourScale, sizeof(Vector4));
+
+        // +0xD0 "gOffset".
+        RenderEngineDeviceBeginShaderStates(&mOffsetStateHandle_ZFade, &lpConstantCursor);
+        StageShaderConstant(lpConstantCursor, &lvOffset, sizeof(Vector4));
+
+        // +0xD4 "gScale".
+        RenderEngineDeviceBeginShaderStates(&mScaleStateHandle_ZFade, &lpConstantCursor);
+        StageShaderConstant(lpConstantCursor, &lvScale, sizeof(Vector4));
+
+        // +0xD8 "gDepthConversion".
+        RenderEngineDeviceBeginShaderStates(&mDepthConversionStateHandle_ZFade, &lpConstantCursor);
+        StageShaderConstant(lpConstantCursor, &lvDepthConversion, sizeof(Vector4));
+
+        // +0xDC "gDepthFadeConstants" -- the shared tail below copies it.
+        RenderEngineDeviceBeginShaderStates(&mDepthFadeStateHandle_ZFade, &lpConstantCursor);
+    }
+    else
+    {
+        // ---- program slot 0: the plain pair ---------------------------------------------------
+        CgsGraphics::ImRenderer<LionBlendVertex>::BeginRendering(static_cast<s8>(0));
+
+        // +0xC0 "worldViewProj".
+        RenderEngineDeviceBeginShaderStates(&mViewProjectionMatrixStateHandle_Normal,
+                                            &lpConstantCursor);
+        StageShaderConstant(lpConstantCursor, &arViewProjection, sizeof(Matrix44));
+
+        // +0xC4 "colourScale" -- the shared tail below copies it.
+        RenderEngineDeviceBeginShaderStates(&mColourScaleStateHandle_Normal, &lpConstantCursor);
+        lvTailConstant.x = afColourScale;
+        lvTailConstant.y = afColourScale;
+        lvTailConstant.z = afColourScale;
+        lvTailConstant.w = 1.0f;                                                 // flt_82001C98
+    }
+
+    // loc_8228230C -- the merged tail: one 16-byte copy into the row the last BeginShaderStates
+    // handed back.
+    StageShaderConstant(lpConstantCursor, &lvTailConstant, sizeof(Vector4));
+}
+
+}  // namespace BrnGraphics

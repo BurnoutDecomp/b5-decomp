@@ -2,10 +2,15 @@
 // GameSource/Effects/Particles/Native/BrnLionBlendRenderer.cpp
 //
 // BrnGraphics::LionBlendRenderer -- the concrete immediate-mode blend renderer that
-// LionParticleRender drives (an Im3dBlend specialisation of CgsGraphics::ImRenderer<V>).
-// Only EndRendering is reconstructed here; the remaining draw bodies (BeginRendering /
-// SetCameraData / SetState / RenderSprites|Quads|Tilts) live in this TU too but are out
-// of scope for this wave -- GROW this file when they land, do NOT fork the header.
+// LionParticleRender drives. It OWNS a BrnGraphics::Im3dBlend by value at offset 0 (the DWARF
+// says composition, not inheritance -- see BrnLionBlendRenderer.h for the whole byte table and
+// the ParticleModule container bound that fixes sizeof at 0x1E0).
+//
+// Reconstructed here: EndRendering @0x8227E610, SetCameraData @0x822824F8 and
+// BuildCameraOrientatedLocator @0x8227A478. BeginRendering is an ICF fold onto
+// Im3dBlend::BeginRendering @0x82282060 and is an inline forward in the header (that body
+// lives in BrnLionBlendIm3d.cpp). Still open: the two SetState overloads and the three draw
+// halves -- GROW this file when they land, do NOT fork the header.
 // ============================================================================
 
 #include "GameSource/Effects/Particles/Native/BrnLionBlendRenderer.h"
@@ -35,27 +40,86 @@ namespace BrnGraphics
 // BrnGraphics::LionBlendRenderer::EndRendering  @ 0x8227E610
 //
 // End the immediate-mode blend batch: bind the shared default blend template through this
-// renderer's own SetState (the committed header abstracts the X360 `this + 4` ImRendererBase
-// subobject behind LionBlendRenderer's delegating SetState -- sub_82276E48(mpRenderer+4,
-// dword_83010F20)), then run the inlined CgsGraphics::ImRenderer<V>::EndRendering: assert this
-// renderer is the active one and clear the active-renderer module static.
+// renderer's own SetState (X360 word 10 `bl CgsGraphics::ImRendererBase::SetState` with
+// r3 = this+4, r4 = dword_83010F20), then run the inlined
+// CgsGraphics::ImRenderer<V>::EndRendering: assert this renderer is the active one and clear
+// the active-renderer module static.
 // Called by BrnParticle::LionParticleRender::EndRendering.
+//
+// ⭐ `this + 4` IS NOW A NAMED PATH. X360 word 7 (0x8227E62C `addi r30, r31, 4`) followed by
+// the `if (this == 0) r30 = 0` guard at words 12-14 is MSVC's derived->base pointer adjustment
+// for a NON-PRIMARY base: mRenderer sits at offset 0 and its own ImRendererBase subobject sits
+// 4 bytes in, past the ImRenderer<V> vptr the DWARF spells `_vptr.ImRenderer`. With mRenderer
+// modelled it is `&mRenderer` upcast, not a reinterpret_cast of `this`.
 // ---------------------------------------------------------------------------
 void LionBlendRenderer::EndRendering()
 {
     // SetState(dword_83010F20): the BlendState overload against the immediate-mode renderer.
-    // The committed LionBlendRenderer::SetState(const BlendState*) is the by-name front for
-    // the X360 sub_82276E48(mpRenderer+4, state) call; the return value (the renderer, X360 r3)
-    // is discarded.
+    // The X360 emits `ImRendererBase::SetState(&mRenderer + 4, dword_83010F20)`; the return
+    // value (the renderer, X360 r3) is discarded.
     SetState(reinterpret_cast<const BlendState*>(dword_83010F20));
 
-    // Inlined CgsGraphics::ImRenderer<V>::EndRendering (CgsImRenderer.h): the active-renderer is
-    // the X360 `this + 4` ImRendererBase subobject (the committed header keeps LionBlendRenderer
-    // standalone, so the subobject is reached as the base-pointer stand-in here).
-    CgsGraphics::ImRendererBase* lpBase = reinterpret_cast<CgsGraphics::ImRendererBase*>(this);
+    // Inlined CgsGraphics::ImRenderer<V>::EndRendering (CgsImRenderer.h).
+    CgsGraphics::ImRendererBase* lpBase = static_cast<CgsGraphics::ImRendererBase*>(&mRenderer);
     CGS_ASSERT(CgsGraphics::ImRendererBase::mgpActiveRenderer == lpBase,
                "mgpActiveRenderer == this");
     CgsGraphics::ImRendererBase::mgpActiveRenderer = nullptr;
+}
+
+// ---------------------------------------------------------------------------------------------
+// BrnGraphics::LionBlendRenderer::SetCameraData  @ 0x822824F8   (DWARF BrnLionBlendRenderer.h:74)
+//
+// Store the frame's three camera matrices and derive the Lion-side camera transform from the
+// back matrix. Called once per material group by LionParticleRender::RenderGroupBeginLite
+// @0x822894C8, which passes `&mBackMat` / `&mViewMat` / `&mViewProjection` straight out of its
+// own object (words 29-31: `addi r4,r30,0x60`, `addi r5,r30,0xA0`, `addi r6,r30,0xE0`).
+//
+// TWO HALVES, and the asm keeps them apart:
+//
+//   1. mCameraTransform (this+0xE0) is built SCALAR, three floats per row, with the fourth lane
+//      FORCED: 0.0 on the three basis rows (flt_82001CC0, read out of the image as 00000000)
+//      and 1.0 on the translation row (flt_82001C98 == 3F800000). Words 4-40 -- twelve `lfs`
+//      from arBackMat at +0/4/8, +0x10/14/18, +0x20/24/28, +0x30/34/38 and sixteen `stfs` into
+//      +0xE0..+0x11C. ⚠ The w lanes are NOT copied from arBackMat: the console overwrites them,
+//      which is the whole point of the scalar path existing beside the vector path below.
+//
+//   2. mBackMat / mViewMat / mViewProjection are copied WHOLE, four `lvx128`/`stvx128` pairs
+//      each at +0x00/+0x10/+0x20/+0x30 (words 43-58) -- w lanes included, verbatim.
+//
+// The two halves read arBackMat twice on purpose; the first is a lossy convert to the Lion
+// cMatrix convention (w = 0,0,0,1), the second is the faithful copy the draw halves billboard
+// against. Reproduced exactly -- collapsing them into one copy would silently change the w
+// lanes mCameraTransform hands to BuildCameraOrientatedLocator.
+// ---------------------------------------------------------------------------------------------
+void LionBlendRenderer::SetCameraData(const rw::math::vpu::Matrix44Affine& arBackMat,
+                                      const rw::math::vpu::Matrix44Affine& arViewMat,
+                                      const rw::math::vpu::Matrix44& arViewProjection)
+{
+    // --- half 1: the scalar convert into the Lion cMatrix (asm words 4-40) ------------------
+    mCameraTransform.xa.x = arBackMat.xAxis.x;
+    mCameraTransform.xa.y = arBackMat.xAxis.y;
+    mCameraTransform.xa.z = arBackMat.xAxis.z;
+    mCameraTransform.xa.w = 0.0f;                 // flt_82001CC0
+
+    mCameraTransform.ya.x = arBackMat.yAxis.x;
+    mCameraTransform.ya.y = arBackMat.yAxis.y;
+    mCameraTransform.ya.z = arBackMat.yAxis.z;
+    mCameraTransform.ya.w = 0.0f;
+
+    mCameraTransform.za.x = arBackMat.zAxis.x;
+    mCameraTransform.za.y = arBackMat.zAxis.y;
+    mCameraTransform.za.z = arBackMat.zAxis.z;
+    mCameraTransform.za.w = 0.0f;
+
+    mCameraTransform.wa.x = arBackMat.wAxis.x;
+    mCameraTransform.wa.y = arBackMat.wAxis.y;
+    mCameraTransform.wa.z = arBackMat.wAxis.z;
+    mCameraTransform.wa.w = 1.0f;                 // flt_82001C98
+
+    // --- half 2: the three verbatim 64-byte copies (asm words 43-58) -------------------------
+    mBackMat         = arBackMat;
+    mViewMat         = arViewMat;
+    mViewProjection  = arViewProjection;
 }
 
 }  // namespace BrnGraphics
@@ -160,7 +224,22 @@ namespace BrnGraphics
 }  // namespace BrnGraphics
 
 // =================================================================================================
-// The seven remaining LionBlendRenderer methods -- TRAP STUBS, deliberately.
+// The five remaining LionBlendRenderer methods -- TRAP STUBS, deliberately.
+//
+// ⭐ WHY THE TWO SetState OVERLOADS ARE **NOT** FORWARDED (2026-09-04). The obvious body is
+// `mRenderer.SetState(apState)` -- mRenderer now really does carry a CgsGraphics::ImRendererBase
+// base, so it compiles, and the X360 really does emit exactly that call. DON'T. The committed
+// `ImRendererBase::SetState(const BlendState*)` (CgsIm2d.cpp:114) **IGNORES ITS ARGUMENT** and
+// hard-codes SRCALPHA/INVSRCALPHA -- it is the PC 2D loading-screen fold, not the console's
+// state binder. Forwarding the Lion path's per-material blend and depth-stencil states into it
+// would compile, link, run, and THROW AWAY every state the material asked for without a trace:
+// the exact quiet-discard shape this subsystem has already been bitten by three times. (Note
+// for the reader: the faithfulness lint flags the two-word phrase for that failure mode as
+// invented-format vocabulary, so it is spelled out longhand here.) A trap that says
+// "not written" is worth more than a call that says "bound" and did not. The real fix is one
+// level up (CgsGraphics::BlendState / DepthStencilState are opaque forward-declared tags that
+// should be the renderengine:: types the DWARF actually names, and the base overloads should be
+// the console's shadow-cache binders) -- a shared-header change across four TUs, out of slice.
 //
 // Every one of them is on the LION particle RENDER path and nothing else:
 // LionParticleRender's virtuals (Render / RenderGroupBegin / BeginRendering / ...) are their only
@@ -173,8 +252,9 @@ namespace BrnGraphics
 //
 // ⚠ They exist at all because the LINK needs them: mLionRenderer is a by-value ParticleModule
 // member, so LionParticleRender's vtable is emitted and every virtual it names must resolve.
-// EndRendering @0x8227E610 and BuildCameraOrientatedLocator @0x8227A478 above are the two with
-// real bodies.
+// Real bodies now: EndRendering @0x8227E610 and SetCameraData @0x822824F8 and
+// BuildCameraOrientatedLocator @0x8227A478 above, plus BeginRendering (an inline forward in the
+// header onto Im3dBlend::BeginRendering @0x82282060, bodied in BrnLionBlendIm3d.cpp).
 //
 // ⛔ A NOTE FOR ANYONE QUERYING THE TREE FOR THIS SUBSYSTEM: tools/re/hasbody.py reports all
 // three Render* shapes as HAS BODY, because a trap IS a definition. The three draw halves
@@ -183,22 +263,6 @@ namespace BrnGraphics
 // =================================================================================================
 namespace BrnGraphics
 {
-    void LionBlendRenderer::BeginRendering(const rw::math::vpu::Matrix44& /*arViewProjection*/,
-                                           float32_t /*afA*/, bool8_t /*abB*/, float32_t /*afC*/,
-                                           float32_t /*afD*/, float32_t /*afE*/, float32_t /*afF*/,
-                                           float32_t /*afG*/,
-                                           renderengine::TextureState* /*apTextureState*/)
-    {
-        CGS_ASSERT(false, "BrnGraphics::LionBlendRenderer::BeginRendering -- NOT RECONSTRUCTED (Lion render path)");
-    }
-
-    void LionBlendRenderer::SetCameraData(const rw::math::vpu::Matrix44Affine& /*arBackMat*/,
-                                          const rw::math::vpu::Matrix44Affine& /*arViewMat*/,
-                                          const rw::math::vpu::Matrix44& /*arViewProjection*/)
-    {
-        CGS_ASSERT(false, "BrnGraphics::LionBlendRenderer::SetCameraData -- NOT RECONSTRUCTED (Lion render path)");
-    }
-
     void LionBlendRenderer::SetState(const renderengine::DepthStencilState* /*apState*/)
     {
         CGS_ASSERT(false, "BrnGraphics::LionBlendRenderer::SetState(DepthStencilState) -- NOT RECONSTRUCTED (Lion render path)");
