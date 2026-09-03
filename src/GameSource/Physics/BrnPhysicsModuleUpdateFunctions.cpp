@@ -474,10 +474,20 @@ namespace BrnPhysics
             DvWitnessMark("contactgen");   // [dv] after harvest + ValidateRaceCarWorldContact
 
             mVehicleManager.DoTrafficWorldContactOrdering(lpPotentialContacts);
+            // ⭐ [dv] THE contactgen->drivers WINDOW IS SPLIT (kerb wave 6). Measured in run
+            // kw6_dv1: on the step the player ENTERS THE CRASH STATE the horizontal velocity is
+            // multiplied by EXACTLY 1.3 (x and z scaled, y untouched, both components exact to
+            // the last printed digit, twice: f6794 34.85->45.30 m/s and f8348 50.62->65.81 m/s)
+            // with NO accumulator drain -- i.e. a DIRECT velocity write. One mark bracketed five
+            // functions, so the ledger could only say "somewhere in here". These four narrow it
+            // to one. ⛔ Cost of not having them: the biggest number in the whole investigation
+            // was un-attributable from its own dump.
+            DvWitnessMark("ctcorder");
 
             CgsDev::PerfMonCpu::StartMonitor(miPhysicsUpdateFixUpVehContactsPM);         // +433200
             FixUpVehicleContacts(lpPotentialContacts);
             CgsDev::PerfMonCpu::StopMonitor(miPhysicsUpdateFixUpVehContactsPM);
+            DvWitnessMark("fixup");
 
             lpPotentialContacts->UnlockForWrite();
             lpPotentialContacts->LockForRead();
@@ -496,6 +506,7 @@ namespace BrnPhysics
                 lpPotentialContacts);
             CgsDev::PerfMonCpu::StopMonitor(miPhysicsUpdateCrashPredictionPM);
             mVehicleManager.CheckState();
+            DvWitnessMark("crashpred");
 
             CgsDev::PerfMonCpu::StartMonitor(miPhysicsUpdateVehiclePhysicsPM);           // +433108
 
@@ -517,6 +528,7 @@ namespace BrnPhysics
                 }
                 mVehicleManager.ResetForceNoSlowMo();
             }
+            DvWitnessMark("slowmo");
 
             // FLAG: gate-bodied. Console: the per-driver control dispatch.
             // FLAG (storage->real seam cast, deliberate -- the driver-input span is still a

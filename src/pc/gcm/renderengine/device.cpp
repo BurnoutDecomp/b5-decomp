@@ -348,9 +348,18 @@ static void DumpBackBufferIfRequested()
         //                   muSkidLatched, raised by EffectsModule::HandleWheels beside its
         //                   TrailSystem::AddTrailSegment call), so a drift film starts at the
         //                   frame a mark exists instead of at boot
+        //   "dv"         -- hold until the [dv] ONE-STEP VELOCITY WITNESS fires (BrnDiag::
+        //                   gFilmLatch.muDvLatched, raised by ExternalPhysicsBody::
+        //                   DvWitnessEndStep on the first step whose |dv| crosses BRN_DV_PROBE's
+        //                   threshold), so a film of "the car lost 9 m/s in one step" starts at
+        //                   that step. Needs BRN_DV_PROBE set as well -- without it the witness
+        //                   never runs, the latch never rises and the writer holds for ever,
+        //                   which is a SILENT no-dump; check for "[dv] STEP" in the log before
+        //                   reading anything into an empty frame directory.
         //   anything else truthy -- hold until the traffic swerve camera latches (the
         //                   original arm; unchanged, so every existing recipe still works)
-        static int siArm = -1;      // 0 none, 1 swerve camera, 2 slomo, 3 traffic ram, 4 skid
+        static int siArm = -1;      // 0 none, 1 swerve camera, 2 slomo, 3 traffic ram, 4 skid,
+                                    // 5 [dv] one-step velocity
         static f32 sfRamMinSpeed = 0.0f;
         static u32 suMax = 0u;
         if (siArm < 0)
@@ -373,6 +382,10 @@ static void DumpBackBufferIfRequested()
             else if (_stricmp(lacArm, "skid") == 0)
             {
                 siArm = 4;
+            }
+            else if (_stricmp(lacArm, "dv") == 0)
+            {
+                siArm = 5;
             }
             else
             {
@@ -401,6 +414,10 @@ static void DumpBackBufferIfRequested()
             return;
         }
         if (siArm == 4 && BrnDiag::gFilmLatch.muSkidLatched == 0u)
+        {
+            return;
+        }
+        if (siArm == 5 && BrnDiag::gFilmLatch.muDvLatched == 0u)
         {
             return;
         }
@@ -488,7 +505,15 @@ static void DumpBackBufferIfRequested()
                     // Columns 15-17 are that segment's SCREEN position: the NDC the skid
                     // vertex program's own transform put it at, and the clip w. They make
                     // "no mark visible" a claim about a named pixel instead of a picture.
-                    std::fprintf(lpCsv, "%u,%.6f,%.6f,%.6f,%d,%d,%.3f,%.3f,%.3f,%u,%u,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f\n",
+                    // Columns 18-20 are THE [dv] ONE-STEP VELOCITY LATCH: the step index, the
+                    // [kerb] frame counter and the |dv| of the step that raised it. Same
+                    // argument as every column above -- the log's "[dv] STEP n f m" line and
+                    // this strip otherwise have no common index, and a `dv`-armed strip is by
+                    // construction a picture of ONE event whose identity has to travel with
+                    // it. All zero on a run where the witness never fired, which is also the
+                    // run where an empty frame directory means the arm held, not that the
+                    // dump broke.
+                    std::fprintf(lpCsv, "%u,%.6f,%.6f,%.6f,%d,%d,%.3f,%.3f,%.3f,%u,%u,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%u,%u,%.4f\n",
                                  renderengine::guPresentCount,
                                  BrnDiag::gFilmLatch.mfLiveSimScale,
                                  BrnDiag::gFilmLatch.mfLiveSimStep,
@@ -505,7 +530,10 @@ static void DumpBackBufferIfRequested()
                                  BrnDiag::gFilmLatch.mfLastSegZ,
                                  BrnDiag::gFilmLatch.mfSegNdcX,
                                  BrnDiag::gFilmLatch.mfSegNdcY,
-                                 BrnDiag::gFilmLatch.mfSegClipW);
+                                 BrnDiag::gFilmLatch.mfSegClipW,
+                                 BrnDiag::gFilmLatch.muDvLatchedStep,
+                                 BrnDiag::gFilmLatch.muDvLatchedFrame,
+                                 BrnDiag::gFilmLatch.mfDvLatchedMagnitude);
                     std::fclose(lpCsv);
                 }
             }

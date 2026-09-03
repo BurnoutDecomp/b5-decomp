@@ -93,6 +93,30 @@ namespace BrnDiag
         f32 mfSegNdcX;
         f32 mfSegNdcY;
         f32 mfSegClipW;
+
+        // ⭐ THE ONE-STEP VELOCITY LATCH, on the same argument as muSkidLatched. The kerb
+        // investigation's whole subject is a car losing an enormous amount of speed in ONE
+        // 16.67 ms physics step -- an event that has never been filmed, because it lasts a
+        // single step in a run that is minutes long and nobody knew in advance which step.
+        // ⛔ AND THE FILM IS NOT DECORATION HERE: four "kerb catches" across two earlier waves
+        // turned out, on the frames, to be the player rear-ending traffic, and one convincing
+        // 15.7 -> 4.0 mph event was a stationary car parked across the approach. The log could
+        // not tell those apart; the picture could. muDvLatched is raised by
+        // ExternalPhysicsBody's [dv] witness on the first step whose |dv| crosses
+        // BRN_DV_PROBE's threshold, so BRN_FRAME_DUMP_ARM=dv starts the capture at that step
+        // and the frames show WHAT THE CAR HIT. STICKY, like the other two.
+        // ⚠️ It films from the event ONWARD -- the approach is not in the strip, because the
+        // latch cannot know about a step before it happens. What a `dv` strip can settle is
+        // what is in contact with the car at and after the drain, not what it looked like
+        // coming in.
+        u32 muDvLatched;
+
+        // The step index, the frame counter and the |dv| that raised it, so a strip and a
+        // "[dv] STEP" line can be tied together without trusting a timestamp -- the same
+        // self-labelling rule the four fields above follow.
+        u32 muDvLatchedStep;
+        u32 muDvLatchedFrame;
+        f32 mfDvLatchedMagnitude;
     };
 
     // Defined in GameSource/Game/BrnGameModule.cpp (the only writer).
