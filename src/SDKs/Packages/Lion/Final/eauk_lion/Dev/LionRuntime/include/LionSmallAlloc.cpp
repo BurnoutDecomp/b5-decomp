@@ -14,9 +14,12 @@
 namespace LionSmallAlloc
 {
 
-// Module statics (LionSmallAlloc.cpp:114/115). Page list head + backing tagged allocator.
-sLSAPage*                        mpPages    = nullptr;
+// Module statics (LionSmallAlloc.cpp:114/115/117/118). Page list head, backing tagged
+// allocator, and the two page sizes Init binds. See the header for which size is which.
+sLSAPage*                        mpPages     = nullptr;
 EA::Allocator::ITaggedAllocator* mpAllocator = nullptr;
+u32                              mMainSize   = 0;
+u32                              mGrowthSize = 0;
 
 namespace
 {
@@ -32,6 +35,37 @@ const u32 KU_TAG_LINE = 6;
 const u32 KU_MAX_BLOCK   = 0xFE;   // 254 bytes
 const u32 KU_SPLIT_LIMIT = 0x106;  // 262: above this, carve another full 254-byte block
 }  // namespace
+
+// ----------------------------------------------------------------------------
+// LionSmallAlloc::Init  (DWARF LionSmallAlloc.cpp:143)
+//
+// NO STANDALONE X360 BODY -- inlined into cLionFX::Init @0x82914A98. Recovered from that
+// body, instruction for instruction:
+//     82914AC4  stw r11(0),   0x1D88(r31)   mpPages     = 0
+//     82914AD8  stw r30,      0x1D90(r11)   mpAllocator = apAllocator
+//     82914AE0  stw r11(1<<16),0x1D8C(r10)  mMainSize   = aMainSize   (0x10000)
+//     82914AEC  stw r11(0x1000),0x1D84(r10) mGrowthSize = aGrowthSize (0x1000)
+//     82914AF0  bl  PageCreate               with r3 == 0x10000, i.e. mMainSize
+//     82914AF4  lwz r11, 0x1D88(r31)         re-READS mpPages (not PageCreate's return)
+//     82914B04  stw r10(1), 0x408(r11)       mpPages->mMainFlag = 1
+// The re-read of mpPages rather than the returned pointer is the console's own shape and is
+// equivalent only because PageCreate appends to a list that is empty at this point.
+// ----------------------------------------------------------------------------
+void Init(EA::Allocator::ITaggedAllocator* apAllocator, u32 aMainSize, u32 aGrowthSize)
+{
+    mpPages     = nullptr;
+    mpAllocator = apAllocator;
+    mMainSize   = aMainSize;
+    mGrowthSize = aGrowthSize;
+
+    PageCreate(mMainSize);
+
+    // The first page is the "main" page and is never released by the growth path.
+    if (mpPages)
+    {
+        mpPages->mMainFlag = 1;
+    }
+}
 
 void DeInit()
 {

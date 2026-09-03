@@ -11,13 +11,26 @@
 
 #include <cstring> // memcpy
 
-// The shared tagged allocator the Lion serialiser draws its backing store from
-// (the X360 file-static off_83121C54). Null until the runtime installs it.
-//
-// HONEST PLACEHOLDER: the real installation point lives elsewhere in the Lion
-// runtime and is not yet homed; this file-static definition reproduces the X360
-// global the serialiser reads.
-static EA::Allocator::ITaggedAllocator* gpLionSerialiserAllocator = nullptr;
+// The shared tagged allocator the Lion serialiser draws its backing store from (X360
+// off_83121C54). Declared in LionSerialiser.h; NOT a file-static any more -- its writer is
+// cParticleSystem::AppInit @0x82913810, in another TU, which is proof it never was one.
+EA::Allocator::ITaggedAllocator* gpLionSerialiserAllocator = nullptr;
+
+namespace
+{
+// The X360 build stamps the serialiser allocation with a (line, file, name) TagValuePair
+// chain; the two strings and the line number are read straight out of the asm at 0x82908960.
+const char* const KPC_SERIALISER_FILE =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\sdks\\packages\\lion\\final\\eauk_lion\\dev\\lionruntime\\include/LionSerialiser.cpp";
+const char* const KPC_SERIALISER_TAG_NAME = "cLionSerialiser::Alloc::Data";
+
+const u32 KU_TAG_NAME = 1;
+const u32 KU_TAG_FILE = 5;
+const u32 KU_TAG_LINE = 6;
+
+// `v5[1] = 70` in the pseudocode -- the source line the allocation is stamped with.
+const s32 KI_LINE_ALLOC = 70;
+}  // namespace
 
 // ----------------------------------------------------------------------------
 // cLionSerialiser::Init  @ 0x82908938
@@ -46,27 +59,18 @@ void cLionSerialiser::Alloc()
 
     if (gpLionSerialiserAllocator && luSize)
     {
-        // Tagged-Alloc tag list, built store-for-store from the asm. The nested
-        // list describes the allocation group / flags and a debug name.
-        EA::Allocator::TagValuePair lTagName;
-        lTagName.muTag   = 1;
-        lTagName.muValue = reinterpret_cast<uintptr_t>(
-            "cLionSerialiser::Alloc::Data");
-        lTagName.mpValue = nullptr;
-
-        EA::Allocator::TagValuePair lTagFile;
-        lTagFile.muTag   = 5;
-        lTagFile.muValue = reinterpret_cast<uintptr_t>(
-            "d:\\p4\\b5_main\\burnout\\main\\code\\sdks\\packages\\lion\\final\\eauk_lion\\dev\\lionruntime\\include/LionSerialiser.cpp");
-        lTagFile.mpValue = &lTagName;
-
-        EA::Allocator::TagValuePair lTagGroup;
-        lTagGroup.muTag   = 6;
-        lTagGroup.muValue = 70;
-        lTagGroup.mpValue = &lTagFile;
+        // Tagged-Alloc tag list, built store-for-store from the asm: a LINE(6) -> FILE(5) ->
+        // NAME(1) chain whose HEAD is the line tag, exactly as LionSmallAlloc::PageCreate and
+        // cLionParticleEffectManager::CreateBehaviour build theirs. (This used to be written
+        // against this header's own private fork of TagValuePair, which had an `mpValue` link
+        // instead of the real `mNext` and put Alloc in a different vtable slot -- see the ODR
+        // note in LionSerialiser.h.)
+        EA::TagValuePair lName(KU_TAG_NAME, static_cast<const void*>(KPC_SERIALISER_TAG_NAME));
+        EA::TagValuePair lFile(KU_TAG_FILE, static_cast<const void*>(KPC_SERIALISER_FILE));
+        EA::TagValuePair lLine(KU_TAG_LINE, static_cast<s32>(KI_LINE_ALLOC));
 
         u8* lpData = static_cast<u8*>(
-            gpLionSerialiserAllocator->Alloc(luSize, &lTagGroup));
+            gpLionSerialiserAllocator->Alloc(luSize, lLine + lFile + lName));
         mpDataBase = lpData;
         if (lpData)
         {

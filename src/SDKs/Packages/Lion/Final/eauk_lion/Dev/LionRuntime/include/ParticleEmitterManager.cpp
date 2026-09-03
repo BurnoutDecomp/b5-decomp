@@ -206,3 +206,25 @@ void cParticleEmitterManager::Update(const cTime& arTime)
         lpEmit = lpNext;
     }
 }
+
+// ------------------------------------------------------------------------------------------------
+// cParticleEmitterManager::Instance (DWARF ParticleEmitterManager.h:39)
+//
+// NO STANDALONE X360 BODY -- inlined at every call site, which is why cParticleSystem::AppInit
+// @0x82913810, cLionFX::Update @0x82915758 and cLionFX::Render @0x82914C50 all pass the literal
+// `&dword_831238E8` as `this`. It was DECLARED in this class's header and defined NOWHERE in the
+// tree until now: LionParticleEffectManager.cpp already called it twice, so the Lion effect
+// manager could never have linked. (`progress/status.json` marks every row here `reviewed`; that
+// is the default, and it is not evidence a body exists -- ask the tree.)
+//
+// A file-scope object, NOT a function-local static: no guard word sits beside it on the console.
+// ------------------------------------------------------------------------------------------------
+namespace
+{
+    cParticleEmitterManager gEmitterManagerSingleton;   // X360 dword_831238E8
+}
+
+cParticleEmitterManager& cParticleEmitterManager::Instance()
+{
+    return gEmitterManagerSingleton;
+}

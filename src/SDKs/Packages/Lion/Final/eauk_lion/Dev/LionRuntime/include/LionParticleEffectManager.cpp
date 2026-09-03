@@ -106,3 +106,54 @@ void cLionParticleEffectManager::BindingsRemove(const cLionParticleEffect* apEff
         cParticleEmitterManager::Instance().UnRegister(*lpDes, arBindings, apBindBase);
     }
 }
+
+// ------------------------------------------------------------------------------------------------
+// cLionParticleEffectManager::Instance / ::AppInit  (DWARF LionParticleEffectManager.h:42 / h:49)
+//
+// NEITHER HAS A STANDALONE X360 BODY. Instance is inlined at every call site -- which is why
+// cParticleEmitter::Init @0x82913228 calls `CreateBehaviour(&off_83123798)` with that literal --
+// and AppInit is inlined into cParticleSystem::AppInit @0x82913810, where it is four operations
+// on this object, in this order:
+//     cLionBlockAlloc::Init(&unk_8312379C, alloc, 12, count)   ; mAllocator  (this + 0x04)
+//     off_83123798   = alloc                                    ; mpAllocator (this + 0x00)
+//     dword_831237BC = 0                                        ; mpEffects   (this + 0x24)
+//     64-word clear at unk_831237C0                             ; mpEffectGroups[64] (this+0x28)
+//
+// ⚠ THE ITEM SIZE 12 IS A CONSOLE LITERAL. This pool's element type is not identified in this
+// tree (nothing reconstructed allocates from mAllocator yet -- CreateBehaviour uses mpAllocator,
+// the TAGGED one), so there is no sizeof() to write instead. If a host record of that element
+// type contains a pointer it is wider than 12 bytes here; re-derive the size from the type the
+// day something carves out of this pool.
+//
+// A file-scope object, NOT a function-local static: no guard word sits beside it on the console.
+// ------------------------------------------------------------------------------------------------
+namespace
+{
+    cLionParticleEffectManager gLionParticleEffectManagerSingleton;   // X360 off_83123798
+
+    // X360 `li r5, 0xC` in cParticleSystem::AppInit. See the warning above.
+    const u32 KU_CONSOLE_EFFECT_MANAGER_ITEM_SIZE = 12;
+}
+
+cLionParticleEffectManager& cLionParticleEffectManager::Instance()
+{
+    return gLionParticleEffectManagerSingleton;
+}
+
+void cLionParticleEffectManager::AppInit(EA::Allocator::ITaggedAllocator* apAllocator, u32 auCount)
+{
+    mAllocator.Init(apAllocator, KU_CONSOLE_EFFECT_MANAGER_ITEM_SIZE, auCount);
+
+    mpAllocator = apAllocator;
+    mpEffects   = nullptr;
+
+    for (u32 lu = 0; lu < 64; ++lu)
+    {
+        mpEffectGroups[lu] = nullptr;
+    }
+}
+
+void cLionParticleEffectManager::AppDeInit()
+{
+    mAllocator.DeInit();
+}

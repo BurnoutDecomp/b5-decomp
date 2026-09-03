@@ -58,6 +58,13 @@ public:
     // the X360 ones -- 16 vectors * 16 bytes = 256, 16 matrices * 64 bytes = 1024.
     static const u32 KU_PARTICLES_PER_BUCKET = 16;
 
+    // The manager singleton (DecFIGS DWARF ParticleBucketManager.h:36). The X360 build reaches
+    // its storage (unk_831238C0) directly from cParticleSystem::AppInit @0x82913810 and
+    // AppDeInit @0x82911DF0, which is what an inlined Instance() looks like. Its 0x2C bytes end
+    // exactly where the emitter-manager singleton begins (0x831238E8), which is the independent
+    // check on this class's size.
+    static cParticleBucketManager& Instance();
+
     // App lifetime: allocate the bucket array + side pool + occupancy bitmap through the
     // tagged allocator, thread the free list, and clear the used list. X360 @0x82912E00.
     void AppInit(EA::Allocator::ITaggedAllocator* apAllocator,
