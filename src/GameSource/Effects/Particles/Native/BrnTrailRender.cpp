@@ -279,9 +279,26 @@ namespace Native
 
             // Stamp the NDC into the film latch so frames.csv carries the SCREEN position of
             // a submitted mark (columns 15-17). See BrnDiagFilmLatch.h.
-            BrnDiag::gFilmLatch.mfSegNdcX  = (lfW != 0.0f) ? (lfX / lfW) : 0.0f;
-            BrnDiag::gFilmLatch.mfSegNdcY  = (lfW != 0.0f) ? (lfY / lfW) : 0.0f;
-            BrnDiag::gFilmLatch.mfSegClipW = lfW;
+            //
+            // ⭐ The point transformed here is the MOST RECENTLY LAID segment
+            // (gFilmLatch.mfLastSeg*, written by HandleWheels beside AddTrailSegment), NOT the
+            // batch's first vertex. Both are real submitted geometry, but the first vertex of
+            // the last batch belongs to an arbitrary emitter that may be nine seconds old and
+            // therefore faded to nothing -- pointing a marker at it and finding bare tarmac
+            // proves only that old marks fade. The freshest segment is the one whose alpha is
+            // at its highest, so it is the honest place to aim.
+            {
+                const f32 lfSX = BrnDiag::gFilmLatch.mfLastSegX;
+                const f32 lfSY = BrnDiag::gFilmLatch.mfLastSegY;
+                const f32 lfSZ = BrnDiag::gFilmLatch.mfLastSegZ;
+                const f32 lfSClipX = lfSX * lpM[0] + lfSY * lpM[4] + lfSZ * lpM[8]  + lpM[12];
+                const f32 lfSClipY = lfSX * lpM[1] + lfSY * lpM[5] + lfSZ * lpM[9]  + lpM[13];
+                const f32 lfSClipW = lfSX * lpM[3] + lfSY * lpM[7] + lfSZ * lpM[11] + lpM[15];
+                BrnDiag::gFilmLatch.mfSegNdcX  = (lfSClipW != 0.0f) ? (lfSClipX / lfSClipW) : 0.0f;
+                BrnDiag::gFilmLatch.mfSegNdcY  = (lfSClipW != 0.0f) ? (lfSClipY / lfSClipW) : 0.0f;
+                BrnDiag::gFilmLatch.mfSegClipW = lfSClipW;
+            }
+            (void)lfZ;
 
             if (guProbeFirstVertex != 0u)
             {
