@@ -144,6 +144,11 @@ public:
                       const cTime& arStartTime,
                       const cTime& arEndTime);
 
+    // ParticleEmitter.h:65 -- the emitter's binding block (locator / scaler / trigger).
+    // cParticleBucket::GetpMatrix @0x8290F28C reaches it with `lwz r11, 0x1FC(r30)` and the
+    // X360 build reads the field directly, so this is inline by construction.
+    const cLionBindings& GetBindings() const      { return *mpBindings; }
+
     // Manager free/used list link (console +0x204).
     void SetNext(cParticleEmitter* apNext)        { mpNext = apNext; }
     cParticleEmitter*& GetNextEmitter()           { return mpNext; }

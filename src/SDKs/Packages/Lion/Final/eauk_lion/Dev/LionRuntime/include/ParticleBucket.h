@@ -118,6 +118,12 @@ public:
                           cVector** appVector,
                           cMatrix** appMatrix);
 
+    // ParticleBucket.h:81 -- produce the world transform for ONE particle in this bucket,
+    // from whichever of the three sources this bucket was allocated with (per-particle matrix
+    // / per-particle position / the emitter's locator). X360 @0x8290F188. RECONSTRUCTED
+    // (ParticleBucket.cpp).
+    void GetpMatrix(u32 auIndex, cMatrix* apMatrix, const cTime& arTime);
+
     // ParticleBucket.h:84 -- "no free slot left". cParticleEmitter::ParticleInsert
     // @0x829133F8 spells it `cmplwi r11, 0x10 ; beq`: an EQUALITY against the capacity, not
     // a >=. Kept as the console asks it.
