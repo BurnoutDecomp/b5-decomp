@@ -65,7 +65,14 @@ class cLionFog;                     // fog descriptor (opaque)
 // with the definitions sitting in the linked object the whole time. Same rule for
 // ITaggedAllocator below.
 struct cTime;                       // engine time stamp -- ext-include/GameStructs/cTime.h
-struct RenderedParticle;            // per-particle render record (opaque)
+
+// RenderedParticle is NO LONGER OPAQUE (2026-09-04). Its real home is included below rather
+// than forward-declared: it is the OUTPUT of cParticleEmitter::ParticleBuild @0x82910118 and
+// the INPUT of the three LionBlendRenderer draw halves, so neither side could be written by
+// name while it was a bare `struct RenderedParticle;`. Seven 16-byte members, sizeof 0x70 ==
+// the stride RenderSprites @0x82282608 walks the run with. The header pulls only the Lion
+// vector home, so it adds no cycle here.
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/RenderedParticle.h"
 
 namespace renderengine { class TextureState; class VertexBuffer; }
 namespace EA { namespace Allocator { struct ITaggedAllocator; } }   // struct: see the note above
