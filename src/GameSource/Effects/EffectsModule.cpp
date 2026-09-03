@@ -20,6 +20,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                       // CgsSceneManager::EntityId
 #include "GameSource/AttribSys/Generated/classes/surface.h"                        // Attrib::Gen::surface
 #include "GameSource/AttribSys/Generated/classes/visualfxsurface.h"                // Attrib::Gen::visualfxsurface
+#include "GameSource/AttribSys/Generated/classes/physicssurface.h"                 // [diag] Attrib::Gen::physicssurface (the [skid-bind] material line)
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"                  // Attrib::FindCollection
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attrib::StringToKey
 #include "GameSource/Graphics/PostFx/BrnPostFx.h"                                  // msPostFx (the colour-cube seed)
@@ -224,6 +225,11 @@ namespace
     inline bool ReadBool(const void* lpBase, u32 luOffset)
     {
         return reinterpret_cast<const u8*>(lpBase)[luOffset] != 0;
+    }
+    // [diag] the raw-word view the [skid-bind] record dump prints.
+    inline u32 ReadU32(const void* lpBase, u32 luOffset)
+    {
+        return *reinterpret_cast<const u32*>(reinterpret_cast<const u8*>(lpBase) + luOffset);
     }
     inline Vector4 ReadVector4(const void* lpBase, u32 luOffset)
     {
@@ -806,11 +812,16 @@ void EffectsModule::PostWorldPreparePrepare()
         if (!sbLoggedSurfaces)
         {
             const u8* lpBytes = static_cast<const u8*>(lpVfxData);
-            char lacMsg[420];
+            // Name the MATERIAL as well as the record: a surface whose SkidMarksEnabled is
+            // false is only believable once you can see what kind of surface it is. Grip /
+            // roughness / drag come off the same surface's physicssurface ref, which
+            // VehicleManager::ReadSurfaceProperties already reads the same way.
+            Attrib::Gen::physicssurface lPhysics(lSurface.PhysicsSurface(), 0);
+            char lacMsg[460];
             std::snprintf(lacMsg, sizeof(lacMsg),
                 "[skid-bind] surf %2u: surfCol=%016llX surfLayout=%p "
                 "vfxRef{class=%016llX col=%016llX res=%d} vfxCol=%016llX vfxLayout=%p "
-                "thr=%.4f en=%d smoke=%d/%d type=%d\n",
+                "thr=%.4f en=%d smoke=%d/%d type=%d grip=%.3f rough=%.3f drag=%.3f\n",
                 luSurface,
                 static_cast<unsigned long long>(lSurface.GetCollection()),
                 lSurface.GetAttributeData(),
@@ -823,8 +834,32 @@ void EffectsModule::PostWorldPreparePrepare()
                 lpBytes ? lpBytes[KU_VFX_SKID_MARKS_ENABLED] : -1,
                 lpBytes ? lpBytes[0x4C] : -1,
                 lpBytes ? lpBytes[0x4D] : -1,
-                static_cast<int>(ReadS16(lpVfxData, KU_VFX_SKID_MARK_TYPE_ID)));
+                static_cast<int>(ReadS16(lpVfxData, KU_VFX_SKID_MARK_TYPE_ID)),
+                static_cast<double>(lPhysics.Grip()),
+                static_cast<double>(lPhysics.Roughness()),
+                static_cast<double>(lPhysics.LinearDrag()));
             CgsDev::Log::WriteToLog(lacMsg);
+
+            // ⭐ AND THE WHOLE RECORD, as raw words. The four fields above are read at
+            // CONSOLE byte offsets into a serialised layout block (0x48 threshold, 0x4C/0x4D
+            // smoke, 0x4E skid-marks, 0x58 type -- from HandleWheels @0x82296C80 and
+            // WheelStateMachine::Update @0x82293EB8). Believing "en is authored false" means
+            // believing those offsets land where they are supposed to, so print the block and
+            // let the next reader check the placement instead of taking it on trust: words 0-3
+            // and 4-7 are the two skid-mark colours, so plausible 0..1 floats there vouch for
+            // the whole record's alignment.
+            if (lpBytes != 0)
+            {
+                char lacDump[420];
+                int liLen = std::snprintf(lacDump, sizeof(lacDump), "[skid-bind] surf %2u raw:", luSurface);
+                for (u32 luWord = 0; luWord < 24u && liLen > 0 && liLen < static_cast<int>(sizeof(lacDump)) - 12; ++luWord)
+                {
+                    liLen += std::snprintf(lacDump + liLen, sizeof(lacDump) - static_cast<size_t>(liLen),
+                                           " %08X", ReadU32(lpVfxData, luWord * 4u));
+                }
+                std::snprintf(lacDump + liLen, sizeof(lacDump) - static_cast<size_t>(liLen), "\n");
+                CgsDev::Log::WriteToLog(lacDump);
+            }
         }
 
         mParticleModule.TrailSystem().UpdateTrailType(
@@ -1452,6 +1487,32 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
                     BrnDiag::gFilmLatch.mfLastSegX = lrWheel.mRoadContact.mPosition.x;
                     BrnDiag::gFilmLatch.mfLastSegY = lrWheel.mRoadContact.mPosition.y;
                     BrnDiag::gFilmLatch.mfLastSegZ = lrWheel.mRoadContact.mPosition.z;
+                }
+
+                // [skid] SURFACE-CHANGE EDGE. The periodic sample below can drive across a
+                // whole material and never land on it, and a run that has to FIND a surface
+                // with SkidMarksEnabled needs every distinct surface the wheels touch, with
+                // the place it was touched -- so a later run can be teleported there. One
+                // line per (wheel, new surface id), not per frame.
+                if (SkidProbeEnabled())
+                {
+                    static u32 sauLastSurface[ActiveRaceCarData::KU_NUM_WHEELS] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
+                    if (sauLastSurface[luWheel] != luSurfaceId)
+                    {
+                        sauLastSurface[luWheel] = luSurfaceId;
+                        char lacChg[240];
+                        std::snprintf(lacChg, sizeof(lacChg),
+                            "[skid] f=%u w=%u SURFCHG surf=%u en=%d thr=%.4f type=%d "
+                            "pos=%.2f,%.2f,%.2f\n",
+                            gauSkidProbeFrame, luWheel, luSurfaceId,
+                            ReadBool(lpVfxData, KU_VFX_SKID_MARKS_ENABLED) ? 1 : 0,
+                            static_cast<double>(ReadF32(lpVfxData, KU_VFX_SKID_MARK_THRESHOLD)),
+                            static_cast<int>(ReadS16(lpVfxData, KU_VFX_SKID_MARK_TYPE_ID)),
+                            static_cast<double>(lrWheel.mRoadContact.mPosition.x),
+                            static_cast<double>(lrWheel.mRoadContact.mPosition.y),
+                            static_cast<double>(lrWheel.mRoadContact.mPosition.z));
+                        CgsDev::Log::WriteToLog(lacChg);
+                    }
                 }
 
                 // [skid] both sides of the gate, on the frames it matters.
