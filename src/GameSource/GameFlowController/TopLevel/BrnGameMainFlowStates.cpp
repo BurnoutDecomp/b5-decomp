@@ -296,37 +296,24 @@ bool LoadingScriptedState::LoadWorldCollision(BrnResource::GameDataIO::InputBuff
 
     if (lbPrepared)
     {
-        // ⛔ THE CALL IS BACK OUT, AND FOR A NEW REASON -- NOT THE OLD ONE. Turning it on
-        // (runs 17 and 18) takes the boot down every time:
-        //     Attrib::Instance::GetClass + 0x11
-        //     BrnEffects::EffectsModule::PostWorldPreparePrepare + 0x298
-        //     LoadingScriptedState::Update -> MainGameFlowStateCompleteLoading::Update
-        //     exit 0xC0000005, phase=BOOT, strfin never
-        // Run 18 carried a guard that returns early when
-        // Attrib::FindCollectionWithDefault(surfacelist, StringToKey("340654")) yields nothing;
-        // the guard did NOT fire (no announcement in the log) and the fault simply moved from
-        // +0x22F to +0x298 -- i.e. Change() hands back a collection and the instance is STILL
-        // unusable, so the first Num_Surfaces()/Surfaces() walks a null class inside AttribSys.
-        // That is an AttribSys instance-binding problem, a subsystem away from effects, and it
-        // is where the tyre mark now stands or falls.
+        // The console's own position: the collision prepare has finished, so the world's
+        // surfacelist collection exists and the effects module can point its instance at it
+        // and push every surface's skid-mark colour pair into the trail system.
         //
-        // Everything else about this arm is now correct and stays: the collection key is
-        // Attrib::StringToKey("340654") (sub_82C4A1F8 -> qword_82FAB7A8, read out of the image),
-        // and the "EffectsModule layout is opaque" reason the old note gave is stale.
-        // ⇒ NEXT STEP, precisely: make Attrib::Instance::Change bind a usable class for
-        //   mSurfaceList, then delete this block and call PostWorldPreparePrepare here. Until
-        //   then Num_Surfaces() is 0, HandleWheels reads Attrib::DefaultDataArea's zeros
-        //   (en=0 thr=0.0 type=0) and no tyre mark can be laid -- measured, 368 gate lines.
-        static bool s_bLoggedPostWorldPrepare = false;
-        if (!s_bLoggedPostWorldPrepare)
-        {
-            s_bLoggedPostWorldPrepare = true;
-            CgsDev::Log::WriteToLog(
-                "[skid-ready] PostWorldPreparePrepare NOT CALLED -- it faults inside "
-                "Attrib::Instance::GetClass on this build (measured runs 17/18). The surface "
-                "list stays EMPTY, so HandleWheels reads the zeroed default data area and no "
-                "tyre mark can be laid. This is the last gate.\n");
-        }
+        // ⭐ THE 0xC0000005 THAT TOOK THIS BACK OUT ON 2026-09-02 (runs 17/18,
+        //   Attrib::Instance::GetClass + 0x11 <- PostWorldPreparePrepare + 0x22F/+0x298)
+        // was NOT an AttribSys instance-binding problem and NOT an asset gap. It was a
+        // one-argument transcription defect in Attrib::Gen::visualfxsurface's constructor:
+        // the console's @0x8227FC00 takes an Attrib::RefSpec (its Instance ctor is
+        // sub_8280A248, which opens with `bl Attrib__RefSpec__GetCollection`), and this tree
+        // declared it taking an Attrib::Collection*. Every caller passes the surface layout
+        // +0x10 -- an embedded 24-byte RefSpec -- so reading it as a Collection fetched
+        // mpClass from +0x20, eight bytes past the record, and dereferenced the garbage.
+        // `GetClass + 0x11` is precisely the `mov eax,[rax]` after `mov rax,[rax+0x20]`.
+        // Fixed in GameSource/AttribSys/Generated/classes/visualfxsurface.h + the four call
+        // sites (2026-09-03). The [skid-bind] line in PostWorldPreparePrepare prints both
+        // sides of the resolve on the first pass.
+        lpGameModule->GetEffectsModule().PostWorldPreparePrepare();
     }
     else if (lpGameDataInputBuffer != 0)
     {

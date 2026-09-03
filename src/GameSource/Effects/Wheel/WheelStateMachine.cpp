@@ -80,9 +80,24 @@ namespace
     const u32 KU_VFX_SKID_SMOKE_ENABLED          = 0x4C;
     const u32 KU_VFX_SKID_SMOKE_2_ENABLED        = 0x4D;
 
-    // The visualfxsurface sub-collection sits 16 bytes into the surface's attribute data
-    // (asm: visualfxsurface(&inst, surfaceData + 16, 0)).
-    const u32 KU_VFX_SUBCOLLECTION_OFFSET = 16;
+    // ⭐⭐ RENAMED + RETYPED 2026-09-03. What sits 16 bytes into the surface's attribute data
+    // is an Attrib::RefSpec -- the ref to that surface's visualfxsurface collection -- not a
+    // sub-collection. The asm at 0x82293EB8 is
+    //     sub_8227FB58(v37, AttributePointer, 0);                      // surface(const RefSpec&)
+    //     Attrib::Gen::visualfxsurface(&v33, LODWORD(v37[1]) + 16, 0); // visualfxsurface(const RefSpec&)
+    // and BOTH of those generated ctors enter Attrib::Instance through sub_8280A248, whose
+    // first instruction pair is `mr r3,r4 / bl Attrib__RefSpec__GetCollection`. Handing either
+    // one an Attrib::Collection* made Instance::Instance read mpData/mpSource at +0x28/+0x30
+    // and bump muRefCount at +0x08 -- past the end of a 24-byte RefSpec -- and GetClass() then
+    // loaded a garbage class pointer. See visualfxsurface.h for the whole chain.
+    const u32 KU_VFX_SURFACE_REF_OFFSET = 16;
+
+    // The visualfxsurface reference embedded in a surface's layout block.
+    const Attrib::RefSpec& VfxSurfaceRef(const void* lpSurfaceLayout)
+    {
+        return *reinterpret_cast<const Attrib::RefSpec*>(
+            reinterpret_cast<const u8*>(lpSurfaceLayout) + KU_VFX_SURFACE_REF_OFFSET);
+    }
 
     // The ActiveRaceCarData flag halfword (X360 byte +0x130); bit 1 disables the wheel FX.
     const u32 KU_ACTIVE_RACE_CAR_FLAGS_OFFSET = 0x130;
@@ -212,7 +227,7 @@ void WheelStateMachine::Update(const CarState& lCarState,
 
     // Resolve the contact surface's visual-FX attributes: index the module's surfacelist
     // by the road-contact surface id, wrap the resolved element in a surface instance,
-    // then its visualfxsurface sub-collection (16 bytes in).
+    // then follow the visualfxsurface REF embedded in that surface's layout (16 bytes in).
     const u32 luSurfaceID =
         (lWheel.mRoadContact.mCollisionTag.muValue >> KU_SURFACE_ID_SHIFT) & KU_SURFACE_ID_MASK;
 
@@ -223,10 +238,10 @@ void WheelStateMachine::Update(const CarState& lCarState,
         lpSurfaceRef = Attrib::DefaultDataArea(0x18u);
     }
 
-    Attrib::Gen::surface lSurface(reinterpret_cast<Attrib::Collection*>(lpSurfaceRef), NULL);
-    Attrib::Collection* lpVfxCollection = reinterpret_cast<Attrib::Collection*>(
-        reinterpret_cast<u8*>(const_cast<void*>(lSurface.GetAttributeData())) + KU_VFX_SUBCOLLECTION_OFFSET);
-    Attrib::Gen::visualfxsurface lVfxSurface(lpVfxCollection, NULL);
+    // sub_8227FB58 is the surface ctor's RefSpec overload -- Surfaces() hands back an
+    // Attrib::RefSpec element of the "Surfaces" array, never a collection.
+    Attrib::Gen::surface lSurface(*static_cast<const Attrib::RefSpec*>(lpSurfaceRef), NULL);
+    Attrib::Gen::visualfxsurface lVfxSurface(VfxSurfaceRef(lSurface.GetAttributeData()), NULL);
 
     const u8* lpVfx = reinterpret_cast<const u8*>(lVfxSurface.GetAttributeData());
 
