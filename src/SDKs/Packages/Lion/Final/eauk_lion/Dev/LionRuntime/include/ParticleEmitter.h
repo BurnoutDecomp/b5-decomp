@@ -69,6 +69,13 @@ struct cLionBindings;   // LionBindings.h (sibling home) -- Bind() attaches one 
 
 class cParticleEmitter
 {
+    // The emitter MANAGER owns the free/used lists and does the surgery on them, reading and
+    // writing mpNext / mpBindings / mpDescriptor directly (`lwz r11, 0x1FC(r31)` and
+    // `lwz r29, 0x204(r31)` all through cParticleEmitterManager::UnRegister @0x829146D0). It
+    // is a friend rather than a set of accessors the DWARF does not declare -- exactly the
+    // arrangement cParticleBucket already has with cParticleBucketManager in this tree.
+    friend struct cParticleEmitterManager;
+
 public:
     // ParticleEmitter.h:266 (DWARF) -- what one call to ParticleBuild concluded about a
     // particle. cParticleEmitter::ParticleBuild returns it and the Simulate* family switches
