@@ -3099,11 +3099,12 @@ void RaceCarEntityModule::ChangePlayerCarColour( u32 luPaletteIndex, u32 luColou
 //   * step 1 -- the module's own CgsWorld::WorldMap2D member is inside this header's
 //     opaque attested-offset tail (it has no name here yet), so there is nothing to
 //     copy FROM. Nothing on the reconstructed path reads the published copy.
-//   * step 4's SetDeformationModelResourcePtr -- the console builds the ResourcePtr
-//     from ActiveRaceCar+0x1CA4, which lands inside maPad1C90, the deliberately opaque
-//     32-byte ResourcePtr pair at the end of ActiveRaceCar. Homing it would drag
-//     StreamedDeformationSpec into every consumer of that header; the published handle
-//     has no reader on this build.
+//   * step 4's SetDeformationModelResourcePtr -- ⭐ RETIRED 2026-09-03 (boost-exhaust
+//     wave). Both of its reasons went stale: +0x1CA4 is no longer inside maPad1C90 (it is
+//     the named mDeformationModelHandle, and this module is already a friend), and the
+//     published handle DOES have a reader -- ActiveRaceCarData::ExtractTags @0x8229B6C0,
+//     which is where muNumBoostTags comes from and therefore whether any boost effect can
+//     start at all. The publish is bodied in the loop below; see its own banner.
 //   * step 5 -- ⭐ RETIRED (hud H3b tracking slice 2026-08-25): RaceCar::
 //     FillInOutputInterface @0x822BED20 is reconstructed and the per-global-slot loop
 //     below publishes through it; the satnav 199 producer consumes the result.
@@ -3288,6 +3289,38 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
             lpActiveRaceCar->GetCurrentInAirRotations(),// v2
             lpActiveRaceCar->HasCrashedIntoWater(),     // stack +0x87
             lpActiveRaceCar->CanDriveAwayFromCrash() ); // stack +0x8F
+
+        // ---- step 4's SECOND publish: this slot's deformation-model resource ptr -------
+        // ⭐ RESTORED 2026-09-03 (boost-exhaust wave). This was the last of step 4 and it was
+        // dropped, on two reasons that are BOTH stale now:
+        //   (a) "the console builds the ResourcePtr from ActiveRaceCar+0x1CA4, which lands
+        //       inside maPad1C90, the deliberately opaque ResourcePtr pair". It does not any
+        //       more -- BrnActiveRaceCar.h:1253 NAMES that word as mDeformationModelHandle
+        //       (the AddHandlingModel `ld r7, 0x1CA4(r31)` fold pinned it), OnResourcesLoaded
+        //       @BrnActiveRaceCar.cpp:1035 fills it, and this module is already a friend.
+        //   (b) "the published handle has no reader on this build". IT HAS EXACTLY ONE, and
+        //       that reader is the whole boost-exhaust feature:
+        //       EffectsModule::Update @1338 calls GetDeformationModelResourcePtr and hands the
+        //       result to ActiveRaceCarData::Initialise -> ExtractTags @0x8229B6C0, which
+        //       counts the car's FXBOOSTPOINT1..4 locators into muNumBoostTags. Unpublished,
+        //       that ptr is the NULL resource, ExtractTags takes its early-out, the count stays
+        //       0, and BoostStateMachine::StartEffects @0x8229B920 -- whose every loop is
+        //       `for (lu = 0; lu < muNumBoostTags; ++lu)` -- starts nothing at all. MEASURED
+        //       before this line existed: `[boosttag] #1 ExtractTags EARLY-OUT ... muNumBoostTags
+        //       stays 0` followed by seven `[boostfx] ... muNumBoostTags=0` lines naming the
+        //       correct BoostGreen / ExhaustSmoke effects.
+        //
+        // The console body, from the asm at the tail of the same loop iteration: a stack-local
+        // ResourcePtr is memset to zero, self-ringed (mpNext/mpPrev/mpThis = &local),
+        // CreateFromHandle'd against `_R31 + 7332` (== 0x1CA4 == mDeformationModelHandle),
+        // handed to SetDeformationModelResource, then unlinked from its ring on the way out.
+        // The ResourcePtr(const ResourceHandle&) ctor is exactly that sequence and
+        // ~BaseResourcePtr is the unlink, so the local below IS the console's local.
+        {
+            const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>
+                lDeformationModelPtr( lpActiveRaceCar->mDeformationModelHandle );
+            lpActiveCarInterface->SetDeformationModelResourcePtr( leSlot, lDeformationModelPtr );
+        }
 
         CGS_ASSERT( liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
                     "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" );
