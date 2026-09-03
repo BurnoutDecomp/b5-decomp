@@ -16,11 +16,14 @@
 
 #include "GameSource/Effects/Particles/Native/BrnLionBlendRenderer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the [texreg] witness
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleDescriptor.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitter.h"
 #include "pc/gcm/renderengine/renderstates.h"   // renderengine::DepthStencilState / TextureState / MaterialState
 #include "pc/gcm/renderengine/texture.h"          // renderengine::Texture
+
+#include <cstdio>   // snprintf (the [texreg] witness)
 
 // D3DDevice_SetTexture -- the platform (Xbox 360 D3D) texture-bind entry point. X360 call:
 // D3DDevice_SetTexture(off_83271608, 0, texture, 0x80000000) -- (device, sampler, texture,
@@ -308,6 +311,30 @@ void LionParticleRender::TextureRegister(cParticleMaterial* apMaterial, char* ap
     {
         const u32 luNormalHash = lHasher.HashString(lpcNormalMapName);
         apMaterial->SetNormalMapHandle(luNormalHash);
+    }
+
+    // ---- [texreg] witness. NOT console behaviour: ours, bounded, log-only. -------------------
+    // ⭐ WHY A COUNT AND NOT A ONE-SHOT. This function is the ONLY place a particle material ever
+    // gets a texture-map handle, and it is reached only while gpLionParticleRender is non-null --
+    // which, before cLionFX::Init landed, it never was. A one-shot line would prove the path is
+    // live and say nothing about COVERAGE, and "at least one material registered" is exactly the
+    // kind of claim this project keeps having to retract. So: the first registration, then every
+    // 32nd, then a final line -- each carrying the material's texture NAME and the handle the
+    // hash produced, because a wrong record layout would give a garbage name or a zero handle
+    // here rather than nothing at all. DELETE-WHEN-STABLE.
+    {
+        static u32 suRegistered = 0;
+        ++suRegistered;
+        if (suRegistered == 1 || (suRegistered % 32) == 0)
+        {
+            char lacMsg[256];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[texreg] #%u material=%p texture=\"%s\" texHandle=%08X matHandle=%08X\n",
+                          suRegistered, static_cast<const void*>(apMaterial),
+                          apcTextureName ? apcTextureName : "<null>",
+                          luTextureHash, apMaterial->mMaterialHandle);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
     }
 }
 
