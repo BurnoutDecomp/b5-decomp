@@ -4119,9 +4119,19 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
         if (lpRt)      lpRt->Release();
     }
 
-    static u32 suDiagRuns = 0u;
-    if (suDiagRuns < 4u)
+    // [DIAG] The ladder below is a one-shot budget of FOUR runs, and every one of them is spent
+    // at boot on the post-fx composite's 20-byte quads -- so it has never once described the
+    // 28-byte SKID runs, which only start when a car drifts. That is the whole reason the tyre
+    // mark's draw side could be measured all the way to "8.4 M vertices submitted with resolved
+    // constants" and still not be explained. A second, stride-keyed budget gives the skid runs
+    // three entries of their own. DELETE-WHEN-STABLE, with the rest of the ladder.
+    static u32 suDiagRuns     = 0u;
+    static u32 suDiagSkidRuns = 0u;
+    const bool lbDiagSkidRun  = (suImVertsStride == 28u) && (suDiagSkidRuns < 3u);
+    if (suDiagRuns < 4u || lbDiagSkidRun)
     {
+        if (lbDiagSkidRun)
+            ++suDiagSkidRuns;
         ++suDiagRuns;
         IDirect3DSurface9* lpBoundRt = nullptr;  lpDevice->GetRenderTarget(0, &lpBoundRt);
         IDirect3DSurface9* lpBackBuf = nullptr;  lpDevice->GetBackBuffer(0u, 0u, D3DBACKBUFFER_TYPE_MONO, &lpBackBuf);
