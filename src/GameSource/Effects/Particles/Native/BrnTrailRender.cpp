@@ -34,6 +34,9 @@
 #include "GameSource/Effects/Particles/Native/BrnTrailSystem.h"        // TrailEmitter / TrailParams
 #include "GameSource/Effects/Particles/Native/BrnIm3dSkidsRenderer.h"  // BrnGraphics::Im3dSkidsRenderer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"             // [diag] CgsDev::Log::WriteToLog
+
+#include <cstdio>   // [diag] snprintf (the [trailpass] transform probe)
 #include "rw/math/vpu/vector3_operation.h"                             // rw::math::vpu::{operator+,operator*}
 
 // The immediate-mode state library's three trail states, built by CgsGraphics::ImRendererBase::
@@ -254,11 +257,53 @@ namespace Native
                                laVertices, static_cast<u32>(lnVertexCount));
             guProbeVertices += static_cast<u32>(lnVertexCount);   // [diag]
             ++guProbeDraws;                                        // [diag]
+
+            // [DIAG] RUN THE VERTEX PROGRAM'S OWN TRANSFORM ON ONE REAL VERTEX.
+            // 8.4 million submitted vertices and an empty road is the classic
+            // valid-call/invalid-data shape: the strips are being drawn somewhere the
+            // camera is not. The skid vertex program's whole position math is
+            //     oPos = pos.x*c0 + pos.y*c1 + pos.z*c2 + c3        (gWorldViewProj rows)
+            // so doing exactly that here, on the first vertex of the batch, says whether
+            // the fault is upstream (the matrix) or downstream (states/shader/blend).
+            // A zero or identity matrix, a w <= 0, or |x/w| > 1 convicts the matrix;
+            // sane NDC inside the frustum clears it and moves the search below the draw.
+            // Read the matrix as its 16 floats -- it is being handed to the shader as raw
+            // bytes by SetTransform, so this reads it exactly as the program does.
+            if (guProbeFirstVertex != 0u)
+            {
+                --guProbeFirstVertex;
+                const f32* const lpM = reinterpret_cast<const f32*>(&mViewProjectionMatrix);
+                const Vector3& lrP = laVertices[0].mv3Pos;
+                const f32 lfX = lrP.x * lpM[0] + lrP.y * lpM[4] + lrP.z * lpM[8]  + lpM[12];
+                const f32 lfY = lrP.x * lpM[1] + lrP.y * lpM[5] + lrP.z * lpM[9]  + lpM[13];
+                const f32 lfZ = lrP.x * lpM[2] + lrP.y * lpM[6] + lrP.z * lpM[10] + lpM[14];
+                const f32 lfW = lrP.x * lpM[3] + lrP.y * lpM[7] + lrP.z * lpM[11] + lpM[15];
+                char lacMsg[400];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[trailpass] xform: v0=(%.2f,%.2f,%.2f) clip=(%.3f,%.3f,%.3f,%.3f) "
+                    "ndc=(%.3f,%.3f,%.3f) m0=[%.4f %.4f %.4f %.4f] m3=[%.3f %.3f %.3f %.3f] "
+                    "start=(%.3f,%.3f,%.3f,%.3f) end=(%.3f,%.3f,%.3f,%.3f) uvta0=(%.2f,%.2f,%.3f,%.3f)\n",
+                    static_cast<double>(lrP.x), static_cast<double>(lrP.y), static_cast<double>(lrP.z),
+                    static_cast<double>(lfX), static_cast<double>(lfY), static_cast<double>(lfZ), static_cast<double>(lfW),
+                    static_cast<double>(lfW != 0.0f ? lfX / lfW : 0.0f),
+                    static_cast<double>(lfW != 0.0f ? lfY / lfW : 0.0f),
+                    static_cast<double>(lfW != 0.0f ? lfZ / lfW : 0.0f),
+                    static_cast<double>(lpM[0]), static_cast<double>(lpM[1]), static_cast<double>(lpM[2]), static_cast<double>(lpM[3]),
+                    static_cast<double>(lpM[12]), static_cast<double>(lpM[13]), static_cast<double>(lpM[14]), static_cast<double>(lpM[15]),
+                    static_cast<double>(lpParams->mStartColour.red), static_cast<double>(lpParams->mStartColour.green),
+                    static_cast<double>(lpParams->mStartColour.blue), static_cast<double>(lpParams->mStartColour.alpha),
+                    static_cast<double>(lpParams->mEndColour.red), static_cast<double>(lpParams->mEndColour.green),
+                    static_cast<double>(lpParams->mEndColour.blue), static_cast<double>(lpParams->mEndColour.alpha),
+                    static_cast<double>(laVertices[0].mv4UvTimeAlpha.x), static_cast<double>(laVertices[0].mv4UvTimeAlpha.y),
+                    static_cast<double>(laVertices[0].mv4UvTimeAlpha.z), static_cast<double>(laVertices[0].mv4UvTimeAlpha.w));
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
         }
     }
 
     // [DIAG] the two running totals the [trailpass] line reads. See BrnTrailRender.h.
-    u32 TrailRenderer::guProbeVertices = 0;
-    u32 TrailRenderer::guProbeDraws    = 0;
+    u32 TrailRenderer::guProbeVertices    = 0;
+    u32 TrailRenderer::guProbeDraws       = 0;
+    u32 TrailRenderer::guProbeFirstVertex = 8;   // print the first EIGHT batches, then stop
 }
 }
