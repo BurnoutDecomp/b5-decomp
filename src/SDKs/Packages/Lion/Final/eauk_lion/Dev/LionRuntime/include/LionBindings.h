@@ -26,10 +26,18 @@
 #include "types.hpp"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRandomSeed.h"
 
-class cParticleLocator;
-class cParticleScaler;
-class cParticleTrigger;
-class cParticleEmitter;
+// ⛔⛔ THE CLASS-KEYS BELOW ARE LOAD-BEARING, NOT COSMETIC (corrected 2026-09-03). These three
+// were `class` here while their real homes (ParticleLocator.h / ParticleScaler.h /
+// ParticleTrigger.h) all say `struct`. MSVC mangles the two differently -- `V` for a class,
+// `U` for a struct -- so `cLionBindings::GetpScaler()` compiled in a TU that saw THIS header
+// first emitted a different symbol from the same function compiled after ParticleScaler.h.
+// Nothing had caught it because no reconstructed body called those accessors across the seam
+// yet; cLionEffectManager::EffectCreate is the first that does. (cParticleEmitter really is a
+// `class` -- ParticleEmitter.h:70 -- and stays one.)
+struct cParticleLocator;
+struct cParticleScaler;
+struct cParticleTrigger;
+class  cParticleEmitter;
 
 struct cLionBindings
 {
@@ -38,6 +46,20 @@ public:
     void DeInit();
 
     void SetLocatorCount(u32 aCount);
+
+    // DWARF LionBindings.h:33 / :34 / :35 / :36. All four are single stores the console
+    // inlines into cLionEffectManager::EffectCreate @0x829149E8 (`v14[7] = a3`, `v14[8] = a4`,
+    // `v14[9] = a5`, `v14[5] = a6` -- the bindings sub-object starts at instance+0x10, so
+    // those four land on +0x0C / +0x10 / +0x14 / +0x04). De-inlined onto the owning class
+    // rather than left as offset pokes at the call site. SetWorldIndex is also what
+    // cLionFX::EffectSetWorldIndex @0x82908898 is, in its entirety.
+    void SetpLocator(cParticleLocator* apLocator) { mpLocator = apLocator; }
+    void SetpScaler(cParticleScaler* apScaler)    { mpScaler  = apScaler;  }
+    void SetpTrigger(cParticleTrigger* apTrigger) { mpTrigger = apTrigger; }
+    void SetWorldIndex(u32 auWorldIndex)          { mWorldIndex = auWorldIndex; }
+
+    // DWARF LionBindings.h:63.
+    u32 GetWorldIndex() const { return mWorldIndex; }
 
     // DWARF LionBindings.h:57. The emitter's locator, i.e. the transform a particle spawns
     // in. cParticleEmitter::InitialiseParticle @0x82911978 reaches it with `lwz r11, 0x1FC(r25)`
