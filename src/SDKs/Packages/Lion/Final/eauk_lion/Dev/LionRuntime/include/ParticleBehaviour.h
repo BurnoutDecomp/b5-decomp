@@ -129,6 +129,11 @@ struct cParticleBehaviour
     void Build();
     void BuildColourSteps();
     void CompileBaseVariance();
+    // ParticleBehaviour.h:314 (DWARF). Interpolate two behaviour layers into this one.
+    // X360 @0x8290B1F8 -- 1,530 instructions. NOT RECONSTRUCTED; the LOG-ONCE stub is in
+    // LionRuntimeLinkStubs.cpp, and its note says what the miss costs.
+    void Lerp(const cParticleBehaviour* apLo, const cParticleBehaviour* apHi, f32 afWeight);
+
     void Delocate(u32 aEndianTwiddleFlag);
     void Relocate();
     void GetSerialiseSize(cLionSerialiser& aSer) const;

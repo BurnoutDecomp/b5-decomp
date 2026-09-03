@@ -120,9 +120,15 @@ public:
     // cParticleEmitterManager::AppInit, i.e. during cLionFX::Init, on every boot.
     void Init(cParticleDescriptor* apDescriptor);
 
-    // Release the emitter's buckets/behaviours back to their pools. X360 @0x82913330.
-    // NOT RECONSTRUCTED -- see LionRuntimeLinkStubs.cpp.
+    // Release the emitter's buckets/behaviours back to their pools, then Init(nullptr).
+    // X360 @0x82913330. RECONSTRUCTED (ParticleEmitter.cpp).
     void DeInit();
+
+    // Choose the behaviour layer this emitter is playing: the effect's SCALER binding gives a
+    // position along the descriptor's behaviour stack, and a fractional position interpolates
+    // the two layers it falls between into mpTempBehaviour. X360 @0x8290F730.
+    // RECONSTRUCTED (ParticleEmitter.cpp).
+    void Blend();
 
     // Advance one frame; returns non-zero while still alive (0 -> manager unregisters it).
     // X360 @0x829153D8 -- the head of the Lion SIMULATION core (Generate / Emit /

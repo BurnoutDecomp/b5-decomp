@@ -83,6 +83,12 @@ public:
     // allocation with a LINE/FILE/NAME TagValuePair chain). X360 @0x829088A8.
     cParticleBehaviour* CreateBehaviour();
 
+    // DWARF h:74 -- give a behaviour node back. NO STANDALONE X360 BODY: inlined into
+    // cParticleEmitter::DeInit @0x82913380, which loads this object's mpAllocator and calls the
+    // ITaggedAllocator::Free(ptr, 0) virtual through it (`lwz r11,0(r3)`, slot +0xC). De-inlined
+    // back onto the owning method rather than left as a vtable poke at the call site.
+    void Free(cParticleBehaviour* apBehaviour);
+
     // Attach arBindings onto every top-level descriptor of apEffect: register an
     // emitter for each descriptor and bind the two together. X360 @0x82914530.
     void BindingsAttach(const cLionParticleEffect* apEffect, cLionBindings& arBindings);

@@ -44,6 +44,11 @@ public:
     // (mpBindings) then `lwz r3, 0xC(r11)` (mpLocator) -- inline, as an accessor compiles.
     cParticleLocator* GetpLocator() const { return mpLocator; }
 
+    // DWARF LionBindings.h:108 -- the emitter's scaler. cParticleEmitter::Blend @0x8290F774
+    // reaches it with `lwz r11, 0x1FC(r31)` (mpBindings) then `lwz r11, 0x10(r11)`, and reads
+    // the float at its +0x00; the scale is the BLEND POSITION along the behaviour stack.
+    cParticleScaler* GetpScaler() const { return mpScaler; }
+
     // DWARF LionBindings.h -- the emitter's trigger (start/stop clock).
     // cParticleEmitter::IsGenerating @0x8290D568 reaches it with `lwz r11, 0x1FC(r31)`
     // (mpBindings) then `lwz r28, 0x14(r11)` (mpTrigger).
