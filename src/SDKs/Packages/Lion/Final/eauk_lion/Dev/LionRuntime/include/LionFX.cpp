@@ -101,3 +101,23 @@ cLionEffectDefinition* cLionFX::BinLoad(void* apData)
 
     return lpDefinition;
 }
+
+// ----------------------------------------------------------------------------
+// cLionFX::BinSave  @ 0x82914438 -- TRAP STUB (see the declaration's note).
+// The console body allocates a cLionSerialiser sized by
+// cLionParticleEffect::GetSerialiseSize, DataStores the 84-byte definition, serialises
+// the effect graph into it, Remaps the copied pointers, Delocates the definition for the
+// target endianness and hands the buffer to the stream callback. Three of those steps
+// have no reconstructed body (cLionParticleEffect::Remap, cLionEffectDefinition::
+// Delocate, cLionSerialiser::StringStore), so writing this one would mean inventing
+// them. It is the SAVE path: the only caller is ParticleDescriptionResourceType::
+// Serialise @0x8267C220, which the PC build never runs.
+// ----------------------------------------------------------------------------
+int cLionFX::BinSave(void* apData, int aiEndianTwiddleFlag, void* apStream)
+{
+    (void)apData;
+    (void)aiEndianTwiddleFlag;
+    (void)apStream;
+    __debugbreak();
+    return 0;
+}

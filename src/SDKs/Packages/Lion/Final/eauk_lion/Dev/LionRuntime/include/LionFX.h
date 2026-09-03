@@ -36,4 +36,14 @@ struct cLionFX
     // the effect into the runtime's global effect chain. Returns the blob as a
     // cLionEffectDefinition*, or NULL when the blob is null or is not a LION effect.
     static cLionEffectDefinition* BinLoad(void* apData);
+
+    // cLionFX::BinSave @0x82914438 (DWARF LionFX.h:100) -- the inverse: serialise a
+    // definition's effect graph into a cLionSerialiser buffer and hand the bytes to the
+    // supplied stream. TRAP STUB, deliberately: its chain needs cLionParticleEffect::
+    // Remap and cLionEffectDefinition::Delocate (neither reconstructed) and
+    // cLionSerialiser::StringStore (whose body the export set has a hole for). Declared
+    // and defined only because ParticleDescriptionResourceType::Serialise @0x8267C220
+    // calls it; nothing on the PC calls THAT (the game reads .lef data, it never writes
+    // it), so the trap is unreachable rather than merely unlikely.
+    static int BinSave(void* apData, int aiEndianTwiddleFlag, void* apStream);
 };
