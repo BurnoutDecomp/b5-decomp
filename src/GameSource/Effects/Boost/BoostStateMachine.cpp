@@ -29,7 +29,9 @@
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnVehicleLocatorData.h"  // VehicleLocatorData / Output / ETagPointType
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the [boost*] witnesses
 #include <cmath>                                              // sqrtf
+#include <cstdio>                                             // snprintf (witnesses)
 
 namespace BrnEffects
 {
@@ -310,6 +312,32 @@ void BoostStateMachine::StartEffects(ParticleEffectHelper& lParticleEffectHelper
 
         const u32 luNameHash = BrnParticle::ParticleDescription::HashString(lpcEffectName);
         mEffects[lu].muHandle = lModule.StartLionEffect(luNameHash, lpcEffectName, luWorldIndex);
+    }
+
+    // ---- [boostfx] witness. NOT console behaviour: ours, bounded, log-only. ---------
+    // PRINTED OUTSIDE THE LOOP, DELIBERATELY. The loop above is bounded by muNumBoostTags,
+    // so with a zero tag count StartEffects is a no-op that leaves NOTHING in the log --
+    // and "the boost effect did not start" then looks identical to "StartEffects was never
+    // called". This line separates the two and names the count that decided it, plus the
+    // handle slot 0 actually got (KU_HANDLE_INVALID == the name did not resolve).
+    // DELETE-WHEN-STABLE.
+    {
+        static u32 suStartWitness = 0;
+        const u32 KU_START_WITNESS_LIMIT = 12;
+        if (suStartWitness < KU_START_WITNESS_LIMIT)
+        {
+            ++suStartWitness;
+            char lacMsg[288];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[boostfx] #%u StartEffects(\"%s\", world=%u) muNumBoostTags=%u handle0=%08X%s\n",
+                suStartWitness, lpcEffectName ? lpcEffectName : "<NULLSTRING>",
+                luWorldIndex, muNumBoostTags,
+                (muNumBoostTags != 0) ? mEffects[0].muHandle : 0u,
+                (muNumBoostTags == 0)
+                    ? "  <-- ZERO: the loop did not execute and no effect started."
+                    : "");
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
     }
 }
 
