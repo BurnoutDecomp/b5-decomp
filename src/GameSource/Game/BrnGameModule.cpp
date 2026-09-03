@@ -59,7 +59,8 @@ namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(
 namespace BrnDiag
 {
     FilmLatch gFilmLatch = { 0u, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f,
-                             0u, 0u, 0.0f, 0.0f, 0.0f };
+                             0u, 0u, 0.0f, 0.0f, 0.0f,
+                             0.0f, 0.0f, 0.0f };
 }
 
 namespace BrnGame
