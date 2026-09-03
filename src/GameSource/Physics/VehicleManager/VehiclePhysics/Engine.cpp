@@ -363,9 +363,25 @@ namespace
     //   restore it -- UpdateDriving re-arms both flags every frame via SetAllowGearChanges).
     //
     // FLAG (BPR divergence, X360 wins): the flywheel-friction clamp uses the freshly
-    //   INTEGRATED flywheel velocity in `min(fly*sgn, friction*sgn*dt)` on X360 (both legs read
-    //   the member/local AFTER the lerp+torque step); the BPR twin reads its still-unwritten
-    //   member, i.e. the PRE-frame value. Reproduced as the X360 shipped it.
+    //   INTEGRATED flywheel velocity in `min(fly*sgn, friction*sgn*dt)` on X360 -- the branchy
+    //   leg reads the member back at 0x825CD2C0/0x825CD2C8, i.e. after the lerp+torque step and
+    //   before the friction bleed; the BPR twin reads its still-unwritten member, i.e. the
+    //   PRE-frame value. Reproduced as the X360 shipped it.
+    //   (Precision note, 2026-09-03 audit: the BRANCHLESS leg's `fly*sgn` term reads the member
+    //   at 0x825CD3DC, which by then also carries the branchy leg's [idle, MaxRPM] clamp. The two
+    //   legs therefore agree only while `fly > 2*friction*dt` -- which the 104.72 rad/s idle floor
+    //   guarantees in every reachable state, and which is exactly what the harness's 0.01-tolerance
+    //   assert at 0x825CEAE4 checks every frame. The branchy form is the one written here.)
+    //
+    // RE-DECODED FROM THE RAW IMAGE WORDS 2026-09-03 (drive-spine 1:1 audit). Every VMX128
+    //   operand was taken from the encoding, not from IDA's print -- VD = bits 6-10 | bits<<5 of
+    //   the word's bits 2-3, VB = bits 16-20 | (w&3)<<5, VA = bits 11-15 | bit5<<5 | bit10<<6
+    //   (fitted over 265 three-operand VMX128 instructions in this function). The two fused forms
+    //   that IDA prints with a phantom fourth operand were pinned by their Newton-Raphson idiom:
+    //   `vnmsubfp128 vD,vA,vB` is `vD = vD - vA*vB` and `vmaddfp128 vD,vA,vB` is `vD = vA*vB + vD`,
+    //   while the single `vmaddcfp128` @0x825CB7F0 is `vD = vA*vD + vB`. Result: 18 stages, all 21
+    //   member stores, and every one of the ~30 constants re-read from the image; ONE divergence
+    //   found (the gear-FSM chain flattening below, @0x825CE460).
     // ---------------------------------------------------------------------------------------
     void Engine::Update(VecFloat lvfWheelAngularVelocity, VecFloat lvfGas, VecFloat lvfBrake,
                         bool lbHandBrake, VecFloat lvfSteering, VecFloat /*lvfRearWheelRadius*/,
@@ -475,16 +491,35 @@ namespace
                             - KF_DOWNSHIFT_FACTOR * mAttribs.GetGearRatio(liGear - 1);
         }
 
-        // -- The gear state machine (mutually exclusive branches, console order).
-        if (liGear == 0)
+        // -- The gear state machine: ONE FLAT else-if chain of five links, not a nest.
+        //
+        // ⚠️ CORRECTED 2026-09-03 (drive-spine audit, re-decoded from the raw image words). The
+        // first link used to be written as a NESTED `if (liGear == 0) { if (brake && speed) … }`,
+        // which silently swallowed links 2-5 for the whole of reverse gear. The console does not:
+        // ALL THREE exits of link 1 -- `bne cr6` on gear != 0 @0x825CE468, `beq cr6` on
+        // brake <= 0.1 @0x825CE4A0, and `beq cr6` on fwd <= -5 @0x825CE4E0 -- branch to the SAME
+        // label 0x825CE4FC, which is link 2. (Branch displacements read out of the encodings:
+        // 409A0094 / 419A005C / 419A001C, all landing on 0x825CE4FC.) The branchless leg says the
+        // same thing without any branching at all: it ANDs the three masks into one predicate --
+        // `vand128 v8, v120(brake>0.1), v7(fwd>-5)` then `vand128 v0, v110(gear==0), v8`
+        // @0x825CE7F0..0x825CE7F8 -- and falls into link 2 when that single predicate is false.
+        // So the original source is one `&&`, and the nest was a transcription defect.
+        //
+        // What it cost: in reverse (gear 0) with the exit test failing, link 3 -- "the clutch is
+        // out, bite again once the revs pass a quarter of the up-shift RPM" -- is the ONLY other
+        // link that can fire (link 2 needs gear 1; link 4 rejects gear 0 at 0x825CE6D4; link 5
+        // needs gear > 1). Entering reverse parks the gear-change timer at 0, so on the very next
+        // frame the "still changing gear" cut zeroes the clutch; with the nest in place nothing
+        // could ever set it back, because link 3 was unreachable in reverse. The clutch stayed at
+        // 0 and mEngineDrive = torque * 0 * ratio * diff, i.e. reverse had NO drive at all once
+        // the clutch had been cut. Faithful now.
+        if (liGear == 0
+            && lfBrake > KVF_BRAKE_LOCK_THRESHOLD
+            && lfForwardSpeed > KVF_REVERSING_POWER_THROUGH_THESHOLD)
         {
             // Leave reverse: brake pressed while rolling forwards fast enough.
-            if (lfBrake > KVF_BRAKE_LOCK_THRESHOLD
-                && lfForwardSpeed > KVF_REVERSING_POWER_THROUGH_THESHOLD)
-            {
-                liGear  = 1;
-                lfTimer = 0.0f;
-            }
+            liGear  = 1;
+            lfTimer = 0.0f;
         }
         else if (liGear == 1 && lbAllowReverseDrive
                  && lfBrake > KVF_START_REVERSING_BRAKE_THRESHOLD
