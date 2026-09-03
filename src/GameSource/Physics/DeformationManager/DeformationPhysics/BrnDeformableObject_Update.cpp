@@ -97,6 +97,13 @@ namespace BrnPhysics { namespace Vehicle {
     bool KerbProbeTake(u32& lruUsed, const char* lpcTag);
 } }
 
+// [dv] the one-step velocity witness's CALL-SITE TAG, DEFINED in ExternalPhysicsBody.cpp (read
+// its banner there). UpdateContacts drains BOTH solver arms through one shared
+// CalculateNewVelocity line, so the drain's return address cannot tell them apart -- this names
+// the arm. NOT IN THE X360 BINARY; extern here rather than in a shared header, on the same
+// grounds as gpDvWatchBody and gpCrashResponseDiagBody.
+namespace BrnPhysics { extern const char* gpcDvDrainTag; }
+
 namespace BrnPhysics
 {
 namespace Deformation
@@ -1417,11 +1424,19 @@ namespace Deformation
 
             if ( lbApplied )
             {
+                // [dv] name the arm. ⛔ NOT cosmetic: both branches above drain through the ONE
+                // CalculateNewVelocity line below, so the witness's return address resolves to
+                // the same `UpdateContacts +0x4bd` either way and cannot discriminate them. The
+                // 7.5 m/s f6386 drain was attributed to the car-car arm by the ABSENCE of a
+                // [kerb-imp] line that frame -- sound, but an inference from a silence. This
+                // makes the same claim a positive statement on the drain's own line.
+                gpcDvDrainTag = ( lContact.mpOtherVehicle != nullptr ) ? "carcar" : "world";
                 GetVehicleBody().CalculateNewVelocity(lvfTimeStep);
                 if ( lContact.mpOtherVehicle != nullptr )
                 {
                     lContact.mpOtherVehicle->GetVehicleBody().CalculateNewVelocity(lvfTimeStep);
                 }
+                gpcDvDrainTag = "";
             }
         }
     }

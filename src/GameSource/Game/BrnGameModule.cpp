@@ -60,7 +60,8 @@ namespace BrnDiag
 {
     FilmLatch gFilmLatch = { 0u, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f,
                              0u, 0u, 0.0f, 0.0f, 0.0f,
-                             0.0f, 0.0f, 0.0f };
+                             0.0f, 0.0f, 0.0f,
+                             0u, 0u, 0u, 0.0f };   // the [dv] one-step velocity latch
 }
 
 namespace BrnGame

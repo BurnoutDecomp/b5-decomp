@@ -5799,6 +5799,31 @@ namespace Vehicle
     // 0x825FD164..0x825FD1FC: apply the four packed crash-extra-velocity factors.  The first
     // three scale the corresponding angular-velocity components; the fourth scales horizontal
     // linear velocity while deliberately preserving Y.
+    //
+    // ⭐⭐⭐ THIS BLOCK IS THE ANSWER TO "THE CAR CHANGES SPEED ENORMOUSLY IN ONE PHYSICS STEP",
+    // AND IT IS CONSOLE BEHAVIOUR (kerb wave 6, 2026-09-03). MEASURED -- three independent
+    // events across two runs, with the [dv] one-step velocity witness:
+    //     kw6_dv2 f6988->f6989   105.3 -> 137.0 mph
+    //         v (13.619181, 0.156167, 45.092186) -> v (17.704935, 0.156167, 58.619843)
+    //     kw6_dv1 f6794           34.85 -> 45.30 m/s
+    //     kw6_dv1 f8348           50.62 -> 65.81 m/s   (113 -> 147 mph)
+    // In every one: x and z multiplied by EXACTLY 1.3 to the last printed digit, y BIT-IDENTICAL,
+    // no accumulator drain anywhere in the step, and it lands on the same frame the car's `crash`
+    // flag goes 0 -> 1. 1.3 == 1 + mCrashExtraVelocityFactors.w, i.e. CrashExtraLinearVelocityFactor
+    // == 0.3 in this car's attribute record (VehicleAttribs.cpp:811, record +0x12C). The [dv] stage
+    // marks pin the write to the fixup->crashpred window, i.e. inside
+    // VehicleManager::DoCrashPrediction @0x82645FE0 -- the caller path that reaches SetCrashing on a
+    // player crash entry.
+    // ⇒ WHY IT MATTERS TO THE "weird physics" CAMPAIGN: the giant one-step LOSSES that follow are
+    // the deformation solver resolving a real contact -- but against a car whose horizontal
+    // momentum the console itself raised 30% one step earlier. Do not read a post-crash
+    // deceleration as a defect without subtracting this first.
+    // ⛔ NOT TUNABLE. It is a named vehicle attribute applied exactly as the asm applies it;
+    // changing it to make a symptom go away is the tuning this project forbids.
+    // ⚠️ WHAT IS NOT CONFIRMED: 0.3 is INFERRED from the exact 1.3 ratio, not read out of the
+    // attribute record. BRN_CRASH_RESPONSE_DIAG=1 prints `crashExtra=(x,y,z,w)` at crash entry
+    // (BrnVehicleManager_UpdateVehiclePhysics.cpp:754) -- one run closes that, and nobody has
+    // spent it yet.
     const Vector3Plus& lrCrashFactors = mpAttribs->mBaseAttribs.mCrashExtraVelocityFactors;
     mAngularVelocity.x += mAngularVelocity.x * lrCrashFactors.x;
     mAngularVelocity.y += mAngularVelocity.y * lrCrashFactors.y;

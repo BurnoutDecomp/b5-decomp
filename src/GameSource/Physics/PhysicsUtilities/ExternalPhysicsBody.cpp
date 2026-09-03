@@ -5,12 +5,18 @@
 #include "rw/math/vpu/matrix44affine_operation.h"           // rw::math::vpu::OrthoNormalize3x3
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"  // InChangeRigidBodyInertia (ReadPropertiesFromChangeInertiaEvent)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags (CheckState's failure print)
+#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"  // [dv] BRN_FRAME_DUMP_ARM=dv film latch
 
 #include <cmath>   // std::pow (models the VMX exp2/log2 pow-curve in the damp funcs)
 #include <cstdlib> // getenv / atof -- the opt-in [bank] and [dv] bring-up probes only
 #ifdef _MSC_VER
 #include <intrin.h>          // _ReturnAddress -- the [dv] drain witness's call-site tag
 #pragma intrinsic(_ReturnAddress)
+// The linker-provided image base, so the [dv] witness can print an ASLR-independent RVA instead
+// of a raw pointer. Declared as a byte rather than pulling <windows.h> into a physics TU (only
+// its ADDRESS is ever taken); this is the same base GetModuleHandleA(nullptr) returns, which is
+// what CgsCrashHandlerPC.cpp uses for the identical purpose.
+extern "C" char __ImageBase;
 #endif
 
 // BrnPhysics::ExternalPhysicsBody -- the 7 functions owned by the BrnPhysics-bodies group.
@@ -283,6 +289,37 @@ namespace BrnPhysics
     // never crossed; it does not mean the probe was armed. Confirm a "[dv] STEP" line appears at
     // all before reading anything into silence.
     //
+    // ⭐⭐⭐ WHAT IT ANSWERED (kerb wave 6, 2026-09-03; runs kw6_dv1 / kw6_dv2, plain -Drive,
+    // BRN_DV_PROBE=4, 216 m and 470 m driven). THREE THINGS, and the third is the one nobody was
+    // looking for:
+    //   1. THE ONE-STEP LOSSES ARE CONTACTS, AND THE PROBE NOW NAMES WHICH KIND. Every drain
+    //      carries `site carcar|world` (see gpcDvDrainTag below). kw6_dv1 f6798 is five `carcar`
+    //      drains taking 19.4 m/s out in one step; kw6_dv2 f6991..f6993 is twelve of them,
+    //      58.6 -> 18.5 m/s; kw6_dv1 f8351/f8352 is `world` at 147 mph. Every tag is matched
+    //      line-for-line by a [kerb-imp] CARCAR / world line at the same frame, from a different
+    //      instrument. THE FILM AGREES: the frames dumped by the new BRN_FRAME_DUMP_ARM=dv show
+    //      the player's nose against an orange traffic sedan. So the class of event is the
+    //      player REAR-ENDING TRAFFIC, which is console behaviour.
+    //   2. THE `ra` FIELD CANNOT DO THAT ON ITS OWN, and the earlier attribution rested on a
+    //      silence. UpdateContacts drains BOTH arms through ONE CalculateNewVelocity line, so
+    //      both print the same `UpdateContacts +0x4bd`. `site` is the positive statement.
+    //   3. ⭐⭐⭐ THE CAR ALSO GAINS SPEED IN ONE STEP -- +30%, ON PURPOSE, BY THE CONSOLE.
+    //      On the step the crash flag goes 0 -> 1 the horizontal velocity is multiplied by
+    //      EXACTLY 1.3 (x and z, y bit-identical, no drain): 105.3 -> 137.0 mph at kw6_dv2 f6988,
+    //      113 -> 147 mph at kw6_dv1 f8348. The four stage marks added this wave
+    //      (ctcorder/fixup/crashpred/slowmo) pin it to DoCrashPrediction @0x82645FE0, and the
+    //      code is VehiclePhysics::SetCrashing's mCrashExtraVelocityFactors block (asm
+    //      0x825FD164..0x825FD1FC) -- read its banner. Half the shock in a "the car lost
+    //      enormous speed" report is momentum the game added one step earlier.
+    //   Also explained in passing: a [dv] step with `dt 0.000017` is not a glitch, it is the
+    //   console's own post-crash slow motion (lfSimTimerTimeStep *= 0.001f, three frames,
+    //   BrnPhysicsModuleUpdateFunctions.cpp).
+    // ⛔ WHAT IT DID NOT ANSWER: the ORIGINAL st_scoutB f1011->f1012 event (9.45 m/s lost at
+    // 28 mph with `crash 0` and no impulse on either arm) was NOT reproduced -- the -Teleport
+    // recipe that reaches it does not drive at all on this build (see (2) below; a third run,
+    // kw6_st2, died the same way, with `gas 0.000000` from the FIRST [motion] sample, i.e. the
+    // throttle never reached the car, teleport or not). That event's mechanism is still unnamed.
+    //
     // ⚠️⚠️ AND HERE IS WHY THOSE RUNS DIED -- written down because it cost this wave its whole
     // measurement budget and NONE of it was the physics. Everything below is in an isolated
     // worktree (D:\wt1) driving tools/diagnostics/flow_run.ps1.
@@ -324,6 +361,17 @@ namespace BrnPhysics
     //     main tree's complete converted data fired 17. Reproducible was not attributable.
     const ExternalPhysicsBody* gpDvWatchBody = nullptr;
 
+    // ⭐⭐⭐ THE CALL-SITE TAG, AND WHY A RETURN ADDRESS IS NOT ENOUGH (added 2026-09-03, kerb
+    // wave 6). DeformableObject::UpdateContacts routes each sorted contact to ApplyCarCarImpulse
+    // or ApplyCarWorldImpulse and then calls CalculateNewVelocity from ONE shared line
+    // (BrnDeformableObject_Update.cpp:1420). So BOTH arms drain at the SAME return address, and
+    // the `ra` field -- which is what named `UpdateContacts +0x4bd` for the 7.5 m/s f6386 event --
+    // is CONSTITUTIONALLY UNABLE to say which arm ran. That is the same "a probe can watch half a
+    // solver" shape that cost four waves a wrong conclusion, one level down: the fix there was to
+    // give the silent arm a print, the fix here is to let the drain name its own arm.
+    // Set by the caller immediately before the drain, cleared immediately after; "" == untagged.
+    const char* gpcDvDrainTag = "";
+
     namespace
     {
         // The [kerb]/[kerb-car] frame counter, so a [dv] step number lines up with the contact
@@ -333,6 +381,7 @@ namespace BrnPhysics
         struct DvEntry
         {
             const char* mpcPhase;
+            const char* mpcTag;            // the drain's call-site tag (see gpcDvDrainTag)
             const void* mpReturnAddress;   // 0 for a stage mark
             bool        mbDrain;
             Vector3     mV;                // velocity AFTER this entry
@@ -381,6 +430,27 @@ namespace BrnPhysics
             return std::sqrt( lrV.x * lrV.x + lrV.y * lrV.y + lrV.z * lrV.z );
         }
 
+        // ⭐ THE RVA, NOT THE RAW POINTER. The witness used to print only the ASLR'd return
+        // address, so naming a drain site meant sweeping 64 KB-aligned candidate bases against
+        // build/game/Burnout_PC.map by hand and keeping the base that put every hit inside a
+        // CalculateNewVelocity caller -- a plausibility argument dressed as a lookup, and one
+        // that is unrepeatable next run because the base moves. The module RVA is
+        // ASLR-independent and is the SAME word the engine's own symbolizer stores
+        // (CgsMapFile::Record::mAddress -- "the records store RVAs"), so a [dv] line can now be
+        // resolved against Burnout_PC.cgsmap, or against the linker .map by adding the preferred
+        // load address 0x140000000. Zero if the base could not be taken.
+        u64 DvRva( const void* lpAddress )
+        {
+#ifdef _MSC_VER
+            const u64 luBase = reinterpret_cast<u64>( &__ImageBase );
+            const u64 luAddr = reinterpret_cast<u64>( lpAddress );
+            return ( luAddr >= luBase ) ? ( luAddr - luBase ) : 0u;
+#else
+            (void)lpAddress;
+            return 0u;
+#endif
+        }
+
         DvEntry* DvPush()
         {
             if ( giDvUsed >= KI_DV_MAX_ENTRIES )
@@ -423,6 +493,7 @@ namespace BrnPhysics
             return;
         }
         lpEntry->mpcPhase        = lpcPhase;
+        lpEntry->mpcTag          = "";
         lpEntry->mpReturnAddress = 0;
         lpEntry->mbDrain         = false;
         lpEntry->mV              = gpDvWatchBody->GetLinearVelocity();
@@ -467,6 +538,17 @@ namespace BrnPhysics
         }
         ++guDvDumps;
 
+        // Raise the film latch on the FIRST step that crosses the threshold, and record which
+        // one it was. BRN_FRAME_DUMP_ARM=dv holds the back-buffer writer until this is non-zero,
+        // so the strip starts at the drain instead of at boot. Sticky: never cleared.
+        if ( BrnDiag::gFilmLatch.muDvLatched == 0u )
+        {
+            BrnDiag::gFilmLatch.muDvLatchedStep      = guDvStep;
+            BrnDiag::gFilmLatch.muDvLatchedFrame     = luFrame;
+            BrnDiag::gFilmLatch.mfDvLatchedMagnitude = lfStepDv;
+            BrnDiag::gFilmLatch.muDvLatched          = 1u;
+        }
+
         *CgsDev::Log::gpDebugPrint
             << "[dv] STEP " << static_cast<s32>( guDvStep ) << " f " << static_cast<s32>( luFrame )
             << " dt " << lfTimeStep
@@ -488,6 +570,8 @@ namespace BrnPhysics
             {
                 *CgsDev::Log::gpDebugPrint
                     << "[dv]   drain  @" << lrE.mpcPhase
+                    << " site " << ( lrE.mpcTag[0] != '\0' ? lrE.mpcTag : "-" )
+                    << " rva " << DvRva( lrE.mpReturnAddress )
                     << " ra " << reinterpret_cast<u64>( lrE.mpReturnAddress )
                     << " J " << lrE.mJ.x << " " << lrE.mJ.y << " " << lrE.mJ.z
                     << " Fdt " << lrE.mFdt.x << " " << lrE.mFdt.y << " " << lrE.mFdt.z
@@ -510,6 +594,28 @@ namespace BrnPhysics
             }
             lPrevV = lrE.mV;
             lPrevP = lrE.mP;
+        }
+
+        // ⭐ THE TAIL SEGMENT -- the last unwatched gap, now printed rather than left to
+        // arithmetic. The final mark is `postsim`, but the step does not END there: the
+        // DeformationManager post-physics leg, OutputData, ProcessDeformationStates and
+        // ProcessCrashingNetworkCars all run between that mark and DvWitnessEndStep. Before
+        // this line, a velocity written in that window showed up ONLY as the step's |dv|
+        // failing to equal the sum of the printed segments -- i.e. it was visible only to a
+        // reader who added the columns up, which is the same "the probe technically had the
+        // information" trap the missing car-car print was. Zero on every step where nothing
+        // wrote after `postsim`, which is what makes a non-zero one worth reading.
+        {
+            const Vector3 lTailDv{ lEndV.x - lPrevV.x, lEndV.y - lPrevV.y, lEndV.z - lPrevV.z, 0.0f };
+            const Vector3 lTailDp{ lEndP.x - lPrevP.x, lEndP.y - lPrevP.y, lEndP.z - lPrevP.z, 0.0f };
+            *CgsDev::Log::gpDebugPrint
+                << "[dv]   mark   @end"
+                << " v " << lEndV.x << " " << lEndV.y << " " << lEndV.z
+                << " segDv " << lTailDv.x << " " << lTailDv.y << " " << lTailDv.z
+                << " |segDv| " << DvMagnitude( lTailDv )
+                << " p " << lEndP.x << " " << lEndP.y << " " << lEndP.z
+                << " segDp " << lTailDp.x << " " << lTailDp.y << " " << lTailDp.z
+                << "\n";
         }
     }
     // ---- end [dv] -------------------------------------------------------------------------------
@@ -575,6 +681,7 @@ namespace BrnPhysics
             if ( lpDvEntry != 0 )
             {
                 lpDvEntry->mpcPhase        = gpcDvPhase;
+                lpDvEntry->mpcTag          = gpcDvDrainTag;
                 lpDvEntry->mpReturnAddress = lpDvCaller;
                 lpDvEntry->mbDrain         = true;
                 lpDvEntry->mV              = mLinearVelocity;
