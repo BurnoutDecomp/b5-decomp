@@ -415,13 +415,26 @@ namespace Vehicle
     // gateui billboard wave needed it. If a gate for it ever reappears here the link will say so
     // (LNK2005).
 
-    void VehicleManager::ProcessContactSpies(const ContactSpy::ContactSpyData*,
-                                             BrnPhysics::Vehicle::VehicleOutputRequestInterface*,
-                                             VehicleOutputInterface*, VehicleManagerOutputInterface*,
-                                             BrnPhysics::Deformation::DeformationInputInterface*,
-                                             Deformation::DeformationManager*, f32)
+    // ⭐⭐ GATE DELETED 2026-09-02 (takedown-chain wave, agent P): VehicleManager::ProcessContactSpies
+    // @0x82646C98 (118) is REAL, in BrnVehicleManager_ProcessContactSpies.cpp -- the race-car spy
+    // loop that hands every race-car-vs-race-car contact to HandleRaceCarRaceCarContact (STAGE 1
+    // of the takedown chain, BrnVehicleManager.cpp) and raises the fatal-crash latch for a crashing
+    // car re-hit by its recorded crash-causer. Its tail call, PhysicalTrafficManager::
+    // DisposeOfNonCrashingTraffic @0x825EFB40, now runs INSIDE it at the console position, and the
+    // wave4-B stand-in call that seated it in BrnPhysicsModuleUpdateFunctions.cpp is retired.
+    // If a gate for it ever reappears here the link will say so (LNK2005).
+    //
+    // NEW GATE, same wave: ProcessShowtimeShunts @0x82629F20 (1002 insns; DWARF h:1539 /
+    // BrnVehicleManager.cpp:4507) is ProcessContactSpies' second call and was neither declared nor
+    // bodied anywhere in the tree. It is reached every frame now that its caller is real, so it
+    // takes the sanctioned log-once shape. Its closure (xrefs_from): BaseEventQueue::GetEvent over
+    // BOTH the race-car and traffic spy queues, EntityId::SetEntityIndex, PhysicalTrafficManager::
+    // GetTrafficInterest, VehicleManager::ApplyShowtimeShunt (DWARF h:1546 -- absent from the tree),
+    // sub_821F0EC8 and sub_82368330 (unidentified). What inert means: in Showtime, race-car and
+    // traffic contacts do not shunt the traffic vehicles -- the crash-mode car bounces nothing.
+    void VehicleManager::ProcessShowtimeShunts(const ContactSpy::ContactSpyData*)
     {
-        BRN_CONDUCTOR_GATE("VehicleManager::ProcessContactSpies @0x82646C98 (118)");
+        BRN_CONDUCTOR_GATE("VehicleManager::ProcessShowtimeShunts @0x82629F20 (1002)");
     }
 
     void VehicleManager::UpdateFatalCrashFlags(VehicleOutputInterface*)

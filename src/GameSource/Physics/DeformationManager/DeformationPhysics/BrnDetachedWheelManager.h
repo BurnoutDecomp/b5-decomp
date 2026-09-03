@@ -108,17 +108,9 @@ namespace PhysicsSimulationIO
 //      ((handle & 0xFF) + 123 for a wheel, + 73 for a body part -- the same slot the matching
 //      AddToScene claims and RemoveFromScene drops). A volume-instance id would have addressed a
 //      slot that does not exist.
-// The one remaining provisional hook below (EmitRemoveRigidBodyEvent) is NOT known to be fabricated
-// and is untouched by this wave -- but it deserves the same treatment before it is trusted.
+// The last provisional hook (EmitRemoveRigidBodyEvent) was RETIRED 2026-09-03: RemoveWheel now AddEvents
+// the console's InRemoveRigidBody on the sim input buffer directly (RemoveWheel @0x82615778).
 namespace CgsSceneManager { namespace SceneManagerIO { struct InSceneUpdateInterface; } }
-namespace BrnPhysics
-{
-namespace Deformation
-{
-    void EmitRemoveRigidBodyEvent(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
-                                  u32 luWheelEntityWord);                                       // FLAG: provisional
-}
-}
 
 namespace BrnPhysics
 {

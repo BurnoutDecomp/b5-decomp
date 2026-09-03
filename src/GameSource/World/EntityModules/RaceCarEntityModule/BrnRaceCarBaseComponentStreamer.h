@@ -57,7 +57,7 @@ public:
 
     // @ 0x822D4C08. Forward the base streamer Construct (8 slots) and clear the
     // desired/loaded asset tables. lbAllowFailure follows the X360 (constant true).
-    void Construct( s32 liPoolId, bool lbAllowFailure, BrnResource::EAssetSet leAssetSet );
+    void Construct( s32 liPoolId, bool lbSlotPoolSystem, BrnResource::EAssetSet leAssetSet );
 
     void Destruct();
 

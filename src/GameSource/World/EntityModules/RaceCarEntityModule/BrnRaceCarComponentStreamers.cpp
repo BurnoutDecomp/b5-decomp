@@ -540,10 +540,10 @@ void RaceCarAudioStreamer::Destruct()
 //                                           r5 = lbAllowFailure, r6 = leAssetSet)
 // followed by `stw r31, 0x1368(leaf)` (the mpStreamer back-pointer):
 //
-//   leaf @ streamer+0x0010 : r4=4     r5=0  r6=0  -> pool 4,  allowFail false, GRAPHICS
-//   leaf @ streamer+0x26F0 : r4=0x11  r5=1  r6=1  -> pool 17, allowFail true,  PHYSICS
-//   leaf @ streamer+0x1380 : r4=0x11  r5=1  r6=4  -> pool 17, allowFail true,  ATTRIBS
-//   leaf @ streamer+0x3A60 : r4=4     r5=0  r6=0  -> pool 4,  allowFail false, GRAPHICS
+//   leaf @ streamer+0x0010 : r4=4     r5=0  r6=0  -> pool 4,  slot-pool false, GRAPHICS
+//   leaf @ streamer+0x26F0 : r4=0x11  r5=1  r6=1  -> pool 17, SLOT-POOL true, PHYSICS   [r5 = lbSlotPoolSystem, corrected 2026-09-02]
+//   leaf @ streamer+0x1380 : r4=0x11  r5=1  r6=4  -> pool 17, SLOT-POOL true, ATTRIBS
+//   leaf @ streamer+0x3A60 : r4=4     r5=0  r6=0  -> pool 4,  slot-pool false, GRAPHICS
 //   leaf @ streamer+0x4DD0 : RaceCarAudioStreamer::Construct (pool 6, SOUND -- above)
 //
 // The offset->member mapping is fixed independently by RaceCarEntityModule::
@@ -571,7 +571,7 @@ namespace
 void RaceCarGraphicsStreamer::Construct( RaceCarStreamer* lpStreamer )
 {
     CGS_ASSERT( lpStreamer != nullptr, "lpStreamer != NULL" );
-    RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR, false, BrnResource::E_ASSETSET_GRAPHICS );
+    RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR, false /*shared car pool*/, BrnResource::E_ASSETSET_GRAPHICS );
     mpStreamer = lpStreamer;
 }
 
@@ -583,7 +583,7 @@ void RaceCarGraphicsStreamer::Destruct()
 void RaceCarPhysicsStreamer::Construct( RaceCarStreamer* lpStreamer )
 {
     CGS_ASSERT( lpStreamer != nullptr, "lpStreamer != NULL" );
-    RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR_PHYS, true, BrnResource::E_ASSETSET_PHYSICS );
+    RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR_PHYS, true /*slot-pool: pool 17 + slot*/, BrnResource::E_ASSETSET_PHYSICS );
     mpStreamer = lpStreamer;
 }
 
@@ -595,7 +595,7 @@ void RaceCarPhysicsStreamer::Destruct()
 void RaceCarAttributeStreamer::Construct( RaceCarStreamer* lpStreamer )
 {
     CGS_ASSERT( lpStreamer != nullptr, "lpStreamer != NULL" );
-    RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR_PHYS, true, BrnResource::E_ASSETSET_ATTRIBS );
+    RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR_PHYS, true /*slot-pool: pool 17 + slot*/, BrnResource::E_ASSETSET_ATTRIBS );
     mpStreamer = lpStreamer;
 }
 
@@ -607,7 +607,7 @@ void RaceCarAttributeStreamer::Destruct()
 void RaceCarWheelGraphicsStreamer::Construct( RaceCarStreamer* lpStreamer )
 {
     CGS_ASSERT( lpStreamer != nullptr, "lpStreamer != NULL" );
-    RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR, false, BrnResource::E_ASSETSET_GRAPHICS );
+    RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR, false /*shared car pool*/, BrnResource::E_ASSETSET_GRAPHICS );
     mpStreamer = lpStreamer;
 }
 

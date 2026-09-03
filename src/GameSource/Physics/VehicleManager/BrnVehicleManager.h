@@ -457,9 +457,12 @@ namespace Vehicle
             VehicleOutputInterface* lpVehicleOutputInterface,
             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
 
-        // DWARF h:1224; X360 address not in this TU's dossier (the ledger mis-keys it to the
-        // CgsBitArray.h TU -- re-derive at its own wave).
-        void UpdateCrashes(f32 lfTimeStep);
+        // DWARF h:1224; X360 @0x825EA640 (203 insns). BODIED 2026-09-02 in
+        // BrnVehicleManager_UpdateCrashes.cpp: the BitArray<32u> walk over mUsedRaceCarCrashesList
+        // that ages each allocated maRaceCarCrashes[].mfTimeSinceImpact by the timestep and frees
+        // the slot (UnSetBit) once it passes 0.1 s. (The ledger still mis-keys this function to
+        // the CgsBitArray.h TU because the iterator pair is inlined into it.)
+        void UpdateCrashes(f32 lfSimTimerTimeStep);
 
         // DWARF h:893; X360 @0x82633CD8 (68 insns).
         // THE 2026-08-10 "ARITY CORRECTED TO ONE PARAMETER" IS ITSELF RETRACTED, 2026-08-11
@@ -1133,7 +1136,11 @@ namespace Vehicle
                                 VehicleManagerOutputInterface* lpManagerOutputInterface,
                                 BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
 
-        // @0x82646C98 (DWARF :385; 118 insns -- the driver over the four typed contact runs).
+        // @0x82646C98 (DWARF :385; 118 insns). BODIED 2026-09-02 in
+        // BrnVehicleManager_ProcessContactSpies.cpp: zeroes muTakedownEventsThisFrame, walks the
+        // race-car spy queue (HandleRaceCarRaceCarContact per race-car-vs-race-car spy, the
+        // fatal-crash latch for a crashing car re-hit by its recorded crash-causer), then
+        // ProcessShowtimeShunts and mPhysicalTrafficManager.DisposeOfNonCrashingTraffic.
         void ProcessContactSpies(const ContactSpy::ContactSpyData* lpContactSpyData,
                                  BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
                                  VehicleOutputInterface* lpVehicleOutputInterface,
@@ -1144,6 +1151,13 @@ namespace Vehicle
 
         // @0x825EA970 (DWARF :397; 173 insns).
         void UpdateFatalCrashFlags(VehicleOutputInterface* lpVehicleOutputInterface);
+
+        // @0x82629F20 (DWARF h:1539 / :4507; 1002 insns). ADDED 2026-09-02 (takedown-chain wave):
+        // ProcessContactSpies' second call -- the Showtime-mode shunt pass over the race-car AND
+        // traffic spy queues (ApplyShowtimeShunt per qualifying contact). NOT BODIED: a log-once
+        // conductor gate in BrnPhysicsConductorGates.cpp until its closure (ApplyShowtimeShunt,
+        // GetTrafficInterest, two unidentified subs) lands.
+        void ProcessShowtimeShunts(const ContactSpy::ContactSpyData* lpContactSpies);
 
         // The per-contact working set the impact classifiers read/populate. Verbatim DWARF
         // layout (BrnVehicleManager.h:763). Pointer members use the forward-declared collaborators.
@@ -2117,15 +2131,23 @@ namespace Vehicle
         // (The member itself is declared with the rest of the class head below.)
         // ==========================================================================================
 
-        // The takedown-type record pool. 32 entries, 12-byte stride, @ class offset +43808.
-        // SetRaceCarCrashing allocates a slot {entity id, ETakedownType, priority} here for the
-        // scoring/UI layer to read back by entity id (doc §3b).
-        // FLAG: struct + field names proposed; the 12-byte stride and +43808 base are asm-proven.
+        // The crash record pool. 32 entries, 12-byte stride, @ class offset +43808.
+        // SetRaceCarCrashing allocates a slot here (seeding +8 to 0) for the scoring/UI layer to
+        // read back by entity id (doc §3b); UpdateCrashes @0x825EA640 ages +8 by the sim timestep
+        // every frame and frees the slot once it passes 0.1 s.
+        //
+        // DWARF (BrnVehicleManager.h:100-104) spells the three members
+        //     EntityId mRaceCarEntityID; EntityId mOtherEntityID; float32_t mfTimeSinceImpact;
+        // +8 RENAMED 2026-09-02 to the DWARF name: UpdateCrashes `fadds` the timestep into it and
+        // SetRaceCarCrashing's pool-full path evicts the LARGEST value -- i.e. the OLDEST record --
+        // which is a time, not a priority. FLAG: +0/+4 keep the earlier proposed names; the
+        // SetRaceCarCrashing recon reads +4 as the takedown type where the DWARF says EntityId
+        // mOtherEntityID -- settle that in SetRaceCarCrashing's own wave (behaviour unchanged).
         struct RaceCarCrashData
         {
-            u32 mEntityId;   // +0
-            u32 meType;      // +4 (BrnGameState::ETakedownType, stored as a 4-byte word)
-            f32 mfPriority;  // +8
+            u32 mEntityId;           // +0 (DWARF: EntityId mRaceCarEntityID)
+            u32 meType;              // +4 (DWARF: EntityId mOtherEntityID -- see the FLAG above)
+            f32 mfTimeSinceImpact;   // +8 (DWARF :104; UpdateCrashes' timer)
         };
 
         // ==========================================================================================

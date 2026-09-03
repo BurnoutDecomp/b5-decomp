@@ -252,6 +252,11 @@ namespace GameStateModuleIO
     // layout change. Asserted in the .cpp.
     typedef BrnResource::GameDataIO::RequestInterface<3072> ResourceRequestInterface; // OutputBuffer +0x3414
     class TakedownEventOutputQueueType;    // OutputBuffer +0x4040
+    // [takedown wave 2026-09-03] The console's `TakedownEvent<..,8>::Construct(this + 16448)` line of
+    // OutputBuffer::Construct @0x82382940. The complete type is confined to the takedown TUs (its
+    // header's second EActiveRaceCarIndex re-binds unqualified uses here), so the Construct is
+    // reached through this forwarder, defined in TakedownManager/EventQueue_TakedownEvent_8.cpp.
+    void ConstructTakedownEventOutputQueue(TakedownEventOutputQueueType* lpQueue);
     // GameStateToGuiInterface (OutputBuffer +0x4450) used to be forward-declared here and carried
     // as an opaque span. It is a REAL TYPED MEMBER as of 2026-08-27 -- its complete definition
     // arrives with the BrnGameStateToGuiIOInterfaces.h include at the top of this file, because
@@ -403,6 +408,11 @@ namespace GameStateModuleIO
         GameEventQueue*                       GetGameEventQueue();
         // X360 0x823B8E18 (write-lock; "Not locked for writing", line 138)
         TakedownEventInputQueueType*          GetTakedownEventInputQueue();
+        // X360 0x82362778 (read-lock; "Not locked for reading", line 137) -- the const half; the
+        // exports carry it as an unnamed `sub_82362778` returning this+0x660. Caller:
+        // TakedownManager::DetectNetworkTakedowns @0x823997A0 (the online takedowns the network
+        // module queued for the game state). Body in the .cpp beside the write-side accessor.
+        const TakedownEventInputQueueType*    GetTakedownEventInputQueue() const;
         // X360 0x8231D020 (read-lock; "Not locked for reading", line 149)
         const NetworkPlayerResultsInterface*  GetNetworkPlayerResultsInterface() const;
         // X360 0x8231CED0 (read-lock; "Not locked for reading", line 140) -- read-side accessor for

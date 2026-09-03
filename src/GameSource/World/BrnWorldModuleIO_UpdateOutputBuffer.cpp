@@ -495,6 +495,13 @@ void UpdateOutputBuffer::AppendTrafficTypeResponseQueue(const TrafficTypeRespons
     mTrafficTypeResponseQueue.Append(*lpQueue);
 }
 
+// [takedown wave 2026-09-02] X360 0x823B63F8 -- read-lock accessor for the traffic-type response queue (+155616).
+const UpdateOutputBuffer::TrafficTypeResponseQueue* UpdateOutputBuffer::GetTrafficTypeResponseQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mTrafficTypeResponseQueue;
+}
+
 // ---- effects environment --------------------------------------------------------------------
 
 // X360 0x823B64A0 (:588 R, "GetEffectsEnviron") -- const effects-environment accessor (+169072).

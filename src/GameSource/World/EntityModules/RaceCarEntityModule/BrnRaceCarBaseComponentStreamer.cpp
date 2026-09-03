@@ -36,7 +36,7 @@ namespace BrnWorld
 // (0x12D8..0x1310) AND maLoadedAssets (0x1318..0x1350) AND mAddedEntries (0x1358) AND
 // mLoadedEntries (0x1360) -- the Feb-2007 source does the bit-array clear via the
 // inlined BitArray::Construct(); on the committed BitArray that is UnSetAll().
-void RaceCarBaseComponentStreamer::Construct( s32 liPoolId, bool lbAllowFailure, BrnResource::EAssetSet leAssetSet )
+void RaceCarBaseComponentStreamer::Construct( s32 liPoolId, bool lbSlotPoolSystem, BrnResource::EAssetSet leAssetSet )
 {
     // BaseStreamer<8>::Construct( liPoolId, lbSlotPoolSystem, leAssetSet, lbAllowFailure ).
     // [fixed on mount] the previous 3-argument call predates the BaseStreamer<N> header
@@ -46,7 +46,15 @@ void RaceCarBaseComponentStreamer::Construct( s32 liPoolId, bool lbAllowFailure,
     // offset; InternalBaseStreamer::PostLoadRequest only adds the list index to the pool id
     // when mbSlotPoolSystem is set, and the runtime-observed load really did land in pool 4
     // rather than 4+slot.
-    BaseClass::Construct( liPoolId, false /*lbSlotPoolSystem*/, leAssetSet, lbAllowFailure );
+    // [takedown wave 2026-09-02] CORRECTED against the asm of @0x822D4C08 (the comment above was the
+    // earlier wave's misread). The outer r5 is handed straight to the inner r10 == the 7th
+    // InternalBaseStreamer::Construct parameter, lbSlotPoolSystem; the 9th (lbAllowFailure) is the
+    // `li r11, 1; stb r11, var_11` == TRUE for every race-car component streamer; r8 = 8 is the
+    // list length. So the physics / attribs leaves (r5 = 1 in RaceCarStreamer::Construct @0x822F7FA0)
+    // ARE slot-pool streamers -- their load for list slot i goes to pool 17 + i, i.e. the memory
+    // map's "Car0..Car7 Physics" pools (5 entries each). With the flag off every car's physics and
+    // attribute vaults piled into pool 17 and the second car ran it out of entries (run 7).
+    BaseClass::Construct( liPoolId, lbSlotPoolSystem, leAssetSet, true /*lbAllowFailure*/ );
 
     mAddedEntries.UnSetAll();
     mLoadedEntries.UnSetAll();

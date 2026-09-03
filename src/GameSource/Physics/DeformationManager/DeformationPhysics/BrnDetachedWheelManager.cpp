@@ -49,7 +49,7 @@
 //
 // UN-HOMED DEEP IO: RemoveWheel's rigid-body-removal AddEvent (InRemoveRigidBody on the sim
 // InputBuffer) still reaches an event type not homed in-tree, and is routed through the one
-// remaining provisional free hook declared in this class' own header (EmitRemoveRigidBodyEvent).
+// remaining provisional free hook (EmitRemoveRigidBodyEvent) -- RETIRED 2026-09-03, real body in RemoveWheel.
 // ⛔ THE SECOND HOOK IS GONE. This banner used to name `EmitUpdateTriangleCacheEvent` alongside it
 // and claimed UpdateTriangleCache's InEventUpdateCachedPosition was likewise "not yet homed
 // in-tree". That was false as of 2026-08-18 and the hook itself was a FABRICATED API -- retired
@@ -112,7 +112,7 @@ namespace Deformation
     //
     // The asm reads the wheel record at +112 as an 8-byte id and feeds it to AddEvent; the scene
     // entity the removal keys on is the id's entity word (mWheelBodyId.muEntityWord), routed through
-    // the provisional EmitRemoveRigidBodyEvent hook. The two distinct CgsBitArray messages (:203
+    // the sim input buffer's remove-rigid-body queue. The two distinct CgsBitArray messages (:203
     // "invalid index" before the lookup, :241 "luIndex < NUMBITS" before the clear) are reproduced
     // in the asm's order.
     // ============================================================================================
@@ -126,12 +126,19 @@ namespace Deformation
 
         PhysicalWheel* lpWheel = &maWheels[liSlot];
 
-        // Queue the wheel's rigid body for removal from the sim. The asm: v21 = sub_825BCF58(lpSimInput)
-        // (the InputBuffer's InRemoveRigidBody queue), InRemoveRigidBody_::AddEvent(v21, &mWheelBodyId)
-        // -- it passes the WHOLE 8-byte packed mWheelBodyId BY ADDRESS (muEntityWord + muSubA + muSubB).
-        // FLAG: the provisional EmitRemoveRigidBodyEvent hook only forwards the 32-bit muEntityWord,
-        // silently dropping muSubA/muSubB; the real owning IO TU must pass the full packed id.
-        EmitRemoveRigidBodyEvent(lpSimInput, lpWheel->GetWheelBodyId().muEntityWord);
+        // Queue the wheel's rigid body for removal from the sim. The asm: `v26 = *(wheel+112)` (the
+        // WHOLE 8-byte packed mWheelBodyId, entity word high -- the same packing GetVolumeInstanceId
+        // does), `v27 = 1` (mbFailIfRigidBodyNotFound, the byte right after it), v21 = sub_825BCF58
+        // (lpSimInput) == the write-side GetRemoveRigidBodyQueue, InRemoveRigidBody_::AddEvent(v21, &v26).
+        // ⭐ LANDED 2026-09-03 (takedown wave, run 8): this stood behind the log-once
+        // EmitRemoveRigidBodyEvent gate, so the sim kept every released wheel body and reported it
+        // into a freed slot on every frame after the player's reset (15,349 UpdatePostPhysics asserts).
+        {
+            CgsPhysics::PhysicsSimulationIO::InRemoveRigidBody lRemoveEvent;
+            lRemoveEvent.mID                     = lpWheel->GetVolumeInstanceId().muId;
+            lRemoveEvent.mbFailIfRigidBodyNotFound = true;
+            lpSimInput->GetRemoveRigidBodyQueue()->AddEvent(lRemoveEvent);
+        }
 
         // if ( mbAddedToScene ) remove the wheel's volume instance from the scene.
         if (lpWheel->IsAddedToScene())
@@ -434,29 +441,11 @@ namespace Deformation
     }
 
     // =============================================================================================
-    // ⛔⛔ EmitUpdateTriangleCacheEvent DELETED 2026-08-27 -- a FABRICATED API. See the header's
-    // banner for the three-way confirmation (no such symbol in any build; the real call is
-    // InSceneUpdateInterface::UpdateCachedObjectPosition -> mUpdateCachedPositionQueue; and its
-    // signature took a 64-bit volume-instance id where the event's field is an s32 cache slot).
-    // Both its call sites now go straight to the real producer.
-    //
-    // The remaining provisional hook (declared FLAG-provisional in the header) -- ⚠️ LOG-ONCE
-    // GATE 2026-08-14 (walls leg 4). Dead until a wheel detaches; the real body is the
-    // sim input buffer's InRemoveRigidBody queue AddEvent.
+    // ⛔⛔ EmitUpdateTriangleCacheEvent DELETED 2026-08-27 -- a FABRICATED API (see the header's
+    // banner); both call sites go straight to InSceneUpdateInterface::UpdateCachedObjectPosition.
+    // ⛔ EmitRemoveRigidBodyEvent RETIRED 2026-09-03 -- the provisional log-once hook; the console's
+    // body (InRemoveRigidBody AddEvent on the sim input buffer) now lives inline in RemoveWheel.
     // =============================================================================================
-    void EmitRemoveRigidBodyEvent(CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/,
-                                  u32 /*luWheelEntityWord*/)
-    {
-        static bool sbLoggedEmitRemoveGate = false;
-        if ( !sbLoggedEmitRemoveGate )
-        {
-            sbLoggedEmitRemoveGate = true;
-            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                *CgsDev::Log::gpDebugPrint
-                    << "conductor gate: EmitRemoveRigidBodyEvent reached but not reconstructed "
-                       "[FLAG PC boot gate]\n";
-        }
-    }
 
 }
 }

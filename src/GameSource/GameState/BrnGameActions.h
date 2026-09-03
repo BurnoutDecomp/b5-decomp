@@ -14,6 +14,7 @@
 #include "SharedClasses/Progression/BrnTrainingTypes.h"       // [stuntrace] BrnProgression::ETrainingType (RequestGameTrainingAction)
 #include "SharedClasses/Progression/BrnTrophyUnlockData.h"    // BrnProgression::TrophyUnlockData (TrophyUnlockAction::meUnlockType) -- see the note below
 #include "SharedClasses/Traffic/BrnTrafficVehicleType.h"      // [showtime-score] BrnTraffic::VehicleClass / VehicleScoreCategory (VehicleHitAction)
+#include "GameSource/World/BrnWorldSharedConstants.h"         // [takedown] BrnWorld::CarControl (SetPlayerCarDriverAction::meCarControl)
 
 namespace BrnResource
 {
@@ -61,6 +62,21 @@ namespace GameStateModuleIO
 enum EGameActionType
 {
     E_ACTION_RESET_PLAYER_CAR           = 0,
+    // [takedown wave 2026-09-02] the takedown classifier's posts (BrnTakedownManager.cpp). Every id
+    // is the live `li r5,<id>` + `li r6,<size>` pair at the named AddEvent site:
+    //   3   size 4  TakedownManager::UpdatePlayerResetStatus @0x82388D80/0x82388D7C  DWARF :13  (+0)
+    //   6   size 8  StartTakedownCamera @0x82388E24/E14, EndTakedownCamera @0x82388F04/EFC,
+    //               ClearAllTakedowns @0x82388FF4/FEC                                DWARF :16  (+0)
+    //   111 size 4  StartTakedownCamera @0x82388EA8/EA4                             DWARF 106 (+5)
+    //   121 size 4  EndTakedownCamera @0x82388F74/F6C                               DWARF 116 (+5)
+    // The +5 pair sits inside the 31..122 band this enum already records; the consumer of 121
+    // (RaceCarEntityModule::HandleGameActions @0x8230BE08 case 121: RemoveRaceCar(record word 0) +
+    // RequestResetOnTrack on the player) matches the DWARF ShutdownFinishedAction payload, and
+    // case 111 stores the record's float into ActiveRaceCar+1828 (the invulnerability timer).
+    E_ACTION_RESET_PLAYER_CAR_ON_TRACK  = 3,     // size 4
+    E_ACTION_SET_TAKEDOWN_CAMERA_STATE  = 6,     // size 8
+    E_ACTION_PLAYER_INVULNERABLE        = 111,   // DWARF 106 (+5 X360); size 4
+    E_ACTION_SHUTDOWN_FINISHED          = 121,   // DWARF 116 (+5 X360); size 4
     E_ACTION_REMOTE_PLAYER_DISCONNECTED = 11,
     E_ACTION_SOUND_TRIGGER              = 210,
     E_ACTION_ONLINE_PLAYER_ADDED        = 211,   // DWARF BrnGameActions.h (was placeholder 220)
@@ -550,6 +566,12 @@ enum EGameActionType
     // from ShowModeResults (@0x82343E4C) and SendModeStopMessages (@0x8234C710), and
     // CarSelectManager posts it on junkyard exit; the leading word selects who is driving.
     E_ACTION_SET_PLAYER_CAR_DRIVER                       = 7,    // DWARF :7 (+0); size 48
+    // PINNED. BrnGameState::TakedownManager::ProcessTakedownEvent @0x82393D40 posts id 14 size 4
+    // (`li r5,0xE` @0x82393FBC + `li r6,4` @0x82393FB8 -> AddEvent @0x82393FC4) whenever the
+    // aggressor is the player's car; the payload is GetGlobalRaceCarIndex(victim). Sub-16 region,
+    // unshifted: DWARF :14 E_ACTION_ON_PLAYER_TAKEDOWN, and the producer's DWARF body hint names the
+    // record (`OnPlayerTakedownAction lPlayerTakedownAction`, BrnTakedownManager.cpp:766).
+    E_ACTION_ON_PLAYER_TAKEDOWN                          = 14,   // DWARF :14 (+0); size 4  PINNED
     // FLAG -- NAME UNRECOVERED. ModeManager::ShowModeResults @0x82343BC8 posts id 18 size 16
     // (`li r5,0x12` @0x82343BBC + `li r6,0x10` @0x82343BB8) with payload
     // {+0x00 CgsID event id, +0x08 s32 EGameModeType, +0x0C s32 score}, and the very next console
@@ -674,6 +696,14 @@ enum EGameActionType
     E_ACTION_RACE_CAR_REACHED_FINISH                     = 114,  // DWARF 109 (+5 X360); size 8  BAND
     E_ACTION_PLAYER_REACHED_PENULTIMATE_CHECKPOINT       = 115,  // DWARF 110 (+5 X360); size 1  BAND
     E_ACTION_SET_WAYPOINT_DISTANCES_TO_FINISH            = 118,  // DWARF 113 (+5 X360); size 68 BAND
+    // BAND (+5). BrnGameState::TakedownManager::ProcessTakedownEvent @0x82393D40 posts id 120 size 24
+    // (`li r5,0x78` @0x823940C8 + `li r6,0x18` @0x823940C4 -> AddEvent @0x823940D0) when the player
+    // takes down a rival OUTSIDE a game mode (mpCurrentGameMode == NULL -- the free-burn rival
+    // shutdown); payload {+0 CgsID victim car id (`ld r11,0x10(event)`), +16 s32 victim active index}
+    // == the DWARF ShutdownAction {mVictimCarID, mRivalID, meVictimIndex} exactly, and the producer's
+    // DWARF body hint names the record (`ShutdownAction lShutdown`, BrnTakedownManager.cpp:795).
+    // DWARF 115 (+5, the band its neighbours 113->118 and 116->121 sit in).
+    E_ACTION_SHUTDOWN                                    = 120,  // DWARF 115 (+5 X360); size 24 BAND
     // ---- [road-rage scorer, 2026-09-02] the three ids the offline road-rage scoring posts -------
     // 103: RoadRageModeScoring::IncrementPlayerNumTakedowns @0x823445D0, `li r5,0x67` + `li r6,1`
     //      @0x82344640..0x82344644, posted the frame miNumTakedownsAchieved reaches the target.
@@ -2122,5 +2152,105 @@ struct HUDMessageRoadRageTimeExtensionAction : public GameAction<E_ACTION_HUD_ME
 };
 static_assert(sizeof(HUDMessageRoadRageTimeExtensionAction) == 4,
               "X360 posts action 255 with size 4");
+
+// =============================================================================================
+// [takedown wave 2026-09-02] The five records BrnGameState::TakedownManager posts
+// (BrnTakedownManager.cpp). Names from the DecFIGS DWARF; LAYOUTS from the X360 producers'
+// stack stores (which differ from the DWARF declaration order in two places, noted inline).
+// =============================================================================================
+
+// DWARF BrnGameActions.h:707-709. Producer TakedownManager::UpdatePlayerResetStatus @0x82388D9C
+// `stfs f0, var_B0` (the clamped takedown speed) -> AddEvent(.., 3, 4). Consumer
+// RaceCarEntityModule::HandleGameActions @0x8230BE08 case 3: RequestResetOnTrack(player, 1,
+// record float, 0.0).
+struct ResetPlayerCarOnTrackAction : public GameAction<E_ACTION_RESET_PLAYER_CAR_ON_TRACK>
+{
+    f32 mfSpeed;   // +0x00  m/s, clamped to [KF_MIN_SPEED_FOR_PLAYER_RESET, KF_MAX_SPEED_FOR_PLAYER_RESET]
+};
+static_assert(sizeof(ResetPlayerCarOnTrackAction) == 4, "X360 posts action 3 with size 4");
+
+// DWARF BrnGameActions.h:1627-1633 names the four members; the X360 producer puts the INDEX FIRST
+// (the DWARF lists the three bools before it): StartTakedownCamera @0x82388E30 `stw victim, +0x00`,
+// @0x82388E20 `stb 1, +0x04`, @0x82388E28 `stb 0, +0x05`, @0x82388E38 `stb (type == E_TAKEDOWN_REVENGE),
+// +0x06` -> AddEvent(.., 6, 8). EndTakedownCamera / ClearAllTakedowns post the same record with
+// {-1, 0, 0, 0} (camera off).
+struct SetTakedownCameraAction : public GameAction<E_ACTION_SET_TAKEDOWN_CAMERA_STATE>
+{
+    EActiveRaceCarIndex meFocusOnRaceCarIndex;   // +0x00  the victim; E_ACTIVE_RACE_CAR_INDEX_INVALID == none
+    bool                mbActive;                // +0x04
+    bool                mbIsSignature;           // +0x05  always 0 on this build's producers
+    bool                mbIsRevengeTakedown;     // +0x06
+    u8                  muPad07;                 // +0x07  tail pad; the console never writes it
+};
+static_assert(sizeof(SetTakedownCameraAction) == 8 &&
+              offsetof(SetTakedownCameraAction, mbActive) == 4 &&
+              offsetof(SetTakedownCameraAction, mbIsRevengeTakedown) == 6,
+              "X360 posts action 6 with size 8; index at +0, flags at +4/+5/+6 (@0x82388E20..E38)");
+
+// DWARF BrnGameActions.h:1645-1650 {meCarControl, mDriveThruBoxRegion, mbIsDriveThru, mfMaxResetSpeed};
+// the X360 record is 48 bytes with the FLOAT BEFORE THE BOOL. Layout from the one producer that
+// writes every field, DriveThruManager::SetPlayerCarDriver @0x823867A0: `stw selector, +0x00`, the
+// 9-dword BoxRegion copy loop into +0x04..+0x27 (@0x823867F8), `stfs f1, +0x28` (max speed),
+// `stb 1, +0x2C` (is drive-thru). The takedown-camera producers (StartTakedownCamera @0x82388E58,
+// EndTakedownCamera @0x82388F58, ClearAllTakedowns @0x82389024) write only +0x00 and +0x2C.
+// The box region is kept as the console's 36-byte wire span: the host BrnTrigger::BoxRegion is
+// 16-aligned and larger, so it cannot be embedded here at +0x04 (BrnRegion.h is deliberately not
+// included by this header; DriveThruManager memcpy's its 36 bytes in).
+struct SetPlayerCarDriverAction : public GameAction<E_ACTION_SET_PLAYER_CAR_DRIVER>
+{
+    BrnWorld::CarControl meCarControl;             // +0x00  1 == entity module (player), 2 == AI module
+    u8                   maDriveThruBoxRegion[36]; // +0x04  the 9-dword BoxRegion image (drive-thru producer only)
+    f32                  mfMaxResetSpeed;          // +0x28
+    bool                 mbIsDriveThru;            // +0x2C
+    u8                   maPad2D[3];               // +0x2D  tail pad to 48
+};
+static_assert(sizeof(SetPlayerCarDriverAction) == 48 &&
+              offsetof(SetPlayerCarDriverAction, mfMaxResetSpeed) == 0x28 &&
+              offsetof(SetPlayerCarDriverAction, mbIsDriveThru) == 0x2C,
+              "X360 posts action 7 with size 48; max speed at +0x28, drive-thru flag at +0x2C");
+
+// DWARF BrnGameActions.h:2136-2138. Producer TakedownManager::StartTakedownCamera @0x82388EBC
+// `stfs (camera time + KF_POST_TAKEDOWN_INVULNERABLE_TIME), +0x00` -> AddEvent(.., 111, 4).
+// Consumer RaceCarEntityModule::HandleGameActions case 111: ActiveRaceCar+1828 = record float.
+struct PlayerInvulnerableAction : public GameAction<E_ACTION_PLAYER_INVULNERABLE>
+{
+    f32 mfInvulnerableTime;   // +0x00  seconds
+};
+static_assert(sizeof(PlayerInvulnerableAction) == 4, "X360 posts action 111 with size 4");
+
+// DWARF BrnGameActions.h:3586-3589. Producer TakedownManager::EndTakedownCamera @0x82388F80
+// `stw meCurrentVictimActiveRaceCarIndex, +0x00` -> AddEvent(.., 121, 4). Consumer
+// RaceCarEntityModule::HandleGameActions case 121: RemoveRaceCar(that car) then reset the player.
+struct ShutdownFinishedAction : public GameAction<E_ACTION_SHUTDOWN_FINISHED>
+{
+    EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00  the rival that was shut down
+};
+static_assert(sizeof(ShutdownFinishedAction) == 4, "X360 posts action 121 with size 4");
+
+// ---- [takedown wave 2026-09-02, agent T2] the two records the detect chain itself posts ----------
+
+// DWARF BrnGameActions.h:4020 (OnPlayerTakedownAction). Producer TakedownManager::ProcessTakedownEvent
+// @0x82393FAC: `stw r3(GetGlobalRaceCarIndex(victim)), record+0`, posted with size 4.
+struct OnPlayerTakedownAction : public GameAction<E_ACTION_ON_PLAYER_TAKEDOWN>
+{
+    EGlobalRaceCarIndex meVictimGlobalRaceCarIndex;   // +0x00
+};
+static_assert(sizeof(OnPlayerTakedownAction) == 4, "X360 posts action 14 with size 4");
+
+// DWARF BrnGameActions.h:3568-3574 (ShutdownAction). Producer TakedownManager::ProcessTakedownEvent
+// @0x823940AC..0x823940D0: `ld r11,0x10(event)` (the takedown event's mVictimCarID) -> `std record+0`,
+// `stw victimIndex, record+0x10`, posted with size 24 (`li r6,0x18`). The console never writes mRivalID
+// (+8): the slot is stack residue on the wire (the MarkedManInterface table the same frame reused).
+struct ShutdownAction : public GameAction<E_ACTION_SHUTDOWN>
+{
+    CgsID               mVictimCarID;    // +0x00
+    CgsID               mRivalID;        // +0x08  (unwritten by the X360 producer)
+    EActiveRaceCarIndex meVictimIndex;   // +0x10
+                                         // +0x14..+0x17 tail padding
+};
+static_assert(sizeof(ShutdownAction) == 24 &&
+              offsetof(ShutdownAction, mRivalID) == 8 &&
+              offsetof(ShutdownAction, meVictimIndex) == 0x10,
+              "X360 posts action 120 with size 24; victim car id @+0, victim index @+0x10");
 }
 }

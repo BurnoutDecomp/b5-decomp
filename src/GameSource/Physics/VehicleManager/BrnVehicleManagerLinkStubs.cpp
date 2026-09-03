@@ -36,6 +36,10 @@
 //       203 insns**. (See the audit note below -- this line used to read "the ledger mis-keys it
 //       to the CgsBitArray.h TU; address to be re-derived at its wave". The ledger key is still
 //       wrong; the address never needed re-deriving.)
+//       ⭐ BODIED 2026-09-02 (takedown-chain wave, agent P) in BrnVehicleManager_UpdateCrashes.cpp;
+//       the boot gate that stood in this file is DELETED. The 203 instructions are the inlined
+//       BitArray<32u> first/next-bit walk over mUsedRaceCarCrashesList around ONE store: age each
+//       allocated maRaceCarCrashes slot's mfTimeSinceImpact by the timestep, free it past 0.1 s.
 //   EndVehicleTractionLineTests (DWARF h:893) -- ⭐ NOT A HOLE, claim RETRACTED 2026-08-10:
 //       **0x82633CD8, 68 insns**, with pseudocode. Body: assert mpContactGenerator != NULL
 //       (BrnVehicleManager.cpp:2387); WaitOn(mpTractionLineTestsJob) then null it;
@@ -133,19 +137,8 @@ namespace Vehicle
         }
     }
 
-    // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
-    void VehicleManager::UpdateCrashes(f32)
-    {
-        // BOOT GATE (conductor wave 2026-08-09): reached every frame by the landed
-        // UpdateVehiclePhysics. Reconstruct and DELETE this gate.
-        static bool s_bLogged = false;
-        if (!s_bLogged)
-        {
-            s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate: VehicleManager::UpdateCrashes @0x825EA640 (203; address RESOLVED 2026-08-10) inert [FLAG PC boot gate]\n";
-        }
-    }
+    // BOOT GATE DELETED 2026-09-02 (takedown-chain wave, agent P): VehicleManager::UpdateCrashes
+    // @0x825EA640 is REAL, in BrnVehicleManager_UpdateCrashes.cpp (LNK2005 if it reappears here).
 
     // ⭐⭐ 2026-08-11 (lifetime wave): the VehicleManager::EndVehicleTractionLineTests @0x82633CD8
     // LINK STUB THAT STOOD HERE IS DELETED. The real 68-instruction body is in

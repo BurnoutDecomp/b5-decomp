@@ -171,6 +171,12 @@ void GameStateModule::Construct()
     // ⭐ [tut-ticker] the console's ModeManager::Construct runs from this Construct
     // (@0x82340008's sole caller); its inter-mode seed stores are extracted --
     // meCurrentGameModeType = E_MODE_NONE (-1) is load-bearing, see the ModeManager banner.
+    // [takedown wave 2026-09-02] X360 Construct @0x82380388 inlines TakedownManager::Construct
+    // (the two manager pointers into gsm+568, its back-pointer at gsm+1256) BEFORE the
+    // TriggerQueryManager / RoadRules / DriveThru constructs; the queue constructs follow at
+    // gsm+249936 / +250272 / +250800. Both halves in GameStateModule_gTD_00.cpp.
+    ConstructTakedownBringUp();
+
     mModeManager.ConstructInterModeStateBringUp(this);
 
     mStuntManager.Construct(&mProgressionManager, &mTriggerQueryManager, &mModeManager,
@@ -656,6 +662,12 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     case E_PREPARESTAGE_RICH_PRESENCE:
     case E_PREPARESTAGE_ACHIEVEMENT_MANAGER:
         LogPrepareStageOnce(13, "the 10 manager prepares (Mode..Achievement) [deferred]");
+        // [takedown wave 2026-09-02] stage 14 of the console ladder, `if (TakedownManager::Prepare(gsm+568))`
+        // -- REAL now (the other nine stay deferred as the line above says).
+        if (!PrepareTakedownBringUp())
+        {
+            break;
+        }
         // fall through
 
     case E_PREPARESTAGE_STREET_MANAGER:

@@ -653,6 +653,29 @@ public:
                                CgsID lWheelModelId,
                                u16 lu16StartAISectionIndex);
 
+    // ------------------------------------------------------------------------
+    // ⭐ [rival-spawn wave R, 2026-09-02] THE TWO RIVAL LEGS SetupOpponents was parked on.
+    // Bodies in BrnRaceCarEntityModule_Rivals.cpp. Shapes are the DWARF's
+    // (BrnRaceCarEntityModule.h:779 / :782) and match the prologues (r27/r25/r19 + r6 as a
+    // halfword for SetUpAIForMode; r3/r4/r5 for RemoveRivals).
+    // ------------------------------------------------------------------------
+
+    // X360 0x82301620. For each of GetOpponentCount() (== miNumRivals) opponents: build the grid
+    // transform from the params' StartLocation, SpawnRaceCar an E_RACE_CAR_TYPE_AI car with the
+    // OpponentData's model id (or the cop car), AttachActiveRaceCar it, seed the AI module's
+    // out-of-range record at the grid pose, publish AddCarToCurrentModeEvent, and map scoring
+    // slot N to the new active slot. THREE arguments (this / the mode params / the pre-scene
+    // OUTPUT buffer / the destination AI section as a u16 -- `sth r6` at entry).
+    void SetUpAIForMode(const BrnGameState::GameModeParams* lpGameModeParams,
+                        RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput,
+                        u16 lu16DestinationSectionIndex);
+
+    // X360 0x82305E00. RemoveRaceCar every global slot that is in the world and not network
+    // driven; the PLAYER's car is skipped unless lbRemovePlayerCar (r5) is set. SetupOpponents
+    // @0x82307EF4 passes false.
+    void RemoveRivals(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput,
+                      bool lbRemovePlayerCar);
+
     // X360 0x822A37C8 -- find the player slot currently mapped to leActiveRaceCarIndex
     // and reset it to the sentinel (8). If no slot maps to it, do nothing.
     void ClearActiveRaceCarToPlayerScoringMapping(EActiveRaceCarIndex leActiveRaceCarIndex);

@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // CgsID (EventJunction / RaceEventData id accessors)
+#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT (GetStartGridSlot's two guards)
+#include "GameSource/World/BrnWorldSharedConstants.h"     // BrnWorld::KI_MAX_RIVALS_IN_MODE
 
 #include <cstdint>            // uintptr_t (the serialised 32-bit pointer slots below)
 
@@ -14,8 +16,9 @@
 // RaceEventData, EventJunction). This is a MINIMAL OWNING SLICE: a sibling type is carved
 // here only once a caller needs it, with its real layout + the accessors the X360 attests.
 // Complete so far: EventJunction, EventRacerPersonality, CheckpointData (full DWARF layout),
-// RaceEventData (partial -- named members + explicit padding). EventStartGridSlot is still
-// absent. When another type is needed it grows this single-owner header (do not fork).
+// RaceEventData (partial -- named members + explicit padding). EventStartGridSlot landed
+// 2026-09-02 (rival-spawn wave R) with the start-grid table it sizes. When another type is
+// needed it grows this single-owner header (do not fork).
 //
 // LAYOUT is X360-faithful and taken from the DecFIGS DWARF for this exact path. The
 // EventRacerPersonality record is four contiguous f32 tuning values (proven by
@@ -115,6 +118,72 @@ private:
 };
 
 // ----------------------------------------------------------------------------
+// BrnProgression::EventStartGridSlot -- one authored start-grid slot of a race event
+// (DWARF BrnRaceEventData.h:152; members :228-:233; the EFlags enum :155).
+//
+// [rival-spawn wave R, 2026-09-02] Landed because ModeManager::SetupOpponentData @0x82329348
+// walks the event's slot table (`addi r28, r29, 0x5C` then `addi r28, r28, 0x14` per pass ==
+// base +0x5C, stride 20) and reads three of its words, and RaceCarEntityModule::SetUpAIForMode
+// @0x82301620 reads the flags byte of the copy carried inside OpponentData
+// (`lbz r11, 0x19(r28); clrlwi r28, r11, 31` == OpponentData+0x08+0x11, bit 0).
+//
+// LAYOUT: 18 bytes of scalars padded to the 20-byte stride the console walks. All scalar, no
+// pointers, so the host layout matches the console byte-for-byte (sizeof pinned below).
+//
+// WHICH WORD IS WHICH (asm-pinned, SetupOpponentData):
+//   +0x00 muOpponentIndex           `lwz r10, 0(r28)`   -> taken modulo the opponent-set count
+//   +0x08 miFastAIBalanceGraphIndex `lwz r30, 8(r28)`   -> r6 == GetInterpolatedAIBalanceGraph's liIndexB
+//   +0x0C miSlowAIBalanceGraphIndex `lwz r31, 0xC(r28)` -> r5 == its liIndexA
+//   +0x11 muFlags                   bit 0 == E_FLAG_CAN_DEVIATE_FROM_ROUTE (SetUpAIForMode)
+// The accessors are the DWARF's (:174-:225). The X360 emits no standalone symbol for any of
+// them -- both consumers open-code the loads -- so they are header-inline, the same precedent
+// as GetCheckpointCount below.
+// ----------------------------------------------------------------------------
+struct EventStartGridSlot
+{
+    // DWARF BrnRaceEventData.h:155
+    enum EFlags
+    {
+        E_FLAG_CAN_DEVIATE_FROM_ROUTE = 1,
+        E_FLAG_CAN_TAKE_SHORTCUTS     = 2,
+    };
+
+    // ---- Remaining X360-attested API (bodies in their own TUs; declaration-only here) ----
+    void Construct();
+    void FixDown();
+    void FixUp();
+
+    u32  GetOpponentIndex() const                { return muOpponentIndex; }
+    void SetOpponentIndex(u32 luIndex)           { muOpponentIndex = luIndex; }
+    u32  GetPersonalityIndex() const             { return muPersonalityIndex; }
+    void SetPersonalityIndex(u32 luIndex)        { muPersonalityIndex = luIndex; }
+    s32  GetFastAIBalanceGraphIndex() const      { return miFastAIBalanceGraphIndex; }
+    s32  GetSlowAIBalanceGraphIndex() const      { return miSlowAIBalanceGraphIndex; }
+    void SetSlowAIBalanceGraphIndex(s32 liIndex) { miSlowAIBalanceGraphIndex = liIndex; }
+    void SetFastAIBalanceGraphIndex(s32 liIndex) { miFastAIBalanceGraphIndex = liIndex; }
+    u8   GetColourIndex() const                  { return muColourIndex; }
+    void SetColourIndex(u8 luColourIndex)        { muColourIndex = luColourIndex; }
+    bool GetFlag(EFlags leFlag) const            { return (muFlags & static_cast<u8>(leFlag)) != 0; }
+    u8   GetFlags() const                        { return muFlags; }
+    void SetFlag(EFlags leFlag)                  { muFlags = static_cast<u8>(muFlags | static_cast<u8>(leFlag)); }
+    void SetFlags(u8 luFlags)                    { muFlags = luFlags; }
+    void ClearFlag(EFlags leFlag)                { muFlags = static_cast<u8>(muFlags & ~static_cast<u8>(leFlag)); }
+
+private:
+    u32 muOpponentIndex;            // 0x00 (DWARF :228)
+    u32 muPersonalityIndex;         // 0x04 (DWARF :229)
+    s32 miFastAIBalanceGraphIndex;  // 0x08 (DWARF :230)
+    s32 miSlowAIBalanceGraphIndex;  // 0x0C (DWARF :231)
+    u8  muColourIndex;              // 0x10 (DWARF :232)
+    u8  muFlags;                    // 0x11 (DWARF :233)
+    // 0x12..0x13: alignment to the 20-byte stride SetupOpponentData walks (`addi r28, r28, 0x14`).
+};
+
+// The 20-byte stride SetupOpponentData @0x82329348 walks the slot table with, and the stride
+// the 5-dword copy into OpponentData (`li r9, 5; mtctr` @0x82329688) preserves.
+static_assert(sizeof(EventStartGridSlot) == 20, "BrnProgression::EventStartGridSlot is a 20-byte record");
+
+// ----------------------------------------------------------------------------
 // BrnProgression::CheckpointData -- one entry of a race event's checkpoint table.
 //
 // SCOPE NOTE: the DWARF gives this as a NAMESPACE-SCOPE sibling of RaceEventData
@@ -192,6 +261,10 @@ struct RaceEventData
     // Number of rank thresholds (the rank-score / rank-time tables are sized to this; the X360
     // bounds-checks the rank arg against 6 in GetRankScore @0x823543D0 / GetRankTime @0x8230F748).
     static const u32 KU_NUM_RANKS = 6;
+
+    // Width of the authored start-grid table (DWARF :256 `EventStartGridSlot[7] maStartGridSlots`),
+    // == BrnWorld::KI_MAX_RIVALS_IN_MODE, the bound GetStartGridSlot's :1166 assert names.
+    static const u32 KU_MAX_START_GRID_SLOTS = 7;
 
     // Progression race-event mode classification. DWARF-attested
     // (references/DecFIGS/dwarfdump/SharedClasses/Progression/BrnRaceEventData.h).
@@ -325,6 +398,23 @@ struct RaceEventData
     f32   GetTimeLimitFast() const    { return mfTimeLimitFast; }
     f32   GetTimeLimitSlow() const    { return mfTimeLimitSlow; }
 
+    // ⭐ [rival-spawn wave R, 2026-09-02] THE START-GRID PAIR (DWARF :524 `const EventStartGridSlot*
+    // GetStartGridSlot(uint32_t) const;` / :532 `uint32_t GetStartGridCount() const;`).
+    // INLINE ON PURPOSE, same reason as GetCheckpointCount: the X360 emits no standalone symbol
+    // for either. ModeManager::SetupOpponentData @0x82329348 carries BOTH of GetStartGridSlot's
+    // asserts at the call site with their baked header lines -- `li r5, 0x48E` (:1166,
+    // "muStartGridCount <= (uint32_t)KI_MAX_RIVALS_IN_MODE") and `li r5, 0x48F` (:1167,
+    // "luIndex < muStartGridCount") -- and then indexes the table itself. Those two asserts are
+    // therefore THIS body's, and callers must not restate them.
+    u32 GetStartGridCount() const { return muStartGridCount; }
+    const EventStartGridSlot* GetStartGridSlot(u32 luIndex) const
+    {
+        CGS_ASSERT(muStartGridCount <= static_cast<u32>(BrnWorld::KI_MAX_RIVALS_IN_MODE),
+                   "muStartGridCount <= (uint32_t)KI_MAX_RIVALS_IN_MODE");    // BrnRaceEventData.h:1166
+        CGS_ASSERT(luIndex < muStartGridCount, "luIndex < muStartGridCount");  // BrnRaceEventData.h:1167
+        return &maStartGridSlots[luIndex];
+    }
+
     f32   GetTrafficDensity() const   { return mfTrafficDensity; }
     f32   GetBoostEarning() const     { return mfBoostEarning; }
     CgsID GetSpecialEventCarId() const { return mSpecialEventCarId; }
@@ -380,7 +470,16 @@ private:
     f32 mfTimeLimitSlow;                // 0x24  (DWARF :244)
     s32 maiRankScores[KU_NUM_RANKS];    // 0x28  rank target scores (6 * 4 == 0x18 -> 0x40)
     f32 mafRankTimes[KU_NUM_RANKS];     // 0x40  rank target times  (6 * 4 == 0x18 -> 0x58)
-    u8  maPad_58[0x94];                 // 0x58..0xEB (remaining record -- not in this slice)
+    // ⭐ [rival-spawn wave R, 2026-09-02] CARVED OUT OF maPad_58 (which covered 0x58..0xEB). The
+    // DWARF lists, in order, `float32_t mfExtensionTime;` (:253), `EventStartGridSlot[7]
+    // maStartGridSlots;` (:256) and `uint32_t muStartGridCount;` (:259) between mfRankTime[6]
+    // and mu8Mode -- 4 + 7*20 + 4 == 0x94, exactly the bytes the pad covered. Both X360
+    // consumers pin the two grid members without a call: ModeManager::SetupOpponentData
+    // @0x82329348 reads the count as `lwz r14, 0xE8(r29)` (and re-reads it for the :1166/:1167
+    // asserts) and walks the slots from `addi r28, r29, 0x5C` in 0x14 steps.
+    f32                mfExtensionTime;                            // 0x58  (DWARF :253)
+    EventStartGridSlot maStartGridSlots[KU_MAX_START_GRID_SLOTS];  // 0x5C  (DWARF :256)  7 * 20 -> 0xE8
+    u32                muStartGridCount;                           // 0xE8  (DWARF :259)  GetStartGridCount
     // DWARF BrnRaceEventData.h:262/265 (source lines 608/609): mu8Mode then mu8OnlineMode, the
     // first two of the eleven-byte run mu8Mode..mi8UnlockRank (+0xEC..+0xF6) that closes the 0xF8
     // record over one alignment byte at +0xF7 -- the same run progression_transcode.py models as

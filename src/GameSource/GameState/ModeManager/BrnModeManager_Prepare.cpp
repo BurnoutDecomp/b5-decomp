@@ -436,6 +436,19 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         mScoringSystem.mauiMedalScores[1] = static_cast<u32>(liTakedownTarget - 1);
         mScoringSystem.mauiMedalScores[2] = static_cast<u32>(liTakedownTarget - 2);
 
+        // [FLAG PC deviation, takedown wave 2026-09-03 run 10] mauiMedalScores[E_CURRENT_MEDAL_TARGET_TIME_NONE]
+        // (ss+0x4B6C) is NEVER WRITTEN by the console: not here (only 0x4B60/64/68 above), not in the
+        // ScoringSystem ctor @0x827E0998, Construct @0x82337FE0, ClearData @0x8232A4A8 or
+        // ClearCumulativeData @0x8231F140 (all four re-read for 0x4B6C). Yet it IS read: the timer-start
+        // arm of UpdateCurrentMode @0x82350EC8 (case 3 == Road Rage) calls SetTimeLimitSeconds, which
+        // resets target/achieved to NONE (3), and the first takedown then reaches
+        // CheckRoadRageMedalAwarded @0x82312840 with target == NONE, i.e. `takedowns >= scores[3]`.
+        // On the console that slot holds heap residue (large, so the compare never passes); on the host
+        // it read 0, the compare passed, "Bad case of Rage Rage" fired and the HUD target became
+        // scores[3] == 0. The unreachable sentinel makes the host behave like the console: the NONE
+        // target is never "achieved", so achieved stays nonzero and the time extensions keep coming.
+        mScoringSystem.mauiMedalScores[3] = 0xFFFFFFFFu;
+
         CGS_ASSERT(muNumLandmarks == 0, "muNumLandmarks == 0");
         return;
     }

@@ -104,6 +104,12 @@ void GameModeParams::Construct(GameStateModuleIO::EGameModeType leGameModeType)
     // GetCheckpointCount() return 0 (rather than wrongly firing the use-before-Construct
     // assert). The Feb-2007 owner spells this maLandmarkDataArray.Construct().
     maStartLocations.Construct();
+    // [takedown wave 2026-09-02] the OPPONENT array too: X360 GameModeParams::Construct @0x8231C370
+    // stores `stw r11(=0), 0x838(r3)` @0x8231C410 == maOpponentData.miCount (0x528 + 784), beside
+    // the +0x520 start-location count. This was the run-6 crash: the params block is a stack local
+    // (BrnModeManager_Start.cpp:226), so an unconstructed count let SetupOpponentData append past
+    // the 7-slot array.
+    maOpponentData.Construct();               // count @ +0x838
     maCheckpointDataArray.Construct();
 }
 

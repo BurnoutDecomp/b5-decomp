@@ -8,6 +8,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID
 #include "SharedClasses/Progression/BrnRaceEventData.h"       // BrnProgression::RaceEventData (real, single owner)
 #include "SharedClasses/Progression/BrnProgressionRankData.h" // BrnProgression::ProgressionRankData (real, single owner)
+#include "GameSource/GameState/BrnOpponentData.h"             // BrnGameState::OpponentData (real, single owner; 112 B)
 
 // =============================================================================
 // BrnGameModeParams.h  (MERGED OWNING HEADER)
@@ -98,7 +99,10 @@ enum EPlayerTeam_Stub        { E_PLAYERTEAM_STUB = 0 };         // stub: GameSta
 // GameModeParams keeps a complete layout. Replaced at consolidation with the real types.
 // CheckpointData stub retired: the real BrnGameState::CheckpointData is now its single owner
 // (BrnCheckpointData.h, included above; 44-byte stride preserved, so GameModeParams' layout is unchanged).
-struct OpponentData_Stub   { u8 mBlob[48]; }; // stub: BrnGameState::OpponentData (own TU)
+// OpponentData stub RETIRED 2026-09-02 (rival-spawn wave R): the real 112-byte
+// BrnGameState::OpponentData (BrnOpponentData.h, included above) is the single owner. The
+// 48-byte blob that stood here was never the console's record -- Array<OpponentData,7>::Append
+// @0x82317D90 strides by 112 -- so every element after the first landed in the wrong place.
 
 // Forward-only handle for the third RaceMode::Start parameter (DWARF: ScoringSystem*).
 class ScoringSystem;
@@ -175,7 +179,7 @@ public:
     // The DWARF spells the embedded fixed arrays as Array<T, N>.
     typedef Array<StartLocation, 8u>        StartLocationArray;
     typedef Array<CheckpointData, 16u>      CheckpointDataArray;
-    typedef Array<OpponentData_Stub, 7u>    OpponentDataArray;
+    typedef Array<OpponentData, 7u>         OpponentDataArray;   // DWARF :140 (7 == BrnWorld::KI_MAX_RIVALS_IN_MODE)
 
     // ---- X360-attested standalone methods (the only six in the ledger) -----------------
     // Construct: reset every field to its "no event" default. Takes the real
@@ -239,6 +243,35 @@ public:
     // the sole LNK2019 on the seat-the-cars path. Bodied now at BrnGameModeParams.cpp (see the
     // instruction-for-instruction derivation there).
     void    AddStartLocation(Vector3 lPosition, Vector3 lDirection);
+
+    // ===========================================================================================
+    // [rival-spawn wave R, 2026-09-02] THE OPPONENT TRIO (DWARF :403 AddOpponentData / :406
+    // GetOpponentCount / :410 GetOpponentData). All three are X360-INLINED at every call site
+    // (no standalone export), hence inline bodies here, each pinned by its consumer's asm:
+    //   * AddOpponentData -- ModeManager::SetupOpponentData @0x82329348 emits it as
+    //     Array<OpponentData,7>::Append @0x82317D90 on params+0x528 (`addi r15, r25, 0x528`).
+    //   * GetOpponentCount -- RaceCarEntityModule::SetUpAIForMode @0x82301620 reads it as
+    //     `lbz r11, 0(r25); extsb r11, r11` == miNumRivals SIGN-EXTENDED, both as the loop bound
+    //     (stashed once at sp+0x70) and inside GetOpponentData's own assert. It is the RIVAL
+    //     COUNT the mode set, NOT maOpponentData's live length -- the console never reads
+    //     params+0x838 (the array's count word) here; the two agree only because
+    //     SetupOpponentData appends exactly the event's start-grid count and the mode's Start
+    //     sets miNumRivals from the same event (RaceMode::Start @0x82330018). Reproduced as
+    //     written, so a mode that sets fewer rivals than the event authored spawns fewer.
+    //   * GetOpponentData -- the same function's `li r5, 0x482` assert ("liOpponentIndex>=0 &&
+    //     liOpponentIndex<GetOpponentCount()", BrnGameModeParams.h:1154) followed by
+    //     Array<OpponentData,7>::GetItem @0x822AE310 on params+0x528. The assert is THIS body's
+    //     (baked header line), so the caller must not restate it; the Array helper carries
+    //     the CgsArray.h:336/:338 constructed/bounds pair itself.
+    // ===========================================================================================
+    void AddOpponentData(const OpponentData* lpOpponentData) { maOpponentData.Append(*lpOpponentData); }
+    s32  GetOpponentCount() const                            { return miNumRivals; }
+    const OpponentData* GetOpponentData(s32 liOpponentIndex) const
+    {
+        CGS_ASSERT(liOpponentIndex >= 0 && liOpponentIndex < GetOpponentCount(),
+                   "liOpponentIndex>=0 && liOpponentIndex<GetOpponentCount()");   // BrnGameModeParams.h:1154
+        return &maOpponentData.GetItem(static_cast<u32>(liOpponentIndex));
+    }
 
     // ---- Inlined-in-X360 mutators/accessors used by RaceMode::Start --------------------
     // These had no standalone address in the X360 ledger (the compiler inlined them at the

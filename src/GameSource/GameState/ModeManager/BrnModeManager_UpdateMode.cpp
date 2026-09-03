@@ -53,6 +53,7 @@
 //     ("luCheckpointIndex < (uint32_t)KI_MAX_LANDMARKS_IN_MODE" and "Distance to finish not ready").
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
+#include "GameSource/GameState/BrnGameStateModule.h"                    // GetTakedownManager (arm 13)
 
 #include "GameSource/GameState/BrnGameStateModule.h"              // GetPlayerActiveRaceCarIndex, meControllerState
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<>::AddEvent
@@ -600,7 +601,12 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
         // agent B this wave (declared BrnScoringSystem.h:356, called here by that declaration).
         // Until that landing consolidates this is an unresolved external at LINK time -- the
         // parallel-wave contract, stated rather than hidden.
-        if (mbPlayerCrashedLastFrame)
+        // [takedown wave 2026-09-02] the console conjunct is back: the manager exists now
+        // (GameStateModule::GetTakedownManager), and TakedownManager::IsInTakedownCamera @0x82359620
+        // is bodied. Console @0x823513D8: `bl IsInTakedownCamera; bne skip; lbzx mbPlayerCrashedLastFrame`.
+        // (Reached through GameStateModule::IsInTakedownCamera: BrnTakedownManager.h cannot be included
+        //  here -- its Types header re-binds EActiveRaceCarIndex, the second-enum rule.)
+        if (!mpGameStateModule->IsInTakedownCamera() && mbPlayerCrashedLastFrame)
         {
             mScoringSystem.OnRoadRagePlayerCrashed(lpOutputBuffer,
                                                    GameStateModuleIO::E_ROADRAGE_CRASHTYPE_WRECKED);

@@ -61,6 +61,7 @@
 #include "SharedClasses/Progression/BrnOpponentData.h"                     // CarOpponentSet / CarOpponent
 #include "SharedClasses/Progression/BrnRaceBalance.h"                      // OpponentBalanceData (68 B, by value)
 #include "SharedClasses/Progression/BrnRaceEventData.h"                    // RaceEventData / its CheckpointData
+#include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress("XUSCCOB2")
 #include "GameShared/GameClasses/World/CgsWorldMap2D.h"                    // WorldMap2D::GetValue + KU_INVALID_WORLD_MAP_VALUE
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint / gxMessageFilterFlags
 
@@ -383,38 +384,45 @@ void ModeManager::SetupPathfinding(const StartGameModeParams* lpStartGameModePar
 //
 // This body has NO mode gate -- its only guard is `lpStartGameModeParams->GetEventData()`.
 //
-// [!!] SCOPE STATUS -- STATED PLAINLY 2026-08-26 (fix round). THIS FUNCTION IS ~5% IMPLEMENTED.
-// The written body is five statements (resolve ProgressionData, read the event data, assert,
-// null-return); the console body is ~120 instructions building one 112-byte OpponentData per grid
-// slot and appending it to GameModeParams+0x528. The whole start-grid loop below is a COMMENT.
-// Read "the four assigned functions are bodied" as "bodied down to their first header gap", not as
-// "complete" -- and note that unlike the other three parks in this file, THIS ONE IS ON THE
-// STUNT-RACE PATH: StartGameMode calls SetupOpponentData unconditionally at 0x8234FE5C, with no
-// online guard and no mode guard (contrast SetUpCheckPointsForGameMode at 0x8234FE3C, which IS
-// guarded by `lbz r11, 0xAC(mode)`).
-// WHY IT IS STILL PARKED RATHER THAN WRITTEN: the wave rule says write the body and file the
-// declaration, but the gate rule says the partfile must be selfcheck-green on disk, and the six
-// declarations this loop needs (header_requests #6 EventStartGridSlot + its two RaceEventData
-// accessors, #8 ProgressionData::GetPersonality, #9 GetProgressionRankNormalisedForGameMode,
-// #10 GameStateModule::GetOriginalCarId made public, #11 the real 112-byte OpponentData record and
-// a non-stub Array<OpponentData,7>) have NOT landed as of this fix round -- BrnGameModeParams.h's
-// 11:57 pass added AddStartLocation only, and BrnProgressionData.h / BrnOpponentData.h were not
-// touched. Writing the loop today is a guaranteed red gate. THIS IS THE OPEN CONDUCTOR
-// ARBITRATION the batch-2 verdict names; it is recorded here so the next reader does not have to
-// re-discover it from a report.
+// [x] BODIED 2026-09-02 (rival-spawn wave R). The banner that stood here recorded this function
+// as ~5% implemented -- five statements and the whole start-grid loop as a COMMENT -- waiting on
+// six header items. All six are landed now, each in its DWARF home:
+//   #6  BrnProgression::EventStartGridSlot + RaceEventData::GetStartGridCount/GetStartGridSlot
+//       (SharedClasses/Progression/BrnRaceEventData.h -- the +0x5C table and the +0xE8 count are
+//       carved out of maPad_58; both accessors inline, carrying the :1166/:1167 asserts).
+//   #8  ProgressionData::GetPersonality(u32) (SharedClasses/Progression/BrnProgressionData.h,
+//       inline, carrying the :497 assert).
+//   #9  ProgressionManager::GetProgressionRankForGameModeNormalised /
+//       GetProgressionRankNormalisedForCurrentRank -- were ALREADY bodied in
+//       BrnProgressionManager.cpp (stuntrace wave D) when this banner still listed them missing.
+//   #10 GameStateModule::GetOriginalCarId -- was ALREADY public (moved 2026-08-26).
+//   #11 the real 112-byte BrnGameState::OpponentData (GameSource/GameState/BrnOpponentData.h,
+//       pad retired, sizeof/offsetof pinned) + Array<OpponentData,7> in BrnGameModeParams.h with
+//       AddOpponentData / GetOpponentCount / GetOpponentData.
+// The loop below is walked from the export ASSEMBLY (0x823293DC..0x823296E4); the pseudocode is
+// flagged "local variable allocation has failed" and mis-merges r30 (the player car id) with the
+// event pointer into one __PAIR64__, so the asm is the only source for who holds what.
 //
 // [!] KI_MAX_RIVALS_IN_MODE == 7 is pinned by the console's own assert compare
-// (`cmplwi r11, 7; ble`) and matches Array<OpponentData,7>.
+// (`cmplwi r11, 7; ble`) and matches Array<OpponentData,7>; it now has its DWARF home,
+// GameSource/World/BrnWorldSharedConstants.h.
 // [!] The cop-car arm is real gameplay, not debug: when the mode sets
 // KU_FLAG_SET_OPPONENTS_TO_COPS (0x400000000 -- the console builds the mask as
 // `li r4,1; extldi r4,r4,64,34`, i.e. 1 << 34) every rival's model id is replaced with
 // CgsIDCompress("XUSCCOB2"), the cop car.
+// [!] THE TWO BALANCE-GRAPH INDEXES ARE CROSSED AND IT MATTERS: 0x82329604 loads slot+0x0C
+// (miSlowAIBalanceGraphIndex) into r31 and 0x82329608 loads slot+0x08 (miFastAIBalanceGraphIndex)
+// into r30, and the call passes r5 = r31 (liIndexA == SLOW) and r6 = r30 (liIndexB == FAST). With
+// GetInterpolatedAIBalanceGraph's `A + (B - A) * blend`, a rank ratio of 0 gives the SLOW graph
+// and 1 the FAST graph. Feeding them in slot order blends the graph backwards.
+// [!] ASSERT-IS-NOT-A-GUARD, reproduced: lpOpponentSet is asserted non-null at :5057 and then
+// RE-TESTED (`cmplwi cr6, r26, 0; beq` @0x82329504) -- a car with no authored opponent set still
+// gets one OpponentData per grid slot, carrying the PLAYER's own model id (`mr r29, r30`
+// @0x823294FC is the fall-through value) and a zeroed personality.
 // ============================================================================
 void ModeManager::SetupOpponentData(const StartGameModeParams* lpStartGameModeParams,
                                     GameModeParams*            lpGameModeParams)
 {
-    (void)lpGameModeParams;
-
     // Console: `addis r3, mpProgressionManager, 2; addi r3, r3, 0x8E4` == manager + 133348 ==
     // the ResourcePtr<ProgressionData>; null slot -> null, otherwise
     // ResourcePtr<ProgressionData>::operator->() @0x82325790 (the "Can not instance resource
@@ -433,112 +441,97 @@ void ModeManager::SetupOpponentData(const StartGameModeParams* lpStartGameModePa
         return;
     }
 
-    // ------------------------------------------------------------------------
-    // [X] PARKED BODY -- the whole start-grid loop. FIVE header gaps, no invented layout.
-    //
-    // Console (0x823293DC-0x823296E4), de-inlined:
-    //
-    //   const u32   luStartGridCount = lpEventData->GetStartGridCount();       // +0xE8
-    //   const CgsID lPlayerCarId     = mpGameStateModule->GetActivePlayerCarId();  // gsm+0x456D8
-    //   const s32   liPlayerRank     = GetProgressionManager()->GetProgressionRank();
-    //   const CgsID lOriginalCarId   = mpGameStateModule->GetOriginalCarId(lPlayerCarId);
-    //   CarOpponentSet* lpOpponentSet =
-    //       lpProgressionData->FindCarOpponentSet(lOriginalCarId, liPlayerRank);
-    //   CGS_ASSERT(lpOpponentSet != NULL, "lpOpponentSet != NULL");            // :5057
-    //
-    //   for (u32 luIndex = 0; luIndex < luStartGridCount; ++luIndex)
-    //   {
-    //       // both asserts are GetStartGridSlot's own body (BrnRaceEventData.h:1166/:1167)
-    //       CGS_ASSERT(lpEventData->GetStartGridCount() <= 7u,
-    //                  "muStartGridCount <= (uint32_t)KI_MAX_RIVALS_IN_MODE");
-    //       CGS_ASSERT(luIndex < lpEventData->GetStartGridCount(), "luIndex < muStartGridCount");
-    //       const EventStartGridSlot* lpStartGridSlot = lpEventData->GetStartGridSlot(luIndex);
-    //           // console: base +0x5C, stride 0x14 (20 B). THREE of its five words are used and
-    //           // their FIELD NAMES ARE NOT RECOVERED -- only the offsets are, so they are spelled
-    //           // by offset below and must not be guessed at when the type lands:
-    //           //   +0x00 u32  the opponent selector (taken modulo the opponent count)
-    //           //   +0x08 s32  AI-balance graph index B   <- GetInterpolatedAIBalanceGraph's 2nd
-    //           //   +0x0C s32  AI-balance graph index A   <- GetInterpolatedAIBalanceGraph's 1st
-    //           // [!] THE ORDER IS CROSSED AND IT MATTERS: 0x82329604 loads +0x0C into r31 and
-    //           // 0x82329608 loads +0x08 into r30, and the call passes r5 = r31 (+0x0C) and
-    //           // r6 = r30 (+0x08). Feeding them in slot order blends the graph backwards.
-    //
-    //       EventRacerPersonality lPersonality;
-    //       lPersonality.Construct();                                          // 0x826767B8
-    //
-    //       CgsID lCarModelId = lPlayerCarId;   // the console's fall-through value
-    //       if (lpOpponentSet != NULL)          // re-tested; the assert above is non-fatal
-    //       {
-    //           CGS_ASSERT(lpOpponentSet->GetOpponentCount() > 0,
-    //                      "lpOpponentSet->GetOpponentCount() > 0");            // :5079
-    //           const s32 miOpponentCount    = lpOpponentSet->GetOpponentCount();
-    //           const s32 liCarOpponentIndex =
-    //               static_cast<s32>(<lpStartGridSlot word +0x00> % static_cast<u32>(miOpponentCount));
-    //               // console: divwu/mullw/subf == an UNSIGNED modulo (`twllei r11, 0` is the
-    //               // divide-by-zero trap the assert above is meant to pre-empt)
-    //           CGS_ASSERT(liCarOpponentIndex >= 0 && liCarOpponentIndex < miOpponentCount,
-    //                      "liCarOpponentIndex >= 0 && liCarOpponentIndex < miOpponentCount");
-    //                                                                          // BrnOpponentData.h:224
-    //           const CarOpponent* lpCarOpponent = lpOpponentSet->GetCarOpponent(liCarOpponentIndex);
-    //
-    //           lCarModelId = lpGameModeParams->GetFlag(GameModeParams::KU_FLAG_SET_OPPONENTS_TO_COPS)
-    //                       ? CgsIDCompress("XUSCCOB2")
-    //                       : lpCarOpponent->GetCarId();
-    //
-    //           const u32 luPersonalityIndex = static_cast<u32>(lpCarOpponent->GetPersonalityIndex());
-    //           CGS_ASSERT(luPersonalityIndex < muPersonalityCount, "luIndex < muPersonalityCount");
-    //                                                                          // BrnProgressionData.h:497
-    //           lPersonality = *lpProgressionData->GetPersonality(luPersonalityIndex);  // 16 B copy
-    //       }
-    //
-    //       const f32 lfRank =
-    //           (leStartModeType == E_MODE_OFFLINE_RACE || leStartModeType == E_MODE_ROAD_RAGE ||
-    //            leStartModeType == E_MODE_STUNT_ATTACK || leStartModeType == E_MODE_MARKED_MAN)
-    //           ? GetProgressionManager()->GetProgressionRankForGameModeNormalised(leStartModeType)
-    //           : GetProgressionManager()->GetProgressionRankNormalised();
-    //           // leStartModeType is lpStartGameModeParams->GetGameModeType() (+0x2D0), NOT the
-    //           // GameModeParams one; the second callee is sub_8237B610 (its body clamps the rank
-    //           // to muProgressionRankCount-1 then forwards to the private
-    //           // GetProgressionRankNormalised(f32)) -- DWARF names it GetProgressionRankNormalised().
-    //
-    //       const OpponentBalanceData lBalanceData =
-    //           lpProgressionData->GetInterpolatedAIBalanceGraph(<slot word +0x0C>,    // liIndexA
-    //                                                            <slot word +0x08>,    // liIndexB
-    //                                                            lfRank);
-    //
-    //       OpponentData lOpponentData;
-    //       lOpponentData.Construct(lCarModelId, lpStartGridSlot, &lBalanceData, &lPersonality);
-    //           // console builds the 112-byte record on the stack field by field:
-    //           //   +0x00 CgsID (8)  +0x08 EventStartGridSlot (20, 5 dwords copied)
-    //           //   +0x1C OpponentBalanceData (memcpy 0x44 == 68)  +0x60 EventRacerPersonality (16)
-    //       lpGameModeParams->AddOpponentData(&lOpponentData);   // Array<OpponentData,7>::Append
-    //                                                            // @0x82317D90, params + 0x528
-    //   }
-    //
-    // WHAT IS MISSING (all filed, all one-liners except the type):
-    //   #6  BrnProgression::EventStartGridSlot -- the type itself does not exist in the tree
-    //       (BrnRaceEventData.h's banner says so outright), nor RaceEventData::GetStartGridCount /
-    //       GetStartGridSlot. Without it the loop bound, the opponent selector and the two
-    //       balance-graph indexes cannot be named.
-    //   #8  ProgressionData::GetPersonality(u32) -- the table is at +0x38 with its count at
-    //       +0x3C (both already named in BrnProgressionData.h), but there is no accessor.
-    //   #9  ProgressionManager::GetProgressionRankForGameModeNormalised(EGameModeType) /
-    //       GetProgressionRankNormalised() -- neither is declared (the grouping sheet already
-    //       lists the first as ABSENT-frontier).
-    //   #10 GameStateModule::GetOriginalCarId is PRIVATE on this tree, and its own comment at
-    //       BrnGameStateModule.h:747 says ModeManager::SetupOpponentData is one of its two
-    //       console callers -- so it cannot be private. One access-specifier move.
-    //   #11 BrnGameState::OpponentData::Construct(...) + GameModeParams::AddOpponentData(...),
-    //       and GameModeParams must stop using the 48-byte OpponentData_Stub (the real record
-    //       is 112 bytes and its owning header GameSource/GameState/BrnOpponentData.h is
-    //       already in the tree).
-    // A raw-offset stand-in was considered and REJECTED for the GameModeParams / OpponentData
-    // half (that header states its byte offsets are not x64-faithful), which would leave the
-    // loop unable to publish anything even if the RaceEventData half were shimmed. Parking the
-    // whole loop keeps one honest seam instead of four half-armed ones.
-    // ------------------------------------------------------------------------
-}
+    // 0x823293DC..0x82329420. The loop bound is read ONCE (`lwz r14, 0xE8(r29)`) and compared
+    // SIGNED (`cmpwi cr6, r14, 0; ble` / `cmpw cr6, r24, r14; blt`), hence the s32 here even
+    // though the accessor returns u32.
+    const s32   liStartGridCount = static_cast<s32>(lpEventData->GetStartGridCount());
+    const CgsID lPlayerCarId     = mpGameStateModule->GetActivePlayerCarId();          // ldx gsm+0x456D8
+    const s32   liPlayerRank     = GetProgressionManager()->GetProgressionRank();      // extsb r31, r3
+    const CgsID lOriginalCarId   = mpGameStateModule->GetOriginalCarId(lPlayerCarId);  // 0x8232940C
 
+    const BrnProgression::CarOpponentSet* lpOpponentSet =
+        lpProgressionData->FindCarOpponentSet(lOriginalCarId, liPlayerRank);
+    CGS_ASSERT(lpOpponentSet != nullptr, "lpOpponentSet != NULL");            // BrnModeManager.cpp:5057
+
+    for (s32 liIndex = 0; liIndex < liStartGridCount; ++liIndex)
+    {
+        // GetStartGridSlot's own :1166/:1167 asserts fire inside it (re-reading the count each
+        // pass, as the console does at 0x823294B0/0x823294D4).
+        const BrnProgression::EventStartGridSlot* lpStartGridSlot =
+            lpEventData->GetStartGridSlot(static_cast<u32>(liIndex));
+
+        BrnProgression::EventRacerPersonality lPersonality;
+        lPersonality.Construct();                                            // 0x82329500
+
+        // `mr r29, r30` @0x823294FC: the player's own car id is the fall-through model id.
+        CgsID lCarModelId = lPlayerCarId;
+
+        if (lpOpponentSet != nullptr)                                        // re-tested @0x82329504
+        {
+            CGS_ASSERT(lpOpponentSet->GetOpponentCount() > 0,
+                       "lpOpponentSet->GetOpponentCount() > 0");             // BrnModeManager.cpp:5079
+
+            // `divwu / mullw / subf` == an UNSIGNED modulo of the slot's opponent selector by the
+            // set's count (`twllei r11, 0` is the divide-by-zero trap the assert above pre-empts).
+            const s32 liOpponentCount    = lpOpponentSet->GetOpponentCount();
+            const s32 liCarOpponentIndex = static_cast<s32>(
+                lpStartGridSlot->GetOpponentIndex() % static_cast<u32>(liOpponentCount));
+            CGS_ASSERT(liCarOpponentIndex >= 0 && liCarOpponentIndex < liOpponentCount,
+                       "liCarOpponentIndex >= 0 && liCarOpponentIndex < miOpponentCount");
+                                                                              // BrnOpponentData.h:224
+            const BrnProgression::CarOpponent* lpCarOpponent =
+                lpOpponentSet->GetCarOpponent(liCarOpponentIndex);
+
+            // 0x82329570..0x823295A4: GetFlag(1 << 34) then either the cop car or the set's car.
+            if (lpGameModeParams->GetFlag(GameModeParams::KU_FLAG_SET_OPPONENTS_TO_COPS))
+            {
+                lCarModelId = CgsIDCompress("XUSCCOB2");
+            }
+            else
+            {
+                lCarModelId = lpCarOpponent->GetCarId();
+            }
+
+            // 0x823295A8..0x823295FC: GetPersonality (its :497 assert is inside it), then the
+            // 16-byte copy into the stack personality.
+            lPersonality = *lpProgressionData->GetPersonality(
+                static_cast<u32>(lpCarOpponent->GetPersonalityIndex()));
+        }
+
+        // 0x82329604/0x82329608 -- the CROSSED pair (see the banner): r5 <- +0x0C, r6 <- +0x08.
+        const s32 liSlowAIBalanceGraphIndex = lpStartGridSlot->GetSlowAIBalanceGraphIndex();
+        const s32 liFastAIBalanceGraphIndex = lpStartGridSlot->GetFastAIBalanceGraphIndex();
+
+        // 0x8232960C..0x82329654: the START params' mode type (+0x2D0), NOT the GameModeParams
+        // one, forks the rank ratio between the per-mode arm (modes 0/3/7/8) and the global one
+        // (sub_8237B610 == GetProgressionRankNormalisedForCurrentRank).
+        const GameStateModuleIO::EGameModeType leStartModeType =
+            lpStartGameModeParams->GetGameModeType();
+        f32 lfRankNormalised;
+        if (leStartModeType == GameStateModuleIO::E_MODE_OFFLINE_RACE ||
+            leStartModeType == GameStateModuleIO::E_MODE_ROAD_RAGE    ||
+            leStartModeType == GameStateModuleIO::E_MODE_STUNT_ATTACK ||
+            leStartModeType == GameStateModuleIO::E_MODE_MARKED_MAN)
+        {
+            lfRankNormalised =
+                GetProgressionManager()->GetProgressionRankForGameModeNormalised(leStartModeType);
+        }
+        else
+        {
+            lfRankNormalised = GetProgressionManager()->GetProgressionRankNormalisedForCurrentRank();
+        }
+
+        const BrnProgression::OpponentBalanceData lBalanceData =
+            lpProgressionData->GetInterpolatedAIBalanceGraph(liSlowAIBalanceGraphIndex,   // r5
+                                                             liFastAIBalanceGraphIndex,   // r6
+                                                             lfRankNormalised);           // f1
+
+        // 0x82329674..0x823296D4: the 112-byte record assembled on the stack, then appended.
+        OpponentData lOpponentData;
+        lOpponentData.Construct(lCarModelId, lpStartGridSlot, &lBalanceData, &lPersonality);
+        lpGameModeParams->AddOpponentData(&lOpponentData);   // Array<OpponentData,7>::Append @0x82317D90
+    }
+}
 
 // ============================================================================
 // ModeManager::SetupCheckpointDistricts -- X360 0x823296F0

@@ -98,7 +98,8 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
         const CgsModule::VariableEventQueue<1536, 16>* lpWorldGameEventQueue,
         f32                                           lfDelta,
         const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpyInterface,
-        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue)
+        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue,
+        const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue)
 {
     // ---- leg 1: refresh the cached active-race-car snapshot ---------------------------------
     // âš ï¸ COPIED BY ASSIGNMENT, NEVER AT THE CONSOLE'S LITERAL 10480 BYTES. 10480 is the X360
@@ -365,6 +366,11 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     {
         GetModeManager()->ProcessPlayerCrashes(lpRaceCarCrashEventQueue);
     }
+
+    // ---- [takedown wave 2026-09-02, conductor] post-world #18 -----------------------------
+    // CacheTakedownManagerPostWorldInputData @0x82375E70: the crash queue (and the traffic-type
+    // response queue) cached for next frame's TakedownManager::Update. GameStateModule_gTD_00.cpp.
+    CacheTakedownPostWorldInputs(lpRaceCarCrashEventQueue, lpTrafficTypeResponseQueue);
 
     // ============================================================================
     // ⭐⭐⭐ [stuntrace 2026-08-27] LEG 4 -- THE STUNT-SCORER LATCH DRAIN
@@ -1082,13 +1088,12 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // this function holds that lock); the cross-home cast is the same one BrnGameModule.cpp:1788
     // carries for the same forward-declared TakedownEventOutputQueueType, and the target type is
     // proven by the console's own TakedownEvent_::Append on it.
-    if (!IsSimPaused(true, false))
-    {
-        const CgsModule::EventQueue<TakedownEvent, 8>* lpTakedownEvents =
-            reinterpret_cast<const CgsModule::EventQueue<TakedownEvent, 8>*>(
-                mpOutputBuffer->GetTakedownEventOutputQueue());
-        ProcessTakedownEvents(lpActionQueue, lpTakedownEvents, mpOutputBuffer, lrTimerStatusInterface);
-    }
+    // [takedown wave 2026-09-02] the whole !IsSimPaused takedown leg now lives in
+    // GameStateModule_gTD_00.cpp (TakedownManager::Update -> the module-queue copy ->
+    // ProcessTakedownEvents, in console order); the direct drain that stood here moved with it.
+    // (Called on every frame: the leg clears its queues unconditionally, as the console does before
+    //  its IsSimPaused branch, and only ticks the manager when not paused -- verify V3.)
+    TakedownPreWorldLeg(lpActionQueue, lfGameTimestep, lrTimerStatusInterface, IsSimPaused(true, false));
 
     // ---- 1b) THE MODE MANAGER'S PRE-WORLD TICK (console #86) ---------------------------------
     // â­â­â­ [D4 stuntrace WAVE D] X360 PreWorldUpdate @0x823A5328 reaches ModeManager through ONE
@@ -1750,10 +1755,10 @@ void GameStateModule::ProcessGameEventsModeIntroBringUp(
             break;
 
         case 27:   // E_EVENT_POST_EVENT_LEAVE
-            // [X] PARKED: neither ModeManager::UserCancelCurrentMode nor
-            // TakedownManager::ClearRaceCarData exists on this tree.
+            // [X] PARKED: ModeManager::UserCancelCurrentMode has no body on this tree.
             //     mModeManager.UserCancelCurrentMode();
-            //     mTakedownManager.ClearRaceCarData();
+            // [takedown wave 2026-09-02] the second call of the arm (0x823A0A18 case 27) is real now.
+            ClearTakedownRaceCarData();
             break;
 
         default:

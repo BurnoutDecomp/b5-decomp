@@ -469,6 +469,11 @@ namespace Vehicle
         // DeformableObject::ResetDeformation (@0x8263A594).
         void     SetStartedDeforming()       { mbStartedDeforming = true; }         // @0x712
         void     SetStartedFatallyCrashing() { mbStartedFatallyCrashing = true; }   // @0x711
+        // ADDITIVE 2026-09-02 (takedown-chain wave): the DWARF-attested spelling of the same seat
+        // (BrnSimpleVehiclePhysics.h:274 `void SetFatallyCrashing();`), which is the name the
+        // DWARF hints for VehicleManager::ProcessContactSpies @0x82646E38 (`stb 1, 0x711`) use.
+        // Same store as SetStartedFatallyCrashing above; prefer this name in new code.
+        void     SetFatallyCrashing()        { mbStartedFatallyCrashing = true; }   // @0x711 (DWARF :274)
         // The matching CLEAR, same seam (2026-09-02, deform close-out wave). X360
         // DeformableObject::ResetDeformation @0x8263A594 `stb r28, 0x712(r9)` with
         // r9 == *(model+0x194C) == this VehiclePhysics -- the reset drops the latch
