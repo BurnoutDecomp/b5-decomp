@@ -385,6 +385,57 @@ namespace Vehicle
         // @0x825B8BC0: the showtime player-car "strength" (damage budget), stored in the singleton.
         f32 GetShowtimePlayerCarStrength() const;
 
+        // @0x825D7B18 -- THE MASS-DRIVEN SHOWTIME DEFORMATION MULTIPLIER.
+        //
+        // ⭐ LANDED 2026-09-03 (drive-spine 1:1 audit). This override was MISSING from the tree
+        // entirely: only the base's `return 1.0f` (@0x827E24E8) existed, so every race car -- the
+        // player's included -- took the base value. The console does not: the RaceCarPhysics vtable
+        // @0x820D1034 carries THIS body in slot +0x1C, while VehiclePhysics' own vtables
+        // @0x820D0C68 / @0x820D0C98 carry the base there (all three read off the image).
+        //
+        // The body, instruction for instruction:
+        //     0x825D7B18  lwz  r11, 0x720(r3)      ; mpAttribs
+        //     0x825D7B20  addi r11, r11, 0x70      ; mBaseAttribs.mvMass_... (mass in lane .x)
+        //     0x825D7B28  lvx128 v12 ; vspltw v11, v12, 0
+        //     0x825D7B44  vmulfp128 v0, v11, [unk_82FB9000]
+        //     0x825D7B54  vmaxfp    v0, [unk_82FB9060], v0
+        //     0x825D7B58  vminfp    v0, [unk_82FB9040], v0
+        //
+        // ⭐ The three slots are the silent-zero family -- they read 0x00000000 in the image
+        // because a CRT thunk fills them. The thunks were found by scanning the whole .text for
+        // the `lis/@l` pair that materialises each address, and disassembled:
+        //     0x82C5D058  lfs  f0, flt_82058318 (0.0015) ; vspltw ; stvx128 -> unk_82FB9000
+        //     0x82C5D080  lvlx v0, flt_82F2A2C0 (1.0)    ; vspltw ; stvx128 -> unk_82FB9060
+        //     0x82C5D0A0  lvlx v0, flt_82F2A2C4 (4.0)    ; vspltw ; stvx128 -> unk_82FB9040
+        // ROLE CHECK: 0.0015 == 1/666.67, so the game's ~1000..2670 kg mass range maps onto a
+        // 1.5x..4.0x multiplier and the clamp bounds are exactly the ends of that useful range --
+        // a heavier car deforms its victim harder in Showtime.
+        //
+        // WHO CONSUMES IT: DeformableObject::ApplySensorImpulse @0x826078B0, at +0x404
+        // (`lwz r3,0x194C(r17) ; lwz r11,0(r3) ; lwz r11,0x1C(r11) ; bctrl ; stfs f1,0xE0(r1)`),
+        // behind the slot-+0x10 IsPlayerVehicleInShowtime gate two instructions earlier. It is the
+        // ONLY call site in the image -- found by sweeping every `lwz rA,0x1C(rB)` + `mtctr rA`
+        // pair in .text (135 hits across all classes; exactly one lands on a VehiclePhysics).
+        // ⚠️ OPEN, and NOT fixed here: that consumer leg of ApplySensorImpulse is itself not
+        // modelled in BrnDeformableObject_Update.cpp, so landing this override is necessary but
+        // not yet sufficient -- see the note there.
+        f32 GetShowtimeDeformationScale() const
+        {
+            // unk_82FB9000 <- flt_82058318 ; unk_82FB9060 <- flt_82F2A2C0 ; unk_82FB9040 <- flt_82F2A2C4
+            static const f32 KF_SHOWTIME_DEFORM_MASS_SCALE = 0.0015f;
+            static const f32 KF_SHOWTIME_DEFORM_MIN        = 1.0f;
+            static const f32 KF_SHOWTIME_DEFORM_MAX        = 4.0f;
+
+            const f32 lfScaled =
+                GetAttribs()->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x
+                * KF_SHOWTIME_DEFORM_MASS_SCALE;
+
+            // vmaxfp then vminfp, in the console's order.
+            const f32 lfFloored = (KF_SHOWTIME_DEFORM_MIN > lfScaled) ? KF_SHOWTIME_DEFORM_MIN
+                                                                      : lfScaled;
+            return (KF_SHOWTIME_DEFORM_MAX < lfFloored) ? KF_SHOWTIME_DEFORM_MAX : lfFloored;
+        }
+
         // @0x825D7B68: true while the player car is in showtime AND not in the brief post-bounce
         // disable window (msPlayerParams.mbDisableShowtime) AND past the launch-push delay.
         bool IsPlayerVehicleInShowtime() const;
