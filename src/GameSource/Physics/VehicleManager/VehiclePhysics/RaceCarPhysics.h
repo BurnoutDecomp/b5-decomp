@@ -42,6 +42,33 @@ namespace Deformation
 }
 namespace Vehicle
 {
+    // ⭐⭐ THE VTABLE AUDIT, 2026-09-03 (drive-spine 1:1 audit) -- DONE, DO NOT REDO. Slots
+    // +0x00..+0x2C of the RaceCarPhysics vtable @0x820D1034 were read out of the image word by
+    // word and diffed against VehiclePhysics' own @0x820D0C68. Nine slots are real overrides; the
+    // tree now carries all nine:
+    //     +0x00  GetSteeringAngle                    (INHERITED -- same target in both)
+    //     +0x04  sub_825D5450 (crash-state clear)    (INHERITED)
+    //     +0x08  SetCrashing()      -> sub_825FFBB0  override -- RaceCarPhysics.cpp
+    //     +0x0C  Update             -> 0x826415E8    override
+    //     +0x10  IsPlayerVehicleInShowtime           override
+    //     +0x14  IsPlayerVehicleActuallyInShowtime   override
+    //     +0x18  IsCrashingNormally                  override
+    //     +0x1C  GetShowtimeDeformationScale         override -- WAS MISSING, landed this wave
+    //     +0x20  GetShowtimePlayerCarStrength        override
+    //     +0x24  IsUsingAftertouch                   override
+    //     +0x28  UpdateAftertouch                    override
+    //     +0x2C  UpdateSuspension                    (INHERITED -- confirms the standing note
+    //                                                 that a direct call is dispatch-identical)
+    // ⚠️ READING TRAP for whoever repeats this: the BASE table's slot names in the IDA export are
+    // ICF artifacts. Its +0x10/+0x14/+0x24 all print `IsSimple`, +0x18 prints `DoOnPostLoad`,
+    // +0x20 prints `GetRenderingDelay` and +0x28 prints `Destruct` -- because every one of those
+    // base bodies is a one-liner (`return false` / `return true` / `return 0.0f` / `{}`) that the
+    // linker folded onto an unrelated function with the same code. The slot INDEX is authoritative;
+    // the folded name is not. And slot +0x08's target sub_825FFBB0 has no name in the export at
+    // all -- an exporter hole, not a missing override.
+    // Beyond +0x30 the two tables are not comparable: @0x820D1034 continues into a SECOND vtable
+    // (the multiple-inheritance sub-object: Construct/Prepare/Release/Destruct/SetMultiThreaded/
+    // LockForInput/...), while @0x820D0C68 has already ended.
     class RaceCarPhysics : public VehiclePhysics
     {
         // VehicleManager owns the eight-car array (`RaceCarPhysics maRaceCarVehicles[8]`,

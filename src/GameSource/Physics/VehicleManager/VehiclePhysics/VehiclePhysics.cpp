@@ -1159,6 +1159,13 @@ namespace Vehicle
     // FLAG (PC-platform, numeric): the console's SinCos is a shared minimax polynomial over a
     //   2*pi-reduced argument; std::sin / std::cos are the exact forms. Tighter than the console,
     //   never looser -- the same de-optimisation CameraUtils.cpp:561 already applies to this table.
+    //   ⭐ BOUNDED 2026-09-03 (drive-spine 1:1 audit), so the flag stops reading open-ended: the
+    //   argument here is mvSteeringAngle...x, a STEERING ANGLE in radians whose own attribute
+    //   ceiling (SteeringAttribs mvMaxAngle, +0x10.x) keeps it well inside one quadrant. The 2*pi
+    //   range reduction therefore never engages on this call, and what is left is XNAMath's
+    //   degree-11 odd minimax on a |x| < pi/2 argument -- relative error ~1e-7, i.e. below the
+    //   single-precision spacing of the steering angle itself. There is no reachable input on
+    //   which this leaf and the console can differ by more than a float ulp.
     //
     // NOT REPRODUCED, deliberately: the console prologue lazily initialises two function-scope
     //   statics -- unk_82FBA210 = splat(100.0f) and unk_82FBA200 = splat(1000.0f), guarded by bits
@@ -1892,6 +1899,13 @@ namespace Vehicle
     //     0x825D1208  B) ALREADY AIRBORNE  (flag set)    -- landing assist + roll-limit bleed.
     //   0x825D1494  SHARED TAIL: the restoring-torque / angular-bleed pair, then
     //               mWheelFFSpring.mfSpringCoefficient = 0 on every path.
+    //
+    // ⭐ CORROBORATED 2026-09-03 (drive-spine 1:1 audit): all fourteen cited constants re-read out
+    // of the image with tools/re/x360rd.py by a second wave with a different tool path, and every
+    // one matched the value written above -- the .data run 0x82F2A258..0x82F2A274
+    // (0.14 / 1.4 / 0.3 / 11.0 / 0.15 / 0.125 / 0.25 / 0.3) and the five rdata sources the .bss
+    // splat thunks copy (0.05 / 0.01 / 60.0 / 0.0 / 1.0 / 10.0). The "every constant is un-homed"
+    // claim this banner already retired stays retired; nothing here is flagged.
     // =====================================================================================
     // The two-vsel sign ladder the X360 emits for `sign(x)` (`vcmpgtfp`+`vsel`, then
     // `vcmpgefp`+`vsel` against -1.0): +1 above zero, 0 AT zero, -1 below (and -1 for NaN).
@@ -4493,6 +4507,18 @@ namespace Vehicle
     // The trailing ExternalPhysicsBody::CalculateNewVelocity(this+0x10) checkpoint stays a
     // faithful comment (base-owned, not declared on this slice), as before.
     // The two per-wheel "Invalid wheel position" (Wheel.h:412) asserts are elided -- debug.
+    //
+    // ⭐ RE-VERIFIED 2026-09-03 (drive-spine 1:1 audit), instruction by instruction against the
+    // 225-instruction body. Everything above holds: the two gate bytes, the mass x acceleration
+    // magnitude and its `ble` on > 0, the vrsqrtefp + two-Newton normalise of the body up axis, the
+    // WORLD force / BODY position argument pair, the wheel-position lever arm, the four-iteration
+    // loop (r18 0x3B0..0x3E0 step 0x10, r27 += 0xE0, r16 += 0x30) and the tail CalculateNewVelocity.
+    // ONE FURTHER ELISION, named here so the list is complete: the console also records the frame's
+    // result into a debug/telemetry block behind a null-checked pointer at this+0x13E4 --
+    // `stvx128 v127, r18, r11` writes the force at block+0x3B0+i*0x10 (0x825D220C) and
+    // `stb 1, 0x3F0(r11+i)` / `stb 0, 0x3F0(r11+i)` sets or clears that wheel's applied flag
+    // (0x825D2210 / 0x825D2228). Nothing in the sim reads it; it is the debug component's buffer,
+    // elided on the same footing as the two asserts. NOT a silent drop -- recorded, not forgotten.
     // =============================================================================================
     void VehiclePhysics::ApplySuspensionForces(VecFloat lvfTimeStep)
     {
