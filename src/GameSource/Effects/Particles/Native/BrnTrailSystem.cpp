@@ -40,7 +40,11 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"                               // rw::math::vpu::{operator+,operator-,MagnitudeSquared,Normalize,Cross,Dot}
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                // [diag] CgsDev::Log::WriteToLog
+
 #include <cstring>   // memset / memcpy (the X360 calls both by name)
+#include <cstdio>    // [diag] snprintf (the [trailpass] render probe)
+#include <cstdlib>   // [diag] getenv  (BRN_SKID_PROBE gates the render probe too)
 
 namespace BrnParticle
 {
@@ -77,6 +81,19 @@ namespace Native
         // rw::math::vpu::detail::gIVector (.rdata 0x82181500 == {1,0,0,0}): the tangent a strip's
         // very first segment is laid with, before any direction exists.
         const Vector3 K_I_VECTOR = { 1.0f, 0.0f, 0.0f, 0.0f };
+
+        // [diag] the [trailpass] render probe's gate -- the same BRN_SKID_PROBE the
+        // HandleWheels gate probe reads, so one run carries both halves of the claim.
+        bool TrailProbeEnabled()
+        {
+            static int siEnabled = -1;
+            if (siEnabled < 0)
+            {
+                const char* lpcValue = std::getenv("BRN_SKID_PROBE");
+                siEnabled = (lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0') ? 1 : 0;
+            }
+            return siEnabled != 0;
+        }
     }
 
     // X360 .data flt_82CDAE78 (8 floats per type: start RGBA, end RGBA). Read out of the image:
@@ -455,6 +472,13 @@ namespace Native
     {
         if (!mbIsReady)
         {
+            // [trailpass] the ONE early-out, said once. DELETE-WHEN-STABLE.
+            static bool sbLoggedNotReady = false;
+            if (!sbLoggedNotReady && TrailProbeEnabled())
+            {
+                sbLoggedNotReady = true;
+                CgsDev::Log::WriteToLog("[trailpass] TrailSystem::Render EARLY-OUT: mbIsReady == 0\n");
+            }
             return;
         }
 
@@ -473,6 +497,39 @@ namespace Native
         }
 
         mRenderer.EndRender();
+
+        // [trailpass] BOTH SIDES OF THE RENDER, periodically. A mark that is LAID and a mark
+        // that is DRAWN are two different claims, and the gate probe in HandleWheels can only
+        // make the first: it counts AddTrailSegment calls. This counts what the render pass
+        // actually submits -- the per-type active-emitter counts, the emitter's segment total,
+        // and the vertices TrailRenderer::Render handed to ImRenderer::Render. Zero emitters
+        // with a rising segment count means the segments never reach an ACTIVE emitter; live
+        // emitters with zero vertices means the strip build rejected them; vertices with no
+        // picture means the fault is below the immediate-mode renderer. DELETE-WHEN-STABLE.
+        if (TrailProbeEnabled())
+        {
+            static u32 suCall = 0;
+            if ((++suCall % 60u) == 0u)
+            {
+                s32 lanCounts[KI_MAX_NUM_TRAIL_TYPES];
+                s32 lnSegments = 0;
+                for (s32 lnTrailType = 0; lnTrailType < KI_MAX_NUM_TRAIL_TYPES; ++lnTrailType)
+                {
+                    lanCounts[lnTrailType] = maActiveEmitters[lnTrailType].GetSize();
+                    for (s32 lnEmitter = 0; lnEmitter < lanCounts[lnTrailType]; ++lnEmitter)
+                        lnSegments += maActiveEmitters[lnTrailType][lnEmitter]->mn8NumSegments;
+                }
+                char lacMsg[300];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[trailpass] render %u: ready=1 tex=%p white=%.3f emitters=%d/%d/%d/%d "
+                    "segments=%d verts=%u draws=%u t=%.3f\n",
+                    suCall, static_cast<void*>(lpTexture), static_cast<double>(lfWhiteLevel),
+                    lanCounts[0], lanCounts[1], lanCounts[2], lanCounts[3], lnSegments,
+                    TrailRenderer::guProbeVertices, TrailRenderer::guProbeDraws,
+                    static_cast<double>(mfCurrentTime));
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
     }
 }
 }

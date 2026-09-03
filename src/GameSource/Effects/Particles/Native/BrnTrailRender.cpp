@@ -189,6 +189,8 @@ namespace Native
             {
                 mpRenderer->Render(static_cast<renderengine::PrimitiveType>(KI_PRIMITIVE_TRIANGLE_STRIP),
                                    laVertices, static_cast<u32>(lnVertexCount));
+                guProbeVertices += static_cast<u32>(lnVertexCount);   // [diag]
+                ++guProbeDraws;                                        // [diag]
                 lnVertexCount = 0;
             }
 
@@ -250,7 +252,13 @@ namespace Native
         {
             mpRenderer->Render(static_cast<renderengine::PrimitiveType>(KI_PRIMITIVE_TRIANGLE_STRIP),
                                laVertices, static_cast<u32>(lnVertexCount));
+            guProbeVertices += static_cast<u32>(lnVertexCount);   // [diag]
+            ++guProbeDraws;                                        // [diag]
         }
     }
+
+    // [DIAG] the two running totals the [trailpass] line reads. See BrnTrailRender.h.
+    u32 TrailRenderer::guProbeVertices = 0;
+    u32 TrailRenderer::guProbeDraws    = 0;
 }
 }
