@@ -25,6 +25,7 @@
 
 #include "types.hpp"
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Matrix44 (the engine 4x4 matrix)
+#include "SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h"   // cVector (mCamPos/mCamDir)
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRender/LionBatch.h" // LionBatchArray
 
 // EA / Lion scalar spellings used by the Lion runtime declarations.
@@ -45,6 +46,7 @@ typedef rw::math::vpu::Matrix44 cMatrix;
 
 class cParticleMaterial;            // ParticleMaterial.h
 class cParticleEmitter;             // owning emitter (opaque at this boundary)
+struct cParticleEmitterManager;     // ParticleEmitterManager.h -- Render takes it by reference
 class cLionFog;                     // fog descriptor (opaque)
 class cTime;                        // engine time stamp (opaque)
 struct RenderedParticle;            // per-particle render record (opaque)
@@ -100,20 +102,61 @@ public:
 // them, drives the per-emitter simulate-and-emit path (EmitterRender / EmitterCubeRender),
 // and finally replays the accumulated LionBatchArray to the device (Dispatch).
 //
-// LAYOUT AUTHORITY (X360 ARTIST asm for the bodies in this TU):
-//   mpRenderer          @ guest +0x04  (Dispatch/EmitterRender: renderer = *(this+4))
-//   muParticlesRendered @ guest +0x08  (EmitterRender accumulates the emitted vertex count)
-//   mpAllocator         @ guest +0x00  (AppInit stores the ITaggedAllocator; unread by the
-//                                        render bodies -- named for shape)
-// The camera-space transform / view-direction the cull path in Render/EmitterCubeRender reads
-// live at guest +0x20 / +0x30; those bodies are VMX128 and are not reconstructed in this pass,
-// so those members are intentionally omitted here (grown when Render is homed). X360 pointers
-// are 32-bit; on the host they widen, so absolute offsets are NOT host layout facts -- members
-// are accessed BY NAME.
+// LAYOUT AUTHORITY: the DecFIGS DWARF (ParticleRender.h:137, members h:249..258) gives the
+// COMPLETE member set, and the X360 ARTIST asm attests every one of its offsets:
+//
+//   mpAllocator             @ +0x000  h:249   cLionFX::Init  `stw r30, 0(r11)`     @0x82914BAC
+//   mpRenderer              @ +0x004  h:250   cLionFX::Init  `stw r26, 4(r11)`     @0x82914BBC
+//                                             (and Dispatch/EmitterRender read *(this+4))
+//   mParticlesRenderedCount @ +0x008  h:251   EmitterRender accumulates the vertex count
+//   mFogEnabledFlag         @ +0x00C  h:252
+//   mFogNear                @ +0x010  h:253
+//   mFogFar                 @ +0x014  h:254
+//   mCamPos                 @ +0x020  h:255   cVector -- 16-byte aligned, so +0x18 pads to 0x20
+//   mCamDir                 @ +0x030  h:256
+//   mLodDistances[8]        @ +0x040  h:257   cLionFX::Init stores 100,90,80,70,60,50,40,30
+//                                             into +0x40..+0x5C (0x82914B9C..0x82914C08)
+//   mFogAlphas[256]         @ +0x060  h:258   -> the record ends at +0x460
+//
+// ⭐⭐ THE END OF THE RECORD IS INDEPENDENTLY CORROBORATED, and it is what pins the whole
+// layout: the singleton lives at 0x82FACC20 and MSVC's magic-static guard word for it is
+// dword_82FAD080 -- exactly 0x460 bytes later. So the DWARF member list and the asm's own
+// data layout agree on the size with nothing left over. (Same reasoning as the "sizeof is
+// short by N -- check ALIGNMENT first" rule: the two 16-byte-aligned cVectors are what make
+// mLodDistances land on 0x40.)
+//
+// X360 pointers are 32-bit; on the host they widen, so absolute offsets are NOT host layout
+// facts -- members are accessed BY NAME.
 // ----------------------------------------------------------------------------
 class cParticleRender
 {
 public:
+    // The render singleton (DWARF h:165). NO STANDALONE X360 BODY: every caller inlines it,
+    // which is why each shows the same magic-static guard word (dword_82FAD080) and the same
+    // `atexit(cParticleRender::Instance::`2'::dynamic atexit destructor for 'm_instance')`
+    // registration -- and that mangled symbol is what names the object `m_instance` and its
+    // accessor `Instance`. Reproduced as a function-local static, which is the construct that
+    // emits exactly that guard + atexit pair.
+    static cParticleRender& Instance();
+
+    // App lifetime (DWARF h:174). NO STANDALONE X360 BODY -- inlined into cLionFX::Init
+    // @0x82914A98 (0x82914B9C..0x82914C08); re-outlined here as the source's own function.
+    void AppInit(EA::Allocator::ITaggedAllocator* apAllocator, iParticleRender* apRenderer);
+
+    // Per-frame (DWARF h:224), called by cLionFX::Update (DWARF LionFX.cpp:111 lists it).
+    // ⚠ ATTESTED EMPTY ON THIS BUILD: cLionFX::Update @0x82915758 emits the Instance()
+    // guard and then ONLY `cParticleEmitterManager::Update` -- there is no call and no store
+    // between them, so cParticleRender::Update compiled to nothing. The empty body is the
+    // faithful transcription, not a stub; see ParticleRender.cpp.
+    void Update(const cTime& arTime);
+
+    // DWARF h:217.
+    iParticleRender* GetpRenderer() { return mpRenderer; }
+
+    // DWARF h:207 / h:215.
+    void SetLodDistance(u32 auLodGroup, FP32 afDistance) { mLodDistances[auLodGroup] = afDistance; }
+    FP32 GetLodDistance(u32 auLodGroup) const           { return mLodDistances[auLodGroup]; }
+
     // Replay the frame's accumulated batch list to the device: for each LionBatch bind its
     // material's render group + vertex stride and issue the DrawVertices (X360 0x82911E98).
     void Dispatch(renderengine::VertexBuffer* apVertexBuffer,
@@ -143,13 +186,32 @@ public:
 
     // Per-frame entry: cull the live emitters and drive the per-emitter path (X360 0x829147F8;
     // VMX128 frustum cull -- reconstructed in its own pass).
-    void Render(const EffectsVertexBufferLocked& arVertexBuffer,
-                const LionBatchArray& arBatchArray,
-                cParticleEmitter* apEmitterList,
+    //
+    // ⚠ SIGNATURE DEFECT FIXED 2026-09-03. This was declared with a third parameter of
+    // `cParticleEmitter* apEmitterList`. It is the emitter MANAGER, not an emitter: the DWARF
+    // (h:184) types it `cParticleEmitterManager &`, and its sole caller cLionFX::Render
+    // @0x82914C50 passes `&dword_831238E8`, which is the manager singleton (its +0x10/+0x14/
+    // +0x18/+0x28 are the very words cParticleSystem::AppDeInit @0x82911DF0 clears as
+    // mpEmitters / mpFree / mpUsed / mpAllocator). The old declaration had no definition, so
+    // nothing had yet been built against it.
+    void Render(EffectsVertexBufferLocked& arVertexBuffer,
+                LionBatchArray& arBatchArray,
+                cParticleEmitterManager& arEmitterManager,
                 const cTime& arTime);
 
 private:
-    EA::Allocator::ITaggedAllocator* mpAllocator;        // guest +0x00
-    iParticleRender*                 mpRenderer;          // guest +0x04
-    u32                              muParticlesRendered; // guest +0x08
+    // Compile-time layout pins (defined at the foot of ParticleRender.cpp; never called). A
+    // private static member so it can see the members below.
+    static void _AssertLayout();
+
+    EA::Allocator::ITaggedAllocator* mpAllocator;              // +0x000  ParticleRender.h:249
+    iParticleRender*                 mpRenderer;               // +0x004  ParticleRender.h:250
+    U32                              mParticlesRenderedCount;  // +0x008  ParticleRender.h:251
+    U32                              mFogEnabledFlag;          // +0x00C  ParticleRender.h:252
+    FP32                             mFogNear;                 // +0x010  ParticleRender.h:253
+    FP32                             mFogFar;                  // +0x014  ParticleRender.h:254
+    cVector                          mCamPos;                  // +0x020  ParticleRender.h:255
+    cVector                          mCamDir;                  // +0x030  ParticleRender.h:256
+    FP32                             mLodDistances[8];         // +0x040  ParticleRender.h:257
+    FP32                             mFogAlphas[256];          // +0x060  ParticleRender.h:258
 };

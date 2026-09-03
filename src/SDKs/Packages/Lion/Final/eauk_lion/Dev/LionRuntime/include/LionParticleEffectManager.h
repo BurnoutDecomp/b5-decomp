@@ -48,6 +48,36 @@ struct cLionBindings;         // LionBindings.h (sibling home)
 struct cLionParticleEffectManager
 {
 public:
+    // The manager singleton (DWARF LionParticleEffectManager.h:42). The X360 build reaches its
+    // storage (off_83123798) directly -- cParticleEmitter::Init @0x82913228 passes that literal
+    // to CreateBehaviour, and cParticleSystem::AppInit @0x82913810 initialises the object there.
+    static cLionParticleEffectManager& Instance();
+
+    // App lifetime (DWARF h:49). NO STANDALONE X360 BODY -- inlined into
+    // cParticleSystem::AppInit @0x82913810 (four operations on this object: mpAllocator = a2,
+    // mpEffects = 0, mAllocator.Init(a2, 12, n), and the 64-word clear of mpEffectGroups).
+    void AppInit(EA::Allocator::ITaggedAllocator* apAllocator, u32 auCount);
+
+    // DWARF h:50. NO STANDALONE X360 BODY -- inlined into cParticleSystem::AppDeInit
+    // @0x82911DF0, where it is the tail `cLionBlockAlloc::DeInit(&unk_8312379C)`. Only the
+    // pool release is in that body; mpEffects / mpEffectGroups are left as they are.
+    void AppDeInit();
+
+    // ---- mpEffects: the head of the loaded-effect chain (DWARF h:88), X360 dword_831237BC ----
+    // ⭐ THIS IS THE DATUM LionFX.cpp CALLED `gpLionParticleEffectChain`, and its note there --
+    // "the datum is unnamed in the X360 export and no DWARF global pins it" -- was WRONG. It is
+    // not a free global at all: 0x831237BC is mSingleton + 0x24, i.e. THIS member. The proof is
+    // the neighbour: cParticleSystem::AppInit clears 64 consecutive words at 0x831237C0, which
+    // is mSingleton + 0x28 == mpEffectGroups[64], and mAllocator (sizeof(cLionBlockAlloc) ==
+    // 0x20) is what puts mpEffects at +0x24 in the first place. Two TUs storing to one datum
+    // under two different names is an ODR fork waiting for a link, so they are unified here.
+    //
+    // Accessors rather than a public member: the DWARF marks mpEffects private, and every
+    // console access is inlined -- so these are the de-inlining, in the same style as this
+    // tree's other recovered accessors.
+    cLionParticleEffect* GetpEffects() const           { return mpEffects; }
+    void SetpEffects(cLionParticleEffect* apEffects)   { mpEffects = apEffects; }
+
     // Allocate a fresh particle-behaviour node from the effect manager's tagged
     // allocator (size == sizeof(cParticleBehaviour); the X360 build stamps the
     // allocation with a LINE/FILE/NAME TagValuePair chain). X360 @0x829088A8.

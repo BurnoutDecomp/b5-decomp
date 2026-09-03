@@ -326,3 +326,23 @@ cVector* cParticleBucketManager::VectorBucketAlloc()
 
     return lpResult;
 }
+
+// ------------------------------------------------------------------------------------------------
+// cParticleBucketManager::Instance (DWARF ParticleBucketManager.h:36)
+//
+// NO STANDALONE X360 BODY -- inlined at every call site, which is why cParticleSystem::AppInit
+// @0x82913810 and AppDeInit @0x82911DF0 both pass the literal `&unk_831238C0` as `this`.
+//
+// A file-scope object, NOT a function-local static: the console has no magic-static guard word
+// beside it (the neighbouring .bss is the emitter-manager singleton at 0x831238E8, 0x2C bytes
+// later), and adding one would give first use an ordering the console does not have.
+// ------------------------------------------------------------------------------------------------
+namespace
+{
+    cParticleBucketManager gBucketManagerSingleton;   // X360 unk_831238C0
+}
+
+cParticleBucketManager& cParticleBucketManager::Instance()
+{
+    return gBucketManagerSingleton;
+}

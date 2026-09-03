@@ -23,60 +23,28 @@
 //   mRemapIndex    @0x18   u32      number of live remap entries
 //   mRemapEntries[2048]    sLionSerialiserRemapEntry  the old->new pointer table
 //
-// The backing store comes from an EA tagged allocator referenced through the
-// file-static global gpLionSerialiserAllocator (the X360 off_83121C54). Alloc
-// requests `(mStringSize + mDataSize)` rounded up to 16 bytes through the
-// allocator's tagged-Alloc vtable slot; DeInit releases it through the Free slot.
+// The backing store comes from an EA tagged allocator referenced through the Lion-module
+// global gpLionSerialiserAllocator (the X360 off_83121C54). Alloc requests
+// `(mStringSize + mDataSize)` rounded up to 16 bytes through the allocator's tagged-Alloc
+// vtable slot; DeInit releases it through the Free slot.
+//
+// ⛔⛔ ODR FORK RETIRED 2026-09-03. This header used to DEFINE its own
+// `EA::Allocator::TagValuePair`, `EA::Allocator::ITaggedAllocAlloc` and
+// `EA::Allocator::ITaggedAllocator` -- same names, same namespace, DIFFERENT class than the
+// real home in SDKs/Packages/Lion/Final/Allocator/include/CoreAllocator/ITaggedAllocator.h
+// (different bases, different vtable slots, a `TagValuePair` with a `mpValue` field instead of
+// the real `mNext`). Every other Lion TU -- cLionBlockAlloc, LionSmallAlloc, cLionChunkManager,
+// cLionParticleEffectManager -- uses the real one. That is an ODR fork of an interface with
+// virtuals: the two TUs disagree on which vtable slot `Alloc` is, and the link resolves it
+// SILENTLY. It was found the moment cParticleSystem::AppInit (which is the writer of
+// off_83121C54) needed to include both headers in one TU and got a hard redefinition -- which
+// is exactly the signal the "reconstruct the header, don't fake the type" rule exists to
+// produce. The tag chain below is now built with the real EA::TagValuePair operator+ form, the
+// same one LionSmallAlloc::PageCreate and cLionParticleEffectManager::CreateBehaviour use.
 // ============================================================================
 
 #include "types.hpp"
-
-namespace EA
-{
-namespace Allocator
-{
-    // EA tagged-allocator tag list element. Each Alloc carries a small array of
-    // these describing the allocation (group / flags / debug name etc.). Only the
-    // fields the Lion serialiser populates are modelled; the values are reproduced
-    // store-for-store from the X360 asm.
-    //
-    // HONEST PLACEHOLDER: the full EA::TagValuePair contract is not yet homed in
-    // this project. This is a minimal owning stand-in sufficient to reconstruct the
-    // tagged-Alloc call faithfully. Grow additively when the real type lands.
-    struct TagValuePair
-    {
-        u32         muTag;     // tag id (5, 6, ...)
-        // The middle slot carries either a small scalar (group index 70, count 1)
-        // or a pointer-width value (a debug-name / file string). It is one machine
-        // word on X360; modelled as uintptr_t so pointers fit on the wider host.
-        uintptr_t   muValue;
-        const void* mpValue;   // pointer value (sub-list / null)
-    };
-
-    // The secondary tagged-Alloc interface (vtable reached at `this + 4` on X360 --
-    // a second base subobject). Slot 0 is the tagged Alloc.
-    class ITaggedAllocAlloc
-    {
-    public:
-        virtual void* Alloc(u32 luSize, const TagValuePair* lpTags) = 0;
-    };
-
-    // The primary allocator interface (vtable at `this`). DeInit releases through
-    // slot 3 (Free).
-    //
-    // HONEST PLACEHOLDER: the real EA::Allocator::ITaggedAllocator is not yet homed.
-    // This minimal interface reproduces the two vtable call shapes the Lion
-    // serialiser uses (tagged Alloc via the secondary base, Free at primary slot 3).
-    class ITaggedAllocator : public ITaggedAllocAlloc
-    {
-    public:
-        virtual ~ITaggedAllocator() {}                  // slot 0
-        virtual void  Unused1() = 0;                    // slot 1
-        virtual void  Unused2() = 0;                    // slot 2
-        virtual void  Free(void* lpBlock, u32 luSize) = 0; // slot 3
-    };
-}
-}
+#include "SDKs/Packages/Lion/Final/Allocator/include/CoreAllocator/ITaggedAllocator.h"
 
 // LionSerialiser.h:33 -- one old->new pointer remap record.
 struct sLionSerialiserRemapEntry
@@ -118,3 +86,16 @@ public:
     u32   mRemapIndex;
     sLionSerialiserRemapEntry mRemapEntries[KU_MAX_REMAP_ENTRIES];
 };
+
+// ----------------------------------------------------------------------------
+// gpLionSerialiserAllocator -- X360 off_83121C54, the tagged allocator the serialiser draws
+// its backing store from. cLionSerialiser::Alloc @0x82908960 and ::DeInit @0x8290AD60 read it;
+// cParticleSystem::AppInit @0x82913810 is its WRITER (`off_83121C54 = a2`).
+//
+// ⚠ IT WAS A `static` IN LionSerialiser.cpp, and that was a guess the binary contradicts: a
+// file-static could not be written from ParticleSystem.cpp, and off_83121C54 demonstrably is.
+// Declared here so its one writer can bind it. Until AppInit runs it is null, and both readers
+// test it -- which is the console's own shape, so a run before Lion init serialises nothing
+// rather than faulting.
+// ----------------------------------------------------------------------------
+extern EA::Allocator::ITaggedAllocator* gpLionSerialiserAllocator;

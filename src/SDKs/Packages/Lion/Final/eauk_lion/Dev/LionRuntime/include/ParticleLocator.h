@@ -37,26 +37,11 @@
 // ============================================================================
 
 #include "types.hpp"
+#include "SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h"   // cVector -- the real eauk_common home (fork retired 2026-09-03)
 
-// ----------------------------------------------------------------------------
-// HONEST PLACEHOLDER: 4-lane vector (x,y,z,w). Init stores whole vectors lane by
-// lane; a 4xf32 struct is the faithful element size (16 bytes, the X360 vector
-// stride). Replace with the real cVector home when it lands
-// (SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h in the DecFIGS DWARF).
-//
-// ⭐ alignas(16) added 2026-09-03: it is an asm fact, pinned in cParticleBehaviour
-// (Lerp @0x8290B1F8 puts mAABBMin at 0x4A0, which is where the record's attested
-// 1216th byte comes from). This copy must stay TOKEN-FOR-TOKEN IDENTICAL to the ones
-// in ParticleBehaviour.h and ParticleBucket.h -- three copies that disagree is an ODR
-// fork, and an ODR fork links silently.
-// ----------------------------------------------------------------------------
-struct alignas(16) cVector
-{
-    f32 x;
-    f32 y;
-    f32 z;
-    f32 w;
-};
+// cVector now comes from its real home, eauk_common/Maths/Vector.h (included above);
+// the private copy that used to live here is retired, and with it the warning to keep
+// three copies token-for-token identical.
 
 // HONEST PLACEHOLDER: row-major 4x4 matrix (four cVector rows, 64 bytes). GetMat
 // writes the interpolated frame here; Init sets it to the identity.

@@ -43,6 +43,7 @@
 // ============================================================================
 
 #include "types.hpp"
+#include "SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h"   // cVector -- the real eauk_common home (fork retired 2026-09-03)
 
 // Real home for the per-bucket RNG seed snapshot (mRandomSeed). Its 0x34-byte size
 // exactly fills the DWARF-attested gap between mRandomSeed@0x1C and the next member
@@ -52,25 +53,9 @@
 class cParticleEmitter;         // owning emitter (chained list head) -- opaque here
 struct cParticleBucketManager;  // pool owner (ParticleBucketManager.h) -- befriended below
 
-// ----------------------------------------------------------------------------
-// HONEST PLACEHOLDER: 4-lane vector. AllocateParticle only computes the address
-// &mpVectors[count]; the X360 stride is 16 bytes (slwi r9,r9,4), so a 4xf32 lane
-// struct is the faithful element size. Replace with the real cVector home
-// (SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h in the DecFIGS DWARF).
-//
-// ⭐ alignas(16) added 2026-09-03: it is an asm fact, pinned in cParticleBehaviour
-// (Lerp @0x8290B1F8 puts mAABBMin at 0x4A0, which is where the record's attested
-// 1216th byte comes from). This copy must stay TOKEN-FOR-TOKEN IDENTICAL to the ones
-// in ParticleBehaviour.h and ParticleLocator.h -- three copies that disagree is an ODR
-// fork, and an ODR fork links silently.
-// ----------------------------------------------------------------------------
-struct alignas(16) cVector
-{
-    f32 x;
-    f32 y;
-    f32 z;
-    f32 w;
-};
+// cVector now comes from its real home, eauk_common/Maths/Vector.h (included above).
+// The private copy that used to live here -- and its "keep the three copies token-for-
+// token identical" warning -- are retired: the home exists, so there is one definition.
 
 // ----------------------------------------------------------------------------
 // HONEST PLACEHOLDER: 4x4 row-major matrix. AllocateParticle only computes the

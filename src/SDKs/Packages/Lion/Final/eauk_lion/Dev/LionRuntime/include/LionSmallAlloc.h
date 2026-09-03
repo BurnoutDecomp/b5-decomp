@@ -60,11 +60,26 @@ struct sLSAMerge
     void BinsBuild();
 };
 
+// LionSmallAlloc::Init (DWARF LionSmallAlloc.cpp:143). Bind the backing allocator and the
+// two page sizes, then carve the first ("main") page. ⭐ THERE IS NO STANDALONE BODY IN THE
+// X360 IMAGE: the compiler inlined it into cLionFX::Init @0x82914A98, where the whole of it
+// is visible store-for-store (0x82914AA8..0x82914B04). Re-outlined here as the source's own
+// function -- the DWARF names it, its parameters and its two globals.
+void      Init(EA::Allocator::ITaggedAllocator* apAllocator, u32 aMainSize, u32 aGrowthSize);
 void      DeInit();
 sLSAPage* PageCreate(u32 aPageSize);
 
-// Module statics (LionSmallAlloc.cpp): the page list head and the backing tagged allocator.
+// Module statics (LionSmallAlloc.cpp:114/115/117/118 -- the DWARF names all four).
+//   mpAllocator @0x83121D90   mpPages @0x83121D88
+//   mGrowthSize @0x83121D84   mMainSize @0x83121D8C
+// ⚠ WHICH SIZE IS WHICH IS SETTLED BY THE CALL, NOT BY THE ADDRESS ORDER. cLionFX::Init
+// loads r3 = 0x10000 (`lis r3,1` @0x82914ABC), stores 0x10000 into +0x1D8C and 0x1000 into
+// +0x1D84, and passes the UNTOUCHED r3 to PageCreate @0x82914AF0 -- and the page that comes
+// back is immediately stamped mMainFlag = 1. So the 64 KB word is mMainSize and the 4 KB word
+// is mGrowthSize, not the reverse.
 extern sLSAPage*                        mpPages;
 extern EA::Allocator::ITaggedAllocator* mpAllocator;
+extern u32                              mMainSize;
+extern u32                              mGrowthSize;
 
 }  // namespace LionSmallAlloc

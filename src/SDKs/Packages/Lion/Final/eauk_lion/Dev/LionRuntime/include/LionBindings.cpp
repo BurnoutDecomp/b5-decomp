@@ -8,15 +8,14 @@
 
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionBindings.h"
 #include "SDKs/Packages/Lion/Final/Allocator/include/CoreAllocator/ITaggedAllocator.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionEffectManager.h"
 
-// The owning tagged allocator is reached through the Lion effect-manager singleton
-// (cLionEffectManager::GetpAllocator, LionEffectManager.h). That TU is owned by another
-// group; this is the minimal cross-TU accessor DeInit needs. FLAGGED cross-TU dep.
-struct cLionEffectManager
-{
-    EA::Allocator::ITaggedAllocator* GetpAllocator();
-};
-extern cLionEffectManager* gpLionEffectManager;
+// ⭐ THE LOCAL FORK IS GONE (2026-09-03). This TU used to declare its own one-method
+// `struct cLionEffectManager` plus `extern cLionEffectManager* gpLionEffectManager` -- a
+// re-declaration of a type that now has a real home, and an invented POINTER global that no
+// TU in the tree defined, so this file could never have linked. The console has no such
+// pointer: off_83121DA4 is `cLionEffectManager::mSingleton.mpAllocator`, i.e. this + 0x10 of
+// the singleton object at 0x83121D94, and the real accessor is GetMe()->GetpAllocator().
 
 void cLionBindings::DeInit()
 {
@@ -24,7 +23,7 @@ void cLionBindings::DeInit()
     // the owned locator array, then clears the array pointer and the count.
     if (mppLocators)
     {
-        gpLionEffectManager->GetpAllocator()->Free(mppLocators, 0);
+        cLionEffectManager::GetMe()->GetpAllocator()->Free(mppLocators, 0);
         mppLocators   = nullptr;
         mLocatorCount = 0;
     }

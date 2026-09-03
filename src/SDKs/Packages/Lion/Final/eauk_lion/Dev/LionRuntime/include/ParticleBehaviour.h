@@ -54,31 +54,18 @@
 // ============================================================================
 
 #include "types.hpp"
+#include "SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h"   // cVector -- the real eauk_common home (fork retired 2026-09-03)
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionSerialisedPtr.h"
 
 class cLionSerialiser;        // LionSerialiser.h (sibling home)
 
 // ----------------------------------------------------------------------------
-// HONEST PLACEHOLDER: minimal 4-float vector. The runtime here only stores whole
-// vectors and reads/writes individual f32 lanes (x,y,z,w), so a named 4-lane
-// struct is sufficient.
-//
-// ⭐ THE alignas(16) IS AN ASM FACT, not a tidiness choice, and it is load-bearing:
-// it is the four bytes between cParticleBehaviour's 1212 and its attested 1216 (see
-// this header's banner). The real home is
-// SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h -- the DecFIGS DWARF declares it
-// there as `struct cVector { float q[4]; }` with the usual PPC vector accessor set
-// (GetX/SetX/GetSplatX/...). Growing that home is the follow-up; until then the two
-// sibling placeholders (ParticleBucket.h, ParticleLocator.h) MUST stay token-for-token
-// identical to this one -- three copies that disagree is an ODR fork that links silently.
+// cVector now comes from its real home, eauk_common/Maths/Vector.h (included above);
+// the private copy here is retired. Its alignas(16) IS AN ASM FACT and moved with it --
+// those are the four bytes between this record's 1212 and its attested 1216 (see the
+// banner). The DWARF declares the full type there as `struct cVector { float q[4]; }`
+// with the PPC accessor set (GetX/SetX/GetSplatX/...); growing the home is the follow-up.
 // ----------------------------------------------------------------------------
-struct alignas(16) cVector
-{
-    f32 x;
-    f32 y;
-    f32 z;
-    f32 w;
-};
 
 // ----------------------------------------------------------------------------
 // HONEST PLACEHOLDER: 8-bit-per-channel packed colour (one 32-bit word). The

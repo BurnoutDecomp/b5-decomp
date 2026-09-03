@@ -109,3 +109,31 @@ void cLionChunkManager::AppDeInit()
         lpChunk = lpNext;
     }
 }
+
+// ------------------------------------------------------------------------------------------------
+// cLionChunkManager::GetMe / ::AppInit  (DWARF LionChunkManager.h:123 / h:15)
+//
+// NEITHER HAS A STANDALONE X360 BODY. GetMe is inlined at every call site (which is why
+// cParticleSystem::AppDeInit @0x82911DF0 passes the literal `&off_83121DC8` as `this`), and
+// AppInit is inlined into cParticleSystem::AppInit @0x82913810, where it is two stores:
+//     off_83121DC8   = apAllocator   ; mpAllocator
+//     dword_83121DCC = 0             ; mpChunks
+//
+// A file-scope object, NOT a function-local static: the console has no magic-static guard word
+// beside it (the next .bss datum is 8 bytes later).
+// ------------------------------------------------------------------------------------------------
+namespace
+{
+    cLionChunkManager gChunkManagerSingleton;   // X360 mSingleton @0x83121DC8
+}
+
+cLionChunkManager* cLionChunkManager::GetMe()
+{
+    return &gChunkManagerSingleton;
+}
+
+void cLionChunkManager::AppInit(EA::Allocator::ITaggedAllocator* apAllocator)
+{
+    mpAllocator = apAllocator;
+    mpChunks    = nullptr;
+}

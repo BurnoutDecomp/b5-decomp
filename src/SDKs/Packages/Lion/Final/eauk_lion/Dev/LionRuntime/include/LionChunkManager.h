@@ -34,6 +34,18 @@ struct cLionChunk
 
 struct cLionChunkManager
 {
+    // The manager singleton (DWARF LionChunkManager.h:123 GetMe / h:5 mSingleton). The X360
+    // build reaches its storage (off_83121DC8) directly: cParticleSystem::AppInit @0x82913810
+    // binds mpAllocator/mpChunks there and AppDeInit @0x82911DF0 passes it as `this`.
+    static cLionChunkManager* GetMe();
+
+    // App lifetime (DWARF h:15). NO STANDALONE X360 BODY -- inlined into
+    // cParticleSystem::AppInit (`off_83121DC8 = a2; dword_83121DCC = 0`).
+    void AppInit(EA::Allocator::ITaggedAllocator* apAllocator);
+
+    // DWARF h:120.
+    EA::Allocator::ITaggedAllocator* GetpAllocator() { return mpAllocator; }
+
     void AppDeInit();
 
 private:
