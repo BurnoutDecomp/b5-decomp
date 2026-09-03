@@ -187,8 +187,7 @@ cParticleBucket* cParticleBucketManager::BucketAlloc(u32 /*auCount*/, const cTim
             break;
         }
 
-        s32 lDelta = static_cast<s32>(static_cast<u32>(arTime.muTicks)
-                                    - static_cast<u32>(lpUsed->mLatestBirthTime.muTicks));
+        s32 lDelta = arTime.GetTimeDiff(lpUsed->mLatestBirthTime);
         if (lDelta < 0)
         {
             lDelta = -lDelta;

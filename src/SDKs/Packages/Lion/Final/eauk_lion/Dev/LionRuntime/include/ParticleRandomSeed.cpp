@@ -18,10 +18,12 @@
 // (X360 dword_82F350FC), mSeed the 32-bit reseed value, and the ring/state/index
 // spine is the embedded CgsNumeric::Random (modelled flat here for now).
 //
-// Two more cParticleRandomSeed methods exist in the X360 binary but belong to
-// OTHER ledger TUs and are deliberately NOT bodied here yet (see the note at the
-// foot of this file): FP32 Build(FP32,FP32) @0x8290A360 and
-// Vector3Plus Build(Vector4,Vector4) @0x8290A648 (unnamed in the X360 idb).
+// 2026-09-03: the two remaining Build overloads are BODIED HERE now -- FP32
+// Build(FP32,FP32) @0x8290A360 and Vector3Plus Build(Vector4,Vector4) @0x8290A648
+// (unnamed sub_8290A648 in the X360 idb, named by the DWARF at :117). Both were
+// ledger-filed under other TUs; this class is their real home, and
+// cParticleEmitter::InitialiseParticle @0x829116A8 calls them fourteen times
+// between them, so nothing downstream could link until they landed.
 // ============================================================================
 
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRandomSeed.h"
@@ -165,20 +167,148 @@ rw::math::vpu::Vector3Plus cParticleRandomSeed::BuildLerp(rw::math::vpu::Vector4
     return Vector3Plus{ lvResult.x, lvResult.y, lvResult.z, lvResult.w };
 }
 
+// ================================================================================================
+// cParticleRandomSeed::Build(FP32, FP32)  @ 0x8290A360      (DWARF ParticleRandomSeed.h:71)
+//
+// The SCALAR draw. Store for store from the asm:
+//
+//   0x8290A3A8  state   = mu64State                       ld   r11, 0x20(r31)
+//   0x8290A3B0  index   = muIndex                         lwz  r10, 0x28(r31)
+//   0x8290A3B8  hi      = state >> 32                     srdi r7, r11, 32
+//   0x8290A3C4  state'  = state * MULT + 1                mulld / addi 1
+//   0x8290A3DC  t_raw   = mafRandom[index]                lfsx f29, r10*4, r31  (read BEFORE refill)
+//   0x8290A3E0  mu64State = state'                        std
+//   0x8290A3E4  mafRandom[index] = 0x3F800000|(hi>>9)     stwx  (inslwi r8,r11,23,9)
+//   0x8290A3F0  muIndex = (index + 1) & 7                 clrlwi r11, r11, 29
+//   0x8290A3FC  return  fmadds((base+variance) - base, t_raw - 1.0, base)
+//
+// The redundant subtraction is the console's and it is kept. `(base + variance) - base` is
+// not `variance` in float arithmetic, and the X360 emits all three ops (fadds 0x8290A3FC,
+// fsubs 0x8290A40C, fmadds 0x8290A410). Folding it would be a tuning change dressed as a
+// simplification. What the shape says is that the ORIGINAL source read Lerp(base,
+// base + variance, t) -- i.e. "variance" is an extent, not a +/- radius.
+//
+// The perf monitor STOPS BEFORE the arithmetic (bl StopMonitor at 0x8290A3F8, the fadds at
+// 0x8290A3FC). Reproduced in that order -- the monitor brackets the DRAW, not the lerp.
+// ================================================================================================
+f32 cParticleRandomSeed::Build(f32 afBase, f32 afVariance)
+{
+    const s32 liMonitor = guBuildMonitor;          // dword_82FAB68C, loaded once
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+    // Consume the value CURRENTLY buffered at muIndex ...
+    const u32 luIndex  = muIndex;
+    const f32 lfRandom = mafRandom[luIndex];       // still in [1,2) here
+
+    // ... then refill that one slot from the live state and advance the ring.
+    mafRandom[luIndex] = MakeCanonicalFloat(mu64State);
+    mu64State = mu64State * KU64_LCG_MULTIPLIER + 1;
+    muIndex   = (luIndex + 1) & 7;
+
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+
+    const f32 lfT = lfRandom - 1.0f;               // [1,2) -> [0,1)   (flt_82001C98 == 1.0)
+    return ((afBase + afVariance) - afBase) * lfT + afBase;
+}
+
+// ================================================================================================
+// cParticleRandomSeed::Build(Vector4, Vector4)  @ 0x8290A648   (DWARF ParticleRandomSeed.h:117)
+//
+// The PER-LANE draw -- the one cParticleEmitter::InitialiseParticle calls twelve times to fill a
+// particle's twelve vector channels. Unnamed in the X360 idb (sub_8290A648); the DWARF names it,
+// and cParticleEmitter::InitialiseParticle's call sites confirm the class.
+//
+// WHAT MAKES IT DIFFERENT FROM BuildLerp @0x8290A7A8, which has the same shape: BuildLerp
+// SPLATS one random across the four lanes (`lvsl` + `vspltw` + `vperm` at 0x8290A7DC..0x8290A804);
+// this one loads the 16-byte cache half straight (`lvx128 v0, r8, r31` @0x8290A6E4, no splat), so
+// each lane gets its OWN random. That is the whole difference, and it is why a Lion particle's
+// position / velocity / size vary per axis rather than along a single diagonal.
+//
+// The draw, store for store (0x8290A688..0x8290A780):
+//   slot    = (muIndex + 3) & 4                   rlwinm r11, r9, 0,29,29   -> 0 or 4
+//   muIndex = slot                                stw @0x8290A6CC (the refill stores re-read it)
+//   v_t     = mafRandom[slot..slot+3] - 1.0       lvx128 at this + slot*4 (16-aligned) ; vsubfp
+//   result  = avBase + avVariance * v_t           vmaddfp128 v127, v0, v126  (VD is the addend)
+//   S1 = S0*MULT+1 ; S2 = S1*MULT+1 ; S3 = S2*MULT+1 ; mu64State = S3      (THREE steps)
+//   the four refilled slots (see the bit-stream note below)
+//   muIndex ^= 4                                  xori @0x8290A77C
+//
+// THE FOUR REFILLS ARE ONE 96-BIT STREAM CUT INTO FOUR 23-BIT MANTISSAS, not four independent
+// draws -- which is why the asm looks like bit soup. Concatenate the high dwords of the three
+// LCG states, hi(S0)||hi(S1)||hi(S2), and take 23 bits at a time:
+//   slot+0 : hi0[0..22]                          inslwi r5,hi0,23,9        -> hi0 >> 9
+//   slot+1 : hi0[23..31] ++ hi1[0..13]           insrwi r4,hi0,9,9 | (hi1 >> 18)
+//   slot+2 : hi1[14..31] ++ hi2[0..4]            insrwi r28,hi1,18,9 | (hi2 >> 27)
+//   slot+3 : hi2[5..27]                          rlwimi r27,hi2,28,9,31    -> (hi2 >> 4) & mask
+// 9+14 == 23 and 18+5 == 23 -- the two stitched entries close exactly, and 4*23 == 92 of the 96
+// bits are consumed (hi2's last four are dropped). Each result is OR'd into a preloaded
+// 0x3F800000, i.e. the same "canonical float in [1,2)" the rest of this class uses.
+// Only the FIRST of the four is MakeCanonicalFloat(state); the other three are NOT, and calling
+// the shared helper for them would silently substitute three different numbers.
+//
+// The result is stored to the sret pointer mid-function (stvx128 v127, r0, r30 @0x8290A708,
+// before the refill stores). Immaterial here -- it is one function's local -- and reproduced as
+// a plain return, which is what the source wrote.
+// ================================================================================================
+rw::math::vpu::Vector3Plus cParticleRandomSeed::Build(rw::math::vpu::Vector4 avBase,
+                                                      rw::math::vpu::Vector4 avVariance)
+{
+    using rw::math::vpu::Vector3Plus;
+
+    const s32 liMonitor = guBuildMonitor;          // dword_82FAB68C, loaded once
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+    // Consume the whole 16-byte cache half -- four independent randoms, one per lane.
+    const u32 luSlot = (muIndex + 3) & 4;
+    muIndex = luSlot;
+
+    const f32 lfT0 = mafRandom[luSlot + 0] - 1.0f;   // [1,2) -> [0,1), per lane
+    const f32 lfT1 = mafRandom[luSlot + 1] - 1.0f;
+    const f32 lfT2 = mafRandom[luSlot + 2] - 1.0f;
+    const f32 lfT3 = mafRandom[luSlot + 3] - 1.0f;
+
+    const Vector3Plus lvResult = {
+        avBase.x + avVariance.x * lfT0,
+        avBase.y + avVariance.y * lfT1,
+        avBase.z + avVariance.z * lfT2,
+        avBase.w + avVariance.w * lfT3,
+    };
+
+    // Three LCG steps; their three high dwords are the 96-bit stream cut into four mantissas.
+    const u64 lu64S0 = mu64State;
+    const u64 lu64S1 = lu64S0 * KU64_LCG_MULTIPLIER + 1;
+    const u64 lu64S2 = lu64S1 * KU64_LCG_MULTIPLIER + 1;
+    const u64 lu64S3 = lu64S2 * KU64_LCG_MULTIPLIER + 1;
+    mu64State = lu64S3;
+
+    const u32 luHi0 = static_cast<u32>(lu64S0 >> 32);
+    const u32 luHi1 = static_cast<u32>(lu64S1 >> 32);
+    const u32 luHi2 = static_cast<u32>(lu64S2 >> 32);
+
+    const u32 KU_ONE_BITS = 0x3F800000u;             // the preloaded `lis rN, 0x3F80`
+    const u32 lauBits[4] = {
+        KU_ONE_BITS |  (luHi0 >> 9),                                    // hi0[0..22]
+        KU_ONE_BITS | ((luHi0 & 0x1FFu) << 14) | (luHi1 >> 18),         // hi0[23..31]++hi1[0..13]
+        KU_ONE_BITS | ((luHi1 & 0x3FFFFu) << 5) | (luHi2 >> 27),        // hi1[14..31]++hi2[0..4]
+        KU_ONE_BITS | ((luHi2 >> 4) & 0x7FFFFFu),                       // hi2[5..27]
+    };
+    for (u32 luLane = 0; luLane < 4; ++luLane)
+    {
+        std::memcpy(&mafRandom[luSlot + luLane], &lauBits[luLane], sizeof(f32));
+    }
+
+    muIndex ^= 4u;
+
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+
+    return lvResult;
+}
+
 // ----------------------------------------------------------------------------
-// NOT BODIED HERE (other ledger TUs -- see the wave spec for the full decoded
-// recipes before implementing; landing them ANYWHERE else is an ODR trap):
-//
-//   FP32 cParticleRandomSeed::Build(FP32, FP32) @ 0x8290A360 -- ledger-filed
-//   under TU 'GameShared/.../PerfMon/Cpu/PS3/CgsPerfMonCpuPS3.h' (a DecFIGS
-//   attribution quirk; its real home is THIS file). Scalar draw: consumes
-//   mafRandom[muIndex], refills that slot, muIndex=(muIndex+1)&7, then returns
-//   fmadds((a+b)-a, t, a) -- source-shaped Lerp(a, a+b, t).
-//
-//   Vector3Plus cParticleRandomSeed::Build(Vector4, Vector4) @ 0x8290A648 --
-//   unnamed sub_8290A648 in the X360 idb, DWARF-attested as this class's
-//   Build(Vector4,Vector4) (ParticleRandomSeed.h:117). Per-lane draw: consumes
-//   the whole 16-byte half at slot=(muIndex+3)&4, result = A + B.*t per lane
-//   (vmaddfp128 @0x8290A6F4, addend = A), refills all four slots from THREE LCG
-//   steps with cross-word mantissa stitching, muIndex ^= 4.
+// EVERY cParticleRandomSeed METHOD THE X360 LEDGER ATTESTS NOW HAS A BODY IN THIS FILE:
+// Init @0x82911BE0, Offset @0x8290E8B0, Update @0x8290EAB0, BuildLerp @0x8290A7A8,
+// Build(FP32,FP32) @0x8290A360 and Build(Vector4,Vector4) @0x8290A648. The DWARF also
+// declares Set(U32) / Get() const / Build(S32,S32) / Build(Vector3&,Vector3,Vector3) /
+// Build(cVector&,const cVector&,const cVector&); none of those has an X360 body, so per
+// the attestation rule they are neither declared nor written.
 // ----------------------------------------------------------------------------

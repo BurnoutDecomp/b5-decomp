@@ -22,29 +22,24 @@
 // Hex-Rays single-arg view drops the two args the X360 simply forwards in the
 // tail-call (b cParticleTrigger__Update keeps r4/r5 live).
 //
-// HONEST PLACEHOLDER (flagged -- see dep_flags): cTime is the engine time stamp.
-// cParticleTrigger::Update @0x82908808 reads/writes it as a SINGLE 32-bit word
-// (lwz/stw, signed cmpw), and the three trigger time stamps sit at +0x00/+0x04/
-// +0x08 with mbEnabled at +0x0C -- so in THIS header cTime is the 4-byte form.
-// (The sibling ParticleBucket.h cTime is an independent local placeholder.)
-// Replace with / collapse onto the real cTime home when it lands.
+// cTime IS NO LONGER A PLACEHOLDER HERE (2026-09-03). This header used to carry its own
+// 4-byte `struct cTime`, derived correctly from cParticleTrigger::Update @0x82908808 --
+// which reads/writes it as a SINGLE 32-bit word (lwz/stw, signed cmpw), with the three
+// trigger stamps at +0x00/+0x04/+0x08 and mbEnabled at +0x0C. That reading was right, and
+// the sibling ParticleBucket.h copy (8 bytes) was wrong; both are now retired onto the one
+// home at ext-include/GameStructs/cTime.h, whose DWARF says `S32 mTicks`.
 // ============================================================================
 
 #include "types.hpp"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/ext-include/GameStructs/cTime.h"
 
-// ----------------------------------------------------------------------------
-// HONEST PLACEHOLDER: engine time stamp. The cParticleTrigger::Update asm
-// (@0x82908808) is authoritative for the WIDTH here: each of the trigger's three
-// time stamps is loaded/stored as one 32-bit word (lwz/stw) and signed-compared
-// (cmpw/blt), and mbEnabled lands at +0x0C -- which only fits if each stamp is
-// 4 bytes. So cTime is modelled as a single 32-bit value (NOT the 8-byte form);
-// it is only ever read as one word by the bodied Update. Collapse onto the real
-// cTime home (and reconcile widths) when it lands.
-// ----------------------------------------------------------------------------
-struct cTime
-{
-    s32 mi32Ticks;
-};
+// cTime now comes from its real home, ext-include/GameStructs/cTime.h (included above).
+// THIS HEADER'S OWN NOTE WAS RIGHT ALL ALONG and is what the unification is built on: it
+// reasoned the width to 4 bytes from cParticleTrigger::Update @0x82908808 ("each stamp is
+// loaded/stored as one 32-bit word (lwz/stw) and signed-compared (cmpw/blt), and mbEnabled
+// lands at +0x0C"), and said "collapse onto the real cTime home when it lands". It landed;
+// the DWARF (cTime.h:217, `S32 mTicks`) agrees with this reading and not with the 8-byte
+// copy ParticleBucket.h was carrying.
 
 // ParticleTrigger.h:21
 struct cParticleTrigger

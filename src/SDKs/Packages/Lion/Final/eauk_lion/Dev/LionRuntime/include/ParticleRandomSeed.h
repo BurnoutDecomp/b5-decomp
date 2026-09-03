@@ -35,11 +35,12 @@
 //       Vector3Plus BuildLerp(Vector4, Vector4);       // :130  X360 @0x8290A7A8
 //       void Build(cVector&, const cVector&, const cVector&); // :144  not in the X360 ledger
 //   };
-// Methods absent from the X360 ledger are NOT declared here (attestation rule);
-// the two Build overloads present in the X360 binary belong to OTHER ledger TUs
-// (FP32 Build @0x8290A360 is ledger-filed under CgsPerfMonCpuPS3.h -- a DecFIGS
-// attribution quirk -- and Vector3Plus Build(Vector4,Vector4) is the unnamed
-// sub_8290A648). Declare them here WHEN their bodies land in this file.
+// Methods absent from the X360 ledger are NOT declared here (attestation rule).
+// ⭐ 2026-09-03: the two Build overloads present in the X360 binary ARE now declared and
+// bodied in this file -- FP32 Build @0x8290A360 (ledger-filed under CgsPerfMonCpuPS3.h, a
+// DecFIGS attribution quirk) and Vector3Plus Build(Vector4,Vector4) @0x8290A648 (unnamed
+// sub_8290A648, named by the DWARF at :117). cParticleEmitter::InitialiseParticle calls
+// BOTH fourteen times between them, so this is where they had to land.
 //
 // LAYOUT AUTHORITY: the member offsets are pinned by the X360 asm for the four
 // bodied methods (Init @0x82911BE0, Offset @0x8290E8B0, Update @0x8290EAB0,
@@ -100,6 +101,23 @@ struct cParticleRandomSeed
     // (mSeed *= kuSeedMultication), then refill. Bracketed by the Lion particle
     // update CPU perf monitor. X360 Update @ 0x8290EAB0.
     void Update();
+
+    // ParticleRandomSeed.h:71 -- draw ONE cached random t in [0,1) from the slot at
+    // muIndex, refill that slot, advance the index (wrapping mod 8), and return
+    // afBase + ((afBase + afVariance) - afBase) * t. The source shape is Lerp(base,
+    // base+variance, t) and the console keeps the redundant subtraction (fadds / fsubs /
+    // fmadds at 0x8290A3FC..0x8290A410), so it is kept here rather than folded to
+    // base + variance*t -- float arithmetic is not associative and this is the console's.
+    // X360 @0x8290A360 (ledger-filed under CgsPerfMonCpuPS3.h -- a DecFIGS attribution
+    // quirk; its real home is this class, per the DWARF).
+    f32 Build(f32 afBase, f32 afVariance);
+
+    // ParticleRandomSeed.h:117 -- the PER-LANE sibling of BuildLerp: consume the whole
+    // 16-byte cache half at slot (muIndex+3)&4 as FOUR independent randoms, refill all
+    // four slots from three LCG steps, and return avBase + avVariance * t per lane.
+    // X360 sub_8290A648 (unnamed in the idb; named by the DWARF).
+    rw::math::vpu::Vector3Plus Build(rw::math::vpu::Vector4 avBase,
+                                     rw::math::vpu::Vector4 avVariance);
 
     // ParticleRandomSeed.h:130 -- draw ONE cached random t in [0,1) (consumed
     // from the "Vector slot" (muIndex+3)&4, which is then refilled and the index
