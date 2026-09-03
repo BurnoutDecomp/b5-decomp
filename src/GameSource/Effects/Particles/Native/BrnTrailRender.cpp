@@ -171,6 +171,44 @@ namespace Native
                                       lColour.blue * lfWhiteLevel, lColour.alpha * 1.0f };
             return lResult;
         }
+
+        // [DIAG] BRN_SKID_LIFT -- a world-space +Y offset in METRES added to every strip vertex.
+        // NOT IN THE X360 BINARY, zero unless the variable names a value. DELETE-WHEN-STABLE.
+        //
+        // The depth test is now known to reject the strip (it draws with the test off and not with
+        // it on, everything else held). The console's own state is the same LESSEQUAL/test-on/
+        // write-off object -- ConstructOnceOnly @0x827F1C20 builds dword_83010F4C as
+        // ConstructDepthStencilState(alloc, 1, 0, 3) and TrailRenderer::BeginRender @0x82284468
+        // binds exactly that -- so the state is faithful and the DEPTH VALUES are what disagree.
+        //
+        // This measures the disagreement in metres instead of guessing it: TrailSystem lays each
+        // segment at the wheel contact point plus kTrailHeightAdjustment (0.03 m), so if the strip
+        // becomes visible at a lift of L, the strip is sitting L below the surface the world wrote
+        // depth for, and 0.03 + L is what it would have taken to clear it. A value near zero means
+        // a precision tie; a value of centimetres means the visible road and the collision surface
+        // the contact point comes from are not at the same height on this build.
+        // ⚠ IT IS A MEASURING STICK, NOT A FIX. Shipping a lift would be exactly the "tune until it
+        // looks right" the project forbids; the number it produces is what points at the real cause.
+        f32 SkidLiftMetres()
+        {
+            static f32 sfLift = -1.0f;
+            if (sfLift < 0.0f)
+            {
+                const char* lpcValue = std::getenv("BRN_SKID_LIFT");
+                sfLift = (lpcValue != 0) ? static_cast<f32>(std::atof(lpcValue)) : 0.0f;
+                if (sfLift < 0.0f)
+                    sfLift = 0.0f;
+                if (sfLift > 0.0f)
+                {
+                    char lacMsg[128];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                                  "[trailpass] BRN_SKID_LIFT=%.4f m ARMED (diagnostic only)\n",
+                                  static_cast<double>(sfLift));
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+            }
+            return sfLift;
+        }
     }
 
     // =========================================================================================
@@ -246,6 +284,7 @@ namespace Native
         BrnGraphics::SkidVertex laVertices[KN_MAX_STRIP_VERTICES];
         s32                     lnVertexCount = 0;
         const f32               lfNow         = mfCurrentTime;                 // v125
+        const f32               lfDiagLift    = SkidLiftMetres();               // [diag] 0.0 normally
 
         for (s32 lnEmitter = 0; lnEmitter < lnEmitterCount; ++lnEmitter)
         {
@@ -270,7 +309,8 @@ namespace Native
 
             // ---- segment 0: its +half edge vertex is written twice (the strip join) ----------
             {
-                const Vector3 lPosition  = lpSegments->ReadSegmentPosition(0);
+                Vector3       lPosition  = lpSegments->ReadSegmentPosition(0);
+                lPosition.y += lfDiagLift;   // [diag] BRN_SKID_LIFT, 0.0 unless armed
                 const Vector3 lTangent   = lpSegments->ReadSegmentTangent(0);
                 const f32     lfStrength = lpSegments->ReadSegmentStrength(0);
                 f32           lfAge      = (lfNow - lpSegments->ReadSegmentTime(0)) * KF_ONE_OVER_TRAIL_BASE_LIFE;
@@ -295,7 +335,8 @@ namespace Native
             f32 lfSegmentU = 1.0f;                                                        // v13, +1.0 per segment
             for (s32 lnSegment = 1; lnSegment < lnNumSegments; ++lnSegment, lfSegmentU += 1.0f)
             {
-                const Vector3 lPosition  = lpSegments->ReadSegmentPosition(lnSegment);
+                Vector3       lPosition  = lpSegments->ReadSegmentPosition(lnSegment);
+                lPosition.y += lfDiagLift;   // [diag] BRN_SKID_LIFT, 0.0 unless armed
                 const Vector3 lTangent   = lpSegments->ReadSegmentTangent(lnSegment);
                 const f32     lfStrength = lpSegments->ReadSegmentStrength(lnSegment);
                 f32           lfAge      = (lfNow - lpSegments->ReadSegmentTime(lnSegment)) * KF_ONE_OVER_TRAIL_BASE_LIFE;

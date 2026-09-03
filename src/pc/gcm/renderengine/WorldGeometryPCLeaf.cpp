@@ -24,6 +24,7 @@
 // =============================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"  // [diag] BrnDiag::LogBoundSurfaces
 #include "pc/gcm/renderengine/WorldGeometryPCLeaf.h"
 #include "pc/gcm/renderengine/device.h"                    // renderengine::gDevice
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::WriteToLog
@@ -810,6 +811,12 @@ s32 WorldGeometry_Submit(const WorldGeometryDraw& lrDraw, u32 luBaseVertexIndex)
     lpDevice->SetStreamSource(0, static_cast<IDirect3DVertexBuffer9*>(lrDraw.mpVertexBuffer),
                               0, lrDraw.muExpandedStride);
     lpDevice->SetIndices(static_cast<IDirect3DIndexBuffer9*>(lrDraw.mpIndexBuffer));
+
+    // [DIAG] THE WORLD PASS'S OWN DEPTH STATE, at the moment a world mesh actually draws.
+    // The tyre mark is rejected by the depth test against whatever this pass left in the
+    // buffer, and a comparison needs BOTH sides. Inert unless BRN_RT_PROBE is set and the
+    // first tyre-mark segment has been laid; see BrnDiagBoundSurfaces.h. DELETE-WHEN-STABLE.
+    BrnDiag::LogBoundSurfaces("world-draw", 397u, true);
 
     // Equivalent to the UP call this replaces: that one offset the vertex POINTER by
     // baseVertex * stride and passed base 0, so the run's index values are relative to

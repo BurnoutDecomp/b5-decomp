@@ -55,6 +55,9 @@
 #include "BrnCommonTypes.h"                                                // Vector4 / Matrix44
 
 #include <cstring>   // memcpy
+#include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"  // [diag] BrnDiag::IsSceneColourPass
+#include <cstdio>    // [diag] snprintf (the [vpcmp] view-projection probe)
+#include <cstdlib>   // [diag] getenv  (BRN_VP_PROBE)
 
 namespace CgsGraphics
 {
@@ -906,6 +909,49 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
         reinterpret_cast<const rw::math::vpu::Matrix44*>(lpContext->mapConstantData[3]);
     CGS_ASSERT(lpWorld != 0,          "lpWorldMatrix != NULL");
     CGS_ASSERT(lpViewProjection != 0, "lpViewProjectionMatrix != NULL");
+
+    // [DIAG] THE WORLD PASS'S VIEW-PROJECTION, PRINTED ONCE PER CALL SITE. NOT IN THE X360
+    // BINARY, inert unless BRN_VP_PROBE names a value. DELETE-WHEN-STABLE.
+    //
+    // WHY: the tyre mark is rejected by the depth test with EVERY fragment strictly BEHIND what
+    // the world wrote (measured: lt=0, eq=0, gt=coverage, over eight samples spread across a
+    // drift), while the mark itself is laid 3 cm ABOVE the wheel contact point on a road the car
+    // visibly sits on, and its own transform puts it on exactly the right PIXEL. Right x and y,
+    // wrong z, is the signature of two passes projecting the same world point through different
+    // matrices -- and the two passes do take their view-projection from different places: the
+    // world from this dispatch command's shader constant 3, the trail from
+    // ParticleRenderData::mCgsCamera. Nobody has compared them. This prints the world's side;
+    // the trail's is already in [trailpass] xform and [ImVerts diag] vs c0..c3.
+    {
+        static int siVpProbe = -1;
+        if (siVpProbe < 0)
+        {
+            const char* lpcValue = std::getenv("BRN_VP_PROBE");
+            siVpProbe = (lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != (char)48) ? 1 : 0;
+        }
+        static u32 suVpSeen = 0;
+        static u32 suVpPrinted = 0;
+        // Sampled, not a prefix: this runs thousands of times a frame and the shadow cascades go
+        // first, so a prefix budget would describe the cascade camera and never the scene one.
+        // ⚠ GATED ON THE SCENE COLOUR PASS. Unfiltered, seven of the first eight samples
+        // were the shadow cascades and an env-map face -- orthographic and 90-degree
+        // cameras that have nothing to do with the depth the trail is tested against.
+        if (siVpProbe == 1 && lpViewProjection != 0 && suVpPrinted < 8u
+            && ((++suVpSeen % 499u) == 0u) && BrnDiag::IsSceneColourPass())
+        {
+            ++suVpPrinted;
+            const f32* const lpfM = reinterpret_cast<const f32*>(lpViewProjection);
+            char lacMsg[400];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[vpcmp] world viewProj(const 3): m0=[%.6f %.6f %.6f %.6f] m1=[%.6f %.6f %.6f %.6f]"
+                " m2=[%.6f %.6f %.6f %.6f] m3=[%.4f %.4f %.4f %.4f]\n",
+                lpfM[0],  lpfM[1],  lpfM[2],  lpfM[3],
+                lpfM[4],  lpfM[5],  lpfM[6],  lpfM[7],
+                lpfM[8],  lpfM[9],  lpfM[10], lpfM[11],
+                lpfM[12], lpfM[13], lpfM[14], lpfM[15]);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
 
     // -------------------------------------------------------------------------
     // [PC bring-up shim] INSTANCING EXPANSION.
