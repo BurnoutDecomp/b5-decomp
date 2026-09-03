@@ -13,6 +13,10 @@
 
 #include <cmath>   // std::pow -- ApplyLocalImpulse's vlogefp/vexptefp + minimax refinement IS powf
 
+// [dent] host-side present counter for exact frame correlation (the same extern the
+// [deform-bbox] / [chain] instruments use). DIAG only.
+namespace renderengine { extern u32 guPresentCount; }
+
 // [T5-sens] DIAG state, DEFINED in BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp.
 // NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
 namespace BrnPhysics { namespace Vehicle {
@@ -537,6 +541,102 @@ namespace Deformation
 	// Modelled through the matching PenetrationSolver methods (AddWorldContact / AddVehicleContact);
 	// the partition + dedupe control flow is reproduced; the dense VMX point math is modelled per-lane.
 	// =============================================================================================
+
+	// =============================================================================================
+	// [dent] NOT IN THE X360 BINARY -- host-side witness, opt-in on BRN_DENT_PROBE (0/unset ==
+	// fully inert, not even a table row is written).  It answers ONE question and states both
+	// sides of it on the SAME frame:
+	//
+	//     THE CONSOLE'S DENT  vs  THE PC'S DENT, per sensor, per direction.
+	//
+	// The console's number is NOT a second copy of this body's arithmetic.  It is the closed form
+	// the X360 asm's own clamp structure forces, derived at 0x825E13E0..0x825E1744 and re-decoded
+	// from the raw instruction words 2026-09-03:
+	//
+	//     move_step = min( room , mag * F * invI * dt )
+	//     room      = max( 0, min( compLimit - max(0,used) , dot(mLimitVector - centre, hitDir) ) )
+	//     compLimit = max(specLim[dir], 0.01) * savfCompressionLimitFactor[set] * allowedCompression
+	//
+	// `used` only ever grows and `compLimit` is constant across a contact, so summing the clamped
+	// per-step moves telescopes EXACTLY to
+	//
+	//     total dent  =  min( compLimit , SUM of the unclamped steps )      [the box term aside]
+	//
+	// i.e. the console's dent is min(CEILING, SUPPLY) -- a ceiling that is pure DATA (the streamed
+	// SensorSpec::maDirectionParams[dir], which this witness prints so it can be joined offline to
+	// the X360 retail VEH_*_AT.BIN by mInitialOffset) and a supply that is the impulse chain.
+	// `disp` is the PC's achieved displacement, read live off the sphere -- the other side.
+	//   * disp ~= min(ceiling, supply)         -> the clamp ladder is transcribed faithfully
+	//   * disp <  ceiling and nRoom == 0       -> IMPULSE-limited: the dent is the chain's answer
+	//   * disp pinned at ceiling               -> DATA-limited: the dent is the spec's answer
+	// DELETE-WHEN the dent magnitude is banked.
+	// =============================================================================================
+	namespace
+	{
+		struct DentRow
+		{
+			const void* mpSensor;
+			s32         miDir;
+			f32         mafInitialOffset[3];
+			f32         mfCeiling;      // compLimit at the last apply (the console's data ceiling)
+			f32         mfSupply;       // SUM of the UNCLAMPED per-step moves (the impulse supply)
+			f32         mfApplied;      // SUM of the moves actually taken (after the room clamp)
+			f32         mfLastToLimit;  // the box term, so a box-bound row can be told apart
+			f32         mfLastMag;      // the incoming magnitude of the last apply
+			f32         mfLastInvI;
+			f32         mfLastFactor;
+			f32         mfLastVn;
+			f32         mfSupply60;     // the same sum with the CONSOLE's exponent (60*dt == 1)
+			f32         mfLastDt;
+			f32         mfLastBase;
+			f32         mfAllowed;      // the compression BUDGET the row's supply was accumulated under
+			u32         muRoomClamped;  // applies where the room bound bit
+			u32         muFree;         // applies where the impulse was the smaller of the two
+			s32         miOwner;
+			s32         miSet;
+			s32         miLevel;
+			u32         muWorld;        // applies whose params carried mbWorldContact
+		};
+		const s32   KI_DENT_ROWS   = 48;
+		DentRow     gaDentRows[KI_DENT_ROWS];
+		s32         giDentRows     = 0;
+		u32         guDentLastDump = 0xFFFFFFFFu;
+		u32         guDentLines    = 0;
+		s32         giDentProbe    = -1;
+
+		s32 DentProbeLevel()
+		{
+			if ( giDentProbe < 0 )
+			{
+				const char* lpcEnv = getenv( "BRN_DENT_PROBE" );
+				giDentProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? atoi( lpcEnv ) : 0;
+				if ( giDentProbe < 0 ) { giDentProbe = 0; }
+			}
+			return giDentProbe;
+		}
+
+		DentRow* DentFind( const void* lpSensor, s32 liDir )
+		{
+			for ( s32 li = 0; li < giDentRows; ++li )
+			{
+				if ( gaDentRows[li].mpSensor == lpSensor && gaDentRows[li].miDir == liDir )
+				{
+					return &gaDentRows[li];
+				}
+			}
+			if ( giDentRows >= KI_DENT_ROWS ) { return 0; }
+			DentRow& lrNew = gaDentRows[giDentRows++];
+			lrNew.mpSensor = lpSensor;  lrNew.miDir = liDir;
+			lrNew.mafInitialOffset[0] = 0.0f; lrNew.mafInitialOffset[1] = 0.0f; lrNew.mafInitialOffset[2] = 0.0f;
+			lrNew.mfCeiling = 0.0f; lrNew.mfSupply = 0.0f; lrNew.mfApplied = 0.0f;
+			lrNew.mfLastToLimit = 0.0f; lrNew.mfLastMag = 0.0f; lrNew.mfLastInvI = 0.0f;
+			lrNew.mfLastFactor = 0.0f; lrNew.mfLastVn = 0.0f; lrNew.mfAllowed = -1.0f;
+			lrNew.mfSupply60 = 0.0f; lrNew.mfLastDt = 0.0f; lrNew.mfLastBase = 0.0f;
+			lrNew.muRoomClamped = 0u; lrNew.muFree = 0u; lrNew.muWorld = 0u;
+			lrNew.miOwner = -1; lrNew.miSet = -1; lrNew.miLevel = -1;
+			return &lrNew;
+		}
+	}
 	// =============================================================================================
 	// ApplyLocalImpulse -- X360 **sub_825E1320** (0x825E1320..0x825E1787, 1128 bytes == 282
 	// instructions). This is the CollidableBody override the sensor vtable needs (slot 0) and the
@@ -812,6 +912,102 @@ namespace Deformation
 					<< "\n";
 			}
 		}
+
+		// ---- [dent] the console-law ledger, both sides -----------------------------------------
+		if ( DentProbeLevel() > 0 )
+		{
+			DentRow* lpRow = DentFind( this, liDir );
+			if ( lpRow != 0 )
+			{
+				const f32 lfUnclamped = lfAbsorbed * lpImpulseParams->mvfInverseInertia.x
+				                      * lpImpulseParams->mvfTimeStep.x;
+				if ( mpSpec != 0 )
+				{
+					lpRow->mafInitialOffset[0] = mpSpec->mInitialOffset.x;
+					lpRow->mafInitialOffset[1] = mpSpec->mInitialOffset.y;
+					lpRow->mafInitialOffset[2] = mpSpec->mInitialOffset.z;
+				}
+				const f32 lfAllowedNow = lpImpulseParams->mvfAllowedCompressionFactor.x;
+				if ( lpRow->mfAllowed != lfAllowedNow )
+				{
+					lpRow->mfAllowed = lfAllowedNow;
+					lpRow->mfSupply = 0.0f; lpRow->mfApplied = 0.0f; lpRow->mfSupply60 = 0.0f;
+					lpRow->muRoomClamped = 0u; lpRow->muFree = 0u; lpRow->muWorld = 0u;
+				}
+				lpRow->mfCeiling     = lfCompressionLimit;
+				lpRow->mfSupply     += lfUnclamped;
+				// The SAME deposit with the console's exponent. On the console dt == 1/60 so
+				// KVF_60_HTZ * dt == 1 exactly and pow(base, 1) == base. Normalised to the SAME
+				// wall-clock slice (this PC step covers 60*dt console steps, each depositing
+				// incoming*base*invI/60 -- so the slice total is incoming*base*invI*dt).
+				const f32 lfIncoming  = lfAbsorbed + lpImpulseParams->mvfImpulseMagnitude.x;
+				lpRow->mfSupply60   += lfIncoming * lfBase
+				                     * lpImpulseParams->mvfInverseInertia.x
+				                     * lpImpulseParams->mvfTimeStep.x;
+
+				lpRow->mfApplied    += lfMove;
+				lpRow->mfLastToLimit = lfToLimit;
+				lpRow->mfLastMag     = lfAbsorbed + lpImpulseParams->mvfImpulseMagnitude.x;  // incoming
+				lpRow->mfLastInvI    = lpImpulseParams->mvfInverseInertia.x;
+				lpRow->mfLastFactor  = lfAbsorbFactor;
+				lpRow->mfLastVn      = lpImpulseParams->mvfVelocityAlongNormal.x;
+				lpRow->mfLastDt      = lpImpulseParams->mvfTimeStep.x;
+				lpRow->mfLastBase    = lfBase;
+				lpRow->miOwner       = BrnPhysics::Vehicle::gT5ApplyOwner;
+				lpRow->miSet         = static_cast<s32>( leSet );
+				lpRow->miLevel       = static_cast<s32>( lu8AbsorptionLevel );
+				if ( lpImpulseParams->mbWorldContact ) { ++lpRow->muWorld; }
+				if ( lfUnclamped > lfRoom ) { ++lpRow->muRoomClamped; } else { ++lpRow->muFree; }
+			}
+			// Dump the whole ledger once per PRESENT, so every row in a block shares one frame.
+			if ( renderengine::guPresentCount != guDentLastDump && CgsDev::Log::gpDebugPrint != 0
+			     && guDentLines < 200000u )
+			{
+				guDentLastDump = renderengine::guPresentCount;
+				for ( s32 li = 0; li < giDentRows; ++li )
+				{
+					const DentRow& lrR = gaDentRows[li];
+					if ( lrR.mfApplied <= 0.005f && lrR.mfSupply <= 0.05f ) { continue; }
+					// the PC's achieved displacement along THIS direction, read live off the sphere
+					f32 lfDisp = 0.0f;
+					const DeformationSensor* lpS = static_cast<const DeformationSensor*>( lrR.mpSensor );
+					if ( lpS->mpLocalSpaceSphere != 0 && lpS->mpSpec != 0 )
+					{
+						const Vector4& lrC = SphereVec( lpS->mpLocalSpaceSphere );
+						const Vector3  lC3 = { lrC.x, lrC.y, lrC.z, 0.0f };
+						const Vector3  lFR = Sub3( lC3, lpS->mpSpec->mInitialOffset );
+						lfDisp = Dot3( KA_IMPULSE_DIRECTIONS[lrR.miDir], lFR );
+					}
+					const f32 lfConsole = ( lrR.mfSupply < lrR.mfCeiling ) ? lrR.mfSupply : lrR.mfCeiling;
+					++guDentLines;
+					*CgsDev::Log::gpDebugPrint
+						<< "[dent] present " << static_cast<s32>( renderengine::guPresentCount )
+						<< " owner " << lrR.miOwner
+						<< " off (" << lrR.mafInitialOffset[0] << "," << lrR.mafInitialOffset[1]
+						<< "," << lrR.mafInitialOffset[2] << ")"
+						<< " dir " << lrR.miDir
+						<< " set " << lrR.miSet << " lvl " << lrR.miLevel
+						<< " allowed " << lrR.mfAllowed
+						<< " ceiling " << lrR.mfCeiling
+						<< " supply " << lrR.mfSupply
+						<< " supply60 " << lrR.mfSupply60
+						<< " lastDt " << lrR.mfLastDt << " lastBase " << lrR.mfLastBase
+						<< " console " << lfConsole
+						<< " pcApplied " << lrR.mfApplied
+						<< " pcDisp " << lfDisp
+						<< " toLimit " << lrR.mfLastToLimit
+						<< " nRoom " << static_cast<s32>( lrR.muRoomClamped )
+						<< " nFree " << static_cast<s32>( lrR.muFree )
+						<< " nWorld " << static_cast<s32>( lrR.muWorld )
+						<< " lastMag " << lrR.mfLastMag
+						<< " lastInvI " << lrR.mfLastInvI
+						<< " lastF " << lrR.mfLastFactor
+						<< " lastVn " << lrR.mfLastVn
+						<< "\n";
+				}
+			}
+		}
+
 		const f32 lfPassedOn = lfAbsorbed * 0.5f;
 
 		// ⭐⭐⭐ CHAIN-FORWARD RELEASED 2026-08-16 (walls leg 9) -- and the leg-8 gate banner that stood
