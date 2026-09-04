@@ -99,8 +99,7 @@ void AIModule::ProcessRequestInterface(const AIModuleIO::InputBuffer* lpInputBuf
                                        AIModuleIO::OutputBuffer* lpOutputBuffer,
                                        BrnUpdateSet lUpdateSet)
 {
-    (void)lpOutputBuffer;   // console a3 -- read only by the parked AI-driver sweep
-    (void)lUpdateSet;       // console a4 -- the sweep's "not paused" gate
+    (void)lpOutputBuffer;   // console a3 -- the sweep below never reads it either
 
     CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");
     if (lpInputBuffer == 0)
@@ -135,6 +134,47 @@ void AIModule::ProcessRequestInterface(const AIModuleIO::InputBuffer* lpInputBuf
                 << "\n";
         }
     }
+    // ---- the STUCK-DRIVER sweep, 0x8278A86C..0x8278A92C (landed 2026-09-04, lane R4's recovery) --------
+    // The park that stood here said GetAIDriver / IsStuck / the driver objects "do not exist in this
+    // tree"; all three do now. Per active slot: driver->mbIsActive && IsStuck() && !(updateSet & 1) &&
+    // car && !car->mbIsPlayer && mbEnableDrivingInput -> a synthetic STANDARD reset request
+    // (speed = race style ? flt_8300D9A4 : flt_8300DC60, distance = race style ? flt_820C488C : 0)
+    // pushed on the manager, then the driver's stuck timer is zeroed. The two .bss speeds are
+    // dyn-init @0x82C68518 / @0x82C68538 = 120 mph / 60 mph * 0.44704 (image.bin); flt_820C488C = 5.0.
+    if ((lUpdateSet & 1) == 0 && mbEnableDrivingInput)
+    {
+        const f32 KF_STUCK_RESET_SPEED_RACE    = 120.0f * 0.44704f;   // flt_8300D9A4 (53.6448)
+        const f32 KF_STUCK_RESET_SPEED_DEFAULT = 60.0f * 0.44704f;    // flt_8300DC60 (26.8224)
+        const f32 KF_STUCK_RESET_DISTANCE_RACE = 5.0f;                // flt_820C488C
+        for (s32 liSlot = 0; liSlot < KI_MAX_ACTIVE_RACE_CARS; ++liSlot)
+        {
+            AIDriver* lpDriver = GetAIDriver(static_cast<EActiveRaceCarIndex>(liSlot));
+            if (lpDriver == 0 || !lpDriver->IsActive() || !lpDriver->IsStuck())
+            {
+                continue;
+            }
+            AICar* lpCar = lpDriver->GetCar();
+            if (lpCar == 0 || lpCar->IsPlayerCar())
+            {
+                continue;
+            }
+            const bool lbRace = (lpCar->GetRouteFindingStyle() == E_ROUTE_FINDING_RACE
+                                 || static_cast<s32>(lpCar->GetRouteFindingStyle()) == 6);
+            AIModuleIO::ResetOnTrackRequest lRequest;
+            lRequest.Construct(static_cast<EGlobalRaceCarIndex>(lpCar->GetRaceCarIndex()),
+                               lbRace ? KF_STUCK_RESET_SPEED_RACE : KF_STUCK_RESET_SPEED_DEFAULT,
+                               lbRace ? KF_STUCK_RESET_DISTANCE_RACE : 0.0f,
+                               E_RESET_TYPE_STANDARD);
+            mResetOnTrackManager.PushResetOnTrackRequest(&lRequest);
+            lpDriver->ResetStuckTime();
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "[resetpump] STUCK sweep: AI car " << lpCar->GetRaceCarIndex()
+                                           << " (slot " << liSlot << ") -> STANDARD reset request [FLAG PC witness]" << "\n";
+            }
+        }
+    }
+
 }
 
 // =================================================================================================

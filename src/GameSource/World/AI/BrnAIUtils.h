@@ -45,9 +45,11 @@ namespace BrnAI
     // Bodied in BrnAIUtils_Angles.cpp (partfile of this TU).
     f32 FindUnsignedAngleBetween2DVectors(Vector2 lA, Vector2 lB);
 
-    // 0x827716A8 - signed planar angle from lA to lB: the unsigned angle with the sign of
-    // -(a.x*b.y - a.y*b.x) (positive when lB lies clockwise of lA), asserting the cross
-    // product and the result are finite ("NAN error in AIDriver::FindSignedAngleBetween2DVectors").
-    // No IDA export exists for this address; recovered from the image bytes (see the .cpp).
+    // 0x827716A8 - signed planar angle from lA to lB: the unsigned angle carrying the sign of the
+    // 2D cross product +(a.x*b.y - a.y*b.x) -- POSITIVE when that cross is positive -- asserting
+    // the cross product and the result are finite ("NAN error in
+    // AIDriver::FindSignedAngleBetween2DVectors"). No IDA export exists for this address; the sign
+    // was re-read word-by-word from the image bytes 0x8277176C..0x827717B0 (aiwave R7; the earlier
+    // banner had the vcmpgtfp/vcmpgefp operands transposed and documented the opposite sign).
     f32 FindSignedAngleBetween2DVectors(Vector2 lA, Vector2 lB);
 }

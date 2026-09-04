@@ -1104,6 +1104,28 @@ void AIModule::ProcessAIVehicleInputs(AIModuleIO::OutputBuffer* lpOutputBuffer)
             lControls.mbIsSteeringWheel     = true;
             lControls.mbSlamPlayer          = false;
 
+            // [rival] PC witness (NOT X360): one line per second per active NON-player driver, first 150
+            // lines -- the car's pose/speed/state/behaviour and the controls this record carries. This is
+            // the instrument that says whether a rival MOVES and, if not, which link is dead.
+            {
+                static s32 saiRivalWitnessTick[E_ACTIVE_RACE_CAR_INDEX_COUNT] = { 0 };
+                static s32 siRivalWitnessLines = 0;
+                if (!lbIsPlayer && lpCar != 0 && CgsDev::Log::gpDebugPrint != 0 && siRivalWitnessLines < 150
+                    && (saiRivalWitnessTick[leSlot]++ % 60) == 0)
+                {
+                    ++siRivalWitnessLines;
+                    const Vector3 lPos = lpCar->GetPosition();
+                    *CgsDev::Log::gpDebugPrint
+                        << "[rival] slot " << static_cast<s32>(leSlot) << " global " << lpCar->GetRaceCarIndex()
+                        << " pos (" << lPos.x << ", " << lPos.y << ", " << lPos.z << ")"
+                        << " speed " << lpCar->GetSpeed() << " state " << static_cast<s32>(lpCar->GetState())
+                        << " behaviour " << static_cast<s32>(lpCar->meBehaviour) << " route " << (lpCar->HasValidRoute() ? 1 : 0)
+                        << " desired " << lpDriver->GetDesiredSpeed() << " gas " << lControls.mfGas << " brake " << lControls.mfBrake
+                        << " steer " << lControls.mfSteering << " boost " << (lControls.mbBoost ? 1 : 0)
+                        << " startline " << (lControls.mbIsOnStartLine ? 1 : 0) << " [FLAG PC witness]\n";
+                }
+            }
+
             ++liActiveRecords;
         }
 

@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT + Begin/Fire/End
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // CgsDev::StrStream (default-case assert)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"        // CgsNumeric::Random (mRandom)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint (witnesses)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnAI::RouteRequestManager::Construct                          @ 0x8278A3B0 (KEPT verbatim)
@@ -59,6 +60,22 @@ float gRouteRequestPad     = 0.0f;
 // DWARF BrnRouteRequestManager.h:158 marks mRandom `extern` -- it is a file-scope static, NOT a
 // per-instance member. GenerateFreeRoamingDestination draws section indices from it.
 static CgsNumeric::Random mRandom;
+
+// [FLAG PC witness] NOT IN THE X360 BINARY -- the "[route-req]" instrument's budgets.
+// A GLOBAL first-N witness is useless on this path and run6 proved it: the AI roster comes up in
+// STAGES (the player's AICar is live from the junkyard hand-off; the five rivals only from
+// ADD_CAR_TO_MODE about ten seconds later), so a global budget is spent entirely on the player
+// before a rival exists. The first-8 "[route] extrapolated route done" witness in
+// scratch/aiwave/run6/BrnGame.log burned all eight lines by log line 3,028 of 802,050 -- four
+// frames after the first rival appeared -- which is why that run could not say whether the
+// rivals were asking for roads at all. The budget here is therefore PER AI-CAR INDEX, with a
+// hard overall cap so a 35-car roster cannot flood the log.
+// DELETE-WHEN rivals are seen driving their own routes.
+static const s32 KI_ROUTE_REQ_WITNESS_PER_CAR = 4;
+static const s32 KI_ROUTE_REQ_WITNESS_TOTAL   = 96;
+// After the opening burst, one further line per car every N eligible frames (600 == about ten
+// seconds at 60 Hz), until the overall cap is reached.
+static const s32 KI_ROUTE_REQ_WITNESS_PERIOD = 600;
 
 // X360 ChooseDistanceFunction (@0x82788CC0): the hardcoded world-X divide that splits the map
 // into the "countryside" half (X < this) and the "city" half. DWARF KF_HACK_CONTRYSIDE_DIVIDE
@@ -172,6 +189,28 @@ u16 RouteRequestManager::ComputeSectionBehind(const AICar* lpAICar, const AISect
     return lpBestSection->GetPortal(lu8ForwardPortalIndex)->GetLinkSectionIndex();
 }
 
+// [FLAG PC witness] NOT IN THE X360 BINARY. THE QUEUE-BUDGET CONTROL.
+// AddEventSafe (X360 @0x8277AFD8 for the 64-byte ExtrapolatedRouteRequest, @0x8277AF20 for the
+// 128-byte RaceRouteRequest) is the BOUNDS-GATED append: when miLength == miMaxLength it returns
+// false and DROPS the request with no assert and no log line. The transient "Route" input buffer
+// holds EventQueue<ExtrapolatedRouteRequest,12> and EventQueue<RaceRouteRequest,1> (Construct
+// @0x8278A028 / @0x82789FB8), so a six-car Road Rage fits the extrapolated queue with room to
+// spare -- but ONE race-route request per frame is the whole race budget, and a silent drop
+// there looks exactly like "the car never asked". The console ignores the return value; these
+// witnesses only observe it. DELETE-WHEN rivals are seen driving their own routes.
+static void WitnessDroppedRequest(const char* lpcQueue, s32 liRaceCarIndex)
+{
+    static s32 siDropWitnessCount = 0;
+    if (siDropWitnessCount < 8 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        ++siDropWitnessCount;
+        *CgsDev::Log::gpDebugPrint
+            << "[route-req] DROPPED: the " << lpcQueue << " request queue was FULL when car "
+            << liRaceCarIndex << " asked -- AddEventSafe returned false, the request is lost"
+            << " [FLAG PC witness]\n";
+    }
+}
+
 // X360 @0x82791490. The full race route to the car's destination section. Skips entirely when the
 // car has no destination, or the destination equals its current section. Optionally chooses a
 // per-route heuristic, blocks the current-checkpoint sections, and -- when U-turns are disallowed
@@ -234,7 +273,10 @@ void RouteRequestManager::GenerateStandardRouteRequest(
         lRouteRequest.AddBlockSectionId(lpAISectionData->GetAISection(luSectionBehind)->mId);
     }
 
-    lpRouteInputBuffer->GetRaceRouteRequestQueue()->AddEventSafe(lRouteRequest);
+    if (!lpRouteInputBuffer->GetRaceRouteRequestQueue()->AddEventSafe(lRouteRequest))
+    {
+        WitnessDroppedRequest("race-route(1-slot)", static_cast<s32>(luRaceCarIndex));
+    }
 }
 
 // X360 @0x82788F58. A route biased onto a different line than the player's. Only issued when the
@@ -271,7 +313,10 @@ void RouteRequestManager::GenerateAlternativeRouteRequest(
         static_cast<AStarDistanceFunction>(((liRaceCarIndex & 1) != 0) + E_ASTAR_DISTANCE_MANHATTAN);
     lRouteRequest.SetDistanceFunction(leDistanceFunction);
 
-    lpRouteInputBuffer->GetRaceRouteRequestQueue()->AddEventSafe(lRouteRequest);
+    if (!lpRouteInputBuffer->GetRaceRouteRequestQueue()->AddEventSafe(lRouteRequest))
+    {
+        WitnessDroppedRequest("race-route(1-slot)", liRaceCarIndex);
+    }
 }
 
 // X360 @0x82789090. A short look-ahead request that predicts the car forward along its current
@@ -296,7 +341,10 @@ void RouteRequestManager::GenerateExtrapolatedRouteRequest(
     RouteMapModuleIO::ExtrapolatedRouteRequest lRouteRequest;
     lRouteRequest.Construct(lDirection2D, lPosition2D, luBestSectionIndex, luRaceCarIndex);
 
-    lpRouteInputBuffer->GetExtrapolatedRouteRequestQueue()->AddEventSafe(lRouteRequest);
+    if (!lpRouteInputBuffer->GetExtrapolatedRouteRequestQueue()->AddEventSafe(lRouteRequest))
+    {
+        WitnessDroppedRequest("extrapolated(12-slot)", static_cast<s32>(luRaceCarIndex));
+    }
 }
 
 // X360 @0x8277A598. The world-space direction to flee a threat: the AI car's position minus the
@@ -339,7 +387,10 @@ void RouteRequestManager::GenerateRouteFleeingRouteRequest(
     RouteMapModuleIO::ExtrapolatedRouteRequest lRouteRequest;
     lRouteRequest.Construct(lDirection2D, lPosition2D, luBestSectionIndex, luRaceCarIndex);
 
-    lpRouteInputBuffer->GetExtrapolatedRouteRequestQueue()->AddEventSafe(lRouteRequest);
+    if (!lpRouteInputBuffer->GetExtrapolatedRouteRequestQueue()->AddEventSafe(lRouteRequest))
+    {
+        WitnessDroppedRequest("extrapolated(12-slot)", static_cast<s32>(luRaceCarIndex));
+    }
 }
 
 // X360 @0x827695F0. Pick a random destination section for a free-roaming (cruising) car: draw a
@@ -453,6 +504,14 @@ void RouteRequestManager::Update(
     if (lpPlayerCar == nullptr)
         return;
 
+    // [FLAG PC witness] per-AI-car-index budget -- see the banner on KI_ROUTE_REQ_WITNESS_PER_CAR.
+    // saiRouteReqTick counts the frames THIS car was eligible, so the periodic sample below keeps
+    // reporting long after a car's opening burst is spent (a rival that starts fine and then goes
+    // quiet is exactly the failure a burst-only witness cannot see).
+    static s32 saiRouteReqWitness[35] = { 0 };
+    static s32 saiRouteReqTick[35]    = { 0 };
+    static s32 siRouteReqWitnessTotal = 0;
+
     for (s32 liAICarIndex = 0; liAICarIndex < 35; ++liAICarIndex)
     {
         // The console's `addi r31, r31, 0x1560` roster step is sizeof(AICar) on the console;
@@ -461,15 +520,72 @@ void RouteRequestManager::Update(
         AICar* lpAICar = &lpaAICars[liAICarIndex];
 
         // Eligible cars are IN_RANGE(0) or OUT_OF_RANGE(1); INACTIVE cars are skipped.
+        // (X360 0x82797FDC: `lwz r11, -0x6C(car+0x1534)` == meCarState @+0x14C8; `beq`/`cmpwi 1`.)
         const EAICarState leState = lpAICar->GetState();
-        if (leState == E_AI_CAR_STATE_IN_RANGE || leState == E_AI_CAR_STATE_OUT_OF_RANGE)
+        const bool lbStateEligible =
+            (leState == E_AI_CAR_STATE_IN_RANGE || leState == E_AI_CAR_STATE_OUT_OF_RANGE);
+
+        // The console evaluates these two IN THIS ORDER and short-circuits on each
+        // (0x8279800C `bl NeedsNewRoute`, then 0x8279801C `lhz 0(r31)` / `lhz -2(r31)` ==
+        // GetBestSectionIndex's best-then-default fallback). NeedsNewRoute @0x82765F80 is a pure
+        // read, and GetBestSectionIndex is two u16 loads, so hoisting both into named locals for
+        // the witness below changes no behaviour -- the guarded call order is unchanged.
+        const bool lbNeedsNewRoute = lbStateEligible && lpAICar->NeedsNewRoute();
+        const u16  luBestSection   = lbStateEligible ? lpAICar->GetBestSectionIndex()
+                                                     : AICar::KI_INVALID_SECTION_INDEX;
+        const bool lbHasSection    = (luBestSection != AICar::KI_INVALID_SECTION_INDEX);
+        const bool lbRequesting    = lbStateEligible && lbNeedsNewRoute && lbHasSection;
+
+        // ---- [FLAG PC witness] NOT IN THE X360 BINARY ------------------------------------
+        // One line per car, naming EVERY term of the console's three-part gate, so a run can
+        // never again leave "the rivals asked but were refused" and "the rivals never asked"
+        // indistinguishable. Printed only for cars the console would even look at
+        // (state IN_RANGE/OUT_OF_RANGE), which is at most the six cars in a Road Rage.
+        // DELETE-WHEN rivals are seen driving their own routes.
+        const bool lbWitnessBurst =
+            lbStateEligible && (saiRouteReqWitness[liAICarIndex] < KI_ROUTE_REQ_WITNESS_PER_CAR);
+        const bool lbWitnessSample =
+            lbStateEligible && ((saiRouteReqTick[liAICarIndex] % KI_ROUTE_REQ_WITNESS_PERIOD) == 0);
+
+        if (lbStateEligible)
         {
-            if (lpAICar->NeedsNewRoute() &&
-                lpAICar->GetBestSectionIndex() != AICar::KI_INVALID_SECTION_INDEX)
+            ++saiRouteReqTick[liAICarIndex];
+        }
+
+        if ((lbWitnessBurst || lbWitnessSample)
+            && siRouteReqWitnessTotal < KI_ROUTE_REQ_WITNESS_TOTAL
+            && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++siRouteReqWitnessTotal;
+            ++saiRouteReqWitness[liAICarIndex];
+
+            const char* lpcVerdict = "REQUEST";
+            if (!lbNeedsNewRoute)
             {
-                GenerateRoute(lpAICar, lpPlayerCar, lpaAICars, lpAISectionData,
-                              lpRouteInputBuffer, lpBuzzByManager);
+                lpcVerdict = "skip: NeedsNewRoute()==false (route still good, or crashing, or no section)";
             }
+            else if (!lbHasSection)
+            {
+                lpcVerdict = "skip: best AND default section are both 0x7FFF (no road under the car)";
+            }
+
+            *CgsDev::Log::gpDebugPrint
+                << "[route-req] car " << liAICarIndex
+                << " raceCarIdx " << lpAICar->GetRaceCarIndex()
+                << " state " << static_cast<s32>(leState)
+                << " style " << static_cast<s32>(lpAICar->GetRouteFindingStyle())
+                << " needsNewRoute " << (lbNeedsNewRoute ? 1 : 0)
+                << " best " << static_cast<s32>(lpAICar->muBestSectionIndex)
+                << " default " << static_cast<s32>(lpAICar->muDefaultSectionIndex)
+                << " dest " << static_cast<s32>(lpAICar->GetDestinationSectionIndex())
+                << " hasRoute " << (lpAICar->HasValidRoute() ? 1 : 0)
+                << " -> " << lpcVerdict << " [FLAG PC witness]\n";
+        }
+
+        if (lbRequesting)
+        {
+            GenerateRoute(lpAICar, lpPlayerCar, lpaAICars, lpAISectionData,
+                          lpRouteInputBuffer, lpBuzzByManager);
         }
     }
 }

@@ -122,4 +122,10 @@ namespace BrnAI
     const f32 KF_PID_DRIFT_D                         = 1.0f;         // flt_82001C98
     const f32 KF_CENTRE_LINE_AHEAD                   = 0.9975f;      // AICar::OnModeStart @0x8277BE30 -> RacingLine::mfCentreLineAhead
     const f32 KF_CENTRE_LINE_AHEAD_RECIP             = 400.0004f;    // ... and 1 / (1 - 0.9975) -> RacingLine::mfCentreLineAheadRecip
+
+    // ADDITIVE (aiwave R7 2026-09-04): the per-lane "is this 2D vector degenerate" epsilon
+    // CalculateSteeringAngle @0x8277CD98 / @0x8277CF50 splats out of flt_820C3B70. Image bytes at
+    // 0x820C3B70 == 0x34000000 == 1.1920928955078125e-07 (FLT_EPSILON). Both tests are strict
+    // `fabs(lane) > eps` (vandc sign-clear then vcmpgtfp), so equality counts as degenerate.
+    const f32 KF_STEERING_VECTOR_EPSILON             = 1.1920928955078125e-07f;   // flt_820C3B70
 }

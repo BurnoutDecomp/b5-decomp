@@ -41,21 +41,61 @@ namespace BrnAI
     // DWARF BrnAISteeringFan.h:58
     const s32 KI_FAN_STEPS = 17;
 
-    // DWARF BrnAISteeringFan.h:41 -- the enumerators are not carried by the DWARF dump. The X360
-    // SetBiasMode asserts `mode < 10` ("Bad Bias mode set in Steering Fan" @0x827693E8), and the
-    // AIDriver fan-choosers produce 0/1/2/4/5/6/7/8/9. Only the count is pinned here; the callers
-    // pass the raw console values.
+    // DWARF BrnAISteeringFan.h:41 (aiwave R6: the DecFIGS dwarfdump DOES carry the enumerators --
+    // references/DecFIGS/dwarfdump/GameSource/World/AI/RacingLine/BrnAISteeringFan.h:3). The X360
+    // SetBiasMode asserts `mode < 10` ("Bad Bias mode set in Steering Fan" @0x827693E8); the
+    // AIDriver fan-choosers produce 0/1/2/4/5/6/8/9. E_BIAS_MODE_COUNT is kept as an alias of
+    // eBiasMode_Count so the pre-R6 call sites keep compiling.
     enum EBiasMode
     {
-        E_BIAS_MODE_COUNT = 10,
+        eBiasMode_First               = 0,
+        eBiasMode_Race                = 0,
+        eBiasMode_RaceDangerous       = 1,
+        eBiasMode_Slam                = 2,
+        eBiasMode_RoadRage            = 3,
+        eBiasMode_CloseToPlayer       = 4,
+        eBiasMode_SlamRivals          = 5,
+        eBiasMode_HitOncoming         = 6,
+        eBiasMode_SlamDangerous       = 7,
+        eBiasMode_DontCentreWithinHNG = 8,
+        eBiasMode_VeerAwayFromPlayer  = 9,
+        eBiasMode_Count               = 10,
+        E_BIAS_MODE_COUNT             = 10,
     };
 
-    // DWARF BrnAISteeringFan.h:60 -- the contributor rows of mfWeighting[14][17]. Enumerator
-    // names are not carried by the DWARF dump; only the row count is load-bearing.
+    // DWARF BrnAISteeringFan.h:60 -- the contributor rows of mfWeighting[14][17]. Enumerator names
+    // from the DecFIGS dwarfdump (BrnAISteeringFan.h:20); each row is confirmed by the kfBias
+    // column UpdateWeightings @0x82794600 tests before calling that row's Include* member, and by
+    // the row base each Include* body writes (e.g. IncludePreferCurrentDirection @0x827694A8 writes
+    // this+0x5D4 == mfWeighting[8], IncludeRouteParallelTracking @0x82786DB8 writes this+0x590 ==
+    // mfWeighting[7], IncludeCentreLineTracking @0x82786BC8 writes this+0x3B4 == mfWeighting[0]).
     enum EFan_Contributors
     {
-        E_FAN_CONTRIBUTORS_COUNT = 14,
+        eFan_First                   = 0,
+        eFan_SteerToCentre           = 0,   // IncludeCentreLineTracking       @0x82786BC8
+        eFan_AvoidHNG                = 1,   // IncludeHardNoGo                 @0x82779D98
+        eFan_ExitHNG                 = 2,   // IncludeHardNoGo                 @0x82779D98
+        eFan_FavourHNGDanger         = 3,   // (IncludeHardNoGo's own third row)
+        eFan_AvoidTraffic            = 4,   // IncludeConstantBearing          @0x827873A0
+        eFan_AvoidOncomingTraffic    = 5,   // IncludeConstantBearing          @0x827873A0
+        eFan_AvoidEdges              = 6,   // IncludeRouteEdgeIntersection    @0x8277A378
+        eFan_DriveParallel           = 7,   // IncludeRouteParallelTracking    @0x82786DB8
+        eFan_PreferCurrentDirection  = 8,   // IncludePreferCurrentDirection   @0x827694A8
+        eFan_DriftFinalDirection     = 9,   // IncludeDriftDirectionTracking   @0x827881B0
+        eFan_DriftFinalLocation      = 10,  // IncludeDriftLocationTracking    @0x82788738
+        eFan_SmashIntoPlayer         = 11,  // IncludeSmashIntoPlayer          @0x82791230
+        eFan_DriveCloseToPlayer      = 12,  // IncludeDriveCloseToPlayer       @0x82787E58
+        eFan_SmashIntoRivals         = 13,  // IncludeSmashIntoNearbyAI        @0x82791338
+        eFan_Count                   = 14,
+        E_FAN_CONTRIBUTORS_COUNT     = 14,
     };
+
+    // DWARF BrnAISteeringFan.cpp:68 -- `float32_t[10][14] kfBias`, the per-bias-mode multiplier
+    // AccumulateWeightings @0x82779088 applies to each contributor row
+    // (`base + meBiasMode*0x38 + contributor*4`, image address flt_82F30468). DEFINED in
+    // BrnAISteeringFan_Target.cpp; NON-const because the console's is (see that file's banner for
+    // where each cell's value came from).
+    extern f32 kfBias[E_BIAS_MODE_COUNT][E_FAN_CONTRIBUTORS_COUNT];
 
     // DWARF BrnAISteeringFan.h:99
     struct SteeringFan
@@ -66,10 +106,11 @@ namespace BrnAI
         s32   GetBestIndex();                              // @0x82768D48
         f32   GetSpeedRatio();                             // @0x82779B90
 
-        // ---- X360-attested members bodied by their own recon pass (declare-only) -----------
-        // [FLAG PC bring-up] BrnAISteeringFan.cpp's weighting/target machinery (26 functions) is
-        // NOT reconstructed this wave; AIDriver gates every call to it behind
-        // BRN_AI_RACINGLINE_STACK_PRESENT (BrnAIDriver.h). DELETE-WHEN those bodies land.
+        // ---- bodied in BrnAISteeringFan_Target.cpp / _Weightings.cpp (aiwave R6) -----------
+        // The fan target machinery. Signatures are the DecFIGS DWARF's
+        // (dwarfdump/.../BrnAISteeringFan.cpp), each gated on the X360 register map in the
+        // reconstructing .cpp. Members that still have NO body carry a [FLAG PC bring-up] park in
+        // BrnAISteeringFan_Weightings.cpp -- they are never silently absent.
         Vector2 GetDrivingTarget(AICar* lpCar, RacingLine* lpRacingLine,
                                  RacingLineGenerator* lpRacingLineGenerator,
                                  const NearbyVehicles* lpNearbyVehicles,
@@ -78,8 +119,13 @@ namespace BrnAI
                                RacingLineGenerator* lpRacingLineGenerator,
                                const NearbyVehicles* lpNearbyVehicles,
                                EGlobalRaceCarIndex leVictim);                     // @0x82794600 (DWARF :127)
-        void  AccumulateWeightings();                                             // @0x82779088
-        s32   GetMinMaxWeightings(float* lpWeightings, f32& lrMin, f32& lrMax);   // @0x82768AC8
+        // @0x82779088 -- returns `this` (the X360 threads r3 straight back out; GetDrivingTarget
+        // @0x82779C5C feeds that return value into BestTargetInArea as its r3).
+        SteeringFan* AccumulateWeightings();
+        // DWARF: GetMinMaxWeightings(float* lfWeighting, const float32_t& lfBestWeighting,
+        // const float32_t& lfWorstWeighting) -- arg 2 is the MAX (best), arg 3 the MIN (worst);
+        // the pre-R6 names had them the wrong way round. Returns the index of the max (-1 if none).
+        s32   GetMinMaxWeightings(f32* lpWeightings, f32& lrBestWeighting, f32& lrWorstWeighting); // @0x82768AC8
         void  GenerateFanVectors(AICar* lpCar);                                   // @0x827792C0
         void  RenderFanVectors(s32 liIndex);                                      // @0x82779A20
         void  IncludeCentreLineTracking(RacingLineGenerator*, RacingLine*);       // @0x82786BC8
@@ -100,6 +146,17 @@ namespace BrnAI
         void  IncludeRouteParallelTracking(RacingLineGenerator*, RacingLine*);    // @0x82786DB8
         void  IncludeDriftLocationTracking(RacingLineGenerator*, RacingLine*);    // @0x82788738
         void  CachePointAhead(RacingLineGenerator*, RacingLine*);                 // @0x827913C8
+
+        // Named by UpdateWeightings @0x82794640 / @0x8279479C; NEITHER has an IDA export
+        // (.ida-exports has no 0x82768CB0.json / 0x8277A378.json) -- both are parked bodies in
+        // BrnAISteeringFan_Weightings.cpp.
+        void  CalculateFanAngle(AICar* lpCar);                                    // @0x82768CB0
+        void  IncludeRouteEdgeIntersection(RacingLineGenerator*, RacingLine*);    // @0x8277A378
+
+        // DWARF BrnAISteeringFan.cpp:1248 -- the rival picker IncludeSmashIntoNearbyAI uses.
+        const NearbyVehicle* FindNeabyAIInTraffic(const NearbyVehicles*, AICar*); // (sic: DWARF spelling)
+        void  RenderEdge(s32 liIndex, u32 luColour);                              // @0x82779770
+        void  RenderContributor(s32 liContributor);                               // @0x82779830
 
         // ---- storage (DWARF declaration order == layout order) ------------------------------
         Vector2     mTarget[KI_FAN_STEPS];                          // +0x000  DWARF :303

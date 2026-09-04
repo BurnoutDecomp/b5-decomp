@@ -87,6 +87,7 @@
 
 #include "types.hpp"               // f32, s32, u8, ...
 #include "BrnCommonTypes.h"        // Vector3 (rw::math::vpu::Vector3, 16-byte SIMD)
+#include "GameSource/BurnoutConstants.h"                // ::EGlobalRaceCarIndex (Construct's argument; DWARF BrnAICar.h:86)
 #include "GameSource/World/AI/BrnAIAggressiveness.h"   // BrnAI::Aggressiveness (embedded by value)
 #include "GameSource/World/AI/BrnAISharedConstants.h"  // BrnAI::ERouteFindingStyle, BrnAI::EAICarState, EAISpeedSelectionMethod, EPersonalityType
 #include "SharedClasses/AI/AISectionsResourceType.h"   // BrnAI::AISectionsData (full type: Update's callees index its sections), EResetSpeedType
@@ -243,6 +244,13 @@ namespace BrnAI
         void SetDestinationSectionIndex(u16 luSection) { muDestinationSectionIndex = luSection; }
 
         s32  GetRaceCarIndex() const { return miRaceCarIndex; }       // +0x14C4
+        // DWARF BrnAICar.h:278 -- the SAME member under its DWARF name (:676
+        // `EGlobalRaceCarIndex meGlobalRaceCarIndex`). AIModule::HandleManagementEvents
+        // compares AIDriver::GetGlobalRaceCarIndex() against the event's slot with it.
+        EGlobalRaceCarIndex GetGlobalRaceCarIndex() const
+        {
+            return static_cast<EGlobalRaceCarIndex>(miRaceCarIndex);
+        }
 
         // Per-frame route-request decision flags (read directly by the X360 builders).
         bool WantsAlternativeRoute() const   { return mbWantsAlternativeRoute != 0; }   // +0x153F
@@ -287,6 +295,12 @@ namespace BrnAI
         void Update(const RaceBalancingManager* lpRaceBalancingManager, f32 lfTimeStep,
                     const AICar* lpPlayerCar, AISectionsData* lpAISectionsData,
                     const Route* lpRoute, bool lbIsOnline);                                  // @0x82798F68
+        // DWARF BrnAICar.h:86 `void Construct(EGlobalRaceCarIndex)`. X360 @0x82792620 (NO IDA
+        // export -- named only through AIModule::Construct's xrefs_from; body recovered from
+        // image.bin). AIModule::Construct runs it once per car, 0x827951BC..0x827951F8:
+        // `GetAICar(i)` then `AICar::Construct(car, i)`. THE ONE-TIME SEED THAT TELLS A CAR
+        // WHICH GLOBAL SLOT IT IS (miRaceCarIndex @+0x14C4 == DWARF meGlobalRaceCarIndex :676).
+        void Construct(EGlobalRaceCarIndex leGlobalRaceCarIndex);                           // @0x82792620 (DWARF :86)
         void Reset(EPersonalityType lePersonalityType, bool lbKeepTransform);               // @0x82792800 (DWARF :100)
         void UpdateShortcut(AISectionsData* lpAISectionsData);                              // @0x82765D70 (DWARF :104)
         void UpdatePositionOutOfRange(f32 lfTimeStep, AISectionsData* lpAISectionsData);    // @0x8276F060 (DWARF :202)
@@ -339,7 +353,7 @@ namespace BrnAI
         EAIBehaviour mePreviousBehaviour;               // +0x14B8 (5304) prior behaviour (SetBehaviour shifts meBehaviour into here)
         s32 meSpeedSelectionMethod;                     // +0x14BC (5308) EAISpeedSelectionMethod -- CalcDesiredSpeed switch
         ERouteFindingStyle meRouteFindingStyle;         // +0x14C0 (5312)
-        s32 miRaceCarIndex;                             // +0x14C4 (5316) -- index packed into each route request
+        s32 miRaceCarIndex;                             // +0x14C4 (5316) DWARF meGlobalRaceCarIndex :676 -- the car's OWN global slot; AICar::Construct @0x82792620 stores its argument here (`stw r28,0x14C4`), and every route request / driver bind / management-event assert is keyed by it
         EAICarState meCarState;                         // +0x14C8 (5320)
         EPersonalityType mePersonalityType;             // +0x14CC (5324) DWARF :678 -- Reset stores its argument; indexes the base-aggression table
         EResetSpeedType meResetSpeedType;               // +0x14D0 (5328) DWARF :679 -- UpdateResetOnTrackSection stores; Reset -> E_RESET_SPEED_TYPE_COUNT (20)

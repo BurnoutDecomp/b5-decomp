@@ -1,5 +1,6 @@
 #include "GameSource/World/AI/BrnAIAggression.h"
 #include "GameSource/World/AI/BrnAICar.h"
+#include "GameSource/World/AI/BrnAICar_Constants.h"    // the .bss tunables, recovered from their start-up initialisers
 #include "GameSource/World/AI/BrnAIUtils.h"                 // BrnAI::StepTo (step-toward helper)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
@@ -14,9 +15,10 @@
 // BrnAIAggression.h, and GetTargetPos is bodied separately in BrnAIAggression.cpp. Bodies were
 // reconstructed from the X360 pseudocode/asm and adversarially verified per function group.
 //
-// FLAGGED file-local constants below: where a rodata tuning value (KF_*) is not present in the
-// per-function exports it is shipped as a flagged placeholder (NOT fabricated); resolve from the
-// XEX .rdata before relying on its magnitude.
+// File-local tuning constants below: the 0x820Cxxxx values are the rodata literal pool, read
+// straight out of image.bin. The 0x8300Dxxx family is .bss and now lives in
+// BrnAICar_Constants.h, recovered 2026-09-04 from the CRT start-up initialisers that write it
+// (0x82C685B8..0x82C69488). No 0.0f placeholder tunables remain in this TU.
 
 namespace BrnAI
 {
@@ -31,13 +33,9 @@ namespace BrnAI
 const f32 KF_MIN_POST_ATTACK_WAIT_TIME = 1.0f; // rodata 0x820C426C == 0x3F800000 (read from image.bin)
 const f32 KF_MAX_POST_ATTACK_WAIT_TIME = 1.0f; // rodata 0x820C4270 == 0x3F800000 (read from image.bin)
 
-// Minimum speed below which a candidate car is considered too slow to target (CarIsTooSlow).
-// X360 rodata at flt_8300D9A0 -- value not recoverable from the dossier asm.
-const f32 KF_CAR_TOO_SLOW_SPEED = 0.0f; // FLAG: flt_8300D9A0 is .bss -- see the .bss note below
-
-// DecideToAttack @0x82770C50: in MARKED_MAN the AI attacks outright when the player's speed
-// drops below this. flt_8300D974 is .bss, so the image cannot attest the value (see below).
-const f32 KF_MARKED_MAN_ATTACK_SPEED = 0.0f; // FLAG: flt_8300D974 is .bss -- see the .bss note below
+// CarIsTooSlow's flt_8300D9A0 (40 mph) and DecideToAttack's flt_8300D974 (90 mph, the
+// MARKED_MAN "player has slowed, attack now" threshold) are .bss: both live in
+// BrnAICar_Constants.h as KF_CAR_TOO_SLOW_SPEED / KF_MARKED_MAN_ATTACK_SPEED.
 
 // --- G2-geometry ---
 // CalcSeparationAcrossToTarget uses a small epsilon to reject a degenerate (near-zero) right
@@ -48,60 +46,19 @@ const f32 KF_QUERY_POS_EPSILON = 1.1920929e-7f; // rodata 0x820C3B70 == 0x340000
 // --- G3-speedmatch ---
 // --- BrnAIAggression.cpp file-local speed-match tuning constants (group G3-speedmatch) ---
 //
-// ⚠️ THE .bss NOTE (checked 2026-09-03 against scratch/postfx_step9_final/envfix/work/image.bin,
-// file offset == VA - 0x82000000). The two address families in this file are NOT the same kind
-// of thing and must not be treated alike:
+// THE .bss NOTE, CORRECTED 2026-09-04. The two address families in this file are still not the
+// same kind of thing, but BOTH are now recoverable:
 //   * 0x820Cxxxx / 0x8201xxxx / 0x8200xxxx are the big-endian **rodata float literal pool**.
-//     Reading the image there IS the console value, and every KF_ below that carries an
-//     0x820Cxxxx address has been back-filled from it (with the raw big-endian word quoted).
-//   * 0x8300D6E8..0x8300DC00 is **.bss**: the whole region reads back as zero in the image,
-//     and a .bss zero is NOT evidence that the console value is zero -- these floats are
-//     written by a dynamic initialiser whose writer has no IDA export. They therefore KEEP
-//     their FLAG and their 0.0f placeholder. Do not "recover" them by reading the image.
-// Everything below that still says FLAG is in the second family.
-
-// GetMinFallBackSpeed -- per-route-finding-style minimum fall-back speed.
-const f32 KF_MIN_FALLBACK_SPEED_PURSUIT     = 0.0f; // flt_8300D988 -- FLAG: rodata value unrecovered
-const f32 KF_MIN_FALLBACK_SPEED_ROAD_RAGE   = 0.0f; // flt_8300D744 -- FLAG: rodata value unrecovered
-const f32 KF_MIN_FALLBACK_SPEED_MARKED_MAN  = 0.0f; // flt_8300DB2C -- FLAG: rodata value unrecovered
-const f32 KF_MIN_FALLBACK_SPEED_DEFAULT     = 0.0f; // flt_8300D7DC -- FLAG: rodata value unrecovered
-
-// GetMaxOvertakeSpeed -- aggression-level lerp endpoints (lerp(lo, hi, aggressionLevel)).
-const f32 KF_MAX_OVERTAKE_SPEED_MARKED_MAN_HI = 0.0f; // flt_8300D714 -- FLAG: rodata value unrecovered
-const f32 KF_MAX_OVERTAKE_SPEED_MARKED_MAN_LO = 0.0f; // flt_8300D6F0 -- FLAG: rodata value unrecovered
-const f32 KF_MAX_OVERTAKE_SPEED_DEFAULT_HI    = 0.0f; // flt_8300D7A0 -- FLAG: rodata value unrecovered
-const f32 KF_MAX_OVERTAKE_SPEED_DEFAULT_LO    = 0.0f; // flt_8300D970 -- FLAG: rodata value unrecovered
-
-// Shared "speed match disabled / no passing" speed (returned when there is no player car or
-// the AI car is not in range). Appears in GetSpeedMatchSpeed, SetSlowOvertakingSpeed and
-// SetSlowFallbackSpeed.
-const f32 KF_NO_PASSING_SPEED = 0.0f; // flt_8300D6F4 -- FLAG: rodata value unrecovered
-
-// GetSpeedMatchSpeed -- OVERTAKE_FAST (case 4).
-const f32 KF_OVERTAKE_FAST_MIN_SPEED   = 0.0f; // flt_8300D71C -- FLAG: rodata value unrecovered (shared w/ SetSlowOvertakingSpeed)
-const f32 KF_OVERTAKE_FAST_SPEED_BIAS  = 0.0f; // flt_8300DBE0 -- FLAG: rodata value unrecovered
-
-// GetSpeedMatchSpeed -- SLOW_TO_CLIP (case 3).
-const f32 KF_SLOW_TO_CLIP_SPEED_DROP   = 0.0f; // flt_8300D7F0 -- FLAG: rodata value unrecovered
-const f32 KF_SLOW_TO_CLIP_FALLBACK     = 0.0f; // flt_8300D754 -- FLAG: rodata value unrecovered
-
-// GetSpeedMatchSpeed -- SLOWER (case 2).
-const f32 KF_SLOWER_BEHIND_SPEED       = 0.0f; // flt_8300D784 -- FLAG: rodata value unrecovered
-
-// GetSpeedMatchSpeed -- default (aggressive fall-back) branch.
-const f32 KF_AGG_FALLBACK_POS_MAGNITUDE = 0.0f; // flt_8300D830 -- FLAG: rodata value unrecovered (used when curve >= 0)
-const f32 KF_AGG_FALLBACK_RELSPEED_HI   = 0.0f; // flt_8300DB08 -- FLAG: rodata value unrecovered (relative-speed lerp hi)
-const f32 KF_AGG_FALLBACK_RELSPEED_LO   = 0.0f; // flt_8300D72C -- FLAG: rodata value unrecovered (relative-speed lerp lo)
-const f32 KF_AGG_FALLBACK_BASE_MARKED   = 0.0f; // flt_8300D6E8 -- FLAG: rodata value unrecovered (marked-man base offset)
-const f32 KF_AGG_FALLBACK_BASE_DEFAULT  = 0.0f; // flt_8300D7D0 -- FLAG: rodata value unrecovered (default base offset)
-
-// SetSlowOvertakingSpeed.
-const f32 KF_SLOW_OVERTAKE_SPEED_BIAS  = 0.0f; // flt_8300D758 -- FLAG: rodata value unrecovered
-const f32 KF_SLOW_OVERTAKE_CAP_BIAS    = 0.0f; // flt_8300D778 -- FLAG: rodata value unrecovered
-
-// SetSlowFallbackSpeed -- relative-speed lerp endpoints (lerp(lo, hi, relSpeedForMatch)).
-const f32 KF_SLOW_FALLBACK_RELSPEED_HI = 0.0f; // flt_8300D7D8 -- FLAG: rodata value unrecovered
-const f32 KF_SLOW_FALLBACK_RELSPEED_LO = 0.0f; // flt_8300D728 -- FLAG: rodata value unrecovered
+//     Reading image.bin (file offset == VA - 0x82000000) there IS the console value.
+//   * 0x8300D6E8..0x8300DC64 is **.bss**: it reads back as zero in the image, and a .bss zero is
+//     NOT evidence that the console value is zero. The earlier note concluded from that that the
+//     writers had "no IDA export" and kept 0.0f placeholders -- WRONG. The writers exist as
+//     unexported CRT leaf routines in 0x82C685B8..0x82C69488 (one `stfs` per address, exactly
+//     one writer each), and every value in that family is now evaluated in
+//     BrnAICar_Constants.h: GetMinFallBackSpeed's four, GetMaxOvertakeSpeed's four,
+//     KF_NO_PASSING_SPEED, the GetSpeedMatchSpeed OVERTAKE_FAST / SLOW_TO_CLIP / SLOWER /
+//     aggressive-fall-back sets, SetSlowOvertakingSpeed's two, SetSlowFallbackSpeed's two,
+//     KF_CLIP_OFF_MIN_SPEED and KF_NON_SPEED_MATCHED_SPEED_DEFAULT.
 
 // Shared speed-match RANGE tuning quad (proximity-lerped). Same four rodata floats are used by
 // OutOfSpeedMatchRange and the GetSpeedMatchSpeed default branch.
@@ -126,10 +83,9 @@ const f32 KF_SPEED_MATCH_SEP_PROX0  =  0.0f; // rodata 0x820C42F0 == 0x00000000 
 // the rodata is dumped. Literal immediates visible in the pseudocode (2.0/3.0/8.0/10.0/
 // 12.0/20.0/30.0/5.0/130.0/1.0) are used inline in the bodies, not listed here.
 
-const f32 KF_FALL_PAST_SPURT_MIN_TIME = 0.0f;   // FLAG: rodata value unrecovered -- fsel floor (f31) for the re-rolled SPURT_FORWARD time in FallPast
+const f32 KF_FALL_PAST_SPURT_MIN_TIME = -1.0f;  // rodata 0x820037C8 == 0xBF800000 -- UpdateAggressionStateFallPast @0x82793568 keeps f31 = flt_820037C8 live from 0x82793620 through the `fsel f0, f0, f0, f31` at 0x82793704 (the same -1 it stores at 0x82793818)
 const f32 KF_FALL_PAST_TIME_LERP_LO   = 0.0f;   // rodata 0x820C4288 == 0x00000000 (read from image.bin) -- low endpoint of the BE_FODDER state-time lerp in FallPast
 const f32 KF_FALL_PAST_TIME_LERP_HI   = 2.0f;   // rodata 0x820C428C == 0x40000000 (read from image.bin) -- high endpoint of the BE_FODDER state-time lerp in FallPast
-const f32 KF_CLIP_OFF_MIN_SPEED       = 0.0f;   // FLAG: flt_8300D720 is .bss -- see the .bss note below
 // 0x82F31928 is INITIALISED .data (not .bss): 0x3EE4E26D == 0.44704, the mph -> m/s factor.
 // SpurtForward's 130.0 * this == 58.1 m/s == 130 mph, which is what the name says it is.
 const f32 KF_SPURT_PASSING_SPEED_SCALE = 0.44704f; // .data 0x82F31928 == 0x3EE4E26D (read from image.bin)
@@ -1692,7 +1648,7 @@ void AIAggression::Construct(AIDriver* lpDriver)
 //
 // Seed the machine for a freshly bound car: mpCar, mfStateTime=-1, state=OUT_OF_RANGE,
 // mfRelativePositionAhead=0, mpTargetCar=NULL, mfHangingAroundTimer=0, mbTargetPosValid=false,
-// meSpeedMatchType=Disabled, mfNonSpeedMatchedSpeed=<.bss flt_8300DC64>, mpPlayerCar=NULL,
+// meSpeedMatchType=Disabled, mfNonSpeedMatchedSpeed=flt_8300DC64 (35.7632 m/s), mpPlayerCar=NULL,
 // mfContinuousContactTimer=0, mfRecentHitTimer=0.
 // ====================================================================================
 void AIAggression::Prepare(AICar* lpCar)
@@ -1705,10 +1661,8 @@ void AIAggression::Prepare(AICar* lpCar)
     mfHangingAroundTimer     = 0.0f;                              // +7272 == +0x68
     mbTargetPosValid         = false;                             // +7236 == +0x44
     meSpeedMatchType         = ESpeedMatch_Disabled;              // +7256 == +0x58
-    // [FLAG PC bring-up] flt_8300DC64 is a zero-initialised .bss tunable whose start-up writer is
-    // not in the export set (see BrnAIDriver_Constants.h); 0.0 is the only value the image
-    // attests. DELETE-WHEN the AI .bss initialiser is recovered.
-    mfNonSpeedMatchedSpeed   = 0.0f;                              // +7268 == +0x64
+    // flt_8300DC64 == 80 mph * 0.44704 (initialiser 0x82C68CA0); see BrnAICar_Constants.h.
+    mfNonSpeedMatchedSpeed   = KF_NON_SPEED_MATCHED_SPEED_DEFAULT;// +7268 == +0x64
     mpPlayerCar              = 0;                                 // +7184 == +0x10
     mfContinuousContactTimer = 0.0f;                              // +7248 == +0x50
     mfRecentHitTimer         = 0.0f;                              // +7244 == +0x4C

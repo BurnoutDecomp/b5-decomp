@@ -8,6 +8,7 @@
 #include "GameSource/World/AI/PID/BrnPIDController.h"      // PIDController (the two embedded controllers)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // [FLAG PC witness] the [drv] behaviour-transition trace
 
 #include <cmath>   // std::sqrt (de-SIMD'd 2D normalise), std::isfinite (RwMath::IsValid)
 
@@ -58,13 +59,28 @@ namespace BrnAI
         return lResult;
     }
 
-    // 2D-flatten a Vector3 (drop z; the steering math is purely in the ground plane). This is
-    // BrnMath::Flatten, which the X360 calls out of line in several of these bodies.
+    // 2D-flatten a Vector3 onto the XZ GROUND plane. This is BrnMath::Flatten @0x822CB8E8, which
+    // the X360 calls out of line in several of these bodies and open-codes as a vrlimi pair in
+    // others.
+    //
+    // ⛔ FIXED 2026-09-04 (aiwave R7): this used to write `lResult.y = lVector.y` -- the WORLD
+    // HEIGHT lane -- so every AI 2D position/heading lived on the X/height plane instead of the
+    // ground plane. Two independent X360 witnesses settle the lane mapping:
+    //   * BrnMath::Flatten @0x822CB8E8 ends `lvx128 v0,&unk_82CDA450 ; vperm v1,v1,v1,v0`, and the
+    //     mask bytes at 0x82CDA450 are 00 01 02 03 | 18 19 1A 1B | 00 01 02 03 | 00 01 02 03 --
+    //     lane1 is sourced from bytes 0x18..0x1B, i.e. vB lane 2 == .z. (This retires the
+    //     "the mask is an un-valued .rdata blob" FLAG in GameSource/Math/BrnMathUtils.cpp; that
+    //     TU's XZ inference was correct.)
+    //   * CalculateSteeringAngle @0x8277CD70..0x8277CD8C open-codes the same flatten inline:
+    //     `vspltisw128 v127,0 ; vrlimi128 v127,v0,8,0 ; vrlimi128 v127,v0,4,1` == lane0 <- v0
+    //     lane0 (.x), lane1 <- (v0 rotl 1 word) lane1 == v0 lane2 (.z), lanes 2/3 left ZERO.
+    // Route nodes agree: RouteMapModule::AddExtrapolatedPortalNode stores {portal.x, portal.z}
+    // and AICar::IsExtrapolatedRouteGettingOld reads a node back as {x, 0, y}.
     static Vector2 To2D(Vector3 lVector)
     {
         Vector2 lResult;
         lResult.x = lVector.x;
-        lResult.y = lVector.y;
+        lResult.y = lVector.z;   // ground plane: Vector2.y IS world Z
         lResult.z = 0.0f;
         lResult.w = 0.0f;
         return lResult;
@@ -76,6 +92,50 @@ namespace BrnAI
         if (lfValue < 0.0f) return 0.0f;
         if (lfValue > 1.0f) return 1.0f;
         return lfValue;
+    }
+
+    // ====================================================================================
+    // [FLAG PC witness] WitnessBehaviourTransition -- NOT IN THE X360 BINARY.
+    //
+    // Declared in BrnAIDriver.h; called by every driver-side writer of AICar::meBehaviour in this
+    // TU and in the BrnAIDriver_Update.cpp partfile. First 30 lines of the whole run, all drivers
+    // together (a run-6-style stop produces 2-3 of them, so the cap never truncates the story).
+    // The line carries the state the edge was taken on -- speed, the stuck timer, the desired
+    // speed and whether the car has a usable route -- because in run 6 EVERY behaviour edge after
+    // the start was decided by exactly those four numbers.
+    // DELETE-WHEN rivals drive a full event start to finish.
+    // ====================================================================================
+    void WitnessBehaviourTransition(const AIDriver* lpDriver, const AICar* lpCar,
+                                    s32 liFrom, s32 liTo, const char* lpcReason)
+    {
+        static s32 siDrvWitnessLines = 0;
+
+        if (lpDriver == 0 || lpCar == 0 || CgsDev::Log::gpDebugPrint == 0)
+        {
+            return;
+        }
+        if (siDrvWitnessLines >= 30)
+        {
+            return;
+        }
+        // The crash arm re-writes behaviour 7 every frame the car is crashing; only real edges
+        // are worth a line.
+        if (liFrom == liTo)
+        {
+            return;
+        }
+        ++siDrvWitnessLines;
+
+        *CgsDev::Log::gpDebugPrint
+            << "[drv] car " << lpCar->GetRaceCarIndex()
+            << " behaviour " << liFrom << " -> " << liTo
+            << " reason " << lpcReason
+            << " speed " << lpCar->GetSpeed()
+            << " stuck " << lpDriver->mfStuckTime
+            << " desired " << lpDriver->GetDesiredSpeed()
+            << " route " << (lpCar->HasValidRoute() ? 1 : 0)
+            << " style " << static_cast<s32>(lpCar->GetRouteFindingStyle())
+            << " [FLAG PC witness]\n";
     }
 
     // ====================================================================================
@@ -240,10 +300,18 @@ namespace BrnAI
             if (GetRacingLine().mbIsInitialised)
             {
 #if BRN_AI_RACINGLINE_STACK_PRESENT
+                // X360 @0x8279AF1C..0x8279AF44: v1 = BrnMath::Flatten(mpCar->GetPosition()) and
+                // `vmr v2, v1` -- BOTH vector arguments are the flattened car position (the same
+                // shape SteeringFan::CachePointAhead @0x8279145C uses, where both are
+                // mCentreTarget). r5 = this+0x1B00 == RacingLine::mCentreHere, r6 = this+0x1B10 ==
+                // RacingLine::mCentreAhead; r3 = this+0x1B30 (generator), r4 = this+0xF20 (line).
+                const Vector2 lCarPos2D = To2D(mpCarHost->GetPosition());
                 GetRacingLine().mbCentreLineHereKnown =
                     mRacingLineGenerator.GetCentreCentreLineHere(&GetRacingLine(),
-                                                                 &GetRacingLine().mCentreHere,
-                                                                 &GetRacingLine().mCentreAhead);
+                                                                 lCarPos2D,
+                                                                 lCarPos2D,
+                                                                 GetRacingLine().mCentreHere,
+                                                                 GetRacingLine().mCentreAhead);
 #else
                 // [FLAG PC bring-up] RacingLineGenerator::GetCentreCentreLineHere has no body in
                 // this tree; the console's own "not known" state is the safe stand-in
@@ -268,7 +336,7 @@ namespace BrnAI
                 if (mfInvulnerableTime > 0.0f)
                     mfInvulnerableTime = mfInvulnerableTime - lfTimeStep;
 
-                m2DCarPos  = To2D(lpCar->GetPosition());   // 0x1CD0 (x,y)
+                m2DCarPos  = To2D(lpCar->GetPosition());   // 0x1CD0 (world x, world z)
                 mfCarSpeed = mpCarHost->GetSpeed();            // 0x1D00
 
                 // lbz 0x1541(car) == mbIsInAir -- an airborne car keeps its controls cleared.
@@ -319,6 +387,17 @@ namespace BrnAI
     //   5       -> UpdateQuickTurn;         6 -> slow-turn behaviour + UpdateStuck;
     //   7       -> zero all controls + steering, then (if no longer crashing) restore behaviour 3;
     //   else    -> assert "Unknown AI behaviour".
+    //
+    // ROLLING_START (1) IS A NO-OP HERE and this file NEVER releases it: cases 1/2/8 branch
+    // straight to the epilogue (asm 0x8279A724 -> loc_8279A86C). The driver cannot leave
+    // behaviour 1 -- only the module can, through AICar::OnModeStartRacing @0x82765C50
+    // (behaviour <- CRUISING, mbIsStartingRace <- 0), which AIModule::OnModeStartRacing
+    // @0x8276E4B0 calls for every active in-mode car from exactly two places: the
+    // full-rolling-start arm of E_ACTION_STOP_MODE_INTRO (asm 0x827922DC, `li r4, 1`) and
+    // E_ACTION_START_PLAYING_MODE (asm 0x8279231C, `li r4, 0`). Nothing here waits on
+    // mbIsStartingRace or IsOnStartLine. During behaviour 1 CalculateCarControls still runs
+    // DoDrivingBehaviour, so the car DOES drive -- at AICar::CalcDesiredSpeed @0x82796078's
+    // meBehaviour==1 arm (opponent-rank-scaled speed), which is what makes a rolling start roll.
     // ====================================================================================
     void AIDriver::UpdateBehaviour(f32 lfTimeStep, AICar* lpPlayerCar)
     {
@@ -331,6 +410,8 @@ namespace BrnAI
             lpCar->mfBehaviourTimer    = 0.0f;                 // stfs 0x14E0
             lpCar->mePreviousBehaviour = lePrev;               // stw  0x14B8
             lpCar->meBehaviour         = E_AI_BEHAVIOUR_CRASHING;   // stw 0x14B4, 7
+            WitnessBehaviourTransition(this, lpCar, static_cast<s32>(lePrev), 7,
+                                       "UpdateBehaviour: AICar::IsCrashing()");   // [FLAG PC witness]
         }
 
         switch (lpCar->meBehaviour)
@@ -355,6 +436,8 @@ namespace BrnAI
                     lpCar->mfBehaviourTimer    = 0.0f;                     // stfs 0x14E0
                     lpCar->mePreviousBehaviour = E_AI_BEHAVIOUR_CRUISING;   // stw 0x14B8, 3
                     lpCar->meBehaviour         = E_AI_BEHAVIOUR_FIGHTING;   // stw 0x14B4, 4
+                    WitnessBehaviourTransition(this, lpCar, 3, 4,
+                                               "UpdateBehaviour case 3: mAggression.mbIsSuitableForAggression");   // [FLAG PC witness]
                 }
                 // [GUARD] 0x8279A768 `lwz r5, 0x1CE8(driver)` -- the aggression victim; the console never
                 // has it null here (the producer that stores +0x1CE8/+0x1CF0 runs first). On the host it
@@ -370,6 +453,8 @@ namespace BrnAI
                     lpCar->mfBehaviourTimer    = 0.0f;
                     lpCar->mePreviousBehaviour = E_AI_BEHAVIOUR_FIGHTING;   // stw 0x14B8, 4
                     lpCar->meBehaviour         = E_AI_BEHAVIOUR_CRUISING;   // stw 0x14B4, 3
+                    WitnessBehaviourTransition(this, lpCar, 4, 3,
+                                               "UpdateBehaviour case 4: !mbIsSuitableForAggression");   // [FLAG PC witness]
                 }
                 // [GUARD] 0x8279A7BC (r5 not reloaded -- the case-3 victim) `lwz r5, 0x1CE8(driver)` -- the aggression victim; the console never
                 // has it null here (the producer that stores +0x1CE8/+0x1CF0 runs first). On the host it
@@ -401,6 +486,8 @@ namespace BrnAI
                     lpCar->mfBehaviourTimer    = 0.0f;
                     lpCar->mePreviousBehaviour = lePrev;
                     lpCar->meBehaviour         = E_AI_BEHAVIOUR_CRUISING;
+                    WitnessBehaviourTransition(this, lpCar, static_cast<s32>(lePrev), 3,
+                                               "UpdateBehaviour case 7: crash over");   // [FLAG PC witness]
                 }
                 break;
 
@@ -411,11 +498,38 @@ namespace BrnAI
     }
 
     // ====================================================================================
+    // [FLAG PC witness] the [steer] trace -- NOT IN THE X360 BINARY.
+    //
+    // CalculateSteeringAngle owns the heading and the target position as locals; UpdateSteeringAngle
+    // owns the actuator. These two TU-local statics carry the former into the latter so ONE line
+    // tells the whole story. sgbSteerInputsFresh is raised only by CalculateSteeringAngle, so a
+    // line printed from any other UpdateSteeringAngle caller (behaviour 5's quick-turn lock, the
+    // airborne/settle 0.0 calls) is marked `src lock` and its head/target are the last computed
+    // ones -- do not read them as this frame's.
+    // DELETE-WHEN rivals hold a lane along a route for a full event.
+    // ====================================================================================
+    namespace
+    {
+        Vector2 sgSteerHeading;
+        Vector2 sgSteerTarget;
+        bool    sgbSteerInputsFresh = false;
+        s32     sgiSteerWitnessLines = 0;
+    }
+
+    static void WitnessSteeringInputs(Vector2 lHeading, Vector2 lTarget)
+    {
+        sgSteerHeading      = lHeading;
+        sgSteerTarget       = lTarget;
+        sgbSteerInputsFresh = true;
+    }
+
+    // ====================================================================================
     // UpdateSteeringAngle @0x827708F0  -- the STEER ACTUATOR.
     //
     // Step the stored steering angle toward lfTargetAngle. The target is FLIPPED when the car is
     // reversing (speed < 0). The per-frame step rate is behaviour-dependent (non-player cars use
     // 1.0; player cars pick a rate by meBehaviour). Then StepTo() the angle and store it.
+    // NOTE the AI rate is 1.0, so for a rival StepTo SNAPS: mfSteeringAngle == lfTargetAngle.
     // ====================================================================================
     void AIDriver::UpdateSteeringAngle(f32 lfTargetAngle)
     {
@@ -440,6 +554,35 @@ namespace BrnAI
         }
 
         mfSteeringAngle = StepTo(mfSteeringAngle, lfTargetAngle, lfRate);
+
+        // [FLAG PC witness] first 16 lines of the whole run, all drivers together.
+        {
+            const bool lbFresh = sgbSteerInputsFresh;
+            sgbSteerInputsFresh = false;
+
+            const AICar* lpWitnessCar = mpCarHost;
+            if (CgsDev::Log::gpDebugPrint != 0 && lpWitnessCar != 0 &&
+                !lpWitnessCar->IsPlayerCar() && sgiSteerWitnessLines < 16)
+            {
+                ++sgiSteerWitnessLines;
+                const Vector3 lFacing = lpWitnessCar->GetDirection();
+                const Route*  lpRoute = lpWitnessCar->GetRoute();
+                *CgsDev::Log::gpDebugPrint
+                    << "[steer] car " << lpWitnessCar->GetRaceCarIndex()
+                    << " src " << (lbFresh ? "pid" : "lock")
+                    << " facing (" << lFacing.x << ", " << lFacing.z << ")"
+                    << " head (" << sgSteerHeading.x << ", " << sgSteerHeading.y << ")"
+                    << " pos (" << m2DCarPos.x << ", " << m2DCarPos.y << ")"
+                    << " target (" << sgSteerTarget.x << ", " << sgSteerTarget.y << ")"
+                    << " angle " << mfCalculatedSteeringAngle
+                    << " pid " << mfPIDOutput
+                    << " in " << lfTargetAngle
+                    << " steer " << mfSteeringAngle
+                    << " node " << lpWitnessCar->GetNextRouteNodeIndex()
+                    << "/" << lpRoute->GetNodeCount()
+                    << " [FLAG PC witness]\n";
+            }
+        }
     }
 
     // ====================================================================================
@@ -462,27 +605,60 @@ namespace BrnAI
 
         const bool lbUseful = mpCarHost->mbIsDrifting;   // lbz 0x1544(car) == mbIsDrifting
 
-        // 1. current heading.
-        Vector2 lHeading;
+        // 1. current heading. The X360 flattens FIRST (the vrlimi pair @0x8277CD78/8C -- see To2D),
+        //    then tests BOTH ground lanes against FLT_EPSILON (flt_820C3B70 == 1.1920929e-7,
+        //    `vandc` = fabs, `vcmpgtfp` per lane @0x8277CD94..0x8277CE28). When BOTH lanes are
+        //    within epsilon the vector is REPLACED with (1, 0) before the normalise
+        //    (@0x8277CE44..0x8277CE58 stores 1.0/0.0/0/0 over it). Added 2026-09-04 (aiwave R7):
+        //    the host used to hand a degenerate vector to Normalize2D, which returns (0,0) and
+        //    makes the signed angle meaningless.
+        Vector2 lHeadingRaw;
         if (lbUseful)
-            lHeading = Normalize2D(To2D(mpCarHost->GetUsefulDirection()));
+            lHeadingRaw = To2D(mpCarHost->GetUsefulDirection());
         else
-            lHeading = Normalize2D(To2D(mpCarHost->GetDirection()));
+            lHeadingRaw = To2D(mpCarHost->GetDirection());
 
-        // 2. target delta -> steering target vector.
+        if (!(std::fabs(lHeadingRaw.x) > KF_STEERING_VECTOR_EPSILON) &&
+            !(std::fabs(lHeadingRaw.y) > KF_STEERING_VECTOR_EPSILON))
+        {
+            lHeadingRaw.x = 1.0f;    // flt_82001C98
+            lHeadingRaw.y = 0.0f;    // flt_82001CC0
+            lHeadingRaw.z = 0.0f; lHeadingRaw.w = 0.0f;
+        }
+        const Vector2 lHeading = Normalize2D(lHeadingRaw);
+
+        // 2. target delta -> steering target vector. The RAW delta is stored to
+        //    mSteeringTargetVector first (`stvx128 v0, r0, r30` @0x8277CED8) and only overwritten
+        //    with the normalised one on the non-degenerate path (@0x8277D030).
         const Vector2 lTarget = GetTargetPosition();
         Vector2 lDelta;
         lDelta.x = lTarget.x - m2DCarPos.x;
         lDelta.y = lTarget.y - m2DCarPos.y;
         lDelta.z = 0.0f; lDelta.w = 0.0f;
         CGS_ASSERT(IsFinite(lDelta.x) && IsFinite(lDelta.y), "Invalid target vector");
-        mSteeringTargetVector = Normalize2D(lDelta);             // 0x1C70
+        mSteeringTargetVector = lDelta;                          // 0x1C70 (raw)
 
-        // 3. signed planar angle heading -> steering target.
-        const f32 lfAngleToTarget =
-            FindSignedAngleBetween2DVectors(lHeading, mSteeringTargetVector);
-        CGS_ASSERT(IsFinite(lfAngleToTarget), "RwMath::IsValid( lfAngleToTarget )");
+        // The SAME per-lane epsilon test on the delta (@0x8277CF48..0x8277CFE0), but here a
+        // degenerate delta SKIPS the normalise AND the angle call entirely: the asm branches to
+        // 0x8277D080 with f30 still holding flt_82001CC0 == 0.0, so the PID records a ZERO error.
+        const bool lbDeltaDegenerate =
+            !(std::fabs(lDelta.x) > KF_STEERING_VECTOR_EPSILON) &&
+            !(std::fabs(lDelta.y) > KF_STEERING_VECTOR_EPSILON);
+
+        f32 lfAngleToTarget = 0.0f;
+        if (!lbDeltaDegenerate)
+        {
+            mSteeringTargetVector = Normalize2D(lDelta);         // 0x1C70 (normalised)
+
+            // 3. signed planar angle heading -> steering target.
+            lfAngleToTarget = FindSignedAngleBetween2DVectors(lHeading, mSteeringTargetVector);
+            CGS_ASSERT(IsFinite(lfAngleToTarget), "RwMath::IsValid( lfAngleToTarget )");
+        }
         mfCalculatedSteeringAngle = lfAngleToTarget;             // 0x1D50
+
+        // [FLAG PC witness] hand the [steer] line in UpdateSteeringAngle the inputs it cannot
+        // reach from there (the heading and the target position are locals here).
+        WitnessSteeringInputs(lHeading, lTarget);
 
         // 4. PID controller (the drift controller while the car is drifting, else the normal
         //    one). X360 @0x8277CE.. `addi r3, this, 0x1B98` vs `addi r3, this, 0x1B34`.
@@ -602,9 +778,18 @@ namespace BrnAI
         AICar* lpCar = mpCarHost;
 
         // 0x82766518..0x82766540: route validity == (meStatus (car+0x1408) != UNINITIALISED &&
-        // miNodeCount (car+0x1400) > 0). The X360 is `cmpwi r11,0 ; bgt` -- strictly > 0, NOT > 1.
+        // miNodeCount (car+0x1400) > 0) -- HasValidRoute(), `cmpwi r11,0 ; bgt`, strictly > 0.
         const Route* lpRoute = lpCar->GetRoute();   // mRoute is the AICar's own base
         if (!(lpRoute->GetStatus() != Route::E_STATUS_UNINITIALISED && lpRoute->GetNodeCount() > 0))
+        {
+            return false;
+        }
+
+        // ⛔ ADDED 2026-09-04 (aiwave R7): the console then takes a SECOND, tighter bound the host
+        // was missing -- `0x82766544 lwz r11,0x1400(r30) ; 0x82766548 cmpwi cr6,r11,1 ;
+        // 0x8276654C ble cr6, loc_82766660` -- a one-node route returns false. Without it the
+        // liNextNode <= 0 arm below reads Route::GetNode(1) off the end of a single-node route.
+        if (lpRoute->GetNodeCount() <= 1)
         {
             return false;
         }
@@ -647,10 +832,14 @@ namespace BrnAI
 
         if (lpCar->mbIsDrivenByPlayer)                           // lbz 0x154A(car)
         {
+            // X360 @0x8277CC48..0x8277CC58: the POSITION is flattened with the same vrlimi pair
+            // (lane0 <- .x, lane1 <- .z) before the unit facing is added
+            // (`vmaddcfp128 v0, v13, v0, v127` @0x8277CCC4). ⛔ FIXED 2026-09-04 (aiwave R7): the
+            // host read lPos.y (world height) into the ground lane.
             const Vector3 lPos = lpCar->GetPosition();
             const Vector2 lDir = Normalize2D(To2D(lpCar->GetDirection()));
             lResult.x = lPos.x + lDir.x;                         // position + unit facing
-            lResult.y = lPos.y + lDir.y;
+            lResult.y = lPos.z + lDir.y;
             lResult.z = 0.0f; lResult.w = 0.0f;
         }
         else
@@ -658,7 +847,7 @@ namespace BrnAI
             // X360 asm: SteeringFan::GetDrivingTarget(out, this+1808 (== mSteeringFan @0x710),
             // car, this+3872 (== mRacingLine @0xF20), this+6960 (== mRacingLineGenerator @0x1B30),
             // this (the driver's NearbyVehicles @0x000), 0).
-#if BRN_AI_RACINGLINE_STACK_PRESENT
+#if BRN_AI_STEERINGFAN_TARGET_PRESENT
             lResult = mSteeringFan.GetDrivingTarget(lpCar,
                                                     &GetRacingLine(),
                                                     &mRacingLineGenerator,
@@ -672,17 +861,59 @@ namespace BrnAI
             // @0x82766500 (the console's own route heading) instead of the raw car facing. That
             // keeps a rival driving its route while the fan is absent; when there is no usable
             // route it degenerates to the car's own facing, exactly like the arm above.
-            // DELETE-WHEN BrnAISteeringFan.cpp's weighting half lands and the macro flips.
+            // DELETE-WHEN BRN_AI_STEERINGFAN_TARGET_PRESENT (BrnRacingLineGenerator.h) goes to 1
+            // -- aiwave R6 landed SteeringFan::GetDrivingTarget and its weighting pass, but left
+            // that gate at 0 because the contributors that carry eBiasMode_Race are still parked
+            // and an all-zero fan resolves to mTarget[0] (80 degrees right). Read the gate's
+            // banner before flipping it.
             {
                 Vector2 lRouteDir;
                 if (!ComputeRouteDirection(lRouteDir))
                 {
                     lRouteDir = Normalize2D(To2D(lpCar->GetDirection()));
                 }
-                lResult.x = m2DCarPos.x + lRouteDir.x;
-                lResult.y = m2DCarPos.y + lRouteDir.y;
+                // [FLAG PC bring-up] run7/run8 (2026-09-04): the console fan targets sit
+                // mfLookAheadRadius (SteeringFan::Prepare: 10.0) ahead of the car, so the fallback
+                // aims that far along the route direction. Extrapolating from m2DCarPos alone is a
+                // pure HEADING hold with no cross-track term, so the car ends up parallel to the
+                // road but never returns to it; prefer the car's own next ROUTE NODE (a real
+                // portal position on the road) whenever that node is still AHEAD of the car
+                // -- dot(routeDir, node - carPos) > 0. The dot gate is what keeps this out of the
+                // "turn back toward a node already passed" trap when miNextRouteNodeIndex has not
+                // advanced yet (AICar::CheckForSectionChange -> MoveToSectionOnRoute owns that).
+                // DELETE-WHEN BRN_AI_STEERINGFAN_TARGET_PRESENT flips.
+                const f32 KF_FALLBACK_LOOK_AHEAD = 10.0f;   // == SteeringFan::mfLookAheadRadius after Prepare
+
+                lResult.x = m2DCarPos.x + lRouteDir.x * KF_FALLBACK_LOOK_AHEAD;
+                lResult.y = m2DCarPos.y + lRouteDir.y * KF_FALLBACK_LOOK_AHEAD;
                 lResult.z = 0.0f;
                 lResult.w = 0.0f;
+
+                // The look-ahead node is `min(miNextRouteNodeIndex + 1, count - 1)` -- the console's
+                // own "the node after the current one" idiom, read off
+                // AICar::IsExtrapolatedRouteGettingOld @0x8276FE7C..0x8276FE88 (which builds
+                // {node.x, 0, node.y} and dots it against the car direction exactly like this).
+                // MoveToSectionOnRoute parks miNextRouteNodeIndex on the node of the section the
+                // car is IN, so node[next] itself is usually the portal just crossed.
+                const Route* lpFallbackRoute = lpCar->GetRoute();
+                if (lpFallbackRoute->GetStatus() != Route::E_STATUS_UNINITIALISED &&
+                    lpFallbackRoute->GetNodeCount() > 0)
+                {
+                    s32 liLookAheadNode = lpCar->GetNextRouteNodeIndex() + 1;
+                    if (liLookAheadNode >= lpFallbackRoute->GetNodeCount())
+                        liLookAheadNode = lpFallbackRoute->GetNodeCount() - 1;
+                    if (liLookAheadNode >= 0)
+                    {
+                        const RouteNode* lpLookAhead = lpFallbackRoute->GetNode(liLookAheadNode);
+                        const f32 lfToNodeX = lpLookAhead->GetX() - m2DCarPos.x;
+                        const f32 lfToNodeY = lpLookAhead->GetY() - m2DCarPos.y;
+                        if ((lRouteDir.x * lfToNodeX + lRouteDir.y * lfToNodeY) > 0.0f)
+                        {
+                            lResult.x = lpLookAhead->GetX();
+                            lResult.y = lpLookAhead->GetY();
+                        }
+                    }
+                }
             }
 #endif
         }

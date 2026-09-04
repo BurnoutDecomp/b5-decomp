@@ -840,7 +840,11 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
 
         static s32 siLastFarParts   = -1;
         static s32 siLastQueueLen   = -1;
-        if ( liFarParts != siLastFarParts || lrDiagQueue.GetLength() != siLastQueueLen )
+        // (2026-09-04) budgeted: the change test was written for ONE car; with six cars in a mode the
+        // per-car values differ every frame and the witness wrote 733k lines in 70 s (the harness's
+        // 128 MB log cap). First 64 emissions only.
+        static s32 siCarRenderDiagBudget = 64;
+        if ( ( liFarParts != siLastFarParts || lrDiagQueue.GetLength() != siLastQueueLen ) && siCarRenderDiagBudget-- > 0 )
         {
             siLastFarParts = liFarParts;
             siLastQueueLen = lrDiagQueue.GetLength();
