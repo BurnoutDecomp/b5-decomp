@@ -9,6 +9,7 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficAIInterfaces.h" // BrnTraffic::BrnTrafficIO::TrafficAIEntity
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // [FLAG PC witness] the [drv] behaviour-transition trace
 
 #include "rw/math/vpu/vector3_operation.h"                 // vpu::Magnitude / vpu::Dot
 
@@ -104,12 +105,17 @@ namespace BrnAI
             return lResult;
         }
 
-        // BrnMath::Flatten -- drop z/w.
+        // BrnMath::Flatten @0x822CB8E8 -- project onto the XZ GROUND plane (drop the height lane).
+        // ⛔ FIXED 2026-09-04 (aiwave R7): was `lResult.y = lVector.y` (world HEIGHT). The vperm
+        // mask Flatten loads (unk_82CDA450 = 00 01 02 03 | 18 19 1A 1B | 00 01 02 03 | 00 01 02 03)
+        // sources lane1 from vB bytes 0x18..0x1B == lane 2 == .z, and the open-coded twin in
+        // CalculateSteeringAngle (`vrlimi128 v127,v0,8,0 ; vrlimi128 v127,v0,4,1` @0x8277CD78/8C)
+        // does the same. See the long banner on BrnAIDriver.cpp's To2D.
         Vector2 To2DU(Vector3 lVector)
         {
             Vector2 lResult;
             lResult.x = lVector.x;
-            lResult.y = lVector.y;
+            lResult.y = lVector.z;   // ground plane: Vector2.y IS world Z
             lResult.z = 0.0f;
             lResult.w = 0.0f;
             return lResult;
@@ -331,6 +337,15 @@ namespace BrnAI
     // not already doing a slow turn, and its behaviour is not 0) push the car into behaviour 6
     // (SLOW TURN). The accumulate arm is skipped only for a DEFAULT-style (style 0) car that is
     // already in behaviour 6.
+    //
+    // THIS IS THE ONLY WAY INTO SLOW_TURN FOR A CAR WITH NO ROUTE. The other producer,
+    // Determine180Turn @0x8277C758, opens with ComputeRouteDirection @0x82766500 and returns
+    // early when the route has no nodes (asm 0x8277C788), so with `route 0` it can never fire.
+    // Run6 (scratch/aiwave/run6/BrnGame.log): rival slot 1 entered FIGHTING at t~4.6 s at
+    // 2.3 m/s, never passed 4.12 m/s (KF_MAX_SPEED_FOR_BEING_STUCK is 4.4704 m/s == 10 mph), so
+    // mfStuckTime ran uninterrupted and this arm fired 2 s later, exactly as the console would.
+    // With a real desired speed the car clears 10 mph inside the first second and mfStuckTime is
+    // reset to 0 every frame, so the console never reaches this arm off a standing start.
     // ================================================================================
     void AIDriver::UpdateStuck(f32 lfTimeStep)
     {
@@ -343,6 +358,8 @@ namespace BrnAI
             lpCar->mfBehaviourTimer    = 0.0f;                             // stfs 0x14E0
             lpCar->mePreviousBehaviour = static_cast<EAIBehaviour>(liBehaviour);  // stw 0x14B8
             lpCar->meBehaviour         = static_cast<EAIBehaviour>(6);      // stw 0x14B4, 6
+            WitnessBehaviourTransition(this, lpCar, liBehaviour, 6,
+                                       "UpdateStuck: mfStuckTime >= KF_AI_TIME_TO_START_TURNING (2s under 10mph)");   // [FLAG PC witness]
         }
 
         if (lpCar->GetRouteFindingStyle() != static_cast<ERouteFindingStyle>(0) || liBehaviour != 6)
@@ -482,7 +499,28 @@ namespace BrnAI
         lfDesired = ((lfDesired - lfProximity) >= 0.0f) ? lfProximity : lfDesired;
         mfDesiredSpeed = lfDesired;
 
+#if BRN_AI_STEERINGFAN_TARGET_PRESENT
         const f32 lfRatio = mSteeringFan.GetSpeedRatio();     // @0x82779B90 (r3 = this + 0x710)
+#else
+        // [FLAG PC bring-up] SteeringFan::GetSpeedRatio @0x82779B90 IS bodied, and aiwave R6 also
+        // bodied AccumulateWeightings / UpdateWeightings -- but 6 of the 13 contributors that fill
+        // mfCumulativeWeighting[17] are still parked, which is why
+        // BRN_AI_STEERINGFAN_TARGET_PRESENT (BrnRacingLineGenerator.h) is still 0 and every slot is
+        // the Prepare-time 0.0f. GetBestIndex @0x82768D48 is "first wins on
+        // ties", which then returns ray 0 -- the HARD-LEFT edge of the fan -- and GetSpeedRatio's
+        // own maths turns that into v = (0*0.0625 - 0.5)*2 = -1, |v^3| = 1 >= 0.5 knee, ratio = 0.
+        // The console never evaluates an all-zero fan while driving, so that 0 is an artifact of
+        // the park, not console behaviour -- and it is expensive: CalculateDesiredSpeed's tail
+        // scales the desired speed by (ratio * 0.75 + 0.25), so a parked fan permanently caps every
+        // AI car at a QUARTER of its speed. Measured in run6 (scratch/aiwave/run6/BrnGame.log):
+        // rival slot 1 top speed ~20.04 m/s -> desired 5.009642 m/s, which is under UpdateStuck's
+        // KF_MAX_SPEED_FOR_BEING_STUCK (4.4704 m/s == 10 mph) once the accelerator ramp tapers, so
+        // the car banked 2 s of mfStuckTime and UpdateStuck pushed it into SLOW_TURN.
+        // FALLBACK: ray 8, the fan's CENTRE (straight ahead) -- v = 0, |v^3| = 0 < knee, ratio 1.0,
+        // i.e. the value GetSpeedRatio returns for an unobstructed straight-ahead choice.
+        // DELETE-WHEN BrnAISteeringFan.cpp's weighting half lands and the macro flips.
+        const f32 lfRatio = 1.0f;
+#endif
         mfDesiredSpeed = (lfRatio * KF_SPEED_RATIO_SCALE + KF_SPEED_RATIO_BASE) * lfDesired;
     }
 
@@ -656,9 +694,11 @@ namespace BrnAI
             lfLookAhead = KF_DRIFT_LOOK_AHEAD_MIN;
 
 #if BRN_AI_RACINGLINE_STACK_PRESENT
+        // DWARF/X360 argument order (CachePointAhead @0x82791424..44 is the attesting call site):
+        // (lpRacingLine r4, lfDistanceAhead f1, lFrom2D v1, lrOutPosition r6, lrOutDirection r7).
         Vector2 lPosition;
-        return mRacingLineGenerator.GetPointFarAhead(&GetRacingLine(), lPosition, lrOutDirection,
-                                                     lfLookAhead, m2DCarPos);
+        return mRacingLineGenerator.GetPointFarAhead(&GetRacingLine(), lfLookAhead, m2DCarPos,
+                                                     lPosition, lrOutDirection);
 #else
         // [FLAG PC bring-up] RacingLineGenerator::GetPointFarAhead has no body in this tree; the
         // console's own "no point found" answer is false, and every caller has a real fallback.
@@ -691,8 +731,8 @@ namespace BrnAI
         if ((lfMaxDistance - lfDistance) < 0.0f)  lfDistance = lfMaxDistance;
 
 #if BRN_AI_RACINGLINE_STACK_PRESENT
-        return mRacingLineGenerator.GetPointFarAhead(&GetRacingLine(), lrOutPosition,
-                                                     lrOutDirection, lfDistance, m2DCarPos);
+        return mRacingLineGenerator.GetPointFarAhead(&GetRacingLine(), lfDistance, m2DCarPos,
+                                                     lrOutPosition, lrOutDirection);
 #else
         // [FLAG PC bring-up] see FindFinalDriftDirection. The one caller
         // (UpdateBrakingAnticipationData) carries the console's own "no line" fallback.
@@ -780,9 +820,14 @@ namespace BrnAI
             liNewBehaviour = 6;
         }
 
+        const s32 liOldBehaviour = static_cast<s32>(lpCar->meBehaviour);
         lpCar->mePreviousBehaviour = lpCar->meBehaviour;                // stw 0x14B8
         lpCar->meBehaviour         = static_cast<EAIBehaviour>(liNewBehaviour);   // stw 0x14B4
         lpCar->mfBehaviourTimer    = 0.0f;                              // stfs 0x14E0
+        WitnessBehaviourTransition(this, lpCar, liOldBehaviour, liNewBehaviour,
+                                   (liNewBehaviour == 5)
+                                       ? "Determine180Turn: route doubles back, speed >= 30mph"
+                                       : "Determine180Turn: route doubles back, speed < 30mph");   // [FLAG PC witness]
     }
 
     // ================================================================================
@@ -841,7 +886,11 @@ namespace BrnAI
         {
             CGS_ASSERT(mpCarHost->mePreviousBehaviour != static_cast<EAIBehaviour>(5),
                        "Nested quick turns!\n");                          // :1151
+            const s32 liOldBehaviour = static_cast<s32>(mpCarHost->meBehaviour);
+            const s32 liNewBehaviour = static_cast<s32>(mpCarHost->mePreviousBehaviour);
             mpCarHost->SetBehaviour(mpCarHost->mePreviousBehaviour);      // @0x82764DE0
+            WitnessBehaviourTransition(this, mpCarHost, liOldBehaviour, liNewBehaviour,
+                                       "UpdateQuickTurn: aimed at target (dot > cos30) or below 10mph");   // [FLAG PC witness]
         }
     }
 
@@ -850,6 +899,15 @@ namespace BrnAI
     //
     // Leave the slow turn once the car's facing has come back within 20 degrees of the route
     // direction: restore behaviour 3 (CRUISING), clear the stuck timer and centre the wheel.
+    //
+    // THE EXIT IS GATED ON THE ROUTE. asm 0x8277C97C..0x8277C988: ComputeRouteDirection first,
+    // and on false the body branches to loc_8277CA7C -- the epilogue -- WITHOUT testing
+    // KF_SLOW_TURN_DROP_OUT. So a car that is put into SLOW_TURN while its route has no nodes
+    // stays in SLOW_TURN for ever; there is no timer, no drop-out angle and no speed test that
+    // can rescue it. That is console behaviour, not a host deviation: on the console a routeless
+    // stuck car is recovered from OUTSIDE the driver, by AIModule::ProcessRequestInterface
+    // @0x8278A7A8's 8-slot sweep, which sees AIDriver::IsStuck() and pushes a synthetic
+    // ResetOnTrackRequest, then zeroes mfStuckTime (asm 0x8278A86C..0x8278A92C).
     // ================================================================================
     void AIDriver::DoSlowTurnBehaviour()
     {
@@ -868,10 +926,13 @@ namespace BrnAI
         CGS_ASSERT(lpCar->mePreviousBehaviour != static_cast<EAIBehaviour>(6),
                    "Nested slow turns!\n");                            // :1866
 
+        const s32 liOldBehaviour = static_cast<s32>(lpCar->meBehaviour);
         lpCar->mePreviousBehaviour = lpCar->meBehaviour;               // stw 0x14B8
         lpCar->mfBehaviourTimer    = 0.0f;                             // stfs 0x14E0
         lpCar->meBehaviour         = static_cast<EAIBehaviour>(3);     // stw 0x14B4, 3
         mfStuckTime                = 0.0f;                             // stfs 0x1D04
+        WitnessBehaviourTransition(this, lpCar, liOldBehaviour, 3,
+                                   "DoSlowTurnBehaviour: facing back within 20 deg of the route");   // [FLAG PC witness]
         UpdateSteeringAngle(0.0f);
     }
 
@@ -885,6 +946,12 @@ namespace BrnAI
     //   phase even -> mfAccelerator = 1 - clamp( speed / 20 mph, 0, 1)
     //   phase odd  -> mfBrake       = 1 - clamp(-speed / 20 mph, 0, 1)   (the console negates)
     // With no usable route the wheel is simply centred.
+    //
+    // NOTE the no-route arm (asm 0x8277CBC4) calls UpdateSteeringAngle(0.0f) and jumps to the
+    // epilogue: it never reaches either throttle phase, so mfAccelerator and mfBrake keep the
+    // zeroes CalculateCarControls wrote at its head. A routeless car in SLOW_TURN therefore
+    // reports gas 0 / brake 0 / steer 0 every frame and coasts to a stop -- run6's `behaviour 6
+    // ... gas 0.000000 ... speed 0.076035` line, reproduced exactly.
     // ================================================================================
     void AIDriver::DoSlowTurn(f32 lfTimeStep)
     {
@@ -968,7 +1035,12 @@ namespace BrnAI
             GetRacingLine().mfSpreadDistance = K_NORMAL_SPREAD_HNG;      // 50.0
 
 #if BRN_AI_RACINGLINE_STACK_PRESENT
-        mRacingLineGenerator.InitialiseRacingLine(&GetRacingLine());      // @0x8278...
+        // X360 @0x82792EE8..0x82792F30: r3 = this+0x1B30 (generator), r4 = this+0xF20 (line),
+        // r5 = mpCar (0x1CE0), r6 = mpCar->miNextRouteNodeIndex (car+0x1524) - 2,
+        // r7 = mpSectionsData (0x1CE4).
+        mRacingLineGenerator.InitialiseRacingLine(&GetRacingLine(), lpCar,
+                                                  lpCar->miNextRouteNodeIndex - 2,
+                                                  mpSectionsDataHost);   // @0x8278FB20
 #else
         // [FLAG PC bring-up] RacingLineGenerator::InitialiseRacingLine has no body in this tree,
         // so the generator cannot raise RacingLine::mbIsInitialised. The flag is raised here so
@@ -1161,7 +1233,7 @@ namespace BrnAI
         }
         else if (leType == E_ROUND_ROBIN_FAN)
         {
-#if BRN_AI_RACINGLINE_STACK_PRESENT
+#if BRN_AI_STEERINGFAN_TARGET_PRESENT
             // X360: UpdateWeightings(this+1808 == mSteeringFan, mpCar (0x1CE0), this+3872 ==
             // mRacingLine, this+6960 == mRacingLineGenerator, this == &mNearbyVehicles,
             // *(this+7408) == meAggressionVictim (0x1CF0)).
@@ -1169,10 +1241,12 @@ namespace BrnAI
                                           GetNearbyVehicles(),
                                           static_cast<EGlobalRaceCarIndex>(meAggressionVictimHost));
 #endif
-            // [FLAG PC bring-up] SteeringFan::UpdateWeightings @0x82794600 and its 13 contributors
-            // have no bodies in this tree; the unit is still counted so AIModule's work budget and
-            // round-robin cursor advance exactly as the console's do.
-            // DELETE-WHEN BrnAISteeringFan.cpp's weighting half lands and the macro flips.
+            // [FLAG PC bring-up] SteeringFan::UpdateWeightings @0x82794600 IS bodied (aiwave R6,
+            // BrnAISteeringFan_Weightings.cpp) but 6 of its 13 contributors are still parked, so
+            // BRN_AI_STEERINGFAN_TARGET_PRESENT (BrnRacingLineGenerator.h) is still 0 -- read that
+            // gate's banner before flipping it. The unit is counted either way so AIModule's work
+            // budget and round-robin cursor advance exactly as the console's do.
+            // DELETE-WHEN the gate goes to 1.
             liWorkDone = 1;
         }
 

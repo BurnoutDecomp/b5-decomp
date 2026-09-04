@@ -1,4 +1,5 @@
 #include "GameSource/World/AI/BrnAICar.h"
+#include "GameSource/World/AI/BrnAICar_Constants.h"       // the .bss tunables, recovered from their start-up initialisers
 #include "GameSource/World/AI/BrnAIDriver.h"   // AIDriver::ResetPIDTuningState / GetRacingLine (UpdateInRangeData / OnModeStart)
 #include "GameSource/World/AI/Route/BrnRoute.h"                          // BrnAI::Route, RouteNode
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingManager.h"   // RaceBalancingManager::CalculateScheduleOffset
@@ -10,6 +11,7 @@
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"       // SetDriver: handling record
 #include "GameSource/AttribSys/Generated/classes/physicsvehicleboostattribs.h"   // SetDriver: MaxBoostSpeed
 
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"           // CgsNumeric::Random (the BrnAICar.cpp file-scope RNG @.data 0x8300D5D0)
 #include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"    // CgsDev::StrStream (streamed assert messages)
 #include "rw/math/vpu/vector3_operation.h"                     // rw::math::vpu Dot / Magnitude / Normalize / Cross / IsValid / IsZero
@@ -78,17 +80,20 @@ namespace BrnAI
     const f32 KF_MPH_TO_MPS                       = 0.44704f;        // flt_82F31928
     const f32 KF_MAX_PLAYER_SPEED_SCALE           = 1.1f;            // flt_820C3D90
     const f32 KF_AICAR_FLT_MAX                    = 3.4028235e+38f;  // flt_82F302F4 (0x7F7FFFFF)
+    // DWARF BrnAICar.cpp:32 KF_DEFAULT_OUT_OF_RANGE_SPEED. flt_8300D7FC is .bss (hence the 0
+    // in image.bin); its ONLY writer is the start-up leaf initialiser at 0x82C68580, which does
+    //   lfs f0, flt_82F31928(=0.44704) ; lfs f13, flt_82004A18(=80.0) ; fmuls ; stfs flt_8300D7FC
+    // == 80 mph -> 35.7632 m/s. AICar::Construct seeds mfSpeedOutOfRange (mfDesiredSpeed) with it.
+    const f32 KF_DEFAULT_OUT_OF_RANGE_SPEED       = 80.0f * 0.44704f;   // flt_8300D7FC (dyn-init 0x82C68580)
     const f32 KAF_PERSONALITY_BASE_AGGRESSION[E_PERSONALITY_TYPE_COUNT] = { 0.0f, 0.5f };   // flt_820C41A0[personality]
     const f32 KF_MARKED_MAN_AGGRESSION_LO         = 0.2f;            // flt_82F30170
     const f32 KF_MARKED_MAN_AGGRESSION_HI         = 1.0f;            // flt_82F30174
     const f32 KAF_RANK_AGGRESSION_LO[E_PERSONALITY_TYPE_COUNT] = { 0.1f, 0.1f };   // unk_820C4188[personality]
     const f32 KAF_RANK_AGGRESSION_HI[E_PERSONALITY_TYPE_COUNT] = { 0.6f, 0.6f };   // unk_820C4190[personality]
-    // GetUsefulDirection's "velocity is trustworthy above this speed" threshold.
-    // [FLAG PC bring-up] flt_8300D964 is .data and reads 0 in image.bin -- a dynamic-initialiser
-    // value with no ARTIST writer export (the readers 0x82770028 are the only xrefs). 0.0 would
-    // make every stationary car Normalize a zero velocity, so a NON-ZERO placeholder is shipped.
-    // DELETE-WHEN the console value is recovered (PS3 DecFIGS asm of GetUsefulDirection).
-    const f32 KF_USEFUL_DIRECTION_MIN_SPEED       = 1.0f;            // flt_8300D964 -- PLACEHOLDER
+    // GetUsefulDirection's "velocity is trustworthy above this speed" threshold lives in
+    // BrnAICar_Constants.h: flt_8300D964 is .bss (hence the 0 in image.bin), written at start-up
+    // by the leaf initialiser 0x82C685B8 as flt_820C4890 (20 mph) * 0.44704 == 8.9408 m/s.
+    // (The 1.0f placeholder shipped here before 2026-09-04 was ~9x too permissive.)
     const f32 KF_USEFUL_DIRECTION_MIN_LENGTH      = 0.0099999998f;   // literal (Hex-Rays decoded)
 
     // The console's file strings (the unity .cpp path for .cpp-line asserts, the relative path
@@ -96,13 +101,32 @@ namespace BrnAI
     static const char* const KPC_AICAR_CPP = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAICar.cpp";
     static const char* const KPC_AICAR_H   = "..\\..\\..\\GameSource\\World/AI/BrnAICar.h";
 
-    // Reset @0x82792800 also (re)stores an 11-word block at .data 0x8300D5D0 on every call
-    // (stw x9 + std x1: 1.0f, 0x3FE43E6C, 0x3F98B09C, 0x3FDA23E0, 0x3FE21EDC, 0x3FDDEB96,
-    // 0x3F9C9A72, 0x3F923D76, 0x00000001, 0x2EC654DA, 0). [FLAG PC bring-up] no ARTIST function
-    // reads 0x8300D5D0 by symbol (xref grep over the export), so the block's owner/consumer is
-    // unknown; the stores are reproduced into a file-local twin so the write is not silently
-    // dropped. DELETE-WHEN the owning global is identified and homed.
-    static u32 gauResetSeededBlock_8300D5D0[11];
+    // ===== the BrnAICar.cpp file-scope RNG (.data 0x8300D5D0) ==============================
+    // IDENTIFIED 2026-09-04 (this lane), replacing the opaque "11-word block" twin that stood
+    // here: 0x8300D5D0 is a `CgsNumeric::Random`, and the unrolled 11-store blob that AICar::
+    // Construct @0x82792754..0x827927C8 and AICar::Reset @0x827928E8..0x8279296C both emit is
+    // `CgsNumeric::Random::Construct()` INLINED. Proof (exact, not a resemblance): running the
+    // committed CgsRandom.h Construct -- seed KU_RANDOM_DEFAULT_SEED 0xC87CD8C91AD0891B, slot 0
+    // = 1.0f, then seven AddRandomFloatToBuffer draws with KU_RANDOM_MULTIPLIER -- reproduces
+    // all eleven stored words bit for bit:
+    //   mauIntegerBuffer[0..7] = 3F800000 3FE43E6C 3F98B09C 3FDA23E0 3FE21EDC 3FDDEB96
+    //                            3F9C9A72 3F923D76   (the ring's 8 floats in [1,2))
+    //   muSeed (+0x20, `std`)  = B5E330D0_2EC654DA   muOldestBufferIndex (+0x28) = 0
+    // ⚠️ THE OLD TWIN HAD THE SEED'S HIGH WORD WRONG (0x00000001 instead of 0xB5E330D0): the
+    // `rldimi r10, r4, 0x20, 0` at 0x82792954 packs r4 -- built by `lis r4,-0x4A1D ; ori
+    // r4,r4,0x30D0` at 0x827928C8/0x827928D0 == 0xB5E330D0 -- into the HIGH half. Fixed here.
+    // ⭐ THE CONSUMER IS `AICar::GetRandomNumber()` (DWARF BrnAICar.h:550), which the console
+    // INLINES into its callers -- which is why the only ARTIST code that touches 0x8300D5D0 by
+    // address is BrnAI::ResetOnTrackManager (ResetAwayFromPlayer @0x827841BC and the two other
+    // DWARF BrnResetOnTrackManager.cpp AICar::GetRandomNumber call sites), never BrnAICar.cpp
+    // itself. Its sibling at 0x8300D5A0 is BuzzBy's, already homed as BrnAIBuzzBy.cpp's mRandom.
+    // [FLAG PC bring-up] SHARED HOME STILL OWED: BrnResetOnTrackManager_Strategies.cpp keeps its
+    // own lazily-Construct'ed `lsGlobalResetRandom_8300D5D0` copy of this same object, so a draw
+    // there does not step the object this file seeds. Both start from the identical console
+    // seed, so each stream is console-correct in isolation; only the interleaving differs.
+    // DELETE-WHEN AICar::GetRandomNumber lands (it needs CgsNumeric::Random::RandomFloat, which
+    // is declared-only in CgsRandom.h) and the ROT strategies draw through it.
+    static CgsNumeric::Random gAICarRandom;
 
     // ==================================================================================
     // Update @0x82798F68 -- the per-frame AI brain tick. See the banner for the callee order.
@@ -920,6 +944,115 @@ namespace BrnAI
     }
 
     // ==================================================================================
+    // Construct @0x82792620 (DWARF BrnAICar.h:86 `void Construct(EGlobalRaceCarIndex)`)
+    //
+    // The ONE-TIME per-car seed. AIModule::Construct @0x82794D08 runs it 35 times
+    // (0x827951BC..0x827951F8: `mr r4,r29 ; mr r3,r31 ; bl GetAICar ; mr r4,r29 ;
+    // bl AICar::Construct ; addi r29,r29,1 ; blt`), BEFORE any Reset and before the 8
+    // AIDriver::Constructs. It has NO IDA export -- the address is known only through that
+    // caller's xrefs_from -- so this body is recovered store for store from image.bin
+    // (0x82792620..0x827927F8, big-endian; the four VMX128 words capstone cannot decode are
+    // lvx128 / stvx128, extended opcode 0x0C3 / 0x1C3 in bits 21-31).
+    //
+    // THIS IS WHERE A CAR LEARNS WHICH GLOBAL SLOT IT IS: `stw r28, 0x14C4(r31)` at
+    // 0x827926F4, r28 == r4 == the caller's loop index. miRaceCarIndex @+0x14C4 is DWARF
+    // :676 meGlobalRaceCarIndex. While this function was parked, all 35 maAICars read index
+    // 0, so (a) every route request was stamped owner 0 and every RouteResponse was applied
+    // to car 0 (`GetAICar(lpRouteResponse->GetEventId())` in UpdateCarRoutes), (b) the
+    // `[rival] slot S global 0` witness printed 0 for every slot, and (c) the
+    // `lpDriver->GetGlobalRaceCarIndex() == leGlobalRaceCarIndex` assert in
+    // HandleManagementEvents fired for every slot but 0.
+    //
+    // Register map @0x82792620: r31 = this, r28 = r4 (the index), r29 = this + 0x1430
+    // (&mPosition), r30 = 0, r9 = -1, r10 = 0x7FFF, r7 = 2, r8 = 0x1460, v0 = vspltisw 0,
+    // f31 = flt_82001CC0 = 0.0f. Calls, in order: SetDirection @0x8276B2C0 with
+    // `lvx128 unk_82181520` (gKVector 0,0,1,0), SetRight @0x8276B7D0 with `lvx128 gIVector`
+    // (0x82181500 = 1,0,0,0), SetIsInJunkyard @0x82764EC0 with r4 = 0.
+    //
+    // NOTE what Construct does NOT touch (the console leaves them at their .bss zero and lets
+    // Reset settle them): mAggressiveness, mVelocity, mLastRoutePosition, mPlaceOnTrack*,
+    // mePersonalityType, meResetSpeedType, meRelativeLocation, mCarAssetAttribKey,
+    // mfDistanceAheadOfPlayer, mfBuzzDistanceToPlayer, mfPlaceOnTrackSpeed,
+    // mfTimeInInvalidSection, miRouteTimeStamp, miProximityIndex, muResetOnTrackSectionIndex,
+    // the two reset portals, mbSectionChangedFlag, mbIsTouchingPlayer, mbIsInShortcut,
+    // mbIsInMasterRoute. Reproduced as-is -- this IS the console's steady state.
+    // ==================================================================================
+    void AICar::Construct(EGlobalRaceCarIndex leGlobalRaceCarIndex)
+    {
+        Route* lpThisRoute = reinterpret_cast<Route*>(this);
+
+        mfBehaviourTimer                = 0.0f;                                  // 0x82792650 stfs f31,0x14E0
+        lpThisRoute->meStatus           = Route::E_STATUS_UNINITIALISED;         // 0x82792654 stw 0,0x1408
+        lpThisRoute->miNodeCount        = 0;                                     // 0x82792658 stw 0,0x1400
+        mPosition                       = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };     // 0x8279265C stvx128 v0,0(r29)
+        lpThisRoute->miDefaultStartNode = 0;                                     // 0x82792660 stw 0,0x1404
+        meBehaviour                     = E_AI_BEHAVIOUR_CRUISING;               // 0x82792664 stw 3,0x14B4
+        mePreviousBehaviour             = E_AI_BEHAVIOUR_CRUISING;               // 0x82792668 stw 3,0x14B8
+        meRouteFindingStyle             = E_ROUTE_FINDING_FREE_ROAM;             // 0x82792670 stw 0,0x14C0
+        meSpeedSelectionMethod          = E_AI_SPEED_SELECTION_METHOD_FREE_ROAM; // 0x82792678 stw 0,0x14BC
+
+        SetDirection(vpu::GetVector3_ZAxis());                                   // 0x82792680 bl 0x8276B2C0 (lvx128 unk_82181520)
+        SetRight(vpu::GetVector3_XAxis());                                       // 0x82792694 bl 0x8276B7D0 (lvx128 gIVector)
+
+        // 0x82792698 lvx128 v0,0(r29) reloads mPosition (the two calls clobbered v0) and
+        // 0x827926D8 stvx128 v0,r31,r8(=0x1460) parks it in mLastGoodPosition.
+        mLastGoodPosition               = mPosition;
+
+        mfSpeedInRange                  = 0.0f;                                  // 0x827926A4 stfs f31,0x14E4
+        mfWrongWayTime                  = 0.0f;                                  // 0x827926AC 0x14F4
+        mfRaceTimer                     = 0.0f;                                  // 0x827926B4 0x14FC
+        mfAlternativeRouteTimer         = 0.0f;                                  // 0x827926BC 0x1500
+        miNextRouteNodeIndex            = -1;                                    // 0x827926C8 stw r9(-1),0x1524
+        mfSpeedOutOfRange               = KF_DEFAULT_OUT_OF_RANGE_SPEED;         // 0x827926CC stfs flt_8300D7FC,0x14E8 (== mfDesiredSpeed)
+        miOpponentIndex                 = -1;                                    // 0x827926D0 stb r9(-1),0x153A
+        mpDriverHost                    = 0;                                     // 0x827926DC stw r30(0),0x14B0 (the guest mpDriver slot)
+        meCarState                      = E_AI_CAR_STATE_INACTIVE;               // 0x827926E0 stw r7(2),0x14C8
+        mfDistanceToCheckpoint          = KF_AICAR_FLT_MAX;                      // 0x827926F0 stfs flt_82F302F4,0x14F0
+        miRaceCarIndex                  = static_cast<s32>(leGlobalRaceCarIndex);// 0x827926F4 stw r28,0x14C4  <-- the car's own global slot
+        muBestSectionIndex              = KI_INVALID_SECTION_INDEX;              // 0x827926FC sth r10(0x7FFF),0x1534
+        muDefaultSectionIndex           = KI_INVALID_SECTION_INDEX;              // 0x82792700 sth r10(0x7FFF),0x1532
+
+        mbIsInAir                       = false;                                 // 0x82792708 stb r30,0x1541
+        mbIsCrashing                    = false;                                 // 0x8279270C 0x1542
+        mbIsInShowtime                  = false;                                 // 0x82792710 0x1543
+        mbIsDrifting                    = false;                                 // 0x82792714 0x1544
+        mbIsTouchingRaceCar             = false;                                 // 0x82792718 0x1545
+        mbHasBlockCheckpoints           = 0;                                     // 0x8279271C 0x153D
+        mbUseAIShortcuts                = 0;                                     // 0x82792720 0x153E
+        mbWantsAlternativeRoute         = 0;                                     // 0x82792724 0x153F
+
+        // 0x82792728 / 0x8279272C store 0 to 0x1408 / 0x1400 a SECOND time -- the console's own
+        // repeat (the InvalidateRoute the first pair already covered). Kept as-is.
+        lpThisRoute->meStatus           = Route::E_STATUS_UNINITIALISED;         // 0x82792728
+        lpThisRoute->miNodeCount        = 0;                                     // 0x8279272C
+
+        mbIsAheadOfPlayer               = false;                                 // 0x82792730 0x153B
+        mbIsPlayer                      = false;                                 // 0x82792734 0x1549
+        mbIsDrivenByPlayer              = false;                                 // 0x82792738 0x154A
+        mbIsOnStartLine                 = false;                                 // 0x8279273C 0x1547
+        mbForceStandardRoute            = 0;                                     // 0x82792740 0x1548 (== mbIsStartingRace)
+        mbPlaceOnTrackRequested         = false;                                 // 0x82792744 0x153C
+        mbIsInGameMode                  = false;                                 // 0x82792748 0x154B
+        mbUseChosenDistanceFunction     = 0;                                     // 0x8279274C 0x1550 (== mbIsOnline)
+        mbIsInResetPairSection          = false;                                 // 0x82792750 0x1551
+
+        // 0x82792754..0x827927C8  CgsNumeric::Random::Construct() inlined on the file-scope RNG
+        // at .data 0x8300D5D0 (the same blob Reset re-emits) -- see gAICarRandom's banner.
+        gAICarRandom.Construct();
+
+        mfMaxPlayerSpeed                = 0.0f;                                  // 0x827927CC stfs f31,0x1504
+        mfRouteTimer                    = 0.0f;                                  // 0x827927D0 0x14EC
+        muDestinationSectionIndex       = KI_INVALID_SECTION_INDEX;              // 0x827927D4 sth r10(0x7FFF),0x1536
+        mfScheduleOffset0               = 0.0f;                                  // 0x827927D8 0x1518
+        miCurrentCheckpoint             = 0;                                     // 0x827927DC stw r30,0x1520
+        mfScheduleOffset1               = 0.0f;                                  // 0x827927E0 0x151C
+        mbRouteRequested                = false;                                 // 0x827927E4 0x154D
+        mfBuzzFrequencyRatio            = 0.0f;                                  // 0x827927E8 0x1510
+
+        SetIsInJunkyard(false);                                                  // 0x827927EC bl 0x82764EC0 (r4 = 0)
+    }
+
+    // ==================================================================================
     // Reset @0x82792800 -- the console's re-initialiser (AIModule::HandleManagementEvents).
     //
     // r4 personality, r5 lbKeepTransform (the reset-on-track/position block is skipped when
@@ -960,18 +1093,10 @@ namespace BrnAI
 
         mbPlaceOnTrackRequested = false;                                                    // 0x153C
 
-        // 0x827928E8..0x8279296C  the .data block re-store (see the banner of gauResetSeededBlock)
-        gauResetSeededBlock_8300D5D0[0]  = 0x3F800000u;   // 1.0f
-        gauResetSeededBlock_8300D5D0[1]  = 0x3FE43E6Cu;
-        gauResetSeededBlock_8300D5D0[2]  = 0x3F98B09Cu;
-        gauResetSeededBlock_8300D5D0[3]  = 0x3FDA23E0u;
-        gauResetSeededBlock_8300D5D0[4]  = 0x3FE21EDCu;
-        gauResetSeededBlock_8300D5D0[5]  = 0x3FDDEB96u;
-        gauResetSeededBlock_8300D5D0[6]  = 0x3F9C9A72u;
-        gauResetSeededBlock_8300D5D0[7]  = 0x3F923D76u;
-        gauResetSeededBlock_8300D5D0[8]  = 0x00000001u;   // std: hi word
-        gauResetSeededBlock_8300D5D0[9]  = 0x2EC654DAu;   // std: lo word
-        gauResetSeededBlock_8300D5D0[10] = 0u;
+        // 0x827928E8..0x8279296C  CgsNumeric::Random::Construct() inlined on the file-scope RNG
+        // at .data 0x8300D5D0 -- see gAICarRandom's banner for the word-for-word proof (and for
+        // the seed high-word this used to get wrong).
+        gAICarRandom.Construct();
 
         mfBuzzDistanceToPlayer = 0.0f;                                                      // 0x1508 (== mfDistanceToPlayer)
         mePersonalityType      = lePersonalityType;                                         // 0x14CC

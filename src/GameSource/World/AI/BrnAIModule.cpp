@@ -139,7 +139,7 @@ AIModule::AIModule()
 //     * the +294784 CgsNumeric::Random prime  (the AI drivers' shared PRNG; only stage 4's parked
 //       AIDriver::Prepare consumes it)
 //     * the six "AI Module, ..." perf monitors  (nothing starts/stops them while Update is gated)
-//     * 35x AICar::Construct and 8x AIDriver::Construct  -- see the banner at the top of the file
+//     * (LANDED 2026-09-04: 35x AICar::Construct -- see the loop below; 8x AIDriver::Construct)
 //     * the +322400..+322435 flag block, +322040/+322044 and ContactSpyInterface::Construct(+322408)
 //       (PostPhysicsUpdate's target; PostPhysicsUpdate is still gated)
 // =================================================================================================
@@ -171,61 +171,40 @@ void AIModule::Construct()
     // flag is what makes every data-structure arm of the base Prepare skip itself.
     mRouteMapModule.MarkAsNewModule();
 
-    // ⭐⭐⭐ THE 35 AI CARS (aicar_reset wave 2026-08-26). PARTIAL, AND THE PART MATTERS.
+    // THE 35 AI CARS. AICar::Construct @0x82792620 NOW RUNS (2026-09-04, R1 lane): the
+    // function was parked here as an "ARTIST export HOLE", which it is -- it has no JSON in
+    // the export set and is named only through THIS function's xrefs_from -- but the body is
+    // recoverable from image.bin and has been, store for store, into BrnAICar_Update.cpp.
     //
-    // The console runs `AICar::Construct` 35 times here. That function (@0x82792620) is an ARTIST
-    // export HOLE -- it has no JSON in the export set and is named only through this function's
-    // own xrefs_from -- so its body is not available to reproduce. What IS available is
-    // AICar::Reset @0x82792800, the console's own re-initialiser, and it settles the ONE field
-    // every consumer on the reset-on-track path reads first:
-    //     0x82792800 ... `*(this + 5320) = 2`   ==  meCarState = E_AI_CAR_STATE_INACTIVE
-    // (5320 == 0x14C8 == the static_asserted offset of meCarState in BrnAICar.h.)
+    // The console's loop, 0x827951BC..0x827951F8:
+    //     mr r4,r29 ; mr r3,r31 ; bl AIModule::GetAICar ; mr r4,r29 ; bl AICar::Construct
+    //     addi r29,r29,1 ; cmpwi r29,0x23 ; <the BurnoutConstants.h:84 operator++ range
+    //     assert "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT"> ; blt
+    // i.e. `for (EGlobalRaceCarIndex i = 0; i < COUNT; i++) GetAICar(i)->Construct(i);`, and
+    // it runs BEFORE the 8 AIDriver::Constructs below (0x82795208..0x82795240), which is the
+    // order kept here.
     //
-    // ⭐ WHY THAT ONE STORE IS THE WHOLE JOB HERE, AND WHY LEAVING IT OUT WOULD HAVE BEEN A
-    // SILENT WRONG ANSWER. E_AI_CAR_STATE_IN_RANGE == 0. A zeroed AICar therefore reads as an
-    // ACTIVE, AI-DRIVEN car -- and both reset-on-track consumers gate on exactly that:
-    //     ResetOnTrackManager::Update            `if (meCarState == 0 || meCarState == 1)` ...
-    //     ComputeInitialCoordinatesStandard      same test, then GetAISection(muResetOnTrackSection)
-    // With zeros they would walk the road network for 35 phantom cars and hand the crash exit a
-    // plausible-looking garbage position. With INACTIVE they do what the console does for a car
-    // the AI is not driving: decline, and let the reset fall through to the ring-buffer arm.
-    // On this build NOTHING activates an AI car (StoreDrivenCarData / SortTrafficIntoAICars /
-    // AICar::Update are all absent), so INACTIVE is not a stand-in -- it is the correct steady
-    // state, and it is the value the console's own Reset writes.
-    //
-    // ⛔ [FLAG PC boot gate] EVERY OTHER STORE OF AICar::Construct/Reset IS ABSENT. Reset alone
-    // writes ~30 more fields (SetDirection/SetRight, the Aggressiveness seeds, mfRouteTimer,
-    // muResetOnTrackSectionIndex/muBestSectionIndex/muDefaultSectionIndex/muDestination-
-    // SectionIndex = 0x7FFF, meResetOnTrackType = 20, ...) and MOST OF THEM LAND IN BrnAICar.h's
-    // EXPLICIT PADS -- the header is a minimal slice and those members have no names yet. Poking
-    // them by raw offset into a pad is the live-corruption class this project keeps paying for,
-    // so they are named here instead of faked. The zero the pads keep is the console's own
-    // pre-Construct .bss value, and the four section indices reading 0 rather than 0x7FFF is
-    // UNREACHABLE while meCarState is INACTIVE (both readers test the state first).
-    // DELETE-WHEN BrnAICar.h grows the members Reset writes and AICar::Reset lands.
-    for( s32 liCar = 0; liCar < 35; ++liCar )
+    // WHAT THE PARK COST, and why the two hand-rolled stores it left behind are gone: the
+    // console's Construct is the ONLY writer of miRaceCarIndex @+0x14C4 (DWARF :676
+    // meGlobalRaceCarIndex) -- `stw r28,0x14C4(r31)` with r28 == the loop index. Parked, all
+    // 35 cars read slot 0, so every route request went out stamped owner 0 (RouteRequest
+    // Manager keys on GetRaceCarIndex()), every RouteResponse came back and was applied to
+    // car 0 by `GetAICar(lpRouteResponse->GetEventId())`, the `[rival] slot S global G`
+    // witness printed `global 0` for every slot, and HandleManagementEvents' assert
+    // `lpDriver->GetGlobalRaceCarIndex() == leGlobalRaceCarIndex` failed for every slot but 0.
+    // The two stand-ins that stood here (meCarState = INACTIVE and miRaceCarIndex = 0) are
+    // both subsumed: Construct writes `stw r7(2),0x14C8` (INACTIVE) and the real index.
+    for( EGlobalRaceCarIndex leCar = E_GLOBAL_RACE_CAR_INDEX_0;
+         leCar < E_GLOBAL_RACE_CAR_INDEX_COUNT;
+         leCar++ )
     {
-        maAICars[liCar].meCarState = E_AI_CAR_STATE_INACTIVE;
-
-        // ⛔⛔ ADDED 2026-08-26 (resetpump wave) AND IT IS NOT COSMETIC.
-        // AIModule::UpdateResetOnTrackManager @0x8279ABB0 reads
-        // `GetAICar(mePlayerGlobalRaceCarIndex)->miRaceCarIndex` (AICar +0x14C4) and hands the
-        // result to ResetOnTrackManager::Update as its lePlayer -- which opens with TWO RANGE
-        // ASSERTS (0 <= index < 35) inside its own GetAICar. On the console that member is .bss
-        // and reads 0 before AICar::Construct (an ARTIST export hole) runs. ON THE HOST IT IS
-        // INDETERMINATE: AICar has no constructor, and this array's storage is whatever the
-        // allocation held. An indeterminate s32 there is a HALTING dev assert on the first
-        // frame the pump runs -- i.e. exactly the frame this wave was built to reach.
-        // ⭐ [[deterministic-does-not-mean-data]] in reverse: the value would have been
-        // repeatable per boot and still meaningless, which is the worst kind to debug.
-        // Zero is the console's own pre-Construct value, not a stand-in.
-        maAICars[liCar].miRaceCarIndex = 0;
+        maAICars[leCar].Construct(leCar);
     }
 
-    // [FLAG PC boot gate] RouteMapDebugComponent::Construct, the +294784 Random prime, the six
-    // perf monitors, AIDebugComponent::Construct, the REST of 35x AICar::Construct (see above),
-    // 8x AIDriver::Construct, the +322400 flag block and ContactSpyInterface::Construct -- see
-    // the banner.
+    // [FLAG PC boot gate] RouteMapDebugComponent::Construct, the six perf monitors and
+    // AIDebugComponent::Construct -- see the banner. (35x AICar::Construct landed 2026-09-04;
+    // the Random prime, RouteRequestManager::Construct, 8x AIDriver::Construct and the
+    // +322400 flag block land just below.)
 
     // ⭐ The two player cursors (resetpump wave 2026-08-26). The console does NOT store them in
     // Construct -- it relies on the module's .bss being zero and on Update overwriting the first

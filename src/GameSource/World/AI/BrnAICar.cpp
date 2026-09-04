@@ -1,4 +1,5 @@
 #include "GameSource/World/AI/BrnAICar.h"
+#include "GameSource/World/AI/BrnAICar_Constants.h"       // the .bss tunables, recovered from their start-up initialisers
 #include "GameSource/World/AI/Route/BrnRoute.h"                 // BrnAI::Route, RouteNode, Route::GetNode
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingManager.h" // RaceBalancingManager::ComputeTargetSpeed
 
@@ -20,52 +21,45 @@
 // reversed into LOGICAL CALLS to the already-bodied/declared callees (RaceBalancingManager::
 // ComputeTargetSpeed, Route::GetNode, the AICar accessors).
 //
-// FLAGGED file-local constants: where a rodata tuning float is referenced only by ADDRESS in
-// the X360 build (flt_8300xxxx / flt_820Cxxxx with no immediate decoded by Hex-Rays) its VALUE
-// is NOT recoverable from the dossier, so it is shipped as a flagged placeholder (KF_*, value
-// 0.0f) and listed in open_questions. Literal immediates Hex-Rays decoded from the float bits
+// File-local tuning constants: the 0x820Cxxxx / 0x8200xxxx ones are the big-endian rodata
+// literal pool and are read straight out of image.bin. The 0x8300Dxxx ones are .bss, written at
+// start-up by the CRT initialiser bank at 0x82C685B8..0x82C69488; they now live in
+// BrnAICar_Constants.h with their initialiser address and derivation, so there are NO 0.0f
+// placeholder tunables left in this TU. Literal immediates Hex-Rays decoded from the float bits
 // (0.0/0.5/0.6/0.55/0.4/1.0/3.0/10.0/20.0/30.0/50.0/80.0/100.0/10000.0) are used inline.
 
 namespace BrnAI
 {
     namespace vpu = rw::math::vpu;
 
-    // ===== file-local tuning constants (rodata referenced by address; values FLAGGED) =====
-    // GetDecentSpeed -- per-route-finding-style "decent" fraction of mfMaxPlayerSpeed. These
-    // four ARE recoverable (Hex-Rays decoded the float bits), kept named for readability.
-    const f32 KF_DECENT_SPEED_ROAD_RAGE = 0.5f;        // ROAD_RAGE  (flt_820C4168)
-    const f32 KF_DECENT_SPEED_PURSUIT   = 0.6f;        // PURSUIT    (flt_820C416C, 0.60000002)
-    const f32 KF_DECENT_SPEED_DEFAULT   = 0.55f;       // default    (flt_820C4174, 0.55000001)
-    const f32 KF_DECENT_SPEED_MARKED    = 0.4f;        // MARKED_MAN w/ opponent (0.40000001)
+    // ===== file-local tuning constants =====
+    // The .bss tunables (0x8300Dxxx) live in BrnAICar_Constants.h -- KF_DESIRED_*,
+    // KF_PERSONALITY_SPEED_OFFSET / KF_PERSONALITY_CLAMP_*, KF_ROAD_RAGE_BEHIND_BIAS /
+    // SLOW_FLOOR / AHEAD_DROP and KF_RACE_DISTANCE_MIN_SPEED -- recovered 2026-09-04 from their
+    // start-up initialisers in the CRT bank at 0x82C685B8..0x82C69488.
+    //
+    // GetDecentSpeed @0x82766030 -- per-route-finding-style "decent" fraction of
+    // mfMaxPlayerSpeed. The asm dispatches on meRouteFindingStyle 2 / 3 / 6 / default; the four
+    // rodata floats sit in one pool addressed off 0x820C4164: 0x820C4164 = 0.55 (the default
+    // arm), 0x820C4168 = 0.5 (ROAD_RAGE), 0x820C416C = 0.6 (PURSUIT), 0x820C4174 = 0.4
+    // (MARKED_MAN with a non-zero opponent index).
+    const f32 KF_DECENT_SPEED_ROAD_RAGE = 0.5f;        // flt_820C4168 -- style 2
+    const f32 KF_DECENT_SPEED_PURSUIT   = 0.6f;        // flt_820C416C -- style 3 (0.60000002)
+    const f32 KF_DECENT_SPEED_DEFAULT   = 0.55f;       // flt_820C4164 -- default arm (0.55000001)
+    const f32 KF_DECENT_SPEED_MARKED    = 0.4f;        // flt_820C4174 -- style 6 w/ opponent (0.40000001)
 
-    // CalcDesiredSpeed -- proximity/cornering speed clamps (rodata by address; UNRECOVERED).
-    const f32 KF_DESIRED_MAX_SPEED          = 0.0f;    // flt_8300DB04 -- FLAG: rodata value unrecovered (upper clamp)
-    const f32 KF_DESIRED_PURSUIT_FALLBEHIND = 0.0f;    // flt_8300D700 -- FLAG: rodata value unrecovered
-    const f32 KF_DESIRED_PURSUIT_FLOOR      = 0.0f;    // flt_8300DC3C -- FLAG: rodata value unrecovered
-    const f32 KF_DESIRED_FREEROAM_BIAS      = 0.0f;    // flt_8300D97C -- FLAG: rodata value unrecovered
-    const f32 KF_DESIRED_OPP_SCALE_RACE     = 0.0f;    // flt_8300DC08 -- FLAG: rodata value unrecovered (opponent-index scale, race)
-    const f32 KF_DESIRED_OPP_BASE_RACE      = 0.0f;    // flt_8300D7D4 -- FLAG: rodata value unrecovered (opponent-index base, race)
-    const f32 KF_DESIRED_OPP_SCALE_DEFAULT  = 0.0f;    // flt_8300D968 -- FLAG: rodata value unrecovered (opponent-index scale, default)
-    const f32 KF_DESIRED_OPP_BASE_DEFAULT   = 0.0f;    // flt_8300D708 -- FLAG: rodata value unrecovered (opponent-index base, default)
+    // CalcDesiredSpeed -- the two multipliers that are rodata, not .bss.
     const f32 KF_DESIRED_PLAYER_DRIVEN_MUL  = 0.7f;    // flt_820C41A8 == 0.69999999 (read from image.bin @0xC41A8, 2026-09-03; was a 0.0 placeholder)
     const f32 KF_DESIRED_DEFAULT_MUL        = 4.0f;    // flt_820C41C0 == 4.0 (read from image.bin @0xC41C0, 2026-09-03; was a 0.0 placeholder; the same word is Update's wrong-way limit)
-    const f32 KF_DESIRED_INRANGE_PLAYER     = 0.0f;    // flt_8300D980 -- FLAG: rodata value unrecovered (meBehaviour==1 player-car speed)
 
-    // CalcPersonalitySpeed -- velocity-magnitude offset + speed scales + clamp band (UNRECOVERED).
-    const f32 KF_PERSONALITY_SPEED_OFFSET   = 0.0f;    // flt_8300D788 -- FLAG: rodata value unrecovered (added to |velocity|)
+    // CalcPersonalitySpeed -- the mph -> m/s factor the x50/x80/x100 bases are scaled by.
     const f32 KF_PERSONALITY_BASE_SCALE     = 0.44704f; // flt_82F31928 == 0.44704 (mph -> m/s; read from image.bin @0xF31928, 2026-09-03) -- the x50/x80/x100 are mph
-    const f32 KF_PERSONALITY_CLAMP_LO       = 0.0f;    // flt_8300D93C -- FLAG: rodata value unrecovered (lower floor)
-    const f32 KF_PERSONALITY_CLAMP_HI       = 0.0f;    // flt_8300D740 -- FLAG: rodata value unrecovered (upper cap)
 
-    // CalcRoadRageSpeed -- separation-blended speed offsets (UNRECOVERED).
-    const f32 KF_ROAD_RAGE_BEHIND_BIAS      = 0.0f;    // flt_8300D724 -- FLAG: rodata value unrecovered (added when behind / slow)
-    const f32 KF_ROAD_RAGE_SLOW_FLOOR       = 0.0f;    // flt_8300D810 -- FLAG: rodata value unrecovered (min speed when player slow)
-    const f32 KF_ROAD_RAGE_AHEAD_DROP       = 0.0f;    // flt_8300D83C -- FLAG: rodata value unrecovered (subtracted when ahead)
+    // CalcRoadRageSpeed -- the separation blend.
     const f32 KF_ROAD_RAGE_BLEND_RATE       = 0.05f;   // flt_820047C8 == 0.05 (== 1/20 m, read from image.bin @0x47C8, 2026-09-03) -- lerp over the [0,20] band
     const f32 KF_ROAD_RAGE_SEPARATION_RANGE = 20.0f;   // flt_820C4890 (== 20.0, separation upper bound)
 
     // UpdateRaceDistance -- speed/distance thresholds.
-    const f32 KF_RACE_DISTANCE_MIN_SPEED    = 0.0f;    // flt_8300D814 -- FLAG: rodata value unrecovered (min speed to accrue wrong-way time)
     const f32 KF_RACE_DISTANCE_AHEAD_GAP    =  30.0f;  // flt_820C3FA8 (== 30.0)  ahead-of-player synthetic gap
     const f32 KF_RACE_DISTANCE_BEHIND_GAP   = -30.0f;  // flt_820951A8 (== -30.0) behind-player synthetic gap
 

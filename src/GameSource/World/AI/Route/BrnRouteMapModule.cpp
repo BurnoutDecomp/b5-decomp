@@ -21,6 +21,45 @@
 
 namespace BrnAI
 {
+namespace
+{
+    // =====================================================================================
+    // [FLAG PC witness] NOT IN THE X360 BINARY. The shared PER-EVENT-ID witness budget.
+    //
+    // ⭐ WHY A PER-ID BUDGET AND NOT "first N". Every route witness in this file used to be a
+    // global first-8, and run6 (scratch/aiwave/run6/BrnGame.log) showed why that cannot answer
+    // the question this campaign asks. The AI roster comes up in stages -- the player's AICar is
+    // live from the junkyard hand-off, the five Road Rage rivals only from ADD_CAR_TO_MODE about
+    // ten seconds later -- so all eight lines were spent on the PLAYER's own routes by log line
+    // 3,028 of 802,050, four frames after the first rival appeared. The run therefore could not
+    // distinguish "the rivals never asked" from "the rivals asked and got an empty road", which
+    // is precisely the fork the lane was opened to resolve.
+    //
+    // The event id IS the asking car's AICar::miRaceCarIndex (the request builders store it at
+    // ExtrapolatedRouteRequest +0x02 / RaceRouteRequest +0x6A -- X360 0x82789128 / 0x82791568),
+    // so a per-id budget gives every car on the roster its own quota and a late-activating rival
+    // still gets witnessed. The array is sized 36 (35 global race cars + one catch-all bucket
+    // for a GUI / mode-manager id that is not a car index).
+    // DELETE-WHEN rivals are seen driving their own routes.
+    // =====================================================================================
+    const s32 KI_ROUTE_WITNESS_PER_EVENT = 3;
+    const s32 KI_ROUTE_WITNESS_TOTAL     = 64;
+
+    // Consumes one line from luEventId's quota; returns true when a line may be printed.
+    bool RouteMapWitnessBudget(s32* lpaiPerEvent, s32& lriTotal, u16 luEventId)
+    {
+        const u32 luBucket = (luEventId < 35u) ? static_cast<u32>(luEventId) : 35u;
+        if (lriTotal >= KI_ROUTE_WITNESS_TOTAL ||
+            lpaiPerEvent[luBucket] >= KI_ROUTE_WITNESS_PER_EVENT)
+        {
+            return false;
+        }
+        ++lriTotal;
+        ++lpaiPerEvent[luBucket];
+        return true;
+    }
+}
+
 RouteMapModule::RouteMapModule()
 {
     mAnchorState = 0;
@@ -237,13 +276,15 @@ void RouteMapModule::ProcessRaceRoute(const RouteMapModuleIO::RaceRouteRequest* 
         lpRouteResponseQueue->AddEvent(lRouteResponse);
 
         {
-            // [FLAG PC witness] NOT IN THE X360 BINARY. First 8 completed race routes: the
-            // one line that tells the conductor whether A* produced anything for the car /
-            // GUI that asked. DELETE-WHEN rivals are seen following routes in the log.
-            static s32 siWitnessCount = 0;
-            if (siWitnessCount < 8 && CgsDev::Log::gpDebugPrint != 0)
+            // [FLAG PC witness] NOT IN THE X360 BINARY. Completed race routes, budgeted PER
+            // EVENT ID (== the asking car's AICar::miRaceCarIndex) rather than first-8 overall
+            // -- see the banner on RouteMapWitnessBudget below.
+            // DELETE-WHEN rivals are seen following routes in the log.
+            static s32 saiRaceRouteWitness[36] = { 0 };
+            static s32 siRaceRouteWitnessTotal = 0;
+            if (RouteMapWitnessBudget(saiRaceRouteWitness, siRaceRouteWitnessTotal, muEventId)
+                && CgsDev::Log::gpDebugPrint != 0)
             {
-                ++siWitnessCount;
                 *CgsDev::Log::gpDebugPrint
                     << "[route] race route done: owner " << static_cast<s32>(muOwnerId)
                     << " event " << static_cast<s32>(muEventId)
@@ -412,13 +453,25 @@ void RouteMapModule::ProcessExtrapolatedRoute(
     lpRouteResponseQueue->AddEvent(lRouteResponse);
 
     {
-        // [FLAG PC witness] NOT IN THE X360 BINARY. First 8 extrapolated responses: the one
-        // line that says whether the rivals' road was actually generated (nodes > 0) and where
-        // their default start sits. DELETE-WHEN rivals are seen driving extrapolated routes.
-        static s32 siWitnessCount = 0;
-        if (siWitnessCount < 8 && CgsDev::Log::gpDebugPrint != 0)
+        // [FLAG PC witness] NOT IN THE X360 BINARY. Extrapolated responses, budgeted PER EVENT
+        // ID (== the asking car's AICar::miRaceCarIndex): the one line that says whether THAT
+        // car's road was actually generated (nodes > 0) and where its default start sits.
+        // An EMPTY route (0 nodes) is the failure this campaign is hunting, so it draws from
+        // its own second budget and stays visible after the first one is spent.
+        // DELETE-WHEN rivals are seen driving extrapolated routes.
+        static s32 saiExtrapolatedWitness[36] = { 0 };
+        static s32 siExtrapolatedWitnessTotal = 0;
+        static s32 saiEmptyRouteWitness[36]   = { 0 };
+        static s32 siEmptyRouteWitnessTotal   = 0;
+        const bool lbEmptyRoute = (liNodeCount <= 0);
+        const bool lbWitnessed =
+            RouteMapWitnessBudget(saiExtrapolatedWitness, siExtrapolatedWitnessTotal,
+                                  lpRouteRequest->GetEventId());
+        const bool lbWitnessedEmpty =
+            lbEmptyRoute && RouteMapWitnessBudget(saiEmptyRouteWitness, siEmptyRouteWitnessTotal,
+                                                  lpRouteRequest->GetEventId());
+        if ((lbWitnessed || lbWitnessedEmpty) && CgsDev::Log::gpDebugPrint != 0)
         {
-            ++siWitnessCount;
             *CgsDev::Log::gpDebugPrint
                 << "[route] extrapolated route done: owner "
                 << static_cast<s32>(lpRouteRequest->GetOwnerId())
