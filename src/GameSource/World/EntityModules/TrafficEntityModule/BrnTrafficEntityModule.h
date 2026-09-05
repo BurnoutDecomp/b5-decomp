@@ -319,10 +319,26 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         Matrix44Affine maWheelTransforms[KU_NUM_WHEELS];                  // :175
         Vector3 maLightLocatorPositions[KU_MAX_LIGHT_LOCATORS];           // :178
         // :179 -- BrnPhysics::Deformation::ETagPointType[24], stored as the enum's underlying
-        // 32-bit value so this header stays out of the deformation include graph.
-        // FLAG: retype to the real enum when a consumer needs it; the width does not change.
-        s32 maLightTagPointTypes[KU_MAX_LIGHT_LOCATORS];                  // :179
-        bool mabWheelExists[KU_NUM_WHEELS];                               // :181
+        // value so this header stays out of the deformation include graph.
+        //
+        // ⭐⭐⭐ WIDTH CORRECTED 2026-09-06 (traffic wave). This was `s32[24]` under a FLAG that
+        // said "the width does not change". It DOES: the console stores ONE BYTE per entry, and
+        // that made the whole record 80 bytes too long on the host (4192 vs the console's 4112),
+        // shifting EVERY member after it by 72. ProcessDeformationData @0x8271DEB0, the only
+        // writer, read instruction by instruction:
+        //     0x8271E92C  addi   r7, r7, -0x6E40   ; r7 = record + 0x60000 - 0x6E40 = +0x591C0
+        //     0x8271E93C  lwz    r6, 0(r9)         ; SOURCE stride 4 (the 32-bit enum)
+        //     0x8271E944  addi   r9, r9, 4
+        //     0x8271E948  stbx   r6, r7, r8        ; DESTINATION: a BYTE
+        //     0x8271E94C  addi   r8, r8, 1         ; DESTINATION stride ONE
+        // The array base is `this + 0x58210` (== 360976; 0x82721144 `addis r3,r31,6` +
+        // 0x8272114C `addi r3,r3,-0x7DF0`), so 0x591C0 - 0x58210 == 0xFB0 == 4016 is this array
+        // and 4016 + 24*1 == 4040 is mabWheelExists -- which BrnTrafficEntityModule_Render.cpp
+        // already documents at "info+4040+i", and which puts mfStuckTimeFront back on the
+        // +0xFCC (4044) that UpdateVehicleStuckTimers @0x82708D90 pins. With s32 it sat at 4116.
+        // The static_asserts in BrnTrafficEntityModule.cpp hold all of this down now.
+        u8 maLightTagPointTypes[KU_MAX_LIGHT_LOCATORS];                   // :179 (X360 BYTE)
+        bool mabWheelExists[KU_NUM_WHEELS];                               // :181 (X360 +0xFC8)
         f32 mfStuckTimeFront;                                             // :183
         f32 mfStuckTimeBack;                                              // :184
         f32 mfStuckTimerDebounce;                                         // :185

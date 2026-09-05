@@ -374,8 +374,10 @@ void TrafficEntityModule::ProcessDeformationData(
                     {
                         lpPhysInfo->maLightLocatorPositions[ liLocator ] =
                             lpLocatorData->maLightLocators[ liLocator ].wAxis;
+                        // `stbx` -- the 32-bit enum read is TRUNCATED into the record's byte
+                        // lane (destination stride 1 @0x8271E948/0x8271E94C).
                         lpPhysInfo->maLightTagPointTypes[ liLocator ] =
-                            static_cast< s32 >( lpLocatorData->maLightLocatorTypes[ liLocator ] );
+                            static_cast< u8 >( lpLocatorData->maLightLocatorTypes[ liLocator ] );
                     }
                 }
             }

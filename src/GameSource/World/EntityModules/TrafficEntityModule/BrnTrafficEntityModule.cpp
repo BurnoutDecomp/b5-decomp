@@ -286,6 +286,40 @@ namespace BrnTraffic
     // nothing on this target. It is a static member so offsetof reaches the private members.
     void TrafficEntityModule::_AssertLayout()
     {
+        // ⭐⭐⭐ TrafficPhysicsInfo IS AN ABSOLUTE-OFFSET EXCEPTION, and it has to be, because the
+        // console reaches this record by a HARD-CODED STRIDE, not by a member name:
+        //     RecordTrafficVehicleIsPhysical @0x82721130  `mulli r10, r29, 0x1010`   (4112)
+        //     ProcessDeformationData         @0x8271E8E8  `mulli r11, r28, 0x1010`
+        //     the array base is `this + 0x58210` == 360976, and 463776 - 360976 == 25 * 4112.
+        // Every member offset below is therefore a CONSOLE FACT read off a store, and the record
+        // has no pointers in it, so the host layout can and must reproduce them exactly. The
+        // record was 4192 bytes here until 2026-09-06 (an s32 light-tag array the console stores
+        // as bytes), which put every member from mabWheelExists onward 72 bytes out; nothing in
+        // the tree could see it, because the array is a typed C array and the stride was
+        // self-consistently wrong. See BrnTrafficEntityModule.h's banner on maLightTagPointTypes.
+        static_assert(sizeof(TrafficPhysicsInfo) == 4112,
+                      "TrafficPhysicsInfo must be the console's 0x1010 stride");
+        static_assert(sizeof(TrafficPhysicsInfo::DetachedPartRenderQueue) == 1312,
+                      "mDetachedPartQueue == 32 + 20*64 (ARTIST, not the DWARF EventQueue)");
+        static_assert(offsetof(TrafficPhysicsInfo, maLightTagPointTypes) == 4016,
+                      "maLightTagPointTypes @ +0xFB0 (ProcessDeformationData stbx base 0x591C0)");
+        static_assert(offsetof(TrafficPhysicsInfo, mabWheelExists) == 4040,
+                      "mabWheelExists @ +0xFC8 (BrnTrafficEntityModule_Render.cpp 'info+4040+i')");
+        static_assert(offsetof(TrafficPhysicsInfo, mfStuckTimeFront) == 4044,
+                      "mfStuckTimeFront @ +0xFCC (UpdateVehicleStuckTimers @0x82708D90)");
+        static_assert(offsetof(TrafficPhysicsInfo, mfStuckTimeBack) == 4048,
+                      "mfStuckTimeBack @ +0xFD0 (UpdateVehicleStuckTimers @0x82708DA8)");
+        static_assert(offsetof(TrafficPhysicsInfo, mfSteeringDirection) == 4060,
+                      "mfSteeringDirection @ +0xFDC (RecordTrafficVehicleIsPhysical stfsx 0x591EC)");
+        static_assert(offsetof(TrafficPhysicsInfo, mfDrivingDirection) == 4064,
+                      "mfDrivingDirection @ +0xFE0 (RecordTrafficVehicleIsPhysical stfsx 0x591F0)");
+        static_assert(offsetof(TrafficPhysicsInfo, miNumLightLocators) == 4068,
+                      "miNumLightLocators @ +0xFE4 (ProcessDeformationData stbx 0x591F4)");
+        static_assert(offsetof(TrafficPhysicsInfo, muContactSideFlags) == 4104,
+                      "muContactSideFlags @ +0x1008 (UpdateVehicleStuckTimers)");
+        static_assert(offsetof(TrafficPhysicsInfo, muOwningVehicleIndex) == 4106,
+                      "muOwningVehicleIndex @ +0x100A (TrafficPhysicsInfo::Construct sth)");
+
         // The state block, ten consecutive DWARF members (:602-:613) on ten consecutive X360
         // offsets 0x2F0..0x314. The Prepare/LoadData ladders and the state machine need it.
         static_assert(offsetof(TrafficEntityModule, mePrepareStage)
