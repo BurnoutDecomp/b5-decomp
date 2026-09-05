@@ -384,12 +384,19 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         rw::IResourceAllocator* lpGraphicsAllocator =
             BrnResource::Allocators::GetGlobalGraphicsAllocator();
         mSkidsRenderer.Construct(lpGraphicsAllocator);
+        // asm word 145 (0x8229C0E4 `bl BrnGraphics__Im3dBlend__Construct`), r3 = the object at
+        // this+0x92E0 == &mLionImmediateModeRenderer, r4 = the same off_82F2C814 allocator all
+        // five renderers take. It uploads the two Lion program pairs and resolves the eight
+        // shader-variable handles; see BrnLionBlendIm3d.cpp and the four re-authored programs in
+        // pc/gcm/renderengine/LionBlendProgramsPC.cpp. It runs BEFORE the two +0x53D0 / +0x5278
+        // stores below, exactly as the console orders it.
+        mLionImmediateModeRenderer.Construct(lpGraphicsAllocator);
         {
             static bool sbLogged = false;
             LogNotReconstructed(sbLogged,
-                "ParticleModule::Prepare's four other Im3d Constructs (CgsGraphics::Im3d, "
-                "Im3dTexPlusLighting, Im3dSmokeRenderer, Im3dBlend) -- ContainedInterface "
-                "placeholders in ParticleModule.h; Im3dSkidsRenderer IS constructed");
+                "ParticleModule::Prepare's three other Im3d Constructs (CgsGraphics::Im3d, "
+                "Im3dTexPlusLighting, Im3dSmokeRenderer) -- ContainedInterface placeholders in "
+                "ParticleModule.h; Im3dSkidsRenderer and Im3dBlend ARE constructed");
         }
 
         // --- the Lion renderer ------------------------------------------------------------
@@ -405,24 +412,14 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         // store is the console's `stw r30, 0x53D0(r31)` and no longer a null.
         mLionRenderer.BindPrepareState(mpHeapMalloc, &mLionImmediateModeRenderer);
         mLionRenderer.Setup();
-        {
-            // ⚠ VALID POINTER, INCOMPLETELY CONSTRUCTED OBJECT -- announced deliberately.
-            // The console calls Im3dBlend::Construct @0x8229B260 on this object to resolve its
-            // eight ProgramVariableHandles by name ("worldViewProj", "colourScale", "gOffset",
-            // "gScale", "gDepthConversion", "gDepthFadeConstants"). Construct is blocked on
-            // ASSETS, not analysis: it needs four Xenos microcode blobs (unk_8200DD58 0x1A4,
-            // unk_8200DF00 0x10C, unk_8200E010 0x220, unk_8200E230 0x1F8) re-authored as D3D9,
-            // the SkidProgramsPC.cpp job. Until that lands the handles are unresolved, so a
-            // consumer must not treat a non-null mpRenderer as a DRAWABLE renderer -- only as
-            // a correctly sized, correctly placed one. Im3dBlend declares no constructor, so
-            // the handles carry whatever the module's storage held.
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "ParticleModule::Prepare binds the REAL mLionImmediateModeRenderer at +0x92E0 "
-                "(the +0x160 store is now faithful), but Im3dBlend::Construct @0x8229B260 has "
-                "NOT run -- its eight shader-variable handles are unresolved pending the four "
-                "Xenos programs being re-authored as D3D9");
-        }
+        // ⭐ THE OBJECT IS NOW CONSTRUCTED, NOT JUST PLACED (2026-09-05). This site used to
+        // announce that Im3dBlend::Construct @0x8229B260 had never run, so mpRenderer was a
+        // correctly sized, correctly placed object with EIGHT UNRESOLVED shader-variable
+        // handles. The four Xenos microcode blobs it needed (unk_8200DD58 0x1A4, unk_8200DF00
+        // 0x10C, unk_8200E010 0x220, unk_8200E230 0x1F8) have been read out of the image,
+        // disassembled and re-authored as D3D9 in pc/gcm/renderengine/LionBlendProgramsPC.cpp,
+        // and the Construct call is the one added above (asm word 145), in the console's own
+        // position. Its one-shot [lionblend] log line reports the eight register counts.
 
         // --- cLionFX::Init: BUILD THE LION RUNTIME ---------------------------------------
         //     cLionFX::Init(&dword_82FAD27C, a1 + 21104, 0, 256, 4096, 4096)
