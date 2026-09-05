@@ -1702,6 +1702,76 @@ namespace Deformation
         std::sort(_mContactOrder.maContactTimes,
                   _mContactOrder.maContactTimes + _mContactOrder.miNumContacts);
 
+        // ---- [absorb] PC bring-up instrument -- NOT IN THE X360 BINARY. -------------------------
+        // ⭐ THE ISOLATION THE ROLL-FREQUENCY WAVE ASKED FOR. That wave measured "pristine stays on
+        // its wheels / the same car dented lands on its roof, and shots 2-3 had ZERO impulse
+        // arrivals", and said plainly that "damaged" bundled dents + detached parts + a deactivated
+        // deformation model and the experiment could not say which. Reading the chain names a
+        // FOURTH candidate that is none of those three and that predicts exactly zero arrivals:
+        //
+        //   meAbsorptionSet == E_ABSORPTIONSET_INVINCIBLE. Its whole AbsorptionTable row is 0.0
+        //   (BrnAbsorptionTable.cpp, recovered from the image), so in ApplyLocalImpulse
+        //   lfAbsorbFactor == pow(0, 60*dt) == 0, lfAbsorbed == 0, and the chain forwards
+        //   PassOnImpulse(next, params, 0.0). Slot 0 of that chain IS the car's own
+        //   VehicleRigidBody, so a car in that set banks NO deformation-route momentum AT ALL --
+        //   which is what "zero impulse arrivals" is, and it has nothing to do with dents.
+        //   ResetDeformation @0x82639D60 puts a car there for mfNoDamageTimer == 1.5 s on a TYPE-1
+        //   reset (`if (a28==1) { +26396 = 1.5 ; +26460 = 4 }`), and the crash sweep's own
+        //   inter-shot reset posts exactly that event whenever the car was wrecked.
+        //
+        // So this line prints, per crashing frame, the three states that tell the four candidates
+        // apart: the absorption SET and its countdown (candidate 4), the live contact count
+        // (candidate 3, "the model is off"), and the accumulated sensor displacement + detached
+        // part count (candidates 1 and 2, dents and shed panels). One boot with two shots then
+        // says which of them differs between a pristine and a re-used car, instead of four moving
+        // at once. DELETE-WHEN the damage/roll question is banked.
+        {
+            static s32 siAbsorbProbe = -1;
+            if ( siAbsorbProbe < 0 )
+            {
+                const char* lpcEnv = getenv( "BRN_CRASH_RESPONSE_DIAG" );
+                siAbsorbProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+            }
+            static u32 suAbsorbLines  = 0u;
+            static u32 suAbsorbFrames = 0u;
+            const bool lbCrashingNow =
+                mVehicleBody.GetVehiclePhysics() != 0 && mVehicleBody.GetVehiclePhysics()->IsCrashing();
+            ++suAbsorbFrames;
+            if ( siAbsorbProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && lbCrashingNow
+                 && suAbsorbLines < 900u && ( suAbsorbLines < 12u || ( suAbsorbFrames % 10u ) == 0u ) )
+            {
+                ++suAbsorbLines;
+                // accumulated damage: the per-sensor scratch ladder ApplySensorImpulse maintains
+                // (sensor +0x1A4, floored at 0 and capped at max(0.75, previous)). It is the only
+                // per-sensor "how beaten up is this" number with a bodied accessor.
+                f32 lfScratchSum = 0.0f;
+                f32 lfScratchMax = 0.0f;
+                const s32 liDentSensors = GetNumSensors() - 4;
+                for ( s32 liD = 0; liD < liDentSensors; ++liD )
+                {
+                    const f32 lfD = maDeformationSensors[liD].GetScratchAmount();
+                    lfScratchSum += lfD;
+                    if ( lfD > lfScratchMax ) { lfScratchMax = lfD; }
+                }
+                // ⚠️⚠️ THE OBJECT ID IS NOT OPTIONAL. UpdateContacts runs for EVERY DeformableObject
+                // in the world, player and traffic alike, so a line without it says "some car" --
+                // and the first version of this probe did exactly that, which made a traffic car's
+                // post-reset invincibility indistinguishable from the player's. owner == 1 is the
+                // race-car owner byte (the same selector UpdateAbsorptionSet reads).
+                *CgsDev::Log::gpDebugPrint
+                    << "[absorb] owner " << static_cast<s32>(GetHandlingBodyIdHighByte())
+                    << " ent " << static_cast<s32>(GetGlobalEntityId().muValue)
+                    << " set " << static_cast<s32>(meAbsorptionSet)
+                    << " noDamageTimer " << mfNoDamageTimer
+                    << " contacts " << static_cast<s32>(_mContactOrder.miNumContacts)
+                    << " scratchSum " << lfScratchSum
+                    << " scratchMax " << lfScratchMax
+                    << " brokenWheels " << static_cast<s32>(miNumBrokenWheels)
+                    << "\n";
+            }
+        }
+        // ---- end [absorb] -----------------------------------------------------------------------
+
         // ---- (2) apply in sorted order ---------------------------------------------------------
         mVehicleBody.GetVehiclePhysics()->mi8NumWorldCollisions = 0;   // *(vp+4947) = 0
 
