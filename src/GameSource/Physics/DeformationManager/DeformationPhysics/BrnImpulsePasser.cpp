@@ -62,8 +62,24 @@ namespace Deformation
     }
 
     // =============================================================================================
-    // PassOnImpulse -- ⭐ ADDED 2026-08-14 (deformation-mount wave). X360 export HOLE; the PS3
-    // twin SHIPS the body (@0x6B4FB8, 61 instr, DecFIGS) and is the authority:
+    // PassOnImpulse -- ⭐ ADDED 2026-08-14 (deformation-mount wave) from the PS3 twin.
+    //
+    // ⭐⭐ THE X360 HOLE IS CLOSED 2026-09-05 (momentum wave) AND IT CONFIRMS THE PS3-DERIVED BODY
+    // POINT FOR POINT. ApplyLocalImpulse's `bl 0x825BA400` names the entry; ppcdis.py now decodes
+    // VMX128 (tools/re/build_vmx_table.py), so 0x825BA400..0x825BA4A4 reads straight out of the
+    // image: r3 == this, r4 == the index byte (`clrlwi r31, r4, 0x18`), r5 == the params, v1 ==
+    // the passed magnitude (`vmr128 v127, v1`).
+    //     0x825BA428  cmplwi r31, 0x19          the index < 25 bound
+    //     0x825BA434  BeginAssert/FireAssert/EndAssert, line 0x9C == 156 -- FIRE AND CONTINUE
+    //     0x825BA450  slwi r31,r31,2 ; lwzx r11,r31,r29     mapCollidableBodies[index]
+    //     0x825BA45C  the != NULL assert, line 0x9D == 157 -- ALSO fire-and-continue, and the
+    //                 console then RE-LOADS the same slot at 0x825BA47C and calls it anyway
+    //     0x825BA488  lwz r11,0(r3) ; lwz r11,4(r11) ; bctrl    VTABLE SLOT 1
+    // i.e. exactly what this body already did. Both asserts are non-gating on ARTIST as well as
+    // on PS3, and slot 1 of CollidableBody is RecievePassedOnImpulse. Nothing changed; the
+    // provenance did.
+    //
+    // The PS3 twin (@0x6B4FB8, 61 instr, DecFIGS) says the same:
     //   * assert lu8ReceivingBodyIndex < 25 ("lu8ReceivingBodyIndex < KI_MAX_NUM_COLLIDABLE_
     //     BODIES_PER_DEFORMABLE_OBJECT", BrnImpulsePasser.cpp:156, fire-and-continue);
     //   * assert the slot is wired ("mapCollidableBodies[lu8ReceivingBodyIndex] != NULL", :157,
