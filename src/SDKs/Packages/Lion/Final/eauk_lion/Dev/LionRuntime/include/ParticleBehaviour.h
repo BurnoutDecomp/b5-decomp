@@ -139,6 +139,31 @@ struct cParticleBehaviour
         // set, integrates only the X size lane and derives Y and Z from it through the build
         // data's mvScaleAndProportionalScaleYXAndZX y/z ratios. The name says what that arm does.
         E_BV_SIZE_PROPORTIONAL = 0x1000000,
+
+        // ⭐⭐ THE AUTHORING TABLE'S OWN NAMES FOR THE WHOLE WORD, read out of the X360 image
+        // and transcribed in LionParticleParser.cpp:89-111 against offset 708 == +0x2C4. Every
+        // E_BV_* name above is this project's guess at what a mask does; these are the game's,
+        // and where they overlap they agree (DO_ROTATE == E_BV_ROT 0x1, DO_ROTXYZ ==
+        // E_BV_ROTVELACC 0x40, DO_SIZEXYZ == E_BV_SIZE_FULL 0x80, DO_PROPORTIONAL ==
+        // E_BV_SIZE_PROPORTIONAL 0x1000000). cParticleEmitter::ParticleBuild @0x82910118 gates
+        // one block on each of the six below, so they are named here rather than at the use
+        // site. Prefer these spellings for new code.
+        E_DO_ROTATE          = 0x0000001,
+        E_DO_REVERSE         = 0x0000008,   // ParticleBuild: age = lifetime - age
+        E_DO_RADIAL          = 0x0000010,   // ParticleBuild: push onto a mRingRadius ring
+        E_DO_OFFSETROT       = 0x0000020,   // ParticleBuild: the Euler XYZ position rotation
+        E_DO_ROTXYZ          = 0x0000040,
+        E_DO_SIZEXYZ         = 0x0000080,
+        E_DO_DRAG            = 0x0000100,   // ParticleBuild: run DragBehaviour::Process
+        E_DO_BURST           = 0x0000200,
+        E_DO_INHERITVEL      = 0x0000800,
+        E_DO_CLONE           = 0x0001000,
+        E_DO_WAVERGB         = 0x0004000,
+        E_DO_WAVEX           = 0x0008000,   // ParticleBuild: mpWaveFormX scales the x lane
+        E_DO_WAVEY           = 0x0010000,   // ParticleBuild: mpWaveFormY scales the y lane
+        E_DO_WAVEZ           = 0x0020000,   // ParticleBuild: mpWaveFormZ scales the z lane
+        E_DO_PROPORTIONAL    = 0x1000000,
+        E_DO_EMITTER_WEIGHTING = 0x2000000,
     };
 
     void Init();

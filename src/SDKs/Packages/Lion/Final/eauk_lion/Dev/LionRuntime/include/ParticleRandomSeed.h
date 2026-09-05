@@ -78,6 +78,7 @@
 #include "types.hpp"
 
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Vector4 / Vector3Plus (BuildLerp)
+#include "SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h"  // cVector -- Build(cVector&,...)
 
 #include <cstddef>   // offsetof
 
@@ -129,6 +130,20 @@ struct cParticleRandomSeed
     // X360 sub_8290A648 (unnamed in the idb; named by the DWARF).
     rw::math::vpu::Vector3Plus Build(rw::math::vpu::Vector4 avBase,
                                      rw::math::vpu::Vector4 avVariance);
+
+    // ParticleRandomSeed.h:144 -- the OUT-PARAMETER sibling of Build(Vector4, Vector4): it
+    // consumes the same 16-byte cache half at slot (muIndex+3)&4 as four per-lane randoms and
+    // writes arBase + arVariance*t through arOut instead of returning it. X360 sub_8290A510
+    // (unnamed in the idb; the DWARF names it, and cParticleEmitter::ParticleBuild @0x82910118
+    // is its ONLY caller -- the DO_RADIAL arm asks it for a random direction in [-1,1) with
+    // base splat4(-1) and variance splat4(2)).
+    //
+    // ⚠ IT IS NOT THE SAME FUNCTION AS Build(Vector4, Vector4) @0x8290A648, and the difference
+    // is not the out parameter. That one takes THREE LCG steps and refills all FOUR cache
+    // slots from a 96-bit stream; this one takes TWO and refills only THREE, advancing muIndex
+    // by 3 rather than toggling it by 4. So the two leave the generator in different states
+    // and are not interchangeable.
+    void Build(cVector& arOut, const cVector& arBase, const cVector& arVariance);
 
     // ParticleRandomSeed.h:130 -- draw ONE cached random t in [0,1) (consumed
     // from the "Vector slot" (muIndex+3)&4, which is then refilled and the index

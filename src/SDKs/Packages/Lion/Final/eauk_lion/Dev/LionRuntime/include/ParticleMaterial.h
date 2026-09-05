@@ -56,6 +56,24 @@ public:
         eSHADER_LIMIT     = 3,
     };
 
+    // mFlags (+0x24) bits. ⭐ NOT DERIVED NAMES -- these are the Lion authoring token table's
+    // own, read out of the X360 image and transcribed in LionParticleParser.cpp:190/:191 as
+    // FLAG_MULTIFRAME 0x1 and FLAG_INTERFRAMEBLEND 0x2 on the +36 == +0x24 flags word.
+    // BrnEffects::Utils::BuildUVs @0x822781E0 tests MULTIFRAME to choose the atlas cell and
+    // QuadDraw @0x82282330 tests INTERFRAMEBLEND to decide whether to write a blend weight;
+    // MultiFrameBehaviour::Process @0x8290FC48 tests INTERFRAMEBLEND twice (`rlwinm r11, r11,
+    // 0,30,30` @0x8290FD28 and @0x829100B0) to decide whether the "next" cell is a real second
+    // cell or a copy of the current one. Those three users previously each carried their own
+    // copy of the constant; this is the flags word's own home.
+    enum eMaterialFlags
+    {
+        eFLAG_MULTIFRAME       = 0x1,
+        eFLAG_INTERFRAMEBLEND  = 0x2,
+        eFLAG_LAYERGROUP       = 0x80,
+        eFLAG_WRAP_U           = 0x100,
+        eFLAG_WRAP_V           = 0x200,
+    };
+
     // ParticleMaterial.h:78 -- the configured shader variant.
     eLionMaterialShaderType GetShaderType() const
     {

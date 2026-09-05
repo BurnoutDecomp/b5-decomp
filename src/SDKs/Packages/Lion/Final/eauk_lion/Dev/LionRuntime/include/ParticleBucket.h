@@ -124,6 +124,13 @@ public:
     // (ParticleBucket.cpp).
     void GetpMatrix(u32 auIndex, cMatrix* apMatrix, const cTime& arTime);
 
+    // ParticleBucket.h:88 -- how many slots are live. It is the same word IsFull() tests, and
+    // cParticleEmitter::Update @0x82915690 sums it across the emitter's whole bucket list to
+    // produce the count it returns when a sub-emitter's parent particle has died
+    // (`lwz r10, 0x50(r11)` then `lwz r11, 8(r11)`). The X360 reads the field directly, so
+    // this is inline by construction.
+    u32 GetNumParticles() const { return mnNextParticlePositionToFill; }
+
     // ParticleBucket.h:84 -- "no free slot left". cParticleEmitter::ParticleInsert
     // @0x829133F8 spells it `cmplwi r11, 0x10 ; beq`: an EQUALITY against the capacity, not
     // a >=. Kept as the console asks it.

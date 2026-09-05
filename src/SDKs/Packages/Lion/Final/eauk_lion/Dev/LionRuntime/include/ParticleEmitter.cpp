@@ -33,6 +33,7 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleBucketManager.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitterManager.h"   // SpawnSubEmitter registers through the manager singleton
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/RenderedParticle.h"   // the per-particle RENDER record the behaviour processors write
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleWaveForm.h"    // ParticleBuild samples the three position wave forms
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -48,6 +49,15 @@ namespace
 // It is a "no blend in progress" sentinel, not a tunable: the blend path compares against it,
 // it is never interpolated toward. The exact bits are kept so the comparison behaves.
 const f32 KF_BLEND_LAST_NONE = 100.12529754638672f;   // flt_820FF0D0
+
+// X360 dword_82FAB640 (LionPerfMon + 0x8) -- the emitter UPDATE monitor. Same arrangement as
+// the behaviour processors' handles below: LionPerfMon has no global instance in this tree yet.
+s32 giEmitterUpdateMonitor = -1;
+
+// flt_82F369A8 == 0x39AEC33E == 0.00033333332976326346 == 1/3000, the Lion tick rate. Written
+// as the image's float rather than 1.0f/3000.0f because the console multiplies by this exact
+// value in cParticleEmitter::Update, ::Emit and ::ParentMatrixCurrentBuild.
+const f32 KF_TICKS_TO_SECONDS = 0.00033333332976326346f;
 }  // namespace
 
 // ----------------------------------------------------------------------------
@@ -1021,10 +1031,10 @@ void cParticleEmitter::SpawnSubEmitter(cParticleBucket* apBucket,
 // r6 = the cParticleRandomSeed -- four registers for the DWARF's four parameters, with nothing
 // left for an implicit first argument. Same for the other two below.
 //
-// ⛔ FOUR OF SEVEN. DragBehaviour::Process @0x8290DBD0 (214 instructions),
+// ✅ SEVEN OF SEVEN (2026-09-05). DragBehaviour::Process @0x8290DBD0 (214 instructions),
 // ColourStepsBehaviour::Process @0x8290F9F8 (147) and MultiFrameBehaviour::Process @0x8290FC48
-// (308) are NOT written -- 669 of the family's 967 instructions still open. They are listed here
-// so the next wave counts the family, not the leftovers.
+// (308) close the family -- 967 instructions, nothing left open. Each was the last thing
+// standing between cParticleEmitter::ParticleBuild and a link.
 //
 // The perf-monitor handles are LionPerfMon members reached off the same file-scope base
 // (0x82FAB638) that cParticleEmitter::Blend's giEmitterBlendMonitor uses; LionPerfMon has no
@@ -1034,9 +1044,29 @@ void cParticleEmitter::SpawnSubEmitter(cParticleBucket* apBucket,
 namespace
 {
 s32 giBaseColourWithVarianceMonitor = -1;   // X360 dword_82FAB660 (LionPerfMon + 0x28)
+s32 giColourStepsMonitor           = -1;   // X360 dword_82FAB664 (LionPerfMon + 0x2C)
 s32 giAlphaFadeMonitor             = -1;   // X360 dword_82FAB670 (LionPerfMon + 0x38)
 s32 giRotationMonitor              = -1;   // X360 dword_82FAB674 (LionPerfMon + 0x3C)
 s32 giSizeMonitor                  = -1;   // X360 dword_82FAB678 (LionPerfMon + 0x40)
+s32 giDragMonitor                  = -1;   // X360 dword_82FAB67C (LionPerfMon + 0x44)
+s32 giMultiFrameMonitor            = -1;   // X360 dword_82FAB680 (LionPerfMon + 0x48)
+
+// flt_820FEC38, read out of the image (tools/re/x360rd.py 0x820FEC38 -> 0x34000000). It is
+// FLT_EPSILON, and DragBehaviour::Process loads it with `lvlx` (the symbol is 8 mod 16, so the
+// left-load puts it in lane 0) and splats it. Every "is this channel worth dragging" test in
+// that function compares against this.
+const f32 KF_DRAG_EPSILON = 1.1920928955078125e-07f;   // flt_820FEC38
+
+// The two multi-frame blend-weight clamps, both real .rdata floats read out of the image
+// (`lis r10, flt_820132C8@ha` @0x8290FDE4 / `lis r10, flt_820FEC60@ha` @0x8290FE34, and again
+// at 0x8290FF98 / 0x8290FFF0 in the play-over-lifetime arm):
+//     flt_820132C8 = 0x3F7FF972 = 0.9998999834060669
+//     flt_820FEC60 = 0x3F7FFFEF = 0.9999989867210388
+// They keep the fractional part strictly inside one atlas cell: once the weight reaches 0.9999
+// it is PINNED at 0.999999 rather than allowed to reach 1.0, which would make BuildUVs' floor
+// step to the next cell a frame early.
+const f32 KF_FRAME_WEIGHT_LIMIT = 0.9998999834060669f;     // flt_820132C8
+const f32 KF_FRAME_WEIGHT_PIN   = 0.9999989867210388f;     // flt_820FEC60
 }  // namespace
 
 // ------------------------------------------------------------------------------------------------
@@ -1387,4 +1417,1190 @@ void SizeBehaviour::Process(const cParticleBehaviour& arBehaviour,
     }
 
     CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+}
+
+// ------------------------------------------------------------------------------------------------
+// DragBehaviour::Process  @ 0x8290DBD0   (214 instructions)
+//
+// Bleed velocity, rotation velocity and size velocity, at a FIXED SIMULATION RATE that is
+// independent of the frame rate. That fixed rate is the whole shape of the function and it is
+// what the two loop-carried registers are for:
+//
+//   accumulator = arNucleus.mAcc.w                    (`addi r29, r30, 0x20`, `vspltw v0, v0, 3`)
+//   step        = arData.mvOrientStepAndDragFrameRateConstants.y
+//                                                     (`addi r4, r31, 0x30`, `vspltw v13, v13, 1`)
+//   accumulator += dt;  while (accumulator >= step) { one drag step; accumulator -= step; }
+//   arNucleus.mAcc.w = accumulator;                   (`vrlimi128 v0, v8, 1, 0` @0x8290DF0C)
+//
+// ⭐ THE ACCUMULATOR LIVES IN mAcc's W LANE, and that is not a guess: r29 is fixed at
+// nucleus+0x20 for the whole body, lane 3 is the only lane read (`vspltw v0, v0, 3`), and the
+// single store at the tail is a `vrlimi128 ..., 1, 0` -- mask 1 == word 3 -- so mAcc.xyz is
+// untouched. mAcc is a DWARF `Vector3Plus`; the "Plus" lane is exactly this kind of slot, the
+// same way MultiFrameBehaviour below parks its two frame numbers in mRotAcc.w / mOffsetRotAcc.w.
+//
+// THE THREE CHANNELS, and the flag that picks each arm (cParticleBehaviour::mFlags @+0x2C4, the
+// same bits RotationBehaviour and SizeBehaviour above test):
+//
+//   velocity          always      mVel    (+0x10)   factor mvDragFactorsVelRotScale.x
+//   rotation velocity E_BV_ROT    mRotVel (+0x40)   factor .y   -- the SCALAR z arm
+//                     E_BV_ROTVELACC        "       factor .y   -- the VECTOR arm
+//                     neither     nothing happens
+//   size velocity     E_BV_SIZE_FULL mSizeVel(+0xA0) factor .z  -- the VECTOR arm
+//                     otherwise            "        factor .z   -- the SCALAR x arm
+//
+// ⚠ THE VECTOR ARMS AND THE SCALAR ARMS DO DIFFERENT ARITHMETIC, and smoothing that away would
+// be a behaviour change, so both are written out:
+//     vector:  v -= normalise(v) * min(1, k * |v|^2)     -- removes an ABSOLUTE amount
+//     scalar:  s -= s            * min(1, k * |s|)       -- removes a FRACTION
+// The vector form's `|v|^2` is `vmsum3fp128 v, v` (xyz only) and its normalise is a `vrsqrtefp`
+// plus TWO Newton-Raphson refinements, de-optimised back to the division it computes per the
+// project's strength-reduction rule. The scalar form has neither a square nor a reciprocal.
+//
+// ⚠ AND THE EPSILON GUARD IS NOT UNIFORM EITHER. Three of the four working arms first test
+// `any(|channel.xyz| > FLT_EPSILON)` (`vandc` against the 0x80000000 sign mask built by
+// `vslw v9, v9` on `vspltisw v9, -1`, then `vcmpgtfp.` read on CR6 bit 2 == "no lane true").
+// The size SCALAR arm at 0x8290DE9C has NO such guard -- it drags mSizeVel.x unconditionally.
+// That asymmetry is in the binary; a uniform guard here would be an invented arm.
+//
+// ⚠ THE `vrlimi128 v11, v13, 1, 1` inside each guard is a rotate-by-one insert, so the tested
+// register is (|x|, |y|, |z|, |x|) -- the w lane is a duplicate of x, not the channel's own w.
+// It changes nothing (an OR over four lanes with one repeated), but reading it as |w| would
+// invent a dependency on a lane the DWARF calls spare.
+// ------------------------------------------------------------------------------------------------
+struct DragBehaviour
+{
+    static void Process(const cParticleEmitter::ParticleBuildData& arData,
+                        const cParticleBehaviour& arBehaviour,
+                        sParticleNucleus& arNucleus,
+                        f32 afDeltaTime);
+};
+
+namespace
+{
+// `vandc` against the sign mask, then `vcmpgtfp.` read on CR6 bit 2 ("no lane greater"): the
+// drag arm runs when ANY of the three channel lanes is above FLT_EPSILON.
+inline bool AnyChannelAboveDragEpsilon(const cVector& arV)
+{
+    return (arV.x < 0.0f ? -arV.x : arV.x) > KF_DRAG_EPSILON
+        || (arV.y < 0.0f ? -arV.y : arV.y) > KF_DRAG_EPSILON
+        || (arV.z < 0.0f ? -arV.z : arV.z) > KF_DRAG_EPSILON;
+}
+
+// v -= normalise(v) * min(1, afFactor * |v|^2), xyz only; the w lane is restored by the
+// console's `vrlimi128 v0, v7, 1, 0` and is therefore simply not written here.
+inline void DragVectorChannel(cVector& arV, f32 afFactor)
+{
+    const f32 lfLen2 = arV.x * arV.x + arV.y * arV.y + arV.z * arV.z;   // vmsum3fp128
+
+    f32 lfAmount = afFactor * lfLen2;                                   // vmulfp128
+    if (lfAmount > 1.0f)                                                // vminfp against vcfsx 1
+    {
+        lfAmount = 1.0f;
+    }
+
+    // vrsqrtefp + two Newton-Raphson steps == 1/sqrt(len2); written as the division it computes.
+    const f32 lfScale = lfAmount / std::sqrt(lfLen2);
+
+    arV.x = arV.x - arV.x * lfScale;
+    arV.y = arV.y - arV.y * lfScale;
+    arV.z = arV.z - arV.z * lfScale;
+}
+
+// s -= s * min(1, afFactor * |s|). No square, no reciprocal -- see the banner.
+inline f32 DragScalarChannel(f32 afValue, f32 afFactor)
+{
+    f32 lfAmount = afFactor * (afValue < 0.0f ? -afValue : afValue);
+    if (lfAmount > 1.0f)
+    {
+        lfAmount = 1.0f;
+    }
+    return afValue - afValue * lfAmount;
+}
+}  // namespace
+
+void DragBehaviour::Process(const cParticleEmitter::ParticleBuildData& arData,
+                            const cParticleBehaviour& arBehaviour,
+                            sParticleNucleus& arNucleus,
+                            f32 afDeltaTime)
+{
+    const s32 liMonitor = giDragMonitor;
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+    // data +0x30 lane y -- the fixed drag time step (the member's name says so).
+    const f32 lfStep = arData.mvOrientStepAndDragFrameRateConstants.y;
+
+    // asm 0x8290DC14..0x8290DC2C -- the accumulator is read out of mAcc's w lane and advanced
+    // BEFORE the loop test, so a step can be taken on the very first frame.
+    f32 lfAccumulator = arNucleus.mAcc.w + afDeltaTime;
+
+    while (lfAccumulator >= lfStep)
+    {
+        // ---- velocity (asm 0x8290DC58..0x8290DCF0) --------------------------------------
+        if (AnyChannelAboveDragEpsilon(arNucleus.mVel))
+        {
+            DragVectorChannel(arNucleus.mVel, arData.mvDragFactorsVelRotScale.x);
+        }
+
+        // ---- rotation velocity (asm 0x8290DCF4..0x8290DDEC) ----------------------------
+        if ((arBehaviour.mFlags & cParticleBehaviour::E_BV_ROT) != 0)
+        {
+            // The single-angle arm: only lane z, and the SCALAR form of the drag.
+            arNucleus.mRotVel.z =
+                DragScalarChannel(arNucleus.mRotVel.z, arData.mvDragFactorsVelRotScale.y);
+        }
+        else if ((arBehaviour.mFlags & cParticleBehaviour::E_BV_ROTVELACC) != 0)
+        {
+            if (AnyChannelAboveDragEpsilon(arNucleus.mRotVel))
+            {
+                DragVectorChannel(arNucleus.mRotVel, arData.mvDragFactorsVelRotScale.y);
+            }
+        }
+
+        // ---- size velocity (asm 0x8290DDF0..0x8290DED4) ---------------------------------
+        if ((arBehaviour.mFlags & cParticleBehaviour::E_BV_SIZE_FULL) != 0)
+        {
+            if (AnyChannelAboveDragEpsilon(arNucleus.mSizeVel))
+            {
+                DragVectorChannel(arNucleus.mSizeVel, arData.mvDragFactorsVelRotScale.z);
+            }
+        }
+        else
+        {
+            // ⚠ NO epsilon guard on this arm -- see the banner.
+            arNucleus.mSizeVel.x =
+                DragScalarChannel(arNucleus.mSizeVel.x, arData.mvDragFactorsVelRotScale.z);
+        }
+
+        lfAccumulator = lfAccumulator - lfStep;   // asm 0x8290DEEC
+    }
+
+    arNucleus.mAcc.w = lfAccumulator;   // asm 0x8290DF0C -- w lane only
+
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+}
+
+// ------------------------------------------------------------------------------------------------
+// ColourStepsBehaviour::Process  @ 0x8290F9F8   (147 instructions)
+//
+// Multiply the particle's colour by the behaviour's colour-STEP ramp, sampled at the particle's
+// normalised life. cParticleBehaviour::BuildColourSteps @0x82909100 packed the ramp into the
+// parallel arrays mColourStepRGBA[4] (+0x240) / mRGBATime[4] (+0x250) with mColourSteps (+0x260)
+// live entries; this reads them back.
+//
+//   life = arParticle.mvTimeScaleAndLifeScale.y        (`lfs f0, 0x64(r30)`)
+//   i    = the first index with mRGBATime[i] >= life, else mColourSteps
+//
+//   i == 0             -> mColourStepRGBA[0]                     (before the first key)
+//   i >= mColourSteps  -> mColourStepRGBA[mColourSteps - 1]      (after the last key)
+//   otherwise          -> lerp(mColourStepRGBA[i-1], mColourStepRGBA[i],
+//                              (life - mRGBATime[i-1]) / (mRGBATime[i] - mRGBATime[i-1]))
+//
+//   arParticle.mvColour *= that                                  (`lvx/vmulfp128/stvx` @+0x50)
+//
+// ⭐ THE SEARCH IS FOUR-WAY UNROLLED IN THE BINARY AND RE-ROLLED HERE. asm 0x8290FA34..0x8290FA78
+// is the four-at-a-time body (four `lfs`/`fcmpu`/`bge` pairs into four distinct
+// `addi r11, r11, 1|2|3` landing pads) and 0x8290FA84..0x8290FAA8 is the one-at-a-time remainder
+// the `blt cr6, loc_8290FA7C` head jumps straight to when mColourSteps < 4. Both compute the same
+// index; per the project's de-optimisation rule they are one loop here.
+//
+// ⭐ THE 1/255 IS READ, NOT ASSUMED. unk_82FAC100 is a dynamically-initialised .bss splat: the
+// CRT thunk at 0x82C4A110 does `lfs f0, flt_82010C1C` / `vspltw` / `stvx128 -> 0x82FAC100`, and
+// flt_82010C1C reads 0x3B808081 == 0.003921568859368563. That is the SAME constant
+// cParticleBehaviour::Build @0x8290B044 already uses under the name KF_COLOUR_U8_TO_UNIT, and the
+// lane order is the same one it establishes -- lane0 == word&0xFF, which on this host is the
+// cColour8's first named channel (see ParticleBehaviour.cpp's colour banner).
+//
+// ⚠ THE LERP IS `vmaddfp v0, v0, v13, v12` AT 0x8290FC20, WHICH IS RAW FIELD ORDER: vD=v0,
+// vA=v0, vB=v13, vC=v12, i.e. v0 = vA*vC + vB = (c1 - c0)*t + c0. Reading it left to right would
+// give (c1-c0)*c0 + t, which is not a colour.
+// ------------------------------------------------------------------------------------------------
+struct ColourStepsBehaviour
+{
+    static void Process(const cParticleBehaviour& arBehaviour, RenderedParticle& arParticle);
+};
+
+namespace
+{
+// `clrlwi`/`extrwi`/`srwi` + `vcfux ..., 0` + `vmulfp128 <1/255>`: the four bytes of the packed
+// colour, low byte first, as unit floats. Lane order pinned by cParticleBehaviour::Build's own
+// unpack at 0x8290B070..0x8290B090.
+inline void UnpackColour8ToUnit(const cColour8& arColour, f32 aafOut[4])
+{
+    aafOut[0] = static_cast<f32>(arColour.r) * 0.003921568859368563f;   // flt_82010C1C
+    aafOut[1] = static_cast<f32>(arColour.g) * 0.003921568859368563f;
+    aafOut[2] = static_cast<f32>(arColour.b) * 0.003921568859368563f;
+    aafOut[3] = static_cast<f32>(arColour.a) * 0.003921568859368563f;
+}
+}  // namespace
+
+void ColourStepsBehaviour::Process(const cParticleBehaviour& arBehaviour,
+                                   RenderedParticle& arParticle)
+{
+    const s32 liMonitor = giColourStepsMonitor;
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+    const u32 luSteps = arBehaviour.mColourSteps;
+    const f32 lfLife  = arParticle.mvTimeScaleAndLifeScale.y;
+
+    // The re-rolled four-way-unrolled search (see the banner).
+    u32 luIndex = 0;
+    while (luIndex < luSteps && arBehaviour.mRGBATime[luIndex] < lfLife)
+    {
+        ++luIndex;
+    }
+
+    f32 lafRamp[4];
+    if (luIndex == 0)
+    {
+        UnpackColour8ToUnit(arBehaviour.mColourStepRGBA[0], lafRamp);
+    }
+    else if (luIndex >= luSteps)
+    {
+        UnpackColour8ToUnit(arBehaviour.mColourStepRGBA[luSteps - 1], lafRamp);
+    }
+    else
+    {
+        f32 lafLo[4];
+        f32 lafHi[4];
+        UnpackColour8ToUnit(arBehaviour.mColourStepRGBA[luIndex - 1], lafLo);
+        UnpackColour8ToUnit(arBehaviour.mColourStepRGBA[luIndex], lafHi);
+
+        const f32 lfTimeLo = arBehaviour.mRGBATime[luIndex - 1];
+        const f32 lfWeight = (lfLife - lfTimeLo) / (arBehaviour.mRGBATime[luIndex] - lfTimeLo);
+
+        for (u32 luLane = 0; luLane < 4; ++luLane)
+        {
+            lafRamp[luLane] = (lafHi[luLane] - lafLo[luLane]) * lfWeight + lafLo[luLane];
+        }
+    }
+
+    arParticle.mvColour.x = arParticle.mvColour.x * lafRamp[0];
+    arParticle.mvColour.y = arParticle.mvColour.y * lafRamp[1];
+    arParticle.mvColour.z = arParticle.mvColour.z * lafRamp[2];
+    arParticle.mvColour.w = arParticle.mvColour.w * lafRamp[3];
+
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+}
+
+// ------------------------------------------------------------------------------------------------
+// MultiFrameBehaviour::Process  @ 0x8290FC48   (308 instructions)
+//
+// ⭐⭐ THIS IS THE FUNCTION THAT PRODUCES THE INTER-FRAME BLEND WEIGHT the whole landed draw path
+// is built around. BrnEffects::Utils::BuildUVs @0x822781E0 floors the two frame numbers to pick
+// two atlas cells and QuadDraw @0x82282330 writes the fraction into the position's w lane, which
+// the Lion pixel program uses to cross-fade them. Both halves were reconstructed months apart and
+// this is the third, independent, corner of the same contract:
+//
+//     arParticle.mvRotPlusFrame.w      = <current frame> + <fraction>
+//     arParticle.mvSizePlusNextFrame.w = <next frame>    + <fraction>
+//
+// and the two INTEGER frame numbers are parked, between frames, in the spare w lanes of two
+// nucleus vectors -- mRotAcc.w (+0x50) and mOffsetRotAcc.w (+0x80). Same "Vector3Plus spare lane"
+// device DragBehaviour above uses for its time accumulator. The four tail stores at
+// 0x8290FFB4..0x82910014 are all `vrlimi128 ..., 1, 0` (mask 1 == word 3), so nothing else in
+// those four vectors is touched.
+//
+// FOUR ARMS, selected by cParticleMaterial::mAnimTexOptions (+0x41). The names are the game's
+// own -- the Lion authoring token table's TEX_ANIM_OPTIONS enum, read out of the X360 image at
+// 0x82F34E28 (the table LionParticleParser.cpp:228 points at):
+//     0 NONE               1 RANDOM_PLAYBACK      2 PLAYBACK_ONCE      3 PLAY_OVER_LIFTIME
+// (the misspelling is the shipped table's, not a transcription slip).
+//
+//   RANDOM_PLAYBACK   accumulate dt into mvLifeTimeAndFrameTimeAndFPSAndBirthTime.y; every
+//                     1/FPS seconds draw a NEW frame with the C library's rand() % mFrameCount.
+//                     With FLAG_INTERFRAMEBLEND the old "next" becomes the new "current" and only
+//                     the next is redrawn (so the pair is always a real transition); without it
+//                     the current is redrawn and the next is left alone. The blend fraction is
+//                     frameTime * FPS.
+//   PLAYBACK_ONCE     frame = particleAge * FPS + <random frame base>, and BOTH the current and
+//                     the next frame CLAMP at mFrameCount - 1, so the animation stops on its last
+//                     cell instead of wrapping.
+//   PLAY_OVER_LIFTIME the cell duration is lifeTime / mFrameCount, i.e. the atlas is stretched
+//                     across the particle's whole life; the same accumulate-and-step as
+//                     RANDOM_PLAYBACK but the frame number simply increments, and both outputs
+//                     clamp at mFrameCount - 1.
+//   NONE              frame = (particleAge * FPS + <random frame base>) MODULO mFrameCount --
+//                     a free-running wrap, computed as x - trunc(x * (1/frameCount)) * frameCount
+//                     (`vrfiz` + `vnmsubfp`). The next frame is current+1 (clamped) only when
+//                     FLAG_INTERFRAMEBLEND is set, otherwise it is the SAME cell, which makes the
+//                     blend a no-op -- exactly what a material without the blend flag wants.
+//
+// ⭐ THE "RANDOM FRAME BASE" IS A SEED DRAW, NOT rand(). asm 0x8290FE74 calls sub_8290A438 ==
+// cParticleRandomSeed::Build(s32, s32) (the DWARF names it; ParticleRandomSeed.cpp:353 has the
+// body) with mFrameBase / mFrameVariance, so it is deterministic per particle. Only the
+// RANDOM_PLAYBACK arm uses the C library's rand(), and it does so twice, once per branch --
+// both call sites are transcribed rather than hoisted, because they draw at different times.
+//
+// ⚠ THE `vmaddfp v0, v13, v12, v0` AT 0x8290FE9C IS RAW FIELD ORDER: vD=v0, vA=v13, vB=v12,
+// vC=v0 => v0 = vA*vC + vB = age * FPS + frameBase. The left-to-right reading (age*frameBase +
+// FPS) has the wrong dimensions and would drift with the atlas size.
+//
+// ⚠ vrefp + two Newton-Raphson steps appears three times (1/FPS, 1/secondsPerFrame,
+// 1/frameCount) and is de-optimised back to the division each computes.
+// ------------------------------------------------------------------------------------------------
+struct MultiFrameBehaviour
+{
+    // cParticleMaterial::mAnimTexOptions (+0x41). Names from the shipped TEX_ANIM_OPTIONS enum
+    // table at X360 0x82F34E28.
+    enum ETexAnimOption
+    {
+        eTEX_ANIM_NONE              = 0,
+        eTEX_ANIM_RANDOM_PLAYBACK   = 1,
+        eTEX_ANIM_PLAYBACK_ONCE     = 2,
+        eTEX_ANIM_PLAY_OVER_LIFTIME = 3,
+    };
+
+    static void Process(const cParticleEmitter::ParticleBuildData& arData,
+                        const cParticleMaterial& arMaterial,
+                        RenderedParticle& arParticle,
+                        sParticleNucleus& arNucleus,
+                        cParticleRandomSeed& arSeed,
+                        f32 afDeltaTime);
+};
+
+void MultiFrameBehaviour::Process(const cParticleEmitter::ParticleBuildData& arData,
+                                  const cParticleMaterial& arMaterial,
+                                  RenderedParticle& arParticle,
+                                  sParticleNucleus& arNucleus,
+                                  cParticleRandomSeed& arSeed,
+                                  f32 afDeltaTime)
+{
+    const s32 liMonitor = giMultiFrameMonitor;
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+    // data +0x90 -- the atlas cell count as a float (`lvx128 v127, r27, 0x90`).
+    const f32 lfFrameCount = arData.mvfFrameCount.x;
+
+    // The two frame numbers, parked in the nucleus's two spare w lanes.
+    f32 lfFrame     = arNucleus.mRotAcc.w;         // `vspltw128 v125, <n+0x50>, 3`
+    f32 lfNextFrame = arNucleus.mOffsetRotAcc.w;   // `vspltw128 v124, <n+0x80>, 3`
+
+    f32 lfOutFrame;
+    f32 lfOutNextFrame;
+
+    if (arMaterial.mAnimTexOptions == eTEX_ANIM_RANDOM_PLAYBACK)
+    {
+        // asm 0x8290FCB8..0x8290FE64.
+        const f32 lfFps = arNucleus.FPS();
+
+        arNucleus.FrameTime() = arNucleus.FrameTime() + afDeltaTime;
+
+        // vrefp + two NR steps == 1/FPS; the seconds one cell lasts.
+        if (arNucleus.FrameTime() >= 1.0f / lfFps)
+        {
+            arNucleus.FrameTime() = arNucleus.FrameTime() - 1.0f / lfFps;
+
+            if ((arMaterial.mFlags & cParticleMaterial::eFLAG_INTERFRAMEBLEND) != 0)
+            {
+                // The pair walks forward: what was next becomes current, and only next is redrawn.
+                lfFrame     = lfNextFrame;
+                lfNextFrame = static_cast<f32>(std::rand() % arMaterial.mFrameCount);
+            }
+            else
+            {
+                lfFrame = static_cast<f32>(std::rand() % arMaterial.mFrameCount);
+            }
+        }
+
+        f32 lfWeight = arNucleus.FrameTime() * lfFps;
+        if (lfWeight >= KF_FRAME_WEIGHT_LIMIT)
+        {
+            lfWeight = KF_FRAME_WEIGHT_PIN;
+        }
+
+        lfOutFrame     = lfFrame + lfWeight;
+        lfOutNextFrame = lfNextFrame + lfWeight;
+    }
+    else
+    {
+        // asm 0x8290FE68.. -- the shared head of the other three arms: a per-particle random
+        // start cell plus the particle's own age in cells.
+        const f32 lfFrameBase =
+            static_cast<f32>(arSeed.Build(arMaterial.mFrameBase, arMaterial.mFrameVariance));
+
+        // vmaddfp raw field order: age * FPS + base (see the banner).
+        f32 lfCurrent = arParticle.mvTimeScaleAndLifeScale.x * arNucleus.FPS() + lfFrameBase;
+
+        if (arMaterial.mAnimTexOptions == eTEX_ANIM_PLAYBACK_ONCE)
+        {
+            // asm 0x8290FEA8..0x8290FEE8 -- clamp both outputs on the last cell.
+            f32 lfNext = lfCurrent + 1.0f;
+            if (lfCurrent >= lfFrameCount)
+            {
+                lfCurrent = lfFrameCount - 1.0f;
+            }
+            if (lfNext >= lfFrameCount)
+            {
+                lfNext = lfFrameCount - 1.0f;
+            }
+            lfOutFrame     = lfCurrent;
+            lfOutNextFrame = lfNext;
+        }
+        else if (arMaterial.mAnimTexOptions == eTEX_ANIM_PLAY_OVER_LIFTIME)
+        {
+            // asm 0x8290FEF4..0x82910064 -- the atlas is stretched over the particle's life.
+            const f32 lfSecondsPerCell = arNucleus.LifeTime() * arData.mvfOneOverFrameCount.x;
+
+            arNucleus.FrameTime() = arNucleus.FrameTime() + afDeltaTime;
+            if (arNucleus.FrameTime() >= lfSecondsPerCell)
+            {
+                arNucleus.FrameTime() = arNucleus.FrameTime() - lfSecondsPerCell;
+                lfFrame = lfFrame + 1.0f;
+            }
+
+            // vrefp + two NR steps == 1/secondsPerCell.
+            f32 lfWeight = arNucleus.FrameTime() / lfSecondsPerCell;
+            if (lfWeight >= KF_FRAME_WEIGHT_LIMIT)
+            {
+                lfWeight = KF_FRAME_WEIGHT_PIN;
+            }
+
+            f32 lfOut     = lfFrame + lfWeight;
+            f32 lfOutNext = lfFrame + 1.0f;
+            if (lfOut >= lfFrameCount)
+            {
+                lfOut = lfFrameCount - 1.0f;
+            }
+            if (lfOutNext >= lfFrameCount)
+            {
+                lfOutNext = lfFrameCount - 1.0f;
+            }
+            lfOutFrame     = lfOut;
+            lfOutNextFrame = lfOutNext;
+        }
+        else
+        {
+            // asm 0x82910068..0x829100D0 -- eTEX_ANIM_NONE: a free-running modulo wrap.
+            // `vrfiz` truncates toward zero and `vnmsubfp v0, v13, v0, v9` (raw field order,
+            // vD = vB - vA*vC) subtracts trunc(x/frameCount) * frameCount.
+            const f32 lfWrapped =
+                lfCurrent - std::floor(lfCurrent / lfFrameCount) * lfFrameCount;
+            lfCurrent = lfWrapped;
+
+            if ((arMaterial.mFlags & cParticleMaterial::eFLAG_INTERFRAMEBLEND) != 0)
+            {
+                f32 lfNext = lfCurrent + 1.0f;
+                if (lfNext >= lfFrameCount)
+                {
+                    lfNext = lfFrameCount - 1.0f;
+                }
+                lfOutNextFrame = lfNext;
+            }
+            else
+            {
+                // Without the blend flag the "next" cell IS the current one, so the shader's
+                // cross-fade contributes nothing. Reproduced rather than special-cased.
+                lfOutNextFrame = lfCurrent;
+            }
+            lfOutFrame = lfCurrent;
+        }
+    }
+
+    // asm 0x8290FFB4..0x82910014 -- four `vrlimi128 ..., 1, 0` inserts into word 3 only.
+    arNucleus.mRotAcc.w              = lfFrame;
+    arNucleus.mOffsetRotAcc.w        = lfNextFrame;
+    arParticle.mvRotPlusFrame.w      = lfOutFrame;
+    arParticle.mvSizePlusNextFrame.w = lfOutNextFrame;
+
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+}
+
+// ================================================================================================
+// cParticleEmitter::ParticleBuild  @0x82910118      (1,142 instructions -- the largest body in the
+//                                                    Lion runtime, and the whole of its per-frame
+//                                                    per-particle simulation)
+//                                (DWARF ParticleEmitter.cpp:1414 / ParticleEmitter.h:284)
+//
+// ⭐⭐ THIS FUNCTION HAS BEEN DECLINED BY TWO EARLIER WAVES, both citing "dense VMX128 driven by
+// rodata that reads zero". That reasoning was wrong for the same reason it was wrong on the draw
+// halves: the constants read zero because they are dynamically-initialised .bss, and
+// tools/re/findinit.py -> ppcdis.py -> x360rd.py recovers every one of them. Everything this
+// function needed is now a number:
+//
+//   unk_82FAB7B0 <- CRT thunk 0x82C4A150 : splat4(flt_820037C8) == splat4(-1.0)
+//   unk_82FAC140 <- CRT thunk 0x82C4A178 : splat4(flt_82001D9C) == splat4( 2.0)
+//   flt_820FEC38  = 0x34000000 == FLT_EPSILON        (the "is this channel worth it" guard)
+//   unk_82181510  = (0, 1, 0, 0)                     (the ribbon's fallback direction: UP)
+//   unk_82CDA350  = (A.x, B.y, A.x, A.x)             (the life/age gather permute)
+//   unk_82000BD0/BE0/BF0 = 1, -1/3!, 1/5! ... 1/23!  (twelve SIN Taylor coefficients)
+//   unk_82000C00/C10/C20 = 1, -1/2!, 1/4! ... 1/22!  (twelve COS Taylor coefficients)
+//   unk_82000C60         = (pi, 2pi, 1/pi, 1/2pi)    (the range reduction)
+//
+// AND THE VMX128 LISTING ITSELF WAS MIS-READ, which is the second reason it looked undecodable.
+// tools/re/vmx128.py (landed with this change) decodes the raw words: IDA prints the vA operand
+// of a VMX128 instruction with its two high bits SWAPPED, so 46 instructions in this function
+// name a register in v86..v95 that the function's own __savevmx_124 prologue forbids it from
+// touching. Every one of them is really v54..v63. Reading them as printed is why the Euler block
+// looked like it referenced undefined registers.
+//
+// ------------------------------------------------------------------------------------------------
+// WHAT IT DOES, in the console's order. Sixteen blocks, each gated by one bit of
+// cParticleBehaviour::mFlags (+0x2C4) whose name is the Lion authoring token table's own
+// (LionParticleParser.cpp:89-111, read out of the X360 image -- these are not derived names):
+//
+//   1  life gate            age = currentTime - birthTime; > lifetime -> Dead, < 0 -> NotBornYet
+//   2  time scale           a per-particle random draw over (mTimeScale, mTimeScaleVariance)
+//   3  DO_REVERSE  0x0008   age = lifetime - age   (the particle plays backwards)
+//   4  publish              mvTimeScaleAndLifeScale = (age, age/lifetime, age, age)
+//                           mLocatorVel = nucleus.mLocatorVel, w = the scaled delta time
+//   5  DO_RADIAL   0x0010   push the particle onto a ring of mRingRadius along a random axis
+//   6  pos evaluator        the locator's iLionPosEvaluator, if one is attached, INSTEAD of 7
+//   7  integrate            pos += vel * dt * mScale ; vel += acc * dt
+//   8  shape 3/6            mPos1 = mPos + vel * orientStep  (the ribbon's second point)
+//   9  DO_OFFSETROT 0x0020  rotate the position by an integrating Euler XYZ triple
+//   10 DO_WAVEX 0x8000 / DO_WAVEY 0x10000 / DO_WAVEZ 0x20000 -- scale one position lane by a
+//                           cParticleWaveForm sampled at the particle's age
+//   11 shape 4/7            mPos1 = mPos + mAxisBase
+//   12 RotationBehaviour / SizeBehaviour / (DO_DRAG 0x0100) DragBehaviour
+//   13 publish position     particle.mPos from either the working vector or the raw nucleus
+//   14 BaseColourWithVariance / (mColourSteps) ColourSteps / AlphaFade
+//   15 material MULTIFRAME  MultiFrameBehaviour, else zero the two frame lanes
+//
+// ⭐ THE DWARF NAMES EVERY LOCAL AND THE HELPERS, which is the corroboration this reconstruction
+// rests on beyond the asm (ParticleEmitter.cpp:1414-1690): lvfLifeTime / lvfDeltaTime /
+// lvfCurrentTime / lvfParticleAge / lvfGlobalTimeScale / lvfScaledDeltaTime / lvAcc /
+// p_position_evaluator / lRad / lRadBase / lRadRand / lRot / lRotVel / lRotAcc / lMat /
+// lOffsetPos / lWave / p_material -- and it names the Euler helper
+// `rw::math::vpu::Matrix44FromEulerXYZ` and the apply `rw::math::vpu::TransformVector`, which is
+// exactly what the 700-instruction block reduces to.
+//
+// ⚠ THE EULER MATRIX WAS *MEASURED*, not assumed from that name. Working the lane gather through
+// the stack red zone (0x82910964..0x82910A64) gives the three columns the transform multiplies
+// pos.x / pos.y / pos.z by:
+//     col_x = ( cb*cc,              cb*sc,              -sb   )
+//     col_y = ( sa*sb*cc - ca*sc,   sa*sb*sc + ca*cc,   sa*cb )
+//     col_z = ( ca*sb*cc + sa*sc,   ca*sb*sc - sa*cc,   ca*cb )
+// which is the standard R = Rz(c) * Ry(b) * Rx(a). The identification of the six trig registers
+// falls out of it with nothing left over -- (sa,ca) = (v57,v56) from the FIRST polynomial, whose
+// input is `vspltw128 v11, v58, 0` (the X angle); (sb,cb) = (v62,v59) from the second (Y); and
+// (sc,cc) = (v20,v19) from the third (Z). Three angles, three polynomial pairs, nine products,
+// no spare terms.
+//
+// ⚠ AND THE SECOND MATRIX IS THE SAME CONSTRUCTION WITH ITS COLUMNS IN DIFFERENT STACK SLOTS.
+// The ribbon arm builds a second Euler triple one orient-step ahead and applies it to mPos1; the
+// compiler parked its columns at (0xA0, 0x80, 0x70) against the first matrix's (0x70, 0xA0,
+// 0x80), so the two multiplies read the same three addresses in a different order. Reading the
+// slots as if they were stable is the trap here, and it would silently transpose the rotation.
+//
+// ⚠ THE SIN/COS IS A TWELVE-TERM TAYLOR SERIES, NOT A CALL. It is inlined SIX times (three
+// angles x two matrices) and is what makes this function 1,142 instructions rather than ~450.
+// Per the project's inlining-reversal rule it is outlined here into LionSinCos.
+// ================================================================================================
+namespace
+{
+s32 giParticleBuildMonitor = -1;   // X360 dword_82FAB648 (LionPerfMon + 0x10)
+s32 giRadialMonitor        = -1;   // X360 dword_82FAB684 (LionPerfMon + 0x4C)
+s32 giOffsetRotMonitor     = -1;   // X360 dword_82FAB688 (LionPerfMon + 0x50)
+
+// unk_82000C60, .rdata: (pi, 2pi, 1/pi, 1/2pi). Only lanes y and w are used -- the range
+// reduction is `x - 2pi * round(x * (1/2pi))`, a `vrfin` (round to nearest) plus a `vnmsubfp`.
+const f32 KF_TWO_PI        = 6.2831854820251465f;    // unk_82000C60 lane y
+const f32 KF_ONE_OVER_2PI  = 0.15915493667125702f;   // unk_82000C60 lane w
+
+// unk_82000BD0 / BE0 / BF0 -- sin(x) = x + c[0]*x^3 + c[1]*x^5 + ... + c[10]*x^23.
+// Read out of the image; they are 1/(2k+1)! with alternating sign, twelve terms.
+const f32 KAF_SIN_COEFF[11] = {
+    -0.1666666716337204f,        0.008333333767950535f,      -0.00019841270113829523f,
+     2.7557318844628753e-06f,   -2.5052107943679403e-08f,     1.6059044372074283e-10f,
+    -7.647163609812713e-13f,     2.8114573589663704e-15f,    -8.220635078476521e-18f,
+     1.9572941524685808e-20f,   -3.868170297964731e-23f,
+};
+
+// unk_82000C00 / C10 / C20 -- cos(x) = 1 + c[0]*x^2 + c[1]*x^4 + ... + c[10]*x^22.
+const f32 KAF_COS_COEFF[11] = {
+    -0.5f,                       0.0416666679084301f,        -0.0013888889225199819f,
+     2.4801587642286904e-05f,   -2.755731998149713e-07f,      2.08767581000302e-09f,
+    -1.147074536050896e-11f,     4.7794772561329454e-14f,    -1.5619206814541513e-16f,
+     4.110317590937049e-19f,    -8.896790959566848e-22f,
+};
+
+// The inlined sin/cos of the DO_OFFSETROT block, outlined (project rule: inlining reversal).
+// ⛔ NOT std::sinf/cosf. The console evaluates this exact truncated series on the exact
+// range-reduced argument; a library call agrees to about a ulp but is not the same arithmetic,
+// and the whole point of the reconstruction is that the numbers are the console's.
+void LionSinCos(f32 afAngle, f32& arSin, f32& arCos)
+{
+    // asm 0x82910540..0x8291056C: x = angle - 2pi * round(angle / 2pi), i.e. fold to [-pi, pi].
+    // `vrfin` is round-to-NEAREST (not trunc, not floor), which is what makes the fold symmetric.
+    const f32 lfRounded = std::nearbyintf(afAngle * KF_ONE_OVER_2PI);
+    const f32 lfX       = afAngle - KF_TWO_PI * lfRounded;
+
+    const f32 lfX2 = lfX * lfX;
+
+    f32 lfSin  = lfX;
+    f32 lfCos  = 1.0f;
+    f32 lfOdd  = lfX * lfX2;   // x^3, then x^5, x^7, ...
+    f32 lfEven = lfX2;         // x^2, then x^4, x^6, ...
+    for (u32 luTerm = 0; luTerm < 11; ++luTerm)
+    {
+        lfSin += KAF_SIN_COEFF[luTerm] * lfOdd;
+        lfCos += KAF_COS_COEFF[luTerm] * lfEven;
+        lfOdd  = lfOdd * lfX2;
+        lfEven = lfEven * lfX2;
+    }
+
+    arSin = lfSin;
+    arCos = lfCos;
+}
+
+// The DWARF names this helper `rw::math::vpu::Matrix44FromEulerXYZ` (ParticleEmitter.cpp:1558);
+// its real home is the RenderWare vpu vocabulary, which this tree has not reconstructed, so it
+// lives here until that header exists -- do NOT fork a second copy elsewhere.
+//
+// The three returned vectors are the matrix COLUMNS, in the order TransformVector multiplies
+// them by x, y and z (see the banner: the lane gather is what pins them).
+struct LionEulerMatrix
+{
+    cVector mColX;
+    cVector mColY;
+    cVector mColZ;
+};
+
+LionEulerMatrix Matrix44FromEulerXYZ(f32 afX, f32 afY, f32 afZ)
+{
+    f32 lfSa;
+    f32 lfCa;
+    f32 lfSb;
+    f32 lfCb;
+    f32 lfSc;
+    f32 lfCc;
+    LionSinCos(afX, lfSa, lfCa);
+    LionSinCos(afY, lfSb, lfCb);
+    LionSinCos(afZ, lfSc, lfCc);
+
+    LionEulerMatrix lMat;
+    lMat.mColX.x = lfCb * lfCc;
+    lMat.mColX.y = lfCb * lfSc;
+    lMat.mColX.z = -lfSb;
+    lMat.mColX.w = 0.0f;
+
+    lMat.mColY.x = lfSb * lfSa * lfCc - lfCa * lfSc;
+    lMat.mColY.y = lfSb * lfSa * lfSc + lfCa * lfCc;
+    lMat.mColY.z = lfCb * lfSa;
+    lMat.mColY.w = 0.0f;
+
+    lMat.mColZ.x = lfSb * lfCa * lfCc + lfSa * lfSc;
+    lMat.mColZ.y = lfSb * lfCa * lfSc - lfSa * lfCc;
+    lMat.mColZ.z = lfCb * lfCa;
+    lMat.mColZ.w = 0.0f;
+    return lMat;
+}
+
+// rw::math::vpu::TransformVector (DWARF ParticleEmitter.cpp:1558 block): the console's
+// `col_x * splat(v.x) + col_y * splat(v.y) + col_z * splat(v.z)` (asm 0x82910A80..0x82910AA8).
+// The w lane is not produced -- every caller re-inserts the source's own w with a vrlimi128.
+void TransformVector(cVector& arOut, const LionEulerMatrix& arMat, const cVector& arVector)
+{
+    arOut.x = arMat.mColX.x * arVector.x + arMat.mColY.x * arVector.y + arMat.mColZ.x * arVector.z;
+    arOut.y = arMat.mColX.y * arVector.x + arMat.mColY.y * arVector.y + arMat.mColZ.y * arVector.z;
+    arOut.z = arMat.mColX.z * arVector.x + arMat.mColY.z * arVector.y + arMat.mColZ.z * arVector.z;
+}
+}  // namespace
+
+cParticleEmitter::EParticleBuildResult cParticleEmitter::ParticleBuild(
+        RenderedParticle& arRenderedParticle,
+        cParticleRandomSeed& arSeed,
+        sParticleNucleus& arSimulatedParticle,
+        const cParticleDescriptor& arDes,
+        const cParticleBehaviour& arBhv,
+        const ParticleBuildData& arParticleBuildData)
+{
+    const s32 liMonitor = giParticleBuildMonitor;
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+    // ---- 1. the life gate (asm 0x82910160..0x829101F8) ------------------------------------
+    const f32 lvfLifeTime    = arSimulatedParticle.LifeTime();
+    const f32 lvfDeltaTime   = arParticleBuildData.mvDeltaTimeAndCurrentTime.x;
+    const f32 lvfCurrentTime = arParticleBuildData.mvDeltaTimeAndCurrentTime.y;
+
+    f32 lvfParticleAge = lvfCurrentTime - arSimulatedParticle.BirthTime();
+
+    if (lvfParticleAge > lvfLifeTime)
+    {
+        CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+        return eParticleBuildResultDead;
+    }
+    if (0.0f > lvfParticleAge)
+    {
+        CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+        return eParticleBuildResultNotBornYet;
+    }
+
+    // ---- 2/3. the per-particle time scale, and DO_REVERSE (asm 0x829101FC..0x82910244) -----
+    const f32 lvfGlobalTimeScale = arSeed.Build(arBhv.mTimeScale, arBhv.mTimeScaleVariance);
+    lvfParticleAge = lvfParticleAge * lvfGlobalTimeScale;
+    const f32 lvfScaledDeltaTime = lvfDeltaTime * lvfGlobalTimeScale;
+
+    if ((arBhv.mFlags & cParticleBehaviour::E_DO_REVERSE) != 0)
+    {
+        lvfParticleAge = lvfLifeTime - lvfParticleAge;
+    }
+
+    // ---- 4. publish the age / life fraction and the locator velocity -----------------------
+    // asm 0x82910248..0x8291029C. The reciprocal is a `vrefp128` plus two Newton-Raphson
+    // refinements, de-optimised back to the division it computes; the four lanes are laid out
+    // by `vperm` through unk_82CDA350 == (A.x, B.y, A.x, A.x), so the age lands in three of them
+    // and the fraction in one. The DWARF types the member Vector2 -- only x and y are read --
+    // but the store is a whole register and is reproduced as one.
+    const f32 lfLifeFraction = lvfParticleAge / lvfLifeTime;
+    arRenderedParticle.mvTimeScaleAndLifeScale.x = lvfParticleAge;
+    arRenderedParticle.mvTimeScaleAndLifeScale.y = lfLifeFraction;
+    arRenderedParticle.mvTimeScaleAndLifeScale.z = lvfParticleAge;
+    arRenderedParticle.mvTimeScaleAndLifeScale.w = lvfParticleAge;
+
+    // asm 0x829102A0..0x829102AC -- copied whole, then the w lane overwritten.
+    arRenderedParticle.mLocatorVel   = arSimulatedParticle.mLocatorVel;
+    arRenderedParticle.mLocatorVel.w = lvfScaledDeltaTime;
+
+    // ---- 5. DO_RADIAL (asm 0x829102B0..0x82910388) -----------------------------------------
+    // The acceleration the integrate below uses. Normally the nucleus's own; under DO_RADIAL it
+    // is redirected onto the random axis with everything else.
+    cVector lvAcc;
+    if ((arBhv.mFlags & cParticleBehaviour::E_DO_RADIAL) != 0)
+    {
+        const s32 liRadialMonitor = giRadialMonitor;
+        CgsDev::PerfMonCpu::StartMonitor(liRadialMonitor);
+
+        // splat4(-1) and splat4(2): a per-lane uniform in [-1, 1). Both are .bss splats the
+        // CRT fills (see the banner) -- they are numbers, not flagged zeros.
+        const cVector lRadBase = { -1.0f, -1.0f, -1.0f, -1.0f };   // unk_82FAB7B0
+        const cVector lRadVar  = {  2.0f,  2.0f,  2.0f,  2.0f };   // unk_82FAC140
+        cVector lRadRand;
+        arSeed.Build(lRadRand, lRadBase, lRadVar);
+
+        // asm 0x8291031C..0x8291035C -- the axis is the per-lane PRODUCT of the draw and the
+        // particle's velocity, then normalised (vmsum3fp128 + vrsqrtefp + two NR steps).
+        cVector lRad = { lRadRand.x * arSimulatedParticle.mVel.x,
+                         lRadRand.y * arSimulatedParticle.mVel.y,
+                         lRadRand.z * arSimulatedParticle.mVel.z,
+                         lRadRand.w * arSimulatedParticle.mVel.w };
+        const f32 lfLen2   = lRad.x * lRad.x + lRad.y * lRad.y + lRad.z * lRad.z;
+        const f32 lfInvLen = 1.0f / std::sqrt(lfLen2);
+        lRad.x *= lfInvLen;
+        lRad.y *= lfInvLen;
+        lRad.z *= lfInvLen;
+        lRad.w *= lfInvLen;
+
+        // asm 0x82910360..0x82910384. mRingRadius is a vector, so the offset is per-lane; the
+        // velocity and the acceleration are then scaled by the same axis, again per-lane.
+        // Every store re-inserts the destination's own w lane (vrlimi128 ..., 1, 0).
+        const cVector lvPos = arSimulatedParticle.mPos;
+        const cVector lvVel = arSimulatedParticle.mVel;
+        arSimulatedParticle.mPos.x = lRad.x * arBhv.mRingRadius.x + lvPos.x;
+        arSimulatedParticle.mPos.y = lRad.y * arBhv.mRingRadius.y + lvPos.y;
+        arSimulatedParticle.mPos.z = lRad.z * arBhv.mRingRadius.z + lvPos.z;
+
+        arSimulatedParticle.mVel.x = lvVel.x * lRad.x;
+        arSimulatedParticle.mVel.y = lvVel.y * lRad.y;
+        arSimulatedParticle.mVel.z = lvVel.z * lRad.z;
+
+        lvAcc.x = arSimulatedParticle.mAcc.x * lRad.x;
+        lvAcc.y = arSimulatedParticle.mAcc.y * lRad.y;
+        lvAcc.z = arSimulatedParticle.mAcc.z * lRad.z;
+        lvAcc.w = lvfParticleAge;
+
+        CgsDev::PerfMonCpu::StopMonitor(liRadialMonitor);
+    }
+    else
+    {
+        // asm 0x82910390..0x829103A0.
+        lvAcc   = arSimulatedParticle.mAcc;
+        lvAcc.w = lvfParticleAge;
+    }
+
+    // ---- 6/7. the position evaluator, or the integrate (asm 0x829103A4..0x82910418) --------
+    iLionPosEvaluator* lpPositionEvaluator = mpBindings->GetpLocator()->GetpPosEvaluator();
+    if (lpPositionEvaluator != 0)
+    {
+        // asm 0x829103C0..0x829103E0. The three vectors ride in v1/v2/v3 (by value -- a
+        // reference would have consumed a GPR and none is set), the two scalars in f1/f2, and
+        // the console DISCARDS the result and skips the integrate entirely. Reproduced as it
+        // is: an attached evaluator owns the particle's motion.
+        lpPositionEvaluator->Evaluate(lvfParticleAge,
+                                      arRenderedParticle.mvTimeScaleAndLifeScale.y,
+                                      arSimulatedParticle.mPos,
+                                      arSimulatedParticle.mVel,
+                                      lvAcc);
+    }
+    else
+    {
+        // asm 0x829103E8..0x82910418. The velocity step is scaled by the behaviour's overall
+        // SCALE (build data slot 2 lane x == cParticleBehaviour::mScale, the authoring token
+        // table's SCALE at +0x2BC), so a scaled-up effect moves proportionally faster.
+        const f32 lfStep = lvfScaledDeltaTime * arParticleBuildData.mvScaleAndProportionalScaleYXAndZX.x;
+        const cVector lvPos = arSimulatedParticle.mPos;
+        const cVector lvVel = arSimulatedParticle.mVel;
+
+        arSimulatedParticle.mPos.x = lvVel.x * lfStep + lvPos.x;
+        arSimulatedParticle.mPos.y = lvVel.y * lfStep + lvPos.y;
+        arSimulatedParticle.mPos.z = lvVel.z * lfStep + lvPos.z;
+
+        arSimulatedParticle.mVel.x = lvAcc.x * lvfScaledDeltaTime + lvVel.x;
+        arSimulatedParticle.mVel.y = lvAcc.y * lvfScaledDeltaTime + lvVel.y;
+        arSimulatedParticle.mVel.z = lvAcc.z * lvfScaledDeltaTime + lvVel.z;
+    }
+
+    // ---- 8. the ribbon's second point (asm 0x8291041C..0x829104C8) -------------------------
+    // mShape 3 and 6 are the two ribbon/tilt shapes; RenderTilts @0x82282FC8 is the draw half
+    // that consumes mPos -> mPos1 as a segment, which is what this pair is for.
+    const u32 luShape = arDes.mShape;
+    if (luShape == 3 || luShape == 6)
+    {
+        const cVector& lrVel = arSimulatedParticle.mVel;
+        const f32 lfVelLen2 = lrVel.x * lrVel.x + lrVel.y * lrVel.y + lrVel.z * lrVel.z;
+
+        cVector lvTip;
+        if (lfVelLen2 > KF_DRAG_EPSILON)
+        {
+            // The step is the build data's ORIENT STEP (slot 3 lane x, 0.05s).
+            const f32 lfOrientStep = arParticleBuildData.mvOrientStepAndDragFrameRateConstants.x;
+            lvTip.x = lrVel.x * lfOrientStep + arSimulatedParticle.mPos.x;
+            lvTip.y = lrVel.y * lfOrientStep + arSimulatedParticle.mPos.y;
+            lvTip.z = lrVel.z * lfOrientStep + arSimulatedParticle.mPos.z;
+        }
+        else
+        {
+            // unk_82181510 == (0, 1, 0, 0): a stationary particle's ribbon points straight up.
+            lvTip.x = arSimulatedParticle.mPos.x + 0.0f;
+            lvTip.y = arSimulatedParticle.mPos.y + 1.0f;
+            lvTip.z = arSimulatedParticle.mPos.z + 0.0f;
+        }
+        arRenderedParticle.mPos1.x = lvTip.x;
+        arRenderedParticle.mPos1.y = lvTip.y;
+        arRenderedParticle.mPos1.z = lvTip.z;   // .w kept
+    }
+
+    // ---- 9. DO_OFFSETROT (asm 0x829104CC..0x82910FA4) --------------------------------------
+    // lOffsetPos (DWARF :1549) is the working position from here to the publish at the tail: it
+    // starts as the nucleus position and is replaced by the rotated one, then possibly scaled
+    // lane by lane by the three wave forms.
+    cVector lOffsetPos = arSimulatedParticle.mPos;
+
+    if ((arBhv.mFlags & cParticleBehaviour::E_DO_OFFSETROT) != 0)
+    {
+        const s32 liOffsetRotMonitor = giOffsetRotMonitor;
+        CgsDev::PerfMonCpu::StartMonitor(liOffsetRotMonitor);
+
+        // asm 0x82910504..0x82910518 -- integrate the offset rotation, exactly as
+        // RotationBehaviour::Process integrates the particle's own.
+        cVector lRot    = arSimulatedParticle.mOffsetRot;
+        cVector lRotVel = arSimulatedParticle.mOffsetRotVel;
+        const cVector lRotAcc = arSimulatedParticle.mOffsetRotAcc;
+
+        lRot.x = lRotVel.x * lvfScaledDeltaTime + lRot.x;
+        lRot.y = lRotVel.y * lvfScaledDeltaTime + lRot.y;
+        lRot.z = lRotVel.z * lvfScaledDeltaTime + lRot.z;
+        lRot.w = lRotVel.w * lvfScaledDeltaTime + lRot.w;
+
+        lRotVel.x = lRotAcc.x * lvfScaledDeltaTime + lRotVel.x;
+        lRotVel.y = lRotAcc.y * lvfScaledDeltaTime + lRotVel.y;
+        lRotVel.z = lRotAcc.z * lvfScaledDeltaTime + lRotVel.z;
+        lRotVel.w = lRotAcc.w * lvfScaledDeltaTime + lRotVel.w;
+
+        // asm 0x8291051C..0x82910AAC -- the first matrix, applied to the nucleus position.
+        const LionEulerMatrix lMat = Matrix44FromEulerXYZ(lRot.x, lRot.y, lRot.z);
+        TransformVector(lOffsetPos, lMat, arSimulatedParticle.mPos);
+
+        if (luShape == 3 || luShape == 6)
+        {
+            // asm 0x82910ABC..0x82910F84 -- a SECOND Euler triple, one orient step ahead, applied
+            // to the ribbon tip this function already wrote into mPos1. The step is the build
+            // data's orient step again.
+            const f32 lfOrientStep = arParticleBuildData.mvOrientStepAndDragFrameRateConstants.x;
+            const cVector lTipRot = { lRotVel.x * lfOrientStep + lRot.x,
+                                      lRotVel.y * lfOrientStep + lRot.y,
+                                      lRotVel.z * lfOrientStep + lRot.z,
+                                      lRotVel.w * lfOrientStep + lRot.w };
+
+            const LionEulerMatrix lTipMat =
+                Matrix44FromEulerXYZ(lTipRot.x, lTipRot.y, lTipRot.z);
+            cVector lvTip;
+            TransformVector(lvTip, lTipMat, arRenderedParticle.mPos1);
+            arRenderedParticle.mPos1.x = lvTip.x;
+            arRenderedParticle.mPos1.y = lvTip.y;
+            arRenderedParticle.mPos1.z = lvTip.z;   // .w kept
+        }
+
+        // asm 0x82910F88..0x82910FA0 -- both integrated triples written back, w lanes preserved.
+        arSimulatedParticle.mOffsetRot.x = lRot.x;
+        arSimulatedParticle.mOffsetRot.y = lRot.y;
+        arSimulatedParticle.mOffsetRot.z = lRot.z;
+
+        arSimulatedParticle.mOffsetRotVel.x = lRotVel.x;
+        arSimulatedParticle.mOffsetRotVel.y = lRotVel.y;
+        arSimulatedParticle.mOffsetRotVel.z = lRotVel.z;
+
+        CgsDev::PerfMonCpu::StopMonitor(liOffsetRotMonitor);
+    }
+
+    // ---- 10. the three wave forms (asm 0x82910FA8..0x82911154) -----------------------------
+    // ⚠ EACH ONE MULTIPLIES THE *NUCLEUS* LANE, NOT THE WORKING ONE. The console reloads
+    // `lvx128 v0, r0, r31` (the nucleus) for every axis and writes the product into
+    // lOffsetPos's lane, so a wave form on an axis DISCARDS whatever DO_OFFSETROT put there.
+    // That is the binary's behaviour and smoothing it into `lOffsetPos.x *= wave` would be a
+    // different function.
+    if ((arBhv.mFlags & cParticleBehaviour::E_DO_WAVEX) != 0 && arBhv.mpWaveFormX.Get() != 0)
+    {
+        const f32 lWave = arBhv.mpWaveFormX.Get()->Evaluate(lvfParticleAge);
+        lOffsetPos.x = arSimulatedParticle.mPos.x * lWave;
+        arRenderedParticle.mPos1.x = arRenderedParticle.mPos1.x * lWave;
+    }
+    if ((arBhv.mFlags & cParticleBehaviour::E_DO_WAVEY) != 0 && arBhv.mpWaveFormY.Get() != 0)
+    {
+        const f32 lWave = arBhv.mpWaveFormY.Get()->Evaluate(lvfParticleAge);
+        lOffsetPos.y = arSimulatedParticle.mPos.y * lWave;
+        arRenderedParticle.mPos1.y = arRenderedParticle.mPos1.y * lWave;
+    }
+    if ((arBhv.mFlags & cParticleBehaviour::E_DO_WAVEZ) != 0 && arBhv.mpWaveFormZ.Get() != 0)
+    {
+        const f32 lWave = arBhv.mpWaveFormZ.Get()->Evaluate(lvfParticleAge);
+        lOffsetPos.z = arSimulatedParticle.mPos.z * lWave;
+        arRenderedParticle.mPos1.z = arRenderedParticle.mPos1.z * lWave;
+    }
+
+    // ---- 11. shapes 4 and 7 (asm 0x82911158..0x82911184) -----------------------------------
+    if (luShape == 4 || luShape == 7)
+    {
+        arRenderedParticle.mPos1.x = arSimulatedParticle.mPos.x + arBhv.mAxisBase.x;
+        arRenderedParticle.mPos1.y = arSimulatedParticle.mPos.y + arBhv.mAxisBase.y;
+        arRenderedParticle.mPos1.z = arSimulatedParticle.mPos.z + arBhv.mAxisBase.z;   // .w kept
+    }
+
+    // ---- 12. rotation / size / drag (asm 0x82911188..0x829111D4) ---------------------------
+    RotationBehaviour::Process(arBhv, arSimulatedParticle, arRenderedParticle, lvfScaledDeltaTime);
+    SizeBehaviour::Process(arBhv, arParticleBuildData, arSimulatedParticle, arRenderedParticle,
+                           lvfScaledDeltaTime);
+    if ((arBhv.mFlags & cParticleBehaviour::E_DO_DRAG) != 0)
+    {
+        DragBehaviour::Process(arParticleBuildData, arBhv, arSimulatedParticle,
+                               lvfScaledDeltaTime);
+    }
+
+    // ---- 13. publish the position (asm 0x829111D8..0x82911254) -----------------------------
+    // The working vector only reaches the render record if something actually wrote into it;
+    // otherwise the raw nucleus position is published. The four bits are re-tested here, in the
+    // console's own order, rather than tracked with a flag.
+    const u32 luFlags = arBhv.mFlags;
+    if ((luFlags & cParticleBehaviour::E_DO_OFFSETROT) != 0 ||
+        (luFlags & cParticleBehaviour::E_DO_WAVEX) != 0 ||
+        (luFlags & cParticleBehaviour::E_DO_WAVEY) != 0 ||
+        (luFlags & cParticleBehaviour::E_DO_WAVEZ) != 0)
+    {
+        arRenderedParticle.mPos.x = lOffsetPos.x;
+        arRenderedParticle.mPos.y = lOffsetPos.y;
+        arRenderedParticle.mPos.z = lOffsetPos.z;   // .w from the record, then overwritten below
+    }
+    else
+    {
+        arRenderedParticle.mPos.x = arSimulatedParticle.mPos.x;
+        arRenderedParticle.mPos.y = arSimulatedParticle.mPos.y;
+        arRenderedParticle.mPos.z = arSimulatedParticle.mPos.z;
+    }
+
+    // GetVecFloat_One / the vspltisw128-0 register: the two segment endpoints' w lanes are the
+    // constants 1 and 0, written unconditionally at the end of every build.
+    arRenderedParticle.mPos.w  = 1.0f;
+    arRenderedParticle.mPos1.w = 0.0f;
+
+    // ---- 14. colour (asm 0x82911258..0x8291127C) -------------------------------------------
+    BaseColourWithVarianceBehaviour::Process(arParticleBuildData, arBhv, arRenderedParticle,
+                                             arSeed);
+    if (arBhv.mColourSteps != 0)
+    {
+        ColourStepsBehaviour::Process(arBhv, arRenderedParticle);
+    }
+    AlphaFadeBehaviour::Process(arParticleBuildData, arRenderedParticle);
+
+    // ---- 15. the frame animation (asm 0x82911280..0x829112CC) ------------------------------
+    cParticleMaterial* lpMaterial = arDes.Material();
+    if ((lpMaterial->mFlags & cParticleMaterial::eFLAG_MULTIFRAME) != 0)
+    {
+        MultiFrameBehaviour::Process(arParticleBuildData, *lpMaterial, arRenderedParticle,
+                                     arSimulatedParticle, arSeed, lvfScaledDeltaTime);
+    }
+    else
+    {
+        // No atlas: both frame lanes are zero, which makes BuildUVs pick cell 0 twice and the
+        // shader's cross-fade a no-op.
+        arRenderedParticle.mvRotPlusFrame.w      = 0.0f;
+        arRenderedParticle.mvSizePlusNextFrame.w = 0.0f;
+    }
+
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+    return eParticleBuildResultAlive;
+}
+
+// ================================================================================================
+// cParticleEmitter::Update  @0x829153D8      (201 instructions)
+//                           (DWARF ParticleEmitter.h -- Update; ParticleEmitter.cpp:1224)
+//
+// ⭐⭐ THE HEAD OF THE LION SIMULATION. cParticleEmitterManager::Update @0x82915700 calls this
+// once per registered emitter per frame, and it is the only thing that advances an effect.
+// Until this landed the whole runtime was inert: emitters were created, linked onto the used
+// list, and never stepped -- which is exactly the state LionRuntimeLinkStubs.cpp described.
+//
+// WHAT IT DOES, store for store:
+//   1  age            m_age = (time - trigger->mTimeStart) * (1/3000)   -- seconds since the
+//                     effect's trigger fired, NOT since the emitter was created
+//   2  mDt            = clamp(m_age - <previous m_age>, 0, 1)
+//   3  (mFlags & 2)   -> stamp mUpdateLastTime and return 1, doing nothing else
+//   4  locator        lMatrix = mpBindings->GetpLocator()->GetMat(time)
+//   5  (mFlags & 8)   the SUB-EMITTER arm (see below); otherwise straight to 6
+//   6  (mFlags & 1)   -> Generate(time), else mFlags &= ~4
+//   7                 mUpdateLastTime = time; return 1
+//
+// THE SUB-EMITTER ARM is the interesting half, and it is why ParticleBuild has a caller here
+// at all. A sub-emitter follows a PARENT PARTICLE, so before it can emit anything it has to
+// know where that particle is *now* -- and the parent particle is not stored anywhere, it is
+// RE-SIMULATED from the parent's nucleus and a copy of the parent's random seed:
+//
+//   copy mParentRandomSeed  -> a local (the seed must not be advanced in place, or the parent
+//                              particle would follow a different path every frame)
+//   parentDes = mpDescriptor->mpParent
+//   if      (parentDes->mFlags & E_FLAG_NEEDS_BUCKET) leave mParentBaseMatrix alone
+//   else if (parentDes->mFlags & E_FLAG_IGNORE_ROT)   mParentBaseMatrix = identity with the
+//                                                     locator's TRANSLATION only
+//   else                                              mParentBaseMatrix = the locator matrix
+//   buildData.mvDeltaTimeAndCurrentTime = (mDt, time * (1/3000))
+//   if (ParticleBuild(...) == Alive) { mParentVel = 0; mParentTime = time; ...continue... }
+//   else                             { return the emitter's total live particle count }
+//
+// ⚠ THE RETURN VALUE IS NOT A BOOLEAN. It is 1 on every normal path, and on the "my parent
+// particle is dead" path it is the SUM of mnNextParticlePositionToFill over this emitter's
+// whole bucket list (asm 0x82911690..0x829116B0). cParticleEmitterManager::Update unregisters
+// the emitter when it comes back 0 -- i.e. a bereaved sub-emitter survives exactly as long as
+// it still has particles of its own on screen. Returning `false` there would kill every
+// sub-emitter effect the instant its parent expired.
+//
+// ⚠ THE IDENTITY ARM'S LAST STORE IS A vsel, NOT A COPY. asm 0x82915550..0x8291556C builds row
+// 3 as `vsel(splat(1.0), locatorRow3, unk_820FEBD0)` with unk_820FEBD0 == (FFFFFFFF, FFFFFFFF,
+// FFFFFFFF, 00000000) -- the xyz-keep / w-drop selector, whose next quadword is splat(1.0).
+// So the translation comes from the locator and the w lane is forced to 1: a position-only
+// transform. (Classic `vsel vD, vA, vB, vC` prints raw field order and means vD = vC ? vB : vA,
+// which is what makes the mask lanes select the LOCATOR and the clear lane select the 1.0.)
+//
+// ⚠ THE TWO fsel PAIRS ARE A CLAMP, de-optimised back. `fsel fD, fA, fC, fB` is fD = (fA >= 0)
+// ? fC : fB, and the console writes it as max-then-min against flt_82001CC0 == 0.0 and
+// flt_82001C98 == 1.0 (the same pair BuildUVs' non-atlas path uses). A frame longer than one
+// second therefore simulates as one second, and a backwards clock as zero -- both are the
+// console's own guards, not defensive code added here.
+// ================================================================================================
+u32 cParticleEmitter::Update(const cTime& arTime)
+{
+    const s32 liMonitor = giEmitterUpdateMonitor;
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+    const u32 luFlags = mFlags;
+    const f32 lfPreviousAge = m_age;
+
+    // asm 0x82915424..0x8291545C -- the age is measured from the TRIGGER's start stamp.
+    const s32 liElapsedTicks = arTime.GetTicks() - mpBindings->GetpTrigger()->GetTimeStart().GetTicks();
+    const f32 lfAge = static_cast<f32>(liElapsedTicks) * KF_TICKS_TO_SECONDS;
+    m_age = lfAge;
+
+    // asm 0x82915460..0x82915474 -- clamp(age - previousAge, 0, 1).
+    f32 lfDeltaTime = lfAge - lfPreviousAge;
+    if (lfDeltaTime <= 0.0f)
+    {
+        lfDeltaTime = 0.0f;
+    }
+    if (lfDeltaTime > 1.0f)
+    {
+        lfDeltaTime = 1.0f;
+    }
+    mDt = lfDeltaTime;
+
+    if ((luFlags & KU_FLAG_FROZEN) == 0)
+    {
+        // asm 0x8291547C..0x829154A8 -- the locator's transform for this frame, copied whole.
+        cMatrix lLocatorMatrix = mpBindings->GetpLocator()->GetMat(arTime);
+
+        if ((mFlags & KU_FLAG_SUB_EMITTER) != 0)
+        {
+            // asm 0x829154BC..0x829154DC -- the parent's seed is COPIED, never advanced in
+            // place: the parent particle has to replay identically every frame.
+            cParticleRandomSeed lParentSeed = mParentRandomSeed;
+
+            const cParticleDescriptor& lrParentDes = *mpDescriptor->mpParent.Get();
+            if ((lrParentDes.mFlags & cParticleDescriptor::E_FLAG_NEEDS_BUCKET) == 0)
+            {
+                if ((lrParentDes.mFlags & cParticleDescriptor::E_FLAG_IGNORE_ROT) != 0)
+                {
+                    // asm 0x82915508..0x8291556C -- identity, then the locator's translation
+                    // with w forced to 1 (see the banner's vsel note).
+                    mParentBaseMatrix.xa = { 1.0f, 0.0f, 0.0f, 0.0f };
+                    mParentBaseMatrix.ya = { 0.0f, 1.0f, 0.0f, 0.0f };
+                    mParentBaseMatrix.za = { 0.0f, 0.0f, 1.0f, 0.0f };
+                    mParentBaseMatrix.wa = { lLocatorMatrix.wa.x,
+                                             lLocatorMatrix.wa.y,
+                                             lLocatorMatrix.wa.z,
+                                             1.0f };
+                }
+                else
+                {
+                    // asm 0x82915574..0x829155AC -- all four rows.
+                    mParentBaseMatrix = lLocatorMatrix;
+                }
+            }
+
+            // asm 0x829155B0..0x829155D0 -- the working seed the build consumes. The console
+            // makes a second copy (the locator matrix's stack slot is dead by now and gets
+            // reused for it); reproduced as the one copy it is.
+            cParticleRandomSeed lSeed = lParentSeed;
+
+            // asm 0x829155D4..0x8291563C -- this frame's delta time and absolute time, pushed
+            // into the two live lanes of build-data slot 0. PrecalculateParticleBuildData
+            // deliberately leaves that slot alone (it is per-frame, not per-behaviour); this
+            // is the only writer.
+            mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.x = mDt;
+            mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.y =
+                static_cast<f32>(arTime.GetTicks()) * KF_TICKS_TO_SECONDS;
+
+            // asm 0x82915640..0x82915654 -- re-simulate the parent particle into a scratch
+            // render record. Only its EFFECT on mParentEmitterNucleus matters here; the
+            // record itself is a local the console never reads back.
+            RenderedParticle lParentParticle;
+            const EParticleBuildResult leResult =
+                ParticleBuild(lParentParticle, lSeed, mParentEmitterNucleus,
+                              *mpDescriptor->mpParent.Get(), *mpCurrentBehaviour,
+                              mPrecalculatedParticleBuildData);
+
+            if (leResult != eParticleBuildResultAlive)
+            {
+                // asm 0x82911690..0x829116B0 -- the parent particle is gone. Report how many
+                // particles this emitter still owns; the manager retires it at zero.
+                u32 luLiveParticles = 0;
+                for (const cParticleBucket* lpBucket = mpBucket;
+                     lpBucket != 0;
+                     lpBucket = lpBucket->GetEmitterNext())
+                {
+                    luLiveParticles += lpBucket->GetNumParticles();
+                }
+                CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+                return luLiveParticles;
+            }
+
+            // asm 0x82915658..0x8291566C.
+            mParentVel.x = 0.0f;
+            mParentVel.y = 0.0f;
+            mParentVel.z = 0.0f;
+            mParentVel.w = 0.0f;
+            mParentTime = arTime;
+        }
+
+        // asm 0x82915670..0x8291568C / 0x829156D0.
+        if ((mFlags & KU_FLAG_ACTIVE) != 0)
+        {
+            Generate(arTime);
+        }
+        else
+        {
+            mFlags &= ~KU_FLAG_EMITTING;
+        }
+    }
+
+    // asm 0x829156D8..0x829156E8.
+    mUpdateLastTime = arTime;
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+    return 1;
 }
