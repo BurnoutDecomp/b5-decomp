@@ -138,6 +138,64 @@ namespace Deformation
     // =================================================================================================
     // GetVehicleWorldRestitution @0x825E0C78
     //
+    // ⭐⭐⭐ READ THIS BEFORE BLAMING e == 0 FOR "THE CAR SLIDES ON ITS ROOF INSTEAD OF BARREL-ROLLING"
+    // (rotation-preservation sweep, 2026-09-05). THE GATE POINTS THE OTHER WAY FROM WHAT THAT STORY
+    // NEEDS, AND THIS IS NOT THE ONLY RESTITUTION IN THE CRASH.
+    //
+    // 1. THIS FUNCTION IS THE TUMBLE-*MAKER*, NOT THE TUMBLE-KILLER, AND IT IS SHOWTIME-ONLY.
+    //    restitution = (|n.y| >= 0.5f) ? 1.1f : 0.0f, and only when the showtime predicate is TRUE.
+    //    A FLAT ground / roof contact (|n.y| ~ 1) is precisely the case that selects 1.1 -- a
+    //    SUPER-ELASTIC bounce, which is what a Hollywood barrel roll is made of. Our build never
+    //    reaches it because it never enters showtime; a car that is merely CRASHING gets the zero
+    //    arm at 0x825E0CB8. ⛔ So "is e == 0 right for a car-vs-world contact while inverted?" is
+    //    answered YES for this function on this path, and the missing tumble is NOT hiding here.
+    //
+    // 2. THERE IS A SECOND, LARGER RESTITUTION, AND IT IS NOT IN THIS FILE. The car body's normal
+    //    response against the world is an rw::physics SOLVER contact, and the potential-contact
+    //    builder stamps its material at 0x825A9D68..0x825A9D74:
+    //        stfs f31(0x8200473C = 0.4 ), 0x174(r1)   dynamic friction
+    //        stfs f30(0x82001DA0 = 0.5 ), 0x170(r1)   static friction
+    //        stfs f30(0x82001DA0 = 0.5 ), 0x178(r1)   mRestitution      <-- NOT zero
+    //    with per-owner overrides at 0x825A9F54 (detached wheels/parts 9/10: 0.8 / 0.8 / 0.2) and
+    //    0x825A9F80 (deformable parts 6/7: 0.4 / 0.6 / 0.05). BrnPhysicsModuleBridgeFunctions.cpp
+    //    :918/:1015/:1021 already stamps exactly these. ⇒ THE GROUND IS ELASTIC (e = 0.5) AND
+    //    FRICTIONAL (mu 0.4-0.5) AT THE SOLVER, even while the deformation-sensor impulse path runs
+    //    at e == 0. The two are different mechanisms on the same collision; do not quote one as
+    //    "the console's restitution rule" for the other.
+    //
+    // 3. AND THERE IS A TANGENTIAL TERM THAT CONVERTS SLIDE INTO SPIN, INSIDE ApplySensorImpulse
+    //    @0x826078B0 -- the classic Coulomb form, applied DIRECTLY to the rigid body:
+    //        0x82608070  vmsum3fp128 v12, v_rel, n          ; v_rel . n
+    //        0x82608078  vsubfp128   v123, v_rel, n(v_rel.n) ; the tangent
+    //        0x82608088  vcmpgefp    |v_t|^2 >= 1e-4         ; below eps -> NO impulse at all
+    //        0x826081A4  saturate(|v_t| / 1.0)
+    //        0x826081B8  * the MODE SCALE  ->  0x826081C0 GetImpulsesFromLocalImpulse
+    //        0x8260821C  AddWorldSpaceImpulse
+    //        0x82608230  AddWorldSpaceAngularImpulse        <-- the spin deposit
+    //        0x826082C0  AddLocalForce (-v_t * physics+0xE0 * 0.9, WORLD contacts only)
+    //    MODE SCALE, gated on VehiclePhysics::mbIsCrashing (+0x710, writers SetCrashing
+    //    @0x825D990C / ClearCrashing @0x825B8EAC) and on contact+0xB8 (1 == world):
+    //        not crashing            -> 0.0   (a world contact deposits NOTHING outside a crash)
+    //        crashing, world         -> 5.0
+    //        crashing, car-car       -> 20.0  (only when the other car is crashing too; else 0.0)
+    //    ⚠️⚠️ THIS PATH DOES NOT GO THROUGH ImpulsePasser, so it is INVISIBLE to the
+    //    [crash-response] arrive census, which watches RecievePassedOnImpulse only. Every "the
+    //    contacts deposit X" number this campaign has published counts the passed-on chain and
+    //    NOT this. The residual it would explain is already on the ledger: over the contact frames
+    //    of mwK_h230_s60 the observed dW_roll runs ~+0.2 rad/s per frame ABOVE what the arriving
+    //    deposits predict (f683 +0.046 predicted / +0.280 observed, f684 +0.060 / +0.291,
+    //    f685 +0.132 / +0.338). Instrument AddWorldSpaceAngularImpulse before theorising further.
+    //
+    // 4. NO ANGULAR RESTITUTION EXISTS ANYWHERE ON THE CHAIN. Every angular deposit is a bare cross
+    //    product: GetImpulsesFromLocalImpulse @0x825A1A80 is vpermwi/vmulfp/vnmsubfp/vpermwi == r x J
+    //    and nothing else, and AddWorldSpaceAngularImpulse @0x825BEAA8 is a NaN assert plus
+    //    `lvx128 this+0x110 ; vaddfp128` -- a plain accumulate, no scale, no clamp.
+    //
+    // ⛔ lbUseNormalScaledFriction IS DEAD IN *BOTH* PATHS, not just the world one: ApplySensorImpulse
+    //    saves r3/r4/r5/r6/r7 across its `bl memcpy @0x8260790C` and NEVER saves r8, which memcpy then
+    //    clobbers. So `li r8,1 @0x82625150` in the car-car sibling is equally dead. The real
+    //    world/car-car discriminator is contact+0xB8.
+    //
     // Combined restitution for a vehicle-vs-WORLD contact. The asm consults the virtual showtime-style
     // predicate on this car's physics body (mVehicleBody.GetVehiclePhysics(), vtable slot +16 -- the
     // same predicate ApplyCarCarImpulse gates its bounce shaping on). If the predicate is FALSE the
@@ -150,11 +208,23 @@ namespace Deformation
     // =================================================================================================
     VecFloat DeformableObject::GetVehicleWorldRestitution(const StoredImpulseContact& lContact) const
     {
-        // The showtime/eligible predicate on this car's physics body (vtable slot +16). Modelled the
-        // same way ApplyCarCarImpulse models the +16 virtual: through the race-car downcast guard.
+        // The showtime predicate on this car's physics body, through the race-car downcast guard.
+        // ⭐ CORRECTED 2026-09-05: this called IsPlayerVehicleActuallyInShowtime(), which is vtable
+        // slot +0x14 (@0x827E42B0, a bare `lbz r3,0x140C(r3)`). The console dispatches slot +0x10 --
+        // read out of the image here, not inferred:
+        //     0x825E0C90  lwz   r3, 0x194C(r4)     ; the RaceCarPhysics*
+        //     0x825E0C98  lwz   r11, 0(r3)         ; its vtable
+        //     0x825E0C9C  lwz   r11, 0x10(r11)     ; <-- SLOT +0x10
+        //     0x825E0CA4  bctrl
+        // and +0x10 on RaceCarPhysics' concrete table (0x820D1034) is IsPlayerVehicleInShowtime
+        // @0x825D7B68, the THREE-term predicate (mbPlayerCarInShowtime && !mbDisableShowtime &&
+        // mfTimeUntilPush <= 0), not the bare flag. The loose predicate let the super-elastic 1.1
+        // arm fire in windows the console excludes. (BrnDeformableObject.cpp's two car-car sites
+        // still spell the +0x14 name; they are NOT changed here because their own dispatch offsets
+        // have not been read out of the image -- do that before touching them.)
         const Vehicle::RaceCarPhysics* lpRaceCarPhysics = AsRaceCarPhysics();
         const bool lbPredicate = (lpRaceCarPhysics != nullptr) &&
-                                 lpRaceCarPhysics->IsPlayerVehicleActuallyInShowtime();
+                                 lpRaceCarPhysics->IsPlayerVehicleInShowtime();
 
         if (!lbPredicate)
             return VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f };
