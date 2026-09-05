@@ -12,6 +12,7 @@
 //   cParticleBehaviour::CompileBaseVariance@ 0x82909170
 //   cParticleBehaviour::Delocate           @ 0x8290C9E0
 //   cParticleBehaviour::GetSerialiseSize   @ 0x8290CCD0
+//   cParticleBehaviour::Lerp               @ 0x8290B1F8  (landed 2026-09-06)
 //   cParticleBehaviour::Relocate           @ 0x8290CC48
 //   cParticleBehaviour::Serialise          @ 0x8290F098
 // ============================================================================
@@ -648,4 +649,303 @@ cParticleBehaviour* cParticleBehaviour::Serialise(cLionSerialiser& aSer) const
     lpCopy->mpWaveFormRGB.Set(lpStoredRGB);
 
     return lpCopy;
+}
+
+// ============================================================================================
+// cParticleBehaviour::Lerp  @ 0x8290B1F8   (ParticleBehaviour.cpp:518)   -- 1,530 instructions
+//
+// Interpolates two behaviour layers of one descriptor's chain into this (scratch) behaviour.
+// cParticleEmitter::Blend @0x8290F730 is the ONLY caller: it walks the chain to layer N and
+// layer N+1 and calls this with the fractional part of the effect's scaler position, then
+// publishes the result as mpCurrentBehaviour. Everything below is read out of the X360
+// listing; nothing here is inferred from the PS3 build except the NAMES of the four helpers
+// the console inlined (cVector::Lerp / cVector::Lerp4 / cColour8::Lerp / imin), which the
+// DecFIGS DWARF supplies at ParticleBehaviour.cpp:518-763.
+//
+// ⭐ THE FUNCTION IS BRANCH-FREE APART FROM ONE 4-ITERATION LOOP AND ELEVEN SNAP TESTS.
+// 1,530 instructions, 3 `bl`, no early-outs, no null checks (Blend does not make one either).
+// The whole body is FIVE kinds of operation applied to the 1216-byte record:
+//
+//   29x  cVector::Lerp   -- the 3-lane vector members            (see Vector.h's own banner)
+//    1x  cVector::Lerp4  -- mRGBADiff, all four lanes            0x8290C3C0
+//   35x  a scalar (hi-lo)*w+lo, one `fsubs` + one `fmadds`, unrolled
+//    4x  cColour8::Lerp + the 36th scalar, in one loop           0x8290C1FC..0x8290C3B0
+//    3x  cColour8::Lerp unrolled  (mRGBA0 / mRGBA1 / mRGBAVar)   0x8290C3E8 / C580 / C71C
+//   11x  a hard SNAP to whichever layer is nearer                0x8290C8A8..0x8290C9DC
+//  then  Build(), tail-called at 0x8290C9C0 / 0x8290C9D4.
+//
+// ⭐⭐ WHY Build() AT THE END, AND WHY THE SET OF FIELDS LOOKS INCOMPLETE. Lerp writes the
+// AUTHORED half of the record and lets Build() re-derive the rest -- that is why nothing here
+// touches mColourStepRGBA[], mDivisors[], mBVCompiled, mZero, the three alpha-fade reciprocals
+// or mRGBABase. Build @0x8290AFE8 rewrites every one of them from the fields Lerp just wrote,
+// and CompileBaseVariance repacks the base/variance table underneath it.
+//   ⚠ THREE OF THE FIELDS LERPED HERE ARE THEN OVERWRITTEN BY THAT SAME Build(), and they are
+//   reproduced anyway because the console does the work: mRGBADiff (Build's `stvx128 v0, r31,
+//   r7` with r7 == 432 == 0x1B0), mRGBAVar (Build stores 0x21C) and mRGBATime[0..3] (Build ->
+//   BuildColourSteps repacks them). A decomp that drops "dead" console work has no way to
+//   notice when a later change makes it live.
+//
+// ⛔ FOUR AUTHORED FIELDS ARE LEFT UNTOUCHED BY BOTH Lerp AND Build, so a blended layer keeps
+// whatever the scratch behaviour already held for them: mCloneScaleInTime (0x284), mRadius
+// (0x2B8), mpNext (0x2DC) and mEmissionRateHasBeenScaled (0x460). mpNext being left alone is
+// clearly deliberate -- the scratch layer is not IN the chain. The other three are the
+// console's own omission; there is no instruction at any address that writes them here, and
+// inventing one would be exactly the "silent fix" this project keeps paying for.
+// mColourStepsRGBAv[] (0x1C0) is not written either; it is derived downstream.
+//
+// ⭐⭐ THE COLOUR PATH IS FIXED-POINT, NOT FLOAT, AND IT IS LOSSY AT BOTH ENDS. The weight is
+// quantised to a byte (0x8290C19C `fmuls f13, f1, flt_82010C20` with flt_82010C20 == 255.0f,
+// then `fctidz` -- truncate toward zero -- then `lbz` of the low byte at 0x8290C1BC), and each
+// channel is scaled with `(channel * w) >> 8`. The two halves therefore sum to 255/256 of the
+// input, not to 1: at aWeight == 0 a channel of 200 comes out as (200*255)>>8 == 199. That
+// one-count darkening is the console's arithmetic and is reproduced exactly; "correcting" it
+// to a float lerp would change every blended particle colour in the game.
+//
+// ⭐ THE ELEVEN SNAPS ARE NOT A THRESHOLD ON THE EFFECT -- THEY ARE PER FIELD. mFlags,
+// mColourSteps, mRGBAVarianceMode, the two emission-count clamps, mRibbonParticleCount and the
+// five wave-form links cannot be interpolated (they are enums, counts and pointers), so each
+// one is copied whole from whichever layer is nearer. The constant is flt_82001DA0 == 0.5f,
+// read out of the image; the branch is `fcmpu cr6, f1, f0` + `bge`, i.e. the UPPER layer wins
+// the tie at exactly 0.5 and also wins if aWeight is NaN (bge is taken when LT is clear, and
+// an unordered compare clears LT). `(aWeight < 0.5f) ? apBeh0 : apBeh1` reproduces both.
+//
+// ⚠ mDragFactorVel / mDragFactorRot / mDragFactorScale ARE LERPED TWICE, and that is in the
+// binary, not a transcription slip: the identical three-scalar block appears at
+// 0x8290BFE0..0x8290C018 (beside mDragFactor) and again at 0x8290C134..0x8290C188 (beside
+// mMass). Both read apBeh0/apBeh1 and write this, so the second is exactly idempotent -- a
+// copy-paste in the original source. Kept, because removing it would make the reconstruction
+// disagree with the listing for no gain.
+//
+// ⚠ FIELD ORDER BELOW IS THE ORDER THE STORES HAPPEN, not declaration order -- e.g. the four
+// mEndOn* scalars land between mAxisBase and mOffsetRotXYZBase (0x8290B380), and mPivotPoint
+// lands between mOffsetRotXYZAccVariance and mRotXYZBase (0x8290B6B4). Every operation reads
+// only apBeh0/apBeh1 and writes only this, so the order is not load-bearing; it is preserved
+// so the body can be walked against the listing line by line.
+// ============================================================================================
+namespace
+{
+// The scalar arm the console emits 36 times: one `fsubs` for the difference, one `fmadds` for
+// the weighted add. (The console's fmadds rounds once; a host multiply-add rounds twice. This
+// is a semantic-parity decomp, so the shape is kept and the last-bit difference is not.)
+inline f32 LerpF32(const f32 afA, const f32 afB, const f32 afT)
+{
+    const f32 lfDiff = afB - afA;
+    return lfDiff * afT + afA;
+}
+
+// flt_82001DA0 -- the snap point for the eleven non-interpolatable fields.
+const f32 KF_LAYER_SNAP = 0.5f;
+
+// flt_82010C20 -- the weight's fixed-point scale. Same constant Build() uses to go back from
+// unit floats to bytes, under the name KF_COLOUR_UNIT_TO_U8 above.
+const f32 KF_COLOUR_WEIGHT_SCALE = 255.0f;
+
+// The eauk integer min the DWARF names (ParticleBehaviour.cpp:622 and the three unrolled
+// copies). On the console it is `cmpwi cr6, rX, 0xFF` + `blt` + `li rX, 0xFF` -- a SIGNED
+// compare, which is immaterial here because every value reaching it is in [0, 510].
+inline s32 imin(const s32 aiA, const s32 aiB)
+{
+    return (aiA < aiB) ? aiA : aiB;
+}
+}  // namespace
+
+// Colour.h:73 -- asm 0x8290C204..0x8290C298 (and three unrolled copies).
+cColour8 cColour8::operator*(const u8 auScale) const
+{
+    cColour8 lResult;
+    lResult.r = static_cast<u8>(imin((static_cast<s32>(r) * auScale) >> 8, 255));
+    lResult.g = static_cast<u8>(imin((static_cast<s32>(g) * auScale) >> 8, 255));
+    lResult.b = static_cast<u8>(imin((static_cast<s32>(b) * auScale) >> 8, 255));
+    lResult.a = static_cast<u8>(imin((static_cast<s32>(a) * auScale) >> 8, 255));
+    return lResult;
+}
+
+// Colour.h:65 -- asm 0x8290C320..0x8290C364, and three unrolled twins at 0x8290C52C /
+// 0x8290C6C8 / 0x8290C864.
+// ⚠ CORRECTED IN REVIEW: THIS CLAMP IS DEAD TOO, and the first version of this comment
+// claimed it was the live one. The console builds the second weight as the EXACT
+// complement (`subfic r11, r30, 0xFF` at 0x8290C1C4), so the sum is
+// floor(255k/256) + floor(255(255-k)/256), whose maximum over all 256 weights and all
+// 65,536 channel pairs is 254 -- reached at k = 0 with lo = 255. Neither clamp in this
+// colour path can ever fire. They are reproduced because they are in the listing, not
+// because they do anything; a confident-but-false 'this one is live' is exactly what a
+// later wave would quote as licence to delete the other.
+cColour8 cColour8::operator+(const cColour8 aOther) const
+{
+    cColour8 lResult;
+    lResult.r = static_cast<u8>(imin(static_cast<s32>(r) + aOther.r, 255));
+    lResult.g = static_cast<u8>(imin(static_cast<s32>(g) + aOther.g, 255));
+    lResult.b = static_cast<u8>(imin(static_cast<s32>(b) + aOther.b, 255));
+    lResult.a = static_cast<u8>(imin(static_cast<s32>(a) + aOther.a, 255));
+    return lResult;
+}
+
+// Colour.h:99 -- the U8-weight overload. The console computes the upper term first (register
+// r30 holds the weight, r26 its complement) and adds the lower to it; the operand order is
+// kept even though the add commutes.
+void cColour8::Lerp(const cColour8 aC0, const cColour8 aC1, const u8 auWeight)
+{
+    *this = aC1 * auWeight + aC0 * static_cast<u8>(255 - auWeight);
+}
+
+void cParticleBehaviour::Lerp(const cParticleBehaviour* apBeh0,
+                              const cParticleBehaviour* apBeh1,
+                              const f32 aWeight)
+{
+    // ParticleBehaviour.cpp:521 -- the weight splat the 30 vector lerps all multiply by. The
+    // console builds it once on the stack (four `stfs f1` at 0x8290B230..0x8290B23C) and loads
+    // it into v0 at 0x8290B25C; v0 then survives to the last vector op at 0x8290C3D0.
+    cVector lvWeight;
+    lvWeight.Set(aWeight, aWeight, aWeight, aWeight);
+
+    // --- 0x8290B204 .. 0x8290B37C -------------------------------------------------------
+    mAccBase.Lerp(apBeh0->mAccBase, apBeh1->mAccBase, lvWeight);
+    mAccVariance.Lerp(apBeh0->mAccVariance, apBeh1->mAccVariance, lvWeight);
+    mAxisBase.Lerp(apBeh0->mAxisBase, apBeh1->mAxisBase, lvWeight);
+
+    // --- 0x8290B380 .. 0x8290B3D0 -- the four end-on scalars, out of declaration order ----
+    mEndOnAlphaFade  = LerpF32(apBeh0->mEndOnAlphaFade,  apBeh1->mEndOnAlphaFade,  aWeight);
+    mEndOnScale      = LerpF32(apBeh0->mEndOnScale,      apBeh1->mEndOnScale,      aWeight);
+    mEndOnStartAngle = LerpF32(apBeh0->mEndOnStartAngle, apBeh1->mEndOnStartAngle, aWeight);
+    mEndOnEndAngle   = LerpF32(apBeh0->mEndOnEndAngle,   apBeh1->mEndOnEndAngle,   aWeight);
+
+    // --- 0x8290B3D4 .. 0x8290BF4C -- the remaining 26 vector members ---------------------
+    mOffsetRotXYZBase.Lerp(apBeh0->mOffsetRotXYZBase, apBeh1->mOffsetRotXYZBase, lvWeight);
+    mOffsetRotXYZVariance.Lerp(apBeh0->mOffsetRotXYZVariance,
+                               apBeh1->mOffsetRotXYZVariance, lvWeight);
+    mOffsetRotXYZVelBase.Lerp(apBeh0->mOffsetRotXYZVelBase,
+                              apBeh1->mOffsetRotXYZVelBase, lvWeight);
+    mOffsetRotXYZVelVariance.Lerp(apBeh0->mOffsetRotXYZVelVariance,
+                                  apBeh1->mOffsetRotXYZVelVariance, lvWeight);
+    mOffsetRotXYZAccBase.Lerp(apBeh0->mOffsetRotXYZAccBase,
+                              apBeh1->mOffsetRotXYZAccBase, lvWeight);
+    mOffsetRotXYZAccVariance.Lerp(apBeh0->mOffsetRotXYZAccVariance,
+                                  apBeh1->mOffsetRotXYZAccVariance, lvWeight);
+
+    // 0x8290B6B4 -- mPivotPoint, emitted between the offset-rot block and the rot block.
+    mPivotPoint.Lerp(apBeh0->mPivotPoint, apBeh1->mPivotPoint, lvWeight);
+
+    mRotXYZBase.Lerp(apBeh0->mRotXYZBase, apBeh1->mRotXYZBase, lvWeight);
+    mRotXYZVariance.Lerp(apBeh0->mRotXYZVariance, apBeh1->mRotXYZVariance, lvWeight);
+    mRotXYZVelBase.Lerp(apBeh0->mRotXYZVelBase, apBeh1->mRotXYZVelBase, lvWeight);
+    mRotXYZVelVariance.Lerp(apBeh0->mRotXYZVelVariance, apBeh1->mRotXYZVelVariance, lvWeight);
+    mRotXYZAccBase.Lerp(apBeh0->mRotXYZAccBase, apBeh1->mRotXYZAccBase, lvWeight);
+    mRotXYZAccVariance.Lerp(apBeh0->mRotXYZAccVariance, apBeh1->mRotXYZAccVariance, lvWeight);
+
+    mPosBase.Lerp(apBeh0->mPosBase, apBeh1->mPosBase, lvWeight);
+    mPosVariance.Lerp(apBeh0->mPosVariance, apBeh1->mPosVariance, lvWeight);
+    mRingRadius.Lerp(apBeh0->mRingRadius, apBeh1->mRingRadius, lvWeight);
+
+    mSizeXYZBase.Lerp(apBeh0->mSizeXYZBase, apBeh1->mSizeXYZBase, lvWeight);
+    mSizeXYZVariance.Lerp(apBeh0->mSizeXYZVariance, apBeh1->mSizeXYZVariance, lvWeight);
+    mSizeXYZVelBase.Lerp(apBeh0->mSizeXYZVelBase, apBeh1->mSizeXYZVelBase, lvWeight);
+    mSizeXYZVelVariance.Lerp(apBeh0->mSizeXYZVelVariance,
+                             apBeh1->mSizeXYZVelVariance, lvWeight);
+    mSizeXYZAccBase.Lerp(apBeh0->mSizeXYZAccBase, apBeh1->mSizeXYZAccBase, lvWeight);
+    mSizeXYZAccVariance.Lerp(apBeh0->mSizeXYZAccVariance,
+                             apBeh1->mSizeXYZAccVariance, lvWeight);
+
+    mVelBase.Lerp(apBeh0->mVelBase, apBeh1->mVelBase, lvWeight);
+    mVelVariance.Lerp(apBeh0->mVelVariance, apBeh1->mVelVariance, lvWeight);
+
+    // 0x8290BEB4 / 0x8290BF20 -- the drive-time bounds travel with the layer.
+    mAABBMin.Lerp(apBeh0->mAABBMin, apBeh1->mAABBMin, lvWeight);
+    mAABBMax.Lerp(apBeh0->mAABBMax, apBeh1->mAABBMax, lvWeight);
+
+    // --- 0x8290BF54 .. 0x8290C1F8 -- the scalar run ---------------------------------------
+    // The four step times are four separate blocks in the listing, and the DWARF puts only
+    // ONE loop scope in this function (ParticleBehaviour.cpp:622, the colour loop below), so
+    // they are written out rather than re-rolled.
+    mRGBATime[0] = LerpF32(apBeh0->mRGBATime[0], apBeh1->mRGBATime[0], aWeight);
+    mRGBATime[1] = LerpF32(apBeh0->mRGBATime[1], apBeh1->mRGBATime[1], aWeight);
+    mRGBATime[2] = LerpF32(apBeh0->mRGBATime[2], apBeh1->mRGBATime[2], aWeight);
+    mRGBATime[3] = LerpF32(apBeh0->mRGBATime[3], apBeh1->mRGBATime[3], aWeight);
+
+    mAlphaFadeIn  = LerpF32(apBeh0->mAlphaFadeIn,  apBeh1->mAlphaFadeIn,  aWeight);
+    mAlphaFadeOut = LerpF32(apBeh0->mAlphaFadeOut, apBeh1->mAlphaFadeOut, aWeight);
+    mCellSize     = LerpF32(apBeh0->mCellSize,     apBeh1->mCellSize,     aWeight);
+
+    // 0x8290BFE0..0x8290C018 -- first of the two identical drag blocks (see the banner).
+    mDragFactorVel   = LerpF32(apBeh0->mDragFactorVel,   apBeh1->mDragFactorVel,   aWeight);
+    mDragFactorRot   = LerpF32(apBeh0->mDragFactorRot,   apBeh1->mDragFactorRot,   aWeight);
+    mDragFactorScale = LerpF32(apBeh0->mDragFactorScale, apBeh1->mDragFactorScale, aWeight);
+
+    mDragFactor = LerpF32(apBeh0->mDragFactor, apBeh1->mDragFactor, aWeight);
+
+    mSizeBase        = LerpF32(apBeh0->mSizeBase,        apBeh1->mSizeBase,        aWeight);
+    mSizeVariance    = LerpF32(apBeh0->mSizeVariance,    apBeh1->mSizeVariance,    aWeight);
+    mSizeVelBase     = LerpF32(apBeh0->mSizeVelBase,     apBeh1->mSizeVelBase,     aWeight);
+    mSizeVelVariance = LerpF32(apBeh0->mSizeVelVariance, apBeh1->mSizeVelVariance, aWeight);
+    mSizeAccBase     = LerpF32(apBeh0->mSizeAccBase,     apBeh1->mSizeAccBase,     aWeight);
+    mSizeAccVariance = LerpF32(apBeh0->mSizeAccVariance, apBeh1->mSizeAccVariance, aWeight);
+
+    mEmissionRateBase     = LerpF32(apBeh0->mEmissionRateBase,
+                                    apBeh1->mEmissionRateBase, aWeight);
+    mEmissionRateVariance = LerpF32(apBeh0->mEmissionRateVariance,
+                                    apBeh1->mEmissionRateVariance, aWeight);
+
+    mEmitterStartWeight = LerpF32(apBeh0->mEmitterStartWeight,
+                                  apBeh1->mEmitterStartWeight, aWeight);
+    mEmitterEndWeight   = LerpF32(apBeh0->mEmitterEndWeight,
+                                  apBeh1->mEmitterEndWeight, aWeight);
+    mEmitterVelWeight   = LerpF32(apBeh0->mEmitterVelWeight,
+                                  apBeh1->mEmitterVelWeight, aWeight);
+
+    mLifeBase     = LerpF32(apBeh0->mLifeBase,     apBeh1->mLifeBase,     aWeight);
+    mLifeVariance = LerpF32(apBeh0->mLifeVariance, apBeh1->mLifeVariance, aWeight);
+
+    // 0x8290C134..0x8290C188 -- the SECOND copy of the drag block. Idempotent, and in the
+    // binary; see the banner.
+    mDragFactorVel   = LerpF32(apBeh0->mDragFactorVel,   apBeh1->mDragFactorVel,   aWeight);
+    mDragFactorRot   = LerpF32(apBeh0->mDragFactorRot,   apBeh1->mDragFactorRot,   aWeight);
+    mDragFactorScale = LerpF32(apBeh0->mDragFactorScale, apBeh1->mDragFactorScale, aWeight);
+
+    mMass  = LerpF32(apBeh0->mMass,  apBeh1->mMass,  aWeight);
+    mScale = LerpF32(apBeh0->mScale, apBeh1->mScale, aWeight);
+
+    mTimeScale         = LerpF32(apBeh0->mTimeScale,         apBeh1->mTimeScale,         aWeight);
+    mTimeScaleVariance = LerpF32(apBeh0->mTimeScaleVariance, apBeh1->mTimeScaleVariance, aWeight);
+
+    // --- 0x8290C138 .. 0x8290C1C8 -- the byte weight and its complement -------------------
+    // `fmuls` by 255.0, `fctidz` (truncate toward zero), then the LOW byte of the 64-bit
+    // result. Blend only ever calls with aWeight in (0.01, 0.99), so this lands in [2, 252];
+    // the byte truncation of anything else is the console's own and is reproduced as written.
+    const u8 luWeight8 = static_cast<u8>(static_cast<s64>(aWeight * KF_COLOUR_WEIGHT_SCALE));
+
+    // --- 0x8290C1FC .. 0x8290C3B0 -- ParticleBehaviour.cpp:622 ---------------------------
+    // The console counts r27 down from 4 and walks three pointer differences (r25 = hi - lo,
+    // r24 = this - lo, r23 = hi - this) off one cursor; re-rolled to the source's own index.
+    for (u32 luIndex = 0; luIndex < KU_COLOUR_STEP_LIMIT; ++luIndex)
+    {
+        mColour[luIndex].Lerp(apBeh0->mColour[luIndex], apBeh1->mColour[luIndex], luWeight8);
+        mColourTime[luIndex] = LerpF32(apBeh0->mColourTime[luIndex],
+                                       apBeh1->mColourTime[luIndex], aWeight);
+    }
+
+    // --- 0x8290C3B4 .. 0x8290C8C0 --------------------------------------------------------
+    mRGBADiff.Lerp4(apBeh0->mRGBADiff, apBeh1->mRGBADiff, lvWeight);
+    mRGBA0.Lerp(apBeh0->mRGBA0, apBeh1->mRGBA0, luWeight8);
+    mRGBA1.Lerp(apBeh0->mRGBA1, apBeh1->mRGBA1, luWeight8);
+    mRGBAVar.Lerp(apBeh0->mRGBAVar, apBeh1->mRGBAVar, luWeight8);
+
+    // --- 0x8290C8A8 .. 0x8290C9DC -- the eleven snaps -------------------------------------
+    // The console re-tests `fcmpu cr6, f1, f0` before each field; f0 is loaded once at
+    // 0x8290C89C and never reloaded, so one decision covers all eleven.
+    const cParticleBehaviour* const lpNearestLayer = (aWeight < KF_LAYER_SNAP) ? apBeh0 : apBeh1;
+
+    mRibbonParticleCount        = lpNearestLayer->mRibbonParticleCount;         // 0x480
+    mColourSteps                = lpNearestLayer->mColourSteps;                 // 0x260
+    mEmissionCountClamp         = lpNearestLayer->mEmissionCountClamp;          // 0x2C0
+    mEmissionCountClampVariance = lpNearestLayer->mEmissionCountClampVariance;  // 0x464
+    mFlags                      = lpNearestLayer->mFlags;                       // 0x2C4
+    mRGBAVarianceMode           = lpNearestLayer->mRGBAVarianceMode;            // 0x264
+    mpWaveFormX                 = lpNearestLayer->mpWaveFormX;                  // 0x2C8
+    mpWaveFormY                 = lpNearestLayer->mpWaveFormY;                  // 0x2CC
+    mpWaveFormZ                 = lpNearestLayer->mpWaveFormZ;                  // 0x2D0
+    mpWaveFormAlpha             = lpNearestLayer->mpWaveFormAlpha;              // 0x2D4
+    mpWaveFormRGB               = lpNearestLayer->mpWaveFormRGB;                // 0x2D8
+
+    // 0x8290C9C0 / 0x8290C9D4 -- a tail call, duplicated by the compiler into both arms of
+    // the last snap. Re-derives everything Lerp deliberately did not write.
+    Build();
 }

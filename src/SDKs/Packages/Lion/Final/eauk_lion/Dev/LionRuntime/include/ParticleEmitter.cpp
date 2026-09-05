@@ -679,10 +679,10 @@ void cParticleEmitter::PrecalculateParticleBuildData()
 // dword_82FAB63C is LionPerfMon + 4, and LionPerfMon's member order (LionPerfMon.cpp) puts
 // miEmitterBlend exactly there.
 //
-// ⛔ cParticleBehaviour::Lerp @0x8290B1F8 IS NOT RECONSTRUCTED -- 1,530 instructions, a wave of
-// its own. It is a LOUD, LOG-ONCE stub in LionRuntimeLinkStubs.cpp rather than an assert,
-// deliberately: Blend runs per frame for any multi-layer effect, and an assert here is the
-// 840,000-line storm that has starved a harness before. What the miss costs is stated there.
+// ⭐ cParticleBehaviour::Lerp @0x8290B1F8 IS BODIED (2026-09-06, ParticleBehaviour.cpp), so
+// the interpolating arm below now actually interpolates. It used to be a log-once stub that
+// left mpTempBehaviour holding whatever Init()+Build() put there, i.e. a mid-blend effect
+// played ONE layer instead of a mix of two -- and that stub's log line fired in every run.
 // ================================================================================================
 namespace
 {
@@ -694,6 +694,53 @@ s32 giEmitterBlendMonitor = -1;   // X360 dword_82FAB63C
 
 // flt_82002138 / flt_8201FDB8 -- the blend snap epsilon and its negation.
 const f32 KF_BLEND_EPSILON = 0.009999999776482582f;
+
+// ------------------------------------------------------------------------------------------
+// [diag] DELETE-WHEN-STABLE, with the [lionblend] witness in Blend below.
+// How many of a representative sample of the fields cParticleBehaviour::Lerp @0x8290B1F8
+// interpolates actually DIFFER between two adjacent behaviour layers. Without this the
+// witness cannot tell "the interpolator works" from "the two layers were identical".
+// Twelve scalars, four vectors (x/y/z only -- the w lane is not interpolated, see Vector.h),
+// three packed colours.
+// ------------------------------------------------------------------------------------------
+bool VectorXYZDiffers(const cVector& arA, const cVector& arB)
+{
+    return (arA.x != arB.x) || (arA.y != arB.y) || (arA.z != arB.z);
+}
+
+bool Colour8Differs(const cColour8& arA, const cColour8& arB)
+{
+    return (arA.r != arB.r) || (arA.g != arB.g) || (arA.b != arB.b) || (arA.a != arB.a);
+}
+
+void CountBlendDifferences(const cParticleBehaviour& arA, const cParticleBehaviour& arB,
+                           u32& aruScalars, u32& aruVectors, u32& aruColours)
+{
+    aruScalars = 0;
+    if (arA.mLifeBase != arB.mLifeBase)                   ++aruScalars;
+    if (arA.mLifeVariance != arB.mLifeVariance)           ++aruScalars;
+    if (arA.mSizeBase != arB.mSizeBase)                   ++aruScalars;
+    if (arA.mSizeVariance != arB.mSizeVariance)           ++aruScalars;
+    if (arA.mEmissionRateBase != arB.mEmissionRateBase)   ++aruScalars;
+    if (arA.mScale != arB.mScale)                         ++aruScalars;
+    if (arA.mAlphaFadeIn != arB.mAlphaFadeIn)             ++aruScalars;
+    if (arA.mAlphaFadeOut != arB.mAlphaFadeOut)           ++aruScalars;
+    if (arA.mDragFactor != arB.mDragFactor)               ++aruScalars;
+    if (arA.mMass != arB.mMass)                           ++aruScalars;
+    if (arA.mCellSize != arB.mCellSize)                   ++aruScalars;
+    if (arA.mTimeScale != arB.mTimeScale)                 ++aruScalars;
+
+    aruVectors = 0;
+    if (VectorXYZDiffers(arA.mPosBase, arB.mPosBase))         ++aruVectors;
+    if (VectorXYZDiffers(arA.mVelBase, arB.mVelBase))         ++aruVectors;
+    if (VectorXYZDiffers(arA.mAccBase, arB.mAccBase))         ++aruVectors;
+    if (VectorXYZDiffers(arA.mSizeXYZBase, arB.mSizeXYZBase)) ++aruVectors;
+
+    aruColours = 0;
+    if (Colour8Differs(arA.mColour[0], arB.mColour[0])) ++aruColours;
+    if (Colour8Differs(arA.mRGBA0, arB.mRGBA0))         ++aruColours;
+    if (Colour8Differs(arA.mRGBA1, arB.mRGBA1))         ++aruColours;
+}
 
 // The console walks the behaviour chain link by link FIVE times in this one function
 // (0x8290F874, 0x8290F8FC, 0x8290F950, 0x8290F984, 0x8290F9A8), each time with the same
@@ -784,8 +831,79 @@ void cParticleEmitter::Blend()
                         AdvanceBehaviours(lpHead, static_cast<u32>(liLayer));
                     const cParticleBehaviour* lpHi =
                         AdvanceBehaviours(lpHead, static_cast<u32>(liLayerN));
-                    mpTempBehaviour->Lerp(lpLo, lpHi, lfFraction);
+                    // ⛔ BRN_LION_NOBLEND=1 -- DELETE-WHEN-STABLE A/B BYPASS. Skipping the
+                    // call reproduces EXACTLY the state this build was in before
+                    // cParticleBehaviour::Lerp @0x8290B1F8 was bodied: lpChosen is still
+                    // mpTempBehaviour, but mpTempBehaviour still holds whatever
+                    // cParticleEmitter::Init left in it. It exists so the landing can be
+                    // FILMED against its own absence on ONE exe, instead of comparing two
+                    // builds. Off by default; the console has no such branch.
+                    static const bool sbNoBlend = (std::getenv("BRN_LION_NOBLEND") != nullptr);
+                    if (!sbNoBlend)
+                    {
+                        mpTempBehaviour->Lerp(lpLo, lpHi, lfFraction);
+                    }
                     lpChosen = mpTempBehaviour;
+
+                    // ------------------------------------------------------------------
+                    // [lionblend] DELETE-WHEN-STABLE. The witness for cParticleBehaviour::
+                    // Lerp @0x8290B1F8 landing: it prints BOTH layers' own values and the
+                    // interpolated result for one field of each kind the body handles --
+                    // a scalar, a vector lane, a fixed-point colour, and one of the eleven
+                    // SNAPPED words -- so "it blends instead of snapping" is a number.
+                    //
+                    // ⚠ IT ALSO COUNTS HOW MANY FIELDS ACTUALLY DIFFER between the two
+                    // layers, because a lerp between two IDENTICAL layers is invisible and
+                    // would otherwise read as a pass. If diff= is 0/0/0 the line proves the
+                    // body ran and NOTHING ELSE -- that is the diagnostic-that-lies trap
+                    // this counter exists to close.
+                    // Capped at KU_LIONBLEND_SHOTS lines; call= keeps counting past the cap.
+                    {
+                        static u32 suShots = 0;
+                        static u32 suCalls = 0;
+                        const u32 KU_LIONBLEND_SHOTS = 24u;
+                        ++suCalls;
+                        if (suShots < KU_LIONBLEND_SHOTS)
+                        {
+                            ++suShots;
+                            u32 luDiffScalar = 0;
+                            u32 luDiffVector = 0;
+                            u32 luDiffColour = 0;
+                            CountBlendDifferences(*lpLo, *lpHi,
+                                                  luDiffScalar, luDiffVector, luDiffColour);
+
+                            char lacMsg[512];
+                            std::snprintf(lacMsg, sizeof(lacMsg),
+                                "[lionblend] call=%u layer=%d->%d t=%.4f diff(s12/v4/c3)=%u/%u/%u"
+                                " life=%.4f|%.4f->%.4f size=%.4f|%.4f->%.4f"
+                                " rate=%.3f|%.3f->%.3f vel.y=%.4f|%.4f->%.4f"
+                                " col0=%02X%02X%02X%02X|%02X%02X%02X%02X->%02X%02X%02X%02X"
+                                " flags=%08X|%08X->%08X\n",
+                                suCalls, static_cast<int>(liLayer), static_cast<int>(liLayerN),
+                                static_cast<double>(lfFraction),
+                                luDiffScalar, luDiffVector, luDiffColour,
+                                static_cast<double>(lpLo->mLifeBase),
+                                static_cast<double>(lpHi->mLifeBase),
+                                static_cast<double>(mpTempBehaviour->mLifeBase),
+                                static_cast<double>(lpLo->mSizeBase),
+                                static_cast<double>(lpHi->mSizeBase),
+                                static_cast<double>(mpTempBehaviour->mSizeBase),
+                                static_cast<double>(lpLo->mEmissionRateBase),
+                                static_cast<double>(lpHi->mEmissionRateBase),
+                                static_cast<double>(mpTempBehaviour->mEmissionRateBase),
+                                static_cast<double>(lpLo->mVelBase.y),
+                                static_cast<double>(lpHi->mVelBase.y),
+                                static_cast<double>(mpTempBehaviour->mVelBase.y),
+                                lpLo->mColour[0].r, lpLo->mColour[0].g,
+                                lpLo->mColour[0].b, lpLo->mColour[0].a,
+                                lpHi->mColour[0].r, lpHi->mColour[0].g,
+                                lpHi->mColour[0].b, lpHi->mColour[0].a,
+                                mpTempBehaviour->mColour[0].r, mpTempBehaviour->mColour[0].g,
+                                mpTempBehaviour->mColour[0].b, mpTempBehaviour->mColour[0].a,
+                                lpLo->mFlags, lpHi->mFlags, mpTempBehaviour->mFlags);
+                            CgsDev::Log::WriteToLog(lacMsg);
+                        }
+                    }
                 }
             }
 

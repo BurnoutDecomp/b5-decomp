@@ -72,6 +72,21 @@ class cLionSerialiser;        // LionSerialiser.h (sibling home)
 // X360 packs the channels little-endian (byte0 = first channel). The runtime
 // reads/writes it as a whole word and per-channel; modelled by named channels.
 // Replace with the real cColour8 home when it is homed.
+//
+// ⭐ ITS REAL HOME IS eauk_common/Common/Colour.h -- the DWARF has the whole class
+// (references/DecFIGS/dwarfdump/SDKs/Packages/Lion/Final/eauk_common/Common/Colour.h:
+// a private `U32 m_RGBA` plus BuildIdentity / GetRGBA / GetR..GetA / SetRGBA / SetR..SetA /
+// the arithmetic operators / two Lerp overloads). Only the three operations the
+// reconstructed bodies actually perform are declared here, and each one's arithmetic is
+// read out of the X360 asm rather than taken from the DWARF. Moving the type to its own
+// header is a separate, mechanical change; growing this placeholder is not the fork the
+// banner warns about, because there is still exactly ONE definition of cColour8 in the tree.
+//
+// ⚠ WHICH BYTE IS WHICH DOES NOT MATTER TO THE OPERATIONS BELOW, and that is worth saying
+// once: all three are per-lane maps that repack in the lane order they unpacked, so they
+// commute with any permutation of the four names. The lane order itself is settled elsewhere
+// and is r = the LOW byte of the word (BrnLionBlendRenderer.cpp:292 reads RGBA0 0xff2348dc as
+// r 220 / g 72 / b 35 / a 255), which is also what cParticleBehaviour::Build assumes.
 // ----------------------------------------------------------------------------
 struct cColour8
 {
@@ -79,6 +94,25 @@ struct cColour8
     u8 g;
     u8 b;
     u8 a;
+
+    // Colour.h:73 -- `cColour8 operator*(U8) const`. Per channel: (channel * scale) >> 8,
+    // then clamped to 255. asm 0x8290C204..0x8290C298 (`mullw` / `srwi 8` / `cmpwi 0xFF` +
+    // `blt` + `li 0xFF` per lane, four lanes, then repacked).
+    // ⚠ THE CLAMP HERE CAN NEVER FIRE and is still reproduced: the largest possible product
+    // is 255*255 >> 8 == 254. NEITHER CAN THE ONE IN operator+ -- the two weights are exact
+    // complements, so their scaled halves sum to at most 254 (see ParticleBehaviour.cpp).
+    // Both are reproduced anyway: dropping a dead console instruction is how a
+    // "simplification" turns into a divergence later.
+    cColour8 operator*(u8 auScale) const;
+
+    // Colour.h:65 -- `cColour8 operator+(cColour8) const`. Per channel: sum clamped to 255.
+    // asm 0x8290C320..0x8290C364.
+    cColour8 operator+(cColour8 aOther) const;
+
+    // Colour.h:99 -- the U8-weight overload: *this = aC1 * auWeight + aC0 * (255 - auWeight).
+    // asm: the loop body 0x8290C1FC..0x8290C390 and the three unrolled copies at
+    // 0x8290C3E8 / 0x8290C580 / 0x8290C71C.
+    void Lerp(cColour8 aC0, cColour8 aC1, u8 auWeight);
 };
 
 // Opaque Lion types this TU only references by pointer.
@@ -171,9 +205,9 @@ struct cParticleBehaviour
     void BuildColourSteps();
     void CompileBaseVariance();
     // ParticleBehaviour.h:314 (DWARF). Interpolate two behaviour layers into this one.
-    // X360 @0x8290B1F8 -- 1,530 instructions. NOT RECONSTRUCTED; the LOG-ONCE stub is in
-    // LionRuntimeLinkStubs.cpp, and its note says what the miss costs.
-    void Lerp(const cParticleBehaviour* apLo, const cParticleBehaviour* apHi, f32 afWeight);
+    // X360 @0x8290B1F8 -- 1,530 instructions, BODIED 2026-09-06 in ParticleBehaviour.cpp.
+    // The DWARF names the parameters apBeh0 / apBeh1 / aWeight (ParticleBehaviour.cpp:518).
+    void Lerp(const cParticleBehaviour* apBeh0, const cParticleBehaviour* apBeh1, f32 aWeight);
 
     void Delocate(u32 aEndianTwiddleFlag);
     void Relocate();
