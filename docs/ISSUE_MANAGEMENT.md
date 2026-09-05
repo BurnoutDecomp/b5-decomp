@@ -10,10 +10,12 @@ Do not mirror every TU into GitHub or infer runtime completeness from ledger per
 
 ## Triage procedure
 
-1. Read the build, reproduction and evidence. Search for duplicates. Close a duplicate
+1. Start with the information supplied; a screenshot and title can be enough to investigate.
+   Intermittent reports do not need reliable reproduction steps. Search for duplicates. Close a duplicate
    as not planned with a link to the canonical issue and preserve any new evidence.
-2. If information is missing, add `status: needs info` and ask for the specific missing
-   detail. Remove that label when supplied. Do not automatically close old reports.
+2. Ask for additional information only when a specific detail is needed to make progress.
+   Use `status: needs info` when waiting for that answer, not merely because optional
+   fields are blank. Remove it when supplied. Do not automatically close old reports.
 3. Reproduce or validate the binary finding. Replace `status: needs triage` with
    `status: confirmed` only when verified. Record the tested commit and result.
 4. Add a type and affected area. Set priority by impact: `priority: high` for widespread
