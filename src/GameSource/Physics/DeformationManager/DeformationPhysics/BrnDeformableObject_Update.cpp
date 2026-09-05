@@ -1630,6 +1630,70 @@ namespace Deformation
     // i.e. a perfectly inelastic solve that removes the whole normal component, halved once, per
     // sensor, five sensors deep. 17 kN.s for one sensor is not a scale factor anybody can be wrong
     // about -- it is what "kill this contact's normal velocity on a 1400 kg car" costs.
+    //
+    // =============================================================================================
+    // ⭐⭐⭐ THE CONTACT-SET VERDICT (2026-09-05, crash-routing wave). The wave before this one
+    // ended by naming the contact set as "the only untested link left", and quoted the crash-entry
+    // frame as "FOUR contacts delivering 128,921 N.s to a car carrying ~110,000 N.s -- 117 % of the
+    // car's entire momentum in one frame". THAT COMPARISON IS BETWEEN TWO DIFFERENT QUANTITIES, and
+    // the ledger closes to 2 % once the right one is used. Measured on run mwK_h230_s60 (a 3.6-deg
+    // -off HEAD-ON wall hit at 67.73 m/s, absorption set 0 -- noDamageTimer already expired, i.e.
+    // the owner's situation), crash-entry frame, from the [kerb-imp] and [crash-response] arrive
+    // lines of a single boot:
+    //     4 contacts, sensors 9 / 8 / 6 / 7, closing 67.68 / 58.29 / 48.77 / 29.24 m/s
+    //     sum of SHAPED magnitudes handed to the four sensors            128,921 N.s   (the 117 %)
+    //     vector sum of those, along their four normals                  123,315 N.s
+    //     what actually ARRIVES at the rigid body, sum Jbody             ( -5,300, -797, -46,440 )
+    //                                                             |J|     46,752 N.s   ( 43 % )
+    //     the car's entry momentum        1589 kg * 67.73 m/s            107,623 N.s
+    //     the frame's OBSERVED dp          1589 * (67.73 - 38.94)         45,747 N.s
+    // -- i.e. the crumple chain absorbs 63 % of the shaped magnitude before it reaches the body
+    // (ApplySensorImpulse's per-direction absorption rows; the [crash-response] `passed`/`mag` pair
+    // prints the split per axis), and what is left agrees with the frame's real momentum change to
+    // within 2 %. ⇒ THE CONTACT SET IS NOT OVER-POPULATED AND NOTHING OVERSHOOTS. The four sensors
+    // ARE solved as if each alone had to kill its own contact's closing speed (e == 0, the
+    // console's rule) -- that is what makes the shaped total exceed the car's momentum -- and the
+    // absorption is precisely the mechanism that makes the sum come out right.
+    // ⛔ SO DO NOT RE-OPEN "TOO MANY CONTACTS" OR "TOO MUCH IMPULSE" WITHOUT A NEW KIND OF EVIDENCE:
+    // both were measured here against the frame's own momentum change and both close.
+    //
+    // ⭐⭐⭐ WHAT IS ACTUALLY WRONG-LOOKING, AND IT IS AN ENERGY-ROUTING RESULT, NOT A MAGNITUDE ONE.
+    // The owner's report is "the car flies way too much; a head-on wall hit should press the car
+    // INTO the wall until the wheels stop and then it should just sit there". Measured, and every
+    // step of the chain is arithmetic that closes on the same log:
+    //   (1) ALL FOUR WALL NORMALS ARE EXACTLY HORIZONTAL -- n.y == 0.000000 on every one. There is
+    //       no upward component in the wall impulse, so nothing launches the car directly.
+    //   (2) The crush arrives along BODY -Z at armBody.y == +0.198 .. +0.234, i.e. 20-23 cm ABOVE
+    //       the body origin -- and the origin IS the centre of mass (the deformation model is
+    //       rebased by StreamedDeformationSpec::TransformToNewCOMSpace at create time), while
+    //       ExternalPhysicsBody::GetImpulsesFromLocalImpulse @0x825A1A80 forms the arm as
+    //       `position - mTransform.Pos()` (`lvx128 v0, r3, 0x30 ; vsubfp v0, v2, v0` @0x825A1AC0/C4
+    //       on the WORLD-space-position arm). So the crush torques the car NOSE-UP about its own
+    //       CoM. Summed over the entry frame's twelve arrivals: pitch -8,273 N.m.s -> dW_pitch
+    //       -2.54 rad/s predicted, -2.51 observed; yaw +8,881 -> +2.42 vs +2.29; roll +859 ->
+    //       +1.13 vs +1.20. The angular ledger closes as tightly as the linear one.
+    //   (3) THAT PITCH THEN DRIVES THE REAR UNDERSIDE INTO THE ROAD. Four frames later the sensors
+    //       at armBody == (-0.612,-0.185,-1.939) and (-0.017,-0.180,-1.969) -- 1.94 m BEHIND and
+    //       18 cm BELOW the CoM -- report ground normals (n == (0,1,0) to five decimals) closing at
+    //       7.5 and 5.1 m/s, because the nose-up rate swings the tail down faster than the CoM is
+    //       rising. Their impulses come back as dir 2 (+Y body) at 1,063 and 924 N.s, which LIFTS
+    //       the car and deposits ANOTHER +2,061 / +1,819 of nose-up pitch.
+    //   (4) The loop runs away: over the ten frames after entry the deformation contacts deposit
+    //       +6,218 N.s of WORLD-Y (JworldY = Jbody.x*right.y + Jbody.y*up.y + Jbody.z*fwd.y, summed
+    //       per frame: 376/648/2004/701/649/1058/376/244/120/42), the car climbs 1.16 m, and then
+    //       flies with ZERO contacts of any kind for 33 consecutive frames.
+    //   (5) RESULT, ACROSS THE WHOLE BANKED CORPUS (26 crashes, mwA/mwB/mwK/cs_* one crash per
+    //       boot, entry 54-90 m/s): the car gains 0.66-3.12 m of HEIGHT in EVERY one, and travels
+    //       11-134 m (median ~48 m) past the impact point before the crash episode ends. It never
+    //       once presses into the wall and stops. On the filmed 89.5 m/s shot (cs6_film_h230_s70,
+    //       401 frames on disk) it pole-vaults nose-first up a tunnel wall, completes a single
+    //       180-degree roll and lands on its roof.
+    // ⚠️ SAID PLAINLY: every number above is THIS BUILD MEASURING ITSELF. The arithmetic is
+    // ARTIST's (formula, restitution, arm, shaping and absorption are all read out of the image);
+    // what no measurement here can settle is whether the console's SENSOR SPHERE GEOMETRY puts the
+    // front contacts 20 cm above the CoM, because that is streamed data, not code. That is the one
+    // input left in the chain m / I^-1 / r / n / v_rel that has never been checked against an
+    // external oracle.
     // =============================================================================================
     void DeformableObject::UpdateContacts(VecFloat lvfTimeStep, CgsNumeric::Random& lrRandom)
     {
@@ -1773,6 +1837,35 @@ namespace Deformation
         // ---- end [absorb] -----------------------------------------------------------------------
 
         // ---- (2) apply in sorted order ---------------------------------------------------------
+        // ⭐⭐⭐ THIS LOOP IS WHERE THE TUMBLE DIES, AND IT IS MEASURED TO 1.5 % (2026-09-05,
+        // crash-routing wave). The owner's third complaint is "it slides for A LOT of time on the
+        // roof where the real game keeps flipping into barrel rolls", and the standing suspect was
+        // VehiclePhysics::UpdateCrashing's per-body-axis +/-6.5 rad/s clamp bleeding rotation off on
+        // every bounce. ⛔ THE CLAMP IS REFUTED: over the whole roll collapse of the filmed crash
+        // (run cs6_film_h230_s70, frames 738-770, body roll rate falling 4.55 -> -0.66 rad/s) the
+        // [rollcatch] stage witness -- which samples omega.At at NINE boundaries inside
+        // UpdateCrashing -- reports the clamp's own contribution as -0.005 .. +0.009 rad/s per
+        // frame and the WHOLE in-function budget (0.995 damping + clamp + spin + steering +
+        // suspension + wheels + both integrates) as at most 0.023 rad/s. roll0 ~= roll8 on every
+        // single frame; the function the car spends its crash inside is not what stops it rolling.
+        // ⭐ WHAT DOES IS THIS LOOP. The roll rate falls in STEPS between UpdateCrashing calls, and
+        // the arriving contacts' own rollDeposit x mLocalInverseInertia.zz predicts each step:
+        //     frame  747   dWroll predicted -0.832   observed -0.843
+        //            749                    -0.693             -0.702
+        //            758                    -0.430             -0.439
+        //            762                    -0.682             -0.674
+        // i.e. essentially 100 % of the lost tumble is contact torque applied HERE, and it is
+        // negative (opposing) on every inverted frame. The mechanism is the one the ladder already
+        // proved: e == 0 out of showtime (GetVehicleWorldRestitution @0x825E0C78 returns
+        // `vspltisw v0, 0` on the whole non-showtime path -- re-read off the asm this wave, the
+        // showtime arm is a |n.y|-gated select and is not entered), so a roof contact removes the
+        // WHOLE normal closing velocity at its point, halved once. A car that puts its roof on the
+        // road therefore has its roll killed dead, with nothing anywhere on this path able to
+        // re-inject it. Contacts 2..N do not carry the tumble forward; they end it.
+        // ⚠️ NOT A DEFECT CLAIM. Every term above is the console's own arithmetic on the console's
+        // own restitution. What is NOT established is what the ORIGINAL does with the same contact,
+        // and no self-measurement of this build can establish it -- see the note in the
+        // UpdateContacts banner about the one input (sensor-sphere geometry) still unchecked.
         mVehicleBody.GetVehiclePhysics()->mi8NumWorldCollisions = 0;   // *(vp+4947) = 0
 
         const VecFloat lvfIterationZero = { 0.0f, 0.0f, 0.0f, 0.0f };  // vspltisw128 v126, 0

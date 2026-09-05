@@ -6075,10 +6075,17 @@ namespace Vehicle
     // deceleration as a defect without subtracting this first.
     // ⛔ NOT TUNABLE. It is a named vehicle attribute applied exactly as the asm applies it;
     // changing it to make a symptom go away is the tuning this project forbids.
-    // ⚠️ WHAT IS NOT CONFIRMED: 0.3 is INFERRED from the exact 1.3 ratio, not read out of the
-    // attribute record. BRN_CRASH_RESPONSE_DIAG=1 prints `crashExtra=(x,y,z,w)` at crash entry
-    // (BrnVehicleManager_UpdateVehiclePhysics.cpp:754) -- one run closes that, and nobody has
-    // spent it yet.
+    // ✅ CONFIRMED 2026-09-05 (crash-routing wave) -- and the run that closes it had ALREADY been
+    // flown; nobody had read the line. `crashExtra` on the entry banner reads, identically on every
+    // crash of every BRN_CRASH_RESPONSE_DIAG boot in the banked corpus (mwK_h230_s60,
+    // cs6_film_h230_s70, the whole mwA/mwB grid):
+    //     crashExtra=(0.000000,0.300000,0.300000,0.300000)  mass=1589  attrMass=1589
+    //     carAngScale=1.000000  crashSpeedMPS=37.998398
+    //     Iinv=(0.000307,0.000273,0.001315)  com=(0.000023,-0.403568,-0.081302)
+    // So CrashExtraLinearVelocityFactor IS 0.3 -- the 1.3x is now READ OUT OF THE RECORD rather
+    // than inferred from a ratio -- the pitch lane IS the zero VehicleAttribs.cpp writes, and the
+    // yaw/roll lanes are 0.3 multiplying an entry omega of ~(0.004,0.001,-0.018) rad/s, i.e. still
+    // ~0. "Crash extra roll" is confirmed NOT to be a barrel-roll seed on this data either.
     const Vector3Plus& lrCrashFactors = mpAttribs->mBaseAttribs.mCrashExtraVelocityFactors;
     mAngularVelocity.x += mAngularVelocity.x * lrCrashFactors.x;
     mAngularVelocity.y += mAngularVelocity.y * lrCrashFactors.y;
@@ -8329,6 +8336,19 @@ namespace Vehicle
         BRN_ROLLCATCH_SAMPLE();   // 1: after the 0.995/0.992 exponential angular damping
 
         // ----- clamp omega per BODY axis (asm 0x82638C60..0x82638CE8) -----
+        // ⛔⛔ THE +/-6.5 CLAMP IS **NOT** WHAT STOPS A CRASHING CAR TUMBLING -- REFUTED WITH ITS OWN
+        // WITNESS, 2026-09-05 (crash-routing wave). It was the standing suspect for the owner's
+        // "the car slides on its roof instead of barrel-rolling", on the reasoning that a limit the
+        // roll rate reaches 85 % of at entry must be shaving rotation off on every later bounce.
+        // The [rollcatch] samples below bracket exactly this block, and over the entire roll
+        // collapse of the filmed crash (cs6_film_h230_s70, frames 738-770, roll 4.55 -> -0.66 rad/s)
+        // the `clamp` column reads -0.005 .. +0.009 rad/s per frame -- three orders of magnitude too
+        // small -- while `roll0` and `roll8` (function entry and exit) agree to ~0.02 on every
+        // frame. The whole tumble is removed OUTSIDE this function, by the deformation contact
+        // torque in DeformableObject::UpdateContacts (see its apply-loop banner for the per-frame
+        // predicted-vs-observed table). Also note the damping pair above is faithful and image-read:
+        // `beq cr6, loc_826388C0` @0x826388A4 takes the NOT-crashing-normally arm, and x360rd reads
+        // 0x82F2A524..30 as 0.992 / 0.9999 / 0.995 / 0.995 exactly as seated here.
         {
             f32 lfLx = vpu::Dot(mTransform.xAxis, mAngularVelocity);   // R^T * omega, the
             f32 lfLy = vpu::Dot(mTransform.yAxis, mAngularVelocity);   // vmrghw/vmrglw transpose
