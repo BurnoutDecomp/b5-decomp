@@ -37,9 +37,15 @@ namespace CgsGraphics
     // one Im2d type), so the canonical header is included below instead. Surfaced when the
     // world-module mount first co-included this header after CgsImRenderBuffer.h in one TU.
     class Im3dRenderBuffer;
-    class Im3dRenderBufferUntex;
+    // Im3dRenderBufferUntex is NOT forward-declared here, for exactly the reason given
+    // above for Im2dRenderBuffer: on the PC target it is a TYPEDEF (CgsIm3d.h -- typedef
+    // Im3dUntex Im3dRenderBufferUntex), so declaring it as a class is a redefinition with
+    // a different basic type. The canonical header is included below instead. Surfaced
+    // when ParticleModule.h began including the Lion blend renderer, which reaches
+    // CgsIm3d.h through Im3dBlend's Im3dBase<V> base and put both in one TU.
 }
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // CgsGraphics::Im2dRenderBuffer (typedef of Im2d)
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"  // CgsGraphics::Im3dRenderBufferUntex (typedef of Im3dUntex)
 // ⭐ struct, not class, 2026-08-17 (found while landing BrnRendererModule::Update). Both are
 // declared `struct` at their homes; forward-declaring them as `class` here made this header's
 // setter signatures mangle with PEAV while any TU that included the real headers emitted PEAU,

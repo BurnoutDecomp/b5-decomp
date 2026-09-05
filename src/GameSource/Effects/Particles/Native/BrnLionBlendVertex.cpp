@@ -42,7 +42,11 @@ void LionBlendVertex::VertexIterator::Write(
     CGS_ASSERT( GetVerticesFree() != 0, "GetVerticesFree() != 0" );
 
     // Delegated element writes (renderengine::VertexIterator3::Write) -- MODELLED.
-    u8* lpCur = mpCurrentAddress;
+    // The canonical EffectsVertexBufferIterator (EffectsVertexBuffer.h) keeps its four
+    // fields private and hands out accessors; the cursor is stored as `const u8*` because
+    // every other reader of it only reads. This is the one writer, so it casts once here
+    // rather than widening the shared struct's interface for a single call site.
+    u8* lpCur = const_cast<u8*>(GetCurrentAddress());
 
     // position Vector4 @ cur+0
     reinterpret_cast<float*>(lpCur)[0] = lv4Position.x;
@@ -60,7 +64,7 @@ void LionBlendVertex::VertexIterator::Write(
     reinterpret_cast<float*>(lpCur + 20)[3] = lv4Uv.w;
 
     // Advance the write cursor by one stride (36 bytes).
-    mpCurrentAddress = lpCur + LionBlendVertex::GetStride();
+    SetCurrentAddress(lpCur + LionBlendVertex::GetStride());
 }
 
 } // namespace BrnGraphics

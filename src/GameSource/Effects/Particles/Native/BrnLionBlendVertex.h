@@ -48,21 +48,20 @@
 // renderengine::VertexDescriptor::Parameters is named (by reference) in the declaration
 // of FillVertexDescriptorParameters below, so the full descriptor type must be visible.
 #include "pc/gcm/renderengine/VertexDescriptor.h"
+#include "GameSource/Effects/Particles/EffectsVertexBuffer.h"  // EffectsVertexBufferIterator -- the ONE definition
 
 namespace renderengine { struct RGBA8; }
 
-// The shared effects vertex-buffer iterator (EffectsVertexBuffer.h:20/66; DWARF: derives
-// from VertexIteratorBaseClass). Only the surface that LionBlendVertex::VertexIterator::
-// Write touches (GetStride / GetVerticesFree, which the asm reads off the base fields) is
-// modelled. Additive stand-in until EffectsVertexBuffer.h is committed.
-struct EffectsVertexBufferIterator : public VertexIteratorBaseClass
-{
-    // EffectsVertexBuffer.h:80 -- vertex stride in bytes (reads muStride @ +0x0C).
-    u32 GetStride() const { return VertexIteratorBaseClass::GetStride(); }
-
-    // EffectsVertexBuffer.h:70 -- (top - current) / stride (inlined into Write).
-    u32 GetVerticesFree() const { return VertexIteratorBaseClass::GetVerticesFree(); }
-};
+// EffectsVertexBufferIterator comes from its committed home, NOT from a local stand-in.
+// This header used to define a second one (`: public VertexIteratorBaseClass`, no members)
+// labelled "additive stand-in until EffectsVertexBuffer.h is committed". That header is
+// committed, and its definition is deliberately a FLAT four-member struct -- it does not
+// inherit VertexIteratorBaseClass, because the committed stand-in for that base already
+// absorbs the same four members and inheriting would double them and break the attested
+// offsets (current @+0x00, start @+0x04, top @+0x08, stride @+0x0C). Two structurally
+// different types under one name is an ODR violation the linker resolves in silence; it
+// only surfaced when ParticleModule.h began including the Lion blend renderer and finally
+// put both definitions in one TU.
 
 namespace BrnGraphics {
 

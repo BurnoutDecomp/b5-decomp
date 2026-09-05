@@ -55,6 +55,20 @@ public:
     const u8* GetTopAddress() const     { return mpTopAddress; }
     const u8* GetCurrentAddress() const { return mpCurrentAddress; }
 
+    // Vertices still writable in this batch: (top - current) / stride. The X360 inlines
+    // this into LionBlendVertex::VertexIterator::Write, where it is one of the two values
+    // the asm asserts on before emitting a 36-byte vertex. Guarded against a zero stride
+    // (an unconstructed iterator reads 0 here) so the assert reports empty rather than
+    // dividing by zero.
+    u32 GetVerticesFree() const
+    {
+        if (muStride == 0u || mpTopAddress <= mpCurrentAddress)
+        {
+            return 0u;
+        }
+        return static_cast<u32>(mpTopAddress - mpCurrentAddress) / muStride;
+    }
+
     void SetBaseAddress(const u8* lpAddress)    { mpStartAddress = lpAddress; }
     void SetTopAddress(const u8* lpAddress)     { mpTopAddress = lpAddress; }
     void SetCurrentAddress(u8* lpAddress)       { mpCurrentAddress = lpAddress; }
