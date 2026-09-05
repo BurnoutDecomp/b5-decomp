@@ -36,7 +36,7 @@ namespace renderengine { extern u32 guPresentCount; }
 //                                            body transform, scaled by the supplied time-step lane.
 //   UpdateSkinningOffsets       @0x825DFA90  drive the IK driven points from the Verlet scratch
 //                                            (maVerletOffsets_Scratch) into each IK part's skin,
-//                                            box-clamping the bonnet/boot panel types.
+//                                            box-clamping the SILL panel types (24/25).
 //   UpdateLocators              @0x8260A018  refresh the generic / light / camera locator transforms
 //                                            from the graphics-vehicle transform via UpdateLocator.
 //   ClearStoredContacts         @0x825BA350  reset every sensor's post-physics scratch + contact count.
@@ -214,8 +214,19 @@ namespace Deformation
         const bool KB_ALLOW_DRIVE_TIME_DEFORMATION = true;
 
         // The two part-type ids whose driven points are skinned through the BOX-CLAMPED path
-        // (UpdateSkinningOffsetsWithinBox) -- the bonnet / boot panel types in the asm's
-        // `v23 == 24 || v23 == 25` GetPartType test. FLAG: the EBodyParts enum only homes
+        // (UpdateSkinningOffsetsWithinBox) -- the asm's `v23 == 24 || v23 == 25` GetPartType test.
+        // ⭐⭐ NAMED CORRECTLY 2026-09-05 (detach wave): 24/25 are the LEFT AND RIGHT SILLS (rocker
+        // panels), NOT the "bonnet / boot" every comment in this file used to call them. Read off
+        // PUSMC01's own shipped StreamedDeformationSpec (tools/re/deform_rowmap.py --parts): type 24
+        // spans x[+0.780,+0.802] y[-0.551] z[-0.916,+0.746] and type 25 the mirror at
+        // x[-0.840,-0.808] -- a narrow strip at the car's LOWEST y, at the extreme left/right edge,
+        // running fore-aft between the wheel arches. The bonnet and boot are types 3 and 4
+        // (x[-0.60,+0.60] y[+0.10,+0.21] z[+0.62,+2.19], and z[-2.29,-1.73]). The identity matters
+        // twice over: these two are also the ONLY detachable parts on the car with ZERO joints and a
+        // finite detach threshold, which makes them the only parts that can leave as a FREE BODY
+        // through DeformableObject::CheckForDetachment's arm A -- everything else the console hinges
+        // first (see BrnDeformableObject_Detach.cpp).
+        // FLAG: the EBodyParts enum only homes
         // E_BODY_PART_INVALID, so these are the raw part-type constants the asm compares against.
         const s32 KI_BODY_PART_BOX_CLAMPED_A = 24;
         const s32 KI_BODY_PART_BOX_CLAMPED_B = 25;
@@ -226,7 +237,7 @@ namespace Deformation
 
         // FLAGGED-0 PLACEHOLDER for the UpdateSkinningOffsets clamp-box inflation row (&unk_82FB9550 in
         // the asm: the per-lane margin subtracted from the body suspension-extent min and added to the
-        // max to build the bonnet/boot WithinBox clamp). No recoverable XEX symbol -- honest zeros
+        // max to build the SILL WithinBox clamp). No recoverable XEX symbol -- honest zeros
         // (NEVER fabricated); the box-construction SHAPE (min = ext - row, max = ext + row) is exact,
         // the inflation stays inert until the rodata lands.
         // ⭐ RECOVERED 2026-08-03. Note this one is NOT a splat: the initialiser @82C5D97C builds
@@ -353,14 +364,14 @@ namespace Deformation
     //      0x20); for each SKINNED one (`lbz 0x41(spec)`) gather (mPos - initial, w = scratch) into
     //      maVerletOffsets_Scratch (this+0x10E0); the running row (r29) advances per skinned tag.
     //  (3) Walk every IK part (miNumIKBodyParts): skip parts in state E_PART_STATE_DETATCHED (4);
-    //      bonnet/boot parts (GetPartType == 24/25) skin through UpdateSkinningOffsetsWithinBox with the
+    //      SILL parts (GetPartType == 24/25) skin through UpdateSkinningOffsetsWithinBox with the
     //      clamp box, all others through UpdateSkinningOffsets. r29 advances by each part's
     //      GetNumberOfDrivenPoints so the scratch slice handed to each part is its own window.
     //
     // ⭐⭐ 2026-09-02 (rest-rows wave) -- TWO TRANSCRIPTION DEFECTS RETIRED HERE, both measured:
     //   (a) The clamp box was built from FLAGGED-ZERO "suspension extents", so the box was
     //       [-0.1,+0.1] x [0,0] x [0,0] around the car origin and UpdateSkinningOffsetsWithinBox
-    //       clamped every bonnet/boot driven point INTO it: the player's rows 40/41 read
+    //       clamped every SILL driven point INTO it: the player's rows 40/41 read
     //       (-0.782, 0.148, 0.004) / (0.819, 0.148, 0.004) at rest == (0.1,0,0) - p0 exactly, the
     //       sedan's row 49 (-0.756, 0.326, 0) is the same arithmetic on its own spec. Those are the
     //       "phantom rest rows" that sailed the panel and tripped the fatal test at first sight.

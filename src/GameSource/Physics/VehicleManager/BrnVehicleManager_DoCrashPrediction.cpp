@@ -167,9 +167,48 @@ void VehicleManager::DoCrashPrediction(
     // GATE: the ~410-insn VMX128 block guarded by
     //   maRaceCarVehicles[mePlayerActiveRaceCarIndex].mbCrashedThisFrame (+0xE53) && mbForceNoSlowMo
     // -- it walks the player car's cached triangle list and CLEARS mbForceNoSlowMo when the
-    // nearest hit's normal-dot exceeds 0.7. Blocker: CgsCachedTriangleList (48-byte per-car cache
-    // records, mpaTriangleCache) is not read anywhere in this tree yet.
-    // DELETE-WHEN the triangle-cache reader lands. EFFECT OF THE GATE, bounded: mbForceNoSlowMo is
+    // nearest hit's normal-dot exceeds 0.7.
+    // ⛔ THE OLD BLOCKER ("CgsCachedTriangleList has no reader") IS RETIRED and must not be quoted
+    // again: TriangleCacheInterface::GetCache / GetNumCachedTriangleBatches are bodied and live, and
+    // this block's own prologue uses their exact idiom. So does everything else it needs.
+    //
+    // ⭐ RECONNAISSANCE, 2026-09-05 (detach wave). This wave read the block end to end and did NOT
+    // body it -- for a scheduling reason, not a decoding one, and the next wave should not have to
+    // re-derive any of the following. NOTHING IN IT IS UNREADABLE:
+    //   PROLOGUE (0x82646450..0x82646620), fully decoded:
+    //     r23 = this + 0x2A0AC  (mePlayerActiveRaceCarIndex)   r22 = this + 0x2A11D (mbForceNoSlowMo)
+    //     r31 = <arg> + 0x1F410 (the TriangleCacheInterface; asserts "mpTriangleCacheManager != NULL",
+    //           CgsSceneManagerModuleIO.h:0x506)
+    //     per-car slot record stride 48; `lwz +0x24` == miIndexIntoTriangleCache and `lwz +0x28` ==
+    //     miNumCachedTriangleBatches -- i.e. GetCache/GetNumCachedTriangleBatches INLINED, on the
+    //     player's own slot (mePlayerActiveRaceCarIndex, the same numbering
+    //     AddRaceCarTractionLineTests uses). Triangle4 stride 0xE0.
+    //     The ray is built from the player RaceCarPhysics at +0xDE0, +0x780 and +0x770.
+    //   LOOP (0x826466C0..0x82646AF8), one Triangle4 batch per iteration, 4 triangles wide:
+    //     nine `lvx128` at batch+0x00..+0x80 then vmrghw/vmrglw transposes to SoA x/y/z of the three
+    //     verts; two `vpermwi128 0x63` cross products, each normalised by vrsqrtefp + TWO Newton
+    //     refinements; an edge/barycentric sign test folded with vand into a 4-lane mask; four
+    //     `vspltw` + `vcmpeqfp.` lane peels deciding "any hit"; then vrefp + two Newton steps for
+    //     1/denominator, and a four-stage `vsel` running MINIMUM that carries the nearest t in v59
+    //     with its companions in v57/v58 (all three read back through the IDA vA-swap: `vor128 v5,
+    //     v91, v59` is v5 = v59, and `vxor128 v0, v90, v0` is -v58).
+    //   EPILOGUE (0x82646AFC..0x82646B88): if any lane hit, dot3(-v58, playerCar+0x770) > 0.7 clears
+    //     mbForceNoSlowMo (`stb r30, 0(r22)`, r30 == 0).
+    //   ⭐ EVERY CONSTANT IS RECOVERED -- none of them is a flagged zero any more:
+    //     unk_82FB9F10 <- flt_8200D5F0 == 1e-8    (splat; the degeneracy epsilon)
+    //     unk_82FB9EF0 <- flt_82004884 == 1e-5    (splat)
+    //     unk_82FBA360 <- flt_82004018 == 0.75    (lazily built, bit 0 of dword_82FBA370)
+    //     unk_82FBA350 <- flt_82004C68 == 0.7     (lazily built, bit 1 -- the normal-dot threshold)
+    //     the running-min seed is flt_8208F5EC == FLT_MAX (3.4028235e38)
+    //     unk_82CDA3C0 / unk_82CDA400 are ordinary rodata vperm CONTROL vectors, readable with
+    //       x360rd: {00 01 02 03, 00 01 02 03, 00 01 02 03, 14 15 16 17} and
+    //               {08 09 0A 0B, 1C 1D 1E 1F, 00 01 02 03, 00 01 02 03}
+    //   ⚠️ WHY IT WAS STILL LEFT: a 4-wide SoA intersection is the one shape where a half-right body
+    //   is worse than none (it would silently answer "no hit" and look exactly like the gate), and
+    //   this wave was already landing two crash-path corrections in the same subsystem -- one of
+    //   which access-violated the game the first time it ran. Landing an unverified 460-instruction
+    //   SIMD body beside an unverified crash fix would make the next failure unattributable.
+    // EFFECT OF THE GATE, bounded: mbForceNoSlowMo is
     // set only by HandleRaceCarTrafficCarPotentialContact and is read + reset unconditionally one
     // statement later (BrnPhysicsModuleUpdateFunctions.cpp:438/447), so the gate can only inhibit
     // slow-mo for the single frame of a traffic hit that the console would have un-inhibited.

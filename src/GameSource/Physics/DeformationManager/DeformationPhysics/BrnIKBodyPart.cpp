@@ -2,6 +2,10 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint ([detach-band] probe)
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformationSensor.h"  // SensorSpec / the .w latch the band reads
+#include <cstdlib>  // getenv ([detach-band] latch)
+
 // BrnPhysics::Deformation::IKBodyPart -- the SKINNING + DETACHMENT side of one deformable
 // vehicle panel. Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX (offset authority).
 // This TU bodies the declare-only methods of the frozen layout header:
@@ -529,6 +533,59 @@ namespace Deformation
                                                 : KVF_MAX_IMPULSE_FOR_DETACHMENT.x;
 
         const s32 liPartType = static_cast<s32>(GetPartType());   // spec +476
+
+        // ---- [detach-band] READ-ONLY WITNESS. NOT IN THE X360 BINARY. Opt-in via BRN_DEFORM_TRACE.
+        //      DELETE-WHEN the shedding question is banked.
+        // ⭐ WHY IT EXISTS: [detach-gate] counts arm-A hits and [detach-make] names the part that
+        // left, but NEITHER carries the two numbers the decision is actually made on -- the
+        // deformation excess and the impulse the sensors latched. "The impulse fed to the band is
+        // not verified" stayed open for exactly as long as nothing printed it. This sits AFTER the
+        // `largestExcess > 0` early-out and BEFORE the band, so it fires once per part that is
+        // genuinely in play, prints the predicted verdict, and lists every tag's two sensor indices
+        // with the .w latch ApplySensorImpulse wrote on each -- which is the only quantity the band
+        // ever compares. `banded 0` means the band was SKIPPED (the candidate/type guard), i.e. the
+        // part detaches on deformation alone.
+        {
+            static s32 siBandProbe = -1;
+            if ( siBandProbe < 0 )
+            {
+                const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
+                siBandProbe = ( lpcEnv != 0 && atoi(lpcEnv) > 0 ) ? 1 : 0;
+            }
+            static u32 suBandLines = 0u;
+            if ( siBandProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && suBandLines < 4000u )
+            {
+                ++suBandLines;
+                const bool lbBanded =
+                    ( liCandidate == -1 || liPartType == 1 || liPartType == 2 || liPartType == 3 );
+                const bool lbVerdict = !lbBanded
+                    || ( KVF_MIN_IMPULSE_FOR_DETACHMENT.x <= lfMaxImpulse && lfMaxImpulse <= lfMaxBand );
+                *CgsDev::Log::gpDebugPrint
+                    << "[detach-band] type " << liPartType
+                    << " tough " << (IsToughenedPart() ? 1 : 0)
+                    << " nTag " << liNumTagPoints
+                    << " cand " << liCandidate
+                    << " excess " << lfLargestExcess
+                    << " maxImp " << lfMaxImpulse
+                    << " band [" << KVF_MIN_IMPULSE_FOR_DETACHMENT.x << "," << lfMaxBand << "]"
+                    << " banded " << (lbBanded ? 1 : 0)
+                    << " hinge " << ((liCandidate != -1) ? 1 : 0)
+                    << " -> " << (lbVerdict ? "DETACH" : "keep");
+                for ( s32 lj = 0; lj < liNumTagPoints; ++lj )
+                {
+                    const TagPoint* lpT = GetTagPoint(lj);
+                    const TagPointSpec* lpS = const_cast<TagPoint*>(lpT)->GetSpec();
+                    *CgsDev::Log::gpDebugPrint
+                        << " s" << static_cast<s32>(lpS->GetDeformationSensorA())
+                        << ":" << lpT->GetDeformationSensorA()->mPointDisplacement_BiggestImpulseThisFrame.w
+                        << " s" << static_cast<s32>(lpS->GetDeformationSensorB())
+                        << ":" << lpT->GetDeformationSensorB()->mPointDisplacement_BiggestImpulseThisFrame.w;
+                }
+                *CgsDev::Log::gpDebugPrint << "\n";
+            }
+        }
+        // ---- end [detach-band] -----------------------------------------------------------------
+
         if ( liCandidate == -1 || liPartType == 1 || liPartType == 2 || liPartType == 3 )
         {
             if ( KVF_MIN_IMPULSE_FOR_DETACHMENT.x > lfMaxImpulse )

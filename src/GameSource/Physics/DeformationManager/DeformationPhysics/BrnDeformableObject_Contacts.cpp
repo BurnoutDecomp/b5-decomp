@@ -19,7 +19,10 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPart.h"     // PhysicalBodyPart accessors
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalWheel.h"        // PhysicalWheel accessors + GetCylinder
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([hinge-cache] witness)
+
 #include <cmath>                                            // std::fabs
+#include <cstdlib>                                          // getenv ([hinge-cache] latch)
 
 // =====================================================================================================
 // BrnPhysics::Deformation::DeformableObject -- CONTACT-GENERATION group.
@@ -361,16 +364,45 @@ namespace Deformation
         CgsSceneManager::VolumeInstanceId lWorldVolumeInstanceId;
         lWorldVolumeInstanceId.muId = static_cast<u64>(static_cast<u32>(lWorldEntityId)) << 32;
 
-        const CgsSceneManager::EntityId lGlobalEntityId(
-            const_cast<DeformableObject*>(this)->GetGlobalEntityId().muValue);
+        // ⭐⭐⭐ SOURCE CORRECTED 2026-09-05 (detach wave) -- THIS IS mHandlingBodyID, NOT
+        // mGlobalEntityId, AND THE DIFFERENCE CRASHES THE GAME.
+        // Every entity word this function derives comes from console +0x6710 == 26384 ==
+        // mHandlingBodyID, read as an 8-byte `ld` whose HIGH dword is the entity word:
+        //     0x82609314  ld     r11, 0x6710(r20)    ; the 8-byte handling-body id
+        //     0x82609320  srdi   r11, r11, 32        ; -> the entity word
+        //     0x82609334  srwi   r10, r11, 24        ; -> GetOwner()          (the 1 -> 6 / else 7 map)
+        //     0x82609338  extrwi r5,  r11, 14,8      ; -> GetEntityIndex()
+        //   ...and again, verbatim, for the hinged block's TRIANGLE-CACHE SLOT:
+        //     0x8260977C  ld     r11, 0x6710(r20)
+        //     0x82609784  srdi   r11, r11, 32
+        //     0x82609788  extrwi r31, r11, 14,8      ; -> the slot handed to GetNumCachedTriangleBatches
+        // +26392 (mGlobalEntityId) is never loaded anywhere in this function's 384 instructions.
+        // ⛔ WHY IT MATTERS, MEASURED: the two ids are NOT interchangeable. mHandlingBodyID's entity
+        // index is the PHYSICS-BODY index -- race cars 0..7, traffic 8.., which is exactly the
+        // triangle-cache slot numbering VehicleManager::AddRaceCarTractionLineTests (slot == liCar)
+        // and PhysicalTrafficManager::AddTrafficTractionLineTests (slot == i + 8) already use.
+        // mGlobalEntityId's index is the WORLD entity index: the traffic cars in run hinge_A1
+        // carried global ids 0x02064000 / 0x02070000 / 0x02090000, whose (>>10)&0x3FFF indices are
+        // 400 / 448 / 576 -- and TriangleCacheManager::Prepare allocates exactly
+        // KU_MAX_CACHED_OBJECTS == 298 CacheSlots. So those three reads land 102, 150 and 278 slots
+        // PAST the end of mpaCachedObjectSlots; miIndexIntoTriangleCache came back as heap garbage and
+        // TriangleList::ValidateTriangles walked a wild Triangle4* -- measured, a hard
+        // EXCEPTION_ACCESS_VIOLATION reading (Triangle4*)0x2CC6F8BF50 + 0x90 (&mValidMasks) in
+        // CgsGeometric::Triangle4::AssertIsValid, from exactly this call site.
+        // ⚠️ IT WAS LATENT, NOT NEW: the hinged block is gated on the builder having primitives, and
+        // until DeformableObject::CheckForDetachment started passing the console's own lbHinge
+        // (same wave, BrnDeformableObject_Detach.cpp) NO PART HAD EVER BEEN HINGED in this build,
+        // so this code had never run. The two ContactGenList keys above it were wrong all along --
+        // silently, because a mis-keyed entry only loses a harvest.
+        const CgsSceneManager::EntityId lHandlingEntityId = mHandlingBodyID.GetEntityId();
         // asm: `srwi r10, r11, 24` then `cmplwi 1` -- owner 1 (RACECAR) maps to the RACECAR
         // deformable-part owner 6, anything else (traffic) to 7.
         const u32 luDeformablePartOwner =
-            (lGlobalEntityId.GetOwner() == KU_ENTITY_OWNER_RACECAR)
+            (lHandlingEntityId.GetOwner() == KU_ENTITY_OWNER_RACECAR)
                 ? KU_ENTITY_OWNER_RACECAR_DEFORMABLE_PART
                 : KU_ENTITY_OWNER_TRAFFIC_DEFORMABLE_PART;
         CgsSceneManager::EntityId lDeformablePartEntityId;
-        lDeformablePartEntityId.Set(luDeformablePartOwner, lGlobalEntityId.GetEntityIndex(), 0u);
+        lDeformablePartEntityId.Set(luDeformablePartOwner, lHandlingEntityId.GetEntityIndex(), 0u);
         CgsSceneManager::VolumeInstanceId lDeformablePartVolumeInstanceId;
         lDeformablePartVolumeInstanceId.muId = static_cast<u64>(static_cast<u32>(lDeformablePartEntityId)) << 32;
 
@@ -508,9 +540,42 @@ namespace Deformation
         // "lpPrimitiveList->GetNumTests() > 0" assert (CgsCollisionGenerator.cpp:1942) refuses.
         if (lHingedPartBuilder.GetNumTests() != 0)
         {
-            // The car's own triangle-cache slot is its plain entity index (no +73 base).
-            const s32 liCacheSlot = static_cast<s32>(lGlobalEntityId.GetEntityIndex());
+            // The car's own triangle-cache slot is the HANDLING BODY's entity index (no +73 base) --
+            // 0x8260977C..0x82609788, the same `ld 0x6710 / srdi 32 / extrwi 14,8` triple as the ids
+            // above. See the correction banner there for why it is not mGlobalEntityId.
+            const s32 liCacheSlot = static_cast<s32>(lHandlingEntityId.GetEntityIndex());
             const s32 liNumCachedBatches = lpTriCache->GetNumCachedTriangleBatches(liCacheSlot);
+
+            // ---- [hinge-cache] READ-ONLY WITNESS. NOT IN THE X360 BINARY. Opt-in via
+            //      BRN_DEFORM_TRACE. DELETE-WHEN the hinged block is banked.
+            // It prints BOTH candidate slot sources side by side so the correction above is a
+            // measurement rather than a claim: `slot` is the console's (handling body) and
+            // `globalSlot` is the one this file used to use. On the player they can agree; on
+            // traffic they must not.
+            {
+                static s32 siHingeProbe = -1;
+                if ( siHingeProbe < 0 )
+                {
+                    const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
+                    siHingeProbe = ( lpcEnv != 0 && atoi(lpcEnv) > 0 ) ? 1 : 0;
+                }
+                static u32 suHingeLines = 0u;
+                if ( siHingeProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && suHingeLines < 400u )
+                {
+                    ++suHingeLines;
+                    const CgsSceneManager::EntityId lGlobal(
+                        const_cast<DeformableObject*>(this)->GetGlobalEntityId().muValue);
+                    *CgsDev::Log::gpDebugPrint
+                        << "[hinge-cache] ent " << static_cast<s32>(lGlobal.GetEntityIndex() & 0xFFFFu)
+                        << " owner " << static_cast<s32>(lHandlingEntityId.GetOwner())
+                        << " slot " << liCacheSlot
+                        << " globalSlot " << static_cast<s32>(lGlobal.GetEntityIndex())
+                        << " batches " << liNumCachedBatches
+                        << " tests " << static_cast<s32>(lHingedPartBuilder.GetNumTests())
+                        << "\n";
+                }
+            }
+            // ---- end [hinge-cache] ---------------------------------------------------------
             if (liNumCachedBatches > 0)
             {
                 TriangleList lTriangleList;

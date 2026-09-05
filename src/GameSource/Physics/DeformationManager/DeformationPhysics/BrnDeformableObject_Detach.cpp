@@ -347,8 +347,38 @@ namespace Deformation
                     if ( maIKParts[li].CheckForDetachment(lfImpulse, liDetachJointOut) )
                     {
                         if ( lbProbe ) { ++liProbeArmAHits; }
-                        // Promote the panel to a free PhysicalBodyPart (no hinge -> lbHinge == false).
-                        DetachPart(lpInput, lpOutput, lpPartMgr, li, /*liJointIndex*/ 0, /*lbHinge*/ false);
+                        // ⭐⭐⭐ CORRECTED 2026-09-05 (detach wave) -- THE HINGE ARGUMENT WAS DROPPED, AND
+                        // WITH IT THE CONSOLE'S ENTIRE FIRST STAGE OF SHEDDING A PANEL.
+                        // This site used to pass `(/*liJointIndex*/ 0, /*lbHinge*/ false)`, i.e. EVERY
+                        // panel that passed the test was blown off as a free rigid body. ARTIST derives
+                        // both arguments from the out-param CheckForDetachment just wrote --
+                        // 0x8263AC64..0x8263AC8C, register for register:
+                        //     0x8263AC64  lwz    r8, var_80(r1)      ; r8  = liDetachJointOut  (arg 6)
+                        //     0x8263AC68  add    r7, r27, r29        ; r7  = li, the part index (arg 5)
+                        //     0x8263AC70  addi   r11, r8, 1
+                        //     0x8263AC78  cntlzw r11, r11            ; 32 iff (out + 1) == 0
+                        //     0x8263AC80  extrwi r11, r11, 1,26      ; bit 26 == the 32 bit -> (out == -1)
+                        //     0x8263AC88  xori   r9, r11, 1          ; r9  = (out != -1)      (arg 7)
+                        //     0x8263AC8C  bl     DetachPart
+                        // so  lbHinge == (liDetachJointOut != -1), and liJointIndex is the tag point the
+                        // test picked -- the LEAST-deformed tag on the part that actually HAS a joint.
+                        // ⛔ WHAT THE DROP COST, and it is the owner's own complaint. A part reaches
+                        // liCandidate != -1 exactly when one of its tag points carries a joint index
+                        // (TagPointSpec +64 != 255). On PUSMC01's shipped spec that is the front and rear
+                        // bumpers, the bonnet, the boot, both grilles, both doors, both front wings, both
+                        // exhausts and the underbody trim -- thirteen of the twenty-five IK parts. The
+                        // console HINGES every one of them (state 3, ++mi16NumHingedParts) and only lets
+                        // them leave later, and separately, when DetachedPartManager::TestJointForBreaking
+                        // says the joint broke. The ONLY parts on this car that can reach a free-body
+                        // detach through this arm are the two SILLS (part types 24/25, zero joints, the
+                        // finite 0.00050625 detach threshold) -- everything else is a hinge first.
+                        // With lbHinge hard-false, that whole stage did not exist: measured across the
+                        // 750 [detach-gate] lines of run shape_B1, `nHinged` is 0 on EVERY line of EVERY
+                        // car, so no part had ever hinged in this build. A wreck therefore threw off the
+                        // bumper, grille, bonnet, door and wing that retail leaves swinging on the car.
+                        DetachPart(lpInput, lpOutput, lpPartMgr, li,
+                                   /*liJointIndex*/ liDetachJointOut,             // 0x8263AC64 (r8)
+                                   /*lbHinge*/ (liDetachJointOut != -1));         // 0x8263AC88 (r9)
                     }
                 }
                 else if ( lu8State == KU_PART_STATE_HINGED )
