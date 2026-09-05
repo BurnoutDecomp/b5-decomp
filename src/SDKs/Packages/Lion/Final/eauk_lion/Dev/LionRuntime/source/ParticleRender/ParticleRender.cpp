@@ -599,8 +599,18 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
         // bar pinned to the CAR at an offset nothing authored". THE THIRD OBJECT IS NOT A PLUME
         // AND NOT A LION DRAW. It is the HUD BOOST BAR -- BrnGui::BoostBarRenderer's fire body,
         // green because this car's EBoostType is E_BOOST_TYPE_STUNT, whose authored inner colour
-        // KV3_BOOSTTYPE_STUNT_INNER_COLOUR is {0.375, 0.95, 0.30} (BrnBoostBarRenderer.cpp:68;
-        // the bar's own pixels measure 78/189/61, i.e. 0.41/1.00/0.32 normalised).
+        // KV3_BOOSTTYPE_STUNT_INNER_COLOUR is {0.375, 0.95, 0.30} (BrnBoostBarRenderer.cpp:68).
+        // ⚠ AND THE COLOUR CLAIM IS THE HUE, NOT A RATIO -- the first cut of this banner quoted
+        // "78/189/61 == 0.41/1.00/0.32 normalised, a match", and that mean was taken over a window
+        // that swept in the debug strip's PURE-GREEN squares and fps text, which pulled it toward
+        // the authored figure. Bar-only (x[80..640], 7,839 px) it is 91/178/71 == 0.51/1.00/0.40,
+        // and it CANNOT equal the inner colour: RenderFire composes the inner colour through the
+        // fire-body texture and mixes the OUTER colour {0.925, 0.575, 0.575} into the core, so the
+        // bar desaturates with brightness (measured 0.55 r/g in the luma 30-70 band rising to 0.76
+        // above 200, the mid-tones bracketing 0.395). What identifies the type is the HUE, and it
+        // is not close: the other two authored inner colours are RED-dominant by 4.5x (DANGER
+        // {1.125,0.25,0.0}) and 16x (AGGRESSION {2.0,0.125,0.15}). Only STUNT is green -- and STUNT
+        // is enum 2, the same value that selects KAC_BOOST_EFFECTS[2] == BoostGreen.lef.
         // A SHOW frame is NOT the particle buffer alone: the GUI draws AFTER the composite, so
         // the map panel, the fps text and the boost bar are all still in it. THE PROOF is
         // scratch/FLAME/BOOST1/evidence/SHOW_bb_002760.bmp, a SHOW frame at EffectsState 2 (no
