@@ -374,7 +374,7 @@ namespace
         // BEFORE the test, so a material without the multi-frame bit contributes a hard zero.
         f32 lfWeight = 0.0f;
         if ((arUVData.muMaterialFlags
-                & BrnEffects::Utils::BuildUVData::KU_MATERIAL_FLAG_MULTI_FRAME) != 0u)
+                & BrnEffects::Utils::BuildUVData::KU_MATERIAL_FLAG_INTERFRAMEBLEND) != 0u)
         {
             const f32 lfFrame = arPart.Frame();
             lfWeight = lfFrame - floorf(lfFrame);   // vrfim + vsubfp

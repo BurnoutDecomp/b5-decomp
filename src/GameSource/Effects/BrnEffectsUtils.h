@@ -120,10 +120,16 @@ struct BuildUVData
     u8       muMaterialUCoordOption;        // +0x44  material.mUCoordOption
     u8       muMaterialVCoordOption;        // +0x45  material.mVCoordOption
 
-    // material.mFlags bit 1 -- the multi-frame (animated atlas) flag. QuadDraw tests it with
-    // `rlwinm r11, r11, 0, 30, 30` (mask 0x2) @0x822823F0 to decide whether the vertex w lane
-    // carries the fractional frame blend weight or a hard zero.
-    static const u32 KU_MATERIAL_FLAG_MULTI_FRAME = 0x2u;
+    // The two material.mFlags bits this block's consumers test. ⭐ BOTH NAMES ARE THE GAME'S
+    // OWN, read out of the X360 Lion authoring token table (LionParticleParser.cpp:190/:191,
+    // offset 36 == cParticleMaterial::mFlags) -- not inferred, and not the same bit:
+    //   BuildUVs @0x822781E0 tests FLAG_MULTIFRAME       with `clrlwi r11, r11, 31` (0x1)
+    //            to choose the frame-atlas cell over the whole texture;
+    //   QuadDraw @0x82282330 tests FLAG_INTERFRAMEBLEND  with `rlwinm r11,r11,0,30,30` (0x2)
+    //            to decide whether the vertex w lane carries the fractional blend weight
+    //            between the current and next frame, or a hard zero.
+    static const u32 KU_MATERIAL_FLAG_MULTIFRAME       = 0x1u;
+    static const u32 KU_MATERIAL_FLAG_INTERFRAMEBLEND  = 0x2u;
 
     // DWARF BrnEffectsUtils.h:398 / X360 @0x822780C8. Defined in BrnEffectsBuildUVData.cpp.
     void SetupFromMaterial(const cParticleMaterial& arMaterial);
@@ -135,7 +141,12 @@ struct BuildUVData
 
 // 0x822781E0 (DWARF BrnEffectsUtils.h:453) -- build the four UV-corner vectors for one
 // particle's quad from the material's frame-atlas data and the particle's current/next frame.
-// STILL A KEYSTONE STUB (see BrnEffectsUtils.cpp).
+// RECONSTRUCTED (BrnEffectsUtils.cpp).
+//
+// ⚠ EACH OUTPUT IS TWO UV PAIRS, NOT ONE. The DWARF calls QuadDraw's local `laUvUv`, and the
+// asm says why: every `vsldoi ..., 8` at the tail welds the CURRENT frame's (u,v) into lanes
+// x/y and the NEXT frame's into lanes z/w. The vertex shader blends between them using the
+// weight QuadDraw puts in the position's w lane.
 //
 // ⚠ THE SIGNATURE WAS WRONG until 2026-09-05: this was declared
 // `BuildUVs(const Vector4* lpQuad, Vector4* lpaUVsOut)`, which loses the two VecFloat frame
