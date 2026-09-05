@@ -66,6 +66,9 @@
 class  cParticleDescriptor;
 struct cParticleBehaviour;
 struct cLionBindings;   // LionBindings.h (sibling home) -- Bind() attaches one to this emitter
+// RenderedParticle.h (sibling home). Reference-only here -- ParticleBuild's output record --
+// so a forward declaration is enough and the full layout is not dragged into every includer.
+struct RenderedParticle;
 
 class cParticleEmitter
 {
@@ -151,6 +154,26 @@ public:
     // LionRuntimeLinkStubs.cpp.
     u32 Update(const cTime& arTime);
 
+    // ParticleEmitter.h:284 / ParticleEmitter.cpp:1414 (DWARF) -- ADVANCE ONE PARTICLE ONE
+    // FRAME and fill its render record. X360 @0x82910118, 1,142 instructions: the largest body
+    // in the Lion runtime and the whole of its per-particle simulation.
+    // RECONSTRUCTED (ParticleEmitter.cpp).
+    //
+    // Its four callers are cParticleEmitter::Update @0x829153D8 (the sub-emitter arm, which
+    // re-derives the PARENT particle so a child can follow it), ParentMatrixCurrentBuild
+    // @0x829113E8, and the three SimulateParticlesInBucketGeneral<> kernels -- i.e. this is
+    // what every live particle in the game goes through once per frame.
+    //
+    // The parameter NAMES are the DWARF's own; the DWARF's .cpp dump prints an extra `const` on
+    // every reference including the four this function writes through, so the const-ness here
+    // is the asm's (arRenderedParticle, arSeed and arSimulatedParticle are all written).
+    EParticleBuildResult ParticleBuild(RenderedParticle& arRenderedParticle,
+                                       cParticleRandomSeed& arSeed,
+                                       sParticleNucleus& arSimulatedParticle,
+                                       const cParticleDescriptor& arDes,
+                                       const cParticleBehaviour& arBhv,
+                                       const ParticleBuildData& arParticleBuildData);
+
     // mFlags bit 0 -- "this emitter is active". cParticleEmitter::IsGenerating @0x8290D564
     // masks it with `clrlwi r10, r10, 31`, and SetActiveFlag(1) is its writer.
     static const u32 KU_FLAG_ACTIVE = 0x1;
@@ -161,6 +184,21 @@ public:
     // selects the branch that builds the spawn transform out of mParentEmitterNucleus /
     // mParentBaseMatrix instead of calling cParticleLocator::GetMat.
     static const u32 KU_FLAG_SUB_EMITTER = 0x8;
+
+    // mFlags bit 1 -- "do not step this emitter". cParticleEmitter::Update @0x829153D8 tests it
+    // FIRST (`rlwinm r9, r9, 0,30,30` @0x82915414) and, when it is set, stamps mUpdateLastTime
+    // and returns 1 without touching the locator, the sub-emitter arm or Generate. DERIVED
+    // NAME: neither the DWARF nor the Lion token table names an emitter flag word, so this is
+    // this project's name for what the guarded branch does -- same convention as
+    // cParticleLocator::Flags.
+    static const u32 KU_FLAG_FROZEN = 0x2;
+
+    // mFlags bit 2 -- "this emitter has already emitted its burst / is mid-emission".
+    // cParticleEmitter::Generate @0x82915158 sets it after a DO_BURST emission and after it
+    // runs out of emission budget, and tests it to avoid re-bursting; cParticleEmitter::Update
+    // CLEARS it (`rlwinm r11, r11, 0,30,28` @0x829156D0 -- a wrapped mask that keeps every bit
+    // but this one) on the frame the emitter goes inactive. DERIVED NAME, as above.
+    static const u32 KU_FLAG_EMITTING = 0x4;
 
     // ParticleEmitter.h:230 -- register one sub-emitter per CHILD descriptor of this emitter's
     // descriptor, each following the particle in apBucket's slot auSlot, and bind every one of
@@ -177,6 +215,12 @@ public:
     // Set the "active" flag word (bit 0 == active). The X360 folds SetActiveFlag(1) into
     // `mFlags |= 1` at its call sites; re-outlined here.
     void SetActiveFlag(u32 auFlag)                { mFlags |= auFlag; }
+
+    // Decide whether this frame emits and how many particles, then call Emit for each. X360
+    // @0x82915158 (159 instructions). cParticleEmitter::Update is its only caller.
+    // NOT RECONSTRUCTED -- see LionRuntimeLinkStubs.cpp, which now carries the trap that used
+    // to stand in for Update itself.
+    void Generate(const cTime& arTime);
 
     // ParticleEmitter.h:186 -- should this emitter emit anything in the window
     // [arStartTime, arEndTime]? X360 @0x8290D538. RECONSTRUCTED (ParticleEmitter.cpp).

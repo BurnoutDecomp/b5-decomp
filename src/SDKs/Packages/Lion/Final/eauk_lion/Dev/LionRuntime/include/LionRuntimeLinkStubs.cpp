@@ -88,22 +88,29 @@ void cParticleBehaviour::Lerp(const cParticleBehaviour* /*apLo*/,
 
 // ---- cParticleEmitter (home: ParticleEmitter.cpp) --------------------------------------------
 
-// cParticleEmitter::Update @0x829153D8 -- 201 instructions, and the head of the whole Lion
-// SIMULATION core: IsGenerating -> Generate -> Emit -> ParticleBuild (1,142) ->
-// InitialiseParticle -> Blend -> cParticleBehaviour::Lerp (1,530), plus the three
-// SimulateParticlesInBucketGeneral<> kernels (549). That closure is what stands between this
-// build and a boost particle on screen.
+// ⭐⭐ cParticleEmitter::Update @0x829153D8 IS BODIED (2026-09-05, ParticleEmitter.cpp) and so
+// is cParticleEmitter::ParticleBuild @0x82910118, the 1,142-instruction kernel underneath it.
+// The trap that used to stand here has moved DOWN one level, to the one callee of Update that
+// is still open.
 //
-// ⛔ IT IS STILL AN ASSERT AND IT IS STILL UNREACHABLE, for one reason only: nothing calls
+// cParticleEmitter::Generate @0x82915158 -- 159 instructions: it asks IsGenerating whether this
+// frame emits at all, calls Blend to pick the behaviour layer, works out the emission budget
+// from the behaviour's mEmissionRateBase / mEmissionRateVariance and mEmissionCountClamp, and
+// then calls cParticleEmitter::Emit @0x82914D38 (173) once per particle -- which in turn needs
+// cParticleEmitter::ParentMatrixCurrentBuild @0x829113E8 (175). Those three, 507 instructions,
+// are the whole of what is left on the EMISSION half.
+//
+// ⛔ STILL AN ASSERT AND STILL UNREACHABLE, for the same single reason as before: nothing calls
 // cLionFX::Update. cParticleEmitterManager::Update is its only caller and cLionFX::Update is
 // that function's only caller, and the arm that would call THAT
-// (ParticleModule::BuildLionVertexBuffers' Lion half) is parked and announces itself. If this
-// trap ever fires, an arm was unparked without its callee -- which is real news, and is why
-// this one is not softened to a log line.
-u32 cParticleEmitter::Update(const cTime& /*arTime*/)
+// (ParticleModule::BuildLionVertexBuffers' Lion half) is parked and announces itself every run.
+// If this trap ever fires, an arm was unparked without its callee -- which is real news, and is
+// why it is not softened to a log line.
+void cParticleEmitter::Generate(const cTime& /*arTime*/)
 {
-    CGS_ASSERT(false, "cParticleEmitter::Update @0x829153D8 -- NOT RECONSTRUCTED (the Lion simulation core)");
-    return 0;
+    CGS_ASSERT(false, "cParticleEmitter::Generate @0x82915158 -- NOT RECONSTRUCTED (the Lion "
+                      "emission budget; Emit @0x82914D38 and ParentMatrixCurrentBuild "
+                      "@0x829113E8 are behind it)");
 }
 
 // ---- cParticleRender::Dispatch's platform surface (home: a renderengine PC leaf) --------------

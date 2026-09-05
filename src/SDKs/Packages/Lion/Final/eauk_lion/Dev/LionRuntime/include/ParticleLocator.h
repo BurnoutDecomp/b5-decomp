@@ -55,8 +55,28 @@
 // ToMatrix a Matrix44 and blends into mMat lane by lane, with no cast between the two.
 
 // DWARF ParticleLocator.h:77 -- the pluggable position source a locator can be given.
-// Pointer-only here; nothing in the reconstructed set dereferences it yet.
-struct iLionPosEvaluator;
+//
+// ⭐ IT IS NOW DEREFERENCED, so it needs its one virtual. cParticleEmitter::ParticleBuild
+// @0x82910118 asks the locator for it (`lwz r3, 0xA4(r11)`) and, when it is non-null, calls
+// VTABLE SLOT 0 (`lwz r11, 0(r3)` then `lwz r11, 0(r11)` then `bctrl`, 0x829103C0..0x829103E0)
+// INSTEAD of integrating the particle -- so an attached evaluator owns the particle's motion
+// entirely. The parameter list is read off the register set-up at that call site: two floats in
+// f1/f2 (the particle's scaled age and its normalised life) and three vectors in v1/v2/v3 (the
+// nucleus position, velocity and acceleration, BY VALUE -- a reference would have consumed a
+// GPR and none is set). The console discards the result.
+//
+// ⚠ THE METHOD *NAME* IS DERIVED, not attested: the X360 has no symbol for it and the DecFIGS
+// DWARF declares the type only as an opaque pointer (ParticleLocator.h:29/42/45 and
+// LionFX.h:53's PosEvaluatorAttach). The SHAPE is the asm's; `Evaluate` is this project's name
+// for what the interface's own name says it does.
+struct iLionPosEvaluator
+{
+    virtual void Evaluate(f32 afParticleAge,
+                          f32 afLifeFraction,
+                          cVector avPos,
+                          cVector avVel,
+                          cVector avAcc) = 0;
+};
 
 // cVector now comes from its real home, eauk_common/Maths/Vector.h (included above);
 // the private copy that used to live here is retired, and with it the warning to keep
@@ -113,6 +133,11 @@ struct cParticleLocator
     // { FFFFFFFF, FFFFFFFF, FFFFFFFF, 00000000 } -- the ordinary xyz-keep / w-drop selector,
     // with 1.0f x4 in the quadword after it, which is the row-3 w that vsel puts back.
     const cMatrix& GetMat(const cTime& arKeyTime) const;
+
+    // ParticleLocator.h:42 (DWARF) -- the attached position source, or null. The X360 reads the
+    // field directly (`lwz r3, 0xA4(r11)` in cParticleEmitter::ParticleBuild @0x829103B4), so
+    // this is inline by construction.
+    iLionPosEvaluator* GetpPosEvaluator() const { return mpPosEvaluator; }
 
     // ----- members: the DWARF's own names and order (ParticleLocator.h:69-77), every
     //       offset verified against the X360 Init @0x82909810 / GetMat @0x8290E288 asm -----

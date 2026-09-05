@@ -370,3 +370,80 @@ s32 cParticleRandomSeed::Build(s32 aiBase, s32 aiVariance)
 
     return static_cast<s32>(luHigh % luMod) + aiBase;
 }
+
+// ================================================================================================
+// cParticleRandomSeed::Build(cVector&, const cVector&, const cVector&)  @0x8290A510   (76 instr)
+//                                                       (DWARF ParticleRandomSeed.h:144)
+//
+// Unnamed in the idb (sub_8290A510); the DWARF names it. cParticleEmitter::ParticleBuild
+// @0x82910118 is its only caller: the DO_RADIAL arm hands it splat4(-1) and splat4(2) -- both
+// dynamically-initialised .bss splats read out of the image (unk_82FAB7B0 <- 0x82C4A150 <-
+// flt_820037C8 == -1.0; unk_82FAC140 <- 0x82C4A178 <- flt_82001D9C == 2.0) -- so it is asking
+// for a random direction with each lane uniform in [-1, 1).
+//
+// ⚠ IT IS NOT Build(Vector4, Vector4) @0x8290A648 WITH AN OUT PARAMETER, and treating it as one
+// would desynchronise the generator. That overload takes THREE LCG steps and refills all four
+// cache slots from a 96-bit stream, then toggles muIndex by 4. This one takes TWO steps
+// (0x8290A588 and 0x8290A5B0), refills only THREE slots, and advances muIndex by +1, +2, +3 --
+// re-reading muIndex from the record between each store (0x8290A5F4, 0x8290A608, 0x8290A618)
+// rather than keeping it in a register, which is exactly what a source-level `mIndex++` per
+// store compiles to.
+//
+// THE THREE REFILLS ARE ONE 64-BIT STREAM CUT INTO THREE 23-BIT MANTISSAS, hi(S0) || hi(S1),
+// which is why the asm is bit soup. Each is OR'd into a preloaded 0x3F800000, the same
+// "canonical float in [1,2)" the rest of this class uses:
+//   slot+0 : insrwi r7, hi1, 21, 9   -> 0x3F800000 | ((hi1 & 0x1FFFFF) << 2)
+//   slot+1 : insrwi r6, hi0, 10, 9   -> 0x3F800000 | ((hi0 & 0x3FF) << 13) | (hi1 >> 19)
+//   slot+2 : inslwi r5, hi0, 23, 9   -> 0x3F800000 | (hi0 >> 9)
+// ⚠ SLOT+0 IS TWO BITS SHORT: `insrwi ..., 21, 9` writes bits 9..29 and leaves bits 30..31 at
+// zero, so that mantissa is 21 random bits followed by two zeros, not 23. Nothing rounds it up
+// and nothing else in this class does the same -- it is the console's own bit budget for a
+// 64-bit stream cut three ways (21 + 23 + 23 == 67 > 64 would not fit, and 21 + 10+13 + 23 == 67
+// only closes because the middle entry is stitched), and it is reproduced rather than "fixed".
+//
+// ⚠ THE RESULT IS FORMED BEFORE THE REFILL, from the OLD cache contents (`lvx128 v0, r4, r31`
+// at 0x8290A5B4 precedes every store), and the store through the out pointer is the LAST thing
+// before the monitor stops (0x8290A624).
+// ================================================================================================
+void cParticleRandomSeed::Build(cVector& arOut, const cVector& arBase, const cVector& arVariance)
+{
+    const s32 liMonitor = guBuildMonitor;          // dword_82FAB68C, loaded once
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+    // asm 0x8290A57C..0x8290A5A4 -- the same 16-byte cache half Build(Vector4,Vector4) uses.
+    const u64 lu64S0  = mu64State;
+    const u32 luSlot  = (muIndex + 3) & 4;
+    muIndex = luSlot;
+
+    const f32 lfT0 = mafRandom[luSlot + 0] - 1.0f;   // [1,2) -> [0,1), per lane
+    const f32 lfT1 = mafRandom[luSlot + 1] - 1.0f;
+    const f32 lfT2 = mafRandom[luSlot + 2] - 1.0f;
+    const f32 lfT3 = mafRandom[luSlot + 3] - 1.0f;
+
+    arOut.x = arBase.x + arVariance.x * lfT0;
+    arOut.y = arBase.y + arVariance.y * lfT1;
+    arOut.z = arBase.z + arVariance.z * lfT2;
+    arOut.w = arBase.w + arVariance.w * lfT3;
+
+    // Two LCG steps; their two high dwords are the 64-bit stream cut into three mantissas.
+    const u64 lu64S1 = lu64S0 * KU64_LCG_MULTIPLIER + 1;
+    const u64 lu64S2 = lu64S1 * KU64_LCG_MULTIPLIER + 1;
+    mu64State = lu64S2;
+
+    const u32 luHi0 = static_cast<u32>(lu64S0 >> 32);
+    const u32 luHi1 = static_cast<u32>(lu64S1 >> 32);
+
+    const u32 KU_ONE_BITS = 0x3F800000u;             // the three preloaded `lis rN, 0x3F80`
+    const u32 lauBits[3] = {
+        KU_ONE_BITS | ((luHi1 & 0x1FFFFFu) << 2),                    // hi1[11..31], 2 zeros below
+        KU_ONE_BITS | ((luHi0 & 0x3FFu) << 13) | (luHi1 >> 19),      // hi0[22..31] ++ hi1[0..12]
+        KU_ONE_BITS |  (luHi0 >> 9),                                 // hi0[0..22]
+    };
+    for (u32 luLane = 0; luLane < 3; ++luLane)
+    {
+        std::memcpy(&mafRandom[muIndex + luLane], &lauBits[luLane], sizeof(f32));
+    }
+    muIndex = muIndex + 3;
+
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+}
