@@ -1369,12 +1369,35 @@ namespace Deformation
     //     the angle clamp;
     //   * store the new joint rotation (+352 w), joint velocity (+368 w) and the body's velocity rows.
     //
-    // The polynomial coefficient tables, the gravity/restitution/resolution tuning vectors, and the
-    // joint-relax constant (0.975 recovered) are XEX rodata that is NOT in the per-function exports.
-    // Per project rule they are FLAGGED placeholders. The control flow -- the tripwires, the
-    // CalcBoundingBox rebuild, the joint-state stores, and the call order -- is reproduced exactly; the
-    // numeric integration stays inert (no joint motion) until the tuning rodata is recovered, rather
-    // than fabricating an integrator from invented coefficients.
+    // ⭐⭐ 2026-09-05 (hinge-geometry wave): THE CONSTANTS ARE RECOVERED. The body is still inert --
+    // this wave did not have the budget to transcribe a 503-instruction VMX integrator and verify it
+    // -- but "the tuning rodata is not recovered" is no longer true, and the next wave must not
+    // re-derive it. All five dyn-init splat slots read 0 out of the image BY DEFINITION; each is
+    // filled by a CRT thunk found with tools/re/findinit.py and read through with ppcdis + x360rd:
+    //     unk_82FB9AC0  <- thunk 0x82C5DC88, lfs flt_8208F83C == 9.8100004    (g -- the hinged-part
+    //                      gravity the KVF_HINGED_PART_GRAVITY name was reaching for)
+    //     unk_82FB95F0  <- thunk 0x82C5DCB0, lfs flt_82004014 == 0.1
+    //     unk_82FB9E30  <- thunk 0x82C5DCD8, lfs flt_82001C98 == 1.0
+    //     unk_82FB9D60  <- thunk 0x82C5DD00, lfs flt_82004270 == 3.0
+    //     unk_82FB9750  <- thunk 0x82C5DD28, lfs flt_82001C98 == 1.0
+    // Each thunk is the same four-instruction shape (`lfs` the literal, `stfs` to the stack, load,
+    // `vspltw`, `stvx128` into the slot), so every one of these is a 4-lane SPLAT of a scalar.
+    // ⛔ AND THE "atan polynomial tables" IN THE OLD BANNER WERE MIS-NAMED. &unk_82000BD0..C20 read
+    // straight out of .rdata as 1.0 / 2.7557319e-06 (1/9!) / 2.8114574e-15 and
+    // 1.0 / 2.4801588e-05 (1/8!) / 4.7794773e-14, with 3.14159274 at unk_82000C60 -- i.e. the two
+    // odd/even TRIGONOMETRIC series and pi, a sin/cos pair for the angle clamp, not an arctangent.
+    // unk_82CDA350 is an ordinary vperm CONTROL vector {00 01 02 03, ...}, and flt_82057F5C ==
+    // 0.9750000238 is the joint-relax factor this file already carries as KF_JOINT_RELAX.
+    // What is left is transcription of the integrator itself, which stays undone here rather than
+    // guessed: the control flow -- the tripwires, the CalcBoundingBox rebuild, the joint-state
+    // stores and the call order -- is exact, and the numeric step is a no-op.
+    // ⇒ CONSEQUENCE, AND IT IS THE WHOLE JOINT-BREAK LADDER: mLocalJointPositionPlusRotation's w
+    // lane (the joint rotation) is written ONLY here. SetJoinedToVehicle seeds it to 0 and nothing
+    // else touches it, so it is identically 0 for the life of a hinged part. TestJointForBreaking's
+    // first gate is `GetJointRotationProportion() < KF_ROTATION_PROPORTION_GATE (0.3)`, and that
+    // proportion is rotation.w / maxAngle.w == 0 / maxAngle == 0. NO JOINT CAN EVER BREAK while
+    // this integrator is inert, on any car, whatever its geometry -- which is why the measured
+    // `jointBreaks 0` is a statement about THIS FUNCTION and not about the joint data.
     // =========================================================================================
     void PhysicalBodyPart::UpdateJoint(VecFloat lvfTimeStep)
     {
