@@ -330,6 +330,36 @@ namespace renderengine
     void PCSceneBlit_End();
 
     // =========================================================================
+    // FLAG PC-platform leaf: THE COMPOSITE BLIT'S ROP STATE -- the two-line deviation
+    // BrnRendererMemory::BlitComposite @0x82406A68 is forced into on Direct3D 9, installed
+    // here so it is one named object rather than raw SetRenderState calls in a GameSource TU.
+    //
+    // The console's composite pixel program computes
+    //     out.rgb = scene * (1 - particleAlpha) + particleRGB      (a premultiplied OVER)
+    // by SAMPLING the scene through BaseSampler while the same target is bound -- legal on the
+    // Xenos, where the bound surface is an EDRAM tile and the texture is its resolved copy in
+    // main memory. On PC the down-sample target's texture IS the surface being rendered into
+    // (PostFxRenderTargetPCLeaf.cpp:1456-1466), and D3D9 gives an undefined result for that.
+    // So the scene term is re-associated onto the ROP, which reads the destination legally:
+    //     SRCBLEND = ONE, DESTBLEND = INVSRCALPHA, BLENDOP = ADD
+    // and the pixel program returns the particle sample alone. Identical arithmetic for the
+    // particle term; what is dropped is the console's two-tap +/-0.166-texel scene average,
+    // which is the Xenos AA reconstruction filter that ResolveMSAA has already performed
+    // differently on this backend. brn_im2dblit.fx's banner is the authority.
+    //
+    // COLORWRITEENABLE IS RGB, NOT RGBA, AND THAT IS THE SECOND DEVIATION. The console's
+    // export0.w is a hard 1.0 written through blend slot 0, which costs it nothing because its
+    // cars-vs-world motion-blur mask lives in the STENCIL buffer. This backend cannot sample a
+    // stencil plane, so renderengine::PCStampMotionBlurMask carries that mask in the SCENE
+    // TARGET'S ALPHA -- the very lane a four-channel write would destroy, silently.
+    //
+    // Nothing needs to restore these: BrnRendererMemory::BlitComposite's LAST act is the
+    // console's own shadow::Device::ResetShadowing(), so the next SetState re-applies whatever
+    // the following pass asks for rather than skipping it as redundant.
+    // DELETE WHEN a backend exists that can sample the bound target (i.e. never, on D3D9).
+    void Im2dCompositeBlit_ApplyRopState();
+
+    // =========================================================================
     // FLAG PC bring-up INITIALISATION: clear a freshly created off-screen target ONCE, at
     // creation, so that the first frame which renders into it does not render into undefined
     // memory.

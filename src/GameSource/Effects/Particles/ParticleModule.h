@@ -387,6 +387,29 @@ namespace BrnParticle
         // X360 0x8229AFD0 -- render thread: the trail strips (RenderTrails), debris, sparks, Lion.
         void RenderFullResParticles(const ParticleRenderData* lpRenderData);
 
+        // X360 0x82294A20 -- render thread: THE OTHER HALF OF THE SAME PASS. The console splits the
+        // particle draw across two render targets and the selector is mbIsInJunkyard: the full-res
+        // arm above draws into the scene target when it is SET, and this one draws into the cleared
+        // quarter-res particle buffer (BrnRendererModule::BeginQuarterResBuffer @0x82408C38 opens it,
+        // EndRenderAntiAliased @0x82408B00 composites it back) when it is CLEAR -- i.e. everywhere
+        // except the junkyard. The two Lion dispatches are ARGUMENT-IDENTICAL; only the bound target
+        // differs. Its two BrnSimpleParticleRenderer::Dispatch calls (the debris halves either side
+        // of the Lion dispatch) reach the same asm-sized placeholders the full-res arm's do.
+        void RenderQuarterResParticles(const ParticleRenderData* lpRenderData);
+
+        // [FLAG PC bring-up] IS THE QUARTER-RES ARM REACHABLE THIS FRAME? Not a console function
+        // and not a console member: on the X360 both arms always exist, so mbIsInJunkyard alone
+        // decides. On PC the particle buffer + the two blit program pairs are built lazily by
+        // BrnRendererMemory::PCBringUpCreateParticleCompositeChain and can legitimately be absent
+        // (no device yet, an unseeded screen extent, a driver that refused the target), and with
+        // the console's gate restored an absent buffer would mean the Lion pass draws NOWHERE --
+        // the plume would simply vanish outside the junkyard. BrnRendererModule::Render publishes
+        // the answer here once per frame, before either arm runs, so the two arms cannot both draw
+        // and cannot both skip. Static + file-scope storage, so no layout moves.
+        // DELETE-WHEN the pool is built by BrnRendererMemory::Construct: the gate is then just
+        // mbIsInJunkyard, as the console has it.
+        static void PCBringUpSetQuarterResRouting(bool lbLive);
+
         // ⭐⭐ THE TWO HALVES OF THE EFFECT HAND-OFF, and between them the ONLY route in the whole
         // program from a stamped maPlayingEffects slot to a live Lion emitter. Everything else on
         // the particle path -- StartLionEffect, the boost tags, the whole render closure -- is

@@ -352,6 +352,25 @@ namespace BrnParticle
         return lOut;
     }
 
+    // [FLAG PC bring-up] The quarter-res routing latch -- see
+    // ParticleModule::PCBringUpSetQuarterResRouting's banner in the header. Seeded FALSE so that a
+    // build whose renderer never publishes it keeps the pre-2026-09-05 behaviour (both arms
+    // collapse onto the full-res one) rather than losing every particle.
+    namespace
+    {
+        bool sbQuarterResRoutingLive = false;
+
+        bool QuarterResRoutingLive()
+        {
+            return sbQuarterResRoutingLive;
+        }
+    }
+
+    void ParticleModule::PCBringUpSetQuarterResRouting(bool lbLive)
+    {
+        sbQuarterResRoutingLive = lbLive;
+    }
+
     // One line, once, for an arm this build does not carry. Never an assert. (The twin in
     // ParticleModule_Lifecycle.cpp is in that TU anonymous namespace, hence the local copy.)
     namespace
@@ -820,17 +839,15 @@ namespace BrnParticle
         // f2 = renderData+0x1BC, f3 = renderData+0x1C0, f4 = 0.6 (flt_82004D00), f5 = f6 = 0,
         // and a null depth texture state on the stack. Only the bound target differs.
         //
-        // FLAG PC-platform leaf: THE QUARTER-RES BUFFER DOES NOT EXIST ON THIS BACKEND.
-        // BrnRendererModule::BeginQuarterResBuffer is declaration-only and render-target pool
-        // slot 9 is never created (BrnRendererModule.cpp:107 and :4761 say so, and the sun
-        // flare already carries the same deviation for the same reason). With one target the
-        // console's two arms are the same call, so they collapse to this one -- which draws
-        // into the scene target, the same colour bus one stage earlier. Gating on
-        // mbIsInJunkyard as written would leave Lion particles invisible everywhere except
-        // the junkyard, which is a routing artefact of a buffer we do not have, not the
-        // console's intent. DELETE-WHEN BeginQuarterResBuffer and pool slot 9 land: restore
-        // the `if (mbIsInJunkyard)` gate here and put the else arm in
-        // RenderQuarterResParticles.
+        // ⭐ THE CONSOLE'S GATE IS RESTORED (2026-09-05). Pool slot 9, BeginQuarterResBuffer,
+        // RenderQuarterResParticles, EndRenderAntiAliased and BlitComposite are all bodied now,
+        // so the console's two arms are two different targets again and this one is the
+        // junkyard's. The `|| !QuarterResRoutingLive()` disjunct is the ONE PC term, and it is
+        // the bring-up gate described on ParticleModule::PCBringUpSetQuarterResRouting: with no
+        // particle buffer the other arm has nowhere to draw, so this one has to keep drawing or
+        // the plume vanishes. When the pool is built by BrnRendererMemory::Construct the
+        // disjunct is deleted and the gate is the console's `if (mbIsInJunkyard)` alone.
+        if (mbIsInJunkyard || !QuarterResRoutingLive())
         {
             renderengine::VertexBuffer* const lpVertexBuffer =
                 mVertexBufferManagerLion.GetVertexBuffer();
@@ -866,6 +883,74 @@ namespace BrnParticle
                 "(flags & 4) and spark (flags & 2) branches -- their job/frame-data members "
                 "are asm-sized placeholders. THE TRAIL BRANCH (flags & 0x20) AND THE LION "
                 "DISPATCH ARE REAL AND RUN");
+        }
+    }
+
+    // =========================================================================
+    // RenderQuarterResParticles  @0x82294A20 -- THE OTHER HALF OF THE PARTICLE PASS.
+    //   Its ONLY caller is BrnRendererModule::Render @0x8240BFA8, on the render thread,
+    //   INSIDE the bracket BeginQuarterResBuffer @0x82408C38 opens and EndRenderAntiAliased
+    //   @0x82408B00 closes -- i.e. the cleared, half-by-half particle buffer is bound. Same
+    //   argument shape as the full-res arm: (this, renderData, ...).
+    //
+    //   The console body, in order (asm/pseudocode 0x82294A20):
+    //     v6 = (flags & 0x40) ? &unk_82FAB5D8 : &unk_82FAB598   -- the "Crash"/"Race" monitor set
+    //     StartMonitor(v6[13])
+    //     assert(!mbLocked)                                     -- EffectsVertexBufferManager.h:97
+    //     v7 = the Lion vertex-buffer manager's CURRENT slot     (the inlined GetVertexBuffer)
+    //     v8 = miSimpleParticleSplit ; v10 = miSimpleParticleCount
+    //     assert(count != -1)                                   -- CgsArray.h:336
+    //     v13 = (flags & 0x40) || mbZFadeEnabled                -- the z-fade argument
+    //     BrnSimpleParticleRenderer::Dispatch(..., 0,  v8, ...)  -- the debris FIRST half
+    //     if (!mbIsInJunkyard) { cLionFX::Dispatch(GetVertexBuffer(), ...) }
+    //     BrnSimpleParticleRenderer::Dispatch(..., v8, v10, ...) -- the debris SECOND half
+    //     StopMonitor(v6[13])
+    //
+    //   ⭐ THE LION GATE IS THE FULL-RES ARM'S, INVERTED, ON THE SAME BYTE. RenderFullResParticles
+    //   reads `lbzx r11, r25, 0x23136 ; beq` and this one reads the same byte with `bne`; the two
+    //   dispatch calls are ARGUMENT-IDENTICAL, verified instruction for instruction (same batch
+    //   array, f1 = mfWhiteLevel, r6 = 0, f2/f3 = the camera's near/far, f4 = 0.6, f5 = f6 = 0,
+    //   a null depth texture state on the stack). ONLY THE BOUND TARGET DIFFERS -- which is the
+    //   whole content of the fix this function is part of: on the console a plume accumulates on a
+    //   CLEARED buffer and is composited OVER the scene with a (1 - alpha) term, so a saturating
+    //   flame REPLACES its background instead of adding to it.
+    //
+    //   THE TWO DEBRIS DISPATCHES cannot run here for exactly the reason they cannot run in the
+    //   full-res arm: BrnSimpleParticleRenderer's frame arrays are asm-sized placeholders on this
+    //   build. Said once, not dropped silently.
+    //
+    //   THE PERFMON BRACKET IS NOT REPRODUCED, this file's standing reason (every id is 0).
+    // =========================================================================
+    void ParticleModule::RenderQuarterResParticles(const ParticleRenderData* lpRenderData)
+    {
+        if (lpRenderData == 0)
+            return;
+
+        const f32 lfWhiteLevel = lpRenderData->mfWhiteLevel;   // renderData +0x208
+
+        if (!mbIsInJunkyard)
+        {
+            renderengine::VertexBuffer* const lpVertexBuffer =
+                mVertexBufferManagerLion.GetVertexBuffer();
+
+            cLionFX::Dispatch(lpVertexBuffer,
+                              gLionBatchArray,
+                              lfWhiteLevel,
+                              false,                       // li r6, 0 -- z-fade off
+                              lpRenderData->mCgsCamera.maProjectionScalars[7],  // near
+                              lpRenderData->mCgsCamera.maProjectionScalars[8],  // far
+                              KF_LION_DEPTH_FADE_DISTANCE, // f4 == flt_82004D00 == 0.6
+                              0.0f,                        // f5 == flt_82001CC0
+                              0.0f,                        // f6 == the same 0.0
+                              0);                          // the stack slot, written 0
+        }
+
+        {
+            static bool sbLogged = false;
+            LogNotReconstructed(sbLogged,
+                "ParticleModule::RenderQuarterResParticles' two BrnSimpleParticleRenderer::"
+                "Dispatch calls (the debris halves either side of the Lion dispatch) -- their "
+                "frame arrays are asm-sized placeholders. THE LION DISPATCH IS REAL AND RUNS");
         }
     }
 

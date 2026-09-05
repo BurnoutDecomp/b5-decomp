@@ -655,6 +655,64 @@ void DeviceClearDepthStencil(const renderengine::ClearDepthStencilParameters* lp
 }
 
 // =============================================================================
+// X360 0x82B61C88 -- renderengine::Device::Clear(colour, targetId): the COLOUR-ONLY clear, the
+// sibling of the combined overload below. Bodied 2026-09-05 for
+// BrnRendererModule::BeginQuarterResBuffer @0x82408C38, which is its caller in this build and
+// asks for E_TARGETID_COLOUR_ALL with a {0,0,0,0} colour -- the clear that makes the quarter-res
+// particle buffer a buffer particles ACCUMULATE ON rather than one they add to.
+//
+// THE CONSOLE BODY (0x82B61C88-0x82B61D60), and it is shorter than its sibling in three ways
+// that all matter:
+//     v8 = 0                                      the flags word STARTS AT ZERO -- there is no
+//                                                 depth/stencil block to OR in, so ZBUFFER (0x10)
+//                                                 and STENCIL (0x20) can never be set
+//     the same five-way ladder                    4 -> 0xF, 0 -> 1, 1 -> 2, 2 -> 4, 3 -> 8
+//     D3DDevice_ClearF(dev, v8, 0, a1, 1.0, r8)   Z is a HARD-CODED 1.0 and the stencil argument
+//                                                 is never used, because neither bit is ever set
+// The tiling fast path (`if (dword_83271620 && !dword_8327161C && UsingGlobalRasters())
+// D3DDevice_BeginTiling(...)`) is dropped, exactly as it is in the sibling below and in every
+// other clear translation in this build: PC D3D9 has no tile replay.
+//
+// The two PC translations are the sibling's, unchanged: the Xenon flags word (TARGET0..3 in bits
+// 0..3) maps to D3DCLEAR_TARGET, and the four floats are clamped and packed into one D3DCOLOR.
+// There is no D3DCLEAR_STENCIL retry here because the stencil bit cannot be set.
+// =============================================================================
+void renderengine::Device::Clear(const renderengine::ClearColorParameters& lrClearColour,
+                                 renderengine::ETargetId leTarget)
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr)
+        return;
+
+    u32 luXenonFlags = 0u;
+    switch (leTarget)
+    {
+        case renderengine::E_TARGETID_COLOUR_ALL: luXenonFlags = 0x0Fu; break;   // `li r4, 0xF`
+        case renderengine::E_TARGETID_COLOUR0:    luXenonFlags = 0x01u; break;
+        case renderengine::E_TARGETID_COLOUR1:    luXenonFlags = 0x02u; break;
+        case renderengine::E_TARGETID_COLOUR2:    luXenonFlags = 0x04u; break;
+        case renderengine::E_TARGETID_COLOUR3:    luXenonFlags = 0x08u; break;
+        default: break;                                                          // no case 5 exists
+    }
+    if (luXenonFlags == 0u)
+        return;
+
+    u32 lauChannel[4];
+    for (u32 luLane = 0; luLane < 4u; ++luLane)
+    {
+        f32 lfValue = lrClearColour.mafColourRGBA[luLane];
+        if (!(lfValue > 0.0f)) lfValue = 0.0f;      // also catches NaN
+        if (lfValue > 1.0f)    lfValue = 1.0f;
+        lauChannel[luLane] = static_cast<u32>(lfValue * 255.0f + 0.5f);
+    }
+    const D3DCOLOR lColour = D3DCOLOR_ARGB(lauChannel[3], lauChannel[0],
+                                           lauChannel[1], lauChannel[2]);
+
+    // Z = 1.0 is the console's own literal; no depth or stencil bit is set, so it is never read.
+    lpDevice->Clear(0, nullptr, D3DCLEAR_TARGET, lColour, 1.0f, 0);
+}
+
+// =============================================================================
 // X360 0x82B61E18 -- renderengine::Device::Clear(colour, depthStencil, targetId): the COMBINED
 // colour + depth/stencil clear. Its one caller in the image is
 // BrnRendererModule::BeginRenderEnvironmentMapFace @0x823F63E0, which asks for
