@@ -83,7 +83,13 @@ namespace Deformation
         Vector3 GetRotationAxis() const { return mJointAxis; }
 
         // BrnIKBodyPartSpec.h:106. The rest/default direction (mJointDefaultDirection).
-        Vector3 GetDefaultDirection() const;
+        // ⭐ INLINED 2026-09-05 (hinge-integrator wave): DECLARE-ONLY until its first caller
+        // (PhysicalBodyPart::UpdateJoint's drive term) turned it into an LNK2019. Same evidence
+        // pattern as GetCarSpacePosition / GetRotationAxis above -- there is no out-of-line X360
+        // emission and the console reads the member directly, `lvx128 v0, r0, r10` with
+        // r10 == GetActiveJointSpec() + 0x20 @0x8260B2B4, i.e. the inlined accessor over
+        // mJointDefaultDirection at spec+0x20.
+        Vector3 GetDefaultDirection() const { return mJointDefaultDirection; }
 
         // BrnIKBodyPartSpec.h:109. The maximum plastic bend angle (mfMaxJointAngle).
         // ⭐ INLINED 2026-09-05 (hinge-geometry wave), same evidence as GetCarSpacePosition: the
