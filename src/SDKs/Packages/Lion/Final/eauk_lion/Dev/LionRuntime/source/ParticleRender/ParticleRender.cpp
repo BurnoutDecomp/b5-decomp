@@ -64,7 +64,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
 
 #include <cstddef>   // offsetof (the layout pins at the foot of this file)
-#include <cstdio>    // snprintf -- the [lionfx] bring-up witness
+#include <cstdio>
+#include <cstdlib>   // [lionfx] getenv -- the BRN_LIONFX_NOCULL bring-up bypass    // snprintf -- the [lionfx] bring-up witness
 
 // --- Platform (Xbox 360 D3D) device + fast-path draw thunks ------------------------------------
 // The engine's single D3D device global (X360 off_83271608 == renderengine::gpD3DDevice, defined
@@ -408,6 +409,18 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
     const rw::math::vpu::Matrix44& lrFrustum = lpRenderer->GetPackedFrustumLrtb();
 
     u32 luLive = 0, luCell = 0, luInactive = 0, luCulled = 0, luRendered = 0;   // [lionfx] witness
+    u32 luCullRange = 0, luCullFrustum = 0, luCullNear = 0;                    // [lionfx] by stage
+
+    // ---- [lionfx] FLAG PC bring-up: BRN_LIONFX_NOCULL -----------------------------------------
+    // A DIAGNOSTIC BYPASS, not console behaviour. With it set, every emitter that reaches the
+    // cull is drawn. It exists because "nothing on screen" and "everything culled" are the same
+    // picture, and the three tests below all depend on camera data this build publishes through a
+    // bring-up stand-in -- so one run with the bypass on separates "the culler is wrong" from
+    // "the draw chain downstream of it is". DELETE with the boost-exhaust bring-up.
+    static const bool sbNoCull = []() {
+        const char* lpcValue = std::getenv("BRN_LIONFX_NOCULL");
+        return lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0';
+    }();
 
     for (cParticleEmitter* lpEmitter = arEmitterManager.GetpUsed();
          lpEmitter != 0;
@@ -434,10 +447,11 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
         const f32 lfDx = lMat.wa.x - mCamPos.x;
         const f32 lfDy = lMat.wa.y - mCamPos.y;
         const f32 lfDz = lMat.wa.z - mCamPos.z;
-        if ((lfDx * lfDx + (lfDy * lfDy + lfDz * lfDz)) >= KF_EMITTER_CULL_RANGE_SQ)
+        const f32 lfRangeSq = lfDx * lfDx + (lfDy * lfDy + lfDz * lfDz);
+        if (lfRangeSq >= KF_EMITTER_CULL_RANGE_SQ)
         {
-            ++luCulled;
-            continue;
+            ++luCulled; ++luCullRange;
+            if (!sbNoCull) continue;
         }
 
         // ---- frustum (the four packed LRTB planes, all four lanes) -----------------------------
@@ -458,15 +472,39 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
                                   && (lafDistance[3] > lrFrustum.wAxis.w);
         if (!lbInsideAllFour)
         {
-            ++luCulled;
-            continue;
+            ++luCulled; ++luCullFrustum;
+            if (!sbNoCull) continue;
         }
 
         // ---- near ------------------------------------------------------------------------------
-        if ((mCamDir.x * lfDx + (mCamDir.y * lfDy + mCamDir.z * lfDz)) <= KF_EMITTER_CULL_BEHIND)
+        const f32 lfAlongView = mCamDir.x * lfDx + (mCamDir.y * lfDy + mCamDir.z * lfDz);
+        if (lfAlongView <= KF_EMITTER_CULL_BEHIND)
         {
-            ++luCulled;
-            continue;
+            ++luCulled; ++luCullNear;
+            if (!sbNoCull) continue;
+        }
+
+        {
+            // [lionfx] ONE-SHOT, the first emitter that ever reaches the cull: every number the
+            // three tests consume, so a wrong camera publish is a readable line rather than a
+            // guess. (The camera data reaches here through ParticleModule::BuildLionVertexBuffers
+            // -> LionParticleRender::SetCameraData, and on this build the ParticleRenderData it
+            // reads is written by a PC bring-up stand-in -- so "is the camera real" is exactly the
+            // question that has to be answerable.) DELETE with the bring-up.
+            static bool sbDiagOnce = false;
+            if (!sbDiagOnce)
+            {
+                sbDiagOnce = true;
+                char lacMsg[416];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[lionfx] cull#1 cam=(%.2f,%.2f,%.2f) dir=(%.3f,%.3f,%.3f) emit=(%.2f,%.2f,%.2f)"
+                    " distSq=%.1f along=%.2f planeD=(%.2f,%.2f,%.2f,%.2f) vs (%.2f,%.2f,%.2f,%.2f)\n",
+                    mCamPos.x, mCamPos.y, mCamPos.z, mCamDir.x, mCamDir.y, mCamDir.z,
+                    lMat.wa.x, lMat.wa.y, lMat.wa.z, lfRangeSq, lfAlongView,
+                    lafDistance[0], lafDistance[1], lafDistance[2], lafDistance[3],
+                    lrFrustum.wAxis.x, lrFrustum.wAxis.y, lrFrustum.wAxis.z, lrFrustum.wAxis.w);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
         }
 
         EmitterRender(arVertexBuffer, arBatchArray, lpEmitter, arTime);
@@ -488,12 +526,13 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
             suLastLive = luLive;
             suLastRendered = luRendered;
             suLastParticles = mParticlesRenderedCount;
-            char lacMsg[192];
+            char lacMsg[256];
             std::snprintf(lacMsg, sizeof(lacMsg),
-                          "[lionfx] Render: emitters live=%u cell=%u inactive=%u culled=%u "
-                          "drawn=%u particles=%u\n",
-                          luLive, luCell, luInactive, luCulled, luRendered,
-                          mParticlesRenderedCount);
+                          "[lionfx] Render: emitters live=%u cell=%u inactive=%u culled=%u"
+                          " (range=%u frustum=%u near=%u) drawn=%u particles=%u nocull=%d\n",
+                          luLive, luCell, luInactive, luCulled,
+                          luCullRange, luCullFrustum, luCullNear, luRendered,
+                          mParticlesRenderedCount, (int)sbNoCull);
             CgsDev::Log::WriteToLog(lacMsg);
         }
     }

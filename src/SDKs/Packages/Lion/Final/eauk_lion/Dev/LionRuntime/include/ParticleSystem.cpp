@@ -34,6 +34,9 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionParticleEffectManager.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionSerialiser.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionFX.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleLocator.h"  // sizeof(cParticleLocator) -- the pool block size
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleScaler.h"   // sizeof(cParticleScaler)
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleTrigger.h"  // sizeof(cParticleTrigger)
 
 namespace
 {
@@ -44,21 +47,35 @@ namespace
 
     // `li r5, 0xB0` -- 176 bytes. cLionFX::LocatorRegister @0x8290AC20 carves a
     // cParticleLocator out of this pool and calls cParticleLocator::Init on it.
-    const u32 KU_CONSOLE_SIZEOF_LOCATOR = 0xB0;
+    const u32 KU_POOL_BLOCK_LOCATOR = static_cast<u32>(sizeof(cParticleLocator));
 
     // `li r5, 4` -- 4 bytes. The scaler pool (cLionFX::ScalerRegister); a cParticleScaler is
     // one float on the console.
-    const u32 KU_CONSOLE_SIZEOF_SCALER  = 4;
+    const u32 KU_POOL_BLOCK_SCALER  = static_cast<u32>(sizeof(cParticleScaler));
 
     // `li r5, 0x10` -- 16 bytes. cLionFX::TriggerRegister @0x8290ACA8 carves from this pool
     // and clears four words, which is the whole record.
-    const u32 KU_CONSOLE_SIZEOF_TRIGGER = 16;
+    const u32 KU_POOL_BLOCK_TRIGGER = static_cast<u32>(sizeof(cParticleTrigger));
 
-    // ⛔ ALL THREE SIZES ABOVE ARE CONSOLE LITERALS on a 4-byte-pointer ABI. cParticleLocator
-    // IS homed in this tree (ParticleLocator.h) but cParticleScaler and cParticleTrigger are
-    // not, and none of the three Register functions is reconstructed, so nothing carves out of
-    // these pools on this build. Re-derive each from sizeof() the day one does -- a host record
-    // wider than its console literal overruns every slot in the pool.
+    // ⭐⭐ THE DAY THIS NOTE WARNED ABOUT IS TODAY (2026-09-05). It used to read "none of the
+    // three Register functions is reconstructed, so nothing carves out of these pools on this
+    // build. Re-derive each from sizeof() the day one does -- a host record wider than its
+    // console literal overruns every slot in the pool." Something carves from all three now:
+    // ParticleModule::DispatchThreadUpdate calls LocatorRegister / ScalerRegister /
+    // TriggerRegister once per created effect.
+    //
+    // So the block size is sizeof() of the HOST record, with the console's literal kept as a
+    // floor -- a pool block smaller than the console's would mean a member had been lost, and
+    // a size drift now fails the gate here instead of corrupting the heap at run time. (All
+    // three still measure the console's own numbers: cParticleLocator's one trailing pointer
+    // widens into padding its 16-byte alignment already had, and the other two carry no
+    // pointers at all.)
+    static_assert(sizeof(cParticleLocator) >= 0xB0,
+                  "the console pool block is 0xB0 -- cParticleSystem::AppInit `li r5, 0xB0`");
+    static_assert(sizeof(cParticleScaler) >= 4,
+                  "the console pool block is 4 -- `li r5, 4`");
+    static_assert(sizeof(cParticleTrigger) >= 16,
+                  "the console pool block is 16 -- `li r5, 0x10`");
 
     // ---- the three "no reader found" globals (see the banner) -----------------------------
     // dword_830ED930 <- apAllocator. It sits immediately after cParticleWaveFormTable::
@@ -133,9 +150,9 @@ void cParticleSystem::AppInit(EA::Allocator::ITaggedAllocator* apAllocator,
     // Every per-emitter sub-object pool holds two entries per emitter.
     const u32 luSubPoolCount = auEmitterCount * KU_SUB_POOL_MULTIPLIER;
 
-    gLionLocatorAllocator.Init(apAllocator, KU_CONSOLE_SIZEOF_LOCATOR, luSubPoolCount);
-    gLionScalerAllocator.Init (apAllocator, KU_CONSOLE_SIZEOF_SCALER,  luSubPoolCount);
-    gLionTriggerAllocator.Init(apAllocator, KU_CONSOLE_SIZEOF_TRIGGER, luSubPoolCount);
+    gLionLocatorAllocator.Init(apAllocator, KU_POOL_BLOCK_LOCATOR, luSubPoolCount);
+    gLionScalerAllocator.Init (apAllocator, KU_POOL_BLOCK_SCALER,  luSubPoolCount);
+    gLionTriggerAllocator.Init(apAllocator, KU_POOL_BLOCK_TRIGGER, luSubPoolCount);
 
     cParticleWaveFormTable::GetMe()->Init();
 

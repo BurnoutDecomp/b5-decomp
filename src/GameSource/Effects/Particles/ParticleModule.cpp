@@ -8,6 +8,10 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionFX.h"   // cLionFX::Update / Render / Dispatch -- the Lion core
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRender/LionBatch.h"  // LionBatchArray
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/ext-include/GameStructs/cTime.h"     // cTime / msfTicksPerSecond
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionEffect.h"        // cLionEffectInstance (the dispatch-thread twins)
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionBindings.h"      // cLionBindings accessors
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleLocator.h"   // the locator velocity override
+#include "SDKs/Packages/Lion/Final/eauk_common/Maths/Matrix.h"                            // cMatrix (LocatorUpdate)
 
 // ============================================================================
 // GameSource/Effects/Particles/ParticleModule.cpp
@@ -314,6 +318,12 @@ namespace BrnParticle
     // =========================================================================
     LionBatchArray gLionBatchArray;
 
+    // [lionhandoff] FLAG PC bring-up counters -- see the witness in DispatchThreadUpdate.
+    // Not console state; ours, and deleted with that witness.
+    u32 muCreatedLionInstances   = 0;
+    u32 muDestroyedLionInstances = 0;
+    u32 suLastReportedCreates    = 0xFFFFFFFFu;
+
     // flt_82004D00 == 0x3F19999A == 0.6 -- the depth-fade DISTANCE cLionFX::Dispatch is handed
     // in BOTH of the console's two dispatch arms (@0x8229B238 and @0x82294BC0). Read out of the
     // image with tools/re/x360rd.py.
@@ -353,6 +363,265 @@ namespace BrnParticle
             lrbLogged = true;
             char lacMsg[256];
             std::snprintf(lacMsg, sizeof(lacMsg), "[particles] NOT RECONSTRUCTED: %s\n", lpcWhat);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
+
+
+    // =========================================================================
+    // PreRenderUpdate  @0x82294760 -- THE PRODUCER, and the first half of the only route in
+    // the program from a stamped playing-effect slot to a live Lion emitter.
+    //
+    // Under the dispatch buffer's WRITE lock:
+    //   * publish the frame's time and time step (mRenderData's own +0x08 / +0x0C);
+    //   * publish the camera's VIEW and PROJECTION matrices (four lvx128/stvx128 pairs each
+    //     from mRenderData.mCgsCamera +0x00 / +0x40);
+    //   * reset the changed-effect count, then walk all 128 playing slots and, for each one
+    //     that is IN_USE:
+    //       - EXPIRE it first: if its mfExpiryTime has passed and it is not already flagged
+    //         KILL, StopLionEffect(&slot) -- which is what raises KILL and CHANGED, so an
+    //         expiring effect is published as a kill in the SAME pass that noticed it;
+    //       - if CHANGED, copy the WHOLE 112-byte record into maChangedLionEffects[count++]
+    //         and clear CHANGED|CREATE (`*(r31+52) &= 0xFFF3`) on the source slot;
+    //       - if that slot carried KILL, LionEffect::Construct(&slot) -- recycling it back to
+    //         a free slot the moment its kill has been published.
+    //
+    // ⚠ THE ORDER OF THE LAST TWO IS LOAD-BEARING AND IT IS EASY TO GET BACKWARDS. The console
+    // clears CHANGED|CREATE and then re-reads the flags to decide whether to recycle -- the
+    // KILL bit (0x10) survives that mask, which is precisely why the mask is 0xFFF3 and not
+    // 0xFFE3. Recycling before the copy would publish a zeroed record; masking KILL out would
+    // leak the slot for ever.
+    //
+    // ⚠ AND THE EXPIRY TEST IS `mfExpiryTime < mfCurrentTime`, read off THIS FRAME'S published
+    // time (`lfs f13, 0(r23)` with r23 == &mRenderData.mfCurrentTime), not off the Lion clock.
+    // StartLionEffect stamps 1.0e10 for an EMITTER_LIFE_INFINITE descriptor, which is what
+    // keeps a boost plume alive; a finite one gets `lionTime * (1/3000) + durationMax`.
+    //
+    // NOT REPRODUCED HERE, and announced rather than dropped: the tail's inter-thread event
+    // queue publish (AllocateEventSafe + two memcpys out of mInterThreadEventQueue, which is
+    // an asm-sized placeholder in this class), and the perf-monitor bracket (this file's
+    // standing reason -- nothing calls LionPerfMon::Construct, so every id is 0).
+    // =========================================================================
+    void ParticleModule::PreRenderUpdate(BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInput)
+    {
+        if (lpDispatchThreadInput == 0)
+            return;
+
+        lpDispatchThreadInput->LockForWrite();
+
+        DispatchThreadUpdateData* const lpOut = lpDispatchThreadInput->GetParticleData();
+
+        lpOut->mfCurrentTime     = mRenderData.mfCurrentTime;       // *(this + 36360)
+        lpOut->mfCurrentTimeStep = mRenderData.mfCurrentTimeStep;   // *(this + 36364)
+        lpOut->mViewMatrix       = RowCopyToAffine(mRenderData.mCgsCamera.mView);        // this+36448
+        lpOut->mProjectionMatrix = mRenderData.mCgsCamera.mProjection;                   // this+36512
+        lpOut->muChangedEffects  = 0;
+
+        if (!mbPlayingEffectsSuspended)
+        {
+            for (u32 luSlot = 0; luSlot < KU_MAX_PLAYING_EFFECTS; ++luSlot)
+            {
+                LionEffect& lrSlot = maPlayingEffects[luSlot];
+
+                if ((lrSlot.muFlags & LionEffect::EPPE_FLAG_IN_USE) == 0)
+                    continue;
+
+                // The expiry sweep (asm 0x82294848..0x8229486C).
+                if (lrSlot.mfExpiryTime < mRenderData.mfCurrentTime
+                    && (lrSlot.muFlags & LionEffect::EPPE_FLAG_KILL) == 0)
+                {
+                    StopLionEffect(&lrSlot);
+                }
+
+                if ((lrSlot.muFlags & LionEffect::EPPE_FLAG_CHANGED) == 0)
+                    continue;
+
+                lpOut->maChangedLionEffects[lpOut->muChangedEffects] = lrSlot;
+                ++lpOut->muChangedEffects;
+
+                // `*(r31+52) &= 0xFFF3` -- clear CHANGED|CREATE, KEEP KILL.
+                lrSlot.muFlags = static_cast<u16>(
+                    lrSlot.muFlags & ~static_cast<u16>(LionEffect::EPPE_FLAG_CHANGED
+                                                     | LionEffect::EPPE_FLAG_CREATE));
+
+                if ((lrSlot.muFlags & LionEffect::EPPE_FLAG_KILL) != 0)
+                {
+                    lrSlot.Construct();   // the slot goes back to the free pool
+                }
+            }
+        }
+
+        {
+            static bool sbLogged = false;
+            LogNotReconstructed(sbLogged,
+                "ParticleModule::PreRenderUpdate's inter-thread event-queue publish "
+                "(AllocateEventSafe + the two memcpys out of mInterThreadEventQueue, which is an "
+                "asm-sized placeholder). THE LION EFFECT PUBLISH IS REAL AND RUNS");
+        }
+
+        lpDispatchThreadInput->UnlockForWrite();
+    }
+
+    // =========================================================================
+    // DispatchThreadUpdate  @0x8229C5F0 -- THE CONSUMER, and the second half.
+    //
+    // Under the dispatch buffer's READ lock, for every record PreRenderUpdate published:
+    //   KILL   -> cLionFX::EffectDestroy(mapDispatchThreadLionEffects[slot]); clear the slot.
+    //   CREATE -> TriggerRegister(0) / ScalerRegister(0) / LocatorRegister(0), then
+    //             cLionFX::EffectCreate(record.mpDescription, locator, scaler, trigger, 0).
+    //             ⭐ THAT CALL IS THE WHOLE POINT OF THIS FUNCTION: EffectCreate ->
+    //             cLionEffectManager::EffectCreate -> cLionParticleEffectManager::
+    //             BindingsAttach -> cParticleEmitterManager::Register is the ONLY thing in
+    //             the Lion runtime that ever puts an emitter on the used list.
+    //   then, for any live instance:
+    //             TriggerUpdate(trigger, (flags >> 1) & 1, time)   -- the ENABLED bit, shifted
+    //                                                                 down to the run/stop edge
+    //             LocatorUpdate(locator, transform, time)          -- the record's 3x4 widened
+    //                                                                 to a 4x4 with w = 0,0,0,1
+    //             if OVERRIDE_VELOCITY: locator->mVel = record velocity; locator flag bit 1
+    //             ScalerUpdate(scaler, record.mfStateBlend)
+    //             EffectSetWorldIndex(instance, record.muWorldIndex)
+    //
+    // ⚠ THE TIME IS THE **PUBLISHED** ONE, CONVERTED TO TICKS ONCE FOR THE WHOLE LOOP
+    // (`v34[0] = (s32)(*v7 * 3000.0)` before the loop, then handed to both TriggerUpdate and
+    // LocatorUpdate) -- not re-read per record and not the render data's.
+    //
+    // ⚠ THE THREE REGISTER CALLS TAKE A NULL NAME. LocatorRegister / ScalerRegister /
+    // TriggerRegister each carve an anonymous binding object out of the Lion pools; the name
+    // parameter is the authoring-time lookup and the runtime never uses it (`li r3, 0` at all
+    // three call sites).
+    //
+    // ⚠ AND THE CREATE ARM IS ASSERTED, NOT GUARDED: the console asserts the slot's instance
+    // pointer is null and its description non-null and then does the create regardless, which
+    // is why a double-create shows up as an assert rather than as a leak.
+    //
+    // NOT REPRODUCED HERE, announced: ProcessEventQueue @0x8229C418 (the module's inter-thread
+    // event drain -- its queue is a placeholder) and BeginSimulateDebris @0x82289A98 (the
+    // debris jobs are asm-sized placeholders). Both are ahead of the effect loop on the
+    // console and neither feeds it.
+    // =========================================================================
+    void ParticleModule::DispatchThreadUpdate(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInput)
+    {
+        if (lpDispatchThreadInput == 0)
+            return;
+
+        {
+            static bool sbLogged = false;
+            LogNotReconstructed(sbLogged,
+                "ParticleModule::DispatchThreadUpdate's ProcessEventQueue @0x8229C418 + "
+                "BeginSimulateDebris @0x82289A98 (the inter-thread event queue and the debris "
+                "jobs are asm-sized placeholders). THE LION EFFECT CREATE/UPDATE LOOP IS REAL "
+                "AND RUNS");
+        }
+
+        const DispatchThreadUpdateData* const lpIn = lpDispatchThreadInput->GetParticleData();
+
+        // `v34[0] = (S32)(*v7 * 3000.0)` -- one conversion for the whole loop.
+        const cTime lTime = LionTimeFromSeconds(lpIn->mfCurrentTime);
+
+        if (mbPlayingEffectsSuspended)
+            return;
+
+        for (u32 luChanged = 0; luChanged < lpIn->muChangedEffects; ++luChanged)
+        {
+            const LionEffect& lrRecord = lpIn->maChangedLionEffects[luChanged];
+            const u32 luArrayIndex = lrRecord.muHandle & LionEffect::KU_HANDLE_INDEX_MASK;
+
+            CGS_ASSERT((lrRecord.muFlags & (LionEffect::EPPE_FLAG_CHANGED
+                                          | LionEffect::EPPE_FLAG_IN_USE)) != 0,
+                       "lChangedEffect.muFlags & ( LionEffect::ePPEFlagChanged | LionEffect::ePPEFlagInUse )");
+
+            if ((lrRecord.muFlags & LionEffect::EPPE_FLAG_KILL) != 0)
+            {
+                cLionFX::EffectDestroy(mapDispatchThreadLionEffects[luArrayIndex]);
+                mapDispatchThreadLionEffects[luArrayIndex] = 0;
+                ++muDestroyedLionInstances;   // [lionhandoff]
+                continue;
+            }
+
+            if ((lrRecord.muFlags & LionEffect::EPPE_FLAG_CREATE) != 0)
+            {
+                CGS_ASSERT(mapDispatchThreadLionEffects[luArrayIndex] == 0,
+                           "mapDispatchThreadLionEffects[luArrayIndex] == NULL");
+                CGS_ASSERT(lrRecord.mpDescription != 0,
+                           "lChangedEffect.mpLionEffectDefinition != NULL");
+
+                cParticleTrigger* const lpTrigger = cLionFX::TriggerRegister(0);
+                cParticleScaler*  const lpScaler  = cLionFX::ScalerRegister(0);
+                cParticleLocator* const lpLocator = cLionFX::LocatorRegister(0);
+
+                mapDispatchThreadLionEffects[luArrayIndex] = cLionFX::EffectCreate(
+                    const_cast<cLionEffectDefinition*>(
+                        static_cast<const cLionEffectDefinition*>(lrRecord.mpDescription)),
+                    lpLocator, lpScaler, lpTrigger, 0);
+
+                ++muCreatedLionInstances;   // [lionhandoff]
+            }
+
+            cLionEffectInstance* const lpInstance = mapDispatchThreadLionEffects[luArrayIndex];
+            if (lpInstance == 0)
+                continue;
+
+            cLionBindings& lrBindings = lpInstance->GetBindings();
+
+            // `(*(v11 + 80) >> 1) & 1` -- the ENABLED bit as the trigger's run/stop edge.
+            cLionFX::TriggerUpdate(lrBindings.GetpTrigger(),
+                                   (lrRecord.muFlags >> 1) & 1u, lTime);
+
+            // The record's transform widened row by row, with the w lanes FORCED 0,0,0,1 --
+            // the console writes v36[3]/[7]/[11] = 0.0 and v36[15] = 1.0 explicitly rather
+            // than copying the source's fourth lanes.
+            cMatrix lLocatorMat;
+            lLocatorMat.xa.x = lrRecord.mTransform.xAxis.x;
+            lLocatorMat.xa.y = lrRecord.mTransform.xAxis.y;
+            lLocatorMat.xa.z = lrRecord.mTransform.xAxis.z;
+            lLocatorMat.xa.w = 0.0f;
+            lLocatorMat.ya.x = lrRecord.mTransform.yAxis.x;
+            lLocatorMat.ya.y = lrRecord.mTransform.yAxis.y;
+            lLocatorMat.ya.z = lrRecord.mTransform.yAxis.z;
+            lLocatorMat.ya.w = 0.0f;
+            lLocatorMat.za.x = lrRecord.mTransform.zAxis.x;
+            lLocatorMat.za.y = lrRecord.mTransform.zAxis.y;
+            lLocatorMat.za.z = lrRecord.mTransform.zAxis.z;
+            lLocatorMat.za.w = 0.0f;
+            lLocatorMat.wa.x = lrRecord.mTransform.wAxis.x;
+            lLocatorMat.wa.y = lrRecord.mTransform.wAxis.y;
+            lLocatorMat.wa.z = lrRecord.mTransform.wAxis.z;
+            lLocatorMat.wa.w = 1.0f;
+
+            cParticleLocator* const lpLocator = lrBindings.GetpLocator();
+            cLionFX::LocatorUpdate(lpLocator, lLocatorMat, lTime);
+
+            if ((lrRecord.muFlags & LionEffect::EPPE_FLAG_OVERRIDE_VELOCITY) != 0
+                && lpLocator != 0)
+            {
+                // The record's +0x50 velocity into the locator's mVel (+0x40), then flag bit 1.
+                lpLocator->mVel.x = lrRecord.mfVelocityX;
+                lpLocator->mVel.y = lrRecord.mfVelocityY;
+                lpLocator->mVel.z = lrRecord.mfVelocityZ;
+                lpLocator->mVel.w = 0.0f;
+                lpLocator->mFlags |= cParticleLocator::E_FLAG_EXTERNAL_VELOCITY;   // `|= 2`
+            }
+
+            cLionFX::ScalerUpdate(lrBindings.GetpScaler(), lrRecord.mfStateBlend, lTime);
+            cLionFX::EffectSetWorldIndex(lpInstance, lrRecord.muWorldIndex);
+        }
+
+        // [lionhandoff] FLAG PC bring-up diagnostic -- the CREATE side's witness, printed only
+        // on the first create and then whenever the running totals change by a decade, so a
+        // steady state costs nothing. It is the line that separates "PreRenderUpdate published
+        // nothing" from "DispatchThreadUpdate published records but created no instance" from
+        // "instances exist and the emitter list is still empty" -- three different bugs that all
+        // look the same as `emitters live=0`. DELETE with the boost-exhaust bring-up.
+        if (muCreatedLionInstances != suLastReportedCreates
+            && (muCreatedLionInstances == 1 || muCreatedLionInstances % 10 == 0))
+        {
+            suLastReportedCreates = muCreatedLionInstances;
+            char lacMsg[192];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[lionhandoff] created=%u destroyed=%u lastChangedBatch=%u\n",
+                          muCreatedLionInstances, muDestroyedLionInstances,
+                          lpIn->muChangedEffects);
             CgsDev::Log::WriteToLog(lacMsg);
         }
     }

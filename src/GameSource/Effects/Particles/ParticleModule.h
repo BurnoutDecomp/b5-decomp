@@ -26,7 +26,11 @@ namespace renderengine { class Texture; }   // ParticleRenderData::mpEnvironment
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // Prepare's allocator list (pointer-only)
 namespace BrnGame { struct DispatchThreadInputBuffer; }                  // GenerateRenderRequests / PreRenderUpdate target (pointer-only)
 namespace BrnDirector { namespace Camera { class Camera; } }              // Update's camera (pointer-only)
-class cTime;                                                              // Lion SDK time (mpLionCurrentTime, pointer-only)
+struct cTime;   // Lion SDK time (mpLionCurrentTime, pointer-only).
+                // ⚠ `struct`, NOT `class`: cTime.h defines it as a struct, and MSVC mangles the two
+                // class-keys differently (U vs V) -- the same trap ParticleRender.h documents for
+                // its own cTime forward declaration, which cost three LNK2019s on 2026-09-03.
+struct cLionEffectInstance;   // LionEffect.h -- mapDispatchThreadLionEffects (pointer-only here)
 namespace BrnParticle { namespace ParticleIO { struct PrepareOutputBuffer; } }   // ParticleModuleIO.h (the prepare payload; pointer-only here)
 namespace BrnParticle { namespace ParticleIO { struct DispatchInputBuffer; } }    // ParticleModuleIO.h (the dispatch payload; pointer-only here)
 
@@ -99,9 +103,9 @@ namespace BrnParticle
         void Construct()
         {
             mTransform.SetIdentity();
-            mPad50[0] = mPad50[1] = mPad50[2] = mPad50[3] = 0;     // +0x50 velocity.x
-            mPad50[4] = mPad50[5] = mPad50[6] = mPad50[7] = 0;     // +0x54 velocity.y
-            mPad50[8] = mPad50[9] = mPad50[10] = mPad50[11] = 0;   // +0x58 velocity.z
+            mfVelocityX = 0.0f;   // +0x50
+            mfVelocityY = 0.0f;   // +0x54
+            mfVelocityZ = 0.0f;   // +0x58
             muWorldIndex = 0;
             mfStateBlend = 0.0f;
             muFlags      = 0;
@@ -131,7 +135,15 @@ namespace BrnParticle
         f32 mfStateBlend;                          // +0x0C - state blend factor (BoostStateMachine
                                                    //         SetBlendValue stores here; +0x53FC)
         rw::math::vpu::Matrix44Affine mTransform;  // +0x10 - the effect's world transform
-        u8  mPad50[0x0C];                          // +0x50 - velocity / death time
+        // +0x50 -- NAMED 2026-09-05 from the DWARF (ParticleModule.h:200), which types it
+        // `SmoothStep::Vector3 mVelocity`: a PACKED three-float vector, 12 bytes, not a 16-byte
+        // lane register -- which is exactly the span the old `u8 mPad50[0x0C]` occupied and what
+        // puts muWorldIndex on +0x5C. ParticleModule::DispatchThreadUpdate @0x8229C5F0 reads the
+        // three lanes individually (`*(v11+60)/+64/+68`) into a stack vector before pushing them
+        // onto the locator, which is what a packed 3-float forces.
+        f32 mfVelocityX;                           // +0x50  DWARF mVelocity.x
+        f32 mfVelocityY;                           // +0x54  DWARF mVelocity.y
+        f32 mfVelocityZ;                           // +0x58  DWARF mVelocity.z
         u32 muWorldIndex;                          // +0x5C - world index (SetWorldIndex stores
                                                    //         here; slot +0x5C / module +0x544C)
         // +0x60 -- StartLionEffect's expiry stamp (`*(v19 + 21584) = 1.0e10` for an endless
@@ -264,16 +276,42 @@ namespace BrnParticle
         // and `...::ParticleRenderData`.
         // ==============================================================================
 
-        // DWARF ParticleModule.h:565. FLAG (ad-hoc opaque, not recovered): the DWARF gives it
-        // mfCurrentTime / mfCurrentTimeStep / muChangedEffects / Matrix44Affine mViewMatrix /
-        // Matrix44 mProjectionMatrix / LionEffect[128] maChangedLionEffects (:566-571), which
-        // sizes to 0x90 + 128 * 0x70 == 0x3890 -- EXACTLY the console's gap between
-        // DispatchThreadInputBuffer's mParticleData (+0x10) and mParticleRenderData (+0x38A0).
-        // Recovering it is the Lion dispatch pass's job; the 1-byte placeholder is kept so
-        // nothing about the enclosing buffer changes by accident.
+        // DWARF ParticleModule.h:565-571. RECOVERED 2026-09-05 (the boost-exhaust wave); it was a
+        // one-byte opaque placeholder, and that placeholder was the reason nothing on this build
+        // could ever create a Lion emitter -- it is the record ParticleModule::PreRenderUpdate
+        // @0x82294760 fills and ParticleModule::DispatchThreadUpdate @0x8229C5F0 consumes, and
+        // that pair is the ONLY route from a stamped maPlayingEffects slot to a live emitter.
+        //
+        // EVERY OFFSET BELOW IS AN INSTRUCTION IN ONE OF THOSE TWO BODIES:
+        //   +0x00 mfCurrentTime         PreRenderUpdate `*v5 = *(this+36360)` (mRenderData+0x08)
+        //   +0x04 mfCurrentTimeStep     `*(v5+4) = *(this+36364)`             (mRenderData+0x0C)
+        //   +0x08 muChangedEffects      `*(v5+8) = 0` then `++*(v5+8)` per copied slot; and
+        //                               DispatchThreadUpdate's loop bound `while (v10 < *(v8+8))`
+        //   +0x10 mViewMatrix           four lvx128/stvx128 from this+36448 (mRenderData+0x60,
+        //                               i.e. mCgsCamera.mView) into v5+16
+        //   +0x50 mProjectionMatrix     four more from this+36512 (mCgsCamera.mProjection) into
+        //                               v5+80
+        //   +0x90 maChangedLionEffects  `112 * *(v5+8) + v5 + 144` -- the copy destination, and
+        //                               DispatchThreadUpdate's `v11 = v7 + 164 + 112*n` cursor
+        //                               (164 == 144 + 20, i.e. it walks from slot+0x14)
+        // 0x90 + 128 * 0x70 == 0x3890, EXACTLY the console's gap between
+        // DispatchThreadInputBuffer's mParticleData (+0x10) and mParticleRenderData (+0x38A0) --
+        // which is the independent check that the member list is complete.
+        //
+        // ⚠ THE HOST RECORD IS BIGGER, AND THAT IS FINE HERE: LionEffect carries a pointer
+        // (mpDescription), so it is 0x80 on the host against the console's 0x70, and this record
+        // is 0x4090 rather than 0x3890. Nothing outside this pair addresses it -- both ends are
+        // ours, both reach it BY NAME, and the enclosing buffer pins no byte offsets (see
+        // BrnDispatchThreadInputBuffer.h's own note).
         struct DispatchThreadUpdateData
         {
-            u8 maStorage[1];   // FLAG: opaque, true size is 0x3890 -- see above
+            f32 mfCurrentTime;                          // DWARF :566
+            f32 mfCurrentTimeStep;                      // DWARF :567
+            u32 muChangedEffects;                       // DWARF :568
+            u32 muPad0C;                                // (mViewMatrix is 16-aligned at +0x10)
+            rw::math::vpu::Matrix44Affine mViewMatrix;  // DWARF :569
+            rw::math::vpu::Matrix44 mProjectionMatrix;  // DWARF :570
+            LionEffect maChangedLionEffects[KU_MAX_PLAYING_EFFECTS];   // DWARF :571
         };
 
         // DWARF ParticleModule.h:576-606 -- the render-side snapshot this module publishes
@@ -348,6 +386,24 @@ namespace BrnParticle
         void BuildLionVertexBuffers(const ParticleRenderData* lpRenderData);
         // X360 0x8229AFD0 -- render thread: the trail strips (RenderTrails), debris, sparks, Lion.
         void RenderFullResParticles(const ParticleRenderData* lpRenderData);
+
+        // ⭐⭐ THE TWO HALVES OF THE EFFECT HAND-OFF, and between them the ONLY route in the whole
+        // program from a stamped maPlayingEffects slot to a live Lion emitter. Everything else on
+        // the particle path -- StartLionEffect, the boost tags, the whole render closure -- is
+        // inert without them, which is exactly what `[lionfx] Render: emitters live=0` measured.
+        //
+        // X360 0x82294760 -- the PRODUCER (update thread). Publish the frame's time, the camera's
+        // view + projection, and every CHANGED playing slot into the dispatch buffer's
+        // maChangedLionEffects, clearing CHANGED|CREATE on the slot as it copies. Called by
+        // BrnEffects::EffectsModule::PreRenderUpdate @0x8227FE10 through the module vtable.
+        void PreRenderUpdate(BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInput);
+
+        // X360 0x8229C5F0 -- the CONSUMER (dispatch thread). For every changed slot: destroy on
+        // KILL, create on CREATE (TriggerRegister / ScalerRegister / LocatorRegister ->
+        // cLionFX::EffectCreate), then push the slot's transform / velocity / scaler / world index
+        // into the live instance's bindings. Called by EffectsModule::DispatchThreadUpdate
+        // @0x8227FE88 through the module vtable.
+        void DispatchThreadUpdate(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInput);
 
         // X360 0x82278380. Resolve a handle to its playing-effect slot, or NULL when the
         // slot has been recycled (its stored handle no longer equals luHandle).
@@ -461,9 +517,11 @@ namespace BrnParticle
         LionEffect maPlayingEffects[KU_MAX_PLAYING_EFFECTS]; // +0x53F0 .. +0x8BF0
 
         u32   muUpdateThreadNextLionEffect;           // +0x8BF0 (35824)  DWARF :40  Construct: 0
-        // DWARF :43 cLionEffectInstance*[128] -- the dispatch-thread twins. FLAG: the Lion
-        // instance type is not reconstructed; carried as untyped host pointers (Construct zeroes them).
-        void* mapDispatchThreadLionEffects[KU_MAX_PLAYING_EFFECTS]; // +0x8BF4 (35828)
+        // DWARF :43 cLionEffectInstance*[128] -- the dispatch-thread twins, i.e. the LIVE Lion
+        // effect for each playing slot. TYPED 2026-09-05: cLionEffectInstance has a home now
+        // (LionEffect.h), and ParticleModule::DispatchThreadUpdate -- which is what fills this
+        // array, through cLionFX::EffectCreate -- needs its bindings by name. Construct zeroes it.
+        cLionEffectInstance* mapDispatchThreadLionEffects[KU_MAX_PLAYING_EFFECTS]; // +0x8BF4 (35828)
         bool  mbPlayingEffectsSuspended;              // +0x8DF4 (36340)  DWARF :46  Update/PreRender/BuildLion gate
         bool  mbStalled;                              // +0x8DF5 (36341)  DWARF :49  EndOfFrame latches it
         u8    maPad8DF6To8E00[0x8E00 - 0x8DF6];       // -> +0x8E00 (16-aligned)

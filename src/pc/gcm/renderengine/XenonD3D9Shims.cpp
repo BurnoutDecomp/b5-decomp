@@ -3144,6 +3144,248 @@ namespace renderengine
         }
     }
 
+
+    // ============================================================================================
+    // renderengine::WorldDraw_NonIndexedUP -- the FAST-SET stash's NON-INDEXED twin.
+    //
+    // WorldDraw_IndexedUP above is what D3DDevice_DrawIndexedVertices lands on. This is what
+    // D3DDevice_DrawVertices lands on: same stash, same UP contract, no index buffer. It exists
+    // because the LION PARTICLE DISPATCH -- cParticleRender::Dispatch @0x82911E98 -- is the
+    // tree's first live non-indexed fast-set caller. It binds one stream
+    // (D3DDevice_SetStreamSource -> WorldDraw_SetVertexSourceRaw), flushes the vertex program
+    // state, and issues one D3DDevice_DrawVertices per batch with NO indices at all.
+    //
+    // ---- XENOS QUADLIST (13) IS THE WHOLE REASON THIS IS NOT A ONE-LINE DrawPrimitiveUP -------
+    //
+    // The Lion pass passes primitive type 13 (the console's `li r4, 0xD`). Xenos QUADLIST takes
+    // every FOUR CONSECUTIVE vertices as one quad and rasterises it as the two triangles
+    // (0,1,2) and (0,2,3). PC Direct3D 9 has no quad topology at all -- MapPrimitive() at the
+    // top of this TU refuses 13 on purpose -- so the quads are expanded here into a
+    // TRIANGLELIST with a generated index run. The VERTEX BYTES ARE NEVER TOUCHED: only indices
+    // are synthesised, so nothing about the particle vertex format, its stride or its
+    // declaration is assumed.
+    //
+    // THE WINDING IS THE LOAD-BEARING PART, and it is not a guess. BrnLionBlendRenderer's
+    // QuadDraw @0x82282330 writes its four corners in the order 0, 1, 3, 2 -- positions taken
+    // from r28+0x00, +0x10, +0x30, +0x20 (BrnLionBlendRenderer.cpp:348-353) -- i.e. the four
+    // corners arrive as a LOOP around the quad, (X0Y0), (X0Y1), (X1Y1), (X1Y0), not as a strip
+    // pair. Fanning a loop from corner 0 is exactly (0,1,2) + (0,2,3), which is exactly what the
+    // Xenos does with a QUADLIST. Reading the same four vertices as a D3D9 TRIANGLESTRIP instead
+    // would draw (0,1,2) + (2,1,3) -- a bow-tie -- and reading them as a D3DPT_TRIANGLEFAN per
+    // quad would be correct but would cost ONE DRAW CALL PER PARTICLE.
+    //
+    // WHY INDEXED-UP RATHER THAN EXPANDING THE VERTICES. DrawIndexedPrimitiveUP copies the
+    // vertex block once and reads the index run out of host memory, so a 6-index-per-quad table
+    // costs 12 bytes per particle against the 2 x 36 = 72 bytes duplicating corners 0 and 2
+    // would cost, and it leaves the vertex bytes byte-identical to what the console's own
+    // BuildLionVertexBuffers wrote. The table is 16-bit and built ONCE (it is a pure function of
+    // the quad index), and the run is submitted in chunks of KU_QUADLIST_CHUNK_QUADS so a 16-bit
+    // index can always address its own chunk -- the chunk's base vertex is folded into the
+    // vertex POINTER instead, which is what MinVertexIndex/BaseVertexIndex would do on a bound
+    // buffer.
+    //
+    // XENOS RECTLIST (8) IS STILL REFUSED. A Xenos rect is THREE vertices with the fourth corner
+    // synthesised by the hardware (v3 = v1 + v2 - v0), which cannot be done without knowing
+    // where POSITION sits in the caller's vertex format and how to interpolate every other
+    // element of it. No caller in this tree passes 8 (the post-fx note at rwgpfxhelper.cpp:1014
+    // describes the console's call; the PC composite draws its quad through
+    // D3DDevice_BeginVertices instead), so it stays an honest refusal rather than a guess.
+    // ============================================================================================
+    const u32 KU_XENOS_QUADLIST        = 13u;
+    const u32 KU_QUADLIST_CHUNK_QUADS  = 16384u;   // x4 = 65536 vertices: the whole u16 range
+
+    // The generated quad index table, built once on first use: for quad q,
+    // {4q+0, 4q+1, 4q+2, 4q+0, 4q+2, 4q+3}.
+    static std::vector<u16> sQuadListIndices;
+
+    static const u16* QuadListIndices()
+    {
+        if (sQuadListIndices.empty())
+        {
+            sQuadListIndices.resize(static_cast<size_t>(KU_QUADLIST_CHUNK_QUADS) * 6u);
+            for (u32 luQuad = 0; luQuad < KU_QUADLIST_CHUNK_QUADS; ++luQuad)
+            {
+                const u32 luBase = luQuad * 4u;
+                u16* const lpOut = &sQuadListIndices[static_cast<size_t>(luQuad) * 6u];
+                lpOut[0] = static_cast<u16>(luBase + 0u);
+                lpOut[1] = static_cast<u16>(luBase + 1u);
+                lpOut[2] = static_cast<u16>(luBase + 2u);
+                lpOut[3] = static_cast<u16>(luBase + 0u);
+                lpOut[4] = static_cast<u16>(luBase + 2u);
+                lpOut[5] = static_cast<u16>(luBase + 3u);
+            }
+        }
+        return &sQuadListIndices[0];
+    }
+
+    void WorldDraw_NonIndexedUP(u32 luPrimTypeXenon, u32 luStartVertex, u32 luVertexCount)
+    {
+        IDirect3DDevice9* lpDevice = Dev();
+        if (lpDevice == nullptr || spVertexSource == nullptr || suVertexStride == 0
+            || !sbWorldDeclarationValid)
+        {
+            LogOnce("updrawnv", "[WorldDraw] non-indexed draw skipped: no device / no vertex"
+                                " stash / no declaration\n");
+            return;
+        }
+        if (luVertexCount == 0)
+        {
+            return;
+        }
+
+        // The DISPATCH publisher's stash describes a serialised bundle mesh whose vertices may
+        // still need the DEC3N expansion, and its expanded stride is not the stride its bytes are
+        // stored at. Nothing non-indexed publishes through that path today; refuse rather than
+        // read one publisher's bytes through the other's plan (the 2026-08-12 exploding-geometry
+        // defect, in the other direction).
+        if (!sbVertexSourceFastSet)
+        {
+            LogOnce("updrawdisp", "[WorldDraw] non-indexed draw skipped: the DISPATCH publisher"
+                                  " owns the stash (no non-indexed dispatch path)\n");
+            return;
+        }
+
+        const void* const lpVertexData = ResolveGuestPointer(spVertexSource->muBaseAddress);
+        if (lpVertexData == nullptr)
+        {
+            LogOnce("upnullnv", "[WorldDraw] non-indexed draw skipped: buffer base unresolved"
+                                " (x64 widening seam?)\n");
+            return;
+        }
+
+        // The header's own byte count is the only statement of how far the buffer goes. A run
+        // that leaves it is a caller bug and would read unowned memory through UP.
+        const u32 luBufferVertices = spVertexSource->muSize / suVertexStride;
+        if (luStartVertex > luBufferVertices || luVertexCount > luBufferVertices - luStartVertex)
+        {
+            static bool sbReportedRange = false;
+            if (!sbReportedRange)
+            {
+                sbReportedRange = true;
+                char lacMsg[224];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                              "[WorldDraw] non-indexed run [%u,%u) leaves the %u-vertex buffer"
+                              " (%u bytes / %u stride) - draw SKIPPED\n",
+                              (unsigned)luStartVertex, (unsigned)(luStartVertex + luVertexCount),
+                              (unsigned)luBufferVertices, (unsigned)spVertexSource->muSize,
+                              (unsigned)suVertexStride);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+            return;
+        }
+
+        const u8* const lpRun = static_cast<const u8*>(lpVertexData)
+                              + static_cast<size_t>(luStartVertex) * suVertexStride;
+
+        HRESULT lhrDraw = S_OK;
+        UINT    luPrimsDrawn = 0;
+
+        if (luPrimTypeXenon == KU_XENOS_QUADLIST)
+        {
+            const u32 luQuads = luVertexCount / 4u;
+            if (luQuads == 0u)
+            {
+                LogOnce("upquadshort", "[WorldDraw] QUADLIST run shorter than one quad -"
+                                       " draw skipped\n");
+                return;
+            }
+            if ((luVertexCount & 3u) != 0u)
+            {
+                LogOnce("upquadpart", "[WorldDraw] QUADLIST vertex count is not a multiple of 4 -"
+                                      " the trailing partial quad is dropped\n");
+            }
+
+            const u16* const lpIndices = QuadListIndices();
+            for (u32 luFirstQuad = 0; luFirstQuad < luQuads; luFirstQuad += KU_QUADLIST_CHUNK_QUADS)
+            {
+                u32 luChunkQuads = luQuads - luFirstQuad;
+                if (luChunkQuads > KU_QUADLIST_CHUNK_QUADS)
+                    luChunkQuads = KU_QUADLIST_CHUNK_QUADS;
+
+                // The chunk's base vertex rides in the VERTEX POINTER, so the shared 16-bit
+                // table always indexes from zero.
+                const u8* const lpChunk = lpRun
+                    + static_cast<size_t>(luFirstQuad) * 4u * suVertexStride;
+
+                const HRESULT lhr = lpDevice->DrawIndexedPrimitiveUP(
+                    D3DPT_TRIANGLELIST,
+                    0,                                  // MinVertexIndex
+                    luChunkQuads * 4u,                  // NumVertices
+                    luChunkQuads * 2u,                  // PrimitiveCount
+                    lpIndices, D3DFMT_INDEX16,
+                    lpChunk, suVertexStride);
+                if (FAILED(lhr))
+                    lhrDraw = lhr;
+                luPrimsDrawn += luChunkQuads * 2u;
+            }
+        }
+        else
+        {
+            D3DPRIMITIVETYPE lePrim = D3DPT_TRIANGLESTRIP;
+            UINT             luPrimCount = 0;
+            if (!MapPrimitive(luPrimTypeXenon, luVertexCount, &lePrim, &luPrimCount))
+            {
+                // MapPrimitive's own LogOnce names the type; this adds the numbers.
+                static bool sbReportedType = false;
+                if (!sbReportedType)
+                {
+                    sbReportedType = true;
+                    char lacMsg[192];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                                  "[WorldDraw] non-indexed Xenos primitive type %u with %u"
+                                  " vertices is not drawable - submit SKIPPED\n",
+                                  (unsigned)luPrimTypeXenon, (unsigned)luVertexCount);
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+                return;
+            }
+            lhrDraw = lpDevice->DrawPrimitiveUP(lePrim, luPrimCount, lpRun, suVertexStride);
+            luPrimsDrawn = luPrimCount;
+        }
+
+        {
+            // [lionfx] FLAG PC bring-up witness. The Lion dispatch is this path's first live
+            // caller and its whole failure surface is invisible from the game side, so the
+            // FIRST submit reports what it drew and the state it drew against, and any later
+            // FAILED submit reports once. Delete with the particle bring-up.
+            static bool sbDiagFirst = false;
+            static bool sbDiagFailed = false;
+            if (!sbDiagFirst || (FAILED(lhrDraw) && !sbDiagFailed))
+            {
+                if (FAILED(lhrDraw)) sbDiagFailed = true;
+                sbDiagFirst = true;
+                IDirect3DVertexShader9*      lpVs   = nullptr;
+                IDirect3DPixelShader9*       lpPs   = nullptr;
+                IDirect3DVertexDeclaration9* lpDecl = nullptr;
+                DWORD luZEnable = 0, luZFunc = 0, luCull = 0, luColourWrite = 0, luAlphaBlend = 0;
+                lpDevice->GetVertexShader(&lpVs);
+                lpDevice->GetPixelShader(&lpPs);
+                lpDevice->GetVertexDeclaration(&lpDecl);
+                lpDevice->GetRenderState(D3DRS_ZENABLE, &luZEnable);
+                lpDevice->GetRenderState(D3DRS_ZFUNC, &luZFunc);
+                lpDevice->GetRenderState(D3DRS_CULLMODE, &luCull);
+                lpDevice->GetRenderState(D3DRS_COLORWRITEENABLE, &luColourWrite);
+                lpDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &luAlphaBlend);
+                char lacMsg[320];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                              "[lionfx] DrawVertices: hr=0x%08X xenosPrim=%u start=%u verts=%u"
+                              " stride=%u prims=%u vbVerts=%u vs=%d ps=%d decl=%d z=%u zfunc=%u"
+                              " cull=%u cw=%u blend=%u\n",
+                              (unsigned)lhrDraw, (unsigned)luPrimTypeXenon,
+                              (unsigned)luStartVertex, (unsigned)luVertexCount,
+                              (unsigned)suVertexStride, (unsigned)luPrimsDrawn,
+                              (unsigned)luBufferVertices,
+                              (int)(lpVs != nullptr), (int)(lpPs != nullptr),
+                              (int)(lpDecl != nullptr), (unsigned)luZEnable, (unsigned)luZFunc,
+                              (unsigned)luCull, (unsigned)luColourWrite, (unsigned)luAlphaBlend);
+                CgsDev::Log::WriteToLog(lacMsg);
+                if (lpVs) lpVs->Release();
+                if (lpPs) lpPs->Release();
+                if (lpDecl) lpDecl->Release();
+            }
+        }
+    }
+
     // renderengine::D3DDevice_CreateVertexDeclaration (VertexDescriptor.cpp
     // CreateD3DObject): the input array uses the XENON 12-byte element records
     // {u16 stream, u16 offset, u32 Xenon type, u8 method, u8 usage, u8 usageIdx,
@@ -3971,6 +4213,29 @@ void D3DDevice_DrawIndexedVertices(IDirect3DDevice9* /*lpDeviceArg*/,
 }
 
 // ---------------------------------------------------------------------------------------------
+// D3DDevice_DrawVertices -- the Xenon NON-INDEXED fast-path draw.
+//
+// Xenon signature: (D3DDevice*, PrimitiveType, StartVertex, VertexCount). The device argument is
+// ignored for the same reason every sibling shim in this block ignores it (the live PC device is
+// whatever Dev() resolves at submit time).
+//
+// Homed HERE, not in LionRuntimeLinkStubs.cpp, because the geometry it draws is the fast-set
+// stash this TU owns -- the same reason D3DDevice_DrawIndexedVertices sits ten lines above. The
+// Lion holding pen previously carried a CGS_ASSERT(false) trap for it; the trap was correct while
+// the Lion dispatch pass was parked and is retired now that cParticleRender::Dispatch runs.
+//
+// CALLERS ON THIS BUILD: cParticleRender::Dispatch (Xenos QUADLIST, one call per particle batch)
+// and the three XCam video-output paths (Xenos TRIANGLESTRIP, 4 vertices).
+// ---------------------------------------------------------------------------------------------
+void D3DDevice_DrawVertices(IDirect3DDevice9* /*lpDeviceArg*/,
+                            u32 luPrimitiveType,
+                            u32 luStartVertex,
+                            u32 luVertexCount)
+{
+    renderengine::WorldDraw_NonIndexedUP(luPrimitiveType, luStartVertex, luVertexCount);
+}
+
+// ---------------------------------------------------------------------------------------------
 // D3DDevice_BeginVertices -- reserve a run of luVertexCount vertices of luVertexStreamZeroStride
 // bytes each and return the write cursor the caller fills.
 //
@@ -3999,10 +4264,20 @@ void D3DDevice_DrawIndexedVertices(IDirect3DDevice9* /*lpDeviceArg*/,
 // already uses it; it is reused here rather than duplicated, so the two draw paths can never
 // disagree about what 6 means.
 //
-// Types MapPrimitive refuses -- Xenos RECTLIST (8) and QUADLIST (13) -- have no DrawPrimitiveUP
-// form and no caller in this tree today (nothing passes 8 or 13 anywhere in b5-decomp/src), so
-// they are refused honestly rather than expanded on speculation. If a real RECTLIST caller ever
-// lands, expand it there (a rect is two triangles) rather than guessing now.
+// Types MapPrimitive refuses -- Xenos RECTLIST (8) and QUADLIST (13) -- have no D3D9 topology at
+// all, so it still refuses both and every caller that needs one handles it above the table.
+//
+// ⭐ UPDATED 2026-09-05. The original note said "no caller in this tree today (nothing passes 8
+// or 13 anywhere in b5-decomp/src)". That is no longer true of 13: cParticleRender::Dispatch
+// @0x82911E98 -- the Lion particle draw -- passes KU_PARTICLE_PRIMITIVE_TYPE == 13 on every
+// batch. It does NOT come through here (this ring is the BeginVertices/EndVertices path); it
+// comes through D3DDevice_DrawVertices -> WorldDraw_NonIndexedUP, which expands the quads into a
+// TRIANGLELIST with a generated index run using QuadDraw's own 0/1/3/2 corner loop. See the
+// derivation above that function. MapPrimitive is deliberately left refusing 13 so this ring, and
+// the indexed world path, cannot silently draw a quad run as something else.
+//
+// RECTLIST (8) is still refused everywhere: a Xenos rect is three vertices with the fourth corner
+// synthesised by the hardware, which cannot be done without knowing the caller's vertex format.
 //
 // THE RETURN VALUE. Every in-tree caller null-checks the cursor before writing through it
 // (CgsIm2dUntex.cpp:436, BrnSkidVertex.cpp:379, the post-fx composite), so nullptr is a usable

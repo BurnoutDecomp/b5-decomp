@@ -114,15 +114,15 @@ void cParticleBehaviour::Lerp(const cParticleBehaviour* /*apLo*/,
 // console-independent construction path yet.
 void* gpLionParticleSamplerState = nullptr;
 
-// D3DDevice_DrawVertices is the Xenon fast-path draw thunk. The sibling
-// D3DDevice_SetStreamSource already has a PC home (pc/gcm/renderengine/MeshHelper.cpp); this one
-// does not, and writing a real DrawPrimitive here would be inventing a draw path for a pass that
-// cannot reach it. FLAG PC-platform leaf: a Xenon D3D9 entry point with no PC equivalent yet.
-extern "C" void D3DDevice_DrawVertices(struct IDirect3DDevice9* /*lpDevice*/,
-                                       u32 /*luPrimitiveType*/,
-                                       u32 /*luStartVertex*/,
-                                       u32 /*luVertexCount*/)
-{
-    CGS_ASSERT(false, "D3DDevice_DrawVertices -- NOT RECONSTRUCTED (Xenon fast-path draw; the "
-                      "Lion dispatch pass that uses it is parked)");
-}
+// D3DDevice_DrawVertices -- RETIRED FROM THIS HOLDING PEN (2026-09-05).
+//
+// It used to be a CGS_ASSERT(false) trap here, on the stated grounds that "writing a real
+// DrawPrimitive here would be inventing a draw path for a pass that cannot reach it". That
+// premise expired the moment cParticleRender::Dispatch got a body: the Lion pass reaches it on
+// every batch, so the trap would fire on every particle draw.
+//
+// The real body is in pc/gcm/renderengine/XenonD3D9Shims.cpp beside D3DDevice_DrawIndexedVertices
+// -- which is where it belongs, because the geometry it draws is the fast-set vertex stash that
+// TU owns (D3DDevice_SetStreamSource -> WorldDraw_SetVertexSourceRaw). It expands the Xenos
+// QUADLIST (13) this pass submits into a D3D9 TRIANGLELIST using QuadDraw's own 0/1/3/2 corner
+// loop; the note above WorldDraw_NonIndexedUP carries the derivation.

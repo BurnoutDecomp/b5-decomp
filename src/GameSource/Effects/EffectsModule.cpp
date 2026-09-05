@@ -1832,6 +1832,45 @@ void EffectsModule::GenerateDispatchLists(CgsModule::IOBufferStack* lpInputBuffe
     const bool lbDestroyed = lpInputBufferStack->DestroyIOBuffer(&lpParticleInput);
     CGS_ASSERT(lbDestroyed, "mpStack->DestroyIOBuffer( &mpBuffer )");   // CgsModuleIOHelper.h:57
     (void)lbDestroyed;
+
+    // =====================================================================================
+    // THE LION EFFECT HAND-OFF (added 2026-09-05, the boost-exhaust wave).
+    //
+    // ⭐⭐ WITHOUT THESE TWO CALLS NOTHING IN THE GAME EVER CREATES A PARTICLE EMITTER, and
+    // that is measured, not argued: with the whole Lion render closure landed and reachable,
+    // a two-minute driving run printed `[lionfx] Render: emitters live=0` once and never
+    // again. StartLionEffect only STAMPS a maPlayingEffects slot with CREATE; the pair below
+    // is the only thing that reads that stamp, and DispatchThreadUpdate's
+    // cLionFX::EffectCreate -> cLionEffectManager::EffectCreate ->
+    // cLionParticleEffectManager::BindingsAttach -> cParticleEmitterManager::Register is the
+    // only route to a live emitter that exists.
+    //
+    // CONSOLE SHAPE, exactly: they are MODULE VTABLE ENTRIES, not calls this function makes.
+    // BrnEffects::EffectsModule::PreRenderUpdate @0x8227FE10 write-locks the dispatch buffer,
+    // memcpys the crash triangle cache into it and then calls the particle module's slot 72
+    // (its own PreRenderUpdate); ::DispatchThreadUpdate @0x8227FE88 read-locks the buffer and
+    // calls slot 76. The module framework drives both once a frame, in that order.
+    //
+    // FLAG PC bring-up wiring: the framework's PreRenderUpdate / DispatchThreadUpdate leg does
+    // not exist on this build (no module's PreRenderUpdate is called anywhere in the tree), so
+    // the pair is driven from HERE -- GenerateDispatchLists, the per-frame dispatch hook that
+    // IS live, is the same DoDispatch pass the console's own calls belong to, and it already
+    // owns this very buffer one statement earlier. The order below is the console's: publish
+    // (write lock), then consume (read lock), both BEFORE the render thread's
+    // BuildLionVertexBuffers runs cLionFX::Update on the emitters this creates.
+    // ⛔ THE TWO LOCK WINDOWS MUST NOT NEST -- IOBuffer::LockForRead asserts "Already locked
+    // for write" -- which is why they sit outside the GenerateRenderRequests bracket above
+    // rather than inside it, and why PreRenderUpdate takes its own write lock internally
+    // exactly as the console's wrapper does.
+    // DELETE-WHEN the module framework's PreRenderUpdate / DispatchThreadUpdate leg lands:
+    // these become EffectsModule::PreRenderUpdate @0x8227FE10 / ::DispatchThreadUpdate
+    // @0x8227FE88 overrides and the framework calls them.
+    // =====================================================================================
+    mParticleModule.PreRenderUpdate(lpDispatchThreadInputBuffer);
+
+    lpDispatchThreadInputBuffer->LockForRead();
+    mParticleModule.DispatchThreadUpdate(lpDispatchThreadInputBuffer);
+    lpDispatchThreadInputBuffer->UnlockForRead();
 }
 
 // =============================================================================
