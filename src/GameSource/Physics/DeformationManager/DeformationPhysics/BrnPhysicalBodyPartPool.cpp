@@ -110,7 +110,7 @@ namespace Deformation
         u16 lu16IKPartIndex, const DeformableObject* lpDeformableObject,
         RigidBodyId lRigidBodyId, EntityId lGlobalVehicleId, s32 liMeshIndex,
         const IKBodyPart* lpIKPart, Matrix44Affine lGraphicsTransform,
-        Matrix44Affine lBBoxOrientation, Vector3 lLinearVelocity,
+        Matrix44Affine lVehicleTransform, Vector3 lLinearVelocity,
         Vector3 lAngularVelocity)
     {
         // Lowest free slot, or KI_INVALID_BITINDEX(-1) / >=50 when the pool is full.
@@ -151,7 +151,7 @@ namespace Deformation
 
         // Bind the part to its vehicle + IK spec, building the joint/graphics/COM/bbox frames.
         lpPart->Prepare(lPartId, lGlobalVehicleId, lpDeformableObject, lpIKPart,
-                        lGraphicsTransform, lBBoxOrientation);
+                        lGraphicsTransform, lVehicleTransform);
 
         // Non-gating bbox finite/handedness tripwires (X360 BrnPhysicalBodyPartPool.cpp:106/107).
         // The asm evaluates `vcmpgtfp(epsilon^2, |axis|^2)` over the built axes and fires the
@@ -268,7 +268,8 @@ namespace Deformation
         {
             const PotentialContact& lContact = *lpWorldContactQueue->GetContact(liWorldContactIndex);
 
-            const u32 luOwner = static_cast<u32>(lContact.muVolumeInstanceIdA >> 56) & 0xFF;
+            // `ld r11, 0x30(contact) ; srdi 32 ; srwi 24` -- the id's TOP byte.
+            const u32 luOwner = static_cast<u32>(lContact.muVolumeInstanceIdA.muId >> 56) & 0xFFu;
             CGS_ASSERT(luOwner == KU_OWNER_RACECAR_DEFORMABLE_PART
                        || luOwner == KU_OWNER_TRAFFIC_DEFORMABLE_PART,
                        "lContact.muVolumeInstanceIdA.GetEntityIDOwner() == "
@@ -276,7 +277,11 @@ namespace Deformation
                        "lContact.muVolumeInstanceIdA.GetEntityIDOwner() == "
                        "BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART");
 
-            const s32 liPartIndex = lContact.muPartIndex;
+            // ⭐ 2026-09-05: the destination slot is the record's byte +64 -- muPolyTagA -- which
+            // is what `lwz r29, 0x40(r27)` reads and what `cmpwi r29, 0x32` bounds against 50.
+            // It used to be a member named muPartIndex on a 48-byte fork, at byte +12. See the
+            // banner over the retired fork in BrnPhysicalBodyPartPool.h.
+            const s32 liPartIndex = static_cast<s32>(lContact.muPolyTagA);
             CGS_ASSERT(liPartIndex < static_cast<s32>(KU_MAX_DETACHED_PARTS),
                        "liPartIndex < (int32_t)KU_MAX_DETACHED_PARTS");
             CGS_ASSERT(mUsedParts.IsBitSet(static_cast<u32>(liPartIndex)),
@@ -291,14 +296,13 @@ namespace Deformation
         const s32 liNumCarContacts = lpCarContactQueue->GetNumContacts();
         for (s32 liCarContactIndex = 0; liCarContactIndex < liNumCarContacts; ++liCarContactIndex)
         {
-            // Copy the record (asm copies 10 dwords into v130) so the local sign-flip does not
-            // mutate the queue's stored contact. FLAG: the asm negates the record's leading 4-vector
-            // (the contact normal/point) before AddContact; that vector lives in this minimal model's
-            // opaque payload, so the negate is documented but deferred to whichever TU homes the full
-            // PotentialContact layout. The copy + forward preserves the observable record routing.
+            // Copy the record so the local sign-flip does not mutate the queue's stored contact.
+            // ⭐ 2026-09-05: the copy is `li r9, 0xA ; ld/std ; bdnz` at 0x8260D734..0x8260D74C --
+            // TEN DOUBLEWORDS, 80 bytes, which is sizeof(PotentialContact) exactly and is the
+            // measurement that settles which record type this queue carries.
             PotentialContact lContact = *lpCarContactQueue->GetContact(liCarContactIndex);
 
-            const u32 luOwner = static_cast<u32>(lContact.muVolumeInstanceIdA >> 56) & 0xFF;
+            const u32 luOwner = static_cast<u32>(lContact.muVolumeInstanceIdA.muId >> 56) & 0xFFu;
             CGS_ASSERT(luOwner == KU_OWNER_RACECAR_DEFORMABLE_PART
                        || luOwner == KU_OWNER_TRAFFIC_DEFORMABLE_PART,
                        "lContact.muVolumeInstanceIdA.GetEntityIDOwner() == "
@@ -306,7 +310,21 @@ namespace Deformation
                        "lContact.muVolumeInstanceIdA.GetEntityIDOwner() == "
                        "BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART");
 
-            const s32 liPartIndex = lContact.muPartIndex;
+            const s32 liPartIndex = static_cast<s32>(lContact.muPolyTagA);
+
+            // ⭐ 2026-09-05 -- THE NEGATE IS RESOLVED, and it happens here, between the two
+            // asserts, exactly where the asm puts it (0x8260D788 loads the index, 0x8260D790..9C
+            // negates, 0x8260D7A0 branches to the index assert). `vspltisw v13,1 ; vcfsx v13,v13,0`
+            // builds 1.0f, `vspltisw v0,-1 ; vslw v0,v0,v0` builds the 0x80000000 lane mask,
+            // `vxor128 v127,v13,v0` makes -1.0f, and `vmulfp128 v0, v0, v127` applies it to the
+            // vector at copy+0x20 == mNormal. It is the CONTACT NORMAL that is mirrored onto the
+            // joined part -- not "the leading 4-vector" the previous FLAG guessed at, which with a
+            // 48-byte forked record was unreachable anyway.
+            lContact.mNormal.x = -lContact.mNormal.x;
+            lContact.mNormal.y = -lContact.mNormal.y;
+            lContact.mNormal.z = -lContact.mNormal.z;
+            lContact.mNormal.w = -lContact.mNormal.w;
+
             CGS_ASSERT(liPartIndex < static_cast<s32>(KU_MAX_DETACHED_PARTS),
                        "liPartIndex < (int32_t)KU_MAX_DETACHED_PARTS");
             CGS_ASSERT(mUsedParts.IsBitSet(static_cast<u32>(liPartIndex)),

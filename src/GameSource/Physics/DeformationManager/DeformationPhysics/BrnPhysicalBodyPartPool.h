@@ -30,6 +30,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPart.h"  // PhysicalBodyPart (array element, BY VALUE)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalWheel.h"     // PhysicalWheel (sibling detached-wheel type)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                                 // CgsContainers::BitArray<N>
+#include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"              // the ONE PotentialContact record (80 bytes) -- see the alias below
 
 // ---- forward declarations (cross-TU types referenced only by pointer/reference) ----
 namespace CgsSceneManager
@@ -52,27 +53,24 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
-    // A single deformation potential-contact record the joint resolves against. Already
-    // forward-declared by BrnPhysicalBodyPart.h (AddContact's arg type). The pool reads two
-    // asm-attested fields off each record before forwarding it to PhysicalBodyPart::AddContact:
-    //   muVolumeInstanceIdA -- the packed volume-instance id whose owner tag must be 6
-    //                          (RACECAR_DEFORMABLE_PART) or 7 (TRAFFIC_DEFORMABLE_PART)
-    //   muPartIndex         -- the destination pool slot index (< KU_MAX_DETACHED_PARTS)
-    // ADDITIVE GROW (own family): the full record is not homed anywhere; this minimal
-    // definition carries only the two fields the pool touches plus an opaque tail so AddContact
-    // can take it by const reference. FLAG: reconstructed-from-asm, fields best-effort.
-    // FLAG: field offsets are SEMANTIC, not byte-exact -- the real X360 record is ~40 bytes and
-    // reads muVolumeInstanceIdA at +0 (owner byte == HIBYTE of the high dword) and the destination
-    // part index at byte +64 (`*(v45 + 64)`). This minimal model exposes only those two fields by
-    // name (plus an opaque tail) so the pool can read them and forward the record; the exact on-disk
-    // offsets are deferred to whichever TU eventually homes the full PotentialContact.
-    struct PotentialContact
-    {
-        u64 muVolumeInstanceIdA;   // owner byte == HIBYTE of the high dword
-        u32 muVolumeInstanceIdB;
-        s32 muPartIndex;           // destination pool slot (X360 record byte +64)
-        u8  maOpaque[28];          // remaining record payload (handed through verbatim)
-    };
+    // ⛔⛔ 2026-09-05 (hinge-geometry wave): THE MINIMAL FORK THAT STOOD HERE IS RETIRED, AND IT
+    // WAS AN OUT-OF-BOUNDS WRITE-SITE SELECTOR THE MOMENT THE HINGE PATH WOKE UP.
+    // It was a 48-byte stand-in -- `{u64 muVolumeInstanceIdA; u32 muVolumeInstanceIdB;
+    // s32 muPartIndex; u8 maOpaque[28];}` -- whose own banner said "field offsets are SEMANTIC,
+    // not byte-exact ... deferred to whichever TU eventually homes the full PotentialContact".
+    // That TU LANDED (GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h), and
+    // meanwhile the fork's `muPartIndex` sat at byte +12 while the console reads the destination
+    // slot at byte +64. Byte +12 of the real record is a float lane of mPointOnA, so
+    // `maParts[liPartIndex]` was subscripted with a float bit pattern: an ACCESS VIOLATION on the
+    // first frame a hinged panel ever generated a contact (measured, run jgeo_A1 --
+    // PhysicalBodyPart::AddContact under UpdateJoinedParts, reading 0x00007FF8'9ABE59E0).
+    // The record type is settled by the console's own copy loop: UpdateJoinedParts' car arm at
+    // 0x8260D734..0x8260D74C copies `li r9, 0xA` == TEN DOUBLEWORDS == 80 bytes, which is
+    // sizeof(CgsSceneManager::SceneManagerIO::PotentialContact) exactly, and then reads +0x30
+    // (muVolumeInstanceIdA), +0x40 (muPolyTagA, bounded against 50) and +0x20 (mNormal) out of
+    // the copy. The fork's stride of 48 also mis-addressed every element after the first.
+    // ⇒ the deformation-side name is now an ALIAS of the one real record. Do not re-fork it.
+    typedef CgsSceneManager::SceneManagerIO::PotentialContact PotentialContact;
 }
 
 namespace PhysicsModuleIO
@@ -108,9 +106,13 @@ namespace PhysicsModuleIO
             }
             s32 GetNumContacts() const { return miNumContacts; }
 
-            const BrnPhysics::Deformation::PotentialContact* mpContacts;  // +0
-            s32 mu32Pad;                                                  // +4
-            s32 miNumContacts;                                            // +8
+            // The three BaseEventQueue<T> members, in DWARF order: the events pointer, the
+            // capacity, then the live length. The host pointer is 8 bytes wide, so the two s32s
+            // land at +8/+12 here where the console has them at +4/+8 -- the member ORDER is what
+            // this model reproduces, and every read goes through the accessors above.
+            const BrnPhysics::Deformation::PotentialContact* mpContacts;  // BaseEventQueue::mpEvents
+            s32 mu32MaxContacts;                                          // BaseEventQueue::miMaxLength
+            s32 miNumContacts;                                            // BaseEventQueue::miLength
         };
 
         // The two hinged-body-part potential-contact queues (still-joined parts vs. the world,
@@ -161,7 +163,7 @@ namespace Deformation
                                      u16 lu16IKPartIndex, const DeformableObject* lpDeformableObject,
                                      RigidBodyId lRigidBodyId, EntityId lGlobalVehicleId, s32 liMeshIndex,
                                      const IKBodyPart* lpIKPart, Matrix44Affine lGraphicsTransform,
-                                     Matrix44Affine lBBoxOrientation, Vector3 lLinearVelocity,
+                                     Matrix44Affine lVehicleTransform, Vector3 lLinearVelocity,
                                      Vector3 lAngularVelocity);
 
         // BrnPhysicalBodyPartPool.h:82. Release the part in slot lu8Index back to the pool,

@@ -694,14 +694,62 @@ namespace Deformation
             return;
 
         // -------- LABEL_11: detach proper -----------------------------------------------------
-        // Build the detached body's seed world transform + linear/angular velocity from the part's
-        // local joint/COM frames and the vehicle body's motion. The asm composes:
-        //   worldTransform = vehicleTransform composed with the part-local graphics frame (the
-        //     vsubfp/vpermwi/vnmsubfp/vaddfp block over body rows + part offsets)
-        //   linearVel      = bodyLinearVel + bodyAngularVel x (partCom - bodyCom)
-        // Modelled below through the part's own seeded pose; the exact per-lane rodata-scaled terms
-        // are FLAGGED-inert where unrecovered. (The scratch blobs v77 / v79 / v80 / v70 the asm
-        // assembles are the transform + the two velocity vectors handed to AddToSim + the notify.)
+        // ⭐⭐⭐ 2026-09-05 (hinge-geometry wave): THE VMX BLOCK AT 0x826308D0..0x826309B0 IS DECODED.
+        // It stood FLAGGED as "NOT decoded" while nothing hinged; the previous wave woke the hinge
+        // path, which made every value it produces load-bearing. Register for register:
+        //
+        //   0x826308D0  lwz  r10, 0x18E0(this)     ; mpDeformationSpec
+        //   0x826308DC  lwz  r30, 0x194C(this)     ; the attached vehicle body
+        //   0x826308E4  lvx128 v12, r0, r29        ; spec->mGraphicsTransform.xAxis   (spec+0x00)
+        //   0x826308F8  lvx128 v0,  r29, 0x30      ; spec->mGraphicsTransform.wAxis   (spec+0x30)
+        //   0x82630900  lvx128 v13, r10, 0x670     ; mpDeformationSpec->mMeshOffset   (spec+1648)
+        //   0x82630908  vsubfp128 v126, v0, v13    ; v126 = partGraphicsPos - meshOffset
+        //   0x8263090C  lvx128 v127, r30, 0x60     ; the body's ANGULAR velocity
+        //   0x82630910  lvx128 v10,  r30, 0x50     ; the body's LINEAR velocity
+        //   0x8263091C  vpermwi128 v7, v127, 0x63  ; perm_yzx(omega)
+        //   0x8263095C  vpermwi128 v8, v126, 0x63  ; perm_yzx(r)
+        //   0x82630970  vmulfp128  v8, v127, v8    ; omega * perm_yzx(r)
+        //   0x82630990  vnmsubfp   v9, v7, v8, v9  ; v8 - v7*v9 == omega*perm(r) - perm(omega)*r
+        //   0x826309A8  vpermwi128 v9, v9, 0x63    ; -> cross(omega, r)
+        //   0x826309AC  vaddfp128  v125, v10, v9   ; v1 = linearVel + omega x r
+        //   ...stack matrix var_140 = {spec row0, row1, row2, v126}   -> arg lLocalRenderTransform
+        //      stack matrix var_100 = body rows +0x10/+0x20/+0x30/+0x40 -> arg lVehicleTransform
+        //      v2 = the body's angular velocity
+        // `vpermwi128 x, 0x63` selects lanes (1,2,0,3) == yzx, and the two-permute form
+        // `perm_yzx(a*perm_yzx(b) - perm_yzx(a)*b)` is the textbook SIMD cross product -- the same
+        // one PhysicalBodyPart::TestJointForBreaking's banner already calibrated. `vnmsubfp` prints
+        // raw field order D,A,B,C and computes B - A*C.
+        //
+        // ⇒ THE ONE VALUE EVERYTHING HANGS OFF is `partGraphicsPos - meshOffset`: the panel's rest
+        // position expressed in the vehicle's PHYSICS (centre-of-mass) frame. mMeshOffset is the
+        // member StreamedDeformationSpec::TransformToNewCOMSpace pulls the opposite way whenever the
+        // COM moves, so subtracting it is exactly the graphics->physics frame change. It is (a) the
+        // translation row of the render transform, (b) SetJoinedToVehicle's lLocalComPosition,
+        // (c) the arm of the omega x r term, and (d) the local point the notification event
+        // transforms into world space. All four were {0,0,0} before this wave.
+        const Vector3 lPartGraphicsPosition = lpSpec->GetPartGraphicsTransform().wAxis;
+        const Vector3 lMeshOffset           = GetDeformationSpec()->mMeshOffset;
+        const Vector3 lLocalComPosition = { lPartGraphicsPosition.x - lMeshOffset.x,
+                                            lPartGraphicsPosition.y - lMeshOffset.y,
+                                            lPartGraphicsPosition.z - lMeshOffset.z, 0.0f };
+
+        // The part's local RENDER frame: the spec's graphics transform with its translation row
+        // replaced by the COM-frame position above (the asm stores spec rows 0/1/2 then v126).
+        Matrix44Affine lLocalRenderTransform = lpSpec->GetPartGraphicsTransform();
+        lLocalRenderTransform.wAxis = lLocalComPosition;
+
+        // omega x r + v -- the world velocity of the part's own origin under the car's rigid motion.
+        const Vector3 lBodyAngularVelocity = GetVehicleBody().GetAngularVelocity();
+        const Vector3 lBodyLinearVelocity  = GetVehicleBody().GetLinearVelocity();
+        const Vector3 lInitialLinearVelocity = {
+            lBodyLinearVelocity.x + lBodyAngularVelocity.y * lLocalComPosition.z
+                                  - lBodyAngularVelocity.z * lLocalComPosition.y,
+            lBodyLinearVelocity.y + lBodyAngularVelocity.z * lLocalComPosition.x
+                                  - lBodyAngularVelocity.x * lLocalComPosition.z,
+            lBodyLinearVelocity.z + lBodyAngularVelocity.x * lLocalComPosition.y
+                                  - lBodyAngularVelocity.y * lLocalComPosition.x,
+            0.0f
+        };
 
         // =====================================================================================
         // DetachedPartManager::MakePartPhysical @0x82626E30 -- CALLED BY NAME 2026-08-27.
@@ -725,36 +773,21 @@ namespace Deformation
         // NARROW (4-byte mHandlingBodyID) layout, which is how a "game-mode state word" got invented
         // for a parameter the console fills with the handling body id.
         //
-        // ⚠️ FLAGGED, and this is the honest edge of this wave: the FOUR by-value VMX arguments
-        // (lLocalRenderTransform, lVehicleTransform, lInitialLinearVelocity, lInitialAngularVelocity)
-        // travel in the vector bank / stack spill slots r1+144..r1+256, assembled by the dense
-        // vsubfp/vpermwi/vnmsubfp/vaddfp block at 0x826308C0..0x826309B0 that is NOT decoded. They are
-        // sourced here from the named state the console demonstrably reads in that block -- the asm
-        // does `lwz r30, 6476(r31)` (the attached vehicle body) and then loads matrix rows at
-        // `r30+16 {+0,+16,+32,+48}`, i.e. the body's own transform -- but the per-lane composition
-        // (worldTransform = vehicleTransform o partLocalGraphicsFrame; linearVel = bodyLinearVel +
-        // bodyAngularVel x (partCom - bodyCom)) is NOT reproduced. The detached part therefore
-        // inherits the CAR's velocity rather than the car's velocity plus its own spin arm.
-        // MakePartPhysical's two orthonormal tripwires are satisfied by these sources (both are real
-        // orthonormal bases), which is the check that keeps them from being nonsense.
-        // ⚠️⚠️ arg 9 (lVehicleTransform) IS A LOCAL BASIS, NOT A WORLD ONE -- and getting that wrong
-        // was MEASURED, not reasoned. PhysicalBodyPart::Prepare adopts this argument as
-        // mBBoxOrientation, and CalcBoundingBox then transforms the box centre through
-        // mBBoxOrientation's rows AND ADDS ITS TRANSLATION ROW before storing it into
-        // mLocalInitialComPositionPlusMaxJointAngle. GetEventRenderTransform subtracts that member
-        // from the local graphics position. So handing the VEHICLE'S WORLD transform here injects
-        // the car's world position into a LOCAL offset: the first attempt put every shed panel
-        // ~3000 units from the car (measured: body (3008.2, -1.4, -1865.4) -> event (8.8, 36.4,
-        // 15.8), and 3008 - 3000 is exactly where that 8.8 comes from).
-        // The console builds mBBoxOrientation from the IK spec's bbox-skin orientation
-        // (*(mpIKPart->GetSpec()+8)+64), which is NOT recovered -- BBoxPointSkinData::
-        // HackSwapHandedness is an honest VMX stub and CalculateSkinnedPoint is declare-only.
-        // Identity is the honest stand-in: it is orthonormal and right-handed (so both of
-        // MakePartPhysical's tripwires and Prepare's handedness tripwire pass on their own merits,
-        // not by suppression) and it keeps the box centre LOCAL, which is the property the
-        // arithmetic actually depends on. FLAG it, do not read the box as real.
-        Matrix44Affine lLocalBBoxOrientation;
-        lLocalBBoxOrientation.SetIdentity();
+        // ✅ THE FOUR BY-VALUE VMX ARGUMENTS ARE NO LONGER FLAGGED -- see the decode above this
+        // block. They are the part's local render transform (spec rows + the COM-frame translation),
+        // the VEHICLE'S WORLD TRANSFORM, `bodyLinearVel + bodyAngularVel x r`, and the body's
+        // angular velocity.
+        // ⛔ THE PREVIOUS BANNER HERE SAID arg 9 "IS A LOCAL BASIS, NOT A WORLD ONE", on the strength
+        // of a real measurement (shed panels ~3000 units from the car). The measurement was real and
+        // the inference was wrong. The console loads that matrix from the attached vehicle body's own
+        // rows +0x10/+0x20/+0x30/+0x40 -- it IS the world transform. What was actually wrong was
+        // PhysicalBodyPart::Prepare, which adopted this argument as mBBoxOrientation; on the console
+        // mBBoxOrientation comes from the IK spec's OWN BodyPartBBoxSpec::mOrientation and takes no
+        // argument at all. That type became reachable by name on 2026-09-05 (BrnBodyPartBBoxSpec.h),
+        // so Prepare is reconstructed and identity is retired here. The 3000-unit displacement was
+        // the car's world position leaking into a local offset through Prepare, exactly as measured;
+        // the fix is in Prepare, not in what this call site passes.
+        const Matrix44Affine lVehicleWorldTransform = GetVehicleBody().GetTransform();
 
         PhysicalBodyPart* lpPhysicalBodyPart = lpPartMgr->MakePartPhysical(
             lpInput,
@@ -764,16 +797,17 @@ namespace Deformation
             mGlobalEntityId,                    // r8  = lwz 26392
             liPartIndex,                        // r9
             &lrPart,                            // r10
-            lpSpec->GetPartGraphicsTransform(), // the part's LOCAL render frame. VERIFIED against
-                                               // the renderer 2026-08-27: its .Pos() is identical
-                                               // to lpCarGraphicsSpec->GetPartLocators()[mesh]'s
-                                               // translation for the same part (e.g. mesh 10 ->
-                                               // (-0.000000, 0.664476, 2.148275) on both sides).
-                                               // (IKBodyPart's own wrapper is declare-only; it
-                                               //  forwards to exactly this spec accessor.)
-            lLocalBBoxOrientation,             // FLAG -- see the note above this call
-            GetVehicleBody().GetLinearVelocity(),    // FLAG: no  w x r term
-            GetVehicleBody().GetAngularVelocity());  // FLAG: body spin, not the part's
+            lLocalRenderTransform,             // the part's LOCAL render frame, translation moved
+                                               // into the COM frame. VERIFIED against the renderer
+                                               // 2026-08-27: the spec transform's .Pos() is
+                                               // identical to lpCarGraphicsSpec->GetPartLocators()
+                                               // [mesh]'s translation for the same part (e.g. mesh
+                                               // 10 -> (-0.000000, 0.664476, 2.148275) on both
+                                               // sides); the mesh offset is subtracted from it here
+                                               // exactly as the asm's vsubfp does.
+            lVehicleWorldTransform,            // r30 rows +0x10/+0x20/+0x30/+0x40
+            lInitialLinearVelocity,            // bodyLinearVel + bodyAngularVel x r
+            lBodyAngularVelocity);             // the body's spin, straight through (v2)
 
         // [detach-probe] BOTH outcomes -- a null return (pool full) is a different failure from
         // "the call site was never reached", and printing only the successes would hide it.
@@ -825,38 +859,66 @@ namespace Deformation
 
                 lrPart.SetActiveJointIndex(liActiveJoint);                // IKBodyPart::SetActiveJointIndex
 
-                // Read the active joint spec (asm: GetAct twice, v69 = *(Act+48) seeds the joint
-                // max-angle), then join the physical part to the vehicle at this tag point. The local
-                // joint/COM positions are the dense VMX block above; the named stores live in
-                // PhysicalBodyPart::SetJoinedToVehicle.
+                // ⭐⭐⭐ 2026-09-05: THE HINGE'S GEOMETRY IS THE CONSOLE'S NOW. Both arguments were
+                // Vector3{0,0,0} placeholders, which pinned every hinge at the vehicle origin. The
+                // asm calls IKBodyPart::GetAct TWICE (0x82630AF8 and 0x82630B18) around a splat of
+                // one scalar, then loads the joint position straight off the spec:
+                //     0x82630AF8  bl GetAct ; 0x82630B08 lfs f0, 0x30(r11)   ; mfMaxJointAngle
+                //     0x82630B0C  stfs var_150 ; lvlx v0 ; vspltw128 v127, v0, 0  ; splat it
+                //     0x82630B18  bl GetAct ; 0x82630B30 lvx128 v1, r0, r11  ; mJointPosition (+0x00)
+                //     0x82630B20  vmr128 v3, v127   ; v3 = splat(maxAngle)
+                //     0x82630B24  vmr128 v2, v126   ; v2 = the local COM position from the block above
+                //     0x82630B28  mr r4, r21        ; the tag-point index
+                // DeformationJointSpec's DWARF layout puts mJointPosition at +0x00 and
+                // mfMaxJointAngle at +0x30, so both are read through their named accessors here.
+                // (SetJoinedToVehicle ignores v2; it is passed because the console passes it.)
                 const DeformationJointSpec* lpActiveJoint = lrPart.GetActiveJointSpec();   // GetAct
-                (void)lpActiveJoint;
-                lpPhysicalBodyPart->SetJoinedToVehicle(/*lLocalJointPosition*/ Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },
-                                                       /*lLocalComPosition*/ Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },
+                const VecFloat lvfMaxJointAngle = { lpActiveJoint->GetMaxAngle(), lpActiveJoint->GetMaxAngle(),
+                                                    lpActiveJoint->GetMaxAngle(), lpActiveJoint->GetMaxAngle() };
+                lpPhysicalBodyPart->SetJoinedToVehicle(lpActiveJoint->GetCarSpacePosition(),
+                                                       lLocalComPosition,
+                                                       lvfMaxJointAngle,
                                                        /*liActiveJointsTagPointIndex*/ liJointIndex);
+
+                // [hinge-geom] NOT X360. The four numbers this wave recovered, at the one site that
+                // consumes them, so "the hinge geometry is real now" is a reading and not a claim.
+                // Before this wave every one of them was 0. DELETE-WHEN the hinge pose is banked.
+                if ( DetachProbeOn() )
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[hinge-geom] ent " << static_cast<s32>(mGlobalEntityId.muValue)
+                        << " part " << liPartIndex
+                        << " type " << static_cast<s32>(lrPart.GetPartType())
+                        << " tag " << liJointIndex
+                        << " joint " << liActiveJoint
+                        << " jointPos (" << lpActiveJoint->GetCarSpacePosition().x
+                        << ", " << lpActiveJoint->GetCarSpacePosition().y
+                        << ", " << lpActiveJoint->GetCarSpacePosition().z << ")"
+                        << " localCom (" << lLocalComPosition.x << ", " << lLocalComPosition.y
+                        << ", " << lLocalComPosition.z << ")"
+                        << " maxAngle " << lpActiveJoint->GetMaxAngle()
+                        << " detachThresh " << lpActiveJoint->GetMaxStress()
+                        << " bodyPos (" << lpPhysicalBodyPart->GetRigidBodyTransform().wAxis.x
+                        << ", " << lpPhysicalBodyPart->GetRigidBodyTransform().wAxis.y
+                        << ", " << lpPhysicalBodyPart->GetRigidBodyTransform().wAxis.z << ")"
+                        << "\n";
+                }
 
                 maPartStates[liPartIndex] = KU_PART_STATE_HINGED;         // *(v49 + 26180) = 3
                 ++mi16NumHingedParts;                                     // ++*(_R31 + 26288)
             }
             else
             {
-                // Free-body path. Add the part to the sim seeded with the assembled world transform +
-                // linear/angular velocity (the v77 blob).
-                // ⛔ FIXED 2026-08-27: this used to hand AddToSim the PART'S OWN transform and
-                // velocities -- which are the state AddToSim exists to SET. Prepare never poses the
-                // embedded body, so the arguments were identity/zero and every shed panel would have
-                // been posed at the world origin. The seed is the VEHICLE's world pose and motion,
-                // which is what the asm's own documented composition starts from
-                // (worldTransform = vehicleTransform o partLocalGraphicsFrame; the part-local half is
-                // already carried by mLocalGraphicsPositionPlusJointVelocity and is re-applied by
-                // GetEventRenderTransform, so seeding the vehicle transform puts the panel exactly
-                // where it was drawn the frame before it came off -- continuity at the detach instant).
-                // ⚠️ FLAG: the linear seed is the body velocity WITHOUT the asm's
-                // `+ bodyAngularVel x (partCom - bodyCom)` arm; that cross term is in the undecoded
-                // VMX block. It biases the seed, it does not fabricate one.
-                lpPhysicalBodyPart->AddToSim(lpInput, GetVehicleBody().GetTransform(),
-                                             GetVehicleBody().GetLinearVelocity(),
-                                             GetVehicleBody().GetAngularVelocity());
+                // Free-body path (asm 0x82630B50..0x82630B64): `vmr128 v2, v127` (the body's angular
+                // velocity -- v127 is only overwritten on the HINGE arm, which this branch skips),
+                // `addi r5, r1, var_100` (the same vehicle world transform the MakePartPhysical call
+                // above was handed), `vmr128 v1, v125` (the omega x r linear seed).
+                // ✅ The omega x r arm is no longer missing -- it is decoded at the head of this
+                // block. AddToSim itself no longer poses the body either: Prepare does that now, and
+                // the console's AddToSim only READS the pose (see its banner).
+                lpPhysicalBodyPart->AddToSim(lpInput, lVehicleWorldTransform,
+                                             lInitialLinearVelocity,
+                                             lBodyAngularVelocity);
 
                 // An exhaust (type 84/85) coming off as a free body decrements the attached-exhaust
                 // count. (asm: `v58 = type; if (84/85) --*(_R31 + 26400)`.)
@@ -876,18 +938,16 @@ namespace Deformation
             // var_100 is the SAME stack matrix handed to AddToSim as its lVehicleTransform argument
             // (`addi r5, r1, var_100` @0x82630B54), so the transform is the vehicle's world pose and
             // v126 is a part-LOCAL point.
-            // ⚠️ THE LOCAL POINT INHERITS AN EXISTING PLACEHOLDER, it does not introduce a new one.
-            // v126 is the same register this body already hands SetJoinedToVehicle as its
-            // lLocalComPosition on the hinge arm above -- and that call passes Vector3{0,0,0} today,
-            // flagged there. So mPointOnA resolves to the vehicle transform's translation until that
-            // one value is recovered; the transform SHAPE is the asm's. Retire both together.
-            // ⚠️ AND NOTHING READS THIS QUEUE YET (Construct/Clear/Append only). Its PS3 consumers
+            // ✅ 2026-09-05: THE PLACEHOLDER IT INHERITED IS RETIRED. v126 is the same register the
+            // hinge arm hands SetJoinedToVehicle as its lLocalComPosition, and it is now the decoded
+            // `partGraphicsPos - meshOffset` from the head of this block, so mPointOnA lands on the
+            // panel instead of on the car's origin.
+            // ⚠️ NOTHING READS THIS QUEUE YET (Construct/Clear/Append only). Its PS3 consumers
             // are BrnSound; this is the hook crash audio will hang off, not audio itself.
             {
                 Deformation::DetachedPartNotificationEvent lNotification;
 
-                const Matrix44Affine lVehicleTransform = GetVehicleBody().GetTransform();
-                const Vector3 lLocalComPosition = { 0.0f, 0.0f, 0.0f, 0.0f };   // FLAG: see above
+                const Matrix44Affine& lVehicleTransform = lVehicleWorldTransform;
                 lNotification.mPointOnA.x = lVehicleTransform.xAxis.x * lLocalComPosition.x
                                           + lVehicleTransform.yAxis.x * lLocalComPosition.y
                                           + lVehicleTransform.zAxis.x * lLocalComPosition.z

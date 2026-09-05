@@ -65,7 +65,14 @@ namespace Deformation
         EDeformationJointType GetType() const;
 
         // BrnIKBodyPartSpec.h:100. The car-space anchor position (mJointPosition).
-        Vector3 GetCarSpacePosition() const;
+        // ⭐ INLINED 2026-09-05 (hinge-geometry wave): DECLARE-ONLY until its first caller
+        // (DeformableObject::DetachPart's hinge arm, which had been passing Vector3{0,0,0}) turned
+        // it into an LNK2019. There is no out-of-line X360 emission -- no DeformationJointSpec
+        // method appears anywhere in progress/identity.json, and the console reads the member
+        // directly: `lvx128 v1, r0, r11` with r11 == GetActiveJointSpec() @0x82630B30, i.e. the
+        // inlined accessor over mJointPosition at spec+0x00. Same evidence pattern as
+        // GetRotationAxis / GetMaxStress below.
+        Vector3 GetCarSpacePosition() const { return mJointPosition; }
 
         // BrnIKBodyPartSpec.h:103. The hinge rotation axis (mJointAxis).
         // ⭐ INLINED 2026-08-27 (detach-2 wave): DECLARE-ONLY until its first caller
@@ -79,7 +86,10 @@ namespace Deformation
         Vector3 GetDefaultDirection() const;
 
         // BrnIKBodyPartSpec.h:109. The maximum plastic bend angle (mfMaxJointAngle).
-        f32 GetMaxAngle() const;
+        // ⭐ INLINED 2026-09-05 (hinge-geometry wave), same evidence as GetCarSpacePosition: the
+        // console reads it as `lfs f0, 0x30(r11)` @0x82630B08 off GetActiveJointSpec()'s return and
+        // splats it into SetJoinedToVehicle's third VMX argument. No out-of-line emission exists.
+        f32 GetMaxAngle() const { return mfMaxJointAngle; }
 
         // BrnIKBodyPartSpec.h:112. The stress at which the joint detaches
         // (mfJointDetachThreshold). FLAG: DWARF names this getter GetMaxStress() but

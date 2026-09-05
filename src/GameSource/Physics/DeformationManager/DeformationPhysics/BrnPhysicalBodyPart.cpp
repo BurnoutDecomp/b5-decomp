@@ -327,18 +327,46 @@ namespace Deformation
     //   +476 = lpIKPart; +485 = 0 (mbAddedToScene); +484 = 0 (mbJoinedToVehicle).
     // Construct the embedded body; +487 = 0 (mbNeedsWritingIntoRenderware).
     //
-    // mBBoxOrientation (+288..+336) is built from the IK spec's bbox skin orientation (the
-    // *(mpIKPart->GetSpec()+8)+64 transpose-and-negate cascade), then asserted right-handed
-    // (CgsNumeric::IsRightHanded). The local graphics row (+368) is seeded from the passed graphics
-    // transform composed with the bbox orientation (the +352/+384/+400/+432/+448 zero stores re-clear
-    // the packed joint rows), the COM/joint frames are expressed in the new basis, and finally
-    // CalcBoundingBox(lBBoxOrientation) builds the oriented box. (The dense VMX cascade is the matrix
-    // compose/transform; modelled by the member-name stores it produces -- the observable result is
-    // the new oriented box + zeroed joint state, which CalcBoundingBox and the zero stores realise.)
+    // ⭐⭐⭐ 2026-09-05 (hinge-geometry wave): THE SECOND MATRIX PARAMETER IS THE VEHICLE'S WORLD
+    // TRANSFORM, NOT A BBOX ORIENTATION, AND THAT MISREADING IS WHY A SHED OR HINGED PANEL WAS
+    // POSED AT THE WORLD ORIGIN. The body below used to spell `mBBoxOrientation = lBBoxOrientation`
+    // and `mRwBody.SetTransform(lBBoxOrientation)`, which forced the ONE call site
+    // (DeformableObject::DetachPart) to hand it IDENTITY -- because handing it the real vehicle
+    // world transform then injected the car's world position into mBBoxOrientation, which
+    // CalcBoundingBox uses as a LOCAL frame. Both halves are decoded now:
+    //
+    //   (a) mBBoxOrientation is built ENTIRELY from the IK spec, from no argument at all --
+    //       0x8262675C..0x826267DC:
+    //         lwz r11,0x1DC(this) ; lwz r11,8(r11) ; addi r11,r11,0x40   ; &spec->mBBoxSkinData
+    //         lvx128 v12/v11/v13 <- rows +0x00/+0x10/+0x20 ; lvx128 v0 <- +0x30
+    //         vsubfp128 v0, 0, v0                                        ; v0 = -translation
+    //         six vmrgh/vmrglw            -> the 3x3 TRANSPOSE (columns become rows)
+    //         three splats of -t + two vmaddfp -> wAxis = -t.x*X -t.y*Y -t.z*Z
+    //       i.e. the AFFINE INVERSE of BodyPartBBoxSpec::mOrientation. The spec type only became
+    //       reachable by name on 2026-09-05 (BrnBodyPartBBoxSpec.h -- row 3 used to be called
+    //       "SIMD alignment padding"), which is exactly why this was modelled by an argument.
+    //
+    //   (b) the body pose (this+0x00..0x30 == mRwBody.mTransform) is
+    //       lGraphicsTransform composed with lVehicleTransform -- 0x82626894..0x82626938, three
+    //       rows of `splat(gfxRow.x)*veh0 + splat(gfxRow.y)*veh1 + splat(gfxRow.z)*veh2` and a
+    //       translation of `splat(gfxPos.x)*veh0 + splat(gfxPos.y)*veh1 + splat(gfxPos.z)*veh2
+    //       + veh3` -- and is then RE-WRITTEN after CalcBoundingBox (0x82626940..0x82626978) with
+    //       the SAME three rotation rows but a translation of vehicleTransform applied to
+    //       mLocalInitialComPositionPlusMaxJointAngle.xyz, the local COM CalcBoundingBox has just
+    //       computed. That second store is the whole point of the call order: the physics body
+    //       sits at the panel's CENTRE OF MASS, and GetEventRenderTransform adds
+    //       (localGraphicsPos - localCom) back to draw the panel where the artist put it.
+    // ⇒ PhysicalBodyPart::AddToSim's compensating `mRwBody.SetTransform(lVehicleTransform)` (which
+    //   the previous wave added precisely because this compose was missing) is DELETED with this;
+    //   the console's AddToSim only READS this pose. The two banners were one story, as flagged.
+    //
+    // The local graphics row (+368) is seeded from the passed graphics transform's translation
+    // (w lane zeroed), the +352/+384/+400/+432/+448 zero stores clear the packed joint rows, and
+    // CalcBoundingBox(lVehicleTransform) builds the oriented box.
     // =========================================================================================
     void PhysicalBodyPart::Prepare(BurnoutBodyPartID lPartId, EntityId lGlobalVehicleId,
                                    const DeformableObject* lpDeformableObject, const IKBodyPart* lpIKPart,
-                                   Matrix44Affine lGraphicsTransform, Matrix44Affine lBBoxOrientation)
+                                   Matrix44Affine lGraphicsTransform, Matrix44Affine lVehicleTransform)
     {
         mRigidBodyId                 = lPartId;            // +464
         mGlobalVehicleId             = lGlobalVehicleId;   // +472
@@ -352,12 +380,32 @@ namespace Deformation
         mRwBody.Construct();
         mbNeedsWritingIntoRenderware = false;             // +487
 
-        // Build mBBoxOrientation from the IK spec's bbox-skin orientation (the spec record at
-        // *(mpIKPart->GetSpec()+8)+64 -- the embedded BodyPartBBoxSpec orientation matrix). The asm
-        // transposes the orthonormal 3x3 and negates the translation, producing the box's basis.
-        // Modelled by adopting the passed bbox-orientation argument (the caller hands the already
-        // computed orientation; the spec-derived rebuild produces the same basis the argument carries).
-        mBBoxOrientation = lBBoxOrientation;
+        // Build mBBoxOrientation as the AFFINE INVERSE of the IK spec's bbox-skin orientation
+        // (mpIKPart->GetSpec()->GetBBoxSpec().mOrientation): transpose the orthonormal 3x3, then
+        // form the translation as -t.x*X - t.y*Y - t.z*Z through the transposed rows. Lane 3 of
+        // every row is 0 (the merges pull it from the zero register).
+        {
+            const rw::math::vpu::Matrix44Affine& lrSpecOrientation =
+                mpIKPart->GetSpec()->GetBBoxSpec().mOrientation;
+
+            mBBoxOrientation.xAxis = { lrSpecOrientation.xAxis.x, lrSpecOrientation.yAxis.x,
+                                       lrSpecOrientation.zAxis.x, 0.0f };
+            mBBoxOrientation.yAxis = { lrSpecOrientation.xAxis.y, lrSpecOrientation.yAxis.y,
+                                       lrSpecOrientation.zAxis.y, 0.0f };
+            mBBoxOrientation.zAxis = { lrSpecOrientation.xAxis.z, lrSpecOrientation.yAxis.z,
+                                       lrSpecOrientation.zAxis.z, 0.0f };
+
+            const Vector3& lrTranslation = lrSpecOrientation.wAxis;
+            mBBoxOrientation.wAxis = {
+                -lrTranslation.x * mBBoxOrientation.xAxis.x - lrTranslation.y * mBBoxOrientation.yAxis.x
+                    - lrTranslation.z * mBBoxOrientation.zAxis.x,
+                -lrTranslation.x * mBBoxOrientation.xAxis.y - lrTranslation.y * mBBoxOrientation.yAxis.y
+                    - lrTranslation.z * mBBoxOrientation.zAxis.y,
+                -lrTranslation.x * mBBoxOrientation.xAxis.z - lrTranslation.y * mBBoxOrientation.yAxis.z
+                    - lrTranslation.z * mBBoxOrientation.zAxis.z,
+                0.0f
+            };
+        }
 
         // CgsNumeric::IsRightHanded(mBBoxOrientation).GetBool() tripwire: cross(x,y).z >= 0 (the asm's
         // vmsum3fp128 of (x cross y) . z >= 0). Non-gating.
@@ -384,26 +432,47 @@ namespace Deformation
         mWorldPenetrationPlusCollisionMagnitude.SetZero();     // +432
         mAverageCollisionPointPlusNumCollisions.SetZero();     // +448
 
-        // ⚠️⚠️ FLAG SHARPENED 2026-08-27 (detach-2 wave) -- THIS IS THE PART'S POSE, AND IT IS NOT
-        // RECONSTRUCTED. The console writes ALL FOUR rows of mRwBody.mTransform here, TWICE: at
-        // 0x82626924..0x82626938 (stvx128 into this+0 / +0x10 / +0x20 / +0x30, from r31/r27/r26/r23)
-        // and again at 0x82626964..0x82626978 after CalcBoundingBox. Both are the tail of a dense
-        // vmaddfp cascade that composes lGraphicsTransform with the vehicle frame -- i.e. the part's
-        // WORLD pose. This line reproduces only the shape (a transform lands in the body); the
-        // compose itself is not decoded, and the caller currently passes IDENTITY for
-        // lBBoxOrientation (the previous wave set it so, after measuring that passing the vehicle's
-        // world transform injected the car's world position into a LOCAL offset).
-        // ⇒ CONSEQUENCE, stated so nobody reads it off a picture: after Prepare the body's pose is
-        // IDENTITY, so PhysicalBodyPart::AddToSim -- which on the console READS this pose and posts
-        // it to the sim -- has to seed it from its own lVehicleTransform argument first. That seed
-        // is the only reason a shed panel does not enter the simulation at the world origin. See
-        // AddToSim's banner; the two notes are one story and must be retired together.
-        // ⛔ The claim "PhysicalBodyPart::Prepare never gives the embedded body a pose" (previous
-        // wave, AddToSim's banner) is true of THIS body and FALSE of the console's.
-        mRwBody.SetTransform(lBBoxOrientation);
+        // ---- the part's WORLD pose: lGraphicsTransform composed with lVehicleTransform ---------
+        // 0x82626894..0x82626938. Row-vector convention throughout this codebase, so each output
+        // row is `gfxRow.x*veh.xAxis + gfxRow.y*veh.yAxis + gfxRow.z*veh.zAxis` and the translation
+        // additionally picks up veh.wAxis.
+        const auto lTransformDirection = [&lVehicleTransform](const Vector3& lrLocal) -> Vector3
+        {
+            return Vector3{
+                lVehicleTransform.xAxis.x * lrLocal.x + lVehicleTransform.yAxis.x * lrLocal.y
+                    + lVehicleTransform.zAxis.x * lrLocal.z,
+                lVehicleTransform.xAxis.y * lrLocal.x + lVehicleTransform.yAxis.y * lrLocal.y
+                    + lVehicleTransform.zAxis.y * lrLocal.z,
+                lVehicleTransform.xAxis.z * lrLocal.x + lVehicleTransform.yAxis.z * lrLocal.y
+                    + lVehicleTransform.zAxis.z * lrLocal.z,
+                0.0f
+            };
+        };
+        const auto lTransformPoint = [&lVehicleTransform, &lTransformDirection](const Vector3& lrLocal) -> Vector3
+        {
+            const Vector3 lRotated = lTransformDirection(lrLocal);
+            return Vector3{ lRotated.x + lVehicleTransform.wAxis.x,
+                            lRotated.y + lVehicleTransform.wAxis.y,
+                            lRotated.z + lVehicleTransform.wAxis.z, 0.0f };
+        };
 
-        // result = CalcBoundingBox(lBBoxOrientation).
-        CalcBoundingBox(lBBoxOrientation);
+        Matrix44Affine lWorldTransform;
+        lWorldTransform.xAxis = lTransformDirection(lGraphicsTransform.xAxis);   // stvx128 this+0x00
+        lWorldTransform.yAxis = lTransformDirection(lGraphicsTransform.yAxis);   // stvx128 this+0x10
+        lWorldTransform.zAxis = lTransformDirection(lGraphicsTransform.zAxis);   // stvx128 this+0x20
+        lWorldTransform.wAxis = lTransformPoint(lGraphicsTransform.wAxis);       // stvx128 this+0x30
+        mRwBody.SetTransform(lWorldTransform);
+
+        // result = CalcBoundingBox(lVehicleTransform) -- the box is built in the vehicle's frame
+        // because the part is still exactly where it was drawn on the car. This is also what
+        // writes mLocalInitialComPositionPlusMaxJointAngle's xyz (the part's local COM).
+        CalcBoundingBox(lVehicleTransform);
+
+        // ---- re-pose the body ON its centre of mass (0x82626940..0x82626978) -------------------
+        // Same three rotation rows (the asm re-stores v127/v126/v125 unchanged); the translation is
+        // replaced by vehicleTransform applied to the local COM CalcBoundingBox just produced.
+        lWorldTransform.wAxis = lTransformPoint(mLocalInitialComPositionPlusMaxJointAngle.GetVector3());
+        mRwBody.SetTransform(lWorldTransform);
     }
 
     // =========================================================================================
@@ -545,23 +614,32 @@ namespace Deformation
     // =========================================================================================
     // SetJoinedToVehicle @ 0x825BA4A8
     //
-    // Join the part to the vehicle as an active joint. The asm captures only TWO VMX register args --
-    // v1 (= local joint position, vmr128 v127,v1) and v3 (= local COM position, vmr128 v126,v3) -- plus
-    // the char tag-point index. Its ONLY calls are savegpr / BeginAssert / FireAssert / EndAssert: it
-    // does NOT call GetActiveJointSpec() or GetMaxAngle() (those were fabricated). The five vrlimi128
-    // lane writes (mask 1,0 = replace-w-lane / keep-xyz) resolve to:
+    // Join the part to the vehicle as an active joint. The DWARF signature is
+    // `SetJoinedToVehicle(Vector3, Vector3, VecFloat, int32_t)`; the console body reads only v1
+    // (the local joint position, `vmr128 v127,v1`) and v3 (the max-joint-angle splat, `vmr128
+    // v126,v3`) plus the r4 tag index. v2 -- the part's local COM position -- IS PASSED AND NEVER
+    // READ here; DeformableObject::DetachPart computes it for its own DetachedPartNotificationEvent
+    // and hands it across anyway. Its ONLY calls are savegpr / BeginAssert / FireAssert / EndAssert:
+    // it does NOT call GetActiveJointSpec() or GetMaxAngle() (the caller does, twice). The five
+    // vrlimi128 lane writes (mask 1, shift 0 == replace the w lane, keep xyz) resolve to:
     //   +352 mLocalJointPositionPlusRotation        double-store -> {v1.xyz, 0}   (jointpos, rotation=0)
     //   +400 mLocalInitialJointPositionPlusLimitStress -> {v1.xyz, OLD w preserved} (limit stress NEVER
-    //          written -- there is no 3rd VMX arg)
-    //   +384 mLocalInitialComPositionPlusMaxJointAngle -> {OLD xyz preserved, w = -(v3.w)} (the COM
-    //          arg's w lane, negated via a vxor sign mask -> the max-joint-angle scalar)
+    //          written -- no argument carries it)
+    //   +384 mLocalInitialComPositionPlusMaxJointAngle -> {OLD xyz preserved, w = -(v3.w)} (the max
+    //          angle, negated via a `vslw -1,-1` sign mask + vxor)
     //   +368 mLocalGraphicsPositionPlusJointVelocity -> {OLD xyz preserved, w = 0} (joint velocity = 0)
     // Then mi8ActiveJointsTagPointIndex (+488) = arg, mbJoinedToVehicle (+484) = 1.
     // Tripwires: GetActiveJointIndex() != KU8_NO_ACTIVE_JOINT ; GetActiveJointSpec() != NULL.
+    // ⚠️ +384's xyz is deliberately PRESERVED: CalcBoundingBox (run from Prepare, before this) owns
+    // that lane -- it is the part's local COM, and GetEventRenderTransform subtracts it. Overwriting
+    // it here with the passed COM would double-count.
     // =========================================================================================
     void PhysicalBodyPart::SetJoinedToVehicle(Vector3 lLocalJointPosition, Vector3 lLocalComPosition,
-                                              s32 liActiveJointsTagPointIndex)
+                                              VecFloat lvfMaxJointAngle, s32 liActiveJointsTagPointIndex)
     {
+        // v2 is an ABI argument the console's body never reads (see the banner). Named, not dropped.
+        (void)lLocalComPosition;
+
         // mpIKPart->GetActiveJointIndex() != KU8_NO_ACTIVE_JOINT (the *(v7+14)==255 test).
         CGS_ASSERT(mpIKPart->GetActiveJointIndex() != IKBodyPart::KU8_NO_ACTIVE_JOINT,
                    "mu8ActiveJointIndex != KU8_NO_ACTIVE_JOINT");
@@ -572,9 +650,10 @@ namespace Deformation
         // OLD lane PRESERVED -- the asm never writes it (no limit-stress arg exists).
         mLocalInitialJointPositionPlusLimitStress.SetVector3(lLocalJointPosition);
 
-        // +384 mLocalInitialComPositionPlusMaxJointAngle: xyz is the OLD lane PRESERVED; w (max joint
-        // angle) = -(v3.w), i.e. the COM arg's w lane negated (the vxor sign mask).
-        mLocalInitialComPositionPlusMaxJointAngle.SetPlus(-lLocalComPosition.w);
+        // +384 mLocalInitialComPositionPlusMaxJointAngle: xyz is the OLD lane PRESERVED (the local COM
+        // CalcBoundingBox wrote); w (max joint angle) = -(v3.w), i.e. the max-angle splat negated
+        // (the vxor sign mask).
+        mLocalInitialComPositionPlusMaxJointAngle.SetPlus(-lvfMaxJointAngle.w);
 
         // +368 mLocalGraphicsPositionPlusJointVelocity: xyz OLD preserved; w (joint velocity) = 0.
         mLocalGraphicsPositionPlusJointVelocity.SetPlus(0.0f);
@@ -688,97 +767,120 @@ namespace Deformation
     }
 
     // =========================================================================================
-    // AddContact @ 0x825E2FC8
+    // AddContact @ 0x825E2FC8 (96 instructions)
     //
-    // Accumulate one potential contact against the joint. Tripwire: the contact's volume-instance-A
-    // owner is a deformable part (== E_ENTITYTYPE_RACECAR_DEFORMABLE_PART (6) or
-    // E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART (7) -- the HIBYTE(*(contact+48)) test).
+    // ⭐⭐⭐ RE-DECODED 2026-09-05 (hinge-geometry wave), INSTRUCTION BY INSTRUCTION, because
+    // waking the hinge path made this the first function a hinged panel's contact ever reaches --
+    // and what stood here read a DIFFERENT STRUCT through raw byte offsets. See the retired-fork
+    // banner in BrnPhysicalBodyPartPool.h. Four separate faults, all invisible while the queues
+    // were empty:
+    //   (1) the owner tripwire read `*(u32*)(contact+48) >> 24`. The console reads `ld 0x30(r30)`
+    //       then `srdi 32 ; srwi 24` -- the TOP byte of an EIGHT-byte field. On big-endian those
+    //       coincide; on x64 a 4-byte load at +48 is the field's LOW half, so the byte tested was
+    //       never the owner. (The classic width/endianness trap, and the reason 3 owner asserts
+    //       fired in run jgeo_A1.)
+    //   (2) the point was transformed by the PART'S OWN transform. The console transforms it by
+    //       the VEHICLE'S PER-FRAME TRANSFORM DELTA: `lwz r10, 0x1E0(this)` (mpDeformableObject),
+    //       `lwz r4, 0x194C(r10)` (its VehiclePhysics), `bl VehiclePhysics::GetTransformDelta`
+    //       into the sret buffer var_70..var_40, whose four rows are then the vmaddfp cascade's
+    //       basis. "How far the car moved this frame" is the whole point of the resolve.
+    //   (3) the CONTACT NORMAL (record +0x20) was not read at all. The console projects the
+    //       resolve onto it and CLAMPS THE PROJECTION AT ZERO:
+    //           v13 = dot3(resolve, normal) ; vminfp v13, v13, 0 ; v13 = normal * v13
+    //       so only a SEPARATING-into-penetrating component survives, and the stored vector is
+    //       along the contact normal. Storing the raw resolve, as this body did, both changes the
+    //       direction and drops the clamp -- and this member is arm (4a)'s gate input in
+    //       TestJointForBreaking, i.e. it is directly part of the joint-break ladder.
+    //   (4) the collision counter was `count + 1`. The asm's `vsel v0, v7, v8, v0` selects
+    //       between splat(oldCount) and the 1.0f built by `vspltisw v8,1 ; vcfsx v8,v8,0` --
+    //       it LATCHES 1, it does not accumulate. The lane is a has-any-contact flag.
     //
-    // The asm computes the part's current transform delta (VehiclePhysics::GetTransformDelta on the
-    // owning vehicle body), transforms the contact's point-on-A into the part's local frame, forms the
-    // resolve vector (newPoint - contactPoint), and -- comparing squared magnitudes -- keeps the LARGER
-    // resolve in mWorldPenetrationPlusCollisionMagnitude (+432, with the magnitude in w) and accumulates
-    // the average collision point + bumps the collision count in mAverageCollisionPointPlusNumCollisions
-    // (+448, num collisions in w). First contact stores unconditionally; later contacts keep the deeper.
-    //
-    // (The contact record layout -- point-on-A @ +0, point @ +16, the resolve @ +32 -- is the asm's
-    // lvx128 offsets off a2. The dense Select/Or VMX is the "keep deeper / first-contact" predicate.)
+    // The two accumulator writes, exactly as the asm spells them (v127 == this+0x30, the part's
+    // world position row; both stores go to their own member, w-lane preserved by vrlimi mask 1):
+    //   +432 mWorldPenetrationPlusCollisionMagnitude.xyz
+    //          = (|projected|^2 >= |old|^2) ? projected : old
+    //   +448 mAverageCollisionPointPlusNumCollisions
+    //          take = (|partPos - newPointOnA|^2 >= |partPos - storedPoint|^2) || count == 0
+    //          .xyz = take ? newPointOnA : stored ;  .w = take ? 1.0f : count
+    // Tripwire: the contact's volume-instance-A owner is a deformable part (6 or 7).
     // =========================================================================================
     void PhysicalBodyPart::AddContact(const PotentialContact& lContact)
     {
-        const char* lpContact = reinterpret_cast<const char*>(&lContact);
-
-        // HIBYTE(*(contact+48)) -- the volume-instance-A owner byte.
-        const u32 luVolInstWordA = *reinterpret_cast<const u32*>(lpContact + 48);
-        const u8  lu8OwnerA       = static_cast<u8>(luVolInstWordA >> 24);
-        CGS_ASSERT(lu8OwnerA == 6 || lu8OwnerA == 7,
+        // `ld r11, 0x30(contact) ; srdi 32 ; srwi 24` -- the id's top byte.
+        const u32 luOwnerA = static_cast<u32>(lContact.muVolumeInstanceIdA.muId >> 56) & 0xFFu;
+        CGS_ASSERT(luOwnerA == 6 || luOwnerA == 7,
                    "lContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART || "
                    "lContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART");
 
-        // lVehicleDeltaTransform = VehiclePhysics::GetTransformDelta on the owning vehicle body
-        // (the asm's *(*(this+480)+6476) -- mpDeformableObject's vehicle physics).
-        // lPartTransform = GetRigidBodyTransform() (the body's current transform).
-        Matrix44Affine lPartTransform = GetRigidBodyTransform();
+        // The owning vehicle's per-frame transform delta (`*(*(this+0x1E0)+0x194C)`).
+        const Matrix44Affine lVehicleDeltaTransform =
+            mpDeformableObject->GetVehiclePhysics()->GetTransformDelta();
 
-        // The contact's point-on-A (a2+0), its point (a2+16), and the existing resolve (this+432).
-        const Vector3 lContactPointOnA = *reinterpret_cast<const Vector3*>(lpContact + 0);
-        const Vector3 lContactPoint    = *reinterpret_cast<const Vector3*>(lpContact + 16);
+        // v127 = *(this + 0x30) -- the part body's own world position row.
+        const Vector3 lPartWorldPosition = mRwBody.GetTransform().wAxis;
 
-        // lNewPointOnA = transformPoint(partTransform, contactPointOnA) -- the vmaddfp cascade with the
-        // contact point-on-A broadcast through the part transform rows. Modelled by the affine transform.
+        // lNewPointOnA = transformPoint(delta, contact.mPointOnA) -- the three vmaddfp rows.
+        const Vector3& lrPointOnA = lContact.mPointOnA;
         const Vector3 lNewPointOnA = {
-            lPartTransform.xAxis.x * lContactPointOnA.x + lPartTransform.yAxis.x * lContactPointOnA.y +
-                lPartTransform.zAxis.x * lContactPointOnA.z + lPartTransform.wAxis.x,
-            lPartTransform.xAxis.y * lContactPointOnA.x + lPartTransform.yAxis.y * lContactPointOnA.y +
-                lPartTransform.zAxis.y * lContactPointOnA.z + lPartTransform.wAxis.y,
-            lPartTransform.xAxis.z * lContactPointOnA.x + lPartTransform.yAxis.z * lContactPointOnA.y +
-                lPartTransform.zAxis.z * lContactPointOnA.z + lPartTransform.wAxis.z,
+            lVehicleDeltaTransform.xAxis.x * lrPointOnA.x + lVehicleDeltaTransform.yAxis.x * lrPointOnA.y +
+                lVehicleDeltaTransform.zAxis.x * lrPointOnA.z + lVehicleDeltaTransform.wAxis.x,
+            lVehicleDeltaTransform.xAxis.y * lrPointOnA.x + lVehicleDeltaTransform.yAxis.y * lrPointOnA.y +
+                lVehicleDeltaTransform.zAxis.y * lrPointOnA.z + lVehicleDeltaTransform.wAxis.y,
+            lVehicleDeltaTransform.xAxis.z * lrPointOnA.x + lVehicleDeltaTransform.yAxis.z * lrPointOnA.y +
+                lVehicleDeltaTransform.zAxis.z * lrPointOnA.z + lVehicleDeltaTransform.wAxis.z,
             0.0f
         };
 
-        // lResolve = lNewPointOnA - lContactPoint (vsubfp v7 = v0 - v6).
-        const Vector3 lResolve = {
-            lNewPointOnA.x - lContactPoint.x,
-            lNewPointOnA.y - lContactPoint.y,
-            lNewPointOnA.z - lContactPoint.z,
-            0.0f
-        };
-        const f32 lfResolveMagnitudeSquared =
-            lResolve.x * lResolve.x + lResolve.y * lResolve.y + lResolve.z * lResolve.z;
+        // lResolve = newPointOnA - mPointOnB (vsubfp v7, v0, v6).
+        const Vector3& lrPointOnB = lContact.mPointOnB;
+        const Vector3 lResolve = { lNewPointOnA.x - lrPointOnB.x,
+                                   lNewPointOnA.y - lrPointOnB.y,
+                                   lNewPointOnA.z - lrPointOnB.z, 0.0f };
 
-        // Keep the larger resolve in +432 (mWorldPenetrationPlusCollisionMagnitude). The existing
-        // resolve's magnitude is the stored value; first contact (count==0) stores unconditionally.
-        const Vector3 lOldResolve = mWorldPenetrationPlusCollisionMagnitude.GetVector3();
-        const f32 lfOldResolveMagnitudeSquared =
-            lOldResolve.x * lOldResolve.x + lOldResolve.y * lOldResolve.y + lOldResolve.z * lOldResolve.z;
+        // The penetration along the contact normal, clamped at zero (vmsum3fp128 / vminfp / vmulfp128).
+        const Vector3& lrNormal = lContact.mNormal;
+        const f32 lfAlongNormal = lResolve.x * lrNormal.x + lResolve.y * lrNormal.y + lResolve.z * lrNormal.z;
+        const f32 lfClamped     = (lfAlongNormal < 0.0f) ? lfAlongNormal : 0.0f;   // vminfp with 0
+        const Vector3 lProjectedPenetration = { lrNormal.x * lfClamped,
+                                                lrNormal.y * lfClamped,
+                                                lrNormal.z * lfClamped, 0.0f };
 
-        const f32 lfNumCollisions = mAverageCollisionPointPlusNumCollisions.GetPlus();   // +448 w
-        const bool lbFirstContact = (lfNumCollisions == 0.0f);                           // vcmpeqfp w==0
-        const bool lbBiggerResolve = lfResolveMagnitudeSquared > lfOldResolveMagnitudeSquared;
-
-        if ( lbBiggerResolve || lbFirstContact )   // vsel(old, new, biggerResolve) gated by first-contact
+        // Keep the deeper of (stored, projected) in +432; the w lane (the magnitude) is preserved.
+        const Vector3 lStoredPenetration = mWorldPenetrationPlusCollisionMagnitude.GetVector3();
+        const f32 lfStoredMagSq = lStoredPenetration.x * lStoredPenetration.x
+                                + lStoredPenetration.y * lStoredPenetration.y
+                                + lStoredPenetration.z * lStoredPenetration.z;
+        const f32 lfProjectedMagSq = lProjectedPenetration.x * lProjectedPenetration.x
+                                   + lProjectedPenetration.y * lProjectedPenetration.y
+                                   + lProjectedPenetration.z * lProjectedPenetration.z;
+        if ( lfProjectedMagSq >= lfStoredMagSq )   // vcmpgefp then vsel
         {
-            mWorldPenetrationPlusCollisionMagnitude.SetVector3(lResolve);
+            mWorldPenetrationPlusCollisionMagnitude.SetVector3(lProjectedPenetration);
         }
 
-        // Accumulate the average collision point + bump the count. The asm keeps the FURTHER point
-        // (vsel by lNewMagSq vs lCurrentMagSq) on first contact and accumulates the running average.
-        const Vector3 lCurrentAvgPoint = mAverageCollisionPointPlusNumCollisions.GetVector3();
-        const f32 lfNewMagSq =
-            lNewPointOnA.x * lNewPointOnA.x + lNewPointOnA.y * lNewPointOnA.y + lNewPointOnA.z * lNewPointOnA.z;
-        const f32 lfCurrentMagSq =
-            lCurrentAvgPoint.x * lCurrentAvgPoint.x + lCurrentAvgPoint.y * lCurrentAvgPoint.y +
-            lCurrentAvgPoint.z * lCurrentAvgPoint.z;
+        // +448: keep whichever candidate point is FURTHER from the part body's own position, and
+        // latch the flag lane. First contact (count == 0) always takes the new point.
+        const Vector3 lStoredPoint  = mAverageCollisionPointPlusNumCollisions.GetVector3();
+        const f32 lfCount           = mAverageCollisionPointPlusNumCollisions.GetPlus();
+        const bool lbFirstContact   = (lfCount == 0.0f);                     // vcmpeqfp against 0
 
-        const bool lbFurtherPoint = lfNewMagSq > lfCurrentMagSq;
-        const bool lbStorePoint   = lbFurtherPoint || lbFirstContact;   // vsel ... vor first-contact
+        const f32 lfNewDx = lPartWorldPosition.x - lNewPointOnA.x;
+        const f32 lfNewDy = lPartWorldPosition.y - lNewPointOnA.y;
+        const f32 lfNewDz = lPartWorldPosition.z - lNewPointOnA.z;
+        const f32 lfNewDistSq = lfNewDx * lfNewDx + lfNewDy * lfNewDy + lfNewDz * lfNewDz;
 
-        if ( lbStorePoint )
+        const f32 lfOldDx = lPartWorldPosition.x - lStoredPoint.x;
+        const f32 lfOldDy = lPartWorldPosition.y - lStoredPoint.y;
+        const f32 lfOldDz = lPartWorldPosition.z - lStoredPoint.z;
+        const f32 lfOldDistSq = lfOldDx * lfOldDx + lfOldDy * lfOldDy + lfOldDz * lfOldDz;
+
+        const bool lbTakeNew = (lfNewDistSq >= lfOldDistSq) || lbFirstContact;   // vcmpgefp ; vor
+
+        if ( lbTakeNew )
         {
             mAverageCollisionPointPlusNumCollisions.SetVector3(lNewPointOnA);
+            mAverageCollisionPointPlusNumCollisions.SetPlus(1.0f);
         }
-        // num collisions += 1 (the SetPlus of lNumCollisionsToStore = count + 1).
-        mAverageCollisionPointPlusNumCollisions.SetPlus(lfNumCollisions + 1.0f);
     }
 
     // =========================================================================================
@@ -1291,12 +1393,26 @@ namespace Deformation
         // mi8ActiveJointsTagPointIndex != -1.
         CGS_ASSERT(mi8ActiveJointsTagPointIndex != -1, "mi8ActiveJointsTagPointIndex != -1");
 
-        // The active deformation-joint spec (sub_825C1170(mpIKPart, mi8ActiveJointsTagPointIndex) ==
-        // IKBodyPart::GetJointSpec at the active tag-point index). Read its rotation axis / max angle /
-        // detach threshold for the integration. FLAG: the gravity/restitution/resolution tuning and the
-        // angle-clamp polynomial tables are rodata-not-recovered, so the integrated delta is inert.
-        const DeformationJointSpec* lpJointSpec = mpIKPart->GetJointSpec(mi8ActiveJointsTagPointIndex);
-        (void)lpJointSpec;
+        // ⛔⛔ 2026-09-05 (hinge-geometry wave): sub_825C1170 IS `IKBodyPart::GetTagPoint`, NOT
+        // `GetJointSpec`. This line read `mpIKPart->GetJointSpec(mi8ActiveJointsTagPointIndex)` --
+        // a TAG-POINT index used to subscript the JOINT-SPEC array, which is a different, SHORTER
+        // array with no bound check on it (`&mpaJointSpecs[liIndex]`, BrnIKBodyPartSpec.h). On
+        // PUSMC01 a jointed panel has ~4 tag points and 1-2 joints, so tag index 3 addresses
+        // 0xC0 bytes past a one-element array. It never faulted only because the result was
+        // `(void)`-cast while the integrator is inert -- an OOB the moment that lands.
+        // The asm is unambiguous (0x8260B254..0x8260B264):
+        //     lbz  r11, 0x1E8(this)   ; mi8ActiveJointsTagPointIndex
+        //     lwz  r3,  0x1DC(this)   ; mpIKPart
+        //     extsb r4, r11 ; bl sub_825C1170
+        //     lwz  r6,  0x10(r3)      ; the returned record's +0x10 -- a POINTER (TagPointSpec*)
+        // and sub_825C1170 itself asserts "liIndex >= 0" and "liIndex < GetNumberOfTagPoints()"
+        // (its own strings), then returns `*(this+4) + liIndex*32` -- the 32-byte TAG POINT
+        // records off IKBodyPart+4. GetJointSpec would stride sizeof(DeformationJointSpec) off
+        // the SPEC. Two bound asserts the console carries were being skipped as well.
+        // FLAG: the gravity/restitution/resolution tuning and the angle-clamp polynomial tables
+        // are rodata-not-recovered, so the integrated delta is still inert.
+        const TagPoint* lpActiveTagPoint = mpIKPart->GetTagPoint(mi8ActiveJointsTagPointIndex);
+        (void)lpActiveTagPoint;
         (void)KF_JOINT_RELAX;   // recovered 0.975 relax factor applied by the (inert) integrator
 
         // INERT integration step: with the tuning rodata unrecovered, the joint rotation/velocity and
@@ -1714,14 +1830,13 @@ namespace Deformation
     // embedded body a pose" -- that is true of THIS TREE'S Prepare, which models the compose as
     // `mRwBody.SetTransform(lBBoxOrientation)` with the caller now passing identity, and it is FALSE
     // of the console. Corrected there too.
-    // => So this body keeps the seeding store the previous wave landed (mRwBody.SetTransform of the
-    // caller's vehicle transform) and then reads the pose back exactly as the console does. With a
-    // reconstructed Prepare compose the store becomes a no-op and should be deleted; until then,
-    // deleting it would post an IDENTITY transform to the sim and put every shed panel at the world
-    // origin. FLAG: the panel therefore enters the sim at the CAR's origin, not at the panel's own
-    // spot on the bodywork. Its RENDER position is unaffected (GetEventRenderTransform re-adds the
-    // part-local graphics offset); its COLLISION box is offset by that same amount.
-    // DELETE-WHEN Prepare's compose is reconstructed.
+    // ✅ RETIRED 2026-09-05 (hinge-geometry wave): Prepare's compose IS reconstructed, so the
+    // compensating `mRwBody.SetTransform(lVehicleTransform)` this body used to open with is DELETED
+    // and the pose is READ exactly as the console reads it. The panel now enters the sim at its own
+    // centre of mass on the bodywork instead of at the car's origin, which also puts its collision
+    // box where the panel is. lVehicleTransform is retained as the console's argument (it is on the
+    // ABI, and TestJointForBreaking/RemoveJointAndAddToSim pass the part's own pose through it) but
+    // this body does not consume it -- exactly as the asm does not.
     //
     // ---- THE INERTIA CHAIN -------------------------------------------------------------------
     //   extents = CalculateAABBExtents()                       (bodied, this file)
@@ -1745,9 +1860,9 @@ namespace Deformation
                                     const Matrix44Affine& lVehicleTransform,
                                     Vector3 lInitialLinearVelocity, Vector3 lInitialAngularVelocity)
     {
-        // NOT IN THE X360 BODY -- the compensation for the un-reconstructed Prepare compose
-        // described in the banner. See DELETE-WHEN above.
-        mRwBody.SetTransform(lVehicleTransform);
+        // The console never stores a transform here -- Prepare (and thereafter UpdateJoint / the sim)
+        // owns the pose. The argument stays on the signature because the console's does.
+        (void)lVehicleTransform;
 
         CgsPhysics::PhysicsSimulationIO::InAddRigidBody lAddBodyEvent;
 
