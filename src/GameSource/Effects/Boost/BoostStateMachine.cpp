@@ -165,6 +165,7 @@ void BoostStateMachine::OnConstruct()
 {
     mTime              = 0.0f;          // +0x08  (base mTime / state timer)
     muNumBoostTags     = 0;             // +0x0C
+    mbBoostLocatorLocalValid = false;   // host-side bring-up field; see the header
     mState             = EffectsStateAllOff;  // +0x04 (base mState = 0)
     for (u32 lu = 0; lu < KU_MAX_BOOST_EFFECTS; ++lu)
     {
@@ -285,6 +286,7 @@ void BoostStateMachine::Reset(ParticleEffectHelper& lParticleEffectHelper)
     }
 
     muNumBoostTags     = 0;       // +0x0C
+    mbBoostLocatorLocalValid = false;   // host-side bring-up field; see the header
     mState             = EffectsStateAllOff;  // +0x04
     mfExhaustSmokeBlend = 0.0f;   // +0x20  (rodata flt_82001CC0 == 0.0)
 }
@@ -637,7 +639,16 @@ void BoostStateMachine::OnTick(CarState& lCarState, RaceCarParticleEffectHelper&
             for (u32 luBoost = 0; luBoost < muNumBoostTags && luBoost < KU_NUM_BOOST_LOCATORS;
                  ++luBoost)
             {
-                lHelper.SetEffectTransform(mEffects[luBoost].muHandle, lpCar->mTransform);
+                // The car's OWN nozzle, when the spec gave us one: the bind-pose FXBOOSTPOINT
+                // matrix through TransformBoostLocator -- the same call the live-locator arm
+                // below makes, with the undeformed locator in place of the deformed one. With
+                // no spec locator at all it degrades to the car origin, which at least keeps the
+                // effect on the car.
+                const Matrix44Affine lWorld =
+                    mbBoostLocatorLocalValid
+                        ? TransformBoostLocator(lpCar->mTransform, maBoostLocatorLocal[luBoost])
+                        : lpCar->mTransform;
+                lHelper.SetEffectTransform(mEffects[luBoost].muHandle, lWorld);
             }
 
             // [boostloc] the stand-in's own witness, latched on the car moving into a new
@@ -649,11 +660,16 @@ void BoostStateMachine::OnTick(CarState& lCarState, RaceCarParticleEffectHelper&
             {
                 siLastCell = liCell;
                 char lacMsg[224];
+                const Matrix44Affine lW0 =
+                    mbBoostLocatorLocalValid
+                        ? TransformBoostLocator(lpCar->mTransform, maBoostLocatorLocal[0])
+                        : lpCar->mTransform;
                 std::snprintf(lacMsg, sizeof(lacMsg),
-                    "[boostloc] STAND-IN: no VehicleLocatorOutput; %u boost effect(s) placed at"
-                    " the car transform (%.2f,%.2f,%.2f)\n",
-                    muNumBoostTags, lpCar->mTransform.wAxis.x, lpCar->mTransform.wAxis.y,
-                    lpCar->mTransform.wAxis.z);
+                    "[boostloc] STAND-IN: no VehicleLocatorOutput; %u boost effect(s); specNozzle=%d"
+                    " car=(%.2f,%.2f,%.2f) fx0=(%.2f,%.2f,%.2f)\n",
+                    muNumBoostTags, (int)mbBoostLocatorLocalValid,
+                    lpCar->mTransform.wAxis.x, lpCar->mTransform.wAxis.y,
+                    lpCar->mTransform.wAxis.z, lW0.wAxis.x, lW0.wAxis.y, lW0.wAxis.z);
                 CgsDev::Log::WriteToLog(lacMsg);
             }
         }

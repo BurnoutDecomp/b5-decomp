@@ -46,7 +46,28 @@ void LionBlendVertex::VertexIterator::Write(
     // fields private and hands out accessors; the cursor is stored as `const u8*` because
     // every other reader of it only reads. This is the one writer, so it casts once here
     // rather than widening the shared struct's interface for a single call site.
-    u8* lpCur = const_cast<u8*>(GetCurrentAddress());
+    //
+    // ⭐⭐ FIXED 2026-09-05 (boost-exhaust wave). THE CURSOR IS ONE 32-BIT WORD BEHIND THE
+    // NEXT WRITE, and this body used to store at the cursor itself.
+    //
+    // The convention is not a guess -- it is stated twice, in the two functions that bracket
+    // every use of this iterator (EffectsVertexBuffer.cpp, both X360-attested):
+    //     BeginBatch @0x82279950:  SetBaseAddress(aligned);
+    //                              SetCurrentAddress(aligned - 4);      <- MINUS FOUR
+    //     EndBatch   @0x82279A28:  bytesWritten = (current - base) + 4; <- PLUS FOUR BACK
+    // so after N vertices the cursor must read base - 4 + N*stride for EndBatch's count to
+    // come out at exactly N. (It is the ordinary PS3/Xenos store-with-pre-offset cursor: the
+    // generic renderengine::VertexIterator3::Write this function tail-calls stores at
+    // cursor+4 and then advances.) Writing at cursor+0 instead put EVERY vertex four bytes
+    // early, which is a whole float: the draw then read each position starting at its Y lane.
+    //
+    // MEASURED, on the frame the first boost quad reached the device -- the corner handed to
+    // QuadDraw against the four floats the device was given at the batch's own start vertex:
+    //     [lionsprite] ... corner0=(3058.03,-2.47,-1977.40)
+    //     [lionfx] quad0 v0=(-2.47,-1977.40,0.00,0.000)
+    // i.e. (x,y,z) arriving as (y,z,w). Every particle was drawn at a position built from the
+    // wrong lanes, which is why a fully-bound, S_OK draw lit no fragments.
+    u8* lpCur = const_cast<u8*>(GetCurrentAddress()) + 4;
 
     // position Vector4 @ cur+0
     reinterpret_cast<float*>(lpCur)[0] = lv4Position.x;
@@ -63,8 +84,9 @@ void LionBlendVertex::VertexIterator::Write(
     reinterpret_cast<float*>(lpCur + 20)[2] = lv4Uv.z;
     reinterpret_cast<float*>(lpCur + 20)[3] = lv4Uv.w;
 
-    // Advance the write cursor by one stride (36 bytes).
-    SetCurrentAddress(lpCur + LionBlendVertex::GetStride());
+    // Advance the write cursor by one stride (36 bytes) -- from the CURSOR, not from the
+    // write position, so it stays one word behind the next vertex (see the note above).
+    SetCurrentAddress(lpCur - 4 + LionBlendVertex::GetStride());
 }
 
 } // namespace BrnGraphics

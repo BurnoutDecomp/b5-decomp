@@ -31,7 +31,8 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"  // shadow::Device::SetState -- the console's own applier
 
 #include <cmath>   // sqrtf -- the two normalisations
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the one-shot CreateInternalMaterial announcement
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstdio>   // [lionsprite] witness   // the one-shot CreateInternalMaterial announcement
 #include "GameSource/Effects/Particles/LionParticleRender.h"   // LionParticleRender::CreateInternalMaterial / cParticleMaterial (the Lion trap stubs below)
 
 namespace renderengine { class BlendMaterialState; }
@@ -574,6 +575,31 @@ void LionBlendRenderer::RenderSprites(EffectsVertexBufferIterator& arIterator,
         for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
         {
             laPoints[luCorner] = rw::math::vpu::TransformPoint(mBackMat, laPoints[luCorner]);
+        }
+
+        // [lionsprite] ONE-SHOT bring-up witness. NOT console behaviour. Every step between the
+        // per-particle matrix and the corner the vertex writer receives, because the spawn point
+        // is provably correct and the vertex provably is not. DELETE-WHEN-STABLE.
+        {
+            static bool sbSpriteOnce = false;
+            if (!sbSpriteOnce)
+            {
+                sbSpriteOnce = true;
+                char lacMsg[384];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[lionsprite] mat.wa=(%.2f,%.2f,%.2f,%.2f) conv.wAxis=(%.2f,%.2f,%.2f,%.2f)"
+                    " part.mPos=(%.2f,%.2f,%.2f) back.wAxis=(%.2f,%.2f,%.2f,%.2f)"
+                    " back.xAxis=(%.3f,%.3f,%.3f) corner0=(%.2f,%.2f,%.2f)\n",
+                    apMatrix[luIndex].wa.x, apMatrix[luIndex].wa.y, apMatrix[luIndex].wa.z,
+                    apMatrix[luIndex].wa.w,
+                    lConvertedXform.wAxis.x, lConvertedXform.wAxis.y, lConvertedXform.wAxis.z,
+                    lConvertedXform.wAxis.w,
+                    lrPart.mPos.x, lrPart.mPos.y, lrPart.mPos.z,
+                    mBackMat.wAxis.x, mBackMat.wAxis.y, mBackMat.wAxis.z, mBackMat.wAxis.w,
+                    mBackMat.xAxis.x, mBackMat.xAxis.y, mBackMat.xAxis.z,
+                    laPoints[0].x, laPoints[0].y, laPoints[0].z);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
         }
 
         QuadDraw(lrLionBlendVertexIterator, lUVData, lrPart, laPoints, *apEmitter);

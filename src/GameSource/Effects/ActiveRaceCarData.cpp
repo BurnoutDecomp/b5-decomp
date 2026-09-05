@@ -270,6 +270,18 @@ void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
             lrParticleModule.StopLionEffect(&lrSlot);
         }
 
+        // ⚠ HOST-SIDE BRING-UP CAPTURE, not console behaviour. The console's tag loop really
+        // does throw the locator away (see the note above this function) because the DEFORMED
+        // per-frame table positions the effects. That table is empty on this build, so the
+        // BIND-POSE matrix is kept here for BoostStateMachine::OnTick's stand-in.
+        // DELETE-WHEN the deformation module publishes VehicleLocatorOutput for race cars.
+        if (mBoostMachine.muNumBoostTags < BrnEffects::BoostStateMachine::KU_MAX_BOOST_EFFECTS)
+        {
+            mBoostMachine.maBoostLocatorLocal[mBoostMachine.muNumBoostTags] =
+                lLocator.mLocatorMatrix;
+            mBoostMachine.mbBoostLocatorLocalValid = true;
+        }
+
         lruHandle = BrnParticle::LionEffect::KU_HANDLE_INVALID;
         ++mBoostMachine.muNumBoostTags;
     }
