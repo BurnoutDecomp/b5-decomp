@@ -597,7 +597,18 @@ namespace Deformation
 			s32         miLevel;
 			u32         muWorld;        // applies whose params carried mbWorldContact
 		};
-		const s32   KI_DENT_ROWS   = 48;
+		// ⚠️⚠️ 48 WAS A DIAGNOSTIC THAT LIED BY OMISSION (momentum wave, 2026-09-05). DentFind
+		// allocates one row per (sensor, direction) pair FIRST-COME, and every vehicle in the
+		// world -- the player AND every traffic car -- competes for the same 48. A player car has
+		// 20 body sensors x 6 directions == 120 pairs on its own, so the table is exhausted long
+		// before the player's crash and DentFind then returns 0 and silently records nothing.
+		// MEASURED in run mom_A1: a 148 mph wall wreck that drove the deepest sensor to 0.968 m
+		// produced [dent] rows for exactly THREE of the player's sensors, all on the front-left --
+		// which reads exactly like "only one corner of the car ever deforms" and is not that at all.
+		// Raised so the ledger can answer the OWNER'S first complaint (does every part deform?)
+		// instead of answering the table's capacity. 512 rows == 8 KB of host BSS in a probe that
+		// is dead unless BRN_DENT_PROBE is set.
+		const s32   KI_DENT_ROWS   = 512;
 		DentRow     gaDentRows[KI_DENT_ROWS];
 		s32         giDentRows     = 0;
 		u32         guDentLastDump = 0xFFFFFFFFu;
