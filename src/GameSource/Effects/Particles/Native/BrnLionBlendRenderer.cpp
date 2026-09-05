@@ -285,6 +285,19 @@ namespace
     // ⚠ THE 511 IS NOT A TYPO AND NOT SHARED WITH ALPHA. RGB scale by 511 and alpha by 255 --
     // that asymmetry is the entire content of the name "Overbright": a 0.5 colour channel
     // saturates to full white, giving the artist one stop of headroom above 1.0.
+    //
+    // ⭐⭐ MEASURED END TO END 2026-09-05, so nobody re-opens "is the particle colour too bright".
+    // A boost-flame vertex reaches the device as RGBA8 bytes FF 90 46 FF (the [lionuv] witness
+    // prints the little-endian word FF4690FF). BoostGreen.lef's BURSTBOOST behaviour authors
+    // RGBA0 = 0xff2348dc, i.e. cColour8 { r 220, g 72, b 35, a 255 }; NormaliseColour divides by
+    // 255 and THIS function multiplies by (511,511,511,255) and saturates:
+    //     r 0.8627 * 511 = 440.8 -> clamp 255 = 0xFF      g 0.2824 * 511 = 144.3 -> 144 = 0x90
+    //     b 0.1373 * 511 =  70.1 ->        70 = 0x46      a 1.0000 * 255 = 255       = 0xFF
+    // The artist's word, the console's conversion and the bytes the draw received agree exactly.
+    // The plume's blowout under the authored ADDITIVE blend is therefore NOT a colour that is too
+    // bright here -- the red channel is already clamped by the x511 the artist asked for, and the
+    // alpha really is 1.0. Look at colourScale (pinned 1.0 while BridgeRendererToEffects
+    // @0x823C1168 is unreconstructed) and the missing quarter-res particle buffer instead.
     inline renderengine::RGBA8 ConvertVector4ToRwRgbaOverbright(const cVector& arColour)
     {
         const rw::math::vpu::Vector4& lrScale = BrnEffects::Utils::K_VECTOR4_511_511_511_255;
