@@ -1582,9 +1582,11 @@ namespace Deformation
     //      ("Impact time is %f on sensor %d/%d", PS3 :1861); build a ContactTime row:
     //        * CAR-CAR records (mpOtherVehicle != 0): sort key = the impact time (earliest first);
     //        * WORLD records: sort key = dot(normalizedVelocity, record.mNormal) -- most head-on
-    //          (most negative) first. [FLAG: the dot's second operand is the one 16-byte lane of
-    //          the copied record the X360 pseudo obscures; the normal is the only physically
-    //          consistent operand and matches the PS3 register flow.]
+    //          (most negative) first. ⭐ THE [FLAG] ON THIS LINE IS RETIRED (2026-09-05): the
+    //          operand is pinned by its displacement, not inferred. The sort loop copies the
+    //          64-byte record to var_110 (== r1+0xC0 in the 0x1D0 frame) and the dot's second
+    //          operand is loaded from `addi r10, r1, 0x1D0+var_F0` @0x82647BBC == r1+0xE0 ==
+    //          copy base + 0x20, and +0x20 is mNormal.
     //      then std::sort the rows (the exported std::_Sort<ContactTime*> over operator<).
     //  (2) APPLY: zero the vehicle's per-frame world-collision count (mi8NumWorldCollisions,
     //      vp+4947); for each sorted row re-read the sensor's record (same >1.0 skip) and route:
@@ -1592,6 +1594,29 @@ namespace Deformation
     //        * world   -> ApplyCarWorldImpulse(record, timeStep, iteration=0, sensorIdx)
     //      and when an impulse was applied, CalculateNewVelocity(timeStep) on this body (and on
     //      the other car's body for car-car).
+    //
+    // ⭐⭐ VERIFIED AGAINST THE ARTIST ASM, 2026-09-05 (roll-frequency wave), because the crash
+    // campaign's open question was whether the observed 74.55 -> 36.22 m/s one-step collapse --
+    // FIVE world impulses from this one call site, J == 17068/13232/14503/9356/4370 N.s, each
+    // solved against the already-reduced velocity -- is what the console does. It is, in all
+    // three respects the question named:
+    //   * THE ITERATION IS A HARD ZERO. `vspltisw128 v126, 0` is hoisted OUT of the loop at
+    //     0x82647C94 and `vmr128 v2, v126` feeds it to both Apply* arms at 0x82647D78. There is
+    //     no relaxation sweep and no iteration counter -- so the (iteration+1)*0.5 shaping the
+    //     Apply arms carry is always exactly x0.5, on every contact.
+    //   * CalculateNewVelocity IS INSIDE THE LOOP. The call is at 0x82647DBC and the back-edge
+    //     at 0x82647DF0 -> 0x82647CC8. So impulse k+1 IS solved against the velocity impulse k
+    //     already reduced; the alternative ("solve them all against the entry velocity") is not
+    //     what the binary does.
+    //   * THE CONTACT-SET SIZE IS THE CONSOLE'S. The collect loop runs while
+    //     `liSensor < *(u8*)(mpDeformationSpec + 0x652)` (0x82647C38..0x82647C4C), and 0x652 ==
+    //     1618 == mu8NumDeformationSensors -- i.e. exactly GetNumSensors() - 4, which is the
+    //     bound this reconstruction already used. Five applied impulses in one step is therefore
+    //     five sensors that had a live stored contact, not an iteration count we invented.
+    // ⛔ WHAT THAT DOES NOT SETTLE: the MAGNITUDES. ApplyCarWorldImpulse @0x82624898 is an X360
+    // EXPORT HOLE and its body is derived from the PS3 twin, so nothing above is evidence about
+    // whether 17 kN.s is the right number for one sensor -- only about how many are applied and
+    // against what velocity.
     // =============================================================================================
     void DeformableObject::UpdateContacts(VecFloat lvfTimeStep, CgsNumeric::Random& lrRandom)
     {
@@ -1632,8 +1657,20 @@ namespace Deformation
             CGS_ASSERT(lContact.mfImpactTimeInFrame >= 0.0f && lContact.mfImpactTimeInFrame <= 1.0f,
                        "Impact time is ");
 
+            // ⭐ THE DISCRIMINATOR IS mpOtherSensor, NOT mpOtherVehicle -- corrected 2026-09-05
+            // against the ARTIST asm. StoredImpulseContact packs mpOtherVehicle at +0x30 and
+            // mpOtherSensor at +0x34, and BOTH of this function's car-vs-world tests read the
+            // +0x34 word: `lwz r10, 0x1D0+var_DC(r1)` @0x82647BB0 in the sort loop and
+            // `lwz r11, 0x1D0+var_11C(r1)` @0x82647D74 in the apply loop (the copy base is
+            // var_110 / var_150, so both displacements are base+0x34). +0x30 is only ever
+            // DEREFERENCED, at 0x82647DCC, where `lwz r11, 0x194C(r11)` reaches the other
+            // DeformableObject's mVehicleBody -- which is what proves +0x30 is the object
+            // pointer and +0x34 is the separate sensor pointer. ValidateAndAddContact sets both
+            // together, so this is a fidelity correction and not a behaviour change; it is made
+            // because the wave that asked "is the five-impulse collapse what the console does"
+            // had to read this loop instruction by instruction anyway.
             f32 lfSortKey;
-            if ( lContact.mpOtherVehicle != nullptr )
+            if ( lContact.mpOtherSensor != nullptr )
             {
                 lfSortKey = lContact.mfImpactTimeInFrame;                 // car-car: earliest first
             }
@@ -1670,7 +1707,7 @@ namespace Deformation
             }
 
             bool lbApplied;
-            if ( lContact.mpOtherVehicle != nullptr )
+            if ( lContact.mpOtherSensor != nullptr )   // +0x34; see the sort-loop note above
             {
                 lbApplied = ApplyCarCarImpulse(lContact, lvfTimeStep, lvfIterationZero,
                                                liSensor, lrRandom);
@@ -1688,9 +1725,9 @@ namespace Deformation
                 // 7.5 m/s f6386 drain was attributed to the car-car arm by the ABSENCE of a
                 // [kerb-imp] line that frame -- sound, but an inference from a silence. This
                 // makes the same claim a positive statement on the drain's own line.
-                gpcDvDrainTag = ( lContact.mpOtherVehicle != nullptr ) ? "carcar" : "world";
+                gpcDvDrainTag = ( lContact.mpOtherSensor != nullptr ) ? "carcar" : "world";
                 GetVehicleBody().CalculateNewVelocity(lvfTimeStep);
-                if ( lContact.mpOtherVehicle != nullptr )
+                if ( lContact.mpOtherSensor != nullptr )
                 {
                     lContact.mpOtherVehicle->GetVehicleBody().CalculateNewVelocity(lvfTimeStep);
                 }
