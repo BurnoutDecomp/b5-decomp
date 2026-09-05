@@ -8434,15 +8434,40 @@ namespace Vehicle
                                                    // direct call is dispatch-identical
         BRN_ROLLCATCH_SAMPLE();   // 6: after UpdateSuspension (contains StabiliseAfterHardLanding)
 
-        // mbAllWheelsHaveTraction: the four road-contact bytes AND the +0x10 vcall
-        // (IsPlayerVehicleInShowtime -- image-settled; traffic defaults false, so a crashing
-        // traffic car never reports traction here). Short-circuit order preserved.
+        // mbAllWheelsHaveTraction: the four road-contact bytes AND the NEGATION of the +0x10
+        // vcall (IsPlayerVehicleInShowtime).
+        //
+        // ⭐⭐⭐ POLARITY CORRECTED 2026-09-05 (tumble wave, found by the vtable-dispatch audit).
+        // This line used to read `... && IsPlayerVehicleInShowtime()`, which is the SENSE THE
+        // CONSOLE DOES NOT HAVE -- and because an ordinary crash is never showtime, it wrote
+        // FALSE on every frame of every crash, where the console writes TRUE the moment all four
+        // wheels are down. The branch, read out of the image rather than inferred:
+        //     0x82638F90..BC  four `lbz` wheel bytes; ANY zero -> b loc_82638FE4
+        //     0x82638FC0..D0  lwz r11,0(r31) ; lwz r11,0x10(r11) ; mtctr ; bctrl   (the +0x10 vcall)
+        //     0x82638FD4      clrlwi r11, r3, 24          ; r11 = (u8)result
+        //     0x82638FD8      cmplwi cr6, r11, 0
+        //     0x82638FDC      mr     r11, r23             ; r23 == 1  (li r23,1 @0x82638DBC)
+        //     0x82638FE0      beq    cr6, loc_82638FE8    ; result == 0  -> KEEP the 1
+        //     0x82638FE4      mr     r11, r29             ; r29 == 0  (li r29,0 @0x826388E4)
+        //     0x82638FE8      stb    r11, 0x135B(r31)
+        //   ⇒ TRUE iff all four wheels are down AND the car is NOT in showtime.
+        // ⛔ The old banner's reasoning was inverted too ("traffic defaults false, so a crashing
+        //    traffic car never reports traction here") -- with the console's sense, a false
+        //    IsPlayerVehicleInShowtime is exactly what LETS a grounded car report traction.
+        // WHAT IT COSTS, and why it is a crash-path defect and not a cosmetic one: +0x135B is
+        // read by DeformationSensor::AddContactsToPenetrationSolver @0x825E22C4 as
+        // `lbVehicleWheelsAllHaveTraction`, and when BOTH cars in a car-car penetration report it
+        // the console FLATTENS the contact normal against the other car's up axis, so a grounded
+        // pair is pushed apart horizontally instead of being launched. With this flag stuck false
+        // that flattening could never fire on a crashing car. It also gates the boost kick
+        // (0x825D20xx), ApplyDriftLatForce, and the StuntOffences beached test.
+        // Short-circuit order preserved.
         mbAllWheelsHaveTraction =
             maWheels[0].GetRoadContact().mbIsOnGround &&    // lbz +0x158
             maWheels[1].GetRoadContact().mbIsOnGround &&    // lbz +0x238
             maWheels[2].GetRoadContact().mbIsOnGround &&    // lbz +0x318
             maWheels[3].GetRoadContact().mbIsOnGround &&    // lbz +0x3F8
-            IsPlayerVehicleInShowtime();                    // vcall +0x10
+            !IsPlayerVehicleInShowtime();                   // vcall +0x10, NEGATED (see above)
 
         UpdateWheels(lpControls, lvfTimeStep);     // ⭐ the ORIGINAL pointer (r22), NOT the
                                                    // copy -- UpdateDriving passes the copy;
