@@ -456,38 +456,81 @@ namespace Deformation
     }
 
     // =============================================================================================
-    // ApplyCarWorldImpulse -- the CAR-vs-WORLD impulse orchestrator.
-    // X360 @0x82624898 is an EXPORT HOLE; the PS3 body @0x746D68 (253 insns) is the authority,
-    // with the sibling ApplyCarCarImpulse (this TU, derived from both consoles) settling the
-    // shared idioms (the (iteration+1)*0.5 shaping literals are asm-visible vcfsx immediates in
-    // BOTH bodies). Showtime constants recovered this wave from the PS3 static initializer
-    // (__static_init_22 @0x6C2CCC): KF_SHOWTIME_BOUNCE_BOOST_SCALE = 2.0,
-    // KF_SHOWTIME_MIN_WORLD_BOUNCE_POWER = 8.0, KVF_Y_COMPONENT_BIG_BOUNCE_MIN = 0.5.
+    // ApplyCarWorldImpulse @0x82624898 -- the CAR-vs-WORLD impulse orchestrator.
     //
-    // Flow (PS3, register for register):
-    //   r        = lContact.mPointOnA - body position (row +0x40);
-    //   relMotion= linVel (+0x50) + angVel (+0x60) x r      (the gCrossProductPermuteConstant pair);
-    //   closing  = dot(relMotion, lContact.mNormal); if (closing >= 0) return false  (separating);
-    //   restitution = GetVehicleWorldRestitution(lContact);
-    //   mag = body.CalculateCollisionImpulseWithInanimateObject(worldPoint, relMotion, normal, restitution,
-    //                                                           &impulse, &invInertia);
-    //   if (vehicle->IsPlayerVehicleInShowtime()) {           (the vtable +0x10 virtual)
-    //       if (n.y*|n.y| >= n.x^2 + n.z^2 && n.y > 0) {      (upward-dominant landing normal)
-    //           RaceCarPhysics::SetJustBounced(contact-normal bounce, ...);
-    //           if (ShouldBounceBoostNextImpact())
-    //               mag = max(mag * KF_SHOWTIME_BOUNCE_BOOST_SCALE,
-    //                         KF_SHOWTIME_MIN_WORLD_BOUNCE_POWER);   [FLAG: the exact fsel fold of
-    //               the boost is modelled scale-then-floor -- showtime is dead on the junkyard
-    //               path; re-derive when showtime lands]
-    //       }
-    //   } else impulse *= (lvfIteration + 1) * 0.5;           (the sibling's asm-immediate shaping)
-    //   build the WORLD ImpulseParams and ApplySensorImpulse(...) -> return true.
+    // ⭐⭐⭐ THE EXPORT HOLE IS CLOSED (2026-09-05, momentum wave). This body used to say "X360
+    // @0x82624898 is an EXPORT HOLE; the PS3 body @0x746D68 is the authority". It is a hole in the
+    // .ida-exports SET, not in the image: IDA knows the name (it is the function between
+    // ResetSensors @0x82623D60, whose `b __restgprlr` is at 0x82624894, and ApplyCarCarImpulse
+    // @0x82624C08) and the exporter simply wrote no JSON. All 219 instructions,
+    // 0x82624898..0x82624C04, were read straight out of the image and are the authority for
+    // everything below. The PS3 twin is demoted to cross-reference; where the two differ THIS
+    // file now follows ARTIST, and every such difference is called out on its own line.
+    //
+    // HOW (so the next hole costs minutes, not hours): tools/re/ppcdis.py now decodes VMX128 via
+    // tools/re/vmx_table.json, an EMPIRICAL opcode->mnemonic table built by
+    // tools/re/build_vmx_table.py from IDA's own printed text across all 29,640 exported ARTIST
+    // functions. Before that, capstone printed `.long 0x...` for every VMX128 word -- i.e. for
+    // most of the physics code -- and a hole in this subsystem was effectively unreadable.
+    //
+    // ⚠️ TWO DECODE RULES THIS FUNCTION DEPENDS ON, both already in the tree and both re-confirmed
+    // here: (a) for `lvx128`/`stvx128` the rA/rB fields are PLAIN 5-bit GPR fields (b11..b15 /
+    // b16..b20) -- the VMX128 high-bit extension does NOT apply, so vmx128.py's "vB=107" is r11;
+    // (b) the vector ARGUMENT registers on this ABI start at v1 (`vmr128 v123,v1` @0x826248B8 and
+    // `vmr128 v122,v2` @0x826248C0 park lvfTimeStep and lvfIteration), which is what makes v122
+    // the iteration in the shaping below.
+    //
+    // ARTIST FLOW, address by address:
+    //   0x826248CC  B  = *(this+0x194C)            the attached VehiclePhysics; B+0x10 is its
+    //                                              ExternalPhysicsBody base subobject
+    //   0x826248EC  r        = lContact.mPointOnA - [B+0x40]           (body position)
+    //   0x826248F4/FC/0x82624914
+    //               relMotion= [B+0x50] + [B+0x60] x r                 (linVel + angVel x r)
+    //   0x82624918  vmsum3fp128 dot(relMotion, mNormal)
+    //   0x8262491C  vcmpgefp128. vs 0 -> `beq` @0x8262492C -> `li r3,0` : SEPARATING, return false
+    //   0x82624950  GetVehicleWorldRestitution(this, lContact) -> r1+0xC0
+    //   0x8262497C  ExternalPhysicsBody::CalculateCollisionImpulseWithInanimateObject(
+    //                   sret=r1+0xB0, this=B+0x10, &impulse=r1+0xA0, &invInertia=r1+0xD0,
+    //                   v1=mPointOnA, v2=relMotion, v3=mNormal, v4=restitution)
+    //   0x82624990  the vtable+0x10 virtual on B  == IsPlayerVehicleInShowtime
+    //                 (SetJustBounced @0x825B8D68 asserts on the string "mbPlayerCarInShowtime",
+    //                  which is what settles the predicate's identity)
+    //   0x826249A8  NOT showtime: impulse *= (lvfIteration + 1.0) * 0.5
+    //                 `vcsxwfp128 v13, v124, 1` == 0.5 and `vcsxwfp128 v127, v124, 0` == 1.0, both
+    //                 off `vspltisw128 v124, 1` @0x82624994 -- the 1.0/0.5 pair is IMAGE-READ, not
+    //                 inherited from the sibling.  With UpdateContacts' hard-zero iteration
+    //                 (9225f00e) this factor is exactly x0.5 on every world contact, always.
+    //   0x826249C4  showtime: the landing gate, then the bounce boost -- see the block below
+    //   0x82624AE8..0x82624BEC  build the WORLD ImpulseParams + normalise the shaped impulse
+    //   0x82624BF0  ApplySensorImpulse(...); 0x82624BF4 `li r3, 1` -> return true
+    //
+    // ⭐ THE MAGNITUDE, WHICH IS WHAT THE OWNER'S "no momentum" QUESTION WAS ABOUT, IS THE
+    // TEXTBOOK RIGID-BODY IMPULSE AND IT IS SOLVED IN AN EXPORTED FUNCTION, NOT HERE.
+    // CalculateCollisionImpulseWithInanimateObject @0x8259C978 (91 instructions, exported) is:
+    //     j = -(1 + e) (v_rel . n) / ( 1/m + n . ((I^-1 (r x n)) x r) )
+    //     *sret = j ; *impulseOut = n * |j| ; *invInertiaOut = the DENOMINATOR (not an inertia)
+    // read off its own asm: `vrefp v12,[this+0xD0]` + two Newton steps is 1/m from mfMass;
+    // [this+0xA0/0xB0/0xC0] are the three mWorldInverseInertia rows; `vaddfp128 v0, v127, v4` then
+    // `vxor` the sign bit is -(1+e); `vmsum3fp128 v8, normal, relMotion` is the closing speed.
+    // Every one of those offsets is the seat ExternalPhysicsBody.h already committed, and the
+    // reconstruction in ExternalPhysicsBody.cpp computes exactly that expression. So the
+    // per-impulse magnitude in this build IS the console's arithmetic on the console's fields;
+    // the only way it can diverge is through m / I^-1 / r / n / v_rel, not through the formula.
+    // ⭐ AND THE RESTITUTION IS ZERO OUT OF SHOWTIME. GetVehicleWorldRestitution @0x825E0C78
+    // returns `vspltisw v0, 0` on the whole non-showtime path (`bne` @0x825E0CB4 is the ONLY way
+    // into the arm that loads a value). A wall hit is therefore perfectly inelastic by the
+    // console's own rule -- there is no bounce term to be missing.
     // =============================================================================================
     namespace
     {
-        // PS3 __static_init_22 values (see the wave log): the showtime world-bounce family.
-        const f32 KF_SHOWTIME_BOUNCE_BOOST_SCALE     = 2.0f;
-        const f32 KF_SHOWTIME_MIN_WORLD_BOUNCE_POWER = 8.0f;
+        // ⭐ RECOVERED FROM THE ARTIST IMAGE 2026-09-05, not from the PS3 initializer. Both are
+        // dynamic-init splat slots (they read 0.0 out of the image BY DEFINITION); findinit.py
+        // names the writer thunk and ppcdis.py reads the float it copies:
+        //   unk_82FB81E0 <- 0x82C5D408..0x82C5D42C <- flt_82001D9C == 2.0   the bounce-boost SCALE
+        //   unk_82FB9E80 <- 0x82C5D458..0x82C5D47C <- flt_82004C88 == 8.0   the minimum bounce POWER
+        // The PS3-derived values were right; the SHAPE they were applied in was not (see below).
+        const f32 KF_SHOWTIME_BOUNCE_BOOST_SCALE     = 2.0f;   // unk_82FB81E0
+        const f32 KF_SHOWTIME_MIN_WORLD_BOUNCE_POWER = 8.0f;   // unk_82FB9E80
     }
 
     bool DeformableObject::ApplyCarWorldImpulse(const StoredImpulseContact& lContact,
@@ -514,77 +557,135 @@ namespace Deformation
         VecFloat lvfImpulseMagnitude = GetVehicleBody().CalculateCollisionImpulseWithInanimateObject(
             lContact.mPointOnA, lRelativeMotion, lContact.mNormal, lvfRestitution, &lImpulse, &lvfInvInertia);
 
-        if ( lpVehicle->IsPlayerVehicleInShowtime() )   // the vtable +0x10 virtual
+        if ( lpVehicle->IsPlayerVehicleInShowtime() )   // 0x82624990, the vtable +0x10 virtual
         {
+            // 0x826249C4..0x82624A40 -- the LANDING gate, decoded operand for operand. The console
+            // builds sign(n.y) with a vcmpgtfp/vcmpgefp/vsel pair, multiplies it by n.y twice and
+            // compares the product against n.x*n.x + n.z*n.z:
+            //     |n.y| * n.y  >=  n.x^2 + n.z^2
+            // which is true only for an UPWARD-dominant normal (a landing), n.y == 0 aside. The
+            // form is transcribed rather than re-derived as `n.y > 0 && ...`, because those two
+            // spellings differ on a degenerate all-zero normal.
             const Vector3& lrN = lContact.mNormal;
-            if ( lrN.y > 0.0f && (lrN.y * lrN.y) >= (lrN.x * lrN.x + lrN.z * lrN.z) )
+            const f32 lfSignY  = (lrN.y > 0.0f) ? 1.0f : ((lrN.y < 0.0f) ? -1.0f : 0.0f);
+            if ( (lfSignY * lrN.y) * lrN.y >= (lrN.x * lrN.x + lrN.z * lrN.z) )
             {
                 BrnPhysics::Vehicle::RaceCarPhysics* lpRaceCar = AsRaceCarPhysics();
                 if ( lpRaceCar != nullptr )
                 {
-                    lpRaceCar->SetJustBounced(lContact.mNormal, false, false, EntityId{ 0u });
+                    // ⚠️ OPERAND CORRECTED 2026-09-05 against ARTIST: `lvx128 v1, r0, r29`
+                    // @0x82624A50 loads the contact base (r29 == &lContact, i.e. +0x00 ==
+                    // mPointOnA), NOT r30 (== contact+0x20 == mNormal), which is live in the same
+                    // register window. The old body passed the normal. SetJustBounced stores that
+                    // vector into the lbBounceBoosting record at 0x82FB8490 (`stvx128 v127, r11,
+                    // 0x10` @0x825B8D9C), so it is a bounce POSITION.
+                    lpRaceCar->SetJustBounced(lContact.mPointOnA, false, false, EntityId{ 0u });
                     if ( lpRaceCar->ShouldBounceBoostNextImpact() )
                     {
-                        f32 lfMag = lvfImpulseMagnitude.x * KF_SHOWTIME_BOUNCE_BOOST_SCALE;
-                        if ( lfMag < KF_SHOWTIME_MIN_WORLD_BOUNCE_POWER )
+                        // ⚠️⚠️ SHAPE CORRECTED 2026-09-05 against ARTIST -- the numbers were right
+                        // and the arithmetic they were used in was not. The old body did
+                        // `mag = max(mag * 2.0, 8.0)` on the SCALAR magnitude. The console
+                        // (0x82624A78..0x82624AE4) scales the IMPULSE VECTOR and floors only its
+                        // Y lane, against 8.0 times the body's MASS:
+                        //     0x82624A98  vmulfp128 v0, v12, v0     ; impulse *= 2.0 (unk_82FB81E0)
+                        //     0x82624AB0  lvx128 v12, r10, r9       ; r9 == 0xE0 -> B+0xE0, which is
+                        //                                           ; ExternalPhysicsBody+0xD0 == mfMass
+                        //     0x82624AB4  vmulfp128 v13, v13, v12   ; 8.0 (unk_82FB9E80) * mass
+                        //     0x82624ACC/D0  fsubs + fsel           ; max(impulse.y, 8.0*mass)
+                        //     0x82624AD4  stfs f0, 0xB4(r1)         ; only lane 1 is written back
+                        // i.e. a showtime landing is guaranteed 8 m/s worth of UPWARD momentum. A
+                        // bare 8.0 was not merely a different number, it was a different unit
+                        // (~8 N.s instead of ~11,200 N.s on a 1400 kg car).
+                        lImpulse = vpu::Mult(lImpulse, KF_SHOWTIME_BOUNCE_BOOST_SCALE);
+                        const f32 lfMinBounce =
+                            KF_SHOWTIME_MIN_WORLD_BOUNCE_POWER * GetVehicleBody().GetMass().x;
+                        if ( lImpulse.y < lfMinBounce )
                         {
-                            lfMag = KF_SHOWTIME_MIN_WORLD_BOUNCE_POWER;   // the fsel floor
+                            lImpulse.y = lfMinBounce;   // the fsel
                         }
-                        lvfImpulseMagnitude = VecFloat{ lfMag, lfMag, lfMag, lfMag };
                     }
                 }
             }
+            // ⭐ NOTE THE ASYMMETRY, and it is the console's: the showtime arm does NOT apply the
+            // (iteration+1)*0.5 shaping. 0x826249A8..0x826249C0 (the `bne`-not-taken arm) is the
+            // only place the factor exists; the showtime arm branches straight to 0x82624AE8.
         }
         else
         {
-            // The sibling ApplyCarCarImpulse's asm-immediate shaping (vcfsx 1.0 / 0.5), identical
-            // instruction pair in this body: impulse *= (iteration + 1) * 0.5.
+            // 0x826249A8..0x826249BC, image-read immediates: impulse *= (iteration + 1.0) * 0.5.
+            //     vcsxwfp128 v127, v124, 0  == float(1) / 2^0 == 1.0
+            //     vcsxwfp128 v13,  v124, 1  == float(1) / 2^1 == 0.5
+            //     vaddfp128  v12, v122(iteration), v127 ; vmulfp128 v13, v12, v13
+            //     vmulfp128  v10, v0(impulse), v13
+            // UpdateContacts feeds iteration == 0 unconditionally (9225f00e: `vspltisw128 v126,0`
+            // hoisted out of the apply loop), so this is exactly x0.5 on every world contact.
             const f32 lfShape = (lvfIteration.x + 1.0f) * 0.5f;
             lImpulse = vpu::Mult(lImpulse, lfShape);
         }
 
-        // The WORLD-contact params block; the remaining fields are filled by ApplySensorImpulse.
+        // The WORLD-contact params block. ⭐ RE-READ OFF ARTIST 2026-09-05: the console's params
+        // base is r1+0xE0 (`addi r5, r1, 0xE0` @0x82624B30) and ApplySensorImpulse memcpys 0xC0
+        // bytes from it (`li r5, 0xC0` @0x826078F8), which pins sizeof(ImpulseParams) == 192 and
+        // makes every store below checkable by displacement. ARTIST writes EXACTLY SEVEN fields:
+        //     0x82624B10  stvx128 -> r1+0x100  (+0x20)  mImpulsePosition   = lContact.mPointOnA
+        //     0x82624B4C  stw   0 -> r1+0x130  (+0x50)  mePositionSpace    = WORLD_SPACE
+        //     0x82624B44  stvx128 -> r1+0x140  (+0x60)  mvfInverseInertia
+        //     0x82624B6C  stvx128 -> r1+0x150  (+0x70)  mvfTimeStep        (v123 == the v1 arg)
+        //     0x82624B84  stvx128 -> r1+0x160  (+0x80)  mvfVelocityAlongNormal
+        //     0x82624B64  stw     -> r1+0x190  (+0xB0)  mpImpulsePasser    = this+0x18E4
+        //     0x82624B80  stb   1 -> r1+0x198  (+0xB8)  mbWorldContact     = true
         //
-        // TWO DROPPED STORES, from the PS3 twin @0x746D68 (the X360
-        // is an export hole). Params base there is var_190; the +0xB8/+0x50 stores below it pin the
-        // base exactly (`stb 1, var_D8` == mbWorldContact and `stw 0, var_140` == mePositionSpace,
-        // which are 8 and 0x40 off the two fields this block already set correctly).
+        // ⛔ AND THREE STORES THIS BODY USED TO MAKE THAT THE CONSOLE DOES NOT -- removed, with the
+        // reason, because "the caller sets it" was a load-bearing claim elsewhere in the tree:
+        //   * mvfImpulseMagnitude (+0x00) and mWorldImpulseDirection (+0x10). ARTIST leaves both as
+        //     stack garbage here; ApplySensorImpulse overwrites them from its OWN arguments the
+        //     moment it starts (`vmr128 v120,v4` / `vmr128 v116,v3` in its prologue, then the two
+        //     assignments at the head of its params seed), and further uses its local copy of both
+        //     slots as scratch (`stw r30, var_290` @0x82607C8C is +0x00 holding a sensor pointer).
+        //     Keeping the caller store was therefore harmless but WRONG -- and specifically it
+        //     wrote the UNSHAPED solved magnitude into a field the shaped one owns, which is the
+        //     exact shape a 2x momentum bug would have taken if anything downstream had read it.
+        //   * meAbsorptionSet (+0xB4). ApplySensorImpulse reads it from `this+0x675C` itself
+        //     (`lwz r10, 0x675C(r17)` @0x8260793C). The note in BrnDeformableObject_Update.cpp
+        //     saying "the world path set it in the caller, so this is the console's own single
+        //     point of truth for both paths" is REFUTED by the asm: neither caller sets it, and
+        //     ApplySensorImpulse is the single point of truth for both.
         ImpulseParams lParams;
-        lParams.mvfImpulseMagnitude    = lvfImpulseMagnitude;
-        lParams.mWorldImpulseDirection = lContact.mNormal;
-        lParams.mvfInverseInertia      = lvfInvInertia;                        // 0x746F78 -> +0x60
-        lParams.mvfTimeStep            = lvfTimeStep;                          // 0x746F90 -> +0x70
-        lParams.mePositionSpace        = rw::physics::WORLD_SPACE;             // 0x746F80 -> +0x50
-        lParams.mImpulsePosition       = lContact.mPointOnA;                   // 0x746F70 -> +0x20
-        lParams.mbWorldContact         = true;                                 // 0x746F88 -> +0xB8
-        lParams.meAbsorptionSet        = meAbsorptionSet;
-        // +0x80 mvfVelocityAlongNormal @0x747010 (`li r0,0x150 ; stvx v1, r1, r0`). v1 is the
-        // vsldoi/vaddfp horizontal sum of relativeMotion*normal -- i.e. dot3(relMotion, normal) --
-        // passed through `vandc v1, v1, v9` @0x74700C where v9 == vslw(vspltisw -1) == 0x80000000,
-        // which CLEARS THE SIGN BIT. So the field is |closing speed|. The function has already
-        // returned false for a separating contact, so the dot is negative here and the abs is what
-        // makes the head's line-319 `>= 0` assert hold. Recomputed by name rather than re-derived.
+        lParams.mvfInverseInertia      = lvfInvInertia;                        // 0x82624B44 -> +0x60
+        lParams.mvfTimeStep            = lvfTimeStep;                          // 0x82624B6C -> +0x70
+        lParams.mePositionSpace        = rw::physics::WORLD_SPACE;             // 0x82624B4C -> +0x50
+        lParams.mImpulsePosition       = lContact.mPointOnA;                   // 0x82624B10 -> +0x20
+        lParams.mbWorldContact         = true;                                 // 0x82624B80 -> +0xB8
+        // +0x80 mvfVelocityAlongNormal @0x82624B84. The value is `vmsum3fp128 v11, v125, v11`
+        // @0x82624AF8 (dot3(relMotion, mNormal)) passed through `vandc v12, v11, v12` @0x82624B3C
+        // where v12 == vslw(vspltisw -1) == 0x80000000, i.e. the SIGN BIT IS CLEARED. So the field
+        // is |closing speed|. The function has already returned false for a separating contact, so
+        // the dot is negative here and the abs is what makes ApplySensorImpulse's line-319 `>= 0`
+        // assert hold. (The PS3 twin spells the same thing with vsldoi/vaddfp.)
         {
             const f32 lfClosing    = vpu::Dot(lRelativeMotion, lContact.mNormal);
             const f32 lfAbsClosing = (lfClosing < 0.0f) ? -lfClosing : lfClosing;
             lParams.mvfVelocityAlongNormal =
                 VecFloat{ lfAbsClosing, lfAbsClosing, lfAbsClosing, lfAbsClosing };
         }
-        // +0xB0 mpImpulsePasser @0x746F6C/0x746F98 (`addi r11, this, 0x18E4 ; stw r11, var_E0`).
-        // ⭐⭐ THE CHAIN'S HANDLE, and the store the tree had never made: this is the ONLY route by
-        // which an ordinary world contact reaches the momentum bank (sensor absorbs -> PassOnImpulse
-        // -> slot 0 == &mVehicleBody -> VehicleRigidBody::RecievePassedOnImpulse ->
-        // VehiclePhysics::ApplyWallContactImpulse -> ExternalPhysicsBody::AddWorldSpaceImpulse).
-        lParams.mpImpulsePasser        = &mImpulsePasser;                      // 0x746F6C/0x746F98
+        // +0xB0 mpImpulsePasser -- `addi r10, r31, 0x18E4` @0x82624B48 then `stw r10, 0x190(r1)`
+        // @0x82624B64 (the PS3 twin spells the identical pair at 0x746F6C/0x746F98).
+        // ⭐⭐ THE CHAIN'S HANDLE: this is the ONLY route by which an ordinary world contact reaches
+        // the momentum bank (sensor absorbs -> PassOnImpulse -> slot 0 == &mVehicleBody ->
+        // VehicleRigidBody::RecievePassedOnImpulse -> VehiclePhysics::ApplyWallContactImpulse ->
+        // ExternalPhysicsBody::AddWorldSpaceImpulse).
+        lParams.mpImpulsePasser        = &mImpulsePasser;                      // 0x82624B48/B64
 
-        // ⭐⭐⭐ THE SAME DROPPED NORMALIZE as the car-car sibling (see its long note). PS3
-        // @0x746FF8..0x74703C: `vrsqrtefp` over the shaped impulse's |imp|^2, two Newton refines,
-        // then the double publish -- `vmaddfp v8,...` == imp * rsqrt (the UNIT DIRECTION, also
-        // written back through r28) and `vmaddfp v5,...` == |imp|^2 * rsqrt (the LENGTH), with
-        // `vsel v5, v5, v31, v7` guarding the zero-length case. `vmr v4, v8` seats the unit vector
-        // as ApplySensorImpulse's arg 3 (PS3 vector args start at v2) and v5 as its arg 4.
-        // vpu::NormalizeReturnMagnitude is the house model of exactly that one-pipeline double
-        // publish, zero guard included.
+        // ⭐⭐⭐ THE NORMALIZE, now read off ARTIST rather than the PS3 twin. 0x82624AF4 takes
+        // `vmsum3fp128 v0, v10, v10` == |shaped impulse|^2, 0x82624B40/0x82624B88 open TWO
+        // independent `vrsqrtefp` pipelines over it, each refined twice (the vnmsubfp128/vmaddfp
+        // pairs at 0x82624B98..0x82624BE4), and the two results publish the pair the callee wants:
+        //     0x82624BD0  vmulfp128 v3, v10, v12   ; impulse * rsqrt  == THE UNIT DIRECTION (arg v3)
+        //     0x82624BE8  vmulfp128 v0, v0,  v13   ; |imp|^2  * rsqrt == THE LENGTH          (arg v4)
+        //     0x82624BEC  vsel v4, v0, v9, v5      ; v5 == vcmpeqfp128(0, |imp|^2) -> zero guard
+        // vpu::NormalizeReturnMagnitude is the house model of exactly that double publish, zero
+        // guard included. ⭐ Note the LENGTH is taken from the SHAPED impulse, so the x0.5 above
+        // reaches the sensor through this magnitude and not only through the direction.
         Vector3   lImpulseUnit;
         const f32 lfImpulseLength = vpu::NormalizeReturnMagnitude(lImpulse, lImpulseUnit);
         const VecFloat lvfShapedMagnitude =
@@ -599,16 +700,29 @@ namespace Deformation
             static u32 suKerbImpLines = 0u;
             if ( BrnPhysics::Vehicle::KerbProbeTake( suKerbImpLines, "[kerb-imp]" ) )
             {
+                // ⭐ 2026-09-05: `m` and `k` added so the line carries EVERY term of the console's
+                // own closed form and the reader can check the identity instead of trusting it:
+                //     solved == -(1 + rest) * closing / k          (k == the CalculateCollision...
+                //                                                   denominator, i.e. `invI` here,
+                //                                                   which is 1/m + n.((I^-1(rxn))xr))
+                //     shapedMag == |solved| * 0.5                  (the (iter+1)*0.5 shaping)
+                // A row where those two identities hold is a row where the magnitude IS ARTIST's
+                // arithmetic; a row where they fail names which input diverged.
                 const Vector3 lPos = lpVehicle->GetPosition();
+                const f32 lfKerbClosing = vpu::Dot( lRelativeMotion, lContact.mNormal );
+                const f32 lfKerbMass    = GetVehicleBody().GetMass().x;
                 *CgsDev::Log::gpDebugPrint
                     << "[kerb-imp] f " << BrnPhysics::Vehicle::guKerbProbeFrame
                     << " sensor " << liSensorIndex
                     << " iter " << lvfIteration.x
                     << " n " << lContact.mNormal.x << " " << lContact.mNormal.y << " " << lContact.mNormal.z
                     << " pA " << lContact.mPointOnA.x << " " << lContact.mPointOnA.y << " " << lContact.mPointOnA.z
-                    << " closing " << vpu::Dot( lRelativeMotion, lContact.mNormal )
+                    << " closing " << lfKerbClosing
                     << " rest " << lvfRestitution.x
+                    << " m " << lfKerbMass
+                    << " k " << lvfInvInertia.x
                     << " solved " << lvfImpulseMagnitude.x
+                    << " predicted " << ( -( 1.0f + lvfRestitution.x ) * lfKerbClosing / lvfInvInertia.x )
                     << " invI " << lvfInvInertia.x
                     << " shapedMag " << lfImpulseLength
                     << " dir " << lImpulseUnit.x << " " << lImpulseUnit.y << " " << lImpulseUnit.z
@@ -658,9 +772,23 @@ namespace Deformation
             }
         }
 
+        // 0x82624BF0. The GPR argument list is pinned by the asm and by the sibling: r7 and r8 are
+        // `li r7, 1` @0x82624B2C and `li r8, 0` @0x82624B0C here, while ApplyCarCarImpulse's
+        // reversed half sets the pair the other way round (`li r7, 0` @0x82625160 / `li r8, 1`
+        // @0x82625150) -- which is exactly the (lbAddToSpy=false, lbUseNormalScaledFriction=true)
+        // this TU already committed for that call, so the mapping is corroborated, not assumed.
+        // ⚠️ CORRECTED 2026-09-05: lbUseNormalScaledFriction is FALSE on the world path; this body
+        // passed true. It cannot change behaviour on ARTIST either -- r8 is never read anywhere in
+        // ApplySensorImpulse @0x826078B0 (the register does not appear once in its 699-instruction
+        // listing), so the parameter is DEAD in this build of the console too. Corrected because it
+        // is now proved, and flagged here so nobody re-derives the flag as a momentum suspect.
+        // The sensor argument is `(liSensorIndex + 15) * 0x1B0 + this` (`addi r11, r26, 0xF` /
+        // `mulli r11, r11, 0x1B0` / `add r6, r11, r31` @0x82624B00..0x82624B28) == the
+        // GetDeformationSensor(liSensorIndex) this call already used: maDeformationSensors is at
+        // this + 15*432 and the record stride is 432.
         ApplySensorImpulse(lvfTimeStep, lContact, lParams, lRelativeMotion, lImpulseUnit,
                            lvfShapedMagnitude, GetDeformationSensor(liSensorIndex),
-                           /*lbAddToSpy*/ true, /*lbUseNormalScaledFriction*/ true);
+                           /*lbAddToSpy*/ true, /*lbUseNormalScaledFriction*/ false);
         return true;
     }
 

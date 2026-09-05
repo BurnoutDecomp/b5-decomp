@@ -647,11 +647,17 @@ namespace Deformation
         // ResetDeformation already names +26460 `meAbsorptionSet` (it writes E_ABSORPTIONSET_NORMAL
         // there, and E_ABSORPTIONSET_INVINCIBLE on a type-1 reset), and +0xB4 in ImpulseParams is
         // `meAbsorptionSet` on the DWARF sequence. Same offset, same name, both already in-tree.
-        // ⛔ WHY IT MATTERS: ApplyCarCarImpulse never set this field, so on the car-car path the
-        // absorption SET index was uninitialised stack -- an out-of-bounds read of a 5-row table by
+        // ⛔ WHY IT MATTERS: neither Apply* caller sets this field, so without the store here the
+        // absorption SET index is uninitialised stack -- an out-of-bounds read of a 5-row table by
         // GetAbsorption / GetSpeedForMaxAbsorbtion / GetProportionToSpeed and of the 5-row
-        // KsaAbsorptionScale in the sensor's RecievePassedOnImpulse. (The world path set it in the
-        // caller, so this is also the console's own single point of truth for both paths.)
+        // KsaAbsorptionScale in the sensor's RecievePassedOnImpulse.
+        // ⚠️ CORRECTED 2026-09-05 (momentum wave): this note used to end "(The world path set it in
+        // the caller, so this is also the console's own single point of truth for both paths.)" --
+        // the parenthesis was WRONG in its premise and right in its conclusion. ApplyCarWorldImpulse
+        // @0x82624898 was an export hole when that was written; read out of the image now, it makes
+        // exactly SEVEN params stores (+0x20/+0x50/+0x60/+0x70/+0x80/+0xB0/+0xB8) and +0xB4 is not
+        // one of them. So the world path does NOT set it in the caller either, and THIS store is
+        // the single point of truth for both paths -- which is what the console does.
         lParams.meAbsorptionSet = meAbsorptionSet;
 
         // (2) showtime pre-apply: when the vehicle's vtable+0x10 predicate is set (image-settled as
@@ -1613,10 +1619,17 @@ namespace Deformation
     //     1618 == mu8NumDeformationSensors -- i.e. exactly GetNumSensors() - 4, which is the
     //     bound this reconstruction already used. Five applied impulses in one step is therefore
     //     five sensors that had a live stored contact, not an iteration count we invented.
-    // ⛔ WHAT THAT DOES NOT SETTLE: the MAGNITUDES. ApplyCarWorldImpulse @0x82624898 is an X360
-    // EXPORT HOLE and its body is derived from the PS3 twin, so nothing above is evidence about
-    // whether 17 kN.s is the right number for one sensor -- only about how many are applied and
-    // against what velocity.
+    // ⭐⭐⭐ AND THE MAGNITUDES ARE NOW SETTLED TOO (2026-09-05, momentum wave). The line that used
+    // to stand here said "ApplyCarWorldImpulse @0x82624898 is an X360 EXPORT HOLE and its body is
+    // derived from the PS3 twin, so nothing above is evidence about whether 17 kN.s is the right
+    // number for one sensor". The hole is CLOSED -- all 219 instructions read out of the image (see
+    // BrnDeformableObject.cpp's banner) -- and the chain it opens is:
+    //     j = -(1 + e) (v_rel . n) / ( 1/m + n . ((I^-1 (r x n)) x r) )    @0x8259C978, EXPORTED
+    //     e = 0 out of showtime                                            @0x825E0C78, EXPORTED
+    //     the impulse handed to the sensor is  n * |j| * 0.5
+    // i.e. a perfectly inelastic solve that removes the whole normal component, halved once, per
+    // sensor, five sensors deep. 17 kN.s for one sensor is not a scale factor anybody can be wrong
+    // about -- it is what "kill this contact's normal velocity on a 1400 kg car" costs.
     // =============================================================================================
     void DeformableObject::UpdateContacts(VecFloat lvfTimeStep, CgsNumeric::Random& lrRandom)
     {
