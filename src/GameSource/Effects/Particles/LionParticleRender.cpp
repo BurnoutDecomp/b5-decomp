@@ -35,6 +35,15 @@
 extern "C" void D3DDevice_SetTexture(void* apDevice, unsigned int auSampler,
                                      void* apTexture, unsigned int auFlags);
 
+// [lionbind] the live sampler-0 probe (XenonD3D9Shims.cpp). FLAG PC bring-up diagnostic,
+// DELETE-WHEN-STABLE -- see the witness banner above SetMaterial.
+namespace renderengine
+{
+    void LionBindProbe(const char* apcTag, const void* apRequestedTexture,
+                       const void* apD3DTexture, unsigned int auTextureHandle,
+                       unsigned int auMatchedEntry, unsigned int auEntryCount);
+}
+
 // The global D3D device the particle renderer binds textures on (off_83271608). Modelled as a
 // file-scope pointer the platform layer fills; on PC it resolves to the active device.
 namespace { void* spD3DDevice = 0; }
@@ -625,6 +634,78 @@ renderengine::Texture* LionParticleRender::FindTexture(U32 auTextureMapHandle) c
     return lpTexture;
 }
 
+// ============================================================================================
+// [lionbind] / [liontab] -- FLAG PC bring-up diagnostics. NOT console behaviour: ours, bounded,
+// log-only, DELETE-WHEN-STABLE.
+//
+// WHY. The Lion pass draws a hard-edged, near-opaque pale block where the console draws soft
+// smoke, and the three inputs that could do that are all readable from the device rather than
+// argued about: what is on sampler unit 0 before and after this bind, whether the acquired-texture
+// table is indexed the way FindTexture assumes, and what the material asked for. The texture data
+// itself is already cleared: ExhaustSmoke's material names BURNOUTSMOKE, which ports to a 128x128
+// DXT5 raster whose BORDER alpha averages 5/255 -- a correctly sampled quad cannot have a hard
+// edge, so the alpha is being lost somewhere between here and the fragment.
+//
+// ⚠ THE TABLE DUMP IS NOT DECORATION. FindTexture reads saTextures[i] where i is the NAME-MAP
+// ENTRY index, while AcquireTexture appends at siTextureCount++ in ACQUIRE-REPLY order. The two
+// agree only if the replies arrive in request order; the console's resource system guarantees
+// that and this host's is a different implementation, so it is measured, not assumed.
+// ============================================================================================
+namespace
+{
+    void LionBindWitness(const char* apcTag, u32 auTextureHandle,
+                         const renderengine::Texture* apTexture,
+                         const BrnParticle::TextureNameMap* apMap)
+    {
+        // Re-walk the map read-only for the matched index (FindTexture itself stays untouched).
+        s32 liEntry = -1;
+        u32 luCount = 0;
+        if (apMap != 0)
+        {
+            const BrnParticle::TextureNameMap::Entry* lpEntries = apMap->GetEntries();
+            luCount = apMap->GetEntryCount();
+            for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+            {
+                if (lpEntries[luIndex].muHashedLionTextureName == auTextureHandle)
+                {
+                    liEntry = static_cast<s32>(luIndex);
+                    break;
+                }
+            }
+        }
+
+        const void* lpD3D = (apTexture != 0)
+                          ? static_cast<const void*>(apTexture->mpD3DTexture) : 0;
+        renderengine::LionBindProbe(apcTag, apTexture, lpD3D, auTextureHandle,
+                                    static_cast<unsigned int>(liEntry), luCount);
+
+        // ...and, once, the acquired-texture table beside the map it is indexed by.
+        static bool sbTableDumped = false;
+        if (!sbTableDumped && apMap != 0)
+        {
+            sbTableDumped = true;
+            const BrnParticle::TextureNameMap::Entry* lpEntries = apMap->GetEntries();
+            char lacMsg[224];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[liontab] acquired=%d mapEntries=%u\n", siTextureCount, luCount);
+            CgsDev::Log::WriteToLog(lacMsg);
+            const u32 luDump = (luCount < 8u) ? luCount : 8u;
+            for (u32 luIndex = 0; luIndex < luDump; ++luIndex)
+            {
+                renderengine::Texture* lpSlot = saTextures[luIndex];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                              "[liontab]   %2u hash=%08X tex=%p d3d=%p %ux%u\n",
+                              luIndex, lpEntries[luIndex].muHashedLionTextureName,
+                              static_cast<void*>(lpSlot),
+                              (lpSlot != 0) ? static_cast<void*>(lpSlot->mpD3DTexture) : 0,
+                              (lpSlot != 0) ? (unsigned)lpSlot->muWidth : 0u,
+                              (lpSlot != 0) ? (unsigned)lpSlot->muHeight : 0u);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 // LionParticleRender::SetMaterial (X360 0x822896B8)
 // Bind the texture, depth-stencil and blend render-states for a material on the current
@@ -645,7 +726,9 @@ void LionParticleRender::SetMaterial(const cParticleMaterial* apMaterial)
     renderengine::Texture* lpTexture = FindTexture(apMaterial->mTextureHandle);
     if (spBoundTexture != lpTexture)
     {
+        LionBindWitness("B", apMaterial->mTextureHandle, lpTexture, mTextureNameMap.operator->());
         D3DDevice_SetTexture(spD3DDevice, 0, lpTexture, 0x80000000u);
+        LionBindWitness("A", apMaterial->mTextureHandle, lpTexture, mTextureNameMap.operator->());
         spBoundTexture = lpTexture;
         siBoundTextureDirty = 0;
     }
