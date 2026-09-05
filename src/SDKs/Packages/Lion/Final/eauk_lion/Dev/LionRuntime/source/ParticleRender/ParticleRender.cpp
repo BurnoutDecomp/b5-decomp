@@ -179,6 +179,73 @@ void cParticleRender::Dispatch(renderengine::VertexBuffer* apVertexBuffer,
         const u32 luVertexCount = lrBatch.GetVertexCount();
         shadow::Device::FlushVertexProgramState();
         D3DDevice_DrawVertices(gpD3DDevice, KU_PARTICLE_PRIMITIVE_TYPE, luStartVertex, luVertexCount);
+
+        // ---- [liontex] THE DRAW-TIME TEXTURE CENSUS. NOT console behaviour: ours, log-only,
+        // bounded, DELETE-WHEN-STABLE.
+        //
+        // ⭐⭐ WHY IT EXISTS, AND WHAT IT REPLACES. Two witnesses on this path already print
+        // texture names and NEITHER of them answers "which textures did the Lion pass DRAW":
+        //   [texreg]  (LionParticleRender::TextureRegister) prints the 1st, 32nd, 64th ...
+        //             material REGISTERED -- i.e. a fixed-stride sample of every material of
+        //             every .lef in PARTICLES.BUNDLE, whether or not any effect using it runs;
+        //   [lionbind] (SetMaterial) prints the first 24 BINDS and then stops, and a bind is
+        //             issued only when the texture CHANGES, so one early effect can spend the
+        //             whole budget before another effect ever starts.
+        // Reading the first as if it were the second is what produced the standing claim that
+        // this pass draws six textures and never the boost flame. This line counts EVERY batch
+        // the device is given, keyed by the material's own mTextureHandle, and prints the whole
+        // table whenever a new handle appears -- so the answer is a census, not a sample.
+        {
+            static const u32 KU_TEXCENSUS_SLOTS = 24u;
+            static u32 sauCensusHash[KU_TEXCENSUS_SLOTS] = { 0 };
+            static const char* sapcCensusName[KU_TEXCENSUS_SLOTS] = { 0 };
+            static u32 sauCensusBatches[KU_TEXCENSUS_SLOTS] = { 0 };
+            static u32 sauCensusVerts[KU_TEXCENSUS_SLOTS] = { 0 };
+            static u32 suCensusUsed = 0;
+            static u32 suCensusDumps = 0;
+            static u32 suCensusTick = 0;
+            static const u32 KU_TEXCENSUS_DUMPS = 24u;
+            static const u32 KU_TEXCENSUS_PERIOD = 4000u;
+
+            const u32 luHandle = lpCurrentMaterial->mTextureHandle;
+            u32 luSlot = 0;
+            while (luSlot < suCensusUsed && sauCensusHash[luSlot] != luHandle)
+                ++luSlot;
+
+            bool lbNew = false;
+            if (luSlot == suCensusUsed && suCensusUsed < KU_TEXCENSUS_SLOTS)
+            {
+                sauCensusHash[luSlot] = luHandle;
+                sapcCensusName[luSlot] = lpCurrentMaterial->mpTextureName.Get();
+                ++suCensusUsed;
+                lbNew = true;
+            }
+            if (luSlot < suCensusUsed)
+            {
+                ++sauCensusBatches[luSlot];
+                sauCensusVerts[luSlot] += luVertexCount;
+            }
+
+            // Dumped on a NEW handle (so the moment a texture first draws is in the log) and
+            // every KU_TEXCENSUS_PERIOD batches (so the counts on the LAST dump are current
+            // rather than frozen at whenever the last new texture appeared).
+            ++suCensusTick;
+            if ((lbNew || (suCensusTick % KU_TEXCENSUS_PERIOD) == 0u)
+                && suCensusDumps < KU_TEXCENSUS_DUMPS)
+            {
+                ++suCensusDumps;
+                for (u32 luRow = 0; luRow < suCensusUsed; ++luRow)
+                {
+                    char lacMsg[224];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                                  "[liontex] dump%u #%u/%u %08X \"%s\" batches=%u verts=%u\n",
+                                  suCensusDumps, luRow, suCensusUsed, sauCensusHash[luRow],
+                                  sapcCensusName[luRow] ? sapcCensusName[luRow] : "<null>",
+                                  sauCensusBatches[luRow], sauCensusVerts[luRow]);
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+            }
+        }
     }
 
     mpRenderer->RenderGroupEnd();
@@ -514,6 +581,46 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
                     lMat.wa.x, lMat.wa.y, lMat.wa.z, lfRangeSq, lfAlongView,
                     lafDistance[0], lafDistance[1], lafDistance[2], lafDistance[3],
                     lrFrustum.wAxis.x, lrFrustum.wAxis.y, lrFrustum.wAxis.z, lrFrustum.wAxis.w);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
+
+        // ---- [lionemit] THE LIVE-EMITTER ROSTER. NOT console behaviour: ours, bounded,
+        // log-only, DELETE-WHEN-STABLE.
+        //
+        // ⭐ WHY. Filmed with BRN_LION_QRES_SHOW=1 (2026-09-06) this pass draws THREE plumes
+        // while the car has TWO nozzles: two at the tailpipes and a hard-edged saturated bar
+        // with a green halo that stays in the SAME lower-left screen rectangle across 310 m of
+        // driving -- i.e. pinned to the CAR, not to the world, at an offset nothing authored.
+        // [lionquad] proved the atlas UVs are right and the quads are 0.15-0.6 m near the car,
+        // so the question left is WHICH emitter is where, and that is exactly what this loop
+        // already holds and nothing prints: the descriptor's own name, its material's texture
+        // and the locator matrix the cull just read. One dump per KU_LIONEMIT_PERIOD renders.
+        {
+            static const u32 KU_LIONEMIT_PERIOD = 900u;
+            static const u32 KU_LIONEMIT_DUMPS  = 10u;
+            static u32 suEmitTick  = 0;
+            static u32 suEmitDumps = 0;
+            if (luLive == 1u)
+                ++suEmitTick;                       // count FRAMES, not emitters
+            if ((suEmitTick % KU_LIONEMIT_PERIOD) == 1u && suEmitDumps < KU_LIONEMIT_DUMPS * 32u)
+            {
+                ++suEmitDumps;
+                const cParticleDescriptor* lpDesc = lpEmitter->GetDescriptor();
+                const cParticleMaterial*   lpMat  = (lpDesc != 0) ? lpDesc->Material() : 0;
+                char lacMsg[288];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[lionemit] tick=%u live#%u \"%s\" tex=\"%s\" world=%u locator=(%.2f,%.2f,%.2f)"
+                    " cam=(%.2f,%.2f,%.2f)\n",
+                    suEmitTick, luLive,
+                    (lpDesc != 0 && lpDesc->mpName.Get()) ? lpDesc->mpName.Get() : "<noname>",
+                    (lpMat != 0 && lpMat->mpTextureName.Get()) ? lpMat->mpTextureName.Get()
+                                                              : "<notex>",
+                    lpEmitter->GetBindings().GetWorldIndex(),
+                    static_cast<double>(lMat.wa.x), static_cast<double>(lMat.wa.y),
+                    static_cast<double>(lMat.wa.z),
+                    static_cast<double>(mCamPos.x), static_cast<double>(mCamPos.y),
+                    static_cast<double>(mCamPos.z));
                 CgsDev::Log::WriteToLog(lacMsg);
             }
         }

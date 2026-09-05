@@ -151,9 +151,14 @@ namespace BrnDiag
         // Written in ONE place -- BoostStateMachine::OnTick, the only function that positions a
         // boost effect (the [boostloc] witness beside it reads the same RaceCarState transform) --
         // and read in ONE place, the back-buffer writer in pc/gcm/renderengine/device.cpp.
-        // muBoostEffectMask is that tick's active FXBOOSTPOINT mask, so a row also says whether a
-        // plume was being positioned at all on the frame it labels. All zero on a run where no
-        // boost machine ticked. DELETE-WHEN-STABLE with the rest of the [lionfx] family.
+        // muBoostEffectMask carries that tick's FXBOOSTPOINT tag count in its low byte AND the
+        // BoostStateMachine's EffectsState in the next byte -- (state << 8) | tagCount -- so a
+        // row says not only whether a plume was being positioned but WHICH .lef was live when
+        // the frame was taken (state 1 Boosting starts Boost{Green,Red,Yellow}.lef; state 2
+        // ExhaustSmokeOn starts ExhaustSmoke.lef; state 5 starts BoostRecharge.lef). The tag
+        // count alone was 2 for every frame of every run on this build and could therefore not
+        // tell those apart. All zero on a run where no boost machine ticked.
+        // DELETE-WHEN-STABLE with the rest of the [lionfx] family.
         f32 mfCarPosX;
         f32 mfCarPosY;
         f32 mfCarPosZ;
