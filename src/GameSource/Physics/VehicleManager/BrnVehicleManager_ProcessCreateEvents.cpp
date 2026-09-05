@@ -106,6 +106,38 @@
 //     mLinearDrag        1.0e-5f                  0.1f
 //     mAngularDrag       1.0e-5f                  0.1f
 // Collapsing them into one value would be a silent physics change; both are reproduced.
+//
+// =================================================================================================
+// ⛔⛔ AND NEITHER OF THEM IS THE TENSOR THE CAR ACTUALLY SPINS ON. SETTLED 2026-09-05 (crash wave)
+// -- read this before "fixing" the |mCOMOffset| term below, because a previous wave called that
+// difference "the strongest remaining lead" for the car flying and it is NOT a defect.
+//
+// The crash probe prints the live tensor on the entry frame of every banked run:
+//     Iinv=(0.000307, 0.000273, 0.001315)   com=(0.000023, -0.403568, -0.081302)   mass=1589
+// Recomputed from PUSMC01's SHIPPED bytes (mHandlingBodyDimensions == 1.05081 / 0.57608 / 2.41295,
+// via tools/assets/bundles/vehicle_geometry_audit.py --car PUSMC01), the two candidate formulas are
+//     with |mCOMOffset|:  dims 2.101666/1.959296/4.988504  ->  Iinv 2.629e-4 / 2.577e-4 / 9.147e-4
+//     without:            dims 2.10162 /1.15216 /4.8259    ->  Iinv 3.068e-4 / 2.726e-4 / 1.3147e-3
+// The live values are the SECOND, three lanes for three, to every printed digit. So the |COMOffset|
+// term is genuinely absent from the tensor in play -- and that is CORRECT, because the tensor in
+// play is not built here at all:
+//   * the Inertia this function builds reaches RaceCarPhysics::Prepare @0x82639CB8 by value and is
+//     NEVER READ there (r6..r10 are reloaded with the three trailing pointers at 0x82639CC4..D4
+//     before the `bl VehiclePhysics::Prepare`; see RaceCarPhysics.cpp's banner), and
+//   * its other copy goes to InAddRigidBody, whose only consumer is the deliberately inert
+//     PhysicsModule gate (see the post below).
+//   * What seats mLocalInverseInertia is SimpleVehiclePhysics::SetAttributes @0x826020A0, reached
+//     Prepare -> SimpleVehiclePhysics::Prepare -> SetAttributes, and it builds the box from
+//     mHalfExtent ALONE. Read out of the image this wave:
+//         0x8260224C  li r8, 0x6A0            ; mHalfExtent
+//         0x82602270  lvx128 v13, r26, r8
+//         0x82602280  vmulfp128 v13, v13, v12 ; v12 == splat(flt_82001D9C == 2.0)
+//     then the same m/12 * (a^2+b^2) reciprocal ladder into +0x80/+0x90/+0xA0. There is no
+//     `vaddfp` of an absolute-valued CoM anywhere in those 503 instructions.
+// ⇒ TWO DIFFERENT CONSOLE FUNCTIONS BUILD TWO DIFFERENT TENSORS FOR TWO DIFFERENT BODIES. The
+//   "the car pitches 17% and rolls 44% faster than the formula says" reading compares this
+//   function's tensor against the OTHER function's body. There is nothing here to correct, and
+//   changing either formula would be a tune, not a decompilation.
 // =================================================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"

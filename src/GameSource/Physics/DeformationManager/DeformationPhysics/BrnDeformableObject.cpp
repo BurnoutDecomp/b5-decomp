@@ -195,8 +195,24 @@ namespace Deformation
         }
 
         // -------- showtime / bounce-boost shaping --------
+        // ⭐ DISPATCH OFFSET READ OUT OF THE IMAGE 2026-09-05 (crash wave) -- this site and the one
+        // at the `else` arm below were the two BrnDeformableObject.cpp sites 1df609e7 flagged as
+        // "spelling the +0x14 name with their own dispatch offsets UNREAD". Read now, and BOTH are
+        // +0x10, not +0x14:
+        //     0x82624DB4  lwz r3, 0x194C(r30)  ; 0x82624DB8 lwz r11, 0(r3)
+        //     0x82624DBC  lwz r11, 0x10(r11)   ; 0x82624DC4 bctrl        <- THIS car
+        //     0x82624E0C  lwz r11, 0x30(r31)   ; 0x82624E10 lwz r3, 0x194C(r11)
+        //     0x82624E18  lwz r11, 0x10(r11)   ; 0x82624E20 bctrl        <- the OTHER car
+        // and +0x10 on RaceCarPhysics' concrete table (0x820D1034) is IsPlayerVehicleInShowtime
+        // @0x825D7B68 == mbPlayerCarInShowtime && !mbDisableShowtime && mfTimeUntilPush <= 0 --
+        // NOT the bare +0x14 byte read IsPlayerVehicleActuallyInShowtime @0x827E42B0. The old
+        // spelling was the looser predicate, so it could fire in windows the console excludes.
+        // Same correction, same direction (stricter) as 1df609e7's GetVehicleWorldRestitution fix.
+        // The banner text below said "vtbl+16" all along -- decimal 16 IS 0x10; the NAME was what
+        // disagreed with it.
+        //
         // The asm gates the shaping on a virtual showtime predicate on THIS car's physics body (the
-        // inlined `(*(vtbl+16))(body)` -> IsPlayerVehicleActuallyInShowtime). It is a TRUE/FALSE split
+        // inlined `(*(vtbl+16))(body)` -> IsPlayerVehicleInShowtime). It is a TRUE/FALSE split
         // (asm: the `else` at ~line 958), NOT two nested cases:
         //   * predicate TRUE  (this car in showtime): the punchy BOUNCE-BOOST path, itself gated on the
         //       OTHER car's game-mode HIGH byte == 2 (takedown/bounce-eligible). Any other mode: nothing.
@@ -207,7 +223,7 @@ namespace Deformation
         // A body that is not a race car (no showtime) takes the FALSE/damp path with this car's mode.
         Vehicle::RaceCarPhysics* lpRaceCarPhysics = AsRaceCarPhysics();
         const bool lbThisInShowtime = (lpRaceCarPhysics != nullptr) &&
-                                      lpRaceCarPhysics->IsPlayerVehicleActuallyInShowtime();
+                                      lpRaceCarPhysics->IsPlayerVehicleInShowtime();   // vtbl +0x10 @0x82624DBC
         if (lbThisInShowtime)
         {
             // ----- predicate TRUE: bounce-boost (asm ~lines 843-957) -----
@@ -276,10 +292,12 @@ namespace Deformation
             {
                 // (c) Only when this-car-mode == 2: apply the damp + latch iff the OTHER car is in
                 //     showtime OR the OTHER car has already bounced this frame (asm ~line 1163:
-                //     `otherCar.IsPlayerVehicleActuallyInShowtime() || *(otherCar+26414)`).
+                //     `otherCar.IsPlayerVehicleInShowtime() || *(otherCar+26414)`) -- the OTHER
+                //     car's dispatch is `lwz r11, 0x10(r11)` @0x82624E18, read this wave; see the
+                //     banner above.
                 const Vehicle::RaceCarPhysics* lpOtherRaceCar = lOtherCar.AsRaceCarPhysics();
                 const bool lbOtherInShowtime = (lpOtherRaceCar != nullptr) &&
-                                               lpOtherRaceCar->IsPlayerVehicleActuallyInShowtime();
+                                               lpOtherRaceCar->IsPlayerVehicleInShowtime();   // vtbl +0x10 @0x82624E18
                 if (lbOtherInShowtime || lOtherCar.HasBouncedThisFrame())
                 {
                     // Latch THIS car's bounced-this-frame flag (asm ~line 1166: `*(this+26414) = 1`),

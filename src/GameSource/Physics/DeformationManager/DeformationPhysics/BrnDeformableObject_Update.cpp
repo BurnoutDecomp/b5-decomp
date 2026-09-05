@@ -1182,17 +1182,53 @@ namespace Deformation
         // (5) ⭐⭐ REWRITTEN 1:1 2026-08-24 (deform-land wave, P4) from the asm
         // 0x82607F80..0x8260835C. The previous body banked the ACCUMULATED per-direction impulse
         // shaped by the 1.5e-4 / 1000 / 5.0 rows -- a mis-placement: those rows belong to the
-        // SENSOR SCRATCH ladder at the tail. What the console banks is a TANGENTIAL shove:
-        //   scale-row select (the second IsPlayerVehicleInShowtime consult):
-        //     not showtime                          -> impulseRow = 0.0, forceRow = 0.0
-        //     showtime && crashed && worldContact   -> impulseRow = 5.0 (unk_82FB8060),  forceRow = 0.9 (unk_82FB7F50)
-        //     showtime && crashed && other crashed  -> impulseRow = 20.0 (unk_82FB8300), forceRow = 0.9
-        //     showtime && crashed && neither        -> impulseRow = 0.0,                 forceRow = 0.9
-        //     showtime && !crashed                  -> both 0.0
-        //     (all five rows recovered from their static-init writers 0x82C5D5C0..0x82C5D650;
-        //      unk_82FB9D40 -- the not-showtime row -- initialises to 0.0 DELIBERATELY: ordinary
-        //      driving banks its wall momentum through the RecievePassedOnImpulse ->
-        //      ApplyWallContactImpulse chain instead, and this block contributes only SCRATCH.)
+        // SENSOR SCRATCH ladder at the tail. What the console banks is a TANGENTIAL shove.
+        //
+        // ⭐⭐⭐ THE SCALE-ROW GATE WAS THE WRONG PREDICATE ENTIRELY -- CORRECTED 2026-09-05
+        // (crash wave; the same wrong-vtable-slot class 1df609e7 found in
+        // GetVehicleWorldRestitution, and this one had a far bigger blast radius).
+        // The banner here used to call it "the second IsPlayerVehicleInShowtime consult" and the
+        // body spelled `IsPlayerVehicleInShowtime() && IsCrashing()`. The console dispatches TWO
+        // DIFFERENT VIRTUALS, and neither is +0x10. Read out of the image, not inferred:
+        //     0x82607F74  lwz r3, 0x194C(r17)     ; the vehicle
+        //     0x82607F78  lwz r11, 0(r3)          ; its vtable
+        //     0x82607F7C  lwz r11, 0x24(r11)      ; <-- SLOT +0x24
+        //     0x82607F90  beq cr6, loc_82607FC8   ; predicate FALSE -> straight to the crash ladder
+        //     0x82607F9C  lwz r11, 0x14(r11)      ; <-- SLOT +0x14
+        //     0x82607FB0  bne cr6, loc_82607FC8   ; predicate TRUE  -> straight to the crash ladder
+        //     0x82607FB4..C4  v121 = v10 = unk_82FB9D40 (both rows 0) ; b loc_82608050
+        // and the two slots are named off RaceCarPhysics' concrete table (0x820D1034, read with
+        // x360rd -- the same table 1df609e7 walked):
+        //     +0x14 -> 0x827E42B0  IsPlayerVehicleActuallyInShowtime  (`lbz r3,0x140C`)
+        //     +0x24 -> 0x825B8C88  IsUsingAftertouch                  (`lbz r3,0x140D`)
+        // ⇒ the rows are zeroed ONLY on `IsUsingAftertouch() && !IsPlayerVehicleActuallyInShowtime()`
+        //   -- an AFTERTOUCH-OUTSIDE-SHOWTIME guard, nothing to do with showtime membership. Every
+        //   other case falls into the crash ladder at loc_82607FC8:
+        //     !mbCrashing (+0x710)                 -> impulseRow = 0.0,  forceRow = 0.0   (0x82608048)
+        //     crashing && params.mbWorldContact    -> impulseRow = 5.0,  forceRow = 0.9   (0x82607FE4)
+        //     crashing && other car mbCrashing     -> impulseRow = 20.0, forceRow = 0.9   (0x82608018)
+        //     crashing && neither                  -> impulseRow = 0.0,  forceRow = 0.9   (0x82608034)
+        //   (the four rows and their SOURCE FLOATS re-read this wave through the static-init
+        //    writers at 0x82C5D5C0..0x82C5D658, disassembled with tools/re/ppcdis.py and the
+        //    constants read with x360rd: unk_82FB9D40 <- flt_82001CC0 == 0.0,
+        //    unk_82FB7F50 <- flt_82005450 == 0.9, unk_82FB8060 <- flt_8200426C == 5.0,
+        //    unk_82FB8300 <- flt_8208F9D4 == 20.0.)
+        // ⛔⛔ WHAT THE OLD GATE COST: an ordinary crash is NOT showtime, so
+        // `IsPlayerVehicleInShowtime()` was false on every wall hit, every roof slide and every
+        // tumble -- and BOTH rows were therefore zero on the whole crash path. That killed
+        //   * the tangential impulse and its ANGULAR half (AddWorldSpaceAngularImpulse @0x82608230),
+        //     i.e. the ONLY term that converts a slide into a spin, and
+        //   * the AddLocalForce leg entirely (0.9 * mass * |v_t| along -tangential), i.e. the
+        //     dominant retarding force on a car sliding on its roof.
+        // The console runs both at impulseRow 5.0 against the world. This is the residual the
+        // momentum ledger had already measured and could not name: observed dW_roll ran ~+0.2 rad/s
+        // per frame ABOVE what the arriving passed-on deposits predict (mwK_h230_s60 f683
+        // +0.046 predicted / +0.280 observed, f684 +0.060/+0.291, f685 +0.132/+0.338) -- because
+        // this path does NOT go through ImpulsePasser and is invisible to the `arrive` census.
+        // ⚠️ The old banner's "unk_82FB9D40 initialises to 0.0 DELIBERATELY: ordinary driving banks
+        // its wall momentum through the RecievePassedOnImpulse chain instead" is RETIRED. The row
+        // really is 0.0, but it is not the ordinary-driving row: ordinary driving takes the
+        // `!mbCrashing` arm at 0x82608048, which is a different zero.
         //   tangential = relMotion - normal * dot3(relMotion, normal)          (vsubfp v123)
         //   gate: |tangential|^2 >= 1e-4 (unk_82FB9720, init 0x82C5D840) else skip to the spy;
         //   dir = -tangential / |tangential| (zero-guarded rsqrt)              (v13)
@@ -1216,10 +1252,15 @@ namespace Deformation
         //     scratch = min( max(0, scratch + add), max(0.75, scratch) )       (the fsel ladder)
         if ( lpVehicle != nullptr )
         {
-            // scale-row select. The second vtable consult repeats the (2) predicate.
+            // scale-row select -- the AFTERTOUCH-OUTSIDE-SHOWTIME guard, then the crash ladder.
+            // See the banner: 0x82607F7C dispatches vtable +0x24 (IsUsingAftertouch) and
+            // 0x82607F9C dispatches +0x14 (IsPlayerVehicleActuallyInShowtime). This is NOT the
+            // +0x10 IsPlayerVehicleInShowtime the (2) pre-apply and the (3) budget select consult.
             Vector3 lImpulseRow = { 0.0f, 0.0f, 0.0f, 0.0f };   // unk_82FB9D40 == splat(0.0)
             Vector3 lForceRow   = { 0.0f, 0.0f, 0.0f, 0.0f };
-            if ( lbIgnoringPassedOn && lbCrashed )
+            const bool lbAftertouchOutsideShowtime =
+                lpVehicle->IsUsingAftertouch() && !lpVehicle->IsPlayerVehicleActuallyInShowtime();
+            if ( !lbAftertouchOutsideShowtime && lbCrashed )
             {
                 lForceRow = KVF_APPLY_LOCAL_FORCE_SCALE;   // unk_82FB7F50 = splat(0.9)
                 if ( lParams.mbWorldContact )
@@ -1285,6 +1326,43 @@ namespace Deformation
                 ExternalPhysicsBody& lBody = GetVehicleBody();
                 lBody.AddWorldSpaceImpulse(lWorldImpulse);
                 lBody.AddWorldSpaceAngularImpulse(lWorldAngularImpulse);
+
+                // ---- [tanbank] NOT IN THE X360 BINARY -- opt-in (BRN_CRASH_RESPONSE_DIAG=1, the
+                // env the crash sweep already arms). DELETE-WHEN the angular residual is banked.
+                // ⭐⭐ THIS IS THE CENSUS THE CAMPAIGN NEVER HAD. Every published "the contacts
+                // deposit X" figure counts RecievePassedOnImpulse arrivals only; this path bypasses
+                // ImpulsePasser entirely, so it was invisible. The line prints exactly what the
+                // hidden term banks, per apply, so `dW_observed - dW_from_arrivals` can be closed
+                // against it instead of guessed at.
+                {
+                    static s32 siTanProbe = -1;
+                    if ( siTanProbe < 0 )
+                    {
+                        const char* lpcEnv = getenv( "BRN_CRASH_RESPONSE_DIAG" );
+                        siTanProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+                    }
+                    static u32 suTanLines = 0u;
+                    if ( siTanProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && suTanLines < 1200u
+                         && ( lImpulseRow.x != 0.0f || lForceRow.x != 0.0f ) )
+                    {
+                        ++suTanLines;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[tanbank] owner " << static_cast<s32>(GetHandlingBodyIdHighByte())
+                            << " ent " << static_cast<s32>(GetGlobalEntityId().muValue)
+                            << " world " << (lParams.mbWorldContact ? 1 : 0)
+                            << " impRow " << lImpulseRow.x
+                            << " forceRow " << lForceRow.x
+                            << " vt " << lfTangentialLen
+                            << " mag " << lvfImpulseMagnitude.x
+                            << " scaledMag " << lfScaledMag
+                            << " Jlin=(" << lWorldImpulse.x << "," << lWorldImpulse.y << ","
+                                         << lWorldImpulse.z << ")"
+                            << " Jang=(" << lWorldAngularImpulse.x << "," << lWorldAngularImpulse.y
+                                         << "," << lWorldAngularImpulse.z << ")"
+                            << "\n";
+                    }
+                }
+                // ---- end [tanbank] --------------------------------------------------------------
 
                 // AddLocalForce leg (previously missing): world contacts shove the body along
                 // -tangential, scaled by the body mass row and the 0.9 force row. The asm's call

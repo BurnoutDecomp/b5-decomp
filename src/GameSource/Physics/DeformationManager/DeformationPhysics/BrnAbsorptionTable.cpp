@@ -50,6 +50,25 @@
 // vehicle in the game was running the invincible absorption profile. This is the "a flagged-zero
 // placeholder is only safe when 0 is the identity element" rule biting for real.
 //
+// ⭐⭐ THE GROUND-CONTACT ROWS RE-VERIFIED INDEPENDENTLY 2026-09-05 (crash wave). The crash
+// campaign's pole-vault solve (a tail sensor driven into the road at 7.5 m/s converting into
+// 1.25 m/s of CoM lift in one frame, effective mass 448 kg) rests on the absorption row those tail
+// sensors use, and that row had never been checked on its own. It has now, WITHOUT re-running the
+// simulation above: the initialiser's two loads were traced by hand and the literals read with
+// x360rd.
+//   PUSMC01's rear/underside sensors carry mu8AbsorbtionLevel 2 (sensors 14/16/18) and 3
+//   (15/17/19); the crash corpus runs absorption SET 0 (E_ABSORPTIONSET_NORMAL, noDamageTimer
+//   expired), so the rows in play are [0][2] and [0][3].
+//   [0][2] is the vector stored at &unk_82FB9780+0x20 by `stvx128 v0,r11,r10` @0x82C5E194, whose
+//     source stack quad (r1-0xE0) is filled at 0x82C5E050/0x82C5E004/0x82C5E05C/0x82C5E060 from
+//     flt_8208F9C8 / flt_82004A18 / flt_82004D00 / flt_82001CC0
+//     == 0.800000011920929 / 80.0 / 0.6000000238418579 / 0.0
+//   [0][3] is the +0x30 store @0x82C5E1A4 out of r1-0x20, filled at 0x82C5E074/0x82C5E008/
+//     0x82C5E064/0x82C5E068 from flt_82004C68 / flt_82004A18 / flt_82004D00 / flt_82001CC0
+//     == 0.699999988079071 / 80.0 / 0.6000000238418579 / 0.0
+// Both match the table below to the last digit. ⇒ the ground contact's absorption row is the
+// image's; the pole-vault arithmetic is not standing on a recovered guess.
+//
 // Callers (X360 xrefs): GetAbsorption <- DeformationSensor::RecievePassedOnImpulse,
 // DeformationSensor::ApplyLocalImpulse; the other two <- DeformationSensor::ApplyLocalImpulse.
 // ⚠️ ALL of those consumers are downstream of DeformationSensor::ApplyLocalImpulse, which is still
