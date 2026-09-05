@@ -14,6 +14,7 @@
 #include "GameSource/Effects/Particles/EffectsVertexBufferManager.h"   // EffectsVertexBufferManager (x3, BY VALUE)
 #include "GameSource/Effects/Particles/Native/FXBuckets.h"             // BrnParticle::FXBucketManager (mBucketManager, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnIm3dSkidsRenderer.h"  // BrnGraphics::Im3dSkidsRenderer (mSkidsRenderer, BY VALUE)
+#include "GameSource/Effects/Particles/Native/BrnLionBlendRenderer.h"   // BrnGraphics::LionBlendRenderer (mLionImmediateModeRenderer, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnTrailSystem.h"        // BrnParticle::Native::TrailSystem (mTrailSystem, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnDebrisRenderer.h"     // BrnParticle::Native::BrnDebrisRenderer (mDebrisRenderer, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnDebrisArray.h"        // BrnParticle::Native::BrnDebrisArray (maDebris[5], BY VALUE)
@@ -492,11 +493,21 @@ namespace BrnParticle
         BrnGraphics::Im3dSkidsRenderer mSkidsRenderer; // +0x9210 .. +0x9274
         ContainedInterface mSmokeRenderer;             // +0x9274 (37492) DWARF :64 BrnGraphics::Im3dSmokeRenderer (off_820CEBE8)
         u8 maPadIfaceDToE[0x92E0 - (0x9274 + sizeof(ContainedInterface))]; // -> +0x92E0
-        ContainedInterface mLionImmediateModeRenderer; // +0x92E0 (37600) DWARF :67 LionBlendRenderer (Im3dBlend base, off_820CFA1C)
+        // +0x92E0 (37600): DWARF :67 BrnGraphics::LionBlendRenderer -- the Lion blend
+        // immediate-mode renderer, 0x1E0 bytes on the console. NOT a ContainedInterface
+        // placeholder any more: ParticleModule::Prepare @0x8229BEA0 measures this object
+        // itself -- word 55 forms &mLionImmediateModeRenderer == module+0x92E0 and word 79
+        // forms mSparkRenderer == module+0x94C0, and 0x94C0 - 0x92E0 == 0x1E0 == the
+        // modelled sizeof (0xE0 Im3dBlend + four 0x40 matrices). It is a MEMBER, not a
+        // base: DWARF :140 makes Im3dBlend a by-value member at offset 0 of it.
+        // ⚠ Its eight shader handles are resolved ONLY by Im3dBlend::Construct
+        // @0x8229B260, which is still blocked on assets -- see the bind site in
+        // ParticleModule_Lifecycle.cpp.
+        BrnGraphics::LionBlendRenderer mLionImmediateModeRenderer; // +0x92E0 (37600)
 
         // Gap to the trail system at +0x9710: DWARF :70 SparkRenderer mSparkRenderer (+0x94C0)
         // and :73 SparkArray maSparks[4] -- not typed. FLAG: PLACEHOLDER.
-        u8 maPadIfaceETo9710[0x9710 - (0x92E0 + sizeof(ContainedInterface))]; // -> +0x9710
+        u8 maPadIfaceETo9710[0x9710 - (0x92E0 + sizeof(BrnGraphics::LionBlendRenderer))]; // -> +0x9710
 
         // +0x9710 (38672): DWARF :76 BrnParticle::Native::TrailSystem mTrailSystem, 102652
         // bytes on the console (.. +0x2280C). The 0x7FFFFFFF the ctor stamps at +0x22190
