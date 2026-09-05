@@ -1186,18 +1186,55 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
 // pc/gcm/renderengine/LionBlendProgramsPC.cpp, and ParticleModule::Prepare calls Construct in the
 // console's own position.
 //
-// ⛔ WHAT STILL STANDS BETWEEN THIS FILE AND A PIXEL IS THE SIMULATION, NOT THE DRAW. Nothing
-// ever calls these three Render* methods on this build, because the Lion SIMULATION core is not
-// landed and both ParticleModule arms that would drive it are parked and say so once:
-//     cParticleEmitter::Update @0x829153D8            201 instr   TRAP (LionRuntimeLinkStubs.cpp)
-//     cParticleEmitter::ParticleBuild @0x82910118   1,142 instr   absent
-//     cParticleBehaviour::Lerp @0x8290B1F8          1,530 instr   log-stub
-//     SimulateParticlesInBucketGeneral<> x3           549 instr   absent
-//     Drag/ColourSteps/MultiFrame Behaviour::Process  669 instr   absent (4 of 7 are landed)
+// ⛔ WHAT STILL STANDS BETWEEN THIS FILE AND A PIXEL. Nothing ever calls these three Render*
+// methods on this build, because both ParticleModule arms that would drive them are parked and
+// say so once per run (log lines 1253/1255).
+//
+// ⭐⭐ THE EMITTER HALF IS DONE AS OF 2026-09-05 -- 2,595 instructions, and cParticleEmitter now
+// has no stub anywhere in the tree:
+//     cParticleEmitter::ParticleBuild @0x82910118   1,142 instr   LANDED (ParticleEmitter.cpp)
+//     cParticleEmitter::Update        @0x829153D8     201 instr   LANDED
+//     cParticleEmitter::Generate      @0x82915158     159 instr   LANDED
+//     cParticleEmitter::Emit          @0x82914D38     173 instr   LANDED
+//     ParentMatrixCurrentBuild        @0x829113E8     175 instr   LANDED
+//     Drag/ColourSteps/MultiFrame Behaviour::Process  669 instr   LANDED (7 of 7 now)
+//     cParticleRandomSeed::Build(cVector&,...)         76 instr   LANDED
+//
+// ⛔ WHAT IS LEFT IS THE BUCKET WALK AND THE RENDER DRIVER, counted from the call graph rather
+// than estimated:
+//     SimulateParticlesInBucketGeneral<Matrix/Vector/Local>
+//       @0x829120C0 / @0x829123E0 / @0x82912610       546 instr   absent
+//       (+ sub_8290D3B8, 95 -- the DO_EMITTER_WEIGHTING blend they call, whose gate is
+//        cParticleBehaviour::mFlags & 0x2000000 and whose weights are mEmitterStartWeight
+//        @+0x490 / mEmitterEndWeight @+0x494)
+//     cParticleRender::Render          @0x829147F8    124 instr   TRAP (ParticleRender.cpp)
+//     cParticleRender::EmitterRender   @0x82913928    212 instr   absent
+//     cParticleRender::EmitterCubeRender @0x82913C80  448 instr   absent
+//     LionParticleRender::SetCameraData @0x82281068    76 instr   absent
+//     LionParticleRender::CreateInternalMaterial @0x82280C30  244 instr  returns 0
+//     sub_82289158                                    143 instr   absent (the VECTOR-bucket
+//       draw -- EmitterRender's Matrix arm calls LionParticleRender::Render, its Vector arm
+//       calls this instead)
 //     ParticleModule::BuildLionVertexBuffers @0x8228AC20's Lion half (231 instr total)
 //     ParticleModule::RenderFullResParticles @0x8229AFD0's cLionFX::Dispatch branch
 // and, once that closure runs, the two SetState overloads below and the Xenon fast-path draw
 // thunk D3DDevice_DrawVertices (LionRuntimeLinkStubs.cpp) are the last traps on the path.
+//
+// ⚠ cParticleBehaviour::Lerp @0x8290B1F8 (1,530) IS NOT ON THIS LIST and is not on the path: it
+// is a log-once stub reached only from a FRACTIONAL blend position, and every effect the create
+// path starts today sits at scaler 1.0, which snaps to a layer. Counting it as a blocker has
+// twice made this closure look 1,530 instructions worse than it is.
+//
+// ⚠ EmitterRender's OWN parameter shape is settled, so the next wave need not re-derive it: the
+// DWARF (ParticleEmitter.cpp:782/914/1048) declares the three kernels
+//   U32 SimulateParticlesInBucketGeneral<T>(T lHelper, RenderedParticle* laSimulatedParticles,
+//                                           cParticleBucket* lpBucket, const cTime& aTime,
+//                                           const cTime& lCurrentLocatorTime,
+//                                           const cMatrix& lBindingsLocatorMat)
+// and EmitterRender's call sites prove `lHelper` is a POINTER-SIZED object holding the bucket's
+// side array -- `&v34[64 * n]` (a 64-byte cMatrix stride) for the Matrix helper and `&v33[n]`
+// (16-byte cVector) for the Vector one, against `&v35[7 * n]` (112 == sizeof(RenderedParticle))
+// for the particle array. So the "empty helper class" reading is wrong.
 //
 // ⛔ A NOTE FOR ANYONE QUERYING THE TREE FOR THIS SUBSYSTEM: tools/re/hasbody.py reports a
 // Render* shape as HAS BODY whether or not it is written, because a trap IS a definition. It
