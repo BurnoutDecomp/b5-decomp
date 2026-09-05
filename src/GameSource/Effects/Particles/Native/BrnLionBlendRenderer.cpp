@@ -505,6 +505,142 @@ namespace
             }
         }
     }
+    // =====================================================================================
+    // [lionquad] PER-TEXTURE DRAW WITNESS. NOT console behaviour: ours, bounded, log-only,
+    // DELETE-WHEN-STABLE.
+    //
+    // ⭐ WHY. A frame of this pass filmed with BRN_LION_QRES_SHOW=1 (2026-09-06) carries THREE
+    // plumes, not two: the car's two nozzles, and a hard-edged SATURATED BAR with a green halo
+    // pinned to the SAME lower-left screen rectangle for a 300 m drive. It is a Lion draw (it is
+    // in the particle buffer) and it only appears while a Boost*.lef is live. Nothing already on
+    // this path can say which of the five boost descriptors draws it: [lionuv] samples the first
+    // few particles of the run without naming their material, [lionsize] prints an edge length
+    // with no position, and [liontex] counts batches without a geometry.
+    //
+    // So this prints, ONCE PER (draw shape, texture) PAIR and then every KU_LIONQUAD_PERIOD
+    // particles of that pair, the three things that separate the candidates:
+    //   * the MATERIAL -- texture name, mFlags (bit 0 is FLAG_MULTIFRAME, which selects
+    //     BuildUVs' atlas branch), the atlas grid and the derived frame count;
+    //   * the FRAME the particle asked for and the UV RECTANGLE BuildUVs returned for it -- a
+    //     uv outside [0,1] under a CLAMP sampler paints one border texel over the whole quad,
+    //     which is exactly what a hard-edged filled rectangle in a soft pass looks like;
+    //   * the quad's WORLD corners and its centre, so "pinned to the screen" can be told from
+    //     "pinned in the world" without trusting the picture.
+    // =====================================================================================
+    void LionQuadWitness(const char* apcShape, const cParticleMaterial& arMaterial,
+                         const BrnEffects::Utils::BuildUVData& arUVData,
+                         const RenderedParticle& arPart,
+                         const rw::math::vpu::Vector3* apPoints)
+    {
+        static const u32 KU_LIONQUAD_SLOTS  = 16u;
+        static const u32 KU_LIONQUAD_PERIOD = 4000u;
+        static const u32 KU_LIONQUAD_SHOTS  = 96u;
+        static const char* sapcShape[KU_LIONQUAD_SLOTS] = { 0 };
+        static u32  sauHandle[KU_LIONQUAD_SLOTS] = { 0 };
+        static u32  sauSeen[KU_LIONQUAD_SLOTS]   = { 0 };
+        static u32  suUsed  = 0;
+        static u32  suShots = 0;
+
+        if (suShots >= KU_LIONQUAD_SHOTS)
+            return;
+
+        const u32 luHandle = arMaterial.mTextureHandle;
+        u32 luSlot = 0;
+        while (luSlot < suUsed
+               && !(sauHandle[luSlot] == luHandle && sapcShape[luSlot] == apcShape))
+            ++luSlot;
+        if (luSlot == suUsed)
+        {
+            if (suUsed >= KU_LIONQUAD_SLOTS)
+                return;
+            sauHandle[luSlot] = luHandle;
+            sapcShape[luSlot] = apcShape;
+            sauSeen[luSlot]   = 0;
+            ++suUsed;
+        }
+        // ⭐ THE OVERSIZE ARM. The pinned bar is far bigger than the 0.15-0.6 m quads the
+        // periodic sample shows, so sampling alone would never land on it. Any quad whose
+        // longest corner-to-corner span exceeds KF_LIONQUAD_BIG metres is printed on sight.
+        static const f32 KF_LIONQUAD_BIG = 2.0f;
+        f32 lfSpan = 0.0f;
+        for (u32 luA = 0; luA < 4u; ++luA)
+        {
+            for (u32 luB = luA + 1u; luB < 4u; ++luB)
+            {
+                const f32 lfDx = apPoints[luB].x - apPoints[luA].x;
+                const f32 lfDy = apPoints[luB].y - apPoints[luA].y;
+                const f32 lfDz = apPoints[luB].z - apPoints[luA].z;
+                const f32 lfD2 = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
+                if (lfD2 > lfSpan) lfSpan = lfD2;
+            }
+        }
+        lfSpan = std::sqrt(lfSpan);
+
+        const u32 luSeen = sauSeen[luSlot]++;
+        const bool lbBig = (lfSpan > KF_LIONQUAD_BIG);
+        if (!lbBig && luSeen != 0 && (luSeen % KU_LIONQUAD_PERIOD) != 0)
+            return;
+        ++suShots;
+
+        rw::math::vpu::Vector4 laUv[4];
+        VecFloat lvfFrame;
+        VecFloat lvfNext;
+        lvfFrame.x = lvfFrame.y = lvfFrame.z = lvfFrame.w = arPart.Frame();
+        lvfNext.x  = lvfNext.y  = lvfNext.z  = lvfNext.w  = arPart.NextFrame();
+        BrnEffects::Utils::BuildUVs(arUVData, lvfFrame, lvfNext, laUv);
+
+        f32 lfUMin = laUv[0].x, lfUMax = laUv[0].x, lfVMin = laUv[0].y, lfVMax = laUv[0].y;
+        for (u32 luCorner = 1; luCorner < 4u; ++luCorner)
+        {
+            if (laUv[luCorner].x < lfUMin) lfUMin = laUv[luCorner].x;
+            if (laUv[luCorner].x > lfUMax) lfUMax = laUv[luCorner].x;
+            if (laUv[luCorner].y < lfVMin) lfVMin = laUv[luCorner].y;
+            if (laUv[luCorner].y > lfVMax) lfVMax = laUv[luCorner].y;
+        }
+
+        f32 lfCx = 0.0f, lfCy = 0.0f, lfCz = 0.0f;
+        for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
+        {
+            lfCx += apPoints[luCorner].x * 0.25f;
+            lfCy += apPoints[luCorner].y * 0.25f;
+            lfCz += apPoints[luCorner].z * 0.25f;
+        }
+        const f32 lfEdgeX = apPoints[2].x - apPoints[0].x;
+        const f32 lfEdgeY = apPoints[2].y - apPoints[0].y;
+        const f32 lfEdgeZ = apPoints[2].z - apPoints[0].z;
+        const f32 lfEdge  = std::sqrt(lfEdgeX * lfEdgeX + lfEdgeY * lfEdgeY + lfEdgeZ * lfEdgeZ);
+
+        char lacMsg[640];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+            "[lionquad]%s %s \"%s\" n=%u flags=%08X mf=%d grid=%ux%u frames=%d"
+            " frame=%.2f/%.2f uv=[%.4f..%.4f]x[%.4f..%.4f] centre=(%.2f,%.2f,%.2f)"
+            " edge=%.3f span=%.3f p0=(%.2f,%.2f,%.2f) p1=(%.2f,%.2f,%.2f)"
+            " p2=(%.2f,%.2f,%.2f) p3=(%.2f,%.2f,%.2f) rgba=%.3f,%.3f,%.3f,%.3f\n",
+            lbBig ? " BIG" : "",
+            apcShape,
+            arMaterial.mpTextureName.Get() ? arMaterial.mpTextureName.Get() : "<null>",
+            luSeen, arMaterial.mFlags,
+            (int)((arMaterial.mFlags
+                   & BrnEffects::Utils::BuildUVData::KU_MATERIAL_FLAG_MULTIFRAME) != 0u),
+            (unsigned)arMaterial.mXFrames, (unsigned)arMaterial.mYFrames,
+            (int)arMaterial.mFrameCount,
+            static_cast<double>(arPart.Frame()), static_cast<double>(arPart.NextFrame()),
+            static_cast<double>(lfUMin), static_cast<double>(lfUMax),
+            static_cast<double>(lfVMin), static_cast<double>(lfVMax),
+            static_cast<double>(lfCx), static_cast<double>(lfCy), static_cast<double>(lfCz),
+            static_cast<double>(lfEdge), static_cast<double>(lfSpan),
+            static_cast<double>(apPoints[0].x), static_cast<double>(apPoints[0].y),
+            static_cast<double>(apPoints[0].z),
+            static_cast<double>(apPoints[1].x), static_cast<double>(apPoints[1].y),
+            static_cast<double>(apPoints[1].z),
+            static_cast<double>(apPoints[2].x), static_cast<double>(apPoints[2].y),
+            static_cast<double>(apPoints[2].z),
+            static_cast<double>(apPoints[3].x), static_cast<double>(apPoints[3].y),
+            static_cast<double>(apPoints[3].z),
+            static_cast<double>(arPart.mvColour.x), static_cast<double>(arPart.mvColour.y),
+            static_cast<double>(arPart.mvColour.z), static_cast<double>(arPart.mvColour.w));
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
 }  // anonymous namespace
 
 namespace BrnGraphics
@@ -615,6 +751,7 @@ void LionBlendRenderer::RenderSprites(EffectsVertexBufferIterator& arIterator,
             }
         }
 
+        LionQuadWitness("sprites", *lpMaterial, lUVData, lrPart, laPoints);
         QuadDraw(lrLionBlendVertexIterator, lUVData, lrPart, laPoints, *apEmitter);
     }
 }
@@ -684,6 +821,7 @@ void LionBlendRenderer::RenderQuads(EffectsVertexBufferIterator& arIterator,
             laPoints[luCorner] = rw::math::vpu::TransformPoint(lConvertedXform, laPoints[luCorner]);
         }
 
+        LionQuadWitness("quads", *lpMaterial, lUVData, lrPart, laPoints);
         QuadDraw(lrLionBlendVertexIterator, lUVData, lrPart, laPoints, *apEmitter);
     }
 }
@@ -966,6 +1104,7 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
                 laPoints[luCorner] = lvOut;
             }
 
+            LionQuadWitness("tilts-a", *lrDescriptor.Material(), lUVData, lrPart, laPoints);
             QuadDraw(lrLionBlendVertexIterator, lUVData, lrPart, laPoints, *apEmitter);
         }
     }
@@ -1147,6 +1286,7 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
             laPoints[3].y = laPoints[1].y + lvWidth.y;
             laPoints[3].z = laPoints[1].z + lvWidth.z; laPoints[3].w = 0.0f;
 
+            LionQuadWitness("tilts-b", *lrDescriptor.Material(), lUVData, lrPart, laPoints);
             QuadDraw(lrLionBlendVertexIterator, lUVData, lrPart, laPoints, *apEmitter);
         }
     }

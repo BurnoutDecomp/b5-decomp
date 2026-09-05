@@ -593,7 +593,15 @@ void BoostStateMachine::OnTick(CarState& lCarState, RaceCarParticleEffectHelper&
             BrnDiag::gFilmLatch.mfCarPosY = lpCarStamp->mTransform.wAxis.y;
             BrnDiag::gFilmLatch.mfCarPosZ = lpCarStamp->mTransform.wAxis.z;
         }
-        BrnDiag::gFilmLatch.muBoostEffectMask = muNumBoostTags;
+        // ⭐ THE STATE, NOT JUST THE TAG COUNT (2026-09-06). muNumBoostTags is 2 for the whole
+        // run on this build, so a column of 2s could not separate a frame that was BOOSTING from
+        // one that was only trailing exhaust smoke -- and those two states start DIFFERENT .lef
+        // files (Boost{Green,Red,Yellow} vs ExhaustSmoke), so a plume filmed without knowing
+        // which one was live cannot be attributed to either. Packed as
+        // (EffectsState << 8) | tagCount: 0x000 AllOff, 0x102 Boosting, 0x202 ExhaustSmokeOn,
+        // 0x302 SmokeStopping, 0x402 BoostStopping, 0x502 PopRestart, 0x602 ExhaustPop.
+        BrnDiag::gFilmLatch.muBoostEffectMask =
+            (static_cast<u32>(mState) << 8) | muNumBoostTags;
     }
 
     // Whether to run the locator update this frame.
