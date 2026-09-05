@@ -39,6 +39,23 @@
 // 0x63 permute lanes and the sign-bit flip. The named operands are modelled so
 // the declaration and the StreamedDeformationSpec::FixUp call site compile and
 // link cleanly.
+//
+// ⭐⭐ 2026-09-05 (crash wave 2): THE COST OF THIS STUB IS MEASURED, AND IT IS ZERO ON
+// SHIPPED DATA. The mirror arm only runs when the streamed box basis is LEFT-handed. Scanning
+// every ported VEH_*_AT.BIN -- 429 cars, 11,258 BodyPartBBoxSpec records -- by the same signed
+// triple product this function computes (dot(cross(row0, row1), row2)):
+//     right-handed  10829
+//     LEFT-handed       0
+//     degenerate      429   (exactly one all-zero placeholder IK part per car; its whole
+//                            orientation is zero, so there is no handedness to test)
+// So HackCheckHandedness takes its early-out on every real record the game loads, the mirror
+// never fires, and the dependent BBoxPointSkinData::HackSwapHandedness keystone is unreachable
+// in practice. That does NOT make either body optional -- it makes the stub non-blocking, and
+// it means a bbox orientation bug can never be blamed on this file without first finding a
+// left-handed record. Re-measure if new vehicle content is ever authored.
+// ⚠️ The same scan pins mOrientation's row 3 (the row this header used to call SIMD padding):
+// it is (0, 0, 0, 1) in 10,829 of 10,829 real records -- a genuine affine translation row whose
+// value happens to be zero. PhysicalBodyPart::CalculateBoundingBoxExtents loads and uses it.
 // ============================================================================
 
 namespace BrnPhysics
