@@ -118,47 +118,99 @@ const Vector4  K_VECTOR4_511_511_511_255 = { 511.0f, 511.0f, 511.0f, 255.0f };
 const VecFloat K_VECFLOAT_ONEOVER255     = { 0.003921568859368563f, 0.003921568859368563f,
                                              0.003921568859368563f, 0.003921568859368563f };
 
-// =============================================================================
-// BrnEffects::Utils::BuildUVs @ 0x822781E0  -- KEYSTONE, STILL NOT reconstructed.
+// =================================================================================================
+// BrnEffects::Utils::BuildUVs  @ 0x822781E0    (DWARF BrnEffectsUtils.h:453)
 //
-// The X360 body is a multi-stage hand-vectorised VMX128 pipeline over two rodata permute
-// tables (unk_82CDA400 / unk_82CDA3C0) and two dynamically-initialised constant vectors
-// (unk_82FABA60 / unk_82FAB880). It branches on the material wrap bit (lUVData.muMaterialFlags
-// & 1):
-//   - wrapped path: lvx128 the inputs, vrfim (floor) + vcmpgefp + vsel to take fractional
-//     parts, a vmulfp128 / vrfim / vsubfp tiling cascade, then four vperm + vsldoi lane-weaves
-//     through the rodata permute tables, stvx128 x4 to the out;
-//   - unwrapped path: vcfsx a 1.0, stvx128 a rodata constant + two splats + a second rodata
-//     constant as the four UV corners.
-// The vperm/vsldoi weaves are driven by permute selectors that are not decoded here; inventing
-// the per-lane UV math would be fabrication.
+// Pick the frame-atlas cell for one particle and hand the caller its four corner UVs -- each
+// carrying BOTH the current frame's pair and the next frame's, so the shader can cross-fade.
 //
-// ⛔ WHAT LANDING THE THREE DRAW HALVES CHANGED ABOUT THIS STUB: nothing about its body, and
-// only its SIGNATURE, which was wrong (see the header). It is still a QUIET stub -- it writes
-// four zero UV corners rather than trapping -- and that is a deliberate, narrow choice, not an
-// oversight: cParticleMaterial::Build calls into this subsystem for every material in every
-// .lef in PARTICLES.BUNDLE, and this project has already measured one run drowned by 839,983
-// asserts. A zero UV maps every particle to texel (0,0); it does not corrupt memory and it
-// cannot be mistaken for correct output on screen. The honest fix is to decode the two permute
-// tables (both are ordinary .rdata and ARE readable with tools/re/x360rd.py) -- that is the
-// next job on this path, not a licence to leave it.
-// =============================================================================
+// ⭐ THIS WAS THE LAST QUIET STUB ON THE LION DRAW PATH. It wrote four zero UV corners, which
+// maps every particle to texel (0,0) and reads on screen as a shader bug rather than as missing
+// code. Everything it needed was readable:
+//
+//   unk_82CDA3C0 (.rdata) = { 00010203, 00010203, 00010203, 14151617 } => vperm(A,B) = (A.x, ., ., B.y)
+//   unk_82CDA400 (.rdata) = { 08090A0B, 1C1D1E1F, 00010203, 00010203 } => vperm(A,B) = (A.z, B.w, ., .)
+//   unk_82FABA60 <- CRT thunk 0x82C4A188 : (flt_82001CC0, flt_82001C98) x2 == (0, 1, 0, 1)
+//   unk_82FAB880 <- CRT thunk 0x82C4A1C0 : (flt_82001C98, flt_82001CC0) x2 == (1, 0, 1, 0)
+//
+// and the `vsldoi ..., 8` that follows each vperm pair is a real immediate, not a register --
+// the raw word at 0x82278288 is 0x10C5322C, whose SH field (bits 22-25) is 8, so it takes
+// bytes 8..23 of (vA || vB) == (vA.z, vA.w, vB.x, vB.y). IDA renders that immediate as "v8",
+// which is what made the tail look like an undecodable lane weave.
+//
+// ⭐⭐ THE TWO PATHS CONFIRM EACH OTHER, which is why the corner order below is safe. Work the
+// vperm/vsldoi weave through and the four outputs come out as
+//   [0] (uLeft, vBottom)  [1] (uLeft, vTop)  [2] (uRight, vBottom)  [3] (uRight, vTop)
+// -- and the non-atlas path, decoded completely independently from two CRT thunks and two
+// splats, writes exactly (0,1) / (0,0) / (1,1) / (1,0) into those same four slots. Two
+// derivations, one corner order. It also matches the corner order the three draw halves build
+// their geometry in ([0] = the -pivot corner in both axes).
+//
+// ⚠ THE FRAME WRAP IS A SNAP, NOT A MODULO: `vcmpgefp` + `vsel` (0x822781FC/0x82278234)
+// replaces the whole floored frame index with 0 as soon as it reaches mvfMaterialFrameCount.
+//
+// The lane arithmetic is done on scalars here because every input is a broadcast: the two
+// frame arguments arrive splatted (QuadDraw's `vspltw v1, ..., 3`), and every BuildUVData
+// member is splatted by SetupFromMaterial, so all four lanes of every intermediate hold the
+// same value.
+// =================================================================================================
 
 void BuildUVs(const BuildUVData& arUVData, VecFloat lvfFrame, VecFloat lvfNextFrame,
               Vector4* lpaUVsOut)
 {
-    // KEYSTONE STUB: the VMX UV-weave pipeline over the two undecoded rodata permute tables
-    // is not reconstructed (see the block above). Zero the four out corners.
-    (void)arUVData;
-    (void)lvfFrame;
-    (void)lvfNextFrame;
-    if (lpaUVsOut != nullptr)
+    // asm 0x822781E0..0x822781F0 -- FLAG_MULTIFRAME off means the quad takes the whole texture.
+    if ((arUVData.muMaterialFlags & BuildUVData::KU_MATERIAL_FLAG_MULTIFRAME) == 0u)
     {
-        lpaUVsOut[0].SetZero();
-        lpaUVsOut[1].SetZero();
-        lpaUVsOut[2].SetZero();
-        lpaUVsOut[3].SetZero();
+        // asm 0x822782DC..0x82278318. Both frame slots hold the same pair, so the shader's
+        // cross-fade is a no-op whatever weight it is given.
+        lpaUVsOut[0] = Vector4{ 0.0f, 1.0f, 0.0f, 1.0f };   // unk_82FABA60
+        lpaUVsOut[1] = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };   // vspltisw v12, 0
+        lpaUVsOut[2] = Vector4{ 1.0f, 1.0f, 1.0f, 1.0f };   // vcfsx(vspltisw 1, 0)
+        lpaUVsOut[3] = Vector4{ 1.0f, 0.0f, 1.0f, 0.0f };   // unk_82FAB880
+        return;
     }
+
+    // asm 0x822781F4..0x8227822C -- the atlas description.
+    const f32 lfFrameCount = arUVData.mvfMaterialFrameCount.x;
+    const f32 lfNumXFrames = arUVData.mvfMaterialNumXFrames.x;
+    const f32 lfInvNumX    = arUVData.mvfMaterialOneOverNumXFrames.x;
+    const f32 lfInvNumY    = arUVData.mvfMaterialOneOverNumYFrames.x;
+
+    // asm 0x822781F8..0x8227823C -- floor, then snap a past-the-end index back to frame 0.
+    f32 lfFrame0 = floorf(lvfFrame.x);
+    if (lvfFrame.x >= lfFrameCount)
+    {
+        lfFrame0 = 0.0f;
+    }
+    f32 lfFrame1 = floorf(lvfNextFrame.x);
+    if (lvfNextFrame.x >= lfFrameCount)
+    {
+        lfFrame1 = 0.0f;
+    }
+
+    // asm 0x82278240..0x8227827C -- index -> (column, row) -> the cell's four edges.
+    const f32 lfRow0 = floorf(lfFrame0 * lfInvNumX);
+    const f32 lfRow1 = floorf(lfFrame1 * lfInvNumX);
+
+    const f32 lfV0Top = lfRow0 * lfInvNumY;
+    const f32 lfV1Top = lfRow1 * lfInvNumY;
+
+    const f32 lfColumn0 = lfFrame0 - lfRow0 * lfNumXFrames;
+    const f32 lfColumn1 = lfFrame1 - lfRow1 * lfNumXFrames;
+
+    const f32 lfU0Left = lfColumn0 * lfInvNumX;
+    const f32 lfU1Left = lfColumn1 * lfInvNumX;
+
+    const f32 lfV0Bottom = lfV0Top + lfInvNumY;
+    const f32 lfV1Bottom = lfV1Top + lfInvNumY;
+    const f32 lfU0Right  = lfU0Left + lfInvNumX;
+    const f32 lfU1Right  = lfU1Left + lfInvNumX;
+
+    // asm 0x82278280..0x822782D4 -- the four (u, v, u', v') corners.
+    lpaUVsOut[0] = Vector4{ lfU0Left,  lfV0Bottom, lfU1Left,  lfV1Bottom };
+    lpaUVsOut[1] = Vector4{ lfU0Left,  lfV0Top,    lfU1Left,  lfV1Top    };
+    lpaUVsOut[2] = Vector4{ lfU0Right, lfV0Bottom, lfU1Right, lfV1Bottom };
+    lpaUVsOut[3] = Vector4{ lfU0Right, lfV0Top,    lfU1Right, lfV1Top    };
 }
 
 // =================================================================================================
