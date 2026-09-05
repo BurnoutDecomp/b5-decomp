@@ -90,7 +90,7 @@ namespace Deformation
     // Caller: DeformationSensor::RecievePassedOnImpulse (the chain forward).
     // =============================================================================================
     void ImpulsePasser::PassOnImpulse(u8 lu8Index, const ImpulseParams* lpImpulseParams,
-                                      VecFloat lvfPassedMagnitude)
+                                      VecFloat lvfHierarchicalImpulse)
     {
         CGS_ASSERT(static_cast<s32>(lu8Index) < KI_MAX_COLLIDABLE_BODIES,
                    "lu8ReceivingBodyIndex < KI_MAX_NUM_COLLIDABLE_BODIES_PER_DEFORMABLE_OBJECT");   // :156
@@ -98,7 +98,7 @@ namespace Deformation
                    "mapCollidableBodies[lu8ReceivingBodyIndex] != NULL");                            // :157
 
         // The console calls through regardless (fire-and-continue past both asserts).
-        mapCollidableBodies[lu8Index]->RecievePassedOnImpulse(lpImpulseParams, lvfPassedMagnitude);
+        mapCollidableBodies[lu8Index]->RecievePassedOnImpulse(lpImpulseParams, lvfHierarchicalImpulse);
     }
 }
 }

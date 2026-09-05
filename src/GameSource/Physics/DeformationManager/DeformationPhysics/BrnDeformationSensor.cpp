@@ -852,6 +852,21 @@ namespace Deformation
 
 		// vsubfp v0,v13,v0 then stvx128 @0x825E175C/0x825E1760 -- what this sensor took is removed
 		// from the magnitude the rest of the chain will see.
+		// ⭐⭐⭐ THIS LINE IS THE CAR'S CRUMPLE ZONE, AND IT IS THE ONLY WAY ABSORPTION REACHES THE
+		// RIGID BODY. VehicleRigidBody::RecievePassedOnImpulse DISCARDS the `absorbed * 0.5f`
+		// argument this function passes below -- `vmulfp128 v1, v13, v0` @0x8260E008 overwrites v1
+		// before any read -- and rebuilds its impulse from params->mvfImpulseMagnitude (+0x10), i.e.
+		// from the value THIS store leaves behind. Consequences, both measured (fdfda858):
+		//   * absorption set INVINCIBLE => the whole AbsorptionTable row is 0.0 => lfAbsorbed == 0
+		//     => this store is a no-op => the FULL shaped impulse arrives at the body (max|J| 45,248
+		//     in that window, against 1,202 with the same car absorbing normally).
+		//   * so "the car has no momentum after a crash" is, mechanically, "nothing was subtracted
+		//     here". The dial is the absorption SET, and the level is a per-sensor spec constant.
+		// ⚠️ NOTE WHICH VALUE IS SUBTRACTED: lfAbsorbed (v0), NOT the room-clamped lfMove (v13).
+		// The asm subtracts v0 -- the operand produced by `vmulfp128 v0,v0,v125` @0x825E1728 --
+		// while v13 is what moved the sphere. A sensor with NO ROOM LEFT therefore still removes its
+		// full share from the chain magnitude even though it cannot dent any further, which is why a
+		// fully-crushed panel does not suddenly start dumping momentum into the body.
 		lpImpulseParams->mvfImpulseMagnitude.x -= lfAbsorbed;
 		lpImpulseParams->mvfImpulseMagnitude.y -= lfAbsorbed;
 		lpImpulseParams->mvfImpulseMagnitude.z -= lfAbsorbed;

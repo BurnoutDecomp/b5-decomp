@@ -40,9 +40,19 @@ namespace Deformation
         // DWARF :70. Bind slot liIndex of the chain map to a collidable body.
         void SetCollidableBodyMap(s32 liIndex, CollidableBody* lpBody);
 
-        // DWARF :76. Pass an impulse on to the body at slot luIndex with the remaining/scaled
+        // DWARF :76. Pass an impulse on to the body at slot luIndex with the chain's own
         // magnitude (forwards to that body's RecievePassedOnImpulse).
-        void PassOnImpulse(u8 lu8Index, const ImpulseParams* lpImpulseParams, VecFloat lvfPassedMagnitude);
+        // ⭐ THE PARAMETER NAME IS THE DWARF'S (BrnImpulsePasser.cpp:154 declares
+        // `VecFloat lvfHierarchicalImpulse`) and it is load-bearing, not cosmetic. This value is
+        // the HIERARCHY's quantity -- `absorbed * 0.5f`, computed by DeformationSensor::
+        // ApplyLocalImpulse -- and it is what a downstream SENSOR dents by. It is NOT the impulse a
+        // rigid body applies: VehicleRigidBody::RecievePassedOnImpulse ignores it entirely and takes
+        // lpImpulseParams->mvfImpulseMagnitude instead (`vmulfp128 v1, v13, v0` @0x8260E008
+        // overwrites the argument register before any read). Calling it "the passed magnitude"
+        // invited exactly the misreading that produced fdfda858's "45 kN.s while absorption is zero
+        // contradicts the chain" -- it does not; see BrnVehicleRigidBody.cpp's banner.
+        void PassOnImpulse(u8 lu8Index, const ImpulseParams* lpImpulseParams,
+                           VecFloat lvfHierarchicalImpulse);
 
         // DWARF :81. Apply one impulse to a specific collidable body directly.
         void ApplyLocalImpulse(CollidableBody* lpBody, ImpulseParams* lpImpulseParams);

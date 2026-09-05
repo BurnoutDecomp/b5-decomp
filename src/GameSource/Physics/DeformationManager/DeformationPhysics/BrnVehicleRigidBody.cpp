@@ -49,6 +49,49 @@
 //    player's showtime vehicle"; the old role-inferred name IsIgnoringPassedOnImpulses is retired.
 //    The second VecFloat param (the chain's passed-on magnitude) is carried by the signature but,
 //    like the X360, is not consumed by the gate/apply path here.
+//
+// ⭐⭐⭐ 2026-09-05 (momentum wave): THAT LAST SENTENCE IS THE WHOLE ANSWER TO THE
+// "45 kN.s WHILE ABSORPTION IS ZERO" CONTRADICTION, so it is spelled out here where the next
+// wave will read it, with the instruction that proves it.
+//   fdfda858 measured, inside ONE crash, arrivals split by absorption state:
+//       set 4 INVINCIBLE   129 arrivals  sum|J| 134,063  max|J| 45,248
+//       set 0 NORMAL      1371 arrivals  sum|J| 125,507  max|J|  1,202
+//   and called the 45 kN.s arrival a CONTRADICTION -- "DeformationSensor::ApplyLocalImpulse passes
+//   absorbed * 0.5 and absorbed == 0 in that window, so this route predicts nothing; there must be
+//   an untraced caller". THERE IS NO UNTRACED CALLER. The premise is the error: it assumes the
+//   arriving magnitude IS the passed-on argument. It is not, and the console says so in one
+//   instruction --
+//       0x8260E008   vmulfp128  v1, v13, v0
+//   v1 is the incoming VecFloat argument (the `absorbed * 0.5f` the sensor computed at
+//   0x825E173C) and it is OVERWRITTEN here, before any read, by the product of the direction row
+//   with `lvx128 v0, r31, 0x10` == lpImpulseParams->mvfImpulseMagnitude. The identical pair sits
+//   at 0x8260E098/0x8260E0A4 in ApplyLocalImpulse. So BOTH bodies take their magnitude from the
+//   PARAMS BLOCK and the passed-on argument is DEAD in this callee on ARTIST as well as here.
+//   The absorbed fraction reaches the rigid body only INDIRECTLY, through the sensor's write-back
+//   `mvfImpulseMagnitude -= lfAbsorbed` (`vsubfp v0,v13,v0 ; stvx128 v0,r0,r11`
+//   @0x825E175C/0x825E1760). With the absorption row identically 0.0, lfAbsorbed == 0, the
+//   write-back is a no-op, and the FULL shaped impulse arrives at the body.
+//   ⇒ The two rows above are ONE mechanism, not two routes: INVINCIBLE means nothing is subtracted
+//   on the way, so the body is handed everything; NORMAL means every sensor in the chain takes its
+//   bite first, so the body is handed the remainder. Absorption is the crumple zone, and the crumple
+//   zone is what LETS A CAR KEEP MOVING.
+// ⭐ AND THE SEARCH WAS DONE ANYWAY, statically, so "no untraced caller" is a measurement and not a
+// preference: CollidableBody's vtable has exactly TWO slots (the image carries the two concrete
+// tables back to back -- VehicleRigidBody at 0x82095220 = {0x8260E068, 0x8260DFA0} and
+// DeformationSensor at 0x82095228 = {0x825E1320, 0x825E11F8}); slot 1 is reached only by
+// ImpulsePasser::PassOnImpulse's `lwz r11,0(r3) ; lwz r11,4(r11) ; bctrl` @0x825BA488; slot 0 is
+// dispatched exactly once in the deformation subsystem, at DeformableObject::ApplySensorImpulse
+// +0x698..+0x6AC (`lwz r3, arg_74(r1) ; lwz r11,0(r3) ; lwz r11,0(r11) ; mtctr ; bctrl`
+// @0x82607F48..0x82607F5C) -- a whole-image scan for that FOUR-instruction form (not
+// vcallsites.py's two-instruction one, which matches every "load a word at +0 and call it" and
+// returned 343 sites) leaves exactly six inside BrnPhysics, five of them on unrelated vtables
+// (VehicleOutputInterface x2, VehicleManager::WriteOutVehicleStats, ShiftControl x2).
+// The dispatch is on the BODY ARGUMENT -- and BOTH of ApplySensorImpulse's only two callers (its `xrefs_to`:
+// ApplyCarWorldImpulse @0x82624898 and ApplyCarCarImpulse @0x82624C08) pass
+// GetDeformationSensor(liSensorIndex), never &mVehicleBody. Neither 0x8260DFA0 nor 0x8260E068 is
+// the target of a single direct `bl` anywhere in the image. So VehicleRigidBody::ApplyLocalImpulse
+// is UNREACHED on this path and every arrival is a PassOnImpulse arrival -- which the [crash-response]
+// line now prints per arrival (`entry local|passed`) rather than leaving to be argued.
 
 namespace BrnPhysics
 {
@@ -64,8 +107,16 @@ namespace Deformation
     // attached vehicle. Factored out only for the bodies below to share -- the X360 inlines it into
     // both functions identically. (The PS3 keeps both out-of-line, @0x6E0A60/@0x6E0B8C, and both
     // resolve the row through CollidableBody::GetDirectionVector -- the same table access.)
+    //
+    // ⚠️ THE TWO TRAILING PARAMETERS ARE INSTRUMENT-ONLY and are read by nothing but the opt-in
+    // probes below. They are honest to add precisely BECAUSE this helper does not exist on the
+    // console: the X360 inlines the kernel into both virtuals, so the helper is already a PC-side
+    // factoring and its argument list is ours, not ARTIST's. `lpcEntry` names which virtual we came
+    // through and `lvfPassedMagnitude` carries the argument the console DISCARDS (see the banner) so
+    // one log line can show the discarded value beside the one actually used.
     static void ApplyImpulseToVehicle(BrnPhysics::Vehicle::VehiclePhysics* lpVehicle,
-                                      const ImpulseParams* lpImpulseParams)
+                                      const ImpulseParams* lpImpulseParams,
+                                      const char* lpcEntry, VecFloat lvfPassedMagnitude)
     {
         // liImpulse = direction-row * magnitude   (vmulfp128 v1, v13, v0)
         const Vector3& lrDirection = KA_IMPULSE_DIRECTIONS[lpImpulseParams->meImpulseDirection];
@@ -166,8 +217,17 @@ namespace Deformation
                     const char* lpcEnv = getenv( "BRN_CRASH_RESPONSE_DIAG" );
                     siCrashRespProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
                 }
+                // ⚠️⚠️ THE CAP WAS 1500 AND IT WAS SPENT INSIDE SHOT 0. fdfda858's two-shot run
+                // recorded 129 + 1371 == 1500 arrivals in its FIRST crash, so the run carried no
+                // arrival data at all for shot 1 and the pristine-vs-dented arrival comparison it
+                // was taken to make could not be made. A zero in the second shot would have been
+                // the PROBE, not the physics -- the campaign's own "diagnostics that lie" class.
+                // 24000 is sized against the volume actually seen: ~18 arrivals per crash frame and
+                // ~700 crash frames in the longest measured shot is ~12.6k, so a two-shot boot fits
+                // with headroom. The counter is still capped, and the cap is still stated in the
+                // log's own line numbers (`n=`), so a truncation remains visible rather than silent.
                 static u32 suCrashArrivals = 0;
-                if ( siCrashRespProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && ++suCrashArrivals <= 1500u )
+                if ( siCrashRespProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && ++suCrashArrivals <= 24000u )
                 {
                     const Matrix44Affine& lrT = lpVehicle->GetTransform();
                     const Vector3 lPos = lrT.Pos();
@@ -243,6 +303,11 @@ namespace Deformation
                     const f32 lfRollRate  = lW.x * lrT.zAxis.x + lW.y * lrT.zAxis.y + lW.z * lrT.zAxis.z;
                     *CgsDev::Log::gpDebugPrint
                         << "[crash-response] arrive n=" << static_cast<s32>(suCrashArrivals)
+                        // ⭐ `entry` names the virtual we came through and `passed` is the argument
+                        // the console throws away at 0x8260E008. A line whose `passed` is 0.0 while
+                        // `mag` is tens of thousands IS the invincible-window mechanism, printed.
+                        << " entry=" << lpcEntry
+                        << " passed=" << lvfPassedMagnitude.x
                         << " world=" << ( lpImpulseParams->mbWorldContact ? 1 : 0 )
                         << " dir=" << static_cast<s32>(lpImpulseParams->meImpulseDirection)
                         << " mag=" << lfMagnitude
@@ -282,12 +347,17 @@ namespace Deformation
     // @0x8260E068  BrnVehicleRigidBody.cpp:186
     void VehicleRigidBody::ApplyLocalImpulse(ImpulseParams* lpImpulseParams)
     {
-        ApplyImpulseToVehicle(mpAttachedVehicle, lpImpulseParams);
+        // ⚠️ vtable slot 0. The static search in the banner finds NO dispatcher that reaches this
+        // slot on a VehicleRigidBody (ApplySensorImpulse's only slot-0 dispatch is on a sensor), so
+        // an "entry=local" line in a log is a discovery, not noise -- read it, do not dismiss it.
+        // The zero VecFloat is only what the probe prints for "no passed-on argument exists here".
+        const VecFloat lvfNoPassedMagnitude = { 0.0f, 0.0f, 0.0f, 0.0f };
+        ApplyImpulseToVehicle(mpAttachedVehicle, lpImpulseParams, "local", lvfNoPassedMagnitude);
     }
 
     // @0x8260DFA0  BrnVehicleRigidBody.cpp:131
     void VehicleRigidBody::RecievePassedOnImpulse(const ImpulseParams* lpImpulseParams,
-                                                  VecFloat /*lvfPassedMagnitude*/)
+                                                  VecFloat lvfPassedMagnitude)
     {
         // Gate: virtual dispatch through the attached vehicle's vptr slot +0x10 -- image-settled
         // as IsPlayerVehicleInShowtime (see the banner). A non-zero return means the player's
@@ -295,7 +365,12 @@ namespace Deformation
         if ( mpAttachedVehicle->IsPlayerVehicleInShowtime() )
             return;
 
-        ApplyImpulseToVehicle(mpAttachedVehicle, lpImpulseParams);
+        // ⚠️ lvfPassedMagnitude is HANDED ON TO THE PROBE ONLY -- the console overwrites its
+        // register (v1) at 0x8260E008 before reading it, and so does this body by taking the
+        // magnitude from lpImpulseParams->mvfImpulseMagnitude inside the kernel. It is forwarded
+        // here so a log line can show the DISCARDED value beside the used one; nothing computes
+        // with it. (Named rather than commented out for exactly that reason.)
+        ApplyImpulseToVehicle(mpAttachedVehicle, lpImpulseParams, "passed", lvfPassedMagnitude);
     }
 }
 }
