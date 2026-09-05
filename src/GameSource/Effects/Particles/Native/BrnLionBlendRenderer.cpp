@@ -19,6 +19,13 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitter.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleLocator.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionBindings.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleDescriptor.h"  // cParticleDescriptor::Material / Flags
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleBehaviour.h"   // cParticleBehaviour::mPivotPoint
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleMaterial.h"    // cParticleMaterial (SetupFromMaterial)
+#include "GameSource/Effects/BrnEffectsUtils.h"                 // BuildUVData / BuildUVs / FastMatrix33FromEulerXYZ / K_VECTOR4_*
+#include "GameSource/Effects/Particles/Native/BrnLionBlendVertex.h"  // LionBlendVertex::VertexIterator (the vertex writer)
+#include "SDKs/EATech/include/ps3/gcm/renderengine/stateparams.h"    // renderengine::RGBA8
+#include "rw/math/vpu/matrix44affine_operation.h"               // rw::math::vpu::TransformPoint
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include <cmath>   // sqrtf -- the two normalisations
@@ -224,7 +231,426 @@ namespace BrnGraphics
 }  // namespace BrnGraphics
 
 // =================================================================================================
-// The five remaining LionBlendRenderer methods -- TRAP STUBS, deliberately.
+// THE DRAW PATH -- the shared quad emitter and the two billboard shapes.        (2026-09-05)
+//
+// Everything below is decoded from the X360 asm, with the DecFIGS DWARF supplying the local
+// NAMES (references/DecFIGS/dwarfdump/.../BrnLionBlendRenderer.cpp names every local of
+// QuadDraw:59, RenderSprites:223 and RenderQuads:327, in the order the asm computes them).
+//
+// ⭐⭐ THE THING THAT UNBLOCKED THESE: SEVEN CONSTANTS AND A SELECTOR. Two previous waves read
+// these three functions and refused them, because ~31% of RenderSprites is VMX128 driven by
+// rodata that reads as zero. It reads as zero because it is dynamically-initialised .bss, not
+// because it is unreadable -- tools/re/findinit.py + ppcdis.py + x360rd.py recover every one
+// (the chain is written out in full over FastMatrix33FromEulerXYZ in BrnEffectsUtils.cpp).
+// Once the sin/cos coefficients are numbers, the three rotation paths and the matrix builder
+// all reduce to ordinary arithmetic and cross-check each other.
+//
+// ⭐ THE ONE SELECTOR THAT SHAPES EVERY CORNER: unk_82CDA350 is ordinary .rdata and reads
+//   { 00 01 02 03 | 14 15 16 17 | 00 01 02 03 | 00 01 02 03 }
+// so `vperm(vA, vB, sel)` == (A.x, B.y, A.x, A.x). Both operands are always splats here, so the
+// whole idiom is "make the 2D point (thisX, thatY)". Every `vrlimi128 vD, <zero>, 2, 0` beside
+// it clears lane z (mask 8/4/2/1 == x/y/z/w), which is why the corners are (x, y, 0, junk) and
+// why QuadDraw is free to overwrite lane w with the frame-blend weight.
+//
+// ⚠ THE OTHER RECURRING IDIOM, so nobody has to re-derive it: `vspltisw128 v,-1` + `vslw v,v,v`
+// builds splat4(0x80000000); `vandc x, mask` is therefore fabs(); `vcmpgtfp` against
+// splat(unk_8200D990 == 0x34000000 == FLT_EPSILON) is `!IsZero(x)`; and the
+// `vperm` through splat4(0x0004080C) + `stvx128` + `lwz` that follows is the standard
+// "did ANY lane compare true" reduction. Since every operand is a broadcast scalar, all four
+// lanes carry the same answer and the reduction is exactly the scalar test written below.
+// =================================================================================================
+namespace
+{
+    // ---------------------------------------------------------------------------------------
+    // BrnEffects::Utils::ConvertVector4ToRwRgbaOverbright -- inlined into QuadDraw by the X360
+    // compiler (DWARF BrnEffectsUtils.h:326 names it; it has NO row in the X360 ledger, so it
+    // is outlined here rather than minted as public surface the target build does not contain).
+    //
+    // asm 0x82282370..0x822823E0. The console does it in two steps and this is the only place
+    // the two byte orders matter, so both are spelled out:
+    //   1. scaled = min(aPart.mvColour * K_VECTOR4_511_511_511_255, K_VECFLOAT_255), then
+    //      `vctuxs ...,0` -- convert to unsigned fixed point, TRUNCATING toward zero and
+    //      saturating a negative lane to 0. The four lanes are then packed into one word as
+    //      (A<<24)|(B<<16)|(G<<8)|R, which is rw::RGBA's own byte order (A,B,G,R in memory).
+    //   2. asm 0x82282414..0x8228245C rotates that word to (R<<24)|(G<<16)|(B<<8)|A before
+    //      every VertexIterator::Write -- i.e. renderengine::RGBA8's { u8 r, g, b, a; }.
+    // The composition of the two is the identity on the channels, so the host writes the
+    // RGBA8 directly; the console's intermediate is documented, not reproduced, because
+    // reproducing it would mean inventing a packing for rw::RGBA (whose ctor has no body in
+    // this tree) purely to unpack it again one instruction later.
+    //
+    // ⚠ THE 511 IS NOT A TYPO AND NOT SHARED WITH ALPHA. RGB scale by 511 and alpha by 255 --
+    // that asymmetry is the entire content of the name "Overbright": a 0.5 colour channel
+    // saturates to full white, giving the artist one stop of headroom above 1.0.
+    inline renderengine::RGBA8 ConvertVector4ToRwRgbaOverbright(const cVector& arColour)
+    {
+        const rw::math::vpu::Vector4& lrScale = BrnEffects::Utils::K_VECTOR4_511_511_511_255;
+        const f32 lfMax = BrnEffects::Utils::K_VECFLOAT_255.x;
+
+        const f32 lafScaled[4] =
+        {
+            arColour.x * lrScale.x, arColour.y * lrScale.y,
+            arColour.z * lrScale.z, arColour.w * lrScale.w
+        };
+
+        u8 lauChannel[4];
+        for (u32 luLane = 0; luLane < 4u; ++luLane)
+        {
+            // vminfp is defined as `A < B ? A : B`, so an unordered lane takes B (255) -- the
+            // test is written that way round rather than as `> lfMax` for that reason. vctuxs
+            // then truncates toward zero and saturates a negative lane to 0.
+            f32 lfLane = lafScaled[luLane];
+            if (!(lfLane < lfMax))
+            {
+                lfLane = lfMax;
+            }
+            lauChannel[luLane] = (lfLane > 0.0f) ? static_cast<u8>(lfLane) : static_cast<u8>(0);
+        }
+
+        return renderengine::RGBA8(lauChannel[0], lauChannel[1], lauChannel[2], lauChannel[3]);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // BrnGraphics::LionBlendRenderer::MatrixConvert (DWARF BrnLionBlendRenderer.cpp:96) --
+    // the Lion cMatrix to engine Matrix44Affine reinterpretation. Both are four 16-byte rows
+    // in the same order, so the console emits no conversion at all: RenderSprites just
+    // `lvx128`s the cMatrix rows straight into the transform cascade
+    // (0x822829E4/0x822829E8/0x822829F0/0x82282A00). Written as a copy here because the two
+    // C++ types are distinct; it is a member on the console and file-local here because it
+    // has no row in the X360 ledger (fully inlined at all three sites).
+    inline rw::math::vpu::Matrix44Affine MatrixConvert(const cMatrix& arMatIn)
+    {
+        rw::math::vpu::Matrix44Affine lResult;
+        lResult.xAxis.x = arMatIn.xa.x; lResult.xAxis.y = arMatIn.xa.y;
+        lResult.xAxis.z = arMatIn.xa.z; lResult.xAxis.w = arMatIn.xa.w;
+        lResult.yAxis.x = arMatIn.ya.x; lResult.yAxis.y = arMatIn.ya.y;
+        lResult.yAxis.z = arMatIn.ya.z; lResult.yAxis.w = arMatIn.ya.w;
+        lResult.zAxis.x = arMatIn.za.x; lResult.zAxis.y = arMatIn.za.y;
+        lResult.zAxis.z = arMatIn.za.z; lResult.zAxis.w = arMatIn.za.w;
+        lResult.wAxis.x = arMatIn.wa.x; lResult.wAxis.y = arMatIn.wa.y;
+        lResult.wAxis.z = arMatIn.wa.z; lResult.wAxis.w = arMatIn.wa.w;
+        return lResult;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // QuadDraw  @ 0x82282330    (DWARF BrnLionBlendRenderer.cpp:59)
+    //
+    // Emit one particle's quad: four vertices sharing a colour, each carrying its own UV and a
+    // position whose w lane is the frame-blend weight.
+    //
+    // ⚠ THE FIFTH PARAMETER IS REAL AND UNUSED. All three draw halves set r7 before the call
+    // (RenderSprites 0x82282A18, RenderQuads 0x82282ED8, RenderTilts 0x8228395C) and the body
+    // never reads it -- the DWARF declares it (`const cParticleEmitter& aEmitter`), so it is a
+    // parameter this build's code path happens not to need, not a phantom.
+    //
+    // ⭐ THE EMISSION ORDER IS 0, 1, 3, 2 -- not 0..3. The four `bl VertexIterator::Write` at
+    // 0x82282480 / 0x8228249C / 0x822824B8 / 0x822824D4 take their position from r28+0x00,
+    // +0x10, +0x30, +0x20 and their UV from the matching laUvUv slot, so the quad is wound
+    // (X0Y0), (X0Y1), (X1Y1), (X1Y0) -- a loop, not a strip pair. Getting this wrong swaps a
+    // triangle and shows a bow-tie.
+    void QuadDraw(BrnGraphics::LionBlendVertex::VertexIterator& arVertexIterator,
+                  const BrnEffects::Utils::BuildUVData& arUVData,
+                  const RenderedParticle& arPart,
+                  const rw::math::vpu::Vector3* apPos,
+                  const cParticleEmitter& arEmitter)
+    {
+        (void)arEmitter;   // see the note above -- declared by the DWARF, unread by this build.
+
+        // asm 0x82282370..0x822823E0 (DWARF: RGBA lColour, :61).
+        const renderengine::RGBA8 lColour = ConvertVector4ToRwRgbaOverbright(arPart.mvColour);
+
+        // asm 0x822823E4 (DWARF: Vector4 laUvUv[4], :63). The two frame arguments ride in v1/v2
+        // -- `vspltw v1, [aPart+0x30], 3` is Frame() and `vspltw v2, [aPart+0x40], 3` is
+        // NextFrame(), both broadcast (0x82282394 / 0x822823C4).
+        rw::math::vpu::Vector4 laUvUv[4];
+        VecFloat lvfFrame;
+        VecFloat lvfNextFrame;
+        lvfFrame.x = lvfFrame.y = lvfFrame.z = lvfFrame.w = arPart.Frame();
+        lvfNextFrame.x = lvfNextFrame.y = lvfNextFrame.z = lvfNextFrame.w = arPart.NextFrame();
+        BrnEffects::Utils::BuildUVs(arUVData, lvfFrame, lvfNextFrame, laUvUv);
+
+        // asm 0x822823E8..0x82282410 (DWARF: VecFloat lvfWeight, :69). `vspltisw v0, 0` runs
+        // BEFORE the test, so a material without the multi-frame bit contributes a hard zero.
+        f32 lfWeight = 0.0f;
+        if ((arUVData.muMaterialFlags
+                & BrnEffects::Utils::BuildUVData::KU_MATERIAL_FLAG_MULTI_FRAME) != 0u)
+        {
+            const f32 lfFrame = arPart.Frame();
+            lfWeight = lfFrame - floorf(lfFrame);   // vrfim + vsubfp
+        }
+
+        // asm 0x82282420 / 0x82282460 / 0x82282470 / 0x8228247C: `vrlimi128 vD, v0, 1, 0`
+        // replaces ONLY lane w (mask 1) of each corner (DWARF: lPosPlusWeight0..3, :76-:79).
+        rw::math::vpu::Vector4 laPosPlusWeight[4];
+        for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
+        {
+            laPosPlusWeight[luCorner].x = apPos[luCorner].x;
+            laPosPlusWeight[luCorner].y = apPos[luCorner].y;
+            laPosPlusWeight[luCorner].z = apPos[luCorner].z;
+            laPosPlusWeight[luCorner].w = lfWeight;
+        }
+
+        arVertexIterator.Write(laPosPlusWeight[0], lColour, laUvUv[0]);
+        arVertexIterator.Write(laPosPlusWeight[1], lColour, laUvUv[1]);
+        arVertexIterator.Write(laPosPlusWeight[3], lColour, laUvUv[3]);
+        arVertexIterator.Write(laPosPlusWeight[2], lColour, laUvUv[2]);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // The billboard corner set both shapes build, and the three rotation paths they choose
+    // between. Shared here because RenderSprites @0x82282608 and RenderQuads @0x82282B28 emit
+    // byte-identical code for it (0x8228272C..0x822829CC vs 0x82282C04..0x82282EC0), differing
+    // only in register allocation -- one function's worth of logic that the compiler duplicated,
+    // not two different algorithms.
+    //
+    // ⚠ lvfX0 IS COMPUTED FROM lvfX1, NOT FROM THE PIVOT. The asm is
+    //     lvfX1 = size.x - size.x * pivot.x        (vmulfp128 then vsubfp)
+    //     lvfX0 = lvfX1 - size.x                   (a SECOND vsubfp, 0x82282780)
+    // and the DWARF's line numbers agree (X1 at :255/:348, X0 three lines later at :258/:351).
+    // `-size.x * pivot.x` is the same value in exact arithmetic and a different one in floats,
+    // so the round trip is kept.
+    void BuildBillboardCorners(rw::math::vpu::Vector3* apPointsOut,
+                               const RenderedParticle& arPart,
+                               const cVector& arPivot)
+    {
+        const f32 lfX1 = arPart.mvSizePlusNextFrame.x - arPart.mvSizePlusNextFrame.x * arPivot.x;
+        const f32 lfY1 = arPart.mvSizePlusNextFrame.y - arPart.mvSizePlusNextFrame.y * arPivot.y;
+        const f32 lfX0 = lfX1 - arPart.mvSizePlusNextFrame.x;
+        const f32 lfY0 = lfY1 - arPart.mvSizePlusNextFrame.y;
+
+        // splat(unk_8200D990) == FLT_EPSILON; rw::math::vpu::IsZero is |v| <= that.
+        static const f32 KF_IS_ZERO_EPSILON = 1.1920928955078125e-07f;
+        const cVector& lrRot = arPart.mvRotPlusFrame;
+        const bool lbRotX = (fabsf(lrRot.x) > KF_IS_ZERO_EPSILON);
+        const bool lbRotY = (fabsf(lrRot.y) > KF_IS_ZERO_EPSILON);
+        const bool lbRotZ = (fabsf(lrRot.z) > KF_IS_ZERO_EPSILON);
+
+        if (lbRotX || lbRotY)
+        {
+            // asm 0x82282928 -- the general case: a full Euler XYZ basis, then each corner
+            // through it. The z multiply is emitted even though every corner's z is the zero
+            // the `vrlimi128 ..., 2, 0` masks in, so it is kept.
+            rw::math::vpu::Vector3 lv3Rot;
+            lv3Rot.x = lrRot.x; lv3Rot.y = lrRot.y; lv3Rot.z = lrRot.z; lv3Rot.w = 0.0f;
+            const rw::math::vpu::Matrix33 lRotMat =
+                BrnEffects::Utils::FastMatrix33FromEulerXYZ(lv3Rot);
+
+            const f32 lafCornerX[4] = { lfX0, lfX0, lfX1, lfX1 };
+            const f32 lafCornerY[4] = { lfY0, lfY1, lfY0, lfY1 };
+            for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
+            {
+                const f32 lfPx = lafCornerX[luCorner];
+                const f32 lfPy = lafCornerY[luCorner];
+                const f32 lfPz = 0.0f;
+                apPointsOut[luCorner].x = lRotMat.xAxis.x * lfPx + lRotMat.yAxis.x * lfPy
+                                        + lRotMat.zAxis.x * lfPz;
+                apPointsOut[luCorner].y = lRotMat.xAxis.y * lfPx + lRotMat.yAxis.y * lfPy
+                                        + lRotMat.zAxis.y * lfPz;
+                apPointsOut[luCorner].z = lRotMat.xAxis.z * lfPx + lRotMat.yAxis.z * lfPy
+                                        + lRotMat.zAxis.z * lfPz;
+                apPointsOut[luCorner].w = 0.0f;
+            }
+        }
+        else if (lbRotZ)
+        {
+            // asm 0x82282828 -- a z-only spin needs one sin/cos pair, so the console inlines
+            // the same polynomial FastMatrix33FromEulerXYZ uses rather than calling it.
+            // ⭐ THIS PATH AND THE ONE ABOVE AGREE: substituting sx = sy = 0, cx = cy = 1 into
+            // the matrix rows gives exactly (cz, sz, 0) / (-sz, cz, 0) / (0, 0, 1), which is
+            // the rotation written out here term for term. Two independently decoded VMX blocks
+            // arriving at the same expression is what makes the sin/cos lane assignment safe.
+            f32 lfSin, lfCos;
+            BrnEffects::Utils::SinCosCycles(lrRot.z, lfSin, lfCos);
+
+            const f32 lafCornerX[4] = { lfX0, lfX0, lfX1, lfX1 };
+            const f32 lafCornerY[4] = { lfY0, lfY1, lfY0, lfY1 };
+            for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
+            {
+                apPointsOut[luCorner].x = lafCornerX[luCorner] * lfCos
+                                        - lafCornerY[luCorner] * lfSin;
+                apPointsOut[luCorner].y = lafCornerX[luCorner] * lfSin
+                                        + lafCornerY[luCorner] * lfCos;
+                apPointsOut[luCorner].z = 0.0f;
+                apPointsOut[luCorner].w = 0.0f;
+            }
+        }
+        else
+        {
+            // asm 0x822828F0 -- no rotation at all: the four `vperm` weaves straight from the
+            // extents. Corner order is (X0,Y0), (X0,Y1), (X1,Y0), (X1,Y1).
+            const f32 lafCornerX[4] = { lfX0, lfX0, lfX1, lfX1 };
+            const f32 lafCornerY[4] = { lfY0, lfY1, lfY0, lfY1 };
+            for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
+            {
+                apPointsOut[luCorner].x = lafCornerX[luCorner];
+                apPointsOut[luCorner].y = lafCornerY[luCorner];
+                apPointsOut[luCorner].z = 0.0f;
+                apPointsOut[luCorner].w = 0.0f;
+            }
+        }
+    }
+}  // anonymous namespace
+
+namespace BrnGraphics
+{
+
+// =================================================================================================
+// BrnGraphics::LionBlendRenderer::RenderSprites  @ 0x82282608   (DWARF BrnLionBlendRenderer.cpp:223)
+//
+// Draw a run of CAMERA-FACING sprites: each particle's quad is built flat in 2D, spun by its own
+// rotation, then planted at the particle's world position using the CAMERA's basis -- so it always
+// faces the viewer. Compare RenderQuads below, which is the same code up to the last twelve
+// instructions and orients the quad in the emitter's own frame instead.
+//
+// ⭐ THE ONE THING THAT MAKES THIS FUNCTION LOOK STRANGE, AND IT IS REAL: the console writes the
+// particle's world position INTO ITS OWN MEMBER, mBackMat.wAxis, and then transforms all four
+// corners through mBackMat. asm 0x8228269C parks `this + 0x150` in a stack slot before the loop,
+// 0x82282A48 reloads it and 0x82282A58 `stvx128 v0, r0, r11` stores the transformed centre there;
+// 0x82282A60 onwards then reads mBackMat's four rows (r31 == this + 0x120) as the billboard
+// transform. mBackMat is the camera back matrix -- its 3x3 is exactly the camera's right/up/forward
+// basis -- so the composite "rotate the flat quad into screen space, translate to the particle" is
+// one four-row transform once the translation row is swapped. It leaves mBackMat.wAxis holding the
+// last particle's position on exit; nothing reads it before the next SetCameraData or the next
+// particle overwrites it. Reproduced, because a local copy would be a different function.
+//
+// ⚠ AND THE VERTEX-SPACE GUARD IS ONLY ON THIS SHAPE. RenderSprites early-outs unless the iterator
+// has 4 vertices per particle free (asm words 6-21: (top - current) / stride vs `slwi r10, r24, 2`,
+// unsigned). RenderQuads @0x82282B28 has no such check -- its prologue goes straight to
+// SetupFromMaterial. That asymmetry is in the binary, not an omission here.
+// =================================================================================================
+void LionBlendRenderer::RenderSprites(EffectsVertexBufferIterator& arIterator,
+                                      RenderedParticle* apParticle, const cMatrix* apMatrix,
+                                      U32 auCount, const cParticleEmitter* apEmitter,
+                                      const cTime& arTime)
+{
+    // arTime is a parameter of all three shapes; only RenderTilts reads it (it needs the
+    // locator sampled at this frame's time). Here r9 is never touched.
+    (void)arTime;
+
+    LionBlendVertex::VertexIterator& lrLionBlendVertexIterator =
+        static_cast<LionBlendVertex::VertexIterator&>(arIterator);
+
+    // asm words 6-21 -- `twllei r8, 0` traps a zero stride, then the unsigned compare.
+    // ⚠ ONE STATED HOST DIVERGENCE, and it is in the shared accessor, not here: the committed
+    // EffectsVertexBufferIterator::GetVerticesFree returns 0 when top <= current, whereas the
+    // console's `subf` + `divwu` would underflow to a huge unsigned and sail past this guard.
+    // The host is the safer of the two on a malformed iterator; noted rather than forked.
+    const U32 luVerticesFree = arIterator.GetVerticesFree();
+    if (luVerticesFree < auCount * 4u)
+    {
+        return;
+    }
+
+    // asm 0x8228265C..0x82282668 -- descriptor +0x1F8, its material +0x4C.
+    const cParticleDescriptor& lrDescriptor = *apEmitter->GetDescriptor();
+    cParticleMaterial* lpMaterial = lrDescriptor.Material();
+    BrnEffects::Utils::BuildUVData lUVData;
+    lUVData.SetupFromMaterial(*lpMaterial);
+
+    // asm 0x8228266C..0x82282680 -- behaviour +0x20C, its mPivotPoint at +0xF0. Only the x and
+    // y lanes are ever read (`vspltw v11, v0, 0` / `vspltw v10, v0, 1`).
+    const cParticleBehaviour& lrBehaviour = *apEmitter->GetCurrentBehaviour();
+    const cVector& lrPivot = lrBehaviour.mPivotPoint;
+
+    for (U32 luIndex = 0; luIndex < auCount; ++luIndex)
+    {
+        const RenderedParticle& lrPart = apParticle[luIndex];
+
+        // asm 0x8228272C..0x822829CC.
+        rw::math::vpu::Vector3 laPoints[4];
+        BuildBillboardCorners(laPoints, lrPart, lrPivot);
+
+        // asm 0x822829D8..0x82282A58 -- the particle centre through its own matrix, parked in
+        // the billboard transform's translation row (see the note above).
+        const rw::math::vpu::Matrix44Affine lConvertedXform = MatrixConvert(apMatrix[luIndex]);
+        rw::math::vpu::Vector3 lv3Centre;
+        lv3Centre.x = lrPart.mPos.x; lv3Centre.y = lrPart.mPos.y;
+        lv3Centre.z = lrPart.mPos.z; lv3Centre.w = 0.0f;
+        mBackMat.wAxis = rw::math::vpu::TransformPoint(lConvertedXform, lv3Centre);
+
+        // asm 0x82282A60..0x82282AFC -- the four corners through the camera basis.
+        for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
+        {
+            laPoints[luCorner] = rw::math::vpu::TransformPoint(mBackMat, laPoints[luCorner]);
+        }
+
+        QuadDraw(lrLionBlendVertexIterator, lUVData, lrPart, laPoints, *apEmitter);
+    }
+}
+
+// =================================================================================================
+// BrnGraphics::LionBlendRenderer::RenderQuads  @ 0x82282B28   (DWARF BrnLionBlendRenderer.cpp:327)
+//
+// Draw a run of quads oriented in the EMITTER's frame rather than the camera's: the flat corner
+// set is spun by the particle's own rotation exactly as for sprites, offset by the particle's
+// position IN THAT LOCAL SPACE, and only then transformed by the per-particle matrix.
+//
+// ⭐ THAT ORDER IS THE ENTIRE DIFFERENCE FROM RenderSprites, and it is four instructions:
+// 0x82282EF0..0x82282EFC add `lPart.mPos` to each corner BEFORE the matrix cascade
+// (0x82282F18..0x82282F94), whereas RenderSprites transformed the centre alone and used the
+// camera basis for the corners. Sprites therefore stay square-on to the viewer and quads lie in
+// whatever plane the emitter's matrix puts them.
+//
+// ⚠ NO VERTEX-SPACE GUARD -- see the note on RenderSprites. This shape trusts the caller.
+//
+// ⚠ apMatrix IS AN ARRAY, ONE ENTRY PER PARTICLE. Both shapes advance it by 0x40 -- one cMatrix
+// -- alongside the 0x70 particle stride every iteration (0x82282FA4/0x82282FA8 here,
+// 0x82282B08/0x82282B0C in RenderSprites).
+// =================================================================================================
+void LionBlendRenderer::RenderQuads(EffectsVertexBufferIterator& arIterator,
+                                    RenderedParticle* apParticle, const cMatrix* apMatrix,
+                                    U32 auCount, const cParticleEmitter* apEmitter,
+                                    const cTime& arTime)
+{
+    (void)arTime;   // r9 is never read on this shape either.
+
+    LionBlendVertex::VertexIterator& lrLionBlendVertexIterator =
+        static_cast<LionBlendVertex::VertexIterator&>(arIterator);
+
+    // asm 0x82282B50..0x82282B5C.
+    const cParticleDescriptor& lrDescriptor = *apEmitter->GetDescriptor();
+    cParticleMaterial* lpMaterial = lrDescriptor.Material();
+    BrnEffects::Utils::BuildUVData lUVData;
+    lUVData.SetupFromMaterial(*lpMaterial);
+
+    // asm 0x82282B60..0x82282B74.
+    const cParticleBehaviour& lrBehaviour = *apEmitter->GetCurrentBehaviour();
+    const cVector& lrPivot = lrBehaviour.mPivotPoint;
+
+    for (U32 luIndex = 0; luIndex < auCount; ++luIndex)
+    {
+        const RenderedParticle& lrPart = apParticle[luIndex];
+
+        // asm 0x82282C04..0x82282EC0 -- identical to the sprite path.
+        rw::math::vpu::Vector3 laPoints[4];
+        BuildBillboardCorners(laPoints, lrPart, lrPivot);
+
+        // asm 0x82282EF0..0x82282EFC (DWARF: Vector3 lConvertedPos, :404).
+        rw::math::vpu::Vector3 lConvertedPos;
+        lConvertedPos.x = lrPart.mPos.x; lConvertedPos.y = lrPart.mPos.y;
+        lConvertedPos.z = lrPart.mPos.z; lConvertedPos.w = 0.0f;
+        for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
+        {
+            laPoints[luCorner].x += lConvertedPos.x;
+            laPoints[luCorner].y += lConvertedPos.y;
+            laPoints[luCorner].z += lConvertedPos.z;
+        }
+
+        // asm 0x82282F18..0x82282F94 (DWARF: Matrix44Affine lConvertedXform, :410).
+        const rw::math::vpu::Matrix44Affine lConvertedXform = MatrixConvert(apMatrix[luIndex]);
+        for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
+        {
+            laPoints[luCorner] = rw::math::vpu::TransformPoint(lConvertedXform, laPoints[luCorner]);
+        }
+
+        QuadDraw(lrLionBlendVertexIterator, lUVData, lrPart, laPoints, *apEmitter);
+    }
+}
+
+}  // namespace BrnGraphics
+
+// =================================================================================================
+// The three remaining LionBlendRenderer methods -- TRAP STUBS, deliberately.
 //
 // ⭐ WHY THE TWO SetState OVERLOADS ARE **NOT** FORWARDED (2026-09-04). The obvious body is
 // `mRenderer.SetState(apState)` -- mRenderer now really does carry a CgsGraphics::ImRendererBase
@@ -252,14 +678,30 @@ namespace BrnGraphics
 //
 // ⚠ They exist at all because the LINK needs them: mLionRenderer is a by-value ParticleModule
 // member, so LionParticleRender's vtable is emitted and every virtual it names must resolve.
-// Real bodies now: EndRendering @0x8227E610 and SetCameraData @0x822824F8 and
-// BuildCameraOrientatedLocator @0x8227A478 above, plus BeginRendering (an inline forward in the
-// header onto Im3dBlend::BeginRendering @0x82282060, bodied in BrnLionBlendIm3d.cpp).
+// Real bodies now: EndRendering @0x8227E610, SetCameraData @0x822824F8,
+// BuildCameraOrientatedLocator @0x8227A478, RenderSprites @0x82282608 and RenderQuads
+// @0x82282B28 above, plus BeginRendering (an inline forward in the header onto
+// Im3dBlend::BeginRendering @0x82282060, bodied in BrnLionBlendIm3d.cpp).
 //
-// ⛔ A NOTE FOR ANYONE QUERYING THE TREE FOR THIS SUBSYSTEM: tools/re/hasbody.py reports all
-// three Render* shapes as HAS BODY, because a trap IS a definition. The three draw halves
-// (RenderSprites 328 / RenderQuads 295 / RenderTilts 639 instructions) are still OPEN. Ask this
-// file, not the tool, and corroborate any "already done" claim about them here.
+// ⛔ A NOTE FOR ANYONE QUERYING THE TREE FOR THIS SUBSYSTEM: tools/re/hasbody.py reports the
+// Render* shapes as HAS BODY whether or not they are written, because a trap IS a definition.
+// As of 2026-09-05 RenderSprites (328 instructions) and RenderQuads (295) are REAL; RenderTilts
+// (639) is still a trap. Ask this file, not the tool.
+//
+// ⛔ WHY RenderTilts IS STILL TRAPPED, precisely. It is not "more of the same": it is two whole
+// draw loops chosen by cParticleBehaviour::mFlags bits 8 and 9 (asm 0x82283078..0x8228308C),
+// sharing only their prologue. Both are dense VMX128 -- `vrsqrtefp` plus two Newton-Raphson
+// refinements per normalise (five separate normalises), `vmsum3fp128` dot products,
+// `vmaddcfp128` (whose operand order is NOT vmaddfp's -- the raw word has to be decoded, see the
+// project note on 0x825C7408), `vpermwi128` lane rotates driving a cross product, `vsel`, and
+// four `vcmpgtfp128.` + `mfocrf`/`extrwi` branches on the CR6 bit. The semantics ARE now within
+// reach -- the four broadcast scalars its prologue builds from the behaviour record at +0x468 /
+// +0x46C / +0x470 / +0x474 are mEndOnAlphaFade / mEndOnScale / mEndOnStartAngle / mEndOnEndAngle,
+// which the DWARF independently names lvfEndOnAlphaFade / lvfEndOnScale / lvfEndOnStartAngle /
+// lvfEndOnEndAngle, so the whole apparatus is a view-angle fade on a velocity-aligned ribbon
+// quad -- but "within reach" is not "decoded". A wrong lane here draws silently wrong geometry,
+// and there is no runtime check available until the Xenos shader blobs are re-authored. It stays
+// a trap until every lane of both loops is tied to an instruction.
 // =================================================================================================
 namespace BrnGraphics
 {
@@ -271,22 +713,6 @@ namespace BrnGraphics
     void LionBlendRenderer::SetState(const BlendState* /*apState*/)
     {
         CGS_ASSERT(false, "BrnGraphics::LionBlendRenderer::SetState(BlendState) -- NOT RECONSTRUCTED (Lion render path)");
-    }
-
-    void LionBlendRenderer::RenderSprites(EffectsVertexBufferIterator& /*arIterator*/,
-                                          RenderedParticle* /*apParticle*/, const cMatrix* /*apMatrix*/,
-                                          U32 /*auCount*/, const cParticleEmitter* /*apEmitter*/,
-                                          const cTime& /*arTime*/)
-    {
-        CGS_ASSERT(false, "BrnGraphics::LionBlendRenderer::RenderSprites -- NOT RECONSTRUCTED (Lion render path)");
-    }
-
-    void LionBlendRenderer::RenderQuads(EffectsVertexBufferIterator& /*arIterator*/,
-                                        RenderedParticle* /*apParticle*/, const cMatrix* /*apMatrix*/,
-                                        U32 /*auCount*/, const cParticleEmitter* /*apEmitter*/,
-                                        const cTime& /*arTime*/)
-    {
-        CGS_ASSERT(false, "BrnGraphics::LionBlendRenderer::RenderQuads -- NOT RECONSTRUCTED (Lion render path)");
     }
 
     void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& /*arIterator*/,

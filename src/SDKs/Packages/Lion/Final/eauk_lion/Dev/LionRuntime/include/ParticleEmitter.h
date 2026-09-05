@@ -111,6 +111,14 @@ public:
     // switches on its render mode to pick the draw shape.
     const cParticleDescriptor* GetDescriptor() const { return mpDescriptor; }
 
+    // The behaviour layer currently selected on this emitter (console +0x20C). Named by the
+    // DecFIGS DWARF (cParticleEmitter::GetCurrentBehaviour, called by all three
+    // BrnGraphics::LionBlendRenderer draw halves), and attested by their asm: RenderSprites
+    // @0x8228266C `lwz r11, 0x20C(r31)` then `lvx128 v0, r11, 0xF0` reads mPivotPoint off the
+    // result, and RenderTilts @0x82283018 reads mFlags (+0x2C4) and the four EndOn* floats
+    // (+0x468..+0x474) off the same pointer.
+    const cParticleBehaviour* GetCurrentBehaviour() const { return mpCurrentBehaviour; }
+
     // Bind arBindings onto this emitter: store the binding pointer and back-link the
     // binding's emitter (cLionBindings::SetEmitter). Called (inlined) by
     // cLionParticleEffectManager::BindingsAttach @ 0x82914530. NOT RECONSTRUCTED -- see

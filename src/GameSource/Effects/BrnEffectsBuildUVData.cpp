@@ -1,32 +1,41 @@
 // =============================================================================
-// BrnEffectsBuildUVData.cpp  (OWNING HOME for BrnEffects::Utils::BuildUVData)
+// BrnEffectsBuildUVData.cpp  (out-of-line home for BrnEffects::Utils::BuildUVData::
+//                             SetupFromMaterial @ 0x822780C8)
 //
-// BuildUVData is the per-material UV-setup block the Lion blend renderer fills
-// before drawing sprites/quads/tilts (callers BrnGraphics::LionBlendRenderer::
-// RenderSprites / RenderQuads / RenderTilts). SetupFromMaterial reads a handful
-// of fields off a material descriptor and broadcasts them into four Vector4
-// lanes plus three trailing scalars.
+// BuildUVData is the per-material UV-atlas block the Lion blend renderer fills once before
+// drawing a run of sprites/quads/tilts (callers BrnGraphics::LionBlendRenderer::RenderSprites
+// / RenderQuads / RenderTilts, which then hand it to BuildUVs per particle). The TYPE now
+// lives in its DWARF home, GameSource/Effects/BrnEffectsUtils.h:395 -- only the body is here.
 //
-// No prior source and no DecFIGS DWARF exist for this TU, so this is a minimal
-// OWNING slice. The output layout is asm-attested (store-for-store) from
-//   BrnEffects::Utils::BuildUVData::SetupFromMaterial @ 0x822780C8
-// and the material source is modelled as a small named view over the offsets the
-// asm reads (no raw-offset casts leak out of this file).
+// ⭐ TWO THINGS THIS FILE USED TO GET WRONG, both fixed 2026-09-05 from the DecFIGS DWARF:
+//   1. The struct was defined INSIDE this .cpp, so no caller could name the type. That is why
+//      the three draw halves could not declare their `BuildUVData lUVData` local. It is now in
+//      the header the DWARF puts it in.
+//   2. The source was modelled as a private "BuildUVMaterialSource" view struct with GUESSED
+//      field names (texel count, texture width/height, frame columns/rows). The real parameter
+//      is `const cParticleMaterial&` (DWARF BrnEffectsUtils.h:398) and every offset the asm
+//      reads is an attested member of the already-committed 164-byte record:
+//        +0x24 mFlags   +0x34 mFrameCount   +0x38 mXFrames   +0x39 mYFrames
+//        +0x3F mUCoordOption   +0x40 mVCoordOption
+//      So this is a FRAME-ATLAS descriptor: how many frames the material has, how many columns
+//      the atlas is, and the reciprocals of the column/row counts that turn a frame index into
+//      a UV offset. Nothing here is about texel dimensions.
 //
 // THE SETUP (asm @ 0x822780C8), reconstructed store-for-store:
-//   maTexels         (+0x00) = (f32)(s32) material[+0x34]            , broadcast (lwz 0x34/extsw)
-//   maTextureWidth   (+0x10) = (f32)(u8)  material[+0x38]            , broadcast
-//   maInvTextureW    (+0x20) = 1.0f / (f32)(u8) material[+0x38]      , bcast
-//   maInvTextureH    (+0x30) = 1.0f / (f32)(u8) material[+0x39]      , bcast
-//   muFlags          (+0x40) = material[+0x24]         (u32 word; lwz 0x24/stw 0x40)
-//   muFrameColumns   (+0x44) = material[+0x3F]         (u8)
-//   muFrameRows      (+0x45) = material[+0x40]         (u8)
+//   mvfMaterialFrameCount        (+0x00) = splat4((f32)(s32) mFrameCount)   lwz 0x34 / extsw
+//   mvfMaterialNumXFrames        (+0x10) = splat4((f32)(u8)  mXFrames)      lbz 0x38
+//   mvfMaterialOneOverNumXFrames (+0x20) = splat4(1.0f / that)
+//   mvfMaterialOneOverNumYFrames (+0x30) = splat4(1.0f / (f32)(u8) mYFrames) lbz 0x39
+//   muMaterialFlags              (+0x40) = mFlags        (lwz 0x24 / stw 0x40, verbatim)
+//   muMaterialUCoordOption       (+0x44) = mUCoordOption (lbz 0x3F)
+//   muMaterialVCoordOption       (+0x45) = mVCoordOption (lbz 0x40)
 // The reciprocal numerator is the shared rodata 1.0f (flt_82001C98). NOTE: the broadcast source
-// is the signed word at material +0x34 and the verbatim muFlags source is the word at +0x24 --
-// these two are NOT interchangeable (the asm reads +0x34 for the texel lanes, +0x24 for muFlags).
+// for the first lane block is the SIGNED word at +0x34 while muMaterialFlags comes from the word
+// at +0x24 -- the asm reads two different fields and they are not interchangeable.
 // =============================================================================
 
-#include "BrnCommonTypes.h"   // Vector4 (rw::math::vpu float lanes)
+#include "GameSource/Effects/BrnEffectsUtils.h"   // BrnEffects::Utils::BuildUVData (the DWARF home)
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleMaterial.h"
 
 namespace BrnEffects
 {
@@ -36,42 +45,7 @@ namespace Utils
 // IEEE-754 1.0f, the shared reciprocal numerator (rodata flt_82001C98).
 static const f32 KF_ONE = 1.0f;
 
-// Minimal named view over the material-descriptor fields the asm reads. The
-// concrete material type is owned by another TU and read here only by these
-// asm-attested offsets; modelling it as a named struct keeps every access
-// inside this slice by-name rather than by raw cast.
-struct BuildUVMaterialSource
-{
-    // @+0x24 (lwz): copied verbatim into muFlags(+0x40).
-    u32 muFlags;
-    // @+0x34 (lwz/extsw): read as a signed word and broadcast as (f32)(s32) into maTexels.
-    s32 miTexelCount;
-    // @+0x38 (lbz): texture width in texels (unsigned byte).
-    u8  muTextureWidth;
-    // @+0x39 (lbz): texture height in texels (unsigned byte).
-    u8  muTextureHeight;
-    // @+0x3F (lbz): frame-grid column count.
-    u8  muFrameColumns;
-    // @+0x40 (lbz): frame-grid row count.
-    u8  muFrameRows;
-};
-
-struct BuildUVData
-{
-    // asm-attested store layout (see header block above).
-    Vector4 maTexels;        // +0x00
-    Vector4 maTextureWidth;  // +0x10
-    Vector4 maInvTextureW;   // +0x20
-    Vector4 maInvTextureH;   // +0x30
-    u32     muFlags;         // +0x40
-    u8      muFrameColumns;  // +0x44
-    u8      muFrameRows;     // +0x45
-
-    // @ 0x822780C8. Returns *this (the asm returns the result pointer in r3).
-    BuildUVData& SetupFromMaterial(const BuildUVMaterialSource& lrMaterial);
-};
-
-static void BroadcastVector4(Vector4& lrTarget, f32 lfValue)
+static void BroadcastVecFloat(VecFloat& lrTarget, f32 lfValue)
 {
     lrTarget.x = lfValue;
     lrTarget.y = lfValue;
@@ -79,29 +53,25 @@ static void BroadcastVector4(Vector4& lrTarget, f32 lfValue)
     lrTarget.w = lfValue;
 }
 
-// @ 0x822780C8
-BuildUVData& BuildUVData::SetupFromMaterial(const BuildUVMaterialSource& lrMaterial)
+// @ 0x822780C8   (DWARF BrnEffectsUtils.h:398)
+void BuildUVData::SetupFromMaterial(const cParticleMaterial& arMaterial)
 {
-    // +0x00: (f32)(s32) texel count, broadcast across all four lanes.
-    BroadcastVector4(maTexels, static_cast<f32>(lrMaterial.miTexelCount));
+    // +0x00: (f32)(s32) frame count, broadcast across all four lanes.
+    BroadcastVecFloat(mvfMaterialFrameCount, static_cast<f32>(arMaterial.mFrameCount));
 
-    // +0x10: (f32)(u8) texture width, broadcast.
-    const f32 lfTextureWidth = static_cast<f32>(lrMaterial.muTextureWidth);
-    BroadcastVector4(maTextureWidth, lfTextureWidth);
+    // +0x10: (f32)(u8) atlas column count, broadcast.
+    const f32 lfNumXFrames = static_cast<f32>(arMaterial.mXFrames);
+    BroadcastVecFloat(mvfMaterialNumXFrames, lfNumXFrames);
 
-    // +0x20: reciprocal of the texture width (1.0f / width), broadcast.
-    BroadcastVector4(maInvTextureW, KF_ONE / lfTextureWidth);
+    // +0x20 / +0x30: the two reciprocals (1.0f / columns, 1.0f / rows), broadcast.
+    BroadcastVecFloat(mvfMaterialOneOverNumXFrames, KF_ONE / lfNumXFrames);
+    const f32 lfNumYFrames = static_cast<f32>(arMaterial.mYFrames);
+    BroadcastVecFloat(mvfMaterialOneOverNumYFrames, KF_ONE / lfNumYFrames);
 
-    // +0x30: reciprocal of the texture height (1.0f / height), broadcast.
-    const f32 lfTextureHeight = static_cast<f32>(lrMaterial.muTextureHeight);
-    BroadcastVector4(maInvTextureH, KF_ONE / lfTextureHeight);
-
-    // +0x40 / +0x44 / +0x45: trailing scalars copied verbatim.
-    muFlags        = lrMaterial.muFlags;
-    muFrameColumns = lrMaterial.muFrameColumns;
-    muFrameRows    = lrMaterial.muFrameRows;
-
-    return *this;
+    // +0x40 / +0x44 / +0x45: the trailing scalars, copied verbatim.
+    muMaterialFlags        = arMaterial.mFlags;
+    muMaterialUCoordOption = arMaterial.mUCoordOption;
+    muMaterialVCoordOption = arMaterial.mVCoordOption;
 }
 
 } // namespace Utils
