@@ -27,10 +27,11 @@
 // mauBoneIndices) are NOT touched by the handedness swap -- it moves the vertex only, which
 // is why reading only the vertex was enough to model it and not enough to model the struct.
 //
-// STILL A STUB, AND IT MATTERS ELSEWHERE, NOT HERE: HackCheckHandedness only mirrors the
-// control points when the streamed box basis is LEFT-handed, so a no-op leaves right-handed
-// specs exactly right and mirrors nothing on the others. It does not zero anything, so it
-// cannot re-degenerate the box CalculateSkinnedPoint now builds.
+// STILL A STUB, AND ITS COST IS NOW MEASURED AT ZERO: HackCheckHandedness only calls this when
+// the streamed box basis is LEFT-handed, and a scan of every ported VEH_*_AT.BIN (429 cars,
+// 10,829 real BodyPartBBoxSpec records) finds ZERO left-handed records -- see the banner in
+// BrnBodyPartBBoxSpec.cpp for the counts. So this body is unreachable on shipped content. It
+// also does not zero anything, so it cannot re-degenerate the box CalculateSkinnedPoint builds.
 
 namespace BrnPhysics
 {
