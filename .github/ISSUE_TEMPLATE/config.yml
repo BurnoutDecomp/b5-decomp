@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Build instructions
+    url: https://github.com/BurnoutDecomp/BP-Decomp_Workflow/blob/main/BUILD.md
+    about: Start here to build and configure the game.
+  - name: Workflow tools, asset conversion, or CI problem
+    url: https://github.com/BurnoutDecomp/BP-Decomp_Workflow/issues/new/choose
+    about: Report failures in the orchestration tools here.

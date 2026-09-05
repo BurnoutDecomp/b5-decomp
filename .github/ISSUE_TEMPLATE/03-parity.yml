@@ -1,0 +1,35 @@
+name: Reconstruction or parity finding
+description: Report binary evidence of an incorrect or missing reconstruction.
+labels: ["type: parity", "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For contributors inspecting code or binary behavior. Players should use the game-bug form.
+        Follow the workflow AGENTS.md source-of-truth ladder, including the Apt exception. Do not upload reference binaries, SDK source or IDA databases.
+  - type: textarea
+    id: identity
+    attributes:
+      label: Affected code and version
+      description: Give normalized qualified function names, TU IDs, source paths and the b5-decomp commit. Addresses must include their build identity.
+    validations:
+      required: true
+  - type: textarea
+    id: finding
+    attributes:
+      label: Observed divergence
+      description: Explain the current behavior, the binary-derived expected behavior, and the missing or incorrect branch, side effect, signature or layout.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and verification
+      description: Identify the authoritative build and relevant instructions/call sites, with a concise analysis. Distinguish confirmed facts from hypotheses. Explain how another contributor can verify it and any runtime reproduction.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Related work
+      description: Link existing issues/PRs, known dependencies, and any proposed fix. Do not create a second ledger of every unreconstructed TU.

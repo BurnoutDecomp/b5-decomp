@@ -1,0 +1,35 @@
+name: Build or installation failure
+description: Report a compiler, linker, dependency, installation, or launch setup problem.
+labels: ["type: bug", "area: build", "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Follow the [build guide](https://github.com/BurnoutDecomp/BP-Decomp_Workflow/blob/main/BUILD.md) first.
+        If you know the failure is in the workflow CLI, asset converter or CI, use the [workflow tracker](https://github.com/BurnoutDecomp/BP-Decomp_Workflow/issues/new/choose). If unsure, report here; maintainers can route it.
+  - type: textarea
+    id: versions
+    attributes:
+      label: Build and environment
+      description: Give both repository SHAs (git rev-parse HEAD and git -C b5-decomp rev-parse HEAD from the workflow root), local changes, OS, Visual Studio/MSVC and SDK versions. For downloads, give the exact URL/date instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction commands and expected result
+      description: Include the working directory, exact commands, setup steps and what you expected. Redact private paths or credentials.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Actual error and diagnostic output
+      description: Paste the first error with surrounding lines, not just the final failure count. Attach long logs as .txt/.log. For source builds include build doctor output (run .\build doctor from PowerShell), or explain why it cannot run.
+    validations:
+      required: true
+  - type: textarea
+    id: attempts
+    attributes:
+      label: What have you tried?
+      description: Include the last working version if known, or say unknown. Screenshots are optional here; copyable error text is more useful.

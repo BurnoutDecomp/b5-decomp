@@ -1,0 +1,23 @@
+name: Improvement or documentation request
+description: Propose a concrete improvement to the decomp project or its documentation.
+labels: ["type: enhancement", "status: needs triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Who is affected, and what are they trying to do? Link related issues or the confusing documentation section.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed improvement
+      description: Describe the outcome and how we would verify it is complete. The project's primary goal is faithful reconstruction; identify changes to original gameplay explicitly.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and context
+      description: Describe workarounds, examples or screenshots if helpful. Small documentation fixes can go directly to a pull request.

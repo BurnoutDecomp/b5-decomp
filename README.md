@@ -4,6 +4,19 @@ This submodule is the recovered C++ project. The parent repository
 `BP-Decomp_Workflow` owns orchestration, references, exports, and the work ledger;
 this submodule owns the source that is being reconstructed.
 
+## Report bugs and contribute
+
+Found a crash, visual problem or behavior that seems wrong?
+[Open an issue](https://github.com/BurnoutDecomp/b5-decomp/issues/new/choose).
+The [reporting guide](CONTRIBUTING.md) explains the required build details,
+reproduction steps and screenshots/videos, with an example. No coding knowledge is needed.
+
+Browse the [issue list](https://github.com/BurnoutDecomp/b5-decomp/issues) for known
+problems and [milestones](https://github.com/BurnoutDecomp/b5-decomp/milestones) for
+public acceptance targets. Detailed TU progress remains in the workflow ledger.
+For known tooling or converter failures, use the
+[workflow tracker](https://github.com/BurnoutDecomp/BP-Decomp_Workflow/issues/new/choose).
+
 ## Layout
 
 | Path | Purpose |
