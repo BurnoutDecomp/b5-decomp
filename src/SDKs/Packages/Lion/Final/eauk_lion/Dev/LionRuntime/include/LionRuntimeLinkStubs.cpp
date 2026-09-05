@@ -65,10 +65,26 @@
 // single-layer effect and every effect whose scaler is never driven -- are UNAFFECTED, because
 // Blend snaps to a real layer on those paths and never calls this.
 //
-// ⚠ THE "never driven" CASE IS NOW A REAL ONE, NOT A HYPOTHETICAL. cLionFX::ScalerRegister
-// @0x8290AC68 (landed 2026-09-03) initialises a fresh scaler to 1.0f, and nothing on this build
-// calls ScalerUpdate, so every effect the create path starts today sits at scale 1.0 -- an
-// integral position, which snaps.
+// ⛔⛔ THE "never driven" ESCAPE HATCH IS GONE -- THIS STUB IS A LIVE FIDELITY GAP, MEASURED.
+// The line that stood here (2026-09-03) said "nothing on this build calls ScalerUpdate, so every
+// effect sits at scale 1.0 -- an integral position, which snaps". IT IS STALE, on both halves:
+//   * THE CALLER EXISTS AND IS OURS. The console's ScalerUpdate @0x82908878 has exactly ONE
+//     xref-to: BrnParticle::ParticleModule::DispatchThreadUpdate @0x8229C5F0, which ends every
+//     live-instance iteration with `cLionFX::ScalerUpdate(v21[8], *(v11 - 8))`. That loop is
+//     bodied in this tree (ParticleModule.cpp, landed 12599aa9) and calls it with the record's
+//     own mfStateBlend -- a scalar four real producers drive: BoostStateMachine::SetBlendValue
+//     @0x82280660, EffectsModule::HandleConvoySlipStream, ParticleEffectHelper and
+//     PropCollisions.
+//   * AND THE FRACTIONAL PATH IS REACHED EVERY RUN. The log-once line below FIRED in all three
+//     runs of 2026-09-05 (scratch/FLAME/{BIG,LIVE1,BOOST1}/BrnGame.log), and in BIG it fires at
+//     line 21145 -- immediately after the first [lionemit] roster at line 20603, which shows the
+//     only live effect is ExhaustSmoke's "FAST" descriptor, and ~66k lines BEFORE the first
+//     boost instance ([lionhandoff] created=10 at line 87634). So the effect sitting strictly
+//     between two behaviour layers is the EXHAUST SMOKE, from the first ticks of the drive.
+// cParticleEmitter::Blend @0x8290F730 clamps the scaler's scale to [0, layers-1] and snaps only
+// when it is within 0.01 of an integer; anything else lands here. What is missing is therefore
+// this body -- 1,530 instructions -- and nothing else. It is the next real piece of work on the
+// Lion runtime, and it is a wave of its own.
 void cParticleBehaviour::Lerp(const cParticleBehaviour* /*apLo*/,
                               const cParticleBehaviour* /*apHi*/,
                               f32 /*afWeight*/)
