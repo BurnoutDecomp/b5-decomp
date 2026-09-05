@@ -229,8 +229,9 @@ void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
 //   ProcessRaceCarCrashCompleteEvents                                 ⭐ REPRODUCED
 //   ProcessLeapedAndStompedCars                                       [ABSENT]
 //   the showtime traffic-density publish into the output interface    [ABSENT helper]
-//   ProcessPowerParking · PlaceOnTrackManager::PostSceneUpdate ·
-//   SendResetOnTrackRequests · CheckForResetOnTrackConditions         [ABSENT]
+//   ProcessPowerParking · PlaceOnTrackManager::PostSceneUpdate         [ABSENT]
+//   SendResetOnTrackRequests                                          ⭐ REPRODUCED
+//   CheckForResetOnTrackConditions                                    ⭐ REPRODUCED (2026-09-05)
 //   UnlockForRead(in) · UnlockForWrite(out) · PerfMon stop
 // =================================================================================================
 void RaceCarEntityModule::PostSceneUpdate(
@@ -254,27 +255,35 @@ void RaceCarEntityModule::PostSceneUpdate(
     // ProcessRaceCarCrashCompleteEvents (two lines up) is what SETS.
     SendResetOnTrackRequests( lpOutput );
 
+    // ⭐ THE EIGHTH CALLEE, at the console's own slot -- the stuck / off-road / drowned
+    // watchdog, landed 2026-09-05 (roll-frequency wave). It is the OTHER producer of
+    // mbToBeResetOnTrack, so it feeds the very pump the line above drains; the console runs it
+    // immediately after, which is why it goes here and not earlier. It takes no buffer: every
+    // condition it tests is on the ActiveRaceCar / RaceCarState the module already owns.
+    CheckForResetOnTrackConditions();
+
     {
         static bool sbLoggedPostScenePark = false;
         if( !sbLoggedPostScenePark && CgsDev::Log::gpDebugPrint != 0 )
         {
             sbLoggedPostScenePark = true;
             *CgsDev::Log::gpDebugPrint
-                << "[crash-exit] RaceCarEntityModule::PostSceneUpdate SLICE: two of the eight"
-                   " console callees are reconstructed -- ProcessRaceCarCrashCompleteEvents and"
-                   " (resetpump wave 2026-08-26) SendResetOnTrackRequests. FIVE still have no"
-                   " body anywhere in this tree (UpdateTrafficAndRaceCarNearMisses,"
+                << "[crash-exit] RaceCarEntityModule::PostSceneUpdate SLICE: THREE of the eight"
+                   " console callees are reconstructed -- ProcessRaceCarCrashCompleteEvents,"
+                   " (resetpump wave 2026-08-26) SendResetOnTrackRequests and (roll-frequency"
+                   " wave 2026-09-05) CheckForResetOnTrackConditions. FOUR still have no body"
+                   " anywhere in this tree (UpdateTrafficAndRaceCarNearMisses,"
                    " ProcessLeapedAndStompedCars, ProcessPowerParking,"
-                   " PlaceOnTrackManager::PostSceneUpdate, CheckForResetOnTrackConditions)"
-                   " [FLAG]\n"
-                   "[crash-exit] ... and the RESET-ON-TRACK PUMP IS NOW PLUMBED END TO END:"
-                   " WriteUpdatedAIData (PreScene) -> the two AI bridges -> AIModule::Update"
-                   " slice -> ResetOnTrackManager -> BridgeAIToEntityModules_PrePhysics ->"
-                   " ProcessResetOnTrackResultQueue (PrePhysics) ->"
-                   " ActiveRaceCar::RequestPlaceOnTrack. The one console producer still absent"
-                   " on this path is CheckForResetOnTrackConditions @0x822CE9E0 (the stuck /"
-                   " off-road watchdog), which costs nothing on the CRASH path."
-                   " See BrnRaceCarEntityModule_ResetPump.cpp for the whole round trip [FLAG]\n";
+                   " PlaceOnTrackManager::PostSceneUpdate) [FLAG]\n"
+                   "[crash-exit] ... and the RESET-ON-TRACK PUMP HAS BOTH PRODUCERS: the crash"
+                   " leg (ProcessRaceCarCrashCompleteEvents -> RequestResetOnTrack) and, as of"
+                   " 2026-09-05, the WATCHDOG leg (CheckForResetOnTrackConditions @0x822CE9E0 --"
+                   " drowned / super-fatal surface / wedged / force-reset / fell out of the world"
+                   " / airborne over 10 s). Both drain through WriteUpdatedAIData (PreScene) ->"
+                   " the two AI bridges -> AIModule::Update slice -> ResetOnTrackManager ->"
+                   " BridgeAIToEntityModules_PrePhysics -> ProcessResetOnTrackResultQueue"
+                   " (PrePhysics) -> ActiveRaceCar::RequestPlaceOnTrack."
+                   " See BrnRaceCarEntityModule_ResetPump.cpp for the whole round trip\n";
         }
     }
 
