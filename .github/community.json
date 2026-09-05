@@ -1,0 +1,31 @@
+{
+  "labels": [
+    {"name": "type: bug", "color": "d73a4a", "description": "Observed failure in game behavior, builds or setup"},
+    {"name": "type: parity", "color": "5319e7", "description": "Binary evidence of a reconstruction divergence"},
+    {"name": "type: enhancement", "color": "a2eeef", "description": "Concrete improvement proposal"},
+    {"name": "type: documentation", "color": "0075ca", "description": "Documentation correction or improvement"},
+    {"name": "status: needs triage", "color": "ededed", "description": "New report awaiting maintainer assessment"},
+    {"name": "status: needs info", "color": "fbca04", "description": "Specific additional evidence requested"},
+    {"name": "status: confirmed", "color": "0e8a16", "description": "Reproduced or verified against authoritative evidence"},
+    {"name": "status: blocked", "color": "b60205", "description": "Waiting on a linked dependency"},
+    {"name": "priority: high", "color": "b60205", "description": "Widespread crash, data loss or milestone blocker"},
+    {"name": "priority: normal", "color": "fbca04", "description": "Normal defect or planned improvement"},
+    {"name": "priority: low", "color": "c5def5", "description": "Minor impact or polish"},
+    {"name": "area: build", "color": "bfd4f2", "description": "Compilation, linking, dependencies or installation"},
+    {"name": "area: rendering", "color": "bfd4f2", "description": "Graphics, lighting, geometry or visual effects"},
+    {"name": "area: ui", "color": "bfd4f2", "description": "Menus, HUD, map or Apt"},
+    {"name": "area: physics", "color": "bfd4f2", "description": "Vehicle behavior, collision or deformation"},
+    {"name": "area: audio", "color": "bfd4f2", "description": "Music, speech or sound effects"},
+    {"name": "area: input", "color": "bfd4f2", "description": "Keyboard, controller or bindings"},
+    {"name": "area: progression", "color": "bfd4f2", "description": "Events, rewards, saves or progression"},
+    {"name": "area: assets", "color": "bfd4f2", "description": "Game-data loading or conversion compatibility"},
+    {"name": "good first issue", "color": "7057ff", "description": "Bounded task with guidance and clear acceptance criteria"},
+    {"name": "help wanted", "color": "008672", "description": "Ready for a contributor to pick up"}
+  ],
+  "milestones": [
+    {"title": "M1 - Reproducible build and launch", "description": "Acceptance target, not a current-status claim or release date. A clean checkout with documented prerequisites and user-supplied data passes build doctor, builds and launches using the supported toolchain. Record both repository SHAs, data/converter version, environment and reproduction evidence; resolve scoped setup blockers."},
+    {"title": "M2 - Reliable menus and free roam", "description": "Acceptance target. A named build repeatedly reaches usable menus and free roam; input, HUD and map work through a documented driving route without blocking crashes. Record a test checklist, environment, video/log evidence and explicitly deferred defects before closing."},
+    {"title": "M3 - Events and progression", "description": "Acceptance target. Document and verify representative event types through start, gameplay, finish/failure, results and rewards; save and reload preserves the tested progression. Record the build, scenario checklist and evidence, with scoped blockers resolved."},
+    {"title": "M4 - Compatibility and stability", "description": "Acceptance target. Define a supported OS/GPU/input matrix and sustained-play duration, execute repeatable scenarios on that matrix, resolve scoped high-impact regressions and publish tested results plus remaining limitations for a named build. No implied support for untested platforms."}
+  ]
+}
