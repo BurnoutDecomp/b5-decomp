@@ -1798,11 +1798,12 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         // ⭐ This is the PHYSICS-driven half of traffic demotion (the world-driven half is
         // TryClearupOffscreenTraffic, inside GenerateDriverInputs). Both were gated, and with
         // both gated the module's 25 TrafficPhysicsInfo slots only ever filled.
-        if (const BrnPhysics::Vehicle::VehicleManagerOutputInterface* lpManagerOutput =
-                lpInput->GetVehicleManagerOutputInterface())
-        {
-            HandleRecycledTraffic(lpManagerOutput->GetRemovedTrafficEventQueue());
-        }
+        // ⛔ NO NULL TEST, deliberately: the console has none (0x8274E874 `bl <getter>` then
+        // 0x8274E880 `addi r4, r3, 0x7A0` with nothing in between), and the getter returns the
+        // address of an embedded member, so there is nothing to test. A guard here would be
+        // dead code that reads like a guard.
+        HandleRecycledTraffic(
+            lpInput->GetVehicleManagerOutputInterface()->GetRemovedTrafficEventQueue());
 
         // HandleExternalResponses @0x82732C68 is the second of the five head legs and IS bodied
         // (_wT3_04.cpp): it turns the physics side's PhysicalTrafficState queue back into world
