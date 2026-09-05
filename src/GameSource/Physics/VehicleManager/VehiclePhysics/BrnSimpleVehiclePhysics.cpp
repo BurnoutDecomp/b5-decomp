@@ -1124,6 +1124,17 @@ namespace Vehicle
                    "\n\nZero vehicle mass. Please tell Graham D and include the TTY!");
 
         // ---- the solid-box inverse inertia (identical machinery to SwitchAttribs) -------------
+        // ⭐⭐ THIS IS THE TENSOR THE CAR ACTUALLY SPINS ON -- confirmed against the live probe
+        // 2026-09-05 (crash wave). VehicleManager::ProcessCreateEvents builds a DIFFERENT solid-box
+        // tensor whose dimensions carry an extra `+ |mBaseAttribs.mCOMOffset|` term, but that value
+        // is dropped by RaceCarPhysics::Prepare and posted into an inert queue; mLocalInverseInertia
+        // is seated HERE, from mHalfExtent alone. On PUSMC01 (mHalfExtent 1.05081/0.57608/2.41295,
+        // mass 1589) this arithmetic gives Iinv 3.068e-4 / 2.726e-4 / 1.3147e-3, which is the
+        // `Iinv=(0.000307,0.000273,0.001315)` the crash probe prints, three lanes for three.
+        // ⛔ The absence of the CoM term here is the CONSOLE'S: 0x8260224C..0x82602280 is
+        // `li r8,0x6A0 ; lvx128 v13,r26,r8 ; vmulfp128 v13,v13,splat(2.0)` and nothing else feeds
+        // lBoxExtent. Do not "restore" a CoM term -- see the banner in
+        // BrnVehicleManager_ProcessCreateEvents.cpp.
         const Vector3 lBoxExtent = vpu::Mult(mHalfExtent, 2.0f);      // flt_82001D9C
         CGS_ASSERT(vpu::IsValid(lBoxExtent), "RwMath::IsValid( lBoxExtent )");   // 0x15A
         CGS_ASSERT(lBoxExtent.x > 0.0f, "lBoxExtent.X() > 0.0f");                // 0x15C
