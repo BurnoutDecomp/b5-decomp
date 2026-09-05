@@ -152,6 +152,13 @@ private:
     // console's own. PERMANENT harness capability, not a bring-up shim. See the .cpp banner.
     void ArmCarTeleportBringUp();
 
+
+    // [sweep] NOT an X360 function -- the harness `BRN_CRASH_SWEEP` deterministic crash
+    // sweep. Fires a scripted list of ActiveRaceCar::RequestPlaceOnTrack( launch, heading,
+    // SPEED ) shots on a SIM-FRAME cadence, so impact speed and impact angle are inputs
+    // instead of emergent properties of a wall-clock drive. See the .cpp banner.
+    void ArmCrashSweepBringUp();
+
     // BrnPlaceOnTrackManager.h:67 (DWARF). Set by Construct.
     RaceCarEntityModule* mpRaceCarEntityModule;
 
