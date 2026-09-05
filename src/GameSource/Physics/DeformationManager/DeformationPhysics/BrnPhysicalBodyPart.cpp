@@ -24,6 +24,12 @@
 #include <cstdint>   // uintptr_t (the console's 16-byte alignment assert on the skin record)
 #include <cstdlib>   // getenv/atoi -- [DIAG] BRN_DEFORM_TRACE only, host-side
 
+// [DIAG] the host-side present counter, for EXACT frame correlation -- the same extern the
+// other correlated instruments use (BrnPhysicalBodyPartPool.cpp:17, BrnActiveRaceCar.cpp:59).
+// BRN_FRAME_DUMP names its BMPs bb_<guPresentCount>.bmp, so the [joint-int] rows below name
+// the frame they describe instead of estimating it.
+namespace renderengine { extern u32 guPresentCount; }
+
 // ============================================================================
 // GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPart.cpp
 //
@@ -241,9 +247,22 @@ namespace Deformation
         // ever come off a car on this build.
         const f32 KF_JOINT_FORCE_MULTIPLIER       = 0.40000001f;   // RECOVERED: 0x82FB96F0 @82C5DDA0 <- flt_8200473C
         const f32 KF_JOINT_PENETRATION_MULTIPLIER = 1.5f;          // RECOVERED: 0x82FB95D0 @82C5DD78 <- flt_820945DC
-        // STILL FLAGGED (same block, not recovered): the joint integration tuning at &unk_82FB9AC0 /
-        // &unk_82FB95F0 / &unk_82FB9750 (0.975 recovered) / &unk_82FB9D60 / &unk_82FB9E30.
-        const f32 KF_JOINT_RELAX                  = 0.97500002f;   // recovered (v58[0])
+        // ⭐⭐⭐ THE UpdateJoint INTEGRATOR TUNING -- ALL FIVE RECOVERED 2026-09-05 (the recon wave;
+        // read through their CRT thunks with tools/re/findinit.py + ppcdis + x360rd, each thunk the
+        // same `lfs <rodata> ; stfs ; lvx ; vspltw ; stvx128 <slot>` 4-lane splat shape). They read
+        // 0x00000000 straight out of the image BY DEFINITION -- dyn-init VMX splats, not rodata.
+        // Every one of them is now CONSUMED by the bodied integrator below.
+        const f32 KF_HINGED_PART_GRAVITY          = 9.8100004f;    // RECOVERED 0x82FB9AC0 @82C5DC88 <- flt_8208F83C
+        const f32 KF_JOINT_RESTITUTION            = 0.1f;          // RECOVERED 0x82FB95F0 @82C5DCB0 <- flt_82004014
+        const f32 KF_JOINT_PENETRATION_RESOLUTION = 1.0f;          // RECOVERED 0x82FB9E30 @82C5DCD8 <- flt_82001C98
+        const f32 KF_JOINT_RESOLVE_FALLOFF_SCALE  = 3.0f;          // RECOVERED 0x82FB9D60 @82C5DD00 <- flt_82004270
+        const f32 KF_JOINT_RESOLVE_FALLOFF_RADIUS = 1.0f;          // RECOVERED 0x82FB9750 @82C5DD28 <- flt_82001C98
+        // The two immediates the same integrator builds in-register rather than loading:
+        //   vcfsx(vspltisw 1, 1) == 0.5  -- the anchor-velocity clamp band [-0.5, +0.5]
+        //   vcfsx(vspltisw 2, 0) == 2.0  -- the limit-stress scale on |worldPenetration|
+        const f32 KF_JOINT_ANCHOR_VELOCITY_CLAMP  = 0.5f;          // vcfsx(vspltisw 1, 1) @0x8260B358
+        const f32 KF_JOINT_LIMIT_STRESS_SCALE     = 2.0f;          // vcfsx(vspltisw 2, 0) @0x8260B4F4
+        const f32 KF_JOINT_RELAX                  = 0.97500002f;   // recovered (v58[0]) -- flt_82057F5C
         const f32 KF_ROTATION_PROPORTION_GATE     = 0.300000012f;   // unk_82FB9E00 @82C5DDC8 <- flt_82004740
 
         // The active-joint default-direction "always detaches when bent past -0.9" early gate the
@@ -257,6 +276,39 @@ namespace Deformation
 
         // Broadcast a scalar into all four lanes (the vspltw idiom).
         inline Vector4 Splat(f32 lfValue) { return Vector4{ lfValue, lfValue, lfValue, lfValue }; }
+
+        // ------------------------------------------------------------------------------------------
+        // The sine/cosine pair UpdateJoint's hinge rotation is built from.
+        //
+        // The X360 emits this as ~120 straight-line VMX instructions (0x8260B610..0x8260B798) --
+        // a 2*pi argument reduction (`vspltw lane3 of unk_82000C60` == 1/(2*pi), `vrfin`, then
+        // `x - 2*pi*n` against lane 1 == 6.2831855) followed by two twelve-term Horner
+        // polynomials whose coefficient vectors read straight out of .rdata as the odd and even
+        // TAYLOR series:
+        //     unk_82000BD0 { 1, -1/3!,  1/5!,  -1/7!  }   unk_82000C00 { 1, -1/2!,  1/4!,  -1/6!  }
+        //     unk_82000BE0 { 1/9!, -1/11!, 1/13!, -1/15! } unk_82000C10 { 1/8!, -1/10!, 1/12!, -1/14! }
+        //     unk_82000BF0 { 1/17!, -1/19!, 1/21!, -1/23! } unk_82000C20 { 1/16!, -1/18!, 1/20!, -1/22! }
+        // i.e. sin(x) through x^23 and cos(x) through x^22 -- exact to well under a float ulp for
+        // the |x| <= pi the reduction guarantees. That is the compiler's inlined library sin/cos,
+        // not authored game code, so per the de-optimisation rule it is reconstructed as the calls
+        // the original source wrote. The reduction is kept because it is observable (it is what
+        // makes an out-of-range angle wrap rather than diverge), even though the joint rotation is
+        // clamped to [-maxAngle, 0] before it ever gets here.
+        // ⛔ THE OLD BANNER CALLED THESE "the chebyshev/atan polynomial tables". They are neither
+        // Chebyshev nor arctangent; corrected 2026-09-05 on the bytes.
+        // ------------------------------------------------------------------------------------------
+        inline void JointSinCos(f32 lfAngle, f32& lfSinOut, f32& lfCosOut)
+        {
+            const f32 KF_TWO_PI         = 6.2831854820251465f;   // unk_82000C60 lane 1
+            const f32 KF_ONE_OVER_TWO_PI = 0.15915493667125702f; // unk_82000C60 lane 3
+
+            // vrfin == round to nearest floating-point integer (ties to even).
+            const f32 lfTurns   = std::nearbyint(lfAngle * KF_ONE_OVER_TWO_PI);
+            const f32 lfReduced = lfAngle - KF_TWO_PI * lfTurns;
+
+            lfSinOut = std::sin(lfReduced);
+            lfCosOut = std::cos(lfReduced);
+        }
 
         // The skin-blend agreement tolerance CalculateSkinnedPoint's opt-vs-unopt self-check uses:
         // `lfs f0, flt_82002138` @0x825E2A48, byte-read from the image == 0x3C23D70A == 0.01f.
@@ -1352,98 +1404,378 @@ namespace Deformation
     }
 
     // =========================================================================================
-    // UpdateJoint @ 0x8260B0F8
+    // UpdateJoint @ 0x8260B0F8 -- 503 instructions, BODIED 2026-09-05 (hinge-integrator wave).
     //
-    // Integrate the joint one step (gravity + restitution + penetration resolve), updating the packed
-    // joint rotation (+352 w) and joint velocity (+368 w) and the body's linear/angular velocities.
+    // Integrate a HINGED panel one step and re-pose it on its hinge. This is what makes a door
+    // SWING: everything upstream of it (CheckForDetachment's lbHinge, SetJoinedToVehicle's four
+    // arguments, the joint geometry, Prepare's compose) only decides WHERE the hinge is and
+    // WHICH parts hang off one. Until this body existed the panel was posed and then frozen, and
+    // -- because mLocalJointPositionPlusRotation's w lane is written ONLY here -- the whole
+    // joint-break ladder was shut: TestJointForBreaking's first gate is
+    // GetJointRotationProportion() >= 0.3 and that proportion was identically 0 on every car.
     //
-    // The X360 body is an extremely dense VMX128 cascade implementing:
-    //   * tripwires: GetActiveJointIndex() != KU8_NO_ACTIVE_JOINT ; IsJoinedToVehicle() ;
-    //     mi8ActiveJointsTagPointIndex != -1 ;
-    //   * pull the active-joint spec (GetActiveJointSpec via sub_825C1170 == IKBodyPart::GetJointSpec);
-    //   * rebuild the oriented box for the current pose (CalcBoundingBox);
-    //   * compute the joint anchor/axis in world space, apply the hinged-part gravity
-    //     (KVF_HINGED_PART_GRAVITY), joint restitution (KVF_JOINT_RESTITUTION) and penetration
-    //     resolution (KVF_JOINT_PENETRATION_RESOLUTION) against the accumulated collision, and integrate
-    //     the joint angle/velocity with the chebyshev/atan polynomial tables (&unk_82000BD0..C20) for
-    //     the angle clamp;
-    //   * store the new joint rotation (+352 w), joint velocity (+368 w) and the body's velocity rows.
+    // ============================ THE MODEL, REGISTER BY REGISTER ============================
+    // The panel is a PENDULUM hanging off the car. Its whole state is two scalars in two w
+    // lanes -- the hinge angle (+352 w) and the hinge angular velocity (+368 w) -- and its pose
+    // is derived, never stored: the 3x3 is Rodrigues(mJointAxis, angle) composed with the
+    // vehicle's, and the translation is the panel's COM swung about the anchor.
     //
-    // ⭐⭐ 2026-09-05 (hinge-geometry wave): THE CONSTANTS ARE RECOVERED. The body is still inert --
-    // this wave did not have the budget to transcribe a 503-instruction VMX integrator and verify it
-    // -- but "the tuning rodata is not recovered" is no longer true, and the next wave must not
-    // re-derive it. All five dyn-init splat slots read 0 out of the image BY DEFINITION; each is
-    // filled by a CRT thunk found with tools/re/findinit.py and read through with ppcdis + x360rd:
-    //     unk_82FB9AC0  <- thunk 0x82C5DC88, lfs flt_8208F83C == 9.8100004    (g -- the hinged-part
-    //                      gravity the KVF_HINGED_PART_GRAVITY name was reaching for)
-    //     unk_82FB95F0  <- thunk 0x82C5DCB0, lfs flt_82004014 == 0.1
-    //     unk_82FB9E30  <- thunk 0x82C5DCD8, lfs flt_82001C98 == 1.0
-    //     unk_82FB9D60  <- thunk 0x82C5DD00, lfs flt_82004270 == 3.0
-    //     unk_82FB9750  <- thunk 0x82C5DD28, lfs flt_82001C98 == 1.0
-    // Each thunk is the same four-instruction shape (`lfs` the literal, `stfs` to the stack, load,
-    // `vspltw`, `stvx128` into the slot), so every one of these is a 4-lane SPLAT of a scalar.
-    // ⛔ AND THE "atan polynomial tables" IN THE OLD BANNER WERE MIS-NAMED. &unk_82000BD0..C20 read
-    // straight out of .rdata as 1.0 / 2.7557319e-06 (1/9!) / 2.8114574e-15 and
-    // 1.0 / 2.4801588e-05 (1/8!) / 4.7794773e-14, with 3.14159274 at unk_82000C60 -- i.e. the two
-    // odd/even TRIGONOMETRIC series and pi, a sin/cos pair for the angle clamp, not an arctangent.
-    // unk_82CDA350 is an ordinary vperm CONTROL vector {00 01 02 03, ...}, and flt_82057F5C ==
-    // 0.9750000238 is the joint-relax factor this file already carries as KF_JOINT_RELAX.
-    // What is left is transcription of the integrator itself, which stays undone here rather than
-    // guessed: the control flow -- the tripwires, the CalcBoundingBox rebuild, the joint-state
-    // stores and the call order -- is exact, and the numeric step is a no-op.
-    // ⇒ CONSEQUENCE, AND IT IS THE WHOLE JOINT-BREAK LADDER: mLocalJointPositionPlusRotation's w
-    // lane (the joint rotation) is written ONLY here. SetJoinedToVehicle seeds it to 0 and nothing
-    // else touches it, so it is identically 0 for the life of a hinged part. TestJointForBreaking's
-    // first gate is `GetJointRotationProportion() < KF_ROTATION_PROPORTION_GATE (0.3)`, and that
-    // proportion is rotation.w / maxAngle.w == 0 / maxAngle == 0. NO JOINT CAN EVER BREAK while
-    // this integrator is inert, on any car, whatever its geometry -- which is why the measured
-    // `jointBreaks 0` is a statement about THIS FUNCTION and not about the joint data.
+    //  1. TRIPWIRES + THE ACTIVE JOINT SPEC (0x8260B12C..0x8260B198). `rotlwi r11, r11, 6` +
+    //     `lwz r10, 0x1C0(spec)` is &mpaJointSpecs[mu8ActiveJointIndex] at stride 64 -- i.e.
+    //     GetActiveJointSpec(). The body then reads the spec at +0x10 (mJointAxis) and +0x20
+    //     (mJointDefaultDirection); this is the FIRST reader of either.
+    //
+    //  2. THE VEHICLE FRAME + ITS AFFINE INVERSE (0x8260B19C..0x8260B224). `*(this+0x1E0)` is
+    //     mpDeformableObject and `+0x194C` its attached VehiclePhysics, whose mTransform starts
+    //     at +0x10 (the leaf's vptr owns +0x00), so the four lvx128 are the car's world rows.
+    //     Six vmrgh/vmrglw transpose the 3x3 and three splats of the negated translation build
+    //     R^T*(-t): the same affine-inverse shape Prepare's mBBoxOrientation build uses. It is
+    //     used once, to bring the accumulated collision point back into vehicle-local space.
+    //
+    //  3. CalcBoundingBox(THE VEHICLE'S WORLD TRANSFORM) -- the stack matrix at var_160 the asm
+    //     hands it is {vehX, vehY, vehZ, vehW}, not the part's own pose. It must run BEFORE the
+    //     pose maths because it is what writes mLocalInitialComPositionPlusMaxJointAngle.xyz
+    //     (the local COM) that step 9 swings.
+    //
+    //  4. THE HINGE ANCHOR FOLLOWS ITS TAG POINT (0x8260B254..0x8260B2AC). sub_825C1170 is
+    //     IKBodyPart::GetTagPoint (its own two asserts are "liIndex >= 0" /
+    //     "liIndex < GetNumberOfTagPoints()"), and `tag+0x00 - tag->mpSpec+0x20` is exactly
+    //     TagPoint::GetOffsetFromInitialPosition(). So
+    //         mLocalJointPositionPlusRotation.xyz = mLocalInitialJointPosition + tagOffset
+    //     with the rotation lane preserved by `vrlimi128 v13, v0, 1, 0`. The hinge point MOVES
+    //     WITH THE DENT -- deform the wing and its hinge travels with it.
+    //     ⚠️ sub_825C1170 IS GetTagPoint, NOT GetJointSpec (the old body called the latter with
+    //     a tag index -- an unbounded subscript of a shorter array; kept corrected here).
+    //
+    //  5. THE PANEL'S REST DIRECTION IN WORLD (0x8260B2B4..0x8260B344, computed twice by the
+    //     compiler into v9 and v7): mJointDefaultDirection carried through the PART's own
+    //     current rows. Every velocity term below is measured along it.
+    //
+    //  6. THE ANCHOR'S WORLD VELOCITY ON THE CAR (0x8260B2E0..0x8260B374):
+    //         r = R_veh * localJointPosition                        (the arm, car COM -> hinge)
+    //         v_anchor = vehicleLinearVelocity + omega x r
+    //     with the cross product the textbook two-`vpermwi128 0x63` form (lanes y,z,x,w).
+    //
+    //  7. THE DRIVE TERM (0x8260B378..0x8260B3E8). The part's OWN mLinearVelocity is not a free
+    //     body's velocity while it is joined -- step 10 stores last frame's anchor velocity
+    //     there, in VEHICLE-LOCAL axes, precisely so this finite difference can be taken:
+    //         a = clamp(v_anchor . dir, -0.5, +0.5)^2
+    //           + ( g * dir.y  +  (v_anchor . dir - R_veh*storedVelocity . dir) / dt )
+    //         jointVelocity += a * dt
+    //     The middle bracket is (pivotAcceleration - gravity) . dir with gravity (0,-9.81,0) --
+    //     a pendulum driven by the car's own acceleration -- and the leading square is a
+    //     centripetal term with the arm length implied 1 m. The 1/dt is `vrefp128` + two
+    //     Newton steps, which converges to the divide written here.
+    //     ⚠️ THE SQUARE IS THE CONSOLE'S, not a transcription slip: `vmaddfp v11, v10, v11, v10`
+    //     at 0x8260B3E4 has the clamped speed in BOTH the vA and vC fields (word 0x116A5AAE,
+    //     A=b11..15=10, C=b21..25=10). [[one-to-one-standard]] -- it is not ours to "fix".
+    //
+    //  8. THE TWO RESTITUTIONS + THE CLAMP (0x8260B3EC..0x8260B5E4).
+    //       a. limit bounce: if the OLD angle is outside (-maxAngle, 0], velocity = -0.1 * v.
+    //          (SetJoinedToVehicle stores the max angle NEGATED, so the stored lane IS the low
+    //          end of the band; the console compares `stored > rotation` for the far limit.)
+    //       b. angle += (pre-relax) velocity * dt; THEN velocity *= 0.975. The order matters and
+    //          it is the asm's (`vmr v4,v9` at 0x8260B444 is taken before the 0.975 multiply).
+    //       c. penetration resolve: the accumulated world penetration projected on the panel
+    //          direction, divided by 1 + 3*max(|contactPoint - hinge| - 1, 0) and scaled by 1.0.
+    //       d. angle clamped into [-maxAngle, 0] by the vmin/vmax overshoot pair.
+    //       e. mLocalInitialJointPositionPlusLimitStress.w = 2 * |worldPenetration| -- THE LIMIT
+    //          STRESS, and the input to TestJointForBreaking's penetration arm (4b). Nothing
+    //          else in the program writes it; it was a permanently-zero lane before this body.
+    //       f. contact bounce: if the resolve opposes the swing, velocity = -0.1 * v again and
+    //          mWorldPenetrationPlusCollisionMagnitude.w records |1.1 * v|.
+    //
+    //  9. THE POSE (0x8260B5E8..0x8260B8C0). sin/cos of the clamped angle (see JointSinCos), a
+    //     Rodrigues matrix about mJointAxis, and then
+    //         newLocalCom = jointPosition - R * (jointPosition - localCom)
+    //         partRows    = R.rows carried through the vehicle's rotation
+    //         partPos     = vehicleTransform applied to newLocalCom
+    //     i.e. the panel's centre of mass swung about its anchor. The assembled rows are R^T in
+    //     the column convention, which under this codebase's ROW-vector convention is a proper
+    //     right-handed rotation by +angle about the axis; the `vperm` control at unk_82CDA350
+    //     is {00 01 02 03, 14 15 16 17, ...} == {vA.x, vB.y, ...} and the `vrlimi128 ...,2,0`
+    //     that follows each one fills lane 2.
+    //
+    // 10. mLinearVelocity = R_veh^T * v_anchor -- the anchor velocity in vehicle-local axes, the
+    //     seed for step 7's next finite difference. The ANGULAR velocity row (+0x50) is NOT
+    //     written: a joined panel has no free-body spin.
+    //
+    // ⭐⭐ THE AXIS IS RIGHT, AND IT IS THE DATA THAT SAYS SO. The two spec vectors are read in
+    // DIFFERENT frames here -- mJointAxis untransformed as the Rodrigues axis of a rotation that
+    // is then composed on the left by the vehicle's rows (car space), mJointDefaultDirection
+    // carried through the PART's own rows (part space) -- and that asymmetry is the console's
+    // register plumbing, not an inference. It is also what the shipped bytes are authored for.
+    // Read offline out of retail VEH_PUSMC01_AT.BIN with tools/re/joint_spec_dump.py (the layout
+    // the vehicledeform porter already proves on 430/430 cars), all 21 of PUSMC01's joints:
+    //     |mJointAxis| == 1.00000 and |mJointDefaultDirection| == 1.00000 on every one, both are
+    //     always +/- a single car axis, and mJointAxis . mJointDefaultDirection == 0.0000 on
+    //     EVERY joint -- an axis of rotation and a lever perpendicular to it, which is exactly
+    //     the pair this body needs and is not what a mis-assigned field pair looks like.
+    // And each one is the hinge the panel visibly has:
+    //     bonnet / boot   axis (+/-1,0,0) TRANSVERSE, lever (0,+1,0) UP,    max 60 deg
+    //     both doors      axis (0,+/-1,0) VERTICAL,   lever (+/-1,0,0) OUT, max 60 deg
+    //     front bumper    axis (-1,0,0) / (0,0,+/-1), lever (0,-1,0) DOWN,  max 10 deg
+    //     grille          axis (-1,0,0),              lever (0,0,+1) FWD,   max  5 deg
+    //     exhausts        axis (+1,0,0),              lever (0,-1,0) DOWN,  max  3 deg
+    // The gravity term is the control: it is g * lever.y, so it is ZERO for a vertically-hinged
+    // door (which is therefore driven only by the car's own acceleration -- correct), NEGATIVE
+    // for the bumper (it droops), and POSITIVE for the bonnet (it falls shut). A swapped axis
+    // and lever would gravity-drive the door and leave the bonnet inert.
+    // ⚠️ WHAT THIS STILL CANNOT DECIDE: the SIGN convention. The band is [-maxAngle, 0] and the
+    // rotation is right-handed about mJointAxis, so a panel whose authored axis points the wrong
+    // way swings the right plane in the wrong DIRECTION -- and both doors' axes are exact
+    // mirrors of each other, so a global sign error would be invisible in the data and would
+    // read on film only as "the door opens towards the front instead of the back". Nothing here
+    // measures that; a frame-by-frame comparison against retail is what would.
     // =========================================================================================
     void PhysicalBodyPart::UpdateJoint(VecFloat lvfTimeStep)
     {
-        (void)lvfTimeStep;
+        const f32 lfTimeStep = lvfTimeStep.x;   // `vmr128 v123, v1` -- consumed lane-wise
 
-        // mpIKPart->GetActiveJointIndex() != KU8_NO_ACTIVE_JOINT.
+        // ---- (1) tripwires + the active joint's spec --------------------------------------------
         CGS_ASSERT(mpIKPart->GetActiveJointIndex() != IKBodyPart::KU8_NO_ACTIVE_JOINT,
                    "mu8ActiveJointIndex != KU8_NO_ACTIVE_JOINT");
-        // IsJoinedToVehicle().
+        const DeformationJointSpec* lpActiveJointSpec = mpIKPart->GetActiveJointSpec();
         CGS_ASSERT(mbJoinedToVehicle, "IsJoinedToVehicle()");
 
-        // Rebuild the oriented box for the current pose (the asm's CalcBoundingBox(this, v60), where v60
-        // is the inverse-mass-weighted body transform it just assembled).
-        CalcBoundingBox(GetRigidBodyTransform());
+        // ---- (2) the vehicle's world frame + the two frame changes it supplies --------------------
+        const ExternalPhysicsBody& lrVehicleBody     = mpDeformableObject->GetVehicleBody();
+        const Matrix44Affine       lVehicleTransform = lrVehicleBody.GetTransform();
 
-        // mi8ActiveJointsTagPointIndex != -1.
+        // Row-vector convention (the file-wide one, see Prepare): local.x*xAxis + local.y*yAxis + ...
+        const auto lVehicleDirection = [&lVehicleTransform](const Vector3& lrLocal) -> Vector3
+        {
+            return Vector3{
+                lVehicleTransform.xAxis.x * lrLocal.x + lVehicleTransform.yAxis.x * lrLocal.y
+                    + lVehicleTransform.zAxis.x * lrLocal.z,
+                lVehicleTransform.xAxis.y * lrLocal.x + lVehicleTransform.yAxis.y * lrLocal.y
+                    + lVehicleTransform.zAxis.y * lrLocal.z,
+                lVehicleTransform.xAxis.z * lrLocal.x + lVehicleTransform.yAxis.z * lrLocal.y
+                    + lVehicleTransform.zAxis.z * lrLocal.z,
+                0.0f };
+        };
+        // The transposed 3x3 (the six vmrgh/vmrglw): {dot(xAxis,p), dot(yAxis,p), dot(zAxis,p)}.
+        const auto lVehicleInverseDirection = [&lVehicleTransform](const Vector3& lrWorld) -> Vector3
+        {
+            return Vector3{
+                lVehicleTransform.xAxis.x * lrWorld.x + lVehicleTransform.xAxis.y * lrWorld.y
+                    + lVehicleTransform.xAxis.z * lrWorld.z,
+                lVehicleTransform.yAxis.x * lrWorld.x + lVehicleTransform.yAxis.y * lrWorld.y
+                    + lVehicleTransform.yAxis.z * lrWorld.z,
+                lVehicleTransform.zAxis.x * lrWorld.x + lVehicleTransform.zAxis.y * lrWorld.y
+                    + lVehicleTransform.zAxis.z * lrWorld.z,
+                0.0f };
+        };
+
+        // ---- (3) rebuild the oriented box for the current pose ------------------------------------
+        // The asm's `CalcBoundingBox(this, var_160)` where var_160..var_130 are the four vehicle rows
+        // it has just stored. This is also what refreshes the local COM step (9) swings.
+        CalcBoundingBox(lVehicleTransform);
+
+        // ---- (4) the hinge anchor follows its own tag point's deformation -------------------------
         CGS_ASSERT(mi8ActiveJointsTagPointIndex != -1, "mi8ActiveJointsTagPointIndex != -1");
-
-        // ⛔⛔ 2026-09-05 (hinge-geometry wave): sub_825C1170 IS `IKBodyPart::GetTagPoint`, NOT
-        // `GetJointSpec`. This line read `mpIKPart->GetJointSpec(mi8ActiveJointsTagPointIndex)` --
-        // a TAG-POINT index used to subscript the JOINT-SPEC array, which is a different, SHORTER
-        // array with no bound check on it (`&mpaJointSpecs[liIndex]`, BrnIKBodyPartSpec.h). On
-        // PUSMC01 a jointed panel has ~4 tag points and 1-2 joints, so tag index 3 addresses
-        // 0xC0 bytes past a one-element array. It never faulted only because the result was
-        // `(void)`-cast while the integrator is inert -- an OOB the moment that lands.
-        // The asm is unambiguous (0x8260B254..0x8260B264):
-        //     lbz  r11, 0x1E8(this)   ; mi8ActiveJointsTagPointIndex
-        //     lwz  r3,  0x1DC(this)   ; mpIKPart
-        //     extsb r4, r11 ; bl sub_825C1170
-        //     lwz  r6,  0x10(r3)      ; the returned record's +0x10 -- a POINTER (TagPointSpec*)
-        // and sub_825C1170 itself asserts "liIndex >= 0" and "liIndex < GetNumberOfTagPoints()"
-        // (its own strings), then returns `*(this+4) + liIndex*32` -- the 32-byte TAG POINT
-        // records off IKBodyPart+4. GetJointSpec would stride sizeof(DeformationJointSpec) off
-        // the SPEC. Two bound asserts the console carries were being skipped as well.
-        // FLAG: the gravity/restitution/resolution tuning and the angle-clamp polynomial tables
-        // are rodata-not-recovered, so the integrated delta is still inert.
         const TagPoint* lpActiveTagPoint = mpIKPart->GetTagPoint(mi8ActiveJointsTagPointIndex);
-        (void)lpActiveTagPoint;
-        (void)KF_JOINT_RELAX;   // recovered 0.975 relax factor applied by the (inert) integrator
+        const Vector3   lTagPointOffset  = lpActiveTagPoint->GetOffsetFromInitialPosition();
+        const Vector3   lLocalJointPosition = {
+            mLocalInitialJointPositionPlusLimitStress.x + lTagPointOffset.x,
+            mLocalInitialJointPositionPlusLimitStress.y + lTagPointOffset.y,
+            mLocalInitialJointPositionPlusLimitStress.z + lTagPointOffset.z,
+            0.0f };
+        mLocalJointPositionPlusRotation.SetVector3(lLocalJointPosition);   // vrlimi128: w preserved
 
-        // INERT integration step: with the tuning rodata unrecovered, the joint rotation/velocity and
-        // the body velocity rows are left at their current values (the asm's vmaddfp cascade collapses
-        // to a no-op delta when the gravity/restitution/resolution vectors are zero). The packed lanes
-        // are re-stored unchanged, matching the asm's store structure without inventing a delta.
-        // (When KVF_HINGED_PART_GRAVITY / KVF_JOINT_RESTITUTION / KVF_JOINT_PENETRATION_RESOLUTION and
-        // the &unk_82000BD0.. polynomial tables are recovered, the integrator delta is applied here.)
+        // ---- (5) the panel's rest direction, carried into world by the part's own pose -------------
+        const Matrix44Affine lPartTransform         = mRwBody.GetTransform();
+        const Vector3        lLocalPanelDirection   = lpActiveJointSpec->GetDefaultDirection();
+        const Vector3        lWorldPanelDirection   = {
+            lPartTransform.xAxis.x * lLocalPanelDirection.x + lPartTransform.yAxis.x * lLocalPanelDirection.y
+                + lPartTransform.zAxis.x * lLocalPanelDirection.z,
+            lPartTransform.xAxis.y * lLocalPanelDirection.x + lPartTransform.yAxis.y * lLocalPanelDirection.y
+                + lPartTransform.zAxis.y * lLocalPanelDirection.z,
+            lPartTransform.xAxis.z * lLocalPanelDirection.x + lPartTransform.yAxis.z * lLocalPanelDirection.y
+                + lPartTransform.zAxis.z * lLocalPanelDirection.z,
+            0.0f };
+
+        // ---- (6) the world velocity of the hinge anchor, ON THE CAR --------------------------------
+        const Vector3 lWorldJointArm  = lVehicleDirection(lLocalJointPosition);
+        const Vector3 lAnchorVelocity = lrVehicleBody.GetLinearVelocity()
+                                      + Cross(lrVehicleBody.GetAngularVelocity(), lWorldJointArm);
+
+        // ---- (7) the drive term --------------------------------------------------------------------
+        const f32 lfAnchorSpeedAlongPanel   = Dot(lAnchorVelocity, lWorldPanelDirection);
+        const f32 lfPreviousSpeedAlongPanel = Dot(lVehicleDirection(mRwBody.GetLinearVelocity()),
+                                                  lWorldPanelDirection);
+
+        // vmaxfp against -0.5 then vminfp against +0.5, in that order.
+        f32 lfClampedAnchorSpeed = lfAnchorSpeedAlongPanel;
+        if ( lfClampedAnchorSpeed < -KF_JOINT_ANCHOR_VELOCITY_CLAMP )
+        {
+            lfClampedAnchorSpeed = -KF_JOINT_ANCHOR_VELOCITY_CLAMP;
+        }
+        if ( lfClampedAnchorSpeed > KF_JOINT_ANCHOR_VELOCITY_CLAMP )
+        {
+            lfClampedAnchorSpeed = KF_JOINT_ANCHOR_VELOCITY_CLAMP;
+        }
+
+        // (v_anchor.dir - v_stored.dir) * (1/dt): `vrefp128 v11, v123` + two Newton refinements.
+        const f32 lfPivotAcceleration =
+            (lfAnchorSpeedAlongPanel - lfPreviousSpeedAlongPanel) / lfTimeStep;
+        const f32 lfAngularAcceleration =
+            lfClampedAnchorSpeed * lfClampedAnchorSpeed
+            + (KF_HINGED_PART_GRAVITY * lWorldPanelDirection.y + lfPivotAcceleration);
+
+        const f32 lfJointRotation = mLocalJointPositionPlusRotation.GetPlus();          // +352 w (OLD)
+        f32 lfJointVelocity = mLocalGraphicsPositionPlusJointVelocity.GetPlus()         // +368 w
+                            + lfAngularAcceleration * lfTimeStep;
+
+        // ---- (8a) restitution at either end of the swing --------------------------------------------
+        // SetJoinedToVehicle seeds this lane with -(maxAngle), so the band is [lane, 0].
+        const f32 lfNegatedMaxJointAngle = mLocalInitialComPositionPlusMaxJointAngle.GetPlus();  // +384 w
+        if ( lfJointRotation > 0.0f || lfNegatedMaxJointAngle > lfJointRotation )
+        {
+            lfJointVelocity = -lfJointVelocity * KF_JOINT_RESTITUTION;
+        }
+
+        // ---- (8b) integrate the angle with the PRE-relax velocity, then relax the velocity ----------
+        f32 lfNewJointRotation = lfJointRotation + lfJointVelocity * lfTimeStep;
+        lfJointVelocity *= KF_JOINT_RELAX;
+
+        // ---- (8c) penetration resolve ----------------------------------------------------------------
+        const Vector3 lWorldPenetration       = mWorldPenetrationPlusCollisionMagnitude.GetVector3();
+        const f32     lfPenetrationAlongPanel = Dot(lWorldPenetration, lWorldPanelDirection);
+
+        // The accumulated contact point brought back into vehicle-local space by the affine inverse.
+        const Vector3 lWorldCollisionPoint = mAverageCollisionPointPlusNumCollisions.GetVector3();
+        const Vector3 lLocalCollisionPoint = lVehicleInverseDirection(
+            lWorldCollisionPoint - lVehicleTransform.wAxis);
+        const f32     lfContactDistance    = Magnitude(lLocalCollisionPoint - lLocalJointPosition);
+
+        f32 lfResolveFalloff = lfContactDistance - KF_JOINT_RESOLVE_FALLOFF_RADIUS;
+        if ( lfResolveFalloff < 0.0f )                                    // vmaxfp against zero
+        {
+            lfResolveFalloff = 0.0f;
+        }
+        const f32 lfResolveScale = KF_JOINT_RESOLVE_FALLOFF_SCALE * lfResolveFalloff + 1.0f;
+        const f32 lfJointResolve = (lfPenetrationAlongPanel / lfResolveScale)
+                                 * KF_JOINT_PENETRATION_RESOLUTION;
+        lfNewJointRotation += lfJointResolve;
+
+        // ---- (8d) clamp the angle into the joint's own band ------------------------------------------
+        const f32 lfBelowLimit = (lfNewJointRotation - lfNegatedMaxJointAngle < 0.0f)
+                               ? (lfNewJointRotation - lfNegatedMaxJointAngle) : 0.0f;   // vminfp
+        const f32 lfAboveRest  = (lfNewJointRotation > 0.0f) ? lfNewJointRotation : 0.0f; // vmaxfp
+        lfNewJointRotation -= (lfBelowLimit + lfAboveRest);
+
+        // ---- (8e) the limit stress TestJointForBreaking's penetration arm reads ------------------------
+        mLocalInitialJointPositionPlusLimitStress.SetPlus(Magnitude(lWorldPenetration)
+                                                          * KF_JOINT_LIMIT_STRESS_SCALE);
+
+        // ---- (8f) restitution when the resolve opposes the swing ---------------------------------------
+        if ( lfJointResolve * lfJointVelocity < 0.0f )                    // `vcmpgtfp128. v8, v127, v8`
+        {
+            const f32 lfBounce = lfJointVelocity * (1.0f + KF_JOINT_RESTITUTION);
+            mWorldPenetrationPlusCollisionMagnitude.SetPlus(std::fabs(lfBounce));   // vandc == |x|
+            lfJointVelocity -= lfBounce;                                            // == -0.1 * v
+        }
+
+        // ---- the two joint-state stores (the only writers of either lane in the program) ---------------
+        mLocalJointPositionPlusRotation.SetPlus(lfNewJointRotation);              // +352 w
+        mLocalGraphicsPositionPlusJointVelocity.SetPlus(lfJointVelocity);         // +368 w
+
+        // ---- (9) pose the panel on its hinge -------------------------------------------------------------
+        f32 lfSin = 0.0f;
+        f32 lfCos = 1.0f;
+        JointSinCos(lfNewJointRotation, lfSin, lfCos);
+        const f32 lfOneMinusCos = 1.0f - lfCos;
+
+        const Vector3 lJointAxis = lpActiveJointSpec->GetRotationAxis();
+
+        // Rodrigues about lJointAxis, assembled row-by-row exactly as the three vperm/vrlimi128 do.
+        Matrix44Affine lJointRotationMatrix;
+        lJointRotationMatrix.xAxis = Vector3{
+            lfCos + lfOneMinusCos * lJointAxis.x * lJointAxis.x,
+            lfOneMinusCos * lJointAxis.x * lJointAxis.y + lfSin * lJointAxis.z,
+            lfOneMinusCos * lJointAxis.x * lJointAxis.z - lfSin * lJointAxis.y,
+            0.0f };
+        lJointRotationMatrix.yAxis = Vector3{
+            lfOneMinusCos * lJointAxis.y * lJointAxis.x - lfSin * lJointAxis.z,
+            lfCos + lfOneMinusCos * lJointAxis.y * lJointAxis.y,
+            lfOneMinusCos * lJointAxis.y * lJointAxis.z + lfSin * lJointAxis.x,
+            0.0f };
+        lJointRotationMatrix.zAxis = Vector3{
+            lfOneMinusCos * lJointAxis.z * lJointAxis.x + lfSin * lJointAxis.y,
+            lfOneMinusCos * lJointAxis.z * lJointAxis.y - lfSin * lJointAxis.x,
+            lfCos + lfOneMinusCos * lJointAxis.z * lJointAxis.z,
+            0.0f };
+        lJointRotationMatrix.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+        const auto lJointDirection = [&lJointRotationMatrix](const Vector3& lrLocal) -> Vector3
+        {
+            return Vector3{
+                lJointRotationMatrix.xAxis.x * lrLocal.x + lJointRotationMatrix.yAxis.x * lrLocal.y
+                    + lJointRotationMatrix.zAxis.x * lrLocal.z,
+                lJointRotationMatrix.xAxis.y * lrLocal.x + lJointRotationMatrix.yAxis.y * lrLocal.y
+                    + lJointRotationMatrix.zAxis.y * lrLocal.z,
+                lJointRotationMatrix.xAxis.z * lrLocal.x + lJointRotationMatrix.yAxis.z * lrLocal.y
+                    + lJointRotationMatrix.zAxis.z * lrLocal.z,
+                0.0f };
+        };
+
+        // The COM swung about the anchor: com' = joint - R*(joint - com).
+        const Vector3 lLocalComPosition = mLocalInitialComPositionPlusMaxJointAngle.GetVector3();
+        const Vector3 lComToJoint       = lLocalJointPosition - lLocalComPosition;
+        const Vector3 lNewLocalCom      = lLocalJointPosition - lJointDirection(lComToJoint);
+
+        Matrix44Affine lNewPartTransform;
+        lNewPartTransform.xAxis = lVehicleDirection(lJointRotationMatrix.xAxis);   // stvx128 this+0x00
+        lNewPartTransform.yAxis = lVehicleDirection(lJointRotationMatrix.yAxis);   // stvx128 this+0x10
+        lNewPartTransform.zAxis = lVehicleDirection(lJointRotationMatrix.zAxis);   // stvx128 this+0x20
+        {
+            const Vector3 lRotatedCom = lVehicleDirection(lNewLocalCom);
+            lNewPartTransform.wAxis = Vector3{
+                lVehicleTransform.wAxis.x + lRotatedCom.x,
+                lVehicleTransform.wAxis.y + lRotatedCom.y,
+                lVehicleTransform.wAxis.z + lRotatedCom.z,
+                0.0f };                                                            // stvx128 this+0x30
+        }
+        mRwBody.SetTransform(lNewPartTransform);
+
+        // ---- (10) the anchor velocity, kept in VEHICLE-LOCAL axes for next frame's difference --------
+        mRwBody.SetLinearVelocity(lVehicleInverseDirection(lAnchorVelocity));      // stvx128 this+0x40
+
+        // [DIAG] NOT IN THE X360 BINARY. The witness for the integrator itself: the hinge angle and
+        // its velocity, the band they live in, the drive term that moves them, and the axis/direction
+        // pair the model is built on. A hinged panel that "does not move" and one that moves in the
+        // wrong plane are indistinguishable from a pose dump, and these are the numbers that tell them
+        // apart. Rate-limited; DELETE-WHEN the swing is banked.
+        if ( DetachProbeOn() )
+        {
+            static s32 siJointLines = 0;
+            if ( siJointLines < 40000 )
+            {
+                ++siJointLines;
+                *CgsDev::Log::gpDebugPrint
+                    << "[joint-int] present " << renderengine::guPresentCount
+                    << " ent " << mGlobalVehicleId.muValue
+                    << " id " << CgsDev::E_PRINTMODE_HEXONCE
+                    << mRigidBodyId.GetBaseRigidBodyID()
+                    << " type " << static_cast<s32>(mpIKPart->GetPartType())
+                    << " rot " << lfJointRotation << " -> " << lfNewJointRotation
+                    << " band [" << lfNegatedMaxJointAngle << ", 0]"
+                    << " vel " << lfJointVelocity
+                    << " accel " << lfAngularAcceleration
+                    << " (sq " << (lfClampedAnchorSpeed * lfClampedAnchorSpeed)
+                    << " g " << (KF_HINGED_PART_GRAVITY * lWorldPanelDirection.y)
+                    << " pivot " << lfPivotAcceleration << ")"
+                    << " resolve " << lfJointResolve
+                    << " stress " << mLocalInitialJointPositionPlusLimitStress.GetPlus()
+                    << " axis (" << lJointAxis.x << ", " << lJointAxis.y << ", " << lJointAxis.z << ")"
+                    << " dirL (" << lLocalPanelDirection.x << ", " << lLocalPanelDirection.y << ", "
+                    << lLocalPanelDirection.z << ")"
+                    << " dirW (" << lWorldPanelDirection.x << ", " << lWorldPanelDirection.y << ", "
+                    << lWorldPanelDirection.z << ")"
+                    << " dt " << lfTimeStep << "\n";
+            }
+        }
     }
 
     // =========================================================================================
