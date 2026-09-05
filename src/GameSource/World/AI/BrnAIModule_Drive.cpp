@@ -822,7 +822,14 @@ void AIModule::StoreDrivenCarData(const AIModuleIO::InputBuffer* lpInputBuffer)
         CGS_ASSERT(IsFiniteF32(lfSpeed), "Invalid car speed");             // X360 :2026
 
         const bool lbIsPlayer         = (mePlayerActiveRaceCarIndex == leSlot);
-        const bool lbIsDrivenByPlayer = lbIsPlayer && mbAIDrivesPlayer;
+        // CORRECTED 2026-09-05 (aiwave2 conductor, asm 0x82795CB4..0x82795CD4): r29 = 1 when the
+        // slot is the player's; then `lbzx [0x4EB82] ; cmplwi ; beq CD8` SKIPS the `mr r29, r26`
+        // (= 0) when mbAIDrivesPlayer is FALSE -- so the flag is isPlayer && !mbAIDrivesPlayer:
+        // "this is the player's car and a human, not the AI, is driving it". The old `&&
+        // mbAIDrivesPlayer` left the human player's AICar with mbIsDrivenByPlayer == 0, and
+        // AIAggression::FindTarget @0x82793CA0 refuses a player car whose byte is 0 -- no rival
+        // could ever target the player (run4: every rival PASSIVE / OUT_OF_RANGE beside the player).
+        const bool lbIsDrivenByPlayer = lbIsPlayer && !mbAIDrivesPlayer;
 
         const bool lbTouchingPlayer  = lpCarInterface->IsActiveRaceCarTouchingPlayer(leSlot);
         const bool lbTouchingAnother = lpCarInterface->IsActiveRaceCarTouchingAnother(leSlot);
@@ -1115,6 +1122,18 @@ void AIModule::ProcessAIVehicleInputs(AIModuleIO::OutputBuffer* lpOutputBuffer)
                 {
                     ++siRivalWitnessLines;
                     const Vector3 lPos = lpCar->GetPosition();
+                    // aiwave2 2026-09-05: + distance to the player, aggression state / victim, fan bias mode
+                    // and whether a speed-match is active -- the contact chain's observables.
+                    const AICar* lpWitnessPlayer = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
+                    f32 lfDistToPlayer = -1.0f;
+                    if (lpWitnessPlayer != 0)
+                    {
+                        const Vector3 lPlayerPos = lpWitnessPlayer->GetPosition();
+                        const f32 lfDx = lPos.x - lPlayerPos.x;
+                        const f32 lfDy = lPos.y - lPlayerPos.y;
+                        const f32 lfDz = lPos.z - lPlayerPos.z;
+                        lfDistToPlayer = std::sqrt(lfDx * lfDx + lfDy * lfDy + lfDz * lfDz);
+                    }
                     *CgsDev::Log::gpDebugPrint
                         << "[rival] slot " << static_cast<s32>(leSlot) << " global " << lpCar->GetRaceCarIndex()
                         << " pos (" << lPos.x << ", " << lPos.y << ", " << lPos.z << ")"
@@ -1122,7 +1141,18 @@ void AIModule::ProcessAIVehicleInputs(AIModuleIO::OutputBuffer* lpOutputBuffer)
                         << " behaviour " << static_cast<s32>(lpCar->meBehaviour) << " route " << (lpCar->HasValidRoute() ? 1 : 0)
                         << " desired " << lpDriver->GetDesiredSpeed() << " gas " << lControls.mfGas << " brake " << lControls.mfBrake
                         << " steer " << lControls.mfSteering << " boost " << (lControls.mbBoost ? 1 : 0)
-                        << " startline " << (lControls.mbIsOnStartLine ? 1 : 0) << " [FLAG PC witness]\n";
+                        << " startline " << (lControls.mbIsOnStartLine ? 1 : 0)
+                        << " dist " << lfDistToPlayer
+                        << " agg " << static_cast<s32>(lpDriver->GetAggression()->GetAggressionState())
+                        << " victim " << lpDriver->GetAggressionVictim()
+                        << " bias " << static_cast<s32>(lpDriver->mSteeringFan.meBiasMode)
+                        << " match " << (lpDriver->GetAggression()->IsSpeedMatchingType() ? 1 : 0)
+                        << " prox " << lpCar->miProximityIndex
+                        << " buzz " << lpCar->mfBuzzDistanceToPlayer
+                        << " pDrv " << ((lpWitnessPlayer != 0 && lpWitnessPlayer->mbIsDrivenByPlayer) ? 1 : 0)
+                        << " near " << lpDriver->GetNearbyVehicles()->GetCount()
+                        << " aggLvl " << lpCar->GetAggressiveness()->GetAggressionLevel()
+                        << " [FLAG PC witness]\n";
                 }
             }
 

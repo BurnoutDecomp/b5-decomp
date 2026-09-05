@@ -117,6 +117,27 @@ struct StoredStompeeData
     EntityId mEntityId;   // :97  @0x10
 };
 
+// ⭐ ADDED 2026-09-05 (rival range-loop wave, lane W1). DWARF BrnRaceCarEntityModule.h:450
+// declares the module's own pending array as `RaceCarNeedsHidingEvent[8] mHidingEvents`, whose
+// element type is BrnGameState::GameStateModuleIO::RaceCarNeedsHidingEvent (dwarfdump
+// BrnGameEvents.h:371-374: `int32_t miActiveRaceCarIndex; float32_t mfHiddenTime;`).
+//
+// [!] HEADER REQUEST -- interim TU-local mirror, exactly the carrier
+// BrnRoadRageMode.cpp:161 already uses for the CONSUMER end of the same 8-byte record
+// (its `RaceCarNeedsHidingEventRecord`), because GameSource/GameState/BrnGameEvents.h does
+// not yet carry E_EVENT_RACE_CAR_NEEDS_HIDING or its GameEvent<> struct. The two mirrors
+// are byte-identical by construction; see the report's header_requests.
+// DELETE-WHEN BrnGameEvents.h grows the enumerator + struct and both mirrors can be dropped.
+//
+// SIZE PROOF: UpdateHidingEvents @0x822F5830 posts each record with `li r6, 8` and walks the
+// array with `addi r30, r30, 8`; the array base (module + 0x186D4) and the count (module +
+// 0x18714) are 0x40 == 8 * 8 bytes apart, which is the DWARF's array bound of 8.
+struct RaceCarNeedsHidingEventRecord
+{
+    s32 miActiveRaceCarIndex;   // +0x00  (SetHiddenDelay: `stw` of RaceCar::miActiveRaceCarIndex)
+    f32 mfHiddenTime;           // +0x04  (SetHiddenDelay: `stfs`)
+};
+
 // ---- element types (2026-07-31: THE ODR FORK IS GONE) ----------------------
 // This header used to define its own opaque `class RaceCar { u8 [0xB0]; }` and
 // `class ActiveRaceCar { u8 [0x1CD0]; }` so the two array accessors could compile
@@ -753,6 +774,40 @@ private:
     // caller (PostPhysicsUpdate @0x8230769C) passes lpOutput->GetGameEventQueue().
     void UpdateCurrentWorldRegion(RaceCarEntityModuleIO::GameEventQueue* lpGameEventQueue);
 
+    // ========================================================================
+    // THE ROAD-RAGE RIVAL RANGE LOOP (rival range-loop wave, lane W1, 2026-09-05).
+    // Bodies in BrnRaceCarEntityModule_Range.cpp; every signature below is from the X360
+    // asm prologue, not the pseudocode (which renders all five with junk argument lists).
+    // ========================================================================
+
+    // X360 0x822FF8F8, called from PreSceneUpdate @0x8230E2C0 (r4 == the pre-scene OUTPUT
+    // buffer -- the same r29 UpdateRaceCars_PreScene and UpdateStreaming receive). Two passes
+    // over the car arrays: pass 1 pushes in-range rivals OUT (or wraps them), pass 2 pulls
+    // out-of-range rivals back IN.
+    void UpdateInAndOutOfRangeCars( RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
+
+    // X360 0x822F5830, called from PostPhysicsUpdate @0x823076B0 with
+    // lpOutput->GetGameEventQueue() (the sub_822B67D0 accessor at 0x823076A4 -- the same one
+    // UpdateCurrentWorldRegion is handed one call earlier). Posts every pending hiding record
+    // as game event 40 and empties the array.
+    void UpdateHidingEvents( RaceCarEntityModuleIO::GameEventQueue* lpGameEventQueue );
+
+    // X360 0x822D2988. Queue one {slot, hiddenTime} record for lpRaceCar. Its ONLY caller is
+    // IsRaceCarWrappable @0x822E9E18.
+    void SetHiddenDelay( RaceCar* lpRaceCar );
+
+    // X360 0x822E9E18. True when the car may be teleported ("wrapped") relative to the player
+    // this frame; queues the hiding record as a side effect on the arms that say yes.
+    bool IsRaceCarWrappable( RaceCar* lpRaceCar );
+
+    // X360 0x822E9188, called from PostPhysicsUpdate @0x82307604 (r4 == the post-physics INPUT
+    // buffer). Copies the AI's pose for every car it is simulating out of range into that car's
+    // RaceCar slot, so a car that comes back in range comes back where the AI drove it to.
+    void ReadOutOfRangeRaceCarDataFromAI( RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput );
+
+    // X360 0x822BA068. The global RaceCar behind the local player's active slot.
+    RaceCar* GetPlayerRaceCar();
+
     // FLAG: opaque leading state. In the full class this span is the
     // ModuleSingleBuffered base plus the early stage/handle/region members; here
     // it exists only to land maRaceCars at the X360-proven +0x250 offset.
@@ -1371,6 +1426,36 @@ private:
     // bit 0 says the sim is paused. UpdateStreaming accumulates it into the streamer's
     // mfTimeSinceLastLoad.
     f32 mfTimeStep;
+
+    // ========================================================================
+    // MODELLED members (rival range-loop wave, lane W1, 2026-09-05). Same additive rule as
+    // the blocks above: console offsets recorded per member, x64 offsets not load-bearing.
+    // ========================================================================
+
+    // X360 +0x228 (552). DWARF BrnRaceCarEntityModule.h:283 -> `float32_t mfClippedTime`, and
+    // the offset is CLOSED, not guessed: the four DWARF members between it and the already
+    // pinned mDistrictMapResourceHandle (:331 @+0x23C) are mePrepareStage / meReleaseStage /
+    // meInitialLoadStage / miResourceCount, four 4-byte slots == +0x22C..+0x23C, so :283 lands
+    // exactly on +0x228. IsRaceCarWrappable @0x822E9E18 is its only reader/writer: it counts
+    // FRAMES (`fadds f0, f13, 1.0` @0x822EA018) for which the car sits more than 30 degrees off
+    // the player's heading axis, hides the car once the count passes 120.0f, and zeroes it the
+    // moment the car comes back onto the axis (`stfs flt_82001CC0, 0x228(r31)` @0x822E9F2C).
+    f32 mfClippedTime;
+
+    // X360 +0x18354 (99156). DWARF BrnRaceCarEntityModule.h:386. The head gate of
+    // UpdateInAndOutOfRangeCars (`lbzx r11, r23, 0x18354 ; bne` @0x822FF93C).
+    // ⛔ NO WRITER EXISTS ON THIS BUILD -- see the [FLAG PC bring-up] banner on the
+    // E_ACTION_START_PLAYING_MODE arm in BrnRaceCarEntityModule.cpp; the console's writers are
+    // Construct @0x822FDBD4, HandlePrepareForModeAction @0x823095E8 (clear) and
+    // HandleGameActions' action-34 arm @0x8230C7F8 (set).
+    bool mbModeStartedPlaying;
+
+    // X360 +0x186D4 (100052) / +0x18714 (100116). DWARF BrnRaceCarEntityModule.h:450/:451.
+    // The frame's pending "this rival needs hiding" records: SetHiddenDelay @0x822D2988
+    // appends (asserting the count is < 8 first), UpdateHidingEvents @0x822F5830 posts them
+    // all as game event 40 and resets the count to zero.
+    RaceCarNeedsHidingEventRecord mHidingEvents[8];
+    s32                           miHidingEvents;
 };
 
 // X360 0x822A34A8. Asserts the index is in [E_ACTIVE_RACE_CAR_INDEX_0,

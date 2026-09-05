@@ -69,32 +69,76 @@ namespace BrnAI
     // steps lowered to one 1/sqrt; the trailing vcmpeqfp. self-compare lowered to a NaN guard,
     // per the committed Calc2DIntersectionEquationData / VMX precedent).
     //
-    // v2 = lPosition, v1 = lVelocity. Returns the signed perpendicular distance from the origin
-    // to the line through lPosition running in direction lVelocity, i.e.
-    // cross(lVelocity, lPosition) / |lPosition.xy|. When |lPosition.xy| is zero the result falls
-    // back to |lVelocity.xy| (the asm's `if (|pos|==0) recompute magnitude from v1` branch). The
-    // result is asserted finite ('Bad maths!', X360 baked BrnAIUtils.h:141 -- path/line dropped).
+    // v1 = lPosition (arg 1), v2 = lVelocity (arg 2) -- the PPC vector ABI order. Returns the
+    // signed perpendicular distance from the origin to the line through lPosition running in
+    // direction lVelocity, i.e. cross(lPosition, lVelocity) / |lVelocity.xy|. When |lVelocity.xy|
+    // is zero the result falls back to |lPosition.xy|. The result is asserted finite ('Bad
+    // maths!', X360 baked BrnAIUtils.h:141 -- path/line dropped).
+    //
+    // CORRECTED 2026-09-05 (aiwave2 lane F2a, re-read against the asm): the earlier body had the
+    // two arguments' ROLES swapped -- it divided by |lPosition|, fell back to |lVelocity| and
+    // formed cross(lVelocity, lPosition). The asm is unambiguous: 0x82765200 `vmulfp128 v13,v2,v2`
+    // (the divisor is |v2| == arg 2), 0x82765270 `vmulfp128 v0,v1,v1` (the fallback is |v1|),
+    // 0x827652B8..0x827652F4 `v1.x*v2.y - v1.y*v2.x` (cross(arg1, arg2)). The DWARF twin
+    // BrnTraffic::TrafficEntityModule::Avoidance_CalculateDistancePosVelToOrigin(lStart, lVel)
+    // agrees. Call sites pass (position, velocity) and were never wrong.
     f32 DistancePosVelToOrigin(Vector2 lPosition, Vector2 lVelocity)
     {
-        // |lPosition.xy| via len2 * rsqrt(len2); the vsel yields 0 for a zero-length vector.
-        const f32 lfPosLenSq = (lPosition.x * lPosition.x) + (lPosition.y * lPosition.y);
-        const f32 lfPosLen   = (lfPosLenSq == 0.0f) ? 0.0f : (lfPosLenSq * (1.0f / std::sqrt(lfPosLenSq)));
+        // |lVelocity.xy| via len2 * rsqrt(len2); the vsel yields 0 for a zero-length vector.
+        const f32 lfVelLenSq = (lVelocity.x * lVelocity.x) + (lVelocity.y * lVelocity.y);
+        const f32 lfVelLen   = (lfVelLenSq == 0.0f) ? 0.0f : (lfVelLenSq * (1.0f / std::sqrt(lfVelLenSq)));
 
         f32 lfResult;
-        if (lfPosLen == 0.0f)
+        if (lfVelLen == 0.0f)
         {
-            // Fallback: |lVelocity.xy| the same way (zero-length -> 0).
-            const f32 lfVelLenSq = (lVelocity.x * lVelocity.x) + (lVelocity.y * lVelocity.y);
-            lfResult = (lfVelLenSq == 0.0f) ? 0.0f : (lfVelLenSq * (1.0f / std::sqrt(lfVelLenSq)));
+            // Fallback: |lPosition.xy| the same way (zero-length -> 0).
+            const f32 lfPosLenSq = (lPosition.x * lPosition.x) + (lPosition.y * lPosition.y);
+            lfResult = (lfPosLenSq == 0.0f) ? 0.0f : (lfPosLenSq * (1.0f / std::sqrt(lfPosLenSq)));
         }
         else
         {
-            // cross(lVelocity, lPosition) scaled by 1/|lPosition.xy|.
-            const f32 lfCross = (lVelocity.x * lPosition.y) - (lVelocity.y * lPosition.x);
-            lfResult = lfCross * (1.0f / lfPosLen);
+            // cross(lPosition, lVelocity) scaled by 1/|lVelocity.xy|.
+            const f32 lfCross = (lPosition.x * lVelocity.y) - (lPosition.y * lVelocity.x);
+            lfResult = lfCross * (1.0f / lfVelLen);
         }
 
         // vcmpeqfp self-compare: a finite result equals itself; a NaN does not.
+        CGS_ASSERT(lfResult == lfResult, "Bad maths!");
+        return lfResult;
+    }
+
+    // 0x8276DDB8 -- SEMANTIC reconstruction (aiwave2 lane R2 + conductor, 2026-09-05), same
+    // VMX lowering as DistancePosVelToOrigin above. v1 = lPoint, v2 = lLineStart, v3 = lLineEnd:
+    //   0x8276DDC8 vsubfp v9, v3, v2      line    = end - start
+    //   0x8276DDD4 vsubfp v8, v1, v2      toPoint = point - start
+    //   0x8276DE10.. |line| via rsqrt + 2 Newton steps, vsel -> 0 for a zero-length line
+    //   0x8276DE50 fcmpu |line| vs 0.0 ; beq -> fallback |toPoint| (0x8276DE58..)
+    //   0x8276DEA0.. cross = line.x*toPoint.y - line.y*toPoint.x (v13 = v9.x*v8.y, v0 = v9.y*v8.x,
+    //                vsubfp v0, v13, v0), scaled by 1/|line| (fdivs 1.0/f13)
+    //   then the vcmpeqfp self-compare -> 'Bad maths! Point = ..., Start = ..., End = ...'
+    //   (BrnAIUtils.cpp:117, StrStream-formatted; the retail build emits it).
+    f32 DistancePointToLine(Vector2 lPoint, Vector2 lLineStart, Vector2 lLineEnd)
+    {
+        const f32 lfLineX    = lLineEnd.x - lLineStart.x;
+        const f32 lfLineY    = lLineEnd.y - lLineStart.y;
+        const f32 lfToPointX = lPoint.x   - lLineStart.x;
+        const f32 lfToPointY = lPoint.y   - lLineStart.y;
+
+        const f32 lfLineLenSq = (lfLineX * lfLineX) + (lfLineY * lfLineY);
+        const f32 lfLineLen   = (lfLineLenSq == 0.0f) ? 0.0f : (lfLineLenSq * (1.0f / std::sqrt(lfLineLenSq)));
+
+        f32 lfResult;
+        if (lfLineLen == 0.0f)
+        {
+            const f32 lfToPointLenSq = (lfToPointX * lfToPointX) + (lfToPointY * lfToPointY);
+            lfResult = (lfToPointLenSq == 0.0f) ? 0.0f : (lfToPointLenSq * (1.0f / std::sqrt(lfToPointLenSq)));
+        }
+        else
+        {
+            const f32 lfCross = (lfLineX * lfToPointY) - (lfLineY * lfToPointX);
+            lfResult = lfCross * (1.0f / lfLineLen);
+        }
+
         CGS_ASSERT(lfResult == lfResult, "Bad maths!");
         return lfResult;
     }
@@ -122,7 +166,15 @@ namespace BrnAI
         {
             const f32 lfSide = (lpfCoefA[liEdge] * (lfY - lpfEdgeY0[liEdge]))
                              - (lpfCoefB[liEdge] * (lfX - lpfEdgeX0[liEdge]));
-            if (!(lfSide >= 0.0f))
+            // CORRECTED 2026-09-05 (aiwave2 lane R1, re-read by the conductor): inside is
+            // ALL FOUR crosses NEGATIVE. asm 0x827686EC..0x82768708: `vcmpgefp v13,cross,0 ;
+            // vnot` (lane = cross < 0), `vperm` with the 0x0004080C byte-gather (AND-reduce over
+            // the four lanes), `vcmpequw` against ~0, then `vcmpeqfp. vs 0 ; mfocrf ; not ;
+            // extrwi 1,24` returns 1 iff the reduced mask is non-zero. The earlier `>= 0.0f`
+            // test made every section probe miss, which left the whole racing line inert.
+            // Corroborated by AISection::IsInside @0x82677058 (inside == cross <= 0) and the
+            // winding SectionData::SetFastSectionCorners builds.
+            if (!(lfSide < 0.0f))
             {
                 return false;
             }

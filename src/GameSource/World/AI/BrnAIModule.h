@@ -503,8 +503,9 @@ private:
     // and Prepare zero it, and SetupRaceBalancingManager @0x8278A460 passes it as the third
     // argument of RaceBalancingManager::OnRaceStart. It has no name to give it, so it is not
     // declared; nothing in this tree reads it.
-    // X360 +322434 (0x4EB82) -- StoreDrivenCarData: `isPlayer && this` is the "driven by the
-    // AI" bool it hands AICar::UpdateInRangeData. DWARF :382.
+    // X360 +322434 (0x4EB82) -- StoreDrivenCarData: `isPlayer && !this` is the mbIsDrivenByPlayer
+    // bool it hands AICar::UpdateInRangeData (asm 0x82795CB4..CD4; corrected 2026-09-05). Construct
+    // stores 0 (r30) here -- the WorldDebugComponent's "AI drives player" toggle is the only setter.
     bool                mbAIDrivesPlayer;
     // X360 +322435 (0x4EB83) -- ProcessAIVehicleInputs: `isPlayer && this` -> the record's
     // mbIsInvulnerableToWorld, OR'd with AIDriver::IsInvulnerable() into

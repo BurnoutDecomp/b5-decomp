@@ -6,6 +6,7 @@
 #include "GameSource/World/AI/Route/BrnRacingLine.h"                  // RacingLine
 #include "GameSource/World/AI/RacingLine/BrnRacingLineGenerator.h"    // RacingLineGenerator + the two gates
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
+#include "GameSource/World/AI/RacingLine/BrnAISteeringFan_TrafficConstants.h" // KF_GUESSED_MAX_SPEED (CalculateFanAngle)
 
 #include <cmath>    // std::sin / std::cos (the XMVectorSinCos polynomial), std::fabs, std::sqrt
 
@@ -21,16 +22,12 @@
 //     FindPlayerInTraffic           @0x82769510
 //     FindVictimInTraffic           @0x82769580
 //     UpdateWeightings              @0x82794600
-//   PARKED (each with its own [FLAG PC bring-up] banner and DELETE-WHEN, below)
-//     CalculateFanAngle             @0x82768CB0   -- no IDA export
-//     IncludeRouteEdgeIntersection  @0x8277A378   -- no IDA export
-//     IncludeHardNoGo               @0x82779D98   -- needs the RacingLineGenerator section stack
-//     IncludeConstantBearing        @0x827873A0   -- needs .bss-resident tuning constants
-//     IncludeDriftDirectionTracking @0x827881B0   -- kfBias column is 0 in all 10 modes
-//     IncludeDriftLocationTracking  @0x82788738   -- kfBias column is 0 in all 10 modes
-//     IncludeSmashIntoPlayer        @0x82791230 / IncludeSmashIntoNearbyAI @0x82791338 /
-//     IncludeSmashIntoTarget        @0x82787968 / FindNeabyAIInTraffic /
-//     IncludeDriveCloseToPlayer     @0x82787E58 / FanIntersectsEdge @0x8277A208
+//     CalculateFanAngle             @0x82768CB0   (no IDA export -- decoded from image bytes, aiwave2)
+//   BODIED ELSEWHERE (aiwave2 2026-09-05 partfiles, see the trailer note at the end of this file)
+//     BrnAISteeringFan_HNG.cpp        IncludeHardNoGo / IncludeRouteEdgeIntersection / FanIntersectsEdge
+//     BrnAISteeringFan_Traffic.cpp    IncludeConstantBearing
+//     BrnAISteeringFan_Aggression.cpp IncludeSmashIntoTarget / IncludeSmashIntoPlayer / IncludeSmashIntoNearbyAI /
+//                                     FindNeabyAIInTraffic / IncludeDriveCloseToPlayer / IncludeDrift*Tracking
 //
 // SHARED REGISTER MAP for UpdateWeightings @0x82794600 (the console's, read off 0x82794614..30):
 //   r3/r31 = this, r4/r26 = lpCar, r5/r27 = lpRacingLine, r6/r28 = lpRacingLineGenerator,
@@ -84,23 +81,43 @@ namespace
 }
 
 // ========================================================================================
-// [FLAG PC bring-up] CalculateFanAngle @0x82768CB0 -- UNRECOVERABLE IN THIS TREE.
-// UpdateWeightings calls it first (bl @0x82794640, r3 = this, r4 = lpCar) and it is the only
-// writer of mfFanAngle besides Prepare. There is NO IDA export for 0x82768CB0
-// (.ida-exports/BURNOUT_X360_ARTIST.XEX has no 0x82768CB0.json and names.tsv has no row for it),
-// so no pseudocode or assembly is available to reconstruct from. The DWARF names the three
-// file-scope constants it must consume (BrnAISteeringFan.cpp:24..26 KF_STEER_AT_LOW_SPEED /
-// KF_STEER_AT_HIGH_SPEED / KF_GUESSED_MAX_SPEED), i.e. it narrows the fan as the car speeds up --
-// but the ramp itself is not attested, and inventing it would be inventing behaviour.
-// EFFECT OF THE PARK: mfFanAngle keeps SteeringFan::Prepare's value, flt_82F30428 == 1.3962634 rad
-// (80 degrees), which is the console's own value for a stationary car, so the fan is at its widest
-// at all speeds instead of narrowing. GenerateFanVectors is otherwise faithful.
-// DELETE-WHEN 0x82768CB0 is disassembled from the image bytes (the recipe BrnAIUtils_Angles.cpp
-// used for FindSignedAngleBetween2DVectors @0x827716A8) and this body is written.
+// CalculateFanAngle @0x82768CB0 -- NO IDA export; decoded from image bytes (tools/re/ppcdis.py,
+// 38 instructions, 0x82768CB0..0x82768D44) by the conductor, aiwave2 2026-09-05.
+//
+//   bl AICar::GetSpeed                     -> f1
+//   f0  = flt_82F30428  (1.3962634 = 80 deg)          KF_STEER_AT_LOW_SPEED   (DWARF :24)
+//   f13 = flt_820C4168  (0.5)                          KF_STEER_AT_HIGH_SPEED  (DWARF :25)
+//   f10 = f13 - f0
+//   f11 = flt_820C4238  (15.0)                         look-ahead growth over the speed range
+//   stfs flt_82F302C0 (15.0) -> +0x7FC                  mfLookAheadHNGRadius (every tick)
+//   f13 = f1 / [0x8300D78C]                            KF_GUESSED_MAX_SPEED (DWARF :26; .bss,
+//                                                       recovered by lane F2a = 100 mph)
+//   fsel x2 -> saturate(f13) into [0, 1]
+//   stfs (f10 * ratio + f0)        -> +0x800            mfFanAngle: 80 deg at rest -> 0.5 rad flat out
+//   stfs (ratio * 15.0 + 10.0)     -> +0x7F8            mfLookAheadRadius: 10 m -> 25 m
 // ========================================================================================
+namespace
+{
+    const f32 KF_STEER_AT_LOW_SPEED    = 1.3962633609771729f;   // flt_82F30428 (80 deg)
+    const f32 KF_STEER_AT_HIGH_SPEED   = 0.5f;                  // flt_820C4168
+    const f32 KF_FAN_LOOK_AHEAD_BASE   = 10.0f;                 // flt_820C4150
+    const f32 KF_FAN_LOOK_AHEAD_GROWTH = 15.0f;                 // flt_820C4238
+    const f32 KF_FAN_LOOK_AHEAD_HNG    = 15.0f;                 // flt_82F302C0
+}
+
 void SteeringFan::CalculateFanAngle(AICar* lpCar)
 {
-    (void)lpCar;
+    const f32 lfSpeed = lpCar->GetSpeed();
+
+    mfLookAheadHNGRadius = KF_FAN_LOOK_AHEAD_HNG;                                   // stfs 0x7FC
+
+    f32 lfRatio = lfSpeed / KF_GUESSED_MAX_SPEED;                                    // fdivs
+    if (lfRatio < 0.0f) lfRatio = 0.0f;                                              // fsel vs 0.0
+    if (lfRatio > 1.0f) lfRatio = 1.0f;                                              // fsel vs 1.0
+
+    mfFanAngle        = (KF_STEER_AT_HIGH_SPEED - KF_STEER_AT_LOW_SPEED) * lfRatio
+                        + KF_STEER_AT_LOW_SPEED;                                     // stfs 0x800
+    mfLookAheadRadius = lfRatio * KF_FAN_LOOK_AHEAD_GROWTH + KF_FAN_LOOK_AHEAD_BASE;  // stfs 0x7F8
 }
 
 // ========================================================================================
@@ -138,8 +155,12 @@ void SteeringFan::GenerateFanVectors(AICar* lpCar)
     const Vector3 lUseful      = lpCar->GetUsefulDirection();     // @0x82770028
 
     mFanOrigin      = lCarPosition;                               // stvx128 v127, r29, 0x340
-    mFanOrigin2D.x  = lCarPosition.x;                             // vrlimi128 8,0 / 4,1
-    mFanOrigin2D.y  = lCarPosition.y;
+    mFanOrigin2D.x  = lCarPosition.x;                             // vrlimi128 v0,v127,8,0
+    mFanOrigin2D.y  = lCarPosition.z;                             // vrlimi128 v0,v127,4,1 -- rotate 1: lane 2 (Z) into lane 1
+    // CORRECTED 2026-09-05 (aiwave2 conductor): this wrote lCarPosition.y (the HEIGHT). The
+    // asm @0x82779340/0x82779354 is the (x, Z) ground-plane flatten every other 2D site uses, so
+    // every mTarget[i] sat at world z ~ 0, the steering angle read ~pi and the rivals spun round
+    // and drove the wrong way (run2/run3 of scratch/aiwave2).
 
     Vector2 lReference;                                           // the (0,1) the angle is from
     lReference.x = 0.0f;
@@ -464,145 +485,13 @@ void SteeringFan::UpdateWeightings(AICar* lpCar, RacingLine* lpRacingLine,
 }
 
 // ========================================================================================
-// [FLAG PC bring-up] THE SIX CONTRIBUTORS BELOW HAVE NO RECONSTRUCTED BODY.
-// Each one keeps its console dispatch guard in UpdateWeightings above (the kfBias column test), so
-// none of them is silently skipped -- the call is made and the row is simply left at whatever
-// SteeringFan::Prepare / the previous tick left in it (Prepare zeroes all 14 rows).
-// A zero row contributes nothing to AccumulateWeightings, which is why the fan can come out FLAT;
-// see the [FLAG] on BRN_AI_STEERINGFAN_TARGET_PRESENT in BrnRacingLineGenerator.h for what a flat
-// fan does to GetDrivingTarget and GetSpeedRatio.
-//
-//   IncludeHardNoGo @0x82779D98 (rows eFan_AvoidHNG / eFan_ExitHNG / eFan_FavourHNGDanger, and the
-//     ONLY positive contributor in eBiasMode_Race: kfBias == +50 / -300). Needs
-//     RacingLineGenerator::GetLocalSectionID @0x82776280, GetNearSectionID @0x827765A8,
-//     GetSectionPointer, and HardNoGoMap::DistanceToHardNoGoEdge -- none of which has a body in
-//     this tree (BrnHardNoGoMap.cpp bodies only MapSquareOccupiedFast / SetMapSquare, and
-//     BrnRacingLineGenerator.cpp is not even mounted because MakeMap / FindMaximalEdges are
-//     missing). DELETE-WHEN the RacingLineGenerator section-cache stack + HardNoGoMap land.
-//
-//   IncludeConstantBearing @0x827873A0 (rows eFan_AvoidTraffic / eFan_AvoidOncomingTraffic; the
-//     traffic-avoidance half of eBiasMode_Race, kfBias == -100 / -400). 370 instructions of VMX
-//     whose tuning constants (flt_8300D78C, flt_8300DB00, and the KF_SLOW_PASSING_SPACE /
-//     KF_TRAFFIC_IMPACT_TIME group) live in the 0x8300xxxx region, which reads as ALL ZERO in the
-//     static image -- they are written by dynamic initialisers, exactly like kfBias itself was
-//     (see BrnAISteeringFan_Target.cpp's table banner for the recovery recipe: find the
-//     lis/addi pair that names the address, decode the initialiser). Reconstructing the body
-//     against zeroed constants would invent behaviour. DELETE-WHEN those constants are decoded.
-//
-//   IncludeRouteEdgeIntersection @0x8277A378 (row eFan_AvoidEdges, kfBias == -200 in Race). NO IDA
-//     export exists for 0x8277A378 (it is the function immediately after FanIntersectsEdge
-//     @0x8277A208, and .ida-exports has no 0x8277A378.json). DELETE-WHEN it is disassembled from
-//     the image bytes.
-//
-//   IncludeDriftDirectionTracking @0x827881B0 / IncludeDriftLocationTracking @0x82788738 (rows
-//     eFan_DriftFinalDirection / eFan_DriftFinalLocation). PROVABLY UNREACHABLE in this build:
-//     both kfBias columns are 0.0 in all ten bias modes (verified against the static image AND the
-//     dynamic initialiser at 0x82C69380, which never writes columns 9 or 10), so UpdateWeightings'
-//     guard above never fires. Both are self-contained (no external calls) and are the cheapest
-//     remaining recon if a later build re-enables the columns.
-//     DELETE-WHEN a mode with a non-zero column 9/10 exists, or on a completeness pass.
-//
-//   IncludeDriveCloseToPlayer @0x82787E58 (row eFan_DriveCloseToPlayer; kfBias == 60 in
-//     eBiasMode_CloseToPlayer -- which is the mode AIDriver::SetDrivingFanBiases selects for
-//     behaviour E_AI_BEHAVIOUR_ROLLING_START -- and 50 in eBiasMode_VeerAwayFromPlayer). Needs
-//     BrnAI::DistancePosVelToOrigin + BrnMath::Flatten (both present) but also the
-//     KF_CLOSE_PASSING_RANGE / KF_DESIRED_CLOSE_PASSING_SEPERATION constants, which are in the
-//     same zeroed 0x8300xxxx region as IncludeConstantBearing's.
-//     DELETE-WHEN those constants are decoded.
-//
-//   IncludeSmashIntoNearbyAI @0x82791338 / IncludeSmashIntoPlayer @0x82791230 /
-//   IncludeSmashIntoTarget @0x82787968 / FindNeabyAIInTraffic / FanIntersectsEdge @0x8277A208
-//     (rows eFan_SmashIntoRivals / eFan_SmashIntoPlayer). The two entry points are 35 and 65
-//     instructions and are pure dispatch into IncludeSmashIntoTarget, whose 159-instruction body
-//     needs KF_SLAM_AHEADNESS / KF_MAX_SEPERATION_FOR_SLAM / KF_SLAM_FROM_BEHIND_RELATIVE_SPEED --
-//     again the zeroed 0x8300xxxx constant region. FanIntersectsEdge is only reached from
-//     IncludeRouteEdgeIntersection, which has no export.
-//     DELETE-WHEN those constants are decoded.
+// The eleven contributors that used to be parked here (IncludeHardNoGo, IncludeConstantBearing,
+// IncludeRouteEdgeIntersection, IncludeDriftDirectionTracking, IncludeDriftLocationTracking,
+// IncludeDriveCloseToPlayer, FindNeabyAIInTraffic, IncludeSmashIntoTarget, IncludeSmashIntoPlayer,
+// IncludeSmashIntoNearbyAI, FanIntersectsEdge) were bodied by aiwave2 (2026-09-05) in their own
+// partfiles: BrnAISteeringFan_HNG.cpp (HNG / route-edge / FanIntersectsEdge),
+// BrnAISteeringFan_Traffic.cpp (constant bearing + BrnAISteeringFan_TrafficConstants.h) and
+// BrnAISteeringFan_Aggression.cpp (smash / drive-close / drift + BrnAISteeringFan_AggressionConstants.h).
 // ========================================================================================
-void SteeringFan::IncludeHardNoGo(RacingLineGenerator* lpRacingLineGenerator,
-                                  RacingLine* lpRacingLine)
-{
-    (void)lpRacingLineGenerator;
-    (void)lpRacingLine;
-}
-
-void SteeringFan::IncludeConstantBearing(RacingLine* lpRacingLine, AICar* lpCar,
-                                         const NearbyVehicles* lpNearbyVehicles)
-{
-    (void)lpRacingLine;
-    (void)lpCar;
-    (void)lpNearbyVehicles;
-}
-
-void SteeringFan::IncludeRouteEdgeIntersection(RacingLineGenerator* lpRacingLineGenerator,
-                                               RacingLine* lpRacingLine)
-{
-    (void)lpRacingLineGenerator;
-    (void)lpRacingLine;
-}
-
-void SteeringFan::IncludeDriftDirectionTracking(RacingLineGenerator* lpRacingLineGenerator,
-                                                RacingLine* lpRacingLine)
-{
-    (void)lpRacingLineGenerator;
-    (void)lpRacingLine;
-}
-
-void SteeringFan::IncludeDriftLocationTracking(RacingLineGenerator* lpRacingLineGenerator,
-                                               RacingLine* lpRacingLine)
-{
-    (void)lpRacingLineGenerator;
-    (void)lpRacingLine;
-}
-
-void SteeringFan::IncludeDriveCloseToPlayer(RacingLine* lpRacingLine, AICar* lpCar,
-                                            const NearbyVehicles* lpNearbyVehicles)
-{
-    (void)lpRacingLine;
-    (void)lpCar;
-    (void)lpNearbyVehicles;
-}
-
-const NearbyVehicle* SteeringFan::FindNeabyAIInTraffic(const NearbyVehicles* lpNearbyTraffic,
-                                                       AICar* lpCar)
-{
-    (void)lpNearbyTraffic;
-    (void)lpCar;
-    return 0;
-}
-
-void SteeringFan::IncludeSmashIntoTarget(AICar* lpCar, const NearbyVehicle* lpTarget,
-                                         EFan_Contributors leContributor,
-                                         f32 lfMinAheadness, f32 lfMaxAheadness)
-{
-    (void)lpCar;
-    (void)lpTarget;
-    (void)leContributor;
-    (void)lfMinAheadness;
-    (void)lfMaxAheadness;
-}
-
-void SteeringFan::IncludeSmashIntoPlayer(AICar* lpCar, const NearbyVehicles* lpNearbyVehicles,
-                                         EGlobalRaceCarIndex leAggressionVictim)
-{
-    (void)lpCar;
-    (void)lpNearbyVehicles;
-    (void)leAggressionVictim;
-}
-
-void SteeringFan::IncludeSmashIntoNearbyAI(AICar* lpCar, const NearbyVehicles* lpNearbyVehicles)
-{
-    (void)lpCar;
-    (void)lpNearbyVehicles;
-}
-
-f32 SteeringFan::FanIntersectsEdge(Vector2* lpEdge, s32 liIndex, Vector2 lA, Vector2 lB)
-{
-    (void)lpEdge;
-    (void)liIndex;
-    (void)lA;
-    (void)lB;
-    return 0.0f;
-}
 
 }

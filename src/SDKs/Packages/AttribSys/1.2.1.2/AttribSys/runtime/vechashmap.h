@@ -279,6 +279,11 @@ namespace Attrib
         // bucket was actually vacated.
         bool RemoveCollection(Collection* lpCollection);
 
+        // The console's `lwz r10, 8(class)` read of the ClassPrivate block, by name
+        // (HashMap::Remove @0x82807B4C inherited-payload arm; Collection::Clear phase 2).
+        // Returns void* because ClassPrivate is not visible here; callers static_cast.
+        void* GetPrivates() const { return mpPrivates; }
+
     private:
         // The class's default-collection key, materialised as a literal immediate in the X360 asm
         // (0x82807DF8-E10): r4 low = ori(lis 0x2D7D, 0x2152) = 0x2D7D2152; then insrdi r4,r10,32,0
