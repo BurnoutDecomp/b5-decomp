@@ -3241,6 +3241,19 @@ namespace Vehicle
             return (siArmed == 1) && (CgsDev::Log::gpDebugPrint != NULL);
         }
         u32 s_uDriftProbeFrame = 0u;
+
+        // [rollcatch] latch -- NOT IN THE X360 BINARY. Shares BRN_CRASH_RESPONSE_DIAG with the
+        // [crash-response] pose witness so one run answers both questions. See UpdateCrashing.
+        bool RollCatchArmed()
+        {
+            static s32 siArmed = -1;
+            if (siArmed < 0)
+            {
+                const char* lpcEnv = getenv("BRN_CRASH_RESPONSE_DIAG");
+                siArmed = (lpcEnv != NULL && lpcEnv[0] != '0') ? 1 : 0;
+            }
+            return (siArmed == 1) && (CgsDev::Log::gpDebugPrint != NULL);
+        }
     }
 
     void VehiclePhysics::UpdateDriftState(const BrnPlayerDriverControls* lpControls, f32 lfAbsSteering,
@@ -8270,6 +8283,23 @@ namespace Vehicle
 
         const VecFloat lvfTimeStep{ lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep };
 
+        // ---- [rollcatch] NOT IN THE X360 BINARY. OPT-IN on the existing BRN_CRASH_RESPONSE_DIAG
+        // latch so it lands in the same log as [crash-response]. THE QUESTION IT ANSWERS: the
+        // previous wave measured 5.50 rad/s of body roll on an oblique wall hit -- 85% of this
+        // function's own +/-6.5 clamp -- and yet up.y never fell below 0.8049 and the verdict was
+        // DRIVE_AWAY. Something REVERSES a live roll. This samples the body roll rate
+        // (omega . at) at every stage boundary of the crash update and prints the per-stage delta,
+        // so the catcher is named by subtraction instead of by argument. mTransform is not
+        // integrated inside this function, so the roll axis is fixed across the samples.
+        // DELETE-WHEN the roll question is closed and banked.
+        const bool lbRollCatch = RollCatchArmed();
+        f32 lafRoll[9] = { 0,0,0,0,0,0,0,0,0 };
+        s32 liRollStage = 0;
+        #define BRN_ROLLCATCH_SAMPLE() \
+            do { if (lbRollCatch && liRollStage < 9) \
+                 { lafRoll[liRollStage++] = vpu::Dot(mAngularVelocity, mTransform.zAxis); } } while (0)
+        BRN_ROLLCATCH_SAMPLE();   // 0: entry
+
         CheckState("Start of update crashing");
 
         BrnPlayerDriverControls lCopy;
@@ -8296,6 +8326,7 @@ namespace Vehicle
             { const f32 lfF = std::pow(lfAngDamp, lfExponent);
               mAngularVelocity = vpu::Mult(mAngularVelocity, lfF); }   // stvx this+0x60
         }
+        BRN_ROLLCATCH_SAMPLE();   // 1: after the 0.995/0.992 exponential angular damping
 
         // ----- clamp omega per BODY axis (asm 0x82638C60..0x82638CE8) -----
         {
@@ -8314,6 +8345,7 @@ namespace Vehicle
                 mTransform.xAxis.z * lfLx + mTransform.yAxis.z * lfLy + mTransform.zAxis.z * lfLz,
                 0.0f };
         }
+        BRN_ROLLCATCH_SAMPLE();   // 2: after the +/-6.5 rad/s per-body-axis clamp
 
         // ----- the mass regime (asm 0x82638CF4..0x82638DA0) -----
         if (IsCrashingNormally())                  // vcall +0x18, second dispatch
@@ -8346,6 +8378,7 @@ namespace Vehicle
         CheckState("After update air ram");
 
         UpdateSpinEffects(lvfTimeStep);
+        BRN_ROLLCATCH_SAMPLE();   // 3: after UpdateAirRam + UpdateSpinEffects
 
         if (lbPlayerAftertouchForceAdditive)
         {
@@ -8372,11 +8405,14 @@ namespace Vehicle
         CheckState("After update engine");
 
         CalculateNewVelocity(lvfTimeStep);
+        BRN_ROLLCATCH_SAMPLE();   // 4: after aftertouch / downforce / engine / integrate
 
         UpdateSteering(lCopy.mfSteering, lCopy.mfGas, lvfTimeStep, lCopy.mbIsSteeringWheel);
+        BRN_ROLLCATCH_SAMPLE();   // 5: after UpdateSteering
 
         UpdateSuspension(lvfTimeStep);             // vcall +0x2C; no override in the image ->
                                                    // direct call is dispatch-identical
+        BRN_ROLLCATCH_SAMPLE();   // 6: after UpdateSuspension (contains StabiliseAfterHardLanding)
 
         // mbAllWheelsHaveTraction: the four road-contact bytes AND the +0x10 vcall
         // (IsPlayerVehicleInShowtime -- image-settled; traffic defaults false, so a crashing
@@ -8393,8 +8429,10 @@ namespace Vehicle
                                                    // this function does not. As shipped.
         SimpleVehiclePhysics::CalculateNewWheelPlane();
         CheckState("After update wheels");
+        BRN_ROLLCATCH_SAMPLE();   // 7: after UpdateWheels
 
         CalculateNewVelocity(lvfTimeStep);
+        BRN_ROLLCATCH_SAMPLE();   // 8: after the trailing integrate
 
         // ----- per-wheel body-point velocities (asm 0x82639030..0x826391CC, unrolled x4) -----
         // maWheels[i].mBodyPointVelocity = v + omega x (R * streamedLocalPos). The console
@@ -8450,6 +8488,49 @@ namespace Vehicle
         // UpdateDriving ZEROES this lane each frame -- the two bodies are each other's
         // complement on it.
         mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y += lfTimeStep;
+
+        // ---- [rollcatch] the ledger line (see the banner at the top of this function) --------
+        if (lbRollCatch && liRollStage == 9 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            static u32 suRollLines = 0u;
+            // Only print frames where the roll channel is actually carrying something, so a long
+            // low-speed tumble does not bury the frames that matter. 0.5 rad/s is ~29 deg/s.
+            const f32 lfPeak = (lafRoll[0] < 0.0f) ? -lafRoll[0] : lafRoll[0];
+            if (lfPeak > 0.5f && ++suRollLines <= 2000u)
+            {
+                const VehicleAttribs::SuspensionAttribs& lrSus = mpAttribs->mSuspensionAttribs;
+                const f32 lfTimeToDamp =
+                    lrSus.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.w;
+                const f32 lfMaxRollDamp =
+                    lrSus.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.y;
+                const f32 lfTimeSince =
+                    mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.x;
+                *CgsDev::Log::gpDebugPrint
+                    << "[rollcatch] roll0 " << lafRoll[0]
+                    << " angDamp " << (lafRoll[1] - lafRoll[0])
+                    << " clamp "   << (lafRoll[2] - lafRoll[1])
+                    << " spin "    << (lafRoll[3] - lafRoll[2])
+                    << " integ1 "  << (lafRoll[4] - lafRoll[3])
+                    << " steer "   << (lafRoll[5] - lafRoll[4])
+                    << " susp "    << (lafRoll[6] - lafRoll[5])
+                    << " wheels "  << (lafRoll[7] - lafRoll[6])
+                    << " integ2 "  << (lafRoll[8] - lafRoll[7])
+                    << " roll8 "   << lafRoll[8]
+                    << " | tSinceLand " << lfTimeSince
+                    << " tToDamp " << lfTimeToDamp
+                    << " maxRollDamp " << lfMaxRollDamp
+                    << " stabArmed " << ((lfTimeSince < lfTimeToDamp) ? 1 : 0)
+                    << " wog " << (maWheels[0].GetRoadContact().mbIsOnGround ? 1 : 0)
+                    << (maWheels[1].GetRoadContact().mbIsOnGround ? 1 : 0)
+                    << (maWheels[2].GetRoadContact().mbIsOnGround ? 1 : 0)
+                    << (maWheels[3].GetRoadContact().mbIsOnGround ? 1 : 0)
+                    << " agValid " << (mAboveGroundTestResult.mbValid ? 1 : 0)
+                    << " upy " << mTransform.yAxis.y
+                    << " dt " << lfTimeStep
+                    << "\n";
+            }
+        }
+        #undef BRN_ROLLCATCH_SAMPLE
 
         // No trailing CheckState -- the console body ends here.
     }
