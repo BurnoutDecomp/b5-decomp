@@ -34,6 +34,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnBurnoutBodyPartID.h" // BurnoutBodyPartID (embedded BY VALUE)
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"                       // CgsSceneManager::VolumeInstanceId (returned BY VALUE)
 #include "GameShared/GameClasses/SceneManager/CgsVolumeId.h"                               // CgsSceneManager::VolumeId (returned BY VALUE)
+#include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"              // CgsSceneManager::SceneManagerIO::PotentialContact (AddContact's record -- see the alias below)
 
 // ---- forward declarations (cross-TU types referenced only by pointer/reference) ----
 // Per project rule these are NOT included (their definitions are other agents' homes);
@@ -130,9 +131,15 @@ namespace Deformation
     // forward-declared (definition not homed in this family).
     struct OutUpdateRigidBody;
 
-    // A single potential contact handed to AddContact (the deformation contact the joint resolves
-    // against). Owned by the physics contact-interface TU. FLAG: forward-declared.
-    struct PotentialContact;
+    // A single potential contact handed to AddContact. ⭐ 2026-09-05 (hinge-geometry wave): this
+    // is THE scene-manager record, not a deformation-local type -- an ALIAS, homed at
+    // GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h. It stood as a bare
+    // forward declaration here while BrnPhysicalBodyPartPool.h defined a 48-byte
+    // `Deformation::PotentialContact` fork beside it, and AddContact then read the record through
+    // RAW BYTE OFFSETS that belonged to the real 80-byte type -- an out-of-bounds read plus a
+    // garbage part index the moment a hinged panel first produced a contact. Full evidence in the
+    // retired-fork banner in BrnPhysicalBodyPartPool.h.
+    typedef CgsSceneManager::SceneManagerIO::PotentialContact PotentialContact;
 
     // The per-part contact-spy debug record AddContactSpy writes. Owned by the contact-spy TU.
     // FLAG: forward-declared.
@@ -157,12 +164,14 @@ namespace Deformation
         // joint/COM/collision state, flags).
         void Construct();
 
-        // BrnPhysicalBodyPart.h:136. Bind this part to a vehicle + its IK spec, building the
-        // local joint/graphics/COM frames from the two passed transforms (graphics + bbox
-        // orientation). @ asm calls CalcBoundingBox.
+        // BrnPhysicalBodyPart.h:136. Bind this part to a vehicle + its IK spec, building the local
+        // joint/graphics/COM frames and posing the embedded body. @ asm calls CalcBoundingBox.
+        // ⭐ 2026-09-05: the SECOND matrix is the VEHICLE'S WORLD TRANSFORM (it was spelled
+        // `lBBoxOrientation`, which is why its one caller had to pass identity). mBBoxOrientation is
+        // built from the IK spec's own BodyPartBBoxSpec::mOrientation and takes no argument at all.
         void Prepare(BurnoutBodyPartID lPartId, EntityId lGlobalVehicleId,
                      const DeformableObject* lpDeformableObject, const IKBodyPart* lpIKPart,
-                     Matrix44Affine lGraphicsTransform, Matrix44Affine lBBoxOrientation);
+                     Matrix44Affine lGraphicsTransform, Matrix44Affine lVehicleTransform);
 
         // BrnPhysicalBodyPart.h:139. Tear down (frees the RW body resources).
         void Release();
@@ -335,12 +344,18 @@ namespace Deformation
         bool IsJoinedToVehicle() const { return mbJoinedToVehicle; }
 
         // BrnPhysicalBodyPart.h:250. Join the part to the vehicle as an active joint: seed the
-        // local joint position (v1) and the max-joint-angle from the COM arg's w lane (v3), then the
-        // active-joints tag-point index. NOTE: the asm takes only TWO vector args (v1, v3) + the char
-        // tag index; the former limit-stress VMX arg was a fabrication (the asm never writes the
-        // +400 limit-stress w lane) and has been dropped.
+        // local joint position (v1) into +352/+400 and the joint's max angle (v3, NEGATED) into the
+        // +384 w lane, then the active-joints tag-point index.
+        // ⭐ 2026-09-05 (hinge-geometry wave): SIGNATURE RESTORED TO THE DWARF'S FOUR PARAMETERS,
+        // `SetJoinedToVehicle(Vector3, Vector3, VecFloat, int32_t)`. It stood as three, with the
+        // third VMX argument renamed "lLocalComPosition" and its w lane read as the max angle --
+        // arithmetically the same store, but it hid the fact that the SECOND vector (the part's
+        // local COM position, v2) is a real console argument that this function simply never reads.
+        // The console's body touches v1 and v3 only; v2 is present in the ABI and unused. Naming it
+        // for what it is stops the next reader concluding, as this tree did, that the COM position
+        // is what carries the angle.
         void SetJoinedToVehicle(Vector3 lLocalJointPosition, Vector3 lLocalComPosition,
-                                s32 liActiveJointsTagPointIndex);
+                                VecFloat lvfMaxJointAngle, s32 liActiveJointsTagPointIndex);
 
         // BrnPhysicalBodyPart.h:254. Break the joint and hand the part to the sim as a free body.
         void RemoveJointAndAddToSim(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput);

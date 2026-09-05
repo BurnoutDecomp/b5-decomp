@@ -656,10 +656,27 @@ namespace Deformation
                 continue;
             }
 
-            // sub_825E8308 == DetachedWheelManager::GetWheel(EntityId, s32) -- identified by its two
-            // arguments (this car's mGlobalEntityId and the wheel ordinal) and its 0x188-byte record.
-            const PhysicalWheel* lpWheel =
-                lpWheelMgr->GetWheel(const_cast<DeformableObject*>(this)->GetGlobalEntityId(), liWheel);
+            // sub_825E8308 == DetachedWheelManager::GetWheel(EntityId, s32).
+            // ⛔⛔ 2026-09-05 (hinge-geometry wave): THE KEY WAS mGlobalEntityId AND THE CONSOLE'S IS
+            // mHandlingBodyID -- the SAME field confusion that overran the triangle cache by 106
+            // slots in DoBodyPartWorldContactGeneration, found by sweeping for it rather than by
+            // tripping over it (tools/re/idfield_sweep.py). The asm, 0x82609920..0x82609934:
+            //     ld     r11, 0x6710(r18)   ; mHandlingBodyID, the 8-byte handle
+            //     srdi   r11, r11, 32       ; its entity word
+            //     clrlwi r4, r11, 0         ; all 32 bits -> GetWheel's EntityId argument
+            //     bl     sub_825E8308
+            // +0x6718 (mGlobalEntityId) is NOT LOADED ONCE in this function's 156 instructions.
+            // ⚠️ AND THIS ONE IS SILENT, WHICH IS WHY NOTHING CAUGHT IT: GetWheel is a LOOKUP, not a
+            // subscript -- it walks its used-bitmask and matches the owner byte (`r14 >> 24`) then
+            // the entity index (`r14 >> 10`), so a wrong key returns null and the loop `continue`s.
+            // The observable cost is a DETACHED WHEEL THAT GENERATES NO WORLD CONTACTS: it falls
+            // through the road instead of bouncing on it. DeformableObject::OutputWheelData
+            // @0x82608E28 already keyed the same manager correctly (`mHandlingBodyID >> 32`,
+            // BrnDeformableObject_GlassState.cpp:3442) -- two callers of one lookup, one of them
+            // wrong, which is exactly how a silent key error survives.
+            EntityId lWheelLookupEntityId;
+            lWheelLookupEntityId.muValue = static_cast<u32>(static_cast<u64>(mHandlingBodyID) >> 32);
+            const PhysicalWheel* lpWheel = lpWheelMgr->GetWheel(lWheelLookupEntityId, liWheel);
             if (lpWheel == nullptr)
             {
                 continue;
