@@ -127,12 +127,12 @@ namespace BrnGraphics
                             float32_t afColourScale, bool8_t abZFadeEnable,
                             float32_t afZFadeNear, float32_t afZFadeFar,
                             float32_t afDepthRange,
-                            float32_t afHalfViewportWidth, float32_t afHalfViewportHeight,
+                            float32_t afDepthSamplerOffsetU, float32_t afDepthSamplerOffsetV,
                             renderengine::TextureState* apDepthTextureState)
         {
             mRenderer.BeginRendering(arViewProjection, afColourScale, abZFadeEnable,
                                      afZFadeNear, afZFadeFar, afDepthRange,
-                                     afHalfViewportWidth, afHalfViewportHeight,
+                                     afDepthSamplerOffsetU, afDepthSamplerOffsetV,
                                      apDepthTextureState);
         }
 

@@ -472,6 +472,24 @@ template bool ImRenderer<BrnGraphics::LionBlendVertex>::SetProgram(s8);
 // slot without occupying the register, which is what pushes the ninth argument onto the stack
 // while r7..r10 sit unused.
 //
+// ⭐⭐ AND THE SIX FLOATS NOW HAVE DWARF NAMES, WHICH CORRECTED TWO OF THEM (2026-09-05). The
+// same six values are passed straight through, unchanged and in order, by cLionFX::Dispatch
+// @0x82912BA8 -> cParticleRender::Dispatch @0x82911E98 -> LionParticleRender::BeginRendering
+// @0x82289568 -> here, and the DWARF declares cLionFX::Dispatch (LionFX.h:79) as
+//     (vertexBuffer, batchArray, afWhiteLevel, abEnableZFade, afNearPlane, afFarPlane,
+//      afDepthFadeDistance, afDepthSamplerOffsetU, afDepthSamplerOffsetV, apDepthTextureState)
+// so f5/f6 are the depth sampler's HALF-TEXEL OFFSETS, not viewport half-extents as this file
+// called them until now. That matters because it decides what the shader computes: with
+// gScale.xy == (0.5, -0.5) and gOffset.xy == (f5 + 0.5, f6 + 0.5), `ndc * gScale + gOffset` is
+// the standard D3D ndc -> NORMALISED screen-uv map with the half-texel bias -- a texture
+// coordinate, not a pixel coordinate. Under the old names the same expression would have spanned
+// one single pixel and read as a shader bug.
+//
+// It also corroborates the z-fade derivation independently: f2/f3 are the projection's REAL near
+// and far planes and f4 is a fade DISTANCE, which is exactly what makes the constant term of
+// zFar + (zNear - zFar) * z vanish and leaves (zScene - zParticle) / afDepthFadeDistance. See the
+// head of tools/assets/shaders/brn_lionblend.fx for that derivation in full.
+//
 // EVERY CONSTANT IS READ OUT OF THE IMAGE, none is fabricated:
 //     flt_82001CC0 == 00000000 == 0.0      flt_82001C98 == 3F800000 == 1.0
 //     flt_82001DA0 == 3F000000 == 0.5      flt_82004C78 == BF000000 == -0.5
@@ -655,7 +673,7 @@ void Im3dBlend::BeginRendering(const Matrix44& arViewProjection,
                                float32_t afColourScale, bool8_t abZFadeEnable,
                                float32_t afZFadeNear, float32_t afZFadeFar,
                                float32_t afDepthRange,
-                               float32_t afHalfViewportWidth, float32_t afHalfViewportHeight,
+                               float32_t afDepthSamplerOffsetU, float32_t afDepthSamplerOffsetV,
                                renderengine::TextureState* apDepthTextureState)
 {
     // asm words 11-19: drop the device's shadowed state, then shadow this renderer's vertex
@@ -692,8 +710,8 @@ void Im3dBlend::BeginRendering(const Matrix44& arViewProjection,
         const f32 lfFadeRange = afZFadeNear - afZFadeFar;                        // fsubs f13
 
         // "gOffset": the viewport half-extents biased by a half pixel, plus the far plane.
-        const Vector4 lvOffset = { afHalfViewportWidth  + 0.5f,                  // flt_82001DA0
-                                   afHalfViewportHeight + 0.5f,
+        const Vector4 lvOffset = { afDepthSamplerOffsetU  + 0.5f,                  // flt_82001DA0
+                                   afDepthSamplerOffsetV + 0.5f,
                                    afZFadeFar,
                                    0.0f };                                       // flt_82001CC0
         // "gScale": the half-viewport scale (y flipped) and the fade range.
