@@ -58,6 +58,16 @@ s32 giEmitterUpdateMonitor = -1;
 // as the image's float rather than 1.0f/3000.0f because the console multiplies by this exact
 // value in cParticleEmitter::Update, ::Emit and ::ParentMatrixCurrentBuild.
 const f32 KF_TICKS_TO_SECONDS = 0.00033333332976326346f;
+
+// X360 dword_82FAB644 (LionPerfMon + 0xC) -- the emitter GENERATE monitor.
+s32 giEmitterGenerateMonitor = -1;
+
+// flt_820FEC40 == 0.10000000149011612 and flt_82009E10 == 1000.0, both .rdata literals
+// cParticleEmitter::Generate loads directly (@0x829151FC and @0x8291520C). The first is a FLOOR
+// on the emission rate, not an epsilon; the second is the milliseconds-per-second the emission
+// clock is kept in (mNextEmissionTime is ticks/3, and 3000/3 == 1000).
+const f32 KF_MIN_EMISSION_RATE       = 0.10000000149011612f;   // flt_820FEC40
+const f32 KF_MILLISECONDS_PER_SECOND = 1000.0f;                // flt_82009E10
 }  // namespace
 
 // ----------------------------------------------------------------------------
@@ -2603,4 +2613,387 @@ u32 cParticleEmitter::Update(const cTime& arTime)
     mUpdateLastTime = arTime;
     CgsDev::PerfMonCpu::StopMonitor(liMonitor);
     return 1;
+}
+
+// ================================================================================================
+// cParticleEmitter::ParentMatrixCurrentBuild  @0x829113E8      (175 instructions)
+//                                             (DWARF ParticleEmitter.h -- ParentMatrixCurrentBuild)
+//
+// Produce the world transform of the PARENT PARTICLE a sub-emitter is following, right now. The
+// parent particle is stored nowhere, so this re-simulates it (ParticleBuild against a COPY of
+// the parent seed) and then builds an orthonormal basis out of the result:
+//
+//   forward = (parentDes->mShape is 3 or 6) ? (particle.mPos1 - particle.mPos)
+//                                           : mParentEmitterNucleus.mVel      normalised
+//   right   = normalise(cross(forward, (0,1,0)))          unk_82181510 is the world UP
+//   up      = cross(right, forward)
+//   out     = { right, up, forward, (particle.mPos, 1) } * mParentBaseMatrix
+//
+// ⚠ THE ARGUMENT LIST HAS A HOLE IN IT, and it is the documented f32-eats-a-GPR-slot pattern.
+// The callers set r3 (this), r4 (the out matrix), r5 (a cTime), f1 (the delta time) and r7 (a
+// second cTime) -- but NOT r6. That is not a bug: an f32 parameter takes f1 and consumes the r6
+// slot, so r7 is the fourth declared parameter. cParticleEmitter::Emit @0x82914D70 sets only r4,
+// r7 and f1 and lets r5 ride in from its own argument, which is what proves r6 is not a
+// parameter at all. ⚠ And r7 is read by NOTHING in the body -- stated rather than dropped, the
+// same call QuadDraw's fifth parameter got.
+//
+// ⚠ THE TWO CROSS PRODUCTS ARE THE `vpermwi128 ..., 0x63` YZX IDIOM: a*yzx(b) - yzx(a)*b, whose
+// result is itself yzx-rotated and permuted back by the next vpermwi128. `vnmsubfp vD, vA, vB,
+// vC` prints raw field order and means vD = vB - vA*vC, which is what makes the pair a cross
+// product rather than a scaled difference. Both normalises are vrsqrtefp + two Newton-Raphson
+// steps, de-optimised back to the division they compute.
+//
+// ⚠ EVERY BASIS ROW IS MASKED WITH unk_820FEBD0 == (FFFFFFFF, FFFFFFFF, FFFFFFFF, 00000000)
+// before it is stored -- the w lane is forced to zero on the three axis rows and to 1.0 on the
+// translation row (flt_82001C98). A basis row with a stray w would translate on multiply.
+// ================================================================================================
+void cParticleEmitter::ParentMatrixCurrentBuild(cMatrix& arOutMatrix,
+                                                const cTime& arTime,
+                                                f32 afDeltaTime,
+                                                const cTime& /*arCurrentTime*/)
+{
+    // asm 0x82911400..0x82911420 -- the parent's seed is COPIED, never advanced in place.
+    cParticleRandomSeed lSeed = mParentRandomSeed;
+
+    const cParticleDescriptor& lrParentDes = *mpDescriptor->mpParent.Get();
+
+    // asm 0x82911444..0x82911494 -- this frame's delta time and absolute time.
+    mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.x = afDeltaTime;
+    mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.y =
+        static_cast<f32>(arTime.GetTicks()) * KF_TICKS_TO_SECONDS;
+
+    RenderedParticle lParticle;
+    ParticleBuild(lParticle, lSeed, mParentEmitterNucleus, lrParentDes, *mpCurrentBehaviour,
+                  mPrecalculatedParticleBuildData);
+
+    // asm 0x829114A8..0x829114D8 -- the forward axis.
+    cVector lvForward;
+    if (lrParentDes.mShape == 3 || lrParentDes.mShape == 6)
+    {
+        lvForward.x = lParticle.mPos1.x - lParticle.mPos.x;
+        lvForward.y = lParticle.mPos1.y - lParticle.mPos.y;
+        lvForward.z = lParticle.mPos1.z - lParticle.mPos.z;
+        lvForward.w = lParticle.mPos1.w - lParticle.mPos.w;
+    }
+    else
+    {
+        lvForward = mParentEmitterNucleus.mVel;
+    }
+
+    // asm 0x829114DC..0x82911560 -- normalise it.
+    {
+        const f32 lfLen2 = lvForward.x * lvForward.x + lvForward.y * lvForward.y
+                         + lvForward.z * lvForward.z;
+        const f32 lfInv  = 1.0f / std::sqrt(lfLen2);
+        lvForward.x *= lfInv;
+        lvForward.y *= lfInv;
+        lvForward.z *= lfInv;
+        lvForward.w *= lfInv;
+    }
+
+    // asm 0x82911564..0x829115AC -- right = normalise(cross(forward, worldUp)), where worldUp
+    // is unk_82181510 == (0, 1, 0, 0).
+    const cVector lvWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
+    cVector lvRight = { lvForward.y * lvWorldUp.z - lvForward.z * lvWorldUp.y,
+                        lvForward.z * lvWorldUp.x - lvForward.x * lvWorldUp.z,
+                        lvForward.x * lvWorldUp.y - lvForward.y * lvWorldUp.x,
+                        0.0f };
+    {
+        const f32 lfLen2 = lvRight.x * lvRight.x + lvRight.y * lvRight.y + lvRight.z * lvRight.z;
+        const f32 lfInv  = 1.0f / std::sqrt(lfLen2);
+        lvRight.x *= lfInv;
+        lvRight.y *= lfInv;
+        lvRight.z *= lfInv;
+    }
+
+    // asm 0x829115C0..0x829115CC -- up = cross(right, forward).
+    const cVector lvUp = { lvRight.y * lvForward.z - lvRight.z * lvForward.y,
+                           lvRight.z * lvForward.x - lvRight.x * lvForward.z,
+                           lvRight.x * lvForward.y - lvRight.y * lvForward.x,
+                           0.0f };
+
+    // asm 0x829115B4..0x829115F4 -- the basis, w lanes masked to 0 and the translation to 1.
+    cMatrix lBasis;
+    lBasis.xa = { lvRight.x,   lvRight.y,   lvRight.z,   0.0f };
+    lBasis.ya = { lvUp.x,      lvUp.y,      lvUp.z,      0.0f };
+    lBasis.za = { lvForward.x, lvForward.y, lvForward.z, 0.0f };
+    lBasis.wa = { lParticle.mPos.x, lParticle.mPos.y, lParticle.mPos.z, 1.0f };
+
+    // asm 0x829115F8..0x8291169C -- out = lBasis * mParentBaseMatrix, all four rows.
+    const cMatrix& lrBase = mParentBaseMatrix;
+    const cVector* lapRow[4] = { &lBasis.xa, &lBasis.ya, &lBasis.za, &lBasis.wa };
+    cVector* lapOut[4] = { &arOutMatrix.xa, &arOutMatrix.ya, &arOutMatrix.za, &arOutMatrix.wa };
+    for (u32 luRow = 0; luRow < 4; ++luRow)
+    {
+        const cVector& lrR = *lapRow[luRow];
+        lapOut[luRow]->x = lrR.x * lrBase.xa.x + lrR.y * lrBase.ya.x
+                         + lrR.z * lrBase.za.x + lrR.w * lrBase.wa.x;
+        lapOut[luRow]->y = lrR.x * lrBase.xa.y + lrR.y * lrBase.ya.y
+                         + lrR.z * lrBase.za.y + lrR.w * lrBase.wa.y;
+        lapOut[luRow]->z = lrR.x * lrBase.xa.z + lrR.y * lrBase.ya.z
+                         + lrR.z * lrBase.za.z + lrR.w * lrBase.wa.z;
+        lapOut[luRow]->w = lrR.x * lrBase.xa.w + lrR.y * lrBase.ya.w
+                         + lrR.z * lrBase.za.w + lrR.w * lrBase.wa.w;
+    }
+}
+
+// ================================================================================================
+// cParticleEmitter::Emit  @0x82914D38      (173 instructions)
+//
+// Emit ONE particle. Work out the spawn transform and the velocity to inherit, find a bucket
+// with a free slot (or allocate one), initialise the particle in it, and spawn any child
+// emitters that follow it.
+//
+//   mEmissionCount++                                                 -- unconditional, first
+//   if (mFlags & KU_FLAG_SUB_EMITTER)  lMatrix = ParentMatrixCurrentBuild(...)
+//   else                               lMatrix = *locator->GetMat(arTime)
+//   lVelocity = lMatrix.translation + <the emitter's own velocity> * elapsedSeconds
+//   for (b = mpBucket; b; b = b->GetEmitterNext())
+//       if (!b->IsFull() && b->AllocateParticle(...)) { InitialiseParticle(...);
+//                                                       b->SetLatestBirthTime(arSpawnTime);
+//                                                       goto spawned; }
+//   b = manager.AllocateBucket(descriptor->mLodGroup, arSpawnTime, descriptor->GetRequiredBucketType())
+//   if (!b) return;                       -- out of buckets: the particle is simply not born
+//   link b onto this emitter; ParticleInsert(b, ...)
+// spawned:
+//   SpawnSubEmitter(b, 0, arTime)
+//
+// ⚠ THE VELOCITY TERM IS SCALED BY THE TIME SINCE A DIFFERENT STAMP IN EACH ARM. The sub-emitter
+// arm measures from mParentTime (`lwz r9, 0x198`) and the locator arm from arTime itself
+// (`lwz r9, 0(r28)`), both against arSpawnTime -- so a burst emitted between frames gets the
+// parent's motion since the parent was last rebuilt, and a locator-driven one gets zero on the
+// frame it is emitted. That asymmetry is in the binary.
+//
+// ⚠ THE LOCATOR ARM READS THE VELOCITY OFF THE LOCATOR (`lfs f13/f12/f11, 0/4/8(r29+0x40)` ==
+// cParticleLocator::mVel), the sub-emitter arm off the EMITTER (`this + 0x50` == mParentVel,
+// which cParticleEmitter::Update zeroes on every frame the parent rebuild succeeds).
+//
+// ⚠ SpawnSubEmitter IS CALLED ON EVERY PATH THAT PRODUCED A BUCKET -- including the one where
+// AllocateParticle failed on an existing bucket and ParticleInsert filled a fresh one -- but NOT
+// when AllocateBucket returned null. The `goto`/label shape is reproduced with an early return.
+// ================================================================================================
+void cParticleEmitter::Emit(cParticleRandomSeed& arSeed,
+                            const cTime& arSpawnTime,
+                            const cTime& arTime)
+{
+    ++mEmissionCount;
+
+    cMatrix lMatrix;
+    cVector lvVelocity;
+
+    if ((mFlags & KU_FLAG_SUB_EMITTER) != 0)
+    {
+        // asm 0x82914D70..0x82914DF4.
+        ParentMatrixCurrentBuild(lMatrix, arSpawnTime, mDt, arTime);
+
+        const f32 lfElapsed =
+            static_cast<f32>(arSpawnTime.GetTicks() - mParentTime.GetTicks()) * KF_TICKS_TO_SECONDS;
+        lvVelocity.x = mParentVel.x * lfElapsed + lMatrix.wa.x;
+        lvVelocity.y = mParentVel.y * lfElapsed + lMatrix.wa.y;
+        lvVelocity.z = mParentVel.z * lfElapsed + lMatrix.wa.z;
+    }
+    else
+    {
+        // asm 0x82914DF8..0x82914EB0.
+        const cParticleLocator& lrLocator = *mpBindings->GetpLocator();
+        lMatrix = lrLocator.GetMat(arTime);
+
+        const f32 lfElapsed =
+            static_cast<f32>(arSpawnTime.GetTicks() - arTime.GetTicks()) * KF_TICKS_TO_SECONDS;
+        lvVelocity.x = lrLocator.mVel.x * lfElapsed + lMatrix.wa.x;
+        lvVelocity.y = lrLocator.mVel.y * lfElapsed + lMatrix.wa.y;
+        lvVelocity.z = lrLocator.mVel.z * lfElapsed + lMatrix.wa.z;
+    }
+
+    // asm 0x82914EB4..0x82914ED8 -- the spawn point is the velocity-advanced translation, with
+    // w == 1 (flt_82001C98). The console writes it back over the matrix's own translation row.
+    lMatrix.wa.x = lvVelocity.x;
+    lMatrix.wa.y = lvVelocity.y;
+    lMatrix.wa.z = lvVelocity.z;
+    lMatrix.wa.w = 1.0f;
+
+    // asm 0x82914EDC..0x82914F68 -- walk this emitter's bucket list for a free slot.
+    cParticleBucket* lpBucket = mpBucket;
+    for (; lpBucket != 0; lpBucket = lpBucket->GetEmitterNext())
+    {
+        if (lpBucket->IsFull())
+        {
+            continue;
+        }
+
+        u32 luSlot = 0;
+        sParticleNucleus* lpNucleus = 0;
+        cVector* lpVector = 0;
+        cMatrix* lpMatrix = 0;
+        if (!lpBucket->AllocateParticle(luSlot, &lpNucleus, &lpVector, &lpMatrix))
+        {
+            continue;
+        }
+
+        InitialiseParticle(*lpNucleus, lpVector, lpMatrix, lMatrix, lvVelocity, arSeed,
+                           arSpawnTime, arTime);
+        lpBucket->SetLatestBirthTime(arSpawnTime);
+        SpawnSubEmitter(lpBucket, 0, arTime);
+        return;
+    }
+
+    // asm 0x82914F6C..0x82914FD0 -- no free slot anywhere: take a fresh bucket and link it on.
+    const cParticleDescriptor& lrDes = *mpDescriptor;
+    cParticleBucket* lpNewBucket =
+        cParticleBucketManager::Instance().AllocateBucket(lrDes.mLodGroup, arSpawnTime,
+                                                          lrDes.GetRequiredBucketType());
+    if (lpNewBucket == 0)
+    {
+        return;
+    }
+
+    lpNewBucket->SetEmitterNext(mpBucket);
+    mpBucket = lpNewBucket;
+    lpNewBucket->SetEmitter(this);
+    ParticleInsert(lpNewBucket, &lMatrix, lvVelocity, arSpawnTime, arSeed, 0, arTime);
+
+    SpawnSubEmitter(lpNewBucket, 0, arTime);
+}
+
+// ================================================================================================
+// cParticleEmitter::Generate  @0x82915158      (159 instructions)
+//
+// Decide how many particles this frame emits, and call Emit for each. Update's only real work.
+//
+//   if (!IsGenerating(<a COPY of mEmitterSeed>, mUpdateLastTime, arTime))
+//       { mFlags &= ~KU_FLAG_EMITTING; mEmissionCount = 0;
+//         mNextEmissionTime = arTime / 3; return; }
+//   Blend()                                            -- pick the behaviour layer first
+//   rate     = seedCopy.Build(mEmissionRateBase, mEmissionRateVariance)
+//   interval = 1000 / max(rate, 0.1)                   -- milliseconds between particles
+//   if (behaviour & DO_BURST) { emit the whole clamp at once, once; return }
+//   if (descriptor & DO_PREFORM && !EMITTING) back-date mNextEmissionTime by the particle life
+//   budget = mEmissionCountClamp ? seedCopy.Build(clamp, clampVariance) - mEmissionCount : 256
+//   while (budget && now > mNextEmissionTime) { Emit(...); mNextEmissionTime += interval }
+//
+// ⭐ THE SEED IS USED TWO DIFFERENT WAYS AND THAT IS DELIBERATE. Every draw Generate itself makes
+// (IsGenerating's schedule, the rate, the count) goes through a 64-byte COPY of mEmitterSeed on
+// the stack, so it does not advance the emitter's stream; but Emit is handed `r25 == this +
+// 0x1B0`, the MEMBER seed, so every particle actually born does advance it. Reading the copy as
+// the seed throughout would make every particle in a burst identical.
+//
+// ⚠ THE 0.1 IS A FLOOR, NOT AN EPSILON. flt_820FEC40 == 0.1 and the console computes
+// `fsubs f13, rate, 0.1 ; fsel f13, f13, rate, 0.1` -- max(rate, 0.1). An effect authored with
+// a zero emission rate therefore emits at 10 Hz, not never and not by dividing by zero.
+//
+// ⚠ THE TICK/3 IS EVERYWHERE AND IT IS AN INTEGER DIVIDE. mNextEmissionTime is kept in
+// MILLISECONDS (3000 ticks/second / 3 == 1000), which is why the interval is 1000/rate and why
+// Emit's spawn stamp is `3 * mNextEmissionTime` converted back to ticks.
+//
+// ⚠ THE LOOP'S ACCUMULATOR IS FLOAT AND ITS BASE IS THE *ORIGINAL* mNextEmissionTime (r26, read
+// once at 0x829152EC), so the emission times do not drift by repeated integer truncation:
+// each is `(s32)(k * interval) + start`, not `previous + (s32)interval`.
+// ================================================================================================
+void cParticleEmitter::Generate(const cTime& arTime)
+{
+    const s32 liMonitor = giEmitterGenerateMonitor;
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+    // asm 0x82915188..0x829151AC -- the scratch seed every decision below draws from.
+    cParticleRandomSeed lSeedCopy = mEmitterSeed;
+
+    if (!IsGenerating(lSeedCopy, mUpdateLastTime, arTime))
+    {
+        mFlags &= ~KU_FLAG_EMITTING;
+        mEmissionCount    = 0;
+        mNextEmissionTime = arTime.GetTicks() / 3;
+        CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+        return;
+    }
+
+    Blend();
+
+    const cParticleBehaviour& lrBhv = *mpCurrentBehaviour;
+
+    // asm 0x829151DC..0x82915210.
+    f32 lfRate = lSeedCopy.Build(lrBhv.mEmissionRateBase, lrBhv.mEmissionRateVariance);
+    if (lfRate < KF_MIN_EMISSION_RATE)
+    {
+        lfRate = KF_MIN_EMISSION_RATE;
+    }
+    const f32 lfIntervalMs = KF_MILLISECONDS_PER_SECOND / lfRate;
+
+    if ((lrBhv.mFlags & cParticleBehaviour::E_DO_BURST) != 0)
+    {
+        // asm 0x82915218..0x82915280 -- the whole burst at once, once per activation.
+        if ((mFlags & KU_FLAG_EMITTING) == 0)
+        {
+            s32 liCount = lSeedCopy.Build(static_cast<s32>(lrBhv.mEmissionCountClamp),
+                                          static_cast<s32>(lrBhv.mEmissionCountClampVariance))
+                        - static_cast<s32>(mEmissionCount);
+            const cTime lSpawnTime = arTime;
+            while (liCount > 0)
+            {
+                Emit(mEmitterSeed, lSpawnTime, arTime);
+                --liCount;
+            }
+            mFlags |= KU_FLAG_EMITTING;
+        }
+        mNextEmissionTime = arTime.GetTicks() / 3;
+        CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+        return;
+    }
+
+    // asm 0x82915284..0x829152D8 -- DO_PREFORM: start the effect already running by back-dating
+    // the emission clock by one whole particle lifetime, so the first frame emits a full stream
+    // instead of a single particle.
+    if ((mpDescriptor->mFlags & cParticleDescriptor::E_FLAG_PREFORM) != 0 &&
+        (mFlags & KU_FLAG_EMITTING) == 0)
+    {
+        const s32 liLifeMs = static_cast<s32>((lrBhv.mLifeVariance + lrBhv.mLifeBase)
+                                              * KF_MILLISECONDS_PER_SECOND);
+        mNextEmissionTime = (arTime.GetTicks() / 3) - liLifeMs;
+    }
+
+    // asm 0x829152DC..0x82915318 -- the emission budget.
+    s32 liBudget = 256;
+    if (lrBhv.mEmissionCountClamp != 0)
+    {
+        liBudget = lSeedCopy.Build(static_cast<s32>(lrBhv.mEmissionCountClamp),
+                                   static_cast<s32>(lrBhv.mEmissionCountClampVariance))
+                 - static_cast<s32>(mEmissionCount);
+        if (liBudget <= 0)
+        {
+            CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+            return;
+        }
+    }
+
+    // asm 0x8291531C..0x82915398.
+    const s32 liStartMs = mNextEmissionTime;
+    const s32 liNowMs   = arTime.GetTicks() / 3;
+    f32 lfAccumulatedMs = 0.0f;
+
+    if (liNowMs > mNextEmissionTime)
+    {
+        while (liBudget != 0)
+        {
+            const cTime lSpawnTime(static_cast<u32>(3 * mNextEmissionTime));
+            Emit(mEmitterSeed, lSpawnTime, arTime);
+
+            lfAccumulatedMs = lfAccumulatedMs + lfIntervalMs;
+            --liBudget;
+
+            mNextEmissionTime = static_cast<s32>(lfAccumulatedMs) + liStartMs;
+            if (liNowMs <= mNextEmissionTime)
+            {
+                break;
+            }
+        }
+    }
+
+    // asm 0x82915380..0x82915388 -- only catch the clock up to `now` when the budget ran out;
+    // if it broke out with budget left, mNextEmissionTime is already the next due time.
+    if (liBudget == 0)
+    {
+        mNextEmissionTime = liNowMs;
+    }
+    mFlags |= KU_FLAG_EMITTING;
+
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
 }

@@ -88,30 +88,18 @@ void cParticleBehaviour::Lerp(const cParticleBehaviour* /*apLo*/,
 
 // ---- cParticleEmitter (home: ParticleEmitter.cpp) --------------------------------------------
 
-// ⭐⭐ cParticleEmitter::Update @0x829153D8 IS BODIED (2026-09-05, ParticleEmitter.cpp) and so
-// is cParticleEmitter::ParticleBuild @0x82910118, the 1,142-instruction kernel underneath it.
-// The trap that used to stand here has moved DOWN one level, to the one callee of Update that
-// is still open.
+// ⭐⭐ THE WHOLE cParticleEmitter CHAIN IS BODIED (2026-09-05) and this section is EMPTY.
+// Update @0x829153D8, ParticleBuild @0x82910118, Generate @0x82915158, Emit @0x82914D38 and
+// ParentMatrixCurrentBuild @0x829113E8 all live in ParticleEmitter.cpp now, with the seven
+// behaviour processors underneath them. Nothing on the emitter is stubbed here any more.
 //
-// cParticleEmitter::Generate @0x82915158 -- 159 instructions: it asks IsGenerating whether this
-// frame emits at all, calls Blend to pick the behaviour layer, works out the emission budget
-// from the behaviour's mEmissionRateBase / mEmissionRateVariance and mEmissionCountClamp, and
-// then calls cParticleEmitter::Emit @0x82914D38 (173) once per particle -- which in turn needs
-// cParticleEmitter::ParentMatrixCurrentBuild @0x829113E8 (175). Those three, 507 instructions,
-// are the whole of what is left on the EMISSION half.
-//
-// ⛔ STILL AN ASSERT AND STILL UNREACHABLE, for the same single reason as before: nothing calls
-// cLionFX::Update. cParticleEmitterManager::Update is its only caller and cLionFX::Update is
-// that function's only caller, and the arm that would call THAT
-// (ParticleModule::BuildLionVertexBuffers' Lion half) is parked and announces itself every run.
-// If this trap ever fires, an arm was unparked without its callee -- which is real news, and is
-// why it is not softened to a log line.
-void cParticleEmitter::Generate(const cTime& /*arTime*/)
-{
-    CGS_ASSERT(false, "cParticleEmitter::Generate @0x82915158 -- NOT RECONSTRUCTED (the Lion "
-                      "emission budget; Emit @0x82914D38 and ParentMatrixCurrentBuild "
-                      "@0x829113E8 are behind it)");
-}
+// ⚠ THAT DOES NOT MEAN THE SIMULATION RUNS. It still cannot be reached, for the same single
+// reason as before: nothing calls cLionFX::Update, because ParticleModule::BuildLionVertexBuffers'
+// LION half is parked and announces itself every run. What stands between this file and a
+// particle on screen is now the three cParticleEmitter::SimulateParticlesInBucketGeneral<>
+// kernels (546 instructions) plus the render driver -- cParticleRender::Render @0x829147F8,
+// EmitterRender @0x82913928 and EmitterCubeRender @0x82913C80 -- and the two parked
+// ParticleModule arms. None of those belongs in this holding pen.
 
 // ---- cParticleRender::Dispatch's platform surface (home: a renderengine PC leaf) --------------
 //

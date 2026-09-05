@@ -73,6 +73,12 @@ public:
         E_FLAG_REPEAT            = 0x4,      // token DO_REPEAT
         E_FLAG_WORLD_ACC         = 0x80,     // token DO_WORLD_ACC
         E_FLAG_IGNORE_ROT        = 0x100,    // token DO_IGNORE_ROT
+        // Token DO_PREFORM (LionParticleParser.cpp:59, the same authoring table).
+        // cParticleEmitter::Generate @0x82915290 masks it with `rlwinm r11, r11, 0,17,17`
+        // (bit 14 == 0x4000): when it is set and the emitter has not emitted yet, the emission
+        // clock is back-dated by one whole particle lifetime, so the effect starts already
+        // running instead of building up from its first particle.
+        E_FLAG_PREFORM           = 0x4000,   // token DO_PREFORM
     };
 
     // cParticleDescriptor::GetRequiredBucketType @ 0x82908660. Decides which bucket
