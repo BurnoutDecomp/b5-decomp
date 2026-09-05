@@ -1644,7 +1644,7 @@ namespace Deformation
     //     sum of SHAPED magnitudes handed to the four sensors            128,921 N.s   (the 117 %)
     //     vector sum of those, along their four normals                  123,315 N.s
     //     what actually ARRIVES at the rigid body, sum Jbody             ( -5,300, -797, -46,440 )
-    //                                                             |J|     46,752 N.s   ( 43 % )
+    //                                                             |J|     46,748 N.s   ( 43.4 % )
     //     the car's entry momentum        1589 kg * 67.73 m/s            107,623 N.s
     //     the frame's OBSERVED dp          1589 * (67.73 - 38.94)         45,747 N.s
     // -- i.e. the crumple chain absorbs 63 % of the shaped magnitude before it reaches the body
