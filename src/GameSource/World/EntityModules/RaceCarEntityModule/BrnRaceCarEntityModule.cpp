@@ -817,11 +817,12 @@ void RaceCarEntityModule::OnRaceCarResourcesLoaded(
 namespace
 {
     // flt_82FAD728, the SPEED argument of PlaceRaceCarOnLoad's in-game-mode arm (0x822CE82C).
-    // ⚠️ FLAGGED, NOT GUESSED -- see the [FLAG PC bring-up] paragraph in the banner below.
-    // Reads 0x00000000 out of the image, and a whole-image scan of the export set finds exactly
-    // two references to the symbol (this one and UpdateInAndOutOfRangeCars @0x822FFB84), so no
-    // code in the image writes it.
-    const f32 KF_AI_LOAD_RESET_SPEED = 0.0f;
+    // RECOVERED 2026-09-05 (aiwave2 lane W1): the earlier "no code in the image writes it" scan
+    // covered only the EXPORT SET. The writer is the CRT dynamic initialiser @0x82C4BB70 (no
+    // export): `lfs f0, flt_82F31928 (0.44704) ; lfs f13, flt_82014948 (120.0) ; fmuls ; stfs ->
+    // 0x82FAD728` == 120 mph in m/s. Same silent-zero class as tools/re/findinit.py documents;
+    // the old 0.0f placed every AI car at a standstill.
+    const f32 KF_AI_LOAD_RESET_SPEED = 120.0f * 0.44704f;   // 53.6448 m/s
 
     // flt_8201BCC4 (0x47742400) @0x822CE728 -- 62500.0f == 250 m squared. Beyond it the console
     // stops trying to place the car relative to the player and just drops it where it is.
@@ -2812,6 +2813,29 @@ void RaceCarEntityModule::HandleCarStatsUpdate(BrnResource::ECarType leCarType,
     mBoostManager.ApplyCarStats(liBoostLevel, liBoostLossLevel);
 }
 
+namespace
+{
+    // ---- action 129, E_ACTION_ALLOW_CAR_TO_JOIN_ROAD_RAGE ---------------------------------
+    // [!] HEADER REQUEST -- interim TU-local mirror, the SAME carrier (and the same reason)
+    // BrnRoadRageMode.cpp:131/:134 already uses for the PRODUCER end of this record, because
+    // GameSource/GameState/BrnGameActions.h does not yet carry the enumerator or the struct.
+    // DWARF E_ACTION_ALLOW_CAR_TO_JOIN_ROAD_RAGE == 124, in the +5 band this enum already
+    // records for its 92..126 neighbours, so X360 129; the producer posts it with
+    // `li r5, 0x81 ; li r6, 8` @0x82344818.
+    // DELETE-WHEN BrnGameActions.h grows the enumerator + struct.
+    const s32 KI_ACTION_ALLOW_CAR_TO_JOIN_ROAD_RAGE = 129;
+
+    struct AllowCarToJoinRoadRageActionRecord
+    {
+        // EXPLICITLY GLOBAL-QUALIFIED for the same reason BrnRoadRageMode.cpp:137 is: two
+        // distinct enums of this name are visible here.
+        ::EActiveRaceCarIndex mActiveRaceCarIndex;   // +0x00  (`lwz r4, 0(r27)` @0x8230D06C)
+        bool                  mbAllowedInRoadRage;   // +0x04  (`lbz r11, 4(r27)` @0x8230D090)
+    };
+    static_assert(sizeof(AllowCarToJoinRoadRageActionRecord) == 8,
+                  "X360 posts action 129 as 8 bytes (li r6, 8)");
+}
+
 void RaceCarEntityModule::HandleGameActions(
         RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
         RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput )
@@ -2865,14 +2889,62 @@ void RaceCarEntityModule::HandleGameActions(
                 lpOutput);
             break;
 
-        // ARTIST 0x8230C7A0..0x8230C7E0.  The trailing non-boost stores and
-        // optional donut-start placement live at 0x8230C7E4..0x8230C880 and
-        // remain with the wider mode-action reconstruction.
+        // ARTIST 0x8230C7A0..0x8230C7E0, plus the ONE trailing store at 0x8230C7F8 added by
+        // the rival range-loop wave (lane W1, 2026-09-05); the optional donut-start placement
+        // at 0x8230C804..0x8230C880 still remains with the wider mode-action reconstruction.
+        //
+        // ⭐ `mbModeStartedPlaying = true` (asm `stbx r23, r31, 0x18354`, r23 == the literal 1)
+        // IS THE GATE OF THE WHOLE RIVAL RANGE LOOP. UpdateInAndOutOfRangeCars @0x822FF924
+        // early-outs on `!mbModeStartedPlaying && mbIsInGameMode`, and mbIsInGameMode is set
+        // true by HandlePrepareForModeAction for every offline event -- so with this one byte
+        // missing the loop landed inert in Road Rage and every rival that fell behind stayed
+        // behind for ever. The console's other two writers (Construct @0x822FDBD4 and
+        // HandlePrepareForModeAction's clear @0x823095E8) are declaration-only on this build;
+        // the member is zero-initialised with the rest of the module, which is what that clear
+        // leaves behind, so this set is the only one the loop needs.
         case BrnGameState::GameStateModuleIO::E_ACTION_START_PLAYING_MODE: // 34
             CGS_ASSERT(mbIsInGameMode, "mbIsInGameMode");
             SetAllCarsOnStartLine(ActiveRaceCar::E_RACE_START_STATE_RACING, true);
             mBoostManager.SetBoostEarningEnabled(true);
+            mbModeStartedPlaying = true;                      // 0x8230C7F8
             break;
+
+        // ====================================================================================
+        // ACTION 129 -- E_ACTION_ALLOW_CAR_TO_JOIN_ROAD_RAGE (rival range-loop wave, lane W1,
+        // 2026-09-05). THE ANSWER TO RoadRageMode::BroadcastEventsToRivals @0x82344798.
+        //
+        // The game-state side has been posting this action once per rival per latch since the
+        // Road Rage wave landed, and NOTHING in this module consumed it: the world side never
+        // learned which rivals were still serving a hide timer, so RaceCar::mbIsAllowedInRoadRage
+        // stayed at whatever Prepare left it and IsRaceCarWrappable's `!IsAllowedInRoadRage()`
+        // gate could never open.
+        //
+        // ARTIST second jump table, case 22 == type 107 + 22 == 129 (asm 0x8230D068..0x8230D098):
+        //     mr   r3, r31 ; lwz r4, 0(r27) ; bl GetActiveRaceCar
+        //     bl   ActiveRaceCar::IsActive  ; beq -> break
+        //     mr   r3, r30 ; bl ActiveRaceCar::GetGlobalRaceCar
+        //     lbz  r11, 4(r27) ; stb r11, 0xAE(r3)        == RaceCar::SetAllowedInRoadRage
+        // Note the record's index is an ACTIVE slot, not a global one, and the flag lands on
+        // the GLOBAL car behind that slot.
+        // ====================================================================================
+        case KI_ACTION_ALLOW_CAR_TO_JOIN_ROAD_RAGE:  // 129
+        {
+            const AllowCarToJoinRoadRageActionRecord* lpAllowAction =
+                reinterpret_cast<const AllowCarToJoinRoadRageActionRecord*>( lpEvent );
+
+            ActiveRaceCar* lpActiveRaceCar =
+                GetActiveRaceCar( lpAllowAction->mActiveRaceCarIndex );
+
+            if( lpActiveRaceCar != 0 && lpActiveRaceCar->IsActive() )
+            {
+                RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
+                if( lpRaceCar != 0 )    // [GUARD]: IsActive() asserts this on console
+                {
+                    lpRaceCar->SetAllowedInRoadRage( lpAllowAction->mbAllowedInRoadRage );
+                }
+            }
+            break;
+        }
 
         // ARTIST 0x8230C3D8..0x8230C408.  DecFIGS gives the exact one-bool
         // AllowBoostEarningAction declaration used here.
@@ -3907,6 +3979,35 @@ void RaceCarEntityModule::PreSceneUpdate(
     // the streaming sweep below looks at it. Its source queue only became non-empty this wave
     // (WorldModule::BridgeActionsToRaceCarModule was an inert link stub).
     HandleGameActions( lpInput, lpOutput );
+
+    // ---- the ONCE-PER-SECOND RIVAL RANGE PASS (console step 7, asm 0x8230E28C..0x8230E2C4)
+    // ⭐ ADDED 2026-09-05 (rival range-loop wave, lane W1), at the console's own position: the
+    // `bl` at 0x8230E2C0, i.e. after UpdateRaceCars_PreScene (0x8230E288, still not reproduced)
+    // and before UpdateStreaming (0x8230E308, immediately below), with r4 == the pre-scene
+    // OUTPUT buffer -- the same r29 both of those neighbours receive.
+    //
+    // [!] IT IS RATE-GATED, AND THE GATE IS THE CONSOLE'S. 0x8230E28C..0x8230E2B4 divides the
+    // sim timer's miFrameCount by `(s32)(1.0f / mfTimeStep)` (the `fctiwz` computed at
+    // 0x8230E20C off the same TimerStatus this function already latches at step 10) and runs
+    // the pass only when the remainder is zero -- i.e. ONCE PER SIMULATED SECOND, not per
+    // frame. Attaching/detaching a car costs a streamer round trip, so this is load-bearing.
+    // The console's `twllei`/`twlgei` trap pair around the divide is the compiler's
+    // divide-by-zero / overflow guard; here it is an explicit zero test.
+    {
+        const RaceCarEntityModuleIO::TimerStatusInterface* lpRangeTimers =
+            lpInput->GetTimerStatusInterface();
+        if( lpRangeTimers != 0 )
+        {
+            const s32 liFrameCount = lpRangeTimers->GetSimTimerStatus()->GetFrameCount();
+            const s32 liUpdatesPerSecond =
+                ( mfTimeStep > 0.0f ) ? static_cast<s32>( 1.0f / mfTimeStep ) : 0;
+
+            if( liUpdatesPerSecond > 0 && ( liFrameCount % liUpdatesPerSecond ) == 0 )
+            {
+                UpdateInAndOutOfRangeCars( lpOutput );
+            }
+        }
+    }
 
     // ---- step 11: pump the five component streamers -------------------------
     UpdateStreaming( lpInput, lpOutput );
@@ -5187,6 +5288,16 @@ void RaceCarEntityModule::PostPhysicsUpdate(
 
     ProcessCreateVehicleEvents( lpInput, lpOutput );
 
+    // Console slot 0x82307604 (between ProcessCreateVehicleEvents @0x823075F8 and the physics
+    // readback @0x8230761C, OUTSIDE the sim-paused skip): pull the AI's out-of-range car poses so
+    // a hidden rival's RaceCar follows the AI while it is out of the world -- otherwise the range
+    // loop (BrnRaceCarEntityModule_Range.cpp) re-attaches it where it was dropped. Wired by the
+    // conductor 2026-09-05 (aiwave2 lane W1 bodied it).
+    if( lpInput != 0 )
+    {
+        ReadOutOfRangeRaceCarDataFromAI( lpInput );
+    }
+
     // ⭐⭐ THE PHYSICS READBACK, at the console's own position (`bl` at 0x8230761C, before
     // UpdateActiveRaceCarColours @0x823076C4 and UpdateOutputInterfaces @0x8230771C).
     // Landed 2026-08-11 (physics-return-path wave). It is the real producer of every active
@@ -5319,6 +5430,22 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     if( !lbSimPaused )
     {
         UpdateCurrentWorldRegion( lpOutput->GetGameEventQueue() );
+    }
+
+    // ⭐ [rival range-loop wave 2026-09-05, lane W1] THE HIDING-EVENT PUBLISH, at the console's
+    // own position and on the console's own queue: the `bl` at 0x823076B0, i.e. immediately
+    // after the world-region sample (0x8230769C, above) and before StorePlayerRoutePortalPositions
+    // (0x823076BC, still not reproduced), INSIDE the sim-paused skip (the `bne cr6, loc_823076C0`
+    // at 0x82307610 lands past it), with a2 == lpOutput->GetGameEventQueue() -- the SECOND
+    // sub_822B67D0 accessor call, at 0x823076A4, which returns the same queue as the first.
+    //
+    // ⛔ WITHOUT IT the Road Rage hide timers have NO PRODUCER: RoadRageMode::HandleGameEvents
+    // consumes game event 40 and nothing in the image posts it except this function, so
+    // UpdateHiddenRivals counts nothing down and BroadcastEventsToRivals' action-129 "allowed"
+    // bit is decided by an array that is never written.
+    if( !lbSimPaused )
+    {
+        UpdateHidingEvents( lpOutput->GetGameEventQueue() );
     }
 
     // ⭐ THE PAINT PUBLISH, at the console's own position. VERIFIED from the asm of
@@ -6224,7 +6351,11 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 //   (UpdateActiveRaceCarColours RETIRED from this list 2026-08-02 -- it is COMPLETE above.
 //    It was never a [VMX] function: its only vector work is two lvx128/stvx128 pairs that
 //    copy a whole Vector4 out of the palette, which is a plain assignment in C++.)
-//   WriteUpdatedAIData, ReadOutOfRangeRaceCarDataFromAI, UpdateOutputInterfaces,
+//   WriteUpdatedAIData, UpdateOutputInterfaces,
+//   (ReadOutOfRangeRaceCarDataFromAI RETIRED from this list 2026-09-05, rival range-loop wave
+//    -- COMPLETE in BrnRaceCarEntityModule_Range.cpp. It IS a vector function, but every one of
+//    its pipelines is a named rw::math::vpu call once read: a cross product, a length-vs-epsilon
+//    test and two Normalize()s, building the {Right, Up, At, Pos} rows of one Matrix44Affine.)
 //   ResetActiveRaceCar, AttachActiveRaceCar, OnRaceCarResourcesLoaded, AddRivalCar,
 //   AddRaceCarToStartingGridOrFreeburnLobby, SetUpAIForMode, SetUpPlayerCarForMode,
 //   SetupOpponents, HandlePrepareForModeAction, HandleResetPlayerCarAction,
@@ -6241,7 +6372,12 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 //    opcode at all. What actually blocked it was the "the create-vehicle result queue has no
 //    producer" claim, which this wave re-verified and found STALE.)
 //   ProcessRaceCarCrashCompleteEvents, ProcessResetOnTrackResultQueue,
-//   UpdateBoost, UpdateNearMisses, UpdateInAndOutOfRangeCars, UpdateSerialiser,
+//   UpdateBoost, UpdateNearMisses, UpdateSerialiser,
+//   (UpdateInAndOutOfRangeCars RETIRED from this list 2026-09-05, rival range-loop wave --
+//    COMPLETE in BrnRaceCarEntityModule_Range.cpp. Its only vector work is the player-speed
+//    Magnitude, which is a plain rw::math::vpu call; what actually blocked it was the four
+//    "silent zero" BurnoutConstants floats, whose CRT initialisers this wave found at
+//    0x82C4BB70..0x82C4BC0C.)
 //   UpdateReplayStreaming, CheckForResetOnTrackConditions, DebugRenderPosition (38 total).
 //
 // [INTERIOR] reach un-homed RaceCar/ActiveRaceCar/*Manager/Streamer/BrnAI/BrnTraffic
@@ -6249,7 +6385,10 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 //   Release-adjacent state writes aside, this covers: DetachActiveRaceCar,
 //   ProcessTakedownEvents, ProcessPropContactQueue, ProcessLeapedAndStompedCars,
 //   ProcessPowerParking, ProcessRaceCarCrashEvents_PostPhysics, UpdatePowerParking,
-//   UpdateCrashingPlayerContacts, UpdateHidingEvents,
+//   UpdateCrashingPlayerContacts,
+//   (UpdateHidingEvents RETIRED from this list 2026-09-05, rival range-loop wave -- COMPLETE in
+//    BrnRaceCarEntityModule_Range.cpp, 26 instructions, no un-homed interior at all once the
+//    module's own mHidingEvents array is a named member.)
 //   (UpdateCurrentWorldRegion RETIRED from this list 2026-08-25, H1 district wave -- bodied
 //    above with the stage-0 map bind; its "un-homed interior" needs were GetActiveRaceCar/
 //    IsActive/GetPosition, all long since real.)
@@ -6260,7 +6399,9 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 //    with no park at all. Its one "un-homed interior" callee, ActiveRaceCar::
 //    SendSceneUpdatesPostPhysics, landed in the same wave. GenerateSceneUpdateEvents and
 //    SetPaddingForResetRaceCars are bodied above too and were never on this list.)
-//   SetAllActiveCarsInGameMode, SetAllCarsOnStartLine, SetupCarColour, SetHiddenDelay,
+//   SetAllActiveCarsInGameMode, SetAllCarsOnStartLine, SetupCarColour,
+//   (SetHiddenDelay and IsRaceCarWrappable RETIRED from this list 2026-09-05, rival range-loop
+//    wave -- both COMPLETE in BrnRaceCarEntityModule_Range.cpp.)
 //   RemoveRivals, RemoveAllRivalsFromWorld, RemoveAllNetworkCarsFromWorld, RemoveAllRaceCars,
 //   ChangePlayerCarColour, GetDamagedCarCount, GetPersistentDamageCarCount,
 //   EnterReplay, LeaveReplay, LoadGlobalResources, IsCarColourInUse,

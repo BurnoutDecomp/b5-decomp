@@ -36,6 +36,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                  // Vector2 / Vector3 / Vector4
 #include "GameSource/World/AI/RacingLine/BrnHardNoGoMap.h"   // HardNoGoMap (embedded per section)
+#include "SharedClasses/AI/AISectionsResourceType.h"         // AISection (SetFastSectionCorners needs the layout)
 
 namespace BrnAI
 {
@@ -72,6 +73,82 @@ namespace BrnAI
         {
             mPortalEntranceAndExit.z = lExit.x;
             mPortalEntranceAndExit.w = lExit.y;
+        }
+
+        // ---- ADDITIVE (aiwave2 lane R1, 2026-09-05) ------------------------------------
+        // DWARF BrnRacingLine.h:170 / :167 / :174. The section portal pair lives packed in
+        // mPortalEntranceAndExit -- entrance in the x/y lanes, exit in z/w -- and every
+        // console reader is inlined. The exit read is attested by
+        // RacingLineGenerator::GenerateInOutVectors @0x82780688
+        // (`vpermwi128 v123, v124, 0xBF` == word-select {2,3,3,3}, i.e. the z/w pair pulled
+        // down into the x/y lanes) and again at @0x8277099C; the entrance read is the raw
+        // x/y lanes of the same load (@0x82780684). The z/w lanes of the RESULT are console
+        // garbage there (the permute duplicates lane 3); they are zeroed here because no
+        // consumer reads them.
+        Vector2 GetSectionEntrance() const
+        {
+            Vector2 lEntrance;
+            lEntrance.x = mPortalEntranceAndExit.x;
+            lEntrance.y = mPortalEntranceAndExit.y;
+            lEntrance.z = 0.0f;
+            lEntrance.w = 0.0f;
+            return lEntrance;
+        }
+
+        Vector2 GetSectionExit() const
+        {
+            Vector2 lExit;
+            lExit.x = mPortalEntranceAndExit.z;
+            lExit.y = mPortalEntranceAndExit.w;
+            lExit.z = 0.0f;
+            lExit.w = 0.0f;
+            return lExit;
+        }
+
+        void SetSectionEntrance(const Vector2& lEntrance)
+        {
+            mPortalEntranceAndExit.x = lEntrance.x;
+            mPortalEntranceAndExit.y = lEntrance.y;
+        }
+
+        // DWARF BrnRacingLine.h:182. Recovered from the byte-identical inlined block in
+        // RacingLineGenerator::CacheLocalSections @0x8278EE0C..0x8278EE80 (and again at
+        // @0x8278F0D8..0x8278F158): the section's four PACKED corners are gathered into two
+        // SoA vectors (all four X lanes, all four Z lanes), each is rotated one word right
+        // (`vpermwi128 v12, v0, 0xC6` == word-select {3,0,1,2} == "the PREVIOUS corner per
+        // edge lane"), the ROTATED sets are stored as mA4XCoords / mA4YCoords, and the
+        // difference (corner[i] - corner[i-1]) is stored as mEdge4X / mEdge4Y.
+        // That is exactly the SoA half-plane form BrnAI::IsInsideSectionFast walks:
+        // per lane i, cross = mEdge4X[i]*(y - mA4YCoords[i]) - mEdge4Y[i]*(x - mA4XCoords[i]).
+        // AISection::Vector2 is the PACKED 2-float corner type; its .y lane is the world Z
+        // (DWARF AISectionsData.h GetCornerX/GetCornerZ), which is the racing line's 2D y.
+        void SetFastSectionCorners(const AISection* lpSection)
+        {
+            f32 lafX[KI_AI_SECTION_EDGES];
+            f32 lafY[KI_AI_SECTION_EDGES];
+            for (s32 liCorner = 0; liCorner < KI_AI_SECTION_EDGES; ++liCorner)
+            {
+                lafX[liCorner] = lpSection->mpaCorners[liCorner].x;
+                lafY[liCorner] = lpSection->mpaCorners[liCorner].y;
+            }
+
+            f32* lapPrevX[KI_AI_SECTION_EDGES] = { &mA4XCoords.x, &mA4XCoords.y,
+                                                   &mA4XCoords.z, &mA4XCoords.w };
+            f32* lapPrevY[KI_AI_SECTION_EDGES] = { &mA4YCoords.x, &mA4YCoords.y,
+                                                   &mA4YCoords.z, &mA4YCoords.w };
+            f32* lapEdgeX[KI_AI_SECTION_EDGES] = { &mEdge4X.x, &mEdge4X.y,
+                                                   &mEdge4X.z, &mEdge4X.w };
+            f32* lapEdgeY[KI_AI_SECTION_EDGES] = { &mEdge4Y.x, &mEdge4Y.y,
+                                                   &mEdge4Y.z, &mEdge4Y.w };
+
+            for (s32 liEdge = 0; liEdge < KI_AI_SECTION_EDGES; ++liEdge)
+            {
+                const s32 liPrevious = (liEdge + KI_AI_SECTION_EDGES - 1) % KI_AI_SECTION_EDGES;
+                *lapPrevX[liEdge] = lafX[liPrevious];
+                *lapPrevY[liEdge] = lafY[liPrevious];
+                *lapEdgeX[liEdge] = lafX[liEdge] - lafX[liPrevious];
+                *lapEdgeY[liEdge] = lafY[liEdge] - lafY[liPrevious];
+            }
         }
     };
 

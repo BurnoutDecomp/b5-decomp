@@ -62,12 +62,13 @@ namespace Attrib
             CGS_ASSERT(lpCollection != NULL, "NULL object found in garbage bag.");
 
             // X360 reads the collection's shared refcount at +0x08 (HashMap base's muRefCount).
-            // ⚠️ [FLAG PC known defect, 2026-09-03 lane A10] on x64 +0x08 is HashMap::muCapacity, NOT the refcount:
-            // only EMPTY collections reach the destructor. Reading GetRefCount() by name is the fix, but it must
-            // wait for attribhashmap.cpp's Remove/Transfer/UpdateSearchLength (still console byte offsets) --
-            // Collection::Clear phase 1 would be their first live caller and would corrupt the buckets.
-            const u16 lu16RefCount =
-                *reinterpret_cast<const u16*>(reinterpret_cast<const u8*>(lpCollection) + 0x08);
+            // FIXED 2026-09-05: this used to read `*(u16*)(collection + 0x08)` -- the CONSOLE byte
+            // offset, which on x64 (8-byte mpBuckets) is HashMap::muCapacity, so only EMPTY
+            // collections ever reached the destructor and every real one leaked in the bag.
+            // Read it BY NAME. Its prerequisite -- attribhashmap.cpp's Remove / UpdateSearchLength
+            // addressing the buckets by name (Collection::Clear phase 1 is their first live caller
+            // through ~Collection below) -- landed in the same change.
+            const u16 lu16RefCount = lpCollection->GetRefCount();
             if (lu16RefCount == 0)
             {
                 lpCollection->~Collection();

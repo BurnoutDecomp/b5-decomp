@@ -613,4 +613,146 @@ void RaceCar::FillInOutputInterface(
         HasActiveRaceCar());                                // r25 (in-range flag)
 }
 
+// ============================================================================
+// THE ROAD-RAGE RANGE PREDICATES (rival range-loop wave, lane W1, 2026-09-05)
+//
+//   RaceCar::AreCarsHeadOn      X360 0x822BEBE8   (BrnRaceCar.h:176, private)
+//   RaceCar::ShouldBeInRange    X360 0x822D3B00   (BrnRaceCar.h:162)
+//   RaceCar::ShouldBeOutOfRange X360 0x822D3C48   (BrnRaceCar.h:163)
+//
+// The two Should* predicates are the whole in/out hysteresis of
+// RaceCarEntityModule::UpdateInAndOutOfRangeCars @0x822FF8F8 (its only caller): a rival goes
+// OUT at the ShouldBeOutOfRange radius and can only come back at the strictly smaller
+// ShouldBeInRange radius, so a car sitting on the boundary does not oscillate.
+//
+// AreCarsHeadOn was DECLARATION-ONLY in this tree (no body anywhere), so both predicates
+// would have been an LNK2019 without it; it is bodied here, in its declaring TU.
+//
+// SIGNATURE FROM THE ASM, NOT THE PSEUDOCODE. Hex-Rays renders all three as `int (int, int)`
+// and hides the sret convention: `RaceCar::GetPosition()` returns a Vector3 BY VALUE, so the
+// console passes the destination buffer in r3 and the RECEIVER in r4
+// (`addi r3, r1, var_50 ; bl GetPosition` with r4 still holding the *other* car). That is why
+// the first GetPosition in each body is the OTHER car's, not this one's.
+//
+// ONE CONSOLE COMPUTATION IN ShouldBeInRange IS DEAD, AND IT IS REPRODUCED AS SUCH.
+// 0x822D3B90..0x822D3BB0 calls GetDirection on the player car, dot-products it against the
+// separation and extracts the vcmpgefp. bit into r11 -- and then 0x822D3BB8 `cmplwi cr6, r11, 0`
+// is immediately overwritten by 0x822D3BC4 `fcmpu cr6, f13, f0`, so the bit never reaches a
+// branch. The sibling ShouldBeOutOfRange @0x822D3D04 DOES branch on the same bit, to two
+// DIFFERENT thresholds (40000 in front / 52900 behind). The compiler merged
+// ShouldBeInRange's two arms because BOTH of its thresholds are the SAME pooled literal
+// flt_8201C214 == 32400.0f -- i.e. the source has the same `in front ? A : B` shape with
+// A == B. Reproduced here as that branch with the same constant on both sides rather than
+// dropped, because GetDirection is a real call carrying real asserts.
+//
+// EVERY CONSTANT READ OUT OF THE DECRYPTED ARTIST IMAGE AT ITS `lfs` SYMBOL:
+//   flt_82001CC0 = 0.0        flt_8201495C = 700.0     flt_8201C210 = 350.0
+//   flt_8201C214 = 32400.0    flt_82014968 = 750.0     flt_8201C218 = 375.0
+//   flt_8201C21C = 52900.0    flt_8201C220 = 40000.0
+// The three squared values are exactly 180^2 / 200^2 / 230^2, and 700/750/350/375 are the
+// UNsquared head-on radii the console squares at run time (`fmuls f0, f31, f31`).
+// ============================================================================
+
+// ---- ShouldBeInRange (0x822D3B00) -----------------------------------------------------
+// flt_8201C214. Both arms of the in-game-mode test; 180 m squared.
+static const f32 KF_IN_RANGE_DISTANCE_SQUARED = 32400.0f;
+// flt_8201495C / flt_8201C210. The free-burn head-on / not-head-on radii, squared at run time.
+static const f32 KF_IN_RANGE_HEAD_ON_DISTANCE = 700.0f;
+static const f32 KF_IN_RANGE_DISTANCE         = 350.0f;
+
+// ---- ShouldBeOutOfRange (0x822D3C48) --------------------------------------------------
+// flt_8201C220 / flt_8201C21C. 200 m squared ahead of the player, 230 m squared behind.
+static const f32 KF_OUT_OF_RANGE_IN_FRONT_DISTANCE_SQUARED = 40000.0f;
+static const f32 KF_OUT_OF_RANGE_BEHIND_DISTANCE_SQUARED   = 52900.0f;
+// flt_82014968 / flt_8201C218. The free-burn head-on / not-head-on radii.
+static const f32 KF_OUT_OF_RANGE_HEAD_ON_DISTANCE = 750.0f;
+static const f32 KF_OUT_OF_RANGE_DISTANCE         = 375.0f;
+
+// ----------------------------------------------------------------------------
+// AreCarsHeadOn @ 0x822BEBE8. True when car 1 is AHEAD of car 0 along car 0's own heading
+// AND the two headings oppose. Both tests are strict (`vcmpgtfp.`), both against 0.0f
+// (flt_82001CC0, splatted out of a zeroed stack Vector3), and the first failure returns
+// false without ever fetching car 1's direction.
+//   0x822BEC64  vsubfp128 v13, v126, v127     lPosition1 - lPosition0
+//   0x822BEC78  vmsum3fp128 v13, v13, v12     dotted with GetDirection(car0)
+//   0x822BEC7C  vcmpgtfp. v13 > 0
+//   0x822BECCC  vmsum3fp128 v13, v13, v127    GetDirection(car1) . GetDirection(car0)
+//   0x822BECDC  vcmpgtfp. 0 > v13
+// ----------------------------------------------------------------------------
+bool RaceCar::AreCarsHeadOn(const RaceCar* lpRaceCar0, const RaceCar* lpRaceCar1) const
+{
+    const Vector3 lPosition0  = lpRaceCar0->GetPosition();
+    const Vector3 lPosition1  = lpRaceCar1->GetPosition();
+    const Vector3 lDirection0 = lpRaceCar0->GetDirection();
+
+    if (rw::math::vpu::Dot(lPosition1 - lPosition0, lDirection0) <= 0.0f)
+    {
+        return false;   // car 1 is not ahead of car 0
+    }
+
+    const Vector3 lDirection1 = lpRaceCar1->GetDirection();
+
+    return rw::math::vpu::Dot(lDirection1, lDirection0) < 0.0f;
+}
+
+// ----------------------------------------------------------------------------
+// ShouldBeInRange @ 0x822D3B00. Whether this out-of-range rival is close enough to the player
+// car to be brought back into simulation.
+//   0x822D3B48  lbz r11, 0xA6(r31)   -- mbIsInGameMode picks the arm
+//   in a game mode : distance^2 < 32400 (180 m), whichever side of the player the car is on
+//   free burn      : distance^2 < (head-on ? 700 : 350)^2
+// ----------------------------------------------------------------------------
+bool RaceCar::ShouldBeInRange(const RaceCar* lpPlayerRaceCar) const
+{
+    // v127 = this position - player position (0x822D3B4C `vsubfp128 v127, v0, v127`).
+    const Vector3 lSeparation      = GetPosition() - lpPlayerRaceCar->GetPosition();
+    const f32     lfDistanceSquared = rw::math::vpu::Dot(lSeparation, lSeparation);
+
+    if (mbIsInGameMode)
+    {
+        // 0x822D3B90..0x822D3BB0. The console computes this and DISCARDS it -- see the
+        // banner. Kept because the call is the console's; the branch it feeds was merged
+        // away by the compiler because both arms compare against the same pooled literal.
+        const bool lbInFrontOfPlayer =
+            rw::math::vpu::Dot(lpPlayerRaceCar->GetDirection(), lSeparation) >= 0.0f;
+
+        return lbInFrontOfPlayer ? (lfDistanceSquared < KF_IN_RANGE_DISTANCE_SQUARED)
+                                 : (lfDistanceSquared < KF_IN_RANGE_DISTANCE_SQUARED);
+    }
+
+    const f32 lfRange = AreCarsHeadOn(this, lpPlayerRaceCar) ? KF_IN_RANGE_HEAD_ON_DISTANCE
+                                                            : KF_IN_RANGE_DISTANCE;
+
+    return lfDistanceSquared < (lfRange * lfRange);
+}
+
+// ----------------------------------------------------------------------------
+// ShouldBeOutOfRange @ 0x822D3C48. Whether this in-range rival has drifted far enough from the
+// player car to be dropped out of simulation. Same two arms, but the in-game-mode arm DOES
+// branch on which side of the player the car is: a car AHEAD survives to 200 m, a car BEHIND
+// to 230 m (the player is driving forwards, so the car behind falls away faster).
+//   0x822D3CF0  vcmpgefp. dot(playerDir, separation) >= 0
+//   0x822D3D08  in front -> 40000    0x822D3D24  behind -> 52900
+// ----------------------------------------------------------------------------
+bool RaceCar::ShouldBeOutOfRange(const RaceCar* lpPlayerRaceCar) const
+{
+    const Vector3 lSeparation      = GetPosition() - lpPlayerRaceCar->GetPosition();
+    const f32     lfDistanceSquared = rw::math::vpu::Dot(lSeparation, lSeparation);
+
+    if (mbIsInGameMode)
+    {
+        const bool lbInFrontOfPlayer =
+            rw::math::vpu::Dot(lpPlayerRaceCar->GetDirection(), lSeparation) >= 0.0f;
+
+        return lbInFrontOfPlayer
+            ? (lfDistanceSquared > KF_OUT_OF_RANGE_IN_FRONT_DISTANCE_SQUARED)
+            : (lfDistanceSquared > KF_OUT_OF_RANGE_BEHIND_DISTANCE_SQUARED);
+    }
+
+    const f32 lfRange = AreCarsHeadOn(this, lpPlayerRaceCar) ? KF_OUT_OF_RANGE_HEAD_ON_DISTANCE
+                                                             : KF_OUT_OF_RANGE_DISTANCE;
+
+    return lfDistanceSquared > (lfRange * lfRange);
+}
+
 }

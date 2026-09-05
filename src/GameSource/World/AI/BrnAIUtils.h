@@ -30,9 +30,16 @@ namespace BrnAI
                                         f32*    lpfParamB);
 
     // 0x827651F0 - signed perpendicular distance of the line through lPosition with direction
-    // lVelocity to the origin = cross(lVelocity, lPosition)/|lPosition.xy|; falls back to
-    // |lVelocity.xy| when |lPosition.xy| is zero. Asserts the result is finite ('Bad maths!').
+    // lVelocity to the origin = cross(lPosition, lVelocity)/|lVelocity.xy|; falls back to
+    // |lPosition.xy| when |lVelocity.xy| is zero. Asserts the result is finite ('Bad maths!').
+    // (Roles corrected 2026-09-05 against the asm -- see the body.)
     f32 DistancePosVelToOrigin(Vector2 lPosition, Vector2 lVelocity);
+
+    // 0x8276DDB8 - signed perpendicular distance from lPoint to the infinite line through
+    // (lLineStart, lLineEnd) = cross(end - start, point - start) / |end - start|; a zero-length
+    // segment falls back to |point - start|. Asserts the result is finite ('Bad maths!',
+    // BrnAIUtils.cpp:117). Consumer: RacingLineGenerator::GetPerpendicularDistanceToCentreLine.
+    f32 DistancePointToLine(Vector2 lPoint, Vector2 lLineStart, Vector2 lLineEnd);
 
     // 0x82768680 - SIMD 'fast' point-in-section test against a precomputed 4-edge convex
     // section (SoA edge coefficients). Returns true iff (lfX,lfY) is on the inside half-plane

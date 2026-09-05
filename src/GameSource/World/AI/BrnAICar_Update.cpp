@@ -828,6 +828,20 @@ namespace BrnAI
     // ==================================================================================
     void AICar::SetRoadRageMadness(f32 lfMadness)
     {
+        // [PC HARNESS, NOT X360] BRN_AI_MADNESS=<0..1>: override the madness every rival receives, so
+        // the slam chain (DecideToAttack roll -> OVERTAKE/DROP_BACK_TO_SLAM -> ATTACK_SLAM ->
+        // eBiasMode_Slam -> IncludeSmashIntoPlayer -> race-car contact -> TakedownManager) can be
+        // exercised on demand. A fresh profile's madness ceiling is 0.1 (KF_EARLY_RANK_MAX_MADNESS),
+        // i.e. a 6% attack roll -- faithful, but useless as a test. Same precedent as
+        // BRN_FORCE_TAKEDOWN (GameStateModule_gTD_00.cpp). DELETE-WHEN the harness grows a proper
+        // debug-menu equivalent of the console's aggression sliders.
+        {
+            static const char* spcForcedMadness = getenv("BRN_AI_MADNESS");
+            if (spcForcedMadness != 0)
+            {
+                lfMadness = static_cast<f32>(atof(spcForcedMadness));
+            }
+        }
         mAggressiveness.SetAggression(lfMadness * 0.6f);                                    // stfs 0x140C ; stb 1,0x1410
         mAggressiveness.SetProximityToSpeedMatch(0.5f);
         mAggressiveness.SetTimeForSpeedMatch(1.0f);
@@ -1139,9 +1153,9 @@ namespace BrnAI
         Attrib::Gen::burnoutcarasset lCarAsset(mCarAssetAttribKey, 0);                      // ld r4,0x14D8 ; bl sub_82204998
         Attrib::Gen::physicsvehiclehandling lHandling(
             const_cast<Attrib::Collection*>(lCarAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), 0);
-        Attrib::Gen::physicsvehicleboostattribs lBoost(
-            const_cast<Attrib::Collection*>(
-                const_cast<Attrib::RefSpec&>(lHandling.PhysicsVehicleBoostAttribs()).GetCollection()), 0);
+        const Attrib::Collection* const lpBoostCollection =
+            const_cast<Attrib::RefSpec&>(lHandling.PhysicsVehicleBoostAttribs()).GetCollection();
+        Attrib::Gen::physicsvehicleboostattribs lBoost(const_cast<Attrib::Collection*>(lpBoostCollection), 0);
 
         const f32* lpBoostData = static_cast<const f32*>(lBoost.GetLayoutPointer());
         // [GUARD] the console dereferences boostData unconditionally (lfs f13,0(r11)); a car
@@ -1149,6 +1163,11 @@ namespace BrnAI
         // and the speed left untouched -- CalcRoadRageSpeed then floors at 0 (GetDecentSpeed).
         if (lpBoostData != 0)
             mfMaxPlayerSpeed = lpBoostData[0] * KF_MPH_TO_MPS * KF_MAX_PLAYER_SPEED_SCALE;   // stfs 0x1504
+
+        // (2026-09-05, aiwave2: a first-8 witness here proved every rival resolves its key to the
+        // right car -- mfMaxPlayerSpeed 78..85 m/s. The "rival top speed ~10 m/s" symptom was
+        // AIDriver::ProximitySpeed halving the desired speed because no fan contributor wrote
+        // RacingLine::mfImmediateDistanceToTrafficImpact yet; closed by IncludeConstantBearing.)
     }
 
     // ==================================================================================

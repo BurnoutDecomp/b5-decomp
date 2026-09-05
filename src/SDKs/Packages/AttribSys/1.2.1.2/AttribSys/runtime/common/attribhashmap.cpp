@@ -3,17 +3,14 @@
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX (AttribSys 1.2.1.2). The
 // container/Node layout is pinned in attribhashmap.h.
 //
-// ⛔⛔ KNOWN DEFECT, NOT FIXED HERE (2026-08-01): Remove / Transfer / UpdateSearchLength
-// still address this object and its buckets through raw CONSOLE byte offsets --
-// `*(u16*)(this+4)` for muCapacity, `+6` muCount, `+0xA` mu8MaxSearchLength, `+0xB`
-// mu8KeyShift, and a `<< 4` / `>> 4` bucket stride. Every one of those is WRONG on x64:
-// mpBuckets is a pointer, so the header fields sit 4 bytes later, and sizeof(Node) is 24,
-// not 16. Release @0x82802718 had the identical bug (`*(u16*)(this+8)` == muCapacity on the
-// host, not muRefCount) and it cost this project a whole boot -- "Too many releases of
-// object!" the moment DirectorResourceManager::Prepare gave the SDK its first real
-// collection to reference-count. Release is fixed by name below; the removal trio is NOT,
-// because nothing on the committed boot path removes an attribute and rewriting it deserves
-// its own verified pass. If you land ANY attribute removal / table repair, fix these first.
+// DEFECT CLOSED 2026-09-05: Remove / UpdateSearchLength used to address this object and
+// its buckets through raw CONSOLE byte offsets (`*(u16*)(this+4)` muCapacity, `+6` muCount,
+// `+0xA` mu8MaxSearchLength, `+0xB` mu8KeyShift, and a `<< 4` / `>> 4` bucket stride) --
+// all WRONG on x64 (mpBuckets is a pointer, sizeof(Node) is 24). Release @0x82802718 had the
+// identical bug (`*(u16*)(this+8)` == muCapacity on the host) and cost a whole boot ("Too many
+// releases of object!"). Every body in this file now reads its members BY NAME; the first live
+// caller of Remove is Collection::Clear phase 1, reached from ~Collection out of the database
+// garbage bag (attribdatabaseprivate.cpp), whose refcount gate was de-offset in the same change.
 // The already-correct half (HashMap / Add / RebuildTable / Find / FindIndex / GetKeyAtIndex /
 // PreFlightAdd / CountSearchCacheLines) reads every member BY NAME -- copy that.
 //
@@ -35,6 +32,8 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribarray.h"   // Attrib::TypeDesc
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsysallochooks.h"  // Attrib::Alloc (RebuildTable carve)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/vechashmap.h"           // Attrib::TableFreeFunc (old-array census release)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"     // Attrib::Collection (Remove: mpClass)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribclassprivate.h" // Attrib::ClassPrivate (Remove: mStaticData)
 #include <new>   // placement new (in-place Node construction in Add)
 
 // ~ClassPrivate's bucket release (@0x8280F4D8 tail): free the bucket array by
@@ -477,80 +476,80 @@ bool Attrib::HashMap::Release() const
 // only the node's search length is zeroed; when true the table's search-length
 // invariant is repaired by walking UpdateSearchLength from the vacated home index
 // until it reports a settled table.
+//
+// DE-OFFSET 2026-09-05: every field is read BY NAME now (the 2026-08-01 transcription
+// addressed `this+4/+6/+0xB` and `node+8/+0xE/+0xF` with the X360 16-byte node stride --
+// see the file banner). Register map of the asm, for the record:
+//   r30 = this, r31 = node, r29 = lpBase (then the result), r28 = lpCollection, r27 = lbRestore
+//   0x82807B14  by-value  (flags & 0x40): result = &node->mpValue (node+8)
+//   0x82807B2C  laid-out  (flags & 0x10): result = lpBase + node->muOffset
+//   0x82807B44  inherited (flags & 0x20): `lwz r10,0x18(r28)` collection->mpClass,
+//               `lwz r10,8(r10)` Class::mpPrivates, `lwz r10,0x34(r10)`
+//               ClassPrivate::mStaticData (X360 +52), + node->muOffset.
+//               (The old transcription named +0x18 "mpSubCollection" -- it is mpClass.)
+//   0x82807B5C  plain     : result = node->mpValue
+//   0x82807B64..0x82807B84 node->mpValue = node ; key = 0 ; flags = 0 ; --muCount
+//   0x82807B88  !lbRestore -> node->mu8SearchLen = 0 ; return
+//   0x82807B8C.. home = rotl(key, mu8KeyShift) % muCapacity ; UpdateSearchLength loop.
 void* Attrib::HashMap::Remove(Node* lpNode, void* lpBase, const Collection* lpCollection, bool lbRestore)
 {
-    u8* lpThis = reinterpret_cast<u8*>(this);
-    u8* lpNodeBytes = reinterpret_cast<u8*>(lpNode);
-    Node* lpTable = *reinterpret_cast<Node**>(lpThis);
-
     // The node must be a valid slot inside this table's bucket array.
-    const u8 lu8Flags0 = *reinterpret_cast<u8*>(lpNodeBytes + 0xF);
-    const u16 lu16TableSize = *reinterpret_cast<u16*>(lpThis + 4);
-    u8* lpTableEnd = reinterpret_cast<u8*>(lpTable) + (static_cast<u32>(lu16TableSize) << 4);
-    CGS_ASSERT((lu8Flags0 & 0x80) != 0
-                   && lpNodeBytes >= reinterpret_cast<u8*>(lpTable)
-                   && lpNodeBytes < lpTableEnd,
+    CGS_ASSERT(lpNode->IsOccupied()
+                   && lpNode >= mpBuckets
+                   && lpNode < mpBuckets + muCapacity,
                "Attrib::HashMap removing node which is not valid node in table.");
 
-    // The node's stored value (its raw payload word) drives the home-index rehash.
-    const u8 lu8Flags = *reinterpret_cast<u8*>(lpNodeBytes + 0xF);
-    const u64 lu64Value = (lu8Flags & 0x80) != 0 ? *reinterpret_cast<u64*>(lpNodeBytes) : 0;
+    // The node's stored key (0 when the occupied bit is clear) drives the home-index rehash.
+    const u64 lu64Key   = lpNode->Key();
+    const u8  lu8Flags  = lpNode->mFlags;
 
     // Resolve the address the caller must act on, per the payload's storage flags.
     u8* lpResult;
     if ((lu8Flags & 0x40) != 0)
     {
-        // By-value: the payload lives inline in the node (node+8).
-        lpResult = lpNodeBytes + 8;
+        // By-value: the payload lives inline in the node's value word.
+        lpResult = reinterpret_cast<u8*>(&lpNode->mpValue);
     }
     else if ((lu8Flags & 0x10) != 0)
     {
         // Laid out: an offset into the caller-supplied data base.
-        lpResult = reinterpret_cast<u8*>(lpBase) + *reinterpret_cast<u32*>(lpNodeBytes + 8);
+        lpResult = static_cast<u8*>(lpBase) + lpNode->muOffset;
     }
     else if ((lu8Flags & 0x20) != 0)
     {
-        // Inherited: an offset into the parent collection's data area.
-        u8* lpParent = *reinterpret_cast<u8* const*>(
-            reinterpret_cast<const u8*>(lpCollection) + 0x18); // Collection.mpSubCollection
-        u8* lpParentData = *reinterpret_cast<u8**>(lpParent + 8);
-        const u32 luDataOfs = *reinterpret_cast<u32*>(lpParentData + 0x34);
-        lpResult = reinterpret_cast<u8*>(static_cast<uintptr_t>(luDataOfs)
-                                         + *reinterpret_cast<u32*>(lpNodeBytes + 8));
+        // Inherited: an offset into the owning class's static data block.
+        const ClassPrivate* lpClassPrivate =
+            static_cast<const ClassPrivate*>(lpCollection->mpClass->GetPrivates());
+        lpResult = static_cast<u8*>(lpClassPrivate->mStaticData) + lpNode->muOffset;
     }
     else
     {
         // Plain pointer stored inline.
-        lpResult = *reinterpret_cast<u8**>(lpNodeBytes + 8);
+        lpResult = static_cast<u8*>(lpNode->mpValue);
     }
 
     // Re-home the node's back-reference to itself and invalidate the slot.
-    *reinterpret_cast<Node**>(lpNodeBytes + 8) = lpNode;
-    *reinterpret_cast<u64*>(lpNodeBytes) = 0;
-    *reinterpret_cast<u8*>(lpNodeBytes + 0xF) = 0;
-    --*reinterpret_cast<u16*>(lpThis + 6);
+    lpNode->mpValue = lpNode;
+    lpNode->mKey    = 0;
+    lpNode->mFlags  = 0;
+    --muCount;
 
     if (!lbRestore)
     {
-        *reinterpret_cast<u8*>(lpNodeBytes + 0xE) = 0; // mMax
+        lpNode->mu8SearchLen = 0;
         return lpResult;
     }
 
     // Repair the search-length invariant from the vacated home bucket outward.
-    const u8 lu8KeyShift = *reinterpret_cast<u8*>(lpThis + 0xB);
-    const unsigned int luTableSize = *reinterpret_cast<u16*>(lpThis + 4);
-    const unsigned int luNodeIndex =
-        static_cast<unsigned int>((lpNodeBytes - reinterpret_cast<u8*>(lpTable)) >> 4);
-    const u64 lu64Rot = (lu64Value >> (64 - lu8KeyShift)) | (lu64Value << lu8KeyShift);
+    const u8 lu8KeyShift = mu8KeyShift;
+    const unsigned int luTableSize = muCapacity;
+    const unsigned int luNodeIndex = static_cast<unsigned int>(lpNode - mpBuckets);
+    const u64 lu64Rot = (lu64Key >> (64 - lu8KeyShift)) | (lu64Key << lu8KeyShift);
     const unsigned int luHome = static_cast<unsigned int>(lu64Rot % luTableSize);
 
     unsigned int luUpdated = UpdateSearchLength(luHome, luNodeIndex);
-    if (luUpdated < *reinterpret_cast<u16*>(lpThis + 4))
-    {
-        do
-            luUpdated = UpdateSearchLength(luUpdated, luUpdated);
-        while (luUpdated < *reinterpret_cast<u16*>(lpThis + 4));
-    }
+    while (luUpdated < muCapacity)
+        luUpdated = UpdateSearchLength(luUpdated, luUpdated);
     return lpResult;
 }
 
@@ -617,34 +616,28 @@ void Attrib::HashMap::Transfer(Node& lrNode)
 // when that bucket held the table-wide worst collision -- rescans every bucket to
 // re-derive the worst-collision high-water mark. Returns the index that was shifted
 // (fed back in the Remove repair loop), or -1u when no further shift is required.
+//
+// DE-OFFSET 2026-09-05 (see Remove above): `this+4` == muCapacity, `this+0xA` ==
+// mu8MaxSearchLength, `this+0xB` == mu8KeyShift, `node+0xE` == mu8SearchLen, `node+0xF` ==
+// mFlags, `node+0xC` == mTypeIndex, `node+8` == mpValue/muOffset, and the `<< 4` stride is
+// mpBuckets[i]. The back-shift copies the whole value word (the X360 copies its 32-bit word).
 unsigned int Attrib::HashMap::UpdateSearchLength(unsigned int luIndex, unsigned int luFreedIndex)
 {
-    u8* lpThis = reinterpret_cast<u8*>(this);
-    Node* lpTable = *reinterpret_cast<Node**>(lpThis);
-    const unsigned int luTableSize = *reinterpret_cast<u16*>(lpThis + 4);
-    const u8 lu8KeyShift = *reinterpret_cast<u8*>(lpThis + 0xB);
-    (void)luTableSize;
-    (void)lu8KeyShift;
-
     unsigned int luHome = luIndex;
     if (luIndex == luFreedIndex)
     {
-        u8* lpFreedSlot = reinterpret_cast<u8*>(lpTable) + (luFreedIndex << 4);
-        if (*reinterpret_cast<u8*>(lpFreedSlot + 0xE) == 0) // mMax
+        if (mpBuckets[luFreedIndex].mu8SearchLen == 0)
         {
             // Walk backwards from the freed slot to find the entry to back-shift.
-            unsigned int luWorst = *reinterpret_cast<u8*>(lpThis + 0xA); // mWorstCollision
-            luHome = (*reinterpret_cast<u16*>(lpThis + 4) - luWorst + luFreedIndex) % *reinterpret_cast<u16*>(lpThis + 4);
-            u8* lpProbe = reinterpret_cast<u8*>(*reinterpret_cast<Node**>(lpThis)) + (luHome << 4);
-            if (*reinterpret_cast<u8*>(lpProbe + 0xE) < luWorst)
+            unsigned int luWorst = mu8MaxSearchLength;
+            luHome = (muCapacity - luWorst + luFreedIndex) % muCapacity;
+            if (mpBuckets[luHome].mu8SearchLen < luWorst)
             {
                 while (luWorst != 0)
                 {
-                    Node* lpBase = *reinterpret_cast<Node**>(lpThis);
                     --luWorst;
-                    luHome = (luHome + 1) % *reinterpret_cast<u16*>(lpThis + 4);
-                    if (*reinterpret_cast<u8*>(reinterpret_cast<u8*>(lpBase) + (luHome << 4) + 0xE)
-                            >= luWorst)
+                    luHome = (luHome + 1) % muCapacity;
+                    if (mpBuckets[luHome].mu8SearchLen >= luWorst)
                         break;
                 }
             }
@@ -658,44 +651,37 @@ unsigned int Attrib::HashMap::UpdateSearchLength(unsigned int luIndex, unsigned 
     }
 
     // The disturbed home bucket's recorded max-probe length.
-    const unsigned int luMax =
-        *reinterpret_cast<u8*>(reinterpret_cast<u8*>(*reinterpret_cast<Node**>(lpThis))
-                               + (luHome << 4) + 0xE);
-    CGS_ASSERT(luMax <= *reinterpret_cast<u8*>(lpThis + 0xA), "Error in table invariant.");
+    const unsigned int luMax = mpBuckets[luHome].mu8SearchLen;
+    CGS_ASSERT(luMax <= mu8MaxSearchLength, "Error in table invariant.");
 
     // The tail slot of the chain -- the entry that will be shifted down.
-    const unsigned int luTail =
-        (luMax + luHome) % *reinterpret_cast<u16*>(lpThis + 4);
-    u8* lpTailSlot = reinterpret_cast<u8*>(*reinterpret_cast<Node**>(lpThis)) + (luTail << 4);
-    if ((*reinterpret_cast<u8*>(lpTailSlot + 0xF) & 0x80) != 0)
+    const unsigned int luTail = (luMax + luHome) % muCapacity;
+    if (mpBuckets[luTail].IsOccupied())
     {
-        const u64 lu64Value = *reinterpret_cast<u64*>(lpTailSlot);
-        const u8 lu8Shift = *reinterpret_cast<u8*>(lpThis + 0xB);
+        const u64 lu64Value = mpBuckets[luTail].mKey;
+        const u8 lu8Shift = mu8KeyShift;
         const u64 lu64Rot = (lu64Value >> (64 - lu8Shift)) | (lu64Value << lu8Shift);
-        CGS_ASSERT(luHome == static_cast<unsigned int>(lu64Rot % *reinterpret_cast<u16*>(lpThis + 4)),
+        CGS_ASSERT(luHome == static_cast<unsigned int>(lu64Rot % muCapacity),
                    "Incorrect max search length found in table.");
     }
 
-    u8* lpFreed = reinterpret_cast<u8*>(*reinterpret_cast<Node**>(lpThis)) + (luFreedIndex << 4);
-    CGS_ASSERT((*reinterpret_cast<u8*>(lpFreed + 0xF) & 0x80) == 0, "Free node is not invalid!");
+    CGS_ASSERT(!mpBuckets[luFreedIndex].IsOccupied(), "Free node is not invalid!");
 
     // Back-shift the tail entry into the freed slot.
     if (luFreedIndex != luTail)
     {
-        Node* lpBase = *reinterpret_cast<Node**>(lpThis);
-        u8* lpSrc = reinterpret_cast<u8*>(lpBase) + (luTail << 4);
-        u8* lpDst = reinterpret_cast<u8*>(lpBase) + (luFreedIndex << 4);
-        *reinterpret_cast<u64*>(lpDst) = *reinterpret_cast<u64*>(lpSrc);            // key
-        *reinterpret_cast<u16*>(lpDst + 0xC) = *reinterpret_cast<u16*>(lpSrc + 0xC); // mTypeIndex
-        *reinterpret_cast<u32*>(lpDst + 8) = *reinterpret_cast<u32*>(lpSrc + 8);     // value
-        *reinterpret_cast<u8*>(lpDst + 0xF) = *reinterpret_cast<u8*>(lpSrc + 0xF);   // mFlags
-        *reinterpret_cast<u8**>(lpSrc + 8) = lpSrc;
-        *reinterpret_cast<u8*>(lpSrc + 0xF) = 0;
-        *reinterpret_cast<u64*>(lpSrc) = 0;
+        Node& lrSrc = mpBuckets[luTail];
+        Node& lrDst = mpBuckets[luFreedIndex];
+        lrDst.mKey       = lrSrc.mKey;
+        lrDst.mTypeIndex = lrSrc.mTypeIndex;
+        lrDst.mpValue    = lrSrc.mpValue;
+        lrDst.mFlags     = lrSrc.mFlags;
+        lrSrc.mpValue    = &lrSrc;
+        lrSrc.mFlags     = 0;
+        lrSrc.mKey       = 0;
     }
 
-    u8* lpTailAfter = reinterpret_cast<u8*>(*reinterpret_cast<Node**>(lpThis)) + (luTail << 4);
-    CGS_ASSERT((*reinterpret_cast<u8*>(lpTailAfter + 0xF) & 0x80) == 0, "Freed node is not invalid!");
+    CGS_ASSERT(!mpBuckets[luTail].IsOccupied(), "Freed node is not invalid!");
 
     // Recompute the home bucket's max-probe length over the remaining chain.
     unsigned int luNewMax = 0;
@@ -703,48 +689,33 @@ unsigned int Attrib::HashMap::UpdateSearchLength(unsigned int luIndex, unsigned 
     {
         for (unsigned int luProbe = 1; luProbe < luMax; ++luProbe)
         {
-            const unsigned int luProbeIndex =
-                (luProbe + luHome) % *reinterpret_cast<u16*>(lpThis + 4);
-            u8* lpSlot = reinterpret_cast<u8*>(*reinterpret_cast<Node**>(lpThis)) + (luProbeIndex << 4);
-            const u64 lu64V = (*reinterpret_cast<u8*>(lpSlot + 0xF) & 0x80) != 0
-                                  ? *reinterpret_cast<u64*>(lpSlot) : 0;
-            const u8 lu8Shift = *reinterpret_cast<u8*>(lpThis + 0xB);
+            const unsigned int luProbeIndex = (luProbe + luHome) % muCapacity;
+            const u64 lu64V = mpBuckets[luProbeIndex].Key();
+            const u8 lu8Shift = mu8KeyShift;
             const u64 lu64Rot = (lu64V << lu8Shift) | (lu64V >> (64 - lu8Shift));
-            if (static_cast<unsigned int>(lu64Rot % *reinterpret_cast<u16*>(lpThis + 4)) == luHome)
+            if (static_cast<unsigned int>(lu64Rot % muCapacity) == luHome)
                 luNewMax = luProbe;
         }
     }
 
-    CGS_ASSERT(luNewMax <= *reinterpret_cast<u8*>(lpThis + 0xA),
+    CGS_ASSERT(luNewMax <= mu8MaxSearchLength,
                "Worst search got worse after making an improvement!");
-    *reinterpret_cast<u8*>(reinterpret_cast<u8*>(*reinterpret_cast<Node**>(lpThis))
-                          + (luHome << 4) + 0xE) = static_cast<u8>(luNewMax);
+    mpBuckets[luHome].mu8SearchLen = static_cast<u8>(luNewMax);
 
     // If this bucket previously held the table-wide worst collision and it has now
     // improved, rescan every bucket to re-derive the worst-collision high-water mark.
-    const unsigned int luWorst = *reinterpret_cast<u8*>(lpThis + 0xA);
+    const unsigned int luWorst = mu8MaxSearchLength;
     if (luMax == luWorst)
     {
-        u8* lpBase = reinterpret_cast<u8*>(*reinterpret_cast<Node**>(lpThis));
-        if (*reinterpret_cast<u8*>(lpBase + (luFreedIndex << 4) + 0xE) < luWorst && luNewMax < luMax)
+        if (mpBuckets[luFreedIndex].mu8SearchLen < luWorst && luNewMax < luMax)
         {
-            *reinterpret_cast<u8*>(lpThis + 0xA) = 0;
-            const unsigned int luCount = *reinterpret_cast<u16*>(lpThis + 4);
-            if (luCount != 0)
+            mu8MaxSearchLength = 0;
+            for (unsigned int luScan = 0; luScan < muCapacity; ++luScan)
             {
-                u8* lpScan = lpBase + 0xE;
-                unsigned int luScanIdx = 0;
-                do
-                {
-                    const unsigned int luCur = *reinterpret_cast<u8*>(lpThis + 0xA);
-                    if (luCur >= luWorst)
-                        break;
-                    if (*lpScan > luCur)
-                        *reinterpret_cast<u8*>(lpThis + 0xA) = *lpScan;
-                    ++luScanIdx;
-                    lpScan += 16;
-                }
-                while (luScanIdx < *reinterpret_cast<u16*>(lpThis + 4));
+                if (mu8MaxSearchLength >= luWorst)
+                    break;
+                if (mpBuckets[luScan].mu8SearchLen > mu8MaxSearchLength)
+                    mu8MaxSearchLength = mpBuckets[luScan].mu8SearchLen;
             }
         }
     }
