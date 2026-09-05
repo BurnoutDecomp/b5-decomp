@@ -47,7 +47,8 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostManager.h"                 // BrnWorld::BoostManager (by value, +0x17890)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/NearMisses/BrnNearMissManager.h"         // BrnWorld::NearMissManager (by value, +0x17E68)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/CrashPlay/BrnCrashPlayDebugComponent.h"  // BrnWorld::CrashPlayManager (by value, +0x180F0)
-#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h"     // BrnWorld::PlayerVehicleControls (by value, +0x183A8)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h"
+#include "GameSource/AttribSys/Generated/classes/surfacelist.h"        // Attrib::Gen::surfacelist mSurfaceList (DWARF :365)     // BrnWorld::PlayerVehicleControls (by value, +0x183A8)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                       // BrnNetwork::EPaybackType (meActivePaybackType)
 
 #include <cstddef>                                   // offsetof
@@ -188,6 +189,14 @@ public:
         // X360 @0x822CE178 (57 insns). Turn every global race car flagged mbToBeResetOnTrack
         // into a queued BrnAI::AIModuleIO::ResetOnTrackRequest on the post-scene output.
         void SendResetOnTrackRequests( RaceCarEntityModuleIO::OutputBuffer_PostScene* lpOutput );
+
+        // ------------------------------------------------------------------------
+        // X360 0x822CE9E0 (305 instrs) -- the OTHER producer of mbToBeResetOnTrack: the
+        // per-frame watchdog that resets a car which has drowned, hit a super-fatal
+        // surface, wedged itself in the world, been force-reset, fallen out of the world,
+        // or hung in the air too long. Bodied in BrnRaceCarEntityModule_ResetPump.cpp.
+        // ------------------------------------------------------------------------
+        void CheckForResetOnTrackConditions();
 
         // X360 @0x822F4580 (192 insns). Drain the AI module's two result rings: the
         // reset-on-track RESULTS (success -> the AI's pose; failure -> the car's own
@@ -813,6 +822,25 @@ private:
     // X360 +0x18358 (99160). GetGameModeFlag reads it with a 64-bit load (`ldx`) and ANDs
     // it with the caller's mask. DWARF BrnRaceCarEntityModule.h:388 -> uint64_t.
     u64 mxGameModeFlags;                // +0x18358 (99160) .. +0x18360 (99168)
+
+    // X360 +0x18330 (99120). DWARF BrnRaceCarEntityModule.h:365 -> `surfacelist mSurfaceList`.
+    // ⭐ OFFSET-CLOSED, not guessed: CheckForResetOnTrackConditions @0x822CE9E0 computes the
+    // member address as `addis r31, r21, 2 ; addi r31, r31, -0x7CD0` == module + 99120, and the
+    // next DWARF member (miOpponentCount :367) is already pinned at +0x18340 (99136) by
+    // HandlePrepareForModeAction -- 16 bytes, exactly one Attrib::Instance.
+    // The console re-resolves it every frame from the surfacelist class's DEFAULT collection.
+    Attrib::Gen::surfacelist mSurfaceList;   // +0x18330 (99120) .. +0x18340 (99136)
+
+    // X360 +0x184CC (99532). DWARF BrnRaceCarEntityModule.h:424 -> float32_t.
+    // ⭐ OFFSET-CLOSED by its two DWARF predecessors, both already committed above:
+    // mfRandomBoostTime :422 @+0x184C4 and mbRandomBoostOn :423 @+0x184C8, so :424 lands on
+    // the next f32 slot, +0x184CC -- which is the exact displacement
+    // CheckForResetOnTrackConditions loads (`lfsx f0, r21, 0x184CC`).
+    // WHAT IT DOES: the watchdog subtracts it from the car's mvfLowestPointWorldSpace before
+    // testing the above-ground intersection height, i.e. it is the slack allowed between the
+    // car's lowest point and the surface it is standing on before that surface's WATER /
+    // SUPER-FATAL properties are consulted.
+    f32 mfResetOnWaterHeight;           // +0x184CC (99532)
 
     u8 maTailPadB0[0x18374 - 0x18360];  // +0x18360 (99168) .. +0x18374 (99188)
 

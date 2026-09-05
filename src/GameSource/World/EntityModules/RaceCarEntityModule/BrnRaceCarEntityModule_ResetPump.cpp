@@ -59,6 +59,11 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"        // gbReadSurfaceProperties, KAB_SURFACE_IS_WATER, KI_MAX_NUM_SURFACES
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h" // AboveGroundTestResult
+#include "GameSource/AttribSys/Generated/classes/surface.h"                        // Attrib::Gen::surface (the surface-list tripwire)
+#include "GameSource/AttribSys/Generated/attrib_findcollection.h"              // Attrib::FindCollectionWithDefault
+#include "SharedClasses/World/BrnCollisionTag.h"                        // the KU_COLLISION_* masks
 
 namespace BrnWorld
 {
@@ -505,6 +510,279 @@ void RaceCarEntityModule::ProcessResetOnTrackResultQueue(
             lpActiveRaceCar->RequestPlaceOnTrack( lrRequest.GetResetPosition(),
                                                   lrRequest.GetResetDirection(),
                                                   lrRequest.GetResetSpeed() );
+        }
+    }
+}
+
+
+// =================================================================================================
+// RaceCarEntityModule::CheckForResetOnTrackConditions @0x822CE9E0 (305 X360 instructions)
+//
+// ⭐ THE OTHER PRODUCER OF mbToBeResetOnTrack, and the piece this file's own banner named as
+// missing. It had NO DEFINITION ANYWHERE IN THE TREE (tools/re/hasbody.py) until now: the crash
+// pump above answers a FINISHED CRASH; this is the per-frame watchdog that answers everything
+// else that can strand a car -- drowning, a super-fatal surface, wedging, a force-reset, falling
+// out of the world, or hanging in the air.
+//
+// ⛔ IT IS NOT A ROLL SUSPECT, and this is why -- so the next wave does not re-open it. Every arm
+// that could fire during a wall wreck is gated against exactly that: the wedged arm is ANDed with
+// `!mbCrashing`, and the in-air arm needs mfTimeInAir > 10 s, which a crashing car does not
+// accumulate. Measured over this wave's crash sweep, not one recorded crash reached this reset.
+//
+// SIX CONDITIONS, in the console's own order (lbNeedsReset == r27):
+//
+//  (1) THE SURFACE UNDER THE CAR (0x822CEC14..0x822CED6C). If the above-ground line test's
+//      intersection point is at or above (mvfLowestPointWorldSpace - mfResetOnWaterHeight) --
+//      i.e. the car really is standing on the thing it hit -- consult that surface's tag:
+//        * WATER (KAB_SURFACE_IS_WATER[surfaceId]):
+//            crashing -> mbCrashedIntoWater = true, reset NOW;
+//            driving  -> if mfTimeInWater > 1 s: zero the timer, mbIsWrecked = true, reset;
+//                        either way mbCrashedIntoWater = true.
+//        * else SUPER-FATAL (CollisionTag bit 12): mbIsWrecked = true, reset.
+//  (2) mbIsWedgedInWorld && !mbCrashing            (0x822CED6C..0x822CED84)
+//  (3) mbForceReset                                (0x822CED88..0x822CED94)
+//  (4) position.y < -100 m, fell out of the world  (0x822CED98..0x822CEDEC)
+//  (5) mfTimeInAir > 10 s, hung in the air         (0x822CEDF0..0x822CEE40)
+//  then RaceCar::RequestResetOnTrack(0.0f, E_RESET_TYPE_STANDARD, 0.0f).
+//
+// ⚠️⚠️ ARM (5) IS AN ASSIGNMENT, NOT AN OR. The asm writes the flag outright
+// (`clrlwi r27, r11, 24` @0x822CEE40), so a car airborne for more than ten seconds has every
+// earlier verdict OVERWRITTEN -- including (4)'s "fell out of the world", the case most likely to
+// co-occur with it. That is the console's behaviour, transcribed; no defect is being claimed.
+// Its showtime term is `bne` at 0x822CEE28: IN showtime -> do NOT reset (flying is the point of
+// showtime). Hex-Rays renders the pair as `if (A || (v36=1, B)) v36 = 0;`, which agrees -- but
+// both terms were re-read off the asm, because it is the asm that decides.
+//
+// ⭐ THE CALL'S ARGUMENT LIST IS THE PPC FLOAT RULE, not a mystery. The asm sets r3, r5 = 1,
+// f1 = f2 = 0.0 and leaves r4/r6 untouched, which is exactly
+// RequestResetOnTrack(f32 speed -> f1 [eats r4], EResetType -> r5, f32 distance -> f2 [eats r6]).
+// Hex-Rays' invented `v29 // r4` parameter is the consumed-but-unwritten GPR slot.
+//
+// THREE CONSTANTS, READ OUT OF THE IMAGE (tools/re/x360rd.py), not inferred:
+//   flt_82014898 == 0xC2C80000 == -100.0f            the world floor
+//   flt_820149B0 == 0x41200000 ==   10.0f            the in-air timeout, seconds
+//   flt_82014460 == 0x34000000 == 1.1920929e-07f     FLT_EPSILON, the surface-list tripwire
+//
+// THE PROLOGUE (0x822CE9F0..0x822CEB34) is a pure DEV TRIPWIRE and is transcribed as one: it
+// re-resolves mSurfaceList onto the surfacelist class's default collection, reads element 1 of a
+// list attribute as a RefSpec, builds an Attrib::Gen::surface over the collection that RefSpec
+// names, and asserts the leading quad of that surface's attribute data is not all-but-zero
+// ("Surface list appears to be corrupt", BrnRaceCarEntityModule.cpp:2516). No gameplay effect;
+// it is here because the console does it every frame.
+// =================================================================================================
+namespace
+{
+    // qword_82FAD4F0 -- the collection key the console passes beside the surfacelist class key.
+    // It READS 0x0000000000000000 out of the decrypted ARTIST image (tools/re/x360rd.py
+    // 82FAD4F0), and 0 is FindCollectionWithDefault's own "use the class's default collection"
+    // value -- the same one generated surfacelist::ChangeWithDefault passes by default.
+    // ⚠️ FLAGGED, not proven inert: no image-wide writer scan was run for this symbol.
+    const u64 KU_SURFACE_LIST_COLLECTION_KEY = 0ull;
+
+    // The attribute key the watchdog reads off mSurfaceList, built by the asm at
+    // 0x822CEA28..0x822CEA40 (`lis -0xC26 / ori 0x7F1F` low, `lis 0xADC / ori 0xE56E` high,
+    // insrdi). Its NAME is not recovered -- an AttribSys key is a hash -- but the shape is:
+    // element index 1 of a list attribute whose element type is Attrib::RefSpec.
+    const u64 KU_SURFACE_LIST_ENTRY_ATTRIBUTE = 0x0ADCE56EF3DA7F1Full;
+
+    // The console's `Attrib::DefaultDataArea(0x18)` fallback when the attribute is absent: the
+    // null-element area for one RefSpec (attribinstance.h:171 records the same 24 bytes).
+    const u32 KU_REF_SPEC_DATA_AREA_BYTES = 0x18u;
+
+    const f32 KF_FELL_OUT_OF_WORLD_HEIGHT   = -100.0f;                     // flt_82014898
+    const f32 KF_MAX_TIME_IN_AIR            = 10.0f;                       // flt_820149B0
+    const f32 KF_SURFACE_LIST_MIN_MAGNITUDE = 1.1920928955078125e-07f;     // flt_82014460
+    const f32 KF_MAX_TIME_IN_WATER          = 1.0f;                        // flt_82001C98
+    const f32 KF_ZERO                       = 0.0f;                        // flt_82001CC0
+
+    // dword_82FB7518 -- a DEBUG TOGGLE with no writer anywhere in this tree and no project home;
+    // ExternallySimulatedBody.cpp records the same global for the same reason. It is 0 in a ship
+    // build. The branch it gates is transcribed rather than folded away, so a future TU that
+    // homes the toggle grows this body additively instead of retyping it.
+    const s32 gsiDebugSuppressInAirReset = 0;   // dword_82FB7518
+
+    inline f32 AbsF( f32 lfValue ) { return ( lfValue < 0.0f ) ? -lfValue : lfValue; }
+}
+
+void RaceCarEntityModule::CheckForResetOnTrackConditions()
+{
+    // ---- the surface-list tripwire (0x822CE9F0..0x822CEB34) --------------------------------
+    {
+        mSurfaceList.Change( Attrib::FindCollectionWithDefault(
+                                 Attrib::Gen::surfacelist::KU_SURFACELIST_CLASS_KEY,
+                                 KU_SURFACE_LIST_COLLECTION_KEY ) );
+
+        void* lpEntry = mSurfaceList.GetAttributePointer( KU_SURFACE_LIST_ENTRY_ATTRIBUTE, 1u );
+        if( lpEntry == 0 )
+        {
+            lpEntry = Attrib::DefaultDataArea( KU_REF_SPEC_DATA_AREA_BYTES );
+        }
+
+        Attrib::RefSpec* lpRefSpec = static_cast<Attrib::RefSpec*>( lpEntry );
+        Attrib::Gen::surface lSurface(
+            const_cast<Attrib::Collection*>( lpRefSpec->GetCollection() ), 0 );
+
+        // `vandc` against splat(0x80000000) is a componentwise fabs; the `vcmpgtfp.` verdict is
+        // taken from CR6 bit 2 (== NONE of the four lanes greater), so the assert fires when the
+        // whole leading quad is within FLT_EPSILON of zero.
+        const Vector4& lrLeading =
+            *static_cast<const Vector4*>( lSurface.GetAttributeData() );
+        const bool lbSurfaceListLooksSane =
+               ( AbsF( lrLeading.x ) > KF_SURFACE_LIST_MIN_MAGNITUDE )
+            || ( AbsF( lrLeading.y ) > KF_SURFACE_LIST_MIN_MAGNITUDE )
+            || ( AbsF( lrLeading.z ) > KF_SURFACE_LIST_MIN_MAGNITUDE )
+            || ( AbsF( lrLeading.w ) > KF_SURFACE_LIST_MIN_MAGNITUDE );
+
+        // ⚠️⚠️ [FLAG PC bring-up] THE CONSOLE'S ASSERT IS UNCONDITIONAL AND FIRES EVERY FRAME
+        // HERE; THIS LATCHES IT TO ONCE PER PROCESS. Measured on the first run that carried this
+        // body (cs6_film_h230_s70): the tripwire fired 4,082 times in 85 seconds and took the
+        // run's assert count from 19 to 4,055. That is not a spurious report -- on this build the
+        // surfacelist collection does not resolve, so GetAttributePointer returns null, the
+        // console's own Attrib::DefaultDataArea(0x18) fallback hands back a ZEROED RefSpec, and
+        // the surface built over it has an all-zero leading quad. The check is doing exactly what
+        // the console wrote it to do; the DATA is what is missing.
+        // ⛔ IT IS LATCHED BECAUSE A PER-FRAME DEV ASSERT IS A HARNESS-KILLER, not because the
+        // report is unwanted: an assert storm PAUSES the simulation waiting for a keypress and
+        // starves every measurement taken through it. The verdict is still printed, once, with
+        // the values that produced it, so nothing is hidden.
+        // DELETE-WHEN the surfacelist collection resolves on this build -- at that point the
+        // console's unconditional form is safe and this latch should go with the comment.
+        {
+            static bool sbSurfaceListReported = false;
+            if( !lbSurfaceListLooksSane && !sbSurfaceListReported )
+            {
+                sbSurfaceListReported = true;
+                if( CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[reset-watchdog] surface-list tripwire: leading quad ("
+                        << lrLeading.x << ", " << lrLeading.y << ", " << lrLeading.z << ", "
+                        << lrLeading.w << ") is within FLT_EPSILON of zero -- the surfacelist"
+                           " collection does not resolve on this build, so the console's"
+                           " DefaultDataArea fallback is what is being read. Reported ONCE"
+                           " [FLAG PC bring-up]\n";
+                }
+                CGS_ASSERT( lbSurfaceListLooksSane, "Surface list appears to be corrupt" );  // :2516
+            }
+        }
+    }
+
+    // ---- the per-car walk (0x822CEB94..0x822CEE94) ------------------------------------------
+    // The loop-guard assert ("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", BurnoutConstants.h:39)
+    // lives in EActiveRaceCarIndex's committed range-guarded operator++, exactly as it does in
+    // WorldModule::BridgeInputToEntityModules.
+    for( EActiveRaceCarIndex leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+         leActiveRaceCarIndex++ )
+    {
+        ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leActiveRaceCarIndex );
+
+        bool lbNeedsReset = false;
+
+        if( !lpActiveRaceCar->IsActive() )
+        {
+            continue;
+        }
+
+        CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );   // BrnActiveRaceCar.h:1096
+        CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );   // BrnActiveRaceCar.h:1089
+
+        const BrnPhysics::Vehicle::RaceCarState* lpState = lpActiveRaceCar->GetPhysicsState();
+        RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
+
+        // (1) THE SURFACE THE CAR IS STANDING ON. The console splats mfResetOnWaterHeight,
+        // subtracts it from the whole mvfLowestPointWorldSpace splat and compares the
+        // intersection point's .y against every lane (vcmpgefp. read on CR6 bit 0 == ALL); both
+        // operands are splats of one scalar each, so the four-lane test IS the scalar one.
+        const BrnPhysics::Vehicle::AboveGroundTestResult& lrGround =
+            lpState->mAboveGroundTestResult;
+        const f32 lfLowestPointY = lpActiveRaceCar->mvfLowestPointWorldSpace.x;
+
+        if( lrGround.mIntersectionPosition.y >= ( lfLowestPointY - mfResetOnWaterHeight ) )
+        {
+            // ⚠️ mCollisionTag here is the GLOBAL stand-in `struct CollisionTag { u32 muValue; }`
+            // (BrnCommonTypes.h:29), NOT BrnWorld::CollisionTag -- two different types with the
+            // same name, and only the stand-in is what AboveGroundTestResult holds. So the two
+            // fields are extracted from the word by mask, exactly as the tree's own precedent
+            // does for the same packing (VehiclePhysics::UpdateInWaterBehaviour,
+            // VehiclePhysics.cpp:1597: `byte_82FB7DF4[(mWaterContactTag.muValue >> 4) & 0x3F]`),
+            // and the masks are BrnWorld's committed constants:
+            //   KU_COLLISION_MASK_SURFACE_ID   == 1008 == bits 4..9   (asm srwi 4 ; clrlwi 26)
+            //   KU_COLLISION_FLAG_SUPERFATAL   == 4096 == bit 12      (asm srwi 12 ; clrlwi 31)
+            const u16 lu16MaterialTag = static_cast<u16>( lrGround.mCollisionTag.muValue );
+            const u8  lu8SurfaceId    = static_cast<u8>(
+                ( lu16MaterialTag & BrnWorld::KU_COLLISION_MASK_SURFACE_ID ) >> 4 );
+            const bool lbIsSuperFatal =
+                ( lu16MaterialTag & BrnWorld::KU_COLLISION_FLAG_SUPERFATAL ) != 0;
+
+            CGS_ASSERT( BrnPhysics::Vehicle::gbReadSurfaceProperties,
+                        "BrnPhysics::Vehicle::gbReadSurfaceProperties" );   // :2551
+
+            // The console indexes byte_82FB7DF4 with the raw 6-bit id; the committed table is
+            // KI_MAX_NUM_SURFACES long, so guard the index exactly as
+            // BrnVehicleManager_CrashState.cpp:709 already does for the same table.
+            const bool lbIsWater =
+                ( static_cast<s32>( lu8SurfaceId ) < BrnPhysics::Vehicle::KI_MAX_NUM_SURFACES )
+                && BrnPhysics::Vehicle::KAB_SURFACE_IS_WATER[lu8SurfaceId];
+
+            if( lbIsWater )
+            {
+                CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" ); // BrnActiveRaceCar.h:1418
+
+                // The latches are written BARE, as the console writes them -- see the friend
+                // grant at the top of BrnActiveRaceCar.h, whose note already cites this
+                // function's two stores at 0x822CED44 / 0x822CED64.
+                if( lpState->mbCrashing )
+                {
+                    lpActiveRaceCar->mbCrashedIntoWater = true;             // stb 1, 0x783
+                    lbNeedsReset = true;
+                }
+                else
+                {
+                    if( lpActiveRaceCar->mfTimeInWater > KF_MAX_TIME_IN_WATER )
+                    {
+                        lpActiveRaceCar->mfTimeInWater = KF_ZERO;           // stfs f31, 0x784
+                        lpActiveRaceCar->mbIsWrecked   = true;              // stb 1, 0x782
+                        lbNeedsReset = true;
+                    }
+                    lpActiveRaceCar->mbCrashedIntoWater = true;             // stb 1, 0x783
+                }
+            }
+            else if( lbIsSuperFatal )
+            {
+                lpActiveRaceCar->mbIsWrecked = true;                        // stb 1, 0x782
+                lbNeedsReset = true;
+            }
+        }
+
+        // (2) wedged, and not already being handled as a crash.
+        if( lpState->mbIsWedgedInWorld && !lpState->mbCrashing )
+        {
+            lbNeedsReset = true;
+        }
+
+        // (3) the physics side asked for it outright.
+        if( lpState->mbForceReset )
+        {
+            lbNeedsReset = true;
+        }
+
+        // (4) fell out of the world.
+        const Vector3 lPosition = lpActiveRaceCar->GetPosition();
+        if( KF_FELL_OUT_OF_WORLD_HEIGHT > lPosition.y )
+        {
+            lbNeedsReset = true;
+        }
+
+        // (5) hung in the air. ⚠️ ASSIGNS lbNeedsReset -- see the banner.
+        if( lpState->mfTimeInAir > KF_MAX_TIME_IN_AIR && !mPlayerVehicleControls.mbReset )
+        {
+            lbNeedsReset = ( !mbIsInShowtimeMode && gsiDebugSuppressInAirReset == 0 );
+        }
+
+        if( lbNeedsReset )
+        {
+            lpRaceCar->RequestResetOnTrack( KF_ZERO, BrnAI::E_RESET_TYPE_STANDARD, KF_ZERO );
         }
     }
 }

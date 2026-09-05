@@ -35,6 +35,24 @@ namespace Gen
         // (0x85B5C4F4 == -2051685132; the low word of the 64-bit insrdi immediate).
         static const int KI_SURFACELIST_CLASS = -2051685132; // 0x85B5C4F4
 
+        // The FULL 64-bit class key. CheckForResetOnTrackConditions @0x822CE9E0 builds it in
+        // one register before calling Attrib::FindCollectionWithDefault:
+        //     0x822CE9FC  lis    r11, -0x7A4B
+        //     0x822CEA00  ori    r3, r11, 0xC4F4      ; low  word 0x85B5C4F4 (== the int above)
+        //     0x822CEA04  lis    r11, 0x42C2
+        //     0x822CEA08  ori    r11, r11, 0x5F49     ; high word 0x42C25F49
+        //     0x822CEA0C  insrdi r3, r11, 32, 0
+        static const u64 KU_SURFACELIST_CLASS_KEY = 0x42C25F4985B5C4F4ull;
+
+        // ⭐ RE-EXPORTS, not new API. This class derives PRIVATELY from Instance, but the
+        // console reaches both of these on a `surfacelist` member directly -- Check-
+        // ForResetOnTrackConditions calls Attrib::Instance::Change and
+        // Attrib::Instance::GetAttributePointer on `module + 99120`, which the DWARF
+        // (BrnRaceCarEntityModule.h:365) names `surfacelist mSurfaceList`. So the generated
+        // original re-exported them, exactly as GetCollection is re-exported below.
+        using Instance::Change;
+        using Instance::GetAttributePointer;
+
         explicit surfacelist(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
 
         // The number of surfaces in this instance's "Surfaces" array attribute. REAL X360
