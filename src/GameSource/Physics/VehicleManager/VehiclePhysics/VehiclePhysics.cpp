@@ -5533,8 +5533,38 @@ namespace Vehicle
     AddWorldSpaceAngularImpulse(lvAngularJ);
     }
 
-// [partial] ApplyWallContactImpulse  @ FLAGS: INLINE literals 0.65/0.70 (tangential restitution, low/high closing speed) are EXACT, used as the literal values; rodata: the tangential-projection scale (unk_82CDA350) is un-homed -> the per-axis projection magnitude is flagged-inert; the restitution selection + counter bumps + lane zero are exact
+// [clean] ApplyWallContactImpulse  @ FLAGS: none -- both floats are IMAGE-READ (flt_82097F40 == 0.65 is the
+// gate, flt_82004C68 == 0.70 the scale) and the whole 0x825FEA18..0x825FEBA4 span is transcribed
+// instruction for instruction; see the 2026-09-05 re-audit note below.
     // @0x825FEA18  BrnPhysics::Vehicle::VehiclePhysics::ApplyWallContactImpulse
+    //
+    // ⭐⭐ THE `[partial]` MARKER AND ITS "flagged-inert projection" WERE STALE (momentum wave,
+    // 2026-09-05) -- SEVENTH "a file's own comment is the regression" this campaign. The banner
+    // claimed "the per-axis VMX tangential-projection magnitude ... is not store-faithfully
+    // recoverable" and "the un-homed projection permute vector stays inert", while the body ten
+    // lines below already carried the permute DECODED (the note on lvBodyContactPosition names
+    // unk_82CDA350's control bytes and shows the .w lane is a duplicate of .x that no consumer
+    // reads). The whole function was re-read off the asm this wave and there is nothing structural
+    // left in it:
+    //   0x825FEA5C/6C  ++mi8NumWorldCollisions (+0x1353)              -- lbz/addi/stb
+    //   0x825FEA80/88  ++miNumCollisions (+0x1354)                    -- lwz/addi/stw
+    //   0x825FEA70/74  vrlimi128 mask 1 -> +0x1070 lane .w = 0
+    //   0x825FEA78/8C  v126 = impulse * 0.5 * 0.5                     -- two vcfsx(vspltisw 1,1)
+    //   0x825FEACC     r30 = this + 0x10                              -- the ExternalPhysicsBody base
+    //   0x825FEAC8/D0  delta = contactPos - mTransform.wAxis (+0x40)
+    //   0x825FEAD8/E8/EC   the three rotation rows +0x20 (Up) / +0x30 (At) / +0x10 (Right)
+    //   0x825FEB04/0C/14   three vmsum3fp128 == dot3(row, delta)
+    //   0x825FEB30/34  vperm(unk_82CDA350) + vrlimi mask 2 -> {R.d, U.d, At.d, R.d}
+    //   0x825FEB2C     vcmpgtfp. v10(=splat flt_82097F40), v11(=splat dir.y)   -- the ONLY gate
+    //   0x825FEB44     beq -> loc_825FEB8C  (skip the whole block when NOT (K > dir.y))
+    //   0x825FEB4C/54  vrlimi128 mask 4 -> BOTH the body contact position's .y AND v126's .y = 0
+    //   0x825FEB7C/80/84   pos * splat(flt_82004C68), vrlimi mask 2 -> keep only the .z lane
+    //   0x825FEB98/9C  li r5,1 (BODY_SPACE position) / r4 = the forwarded impulse space
+    //   0x825FEBA4..C4 GetImpulsesFromLocalImpulse -> AddWorldSpaceImpulse + AddWorldSpaceAngularImpulse
+    // BOTH constants are now IMAGE-READ rather than "inline literals": x360rd 0x82097F40 ==
+    // 0x3F266666 == 0.649999976 and 0x82004C68 == 0x3F333333 == 0.699999988. And the asm has NO
+    // else-arm -- `beq` jumps straight to the call -- so KF_WALL_RESTITUTION_LOW below is
+    // genuinely dead on the console too, not a missing branch.
     //   ++mi8NumWorldCollisions(+0x1353) ; ++miNumCollisions(+0x1354) ; zero +0x1070 lane .w.
     //   (asserts the contact position is WORLD_SPACE -- debug guard, elided.)
     //   The contact impulse is pre-scaled by 0.25 (vcfsx(1,1)=0.5 applied twice: v126 = imp*0.5*0.5).
@@ -5545,13 +5575,13 @@ namespace Vehicle
     //   0.64999998 / 0.69999999). The tangential component is scaled by the chosen restitution, then
     //   GetImpulsesFromLocalImpulse + AddWorldSpace{,Angular}Impulse banks it.
     //
-    // FIDELITY: PARTIAL. The restitution SELECTION with the inline 0.65/0.70 literals, the closing-
-    // speed test operand (lvContactNormal.y, not a velocity dot), the two counter bumps and the
-    // +0x1070 lane-zero are exact. The per-axis VMX tangential-projection magnitude (which axes, the
-    // 0.25 pre-scale routing, the unk_82CDA350 permute, the body-axis-projected local position) is not
-    // store-faithfully recoverable from the degenerate VMX export -> the projection is reproduced
-    // structurally; the restitution is applied to the supplied local impulse. The un-homed projection
-    // permute vector stays inert. NEVER fabricated.
+    // FIDELITY: CLEAN. Every store, gate and constant above is asm- or image-attested; the only
+    // deliberate divergence is the .w lane of lvBodyContactPosition (0 here, R.d on the console),
+    // which the note at that line proves no consumer reads.
+    // ⚠️ WHAT THIS RE-AUDIT CANNOT SAY: it does not make the WALL RESPONSE 1:1 end to end. It says
+    // this function is a faithful transcription of 0x825FEA18. The magnitude that ARRIVES here is
+    // decided upstream (ApplyCarWorldImpulse -> ApplySensorImpulse -> the sensor's pass-on), and
+    // that supply is where any remaining "the car stops too fast" would have to live.
     void VehiclePhysics::ApplyWallContactImpulse(Vector3 lvLocalImpulse,
                                                  rw::physics::InputSpace leImpulseSpace,
                                                  Vector3 lvWorldImpulseDirection,
@@ -5926,8 +5956,35 @@ namespace Vehicle
     lrHand  = 0.0f;        // controls[+0x0C]
     }
 
-// [partial] SetCrashing  @ FLAGS: the SIMD state-row zeroing (drift/boost bank +0xFE0..+0x1040), the +0x10F4 = -1 slam marker, the mu8DriftState/+0x135E byte clears and the base-chain to SimpleVehiclePhysics::SetCrashing are exact; the final contact/weight-vector recompute (mpAttribs+0x280 / +0x30 columns) is structural; the per-lane vrlimi insert routing of the recomputed weight vector is the structural part
+// [clean] SetCrashing  @ FLAGS: none -- the whole 0x825FD088..0x825FD1FC span is transcribed store for
+// store; there is NO "weight-vector recompute" and nothing reads mpAttribs+0x280 here (see the
+// 2026-09-05 re-audit note below).
     // @0x825FD088  BrnPhysics::Vehicle::VehiclePhysics::SetCrashing  (virtual override)
+    //
+    // ⭐⭐ THE `[partial]` MARKER WAS STALE, AND ITS DESCRIPTION OF THE TAIL WAS WRONG (momentum
+    // wave, 2026-09-05). It said the function ends by "recomputing a contact/weight vector from
+    // mpAttribs+0x280 (vspltw .w) and the body axes (+0x30 columns)". The tail reads mpAttribs
+    // **+0x30**, not +0x280, and +0x30 is mCrashExtraVelocityFactors (VehicleAttribs.h carries the
+    // static_assert). There are no body-axis columns anywhere in the block. Decoded operand for
+    // operand (the classic-`vmaddfp` rule: printed D,A,B,C == D = A*C + B):
+    //   0x825FD164/6C  r9 = mpAttribs (+0x720) ; v0 = *(mpAttribs+0x30) == the four factors
+    //   0x825FD174/78/90   v8 = splat(f.x)  v10 = splat(f.z)  v12 = splat(f.y)
+    //   0x825FD188/A0/A8   v9 = splat(w.x)  v13 = splat(w.y)  v11 = splat(w.z)   (w == +0x60 omega)
+    //   0x825FD1A4  vmaddfp v0, v9, v0, v8    -> omega.x*f.x + omega   ; vrlimi mask 8 keeps lane .x
+    //   0x825FD1BC  vmaddfp v0, v13, v0, v12  -> omega.y*f.y + omega   ; vrlimi mask 4 keeps lane .y
+    //   0x825FD1D0  vmaddfp v0, v11, v0, v10  -> omega.z*f.z + omega   ; vrlimi mask 2 keeps lane .z
+    //   0x825FD1E4/E8   v0 = mLinearVelocity with lane .y replaced by v7 (== vspltisw 0)
+    //   0x825FD1F4/F8   v13 = splat(f.w) ; vmaddfp v0, v0, v12, v13 -> vWithZeroY*f.w + v
+    //   0x825FD1FC  stvx128 -> +0x50            (so x,z scale by 1+f.w and y is preserved)
+    // ⇒ the committed five lines below ARE the console's arithmetic, and the `[partial]` was
+    //   costing every reader a phantom missing block. (Eighth "a file's own comment is the
+    //   regression" this campaign -- see the sibling retirement on ApplyWallContactImpulse.)
+    // ⛔ AND IT SETTLES A CAMPAIGN QUESTION: the three ANGULAR factors are named
+    //   CrashExtraPitch/Yaw/RollVelocityFactor (VehicleAttribs.cpp:837-839) and read 0/0.3/0.3 on
+    //   the Cavalry -- but the console MULTIPLIES the EXISTING omega by them. Measured at crash
+    //   entry (run mom_B1) omega is ~(0.004, 0.001, -0.018) rad/s, so 1.3x of it is still ~0.
+    //   **The "crash extra roll" is NOT a barrel-roll seed on the console either**; only the .w
+    //   LINEAR factor does visible work (the exact 1.3x on x/z the [dv] witness banked three times).
     //   Zeroes selected lanes of the drift/boost SIMD bank (vrlimi128 mask convention 8=.x,4=.y,2=.z,
     //   1=.w, cross-validated against ApplyBoostKickForce/UpdateBoost in this TU): +0x1000 mask1 ->
     //   .w=DriftScale=0 ; +0x1010 mask2 -> .z=TimeDrifting=0 ; +0x1020 mask8 -> .x=DesiredDriftAngleScale=0 ;
@@ -5936,13 +5993,23 @@ namespace Vehicle
     //   (mu8DriftState +0x1352). Sets the slam marker mDriftFlags(+0x10F4) = -1 (stb -1). Chains to
     //   SimpleVehiclePhysics::SetCrashing() (sets mbIsCrashing +0x710, rebuilds wheel reciprocal mass).
     //   POST-base-call: +0x1040 mask4 -> .y=TimeBoosting=0 (0x825FD158-160, a SECOND +0x1040 write the
-    //   committed body previously omitted). Then *(this+4958)=0 (+0x135E byte) and recomputes a
-    //   contact/weight vector from mpAttribs+0x280 (vspltw .w) and the body axes (+0x30 columns),
-    //   inserting it lane-by-lane into the +0xEF0 register.
+    //   committed body previously omitted). Then *(this+4958)=0 (+0x135E byte, mbOverrideSteering)
+    //   and the four crash-extra-velocity factors are applied (see the decode above).
     //
-    // FIDELITY: PARTIAL. The state-row zeroing, the -1 slam marker, the byte clears and the base
-    // chain are exact; the final weight-vector recompute is reproduced structurally (the un-homed
-    // mpAttribs+0x280 lane + the per-lane vrlimi routing stay faithful in shape). NEVER fabricated.
+    // FIDELITY: CLEAN. Every store in 0x825FD088..0x825FD1FC has a counterpart below, and the last
+    // silent-zero in the function is RECOVERED this wave rather than assumed:
+    //   unk_83018040 (loaded at 0x825FD134, multiplied by mNormLinearVelocityMag.w into the
+    //   SpeedOnLastCrashMPH lane) is a .data splat -- 0 in the image BY DEFINITION. findinit.py
+    //   gives it exactly two sites: the reader here and a CRT thunk at 0x82C6D180, which decodes
+    //   `lis r11,0x8302 / addi r11,r11,-0x7F50 (== 0x830180B0) / lvx v0 / vspltw v0,v0,0 /
+    //    addi r11,...,-0x7FC0 (== 0x83018040) / stvx v0` -- a splat of the scalar at 0x830180B0.
+    //   That scalar is ITSELF dyn-init, by the thunk at 0x82C6D0C0:
+    //     lfs f0, 0x1C98(0x8200)  == flt_82001C98 == 1.0        (image-read)
+    //     lfs f13, 0x1928(0x82F3) == flt_82F31928 == 0.44703999 (image-read, the MPH->MPS constant)
+    //     fdivs f0, f0, f13 ; stfs f0, 0x830180B0
+    //   i.e. 1.0 / 0.44703999 == 2.2369363 == KF_MPS_TO_MPH. The value the body uses was right;
+    //   it is now DERIVED instead of inferred, and the same 0x82F31928 is the third independent
+    //   confirmation of the MPH<->MPS pair this campaign has banked.
     void VehiclePhysics::SetCrashing()
     {
     mu8DriftState = eDriftState_None;

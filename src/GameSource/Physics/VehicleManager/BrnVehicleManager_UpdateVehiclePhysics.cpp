@@ -705,11 +705,22 @@ namespace Vehicle
             if (siCrashRespDiag == 1 && liCar == mePlayerActiveRaceCarIndex
                 && CgsDev::Log::gpDebugPrint != 0)
             {
-                struct PoseSample { u32 f; f32 mph, px, py, pz, upy, fwdy, rty, wp, wy, wr, vx, vy, vz; };
+                // ⭐ dtSim/dtGame/aiSlowMo/frozen ADDED 2026-09-05 (momentum wave). Measured in
+                // runs mom_A1/mom_A2: the per-car dt reaching ExternalPhysicsBody::
+                // CalculateNewVelocity is 1.6667e-5 for the first 3-4 crashing frames -- exactly
+                // 1/1000 of the sim step -- while the PUBLISHED sim scale ([slomo]) is still
+                // 1.000000. The car therefore travels ~1 mm per frame at 55-70 m/s and its whole
+                // force integration is scaled to nothing. RaceCarPhysics::Update's AI crash
+                // slow-mo (KVF_AI_CRASH_SLOWMO_FACTOR == 100.0, verified in the image at
+                // 0x8208F9B8) only accounts for 1/100, so these four fields exist to say WHICH
+                // half of the product is wrong: what the module handed in, and whether the AI
+                // slow-mo latch was even set. DELETE-WHEN the crash-entry dt is attributed.
+                struct PoseSample { u32 f; f32 mph, px, py, pz, upy, fwdy, rty, wp, wy, wr, vx, vy, vz,
+                                    dtSim, dtGame; s32 aiSlow, frozen; };
                 static PoseSample saRing[16];
                 static u32 suFrame = 0, suPostCrash = 0, suLines = 0;
                 static bool sbWasCrashing = false;
-                const RaceCarPhysics& lrCar = maRaceCarVehicles[liCar];
+                RaceCarPhysics& lrCar = maRaceCarVehicles[liCar];
                 const Matrix44Affine& lrT = lrCar.GetTransform();
                 const Vector3 lW = lrCar.GetAngularVelocity();
                 const Vector3 lV = lrCar.GetLinearVelocity();
@@ -719,6 +730,9 @@ namespace Vehicle
                 lS.upy = lrT.yAxis.y; lS.fwdy = lrT.zAxis.y; lS.rty = lrT.xAxis.y;
                 lS.wp = vpu::Dot(lW, lrT.xAxis); lS.wy = vpu::Dot(lW, lrT.yAxis); lS.wr = vpu::Dot(lW, lrT.zAxis);
                 lS.vx = lV.x; lS.vy = lV.y; lS.vz = lV.z;
+                lS.dtSim = lfSimTimerTimeStep; lS.dtGame = lfGameTimerTimeStep;
+                lS.aiSlow = lrCar.IsInAICrashSlowMo() ? 1 : 0;
+                lS.frozen = lrCar.IsFrozen() ? 1 : 0;
                 const bool lbCrashing = lrCar.IsCrashing();
                 auto lPrint = [&](const PoseSample& lrS, const char* lpcTag)
                 {
@@ -729,6 +743,8 @@ namespace Vehicle
                         << " up.y=" << lrS.upy << " fwd.y=" << lrS.fwdy << " right.y=" << lrS.rty
                         << " Wbody=(" << lrS.wp << "," << lrS.wy << "," << lrS.wr << ")"
                         << " v=(" << lrS.vx << "," << lrS.vy << "," << lrS.vz << ")"
+                        << " dtSim=" << lrS.dtSim << " dtGame=" << lrS.dtGame
+                        << " aiSlowMo=" << lrS.aiSlow << " frozen=" << lrS.frozen
                         << "\n";
                 };
                 if (lbCrashing && !sbWasCrashing)
