@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"   // InSceneUpdateInterface::UpdateCachedObjectPosition (the real tri-cache producer)
 #include "rw/math/vpu/vector3_operation.h"                         // rw::math::vpu::MagnitudeSquared (transform validation tripwires)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint -- [part-rest] DIAG only
+#include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"   // CgsGeometric::Box -- [part-rest] resting-orientation read
 
 #include <cstdlib>   // getenv/atoi -- [part-rest] DIAG only, host-side
 
@@ -409,6 +410,29 @@ namespace Deformation
                     const PhysicalBodyPart* lpProbePart = mPartPool.GetPart(static_cast<s16>(liProbe));
                     const Vector3 lvProbePos = lpProbePart->GetRigidBodyTransform().wAxis;
                     const Vector3 lvProbeVel = lpProbePart->GetLinearVelocity();
+
+                    // ⭐ ADDED 2026-09-05 (crash wave 2). THE OWNER'S ACTUAL COMPLAINT IS AN
+                    // ORIENTATION, not a height: detached panels came to rest STANDING ON EDGE like
+                    // headstones. Read it through the console's own GetBoundingBox, which hands back
+                    // the box's WORLD basis plus its half-dimensions: take the axis with the SMALLEST
+                    // half-extent (the panel's thickness direction) and dot it with world up.
+                    //   flat ~ 1.0  the thin axis points up  -> the panel is lying down
+                    //   flat ~ 0.0  the thin axis is level   -> the panel is standing on its edge
+                    // Before CalculateSkinnedPoint landed this could not be asked at all: every box
+                    // was the isotropic 0.05 floor, so there was no "thin axis" to speak of.
+                    CgsGeometric::Box lProbeBox;
+                    lpProbePart->GetBoundingBox(&lProbeBox);
+                    const Vector3 lvBoxHalf = lProbeBox.GetDimensions();
+                    s32 liThinAxis = 0;
+                    f32 lfThinHalf = lvBoxHalf.x;
+                    if ( lvBoxHalf.y < lfThinHalf ) { lfThinHalf = lvBoxHalf.y; liThinAxis = 1; }
+                    if ( lvBoxHalf.z < lfThinHalf ) { lfThinHalf = lvBoxHalf.z; liThinAxis = 2; }
+                    const Matrix44Affine lProbeBoxFrame = lProbeBox.GetTransform();
+                    const Vector3& lrThinWorldAxis = (liThinAxis == 0) ? lProbeBoxFrame.xAxis
+                                                   : (liThinAxis == 1) ? lProbeBoxFrame.yAxis
+                                                                       : lProbeBoxFrame.zAxis;
+                    const f32 lfFlatness = (lrThinWorldAxis.y < 0.0f) ? -lrThinWorldAxis.y : lrThinWorldAxis.y;
+
                     *CgsDev::Log::gpDebugPrint
                         << "[part-rest] f " << static_cast<s32>(sluRestFrames)
                         << " slot " << liProbe
@@ -418,6 +442,9 @@ namespace Deformation
                         << " y " << lvProbePos.y
                         << " vy " << lvProbeVel.y
                         << " r " << lpProbePart->GetSphereRadius()
+                        << " half (" << lvBoxHalf.x << ", " << lvBoxHalf.y << ", " << lvBoxHalf.z << ")"
+                        << " thinAxis " << liThinAxis
+                        << " flat " << lfFlatness
                         << "\n";
                 }
             }

@@ -4,6 +4,7 @@
 #include "BrnCommonTypes.h"   // Vector3, Vector3Plus, Matrix44Affine
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"   // EBodyParts (committed home)
 #include "SharedClasses/Physics/Deformation/BrnDeformationJointSpec.h"             // DeformationJointSpec (GetJointSpec indexes the array -- complete type needed)
+#include "SharedClasses/Physics/Deformation/BrnBodyPartBBoxSpec.h"                 // BodyPartBBoxSpec (the embedded bbox skin record -- held BY VALUE)
 #include "GameShared/GameClasses/Graphics/CgsSerialisedPtr.h"                      // CgsGraphics::Ptr32 (the serialised 4-byte joint-array slot)
 #include <cstddef>                                                                 // offsetof (the layout tripwires)
 
@@ -90,23 +91,31 @@ namespace Deformation
         // shape). The joint-spec home header is now included above for the stride.
         const DeformationJointSpec* GetJointSpec(s32 liIndex) const { return &mpaJointSpecs[liIndex]; }
 
+        // The embedded oriented-bounding-box spec (orientation + the ten skinned control
+        // points). ⭐ 2026-09-05: PhysicalBodyPart::CalculateBoundingBoxExtents @0x825E2B80
+        // reaches it as `*(mpIKPart->GetSpec() + 8) + 0x40` in Hex-Rays word terms, i.e. the
+        // IKBodyPartSpec's own +0x40 -- the asm is `lwz r11, 8(mpIKPart)` (the spec pointer)
+        // then `addi r29, r11, 0x40`. Header-inline: a member read with no console export.
+        const BodyPartBBoxSpec& GetBBoxSpec() const { return mBBoxSkinData; }
+
         // BrnIKBodyPartSpec.h:189/192 — relocate-fix the streamed record (pointer swizzle).
         // Declare-only; bodies in the spec's own TU.
         void FixUp(void* lpBase);
         void FixDown(void* lpBase);
 
     private:
-        // Full DWARF member list (BrnIKBodyPartSpec.h:214-229). mBBoxSkinData is the embedded
-        // bounding-box skin-data helper (BodyPartBBoxSpec) the full TU defines; here it is held
-        // BY NAME as an opaque byte block so the record layout/offsets the IKBodyPart asm walks
-        // stay correct without pulling in the (other-agent-owned) skin-data struct definitions.
+        // Full DWARF member list (BrnIKBodyPartSpec.h:214-229).
         Matrix44Affine        mGraphicsTransform;          // :214
-        // :216 mBBoxSkinData (BodyPartBBoxSpec — 10 BBoxPointSkinData entries). Opaque slice:
-        // sizeof matches the DWARF (8 corner + centre + joint skin records, each a Vector3 +
-        // 3 weights + 3 bone indices = 32 bytes, plus a leading Matrix44Affine orientation).
-        // FLAG: held as a byte block (role = embedded bbox skin data) so the surrounding member
-        // offsets are preserved without redefining BodyPartBBoxSpec here.
-        u8                    mBBoxSkinData[64 + 10 * 32]; // :216 (opaque embedded BodyPartBBoxSpec)
+        // ⭐⭐ 2026-09-05 (crash wave 2): THE EMBEDDED BBOX SPEC IS A REAL TYPE NOW. It stood
+        // here as `u8 mBBoxSkinData[64 + 10 * 32]` -- the right SIZE with no members, which
+        // preserved every surrounding offset and made the ten skinned control points
+        // unreachable by name. That opacity is precisely why PhysicalBodyPart::
+        // CalculateSkinnedPoint stayed declare-only and every detached panel's bounding box
+        // collapsed to a point (see the banner in BrnBBoxPointSkinData.h). The home header
+        // BrnBodyPartBBoxSpec.h already existed; it is included above and used here, per the
+        // "reconstruct includes, don't fake the type" rule. Its own static_assert pins the
+        // 0x180 bytes this member used to spell as a magic number.
+        BodyPartBBoxSpec      mBBoxSkinData;               // :216 (console spec+64)
         // ⭐⭐ SERIALISED SLOT, NOT A HOST POINTER (corrected 2026-08-14, deformation-mount wave).
         // IKBodyPartSpec is a VIEW over the streamed _AT payload (GetDrivenPartSpec returns
         // &maIKPartData[i] straight into the resource bytes), and the shipped record keeps the
@@ -134,6 +143,7 @@ namespace Deformation
         // private members; never called, compile-time only.
         static void LayoutTripwires()
         {
+            static_assert(offsetof(IKBodyPartSpec, mBBoxSkinData)          ==  64, "bbox spec @ +64");
             static_assert(offsetof(IKBodyPartSpec, mpaJointSpecs)          == 448, "joint slot @ +448");
             static_assert(offsetof(IKBodyPartSpec, miNumJoints)            == 452, "joint count @ +452");
             static_assert(offsetof(IKBodyPartSpec, miNumberOfDrivenPoints) == 464, "driven count @ +464");

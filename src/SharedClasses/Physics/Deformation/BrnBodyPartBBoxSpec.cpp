@@ -8,9 +8,9 @@
 // product (its winding / handedness) and, only when it is left-handed, mirrors
 // every skinned corner point:
 //
-//   lvx128 v0  <- mav4Basis[0]            (basis row 0)
-//   lvx128 v12 <- mav4Basis[1]            (basis row 1)
-//   lvx128 v11 <- mav4Basis[2]            (basis row 2)
+//   lvx128 v0  <- mOrientation.xAxis      (basis row 0)
+//   lvx128 v12 <- mOrientation.yAxis      (basis row 1)
+//   lvx128 v11 <- mOrientation.zAxis      (basis row 2)
 //   vpermwi128 v10, v0,  0x63             (lane reshuffle of row 0)
 //   vpermwi128 v12, v12, 0x63             (lane reshuffle of row 1)
 //   vmulfp128  v0,  v0,  v12              (row0 * row1')
@@ -21,9 +21,9 @@
 //   vcmpeqfp.  v0, v0, 0                  (CR record -> the branch predicate)
 //   if ( left-handed ) {
 //       for ( i = 0; i < 8; ++i )
-//           maPoints[i].HackSwapHandedness( *this as frame );   // r3 += 0x20
-//       maPoints[8].HackSwapHandedness( ... );                  // r31 + 0x140
-//       maPoints[9].HackSwapHandedness( ... );                  // r31 + 0x160
+//           maCornerSkinData[i].HackSwapHandedness( mOrientation );   // r3 += 0x20
+//       mCentreSkinData.HackSwapHandedness( ... );                    // r31 + 0x140
+//       mJointSkinData.HackSwapHandedness( ... );                     // r31 + 0x160
 //       // vspltisw -1; vslw; vxor; stvx128 -> flip a sign-bit lane in row 0
 //   }
 //
@@ -50,8 +50,10 @@ namespace Deformation
         // KEYSTONE STUB: VMX triple-product handedness test + point mirror not
         // reconstructed. Reference the operands so the signature is honest about
         // what it consumes/produces without fabricating the per-lane math.
-        (void)mav4Basis;
-        (void)maPoints;
+        (void)mOrientation;
+        (void)maCornerSkinData;
+        (void)mCentreSkinData;
+        (void)mJointSkinData;
     }
 }
 }

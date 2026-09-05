@@ -7,6 +7,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnTagPoint.h"             // TagPoint
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"              // EBodyParts (committed home)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"                    // CgsGeometric::AxisAlignedBox
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                            // CGS_ASSERT (the console's own inlined index gates)
 
 // BrnPhysics::Deformation::IKBodyPart — the SKINNING + DETACHMENT side of one deformable
 // vehicle panel. It owns (by pointer-into-the-owning-DeformableObject's-pools) the array of
@@ -76,13 +77,47 @@ namespace Deformation
         bool Release();
 
         // ---- driven-point / tag-point access (DWARF :77-92) ------------------------------
-        IKDrivenPoint*       GetDrivenPoint(s32 liIndex);
-        const IKDrivenPoint* GetDrivenPoint(s32 liIndex) const;
+        //
+        // ⭐⭐ 2026-09-05 (crash wave 2): BOTH INDEXED ACCESSORS NOW CARRY THE CONSOLE'S OWN
+        // BOUNDS GATES, and GetDrivenPoint is header-inline like its tag-point twin. It was
+        // declared out-of-line and had NO DEFINITION ANYWHERE IN THE TREE (hasbody.py), which
+        // is consistent with the console: it is inlined at every call site, and each inlining
+        // bakes the assert strings with this header's own line numbers. Read straight off
+        // PhysicalBodyPart::CalculateSkinnedPoint @0x825E2560, which inlines both four times:
+        //     tag    liIndex >= 0                          BrnIKBodyPart.h:264  (li r5, 0x108)
+        //            liIndex < GetNumberOfTagPoints()       BrnIKBodyPart.h:265  (li r5, 0x109)
+        //     driven liIndex >= 0                           BrnIKBodyPart.h:243  (li r5, 0xF3)
+        //            liIndex < GetNumberOfDrivenPoints()    BrnIKBodyPart.h:244  (li r5, 0xF4)
+        // The array indexing itself is the same `base + stride * index` the asm computes
+        // (`slwi r11, r31, 5` for the 32-byte TagPoint; `r31*3 << 4` for the 48-byte
+        // IKDrivenPoint) -- expressed here as ordinary C++ indexing so the host recomputes it.
+        IKDrivenPoint*       GetDrivenPoint(s32 liIndex)
+        {
+            CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+            CGS_ASSERT(liIndex < GetNumberOfDrivenPoints(), "liIndex < GetNumberOfDrivenPoints()");
+            return &maDrivenPoints[liIndex];
+        }
+        const IKDrivenPoint* GetDrivenPoint(s32 liIndex) const
+        {
+            CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+            CGS_ASSERT(liIndex < GetNumberOfDrivenPoints(), "liIndex < GetNumberOfDrivenPoints()");
+            return &maDrivenPoints[liIndex];
+        }
         // ⭐ HEADER-INLINE (2026-08-14, deformation-mount wave): no export on either console
         // (console-inline; the callers read spec+464 directly). Forwards to mpSpec.
         s32                  GetNumberOfDrivenPoints() const { return mpSpec->GetNumberOfDrivenPoints(); }   // console spec+464
-        TagPoint*            GetTagPoint(s32 liIndex) { return &maTagPoints[liIndex]; }   // (inlined walls leg 4; @0x825C1170 is the same indexed read)
-        const TagPoint*      GetTagPoint(s32 liIndex) const { return &maTagPoints[liIndex]; }   // (inlined walls leg 4)
+        TagPoint*            GetTagPoint(s32 liIndex)   // (inlined walls leg 4; @0x825C1170 is the same indexed read)
+        {
+            CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+            CGS_ASSERT(liIndex < GetNumberOfTagPoints(), "liIndex < GetNumberOfTagPoints()");
+            return &maTagPoints[liIndex];
+        }
+        const TagPoint*      GetTagPoint(s32 liIndex) const   // (inlined walls leg 4)
+        {
+            CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+            CGS_ASSERT(liIndex < GetNumberOfTagPoints(), "liIndex < GetNumberOfTagPoints()");
+            return &maTagPoints[liIndex];
+        }
         s32                  GetNumberOfTagPoints() const { return mpSpec->GetNumberOfTagPoints(); }   // (inlined walls leg 4; console spec+472)
 
         // ---- per-frame / skinning (DWARF :95-99) -----------------------------------------
