@@ -399,17 +399,29 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         // ⚠ THE HEAP STORE IS NOT OPTIONAL. Setup's first act is mpHeapMalloc->Malloc, so an
         // earlier draft that announced BOTH stores and still called Setup faulted inside
         // GeneralAllocator on the very first effects prepare (measured 2026-09-02). The heap
-        // pointer is a real named member and is bound here; the renderer pointer's target,
-        // mLionImmediateModeRenderer, is still a ContainedInterface placeholder, so null goes
-        // in and is announced.
-        mLionRenderer.BindPrepareState(mpHeapMalloc, 0);
+        // pointer is a real named member and is bound here. The renderer pointer is now REAL
+        // too: mLionImmediateModeRenderer was promoted from a 12-byte ContainedInterface
+        // placeholder to the modelled 0x1E0-byte BrnGraphics::LionBlendRenderer, so this
+        // store is the console's `stw r30, 0x53D0(r31)` and no longer a null.
+        mLionRenderer.BindPrepareState(mpHeapMalloc, &mLionImmediateModeRenderer);
         mLionRenderer.Setup();
         {
+            // ⚠ VALID POINTER, INCOMPLETELY CONSTRUCTED OBJECT -- announced deliberately.
+            // The console calls Im3dBlend::Construct @0x8229B260 on this object to resolve its
+            // eight ProgramVariableHandles by name ("worldViewProj", "colourScale", "gOffset",
+            // "gScale", "gDepthConversion", "gDepthFadeConstants"). Construct is blocked on
+            // ASSETS, not analysis: it needs four Xenos microcode blobs (unk_8200DD58 0x1A4,
+            // unk_8200DF00 0x10C, unk_8200E010 0x220, unk_8200E230 0x1F8) re-authored as D3D9,
+            // the SkidProgramsPC.cpp job. Until that lands the handles are unresolved, so a
+            // consumer must not treat a non-null mpRenderer as a DRAWABLE renderer -- only as
+            // a correctly sized, correctly placed one. Im3dBlend declares no constructor, so
+            // the handles carry whatever the module's storage held.
             static bool sbLogged = false;
             LogNotReconstructed(sbLogged,
-                "ParticleModule::Prepare's mLionRenderer +0x160 blend-renderer pointer (its target "
-                "mLionImmediateModeRenderer is a ContainedInterface placeholder, so the bind passes "
-                "null); the +0x08 heap store IS made, and cLionFX::Init IS CALLED below");
+                "ParticleModule::Prepare binds the REAL mLionImmediateModeRenderer at +0x92E0 "
+                "(the +0x160 store is now faithful), but Im3dBlend::Construct @0x8229B260 has "
+                "NOT run -- its eight shader-variable handles are unresolved pending the four "
+                "Xenos programs being re-authored as D3D9");
         }
 
         // --- cLionFX::Init: BUILD THE LION RUNTIME ---------------------------------------
