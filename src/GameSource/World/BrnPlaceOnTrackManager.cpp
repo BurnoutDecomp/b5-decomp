@@ -1152,6 +1152,10 @@ void PlaceOnTrackManager::ArmCrashSweepBringUp()
     static bool        sbArmOriginSeen   = false;
     static s32         siFramesSinceShot = 0;
     static s32         siFrame           = 0;
+    // [sweep] SEAT VERIFICATION -- see the block that consumes them, below the shot.
+    static s32         siSeatCheck       = -1;   // frames until the seat is verified; -1 == idle
+    static Vector3     sSeatWanted       = { 0.0f, 0.0f, 0.0f, 0.0f };
+    static s32         siSeatShot        = 0;
 
     if( seStage == E_SWEEP_OFF || seStage == E_SWEEP_DONE )
     {
@@ -1326,6 +1330,57 @@ void PlaceOnTrackManager::ArmCrashSweepBringUp()
     ++siFrame;
     ++siFramesSinceShot;
 
+    // ---- [sweep] SEAT VERIFICATION ------------------------------------------------------------
+    // ⛔⛔ AN OFF-ROAD LAUNCH IS A SILENTLY DEAD RUN, AND IT COST A WAVE A WHOLE GRID (2026-09-05).
+    // crash_sweep_batch.ps1's banner already warned that "the launch must land ON ROAD:
+    // place-on-track's drop query returns no candidate off it and the car is seated at the
+    // requested Y instead" -- but nothing SAID SO AT RUN TIME. Measured on run mwB_h210_s50_r1
+    // (a 160 m run-up whose launch fell off the road): the car was seated at y -12.606 against a
+    // requested -3.700, at 0.000000 mph, and sat there for 4,000 frames. The log contained a
+    // perfectly ordinary "[sweep] shot 0/1 ... forced 0" line and then simply no crash, which reads
+    // exactly like "this angle does not roll the car" -- a NEGATIVE RESULT MANUFACTURED BY THE
+    // HARNESS. The same silence would follow a shot whose launch is inside geometry.
+    // So the sweep now checks its own placement three frames after the request (the placement is a
+    // REQUEST -- it is consumed by the reset pump on a later frame, so the check cannot be
+    // immediate) and prints one line either way. Frame-counted like everything else here.
+    if( siSeatCheck > 0 )
+    {
+        --siSeatCheck;
+        if( siSeatCheck == 0 )
+        {
+            const f32 lfDX = lrHere.x - sSeatWanted.x;
+            const f32 lfDY = lrHere.y - sSeatWanted.y;
+            const f32 lfDZ = lrHere.z - sSeatWanted.z;
+            const f32 lfDist = std::sqrt( lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ );
+            // ⚠️ THE TEST IS ON **Y** ALONE, and that is deliberate. The horizontal distance is
+            // useless as a discriminator here: the shot arrives MOVING, so three frames later a
+            // perfectly good seat is already 1-3 m down its own heading (measured: 0.4 m at
+            // 50 m/s in mwA_h210_s50_r1, 1.9 m at 60 m/s in mwA_h240_s60_r1), and a threshold
+            // loose enough to allow that would also allow a bad seat that happens to be nearby.
+            // The vertical is the axis the failure actually shows on: a good seat is snapped to the
+            // road surface and lands within ~0.3 m of the requested Y, while mwB_h210_s50_r1's bad
+            // one was 8.9 m below it. 3 m is an order of magnitude clear of both.
+            const bool lbBad = ( lfDY < -3.0f || lfDY > 3.0f );
+            if( CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << ( lbBad ? "[sweep] SEAT BAD shot " : "[sweep] seat ok shot " ) << siSeatShot
+                    << " wanted (" << sSeatWanted.x << ", " << sSeatWanted.y << ", " << sSeatWanted.z
+                    << ") got (" << lrHere.x << ", " << lrHere.y << ", " << lrHere.z
+                    << ") off " << lfDist << " m\n";
+                if( lbBad )
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[sweep] SEAT BAD: the launch point is almost certainly OFF ROAD -- "
+                           "PlaceCarOnTrack found no road candidate and seated the car at the "
+                           "requested Y. This shot is NOT a sample; do not read its silence as "
+                           "physics. Move the launch onto a road.\n";
+                }
+            }
+        }
+    }
+    // ---- end [sweep] seat verification ---------------------------------------------------------
+
     const bool lbCrashing = lpPlayerCar->IsCrashing();
     const bool lbForced   = ( siFramesSinceShot >= siMaxFrames );
     if( !lbForced && !( siFramesSinceShot >= siSettleFrames && !lbCrashing ) )
@@ -1366,6 +1421,11 @@ void PlaceOnTrackManager::ArmCrashSweepBringUp()
             << " wasCrashing " << ( lbCrashing ? 1 : 0 )
             << " from (" << lrHere.x << ", " << lrHere.y << ", " << lrHere.z << ")\n";
     }
+
+    // arm the seat check for this shot (consumed three frames from now; see the block above)
+    siSeatCheck = 3;
+    sSeatWanted = saLaunch[ siNextShot ];
+    siSeatShot  = siNextShot;
 
     ++siNextShot;
     siFramesSinceShot = 0;
