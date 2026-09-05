@@ -5,6 +5,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"      // DeformableObject (GetVehicleBody / transform delta path)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"                   // VehiclePhysics::GetTransformDelta
 #include "SharedClasses/Physics/Deformation/BrnIKBodyPartSpec.h"                               // IKBodyPartSpec
+#include "SharedClasses/Physics/Deformation/BrnBodyPartBBoxSpec.h"                             // BodyPartBBoxSpec / BBoxPointSkinData (CalculateSkinnedPoint's argument + the ten control points)
 #include "SharedClasses/Physics/Deformation/BrnDeformationJointSpec.h"                         // DeformationJointSpec::GetMaxStress/GetMaxAngle/...
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"                 // InSceneUpdateInterface remove/set producers
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                                   // CgsSceneManager::EntityId
@@ -19,7 +20,8 @@
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"                    // DetachedPartNotificationEvent
 
 #include <cstring>   // memset (matching the X360 memset of the BBox scratch tail)
-#include <cmath>     // std::sqrt (the vrsqrtefp magnitude refinements converge to this)
+#include <cmath>     // std::sqrt / std::fabs (the vrsqrtefp magnitude refinements + the skin self-check)
+#include <cstdint>   // uintptr_t (the console's 16-byte alignment assert on the skin record)
 #include <cstdlib>   // getenv/atoi -- [DIAG] BRN_DEFORM_TRACE only, host-side
 
 // ============================================================================
@@ -255,6 +257,34 @@ namespace Deformation
 
         // Broadcast a scalar into all four lanes (the vspltw idiom).
         inline Vector4 Splat(f32 lfValue) { return Vector4{ lfValue, lfValue, lfValue, lfValue }; }
+
+        // The skin-blend agreement tolerance CalculateSkinnedPoint's opt-vs-unopt self-check uses:
+        // `lfs f0, flt_82002138` @0x825E2A48, byte-read from the image == 0x3C23D70A == 0.01f.
+        const f32 KF_SKIN_BLEND_TOLERANCE = 0.0099999998f;   // RECOVERED flt_82002138
+
+        // ------------------------------------------------------------------------------------------
+        // One skin influence of a bounding-box control point, resolved to its CURRENT-minus-REST
+        // offset. The single flat byte index selects a TAG point when it is below the part's tag-point
+        // count and a DRIVEN point above it (re-indexed by subtracting that count) -- the branch at
+        // 0x825E25D4 / 0x825E278C / 0x825E2874 / 0x825E2958, four identical copies from the loop plus
+        // the three unrolled steps.
+        //
+        // Both point types already carry `current - rest` as GetOffsetFromInitialPosition(), which is
+        // exactly the `vsubfp v0, v0, v13` the asm performs after loading the record's own position
+        // (+0x00) and its spec's rest position (TagPointSpec +0x20 / IKDrivenPointSpec +0x00).
+        // The accessors' own bounds asserts are the console's -- see BrnIKBodyPart.h.
+        // ------------------------------------------------------------------------------------------
+        inline Vector3 ResolveSkinBoneOffset(const IKBodyPart* lpIKPart, u8 lu8BoneIndex)
+        {
+            const s32 liIndex        = static_cast<s32>(lu8BoneIndex);
+            const s32 liNumTagPoints = lpIKPart->GetNumberOfTagPoints();
+
+            if ( liIndex < liNumTagPoints )
+            {
+                return lpIKPart->GetTagPoint(liIndex)->GetOffsetFromInitialPosition();
+            }
+            return lpIKPart->GetDrivenPoint(liIndex - liNumTagPoints)->GetOffsetFromInitialPosition();
+        }
 
         // [DIAG] NOT IN THE X360 BINARY. The same BRN_DEFORM_TRACE latch BrnDeformableObject_Detach.cpp
         // uses, duplicated here (file-local, no ODR surface) so the sim-entry witness is on the SAME
@@ -752,35 +782,131 @@ namespace Deformation
     }
 
     // =========================================================================================
+    // CalculateSkinnedPoint @ 0x825E2560  (392 instructions) -- LANDED 2026-09-05, crash wave 2.
+    //
+    // Resolve ONE bounding-box control point into the panel's CURRENT deformed pose. The point is
+    // skinned to THREE "bones" -- each bone being either a TagPoint or an IKDrivenPoint of the
+    // owning IKBodyPart -- and the blend is a pure DELTA skin:
+    //
+    //     skinned = lrPoint.mVertex + SUM(i=0..2)  weight[i] * (bone[i].current - bone[i].rest)
+    //
+    // ⛔ THE PREVIOUS BANNER SAID "DELIBERATELY NOT ATTEMPTED ... a realism refinement, not a
+    // behaviour", and that judgement was wrong for a reason it could not see from here: with this
+    // function absent, every one of the ten control points was the ORIGIN, so the box built below
+    // was DEGENERATE, floored at the 0.05 half-extent, and DoBodyPartWorldContactGeneration then
+    // padded that "thin" box by the console's full 0.5 m anti-tunnelling ceiling (the inverse gate
+    // at 0x8260962C). A flat door was collided as a ~0.55 m near-cube -- which is exactly why
+    // detached panels came to rest STANDING ON EDGE in the owner's screenshot. A cube can balance
+    // on a corner; a door cannot. The padding constants are the console's own and are untouched.
+    //
+    // ---- how the three bone indices are resolved (the branch at 0x825E25D4, four times over) ----
+    // One BYTE index selects into a single flat numbering: [0 .. numTagPoints) are TAG points and
+    // everything above is a DRIVEN point re-indexed by subtracting numTagPoints. The asm reads the
+    // count once per path as `*(*(mpIKPart+8) + 0x1D8)` == mpSpec->GetNumberOfTagPoints(), and the
+    // driven bound as `+0x1D0` == GetNumberOfDrivenPoints(). Both arrays are reached through the
+    // IKBodyPart's own two window pointers (`lwz r10, 4(r30)` == maTagPoints, stride 32;
+    // `lwz r10, 0(r30)` == maDrivenPoints, stride 48) -- i.e. the ordinary accessors, whose bounds
+    // asserts this function bakes four times each (BrnIKBodyPart.h:243/244 and :264/265).
+    //
+    // ---- and what is actually differenced (the vsubfp at 0x825E26B0 and its three twins) ----
+    //     TAG:     v0 = *(record + 0x00)        == TagPoint::mPos
+    //              v13 = *( *(record + 0x10) + 0x20 )
+    //                  == mpSpec->mInitialPositionAndDetachThreshold  (TagPointSpec + 0x20)
+    //     DRIVEN:  v0 = *(record + 0x00)        == IKDrivenPoint::mPositionPlusDistanceToA
+    //              v13 = *( *(record + 0x20) + 0x00 )
+    //                  == mpSpec->mInitialPos                         (IKDrivenPointSpec + 0x00)
+    // In both cases `current - rest` is exactly the accessor both types already carry,
+    // GetOffsetFromInitialPosition() -- so the delta is spelled through it rather than by walking
+    // the spec pointer by hand.
+    //
+    // ---- the two paths and the assert between them are the ORIGINAL SOURCE'S, not an artefact ----
+    // The console computes the blend TWICE: once as a 3-iteration loop (the reference), once
+    // unrolled with the weight vector loaded whole and lanes 0/1/2 splatted, and then asserts the
+    // two agree to 0.01 -- the "Mismatch Opt: (%f, %f, %f), Unopt: (%f, %f, %f)" string pair at
+    // BrnPhysicalBodyPart.cpp:257. That is a hand-vectorisation self-check the author wrote, so it
+    // is transcribed rather than folded away. ⚠️ STATED PLAINLY: on the host both spellings lower
+    // to the same scalar arithmetic, so this assert is FAITHFUL BUT NOT INDEPENDENTLY
+    // DISCRIMINATING here -- it cannot fail on a PC build the way it could on VMX. It is kept
+    // because deleting it would drop, without saying so, a side effect the binary has.
+    //
+    // The 16-byte alignment assert is real on the host and does discriminate: BBoxPointSkinData is
+    // alignas(16) precisely because mafWeights sits at +0x10 and the console loads it with a single
+    // vector load (`lvlx v0, r0, r21` @0x825E2780).
+    //
+    // Registers: r3 is the hidden sret buffer for the returned Vector3, r4 is `this`, r5 is the
+    // point -- read from the prologue (`mr r23, r4` / `mr r20, r5` / `stw r3, arg_14`), not from
+    // the pseudocode, which renders the whole function as a nullary `int`.
+    // =========================================================================================
+    Vector3 PhysicalBodyPart::CalculateSkinnedPoint(const BBoxPointSkinData& lrPoint)
+    {
+        // ---- the reference blend: the do/while(v11) over three influences ---------------------
+        // Seeded from the point's own rest vertex (`lvx128 v123, r0, r20` -- record +0x00), then
+        // one fused multiply-add per influence (`vmaddfp128 v123, v0, v13, v123`, classic raw
+        // field order D,A,B,C == D = A*C + B, with v13 the splatted scalar weight).
+        Vector3 lvUnoptimised = lrPoint.GetVertex();
+        for ( s32 liInfluence = 0; liInfluence < BBoxPointSkinData::KI_NUM_SKIN_INFLUENCES; ++liInfluence )
+        {
+            const Vector3 lvBoneOffset = ResolveSkinBoneOffset(mpIKPart, lrPoint.GetBoneIndex(liInfluence));
+            const f32     lfWeight     = lrPoint.GetWeight(liInfluence);
+
+            lvUnoptimised.x += lvBoneOffset.x * lfWeight;
+            lvUnoptimised.y += lvBoneOffset.y * lfWeight;
+            lvUnoptimised.z += lvBoneOffset.z * lfWeight;
+        }
+
+        // ---- the hand-vectorised blend: weights fetched ONCE, the three lanes splatted ---------
+        // `clrlwi r10, r20, 28` / `cmplwi r10, 0` @0x825E26EC-0x825E2720 -- the record base, hence
+        // mafWeights at +0x10, must be 16-byte aligned for the single unaligned-vector weight load.
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(&lrPoint) & 0xFu) == 0u,
+                   "Expected lPoint.mafWeights to be 16 byte aligned\n");
+
+        const f32 lfWeightX = lrPoint.GetWeight(0);   // vspltw128 v127, v0, 0
+        const f32 lfWeightY = lrPoint.GetWeight(1);   // vspltw128 v126, v0, 1
+        const f32 lfWeightZ = lrPoint.GetWeight(2);   // vspltw128 v124, v0, 2
+
+        const Vector3 lvBoneOffset0 = ResolveSkinBoneOffset(mpIKPart, lrPoint.GetBoneIndex(0));
+        const Vector3 lvBoneOffset1 = ResolveSkinBoneOffset(mpIKPart, lrPoint.GetBoneIndex(1));
+        const Vector3 lvBoneOffset2 = ResolveSkinBoneOffset(mpIKPart, lrPoint.GetBoneIndex(2));
+
+        // vmaddcfp128 (0x825E2878) then two vmaddfp128 (0x825E295C, 0x825E2A50), accumulating into
+        // the base vertex re-loaded unaligned at 0x825E26F0.
+        Vector3 lvOptimised = lrPoint.GetVertex();
+        lvOptimised.x += lvBoneOffset0.x * lfWeightX + lvBoneOffset1.x * lfWeightY + lvBoneOffset2.x * lfWeightZ;
+        lvOptimised.y += lvBoneOffset0.y * lfWeightX + lvBoneOffset1.y * lfWeightY + lvBoneOffset2.y * lfWeightZ;
+        lvOptimised.z += lvBoneOffset0.z * lfWeightX + lvBoneOffset1.z * lfWeightY + lvBoneOffset2.z * lfWeightZ;
+
+        // The self-check: |opt - unopt| must be within 0.01 on every compared lane. The console
+        // masks the w lane out of the comparison by overwriting it with the x lane
+        // (`vrlimi128 v12, v0, 1, 1`), which is why w is not modelled or compared here.
+        const f32 lfDiffX = std::fabs(lvUnoptimised.x - lvOptimised.x);
+        const f32 lfDiffY = std::fabs(lvUnoptimised.y - lvOptimised.y);
+        const f32 lfDiffZ = std::fabs(lvUnoptimised.z - lvOptimised.z);
+        CGS_ASSERT(lfDiffX <= KF_SKIN_BLEND_TOLERANCE && lfDiffY <= KF_SKIN_BLEND_TOLERANCE &&
+                       lfDiffZ <= KF_SKIN_BLEND_TOLERANCE,
+                   "Mismatch Opt/Unopt skinned point");
+
+        // `stvx128 v127, r0, r3` -- the OPTIMISED vector is the one returned.
+        return lvOptimised;
+    }
+
+    // =========================================================================================
     // CalculateBoundingBoxExtents @ 0x825E2B80
     //
-    // Compute the part's local-space bbox min/max by transforming each of the 10 skinned bbox control
-    // points (CalculateSkinnedPoint, indexed off *(mpIKPart->GetSpec()+8)+64.. at +0/+16/+32/+48 of the
-    // bbox skin record) through the part's current pose, min/max-reducing into lvBoundingBoxMin /
-    // lvBoundingBoxMax. The first 8 corners run in a do/while(v11); two extra control points (+320,
-    // +352) close it out. Two non-gating asserts bound the box magnitude:
+    // Compute the part's local-space bbox min/max by resolving each of the 10 skinned bbox control
+    // points (CalculateSkinnedPoint over the IK spec's embedded BodyPartBBoxSpec) and transforming
+    // each through that spec's own ORIENTATION matrix, min/max-reducing into lvBoundingBoxMin /
+    // lvBoundingBoxMax. The first 8 corners run in a do/while(r27); the centre (+0x140) and joint
+    // (+0x160) control points close it out. Two non-gating asserts bound the box magnitude:
     //   Magnitude(max-min) > 0.00001f ; Magnitude(max-min) < KV_BIG_VECTOR.GetX().
     //
-    // CalculateSkinnedPoint's full skin math lives in its own (declare-only) helper; the per-corner
-    // transform is the same vmaddfp cascade. The control-point geometry is rodata-not-recovered, so the
-    // skinned points resolve through the (placeholder) skin helper -- the min/max REDUCTION structure
-    // is exact, the numeric extent stays inert until the skin data is recovered.
-    //
-    // ⚠️ SCOPED 2026-08-27 (detach-2 wave) so the next attempt does not have to re-measure it, and
-    // DELIBERATELY NOT ATTEMPTED. CalculateSkinnedPoint @0x825E2560 is **392 instructions** -- not the
-    // small helper "declare-only" suggests. Its shape, from the prologue: r28 = 3 influences per
-    // point, walking a per-influence byte index (`lbz 0(r29)`, r29 stepping from spec+0x1C) and
-    // branching on whether that index is BELOW `*(spec+0x1D8)` (a TAG point) or above it (a DRIVEN
-    // point, re-indexed by subtracting the same count and bounds-checked against `*(spec+0x1D0)`),
-    // then loading a 48-byte-stride record and blending. The two assert strings it bakes name both
-    // arrays outright: "liIndex < GetNumberOfTagPoints()" (:0xF3) and
-    // "liIndex < GetNumberOfDrivenPoints()" (:0xF4).
-    // ⇒ WHAT LANDING IT WOULD ACTUALLY BUY, measured rather than assumed: the bbox half-extents feed
-    // exactly two things -- CalculateAABBExtents (hence the fat-box inertia AddToSim posts) and the
-    // collision volume AddToScene builds. AddToScene is still a gate, so today the ONLY observable
-    // effect would be that shed parts stop all sharing one inertia (every part currently lands on the
-    // 0.1 floor and therefore on invI == 2.5, visible in the [detach-sim] line). That is a realism
-    // refinement, not a behaviour. It is worth doing AFTER collision, not before.
+    // ⭐⭐ 2026-09-05: THE PER-POINT TRANSFORM WAS MISSING ENTIRELY, and it was invisible because
+    // the points were all the origin (0 transformed by anything but a translation is still 0, and
+    // the translation row had been modelled as PADDING -- see BrnBodyPartBBoxSpec.h). The asm
+    // cascade at 0x825E2C28..0x825E2C3C is an ordinary affine point transform:
+    //     out = orientation.xAxis * p.x + orientation.yAxis * p.y + orientation.zAxis * p.z
+    //           + orientation.wAxis
+    // taken in raw field order (`vmaddfp vD,vA,vB,vC` == vA*vC + vB), with the three lanes of the
+    // skinned point splatted into vC by the three vspltw at 0x825E2C08/0C14/0C1C.
     // =========================================================================================
     void PhysicalBodyPart::CalculateBoundingBoxExtents(Vector3& lvBoundingBoxMin, Vector3& lvBoundingBoxMax)
     {
@@ -790,23 +916,33 @@ namespace Deformation
         Vector3 lMin = {  KF_BIG_VECTOR_X,  KF_BIG_VECTOR_X,  KF_BIG_VECTOR_X, 0.0f };
         Vector3 lMax = { -KF_BIG_VECTOR_X, -KF_BIG_VECTOR_X, -KF_BIG_VECTOR_X, 0.0f };
 
-        // The bbox skin record base inside the IK spec (the asm's *(mpIKPart->GetSpec()+8)+64).
-        // The 10 control points stride 32 from +64; the loop visits the first 8, then +320, +352.
-        // CalculateSkinnedPoint resolves each point in the part's current pose. Its body + the control
-        // point data are not homed here; the reduction below is the observable transform.
-        for ( s32 liCorner = 0; liCorner < 10; ++liCorner )
+        // The bbox skin record inside the IK spec: `lwz r10, 0x1DC(this)` (mpIKPart), `lwz r11, 8(r10)`
+        // (its spec), `addi r29, r11, 0x40` (the embedded BodyPartBBoxSpec).
+        const BodyPartBBoxSpec& lrBBoxSpec = mpIKPart->GetSpec()->GetBBoxSpec();
+        const Matrix44Affine&   lrOrientation = lrBBoxSpec.mOrientation;
+
+        for ( s32 liPoint = 0; liPoint < BodyPartBBoxSpec::KI_NUM_BBOX_POINTS; ++liPoint )
         {
-            // lSkinnedPoint = CalculateSkinnedPoint(controlPoint[liCorner]); placeholder -> origin
-            // (the skin record is rodata-not-recovered). FLAG: numeric extent inert until homed.
-            const Vector3 lSkinnedPoint = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lSkinnedPoint = CalculateSkinnedPoint(lrBBoxSpec.GetSkinPoint(liPoint));
+
+            // The vmaddfp cascade: transform the skinned point through the spec's orientation.
+            const Vector3 lTransformed = {
+                lrOrientation.xAxis.x * lSkinnedPoint.x + lrOrientation.yAxis.x * lSkinnedPoint.y +
+                    lrOrientation.zAxis.x * lSkinnedPoint.z + lrOrientation.wAxis.x,
+                lrOrientation.xAxis.y * lSkinnedPoint.x + lrOrientation.yAxis.y * lSkinnedPoint.y +
+                    lrOrientation.zAxis.y * lSkinnedPoint.z + lrOrientation.wAxis.y,
+                lrOrientation.xAxis.z * lSkinnedPoint.x + lrOrientation.yAxis.z * lSkinnedPoint.y +
+                    lrOrientation.zAxis.z * lSkinnedPoint.z + lrOrientation.wAxis.z,
+                0.0f
+            };
 
             // vminfp / vmaxfp reduction.
-            if ( lSkinnedPoint.x < lMin.x ) lMin.x = lSkinnedPoint.x;
-            if ( lSkinnedPoint.y < lMin.y ) lMin.y = lSkinnedPoint.y;
-            if ( lSkinnedPoint.z < lMin.z ) lMin.z = lSkinnedPoint.z;
-            if ( lSkinnedPoint.x > lMax.x ) lMax.x = lSkinnedPoint.x;
-            if ( lSkinnedPoint.y > lMax.y ) lMax.y = lSkinnedPoint.y;
-            if ( lSkinnedPoint.z > lMax.z ) lMax.z = lSkinnedPoint.z;
+            if ( lTransformed.x < lMin.x ) lMin.x = lTransformed.x;
+            if ( lTransformed.y < lMin.y ) lMin.y = lTransformed.y;
+            if ( lTransformed.z < lMin.z ) lMin.z = lTransformed.z;
+            if ( lTransformed.x > lMax.x ) lMax.x = lTransformed.x;
+            if ( lTransformed.y > lMax.y ) lMax.y = lTransformed.y;
+            if ( lTransformed.z > lMax.z ) lMax.z = lTransformed.z;
         }
 
         // The asm clamps (max-min) to a minimum vector (vmaxfp v0,v0,v12 against &unk_82FB96E0) before
@@ -859,10 +995,44 @@ namespace Deformation
         // &unk_82FB9DD0). ⭐ 2026-08-27: this is the HALF floor (0.05), a DIFFERENT static from the
         // full-extent floor (0.1) at &unk_82FB96E0 -- both were zero placeholders, so the two were
         // indistinguishable and this site used the wrong one.
+        const Vector3 lRawHalf = lHalf;
         if ( lHalf.x < KV_MIN_BBOX_HALF_SIZE.x ) lHalf.x = KV_MIN_BBOX_HALF_SIZE.x;
         if ( lHalf.y < KV_MIN_BBOX_HALF_SIZE.y ) lHalf.y = KV_MIN_BBOX_HALF_SIZE.y;
         if ( lHalf.z < KV_MIN_BBOX_HALF_SIZE.z ) lHalf.z = KV_MIN_BBOX_HALF_SIZE.z;
         mBoundingBoxHalfDimensions = lHalf;   // +416
+
+        // [DIAG] NOT IN THE X360 BINARY. The before/after witness for CalculateSkinnedPoint: the box
+        // the ten skinned control points actually produce, whether it still lands on the 0.05 half
+        // floor, and -- computed with the CONSOLE'S OWN rule from DoBodyPartWorldContactGeneration
+        // @0x826095E0..0x826096D4 -- the contact padding that box earns. A degenerate box is "thin"
+        // (min half <= 0.15) and takes the full 0.5 m pad, i.e. a ~0.55 m near-cube collider for a
+        // flat panel. DELETE-WHEN the part-box question is closed and banked.
+        if ( DetachProbeOn() )
+        {
+            static s32 siBoxLines = 0;
+            if ( siBoxLines < 400 )
+            {
+                ++siBoxLines;
+                f32 lfMinHalf = lHalf.x;
+                if ( lHalf.y < lfMinHalf ) lfMinHalf = lHalf.y;
+                if ( lHalf.z < lfMinHalf ) lfMinHalf = lHalf.z;
+                const bool lbFatBox = (lfMinHalf > 0.15f);
+                const f32  lfPad = lbFatBox ? ((lfMinHalf < 0.5f) ? lfMinHalf : 0.5f) : 0.5f;
+                *CgsDev::Log::gpDebugPrint
+                    << "[part-box] id " << CgsDev::E_PRINTMODE_HEXONCE
+                    << mRigidBodyId.GetBaseRigidBodyID()
+                    << " type " << static_cast<s32>(mpIKPart->GetPartType())
+                    << " raw (" << lRawHalf.x << ", " << lRawHalf.y << ", " << lRawHalf.z << ")"
+                    << " half (" << lHalf.x << ", " << lHalf.y << ", " << lHalf.z << ")"
+                    << " minHalf " << lfMinHalf
+                    << (lbFatBox ? " FAT" : " THIN")
+                    << " pad " << lfPad
+                    << " effective " << (lfMinHalf + lfPad)
+                    << " ext (" << (lvBoundingBoxMax.x - lvBoundingBoxMin.x) << ", "
+                    << (lvBoundingBoxMax.y - lvBoundingBoxMin.y) << ", "
+                    << (lvBoundingBoxMax.z - lvBoundingBoxMin.z) << ")\n";
+            }
+        }
 
         // centre = (max + min) * 0.5, transformed through the part's OWN mBBoxOrientation rows (the asm
         // reads this+288/+304/+320 and adds the translation row this+336 -- NOT the passed lTransform;
