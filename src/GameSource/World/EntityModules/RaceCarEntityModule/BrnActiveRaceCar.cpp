@@ -1424,6 +1424,52 @@ void ActiveRaceCar::UpdateDeformationState(
                 if (lfRow > lfMaxVerlet) { lfMaxVerlet = lfRow; liMaxVerletRow = static_cast<s32>(luRow); }
             }
 
+            // ---- [deform-rows] THE SHAPE, NOT THE SCALAR. NOT X360; opt-in BRN_DEFORM_ROWS=1
+            // (needs BRN_DEFORM_TRACE too -- it lives inside that block).
+            // ⭐ WHY A WHOLE-ARRAY DUMP EXISTS AT ALL: sumVerlet / nnzVerlet / maxVerlet answer
+            // "how much" and "the worst row". They cannot answer the OWNER'S question, which is
+            // WHERE the displacement goes -- a dent that smears across a panel and a dent that
+            // folds it have the SAME sum and can have the same max. Constant 22's rows are the
+            // vehicle's only vertex mover, and each row has a fixed authored identity (the
+            // console packs [every skinned TagPoint in tag order][then each IK part's driven
+            // points], DeformableObject::UpdateSkinningOffsets @0x825DFA90), so a row index IS a
+            // place on the car and the array IS the deformed shape.
+            // Prints ONCE per car per new sumVerlet HIGH-WATER MARK, so a wreck emits a handful
+            // of lines at its worst frames instead of one per frame.
+            // DELETE-WHEN the deformation-shape question is closed and banked.
+            {
+                static s32 siRowsOn = -1;
+                if (siRowsOn < 0)
+                {
+                    const char* lpcEnv = getenv("BRN_DEFORM_ROWS");
+                    siRowsOn = (lpcEnv != 0 && atoi(lpcEnv) > 0) ? 1 : 0;
+                }
+                static f32 sfRowsHighWater = 0.0f;
+                if (siRowsOn == 1 && IsPlayer() && lfSumVerlet > sfRowsHighWater + 0.25f
+                    && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    sfRowsHighWater = lfSumVerlet;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[deform-rows] present " << static_cast<s32>(renderengine::guPresentCount)
+                        << " crashing " << (IsCrashing() ? 1 : 0)
+                        << " sumVerlet " << lfSumVerlet << " rows>=0.02m:";
+                    for (u32 luRow = 0; luRow < 128u; ++luRow)
+                    {
+                        const f32 lfRow = std::sqrt(lpVerlet[luRow].x * lpVerlet[luRow].x
+                                                  + lpVerlet[luRow].y * lpVerlet[luRow].y
+                                                  + lpVerlet[luRow].z * lpVerlet[luRow].z);
+                        if (lfRow >= 0.02f)
+                        {
+                            *CgsDev::Log::gpDebugPrint
+                                << " " << static_cast<s32>(luRow) << "=("
+                                << lpVerlet[luRow].x << "," << lpVerlet[luRow].y << ","
+                                << lpVerlet[luRow].z << ")|" << lfRow;
+                        }
+                    }
+                    *CgsDev::Log::gpDebugPrint << "\n";
+                }
+            }
+
             // max |displacement| over the live sensors, and which sensor carries it.
             f32 lfMaxSensor = 0.0f;
             s32 liMaxSensor = -1;
