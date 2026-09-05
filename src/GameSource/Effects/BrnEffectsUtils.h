@@ -29,13 +29,37 @@
 // result is  mVecA * mVecB + (previousDraw - 1.0)  computed per lane.
 // =============================================================================
 
-#include "BrnCommonTypes.h"   // Vector3, Vector4 (rw::math::vpu float lanes)
+#include "BrnCommonTypes.h"   // Vector3, Vector4, Matrix33, VecFloat (rw::math::vpu float lanes)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"  // CgsNumeric::Random (+ LCG constants)
+
+// The Lion particle material BuildUVData::SetupFromMaterial reads. Reference-only here (the
+// full record lives in the Lion SDK header, which this general-purpose Effects header must not
+// drag into every consumer) -- BrnEffectsBuildUVData.cpp includes the real one.
+class cParticleMaterial;
 
 namespace BrnEffects
 {
 namespace Utils
 {
+
+// =============================================================================
+// The named colour-conversion constants (DWARF BrnEffectsUtils.h:43/:44/:45).
+//
+// All three are dynamically-initialised .bss splats in the X360 image, so a literal read of
+// their addresses returns 0x00000000 BY DEFINITION; each value below was recovered through
+// its CRT init thunk (tools/re/findinit.py -> tools/re/ppcdis.py -> tools/re/x360rd.py):
+//
+//   unk_82FAC220 <- 0x82C4A0C0 : splat4(flt_82010C20)                     == 255.0f
+//   unk_82FAC210 <- 0x82C4A0D8 : (flt_82013F98 x3, flt_82010C20)          == (511,511,511,255)
+//   unk_82FAC100 <- 0x82C4A110 : splat4(flt_82010C1C) == 0x3B808081       == 1/255
+//
+// K_VECTOR4_511_511_511_255 is the OVERBRIGHT scale: RGB gets 511 (so a 0.5 channel saturates
+// to 255 and anything above it clamps), alpha gets the plain 255. That asymmetry is the whole
+// content of the name ConvertVector4ToRwRgbaOverbright.
+// =============================================================================
+extern const VecFloat K_VECFLOAT_255;                 // BrnEffectsUtils.h:43   splat4(255.0f)
+extern const Vector4  K_VECTOR4_511_511_511_255;      // BrnEffectsUtils.h:44
+extern const VecFloat K_VECFLOAT_ONEOVER255;          // BrnEffectsUtils.h:45   splat4(1/255)
 
 struct Vector3Randomiser
 {
@@ -70,21 +94,75 @@ public:
 };
 
 // =============================================================================
+// BrnEffects::Utils::BuildUVData (DWARF BrnEffectsUtils.h:395) -- the per-material UV-atlas
+// setup block the three LionBlendRenderer draw halves fill once per call and then hand to
+// BuildUVs for every particle.
+//
+// ⭐ THE MEMBER NAMES ARE THE DWARF'S, NOT INFERRED. The first version of this struct lived
+// inside BrnEffectsBuildUVData.cpp (so no caller could name the type at all) with guessed
+// names -- "texel count", "texture width/height", "frame columns/rows". The DWARF names them
+// mvfMaterialFrameCount / mvfMaterialNumXFrames / mvfMaterialOneOverNumXFrames /
+// mvfMaterialOneOverNumYFrames / muMaterialFlags / muMaterialUCoordOption /
+// muMaterialVCoordOption, and cParticleMaterial's own attested layout agrees field for field
+// (+0x34 mFrameCount, +0x38 mXFrames, +0x39 mYFrames, +0x24 mFlags, +0x3F mUCoordOption,
+// +0x40 mVCoordOption). It is a FRAME-ATLAS descriptor, not a texel-size one.
+// =============================================================================
+struct BuildUVData
+{
+    // DWARF BrnEffectsUtils.h:412-418. Every member is written by SetupFromMaterial
+    // @0x822780C8 in this order (four 16-byte splats then the three trailing scalars at
+    // +0x40 / +0x44 / +0x45 -- QuadDraw's `lwz r11, 0x40(r30)` reads muMaterialFlags there).
+    VecFloat mvfMaterialFrameCount;         // +0x00  splat4((f32)(s32) material.mFrameCount)
+    VecFloat mvfMaterialNumXFrames;         // +0x10  splat4((f32)(u8)  material.mXFrames)
+    VecFloat mvfMaterialOneOverNumXFrames;  // +0x20  splat4(1 / that)
+    VecFloat mvfMaterialOneOverNumYFrames;  // +0x30  splat4(1 / (f32)(u8) material.mYFrames)
+    u32      muMaterialFlags;               // +0x40  material.mFlags, verbatim
+    u8       muMaterialUCoordOption;        // +0x44  material.mUCoordOption
+    u8       muMaterialVCoordOption;        // +0x45  material.mVCoordOption
+
+    // material.mFlags bit 1 -- the multi-frame (animated atlas) flag. QuadDraw tests it with
+    // `rlwinm r11, r11, 0, 30, 30` (mask 0x2) @0x822823F0 to decide whether the vertex w lane
+    // carries the fractional frame blend weight or a hard zero.
+    static const u32 KU_MATERIAL_FLAG_MULTI_FRAME = 0x2u;
+
+    // DWARF BrnEffectsUtils.h:398 / X360 @0x822780C8. Defined in BrnEffectsBuildUVData.cpp.
+    void SetupFromMaterial(const cParticleMaterial& arMaterial);
+};
+
+// =============================================================================
 // Namespace-scoped VMX helpers (the Hex-Rays "BrnEffects::Utils::*" free functions).
-// Both are hand-vectorised VMX128 pipelines over undecoded rodata -- KEYSTONES, defined
-// (as honest non-fabricated stubs) in BrnEffectsUtils.cpp. See the .cpp for the per-op
-// pipeline breakdown and the floor rationale.
 // =============================================================================
 
-// 0x822781E0 -- build the 4 UV-corner vectors for a quad. Reads a wrap/flag bit and three
-// input vectors from the quad descriptor (lpQuad), writes four Vector4 UV vectors to
-// lpaUVsOut[0..3]. (X360 ABI: lpQuad in r3, lpaUVsOut in r4.)
-void BuildUVs(const Vector4* lpQuad, Vector4* lpaUVsOut);
+// 0x822781E0 (DWARF BrnEffectsUtils.h:453) -- build the four UV-corner vectors for one
+// particle's quad from the material's frame-atlas data and the particle's current/next frame.
+// STILL A KEYSTONE STUB (see BrnEffectsUtils.cpp).
+//
+// ⚠ THE SIGNATURE WAS WRONG until 2026-09-05: this was declared
+// `BuildUVs(const Vector4* lpQuad, Vector4* lpaUVsOut)`, which loses the two VecFloat frame
+// arguments entirely. The X360 call site inside QuadDraw @0x822823E4 sets r3 = &lUVData,
+// r4 = &laUvUv[0], v1 = splat(aPart.Frame()) and v2 = splat(aPart.NextFrame()) -- the two
+// vector registers are arguments 2 and 3, which is exactly the DWARF's declaration. An f32/
+// vector argument does not consume a GPR slot here, so reading the prototype off the GPRs
+// alone dropped them.
+void BuildUVs(const BuildUVData& arUVData, VecFloat lvfFrame, VecFloat lvfNextFrame,
+              Vector4* lpaUVsOut);
 
-// 0x8227E7A8 -- build a 3x3 rotation matrix from packed Euler XYZ angles, via a polynomial
-// sin/cos approximation (the angle vector arrives in a SIMD register). Writes the three rows
-// to *lpMatrixOut. (X360 ABI: lpMatrixOut in r3, angles in v1.)
-void FastMatrix33FromEulerXYZ(Matrix33* lpMatrixOut, Vector3 lv3EulerAngles);
+// The outlined CgsNumeric::TrigFunctions<CgsNumeric::TrigBaseFunctions5>::SinCos the DWARF names
+// inside FastMatrix33FromEulerXYZ and inside both draw halves' z-only rotation path. The X360
+// folds it into every caller (it has NO row in the ledger), and it is exposed here rather than
+// copied into each site so the recovered polynomial has exactly one home. lfRadians in, the
+// matching sine and cosine out; see the .cpp for the seven recovered coefficients.
+void SinCosCycles(f32 lfRadians, f32& arSin, f32& arCos);
+
+// 0x8227E7A8 (DWARF BrnEffectsUtils.h:259) -- the 3x3 rotation matrix Rx*Ry*Rz built from
+// packed Euler XYZ angles through a minimax polynomial sin/cos. RECONSTRUCTED
+// (BrnEffectsUtils.cpp).
+//
+// ⚠ IT RETURNS BY VALUE. The X360 passes the 48-byte result through the hidden r3 pointer
+// (the three `stvx128 v0, r3, {0,0x10,0x20}` at 0x8227E964/0x8227E990/0x8227E998) and takes
+// the angles in v1 -- i.e. exactly the DWARF's `Matrix33 FastMatrix33FromEulerXYZ(Vector3)`,
+// not the `(Matrix33*, Vector3)` this file used to declare.
+Matrix33 FastMatrix33FromEulerXYZ(Vector3 lv3EulerAngles);
 
 } // namespace Utils
 } // namespace BrnEffects
