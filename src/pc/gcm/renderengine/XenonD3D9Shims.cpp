@@ -895,7 +895,13 @@ namespace
 
     inline bool XenonBlendFactorIsDestAlpha(u32 luValue)
     {
-        return luValue == 8u || luValue == 9u;   // DEST_ALPHA / INV_DEST_ALPHA
+        // ⭐ CORRECTED 2026-09-05 with XenonBlendFactorToD3D9's dest half: DEST_ALPHA /
+        // INV_DEST_ALPHA are 10 and 11, not 8 and 9 (8/9 are DEST_COLOR / INV_DEST_COLOR).
+        // The census had been asking about the wrong two factors, which is why it could only
+        // ever have answered "no destination-alpha material" -- see the proof over that
+        // function. cParticleMaterial::eBLEND_DESTALPHA and its three relatives DO emit 10/11,
+        // so the count this reports is now a real question about the mask carrier's lane.
+        return luValue == 10u || luValue == 11u;   // DEST_ALPHA / INV_DEST_ALPHA
     }
 
     void BlendCensus_Account(u32 luColourSrc, u32 luColourDst, u32 luAlphaSrc, u32 luAlphaDst)
@@ -5156,6 +5162,41 @@ namespace
     }
 
     // RB_BLENDCONTROL blend-factor field -> D3DBLEND.
+    //
+    // ⭐⭐ THE DESTINATION HALF WAS WRONG UNTIL 2026-09-05 -- 8/9 and 10/11 were swapped, so
+    // 8 read as DESTALPHA and 10 as DESTCOLOR. It cost nothing measurable only because the
+    // world's material data pushes just two words (0x00010001 and 0x07060706, per THE
+    // DEST-ALPHA CENSUS above), neither of which uses a destination factor at all. The Lion
+    // particle path does: LionParticleRender::CreateInternalMaterial @0x82280C30 emits 8, 10
+    // and 11 for four of its blend modes.
+    //
+    // THE CORRECTION IS PROVED TWICE OVER, BOTH TIMES FROM ARTIST AND NEITHER TIME FROM AN
+    // OUTSIDE TABLE:
+    //  (a) THE CONSOLE'S OWN D3D THUNKS DO NOT TRANSLATE. D3DDevice_SetRenderState_SrcBlend
+    //      @0x82938D10 stores `Value & 0x1F` straight into RB_BLENDCONTROL[4:0] and
+    //      _BlendOp @0x82938C20 stores `(32 * Value) & 0xE0` into [7:5]. So the Xbox 360
+    //      D3DBLEND enumeration IS the hardware field, and any row here is a claim about that
+    //      one enumeration rather than about two.
+    //  (b) THE LION AUTHORING NAMES PIN EVERY ROW WE ACTUALLY USE. CreateInternalMaterial's
+    //      twenty-case switch is keyed by cParticleMaterial::eBlendMode, whose 26 names are in
+    //      the console's own parser token table (@0x82F34CA8, read with tools/re/x360rd.py),
+    //      and the factors it writes agree with those names term for term:
+    //          COPYRGB           -> (1, 0)    ONE / ZERO
+    //          SRCALPHA          -> (6, 7)    SRCALPHA / INVSRCALPHA
+    //          SRCINVALPHA       -> (7, 6)    the mirror of it
+    //          DESTALPHA         -> (10, 11)
+    //          DESTINVALPHA      -> (11, 10)  the mirror of THAT
+    //          SRCALPHA_LIGHTMAP -> (4, 8)    SRCCOLOR / DESTCOLOR
+    //      The src quartet 4/5/6/7 = SRCCOLOR/INVSRCCOLOR/SRCALPHA/INVSRCALPHA is already
+    //      fixed by 6 and 7; the dest quartet is the same quartet plus four, and the two
+    //      INV mirrors force 10 = DESTALPHA and 11 = INVDESTALPHA, hence 8 = DESTCOLOR and
+    //      9 = INVDESTCOLOR. There is no assignment of those names that satisfies both
+    //      mirrors and leaves 8/9 as the alpha pair.
+    //
+    // ⚠ 12 AND UP ARE NOT ATTESTED BY THIS GAME AT ALL -- no state anywhere in the mounted
+    // set emits one, and nothing in ARTIST names them -- so the rows below them are the
+    // hardware's documented order carried through, and they are flagged as such rather than
+    // presented as recovered. If one ever arrives, the LogOnce is the thing that will say so.
     DWORD XenonBlendFactorToD3D9(u32 luValue)
     {
         switch (luValue)
@@ -5166,13 +5207,14 @@ namespace
         case 5:  return D3DBLEND_INVSRCCOLOR;
         case 6:  return D3DBLEND_SRCALPHA;
         case 7:  return D3DBLEND_INVSRCALPHA;
-        case 8:  return D3DBLEND_DESTALPHA;
-        case 9:  return D3DBLEND_INVDESTALPHA;
-        case 10: return D3DBLEND_DESTCOLOR;
-        case 11: return D3DBLEND_INVDESTCOLOR;
-        case 12: return D3DBLEND_SRCALPHASAT;
-        case 13: return D3DBLEND_BLENDFACTOR;
-        case 14: return D3DBLEND_INVBLENDFACTOR;
+        case 8:  return D3DBLEND_DESTCOLOR;
+        case 9:  return D3DBLEND_INVDESTCOLOR;
+        case 10: return D3DBLEND_DESTALPHA;
+        case 11: return D3DBLEND_INVDESTALPHA;
+        // FLAG PC-platform leaf: unattested by any Burnout state -- hardware order, not recovered.
+        case 12: return D3DBLEND_BLENDFACTOR;
+        case 13: return D3DBLEND_INVBLENDFACTOR;
+        case 16: return D3DBLEND_SRCALPHASAT;
         default:
             LogOnce("blendfactor",
                     "[XenonD3D9] unmapped Xenos blend factor - treated as ONE\n");

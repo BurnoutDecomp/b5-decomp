@@ -67,11 +67,91 @@ public:
     // copy of the constant; this is the flags word's own home.
     enum eMaterialFlags
     {
-        eFLAG_MULTIFRAME       = 0x1,
-        eFLAG_INTERFRAMEBLEND  = 0x2,
-        eFLAG_LAYERGROUP       = 0x80,
-        eFLAG_WRAP_U           = 0x100,
-        eFLAG_WRAP_V           = 0x200,
+        eFLAG_MULTIFRAME        = 0x1,
+        eFLAG_INTERFRAMEBLEND   = 0x2,
+        eFLAG_ALPHA_TEST_ENABLE = 0x4,
+        eFLAG_Z_TEST_ENABLE     = 0x10,
+        eFLAG_Z_WRITE_ENABLE    = 0x20,
+        eFLAG_LAYERGROUP        = 0x80,
+        eFLAG_WRAP_U            = 0x100,
+        eFLAG_WRAP_V            = 0x200,
+        eFLAG_DO_MESH0          = 0x2000,
+        eFLAG_DO_MESH1          = 0x4000,
+        eFLAG_DO_MESH2          = 0x8000,
+        eFLAG_DO_MESH3          = 0x10000,
+        eFLAG_DO_MESH4          = 0x20000,
+    };
+
+    // ⭐ THE THREE AUTHORED MODE ENUMS, READ OUT OF THE IMAGE -- NOT NAMED BY US AND NOT
+    // GUESSED. Each of the three E_LION_MEMBER_U8 tokens in gaLionParticleParserMatTokens
+    // (LionParticleParser.cpp:186-188) carries a pointer to a { u32 count; sLionEnumEntry* }
+    // header, and each entry is { u32 value; const char* name; u32 pad } -- 12 bytes. The
+    // three tables are ALPHA_TEST_MODE @0x82F34C48 (8), BLEND_MODE @0x82F34CA8 (26) and
+    // Z_TEST_MODE @0x82F34DE0 (6), dumped with tools/re/x360rd.py. These are the strings a
+    // .lef author typed, so they are the material's own vocabulary.
+    //
+    // ⭐⭐ AND THEY ARE ALSO THE PROOF OF WHAT THE PACKED BLEND WORD MEANS.
+    // LionParticleRender::CreateInternalMaterial @0x82280C30 turns each of these into a Xenos
+    // RB_BLENDCONTROL, and the factor numbers it writes agree with the NAMES here term for
+    // term -- eBLEND_SRCINVALPHA writes (7,6) where eBLEND_SRCALPHA writes (6,7), and
+    // eBLEND_DESTINVALPHA writes (11,10) where eBLEND_DESTALPHA writes (10,11). That mirror
+    // is what pins 10/11 as DESTALPHA/INVDESTALPHA (see the note over the switch).
+    enum eBlendMode
+    {
+        eBLEND_COPYRGB                = 0,
+        eBLEND_SRCALPHA               = 1,
+        eBLEND_SRCALPHA_KEEP          = 2,
+        eBLEND_COPYALPHA              = 3,
+        eBLEND_DESTALPHA              = 4,
+        eBLEND_DESTALPHA_KEEP         = 5,
+        eBLEND_SRCALPHA_ADD           = 6,
+        eBLEND_DESTALPHA_ADD          = 7,
+        eBLEND_SRCALPHA_SUB           = 8,
+        eBLEND_DESTALPHA_SUB          = 9,
+        eBLEND_SRCDEST_5050           = 10,
+        eBLEND_SRCALPHA_ADD_KEEP      = 11,
+        eBLEND_DESTALPHA_ADD_KEEP     = 12,
+        eBLEND_COPYRGB_KEEP           = 13,
+        eBLEND_SRCINVALPHA            = 14,
+        eBLEND_SRCINVALPHA_KEEP       = 15,
+        eBLEND_DESTINVALPHA           = 16,
+        eBLEND_DESTINVALPHA_KEEP      = 17,
+        eBLEND_SRCALPHA_LIGHTMAP      = 18,
+        eBLEND_SRCALPHA_LIGHTMAP_KEEP = 19,
+        eBLEND_ADD_SRCALPHA           = 20,
+        eBLEND_ADD_SRCALPHA_KEEP      = 21,
+        eBLEND_ZWRITE_ONLY            = 22,
+        eBLEND_SRCMINUSDEST           = 23,
+        eBLEND_DESTMINUSSRC           = 24,
+        eBLEND_SRCADDDEST             = 25,
+        eBLEND_LIMIT                  = 26,
+    };
+
+    // ⚠ THIS IS NOT THE GPU'S COMPARISON ORDER, which is exactly why it needs a translation
+    // switch: CreateInternalMaterial's second switch maps each of these onto the Xenos
+    // CompareFunction (NEVER 0, LESS 1, EQUAL 2, LEQUAL 3, GREATER 4, NOTEQUAL 5, GEQUAL 6,
+    // ALWAYS 7), and that translation lands on the right name for all eight -- an independent
+    // confirmation that the state word it builds really is the GPU's alpha-test field.
+    enum eAlphaTestMode
+    {
+        eALPHATEST_NEVER    = 0,
+        eALPHATEST_ALWAYS   = 1,
+        eALPHATEST_LESS     = 2,
+        eALPHATEST_LEQUAL   = 3,
+        eALPHATEST_EQUAL    = 4,
+        eALPHATEST_GEQUAL   = 5,
+        eALPHATEST_GREATER  = 6,
+        eALPHATEST_NOTEQUAL = 7,
+    };
+
+    enum eZTestMode
+    {
+        eZTEST_NEVER   = 0,
+        eZTEST_ALWAYS  = 1,
+        eZTEST_GEQUAL  = 2,
+        eZTEST_GREATER = 3,
+        eZTEST_LEQUAL  = 4,
+        eZTEST_LESS    = 5,
     };
 
     // ParticleMaterial.h:78 -- the configured shader variant.

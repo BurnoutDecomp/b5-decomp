@@ -21,10 +21,12 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleDescriptor.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitter.h"
 #include "pc/gcm/renderengine/renderstates.h"   // renderengine::DepthStencilState / TextureState / MaterialState
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"  // BlendState / BlendStateParameters
 #include "pc/gcm/renderengine/texture.h"          // renderengine::Texture
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"  // shadow::Device::SetState -- the rasteriser third BeginRendering binds
 
-#include <cstdio>   // snprintf (the [texreg] witness)
+#include <cstdio>   // snprintf (the [texreg] / [lionmat] witnesses)
+#include <cstdlib>  // malloc -- CreateInternalMaterial allocates the blend state with it
 
 // D3DDevice_SetTexture -- the platform (Xbox 360 D3D) texture-bind entry point. X360 call:
 // D3DDevice_SetTexture(off_83271608, 0, texture, 0x80000000) -- (device, sampler, texture,
@@ -117,6 +119,137 @@ namespace
     // came through LionBlendRenderer::SetState. It does not. See the header banner in
     // BrnLionBlendRenderer.h.
     const renderengine::RasterizerState* spBeginRasterizerState = 0;   // dword_83010F3C
+
+    // =========================================================================================
+    // THE PACKED BLEND WORD CreateInternalMaterial BUILDS -- Xenos RB_BLENDCONTROL.
+    //
+    // renderengine::BlendMaterialState::maState[0..3] are the four per-render-target
+    // RB_BLENDCONTROL registers (blendstate.h:35); the host applier decodes exactly this split
+    // in D3DDevice_SetBlendState (XenonD3D9Shims.cpp), and the X360's own D3D thunks pack it:
+    //     D3DDevice_SetRenderState_SrcBlend  @0x82938D10   Value & 0x1F         -> [4:0]
+    //     D3DDevice_SetRenderState_BlendOp   @0x82938C20   (32 * Value) & 0xE0  -> [7:5]
+    //     COLOR_DESTBLEND [12:8]   ALPHA_SRCBLEND [20:16]
+    //     ALPHA_COMB_FCN [23:21]   ALPHA_DESTBLEND [28:24]
+    // Those thunks pass the D3D argument through UNTRANSLATED, so the Xbox 360 D3DBLEND
+    // enumeration IS the hardware field, which is what makes the enum below a fact about this
+    // binary rather than a convention borrowed from somewhere else.
+    //
+    // ⛔⛔ THE FIELD POSITIONS ARE THE WHOLE POINT, AND THEY ARE NOT WHAT THE HEX-RAYS
+    // PSEUDOCODE LOOKS LIKE ON A LITTLE-ENDIAN HOST. IDA renders the console's two destination
+    // stores as `BYTE2(v20[0]) = n` and `HIBYTE(v20[0]) = n`, and IDA's defs.h defines
+    // BYTE2(x) as *((_BYTE*)&x + 2) -- a MEMORY offset -- while HIBYTE(x) resolves through
+    // HIGH_IND, which on a big-endian target is offset 0. So on the X360:
+    //     HIBYTE -> memory byte 0 -> value bits [31:24] == ALPHA_DESTBLEND
+    //     BYTE2  -> memory byte 2 -> value bits [15:8]  == COLOR_DESTBLEND
+    // and the asm says exactly that (`stb r30, var_80(r1)` @0x82280D78 for the first,
+    // `stb r31, var_80+2(r1)` @0x82280E08 for the second). Transcribing those macros into
+    // host C++ as &x+2 / &x+3 -- which an earlier draft of this body did -- puts the
+    // DESTINATION COLOUR FACTOR into the ALPHA source lane on a little-endian host and leaves
+    // COLOR_DESTBLEND at whatever the template held. The material's blend mode then cannot
+    // change the destination factor AT ALL: every mode draws with the template's
+    // INV_SRC_ALPHA destination, so eBLEND_SRCALPHA_ADD comes out as an ordinary alpha blend.
+    // That is a silent, invisible discard of the entire switch below.
+    //
+    // The widths are the console's own: the two destination factors are BYTE stores (so they
+    // clear the reserved bits above each 5-bit field as well), the source factors are 5-bit
+    // inserts (`insrwi` / `rlwimi ..., 27, 31`), and the colour blend op is a 3-bit insert.
+    // =========================================================================================
+    enum EXenosBlendFactor
+    {
+        E_XBLEND_ZERO         = 0,
+        E_XBLEND_ONE          = 1,
+        E_XBLEND_SRCCOLOR     = 4,
+        E_XBLEND_INVSRCCOLOR  = 5,
+        E_XBLEND_SRCALPHA     = 6,
+        E_XBLEND_INVSRCALPHA  = 7,
+        E_XBLEND_DESTCOLOR    = 8,
+        E_XBLEND_INVDESTCOLOR = 9,
+        E_XBLEND_DESTALPHA    = 10,
+        E_XBLEND_INVDESTALPHA = 11,
+    };
+
+    enum EXenosBlendOp
+    {
+        E_XBLENDOP_ADD         = 0,
+        E_XBLENDOP_SUBTRACT    = 1,
+        E_XBLENDOP_MIN         = 2,
+        E_XBLENDOP_MAX         = 3,
+        E_XBLENDOP_REVSUBTRACT = 4,
+    };
+
+    // The GPU's zero-based comparison enumeration (the alpha-test switch's OUTPUT; the Lion
+    // material's own eAlphaTestMode is its input and the two orders differ).
+    enum EXenosCompare
+    {
+        E_XCMP_NEVER    = 0,
+        E_XCMP_LESS     = 1,
+        E_XCMP_EQUAL    = 2,
+        E_XCMP_LEQUAL   = 3,
+        E_XCMP_GREATER  = 4,
+        E_XCMP_NOTEQUAL = 5,
+        E_XCMP_GEQUAL   = 6,
+        E_XCMP_ALWAYS   = 7,
+    };
+
+    inline void SetColourSrcFactor(u32& aruWord, u32 auFactor)      // insrwi/rlwimi 5,27
+    {
+        aruWord = (aruWord & ~0x0000001Fu) | (auFactor & 0x1Fu);
+    }
+
+    inline void SetColourBlendOp(u32& aruWord, u32 auOp)            // rlwimi ..., 7, 24, 26
+    {
+        aruWord = (aruWord & ~0x000000E0u) | ((auOp << 5) & 0xE0u);
+    }
+
+    inline void SetColourDstFactorByte(u32& aruWord, u32 auFactor)  // stb <state>+2  (BE byte 2)
+    {
+        aruWord = (aruWord & ~0x0000FF00u) | ((auFactor & 0xFFu) << 8);
+    }
+
+    inline void SetAlphaSrcFactorAndOp(u32& aruWord, u32 auFactor, u32 auOp)
+    {
+        aruWord = (aruWord & ~0x00FF0000u)
+                | ((auFactor & 0x1Fu) << 16) | ((auOp & 0x07u) << 21);
+    }
+
+    inline void SetAlphaDstFactorByte(u32& aruWord, u32 auFactor)   // stb <state>+0  (BE byte 0)
+    {
+        aruWord = (aruWord & ~0xFF000000u) | ((auFactor & 0xFFu) << 24);
+    }
+
+    // The BlendStateParameters block the console default-constructs on the stack before it
+    // reads the shared template. Every value is from the X360 prologue @0x82280CA4..0x82280D14.
+    // ⭐ IT IS ALSO, EXACTLY, THE TEMPLATE. dword_83010F20 is built by
+    // ImRendererBase::ConstructOnceOnly @0x827F1C20 as ConstructBlendState(alloc, 6, 7, 0), and
+    // that builder's own word is (6 & 0x1F) | (32*((7*8) & 0x7F8)) & 0xFFE0 | 0x07060000 ==
+    // 0x07060706 with the same colour-write / alpha-func / blend-factor tail
+    // (CgsImRendererBlendState.cpp). So the GetParameters read below overwrites this block with
+    // its own contents, which is why skipping it when the state library is unbuilt is provably
+    // inert rather than a silent default.
+    const u32 KU_TEMPLATE_BLEND_WORD = 0x07060706u;   // SRC_ALPHA / INV_SRC_ALPHA, add, both halves
+
+    void DefaultConstructBlendParameters(renderengine::BlendStateParameters& arParams)
+    {
+        arParams.maBlendFactor[0] = KU_TEMPLATE_BLEND_WORD;
+        arParams.maBlendFactor[1] = KU_TEMPLATE_BLEND_WORD;
+        arParams.maBlendFactor[2] = KU_TEMPLATE_BLEND_WORD;
+        arParams.maBlendFactor[3] = KU_TEMPLATE_BLEND_WORD;
+        arParams.muState15 = E_XCMP_ALWAYS;   // AlphaFunc
+        arParams.muState4  = 15u;             // ColorWriteEnable  (all four channels)
+        arParams.muState5  = 15u;
+        arParams.muState6  = 15u;
+        arParams.muState7  = 15u;
+        arParams.muState8  = 135u;            // AlphaToMaskOffsets
+        arParams.muState17 = 0u;              // AlphaRef
+        arParams.muState9  = 0xFFFFFFFFu;     // BlendFactor
+        arParams.mbHasCustomBlendFactors = 0u;
+        arParams.mbState10 = 0u;
+        arParams.mbState11 = 0u;
+        arParams.mbState12 = 0u;
+        arParams.mbState13 = 0u;
+        arParams.mbState14 = 0u;
+        arParams.mbState16 = 0u;              // AlphaTestEnable
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -167,6 +300,230 @@ U32 LionParticleRender::GetMaterialHandle(U32 auMaterialHash)
             return auMaterialHash;
     }
     return 0;
+}
+
+// ----------------------------------------------------------------------------
+// LionParticleRender::CreateInternalMaterial (X360 0x82280C30, 244 instructions)
+//
+// Build the per-material blend state -- the object LionParticleRender::SetMaterial binds
+// through LionBlendRenderer::SetState -- and append {hash, state} to the process-wide
+// internal-material table. The console's own assert strings put this body in THIS file
+// (LionParticleRender.cpp:530 / :534 / :539 / :687), which is why it lives here and not in the
+// orphan LionParticleRenderMaterial.cpp this replaces.
+//
+// ⛔⛔ WHY THE ORPHAN HAD TO GO RATHER THAN BE MOUNTED. That file declared
+// `extern BlendStateMapEntry saBlendStates[256]` at GLOBAL scope while this TU owns
+// saBlendStates / siMaterialCount in an ANONYMOUS namespace. Mounting it would have linked --
+// against a DIFFERENT object. CreateInternalMaterial would have filled a table SetMaterial
+// never reads, every material would still have bound no blend state, and the compile gate, the
+// link and the parity check would all have been green. The table and its only two writers
+// belong in one TU because the console keeps them in one TU.
+//
+// ⭐ WHAT IT DOES, IN THE CONSOLE'S ORDER:
+//   1. hash the material's four render-state bytes (HashMaterial, +0x3A..+0x3D);
+//   2. default-construct a BlendStateParameters, then read the shared template over it;
+//   3. force COLOR_COMB_FCN = add and the ALPHA half to ONE / add / INV_SRC_ALPHA, enable the
+//      alpha test at GREATER with reference 1, and mark the factors custom;
+//   4. switch on mBlendMode (+0x3A) to set the two COLOUR factors and, for the two _SUB modes,
+//      the colour blend op;
+//   5. if the material's ALPHA_TEST_ENABLE flag (+0x24 bit 2) is set, override the alpha-test
+//      function from mAlphaTestMode (+0x3B) and the reference from mAlphaTestValue (+0x3C);
+//   6. size, allocate and initialise the BlendState, and append it under the hash.
+//
+// ⚠ STEP 3 IS UNCONDITIONAL, INCLUDING THE ALPHA TEST. Every particle material this build
+// creates draws with ALPHATESTENABLE on, ALPHAFUNC GREATER and ALPHAREF 1 unless its own
+// ALPHA_TEST_ENABLE flag replaces the function and the reference -- the flag does not turn the
+// test ON, it takes the test OVER. asm 0x82280D64 (`stb r10, var_4A`, AlphaTestEnable),
+// 0x82280D6C (`stw r6, var_70`, AlphaFunc = 4) and 0x82280D80 (`stw r10, var_58`, AlphaRef = 1)
+// all sit ahead of the switch, and the flag arm at 0x82280EE8 re-stores the same enable byte.
+// ----------------------------------------------------------------------------
+U32 LionParticleRender::CreateInternalMaterial(const cParticleMaterial* apMaterial)
+{
+    CGS_ASSERT(apMaterial != 0, "apMaterial != NULL");
+
+    const U32 luMaterialHash = HashMaterial(apMaterial);
+    CGS_ASSERT(luMaterialHash != 0, "luMaterialHash != 0");
+
+    renderengine::BlendStateParameters lParams;
+    DefaultConstructBlendParameters(lParams);
+
+    CGS_ASSERT(mpRenderer != 0, "mpRenderer != NULL");
+
+    // asm 0x82280D38..0x82280D44. The template is ImRendererBase's shared alpha-blend state.
+    // ⚠ FLAG PC-platform: the state library is not built on this backend
+    // (ImRendererBase::ConstructOnceOnly is an empty PC leaf, ImmediateModePCLeaf.cpp), so this
+    // word reads null and the console's unconditional read would fault. Skipping it is provably
+    // inert and NOT a default-shaped guess: ConstructBlendState(6, 7, 0) produces byte for byte
+    // the block DefaultConstructBlendParameters just wrote (the derivation is over that
+    // function). DELETE-WHEN a caller fills the render-state library.
+    if (dword_83010F20 != 0)
+    {
+        renderengine::BlendState::GetParameters(dword_83010F20, &lParams);
+    }
+
+    // asm 0x82280D4C..0x82280D90 -- the fixed part, ahead of the switch.
+    u32& lruBlend = lParams.maBlendFactor[0];
+    lParams.mbState16 = 1u;                                   // AlphaTestEnable
+    lParams.muState15 = E_XCMP_GREATER;                       // AlphaFunc
+    lParams.muState17 = 1u;                                   // AlphaRef
+    lParams.mbHasCustomBlendFactors = 1u;
+    SetColourBlendOp(lruBlend, E_XBLENDOP_ADD);               // rlwinm ..., 27, 23
+    SetAlphaDstFactorByte(lruBlend, E_XBLEND_INVSRCALPHA);    // stb r30(=7), var_80
+    SetAlphaSrcFactorAndOp(lruBlend, E_XBLEND_ONE, E_XBLENDOP_ADD);   // rlwinm + insrwi 5,11
+
+    // asm 0x82280D94..0x82280ECC -- the twenty-case blend-mode switch. The case groupings are
+    // the jump table at 0x82280DB0 read out of the image, not IDA's rendering of it: the
+    // "_KEEP" variant of every mode shares its base mode's arm, and eBLEND_SRCDEST_5050 really
+    // does share eBLEND_COPYRGB's (jump-table slot 10 == 0x82280E00), so a 50/50 blend draws
+    // opaque on this build. Modes 20..25 are above the `cmplwi r9, 0x13` bound and fall through
+    // unchanged, as does eBLEND_COPYALPHA, which has no arm of its own.
+    switch (apMaterial->mBlendMode)
+    {
+    case cParticleMaterial::eBLEND_COPYRGB:                    // 0
+    case cParticleMaterial::eBLEND_SRCDEST_5050:               // 10
+    case cParticleMaterial::eBLEND_COPYRGB_KEEP:               // 13
+        SetColourSrcFactor(lruBlend, E_XBLEND_ONE);
+        SetColourDstFactorByte(lruBlend, E_XBLEND_ZERO);
+        break;
+
+    case cParticleMaterial::eBLEND_SRCALPHA:                   // 1
+    case cParticleMaterial::eBLEND_SRCALPHA_KEEP:              // 2
+        SetColourSrcFactor(lruBlend, E_XBLEND_SRCALPHA);
+        SetColourDstFactorByte(lruBlend, E_XBLEND_INVSRCALPHA);
+        break;
+
+    case cParticleMaterial::eBLEND_DESTALPHA:                  // 4
+    case cParticleMaterial::eBLEND_DESTALPHA_KEEP:             // 5
+        SetColourSrcFactor(lruBlend, E_XBLEND_DESTALPHA);
+        SetColourDstFactorByte(lruBlend, E_XBLEND_INVDESTALPHA);
+        break;
+
+    case cParticleMaterial::eBLEND_SRCALPHA_ADD:               // 6   -- THE ADDITIVE ONE
+    case cParticleMaterial::eBLEND_SRCALPHA_ADD_KEEP:          // 11
+        SetColourSrcFactor(lruBlend, E_XBLEND_SRCALPHA);
+        SetColourDstFactorByte(lruBlend, E_XBLEND_ONE);
+        // asm 0x82280E3C/0x82280E44 -- and the ALPHA half goes ZERO / add / ONE with it.
+        SetAlphaDstFactorByte(lruBlend, E_XBLEND_ONE);
+        SetAlphaSrcFactorAndOp(lruBlend, E_XBLEND_ZERO, E_XBLENDOP_ADD);
+        break;
+
+    case cParticleMaterial::eBLEND_DESTALPHA_ADD:              // 7
+    case cParticleMaterial::eBLEND_DESTALPHA_ADD_KEEP:         // 12
+        SetColourSrcFactor(lruBlend, E_XBLEND_DESTALPHA);
+        SetColourDstFactorByte(lruBlend, E_XBLEND_ONE);
+        break;
+
+    case cParticleMaterial::eBLEND_SRCALPHA_SUB:               // 8
+        SetColourSrcFactor(lruBlend, E_XBLEND_SRCALPHA);
+        SetColourDstFactorByte(lruBlend, E_XBLEND_ONE);
+        SetColourBlendOp(lruBlend, E_XBLENDOP_REVSUBTRACT);
+        break;
+
+    case cParticleMaterial::eBLEND_DESTALPHA_SUB:              // 9
+        SetColourSrcFactor(lruBlend, E_XBLEND_DESTALPHA);
+        SetColourDstFactorByte(lruBlend, E_XBLEND_INVDESTALPHA);
+        SetColourBlendOp(lruBlend, E_XBLENDOP_REVSUBTRACT);
+        break;
+
+    case cParticleMaterial::eBLEND_SRCINVALPHA:                // 14
+    case cParticleMaterial::eBLEND_SRCINVALPHA_KEEP:           // 15
+        SetColourSrcFactor(lruBlend, E_XBLEND_INVSRCALPHA);
+        SetColourDstFactorByte(lruBlend, E_XBLEND_SRCALPHA);
+        break;
+
+    case cParticleMaterial::eBLEND_DESTINVALPHA:               // 16
+    case cParticleMaterial::eBLEND_DESTINVALPHA_KEEP:          // 17
+        SetColourSrcFactor(lruBlend, E_XBLEND_INVDESTALPHA);
+        SetColourDstFactorByte(lruBlend, E_XBLEND_DESTALPHA);
+        break;
+
+    case cParticleMaterial::eBLEND_SRCALPHA_LIGHTMAP:          // 18
+    case cParticleMaterial::eBLEND_SRCALPHA_LIGHTMAP_KEEP:     // 19
+        SetColourSrcFactor(lruBlend, E_XBLEND_SRCCOLOR);
+        SetColourDstFactorByte(lruBlend, E_XBLEND_DESTCOLOR);
+        break;
+
+    default:
+        break;
+    }
+
+    // asm 0x82280ED0..0x82280F6C -- the alpha-test override. The Lion authoring enum and the
+    // GPU's comparison enum are in different orders, which is what this switch is for.
+    if ((apMaterial->mFlags & cParticleMaterial::eFLAG_ALPHA_TEST_ENABLE) != 0u)
+    {
+        lParams.muState17 = static_cast<u32>(apMaterial->mAlphaTestValue);   // AlphaRef
+        lParams.mbState16 = 1u;                                             // AlphaTestEnable
+        switch (apMaterial->mAlphaTestMode)
+        {
+        case cParticleMaterial::eALPHATEST_NEVER:    lParams.muState15 = E_XCMP_NEVER;    break;
+        case cParticleMaterial::eALPHATEST_ALWAYS:   lParams.muState15 = E_XCMP_ALWAYS;   break;
+        case cParticleMaterial::eALPHATEST_LESS:     lParams.muState15 = E_XCMP_LESS;     break;
+        case cParticleMaterial::eALPHATEST_LEQUAL:   lParams.muState15 = E_XCMP_LEQUAL;   break;
+        case cParticleMaterial::eALPHATEST_EQUAL:    lParams.muState15 = E_XCMP_EQUAL;    break;
+        case cParticleMaterial::eALPHATEST_GEQUAL:   lParams.muState15 = E_XCMP_GEQUAL;   break;
+        case cParticleMaterial::eALPHATEST_GREATER:  lParams.muState15 = E_XCMP_GREATER;  break;
+        case cParticleMaterial::eALPHATEST_NOTEQUAL: lParams.muState15 = E_XCMP_NOTEQUAL; break;
+        default: break;
+        }
+    }
+
+    // asm 0x82280F70..0x82280FAC -- size it, allocate it, initialise it. The console's
+    // five-slot handle array is the rw resource-handle block BlendState::Initialize reads
+    // slot 0 of; the descriptor is a fixed { 0x4C, 4 }.
+    renderengine::ResourceDescriptorEntry laDescriptor[5];
+    renderengine::BlendState::GetResourceDescriptor(laDescriptor, &lParams);
+
+    renderengine::BlendMaterialState* lapStateHandles[5] = { 0, 0, 0, 0, 0 };
+    lapStateHandles[0] = static_cast<renderengine::BlendMaterialState*>(
+        malloc(laDescriptor[0].muSize));
+    BrnGraphics::BlendState* const lpBlendState = static_cast<BrnGraphics::BlendState*>(
+        renderengine::BlendState::Initialize(lapStateHandles, &lParams));
+
+    // asm 0x82280FB0..0x8228105C -- append under the hash. The console packs the pair into one
+    // 64-bit store (`stdx r8, r9, r10` with the hash in the high word and the pointer in the
+    // low word); the two named members are that pair.
+    CGS_ASSERT(siMaterialCount < 256, "Out of space for more blend states");
+    if (siMaterialCount < 256)
+    {
+        saBlendStates[siMaterialCount].muHash       = luMaterialHash;
+        saBlendStates[siMaterialCount].mpBlendState = lpBlendState;
+        ++siMaterialCount;
+    }
+
+    // ---- [lionmat] witness. NOT console behaviour: ours, bounded (one line per DISTINCT
+    // material render state -- this build's material set produces a handful), log-only.
+    // It prints the number the "washed out" complaint is actually about, so a claim about the
+    // blend can be checked against the state that was built rather than against a screenshot.
+    {
+        static const char* const KAPC_BLEND_MODE_NAMES[26] =
+        {
+            "COPYRGB", "SRCALPHA", "SRCALPHA_KEEP", "COPYALPHA", "DESTALPHA",
+            "DESTALPHA_KEEP", "SRCALPHA_ADD", "DESTALPHA_ADD", "SRCALPHA_SUB",
+            "DESTALPHA_SUB", "SRCDEST_5050", "SRCALPHA_ADD_KEEP", "DESTALPHA_ADD_KEEP",
+            "COPYRGB_KEEP", "SRCINVALPHA", "SRCINVALPHA_KEEP", "DESTINVALPHA",
+            "DESTINVALPHA_KEEP", "SRCALPHA_LIGHTMAP", "SRCALPHA_LIGHTMAP_KEEP",
+            "ADD_SRCALPHA", "ADD_SRCALPHA_KEEP", "ZWRITE_ONLY", "SRCMINUSDEST",
+            "DESTMINUSSRC", "SRCADDDEST"
+        };
+        const u32 luMode = apMaterial->mBlendMode;
+        char lacMsg[288];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+            "[lionmat] #%d hash=%08X mode=%u(%s) rb_blendcontrol=%08X"
+            " colour src=%u dst=%u op=%u  alpha src=%u dst=%u op=%u"
+            "  alphatest=%u func=%u ref=%u ztest=%u\n",
+            (int)siMaterialCount - 1, (unsigned)luMaterialHash, (unsigned)luMode,
+            (luMode < 26u) ? KAPC_BLEND_MODE_NAMES[luMode] : "?",
+            (unsigned)lruBlend,
+            (unsigned)(lruBlend & 0x1Fu), (unsigned)((lruBlend >> 8) & 0x1Fu),
+            (unsigned)((lruBlend >> 5) & 0x7u),
+            (unsigned)((lruBlend >> 16) & 0x1Fu), (unsigned)((lruBlend >> 24) & 0x1Fu),
+            (unsigned)((lruBlend >> 21) & 0x7u),
+            (unsigned)lParams.mbState16, (unsigned)lParams.muState15,
+            (unsigned)lParams.muState17, (unsigned)apMaterial->mZTestMode);
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
+
+    return luMaterialHash;
 }
 
 // ----------------------------------------------------------------------------

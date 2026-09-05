@@ -1263,11 +1263,8 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
 // ⚠ STILL OPEN ON THE DRAW SIDE ITSELF, both stated rather than hidden:
 //   * cParticleRender::EmitterCubeRender @0x82913C80 (448) -- the CELL_RENDER camera-anchored
 //     volume. A named one-shot log, NOT a trap, because Render routes to it before any cull.
-//   * LionParticleRender::CreateInternalMaterial @0x82280C30 (244) -- the per-material blend
-//     state. ⭐ ITS BODY IS ALREADY WRITTEN, in LionParticleRenderMaterial.cpp, which is simply
-//     NOT MOUNTED in tools/build/build_game_exe.bat; mounting it needs saBlendStates /
-//     siMaterialCount / off_82000D00 / off_82000D08 homed, since LionParticleRender.cpp keeps
-//     its own copies of the first two in an anonymous namespace.
+//   (LionParticleRender::CreateInternalMaterial @0x82280C30 (244) -- the per-material blend
+//    state -- came off this list on 2026-09-05; it is bodied in LionParticleRender.cpp.)
 //
 // ⛔ A NOTE FOR ANYONE QUERYING THE TREE FOR THIS SUBSYSTEM: tools/re/hasbody.py reports a
 // Render* shape as HAS BODY whether or not it is written, because a trap IS a definition. It
@@ -1320,56 +1317,24 @@ namespace BrnGraphics
 }
 
 // =================================================================================================
-// ONE more Lion-render-path symbol, homed here beside the blend renderer rather than pulling
-// another TU onto the build list.
+// ⭐⭐ CreateInternalMaterial IS NO LONGER HOMED HERE, AND THAT IS THE POINT (2026-09-05).
 //
-//   * LionParticleRender::CreateInternalMaterial @0x82280C30 (LionParticleRenderMaterial.cpp) --
-//     reached from LionParticleRender::TextureRegister and ::SetMaterial.
+// BrnParticle::LionParticleRender::CreateInternalMaterial @0x82280C30 used to sit below this
+// banner as a one-shot "NOT RECONSTRUCTED" announcement returning 0, on the stated grounds that
+// the real pass over renderengine::BlendState was out of slice. It has one now, and it is in
+// LionParticleRender.cpp -- the file the console's own four assert strings name
+// (LionParticleRender.cpp:530 / :534 / :539 / :687), beside the saBlendStates table it fills and
+// the SetMaterial that reads it.
 //
-// ⛔ IT IS NO LONGER UNREACHABLE, AND THAT IS WHY IT IS NO LONGER AN ASSERT. As of the Lion
-// install landing, ParticleModule::Prepare calls cLionFX::Init, so gpLionParticleRender is
-// non-null and cParticleMaterial::Build @0x8290E500 calls TextureRegister for EVERY material in
-// every .lef in PARTICLES.BUNDLE -- which reaches here once per material. A CGS_ASSERT(false)
-// there is an assert storm: this project has measured a run drowned by 839,983 of them, and an
-// assert storm starves the harness so badly that the failure is reported as the game's.
-//
-// So it is a ONE-SHOT NAMED ANNOUNCEMENT instead, never a silent zero. What is actually missing:
-// the console body builds a renderengine::BlendStateParameters from the material's blend mode
-// (a 20-case switch over material +0x3A writing packed bitfields, plus a second 8-case switch
-// over +0x3B when material flag 4 is set), calls BlendState::GetResourceDescriptor +
-// BlendState::Initialize, and appends {materialHash, blendState} to the process-wide table at
-// qword_82FAAD80 (capacity 256, "Out of space for more blend states" at
-// LionParticleRender.cpp:687). That is a self-contained pass over renderengine::BlendState and
-// is deliberately out of this wave's slice.
-//
-// WHAT RETURNING 0 COSTS, EXACTLY: cParticleMaterial::mMaterialHandle stays 0, so
-// LionParticleRender::SetMaterial cannot bind a per-material blend state. It does NOT cost the
-// texture: TextureRegister's other half -- SetTextureMapHandle / SetNormalMapHandle from the
-// name hashes -- runs normally, and that is what FindTexture resolves against.
-//
-// ⭐ THE OTHER TWO STAND-INS ARE GONE (2026-09-03). cParticleMaterial::SetTextureMapHandle /
-// SetNormalMapHandle used to be trap stand-ins here as well, because their real TU --
-// ParticleMaterial.cpp, which has both real bodies (@0x82909DD8 / @0x82909DE0) -- "would drag
-// four further un-homed Lion SDK symbols (cLionSerialiser::StringStore, gpLionParticleRender,
-// gLionParticleMaterialTokenTable and the unnamed rodata off_82000D08)". All four are now
-// homed, ParticleMaterial.cpp is mounted, and the duplicate definitions here were an LNK2005 the
-// moment it was -- which is how they were found. A stand-in that outlives its reason is a fork
-// waiting to happen.
+// ⛔⛔ AND IT IS NOT IN LionParticleRenderMaterial.cpp EITHER, WHICH IS NOW DELETED. That file
+// held a complete-looking body that was never on any build list, and the note here used to say
+// mounting it was the whole job. Mounting it would have been WORSE than leaving it out: it
+// declared `extern BlendStateMapEntry saBlendStates[256]` at global scope while
+// LionParticleRender.cpp owns saBlendStates and siMaterialCount in an anonymous namespace, so
+// the two halves would have linked cleanly against two DIFFERENT tables -- the writer filling
+// one, the reader walking the other, every material still binding nothing, and the compile gate,
+// the link and the structural parity check all green. It also transcribed IDA's BYTE2 macro as
+// a host `&x + 2`, which on a little-endian host writes the ALPHA source lane where the console
+// writes COLOR_DESTBLEND (see the field note in LionParticleRender.cpp) -- so even against the
+// right table it could not have changed a destination blend factor.
 // =================================================================================================
-namespace BrnParticle
-{
-    U32 LionParticleRender::CreateInternalMaterial(const cParticleMaterial* /*apMaterial*/)
-    {
-        static bool sbLogged = false;
-        if (!sbLogged)
-        {
-            sbLogged = true;
-            CgsDev::Log::WriteToLog(
-                "[effects] NOT RECONSTRUCTED: BrnParticle::LionParticleRender::"
-                "CreateInternalMaterial @0x82280C30 (the renderengine::BlendState build + the "
-                "256-entry internal-material table). Every material gets mMaterialHandle 0, so no "
-                "per-material blend state is bound; the texture-map/normal-map handles ARE set.\n");
-        }
-        return 0;
-    }
-}
