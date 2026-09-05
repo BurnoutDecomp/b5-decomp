@@ -26,13 +26,31 @@
 #include "GameSource/Effects/Particles/Native/BrnLionBlendIm3d.h"   // BrnGraphics::Im3dBlend
 
 #include <cstring>   // memcpy -- the staged shader-constant copies (console lvx128/stvx128)
+#include <cstdio>    // [diag] snprintf (the eight-handle resolve line in Construct)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::WriteToLog
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
+
+// The four re-authored PC program images (pc/gcm/renderengine/LionBlendProgramsPC.cpp -- the PC
+// stand-in for the four guest Xenos microcode blobs Im3dBlend::Construct hands to
+// ImRenderer<LionBlendVertex>::Construct; see that file's recipe). Declared the same way
+// BrnIm3dSkidsRenderer.cpp declares the skid pair.
+namespace renderengine
+{
+    extern const u8  gauLionBlendVertexProgramPC[];
+    extern const u32 guLionBlendVertexProgramPCSize;
+    extern const u8  gauLionBlendPixelProgramPC[];
+    extern const u32 guLionBlendPixelProgramPCSize;
+    extern const u8  gauLionBlendZFadeVertexProgramPC[];
+    extern const u32 guLionBlendZFadeVertexProgramPCSize;
+    extern const u8  gauLionBlendZFadePixelProgramPC[];
+    extern const u32 guLionBlendZFadePixelProgramPCSize;
+}
 
 // renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- the same minimal extern
 // surface BrnIm3dSkidsRenderer.cpp / BrnIm3d.cpp / BrnPostFxBloom.cpp declare (defined in
@@ -139,6 +157,41 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
                "Adding too many shader programs to the immediate mode renderer");
 
+    // ---- [PC-platform leaf] adopt a pre-built PC ShaderProgramBuffer image ----------------------
+    // ⭐⭐ THE SAME MISSING ARM THE SKID PATH HAD, AND MEASURED THE SAME WAY. The console route
+    // below (GetResourceDescriptor -> allocator Create -> Initialize) cannot run on the PC
+    // backend: both renderengine::ProgramBuffer bodies call XGGetMicrocodeShaderParts, whose PC
+    // stub returns 0 WITHOUT writing *lpParts, then read that uninitialised
+    // ProgramMicrocodeParts for the microcode size and hand a 64-bit function pointer truncated
+    // into the u32 muFunction to Xbox2CreateConstantTable. CgsIm3dSkyDome.cpp and
+    // BrnSkidVertex.cpp both carry this adopt path; this TU was left on the console route.
+    //
+    // MEASURED, on the first run that reached the new Im3dBlend::Construct: the descriptor built
+    // fine ("[ImLeaf] vertex descriptor built: elements=3 stride0=36 decl=ok") but NO
+    // "[ImLeaf] adopted PC program buffer" line followed, and Construct reported
+    //     [lionblend] p0{wvp=0 cs=0} p1{wvp=0 cs=0 off=0 scl=0 dconv=0 dfade=0}
+    // -- all eight handles with mu8RegisterCount == 0. The PC leaf's BeginShaderStates routes a
+    // zero-count handle to a DISCARD row, so worldViewProj and colourScale would never have been
+    // uploaded and every particle would have been transformed by whatever c0..c3 the previous
+    // draw left behind. LionBlendProgramsPC.cpp's four images are not at fault -- their
+    // tables declare 2 / 1 / 4 / 4 variables. Nothing was adopting them.
+    //
+    // A non-PC binary returns null here and falls through to the console path unchanged.
+    if (renderengine::ProgramBufferData* lpAdoptedVertex =
+            renderengine::ProgramBufferPC_Adopt(lpVertexProgramBinary, luVertexProgramSize, 0u))
+    {
+        renderengine::ProgramBufferData* const lpAdoptedPixel =
+            renderengine::ProgramBufferPC_Adopt(lpPixelProgramBinary, luPixelProgramSize, 1u);
+        if (lpAdoptedPixel != nullptr)
+        {
+            mapVertexProgramBuffer[li8ProgramIndex] =
+                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedVertex);
+            mapPixelProgramBuffer[li8ProgramIndex] =
+                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedPixel);
+            return li8ProgramIndex;
+        }
+    }
+
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
 
     // ---- vertex program (muFunction = binary, muReserved8 = size, muShaderType = 0 -> vertex) ----
@@ -244,8 +297,8 @@ void ImRenderer<V>::BeginRendering(s8 li8Program)
 // ImRenderer<LionBlendVertex>::Construct  @ 0x8228E890
 // One-time-construct the shared render-state library (ImRendererBase::ConstructOnceOnly, guarded by a
 // module flag), build this renderer's Lion-blend vertex descriptor (THREE elements: element[0] and
-// element[2] share type-word 0x1A23A6 at in-stream offsets 0 / 20 with usage indices 1 / 6; element[1]
-// is type-word 0x14C86 at offset 16 with usage index 4), clear the program tables, then upload each of
+// element[2] share type-word 0x1A23A6 at in-stream offsets 0 / 20 with ELEMENT TYPES 1 / 6; element[1]
+// is type-word 0x14C86 at offset 16 with element type 4), clear the program tables, then upload each of
 // li8NumberPrograms vertex/pixel program pairs via AddProgram.
 //
 // The three element offsets (0 / 16 / 20) match the DWARF-attested LionBlendVertex layout (position
@@ -270,32 +323,38 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
         sbStateLibraryConstructed = true;
     }
 
-    // Build the Lion-blend vertex descriptor (the X360 inlines the descriptor fill). The asm only
-    // stores stream/pad0/miOffset/usageIndex per element; type/pad1/usage stay zero from the ctor.
+    // Build the Lion-blend vertex descriptor (the X360 inlines the descriptor fill).
+    //
+    // ⭐⭐ THE ASM STORES EXACTLY FOUR LANES PER ELEMENT, AND THE THREE IT LEAVES ALONE ARE THE
+    // POINT. Walk 0x8228E8E0..0x8228E93C: `sth` to element+0 (stream) and element+2 (in-stream
+    // offset), `stw` to element+4 (the format word), `stb` to element+0x0B (the element TYPE) --
+    // and nothing at all to +0x08/+0x09/+0x0A. Those three are the METHOD / USAGE / USAGE-INDEX
+    // lanes, and VertexDescriptor::Parameters::Parameters @0x82276870 seeds them 0 / 0xFF / 0xFF.
+    // 0xFF is the "take the default for this element type" sentinel VertexDescriptor::Initialize
+    // reads (`lbz r11, 2(r7)` -> gauVertexFormatDefaults[type*2 (+1)]), which is what turns
+    // element types 1 / 4 / 6 into POSITION0 / COLOR0 / TEXCOORD0.
+    //
+    // ⛔ THIS FILE USED TO WRITE 0 INTO ALL THREE. That is not a no-op: it replaces both
+    // sentinels with a real value, so every one of the three elements would have declared
+    // D3DDECLUSAGE_POSITION index 0 -- three positions, no colour, no uv. It is the same defect
+    // ImmediateModePCLeaf.cpp records for the post-fx composite quad ("drew NOTHING with
+    // hr == S_OK"), and the working sibling (BrnSkidVertex.cpp's ImRenderer<SkidVertex>::
+    // Construct) writes only the four attested lanes. Do not re-add them.
     renderengine::VertexDescriptor::Parameters lParameters;
     lParameters.maElements[0].mu16Stream    = 0;
-    lParameters.maElements[0].mu16Pad0      = 0;
+    lParameters.maElements[0].mu16Pad0      = 0;                                  // in-stream offset 0
     lParameters.maElements[0].miOffset      = static_cast<s32>(KU_ELEMENT_WORD_A);
-    lParameters.maElements[0].mu8Type       = 0;
-    lParameters.maElements[0].mu8Pad1       = 0;
-    lParameters.maElements[0].mu8Usage      = 0;
-    lParameters.maElements[0].mu8UsageIndex = 1;
+    lParameters.maElements[0].mu8UsageIndex = 1;                                  // element type 1 -> POSITION0
 
     lParameters.maElements[1].mu16Stream    = 0;
     lParameters.maElements[1].mu16Pad0      = KU_ELEMENT1_OFFSET;
     lParameters.maElements[1].miOffset      = static_cast<s32>(KU_ELEMENT_WORD_B);
-    lParameters.maElements[1].mu8Type       = 0;
-    lParameters.maElements[1].mu8Pad1       = 0;
-    lParameters.maElements[1].mu8Usage      = 0;
-    lParameters.maElements[1].mu8UsageIndex = 4;
+    lParameters.maElements[1].mu8UsageIndex = 4;                                  // element type 4 -> COLOR0
 
     lParameters.maElements[2].mu16Stream    = 0;
     lParameters.maElements[2].mu16Pad0      = KU_ELEMENT2_OFFSET;
     lParameters.maElements[2].miOffset      = static_cast<s32>(KU_ELEMENT_WORD_A);
-    lParameters.maElements[2].mu8Type       = 0;
-    lParameters.maElements[2].mu8Pad1       = 0;
-    lParameters.maElements[2].mu8Usage      = 0;
-    lParameters.maElements[2].mu8UsageIndex = 6;
+    lParameters.maElements[2].mu8UsageIndex = 6;                                  // element type 6 -> TEXCOORD0
 
     u8 lauDescriptor[144] = {};
     renderengine::VertexDescriptor::GetResourceDescriptor(lauDescriptor, &lParameters);
@@ -437,6 +496,158 @@ namespace
         {
             memcpy(lpCursor, lpSource, luBytes);
         }
+    }
+}
+
+// =================================================================================================
+// BrnGraphics::Im3dBlend::Construct  @ 0x8229B260   (DWARF BrnLionBlendIm3d.h:58)
+//
+// Build the two-program Lion-blend immediate-mode renderer and resolve the eight named shader
+// constants against it. This is the function that had never run: with it absent, no Lion program
+// pair was ever uploaded, so the three draw halves' vertices had nothing to be drawn WITH.
+//
+// THE SHAPE, straight off the asm:
+//   words  3..37  store four 16-byte rows at `this + 0x80` == mCurrentTransform. The four source
+//                 addresses are w::math::vpu::detail::gIVector (0x82181500) and the three that
+//                 follow it at 0x82181510 / 0x82181520 / 0x82181530; read out of the image they
+//                 are (1,0,0,0) / (0,1,0,0) / (0,0,1,0) / (0,0,0,1) -- the identity. Nothing is
+//                 inferred: `lis r10, gIVector@ha` + `lvx128 v0, r0, r10` + `stvx128 v0, r0, r11`
+//                 with r11 = r31 + 0x80, then the same triple at +0x10 / +0x20 / +0x30.
+//   words 13..44  fill FOUR parallel two-entry stack arrays and call
+//                 ImRenderer<LionBlendVertex>::Construct(allocator, r5, r6, r7, r8, r9=2):
+//                     r5 -> var_C0 { unk_8200DD58, unk_8200E010 }   vertex binaries
+//                     r6 -> var_A0 { 0x1A4,        0x220        }   vertex sizes
+//                     r7 -> var_80 { unk_8200DF00, unk_8200E230 }   pixel binaries
+//                     r8 -> var_60 { 0x10C,        0x1F8        }   pixel sizes
+//                 (the three `addi r27/r26/r25, r10, unk_8200XXXX - unk_8200E230` are pointer
+//                 arithmetic off the ONE `lis/addi` of unk_8200E230 the compiler materialised.)
+//                 Slot 0 is "LionBlended", slot 1 "LionBlendedZFade" -- which is which is fixed
+//                 by BeginRendering @0x82282060: its ZFade arm binds slot 1 and pushes gOffset /
+//                 gScale / gDepthConversion / gDepthFadeConstants, and only the SECOND pair's
+//                 constant tables carry those four names.
+//   words 45..112 the eight GetVariableHandleByName resolves, each preceded by the console's own
+//                 CgsImRenderer.h:570 / :554 null assert on the program buffer it is about to
+//                 read. The X360 re-tests the pointer before every single lookup; hoisted to one
+//                 test per program buffer here, exactly as the skid sibling does.
+//
+// The four PC program images are pc/gcm/renderengine/LionBlendProgramsPC.cpp -- the four guest
+// Xenos packages re-authored as D3D9 from their own disassembly. Their constant tables pin the
+// same registers the console's do, which is what makes these eight lookups resolve.
+// =================================================================================================
+
+void Im3dBlend::Construct(rw::IResourceAllocator* lpAllocator)
+{
+    // asm words 3..37 -- mCurrentTransform = identity. (mauTransform is the committed
+    // ImRenderer<V> alias for Im3dBase<V>::mCurrentTransform at the console's +0x80; see the
+    // "ONE CONSOLE WORD, TWO HOST HOMES" flag at the head of BrnLionBlendIm3d.h.)
+    static const f32 KAF_IDENTITY[16] =
+    {
+        1.0f, 0.0f, 0.0f, 0.0f,   // w::math::vpu::detail::gIVector @0x82181500
+        0.0f, 1.0f, 0.0f, 0.0f,   // 0x82181510
+        0.0f, 0.0f, 1.0f, 0.0f,   // 0x82181520
+        0.0f, 0.0f, 0.0f, 1.0f,   // 0x82181530
+    };
+    memcpy(mauTransform, KAF_IDENTITY, sizeof(mauTransform));
+
+    // asm words 13..44 -- the two program pairs, in slot order.
+    const void* lapVertexProgramBinary[2] =
+    {
+        renderengine::gauLionBlendVertexProgramPC,       // slot 0  <- unk_8200DD58
+        renderengine::gauLionBlendZFadeVertexProgramPC,  // slot 1  <- unk_8200E010
+    };
+    const u32 lauVertexProgramSize[2] =
+    {
+        renderengine::guLionBlendVertexProgramPCSize,       // console 0x1A4
+        renderengine::guLionBlendZFadeVertexProgramPCSize,  // console 0x220
+    };
+    const void* lapPixelProgramBinary[2] =
+    {
+        renderengine::gauLionBlendPixelProgramPC,        // slot 0  <- unk_8200DF00
+        renderengine::gauLionBlendZFadePixelProgramPC,   // slot 1  <- unk_8200E230
+    };
+    const u32 lauPixelProgramSize[2] =
+    {
+        renderengine::guLionBlendPixelProgramPCSize,        // console 0x10C
+        renderengine::guLionBlendZFadePixelProgramPCSize,   // console 0x1F8
+    };
+
+    CgsGraphics::ImRenderer<LionBlendVertex>::Construct(
+        lpAllocator,
+        lapVertexProgramBinary, lauVertexProgramSize,
+        lapPixelProgramBinary,  lauPixelProgramSize,
+        static_cast<s8>(2));
+
+    // ---- asm words 45..112: the eight named constants ------------------------------------------
+    // Program 0's pair is read through mapVertexProgramBuffer[0] (`lwz r11, 0x14(r31)`), program
+    // 1's through mapVertexProgramBuffer[1] (`0x18`) and mapPixelProgramBuffer[1] (`0x38`, the
+    // pixel table base 0x34 plus one slot). Each handle's member is the `a3` out-parameter of its
+    // own call, so name and offset are witnessed by the same instruction pair -- the table at the
+    // head of BrnLionBlendIm3d.h.
+    const renderengine::ProgramBufferData* const lpVertexProgram0 =
+        reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[0]);
+    CGS_ASSERT(lpVertexProgram0 != nullptr, "mapVertexProgramBuffer[ li8Program ] != NULL");
+    if (lpVertexProgram0 != nullptr)
+    {
+        renderengine::ProgramBuffer::GetVariableHandleByName(
+            lpVertexProgram0, reinterpret_cast<const u8*>("worldViewProj"),
+            &mViewProjectionMatrixStateHandle_Normal);                        // +0xC0
+        renderengine::ProgramBuffer::GetVariableHandleByName(
+            lpVertexProgram0, reinterpret_cast<const u8*>("colourScale"),
+            &mColourScaleStateHandle_Normal);                                 // +0xC4
+    }
+
+    const renderengine::ProgramBufferData* const lpVertexProgram1 =
+        reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[1]);
+    CGS_ASSERT(lpVertexProgram1 != nullptr, "mapVertexProgramBuffer[ li8Program ] != NULL");
+    if (lpVertexProgram1 != nullptr)
+    {
+        renderengine::ProgramBuffer::GetVariableHandleByName(
+            lpVertexProgram1, reinterpret_cast<const u8*>("worldViewProj"),
+            &mViewProjectionMatrixStateHandle_ZFade);                         // +0xC8
+        renderengine::ProgramBuffer::GetVariableHandleByName(
+            lpVertexProgram1, reinterpret_cast<const u8*>("colourScale"),
+            &mColourScaleStateHandle_ZFade);                                  // +0xCC
+        renderengine::ProgramBuffer::GetVariableHandleByName(
+            lpVertexProgram1, reinterpret_cast<const u8*>("gOffset"),
+            &mOffsetStateHandle_ZFade);                                       // +0xD0
+        renderengine::ProgramBuffer::GetVariableHandleByName(
+            lpVertexProgram1, reinterpret_cast<const u8*>("gScale"),
+            &mScaleStateHandle_ZFade);                                        // +0xD4
+    }
+
+    const renderengine::ProgramBufferData* const lpPixelProgram1 =
+        reinterpret_cast<const renderengine::ProgramBufferData*>(mapPixelProgramBuffer[1]);
+    CGS_ASSERT(lpPixelProgram1 != nullptr, "mapPixelProgramBuffer[ li8Program ] != NULL");
+    if (lpPixelProgram1 != nullptr)
+    {
+        renderengine::ProgramBuffer::GetVariableHandleByName(
+            lpPixelProgram1, reinterpret_cast<const u8*>("gDepthConversion"),
+            &mDepthConversionStateHandle_ZFade);                              // +0xD8
+        renderengine::ProgramBuffer::GetVariableHandleByName(
+            lpPixelProgram1, reinterpret_cast<const u8*>("gDepthFadeConstants"),
+            &mDepthFadeStateHandle_ZFade);                                    // +0xDC
+    }
+
+    // [DIAG] DID THE EIGHT CONSTANTS RESOLVE? mu8RegisterCount == 0 is GetVariableHandleByName's
+    // "not found" answer, and the PC leaf's BeginShaderStates routes a zero-count handle to a
+    // DISCARD row -- so an unresolved worldViewProj means BeginRendering writes the matrix into a
+    // bin and every particle transforms by whatever c0..c3 happen to hold. That is invisible both
+    // in the log and in the picture, which is why it is worth one line. Same shape, and the same
+    // reason, as the skid renderer's (BrnIm3dSkidsRenderer.cpp). DELETE-WHEN-STABLE.
+    {
+        char lacMsg[320];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+            "[lionblend] Im3dBlend::Construct: p0{wvp=%u cs=%u} "
+            "p1{wvp=%u cs=%u off=%u scl=%u dconv=%u dfade=%u} (register counts; 0 == UNRESOLVED)\n",
+            mViewProjectionMatrixStateHandle_Normal.mu8RegisterCount,
+            mColourScaleStateHandle_Normal.mu8RegisterCount,
+            mViewProjectionMatrixStateHandle_ZFade.mu8RegisterCount,
+            mColourScaleStateHandle_ZFade.mu8RegisterCount,
+            mOffsetStateHandle_ZFade.mu8RegisterCount,
+            mScaleStateHandle_ZFade.mu8RegisterCount,
+            mDepthConversionStateHandle_ZFade.mu8RegisterCount,
+            mDepthFadeStateHandle_ZFade.mu8RegisterCount);
+        CgsDev::Log::WriteToLog(lacMsg);
     }
 }
 

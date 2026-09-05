@@ -99,6 +99,19 @@ namespace BrnGraphics
     class LionBlendRenderer
     {
     public:
+        // BrnLionBlendRenderer.h:41 -- build the two-program Lion-blend renderer and resolve
+        // its eight named shader constants. FOLDED onto Im3dBlend::Construct @0x8229B260 in
+        // exactly the way BeginRendering is folded onto Im3dBlend::BeginRendering: mRenderer is
+        // the offset-0 member, so the console's ParticleModule::Prepare @0x8229BEA0 (asm word
+        // 145, `bl BrnGraphics__Im3dBlend__Construct` with r3 = this+0x92E0 == the
+        // LionBlendRenderer itself, r4 = off_82F2C814) reaches the base method through the
+        // derived object's own address and the linker keeps one body. The forward IS the whole
+        // function, so it is inline here.
+        void Construct(rw::IResourceAllocator* lpAllocator)
+        {
+            mRenderer.Construct(lpAllocator);
+        }
+
         // BrnLionBlendRenderer.h:53 -- begin an immediate-mode batch with the packed
         // view-projection matrix and the depth-fade / viewport parameters, sampling
         // apDepthTextureState. FOLDED onto Im3dBlend::BeginRendering @0x82282060 (see the

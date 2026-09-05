@@ -1149,12 +1149,26 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
 // @0x8227A478 and BeginRendering (an inline forward in the header onto
 // Im3dBlend::BeginRendering @0x82282060, bodied in BrnLionBlendIm3d.cpp).
 //
-// ⛔ NOTHING RENDERS YET, and that is not this file's fault. Im3dBlend::Construct @0x8229B260
-// has never run: it needs the four Xenos microcode blobs (unk_8200DD58 / unk_8200DF00 /
-// unk_8200E010 / unk_8200E230) re-authored as D3D9, the SkidProgramsPC.cpp job. And one input
-// to the draw is still a stub: BrnEffects::Utils::BuildUVs @0x822781E0 writes four zero UV
-// corners, so every particle would sample texel (0,0) until its two rodata permute tables are
-// decoded. Both are named jobs, not unknowns.
+// ⭐ THE DRAW SIDE IS NOW WHOLE (2026-09-05). Both of the jobs this note used to name are done:
+// BrnEffects::Utils::BuildUVs @0x822781E0 is real (its two rodata permute tables decoded), and
+// Im3dBlend::Construct @0x8229B260 is bodied in BrnLionBlendIm3d.cpp -- the four Xenos microcode
+// blobs (unk_8200DD58 0x1A4 / unk_8200DF00 0x10C / unk_8200E010 0x220 / unk_8200E230 0x1F8) were
+// read out of the image, disassembled and re-authored as D3D9 in
+// pc/gcm/renderengine/LionBlendProgramsPC.cpp, and ParticleModule::Prepare calls Construct in the
+// console's own position.
+//
+// ⛔ WHAT STILL STANDS BETWEEN THIS FILE AND A PIXEL IS THE SIMULATION, NOT THE DRAW. Nothing
+// ever calls these three Render* methods on this build, because the Lion SIMULATION core is not
+// landed and both ParticleModule arms that would drive it are parked and say so once:
+//     cParticleEmitter::Update @0x829153D8            201 instr   TRAP (LionRuntimeLinkStubs.cpp)
+//     cParticleEmitter::ParticleBuild @0x82910118   1,142 instr   absent
+//     cParticleBehaviour::Lerp @0x8290B1F8          1,530 instr   log-stub
+//     SimulateParticlesInBucketGeneral<> x3           549 instr   absent
+//     Drag/ColourSteps/MultiFrame Behaviour::Process  669 instr   absent (4 of 7 are landed)
+//     ParticleModule::BuildLionVertexBuffers @0x8228AC20's Lion half (231 instr total)
+//     ParticleModule::RenderFullResParticles @0x8229AFD0's cLionFX::Dispatch branch
+// and, once that closure runs, the two SetState overloads below and the Xenon fast-path draw
+// thunk D3DDevice_DrawVertices (LionRuntimeLinkStubs.cpp) are the last traps on the path.
 //
 // ⛔ A NOTE FOR ANYONE QUERYING THE TREE FOR THIS SUBSYSTEM: tools/re/hasbody.py reports a
 // Render* shape as HAS BODY whether or not it is written, because a trap IS a definition. It
