@@ -1127,19 +1127,48 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
 // the exact quiet-discard shape this subsystem has already been bitten by three times. (Note
 // for the reader: the faithfulness lint flags the two-word phrase for that failure mode as
 // invented-format vocabulary, so it is spelled out longhand here.) A trap that says
-// "not written" is worth more than a call that says "bound" and did not. The real fix is one
-// level up (CgsGraphics::BlendState / DepthStencilState are opaque forward-declared tags that
-// should be the renderengine:: types the DWARF actually names, and the base overloads should be
-// the console's shadow-cache binders) -- a shared-header change across four TUs, out of slice.
+// "not written" is worth more than a call that says "bound" and did not.
+//
+// ⭐⭐ THE FIX IS SMALLER THAN THAT NOTE THOUGHT, AND ONE HALF OF IT IS ALREADY DECIDED
+// (2026-09-05). Neither overload needs ImRendererBase touched at all, so the "shared-header change
+// across four TUs" is not the obstacle: the console's own two bodies are an assert plus ONE call,
+// and both callees are fully reconstructed in this tree.
+//   sub_82276DA8 (39 instr) = CGS_ASSERT(mgpActiveRenderer == this) [CgsImRenderer.h:732]
+//                             + shadow::Device::SetState(const renderengine::DepthStencilState*)
+//                               @0x82276AD0  -- bodied, shadowingdevice.cpp:870
+//   sub_82276E48 (39 instr) = the same assert [CgsImRenderer.h:776]
+//                             + shadow::Device::SetState(const renderengine::RasterizerState*)
+//                               @0x82276B38  -- bodied, shadowingdevice.cpp:901
+// (Both identifications are the ones CgsImRenderer.cpp:270's SetStateLowLevel note already
+// established by comparing the three wrappers' gate byte and cache slot instruction for
+// instruction: 0x82276DA8/0x82276B38 share mbDepthStencilStateLocked / dword_83010A28 and
+// mbRasteriserStateLocked / dword_83010A2C respectively.)
+//
+// ⛔ WHAT ACTUALLY BLOCKS THE SECOND ONE IS A TYPE CONTRADICTION, NOT AN UNKNOWN BODY -- and it
+// must be SETTLED, not guessed, because a wrong state family is exactly the quiet-discard the
+// paragraph above is about:
+//   * DWARF BrnLionBlendRenderer.h:86 declares this overload `SetState(const BlendState*)`, and
+//     ImRendererBase declares BOTH `SetState(const BlendState*)` and
+//     `SetState(const RasterizerState*)` as separate members (dwarfdump CgsImRenderer.h:90/:99),
+//     so the DWARF is distinguishing them deliberately.
+//   * But LionParticleRender::BeginRendering @0x82289568 word 18 calls sub_82276E48 -- the
+//     RASTERISER wrapper -- with dword_83010F3C. The BLEND wrapper is a different address
+//     (ImRendererBase::SetState @0x82276D08, gate byte_83010907, cache dword_83010964) and is
+//     not byte-identical to it, so this is not an ICF fold either way.
+// One of the two readings is wrong. Settle it from the DecFIGS PS3 body of
+// LionParticleRender::BeginRendering, or from whatever builds dword_83010F3C, BEFORE writing a
+// body; do not resolve it by editing the `typedef renderengine::MaterialState BlendState` in
+// BrnLionBlendRenderer.h to whatever makes the call compile. (MaterialState is a *material* block
+// that CONTAINS a blend, a depth-stencil and a rasteriser state -- renderstates.h:254 -- so that
+// typedef is itself unproven.)
 //
 // Every one of them is on the LION particle RENDER path and nothing else:
 // LionParticleRender's virtuals (Render / RenderGroupBegin / BeginRendering / ...) are their only
-// callers, and those virtuals are reached only from cLionFX's dispatch. The Lion core is not
-// landed on this build -- cLionFX::Init is announced, not called (ParticleModule_Lifecycle.cpp),
-// StartLionEffect always returns KU_HANDLE_INVALID, and no LionEffect slot is ever claimed -- so
-// none of these can execute. A trap body is the project's honest "not done yet" for exactly that
-// case (STRATEGY.md, "the stub scaffold"): it declares the function unfinished and crashes LOUDLY
-// if the Lion path ever does come alive, instead of quietly drawing nothing.
+// callers, and those virtuals are reached only from cLionFX's dispatch -- whose Lion arms in
+// ParticleModule::BuildLionVertexBuffers and ::RenderFullResParticles are parked (see below), so
+// none of these can execute today. A trap body is the project's honest "not done yet" for exactly
+// that case (STRATEGY.md, "the stub scaffold"): it declares the function unfinished and crashes
+// LOUDLY if the Lion path ever does come alive, instead of quietly drawing nothing.
 //
 // ⚠ They exist at all because the LINK needs them: mLionRenderer is a by-value ParticleModule
 // member, so LionParticleRender's vtable is emitted and every virtual it names must resolve.
