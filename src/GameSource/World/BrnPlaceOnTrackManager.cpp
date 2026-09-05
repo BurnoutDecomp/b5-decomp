@@ -205,6 +205,11 @@ void PlaceOnTrackManager::PrePhysicsUpdate(
     // ApplyPendingRequestsWithoutSceneQueryBringUp below. See the block at the bottom of this file.
     ArmCarTeleportBringUp();
 
+    // [sweep] the deterministic crash sweep, armed on the same frame and answered by the
+    // same ApplyPendingRequestsWithoutSceneQueryBringUp below. See the block at the bottom
+    // of this file. Inert unless BRN_CRASH_SWEEP is set.
+    ArmCrashSweepBringUp();
+
     const RaceCarEntityModuleIO::SceneResultQueue* lpSceneResultQueue =
         lpInput->GetSceneResultQueue();
 
@@ -1050,6 +1055,320 @@ void PlaceOnTrackManager::ArmCarTeleportBringUp()
             << ") heading=(" << sDirection.x << ", " << sDirection.y << ", " << sDirection.z
             << ") from (" << lrHere.x << ", " << lrHere.y << ", " << lrHere.z << ")\n";
     }
+}
+
+
+// ===========================================================================
+// [sweep] ArmCrashSweepBringUp -- NOT an X360 function. THE DETERMINISTIC CRASH HARNESS.
+//
+// ⭐⭐ WHY IT EXISTS, and what it fixes. The crash campaign's recipe up to 2026-09-05 was
+// "teleport to a launch point, hold the throttle, and steer right 21.5 SECONDS later"
+// (flow_run.ps1 -SteerScript). Seconds are WALL CLOCK; the sim is a fixed 1/60 step. So the
+// frame a steering change lands on depends on how fast the host happened to be running --
+// and the previous wave measured exactly that: box_B2 and box_B3 produced BYTE-IDENTICAL
+// numbers to each other (entry 142.89 mph, no roll-over) while box_B1, the same build and
+// the same recipe with frame dumping ON, entered at 139.82 mph and rolled the car through a
+// full 360. A harness whose result depends on whether frames are being dumped cannot answer
+// a FREQUENCY question, and that wave said so.
+//
+// ⭐ THE FIX IS TO REMOVE THE CLOCK, NOT TO ADD A SEED. Note what those two runs prove: the
+// sim IS deterministic -- identical input frames gave identical floats. The clock was the
+// only stochastic term. So this trigger specifies a crash by its PHYSICS, not by a drive:
+//
+//     BRN_CRASH_SWEEP        = "x,y,z"                    the launch point
+//     BRN_CRASH_SWEEP_SHOTS  = "h0:s0,h1:s1,..."          heading (deg) : speed (m/s), per shot
+//                              ...or "x/y/z/h:s" per entry, to fire that shot from ITS OWN
+//                              launch point. THAT FORM IS WHAT MAKES AN ANGLE SWEEP HONEST:
+//                              fanning the heading from ONE launch point changes WHICH piece of
+//                              world the car meets (measured -- from one waterfront launch,
+//                              heading 234 hit at (3172.6,-2003.2), heading 250 hit a different
+//                              object 19 m away, and heading 220 drove 112 m and hit NOTHING),
+//                              whereas launch = target - D * dir(h) aims every shot at the SAME
+//                              wall and varies only the angle of incidence.
+//     BRN_CRASH_SWEEP_SETTLE = frames between shots       (default 150 == 2.5 s)
+//     BRN_CRASH_SWEEP_MAX    = frames before a shot is forced anyway (default 900 == 15 s)
+//     BRN_CRASH_SWEEP_ARM_DISTANCE = metres driven before shot 0 (default 8, as the teleport)
+//
+// Each shot is ONE ActiveRaceCar::RequestPlaceOnTrack( launch, heading, speed ) -- the same
+// single call the BRN_CAR_TELEPORT trigger already makes, with the console's own THIRD
+// argument (mfPlaceOnTrackSpeed) finally non-zero. PlaceCarOnTrack multiplies the reset
+// direction by it (`v1 = lResetDirection * splat(mfPlaceOnTrackSpeed)`) and hands that to
+// ResetActiveRaceCar, so the car ARRIVES MOVING at exactly the requested speed on exactly
+// the requested heading, seated by VehiclePhysics::SetTransformFromPositionOnRoad and
+// re-seeded by VehiclePhysics::Reset. Nothing here writes a transform, a velocity, a force
+// or a physics field; impact speed and impact angle stop being emergent properties of a
+// drive and become INPUTS.
+//
+// ⭐ WHY IT IS FRAME-COUNTED AND NOT TIMED. After shot k the car's whole motion state is
+// re-seeded by the console's own reset, so the trajectory from there depends only on (a) the
+// seeded pose/velocity and (b) the per-frame input, which the harness holds CONSTANT. The
+// shot cadence is therefore counted in PrePhysicsUpdate calls -- sim frames -- so the shot
+// list replays identically whatever the host's frame rate does. The one arm that is not
+// frame-counted is shot 0's (it waits for the car to have DRIVEN the arm distance, exactly
+// as the teleport does, because nothing else tells us the flow has reached DRIVING); that
+// only decides WHEN the sweep starts, not what any shot does.
+//
+// ⭐ THE SETTLE GATE IS A STATE GATE, NOT A TIMER. The next shot waits for
+// ActiveRaceCar::IsCrashing() to go false -- i.e. for the console's own crash record to
+// close and the reset pump to recover the car -- with BRN_CRASH_SWEEP_MAX as a backstop so a
+// car that never recovers cannot stall the sweep. Both terms are deterministic functions of
+// the sim, so the shot FRAMES are reproducible too, not just the shot parameters.
+//
+// ⛔ WHAT IT STILL CANNOT DO, said plainly: RequestPlaceOnTrack takes ONE direction, which
+// becomes both the facing and the velocity. So a shot is always a car travelling the way it
+// points -- this sweep covers ANGLE OF INCIDENCE, and cannot express a sideways slide or a
+// spinning car meeting a wall. Traffic is also not reset between shots, so a shot that meets
+// a traffic car is a different experiment from one that meets the wall; the [sweep] marker
+// exists so the log can be segmented per shot and such a shot identified and dropped.
+//
+// ⛔ DELETE-WHEN: NOTHING. Permanent harness capability, inert unless BRN_CRASH_SWEEP is set
+// (one getenv on the first pre-physics update, one enum test per update after).
+// ===========================================================================
+void PlaceOnTrackManager::ArmCrashSweepBringUp()
+{
+    static const s32 KI_MAX_SWEEP_SHOTS = 48;
+    static const f32 KF_SWEEP_DEG_TO_RAD = 0.0174532925199433f;
+
+    enum ESweepStage
+    {
+        E_SWEEP_UNREAD = 0,   // the env var has not been looked at yet
+        E_SWEEP_OFF,          // not set / unparseable -- never look again
+        E_SWEEP_WAITING,      // parsed; waiting for the drive to start
+        E_SWEEP_RUNNING,      // firing shots
+        E_SWEEP_DONE          // shot list exhausted
+    };
+
+    static ESweepStage seStage           = E_SWEEP_UNREAD;
+    static Vector3     sLaunch           = { 0.0f, 0.0f, 0.0f, 0.0f };
+    static f32         safHeadingDeg[ KI_MAX_SWEEP_SHOTS ];
+    static f32         safSpeed[ KI_MAX_SWEEP_SHOTS ];
+    static Vector3     saLaunch[ KI_MAX_SWEEP_SHOTS ];
+    static s32         siShotCount       = 0;
+    static s32         siNextShot        = 0;
+    static s32         siSettleFrames    = 150;
+    static s32         siMaxFrames       = 900;
+    static f32         sfArmDistance     = 8.0f;
+    static Vector3     sArmOrigin        = { 0.0f, 0.0f, 0.0f, 0.0f };
+    static bool        sbArmOriginSeen   = false;
+    static s32         siFramesSinceShot = 0;
+    static s32         siFrame           = 0;
+
+    if( seStage == E_SWEEP_OFF || seStage == E_SWEEP_DONE )
+    {
+        return;
+    }
+
+    if( seStage == E_SWEEP_UNREAD )
+    {
+        seStage = E_SWEEP_OFF;
+
+        const char* lpcSpec = std::getenv( "BRN_CRASH_SWEEP" );
+        if( lpcSpec == 0 || lpcSpec[0] == '\0' )
+        {
+            return;
+        }
+
+        f32 lfX = 0.0f, lfY = 0.0f, lfZ = 0.0f;
+        if( std::sscanf( lpcSpec, "%f,%f,%f", &lfX, &lfY, &lfZ ) != 3 )
+        {
+            if( CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[sweep] FAIL: BRN_CRASH_SWEEP=\"" << lpcSpec
+                    << "\" is not \"x,y,z\" -- the sweep is OFF\n";
+            }
+            return;
+        }
+        sLaunch = Vector3{ lfX, lfY, lfZ, 0.0f };
+
+        // "h:s,h:s,..." -- heading in degrees clockwise from +Z (the same convention the
+        // teleport uses: at = (sin h, 0, cos h)), speed in metres per second.
+        const char* lpcShots = std::getenv( "BRN_CRASH_SWEEP_SHOTS" );
+        if( lpcShots != 0 && lpcShots[0] != '\0' )
+        {
+            const char* lpcCursor = lpcShots;
+            while( *lpcCursor != '\0' && siShotCount < KI_MAX_SWEEP_SHOTS )
+            {
+                f32 lfHeadingDeg = 0.0f, lfSpeed = 0.0f;
+                f32 lfShotX = 0.0f, lfShotY = 0.0f, lfShotZ = 0.0f;
+                const int liShotFields = std::sscanf( lpcCursor, "%f/%f/%f/%f:%f",
+                                                      &lfShotX, &lfShotY, &lfShotZ,
+                                                      &lfHeadingDeg, &lfSpeed );
+                if( liShotFields == 5 )
+                {
+                    saLaunch[ siShotCount ] = Vector3{ lfShotX, lfShotY, lfShotZ, 0.0f };
+                }
+                else
+                {
+                    if( std::sscanf( lpcCursor, "%f:%f", &lfHeadingDeg, &lfSpeed ) != 2 )
+                    {
+                        break;
+                    }
+                    saLaunch[ siShotCount ] = sLaunch;
+                }
+                safHeadingDeg[ siShotCount ] = lfHeadingDeg;
+                safSpeed[ siShotCount ]      = ( lfSpeed < 0.0f ) ? 0.0f : lfSpeed;
+                ++siShotCount;
+
+                const char* lpcComma = std::strchr( lpcCursor, ',' );
+                if( lpcComma == 0 )
+                {
+                    break;
+                }
+                lpcCursor = lpcComma + 1;
+            }
+        }
+
+        if( siShotCount == 0 )
+        {
+            if( CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[sweep] FAIL: BRN_CRASH_SWEEP_SHOTS is empty or unparseable "
+                       "(expected \"heading:speed,heading:speed,...\") -- the sweep is OFF\n";
+            }
+            return;
+        }
+
+        const char* lpcSettle = std::getenv( "BRN_CRASH_SWEEP_SETTLE" );
+        if( lpcSettle != 0 && lpcSettle[0] != '\0' )
+        {
+            int liSettle = siSettleFrames;
+            if( std::sscanf( lpcSettle, "%d", &liSettle ) == 1 && liSettle > 0 )
+            {
+                siSettleFrames = liSettle;
+            }
+        }
+
+        const char* lpcMax = std::getenv( "BRN_CRASH_SWEEP_MAX" );
+        if( lpcMax != 0 && lpcMax[0] != '\0' )
+        {
+            int liMax = siMaxFrames;
+            if( std::sscanf( lpcMax, "%d", &liMax ) == 1 && liMax > 0 )
+            {
+                siMaxFrames = liMax;
+            }
+        }
+        if( siMaxFrames < siSettleFrames )
+        {
+            siMaxFrames = siSettleFrames;
+        }
+
+        const char* lpcArm = std::getenv( "BRN_CRASH_SWEEP_ARM_DISTANCE" );
+        if( lpcArm != 0 && lpcArm[0] != '\0' )
+        {
+            float lfArm = sfArmDistance;
+            if( std::sscanf( lpcArm, "%f", &lfArm ) == 1 && lfArm >= 0.0f )
+            {
+                sfArmDistance = lfArm;
+            }
+        }
+
+        seStage = E_SWEEP_WAITING;
+
+        if( CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[sweep] armed: launch (" << sLaunch.x << ", " << sLaunch.y << ", "
+                << sLaunch.z << ") shots=" << siShotCount << " settle=" << siSettleFrames
+                << " maxFrames=" << siMaxFrames << " armDistance=" << sfArmDistance << "\n";
+            for( s32 liShot = 0; liShot < siShotCount; ++liShot )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[sweep] plan " << liShot << " heading " << safHeadingDeg[ liShot ]
+                    << " deg speed " << safSpeed[ liShot ] << " m/s from ("
+                    << saLaunch[ liShot ].x << ", " << saLaunch[ liShot ].y << ", "
+                    << saLaunch[ liShot ].z << ")\n";
+            }
+        }
+    }
+
+    if( mpRaceCarEntityModule == 0 )
+    {
+        return;
+    }
+
+    const EActiveRaceCarIndex lePlayerIndex =
+        mpRaceCarEntityModule->GetPlayerActiveRaceCarIndex();
+    if( lePlayerIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )
+    {
+        return;
+    }
+
+    ActiveRaceCar* lpPlayerCar = mpRaceCarEntityModule->GetActiveRaceCar( lePlayerIndex );
+    if( lpPlayerCar == 0 || !lpPlayerCar->IsActive() || lpPlayerCar->ToBePlacedOnTrack() )
+    {
+        return;   // not live yet, or a placement it did not ask for is already in flight
+    }
+
+    const Vector3& lrHere = lpPlayerCar->GetPhysicsState()->mTransform.wAxis;
+
+    if( seStage == E_SWEEP_WAITING )
+    {
+        if( !sbArmOriginSeen )
+        {
+            sbArmOriginSeen = true;
+            sArmOrigin      = lrHere;
+        }
+
+        const f32 lfDX = lrHere.x - sArmOrigin.x;
+        const f32 lfDY = lrHere.y - sArmOrigin.y;
+        const f32 lfDZ = lrHere.z - sArmOrigin.z;
+        if( ( lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ ) < ( sfArmDistance * sfArmDistance ) )
+        {
+            return;   // still parked where it spawned -- the drive has not started
+        }
+
+        seStage           = E_SWEEP_RUNNING;
+        siFramesSinceShot = siSettleFrames;   // fire shot 0 on this frame
+    }
+
+    ++siFrame;
+    ++siFramesSinceShot;
+
+    const bool lbCrashing = lpPlayerCar->IsCrashing();
+    const bool lbForced   = ( siFramesSinceShot >= siMaxFrames );
+    if( !lbForced && !( siFramesSinceShot >= siSettleFrames && !lbCrashing ) )
+    {
+        return;
+    }
+
+    if( siNextShot >= siShotCount )
+    {
+        seStage = E_SWEEP_DONE;
+        if( CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[sweep] done: " << siShotCount << " shots fired\n";
+        }
+        return;
+    }
+
+    const f32     lfHeading  = safHeadingDeg[ siNextShot ] * KF_SWEEP_DEG_TO_RAD;
+    const Vector3 lDirection = Vector3{ std::sin( lfHeading ), 0.0f,
+                                        std::cos( lfHeading ), 0.0f };
+
+    // ⭐ THE ONE CALL -- the same one the teleport makes, with the console's own speed
+    // argument. Everything the move does after this is the console's code.
+    lpPlayerCar->RequestPlaceOnTrack( saLaunch[ siNextShot ], lDirection,
+                                      safSpeed[ siNextShot ] );
+
+    if( CgsDev::Log::gpDebugPrint != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[sweep] shot " << siNextShot << "/" << siShotCount
+            << " heading " << safHeadingDeg[ siNextShot ]
+            << " speed " << safSpeed[ siNextShot ]
+            << " launch (" << saLaunch[ siNextShot ].x << ", " << saLaunch[ siNextShot ].y
+            << ", " << saLaunch[ siNextShot ].z << ")"
+            << " sweepFrame " << siFrame
+            << " forced " << ( lbForced ? 1 : 0 )
+            << " wasCrashing " << ( lbCrashing ? 1 : 0 )
+            << " from (" << lrHere.x << ", " << lrHere.y << ", " << lrHere.z << ")\n";
+    }
+
+    ++siNextShot;
+    siFramesSinceShot = 0;
 }
 
 } // namespace BrnWorld
