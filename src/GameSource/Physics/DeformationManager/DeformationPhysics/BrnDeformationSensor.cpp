@@ -862,6 +862,18 @@ namespace Deformation
 		//     in that window, against 1,202 with the same car absorbing normally).
 		//   * so "the car has no momentum after a crash" is, mechanically, "nothing was subtracted
 		//     here". The dial is the absorption SET, and the level is a per-sensor spec constant.
+		// ⛔⛔ BUT THE CONVERSE IS **NOT** MEASURED, and the next wave must not assume it. "Absorption
+		// preserves momentum" is true of ONE CONTACT and does NOT survive as a rule over a whole
+		// crash. Measured 2026-09-05 on the deterministic sweep, same wall, same angles:
+		//     just-reset car (invincible for the first ~0.7 s)   keep10 median 53.3 %, n=8
+		//     timer expired (the owner's situation, set 0 only)  keep10 median 20.9 %, n=4
+		// i.e. the absorbing car keeps LESS of its speed overall, not more. What absorption
+		// demonstrably changes is the SHAPE: a just-reset car dumps 41 % of its speed in a SINGLE
+		// frame (100 % -> 59.2 % between crash frames 0 and 1, run mwA_h220_s50_r1) where the
+		// absorbing car spreads the same loss over three frames and then holds a quarter more of it
+		// (keep60 40.3 % vs 30.9 % on the identical impact). Across the grid the ANGLE OF INCIDENCE
+		// dominates the total. So: no "absorption gives the body more/less momentum" claim in either
+		// direction -- exactly the instruction fdfda858 left, upheld for a different reason.
 		// ⚠️ NOTE WHICH VALUE IS SUBTRACTED: lfAbsorbed (v0), NOT the room-clamped lfMove (v13).
 		// The asm subtracts v0 -- the operand produced by `vmulfp128 v0,v0,v125` @0x825E1728 --
 		// while v13 is what moved the sphere. A sensor with NO ROOM LEFT therefore still removes its
