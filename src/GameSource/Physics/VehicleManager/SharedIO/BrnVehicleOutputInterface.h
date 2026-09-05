@@ -378,6 +378,13 @@ namespace Vehicle
         const TrafficSlammedEventQueue* GetSlammedTrafficEventQueue() const { return &mSlammedTrafficEventQueue; }
         const RaceCarCrashEventQueue*   GetRaceCarCrashEventQueue()   const { return &mRaceCarCrashEventQueue; }
 
+        // ADDITIVE 2026-09-06 (traffic-demotion wave), same family and same evidence as the
+        // three above: TrafficEntityModule::PostPhysicsUpdate @0x8274E880 folds this accessor
+        // to a bare `addi r4, <managerOut>, 0x7A0` before calling HandleRecycledTraffic
+        // @0x82741780, and 0x7A0 == 1952 is exactly mRemovedTrafficEventQueue's seat below.
+        // No layout, member or existing signature is touched.
+        const RemovedTrafficEventQueue* GetRemovedTrafficEventQueue() const { return &mRemovedTrafficEventQueue; }
+
         // DWARF-attested
         // (BrnVehicleOutputInterface.h:205 `void AddSlammedTrafficEvent(EntityId, EntityId,
         // eCrashTrafficType, float32_t, float32_t)`) and X360-attested at its two call sites:

@@ -68,6 +68,15 @@ namespace BrnPhysics { namespace Deformation { class StreamedDeformationSpec;
 // the definition). MSVC mangles struct vs class, so these keys are load-bearing.
 namespace BrnPhysics { namespace Vehicle { struct BrnTrafficDriverControls;
                                            struct VehicleInputInterface; } }
+// HandleRecycledTraffic's parameter, by pointer only (forward-declaration exception (b)).
+// The DWARF spells it VehicleManagerOutputInterface::RemovedTrafficEventQueue, which is that
+// interface's own typedef for CgsModule::EventQueue<TrafficRemovedEvent, 25>
+// (BrnVehicleOutputInterface.h:285). Naming it through the typedef would drag the whole
+// physics vehicle-IO graph into this header, and BrnWorldModule.h includes this one; a
+// pointer to the un-instantiated template is enough for the declaration, and the .cpp that
+// defines the body includes BrnVehicleOutputInterface.h for the real thing.
+namespace CgsModule { template <typename T, s32 N> class EventQueue; }
+namespace BrnPhysics { namespace Vehicle { struct TrafficRemovedEvent; } }
 // Pointer-only uses in the render declarations (forward-declaration exception (b)):
 // including CgsDispatcher.h / BrnShadowMap.h here would pull the renderer and the
 // shadow-cascade tail into every includer, and BrnWorldModule.h includes this header.
@@ -1016,6 +1025,52 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         // mbAllowDivergentBehaviour) rather than freeing it -- the actual pool recycle is
         // KillDyingVehicleEntities' job, and the scene/collision teardown stays there too.
         void RemoveVehicle(u32 luVehicle);
+
+        // @0x8273C4C8 (452 insns). DWARF `void TryClearupOffscreenTraffic(
+        // const FastBitArray<601>::Iterator&)` (BrnTrafficUnity.cpp:14258); the X360 asm
+        // arbitrates the RETURN -- 0x8273CAD4 `li r3,1` on the removal path, 0x8273CBC4
+        // `li r3,0` otherwise, and its one caller GenerateDriverInputs @0x82749238 tests r3
+        // as a byte and `continue`s on true. Body in _wT3_02.cpp beside that caller.
+        // ⭐ THE PER-FRAME DEMOTION VALVE for physical traffic: GenerateDriverInputs runs it
+        // over EVERY alive physical vehicle before the manoeuvre dispatch, so it is the only
+        // route that reaches a car promoted with E_PHYSICALREASON_CRASHED (those take the
+        // early-SEND branch and never reach a manoeuvre arm at all).
+        bool TryClearupOffscreenTraffic(
+            const CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator&
+                lrItVehicle);
+
+        // @0x82741780 (218 insns). DWARF `void HandleRecycledTraffic(
+        // const VehicleManagerOutputInterface::RemovedTrafficEventQueue*)`
+        // (BrnTrafficUnity.cpp:14952). PostPhysicsUpdate's FIRST RUNNING head leg
+        // (0x8274E884, fed by GetVehicleManagerOutputInterface() + 0x7A0). The physics side
+        // recycles a traffic body (PhysicalTrafficManager::RecycleTrafficVehicle /
+        // ::CheckForTrafficHittingWater post the events); this hands the world side's half
+        // back -- StopVehicleBeingPhysical with the physics-removal half SUPPRESSED, because
+        // physics is the one telling us. Body in _wT3_02.cpp beside StopVehicleBeingPhysical.
+        void HandleRecycledTraffic(
+            const CgsModule::EventQueue<BrnPhysics::Vehicle::TrafficRemovedEvent, 25>*
+                lpRemovedTrafficQueue);
+
+        // ---- THE TWO DRAINS OF maNewCrashedVehicles. Bodies in _wT3_01.cpp beside its one
+        //      producer, RecordTrafficVehicleIsPhysical.
+        // @0x82720030 (428 insns). DWARF `void GenerateCrashedVehicleEvents(
+        // OutputBuffer_PreScene*)` (BrnTrafficUnity.cpp:6847). The LAST leg of PreSceneUpdate's
+        // `!IsPaused() && !lbSimPaused` block (0x8274AC20, right after UpdateCollidableVehicles):
+        // it re-registers each freshly crashed car's collision volume with the CRASH culling
+        // group, and then CLEARS the array (0x827206C0 `stwx r20, r25, 0x572EC` -- a store of 0
+        // over the count word at this + 357100). ⭐ That Clear is the ONLY thing that bounds the
+        // array: it holds 160 TrafficCrashInfo and RecordTrafficVehicleIsPhysical appends one per
+        // promotion, so with this gated append #161 overwrites the count word with an entity id.
+        void GenerateCrashedVehicleEvents(BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
+
+        // @0x82727768 (273 insns). DWARF `void GenerateVehicleCrashedEvents(
+        // OutputBuffer_PostPhysics*)` (BrnTrafficUnity.cpp:20156). One of PostPhysicsUpdate's
+        // RUNNING tail legs. It does NOT shrink the array -- it walks the same records, hands
+        // each one that still needs it to the CRASH MODULE as an AddCrashingTrafficEvent, and
+        // clears its mbNeedsToBeSentToCrashModule flag (which is exactly what
+        // GenerateCrashedVehicleEvents' "We forgot to tell the crash module about ..." assert
+        // then checks).
+        void GenerateVehicleCrashedEvents(BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput);
 
         // @0x82745218, DWARF :1875. Body in BrnTrafficEntityModule_wT5_01.cpp.
         // THE ONLY WRITER of mfJunctionFUP, i.e. the only producer of the input

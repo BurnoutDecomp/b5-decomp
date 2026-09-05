@@ -25,14 +25,17 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"          // Param
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicleTypeRuntime.h"
-#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"                       // KU_ENTITYTYPE_TRAFFIC_VEHICLE
+#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"                       // KU_ENTITYTYPE_TRAFFIC_VEHICLE, ETrafficType
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"
-#include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"                            // mpaVehicleTypesUpdate
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"        // RemovedTrafficEventQueue (HandleRecycledTraffic)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"                 // TrafficRemovedEvent
+#include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"                            // mpaVehicleTypesUpdate, mpaVehicleTypes, mpaVehicleAssets
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"
 
 #include "rw/math/vpu/vector3_operation.h"   // Dot, Cross, IsValid
 
 #include <cmath>     // std::sqrt
+#include <cstdlib>   // getenv (the [T3-demote] census only)
 
 namespace BrnTraffic
 {
@@ -118,6 +121,40 @@ namespace
     const u32 KU_RACE_CAR_OWNER_PACKED             = 0x01000000u;
     const u32 KU_NUM_BITS_FOR_ENTITY_NUM_LOCAL     = 14;
 
+    // ---- TryClearupOffscreenTraffic @0x8273C4C8's own constants ----------------------------
+    // unk_8300CC80 is a .bss splat, so it reads 0 by definition; recovered through its
+    // dyn-init thunk, which is itself an EXPORT HOLE (no per-function JSON) and was read out
+    // of the image with tools/re/ppcdis.py:
+    //   0x82C662F8  lfs f0, -0x2AF4(r11)   ; r11 == 0x82010000  ->  flt_8200D50C
+    //   0x82C66308  addi r11, r11, -0x3380 ;                    ->  unk_8300CC80
+    //   0x82C6630C  vspltw v0, v0, 0 ; stvx128 v0, r0, r11
+    // and tools/re/x360rd.py reads 0x8200D50C == 22500.0f. It is a SQUARED distance: 150 m.
+    const f32 KF_CLEARUP_FAR_FROM_CAMERA_DIST_SQ  = 22500.0f;   // <- flt_8200D50C
+    // The two showtime-only bands, read straight out of .rdata (x360rd):
+    const f32 KF_CLEARUP_SHOWTIME_MIN_DIST_SQ     = 225.0f;     // flt_82018E3C   15 m
+    const f32 KF_CLEARUP_SHOWTIME_BUS_MAX_DIST_SQ = 1600.0f;    // flt_820BA810   40 m
+
+    // 0x8273C95C..0x8273C998 compares the vehicle asset's CgsID against two baked 64-bit
+    // literals, assembled `lis/ori` into the high word and `insrdi ...,32,0` into the low:
+    //   0xBF2E42A8A7700000 and 0xBF2E42A99B940000.
+    // Decoded with the project's own CgsID packing (tools/volatility CgsIDUtilities, base-40)
+    // they are the two US BUSES, "TUSB01" and "TUSB02" -- the only traffic types the showtime
+    // mid-band cull spares. FLAG (name inferred from the decode, not from a symbol).
+    const CgsID KX_VEHICLE_ID_BUS_01 = 0xBF2E42A8A7700000ULL;   // "TUSB01"
+    const CgsID KX_VEHICLE_ID_BUS_02 = 0xBF2E42A99B940000ULL;   // "TUSB02"
+
+    // ---- HandleRecycledTraffic @0x82741780's entity-id unpacking --------------------------
+    // The same 14/10 split MakeTrafficEntityId packs (BrnTrafficConstants.h), mirrored here
+    // the way _wT3_04.cpp mirrors it -- these are file-local helpers in every partfile that
+    // needs them, not a shared shim.
+    const u32 KU_ENTITY_INDEX_SHIFT = 10;
+    const u32 KU_ENTITY_INDEX_MASK  = 0x3FFFu;
+
+    inline u32 EntityIndexOf(EntityId lId)
+    {
+        return (lId.muValue >> KU_ENTITY_INDEX_SHIFT) & KU_ENTITY_INDEX_MASK;
+    }
+
     inline VecFloat SplatDrive(f32 lfValue)
     {
         const VecFloat lLane = { lfValue, lfValue, lfValue, lfValue };
@@ -130,6 +167,43 @@ namespace
         lZero.SetZero();
         return lZero;
     }
+
+    // ---- [T3-demote] the demotion census -- NOT IN THE X360 BINARY. -----------------------
+    // WHY IT EXISTS: this file now carries two of the three routes into
+    // StopVehicleBeingPhysical, and "physSlots stopped being monotonic" is a SAMPLE (the
+    // [T3-behaviour] histogram prints once every ~5 s), not a per-event record. This counts
+    // every call and attributes it, so an absence is readable: an unattributed call is the
+    // KillDyingVehicleEntity route (_KillDyingVehicleEntities.cpp), which is the tail of
+    // TryClearupOffscreenTraffic -> RemoveVehicle -> the param sweep.
+    // CAPPED, and it SAYS SO when it stops printing -- an uncapped per-event line in a
+    // 50 MB-log run is how a harness starves itself. DELETE-WHEN-STABLE.
+    bool TrafficDiagEnabled()
+    {
+        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
+        return sbEnabled;
+    }
+
+    CgsDev::Log::DebugPrint* TrafficDiagStream()
+    {
+        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
+        {
+            return 0;
+        }
+        return CgsDev::Log::gpDebugPrint;
+    }
+
+    const s32 KI_DEMOTE_PRINT_CAP = 60;
+
+    s32 giDemoteCalls        = 0;   // every StopVehicleBeingPhysical
+    // clearupKills is NOT a partition member and the printed line says so.
+    // TryClearupOffscreenTraffic does not demote directly: it calls RemoveVehicle, which
+    // only MARKS the param, and the actual StopVehicleBeingPhysical comes a frame or more
+    // later through KillDyingVehicleEntity. So the partition of giDemoteCalls is
+    // recycle + return + killDying, and clearupKills is reported beside it as the upstream
+    // cause of most of the killDying column -- lagged, so the two never have to agree.
+    s32 giDemoteFromClearup  = 0;   // TryClearupOffscreenTraffic said kill (UPSTREAM, lagged)
+    s32 giDemoteFromRecycle  = 0;   // HandleRecycledTraffic
+    s32 giDemoteFromReturn   = 0;   // ReturnPhysicalVehicleToTraffic
 
     // One-shot gate banner -- NOT IN THE X360 BINARY. Retire with the last gate below.
     void LogMissingLeg(bool& lrbAlreadyLogged, const char* lpcLegNameAndAddress)
@@ -177,6 +251,117 @@ void TrafficEntityModule::UpdateVehicleStuckTimers(void* lpPhysicsInfo, f32 lfRe
 
     UpdateVehicleStuckSideTime(static_cast<s32>(lpInfo->muContactSideFlags), KI_CONTACT_SIDE_BACK,
                                lfReset, lfThreshold, &lpInfo->mfStuckTimeBack);
+}
+
+// -------------------------------------------------------------------------------------------
+// TrafficEntityModule::TryClearupOffscreenTraffic  @0x8273C4C8  (452 insns)
+//   DWARF BrnTrafficUnity.cpp:14258 -- and its local names are transcribed verbatim below
+//   (lVehiclePos / lDiff / lfDiffSq / lbKillVehicle / lbFarFromPlayer, and the inner scope's
+//   lpVehicleType / lTypeID / lbBus).
+//
+// ⭐⭐⭐ THE MISSING DEMOTION VALVE. GenerateDriverInputs @0x82749234 calls this for EVERY
+// alive physical traffic vehicle, every frame, BEFORE the manoeuvre dispatch, and `continue`s
+// when it returns true (0x82749238 `clrlwi r11,r3,24` + `bne loc_82749838`). It was the one
+// unbodied leg on that path, and with it gated the module's 25-slot maTrafficPhysicsInfoList
+// only ever filled: physSlots across a whole Showtime run measured strictly monotonic
+// (0, 0, 4, 6, 6, 7, 8, 10, 16), and the 26th promotion made
+// RecordTrafficVehicleIsPhysical's GetFirstClearBit return -1 and SetBit(-1) fault. The
+// console has THREE routes into StopVehicleBeingPhysical -- this one (via RemoveVehicle ->
+// the param sweep -> KillDyingVehicleEntity), HandleRecycledTraffic (below), and
+// ReturnPhysicalVehicleToTraffic -- and only the third was reachable here. The third is also
+// the one a crashed car can never take: GenerateDriverInputs sends a car whose reason is
+// E_PHYSICALREASON_CRASHED straight to its early-SEND label, so it never reaches a manoeuvre
+// arm at all.
+//
+// THE DECISION, register for register (0x8273C860..0x8273C9B4):
+//   * lfDiffSq is measured from mCameraLastFrame's POSITION lane (+0x728C0), not the player's
+//     car; lbFarFromPlayer is the console's own name for `lfDiffSq > 150 m` and it is computed
+//     BEFORE the rendered test because the tail uses it whether or not the car is killed.
+//   * A car the RENDER pass touched last frame is never cleared up. That predicate reads
+//     mVehicleSoaData.mVehiclesRenderedLastFrame, whose only writer is PreDispatchUpdate
+//     @0x8274D900 (an export hole; see BrnTrafficEntityModule_Render.cpp).
+//   * The extra showtime band is gated on mbPlayingShowtimeMode (+0x717DD): a car BEHIND the
+//     camera and more than 15 m away goes, unless it is between 15 m and 40 m AND is one of
+//     the two buses. Showtime wants big things to stay hittable and everything else recycled.
+// The console reads the bit with the ITERATOR'S CACHED MASK (`ld r10, 8(r29)` + `and`) rather
+// than recomputing 1 << (index & 63); the value is identical, so this reads by name.
+// -------------------------------------------------------------------------------------------
+bool TrafficEntityModule::TryClearupOffscreenTraffic(
+        const CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator& lrItVehicle)
+{
+    bool lbKillVehicle = false;                        // `li r30, 0` @0x8273C500
+
+    CGS_ASSERT(lrItVehicle.GetIndex() >= 0 &&
+               lrItVehicle.GetIndex() < static_cast<s32>(KU_MAX_TOTAL_TRAFFIC),
+               "Attempt to get index when out of range\n");        // CgsFastBitArray.h:235
+
+    const u32 luVehicle = static_cast<u32>(lrItVehicle.GetIndex());
+
+    // 0x8273C58C..0x8273C5F4 -- the whole distance block, done once and reused by both tests.
+    const Vector3 lVehiclePos = GetVehicleTransform(luVehicle).Pos();
+    const Vector3 lDiff       = lVehiclePos - mCameraLastFrame.GetPosition();   // +0x728C0
+    const f32     lfDiffSq    = rw::math::vpu::Dot(lDiff, lDiff);
+
+    const bool lbFarFromPlayer = (lfDiffSq > KF_CLEARUP_FAR_FROM_CAMERA_DIST_SQ);
+
+    // 0x8273C860..0x8273C890 -- rendered last frame: keep it, unconditionally.
+    if (!mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet(luVehicle))
+    {
+        lbKillVehicle = lbFarFromPlayer;                            // `mr r16, r15`
+
+        if (mbPlayingShowtimeMode)                                  // +0x717DD
+        {
+            // 0x8273C8C0..0x8273C8F8 -- BEHIND the camera's At row (+0x728B0).
+            const f32 lfAlongCamera =
+                rw::math::vpu::Dot(mCameraLastFrame.GetDirection(), lDiff);
+
+            if (0.0f > lfAlongCamera && lfDiffSq > KF_CLEARUP_SHOWTIME_MIN_DIST_SQ)
+            {
+                if (lfDiffSq > KF_CLEARUP_SHOWTIME_BUS_MAX_DIST_SQ)
+                {
+                    lbKillVehicle = true;                           // 0x8273C91C
+                }
+                else
+                {
+                    // 0x8273C924..0x8273C9B0 -- mpaVehicleTypes[type].muAssetId then
+                    // mpaVehicleAssets[assetId].GetVehicleId(), both at the console's own
+                    // stride 8. lbKillVehicle is the INVERSE of the match (`cntlzw` + bit 26).
+                    const VehicleTypeData* const lpVehicleType =
+                        &mpData->mpaVehicleTypes[GetVehicle(luVehicle)->GetVehicleType()];
+                    const CgsID lTypeID =
+                        mpData->mpaVehicleAssets[lpVehicleType->muAssetId].GetVehicleId();
+
+                    const bool lbBus = (lTypeID == KX_VEHICLE_ID_BUS_01) ||
+                                       (lTypeID == KX_VEHICLE_ID_BUS_02);
+
+                    lbKillVehicle = !lbBus;
+                }
+            }
+        }
+    }
+
+    if (lbKillVehicle)
+    {
+        // 0x8273CA68..0x8273CAC4 -- the console re-reads the bit and fires a streamed assert.
+        // It is a tripwire, not a gate: 0x8273CAC8 calls RemoveVehicle either way.
+        CGS_ASSERT(!mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet(luVehicle),
+                   "!mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet( luVehicle )"); // .cpp 16050
+
+        ++giDemoteFromClearup;   // [T3-demote] census, NOT IN THE X360 BINARY
+        RemoveVehicle(luVehicle);                                   // 0x8273CAD0
+        return true;                                                // 0x8273CAD4 `li r3, 1`
+    }
+
+    // 0x8273CAEC..0x8273CBC0 -- not killed, but far: publish it so the param sim can drive
+    // around it. This is the ONLY writer of mPhysicalVehiclesFarFromPlayer; its reader is
+    // TryClearupOffscreenTraffic's own caller-side census and the crash-traffic input
+    // interface copy at the tail of PostPhysicsUpdate.
+    if (lbFarFromPlayer)
+    {
+        mVehicleSoaData.mPhysicalVehiclesFarFromPlayer.SetBit(luVehicle);
+    }
+
+    return false;                                                   // 0x8273CBC4 `li r3, 0`
 }
 
 // -------------------------------------------------------------------------------------------
@@ -238,12 +423,14 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
             continue;
         }
 
-        // GATE TrafficEntityModule::TryClearupOffscreenTraffic @0x8273C4C8 (453) -- removal
-        // polish; the console `continue`s when it returns true. BLOCKER: unreconstructed, and it
-        // is the only demotion route for an outrun car. DELETE-WHEN it lands. Taken as false.
+        // 0x82749230..0x82749240 -- UNGATED as of 2026-09-06: TryClearupOffscreenTraffic is
+        // bodied above in this file. The console passes the LIVE ITERATOR (`addi r4, r1,
+        // var_380`, the stack copy it keeps of it) and `continue`s on a true return.
+        // ⭐ This is the demotion valve. Without it maTrafficPhysicsInfoList only ever filled,
+        // and the 26th promotion faulted inside RecordTrafficVehicleIsPhysical.
+        if (TryClearupOffscreenTraffic(lIterator))
         {
-            static bool sbLoggedClearup = false;
-            LogMissingLeg(sbLoggedClearup, "TryClearupOffscreenTraffic @0x8273C4C8");
+            continue;
         }
 
         Vehicle* const lpVehicle = GetVehicle(static_cast<u32>(liVehicle));    // 0x82749244
@@ -886,6 +1073,129 @@ void TrafficEntityModule::StopVehicleBeingPhysical(u32 luVehicle, bool lbSuppres
     // 0x82720024 -- clears E_FLAG_PHYSICAL, the mPhysicalVehicles bit, the parts index, the
     // physical reason and the crash-traffic type.
     lpVehicle->SetNotPhysical(luVehicle, mVehicleSoaData);
+
+    // [T3-demote] -- NOT IN THE X360 BINARY. See the census banner at the top of this file.
+    ++giDemoteCalls;
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        if (giDemoteCalls <= KI_DEMOTE_PRINT_CAP)
+        {
+            *lpDiag << "[T3-demote] #" << giDemoteCalls
+                    << " vehicle " << static_cast<s32>(luVehicle)
+                    << " slot " << liPartsIndex
+                    << " suppressPhysRemoval " << (lbSuppressPhysicsRemoval ? 1 : 0)
+                    << " physSlots " << static_cast<s32>(maTrafficPhysicsInfoListBits.CountSetBits())
+                    << " | recycle " << giDemoteFromRecycle
+                    << " return "    << giDemoteFromReturn
+                    << " killDying " << (giDemoteCalls - giDemoteFromRecycle
+                                         - giDemoteFromReturn)
+                    << " (clearupKills " << giDemoteFromClearup << ")"
+                    << " [DELETE-WHEN-STABLE]\n";
+
+            if (giDemoteCalls == KI_DEMOTE_PRINT_CAP)
+            {
+                *lpDiag << "[T3-demote] print cap " << KI_DEMOTE_PRINT_CAP
+                        << " reached -- later demotions still counted, not printed\n";
+            }
+        }
+    }
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::HandleRecycledTraffic  @0x82741780  (218 insns)
+//   DWARF BrnTrafficUnity.cpp:14952, whose locals are transcribed verbatim (lTrafficRemovedEvent
+//   / liEvent / luVehicle / lpVehicle / luI).
+//
+// THE SECOND DEMOTION ROUTE, and the one physics drives. PostPhysicsUpdate's FIRST RUNNING head
+// leg (0x8274E884) hands it the vehicle manager's mRemovedTrafficEventQueue (+0x7A0), which
+// PhysicalTrafficManager::RecycleTrafficVehicle and ::CheckForTrafficHittingWater fill when the
+// SIMULATION drops a traffic body. The world side then gives up its own half.
+//
+// TWO THINGS THE ASM SETTLES THAT THE PSEUDOCODE HIDES:
+//   * the suppression flag is `li r5, 1` (0x827418B0), i.e. StopVehicleBeingPhysical does NOT
+//     append to maNewRemovedVehicles. It must not: physics is the one telling us, so posting a
+//     RemoveTrafficEvent back at it would remove a slot that is already gone.
+//   * the switch is on the event's SECOND word. TrafficRemovedEvent is
+//     { EntityId, ETrafficType } (BrnVehicleEvents.h:356); the console loads the 8 bytes with a
+//     single `ld`, spills them, and reads the two halves back separately -- the high word for
+//     the entity index (`extrwi r30, r11, 14,8`) and the low word for the jump table
+//     (0x827418C4 `cmplwi r11, 3` + jpt_827418E0). Only E_TRAFFIC_TYPE_SLAMMED (3) is
+//     distinguished; 0/1/2 share one arm.
+// The default arm's baked message is "A traffic vehicle was recycled with an invalid physical
+// state" (.cpp 3575) -- the console's own words for a fourth ETrafficType value.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::HandleRecycledTraffic(
+        const CgsModule::EventQueue<BrnPhysics::Vehicle::TrafficRemovedEvent, 25>*
+            lpRemovedTrafficQueue)
+{
+    CGS_ASSERT(lpRemovedTrafficQueue != 0, "lpRemovedTrafficQueue != NULL");     // .cpp 3497
+
+    for (s32 liEvent = 0; liEvent < lpRemovedTrafficQueue->GetLength(); ++liEvent)
+    {
+        const BrnPhysics::Vehicle::TrafficRemovedEvent& lrTrafficRemovedEvent =
+            lpRemovedTrafficQueue->GetEvent(liEvent);                            // sub_82709AA8
+
+        const u32 luVehicle = EntityIndexOf(lrTrafficRemovedEvent.mRemovedVehicleEntityId);
+
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC"); // .h 2459
+
+        const Vehicle* const lpVehicle = GetVehicle(luVehicle);
+
+        // 0x82741894..0x827418A0 -- a vehicle the world has already retired needs nothing.
+        if (!lpVehicle->IsAlive())
+        {
+            continue;
+        }
+
+        // 0x827418A4..0x827418BC -- `li r5, 1`: the physics half is SUPPRESSED (see banner).
+        if (lpVehicle->IsPhysical())
+        {
+            ++giDemoteFromRecycle;   // [T3-demote] census, NOT IN THE X360 BINARY
+            StopVehicleBeingPhysical(luVehicle, true);
+        }
+
+        switch (lrTrafficRemovedEvent.meTrafficType)                             // jpt_827418E0
+        {
+        case BrnPhysics::Vehicle::E_TRAFFIC_TYPE_POTENTIAL:                      // cases 0-2
+        case BrnPhysics::Vehicle::E_TRAFFIC_TYPE_CRASHING:
+        case BrnPhysics::Vehicle::E_TRAFFIC_TYPE_PHYSICAL:
+            RemoveVehicle(luVehicle);                                            // 0x827418FC
+            break;
+
+        case BrnPhysics::Vehicle::E_TRAFFIC_TYPE_SLAMMED:                        // case 3
+        {
+            // 0x82741904..0x8274196C -- drop this car's pending crash record. This is one of
+            // the two things that ever shrinks maNewCrashedVehicles (the other is
+            // GenerateCrashedVehicleEvents' whole-array Clear), and the console breaks out of
+            // the scan on the FIRST match rather than erasing every instance.
+            for (u32 luI = 0; luI < maNewCrashedVehicles.GetLength(); ++luI)
+            {
+                if (EntityIndexOf(maNewCrashedVehicles.GetItem(luI).mVictimId) == luVehicle)
+                {
+                    maNewCrashedVehicles.Erase(luI);
+                    break;
+                }
+            }
+
+            // 0x82741970..0x82741AA4 -- a tripwire, not a gate. The console falls through to
+            // RemoveVehicle whether or not it fires.
+            CGS_ASSERT(!mVehiclesAddedToCrashModule.IsBitSet(luVehicle) ||
+                       lpVehicle->GetCrashTrafficTypeRaw() !=
+                           static_cast<u8>(BrnPhysics::Vehicle::eCrashTrafficType_Slammed),
+                       "!mVehiclesAddedToCrashModule.IsBitSet( luVehicle ) || "
+                       "( GetVehicle( luVehicle )->GetCrashTrafficType() != "
+                       "BrnPhysics::Vehicle::eCrashTrafficType_Slammed )");      // .cpp 3568
+
+            RemoveVehicle(luVehicle);                                            // 0x82741AB0
+            break;
+        }
+
+        default:
+            CGS_ASSERT(false,
+                       "A traffic vehicle was recycled with an invalid physical state"); // .cpp 3575
+            break;
+        }
+    }
 }
 
 // --------------------------------------------------------------------------------------------
@@ -916,6 +1226,7 @@ void TrafficEntityModule::ReturnPhysicalVehicleToTraffic(u32 luVehicle)
     GetVehicleAxles(luVehicle)->SetFromVehicleTransform(lTransform, lpVehicleTypeRuntime,
                                                         lpVehicleTypeUpdate);
 
+    ++giDemoteFromReturn;   // [T3-demote] census, NOT IN THE X360 BINARY
     StopVehicleBeingPhysical(luVehicle, false);                        // 0x8273DE10
 
     CGS_ASSERT(luVehicle < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");  // .h 2350

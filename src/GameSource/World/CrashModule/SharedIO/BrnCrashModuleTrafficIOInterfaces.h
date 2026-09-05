@@ -98,6 +98,15 @@ namespace CrashIO
         // @0x827AA4E8).
         TrafficInputInterface& operator=(const TrafficInputInterface& lOther);
 
+        // ADDITIVE 2026-09-06 (traffic-demotion wave), same shape as TrafficOutputInterface's
+        // queue accessor pair below. TrafficEntityModule::GenerateVehicleCrashedEvents
+        // @0x82727768 is this queue's only producer, and the console folds the access to a
+        // bare `bl BaseEventQueue<AddCrashingTrafficEvent>::AddEvent` on the interface
+        // pointer itself (0x82727AB0 fetches the interface, 0x82727AC4 calls AddEvent with
+        // r3 unchanged) -- i.e. the queue at offset 0. Reached by name here.
+        const AddCrashingTrafficEventQueue& GetAddCrashingTrafficEventQueue() const { return mAddCrashingTrafficEventQueue; }
+        AddCrashingTrafficEventQueue&       GetAddCrashingTrafficEventQueue()       { return mAddCrashingTrafficEventQueue; }
+
     private:
         AddCrashingTrafficEventQueue   mAddCrashingTrafficEventQueue;    // :187 @0x000
         RemoveSlammedTrafficEventQueue mRemoveSlammedTrafficEventQueue;  // :188 @0xA10

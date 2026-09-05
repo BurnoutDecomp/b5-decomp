@@ -208,6 +208,38 @@ public:
             }
         }
 
+        // DWARF h:174 -- the default constructor, paired with ConstructOrphan below. It leaves
+        // the three members as the console leaves its stack record before ConstructOrphan fills
+        // them, so both are spelled here rather than one delegating to the other.
+        Iterator()
+            : miIndex(0)
+            , mpxSourceMasks(0)
+            , mxMask(1)
+        {
+        }
+
+        // DWARF h:211 `void ConstructOrphan(int)`. ADDITIVE 2026-09-06 (traffic-demotion wave).
+        // An ORPHAN iterator has NO source array: it carries only an index and that index's
+        // mask, so it can be handed to the container's iterator-taking Set/UnSet/IsBitSet
+        // overloads (and to consumers like Vehicle::SetCollidable, which take an Iterator&
+        // purely to name a bit). The X360 builds exactly this record inline, on the stack, at
+        // TrafficEntityModule::GenerateCrashedVehicleEvents @0x82720674..0x82720698:
+        //     stw  r31, var_160(r1)          ; miIndex        = luVehicle
+        //     stw  r20, var_15C(r1)          ; mpxSourceMasks = 0   (r20 == 0)
+        //     clrldi r11, r31, 58            ; luVehicle & 63
+        //     sld  r11, r21, r11             ; r21 == 1
+        //     std  r11, var_158(r1)          ; mxMask         = 1 << (luVehicle & 63)
+        //     addi r5, r1, var_160           ; -> Vehicle::SetCollidable's iterator argument
+        // ⚠️ An orphan cannot be advanced or compared against End(): mpxSourceMasks is null and
+        // Advance() would dereference it. That is the console's own contract, not a host
+        // limitation -- the record it builds has a zero there too.
+        void ConstructOrphan(s32 liIndex)
+        {
+            miIndex        = liIndex;
+            mpxSourceMasks = 0;
+            mxMask         = (u64)1 << (static_cast<u32>(liIndex) & KU_BITS_IN_BIT_FIELD_MASK);
+        }
+
         s32 GetIndex() const { return miIndex; }                            // DWARF h:230
         Iterator& operator++() { Advance(); return *this; }                 // DWARF h:245
         bool operator==(s32 liIndex) const { return miIndex == liIndex; }   // DWARF h:340

@@ -220,16 +220,26 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
             // never emits a race-car-vs-traffic overlap pair. Mount _wT4_01.cpp in
             // tools/build/build_game_exe.bat or this call is an LNK2019 at exe link.
             UpdateCollidableVehicles(lpInput, lpOutput);
+
+            // 0x8274AC20 -- UN-GATED 2026-09-06. Body in _wT3_01.cpp beside its one producer.
+            // ⭐ ITS TAIL IS THE ONLY THING THAT BOUNDS maNewCrashedVehicles: the array holds
+            // 160 TrafficCrashInfo, RecordTrafficVehicleIsPhysical appends one per promotion,
+            // and this Clear is the only shrink apart from HandleRecycledTraffic's single-entry
+            // erase and Reset(). With it gated, append #161 would have written an EntityId over
+            // the count word and #162 a store ~half a gigabyte past the record.
+            // It is INSIDE the `!IsPaused() && !lbSimPaused` guard, exactly where the console
+            // puts it -- the whole block sits between 0x8274ABD0/0x8274ABDC and 0x8274AC24.
+            GenerateCrashedVehicleEvents(lpOutput);
         }
 
         {
             static bool sbLogged = false;
             LogMissingLeg(sbLogged,
-                "PreSceneUpdate E_STATE_RUNNING remaining legs -- GenerateCrashedVehicleEvents "
-                "@0x82720030 / ManageTriggers @0x82747518 / UpdateSerialiser @0x8272DA80. "
-                "None bodied; all are crash/trigger/replay surface (waves 2 and 3). "
-                "UpdateCrashSlider @0x82715A18 WAS in this list and is now live above. The "
-                "reference's KillTrafficTooCloseToRaceCars is NOT in the ship's callee list and is "
+                "PreSceneUpdate E_STATE_RUNNING remaining legs -- ManageTriggers @0x82747518 / "
+                "UpdateSerialiser @0x8272DA80. Neither bodied; both are trigger/replay surface. "
+                "UpdateCrashSlider @0x82715A18 and GenerateCrashedVehicleEvents @0x82720030 "
+                "WERE in this list and are now live above. The reference's "
+                "KillTrafficTooCloseToRaceCars is NOT in the ship's callee list and is "
                 "therefore not written");
         }
     }

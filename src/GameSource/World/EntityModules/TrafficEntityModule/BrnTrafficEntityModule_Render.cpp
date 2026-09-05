@@ -235,8 +235,27 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
 
     // DWARF :19315 -- `FastBitArray<601>::UnSetAll` at the top of the body, before the walk.
     // See note (1) in this function's header for the ship-vs-DWARF extent.
-    CgsContainers::FastBitArray< KU_MAX_TOTAL_TRAFFIC > lVehiclesAlreadySeen;
-    lVehiclesAlreadySeen.UnSetAll();
+    //
+    // ⭐⭐ IT IS THE SoA MEMBER, NOT A LOCAL (fixed 2026-09-06, traffic-demotion wave).
+    // This body was reconstructed from the DWARF alone because @0x8274D900 is an export hole,
+    // and the DWARF names only the TYPE -- so "a FastBitArray is cleared here and bits are set
+    // in it" was modelled as a stack-local duplicate filter. The image says otherwise. Read
+    // with tools/re/ppcdis.py, the console's clear is
+    //     0x8274D998  slwi r10, r11, 0
+    //     0x8274D9A0  addi r10, r10, 0x508C        ; 8 * 0x508C == 164960
+    //     0x8274D9A8  slwi r10, r10, 3
+    //     0x8274D9AC  stdx r22(0), r10, r30        ; ten doublewords, r30 == this
+    // and its set is
+    //     0x8274DBF4  addis r28, r29, 3 ; addi r28, r28, -0x7BA0   ; this + 0x28460 == 164960
+    //     0x8274DCC4  stdx  r10, r11, r28
+    // 164960 == mVehicleSoaData + 400 == mVehiclesRenderedLastFrame (the sixth 80-byte set;
+    // TryClearupOffscreenTraffic @0x8273CAB8 names it in its own baked assert string). So the
+    // duplicate filter and "which cars did the render pass touch last frame" are ONE bit set,
+    // and the console publishes it. WHAT THE LOCAL COST: four readers saw a permanently empty
+    // array -- TryClearupOffscreenTraffic (which then treats every car as never-rendered),
+    // ClearupCrashedTraffic and NukeTrafficJams' kill selection (_wT5_01.cpp / _wT6_01.cpp),
+    // and PostPhysicsUpdate's 80-byte copy into the crash-traffic input interface (+0xCA8).
+    mVehicleSoaData.mVehiclesRenderedLastFrame.UnSetAll();
 
     // The producer (WorldModule::FilterFrustumTestResults) has already kept only the
     // owner-byte-2 (traffic) ids, so every entry here names a traffic vehicle slot.
@@ -256,7 +275,7 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
         }
 
         // DWARF :19315 -- `FastBitArray<601>::IsBitSet` guards the whole per-vehicle block.
-        if ( lVehiclesAlreadySeen.IsBitSet( luVehicle ) )
+        if ( mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet( luVehicle ) )
         {
             continue;
         }
@@ -279,7 +298,7 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
         // i.e. inside the body of the distance-cull `if` and BEFORE the liveness dispatch. So
         // a vehicle that passed the cull marks itself seen whether or not it is then kept: the
         // bit means "considered this frame", not "appended this frame". Reproduced exactly.
-        lVehiclesAlreadySeen.SetBit( luVehicle );
+        mVehicleSoaData.mVehiclesRenderedLastFrame.SetBit( luVehicle );
 
         // ---- the species-dispatched liveness predicate (DWARF :13765-:13789) -------------
         // NOT `Vehicle::IsAlive()`. The ship asks the vehicle's PARAM, and the pool the param

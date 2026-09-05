@@ -58,12 +58,17 @@
 // its sim box around and PostPhysicsUpdate's tail latches meLocalPlayerIndex from.
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 
+// VehicleManagerOutputInterface::GetRemovedTrafficEventQueue() -- PostPhysicsUpdate's first
+// RUNNING head leg feeds it straight into HandleRecycledTraffic (0x8274E870..0x8274E884).
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT
 #include "GameShared/GameClasses/Algorithms/CgsShuffle.h"        // CgsAlgorithms::Shuffle (Reset pool shuffles)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // gpDebugPrint / gxMessageFilterFlags
 
 #include "rw/math/vpu/matrix44affine_operation.h"               // rw::math::vpu::IsValid
 
+#include <cstring>   // std::memset (Construct's 102,800-byte maTrafficPhysicsInfoList clear)
 #include <cfloat>    // FLT_MAX (the KF_MAX_FLOAT tuning seed)
 #include <cmath>     // std::floor, std::cos, std::sin
 #include <cstdlib>   // getenv
@@ -1787,6 +1792,18 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     // ====================================================================================
     case E_STATE_RUNNING:
     {
+        // 0x8274E870..0x8274E884 -- UNGATED as of 2026-09-06: HandleRecycledTraffic is bodied
+        // in _wT3_02.cpp. The console fetches the vehicle manager's output interface and hands
+        // it `interface + 0x7A0` == mRemovedTrafficEventQueue, reached here by name.
+        // ⭐ This is the PHYSICS-driven half of traffic demotion (the world-driven half is
+        // TryClearupOffscreenTraffic, inside GenerateDriverInputs). Both were gated, and with
+        // both gated the module's 25 TrafficPhysicsInfo slots only ever filled.
+        if (const BrnPhysics::Vehicle::VehicleManagerOutputInterface* lpManagerOutput =
+                lpInput->GetVehicleManagerOutputInterface())
+        {
+            HandleRecycledTraffic(lpManagerOutput->GetRemovedTrafficEventQueue());
+        }
+
         // HandleExternalResponses @0x82732C68 is the second of the five head legs and IS bodied
         // (_wT3_04.cpp): it turns the physics side's PhysicalTrafficState queue back into world
         // vehicle transforms, so a car the player hits actually moves. The other four legs keep
@@ -1798,16 +1815,10 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         // body in BrnTrafficEntityModule_ProcessDeformationData.cpp.
         ProcessDeformationData(lpInput->GetDeformationOutputInterfaceForEntityModules());
 
-        {
-            static bool sbLogged = false;
-            LogMissingLeg(sbLogged,
-                "PostPhysicsUpdate E_STATE_RUNNING head leg -- HandleRecycledTraffic "
-                "@0x82741AF8 (0x8274E884, fed by the InputBuffer getter @0x8274E874 + 0x7A0) "
-                "is not bodied in this tree. HandleExternalResponses (T3 round 1) and "
-                "ProcessDeformationData (2026-09-02) are LIVE; the console's head-leg order at "
-                "0x8274E870..0x8274E8A4 is exactly those three calls -- HandleResetRaceCarEvents "
-                "/ HandleContactPoints are NOT in this arm");
-        }
+        // The console's head-leg order at 0x8274E870..0x8274E8A4 is exactly those three calls
+        // (HandleRecycledTraffic / HandleExternalResponses / ProcessDeformationData) --
+        // HandleResetRaceCarEvents and HandleContactPoints are NOT in this arm. All three are
+        // now LIVE.
 
         // 0x8274E710 `clrlwi r27, r30, 31` -- bit 0 of the update set is the sim-paused bit,
         // fed straight into the `IsPaused() || ...` test below. FLAG (no enumerator):
@@ -1846,6 +1857,14 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
             }
         }
 
+        // 0x8274EB5C -- UN-GATED 2026-09-06. Body in _wT3_01.cpp. It hands each freshly crashed
+        // traffic car to the CRASH MODULE once (guarded by mVehiclesAddedToCrashModule) and
+        // clears its mbNeedsToBeSentToCrashModule flag -- which is exactly the flag
+        // GenerateCrashedVehicleEvents (PreSceneUpdate, now live) asserts is already clear.
+        // The two are one ordered pair; landing only the PreScene half would fire that assert
+        // on every record.
+        GenerateVehicleCrashedEvents(lpOutput);
+
         {
             static bool sbLogged = false;
             LogMissingLeg(sbLogged,
@@ -1857,11 +1876,12 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
                 "TrafficSoundOutputInterface::AddTrafficEntity, TrafficDirectorEntity::Append. "
                 "It creates NO physics body and touches no collision volume, so it is not on "
                 "the crash-into-traffic path), GenerateRemovedVehicleEvents, "
-                "GenerateSlamRecoveryEvents, GenerateVehicleCrashedEvents, and the three "
+                "GenerateSlamRecoveryEvents, and the three "
                 "80-byte mVehicleSoaData -> OutputBuffer_PostPhysics copies (soa members "
                 "mPhysicalVehicles / mVehiclesRenderedLastFrame / mPhysicalVehiclesFarFrom"
                 "Player into the crash-traffic input interface at console +3240/+3320/+3400). "
-                "None is bodied; the last four are crash-module surface (wave 3)");
+                "GenerateVehicleCrashedEvents WAS in this list and is now live above; the rest are "
+                "not bodied and are crash-module surface (wave 3)");
         }
     }
     break;
@@ -2401,23 +2421,45 @@ void TrafficEntityModule::Construct()
         LogMissingLeg(sbLogged,
             "Construct sub-object legs TrafficEntitySerialiser::Construct, "
             "CgsResource::BaseResourcePtr::CreateFromHandle(mpData-adjacent slot), "
-            "the 102800-byte maTrafficPhysicsInfoList memset "
-            "(RECURRING-BUG CLASS (a) LIVES HERE, not in the 25 Constructs: this memset -- or "
-            "Construct's own tail -- is the only remaining candidate for whoever binds "
-            "mDetachedPartQueue.mpEvents, and neither has been read yet), the 32-slot showtime "
+            "the 32-slot showtime "
             "list seed, the DebugComponent and Logger allocations, the twenty "
             "CgsDev::PerfMonCpu::AddMonitor registrations and DebugRenderStreamReader::"
             "Construct -- none of those callees has a body or a usable declaration in this tree");
     }
 
+    // ⭐⭐ THE 102,800-BYTE BULK CLEAR, RESTORED 2026-09-06 (traffic-demotion wave). It used to
+    // be inside the gate above, with a note saying "every field Construct does not touch is
+    // zero on the console and is whatever the host storage holds here. Every reader of those
+    // fields is a gated physical-traffic leg, so the loop is safe to run without the memset."
+    // THAT SECOND SENTENCE WENT STALE and nobody retired it: ProcessDeformationData
+    // (2026-09-02) and RenderTrafficCar are both live now, and between them they read
+    // maSkinningOffsets_Scratch, maWheelTransforms, mabWheelExists, maLightLocatorPositions and
+    // maLightTagPointTypes -- exactly the members TrafficPhysicsInfo::Construct @0x82751E88
+    // deliberately does NOT touch, precisely because this clear has already run
+    // (see _wT1_03.cpp's "NOT ZEROED, DELIBERATELY" list).
+    // ⚠️ AND THIS WAVE MADE IT MATTER MORE, not less. Until TryClearupOffscreenTraffic and
+    // HandleRecycledTraffic landed, no slot was ever freed, so each of the 25 records was
+    // claimed at most once per session; now they are RECYCLED, and a fresh occupant would
+    // otherwise inherit the previous car's dent, wheel and light-locator state for the frames
+    // before ProcessDeformationData refreshes them. The standing "one-frame 4.86 m vertex spike
+    // on a freshly promoted traffic car, pure +Y, gone the next frame" lead is that shape.
+    // THE CONSOLE'S OWN CALL, read out of Construct @0x82740220 (nobody had opened it):
+    //     0x827408E8  addis r27, r31, 6       ; this + 0x60000
+    //     0x827408F0  addi  r27, r27, -0x7DF0 ; this + 0x58210 == 360976 == the array base
+    //     0x827408EC  lis   r5, 1
+    //     0x827408F4  ori   r5, r5, 0x9190    ; Size == 0x19190 == 102800
+    //     0x827408F8  li    r4, 0             ; Val
+    //     0x827408FC  mr    r3, r27           ; Dst
+    //     0x82740900  bl    memset
+    //     0x82740904  li    r29, 0x19         ; 25 -- the Construct loop below starts here
+    // The host record is byte-for-byte the console's size -- the eleven static_asserts in
+    // BrnTrafficEntityModule.cpp pin sizeof(TrafficPhysicsInfo) == 4112 and 25 * 4112 == 102,800
+    // -- so this is the console's memset, not an approximation of it.
+    std::memset(maTrafficPhysicsInfoList, 0, sizeof(maTrafficPhysicsInfoList));
+
     // The 25 physical-traffic scratch records; body in BrnTrafficEntityModule_wT1_03.cpp. The
     // console's literal is a sign-extended -1, the same 16 bits the u16 member takes.
-    //
-    // ORDER WARNING: the console memsets the 102,800-byte array and THEN runs these Constructs,
-    // and that memset is gated above. So every field Construct does not touch is zero on the
-    // console and is whatever the host storage holds here. Every reader of those fields is a
-    // gated physical-traffic leg, so the loop is safe to run without the memset, but the record
-    // is not initialised.
+    // ORDER: the memset above runs FIRST, exactly as the console orders them.
     for ( u32 luSlot = 0; luSlot < KU_MAX_PHYSICAL_TRAFFIC_VEHICLES; luSlot++ )
     {
         maTrafficPhysicsInfoList[luSlot].Construct(

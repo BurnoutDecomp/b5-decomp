@@ -239,6 +239,12 @@ public:
     // STANDARD-species arm is `(*(GetParam(luVehicle) + 64) >> 5) & 1`: offset 0x40 is
     // mxFlags and bit 5 is E_FLAG_ZOMBIE.
     bool IsZombie() const { return (mxFlags & E_FLAG_ZOMBIE) != 0; }
+    // The read half of SetShouldBeRemoved, and the exact sibling of
+    // StaticTrafficParam::ShouldBeRemoved (BrnTrafficStaticParam.h:63). ADDITIVE 2026-09-06:
+    // GenerateCrashedVehicleEvents @0x82720318 tests this bit inline
+    // (`rlwinm r10, r11, 0, 27, 27` on the +0x40 flag byte == 0x10) alongside IsAlive /
+    // IsDying / IsZombie, and nothing in the tree could read it.
+    bool ShouldBeRemoved() const { return (mxFlags & E_FLAG_SHOULD_BE_REMOVED) != 0; }
 };
 
 // BrnTraffic::ParamTransform -- the per-vehicle orientation/position transform block.

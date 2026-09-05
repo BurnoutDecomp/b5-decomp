@@ -26,9 +26,19 @@
 #include "SharedClasses/Traffic/BrnTrafficVehicleAsset.h"
 #include "SharedClasses/Traffic/BrnTrafficVehicleType.h"
 
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"           // Param (the drains' liveness test)
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficStaticParam.h"     // StaticTrafficParam
+#include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleTrafficIOInterfaces.h"      // AddCrashingTrafficEvent
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"            // AddVolumeInstance / AddForCollision
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
+
+#include "GameShared/GameClasses/SceneManager/CgsVolumeId.h"                              // VolumeId
+
+#include "rw/physics/rigidbody.h"                                                         // rw::physics::ACTIVE_BODY
+#include "rw/math/vpu/vector3_operation.h"                                                // Vector3 operator*
 
 namespace BrnTraffic
 {
@@ -41,6 +51,44 @@ namespace
     // hard 50, so they are two different constants that happen to share a modulus.
     const u32 KU_SYMP_CRASH_PERCENT_MODULUS   = 101u;
     const s32 KI_SYMP_CRASH_ACCELERATE_PERCENT = 50;
+
+    // ---- the two maNewCrashedVehicles drains --------------------------------------------
+    // The 14/10 traffic entity-id split MakeTrafficEntityId packs (BrnTrafficConstants.h),
+    // unpacked. Mirrored file-local exactly as _wT3_02.cpp / _wT3_04.cpp mirror it.
+    const u32 KU_ENTITY_INDEX_SHIFT   = 10;
+    const u32 KU_ENTITY_INDEX_MASK    = 0x3FFFu;
+    const u8  KU8_TRAFFIC_ENTITY_OWNER = 2;   // E_ENTITYTYPE_TRAFFIC
+
+    inline u32 EntityIndexOf(EntityId lId)
+    {
+        return (lId.muValue >> KU_ENTITY_INDEX_SHIFT) & KU_ENTITY_INDEX_MASK;
+    }
+
+    // The console folds the id as `sldi r27, <victim EntityId>, 32` -- the traffic EntityId
+    // sitting in the VolumeInstanceId's high dword, volume index 0. Built through the named
+    // setters here, the same two lines CleanUpCrashedVehiclePhysics (_wT3_02.cpp) and
+    // KillDyingVehicleEntity use.
+    inline CgsSceneManager::VolumeInstanceId MakeTrafficVolumeInstanceId(u32 luVehicle)
+    {
+        CgsSceneManager::VolumeInstanceId lVolumeInstanceId;
+        lVolumeInstanceId.muId = 0;
+        lVolumeInstanceId.SetEntityIDOwner(KU8_TRAFFIC_ENTITY_OWNER);
+        lVolumeInstanceId.SetEntityIDEntityIndex(luVehicle);
+        return lVolumeInstanceId;
+    }
+
+    // GenerateCrashedVehicleEvents' three literal arguments, `li r31,3` / `li r11,4` /
+    // `li r11,1` at 0x827204E4 / 0x827205CC / 0x827205C4.
+    // FLAG (name inferred, value asm-literal): culling group 3 has no symbol anywhere in this
+    // tree -- the named neighbours are 0 WORLD, 2 CARS, 7 PROPS, 8 PARTS, 9 the detached-part
+    // group (BrnPropEntityModule.cpp / BrnPhysicalWheel.cpp), and 3 is the one ordinary traffic
+    // does NOT use: UpdateCollidableVehicles (_wT4_01.cpp) registers a driving car in group 2.
+    // So a car that has just started crashing is moved into its own group.
+    const s32 KI_CULLING_GROUP_CRASHED_TRAFFIC = 3;
+
+    // 0x82720544 `addi r11, r11, 0x24` -- the same shared per-vehicle-TYPE BoxVolume id space
+    // UpdateCollidableVehicles registers into (_wT4_01.cpp:551 spells the identical 36 + type).
+    const u32 KU_HACK_BASE_VOLUME_ID = 36u;
 }
 
 // HOST SEAT REACHED ACROSS A TU BOUNDARY. The console walks maJobs[0..
@@ -451,6 +499,242 @@ void TrafficEntityModule::RecordTrafficVehicleIsPhysical(
     }
 
     lpVehicle->OnPhysical(leCrashType);   // 0x8272119C -- runs on BOTH paths
+}
+
+// ============================================================================================
+// THE TWO DRAINS of maNewCrashedVehicles, landed beside their one producer above.
+//
+// ⭐⭐ WHY THEY ARE HERE. RecordTrafficVehicleIsPhysical appends one TrafficCrashInfo per
+// promotion into a 160-slot ::Array, and until this wave NEITHER console drain had a body, so
+// nothing but Reset() ever shortened it. The array's count word sits immediately after its 160
+// records (X360 +0x572EC == this + 357100 == base + 0xA00), so append #161 does not fault -- it
+// writes an EntityId (>= 33.5 M for a traffic id) OVER THE COUNT, and #162 then indexes at that
+// count: a store roughly half a gigabyte past the record. Latent, not fired, and of exactly the
+// family the campaign has now hit three times (a write that only becomes reachable once some
+// other gate is opened). Landing the demotion valve makes promotions unbounded over a session,
+// which is precisely what would have taken this from latent to live.
+//
+// The two are NOT interchangeable and only one of them shortens anything:
+//   * GenerateVehicleCrashedEvents @0x82727768 (PostPhysicsUpdate) tells the CRASH MODULE about
+//     each record and clears its mbNeedsToBeSentToCrashModule flag. It never removes a record.
+//   * GenerateCrashedVehicleEvents @0x82720030 (PreSceneUpdate) re-registers the collision
+//     volume and then CLEARS THE WHOLE ARRAY at its tail. That Clear is the bound.
+// Their ORDER matters and the console encodes it as an assert: the PreScene drain fires
+// "We forgot to tell the crash module about ..." on any record still flagged, which can only
+// happen if the PostPhysics drain did not run first.
+// ============================================================================================
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::GenerateVehicleCrashedEvents  @0x82727768  (273 insns)
+//   DWARF `void GenerateVehicleCrashedEvents(OutputBuffer_PostPhysics*)` (BrnTrafficUnity.cpp
+//   :20156).
+//
+// One record per newly crashed traffic car handed to the crash module, guarded by
+// mVehiclesAddedToCrashModule so a car is announced once. That bit array is the module member
+// at X360 +164480 (`addis r22, r22, 3 ; addi r22, r22, -0x7D80`), i.e. the FastBitArray that
+// sits immediately BEFORE mVehicleSoaData -- reached by name here. Its other half is
+// EnsureVehicleRemovedFromCrashModule (_wT5_01.cpp), which clears the same bit.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::GenerateVehicleCrashedEvents(BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");                              // .cpp 14447
+
+    // The console re-reads the length every iteration (`lwz r11, 0xA00(r23)` inside the loop),
+    // exactly as CleanUpCrashedVehiclePhysics does.
+    for (u32 luIndex = 0; luIndex < maNewCrashedVehicles.GetLength(); ++luIndex)
+    {
+        TrafficCrashInfo& lrCrashInfo = maNewCrashedVehicles.GetItem(luIndex);
+
+        if (!lrCrashInfo.mbNeedsToBeSentToCrashModule)                          // lbz +0xC
+        {
+            continue;
+        }
+
+        const EntityId lVictimId          = lrCrashInfo.mVictimId;              // +0x00
+        const EntityId lCauserId          = lrCrashInfo.mCauserId;              // +0x04
+        const u32      luCrashTrafficType = lrCrashInfo.muCrashTrafficType;     // +0x08
+
+        // 0x827278A4 -- the flag is cleared BEFORE the assert and before every early-out, so a
+        // record is consumed exactly once whatever happens below.
+        lrCrashInfo.mbNeedsToBeSentToCrashModule = false;
+
+        // 0x827278A0..0x82727960. Streamed: "Someone has requested to send slammed traffic
+        // vehicle " << entityIndex << " to the crash module".
+        CGS_ASSERT(luCrashTrafficType !=
+                       static_cast<u32>(BrnPhysics::Vehicle::eCrashTrafficType_Slammed),
+                   "Someone has requested to send slammed traffic vehicle ");   // .cpp 14466
+
+        const u32 luVehicle = EntityIndexOf(lVictimId);
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TOTAL_TRAFFIC"); // 14471
+
+        // 0x827279A0..0x827279B4 -- a car that died between the promotion and this frame.
+        if (!GetVehicle(luVehicle)->IsAlive())
+        {
+            continue;
+        }
+
+        if (mVehiclesAddedToCrashModule.IsBitSet(luVehicle))                    // +164480
+        {
+            continue;
+        }
+
+        // 0x82727AAC..0x82727AC4 -- the 16-byte record, in the console's own field order.
+        BrnWorld::CrashIO::AddCrashingTrafficEvent lEvent;
+        lEvent.mVolumeInstanceId  = MakeTrafficVolumeInstanceId(luVehicle);
+        lEvent.mCrasherEntityId   = lCauserId;
+        lEvent.meCrashTrafficType =
+            static_cast<BrnPhysics::Vehicle::eCrashTrafficType>(luCrashTrafficType);
+
+        lpOutput->GetCrashTrafficInputInterface()
+                ->GetAddCrashingTrafficEventQueue().AddEvent(lEvent);
+
+        mVehiclesAddedToCrashModule.SetBit(luVehicle);                          // 0x82727B88
+    }
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::GenerateCrashedVehicleEvents  @0x82720030  (428 insns)
+//   DWARF `void GenerateCrashedVehicleEvents(OutputBuffer_PreScene*)` (BrnTrafficUnity.cpp:6847).
+//
+// The LAST leg of PreSceneUpdate's `!IsPaused() && !lbSimPaused` block -- 0x8274AC20, straight
+// after UpdateCollidableVehicles @0x827302C8. For each freshly crashed car whose PARAM is still
+// a live one it either (a) moves the existing collision volume into the crashed-traffic culling
+// group, or (b) registers one from scratch; then it CLEARS the array.
+//
+// THE LIVENESS TEST IS THE PARAM'S, NOT THE VEHICLE'S, and it is species-dispatched exactly the
+// way PreDispatchUpdate's is (BrnTrafficEntityModule_Render.cpp) -- alive AND not dying AND not
+// should-be-removed AND not zombie. The three arms come off the index/species ladder at
+// 0x827202E8 (`cmplwi r31, 0x190` -- the standard pool is [0, 400)) and 0x827203B8 /
+// 0x82720410 (GetVehicleSpecies == 1 STATIC / == 2 TRAILER).
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::GenerateCrashedVehicleEvents(BrnTrafficIO::OutputBuffer_PreScene* lpOutput)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");
+
+    for (u32 luIndex = 0; luIndex < maNewCrashedVehicles.GetLength(); ++luIndex)
+    {
+        const TrafficCrashInfo& lrCrashInfo = maNewCrashedVehicles.GetItem(luIndex);
+
+        // 0x827201BC..0x82720268 -- a TRIPWIRE on ordering, not a gate: by the time PreScene
+        // runs, PostPhysics' GenerateVehicleCrashedEvents should have cleared every flag.
+        // Streamed: "We forgot to tell the crash module about " << index << ", vehicle flags = "
+        // << flags.
+        CGS_ASSERT(!lrCrashInfo.mbNeedsToBeSentToCrashModule,
+                   "We forgot to tell the crash module about ");
+
+        const u32 luVehicle = EntityIndexOf(lrCrashInfo.mVictimId);
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TOTAL_TRAFFIC");
+
+        Vehicle* const lpVehicle = GetVehicle(luVehicle);
+
+        // 0x827202A8..0x827202BC -- the vehicle's own liveness, read off its flag byte.
+        if (!lpVehicle->IsAlive())
+        {
+            continue;
+        }
+
+        // 0x827202C0 -- the key the whole registration is done under.
+        const CgsSceneManager::VolumeInstanceId lVolumeInstanceId =
+            MakeTrafficVolumeInstanceId(luVehicle);
+
+        // ---- the species-dispatched PARAM liveness test -------------------------------
+        bool lbParamStillLive = false;                                          // `mr r28, r20`
+
+        if (luVehicle < KU_MAX_STANDARD_TRAFFIC)                                // 0x827202E8
+        {
+            const Param* const lpParam = GetParam(luVehicle);                   // maParams[idx]
+
+            if (lpParam->IsAlive() && !lpParam->IsDying() &&
+                !lpParam->ShouldBeRemoved() && !lpParam->IsZombie())
+            {
+                // 0x82720330..0x827203AC. Streamed: "Param/vehicle got into a bizarre state:"
+                // << index << ", vehicle flags = " << flags.
+                CGS_ASSERT(lpVehicle->IsAlive(), "Param/vehicle got into a bizarre state:");
+                lbParamStillLive = true;                                        // `mr r28, r21`
+            }
+        }
+        else if (GetVehicleSpecies(luVehicle) == Vehicle::E_SPECIES_STATIC)     // 0x827203C0
+        {
+            const StaticTrafficParam* const lpParam = GetStaticTrafficParamFromFullV(luVehicle);
+
+            // Same four bits, in the console's own order for this arm (0x827203D8 alive,
+            // 0x827203E4 dying, 0x827203F0 zombie, 0x827203FC should-be-removed).
+            if (lpParam->IsAlive() && !lpParam->IsDying() &&
+                !lpParam->IsZombie() && !lpParam->ShouldBeRemoved())
+            {
+                lbParamStillLive = true;
+            }
+        }
+        else if (GetVehicleSpecies(luVehicle) == Vehicle::E_SPECIES_TRAILER)    // 0x82720418
+        {
+            // 0x82720420..0x8272043C -- a trailer has no param of its own; the vehicle answers.
+            lbParamStillLive = GetVehicle(luVehicle)->IsAlive();
+        }
+        else
+        {
+            CGS_ASSERT(false, "Vehicle has unsupported species");
+        }
+
+        if (!lbParamStillLive)                                                  // 0x82720498
+        {
+            continue;
+        }
+
+        // ---- (a) it is ALREADY registered: just re-group and re-cache it ----------------
+        if (lpVehicle->IsCollidable())                                          // 0x827204D0
+        {
+            lpOutput->GetSceneInputInterface()->SetVolumeInstanceCullingGroup(
+                lVolumeInstanceId, KI_CULLING_GROUP_CRASHED_TRAFFIC);           // li r31, 3
+
+            lpOutput->GetSceneInputInterface()->AddVolumeInstanceForCaching(
+                lVolumeInstanceId,
+                CgsSceneManager::SceneManagerIO::E_ADD_TO_CACHE_MANAGER_AS_NON_CACHED); // li r31, 1
+            continue;
+        }
+
+        // ---- (b) register one from scratch ----------------------------------------------
+        CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()");                          // 0x82720518
+
+        const CgsSceneManager::VolumeId lVolumeId(
+            static_cast<u64>(KU_HACK_BASE_VOLUME_ID + lpVehicle->GetVehicleType()));
+
+        // ⚠️ THE RAW VEHICLE TRANSFORM. UpdateCollidableVehicles' own AddVolumeInstance moves
+        // the translation row to TransformPoint(transform, mBBoxOffset) first; this site does
+        // NOT (0x82720558 hands GetVehicleTransform's result straight to r6). Reproduced as the
+        // console has it.
+        const Matrix44Affine lTransform = GetVehicleTransform(luVehicle);
+
+        lpOutput->GetSceneInputInterface()->AddVolumeInstance(
+            lVolumeInstanceId, lVolumeId, lTransform);                          // 0x82720574
+
+        // 0x8272057C..0x827205E0 -- the swept padding: the car's own At axis times the distance
+        // it covers this frame. Same three factors UpdateCollidableVehicles uses.
+        const Vector3 lPadding =
+            lTransform.At() * (lpVehicle->GetSpeed().x * mfSimTimeStepVec.x);
+
+        lpOutput->GetSceneInputInterface()->AddForCollision(
+            lVolumeInstanceId,
+            static_cast<CgsSceneManager::SceneManagerIO::InEventAddForCollision::CullingGroup>(
+                KI_CULLING_GROUP_CRASHED_TRAFFIC),                              // event +0x18 = 3
+            rw::physics::ACTIVE_BODY,                                           // event +0x1C = 4
+            lPadding,
+            CgsSceneManager::SceneManagerIO::E_ADD_TO_CACHE_MANAGER_AS_NON_CACHED); // +0x1D = 1
+
+        // 0x82720674..0x8272069C -- SetCollidable takes an ITERATOR, and this site has none to
+        // hand it, so the console builds an ORPHAN one on the stack: {miIndex = luVehicle,
+        // mpxSourceMasks = 0, mxMask = 1 << (luVehicle & 63)}. That is the DWARF's
+        // FastBitArray<601>::Iterator::ConstructOrphan(int) (CgsFastBitArray.h:211), recovered
+        // for this site.
+        CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator lItVehicle;
+        lItVehicle.ConstructOrphan(static_cast<s32>(luVehicle));
+
+        lpVehicle->SetCollidable(true, lItVehicle, mVehicleSoaData);
+    }
+
+    // 0x827206B8..0x827206C0 `lis r11, 5 ; ori r11, r11, 0x72EC ; stwx r20, r25, r11` -- a store
+    // of ZERO over the count word at this + 0x572EC == 357100, i.e. maNewCrashedVehicles.Clear().
+    // ⭐ THIS IS THE BOUND on the 160-slot array. See the section banner above.
+    maNewCrashedVehicles.Clear();
 }
 
 }
