@@ -603,6 +603,60 @@ void BoostStateMachine::OnTick(CarState& lCarState, RaceCarParticleEffectHelper&
 
     if (!lbDoLocatorUpdate)
     {
+        // ================================================================================
+        // ⚠ FLAG PC BRING-UP STAND-IN -- NOT CONSOLE BEHAVIOUR. DELETE-WHEN the deformation
+        // module publishes VehicleLocatorOutput for race cars on this build.
+        //
+        // WHY IT IS HERE. Every arm above needs a locator source, and on this build there is
+        // none: EffectsModule's per-car lookup (EffectsModule.cpp, the [deformloc] witness)
+        // searches DeformationOutputInterface::maLocatorData for this car's entity id and
+        // finds nothing, so RaceCarParticleEffectHelper::VehicleLocators() is null; and the
+        // replay serialiser is not playing. The console would then leave the effects where
+        // they were -- but on this build they have never been anywhere, so they sit at the
+        // WORLD ORIGIN and cParticleRender::Render culls every one of them by range. Measured:
+        //     [lionfx] cull#1 cam=(3003.57,-2.54,-1938.61) ... emit=(0.00,0.00,0.00)
+        //              distSq=12779648.0
+        // with `[boosttag] ExtractTags RAN: locators=5 boostTags=2` -- so the car's spec DOES
+        // carry FXBOOSTPOINT1/2 (tag-type bits 41 and 42); it is only the per-frame DEFORMED
+        // locator table that never arrives.
+        //
+        // WHAT IT DOES, AND WHAT IT DELIBERATELY DOES NOT. It puts each live boost effect at
+        // the car's own world transform -- the console's own idiom for an effect that follows
+        // a car (HandleJumpAndLandingEffects @0x82288068 does exactly
+        // `lpEffect->SetTransform(lrHelper.RaceCarState()->mTransform)` for the jump effect).
+        // It does NOT invent the nozzle offset: the real transform is
+        // TransformBoostLocator(carWorld, locator) a few lines below, and until the locator
+        // exists any offset here would be a number nothing attests. So the exhaust plume rides
+        // the car's origin rather than its tailpipes, and it is off by the nozzle offset ONLY.
+        // The moment VehicleLocators() is non-null this arm stops running and the console path
+        // takes over untouched.
+        // ================================================================================
+        const BrnPhysics::Vehicle::RaceCarState* lpCar = lHelper.RaceCarState();
+        if (lpCar != NULL && muNumBoostTags != 0)
+        {
+            for (u32 luBoost = 0; luBoost < muNumBoostTags && luBoost < KU_NUM_BOOST_LOCATORS;
+                 ++luBoost)
+            {
+                lHelper.SetEffectTransform(mEffects[luBoost].muHandle, lpCar->mTransform);
+            }
+
+            // [boostloc] the stand-in's own witness, latched on the car moving into a new
+            // 8-metre cell so a stationary car costs one line. DELETE with the arm above.
+            static s32 siLastCell = 0x7FFFFFFF;
+            const s32 liCell = static_cast<s32>(lpCar->mTransform.wAxis.x * 0.125f)
+                             ^ (static_cast<s32>(lpCar->mTransform.wAxis.z * 0.125f) << 12);
+            if (liCell != siLastCell)
+            {
+                siLastCell = liCell;
+                char lacMsg[224];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[boostloc] STAND-IN: no VehicleLocatorOutput; %u boost effect(s) placed at"
+                    " the car transform (%.2f,%.2f,%.2f)\n",
+                    muNumBoostTags, lpCar->mTransform.wAxis.x, lpCar->mTransform.wAxis.y,
+                    lpCar->mTransform.wAxis.z);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
         return;
     }
 
@@ -616,6 +670,8 @@ void BoostStateMachine::OnTick(CarState& lCarState, RaceCarParticleEffectHelper&
 
     // The per-effect world transforms and the active-effect bitmask.
     Matrix44Affine laBoostTransforms[4];
+    for (u32 luSeed = 0; luSeed < 4u; ++luSeed)
+        laBoostTransforms[luSeed].SetIdentity();   // [boostloc]: the witness below reads slot 0 even when no tag is active
     u8 luActiveMask = 0;
 
     if (lbPlaying)
@@ -652,6 +708,40 @@ void BoostStateMachine::OnTick(CarState& lCarState, RaceCarParticleEffectHelper&
                     luActiveMask |= static_cast<u8>(1u << luBoost);
                 }
             }
+        }
+    }
+
+    // ---- [boostloc] witness. NOT console behaviour: ours, bounded, log-only. -----------------
+    // MEASURED 2026-09-05 (boost-exhaust wave): every live Lion emitter culls at the world
+    // ORIGIN -- `[lionfx] cull#1 cam=(3003.57,-2.54,-1938.61) ... emit=(0.00,0.00,0.00)`. The
+    // camera is right; the EFFECT is at (0,0,0). This function is the only thing that ever gives
+    // a boost effect a world transform, so the question is which of its four exits it takes: no
+    // locator source at all, a locator list with no FXBOOSTPOINT in it, a tag the machine has no
+    // slot for, or a transform that really is the identity. Latched on the answer CHANGING, so a
+    // steady state costs one line. DELETE-WHEN-STABLE.
+    {
+        static u32 suLastKey = 0xFFFFFFFFu;
+        const u32 luKey = (static_cast<u32>(luActiveMask) << 8) | muNumBoostTags;
+        if (luKey != suLastKey)
+        {
+            suLastKey = luKey;
+            const BrnPhysics::Deformation::VehicleLocatorOutput* lpLocOut = lHelper.VehicleLocators();
+            s32 liNum = -1;
+            if (lpLocOut != NULL && lpLocOut->mpLocatorData != NULL)
+                liNum = lpLocOut->mpLocatorData->miNumGenericLocators;
+            const BrnPhysics::Vehicle::RaceCarState* lpCarDiag = lHelper.RaceCarState();
+            char lacMsg[320];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[boostloc] tags=%u activeMask=%02X playing=%d locOut=%p genericLocators=%d"
+                " car=(%.2f,%.2f,%.2f) fx0=(%.2f,%.2f,%.2f)\n",
+                muNumBoostTags, (unsigned)luActiveMask, (int)lbPlaying,
+                static_cast<const void*>(lpLocOut), (int)liNum,
+                lpCarDiag ? lpCarDiag->mTransform.wAxis.x : 0.0f,
+                lpCarDiag ? lpCarDiag->mTransform.wAxis.y : 0.0f,
+                lpCarDiag ? lpCarDiag->mTransform.wAxis.z : 0.0f,
+                laBoostTransforms[0].wAxis.x, laBoostTransforms[0].wAxis.y,
+                laBoostTransforms[0].wAxis.z);
+            CgsDev::Log::WriteToLog(lacMsg);
         }
     }
 

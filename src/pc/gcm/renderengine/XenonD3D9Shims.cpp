@@ -3348,12 +3348,12 @@ namespace renderengine
             // caller and its whole failure surface is invisible from the game side, so the
             // FIRST submit reports what it drew and the state it drew against, and any later
             // FAILED submit reports once. Delete with the particle bring-up.
-            static bool sbDiagFirst = false;
+            static u32  suDiagShots  = 0;
             static bool sbDiagFailed = false;
-            if (!sbDiagFirst || (FAILED(lhrDraw) && !sbDiagFailed))
+            if (suDiagShots < 8u || (FAILED(lhrDraw) && !sbDiagFailed))
             {
                 if (FAILED(lhrDraw)) sbDiagFailed = true;
-                sbDiagFirst = true;
+                ++suDiagShots;
                 IDirect3DVertexShader9*      lpVs   = nullptr;
                 IDirect3DPixelShader9*       lpPs   = nullptr;
                 IDirect3DVertexDeclaration9* lpDecl = nullptr;
@@ -3366,6 +3366,31 @@ namespace renderengine
                 lpDevice->GetRenderState(D3DRS_CULLMODE, &luCull);
                 lpDevice->GetRenderState(D3DRS_COLORWRITEENABLE, &luColourWrite);
                 lpDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &luAlphaBlend);
+                // The QUAD ITSELF: LionBlendVertex is position Vector4 @0, RGBA8 @16, uv @20
+                // (stride 36, BrnLionBlendVertex.h), so the first four POSITION rows are the
+                // corners QuadDraw emitted. Printed with the blend factors, because a draw that
+                // succeeds and lights nothing is either geometry the shader cannot place or a
+                // blend that multiplies it away.
+                f32 lafP[4][4];
+                for (u32 luV = 0; luV < 4u; ++luV)
+                    std::memcpy(lafP[luV], lpRun + luV * suVertexStride, sizeof(lafP[luV]));
+                DWORD luSrcBlend = 0, luDstBlend = 0, luBlendOp = 0, luFvf = 0;
+                lpDevice->GetRenderState(D3DRS_SRCBLEND, &luSrcBlend);
+                lpDevice->GetRenderState(D3DRS_DESTBLEND, &luDstBlend);
+                lpDevice->GetRenderState(D3DRS_BLENDOP, &luBlendOp);
+                lpDevice->GetFVF(&luFvf);
+                char lacQuad[288];
+                std::snprintf(lacQuad, sizeof(lacQuad),
+                              "[lionfx] quad0 v0=(%.2f,%.2f,%.2f,%.3f) v1=(%.2f,%.2f,%.2f,%.3f)"
+                              " v2=(%.2f,%.2f,%.2f,%.3f) v3=(%.2f,%.2f,%.2f,%.3f)"
+                              " srcBlend=%u dstBlend=%u blendOp=%u\n",
+                              lafP[0][0], lafP[0][1], lafP[0][2], lafP[0][3],
+                              lafP[1][0], lafP[1][1], lafP[1][2], lafP[1][3],
+                              lafP[2][0], lafP[2][1], lafP[2][2], lafP[2][3],
+                              lafP[3][0], lafP[3][1], lafP[3][2], lafP[3][3],
+                              (unsigned)luSrcBlend, (unsigned)luDstBlend, (unsigned)luBlendOp);
+                CgsDev::Log::WriteToLog(lacQuad);
+
                 char lacMsg[320];
                 std::snprintf(lacMsg, sizeof(lacMsg),
                               "[lionfx] DrawVertices: hr=0x%08X xenosPrim=%u start=%u verts=%u"
