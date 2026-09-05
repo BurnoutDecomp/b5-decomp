@@ -480,6 +480,18 @@ namespace Deformation
     // `vmr128 v122,v2` @0x826248C0 park lvfTimeStep and lvfIteration), which is what makes v122
     // the iteration in the shaping below.
     //
+    // ⭐ THE SIGNATURE IS CORROBORATED ON RUNG 2, not inferred from (b) alone. BOTH PS3 exports
+    // carry the mangled name, and it decodes to exactly this parameter list:
+    //     DecFIGS  @0x746D68 and Burnout_External_PS3 @0x3E57A0
+    //     _ZN10BrnPhysics11Deformation16DeformableObject20ApplyCarWorldImpulseE
+    //         RKNS0_20StoredImpulseContactE N2rw4math3vpu8VecFloatE S8_ i
+    //   == (const StoredImpulseContact&, VecFloat, VecFloat, int) -- two VecFloats then an int,
+    //   which is what makes v1/v2 the two vector args and r5 the sensor index.
+    // ⛔ AND THE LITTLE-ENDIAN ORACLES DO NOT HAVE IT. A sweep of Burnout_External_Xbox_One.exe,
+    // BurnoutPR.exe and TUB_Burnout_PC_External.exe for this symbol returns ZERO hits in all
+    // three, so "read it off an LE build" was never an available route for this function --
+    // recorded so the next wave does not spend the search.
+    //
     // ARTIST FLOW, address by address:
     //   0x826248CC  B  = *(this+0x194C)            the attached VehiclePhysics; B+0x10 is its
     //                                              ExternalPhysicsBody base subobject
