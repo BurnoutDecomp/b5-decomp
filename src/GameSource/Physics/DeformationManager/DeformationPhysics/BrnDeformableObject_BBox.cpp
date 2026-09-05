@@ -516,7 +516,32 @@ namespace Deformation
 		// and gid 369 (4485, 0.1872 m). Two cars an impulse apart differ by the whole range.
 		// ⇒ The brief's "impact speed does not predict crush" reproduces one rung further in: the
 		//   IMPULSE does not predict crush either, so the scatter is not in the speed->impulse
-		//   step. ⛔ NOT YET ATTRIBUTED, and this comment is not a claim that it is.
+		//   step.
+		// ✅✅ ATTRIBUTED 2026-09-05 (momentum wave) -- AND IT IS THE CONSOLE'S OWN GEOMETRY, not a
+		//   defect. A "large impulse, EXACTLY ZERO crush" row is a sensor whose impulse projected
+		//   onto a direction that would push it OUTWARD, and the limit-box room for that direction
+		//   is negative by construction.
+		//   ApplySensorImpulse builds laLimitRows[] as {min+pad, max-pad, min+pad, max-pad, ...}
+		//   -- EVEN rows (+X/+Y/+Z) from the box MIN corner, ODD rows (-X/-Y/-Z) from the MAX
+		//   corner (asm 0x82607AA0/AA4, and the store order v13,v0,v13,v0,v13,v0 at
+		//   0x82607AC4..B04). DeformationSensor::ApplyLocalImpulse then bounds the move by
+		//   `dot3(mLimitVector - sphereCentre, hitDir)`, so for a sensor on the +X side the +X row
+		//   (built from min.x) puts the limit BEHIND it and the room is negative: the sensor may be
+		//   crushed inward and never pushed outward. Measured directly, run mom_C1 (148 mph wall
+		//   wreck, [dent] table raised to 512 rows so the player's own sensors are actually in it):
+		//     off (0.604306, 0.201590, 1.140421) dir 0  supply 0.127372 (12.7x its 0.010 ceiling)
+		//         toLimit -0.703341  nRoom 2  nFree 0  pcApplied 0.000000  pcDisp 0.000000
+		//     off (-0.000023, 0.227453, 2.072806) dir 1 supply 0.214577  toLimit -0.153731
+		//         nRoom 4  nFree 0  pcApplied 0.000000
+		//   -- i.e. EVERY apply in those directions was room-clamped to zero, while the SAME
+		//   sensors' inward directions moved normally (that first sensor reached 0.2348 m on dir 5).
+		//   ⇒ A per-direction ledger row with `supply >> ceiling` and `pcDisp 0` is EXPECTED, and
+		//     the correct crush metric is the row with the largest achieved displacement, never the
+		//     row with the largest supply. Reading the zero rows as "the deformation is being
+		//     suppressed" is the mistake this note now blocks.
+		// ⚠️ WHAT THIS DOES NOT SETTLE: it explains the ZEROES, not the 4700x impulse range mapping
+		//   onto a 0..0.187 m crush range. The surviving spread is the direction MIX (which of the
+		//   six rows a contact's impulse lands on), which nothing has measured per-car yet.
 		// -----------------------------------------------------------------------------------------
 		{
 			static s32 siBBoxTracePeriod = -1;
