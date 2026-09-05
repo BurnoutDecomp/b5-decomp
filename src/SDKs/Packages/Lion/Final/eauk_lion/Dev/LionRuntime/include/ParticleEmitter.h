@@ -218,9 +218,26 @@ public:
 
     // Decide whether this frame emits and how many particles, then call Emit for each. X360
     // @0x82915158 (159 instructions). cParticleEmitter::Update is its only caller.
-    // NOT RECONSTRUCTED -- see LionRuntimeLinkStubs.cpp, which now carries the trap that used
-    // to stand in for Update itself.
+    // RECONSTRUCTED (ParticleEmitter.cpp).
     void Generate(const cTime& arTime);
+
+    // Emit ONE particle at arSpawnTime: build its spawn transform (from the parent particle for
+    // a sub-emitter, else from the locator), find or allocate a bucket, initialise the particle
+    // and spawn any child emitters that follow it. X360 @0x82914D38 (173 instructions).
+    // Generate is its only caller. RECONSTRUCTED (ParticleEmitter.cpp).
+    void Emit(cParticleRandomSeed& arSeed, const cTime& arSpawnTime, const cTime& arTime);
+
+    // Produce the world transform of the PARENT PARTICLE this sub-emitter follows, by
+    // re-simulating it and building an orthonormal basis from its motion. X360 @0x829113E8
+    // (175 instructions). RECONSTRUCTED (ParticleEmitter.cpp).
+    //
+    // ⚠ THE FOURTH PARAMETER IS READ BY NOTHING in the console body, and the third is an f32
+    // that consumes the r6 GPR slot -- which is why cParticleEmitter::Emit @0x82914D70 sets r4,
+    // r7 and f1 but never r6. Both are stated rather than dropped.
+    void ParentMatrixCurrentBuild(cMatrix& arOutMatrix,
+                                  const cTime& arTime,
+                                  f32 afDeltaTime,
+                                  const cTime& arCurrentTime);
 
     // ParticleEmitter.h:186 -- should this emitter emit anything in the window
     // [arStartTime, arEndTime]? X360 @0x8290D538. RECONSTRUCTED (ParticleEmitter.cpp).
