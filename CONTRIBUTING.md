@@ -16,48 +16,43 @@ or contributing code. You do not need reverse-engineering experience to report a
 If you choose the wrong repository, a maintainer can transfer the issue or link a
 follow-up. Please do not open the same report in both repositories.
 
-## Report a useful bug in five minutes
+## Report a bug with what you have
 
-1. Search open **and closed** issues for the symptom or error. Add new evidence to an
-   existing matching report. Use a reaction instead of a comment containing only "me too".
-2. Choose **Game bug or crash** and use a specific title: "Map stays black after opening
-   it from free roam" is better than "Game broken".
-3. Identify your build. For a download, paste its URL, filename and date/build identifier.
-   For a local build, run these from the workflow repository and copy both results:
+Choose **Game bug or crash** and give it a short, descriptive title. Everything else
+in that form is optional. You do not need to diagnose the cause, reproduce it reliably,
+or collect computer specifications before opening a report.
 
-   ```powershell
-   git rev-parse HEAD
-   git -C b5-decomp rev-parse HEAD
-   ```
+A title such as **"Assert while driving near traffic"** and a screenshot of the assert
+are enough to start. For something too brief to capture, a description is useful:
 
-   Say whether you have local changes. "Latest" becomes ambiguous as new builds arrive.
-4. Give numbered steps starting from launch, the expected result, the actual result,
-   and how often it happens. Include location, car, event, save progression and controls
-   when relevant. Unknown details can be marked unknown; do not guess.
-5. Upload a screenshot or short video using the form's upload field. Show the full
-   relevant screen and explain the problem. For audio/timing issues, use a video with
-   sound. For an immediate crash, capture the error dialog or diagnostic output.
-   Also paste error text and available logs so contributors can search them.
+> The screen went black for about half a second after a few minutes of driving,
+> then returned to normal. It happened once; I don't know what triggered it.
 
-Game reports require image/video evidence. Build reports require copyable errors and
-diagnostics instead; source-level parity findings require binary evidence. If a log is
-not produced, say so. Never fabricate a successful reproduction or comparison.
+These are examples of useful reports, not confirmed diagnoses. An intermittent bug
+is still worth reporting, even without steps or a recording. Share what you noticed
+and leave anything you don't know blank. You can add details later.
 
-Example reproduction (illustrative, not a known bug):
+### Helpful extras, if available
 
-> Launch build [identifier] with an existing save, enter free roam in [car], press
-> [button] to open the map, then close and reopen it. Expected: roads and markers are
-> visible. Actual: the map panel is black, while the cursor remains visible. Happens
-> 3/3 attempts. Screenshot attached. Last working build: unknown.
+- **Screenshot or video:** especially useful for an error/assert dialog or a visual
+  problem. No need to spend time trying to recapture a one-off glitch.
+- **What you were doing:** driving, opening a menu, starting an event, or anything
+  else you remember. Mention how often it happened or steps if you know them.
+- **Download or build:** a link, filename or approximate download date helps us work
+  out which version you used. Contributors building locally can include commit IDs
+  and local changes; players do not need to run Git commands.
+- **Other clues:** error text, an available log, mods, or relevant computer details.
+  Include the expected result if it isn't obvious from the symptom.
 
-Report one independently fixable problem per issue. Include your OS, hardware/driver,
-display settings, controller, game-data edition/platform, conversion version/date,
-mods and launch options. If comparing with original gameplay, name the original build:
-the target is X360 ARTIST behavior, and later editions can differ.
+If you can, search open and closed issues first and add evidence to a matching report.
+Keep separate problems in separate issues. Maintainers can help with duplicates and
+ask a focused follow-up when a particular detail is needed to investigate.
 
-Only attach material needed to explain the report. Remove tokens and personal details
-from logs; do not upload game files, proprietary SDK source, IDA databases or full
-memory dumps. Short recordings and diagnostic text are enough for the first report.
+Build failures and source-level parity findings have dedicated forms for contributors
+who have diagnostic or binary evidence. Use the game-bug form if you are unsure.
+
+Remove tokens and personal details from logs; do not upload game files, proprietary
+SDK source, IDA databases or full memory dumps.
 
 ## What happens next
 

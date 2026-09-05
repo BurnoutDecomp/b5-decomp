@@ -8,8 +8,9 @@ this submodule owns the source that is being reconstructed.
 
 Found a crash, visual problem or behavior that seems wrong?
 [Open an issue](https://github.com/BurnoutDecomp/b5-decomp/issues/new/choose).
-The [reporting guide](CONTRIBUTING.md) explains the required build details,
-reproduction steps and screenshots/videos, with an example. No coding knowledge is needed.
+The [reporting guide](CONTRIBUTING.md) shows how to report with whatever details
+you have. Screenshots, build details and reproduction steps are helpful but optional.
+No coding knowledge is needed.
 
 Browse the [issue list](https://github.com/BurnoutDecomp/b5-decomp/issues) for known
 problems and [milestones](https://github.com/BurnoutDecomp/b5-decomp/milestones) for

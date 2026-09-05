@@ -1,79 +1,35 @@
 name: Game bug or crash
-description: Report something broken while running the decompiled game.
+description: Tell us about a problem, even if it only happened once.
 labels: ["type: bug", "status: needs triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Describe one problem per report. You do not need to know C++ or identify the broken function.
-        Search [existing issues](https://github.com/BurnoutDecomp/b5-decomp/issues?q=is%3Aissue) first and add new evidence to a matching report.
-        For compiler or setup errors, use the build form instead. [Reporting guide](https://github.com/BurnoutDecomp/b5-decomp/blob/dev/CONTRIBUTING.md).
-  - type: input
-    id: build
-    attributes:
-      label: Exact build tested
-      description: Paste the download/build URL and date, or the b5-decomp commit SHA. For local builds, also include the workflow SHA and whether you have local changes. Do not just write latest.
-    validations:
-      required: true
-  - type: textarea
-    id: environment
-    attributes:
-      label: Computer and game setup
-      description: Include Windows version (or OS and compatibility layer), CPU, GPU and driver, RAM, controller/keyboard, resolution and display mode. Name the game-data platform/edition, conversion date or version, and any mods or launch options. Write unknown where needed.
-    validations:
-      required: true
-  - type: textarea
-    id: reproduction
-    attributes:
-      label: Steps to reproduce
-      description: Start from launching the game. Include the car, location, event, menu path, save progression and inputs needed. If intermittent, describe your last actions.
-      placeholder: |
-        1. Launch with ...
-        2. Select ...
-        3. Drive to ... and press ...
-        4. Observe ...
-    validations:
-      required: true
-  - type: textarea
-    id: expected
-    attributes:
-      label: Expected behavior
-      description: What should happen? If comparing with an original game, name its platform/build; a Remastered difference alone does not prove an X360 parity bug.
-    validations:
-      required: true
+        Give your issue a short, descriptive title. Everything below is optional - share what you have.
+        A title and a screenshot of an error are enough to start. If a glitch was too quick to capture, a short description is welcome too.
+        You do not need to know the cause or how to reproduce it. You can add more details later.
+        If you can, check [existing issues](https://github.com/BurnoutDecomp/b5-decomp/issues?q=is%3Aissue) for a matching report.
   - type: textarea
     id: actual
     attributes:
-      label: Actual behavior
-      description: Describe what happened, including exact error text. Explain what to look for in your screenshot or video.
-    validations:
-      required: true
+      label: What happened? (optional)
+      description: A sentence or two is fine. What were you doing? Did it happen once or several times? If you know how to trigger it, include those steps.
+      placeholder: The screen went black for about half a second after a few minutes of driving, then returned to normal. It only happened once and I don't know what triggered it.
   - type: upload
     id: evidence
     attributes:
-      label: Screenshot or video evidence
-      description: Required. Show the problem or crash dialog; include sound for audio bugs. If the game exits before capture is possible, attach a screenshot of the error or diagnostic output. Paste searchable error text in the next field too.
+      label: Screenshot or video (optional)
+      description: An error/assert screenshot is especially helpful. Attach a clip if you already have one, but don't worry if you missed a brief glitch.
     validations:
-      required: true
+      required: false
       accept: ".png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.webm"
-  - type: textarea
-    id: diagnostics
-    attributes:
-      label: Logs and crash details
-      description: Paste relevant log/error text and the call stack if available, or attach a .txt/.log. If none was produced, say so. Remove personal paths and secrets; do not upload game assets or full memory dumps.
-    validations:
-      required: true
   - type: input
-    id: frequency
+    id: build
     attributes:
-      label: Frequency and regression
-      description: How often (for example 3 of 5 attempts)? Did an earlier build work? Give its identifier or say unknown.
-    validations:
-      required: true
-  - type: checkboxes
-    id: checks
+      label: Which download or build? (optional)
+      description: A download link, filename or approximate download date helps. If you built it yourself, a commit ID is useful. Leave blank if unsure.
+  - type: textarea
+    id: details
     attributes:
-      label: Before submitting
-      options:
-        - label: I searched existing issues and this report describes one problem.
-          required: true
+      label: Anything else? (optional)
+      description: Add any details you think matter, such as error text, logs, mods or computer specs. No checklist to complete. Remove private information from logs; don't attach game files or full memory dumps.
