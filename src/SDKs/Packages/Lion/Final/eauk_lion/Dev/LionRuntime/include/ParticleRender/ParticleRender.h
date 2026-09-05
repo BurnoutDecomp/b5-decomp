@@ -83,7 +83,7 @@ struct EffectsVertexBufferLocked;
 
 // EffectsVertexBufferIterator -- the locked vertex-buffer write cursor the renderers fill.
 // Opaque here (only passed by reference into the blend renderer).
-class EffectsVertexBufferIterator;
+struct EffectsVertexBufferIterator;  // struct, not class: both definitions say struct, and the mismatch mangles PEAV vs PEAU
 
 // ----------------------------------------------------------------------------
 // iParticleRender -- pure-virtual renderer interface (ParticleRender.h:46).

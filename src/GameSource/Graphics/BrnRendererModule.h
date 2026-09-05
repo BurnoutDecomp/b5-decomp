@@ -6,6 +6,7 @@
 // off-path gameplay-render subsystems below remain opaque storage until reached).
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"   // CgsGraphics::Im2d
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // CgsGraphics::Im2dRenderBuffer (canonical)
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"  // CgsGraphics::Im3d / Im3dUntex / Im3dRenderBufferUntex -- the real types
 #include "GameSource/Game/BrnLoadingScreenRenderer.h"                // BrnGame::LoadingScreenRenderer
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"            // BrnGame::DispatchThreadInputBuffer (Render's input)
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // BrnShaderConstantsFrame
@@ -49,17 +50,15 @@ class Im3dRenderBuffer
 {
 };
 
-class Im3d
-{
-};
-
-class Im3dRenderBufferUntex
-{
-};
-
-class Im3dUntex
-{
-};
+// Im3d, Im3dUntex and Im3dRenderBufferUntex are NOT declared here any more. They had empty
+// placeholder definitions in this namespace while their real ones live in CgsIm3d.h
+// (`struct Im3d`, `struct Im3dUntex`, and `typedef Im3dUntex Im3dRenderBufferUntex` -- the
+// buffer/renderer split folds onto one type on the PC target). Because this module holds all
+// three BY VALUE below, its size was being computed from the empty stand-ins. CgsIm3d.h had
+// already flagged the hazard and named the assumption that kept it latent -- "the two are
+// never included in the same TU" -- which stopped being true when ParticleModule.h began
+// including the Lion blend renderer, since Im3dBlend derives from Im3dBase<V> in CgsIm3d.h.
+// This mirrors what was already done for the 2D pair noted at the top of this block.
 
 class Im3dZOnly
 {
