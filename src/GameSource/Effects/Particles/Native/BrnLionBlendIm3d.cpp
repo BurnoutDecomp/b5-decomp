@@ -176,6 +176,15 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     // draw left behind. LionBlendProgramsPC.cpp's four images are not at fault -- their
     // tables declare 2 / 1 / 4 / 4 variables. Nothing was adopting them.
     //
+    // ⭐ AND MEASURED AGAIN WITH THE ARM IN, same session, same load:
+    //     [ImLeaf] adopted PC program buffer: stage=0 bytes=464 microcode=388 vars=2
+    //     [ImLeaf] adopted PC program buffer: stage=1 bytes=304 microcode=260 vars=1
+    //     [ImLeaf] adopted PC program buffer: stage=0 bytes=640 microcode=532 vars=4
+    //     [ImLeaf] adopted PC program buffer: stage=1 bytes=736 microcode=604 vars=4
+    //     [lionblend] Im3dBlend::Construct: p0{wvp=4 cs=1} p1{wvp=4 cs=1 off=1 scl=1 dconv=1 dfade=1}
+    // Four programs adopted at exactly the emitted sizes, and all EIGHT handles resolved --
+    // worldViewProj four registers wide (the float4x4) and the other six one each.
+    //
     // A non-PC binary returns null here and falls through to the console path unchanged.
     if (renderengine::ProgramBufferData* lpAdoptedVertex =
             renderengine::ProgramBufferPC_Adopt(lpVertexProgramBinary, luVertexProgramSize, 0u))

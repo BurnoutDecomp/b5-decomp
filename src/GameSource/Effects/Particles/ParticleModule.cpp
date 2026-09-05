@@ -100,9 +100,10 @@ namespace BrnParticle
         // mLionImmediateModeRenderer is no longer a ContainedInterface placeholder -- it is
         // the real BrnGraphics::LionBlendRenderer (0x1E0 bytes), so there are no mpVTable /
         // mu04 / mu08 fields to poke. The console's off_820CFA1C store is part of that
-        // object's genuine construction by Im3dBlend::Construct @0x8229B260, which is still
-        // blocked on its four Xenos programs being re-authored as D3D9; it is announced at
-        // the bind site in ParticleModule_Lifecycle.cpp rather than faked here.
+        // object's genuine construction by Im3dBlend::Construct @0x8229B260, which now RUNS
+        // (its four Xenos programs are re-authored as D3D9 in
+        // pc/gcm/renderengine/LionBlendProgramsPC.cpp) -- ParticleModule::Prepare calls it in
+        // the console's own position, so nothing is faked here either.
 
         // --- sentinel words ------------------------------------------------------
         // (+0x22190 == 0x7FFFFFFF is mTrailSystem.mFreeEmitters' unconstructed Stack

@@ -500,9 +500,10 @@ namespace BrnParticle
         // forms mSparkRenderer == module+0x94C0, and 0x94C0 - 0x92E0 == 0x1E0 == the
         // modelled sizeof (0xE0 Im3dBlend + four 0x40 matrices). It is a MEMBER, not a
         // base: DWARF :140 makes Im3dBlend a by-value member at offset 0 of it.
-        // ⚠ Its eight shader handles are resolved ONLY by Im3dBlend::Construct
-        // @0x8229B260, which is still blocked on assets -- see the bind site in
-        // ParticleModule_Lifecycle.cpp.
+        // Its eight shader handles are resolved by Im3dBlend::Construct @0x8229B260, which
+        // ParticleModule::Prepare now calls (asm word 145) and which a run confirms resolves
+        // all eight -- see the bind site in ParticleModule_Lifecycle.cpp and the four
+        // re-authored programs in pc/gcm/renderengine/LionBlendProgramsPC.cpp.
         BrnGraphics::LionBlendRenderer mLionImmediateModeRenderer; // +0x92E0 (37600)
 
         // Gap to the trail system at +0x9710: DWARF :70 SparkRenderer mSparkRenderer (+0x94C0)
