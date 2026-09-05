@@ -101,14 +101,36 @@ namespace
     const u16 KU_ELEMENT1_OFFSET = 16u;
     const u16 KU_ELEMENT2_OFFSET = 20u;
 
-    // ---- per-module shadow caches (X360 .data block off_83010950) -----------------------------------
-    // These mirror the live device bindings the immediate-mode renderer compares against; one set per
-    // module (NOT per renderer), shared by BeginRendering and SetProgram in this TU. They correspond to
-    // dword_8301095C (last vertex program), off_83010958 (last vertex descriptor) and byte_83010A34
-    // (the vertex-program-state dirty flag).
-    renderengine::ProgramBufferData*           spgLastVertexProgram   = nullptr;  // dword_8301095C
-    const renderengine::VertexDescriptorData*  spVertexDescriptorLast = nullptr;  // off_83010958
-    bool                                       sbVertexProgramDirty   = false;    // byte_83010A34
+    // ---- ⭐ FIXED 2026-09-05 (boost-exhaust wave). THE THREE "MODULE STATICS" ARE NOT STATICS. ------
+    //
+    // This TU used to carry three file-scope variables here --
+    //     renderengine::ProgramBufferData*          spgLastVertexProgram   // dword_8301095C
+    //     const renderengine::VertexDescriptorData* spVertexDescriptorLast // off_83010958
+    //     bool                                      sbVertexProgramDirty   // byte_83010A34
+    // -- "per-module shadow caches ... one set per module (NOT per renderer)". They are nothing of
+    // the kind: those three addresses are shadow::Device's OWN static members, mpVertexProgramShadow
+    // / mpVertexDescriptor / mbVertexProgramStateDirty, all three inside the off_83010950 block
+    // (shadowingdevice.h:234/:242/:245). CgsIm3dSkyDome.cpp made exactly this mistake and the sky
+    // PC leaf already recorded the correction and the binder for it
+    // (ImmediateModePCLeaf.cpp -- "This is the missing binder").
+    //
+    // WHAT IT COST, MEASURED. Duplicating them meant this renderer compared against ITS copy and
+    // updated ITS copy, and NEVER called shadow::Device::SetVertexDescriptor -- so
+    // Device::mpVertexDescriptor stayed null for the whole Lion pass. Device::FlushVertexProgramState
+    // binds a vertex shader only when mpVertexDescriptor AND mpVertexProgramShadow are both non-null,
+    // so it returned early every time and the Lion particle draw went to the device with NO VERTEX
+    // SHADER AT ALL. The first live draw said so in one line:
+    //     [lionfx] DrawVertices: hr=0x00000000 xenosPrim=13 verts=4 stride=36 prims=2
+    //                            vs=0 ps=1 decl=1
+    // -- S_OK, a pixel shader, a declaration, and vs=0. And the same duplication would have kept it
+    // broken on every frame AFTER the first even once the descriptor was set, because
+    // cParticleRender::Dispatch opens with shadow::Device::ResetShadowing(), which nulls the device's
+    // two shadows and cannot touch this TU's copies -- so from frame 2 the "cache" would report the
+    // program still bound and skip the re-bind.
+    //
+    // The three compares now go through shadow::Device itself, which performs the identical
+    // compare-and-dirty (Device::SetVertexProgram / Device::SetVertexDescriptor, shadowingdevice.cpp
+    // :329/:362) on the real fields.
 }
 
 } // namespace CgsGraphics
@@ -283,11 +305,9 @@ void ImRenderer<V>::BeginRendering(s8 li8Program)
     renderengine::ProgramBuffer* lpVertexProgram = mapVertexProgramBuffer[li8Program];
     renderengine::ProgramBuffer* lpPixelProgram  = mapPixelProgramBuffer[li8Program];
 
-    if (spgLastVertexProgram != reinterpret_cast<renderengine::ProgramBufferData*>(lpVertexProgram))
-    {
-        shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-        spgLastVertexProgram = reinterpret_cast<renderengine::ProgramBufferData*>(lpVertexProgram);
-    }
+    // The shadow device performs the identical compare-and-dirty on its own field.
+    shadow::Device::SetVertexProgram(
+        reinterpret_cast<const renderengine::ProgramBufferData*>(lpVertexProgram));
 
     shadow::DeviceSetPixelProgram(lpPixelProgram);
 
@@ -295,11 +315,30 @@ void ImRenderer<V>::BeginRendering(s8 li8Program)
     // vertex-program state dirty when it changed.
     const renderengine::VertexDescriptorData* lpVertexDescriptor =
         reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor);
-    if (spVertexDescriptorLast != lpVertexDescriptor)
+    // ---- [lionprog] witness. NOT console behaviour: ours, one-shot, log-only. ----------------
+    // MEASURED 2026-09-05: the Lion dispatch's first real draw went out as
+    // `[lionfx] DrawVertices: hr=0 xenosPrim=13 verts=4 stride=36 prims=2 vs=0 ps=1 decl=1` --
+    // S_OK, a pixel shader, a declaration, and NO VERTEX SHADER. shadow::Device::
+    // FlushVertexProgramState binds one only when BOTH its shadows are non-null, and this is the
+    // function that sets them, so this line says which of the three inputs was missing.
+    // DELETE-WHEN-STABLE.
     {
-        sbVertexProgramDirty   = true;
-        spVertexDescriptorLast = lpVertexDescriptor;
+        static bool sbDiagOnce = false;
+        if (!sbDiagOnce)
+        {
+            sbDiagOnce = true;
+            char lacMsg[224];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[lionprog] BeginRendering(slot=%d) vp=%p pp=%p vertexDescriptor=%p"
+                " (a NULL descriptor makes FlushVertexProgramState bind nothing)\n",
+                (int)li8Program, static_cast<const void*>(lpVertexProgram),
+                static_cast<const void*>(lpPixelProgram),
+                static_cast<const void*>(lpVertexDescriptor));
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
     }
+
+    shadow::Device::SetVertexDescriptor(lpVertexDescriptor);
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -409,7 +448,7 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
 // ---------------------------------------------------------------------------------------------------
 // ImRenderer<LionBlendVertex>::SetProgram  @ 0x827DC398
 // Bind program slot li8Program's vertex + pixel programs on the device. The vertex program is
-// shadow-cached (module-static spgLastVertexProgram == dword_8301095C): if it is unchanged the bind is
+// shadow-cached (shadow::Device::mpVertexProgramShadow == dword_8301095C): if it is unchanged the bind is
 // skipped and false is returned; otherwise the vertex program is set, the cache updated, the current
 // slot recorded and the pixel program set, returning true.
 // ---------------------------------------------------------------------------------------------------
@@ -422,17 +461,11 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
                "mapPixelProgramBuffer[ li8Program ] != NULL");
 
     renderengine::ProgramBuffer* lpVertexProgram = mapVertexProgramBuffer[li8Program];
-    bool lbChanged;
-    if (spgLastVertexProgram == reinterpret_cast<renderengine::ProgramBufferData*>(lpVertexProgram))
-    {
-        lbChanged = false;
-    }
-    else
-    {
-        shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-        spgLastVertexProgram = reinterpret_cast<renderengine::ProgramBufferData*>(lpVertexProgram);
-        lbChanged = true;
-    }
+    // Device::SetVertexProgram IS the console's compare-and-bind (it returns false when the shadow
+    // already holds this program), so the caller's "did it change" answer comes from the device's
+    // own field rather than from a duplicate of it. See the banner at the top of this TU.
+    const bool lbChanged = shadow::Device::SetVertexProgram(
+        reinterpret_cast<const renderengine::ProgramBufferData*>(lpVertexProgram));
 
     if (lbChanged)
     {
@@ -692,11 +725,7 @@ void Im3dBlend::BeginRendering(const Matrix44& arViewProjection,
     {
         const renderengine::VertexDescriptorData* lpVertexDescriptor =
             reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor);
-        if (CgsGraphics::spVertexDescriptorLast != lpVertexDescriptor)
-        {
-            CgsGraphics::sbVertexProgramDirty   = true;
-            CgsGraphics::spVertexDescriptorLast = lpVertexDescriptor;
-        }
+        shadow::Device::SetVertexDescriptor(lpVertexDescriptor);
     }
 
     // The staged shader-constant cursor renderengine::Device::BeginShaderStates advances

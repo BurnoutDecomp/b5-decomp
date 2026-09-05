@@ -1329,6 +1329,34 @@ void EffectsModule::UpdateActiveRaceCars(EActiveRaceCarIndex lePlayerIndex,
             }
         }
 
+        // ---- [deformloc] witness. NOT console behaviour: ours, latched, log-only. ---------------
+        // MEASURED 2026-09-05 (boost-exhaust wave): every Lion emitter sits at the world ORIGIN,
+        // and BoostStateMachine::OnTick -- the ONLY thing that ever gives a boost effect a world
+        // transform -- returns before doing anything, because lHelper.VehicleLocators() is null and
+        // the replay serialiser is not playing. That pointer is THIS lookup's result. So the line
+        // below says whether the deformation output published any locator table at all and whether
+        // this car's entity id is among the ones it did publish. DELETE-WHEN-STABLE.
+        {
+            static u32 suLastKey = 0xFFFFFFFFu;
+            const u32 luKey = (static_cast<u32>(lpDeformation->miNumLocatorOutputs) << 8)
+                            | (lpLocators != 0 ? 1u : 0u) | (luCar << 16);
+            if (luKey != suLastKey)
+            {
+                suLastKey = luKey;
+                CgsSceneManager::EntityId lWantId;
+                lWantId.Set(1u, luCar, 0u);
+                char lacMsg[288];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[deformloc] car=%u want=%08X locatorOutputs=%d found=%d first=%08X"
+                    "  (null -> BoostStateMachine::OnTick never positions the boost effects)\n",
+                    luCar, static_cast<u32>(lWantId), (int)lpDeformation->miNumLocatorOutputs,
+                    (int)(lpLocators != 0),
+                    (lpDeformation->miNumLocatorOutputs > 0)
+                        ? lpDeformation->maLocatorData[0].mEntityId.muValue : 0u);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
+
         RaceCarParticleEffectHelper lHelper(*this, lrData, lpState, mParticleModule, &mDebugComponent,
                                             luWorldIndex, lrColour, meCurrentGameMode, lpLocators);
 
