@@ -23,11 +23,6 @@ body:
     validations:
       required: false
       accept: ".png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.webm"
-  - type: input
-    id: build
-    attributes:
-      label: Which download or build? (optional)
-      description: A download link, filename or approximate download date helps. If you built it yourself, a commit ID is useful. Leave blank if unsure.
   - type: textarea
     id: details
     attributes:
