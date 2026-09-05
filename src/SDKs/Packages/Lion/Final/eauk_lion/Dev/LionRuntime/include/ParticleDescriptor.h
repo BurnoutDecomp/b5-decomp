@@ -53,6 +53,12 @@ public:
     {
         E_FLAG_NEEDS_BUCKET      = 0x10,    // descriptor draws particles -> needs a bucket
         E_FLAG_FORCE_HEAVY       = 0x20,    // force the heavyweight bucket type
+        // Token ORIENT_TO_CAMERA_FLAG / DWARF eDO_FACECAMERA (LionParticleParser.cpp:63 --
+        // the token table and the DecFIGS enum agree). LionBlendRenderer::RenderTilts
+        // @0x82282FC8 masks it with `rlwinm r14, r28, 0,25,25` (0x40) at 0x822830B0 and
+        // 0x822835C8: when set, BOTH of its draw loops derive the segment transform from
+        // BuildCameraOrientatedLocator instead of the caller's per-particle matrix.
+        E_FLAG_ORIENT_TO_CAMERA  = 0x40,    // token ORIENT_TO_CAMERA_FLAG / eDO_FACECAMERA
         // Asm-attested bit (cLionParticleEffectManager::BindingsAttach masks 0x8000 to skip
         // a descriptor); name inferred -- sub/child descriptors are spawned by their parent
         // emitter, so they are excluded from top-level binding attach.

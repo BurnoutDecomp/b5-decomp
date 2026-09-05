@@ -117,6 +117,16 @@ struct cParticleBehaviour
         E_FLAG_COLOUR_STEP1  = 0x80000,
         E_FLAG_COLOUR_STEP2  = 0x100000,
         E_FLAG_COLOUR_STEP3  = 0x200000,
+        // ⭐ NOT DERIVED NAMES -- these two are the Lion authoring token table's own, read out
+        // of the X360 image (cLionTokenTable, transcribed in LionParticleParser.cpp:108/:109
+        // as DO_ENDON_SPRITE 0x00400000 and DO_ENDON_ACTIVE 0x00800000 on the +708 == +0x2C4
+        // flags word). LionBlendRenderer::RenderTilts @0x82282FC8 selects between its two
+        // entirely different draw loops on them: `rlwinm r11, r9, 0,9,9` (0x00400000) then
+        // `rlwinm r11, r9, 0,8,8` (0x00800000) at 0x82283078/0x82283084 -- BOTH set picks the
+        // end-on SPRITE loop, otherwise the ribbon loop, which then re-tests ENDON_ACTIVE
+        // alone at 0x82283754 to gate its width floor and alpha fade.
+        E_DO_ENDON_SPRITE    = 0x00400000,
+        E_DO_ENDON_ACTIVE    = 0x00800000,
         E_DO_WAVEALPHA       = 0x2000,   // Build assert: must be clear here
         E_BV_AXIS            = 0x10,     // CompileBaseVariance axis block
         E_BV_OFFSETROT       = 0x20,     // CompileBaseVariance offset-rot block

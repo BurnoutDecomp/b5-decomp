@@ -26,6 +26,7 @@
 #include "GameSource/Effects/Particles/Native/BrnLionBlendVertex.h"  // LionBlendVertex::VertexIterator (the vertex writer)
 #include "SDKs/EATech/include/ps3/gcm/renderengine/stateparams.h"    // renderengine::RGBA8
 #include "rw/math/vpu/matrix44affine_operation.h"               // rw::math::vpu::TransformPoint
+#include "rw/math/vpu/vector3_operation.h"                      // Normalize / Magnitude / Dot / Cross / Lerp
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include <cmath>   // sqrtf -- the two normalisations
@@ -647,10 +648,474 @@ void LionBlendRenderer::RenderQuads(EffectsVertexBufferIterator& arIterator,
     }
 }
 
+// =================================================================================================
+// BrnGraphics::LionBlendRenderer::RenderTilts  @ 0x82282FC8   (DWARF BrnLionBlendRenderer.cpp:430)
+//
+// Draw a run of MOTION-ALIGNED particles: each one spans the segment from its previous position
+// (mPos) to its current one (mPos1), and the shape drawn along that segment depends on two
+// authoring flags. 639 instructions and TWO complete draw loops that share only a prologue.
+//
+// ⭐⭐ THE FLAGS ARE NAMED BY THE GAME'S OWN AUTHORING TOKEN TABLE, NOT INFERRED. The X360
+// cLionTokenTable (transcribed in LionParticleParser.cpp) binds, on cParticleBehaviour::mFlags
+// (+708 == +0x2C4):   DO_ENDON_SPRITE 0x00400000   DO_ENDON_ACTIVE 0x00800000
+// and on the four floats this function broadcasts in its prologue:
+//   +1128 (0x468) END_ON_ALPHA_FADE   +1132 (0x46C) END_ON_SCALE
+//   +1136 (0x470) END_ON_START_ANGLE  +1140 (0x474) END_ON_END_ANGLE
+// The DecFIGS DWARF independently names this function's four locals lvfEndOnAlphaFade /
+// lvfEndOnScale / lvfEndOnStartAngle / lvfEndOnEndAngle, and the committed cParticleBehaviour
+// record already had those members at exactly those offsets. THREE independent derivations of
+// the same four fields -- which is what made this function decodable at all, because "end on"
+// explains every branch in it.
+//
+//   * BOTH flags set  -> the END-ON SPRITE loop (0x82283148). A flat, z-spun, camera-facing
+//     quad planted at the MIDPOINT of the segment, whose alpha ramps UP from 0 to 1 as the
+//     view direction lines up with the segment. That is the point of the name: when you look
+//     down the ribbon it degenerates, so a round sprite fades in to replace it.
+//   * otherwise       -> the RIBBON loop (0x822835B8). A quad stretched along the segment,
+//     its width along cross(segmentDir, viewDir) -- so it always presents its face. When
+//     DO_ENDON_ACTIVE is set it additionally floors that width at END_ON_SCALE and fades its
+//     alpha DOWN toward END_ON_ALPHA_FADE over the same angle window. The two ramps are
+//     complements, which is exactly what a sprite/ribbon swap needs.
+//
+// ⚠ THE TWO ALPHA ARMS ARE GENUINELY ASYMMETRIC, and it is not a transcription slip:
+//   sprite loop: mvColour.w  =  ramp                 (0 below the start angle, 1 above the end)
+//   ribbon loop: mvColour.w *= max(END_ON_ALPHA_FADE, 1 - ramp)
+// The sprite arm REPLACES the alpha (`vrlimi128 v0, v10, 1, 0` with no multiply, 0x82283514)
+// and uses the ramp as-is; the ribbon arm MULTIPLIES into the existing alpha (`vmulfp128 v13,
+// v13, v9` with v9 = the particle's own w, 0x82283948) and inverts the ramp (`vsubfp128 v11,
+// v127, v0`, 0x82283934). Both arms WRITE BACK into the particle record -- apParticles is
+// non-const for this reason.
+//
+// ⭐ HOW THE VMX128 FUSED FORMS WERE READ, because this is where a wrong lane hides. IDA prints
+// `vnmsubfp128 vD, vA, vB, vC` and `vmaddcfp128 vD, vA, vB, vC` with FOUR operands, but the raw
+// image words carry only THREE registers:
+//     0x82283430  15980530  vmaddcfp128 v12, v120, v12, v0  ->  VD=12, VA=120, VB=0
+//     0x822833AC  148A3150  vnmsubfp128 v4,  v10,  v6,  v4   ->  VD=4,  VA=10,  VB=6
+// The fourth printed operand is the IMPLIED ACCUMULATOR, which is vD itself -- and in every one
+// of the eleven `vnmsubfp128` in this function the fourth operand is literally the destination
+// register. So `vmaddcfp128` is vD = vA*vD + vB and `vnmsubfp128` is vD = vD - vA*vB. Read the
+// classic (non-128) forms the other way: `vnmsubfp v13, v11, v13, v12` @0x822837A8 IS raw field
+// order (vD = vB - vA*vC) and forms the cross-product term a*yzx(b) - yzx(a)*b.
+// Both readings are independently pinned by what they build: the vmaddcfp128 makes
+// `Lerp(end0, end1, 0.5)` (the DWARF says Lerp) and each vnmsubfp128 makes the residual
+// `1 - x*y*y` of a Newton-Raphson rsqrt step (the surrounding vrsqrtefp / *0.5 / vmaddfp is
+// meaningless otherwise).
+//
+// ⚠ HOST DIVERGENCE, STATED ONCE FOR THE WHOLE FUNCTION: every normalise here is `vrsqrtefp`
+// plus TWO Newton-Raphson refinements (about 22 bits), and every divide is `vrefp` plus two
+// refinements. The reconstruction uses the vendor rw::math::vpu::Normalize / an exact divide,
+// which is the standing convention in this tree for that pattern. The degenerate cases still
+// match: rsqrt(0) makes the console's result NaN, NaN fails the `vcmpgtfp` epsilon test, and
+// the host's Normalize returns zero which fails the same test -- both take the fallback arm.
+//
+// ⚠ THE Y-AXIS FALLBACK IS READ, NOT ASSUMED. Sprite loop: `vperm128 v13, v127, v126, v0`
+// (0x822833F4) weaves the zero and one vectors through the standard selector into (0,1,0,0).
+// Ribbon loop: `lvx128 v0, r0, r25` (0x8228373C) loads unk_82181510, which reads out of the
+// image as 00000000 3F800000 00000000 00000000. Same vector, two encodings; the DWARF calls it
+// GetVector3_YAxis.
+// =================================================================================================
+void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
+                                    RenderedParticle* apParticle, const cMatrix* apMatrix,
+                                    U32 auCount, const cParticleEmitter* apEmitter,
+                                    const cTime& arTime)
+{
+    LionBlendVertex::VertexIterator& lrLionBlendVertexIterator =
+        static_cast<LionBlendVertex::VertexIterator&>(arIterator);
+
+    // asm 0x82282FF0..0x82283014 -- the descriptor, its flags word and its material.
+    const cParticleDescriptor& lrDescriptor = *apEmitter->GetDescriptor();
+    const u32 luDescriptorFlags = lrDescriptor.Flags();
+    BrnEffects::Utils::BuildUVData lUVData;
+    lUVData.SetupFromMaterial(*lrDescriptor.Material());
+
+    // asm 0x82283018..0x82283074 -- the behaviour, the pivot, the camera position (the
+    // translation row of mCameraTransform, copied 16 bytes at a time by the two `ld`/`std`
+    // pairs at 0x8228304C..0x82283074) and the four END_ON authoring floats.
+    const cParticleBehaviour& lrBehaviour = *apEmitter->GetCurrentBehaviour();
+    const cVector& lrPivot = lrBehaviour.mPivotPoint;
+
+    rw::math::vpu::Vector3 lvCameraPosition;
+    lvCameraPosition.x = mCameraTransform.wa.x;
+    lvCameraPosition.y = mCameraTransform.wa.y;
+    lvCameraPosition.z = mCameraTransform.wa.z;
+    lvCameraPosition.w = mCameraTransform.wa.w;
+
+    const f32 lfEndOnStartAngle = lrBehaviour.mEndOnStartAngle;
+    const f32 lfEndOnEndAngle   = lrBehaviour.mEndOnEndAngle;
+    const f32 lfEndOnAlphaFade  = lrBehaviour.mEndOnAlphaFade;
+    const f32 lfEndOnScale      = lrBehaviour.mEndOnScale;
+
+    // asm 0x822830B0 / 0x822835C8 -- ORIENT_TO_CAMERA replaces the caller's per-particle
+    // matrix with a freshly built camera-orientated locator, in BOTH loops.
+    const bool lbFaceCamera =
+        (luDescriptorFlags & cParticleDescriptor::E_FLAG_ORIENT_TO_CAMERA) != 0u;
+
+    // asm 0x82283078..0x8228308C -- the loop selector.
+    const bool lbEndOnSprite =
+        (lrBehaviour.mFlags & cParticleBehaviour::E_DO_ENDON_SPRITE) != 0u;
+    const bool lbEndOnActive =
+        (lrBehaviour.mFlags & cParticleBehaviour::E_DO_ENDON_ACTIVE) != 0u;
+
+    if (lbEndOnSprite && lbEndOnActive)
+    {
+        // -----------------------------------------------------------------------------------
+        // THE END-ON SPRITE LOOP -- asm 0x82283148..0x822835A4.
+        // -----------------------------------------------------------------------------------
+        for (U32 luIndex = 0; luIndex < auCount; ++luIndex)
+        {
+            RenderedParticle& lrPart = apParticle[luIndex];
+
+            // asm 0x82283148..0x822831B8. ⚠ THE ARITHMETIC ORDER IS THIS SHAPE'S OWN, and it
+            // is NOT the one RenderSprites uses: here X0 is formed first as size.x * -pivot.x
+            // (`vxor` sign flip then `vmulfp128`) and X1 as size.x + X0 (`vaddfp`), whereas
+            // RenderSprites forms X1 = size.x - size.x*pivot.x and X0 = X1 - size.x. The
+            // values agree in exact arithmetic and round differently in floats.
+            const f32 lfSizeX = lrPart.mvSizePlusNextFrame.x;
+            const f32 lfSizeY = lrPart.mvSizePlusNextFrame.y;
+            const f32 lfX0 = lfSizeX * -lrPivot.x;
+            const f32 lfY0 = lfSizeY * -lrPivot.y;
+            const f32 lfX1 = lfSizeX + lfX0;
+            const f32 lfY1 = lfSizeY + lfY0;
+
+            const f32 lafCornerX[4] = { lfX0, lfX0, lfX1, lfX1 };
+            const f32 lafCornerY[4] = { lfY0, lfY1, lfY0, lfY1 };
+
+            // asm 0x822831BC (spun) / 0x82283290 (flat). ⚠ ONLY rot.z is tested here -- there
+            // is no Euler path on this shape at all.
+            //
+            // ⚠⚠ AND THE SPIN GOES THE OTHER WAY THAN RenderSprites'. The two vperm operands
+            // at 0x82283274 are (X*cos + Y*sin) and (Y*cos - X*sin); RenderSprites' at
+            // 0x822828C8 are (X*cos - Y*sin) and (X*sin + Y*cos). That is the transpose --
+            // a rotation by the negated angle -- and it is what the instructions say.
+            rw::math::vpu::Vector3 laPoints[4];
+            static const f32 KF_IS_ZERO_EPSILON = 1.1920928955078125e-07f;
+            if (fabsf(lrPart.mvRotPlusFrame.z) > KF_IS_ZERO_EPSILON)
+            {
+                f32 lfSin, lfCos;
+                BrnEffects::Utils::SinCosCycles(lrPart.mvRotPlusFrame.z, lfSin, lfCos);
+                for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
+                {
+                    laPoints[luCorner].x = lafCornerX[luCorner] * lfCos
+                                         + lafCornerY[luCorner] * lfSin;
+                    laPoints[luCorner].y = lafCornerY[luCorner] * lfCos
+                                         - lafCornerX[luCorner] * lfSin;
+                    laPoints[luCorner].z = 0.0f;
+                    laPoints[luCorner].w = 0.0f;
+                }
+            }
+            else
+            {
+                for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
+                {
+                    laPoints[luCorner].x = lafCornerX[luCorner];
+                    laPoints[luCorner].y = lafCornerY[luCorner];
+                    laPoints[luCorner].z = 0.0f;
+                    laPoints[luCorner].w = 0.0f;
+                }
+            }
+
+            // asm 0x822832D8..0x8228333C -- the segment transform. Note the locator is rebuilt
+            // every iteration even though nothing per-particle feeds it; reproduced as emitted.
+            rw::math::vpu::Matrix44Affine lConvertedXform;
+            if (lbFaceCamera)
+            {
+                cMatrix lCurrLoc;
+                BuildCameraOrientatedLocator(lCurrLoc, apEmitter, mCameraTransform, arTime);
+                lConvertedXform = MatrixConvert(lCurrLoc);
+            }
+            else
+            {
+                lConvertedXform = MatrixConvert(apMatrix[luIndex]);
+            }
+
+            // asm 0x82283348..0x822833F8 -- the segment, its unit direction, and the Y-axis
+            // fallback when it degenerates.
+            rw::math::vpu::Vector3 lv3Pos, lv3Pos1;
+            lv3Pos.x  = lrPart.mPos.x;  lv3Pos.y  = lrPart.mPos.y;
+            lv3Pos.z  = lrPart.mPos.z;  lv3Pos.w  = 0.0f;
+            lv3Pos1.x = lrPart.mPos1.x; lv3Pos1.y = lrPart.mPos1.y;
+            lv3Pos1.z = lrPart.mPos1.z; lv3Pos1.w = 0.0f;
+
+            const rw::math::vpu::Vector3 lvPos0 =
+                rw::math::vpu::TransformPoint(lConvertedXform, lv3Pos);
+            const rw::math::vpu::Vector3 lvPos1 =
+                rw::math::vpu::TransformPoint(lConvertedXform, lv3Pos1);
+
+            rw::math::vpu::Vector3 lvDirVec;
+            lvDirVec.x = lvPos1.x - lvPos0.x;
+            lvDirVec.y = lvPos1.y - lvPos0.y;
+            lvDirVec.z = lvPos1.z - lvPos0.z;
+            lvDirVec.w = 0.0f;
+
+            rw::math::vpu::Vector3 lvNormDirVec = rw::math::vpu::Normalize(lvDirVec);
+            if (!(fabsf(rw::math::vpu::MagnitudeSquared(lvNormDirVec)) > KF_IS_ZERO_EPSILON))
+            {
+                lvNormDirVec.x = 0.0f; lvNormDirVec.y = 1.0f;
+                lvNormDirVec.z = 0.0f; lvNormDirVec.w = 0.0f;
+            }
+
+            // asm 0x822833FC..0x82283430 -- the span, its two ends and their midpoint.
+            // ⚠ THE DOT PRODUCT BELOW USES THE UNIT DIRECTION, NOT THIS SCALED ONE: the asm
+            // saves the unit copy in v9 (0x82283400) BEFORE 0x82283414 scales v13 by size.y.
+            rw::math::vpu::Vector3 lvMidVec;   // the span vector (DWARF lvMidVec)
+            lvMidVec.x = lvNormDirVec.x * lfSizeY;
+            lvMidVec.y = lvNormDirVec.y * lfSizeY;
+            lvMidVec.z = lvNormDirVec.z * lfSizeY;
+            lvMidVec.w = 0.0f;
+
+            rw::math::vpu::Vector3 lvEnd0;
+            lvEnd0.x = lvPos0.x - lvMidVec.x * lrPivot.y;
+            lvEnd0.y = lvPos0.y - lvMidVec.y * lrPivot.y;
+            lvEnd0.z = lvPos0.z - lvMidVec.z * lrPivot.y;
+            lvEnd0.w = 0.0f;
+
+            rw::math::vpu::Vector3 lvEnd1;
+            lvEnd1.x = lvEnd0.x + lvMidVec.x;
+            lvEnd1.y = lvEnd0.y + lvMidVec.y;
+            lvEnd1.z = lvEnd0.z + lvMidVec.z;
+            lvEnd1.w = 0.0f;
+
+            // `vsubfp` then `vmaddcfp128 v12, <0.5>, v12, v0` == Lerp(lvEnd0, lvEnd1, 0.5).
+            const rw::math::vpu::Vector3 lvPartMidPoint =
+                rw::math::vpu::Lerp(lvEnd0, lvEnd1, 0.5f);
+
+            // asm 0x82283434..0x82283474 -- how squarely the segment points at the viewer.
+            rw::math::vpu::Vector3 lvCamVec;
+            lvCamVec.x = lvCameraPosition.x - lvPartMidPoint.x;
+            lvCamVec.y = lvCameraPosition.y - lvPartMidPoint.y;
+            lvCamVec.z = lvCameraPosition.z - lvPartMidPoint.z;
+            lvCamVec.w = 0.0f;
+            lvCamVec = rw::math::vpu::Normalize(lvCamVec);
+
+            f32 lfDotProd = rw::math::vpu::Dot(lvNormDirVec, lvCamVec);
+            lfDotProd *= lfDotProd;
+
+            // asm 0x82283478..0x822834E0 -- the ramp, then 0x8228350C..0x82283528 REPLACES the
+            // particle's alpha with it (no floor, no multiply -- see the note at the head).
+            f32 lfAlpha = 0.0f;
+            if (lfDotProd > lfEndOnStartAngle)
+            {
+                if (lfEndOnEndAngle > lfDotProd)
+                {
+                    lfAlpha = (lfDotProd - lfEndOnStartAngle)
+                            / (lfEndOnEndAngle - lfEndOnStartAngle);
+                }
+                else
+                {
+                    lfAlpha = 1.0f;
+                }
+            }
+            lrPart.mvColour.w = lfAlpha;
+
+            // asm 0x82283530..0x8228358C -- the flat quad through the camera basis, planted at
+            // the segment midpoint. Only mCameraTransform's three basis rows are used; the
+            // translation comes from lvPartMidPoint.
+            for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
+            {
+                const f32 lfCx = laPoints[luCorner].x;
+                const f32 lfCy = laPoints[luCorner].y;
+                const f32 lfCz = laPoints[luCorner].z;
+                rw::math::vpu::Vector3 lvOut;
+                lvOut.x = mCameraTransform.xa.x * lfCx + mCameraTransform.ya.x * lfCy
+                        + mCameraTransform.za.x * lfCz + lvPartMidPoint.x;
+                lvOut.y = mCameraTransform.xa.y * lfCx + mCameraTransform.ya.y * lfCy
+                        + mCameraTransform.za.y * lfCz + lvPartMidPoint.y;
+                lvOut.z = mCameraTransform.xa.z * lfCx + mCameraTransform.ya.z * lfCy
+                        + mCameraTransform.za.z * lfCz + lvPartMidPoint.z;
+                lvOut.w = 0.0f;
+                laPoints[luCorner] = lvOut;
+            }
+
+            QuadDraw(lrLionBlendVertexIterator, lUVData, lrPart, laPoints, *apEmitter);
+        }
+    }
+    else
+    {
+        // -----------------------------------------------------------------------------------
+        // THE RIBBON LOOP -- asm 0x82283624..0x822839B0.
+        // -----------------------------------------------------------------------------------
+        for (U32 luIndex = 0; luIndex < auCount; ++luIndex)
+        {
+            RenderedParticle& lrPart = apParticle[luIndex];
+
+            // asm 0x82283624..0x82283688 -- same segment-transform choice as the sprite loop.
+            rw::math::vpu::Matrix44Affine lConvertedXform;
+            if (lbFaceCamera)
+            {
+                cMatrix lCurrLoc;
+                BuildCameraOrientatedLocator(lCurrLoc, apEmitter, mCameraTransform, arTime);
+                lConvertedXform = MatrixConvert(lCurrLoc);
+            }
+            else
+            {
+                lConvertedXform = MatrixConvert(apMatrix[luIndex]);
+            }
+
+            // asm 0x82283688..0x8228373C.
+            rw::math::vpu::Vector3 lv3Pos, lv3Pos1;
+            lv3Pos.x  = lrPart.mPos.x;  lv3Pos.y  = lrPart.mPos.y;
+            lv3Pos.z  = lrPart.mPos.z;  lv3Pos.w  = 0.0f;
+            lv3Pos1.x = lrPart.mPos1.x; lv3Pos1.y = lrPart.mPos1.y;
+            lv3Pos1.z = lrPart.mPos1.z; lv3Pos1.w = 0.0f;
+
+            const rw::math::vpu::Vector3 lvPos0 =
+                rw::math::vpu::TransformPoint(lConvertedXform, lv3Pos);
+            const rw::math::vpu::Vector3 lvPos1 =
+                rw::math::vpu::TransformPoint(lConvertedXform, lv3Pos1);
+
+            rw::math::vpu::Vector3 lvDirVec;
+            lvDirVec.x = lvPos1.x - lvPos0.x;
+            lvDirVec.y = lvPos1.y - lvPos0.y;
+            lvDirVec.z = lvPos1.z - lvPos0.z;
+            lvDirVec.w = 0.0f;
+
+            static const f32 KF_IS_ZERO_EPSILON = 1.1920928955078125e-07f;
+            rw::math::vpu::Vector3 lvNormDirVec = rw::math::vpu::Normalize(lvDirVec);
+            if (!(fabsf(rw::math::vpu::MagnitudeSquared(lvNormDirVec)) > KF_IS_ZERO_EPSILON))
+            {
+                lvNormDirVec.x = 0.0f; lvNormDirVec.y = 1.0f;   // unk_82181510
+                lvNormDirVec.z = 0.0f; lvNormDirVec.w = 0.0f;
+            }
+
+            // asm 0x82283740..0x822837AC -- the view ray is taken from the PIVOT point along
+            // the segment (the UNNORMALISED direction scaled by pivot.y), and the ribbon's
+            // width axis is the cross product of the segment with it.
+            rw::math::vpu::Vector3 lvPartMidPoint;
+            lvPartMidPoint.x = lvDirVec.x * lrPivot.y + lvPos0.x;
+            lvPartMidPoint.y = lvDirVec.y * lrPivot.y + lvPos0.y;
+            lvPartMidPoint.z = lvDirVec.z * lrPivot.y + lvPos0.z;
+            lvPartMidPoint.w = 0.0f;
+
+            rw::math::vpu::Vector3 lvCamVec;
+            lvCamVec.x = lvCameraPosition.x - lvPartMidPoint.x;
+            lvCamVec.y = lvCameraPosition.y - lvPartMidPoint.y;
+            lvCamVec.z = lvCameraPosition.z - lvPartMidPoint.z;
+            lvCamVec.w = 0.0f;
+            lvCamVec = rw::math::vpu::Normalize(lvCamVec);
+
+            rw::math::vpu::Vector3 lvWidthVec = rw::math::vpu::Cross(lvNormDirVec, lvCamVec);
+
+            if (lbEndOnActive)
+            {
+                // asm 0x822837B4..0x8228383C. Two unit vectors, so |cross| is the sine of the
+                // angle between them and collapses to zero end-on -- the floor at END_ON_SCALE
+                // is what stops the ribbon vanishing to a line. `vsel v13, v13, v5, v8`
+                // (0x82283834) substitutes a hard zero when |cross| squared is exactly zero,
+                // which is the Magnitude() zero guard.
+                //
+                // ⚠ ONE STATED DIVERGENCE, in the exactly-degenerate case only. On the console
+                // the guard covers the MAGNITUDE but not the direction: a zero cross still goes
+                // through `vrsqrtefp(0)` == +Inf, so the normalised vector comes out NaN and the
+                // ribbon's width axis is NaN. The host Normalize returns the zero vector there,
+                // giving a zero-width quad instead. Reaching it needs the segment exactly
+                // parallel to the view ray; the host behaviour is the same shape, without the
+                // NaN.
+                f32 lfCamVecLength = rw::math::vpu::Magnitude(lvWidthVec);
+                lvWidthVec = rw::math::vpu::Normalize(lvWidthVec);
+                if (lfEndOnScale > lfCamVecLength)
+                {
+                    lfCamVecLength = lfEndOnScale;
+                }
+                lvWidthVec.x *= lfCamVecLength;
+                lvWidthVec.y *= lfCamVecLength;
+                lvWidthVec.z *= lfCamVecLength;
+            }
+
+            // asm 0x82283840..0x82283860 -- the span along the segment and the half-width
+            // across it, both scaled by the particle's size.
+            const f32 lfSizeX = lrPart.mvSizePlusNextFrame.x;
+            const f32 lfSizeY = lrPart.mvSizePlusNextFrame.y;
+
+            rw::math::vpu::Vector3 lvSpan;
+            lvSpan.x = lvNormDirVec.x * lfSizeY;
+            lvSpan.y = lvNormDirVec.y * lfSizeY;
+            lvSpan.z = lvNormDirVec.z * lfSizeY;
+            lvSpan.w = 0.0f;
+
+            rw::math::vpu::Vector3 lvWidth;
+            lvWidth.x = lvWidthVec.x * lfSizeX;
+            lvWidth.y = lvWidthVec.y * lfSizeX;
+            lvWidth.z = lvWidthVec.z * lfSizeX;
+            lvWidth.w = 0.0f;
+
+            rw::math::vpu::Vector3 lvEnd0;
+            lvEnd0.x = lvPos0.x - lvSpan.x * lrPivot.y;
+            lvEnd0.y = lvPos0.y - lvSpan.y * lrPivot.y;
+            lvEnd0.z = lvPos0.z - lvSpan.z * lrPivot.y;
+            lvEnd0.w = 0.0f;
+
+            rw::math::vpu::Vector3 lvEnd1;
+            lvEnd1.x = lvEnd0.x + lvSpan.x;
+            lvEnd1.y = lvEnd0.y + lvSpan.y;
+            lvEnd1.z = lvEnd0.z + lvSpan.z;
+            lvEnd1.w = 0.0f;
+
+            if (lbEndOnActive)
+            {
+                // asm 0x82283868..0x82283950 -- the same angle window as the sprite loop, but
+                // the ramp is inverted and the result MULTIPLIES the particle's own alpha
+                // after being floored at END_ON_ALPHA_FADE.
+                const f32 lfInAlpha = lrPart.mvColour.w;
+
+                const rw::math::vpu::Vector3 lvMid =
+                    rw::math::vpu::Lerp(lvEnd0, lvEnd1, 0.5f);
+
+                rw::math::vpu::Vector3 lvMidCamVec;
+                lvMidCamVec.x = lvCameraPosition.x - lvMid.x;
+                lvMidCamVec.y = lvCameraPosition.y - lvMid.y;
+                lvMidCamVec.z = lvCameraPosition.z - lvMid.z;
+                lvMidCamVec.w = 0.0f;
+                lvMidCamVec = rw::math::vpu::Normalize(lvMidCamVec);
+
+                f32 lfDotProd = rw::math::vpu::Dot(lvNormDirVec, lvMidCamVec);
+                lfDotProd *= lfDotProd;
+
+                f32 lfOutAlpha = 1.0f;
+                if (lfDotProd > lfEndOnStartAngle)
+                {
+                    if (lfEndOnEndAngle > lfDotProd)
+                    {
+                        lfOutAlpha = 1.0f - (lfDotProd - lfEndOnStartAngle)
+                                          / (lfEndOnEndAngle - lfEndOnStartAngle);
+                    }
+                    else
+                    {
+                        lfOutAlpha = 0.0f;
+                    }
+                }
+                if (lfEndOnAlphaFade > lfOutAlpha)
+                {
+                    lfOutAlpha = lfEndOnAlphaFade;
+                }
+                lrPart.mvColour.w = lfOutAlpha * lfInAlpha;
+            }
+
+            // asm 0x82283954..0x82283998 -- the four corners, already in world space.
+            rw::math::vpu::Vector3 laPoints[4];
+            const f32 lfOffX = lvWidth.x * lrPivot.x;
+            const f32 lfOffY = lvWidth.y * lrPivot.x;
+            const f32 lfOffZ = lvWidth.z * lrPivot.x;
+
+            laPoints[0].x = lvEnd0.x - lfOffX; laPoints[0].y = lvEnd0.y - lfOffY;
+            laPoints[0].z = lvEnd0.z - lfOffZ; laPoints[0].w = 0.0f;
+            laPoints[1].x = lvEnd1.x - lfOffX; laPoints[1].y = lvEnd1.y - lfOffY;
+            laPoints[1].z = lvEnd1.z - lfOffZ; laPoints[1].w = 0.0f;
+            laPoints[2].x = laPoints[0].x + lvWidth.x;
+            laPoints[2].y = laPoints[0].y + lvWidth.y;
+            laPoints[2].z = laPoints[0].z + lvWidth.z; laPoints[2].w = 0.0f;
+            laPoints[3].x = laPoints[1].x + lvWidth.x;
+            laPoints[3].y = laPoints[1].y + lvWidth.y;
+            laPoints[3].z = laPoints[1].z + lvWidth.z; laPoints[3].w = 0.0f;
+
+            QuadDraw(lrLionBlendVertexIterator, lUVData, lrPart, laPoints, *apEmitter);
+        }
+    }
+}
+
 }  // namespace BrnGraphics
 
 // =================================================================================================
-// The three remaining LionBlendRenderer methods -- TRAP STUBS, deliberately.
+// The two remaining LionBlendRenderer methods -- TRAP STUBS, deliberately.
 //
 // ⭐ WHY THE TWO SetState OVERLOADS ARE **NOT** FORWARDED (2026-09-04). The obvious body is
 // `mRenderer.SetState(apState)` -- mRenderer now really does carry a CgsGraphics::ImRendererBase
@@ -678,30 +1143,22 @@ void LionBlendRenderer::RenderQuads(EffectsVertexBufferIterator& arIterator,
 //
 // ⚠ They exist at all because the LINK needs them: mLionRenderer is a by-value ParticleModule
 // member, so LionParticleRender's vtable is emitted and every virtual it names must resolve.
-// Real bodies now: EndRendering @0x8227E610, SetCameraData @0x822824F8,
-// BuildCameraOrientatedLocator @0x8227A478, RenderSprites @0x82282608 and RenderQuads
-// @0x82282B28 above, plus BeginRendering (an inline forward in the header onto
+// ALL THREE DRAW HALVES ARE NOW REAL (2026-09-05): RenderSprites @0x82282608 (328
+// instructions), RenderQuads @0x82282B28 (295) and RenderTilts @0x82282FC8 (639), alongside
+// EndRendering @0x8227E610, SetCameraData @0x822824F8, BuildCameraOrientatedLocator
+// @0x8227A478 and BeginRendering (an inline forward in the header onto
 // Im3dBlend::BeginRendering @0x82282060, bodied in BrnLionBlendIm3d.cpp).
 //
-// ⛔ A NOTE FOR ANYONE QUERYING THE TREE FOR THIS SUBSYSTEM: tools/re/hasbody.py reports the
-// Render* shapes as HAS BODY whether or not they are written, because a trap IS a definition.
-// As of 2026-09-05 RenderSprites (328 instructions) and RenderQuads (295) are REAL; RenderTilts
-// (639) is still a trap. Ask this file, not the tool.
+// ⛔ NOTHING RENDERS YET, and that is not this file's fault. Im3dBlend::Construct @0x8229B260
+// has never run: it needs the four Xenos microcode blobs (unk_8200DD58 / unk_8200DF00 /
+// unk_8200E010 / unk_8200E230) re-authored as D3D9, the SkidProgramsPC.cpp job. And one input
+// to the draw is still a stub: BrnEffects::Utils::BuildUVs @0x822781E0 writes four zero UV
+// corners, so every particle would sample texel (0,0) until its two rodata permute tables are
+// decoded. Both are named jobs, not unknowns.
 //
-// ⛔ WHY RenderTilts IS STILL TRAPPED, precisely. It is not "more of the same": it is two whole
-// draw loops chosen by cParticleBehaviour::mFlags bits 8 and 9 (asm 0x82283078..0x8228308C),
-// sharing only their prologue. Both are dense VMX128 -- `vrsqrtefp` plus two Newton-Raphson
-// refinements per normalise (five separate normalises), `vmsum3fp128` dot products,
-// `vmaddcfp128` (whose operand order is NOT vmaddfp's -- the raw word has to be decoded, see the
-// project note on 0x825C7408), `vpermwi128` lane rotates driving a cross product, `vsel`, and
-// four `vcmpgtfp128.` + `mfocrf`/`extrwi` branches on the CR6 bit. The semantics ARE now within
-// reach -- the four broadcast scalars its prologue builds from the behaviour record at +0x468 /
-// +0x46C / +0x470 / +0x474 are mEndOnAlphaFade / mEndOnScale / mEndOnStartAngle / mEndOnEndAngle,
-// which the DWARF independently names lvfEndOnAlphaFade / lvfEndOnScale / lvfEndOnStartAngle /
-// lvfEndOnEndAngle, so the whole apparatus is a view-angle fade on a velocity-aligned ribbon
-// quad -- but "within reach" is not "decoded". A wrong lane here draws silently wrong geometry,
-// and there is no runtime check available until the Xenos shader blobs are re-authored. It stays
-// a trap until every lane of both loops is tied to an instruction.
+// ⛔ A NOTE FOR ANYONE QUERYING THE TREE FOR THIS SUBSYSTEM: tools/re/hasbody.py reports a
+// Render* shape as HAS BODY whether or not it is written, because a trap IS a definition. It
+// happens to be right today; it was wrong for months. Ask this file, not the tool.
 // =================================================================================================
 namespace BrnGraphics
 {
@@ -715,13 +1172,6 @@ namespace BrnGraphics
         CGS_ASSERT(false, "BrnGraphics::LionBlendRenderer::SetState(BlendState) -- NOT RECONSTRUCTED (Lion render path)");
     }
 
-    void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& /*arIterator*/,
-                                        RenderedParticle* /*apParticle*/, const cMatrix* /*apMatrix*/,
-                                        U32 /*auCount*/, const cParticleEmitter* /*apEmitter*/,
-                                        const cTime& /*arTime*/)
-    {
-        CGS_ASSERT(false, "BrnGraphics::LionBlendRenderer::RenderTilts -- NOT RECONSTRUCTED (Lion render path)");
-    }
 }
 
 // =================================================================================================
