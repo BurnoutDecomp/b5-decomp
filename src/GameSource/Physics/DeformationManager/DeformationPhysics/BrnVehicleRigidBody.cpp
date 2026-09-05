@@ -197,6 +197,31 @@ namespace Deformation
                     const Vector3 lW = lpVehicle->GetAngularVelocity();
                     const f32 lfPitchRate = lW.x * lrT.xAxis.x + lW.y * lrT.xAxis.y + lW.z * lrT.xAxis.z;
                     const f32 lfPitchDep  = lRxJ.x * lrT.xAxis.x + lRxJ.y * lrT.xAxis.y + lRxJ.z * lrT.xAxis.z;
+                    // ⭐ yaw and ROLL deposits added 2026-09-05 (momentum wave) -- the owner's
+                    // "the car never really barrel rolls" is a question about the ROLL budget, and
+                    // the line printed only the pitch one, so answering it needed offline maths on
+                    // Jbody/armBody. THE MECHANISM, said here because it is not obvious: every
+                    // impulse that reaches this function is Jbody == KA_IMPULSE_DIRECTIONS[dir] *
+                    // magnitude, i.e. a PURE signed BODY AXIS (ApplySensorImpulse decomposes the
+                    // world impulse onto the six axes, asm switch @0x82607BAC). A pure -Z impulse
+                    // -- the head-on crush direction -- has (r x J).z identically zero, so it can
+                    // deposit pitch and yaw and NEVER roll. Roll comes only from the +/-X and +/-Y
+                    // direction magnitudes, through arm.x*J.y - arm.y*J.x.
+                    // MEASURED, run mom_C1 (148 mph head-on wall wreck, 885 arrivals):
+                    //     dir -Z  249 arrivals  sum|mag| 94134  max 14525
+                    //     dir +/-X 295 arrivals sum|mag| 44200  max  2811
+                    //     dir +/-Y 295 arrivals sum|mag| 28935  max  1062
+                    //     body-frame roll moment  sum 6223  max 650   (vs a 9035 yaw deposit
+                    //     from a SINGLE -Z arrival)
+                    // and the integrated result over the whole crash was
+                    //     sum dWbody = pitch -1.98, yaw +16.57, ROLL -0.47 rad/s.
+                    // ⚠️ THAT IS NOT YET A DEFECT: a symmetric head-on wall hit cannot roll a car
+                    // on the console either. What it gives is the BUDGET to compare -- the next
+                    // barrel-roll experiment must be an OBLIQUE/asymmetric hit, and the question to
+                    // ask of it is whether the +/-X and +/-Y magnitudes rise the way the console's do.
+                    const f32 lfYawDep    = lRxJ.x * lrT.yAxis.x + lRxJ.y * lrT.yAxis.y + lRxJ.z * lrT.yAxis.z;
+                    const f32 lfRollDep   = lRxJ.x * lrT.zAxis.x + lRxJ.y * lrT.zAxis.y + lRxJ.z * lrT.zAxis.z;
+                    const f32 lfRollRate  = lW.x * lrT.zAxis.x + lW.y * lrT.zAxis.y + lW.z * lrT.zAxis.z;
                     *CgsDev::Log::gpDebugPrint
                         << "[crash-response] arrive n=" << static_cast<s32>(suCrashArrivals)
                         << " world=" << ( lpImpulseParams->mbWorldContact ? 1 : 0 )
@@ -209,7 +234,10 @@ namespace Deformation
                         << "," << ( lArmW.x * lrT.zAxis.x + lArmW.y * lrT.zAxis.y + lArmW.z * lrT.zAxis.z ) << ")"
                         << " rxJ=(" << lRxJ.x << "," << lRxJ.y << "," << lRxJ.z << ")"
                         << " pitchDeposit=" << lfPitchDep
+                        << " yawDeposit=" << lfYawDep
+                        << " rollDeposit=" << lfRollDep
                         << " pitchRate=" << lfPitchRate
+                        << " rollRate=" << lfRollRate
                         << " up.y=" << lrT.yAxis.y << " fwd.y=" << lrT.zAxis.y
                         << " closing=" << lpImpulseParams->mvfVelocityAlongNormal.x
                         << "\n";
