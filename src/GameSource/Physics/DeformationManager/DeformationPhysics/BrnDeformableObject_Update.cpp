@@ -1664,24 +1664,67 @@ namespace Deformation
     //   (1) ALL FOUR WALL NORMALS ARE EXACTLY HORIZONTAL -- n.y == 0.000000 on every one. There is
     //       no upward component in the wall impulse, so nothing launches the car directly.
     //   (2) The crush arrives along BODY -Z at armBody.y == +0.198 .. +0.234, i.e. 20-23 cm ABOVE
-    //       the body origin -- and the origin IS the centre of mass (the deformation model is
-    //       rebased by StreamedDeformationSpec::TransformToNewCOMSpace at create time), while
-    //       ExternalPhysicsBody::GetImpulsesFromLocalImpulse @0x825A1A80 forms the arm as
-    //       `position - mTransform.Pos()` (`lvx128 v0, r3, 0x30 ; vsubfp v0, v2, v0` @0x825A1AC0/C4
-    //       on the WORLD-space-position arm). So the crush torques the car NOSE-UP about its own
-    //       CoM. Summed over the entry frame's twelve arrivals: pitch -8,273 N.m.s -> dW_pitch
-    //       -2.54 rad/s predicted, -2.51 observed; yaw +8,881 -> +2.42 vs +2.29; roll +859 ->
-    //       +1.13 vs +1.20. The angular ledger closes as tightly as the linear one.
+    //       the centre of mass. ExternalPhysicsBody::GetImpulsesFromLocalImpulse @0x825A1A80 forms
+    //       the arm as `position - mTransform.Pos()` (`lvx128 v0, r3, 0x30 ; vsubfp v0, v2, v0`
+    //       @0x825A1AC0/C4 on the WORLD-space-position arm). So the crush torques the car NOSE-UP
+    //       about its own CoM. Summed over the entry frame's twelve arrivals: pitch -8,273 N.m.s
+    //       -> dW_pitch -2.54 rad/s predicted, -2.51 observed; yaw +8,881 -> +2.42 vs +2.29; roll
+    //       +859 -> +1.13 vs +1.20. The angular ledger closes as tightly as the linear one.
+    //       ⭐⭐⭐ AND THE 20 cm IS THE CONSOLE'S OWN -- SETTLED 2026-09-05 AGAINST RETAIL DATA, so
+    //       do not re-open it. It is NOT in the streamed geometry: the shipped spec puts PUSMC01's
+    //       front crush spheres BELOW the spec origin (sensors 4..9 mInitialOffset.y == -0.176 ..
+    //       -0.217). The arm is DERIVED, by two asm-attested steps that both put the rig in the
+    //       wheels' own zero-mean frame:
+    //         * ProcessCreateEvents @0x82616D2C accumulates the mean of the four streamed WheelSpec
+    //           positions into mBaseAttribs.mCOMOffset (on top of an authored tweak that is zero
+    //           for this car). Re-derived from the shipped bytes alone, that mean is
+    //           (0.000023, -0.403568, -0.081302) -- to all six printed digits the `com=` the entry
+    //           probe prints. The rule is therefore confirmed independently of our own source.
+    //         * DeformationManager hands the NEGATED value to TransformToNewCOMSpace (X360
+    //           0x82644AF0..B04 `vspltisw v0,-1 / vslw / vxor v1,v13,v0 / bl`; PS3 0x76ADE4 emits
+    //           the identical five), so every sensor moves by -mCOMOffset -- the same frame
+    //           SimpleVehiclePhysics::SetAttributes @0x82602828 puts the WHEELS in.
+    //       => body sensor centre = mInitialOffset - wheelMean: sensor 6 -> +0.2016, 7 -> +0.2275,
+    //       8 -> +0.2016, 9 -> +0.1866, versus the four observed armBody.y of 0.2123 / 0.2339 /
+    //       0.2128 / 0.1979 -- the 1-2 cm residual is the contact point sitting on the sphere
+    //       rather than at its centre. The CoM lands 0.3370 m above the road (mMeshOffset.y
+    //       0.74058 - 0.4036), i.e. at axle height, with the bumper spheres 20 cm above it.
+    //       tools/assets/bundles/vehicle_geometry_audit.py compared the SHIPPED bytes against X360
+    //       retail for 429 cars: 380,798 deformation-spec values and 461,963 AttribSysVault values,
+    //       ZERO mismatches, with seven negative controls that all bite (`--selftest`). Both halves
+    //       of the difference `contactPoint - CoM` are retail's.
     //   (3) THAT PITCH THEN DRIVES THE REAR UNDERSIDE INTO THE ROAD. Four frames later the sensors
-    //       at armBody == (-0.612,-0.185,-1.939) and (-0.017,-0.180,-1.969) -- 1.94 m BEHIND and
-    //       18 cm BELOW the CoM -- report ground normals (n == (0,1,0) to five decimals) closing at
-    //       7.5 and 5.1 m/s, because the nose-up rate swings the tail down faster than the CoM is
-    //       rising. Their impulses come back as dir 2 (+Y body) at 1,063 and 924 N.s, which LIFTS
-    //       the car and deposits ANOTHER +2,061 / +1,819 of nose-up pitch.
-    //   (4) The loop runs away: over the ten frames after entry the deformation contacts deposit
-    //       +6,218 N.s of WORLD-Y (JworldY = Jbody.x*right.y + Jbody.y*up.y + Jbody.z*fwd.y, summed
-    //       per frame: 376/648/2004/701/649/1058/376/244/120/42), the car climbs 1.16 m, and then
-    //       flies with ZERO contacts of any kind for 33 consecutive frames.
+    //       at armBody == (-0.612,-0.185,-1.939) and (-0.017,-0.180,-1.969) -- 1.94 m BEHIND the
+    //       CoM, and 18 cm below it because a ground contact touches the BOTTOM of a 0.45 m sphere
+    //       whose centre is +0.2635 above the CoM -- report ground normals (n == (0,1,0) to five
+    //       decimals) closing at 7.5 and 5.1 m/s, because the nose-up rate swings the tail down
+    //       faster than the CoM is rising. Their impulses come back as dir 2 (+Y body) at 1,063 and
+    //       924 N.s, which LIFTS the car and deposits +2,061 / +1,819 of pitch.
+    //       ⛔⛔ THAT PITCH IS NOSE-DOWN, NOT NOSE-UP -- THIS LINE USED TO SAY "ANOTHER ... nose-up"
+    //       AND IT WAS A SIGN ERROR. In this frame -Wbody.x is nose-up: over frames 679..695 of
+    //       mwK_h230_s60 the pitch rate runs 0.29 -> -2.22 -> -3.32 while fwd.y rises -0.025 ->
+    //       +0.527, i.e. the nose climbs while the rate is NEGATIVE. The crush's deposits are
+    //       negative (-2,459 / -3,339 / -3,224 / -734); the ground's are POSITIVE. They oppose.
+    //   (4) SO THERE IS NO RUNAWAY -- the pitch feedback is NEGATIVE and the rotation is being
+    //       KILLED, not fed. crash_impulse_ledger `ledger` on the same log: the arriving contacts
+    //       predict dW_pitch -2.540 (obs -2.510) on the entry frame, -1.371 (-1.107) on the next,
+    //       then +0.482 (+0.676) as the tail lands; the nose-up rate PEAKS at -3.322 rad/s on frame
+    //       681 and decays monotonically from there. "The loop runs away" was the sign error
+    //       restated and it is withdrawn.
+    //       WHAT SURVIVES IS THE LIFT, AND IT IS ENTIRELY THE TAIL-GROUND PAIR. Over the ten frames
+    //       after entry the deformation contacts deposit +6,218 N.s of WORLD-Y (JworldY =
+    //       Jbody.x*right.y + Jbody.y*up.y + Jbody.z*fwd.y, per frame 376/648/2004/701/649/1058/
+    //       376/244/120/42 == 3.91 m/s on 1589 kg), the car climbs 1.16 m and then flies with ZERO
+    //       contacts of any kind for 33 consecutive frames. On the biggest frame (681, +2,004) the
+    //       dir-2 total is 2,585 N.s, of which 1,987 is the two ground contacts; the remaining 598
+    //       is the FRONT WALL contact's body-Y component, which is not a leak -- a horizontal world
+    //       impulse at a 4.2-degree nose-up attitude MUST have Jb.y == -(right.y*Jb.x +
+    //       fwd.y*Jb.z)/up.y == +517 against +534 measured, and it cancels back to zero world-Y by
+    //       construction (-36.5 + 2,576.6 - 535.4 == +2,004.7 vs the ledger's 2,004).
+    //       ⇒ THE OPEN QUESTION IS THE POLE-VAULT ITSELF: whether the console lets a tail that is
+    //       driven into the road at 7.5 m/s convert that into 1.25 m/s of CoM lift in one frame,
+    //       i.e. whether the ground contact's effective mass and absorption are ours. It is NOT a
+    //       positive-feedback loop and it is NOT the sensor geometry.
     //   (5) RESULT, ACROSS THE WHOLE BANKED CORPUS (26 crashes, mwA/mwB/mwK/cs_* one crash per
     //       boot, entry 54-90 m/s): the car gains 0.66-3.12 m of HEIGHT in EVERY one, and travels
     //       11-134 m (median ~48 m) past the impact point before the crash episode ends. It never
