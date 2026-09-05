@@ -243,14 +243,34 @@ namespace Deformation
 		const s32 liNum = mi32NumStoredContacts;            // v31 = *(this+408)
 		if ( liNum >= static_cast<s32>(KU_MAX_STORED_CONTACTS) )
 		{
-			// Full (count >= 3). The asm copies the candidate into a scratch slot, then ONLY if the
-			// candidate's mbValid > 0 (SHIDWORD(v37) > 0 -- the +60 valid word, signed) walks EVERY
+			// Full (count >= 3). The asm copies the candidate into a scratch slot, then walks EVERY
 			// slot and, whenever candidateProjDist < slotProjDist (v103 < *(slot+48)), SWAPS the
 			// candidate with that slot (the three 8x64-bit blob copies through the v94/v102 scratch
 			// == a full record swap). Because the candidate becomes the evicted slot's old contact,
 			// each swap carries the *largest* projected distance forward -- an iterative min-keep that
 			// ends with the deepest three contacts retained.
-			if ( lCandidate.mbValid )
+			//
+			// ⭐ RE-READ OFF THE ARTIST ASM 2026-09-05 (crash-routing wave). The insert is exact,
+			// instruction for instruction, and every displacement is now pinned rather than inferred:
+			//   0x825E19BC  lwz    r7, 0x198(r31)          ; count == this+408 == mi32NumStoredContacts
+			//   0x825E19C8  cmpwi  cr6, r7, 3 ; bge -> the replace arm at 0x825E1A08
+			//   0x825E19D4  slwi   r9, r7, 6 ; add r9,r9,r31 ; addi r9,r9,0x20
+			//                                           ; &maStoredContacts[count]  (STRIDE 64, base +0x20)
+			//   0x825E19E4..F4  the 8x`ld`/`std` pair == the 64-byte record copy
+			//   0x825E19F8..A00 count += 1
+			//   replace arm: 0x825E1A34 `lfs f0, 0x30(r7)` == slot->mfProjectedDist (+48)
+			//                0x825E1A38 `lfs f13, var_A0(r1)` == the candidate copy's same field
+			//                0x825E1A3C/40 `fcmpu ; bge -> skip`   i.e. SWAP WHEN candidate < slot
+			//                0x825E1AB8 `addi r7, r7, 0x40`        the 64-byte stride again
+			// ⛔ AND ONE COMMENT CORRECTION THE ASM FORCES: the guard on that walk is NOT the
+			// candidate's mbValid. 0x825E1A28/2C is `cmpwi cr6, r7, 0 ; ble` and **r7 is the COUNT**
+			// loaded at 0x825E19BC -- there is no read of the +60 valid word anywhere in the arm.
+			// The old note ("ONLY if the candidate's mbValid > 0, SHIDWORD(v37) > 0") named the wrong
+			// quantity. It cannot change behaviour (the arm is only reached with count >= 3, and
+			// mbValid is set true unconditionally 60 lines above), so the host test is kept as the
+			// documented invariant -- but it is the CONSOLE's `count > 0`, and a later wave must not
+			// read this line as evidence that ARTIST re-tests validity here.
+			if ( lCandidate.mbValid )   // console: `count > 0` @0x825E1A28 -- see the note above
 			{
 				for ( s32 li = 0; li < mi32NumStoredContacts; ++li )
 				{
@@ -315,6 +335,29 @@ namespace Deformation
 		//     ApplyCarWorldImpulse was never called for a wall. That was the whole blockage.
 		// ⚠️ The basis is signed and one-sided BY DESIGN: only a contact the sensor is closing on
 		// has basis > 0, which is how a separating contact is rejected. Do not "fix" it to fabs.
+		// ⭐⭐ THE LATCH IS RE-READ AND THE FOUR OPERAND POINTERS ARE PINNED BY THEIR OWN `addi`
+		// (2026-09-05, crash-routing wave). The previous banner named the registers; these are the
+		// instructions that LOAD them, so no operand is inherited from the sibling any more:
+		//     0x825E18A8  addi r4, r31, 0x10    -> r4 == this+0x10 == mPointDisplacement_...
+		//     0x825E18B8  addi r5, r28, 0x10    -> r5 == potential+0x10 == mPointOnB (r28 == the
+		//                                          potential-contact base == mPointOnA)
+		//     0x825E18B0  li   r3, 0x10         -> the index used by `lvx128 v13, r26, r3` below,
+		//                                          i.e. lpOtherSensor->mPointDisplacement_...
+		// so 0x825E1AD0 `vsubfp v12, v11([r28]), v0([r5])` IS pointA - pointB and 0x825E1AE4
+		// `vmsum3fp128 v12, v12, v124` dots it with the normal; 0x825E1AE0 dots this sensor's own
+		// displacement with -NORMAL, and 0x825E1AF0/AF4 add the other sensor's, gated on
+		// `cmplwi cr6, r26, 0 ; beq` @0x825E1AC8/AE8. Numerator, basis and both guards match.
+		// ⛔ WHAT THIS FUNCTION DOES **NOT** DO, said here because a whole wave was pointed at it as
+		// "the last untested link" on the owner's crash complaints: it does not CULL or MERGE
+		// anything on the impulse path. maStoredContacts (the 3-deep insert above) feeds the
+		// PENETRATION SOLVER; the impulse path reads mImpulseContact only, exactly one record per
+		// sensor per frame, and UpdateContacts then applies exactly one impulse per sensor that
+		// latched. So "how many contacts exist" is decided by HOW MANY SENSOR SPHERES THE WORLD
+		// OVERLAPS, not by anything here. Measured on a 3.6-degree-off head-on wall hit at 67.7 m/s
+		// (run mwK_h230_s60, crash-entry frame): FOUR contacts, sensors 6/7/8/9, four DISTINCT
+		// normals and four distinct points spread over 1.1 m of the car's front -- four real
+		// contacts, not one fanned out. See BrnDeformableObject_Update.cpp's UpdateContacts banner
+		// for the momentum ledger that follows from them.
 		const f32 lfPenetration = Dot3(Sub3(lPointOnA, lPointOnB), lNormal);
 
 		f32 lfBasis = -Dot3(lrDisp.GetVector3(), lNormal);   // vmsum3fp128 v0, thisDisp, -NORMAL
