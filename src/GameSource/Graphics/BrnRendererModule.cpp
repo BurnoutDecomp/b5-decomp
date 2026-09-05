@@ -285,6 +285,7 @@ EA::Jobs::Job::Job(s32 /*liPriority*/) {}
 #include <cstring>     // memcpy (per-pass DispatchObjectContext copies)
 #include <cmath>       // std::sqrt (PCBringUpPublishCoronaCamera's two projection scalars)
 #include <new>         // world dispatch bring-up heap
+#include <cstdlib>     // [diag] std::getenv (BRN_LION_QRES_OFF, the quarter-res A/B pin)
 
 // [diag] present counter (device.cpp) - stamps the trace lines with their frame.
 namespace renderengine { extern u32 guPresentCount; }
@@ -927,6 +928,59 @@ namespace
         }
         return lpBuffer->GetWidth() != 0u && lpBuffer->GetHeight() != 0u
             && lpBuffer->GetRenderTarget() != 0;
+    }
+
+    // ============================================================================================
+    // [FLAG PC bring-up] BUILD THE QUARTER-RES PARTICLE CHAIN (2026-09-05).
+    //
+    // Pool slot 9 + the four blit shader programs. Same shape, same latching rule and the same two
+    // blockers as EnsureSunCoronaBringUp above: VALUE-LATCHED on what actually exists, never on a
+    // `static bool tried` (a one-shot flag set during the loading screen, before renderengine::
+    // gDevice exists, burns the single attempt -- EnsureShadowMapTarget's banner records that bug).
+    //
+    // THE DOWN-SAMPLE BUFFER IS A PRECONDITION and not an ordering assumption: BeginQuarterResBuffer
+    // blits ITS depth into the particle buffer, and BlitComposite reads its extent for the
+    // half-texel offsets. Render calls EnsurePostFxSceneTargets before this point on every path;
+    // testing the SLOT keeps this gate independent of that.
+    //
+    // DELETE-WHEN BrnRendererMemory::Construct is callable -- it builds slot 9 and compiles the
+    // four blit programs itself.
+    // ============================================================================================
+    bool EnsureQuarterResParticleChain(BrnRendererMemory& lrRendererMemory)
+    {
+        // [FLAG PC bring-up diagnostic] BRN_LION_QRES_OFF=1 keeps the chain from ever coming up,
+        // so ONE build can be run twice differing in ONE SCALAR: with it, the Lion pass takes the
+        // full-res arm and adds onto the scene (the pre-2026-09-05 behaviour); without it, it
+        // accumulates on the cleared quarter-res buffer and is composited over the scene. That
+        // is the A/B the wave's position-matched film compares, and it is the same discipline
+        // BRN_LION_WHITE_PIN carried for the white-level fix. Registered in flow_run.ps1's
+        // DEFAULT-RUN clear list in the SAME change. DELETE-WHEN STABLE.
+        static const bool sbQResPinnedOff = (std::getenv("BRN_LION_QRES_OFF") != 0);
+        if (sbQResPinnedOff)
+        {
+            static bool sbLoggedPin = false;
+            if (!sbLoggedPin)
+            {
+                sbLoggedPin = true;
+                CgsDev::Log::WriteToLog("[qres] BRN_LION_QRES_OFF=1 -- the quarter-res particle"
+                                        " chain is PINNED OFF; the Lion pass takes the full-res"
+                                        " arm and adds straight onto the scene\n");
+            }
+            return false;
+        }
+
+        if (lrRendererMemory.PCBringUpParticleCompositeChainReady())
+            return true;
+        if (renderengine::gDevice == 0)
+            return false;                                  // no device -> no D3D9 objects yet
+        if (lrRendererMemory.GetShadowMapBuffer(0) == nullptr)
+            return false;                                  // the slot-nulling bring-up has not run
+        if (lrRendererMemory.GetDownSampleBuffer() == nullptr)
+            return false;                                  // no depth source, no composite extent
+        if (!EnsureWorldDispatchAllocator())
+            return false;
+
+        return lrRendererMemory.PCBringUpCreateParticleCompositeChain(&sWorldDispatchAllocator);
     }
 
     // ============================================================================================
@@ -3351,6 +3405,155 @@ void BrnRendererModule::ComputeSunCoronaVisibility()
                                        mAllocatedRenderTargets.GetDownSampleBuffer());
 }
 
+// =================================================================================================
+// BrnRendererModule::BeginQuarterResBuffer -- X360 @0x82408C38.
+//
+// Open the QUARTER-RESOLUTION particle buffer. Console body, in order:
+//     assert(mAllocatedRenderTargets.GetParticleBuffer() != NULL)                       (:4302)
+//     assert(mAllocatedRenderTargets.GetParticleBuffer()->GetRenderTarget() != NULL)    (:4303)
+//     CgsRenderTarget::SetRenderTargetState(particleBuffer, 0)
+//     clear colour = {0,0,0,0} (four consecutive stack floats @0x82408CCC..D8)
+//     renderengine::Device::Clear(thatColour, 4)          -- 4 == COLOUR_ALL, not depth
+//     push saDepthStencilStates[3] ZON_ZALL_ZWRITEON      (dword_83010918)
+//     push saRasterizerStates[2]   Scissor_CullModeNone   (dword_83010A40)
+//     push saBlendStates[7]        NoColourWrite_NoAlphaTest (dword_83010F8C, @0x82408D9C)
+//     BrnRendererMemory::BlitDepth(mIm2dRenderer, GetDownSampleBuffer())
+//     CgsRenderTarget::SetRenderTargetState(particleBuffer, 0)
+//
+// THE CLEAR IS THE WHOLE POINT OF THE BUFFER, and it is what this build has been missing: the
+// particles accumulate on ZERO, so the composite that follows can put them OVER the scene with a
+// (1 - accumulatedAlpha) term. Adding them straight onto the scene -- which is what this backend
+// did until 2026-09-05 -- makes a saturating plume ADD its background instead of REPLACING it.
+//
+// THE STATE TRIPLE IS THE DEPTH BLIT'S, not the particles': write depth, write no colour, cull
+// nothing. The particle pass that follows sets its own per-material states.
+//
+// ⚠ THE TRAILING RE-BIND IS THE CONSOLE'S OWN and is reproduced: BlitDepth ends with
+// shadow::Device::ResetShadowing, so the "last state installed" cache no longer knows what is
+// bound, and a SetRenderTargetState that would otherwise be skipped as redundant has to run.
+//
+// ⚠ THE PERFMON BRACKET IS NOT REPRODUCED (this file's banner at :250): every id in mGpuMonitors
+// is 0 on this build because nothing calls PerfMonGpu::AddMonitor.
+// =================================================================================================
+void BrnRendererModule::BeginQuarterResBuffer()
+{
+    CgsRenderTarget* const lpParticleBuffer = mAllocatedRenderTargets.GetParticleBuffer();
+    CGS_ASSERT(lpParticleBuffer != nullptr,
+               "mAllocatedRenderTargets.GetParticleBuffer() != NULL");
+    if (lpParticleBuffer == nullptr || lpParticleBuffer->GetRenderTarget() == nullptr)
+    {
+        return;
+    }
+    CGS_ASSERT(lpParticleBuffer->GetRenderTarget() != nullptr,
+               "mAllocatedRenderTargets.GetParticleBuffer()->GetRenderTarget() != NULL");
+
+    lpParticleBuffer->SetRenderTargetState(0);
+
+    renderengine::ClearColorParameters lClearColour;
+    lClearColour.mafColourRGBA[0] = 0.0f;
+    lClearColour.mafColourRGBA[1] = 0.0f;
+    lClearColour.mafColourRGBA[2] = 0.0f;
+    lClearColour.mafColourRGBA[3] = 0.0f;
+    renderengine::Device::Clear(lClearColour, renderengine::E_TARGETID_COLOUR_ALL);
+
+    renderengine::DepthStencilState* const lpDepthStencil =
+        CgsDepthStencilStateFactory::GetState(E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZALL_ZWRITEON);
+    renderengine::RasterizerState* const lpRasterizer =
+        CgsRasterizerStateFactory::GetState(E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE);
+    renderengine::BlendMaterialState* const lpBlend =
+        CgsBlendStateFactory::GetState(E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_NO_ALPHA_TEST);
+    if (lpDepthStencil == nullptr || lpRasterizer == nullptr || lpBlend == nullptr)
+    {
+        // [FLAG PC bring-up gate] the same refusal, for the same reason, BrnSunCorona's passes
+        // carry: on PC the three factories are Constructed from a deferred block in Render, so a
+        // slot can still be null and shadow::Device::SetState would dereference it.
+        static bool sbLoggedStates = false;
+        if (!sbLoggedStates)
+        {
+            sbLoggedStates = true;
+            CgsDev::Log::WriteToLog("[qres] BeginQuarterResBuffer DEFERRED: the blend /"
+                                    " rasteriser / depth-stencil state factories are not"
+                                    " Constructed yet\n");
+        }
+        return;
+    }
+
+    shadow::Device::SetState(lpDepthStencil);
+    shadow::Device::SetState(lpRasterizer);
+    shadow::Device::SetState(lpBlend);
+
+    mAllocatedRenderTargets.BlitDepth(mIm2dRenderer, mAllocatedRenderTargets.GetDownSampleBuffer());
+
+    lpParticleBuffer->SetRenderTargetState(0);
+}
+
+// =================================================================================================
+// BrnRendererModule::EndRenderAntiAliased -- X360 @0x82408B00.
+//
+// Close the anti-aliased pass: composite the quarter-res particle buffer back over the scene.
+// Console body, in order:
+//     PerfMonGpu::StartMonitor(mGpuMonitors.miQuarterResParticles)     (a1[12922])
+//     v3 = mapRenderTarget[4]                                          the DOWN-SAMPLE buffer
+//     CgsRenderTarget::SetRenderTargetState(v3, 0)
+//     push saDepthStencilStates[1] ZOFF_ZALL_ZWRITEOFF  (dword_83010910, @0x82408BCC)
+//     push saRasterizerStates[2]   Scissor_CullModeNone (dword_83010A40)
+//     push saBlendStates[0]        Opaque_Modulate_NoAlphaTest_DestRGBA (dword_83010F70)
+//     BrnRendererMemory::BlitComposite(mIm2dRenderer, v3, mapRenderTarget[9], false, false)
+//     rw::graphics::postfx::RenderTarget::Resolve(v3->GetRenderTarget(), false, true)
+//     PerfMonGpu::StopMonitor
+//
+// THE TWO SLOT NUMBERS ARE READ, NOT GUESSED: mAllocatedRenderTargets sits at this+0x238, the body
+// loads the composite's destination as `lwz r28, 0x248(r29)` -- (0x248-0x238)/4 == 4 == DOWN_SAMPLE
+// -- and its overlay as `lwz r6, 0x25C(r29)` -- (0x25C-0x238)/4 == 9 == PARTICLE.
+//
+// ⚠ Resolve IS CALLED and IS A NO-OP HERE, deliberately. On the Xenos it copies the EDRAM tile back
+// over the sampleable texture BlitComposite just read; on PC that texture IS the surface
+// (PostFxRenderTargetPCLeaf.cpp's Resolve() banner), so there is nothing to copy. It is reproduced
+// rather than dropped so the call graph still matches and the day a backend needs it, it is there.
+//
+// ⚠ THE PERFMON BRACKET IS NOT REPRODUCED (this file's banner at :250).
+// =================================================================================================
+void BrnRendererModule::EndRenderAntiAliased()
+{
+    CgsRenderTarget* const lpSceneTarget    = mAllocatedRenderTargets.GetDownSampleBuffer();
+    CgsRenderTarget* const lpParticleBuffer = mAllocatedRenderTargets.GetParticleBuffer();
+    if (lpSceneTarget == nullptr || lpSceneTarget->GetRenderTarget() == nullptr
+        || lpParticleBuffer == nullptr)
+    {
+        return;
+    }
+
+    lpSceneTarget->SetRenderTargetState(0);
+
+    renderengine::DepthStencilState* const lpDepthStencil =
+        CgsDepthStencilStateFactory::GetState(E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF);
+    renderengine::RasterizerState* const lpRasterizer =
+        CgsRasterizerStateFactory::GetState(E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE);
+    renderengine::BlendMaterialState* const lpBlend =
+        CgsBlendStateFactory::GetState(E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA);
+    if (lpDepthStencil == nullptr || lpRasterizer == nullptr || lpBlend == nullptr)
+    {
+        static bool sbLoggedStates = false;
+        if (!sbLoggedStates)
+        {
+            sbLoggedStates = true;
+            CgsDev::Log::WriteToLog("[qres] EndRenderAntiAliased DEFERRED: the blend /"
+                                    " rasteriser / depth-stencil state factories are not"
+                                    " Constructed yet\n");
+        }
+        return;
+    }
+
+    shadow::Device::SetState(lpDepthStencil);
+    shadow::Device::SetState(lpRasterizer);
+    shadow::Device::SetState(lpBlend);
+
+    mAllocatedRenderTargets.BlitComposite(mIm2dRenderer, lpSceneTarget, lpParticleBuffer,
+                                          false, false);
+
+    lpSceneTarget->GetRenderTarget()->Resolve(false, true);
+}
+
 // The world/car/sky pass block of Render (@0x8240BFA8 :725+). Pass order and list ids are the
 // X360's (see the renderer wave log for the full map):
 //   shadow cascades (lists 0,2,1,3,4)  -> LIVE, and no longer here: they run in
@@ -4673,6 +4876,17 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         // a frame stamped by it would have the renderer dereference NULL. DELETE-WHEN
         // PCBringUpProduceParticleRenderData is gone: the console has no such test.
         // ==========================================================================================
+        // ⭐ WHICH ARM THE LION PASS TAKES, published ONCE for this frame before either arm runs.
+        // The console has no such publish: both its arms always exist and mbIsInJunkyard alone
+        // selects. On PC the quarter-res half is a lazily built chain (pool slot 9 + the four blit
+        // programs) that can legitimately be absent, and with the console's gate restored an absent
+        // buffer would mean the Lion dispatch draws NOWHERE. Reading it once, here, is what stops
+        // the two arms from disagreeing inside a frame. See
+        // BrnParticle::ParticleModule::PCBringUpSetQuarterResRouting.
+        const bool lbQuarterResParticles =
+            lbSceneBracketOpen && EnsureQuarterResParticleChain(mAllocatedRenderTargets);
+        BrnParticle::ParticleModule::PCBringUpSetQuarterResRouting(lbQuarterResParticles);
+
         if (lbSceneBracketOpen && mbRenderParticles && lpDispatchThreadInputBuffer != 0)
         {
             const BrnParticle::ParticleModule::ParticleRenderData* lpFullResRenderData =
@@ -4805,6 +5019,62 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
                                                lrSunFrame.GetWhiteLevel(),
                                                0.0f, false);
             }
+        }
+
+        // ==========================================================================================
+        // ⭐⭐ THE QUARTER-RES PARTICLE BRACKET -- BeginQuarterResBuffer @0x82408C38,
+        // ParticleModule::RenderQuarterResParticles @0x82294A20, EndRenderAntiAliased @0x82408B00.
+        //
+        // CONSOLE POSITION, exactly: Render @0x8240BFA8 calls ResolveMSAA, then
+        // ComputeSunCoronaVisibility, then BeginQuarterResBuffer, then the quarter-res particles,
+        // then BrnSunCorona::RenderOccludedFlare @0x8240D688, then EndRenderAntiAliased -- so the
+        // bracket sits HERE, after the resolve and the corona visibility test and before the
+        // post-fx composite reads the down-sample buffer.
+        //
+        // WHAT IT IS FOR, in one line: the console accumulates particles in a CLEARED, SEPARATE
+        // buffer and composites them OVER the scene with a (1 - accumulatedAlpha) term, so a
+        // saturating plume REPLACES its background instead of ADDING to it. This backend added
+        // them straight onto the scene, which is what left the boost flame with a white core after
+        // the white-level fix in a4c7670b.
+        //
+        // ⚠ THE FLARE STAYS WHERE IT IS, and that is a MEASURED equivalence rather than an
+        // omission. The console draws RenderOccludedFlare INTO the particle buffer, between the
+        // particles and EndRenderAntiAliased; the flare's blend is
+        // eFactoryBlendState_Transparent_AdditiveRGB_NoAlphaTest_DestRGB -- additive RGB that
+        // writes NO alpha -- so in the particle buffer it contributes flareRGB with the alpha lane
+        // untouched, and the composite then evaluates scene*(1 - a) + particleRGB + flareRGB. Drawn
+        // one stage earlier into the down-sample buffer, as it is above, the composite evaluates
+        // (scene + flareRGB)*(1 - a) + particleRGB. The two differ only where the plume and the sun
+        // flare OVERLAP -- and the only cost of moving it would be redrawing it at half resolution.
+        // Stated rather than silently deviated from; the earlier "DELETE-WHEN the quarter-res
+        // buffer lands" note on that block is answered by this paragraph.
+        //
+        // ⚠ THE PARTICLE GATE IS THE FULL-RES ARM'S, verbatim: same three console reads, same
+        // temporary null test on mpParticleModule, same DELETE-WHEN. It is repeated rather than
+        // hoisted because the console repeats it -- the two arms are two independent call sites in
+        // Render, each with its own guard.
+        // ==========================================================================================
+        // The SAME latch published before the full-res arm above -- re-read here rather than
+        // carried in a local, because that arm sits in the pre-bracket scope. It is a pure
+        // query over what actually exists, so the two reads cannot disagree inside a frame.
+        if (mAllocatedRenderTargets.PCBringUpParticleCompositeChainReady())
+        {
+            BeginQuarterResBuffer();
+
+            if (mbRenderParticles && lpDispatchThreadInputBuffer != 0)
+            {
+                const BrnParticle::ParticleModule::ParticleRenderData* lpQuarterResRenderData =
+                    lpDispatchThreadInputBuffer->GetParticleRenderData();
+                if (lpQuarterResRenderData != 0 && lpQuarterResRenderData->mpParticleModule != 0
+                    && lpDispatchThreadInputBuffer->GetCalibrationUnfriendlyEnablePostFx()
+                    && !lpDispatchThreadInputBuffer->GetIsStalled())
+                {
+                    lpQuarterResRenderData->mpParticleModule
+                        ->RenderQuarterResParticles(lpQuarterResRenderData);
+                }
+            }
+
+            EndRenderAntiAliased();
         }
 
         // [FLAG PC bring-up] PRESENT THE SCENE TARGET. The world passes above drew into the

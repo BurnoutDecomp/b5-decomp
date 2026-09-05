@@ -8,6 +8,13 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // renderengine::ProgramBuffer
 #include "GameSource/Resource/BrnResourceAllocator.h"          // BrnResource::Allocators::GetGlobalGraphicsAllocator
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"              // renderengine::PCBringUpClearRenderTargetState
+#include "pc/gcm/renderengine/Im2dBlitProgramsPC.h"           // the four authored PC blit program images
+#include "pc/gcm/renderengine/VertexDescriptor.h"             // renderengine::VertexDescriptor(+Data)
+#include "pc/gcm/renderengine/renderstates.h"                 // renderengine::TextureState
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"  // shadow::Device
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"    // CgsDev::Log::WriteToLog ([qres] lines)
+#include <cstdio>    // snprintf (the one-shot bring-up lines)
+#include <cstring>   // memcpy (the constant rows -- the row pointer carries no alignment guarantee)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnRendererMemory::Construct             @ 0x823FCA38  (EXECUTED in the boot trace)
@@ -97,6 +104,19 @@ namespace renderengine
     };
 }
 #endif  // BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE
+
+// renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- open one shader-constant
+// row and return the write cursor (X360 r3 @0x822768D0). The SHARED declaration-only spelling this
+// tree standardised on; the ONE definition is pc/gcm/renderengine/ImmediateModePCLeaf.cpp:729.
+void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
+
+// The Xenon immediate-vertex ring intrinsics (defined for PC in
+// pc/gcm/renderengine/XenonD3D9Shims.cpp:3646/3775). Declared at file scope exactly as
+// BrnSunCorona.cpp, CgsIm2dUntex.cpp and BrnSkidVertex.cpp declare them.
+struct D3DDevice;
+extern "C" void* D3DDevice_BeginVertices(D3DDevice* lpDevice, u32 luPrimitiveType,
+                                         u32 luVertexCount, u32 luVertexStreamZeroStride);
+extern "C" void  D3DDevice_EndVertices(D3DDevice* lpDevice);
 
 namespace
 {
@@ -1123,4 +1143,448 @@ void BrnRendererMemory::CreateSunCoronaBuffer(rw::IResourceAllocator* lpAllocato
 
     // Slot written last, after Construct (stw r31, 0x28(r29) @0x823F746C).
     mapRenderTarget[E_RENDER_TARGET_SUN_CORONA] = lpSunCorona;
+}
+
+// =================================================================================================
+// THE BLIT DRAW SURFACE (2026-09-05, the quarter-res particle chain).
+//
+// Everything the two blits need that the console reaches through CgsGraphics::Im2d. The PC Im2d
+// (CgsIm2d.cpp:150-193) is the fixed-function 2D GUI path -- it selects the fixed-function
+// pipeline, rewrites every vertex from 1280x720 logical coordinates, and cannot carry a bound
+// vertex/pixel program pair -- so the two blits draw the way BrnSunCorona's two passes already do
+// on this backend: D3DDevice_BeginVertices with an explicit descriptor, in NDC.
+// =================================================================================================
+namespace
+{
+    // The three constant names BlitComposite resolves through
+    // renderengine::ProgramBuffer::GetVariableHandleByName. gQuincunxOffsets is the console's
+    // third; it is NOT looked up here because the PC pixel program does not declare it (see
+    // BlitComposite's banner), and a name with no declaration would resolve to a count-0 handle.
+    const u8 gszBlitUVOffsets[] = "gUVOffsets";
+    const u8 gszBlitUVScales[]  = "gUVScales";
+
+    // The Xenos vertex-format words + element-type lanes of the shared blit declaration -- the sun
+    // corona's, value for value (BrnSunCorona.cpp:113-121).
+    const u32 KU_BLIT_ELEMENT_FORMAT_FLOAT3 = 0x2A23B9u;
+    const u32 KU_BLIT_ELEMENT_FORMAT_FLOAT2 = 0x2C23A5u;
+    const u8  KU8_BLIT_ELEMENT_TYPE_POSITION  = 1u;
+    const u8  KU8_BLIT_ELEMENT_TYPE_TEXCOORD0 = 6u;
+
+    // 6 == TRIANGLESTRIP (XenonD3D9Shims.cpp:125 maps it straight to D3DPT_TRIANGLESTRIP); the
+    // console's Basic2dColouredTexturedVertex_::Render is handed the same 6 and the same 4.
+    const u32 KU_BLIT_PRIMITIVE_TRIANGLESTRIP = 6u;
+    const u32 KU_BLIT_QUAD_VERTEX_COUNT       = 4u;
+
+    // The overlay sampler unit -- the console's own (`sub_8227D158(v14, 1)` in BlitComposite), and
+    // the register the PC recompile's CTAB puts OverlaySampler at.
+    const u32 KU_BLIT_OVERLAY_SAMPLER_UNIT = 1u;
+    // renderengine::PostFxSourceSampler_ApplyState's min/mag filter word: 1 == LINEAR, which is
+    // what Construct @0x823FCA38 seeds the blit texture state with (mu8MinFilter = mu8MagFilter = 1).
+    const u32 KU_BLIT_SAMPLER_FILTER_LINEAR = 1u;
+
+    // BlitComposite's own 0.5 -- the two `v65[0] = 0.5 / v66[0] = 0.5` splats it multiplies the two
+    // reciprocal-extent vectors by.
+    const f32 KF_BLIT_HALF_TEXEL = 0.5f;
+
+    // The shared two-element vertex declaration both program pairs draw through. File-scope because
+    // it belongs to the pair of programs, not to a render target, and because the console's own
+    // equivalent (the Im2d renderer's declaration) is likewise built once and reused.
+    renderengine::VertexDescriptorData* gpBlitVertexDescriptor = nullptr;
+
+    // The 20-byte vertex the shared declaration auto-packs to: POSITION0 FLOAT3 at +0, TEXCOORD0
+    // FLOAT2 at +12. The layout MUST byte-match what VertexDescriptor::Initialize packs.
+    struct BlitVertex
+    {
+        f32 mafPosition[3];   // +0x00  POSITION0 -- ALREADY IN NDC
+        f32 mafUv[2];         // +0x0C  TEXCOORD0
+    };
+    static_assert(sizeof(BlitVertex) == 20, "the blit vertex is the shared 20-byte record");
+
+    // The console's unit-square quad, in the console's own order. BlitComposite builds four
+    // Basic2dColouredTexturedVertex records at (0,0) (0,1) (1,0) (1,1) with matching uvs and a
+    // 0xFFFFFFFF colour, and draws them as a TRIANGLESTRIP; here the xy pair is mapped to NDC
+    // (x*2-1, 1-y*2) because the Im2d transform that did that on the console is gone, and the
+    // colour lane is dropped because neither PC program declares a colour input.
+    void DrawBlitQuad()
+    {
+        BlitVertex* lpVertex = static_cast<BlitVertex*>(
+            D3DDevice_BeginVertices(0, KU_BLIT_PRIMITIVE_TRIANGLESTRIP,
+                                    KU_BLIT_QUAD_VERTEX_COUNT, sizeof(BlitVertex)));
+        if (lpVertex != nullptr)
+        {
+            static const f32 kaafQuad[KU_BLIT_QUAD_VERTEX_COUNT][5] =
+            {
+                // NDC x, NDC y, z, u, v      (console vertex, in its own order)
+                { -1.0f,  1.0f, 0.0f, 0.0f, 0.0f },   // (0,0)
+                { -1.0f, -1.0f, 0.0f, 0.0f, 1.0f },   // (0,1)
+                {  1.0f,  1.0f, 0.0f, 1.0f, 0.0f },   // (1,0)
+                {  1.0f, -1.0f, 0.0f, 1.0f, 1.0f },   // (1,1)
+            };
+            for (u32 luCorner = 0; luCorner < KU_BLIT_QUAD_VERTEX_COUNT; ++luCorner)
+            {
+                lpVertex[luCorner].mafPosition[0] = kaafQuad[luCorner][0];
+                lpVertex[luCorner].mafPosition[1] = kaafQuad[luCorner][1];
+                lpVertex[luCorner].mafPosition[2] = kaafQuad[luCorner][2];
+                lpVertex[luCorner].mafUv[0]       = kaafQuad[luCorner][3];
+                lpVertex[luCorner].mafUv[1]       = kaafQuad[luCorner][4];
+            }
+        }
+        D3DDevice_EndVertices(0);
+    }
+}
+
+// =================================================================================================
+// THE QUARTER-RES PARTICLE COMPOSITE CHAIN (2026-09-05).
+//
+// The console draws Lion particles into a CLEARED, SEPARATE half-by-half buffer and composites
+// that buffer OVER the scene with a (1 - accumulatedAlpha) term; this build drew them straight
+// onto the scene with no such term, so a saturating plume ADDED its background instead of
+// REPLACING it -- which is what left the boost flame with a white core after the white-level fix
+// in a4c7670b. The chain is five console functions:
+//     BrnRendererMemory::CreateParticleBuffer        @0x823F72B8  (already in this file)
+//     BrnRendererModule::BeginQuarterResBuffer       @0x82408C38  (BrnRendererModule.cpp)
+//     ParticleModule::RenderQuarterResParticles      @0x82294A20  (ParticleModule.cpp)
+//     BrnRendererModule::EndRenderAntiAliased        @0x82408B00  (BrnRendererModule.cpp)
+//     BrnRendererMemory::BlitComposite               @0x82406A68  (here)
+// plus BrnRendererMemory::BlitDepth @0x82406EA8 (here), which is what keeps the particles
+// depth-tested once they leave the scene target's own depth buffer.
+// =================================================================================================
+
+// [PC bring-up] Build pool slot 9 and the four blit programs. NOT a console function -- both halves
+// are Construct @0x823FCA38's, which is gated out for the two reasons the
+// BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE banner names.
+//
+// The RENDER TARGET half calls the real CreateParticleBuffer, exactly as its three sibling
+// bring-ups call theirs. The PROGRAM half is the one thing Construct does that has no console body
+// available on PC: its four gacIm2d*BlitProgram blobs are Xenos microcode inside the guest image.
+// They are ADOPTED from the authored D3D9 recompiles instead (pc/gcm/renderengine/
+// Im2dBlitProgramsPC.cpp, generated from tools/assets/shaders/brn_im2dblit.fx) -- the identical
+// route BrnSunCorona::Construct takes for its own four executable-embedded programs, and the reason
+// this cannot simply be `CreateBlitProgram(gacIm2dDepthBlitVertexProgram, ...)`.
+//
+// Also NOT done here: mBlitTextureStateResource / mpBlitTextureState. The console's BlitDepth
+// Initialize's that state per call over the source's depth texture; on PC the source render target
+// already owns a depth TextureState carrying the same texture, so BlitDepth reads that instead and
+// nothing has to be carved. See BlitDepth's banner.
+//
+// IDEMPOTENT, and it must be: CreateParticleBuffer `new`s a CgsRenderTarget and publishes it into
+// the slot, so a second call would leak the first AND hand the composite a different object than
+// the particle pass rendered into (the same hazard PCBringUpCreateSunCoronaBuffer's early return
+// exists for). DELETE WITH THE BRING-UP, together with its three siblings.
+bool BrnRendererMemory::PCBringUpCreateParticleCompositeChain(rw::IResourceAllocator* lpAllocator)
+{
+    CGS_ASSERT(mapRenderTarget[E_RENDER_TARGET_SHADOW_MAP_0] != nullptr,
+               "GetShadowMapBuffer(0) != NULL -- slot-nulling bring-up must run first");
+
+    // The pool sizes this target from mu32ScreenWidth/mu32ScreenHeight >> 1, so it needs the same
+    // precondition PCBringUpCreatePostFxSceneTargets has: the screen extent must be seeded.
+    if (mu32ScreenWidth == 0u || mu32ScreenHeight == 0u)
+    {
+        return false;
+    }
+
+    if (mapRenderTarget[E_RENDER_TARGET_PARTICLE] == nullptr)
+    {
+        CreateParticleBuffer(lpAllocator);
+
+        CgsRenderTarget* const lpParticle = mapRenderTarget[E_RENDER_TARGET_PARTICLE];
+        char lacMessage[224];
+        std::snprintf(lacMessage, sizeof(lacMessage),
+                      "[qres] particle buffer created: %ux%u rt=%d colourState=%d depthState=%d\n",
+                      (unsigned)(lpParticle != nullptr ? lpParticle->GetWidth() : 0u),
+                      (unsigned)(lpParticle != nullptr ? lpParticle->GetHeight() : 0u),
+                      (int)(lpParticle != nullptr && lpParticle->GetRenderTarget() != nullptr),
+                      (int)(lpParticle != nullptr && lpParticle->GetRenderTarget() != nullptr
+                            && lpParticle->GetRenderTarget()->maColourTargets[0].mpTextureState != nullptr),
+                      (int)(lpParticle != nullptr && lpParticle->GetRenderTarget() != nullptr
+                            && lpParticle->GetRenderTarget()->GetDepthTextureState() != nullptr));
+        CgsDev::Log::WriteToLog(lacMessage);
+    }
+
+    if (mpCompositeBlitVertexProgramBuffer == nullptr)
+    {
+        mpDepthBlitVertexProgramBuffer = renderengine::ProgramBufferPC_Adopt(
+            renderengine::gauIm2dDepthBlitVertexProgramPC,
+            renderengine::guIm2dDepthBlitVertexProgramPCSize, 0u);
+        mpDepthBlitPixelProgramBuffer = renderengine::ProgramBufferPC_Adopt(
+            renderengine::gauIm2dDepthBlitPixelProgramPC,
+            renderengine::guIm2dDepthBlitPixelProgramPCSize, 1u);
+        mpCompositeBlitVertexProgramBuffer = renderengine::ProgramBufferPC_Adopt(
+            renderengine::gauIm2dCompositeBlitVertexProgramPC,
+            renderengine::guIm2dCompositeBlitVertexProgramPCSize, 0u);
+        mpCompositeBlitPixelProgramBuffer = renderengine::ProgramBufferPC_Adopt(
+            renderengine::gauIm2dCompositeBlitPixelProgramPC,
+            renderengine::guIm2dCompositeBlitPixelProgramPCSize, 1u);
+
+        // The shared two-element declaration both pairs draw through (the sun corona's, value for
+        // value -- see brn_im2dblit.fx's VERTEX INPUT note). The offset lane is left at the ctor's
+        // 0xFFFF, which is the auto-pack request that produces 0 / 12.
+        renderengine::VertexDescriptor::Parameters lVertexDecl;
+        lVertexDecl.maElements[0].mu16Stream    = 0;
+        lVertexDecl.maElements[0].miOffset      = static_cast<s32>(KU_BLIT_ELEMENT_FORMAT_FLOAT3);
+        lVertexDecl.maElements[0].mu8UsageIndex = KU8_BLIT_ELEMENT_TYPE_POSITION;
+        lVertexDecl.maElements[1].mu16Stream    = 0;
+        lVertexDecl.maElements[1].miOffset      = static_cast<s32>(KU_BLIT_ELEMENT_FORMAT_FLOAT2);
+        lVertexDecl.maElements[1].mu8UsageIndex = KU8_BLIT_ELEMENT_TYPE_TEXCOORD0;
+        gpBlitVertexDescriptor = renderengine::VertexDescriptor::Initialize(0, &lVertexDecl);
+
+        // [FLAG PC bring-up gate] A resolved-but-not-found handle reads mu8RegisterCount == 0 and
+        // RenderEngineDeviceBeginShaderStates routes its row to the discard row -- the constant
+        // never reaches the shader, the composite samples uv (0,0) forever, and NOTHING errors.
+        // Refuse the whole chain instead, exactly as BrnSunCorona::Construct refuses its own.
+        renderengine::ProgramVariableHandle lUvOffsets;
+        renderengine::ProgramVariableHandle lUvScales;
+        if (mpCompositeBlitVertexProgramBuffer != nullptr)
+        {
+            renderengine::ProgramBuffer::GetVariableHandleByName(
+                mpCompositeBlitVertexProgramBuffer, gszBlitUVOffsets, &lUvOffsets);
+            renderengine::ProgramBuffer::GetVariableHandleByName(
+                mpCompositeBlitVertexProgramBuffer, gszBlitUVScales, &lUvScales);
+        }
+
+        char lacMessage[256];
+        std::snprintf(lacMessage, sizeof(lacMessage),
+                      "[qres] blit programs adopted: depthVs=%d depthPs=%d compVs=%d compPs=%d"
+                      " decl=%d gUVOffsets{reg=%u,count=%u} gUVScales{reg=%u,count=%u}\n",
+                      (int)(mpDepthBlitVertexProgramBuffer != nullptr),
+                      (int)(mpDepthBlitPixelProgramBuffer != nullptr),
+                      (int)(mpCompositeBlitVertexProgramBuffer != nullptr),
+                      (int)(mpCompositeBlitPixelProgramBuffer != nullptr),
+                      (int)(gpBlitVertexDescriptor != nullptr),
+                      (unsigned)lUvOffsets.mu8RegisterIndex, (unsigned)lUvOffsets.mu8RegisterCount,
+                      (unsigned)lUvScales.mu8RegisterIndex, (unsigned)lUvScales.mu8RegisterCount);
+        CgsDev::Log::WriteToLog(lacMessage);
+
+        if (lUvOffsets.mu8RegisterCount == 0u || lUvScales.mu8RegisterCount == 0u)
+        {
+            CgsDev::Log::WriteToLog(
+                "[qres] the authored composite vertex program does NOT declare gUVOffsets /"
+                " gUVScales by those exact names -- the quarter-res particle chain stays off\n");
+            mpDepthBlitVertexProgramBuffer     = nullptr;
+            mpDepthBlitPixelProgramBuffer      = nullptr;
+            mpCompositeBlitVertexProgramBuffer = nullptr;
+            mpCompositeBlitPixelProgramBuffer  = nullptr;
+        }
+    }
+
+    return PCBringUpParticleCompositeChainReady();
+}
+
+// A pure query -- see the declaration. Every surface and program the two blits dereference without
+// a test of their own is checked here, ONCE, so the renderer's routing decision and the blits agree
+// about what "live" means.
+bool BrnRendererMemory::PCBringUpParticleCompositeChainReady() const
+{
+    CgsRenderTarget* const lpParticle = mapRenderTarget[E_RENDER_TARGET_PARTICLE];
+    if (lpParticle == nullptr || lpParticle->GetRenderTarget() == nullptr)
+        return false;
+    if (lpParticle->GetRenderTarget()->maColourTargets[0].mpTextureState == nullptr)
+        return false;
+
+    return mpDepthBlitVertexProgramBuffer     != nullptr
+        && mpDepthBlitPixelProgramBuffer      != nullptr
+        && mpCompositeBlitVertexProgramBuffer != nullptr
+        && mpCompositeBlitPixelProgramBuffer  != nullptr
+        && gpBlitVertexDescriptor             != nullptr;
+}
+
+// =================================================================================================
+// BrnRendererMemory::BlitDepth -- X360 @0x82406EA8.
+//
+// Console body, in order: read the source's postfx RenderTarget; SetShaderGPRAllocation; load the
+// Im2d blit transform out of flt_830112D0 and hand it to Basic2dColouredTexturedVertex_::
+// BeginRendering + SetTransform; build a clamped bilinear TextureState over the SOURCE'S DEPTH
+// TEXTURE (`v47 = *(v3 + 136)` == mDepthTarget.mpTexture) into mpBlitTextureState; bind it to
+// sampler 0; install mpDepthBlitVertexProgramBuffer / mpDepthBlitPixelProgramBuffer; draw the unit
+// quad; ResetShadowing. The pixel program is three instructions --
+//     tfetch r0.x, uv, tf0 ; sgts export0.x, -r0.x ; maxs export61.x, r0.x [clamp]
+// -- and export61 IS the Xenos depth export, so the whole pass is "write the sampled depth as this
+// fragment's depth". The caller supplies the state: BeginQuarterResBuffer @0x82408C38 pushes
+// depth-stencil slot 3 (ZON_ZALL_ZWRITEON), rasteriser slot 2 (CullModeNone) and blend slot 7
+// (NoColourWrite_NoAlphaTest) immediately before calling it.
+//
+// FOUR PC SUBSTITUTIONS, each named where it happens:
+//  (1) the Im2d renderer is not used (its PC realisation is the fixed-function 2D GUI path and
+//      cannot carry a bound program pair -- brn_im2dblit.fx's VERTEX INPUT note), so the quad is
+//      drawn through D3DDevice_BeginVertices with an explicit descriptor and arrives in NDC. That
+//      also makes the console's transform load and gOffsetXYZ/gRightUp dead.
+//  (2) mpBlitTextureState is not built. The source render target already owns a depth TextureState
+//      over the very texture the console's per-call state would wrap (PostFxRenderTargetPCLeaf.cpp
+//      builds it from mDepthTarget's hi-Z-else-depth texture), and on this backend a TextureState's
+//      sampler words are stored, not applied -- so a second object over the same raster would
+//      differ in nothing and would have to be carved every frame.
+//  (3) D3DDevice_SetTexture forces POINT/CLAMP on any unit that receives a raw-depth texture
+//      (ApplyRawDepthSamplerState), which is what a depth fetch must have and what the console's
+//      own CreateStates writes (mag = min = 0). Nothing extra is installed here.
+//  (4) SetShaderGPRAllocation is dropped, as this tree drops the other four occurrences: it is a
+//      Xenos GPR-partition hint with no D3D9 counterpart.
+// =================================================================================================
+void BrnRendererMemory::BlitDepth(CgsGraphics::Im2d& /*lIm2d*/, CgsRenderTarget* lpSource)
+{
+    if (lpSource == nullptr || lpSource->GetRenderTarget() == nullptr)
+        return;
+
+    renderengine::TextureState* const lpSourceDepth =
+        lpSource->GetRenderTarget()->GetDepthTextureState();
+    if (lpSourceDepth == nullptr)
+    {
+        static bool sbLoggedNoDepth = false;
+        if (!sbLoggedNoDepth)
+        {
+            sbLoggedNoDepth = true;
+            CgsDev::Log::WriteToLog(
+                "[qres] BlitDepth REFUSED: the source target has no sampleable depth TextureState"
+                " -- the quarter-res particles will not be occluded by the world\n");
+        }
+        return;
+    }
+
+    shadow::Device::SetVertexProgram(mpDepthBlitVertexProgramBuffer);
+    shadow::Device::SetPixelProgram(mpDepthBlitPixelProgramBuffer);
+
+    shadow::Device::SetState(lpSourceDepth, 0u);
+    shadow::Device::SetVertexDescriptor(gpBlitVertexDescriptor);
+    shadow::Device::FlushVertexProgramState();
+
+    DrawBlitQuad();
+
+    // The console's own last act (`dword_83010F9C = 0; shadow::Device::ResetShadowing()` at the
+    // tail of 0x82406EA8, the same pair BlitComposite ends with). It matters here for a reason the
+    // console never had to think about: this pass leaves the SOURCE'S DEPTH TEXTURE bound at unit
+    // 0, which is the unit LionParticleRender::SetMaterial keys its own bind on -- and the pass
+    // that runs next, in the bracket this one opens, IS the Lion particle pass.
+    shadow::Device::ResetShadowing();
+}
+
+// =================================================================================================
+// BrnRendererMemory::BlitComposite -- X360 @0x82406A68.
+//
+// Console body, in order: read both sources' postfx RenderTargets; Im2d BeginRendering +
+// SetTransform; bind source0's colour TextureState (`v7[11]` == maColourTargets[0].mpTextureState)
+// to sampler 0 and source1's to sampler 1; install the composite program pair; build the unit-square
+// quad; then THREE shader constants --
+//     gUVOffsets  (VERTEX c2) = gbHalfTexelBlitOffset ? 0.5 * (1/w0, 1/h0, 1/w1, 1/h1) : 0
+//     gUVScales   (VERTEX c3) = (1, 1, 1, 1)
+//     gQuincunxOffsets (PIXEL c0) = (0.166, -0.166, 0, 0) * (1/w0, 1/h0, 1/w0, 1/h0)
+// -- and Render(6 /*TRIANGLESTRIP*/, quad, 4), ResetShadowing. gbHalfTexelBlitOffset is
+// byte_82F2423E, which dumps as 0x01 (the dword at 0x82F2423C is 0x01010101), so the half-texel
+// arm is the console's live one; it is also exactly the correction D3D9's texel-centre rule needs,
+// so it is applied here rather than being a console-only quirk.
+//
+// The caller supplies the state: EndRenderAntiAliased @0x82408B00 binds the DOWN-SAMPLE target and
+// pushes depth-stencil slot 1 (ZOFF_ZALL_ZWRITEOFF), rasteriser slot 2 (CullModeNone) and blend
+// slot 0 (Opaque_Modulate_NoAlphaTest_DestRGBA) immediately before calling it.
+//
+// ⚠ THE TWO PC DEVIATIONS ARE IN Im2dCompositeBlit_ApplyRopState (ShadowPassPCLeaf.h) AND IN THE
+// PIXEL PROGRAM (brn_im2dblit.fx). In one sentence each: the scene term moves onto the D3D9 blend
+// unit because a texture cannot be sampled while it is the bound render target on this backend, so
+// BaseSampler and gQuincunxOffsets are not used and the two SCENE taps' 0.5 average is dropped;
+// and the write is masked to RGB because this backend carries the motion-blur mask in the scene
+// target's alpha, where the console carries it in the stencil. Everything else -- the particle
+// term, the two UV constants, the quad, the sampler unit numbers -- is the console's.
+//
+// lbFlag0 / lbFlag1 are the two trailing bool arguments the X360 call site passes as 0
+// (`li r7, 0` @0x82408C00 / `li r8, 0` @0x82408BF8). Hex-Rays loses them and no path in the
+// reconstructed body reads them, so they are carried and unused rather than invented behaviour.
+// =================================================================================================
+void BrnRendererMemory::BlitComposite(CgsGraphics::Im2d& /*lIm2d*/, CgsRenderTarget* lpSource0,
+                                      CgsRenderTarget* lpSource1, bool /*lbFlag0*/, bool /*lbFlag1*/)
+{
+    if (lpSource0 == nullptr || lpSource0->GetRenderTarget() == nullptr
+        || lpSource1 == nullptr || lpSource1->GetRenderTarget() == nullptr)
+        return;
+
+    rw::graphics::postfx::RenderTarget* const lpBase    = lpSource0->GetRenderTarget();
+    rw::graphics::postfx::RenderTarget* const lpOverlay = lpSource1->GetRenderTarget();
+
+    renderengine::TextureState* const lpOverlayState = lpOverlay->maColourTargets[0].mpTextureState;
+    if (lpOverlayState == nullptr)
+    {
+        static bool sbLoggedNoOverlay = false;
+        if (!sbLoggedNoOverlay)
+        {
+            sbLoggedNoOverlay = true;
+            CgsDev::Log::WriteToLog(
+                "[qres] BlitComposite REFUSED: the overlay target has no colour TextureState\n");
+        }
+        return;
+    }
+
+    shadow::Device::SetVertexProgram(mpCompositeBlitVertexProgramBuffer);
+    shadow::Device::SetPixelProgram(mpCompositeBlitPixelProgramBuffer);
+
+    // ---- gUVOffsets (VERTEX c2): the half-texel correction, per source ---------------------------
+    // The console's `1.0 / width` pair for each source, splatted through the two vrlimi128 pairs and
+    // multiplied by the two 0.5 splats. Both sources are read at their OWN extent, which is why the
+    // overlay lane uses the half-res particle buffer's numbers and not the scene's.
+    const f32 lfBaseWidth     = static_cast<f32>(lpBase->muWidth);
+    const f32 lfBaseHeight    = static_cast<f32>(lpBase->muHeight);
+    const f32 lfOverlayWidth  = static_cast<f32>(lpOverlay->muWidth);
+    const f32 lfOverlayHeight = static_cast<f32>(lpOverlay->muHeight);
+    if (lfBaseWidth <= 0.0f || lfBaseHeight <= 0.0f
+        || lfOverlayWidth <= 0.0f || lfOverlayHeight <= 0.0f)
+        return;
+
+    const f32 lafUvOffsets[4] =
+    {
+        KF_BLIT_HALF_TEXEL / lfBaseWidth,     KF_BLIT_HALF_TEXEL / lfBaseHeight,
+        KF_BLIT_HALF_TEXEL / lfOverlayWidth,  KF_BLIT_HALF_TEXEL / lfOverlayHeight,
+    };
+    // gUVScales (VERTEX c3): `vspltisw v0, 1 ; vcsxwfp128 v126, v0, 0` -- an all-ones float4.
+    const f32 lafUvScales[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+    renderengine::ProgramVariableHandle lUvOffsets;
+    renderengine::ProgramVariableHandle lUvScales;
+    renderengine::ProgramBuffer::GetVariableHandleByName(
+        mpCompositeBlitVertexProgramBuffer, gszBlitUVOffsets, &lUvOffsets);
+    renderengine::ProgramBuffer::GetVariableHandleByName(
+        mpCompositeBlitVertexProgramBuffer, gszBlitUVScales, &lUvScales);
+
+    {
+        void* lpRow = 0;
+        RenderEngineDeviceBeginShaderStates(&lUvOffsets, &lpRow);
+        if (lpRow != 0)
+            std::memcpy(lpRow, lafUvOffsets, sizeof(lafUvOffsets));
+    }
+    {
+        void* lpRow = 0;
+        RenderEngineDeviceBeginShaderStates(&lUvScales, &lpRow);
+        if (lpRow != 0)
+            std::memcpy(lpRow, lafUvScales, sizeof(lafUvScales));
+    }
+
+    // Sampler 1 is the console's own unit for the overlay (`sub_8227D158(v14, 1)`), and the PC
+    // recompile's CTAB puts OverlaySampler at s1 to match. Sampler 0 (BaseSampler) is deliberately
+    // NOT bound -- see the deviation note above; binding the scene there while it is the render
+    // target is the undefined case this whole re-association exists to avoid.
+    shadow::Device::SetState(lpOverlayState, KU_BLIT_OVERLAY_SAMPLER_UNIT);
+    renderengine::PostFxSourceSampler_ApplyState(KU_BLIT_OVERLAY_SAMPLER_UNIT,
+                                                 KU_BLIT_SAMPLER_FILTER_LINEAR, 1u);
+    shadow::Device::SetVertexDescriptor(gpBlitVertexDescriptor);
+    shadow::Device::FlushVertexProgramState();
+
+    renderengine::Im2dCompositeBlit_ApplyRopState();
+
+    DrawBlitQuad();
+
+    // The console's own last act (`shadow::Device::ResetShadowing`) -- and on PC it is what stops
+    // the raw D3D9 words Im2dCompositeBlit_ApplyRopState just wrote from being remembered as a
+    // state object that a later SetState would then skip as redundant.
+    shadow::Device::ResetShadowing();
+
+    {
+        static bool sbLoggedFirst = false;
+        if (!sbLoggedFirst)
+        {
+            sbLoggedFirst = true;
+            char lacMessage[224];
+            std::snprintf(lacMessage, sizeof(lacMessage),
+                          "[qres] first composite: base %ux%u overlay %ux%u"
+                          " uvOffsets=(%.6f %.6f %.6f %.6f)\n",
+                          (unsigned)lpBase->muWidth, (unsigned)lpBase->muHeight,
+                          (unsigned)lpOverlay->muWidth, (unsigned)lpOverlay->muHeight,
+                          lafUvOffsets[0], lafUvOffsets[1], lafUvOffsets[2], lafUvOffsets[3]);
+            CgsDev::Log::WriteToLog(lacMessage);
+        }
+    }
 }

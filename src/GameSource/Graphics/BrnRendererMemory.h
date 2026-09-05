@@ -33,8 +33,8 @@
 
 namespace renderengine
 {
-    class ProgramBuffer;   // the four blit shader programs are held by pointer
-    class TextureState;    // the blit texture state is held by pointer
+    struct ProgramBufferData;   // the four blit shader programs are held by pointer
+    class TextureState;         // the blit texture state is held by pointer
 }
 
 class CgsRenderTarget;     // the render-target pool entries are held by pointer
@@ -149,7 +149,11 @@ struct BrnRendererMemory
     // +0x38/+0x3C). FIVE parameters: BrnRendererModule::EndRenderAntiAliased @0x82408B00 sets r4..r8
     // (`addi r4, r29, 0xB30` / `mr r5, r28` / `lwz r6, 0x25C(r29)` / `li r7, 0` @0x82408C00 /
     // `li r8, 0` @0x82408BF8), which is exactly this arity. Hex-Rays prints four and loses both bools.
-    // BODY NOT IN THE TREE -- declaration only.
+    //
+    // BODIED 2026-09-05 (the quarter-res particle chain). lIm2d is CARRIED AND UNUSED: on the
+    // console the quad goes through CgsGraphics::Basic2dColouredTexturedVertex_::Render, whose PC
+    // realisation (CgsIm2d.cpp:150-193) is the fixed-function 2D GUI path and cannot carry a bound
+    // vertex/pixel program pair. See the definition's banner and brn_im2dblit.fx.
     void BlitComposite(CgsGraphics::Im2d& lIm2d, CgsRenderTarget* lpSource0,
                        CgsRenderTarget* lpSource1, bool lbFlag0, bool lbFlag1);
 
@@ -157,8 +161,25 @@ struct BrnRendererMemory
     // depth into the bound render target with the depth-blit shader pair (+0x2C/+0x30). This is also
     // the function that finally initialises mpBlitTextureState (+0x44) out of mBlitTextureStateResource
     // (+0x48), which answers the "Initialize'd lazily on first use" note on Construct.
-    // BODY NOT IN THE TREE -- declaration only.
+    //
+    // BODIED 2026-09-05 (the quarter-res particle chain). Same lIm2d note as BlitComposite above;
+    // and the console's per-call TextureState::Initialize over the source's DEPTH texture is
+    // replaced by the source render target's OWN depth TextureState (GetDepthTextureState()),
+    // which already holds that same texture -- see the definition's banner.
     void BlitDepth(CgsGraphics::Im2d& lIm2d, CgsRenderTarget* lpSource);
+
+    // [PC bring-up] Build the QUARTER-RES PARTICLE CHAIN: pool slot 9 (the real
+    // CreateParticleBuffer @0x823F72B8) plus the four blit shader programs Construct @0x823FCA38
+    // compiles into mp{Depth,Composite}Blit{Vertex,Pixel}ProgramBuffer. NOT a console function --
+    // it exists for the two reasons the BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE banner names, and
+    // does nothing those five console steps do not do. Idempotent; returns true once the whole
+    // chain is usable. DELETE WITH THE BRING-UP, together with its three siblings.
+    bool PCBringUpCreateParticleCompositeChain(rw::IResourceAllocator* lpAllocator);
+
+    // Is the chain above live this frame? A pure query -- no allocation, no logging. The renderer
+    // asks it before ROUTING the Lion particle pass at all: with no particle buffer the console's
+    // !mbIsInJunkyard arm has nowhere to draw, and the plume would simply disappear.
+    bool PCBringUpParticleCompositeChainReady() const;
 
     // The post-fx spine's two targets, created lazily on the first frame that has a D3D9 device.
     // See the banner on EnsurePostFxSceneTargets in BrnRendererModule.cpp for why this is a bring-up
@@ -214,14 +235,18 @@ private:
     CgsRenderTarget* mapRenderTarget[E_RENDER_TARGET_COUNT];    // +0x00 (11 dwords zeroed in Construct)
 
     // Depth-blit shader program pair + its working/original temp-register counts.
-    renderengine::ProgramBuffer* mpDepthBlitVertexProgramBuffer;      // +0x2C
-    renderengine::ProgramBuffer* mpDepthBlitPixelProgramBuffer;       // +0x30
+    // (Typed ProgramBufferData* -- the object renderengine::ProgramBuffer::Initialize and
+    // ProgramBufferPC_Adopt actually return. renderengine::ProgramBuffer is the STATIC helper
+    // class, never an instance, so the previous spelling forced a reinterpret_cast at every
+    // producer and could not be handed to GetVariableHandleByName at all.)
+    renderengine::ProgramBufferData* mpDepthBlitVertexProgramBuffer;      // +0x2C
+    renderengine::ProgramBufferData* mpDepthBlitPixelProgramBuffer;       // +0x30
     u8                           mu8DepthBlitTempRegisterCountCurrent;  // +0x34
     u8                           mu8DepthBlitTempRegisterCountOriginal; // +0x35
 
     // Composite-blit shader program pair + its working/original temp-register counts.
-    renderengine::ProgramBuffer* mpCompositeBlitVertexProgramBuffer;   // +0x38
-    renderengine::ProgramBuffer* mpCompositeBlitPixelProgramBuffer;    // +0x3C
+    renderengine::ProgramBufferData* mpCompositeBlitVertexProgramBuffer;   // +0x38
+    renderengine::ProgramBufferData* mpCompositeBlitPixelProgramBuffer;    // +0x3C
     u8                           mu8CompositeBlitTempRegisterCountCurrent;  // +0x40
     u8                           mu8CompositeBlitTempRegisterCountOriginal; // +0x41
 

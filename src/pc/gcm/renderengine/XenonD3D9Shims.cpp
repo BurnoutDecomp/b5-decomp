@@ -6361,6 +6361,56 @@ void LionParticleSampler_ApplyState(u32 luUnit)
     lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPMAPLODBIAS, 0u);                // X360 mipLodBias = 0.0f
 }
 
+// =============================================================================================
+// FLAG PC-platform leaf: THE COMPOSITE BLIT'S ROP STATE. See the banner on the declaration in
+// ShadowPassPCLeaf.h -- the scene term of BrnRendererMemory::BlitComposite @0x82406A68 is
+// re-associated onto the blend unit because D3D9 cannot sample the bound render target, and the
+// alpha lane is left alone because this backend carries the motion-blur mask there.
+// =============================================================================================
+void Im2dCompositeBlit_ApplyRopState()
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr)
+        return;
+
+    // [FLAG PC bring-up diagnostic] BRN_LION_QRES_SHOW=1 replaces the destination factor with ZERO,
+    // so the frame becomes THE PARTICLE BUFFER ALONE on black. It exists because the endemic failure
+    // on this path is the SILENT one: a composite that runs, draws, and contributes nothing is
+    // indistinguishable from a correct composite over a frame with few particles. One run under this
+    // flag separates "the buffer is empty" from "the draw is not landing" from "both work".
+    // DELETE-WHEN-STABLE. Registered in flow_run.ps1's DEFAULT-RUN clear list in the same change.
+    static const bool sbShowOverlayOnly = (std::getenv("BRN_LION_QRES_SHOW") != 0);
+
+    // [FLAG PC bring-up diagnostic] BRN_LION_QRES_ADD=1 replaces the destination factor with ONE,
+    // i.e. it ADDS the particle buffer to the scene instead of compositing it OVER. That is the
+    // A/B THIS WAVE'S CLAIM ACTUALLY NEEDS: it holds the buffer, the half resolution, the depth
+    // blit and the particle pass fixed and moves the (1 - alpha) TERM ALONE, so a difference on
+    // film cannot be a routing artefact. DELETE-WHEN-STABLE.
+    static const bool sbAddInsteadOfOver = (std::getenv("BRN_LION_QRES_ADD") != 0);
+
+    lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE,  TRUE);
+    lpDevice->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+    lpDevice->SetRenderState(D3DRS_SRCBLEND,          D3DBLEND_ONE);          // premultiplied RGB
+    lpDevice->SetRenderState(D3DRS_DESTBLEND,
+                             sbShowOverlayOnly ? D3DBLEND_ZERO
+                             : sbAddInsteadOfOver ? D3DBLEND_ONE
+                                                  : D3DBLEND_INVSRCALPHA);    // the (1 - a) term
+    lpDevice->SetRenderState(D3DRS_BLENDOP,           D3DBLENDOP_ADD);
+    lpDevice->SetRenderState(D3DRS_ALPHATESTENABLE,   FALSE);
+    // RGB only -- the destination ALPHA is renderengine::PCStampMotionBlurMask's mask lane.
+    lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE,
+                             D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN
+                             | D3DCOLORWRITEENABLE_BLUE);
+    // The console's blend slot 0 (eFactoryBlendState_Opaque_Modulate_NoAlphaTest_DestRGBA) writes
+    // no stencil and does not scissor; EndRenderAntiAliased's rasteriser slot 2 is CullModeNone.
+    lpDevice->SetRenderState(D3DRS_STENCILENABLE,     FALSE);
+    lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+    lpDevice->SetRenderState(D3DRS_CULLMODE,          D3DCULL_NONE);
+    // Depth-stencil slot 1 (ZOFF_ZALL_ZWRITEOFF), the state EndRenderAntiAliased pushes.
+    lpDevice->SetRenderState(D3DRS_ZENABLE,           FALSE);
+    lpDevice->SetRenderState(D3DRS_ZWRITEENABLE,      FALSE);
+}
+
 u32 PostFxDepthSampler_BoundUnitMask()
 {
     // SELF-HEALING (rung-6 verifier): the claim bitmask is maintained by the D3DDevice_SetTexture hook,

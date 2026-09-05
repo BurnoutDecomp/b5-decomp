@@ -109,10 +109,23 @@ namespace
     renderengine::DepthStencilState* saDepthStencilStates[4] = { 0, 0, 0, 0 };
     renderengine::DepthStencilState* spDefaultDepthStencil = 0;   // dword_82FAB590
 
-    // Cached bound texture so SetMaterial only re-binds when the texture changes
-    // (dword_830109E8 / dword_83010968).
-    renderengine::Texture* spBoundTexture = 0;
-    s32 siBoundTextureDirty = 0;
+    // ⛔⛔ DELETED 2026-09-05 -- THIS WAS A PRIVATE FORK OF SHARED STATE.
+    //     renderengine::Texture* spBoundTexture = 0;   // "(dword_830109E8 / dword_83010968)"
+    //     s32 siBoundTextureDirty = 0;
+    // The comment was right about WHICH words the console uses and wrong about WHOSE they are:
+    // dword_830109E8 / dword_83010968 are shadow::Device's OWN per-unit shadows
+    // (mapSamplerTexture / mapTextureState -- shadowingdevice.cpp:443-445 writes the same two
+    // words from SetState(const TextureState*, u32)), and SetMaterial @0x822896B8 reads and
+    // writes THOSE, not a cache of its own. A private copy agrees with the device only while
+    // nothing else binds unit 0 between two Lion draws.
+    //
+    // MEASURED THE DAY THE QUARTER-RES CHAIN LANDED: BrnRendererMemory::BlitDepth binds the scene
+    // DEPTH texture at unit 0 once a frame, the fork never saw it, `spBoundTexture == lpTexture`
+    // held, SetMaterial skipped its D3DDevice_SetTexture -- and every boost-plume quad sampled the
+    // DEPTH BUFFER. On film (BRN_LION_QRES_SHOW=1, scratch/QRES/SHOW/frames/bb_003500.bmp) that is
+    // a hard-edged rectangular block carrying the CAR'S OWN SILHOUETTE where the plume should be,
+    // with a clean compile, a clean link and nothing in any log. SetMaterial now goes through
+    // shadow::Device::GetSamplerTextureShadow / SetSamplerTextureShadow, i.e. the console's storage.
 
     // Default render states BeginRendering binds after starting the immediate-mode batch
     // (dword_83010F48 / dword_83010F3C): a default depth-stencil state and a default blend
@@ -733,14 +746,15 @@ void LionParticleRender::SetMaterial(const cParticleMaterial* apMaterial)
     BrnGraphics::LionBlendRenderer* lpRenderer = mpCurrentRenderer;
 
     // Resolve + bind the material's texture (only touch the device when it changes).
+    // The cache test and the two stores are the console's own, against the console's own storage
+    // (asm 0x82289744 / 0x82289770 / 0x82289774 -- see the note where the private fork used to be).
     renderengine::Texture* lpTexture = FindTexture(apMaterial->mTextureHandle);
-    if (spBoundTexture != lpTexture)
+    if (shadow::Device::GetSamplerTextureShadow(0u) != static_cast<void*>(lpTexture))
     {
         LionBindWitness("B", apMaterial->mTextureHandle, lpTexture, mTextureNameMap.operator->());
         D3DDevice_SetTexture(spD3DDevice, 0, lpTexture, 0x80000000u);
         LionBindWitness("A", apMaterial->mTextureHandle, lpTexture, mTextureNameMap.operator->());
-        spBoundTexture = lpTexture;
-        siBoundTextureDirty = 0;
+        shadow::Device::SetSamplerTextureShadow(0u, static_cast<void*>(lpTexture));
     }
 
     // Pick the depth-stencil state from the material's z-test / z-write flag bits (inverted:

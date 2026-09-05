@@ -447,6 +447,24 @@ namespace shadow
         return lpResult;
     }
 
+    // The console's own per-unit texture shadow, reached by name -- see the declaration's banner
+    // for the one X360 body that does this (LionParticleRender::SetMaterial @0x822896B8) and for
+    // the measured defect a private copy of it produced.
+    void* Device::GetSamplerTextureShadow(u32 luSamplerId)
+    {
+        if (luSamplerId >= KU_MAX_TEXTURE_STATES)
+            return 0;
+        return mapSamplerTexture[luSamplerId];
+    }
+
+    void Device::SetSamplerTextureShadow(u32 luSamplerId, void* lpTexture)
+    {
+        if (luSamplerId >= KU_MAX_TEXTURE_STATES)
+            return;
+        mapSamplerTexture[luSamplerId] = lpTexture;   // stw r31, dword_830109E8(r30)
+        mapTextureState[luSamplerId]   = 0;           // stw r11(=0), dword_83010968(r30)
+    }
+
     // @0x827E7A10: rebind the dirty vertex-program state + the active stream sources to D3D.
     void Device::FlushVertexProgramState()
     {

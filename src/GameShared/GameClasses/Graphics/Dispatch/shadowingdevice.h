@@ -84,6 +84,30 @@ namespace shadow
         // renderer. No unit-range assert in this one -- the console has none (faithful).
         static void* SetState(const renderengine::TextureState* lpState, u32 luSamplerId);
 
+        // ⭐ THE PER-UNIT TEXTURE SHADOW, REACHED BY NAME (2026-09-05).
+        // On the X360 dword_830109E8 / dword_83010968 are FILE-SCOPE GLOBALS, so a body outside
+        // this class can read and write them directly -- and exactly one does:
+        //     BrnParticle::LionParticleRender::SetMaterial @0x822896B8
+        //       0x82289744  lwz r11, dword_830109E8(r30)   ; the CACHE TEST
+        //       0x82289748  cmplw cr6, r11, r31            ; ... against the texture it resolved
+        //       0x82289768  bl   D3DDevice_SetTexture      ; on a miss, bind unit 0 directly
+        //       0x82289770  stw  r31, dword_830109E8(r30)  ; mapSamplerTexture[0] = the texture
+        //       0x82289774  stw  r11(=0), dword_83010968(r30) ; mapTextureState[0]  = NULL
+        // On the host those two arrays are private statics of this class, so without this pair
+        // that body has to keep a PRIVATE COPY of the cache -- and a private copy of shared state
+        // is only correct until something else binds the same unit between two of its draws.
+        // MEASURED, and it is why this pair exists: with the quarter-res particle chain live,
+        // BrnRendererMemory::BlitDepth binds the scene DEPTH texture at unit 0 between frames, the
+        // forked copy never noticed, SetMaterial skipped its bind, and every boost-plume quad
+        // sampled the DEPTH BUFFER -- a hard-edged block carrying the car's own silhouette, with
+        // nothing in any log.
+        static void* GetSamplerTextureShadow(u32 luSamplerId);
+        // The console's PAIR of stores, together: mapSamplerTexture[unit] = lpTexture and
+        // mapTextureState[unit] = NULL (binding half of a unit invalidates the whole-unit key --
+        // see the mapTextureState banner below). Call it immediately after a direct
+        // D3DDevice_SetTexture, exactly where SetMaterial's two `stw`s are.
+        static void  SetSamplerTextureShadow(u32 luSamplerId, void* lpTexture);
+
         // Rebind the dirty vertex-program / stream sources to D3D (X360 0x827E7A10).
         static void FlushVertexProgramState();
 
