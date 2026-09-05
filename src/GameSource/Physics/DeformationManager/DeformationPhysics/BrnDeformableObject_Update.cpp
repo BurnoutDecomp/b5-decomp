@@ -369,6 +369,25 @@ namespace Deformation
     //       A flagged zero is only safe where 0 is the identity; here it was a clamp target.
     //   (b) The gather loop bound is miNumTagPoints (this+0x4B10 -- the word ResetDeformation
     //       @0x82639FD8 stores the tag count into), not miNumDrivenPoints.
+    //
+    // ⭐⭐⭐ 2026-09-05 (deformation-SHAPE wave) -- THE ROW NUMBERING THIS FUNCTION PRODUCES IS THE
+    // ONE THE ARTISTS BAKED INTO THE MESH. Proven on shipped retail bytes, no runtime involved,
+    // because "which row is this" is the only thing that decides WHERE a dent lands and it had
+    // never been checked end to end. For PUSMC01 (VEHICLES/VEH_PUSMC01_AT.BIN + _GR.BIN, X360):
+    //   * the spec has 101 tag points of which 97 carry mbSkinnedPoint, and 31 driven points over
+    //     25 IK parts -> 97 + 31 == 128 == KI_MAX_RACE_CAR_VERLET_POINTS, exactly full;
+    //   * the four UNSKINNED tags are indices 97..100, i.e. the LAST four, so packed row == raw tag
+    //     index for every skinned tag. That is what makes UpdateIKSuspensionOffsets' write at the
+    //     RAW wheel-tag index land on the same row this dense walk would give it -- the two
+    //     functions only agree because of where the data puts its unskinned tags;
+    //   * the car-body renderable's BLENDINDICES reference bones 0..127 with two influences per
+    //     vertex whose UBYTE4N weights sum to exactly 255, and for all 36 bones that mesh uses the
+    //     weighted centroid of the vertices bound to bone b sits on the SAME corner of the car as
+    //     row b's authored rest position (sign of x matches on every row; z matches; the y offset
+    //     is a near-constant +0.28 m, sd 0.08 -- panels sit above their tag points).
+    // => a row index IS a place on the car, and the physics fills the row the mesh asks for.
+    // tools/re/deform_rowmap.py (parent repo) rebuilds that table for any car and annotates a
+    // [deform-rows] log line with it.
     // =============================================================================================
     void DeformableObject::UpdateSkinningOffsets()
     {
