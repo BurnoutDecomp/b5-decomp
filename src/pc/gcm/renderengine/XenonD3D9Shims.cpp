@@ -3224,6 +3224,10 @@ namespace renderengine
         return &sQuadListIndices[0];
     }
 
+    // [lionsamp] the live sampler-0 read, defined at the foot of this file beside its bind-side
+    // twin. FLAG PC bring-up diagnostic, DELETE-WHEN-STABLE.
+    void LionDrawSamplerProbe(char* lpcOut, size_t luCap);
+
     void WorldDraw_NonIndexedUP(u32 luPrimTypeXenon, u32 luStartVertex, u32 luVertexCount)
     {
         IDirect3DDevice9* lpDevice = Dev();
@@ -3356,7 +3360,25 @@ namespace renderengine
             // FAILED submit reports once. Delete with the particle bring-up.
             static u32  suDiagShots  = 0;
             static bool sbDiagFailed = false;
-            if (suDiagShots < 8u || (FAILED(lhrDraw) && !sbDiagFailed))
+            // [lionuv] census budget: one sample per DISTINCT texture bound on sampler 0, so the
+            // flame materials get a row and not only the first (smoke) batch of the session.
+            // FLAG PC bring-up diagnostic, DELETE-WHEN-STABLE.
+            static const void* spLastCensusTexture = reinterpret_cast<const void*>(~0ull);
+            static u32  suCensusShots = 0;
+            bool lbCensus = false;
+            {
+                IDirect3DBaseTexture9* lpCensusBound = nullptr;
+                lpDevice->GetTexture(0, &lpCensusBound);
+                if (suCensusShots < 24u && lpCensusBound != spLastCensusTexture)
+                {
+                    spLastCensusTexture = lpCensusBound;
+                    ++suCensusShots;
+                    lbCensus = true;
+                }
+                if (lpCensusBound != nullptr)
+                    lpCensusBound->Release();
+            }
+            if (suDiagShots < 8u || lbCensus || (FAILED(lhrDraw) && !sbDiagFailed))
             {
                 if (FAILED(lhrDraw)) sbDiagFailed = true;
                 ++suDiagShots;
@@ -3396,6 +3418,96 @@ namespace renderengine
                               lafP[3][0], lafP[3][1], lafP[3][2], lafP[3][3],
                               (unsigned)luSrcBlend, (unsigned)luDstBlend, (unsigned)luBlendOp);
                 CgsDev::Log::WriteToLog(lacQuad);
+
+                // ---- [lionuv] the OTHER two lanes of the same four vertices, plus what is on
+                // sampler 0 AT THE DRAW. FLAG PC bring-up diagnostic, DELETE-WHEN-STABLE.
+                // A hard-edged, opaque quad drawn from a texture whose border alpha is 5/255 has
+                // exactly three possible causes -- no texture on the unit, a texture with no alpha,
+                // or UVs that do not span the quad -- and these two lines separate all three.
+                // LionBlendVertex is position Vector4 @0, RGBA8 @16, uv Vector4 @20 (stride 36).
+                {
+                    u32 lauCol[4];
+                    f32 lafUv[4][4];
+                    for (u32 luV = 0; luV < 4u; ++luV)
+                    {
+                        std::memcpy(&lauCol[luV], lpRun + luV * suVertexStride + 16, 4);
+                        std::memcpy(lafUv[luV], lpRun + luV * suVertexStride + 20, sizeof(lafUv[luV]));
+                    }
+                    // The quad's WORLD EXTENT, for the size question: the four corners QuadDraw
+                    // emitted, reduced to the two edge lengths |v1-v0| and |v3-v0| (the emission
+                    // order is 0,1,3,2, so those two are the quad's sides).
+                    const f32 lfEdgeA = std::sqrt(
+                        (lafP[1][0]-lafP[0][0])*(lafP[1][0]-lafP[0][0]) +
+                        (lafP[1][1]-lafP[0][1])*(lafP[1][1]-lafP[0][1]) +
+                        (lafP[1][2]-lafP[0][2])*(lafP[1][2]-lafP[0][2]));
+                    const f32 lfEdgeB = std::sqrt(
+                        (lafP[3][0]-lafP[0][0])*(lafP[3][0]-lafP[0][0]) +
+                        (lafP[3][1]-lafP[0][1])*(lafP[3][1]-lafP[0][1]) +
+                        (lafP[3][2]-lafP[0][2])*(lafP[3][2]-lafP[0][2]));
+                    char lacSize[128];
+                    std::snprintf(lacSize, sizeof(lacSize),
+                                  "[lionsize] quad edges %.3f x %.3f m  verts=%u" "\n",
+                                  (double)lfEdgeA, (double)lfEdgeB, (unsigned)luVertexCount);
+                    CgsDev::Log::WriteToLog(lacSize);
+
+                    char lacUv[352];
+                    std::snprintf(lacUv, sizeof(lacUv),
+                                  "[lionuv] uv0=(%.3f,%.3f|%.3f,%.3f) uv1=(%.3f,%.3f|%.3f,%.3f)"
+                                  " uv2=(%.3f,%.3f|%.3f,%.3f) uv3=(%.3f,%.3f|%.3f,%.3f)"
+                                  " rgba=%08X,%08X,%08X,%08X\n",
+                                  lafUv[0][0], lafUv[0][1], lafUv[0][2], lafUv[0][3],
+                                  lafUv[1][0], lafUv[1][1], lafUv[1][2], lafUv[1][3],
+                                  lafUv[2][0], lafUv[2][1], lafUv[2][2], lafUv[2][3],
+                                  lafUv[3][0], lafUv[3][1], lafUv[3][2], lafUv[3][3],
+                                  (unsigned)lauCol[0], (unsigned)lauCol[1],
+                                  (unsigned)lauCol[2], (unsigned)lauCol[3]);
+                    CgsDev::Log::WriteToLog(lacUv);
+
+                    // ---- [liondecl] the BOUND VERTEX DECLARATION, read back from the device.
+                    // The colour lane is the whole question: the shader's fragment alpha is
+                    // texture.a * COLOR0.a, and the vertex bytes say COLOR0.a is ~0.08 while the
+                    // filmed plume covers ~0.75 of its background. A COLOR0 element that is
+                    // missing (or carries the wrong usage) feeds the shader an undefined register
+                    // and is exactly that 10x. Reading the declaration back is the only way to
+                    // tell "the element was built" from "the element is bound".
+                    // FLAG PC bring-up diagnostic, DELETE-WHEN-STABLE.
+                    {
+                        IDirect3DVertexDeclaration9* lpDeclRead = nullptr;
+                        if (SUCCEEDED(lpDevice->GetVertexDeclaration(&lpDeclRead)) && lpDeclRead)
+                        {
+                            D3DVERTEXELEMENT9 laEls[64];
+                            UINT luEls = 0;
+                            if (SUCCEEDED(lpDeclRead->GetDeclaration(laEls, &luEls)))
+                            {
+                                char lacDecl[320];
+                                int liLen = std::snprintf(lacDecl, sizeof(lacDecl), "[liondecl] %u:",
+                                                          (unsigned)luEls);
+                                for (UINT luE = 0; luE + 1 < luEls && liLen > 0
+                                                   && liLen < (int)sizeof(lacDecl) - 40; ++luE)
+                                {
+                                    liLen += std::snprintf(lacDecl + liLen,
+                                                           sizeof(lacDecl) - (size_t)liLen,
+                                                           " [s%u+%u t%u m%u u%u/%u]",
+                                                           (unsigned)laEls[luE].Stream,
+                                                           (unsigned)laEls[luE].Offset,
+                                                           (unsigned)laEls[luE].Type,
+                                                           (unsigned)laEls[luE].Method,
+                                                           (unsigned)laEls[luE].Usage,
+                                                           (unsigned)laEls[luE].UsageIndex);
+                                }
+                                std::snprintf(lacDecl + liLen, sizeof(lacDecl) - (size_t)liLen, "\n");
+                                CgsDev::Log::WriteToLog(lacDecl);
+                            }
+                            lpDeclRead->Release();
+                        }
+                    }
+
+                    char lacSamp[320];
+                    LionDrawSamplerProbe(lacSamp, sizeof(lacSamp));
+                    char lacSampMsg[384];
+                    std::snprintf(lacSampMsg, sizeof(lacSampMsg), "[lionsamp] %s\n", lacSamp);
+                    CgsDev::Log::WriteToLog(lacSampMsg);
+                }
 
                 char lacMsg[320];
                 std::snprintf(lacMsg, sizeof(lacMsg),
@@ -8509,4 +8621,122 @@ namespace renderengine
 namespace renderengine { struct ProgramBufferData; }
 void ProgramBuffer_ReleaseResource(renderengine::ProgramBufferData* /*lpData*/)
 {
+}
+
+// =================================================================================================
+// [lionbind] THE LIVE SAMPLER-0 PROBE. FLAG PC bring-up diagnostic, DELETE-WHEN-STABLE.
+//
+// The Lion particle pass draws a hard-edged, near-opaque pale block where the console draws soft
+// smoke. Everything upstream of the sampler has been read out of the data and is right:
+// BURNOUTSMOKE ports to a 128x128 DXT5 raster whose BORDER alpha averages 5/255 (so a correctly
+// sampled quad CANNOT have a hard edge), and the PC pixel program's own bytecode is
+//     texld r0, v0, s0 ; texld r1, v0.zwzw, s0 ; lrp r2, v1.x, r1, r0 ; mul oC0, r2, v2
+// so the fragment alpha is texture.a * colour.a and nothing else. A hard edge therefore means the
+// texture alpha is not reaching the blend, and there are exactly three ways that happens: no
+// texture on the unit, a texture with no alpha channel, or UVs that do not span the quad.
+//
+// This prints the device's OWN answer on BOTH SIDES of LionParticleRender::SetMaterial's
+// D3DDevice_SetTexture, the same technique that refuted the blend-mode hypothesis on 2026-09-05.
+// It is bounded (the first KU_LIONBIND_SHOTS calls) and log-only.
+// =================================================================================================
+namespace renderengine
+{
+namespace
+{
+    const u32 KU_LIONBIND_SHOTS = 24u;
+    u32       suLionBindShots   = 0u;
+
+    // One line of "what is actually on sampler unit 0 right now", straight from the device.
+    void AppendSampler0State(char* lpcOut, size_t luCap, IDirect3DDevice9* lpDevice)
+    {
+        IDirect3DBaseTexture9* lpBound = nullptr;
+        lpDevice->GetTexture(0, &lpBound);
+
+        D3DRESOURCETYPE leType = D3DRTYPE_FORCE_DWORD;
+        u32 luFormat = 0u, luW = 0u, luH = 0u, luLevels = 0u;
+        if (lpBound != nullptr)
+        {
+            leType   = lpBound->GetType();
+            luLevels = lpBound->GetLevelCount();
+            if (leType == D3DRTYPE_TEXTURE)
+            {
+                D3DSURFACE_DESC lDesc = {};
+                if (SUCCEEDED(static_cast<IDirect3DTexture9*>(lpBound)->GetLevelDesc(0, &lDesc)))
+                {
+                    luFormat = static_cast<u32>(lDesc.Format);
+                    luW      = lDesc.Width;
+                    luH      = lDesc.Height;
+                }
+            }
+        }
+
+        DWORD luMin = 0, luMag = 0, luMip = 0, luAddrU = 0, luAddrV = 0, luSrgb = 0;
+        lpDevice->GetSamplerState(0, D3DSAMP_MINFILTER,   &luMin);
+        lpDevice->GetSamplerState(0, D3DSAMP_MAGFILTER,   &luMag);
+        lpDevice->GetSamplerState(0, D3DSAMP_MIPFILTER,   &luMip);
+        lpDevice->GetSamplerState(0, D3DSAMP_ADDRESSU,    &luAddrU);
+        lpDevice->GetSamplerState(0, D3DSAMP_ADDRESSV,    &luAddrV);
+        lpDevice->GetSamplerState(0, D3DSAMP_SRGBTEXTURE, &luSrgb);
+
+        DWORD luAlphaTest = 0, luAlphaFunc = 0, luAlphaRef = 0, luBlend = 0, luSrc = 0, luDst = 0;
+        lpDevice->GetRenderState(D3DRS_ALPHATESTENABLE,  &luAlphaTest);
+        lpDevice->GetRenderState(D3DRS_ALPHAFUNC,        &luAlphaFunc);
+        lpDevice->GetRenderState(D3DRS_ALPHAREF,         &luAlphaRef);
+        lpDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &luBlend);
+        lpDevice->GetRenderState(D3DRS_SRCBLEND,         &luSrc);
+        lpDevice->GetRenderState(D3DRS_DESTBLEND,        &luDst);
+
+        std::snprintf(lpcOut, luCap,
+                      "t0=%p rt=%d fmt=%08X %ux%u lv=%u | filt %u/%u/%u addr %u/%u srgb=%u"
+                      " | at=%u af=%u ar=%u ab=%u src=%u dst=%u",
+                      static_cast<void*>(lpBound), (int)leType, (unsigned)luFormat,
+                      (unsigned)luW, (unsigned)luH, (unsigned)luLevels,
+                      (unsigned)luMin, (unsigned)luMag, (unsigned)luMip,
+                      (unsigned)luAddrU, (unsigned)luAddrV, (unsigned)luSrgb,
+                      (unsigned)luAlphaTest, (unsigned)luAlphaFunc, (unsigned)luAlphaRef,
+                      (unsigned)luBlend, (unsigned)luSrc, (unsigned)luDst);
+
+        if (lpBound != nullptr)
+            lpBound->Release();
+    }
+}
+
+// Called by BrnParticle::LionParticleRender::SetMaterial on both sides of its texture bind.
+// `apcTag` is "B" (before) or "A" (after); the two pointers are what the game BELIEVES it is
+// binding, so a null there and a stale non-null on the unit is a different fault from a
+// successful bind of a texture with no alpha.
+void LionBindProbe(const char* apcTag, const void* apRequestedTexture, const void* apD3DTexture,
+                   unsigned int auTextureHandle, unsigned int auMatchedEntry,
+                   unsigned int auEntryCount)
+{
+    if (suLionBindShots >= KU_LIONBIND_SHOTS)
+        return;
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr)
+        return;
+    ++suLionBindShots;
+
+    char lacState[320];
+    AppendSampler0State(lacState, sizeof(lacState), lpDevice);
+
+    char lacMsg[512];
+    std::snprintf(lacMsg, sizeof(lacMsg),
+                  "[lionbind] %s texHandle=%08X entry=%d/%u want=%p d3d=%p | %s\n",
+                  apcTag, auTextureHandle, (int)auMatchedEntry, auEntryCount,
+                  apRequestedTexture, apD3DTexture, lacState);
+    CgsDev::Log::WriteToLog(lacMsg);
+}
+
+// The same read, taken at the DRAW rather than at the bind -- whatever SetMaterial did, this is
+// the state the fragments are actually shaded with. Called from the [lionfx] draw witness.
+void LionDrawSamplerProbe(char* lpcOut, size_t luCap)
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr)
+    {
+        std::snprintf(lpcOut, luCap, "no device");
+        return;
+    }
+    AppendSampler0State(lpcOut, luCap, lpDevice);
+}
 }
