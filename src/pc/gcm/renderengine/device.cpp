@@ -532,7 +532,13 @@ static void DumpBackBufferIfRequested()
                     // it. All zero on a run where the witness never fired, which is also the
                     // run where an empty frame directory means the arm held, not that the
                     // dump broke.
-                    std::fprintf(lpCsv, "%u,%.6f,%.6f,%.6f,%d,%d,%.3f,%.3f,%.3f,%u,%u,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%u,%u,%.4f\n",
+                    // Columns 21-24 are THE SCENE-MATCH KEY: the player car's world position
+                    // and the live boost-effect mask (BoostStateMachine::OnTick). Same argument
+                    // as every column above and one more besides -- they are what lets a
+                    // before/after pair of RUNS be matched by where the car was, which a
+                    // frame-coupled sim makes impossible by frame index. See the banner on
+                    // BrnDiag::FilmLatch::mfCarPosX.
+                    std::fprintf(lpCsv, "%u,%.6f,%.6f,%.6f,%d,%d,%.3f,%.3f,%.3f,%u,%u,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%u,%u,%.4f,%.3f,%.3f,%.3f,%u\n",
                                  renderengine::guPresentCount,
                                  BrnDiag::gFilmLatch.mfLiveSimScale,
                                  BrnDiag::gFilmLatch.mfLiveSimStep,
@@ -552,7 +558,11 @@ static void DumpBackBufferIfRequested()
                                  BrnDiag::gFilmLatch.mfSegClipW,
                                  BrnDiag::gFilmLatch.muDvLatchedStep,
                                  BrnDiag::gFilmLatch.muDvLatchedFrame,
-                                 BrnDiag::gFilmLatch.mfDvLatchedMagnitude);
+                                 BrnDiag::gFilmLatch.mfDvLatchedMagnitude,
+                                 BrnDiag::gFilmLatch.mfCarPosX,
+                                 BrnDiag::gFilmLatch.mfCarPosY,
+                                 BrnDiag::gFilmLatch.mfCarPosZ,
+                                 BrnDiag::gFilmLatch.muBoostEffectMask);
                     std::fclose(lpCsv);
                 }
             }

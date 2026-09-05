@@ -83,7 +83,7 @@ using BrnWorld::WorldModule;   // DWARF: global-namespace WorldModule (BrnWorldM
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h"
 namespace CgsInput { namespace InputIO { struct PadOutputInformation; struct ActionInfo; struct PostWorldInputBuffer; } }
 namespace BrnDirector { namespace DirectorIO { struct InputBuffer; } }
-namespace BrnWorldIO { struct UpdateInputBuffer; struct UpdateOutputBuffer; }
+namespace BrnWorldIO { struct UpdateInputBuffer; struct UpdateOutputBuffer; struct DispatchOutputBuffer; }
 namespace BrnGame { struct DebugControllerImage; }
 namespace CgsGui { class GuiModule; }
 // Replay-bridge family (GameSource/Unity/../Game/GameBridgeReplayToX.cpp) parameter type:
@@ -149,7 +149,7 @@ namespace CgsInput     { class InputModule     : public CgsModule::ModuleSingleB
 // GameBridgeReplayToX.h still carry. Those forks are a real latent defect -- they are
 // invisible only because no TU pulls both in -- but retiring them is the network/replay
 // bridges own change, not this one. Measured 2026-09-02.
-namespace BrnEffects { namespace EffectsIO { struct InputBuffer; } }
+namespace BrnEffects { namespace EffectsIO { struct InputBuffer; struct DispatchInputBuffer; } }
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"   // BrnSound::Module::RootSoundModule (real class)
 #include "GameSource/Replays/BrnReplayModule.h"   // BrnReplays::ReplayModule (real class -- was an ODR stub)
 namespace BrnNetwork   { class BrnNetworkModule : public CgsModule::ModuleSingleBuffered {}; }
@@ -814,6 +814,17 @@ namespace BrnGame
         void BridgeWorldToSound(BrnSound::Module::Io::RootInputBuffer* lpSoundInputBuffer,
                                 const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer,
                                 BrnUpdateSet leUpdateSet);
+
+        // @ 0x823C11F8. THE WORLD -> EFFECTS DISPATCH BRIDGE, and the ONLY producer of the
+        // effects side's white level anywhere in the image: it is the only xref of
+        // BrnEffects::EffectsIO::DispatchInputBuffer::SetWhiteLevel @0x823BAB40. Four legs, all
+        // read out of the world's dispatch OUTPUT buffer -- key-light direction, key-light
+        // colour, average irradiance colour, white level. Called once, from DoDispatch
+        // @0x823DC458, next to BridgeRendererToEffects @0x823C1168 (which carries the frames and
+        // the env map and does NOT touch the white level -- the two were confused for three
+        // commits; see the body's banner). Home: GameBridgeWorldToX.cpp.
+        void BridgeWorldToEffects_Dispatch(BrnEffects::EffectsIO::DispatchInputBuffer* lpEffectsInputBuffer,
+                                           const BrnWorldIO::DispatchOutputBuffer* lpWorldOutputBuffer);
 
         // @ 0x823CDE50 (phase C3b). The game-state -> sound input bridge: the 13312
         // game-action queue append, the game-mode/scoring/online-scoring interface

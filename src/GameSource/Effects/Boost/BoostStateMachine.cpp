@@ -30,6 +30,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the [boost*] witnesses
+#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"  // [DIAG] the scene-match stamp
 #include <cmath>                                              // sqrtf
 #include <cstdio>                                             // snprintf (witnesses)
 
@@ -575,6 +576,26 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
 // =============================================================================
 void BoostStateMachine::OnTick(CarState& lCarState, RaceCarParticleEffectHelper& lHelper)
 {
+    // ---- [DIAG] the SCENE-MATCH stamp. NOT console behaviour: ours, bounded, store-only. -----
+    // Every dumped frame carries the car's world position and whether this car's boost effects
+    // are live, so a before/after pair of RUNS can be chosen by WHERE THE CAR WAS instead of by
+    // frame index -- which a frame-coupled sim makes meaningless. See the banner on
+    // BrnDiag::FilmLatch::mfCarPosX.
+    // ⛔ IT IS AT THE TOP OF THE FUNCTION ON PURPOSE. Placed lower it sat AFTER the no-locator
+    // stand-in arm's `return`, which is the arm this build always takes -- so it wrote nothing
+    // and frames.csv carried a column of zeros while the [boostloc] witness three lines above the
+    // return printed a perfectly good car position. Measured, first run. DELETE-WHEN-STABLE.
+    {
+        const BrnPhysics::Vehicle::RaceCarState* lpCarStamp = lHelper.RaceCarState();
+        if (lpCarStamp != NULL)
+        {
+            BrnDiag::gFilmLatch.mfCarPosX = lpCarStamp->mTransform.wAxis.x;
+            BrnDiag::gFilmLatch.mfCarPosY = lpCarStamp->mTransform.wAxis.y;
+            BrnDiag::gFilmLatch.mfCarPosZ = lpCarStamp->mTransform.wAxis.z;
+        }
+        BrnDiag::gFilmLatch.muBoostEffectMask = muNumBoostTags;
+    }
+
     // Whether to run the locator update this frame.
     bool lbDoLocatorUpdate = false;
 
