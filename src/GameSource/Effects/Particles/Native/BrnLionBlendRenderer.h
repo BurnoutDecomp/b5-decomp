@@ -86,15 +86,49 @@
 namespace renderengine
 {
     class DepthStencilState;
-    class MaterialState;            // a.k.a. BlendState (renderstates.h)
+    class MaterialState;            // a material block CONTAINING all three states (renderstates.h:254)
+    struct BlendMaterialState;      // the blend state object every applier consumes (blendstate.h:35)
+                                    // ⚠ `struct`, not `class` -- blendstate.h:35 says struct, and MSVC
+                                    // mangles the two class-keys differently (U vs V), so a mismatch
+                                    // here would fork every SetState/global symbol that names it.
     class TextureState;
 }
 
 namespace BrnGraphics
 {
-    // BrnGraphics::BlendState alias used by the DWARF SetState overload -- the
-    // render-engine material/blend state block.
-    typedef renderengine::MaterialState BlendState;
+    // ⭐⭐ SETTLED 2026-09-05, AND IT WAS NOT THE CONTRADICTION TWO WAVES PARKED IT AS.
+    //
+    // The standing note said the DWARF declares LionBlendRenderer::SetState(const BlendState*)
+    // while "LionParticleRender::BeginRendering @0x82289568 word 18 calls the RASTERISER wrapper
+    // with dword_83010F3C", concluded one reading had to be wrong, and trapped both overloads
+    // rather than guess. The premise was the error: those are two DIFFERENT call sites.
+    // LionParticleRender::BeginRendering binds a rasteriser state of its OWN, directly, on its way
+    // into the pass -- it never goes through LionBlendRenderer::SetState at all.
+    //
+    // The three ImRendererBase::SetState overloads are one family, and the X360 bodies differ ONLY
+    // in which third of the render state they own -- read side by side, instruction for
+    // instruction, they are the same body with three substitutions:
+    //     @0x82276D08  assert CgsImRenderer.h:711  gate byte_83010907 (mbBlendStateLocked)
+    //                  cache dword_83010964  applier Xbox2SetStateLowLevelShadowed   -> BLEND
+    //     @0x82276DA8  assert CgsImRenderer.h:732  gate mbDepthStencilStateLocked
+    //                  cache dword_83010A28  applier sub_827E8150                    -> DEPTHSTENCIL
+    //     @0x82276E48  assert CgsImRenderer.h:776  gate mbRasteriserStateLocked
+    //                  cache dword_83010A2C  applier sub_827E8690                    -> RASTERISER
+    // (The same identification CgsImRenderer.cpp:270 already made, from the same three fields.)
+    // LionBlendRenderer::EndRendering @0x8227E610 word 10 calls the FIRST of those with
+    // dword_83010F20 -- the blend one -- which is exactly what a DWARF `SetState(const BlendState*)`
+    // inlined into it should emit. Nothing disagrees with anything.
+    //
+    // ⭐ AND THE TYPEDEF WAS THE ONE THING THAT REALLY WAS WRONG. It aliased
+    // renderengine::MaterialState, which is the *material* block that CONTAINS a blend, a
+    // depth-stencil and a rasteriser state (renderstates.h:254). The object the blend applier
+    // takes is renderengine::BlendMaterialState (blendstate.h:35) -- the same reconciliation
+    // shadowingdevice.cpp already made for shadow::Device::SetState, whose DWARF also spells its
+    // parameter `const BlendState*`. dword_83010F20, the default template EndRendering binds, is
+    // already declared BlendMaterialState* in BrnLionBlendRenderer.cpp. So the alias is corrected
+    // here to the type the whole chain actually passes -- from the applier's signature, not from
+    // whatever made a call compile.
+    typedef renderengine::BlendMaterialState BlendState;
 
     class LionBlendRenderer
     {

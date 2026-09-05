@@ -116,6 +116,42 @@ namespace BrnParticle
             mTextureNameMap = lrMap;
         }
 
+        // ------------------------------------------------------------------------------------
+        // LionParticleRender::SetCameraData  (X360 0x82281068) -- the FIVE-argument sibling of
+        // BrnGraphics::LionBlendRenderer::SetCameraData @0x822824F8, and the one
+        // ParticleModule::BuildLionVertexBuffers @0x8228AC20 calls once per frame. It stores the
+        // frame's three camera matrices AND the packed LRTB frustum this renderer's culler reads.
+        // ------------------------------------------------------------------------------------
+        void SetCameraData(const rw::math::vpu::Matrix44Affine& arBackMat,
+                           const rw::math::vpu::Matrix44Affine& arViewMat,
+                           const rw::math::vpu::Matrix44& arViewProjection,
+                           const rw::math::vpu::Matrix44& arPackedFrustumLrtb);
+
+        // The frame's four side planes, packed SoA (row 0 == the four Nx, row 1 the four Ny,
+        // row 2 the four Nz, row 3 the four plane distances). cParticleRender::Render
+        // @0x82914930 loads exactly these four rows off `mpRenderer + 0x120` and tests all four
+        // planes in one pass. Inline by construction (the console forms the address directly).
+        const rw::math::vpu::Matrix44& GetPackedFrustumLrtb() const { return mPackedFrustumLrtb; }
+
+        // The Lion-convention camera transform (this+0x20), returned BY VALUE -- the same
+        // 64-byte copy GetCameraMatrix() makes. cParticleRender::Render calls it non-virtually
+        // (`bl BrnParticle__LionParticleRender__GetCameraMatrix` @0x82914834), which is why the
+        // Lion driver knows the concrete renderer type at all.
+
+        // ------------------------------------------------------------------------------------
+        // The `const cVector*` Render overload (DWARF ParticleRender.h:8 / :170; X360
+        // sub_82289158, unnamed in the idb). cParticleRender::EmitterRender's VECTOR arm calls
+        // THIS one where its Matrix arm calls the cMatrix overload above.
+        // ------------------------------------------------------------------------------------
+        void Render(EffectsVertexBufferIterator& arIterator,
+                    RenderedParticle* apParticle,
+                    const cVector* apVectors,
+                    U32 auCount,
+                    U32 auFirstIndex,
+                    const cParticleEmitter* apEmitter,
+                    const cLionFog* apFog,
+                    const cTime& arTime);
+
     private:
         // Find the acquired texture for a texture-map hash via the name map (X360 0x822895D8).
         renderengine::Texture* FindTexture(U32 auTextureMapHandle) const;

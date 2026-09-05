@@ -69,6 +69,91 @@ struct cLionBindings;   // LionBindings.h (sibling home) -- Bind() attaches one 
 // RenderedParticle.h (sibling home). Reference-only here -- ParticleBuild's output record --
 // so a forward declaration is enough and the full layout is not dragged into every includer.
 struct RenderedParticle;
+class  cParticleRender;   // ParticleRender.h -- the only caller of the private kernel below
+
+// =================================================================================================
+// THE THREE SIMULATION HELPERS (DWARF ParticleEmitter.cpp:782 / :914 / :1048 name the template
+// parameter `T lHelper` on cParticleEmitter::SimulateParticlesInBucketGeneral<T>).
+//
+// ⚠ lHelper IS NOT AN EMPTY TAG TYPE. Each of the three carries ONE pointer -- the caller's
+// per-emitted-particle side array -- and the console passes it BY VALUE in a single GPR:
+// SimulateParticlesInBucketGeneral<MatrixSimulationHelper> @0x829120C0 opens with
+// `stw r4, 0x190+arg_1C(r1)` and later hands `addi r3, r1, 0x190+arg_1C` to
+// MatrixSimulationHelper::UpdateLocatorVelocity as its `this`. Reading it as an empty class --
+// which is what the mangled name suggests -- puts every later argument one register out.
+//
+// cParticleRender::EmitterRender @0x82913928 is what constructs them, from its own stack arrays:
+//   Matrix helper  <- `&laMatrices[n]`  (64-byte cMatrix stride, `slwi r9, r31, 6`)
+//   Vector helper  <- `&laVectors[n]`   (16-byte cVector stride, `slwi r9, r31, 4`)
+//   Local  helper  <- `&laMatrices[n]`  (64-byte stride again, its own array)
+// against `&laParticles[n]` at 112 == sizeof(RenderedParticle) for the particle run itself.
+//
+// WHAT EACH ONE PUBLISHES per particle that ParticleBuild kept alive:
+//   Matrix : copy bucket->GetMatrices()[slot] out, run the emitter-weighting blend on its
+//            TRANSLATION row, write the result back to BOTH the helper's slot and the bucket's.
+//            (@0x8290DF28, out of line -- the only one the console did not inline.)
+//   Vector : the same three steps on bucket->GetVectorArray()[slot], the vector being the whole
+//            record rather than a matrix row (inlined at 0x82912580..0x829125B4).
+//   Local  : no bucket side array at all -- publish the emitter's own locator transform, the same
+//            64 bytes for every particle (inlined at 0x829128E4..0x829128F8, the four
+//            `stvx128 v126/v125/v124/v127` the prologue parked in v124..v127).
+// =================================================================================================
+class MatrixSimulationHelper
+{
+public:
+    explicit MatrixSimulationHelper(cMatrix* apMatrices) : mpMatrices(apMatrices) {}
+
+    // X360 @0x8290DF28 (an export-set hole -- disassembled out of the image).
+    void UpdateLocatorVelocity(cParticleBucket* apBucket,
+                               const cParticleBehaviour* apBehaviour,
+                               const cParticleDescriptor* apDescriptor,
+                               const RenderedParticle* apParticle,
+                               u32 auOutIndex,
+                               u32 auSlot,
+                               const cMatrix& arLocatorMat);
+
+private:
+    cMatrix* mpMatrices;
+};
+
+class VectorSimulationHelper
+{
+public:
+    explicit VectorSimulationHelper(cVector* apVectors) : mpVectors(apVectors) {}
+
+    // Inlined by the X360 into SimulateParticlesInBucketGeneral<VectorSimulationHelper>
+    // @0x829123E0 (0x82912580..0x829125B4); re-outlined here per the project's
+    // inlining-reversal rule, which is also what makes the three specialisations one template.
+    void UpdateLocatorVelocity(cParticleBucket* apBucket,
+                               const cParticleBehaviour* apBehaviour,
+                               const cParticleDescriptor* apDescriptor,
+                               const RenderedParticle* apParticle,
+                               u32 auOutIndex,
+                               u32 auSlot,
+                               const cMatrix& arLocatorMat);
+
+private:
+    cVector* mpVectors;
+};
+
+class LocalSimulationHelper
+{
+public:
+    explicit LocalSimulationHelper(cMatrix* apMatrices) : mpMatrices(apMatrices) {}
+
+    // Inlined by the X360 into SimulateParticlesInBucketGeneral<LocalSimulationHelper>
+    // @0x82912610 (0x829128E4..0x829128FC).
+    void UpdateLocatorVelocity(cParticleBucket* apBucket,
+                               const cParticleBehaviour* apBehaviour,
+                               const cParticleDescriptor* apDescriptor,
+                               const RenderedParticle* apParticle,
+                               u32 auOutIndex,
+                               u32 auSlot,
+                               const cMatrix& arLocatorMat);
+
+private:
+    cMatrix* mpMatrices;
+};
 
 class cParticleEmitter
 {
@@ -78,6 +163,13 @@ class cParticleEmitter
     // is a friend rather than a set of accessors the DWARF does not declare -- exactly the
     // arrangement cParticleBucket already has with cParticleBucketManager in this tree.
     friend struct cParticleEmitterManager;
+
+    // The RENDER driver is the only caller of the private SimulateParticlesInBucketGeneral<>
+    // kernel below -- cParticleRender::EmitterRender @0x82913928 and ::EmitterCubeRender
+    // @0x82913C80 are its two call sites and there is no other. The mangled X360 names carry
+    // the `AAA` (private __fastcall) access code, so the console really did keep it private
+    // and grant this friendship rather than making the kernel public.
+    friend class cParticleRender;
 
 public:
     // ParticleEmitter.h:266 (DWARF) -- what one call to ParticleBuild concluded about a
@@ -254,7 +346,45 @@ public:
     void SetNext(cParticleEmitter* apNext)        { mpNext = apNext; }
     cParticleEmitter*& GetNextEmitter()           { return mpNext; }
 
+    // DWARF ParticleRender.cpp:482 names cParticleRender::EmitterRender's local
+    // `cParticleBucket* lpBucket` as the result of cParticleEmitter::GetBucket(); the X360
+    // reads the field directly (`lwz r27, 0x200(r29)` @0x8291398C), so it is inline by
+    // construction. This is the head of the emitter's bucket LIST -- EmitterRender walks it
+    // with cParticleBucket::GetEmitterNext().
+    cParticleBucket* GetBucket() const            { return mpBucket; }
+
+    // mFlags bit 0 (KU_FLAG_ACTIVE). cParticleRender::Render @0x829148AC tests it with
+    // `lwz r11, 0x1F0(r30) ; clrlwi r11, r11, 31` before considering an emitter for drawing.
+    bool IsActive() const                         { return (mFlags & KU_FLAG_ACTIVE) != 0; }
+
 private:
+    // =============================================================================================
+    // ParticleEmitter.cpp:782 / :914 / :1048 (DWARF) -- ADVANCE ONE BUCKET ONE FRAME and publish
+    // the particles that are still alive into the caller's render arrays. This is the bridge
+    // between the emitter's per-particle simulation (ParticleBuild) and the draw path: the render
+    // driver hands it a run of RenderedParticle slots plus a side array, and it returns HOW MANY
+    // it filled -- the vertex count the batch is built from.
+    //
+    // X360: @0x829120C0 <MatrixSimulationHelper> (199), @0x829123E0 <VectorSimulationHelper>
+    // (138), @0x82912610 <LocalSimulationHelper> (209). The three differ ONLY in the helper's
+    // UpdateLocatorVelocity, which is why they are one template; everything above that call is
+    // instruction-for-instruction the same in all three.
+    //
+    // ⚠ THE HELPER IS THE FIRST PARAMETER AND IS PASSED BY VALUE -- see the note on the three
+    // helper classes above. The DWARF's declared order is
+    //   (T lHelper, RenderedParticle* laSimulatedParticles, cParticleBucket* lpBucket,
+    //    const cTime& aTime, const cTime& lCurrentLocatorTime, const cMatrix& lBindingsLocatorMat)
+    // and the asm's register order r3=this r4=helper r5=particles r6=bucket r7=aTime
+    // r8=lCurrentLocatorTime r9=lBindingsLocatorMat matches it exactly.
+    // =============================================================================================
+    template <class T>
+    u32 SimulateParticlesInBucketGeneral(T lHelper,
+                                         RenderedParticle* laSimulatedParticles,
+                                         cParticleBucket* lpBucket,
+                                         const cTime& aTime,
+                                         const cTime& lCurrentLocatorTime,
+                                         const cMatrix& lBindingsLocatorMat);
+
     // ParticleEmitter.h:299 (DWARF) -- work out, ONCE per behaviour change, the per-emitter
     // constants ParticleBuild would otherwise redo per particle per frame. X360 @0x8290E018.
     // RECONSTRUCTED (ParticleEmitter.cpp).
@@ -343,3 +473,18 @@ private:
     // only the 0x34 the bucket's DWARF gap attests, so the remainder is carried here explicitly
     // rather than silently changing that type's size for every other user of it.
 };
+
+// The three specialisations the console emitted, and the only three that exist -- one per bucket
+// kind. Declared `extern` here so cParticleRender::EmitterRender / ::EmitterCubeRender can call
+// them against the single copy ParticleEmitter.cpp instantiates, which is exactly the arrangement
+// the X360 image has (@0x829120C0 / @0x829123E0 / @0x82912610, one body each, called from
+// @0x82913928 and @0x82913C80).
+extern template u32 cParticleEmitter::SimulateParticlesInBucketGeneral<MatrixSimulationHelper>(
+    MatrixSimulationHelper, RenderedParticle*, cParticleBucket*, const cTime&, const cTime&,
+    const cMatrix&);
+extern template u32 cParticleEmitter::SimulateParticlesInBucketGeneral<VectorSimulationHelper>(
+    VectorSimulationHelper, RenderedParticle*, cParticleBucket*, const cTime&, const cTime&,
+    const cMatrix&);
+extern template u32 cParticleEmitter::SimulateParticlesInBucketGeneral<LocalSimulationHelper>(
+    LocalSimulationHelper, RenderedParticle*, cParticleBucket*, const cTime&, const cTime&,
+    const cMatrix&);

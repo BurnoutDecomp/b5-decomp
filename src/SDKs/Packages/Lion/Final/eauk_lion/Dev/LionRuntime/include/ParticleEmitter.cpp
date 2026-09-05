@@ -2997,3 +2997,352 @@ void cParticleEmitter::Generate(const cTime& arTime)
 
     CgsDev::PerfMonCpu::StopMonitor(liMonitor);
 }
+
+// =================================================================================================
+// THE BUCKET WALK -- cParticleEmitter::SimulateParticlesInBucketGeneral<T> and its three helpers.
+//
+// This is the bridge between the per-particle simulation (ParticleBuild) and the draw path. The
+// render driver hands one kernel a bucket, a run of RenderedParticle slots and a side array; the
+// kernel advances every live slot one frame and returns how many are still alive -- which is the
+// vertex count cParticleRender::EmitterRender builds its LionBatch from.
+//
+// X360: @0x829120C0 <MatrixSimulationHelper> (199 instructions), @0x829123E0
+// <VectorSimulationHelper> (138), @0x82912610 <LocalSimulationHelper> (209). Everything above the
+// helper call is instruction-for-instruction identical in all three -- which is what proves they
+// are one template rather than three hand-written loops. The Vector specialisation is the shortest
+// only because its helper reads no matrix, so the compiler dead-stripped three of the four arms of
+// the locator-transform selector below (it could NOT strip the ParentMatrixCurrentBuild call, an
+// opaque one, and the slot it writes into is reused for the seed copy -- which is exactly how the
+// dead-store elimination is visible from outside).
+// =================================================================================================
+
+namespace
+{
+    // ---------------------------------------------------------------------------------------------
+    // sub_8290D3B8 (95 instructions) -- DO_EMITTER_WEIGHTING, the shared body of the Matrix and
+    // Vector helpers. Unnamed in the idb; named here for what it does.
+    //
+    // Fade the particle's inherited LOCATOR VELOCITY contribution out over its life:
+    //
+    //     w =  1                                        while life <  mEmitterStartWeight
+    //       =  1 - (life - start) / (end - start)       while life <  mEmitterEndWeight
+    //       =  0                                        thereafter
+    //     arAccumulator += particle.mLocatorVel * (particle.mLocatorVel.w * w)
+    //
+    // GATES, both of them: cParticleBehaviour::mFlags & E_DO_EMITTER_WEIGHTING (0x2000000,
+    // `rlwinm r11, r11, 0,6,6` @0x8290D3BC) AND cParticleDescriptor::mFlags &
+    // E_FLAG_NEEDS_BUCKET (0x10, `extrwi r11, r11, 1,27` @0x8290D3CC). Either clear and the
+    // accumulator is left exactly as it was.
+    //
+    // ⚠ THE LIFE IT MEASURES IS mvTimeScaleAndLifeScale.y (`vspltw v10, v13, 1` off particle+0x60
+    // @0x8290D408), i.e. RenderedParticle::LifeScale() -- not the age and not the time.
+    // ⚠ AND THE SCALE FACTOR IS THE VELOCITY'S OWN W LANE (`vspltw v13, v11, 3` off particle+0x20
+    // @0x8290D414), the "Plus" of the DWARF's Vector3Plus. mLocatorVel carries its own weight.
+    //
+    // The two arms are continuous at life == start (w == 1 both sides), which is what makes the
+    // reading safe rather than merely plausible; the console re-loads mEmitterStartWeight into the
+    // splat slot at 0x8290D48C precisely so the ramp starts from it.
+    // ---------------------------------------------------------------------------------------------
+    void ApplyEmitterWeighting(const cParticleBehaviour* apBehaviour,
+                               const cParticleDescriptor* apDescriptor,
+                               const RenderedParticle* apParticle,
+                               cVector& arAccumulator)
+    {
+        if ((apBehaviour->mFlags & cParticleBehaviour::E_DO_EMITTER_WEIGHTING) == 0)
+            return;
+        if ((apDescriptor->Flags() & cParticleDescriptor::E_FLAG_NEEDS_BUCKET) == 0)
+            return;
+
+        const f32 lfStart = apBehaviour->mEmitterStartWeight;
+        const f32 lfLife  = apParticle->LifeScale();
+        const cVector& lrVel = apParticle->mLocatorVel;
+
+        f32 lfWeight;
+        if (lfStart > lfLife)                       // vcmpgtfp. @0x8290D420
+        {
+            lfWeight = 1.0f;
+        }
+        else
+        {
+            const f32 lfEnd = apBehaviour->mEmitterEndWeight;
+            if (lfEnd > lfLife)                     // vcmpgtfp. @0x8290D474
+            {
+                // asm 0x8290D490..0x8290D51C: t = (life - start) * (1 / (end - start)),
+                // then the weight is 1 - t (the `fsubs f0, f0, f13` at 0x8290D504 against the
+                // 1.0 flt_82001C98 already in f0).
+                const f32 lfT = (lfLife - lfStart) * (1.0f / (lfEnd - lfStart));
+                lfWeight = 1.0f - lfT;
+            }
+            else
+            {
+                lfWeight = 0.0f;                    // no contribution; the store below is a no-op
+            }
+        }
+
+        const f32 lfScale = lrVel.w * lfWeight;
+        arAccumulator.x = lrVel.x * lfScale + arAccumulator.x;
+        arAccumulator.y = lrVel.y * lfScale + arAccumulator.y;
+        arAccumulator.z = lrVel.z * lfScale + arAccumulator.z;
+        arAccumulator.w = lrVel.w * lfScale + arAccumulator.w;
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// MatrixSimulationHelper::UpdateLocatorVelocity  @ 0x8290DF28  (an EXPORT-SET HOLE -- no
+// 0x8290DF28.json; disassembled out of the image with tools/re/ppcdis.py + tools/re/vmx128.py)
+//
+// Publish the per-particle MATRIX this particle is drawn with, and advance its translation row by
+// the emitter-weighting blend:
+//
+//     mpMatrices[out] = apBucket->GetMatrices()[slot];             (four lvx128/stvx128 pairs,
+//                                                                   0x8290DF6C..0x8290DF90)
+//     v = mpMatrices[out].wa;                                      (the ld/std pair @0x8290DFA0)
+//     ApplyEmitterWeighting(bhv, des, particle, v);                (bl 0x8290D3B8 @0x8290DFB0)
+//     mpMatrices[out].wa = (v.x, v.y, v.z, 1);                     (vsel with unk_820FEBD0 /
+//                                                                   unk_820FEBE0 @0x8290DFD8)
+//     apBucket->GetMatrices()[slot] = mpMatrices[out];             (four more pairs, 0x8290DFF0..)
+//
+// ⚠ THE WRITE-BACK TO THE BUCKET IS REAL AND IS THE POINT: the blend is CUMULATIVE, so the
+// particle's own matrix carries the accumulated locator drift from frame to frame. Dropping it
+// (an easy "the helper only publishes" tidy-up) would restart the drift every frame and the
+// exhaust plume would stop trailing behind the car.
+//
+// ⚠ unk_820FEBD0 == (FFFFFFFF, FFFFFFFF, FFFFFFFF, 0) and unk_820FEBE0 == splat4(1.0), both read
+// out of the image, so the vsel is "xyz from the blend, w forced to 1" -- an affine translation
+// row. A stray w here would translate on every later multiply.
+//
+// ⚠ THE LOCATOR MATRIX (the 8th argument, r10) IS READ BY NOTHING in this body. The register is
+// set by the caller @0x82912364 and never touched again; stated rather than dropped, the same
+// call ParentMatrixCurrentBuild's r7 and QuadDraw's fifth parameter got.
+// -------------------------------------------------------------------------------------------------
+void MatrixSimulationHelper::UpdateLocatorVelocity(cParticleBucket* apBucket,
+                                                   const cParticleBehaviour* apBehaviour,
+                                                   const cParticleDescriptor* apDescriptor,
+                                                   const RenderedParticle* apParticle,
+                                                   u32 auOutIndex,
+                                                   u32 auSlot,
+                                                   const cMatrix& /*arLocatorMat*/)
+{
+    cMatrix* const lpBucketMatrices = apBucket->GetMatrices();
+
+    mpMatrices[auOutIndex] = lpBucketMatrices[auSlot];
+
+    cVector lvTranslation = mpMatrices[auOutIndex].wa;
+    ApplyEmitterWeighting(apBehaviour, apDescriptor, apParticle, lvTranslation);
+
+    mpMatrices[auOutIndex].wa.x = lvTranslation.x;
+    mpMatrices[auOutIndex].wa.y = lvTranslation.y;
+    mpMatrices[auOutIndex].wa.z = lvTranslation.z;
+    mpMatrices[auOutIndex].wa.w = 1.0f;
+
+    lpBucketMatrices[auSlot] = mpMatrices[auOutIndex];
+}
+
+// -------------------------------------------------------------------------------------------------
+// VectorSimulationHelper::UpdateLocatorVelocity -- inlined by the X360 into
+// SimulateParticlesInBucketGeneral<VectorSimulationHelper> @0x82912580..0x829125B4; re-outlined
+// here per the project's inlining-reversal rule (and because that is what makes the three
+// specialisations one template).
+//
+// The same three steps as the Matrix helper, on the bucket's cVector side array rather than the
+// translation row of a matrix:
+//     mpVectors[out] = apBucket->GetVectorArray()[slot];     (lvx128 v0, r26, r11 / stvx128 r28)
+//     ApplyEmitterWeighting(bhv, des, particle, mpVectors[out]);
+//     apBucket->GetVectorArray()[slot] = mpVectors[out];     (stvx128 v0, r26, r11)
+//
+// ⚠ NO W FORCE HERE, and the asymmetry is the console's: the matrix arm rebuilds an affine
+// translation row (w := 1) because it is writing a matrix; the vector arm stores the blended
+// vector verbatim, w lane included.
+// -------------------------------------------------------------------------------------------------
+void VectorSimulationHelper::UpdateLocatorVelocity(cParticleBucket* apBucket,
+                                                   const cParticleBehaviour* apBehaviour,
+                                                   const cParticleDescriptor* apDescriptor,
+                                                   const RenderedParticle* apParticle,
+                                                   u32 auOutIndex,
+                                                   u32 auSlot,
+                                                   const cMatrix& /*arLocatorMat*/)
+{
+    cVector* const lpBucketVectors = apBucket->GetVectorArray();
+
+    mpVectors[auOutIndex] = lpBucketVectors[auSlot];
+    ApplyEmitterWeighting(apBehaviour, apDescriptor, apParticle, mpVectors[auOutIndex]);
+    lpBucketVectors[auSlot] = mpVectors[auOutIndex];
+}
+
+// -------------------------------------------------------------------------------------------------
+// LocalSimulationHelper::UpdateLocatorVelocity -- inlined by the X360 into
+// SimulateParticlesInBucketGeneral<LocalSimulationHelper> @0x829128E4..0x829128FC.
+//
+// A bucket with NEITHER side array: every particle in it is drawn against the emitter's own
+// locator transform, so the helper just publishes that same 64 bytes per emitted particle. The
+// console parks the four rows in v126/v125/v124/v127 before the loop (0x8291282C..0x82912850,
+// which is why this specialisation is the one that calls __savevmx_124) and stores them with the
+// four `stvx128 v126, r30, r19` / `v125, r30, r20` / `v124, r0, r30` / `v127, r30, r16` at
+// r30 == &mpMatrices[out] + 0x20 with r19/r20/r16 == -0x20/-0x10/+0x10 -- i.e. rows 0/1/2/3 in
+// order, then `addi r30, r30, 0x40`.
+//
+// ⚠ It touches NEITHER the bucket NOR the emitter-weighting blend. There is no side array to
+// accumulate into, so DO_EMITTER_WEIGHTING has no effect on a light bucket. That is in the binary.
+// -------------------------------------------------------------------------------------------------
+void LocalSimulationHelper::UpdateLocatorVelocity(cParticleBucket* /*apBucket*/,
+                                                  const cParticleBehaviour* /*apBehaviour*/,
+                                                  const cParticleDescriptor* /*apDescriptor*/,
+                                                  const RenderedParticle* /*apParticle*/,
+                                                  u32 auOutIndex,
+                                                  u32 /*auSlot*/,
+                                                  const cMatrix& arLocatorMat)
+{
+    mpMatrices[auOutIndex] = arLocatorMat;
+}
+
+// -------------------------------------------------------------------------------------------------
+// cParticleEmitter::SimulateParticlesInBucketGeneral<T>
+//   @0x829120C0 <Matrix> / @0x829123E0 <Vector> / @0x82912610 <Local>
+//   (DWARF ParticleEmitter.cpp:782 / :914 / :1048)
+//
+// FOUR WAYS TO BUILD THE LOCATOR TRANSFORM, in the console's own order (0x829120F8..0x8291223C):
+//   1. descriptor E_FLAG_NEEDS_BUCKET (0x10)  -> IDENTITY. Sixteen scalar stores of
+//      flt_82001C98 (1.0) / flt_82001CC0 (0.0), both read out of the image.
+//   2. emitter KU_FLAG_SUB_EMITTER (0x8)      -> ParentMatrixCurrentBuild: re-derive where the
+//      PARENT particle is this frame, because a sub-emitter's parent is stored nowhere.
+//      ⚠ It rides the f32-eats-a-GPR pattern -- `lfs f1, 0x1AC(r29)` is mDt in f1 and r7 is
+//      lCurrentLocatorTime, with r6 skipped. See ParentMatrixCurrentBuild's own note.
+//   3. descriptor E_FLAG_IGNORE_ROT (0x100)   -> identity ROTATION, the binding locator's
+//      TRANSLATION. The console does it with a vsel of unk_820FEBD0 (FFFFFFFF x3, 0) between
+//      lBindingsLocatorMat.wa and unk_820FEBE0 (splat4(1.0)), i.e. exactly SetTrans's w := 1.
+//   4. otherwise                              -> the binding locator verbatim (four lvx128/
+//      stvx128 pairs, 0x82912208..0x8291223C).
+//
+// THEN, once per bucket:
+//   * a 64-byte copy of the bucket's random seed onto the stack (the 8-iteration ld/std loop
+//     @0x82912250) -- the per-slot draws advance the COPY, so the bucket's own stream is not
+//     disturbed by rendering;
+//   * two lanes of mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime are refreshed:
+//     lane 0 := mDt (`lvlx v0, r29, 0x1AC` + `vrlimi128 v12, v0, 8, 0`) and lane 1 :=
+//     aTime's tick count in SECONDS (`fcfid` + `frsp` + `* flt_82F369A8`, and flt_82F369A8 is
+//     1/3000 -- the Lion clock is 3000 ticks per second, the same divisor Generate's
+//     millisecond arithmetic uses). The member's DWARF name says exactly that.
+//
+// THEN, per slot 0..15:
+//   * skip the slot unless its occupancy bit is set;
+//   * advance the seed copy one Park-Miller step (cParticleRandomSeed::Update), take a COPY of
+//     it, and Offset that copy by the particle's BIRTH TIME in ticks
+//     (`lfs f13, 0xDC(r28)` == nucleus.BirthTime(), `* flt_820FEC3C` == 3000.0, `fctidz`).
+//     ⭐ That is what makes a particle's random stream a function of WHEN IT WAS BORN rather
+//     than of what order the bucket happens to be walked in -- so a particle looks the same on
+//     every frame of its life, and a replay reproduces it.
+//   * ParticleBuild, and switch on its three-valued result: ALIVE -> publish through the helper
+//     and take the next output slot; DEAD -> retire the slot; NOT-BORN-YET -> nothing.
+//
+// AND FINALLY: a bucket whose last particle just died is handed straight back to the pool
+// (cParticleBucketManager::Free, `lwz r11, 0x54(r24)` + `bne` @0x829123B8). The render pass is
+// where buckets are recycled, which is why an emitter that is not being rendered leaks none --
+// its buckets are simply never walked.
+// -------------------------------------------------------------------------------------------------
+template <class T>
+u32 cParticleEmitter::SimulateParticlesInBucketGeneral(T lHelper,
+                                                       RenderedParticle* laSimulatedParticles,
+                                                       cParticleBucket* lpBucket,
+                                                       const cTime& aTime,
+                                                       const cTime& lCurrentLocatorTime,
+                                                       const cMatrix& lBindingsLocatorMat)
+{
+    if (lpBucket->IsEmpty())
+    {
+        return 0;
+    }
+
+    // ---- the transform every particle in this bucket is simulated against --------------------
+    cMatrix lLocatorMat;
+    const u32 luDescriptorFlags = mpDescriptor->Flags();
+
+    if ((luDescriptorFlags & cParticleDescriptor::E_FLAG_NEEDS_BUCKET) != 0)
+    {
+        lLocatorMat.BuildIdentity();
+    }
+    else if ((mFlags & KU_FLAG_SUB_EMITTER) != 0)
+    {
+        ParentMatrixCurrentBuild(lLocatorMat, aTime, mDt, lCurrentLocatorTime);
+    }
+    else if ((luDescriptorFlags & cParticleDescriptor::E_FLAG_IGNORE_ROT) != 0)
+    {
+        lLocatorMat.BuildIdentity();
+        lLocatorMat.SetTrans(lBindingsLocatorMat.wa.x,
+                             lBindingsLocatorMat.wa.y,
+                             lBindingsLocatorMat.wa.z);
+    }
+    else
+    {
+        lLocatorMat = lBindingsLocatorMat;
+    }
+
+    // ---- the bucket's seed, copied so the draw does not disturb the bucket's own stream ------
+    cParticleRandomSeed lBucketSeed = lpBucket->GetRandomSeed();
+
+    // ---- this frame's two build-data lanes (asm 0x82912284..0x829122D4) ----------------------
+    mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.x = mDt;
+    mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.y =
+        aTime.GetTimeSeconds();
+
+    sParticleNucleus* const laNuclei = lpBucket->GetParticles();
+
+    u32 luOutCount = 0;
+    for (u32 luSlot = 0; luSlot < cParticleBucket::KU_MAX_PARTICLES; ++luSlot)
+    {
+        if (!lpBucket->IsParticleActive(luSlot))
+        {
+            continue;
+        }
+
+        lBucketSeed.Update();
+
+        cParticleRandomSeed lParticleSeed = lBucketSeed;
+        lParticleSeed.Offset(static_cast<u32>(
+            static_cast<s32>(laNuclei[luSlot].BirthTime() * msfTicksPerSecond)));
+
+        const EParticleBuildResult leResult =
+            ParticleBuild(laSimulatedParticles[luOutCount],
+                          lParticleSeed,
+                          laNuclei[luSlot],
+                          *mpDescriptor,
+                          *mpCurrentBehaviour,
+                          mPrecalculatedParticleBuildData);
+
+        if (leResult == eParticleBuildResultAlive)
+        {
+            lHelper.UpdateLocatorVelocity(lpBucket,
+                                          mpCurrentBehaviour,
+                                          mpDescriptor,
+                                          &laSimulatedParticles[luOutCount],
+                                          luOutCount,
+                                          luSlot,
+                                          lLocatorMat);
+            ++luOutCount;
+        }
+        else if (leResult == eParticleBuildResultDead)
+        {
+            lpBucket->RetireParticle(luSlot);
+        }
+    }
+
+    if (lpBucket->IsEmpty())
+    {
+        cParticleBucketManager::Instance().Free(lpBucket);
+    }
+
+    return luOutCount;
+}
+
+// The three the console emitted, and the only three that exist. `extern template` in the header
+// lets cParticleRender::EmitterRender / ::EmitterCubeRender call them without dragging this body
+// (and cParticleBucketManager) into ParticleRender.cpp -- which is also how the console ended up
+// with exactly one copy of each, in this TU.
+template u32 cParticleEmitter::SimulateParticlesInBucketGeneral<MatrixSimulationHelper>(
+    MatrixSimulationHelper, RenderedParticle*, cParticleBucket*, const cTime&, const cTime&,
+    const cMatrix&);
+template u32 cParticleEmitter::SimulateParticlesInBucketGeneral<VectorSimulationHelper>(
+    VectorSimulationHelper, RenderedParticle*, cParticleBucket*, const cTime&, const cTime&,
+    const cMatrix&);
+template u32 cParticleEmitter::SimulateParticlesInBucketGeneral<LocalSimulationHelper>(
+    LocalSimulationHelper, RenderedParticle*, cParticleBucket*, const cTime&, const cTime&,
+    const cMatrix&);

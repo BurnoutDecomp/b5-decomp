@@ -28,6 +28,7 @@
 #include "rw/math/vpu/matrix44affine_operation.h"               // rw::math::vpu::TransformPoint
 #include "rw/math/vpu/vector3_operation.h"                      // Normalize / Magnitude / Dot / Cross / Lerp
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"  // shadow::Device::SetState -- the console's own applier
 
 #include <cmath>   // sqrtf -- the two normalisations
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the one-shot CreateInternalMaterial announcement
@@ -1186,55 +1187,61 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
 // pc/gcm/renderengine/LionBlendProgramsPC.cpp, and ParticleModule::Prepare calls Construct in the
 // console's own position.
 //
-// ⛔ WHAT STILL STANDS BETWEEN THIS FILE AND A PIXEL. Nothing ever calls these three Render*
-// methods on this build, because both ParticleModule arms that would drive them are parked and
-// say so once per run (log lines 1253/1255).
-//
-// ⭐⭐ THE EMITTER HALF IS DONE AS OF 2026-09-05 -- 2,595 instructions, and cParticleEmitter now
-// has no stub anywhere in the tree:
-//     cParticleEmitter::ParticleBuild @0x82910118   1,142 instr   LANDED (ParticleEmitter.cpp)
-//     cParticleEmitter::Update        @0x829153D8     201 instr   LANDED
-//     cParticleEmitter::Generate      @0x82915158     159 instr   LANDED
-//     cParticleEmitter::Emit          @0x82914D38     173 instr   LANDED
-//     ParentMatrixCurrentBuild        @0x829113E8     175 instr   LANDED
-//     Drag/ColourSteps/MultiFrame Behaviour::Process  669 instr   LANDED (7 of 7 now)
-//     cParticleRandomSeed::Build(cVector&,...)         76 instr   LANDED
-//
-// ⛔ WHAT IS LEFT IS THE BUCKET WALK AND THE RENDER DRIVER, counted from the call graph rather
-// than estimated:
+// ⭐⭐ THE WHOLE RENDER CLOSURE THIS BANNER USED TO LIST IS LANDED (2026-09-05, the
+// boost-exhaust wave). Every function below is real code, and the exe LINKS AND RUNS with the
+// whole chain reachable -- checked in Burnout_PC.cgsmap, which is the test that matters here
+// because /OPT:REF had been silently stripping the entire Lion island while nothing called it:
+//     cParticleRender::Render            @0x829147F8   124 instr   LANDED (ParticleRender.cpp)
+//     cParticleRender::EmitterRender     @0x82913928   212 instr   LANDED
 //     SimulateParticlesInBucketGeneral<Matrix/Vector/Local>
-//       @0x829120C0 / @0x829123E0 / @0x82912610       546 instr   absent
-//       (+ sub_8290D3B8, 95 -- the DO_EMITTER_WEIGHTING blend they call, whose gate is
-//        cParticleBehaviour::mFlags & 0x2000000 and whose weights are mEmitterStartWeight
-//        @+0x490 / mEmitterEndWeight @+0x494)
-//     cParticleRender::Render          @0x829147F8    124 instr   TRAP (ParticleRender.cpp)
-//     cParticleRender::EmitterRender   @0x82913928    212 instr   absent
-//     cParticleRender::EmitterCubeRender @0x82913C80  448 instr   absent
-//     LionParticleRender::SetCameraData @0x82281068    76 instr   absent
-//     LionParticleRender::CreateInternalMaterial @0x82280C30  244 instr  returns 0
-//     sub_82289158                                    143 instr   absent (the VECTOR-bucket
-//       draw -- EmitterRender's Matrix arm calls LionParticleRender::Render, its Vector arm
-//       calls this instead)
-//     ParticleModule::BuildLionVertexBuffers @0x8228AC20's Lion half (231 instr total)
-//     ParticleModule::RenderFullResParticles @0x8229AFD0's cLionFX::Dispatch branch
-// and, once that closure runs, the two SetState overloads below and the Xenon fast-path draw
-// thunk D3DDevice_DrawVertices (LionRuntimeLinkStubs.cpp) are the last traps on the path.
+//       @0x829120C0 / @0x829123E0 / @0x82912610       546 instr   LANDED (ParticleEmitter.cpp)
+//     MatrixSimulationHelper::UpdateLocatorVelocity @0x8290DF28   LANDED (an export-set hole)
+//     sub_8290D3B8 (the DO_EMITTER_WEIGHTING blend)   95 instr    LANDED
+//     LionParticleRender::SetCameraData  @0x82281068    76 instr   LANDED
+//     sub_82289158 (the cVector Render overload)      143 instr   LANDED
+//     ParticleModule::BuildLionVertexBuffers' Lion half           LANDED (cLionFX::Update +
+//       the packed-LRTB frustum transpose + SetCameraData + cLionFX::Render)
+//     ParticleModule::RenderFullResParticles' Lion dispatch       LANDED
+//     the two SetState overloads below                            LANDED
+//
+// ⭐⭐⭐ AND THE MEASURED RESULT OF ALL OF IT: `[lionfx] Render: emitters live=0`.
+// The draw path runs every frame and the emitter manager's USED LIST IS EMPTY, so there is
+// nothing to cull, simulate or draw. That is not a defect in anything above -- it is the next
+// gate, and it is in a DIFFERENT SUBSYSTEM that no closure list on this path has ever named:
+//
+//     ParticleModule::PreRenderUpdate @0x82294760 -- the PRODUCER. Walks the 128
+//       maPlayingEffects slots and copies every CHANGED one into the dispatch buffer's
+//       maChangedLionEffects, clearing CHANGED|CREATE as it goes. NO BODY IN THE TREE.
+//     ParticleModule::DispatchThreadUpdate @0x8229C5F0 -- the CONSUMER. For each changed
+//       slot: TriggerRegister / ScalerRegister / LocatorRegister / cLionFX::EffectCreate on
+//       CREATE, then TriggerUpdate / LocatorUpdate / ScalerUpdate / EffectSetWorldIndex.
+//       cLionFX::EffectCreate -> cLionEffectManager::EffectCreate ->
+//       cLionParticleEffectManager::BindingsAttach -> cParticleEmitterManager::Register IS
+//       THE ONLY THING IN THE RUNTIME THAT EVER CREATES AN EMITTER. NO BODY IN THE TREE.
+//     ParticleModule::DispatchThreadUpdateData -- the record they exchange. Modelled as a
+//       ONE-BYTE opaque placeholder (ParticleModule.h:274); the DWARF gives it
+//       mfCurrentTime / mfCurrentTimeStep / muChangedEffects / Matrix44Affine mViewMatrix /
+//       Matrix44 mProjectionMatrix / LionEffect[128] maChangedLionEffects.
+//
+// ⚠ SO `[lionstart] STARTED ... handle=128 descriptors=1` -- which this build prints 22 times
+// in a two-minute run at both FXBOOSTPOINT tags -- IS NOT EVIDENCE AN EFFECT IS PLAYING. All it
+// says is that StartLionEffect resolved a definition and stamped a slot with CREATE. Nothing
+// reads that stamp on this build, so the Lion runtime never hears about it. Two waves have now
+// quoted that line as "the effect fires 12 times per run"; it fires nothing.
 //
 // ⚠ cParticleBehaviour::Lerp @0x8290B1F8 (1,530) IS NOT ON THIS LIST and is not on the path: it
 // is a log-once stub reached only from a FRACTIONAL blend position, and every effect the create
 // path starts today sits at scaler 1.0, which snaps to a layer. Counting it as a blocker has
 // twice made this closure look 1,530 instructions worse than it is.
 //
-// ⚠ EmitterRender's OWN parameter shape is settled, so the next wave need not re-derive it: the
-// DWARF (ParticleEmitter.cpp:782/914/1048) declares the three kernels
-//   U32 SimulateParticlesInBucketGeneral<T>(T lHelper, RenderedParticle* laSimulatedParticles,
-//                                           cParticleBucket* lpBucket, const cTime& aTime,
-//                                           const cTime& lCurrentLocatorTime,
-//                                           const cMatrix& lBindingsLocatorMat)
-// and EmitterRender's call sites prove `lHelper` is a POINTER-SIZED object holding the bucket's
-// side array -- `&v34[64 * n]` (a 64-byte cMatrix stride) for the Matrix helper and `&v33[n]`
-// (16-byte cVector) for the Vector one, against `&v35[7 * n]` (112 == sizeof(RenderedParticle))
-// for the particle array. So the "empty helper class" reading is wrong.
+// ⚠ STILL OPEN ON THE DRAW SIDE ITSELF, both stated rather than hidden:
+//   * cParticleRender::EmitterCubeRender @0x82913C80 (448) -- the CELL_RENDER camera-anchored
+//     volume. A named one-shot log, NOT a trap, because Render routes to it before any cull.
+//   * LionParticleRender::CreateInternalMaterial @0x82280C30 (244) -- the per-material blend
+//     state. ⭐ ITS BODY IS ALREADY WRITTEN, in LionParticleRenderMaterial.cpp, which is simply
+//     NOT MOUNTED in tools/build/build_game_exe.bat; mounting it needs saBlendStates /
+//     siMaterialCount / off_82000D00 / off_82000D08 homed, since LionParticleRender.cpp keeps
+//     its own copies of the first two in an anonymous namespace.
 //
 // ⛔ A NOTE FOR ANYONE QUERYING THE TREE FOR THIS SUBSYSTEM: tools/re/hasbody.py reports a
 // Render* shape as HAS BODY whether or not it is written, because a trap IS a definition. It
@@ -1242,14 +1249,46 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
 // =================================================================================================
 namespace BrnGraphics
 {
-    void LionBlendRenderer::SetState(const renderengine::DepthStencilState* /*apState*/)
+    // -----------------------------------------------------------------------------------------
+    // LionBlendRenderer::SetState(const DepthStencilState*)  (DWARF BrnLionBlendRenderer.h:81)
+    // LionBlendRenderer::SetState(const BlendState*)         (DWARF BrnLionBlendRenderer.h:86)
+    //
+    // Neither has an out-of-line X360 body: both are one-line forwards onto mRenderer's
+    // ImRendererBase base and the console inlined them at every call site. EndRendering
+    // @0x8227E610 word 10 shows exactly what that inlining looks like --
+    // `bl CgsGraphics::ImRendererBase::SetState` (@0x82276D08, the BLEND overload) with
+    // r3 == &mRenderer + 4 and r4 == dword_83010F20.
+    //
+    // ⛔ THEY DO NOT FORWARD INTO CgsGraphics::ImRendererBase, AND THE REASON IS NOT THE OLD
+    // TYPE QUESTION (which is answered in the header) -- it is that the committed
+    // ImRendererBase::SetState(const BlendState*) is CgsIm2d.cpp:114, the PC 2D loading-screen
+    // leaf, which IGNORES ITS ARGUMENT and hard-codes SRCALPHA/INVSRCALPHA. Routing the Lion
+    // path's per-material blend through it would compile, link, run, and throw away every state
+    // the material asked for without a trace. So these bodies reproduce what the console's own
+    // outlined wrapper does instead -- the mgpActiveRenderer assert plus the one shadow-device
+    // call -- which is the SAME two operations, in the same order, against the same shadow
+    // cache. shadow::Device::SetState owns the lock gate, the redundancy compare, the applier
+    // and the cache slot; there is no second cache here.
+    // DELETE-WHEN CgsIm2d.cpp's overload becomes the faithful @0x82276D08 body: these two then
+    // collapse back to `mRenderer.SetState(apState)`.
+    // -----------------------------------------------------------------------------------------
+    void LionBlendRenderer::SetState(const renderengine::DepthStencilState* apState)
     {
-        CGS_ASSERT(false, "BrnGraphics::LionBlendRenderer::SetState(DepthStencilState) -- NOT RECONSTRUCTED (Lion render path)");
+        // sub_82276DA8: assert [CgsImRenderer.h:732] + shadow::Device::SetState(DepthStencilState*)
+        CGS_ASSERT(CgsGraphics::ImRendererBase::mgpActiveRenderer
+                       == static_cast<CgsGraphics::ImRendererBase*>(&mRenderer),
+                   "mgpActiveRenderer == this");
+        shadow::Device::SetState(apState);
     }
 
-    void LionBlendRenderer::SetState(const BlendState* /*apState*/)
+    void LionBlendRenderer::SetState(const BlendState* apState)
     {
-        CGS_ASSERT(false, "BrnGraphics::LionBlendRenderer::SetState(BlendState) -- NOT RECONSTRUCTED (Lion render path)");
+        // ImRendererBase::SetState @0x82276D08: assert [CgsImRenderer.h:711] +
+        // shadow::Device::SetState(BlendMaterialState*) @0x82276A68.
+        CGS_ASSERT(CgsGraphics::ImRendererBase::mgpActiveRenderer
+                       == static_cast<CgsGraphics::ImRendererBase*>(&mRenderer),
+                   "mgpActiveRenderer == this");
+        shadow::Device::SetState(apState);
     }
 
 }

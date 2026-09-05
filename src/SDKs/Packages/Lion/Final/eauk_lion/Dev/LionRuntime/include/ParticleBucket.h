@@ -124,6 +124,34 @@ public:
     // (ParticleBucket.cpp).
     void GetpMatrix(u32 auIndex, cMatrix* apMatrix, const cTime& arTime);
 
+    // ParticleBucket.h:136 / :141 -- which of the two per-particle SIDE ARRAYS this bucket was
+    // allocated with. cParticleRender::EmitterRender @0x82913928 picks its simulation kernel with
+    // exactly these two tests, in this order (`lwz r11, 0xE60(r27)` then `lwz r11, 0xE64(r27)`
+    // @0x829139C0 / 0x82913A9C): matrices -> MatrixSimulationHelper, else vectors ->
+    // VectorSimulationHelper, else neither -> LocalSimulationHelper. Inline by construction (the
+    // console reads the field directly at every site).
+    bool HasMatrices() const { return mpMatrices != nullptr; }
+    bool HasVectors()  const { return mpVectors  != nullptr; }
+
+    // ParticleBucket.h:70 / :198 -- the side arrays themselves, one element per particle SLOT
+    // (not per emitted particle). MatrixSimulationHelper::UpdateLocatorVelocity @0x8290DF28 reads
+    // `lwz r11, 0xE60(r26)` and indexes it by `slot << 6`; the Vector kernel @0x829123E0 reads
+    // 0xE64 and indexes by `slot << 4`.
+    cMatrix* GetMatrices()          const { return mpMatrices; }
+    cVector* GetVectorArray()       const { return mpVectors; }
+
+    // ParticleBucket.h:102 / :131 / :107 -- the occupancy bitmap, one bit per slot. The three
+    // simulation kernels open with IsEmpty() (`lwz r11, 0x54(r24)` + branch @0x829120E0), test
+    // IsParticleActive per slot (`slw r22, r21, r27 ; and`) and RetireParticle a slot whose
+    // ParticleBuild returned eParticleBuildResultDead (`andc r11, r11, r22 ; stw`).
+    bool IsEmpty() const                      { return mActiveBits == 0; }
+    bool IsParticleActive(u32 auSlot) const   { return (mActiveBits & (1u << auSlot)) != 0; }
+    void RetireParticle(u32 auSlot)           { mActiveBits &= ~(1u << auSlot); }
+
+    // ParticleBucket.h:60 -- the nucleus array. The kernels walk it with a 0xE0 stride from
+    // `bucket + 0x60` (`addi r28, r24, 0x60` @0x829122A4, `addi r28, r28, 0xE0` per slot).
+    sParticleNucleus* GetParticles()          { return mParticles; }
+
     // ParticleBucket.h:88 -- how many slots are live. It is the same word IsFull() tests, and
     // cParticleEmitter::Update @0x82915690 sums it across the emitter's whole bucket list to
     // produce the count it returns when a sub-emitter's parent particle has died

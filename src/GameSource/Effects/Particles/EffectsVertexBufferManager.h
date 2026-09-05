@@ -54,6 +54,14 @@ public:
     // then return the vertex buffer for the current double-buffer slot.
     renderengine::VertexBuffer* GetVertexBuffer() const;
 
+    // Advance the double-buffer slot. ParticleModule::BuildLionVertexBuffers @0x8228AC20 emits
+    // it INLINE, immediately before Lock and after its own `!mbLocked` assert -- `*(module +
+    // 143712) = (*(module + 143712) - 1) & 1`, i.e. muCurrentBuffer toggles 0 <-> 1 (subtracting
+    // 1 and masking is the same toggle as adding 1 for a two-slot ring, and it is what the
+    // console emits). De-inlined onto the owning class rather than left as an offset poke at the
+    // call site.
+    void FlipBuffer() { muCurrentBuffer = static_cast<u8>((muCurrentBuffer - 1u) & 1u); }
+
     static const u32 KU_NUM_BUFFERS = 2;  // EffectsVertexBufferManager.h:78
 
 private:
