@@ -51,7 +51,17 @@ public:
     // mFlags bits the runtime tests here.
     enum Flags
     {
-        E_FLAG_NEEDS_BUCKET      = 0x10,    // descriptor draws particles -> needs a bucket
+        // ⭐ THE GAME'S OWN TOKEN NAME (LionParticleParser.cpp:57, offset 32 == mFlags):
+        // CELL_RENDER_FLAG. cParticleRender::Render @0x82914894 tests it FIRST, before the
+        // active bit, and routes the emitter to EmitterCubeRender instead of EmitterRender --
+        // the cell/volume renderer that wraps its particles inside a camera-anchored box.
+        E_FLAG_CELL_RENDER       = 0x8,     // token CELL_RENDER_FLAG
+        // ⚠ THE TOKEN TABLE CALLS THIS ONE DYNAMIC_PLACEMENT_FLAG (LionParticleParser.cpp:61),
+        // which is what the three simulation kernels use it for: set -> the particle is placed
+        // in WORLD space, so the locator transform they simulate against is the IDENTITY
+        // (@0x82912114). The "needs a bucket" spelling here is an older inferred name kept
+        // because several bodies already reference it.
+        E_FLAG_NEEDS_BUCKET      = 0x10,    // token DYNAMIC_PLACEMENT_FLAG
         E_FLAG_FORCE_HEAVY       = 0x20,    // force the heavyweight bucket type
         // Token ORIENT_TO_CAMERA_FLAG / DWARF eDO_FACECAMERA (LionParticleParser.cpp:63 --
         // the token table and the DecFIGS enum agree). LionBlendRenderer::RenderTilts

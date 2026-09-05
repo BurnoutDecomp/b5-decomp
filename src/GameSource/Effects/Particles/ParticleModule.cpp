@@ -5,6 +5,9 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog (the NOT-RECONSTRUCTED announcements)
 #include "GameSource/Effects/Particles/ParticleModuleIO.h"   // BrnParticle::ParticleIO::DispatchInputBuffer
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"    // BrnGame::DispatchThreadInputBuffer
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionFX.h"   // cLionFX::Update / Render / Dispatch -- the Lion core
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRender/LionBatch.h"  // LionBatchArray
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/ext-include/GameStructs/cTime.h"     // cTime / msfTicksPerSecond
 
 // ============================================================================
 // GameSource/Effects/Particles/ParticleModule.cpp
@@ -291,6 +294,54 @@ namespace BrnParticle
         *lpDispatchThreadInput->GetParticleRenderData() = mRenderData;
     }
 
+    // =========================================================================
+    // THE FRAME'S LION BATCH LIST (X360 the module member at +0x231C4, a
+    // LionBatchArray == Array<LionBatch,512>; its trailing count word is the
+    // +0x249C4 == 149956 that BuildLionVertexBuffers zeroes and that the ctor
+    // stamps -1).
+    //
+    // FLAG PC-platform leaf: HOST POINTER WIDENING, and it is a LAYOUT fact, not a
+    // behavioural one. LionBatch is { u32 start; u32 count; const cParticleMaterial* } --
+    // 12 bytes with the console's 4-byte pointer, 16 with the host's 8 -- so a real
+    // Array<LionBatch,512> is 0x2004 bytes where the console's span is 0x1800, and it
+    // cannot occupy that span without moving every member after it (the module's tail
+    // is pinned delta-for-delta from +0x22190 by _AssertLayout below, and those pins
+    // are what keep the ctor's sentinels landing where the asm puts them). So the
+    // console's span stays as the sized placeholder it already was and the REAL array
+    // lives beside the module. Nothing outside this TU addresses it: cLionFX::Render
+    // fills it and cLionFX::Dispatch replays it, and both calls are right here.
+    // DELETE-WHEN the tail's placeholders are typed and the pins re-derived.
+    // =========================================================================
+    LionBatchArray gLionBatchArray;
+
+    // flt_82004D00 == 0x3F19999A == 0.6 -- the depth-fade DISTANCE cLionFX::Dispatch is handed
+    // in BOTH of the console's two dispatch arms (@0x8229B238 and @0x82294BC0). Read out of the
+    // image with tools/re/x360rd.py.
+    const f32 KF_LION_DEPTH_FADE_DISTANCE = 0.60000002384185791f;
+
+    // The Lion clock is 3000 ticks per second (cTime.h -- the DWARF's own
+    // msuTicksPerMilliSecond == 3, corroborated by flt_82F369A8 == 1/3000 in the image).
+    // BuildLionVertexBuffers converts renderData->mfCurrentTime the same way at both of
+    // its call sites: `(S32)(seconds * 3000.0f)` -- `fmuls` then `fctiwz`/`stfiwx`.
+    cTime LionTimeFromSeconds(f32 afSeconds)
+    {
+        return cTime(static_cast<u32>(static_cast<s32>(afSeconds * msfTicksPerSecond)));
+    }
+
+    // The camera's view transform is a Matrix44 in this tree and the Lion renderer's
+    // mViewMat is a Matrix44Affine; the console has ONE 64-byte block and copies it with
+    // four lvx128/stvx128 pairs. Same sixteen floats in the same order -- the seam is a
+    // row copy, not a conversion.
+    rw::math::vpu::Matrix44Affine RowCopyToAffine(const rw::math::vpu::Matrix44& arM)
+    {
+        rw::math::vpu::Matrix44Affine lOut;
+        lOut.xAxis.x = arM.xAxis.x; lOut.xAxis.y = arM.xAxis.y; lOut.xAxis.z = arM.xAxis.z; lOut.xAxis.w = arM.xAxis.w;
+        lOut.yAxis.x = arM.yAxis.x; lOut.yAxis.y = arM.yAxis.y; lOut.yAxis.z = arM.yAxis.z; lOut.yAxis.w = arM.yAxis.w;
+        lOut.zAxis.x = arM.zAxis.x; lOut.zAxis.y = arM.zAxis.y; lOut.zAxis.z = arM.zAxis.z; lOut.zAxis.w = arM.zAxis.w;
+        lOut.wAxis.x = arM.wAxis.x; lOut.wAxis.y = arM.wAxis.y; lOut.wAxis.z = arM.wAxis.z; lOut.wAxis.w = arM.wAxis.w;
+        return lOut;
+    }
+
     // One line, once, for an arm this build does not carry. Never an assert. (The twin in
     // ParticleModule_Lifecycle.cpp is in that TU anonymous namespace, hence the local copy.)
     namespace
@@ -338,17 +389,101 @@ namespace BrnParticle
         if (lpRenderData == 0)
             return;
 
-        mTrailSystem.Update(lpRenderData->mfCurrentTimeStep,
-                            lpRenderData->mfCurrentTime,
-                            lpRenderData->mCgsCamera.GetViewProjectionMatrix());
+        // asm words 8-38: the view (+0x60) and view-projection (+0xE0) blocks are copied out
+        // of the render data BEFORE the frame guard, because both halves below need them.
+        const rw::math::vpu::Matrix44& lrViewProjection =
+            lpRenderData->mCgsCamera.GetViewProjectionMatrix();
+        const rw::math::vpu::Matrix44& lrViewMatrix = lpRenderData->mCgsCamera.mView;
 
+        // ---- the ONCE-PER-FRAME guard (X360 dword_82CDB408) -------------------------------
+        // The console latches renderData->muCurrentFrame in a file-scope word and only runs
+        // the simulation half when it CHANGED. This pass is called on the render thread and
+        // can be re-entered for the same frame; without the guard the Lion sim would advance
+        // twice and the trail system's time step would be applied twice with it.
+        static u32 suLastLionFrame = 0;
+        const u32 luPreviousFrame = suLastLionFrame;
+        suLastLionFrame = lpRenderData->muCurrentFrame;
+
+        if (suLastLionFrame != luPreviousFrame)
         {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "ParticleModule::BuildLionVertexBuffers' LION half (the per-batch vertex "
-                "buffer build; the batch members are asm-sized placeholders and cLionFX is "
-                "not landed). THE INLINED TrailSystem::Update IS REAL AND RUNS");
+            // TrailSystem::Update, INLINED at the console's head of this arm (the two stores
+            // at module +141312/+141316 and the four-row matrix copy at +141248).
+            mTrailSystem.Update(lpRenderData->mfCurrentTimeStep,
+                                lpRenderData->mfCurrentTime,
+                                lrViewProjection);
+
+            // ⭐⭐ THE LION SIMULATION. Every live emitter advances one frame here:
+            // cLionFX::Update -> cParticleEmitterManager::Update -> cParticleEmitter::Update
+            // -> Generate / Emit / ParticleBuild. Gated on the same mbPlayingEffectsSuspended
+            // the draw half below uses, so a suspended world neither ages nor draws.
+            if (!mbPlayingEffectsSuspended)
+            {
+                cLionFX::Update(LionTimeFromSeconds(lpRenderData->mfCurrentTime));
+            }
         }
+
+        // The frame's batch list starts empty (X360 `stw r11(0), 0x249C4`).
+        gLionBatchArray.Clear();
+
+        // The double-buffer flip + the write window (the assert and the flip are inline on the
+        // console, at EffectsVertexBufferManager.h:104 and module +143712).
+        mVertexBufferManagerLion.FlipBuffer();
+        EffectsVertexBufferLocked& lrLockedBuffer = mVertexBufferManagerLion.Lock();
+
+        if (!mbPlayingEffectsSuspended)
+        {
+            // ---- the packed LRTB frustum the Lion culler tests against ---------------------
+            // CgsGraphics::Camera::GetFrustum writes SIX world-space planes, each [Nx,Ny,Nz,D]
+            // with dot3(N,p) == D and N pointing INTO the volume, in the order
+            //   [0] near  [1] far  [2] left  [3] right  [4] top  [5] bottom   (CgsCamera.h:44).
+            // The console keeps ONLY the four side planes and TRANSPOSES them into structure-
+            // of-arrays rows with six vperm and three vsldoi (0x8228AD60..0x8228B190, permute
+            // tables unk_82CDADB0 / unk_82CDA3F0 / unk_82CDADC0 / unk_82CDADD0 / unk_82CDADE0 /
+            // unk_82CDADF0, all six read out of the image as byte selectors). The result is
+            //   row 0 = (Lx, Rx, Tx, Bx)   row 1 = (Ly, Ry, Ty, By)
+            //   row 2 = (Lz, Rz, Tz, Bz)   row 3 = (Ld, Rd, Td, Bd)
+            // so cParticleRender::Render can test all four planes in one four-lane pass. The
+            // transpose is written out longhand here; a vperm weave is not clearer in C++ and
+            // the lane order is the whole content of it.
+            CgsGraphics::CameraRwFrustum lFrustum;
+            lpRenderData->mCgsCamera.GetFrustum(lFrustum);
+
+            const rw::math::vpu::Vector4& lrLeft   = lFrustum.maPlanes[2];
+            const rw::math::vpu::Vector4& lrRight  = lFrustum.maPlanes[3];
+            const rw::math::vpu::Vector4& lrTop    = lFrustum.maPlanes[4];
+            const rw::math::vpu::Vector4& lrBottom = lFrustum.maPlanes[5];
+
+            rw::math::vpu::Matrix44 lPackedFrustumLrtb;
+            lPackedFrustumLrtb.xAxis.x = lrLeft.x;  lPackedFrustumLrtb.xAxis.y = lrRight.x;
+            lPackedFrustumLrtb.xAxis.z = lrTop.x;   lPackedFrustumLrtb.xAxis.w = lrBottom.x;
+            lPackedFrustumLrtb.yAxis.x = lrLeft.y;  lPackedFrustumLrtb.yAxis.y = lrRight.y;
+            lPackedFrustumLrtb.yAxis.z = lrTop.y;   lPackedFrustumLrtb.yAxis.w = lrBottom.y;
+            lPackedFrustumLrtb.zAxis.x = lrLeft.z;  lPackedFrustumLrtb.zAxis.y = lrRight.z;
+            lPackedFrustumLrtb.zAxis.z = lrTop.z;   lPackedFrustumLrtb.zAxis.w = lrBottom.z;
+            lPackedFrustumLrtb.wAxis.x = lrLeft.w;  lPackedFrustumLrtb.wAxis.y = lrRight.w;
+            lPackedFrustumLrtb.wAxis.z = lrTop.w;   lPackedFrustumLrtb.wAxis.w = lrBottom.w;
+
+            // The camera publish (X360 `bl LionParticleRender::SetCameraData` @0x8228B1B8 with
+            // r3 == module + 21104 == &mLionRenderer, r4 == renderData + 0x20 == the BACK
+            // matrix, r5 == the view, r6 == the view-projection, r7 == the packed frustum).
+            mLionRenderer.SetCameraData(lpRenderData->mCameraTransform,
+                                        RowCopyToAffine(lrViewMatrix),
+                                        lrViewProjection,
+                                        lPackedFrustumLrtb);
+
+            // ⭐⭐ THE BATCH BUILD. cLionFX::Render -> cParticleRender::Render: cull every live
+            // emitter, simulate its buckets, write the vertices into this frame's locked buffer
+            // and append one LionBatch per material run. Gated on the render data's own Lion
+            // bit (`lwz r11, 0x200(r24) ; andi 0x10`), which is the debug component's
+            // Enable/Disable LION rendering switch arriving on the render thread.
+            if ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagRenderLion) != 0)
+            {
+                cLionFX::Render(lrLockedBuffer, gLionBatchArray,
+                                LionTimeFromSeconds(lpRenderData->mfCurrentTime));
+            }
+        }
+
+        mVertexBufferManagerLion.UnLock();
     }
 
     // =========================================================================
@@ -397,6 +532,59 @@ namespace BrnParticle
             mTrailSystem.Render(lfWhiteLevel);   // this + 38672 == +0x9710
         }
 
+        // ---- the LION DISPATCH (X360 @0x8229B1B4..0x8229B23C) ---------------------------
+        // Replay the frame's batch list to the device: cLionFX::Dispatch ->
+        // cParticleRender::Dispatch, one DrawVertices per LionBatch, each with its material's
+        // render group and vertex stride bound.
+        //
+        // ⭐⭐ THE CONSOLE SPLITS THIS CALL ACROSS TWO PASSES AND THE GATE IS mbIsInJunkyard,
+        // which is NOT a typo for mbLionEnabled -- it is a render-TARGET selector:
+        //     mbIsInJunkyard  -> here, RenderFullResParticles @0x8229AFD0, `lbzx r11, r25,
+        //                        0x23136 ; beq` -- into the full-res scene target;
+        //    !mbIsInJunkyard  -> RenderQuarterResParticles @0x82294A20, `lbzx` on the SAME
+        //                        byte with the branch INVERTED (`bne`), into the quarter-res
+        //                        particle buffer BrnRendererModule::BeginQuarterResBuffer
+        //                        @0x82408C38 opens and the post-fx composite adds back.
+        // The two calls are ARGUMENT-IDENTICAL, verified instruction for instruction: same
+        // vertex buffer (the Lion manager's current slot -- inlined here, outlined through
+        // GetVertexBuffer there), same batch array, f1 = mfWhiteLevel, r6 = 0 (z-fade OFF),
+        // f2 = renderData+0x1BC, f3 = renderData+0x1C0, f4 = 0.6 (flt_82004D00), f5 = f6 = 0,
+        // and a null depth texture state on the stack. Only the bound target differs.
+        //
+        // FLAG PC-platform leaf: THE QUARTER-RES BUFFER DOES NOT EXIST ON THIS BACKEND.
+        // BrnRendererModule::BeginQuarterResBuffer is declaration-only and render-target pool
+        // slot 9 is never created (BrnRendererModule.cpp:107 and :4761 say so, and the sun
+        // flare already carries the same deviation for the same reason). With one target the
+        // console's two arms are the same call, so they collapse to this one -- which draws
+        // into the scene target, the same colour bus one stage earlier. Gating on
+        // mbIsInJunkyard as written would leave Lion particles invisible everywhere except
+        // the junkyard, which is a routing artefact of a buffer we do not have, not the
+        // console's intent. DELETE-WHEN BeginQuarterResBuffer and pool slot 9 land: restore
+        // the `if (mbIsInJunkyard)` gate here and put the else arm in
+        // RenderQuarterResParticles.
+        {
+            renderengine::VertexBuffer* const lpVertexBuffer =
+                mVertexBufferManagerLion.GetVertexBuffer();
+
+            cLionFX::Dispatch(lpVertexBuffer,
+                              gLionBatchArray,
+                              lfWhiteLevel,
+                              false,                       // li r6, 0 -- z-fade off
+                              // ⭐ THE TWO PLANES ARE THE CAMERA'S OWN CLIP DISTANCES, not two
+                              // loose render-data floats: renderData+0x1BC and +0x1C0 land
+                              // INSIDE mCgsCamera (which starts at +0x60) at camera+0x15C and
+                              // +0x160 -- CgsGraphics::Camera::maProjectionScalars[7] and [8],
+                              // the very words SetNearClipPlane @0x827B41E8 and
+                              // SetFarClipPlane @0x827B41D8 store to.
+                              lpRenderData->mCgsCamera.maProjectionScalars[7],  // near
+                              lpRenderData->mCgsCamera.maProjectionScalars[8],  // far
+                              KF_LION_DEPTH_FADE_DISTANCE, // f4 == flt_82004D00 == 0.6
+                              0.0f,                        // f5 == flt_82001CC0
+                              0.0f,                        // f6 == the same 0.0
+                              0);                          // the stack slot, written 0
+        }
+
+        // ---- the four branches this build cannot run ---------------------------------
         // ---- the four branches this build cannot run ---------------------------------
         // EndSimulateDebris is UNCONDITIONAL on the console and closes the debris
         // simulation jobs before the debris renderer reads their output; the jobs are
@@ -406,9 +594,9 @@ namespace BrnParticle
             static bool sbLogged = false;
             LogNotReconstructed(sbLogged,
                 "ParticleModule::RenderFullResParticles' EndSimulateDebris + the debris "
-                "(flags & 4), spark (flags & 2) and Lion (cLionFX::Dispatch) branches -- "
-                "their job/frame-data members are asm-sized placeholders and cLionFX is "
-                "not landed. THE TRAIL BRANCH (flags & 0x20) IS REAL AND RUNS");
+                "(flags & 4) and spark (flags & 2) branches -- their job/frame-data members "
+                "are asm-sized placeholders. THE TRAIL BRANCH (flags & 0x20) AND THE LION "
+                "DISPATCH ARE REAL AND RUN");
         }
     }
 

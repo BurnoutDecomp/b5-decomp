@@ -30,21 +30,29 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<T,N> backing container
+#include "GameSource/Effects/Particles/EffectsVertexBuffer.h"  // EffectsVertexBufferBatch (the base)
 
 class cParticleMaterial;   // ParticleMaterial.h -- the material a batch was emitted with
 
 // ----------------------------------------------------------------------------
 // LionBatch -- one immediate-mode particle draw record.
+//
+// ⭐ IT DERIVES FROM EffectsVertexBufferBatch, AND THAT IS WHAT THE DWARF SAYS (corrected
+// 2026-09-05). cParticleRender::EmitterRender's local list (DecFIGS ParticleRender.cpp:491)
+// declares ONE record -- `LionBatch lBatch` -- and hands that same object to
+// EffectsVertexBufferLocked::BeginBatch / ::EndBatch, whose parameter is
+// EffectsVertexBufferBatch&. The X360 confirms it byte for byte: EndBatch writes the run's
+// start/count into the record's words 0 and 1 (`stw` at +0x00/+0x04), then EmitterRender writes
+// the material into word 2 (`stw r21, 0x3D00+var_3C98(r1)` @0x82913C58) and Appends the whole
+// thing. So the first two words ARE the vertex-buffer batch, and this record is that record plus
+// the material -- not two independent structs that happen to overlap.
 // ----------------------------------------------------------------------------
-struct LionBatch
+struct LionBatch : public EffectsVertexBufferBatch
 {
 public:
-    u32 GetStartVertex() const              { return muStartVertex; }
-    u32 GetVertexCount() const              { return muVertexCount; }
     const cParticleMaterial* GetMaterial() const { return mpMaterial; }
 
-    u32                muStartVertex;   // guest +0x00 -- first vertex of the run
-    u32                muVertexCount;   // guest +0x04 -- vertices in the run (Dispatch asserts > 0)
+    // muStartVertex / muVertexCount come from EffectsVertexBufferBatch (guest +0x00 / +0x04).
     const cParticleMaterial* mpMaterial; // guest +0x08 -- material the run was emitted with
 };
 

@@ -22,6 +22,7 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitter.h"
 #include "pc/gcm/renderengine/renderstates.h"   // renderengine::DepthStencilState / TextureState / MaterialState
 #include "pc/gcm/renderengine/texture.h"          // renderengine::Texture
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"  // shadow::Device::SetState -- the rasteriser third BeginRendering binds
 
 #include <cstdio>   // snprintf (the [texreg] witness)
 
@@ -36,6 +37,29 @@ extern "C" void D3DDevice_SetTexture(void* apDevice, unsigned int auSampler,
 // file-scope pointer the platform layer fills; on PC it resolves to the active device.
 namespace { void* spD3DDevice = 0; }
 
+// -------------------------------------------------------------------------------------------
+// dword_83010F20 -- the process-wide DEFAULT blend-state template. Its console .data home is
+// THIS translation unit (the LionParticleRender TU), which is why BrnLionBlendRenderer.cpp
+// externs it rather than owning it; BrnGraphics::LionBlendRenderer::EndRendering @0x8227E610
+// binds it at every batch end (`bl ImRendererBase::SetState` @0x82276D08 with r4 == this word).
+//
+// ⛔ IT READS NULL ON THIS BUILD, AND THAT IS A MEASURED FACT ABOUT THE STATE LIBRARY, NOT A
+// PLACEHOLDER FOR THIS PATH. The entry belongs to the console's render-state table, and nothing
+// on this build populates that table: shadowingdevice.cpp:614-628 records the same thing for
+// its sibling (CgsBlendStateFactory::Construct has a body but no caller), which is exactly why
+// shadow::Device::Xbox2SetStateLowLevelShadowed carries a null guard the console does not have.
+// A null bind there invalidates the shadow cache and binds nothing -- the console's own
+// semantics for an unset state -- so this is inert rather than wrong.
+//
+// ⛔⛔ DO NOT POINT IT AT CgsGui::gpGuiBlendStateStandard, which names the SAME console word
+// (dword_83010F20) for the 2D GUI path. That one is an opaque four-word SENTINEL over static
+// storage whose own banner says "nothing may dereference them" -- the GUI dispatch only compares
+// its identity. The blend applier here DOES dereference (eighteen words), so adopting it would
+// read past a 16-byte array and bind garbage.
+// DELETE-WHEN a caller fills the render-state table.
+// -------------------------------------------------------------------------------------------
+renderengine::BlendMaterialState* dword_83010F20 = 0;
+
 namespace BrnParticle
 {
 namespace
@@ -48,6 +72,11 @@ namespace
     // The maximum number of textures the particle system can have registered at once
     // (AcquireTexture asserts on overflow). X360: hard-coded 0x100 compare.
     const u32 KU_MAX_PARTICLE_TEXTURES = 256;
+
+    // The stack matrix array the cVector Render overload (sub_82289158) expands into: 2048
+    // bytes at sp+0x60 of a 0x880 frame == 32 cMatrix, the same run cParticleRender::
+    // EmitterRender streams with.
+    const u32 KU_VECTOR_DRAW_RUN = 32;
 
     // Acquired-texture table: indexed by AcquireTexture's running counter and read back
     // by FindTexture once a texture-map hash resolves to an array index (qword_82FAC3A0).
@@ -79,7 +108,15 @@ namespace
     // state the renderer resets to at the start of each rendering pass. They are configured by
     // the renderer-construction path (out of this TU's scope); modelled as file-scope pointers.
     renderengine::DepthStencilState* spBeginDepthStencilState = 0;   // dword_83010F48
-    BrnGraphics::BlendState*         spBeginBlendState         = 0;   // dword_83010F3C
+    // ⭐ CORRECTED 2026-09-05: dword_83010F3C IS A RASTERISER STATE, NOT A BLEND STATE, and the
+    // asm has always said so -- LionParticleRender::BeginRendering @0x82289568 word 18 calls
+    // sub_82276E48, whose lock byte is mbRasteriserStateLocked and whose cache slot is
+    // dword_83010A2C (the rasteriser third), NOT the blend wrapper @0x82276D08. This global was
+    // typed BlendState* and that mis-typing is what made the SetState pair look like a
+    // contradiction for two waves: they read a call LionParticleRender makes for ITSELF as if it
+    // came through LionBlendRenderer::SetState. It does not. See the header banner in
+    // BrnLionBlendRenderer.h.
+    const renderengine::RasterizerState* spBeginRasterizerState = 0;   // dword_83010F3C
 }
 
 // ----------------------------------------------------------------------------
@@ -405,7 +442,12 @@ void LionParticleRender::BeginRendering(float32_t afNear, bool8_t abFogEnable,
     mpRenderer->BeginRendering(mViewProjection, afNear, abFogEnable, afFogNear, afFogFar,
                                afD, afE, afF, apTextureState);
     mpRenderer->SetState(spBeginDepthStencilState);  // sub_82276DA8(mpRenderer+4, dword_83010F48)
-    mpRenderer->SetState(spBeginBlendState);         // sub_82276E48(mpRenderer+4, dword_83010F3C)
+
+    // sub_82276E48(mpRenderer+4, dword_83010F3C) -- the RASTERISER third, bound by this class
+    // directly on the renderer's ImRendererBase rather than through LionBlendRenderer (which the
+    // DWARF gives only the DepthStencilState and BlendState overloads). shadow::Device::SetState
+    // is what that wrapper's body is, minus the mgpActiveRenderer assert.
+    shadow::Device::SetState(spBeginRasterizerState);
 }
 
 // ----------------------------------------------------------------------------
@@ -521,6 +563,121 @@ void LionParticleRender::Setup()
                                                  lDefaultDescriptor.maEntries[0].muAlignment);
     DepthStencilState* lpDefaultState = reinterpret_cast<DepthStencilState*>(lpDefaultMemory);
     spDefaultDepthStencil = DepthStencilState::Initialize(&lpDefaultState, &lDefault);
+}
+
+
+// =================================================================================================
+// Landed 2026-09-05 by the boost-exhaust wave: the frame's camera publish and the cVector draw
+// adapter. Both sit between ParticleModule::BuildLionVertexBuffers and cParticleRender.
+// =================================================================================================
+
+// ------------------------------------------------------------------------------------------------
+// LionParticleRender::SetCameraData  @ 0x82281068  (76 instructions)
+//
+// Publish the frame's camera to the Lion renderer. Its ONLY caller is
+// ParticleModule::BuildLionVertexBuffers @0x8228AC20 (`bl` @0x8228B1B8 with r3 == module + 21104
+// == &mLionRenderer), once per frame, immediately before cLionFX::Render.
+//
+// It is the FIVE-argument sibling of BrnGraphics::LionBlendRenderer::SetCameraData @0x822824F8 --
+// same two halves, plus a fourth matrix:
+//
+//   1. mCameraTransform (this+0x20) is built SCALAR, three floats per row, with the fourth lane
+//      FORCED: 0.0 on the three basis rows (flt_82001CC0, read out of the image as 00000000) and
+//      1.0 on the translation row (flt_82001C98 == 3F800000). Twelve `lfs` from arBackMat and
+//      sixteen `stfs` into +0x20..+0x5C. ⚠ The w lanes are NOT copied from arBackMat -- the
+//      console overwrites them, which is the whole reason this scalar path exists beside the
+//      vector copies below. cParticleRender::Render then reads its za row as the camera DIRECTION
+//      and its wa row as the camera POSITION.
+//   2. mBackMat / mViewMat / mViewProjection / mPackedFrustumLrtb are copied WHOLE -- four
+//      lvx128/stvx128 pairs each into +0x60 / +0xA0 / +0xE0 / +0x120, w lanes included, verbatim.
+//
+// ⭐ THE FOURTH MATRIX IS THE ONE THAT MATTERS FOR CULLING and it is not a camera matrix at all:
+// BuildLionVertexBuffers transposes CgsGraphics::Camera::GetFrustum's planes 2..5 (left / right /
+// top / bottom) into SoA rows -- (Lx,Rx,Tx,Bx), (Ly,Ry,Ty,By), (Lz,Rz,Tz,Bz), (Ld,Rd,Td,Bd) --
+// with six vperm and three vsldoi, and hands the result here. cParticleRender::Render tests all
+// four planes in one pass against it. Copying it as if it were a transform would still compile
+// and would cull the whole world.
+// ------------------------------------------------------------------------------------------------
+void LionParticleRender::SetCameraData(const rw::math::vpu::Matrix44Affine& arBackMat,
+                                       const rw::math::vpu::Matrix44Affine& arViewMat,
+                                       const rw::math::vpu::Matrix44& arViewProjection,
+                                       const rw::math::vpu::Matrix44& arPackedFrustumLrtb)
+{
+    // --- half 1: the scalar convert into the Lion cMatrix (asm words 3-40) --------------------
+    mCameraTransform.xa.x = arBackMat.xAxis.x;
+    mCameraTransform.xa.y = arBackMat.xAxis.y;
+    mCameraTransform.xa.z = arBackMat.xAxis.z;
+    mCameraTransform.xa.w = 0.0f;                 // flt_82001CC0
+
+    mCameraTransform.ya.x = arBackMat.yAxis.x;
+    mCameraTransform.ya.y = arBackMat.yAxis.y;
+    mCameraTransform.ya.z = arBackMat.yAxis.z;
+    mCameraTransform.ya.w = 0.0f;
+
+    mCameraTransform.za.x = arBackMat.zAxis.x;
+    mCameraTransform.za.y = arBackMat.zAxis.y;
+    mCameraTransform.za.z = arBackMat.zAxis.z;
+    mCameraTransform.za.w = 0.0f;
+
+    mCameraTransform.wa.x = arBackMat.wAxis.x;
+    mCameraTransform.wa.y = arBackMat.wAxis.y;
+    mCameraTransform.wa.z = arBackMat.wAxis.z;
+    mCameraTransform.wa.w = 1.0f;                 // flt_82001C98
+
+    // --- half 2: the four verbatim 64-byte copies (asm words 41-76) ---------------------------
+    mBackMat           = arBackMat;
+    mViewMat           = arViewMat;
+    mViewProjection    = arViewProjection;
+    mPackedFrustumLrtb = arPackedFrustumLrtb;
+}
+
+// ------------------------------------------------------------------------------------------------
+// LionParticleRender::Render(..., const cVector*, ...)  @ sub_82289158  (143 instructions)
+//   DWARF ParticleRender.h:8 / :170 declares it on iParticleRender AND on LionParticleRender; the
+//   idb leaves it unnamed, which is why two waves recorded it as "the VECTOR-bucket draw".
+//
+// ⭐ IT IS AN ADAPTER, NOT A SECOND DRAW PATH. It expands the run's per-particle cVector POSITIONS
+// into a stack array of full cMatrix -- identity rotation, the vector as the translation row --
+// and tail-calls the cMatrix overload (`bl BrnParticle__LionParticleRender__Render` @0x8228938C,
+// with the ninth argument re-pushed from its own frame at 0x82289380). So a vector bucket draws
+// through exactly the same RenderSprites / RenderQuads / RenderTilts as a matrix bucket; the only
+// difference is that its particles carry no orientation.
+//
+// Every lane is written explicitly, in the console's own order (the loop is unrolled x4 with a
+// remainder loop; re-rolled here per the project's de-optimisation rule):
+//     {  1, 0, 0, 0 }
+//     {  0, 1, 0, 0 }
+//     {  0, 0, 1, 0 }
+//     { v.x, v.y, v.z, 1 }
+// The two constants are flt_82001C98 (1.0) and flt_82001CC0 (0.0), read out of the image.
+//
+// ⚠ THE ARRAY IS 32 MATRICES ON THE STACK (2048 bytes at sp+0x60, frame 0x880) -- the same
+// KU_SIMULATION_RUN cParticleRender::EmitterRender streams with, which is what bounds auCount.
+// ------------------------------------------------------------------------------------------------
+void LionParticleRender::Render(EffectsVertexBufferIterator& arIterator,
+                                RenderedParticle* apParticle,
+                                const cVector* apVectors,
+                                U32 auCount,
+                                U32 auFirstIndex,
+                                const cParticleEmitter* apEmitter,
+                                const cLionFog* apFog,
+                                const cTime& arTime)
+{
+    cMatrix laMatrices[KU_VECTOR_DRAW_RUN];
+
+    for (U32 luIndex = 0; luIndex < auCount; ++luIndex)
+    {
+        cMatrix& lrMatrix = laMatrices[luIndex];
+        lrMatrix.xa.x = 1.0f; lrMatrix.xa.y = 0.0f; lrMatrix.xa.z = 0.0f; lrMatrix.xa.w = 0.0f;
+        lrMatrix.ya.x = 0.0f; lrMatrix.ya.y = 1.0f; lrMatrix.ya.z = 0.0f; lrMatrix.ya.w = 0.0f;
+        lrMatrix.za.x = 0.0f; lrMatrix.za.y = 0.0f; lrMatrix.za.z = 1.0f; lrMatrix.za.w = 0.0f;
+        lrMatrix.wa.x = apVectors[luIndex].x;
+        lrMatrix.wa.y = apVectors[luIndex].y;
+        lrMatrix.wa.z = apVectors[luIndex].z;
+        lrMatrix.wa.w = 1.0f;
+    }
+
+    Render(arIterator, apParticle, laMatrices, auCount, auFirstIndex, apEmitter, apFog, arTime);
 }
 
 }  // namespace BrnParticle

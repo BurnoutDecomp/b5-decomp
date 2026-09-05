@@ -87,6 +87,13 @@ public:
     void UnRegister(const cParticleDescriptor& arDescriptor, cLionBindings& arBindings,
                     cLionBindings* apBindBase);
 
+    // DWARF ParticleEmitterManager.h:93 / :99 -- the head of the LIVE emitter list and how many
+    // are on it. cParticleRender::Render @0x82914860 reads the list head directly
+    // (`lwz r30, 0x18(r30)`) and walks it through each emitter's own next pointer; inline by
+    // construction, like every other accessor on this class.
+    cParticleEmitter* GetpUsed() const { return mpUsed; }
+    u32 GetUsedCount() const           { return mUsedCount; }
+
 private:
     // ----- members (DWARF order; offsets verified against the X360 asm) -----
     u32 mEmitterCount;                              // 0x00  ParticleEmitterManager.h:94
