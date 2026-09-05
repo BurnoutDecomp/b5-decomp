@@ -217,8 +217,27 @@ namespace Deformation
                     //     sum dWbody = pitch -1.98, yaw +16.57, ROLL -0.47 rad/s.
                     // ⚠️ THAT IS NOT YET A DEFECT: a symmetric head-on wall hit cannot roll a car
                     // on the console either. What it gives is the BUDGET to compare -- the next
-                    // barrel-roll experiment must be an OBLIQUE/asymmetric hit, and the question to
-                    // ask of it is whether the +/-X and +/-Y magnitudes rise the way the console's do.
+                    // barrel-roll experiment must be an OBLIQUE/asymmetric hit.
+                    // ✅✅ AND THE OBLIQUE EXPERIMENT WAS RUN THE SAME DAY (mom_D2: same recipe plus
+                    // -SteerScript "0:none,21.5:right", so the car meets the same wall side-on).
+                    // The direction budget inverts exactly as the mechanism predicts, and the roll
+                    // channel is ALIVE:
+                    //     dir +X   478 arrivals  sum|mag| 81328   (vs 83 arrivals / 23854 head-on)
+                    //     dir -Z   473 arrivals  sum|mag| 35703   (vs 249 / 94134 head-on)
+                    //     deposits  pitch -12300   yaw +52589   ROLL -21410   maxRoll 1238
+                    //     Wbody roll rate reached -4.24 .. +5.50 rad/s
+                    // 5.50 rad/s is 85 % of UpdateCrashing's own +/-6.5 clamp, so neither the clamp
+                    // nor a dead roll channel is the limiter.
+                    // ⭐⭐ WHAT IS: the car is CAUGHT. Over that whole crash up.y never fell below
+                    // 0.8049 (right.y -0.5953, i.e. ~36 degrees of roll) and the verdict was
+                    // DRIVE_AWAY with upDot 0.9967. A 5.5 rad/s roll covers 36 degrees in 0.11 s and
+                    // should keep going; something reverses it. THE NAMED SUSPECT, for whoever picks
+                    // this up: VehiclePhysics::StabiliseAfterHardLanding @0x825D1890, which a
+                    // crashing car still reaches through UpdateCrashing -> UpdateSuspension, reads
+                    // mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_... (+0x250) and damps ROLL
+                    // for TimeToDampAfterLanding seconds whenever at least one front and one rear
+                    // wheel are on the road. Measure mfTimeSinceHardLanding, its wheels-on-ground
+                    // gate and the damping factor across a crash before touching anything.
                     const f32 lfYawDep    = lRxJ.x * lrT.yAxis.x + lRxJ.y * lrT.yAxis.y + lRxJ.z * lrT.yAxis.z;
                     const f32 lfRollDep   = lRxJ.x * lrT.zAxis.x + lRxJ.y * lrT.zAxis.y + lRxJ.z * lrT.zAxis.z;
                     const f32 lfRollRate  = lW.x * lrT.zAxis.x + lW.y * lrT.zAxis.y + lW.z * lrT.zAxis.z;
