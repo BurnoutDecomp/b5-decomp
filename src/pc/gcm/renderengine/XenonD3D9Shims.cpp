@@ -6374,11 +6374,26 @@ void Im2dCompositeBlit_ApplyRopState()
         return;
 
     // [FLAG PC bring-up diagnostic] BRN_LION_QRES_SHOW=1 replaces the destination factor with ZERO,
-    // so the frame becomes THE PARTICLE BUFFER ALONE on black. It exists because the endemic failure
-    // on this path is the SILENT one: a composite that runs, draws, and contributes nothing is
-    // indistinguishable from a correct composite over a frame with few particles. One run under this
-    // flag separates "the buffer is empty" from "the draw is not landing" from "both work".
+    // so the composite REPLACES the scene with the particle buffer. It exists because the endemic
+    // failure on this path is the SILENT one: a composite that runs, draws, and contributes nothing
+    // is indistinguishable from a correct composite over a frame with few particles. One run under
+    // this flag separates "the buffer is empty" from "the draw is not landing" from "both work".
     // DELETE-WHEN-STABLE. Registered in flow_run.ps1's DEFAULT-RUN clear list in the same change.
+    //
+    // ⛔⛔ READ THIS BEFORE ATTRIBUTING ANYTHING YOU SEE IN A "SHOW" FRAME TO THE PARTICLE BUFFER.
+    // The sentence this comment used to carry -- "the frame becomes THE PARTICLE BUFFER ALONE on
+    // black" -- IS FALSE, and it cost a wave. This blit runs during the SCENE render; the whole GUI
+    // (BrnGui custom renderers + Apt) and the debug strip draw AFTERWARDS, onto the same target. So
+    // a SHOW frame is "the particle buffer PLUS EVERYTHING DRAWN AFTER THE COMPOSITE", and the map
+    // panel, MILES DRIVEN, the fps text and the boost bar are all still in it, sitting on black.
+    // MEASURED 2026-09-06: the "hard-edged saturated green rectangle low-left, in the particle
+    // buffer" that commit 04e903c2 left open is the HUD BOOST BAR (BrnGui::BoostBarRenderer's fire
+    // body, green because this car's EBoostType is E_BOOST_TYPE_STUNT). The frame that proves it is
+    // scratch/FLAME/BOOST1/evidence/SHOW_bb_002760.bmp -- a SHOW frame whose own frames.csv column
+    // 24 reads EffectsState 2, i.e. NO boost effect live: the particle buffer is EMPTY (671 lit
+    // pixels, all of them the memory-counter text), the frame is black from edge to edge, and the
+    // green bar is there at full strength. An object that survives an empty particle buffer was
+    // never in the particle buffer. Commit 0f7f4aa9's HUD attribution was right all along.
     static const bool sbShowOverlayOnly = (std::getenv("BRN_LION_QRES_SHOW") != 0);
 
     // [FLAG PC bring-up diagnostic] BRN_LION_QRES_ADD=1 replaces the destination factor with ONE,

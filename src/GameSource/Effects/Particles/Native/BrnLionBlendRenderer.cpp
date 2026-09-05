@@ -509,13 +509,25 @@ namespace
     // [lionquad] PER-TEXTURE DRAW WITNESS. NOT console behaviour: ours, bounded, log-only,
     // DELETE-WHEN-STABLE.
     //
-    // ⭐ WHY. A frame of this pass filmed with BRN_LION_QRES_SHOW=1 (2026-09-06) carries THREE
-    // plumes, not two: the car's two nozzles, and a hard-edged SATURATED BAR with a green halo
-    // pinned to the SAME lower-left screen rectangle for a 300 m drive. It is a Lion draw (it is
-    // in the particle buffer) and it only appears while a Boost*.lef is live. Nothing already on
-    // this path can say which of the five boost descriptors draws it: [lionuv] samples the first
-    // few particles of the run without naming their material, [lionsize] prints an edge length
-    // with no position, and [liontex] counts batches without a geometry.
+    // ⭐ WHY. Nothing else on this path can say what a given Lion batch actually put on screen:
+    // [lionuv] samples the first few particles of the run without naming their material,
+    // [lionsize] prints an edge length with no position, and [liontex] counts batches without a
+    // geometry. This closed the frame-atlas question (the FLAG_MULTIFRAME branch IS live and IS
+    // right: FIRE02_C grid 8x4 frame 25 -> uv [0.125..0.25]x[0.75..1.0]).
+    //
+    // ⛔ CORRECTION (2026-09-06). This comment used to open: "a frame filmed with
+    // BRN_LION_QRES_SHOW=1 carries THREE plumes, not two ... a hard-edged SATURATED BAR pinned
+    // to the lower-left screen rectangle ... It is a Lion draw (it is in the particle buffer)".
+    // THAT ATTRIBUTION IS WRONG AND THIS PASS NEVER DREW IT. The bar is the HUD BOOST BAR
+    // (BrnGui::BoostBarRenderer, custom-renderer slot 4 / E_BOOSTBAR), whose green is the
+    // console's own KV3_BOOSTTYPE_STUNT_INNER_COLOUR {0.375, 0.95, 0.30} selected by this car's
+    // EBoostType == E_BOOST_TYPE_STUNT -- the SAME enum value 2 that picks BoostGreen.lef. The
+    // GUI draws after the quarter-res composite, so a SHOW frame carries the whole HUD on top of
+    // the particle buffer; see the correction banner in XenonD3D9Shims.cpp. Two independent
+    // controls, both on this build: a SHOW frame with an EMPTY particle buffer that still has the
+    // bar (scratch/FLAME/BOOST1/evidence/SHOW_bb_002760.bmp, EffectsState 2), and a 417-frame
+    // composited run that never once reaches EffectsState 1 yet carries the bar in 313 frames
+    // with its left edge pinned at x = 102..106 (scratch/GREENBAR/LIVE).
     //
     // So this prints, ONCE PER (draw shape, texture) PAIR and then every KU_LIONQUAD_PERIOD
     // particles of that pair, the three things that separate the candidates:

@@ -588,14 +588,28 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
         // ---- [lionemit] THE LIVE-EMITTER ROSTER. NOT console behaviour: ours, bounded,
         // log-only, DELETE-WHEN-STABLE.
         //
-        // ⭐ WHY. Filmed with BRN_LION_QRES_SHOW=1 (2026-09-06) this pass draws THREE plumes
-        // while the car has TWO nozzles: two at the tailpipes and a hard-edged saturated bar
-        // with a green halo that stays in the SAME lower-left screen rectangle across 310 m of
-        // driving -- i.e. pinned to the CAR, not to the world, at an offset nothing authored.
-        // [lionquad] proved the atlas UVs are right and the quads are 0.15-0.6 m near the car,
-        // so the question left is WHICH emitter is where, and that is exactly what this loop
-        // already holds and nothing prints: the descriptor's own name, its material's texture
-        // and the locator matrix the cull just read. One dump per KU_LIONEMIT_PERIOD renders.
+        // ⭐ WHY. It answers "WHICH emitter is where" -- the descriptor's own name, its
+        // material's texture and the locator matrix the cull just read -- which nothing else on
+        // this path prints. One dump per KU_LIONEMIT_PERIOD renders. Its first roster is what
+        // settled the boost-effect placement question: TEN emitters at exactly TWO positions
+        // 0.99 m apart, the car's two FXBOOSTPOINT nozzles, none stray and none at the origin.
+        //
+        // ⛔ CORRECTION (2026-09-06). This comment used to open "filmed with BRN_LION_QRES_SHOW=1
+        // this pass draws THREE plumes while the car has TWO nozzles ... a hard-edged saturated
+        // bar pinned to the CAR at an offset nothing authored". THE THIRD OBJECT IS NOT A PLUME
+        // AND NOT A LION DRAW. It is the HUD BOOST BAR -- BrnGui::BoostBarRenderer's fire body,
+        // green because this car's EBoostType is E_BOOST_TYPE_STUNT, whose authored inner colour
+        // KV3_BOOSTTYPE_STUNT_INNER_COLOUR is {0.375, 0.95, 0.30} (BrnBoostBarRenderer.cpp:68;
+        // the bar's own pixels measure 78/189/61, i.e. 0.41/1.00/0.32 normalised).
+        // A SHOW frame is NOT the particle buffer alone: the GUI draws AFTER the composite, so
+        // the map panel, the fps text and the boost bar are all still in it. THE PROOF is
+        // scratch/FLAME/BOOST1/evidence/SHOW_bb_002760.bmp, a SHOW frame at EffectsState 2 (no
+        // boost effect live) whose particle buffer is EMPTY -- black edge to edge -- and which
+        // still carries the bar; plus scratch/GREENBAR/LIVE, a 417-frame composited run of this
+        // build in which NO frame ever reaches EffectsState 1 and the bar is nonetheless in 313
+        // of them, its LEFT EDGE PINNED at x = 102..106 while its right edge grows 271 -> 399+
+        // as boost is earned. A gauge fills; a plume does not. See also the correction banner in
+        // XenonD3D9Shims.cpp's Im2dCompositeBlit_ApplyRopState.
         {
             static const u32 KU_LIONEMIT_PERIOD = 900u;
             static const u32 KU_LIONEMIT_DUMPS  = 10u;
