@@ -2812,6 +2812,26 @@ void cParticleEmitter::Emit(cParticleRandomSeed& arSeed,
     lMatrix.wa.z = lvVelocity.z;
     lMatrix.wa.w = 1.0f;
 
+    // [lionspawn] ONE-SHOT bring-up witness. NOT console behaviour. The particle's SPAWN point,
+    // beside the locator row it was derived from -- the first half of the "(carY, carZ, 0) where
+    // (carX, carY, carZ) belongs" split. DELETE-WHEN-STABLE.
+    {
+        static bool sbSpawnOnce = false;
+        if (!sbSpawnOnce)
+        {
+            sbSpawnOnce = true;
+            const cMatrix& lrLocNow = mpBindings->GetpLocator()->GetMat(arTime);
+            char lacMsg[256];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[lionspawn] spawn.wa=(%.2f,%.2f,%.2f,%.2f) locator.wa=(%.2f,%.2f,%.2f,%.2f)"
+                " vel=(%.2f,%.2f,%.2f)\n",
+                lMatrix.wa.x, lMatrix.wa.y, lMatrix.wa.z, lMatrix.wa.w,
+                lrLocNow.wa.x, lrLocNow.wa.y, lrLocNow.wa.z, lrLocNow.wa.w,
+                lvVelocity.x, lvVelocity.y, lvVelocity.z);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
+
     // asm 0x82914EDC..0x82914F68 -- walk this emitter's bucket list for a free slot.
     cParticleBucket* lpBucket = mpBucket;
     for (; lpBucket != 0; lpBucket = lpBucket->GetEmitterNext())

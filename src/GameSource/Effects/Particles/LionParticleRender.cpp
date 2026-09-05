@@ -665,6 +665,23 @@ void LionParticleRender::Render(EffectsVertexBufferIterator& arIterator,
 {
     cMatrix laMatrices[KU_VECTOR_DRAW_RUN];
 
+    // [lionvec] ONE-SHOT bring-up witness. NOT console behaviour. The per-particle VECTOR this
+    // adapter reads out of the bucket's side array, beside the particle's own local position --
+    // the second half of the spawn/draw split. DELETE-WHEN-STABLE.
+    {
+        static bool sbVecOnce = false;
+        if (!sbVecOnce && auCount != 0)
+        {
+            sbVecOnce = true;
+            char lacMsg[224];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[lionvec] count=%u v0=(%.2f,%.2f,%.2f,%.2f) partPos=(%.2f,%.2f,%.2f)\n",
+                (unsigned)auCount, apVectors[0].x, apVectors[0].y, apVectors[0].z, apVectors[0].w,
+                apParticle[0].mPos.x, apParticle[0].mPos.y, apParticle[0].mPos.z);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
+
     for (U32 luIndex = 0; luIndex < auCount; ++luIndex)
     {
         cMatrix& lrMatrix = laMatrices[luIndex];
