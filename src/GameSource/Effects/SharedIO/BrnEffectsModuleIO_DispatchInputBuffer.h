@@ -88,6 +88,24 @@ namespace EffectsIO
         const rw::math::vpu::Vector3&  GetKeyLightColour() const         { return mKeyLightColour; }
         const rw::math::vpu::Vector3&  GetAverageIrradianceColour() const{ return mAverageIrradianceColour; }
 
+        // ...and the three WRITE twins, added 2026-09-05 for the same reason and with the same
+        // evidence. BrnGameModule::BridgeWorldToEffects_Dispatch @0x823C11F8 fills these three
+        // members with bare vector stores off the buffer pointer --
+        //     0x823C1224  li r10, 0x20 ; 0x823C1234  stvx128 v0, r31, r10   -- mKeyLightDirection
+        //     0x823C1240  li r10, 0x30 ; 0x823C1250  stvx128 v0, r31, r10   -- mKeyLightColour
+        //     0x823C125C  li r10, 0x40 ; 0x823C1268  stvx128 v0, r31, r10   -- mAverageIrradianceColour
+        // -- with NO write-lock test and NO call, while the fourth leg of the same function goes
+        // through the out-of-line SetWhiteLevel @0x823BAB40 (which does assert the lock). That
+        // asymmetry is the console telling us these three setters are header inlines and
+        // SetWhiteLevel is not: none of the three has a row in the X360 ledger, and SetWhiteLevel
+        // does. Reproduced as inlines here, lock-free, matching the asm exactly.
+        // Also note mpDispatchFrame's twin is the same shape (`stw r11, 0x10(r29)` in
+        // BridgeRendererToEffects @0x823C118C), so it is spelled the same way.
+        void SetDispatchFrame(CgsGraphics::DispatchFrame* lpFrame)                { mpDispatchFrame = lpFrame; }
+        void SetKeyLightDirection(const rw::math::vpu::Vector3& lrValue)          { mKeyLightDirection = lrValue; }
+        void SetKeyLightColour(const rw::math::vpu::Vector3& lrValue)             { mKeyLightColour = lrValue; }
+        void SetAverageIrradianceColour(const rw::math::vpu::Vector3& lrValue)    { mAverageIrradianceColour = lrValue; }
+
         // NOTE: no offsetof _AssertLayout() -- the X360 byte offsets (mpBaseEffectsFrame @+0x4,
         // mCameraInput @+0x50, mpEnvironmentMap @+0x1B0, mfWhiteLevel @+0x1B4) are 32-bit-specific
         // (pointers widen on the x64 gate), so they cannot be pinned by static_assert. Parity is

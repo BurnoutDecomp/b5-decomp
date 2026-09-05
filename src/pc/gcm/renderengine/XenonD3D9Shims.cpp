@@ -6304,6 +6304,63 @@ void PostFxSourceSampler_ApplyState(u32 luUnit, u32 luMinMagFilterWord, u32 luMa
     ApplyPostFxSourceSamplerState(Dev(), luUnit, luMinMagFilterWord, luMaxAnisotropy);
 }
 
+// =============================================================================================
+// FLAG PC-platform leaf: THE LION PARTICLE PASS'S SAMPLER -- the fourth sibling of the three
+// seams above, and the one that has been running on WHATEVER THE WORLD LEFT BEHIND.
+//
+// cParticleRender::Dispatch's one device-state call is
+//     shadow::Device::SetState(gpLionParticleSamplerState, 0)
+// and gpLionParticleSamplerState is X360 dword_83010F60, which is NOT a particle-specific object
+// at all: CgsGraphics::ImRendererBase::ConstructOnceOnly @0x827F1C20 builds it as the FIRST of
+// the immediate-mode layer's four shared samplers --
+//     dword_83010F60 = ConstructSamplerState(alloc, 1, 0, 2, 2)
+//     dword_83010F64 = ConstructSamplerState(alloc, 1, 0, 0, 0)
+//     dword_83010F68 = ConstructSamplerState(alloc, 0, 0, 2, 2)
+//     dword_83010F6C = ConstructSamplerState(alloc, 0, 0, 0, 0)
+// -- a LINEAR/CLAMP, LINEAR/WRAP, POINT/CLAMP, POINT/WRAP set. ConstructSamplerState @0x827ED538
+// lays its five arguments into renderengine::TextureState::Parameters in this order (its own
+// stack quad, word for word): addressU = a4, addressV = a5, addressW = 0, magFilter = a2,
+// minFilter = a2, mipFilter = a3, maxAnisotropy = 13, mipLodBias = 0.0. So the Lion pass's
+// sampler is min = mag = LINEAR (1), mip = NONE (0), address U/V = CLAMP (2).
+//
+// THE VALUE->D3D9 MAPPING IS THE TREE'S OWN, not this edit's: ApplyVolumeSamplerState above
+// carries exactly the same four numbers from Tint::Initialize @0x82403B48 (magFilter = minFilter
+// = 1 -> LINEAR, mipFilter = 0 -> NONE, address 2 -> CLAMP) and three other seams in this file
+// annotate `X360 addressU = 2` beside D3DTADDRESS_CLAMP.
+//
+// WHY IT IS NEEDED: SetSamplerStateLowLevel is the documented no-op below, so that SetState binds
+// nothing and the Lion pass inherits the previous pass's unit-0 words. Measured on the shipped
+// build ([lionbind], the probe added 2026-09-05): `filt 2/2/2 addr 1/1` -- LINEAR filtering, but
+// ADDRESSU/V = D3DTADDRESS_WRAP, which is WorldShader_BindTextureUnit's non-cube default a few
+// thousand lines above. Every particle material in these effects leaves cParticleMaterial's
+// FLAG_WRAP_U / FLAG_WRAP_V (0x100 / 0x200) CLEAR, i.e. asks for CLAMP; on BURNOUTSMOKE, whose
+// border alpha averages 5.3/255, a wrapped fetch pulls the opposite edge in at the quad's rim.
+//
+// ONE CALL, ONE PLACE, matching the console: it is applied where cParticleRender::Dispatch makes
+// its single SetState call, before BeginRendering and before any Lion draw. No world draw can
+// intervene inside the Lion pass, so the unit keeps these words for the whole batch replay.
+// SIDE EFFECT, bounded and the same one the raw-depth seam documents: unit 0 keeps CLAMP after
+// the pass until the next WorldShader_BindTextureUnit restores WRAP, which it does on its own
+// next frame.
+// DELETE WHEN SetSamplerStateLowLevel really applies a TextureState's sampler block.
+// =============================================================================================
+void LionParticleSampler_ApplyState(u32 luUnit)
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr || luUnit >= 16u)
+        return;
+
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER,   D3DTEXF_LINEAR);      // X360 minFilter = 1
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER,   D3DTEXF_LINEAR);      // X360 magFilter = 1
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER,   D3DTEXF_NONE);        // X360 mipFilter = 0
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU,    D3DTADDRESS_CLAMP);   // X360 addressU = 2
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV,    D3DTADDRESS_CLAMP);   // X360 addressV = 2
+    // addressW is 0 in this state (ConstructSamplerState writes a literal 0 there, not a4/a5) and
+    // a 2D fetch never consults it, so it is deliberately left alone rather than clamped to match
+    // the tint sampler -- writing a W the console does not ask for would be an invention.
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPMAPLODBIAS, 0u);                // X360 mipLodBias = 0.0f
+}
+
 u32 PostFxDepthSampler_BoundUnitMask()
 {
     // SELF-HEALING (rung-6 verifier): the claim bitmask is maintained by the D3DDevice_SetTexture hook,

@@ -137,6 +137,27 @@ namespace BrnDiag
         u32 muVictimGainPresent;
         s32 miVictimGainGid;
         f32 mfVictimGainShaped;
+
+        // ⭐ THE PLAYER CAR'S WORLD POSITION AND THE LIVE BOOST-PLUME MASK, on exactly the
+        // argument every field above is built on -- and added for the one thing this strip could
+        // NOT do before: SCENE-MATCH TWO RUNS. A before/after film of a particle effect is worth
+        // nothing unless the two frames being differenced are the same shot, and this sim is
+        // frame-coupled, so two runs of one recipe present a different number of frames over the
+        // same drive (measured 6,630 vs 7,560 over 51 s). Matching by frame index therefore
+        // compares different places on the road, and "the plume got brighter" cannot be told from
+        // "the car is somewhere else". With the car's own position stamped into every row, a pair
+        // can be chosen by WHERE THE CAR WAS, and the background difference outside the effect
+        // then MEASURES the quality of that match instead of being assumed.
+        // Written in ONE place -- BoostStateMachine::OnTick, the only function that positions a
+        // boost effect (the [boostloc] witness beside it reads the same RaceCarState transform) --
+        // and read in ONE place, the back-buffer writer in pc/gcm/renderengine/device.cpp.
+        // muBoostEffectMask is that tick's active FXBOOSTPOINT mask, so a row also says whether a
+        // plume was being positioned at all on the frame it labels. All zero on a run where no
+        // boost machine ticked. DELETE-WHEN-STABLE with the rest of the [lionfx] family.
+        f32 mfCarPosX;
+        f32 mfCarPosY;
+        f32 mfCarPosZ;
+        u32 muBoostEffectMask;
     };
 
     // Defined in GameSource/Game/BrnGameModule.cpp (the only writer).

@@ -24,6 +24,7 @@
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"                  // Attrib::FindCollection
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attrib::StringToKey
 #include "GameSource/Graphics/PostFx/BrnPostFx.h"                                  // msPostFx (the colour-cube seed)
+#include "GameSource/Graphics/BrnShaderConstantsFrame.h"                           // gBrnWorldShaderConstantsFrameBringUp -- the live world white level
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"                          // BrnGame::DispatchThreadInputBuffer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // CgsDev::Log::WriteToLog
@@ -1840,15 +1841,107 @@ void EffectsModule::GenerateDispatchLists(CgsModule::IOBufferStack* lpInputBuffe
     }
     else
     {
-        // FLAG PC bring-up: no BrnEffects::EffectsIO::DispatchInputBuffer exists on this build
-        // yet (BridgeRendererToEffects @0x823C1168 is not reconstructed -- see the DoDispatch
-        // banner), so the particle dispatch input keeps its Construct state: zero lights, no
-        // environment map, white level 1.0 (the identity for the trail colour scale).
+        // =========================================================================================
+        // FLAG PC bring-up: no BrnEffects::EffectsIO::DispatchInputBuffer exists on this build yet,
+        // so the particle dispatch input keeps its Construct state -- zero lights, no environment
+        // map -- EXCEPT for the WHITE LEVEL, which is now the world's own and not a constant.
+        //
+        // ⛔⛔ THE PRODUCER THIS ARM STANDS IN FOR IS **NOT** BridgeRendererToEffects @0x823C1168.
+        // Three commits in this tree named that function as the reason the white level never
+        // arrives. It is the wrong one, and its 22 instructions say so -- the whole body is
+        //     GetDispatchFrame -> in+0x10;  GetBaseEffectsFrame -> SetBaseEffectsFrame;
+        //     GetFXEventsEffectsFrame(0..1) -> SetFXEventsEffectsFrame;  SetEnvironmentMap
+        // and it never touches a float. THE WHITE LEVEL'S PRODUCER IS THE FUNCTION IMMEDIATELY
+        // AFTER IT IN THE IMAGE -- BrnGameModule::BridgeWorldToEffects_Dispatch @0x823C11F8, whose
+        // last two instructions are the whole point:
+        //     0x823C126C  bl  BrnWorldIO::DispatchOutputBuffer::GetWhiteLevel
+        //     0x823C1274  bl  BrnEffects::EffectsIO::DispatchInputBuffer::SetWhiteLevel
+        // and which is the ONLY xref of SetWhiteLevel @0x823BAB40 in the entire image. Both bridges
+        // are called from DoDispatch @0x823DC458; the adjacent addresses are what got confused.
+        // The body is landed in its console home, GameSource/Game/GameBridgeWorldToX.cpp.
+        //
+        // ⭐⭐ WHY THE CONSTANT 1.0f WAS A DEFECT, MEASURED ON THIS BUILD'S OWN LOG.
+        // colourScale (BrnLionBlendIm3d's "colourScale" shader variable, staged as
+        // (w, w, w, 1) by Im3dBlend::BeginRendering) IS this white level: ParticleModule::
+        // RenderFullResParticles passes mRenderData.mfWhiteLevel as cLionFX::Dispatch's f1, which
+        // becomes cParticleRender::Dispatch's afWhiteLevel and then LionBlendRenderer::
+        // BeginRendering's afColourScale. The same number also scales the tyre-mark trail pass.
+        // One shipped run, three passes, one frame:
+        //     [sky]       ... whiteLevel 0.500000        <- EnvironmentManager::mfWhiteLevel
+        //     [suncorona] ... whiteLevel=0.500           <- the corona vertex program
+        //     [lionfx] Dispatch: batches=2 ... white=1.000   <- THE PARTICLES
+        //     [trailpass] RenderFullResParticles live: ... white=1.000
+        // EnvironmentManager::GenerateShaderConstants @0x827D0098 pre-multiplies EVERY published
+        // colour by mfWhiteLevel (0.5, KF_DEF_WHITE_LEVEL) and the post-fx composite divides it
+        // straight back out (BrnPostFxShader.cpp:1472, GlobalParams.x = 1 / lfWhiteLevel = 2.0).
+        // That round trip cancels for the world, the sky and the coronas -- and did NOT cancel for
+        // the particles, because this arm handed them 1.0. Every Lion particle and every trail
+        // therefore left the composite at EXACTLY 2x its authored value, which under the material's
+        // own authored additive blend (eBLEND_SRCALPHA_ADD, 13c415d5) is what blew the boost plume
+        // to a white core. It is not a colour that was tuned; it is the missing half of a round
+        // trip the rest of the frame already performs.
+        //
+        // THE SOURCE IS THE FRAME, NOT A NUMBER WE CHOSE: gBrnWorldShaderConstantsFrameBringUp is
+        // the same object BrnRendererModule::Render reads lfFrameWhiteLevel out of to build that
+        // 1/whiteLevel (BrnRendererModule.cpp:4283), written by WorldModule::
+        // SetupShaderConstantsBeforeRendering @0x827D1410 -- the console function that ALSO writes
+        // the DispatchOutputBuffer word BridgeWorldToEffects_Dispatch reads. Same producer, same
+        // value; only the carrier differs, and the carrier is the missing IO buffer set.
+        //
+        // ONE-FRAME LAG, stated rather than hidden: this producer runs earlier in DoDispatch than
+        // WorldModule::GenerateDispatchListsBringUp, so it reads the frame the world published LAST
+        // frame. The console has the same producer/consumer split across the dispatch buffer pair.
+        // Before the first world publish the valid flag is clear and the Construct seed (1.0f, the
+        // identity) stands -- the same gate BrnRendererModule::PublishSkyConstantsBringUp uses.
+        //
+        // DELETE-WHEN the effects dispatch IO buffer set is real: then DoDispatch calls
+        // BridgeWorldToEffects_Dispatch and this whole arm goes with the null test above it.
+        // =========================================================================================
         static bool sbLogged = false;
         LogNotReconstructed(sbLogged,
-            "the effects DISPATCH input (BridgeRendererToEffects @0x823C1168); the particle dispatch input keeps "
-            "zero key light / no env map / white level 1.0");
-        lpParticleInput->SetWhiteLevel(1.0f);
+            "the effects DISPATCH input (BridgeWorldToEffects_Dispatch @0x823C11F8 has a body but no "
+            "IO buffer set to carry it); the particle dispatch input keeps zero key light / no env "
+            "map, and takes its WHITE LEVEL from the live world shading frame");
+
+        f32 lfLiveWhiteLevel = gbBrnWorldShaderConstantsFrameBringUpValid
+                             ? gBrnWorldShaderConstantsFrameBringUp.GetWhiteLevel()
+                             : 1.0f;
+
+        // [DIAG] BRN_LION_WHITE_PIN=1 restores the OLD constant 1.0f. It exists for exactly one
+        // purpose: a SAME-BUILD A/B, so the before/after film differs in this one scalar and in
+        // nothing else -- no second compile, no second commit, no "is the other build stale".
+        // Inert unless the variable is set. DELETE-WHEN-STABLE with the [lionfx] family.
+        {
+            static s32 siPin = -1;
+            if (siPin < 0)
+            {
+                const char* lpcPin = std::getenv("BRN_LION_WHITE_PIN");
+                siPin = (lpcPin != 0 && lpcPin[0] != '0') ? 1 : 0;
+            }
+            if (siPin != 0)
+            {
+                lfLiveWhiteLevel = 1.0f;
+            }
+        }
+
+        lpParticleInput->SetWhiteLevel(lfLiveWhiteLevel);
+
+        // [lionfx] one line whenever the value the particle pass will scale by changes, so the
+        // colourScale that reaches the shader is readable in the same log as [sky] and [lionfx]
+        // Dispatch. DELETE-WHEN-STABLE with the rest of the [lionfx] family.
+        {
+            static f32 sfLastWhiteLevel = -1.0f;
+            if (lfLiveWhiteLevel != sfLastWhiteLevel)
+            {
+                sfLastWhiteLevel = lfLiveWhiteLevel;
+                char lacMsg[128];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                              "[lionfx] particle colourScale <- world white level %.3f (valid=%d)\n",
+                              static_cast<double>(lfLiveWhiteLevel),
+                              gbBrnWorldShaderConstantsFrameBringUpValid ? 1 : 0);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
     }
 
     lpParticleInput->LockForRead();

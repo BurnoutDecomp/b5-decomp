@@ -148,6 +148,18 @@ namespace renderengine
     // DELETE WHEN SetSamplerStateLowLevel really applies a TextureState's sampler block.
     void PostFxSourceSampler_ApplyState(u32 luUnit, u32 luMinMagFilterWord, u32 luMaxAnisotropy);
 
+    // FLAG PC-platform leaf: the LION PARTICLE pass's sampler unit, the fourth sibling of the three
+    // seams above. cParticleRender::Dispatch's single `shadow::Device::SetState(
+    // gpLionParticleSamplerState, 0)` binds nothing on this backend (SetSamplerStateLowLevel is the
+    // documented no-op), so the Lion pass inherits whatever the world left on unit 0 -- measured
+    // ADDRESSU/V = WRAP, while every particle material here leaves cParticleMaterial's FLAG_WRAP_U /
+    // FLAG_WRAP_V clear, i.e. asks for CLAMP. This installs the words the console's own builder
+    // produces: ImRendererBase::ConstructOnceOnly @0x827F1C20 makes that state as
+    // ConstructSamplerState(alloc, 1, 0, 2, 2) == min/mag LINEAR, mip NONE, address U/V CLAMP.
+    // Call it right after that SetState. Defined in XenonD3D9Shims.cpp.
+    // DELETE WHEN SetSamplerStateLowLevel really applies a TextureState's sampler block.
+    void LionParticleSampler_ApplyState(u32 luUnit);
+
     // The units currently holding a raw-depth texture, one bit per sampler. Device::SetState
     // unbinds them before it binds that same texture's surface as the depth-stencil: D3D9 (unlike
     // D3D10+) does NOT auto-unbind, and a texture that is simultaneously a sampler source and the

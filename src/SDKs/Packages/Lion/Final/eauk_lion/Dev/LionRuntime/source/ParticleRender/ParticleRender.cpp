@@ -61,6 +61,7 @@
 #include "GameSource/Effects/Particles/LionParticleRender.h"    // BrnParticle::LionParticleRender
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // the one-shot EmitterCubeRender announcement
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"   // shadow::Device
+#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                 // renderengine::LionParticleSampler_ApplyState
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
 
 #include <cstddef>   // offsetof (the layout pins at the foot of this file)
@@ -137,6 +138,16 @@ void cParticleRender::Dispatch(renderengine::VertexBuffer* apVertexBuffer,
     shadow::Device::ResetShadowing();
     D3DDevice_SetStreamSource(gpD3DDevice, 0, apVertexBuffer, 0, 0, 1);
     shadow::Device::SetState(gpLionParticleSamplerState, 0);
+
+    // FLAG PC-platform leaf, paired 1:1 with the call above and DELETE-WHEN it works.
+    // gpLionParticleSamplerState is null on this backend AND shadow::Device's sampler setter bottoms
+    // out in the documented no-op SetSamplerStateLowLevel, so that call binds nothing twice over and
+    // the pass runs on whatever sampler words the previous pass left on unit 0 (measured by the
+    // [lionbind] probe: ADDRESSU/V = WRAP, the world path's non-cube default). The console's state is
+    // not a mystery -- it is ImRendererBase::ConstructOnceOnly @0x827F1C20's
+    // ConstructSamplerState(alloc, 1, 0, 2, 2), i.e. min/mag LINEAR, mip NONE, address U/V CLAMP --
+    // and this installs exactly those words. See the banner on LionParticleSampler_ApplyState.
+    renderengine::LionParticleSampler_ApplyState(0);
 
     mpRenderer->BeginRendering(afWhiteLevel, abEnableZFade, afNearPlane, afFarPlane,
                                afDepthFadeDistance, afDepthSamplerOffsetU, afDepthSamplerOffsetV,

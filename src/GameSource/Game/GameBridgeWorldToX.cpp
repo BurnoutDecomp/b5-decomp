@@ -124,6 +124,8 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"           // DirectorIO::InputBuffer
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"                // Camera::VehicleInfo
 #include "GameSource/World/BrnWorldModuleIO.h"                                // BrnWorldIO::UpdateOutputBuffer
+#include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_DispatchInputBuffer.h"  // EffectsIO::DispatchInputBuffer (BridgeWorldToEffects_Dispatch)
+#include "GameSource/World/BrnWorldModuleIO_DispatchOutputBuffer.h"                  // BrnWorldIO::DispatchOutputBuffer (same)
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"                     // Io::RootInputBuffer (BridgeWorldToSound; phase C3b)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"      // RaceCarState
@@ -628,4 +630,67 @@ namespace BrnGame
             lpSoundInputBuffer->GetPropUpdateNotificationQueue())->Append(
                 *lpWorldOutputBuffer->GetPropUpdateNotificationQueue());
     }
+
+// =================================================================================================
+// BrnGameModule::BridgeWorldToEffects_Dispatch  @ X360 0x823C11F8
+//
+// THE WORLD -> EFFECTS DISPATCH BRIDGE. Four legs, all read out of the world's dispatch OUTPUT
+// buffer and written into the effects dispatch INPUT buffer: key-light direction, key-light
+// colour, average irradiance colour, and the WHITE LEVEL.
+//
+// ⛔⛔ THIS IS THE FUNCTION THREE COMMITS CALLED "BridgeRendererToEffects @0x823C1168", AND THE
+// DISTINCTION IS THE WHOLE POINT. The two are adjacent in the image and both are called exactly
+// once, from DoDispatch @0x823DC458, but they carry different payloads:
+//     0x823C1168 BridgeRendererToEffects        -- GetDispatchFrame -> in+0x10, GetBaseEffectsFrame,
+//                                                  GetFXEventsEffectsFrame(0..1), SetEnvironmentMap.
+//                                                  22 instructions, NOT ONE OF THEM A FLOAT.
+//     0x823C11F8 BridgeWorldToEffects_Dispatch   -- THIS. Its last two calls are
+//                                                     bl BrnWorldIO::DispatchOutputBuffer::GetWhiteLevel
+//                                                     bl BrnEffects::EffectsIO::DispatchInputBuffer::SetWhiteLevel
+// and SetWhiteLevel @0x823BAB40's xrefs_to list has exactly ONE entry: this function. So this is
+// the only path by which a white level ever reaches the effects side, i.e. the only producer of
+// the particle pass's colourScale. (See the banner in EffectsModule::GenerateDispatchLists for
+// what that cost: the particles ran at 1.0 while the rest of the frame ran at 0.5.)
+//
+// SIGNATURE, from the asm rather than the pseudocode. The prologue is
+//     0x823C120C  mr r30, r5      ; the world DispatchOutputBuffer
+//     0x823C1210  mr r31, r4      ; the effects DispatchInputBuffer
+// and r3 (`this`) is overwritten by the very next instruction (`addi r3, r1, var_40`, the first
+// getter's return slot) and never read again. So the method genuinely does not touch its own
+// object -- it is a static-shaped member, exactly like its BridgeRendererToEffects neighbour.
+//
+// THE THREE VECTOR LEGS ARE BARE STORES, NOT SETTER CALLS:
+//     li r10, 0x20 / lvx128 v0, r0, r11 / stvx128 v0, r31, r10      -- mKeyLightDirection
+//     li r10, 0x30 / lvx128 v0, r0, r11 / stvx128 v0, r31, r10      -- mKeyLightColour
+//     li r10, 0x40 / lvx128 v0, r0, r11 / stvx128 v0, r31, r10      -- mAverageIrradianceColour
+// with no write-lock assert, while the fourth leg goes through the out-of-line SetWhiteLevel
+// (which DOES assert the lock). That is the compiler inlining three header setters and not the
+// fourth -- and the X360 ledger agrees: SetWhiteLevel has a row, the three vector setters do not.
+// They are therefore spelled as the inline setters added to the effects header, not as offset
+// pokes. (The getters take a 16-byte return slot in r3 and the buffer in r4; the `lvx128` reads
+// that slot straight back, so by value here.)
+//
+// ⚠ NO CALLER ON THIS BUILD, AND THE REASON IS AN OBJECT, NOT A FUNCTION. DoDispatch would call
+// this immediately after BridgeRendererToEffects, but neither IO buffer exists on PC: no
+// BrnEffects::EffectsIO::DispatchInputBuffer is ever created, and the only
+// BrnWorldIO::DispatchOutputBuffer in the tree is the file-static bring-up stand-in
+// gWorldDispatchOutputBringUp inside BrnWorldModule.cpp. Until that buffer set is real,
+// EffectsModule::GenerateDispatchLists' documented null arm stands in for this function's WHITE
+// LEVEL leg, reading the same number out of gBrnWorldShaderConstantsFrameBringUp -- which
+// WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410 fills from the same environment
+// manager, in the same call, as the DispatchOutputBuffer word this reads (BrnWorldModule.cpp:4958
+// vs :4970). DELETE-WHEN the dispatch IO buffer set is real: wire this in DoDispatch and drop
+// that arm.
+// =================================================================================================
+void BrnGameModule::BridgeWorldToEffects_Dispatch(
+        BrnEffects::EffectsIO::DispatchInputBuffer* lpEffectsInputBuffer,
+        const BrnWorldIO::DispatchOutputBuffer*     lpWorldOutputBuffer )
+{
+    lpEffectsInputBuffer->SetKeyLightDirection( lpWorldOutputBuffer->GetKeyLightDirection() );
+    lpEffectsInputBuffer->SetKeyLightColour( lpWorldOutputBuffer->GetKeyLightColour() );
+    lpEffectsInputBuffer->SetAverageIrradianceColour(
+        lpWorldOutputBuffer->GetAverageIrradianceColour() );
+    lpEffectsInputBuffer->SetWhiteLevel( lpWorldOutputBuffer->GetWhiteLevel() );
+}
+
 }
