@@ -650,6 +650,16 @@ renderengine::Texture* LionParticleRender::FindTexture(U32 auTextureMapHandle) c
 // ENTRY index, while AcquireTexture appends at siTextureCount++ in ACQUIRE-REPLY order. The two
 // agree only if the replies arrive in request order; the console's resource system guarantees
 // that and this host's is a different implementation, so it is measured, not assumed.
+//
+// ⭐ WHAT IT ANSWERED (2026-09-05, three runs). acquired=48 against mapEntries=48, every slot
+// matching its map entry by hash AND by raster size; the bind moves sampler 0 onto a real
+// 128x128 DXT5 with one mip (BURNOUTSMOKE) with LINEAR filtering; the vertex UVs are the
+// console's own non-atlas corner set (0,1)/(0,0)/(1,0)/(1,1); and the bound vertex declaration,
+// read back off the device on 30 draws and identical every time, is
+//     [s0+0 FLOAT4 POSITION0] [s0+16 UBYTE4N COLOR0] [s0+20 FLOAT4 TEXCOORD0]
+// -- exactly LionBlendVertex. NOTHING on the texture path is unbound, mis-indexed, degenerate or
+// undeclared. The plume's remaining defect is BRIGHTNESS, not texturing; see the overbright
+// banner in BrnLionBlendRenderer.cpp for where that trail goes next.
 // ============================================================================================
 namespace
 {
