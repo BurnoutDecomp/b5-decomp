@@ -215,6 +215,22 @@ namespace
 
     u32 gauSkidProbeFrame = 0;
 
+    // ⛔⛔ THE [skid] PROBE COULD NOT PRINT A "START", AND THAT IS WHY THIS ARRAY EXISTS
+    // (measured 2026-09-06, effects-path 1:1 audit). The edge test read
+    //     lbWasLaying = (lrEmitter.mrLastTrailTime >= 0.0f)
+    // but TrailSystem::AddTrailSegment sets mrLastTrailTime = lrCurrentTime
+    // (BrnTrailSystem.cpp:394) BEFORE the probe runs, and the `-1.0f` reset is the line AFTER
+    // it. So on a laying frame both sides of the test are true and the edge never fires; the
+    // instrument was structurally incapable of saying START. One 210 s run printed
+    // FIFTY-TWO "STOP" and ZERO "START" while 625 of 1,579 sample lines carried the gate's own
+    // `skid > thr` -- i.e. marks were being laid the whole time and every "the mark begins here"
+    // line was missing. A wave reading "0 STARTs" as "no mark ever begins" is the next
+    // diagnostics-that-lie entry, so the state is latched here instead: this is the PREVIOUS
+    // frame's laying answer, written at the bottom of the wheel loop where lbTrailEnded is final.
+    // ⚠️ Per WHEEL, not per (car, wheel) -- the same limitation sauLastSurface below already has,
+    // and for the same reason (this is a bring-up instrument, and one player car is the subject).
+    bool gabSkidProbeWasLaying[4] = { false, false, false, false };
+
     inline f32 ReadF32(const void* lpBase, u32 luOffset)
     {
         return *reinterpret_cast<const f32*>(reinterpret_cast<const u8*>(lpBase) + luOffset);
@@ -1571,7 +1587,10 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
                 // [skid] both sides of the gate, on the frames it matters.
                 if (SkidProbeEnabled())
                 {
-                    const bool lbWasLaying = (lrEmitter.mrLastTrailTime >= 0.0f);
+                    // NOT `lrEmitter.mrLastTrailTime >= 0.0f` -- see gabSkidProbeWasLaying's
+                    // banner: AddTrailSegment has already written that field this frame, so
+                    // reading it here made a START unreachable.
+                    const bool lbWasLaying = gabSkidProbeWasLaying[luWheel & 3u];
                     const bool lbNowLaying = !lbTrailEnded;
                     const bool lbEdge      = (lbWasLaying != lbNowLaying);
                     if (lbEdge || (gauSkidProbeFrame % 30u) == 0u)
@@ -1630,6 +1649,11 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
         }
         if (lbTrailEnded)
             lrEmitter.mrLastTrailTime = -1.0f;
+
+        // [skid probe] the edge latch, at the ONE point where lbTrailEnded is final for this
+        // wheel this frame (every arm above has run, including the two that never look a
+        // surface up). See gabSkidProbeWasLaying's banner. Costs one byte-store when unarmed.
+        gabSkidProbeWasLaying[luWheel & 3u] = !lbTrailEnded;
 
         lrMachine.SetPreviousPosition(lrWheel.mRoadContact.mPosition);
     }
