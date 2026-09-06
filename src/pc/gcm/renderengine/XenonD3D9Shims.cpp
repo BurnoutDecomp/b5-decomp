@@ -2939,6 +2939,15 @@ namespace renderengine
     // the seeds are 0.8 / 0.75 / 0.0 (GetInitialCompressionScalesAndLimits), so nothing in the
     // simulation can put 3538 or 9500 there. A row above this is the previous world draw's
     // matrix left in c0..c127 -- counted separately, never bucketed as scratch.
+    // ⭐ AND MOST OF WHAT IT COUNTS IS THIS PROBE'S OWN ARTEFACT, SO NOBODY CHASES IT: the
+    // technique that produced 3,987 of the first run's 4,000 entries,
+    // Vehicle_GreyScale_WheelChrome_Textured_Damaged_Default, DOES NOT DECLARE
+    // g_verletOffsets AT ALL. Its vertex program (SHADERS.BNDL technique 080D6611 -> VS
+    // EB89C988) puts ShadowMap_WorldToLight at c0..c11, ViewProjectionModified at c12,
+    // IrradianceQuadricA at c16 and `world` at c20 -- exactly the layout
+    // BrnRaceCarEntityModule_Render's banner enumerates. Reading c0..c127 there measures
+    // somebody else's constants, not a stale publish. A "stale" count is only meaningful on a
+    // technique whose CTAB actually names g_verletOffsets at c0 count 128.
     const f32 KF_SCRATCH_STALE_ABOVE = 2.0f;
 
     struct ScratchProbeRecord
