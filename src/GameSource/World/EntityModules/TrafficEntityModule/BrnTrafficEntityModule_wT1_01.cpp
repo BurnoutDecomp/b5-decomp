@@ -66,6 +66,11 @@
 #include "GameShared/GameClasses/Algorithms/CgsShuffle.h"        // CgsAlgorithms::Shuffle (Reset pool shuffles)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // gpDebugPrint / gxMessageFilterFlags
 
+// [FLAG PC witness] the traffic_weird lane's [traffic-track] oracle (BRN_TRAFFIC_TRACK).
+// NOT IN THE X360 BINARY. DELETE-WHEN: see BrnTrafficTrackWitness.h.
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficTrackWitness.h"
+#include <cmath>   // sqrtf, for the witness' player distance
+
 #include "rw/math/vpu/matrix44affine_operation.h"               // rw::math::vpu::IsValid
 
 #include <cstring>   // std::memset (Construct's 102,800-byte maTrafficPhysicsInfoList clear)
@@ -1961,6 +1966,131 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         else
         {
             meLocalPlayerIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        }
+    }
+
+    // ========================================================================================
+    // [FLAG PC witness] [traffic-track] -- NOT IN THE X360 BINARY, OFF unless BRN_TRAFFIC_TRACK.
+    //
+    // The traffic_weird bug ("traffic disappears, teleports above the road, does other weird
+    // things") is not an assert, so the test needs the numbers it moves. Every 0.5 s of SIM
+    // time this prints, for each ALIVE traffic vehicle inside 120 m of the player: its slot id,
+    // world position, lifecycle state, whether the render pass considered it last frame, its
+    // distance and whether it is in front of the player. Plus one SAMPLE line carrying the
+    // population counts (the collapse check reads those).
+    //
+    // Seated at the very tail of PostPhysicsUpdate, AFTER the local-player refresh above, so
+    // mLocalPlayerPosition / mLocalPlayerDirection are this frame's and every vehicle transform
+    // has already been moved by the frame's update. Bounded three ways: 2 Hz, at most 64
+    // vehicles per sample, and a hard total-line cap -- an unbounded per-frame witness once
+    // flooded a run with 733k lines and aborted the harness at its 128 MB cap.
+    //
+    // ⛔ NO ASSERTING ACCESSOR IS USED HERE: Vehicle::IsCrashing() asserts IsAlive() and then
+    // IsPhysical(), which would turn a diagnostic into an assert storm on the very cars this is
+    // trying to observe. The raw crash-type byte (GetCrashTrafficTypeRaw) is the unasserted read
+    // the console itself uses at sites that may not require IsPhysical().
+    //
+    // DELETE-WHEN: see BrnTrafficTrackWitness.h.
+    // ========================================================================================
+    if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+    {
+        static const f32 KF_TRACK_SAMPLE_PERIOD   = 0.5f;
+        static const f32 KF_TRACK_RADIUS_SQ       = 120.0f * 120.0f;
+        static const u32 KU_TRACK_MAX_PER_SAMPLE  = 64u;
+        static const u32 KU_TRACK_MAX_LINES       = 60000u;
+
+        static f32 sfTrackTime  = 0.0f;
+        static f32 sfNextSample = 0.0f;
+        static u32 suTrackLines = 0u;
+
+        sfTrackTime += mfSimTimeStep;
+
+        if (sfTrackTime >= sfNextSample && suTrackLines < KU_TRACK_MAX_LINES)
+        {
+            sfNextSample = sfTrackTime + KF_TRACK_SAMPLE_PERIOD;
+
+            u32 luAlive    = 0u;
+            u32 luNear     = 0u;
+            u32 luPrinted  = 0u;
+
+            for (CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator lItVehicle =
+                     mVehicleSoaData.mAliveVehicles.Begin();
+                 lItVehicle != mVehicleSoaData.mAliveVehicles.End();
+                 ++lItVehicle)
+            {
+                const u32 luVehicle = static_cast<u32>(lItVehicle.GetIndex());
+                ++luAlive;
+
+                if (luVehicle >= KU_MAX_TOTAL_TRAFFIC)
+                {
+                    continue;
+                }
+
+                const Vector3& lrPos = maVehicleTransforms[luVehicle].Pos();
+
+                const f32 lfDX = lrPos.x - mLocalPlayerPosition.x;
+                const f32 lfDY = lrPos.y - mLocalPlayerPosition.y;
+                const f32 lfDZ = lrPos.z - mLocalPlayerPosition.z;
+                const f32 lfDistSq = lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ;
+
+                if (lfDistSq >= KF_TRACK_RADIUS_SQ)
+                {
+                    continue;
+                }
+
+                ++luNear;
+
+                if (luPrinted >= KU_TRACK_MAX_PER_SAMPLE)
+                {
+                    continue;
+                }
+
+                const Vehicle* const lpVehicle = GetVehicle(luVehicle);
+
+                const char* lpcState = "param";
+                if (lpVehicle->IsPhysical())
+                {
+                    // eCrashTrafficType 0 is the crashing type; 255 is "not registered".
+                    lpcState = (lpVehicle->GetCrashTrafficTypeRaw() == 0u) ? "crashed" : "physical";
+                }
+                else if (GetVehicleSpecies(luVehicle) == Vehicle::E_SPECIES_STATIC)
+                {
+                    lpcState = "static";
+                }
+
+                const f32 lfAlong = lfDX * mLocalPlayerDirection.x
+                                  + lfDY * mLocalPlayerDirection.y
+                                  + lfDZ * mLocalPlayerDirection.z;
+
+                *lpTrack << "[traffic-track] t=" << sfTrackTime
+                         << " id=" << luVehicle
+                         << " pos=(" << lrPos.x << ", " << lrPos.y << ", " << lrPos.z << ")"
+                         << " state=" << lpcState
+                         << " vis=" << (mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet(luVehicle) ? 1 : 0)
+                         << " dist=" << sqrtf(lfDistSq)
+                         << " infront=" << ((lfAlong > 0.0f) ? 1 : 0)
+                         << "\n";
+                ++luPrinted;
+                ++suTrackLines;
+            }
+
+            // mCameraLastFrame is on this line because it is the traffic module's BEHAVIOUR
+            // CENTRE, not a picture: TryClearupOffscreenTraffic / SpawnNewTraffic /
+            // UpdateSympatheticCrashing / UpdateJunctionFUP all measure from it, so a frame on
+            // which it is not where the player is is a frame that deletes and stops spawning
+            // traffic around him.
+            const Vector3 lCamera = mCameraLastFrame.GetPosition();
+
+            *lpTrack << "[traffic-track] SAMPLE t=" << sfTrackTime
+                     << " alive=" << luAlive
+                     << " near=" << luNear
+                     << " printed=" << luPrinted
+                     << " player=(" << mLocalPlayerPosition.x
+                     << ", " << mLocalPlayerPosition.y
+                     << ", " << mLocalPlayerPosition.z << ")"
+                     << " cam=(" << lCamera.x << ", " << lCamera.y << ", " << lCamera.z << ")"
+                     << "\n";
+            ++suTrackLines;
         }
     }
 

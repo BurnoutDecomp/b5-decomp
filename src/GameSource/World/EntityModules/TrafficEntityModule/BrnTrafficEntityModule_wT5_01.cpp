@@ -90,10 +90,20 @@
 #include "rw/math/vpu/matrix44affine_operation.h"
 
 #include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG probe)
+#include <cmath>     // sqrtf (the [traffic-track] witness)
+
+// [FLAG PC witness] the traffic_weird lane's [traffic-track] oracle (BRN_TRAFFIC_TRACK).
+// NOT IN THE X360 BINARY. DELETE-WHEN: see BrnTrafficTrackWitness.h.
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficTrackWitness.h"
 
 
 namespace BrnTraffic
 {
+// [FLAG PC witness] the removal-reason baton declared in BrnTrafficTrackWitness.h. NOT IN THE
+// X360 BINARY -- RemoveVehicle takes no reason argument on the console either; this is how the
+// witness names WHICH of the eleven callers vanished a car. DELETE-WHEN: see that header.
+const char* gpcTrafficRemoveReason = "unknown";
+
 namespace
 {
     // ---- recovered constants (provenance in the file banner) -----------------------------
@@ -435,6 +445,46 @@ void TrafficEntityModule::RemoveVehicle(u32 luVehicle)
 
     Vehicle* const lpVehicle = GetVehicle(luVehicle);
 
+    // ---- [FLAG PC witness] [traffic-track] REMOVED. NOT IN THE X360 BINARY, off unless
+    // BRN_TRAFFIC_TRACK. This is the module's SINGLE kill entry point, so one line here names
+    // every car that vanishes, where it was relative to the player, and which caller did it
+    // (gpcTrafficRemoveReason, parked by the instrumented call sites). Unbounded per call is
+    // safe: removals are events, not frames -- a 160 s drive produces tens, not thousands.
+    // DELETE-WHEN: see BrnTrafficTrackWitness.h.
+    if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+    {
+        // maVehicleTransforms directly, not GetVehicleTransform(): that accessor returns a
+        // Matrix44Affine BY VALUE, so binding a reference to its .Pos() would dangle.
+        const Vector3& lrPos = maVehicleTransforms[luVehicle].Pos();
+
+        const f32 lfDX = lrPos.x - mLocalPlayerPosition.x;
+        const f32 lfDY = lrPos.y - mLocalPlayerPosition.y;
+        const f32 lfDZ = lrPos.z - mLocalPlayerPosition.z;
+        const f32 lfDistSq = lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ;
+        const f32 lfAlong  = lfDX * mLocalPlayerDirection.x
+                           + lfDY * mLocalPlayerDirection.y
+                           + lfDZ * mLocalPlayerDirection.z;
+
+        const char* lpcState = "param";
+        if (lpVehicle->IsPhysical())
+        {
+            lpcState = (lpVehicle->GetCrashTrafficTypeRaw() == 0u) ? "crashed" : "physical";
+        }
+        else if (GetVehicleSpecies(luVehicle) == Vehicle::E_SPECIES_STATIC)
+        {
+            lpcState = "static";
+        }
+
+        *lpTrack << "[traffic-track] id=" << luVehicle
+                 << " REMOVED reason=" << gpcTrafficRemoveReason
+                 << " state=" << lpcState
+                 << " pos=(" << lrPos.x << ", " << lrPos.y << ", " << lrPos.z << ")"
+                 << " vis=" << (mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet(luVehicle) ? 1 : 0)
+                 << " dist=" << sqrtf(lfDistSq)
+                 << " infront=" << ((lfAlong > 0.0f) ? 1 : 0)
+                 << "\n";
+    }
+
     // ========================================================================================
     // ARM 1 -- loc_8272E9D4. An ORPHAN: a trailer whose cab has already gone. There is nothing
     // left to co-ordinate, so it dies immediately, regardless of mbAllowDivergentBehaviour.
@@ -686,7 +736,11 @@ bool TrafficEntityModule::JunctionFUP_TryClearupNonMovingPhysical(
                 << " fatal=" << (lpPhysInfo->mbIsFatallyCrashing ? 1 : 0)
                 << " notDriving=" << lpPhysInfo->mfTimeNotDriving << "\n";
     }
-    RemoveVehicle(luVehicle);
+    {
+        // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
+        const TrafficRemoveReasonTag lTag("junctionfup-nonmoving");
+        RemoveVehicle(luVehicle);
+    }
     return true;
 }
 
@@ -826,7 +880,11 @@ void TrafficEntityModule::UpdateJunctionFUP()
                         << " killing veh=" << luNextKillVehicle
                         << " distSq=" << lfFurthestDistance << "\n";
             }
-            RemoveVehicle(luNextKillVehicle);
+            {
+                // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
+                const TrafficRemoveReasonTag lTag("junctionfup-jamvalve");
+                RemoveVehicle(luNextKillVehicle);
+            }
 
             // 0x82745BC4..0x82745BEC. Offline (divergent behaviour allowed) waits a full
             // second between kills; online only half.

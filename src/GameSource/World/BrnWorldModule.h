@@ -764,8 +764,14 @@ namespace BrnWorld
         Vector4                    mPlayerCarPosition; // (+6175680)
         // The last director camera the dispatch pass consumed (X360 +6167744;
         // GenerateDispatchLists copies the frame camera into it each dispatch).
-        // [FLAG PC bring-up] the one-frame director-camera override (see
-        // SetBringUpCameraOverride). DELETE with GenerateDispatchListsBringUp.
+        // [FLAG PC bring-up] the director-camera override (see SetBringUpCameraOverride).
+        // LEVEL, not one-shot, since 2026-09-06: mbBringUpCameraOverrideValid latches TRUE on
+        // the first publish and is never cleared, so a dispatch frame the director does not
+        // publish holds the LAST director camera instead of falling back to the boot tour
+        // camera. Same reason as the two LEVEL fields below -- the console's camera input is
+        // never absent -- and the fallback was DELETING TRAFFIC (the traffic module's
+        // behaviour centre is this camera; full banner at the consume site in
+        // GenerateDispatchListsBringUp). DELETE with GenerateDispatchListsBringUp.
         rw::math::vpu::Matrix44Affine mBringUpCameraOverride;
         f32                           mfBringUpCameraOverrideFOV;
         bool                          mbBringUpCameraOverrideValid;

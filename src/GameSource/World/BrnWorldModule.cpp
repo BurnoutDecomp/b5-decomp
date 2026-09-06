@@ -3747,8 +3747,15 @@ WorldModule::GenerateFrustumQueries(
             // space is at NEGATIVE distance along the LookAt direction. Without the negate
             // the query culls against the volume BEHIND each face and every face list comes
             // back with the wrong half of the world in it.
+            // ⚠ CORRECTED 2026-09-06 (b5-decomp#5): the paragraph above describes the state
+            // this build WAS in, and it is exactly the bug. The face cameras are no longer
+            // right-handed -- EnvironmentMap::Update publishes the ordinary D3D projection now,
+            // because LookAt's view is LEFT-handed and the pair drew the antipodal hemisphere
+            // into every cube face (+Y held the ground, -Y the sky; measured with
+            // BRN_ENVMAP_STATS). So the negate flag goes with it, here and at the live
+            // producer's copy of this block. See the FLAG on EnvironmentMap::Update.
             CgsGraphics::CameraRwFrustum lFaceRwFrustum;
-            mEnvironmentMap.maEnvMapCameras[ liFace ].GetFrustumPerspective( lFaceRwFrustum, true );
+            mEnvironmentMap.maEnvMapCameras[ liFace ].GetFrustumPerspective( lFaceRwFrustum, false );
             CgsGeometric::Frustum lFaceFrustum;
             lFaceFrustum.SetFromRwFrustum( lFaceRwFrustum );
 
@@ -4264,8 +4271,12 @@ WorldModule::GenerateDispatchLists(
             // and record its view-projection for the env-map resolve -- ON THE
             // LOCAL COPY (X360 v219): the member maEnvMapCameras[face] is never
             // mutated by the dispatch pass.
-            lFaceCamera.SetFarClipPlane( 10000.0f );   // the store + the rebuild, one member
-            lFaceCamera.SetPerspectiveProjectionMatrixRightHanded();
+            // ⚠ FLAG PC-platform leaf (b5-decomp#5): the console's trailing
+            // SetPerspectiveProjectionMatrixRightHanded is dropped here for the same reason it
+            // is dropped in GenerateDispatchListsBringUp's env-map arm (the live producer) --
+            // see the FLAG there and on EnvironmentMap::Update. Kept in step so the two
+            // producers cannot disagree the day this one goes live.
+            lFaceCamera.SetFarClipPlane( 10000.0f );   // the store + the D3D rebuild, one member
             lpShaderConstantsFrame->SetEnvMapViewProjectionMatrix(
                 static_cast<BrnGraphics::EEnvironmentMapFace>( liFace ),
                 lFaceCamera.GetViewProjectionMatrix() );
@@ -5461,12 +5472,38 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         }
     }
 
-    // Consume this frame's director-camera override (one frame only -- see the header).
+    // The director-camera override.
+    //
+    // ⭐⭐ LEVEL, NOT ONE-SHOT (fixed 2026-09-06, traffic_weird bug-test lane). This block used
+    // to CONSUME the override every dispatch frame (`mbBringUpCameraOverrideValid = false;`)
+    // while the three fields staged beside it by the SAME setter -- mbBringUpCameraInJunkyard
+    // BringUp and the time-of-day pair -- were already LEVEL, for the reason the header spells
+    // out: THE CONSOLE'S CAMERA INPUT IS NEVER ABSENT. The transform and its FOV were the odd
+    // ones out, and the publish is NOT locked to this pass: BrnGameModule::DoDispatch stages it
+    // only when `lpDispatchCamera != 0 && mbDirectorCameraLive` and the eye is more than 1 m
+    // from the origin. On every dispatch frame that did not coincide with a publish, this pass
+    // therefore fell through to the BOOT TOUR CAMERA below -- an orbit around sPathOrigin whose
+    // eye is hundreds to thousands of metres from the player.
+    //
+    // ⛔ That is not merely a wrong picture for one frame. mLastCameraInput is latched from this
+    // eye, WorldModule hands it to the traffic module as lBrnCamera, and TrafficEntityModule
+    // stores it as mCameraLastFrame -- ITS BEHAVIOUR CENTRE. TryClearupOffscreenTraffic
+    // @0x8273C4C8 removes every non-rendered physical traffic car whose squared distance from
+    // that point exceeds unk_8300CC80 == 22500 (150 m), so ONE tour-camera frame deletes the
+    // traffic standing around the player. Spawn suppression (SpawnNewTraffic @0x82748A40),
+    // UpdateSympatheticCrashing and the junction-FUP behaviour centre read the same member.
+    // MEASURED, run scratch/bugtest/runs/traffic_track_lane/20260906_093326: [T-anchor] printed
+    // `cam 2.389504 -0.318707 -2.785215` while the player was at (3345.6, 0.37, -1707.2), and
+    // traffic vehicle 139 was removed by clearup-offscreen 55 m from the player.
+    //
+    // The tour camera keeps its job: until the director publishes for the FIRST time
+    // mbBringUpCameraOverrideValid is still false, so boot and the establishing shot are
+    // unchanged. After that the last published director transform is held, which is exactly
+    // what a console frame would have carried. DELETE with GenerateDispatchListsBringUp.
     const bool                          lbUseDirectorCamera =
         mbBringUpCameraOverrideValid && ( siCamFree == 0 ) && !sbSwerveCamLatched;
     const rw::math::vpu::Matrix44Affine lDirectorTransform  = mBringUpCameraOverride;
     const f32                           lfDirectorFOVDegs   = mfBringUpCameraOverrideFOV;
-    mbBringUpCameraOverrideValid = false;
 
     // ---- junkyard lighting latch (camera flag bit 0x400000) ----------------
     // ⭐ WIRED 2026-08-17 (reflections step 2, envproducer findings F4 / B3). THIS IS THE
@@ -6646,10 +6683,17 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 lFaceCamera.Clone( &lProjectedCamera );
                 lProjectedCamera.UpdatePerspectiveProjectionMatrix();
 
-                // negate = TRUE: the face cameras are right-handed. See the full asm
-                // derivation on the same call in ::GenerateFrustumQueries above.
+                // ⚠ negate = FALSE since 2026-09-06 (b5-decomp#5). It used to be TRUE, to match
+                // the RIGHT-HANDED projection EnvironmentMap::Update left on the face cameras --
+                // a pairing that made the query volume, and the render, the hemisphere BEHIND
+                // each look direction, so the cube came out antipodal (the +Y face held the
+                // ground, the -Y face the sky; measured with BRN_ENVMAP_STATS). Update now
+                // publishes the ordinary D3D projection, so the visible half-space is the one
+                // the face camera looks at, and the query must select THAT half. See the FLAG
+                // on EnvironmentMap::Update for the whole derivation; the two must move
+                // together.
                 CgsGraphics::CameraRwFrustum lFaceRwFrustum;
-                mEnvironmentMap.maEnvMapCameras[ liFace ].GetFrustumPerspective( lFaceRwFrustum, true );
+                mEnvironmentMap.maEnvMapCameras[ liFace ].GetFrustumPerspective( lFaceRwFrustum, false );
                 CgsGeometric::Frustum lFaceFrustum;
                 lFaceFrustum.SetFromRwFrustum( lFaceRwFrustum );
 
@@ -7227,6 +7271,39 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         const ShadowPerfClock::time_point lEnvMapStart = ShadowPerfNow();
         gShadowPerf.miEnvMapWorldEnts = 0;
         gShadowPerf.miEnvMapRecords   = 0;
+
+        // [FLAG PC bring-up probe] BRN_ENVMAP_STATS=1 -- the PRODUCER half of the reflections
+        // witness (b5-decomp#5). The renderer half reads the six cube faces back; this one says
+        // what the producer told it to render and WHICH BUFFER it told. Rate-limited to one line
+        // every 30 producer passes for the first 20 samples. DELETE-WHEN b5-decomp#5 is closed.
+        {
+            static s32 siEnvProdStats = -1;
+            if ( siEnvProdStats < 0 )
+            {
+                const char* lpcStats = std::getenv( "BRN_ENVMAP_STATS" );
+                siEnvProdStats = ( lpcStats != 0 && lpcStats[0] != '0' ) ? 1 : 0;
+            }
+            static s32 siEnvProdPass    = 0;
+            static s32 siEnvProdSamples = 0;
+            const s32  liProdPass = siEnvProdPass++;
+            if ( siEnvProdStats != 0 && siEnvProdSamples < 20 && ( liProdPass % 61 ) == 0
+                 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                ++siEnvProdSamples;
+                *CgsDev::Log::gpDebugPrint
+                    << "[envmap-prod] pass " << liProdPass
+                    << " live=" << ( lbEnvMapArmLive ? 1 : 0 )
+                    << " staged=" << liEnvMapFacesStaged
+                    << " resultType=" << liResultType
+                    << " result=" << ( lpFrustumTestResult != 0 ? 1 : 0 )
+                    << " flags=" << ( mabEnvMapFaceRender[0] ? 1 : 0 ) << ( mabEnvMapFaceRender[1] ? 1 : 0 )
+                                 << ( mabEnvMapFaceRender[2] ? 1 : 0 ) << ( mabEnvMapFaceRender[3] ? 1 : 0 )
+                                 << ( mabEnvMapFaceRender[4] ? 1 : 0 ) << ( mabEnvMapFaceRender[5] ? 1 : 0 )
+                    << " buf=" << static_cast< void* >( mpBringUpDispatchThreadInputBuffer )
+                    << "\n";
+            }
+        }
+
         if ( liEnvMapFacesStaged > 0 && liResultType >= 0 && lpFrustumTestResult != 0 )
         {
             // :4007-4010. ⭐ LIVE as of 2026-08-17: mbIsInJunkyard is latched at the top of
@@ -7383,11 +7460,17 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                     1.0f, &mShaderLodInfo, liFaceList, liFaceList, liFaceList, true, false );
 
                 // :4080-4085 -- push the far clip out for the RENDERER's copy of the face
-                // view-projection and publish it into the frame. SetPerspectiveProjection-
-                // MatrixRightHanded is last, so the published matrix is the RIGHT-HANDED
-                // one (which is why the query above negates).
-                lFaceCamera.SetFarClipPlane( 10000.0f );   // the store + the rebuild, one member
-                lFaceCamera.SetPerspectiveProjectionMatrixRightHanded();
+                // view-projection and publish it into the frame (the SKY DOME reads it back as
+                // GetEnvMapViewProjectionMatrix(face)).
+                // ⚠ FLAG PC-platform leaf (b5-decomp#5, 2026-09-06): the console's trailing
+                // SetPerspectiveProjectionMatrixRightHanded @0x827EC698 is DROPPED. It is the
+                // only thing that made the published matrix right-handed, and on D3D9 -- paired
+                // with LookAt's LEFT-handed view -- it drew the sky dome's ANTIPODAL hemisphere
+                // into every face, which is what put the ground on +Y and the sky on -Y. The
+                // rebuild SetFarClipPlane already performed leaves the ordinary D3D projection
+                // in place, which is the same matrix the world and prop legs above were handed.
+                // Full derivation on the FLAG in EnvironmentMap::Update; the two move together.
+                lFaceCamera.SetFarClipPlane( 10000.0f );   // the store + the D3D rebuild, one member
                 gBrnWorldShaderConstantsFrameBringUp.LockForWriting();
                 gBrnWorldShaderConstantsFrameBringUp.SetEnvMapViewProjectionMatrix(
                     static_cast< BrnGraphics::EEnvironmentMapFace >( liFace ),

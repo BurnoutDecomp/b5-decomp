@@ -18,6 +18,9 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+// [FLAG PC witness] the traffic_weird lane's [traffic-track] removal-reason baton
+// (BRN_TRAFFIC_TRACK). NOT IN THE X360 BINARY. DELETE-WHEN: see BrnTrafficTrackWitness.h.
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficTrackWitness.h"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 
@@ -348,7 +351,32 @@ bool TrafficEntityModule::TryClearupOffscreenTraffic(
                    "!mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet( luVehicle )"); // .cpp 16050
 
         ++giDemoteFromClearup;   // [T3-demote] census, NOT IN THE X360 BINARY
-        RemoveVehicle(luVehicle);                                   // 0x8273CAD0
+
+        // [FLAG PC witness] [traffic-track] CLEARUP. NOT IN THE X360 BINARY, off unless
+        // BRN_TRAFFIC_TRACK. Prints the three numbers the decision above is made of, so a
+        // removal can be checked against the console's rule instead of guessed at: the
+        // BEHAVIOUR CENTRE this measured from (mCameraLastFrame, which is NOT necessarily
+        // where the player is on this build -- see the banner at the consume site in
+        // WorldModule::GenerateDispatchListsBringUp), the squared distance, and the constant.
+        // One line per kill, and kills are events. DELETE-WHEN: see BrnTrafficTrackWitness.h.
+        if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+        {
+            const Vector3 lCamera = mCameraLastFrame.GetPosition();
+            *lpTrack << "[traffic-track] id=" << luVehicle
+                     << " CLEARUP cam=(" << lCamera.x << ", " << lCamera.y
+                     << ", " << lCamera.z << ")"
+                     << " distSq=" << lfDiffSq
+                     << " limitSq=" << KF_CLEARUP_FAR_FROM_CAMERA_DIST_SQ
+                     << " far=" << (lbFarFromPlayer ? 1 : 0)
+                     << " showtime=" << (mbPlayingShowtimeMode ? 1 : 0)
+                     << "\n";
+        }
+
+        {
+            // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
+            const TrafficRemoveReasonTag lTag("clearup-offscreen");
+            RemoveVehicle(luVehicle);                               // 0x8273CAD0
+        }
         return true;                                                // 0x8273CAD4 `li r3, 1`
     }
 
@@ -1159,7 +1187,11 @@ void TrafficEntityModule::HandleRecycledTraffic(
         case BrnPhysics::Vehicle::E_TRAFFIC_TYPE_POTENTIAL:                      // cases 0-2
         case BrnPhysics::Vehicle::E_TRAFFIC_TYPE_CRASHING:
         case BrnPhysics::Vehicle::E_TRAFFIC_TYPE_PHYSICAL:
-            RemoveVehicle(luVehicle);                                            // 0x827418FC
+            {
+                // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
+                const TrafficRemoveReasonTag lTag("physics-recycled");
+                RemoveVehicle(luVehicle);                                        // 0x827418FC
+            }
             break;
 
         case BrnPhysics::Vehicle::E_TRAFFIC_TYPE_SLAMMED:                        // case 3
@@ -1186,7 +1218,11 @@ void TrafficEntityModule::HandleRecycledTraffic(
                        "( GetVehicle( luVehicle )->GetCrashTrafficType() != "
                        "BrnPhysics::Vehicle::eCrashTrafficType_Slammed )");      // .cpp 3568
 
-            RemoveVehicle(luVehicle);                                            // 0x82741AB0
+            {
+                // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
+                const TrafficRemoveReasonTag lTag("physics-recycled-slammed");
+                RemoveVehicle(luVehicle);                                        // 0x82741AB0
+            }
             break;
         }
 
@@ -1259,6 +1295,8 @@ void TrafficEntityModule::ReturnPhysicalVehicleToTraffic(u32 luVehicle)
         // _wT5_01.cpp. (Its park note here named GetVehicleSpecies /
         // Vehicle::DetachArticulation / StaticTrafficParam::SetShouldBeRemoved as blockers;
         // all three had already been landed by earlier waves and nobody retired the note.)
+        // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
+        const TrafficRemoveReasonTag lTag("return-to-traffic-deadparam");
         RemoveVehicle(luVehicle);
     }
 }
