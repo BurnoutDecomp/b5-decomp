@@ -106,6 +106,16 @@ namespace renderengine
     // Defined in XenonD3D9Shims.cpp.
     void ShadowSampler_ApplyState(u32 luUnit);
 
+    // FLAG PC-platform leaf: the GLASS-FRACTURE sampler seam -- unit 14, the sibling of
+    // ShadowSampler_ApplyState above. BrnRendererModule::Render binds the crack map through
+    // shadow::Device::SetResource (the console binds a TextureState: Render @0x8240BFA8 does
+    // `v79 = *(this + 5804); if (v79) sub_8227D158(v79, 14)`), and this says the sampler
+    // words that state carries -- WRAP on all three axes, which the crack UV arithmetic
+    // requires. Full derivation, and the one word that is a flagged PC choice rather than a
+    // decode, in the banner over the definition in XenonD3D9Shims.cpp.
+    // DELETE when Construct's TextureState pair lands.
+    void GlassFractureSampler_ApplyState(u32 luUnit);
+
     // FLAG PC-platform leaf: the POST-FX RAW-DEPTH sampler seam -- the sibling of
     // ShadowSampler_ApplyState above, for the other depth semantic.
     //

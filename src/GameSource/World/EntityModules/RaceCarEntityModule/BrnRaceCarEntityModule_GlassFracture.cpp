@@ -27,9 +27,18 @@
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"   // ShaderConstantTable
 #include "BrnCommonTypes.h"                                       // Vector2, Vector4
 
-// The global runtime shader-constant register (X360 symbol mShaderConstantTable; bodied
-// by the CgsShaderConstants TU). Mirrors the committed extern in CgsDispatcherCommands.cpp.
-extern ShaderConstantTable mShaderConstantTable;
+// The global runtime shader-constant register (X360 symbol mShaderConstantTable, inside
+// namespace CgsGraphics; its storage is GameSource/World/WorldLinkStubs.cpp:162).
+//
+// ⛔ THIS DECLARATION USED TO BE AT GLOBAL SCOPE, and that was a LATENT UNRESOLVED EXTERNAL,
+// not a style point: the definition is CgsGraphics::mShaderConstantTable, so `::
+// mShaderConstantTable` is a different mangled name that nothing defines. The TU compiled
+// clean for as long as it was unmounted -- `cl /c` cannot see it -- and would have taken the
+// shared link (and with it the exe, which a failed link deletes) on the first build that
+// mounted it. Fixed with the mount, 2026-09-06. Every other consumer
+// (BrnRendererModule / BrnWorldModule / CgsDispatcherCommands / the two Traffic render TUs)
+// spells it exactly like this.
+namespace CgsGraphics { extern ::ShaderConstantTable mShaderConstantTable; }
 
 namespace BrnWorld
 {
@@ -48,17 +57,17 @@ void SetGlassFractureConstants(float lfFractureStrength,
                                lfInverseStrength,
                                0.0f,
                                0.0f };
-    mShaderConstantTable.SetShaderConstantData(30, lv4Fracture);
+    CgsGraphics::mShaderConstantTable.SetShaderConstantData(30, lv4Fracture);
 
     // Constant 31: the incoming UV-offsets vector, verbatim (held in v127 across the call).
-    mShaderConstantTable.SetShaderConstantData(31, lvUVOffsets);
+    CgsGraphics::mShaderConstantTable.SetShaderConstantData(31, lvUVOffsets);
 
     // Constant 32: {uv.x, uv.x * equalisation, uv.y, uv.y * equalisation}.
     const Vector4 lv4UVScale{ lvUVScale.x,
                               lvUVScale.x * lfEqualisationFactor,
                               lvUVScale.y,
                               lvUVScale.y * lfEqualisationFactor };
-    mShaderConstantTable.SetShaderConstantData(32, lv4UVScale);
+    CgsGraphics::mShaderConstantTable.SetShaderConstantData(32, lv4UVScale);
 }
 
 }   // namespace BrnWorld

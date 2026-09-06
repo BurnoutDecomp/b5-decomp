@@ -181,6 +181,57 @@ Vector4 gvWheelBlurConstants = { 30.0f, 30.0f, 30.0f, 30.0f };
 static const s32 KU_WHEELS_TO_RENDER_MAX = 4;
 
 // ============================================================================
+// unk_82FAD420 -- THE PER-PANE CRACK UV OFFSET TABLE (shader constant 31,
+// `g_glassFractureUVOffsets`). Eight Vector4s, one per iteration of the cracked-glass
+// loop (`addi r24, r24, 0x10` @0x822D0F54).
+//
+// ⚠️ ANOTHER SILENT-ZERO CONSTANT: the 128 bytes read 0x00 straight out of the image
+// because a CRT dynamic initialiser fills them before main, so a literal scan finds only
+// the READER. tools/re/findinit.py 0x82FAD420 reports exactly two sites that materialise
+// the address -- 0x822D0990 (this loop) and 0x82C4BE38 (the writer) -- and disassembling
+// the writer at 0x82C4BD40..0x82C4BEBC shows it building eight quadwords on the stack from
+// .rodata floats and copying them to +0x00..+0x70 with `stvx128 v0, r11, {0,0x10,..,0x70}`.
+// The 32 sources, in the writer's own store order, decode to:
+//
+//   -0x80 8200D584 -0.0    -0x7c 820147FC  0.5    -0x78 82005450  0.9    -0x74 820147E0 0.1
+//   -0x70 82020A84 -0.2    -0x6c 8200D5FC -0.7    -0x68 8201496C  0.3    -0x64 82014930 0.8
+//   -0x60 82004C78 -0.5    -0x5c 82014930  0.8    -0x58 820147F4  0.6    -0x54 82005450 0.9
+//   -0x50 8200D530 -0.1    -0x4c 82004C68  0.7    -0x48 820147FC  0.5    -0x44 82004C68 0.7
+//   -0x40 8200D5A4 -0.9    -0x3c 8200D5A4 -0.9    -0x38 82014930  0.8    -0x34 8200473C 0.4
+//   -0x30 82004C78 -0.5    -0x2c 8201496C  0.3    -0x28 820147F4  0.6    -0x24 820147F4 0.6
+//   -0x20 8200D564 -0.8    -0x1c 820147FC  0.5    -0x18 820147FC  0.5    -0x14 820147E0 0.1
+//   -0x10 82020A80 -0.3    -0x0c 82020A80 -0.3    -0x08 82005450  0.9    -0x04 8200473C 0.4
+//
+// Read with tools/re/x360rd.py; every value is an exact tenth, which is itself a check.
+// They are two UV offsets per pane (xy for the first crack fetch, zw for the second), and
+// their job is to decorrelate the pattern so eight panes of one car do not crack alike.
+// ============================================================================
+static const Vector4 KAV4_GLASS_FRACTURE_UV_OFFSETS[8] =
+{
+    { -0.0f,  0.5f,  0.9f,  0.1f },
+    { -0.2f, -0.7f,  0.3f,  0.8f },
+    { -0.5f,  0.8f,  0.6f,  0.9f },
+    { -0.1f,  0.7f,  0.5f,  0.7f },
+    { -0.9f, -0.9f,  0.8f,  0.4f },
+    { -0.5f,  0.3f,  0.6f,  0.6f },
+    { -0.8f,  0.5f,  0.5f,  0.1f },
+    { -0.3f, -0.3f,  0.9f,  0.4f },
+};
+
+// BrnWorld::SetGlassFractureConstants @0x822BD280 -- defined in the sibling TU
+// BrnRaceCarEntityModule_GlassFracture.cpp, whose DWARF declaration home is
+// BrnRaceCarEntityModule.h. Declared here rather than added to that header for the same
+// reason the ShaderConstantTable extern above is spelled locally: this TU needs the
+// symbol, not the header's whole surface.
+namespace BrnWorld
+{
+    void SetGlassFractureConstants(float lfFractureStrength,
+                                   float lfEqualisationFactor,
+                                   const Vector2& lvUVScale,
+                                   Vector4 lvUVOffsets);
+}
+
+// ============================================================================
 // The three constants shader constant 24 (`g_selfIlluminationMask`) is built from.
 // All three were READ OUT OF THE SHIPPED IMAGE, not guessed: the wave decrypted and
 // decompressed BURNOUT_X360_ARTIST.XEX's basefile (XEX2, encryption type 1 with the
@@ -389,6 +440,25 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                            && lpShadowMap->IsUsingZOnlyRenderingPath();
 
     // ---- per-car shader constants ------------------------------------------
+    // ⭐ THE "NO FRACTURE" RESET, restored 2026-09-06. `fmr f1, f31(=0.0f) ; fmr f2, f29(=1.0f)
+    // ; addi r5, r1, var_510 (= {0,0}) ; vmr128 v1, v123 (= vspltisw 0) ; bl
+    // SetGlassFractureConstants` @0x822CFBE0..0x822CFC08 -- one call per car, immediately
+    // before constants 20/21. It is what makes an INTACT pane intact: with strength 0 the
+    // helper writes inv = 0 into constant 30, and the pixel shader's
+    // `mad_sat r1.xy, r4, c5.y, -c5.x` then collapses to saturate(0) on every glass pixel.
+    // Without it the register keeps the LAST cracked pane's strength -- and an unset external
+    // shader constant is SKIPPED rather than zeroed (shadowingdevice.cpp:847), so before this
+    // wave constants 30/31/32 were never published by anything at all and every glass program
+    // read whatever the previous draw left in c5 / c159 / c160.
+    // ⛔ WAS BLOCKED ON A MOUNT, NOT ON KNOWLEDGE: the only definition of
+    // SetGlassFractureConstants lives in BrnRaceCarEntityModule_GlassFracture.cpp, which was
+    // absent from tools/build/build_game_exe.bat. That mount lands with this change.
+    {
+        const Vector2 lv2NoFractureScale   = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector4 lv4NoFractureOffsets = { 0.0f, 0.0f, 0.0f, 0.0f };
+        SetGlassFractureConstants( 0.0f, 1.0f, lv2NoFractureScale, lv4NoFractureOffsets );
+    }
+
     // 20 / 21: the paint + pearlescent tints, straight out of the render snapshot
     // (`lvx128 v1, r16, 2944` / `..., 2960`).
     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 20, lpRenderParams->GetPaintColour() );
@@ -902,10 +972,262 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     }
     // ---- end [DIAG carrender wave] --------------------------------------------
 
-    // NOT reconstructed (see the banner), in console order after the body-part loop:
-    //   * `if (lbRenderAttachedGeometry)`  -- the cracked-glass loop, which walks the
-    //     spec's shattered-glass part table and calls BrnWorld::SetGlassFractureConstants
-    //     per pane before its own AddToBin/Submit.
+    // ========================================================================
+    // ⭐⭐ THE CRACKED-GLASS LOOP  (@0x822D0964..0x822D0F64) -- LANDED 2026-09-06.
+    //
+    // This block used to be the file's largest named absence, and it is not cosmetic: it is
+    // the ONLY thing that draws a cracked pane. The body-part loop above hands AddToBin
+    // `excludeMeshBits = mu8RenderDamageFlags`, and DrawRenderable::Interpret drops every
+    // mesh whose own `mu8Flags` intersects that byte -- and the L2 glass drain
+    // (BrnRaceCarEntityModule.cpp, the GlassSmashOrCrackQueue) sets bit N the moment pane N
+    // CRACKS, not only when it smashes. So without this loop a cracked pane's mesh is removed
+    // from the car and nothing replaces it: the pane becomes a hole, indistinguishable from a
+    // smashed one. On one measured crash that is 2,532 of 2,542 glass events.
+    //
+    // WHAT THE CONSOLE DRAWS INSTEAD. The spec carries a SECOND model per pane --
+    // BrnVehicle::GraphicsSpec::mpShatteredGlassParts[i] = {mpModel, muBodyPartIndex,
+    // muBodyPartType} -- and this loop submits it at the pane's own body-part locator with
+    // three shader constants published in front of it. The gate is the pair
+    //     (mu8RenderDamageFlags & (1 << pane)) != 0     &&     fractureAmount <= 1.0f
+    // (`lbz r11, 0x1416(r16)` / `slw r10, 1, pane` @0x822D09E4-9F8, then
+    // `fcmpu f31, f29(=1.0f) ; bgt` @0x822D09FC), and the second half is what separates the
+    // two states: the drain writes the crack amount in [0,1] for CRACKED and the literal
+    // 2.0f (flt_82014984) for SMASHED, so a smashed pane falls through this loop and stays a
+    // hole -- which is exactly the behaviour the glass wave already filmed.
+    //
+    // THE THREE CONSTANTS. BrnWorld::SetGlassFractureConstants(strength, equalisation,
+    // uvScale, uvOffsets) writes 30/31/32, and the shipped
+    // Glass_Specular_Transparent_Doublesided programs consume all three (fxc /dumpbin over
+    // build/game/SHADERS.BNDL):
+    //     VS  mov r2, c160 ; mad o7, v3.xyxy, r2, c159   -- TEXCOORD6 = uv1.xyxy*scale+offset
+    //     PS  texld r1, v6, s14 ; texld r3, v6.zwzw, s14 ; max r4.xyz, r1.xyww, r3.xyww
+    //         mad_sat r1.xy, r4, c5.y, -c5.x             -- saturate((crackTex - (1-s)) / s)
+    // i.e. TWO crack fetches at two scales, maxed, remapped by the strength, then used to
+    // perturb the normal and (past a 0.05 threshold) to swap the pane to the crack colour
+    // and double its alpha.
+    //
+    // ⚠️ THE PER-PANE UV OFFSET TABLE IS A SILENT-ZERO CONSTANT and had to be recovered from
+    // the image, not read from it. `unk_82FAD420` reads 128 bytes of 0x00 straight out of
+    // the XEX because a CRT init thunk fills it at startup; tools/re/findinit.py names the
+    // writer (0x82C4BE38 is the second of exactly two sites that materialise the address,
+    // the other being this loop's own `addi r24, r11, unk_82FAD420@l` @0x822D0990), and
+    // disassembling 0x82C4BD40..0x82C4BEBC gives eight stack-built quadwords copied to
+    // +0x00..+0x70. Their .rodata sources decode to the table below. The loop walks it with
+    // `addi r24, r24, 0x10` per ITERATION (not per drawn pane), so it is indexed by the
+    // loop counter.
+    // ========================================================================
+    if ( lbRenderAttachedGeometry )
+    {
+        const ActiveRaceCar::RenderParams::DetachedPartRenderQueue& lrGlassDetachedParts =
+            lpRenderParams->GetDetachedPartQueue();
+
+        const u32 luGlassPartCount = lpCarGraphicsSpec->muShatteredGlassPartsCount;
+        const BrnVehicle::ShatteredGlassPart* const lpGlassParts =
+            lpCarGraphicsSpec->GetShatteredGlassParts();
+
+        // [DIAG glassfx wave] THE OUTCOME CENSUS, not a "did it run" flag. Five different
+        // things can make this loop draw nothing and a boolean could only ever report the
+        // first car's answer, so every pane's outcome is tallied and the tuple is printed once
+        // per DISTINCT value. ⛔ DELETE-WHEN cracked panes are confirmed on film.
+        u32 luSeen = 0u, luNotDamaged = 0u, luSmashed = 0u, luNoModel = 0u, luSubmitted = 0u;
+
+        // [PC guard] the console dereferences the table unguarded, because it only reaches
+        // RenderRaceCar for a car whose whole resource set is in. This build renders cars with
+        // PARTIAL sets through the BringUp getters (see the wheel block's own FLAG below), and
+        // a null table with a non-zero count is exactly the shape the 27 rig-less cars carry on
+        // disc. DELETE with the BringUp getters.
+        for ( u32 luGlassIdx = 0;
+              lpGlassParts != 0 && luGlassIdx < luGlassPartCount;
+              ++luGlassIdx )
+        {
+            ++luSeen;
+            const BrnVehicle::ShatteredGlassPart* const lpPart = &lpGlassParts[luGlassIdx];
+            CGS_ASSERT( lpPart != 0, "lpPart != NULL" );
+
+            // `lwz r11, 8(r29) ; addi r30, r11, -0x10` -- the pane index is the part TYPE
+            // minus E_TAGPOINT_GLASS_BASE (16), the same subtraction the L2 drain does.
+            const s32 liPane = static_cast< s32 >( lpPart->muBodyPartType ) - 16;
+            if ( liPane < 0 || liPane >= 8 )
+            {
+                continue;   // [PC guard] the console indexes an 8-slot array unguarded
+            }
+
+            const f32 lfFracture =
+                lpRenderParams->GetCrackedGlassFractureAmountN( static_cast< u32 >( liPane ) );
+
+            // The pane must be DAMAGED and not SMASHED. 2.0f is the drain's smashed literal.
+            if ( ( lpRenderParams->GetRenderDamageFlag() & ( 1u << liPane ) ) == 0 )
+            {
+                ++luNotDamaged;
+                continue;
+            }
+            if ( lfFracture > 1.0f )
+            {
+                ++luSmashed;
+                continue;
+            }
+
+            const f32 lfEqualisation =
+                lpRenderParams->GetCrackedGlassEqualisationFactorN( static_cast< u32 >( liPane ) );
+            const Vector2 lv2Scale =
+                lpRenderParams->GetCrackedGlassScale( static_cast< u32 >( liPane ) );
+
+            // v127 is loaded from the table BEFORE the GetCrackedGlassScale call and carried
+            // across it (`lvx128 v127, r0, r24` @0x822D0A18, `vmr128 v1, v127` @0x822D0A28).
+            SetGlassFractureConstants( lfFracture, lfEqualisation, lv2Scale,
+                                       KAV4_GLASS_FRACTURE_UV_OFFSETS[
+                                           luGlassIdx < 8u ? luGlassIdx : 7u ] );
+
+            // World matrix = the PANE'S BODY PART locator * bodyTransform. `lwz r11, 4(r29)`
+            // is muBodyPartIndex and `slwi r10, r11, 6` is its 64-byte stride into
+            // mpPartLocators -- the same rw::math::vpu::Mult, locator on the left, that the
+            // body-part loop above uses. (Measured on the shipped VEH_PUSMC01_GR.BIN: the six
+            // records name body parts 8, 9, 20, 20, 20, 20 -- four panes share the cabin part,
+            // which is exactly why the exclusion has to be per-MESH and not per-part.)
+            if ( lpPart->muBodyPartIndex >= lpCarGraphicsSpec->muPartsCount )
+            {
+                ++luNoModel;   // [PC guard] out-of-range index; the console indexes unguarded
+                continue;
+            }
+            Matrix44Affine lGlassWorldMatrix =
+                rw::math::vpu::Mult( lpCarGraphicsSpec->GetPartLocators()[lpPart->muBodyPartIndex],
+                                     lBodyTransform );
+
+            // If the pane's body part has been knocked off, follow it: the console searches
+            // the detached queue for an entry whose miPartIndex == muBodyPartIndex and, on a
+            // hit, OVERWRITES all four rows with the queue entry's transform
+            // (@0x822D0B10..0x822D0B70). Note it does NOT consult mbIsAttached here -- unlike
+            // the body-part loop, a detached pane is drawn either way.
+            for ( s32 liEvent = 0; liEvent < lrGlassDetachedParts.GetLength(); ++liEvent )
+            {
+                const DetachedPartRenderEvent& lrEvent = lrGlassDetachedParts.GetEvent( liEvent );
+                if ( lrEvent.miPartIndex == static_cast< s32 >( lpPart->muBodyPartIndex ) )
+                {
+                    lGlassWorldMatrix = lrEvent.mTransform;
+                    break;
+                }
+            }
+
+            // Technique index -- BIT FOR BIT the body-part loop's, and that is an asm fact:
+            // pseudocode lines 1123-1131 (the body loop) and 1421-1429 (this one) are the
+            // SAME two branches over the SAME two values, `if (v351 || *v329)` with
+            // `v351 = mbDamaged || kbAllowDeformationDebug` and `*v329 = module + 100216`,
+            // selecting on `v320` == the shadow byte built at 0x822CFBC0..0x822CFBE4.
+            u8 lu8GlassTechnique;
+            if ( lbDamaged )
+            {
+                lu8GlassTechnique = lbShadowPass ? 3u : 0u;
+            }
+            else
+            {
+                lu8GlassTechnique = lbShadowPass ? 2u : 1u;
+            }
+
+            // The glass model is always drawn at its FIRST state: `lwz r11, 4(r26) ;
+            // lbz r11, 0(r11)` reads mpu8StateRenderableIndices[0], and the two asserts that
+            // follow ("State does not exist" at :400, the null renderable at :403) are
+            // GetRenderable's own. It never consults the car's LOD.
+            const CgsGraphics::Model* const lpGlassModel = lpPart->GetModel();
+            if ( lpGlassModel == 0 || !lpGlassModel->DoesStateExist( CgsGraphics::Model::E_STATE_LOD_0 ) )
+            {
+                ++luNoModel;
+                continue;   // [PC guard] the console asserts instead; a missing state here
+                            // would fault on this build's partially-streamed cars
+            }
+
+            const CgsGraphics::Renderable* const lpGlassRenderable =
+                lpGlassModel->GetRenderable( CgsGraphics::Model::E_STATE_LOD_0 );
+            CGS_ASSERT( lpGlassRenderable != 0, "lpRenderable" );
+            CGS_ASSERT( !lpGlassModel->GetFlag(
+                            CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER ),
+                        "lbInstancing == GetFlag( CgsGraphics::Model::"
+                        "E_FLAG_MODEL_USES_INSTANCE_SHADER )" );
+
+            CgsGraphics::DispatchList* const lpGlassList = lpDispatchFrame->GetList( liObjectList );
+            CGS_ASSERT( lpGlassList != 0, "lpDispatchList" );
+            if ( lpGlassList == 0 )
+            {
+                continue;
+            }
+
+            // Constant 0 is the pane's world matrix, published inside the packet exactly as
+            // the body-part loop does (`addi r5, r1, var_350 ; li r4, 0 ; bl sub_822B33B8`).
+            CgsGraphics::mShaderConstantTable.SetShaderConstantData( 0, lGlassWorldMatrix );
+
+            const bool lbGlassFirstInList = ( lpGlassList->GetCount() & 0x7F ) == 0;
+
+            lpDispatchFrame->GetBin().BeginPacket();
+            if ( lbShadowPass )
+            {
+                // @0x822D0D18..0x822D0D74: both mesh lists are the OPAQUE one, zOnly = 1.
+                CgsGraphics::DrawRenderable::AddToBin(
+                    lpGlassRenderable, lpDispatchFrame, lbGlassFirstInList,
+                    static_cast< s8 >( liOpaqueMeshList ), static_cast< s8 >( liOpaqueMeshList ),
+                    1, lu8GlassTechnique, true,
+                    0xFFu, 0u, 0, 0u );
+            }
+            else
+            {
+                // @0x822D0EC8..0x822D0F28: opaque + transparent, zOnly = 0.
+                CgsGraphics::DrawRenderable::AddToBin(
+                    lpGlassRenderable, lpDispatchFrame, lbGlassFirstInList,
+                    static_cast< s8 >( liOpaqueMeshList ),
+                    static_cast< s8 >( liTransparentMeshList ),
+                    1, lu8GlassTechnique, false,
+                    0xFFu, 0u, 0, 0u );
+            }
+            // ⭐ excludeMeshBits is ZERO here (`stb r31, var_521(r1)`, r31 == 0), NOT
+            // mu8RenderDamageFlags. It has to be: the whole point of this draw is the pane the
+            // body walk just excluded.
+
+            lpGlassList->Submit( 0, lpDispatchFrame->GetBin().EndPacket() );
+            ++luSubmitted;
+
+            // [DIAG glassfx wave] one line per DISTINCT (pane, strength) pair -- a census, not
+            // a peak. "the loop never ran", "it ran and every pane was skipped" and "it ran and
+            // submitted" are three different findings and a bare counter conflates them.
+            {
+                static u32 sauLoggedPaneKeys[8] = { 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u };
+                const u32 luKey = static_cast< u32 >( lfFracture * 100.0f ) + 1u;
+                if ( sauLoggedPaneKeys[liPane] != luKey && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    sauLoggedPaneKeys[liPane] = luKey;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[glassfx] cracked pane " << liPane
+                        << " SUBMITTED  strength " << lfFracture
+                        << " equalisation " << lfEqualisation
+                        << " scale (" << lv2Scale.x << ", " << lv2Scale.y << ")"
+                        << " bodyPart " << static_cast< s32 >( lpPart->muBodyPartIndex )
+                        << " technique " << static_cast< s32 >( lu8GlassTechnique ) << "\n";
+                }
+            }
+        }
+
+        // The outcome tuple, printed once per DISTINCT value. A run where this line never
+        // appears at all means RenderRaceCar was not reached with lbRenderAttachedGeometry;
+        // a run where it reads `seen 6 notDamaged 6` means the drain never set a flag; a run
+        // where it reads `submitted 0 noModel 6` means the spec has no shattered models on
+        // this build. Those are three different bugs and the [glassfx] device probe cannot
+        // tell them apart on its own.
+        {
+            static u32 suLastCensusKey = 0xFFFFFFFFu;
+            const u32 luCensusKey = ( luSeen << 20 ) | ( luNotDamaged << 15 )
+                                  | ( luSmashed << 10 ) | ( luNoModel << 5 ) | luSubmitted;
+            if ( luCensusKey != suLastCensusKey && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                suLastCensusKey = luCensusKey;
+                *CgsDev::Log::gpDebugPrint
+                    << "[glassfx] shattered-glass loop: seen " << static_cast< s32 >( luSeen )
+                    << " notDamaged " << static_cast< s32 >( luNotDamaged )
+                    << " smashed " << static_cast< s32 >( luSmashed )
+                    << " noModel " << static_cast< s32 >( luNoModel )
+                    << " SUBMITTED " << static_cast< s32 >( luSubmitted )
+                    << "  (specCount " << static_cast< s32 >( luGlassPartCount )
+                    << " damageFlags 0x" << static_cast< s32 >( lpRenderParams->GetRenderDamageFlag() )
+                    << ")\n";
+            }
+        }
+    }
 
     // ---- the WHEEL block  (@0x822D0F60..0x822D15BC) -------------------------
     // `if (*(this + 99148) && a42)` -- the module's wheel switch and the caller's

@@ -79,7 +79,14 @@ struct ShatteredGlassPart
 {
     u32 mpModel;            // +0  load-relative CgsGraphics::Model*
     u32 muBodyPartIndex;    // +4  index into the mppPartModels table
-    u32 muBodyPartType;     // +8
+    u32 muBodyPartType;     // +8  E_TAGPOINT_GLASS_* -- minus 16 it is the PANE INDEX, the
+                            //     same subtraction RenderRaceCar @0x822D09D4 and the L2 glass
+                            //     drain both do (`addi r30, r11, -0x10`).
+
+    // The pane's own SHATTERED model -- the thing RenderRaceCar's cracked-glass loop submits
+    // in place of the body mesh the damage flags excluded. Same 4-byte load-relative slot as
+    // the body-part model pointers (see the banner); widened on read like every sibling here.
+    const CgsGraphics::Model* GetModel() const;
 };
 
 struct GraphicsSpec
@@ -132,6 +139,13 @@ struct GraphicsSpec
         return static_cast< const u8* >( Widen( mpNumRigidBodiesForPart ) );
     }
 };
+
+// Defined out of line because it needs GraphicsSpec::Widen, which is declared below the
+// record it belongs to (the record is laid out first so its offsets read in disc order).
+inline const CgsGraphics::Model* ShatteredGlassPart::GetModel() const
+{
+    return static_cast< const CgsGraphics::Model* >( GraphicsSpec::Widen( mpModel ) );
+}
 
 // BrnWheel::GraphicsSpec is the wheel-side twin (DWARF: muVersion, mpWheelModel,
 // mpCaliperModel; Construct() seeds both models to (Model*)-1 == "absent"). Its own

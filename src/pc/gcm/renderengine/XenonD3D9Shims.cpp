@@ -3294,6 +3294,368 @@ namespace renderengine
         lpDevice->SetVertexShaderConstantF(0u, safForce, 128u);
     }
 
+    // =====================================================================================
+    // [PROBE, env-gated: BRN_GLASSFX_PROBE] THE CRACKED-GLASS CHAIN, READ AT THE DRAW.
+    //
+    // WHAT IT IS FOR. A cracked pane on the console is a SECOND DRAW: the pane's own mesh is
+    // dropped out of the body renderable (AddToBin's excludeMeshBits == mu8RenderDamageFlags,
+    // whose bit N is set for pane N the moment it cracks OR smashes) and the spec's
+    // ShatteredGlassPart[N] model is submitted in its place, with three shader constants
+    // published in front of it by BrnWorld::SetGlassFractureConstants @0x822BD280:
+    //
+    //   30 g_glassFractureStrength      {(1-s)*inv, inv, 0, 0}, inv = s>0 ? 1/s : 0
+    //   31 g_glassFractureUVOffsets     the per-pane offset vector (gaGlassFractureUVOffsets)
+    //   32 g_glassFractureFresnelRanges {scale.x, scale.x*eq, scale.y, scale.y*eq}
+    //
+    // and the shipped Glass_Specular_Transparent_Doublesided programs in build/game/
+    // SHADERS.BNDL consume exactly those three (dumped with fxc /dumpbin off the bundle):
+    //
+    //   VS  g_glassFractureUVOffsets c159, g_glassFractureFresnelRanges c160
+    //         mov r2, c160
+    //         mad o7, v3.xyxy, r2, c159        ; TEXCOORD6 = uv1.xyxy * scale + offset
+    //   PS  g_glassFractureStrength c5, GlassFractureSampler s14
+    //         texld r1, v6,      s14
+    //         texld r3, v6.zwzw, s14
+    //         max   r4.xyz, r1.xyww, r3.xyww
+    //         mad_sat r1.xy, r4, c5.y, -c5.x   ; saturate((crackTex - (1-s)) / s)
+    //         ...  r1.y perturbs the normal; `add r0.x, r1.x, -0.05` + `cmp` swaps the pane
+    //              to the crack colour and doubles its alpha above the threshold
+    //
+    // So there are FIVE independent ways for a crack to be invisible, and a bind-time probe
+    // can see none of them. This one asks the DEVICE, on the line above the draw, after every
+    // render-state override in WorldDraw_IndexedUP -- the same placement and the same reason
+    // as CrumpleProbe_AtDraw beside it (Device::SetMeshTechniquePC is guarded by
+    // `lpTechnique != spLastTechnique`, so a bind says nothing 20,000 draws later).
+    //
+    // WHAT IT REPORTS, and why each one is a histogram or a census and never a max:
+    //   * DRAWS per technique -- "the glass technique never drew" and "it drew and the crack
+    //     term was zero" are different findings and the first is the likelier one on this
+    //     build (the cracked-glass loop in RenderRaceCar is the thing under test).
+    //   * s14 -- which texture unit 14 actually holds at this draw, with a saturating
+    //     distinct-pointer table (the crumple probe's own bug: a full table made every
+    //     further pointer read as "new"), plus the unit's live SAMPLER STATE. The address
+    //     mode is load-bearing: the crack UV is uv1 * paneWidthInMetres + offset, so a
+    //     CLAMPed unit smears one texel across a whole pane. It is printed rather than
+    //     assumed because the console's own params block for this state
+    //     (BrnRendererModule + 5808) is left at the constructor's words -- address 0/0/0,
+    //     filters 0/0/2 -- in an enum this tree has calibrated only at 2 == CLAMP and
+    //     1 == LINEAR. 0 is therefore WRAP by elimination and by the UV arithmetic; the
+    //     filter words are NOT calibrated and the PC leaf installs LINEAR. Measure, do not
+    //     believe this comment.
+    //   * THE STRENGTH HISTOGRAM. c5 carries inv = 1/s, so s = 1/c5.y is recovered and
+    //     bucketed, with a DISTINCT-VALUE count beside it. A defaulted / never-published
+    //     register reads distinct==1 on every draw; a real crack ramp does not. (The glass
+    //     wave's own [glass] histogram already proved the SIMULATION's ramp is real --
+    //     b0 empty, 951/291/587/489/214 across the five upper buckets -- so a flat reading
+    //     here localises the break to the render side, not the producer.)
+    //   * THE UV CONSTANTS -- c159/c160 verbatim. All-zero c160 means the pane's scale never
+    //     reached the vertex program, which collapses both crack fetches onto one texel.
+    //   * A CHANGE-TRIGGERED line, not a peak: the key is the quantised (strength, uvScale.x,
+    //     s14 pointer) triple, so a run that never changes prints once and a run that ramps
+    //     prints the ramp. (The crumple probe's high-water trigger latched on draw #14 and
+    //     could never fire again -- that mistake is not repeated here.)
+    //
+    // ⚠️ THE REGISTER NUMBERS ARE THIS TECHNIQUE'S. c5 / c159 / c160 are where the SHIPPED
+    // Glass_Specular_Transparent_Doublesided CTAB puts them; another program puts other
+    // things there. The probe therefore reads constants ONLY for techniques whose name
+    // contains "Glass", and reports s14 + the draw count for everything else.
+    // =====================================================================================
+    const u32 KU_GLASSFX_PROBE_SLOTS = 48u;
+    const u32 KU_GLASSFX_S14SEEN     = 4u;
+
+    struct GlassFxProbeRecord
+    {
+        const char*             mpcTechnique;
+        u64                     muDraws;
+        u32                     muLines;
+        IDirect3DBaseTexture9*  mapS14Seen[KU_GLASSFX_S14SEEN];
+        u32                     muNumS14Seen;
+        bool                    mbS14Saturated;
+        // The strength histogram, over the whole run for this technique.
+        //  [0] s == 0 (no crack)        [1] < 0.10   [2] < 0.25
+        //  [3] < 0.50                   [4] < 1.00   [5] == 1.0 (full)
+        u32                     mauStrengthBucket[6];
+        u32                     mauDistinct[64];      // quantised s*63, a presence census
+        u32                     muNumDistinct;
+        u32                     muUnpublished;        // draws whose c5 was {0,0,0,0}
+        s32                     miLastKeyA;
+        s32                     miLastKeyB;
+        s32                     miLastKeyC;
+    };
+
+    GlassFxProbeRecord saGlassFxProbe[KU_GLASSFX_PROBE_SLOTS] = {};
+    u32                suGlassFxProbeUsed     = 0u;
+    bool               sbGlassFxProbeOverflow = false;
+
+    void GlassFxProbe_AtDraw(IDirect3DDevice9* lpDevice)
+    {
+        static const char* const spcProbe = std::getenv("BRN_GLASSFX_PROBE");
+        if (spcProbe == nullptr || spcProbe[0] == '0' || lpDevice == nullptr)
+            return;
+
+        LogOnce("gfxarm", "[glassfx] probe ARMED (BRN_GLASSFX_PROBE) -- s14 + the three glass"
+                          " fracture constants, read off the device at DRAW time\n");
+
+        const char* const lpcName = (spCurrentTechniqueName != nullptr)
+                                        ? spCurrentTechniqueName : "<no technique>";
+
+        // Same filter convention as the crumple/scratch probes. ⛔ The technique NAME's first
+        // character is overwritten with the shader-profile digit by
+        // ShaderTechniqueResourceType::PostFixUp, so "Glass_..." reads "0lass_..." -- never
+        // match the first letter. "g"/"G" is expanded to the safe tail "lass".
+        //
+        // ⚠️ "lass" IS THE WRONG FILTER FOR THIS QUESTION, and the first run of this probe
+        // proved it by measuring a technique that has nothing to do with the crack. The only
+        // technique in build/game/SHADERS.BNDL that declares the three fracture constants is
+        //     a46b6ca0  Vehicle_Greyscale_Window_Textured_Damaged
+        //         VS ext: g_glassFractureFresnelRanges, g_glassFractureUVOffsets, g_verletOffsets
+        //         PS ext: g_glassFractureStrength
+        // -- so the filter that matters is "indow". `Glass_Specular_Transparent_Doublesided`
+        // (f4e10c1f) is WORLD glass: it declares NO fracture constant, and its PS c5 is
+        // KeyLightColour, which is exactly the {0.85, 0.85, 0.53, 0} the first run reported and
+        // (wrongly) read as "constant 30 never arrives".
+        static const char* const spcFilter =
+            (spcProbe[0] == '1' && spcProbe[1] == '\0') ? nullptr
+            : ((spcProbe[0] == 'g' || spcProbe[0] == 'G') && spcProbe[1] == 'l') ? "lass"
+            : ((spcProbe[0] == 'w' || spcProbe[0] == 'W') && spcProbe[1] == 'i') ? "indow"
+            : spcProbe;
+        if (spcFilter != nullptr && std::strstr(lpcName, spcFilter) == nullptr)
+            return;
+
+        GlassFxProbeRecord* lpRecord = nullptr;
+        for (u32 lu = 0; lu < suGlassFxProbeUsed; ++lu)
+        {
+            if (saGlassFxProbe[lu].mpcTechnique == lpcName)
+            {
+                lpRecord = &saGlassFxProbe[lu];
+                break;
+            }
+        }
+        if (lpRecord == nullptr)
+        {
+            if (suGlassFxProbeUsed >= KU_GLASSFX_PROBE_SLOTS)
+            {
+                // ⚠️ SAY SO -- a silently truncated table is a coverage claim nobody can check.
+                LogOnce("gfxfull", "[glassfx] technique table FULL -- later techniques are NOT"
+                                   " being probed; this run cannot claim coverage\n");
+                sbGlassFxProbeOverflow = true;
+                return;
+            }
+            lpRecord = &saGlassFxProbe[suGlassFxProbeUsed++];
+            lpRecord->mpcTechnique = lpcName;
+            lpRecord->miLastKeyA   = -1;
+            lpRecord->miLastKeyB   = -1;
+            lpRecord->miLastKeyC   = -1;
+        }
+        ++lpRecord->muDraws;
+
+        // ---- unit 14, as the device holds it right now -----------------------------------
+        IDirect3DBaseTexture9* lpS14 = nullptr;
+        lpDevice->GetTexture(14u, &lpS14);
+        if (lpS14 != nullptr)
+            lpS14->Release();               // the identity only; GetTexture AddRef'd it
+
+        bool lbNewS14 = false;
+        if (!lpRecord->mbS14Saturated)
+        {
+            lbNewS14 = true;
+            for (u32 lu = 0; lu < lpRecord->muNumS14Seen; ++lu)
+            {
+                if (lpRecord->mapS14Seen[lu] == lpS14)
+                {
+                    lbNewS14 = false;
+                    break;
+                }
+            }
+            if (lbNewS14)
+            {
+                if (lpRecord->muNumS14Seen < KU_GLASSFX_S14SEEN)
+                {
+                    lpRecord->mapS14Seen[lpRecord->muNumS14Seen++] = lpS14;
+                }
+                else
+                {
+                    // ⛔ EXPLICIT SATURATION LATCH. Without it a full table makes every later
+                    // pointer read as "new" and the probe logs on every draw -- the 302 MB log
+                    // that killed the first cut of the crumple probe in 41 s.
+                    lpRecord->mbS14Saturated = true;
+                    lbNewS14                 = false;
+                }
+            }
+        }
+
+        // ⚠️ ONLY ONE PROGRAM PUTS THE FRACTURE CONSTANTS AT THESE REGISTERS, and it is the
+        // vehicle WINDOW DAMAGED one (see the filter banner above). Reading c5 / c159 / c160 on
+        // any other technique reports that program's own constants under this one's names --
+        // which is precisely the false negative the first run of this probe produced.
+        const bool lbGlassTechnique = (std::strstr(lpcName, "indow") != nullptr)
+                                   && (std::strstr(lpcName, "Damaged") != nullptr);
+
+        f32 lafStrength[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        f32 lafOffsets[4]  = { 0.0f, 0.0f, 0.0f, 0.0f };
+        f32 lafScale[4]    = { 0.0f, 0.0f, 0.0f, 0.0f };
+        f32 lfStrength     = -1.0f;
+        if (lbGlassTechnique)
+        {
+            lpDevice->GetPixelShaderConstantF(5u, lafStrength, 1u);
+            lpDevice->GetVertexShaderConstantF(159u, lafOffsets, 1u);
+            lpDevice->GetVertexShaderConstantF(160u, lafScale, 1u);
+
+            // c5 = {(1-s)*inv, inv, 0, 0}. inv == 0 is the console's own "s <= 0" arm, i.e.
+            // NO CRACK -- and it is also exactly what an unpublished register reads if the
+            // last writer left zeros there, so the two are counted apart.
+            if (lafStrength[1] > 0.0f)
+                lfStrength = 1.0f / lafStrength[1];
+            else if (lafStrength[0] == 0.0f && lafStrength[1] == 0.0f)
+                lfStrength = 0.0f;
+
+            if (lafStrength[0] == 0.0f && lafStrength[1] == 0.0f
+                && lafStrength[2] == 0.0f && lafStrength[3] == 0.0f)
+            {
+                ++lpRecord->muUnpublished;
+            }
+
+            if (lfStrength >= 0.0f)
+            {
+                const f32 lfClamped = (lfStrength > 1.0f) ? 1.0f : lfStrength;
+                u32 luBucket;
+                if      (lfClamped <= 0.0f)   luBucket = 0u;
+                else if (lfClamped <  0.10f)  luBucket = 1u;
+                else if (lfClamped <  0.25f)  luBucket = 2u;
+                else if (lfClamped <  0.50f)  luBucket = 3u;
+                else if (lfClamped <  1.00f)  luBucket = 4u;
+                else                          luBucket = 5u;
+                ++lpRecord->mauStrengthBucket[luBucket];
+
+                // Distinct-value census, quantised to 1/63. A DEFAULTED register reads one
+                // value for ever; a driven one does not. The max cannot tell them apart.
+                const u32 luSlot = static_cast<u32>(lfClamped * 63.0f + 0.5f);
+                if (luSlot < 64u && lpRecord->mauDistinct[luSlot] == 0u)
+                    ++lpRecord->muNumDistinct;
+                if (luSlot < 64u)
+                    ++lpRecord->mauDistinct[luSlot];
+            }
+        }
+
+        // ---- the change trigger. A key, not a peak. --------------------------------------
+        const s32 liKeyA = (lfStrength >= 0.0f)
+                               ? static_cast<s32>(lfStrength * 1000.0f) : -1;
+        const s32 liKeyB = static_cast<s32>(lafScale[0] * 1000.0f);
+        const s32 liKeyC = static_cast<s32>(reinterpret_cast<uintptr_t>(lpS14) & 0xFFFFFF);
+        const bool lbChanged = (liKeyA != lpRecord->miLastKeyA)
+                            || (liKeyB != lpRecord->miLastKeyB)
+                            || (liKeyC != lpRecord->miLastKeyC);
+        // ⭐ THE PERIODIC LINE IS NOT SUBJECT TO THE CAP, and that is the whole design. A cap
+        // that silences the periodic census too is the "instrument stopped before the event"
+        // failure: the histogram is CUMULATIVE, so the last line printed is the only place the
+        // run's totals ever appear, and a run that changes 400 times early would then report
+        // its totals from the first tenth of the crash. The cap silences CHANGE lines only.
+        const bool lbPeriodic = ((lpRecord->muDraws % 1024u) == 1u);
+        const bool lbCapped   = (lpRecord->muLines >= 400u);
+
+        if (!lbPeriodic && (lbCapped || (!lbChanged && !lbNewS14)))
+        {
+            if (lbCapped && lpRecord->muLines == 400u)
+            {
+                ++lpRecord->muLines;   // the cap line, once
+                CgsDev::Log::WriteToLog("[glassfx] per-technique CHANGE-line cap reached --"
+                                        " later changes are not printed; the periodic census"
+                                        " every 1024 draws continues\n");
+            }
+            return;
+        }
+        lpRecord->miLastKeyA = liKeyA;
+        lpRecord->miLastKeyB = liKeyB;
+        lpRecord->miLastKeyC = liKeyC;
+        if (!lbCapped)
+        {
+            ++lpRecord->muLines;
+        }
+
+        // The unit's live sampler words, so the address/filter question is measured.
+        DWORD luAddrU = 0, luAddrV = 0, luMag = 0, luMin = 0, luMip = 0;
+        lpDevice->GetSamplerState(14u, D3DSAMP_ADDRESSU,  &luAddrU);
+        lpDevice->GetSamplerState(14u, D3DSAMP_ADDRESSV,  &luAddrV);
+        lpDevice->GetSamplerState(14u, D3DSAMP_MAGFILTER, &luMag);
+        lpDevice->GetSamplerState(14u, D3DSAMP_MINFILTER, &luMin);
+        lpDevice->GetSamplerState(14u, D3DSAMP_MIPFILTER, &luMip);
+
+        u32 luW = 0u, luH = 0u, luLevels = 0u, luFmt = 0u;
+        if (lpS14 != nullptr && lpS14->GetType() == D3DRTYPE_TEXTURE)
+        {
+            D3DSURFACE_DESC lDesc = {};
+            if (SUCCEEDED(static_cast<IDirect3DTexture9*>(lpS14)->GetLevelDesc(0u, &lDesc)))
+            {
+                luW      = lDesc.Width;
+                luH      = lDesc.Height;
+                luFmt    = static_cast<u32>(lDesc.Format);
+                luLevels = lpS14->GetLevelCount();
+            }
+        }
+
+        char lacMsg[640];
+        std::snprintf(
+            lacMsg, sizeof(lacMsg),
+            "[glassfx] tech='%s' draw=%llu  s14=%p %ux%u fmt=%u mips=%u"
+            " addr=%u/%u filt=%u/%u/%u  c5={%.5f,%.5f,%.5f,%.5f} strength=%.5f"
+            "  c159={%.4f,%.4f,%.4f,%.4f} c160={%.4f,%.4f,%.4f,%.4f}"
+            "  buckets s0=%u <.10=%u <.25=%u <.50=%u <1=%u ==1=%u distinct=%u unpub=%u\n",
+            lpcName, (unsigned long long)lpRecord->muDraws, (void*)lpS14,
+            (unsigned)luW, (unsigned)luH, (unsigned)luFmt, (unsigned)luLevels,
+            (unsigned)luAddrU, (unsigned)luAddrV,
+            (unsigned)luMag, (unsigned)luMin, (unsigned)luMip,
+            (double)lafStrength[0], (double)lafStrength[1],
+            (double)lafStrength[2], (double)lafStrength[3], (double)lfStrength,
+            (double)lafOffsets[0], (double)lafOffsets[1],
+            (double)lafOffsets[2], (double)lafOffsets[3],
+            (double)lafScale[0], (double)lafScale[1],
+            (double)lafScale[2], (double)lafScale[3],
+            (unsigned)lpRecord->mauStrengthBucket[0], (unsigned)lpRecord->mauStrengthBucket[1],
+            (unsigned)lpRecord->mauStrengthBucket[2], (unsigned)lpRecord->mauStrengthBucket[3],
+            (unsigned)lpRecord->mauStrengthBucket[4], (unsigned)lpRecord->mauStrengthBucket[5],
+            (unsigned)lpRecord->muNumDistinct, (unsigned)lpRecord->muUnpublished);
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
+
+    // =====================================================================================
+    // [DIAG, env-gated: BRN_GLASSFX_FORCE=<0..1>] THE CONTROL FOR THE PROBE ABOVE.
+    //
+    // ⛔ THIS IS A DIAGNOSTIC, NOT A BEHAVIOUR, AND IT IS NEVER ON BY DEFAULT. Same shape and
+    // same argument as BRN_CRUMPLE_FORCE / BRN_SCRATCH_FORCE beside it: when every measured
+    // input to a term is correct and the picture still does not show it, the only honest next
+    // question is whether the term has any visible authority at all, and the only way to ask is
+    // to drive it to its maximum on every pixel of the pane and LOOK.
+    //
+    // It writes constant 30 in the CONSOLE'S OWN SHAPE -- BrnWorld::SetGlassFractureConstants
+    // @0x822BD280 builds {(1-s)*inv, inv, 0, 0} with inv = s > 0 ? 1/s : 0 -- so
+    // BRN_GLASSFX_FORCE=1 is exactly "as if this pane were fully cracked", and 0 is the
+    // console's own no-fracture reset. Nothing else is touched: the UV constants the vertex
+    // program builds the two crack fetches from stay as the simulation published them, so the
+    // ONLY difference between a control frame and a normal one is the crack strength.
+    //
+    // Vehicle WINDOW *Damaged* techniques only -- no other program declares g_glassFractureStrength,
+    // and writing pixel c5 under another one would overwrite an unrelated constant (on
+    // Glass_Specular_Transparent_Doublesided that register is KeyLightColour).
+    // =====================================================================================
+    void GlassFxForce_Apply(IDirect3DDevice9* lpDevice)
+    {
+        static const char* const spcForce = std::getenv("BRN_GLASSFX_FORCE");
+        if (spcForce == nullptr || lpDevice == nullptr || spCurrentTechniqueName == nullptr)
+            return;
+        if (std::strstr(spCurrentTechniqueName, "indow") == nullptr
+            || std::strstr(spCurrentTechniqueName, "Damaged") == nullptr)
+            return;
+
+        static const f32 sfStrength = static_cast<f32>(std::atof(spcForce));
+        LogOnce("gfxforce", "[glassfx] BRN_GLASSFX_FORCE armed -- g_glassFractureStrength is being"
+                            " OVERRIDDEN on every vehicle Window Damaged draw. This is a CONTROL;"
+                            " no shipped path sets it.\n");
+
+        const f32 lfInv = (sfStrength > 0.0f) ? (1.0f / sfStrength) : 0.0f;
+        const float lafForced[4] = { (1.0f - sfStrength) * lfInv, lfInv, 0.0f, 0.0f };
+        lpDevice->SetPixelShaderConstantF(5u, lafForced, 1u);
+    }
+
     void WorldDraw_IndexedUP(u32 luPrimTypeXenon, u32 luBaseVertexIndex,
                              u32 luStartIndex, u32 luIndexCount)
     {
@@ -3832,6 +4194,12 @@ namespace renderengine
         // [DIAG, env-gated] BRN_SCRATCH_FORCE=<0..1>. AFTER the probe, so the probe always
         // reports the value the SIMULATION published, never the forced one.
         ScratchForce_Apply(lpDevice);
+        // [PROBE, env-gated] BRN_GLASSFX_PROBE -- sampler 14 and the three glass-fracture
+        // constants, at this draw. Same placement and the same reason as the two above.
+        GlassFxProbe_AtDraw(lpDevice);
+        // [DIAG, env-gated] BRN_GLASSFX_FORCE=<0..1>. AFTER the probe, so the probe always
+        // reports the value the SIMULATION published, never the forced one.
+        GlassFxForce_Apply(lpDevice);
 
         // The retained submit is the exact equivalent of the UP call beside it: the UP form
         // offsets the vertex POINTER by baseVertex * stride and passes base 0, the retained
@@ -7285,6 +7653,59 @@ void ShadowSampler_ApplyState(u32 luUnit)
     lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXMIPLEVEL, 0u);
     lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, 1u);
     lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE, FALSE);
+}
+
+// =============================================================================
+// FLAG PC-platform leaf: the GLASS-FRACTURE sampler seam -- unit 14, the sibling of
+// ShadowSampler_ApplyState above. Same mechanism, same reason: the console binds this
+// unit with a renderengine::TextureState (Render @0x8240BFA8:538-540 ->
+// `sub_8227D158(*(this + 5804), 14)`), and on this backend SetSamplerStateLowLevel is the
+// documented no-op, so the sampler words never reach D3D9. BrnRendererModule::Render binds
+// the TEXTURE through shadow::Device::SetResource and then says the words here.
+//
+// WHAT THE CONSOLE'S OWN WORDS ARE, and what is and is not decoded from them.
+// The params block is BrnRendererModule + 5808 (== mGlassFractureTextureStateParams, whose
+// mpTexture at +72 == this+5880 is what PrepareAgain @0x823FF8F8 writes). Unlike the env-map
+// and shadow states, Construct @0x8240A778 NEVER overrides it -- line 596 only nulls the
+// state pointer -- so the live words are exactly the ones the constructor
+// (BrnRendererModule::BrnRendererModule @0x827DFF48, 0x827E0190..0x827E01F0) stores:
+//
+//      muAddressU / V / W = 0            (r30, and r30 is `li r30, 0` at 0x827DFF88)
+//      muMagFilter / muMinFilter = 0     muMipFilter = 2   (r11, `li r11, 2`)
+//      muMaxAnisotropy = 13   muField10 = 1   mfMipLodBias = 0.0f
+//
+//  * ADDRESS 0 IS WRAP, and that is settled twice over. The two states that want clamping
+//    -- the env map (Construct lines 558-560) and the font (CgsResource::Font::
+//    CreateTextureState) -- both write 2 explicitly, so 0 is not CLAMP; and the crack UV the
+//    vertex program builds is `uv1.xyxy * c160 + c159` where c160 carries the pane's WIDTH
+//    IN METRES (SetGlassFractureConstants' constant 32 is {scale.x, scale.x*eq, ...} and the
+//    producer stores scale = |corner2 - corner1|), so the fetch runs far outside [0,1] and a
+//    clamped unit would smear one texel across the whole pane.
+//  * ⚠️ THE FILTER WORDS ARE NOT DECODED. This tree has calibrated exactly two points of that
+//    enum -- 1 == LINEAR and (for mip) 0 == NONE, from ImRendererBase::ConstructOnceOnly's
+//    ConstructSamplerState(alloc, 1, 0, 2, 2) -- and 0/0/2 is not on it. LINEAR is installed
+//    here because it is what every other global sampler this leaf speaks for installs, and
+//    because the words do not reach D3D9 on the console path either. It is a PC choice, it is
+//    flagged as one, and BRN_GLASSFX_PROBE prints the unit's live filter words at draw time
+//    so the next wave measures instead of re-reading this comment.
+// DELETE when Construct's TextureState pair lands and the console's own bind path is live.
+// =============================================================================
+void GlassFractureSampler_ApplyState(u32 luUnit)
+{
+    IDirect3DDevice9* const lpDevice = Dev();
+    if (lpDevice == nullptr || luUnit >= 16u)
+        return;
+
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU,      D3DTADDRESS_WRAP);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV,      D3DTADDRESS_WRAP);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW,      D3DTADDRESS_WRAP);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER,     D3DTEXF_LINEAR);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER,     D3DTEXF_LINEAR);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER,     D3DTEXF_LINEAR);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, 1u);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPMAPLODBIAS, 0u);
+    lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
 }
 
 // =============================================================================

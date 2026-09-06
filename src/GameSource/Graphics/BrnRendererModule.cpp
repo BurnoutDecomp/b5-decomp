@@ -4381,11 +4381,63 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         }
 #endif
 
-        // s14 -- the blobby-shadow texture. The console guards this one too (`if (v79)` at
-        // Render:540); it is null until GamePrepare stage 3 hands it to PrepareAgain.
-        if (mpBlobbyShadowTexture != 0)
+        // ⭐⭐ s14 -- THE GLASS-FRACTURE MAP. CORRECTED 2026-09-06 (cracked-glass wave): this
+        // bind used to hand unit 14 mpBlobbyShadowTexture, and that was a MISIDENTIFIED MEMBER,
+        // not a stand-in. The console's line is
+        //     v79 = *(this + 5804); if (v79) sub_8227D158(v79, 14);   Render @0x8240BFA8:538-540
+        // and this+5804 is mpGlassFractureTextureState, which PrepareAgain @0x823FF8F8 builds
+        // out of its SIXTH argument -- the glass-fracture texture -- three instructions after it
+        // stores that same argument into the params block:
+        //     stw r30, 0x16A8(r31)   ; 5800  mpGlassFractureTexture      = lpGlassFracture
+        //     stw r30, 0x16F8(r31)   ; 5880  mGlassFractureTextureStateParams.mpTexture (+72)
+        //     ...                    ; 5884  the TextureState resource block (5 words)
+        //     stw r3,  0x16AC(r31)   ; 5804  mpGlassFractureTextureState = Initialize(5884, 5808)
+        // The blobby-shadow texture is PrepareAgain's SECOND argument and lands at this+14320
+        // (`stw r11, 0x37F0(r31)`); its only reader in the whole XEX is
+        // BrnBlobbyShadowManager::Render (`*(v12 + 14320)`, Render:859). It never goes near a
+        // sampler unit.
+        //
+        // WHAT THE WRONG TEXTURE COST. All 22 shipped vehicle pixel shaders declare
+        // `GlassFractureSampler` at s14; the vehicle GLASS program
+        // (Glass_Specular_Transparent_Doublesided, PS in build/game/SHADERS.BNDL) samples it
+        // TWICE per pixel and its whole crack term is those two fetches:
+        //     texld r1, v6,      s14
+        //     texld r3, v6.zwzw, s14
+        //     max   r4.xyz, r1.xyww, r3.xyww
+        //     mad_sat r1.xy, r4, c5.y, -c5.x        ; c5 == g_glassFractureStrength
+        // so unit 14 was feeding the crack the blobby-shadow blob instead of the crack map.
+        //
+        // The bind stays GATED on the pointer exactly as the console gates it, and it goes
+        // through shadow::Device::SetResource for the same reason s15 above does: this build
+        // has no TextureState objects yet (Construct's Initialize pair needs the resource
+        // allocator), so the resource-only entry point plus an explicit sampler apply is the
+        // honest stand-in. The sampler half is NOT optional here -- the vertex program tiles
+        // the crack UVs (`mad o7, v3.xyxy, c160, c159` with per-pane offsets in [-0.9, +0.9]),
+        // so a CLAMPed unit would smear one texel across a whole pane.
+        if (mpGlassFractureTexture != 0)
         {
-            shadow::Device::SetResource(mpBlobbyShadowTexture, 14u);
+            shadow::Device::SetResource(mpGlassFractureTexture, 14u);
+            renderengine::GlassFractureSampler_ApplyState(14u);
+
+            static bool sbLoggedGlassFractureBind = false;
+            if (!sbLoggedGlassFractureBind && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbLoggedGlassFractureBind = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[glassfx] s14 bound: glass-fracture texture " << mpGlassFractureTexture
+                    << " (WRAP/LINEAR)\n";
+            }
+        }
+        else if (CgsDev::Log::gpDebugPrint != 0)
+        {
+            static bool sbLoggedGlassFractureMissing = false;
+            if (!sbLoggedGlassFractureMissing)
+            {
+                sbLoggedGlassFractureMissing = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[glassfx] s14 UNBOUND -- mpGlassFractureTexture is null; every cracked"
+                       " pane will sample whatever unit 14 last held\n";
+            }
         }
 
 #if BRN_ENVMAP_PASS_AVAILABLE
