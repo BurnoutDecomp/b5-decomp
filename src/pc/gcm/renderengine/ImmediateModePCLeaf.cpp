@@ -353,6 +353,20 @@ namespace
     // skid-mark pass (BrnTrailRender.cpp) binds it between its depth-stencil (F4C) and
     // cull-none rasteriser (F3C) binds, exactly as the sky dome binds its own trio.
     ImBlendState        sImStandardAlphaBlendState = { TRUE, D3DBLEND_SRCALPHA, D3DBLEND_INVSRCALPHA, FALSE, FALSE };
+    // X360 dword_83010F24 -- the library ADDITIVE blend, bound by the spark pass
+    // (SparkRenderer::Dispatch @0x8228BBC8 opens with sub_82276A68(dword_83010F24)).
+    // ConstructOnceOnly @0x827F1C20 builds it at 0x827F1C54-0x827F1C68 as
+    // ConstructBlendState(6, 1, 0) against the standard alpha state built one call earlier
+    // as ConstructBlendState(6, 7, 0). The triple is (source factor, destination factor,
+    // blend op) in the XENOS RB_BLENDCONTROL encoding -- 0 ZERO, 1 ONE, 4 SRC_COLOR,
+    // 6 SRC_ALPHA, 7 ONE_MINUS_SRC_ALPHA -- and that reading is confirmed by all five of the
+    // library blend states agreeing with their DWARF NAMES under it:
+    //     Standard          (6, 7, 0)  SRC_ALPHA / ONE_MINUS_SRC_ALPHA
+    //     Additive          (6, 1, 0)  SRC_ALPHA / ONE
+    //     Subtractive       (6, 7, 1)  ... with blend op 1 (SUBTRACT)
+    //     SubtractiveColour (6, 1, 4)
+    //     Premultiplied     (1, 7, 0)  ONE / ONE_MINUS_SRC_ALPHA -- premultiplied alpha, exactly
+    ImBlendState        sImAdditiveBlendState      = { TRUE, D3DBLEND_SRCALPHA, D3DBLEND_ONE, FALSE, FALSE };
     ImRasterizerState   sSkyDomeRasterizerState   = { D3DCULL_NONE, D3DFILL_SOLID };
     ImDepthStencilState sSkyDomeDepthStencilState = { TRUE, FALSE, D3DCMP_LESSEQUAL };
     // The env-map faces are rendered into a freshly cleared face with nothing else in
@@ -415,6 +429,9 @@ void* gpSkyDomeEnvMapDepthStencilState = &sSkyDomeEnvMapDepthStencilState;
 // X360 dword_83010F20 -- the library's standard alpha blend (see the object above). Bound by the
 // skid-mark pass (BrnTrailRender.cpp) through ImDeviceSetBlendState.
 void* gpImStandardAlphaBlendState      = &sImStandardAlphaBlendState;
+// X360 dword_83010F24 -- the library additive blend (see the object above). Bound by the SPARK
+// pass (BrnSparkRenderer_Render.cpp) through ImDeviceSetBlendState.
+void* gpImAdditiveBlendState           = &sImAdditiveBlendState;
 
 // ============================================================================================
 // [DIAG] NOT IN THE X360 BINARY. The tyre-mark campaign's DISCRIMINATOR, reachable only when

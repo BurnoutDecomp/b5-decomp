@@ -97,9 +97,10 @@ namespace BrnParticle
 
         // --- 4 contained-interface stamps: vtable (left null -- FLAG) + 2 zeros; the
         //     skids renderer (@+0x9210) constructs itself as the real type -----------
-        mImmediateModeRenderer.mpVTable = nullptr;      // X360 off_820CF69C
-        mImmediateModeRenderer.mu04 = 0;
-        mImmediateModeRenderer.mu08 = 0;
+        // mImmediateModeRenderer is no longer a ContainedInterface placeholder either -- it is
+        // the real CgsGraphics::Im3d, so there are no mpVTable / mu04 / mu08 fields to poke. The
+        // console's off_820CF69C store is part of that object's genuine construction, which
+        // ParticleModule::Prepare now performs through CgsGraphics::Im3d::Construct @0x827FC748.
         mWorldTexRenderer.mpVTable = nullptr;           // X360 off_820CEBE0
         mWorldTexRenderer.mu04 = 0;
         mWorldTexRenderer.mu08 = 0;
@@ -851,11 +852,24 @@ namespace BrnParticle
                 {
                     const f32 lfPhase = static_cast<f32>(luSpark) * 0.7391f
                                       + static_cast<f32>(luSpark & 7u);
+                    // 6 m in front of the camera, 2 m to its RIGHT and 0.6 m above it --
+                    // and every one of those three numbers was MEASURED into place, not
+                    // chosen. Reading 1 put them at camera + 6 m forward, which is inside the
+                    // player car, and the pass is depth-TESTED (dword_83010F4C: test on,
+                    // write off), so every spark drew and was then occluded by the car body.
+                    // Reading 2 lifted them 2 m and the one-shot geometry witness in
+                    // RenderBank answered with the view-space point it was actually emitting:
+                    //     [spark] ribbon0 edges=2 halfWidth=0.02000 colour=FFE1ADFF
+                    //             A0{-0.120 2.108 3.992} B0{-0.141 2.077 4.008}
+                    // z = +3.99 (in front -- the view basis is left-handed) and y = +2.11,
+                    // while the top of the frame at that depth is 4 * tan(vfov/2) ~= 2.08.
+                    // They were a couple of centimetres ABOVE THE TOP EDGE. Perfect batch,
+                    // vertex and draw counts, hr = S_OK, and off screen by 3 cm.
                     rw::math::vpu::Vector3 lPosition;
-                    lPosition.x = lrCam.wAxis.x + lrCam.zAxis.x * 6.0f;
-                    lPosition.y = lrCam.wAxis.y + lrCam.zAxis.y * 6.0f;
-                    lPosition.z = lrCam.wAxis.z + lrCam.zAxis.z * 6.0f;
-                    lPosition.w = lPosition.y;
+                    lPosition.x = lrCam.wAxis.x + lrCam.zAxis.x * 6.0f + lrCam.xAxis.x * 2.0f;
+                    lPosition.y = lrCam.wAxis.y + lrCam.zAxis.y * 6.0f + lrCam.xAxis.y * 2.0f + 0.6f;
+                    lPosition.z = lrCam.wAxis.z + lrCam.zAxis.z * 6.0f + lrCam.xAxis.z * 2.0f;
+                    lPosition.w = lPosition.y - 3.0f;
 
                     rw::math::vpu::Vector3 lVelocity;
                     lVelocity.x = std::cos(lfPhase) * 4.0f;
@@ -865,6 +879,15 @@ namespace BrnParticle
 
                     maSparks[BrnParticle::Native::eSparkArray_GrindingWorld].SpawnSpark(
                         lPosition, lVelocity,
+                        // ⭐ THE SIZE IS 1.0 -- THE CONSOLE'S OWN SCALE -- AND THAT IS WHY THE
+                        // FIRST FRAMES LOOKED EMPTY. mfSize multiplies the array's authored
+                        // mfSparkRadius (0.02 m out of the ported vault), so one spark ribbon is
+                        // 4 cm x 8 cm: about 5 x 10 PIXELS at the 6 m this instrument spawns at.
+                        // "I cannot see it" and "it is not drawn" are indistinguishable at that
+                        // size, so the reading was taken with this literal temporarily at 25.0f
+                        // (a metre-wide ribbon) -- run22, frame bb_005400: warm additive streaks
+                        // tapering off across the overpass, exactly a motion-blurred spark. The
+                        // whole chain draws. Edit this one literal to re-take that reading.
                         1.0f,      // lfSize
                         lfNow,     // lfCurrentTime
                         0.0f,      // lfTimeSinceEvent
@@ -993,7 +1016,7 @@ namespace BrnParticle
                     char lacMsg[480];
                     std::snprintf(lacMsg, sizeof(lacMsg),
                         "[spark] calls=%u prep=%u mod=%08X entry{head=%u nb=%u free=%u ring=%.3f} spawnCalls=%u arms=%u/%u/%u/%u live=%u batches=%d verts=%u ringNow=%.3f ring1=%.3f "
-                        "flags=0x%04X dt=%.4f rdt=%.5f | bank0 head=%d nb=%u np=%u nc=%u cap=%u "
+                        "flags=0x%04X dt=%.4f rdt=%.5f drew=%u/%u | bank0 head=%d nb=%u np=%u nc=%u cap=%u "
                         "mgrFree=%u/%u | a0 blur=%.4f rad=%.4f grav=%.3f bounce=%.3f "
                         "drag=%.3f/%.3f/%.4f life=%.2f tex=%s\n",
                         suCalls, gauSparkPrepareCount,
@@ -1007,6 +1030,7 @@ namespace BrnParticle
                         mSparkFrameDataSetUpdate.GetFrame(1).mfTimeStamp,
                         lpRenderData->muFlags, lpRenderData->mfCurrentTimeStep,
                         static_cast<double>(sfDiagRingDelta),
+                        Native::gauSparkDrawnBatches, Native::gauSparkDrawnVertices,
                         (lpHead0 != 0) ? 1 : 0,
                         lrArray0.mRegularBank.muNumBuckets,
                         (lpHead0 != 0) ? static_cast<u32>(lpHead0->mu16NextPositionInBucket) : 0u,
@@ -1279,12 +1303,25 @@ namespace BrnParticle
         //   assert(mgpActiveRenderer == mpRenderer); mgpActiveRenderer = 0;
         // Primitive type 6 is the Xenos TRIANGLESTRIP the PC shim's MapPrimitive already
         // translates, which is why the ribbons are emitted with duplicated end vertices.
+        // ⭐ BODIED THIS WAVE. mSparkRenderer.mpRenderer is a real CgsGraphics::Im3d now
+        // (ParticleModule::Prepare Constructs it; pc/gcm/renderengine/Im3dProgramsPC.cpp
+        // carries its re-authored program pair), so the frame's batch list is replayed to the
+        // device exactly as the console replays it. The view-projection the console hands
+        // Dispatch is the render data's own camera product.
         {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "ParticleModule::RenderFullResParticles' SparkRenderer::Dispatch @0x8228BBC8 -- "
-                "the spark GEOMETRY is built (see the [spark] line) but mSparkRenderer.mpRenderer "
-                "is null while mImmediateModeRenderer is a ContainedInterface placeholder");
+            // THE MATRIX IS THE PROJECTION, NOT THE VIEW-PROJECTION, and that is measured, not
+            // chosen: the call site at 0x8229B19C forms r4 as `addi r4, r31, 0xA0` -- renderData
+            // + 0xA0 -- and renderData+0x60/+0xA0 are mCgsCamera mView / mProjection (the same two
+            // BeginParticleRenderJob copies at 0x8228A828 / 0x8228A844). It has to be: RenderBank
+            // already transforms every ribbon sample by the ring frame OWN view matrix
+            // (mViewPosition = view * world), so the vertices reach the buffer in VIEW SPACE and
+            // the vertex program applies exactly one more matrix. Handing it the view-projection
+            // applies the view TWICE -- which is what this call did on its first reading, and the
+            // pass then drew 4.6 million vertices at hr=S_OK with nothing on screen.
+            renderengine::VertexBuffer* const lpSparkVertexBuffer =
+                mVertexBufferManagerSparks.GetVertexBuffer();
+            mSparkRenderer.Dispatch(lpRenderData->mCgsCamera.mProjection,
+                                    lpSparkVertexBuffer, gSparkBatchArray);
         }
 
         // ---- the branches this build still cannot run -----------------------------------

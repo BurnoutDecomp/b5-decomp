@@ -309,6 +309,11 @@ namespace Native
     extern u32 gauSparkBankRecycle;
     extern u32 gauSparkBankNull;
 
+    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. What SparkRenderer::Dispatch actually
+    // handed the device -- "built N vertices" and "drew N vertices" are two different claims.
+    extern u32 gauSparkDrawnBatches;
+    extern u32 gauSparkDrawnVertices;
+
     // BrnSparkRenderer.h -- SparkVertexBufferBuilder. No state: one static that walks the
     // four spark arrays and fills the frame's vertex buffer + batch list. Its only caller is
     // ParticleRenderJob::Execute @0x8291DF38.

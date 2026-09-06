@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"            // CgsGraphics::ImRenderer<V>
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredVertex.h"  // CgsGraphics::BasicColouredVertex
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"  // CgsGraphics::BasicColouredTexturedVertex (Im3d)
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // renderengine::ProgramVariableHandle
 
 // CgsGraphics::Im3d* - the untextured immediate-mode 3D render hierarchy. Mirrors the 2D
 // fold in CgsIm2d.h: Im3dBase<V> adds the world transform on top of ImRenderer<V>, and
@@ -54,6 +55,19 @@ namespace CgsGraphics
         // V_IM3D_MAX_MASK_COUNT -- the mask-stack ceiling PushMask asserts against (X360 immediate
         // `cmplwi 2`). CgsIm3d.h:374 in the X360 source.
         static const u32 KU_MAX_MASK_COUNT = 2;
+
+        // Construct @0x827FC748 (289 instr). Stamp the identity into mCurrentTransform, build the
+        // ImRenderer<BasicColouredTexturedVertex> base over the title's TWO {vertex, pixel} program
+        // pairs, then resolve "worldViewProj" against each program's VERTEX buffer into that
+        // program's shader-state handle slot (the X360 writes them at this+0x58 + i*4 == the base's
+        // maShaderStateBlocks[i], which is exactly the handle ImRenderer<V>::SetTransform pushes
+        // through), and "gvMaskUseFlags" against program 1's vertex AND pixel buffers into the mask
+        // handle at this+0x160.
+        void Construct(rw::IResourceAllocator* lpAllocator);
+
+        // The "gvMaskUseFlags" handle Construct resolves (X360 this+0x160), consumed by the mask
+        // pixel-shader state. Declared so Construct can reach it by name.
+        renderengine::ProgramVariableHandle mMaskUseFlagsHandle;
 
         // PushMask @0x827DCF78. Open one stencil-mask region: on the FIRST mask of the stack, bind
         // the next program slot (mi8CurrentProgram + 1) and install the current world transform;

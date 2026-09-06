@@ -14,6 +14,7 @@
 #include "GameSource/Effects/Particles/EffectsVertexBufferManager.h"   // EffectsVertexBufferManager (x3, BY VALUE)
 #include "GameSource/Effects/Particles/Native/FXBuckets.h"             // BrnParticle::FXBucketManager (mBucketManager, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnIm3dSkidsRenderer.h"  // BrnGraphics::Im3dSkidsRenderer (mSkidsRenderer, BY VALUE)
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"          // CgsGraphics::Im3d (mImmediateModeRenderer, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnLionBlendRenderer.h"   // BrnGraphics::LionBlendRenderer (mLionImmediateModeRenderer, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnTrailSystem.h"        // BrnParticle::Native::TrailSystem (mTrailSystem, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnDebrisRenderer.h"     // BrnParticle::Native::BrnDebrisRenderer (mDebrisRenderer, BY VALUE)
@@ -576,8 +577,27 @@ namespace BrnParticle
             u32   mu04;       // +0x04 : 0
             u32   mu08;       // +0x08 : 0
         };
-        ContainedInterface mImmediateModeRenderer;     // +0x9010 (36880) DWARF :55 CgsGraphics::Im3d          (off_820CF69C)
-        u8 maPadIfaceAToB[0x91A0 - (0x9010 + sizeof(ContainedInterface))]; // -> +0x91A0
+        // +0x9010 (36880) DWARF :55. NOT a ContainedInterface placeholder any more: this IS the
+        // CgsGraphics::Im3d that SparkRenderer::Dispatch @0x8228BBC8 draws through, and
+        // ParticleModule::Prepare @0x8229BEA0 builds it with CgsGraphics::Im3d::Construct
+        // @0x827FC748 (asm: the same off_82F2C814 GlobalGraphics allocator all five contained
+        // renderers take). Its program pair is the re-authored
+        // pc/gcm/renderengine/Im3dProgramsPC.cpp.
+        //
+        // ⚠ HOST POINTER WIDENING, a LAYOUT fact and not a behavioural one, exactly as for
+        // mSkidsRenderer and mLionImmediateModeRenderer: ImRenderer<V> carries a vptr, a
+        // descriptor pointer and two 8-entry ProgramBuffer* tables, all of which widen on x64,
+        // so this object is bigger than the console's 0x190 span. Nothing addresses the tail by
+        // absolute offset -- _AssertLayout in the .cpp pins the tail DELTA-for-delta from
+        // miLionBatchCount, which is downstream of every one of these members, so the pins are
+        // unaffected. maPadIfaceAToB below is what would have to give if it were not.
+        CgsGraphics::Im3d mImmediateModeRenderer;      // +0x9010 (36880) DWARF :55 (off_820CF69C)
+        // The console's 0x190 gap to mWorldTexRenderer. On x64 the widened Im3d above already
+        // fills more than that, so the pad is clamped to zero rather than made negative; the
+        // console offset it used to reproduce is recorded in the comment, which is all it ever
+        // was (nothing reads these members by absolute offset).
+        u8 maPadIfaceAToB[(0x91A0 - 0x9010) > sizeof(CgsGraphics::Im3d)
+                          ? (0x91A0 - 0x9010) - sizeof(CgsGraphics::Im3d) : 1]; // -> +0x91A0 on the console
         ContainedInterface mWorldTexRenderer;          // +0x91A0 (37280) DWARF :58 BrnGraphics::Im3dTexPlusLighting (off_820CEBE0)
         u8 maPadIfaceBToC[0x9210 - (0x91A0 + sizeof(ContainedInterface))]; // -> +0x9210
         // +0x9210 (37392): DWARF :61 BrnGraphics::Im3dSkidsRenderer mSkidsRenderer -- the skid /

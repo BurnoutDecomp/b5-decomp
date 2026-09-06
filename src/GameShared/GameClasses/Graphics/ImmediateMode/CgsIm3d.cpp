@@ -38,10 +38,24 @@
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the constant-resolve witness
+#include <cstdio>
+
+// The converted PC program images for Im3d PROGRAM 0 (pc/gcm/renderengine/Im3dProgramsPC.cpp --
+// the PC stand-in for the two guest .data blobs unk_820D4090 / unk_820D41F0; see that file for
+// the recipe and tools/assets/shaders/brn_im3d.fx for the Xenos listing they came from).
+namespace renderengine
+{
+    extern const u8  gauIm3dVertexProgramPC[];
+    extern const u32 guIm3dVertexProgramPCSize;
+    extern const u8  gauIm3dPixelProgramPC[];
+    extern const u32 guIm3dPixelProgramPCSize;
+}
 
 namespace CgsGraphics
 {
@@ -134,6 +148,37 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
 
     CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
                "Adding too many shader programs to the immediate mode renderer");
+
+    // ---- [PC-platform leaf] adopt a pre-built PC ShaderProgramBuffer image --------------------
+    // The SAME defect BrnSkidVertex.cpp carried until 2026-09-03 and its banner describes in
+    // full: the console route below (GetResourceDescriptor -> allocator Create -> Initialize)
+    // cannot run on this backend, because both renderengine::ProgramBuffer bodies call
+    // XGGetMicrocodeShaderParts, whose PC stub returns 0 WITHOUT writing *lpParts, and then read
+    // that uninitialised block for the microcode size. It does not crash here -- it produces a
+    // program buffer reporting ZERO VARIABLES, and this TU measured exactly that on its first
+    // run with the newly mounted Im3d:
+    //     [im3d] program 0 worldViewProj{set=0 idx=0 type=0 count=0} vars=0
+    // while the skid renderer, three lines earlier in the same log, reported vars=3. A zero-count
+    // handle goes to the PC leaf DISCARD row, so the view-projection would never have reached
+    // c0..c3 and every spark ribbon would have been transformed by whatever the previous draw
+    // left there. The image is not at fault: Im3dProgramsPC.cpp declares 1 variable at its +0x04
+    // and names it "worldViewProj" in its interned table. Nothing was adopting it.
+    //
+    // A non-PC binary returns null here and falls through to the console path unchanged.
+    if (renderengine::ProgramBufferData* lpAdoptedVertex =
+            renderengine::ProgramBufferPC_Adopt(lpVertexProgramBinary, luVertexProgramSize, 0u))
+    {
+        renderengine::ProgramBufferData* const lpAdoptedPixel =
+            renderengine::ProgramBufferPC_Adopt(lpPixelProgramBinary, luPixelProgramSize, 1u);
+        if (lpAdoptedPixel != nullptr)
+        {
+            mapVertexProgramBuffer[li8ProgramIndex] =
+                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedVertex);
+            mapPixelProgramBuffer[li8ProgramIndex] =
+                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedPixel);
+            return li8ProgramIndex;
+        }
+    }
 
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
 
@@ -293,21 +338,30 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
     CGS_ASSERT(mapPixelProgramBuffer[li8Program] != nullptr,
                "mapPixelProgramBuffer[ li8Program ] != NULL");
 
-    // The live vertex-program shadow cache (X360 dword_8301095C). One per module, not per renderer.
-    static renderengine::ProgramBuffer* spgLastVertexProgram = nullptr;
-
+    // ⭐⭐ ONE CACHE, NOT ONE PER INSTANTIATION. The X360 shadow-caches the live vertex
+    // program in dword_8301095C -- ONE word for the whole module -- and shadow::Device
+    // already models it by name as mpVertexProgramShadow (shadowingdevice.h:269; the
+    // ImmediateModePCLeaf.cpp banner at DeviceSetVertexDescriptor makes the same point for
+    // its two neighbours, and CgsImRenderer.h records four more host words that had to be
+    // deleted for the same reason). A function-local `static ProgramBuffer* spgLastVertexProgram`
+    // inside a TEMPLATE body is one object PER INSTANTIATION, so every vertex type got its own
+    // private cache and they lied to each other: whichever renderer bound last owned the
+    // device, and the next renderer skipped its own bind because ITS cache still said "mine is
+    // current".
+    //
+    // MEASURED, run16: the spark pass (ImRenderer<BasicColouredTexturedVertex>) issued 6069
+    // draws of 4.6 million vertices at hr=S_OK, with the right stride, the right declaration
+    // and the right blend -- and the draw-site witness read back
+    //     [lionfx] DrawVertices: ... verts=216 stride=24 vs=1 ps=1 ...   (the first draw)
+    //     [lionfx] DrawVertices: ... verts=216 stride=24 vs=0 ps=1 ...   (every draw after)
+    // NO VERTEX SHADER BOUND from the second draw on. The pixels were never going to appear.
+    //
+    // shadow::Device::SetVertexProgram IS the console compare-and-store on that one word, so
+    // calling it unconditionally is what the console does -- its own outer compare was a
+    // redundant fast path over the same word.
     renderengine::ProgramBuffer* lpVertexProgram = mapVertexProgramBuffer[li8Program];
-    bool lbChanged;
-    if (spgLastVertexProgram == lpVertexProgram)
-    {
-        lbChanged = false;
-    }
-    else
-    {
-        shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-        spgLastVertexProgram = lpVertexProgram;
-        lbChanged = true;
-    }
+    const bool lbChanged = shadow::Device::SetVertexProgram(
+        reinterpret_cast<const renderengine::ProgramBufferData*>(lpVertexProgram));
 
     if (lbChanged)
     {
@@ -384,6 +438,141 @@ template s8 ImRenderer<BasicColouredTexturedVertex>::AddProgram(
 template bool ImRenderer<BasicColouredTexturedVertex>::SetProgram(s8);
 template void ImRenderer<BasicColouredTexturedVertex>::EndRendering();
 template void* ImRenderer<BasicColouredTexturedVertex>::SetTransform(const void*);
+
+// ---------------------------------------------------------------------------------------------------
+// Im3d::Construct  @ 0x827FC748  (289 instructions)
+//
+// The X360 body, in order:
+//   0x827FC75C-0x827FC804  stamp the IDENTITY into the base transform store (mauTransform): the engine-wide identity
+//     row w__math__vpu__detail__gIVector into this+0x80 and the three constant rows
+//     unk_82181510 / unk_82181520 / unk_82181530 into +0x90 / +0xA0 / +0xB0.
+//   0x827FC784-0x827FC808  four stack pairs -> ImRenderer<BasicColouredTexturedVertex>::Construct
+//     (IDA names the callee BasicColouredTexturedVertex___Construct) with li8NumberPrograms = 2:
+//         vertex binaries {unk_820D4090, unk_820D44B8}   sizes {0x160=352, 0x180=384}
+//         pixel  binaries {unk_820D41F0, unk_820D4638}   sizes {0x0E4=228, 0x458=1112}
+//   0x827FC82C-0x827FC878  for i in 0..1: assert mapVertexProgramBuffer[i] != NULL, then
+//     GetVariableHandleByName(mapVertexProgramBuffer[i], "worldViewProj", this+0x58 + 4*i).
+//     THIS+0x58 IS THE BASE ImRenderer maShaderStateBlocks[] -- the same 4-byte handle slot
+//     ImRenderer<V>::SetTransform @0x8227B8A0 pushes the matrix through
+//     (its `this + 4*(mi8CurrentProgram + 22)`). That is why SetTransform carries no handle of
+//     its own, and it is the whole reason this loop exists.
+//   0x827FC87C-0x827FC93C  program 1 only: GetVariableHandleByName("gvMaskUseFlags") against its
+//     VERTEX buffer (this+0x18) and, when that misses, its PIXEL buffer (this+0x38), into
+//     this+0x160.
+//
+// ONE FLAGGED DEVIATION, AND IT IS AN ASSET GAP, NOT AN ANALYSIS ONE: only PROGRAM 0 is built.
+// Program 1 is the STENCIL-MASK variant, and its 1112-byte Xenos pixel half is a separate
+// re-authoring job; nothing on this build calls Im3d::PushMask, which is the only consumer of
+// slot 1 and of mMaskUseFlagsHandle. Passing a null binary would trip AddProgram own assert and
+// then hand renderengine a null image, so the count is 1 and the gap is SAID OUT LOUD instead.
+// DELETE-WHEN pc/gcm/renderengine/Im3dProgramsPC.cpp carries the mask pair as well.
+// ---------------------------------------------------------------------------------------------------
+void Im3d::Construct(rw::IResourceAllocator* lpAllocator)
+{
+    // The identity world transform (X360: gIVector plus the three constant rows).
+    static const f32 KAF_IDENTITY[16] =
+    {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f,
+    };
+    for (u32 luByte = 0; luByte < sizeof(mauTransform); ++luByte)
+    {
+        mauTransform[luByte] = reinterpret_cast<const u8*>(KAF_IDENTITY)[luByte];
+    }
+
+    const void* lapVertexProgramBinary[1] = { renderengine::gauIm3dVertexProgramPC };
+    const void* lapPixelProgramBinary[1]  = { renderengine::gauIm3dPixelProgramPC };
+    const u32   lauVertexProgramSize[1]   = { renderengine::guIm3dVertexProgramPCSize };
+    const u32   lauPixelProgramSize[1]    = { renderengine::guIm3dPixelProgramPCSize };
+    const s8    KI8_PROGRAMS_BUILT        = 1;   // the console builds 2 -- see the FLAG above
+    ImRenderer<BasicColouredTexturedVertex>::Construct(
+        lpAllocator,
+        lapVertexProgramBinary, lauVertexProgramSize,
+        lapPixelProgramBinary,  lauPixelProgramSize,
+        KI8_PROGRAMS_BUILT);
+
+    mMaskUseFlagsHandle.mu8RegisterSet   = 0;
+    mMaskUseFlagsHandle.mu8RegisterIndex = 0;
+    mMaskUseFlagsHandle.mu8ShaderType    = 0;
+    mMaskUseFlagsHandle.mu8RegisterCount = 0;
+    mu32NumMasks = 0;
+
+    for (s8 li8Program = 0; li8Program < KI8_PROGRAMS_BUILT; ++li8Program)
+    {
+        renderengine::ProgramBufferData* const lpVertexProgram =
+            reinterpret_cast<renderengine::ProgramBufferData*>(mapVertexProgramBuffer[li8Program]);
+        CGS_ASSERT(lpVertexProgram != nullptr, "mapVertexProgramBuffer[ li8Program ] != NULL");
+        if (lpVertexProgram == nullptr)
+        {
+            continue;
+        }
+        renderengine::ProgramBuffer::GetVariableHandleByName(
+            lpVertexProgram, reinterpret_cast<const u8*>("worldViewProj"),
+            reinterpret_cast<renderengine::ProgramVariableHandle*>(&maShaderStateBlocks[li8Program]));
+
+        // [DIAG] DID worldViewProj RESOLVE? mu8RegisterCount == 0 is GetVariableHandleByName
+        // "not found" answer and the PC leaf sends a zero-count handle to a DISCARD row -- so an
+        // unresolved handle means SetTransform writes the view-projection into a bin and every
+        // spark ribbon transforms by whatever c0..c3 happen to hold. Invisible in the log AND in
+        // the picture, which is why it is worth one line -- the same witness the skid path took.
+        // DELETE-WHEN-STABLE.
+        const renderengine::ProgramVariableHandle& lrHandle =
+            *reinterpret_cast<const renderengine::ProgramVariableHandle*>(
+                &maShaderStateBlocks[li8Program]);
+        char lacMsg[192];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+            "[im3d] program %d worldViewProj{set=%u idx=%u type=%u count=%u} vars=%u\n",
+            static_cast<int>(li8Program),
+            lrHandle.mu8RegisterSet, lrHandle.mu8RegisterIndex,
+            lrHandle.mu8ShaderType, lrHandle.mu8RegisterCount,
+            static_cast<unsigned>(lpVertexProgram->mu16NumVariables));
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Im3d::SaveMaskShaderConstants / Im3d::SetMaskPixelShaderState -- ANNOUNCED, NOT RECONSTRUCTED.
+//
+// These two are PushMask own collaborators and separate (still unhomed) ledger keys: no X360 body
+// is attested for THIS key, and their parameter types are width-only (4-byte, no DecFIGS DWARF for
+// this TU), which is why CgsIm3d.h models them as opaque handles rather than inventing a shape.
+// They became LINK-VISIBLE the moment this TU was mounted for CgsGraphics::Im3d::Construct.
+//
+// They are bodied as ANNOUNCEMENTS, not as silent no-ops, because a stub that compiles, links,
+// runs and copies nothing is this project single most expensive defect class. Nothing on this
+// build reaches them -- PushMask own only caller would be the Apt/GUI stencil-mask path, which
+// needs Im3d PROGRAM 1, and Im3d::Construct above builds program 0 only and says so -- so the
+// first line either of them ever prints is itself the news.
+// DELETE-WHEN their own TU lands.
+// ---------------------------------------------------------------------------------------------------
+void Im3d::SaveMaskShaderConstants(const void* lpParam0, const void* lpParam1, const void* lpParam2)
+{
+    (void)lpParam0; (void)lpParam1; (void)lpParam2;
+    static bool sbLogged = false;
+    if (!sbLogged)
+    {
+        sbLogged = true;
+        CgsDev::Log::WriteToLog(
+            "[im3d] NOT RECONSTRUCTED: CgsGraphics::Im3d::SaveMaskShaderConstants -- no X360 body "
+            "is attested for this ledger key and its parameter types are width-only; the "
+            "stencil-mask path also needs Im3d PROGRAM 1, which Im3dProgramsPC.cpp does not carry.\n");
+    }
+}
+
+void* Im3d::SetMaskPixelShaderState()
+{
+    static bool sbLogged = false;
+    if (!sbLogged)
+    {
+        sbLogged = true;
+        CgsDev::Log::WriteToLog(
+            "[im3d] NOT RECONSTRUCTED: CgsGraphics::Im3d::SetMaskPixelShaderState -- the same "
+            "ledger-key gap as SaveMaskShaderConstants above; returns null.\n");
+    }
+    return 0;
+}
 
 // ---------------------------------------------------------------------------------------------------
 // Im3d::PushMask  @ 0x827DCF78

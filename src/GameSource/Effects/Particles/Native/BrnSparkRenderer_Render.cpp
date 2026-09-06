@@ -35,6 +35,40 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cmath>
+#include <cstdio>   // [diag] snprintf (the draw-side texture witness)
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"                 // CgsGraphics::Im3d (Dispatch drives it)
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"           // ImRendererBase::mgpActiveRenderer
+#include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"  // the 24-byte stride
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"              // shadow::Device
+#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                                  // LionParticleSampler_ApplyState
+
+// ---- the device surface SparkRenderer::Dispatch binds through -------------------------------
+// The same minimal extern surface the Lion particle dispatch declares
+// (SDKs/.../ParticleRender/ParticleRender.cpp) and the tyre-mark pass declares for its three
+// state appliers (BrnTrailRender.cpp). No project TU homes the D3DDevice_* thunks; they match
+// the XDK d3d9 fast-set API and the shadow-device precedent.
+struct IDirect3DDevice9;
+extern IDirect3DDevice9* gpD3DDevice;
+
+extern "C"
+{
+    void D3DDevice_SetStreamSource(IDirect3DDevice9* lpDevice, u32 luStreamNumber,
+                                   const void* lpStreamData, u32 luOffsetInBytes,
+                                   u32 luStride, u32 luFlags);
+    void D3DDevice_DrawVertices(IDirect3DDevice9* lpDevice, u32 luPrimitiveType,
+                                u32 luStartVertex, u32 luVertexCount);
+    void D3DDevice_SetTexture(IDirect3DDevice9* lpDevice, u32 luSampler,
+                              const void* lpTexture, u32 luFlags);
+}
+
+// The three shared-library render states Dispatch binds (ImmediateModePCLeaf.cpp), declared
+// `extern void*` exactly as BrnTrailRender.cpp / BrnSkyDomeManager.cpp declare theirs.
+extern void* gpImAdditiveBlendState;        // X360 dword_83010F24  mpBlendState_Additive
+extern void* gpSkyDomeRasterizerState;      // X360 dword_83010F3C  mpRasterizerState_CullNone
+extern void* gpSkyDomeDepthStencilState;    // X360 dword_83010F4C  mpDepthStencilState_ZBufferOnWriteOff
+void ImDeviceSetDepthStencilState(void* lpState);
+void ImDeviceSetBlendState(void* lpState);
+void ImDeviceSetRasterizerState(void* lpState);
 
 namespace BrnParticle
 {
@@ -531,6 +565,30 @@ void SparkArray::RenderBank(NativeParticleVertex::VertexIterator& lrIterator,
             // with a duplicate of edge B's last, so consecutive sparks in the same batch are
             // joined by degenerate triangles.
             const u32 luColourWord = SwizzleVertexColour(lauPackedColours[luParticle & 3]);
+            // [DIAG] NOT IN THE X360 BINARY. ONE-SHOT GEOMETRY WITNESS. "The batch count and
+            // the vertex count are healthy and the picture is empty" has four possible causes
+            // and only two of them are visible from the counters: the ribbon can be off
+            // screen, behind the eye, zero-width, or shaded away. This prints the first
+            // ribbon it ever emits -- the two edge points in VIEW SPACE, the half width and
+            // the packed colour -- which separates all four. DELETE-WHEN-STABLE.
+            {
+                static bool sbLoggedGeometry = false;
+                if (!sbLoggedGeometry)
+                {
+                    sbLoggedGeometry = true;
+                    char lacMsg[256];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                        "[spark] ribbon0 edges=%u halfWidth=%.5f colour=%08X "
+                        "A0{%.3f %.3f %.3f} B0{%.3f %.3f %.3f}\n",
+                        luEdgeCount, static_cast<double>(lfHalfWidth), luColourWord,
+                        static_cast<double>(laEdgeA[0].x), static_cast<double>(laEdgeA[0].y),
+                        static_cast<double>(laEdgeA[0].z),
+                        static_cast<double>(laEdgeB[0].x), static_cast<double>(laEdgeB[0].y),
+                        static_cast<double>(laEdgeB[0].z));
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+            }
+
             f32 lafUv[2];
 
             lafUv[0] = lafEdgeU[0];
@@ -603,6 +661,164 @@ void SparkVertexBufferBuilder::BuildDispatchData(EffectsVertexBufferLocked* lpLo
             lrBatches.Append(lBatch);
         }
     }
+}
+
+
+// ===============================================================================================
+// SparkRenderer::Dispatch  @0x8228BBC8  (172 instructions)
+//
+// The DEVICE half of the spark pass: replay the frame batch list that
+// SparkVertexBufferBuilder::BuildDispatchData filled, one DrawVertices per batch.
+// Instruction by instruction:
+//   0x8228BBE4-0x8228BC20  GetCount() (its own "Array used before Construct/Clear" assert on the
+//                          -1 sentinel), then return when the list is empty.
+//   0x8228BC24             shadow::Device::ResetShadowing()
+//   0x8228BC30-0x8228BC44  three state binds out of the shared library at dword_83010F20:
+//                            +0x04 dword_83010F24  mpBlendState_Additive
+//                            +0x1C dword_83010F3C  mpRasterizerState_CullNone
+//                            +0x2C dword_83010F4C  mpDepthStencilState_ZBufferOnWriteOff
+//                          (ConstructOnceOnly @0x827F1C20 builds them as ConstructBlendState(6,1,0),
+//                          ConstructRasteriserState(0) and ConstructDepthStencilState(1,0,3) --
+//                          so a spark is ADDITIVE, cull-none, depth-tested and depth-WRITE-OFF.
+//                          Those three are the console own answer to "why do sparks not occlude".)
+//   0x8228BC48-0x8228BC80  bind the library sampler at +0x40 dword_83010F60
+//                          (mpSamplerState_Linear_MipNearest_ClampUV) on unit 0, shadow-cached at
+//                          dword_830109A8, and clear the unit-0 texture-state cache.
+//   0x8228BC84             mpRenderer->BeginRendering()      ImRenderer<BasicColouredTexturedVertex> @0x8227B730
+//   0x8228BC90             mpRenderer->SetTransform(viewProj) @0x8227B8A0
+//   0x8228BC98-0x8228BCB4  shadow-compare the spark vertex descriptor off_82FAB6A4 against the
+//                          bound one and mark the vertex-program state dirty on a change.
+//   0x8228BCB8-0x8228BCFC  D3DDevice_SetStreamSource(dev, 0, vb, 0, 0) and then AGAIN with the
+//                          descriptor stride read out of its own per-element stride table
+//                          (`lhz +8` element count, `(count + 1) << 4`, `lbzx`).
+//   0x8228BD2C-0x8228BE20  per batch: assert GetVertexCount() > 0 (BrnSparkRenderer.cpp:1193),
+//                          assert 0 <= meArrayId < 4 (BrnSparkRenderer.h:240), take the texture
+//                          from the four-entry table at unk_82FAC230 indexed by meArrayId, bind it
+//                          on sampler 0 when it differs from the cached one (flags 0x80000000),
+//                          shadow::Device::FlushVertexProgramState(), then
+//                          D3DDevice_DrawVertices(dev, 6, GetStartVertex(), GetVertexCount()).
+//                          Primitive type 6 is the Xenos TRIANGLESTRIP -- which is why RenderBank
+//                          emits its ribbons with duplicated end vertices.
+//   0x8228BE24-0x8228BE6C  the EndRendering fold: assert mgpActiveRenderer == this+4, clear it.
+//
+// TWO FLAGGED PC SUBSTITUTIONS, both LAYOUT facts rather than behavioural ones:
+//  (1) THE STRIDE. The console reads it out of off_82FAB6A4 own per-element stride table. That
+//      global is the spark stream descriptor and the stream IS
+//      CgsGraphics::BasicColouredTexturedVertex (FLOAT3 position, packed RGBA8, FLOAT2 UV --
+//      ImRenderer<BasicColouredTexturedVertex>::Construct declares exactly those three elements),
+//      so the number it reads is sizeof(BasicColouredTexturedVertex) == 24 by construction. It is
+//      taken from the type here rather than re-homing a second descriptor global, and
+//      NativeParticleVertex::VertexIterator::Write -- which is what filled the buffer -- writes
+//      those same 24 bytes.
+//  (2) THE SAMPLER. The library sampler object is not built on this build (ConstructOnceOnly
+//      home is unmounted); LionParticleSampler_ApplyState installs exactly
+//      ConstructSamplerState(alloc, 1, 0, 2, 2) -- min/mag LINEAR, mip NONE, address U/V CLAMP --
+//      which is the same object the Lion particle pass binds for the same reason. Same words,
+//      different home. DELETE-WHEN ConstructOnceOnly lands.
+// ===============================================================================================
+// The Xenos primitive type Dispatch passes to D3DDevice_DrawVertices (X360 `li r4, 6`).
+// 6 == TRIANGLESTRIP, which the PC shim MapPrimitive translates -- and which is why RenderBank
+// emits each ribbon with duplicated end vertices.
+static const u32 KU_SPARK_PRIMITIVE_TYPE = 6u;
+
+// [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+u32 gauSparkDrawnBatches  = 0;
+u32 gauSparkDrawnVertices = 0;
+
+void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMatrix,
+                             renderengine::VertexBuffer* lpVertexBuffer,
+                             const SparkBatchArray& lrBatches)
+{
+    const s32 lnBatches = lrBatches.GetCount();
+    CGS_ASSERT(lnBatches != -1, "Array used before Construct/Clear was called");
+    if (lnBatches <= 0)
+    {
+        return;
+    }
+
+    // ⛔ The renderer is the one thing Dispatch cannot do without: its BeginRendering binds the
+    // program pair and the vertex declaration. A null one is a crash, not a missing effect.
+    if (mpRenderer == 0)
+    {
+        static bool sbLogged = false;
+        if (!sbLogged)
+        {
+            sbLogged = true;
+            CgsDev::Log::WriteToLog("[spark] Dispatch SKIPPED: mpRenderer is null "
+                                    "(ParticleModule::mImmediateModeRenderer was not Constructed)\n");
+        }
+        return;
+    }
+
+    shadow::Device::ResetShadowing();
+    ImDeviceSetBlendState(gpImAdditiveBlendState);            // dword_83010F24
+    ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);     // dword_83010F3C (cull none)
+    ImDeviceSetDepthStencilState(gpSkyDomeDepthStencilState); // dword_83010F4C (test on, write off)
+    renderengine::LionParticleSampler_ApplyState(0);          // dword_83010F60 on unit 0
+
+    mpRenderer->BeginRendering();
+    mpRenderer->SetTransform(&lViewProjectionMatrix);
+
+    const u32 luVertexStride =
+        static_cast<u32>(sizeof(CgsGraphics::BasicColouredTexturedVertex));   // 24 -- see FLAG (1)
+    D3DDevice_SetStreamSource(gpD3DDevice, 0, lpVertexBuffer, 0, 0, 1);
+    D3DDevice_SetStreamSource(gpD3DDevice, 0, lpVertexBuffer, 0, luVertexStride, 1);
+
+    const renderengine::Texture* lpCachedTexture = 0;
+    for (s32 lnBatch = 0; lnBatch < lrBatches.GetCount(); ++lnBatch)
+    {
+        const SparkBatch& lrBatch = lrBatches[static_cast<u32>(lnBatch)];
+        CGS_ASSERT(lrBatch.muVertexCount > 0, "lBatch.GetVertexCount() > 0");
+        CGS_ASSERT(lrBatch.meArrayId >= 0 && lrBatch.meArrayId < eSparkArray_Max,
+                   "( leArrayId >= 0 ) && ( leArrayId < eSparkArray_Max )");
+
+        renderengine::Texture* const lpTexture = SparkArray::GetTexture(lrBatch.meArrayId);
+
+        // [DIAG] NOT IN THE X360 BINARY. THE TEXTURE WITNESS, once per array id.
+        // A null texture here is INVISIBLE in every other measurement: the batch count, the
+        // vertex count and the draw count all stay perfect and the pass simply produces no
+        // pixels, because tex2D of nothing multiplied into an ADDITIVE blend adds nothing.
+        // That is the silent-drop shape exactly, and it is the first thing to rule out when
+        // "drew=N/M" is healthy and the picture is empty. DELETE-WHEN-STABLE.
+        {
+            static u32 suLoggedArrays = 0;
+            const u32 luBit = 1u << static_cast<u32>(lrBatch.meArrayId);
+            if ((suLoggedArrays & luBit) == 0)
+            {
+                suLoggedArrays |= luBit;
+                char lacMsg[160];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[spark] draw array %d: texture=%p verts=%u start=%u\n",
+                    static_cast<int>(lrBatch.meArrayId),
+                    static_cast<const void*>(lpTexture),
+                    lrBatch.muVertexCount, lrBatch.muStartVertex);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
+
+        if (lpTexture != lpCachedTexture)
+        {
+            D3DDevice_SetTexture(gpD3DDevice, 0, lpTexture, 0x80000000u);
+            lpCachedTexture = lpTexture;
+        }
+
+        shadow::Device::FlushVertexProgramState();
+        D3DDevice_DrawVertices(gpD3DDevice, KU_SPARK_PRIMITIVE_TYPE,
+                               lrBatch.muStartVertex, lrBatch.muVertexCount);
+
+        // [DIAG] NOT IN THE X360 BINARY. The DRAW-side witness -- the [spark] line at the
+        // BeginParticleRenderJob tail counts what was BUILT, and "built 2108 vertices" and
+        // "drew 2108 vertices" are two different claims. Change-gated + periodic, the same
+        // shape the build-side probe had to be given. DELETE-WHEN-STABLE.
+        gauSparkDrawnBatches += 1u;
+        gauSparkDrawnVertices += lrBatch.muVertexCount;
+    }
+
+    // The EndRendering fold at 0x8228BE24.
+    CgsGraphics::ImRendererBase* const lpBase =
+        static_cast<CgsGraphics::ImRendererBase*>(mpRenderer);
+    CGS_ASSERT(CgsGraphics::ImRendererBase::mgpActiveRenderer == lpBase, "mgpActiveRenderer == this");
+    CgsGraphics::ImRendererBase::mgpActiveRenderer = 0;
 }
 
 } // namespace Native

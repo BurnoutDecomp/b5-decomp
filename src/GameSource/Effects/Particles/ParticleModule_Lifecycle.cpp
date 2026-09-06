@@ -463,15 +463,14 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         //    BrnDebrisRenderer::Construct announced twenty lines below. Type-punning it to
         //    an Im3d* would be an invented type, so the pointer is left null AND SAID SO;
         //    the spark SIMULATION does not read it (only SparkRenderer::Dispatch does).
-        {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "ParticleModule::Prepare's SparkRenderer::Construct renderer argument -- "
-                "mImmediateModeRenderer is still a ContainedInterface placeholder, so "
-                "mSparkRenderer.mpRenderer is null (the spark ARRAYS are real)");
-        }
+        // ⭐ THE RENDERER ARGUMENT IS REAL AS OF THIS WAVE. r27 is &mImmediateModeRenderer
+        // (+0x9010), which is now the actual CgsGraphics::Im3d and is Constructed one line
+        // above through Im3d::Construct @0x827FC748 with the same off_82F2C814 GlobalGraphics
+        // allocator every contained renderer takes. SparkRenderer::Dispatch @0x8228BBC8 draws
+        // through it.
+        mImmediateModeRenderer.Construct(lpGraphicsAllocator);
         ++gauSparkPrepareCount;   // [diag] how many times Prepare re-built the spark banks
-        mSparkRenderer.Construct(mpHeapMalloc, 0);
+        mSparkRenderer.Construct(mpHeapMalloc, &mImmediateModeRenderer);
         for (u32 luArray = 0; luArray < KU_NUM_SPARK_ARRAYS; ++luArray)
         {
             maSparks[luArray].Construct(&mBucketManager,

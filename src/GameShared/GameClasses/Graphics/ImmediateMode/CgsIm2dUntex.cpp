@@ -25,6 +25,14 @@
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredVertex.h"
+// The TEXTURED 3D vertex type, for the one extra explicit instantiation at the tail of this
+// file. Its BeginRendering has its OWN X360 body (@0x8227B730 -- the same asserts, the same
+// CgsImRenderer.h:0x24C/0x24D/0x24E line numbers and the same bind sequence as the 2D one at
+// @0x823F9640), and SparkRenderer::Dispatch @0x8228BBC8 calls it. It is instantiated HERE,
+// beside the template definition, rather than re-defining that definition in CgsIm3d.cpp --
+// two definitions of one template body in two TUs is an ODR fork, and this project has been
+// bitten by one (odr-forks-link-silently).
+#include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
@@ -289,24 +297,52 @@ void ImRenderer<V>::BeginRendering()
     // Reset the current program slot (X360 stb 0 into +0x54).
     mi8CurrentProgram = 0;
 
-    // The live vertex-program shadow cache (X360 dword_8301095C). One per module, not per renderer.
-    static renderengine::ProgramBuffer* spgLastVertexProgram = nullptr;
-    if (spgLastVertexProgram != lpVertexProgram)
-    {
-        shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-        spgLastVertexProgram = lpVertexProgram;
-    }
+    // ⭐⭐ ONE CACHE, NOT ONE PER INSTANTIATION. The X360 shadow-caches the live vertex
+    // program in dword_8301095C -- ONE word for the whole module -- and shadow::Device
+    // already models it by name as mpVertexProgramShadow (shadowingdevice.h:269; the
+    // ImmediateModePCLeaf.cpp banner at DeviceSetVertexDescriptor makes the same point for
+    // its two neighbours, and CgsImRenderer.h records four more host words that had to be
+    // deleted for the same reason). A function-local `static ProgramBuffer* spgLastVertexProgram`
+    // inside a TEMPLATE body is one object PER INSTANTIATION, so every vertex type got its own
+    // private cache and they lied to each other: whichever renderer bound last owned the
+    // device, and the next renderer skipped its own bind because ITS cache still said "mine is
+    // current".
+    //
+    // MEASURED, run16: the spark pass (ImRenderer<BasicColouredTexturedVertex>) issued 6069
+    // draws of 4.6 million vertices at hr=S_OK, with the right stride, the right declaration
+    // and the right blend -- and the draw-site witness read back
+    //     [lionfx] DrawVertices: ... verts=216 stride=24 vs=1 ps=1 ...   (the first draw)
+    //     [lionfx] DrawVertices: ... verts=216 stride=24 vs=0 ps=1 ...   (every draw after)
+    // NO VERTEX SHADER BOUND from the second draw on. The pixels were never going to appear.
+    //
+    // shadow::Device::SetVertexProgram IS the console compare-and-store on that one word, so
+    // calling it unconditionally is what the console does -- its own outer compare was a
+    // redundant fast path over the same word.
+    shadow::Device::SetVertexProgram(
+        reinterpret_cast<const renderengine::ProgramBufferData*>(lpVertexProgram));
 
     shadow::DeviceSetPixelProgram(lpPixelProgram);
 
     // Shadow-cache the renderer's vertex descriptor (X360 off_83010958): when it differs from the
     // bound one, mark the vertex-program state dirty (byte_83010A34 = 1) and store the new descriptor.
-    static renderengine::VertexDescriptor* spgLastVertexDescriptor = nullptr;
-    if (spgLastVertexDescriptor != mpVertexDescriptor)
-    {
-        shadow::DeviceSetVertexDescriptor(mpVertexDescriptor);
-        spgLastVertexDescriptor = mpVertexDescriptor;
-    }
+    //
+    // ⭐⭐ ONE CACHE, NOT ONE PER INSTANTIATION -- the same defect as the vertex-program shadow
+    // just above, and this half is the one that actually cost the pixels. off_83010958 is
+    // shadow::Device::mpVertexDescriptor (shadowingdevice.h; the ImmediateModePCLeaf.cpp banner
+    // at DeviceSetVertexDescriptor spells out that these three words are the device's own and
+    // that modelling them TU-locally once left the sky's flush dereferencing null). A
+    // function-local static inside a TEMPLATE body is one object per instantiation, so it said
+    // "already bound" from the second frame on -- while this function's OWN ResetShadowing()
+    // call four lines earlier had just nulled shadow::Device::mpVertexDescriptor. And
+    // Device::FlushVertexProgramState opens with
+    //     if (mpVertexDescriptor == nullptr || mpVertexProgramShadow == nullptr) return;
+    // so from frame two the flush returned before binding anything.
+    //
+    // MEASURED, run17 (spark pass, one draw per frame, eight consecutive frames):
+    //     [lionfx] DrawVertices: ... verts=144 stride=24 vs=1 ps=1 decl=1 ...   frame 1
+    //     [lionfx] DrawVertices: ... verts=376 stride=24 vs=0 ps=1 decl=1 ...   frames 2..8
+    // -- hr=S_OK, the right stride, the right blend, and NO VERTEX SHADER BOUND.
+    shadow::DeviceSetVertexDescriptor(mpVertexDescriptor);
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -324,21 +360,30 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
     CGS_ASSERT(mapPixelProgramBuffer[li8Program] != nullptr,
                "mapPixelProgramBuffer[ li8Program ] != NULL");
 
-    // The live vertex-program shadow cache (X360 dword_8301095C). One per module, not per renderer.
-    static renderengine::ProgramBuffer* spgLastVertexProgram = nullptr;
-
+    // ⭐⭐ ONE CACHE, NOT ONE PER INSTANTIATION. The X360 shadow-caches the live vertex
+    // program in dword_8301095C -- ONE word for the whole module -- and shadow::Device
+    // already models it by name as mpVertexProgramShadow (shadowingdevice.h:269; the
+    // ImmediateModePCLeaf.cpp banner at DeviceSetVertexDescriptor makes the same point for
+    // its two neighbours, and CgsImRenderer.h records four more host words that had to be
+    // deleted for the same reason). A function-local `static ProgramBuffer* spgLastVertexProgram`
+    // inside a TEMPLATE body is one object PER INSTANTIATION, so every vertex type got its own
+    // private cache and they lied to each other: whichever renderer bound last owned the
+    // device, and the next renderer skipped its own bind because ITS cache still said "mine is
+    // current".
+    //
+    // MEASURED, run16: the spark pass (ImRenderer<BasicColouredTexturedVertex>) issued 6069
+    // draws of 4.6 million vertices at hr=S_OK, with the right stride, the right declaration
+    // and the right blend -- and the draw-site witness read back
+    //     [lionfx] DrawVertices: ... verts=216 stride=24 vs=1 ps=1 ...   (the first draw)
+    //     [lionfx] DrawVertices: ... verts=216 stride=24 vs=0 ps=1 ...   (every draw after)
+    // NO VERTEX SHADER BOUND from the second draw on. The pixels were never going to appear.
+    //
+    // shadow::Device::SetVertexProgram IS the console compare-and-store on that one word, so
+    // calling it unconditionally is what the console does -- its own outer compare was a
+    // redundant fast path over the same word.
     renderengine::ProgramBuffer* lpVertexProgram = mapVertexProgramBuffer[li8Program];
-    bool lbChanged;
-    if (spgLastVertexProgram == lpVertexProgram)
-    {
-        lbChanged = false;
-    }
-    else
-    {
-        shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-        spgLastVertexProgram = lpVertexProgram;
-        lbChanged = true;
-    }
+    const bool lbChanged = shadow::Device::SetVertexProgram(
+        reinterpret_cast<const renderengine::ProgramBufferData*>(lpVertexProgram));
 
     if (lbChanged)
     {
@@ -462,5 +507,10 @@ template void ImRenderer<Basic2dColouredVertex>::BeginRendering();
 template bool ImRenderer<Basic2dColouredVertex>::SetProgram(s8);
 template void* ImRenderer<Basic2dColouredVertex>::SetTransform(const void*);
 template void ImRenderer<Basic2dColouredVertex>::Render(renderengine::PrimitiveType, const Basic2dColouredVertex*, u32);
+
+// ImRenderer<BasicColouredTexturedVertex>::BeginRendering @0x8227B730 -- the Im3d path's own
+// instantiation of the body above. The rest of that vertex type's attested members are homed
+// in CgsIm3d.cpp; only this one shares its definition with the 2D fold.
+template void ImRenderer<BasicColouredTexturedVertex>::BeginRendering();
 
 } // namespace CgsGraphics
