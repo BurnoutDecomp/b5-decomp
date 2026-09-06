@@ -300,6 +300,15 @@ namespace
         u16                          mu16PositionExpandedOffset;
         // "POSITION0:FLOAT3@0->0 NORMAL0:DEC3N@12->12 ..." (source offset -> expanded offset).
         char                         macElements[224];
+        // ---- [PROBE crumple] the TWO UV SETS, in the SOURCE stream ------------------
+        // TEXCOORD0 is the diffuse/livery unwrap; TEXCOORD1 is the SCRATCH unwrap, and
+        // the vehicle Damaged pixel shader samples BOTH the crumple normal map (x6,x3)
+        // and the scratch map through TEXCOORD1 alone. A degenerate TEXCOORD1 therefore
+        // kills the crease AND the bare-metal reveal together, which is exactly the pair
+        // of symptoms in the owner's wreck. Recorded from the SOURCE offsets (the
+        // bundle's own bytes) so the read does not depend on the DEC3N expansion.
+        u16                          mau16TexcoordSourceOffset[2];
+        u8                           mau8TexcoordType[2];
     };
     std::unordered_map<const void*, Vd32Cached> sVdCache;
 
@@ -518,6 +527,9 @@ namespace
     u32                     suLastDeclPositionSourceOffset = 0;
     u32                     suLastDeclPositionExpandedOffset = 0;
     const char*             spLastDeclElements = nullptr;
+    // [PROBE crumple] the two UV sets of the declaration just bound, in the SOURCE stream.
+    u16                     sau16LastDeclTexcoordOffset[2] = { 0xFFFFu, 0xFFFFu };
+    u8                      sau8LastDeclTexcoordType[2] = { D3DDECLTYPE_UNUSED, D3DDECLTYPE_UNUSED };
     // Set by WorldFallbackShader_MarkInstancedMesh (see its banner further down): the next
     // mesh is CONSOLE-INSTANCED. WorldFallbackShader_SelectForMesh turns that into a fallback
     // only when the technique's vertex program cannot be fed a `world` matrix.
@@ -1706,12 +1718,20 @@ namespace renderengine
             suLastDeclPositionSourceOffset   = lIt->second.mu16PositionSourceOffset;
             suLastDeclPositionExpandedOffset = lIt->second.mu16PositionExpandedOffset;
             spLastDeclElements               = lIt->second.macElements;
+            std::memcpy(sau16LastDeclTexcoordOffset, lIt->second.mau16TexcoordSourceOffset,
+                        sizeof(sau16LastDeclTexcoordOffset));
+            std::memcpy(sau8LastDeclTexcoordType, lIt->second.mau8TexcoordType,
+                        sizeof(sau8LastDeclTexcoordType));
             return lIt->second.mpDeclaration;
         }
 
         Vd32Cached lEntry = {};
         // Zero would read as D3DDECLTYPE_FLOAT1; "no POSITION0 resolved" is UNUSED.
         lEntry.mu8PositionType = D3DDECLTYPE_UNUSED;
+        lEntry.mau16TexcoordSourceOffset[0] = 0xFFFFu;
+        lEntry.mau16TexcoordSourceOffset[1] = 0xFFFFu;
+        lEntry.mau8TexcoordType[0] = D3DDECLTYPE_UNUSED;
+        lEntry.mau8TexcoordType[1] = D3DDECLTYPE_UNUSED;
         const u8* lpImage = static_cast<const u8*>(lpVdImage);
         u16 lu16NumElements;
         std::memcpy(&lu16NumElements, lpImage + 0x08, 2);
@@ -1769,6 +1789,11 @@ namespace renderengine
             laElements[lu].UsageIndex = lu8UsageIndex;
             if (lu8Usage == D3DDECLUSAGE_TEXCOORD && lu8UsageIndex == 0)
                 lEntry.mbHasTexcoord0 = true;
+            if (lu8Usage == D3DDECLUSAGE_TEXCOORD && lu8UsageIndex < 2u)
+            {
+                lEntry.mau16TexcoordSourceOffset[lu8UsageIndex] = lu16Offset;
+                lEntry.mau8TexcoordType[lu8UsageIndex] = lu8Type;
+            }
             lEntry.muUsageMask |= DeclUsageBit(lu8Usage, lu8UsageIndex);
             if (lu8Type == D3DDECLTYPE_DEC3N && !lbSupportsDec3n)
                 lEntry.mau16Dec3nOffsets[lEntry.muDec3nCount++] = lu16Offset;
@@ -1952,6 +1977,10 @@ namespace renderengine
         suLastDeclPositionSourceOffset   = lrStored.mu16PositionSourceOffset;
         suLastDeclPositionExpandedOffset = lrStored.mu16PositionExpandedOffset;
         spLastDeclElements               = lrStored.macElements;
+        std::memcpy(sau16LastDeclTexcoordOffset, lrStored.mau16TexcoordSourceOffset,
+                    sizeof(sau16LastDeclTexcoordOffset));
+        std::memcpy(sau8LastDeclTexcoordType, lrStored.mau8TexcoordType,
+                    sizeof(sau8LastDeclTexcoordType));
         if (lEntry.muDec3nCount != 0 && lEntry.mpDeclaration != nullptr)
             LogOnce("vd32dec3n", "[WorldVd32] driver lacks DEC3N; packed normals expanded to FLOAT3\n");
         return lEntry.mpDeclaration;
@@ -2296,6 +2325,497 @@ namespace renderengine
     {
         spResetEnabled = lbEnabled;
         suResetIndex   = luResetIndex;
+    }
+
+    // =====================================================================================
+    // [PROBE, env-gated: BRN_CRUMPLE_PROBE] WHAT IS ON THE BODY MATERIAL'S SAMPLERS AT THE
+    // INSTANT OF THE DRAW.
+    //
+    // WHY IT IS HERE AND NOT AT THE BIND. A technique bind runs once per technique CHANGE
+    // (Device::SetMeshTechniquePC is guarded by `lpTechnique != spLastTechnique`), not once
+    // per draw, and this project has already published one false negative from a device
+    // probe placed BEFORE the state it measured was bound. The only state that can be wrong
+    // at a draw is the state the device holds AT that draw, so this reads it back off the
+    // device (GetTexture / Get{Vertex,Pixel}ShaderConstantF) on the line immediately above
+    // DrawIndexedPrimitive(UP) -- after every render-state override in this function.
+    //
+    // WHAT IT ANSWERS. Vehicle_Opaque_*_Damaged samples CrumpleTextureSampler at s2 and
+    // feeds crumpleTex.ga to DecodeNormalMap( , , , , 4.0 * damageLevels.x ); that per-pixel
+    // normal IS the crease. If s2 holds nothing, or holds a texture that is not the shipped
+    // 256x256 DXT5 crumple normal map (VEHICLES/VEHICLETEX.BIN resource 687B6FB1), a
+    // deformed panel can only shade as a smooth graded slide.
+    //
+    // ⭐ NOT A FIXED-STRIDE SAMPLE AND NOT A FIRST-N LOG. It records PER TECHNIQUE and emits
+    // a line the first time a technique draws AND every time that technique's observed s2
+    // texture CHANGES, plus a periodic re-print. An absence of change is then positive
+    // evidence rather than an unread buffer -- the failure mode a 24-entry bind log produced
+    // on the boost-flame path.
+    // =====================================================================================
+    // ⛔ SIZED AGAINST THE DATA, NOT GUESSED. build/game/SHADERS.BNDL holds 110 ShaderTechnique
+    // resources, so a 48-slot table would have filled with WORLD techniques long before the car
+    // ever drew and the vehicle answer would have landed in the overflow arm -- the "24-entry
+    // bind log read as exhaustive" failure, reproduced. 256 covers every technique in the bundle
+    // plus the no-name bucket, and the overflow arm below is kept as the tripwire.
+    const u32 KU_CRUMPLE_PROBE_SLOTS   = 256u;
+    const u32 KU_CRUMPLE_PROBE_S2SEEN  = 4u;
+    const u32 KU_CRUMPLE_PROBE_PERIOD  = 20000u;
+
+    // ⛔ THE FIRST CUT OF THIS PROBE WROTE A 302 MB LOG AND KILLED ITS OWN RUN, and the bug is
+    // worth keeping written down: once the four-entry mapS2Seen table was full, EVERY further
+    // pointer read as "new" (it could not be recorded, so the membership test always failed)
+    // and the probe logged on every draw. The WORLD techniques churn s2 constantly --
+    // Diffuse_Opaque_Singlesided_Default alone produced 174,552 lines in 41 seconds. Hence
+    // mbS2Saturated: past the cap the probe says so ONCE and falls back to the periodic line.
+    const u32 KU_CRUMPLE_PROBE_LINES = 12000u;  // global budget, then it stops and says so
+
+    struct CrumpleProbeRecord
+    {
+        const char*             mpcTechnique;
+        u32                     muDraws;
+        u32                     muNumS2Seen;
+        bool                    mbS2Saturated;
+        bool                    mbSaturationSaid;
+        f32                     mfMaxVerletSeen;
+        u32                     muLastRows;
+        s32                     miLastMaxCm;
+        s32                     miLastWCm;
+        u32                     muStaleConstantDraws;
+        IDirect3DBaseTexture9*  mapS2Seen[KU_CRUMPLE_PROBE_S2SEEN];
+    };
+
+    CrumpleProbeRecord saCrumpleProbe[KU_CRUMPLE_PROBE_SLOTS] = {};
+    u32                suCrumpleProbeUsed = 0u;
+    u32                suCrumpleProbeLines = 0u;
+    bool               sbCrumpleProbeOverflow = false;
+
+    // "<2D 256x256 DXT5 mips=9>" for whatever is bound at luUnit, or "<none>".
+    void CrumpleProbe_DescribeUnit(IDirect3DDevice9* lpDevice, u32 luUnit,
+                                   char* lpcOut, size_t luCap)
+    {
+        IDirect3DBaseTexture9* lpTexture = nullptr;
+        if (FAILED(lpDevice->GetTexture(luUnit, &lpTexture)) || lpTexture == nullptr)
+        {
+            std::snprintf(lpcOut, luCap, "s%u=<none>", luUnit);
+            return;
+        }
+
+        const D3DRESOURCETYPE leType = lpTexture->GetType();
+        D3DSURFACE_DESC lDesc = {};
+        bool lbHaveDesc = false;
+        if (leType == D3DRTYPE_TEXTURE)
+        {
+            lbHaveDesc = SUCCEEDED(
+                static_cast<IDirect3DTexture9*>(lpTexture)->GetLevelDesc(0, &lDesc));
+        }
+        else if (leType == D3DRTYPE_CUBETEXTURE)
+        {
+            lbHaveDesc = SUCCEEDED(
+                static_cast<IDirect3DCubeTexture9*>(lpTexture)->GetLevelDesc(0, &lDesc));
+        }
+
+        // A D3DFORMAT below 256 is one of the enum's own values; the compressed ones are
+        // FOURCCs, so print those as their four characters.
+        char lacFormat[16];
+        const u32 luFormat = static_cast<u32>(lDesc.Format);
+        if (lbHaveDesc && luFormat > 0xFFu)
+        {
+            lacFormat[0] = static_cast<char>(luFormat & 0xFFu);
+            lacFormat[1] = static_cast<char>((luFormat >> 8) & 0xFFu);
+            lacFormat[2] = static_cast<char>((luFormat >> 16) & 0xFFu);
+            lacFormat[3] = static_cast<char>((luFormat >> 24) & 0xFFu);
+            lacFormat[4] = '\0';
+            for (u32 lu = 0; lu < 4u; ++lu)
+            {
+                if (lacFormat[lu] < 0x20 || lacFormat[lu] > 0x7E)
+                {
+                    std::snprintf(lacFormat, sizeof(lacFormat), "fmt%u", luFormat);
+                    break;
+                }
+            }
+        }
+        else
+        {
+            std::snprintf(lacFormat, sizeof(lacFormat), "fmt%u", luFormat);
+        }
+
+        const char* lpcKind = (leType == D3DRTYPE_TEXTURE)     ? "2D"
+                            : (leType == D3DRTYPE_CUBETEXTURE) ? "CUBE"
+                            : (leType == D3DRTYPE_VOLUMETEXTURE) ? "VOL" : "?";
+        if (lbHaveDesc)
+        {
+            std::snprintf(lpcOut, luCap, "s%u=%p<%s %ux%u %s mips=%u>",
+                          luUnit, static_cast<void*>(lpTexture), lpcKind,
+                          static_cast<unsigned>(lDesc.Width),
+                          static_cast<unsigned>(lDesc.Height), lacFormat,
+                          static_cast<unsigned>(lpTexture->GetLevelCount()));
+        }
+        else
+        {
+            std::snprintf(lpcOut, luCap, "s%u=%p<%s ?>", luUnit,
+                          static_cast<void*>(lpTexture), lpcKind);
+        }
+        lpTexture->Release();
+    }
+
+    // Decode one UV set out of the SOURCE vertex stream (the bundle's own bytes, before the
+    // DEC3N widening -- so this read does not depend on the expansion) and report its span.
+    // A UV set that is CONSTANT over the mesh reads as span 0, and that is the whole point:
+    // the vehicle Damaged pixel shader samples the crumple normal map AND the scratch map
+    // through TEXCOORD1 alone, so a dead TEXCOORD1 removes the crease and the bare metal
+    // together while every binding and every constant stays perfectly correct.
+    void CrumpleProbe_UvCensus(const u8* lpVertices, u32 luStride, u32 luNumVertices,
+                               u32 luSet, char* lpcOut, size_t luCap)
+    {
+        const u16 lu16Offset = sau16LastDeclTexcoordOffset[luSet];
+        const u8  lu8Type    = sau8LastDeclTexcoordType[luSet];
+        if (lpVertices == nullptr || luStride == 0 || luNumVertices == 0
+            || lu16Offset == 0xFFFFu)
+        {
+            std::snprintf(lpcOut, luCap, "uv%u=<absent>", luSet);
+            return;
+        }
+        u32 luSample = luNumVertices;
+        if (luSample > 512u)
+            luSample = 512u;      // a census of the head of the buffer, never of one vertex
+        f32 lfMinU = 1.0e30f, lfMaxU = -1.0e30f, lfMinV = 1.0e30f, lfMaxV = -1.0e30f;
+        u32 luDecoded = 0u;
+        for (u32 lu = 0; lu < luSample; ++lu)
+        {
+            const u8* const lpV = lpVertices + static_cast<size_t>(lu) * luStride + lu16Offset;
+            f32 lfU = 0.0f, lfV = 0.0f;
+            if (lu8Type == D3DDECLTYPE_FLOAT16_2)
+            {
+                // half -> float by hand: a probe must not depend on a runtime helper.
+                u16 lau16[2];
+                std::memcpy(lau16, lpV, 4);
+                f32 laf[2];
+                for (u32 luLane = 0; luLane < 2u; ++luLane)
+                {
+                    const u16 lu16H  = lau16[luLane];
+                    const u32 luSign = static_cast<u32>(lu16H >> 15) << 31;
+                    const u32 luExp  = (lu16H >> 10) & 0x1Fu;
+                    const u32 luMant = lu16H & 0x3FFu;
+                    u32 luBits;
+                    if (luExp == 0u)
+                        luBits = luSign;                        // zero / subnormal -> 0
+                    else if (luExp == 31u)
+                        luBits = luSign | 0x7F800000u | (luMant << 13);
+                    else
+                        luBits = luSign | ((luExp + 112u) << 23) | (luMant << 13);
+                    std::memcpy(&laf[luLane], &luBits, 4);
+                }
+                lfU = laf[0];
+                lfV = laf[1];
+            }
+            else if (lu8Type == D3DDECLTYPE_FLOAT2 || lu8Type == D3DDECLTYPE_FLOAT4)
+            {
+                std::memcpy(&lfU, lpV, 4);
+                std::memcpy(&lfV, lpV + 4, 4);
+            }
+            else if (lu8Type == D3DDECLTYPE_SHORT2N)
+            {
+                s16 las16[2];
+                std::memcpy(las16, lpV, 4);
+                lfU = static_cast<f32>(las16[0]) / 32767.0f;
+                lfV = static_cast<f32>(las16[1]) / 32767.0f;
+            }
+            else
+            {
+                std::snprintf(lpcOut, luCap, "uv%u=<type %u not decoded>", luSet,
+                              static_cast<unsigned>(lu8Type));
+                return;
+            }
+            ++luDecoded;
+            if (lfU < lfMinU) lfMinU = lfU;
+            if (lfU > lfMaxU) lfMaxU = lfU;
+            if (lfV < lfMinV) lfMinV = lfV;
+            if (lfV > lfMaxV) lfMaxV = lfV;
+        }
+        std::snprintf(lpcOut, luCap,
+                      "uv%u@%u[%s] n=%u u[%.4f..%.4f] v[%.4f..%.4f] span=(%.4f,%.4f)",
+                      luSet, static_cast<unsigned>(lu16Offset), DeclTypeName(lu8Type),
+                      static_cast<unsigned>(luDecoded),
+                      static_cast<double>(lfMinU), static_cast<double>(lfMaxU),
+                      static_cast<double>(lfMinV), static_cast<double>(lfMaxV),
+                      static_cast<double>(lfMaxU - lfMinU),
+                      static_cast<double>(lfMaxV - lfMinV));
+    }
+
+    // =====================================================================================
+    // [DIAG, env-gated: BRN_CRUMPLE_FORCE=<0..1>] PAINT THE CREASE ON AN UNDAMAGED CAR.
+    //
+    // ⛔ THIS IS A DIAGNOSTIC, NOT A BEHAVIOUR, AND IT IS NEVER ON BY DEFAULT. It exists
+    // because every input to the crease measured CORRECT -- s2 carries the shipped 256x256
+    // DXT5 crumple normal map with WRAP/LINEAR/no-bias state on 80,502 consecutive body draws,
+    // TEXCOORD1 spans (0.92, 0.99), TANGENT0 is in the declaration, g_verletOffsets reaches
+    // c0..c127 at 0.69 m so damageLevels.x saturates to 1.0, and the shipped bytecode really
+    // does `texld s2` and `mul r0.xy, r0, 4*damage` -- and the wreck STILL shades smooth. When
+    // every measured input is right and the picture is wrong, the next question is whether the
+    // term has any visible authority at all, and the only honest way to ask is to drive it to
+    // its maximum ON EVERY PIXEL and look.
+    //
+    // It writes the console's own `g_damageConstants` (pixel c5, measured from the shipped
+    // CTAB), in the console's own shape: BrnRaceCarEntityModule_Render's DEBUG_mbOverrideDamage
+    // arm builds {crumple, 0, dust, 0}. The pixel shader takes
+    // `damageLevels = max(float4(deformation, deformation, 0, 0), g_damageConstants)`, so a
+    // forced .x is exactly "as if every vertex of this panel were fully crushed".
+    // Nothing here changes a shipped code path: with the variable unset the function returns
+    // on its first line.
+    // =====================================================================================
+    void CrumpleForce_Apply(IDirect3DDevice9* lpDevice)
+    {
+        static const char* const spcForce = std::getenv("BRN_CRUMPLE_FORCE");
+        if (spcForce == nullptr || lpDevice == nullptr || spCurrentTechniqueName == nullptr)
+            return;
+        // Only the vehicle DAMAGED techniques declare g_damageConstants; writing c5 under any
+        // other program would overwrite an unrelated constant. Match the tail of the name --
+        // its first character is the shader-profile digit (see the probe's banner).
+        if (std::strstr(spCurrentTechniqueName, "ehicle") == nullptr
+            || std::strstr(spCurrentTechniqueName, "Damaged") == nullptr)
+            return;
+        static const f32 sfAmount = static_cast<f32>(std::atof(spcForce));
+        LogOnce("crumforce", "[crumple] BRN_CRUMPLE_FORCE armed -- g_damageConstants.x is being"
+                             " OVERRIDDEN on every vehicle Damaged draw. NOT a default run.\n");
+        const float lafForced[4] = { sfAmount, 0.0f, 0.0f, 0.0f };
+        lpDevice->SetPixelShaderConstantF(5u, lafForced, 1u);
+    }
+
+    void CrumpleProbe_AtDraw(IDirect3DDevice9* lpDevice, const u8* lpVertices,
+                             u32 luSourceStride, u32 luNumVertices)
+    {
+        static const char* const spcProbe = std::getenv("BRN_CRUMPLE_PROBE");
+        if (spcProbe == nullptr || spcProbe[0] == '0' || lpDevice == nullptr)
+            return;
+
+        LogOnce("crumarm", "[crumple] probe ARMED (BRN_CRUMPLE_PROBE) -- device sampler"
+                           " read-back at DRAW time\n");
+
+        const char* const lpcName = (spCurrentTechniqueName != nullptr)
+                                        ? spCurrentTechniqueName : "<no technique>";
+
+        // BRN_CRUMPLE_PROBE=<substring> restricts the probe to techniques whose name contains
+        // <substring> ("1" = every technique; "vehicle" is spelled "ehicle" -- see below).
+        // ⭐ THIS IS NOT A CONVENIENCE AND IT IS NOT ASSUMING THE ANSWER: the unfiltered run
+        // (scratch/CRUMPLE/p1) already enumerated all 61 techniques that drew in a whole boot
+        // and printed every one's s2 binding, so a filter drops techniques whose state has
+        // ALREADY been measured, not techniques nobody looked at. It exists because the
+        // unfiltered form cannot survive a driving run: the world pass alone wrote 429,127
+        // lines in 41 s, and even the vehicle-wide form spent a 12,000-line budget on TRAFFIC
+        // before the player's body technique reached its first crash.
+        // ⛔ The technique NAME's first character is overwritten with the shader-profile digit
+        // by ShaderTechniqueResourceType::PostFixUp (the console's own behaviour), so
+        // "Vehicle_..." reads "0ehicle_...". Never match the first letter.
+        static const char* const spcFilter =
+            (spcProbe[0] == '1' && spcProbe[1] == '\0') ? nullptr
+            : ((spcProbe[0] == 'v' || spcProbe[0] == 'V') && spcProbe[1] == 'e') ? "ehicle"
+            : spcProbe;
+        const bool lbReadConstants = (spcFilter != nullptr);
+        if (spcFilter != nullptr && std::strstr(lpcName, spcFilter) == nullptr)
+            return;
+
+        CrumpleProbeRecord* lpRecord = nullptr;
+        for (u32 lu = 0; lu < suCrumpleProbeUsed; ++lu)
+        {
+            if (saCrumpleProbe[lu].mpcTechnique == lpcName)
+            {
+                lpRecord = &saCrumpleProbe[lu];
+                break;
+            }
+        }
+        if (lpRecord == nullptr)
+        {
+            if (suCrumpleProbeUsed >= KU_CRUMPLE_PROBE_SLOTS)
+            {
+                // ⚠️ SAY SO. A silently truncated table is the "24-entry bind log read as
+                // exhaustive" failure with extra steps.
+                LogOnce("crumfull", "[crumple] technique table FULL -- later techniques are"
+                                    " NOT being probed; this run cannot claim coverage\n");
+                sbCrumpleProbeOverflow = true;
+                return;
+            }
+            lpRecord = &saCrumpleProbe[suCrumpleProbeUsed++];
+            lpRecord->mpcTechnique = lpcName;
+        }
+
+        ++lpRecord->muDraws;
+
+        IDirect3DBaseTexture9* lpS2 = nullptr;
+        lpDevice->GetTexture(2u, &lpS2);
+        if (lpS2 != nullptr)
+            lpS2->Release();          // the identity only; GetTexture AddRef'd it
+
+        bool lbNewS2 = false;
+        if (!lpRecord->mbS2Saturated)
+        {
+            lbNewS2 = true;
+            for (u32 lu = 0; lu < lpRecord->muNumS2Seen; ++lu)
+            {
+                if (lpRecord->mapS2Seen[lu] == lpS2)
+                {
+                    lbNewS2 = false;
+                    break;
+                }
+            }
+            if (lbNewS2)
+            {
+                if (lpRecord->muNumS2Seen < KU_CRUMPLE_PROBE_S2SEEN)
+                {
+                    lpRecord->mapS2Seen[lpRecord->muNumS2Seen++] = lpS2;
+                }
+                else
+                {
+                    // Cap reached. WITHOUT this latch the membership test can never succeed
+                    // again and the probe logs every draw -- the 302 MB failure in the banner.
+                    lpRecord->mbS2Saturated = true;
+                }
+            }
+        }
+
+        // g_verletOffsets is c0..c127 in every Vehicle_*_Damaged vertex program (measured
+        // from the compiled CTAB in build/game/SHADERS.BNDL). Reading it back says whether
+        // the deformation the sim computed reached the GPU at all, which is the other half
+        // of "the crease is missing". Read on EVERY probed draw when the vehicle filter is on,
+        // because the line we actually want is the one at the WRECK'S PEAK, and a peak is only
+        // detectable by watching a high-water mark -- the [deform-rows] idiom.
+        static float safVerlet[128 * 4];
+        u32 luNonZeroRows = 0u;
+        f32 lfMaxOffset = 0.0f;
+        f32 lfMaxScratch = 0.0f;
+        if (lbReadConstants && SUCCEEDED(lpDevice->GetVertexShaderConstantF(0u, safVerlet, 128u)))
+        {
+            for (u32 lu = 0; lu < 128u; ++lu)
+            {
+                const f32 lfX = safVerlet[lu * 4 + 0];
+                const f32 lfY = safVerlet[lu * 4 + 1];
+                const f32 lfZ = safVerlet[lu * 4 + 2];
+                const f32 lfW = safVerlet[lu * 4 + 3];
+                const f32 lfLen = std::sqrt(lfX * lfX + lfY * lfY + lfZ * lfZ);
+                if (lfLen > 1.0e-4f)
+                    ++luNonZeroRows;
+                if (lfLen > lfMaxOffset)
+                    lfMaxOffset = lfLen;
+                if (std::fabs(lfW) > lfMaxScratch)
+                    lfMaxScratch = std::fabs(lfW);
+            }
+        }
+
+        // ---- the per-draw STATE SAMPLE (one compact line, on any change) ------------------
+        // ⛔ A HIGH-WATER MARK WAS THE WRONG TRIGGER AND IT COST THE FIRST WRECK RUN ITS SERIES.
+        // Draw #14 of the car body read max|xyz| = 3723.8 (stale world-matrix registers, see
+        // below), the mark latched there, and the remaining 140,000 draws could never beat it --
+        // so the crash's own peak was visible only in the every-20,000th periodic line. Log on a
+        // CHANGE of the state triple instead: that is a series, and a run of identical lines is
+        // then positive evidence of "nothing changed" rather than an unwritten one.
+        const u32 luRowsKey = luNonZeroRows;
+        const s32 liMaxKey  = static_cast<s32>(lfMaxOffset  * 100.0f);   // centimetres
+        const s32 liWKey    = static_cast<s32>(lfMaxScratch * 100.0f);
+        // ⚠️ A verlet row of TENS OF METRES is not deformation -- it is the previous world
+        // draw's matrix left in c0..c127 because this mesh's g_verletOffsets publish was
+        // skipped. Count it, so "I saw it once" becomes a RATE.
+        if (lfMaxOffset > 10.0f)
+            ++lpRecord->muStaleConstantDraws;
+        if (lbReadConstants
+            && (luRowsKey != lpRecord->muLastRows || liMaxKey != lpRecord->miLastMaxCm
+                || liWKey != lpRecord->miLastWCm)
+            && suCrumpleProbeLines < KU_CRUMPLE_PROBE_LINES)
+        {
+            lpRecord->muLastRows  = luRowsKey;
+            lpRecord->miLastMaxCm = liMaxKey;
+            lpRecord->miLastWCm   = liWKey;
+            ++suCrumpleProbeLines;
+            char lacState[256];
+            std::snprintf(lacState, sizeof(lacState),
+                          "[crumple-v] %s draw#%u rows=%u max|xyz|=%.4f max|w|=%.4f"
+                          " dmgFromVerlet=%.3f stale=%u\n",
+                          lpcName, static_cast<unsigned>(lpRecord->muDraws),
+                          static_cast<unsigned>(luNonZeroRows),
+                          static_cast<double>(lfMaxOffset), static_cast<double>(lfMaxScratch),
+                          static_cast<double>(lfMaxOffset * 3.0f > 1.0f ? 1.0f
+                                                                       : lfMaxOffset * 3.0f),
+                          static_cast<unsigned>(lpRecord->muStaleConstantDraws));
+            CgsDev::Log::WriteToLog(lacState);
+        }
+
+        // ---- what makes the full BINDING block worth writing ------------------------------
+        //   * the first draw of a technique                     (the binding, at draw time)
+        //   * a NEW s2 texture for that technique               (a clobber, whenever it lands)
+        //   * one periodic line                                 (absence of change, positive)
+        // The saturation notice is a third, one-shot case so a capped table is never silent.
+        const bool lbNewPeak = false;
+        const bool lbSaturationNotice = lpRecord->mbS2Saturated && !lpRecord->mbSaturationSaid;
+        if (lbSaturationNotice)
+            lpRecord->mbSaturationSaid = true;  // latch: the notice prints exactly once
+        const bool lbLog = (lpRecord->muDraws == 1u) || lbNewS2 || lbNewPeak || lbSaturationNotice
+                           || (lpRecord->muDraws % KU_CRUMPLE_PROBE_PERIOD) == 0u;
+        if (!lbLog)
+            return;
+        if (suCrumpleProbeLines >= KU_CRUMPLE_PROBE_LINES)
+        {
+            LogOnce("crumbudget", "[crumple] line budget spent -- the probe has STOPPED"
+                                  " logging; later state changes are NOT in this log\n");
+            return;
+        }
+        ++suCrumpleProbeLines;
+
+        float lafDamage[4] = { -1.0f, -1.0f, -1.0f, -1.0f };
+        lpDevice->GetPixelShaderConstantF(5u, lafDamage, 1u);   // g_damageConstants == c5
+
+        char lacUv[2][192];
+        for (u32 lu = 0; lu < 2u; ++lu)
+            CrumpleProbe_UvCensus(lpVertices, luSourceStride, luNumVertices, lu,
+                                  lacUv[lu], sizeof(lacUv[lu]));
+
+        char lacUnits[6][96];
+        const u32 lauUnits[6] = { 0u, 2u, 3u, 5u, 13u, 15u };
+        for (u32 lu = 0; lu < 6u; ++lu)
+            CrumpleProbe_DescribeUnit(lpDevice, lauUnits[lu], lacUnits[lu], sizeof(lacUnits[lu]));
+
+        // The LIVE sampler descriptor on unit 2 -- the brief asks for the state, not only the
+        // binding. A crumple normal map read through a point filter, a clamped address mode, a
+        // forced top mip level or an sRGB decode is bound-but-wrong, and every one of those is
+        // a state word rather than a texture pointer.
+        DWORD luAddrU = 0, luAddrV = 0, luMag = 0, luMin = 0, luMip = 0, luMaxMip = 0, luSrgb = 0;
+        DWORD luLodBias = 0;
+        lpDevice->GetSamplerState(2u, D3DSAMP_ADDRESSU,      &luAddrU);
+        lpDevice->GetSamplerState(2u, D3DSAMP_ADDRESSV,      &luAddrV);
+        lpDevice->GetSamplerState(2u, D3DSAMP_MAGFILTER,     &luMag);
+        lpDevice->GetSamplerState(2u, D3DSAMP_MINFILTER,     &luMin);
+        lpDevice->GetSamplerState(2u, D3DSAMP_MIPFILTER,     &luMip);
+        lpDevice->GetSamplerState(2u, D3DSAMP_MAXMIPLEVEL,   &luMaxMip);
+        lpDevice->GetSamplerState(2u, D3DSAMP_MIPMAPLODBIAS, &luLodBias);
+        lpDevice->GetSamplerState(2u, D3DSAMP_SRGBTEXTURE,   &luSrgb);
+        f32 lfLodBias = 0.0f;
+        std::memcpy(&lfLodBias, &luLodBias, sizeof(lfLodBias));
+
+        char lacMsg[2400];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[crumple] tech='%s' draw#%u real=%d s2seen=%u%s\n"
+                      "[crumple]   %s %s %s %s %s %s\n"
+                      "[crumple]   s2 state: addrUV=%u/%u filt mag/min/mip=%u/%u/%u"
+                      " maxMip=%u lodBias=%.3f srgb=%u\n"
+                      "[crumple]   decl=[%s]\n"
+                      "[crumple]   %s\n"
+                      "[crumple]   %s\n"
+                      "[crumple]   verlet c0..c127: rows!=0=%u max|xyz|=%.4f max|w|=%.4f"
+                      "  g_damageConstants=(%.4f %.4f %.4f %.4f)\n",
+                      lpcName, static_cast<unsigned>(lpRecord->muDraws),
+                      sbRealProgramsBound ? 1 : 0,
+                      static_cast<unsigned>(lpRecord->muNumS2Seen),
+                      lpRecord->mbS2Saturated
+                          ? " (s2 table SATURATED -- more than 4 distinct textures on this"
+                            " technique's s2; further changes are not tracked)" : "",
+                      lacUnits[0], lacUnits[1], lacUnits[2], lacUnits[3], lacUnits[4], lacUnits[5],
+                      static_cast<unsigned>(luAddrU), static_cast<unsigned>(luAddrV),
+                      static_cast<unsigned>(luMag), static_cast<unsigned>(luMin),
+                      static_cast<unsigned>(luMip), static_cast<unsigned>(luMaxMip),
+                      static_cast<double>(lfLodBias), static_cast<unsigned>(luSrgb),
+                      (spLastDeclElements != nullptr) ? spLastDeclElements : "?",
+                      lacUv[0], lacUv[1],
+                      static_cast<unsigned>(luNonZeroRows),
+                      static_cast<double>(lfMaxOffset), static_cast<double>(lfMaxScratch),
+                      static_cast<double>(lafDamage[0]), static_cast<double>(lafDamage[1]),
+                      static_cast<double>(lafDamage[2]), static_cast<double>(lafDamage[3]));
+        CgsDev::Log::WriteToLog(lacMsg);
     }
 
     void WorldDraw_IndexedUP(u32 luPrimTypeXenon, u32 luBaseVertexIndex,
@@ -2821,6 +3341,14 @@ namespace renderengine
             lpDevice->GetRenderState(D3DRS_ZFUNC,    &luState); lrTally.muZFuncEffective = luState;
             lpDevice->GetRenderState(D3DRS_CULLMODE, &luState); lrTally.muCullEffective  = luState;
         }
+
+        // [PROBE, env-gated] the sampler/constant state THIS draw runs under -- read off the
+        // device on the line above the draw, after every override in this function. See the
+        // banner on CrumpleProbe_AtDraw for why the bind site is the wrong place to ask.
+        CrumpleProbe_AtDraw(lpDevice, static_cast<const u8*>(lpVertexData),
+                            suVertexSourceStride, luNumVertices);
+        // [DIAG, env-gated] BRN_CRUMPLE_FORCE=<0..1> -- see CrumpleForce_Apply's banner.
+        CrumpleForce_Apply(lpDevice);
 
         // The retained submit is the exact equivalent of the UP call beside it: the UP form
         // offsets the vertex POINTER by baseVertex * stride and passes base 0, the retained
