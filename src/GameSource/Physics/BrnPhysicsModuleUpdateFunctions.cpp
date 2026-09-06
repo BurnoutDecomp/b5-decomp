@@ -40,6 +40,7 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h" // CgsCollision::CollisionGenerator
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // CgsDev::PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint / gxMessageFilterFlags (the [pausebit] witnesses + the prop-diag trace)
+#include <cstdlib>   // getenv ([slomo] crash-arm witness only)
 
 namespace BrnPhysics
 {
@@ -516,16 +517,56 @@ namespace BrnPhysics
             {
                 Vehicle::RaceCarPhysics* lpSlowMoCar =
                     mVehicleManager.GetRaceCarPhysics(mVehicleManager.GetRigidBodyId(0));
-                if (lpSlowMoCar != 0 && lpSlowMoCar->HasCrashedThisFrame() &&
-                    !mVehicleManager.GetForceNoSlowMo())
+
+                const bool lbCrashedThisFrame =
+                    (lpSlowMoCar != 0) && lpSlowMoCar->HasCrashedThisFrame();
+                const bool lbInhibited = mVehicleManager.GetForceNoSlowMo();
+
+                if (lbCrashedThisFrame && !lbInhibited)
                 {
                     miFramesToForceSuperSlowMotion = 3;
                 }
-                if (miFramesToForceSuperSlowMotion > 0)
+                const bool lbScaled = (miFramesToForceSuperSlowMotion > 0);
+                if (lbScaled)
                 {
                     miFramesToForceSuperSlowMotion -= 1;
                     lfSimTimerTimeStep = lfSimTimerTimeStep * 0.001f;   // flt_82013F90
                 }
+
+                // ---- [slomo] THE LAST RUNG OF THE mbForceNoSlowMo CHAIN --------------------
+                // OPT-IN (BRN_SLOMO_DIAG=1), the same variable the [noslowmo] gate probe in
+                // BrnVehicleManager_DoCrashPrediction.cpp uses, so ONE run carries both ends.
+                //
+                // ⭐ WHY IT EXISTS: without it the chain's last step is a code-reading argument,
+                // not a measurement. The gate probe can only report what the GATE decided; this
+                // reports what the CONSUMER did with it, on the same frame, and -- the part that
+                // makes it a verification rather than a confirmation -- the two outcomes are
+                // DISTINGUISHABLE in the log. `inhibited 1 -> armed 0` is exactly what a run
+                // without the triangle-cache clear prints, so a pass cannot be mistaken for one.
+                // The `[slomo]` tag family is otherwise EDGE-TRIGGERED at boot (BrnMainDirector
+                // .cpp:98), which is why a 240 s driving log carried three lines, all at scale
+                // 1.0, and none of them about a crash.
+                if (lbCrashedThisFrame)
+                {
+                    static s32 siSlowMoDiag = -1;
+                    if (siSlowMoDiag < 0)
+                    {
+                        const char* lpcEnv = getenv("BRN_SLOMO_DIAG");
+                        siSlowMoDiag = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
+                    }
+                    if (siSlowMoDiag == 1 && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[slomo] crashArm  crashed 1  inhibited "
+                            << static_cast<s32>(lbInhibited ? 1 : 0)
+                            << "  -> armed " << static_cast<s32>((!lbInhibited) ? 1 : 0)
+                            << "  framesLeft " << miFramesToForceSuperSlowMotion
+                            << "  scaledThisFrame " << static_cast<s32>(lbScaled ? 1 : 0)
+                            << "  step " << lfSimTimerTimeStep
+                            << "\n";
+                    }
+                }
+
                 mVehicleManager.ResetForceNoSlowMo();
             }
             DvWitnessMark("slowmo");

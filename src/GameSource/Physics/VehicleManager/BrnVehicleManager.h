@@ -1505,15 +1505,19 @@ namespace Vehicle
         //   -> queue[8] race-car-vs-traffic -> DoCrashPredictionForRaceCarAndTrafficVehicle
         //   -> HandleCrashPredictionForRaceCarAndTrafficVehicle
         //   -> HandleCrashPredictionForRaceCarAndWorld
-        //   -> the ~410-insn VMX128 triangle-cache block that CLEARS mbForceNoSlowMo
+        //   -> the 463-insn VMX128 triangle-cache block that CLEARS mbForceNoSlowMo (BODIED)
         //      (0x82646450..0x82646B8C -- it sits AFTER the world arm, not in the middle; the old
         //      "its middle is the VMX loop" reading below was wrong)
         //   -> queue[9] traffic-vs-world -> HandleTrafficCarWorldPotentialContact
         //   -> BridgeArticulatedJointRequestsToSim -> DeallocateInternalBuffers.
         // The two BasePriorityQueue::Clear calls are the assert StrStream constructions at
         // :2911/:2912, not queue drains. sub_8259D670 / CgsScen are EventQueue<T>::GetEvent(s32).
-        // ONE NAMED GATE remains inside the landed body, not on the race-car-vs-traffic path:
-        //   the mbForceNoSlowMo triangle-cache clear                      -- no cache reader yet
+        // ✅ NO GATES REMAIN. RETIRED 2026-09-06 (constant-audit wave): the mbForceNoSlowMo
+        //   triangle-cache clear (0x82646450..0x82646B8C, 463 instructions) is BODIED in
+        //   BrnVehicleManager_DoCrashPrediction.cpp and measured on two runs. Its old park
+        //   reason -- "no cache reader yet" -- had already been retired once in the .cpp and
+        //   survived here for four more waves; TriangleCacheInterface::GetCache and
+        //   GetNumCachedTriangleBatches have been live throughout. Do not quote it again.
         // RETIRED 2026-09-02 (traffic crash wave): HandleTrafficCarTrafficCarPotentialContact
         //   @0x8263EC90 and HandleTrafficCarWorldPotentialContact @0x8263F0F0 are bodied in
         //   BrnVehicleManager_TrafficCrashArms.cpp and called from queue [13] / queue [9].

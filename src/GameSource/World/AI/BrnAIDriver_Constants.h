@@ -112,7 +112,20 @@ namespace BrnAI
     // Additional address-attested rodata the Update-path bodies load.
     // ================================================================================
     const f32 KF_NEARBY_AI_MAX_DISTANCE_SQ           = 40000.0f;     // flt_8201C220 -- AddNearbyAIToAvoidance (200 m, squared)
-    const f32 KF_NEARBY_VEHICLE_HALF_EXTENT          = 2.0f;         // unk_8300DC80 / unk_8300DC90 -- the HNG box half-extents
+    // ⭐ 2026-09-06 (constant audit, --wide): the VALUE was right and its PROVENANCE was a
+    // dead end -- a --wide sweep reported both slots NO-WRITER, the exact phrase five
+    // genuinely-wrong constants were carried under. They are not un-homed: they are a LAZY
+    // FIRST-CALL CACHE in AddNearbyAIToAvoidance, guard word dword_8300DCA0 bits 0 and 1:
+    //     0x8277D8F8  lwz r11, dword_8300DCA0        the guard
+    //     0x8277D900  lfs f0, flt_820C41F4 == 2.0    THE VALUE
+    //     0x8277D914  addi r6, r9, unk_8300DC90 ; bne skip ; ... stvx128 -> { 2.0, 0, .. }
+    //     0x8277D94C  addi r7, r9, unk_8300DC80 ; bne skip ; ... stvx128 -> { 0, 2.0, .. }
+    // ⚠️ So they are not two scalars, they are two AXIS-ALIGNED half-extent VECTORS -- the
+    // 2.0 sits in lane 0 of one and lane 1 of the other. Anything that needs the box rather
+    // than the scalar must read them that way round.
+    const f32 KF_NEARBY_VEHICLE_HALF_EXTENT          = 2.0f;         // flt_820C41F4 -> lane 0 of
+                                                                     // unk_8300DC90 / lane 1 of
+                                                                     // unk_8300DC80 (HNG box)
     const f32 KF_QUICK_TURN_STEERING_LOCK            = 1.0f;         // flt_82001C98 / flt_820037C8 -- GetQuickTurnSteering returns +-K
     const f32 KF_PID_NORMAL_P                        = 1.5f;         // flt_82004D04 -- ResetPIDTuningState mPIDController {P,I,D}
     const f32 KF_PID_NORMAL_I                        = 0.0f;         // flt_82001CC0
