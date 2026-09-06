@@ -253,14 +253,34 @@ namespace CgsGraphics
     }
 
     // The X360 reserve/submit buffer API, folded onto the PC immediate renderer (see CgsImRenderBuffer.h).
-    // RenderStart hands back a CPU scratch run the caller fills; RenderEnd submits it as one strip. The
-    // text path's RenderStart/RenderEnd never nest, so a single static run per vertex type is safe here.
+    // RenderStart hands back a CPU scratch run the caller fills; RenderEnd submits it as one strip.
+    //
+    // ⛔ THE RUNS MUST NOT ALIAS. The old note here said "the text path's RenderStart/RenderEnd never
+    // nest, so a single static run per vertex type is safe". They do nest. The console's
+    // TextRenderer::RenderStringInternal @0x827FF670 lays a line's glyphs into ONE reserved run, parks
+    // that run in mapaVertices[leType] (@0x827FFDFC), then reserves and submits its effect passes over
+    // it -- background @0x827FFE68, border @0x827FFEC4, drop shadow @0x827FFF1C
+    // (TextRenderer::RenderDropShadow @0x827FD968 calls RenderBufferRenderStart again), emboss
+    // @0x82800720 -- and only THEN submits the glyph run itself (@0x827FFFB4), so the effect lands
+    // underneath. The console's own ImRenderBuffer<V>::RenderStart @0x827EF748 sub-allocates a fresh
+    // run out of the vertex stream each time, which is what makes that legal.
+    // With one shared scratch the drop shadow's writes landed ON the glyph vertices, so the main pass
+    // re-drew the SHADOW: every immediate-path string rendered solid black, offset by (2,3). Measured
+    // 2026-09-06 on the free-burn HUD ("MILES DRIVEN : 0.0km"), bug-test lane aptshadow.
+    // A small ring restores the console's contract; the depth needed is 2 (glyph run + the one effect
+    // pass being submitted), and 4 leaves headroom for the passes not yet ported.
+    // FLAG PC-platform leaf: CPU-side scratch for DrawPrimitiveUP; the console reserves out of the
+    // command buffer's vertex stream instead.
     template <typename V>
     V* ImRenderer<V>::RenderStart(u32 luVertexCount)
     {
-        static V saScratch[KU_RENDER_BUFFER_MAX];
+        enum { KU_RENDER_BUFFER_SLOTS = 4 };
+        static V   saScratch[KU_RENDER_BUFFER_SLOTS][KU_RENDER_BUFFER_MAX];
+        static u32 suNextSlot = 0;
         (void)luVertexCount;   // (X360 asserts luVertexCount < KU_MAX_VERTICES; the run is pre-sized)
-        return saScratch;
+        V* const lpRun = saScratch[suNextSlot];
+        suNextSlot = (suNextSlot + 1u) % static_cast<u32>(KU_RENDER_BUFFER_SLOTS);
+        return lpRun;
     }
 
     template <typename V>

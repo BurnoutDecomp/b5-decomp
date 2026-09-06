@@ -146,6 +146,12 @@ namespace CgsGraphics
         // is VPU-garbled); the body is written in passes.
         void RenderStringInternal(const TextObject& lrTextObject, EImRenderingType leType);
 
+        // Re-submit the glyph run the current line just laid out (mapaVertices[leType],
+        // mauVertexCount[leType]) offset by the console's 2D drop-shadow offset and recoloured
+        // to *lpDropShadowColour, BEFORE the main pass. X360 0x827FD968; called from
+        // RenderStringInternal @0x827FFF50 when TextObject::mbDropShadow is set.
+        void RenderDropShadow(const RGBA* lpDropShadowColour, EImRenderingType leType);
+
         // Vertex-buffer helpers the glyph emit drives (X360 TextRenderer privates). RenderBufferRenderStart
         // reserves luVertexCount verts (returns the write pointer), RenderBufferRenderEnd submits them as
         // a primitive, RenderBufferSetTextureState binds the font atlas. Bodies are a follow-on pass.

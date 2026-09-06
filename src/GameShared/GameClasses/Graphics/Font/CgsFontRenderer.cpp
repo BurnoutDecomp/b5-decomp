@@ -1,8 +1,11 @@
 #include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"   // IncrementUtf8Pointer
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (the buffered Apt string path)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [FLAG PC witness] the BRN_FONT_DIAG [font] trace
+#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (RenderDropShadow's two console asserts)
 
-#include <cmath>   // fabsf
+#include <cmath>    // fabsf
+#include <cstdlib>  // getenv ([FLAG PC witness] BRN_FONT_DIAG gate)
 
 // CgsGraphics::TextObject + TextRenderer bodies (faithful X360 ARTIST ports):
 //   TextObject::Construct       0x827EEE70
@@ -190,6 +193,14 @@ namespace CgsGraphics
         // renderengine::PrimitiveType for a triangle strip (X360 RenderBufferRenderEnd arg = 6).
         const u32 KU_PRIMITIVE_TRIANGLE_STRIP = 6u;
 
+        // The 2D drop-shadow offset TextRenderer::RenderDropShadow (X360 0x827FD968) adds to every
+        // glyph vertex: flt_82F31004 -> +X, flt_82F31008 -> +Y, read verbatim out of the ARTIST
+        // image (file offset 0xF31004/0xF31008 = 40 00 00 00 / 40 40 00 00 big-endian). The 3D
+        // (Im3d) branch of the same function uses its own pair, flt_82F31014/18 = 0.03 -- that
+        // branch is not reconstructed here (see the FLAG in RenderDropShadow).
+        const f32 KF_DROPSHADOW_OFFSET_X = 2.0f;
+        const f32 KF_DROPSHADOW_OFFSET_Y = 3.0f;
+
         // Write one Im2d vertex. PC: the packed RGBA colour is stored directly (the X360 byte-swaps
         // it for big-endian; little-endian PC keeps it as-is -- see rsi_notes.md).
         void lEmitVertex(CgsGraphics::Basic2dColouredTexturedVertex& lrVtx,
@@ -201,6 +212,97 @@ namespace CgsGraphics
             lrVtx.mv2Tex0UV.y = lfV;
             *reinterpret_cast<u32*>(&lrVtx.mv4Colour) = lColour;
         }
+
+        // ---------------------------------------------------------------------------------
+        // [FLAG PC witness] BRN_FONT_DIAG=1 -- the text/drop-shadow submission trace. NOT IN
+        // THE X360 BINARY. Prints ONE line per DISTINCT (string prefix, drop-shadow flag) the
+        // font renderer submits, hard-capped at KU_FONT_DIAG_SLOTS distinct keys, so a
+        // per-frame re-submission of the same field never floods the log.
+        // DELETE-WHEN: the Apt drop-shadow pass has been screenshot-verified against a console
+        // capture (bug-test lane aptshadow, 2026-09-06).
+        // ---------------------------------------------------------------------------------
+        // TWO independent budgets, keyed on the DROP-SHADOW FLAG -- the thing the bug is about.
+        // The debug overlay (Debug2DImmediateRender: "62 fps", "2560MB 288KB 0B") writes a NEW
+        // string every frame and never asks for a shadow, so with ONE shared budget it spends
+        // the lot inside two seconds and no shadowed string ever gets a line. Measured: run
+        // 20260906_100822 burned all 256 slots on the overlay. Bucketing on mbDropShadow makes
+        // the overlay structurally unable to starve the signal.
+        enum
+        {
+            KU_FONT_DIAG_BUCKETS      = 2,   // 0 = shadow off, 1 = shadow on
+            KU_FONT_DIAG_SLOTS_PLAIN  = 24,
+            KU_FONT_DIAG_SLOTS_SHADOW = 232
+        };
+
+        bool lFontDiagEnabled()
+        {
+            static const bool sbOn = (std::getenv("BRN_FONT_DIAG") != 0);
+            return sbOn;
+        }
+
+        bool lFontDiagFirstSight(u32 luBucket, u32 luKey)
+        {
+            static u32 sauSeen[KU_FONT_DIAG_BUCKETS][KU_FONT_DIAG_SLOTS_SHADOW] = { { 0 } };
+            static u32 sauSeenCount[KU_FONT_DIAG_BUCKETS] = { 0, 0 };
+            const u32 luLimit = (luBucket == 0) ? static_cast<u32>(KU_FONT_DIAG_SLOTS_PLAIN)
+                                                : static_cast<u32>(KU_FONT_DIAG_SLOTS_SHADOW);
+            if (luKey == 0)
+                luKey = 1u;
+            for (u32 luI = 0; luI < sauSeenCount[luBucket]; ++luI)
+            {
+                if (sauSeen[luBucket][luI] == luKey)
+                    return false;
+            }
+            if (sauSeenCount[luBucket] >= luLimit)
+                return false;
+            sauSeen[luBucket][sauSeenCount[luBucket]++] = luKey;
+            return true;
+        }
+
+        // Vertices the drop-shadow pass actually submitted for the CURRENT RenderStringInternal
+        // call (reset by the caller, bumped by TextRenderer::RenderDropShadow).
+        u32 guFontDiagShadowVerts = 0;
+
+        // One [font] line per distinct string+flag. The number the drop-shadow bug moves is
+        // shadowquads: a mbDropShadow text object whose shadow pass never runs reports
+        // shadow=1 shadowquads=0.
+        void lWitnessTextSubmission(const CgsGraphics::TextObject& lrTextObject, u32 luGlyphVerts,
+                                    u32 luPath)
+        {
+            if (!lFontDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
+                return;
+
+            char lacText[17];
+            u32  luLen = 0;
+            u32  luKey = 2166136261u;   // FNV-1a over the printable prefix
+            const CgsResource::CgsUtf8* lpText = lrTextObject.mpUtf8String;
+            if (lpText != 0)
+            {
+                while (luLen < 16u && lpText[luLen] != 0)
+                {
+                    const u8 luCh = static_cast<u8>(lpText[luLen]);
+                    lacText[luLen] = (luCh >= 32u && luCh < 127u) ? static_cast<char>(luCh) : '?';
+                    luKey = (luKey ^ luCh) * 16777619u;
+                    ++luLen;
+                }
+            }
+            lacText[luLen] = 0;
+            luKey = (luKey << 1) | (lrTextObject.mbDropShadow ? 1u : 0u);
+
+            if (!lFontDiagFirstSight(lrTextObject.mbDropShadow ? 1u : 0u, luKey))
+                return;
+
+            *CgsDev::Log::gpDebugPrint
+                << "[font] path=" << (luPath != 0 ? "apt" : "imm")
+                << " str=\"" << lacText
+                << "\" shadow=" << (lrTextObject.mbDropShadow ? 1u : 0u)
+                << " quads=" << (luGlyphVerts / 6u)
+                << " shadowquads=" << (guFontDiagShadowVerts / 6u)
+                << " colour=" << CgsDev::E_PRINTMODE_HEXONCE << lrTextObject.mTextColour
+                << " shadowcolour=" << CgsDev::E_PRINTMODE_HEXONCE << lrTextObject.mDropShadowColour
+                << " off=(" << KF_DROPSHADOW_OFFSET_X << "," << KF_DROPSHADOW_OFFSET_Y
+                << ") [FLAG PC witness]\n";
+        }
     }
 
     // Translated from the X360 PPC asm (0x827FF670) per rsi_notes.md. Lays each line of the text out as
@@ -209,7 +311,8 @@ namespace CgsGraphics
     // the Im2d buffer with the font's texture state bound.
     //
     // CORE path implemented: scale/layout setup, the per-line loop, the per-glyph quad emit, and the
-    // colour codes. NOTE (asm branches not yet ported): the background/border/drop-shadow/emboss passes
+    // colour codes, plus the DROP-SHADOW pass (0x827FFF1C -> RenderDropShadow @0x827FD968).
+    // NOTE (asm branches still not ported): the background/border/emboss passes
     // and the gradient colour interpolation are guarded features -- added in a follow-on; the common
     // (plain coloured text) path is complete. The line measurer Font::GetStringStartAndEnd and the
     // RenderBuffer* helpers are declared; their bodies are the next pass (so this displays once those land).
@@ -222,6 +325,10 @@ namespace CgsGraphics
         // (X360 asserts here: font set, string set, font->mpTextureState set, valid UTF-8 string.)
 
         mauVertexCount[leType] = 0;
+
+        // [FLAG PC witness] BRN_FONT_DIAG accounting for this call (see the anon namespace).
+        u32 luDiagGlyphVerts = 0;
+        guFontDiagShadowVerts = 0;
 
         const f32 lfFontHeight = *lrTextObject.mpfCurrentFontHeight;
         const f32 lfGlyphX     = lpFont->mScaleUV.mX * lfFontHeight;                    // X360 f29
@@ -297,7 +404,8 @@ namespace CgsGraphics
             }
             Im2dVertex* lpVtx = lpVtxBase;
             mauVertexCount[leType] = 0;
-            RenderBufferSetTextureState(lpFont->mpTextureState, leType);
+            // (The console binds the font atlas once per PASS, after the run is laid out --
+            // 0x827FFF3C for the drop shadow, 0x827FFF98 for the main pass -- not here.)
 
             for (const CgsUtf8* lpChar = lpLineStart; lpChar < lpLineEnd; )
             {
@@ -366,10 +474,32 @@ namespace CgsGraphics
                 lpChar = CgsUnicode::IncrementUtf8Pointer(lpChar);
             }
 
-            // Submit the buffer the glyphs were written into (the RenderStart return). The X360 2D path
-            // does NOT stash this in mapaVertices (that member is only the 3D temp buffer), so passing
-            // mapaVertices[leType] here submitted a null/empty buffer -> invisible text.
-            RenderBufferRenderEnd(KU_PRIMITIVE_TRIANGLE_STRIP, lpVtxBase, mauVertexCount[leType], leType);
+            // Submit the buffer the glyphs were written into (the RenderStart return). The X360
+            // stashes that pointer in mapaVertices[leType] (`stwx r31, r24, r16` @0x827FFDFC, with
+            // r24 = (leType+3)*4) and submits FROM there (`lwzx r5, r24, r16` @0x827FFFAC), then
+            // clears the slot (`stwx r26, r24, r16` @0x827FFFB8) -- the epilogue @0x82800754
+            // asserts it is null again. The slot is not just bookkeeping: the effect passes
+            // (drop shadow @0x827FD968, emboss) READ it, which is how the shadow re-walks the
+            // glyph run that was just laid out. (An earlier note here claimed the 2D path does
+            // NOT stash it -- it does; only the 3D TEMP scratch is maaTempVertices.)
+            mapaVertices[leType] = lpVtxBase;
+            luDiagGlyphVerts += mauVertexCount[leType];
+
+            // The guarded effect passes the console runs over the finished glyph run, in its
+            // order: background (0x827FFE68), border (0x827FFEC4), DROP SHADOW (0x827FFF1C),
+            // then the main pass -- so each earlier pass lands UNDER the glyphs in the command
+            // stream. Background / border / emboss / the gradient colour ramp are still
+            // unported (see the note above RenderStringInternal).
+            if (lrTextObject.mbDropShadow)
+            {
+                RenderBufferSetTextureState(lpFont->mpTextureState, leType);
+                RenderDropShadow(&lrTextObject.mDropShadowColour, leType);
+            }
+
+            RenderBufferSetTextureState(lpFont->mpTextureState, leType);
+            RenderBufferRenderEnd(KU_PRIMITIVE_TRIANGLE_STRIP, mapaVertices[leType],
+                                  mauVertexCount[leType], leType);
+            mapaVertices[leType] = 0;
 
             // Advance to the next line (ensure forward progress, then skip a trailing newline).
             lpCursor = (lpLineEnd > lpCursor) ? lpLineEnd : CgsUnicode::IncrementUtf8Pointer(lpCursor);
@@ -377,6 +507,61 @@ namespace CgsGraphics
                 lpCursor = CgsUnicode::IncrementUtf8Pointer(lpCursor);
             lfPenY += lfFontHeight;
         }
+
+        lWitnessTextSubmission(lrTextObject, luDiagGlyphVerts,
+                               (mpBufferedRenderBuffer != 0) ? 1u : 0u);
+    }
+
+    // -------------------------------------------------------------------------------------
+    // TextRenderer::RenderDropShadow -- X360 0x827FD968. A faithful port of the 2D branch.
+    //
+    // The line's glyph run has already been written into the vertex stream and parked in
+    // mapaVertices[leType] / mauVertexCount[leType]. This reserves a SECOND run of exactly the
+    // same length, copies each vertex across with the position nudged by the console's
+    // (flt_82F31004, flt_82F31008) = (+2, +3) offset, the UV kept, and the colour replaced by
+    // *lpDropShadowColour, and submits it as its own triangle strip. Because the console calls
+    // this BEFORE the main pass's RenderEnd (0x827FFF50 vs 0x827FFFB4), the shadow's draw
+    // command precedes the glyph draw in the dispatched stream and therefore lands underneath.
+    //
+    // The colour is stored verbatim: the console's `((*a2 << 8 | BYTE2) << 8 | BYTE1) << 8 |
+    // HIBYTE` chain is the big-endian byte-reverse the X360 needs, exactly as in the main pass
+    // (0x828004C0..), and the PC keeps the packed RGBA as-is -- see lEmitVertex.
+    //
+    // [FLAG PC bring-up] the Im3d (3D text) branch @0x827FD9A4 -- which allocates 32-byte
+    // Im3dVertex records straight off mpIm3dRenderBuffer (ImRenderBuffer<Im3dVertex>::RenderStart
+    // @0x827EF548) and uses its OWN offset pair flt_82F31014/18 = (0.03, 0.03) -- is not ported,
+    // matching RenderBufferRenderEnd's existing 3D park. Neither the Apt string path nor the
+    // debug-text path ever sets mpIm3dRenderBuffer. DELETE-WHEN: the 3D text path is brought up.
+    // -------------------------------------------------------------------------------------
+    void TextRenderer::RenderDropShadow(const RGBA* lpDropShadowColour, EImRenderingType leType)
+    {
+        const Im2dVertex* lpInVert = mapaVertices[leType];
+        const u32 luVertexCount = mauVertexCount[leType];
+
+        CGS_ASSERT(lpInVert != 0, "lpInVert");
+        if (lpInVert == 0)
+            return;
+
+        if (mpIm3dRenderBuffer != 0)
+            return;   // [FLAG PC bring-up] 3D branch, see above.
+
+        Im2dVertex* const lpOutVert = RenderBufferRenderStart(luVertexCount, leType);
+        if (lpOutVert == 0)
+            return;   // the stream is full (RenderStart's graceful-fail path)
+
+        CGS_ASSERT(luVertexCount < KU_MAX_VERTICES, "luVertexCount < KU_MAX_VERTICES");
+
+        for (u32 luI = 0; luI < luVertexCount; ++luI)
+        {
+            lpOutVert[luI].mv2Pos.x  = lpInVert[luI].mv2Pos.x + KF_DROPSHADOW_OFFSET_X;
+            lpOutVert[luI].mv2Pos.y  = lpInVert[luI].mv2Pos.y + KF_DROPSHADOW_OFFSET_Y;
+            *reinterpret_cast<u32*>(&lpOutVert[luI].mv4Colour) = *lpDropShadowColour;
+            lpOutVert[luI].mv2Tex0UV = lpInVert[luI].mv2Tex0UV;
+        }
+
+        RenderBufferRenderEnd(KU_PRIMITIVE_TRIANGLE_STRIP, lpOutVert, luVertexCount, leType);
+
+        guFontDiagShadowVerts += luVertexCount;   // [FLAG PC witness] BRN_FONT_DIAG accounting
     }
 
     // --- Render-buffer helpers (faithful X360 ports). Each dispatches to whichever immediate buffer
