@@ -13,6 +13,8 @@
 #include "GameSource/AttribSys/Generated/classes/shotgroup.h"                   // Attrib::Gen::shotgroup
 #include "rw/math/vpu/types.h"                                                  // Matrix44Affine::Pos()/At()
 #include "rw/math/vpu/vector3_operation.h"                                      // Dot / operator-
+#include <cstdlib>                                                              // getenv ([dt-cam] witness gate)
+#include <cmath>                                                                // sqrtf ([dt-cam] witness)
 
 // ============================================================================
 // BrnDirector::ArbStateDriveThru -- reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity)
@@ -298,6 +300,47 @@ namespace BrnDirector
             // Update @0x82235DB0 contains no such store -- the body goes straight from
             // Camera::operator= to `bl sub_821FCDA8`. Removed: it was invented behaviour.
             lrCamera = mDriveThruBehaviourHandle.GetProducedCamera();
+
+            // [FLAG PC witness] [dt-cam] NOT IN THE X360 BINARY. Off unless BRN_DRIVETHRU_DIAG is
+            // set, and BOUNDED to the first KI_DT_CAM_WITNESS_LINES samples of the process (this
+            // arm runs every frame the state owns, so an unbounded print is a runaway log).
+            //
+            // WHY THESE NUMBERS. The field report is "the camera changes FOV several times and
+            // goes to ground level, and no car is in frame". "The state ran" and "the state aimed
+            // a camera at the car" are different claims, and the whole earlier drive-thru wave
+            // closed on the first one while the second was false, so this prints the two
+            // quantities that decide the second: the camera's height ABOVE THE PLAYER CAR
+            // (dy; ground level == dy <= 0) and its DISTANCE to the player car (dist; a shot that
+            // frames a car is metres away, not tens). The FOV goes on the same line because the
+            // report names it and because a shot whose FOV swings is a shot whose take is being
+            // re-resolved every frame.
+            // DELETE-WHEN: the drive-thru camera is fixed and the case drivethru_body_shop is
+            // green on a build without it.
+            {
+                static const bool sbDriveThruDiag = (getenv("BRN_DRIVETHRU_DIAG") != 0);
+                static const s32  KI_DT_CAM_WITNESS_LINES = 900;
+                static s32        siWitnessLines = 0;
+                if (sbDriveThruDiag && CgsDev::Log::gpDebugPrint != 0 &&
+                    siWitnessLines < KI_DT_CAM_WITNESS_LINES && lrSharedInfo.mpPlayerCarTransform != 0)
+                {
+                    ++siWitnessLines;
+                    const rw::math::vpu::Matrix44Affine& lrCarToWorld =
+                        *static_cast<const rw::math::vpu::Matrix44Affine*>(lrSharedInfo.mpPlayerCarTransform);
+                    const rw::math::vpu::Vector3& lrCamPos = lrCamera.GetTransform().Pos();
+                    const rw::math::vpu::Vector3& lrCarPos = lrCarToWorld.Pos();
+                    const f32 lfDX = lrCamPos.x - lrCarPos.x;
+                    const f32 lfDY = lrCamPos.y - lrCarPos.y;
+                    const f32 lfDZ = lrCamPos.z - lrCarPos.z;
+                    const f32 lfDist = std::sqrt(lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ);
+                    *CgsDev::Log::gpDebugPrint
+                        << "[dt-cam] n=" << siWitnessLines
+                        << " cam=(" << lrCamPos.x << "," << lrCamPos.y << "," << lrCamPos.z << ")"
+                        << " car=(" << lrCarPos.x << "," << lrCarPos.y << "," << lrCarPos.z << ")"
+                        << " dy=" << lfDY
+                        << " dist=" << lfDist
+                        << " fov=" << lrCamera.GetFOV() << "\n";
+                }
+            }
 
             Camera::Behaviour* lpBehaviour = mDriveThruBehaviourHandle.GetBehaviour();
 

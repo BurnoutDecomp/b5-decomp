@@ -8,6 +8,9 @@
 #include "GameShared/GameClasses/Algorithms/CgsBubbleSort.h" // CgsAlgorithms::BubbleSort
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (the inline accessors' tripwires)
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h" // BrnDirector::Camera::VehicleInfo (mpRaceCars' real pointee)
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"      // Camera::Utils::CreateLookAt (the heading-space frame)
+#include "rw/math/vpu/vector3_operation.h"                     // Cross / Normalize (the impact-space basis)
+#include "rw/math/vpu/matrix44affine_operation.h"              // SLerp / IsValid (the heading blend + the NaN cascade)
 
 #include <cfloat>   // FLT_MAX -- the no-opposing-car sentinel (XEX rodata flt_8200173C,
                     // read as 0x7F7FFFFF == 3.4028235e+38 == FLT_MAX)
@@ -175,6 +178,144 @@ namespace BrnDirector
             }
 
             mbSorteddNearestRaceCarsToPlayer = false;
+
+            // The three player reference spaces. On the console this is the SAME function's
+            // first stage and it runs BEFORE the nearest-car rebuild; see the banner below.
+            UpdatePlayerSpaces();
+        }
+
+        // ====================================================================================
+        // ⭐⭐ UpdatePlayerSpaces -- THE FIRST STAGE of AllVehicleData::Update @0x8221D938
+        // (0x8221D9E8..0x8221DDD8), which the UpdateRaceCarsBringUp extraction above had never
+        // taken. Added 2026-09-06, bug-test wave, lane `drivethru`.
+        //
+        // ⛔⛔ WHAT WAS WRONG, AND IT IS MEASURED, NOT ARGUED. Construct() seeds
+        // mPlayerImpactSpace / mPlayerHeadingSpace / mPlayerLooseHeadingSpace to IDENTITY and
+        // NOTHING in this tree ever wrote them again. Those three matrices are three of the
+        // eight MainDirector::BuildBehaviourSharedInfo stages into every frame's
+        // ICE::CameraSpaceHandler (mImpactToWorld / mHeadingToWorld / mLooseHeadingToWorld), and
+        // ICE::CameraSpaceHandler::TransformToWorld @0x82533DE8 projects an authored eye/look
+        // point through them. Through an IDENTITY matrix the projection is the identity: a
+        // CAR-RELATIVE offset comes out as an ABSOLUTE WORLD POSITION a few metres from the
+        // world origin.
+        //   BurnoutDecomp/b5-decomp#6, body shop, RED run 20260906_100326:
+        //     [ice]    eyeSpace 10 lookSpace 10 rawEye (-2.548, 0.079, -2.942)
+        //                                        -> world (-2.548, 0.079, -2.942)
+        //     [dt-cam] cam=(-2.548,0.079,-2.942) car=(917.011,22.506,-1378.163)
+        //              dy=-22.426 dist=1654.486
+        //   203 of 203 sampled drive-thru frames: the camera 1654-1694 m from the car and 22-24 m
+        //   BELOW it -- "the camera goes to ground level and the car is not in frame".
+        //   eICE_HEADING_SPACE (10) is what the shop take is authored in, for BOTH eye and look.
+        //
+        // ⭐ THE CONSOLE BODY, read off the ARTIST asm (the pseudocode renders the whole block
+        // as inline __asm and names nothing):
+        //
+        //   0x8221D9E8  lbz r11, 0x44A(GetPlayer())            == mRaceCarState.mbCrashing
+        //               bne -> 0x8221DCD0                      -- the IMPACT space FREEZES while
+        //                                                         the player is crashing: that is
+        //                                                         what makes it an impact frame.
+        //   0x8221DA14  lbz r11, 0x1E8(GetPlayer())            == mAboveGroundTestResult.mbValid
+        //                                                         (RaceCarState +448 +40)
+        //     not valid -> 0x8221DCC0: refresh ONLY the translation row.
+        //     valid     -> 0x8221DA28..0x8221DAF8, in this order:
+        //                    +0x30 wAxis = mTransform.wAxis
+        //                    +0x10 yAxis = mAboveGroundTestResult.mIntersectionNormal (+448 +16)
+        //                    +0x20 zAxis = mTransform.zAxis
+        //                    +0x00 xAxis = Normalize(Cross(yAxis, zAxis))
+        //                    +0x20 zAxis = Cross(xAxis, yAxis)          (re-orthogonalised)
+        //                  The two crosses are the standard `vpermwi128 ..., 0x63` (yzx swizzle)
+        //                  pair `perm(a*perm(b) - perm(a)*b)`; the normalise is vrsqrtefp plus
+        //                  two Newton-Raphson steps (written as the exact Normalize, the standing
+        //                  convention of the rwmath vendor home).
+        //   0x8221DAFC..0x8221DC8C  a four-row x three-lane `vcmpeqfp.` self-equality cascade,
+        //                  ANDed; if ANY lane is NaN the console DISCARDS the frame it just built
+        //                  and copies the car transform verbatim into all four rows
+        //                  (0x8221DC90). rw::math::vpu::IsValid(Matrix44Affine) IS that cascade.
+        //   0x8221DCD0..0x8221DDD0  the two heading frames. Both chase the SAME target: a look-at
+        //                  from the car position along its FLATTENED forward axis. The vperm
+        //                  control at unk_82CDA350 is {00 01 02 03 | 14 15 16 17 | 00 01 02 03 |
+        //                  00 01 02 03}, i.e. splat(zAxis.x) in lanes 0/2/3 and ZERO in lane 1,
+        //                  and the following `vrlimi128 v0, splat(zAxis.z), 2, 0` restores
+        //                  zAxis.z in the Z lane -- so the vector added to the car position is
+        //                  (zAxis.x, 0, zAxis.z). The console re-seats the FROM matrix's
+        //                  translation row to the car position before each blend
+        //                  (`stvx128 v0, r31, 0x70` / `..., 0xB0`).
+        //
+        // ⚠️ THE TWO BLEND RATES WERE SILENT-ZERO .data SLOTS (AGENTS.md rule 8). A literal read
+        // of the image at unk_82FAA6D0 / unk_82FAA950 gives 0.0 -- which would make SLerp the
+        // identity and freeze both frames for ever. They are written by CRT init thunks:
+        //     0x82C48560  lfs f0, flt_82004744 (0.20) ; vspltw ; stvx128 -> 0x82FAA6D0  (heading)
+        //     0x82C48538  lfs f0, flt_8200D528 (0.07) ; vspltw ; stvx128 -> 0x82FAA950  (loose)
+        // Located with a lis/@l pair sweep of the image; every OTHER site whose low half is
+        // 0xA6D0/0xA950 resolves to a different symbol (checked, not assumed).
+        //
+        // ⚠️ ORDER DEVIATION, stated: the console runs this stage BEFORE the nearest-car rebuild
+        // and this call sits AFTER it. Nothing in either stage reads the other's output (the
+        // rebuild reads mpRaceCars/mUsedRaceCars, this reads GetPlayer()), so the frame's result
+        // is identical; it is called last only because the extraction above already owns the
+        // member seeding this needs.
+        // ====================================================================================
+        void UpdatePlayerSpaces()
+        {
+            // The heading frame's per-frame blend towards the flattened look-at (unk_82FAA6D0).
+            const f32 KF_HEADING_SPACE_BLEND = 0.20f;
+            // The lagged flavour of the same frame (unk_82FAA950).
+            const f32 KF_LOOSE_HEADING_SPACE_BLEND = 0.07f;
+
+            const Camera::VehicleInfo& lrPlayer = GetPlayer();
+            const Matrix44Affine&      lrCarToWorld = lrPlayer.mRaceCarState.mTransform;
+
+            // ---- mPlayerImpactSpace ------------------------------------------------------
+            if (!lrPlayer.mRaceCarState.mbCrashing)
+            {
+                const BrnPhysics::Vehicle::AboveGroundTestResult& lrGround =
+                    lrPlayer.mRaceCarState.mAboveGroundTestResult;
+
+                if (lrGround.mbValid)
+                {
+                    mPlayerImpactSpace.wAxis = lrCarToWorld.wAxis;
+                    mPlayerImpactSpace.yAxis = lrGround.mIntersectionNormal;
+                    mPlayerImpactSpace.zAxis = lrCarToWorld.zAxis;
+                    mPlayerImpactSpace.xAxis = rw::math::vpu::Normalize(
+                        rw::math::vpu::Cross(mPlayerImpactSpace.yAxis, mPlayerImpactSpace.zAxis));
+                    mPlayerImpactSpace.zAxis = rw::math::vpu::Cross(
+                        mPlayerImpactSpace.xAxis, mPlayerImpactSpace.yAxis);
+
+                    if (!rw::math::vpu::IsValid(mPlayerImpactSpace))
+                    {
+                        mPlayerImpactSpace = lrCarToWorld;
+                    }
+                }
+                else
+                {
+                    mPlayerImpactSpace.wAxis = lrCarToWorld.wAxis;
+                }
+            }
+
+            // ---- mPlayerHeadingSpace / mPlayerLooseHeadingSpace --------------------------
+            const Vector3 lvCarPosition = lrCarToWorld.wAxis;
+            const Vector3 lvFlattenedTarget =
+            {
+                lvCarPosition.x + lrCarToWorld.zAxis.x,
+                lvCarPosition.y,
+                lvCarPosition.z + lrCarToWorld.zAxis.z,
+                0.0f
+            };
+            const Matrix44Affine lHeadingLookAt =
+                Camera::Utils::CreateLookAt(lvCarPosition, lvFlattenedTarget);
+
+            // SLerp's fourth argument is its remaining-rotation OUT parameter; the console
+            // passes a stack slot it never reads (the DWARF names such a local lUnusedAngle).
+            Vector3 lUnusedAngle;
+
+            mPlayerHeadingSpace.wAxis = lvCarPosition;
+            mPlayerHeadingSpace = rw::math::vpu::SLerp(
+                mPlayerHeadingSpace, lHeadingLookAt, KF_HEADING_SPACE_BLEND, &lUnusedAngle);
+
+            mPlayerLooseHeadingSpace.wAxis = lvCarPosition;
+            mPlayerLooseHeadingSpace = rw::math::vpu::SLerp(
+                mPlayerLooseHeadingSpace, lHeadingLookAt, KF_LOOSE_HEADING_SPACE_BLEND,
+                &lUnusedAngle);
         }
 
         // ⭐ GetPlayer @0x82205C58 / GetRaceCar @0x82205DE8 -- BODIED INLINE HERE, which is
