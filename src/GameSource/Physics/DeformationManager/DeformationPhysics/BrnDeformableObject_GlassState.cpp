@@ -159,7 +159,9 @@ namespace Deformation
         // ⛔⛔ X360 VALUES -- REFERENCE ONLY, NEVER IN HOST POINTER ARITHMETIC (2026-09-06, glass
         // wave). maTagPoints and maDrivenPoints are homed BY-VALUE members, and EVERY OTHER reader
         // in the tree already spells them `maTagPoints[i]` / `maDrivenPoints[i]`. This file was the
-        // last holdout: five reads used `this + 15120 + 32*i` / `this + 19232 + 48*i`, and BOTH the
+        // last holdout: SIX reads used `this + 15120 + 32*i` / `this + 19232 + 48*i` -- the tag and
+        // driven pair inside each of UpdateGlassSmashedState and SendGlassUpdateEvents, plus one
+        // wheel-tag read in each of OutputState and GetWheelTagPoints -- and BOTH the
         // seat and the stride are wrong on x64. ⭐ MEASURED, run glassfix_A, printed by the
         // [glassspec] probe below out of the live object:
         //       host tagSeat 16832 stride 48   drivenSeat 22992 stride 64

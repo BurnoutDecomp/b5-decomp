@@ -2503,7 +2503,8 @@ namespace Deformation
         // so neither reached maTagPoints / maDrivenPoints -- and then took *(element+16) as a
         // TagPointSpec* and dereferenced it. Same x64-widening ghost, same file and same function
         // family as the `*(this + 6476)` vehicle read the deform-land wave fixed after an AV at
-        // OutputWheelData+0x67. Both are now BY NAME (five sites; see BrnDeformableObject_GlassState.cpp).
+        // OutputWheelData+0x67. Both are now BY NAME (SIX reads across four functions; see
+        // BrnDeformableObject_GlassState.cpp).
         // ⭐ UN-GATED AGAIN 2026-09-06 (glass wave), AND MEASURED. Run glassfix_A, exe
         // d755cea1fb8a, one deterministic 60 m/s wall shot: ZERO access violations and
         //     [glass] ... | events 2542 intact 0 cracked 2532 smashed 10
