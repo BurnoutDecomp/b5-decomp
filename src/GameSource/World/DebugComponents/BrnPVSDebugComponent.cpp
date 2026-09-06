@@ -34,15 +34,24 @@ namespace BrnWorld
     // ------------------------------------------------------------------------------------------
     // File-scope debug state. These are the X360 .bss/.data toggles this TU owns (a debug
     // component keeps its menu-bound flags as file-scope statics so the menu can point at a stable
-    // address). The collision-zone draw radius defaults to the X360 .data initial 750.0 (mid-range
-    // of the registered 100..1500 SetRange in OnActivate).
+    // address).
+    //
+    // ⭐ 2026-09-06 CONSTANT AUDIT: the collision-zone draw radius was 750.0 with the rationale
+    // "the X360 .data initial 750.0 (mid-range of the registered 100..1500 SetRange)". The range
+    // is right and 750 is indeed its midpoint -- but the midpoint of a range is not a datum. The
+    // .data image word at flt_82F307F4 is 0x43480000 == 200.0, and that is the shipped default:
+    // OnActivate registers the variable at 0x827B222C (`addi r30, r11, 0x7f4`, r11 = 0x82F30000)
+    // then SetRange(100.0 flt_820049E0, 1500.0 flt_820266C4) / SetStep(20.0 flt_820CA5A8); the
+    // draw reads the same word at 0x827C7474 (`lfs f0, 0x7f4(r22)`). 200 is inside the range, so
+    // nothing ever contradicted 750 -- the overlay just drew a zone disc 3.75x too wide. Second
+    // lying instrument in this file: KF_WORLD_TO_SCREEN_SCALE was 0.05 vs the image's 0.2 (a3f05287).
     // ------------------------------------------------------------------------------------------
     namespace
     {
         bool _mbShowPVS            = false;   // byte_8300E116 - "Show PVS"
         bool _mbShowCollisionZones = false;   // byte_8300E117 - "Show collision zones"
         s32  _miColourMode         = 0;       // dword_8300E11C - "Colours" (0 = by player-zone, 1 = by streaming status)
-        f32  _mrDrawCollisionRadius = 750.0f; // flt_82F307F4 - "Draw collision zone radius"
+        f32  _mrDrawCollisionRadius = 200.0f; // flt_82F307F4 - "Draw collision zone radius"
 
         // KI_BOUNDING_SPHERE_SEGMENTS (DWARF :48) - circle tessellation for the collision-zone discs.
         const s32 KI_BOUNDING_SPHERE_SEGMENTS = 32;

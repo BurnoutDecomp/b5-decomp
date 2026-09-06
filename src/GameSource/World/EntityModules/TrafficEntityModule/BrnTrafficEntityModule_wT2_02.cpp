@@ -668,7 +668,8 @@ void TrafficEntityModule::Pressure_PickSplitToTake(const Section* lpSection,
     u8  luBestSection   = KU_INVALID_SECTION;
     u16 luBestHull      = static_cast<u16>(KU_INVALID_PARAM);
     u8  luBestDirection = 0;
-    f32 lfBestScore     = 3.4028235e38f;   // flt_82001C98-adjacent KF_MAX_FLOAT literal
+    f32 lfBestScore     = 3.4028235e38f;   // flt_8208F5EC == FLT_MAX (flt_82001C98 is 1.0 --
+                                           // the old "82001C98-adjacent" note named the wrong word)
 
     // Base scores: a split whose change probability is zero starts 100 points down.
     f32 lafScores[3];

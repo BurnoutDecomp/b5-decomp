@@ -30,16 +30,30 @@ namespace BrnAIDebugUtils
     bool _gbHighlightOneLine = false; // byte_8300D53C
 
     // ---- Mutable module colour / counter words (read as data, not immediates). ----
-    // Actual RGBA8 values live in the shipped .data and are not present in the asm
-    // immediates, so they are defined here as zero-initialised words (value NOT
-    // recoverable from this TU's asm; behaviourally the code only bit-twiddles them).
     // Modelled as raw u32 colour words -- the X360 reads/writes them with plain
     // lwz/stw + oris/clrlwi bit-ops, i.e. as the packed RGBA8 word (rw::RGBA::m_rgba),
-    // not as a struct; the word is wrapped into an rw::RGBA at the draw call.
-    u32  _guHNGColourHighlight = 0; // dword_82F303E0
-    u32  _guPortalColour       = 0; // dword_82F303E4 (portal boundary-line colour)
-    u32  _guHNGColourNormal    = 0; // dword_82F303EC
-    u32  _guHNGWindowCounter   = 0; // dword_8300DC70
+    // not as a struct; the word is wrapped into an rw::RGBA at the draw call. Packing is
+    // AARRGGBB, alpha in the top byte, corroborated by the highlight edits below (the
+    // code clears the top byte and ORs 0xFF00/0x4600 into it -- an ALPHA edit).
+    //
+    // ⭐ 2026-09-06 CONSTANT AUDIT. These three were carried as flagged zeros under the
+    // claim "actual RGBA8 values live in the shipped .data and are NOT present in the asm
+    // immediates ... value NOT recoverable from this TU's asm". That was false in the way
+    // that matters: they are not immediates, but they are not .bss either -- they are
+    // PLAIN INITIALISED .data, so the values are readable straight out of the image and
+    // there is no CRT writer thunk to chase. And 0 is not the identity element for a
+    // colour word: 0x00000000 is alpha 0, so all three overlays drew FULLY TRANSPARENT.
+    //   dword_82F303E0 image 0xFF0000FF (blue)    read @0x827745F8 -> r27, the highlight arm
+    //   dword_82F303E4 image 0xFF00FF00 (green)   read @0x82774560 -> r5, DrawPortalGeometry's
+    //                                             lColour argument to the boundary-line draw
+    //   dword_82F303EC image 0xFFFF00FF (magenta) read @0x82774604 -> r27, the normal arm
+    // The two genuinely-zero words below them (_guLineToHighlight, _guHNGWindowCounter)
+    // are the .bss half of the same block and DO ship 0 -- that is the distinction the
+    // old comment collapsed.
+    u32  _guHNGColourHighlight = 0xFF0000FFu; // dword_82F303E0 (blue,    .data image word)
+    u32  _guPortalColour       = 0xFF00FF00u; // dword_82F303E4 (green,   .data image word)
+    u32  _guHNGColourNormal    = 0xFFFF00FFu; // dword_82F303EC (magenta, .data image word)
+    u32  _guHNGWindowCounter   = 0;           // dword_8300DC70 (.bss; ships 0)
 
     // Number of HNG lines drawn per frame; the window cycles across the section's
     // mpaNoGoLines list on _guHNGWindowCounter. asm: li r28,0x7D0.

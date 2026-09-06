@@ -5705,7 +5705,12 @@ namespace Vehicle
                                 lvContactPosition, lePositionSpace, &lvJ, &lvAngularJ);
 
     // Process-wide cached Showtime restitution tunables (inline literals).
-    static const f32 KF_SHOWTIME_FRICTION = 0.30000001f;   // dword_82FBA1D0 K0 (per-axis strip scale)
+    // 2026-09-06 constant audit: value confirmed, SYMBOL corrected. dword_82FBA1D0 is the lazy
+    // first-call cache's GUARD word (`lwz r11, -0x5e30(r10)` @0x825D4E68, bit 0 tested then set
+    // back @0x825D4E98); the value slot is unk_82FBA1C0 and its source is flt_82004740 == 0.3
+    // (`lfs f0, 0x4740(r8)` @0x825D4E8C, splatted to 0x82FBA1C0 @0x825D4EA0). Same shape as
+    // GetDownForce's lazy cache -- a game-code writer, invisible to a CRT-bank static-init scan.
+    static const f32 KF_SHOWTIME_FRICTION = 0.30000001f;   // unk_82FBA1C0 <- flt_82004740 (guard 82FBA1D0)
     static const f32 KF_SHOWTIME_RESTITUTION_LOW  = 0.0f;          // K1
     static const f32 KF_SHOWTIME_RESTITUTION_HIGH = 0.97000003f;   // K2
 

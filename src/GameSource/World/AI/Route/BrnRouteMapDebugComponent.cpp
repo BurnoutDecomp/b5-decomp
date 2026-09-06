@@ -47,7 +47,13 @@ namespace
 
     // The packed RGBA colours used by the colour pickers (read straight off the X360 li/lis/ori
     // immediates; AARRGGBB, alpha in the top byte).
-    const RGBA K_NORMAL_COLOUR        = 0xFFFFFFFFu;  // dword_82F30404 (white)
+    // ⭐ 2026-09-06 CONSTANT AUDIT: this one is NOT an immediate like the table below it --
+    // it is a memory word, and it was recorded as white by assumption. GetSectionTypeColour's
+    // fall-through arm reads it (`lwz r11, 0x404(r11)` @0x827681B8, r11 = 0x82F30000) and the
+    // .data image word at dword_82F30404 is 0xFF00FFFF -- CYAN, not white. Same word feeds the
+    // section draw at 0x82775550. (The 0xFF0080FF entry below IS an immediate -- `lis 0xFF00 /
+    // ori 0x80FF` @0x82768198 -- which is what pins the AARRGGBB packing for both.)
+    const RGBA K_NORMAL_COLOUR        = 0xFF00FFFFu;  // dword_82F30404 (cyan, .data image word)
 
     // Type-colour table (GetSectionTypeColour @0x82768120).
     const RGBA K_TYPE_JUNCTION_COLOUR = 0xFFFFFF00u;  // bit 0x04 -> -256
