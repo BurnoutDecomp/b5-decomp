@@ -2094,6 +2094,40 @@ namespace CgsPhysics
             const PhysicsSimulationIO::InUpdateRigidBody& lrEvent = lpQueue->GetEvent(li);
 
             const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mID });
+
+            // [DIAG] NOT IN THE X360 BINARY -- 2026-09-06 props lane (b5-decomp#2). Opt-in
+            // (BRN_PROP_DIAG), first-N, PROP-OWNER events only (owner byte 3 ==
+            // BrnWorld::E_ENTITYTYPE_PROP), so the vehicle/traffic traffic through this drain
+            // costs nothing. PropManager::ClampAcceleration @0x82627F00 re-posts a corrected
+            // velocity here every frame it clamps, and the measured flight of a hit prop says
+            // that correction is not reaching the body -- this line says whether the event
+            // arrives at all and whether GetIndexFromGameID resolves it.
+            // DELETE-WHEN b5-decomp#2 is closed.
+            {
+                static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
+                static s32        siUpdRbLinesLeft = 400;
+                // The owner byte is the TOP byte of the ENTITY WORD, and the entity word is the
+                // HIGH dword of the packed RigidBodyId -- i.e. mID >> 56, not mID >> 32. The
+                // first cut of this line used >> 32, which is the entity word's LOW byte, so it
+                // selected "prop part index 3" instead of "owner == prop" and made the drain
+                // look like it was dropping almost every event. Recorded because the wrong
+                // reading is the plausible one.
+                const u32 luOwner = static_cast<u32>((lrEvent.mID >> 56) & 0xFFu);
+                if (sbPropDiag && siUpdRbLinesLeft > 0 && luOwner == 3u
+                    && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    --siUpdRbLinesLeft;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[prop-updrb] entity=" << static_cast<u32>(lrEvent.mID >> 32)
+                        << " bodyIndex=" << liBodyIndex
+                        << " queueLen=" << lpQueue->GetLength()
+                        << " v=(" << lrEvent.mRigidBody.GetLinearVelocity().x
+                        << "," << lrEvent.mRigidBody.GetLinearVelocity().y
+                        << "," << lrEvent.mRigidBody.GetLinearVelocity().z << ")"
+                        << "\n";
+                }
+            }
+
             if (liBodyIndex == -1)
             {
                 continue;   // SILENT -- 0x828A3A78

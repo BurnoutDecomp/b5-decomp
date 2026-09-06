@@ -162,6 +162,34 @@ namespace BrnWorld
                     }
                 }
 
+                // ---- ADDED 2026-09-06 (props lane, bug #2): the PART arm ----------------
+                // The one-shot above proves a part ARRIVED once; it says nothing about where
+                // a shed part goes. Bug #2 ("props sent flying way too much at medium/high
+                // speed") is a report about what leaves the scene, and the debris of a
+                // smashed gate/fence is most of what a player sees leave -- so it has to be
+                // measurable too. Same shape as the whole-prop rung below: budgeted first-N,
+                // opt-in, one line per part per update. DELETE-WHEN bug #2 is closed.
+                static s32 siPartLinesLeft = 6000;
+                for ( s32 liScan = 0; siPartLinesLeft > 0 && liScan < liQueueLength; ++liScan )
+                {
+                    const BrnPhysics::Props::UpdatePropEvent& lrScanEvent =
+                        lpUpdatePropEventQueue->GetEvent( liScan );
+                    if ( lrScanEvent.mEntityId.GetPartIndex() != 0 )
+                    {
+                        --siPartLinesLeft;
+                        const Vector3& lScanPosition = lrScanEvent.mTransform.Pos();
+                        *CgsDev::Log::gpDebugPrint
+                            << "[Q6-world] part " << lrScanEvent.mEntityId.GetValue()
+                            << " pos (" << lScanPosition.x
+                            << ", "     << lScanPosition.y
+                            << ", "     << lScanPosition.z
+                            << ") |linVel|="
+                            << rw::math::vpu::Magnitude( lrScanEvent.mLinearVelocity )
+                            << " frozen=" << ( lrScanEvent.mbFrozen ? 1 : 0 )
+                            << "\n";
+                    }
+                }
+
                 // ---- ADDED 2026-08-23 (bug-wave round 2): the WHOLE-PROP arm -------------
                 // The two rungs above witness the batch and the first PART. Neither can
                 // answer the question the "reacts slow, nothing fast" report actually turns
@@ -170,7 +198,11 @@ namespace BrnWorld
                 // UpdatePropEvent. `[Q6-read] props=N` upstream only proves the event was
                 // QUEUED; this proves a POSE arrived and, across consecutive lines, whether
                 // it is actually changing. Budgeted, opt-in, whole props only (part index 0).
-                static s32 siWholePropLinesLeft = 200;   // 24 -> 200, 2026-09-02 (props-at-speed)
+                static s32 siWholePropLinesLeft = 6000;  // 24 -> 200, 2026-09-02 (props-at-speed);
+                                                         // 200 -> 6000, 2026-09-06 (props lane,
+                                                         // bug #2): 200 lines is <1 s of updates
+                                                         // with five props live, so a prop's whole
+                                                         // flight fell outside the window.
                 for ( s32 liScan = 0; siWholePropLinesLeft > 0 && liScan < liQueueLength;
                       ++liScan )
                 {

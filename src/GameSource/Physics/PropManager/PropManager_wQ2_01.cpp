@@ -392,7 +392,35 @@ void PropManager::ClampAcceleration( Vector3                                    
 
         // @0x826280E0 `bl sub_825BCCB8` then @0x826280E8 the one-arg AddEvent. The accessor is the
         // NON-const twin landed at CgsPhysicsSimulationModuleIO.h:190 this round.
-        lpSimModuleInputBuffer->GetUpdateRigidBodyQueue()->AddEvent(lOutUpdateRigidBodyEvent);
+        const bool lbPosted =
+            lpSimModuleInputBuffer->GetUpdateRigidBodyQueue()->AddEvent(lOutUpdateRigidBodyEvent);
+
+        // [DIAG] NOT IN THE X360 BINARY -- 2026-09-06 props lane (b5-decomp#2). The POST side of
+        // the pair whose CONSUMER side is the [prop-updrb] line in
+        // PhysicsSimulationModule::ProcessUpdateRigidBodyQueue. Measured on run
+        // scratch\bugtest\runs\props_hit_lean\20260906_101608: a hit prop's position keeps
+        // tracking the SIM's velocity (~17.7 m/s) while this clamped value creeps at the
+        // console's 30 m/s^2 -- i.e. the correction is computed and stored into the
+        // PropInstance but never reaches the rigid body. These two lines say which half fails.
+        // Opt-in, first-N. DELETE-WHEN b5-decomp#2 is closed.
+        {
+            static const bool sbPostDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+            static s32        siPostLinesLeft = 400;
+            if ( sbPostDiag && siPostLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                --siPostLinesLeft;
+                *CgsDev::Log::gpDebugPrint
+                    << "[prop-clamp-post] entity="
+                    << static_cast<u32>( lRigidBodyId.GetEntityId() )
+                    << " posted=" << ( lbPosted ? 1 : 0 )
+                    << " queueLen="
+                    << lpSimModuleInputBuffer->GetUpdateRigidBodyQueue()->GetLength()
+                    << " v=(" << lUpdatedLinearVelocity.x
+                    << "," << lUpdatedLinearVelocity.y
+                    << "," << lUpdatedLinearVelocity.z << ")"
+                    << "\n";
+            }
+        }
     }
 }
 
@@ -622,6 +650,37 @@ void PropManager::ApplyAntiHerdingForce( CgsPhysics::PhysicsSimulationIO::InputB
     if (lAboveRaceCar)
     {
         lFinalForce = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY -- 2026-09-06 props lane (bug #2, "props sent flying way too
+    // much at medium/high speed"). This function is the only place the game deliberately BLASTS a
+    // prop upward, and the blast is speed-gated at exactly the speed the report names
+    // (KVF_MAX_SPEED_FOR_SIDE_FORCE == 60 mph), so a run has to be able to say whether it fired
+    // and how big it was. Every value printed is already computed above; the acceleration column
+    // is force/mass because InApplyForce is scaled by the body's INVERSE MASS at the consumer
+    // (RigidBody::AddForce, witnessed inline in ProcessApplyForceQueue @0x828A6C1C).
+    // Opt-in (BRN_PROP_DIAG), first-N, never per-frame unbounded. DELETE-WHEN bug #2 is closed.
+    {
+        static const bool sbHerdDiag   = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+        static s32        siHerdLinesLeft = 400;
+        if ( sbHerdDiag && siHerdLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            --siHerdLinesLeft;
+            const f32 lfMass  = ( lvfPropMass.x != 0.0f ) ? lvfPropMass.x : 1.0f;
+            *CgsDev::Log::gpDebugPrint
+                << "[prop-herd] entity=" << static_cast<u32>( lPropRigidBodyId.GetEntityId() )
+                << " carMph=" << lvfRaceCarSpeed.x
+                << " mass=" << lvfPropMass.x
+                << " aboveCar=" << ( lAboveRaceCar ? 1 : 0 )
+                << " relY=" << lPropRelativePosition.y
+                << " halfY=" << lpRaceCar->GetHalfExtent().y
+                << " targetUp=" << lvfTargetUpwardVel.x
+                << " propUp=" << lvfPropsUpwardVelocity.x
+                << " forceMag=" << lForceMagnitude.x
+                << " |F|=" << rw::math::vpu::Magnitude( lFinalForce )
+                << " a=" << ( rw::math::vpu::Magnitude( lFinalForce ) / lfMass )
+                << "\n";
+        }
     }
 
     // :2113  the event: the 8-byte handle at +0x00, the force at +0x10 (`std r6, sp+0x70`,
@@ -1234,7 +1293,10 @@ void PropManager::ReadUpdatedBodies(
                                    lvfTimeStep, lvfOneOverTimeStep, lpSimModuleInputBuffer );
 
                 {
-                    static s32 siDiagClampLinesLeft = 200;
+                    // 200 -> 6000, 2026-09-06 (props lane, bug #2). 200 lines is ~40 physics
+                    // frames with five props in the queue -- 0.7 s, far too short a window to
+                    // measure how far a hit prop actually travels. Still first-N, still opt-in.
+                    static s32 siDiagClampLinesLeft = 6000;
                     if ( sbPropDiag && siDiagClampLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
                     {
                         --siDiagClampLinesLeft;
