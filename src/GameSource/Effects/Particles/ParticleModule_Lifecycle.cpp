@@ -470,6 +470,7 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
                 "mImmediateModeRenderer is still a ContainedInterface placeholder, so "
                 "mSparkRenderer.mpRenderer is null (the spark ARRAYS are real)");
         }
+        ++gauSparkPrepareCount;   // [diag] how many times Prepare re-built the spark banks
         mSparkRenderer.Construct(mpHeapMalloc, 0);
         for (u32 luArray = 0; luArray < KU_NUM_SPARK_ARRAYS; ++luArray)
         {

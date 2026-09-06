@@ -677,6 +677,32 @@ bool EffectsModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllo
 // =============================================================================
 void EffectsModule::PushSparkParams()
 {
+    // [DIAG] BRN_SPARK_DIAG=1 -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Says ONCE
+    // whether each of the four sparkeffect collections actually RESOLVED. Every one of the
+    // thirteen values below is a divisor or a gate downstream, and a collection that did not
+    // resolve hands back Attrib::DefaultDataArea(0x90) -- 144 bytes of zeros that read as a
+    // perfectly plausible "the parameters are all zero" rather than as a load failure.
+    {
+        static bool sbLogged = false;
+        if (!sbLogged)
+        {
+            const char* const lpcEnv = std::getenv("BRN_SPARK_DIAG");
+            if (lpcEnv != 0 && lpcEnv[0] != '0')
+            {
+                sbLogged = true;
+                char lacMsg[256];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[spark] sparkeffect collections: %s=%d %s=%d %s=%d %s=%d "
+                    "(1 == the collection resolved; 0 == DefaultDataArea zeros)\n",
+                    "376835", mSparkParams[0].IsValid() ? 1 : 0,
+                    "376836", mSparkParams[1].IsValid() ? 1 : 0,
+                    "376837", mSparkParams[2].IsValid() ? 1 : 0,
+                    "554431", mSparkParams[3].IsValid() ? 1 : 0);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
+    }
+
     for (u32 luArray = 0; luArray < KU_NUM_SPARK_PARAMS; ++luArray)
     {
         const Attrib::Gen::sparkeffect& lrParams = mSparkParams[luArray];
@@ -693,6 +719,55 @@ void EffectsModule::PushSparkParams()
             lrParams.Colour(1), lrParams.Colour(0),
             lrParams.Lifetimes(),                   // attrib +0x40, all four lanes
             lrParams.SparkTextureName());           // attrib +0x50 -> array +0x8C
+    }
+
+    // =====================================================================================
+    // [DIAG] BRN_SPARK_FORCE=1 -- NOT IN THE X360 BINARY. OFF BY DEFAULT. DELETE-WHEN the
+    // sparkeffect collections resolve.
+    //
+    // The same shape and the same purpose as BRN_CRUMPLE_FORCE: when every input measures
+    // zero, the honest next question is whether the code downstream has any authority at
+    // all, and the only way to ask it is to force the input and look. MEASURED on this
+    // build (see the "[spark] sparkeffect collections" line above): all four collections
+    // report 0, i.e. Attrib::DefaultDataArea handed back 144 bytes of zeros, so every array
+    // runs with a ZERO lifetime, ZERO radius, ZERO motion-blur time and a NULL texture name.
+    // A zero lifetime alone empties the banks on the frame after the spark is born and makes
+    // RenderBank's own age gate reject every sample, so nothing downstream can ever be
+    // exercised while it stands.
+    //
+    // ⚠ EVERY NUMBER BELOW IS THIS INSTRUMENT'S, NOT THE CONSOLE'S. They are not a guess at
+    // the authored values and must never be shipped as one: they exist so the geometry half
+    // can be measured, and they go away with the collection load.
+    {
+        static bool sbProbed = false;
+        static bool sbForce  = false;
+        if (!sbProbed)
+        {
+            sbProbed = true;
+            const char* const lpcEnv = std::getenv("BRN_SPARK_FORCE");
+            sbForce = (lpcEnv != 0 && lpcEnv[0] != '0');
+            if (sbForce)
+                CgsDev::Log::WriteToLog("[spark] PARAMETER FORCE ARMED (BRN_SPARK_FORCE) -- "
+                                        "the values below are the INSTRUMENT'S, not the console's\n");
+        }
+        if (sbForce)
+        {
+            const rw::math::vpu::Vector4 lColour    = { 1.0f, 0.75f, 0.30f, 1.0f };
+            const rw::math::vpu::Vector4 lLifetimes = { 1.20f, 1.00f, 0.80f, 0.60f };
+            for (u32 luArray = 0; luArray < KU_NUM_SPARK_PARAMS; ++luArray)
+            {
+                mParticleModule.maSparks[luArray].UpdateParams(
+                    -9.81f,   // gravity
+                    0.35f,    // bounce
+                    0.10f,    // motion-blur window, seconds
+                    0.05f,    // spark radius, metres
+                    1.00f,    // drag initial velocity scale
+                    0.20f,    // drag terminal velocity scale
+                    0.50f,    // drag duration, seconds
+                    lColour, lColour, lColour, lColour, lLifetimes,
+                    "fxspark");
+            }
+        }
     }
 }
 

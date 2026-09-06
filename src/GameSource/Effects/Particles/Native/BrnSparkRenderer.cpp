@@ -184,6 +184,14 @@ void SparkArray::SparkBank::Construct(FXBucketManager* lpBucketManager, bool lbI
 //     their old values, so the recycled bucket keeps reporting a full particle count while its
 //     slots are overwritten from the start. That is the console's behaviour, not an omission.
 // =============================================================================================
+// [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Which ARM of GetNewSpark each call takes:
+// a frozen live count cannot say whether the head was full, the cap was reached or the manager
+// was empty, and those are three different defects.
+u32 gauSparkBankHead   = 0;   // took the head bucket
+u32 gauSparkBankAlloc  = 0;   // borrowed a new bucket
+u32 gauSparkBankRecycle= 0;   // recycled the oldest
+u32 gauSparkBankNull   = 0;   // returned nothing
+
 BrnSpark* SparkArray::SparkBank::GetNewSpark(f32 lfBirthTime)
 {
     SparkBucket* lpHeadBucket = mpBuckets;
@@ -191,6 +199,7 @@ BrnSpark* SparkArray::SparkBank::GetNewSpark(f32 lfBirthTime)
     if (lpHeadBucket != 0
         && lpHeadBucket->mu16NextPositionInBucket < SparkBucket::KuMaxNumParticles)
     {
+        ++gauSparkBankHead;   // [diag]
         return lpHeadBucket->GetNewParticle(lfBirthTime);
     }
 
@@ -199,7 +208,11 @@ BrnSpark* SparkArray::SparkBank::GetNewSpark(f32 lfBirthTime)
         // Room under the cap: borrow one more bucket.
         SparkBucket* const lpNewBucket = mpBucketManager->AllocateBucket<SparkBucket>();
         if (lpNewBucket == 0)
+        {
+            ++gauSparkBankNull;   // [diag]
             return 0;
+        }
+        ++gauSparkBankAlloc;   // [diag]
 
         SparkBucket* const lpOldHead = mpBuckets;
         lpNewBucket->mpNextBucket = lpOldHead;
@@ -222,7 +235,11 @@ BrnSpark* SparkArray::SparkBank::GetNewSpark(f32 lfBirthTime)
     }
 
     if (lpHeadBucket == 0)
+    {
+        ++gauSparkBankNull;   // [diag]
         return 0;
+    }
+    ++gauSparkBankRecycle;   // [diag]
 
     // At the cap: walk to the list tail (the oldest bucket) and recycle it.
     SparkBucket* lpOldestBucket = lpHeadBucket;

@@ -2,6 +2,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include <cstddef>                                   // offsetof
 #include <cstdio>                                    // snprintf (the announcement)
+#include <cstdlib>                                   // getenv / atoi ([diag] gates)
+#include <cmath>                                     // cos / sin ([diag] BRN_SPARK_TEST)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog (the NOT-RECONSTRUCTED announcements)
 #include "GameSource/Effects/Particles/ParticleModuleIO.h"   // BrnParticle::ParticleIO::DispatchInputBuffer
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"    // BrnGame::DispatchThreadInputBuffer
@@ -327,6 +329,16 @@ namespace BrnParticle
     // RenderFullResParticles replays it through SparkRenderer::Dispatch -- all three calls
     // are in this file. DELETE-WHEN the job parameter blocks are typed.
     Native::SparkBatchArray gSparkBatchArray;
+
+    // [DIAG] how many times the BRN_SPARK_TEST control actually called SparkArray::SpawnSpark.
+    // A live count that never moves cannot say whether the producer stopped producing or the
+    // bank stopped accepting; this is the first half of that question. DELETE-WHEN-STABLE.
+    u32 gauSparkTestSpawnCalls = 0;
+    // [DIAG] how many times ParticleModule::Prepare re-built the spark banks. Prepare is a
+    // STAGE machine that is re-entered until it reports done, so a stage that never completes
+    // re-runs its constructors -- and a re-run bank looks exactly like a bank that never
+    // accepts more than one frame of sparks. DELETE-WHEN-STABLE.
+    u32 gauSparkPrepareCount = 0;
 
     // [lionhandoff] FLAG PC bring-up counters -- see the witness in DispatchThreadUpdate.
     // Not console state; ours, and deleted with that witness.
@@ -693,6 +705,18 @@ namespace BrnParticle
         if (lpRenderData == 0)
             return;
 
+        // [DIAG] the bank state AT ENTRY, before anything in this function runs. A state that
+        // reads post-Prepare here every frame means the module's memory is being restored
+        // between frames -- which no code in this file does. DELETE-WHEN-STABLE.
+        const u32 luEntryNumBuckets = maSparks[0].mRegularBank.muNumBuckets;
+        const u32 luEntryHead       = (maSparks[0].mRegularBank.mpBuckets != 0) ? 1u : 0u;
+        const u32 luEntryMgrFree    = mBucketManager.muNumFreeBuckets;
+        const f32 lfEntryRing       = mSparkFrameDataSetUpdate.GetFrame(0).mfTimeStamp;
+
+        // [DIAG] the delta actually handed to the ring this frame (see the banner at the
+        // Update call below). Function scope so the probe at the tail can print it.
+        static f32 sfDiagRingDelta = 0.0f;
+
         // dword_82CDB404 -- a module-scope static on the console too, not a member.
         static u32 suLastRenderedFrame = 0;
         const bool lbFrameChanged = (lpRenderData->muCurrentFrame != suLastRenderedFrame);
@@ -720,7 +744,48 @@ namespace BrnParticle
             const rw::math::vpu::Matrix44Affine& lrView = lView;
             const rw::math::vpu::Matrix44&       lrProj = lpRenderData->mCgsCamera.mProjection;
 
-            mSparkFrameDataSetUpdate.Update(lrView, lrProj, lpRenderData->mfCurrentTimeStep);
+            // ⚠⚠ THE RING DELTA. The console writes `lfs f1, 0xC(r30)` at 0x8228A82C, i.e. it
+            // hands SparkFrameDataSet::Update the render data's mfCurrentTimeStep VERBATIM --
+            // and that field is an ACCUMULATOR. Three of the callee's own facts prove the
+            // callee wants a PER-RENDER-FRAME DELTA and not a clock:
+            //   * 0x822842D8-E0  `lfs f0, 0x80(r3); fadds f0, f0, f1`, stored back to 0x80(r3)
+            //     and 0x84(r3) at 0x82284438 -- the ring head is ADVANCED BY f1, not set to it.
+            //   * 0x822842F4-FC  the shift is gated on `head - *(r3+0x150) >= flt_8200DD54`,
+            //     and flt_8200DD54 == 0x3C800000 == 0.015625 == 1/64 s. A minimum-interval
+            //     gate is meaningless unless f1 is a small per-frame quantity.
+            //   * 0x82283C20-28  `f1 == flt_82001CC0 (0.0)` selects the OTHER arm -- the
+            //     "no time has passed" rebuild. A monotonic clock is 0.0 only on frame one.
+            // Against that, an EXHAUSTIVE scan of every function in the ARTIST export set for
+            // the four spellings of module+0x8E0C (`ori ...,0x8E0C`, `addi ...,-0x71F4`, and
+            // the same two for the record base +0x8E00) finds exactly four bodies:
+            //     0x822817D8 Update           -- `+= mfSimulationRate * arg1`
+            //     0x82294220 Construct        -- `= 0.0f` (the seed)
+            //     0x82294760 PreRenderUpdate  -- reads it into DispatchThreadUpdateData+4
+            //     0x82296C80 HandleWheels     -- touches +0x8E08 only, never +0x8E0C
+            // NOTHING CLEARS IT. Those two readings cannot both be right, and this evidence
+            // CANNOT DISTINGUISH "the export set has a hole where the console's clear lives"
+            // (the set is known to have them) from "the accumulate is scaled by something not
+            // yet found". So nothing here invents a clear, and mfCurrentTimeStep keeps the
+            // console's exact value for BrnRendererUpdatePostFxMotionBlur, its other consumer.
+            //
+            // What is taken instead is the FIRST DIFFERENCE of the console's own published
+            // field across render frames. That quantity is right under BOTH hypotheses: if the
+            // console clears after publishing, the field IS the frame's sum of sim steps and
+            // the difference equals it; if it does not clear, the difference is still exactly
+            // the sim time that elapsed between this render frame and the last. No number here
+            // is invented -- it is the console's accumulator, differenced.
+            // DELETE-WHEN the missing clear is found, or the module scheduler drives the real
+            // per-sub-step Update/GenerateRenderRequests cadence (ParticleModuleBringUp.cpp's
+            // own "CADENCE DEVIATION, FLAGGED" banner).
+            static f32 sfLastConsumedTimeStepSum = 0.0f;
+            const f32  lfAccumulated = lpRenderData->mfCurrentTimeStep;
+            f32        lfRingDelta   = lfAccumulated - sfLastConsumedTimeStepSum;
+            sfLastConsumedTimeStepSum = lfAccumulated;
+            if (lfRingDelta < 0.0f)      // the accumulator was re-seeded (a module rebuild)
+                lfRingDelta = 0.0f;
+            sfDiagRingDelta = lfRingDelta;
+
+            mSparkFrameDataSetUpdate.Update(lrView, lrProj, lfRingDelta);
 
             // `*(a1 + 151728)` == +0x250B0 == mSparkFrameDataSetUpdate.maFrames[0].mfTimeStamp.
             f32 lfRetireTime = mSparkFrameDataSetUpdate.GetFrame(0).mfTimeStamp;
@@ -747,6 +812,69 @@ namespace BrnParticle
             }
         }
 
+        // =====================================================================================
+        // [DIAG] BRN_SPARK_TEST=<n> -- NOT IN THE X360 BINARY. OFF BY DEFAULT. DELETE-WHEN the
+        // producers land.
+        //
+        // The same shape as BRN_CRUMPLE_FORCE (XenonD3D9Shims.cpp): a control that drives the
+        // console's OWN entry point so a chain can be measured before its natural producer
+        // exists. It calls SparkArray::SpawnSpark -- the real body, with the real array
+        // parameters -- <n> times a frame in front of the camera, which exercises exactly what
+        // 2dac4368 and this build landed: the bank ladder, the two-phase bounce solve,
+        // FreeUnusedBuckets, the frustum cull, CalculateSparkPosition, the ribbon and the
+        // vertex writer. It does NOT stand in for a producer and nothing about it is the
+        // console's behaviour; the POSITIONS and VELOCITIES below are this instrument's, and
+        // they are the only invented numbers in the spark lane.
+        {
+            static bool sbTestProbed = false;
+            static u32  suTestCount  = 0;
+            if (!sbTestProbed)
+            {
+                sbTestProbed = true;
+                const char* const lpcEnv = std::getenv("BRN_SPARK_TEST");
+                suTestCount = (lpcEnv != 0) ? static_cast<u32>(std::atoi(lpcEnv)) : 0u;
+                if (suTestCount != 0)
+                {
+                    char lacMsg[160];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                        "[spark] TEST CONTROL ARMED (BRN_SPARK_TEST=%u sparks/frame) -- this is "
+                        "an INSTRUMENT, not a producer\n", suTestCount);
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+            }
+            if (suTestCount != 0)
+            {
+                gauSparkTestSpawnCalls += suTestCount;
+                const rw::math::vpu::Matrix44Affine& lrCam = lpRenderData->mCameraTransform;
+                const f32 lfNow = mSparkFrameDataSetUpdate.GetFrame(0).mfTimeStamp;
+                for (u32 luSpark = 0; luSpark < suTestCount; ++luSpark)
+                {
+                    const f32 lfPhase = static_cast<f32>(luSpark) * 0.7391f
+                                      + static_cast<f32>(luSpark & 7u);
+                    rw::math::vpu::Vector3 lPosition;
+                    lPosition.x = lrCam.wAxis.x + lrCam.zAxis.x * 6.0f;
+                    lPosition.y = lrCam.wAxis.y + lrCam.zAxis.y * 6.0f;
+                    lPosition.z = lrCam.wAxis.z + lrCam.zAxis.z * 6.0f;
+                    lPosition.w = lPosition.y;
+
+                    rw::math::vpu::Vector3 lVelocity;
+                    lVelocity.x = std::cos(lfPhase) * 4.0f;
+                    lVelocity.y = 3.0f + static_cast<f32>(luSpark & 3u);
+                    lVelocity.z = std::sin(lfPhase) * 4.0f;
+                    lVelocity.w = lVelocity.y;
+
+                    maSparks[BrnParticle::Native::eSparkArray_GrindingWorld].SpawnSpark(
+                        lPosition, lVelocity,
+                        1.0f,      // lfSize
+                        lfNow,     // lfCurrentTime
+                        0.0f,      // lfTimeSinceEvent
+                        0.0f,      // lfBirthTimeOffset
+                        1.5f,      // lfHeightAbovePlane
+                        false);    // the regular bank
+                }
+            }
+        }
+
         gSparkBatchArray.Clear();
 
         // The console's `*(this+143752) = (*(this+143752) - 1) & 1` pair, one per manager,
@@ -755,7 +883,6 @@ namespace BrnParticle
         mVertexBufferManagerParticles.FlipBuffer();
 
         EffectsVertexBufferLocked& lrLockedSparkBuffer = mVertexBufferManagerSparks.Lock();
-        (void)mVertexBufferManagerParticles.Lock();
 
         // ---- ParticleRenderJob::Execute @0x8291DF38, the spark arm, run inline ------------
         if ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagRenderSparks) != 0)
@@ -771,12 +898,24 @@ namespace BrnParticle
                 (lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0);
         }
 
+        // ⭐ THE UNLOCK IS THE PC FOLD'S, AND IT IS NOT OPTIONAL. On the console the two
+        // buffers stay locked across the AddJobs and each JOB closes its own; here the job
+        // body ran inline, so the bracket closes here -- exactly as BuildLionVertexBuffers
+        // does with its own manager. Leaving it locked would trip the `!mbLocked` assert at
+        // the NEXT frame's FlipBuffer, once per frame for ever, which on this box is an
+        // assert storm that starves the harness rather than a missing effect.
+        mVertexBufferManagerSparks.UnLock();
+
+        // The console also locks mVertexBufferManagerParticles here for the SIMPLE-PARTICLE
+        // job. That job is announced (below), so its buffer is deliberately NOT locked --
+        // an unmatched lock is the assert storm described above.
         {
             static bool sbLogged = false;
             LogNotReconstructed(sbLogged,
                 "ParticleModule::BeginParticleRenderJob's SIMPLE-PARTICLE job "
                 "(ParticleRenderJob::RenderSimpleParticles -- BrnSimpleParticleArray is a "
-                "partial layout). THE SPARK JOB IS REAL AND RUNS");
+                "partial layout), and its vertex-buffer lock with it. THE SPARK JOB IS REAL "
+                "AND RUNS");
         }
 
         // =====================================================================================
@@ -827,20 +966,59 @@ namespace BrnParticle
                 for (s32 lnBatch = 0; lnBatch > -1 && lnBatch < lnBatches; ++lnBatch)
                     luVerts += gSparkBatchArray[static_cast<u32>(lnBatch)].muVertexCount;
 
+                // ⭐ A CALL COUNT, AND A PERIODIC LINE. A change-gated line cannot tell "this
+                // function ran once" from "it ran three thousand times and nothing moved" --
+                // the first read of this probe printed exactly one line and both readings fit
+                // it. So the count is on the line and the line also prints every 300th call.
+                static u32 suCalls       = 0;
                 static u32 suLastLive    = 0xFFFFFFFFu;
                 static u32 suLastVerts   = 0xFFFFFFFFu;
-                if (luLive != suLastLive || luVerts != suLastVerts)
+                ++suCalls;
+                if (luLive != suLastLive || luVerts != suLastVerts || (suCalls % 300u) == 0u)
                 {
                     suLastLive  = luLive;
                     suLastVerts = luVerts;
-                    char lacMsg[224];
+                    // The array PARAMETERS are printed too, because every one of them is a
+                    // divisor or a gate downstream: a zero mfDragDuration divides by zero in
+                    // the drag vector, a zero mfMotionBlurTime makes the ring window zero so
+                    // RenderBank returns at once, a zero mfSparkRadius gives a zero-width
+                    // ribbon, and all four are zero if the sparkeffect collection did not
+                    // resolve. "Nothing drawn" is only diagnosable with them on the line.
+                    // The BANK's own state, so "live is frozen" is separable into "the head
+                    // bucket is full", "the manager is out of buckets" and "the list was
+                    // unlinked": nb = muNumBuckets, np = the head's write cursor, nc = the
+                    // head's live count, free = what the shared FXBucketManager still holds.
+                    const Native::SparkArray& lrArray0 = maSparks[0];
+                    const Native::SparkBucket* const lpHead0 = lrArray0.mRegularBank.mpBuckets;
+                    char lacMsg[480];
                     std::snprintf(lacMsg, sizeof(lacMsg),
-                        "[spark] live=%u batches=%d verts=%u ringNow=%.3f ring1=%.3f "
-                        "flags=0x%04X dt=%.4f\n",
+                        "[spark] calls=%u prep=%u mod=%08X entry{head=%u nb=%u free=%u ring=%.3f} spawnCalls=%u arms=%u/%u/%u/%u live=%u batches=%d verts=%u ringNow=%.3f ring1=%.3f "
+                        "flags=0x%04X dt=%.4f rdt=%.5f | bank0 head=%d nb=%u np=%u nc=%u cap=%u "
+                        "mgrFree=%u/%u | a0 blur=%.4f rad=%.4f grav=%.3f bounce=%.3f "
+                        "drag=%.3f/%.3f/%.4f life=%.2f tex=%s\n",
+                        suCalls, gauSparkPrepareCount,
+                        static_cast<u32>(reinterpret_cast<uintptr_t>(this) & 0xFFFFFFFFu),
+                        luEntryHead, luEntryNumBuckets, luEntryMgrFree, lfEntryRing,
+                        gauSparkTestSpawnCalls,
+                        Native::gauSparkBankHead, Native::gauSparkBankAlloc,
+                        Native::gauSparkBankRecycle, Native::gauSparkBankNull,
                         luLive, lnBatches, luVerts,
                         mSparkFrameDataSetUpdate.GetFrame(0).mfTimeStamp,
                         mSparkFrameDataSetUpdate.GetFrame(1).mfTimeStamp,
-                        lpRenderData->muFlags, lpRenderData->mfCurrentTimeStep);
+                        lpRenderData->muFlags, lpRenderData->mfCurrentTimeStep,
+                        static_cast<double>(sfDiagRingDelta),
+                        (lpHead0 != 0) ? 1 : 0,
+                        lrArray0.mRegularBank.muNumBuckets,
+                        (lpHead0 != 0) ? static_cast<u32>(lpHead0->mu16NextPositionInBucket) : 0u,
+                        (lpHead0 != 0) ? static_cast<u32>(lpHead0->mu16NumberOfParticlesInBucket) : 0u,
+                        lrArray0.mRegularBank.muMaxNumSparks,
+                        mBucketManager.muNumFreeBuckets, mBucketManager.muNumBuckets,
+                        lrArray0.mfMotionBlurTime, lrArray0.mfSparkRadius,
+                        lrArray0.mfGravityStrength, lrArray0.mfBounceStrength,
+                        lrArray0.mfDragInitialVelocityScale,
+                        lrArray0.mfDragTerminalVelocityScale, lrArray0.mfDragDuration,
+                        lrArray0.mafLifetimes[0],
+                        (lrArray0.mpcSparkTextureName != 0) ? lrArray0.mpcSparkTextureName : "(null)");
                     CgsDev::Log::WriteToLog(lacMsg);
                 }
             }

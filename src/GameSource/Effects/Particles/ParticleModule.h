@@ -74,6 +74,9 @@ namespace BrnParticle { namespace ParticleIO { struct DispatchInputBuffer; } }  
 
 namespace BrnParticle
 {
+    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Counters the spark probe prints.
+    extern u32 gauSparkTestSpawnCalls;
+    extern u32 gauSparkPrepareCount;
     struct ParticleDescriptionCollection;   // SharedClasses/Graphics/ParticleDescriptionResourceType.h (handle target; pointer-only here)
 
     // A single playing LION (particle) effect slot. DWARF home ParticleModule.h:87.

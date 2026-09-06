@@ -302,6 +302,13 @@ namespace Native
                           const char* lpcSparkTextureName);
     };
 
+    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Which arm of SparkBank::GetNewSpark
+    // each call took (head / borrowed / recycled / refused).
+    extern u32 gauSparkBankHead;
+    extern u32 gauSparkBankAlloc;
+    extern u32 gauSparkBankRecycle;
+    extern u32 gauSparkBankNull;
+
     // BrnSparkRenderer.h -- SparkVertexBufferBuilder. No state: one static that walks the
     // four spark arrays and fills the frame's vertex buffer + batch list. Its only caller is
     // ParticleRenderJob::Execute @0x8291DF38.
