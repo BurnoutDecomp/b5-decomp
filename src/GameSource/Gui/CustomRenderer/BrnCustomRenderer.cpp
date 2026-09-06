@@ -54,6 +54,8 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint (the [tut-ticker] diag)
+#include <cstdlib>   // std::getenv -- the BRN_HUD_VIS witness gate (see HudVisEnabled below)
+#include <cstdio>    // std::snprintf -- the [hud-vis] witness reason string
 
 // CgsGui::SetGuiCamera @0x82847658 -- selects the active GUI camera (0 = full-screen-map,
 // 1 = normal HUD). It used to be re-declared locally here as an "uncommitted, out of scope"
@@ -106,6 +108,66 @@ namespace
     {
         if (lpComponent != 0)
             lpComponent->SetRenderEnabled(lbEnabled);
+    }
+
+    // -----------------------------------------------------------------------------
+    // [FLAG PC witness] `[hud-vis]` -- the HUD element show/hide trace (lane `hud`,
+    // bug-test wave 2026-09-06). NOT IN THE X360 BINARY.
+    // Opt-in behind BRN_HUD_VIS=1 and printed ONLY when a component's render-enabled
+    // flag CHANGES, so the line count is bounded by the number of real transitions
+    // (never per-frame). The manager is where visibility is actually decided for every
+    // custom-rendered HUD element (minimap, main map, crash-nav icons, boost bar,
+    // above-car, progress bar, black bar, ticker, credits, player image), so one probe
+    // here covers the whole element set.
+    // DELETE-WHEN tools\tests\cases\hud_visibility.ps1 is retired.
+    // -----------------------------------------------------------------------------
+    const char* const kapcHudVisNames[10] =
+    {
+        "netplayerimage", "satnav", "mainmap", "crashnavicons", "boostbar",
+        "abovecar", "progressbar", "blackbar", "ingamemessage", "creditstext"
+    };
+
+    bool gbHudVisChecked = false;
+    bool gbHudVisEnabled = false;
+    bool gbHudVisSeeded  = false;
+    bool gabHudVisLast[10] = { false, false, false, false, false,
+                               false, false, false, false, false };
+    s32  giHudVisBudget  = 400;   // hard line cap -- a fading component must never flood
+
+    bool HudVisEnabled()
+    {
+        if (!gbHudVisChecked)
+        {
+            gbHudVisChecked = true;
+            const char* lpcVar = std::getenv("BRN_HUD_VIS");
+            gbHudVisEnabled = (lpcVar != 0 && lpcVar[0] != '\0' && lpcVar[0] != '0');
+        }
+        return gbHudVisEnabled;
+    }
+
+    void HudVisReport(CgsGui::CustomRenderComponentInterface* const* lpapComponents,
+                      const char* lpcReason)
+    {
+        if (!HudVisEnabled() || CgsDev::Log::gpDebugPrint == 0 || giHudVisBudget <= 0)
+            return;
+
+        for (s32 liSlot = 0; liSlot < 10; ++liSlot)
+        {
+            const CgsGui::CustomRenderComponentInterface* lpComponent = lpapComponents[liSlot];
+            const bool lbNow = (lpComponent != 0) && lpComponent->GetRenderEnabled();
+            if (gbHudVisSeeded && lbNow == gabHudVisLast[liSlot])
+                continue;
+
+            gabHudVisLast[liSlot] = lbNow;
+            if (giHudVisBudget <= 0)
+                break;
+            --giHudVisBudget;
+            *CgsDev::Log::gpDebugPrint
+                << "[hud-vis] " << kapcHudVisNames[liSlot]
+                << (lpComponent == 0 ? " absent" : (lbNow ? " show" : " hide"))
+                << " by " << lpcReason << "\n";
+        }
+        gbHudVisSeeded = true;
     }
 }
 
@@ -266,6 +328,7 @@ bool CustomRendererManager::Prepare(rw::IResourceAllocator* lpHeapAllocator,
             SetComponentRenderable(E_INGAME_MESSAGE,       true);
 
             mePrepareStage = E_PREPARESTAGE_DONE;
+            HudVisReport(mapCustomRenderComponents, "prepare");   // [FLAG PC witness]
             // guest CgsDev::DebugComponent::Register(this + 0x1F49C) -- debug menu only.
             return true;
         }
@@ -507,6 +570,14 @@ void CustomRendererManager::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
         default:
             break;
     }
+
+    // [FLAG PC witness] see HudVisReport -- change-only, BRN_HUD_VIS=1.
+    if (HudVisEnabled())
+    {
+        char lacReason[32];
+        std::snprintf(lacReason, sizeof(lacReason), "evt=%d", liEventType);
+        HudVisReport(mapCustomRenderComponents, lacReason);
+    }
 }
 
 // ---- RecvEvent case 213: the SatNav/MainMap/CrashNav map toggle. -------------------
@@ -646,6 +717,11 @@ void CustomRendererManager::Render(CgsGui::ImRendererSet* lpRendererSet,
 
     if (++miHACK_NumberOfRendersWithoutUpdate > 10)
         mEventQueue.Clear();
+
+    // [FLAG PC witness] the LAST word on what is actually on screen this frame: any
+    // enable a component flipped itself (a fade completing, a renderer disabling on a
+    // missing resource) shows up here and nowhere else. Change-only, BRN_HUD_VIS=1.
+    HudVisReport(mapCustomRenderComponents, "render");
 }
 
 // ================= GetComponentID @ 0x82445378 =================

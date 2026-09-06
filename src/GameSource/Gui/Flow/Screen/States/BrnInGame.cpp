@@ -6,6 +6,16 @@
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsID / CgsIDCompress
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiOverlayRequest / GuiOverlayCompleteEvent / GuiEventActivateCrashNav
+// ⚠️ BrnGuiDemangledEventTypes.h -- the canonical home of BrnGui::GuiEventNetworkPlayerImage
+// (id 258) -- CANNOT be included here: it and BrnGuiOverlaysDirector.h (included above, for the
+// 188 wait-finish handshake this state posts eleven times) each define
+// GuiOverlayWaitFinishRequest and GuiOverlayShowingNotification, so the two headers are
+// mutually exclusive -- a pre-existing fork that header itself documents at :548. The 258 wire
+// record is therefore built locally below, the same standing accommodation
+// BrnLicenseComponent.cpp:184 and BrnPhotoBoothComponent.cpp:167 already use for this exact
+// event, and for the same reason. DELETE-WHEN the GuiOverlay* fork is resolved and the
+// demangled header can be included: then post `BrnGui::GuiEventNetworkPlayerImage` through
+// StateInterface::OutputViewState<T> instead.
 #include "GameSource/Gui/BrnGuiOverlaysDirector.h"                        // GuiOverlayWaitFinishRequest (the 188 handshake payload)
 #include "GameSource/Gui/Flow/Screen/States/Shared/BrnScreenShared.h"     // GetSplashScreenIDForGameMode (+ GsmIO::EGameModeType)
 #include "GameSource/GameState/Progression/BrnProfile.h"                  // BrnProgression::Profile::GetIsNewProfile (the intro gate)
@@ -128,14 +138,54 @@ namespace BrnGui
                 reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
         }
 
-        // 20-byte GuiEvent<258> view-state record { 8, 258, 12, w0, w1 } (the OnEnter
-        // view reset; the X360 posts { 0, -1 }).
-        struct GuiViewStateEvent20 : public CgsGui::GuiEvent<258>
+        // ⛔ `GuiViewStateEvent20` DELETED 2026-09-06 (hud lane). It was the OnEnter
+        // "view reset" modelled as a 20-byte { 8, 258, 12, w0, w1 } record with the payload
+        // written as TWO X360 32-BIT WORDS -- `GuiViewStateEvent20 lViewReset(0u,
+        // 0xFFFFFFFFu)`. The payload is not two opaque words: id 258 is
+        // BrnGui::GuiEventNetworkPlayerImage { NetworkTexture* mpTexture; s32
+        // miTextureIndex; }, and the console is posting the CLEAR record { null, -1 } --
+        // NetworkPlayerImageRenderer::RecvEvent case 258 then takes its
+        // `mbRenderTexture == false` arm and arms the 3-frame texture-clear countdown.
+        // Read store-for-store from InGame::OnEnter @0x824D0498 (0x824D0518..0x824D0554):
+        //     stw r28(0),  var_70        ; payload word 0 = 0            (the pointer)
+        //     li  r11,-1 ; stw r11, var_70+4  ; payload word 1 = -1      (the index)
+        //     ld  r11, var_70            ; take those 8 bytes as one 64-bit value
+        //     li  r30,8  ; stw r30, var_70    ; header0 = sizeof(T) == 8 on X360
+        //     stw r29(12), var_68        ; header2 = 12 (payload offset)
+        //     li  r11,0x102; stw r11, var_70+4 ; header1 = 258
+        //     li  r5,0x29 ; li r6,0x14   ; channel 41, record 20 bytes
+        //     bl  VariableEventQueue<65536,16>::AddEvent
+        // The 8 in header0 is `sizeof(GuiEventNetworkPlayerImage)` on a 4-BYTE-POINTER
+        // console -- exactly the X360 size that rule 2 forbids reproducing on the x64 host,
+        // where the same object is 16 bytes. Nothing consumed the record while the
+        // channel-41 bridge filtered it away, so the wrong width was invisible; with the
+        // console's routing restored (BrnGuiModule.cpp case 41 + the ViewModule tail
+        // forward) the renderer read `miTextureIndex` off the end of an 8-byte payload,
+        // asserted BrnNetworkPlayerImageRenderer.cpp:355/:481 and then AV'd in CopyTexture
+        // (run scratch\bugtest\runs\hud_visibility\20260906_111310).
+        // It is replaced by the typed wire record below, whose header words are computed from
+        // the HOST offsetof/sizeof -- byte-identical in shape to the GuiEventWrapper<T,41>
+        // the console's own OutputViewState<GuiEventNetworkPlayerImage> @0x82436CF0 builds,
+        // and to the record BrnLicenseComponent.cpp / BrnPhotoBoothComponent.cpp already post
+        // for this same event.
+
+        // The channel-41 wire record for BrnGui::GuiEventNetworkPlayerImage (id 258):
+        // { sizeof(payload), 258, offsetof(payload) } + { NetworkTexture*, s32 index }.
+        // Local for the include reason stated at the top of this file, NOT because the type
+        // lacks a home. The two payload members mirror that home field for field.
+        struct GuiEventNetworkPlayerImageWire : public CgsGui::GuiEvent<258>
         {
-            u32 muWord0;   // +0x0C
-            u32 muWord1;   // +0x10
-            GuiViewStateEvent20(u32 luWord0, u32 luWord1)
-                : CgsGui::GuiEvent<258>(8, 12), muWord0(luWord0), muWord1(luWord1) {}
+            const CgsNetwork::NetworkTexture* mpTexture;        // payload +0x00
+            s32                               miTextureIndex;   // payload +0x08 x64 (+0x04 console)
+
+            GuiEventNetworkPlayerImageWire(const CgsNetwork::NetworkTexture* lpTexture,
+                                           s32 liTextureIndex)
+                : CgsGui::GuiEvent<258>(), mpTexture(lpTexture), miTextureIndex(liTextureIndex)
+            {
+                const size_t luOffset = offsetof(GuiEventNetworkPlayerImageWire, mpTexture);
+                muHeader0 = static_cast<u32>(sizeof(*this) - luOffset);   // X360 8
+                muHeader2 = static_cast<u32>(luOffset);                   // X360 12
+            }
         };
 
         // The OutputGuiEvent<BrnGui::GuiOverlayRequest> wire record (@0x82436BE0):
@@ -378,10 +428,17 @@ namespace BrnGui
         // flag=0 twin is ShutDownHudComponents).
         PostCommand16<148>(mpStateInterface, KI_CHANNEL_GUI_INTERNAL, 1);
 
-        // { 8, 258, 12, 0, -1 } on the view channel -- the view-state reset record.
-        GuiViewStateEvent20 lViewReset(0u, 0xFFFFFFFFu);
+        // The view-channel player-image CLEAR: GuiEventNetworkPlayerImage { null, -1 } on
+        // channel 41, i.e. "no picture for any slot" -- NetworkPlayerImageRenderer::RecvEvent
+        // @0x82449CA0 case 258 sees mpTexture == 0 AND miTextureIndex == -1, so
+        // mbRenderTexture is false and it arms the 3-frame clear countdown. The console
+        // builds the record inline at 0x824D0518..0x824D0554 (see the note where the old
+        // two-word helper stood); OutputViewState<T> builds the identical wrapper at host
+        // width, which is the whole point of using it here.
+        GuiEventNetworkPlayerImageWire lViewReset(0, -1);
         mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lViewReset), KI_CHANNEL_VIEW_STATE, 20);
+            reinterpret_cast<const CgsModule::Event*>(&lViewReset), KI_CHANNEL_VIEW_STATE,
+            static_cast<s32>(sizeof(lViewReset)));
 
         // { 8, 191, 12, 1, 0 } -- activate the CrashNav (front-end map) flow.
         GuiEventActivateCrashNav lActivateCrashNav(true);

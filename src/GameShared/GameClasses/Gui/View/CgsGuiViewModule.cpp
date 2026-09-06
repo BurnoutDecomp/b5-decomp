@@ -18,6 +18,25 @@
 #include <windows.h>                                   // [diag] GetEnvironmentVariableA
 namespace renderengine { extern u32 guPresentCount; }  // [diag]
 
+namespace
+{
+    // [FLAG PC witness] BRN_HUD_VIS gate for the `[hud-vis] view->mgr` lines in the
+    // per-event manager forward (lane `hud`, bug-test wave 2026-09-06). NOT IN THE X360
+    // BINARY. DELETE-WHEN tools/tests/cases/hud_visibility.ps1 is retired.
+    bool HudVisWitnessEnabled()
+    {
+        static s32 siState = -1;
+        if (siState < 0)
+        {
+            char lacValue[8] = { 0 };
+            const DWORD luLen = ::GetEnvironmentVariableA("BRN_HUD_VIS", lacValue,
+                                                          sizeof(lacValue));
+            siState = (luLen > 0 && lacValue[0] != '0') ? 1 : 0;
+        }
+        return siState != 0;
+    }
+}
+
 namespace CgsGui
 {
     // ⛔ `struct CustomRendererManagerWiring` DELETED (2026-08-16).
@@ -302,22 +321,11 @@ namespace CgsGui
             case 14:
                 // The load notification routes through the virtual (guest vtbl slot
                 // +0x50), so the BrnGui::ViewModule override handles a FLAPT load.
+                // ⭐ [hud F4 2026-09-06] the explicit custom-renderer forward that used to
+                // sit here is GONE -- it is subsumed by the console's own per-event tail
+                // forward at the bottom of this loop, which is now restored. Keeping both
+                // would deliver every case-14 notification to the manager TWICE.
                 ProcessIncomingLoadNotification(lpEvent);
-                // [PC bring-up seat] The custom-renderer components adopt resources off
-                // the same notification (InGameMessageRenderer::RecvEvent case 14 takes
-                // the ticker font). On the X360 the manager hears every view-side event
-                // through the view hop (CustomRendererManager::RecvEvent has no static
-                // caller -- vtable dispatch); on PC the module pump feeds the manager
-                // the INBOUND queue only, and the RESOURCE-module notifications (fonts,
-                // textures) ride this separate view queue -- so forward them here. No
-                // double delivery: the two streams are disjoint (the module inbound
-                // queue's case-14s are the FSM bundle loads, which never transit this
-                // view queue -- proven by the 13:37 boot, where the module feed alone
-                // left the ticker font unadopted).
-                if (mpCustomRendererManager != 0)
-                {
-                    mpCustomRendererManager->RecvEvent(lpEvent, liEventId);
-                }
                 break;
 
             case 15:
@@ -373,44 +381,74 @@ namespace CgsGui
                 // Reproduce them when those AptAux members gain named homes.
                 break;
 
-            case 204:   // [H3b] SatNav event-starts display command (the icon filter)
-            case 212:   // [H3b] the per-frame RenderSatNav payload (alignas(16) record)
-            case 213:   // SatNav/MainMap show-hide  {s32 mode, f32 fade, u8 enable}
-            case 214:   // BoostBar render enable    {u8 flag}
-            case 215:   // AboveCar render enable    {u8 flag}
-            case 223:   // ⭐ [map-world] the per-frame RenderMainMap payload -- MainMapRenderer
-                        // (slot 2) and CrashNavIconRenderer (slot 3) both latch it.
-                // ⭐ [boost-bar] the custom-renderer view-state commands, bridged body-only
-                // from channel 41 by GuiModule (see its case-41 note). On the console these
-                // reach the manager through the loop-tail forward below every view event
-                // rides; on this build the tail forward is seated at the module pump (the
-                // FLAG note below), so the view-queue-only records are forwarded here --
-                // no double delivery, the module inbound stream never carries them.
-                if (mpCustomRendererManager != 0)
-                {
-                    mpCustomRendererManager->RecvEvent(lpEvent, liEventId);
-                }
-                break;
+            // ⭐ [hud F4 2026-09-06] the 204/212/213/214/215/223 case block that stood here
+            // is GONE, and its absence is the console's shape: ProcessIncomingViewEvents
+            // @0x8285FCE8 has NO case label for any of them (its switch is 10/11/12, 14, 15,
+            // 17-20, 25, 26, 32, 61, 62 and nothing else). They reach
+            // BrnGui::CustomRendererManager::RecvEvent through the per-event TAIL FORWARD
+            // below, which every view event rides -- so a bring-up case list here was both
+            // redundant with the restored tail and, worse, the reason a record type that
+            // lacked a label was silently dropped even after GuiModule bridged it.
 
             default:
                 break;
             }
 
-            // ⭐ [tut-ticker] the custom-renderer manager per-event hook -- the CONSOLE'S
-            // manager feed. Guest tail of the loop body @0x8285FCE8:
-            //     if ( *v10 ) (*(**v10 + 16))(*v10, v8, v9);   // v10 == view+57352
-            // i.e. every view event is forwarded to the installed manager's virtual
-            // RecvEvent(event, id) -- and on the console the view queue receives the WHOLE
-            // module input queue via GuiModule::BridgeFromInputToView, so this hook is where
-            // GUI event 537 (the tutorial ticker) meets the manager.
-            // ⚠️ [FLAG PC seat deviation, 2026-08-24] on THIS build the manager forward runs
-            // in BrnGui::GuiModule::DispatchInboundGuiEvents (the PC's module-input pump)
-            // instead of here. Reason: the PC feeds the view queue SELECTIVELY (direct posts
-            // of 14/18/26 at their producers; BridgeFromInputToView has no caller), so the
-            // full event stream only exists at the module pump -- and forwarding from BOTH
-            // seats would double-deliver the direct-posted 14s to the manager. Move the
-            // forward HERE (and delete it there) when BridgeFromInputToView gets its console
-            // caller and the selective posts retire.
+            // ⭐⭐ [hud F4 2026-09-06] THE CONSOLE'S PER-EVENT MANAGER FORWARD, RESTORED.
+            // Guest tail of the loop body @0x8285FCE8, three instructions after the switch:
+            //     if ( *v10 ) (*(**v10 + 16))(*v10, v8, v9);   // v10 == view + 57352
+            // i.e. EVERY view event, whatever its id and whether or not the switch above
+            // handled it, is handed to the installed custom-renderer manager's virtual
+            // RecvEvent(event, id). This is the ONLY path by which a GUI state's channel-41
+            // view-state record reaches a HUD render component, and it had been replaced by
+            // a hand-maintained case list (deleted above).
+            // ⚠️ NO DOUBLE DELIVERY with the module-pump forward in
+            // BrnGui::GuiModule::DispatchInboundGuiEvents (the PC seat deviation flagged
+            // below): the two queues are disjoint streams. The module inbound queue carries
+            // the game-side GUI events (537 the ticker, 64 the cache bind, 571 ...); this
+            // view queue carries the resource notifications (14/15), the direct 18/26 posts
+            // and the channel-41 bridge output. Nothing rides both.
+            if (mpCustomRendererManager != 0)
+            {
+                // [FLAG PC witness] `[hud-vis] view->mgr` -- lane `hud`, bug-test wave
+                // 2026-09-06. NOT IN THE X360 BINARY. Names each event id that actually
+                // reaches the custom-renderer manager through this seat, first two per id.
+                // Opt-in behind BRN_HUD_VIS=1.
+                // DELETE-WHEN tools/tests/cases/hud_visibility.ps1 is retired.
+                if (HudVisWitnessEnabled() && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    static s32 saiSeen[64] = { 0 };
+                    static s32 saiType[64] = { 0 };
+                    static s32 siCount     = 0;
+                    s32 liSlot = -1;
+                    for (s32 lk = 0; lk < siCount; ++lk)
+                        if (saiType[lk] == liEventId) { liSlot = lk; break; }
+                    if (liSlot < 0 && siCount < 64)
+                    {
+                        liSlot = siCount++;
+                        saiType[liSlot] = liEventId;
+                        saiSeen[liSlot] = 0;
+                    }
+                    if (liSlot >= 0 && saiSeen[liSlot] < 2)
+                    {
+                        ++saiSeen[liSlot];
+                        *CgsDev::Log::gpDebugPrint
+                            << "[hud-vis] view->mgr type=" << liEventId << "\n";
+                    }
+                }
+                mpCustomRendererManager->RecvEvent(lpEvent, liEventId);
+            }
+
+            // ⚠️ [FLAG PC seat deviation, 2026-08-24, STILL LIVE] the manager ALSO hears the
+            // module-input stream from BrnGui::GuiModule::DispatchInboundGuiEvents. On the
+            // console it would hear it here instead: CgsGui::GuiModule::BridgeFromInputToView
+            // @0x8285B088 appends the WHOLE module GUI-event queue onto this view queue
+            // (ViewModule::AddViewState<32768,16> @0x82859E28 -> AppendSafe, no filter), so
+            // ONE forward covered both streams. This build's BridgeFromInputToView has no
+            // caller, so that half of the stream never arrives here and the module pump keeps
+            // its own forward. The two seats are disjoint -- see the tail forward above.
+            // DELETE-WHEN BridgeFromInputToView gets its console caller: then drop the module
+            // pump's forward and this note, and the tail above is the only seat, as on X360.
 
             liEventId = lpEvents->CgsModule::VariableEventQueue<65536, 16>::GetNextEvent(
                 lpEvent, &lpEvent, &liSize);

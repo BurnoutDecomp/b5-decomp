@@ -66,6 +66,22 @@ namespace BrnGameMainFlowController { extern bool gBrnInGameStateActive; }
 
 namespace
 {
+    // [FLAG PC witness] BRN_HUD_VIS gate for the `[hud-vis] cmd` lines in the channel-42
+    // drain (lane `hud`, bug-test wave 2026-09-06). NOT IN THE X360 BINARY.
+    // DELETE-WHEN tools\tests\cases\hud_visibility.ps1 is retired.
+    bool HudVisWitnessEnabled()
+    {
+        static s32 siState = -1;
+        if (siState < 0)
+        {
+            char lacValue[8] = { 0 };
+            const DWORD luLen = ::GetEnvironmentVariableA("BRN_HUD_VIS", lacValue,
+                                                          sizeof(lacValue));
+            siState = (luLen > 0 && lacValue[0] != '0') ? 1 : 0;
+        }
+        return siState != 0;
+    }
+
     // Backing for the per-flow FSM bundle pools (3 mem types each; the boot FSM scripts
     // are tiny single-state bundles ~1.5 KB -- BRNSCREENFSM is the largest at ~68 KB --
     // and each pool reserves 64 KB for its own management structures). One backing per
@@ -2469,6 +2485,50 @@ void GuiModule::Destruct()
                 {
                     const CgsGui::GuiEventPlayAptMovie* lpPlay =
                         reinterpret_cast<const CgsGui::GuiEventPlayAptMovie*>(lpEvent);
+                    // [FLAG PC witness] `[hud-vis] ch41` -- lane `hud`, bug-test wave
+                    // 2026-09-04. NOT IN THE X360 BINARY. The console's channel-41 arm
+                    // (EventInterpreterModule::ProcessOutEvents @0x8285E1D0 case ')' ,
+                    // @0x8285E5xx) forwards EVERY record's payload to the view queue --
+                    // `AddEvent(viewQueue, record + record[2], record[1], record[0])`,
+                    // no id filter at all. This build filters; a record whose type is not
+                    // in the list below never reaches the view module and therefore never
+                    // reaches CustomRendererManager::RecvEvent, so its HUD element never
+                    // changes state. This line names each record and whether it survived.
+                    // Bounded: first two of each type. Opt-in behind BRN_HUD_VIS=1.
+                    // DELETE-WHEN tools\tests\cases\hud_visibility.ps1 is retired.
+                    if (HudVisWitnessEnabled() && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        static s32 saiSeen[64]  = { 0 };
+                        static u32 sauType[64]  = { 0 };
+                        static s32 siSeenCount  = 0;
+                        const u32 luType = lpPlay->muEventType;
+                        s32 liIndex = -1;
+                        for (s32 lk = 0; lk < siSeenCount; ++lk)
+                            if (sauType[lk] == luType) { liIndex = lk; break; }
+                        if (liIndex < 0 && siSeenCount < 64)
+                        {
+                            liIndex = siSeenCount++;
+                            sauType[liIndex] = luType;
+                            saiSeen[liIndex] = 0;
+                        }
+                        if (liIndex >= 0 && saiSeen[liIndex] < 2)
+                        {
+                            ++saiSeen[liIndex];
+                            // Mirrors the dispatch below exactly: 18 and 25 have their own
+                            // body-rebuild arms, everything else rides the generalized
+                            // forward, which needs a sane payload offset.
+                            const u32 luOffset =
+                                reinterpret_cast<const u32*>(lpEvent)[2];
+                            const bool lbBridged =
+                                (luType == 18u || luType == 25u) ||
+                                (luOffset >= 12u &&
+                                 static_cast<s32>(luOffset) <= liSize);
+                            *CgsDev::Log::gpDebugPrint
+                                << "[hud-vis] ch41 type=" << static_cast<s32>(luType)
+                                << " size=" << liSize
+                                << (lbBridged ? " bridged=1\n" : " bridged=0 DROPPED\n");
+                        }
+                    }
                     if (lpPlay->muEventType == 18)   // PlayAptMovie {name, level}
                     {
                         PrepareAptRuntime();   // idempotent
@@ -2516,15 +2576,52 @@ void GuiModule::Destruct()
                     // bridge the whole map screen drew nothing and CrashNavIconRenderer's
                     // `mRenderMainMapEvent.mfZoomLevel != 0.0f` assert fired once per frame
                     // on a record that had never been delivered.
-                    else if (lpPlay->muEventType == 204 ||
-                             lpPlay->muEventType == 212 ||
-                             lpPlay->muEventType == 213 ||
-                             lpPlay->muEventType == 214 ||
-                             lpPlay->muEventType == 215 ||
-                             lpPlay->muEventType == 223)
+                    // ⭐⭐ [hud F4 2026-09-06] THE WHITELIST IS GONE -- THE CONSOLE HAS NO ID
+                    // FILTER ON THIS CHANNEL. The list that stood here (204/212/213/214/215/223)
+                    // was a bring-up stand-in that grew one record type at a time as each
+                    // consumer landed, and it silently dropped everything else. The console's
+                    // arm is EventInterpreterModule::ProcessOutEvents @0x8285E1D0, case ')'
+                    // (== 41), five instructions at @0x8285E64C:
+                    //     lwz r11, 8(r22)   ; headerOffset = record[2]
+                    //     mr  r3, r23       ; the view-state queue
+                    //     lwz r6, 0(r22)    ; payload size = record[0]
+                    //     add r4, r11, r22  ; payload = record + headerOffset (BYTES)
+                    //     lwz r5, 4(r22)    ; inner event type = record[1]
+                    //     bl  VariableEventQueue<65536,16>::AddEvent
+                    // -- byte for byte the sibling of case '(' (40) and case '*' (42), and it
+                    // runs for EVERY record on the channel. Two asserts guard it (":944" the
+                    // queue, ":948" "Invalid raw event in EventInterpreterModule::
+                    // ProcessOutEvents" on the payload pointer); both are kept below.
+                    //
+                    // WHAT THE FILTER COST, MEASURED (run scratch\bugtest\runs\hud_visibility\
+                    // 20260906_104450, the `[hud-vis] ch41 ... bridged=0 DROPPED` witness):
+                    //   type 258 GuiEventNetworkPlayerImage  x2 -- LicenseComponent::
+                    //     SendPlayerPictureEvent / PhotoBoothComponent's texture posts; slot 0
+                    //     NetworkPlayerImageRenderer never received a picture, so the licence
+                    //     card kept its silhouette.
+                    //   type 559 GuiEventSetHoveredEventIcon x2 -- posted while the MAIN MAP is
+                    //     open; slot 3 CrashNavIconRenderer's mHoveredEventIcon never updated,
+                    //     so the hovered event icon never changed state on the map.
+                    // Both are HUD elements whose visibility is decided by a record this build
+                    // threw away between the producer and the only consumer.
+                    //
+                    // [FLAG PC size] the console passes record[0] as the payload size; this
+                    // build passes the RESIDUAL (liSize - headerOffset) instead, exactly as the
+                    // old arm did. Reason: records in this tree are a mix -- StateInterface::
+                    // OutputViewState builds its wrapper with the x64 sizeof(T), while the
+                    // hand-rolled GuiEvent<N>(size, 12) helpers still carry the X360-era size
+                    // literal in record[0] (e.g. PostCommand16<214> writes 1 for a 4-byte
+                    // aligned payload). The residual is >= record[0] in every case and every
+                    // consumer reads a typed prefix, so it is the safe superset; switch to
+                    // record[0] when the hand-rolled helpers carry host sizes.
+                    // DELETE-WHEN those helpers are host-sized.
+                    else
                     {
                         const u32 luPayloadOffset =
                             reinterpret_cast<const u32*>(lpEvent)[2];
+                        // ":948" -- the console asserts the payload pointer, then posts.
+                        CGS_ASSERT(luPayloadOffset >= 12u,
+                                   "Invalid raw event in EventInterpreterModule::ProcessOutEvents");
                         if (luPayloadOffset >= 12u &&
                             static_cast<s32>(luPayloadOffset) <= liSize)
                         {
@@ -2537,9 +2634,6 @@ void GuiModule::Destruct()
                                     liSize - static_cast<s32>(luPayloadOffset));
                         }
                     }
-                    // The remaining view-state records (311/415/556 and the rest) ride the
-                    // AptCommunicator component path on PC. [FLAG: the raw channel-41
-                    // bridge for them lands with the full view IO chain.]
                     break;
                 }
 
@@ -2609,9 +2703,25 @@ void GuiModule::Destruct()
                     if (luHeaderSize >= 12u &&
                         static_cast<s32>(luHeaderSize) + liPayload <= liSize)
                     {
+                        const u8* lpu8Body =
+                            reinterpret_cast<const u8*>(lpEvent) + luHeaderSize;
+                        // [FLAG PC witness] `[hud-vis] cmd` -- lane `hud`, bug-test wave
+                        // 2026-09-06. NOT IN THE X360 BINARY. The HUD show/hide COMMAND
+                        // (GuiEventShowHideHud, id 148) as it leaves the internal-state
+                        // channel: InGame::OnEnter posts flag=1, OpenMainMap /
+                        // OpenEventMap / OpenDriverDetails / ShutDownHudComponents post
+                        // flag=0. This is the pause boundary in the log, and it is
+                        // bounded (a handful per run). Opt-in behind BRN_HUD_VIS=1.
+                        // DELETE-WHEN tools\tests\cases\hud_visibility.ps1 is retired.
+                        if (liInnerId == 148 && liPayload >= 1 && HudVisWitnessEnabled() &&
+                            CgsDev::Log::gpDebugPrint != 0)
+                        {
+                            *CgsDev::Log::gpDebugPrint
+                                << "[hud-vis] cmd 148 flag="
+                                << static_cast<s32>(lpu8Body[0]) << " ch=42\n";
+                        }
                         RouteEventToFlow(
-                            reinterpret_cast<const CgsModule::Event*>(
-                                reinterpret_cast<const u8*>(lpEvent) + luHeaderSize),
+                            reinterpret_cast<const CgsModule::Event*>(lpu8Body),
                             liInnerId, liPayload);
                     }
                     break;
