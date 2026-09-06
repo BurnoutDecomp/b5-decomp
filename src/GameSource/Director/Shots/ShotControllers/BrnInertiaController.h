@@ -14,8 +14,15 @@ namespace BrnDirector
 
     struct InertiaController
     {
-        // DWARF h:45 / cpp:37 -- declaration-only (its own ledger function).
-        void Construct();
+        // DWARF h:45 / cpp:37. ⭐ BODIED 2026-09-06 (camera-shake lane), inline, because that
+        // is where the console has it: there is NO standalone InertiaController::Construct
+        // symbol in the X360 export set, and its whole body is visible INLINED at its one
+        // caller -- CameraFinaliser::Construct inside MainDirector::Construct @0x8225B448,
+        // where `stw r31(=0), 0x40(r9)` (r9 == &mCameraFinaliser) zeroes exactly this field
+        // and nothing else. mPreviousActualXform is deliberately NOT seeded: Update latches it
+        // on the frame after a reset (miFrame == 1) before ever reading it, which is why the
+        // console leaves it alone too.
+        void Construct() { miFrame = 0; }
 
         // @0x8221ECD0 (this TU, DWARF h:50 / cpp:54) -- apply the per-frame camera
         // inertia. Called by BrnDirector::CameraFinaliser::Update.

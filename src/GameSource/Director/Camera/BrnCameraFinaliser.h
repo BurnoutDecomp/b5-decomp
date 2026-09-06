@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Director/Shots/ShotControllers/BrnInertiaController.h"  // BrnDirector::InertiaController (mInertiaController @+0)
+#include "GameSource/Director/Shots/ShotControllers/BrnKeyAnimShakeController.h" // BrnDirector::KeyAnimShakeController (mKeyAnimShakeController @+0x50)
 
 // ============================================================================
 // GameSource/Director/Camera/BrnCameraFinaliser.h
@@ -32,11 +33,13 @@
 // controller ends EXACTLY where the key-anim shake controller begins. Parity is BY NAMED
 // MEMBER (the x64 gate); the offsets above are provenance.
 //
-// FLAG: BrnDirector::KeyAnimShakeController has no reconstructed home (it is NOT the
-//   committed BrnDirector::KeyAnimController in Shots/ShotControllers -- different type,
-//   different Update signature), so it is modelled here as correctly-SIZED opaque storage
-//   carrying its recovered name and offset -- the BrnDirectorModuleIO.h house style. Grow it
-//   into its real type additively when its own TU lands.
+// -- RETIRED 2026-09-06 (camera-shake lane). The FLAG that stood here said
+//   "BrnDirector::KeyAnimShakeController has no reconstructed home ... modelled as
+//   correctly-SIZED opaque storage". It HAS a home now
+//   (Shots/ShotControllers/BrnKeyAnimShakeController.h, bodied from Construct @0x8223D240 and
+//   Update @0x8223D488), and the opaque span is replaced by the real member at the same
+//   offset and the same 0x7A0 size. That mattered: the opaque span meant step 4 could never
+//   run, and step 4 is the ONLY reader of Camera::mEffects' shake request in the game.
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
@@ -44,21 +47,41 @@ namespace BrnDirector
     namespace DirectorIO { struct InputBuffer; }
     namespace Camera     { struct Camera; }
     class DirectorResourceManager;
+    struct GameState;
 
     struct alignas(16) CameraFinaliser
     {
         // X360 @0x82250440 (caller: MainDirector::Update, its only caller). Apply the frame's
         // camera inertia + shake. lrCameraInOut is finalised in place.
+        // ⭐ THE SECOND ARGUMENT IS TYPED NOW (2026-09-06, camera-shake lane). It used to be
+        // `void* lpCameraStateBlock` and the banner called it "a camera-state block"; the
+        // X360 reads `lwz r11, 0xE4(r27)` off it and MainDirector's only call site passes
+        // `&maGameState`, and GameState::miThisFramesActionFlags is at console +0xE4 (the
+        // member run mpEventJLBox/0x00, mTrafficLightSpace/0x10, mBaseDriveThruTransform/0x50,
+        // mDriveThruTransform/0x90, the six bools 0xD0..0xDD, meTakedownVictimID/0xE0 lands it
+        // exactly there, and ArbStateRoaming.cpp:684 independently reads bit 0x10 of that same
+        // member as "smash action this frame"). Named, so step 2 below never pokes an offset.
         void Update(const DirectorIO::InputBuffer* lpInputBuffer,
-                    void*                          lpCameraStateBlock,
+                    GameState*                     lpGameState,
                     const DirectorResourceManager* lpResourceManager,
                     Camera::Camera*                lpCameraInOut);
+
+        // Seed the finaliser. INLINED on the console into MainDirector::Construct
+        // @0x8225B448, where the three statements are visible as
+        //     stw   r31(=0), 0x40(r9)                 -> mInertiaController.Construct()
+        //     stfs  0.0,     0x7F0(r9)                -> mfShakeScale = 0
+        //     addi  r3, r9, 0x50 ; bl KeyAnimShakeController::Construct   (r4 == the manager)
+        // with r9 == this. De-inlined to the one named call so MainDirector never forms
+        // `this + 0x50` itself.
+        void Construct(const DirectorResourceManager* lpResourceManager);
 
         // +0x00: the camera-lag slerp. Its Update @0x8221ECD0 is REAL (BrnInertiaController.cpp).
         InertiaController mInertiaController;
 
-        // +0x50: the key-anim shake controller. FLAG: no homed type -- sized opaque storage.
-        u8 mKeyAnimShakeController[0x7F0 - 0x50];
+        // +0x50: the key-anim shake controller -- the consumer of the camera's shake request.
+        // Its own sizeof is 0x7A0 (see its header), i.e. exactly 0x7F0 - 0x50, so the member
+        // that follows still lands where the asm puts it.
+        KeyAnimShakeController mKeyAnimShakeController;
 
         // +0x7F0: the shake/lag scale accumulator. Update zeroes it when the camera raises the
         // 0x40 state bit, ramps it toward 1.0 while the camera-state block raises its 0x10 bit,

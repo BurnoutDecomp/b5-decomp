@@ -118,6 +118,46 @@ namespace BrnDirector
             }
         }
 
+        // [DIAG BRN_CAMERA_TRACE] [FLAG PC witness] -- NOT IN THE X360 BINARY. ONE line per
+        // frame at THE PUBLISH POINT (the last read of the frame camera before
+        // OutputBuffer::SetCameraOutput), carrying the numbers the camera bug report is about:
+        // where the camera is, where it looks, its FOV, and the shake REQUEST the effects block
+        // is carrying (amplitude / frequency / type). The whole point of printing the request
+        // next to the pose is that a shake that is requested but not applied is invisible in
+        // every other log this build writes -- the pose simply stays smooth.
+        // BOUNDED: KI_CAMERA_TRACE_MAX_LINES lines, then silent for the rest of the run.
+        // Off unless BRN_CAMERA_TRACE is set (flow_run clears every BRN_* first).
+        // DELETE-WHEN: the camera-shake bring-up closes.
+        const s32 KI_CAMERA_TRACE_MAX_LINES = 12000;
+
+        void BrnDiag_ReportCamera(const Camera::Camera& lrCamera);
+
+        void BrnDiag_ReportCamera(const Camera::Camera& lrCamera)
+        {
+            static const bool sbOn = (getenv("BRN_CAMERA_TRACE") != 0);
+            if (!sbOn || CgsDev::Log::gpDebugPrint == 0)
+                return;
+
+            static s32 siFrame = 0;
+            if (siFrame >= KI_CAMERA_TRACE_MAX_LINES)
+                return;
+
+            const rw::math::vpu::Matrix44Affine& lrXform = lrCamera.mTransform;
+            const Camera::CameraEffects&         lrFx    = lrCamera.mEffects;
+
+            *CgsDev::Log::gpDebugPrint
+                << "[cam] f=" << siFrame
+                << " pos=" << lrXform.wAxis.x << "," << lrXform.wAxis.y << "," << lrXform.wAxis.z
+                << " fwd=" << lrXform.zAxis.x << "," << lrXform.zAxis.y << "," << lrXform.zAxis.z
+                << " fov=" << lrCamera.mfFOV
+                << " amp=" << lrFx.mfShakeAmplitude
+                << " frq=" << lrFx.mfShakeFrequency
+                << " typ=" << static_cast<u32>(lrFx.mu8ShakeType)
+                << " lag=" << lrFx.mfCameraLag
+                << "\n";
+            ++siFrame;
+        }
+
         // The collision-generator view of an embedded aggregate. Takes a NAMED member's
         // address (never an offset into this class's storage) -- the X360 tears the embedded
         // CgsGraphics::Camera down through BaseCollisionGenerator::Destruct because on this
@@ -290,7 +330,18 @@ namespace BrnDirector
         mArbitrator.Construct();
 
         // ⚠️ GATE: the VMX/LCG camera-shake seed pipeline into maRandom.
-        // ⚠️ GATE: KeyAnimShakeController::Construct / ShotSelector::Construct.
+
+        // ⭐ REAL (2026-09-06, camera-shake lane): the camera finaliser's own seed --
+        // InertiaController::miFrame = 0, mfShakeScale = 0 and
+        // KeyAnimShakeController::Construct(lpResourceManager), which the console emits inline
+        // here at 0x8225B7E0..0x8225B7E8 with r9 == &mCameraFinaliser and r4 == r29 == this
+        // function's own lpResourceManager argument. It was gated together with
+        // ShotSelector::Construct on the grounds that KeyAnimShakeController had no home;
+        // it has one now, and WITHOUT this seed its shot group pointer, its RNG ring and its
+        // shot clock would all start as allocator garbage the first time a shake is requested.
+        mCameraFinaliser.Construct(lpResourceManager);
+
+        // ⚠️ GATE: ShotSelector::Construct.
 
         // ⭐ REAL (was held back for host size): the ICE wrapper.
         mICEWrapper.Construct();
@@ -2000,6 +2051,10 @@ namespace BrnDirector
         // Validate (asserts on NaN / unreasonable position), then convert to the graphics
         // camera and publish BOTH forms into the director output buffer.
         lCamera.ValidateTransformWithDebugInfo();
+
+        // [diag] BRN_CAMERA_TRACE -- the per-frame published-camera witness (see the helper).
+        BrnDiag_ReportCamera(lCamera);
+
         lCamera.CopyToCgsCamera(&mCgsCamera);
 
         lpIO->mpOutputBuffer->SetCgsCamera(mCgsCamera);
