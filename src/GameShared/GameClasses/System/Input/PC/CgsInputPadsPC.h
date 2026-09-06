@@ -8,17 +8,20 @@
 // CgsInput::DeviceX360Pad::Update @0x828E7AB0 -> CgsInput::InputPads::Update
 // @0x828F8690 -> CgsInput::InputPads::FillRawData @0x828E7350 -> the
 // gaDefaultGameInputMapping action tables) fills each port's
-// CgsInput::InputIO::PadOutputInformation record in the module output buffer;
-// none of that pass is reconstructed (InputPads::Update is a HOLE in the IDA
-// export set and the mapping table is un-exported rodata -- see the park at the
-// top of the .cpp). This leaf stands in for it on PC: it reads the host keyboard
+// CgsInput::InputIO::PadOutputInformation record in the module output buffer.
+// InputPads::Update is a HOLE in the IDA export set and the mapping table is
+// un-exported rodata, so neither has a dossier -- but BOTH were recovered from
+// the image on 2026-09-06 (ppcdis of 0x828F8690; the 112 bytes at 0x82CDBEB8),
+// and the pad half of this leaf now IS that table. See the banner at the top of
+// the .cpp. This leaf stands in for the rest on PC: it reads the host keyboard
 // (focus-gated GetAsyncKeyState) and, when present, the XInput pad 0
 // (XInputGetState via the dynamically loaded system XInput DLL), and publishes
 // the player-0 pad record with the same observable contract the console fill
 // produces:
 //   - maActionInfo[k].mfValue / .muStatus (bit0 held / bit1 pressed / bit2
 //     released) for the EGameInputActions slots the controller bridges consume:
-//     the GUI rows (45 accept, 49 stop/back, 41 menu-next, 42 menu-prev -- the
+//     the GUI rows (49 accept, 50 back, 45 START, 41 menu-prev, 42 menu-next --
+//     the vocabulary repaired 2026-08-29; the
 //     ids BootLegal reads back out of the bridge's GuiEventControllerInput*
 //     events) AND the DRIVING rows BridgeControllerToWorld @0x823CD890 reads
 //     (0 ACCELERATE, 1 BRAKE, 2 HANDBRAKE, 3 BOOST, 5 CHANGEVIEW, 7 RESET,

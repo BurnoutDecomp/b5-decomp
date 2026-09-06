@@ -33,19 +33,34 @@
 //        PadOutputInformation::GetActionInfo(), plus SetPlayerId / SetType /
 //        SetPadIdle. That record is what this leaf writes directly.
 //
-// ⚠️ HONEST PARK -- gaDefaultGameInputMapping IS NOT RECOVERED.
-// InputPads::Update @0x828F8690 is a HOLE in the IDA export set (no
-// .ida-exports/BURNOUT_X360_ARTIST.XEX/0x828F8690.json; it is only reachable as
-// an xref name from FillRawData), and gaDefaultGameInputMapping is a rodata DATA
-// symbol with no export at all, so the console's control->action table cannot be
-// read on this host (no IDA install; only .i64 databases are present). The
-// per-action SEMANTICS are attested -- EGameInputActions
+// ✅✅ gaDefaultGameInputMapping IS RECOVERED (bug-test wave, 2026-09-06, lane input).
+// This banner used to read "IS NOT RECOVERED ... cannot be read on this host", and on the
+// strength of that park EVERY pad binding in this file was a PC guess. Both halves of the
+// park were wrong, and the fix was reading the image, not reasoning about it:
+//   * InputPads::Update @0x828F8690 is indeed an export HOLE -- but tools/re/ppcdis.py
+//     disassembles it straight out of the flat image, and it is the function that walks the
+//     table (`addi r9, r10, 0x7BA` @0x828F88D8, 28 iterations of `lbz`/`extsb`/`slwi 3`/
+//     `lfsx`/`fcmpu`/`stfsx` -- i.e. per raw control i, per action id in entry i,
+//     maActionInfo[id].mfValue = MAX(mfValue, rawControl[i]); -1 == no action).
+//   * gaDefaultGameInputMapping has no data export, but it does not need one: it is the
+//     LITERAL ARGUMENT of BrnGame::BrnGameModule::PrepareInitialInputMapping @0x823BCF40 --
+//         PostWorldInputBuffer::PostMappingRequest(lpInputBuffer, &unk_82CDBEB8, -1)
+//     which memcpy's exactly 112 bytes from 0x82CDBEB8, and
+//     InputModule::ProcessMappingQueue @0x828E7098 copies those 112 bytes into all four
+//     ports (pad id -1 == "all pads"). It is the ONLY PostMappingRequest call site in the
+//     build, so 0x82CDBEB8 is the console's whole control->action map. 112 bytes / 4 == the
+//     28 pad controls of CgsInput::EPadButton; InputPads::Construct @0x828EFAF0 pre-fills
+//     each port's copy with 112 bytes of -1, so nothing else contributes.
+// The table is transcribed verbatim into KA_DEFAULT_GAME_INPUT_MAPPING below and is now the
+// ONLY thing that decides what the PAD does. tools/tests/offline/input_mapping_coverage.py
+// re-reads 0x82CDBEB8 out of the image and diffs it against this build's own
+// `[input-map]` dump, so a future drift is a red test rather than a comment.
+// The per-action SEMANTICS were already attested -- EGameInputActions
 // (references/DecFIGS/dwarfdump/GameSource/Input/GameInputActions.h:24) and
-// EPadButton/EPadAxis (.../Devices/PS3/CgsInputDevicePS3Pad.h:40/:84) -- and the
-// CONSUMER side is attested store-for-store by BridgeControllerToWorld
-// @0x823CD890. What is NOT attested is which pad control the console binds to
-// which action; the KA_BINDINGS table below is therefore a PC-side binding
-// choice, flagged as such, and is the ONE place any binding lives.
+// EPadButton/EPadAxis (.../Devices/PS3/CgsInputDevicePS3Pad.h:40/:84) -- as was the
+// CONSUMER side, store-for-store, by BridgeControllerToWorld @0x823CD890.
+// ⚠️ The KEYBOARD half (KA_BINDINGS) is still a PC binding choice: the console has no
+// keyboard and there is no table to recover for one. It is flagged as such at its own banner.
 // ============================================================================
 
 extern "C" __declspec(dllimport) short __stdcall GetAsyncKeyState(int vKey);
@@ -126,7 +141,18 @@ namespace
     // because the console applies the curve in the DEVICE layer -- i.e. BEFORE the pad
     // record this leaf writes. Feeding raw values here would be a different signal.
     // ------------------------------------------------------------------------------------
-    const f32 KF_CONTROL_DOWN_THRESHOLD = 0.2f;        // Construct this+212: raw > 0.2 => "down"
+    // ⚠️ TWO DIFFERENT "down" THRESHOLDS, and this file used the wrong one for the actions.
+    //   * 0.2 (DeviceX360Pad::Construct this+212) is the DEVICE's per-CONTROL threshold. It
+    //     feeds only the device's own 28-bool is-down/was-down array (Update @0x828E7AB0's
+    //     `*v89 = *v88 > *(a1 + 212)` tail), which nothing in the action path reads --
+    //     FillRawData @0x828E7350 accumulates the raw FLOATS (device+76+4i), not the bools.
+    //   * 0.1 (the literal at rodata 0x820F78E4) is the threshold InputPads::Update
+    //     @0x828F8690 compares each ACTION's accumulated mfValue against before setting
+    //     muStatus bit0/bit1/bit2 (`lfs f0, 0x78e4(r17)` / `fcmpu` / `blt` @0x828F89B4).
+    // This leaf used 0.2 for the action test, so an analogue source (a trigger) counted as
+    // held later than the console counts it. The device constant is kept for the curve
+    // constants around it; the action test now uses the console's own 0.1.
+    const f32 KF_ACTION_DOWN_THRESHOLD  = 0.1f;        // 0x820F78E4, InputPads::Update
     const f32 KF_TRIGGER_SATURATION     = 0.9f;        // Construct this+224
     const f32 KF_TRIGGER_DEADZONE       = 0.1f;        // Construct this+228
     const f32 KF_STICK_SATURATION       = 0.9f;        // Construct this+232
@@ -259,42 +285,146 @@ namespace
     // "GO_BACK" from one press. 'P' is already action 8 (world START) and pad START already
     // emits 8, so 'P'/START emitting 8 + 45 together IS the console control.
     //
-    // ⚠️ ONE PHYSICAL PRESS => EXACTLY ONE GUI ACTION ID. That rule shapes three choices
-    // below and is why this table does not simply multi-map everything:
-    //   * the pad DPAD's VERTICAL axis serves 41/42 (the family every menu reads) and its
-    //     HORIZONTAL axis serves 39/40; the numpad cluster 8/2/4/6 exposes the full 37..40
-    //     dpad family for the map's filter panel. Putting DPAD_UP on both 37 and 41 would
-    //     double-step BrnGui::OnlineGameOptions, which reads both families in one handler.
-    //   * 43/44 get ',' and '.' rather than the arrow keys, because CarSelectLivery reads
-    //     41 and 43 in the same switch and CarSelectVehicle reads 39/40 and 43/44 in the
-    //     same handler (39/40 = hold-to-scroll, 43/44 = step).
-    //   * 56/57 are KEYBOARD ONLY (PageUp/PageDown). The pad triggers stay on actions 0/1;
-    //     stacking 56/57 onto them would make one trigger pull emit two action ids.
-    // FLAG PC binding choice: every key below is a PC choice, not console truth --
-    // gaDefaultGameInputMapping is still unrecovered (see the park at the top of the file).
-    // Only the action SEMANTICS are attested.
+    // ⛔⛔ THE "ONE PHYSICAL PRESS => EXACTLY ONE GUI ACTION ID" RULE WAS A GUESS, AND THE
+    // CONSOLE REFUTES IT. It used to stand here and it is why this table did not multi-map:
+    // DPAD_UP was given 41 only, 37/38 were keyboard-only, 43/44 were ',' and '.', 56/57 were
+    // keyboard-only "because stacking them on the triggers would emit two action ids from one
+    // pull". gaDefaultGameInputMapping (now read out of the image, see the banner at the top)
+    // does exactly what the rule forbade: entry 0 (E_PADBUTTON_UP) is { 37, 41, 58, 14 } --
+    // ONE dpad press emits FOUR action ids, and every other entry carries two or three. The
+    // multi-id fan-out IS the console's design; screens ignore the ids they do not handle.
+    // The measured cost of the rule was 29 player-visible pad bindings that simply did not
+    // exist on PC -- LOOKBACK on L1, RESET on R1, map zoom on L2, event inspect on R2, the
+    // three GUI_OPTION rows, DIRTY_TRICK, both thumb-stick clicks, menu left/right on the dpad
+    // and menu navigation on the left stick, which is the bug this file was fixed for.
     //
-    // ⚠️ NOT BOUND (honest gaps, all of them consumed by the bridge but with no defensible
-    // host control that would not double-fire): action 10 POWERSWERVE_R -> mbToggle, action 4
-    // CRASHBREAKER, action 6 LOOKBACK, action 9 POWERSWERVE_L, action 11 DIRTY_TRICK, action
-    // 12 SCREENSHOT, 47 GUI_LTHUMB (pad L3 is already 13 HORN), 48 GUI_RTHUMB, the three
-    // GUI_OPTION* rows and 59 GUI_CAR_LOG. They stay 0 rather than guessed.
+    // FLAG PC binding choice: only the KEYBOARD rows below are a PC choice -- the console has
+    // no keyboard, so there is no table to recover for one. The PAD is no longer a choice at
+    // all: it is KA_DEFAULT_GAME_INPUT_MAPPING, transcribed from 0x82CDBEB8.
     // ====================================================================================
 
-    // Which XInput analogue axis, if any, additionally feeds an action's value.
-    enum EPcAnalogueSource
+    // ====================================================================================
+    // gaDefaultGameInputMapping -- the console's ActionMapping[28], each entry four
+    // EGameInputActions ids (-1 == unused), transcribed byte-for-byte from the X360 image at
+    // 0x82CDBEB8 (file offset 0xCDBEB8 in the flat dump; see the banner at the top of this
+    // file for the three console functions that produce, distribute and consume it).
+    // Row i is CgsInput::EPadButton i; the comment names it. Verified against the image by
+    // tools/tests/offline/input_mapping_coverage.py, which re-reads those 112 bytes.
+    //
+    // ⓘ Rows 24..27 are the WHEEL controls. DeviceX360Pad::Update @0x828E7AB0 writes 0.0 into
+    // them for every non-wheel device (its `meType == 2` arm is the only writer), so they are
+    // inert for a pad -- they are kept because the table is transcribed, not curated.
+    // ====================================================================================
+    const u32 KU_NUM_PAD_CONTROLS = 28;   // FillRawData @0x828E7350's `i < 28` + lbValidControl
+    const u32 KU_MAPPING_SLOTS    = 4;    // int8_t[4] per entry; 28 * 4 == the 112-byte memcpy
+
+    const s8 KA_DEFAULT_GAME_INPUT_MAPPING[KU_NUM_PAD_CONTROLS][KU_MAPPING_SLOTS] =
     {
-        E_PCANALOGUE_NONE     = 0,
-        E_PCANALOGUE_LTRIGGER = 1,   // XINPUT bLeftTrigger  (E_PADBUTTON_L2, control 14)
-        E_PCANALOGUE_RTRIGGER = 2    // XINPUT bRightTrigger (E_PADBUTTON_R2, control 15)
+        { 37, 41, 58, 14 },   //  0 E_PADBUTTON_UP        GUI_DPAD_UP, GUI_UP, GUI_EVENT_DETAILS, dbg
+        { 38, 42, 60, 15 },   //  1 E_PADBUTTON_DOWN      GUI_DPAD_DOWN, GUI_DOWN, SET_PLAYERSTATS_MAX, dbg
+        { 39, 43, 59, 16 },   //  2 E_PADBUTTON_LEFT      GUI_DPAD_LEFT, GUI_LEFT, GUI_CAR_LOG, dbg
+        { 40, 44, -1, 17 },   //  3 E_PADBUTTON_RIGHT     GUI_DPAD_RIGHT, GUI_RIGHT, dbg
+        {  8, 45, -1, -1 },   //  4 E_PADBUTTON_START     START, GUI_START
+        { 50, 46, -1, 36 },   //  5 E_PADBUTTON_SELECT    GUI_CANCEL, GUI_BACK, DEBUG_STEP   (the Back button)
+        { 13, 47, -1, 34 },   //  6 E_PADBUTTON_LTHUMB    HORN, GUI_LTHUMB, dbg              (L3)
+        { 12, 48, -1, 35 },   //  7 E_PADBUTTON_RTHUMB    SCREENSHOT, GUI_RTHUMB, dbg        (R3)
+        {  3, 49, -1, 19 },   //  8 E_PADBUTTON_CROSS     BOOST, GUI_SELECT, dbg             (A)
+        { 11, 53, 50, 21 },   //  9 E_PADBUTTON_CIRCLE    DIRTY_TRICK, GUI_OPTION2, GUI_CANCEL, dbg (B)
+        {  2, 51, -1, 20 },   // 10 E_PADBUTTON_SQUARE    HANDBRAKE, GUI_OPTION0, dbg        (X)
+        {  5, 52, -1, 18 },   // 11 E_PADBUTTON_TRIANGLE  CHANGEVIEW, GUI_OPTION1, dbg       (Y)
+        {  6, 54, -1, 24 },   // 12 E_PADBUTTON_L1        LOOKBACK, GUI_LSHOULDER, dbg
+        {  7, 55, -1, 25 },   // 13 E_PADBUTTON_R1        RESET, GUI_RSHOULDER, dbg
+        {  1, 56, -1, 22 },   // 14 E_PADBUTTON_L2        BRAKE, GUI_LTRIGGER, dbg           (left trigger)
+        {  0, 57, -1, 23 },   // 15 E_PADBUTTON_R2        ACCELERATE, GUI_RTRIGGER, dbg      (right trigger)
+        { -1, 41, -1, 26 },   // 16 E_PADBUTTON_ANALOGUE_0_UP     GUI_UP, dbg               (left stick)
+        { -1, 42, -1, 27 },   // 17 E_PADBUTTON_ANALOGUE_0_DOWN   GUI_DOWN, dbg
+        { -1, 43, -1, 28 },   // 18 E_PADBUTTON_ANALOGUE_0_LEFT   GUI_LEFT, dbg
+        { -1, 44, -1, 29 },   // 19 E_PADBUTTON_ANALOGUE_0_RIGHT  GUI_RIGHT, dbg
+        { -1, -1, -1, 30 },   // 20 E_PADBUTTON_ANALOGUE_1_UP     dbg only                  (right stick)
+        { -1, -1, -1, 31 },   // 21 E_PADBUTTON_ANALOGUE_1_DOWN   dbg only
+        { -1, -1, -1, 32 },   // 22 E_PADBUTTON_ANALOGUE_1_LEFT   dbg only
+        { -1, -1, -1, 33 },   // 23 E_PADBUTTON_ANALOGUE_1_RIGHT  dbg only
+        {  0, 41, -1, 30 },   // 24 E_WHEELBUTTON_ACCELERATOR     wheel only (pad writes 0)
+        {  1, 42, -1, 31 },   // 25 E_WHEELBUTTON_BRAKE           wheel only
+        { -1, 43, -1, 32 },   // 26 E_WHEELBUTTON_LEFT_PADDLE     wheel only
+        { -1, 44, -1, 33 },   // 27 E_WHEELBUTTON_RIGHT_PADDLE    wheel only
     };
 
+    // CgsInput::EPadButton (CgsInputDevicePS3Pad.h:40) -- names for the [input-map] dump only.
+    const char* const KAPC_CONTROL_NAMES[KU_NUM_PAD_CONTROLS] =
+    {
+        "E_PADBUTTON_UP", "E_PADBUTTON_DOWN", "E_PADBUTTON_LEFT", "E_PADBUTTON_RIGHT",
+        "E_PADBUTTON_START", "E_PADBUTTON_SELECT", "E_PADBUTTON_LTHUMB", "E_PADBUTTON_RTHUMB",
+        "E_PADBUTTON_CROSS", "E_PADBUTTON_CIRCLE", "E_PADBUTTON_SQUARE", "E_PADBUTTON_TRIANGLE",
+        "E_PADBUTTON_L1", "E_PADBUTTON_R1", "E_PADBUTTON_L2", "E_PADBUTTON_R2",
+        "E_PADBUTTON_ANALOGUE_0_UP", "E_PADBUTTON_ANALOGUE_0_DOWN",
+        "E_PADBUTTON_ANALOGUE_0_LEFT", "E_PADBUTTON_ANALOGUE_0_RIGHT",
+        "E_PADBUTTON_ANALOGUE_1_UP", "E_PADBUTTON_ANALOGUE_1_DOWN",
+        "E_PADBUTTON_ANALOGUE_1_LEFT", "E_PADBUTTON_ANALOGUE_1_RIGHT",
+        "E_WHEELBUTTON_ACCELERATOR", "E_WHEELBUTTON_BRAKE",
+        "E_WHEELBUTTON_LEFT_PADDLE", "E_WHEELBUTTON_RIGHT_PADDLE",
+    };
+
+    // ------------------------------------------------------------------------------------
+    // The 28 raw control floats a pad device publishes, filled the way
+    // CgsInput::DeviceX360Pad::Update @0x828E7AB0 fills them on its NON-WHEEL arm
+    // (`meType != 2`), because that arm is the one an ordinary XInput pad takes:
+    //   controls 0..13   the 14 wButtons bits, 1.0 / 0.0            (stores this+76 .. this+128)
+    //   control 14/15    bLeftTrigger / bRightTrigger, normalised   (this+132 / this+136)
+    //   controls 16..19  the LEFT stick split into four one-sided magnitudes; the sign test
+    //                    is on the raw thumb word and the deadzone curve is applied to the
+    //                    magnitude, exactly as the two `if (thumb <= 0)` arms do
+    //                    (this+140/144 from sThumbLY, this+148/152 from sThumbLX)
+    //   controls 20..23  the RIGHT stick, same split (this+156/160 from RY, +164/168 from RX)
+    //   controls 24..27  0.0 -- wheel-only, written only by the `meType == 2` arm
+    // ⚠️ The stick DIRECTIONS are controls, not axes: they are what makes the left stick a
+    // menu navigator (mapping rows 16..19 -> GUI_UP/DOWN/LEFT/RIGHT). The signed axis value
+    // the same stick also produces goes to the record's leading floats, not through here.
+    // ------------------------------------------------------------------------------------
+    void FillPadRawControls(const XInputGamepad& lrGamepad, f32 lafRawControls[KU_NUM_PAD_CONTROLS])
+    {
+        for (u32 luControl = 0; luControl < KU_NUM_PAD_CONTROLS; ++luControl)
+            lafRawControls[luControl] = 0.0f;
+
+        // The wButtons bit -> EPadButton control index order of DeviceX360Pad::Update's
+        // fourteen store pairs (0x1 -> +76 == control 0 ... 0x200 -> +128 == control 13).
+        static const unsigned short KAU_BUTTON_MASKS[14] =
+        {
+            KU_XPAD_DPAD_UP, KU_XPAD_DPAD_DOWN, KU_XPAD_DPAD_LEFT, KU_XPAD_DPAD_RIGHT,
+            KU_XPAD_START,   KU_XPAD_BACK,      KU_XPAD_LTHUMB,    KU_XPAD_RTHUMB,
+            KU_XPAD_A,       KU_XPAD_B,         KU_XPAD_X,         KU_XPAD_Y,
+            KU_XPAD_LSHOULDER, KU_XPAD_RSHOULDER
+        };
+        for (u32 luButton = 0; luButton < 14; ++luButton)
+        {
+            if ((lrGamepad.wButtons & KAU_BUTTON_MASKS[luButton]) != 0)
+                lafRawControls[luButton] = 1.0f;
+        }
+
+        lafRawControls[14] = NormaliseTrigger(lrGamepad.bLeftTrigger);   // E_PADBUTTON_L2
+        lafRawControls[15] = NormaliseTrigger(lrGamepad.bRightTrigger);  // E_PADBUTTON_R2
+
+        // One-sided stick magnitudes. NormaliseThumb already carries the sign-preserving
+        // deadzone curve, so the magnitude is |curve(thumb)| on the half the stick is on.
+        const f32 lfLeftY  = NormaliseThumb(lrGamepad.sThumbLY);
+        const f32 lfLeftX  = NormaliseThumb(lrGamepad.sThumbLX);
+        const f32 lfRightY = NormaliseThumb(lrGamepad.sThumbRY);
+        const f32 lfRightX = NormaliseThumb(lrGamepad.sThumbRX);
+        if (lrGamepad.sThumbLY > 0) lafRawControls[16] =  lfLeftY;  else lafRawControls[17] = -lfLeftY;
+        if (lrGamepad.sThumbLX > 0) lafRawControls[19] =  lfLeftX;  else lafRawControls[18] = -lfLeftX;
+        if (lrGamepad.sThumbRY > 0) lafRawControls[20] =  lfRightY; else lafRawControls[21] = -lfRightY;
+        if (lrGamepad.sThumbRX > 0) lafRawControls[23] =  lfRightX; else lafRawControls[22] = -lfRightX;
+    }
+
+    // A KEYBOARD row: the host keys that stand in for one action. The pad column that used to
+    // live here is gone -- the pad comes from KA_DEFAULT_GAME_INPUT_MAPPING above, so there is
+    // exactly ONE place a pad binding can come from.
+    // ⓘ The harness channel (ConsumeHarnessAction) still looks a row up BY ACTION ID in this
+    // table, so every id it can deliver must appear here; that is unchanged.
     struct PcActionBinding
     {
-        s32              iActionId;    // EGameInputActions slot in maActionInfo[]
-        const int*       paiVKeys;     // virtual keys mapped to this action (0-terminated)
-        unsigned short   uXPadButtons; // XINPUT wButtons mask mapped to this action
-        EPcAnalogueSource eXPadAnalogue;
+        s32        iActionId;    // EGameInputActions slot in maActionInfo[]
+        const int* paiVKeys;     // virtual keys mapped to this action (0-terminated)
     };
 
     // ---- menu rows ----
@@ -346,72 +476,127 @@ namespace
     const int KAI_KEYS_HORN[]       = { 'H', 0 };
     const int KAI_KEYS_SPIN_LEFT[]  = { 'Q', 0 };
     const int KAI_KEYS_SPIN_RIGHT[] = { 'E', 0 };
-    // FLAG PC binding choice (this table is the one place bindings live -- see the banner):
-    // action 46 == EGameInputActions GUI_BACK, the Back button, which InGame turns into the
-    // OFFLINE pause -> main map. 'M' for map. ⭐ It NOW ALSO has the pad's BACK button: the
-    // stale reason it did not ("KU_XPAD_BACK is already action 7 RESET") was resolved the
-    // console's own way -- 7 RESET keeps its keyboard 'R' and gives the Back BUTTON up, so
-    // one Back press fires exactly one action id, and a controller can finally open the
-    // main menu at all (it previously could not, on any button).
+    // FLAG PC binding choice: action 46 == EGameInputActions GUI_BACK, the Back button, which
+    // InGame turns into the OFFLINE pause -> main map. 'M' for map on the keyboard. On the PAD
+    // it is mapping entry 5 (E_PADBUTTON_SELECT, the Back button) = { 50, 46, -1, 36 }, i.e.
+    // the console's Back both cancels and opens the map -- which is where the old "one press,
+    // one id" worry about stacking 50 onto Back was answered by the table itself.
     const int KAI_KEYS_PAUSE_MAP[]  = { 'M', 0 };
 
+    // ⭐ KEYBOARD ONLY. Every pad column that used to sit in these rows is gone -- the pad is
+    // KA_DEFAULT_GAME_INPUT_MAPPING now. What a key does is still a PC choice; what a BUTTON
+    // does is the console's table. The keys themselves are byte-identical to what they were,
+    // so nothing about the verified boot chain or the harness scripts moved.
     const PcActionBinding KA_BINDINGS[] =
     {
         // -- the GUI rows. The harness channel below looks a row up BY ACTION ID, never by
         //    index, so this block may be reordered or grown freely. -----------------------
-        //  id  EGameInputActions          keyboard              pad button       pad analogue
-        { E_GAMEINPUTACTIONS_GUI_SELECT, KAI_KEYS_ACCEPT, KU_XPAD_A,     E_PCANALOGUE_NONE }, // 49 accept (Enter/Space/A)
-        { E_GAMEINPUTACTIONS_GUI_CANCEL, KAI_KEYS_STOP,   KU_XPAD_B,     E_PCANALOGUE_NONE }, // 50 back   (Esc/Bksp/B)
-        { E_GAMEINPUTACTIONS_GUI_UP,     KAI_KEYS_PREV,   KU_XPAD_DPAD_UP,   E_PCANALOGUE_NONE }, // 41 HighlightPrevious
-        { E_GAMEINPUTACTIONS_GUI_DOWN,   KAI_KEYS_NEXT,   KU_XPAD_DPAD_DOWN, E_PCANALOGUE_NONE }, // 42 HighlightNext
-        // 45 GUI_START -- the START button, NOT accept. It SHARES KAI_KEYS_START and KU_XPAD_START
-        // with driving row 8 on purpose and they must never drift apart: on the console the one
-        // START control emits BOTH 8 (world start) and 45 (GUI start), so 'P'/pad-START firing
-        // two action ids here is the console control, not a double-fire bug.
-        { E_GAMEINPUTACTIONS_GUI_START,  KAI_KEYS_START, KU_XPAD_START,  E_PCANALOGUE_NONE }, // 45 START (P)
+        //  id  EGameInputActions              keyboard
+        { E_GAMEINPUTACTIONS_GUI_SELECT, KAI_KEYS_ACCEPT }, // 49 accept (Enter/Space; pad A)
+        { E_GAMEINPUTACTIONS_GUI_CANCEL, KAI_KEYS_STOP   }, // 50 back   (Esc/Bksp;    pad B + Back)
+        { E_GAMEINPUTACTIONS_GUI_UP,     KAI_KEYS_PREV   }, // 41 HighlightPrevious
+        { E_GAMEINPUTACTIONS_GUI_DOWN,   KAI_KEYS_NEXT   }, // 42 HighlightNext
+        // 45 GUI_START -- the START button, NOT accept. It SHARES KAI_KEYS_START with driving
+        // row 8 on purpose: on the console the one START control emits BOTH 8 (world start) and
+        // 45 (GUI start) -- mapping entry 4 is literally { 8, 45, -1, -1 } -- so 'P' firing two
+        // action ids here is the console control, not a double-fire bug.
+        { E_GAMEINPUTACTIONS_GUI_START,  KAI_KEYS_START  }, // 45 START (P)
 
-        // -- the dpad family. 37/38 are keyboard-only because the pad's DPAD_UP/DOWN carry
-        //    41/42 above; 39/40 take the pad's horizontal dpad, which nothing else wants.
-        { E_GAMEINPUTACTIONS_GUI_DPAD_UP,    KAI_KEYS_DPAD_UP,    0,                  E_PCANALOGUE_NONE }, // 37
-        { E_GAMEINPUTACTIONS_GUI_DPAD_DOWN,  KAI_KEYS_DPAD_DOWN,  0,                  E_PCANALOGUE_NONE }, // 38 (PauseScreen TO_COLOUR)
-        { E_GAMEINPUTACTIONS_GUI_DPAD_LEFT,  KAI_KEYS_DPAD_LEFT,  KU_XPAD_DPAD_LEFT,  E_PCANALOGUE_NONE }, // 39
-        { E_GAMEINPUTACTIONS_GUI_DPAD_RIGHT, KAI_KEYS_DPAD_RIGHT, KU_XPAD_DPAD_RIGHT, E_PCANALOGUE_NONE }, // 40
+        // -- the dpad family (37..40). On the pad these ride the dpad ALONGSIDE 41..44, which
+        //    is what mapping entries 0..3 do; the numpad/IJKL cluster is the keyboard's way in.
+        { E_GAMEINPUTACTIONS_GUI_DPAD_UP,    KAI_KEYS_DPAD_UP    }, // 37
+        { E_GAMEINPUTACTIONS_GUI_DPAD_DOWN,  KAI_KEYS_DPAD_DOWN  }, // 38 (PauseScreen TO_COLOUR)
+        { E_GAMEINPUTACTIONS_GUI_DPAD_LEFT,  KAI_KEYS_DPAD_LEFT  }, // 39
+        { E_GAMEINPUTACTIONS_GUI_DPAD_RIGHT, KAI_KEYS_DPAD_RIGHT }, // 40
 
         // -- horizontal nav / option adjust / legend ------------------------------------
-        { E_GAMEINPUTACTIONS_GUI_LEFT,  KAI_KEYS_GUI_LEFT,  0, E_PCANALOGUE_NONE }, // 43 (',')
-        { E_GAMEINPUTACTIONS_GUI_RIGHT, KAI_KEYS_GUI_RIGHT, 0, E_PCANALOGUE_NONE }, // 44 ('.')
+        { E_GAMEINPUTACTIONS_GUI_LEFT,  KAI_KEYS_GUI_LEFT  }, // 43 (',';  pad dpad-left + stick)
+        { E_GAMEINPUTACTIONS_GUI_RIGHT, KAI_KEYS_GUI_RIGHT }, // 44 ('.';  pad dpad-right + stick)
 
-        // -- map zoom / event inspect / event details (keyboard only, see the banner) ----
-        { E_GAMEINPUTACTIONS_GUI_LTRIGGER,      KAI_KEYS_GUI_LTRIGGER,  0, E_PCANALOGUE_NONE }, // 56 PageUp
-        { E_GAMEINPUTACTIONS_GUI_RTRIGGER,      KAI_KEYS_GUI_RTRIGGER,  0, E_PCANALOGUE_NONE }, // 57 PageDown
-        { E_GAMEINPUTACTIONS_GUI_EVENT_DETAILS, KAI_KEYS_EVENT_DETAILS, 0, E_PCANALOGUE_NONE }, // 58 'N'
+        // -- map zoom / event inspect / event details -----------------------------------
+        { E_GAMEINPUTACTIONS_GUI_LTRIGGER,      KAI_KEYS_GUI_LTRIGGER  }, // 56 PageUp   (pad LT)
+        { E_GAMEINPUTACTIONS_GUI_RTRIGGER,      KAI_KEYS_GUI_RTRIGGER  }, // 57 PageDown (pad RT)
+        { E_GAMEINPUTACTIONS_GUI_EVENT_DETAILS, KAI_KEYS_EVENT_DETAILS }, // 58 'N'      (pad dpad-up)
 
-        // -- driving ------------------------------------------------------------------
-        //  id  EGameInputActions       keyboard         pad button        pad analogue
-        {  0, KAI_KEYS_ACCELERATE, 0,                E_PCANALOGUE_RTRIGGER }, // ACCELERATE  (RT / Up,W)
-        {  1, KAI_KEYS_BRAKE,      0,                E_PCANALOGUE_LTRIGGER }, // BRAKE       (LT / Down,S)
-        {  2, KAI_KEYS_HANDBRAKE,  KU_XPAD_X,        E_PCANALOGUE_NONE     }, // HANDBRAKE   (X / LCtrl)
-        {  3, KAI_KEYS_BOOST,      KU_XPAD_A,        E_PCANALOGUE_NONE     }, // BOOST       (A / LShift)
-        {  5, KAI_KEYS_CHANGEVIEW, KU_XPAD_Y,        E_PCANALOGUE_NONE     }, // CHANGEVIEW  (Y / C)
-        // ⚠️ KU_XPAD_BACK REMOVED from this row (input-vocabulary wave). The Back BUTTON now
-        // belongs to 46 GUI_BACK below -- the console's Back is the open-the-map control, and
-        // it is the only pad button the main menu can be opened with. Keyboard 'R' keeps
-        // RESET, so nothing about the driving reset is lost; only its pad alias moved.
-        {  7, KAI_KEYS_RESET,      0,                E_PCANALOGUE_NONE     }, // RESET       (R)
-        {  8, KAI_KEYS_START,      KU_XPAD_START,    E_PCANALOGUE_NONE     }, // START       (Start / P)
-        { 13, KAI_KEYS_HORN,       KU_XPAD_LTHUMB,   E_PCANALOGUE_NONE     }, // HORN        (L3 / H)
-        { 54, KAI_KEYS_SPIN_LEFT,  KU_XPAD_LSHOULDER, E_PCANALOGUE_NONE    }, // GUI_LSHOULDER -> -mfSpin
-        { 55, KAI_KEYS_SPIN_RIGHT, KU_XPAD_RSHOULDER, E_PCANALOGUE_NONE    }, // GUI_RSHOULDER -> +mfSpin
+        // -- driving --------------------------------------------------------------------
+        //  id  EGameInputActions       keyboard              (the pad control, for orientation)
+        {  0, KAI_KEYS_ACCELERATE }, // ACCELERATE  (Up,W)   pad R2
+        {  1, KAI_KEYS_BRAKE      }, // BRAKE       (Down,S) pad L2
+        {  2, KAI_KEYS_HANDBRAKE  }, // HANDBRAKE   (LCtrl)  pad X
+        {  3, KAI_KEYS_BOOST      }, // BOOST       (LShift) pad A
+        {  5, KAI_KEYS_CHANGEVIEW }, // CHANGEVIEW  (C)      pad Y
+        {  7, KAI_KEYS_RESET      }, // RESET       (R)      pad R1  -- restored by the console table
+        {  8, KAI_KEYS_START      }, // START       (P)      pad START
+        { 13, KAI_KEYS_HORN       }, // HORN        (H)      pad L3
+        { 54, KAI_KEYS_SPIN_LEFT  }, // GUI_LSHOULDER -> -mfSpin (Q) pad L1
+        { 55, KAI_KEYS_SPIN_RIGHT }, // GUI_RSHOULDER -> +mfSpin (E) pad R1
 
         // -- the offline pause / open-the-map (pause wave, 2026-08-26) -------------------
         // Action 46 GUI_BACK was ABSENT FROM THIS TABLE ENTIRELY, which is why the offline
         // pause could not be reached from a PC keyboard at all: InGame::HandleControllerInput
         // has had `case E_GAMEINPUTACTIONS_GUI_BACK: PauseGame(true,false)` all along
-        // (BrnInGame.cpp) and nothing could ever deliver a 46. The pad's BACK button joined
-        // it in the input-vocabulary wave (freed from row 7 RESET above).
-        { E_GAMEINPUTACTIONS_GUI_BACK, KAI_KEYS_PAUSE_MAP, KU_XPAD_BACK, E_PCANALOGUE_NONE }, // 46 (M / Back)
+        // (BrnInGame.cpp) and nothing could ever deliver a 46. On the pad it is mapping entry
+        // 5 (the Back button), which also carries 50 GUI_CANCEL.
+        { E_GAMEINPUTACTIONS_GUI_BACK, KAI_KEYS_PAUSE_MAP }, // 46 (M)
     };
     const u32 KU_NUM_BINDINGS = sizeof(KA_BINDINGS) / sizeof(KA_BINDINGS[0]);
+
+    // ---- [input-map] the build says what it binds -----------------------------------------
+    // DIAG. NOT IN THE X360 BINARY. Opt-in (BRN_INPUT_MAP_DUMP=1), printed ONCE at the first
+    // input update, 28 + N lines and never again -- there is no per-frame budget here at all.
+    // ⭐ WHY IT EXISTS: "the pad is missing controls" was un-measurable for as long as the
+    // console's table was believed unreadable. It is readable, and this makes the two
+    // comparable without a screenshot or a human with a controller:
+    // tools/tests/offline/input_mapping_coverage.py re-reads the same 112 bytes out of the
+    // image and diffs them against these lines (case tools/tests/cases/input_pad_coverage.ps1).
+    // A future edit that drops a binding is then a red test, not a comment nobody re-checks.
+    void DumpInputMapOnce()
+    {
+        static bool sbDumped = false;
+        if (sbDumped)
+            return;
+        static const bool s_bWanted = (std::getenv("BRN_INPUT_MAP_DUMP") != 0);
+        if (!s_bWanted)
+        {
+            sbDumped = true;      // never asked for; stop looking
+            return;
+        }
+        // ⚠️ DO NOT latch before the log stream exists. The first input update can run before
+        // CgsDev::Log::gpDebugPrint is bound, and latching there would make the witness
+        // silently never appear -- which reads in a test exactly like a missing binding.
+        if (CgsDev::Log::gpDebugPrint == 0)
+            return;
+        sbDumped = true;
+
+        *CgsDev::Log::gpDebugPrint
+            << "[input-map] pad = gaDefaultGameInputMapping @0x82CDBEB8 (X360), "
+            << static_cast<s32>(KU_NUM_PAD_CONTROLS) << " controls x "
+            << static_cast<s32>(KU_MAPPING_SLOTS) << " action slots; -1 == unbound\n";
+        for (u32 luControl = 0; luControl < KU_NUM_PAD_CONTROLS; ++luControl)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[input-map] control " << static_cast<s32>(luControl) << " "
+                << KAPC_CONTROL_NAMES[luControl] << " -> actions "
+                << static_cast<s32>(KA_DEFAULT_GAME_INPUT_MAPPING[luControl][0]) << ","
+                << static_cast<s32>(KA_DEFAULT_GAME_INPUT_MAPPING[luControl][1]) << ","
+                << static_cast<s32>(KA_DEFAULT_GAME_INPUT_MAPPING[luControl][2]) << ","
+                << static_cast<s32>(KA_DEFAULT_GAME_INPUT_MAPPING[luControl][3]) << "\n";
+        }
+        for (u32 luBind = 0; luBind < KU_NUM_BINDINGS; ++luBind)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[input-map] keyboard action " << KA_BINDINGS[luBind].iActionId
+                << " <- vk (decimal)";
+            // ⚠️ DECIMAL, and the label says so. This stream has no hex manipulator, so a
+            // literal "0x" prefix in front of it would print `0x13` for VK_RETURN (13) --
+            // a number that is wrong in both bases. (The pre-existing [input-src] line
+            // below has exactly that wart on its padButtons word; left alone here because
+            // it is not this lane's line, but do not copy the pattern.)
+            for (const int* lpiKey = KA_BINDINGS[luBind].paiVKeys; *lpiKey != 0; ++lpiKey)
+                *CgsDev::Log::gpDebugPrint << " " << *lpiKey;
+            *CgsDev::Log::gpDebugPrint << "\n";
+        }
+    }
 
     // ---- keyboard overlay for the two left-stick axes ----------------------------------
     // The console accumulates every device bound to a port into one axis value
@@ -644,6 +829,7 @@ namespace CgsInput
             std::memset(&lrPad, 0, sizeof(lrPad));
             sbInitialised = true;
         }
+        DumpInputMapOnce();   // opt-in [input-map] witness; see its banner
 
         // Host device reads. Both sources are focus-gated (see IsProcessForeground).
         const bool lbForeground = IsProcessForeground();
@@ -688,10 +874,11 @@ namespace CgsInput
         lrPad.mfAxis14  = 0.0f;   // E_WHEELAXIS_PEDALS   -- wheel devices only
 
         // ---- the per-action {value, status} table -----------------------------------------
-        // Per action: the value is the raw control value (a key or pad button has no travel,
-        // so it is full scale; a trigger carries its normalised curve), and the status is the
-        // console muStatus contract (bit0 held, bit1 pressed-this-frame, bit2 released-this-
-        // frame) with "held" being DeviceX360Pad::Update's `raw > 0.2` control-down test.
+        // Per action: the value is the MAX over every host control mapped to it (a key or pad
+        // button has no travel, so it is full scale; a trigger and a stick direction carry
+        // their normalised curve), and the status is the console muStatus contract (bit0 held,
+        // bit1 pressed-this-frame, bit2 released-this-frame) with "held" being InputPads::
+        // Update's own `mfValue > 0.1` ACTION test (0x820F78E4), not the device's 0.2.
         // ✅✅ THE OFFLINE PAUSE SHIPS (pauseresume wave, 2026-08-27). Action 46 is bound above
         // and the whole chain behind it works, pause AND resume, repeatedly:
         //     action 46 -> CrashNavMapMain::OnEnter -> GuiEventActivateCrashNav(false) ->
@@ -748,47 +935,83 @@ namespace CgsInput
         // The 2026-08-26 assert FAILED that test -- BOTH bands went to 0.000 for the remaining
         // ~2900 presents. ⛔ The absolute numbers are band-definition-specific; what transfers is
         // the SPLIT, never a threshold copied between waves.
-        static bool sabWasDown[KU_NUM_BINDINGS] = {};
+        //
+        // ⭐⭐ THE ACCUMULATION IS PER ACTION, NOT PER BINDING ROW -- that is the shape change.
+        // It used to walk KA_BINDINGS and write one action per row, which forced each action to
+        // have at most one host control and kept the edge state (sabWasDown) per ROW. The
+        // console has neither restriction: InputPads::Update @0x828F8690 MAXes every mapped
+        // control into maActionInfo[id].mfValue and only THEN, in a second pass over the
+        // actions, derives muStatus from the accumulated value against a per-ACTION previous
+        // state. Reproduced here: three devices contribute into one value array, then one
+        // status pass. That is what lets the dpad feed 37 AND 41 AND 58 at once.
+        f32 lafActionValue[E_GAMEINPUTACTIONS_COUNT];
+        for (u32 luAction = 0; luAction < E_GAMEINPUTACTIONS_COUNT; ++luAction)
+            lafActionValue[luAction] = 0.0f;
+
+        // Which source raised each action, for the [input-src] diagnostic below only.
+        bool labFromKey[E_GAMEINPUTACTIONS_COUNT]     = {};
+        bool labFromHarness[E_GAMEINPUTACTIONS_COUNT] = {};
+        bool labFromPad[E_GAMEINPUTACTIONS_COUNT]     = {};
+
+        // ---- device 1+2: the host keyboard and the harness's named-event channel ----------
+        // ⓘ Order and short-circuiting are UNCHANGED from the per-row loop this replaces:
+        // ConsumeHarnessAction is still not called when a key for the same action is already
+        // down, which matters because the menu channels are AUTO-RESET and a second call would
+        // consume the request a second time. The pad is read after, and never gated a consume.
         for (u32 luBind = 0; luBind < KU_NUM_BINDINGS; ++luBind)
         {
             const PcActionBinding& lrBinding = KA_BINDINGS[luBind];
+            const s32 liAction = lrBinding.iActionId;
 
-            // ⓘ The two source flags are hoisted out of the tests they used to be inlined in so
-            // that [input-src] below can NAME the source. The tests, their order and their
-            // short-circuiting are unchanged -- ConsumeHarnessAction is still not called when a key
-            // is already down, which matters because the menu channels are AUTO-RESET and a second
-            // call would consume the request a second time.
-            f32 lfValue = 0.0f;
             const bool lbFromKey = lbForeground && AnyKeyDown(lrBinding.paiVKeys);
-            if (lbFromKey)
-                lfValue = 1.0f;
-            bool lbFromHarness = false;
-            if (lfValue < 1.0f && ConsumeHarnessAction(lrBinding.iActionId))
+            const bool lbFromHarness = !lbFromKey && ConsumeHarnessAction(liAction);
+            if (lbFromKey || lbFromHarness)
             {
-                lbFromHarness = true;
-                lfValue = 1.0f;
+                if (lafActionValue[liAction] < 1.0f)
+                    lafActionValue[liAction] = 1.0f;      // a key has no travel
+                labFromKey[liAction]     = labFromKey[liAction]     || lbFromKey;
+                labFromHarness[liAction] = labFromHarness[liAction] || lbFromHarness;
             }
-            if (lbXPad)
+        }
+
+        // ---- device 3: the XInput pad, through the CONSOLE's own mapping table -------------
+        // The two nested loops ARE InputPads::Update's mapping walk (@0x828F88C8..0x828F898C):
+        // for each raw control, for each of its four action slots, MAX the control's value into
+        // that action. -1 slots are skipped exactly as the `cmpwi r10, -1 / beq` arms do.
+        if (lbXPad)
+        {
+            f32 lafRawControls[KU_NUM_PAD_CONTROLS];
+            FillPadRawControls(lXState.Gamepad, lafRawControls);
+            for (u32 luControl = 0; luControl < KU_NUM_PAD_CONTROLS; ++luControl)
             {
-                if (lrBinding.uXPadButtons != 0
-                    && (lXState.Gamepad.wButtons & lrBinding.uXPadButtons) != 0)
+                const f32 lfRaw = lafRawControls[luControl];
+                for (u32 luSlot = 0; luSlot < KU_MAPPING_SLOTS; ++luSlot)
                 {
-                    lfValue = 1.0f;
+                    const s32 liAction = KA_DEFAULT_GAME_INPUT_MAPPING[luControl][luSlot];
+                    // FLAG PC-platform leaf: the `< 0` half is the console's own `cmpwi -1`
+                    // skip; the upper half is a transcription guard, not console behaviour --
+                    // the console indexes maActionInfo[] unchecked, and the largest id in the
+                    // table is 60 (== E_GAMEINPUTACTIONS_SET_PLAYERSTATS_MAX, in range), so it
+                    // can only fire if someone mistypes a row. DELETE-WHEN the table is
+                    // generated from the image rather than transcribed.
+                    if (liAction < 0 || liAction >= E_GAMEINPUTACTIONS_COUNT)
+                        continue;
+                    if (lfRaw > lafActionValue[liAction])
+                        lafActionValue[liAction] = lfRaw;
+                    if (lfRaw > KF_ACTION_DOWN_THRESHOLD)
+                        labFromPad[liAction] = true;
                 }
-                // FillRawData accumulates several controls onto one action by MAX, so an
-                // analogue source only raises the value a digital source already set.
-                f32 lfAnalogue = 0.0f;
-                if (lrBinding.eXPadAnalogue == E_PCANALOGUE_LTRIGGER)
-                    lfAnalogue = NormaliseTrigger(lXState.Gamepad.bLeftTrigger);
-                else if (lrBinding.eXPadAnalogue == E_PCANALOGUE_RTRIGGER)
-                    lfAnalogue = NormaliseTrigger(lXState.Gamepad.bRightTrigger);
-                if (lfAnalogue > lfValue)
-                    lfValue = lfAnalogue;
             }
+        }
 
-            const bool lbDown = (lfValue > KF_CONTROL_DOWN_THRESHOLD);
+        // ---- the status pass (InputPads::Update @0x828F89B4, per ACTION) -------------------
+        static bool sabActionWasDown[E_GAMEINPUTACTIONS_COUNT] = {};
+        for (u32 luAction = 0; luAction < E_GAMEINPUTACTIONS_COUNT; ++luAction)
+        {
+            const f32  lfValue = lafActionValue[luAction];
+            const bool lbDown  = (lfValue > KF_ACTION_DOWN_THRESHOLD);
 
-            // ---- [input-src] WHO PRESSED THE BUTTON THAT PAUSED THE WORLD ----------------------
+            // ---- [input-src] WHO PRESSED THE BUTTON THAT PAUSED THE WORLD ------------------
             // DIAG. NOT IN THE X360 BINARY. Always on for the two ids that stop the simulation --
             // 45 GUI_START (-> InGame::PauseGame(true,true) -> CrashNavDriverDetails) and 46
             // GUI_BACK (-> PauseGame(true,false) -> CrashNavMapMain). Both post
@@ -804,35 +1027,33 @@ namespace CgsInput
             // These two ids fire at most a handful of times in a run, so there is no budget and no
             // env gate -- an opt-in diagnostic is exactly what was missing when those runs were read.
             // DELETE-WHEN the spontaneous press is explained.
-            if (lbDown && !sabWasDown[luBind]
-                && (lrBinding.iActionId == E_GAMEINPUTACTIONS_GUI_START
-                    || lrBinding.iActionId == E_GAMEINPUTACTIONS_GUI_BACK)
+            if (lbDown && !sabActionWasDown[luAction]
+                && (luAction == static_cast<u32>(E_GAMEINPUTACTIONS_GUI_START)
+                    || luAction == static_cast<u32>(E_GAMEINPUTACTIONS_GUI_BACK))
                 && CgsDev::Log::gpDebugPrint != 0)
             {
-                const bool lbFromPad = lbXPad && lrBinding.uXPadButtons != 0
-                                       && (lXState.Gamepad.wButtons & lrBinding.uXPadButtons) != 0;
                 *CgsDev::Log::gpDebugPrint
-                    << "[input-src] action " << lrBinding.iActionId
-                    << " PRESSED -- key " << (lbFromKey ? 1 : 0)
-                    << " padbtn " << (lbFromPad ? 1 : 0)
-                    << " harness " << (lbFromHarness ? 1 : 0)
+                    << "[input-src] action " << static_cast<s32>(luAction)
+                    << " PRESSED -- key " << (labFromKey[luAction] ? 1 : 0)
+                    << " padbtn " << (labFromPad[luAction] ? 1 : 0)
+                    << " harness " << (labFromHarness[luAction] ? 1 : 0)
                     << " (foreground " << (lbForeground ? 1 : 0)
                     << " xpad " << (lbXPad ? 1 : 0)
                     << " padButtons 0x" << static_cast<s32>(lXState.Gamepad.wButtons)
                     << ") -- this press PAUSES THE SIMULATION\n";
             }
-            // ---- end [input-src] ---------------------------------------------------------------
+            // ---- end [input-src] -----------------------------------------------------------
 
             u32 luStatus = 0;
             if (lbDown)
-                luStatus |= 1u;                          // held
-            if (lbDown && !sabWasDown[luBind])
-                luStatus |= 2u;                          // pressed edge
-            if (!lbDown && sabWasDown[luBind])
-                luStatus |= 4u;                          // released edge
-            sabWasDown[luBind] = lbDown;
+                luStatus |= 1u;                                  // held
+            if (lbDown && !sabActionWasDown[luAction])
+                luStatus |= 2u;                                  // pressed edge
+            if (!lbDown && sabActionWasDown[luAction])
+                luStatus |= 4u;                                  // released edge
+            sabActionWasDown[luAction] = lbDown;
 
-            InputIO::ActionInfo& lrAction = lrPad.maActionInfo[lrBinding.iActionId];
+            InputIO::ActionInfo& lrAction = lrPad.maActionInfo[luAction];
             lrAction.mfValue  = lfValue;
             lrAction.muStatus = luStatus;
         }

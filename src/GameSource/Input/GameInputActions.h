@@ -11,12 +11,18 @@
 // pad + 0x18 + 8*N + 4, e.g. action 45 -> +0x184).
 //
 // PRODUCERS (host control -> action id):
-//   * console: CgsInput::InputPads::FillRawData @0x828E7350 walks gaDefaultGameInputMapping
-//     (ActionMapping[34], DWARF GameSource/Input/DefaultGameInputMapping.h:26). ⚠️ That
-//     table is NOT recovered -- no IDA export for the data symbol and none for
-//     InputPads::Update @0x828F8690 -- so the console's control->action map is unattested.
-//   * PC: CgsInput::InputPadsPC::UpdatePlayer0's KA_BINDINGS table
-//     (GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.cpp) is the one PC stand-in.
+//   * console: CgsInput::InputPads::Update @0x828F8690 walks gaDefaultGameInputMapping over
+//     the raw controls CgsInput::InputPads::FillRawData @0x828E7350 accumulated
+//     (ActionMapping[34] in the PS3 DWARF GameSource/Input/DefaultGameInputMapping.h:26;
+//     the X360 uses 28 entries -- the 112-byte memcpy). ✅ RECOVERED 2026-09-06: neither the
+//     data symbol nor InputPads::Update @0x828F8690 has an IDA export, but the table is the
+//     literal argument of PrepareInitialInputMapping @0x823BCF40
+//     (PostMappingRequest(buf, &unk_82CDBEB8, -1)) and lives at image 0x82CDBEB8, and Update
+//     disassembles with tools/re/ppcdis.py. Transcribed into
+//     GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.cpp as
+//     KA_DEFAULT_GAME_INPUT_MAPPING and re-diffed against the image by
+//     tools/tests/offline/input_mapping_coverage.py.
+//   * PC: that same table drives the PAD; KA_BINDINGS beside it is the KEYBOARD only.
 //
 // CONSUMERS (action id -> game/GUI):
 //   * driving: BrnGame::BrnGameModule::BridgeControllerToWorld @0x823CD890 reads actions
