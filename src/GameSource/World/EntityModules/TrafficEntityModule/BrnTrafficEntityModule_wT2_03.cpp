@@ -76,7 +76,12 @@ namespace
 
     // .rdata literals this TU reads by value, each named by the expression it appears in.
     const f32 KF_PARAM_MAX_PARAM_IN_SEGMENT = 0.999f;   // flt_82008984
-    const f32 KF_PARAM_PLAN_LOOKAHEAD_DIST  = 80.0f;    // flt_820BA5E8
+    // ⭐ SYMBOL CORRECTED 2026-09-06 (constant audit): the VALUE 80.0 is right, the symbol was
+    // not. flt_820BA5E8 is the .rdata word IDA anchors r20 on (`addi r20, r11, flt_820BA5E8@l`
+    // @0x82737D74) and reads 30.0; the two comparisons that actually use this distance load
+    // `flt_820BA4E0 - 0x820BA5E8` off that base at 0x827380A4 / 0x82738398, and flt_820BA4E0 is
+    // 0x42A00000 == 80.0. Anchor-register displacement, not a value error.
+    const f32 KF_PARAM_PLAN_LOOKAHEAD_DIST  = 80.0f;    // flt_820BA4E0 (read off the r20 anchor)
     const f32 KF_PARAM_DEFAULT_MAX_SPEED    = 500.0f;   // flt_8200A034
     const f32 KF_PARAM_BRAKE_LIGHT_ACCEL    = -0.6f;    // flt_820BC9D4
     const f32 KF_PARAM_BRAKE_LIGHT_SPEED    = 2.5f;     // flt_82005548

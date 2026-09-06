@@ -72,10 +72,14 @@ namespace BrnWorld
         // SINGLE fixed scale (flt_82F30E30, @0x827C74FC) that it applies to BOTH the world->screen
         // projection of the zone centre AND the zone-disc radius (asm: sphereRadius * flt_82F30E30).
         // It centres the overlay on the virtual screen and halves the label width with a single 0.5
-        // half-factor (flt_82001DA0, @0x827C73B0 into f30) used in BOTH places. Only the 0.05 scale
-        // magnitude is inferred (FLAGGED); the 0.5 is exact and the control flow (range cull,
-        // projection shape, draw order) is confirmed from the asm.
-        const f32 KF_WORLD_TO_SCREEN_SCALE = 0.05f;  // flt_82F30E30 (world units AND sphere radius -> overlay pixels)
+        // half-factor (flt_82001DA0, @0x827C73B0 into f30) used in BOTH places.
+        // ⭐ THE FLAG IS RETIRED 2026-09-06 (driving-path 1:1 constant audit). The scale magnitude
+        // was never inferred-only: flt_82F30E30 is plain initialised image data that reads
+        // 0x3E4CCCCD == 0.2, and nothing in the CRT init bank writes it, so the load at
+        // 0x827C74FC (`lfs f0, 0xE30(r24)`, r24 = 0x82F30000) takes exactly that. The inferred
+        // 0.05 was four times too small, i.e. this overlay drew the whole PVS zone map at a
+        // quarter scale.
+        const f32 KF_WORLD_TO_SCREEN_SCALE = 0.200000003f;  // flt_82F30E30 (world units AND sphere radius -> overlay pixels)
         const f32 KF_OVERLAY_HALF          = 0.5f;   // flt_82001DA0 (screen-centre origin + label-width halving)
     }
 

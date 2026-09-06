@@ -130,9 +130,17 @@ namespace Deformation
         enum ECompressPreset { E_COMPRESS_NONE = 0, E_COMPRESS_MAX_DRIVETIME = 1, E_COMPRESS_MAX_TOTAL = 2 };
 
         // ---- CompressSelectedRig_MaxDrivetime tuning (X360 .rdata) -------------------------------
-        const f32 KF_DRIVETIME_EXTENT_LIMIT  = 3.4028235e38f;  // flt_820224B0 (FLT_MAX seed)
-        const f32 KF_DRIVETIME_COMPRESS_STEP = 0.05f;          // flt_82002138 (per-iteration scale add)
-        const f32 KF_DRIVETIME_SCALE_LIMIT   = 0.99000001f;    // flt_8208F5EC (stop once scale >= ~0.99)
+        // ⭐ CORRECTED 2026-09-06 (driving-path 1:1 constant audit). The three symbol comments
+        // were rotated against the image and the STEP carried the wrong number. Read straight off
+        // CompressSelectedRig_MaxDrivetime @0x82607160's own prologue and loop:
+        //     0x82607198  lfs f28, flt_820224B0  == 0.99      -> the loop bound (fcmpu f0,f28)
+        //     0x826071A8  lfs f30, flt_82002138  == 0.01      -> the step   (fadds f0,f0,f30)
+        //     0x826071C8  lfs f31, flt_8208F5EC  == FLT_MAX   -> the seed   (min-updated at 0x82607364)
+        // The step was 0.05, five times the console's, so this dev tool searched a fifth of the
+        // scales the console does and reported the best of a coarser set as "the" answer.
+        const f32 KF_DRIVETIME_EXTENT_LIMIT  = 3.4028235e38f;  // flt_8208F5EC (FLT_MAX seed)
+        const f32 KF_DRIVETIME_COMPRESS_STEP = 0.00999999978f; // flt_82002138 (per-iteration scale add)
+        const f32 KF_DRIVETIME_SCALE_LIMIT   = 0.99000001f;    // flt_820224B0 (stop once scale >= ~0.99)
 
         // RGBA debug colours (X360 packed ARGB immediates, passed straight to the renderer).
         // rw::RGBA takes (R,G,B,A); the comment is the X360 packed 0xAARRGGBB immediate.
