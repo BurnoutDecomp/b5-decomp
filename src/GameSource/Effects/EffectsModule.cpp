@@ -682,22 +682,40 @@ void EffectsModule::PushSparkParams()
     // thirteen values below is a divisor or a gate downstream, and a collection that did not
     // resolve hands back Attrib::DefaultDataArea(0x90) -- 144 bytes of zeros that read as a
     // perfectly plausible "the parameters are all zero" rather than as a load failure.
+    //
+    // CHANGE-GATED, NOT ONCE-ONLY. A once-only line here LIED: PushSparkParams runs
+    // from Prepare BEFORE 'PostFx/postfxvault.bin' registers and again from Update
+    // after it has, so the first call legitimately reads four zeros and a once-only
+    // print freezes that reading for the whole run. It printed "376835=0 ... 554431=0"
+    // on the very run in which the vault had just been ported and every value WAS
+    // live. It now prints whenever the validity word CHANGES, and prints the numbers,
+    // so "resolved" is checkable against the vault's own bytes rather than asserted.
     {
-        static bool sbLogged = false;
-        if (!sbLogged)
+        static u32 suLastSparkValidity = 0xFFFFFFFFu;
+        const char* const lpcEnv = std::getenv("BRN_SPARK_DIAG");
+        if (lpcEnv != 0 && lpcEnv[0] != '0')
         {
-            const char* const lpcEnv = std::getenv("BRN_SPARK_DIAG");
-            if (lpcEnv != 0 && lpcEnv[0] != '0')
+            u32 luValidity = 0;
+            for (u32 luSlot = 0; luSlot < KU_NUM_SPARK_PARAMS; ++luSlot)
+                luValidity |= (mSparkParams[luSlot].IsValid() ? 1u : 0u) << luSlot;
+            if (luValidity != suLastSparkValidity)
             {
-                sbLogged = true;
-                char lacMsg[256];
+                suLastSparkValidity = luValidity;
+                char lacMsg[320];
                 std::snprintf(lacMsg, sizeof(lacMsg),
                     "[spark] sparkeffect collections: %s=%d %s=%d %s=%d %s=%d "
-                    "(1 == the collection resolved; 0 == DefaultDataArea zeros)\n",
-                    "376835", mSparkParams[0].IsValid() ? 1 : 0,
-                    "376836", mSparkParams[1].IsValid() ? 1 : 0,
-                    "376837", mSparkParams[2].IsValid() ? 1 : 0,
-                    "554431", mSparkParams[3].IsValid() ? 1 : 0);
+                    "(1 == the collection resolved; 0 == DefaultDataArea zeros)"
+                    " | 376835 grav=%.3f rad=%.4f blur=%.4f life0=%.3f tex=%s\n",
+                    "376835", (luValidity & 1u) != 0 ? 1 : 0,
+                    "376836", (luValidity & 2u) != 0 ? 1 : 0,
+                    "376837", (luValidity & 4u) != 0 ? 1 : 0,
+                    "554431", (luValidity & 8u) != 0 ? 1 : 0,
+                    static_cast<double>(mSparkParams[0].GravityStrength()),
+                    static_cast<double>(mSparkParams[0].SparkRadius()),
+                    static_cast<double>(mSparkParams[0].MotionBlurTime()),
+                    static_cast<double>(mSparkParams[0].Lifetimes().x),
+                    (mSparkParams[0].SparkTextureName() != 0)
+                        ? mSparkParams[0].SparkTextureName() : "(null)");
                 CgsDev::Log::WriteToLog(lacMsg);
             }
         }
