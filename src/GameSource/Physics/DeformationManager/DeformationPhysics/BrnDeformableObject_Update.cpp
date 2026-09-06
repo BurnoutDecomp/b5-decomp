@@ -1572,6 +1572,41 @@ namespace Deformation
     //  (2) IK-PART UPDATE (0x8260891C..0x82608940): for each of the miNumIKBodyParts parts, skip
     //      parts whose state == 4 (E_PART_STATE_DETATCHED, DWARF spelling -- detached parts are
     //      simulated by the part pool, not IK), else IKBodyPart::Update().
+    //
+    // ⭐⭐⭐ 2026-09-07 (deformation-SHAPE) -- THE REST POSE IS EXACT, FLEET-WIDE. Four candidate
+    // causes of the owner's "the car can deform like that while in retail it doesn't" screenshot
+    // are CLOSED here, all without a run. Do not re-chase them.
+    //   (a) The IK layer cannot smear. IKDrivenPoint::ResolveConstraint re-extends to an EXACT
+    //       distance from each endpoint, once per endpoint per Update, so a driven point is a
+    //       RIGID two-bone linkage fully determined by its two tag points -- not a spring that
+    //       could relax wrongly. Panels cannot stretch unless the TAG POINTS move wrongly.
+    //   (b) Pass (1)'s blend reproduces the authored rest pose. At rest the two sensors' live
+    //       sphere centres ARE their authored mInitialOffset (spec +272, stride 64), so
+    //       (sensorOff[sA]+offA)*wA + (sensorOff[sB]+offB)*wB must equal the tag's own
+    //       mInitialPosition. Measured over the shipped bundles: 429 cars, 41,360 tag points,
+    //       worst residual 4.17e-07 m, zero weight anomalies of any kind (packed sum, scalar sum,
+    //       packed-vs-scalar). tools/re/ik_rest_identity.py (parent repo) re-runs it.
+    //       ⚠ THE TAUTOLOGY GUARD IS THE POINT: most tags are single-bone (sA == sB, wA 1, wB 0)
+    //       and pass for free. 16,359 rows (39.6%) are genuine two-bone blends where the identity
+    //       CANNOT pass for free, and the residual is quoted over those separately. Three negative
+    //       controls bite -- a 5 cm sensor nudge gives 2.5 cm (exactly half, since wA=wB=0.5), a
+    //       64->80 sensor stride (an x64-widening ghost) gives 2.45 m, an off-by-one record base
+    //       gives 2.07 m.
+    //   (c) The packed .w weights, the SCALAR pair at spec +48/+52, and the sensor indices at
+    //       TagPointSpec +60/+62 are all right, and vehicledeform_transcode.py ports the record
+    //       with schema coverage and seven biting negative controls. "The porter broke the
+    //       weights" is closed before it starts.
+    //   (d) The impulse chain is wired the way the DATA expects. maNextSensor[] indexes
+    //       ImpulsePasser::mapCollidableBodies, which is 1-BASED FOR SENSORS: slot 0 is the
+    //       vehicle body (Lifecycle :999) and sensor i registers at spec->mu8SceneIndex == i+1
+    //       (Lifecycle :1198, `lbz 0x32(spec)`). The authored values span 0..20 for 20 sensors and
+    //       never reach 21..24, which is that layout exactly. So `next == 0` means "hand the
+    //       remainder to the car body" -- the crumple terminus -- not "no neighbour", and there
+    //       are NO self-loops. (Counting self-loops 0-based invents seven of them; that reading is
+    //       wrong.) No off-by-one here.
+    // ⇒ WHAT IS LEFT is the crash-time half: where the sensor sphere centres TRAVEL during an
+    // impact -- the per-sensor `lfRoom` crush budget, the hit direction, and how many chain hops an
+    // impulse actually makes before it terminates at the body. That needs a run, not a byte audit.
     // =============================================================================================
     void DeformableObject::UpdateIK(VecFloat lvfTime)
     {
