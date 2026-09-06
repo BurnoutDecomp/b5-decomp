@@ -19,8 +19,13 @@
 // those bits into the ring at a Vector-slot ((index + 3) & 4); each step loads the
 // slot's PREVIOUS contents first and subtracts 1.0 (-> [0, 1)). The two prior
 // draws are lvA (step 0) and lvB (step 1). Then per lane:
-//   lvScaledA = mVecRange * mVecBase + lvA      (vmaddfp v13)
-//   lvScaledB = mVecRange * mVecBase + lvB      (vmaddfp v11)
+//   lvScaledA = mVecBase + mVecRange * lvA      (vmaddfp v13, v13, v12, v10)
+//   lvScaledB = mVecBase + mVecRange * lvB      (vmaddfp v11, v13, v12, v11)
+// ^^ IDA prints vmaddfp in RAW FIELD ORDER D,A,B,C, so D = A*C + B: A == v13 == mVecRange
+//    (lvx128 v13, r4, r30 with r30 == 16), B == v12 == mVecBase (lvx128 v12, r0, r4),
+//    C == the [0,1) draw.  BASE + RANGE * r.  The first committed reading took the printed
+//    order literally and multiplied the two BOUND vectors together, then added the raw
+//    draw -- the same misread this wave corrected in Vector3Randomiser::RandomiseXYZ.
 //   lvResult  = lvScaledA * lvScaledB.w         (splat w of B, vmulfp128)
 //   lvResult.w = 1.0f                           (vrlimi128 of the 1.0 splat)
 // =============================================================================
@@ -83,18 +88,18 @@ void DebrisColourRandomiser::Randomise(Vector4& lrOut, CgsNumeric::Random& lrRan
     const Vector4 lvA = DrawNextRingVector(lrRandom);
     const Vector4 lvB = DrawNextRingVector(lrRandom);
 
-    // lvScaledA/B = mVecRange * mVecBase + draw, per lane (vmaddfp).
+    // lvScaledA/B = mVecBase + mVecRange * draw, per lane (vmaddfp; see the banner).
     Vector4 lvScaledA;
-    lvScaledA.x = mVecRange.x * mVecBase.x + lvA.x;
-    lvScaledA.y = mVecRange.y * mVecBase.y + lvA.y;
-    lvScaledA.z = mVecRange.z * mVecBase.z + lvA.z;
-    lvScaledA.w = mVecRange.w * mVecBase.w + lvA.w;
+    lvScaledA.x = mVecBase.x + mVecRange.x * lvA.x;
+    lvScaledA.y = mVecBase.y + mVecRange.y * lvA.y;
+    lvScaledA.z = mVecBase.z + mVecRange.z * lvA.z;
+    lvScaledA.w = mVecBase.w + mVecRange.w * lvA.w;
 
     Vector4 lvScaledB;
-    lvScaledB.x = mVecRange.x * mVecBase.x + lvB.x;
-    lvScaledB.y = mVecRange.y * mVecBase.y + lvB.y;
-    lvScaledB.z = mVecRange.z * mVecBase.z + lvB.z;
-    lvScaledB.w = mVecRange.w * mVecBase.w + lvB.w;
+    lvScaledB.x = mVecBase.x + mVecRange.x * lvB.x;
+    lvScaledB.y = mVecBase.y + mVecRange.y * lvB.y;
+    lvScaledB.z = mVecBase.z + mVecRange.z * lvB.z;
+    lvScaledB.w = mVecBase.w + mVecRange.w * lvB.w;
 
     // Scale lvScaledA by the w lane of lvScaledB (vspltw v12, v11, 3; vmulfp128).
     const f32 lfScale = lvScaledB.w;

@@ -76,6 +76,24 @@ namespace Gen
         f32 DragDuration()                         const { return FloatAt(0x84u); }
         f32 BounceStrength()                       const { return FloatAt(0x88u); }
 
+        // ⭐ ADDITIVE 2026-09-06 (spark-producer wave). Six more slots of the SAME 0x90 layout,
+        // every one of them a load in BrnEffects::EffectsModule::HandleSparkContacts @0x822906A8
+        // off `lwz r10, 4(r30)` with r30 == &mSparkParams[type]:
+        //   0x82290878 lfs f0,  0x5C(r10) / 0x82290880 lfs f13, 0x60(r10)
+        //        -> min/max of the RANDOM SEGMENT LENGTH the spark line is drawn along
+        //           (the result multiplies the normalised friction-stress direction);
+        //   0x82290930 lfs f12, 0x70(r8)  / 0x82290934 lfs f0,  0x6C(r8)
+        //        -> min/max of the number of sparks, which lands in the event's mfNumSparks;
+        //   0x822909D0 lfs f0,  0x54(r10) / 0x82290A0C lfs f0,  0x58(r10)
+        //        -> the event's mfVelocityInheritanceMin / Max, copied straight through.
+        // ⚠ SAME FLAG AS THE BLOCK ABOVE: the names are the CONSUMER'S, not the schema's.
+        f32 VelocityInheritanceMin()               const { return FloatAt(0x54u); }
+        f32 VelocityInheritanceMax()               const { return FloatAt(0x58u); }
+        f32 SparkLineLengthMin()                   const { return FloatAt(0x5Cu); }
+        f32 SparkLineLengthMax()                   const { return FloatAt(0x60u); }
+        f32 NumSparksMin()                         const { return FloatAt(0x6Cu); }
+        f32 NumSparksMax()                         const { return FloatAt(0x70u); }
+
         using Instance::IsValid;
 
         // Construct over the sparkeffect collection, optionally owned by lpOwner.

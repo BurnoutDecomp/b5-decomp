@@ -22,6 +22,7 @@
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleRenderer.h" // BrnParticle::Native::BrnSimpleParticleRenderer (BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleArray.h"    // BrnParticle::Native::BrnSimpleParticleArray (maSimpleParticles[13], BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnSparkRenderer.h"          // SparkRenderer / SparkArray / SparkFrameDataSet (BY VALUE)
+#include "GameSource/Effects/Particles/BrnParticleModuleIO_EventTypes.h"   // the inter-thread event records + InterThreadEventQueue<16384> (BY VALUE)
 
 namespace CgsMemory { class HeapMalloc; }   // GameShared/GameClasses/Memory/CgsHeapMalloc.h (fwd; avoids a cross-module include cycle)
 namespace renderengine { class Texture; }   // ParticleRenderData::mpEnvironmentMap (pointer-only)
@@ -78,6 +79,29 @@ namespace BrnParticle
     // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Counters the spark probe prints.
     extern u32 gauSparkTestSpawnCalls;
     extern u32 gauSparkPrepareCount;
+    // [DIAG] THE CONTACT-PRODUCER LADDER, ONE RUNG PER LINK, so a run that draws no spark says
+    // WHICH link is at fault instead of only that none reached the screen. Every one of these is
+    // a distinct failure the chain has actually had at some point:
+    //   contactCalls  -- ProcessCarContactQueues ran at all (a stub, a gate, or no caller)
+    //   hingedSeen    -- how many hinged-part contacts the queue held  (an empty producer)
+    //   hingedTyped   -- ...of those, part type 84/85                  (the wrong part types)
+    //   hingedStress  -- ...of those, past the 7.5 friction floor      (too gentle a scrape)
+    //   sparkCalls    -- HandleSparkContacts entered
+    //   sparkPosted   -- ...and AddEventSafe accepted the record       (a full/unconstructed queue)
+    //   sparkRejected -- ...rejected by its own friction threshold
+    //   eventsDrained -- records ProcessEventQueue pulled OUT of the dispatch buffer's copy
+    //                    (0 here with sparkPosted > 0 convicts the PreRenderUpdate hand-off)
+    //   lineSparks    -- SpawnSpark calls HandleSpawnSparksAlongLineEvent made
+    // DELETE-WHEN-STABLE.
+    extern u32 gauSparkContactQueueCalls;
+    extern u32 gauSparkHingedSeen;
+    extern u32 gauSparkHingedTyped;
+    extern u32 gauSparkHingedStress;
+    extern u32 gauSparkContactCalls;
+    extern u32 gauSparkContactPosted;
+    extern u32 gauSparkContactRejected;
+    extern u32 gauSparkEventsDrained;
+    extern u32 gauSparkLineSpawned;
     struct ParticleDescriptionCollection;   // SharedClasses/Graphics/ParticleDescriptionResourceType.h (handle target; pointer-only here)
 
     // A single playing LION (particle) effect slot. DWARF home ParticleModule.h:87.
@@ -439,6 +463,27 @@ namespace BrnParticle
         // @0x8227FE88 through the module vtable.
         void DispatchThreadUpdate(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInput);
 
+        // ---- the inter-thread event drain (DWARF :576 / :585 / :588 / :591 / :594) ----------
+        // X360 0x8229C418 -- walk the dispatch buffer's copy of the particle inter-thread event
+        // queue and dispatch each record on its type id. Called by DispatchThreadUpdate, ahead of
+        // the Lion effect loop. This is the only route from EffectsModule's contact drains to
+        // SparkArray::SpawnSpark.
+        void ProcessEventQueue(const CgsModule::VariableEventQueue<
+                                   KI_PARTICLE_MODULE_INTERTHREAD_COMMAND_QUEUE_MEMSIZE, 16>* lpQueue,
+                               const ParticleRenderData& lrRenderData);
+
+        // X360 0x8229A138 -- THE GRINDING-SPARK CONSUMER. Walk the contact's start->end segment
+        // and launch mfNumSparks + 1 sparks off it (SpawnSparksAlongLine is inlined here).
+        void HandleSpawnSparksAlongLineEvent(const SpawnSparksAlongLineEvent* lpEvent,
+                                             const ParticleRenderData& lrRenderData);
+
+        // X360 0x82299840 / 0x82299CC8 / 0x8229A660 -- the other three record handlers.
+        void HandleSpawnSparksFromPointEvent(const SpawnSparksFromPointEvent* lpEvent,
+                                             const ParticleRenderData& lrRenderData);
+        void HandleSpawnSparkShowerFromPointEvent(const SpawnSparkShowerFromPointEvent* lpEvent,
+                                                  const ParticleRenderData& lrRenderData);
+        void HandleFireDebrisBurstEvent(const FireDebrisBurstEvent* lpEvent);
+
         // X360 0x82278380. Resolve a handle to its playing-effect slot, or NULL when the
         // slot has been recycled (its stored handle no longer equals luHandle).
         LionEffect* GetLionEffect(u32 luHandle);
@@ -741,16 +786,41 @@ namespace BrnParticle
         // the ctor's `stbx r30` is the low byte of this word's store neighbour -- the DWARF
         // places the debris-job wait count here and the inter-thread queue right after.
         s32 miNumDebrisUpdateJobsToWaitOn;             // +0x27780 == -1
-        bool mbFlag27784;                              // +0x27784 == false (the ctor's trailing byte store)
-        u8  maPad27785To27788[0x27788 - 0x27785];
-        // +0x27784 (161668): DWARF :163 CappedInterThreadEventQueue mInterThreadEventQueue
-        // (VariableEventQueue<16384,16>, Construct'd by ParticleModule::Construct). FLAG:
-        // PLACEHOLDER on the host (its consumer is the Lion dispatch pass, not landed).
-        u8  maInterThreadEventQueuePlaceholder[0x2B7A0 - 0x27788];
-        // +0x2B7A0 (178080): DWARF :166 SparkBatchSpawnEvent mSparkSpawnBufferHeader (16 bytes:
-        // count first) and :169 mpSparkSpawnBuffer (+0x2B7B0, Prepare: Malloc(2560, 16)).
-        u32   muSparkSpawnCount;                       // +0x2B7A0 (the header's leading count; Prepare: 0)
-        u8    maSparkSpawnHeaderTail[0x2B7B0 - 0x2B7A4];
+        // ⭐⭐ +0x27784 (161668): DWARF :163 CappedInterThreadEventQueue mInterThreadEventQueue.
+        // PROMOTED 2026-09-06 (spark-producer wave) from `bool mbFlag27784` + an asm-sized
+        // u8[0x4018] placeholder to the REAL CgsModule::VariableEventQueue<16384,16>.
+        //   * the "bool the ctor zeroes last" IS this queue's leading mbIsConstructed:
+        //     ParticleModule::ParticleModule @0x827E2218 ends with `*(this+0x27784) = 0 (bool)`,
+        //     which is BaseVariableEventQueue's flag, exactly as CgsGui::GuiModule's ctor does
+        //     to its own embedded queue (the reason MarkUnconstructed() exists);
+        //   * ParticleModule::Construct @0x82294220 then calls
+        //     VariableEventQueue<16384,16>::Construct(this + 0x27784);
+        //   * the host size is 1 + 16384 + 3 pad + 3*s32 == 16400 == 0x4010, so the queue runs
+        //     +0x27784 .. +0x2B794 and the 12 bytes to the 16-aligned +0x2B7A0 are padding --
+        //     the same 0x4018 span the placeholder covered, minus the 4 the bool+pad took.
+        // It is a REAL queue now because the whole grinding-spark chain runs through it:
+        // EffectsModule::HandleSparkContacts writes it, PreRenderUpdate appends it into the
+        // dispatch buffer and ProcessEventQueue drains it.
+        CgsModule::VariableEventQueue<KI_PARTICLE_MODULE_INTERTHREAD_COMMAND_QUEUE_MEMSIZE, 16>
+              mInterThreadEventQueue;                  // +0x27784 (161668)
+        u8    maPad2B794To2B7A0[0x2B7A0 - 0x2B794];    // alignment to the 16-aligned pair below
+        // +0x2B7A0 (178080): DWARF :166/:169 name this pair mSparkSpawnBufferHeader /
+        // mpSparkSpawnBuffer (Prepare: Malloc(2560, 16)).
+        // ⚠️ THE ONLY CONSOLE CODE THAT TOUCHES THE PAIR TREATS IT AS THE **DEBRIS** BATCH.
+        // PreRenderUpdate @0x82294940..0x822949E4 reads the u16 count at +0x2B7A0, allocates
+        // `count*5 << 4` + 0x10 == count*80 + 16 bytes as event TYPE 4, memcpy's 0x10 header
+        // bytes then count*80 payload bytes out of *(this+0x2B7B0), and zeroes the count; and
+        // ProcessEventQueue's case 4 walks that event at an 80-byte stride, asserts
+        // "lDebrisData.meType < eDebrisArray_Max" and calls BrnDebrisArray::SpawnDebris.
+        // 80 is sizeof(DebrisBatchSpawnEvent::DebrisSpawnData); SparkSpawnData is 49 -> 64 and
+        // cannot produce that stride. So either ARTIST orders the DWARF's two pairs the other
+        // way round or it carries only one. NOT GUESSED -- the members keep the DWARF's names
+        // and this note carries the contradiction.
+        // The count is a u16, not a word: PreRenderUpdate reads it with `lhz r11, 0(r30)` at
+        // offset 0 of a big-endian record, which is the record's own leading uint16_t (the DWARF
+        // spells both batch headers `uint16_t mu16*Count`), not the high half of a u32.
+        u16   mu16SpawnBufferCount;                    // +0x2B7A0 (Prepare: 0)
+        u8    maSpawnBufferHeaderTail[0x2B7B0 - 0x2B7A2];
         void* mpSparkSpawnBuffer;                      // +0x2B7B0 (178096)
     };
 

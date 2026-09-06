@@ -13,7 +13,8 @@
 // of an IEEE-754 float in [1, 2) and write those float-bits into the Random's ring
 // at a Vector-slot chosen by ((index + 3) & 4). It RETURNS the slot primed on the
 // PREVIOUS call (a 1-deep pipeline): load the slot BEFORE writing new bits,
-// subtract 1.0 (components -> [0, 1)), result = mVecA * mVecB + (prev - 1.0).
+// subtract 1.0 (components -> [0, 1)), result = mVecA + mVecB * (prev - 1.0)  --
+// i.e. BASE + RANGE * r.  See the note on the vmaddfp field order in RandomiseXYZ.
 // =============================================================================
 
 #include "GameSource/Effects/BrnEffectsUtils.h"
@@ -58,12 +59,87 @@ Vector3 Vector3Randomiser::RandomiseXYZ(CgsNumeric::Random &lrRandom)
     lrRandom.mauIntegerBuffer[luSlot + 2] = luOne | (luS0Hi >> 9);
     lrRandom.muOldestBufferIndex = luSlot + 3;
 
-    // result = mVecA * mVecB + (previousDraw - 1.0), per lane.
+    // ⭐⭐ result = mVecA + mVecB * (previousDraw - 1.0), per lane -- i.e. BASE + RANGE * r,
+    // r in [0, 1). The tail is
+    //     0x82277FA0  lvx128  v13, r4, r30   ; v13 = *(this + 16) == mVecB
+    //     0x82277FA4  lvx128  v12, r0, r4    ; v12 = *(this +  0) == mVecA
+    //     0x82277FA8  vmaddfp v0, v13, v12, v0
+    // and IDA prints vmaddfp in RAW FIELD ORDER D,A,B,C, so that is D = A*C + B ==
+    // mVecB * (prev - 1.0) + mVecA. The first committed reading took the printed order at face
+    // value and wrote `mVecA * mVecB + prev`, which multiplies the two bound vectors together
+    // and then adds an unscaled [0,1) — a different function entirely (it collapses to `prev`
+    // whenever either bound is 0, and it never lands between the bounds).
+    //
+    // The caller proves the same thing independently: ParticleModule::
+    // HandleSpawnSparksAlongLineEvent @0x8229A138 builds its two randomisers as
+    //     mVecA = min * speedScale                      (stvx128 v11 -> var_150)
+    //     mVecB = max * speedScale - min * speedScale   (vsubfp v11, v10, v11 -> var_140)
+    // which is base+range and is only meaningful under this reading.
     Vector3 lvResult;
-    lvResult.x = mVecA.x * mVecB.x + lvPrev.x;
-    lvResult.y = mVecA.y * mVecB.y + lvPrev.y;
-    lvResult.z = mVecA.z * mVecB.z + lvPrev.z;
-    lvResult.w = mVecA.w * mVecB.w + lvPrev.w;
+    lvResult.x = mVecA.x + mVecB.x * lvPrev.x;
+    lvResult.y = mVecA.y + mVecB.y * lvPrev.y;
+    lvResult.z = mVecA.z + mVecB.z * lvPrev.z;
+    lvResult.w = mVecA.w + mVecB.w * lvPrev.w;
+    return lvResult;
+}
+
+// =============================================================================================
+// Vector3Randomiser::Prepare / ::RandomInterpolate -- ⭐ BODIED 2026-09-06 (spark-producer wave).
+//
+// Both were declared-only ("owned by other TUs"), which is not quite the situation: the console
+// emits NO out-of-line symbol for either (the ledger has exactly three Randomiser addresses, all
+// of them the per-component RandomiseXYZ/XYZW/Randomise), so they are header inlines there and a
+// caller could never have linked against the declaration. They are recovered from the site that
+// inlines BOTH of them, BrnParticle::ParticleModule::HandleSpawnSparksAlongLineEvent @0x8229A138.
+//
+// PREPARE STORES BASE + RANGE, NOT THE TWO BOUNDS. That handler builds two randomisers on its own
+// stack and the stores are unambiguous (0x8229A31C..0x8229A3B4):
+//     vmulfp128 v11, v11, v10          ; v11 = minBound * speedScale
+//     vmulfp128 v10, v9,  v10          ; v10 = maxBound * speedScale
+//     stvx128   v11, r0, r11           ; -> var_150   == mVecA
+//     vsubfp    v11, v10, v11          ; max*s - min*s
+//     stvx128   v11, r0, r11           ; -> var_140   == mVecB
+// and again, for the position jitter, mVecA = -K and mVecB = K - (-K) = 2K. So mVecA is the LOW
+// bound and mVecB is (high - low) -- which is exactly what makes RandomiseXYZ's own
+// `mVecA + mVecB * r` land inside [low, high). The two are one contract; neither can be read
+// without the other, and reading either backwards silently changes both.
+//
+// RANDOMINTERPOLATE IS ONE DRAW FOR ALL THREE LANES (0x8229A49C..0x8229A4F8 + 0x8229A50C..0x8229A520),
+// where RandomiseXYZ is one draw per lane. It uses the SAME Vector-slot scheme ((index + 3) & 4,
+// read the quad primed last call, write ONE new float into the slot) and then splats lane 0:
+//     lwz    r11, 0x28(r31) ; addi r11, r11, 3 ; rlwinm r11, r11, 0,29,29   ; slot = (i+3)&4
+//     lvx128 v127, (slot<<2)&~0xF, r31                                       ; the PREVIOUS quad
+//     std    seed' ; stwx bits, slot*4, r31 ; stw slot+1, 0x28(r31)
+//     vspltw v0, v127, 0 ; vsubfp128 v0, v0, 1.0 ; vmaddfp128 v13, v122, v0, v13
+// (the vspltw is spelled as an lvsl(0)+vperm128 pair, which is the same splat.) The accumulate is
+// again raw field order D,A,B,C: v13 = v122 * (r - 1.0) + v123 == RANGE * r + BASE.
+// =============================================================================================
+void Vector3Randomiser::Prepare(Vector3 lvA, Vector3 lvB)
+{
+    mVecA = lvA;
+    mVecB.x = lvB.x - lvA.x;
+    mVecB.y = lvB.y - lvA.y;
+    mVecB.z = lvB.z - lvA.z;
+    mVecB.w = lvB.w - lvA.w;
+}
+
+Vector3 Vector3Randomiser::RandomInterpolate(CgsNumeric::Random &lrRandom)
+{
+    // The Vector-slot draw: one float, splatted across the lerp.
+    const u32 luSlot = (lrRandom.muOldestBufferIndex + 3) & 4;
+    const f32 lfT    = lrRandom.mafFloatBuffer[luSlot] - 1.0f;   // the quad primed last call
+
+    const u32 luS0Hi = static_cast<u32>(lrRandom.muSeed >> 32);
+    lrRandom.muSeed  = lrRandom.muSeed * CgsNumeric::KU_RANDOM_MULTIPLIER + 1;
+    lrRandom.mauIntegerBuffer[luSlot] =
+        CgsNumeric::KU_IEEE_754_REPRESENTATION_FLOAT_ONE | (luS0Hi >> 9);
+    lrRandom.muOldestBufferIndex = luSlot + 1;
+
+    Vector3 lvResult;
+    lvResult.x = mVecA.x + mVecB.x * lfT;
+    lvResult.y = mVecA.y + mVecB.y * lfT;
+    lvResult.z = mVecA.z + mVecB.z * lfT;
+    lvResult.w = mVecA.w + mVecB.w * lfT;
     return lvResult;
 }
 
@@ -100,11 +176,14 @@ Vector4 Vector4Randomiser::RandomiseXYZW(CgsNumeric::Random &lrRandom)
     // Next call swaps to the other ring half.
     lrRandom.muOldestBufferIndex = luSlot ^ 4u;
 
+    // Same correction as RandomiseXYZ above -- 0x822780BC `vmaddfp v0, v13, v12, v0` with
+    // v13 == *(this + 16) == mVecB and v12 == *(this + 0) == mVecA, raw field order D,A,B,C
+    // => mVecB * (prev - 1.0) + mVecA.
     Vector4 lvResult;
-    lvResult.x = mVecA.x * mVecB.x + lvPrev.x;
-    lvResult.y = mVecA.y * mVecB.y + lvPrev.y;
-    lvResult.z = mVecA.z * mVecB.z + lvPrev.z;
-    lvResult.w = mVecA.w * mVecB.w + lvPrev.w;
+    lvResult.x = mVecA.x + mVecB.x * lvPrev.x;
+    lvResult.y = mVecA.y + mVecB.y * lvPrev.y;
+    lvResult.z = mVecA.z + mVecB.z * lvPrev.z;
+    lvResult.w = mVecA.w + mVecB.w * lvPrev.w;
     return lvResult;
 }
 

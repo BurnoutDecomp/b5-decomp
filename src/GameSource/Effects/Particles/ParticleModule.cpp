@@ -3,6 +3,7 @@
 #include <cstddef>                                   // offsetof
 #include <cstdio>                                    // snprintf (the announcement)
 #include <cstdlib>                                   // getenv / atoi ([diag] gates)
+#include <cstring>                                   // memcpy (PreRenderUpdate's batch publish)
 #include <cmath>                                     // cos / sin ([diag] BRN_SPARK_TEST)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog (the NOT-RECONSTRUCTED announcements)
 #include "GameSource/Effects/Particles/ParticleModuleIO.h"   // BrnParticle::ParticleIO::DispatchInputBuffer
@@ -129,7 +130,11 @@ namespace BrnParticle
         // The 5 frame-job constructions (@+0x26400, stride 0x350) fall inside the
         // frame-job opaque placeholder (DEFERRED).
 
-        mbFlag27784 = false;
+        // The ctor's trailing single-byte store `*(this + 0x27784) = 0` is the inter-thread
+        // event queue's own BaseVariableEventQueue::mbIsConstructed -- the same one-byte
+        // sub-object construction CgsGui::GuiModule's ctor @0x827E54B0 performs on its embedded
+        // queue, which is why MarkUnconstructed() exists. It is NOT a loose bool.
+        mInterThreadEventQueue.MarkUnconstructed();   // +0x27784
     }
 
     // X360 0x82278380. Resolve a handle to its playing-effect slot. The handle's low
@@ -341,6 +346,18 @@ namespace BrnParticle
     // accepts more than one frame of sparks. DELETE-WHEN-STABLE.
     u32 gauSparkPrepareCount = 0;
 
+    // [DIAG] the contact-producer ladder -- see the block comment on the declarations in
+    // ParticleModule.h. DELETE-WHEN-STABLE.
+    u32 gauSparkContactQueueCalls = 0;
+    u32 gauSparkHingedSeen        = 0;
+    u32 gauSparkHingedTyped       = 0;
+    u32 gauSparkHingedStress      = 0;
+    u32 gauSparkContactCalls      = 0;
+    u32 gauSparkContactPosted     = 0;
+    u32 gauSparkContactRejected   = 0;
+    u32 gauSparkEventsDrained     = 0;
+    u32 gauSparkLineSpawned       = 0;
+
     // [lionhandoff] FLAG PC bring-up counters -- see the witness in DispatchThreadUpdate.
     // Not console state; ours, and deleted with that witness.
     u32 muCreatedLionInstances   = 0;
@@ -493,13 +510,41 @@ namespace BrnParticle
             }
         }
 
+        // ⭐⭐ THE TAIL, 0x82294940..0x82294A10 -- and it is the whole reason a spark record ever
+        // crosses from the update thread to the dispatch thread. It was announced-not-written
+        // while mInterThreadEventQueue was a placeholder; the queue is real now.
+        //
+        // (a) the batch spawn publish. `lhz r11, 0(r30)` with r30 == this + 0x2B7A0 reads the
+        //     header's leading u16 count; the size is `(count + count*4) << 4` + 0x10 ==
+        //     count*80 + 16, the type id is 4, and the two memcpys copy the 16-byte header then
+        //     count*80 payload bytes out of *(this + 0x2B7B0). The count is then zeroed.
+        //     ⚠ count is ALWAYS 0 on this build: nothing fills mpSparkSpawnBuffer yet (the
+        //     debris batch producer is not landed), so this arm allocates nothing. It is written
+        //     because it is the console's, not because it moves today.
         {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "ParticleModule::PreRenderUpdate's inter-thread event-queue publish "
-                "(AllocateEventSafe + the two memcpys out of mInterThreadEventQueue, which is an "
-                "asm-sized placeholder). THE LION EFFECT PUBLISH IS REAL AND RUNS");
+            const u16 lu16Count = mu16SpawnBufferCount;
+            if (lu16Count != 0)
+            {
+                const s32 liSize = static_cast<s32>(lu16Count) * 80 + 16;
+                void* const lpData = mInterThreadEventQueue.AllocateEventSafe(
+                                         eParticleEvent_DebrisBatchSpawn, liSize);
+                if (lpData != 0)
+                {
+                    CGS_ASSERT((reinterpret_cast<uintptr_t>(lpData) & 0xF) == 0,
+                               "(((uint32_t)lpData) & 0xf) == 0");                 // .cpp:843
+                    memcpy(lpData, &mu16SpawnBufferCount, 16);
+                    memcpy(static_cast<u8*>(lpData) + 16, mpSparkSpawnBuffer,
+                           static_cast<size_t>(lu16Count) * 80);
+                }
+                mu16SpawnBufferCount = 0;
+            }
         }
+
+        // (b) hand the whole queue over: clear the dispatch buffer's copy, bulk-append ours into
+        //     it, then clear ours. Both Clear()s are the console's own calls, in this order.
+        lpDispatchThreadInput->GetParticleInterThreadEventQueue()->Clear();
+        lpDispatchThreadInput->AppendParticleInterThreadEventQueue(&mInterThreadEventQueue);
+        mInterThreadEventQueue.Clear();
 
         lpDispatchThreadInput->UnlockForWrite();
     }
@@ -537,10 +582,14 @@ namespace BrnParticle
     // pointer is null and its description non-null and then does the create regardless, which
     // is why a double-create shows up as an assert rather than as a leak.
     //
-    // NOT REPRODUCED HERE, announced: ProcessEventQueue @0x8229C418 (the module's inter-thread
-    // event drain -- its queue is a placeholder) and BeginSimulateDebris @0x82289A98 (the
-    // debris jobs are asm-sized placeholders). Both are ahead of the effect loop on the
-    // console and neither feeds it.
+    // NOT REPRODUCED HERE, announced: BeginSimulateDebris @0x82289A98 (the debris jobs are
+    // asm-sized placeholders). It is ahead of the effect loop on the console and does not
+    // feed it.
+    // ⚠️ CORRECTED 2026-09-06: this list used to also name ProcessEventQueue @0x8229C418
+    // "(the module's inter-thread event drain -- its queue is a placeholder)". Both halves of
+    // that are now false -- the queue is the real VariableEventQueue<16384,16> and the drain
+    // is bodied in ParticleModule_SparkEvents.cpp -- and DispatchThreadUpdate below CALLS it.
+    // The log line this function writes already said so; only the banner was stale.
     // =========================================================================
     void ParticleModule::DispatchThreadUpdate(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInput)
     {
@@ -550,10 +599,25 @@ namespace BrnParticle
         {
             static bool sbLogged = false;
             LogNotReconstructed(sbLogged,
-                "ParticleModule::DispatchThreadUpdate's ProcessEventQueue @0x8229C418 + "
-                "BeginSimulateDebris @0x82289A98 (the inter-thread event queue and the debris "
-                "jobs are asm-sized placeholders). THE LION EFFECT CREATE/UPDATE LOOP IS REAL "
-                "AND RUNS");
+                "ParticleModule::DispatchThreadUpdate's BeginSimulateDebris @0x82289A98 (the "
+                "debris jobs are asm-sized placeholders). THE LION EFFECT CREATE/UPDATE LOOP AND "
+                "THE INTER-THREAD EVENT DRAIN ARE REAL AND RUN");
+        }
+
+        // ⭐ ProcessEventQueue @0x8229C418, at the console's own position -- 0x8229C644..0x8229C658
+        // is `GetParticleRenderData(); GetParticleInterThreadEventQueue(); ProcessEventQueue(...)`
+        // ahead of BeginSimulateDebris and the effect loop. THIS is what turns the contact records
+        // EffectsModule posted into SparkArray::SpawnSpark calls.
+        //   ⚠ the render data is the READ-locked overload (sub_8227F640 == GetParticleRenderData()
+        //     const), which the console fetches ONCE at 0x8229C610 and reuses for the perf-monitor
+        //     selection at 0x8229C618 as well.
+        {
+            const ParticleRenderData* const lpRenderData =
+                lpDispatchThreadInput->GetParticleRenderData();
+            const CgsModule::VariableEventQueue<
+                      KI_PARTICLE_MODULE_INTERTHREAD_COMMAND_QUEUE_MEMSIZE, 16>* const lpQueue =
+                lpDispatchThreadInput->GetParticleInterThreadEventQueue();
+            ProcessEventQueue(lpQueue, *lpRenderData);
         }
 
         const DispatchThreadUpdateData* const lpIn = lpDispatchThreadInput->GetParticleData();
@@ -1013,12 +1077,16 @@ namespace BrnParticle
                     // head's live count, free = what the shared FXBucketManager still holds.
                     const Native::SparkArray& lrArray0 = maSparks[0];
                     const Native::SparkBucket* const lpHead0 = lrArray0.mRegularBank.mpBuckets;
-                    char lacMsg[480];
+                    char lacMsg[720];
                     std::snprintf(lacMsg, sizeof(lacMsg),
-                        "[spark] calls=%u prep=%u mod=%08X entry{head=%u nb=%u free=%u ring=%.3f} spawnCalls=%u arms=%u/%u/%u/%u live=%u batches=%d verts=%u ringNow=%.3f ring1=%.3f "
+                        "[spark] prod{q=%u hinged=%u/%u/%u call=%u post=%u rej=%u drain=%u line=%u} "
+                        "calls=%u prep=%u mod=%08X entry{head=%u nb=%u free=%u ring=%.3f} spawnCalls=%u arms=%u/%u/%u/%u live=%u batches=%d verts=%u ringNow=%.3f ring1=%.3f "
                         "flags=0x%04X dt=%.4f rdt=%.5f drew=%u/%u | bank0 head=%d nb=%u np=%u nc=%u cap=%u "
                         "mgrFree=%u/%u | a0 blur=%.4f rad=%.4f grav=%.3f bounce=%.3f "
                         "drag=%.3f/%.3f/%.4f life=%.2f tex=%s\n",
+                        gauSparkContactQueueCalls, gauSparkHingedSeen, gauSparkHingedTyped,
+                        gauSparkHingedStress, gauSparkContactCalls, gauSparkContactPosted,
+                        gauSparkContactRejected, gauSparkEventsDrained, gauSparkLineSpawned,
                         suCalls, gauSparkPrepareCount,
                         static_cast<u32>(reinterpret_cast<uintptr_t>(this) & 0xFFFFFFFFu),
                         luEntryHead, luEntryNumBuckets, luEntryMgrFree, lfEntryRing,
@@ -1435,7 +1503,15 @@ namespace BrnParticle
         static_assert(PM_TAIL_DELTA(mSparkFrameDataSetRender)        == 0x25D30 - 0x249C4, "spark set 1 @ +0x25D30");
         static_assert(PM_TAIL_DELTA(maFrameJobsPlaceholder)         == 0x26400 - 0x249C4, "frame jobs @ +0x26400");
         static_assert(PM_TAIL_DELTA(miNumDebrisUpdateJobsToWaitOn)   == 0x27780 - 0x249C4, "debris job wait count @ +0x27780");
-        static_assert(PM_TAIL_DELTA(mbFlag27784)                    == 0x27784 - 0x249C4, "bool sentinel @ +0x27784");
+        static_assert(PM_TAIL_DELTA(mInterThreadEventQueue)         == 0x27784 - 0x249C4, "inter-thread event queue @ +0x27784");
+        // The queue is now a REAL VariableEventQueue<16384,16>, so its own size is part of the
+        // pin: 1 (mbIsConstructed) + 16384 (macData) + 3 pad + 3*s32 == 0x4010, which is what
+        // puts the spawn-buffer pair back on the console's 16-aligned +0x2B7A0.
+        static_assert(sizeof(CgsModule::VariableEventQueue<
+                                 KI_PARTICLE_MODULE_INTERTHREAD_COMMAND_QUEUE_MEMSIZE, 16>) == 0x4010,
+                      "VariableEventQueue<16384,16> must be 16400 bytes on the host");
+        static_assert(PM_TAIL_DELTA(mu16SpawnBufferCount)         == 0x2B7A0 - 0x249C4, "spawn-buffer header @ +0x2B7A0");
+        static_assert(PM_TAIL_DELTA(mpSparkSpawnBuffer)             == 0x2B7B0 - 0x249C4, "spawn buffer ptr @ +0x2B7B0");
 
         #undef PM_TAIL_DELTA
         (void)&_AssertLayout;  // suppress unused-function diagnostics

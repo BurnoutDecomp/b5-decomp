@@ -301,13 +301,10 @@ void ParticleModule::Construct()
     miNumDebrisUpdateJobsToWaitOn = -1;   // +0x27780
 
     // CgsModule::VariableEventQueue<16384,16>::Construct(this + 0x27784) -- the capped
-    // inter-thread event queue. Placeholder type; announced, not faked.
-    {
-        static bool sbLogged = false;
-        LogNotReconstructed(sbLogged,
-            "ParticleModule::Construct's CappedInterThreadEventQueue::Construct "
-            "(VariableEventQueue<16384,16> at +0x27784 is an asm-sized placeholder)");
-    }
+    // inter-thread event queue. REAL as of the spark-producer wave (2026-09-06): the queue is
+    // the transport for every SpawnSparks*/DebrisBatch record EffectsModule posts, and it was
+    // an asm-sized placeholder only because nothing had a body at either end.
+    mInterThreadEventQueue.Construct();   // +0x27784
 
     // LionPerfMon::Construct(&dword_82FAB638, ...) -- the Lion perf-monitor set. Its class
     // is TU-local to LionPerfMon.cpp (no header), so it is not reachable from here.
@@ -522,7 +519,7 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         // ⚠ the console stores the count with `sthx` (a HALFWORD) even though the DWARF types
         // the member u32; both halves are zero either way, so the widened store below is not
         // observably different. Recorded because it is the console's own quirk, not ours.
-        muSparkSpawnCount = 0;
+        mu16SpawnBufferCount = 0;
         mpSparkSpawnBuffer = mpHeapMalloc->Malloc(KU_SPARK_SPAWN_BUFFER_BYTES,
                                                   KU_SPARK_SPAWN_BUFFER_ALIGN);
         // ParticleModule.cpp:523 re-asserts ValidateHeap -- dropped for the same reason as :425.

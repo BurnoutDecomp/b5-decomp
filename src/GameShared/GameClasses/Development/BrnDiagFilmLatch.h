@@ -163,6 +163,20 @@ namespace BrnDiag
         f32 mfCarPosY;
         f32 mfCarPosZ;
         u32 muBoostEffectMask;
+
+        // The SPARK-DRAW latch (BRN_FRAME_DUMP_ARM=spark), added 2026-09-06 with the spark
+        // PRODUCER chain, and added for the reason this header's banner gives rather than for
+        // convenience: contact sparks fire for a handful of presents in the middle of a crash,
+        // and a 600-frame strip armed on `slomo` MISSED BOTH BURSTS of a six-shot crash sweep --
+        // the latch rose at present 2114, the strip ran out at 3312, and the draws were at ~1530
+        // and ~3430. A strip that has to be aimed by arithmetic after the fact is not a
+        // measurement of whether the effect is visible.
+        // Raised by SparkRenderer::Dispatch the first time it issues a DrawVertices with a
+        // non-zero vertex count -- i.e. the first frame on which a spark ribbon actually reaches
+        // the device, not the first frame on which one is spawned. STICKY, like the rest.
+        u32 muSparkDrawLatched;
+        u32 muSparkDrawArray;      // which SparkArray drew (0..3), self-labelling as above
+        u32 muSparkDrawVertices;   // and how many vertices that first batch carried
     };
 
     // Defined in GameSource/Game/BrnGameModule.cpp (the only writer).

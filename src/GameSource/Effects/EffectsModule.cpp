@@ -63,8 +63,11 @@
 // trail / showtime bounce / junkyard editor / QA tests, the post-fx effects frames
 // (GenerateRenderRequests -- the renderer's base-frame bring-up producer still stands in
 // for it), the native simple-particle parameter push (LoadNativeParticleParams' consumer
-// BrnSimpleParticleArray::UpdateParams has no body), the prop-locator VFX and the spark
-// parameter copies into the particle module's (placeholder) spark arrays. None of them is
+// BrnSimpleParticleArray::UpdateParams has no body) and the prop-locator VFX.
+// ⚠️ CORRECTED 2026-09-06: this list used to end "...and the spark parameter copies into the
+// particle module's (placeholder) spark arrays". Both halves went stale in this wave --
+// maSparks[4] is no longer a placeholder (ParticleModule.h:668) and PushSparkParams below is
+// bodied, calling maSparks[i].UpdateParams for all four banks. None of them is
 // a trap: a CGS_ASSERT in HandleCrashingTrail or JunkyardVfxStart would kill every crash
 // and every junkyard boot on the shared box; none is silent either -- each writes ONE
 // `[effects] NOT RECONSTRUCTED: ...` line to BrnGame.log so a run that needed the arm says so.
@@ -136,6 +139,42 @@ namespace
     const u32 KU_SURFACE_ID_SHIFT           = 4;      // (tag >> 4) & 0x3F
     const u32 KU_SURFACE_ID_MASK            = 0x3F;
     const u32 KU_SURFACE_REFSPEC_SIZE       = 24;     // Attrib::DefaultDataArea(24) fallback
+
+    // ---- the contact-spark drains (2026-09-06) -------------------------------------------------
+    // unk_8200D990 == FLT_EPSILON -- the constant RwMathVPU::IsZero compares |lane| against, in
+    // the two HandleSparkContacts asserts (EffectsModule.cpp:1578 / :1579). The console's vector
+    // form masks the sign bit off the whole quad and then `vrlimi128 v12, v0, 1, 1` restricts the
+    // compare to lanes x and y -- so it is a TWO-lane test, not a three-lane one.
+    const f32 KF_RWMATH_IS_ZERO_EPSILON     = 1.1920928955078125e-07f;
+    // flt_8200DD18 -- ProcessHingedPartContacts' friction-stress floor, used BOTH as its own
+    // pre-filter and as the threshold it hands HandleSparkContacts.
+    const f32 KF_HINGED_MIN_FRICTION_STRESS = 7.5f;
+    // flt_8200DD14 -- the same role in ProcessCarDetatchedPartContacts' spark arm.
+    const f32 KF_DETACHED_MIN_FRICTION_STRESS = 0.004999999888241291f;
+    // flt_82004A20 / flt_82001DA0 -- the two |mVelocity| gates the detached-part drain uses to
+    // pick its arm: above 10 m/s a spark contact, above 0.5 m/s (and part type 91) a dust burst.
+    const f32 KF_DETACHED_SPARK_MIN_SPEED   = 10.0f;
+    const f32 KF_DETACHED_DUST_MIN_SPEED    = 0.5f;
+    // ⭐ THE TWO EBodyParts IDS ProcessHingedPartContacts SPARKS ON ARE THE TWO EXHAUSTS
+    // (`cmpwi r11, 0x54` / `0x55`). That is not this wave's inference: BrnDeformableObject_
+    // Detach.cpp:188 already names 84/85 KI_BODY_PART_STRUCTURAL_A/B == "exhaust A/B", pinned
+    // by the counter its own hinge logic guards being miNumAttachedExhausts. So this drain is
+    // the EXHAUST-SCRAPE spark path specifically, not a general body-part one -- which is why
+    // a wall-crash sweep measured 1,756 hinged contacts and ZERO past this filter: the parts
+    // that ground were bumper / bonnet / grille. The general deformable-part grind is
+    // ProcessCarDetatchedPartContacts' spark arm below, and that one does fire.
+    const s32 KI_HINGED_SPARK_PART_EXHAUST_A = 84;
+    const s32 KI_HINGED_SPARK_PART_EXHAUST_B = 85;
+    // The one EBodyParts id ProcessCarDetatchedPartContacts routes to DUST instead of sparks
+    // (`cmpwi cr6, r11, 0x5B`). Same FLAG as the pair above: the value is the console's.
+    const s32 KI_DETACHED_DUST_PART_TYPE    = 91;
+    // The visualfxsurface words the two drains read past the skid block: +0x4F is the bool the
+    // detached-part arm gates its HandleSparkContacts call on, +0x54 is the f32 both drains pass
+    // as HandleSparkContacts' fifth float. ⚠ FLAG -- the NAMES are the consumers', not the
+    // schema's (AttribSys keys by hash and the shipped schema carries no strings); what is
+    // recovered is the offset and the role.
+    const u32 KU_VFX_SPARKS_ENABLED         = 0x4F;   // bool  (`lbz r10, 0x4F(r11)`)
+    const u32 KU_VFX_SPARK_SCALE            = 0x54;   // f32   (`lfs f5, 0x54(r11)`)
 
     // The surface layout's visualfxsurface reference: `surfaceInstance.mpAttributeData + 16`
     // read as the Attrib::RefSpec it is. One spelling for all four call sites.
@@ -1833,13 +1872,31 @@ void EffectsModule::HandlePlayerTriangleCache(const EffectsIO::InputBuffer* lpIn
     else if (lbWasCrashing)
     {
         mCrashTriangleCache.ResetCounters();
-        // VariableEventQueue<16384,16>::AllocateEventSafe(&mParticleModule.mInterThreadEventQueue,
-        // 0, 0): the "crash triangle cache cleared" post to the dispatch thread. NOT
-        // RECONSTRUCTED: the inter-thread queue is a placeholder (its consumer is the Lion
-        // dispatch pass). Announced once.
-        static bool sbLogged = false;
-        LogNotReconstructed(sbLogged,
-            "HandlePlayerTriangleCache's inter-thread 'cache cleared' post (ParticleModule::mInterThreadEventQueue is a placeholder)");
+        // The "crash triangle cache cleared" post to the dispatch thread. MEASURED at
+        // 0x82296FB0..0x82296FC8:
+        //     li r5, 0 ; li r4, 0 ; addi r3, r3, -0x7DFC
+        //     bl CgsModule::VariableEventQueue<16384,16>::AllocateEventSafe
+        // i.e. AllocateEventSafe(liType = 0, liSize = 0) -- a payload-less type-0 record. The
+        // result is NOT tested: the bl is followed straight by `addi r1,r1,0x80 ; b
+        // __restgprlr_27`, so there is no null check here to reproduce and none is added.
+        //
+        // ⭐ WHICH queue is pinned by ARITHMETIC, not by trusting the symbol name: r3 is
+        // r28 + (3 << 16) - 0x7DFC == this + 0x28204, and mParticleModule sits at +0xA80
+        // (EffectsModule.h:406) with mInterThreadEventQueue at +0x27784 inside it --
+        // 0xA80 + 0x27784 == 0x28204 exactly.
+        //
+        // ⚠️ CORRECTED 2026-09-06. This was announced as "NOT RECONSTRUCTED: the inter-thread
+        // queue is a placeholder". That was true when it was written and became FALSE in this
+        // same wave, when the queue was promoted from a u8[0x4018] span to the real
+        // VariableEventQueue<16384,16>. A stale "it is a placeholder" is the reason to re-read
+        // these notes rather than trust them: nothing would have failed, the post would simply
+        // have gone on not happening while the comment explained why it could not.
+        //
+        // Type 0 is eParticleEvent_ClearAllDebrisBuckets. Its CONSUMER is still announced --
+        // but for an unrelated reason (BrnDebrisArray.cpp is deliberately unmounted), and that
+        // announcement lives at the consumer, in ParticleModule_SparkEvents.cpp.
+        mParticleModule.mInterThreadEventQueue.AllocateEventSafe(
+            BrnParticle::eParticleEvent_ClearAllDebrisBuckets, 0);
     }
 }
 
@@ -2170,15 +2227,400 @@ void EffectsModule::HandleCrashingTrail(ActiveRaceCarData& /*lrActiveRaceCar*/, 
     LogNotReconstructed(sbLogged, "EffectsModule::HandleCrashingTrail @0x82290D30 (the crash debris trail)");
 }
 
-void EffectsModule::ProcessCarContactQueues(const EffectsModuleParams& /*lrParams*/,
-                                            const RCEntityActiveRaceCarOutputInterface* /*lpActiveRaceCars*/,
-                                            const BrnPhysics::ContactSpy::ContactSpyInterface* /*lpContactSpy*/,
-                                            const BrnDirector::Camera::Camera* /*lpCamera*/)
+// =================================================================================================
+// ⭐⭐⭐ THE CONTACT SPARK DRAINS -- @0x8229B7F8 / @0x82293470 / @0x822906A8.
+//
+// This is the producer half of the grinding-spark chain. The consumer half (the particle module's
+// inter-thread queue, ProcessEventQueue and HandleSpawnSparksAlongLineEvent) landed in the same
+// change; before it, HandleSparkContacts had nowhere to post and these three had no reason to run.
+//
+// The route, per contact:
+//     contact spy queue -> Process*Contacts -> HandleSparkContacts
+//         -> mParticleModule.mInterThreadEventQueue.AddEventSafe(&rec, 3, 80)
+//         -> (next frame, dispatch thread) ParticleModule::HandleSpawnSparksAlongLineEvent
+//         -> SparkArray::SpawnSpark
+//
+// ⚠️ THE ONE THING TO NOT MISREAD HERE is which vector each drain passes as the spark VELOCITY.
+// ProcessHingedPartContacts passes the contact's mFrictionStress (`addi r11, r1, var_B0` with the
+// 112-byte copy based at var_C0, i.e. copy + 0x10); ProcessCarDetatchedPartContacts passes the
+// PhysicalCarPartContact's own mVelocity (copy + 0x60). They are different members and the
+// pseudocode shows neither.
+// =================================================================================================
+
+// ------------------------------------------------------------------------------------------------
+// HandleSparkContacts @0x822906A8 (232 instr, DWARF EffectsModule.cpp:1452).
+//
+// DWARF signature:
+//   void HandleSparkContacts(const BaseContact&, Vector3, Native::ESparkArrayID,
+//                            f32, f32, f32, f32, f32, bool);
+// and the ABI confirms it: r3 this, r4 the contact, the Vector3 in v1, r5 the array id, the five
+// f32s in f1..f5, and the bool as a STACK argument at the caller's +0x64 (its byte at +0x67 --
+// both call sites do `stb r26, 0x160+var_F9(r1)` / `stb r27, 0x240+var_1D9(r1)`, which is that
+// slot). Hex-Rays renders this as a 32-argument function because each f32 eats a GPR slot.
+//
+// ⚠️ TWO OF THE FIVE FLOATS ARE NEVER READ BY THIS BUILD'S BODY -- f1 and f5. The asm touches f2
+// (`fmr f31, f2`), f3 (`fmr f30, f3`) and f4 (`stfs f4, var_100`) and nothing else; there is no
+// other fp load of an incoming register anywhere in the 232 instructions. Both call sites still
+// compute and pass them (f1 = params.mDt, f5 = the visualfxsurface word at +0x54), so they are
+// real parameters that this revision's body stopped using -- NOT parameters that do not exist.
+// They are named for what the callers put in them and marked unused rather than deleted.
+//
+// WHAT IT ACTUALLY DOES: reject the contact if its friction stress is shorter than the caller's
+// threshold, then fill a 80-byte SpawnSparksAlongLineEvent whose segment runs from the contact
+// point along the NORMALISED friction stress for a randomly drawn length, and post it.
+// ------------------------------------------------------------------------------------------------
+void EffectsModule::HandleSparkContacts(const BrnPhysics::ContactSpy::BaseContact& lrContact,
+                                        Vector3 lvVelocity,
+                                        BrnParticle::Native::ESparkArrayID leSparkType,
+                                        f32 /*lfDt*/,                    // f1 -- see the banner
+                                        f32 lfTime,                      // f2
+                                        f32 lfGroundPositionY,           // f3
+                                        f32 lfMinFrictionStress,         // f4
+                                        f32 /*lfSurfaceSparkScale*/,     // f5 -- see the banner
+                                        bool lbIsCrashing)
+{
+    // byte_82CDB40C -- the module-wide spark kill switch. ⚠ NOTHING IN THE IMAGE WRITES IT: a
+    // findinit.py sweep over the whole ARTIST export set returns exactly one site, the `lbz` two
+    // instructions below, so it is a .bss byte that stays false and the gate never fires. Kept
+    // because it is the console's first instruction, not because it can do anything here.
+    static const bool sbSparkContactsDisabled = false;      // byte_82CDB40C
+    if (sbSparkContactsDisabled)
+        return;
+
+    ++BrnParticle::gauSparkContactCalls;   // [DIAG] DELETE-WHEN-STABLE
+
+    // The console computes Length(mFrictionStress) with vrsqrtefp + two Newton steps and a vsel
+    // that maps a zero vector to 0 rather than NaN; sqrtf does the same on both counts.
+    const Vector3& lrFriction = lrContact.mFrictionStress;      // contact + 0x10
+    const f32 lfFrictionLength = sqrtf(lrFriction.x * lrFriction.x
+                                     + lrFriction.y * lrFriction.y
+                                     + lrFriction.z * lrFriction.z);
+
+    // `vcmpgtfp. v0, v9, v0` -- threshold > length rejects. Note the sense: EQUAL passes.
+    if (lfMinFrictionStress > lfFrictionLength)
+    {
+        ++BrnParticle::gauSparkContactRejected;   // [DIAG] DELETE-WHEN-STABLE
+        return;
+    }
+
+    // The console's own two self-checks, EffectsModule.cpp:1578 and :1579. IsZero here is the
+    // RwMathVPU one: it masks the sign bit off each lane and compares against unk_8200D990 ==
+    // FLT_EPSILON, over lanes x and y only (`vrlimi128 v12, v0, 1, 1`).
+    CGS_ASSERT(!(std::fabs(lrFriction.x) <= KF_RWMATH_IS_ZERO_EPSILON
+                 && std::fabs(lrFriction.y) <= KF_RWMATH_IS_ZERO_EPSILON),
+               "RwMathVPU::IsZero( lContact.mFrictionStress ) == false");
+    CGS_ASSERT(!(std::fabs(lrContact.mNormalStress.x) <= KF_RWMATH_IS_ZERO_EPSILON
+                 && std::fabs(lrContact.mNormalStress.y) <= KF_RWMATH_IS_ZERO_EPSILON),
+               "RwMathVPU::IsZero( lContact.mNormalStress ) == false");
+
+    // The spark type indexes mSparkParams[] (this + 16*type + 0x2D348) and everything below comes
+    // out of that sparkeffect's attribute block -- the fields postfxvault.bin publishes.
+    const Attrib::Gen::sparkeffect& lrParams = mSparkParams[leSparkType];
+
+    // The two draws, in the console's order (one shared LCG -- swapping them changes both).
+    const f32 lfLineLength = mRandom.RandomFloat(lrParams.SparkLineLengthMin(),
+                                                 lrParams.SparkLineLengthMax());
+    const f32 lfNumSparks  = mRandom.RandomFloat(lrParams.NumSparksMin(),
+                                                 lrParams.NumSparksMax());
+
+    // The segment: from the contact point, along the NORMALISED friction stress, lfLineLength long.
+    // (`vmulfp128 v0, v13, v0` normalises, then `vmaddfp v0, v0, v11, v7` with v11 == the contact
+    // point and v7 == splat(lfLineLength) -- raw field order D,A,B,C, so dir * length + point.)
+    // ⚠ NO ZERO GUARD, DELIBERATELY. The console's SECOND normalise (0x82290858..0x822909EC) has
+    // no `vsel` -- unlike the threshold one above it -- so on a zero friction stress it would
+    // produce a NaN segment. It cannot: the threshold test three lines up already rejected that
+    // case for every caller (both pass a positive threshold, 7.5 and 0.005). Adding a guard here
+    // would be a defensive arm the binary does not have.
+    const f32 lfInvLength = 1.0f / lfFrictionLength;
+
+    BrnParticle::SpawnSparksAlongLineEvent lEvent;
+    lEvent.mvStartPos = lrContact.mPointOnA;                                  // contact + 0x40
+    lEvent.mvEndPos.x = lrContact.mPointOnA.x + lrFriction.x * lfInvLength * lfLineLength;
+    lEvent.mvEndPos.y = lrContact.mPointOnA.y + lrFriction.y * lfInvLength * lfLineLength;
+    lEvent.mvEndPos.z = lrContact.mPointOnA.z + lrFriction.z * lfInvLength * lfLineLength;
+    lEvent.mvEndPos.w = lrContact.mPointOnA.w + lrFriction.w * lfInvLength * lfLineLength;
+    lEvent.mvVelocity = lvVelocity;                                           // the v1 argument
+    lEvent.mfCurrentTime                 = lfTime;                            // f2
+    lEvent.mfNumSparks                   = lfNumSparks;
+    // `vspltw v10, v11, 1` (the contact point's y) minus splat(f3) -- the height of the segment's
+    // start above whatever plane the caller nominated. BOTH current callers pass the contact
+    // point's OWN y, so this is 0 for them; it is not hard-coded to 0 because the parameter is
+    // real and the race-car drain (not landed here) has a genuine ground plane to pass.
+    lEvent.mfHeightAboveGroundOfStartPos = lrContact.mPointOnA.y - lfGroundPositionY;
+    lEvent.mfVelocityInheritanceMin      = lrParams.VelocityInheritanceMin();
+    lEvent.mfVelocityInheritanceMax      = lrParams.VelocityInheritanceMax();
+    lEvent.meSparkType                   = leSparkType;
+    lEvent.mbIsCrashing                  = lbIsCrashing;
+
+    const bool lbPosted = mParticleModule.mInterThreadEventQueue.AddEventSafe(
+        &lEvent, BrnParticle::eParticleEvent_SpawnSparksAlongLine,
+        static_cast<s32>(sizeof(BrnParticle::SpawnSparksAlongLineEvent)));   // li r6, 0x50
+    if (lbPosted)
+        ++BrnParticle::gauSparkContactPosted;   // [DIAG] DELETE-WHEN-STABLE
+}
+
+// ------------------------------------------------------------------------------------------------
+// ProcessHingedPartContacts @0x82293470 (105 instr, DWARF EffectsModule.cpp:3767).
+//
+// The hinged deformable parts -- bonnet, boot, bumper, grille -- grinding on the world. This is
+// the drain whose queue used to be provably empty on every frame of every run: its only producer
+// in the whole image, PhysicalBodyPart::AddContactSpy @0x8260B8D8, was a log-once stub until the
+// physics lane bodied it (0d6cc68b), and the accessor that reaches the queue
+// (ContactSpyInterface::GetHingedPartContacts @0x822779B8) did not exist at either level.
+// ------------------------------------------------------------------------------------------------
+void EffectsModule::ProcessHingedPartContacts(
+         const BrnPhysics::ContactSpy::ContactSpyData::HingedCarPartContactQueue* lpQueue,
+         const EffectsModuleParams& lrParams)
+{
+    const s32 liLength = lpQueue->GetLength();          // `lwz r24, 8(r27)`
+    BrnParticle::gauSparkHingedSeen += static_cast<u32>(liLength > 0 ? liLength : 0);   // [DIAG]
+
+    for (s32 liIndex = 0; liIndex < liLength; ++liIndex)
+    {
+        // The console copies the whole 112-byte record onto its stack (14 std pairs) before
+        // touching it, and hands HandleSparkContacts a pointer to THAT copy.
+        const BrnPhysics::ContactSpy::HingedPartContact lContact = lpQueue->GetEvent(liIndex);
+
+        // Only the two EXHAUST part ids spark here (84 / 85 -- see the constants' note).
+        if (lContact.meType != KI_HINGED_SPARK_PART_EXHAUST_A && lContact.meType != KI_HINGED_SPARK_PART_EXHAUST_B)
+            continue;
+        ++BrnParticle::gauSparkHingedTyped;   // [DIAG] DELETE-WHEN-STABLE
+
+        const Vector3& lrFriction = lContact.mFrictionStress;
+        const f32 lfFrictionLength = sqrtf(lrFriction.x * lrFriction.x
+                                         + lrFriction.y * lrFriction.y
+                                         + lrFriction.z * lrFriction.z);
+
+        // `vcmpgtfp. v0, v0, v9` -- the caller-side pre-filter, the same 7.5 it then hands
+        // HandleSparkContacts as its own threshold (flt_8200DD18).
+        if (!(lfFrictionLength > KF_HINGED_MIN_FRICTION_STRESS))
+            continue;
+        ++BrnParticle::gauSparkHingedStress;   // [DIAG] DELETE-WHEN-STABLE
+
+        // The surface lookup: (mCollisionTagB's low half >> 4) & 0x3F indexes mSurfaceList's
+        // "Surfaces" array; the surface's layout carries the visualfxsurface RefSpec at +0x10.
+        const u32 luSurfaceId =
+            (static_cast<u16>(lContact.mCollisionTagB.muValue) >> KU_SURFACE_ID_SHIFT) & KU_SURFACE_ID_MASK;
+
+        void* lpSurfaceRef = mSurfaceList.Surfaces(luSurfaceId);
+        if (!lpSurfaceRef)
+            lpSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_SIZE);
+
+        Attrib::Gen::surface lSurface(*static_cast<const Attrib::RefSpec*>(lpSurfaceRef), 0);
+        Attrib::Gen::visualfxsurface lVfx(VfxSurfaceRef(lSurface.GetAttributeData()), 0);
+
+        // f5 -- the visualfxsurface word at +0x54. Passed, and this build's HandleSparkContacts
+        // does not read it (see its banner). Reproduced because the console computes it.
+        const f32 lfSurfaceSparkScale =
+            *reinterpret_cast<const f32*>(static_cast<const u8*>(lVfx.GetAttributeData()) + KU_VFX_SPARK_SCALE);
+
+        HandleSparkContacts(lContact,
+                            lrFriction,                                   // v1: the friction stress
+                            BrnParticle::Native::eSparkArray_BodyPart_Contact,  // r5 == 3
+                            lrParams.mDt,                                 // f1
+                            lrParams.mTime,                               // f2
+                            lContact.mPointOnA.y,                         // f3 (=> height 0)
+                            KF_HINGED_MIN_FRICTION_STRESS,                // f4
+                            lfSurfaceSparkScale,                          // f5
+                            false);                                       // the stack byte
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// ProcessCarContactQueues @0x8229B7F8 (74 instr, DWARF EffectsModule.cpp:3012) -- the fan-out.
+//
+// ⭐⭐ THE GATE IS THE REPLAY SERIALISER'S MODE, AND IT IS AN OVERRIDE, NOT AN EARLY-OUT.
+// `addis r11, r26, 3 ; addi r11, r11, -0xAB0 ; lwz r11, 0(r11)` reads this + 0x2F550, which is
+// mEffectsSerialiser's leading word == BaseSerialiser::meMode; the three values it tests -- 4, 5,
+// 6 -- are E_MODE_PLAYING_PREPARING, E_MODE_PLAYING and E_MODE_PLAYING_STALLED, i.e. exactly the
+// three PLAYBACK states. So: while a replay is playing back, the live contact queues are ignored
+// and ProcessRaceCarContacts runs with a NULL queue (it replays the recorded contacts out of
+// EffectsSerialiserStaticLayout::GetCarContact instead), and the detached-part and hinged-part
+// drains do not run at all. Otherwise the spy is asserted bound and all three are drained.
+// ⚠ Read by NAME (mEffectsSerialiser.GetMode()), never by the console byte offset -- every member
+// ahead of it on this host carries widened pointers, so +0x2F550 is not that word here.
+// ------------------------------------------------------------------------------------------------
+void EffectsModule::ProcessCarContactQueues(const EffectsModuleParams& lrParams,
+                                            const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
+                                            const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpy,
+                                            const BrnDirector::Camera::Camera* lpCamera)
+{
+    ++BrnParticle::gauSparkContactQueueCalls;   // [DIAG] DELETE-WHEN-STABLE
+
+    const BrnReplays::BaseSerialiser::EMode leReplayMode = mEffectsSerialiser.GetMode();
+    const bool lbForceRaceCarPass =
+        (leReplayMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_PREPARING
+      || leReplayMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING
+      || leReplayMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_STALLED);
+
+    const bool lbHasSpyData = (lpContactSpy != 0 && lpContactSpy->IsValid());
+    if (!lbHasSpyData && !lbForceRaceCarPass)
+        return;
+
+    const BrnPhysics::ContactSpy::ContactSpyData::RaceCarContactQueue*         lpRaceCar  = 0;
+    const BrnPhysics::ContactSpy::ContactSpyData::PhysicalCarPartContactQueue* lpCarPart  = 0;
+    const BrnPhysics::ContactSpy::ContactSpyData::HingedCarPartContactQueue*   lpHinged   = 0;
+
+    if (!lbForceRaceCarPass)
+    {
+        // The console re-reads mpData here and asserts it -- BrnContactSpyInterface.h:179, which is
+        // the assert GetRaceCarContacts() itself carries; the three accessors are inlined/called in
+        // this order (`lwz r31, 0(r29)` then `bl _` then `bl sub_822779B8`).
+        lpRaceCar = lpContactSpy->GetRaceCarContacts();
+        lpCarPart = lpContactSpy->GetPhysicalCarPartContacts();
+        lpHinged  = lpContactSpy->GetHingedPartContacts();
+    }
+
+    if (lpRaceCar != 0 || lbForceRaceCarPass)
+        ProcessRaceCarContacts(lpRaceCar, lpActiveRaceCars, lrParams, lpCamera);
+
+    if (lpCarPart != 0)
+        ProcessCarDetatchedPartContacts(lpCarPart, lpActiveRaceCars, lrParams);
+
+    if (lpHinged != 0)
+        ProcessHingedPartContacts(lpHinged, lrParams);
+}
+
+// ------------------------------------------------------------------------------------------------
+// ProcessRaceCarContacts @0x82297C08 (965 instr, DWARF EffectsModule.cpp:3292) and
+// ProcessCarDetatchedPartContacts @0x82292FA0 (308 instr, :3654).
+//
+// NOT RECONSTRUCTED in this wave, and each announces itself once rather than being dropped
+// silently. Both are READ; the callee wall below is measured, not estimated, so the next pass does
+// not have to re-derive it:
+//
+//   ProcessCarDetatchedPartContacts has TWO arms, split on the contact's meType:
+//     * meType == 91 -> a dust burst: |mVelocity| must exceed 0.5, then
+//       mafAccumulatedParticleCountTyres[carIndex] += params.mDt * 20.0, floor() it, and call
+//       BrnParticle::ParticleModule::SpawnSimple @0x82281A10 (55 instr, NO BODY IN THE TREE --
+//       not even declared) that many times with a +/-3 m jittered normal.
+//     * meType != 91 -> the SPARK arm: |mVelocity| must exceed 10.0, the surface's
+//       visualfxsurface +0x4F bool must be set, and then it is the same HandleSparkContacts call
+//       ProcessHingedPartContacts makes -- except that it passes the contact's own mVelocity
+//       (copy + 0x60) as the spark velocity and flt_8200DD14 (0.005) as the threshold.
+//     Its one other gate: a contact whose mEntityIdA high byte is 1 is skipped when the active
+//     race car's byte at +0x452 is set.
+//   ⇒ ONE missing body (SpawnSimple) blocks the dust arm; the spark arm is otherwise ready.
+//
+//   ProcessRaceCarContacts does NOT call HandleSparkContacts at all. Its own callees are, from
+//   its call list: HandleRaceCarRaceCarSparks @0x82290A48 (96), HandleVehicleVehicleSparks
+//   @0x82296790 (148), DoSparkShower @0x822920C0 (39), HandleBurstDebris @0x82290BC8 (89),
+//   BrnEffects::BurstAccumulator::Update @0x8227EC90 (62), ParticleModule::SpawnSimple (55), plus
+//   EffectsSerialiserStaticLayout::GetCarContact / UpdateCarContact (which ARE bodied) and the
+//   two randomisers (bodied). NONE of the first six has a definition in the tree.
+//   ⇒ ~489 instructions of callee wall before its own 965 can run. That is the honest reason it
+//   is not in this change, not a judgement that it matters less -- it is the drain that carries
+//   car-vs-world and car-vs-car grinding, i.e. the wall-scrape case.
+// ------------------------------------------------------------------------------------------------
+void EffectsModule::ProcessRaceCarContacts(
+         const BrnPhysics::ContactSpy::ContactSpyData::RaceCarContactQueue* /*lpQueue*/,
+         const RCEntityActiveRaceCarOutputInterface* /*lpActiveRaceCars*/,
+         const EffectsModuleParams& /*lrParams*/,
+         const BrnDirector::Camera::Camera* /*lpCamera*/)
 {
     static bool sbLogged = false;
     LogNotReconstructed(sbLogged,
-        "EffectsModule::ProcessCarContactQueues @0x8229B7F8 (ProcessRaceCarContacts / "
-        "ProcessCarDetatchedPartContacts / ProcessHingedPartContacts -- the contact sparks)");
+        "EffectsModule::ProcessRaceCarContacts @0x82297C08 (965 instr) -- blocked on its own "
+        "callee wall: HandleRaceCarRaceCarSparks/HandleVehicleVehicleSparks/DoSparkShower/"
+        "HandleBurstDebris/BurstAccumulator::Update/ParticleModule::SpawnSimple, ~489 instr, none "
+        "bodied. THE HINGED-PART DRAIN IS REAL AND RUNS");
+}
+
+// ------------------------------------------------------------------------------------------------
+// ProcessCarDetatchedPartContacts @0x82292FA0 (308 instr, DWARF EffectsModule.cpp:3654).
+//
+// The deformable car parts (attached or knocked off) hitting the world. Two arms, split on the
+// contact's meType at copy + 0x70, and they are NOT alternatives of the same effect:
+//   * meType == 91  -> a DUST burst through ParticleModule::SpawnSimple. NOT RECONSTRUCTED here --
+//                      SpawnSimple @0x82281A10 forwards to BrnSimpleParticleArray::SpawnParticle,
+//                      which has no body and no declaration in the tree. Announced, with the whole
+//                      arm written down in the announcement so it is one job, not a re-read.
+//   * meType != 91  -> the SPARK arm, and it is real below.
+//
+// The two gates ahead of both arms:
+//   * an entity whose EntityId owner byte is E_ENTITYTYPE_RACECAR (1) contributes its 14-bit entity
+//     index as the accumulator slot AND is skipped entirely when that car's RaceCarState says
+//     mbIsHidden (`lbz r11, 0x452(r3)` == +1106); anything else uses slot 8;
+//   * the spark arm additionally needs |mVelocity| > 10 m/s and the surface's visualfxsurface
+//     "sparks enabled" bool at +0x4F.
+// ------------------------------------------------------------------------------------------------
+void EffectsModule::ProcessCarDetatchedPartContacts(
+         const BrnPhysics::ContactSpy::ContactSpyData::PhysicalCarPartContactQueue* lpQueue,
+         const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
+         const EffectsModuleParams& lrParams)
+{
+    const s32 liLength = lpQueue->GetLength();          // `lwz r18, 8(r19)`
+
+    for (s32 liIndex = 0; liIndex < liLength; ++liIndex)
+    {
+        // The 128-byte copy (16 std pairs): BaseContact(96) + mVelocity + meType + mbIsHinged,
+        // alignas(16) => 128.
+        const BrnPhysics::ContactSpy::PhysicalCarPartContact lContact = lpQueue->GetEvent(liIndex);
+
+        // The accumulator slot -- the race car's own index, or 8 for anything that is not one.
+        const CgsSceneManager::EntityId lEntityId(lContact.mEntityIdA.muValue);
+        u32 luAccumulatorSlot = KU_NUM_ACTIVE_RACE_CARS;                     // `li r31, 8`
+
+        if (lEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_RACECAR)
+        {
+            luAccumulatorSlot = lEntityId.GetEntityIndex();
+            const BrnPhysics::Vehicle::RaceCarState* const lpState =
+                lpActiveRaceCars->GetRaceCarState(static_cast<EActiveRaceCarIndex>(luAccumulatorSlot));
+            if (lpState != 0 && lpState->mbIsHidden)                          // +1106
+                continue;
+        }
+
+        const Vector3& lrVelocity = lContact.mVelocity;                       // copy + 0x60
+        const f32 lfSpeed = sqrtf(lrVelocity.x * lrVelocity.x
+                                + lrVelocity.y * lrVelocity.y
+                                + lrVelocity.z * lrVelocity.z);
+
+        if (lContact.meType == KI_DETACHED_DUST_PART_TYPE)
+        {
+            if (!(lfSpeed > KF_DETACHED_DUST_MIN_SPEED))
+                continue;
+
+            static bool sbLogged = false;
+            LogNotReconstructed(sbLogged,
+                "EffectsModule::ProcessCarDetatchedPartContacts' DUST arm (meType == 91, "
+                "0x82293150..0x8229333C): mafAccumulatedParticleCountTyres[slot] += mDt * 20.0, "
+                "floor() it, then that many ParticleModule::SpawnSimple(&mParticleModule, 2, "
+                "mPointOnA, mNormal + Random(-3..3), size = Random()*0.5 + 0.2, mTime, 1.0) calls. "
+                "BLOCKED: SpawnSimple @0x82281A10 -> BrnSimpleParticleArray::SpawnParticle has no "
+                "body and no declaration. THE SPARK ARM OF THIS DRAIN IS REAL AND RUNS");
+            continue;
+        }
+
+        // ---- the spark arm (0x82293340..0x82293450) ----
+        if (!(lfSpeed > KF_DETACHED_SPARK_MIN_SPEED))
+            continue;
+
+        const u32 luSurfaceId =
+            (static_cast<u16>(lContact.mCollisionTagB.muValue) >> KU_SURFACE_ID_SHIFT) & KU_SURFACE_ID_MASK;
+
+        void* lpSurfaceRef = mSurfaceList.Surfaces(luSurfaceId);
+        if (!lpSurfaceRef)
+            lpSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_SIZE);
+
+        Attrib::Gen::surface lSurface(*static_cast<const Attrib::RefSpec*>(lpSurfaceRef), 0);
+        Attrib::Gen::visualfxsurface lVfx(VfxSurfaceRef(lSurface.GetAttributeData()), 0);
+        const u8* const lpVfxData = static_cast<const u8*>(lVfx.GetAttributeData());
+
+        // ⚠ THE GATE THE HINGED DRAIN DOES NOT HAVE: `lbz r10, 0x4F(r11) ; cmplwi ; beq` -- a
+        // surface that does not have sparks enabled produces none here.
+        if (lpVfxData[KU_VFX_SPARKS_ENABLED] == 0)
+            continue;
+
+        HandleSparkContacts(lContact,
+                            lrVelocity,                                   // v1: the part's velocity
+                            BrnParticle::Native::eSparkArray_BodyPart_Contact,  // r5 == 3
+                            lrParams.mDt,                                 // f1
+                            lrParams.mTime,                               // f2
+                            lContact.mPointOnA.y,                         // f3 (=> height 0)
+                            KF_DETACHED_MIN_FRICTION_STRESS,              // f4 == 0.005
+                            *reinterpret_cast<const f32*>(lpVfxData + KU_VFX_SPARK_SCALE),  // f5
+                            false);                                       // the stack byte
+    }
 }
 
 void EffectsModule::HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffer* /*lpInputBuffer*/,

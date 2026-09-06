@@ -148,6 +148,14 @@ public:
     }
 
     // ---- declared-only DWARF surface (bodies land with the full CgsRandom TU) ----
+    // ⭐ RandomFloat() and RandomFloat(f32,f32) ARE BODIED, in CgsRandom.cpp:121 and :182 (the
+    // rotate-helper wave, 2026-08-02), from CameraShake::Update's three inline expansions.
+    // The spark-producer wave (2026-09-06) re-derived both independently from a fourth and fifth
+    // site -- EffectsModule::HandleSparkContacts @0x8229089C and ParticleModule::
+    // HandleSpawnSparksAlongLineEvent @0x8229A574 -- and they agree instruction for instruction,
+    // including the load-refill-bump order that makes the value returned the one primed EIGHT
+    // calls ago. Do not re-inline them here; that is a duplicate-definition link error, which is
+    // how the re-derivation was caught.
     void SetSeed(u64 lu64Seed);
     u32  RandomUInt();
     u32  RandomUInt(u32 luMin, u32 luMax);

@@ -36,11 +36,14 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cmath>
 #include <cstdio>   // [diag] snprintf (the draw-side texture witness)
+#include <cstdlib>  // [diag] getenv / atoi (BRN_SPARK_FILM_VERTS)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"                 // CgsGraphics::Im3d (Dispatch drives it)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"           // ImRendererBase::mgpActiveRenderer
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"  // the 24-byte stride
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"              // shadow::Device
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                                  // LionParticleSampler_ApplyState
+#include <cstring>   // memcpy -- the host-endian-explicit vertex colour word
+#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"   // [diag] BRN_FRAME_DUMP_ARM=spark
 
 // ---- the device surface SparkRenderer::Dispatch binds through -------------------------------
 // The same minimal extern surface the Lion particle dispatch declares
@@ -146,22 +149,44 @@ namespace
         return (luAlpha << 24) | (luBlue << 16) | (luGreen << 8) | luRed;
     }
 
-    // The byte re-order the vertex path applies to that word before it reaches
-    // NativeParticleVertex::VertexIterator::Write (0x82920BAC..0x82920BF0). Written out as
-    // the console's own six extract/insert steps rather than guessed as a swap:
+    // ⭐⭐⭐ THE VERTEX COLOUR WORD -- AND THE ENDIAN TRAP IN IT (corrected 2026-09-06).
+    //
+    // The console re-orders the packed word before handing it to NativeParticleVertex::
+    // VertexIterator::Write (0x82920BAC..0x82920BF0), as six extract/insert steps:
     //   b0 = word >> 24 ; b1 = (word >> 16) & 0xFF ; b2 = (word >> 8) & 0xFF ; b3 = word & 0xFF
-    //   r3  = b2 ; insrwi r3, b3, 8, 16   -> r3  = (b2 & 0xFF00FFFF) | (b3 << 8)  == (b3<<8)|b2
-    //   r30 = b1 ; insrwi r30, r3, 24, 0  -> r30 = (r3 << 8) | b1  (r3 masked to 16 bits first)
+    //   r3  = b2 ; insrwi r3, b3, 8, 16   -> r3  = (b3 << 8) | b2
+    //   r30 = b1 ; insrwi r30, r3, 24, 0  -> r30 = (r3 << 8) | b1
     //   r30 = (r30 << 8) | b0
-    // i.e. the result is ((b3<<8 | b2) << 16) | (b1 << 8) | b0 == a full byte reversal of the
-    // packed word.
-    inline u32 SwizzleVertexColour(u32 luPackedColour)
+    // i.e. a full byte REVERSAL of PackColour's (a<<24)|(b<<16)|(g<<8)|r.
+    //
+    // ⛔ REPRODUCING THAT REVERSAL AS AN ARITHMETIC OPERATION ON THE HOST IS WRONG, AND THE FIRST
+    // COMMITTED VERSION OF THIS FUNCTION DID EXACTLY THAT. The reversal is an ENDIAN SWAP, not a
+    // channel swizzle: what the element needs is a MEMORY IMAGE of R,G,B,A at increasing addresses,
+    // because the declaration reads it as UBYTE4N (element word 0x014C86; see the derivation in
+    // pc/gcm/renderengine/ImmediateModePCLeaf.cpp:212).
+    //     packed word (a<<24)|(b<<16)|(g<<8)|r
+    //       on BIG-endian X360  -> memory [A][B][G][R]; the console's reversal makes it [R][G][B][A]
+    //       on LITTLE-endian PC -> memory [R][G][B][A] ALREADY; re-applying the reversal makes it
+    //                              [A][B][G][R], and the shader reads (x,y,z,w) = (a,b,g,r).
+    // With the instrument's forced colour the difference is not subtle: the ribbon witness printed
+    // colour=FFE1ADFF, whose little-endian memory image is [FF][AD][E1][FF] -- a pale CYAN --
+    // where the intended channels are r=FF g=E1 b=AD, a warm orange-white.
+    //
+    // This is the SAME correction renderengine::CoronaBuffer::Iterator::Write @0x823F3350 carries
+    // in its own banner (SDKs/RenderEngineClub/.../rwgcoronabufferiterator.cpp:29-44), for the same
+    // element word, and it is written the same way here: BYTE BY BYTE, so the stored order is
+    // R,G,B,A on any host and the question cannot come back.
+    inline u32 VertexColourWordRGBA(u32 luPackedColour)
     {
-        const u32 lu0 = (luPackedColour >> 24) & 0xFFu;
-        const u32 lu1 = (luPackedColour >> 16) & 0xFFu;
-        const u32 lu2 = (luPackedColour >> 8) & 0xFFu;
-        const u32 lu3 = luPackedColour & 0xFFu;
-        return (lu3 << 24) | (lu2 << 16) | (lu1 << 8) | lu0;
+        u8 lau8Channels[4];
+        lau8Channels[0] = static_cast<u8>( luPackedColour        & 0xFFu);   // R
+        lau8Channels[1] = static_cast<u8>((luPackedColour >>  8) & 0xFFu);   // G
+        lau8Channels[2] = static_cast<u8>((luPackedColour >> 16) & 0xFFu);   // B
+        lau8Channels[3] = static_cast<u8>((luPackedColour >> 24) & 0xFFu);   // A
+
+        u32 luWord = 0;
+        std::memcpy(&luWord, lau8Channels, sizeof(luWord));
+        return luWord;
     }
 
     // One ribbon sample: the console's 0x30-byte stack record (var_720, stride 0x30).
@@ -564,7 +589,7 @@ void SparkArray::RenderBank(NativeParticleVertex::VertexIterator& lrIterator,
             // (vi) emit. The strip opens with a duplicate of edge A's first vertex and closes
             // with a duplicate of edge B's last, so consecutive sparks in the same batch are
             // joined by degenerate triangles.
-            const u32 luColourWord = SwizzleVertexColour(lauPackedColours[luParticle & 3]);
+            const u32 luColourWord = VertexColourWordRGBA(lauPackedColours[luParticle & 3]);
             // [DIAG] NOT IN THE X360 BINARY. ONE-SHOT GEOMETRY WITNESS. "The batch count and
             // the vertex count are healthy and the picture is empty" has four possible causes
             // and only two of them are visible from the counters: the ribbon can be off
@@ -812,6 +837,34 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
         // shape the build-side probe had to be given. DELETE-WHEN-STABLE.
         gauSparkDrawnBatches += 1u;
         gauSparkDrawnVertices += lrBatch.muVertexCount;
+
+        // [DIAG] NOT IN THE X360 BINARY. THE FILM ARM (BRN_FRAME_DUMP_ARM=spark). Sticky; see
+        // BrnDiagFilmLatch.h. DELETE-WHEN-STABLE with the rest of this file's [spark] family.
+        //
+        // ⚠️ IT IS A CUMULATIVE-VERTEX THRESHOLD, NOT "THE FIRST DRAW", AND THE FIRST VERSION OF
+        // THIS LATCH WAS THE FIRST DRAW. That version armed correctly and filmed the LOADING
+        // SCREEN: sparks are drawn during the junkyard hand-off too (the previous run's first
+        // draws were at render frame ~1530, three seconds before DRIVING), so "the first spark
+        // ribbon" is not "the first crash". The threshold below is the smallest quantity that
+        // separates them -- the junkyard burst totalled 2,664 vertices over its whole life while
+        // one crash burst carried 2,580 in a SINGLE frame -- and it is overridable so the number
+        // never has to be argued about:
+        //     BRN_SPARK_FILM_VERTS=<n>   cumulative drawn vertices before the strip opens
+        static u32 suFilmThreshold = 0u;
+        if (suFilmThreshold == 0u)
+        {
+            const char* const lpcEnv = std::getenv("BRN_SPARK_FILM_VERTS");
+            const int liValue = (lpcEnv != 0) ? atoi(lpcEnv) : 0;
+            suFilmThreshold = (liValue > 0) ? static_cast<u32>(liValue) : 8000u;
+        }
+        if (BrnDiag::gFilmLatch.muSparkDrawLatched == 0u
+            && gauSparkDrawnVertices >= suFilmThreshold)
+        {
+            BrnDiag::gFilmLatch.muSparkDrawArray    = static_cast<u32>(lrBatch.meArrayId);
+            BrnDiag::gFilmLatch.muSparkDrawVertices = gauSparkDrawnVertices;
+            BrnDiag::gFilmLatch.muSparkDrawLatched  = 1u;
+            CgsDev::Log::WriteToLog("[spark] FILM LATCH raised (BRN_FRAME_DUMP_ARM=spark)\n");
+        }
     }
 
     // The EndRendering fold at 0x8228BE24.

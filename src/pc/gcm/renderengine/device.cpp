@@ -367,10 +367,17 @@ static void DumpBackBufferIfRequested()
         //                   rose 520 presents earlier and a 48-frame strip from it ended long
         //                   before the event. Needs BRN_SHOWTIME_WATCH only for the matching log
         //                   lines; the latch itself is unconditional.
+        //   "spark"      -- hold until a SPARK RIBBON REACHES THE DEVICE (BrnDiag::gFilmLatch.
+        //                   muSparkDrawLatched, raised by SparkRenderer::Dispatch on its first
+        //                   DrawVertices with a non-zero count). Use this and NOT `slomo` to film
+        //                   contact sparks: measured 2026-09-06, a 600-frame `slomo` strip over a
+        //                   six-shot crash sweep armed at present 2114 and ran out at 3312, while
+        //                   the two spark bursts were at ~1530 and ~3430 -- it missed both.
         //   anything else truthy -- hold until the traffic swerve camera latches (the
         //                   original arm; unchanged, so every existing recipe still works)
         static int siArm = -1;      // 0 none, 1 swerve camera, 2 slomo, 3 traffic ram, 4 skid,
-                                    // 5 [dv] one-step velocity, 6 showtime victim gain
+                                    // 5 [dv] one-step velocity, 6 showtime victim gain,
+                                    // 7 spark ribbon drawn
         static f32 sfRamMinSpeed = 0.0f;
         static u32 suMax = 0u;
         if (siArm < 0)
@@ -401,6 +408,10 @@ static void DumpBackBufferIfRequested()
             else if (_stricmp(lacArm, "x15") == 0)
             {
                 siArm = 6;
+            }
+            else if (_stricmp(lacArm, "spark") == 0)
+            {
+                siArm = 7;
             }
             else
             {
@@ -438,6 +449,11 @@ static void DumpBackBufferIfRequested()
         }
         if (siArm == 6 && BrnDiag::gFilmLatch.muVictimGainLatched == 0u)
         {
+        // "spark" -- hold until a spark ribbon actually reaches the device.
+        if (siArm == 7 && BrnDiag::gFilmLatch.muSparkDrawLatched == 0u)
+        {
+            return;
+        }
             return;
         }
         if (suMax != 0u)

@@ -26,7 +26,8 @@
 // double-buffer over the 8-entry f32 ring). It then RETURNS the slot that was
 // primed on the PREVIOUS call (a 1-deep pipeline): the slot is loaded BEFORE the
 // new bits are written, 1.0 is subtracted (giving components in [0, 1)), and the
-// result is  mVecA * mVecB + (previousDraw - 1.0)  computed per lane.
+// result is  mVecA + mVecB * (previousDraw - 1.0)  computed per lane (BASE + RANGE * r);
+// see the vmaddfp raw-field-order note in BrnEffectsUtils.cpp.
 // =============================================================================
 
 #include "BrnCommonTypes.h"   // Vector3, Vector4, Matrix33, VecFloat (rw::math::vpu float lanes)

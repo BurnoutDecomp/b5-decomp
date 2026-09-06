@@ -20,6 +20,7 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                   // BrnGameState::GameStateModuleIO::EGameModeType
 #include "GameSource/Replays/Serialisers/BrnReplayEffectsSerialiser.h"   // BrnReplays::EffectsSerialiser (BY VALUE, X360-only member)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface / BoostOutputInfo / EActiveRaceCarIndex
+#include "GameSource/Physics/ContactSpies/BrnContactSpyData.h"           // ContactSpyData's three car-contact queue typedefs + BaseContact (the contact drains' parameter types; nested typedefs cannot be forward-declared)
 #include "rw/core/base/ostypes.h"                                        // RwRGBAReal
 
 // ============================================================================
@@ -341,10 +342,48 @@ namespace BrnEffects
         void HandleCrashingTrail(ActiveRaceCarData& lrActiveRaceCar, f32 lfDt, f32 lfTime,
                                  const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState,
                                  EActiveRaceCarIndex leIndex);
+        // ⭐⭐ THE CONTACT DRAINS. Moved out of the "NOT RECONSTRUCTED" block 2026-09-06 -- the
+        // first three are real bodies now; ProcessRaceCarContacts still announces itself (see
+        // the .cpp for its own callee wall).
+        //
+        // @0x8229B7F8 (DWARF EffectsModule.cpp:3012). ⚠ ITS SIGNATURE IS THE ASM'S: r4 the
+        // params, r5 the active-race-car interface, r6 the contact spy, r7 the camera -- the
+        // Hex-Rays prototype drops two of them.
         void ProcessCarContactQueues(const EffectsModuleParams& lrParams,
                                      const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
                                      const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpy,
                                      const BrnDirector::Camera::Camera* lpCamera);
+
+        // @0x82297C08 (DWARF EffectsModule.cpp:3292).
+        void ProcessRaceCarContacts(const BrnPhysics::ContactSpy::ContactSpyData::RaceCarContactQueue* lpQueue,
+                                    const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
+                                    const EffectsModuleParams& lrParams,
+                                    const BrnDirector::Camera::Camera* lpCamera);
+
+        // @0x82292FA0 (DWARF EffectsModule.cpp:3654).
+        void ProcessCarDetatchedPartContacts(
+                 const BrnPhysics::ContactSpy::ContactSpyData::PhysicalCarPartContactQueue* lpQueue,
+                 const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
+                 const EffectsModuleParams& lrParams);
+
+        // @0x82293470 (DWARF EffectsModule.cpp:3767).
+        void ProcessHingedPartContacts(
+                 const BrnPhysics::ContactSpy::ContactSpyData::HingedCarPartContactQueue* lpQueue,
+                 const EffectsModuleParams& lrParams);
+
+        // @0x822906A8 (DWARF EffectsModule.cpp:1452). The shared consumer all three drains feed:
+        // it turns ONE resolved contact into a SpawnSparksAlongLineEvent on the particle module's
+        // inter-thread queue. See the .cpp for the five-float parameter list and which two of them
+        // this build's body never reads.
+        void HandleSparkContacts(const BrnPhysics::ContactSpy::BaseContact& lrContact,
+                                 Vector3 lvVelocity,
+                                 BrnParticle::Native::ESparkArrayID leSparkType,
+                                 f32 lfDt,
+                                 f32 lfTime,
+                                 f32 lfGroundPositionY,
+                                 f32 lfMinFrictionStress,
+                                 f32 lfSurfaceSparkScale,
+                                 bool lbIsCrashing);
         void HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffer* lpInputBuffer,
                                               const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
                                               f32 lfDt, f32 lfTime);
