@@ -816,9 +816,15 @@ void RaceCarEntityModule::ReadOutOfRangeRaceCarDataFromAI(
 
         // 0x822E9268: the slot is handled here only while the AI owns it -- i.e. it is out of
         // the world, or it has no active car, or its active car has not finished loading.
-        const ActiveRaceCar* lpActiveRaceCar = lpRaceCar->GetActiveRaceCar();
+        // ⛔ SHORT-CIRCUIT ORDER IS BEHAVIOUR (2026-09-06): the console tests `muType == 3`
+        //   (INACTIVE, i.e. !IsInWorld) FIRST and only then calls GetActiveRaceCar (0x822E9268:
+        //   `cmplwi cr6, r11, 3; beq` before the `bl GetActiveRaceCar`). GetActiveRaceCar
+        //   CGS_ASSERTs IsInWorld(), so calling it before the test fired 230,859 asserts in one
+        //   130 s freeburn run (every inactive slot, every frame). Measured, not theorised.
+        const bool lbInWorld = lpRaceCar->IsInWorld();
+        const ActiveRaceCar* lpActiveRaceCar = lbInWorld ? lpRaceCar->GetActiveRaceCar() : 0;
         const bool lbSimulatedByAI =
-            !lpRaceCar->IsInWorld() ||
+            !lbInWorld ||
             lpActiveRaceCar == 0 ||
             !lpActiveRaceCar->IsWaitingForLoad();
 
