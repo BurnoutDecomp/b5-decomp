@@ -45,6 +45,9 @@ namespace CgsDev
         E_PMP_6       = 6,   // BrnPhysics::Vehicle::VehicleManager::Construct's "PHYS ValidateRCWorldContact"
         E_PMP_9       = 9,   // BrnNetwork::BrnServerInterfaceX360::Construct's two "Int - * Update" monitors
         E_PMP_12      = 12,  // VehicleManager::Construct's other twenty-nine "VMan: ..." monitors (`li r4, 0xC`)
+        E_PMP_21      = 21,  // LionPerfMon::Construct's twenty-three Lion monitors (`li r4, 0x15`
+                             // @0x82279EB4 and twenty-two more, all with r5 = 0, r7 = 0 and the
+                             // f1 budget flt_820049E0 == 100.0f loaded once into f31 @0x82279EB8)
         E_PMP_MAX     = 24,
     };
 

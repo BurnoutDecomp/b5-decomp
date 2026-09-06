@@ -111,6 +111,20 @@ public:
     void UnlockForWriting() { mbLockedForWriting = false; }
 };
 
+// ⭐ THE CONSOLE NAMES THIS STRIDE FIVE TIMES; NOTHING WAS CHECKING IT (effects-path 1:1 audit,
+// 2026-09-06, class 3). maShaderConstantsFrames[2] is indexed by a byte the renderer keeps beside
+// it, and every one of those index expressions is a literal `mulli ..., 0x320`:
+//     BrnRendererModule::Construct   0x8240A778     SwapBuffers  0x823FC678 (@0x823FC6D4)
+//     BrnRendererModule::Update      0x82405E28 (@0x824060C8, the SetShaderConstantsFrame publish)
+//     BrnRendererModule::Render      0x8240BFA8     ComputeSunCoronaVisibility
+// with `0x490 + 2 * 0x320 == 0xAD0`, exactly where the two index bytes begin -- so the array ends
+// where the console says it ends. This type is pointer-free, so unlike the widened records around
+// it the host size must be the console's to the byte. Its five sibling console-attested strides
+// (BrnEffectsFrame 0x1F0, BrnBlobbyShadowBuffer 0x1010, sParticleNucleus 0xE0, SparkFrameData 0xD0,
+// ShadowStruct 0x40) all carry a pin like this one; this one did not.
+static_assert(sizeof(BrnShaderConstantsFrame) == 0x320,
+              "BrnShaderConstantsFrame stride drift (X360 0x320 == 800; see the mulli sites above)");
+
 // [FLAG PC bring-up] The shader-constants frame the WORLD producer filled this dispatch
 // frame. Defined in BrnWorldModule.cpp, written by WorldModule::GenerateDispatchListsBringUp
 // through the REAL WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410, which on
