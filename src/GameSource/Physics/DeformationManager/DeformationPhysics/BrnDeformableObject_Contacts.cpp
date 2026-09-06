@@ -229,6 +229,54 @@ namespace Deformation
         const bool lbPredicate = (lpRaceCarPhysics != nullptr) &&
                                  lpRaceCarPhysics->IsPlayerVehicleInShowtime();
 
+        // ---- [restit] NOT IN THE X360 BINARY. OPT-IN (BRN_ROLL_PROBE=1). Read-only census of THIS
+        // routine's own two gates. The super-elastic 1.1 arm is the only bounce restitution a
+        // vehicle-vs-world contact can get, and it is SHOWTIME-GATED, so on every crash measurement
+        // this campaign has ever taken it returned 0.0 -- and a routine that always returns zero is
+        // indistinguishable in a log from a routine that never ran. The three counters decompose it:
+        //   calls    -- the routine ran at all
+        //   noShow   -- rejected by the showtime predicate (slot +0x10, the three-term one)
+        //   flatRej  -- past showtime, rejected by |normal.y| < threshold (a WALL, not a floor)
+        //   fired    -- returned the 1.1
+        // ⛔ It is a CENSUS, not a max: a run with calls>0 and fired==0 is a measurement, not a gap.
+        // DELETE-WHEN the barrel-roll frequency question is closed and banked.
+        {
+            static s32 siArmed = -1;
+            if (siArmed < 0)
+            {
+                const char* lpcEnv = getenv("BRN_ROLL_PROBE");
+                siArmed = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
+            }
+            if (siArmed == 1)
+            {
+                static u32 suCalls = 0u, suNoShow = 0u, suFlatRej = 0u, suFired = 0u;
+                ++suCalls;
+                if (!lbPredicate) { ++suNoShow; }
+                else if (std::fabs(lContact.mNormal.y) < KF_WORLD_RESTITUTION_NORMAL_Y_THRESHOLD)
+                { ++suFlatRej; }
+                else { ++suFired; }
+                // ⛔⛔ THE PERIOD IS CHECKED AGAINST THE EVENT RATE, and the first version FAILED
+                // that check: a plain `% 2000` printed NOTHING on a 75 s wall-hit boot, because
+                // this routine is called a few hundred times in a whole crash. A census whose
+                // period exceeds its event rate is indistinguishable in the log from a routine
+                // that never ran -- the exact misreading this campaign has paid for three times.
+                // First call, then a geometric ladder, then every 2000.
+                const bool lbDue = (suCalls == 1u) || (suCalls == 25u) || (suCalls == 100u)
+                                || (suCalls == 500u) || ((suCalls % 2000u) == 0u);
+                if (lbDue && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[restit] calls=" << static_cast<s32>(suCalls)
+                        << " noShowtime=" << static_cast<s32>(suNoShow)
+                        << " flatRejected=" << static_cast<s32>(suFlatRej)
+                        << " FIRED=" << static_cast<s32>(suFired)
+                        << " thresh=" << KF_WORLD_RESTITUTION_NORMAL_Y_THRESHOLD
+                        << " value=" << KVF_WORLD_RESTITUTION_VALUE.x
+                        << "\n";
+                }
+            }
+        }
+
         if (!lbPredicate)
             return VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f };
 

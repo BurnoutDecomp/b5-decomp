@@ -114,6 +114,13 @@ namespace BrnPhysics
         static bool IsWithinTailgatingCone(const Vector3& lvForward, const Vector3& lvFrom,
                                            const Vector3& lvTo);                                    // @0x825BB290
 
+        // [stuntair] witness -- NOT IN THE X360 BINARY, opt-in on BRN_ROLL_PROBE=1, read-only.
+        // Prints the CONSOLE'S OWN barrel-roll/air-spin quantities (the accumulator this class
+        // integrates and the completion flags CheckForRollsAndSpins raises) plus the decomposition
+        // of why a crash never scores one. Full banner at the definition.
+        // DELETE-WHEN the barrel-roll frequency question is closed and banked.
+        void StuntProbe(Vehicle::RaceCarPhysics* lpCar, f32 lfTimeStep);
+
         void ResetCompleteOutputValues();                                                          // @0x825C2D80
         void OutputStuntsCompleted(BrnGameState::GameStateModuleIO::GameEventQueue* lpGameEventQueue); // @0x8263B3E8
 
