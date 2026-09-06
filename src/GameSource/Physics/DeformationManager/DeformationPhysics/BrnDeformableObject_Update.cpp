@@ -2487,9 +2487,44 @@ namespace Deformation
         // ZERO, and that zero did NOT mean "no pane crossed the 1 mm threshold" -- it meant the
         // entire leg never executed. A probe inside a function an upstream gate skips reports the
         // absence of the gate, not the absence of the phenomenon. [[diagnostics-that-lie]]
-        UpdateGlass(lvfTimeStep.x,
-                    lpOutput->GetDeformationOutputInterface(),
-                    lpOutput->GetDeformationOutputInterfaceForEntityModules());
+        // ⛔ AND THE LEG IS GATED AGAIN -- BUT THE REASON IS NOW MEASURED, NOT ASSUMED.
+        // Calling it AVs on the first frame it runs. Run glassspy_B, exe e4cfdb7f7505, 43.5 s in:
+        //     [EXCEPTION] EXCEPTION_ACCESS_VIOLATION (0xC0000005) at module+0x1BA44E
+        //       DeformableObject::UpdateGlassSmashedState + 0x3E   <- rcx=0, rdx=0
+        //       DeformableObject::UpdateGlass             + 0x54
+        //       DeformableObject::UpdateIKAndLocators     + 0x317
+        // +0x3E is immediately after the GetGlassPaneSpec call that opens the function, so the
+        // count read survived and the SPEC did not: miNumGlassPanes is non-zero (a null
+        // mpDeformationSpec would have faulted in UpdateGlass itself, ~0x40 earlier, not here)
+        // and the pane record behind it is not there. maGlassPaneData sits at spec+28, one slot
+        // below the count at +32 that this file static_asserts -- so the count is trustworthy and
+        // the ARRAY POINTER is the suspect. That is the [[silent-drop-stubs]] /
+        // [[valid-pointer-invalid-object]] shape: streamed glass pane data that nothing loads.
+        //
+        // ⭐ WHAT THIS EXCHANGE BOUGHT, because the gate looks unchanged and is not: the OLD gate
+        // said "module-output deformation interfaces not homed", and that was simply false -- both
+        // accessors exist and their Storage typedefs are exactly UpdateGlass's two parameter types
+        // (EmitDetachedPartNotification has been calling one of them for weeks). Its second clause,
+        // "dead on the junkyard path (no glass impacts)", described a boot that never left the
+        // junkyard. Both were stale, and while they stood, the [glass] probe's ZERO could not mean
+        // anything: a probe inside a function an upstream gate skips reports the absence of the
+        // gate. [[gates-are-stale-not-dead]] [[diagnostics-that-lie]]
+        // ⇒ the blocker is now ONE named thing (the pane array), reproducible in one run, instead
+        // of two false claims. Un-gate again the moment maGlassPaneData is populated; the crack
+        // remap below it is transcribed, self-corroborated and waiting.
+        {
+            static bool sbLoggedGlassGate = false;
+            if ( !sbLoggedGlassGate )
+            {
+                sbLoggedGlassGate = true;
+                if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                    *CgsDev::Log::gpDebugPrint
+                        << "conductor gate: DeformableObject::UpdateGlass leg of "
+                           "UpdateIKAndLocators skipped -- MEASURED AV at UpdateGlassSmashedState"
+                           "+0x3E (glass pane spec array absent behind a non-zero pane count); "
+                           "the two output interfaces ARE homed [FLAG PC boot gate]\n";
+            }
+        }
 
         UpdateDeformedBBox();
 
