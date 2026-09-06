@@ -8,6 +8,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxcolourcube.h"  // ColourCube::GetSize
 
 #include <cstdio>    // snprintf (the diag line)
+#include <Windows.h> // [FLAG PC witness] GetEnvironmentVariableA (BRN_POSTFX_DIAG)
 
 // ==================================================================================================
 // BrnRendererModule::Render @0x8240BFA8 -- THE EFFECTS-FRAME -> BrnPostFx APPLY BLOCK.
@@ -548,6 +549,86 @@ void BrnRendererBeginPostFxTintBlend(const BrnGraphics::EffectsArbitrator* lpArb
 }
 
 // ==================================================================================================
+// [FLAG PC witness][postfx] the applied-vignette line. ON CHANGE ONLY, opt-in, capped.
+//
+// WHY IT EXISTS: the composite's last colour op is `rgb = composite * lerp(inner, outer,
+// smoothstep(saturate(radius + gradientAdd))) + tint2d` (tools/assets/shaders/brn_postfx_composite.fx
+// :366-390), so this pair of colours IS the multiplier over the whole picture. The
+// `[postfx-fx] apply-call` sampler above only reports vig=1/0; it cannot tell a neutral vignette
+// from one that multiplies the frame by a dark blue. Bug-test lane `postfx` (b5-decomp#4).
+// DELETE-WHEN BrnRendererModule::PCBringUpProduceBaseEffectsFrame retires (the real
+// BrnEffects::EffectsModule::GenerateRenderRequests @0x8227FF10 becomes the base-frame producer).
+// ==================================================================================================
+namespace
+{
+    bool PostFxDiagEnabled()
+    {
+        static int siOn = -1;
+        if (siOn < 0)
+        {
+            char lacValue[8] = { 0 };
+            siOn = (GetEnvironmentVariableA("BRN_POSTFX_DIAG", lacValue, sizeof(lacValue)) > 0
+                    && lacValue[0] != '0') ? 1 : 0;
+        }
+        return siOn == 1;
+    }
+
+    void BrnRendererLogPostFxVignette(bool lbActive, const BrnEffects::VignetteData& lrVignette)
+    {
+        static u32  suCalls  = 0u;
+        static u32  suPrints = 0u;
+        const u32   luCall   = suCalls++;
+        if (!PostFxDiagEnabled() || suPrints >= 24u)
+            return;
+
+        // Change detection on the six values the state carries, quantised to 1/1000 so a float
+        // that only jitters in its low bits does not print every frame.
+        static bool sbHave   = false;
+        static bool sbActive = false;
+        static s32  saiLast[10] = { 0 };
+        const f32 lafNow[10] = {
+            lrVignette.mv4InnerColour.x, lrVignette.mv4InnerColour.y, lrVignette.mv4InnerColour.z,
+            lrVignette.mv4OuterColour.x, lrVignette.mv4OuterColour.y, lrVignette.mv4OuterColour.z,
+            lrVignette.mv2Amount.x, lrVignette.mv2Amount.y,
+            lrVignette.mv2Centre.x, lrVignette.mv2Centre.y
+        };
+        bool lbChanged = (!sbHave) || (lbActive != sbActive);
+        for (int li = 0; li < 10; ++li)
+        {
+            const s32 liQ = static_cast<s32>(lafNow[li] * 1000.0f);
+            if (liQ != saiLast[li])
+                lbChanged = true;
+            saiLast[li] = liQ;
+        }
+        sbHave   = true;
+        sbActive = lbActive;
+        if (!lbChanged)
+            return;
+        ++suPrints;
+
+        char lacMsg[288];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[postfx] vignette apply %u: active=%d inner=(%.4f,%.4f,%.4f)"
+                      " outer=(%.4f,%.4f,%.4f) amount=(%.4f,%.4f) centre=(%.4f,%.4f)"
+                      " sharp=%.4f angle=%.4f\n",
+                      static_cast<unsigned>(luCall), lbActive ? 1 : 0,
+                      static_cast<double>(lrVignette.mv4InnerColour.x),
+                      static_cast<double>(lrVignette.mv4InnerColour.y),
+                      static_cast<double>(lrVignette.mv4InnerColour.z),
+                      static_cast<double>(lrVignette.mv4OuterColour.x),
+                      static_cast<double>(lrVignette.mv4OuterColour.y),
+                      static_cast<double>(lrVignette.mv4OuterColour.z),
+                      static_cast<double>(lrVignette.mv2Amount.x),
+                      static_cast<double>(lrVignette.mv2Amount.y),
+                      static_cast<double>(lrVignette.mv2Centre.x),
+                      static_cast<double>(lrVignette.mv2Centre.y),
+                      static_cast<double>(lrVignette.mfSharpness),
+                      static_cast<double>(lrVignette.mfAngle));
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
+}
+
+// ==================================================================================================
 // Render @0x8240D700-0x8240DC50 -- THE APPLY BLOCK.
 // ==================================================================================================
 void BrnRendererApplyEffectsFrameToPostFx(const BrnGraphics::EffectsArbitrator* lpArbitrator,
@@ -652,6 +733,15 @@ void BrnRendererApplyEffectsFrameToPostFx(const BrnGraphics::EffectsArbitrator* 
             // all BEFORE the intervening `bl sub_823F9DE0`, which clobbers every volatile GPR. The
             // committed declaration agrees: rwgpfxvignette.h `void SetState(const State&)`.
             msPostFx.GetVignette()->SetState(*lpState);
+
+            // [FLAG PC witness][postfx] the vignette the composite actually multiplies the
+            // picture by, printed ON CHANGE only (never per frame -- an unbounded per-frame line
+            // floods the log). Opt-in behind BRN_POSTFX_DIAG=1 and capped at 24 lines. It sits
+            // INSIDE the active arm because lVignette is a raw stack slot outside it (see the
+            // bloom arm's note) -- reading it when the Eval did not run would print garbage.
+            // DELETE-WHEN the post-fx bring-up producers retire
+            // (BrnRendererModule::PCBringUpProduceBaseEffectsFrame).
+            BrnRendererLogPostFxVignette(true, lVignette);
         }
         gDiag.mbVignette = lbVignetteActive;
     }

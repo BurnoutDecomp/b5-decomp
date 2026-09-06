@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // CgsDev::DebugManager (debug HUD overlay)
 #include "GameSource/Gui/BrnGuiModule.h"         // BrnGui::gpActiveGuiModule (the GUI render drive)
 #include "GameSource/Graphics/BrnRendererModulePostFx.h"  // Render's effects-frame -> BrnPostFx apply block
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"  // Attrib::StringToKey ("198102", the base-frame vignette asset)
 #include "GameSource/Director/Camera/Camera.h"            // BrnDirector::Camera::Camera -- the staged camera-input record
 #include "GameSource/Effects/Particles/ParticleModule.h"     // BrnParticle::ParticleModule::RenderFullResParticles (the full-res particle pass)
 #include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"  // [diag] BrnDiag::LogBoundSurfaces (the pass-boundary RT probe)
@@ -1776,51 +1777,56 @@ void BrnRendererModule::PCBringUpProduceBaseEffectsFrame()
         lpFrame->SetTintData2d(lTint2d, KF_BASE_FRAME_ENABLED_WEIGHT);
     }
 
-    // ---- vignette: the weight is written, the DATA BLOCK IS NOT ---------------------------------
-    // [FLAG BLOCKED: the base-layer vignette asset is absent from every shipped bundle]
+    // ---- vignette: the console's own asset-keyed Construct, at the console's position ----------
     //
-    // The console's producer does VignetteData::Construct(&frame+0x40, hash64("198102")) and then
-    // sets the weight to 1.0f. Asset "198102" is in NO shipped bundle -- not POSTFXVAULT.BIN, not
-    // any other bnd2 under build/game (the conductor searched all of them) -- so on the retail
-    // console VignetteData::Construct @0x826780D0 runs over an Attrib instance with NO collection
-    // behind it and the block it writes is the vignetteasset's DefaultDataArea (0x50 bytes), whose
-    // CONTENTS ARE NOT ATTESTED BY ANYTHING WE HAVE. So the data block is not written here: any
-    // value would be invented, and this is the one effect where an invented value is not cosmetic
-    // (see the measurement note below). What the frame carries instead is what
-    // BrnEffectsFrame::Construct seeded -- VignetteData::Construct's own kv4Def* / kv2Def* statics.
+    // GenerateRenderRequests @0x8227FF10 lines 62-75:
+    //     if (mbVignette) {                                    // EffectsDebugComponent +181101
+    //         VignetteData::Construct(v50, &qword_82FAD0A0);    // qword = StringToKey("198102")
+    //         <10 x ld/std: v50 -> frame + 0x40>               // the 80-byte block
+    //         *(frame + 12) = 1.0f;                            // the weight
+    //     }
+    // mbVignette is 1 (EffectsDebugComponent::Construct @0x82278C98 seeds mbEnableBloom /
+    // mbEnableVignette / mbEnableDOF / mbEnableTint / mbEnable2dTint / mbEnableMotionBlur all to 1),
+    // which is why SetUseVignette(true) above is unconditional -- and why this block is too.
     //
-    // THE WEIGHT IS WRITTEN AT THE CONSOLE'S 1.0f, and that is not a compromise -- it is very nearly
-    // a no-op, which the asm settles. EffectsArbitrator::EvalVignette (sub_823F9DE0) does NOT use
-    // the base layer's weight at all:
-    //   * it SEEDS the out block with the base layer's VignetteData verbatim -- a ten-iteration
-    //     `ld`/`std` loop over 80 bytes from `mapaEffectsFrames[0] + 496*internal + 0x40`
-    //     (asm 0x823F9E08-0x823F9E30), before it looks at any weight;
-    //   * then, per layer 1..2, it folds that layer in with
-    //     `VignetteData::SetToBlend(out, out, 1.0f - layerWeight, layerWeight, layerBlend)`
-    //     (asm 0x823FA020-0x823FA034: `fsubs f1, f29(1.0), f31` / `fmr f2, f31` / r3 = r4 = out).
-    // So the base layer IS the seed and its residual weight is (1 - the OTHER layers' sum).
-    // EvalBloom (sub_823F9AA8) has the same shape -- it copies 32 bytes from frame+0x20 into the out
-    // block first (asm 0x823F9AE0-0x823F9B00) -- which is ALSO why the bloom block written above is
-    // what reaches BrnPostFx unchanged while the world layer contributes weight 0 on this build.
+    // UNBLOCKED 2026-09-06 (bug-test lane `postfx`, BurnoutDecomp/b5-decomp#4). The FLAG that stood
+    // here said the vignetteasset DefaultDataArea bytes were "NOT ATTESTED BY ANYTHING WE HAVE", so
+    // the data block was left as BrnEffectsFrame::Construct seeded it -- VignetteData's kv4Def* /
+    // kv2Def* statics, the "environment disabled" fallback: outer colour (0.0549, 0.2078, 0.3765),
+    // amount (0.5, 0.6), centre (0.5, 0.7), sharpness 0.33. That is a REAL vignette, and with the
+    // world layer contributing weight 0 -- every frame before the environment timeline is up, i.e.
+    // the whole boot including the boot-up autosave prompt -- it is the ONLY vignette, so the
+    // composite multiplied the entire front-end picture by a dark blue gradient. That is the wash
+    // the bug report's screenshot shows behind the prompt.
     //
-    // WHAT THE CONDUCTOR MUST MEASURE, because this is the one arm that can black the frame: with no
-    // world keyframes the vignette state IS the base frame's VignetteData, i.e. VignetteData's
-    // kv4DefInnerColour / kv4DefOuterColour. Those two statics are DECLARED in
-    // SharedClasses/Graphics/BrnEffectsData.h and DEFINED NOWHERE
-    // (`grep -rn "kv4DefInnerColour" --include=*.cpp b5-decomp/src` -> no hits), so their values are
-    // this wave's other open question. If they land as zeros, the composite's
-    // lerp(inner, outer, gradient) is black everywhere and the frame goes black.
-    //   * `[ImVerts pixels run N]` in BrnGame.log prints the render-target centre against the source
-    //     texture's centre. With bloom on the two MUST differ. An rt centre of 000000 while tex0 is
-    //     bright is the vignette going black.
-    //   * The `[postfx-fx]` line reports vig=1 either way; it says the arbitrator evaluated, not that
-    //     the result is sane.
-    // UNBLOCK by attesting asset 198102 (or the vignetteasset DefaultDataArea bytes) and writing the
-    // block here, next to the bloom one.
-    // The frame API sets data+weight together (DWARF BrnEffectsFrame.h:76); the DATA is left as
-    // BrnEffectsFrame::Construct seeded it (VignetteData::Construct() -> the kv*Def* statics dumped from
-    // the CRT initialisers, BrnEffectsData.cpp), so only the weight changes here.
-    lpFrame->SetVignetteData(lpFrame->GetVignetteData(), KF_BASE_FRAME_ENABLED_WEIGHT);
+    // THE BYTES ARE NOW ATTESTED, AND THE ANSWER IS ZERO. The full chain is documented at the
+    // Construct body in SharedClasses/Graphics/BrnEffectsData.cpp: asset "198102" is in no shipped
+    // collection (POSTFXVAULT.BIN is the only vault with vignetteasset collections and its 84
+    // exports were enumerated -- 30 vignetteasset, none of them 198102, while bloom 191270, tint2d
+    // 374388 and b4blur 218901 ARE there), so the ctor falls through to
+    // Attrib::DefaultDataArea(0x50) @0x821F0048, whose block unk_82FA8880 is 0x1D48 bytes that are
+    // ALL ZERO in the image. Calling the real Construct reproduces that AND self-corrects the day a
+    // vault carrying 198102 loads: no constant is written here.
+    //
+    // THE WEIGHT stays the console's 1.0f, and it is very nearly a no-op. EffectsArbitrator::
+    // EvalVignette (sub_823F9DE0) SEEDS the out block with the base layer's VignetteData verbatim
+    // -- a ten-iteration `ld`/`std` loop over 80 bytes from `mapaEffectsFrames[0] + 496*internal +
+    // 0x40` (asm 0x823F9E08-0x823F9E30) -- before it looks at any weight, then folds layers 1..2 in
+    // with `VignetteData::SetToBlend(out, out, 1.0f - layerWeight, layerWeight, layerBlend)`
+    // (asm 0x823FA020-0x823FA034). So the base layer IS the seed and its residual weight is
+    // (1 - the other layers' sum). EvalBloom (sub_823F9AA8) has the same shape, which is why the
+    // bloom block above reaches BrnPostFx unchanged while the world layer is silent.
+    //
+    // The key is hashed ONCE, exactly as the console caches it: dword_82FAD0A8's bit 0 guards a
+    // one-shot `Attrib::StringToKey("198102") -> qword_82FAD0A0` (asm lines 56-61).
+    {
+        static const u64 KU_BASE_FRAME_VIGNETTE_ASSET = Attrib::StringToKey("198102");
+
+        BrnEffects::VignetteData lVignette;
+        lVignette.Construct(KU_BASE_FRAME_VIGNETTE_ASSET);
+        // The frame API sets data + weight together (DWARF BrnEffectsFrame.h:76).
+        lpFrame->SetVignetteData(lVignette, KF_BASE_FRAME_ENABLED_WEIGHT);
+    }
 
     // ---- depth of field: the camera's own focus band, five floats + weight 1.0 -------------------
     // GenerateRenderRequests lines 132-146: a five-iteration WORD loop copying
@@ -2637,8 +2643,29 @@ void BrnRendererModule::BeginRenderEnvironmentMapFace(u32 luFace, f32 lfWhiteLev
     // The three cached render-state applies (see the banner for each slot's identification).
     shadow::Device::SetState(CgsDepthStencilStateFactory::GetState(
                                  E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZGTEQ_ZWRITEON));
+    // ⚠ FLAG PC-platform leaf (b5-decomp#5, 2026-09-06): CULL_MODE_**BACK**, not the console's
+    // CULL_MODE_FRONT, and it is the SECOND HALF of one change -- it must move with the env-map
+    // face projection and never on its own.
+    //
+    // The console's face cameras carried a RIGHT-handed projection (clip.w = -view.z, from
+    // Camera::SetPerspectiveProjectionMatrixRightHanded @0x827EC698), which negates the projected
+    // x and y and therefore REVERSES every triangle's screen winding. CULL FRONT is what turns
+    // that back into ordinary front-face rendering; the two are one state. This build's PC leaf
+    // publishes the ordinary D3D projection for the faces instead (see the FLAG on
+    // BrnGraphics::EnvironmentMap::Update -- the right-handed pair drew the ANTIPODAL hemisphere
+    // into every face on D3D9), so the winding is no longer reversed and CULL FRONT would cull
+    // exactly the surfaces the console keeps.
+    //
+    // MEASURED, both ways, with BRN_ENVMAP_STATS reading the resolved faces back off the GPU:
+    //   RH projection + CULL FRONT : +Y face = the GROUND (lum 39), -Y face = the SKY (lum 78)
+    //   D3D projection + CULL FRONT: +Y face = the SKY (lum 78), -Y face = FLAT CLEAR COLOUR
+    //                                (lum 38.0, std 0.00) with 90-106 meshes dispatched into it --
+    //                                the road drawn and then culled, one-sided, so it vanished
+    //                                while the buildings' back faces kept the side faces busy.
+    //   D3D projection + CULL BACK : the state below.
+    // DELETE-WHEN the face projection goes back to the console's right-handed build.
     shadow::Device::SetState(CgsRasterizerStateFactory::GetState(
-                                 E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT));
+                                 E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK));
     shadow::Device::SetState(CgsBlendStateFactory::GetState(
                                  E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA));
 }
@@ -4673,6 +4700,14 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         const double lfUsPerTick = 1.0e6 / static_cast<double>(lPerfFreq.QuadPart);
         LARGE_INTEGER lLoopT0; QueryPerformanceCounter(&lLoopT0);
 
+        // [FLAG PC bring-up probe] this frame's per-face schedule + mesh counts, for the
+        // BRN_ENVMAP_STATS witness below. Always filled (two stores per face); only read when
+        // the witness is armed. DELETE-WHEN b5-decomp#5 is closed.
+        bool labStatFaceRendered[BrnGraphics::E_FACE_NUM] = {};
+        u32  lauStatFaceMeshes[BrnGraphics::E_FACE_NUM]   = {};
+        static u32 sxEnvMapEverRendered = 0u;   // bit f = face f rendered at least once, ever
+        static u32 suEnvMapBeginCount   = 0u;   // total BeginRenderEnvironmentMapFace calls
+
         for (u32 luFace = 0; luFace < BrnGraphics::E_FACE_NUM; ++luFace)
         {
             // X360 @0x8240CC24: `lbzx r11, r29, r17` where r17 == the READ buffer + 0x99B4, i.e.
@@ -4684,6 +4719,10 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             // cost three faces and not six.
             if (!lpDispatchThreadInputBuffer->GetEnvMapFaceRender(luFace))
                 continue;
+
+            labStatFaceRendered[luFace] = true;
+            sxEnvMapEverRendered |= (1u << luFace);   // [probe] see the BRN_ENVMAP_STATS block
+            ++suEnvMapBeginCount;
 
             LARGE_INTEGER lT0; QueryPerformanceCounter(&lT0);
             BeginRenderEnvironmentMapFace(luFace, lfFrameWhiteLevel);
@@ -4704,6 +4743,7 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             CgsGraphics::DispatchList* const lpList =
                 mSingleBufferedDispatchFrame.GetList(KU_ENV_MAP_FIRST_MESH_LIST + luFace);
             const u32 luMeshCount = lpList->GetCount();
+            lauStatFaceMeshes[luFace] = luMeshCount;
             lpList->DispatchAllMeshes(mpInterpreter, &lDispatchContext, 0, -1);
 
             shadow::Device::UnlockRasteriserState();
@@ -4751,6 +4791,100 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
                     << " list=" << static_cast<s32>(KU_ENV_MAP_FIRST_MESH_LIST + luFace)
                     << " meshes=" << static_cast<s32>(luMeshCount)
                     << " sky=" << (lbSkyReady ? 1 : 0) << "\n";
+            }
+        }
+
+        // ========================================================================================
+        // [FLAG PC bring-up probe] BRN_ENVMAP_STATS=1 -- WHAT THE CUBE ACTUALLY HOLDS.
+        //
+        // Written for the reflections regression (b5-decomp#5, "reflections are weird ... they
+        // were working before"). A screenshot of a car cannot separate the two explanations --
+        // six good faces sampled wrongly, or some faces good and some frozen/black -- so this
+        // reads the six RESOLVED faces back off the GPU and prints one line per face:
+        //     [envmap] update <n> face <i> mean=(r,g,b) std=<s> lum=<l> rendered=<0|1> meshes=<m>
+        // `rendered` is this frame's mabEnvMapFaceRender byte (under the 30 Hz schedule only
+        // three faces are refreshed per frame), `meshes` the world mesh count dispatched into
+        // that face this frame.
+        //
+        // RATE: one sample every KU_ENVMAP_STATS_PERIOD passes, for the first
+        // KU_ENVMAP_STATS_SAMPLES samples -- 20 samples x 6 lines = 120 lines a run, and 120 GPU
+        // stalls spread over ~40 s. It is OFF unless the environment variable is set, so a normal
+        // run pays one getenv.
+        // DELETE-WHEN b5-decomp#5 is closed.
+        // ========================================================================================
+        {
+            // PRIME, deliberately: the env-map schedule alternates halves frame by frame and the
+            // sim sub-step count alternates with it, so an EVEN period samples one parity only
+            // and would report "no face ever renders" on a build where half the frames render
+            // three. 61 is coprime with 2 and 3.
+            //
+            // ⚠ AND THE CLOCK STARTS AT THE FIRST FACE, NOT AT THE FIRST PASS. This block runs
+            // from the loading screen onwards -- the target exists long before any world list
+            // does -- so a counter started at pass 0 spends its whole sample budget on the boot
+            // frames, where an empty cube and `rendered=0` are CORRECT and say nothing about the
+            // bug. Measured 2026-09-06: 20 samples at period 30 all landed inside the first ten
+            // seconds of a 150-second run. Gating on suEnvMapBeginCount puts every sample in the
+            // live phase, which is the only phase the question is about.
+            const u32 KU_ENVMAP_STATS_PERIOD  = 61u;
+            const u32 KU_ENVMAP_STATS_SAMPLES = 20u;
+
+            static s32 siEnvMapStats = -1;
+            if (siEnvMapStats < 0)
+            {
+                char lacStats[8] = { 0 };
+                siEnvMapStats = (GetEnvironmentVariableA("BRN_ENVMAP_STATS", lacStats,
+                                                         sizeof(lacStats)) > 0
+                                 && lacStats[0] != '0') ? 1 : 0;
+            }
+
+            // The raw pass counter runs from the first frame this block executes; the SAMPLE
+            // clock starts at the first face actually rendered, or -- if no face ever renders,
+            // which is itself the answer -- after KU_ENVMAP_STATS_FALLBACK raw passes, so the
+            // witness still reports the cube it found.
+            const u32 KU_ENVMAP_STATS_FALLBACK = 1800u;   // ~30 s at 60 Hz
+            static u32 suEnvMapRawPass      = 0u;
+            static u32 suEnvMapStatsPass    = 0u;
+            static u32 suEnvMapStatsSamples = 0u;
+            const u32 luRawPass = suEnvMapRawPass++;
+            const bool lbStatsClockRunning =
+                (suEnvMapBeginCount != 0u) || (luRawPass >= KU_ENVMAP_STATS_FALLBACK);
+            const u32 luPass = lbStatsClockRunning ? suEnvMapStatsPass++ : 1u;
+
+            if (siEnvMapStats != 0
+                && suEnvMapStatsSamples < KU_ENVMAP_STATS_SAMPLES
+                && (luPass % KU_ENVMAP_STATS_PERIOD) == 0u
+                && CgsDev::Log::gpDebugPrint != 0
+                && gpEnvMapTarget != 0
+                && gpEnvMapTarget->GetRenderTarget() != 0)
+            {
+                const u32 luSample = suEnvMapStatsSamples++;
+                *CgsDev::Log::gpDebugPrint
+                    << "[envmap] sample " << static_cast<s32>(luSample)
+                    << " pass " << static_cast<s32>(luPass)
+                    << " readbuf=" << const_cast<void*>(
+                           static_cast<const void*>(lpDispatchThreadInputBuffer))
+                    << " everRendered=" << static_cast<s32>(sxEnvMapEverRendered)
+                    << " begins=" << static_cast<s32>(suEnvMapBeginCount)
+                    << "\n";
+                for (u32 luStatFace = 0; luStatFace < BrnGraphics::E_FACE_NUM; ++luStatFace)
+                {
+                    f32 lafMean[3] = { 0.0f, 0.0f, 0.0f };
+                    f32 lfStd      = 0.0f;
+                    const bool lbOk =
+                        gpEnvMapTarget->GetRenderTarget()->maColourTargets[0]
+                            .PCReadBackFaceStats(luStatFace, lafMean, &lfStd);
+                    const f32 lfLum = 0.299f * lafMean[0] + 0.587f * lafMean[1]
+                                    + 0.114f * lafMean[2];
+                    *CgsDev::Log::gpDebugPrint
+                        << "[envmap] update " << static_cast<s32>(luSample)
+                        << " face " << static_cast<s32>(luStatFace)
+                        << " mean=(" << lafMean[0] << "," << lafMean[1] << "," << lafMean[2]
+                        << ") std=" << lfStd
+                        << " lum=" << lfLum
+                        << " rendered=" << (labStatFaceRendered[luStatFace] ? 1 : 0)
+                        << " meshes=" << static_cast<s32>(lauStatFaceMeshes[luStatFace])
+                        << " read=" << (lbOk ? 1 : 0) << "\n";
+                }
             }
         }
 

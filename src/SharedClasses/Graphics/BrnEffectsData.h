@@ -126,6 +126,14 @@ struct VignetteData
         mv4OuterColour = kv4DefOuterColour;
     }
 
+    // X360 @0x826780D0 -- the ASSET-KEYED Construct, the one the base-frame producer
+    // BrnEffects::EffectsModule::GenerateRenderRequests @0x8227FF10 calls with
+    // hash64("198102"). It builds an Attrib::Gen::vignetteasset over that key and copies the
+    // six fields out of the resolved layout block; it does NOT touch the kv*Def* statics
+    // above (those are only BrnEffectsFrame::Construct's seed). Body in BrnEffectsData.cpp,
+    // where the AttribSys headers can be included without pulling them into every consumer.
+    void Construct(const u64& lruAssetKey);
+
     // DWARF :161, X360 @0x823F35B8.
     void SetToBlend(const VignetteData& lA, f32 lfWa,
                     const VignetteData& lB, f32 lfWb);

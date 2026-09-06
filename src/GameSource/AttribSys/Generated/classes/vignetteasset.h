@@ -49,6 +49,20 @@ namespace Gen
         // same provenance pattern as shotgroup's luGroupNameKey). lpOwner is the optional
         // owning object the AttribSys collection resolve threads through (arrives in r5).
         explicit vignetteasset(u32 luCollectionKey = 0, void* lpOwner = nullptr);
+
+        // The base validity test and the attribute-data slot, re-exported past the PRIVATE
+        // inheritance -- the same pair cameradefaults.h:71/:79 and cameraexternalbehaviour.h
+        // already carry, and for the same reason: the block is Instance +0x04 on the console
+        // and +0x08 here, so the accessor is the only sound way to reach it on x64.
+        //
+        // ⭐ THE ONE READER IS BrnEffects::VignetteData::Construct @0x826780D0 (the X360
+        // inlines the generated per-attribute accessors away, so its body is six loads off
+        // `lwz r11, 4(this)`). The offsets it reads are documented at that body in
+        // SharedClasses/Graphics/BrnEffectsData.cpp, where the vpu Vector2/Vector4 types are
+        // complete; keeping them there rather than minting six typed accessors here matches
+        // what the ledger attests -- the ctor is the ONLY vignetteasset symbol in the image.
+        using Instance::IsValid;
+        using Instance::GetLayoutPointer;
     };
 
     // X360 ctor @0x82677F70: Collection = FindCollection(0x9C02B73F); chain the Instance

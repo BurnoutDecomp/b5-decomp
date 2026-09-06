@@ -74,6 +74,7 @@
 #include <cstdio>
 #include <cstddef>
 #include <cstdlib>   // std::getenv (the BRN_ENVMAP_DEBUG face-colour knob, OFF by default)
+#include <cmath>     // std::sqrt (the BRN_ENVMAP_STATS face-readback standard deviation)
 
 // =============================================================================
 // renderengine::RenderTargetState -- the bound-surface object.
@@ -1987,6 +1988,45 @@ namespace postfx
         if (lpDevice == nullptr)
             return;
 
+        // [FLAG PC bring-up probe] IS THE SCRATCH STILL THE BOUND TARGET? (b5-decomp#5)
+        // The resolve copies mpScratch into the face unconditionally, so a pass that rendered
+        // somewhere ELSE -- because a later pass bound a target through raw D3D9 and left the
+        // engine's gpLastRenderTargetState shadow claiming section 0 was still installed, so
+        // SetRenderTargetStateInvertDepth's bind was SKIPPED -- resolves a BLACK scratch into all
+        // six faces, with every log line reading OK. That is invisible without this compare.
+        // Value-latched (prints only when the answer changes), armed by BRN_ENVMAP_STATS.
+        // DELETE-WHEN b5-decomp#5 is closed.
+        {
+            static s32 siResolveProbe = -1;
+            if (siResolveProbe < 0)
+            {
+                const char* lpcStats = std::getenv("BRN_ENVMAP_STATS");
+                siResolveProbe = (lpcStats != nullptr && lpcStats[0] != '0') ? 1 : 0;
+            }
+            if (siResolveProbe != 0)
+            {
+                IDirect3DSurface9* lpBound = nullptr;
+                const bool lbGot = SUCCEEDED(lpDevice->GetRenderTarget(0u, &lpBound));
+                const bool lbIsScratch = (lbGot && lpBound == lpRecord->mpScratch);
+                static s32 siLastAnswer = -1;
+                const s32  liAnswer = lbIsScratch ? 1 : (lbGot ? 0 : 2);
+                if (liAnswer != siLastAnswer)
+                {
+                    siLastAnswer = liAnswer;
+                    char lacProbe[224];
+                    std::snprintf(lacProbe, sizeof(lacProbe),
+                                  "[envmap-rt] resolve probe: boundRT=%p scratch=%p isScratch=%d"
+                                  " (face %u)\n",
+                                  static_cast<void*>(lpBound),
+                                  static_cast<void*>(lpRecord->mpScratch),
+                                  lbIsScratch ? 1 : 0, static_cast<unsigned>(luFace));
+                    CgsDev::Log::WriteToLog(lacProbe);
+                }
+                if (lpBound != nullptr)
+                    lpBound->Release();
+            }
+        }
+
         IDirect3DSurface9* lpFaceSurface = nullptr;
         if (FAILED(lpRecord->mpCube->GetCubeMapSurface(static_cast<D3DCUBEMAP_FACES>(luFace), 0u,
                                                        &lpFaceSurface))
@@ -2048,6 +2088,124 @@ namespace postfx
         }
 
         lpFaceSurface->Release();          // GetCubeMapSurface AddRefs
+    }
+
+    // =========================================================================================
+    // Target::PCReadBackFaceStats  [FLAG PC bring-up probe -- NOT an X360 function]
+    //
+    // The BRN_ENVMAP_STATS witness's engine half. A screenshot of a car cannot say whether the
+    // CUBE is right: a reflection that looks "weird" is equally explained by six good faces
+    // sampled wrongly and by three good faces beside three frozen ones. This reads the resolved
+    // faces themselves.
+    //
+    // The source is the CUBE TEXTURE's face surface, i.e. the resolve DESTINATION -- never the
+    // multisampled scratch (GetRenderTargetData refuses a multisampled source, and the scratch is
+    // face-independent anyway, so it could only ever report the LAST face rendered).
+    // The staging surface is created once per edge size and kept: it is 64 KB at 128x128 and the
+    // witness is called six times a sample.
+    //
+    // It STALLS: GetRenderTargetData is a full pipeline flush plus a PCI-e read. That is why the
+    // caller rate-limits it and why nothing but the witness may call it.
+    // DELETE-WHEN the reflections regression (b5-decomp#5) is closed.
+    // =========================================================================================
+    bool Target::PCReadBackFaceStats(u32 luFace, f32* lpafMeanRgb, f32* lpfStdLum) const
+    {
+        if (lpafMeanRgb != nullptr)
+        {
+            lpafMeanRgb[0] = 0.0f;
+            lpafMeanRgb[1] = 0.0f;
+            lpafMeanRgb[2] = 0.0f;
+        }
+        if (lpfStdLum != nullptr)
+            *lpfStdLum = 0.0f;
+
+        const CubeTargetRecord* const lpRecord = FindCubeTarget(this);
+        if (lpRecord == nullptr || luFace >= 6u || lpRecord->muEdge == 0u)
+            return false;
+
+        IDirect3DDevice9* const lpDevice = Dev();
+        if (lpDevice == nullptr)
+            return false;
+
+        // The staging surface, one per edge size, created on first use and never released (this
+        // build has no render-target teardown path at all -- see the CubeTargetRecord banner).
+        static IDirect3DSurface9* spStaging     = nullptr;
+        static u32                suStagingEdge = 0u;
+        if (spStaging == nullptr || suStagingEdge != lpRecord->muEdge)
+        {
+            if (spStaging != nullptr)
+            {
+                spStaging->Release();
+                spStaging = nullptr;
+            }
+            suStagingEdge = 0u;
+            if (FAILED(lpDevice->CreateOffscreenPlainSurface(lpRecord->muEdge, lpRecord->muEdge,
+                                                             D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM,
+                                                             &spStaging, nullptr))
+                || spStaging == nullptr)
+            {
+                spStaging = nullptr;
+                return false;
+            }
+            suStagingEdge = lpRecord->muEdge;
+        }
+
+        IDirect3DSurface9* lpFaceSurface = nullptr;
+        if (FAILED(lpRecord->mpCube->GetCubeMapSurface(static_cast<D3DCUBEMAP_FACES>(luFace), 0u,
+                                                       &lpFaceSurface))
+            || lpFaceSurface == nullptr)
+        {
+            return false;
+        }
+
+        bool lbRead = false;
+        D3DLOCKED_RECT lLock;
+        if (SUCCEEDED(lpDevice->GetRenderTargetData(lpFaceSurface, spStaging))
+            && SUCCEEDED(spStaging->LockRect(&lLock, nullptr, D3DLOCK_READONLY)))
+        {
+            const u32 luEdge = lpRecord->muEdge;
+            double lfSumR = 0.0, lfSumG = 0.0, lfSumB = 0.0;
+            double lfSumLum = 0.0, lfSumLumSq = 0.0;
+            const unsigned char* lpRow = static_cast<const unsigned char*>(lLock.pBits);
+            for (u32 luY = 0; luY < luEdge; ++luY)
+            {
+                const unsigned char* lpTexel = lpRow;
+                for (u32 luX = 0; luX < luEdge; ++luX)
+                {
+                    // A8R8G8B8 little-endian: byte 0 = B, 1 = G, 2 = R, 3 = A.
+                    const double lfB = static_cast<double>(lpTexel[0]);
+                    const double lfG = static_cast<double>(lpTexel[1]);
+                    const double lfR = static_cast<double>(lpTexel[2]);
+                    lfSumB += lfB;
+                    lfSumG += lfG;
+                    lfSumR += lfR;
+                    const double lfLum = 0.299 * lfR + 0.587 * lfG + 0.114 * lfB;
+                    lfSumLum   += lfLum;
+                    lfSumLumSq += lfLum * lfLum;
+                    lpTexel += 4;
+                }
+                lpRow += lLock.Pitch;
+            }
+            const double lfCount = static_cast<double>(luEdge) * static_cast<double>(luEdge);
+            const double lfMeanLum = lfSumLum / lfCount;
+            double lfVariance = (lfSumLumSq / lfCount) - (lfMeanLum * lfMeanLum);
+            if (lfVariance < 0.0)
+                lfVariance = 0.0;
+            if (lpafMeanRgb != nullptr)
+            {
+                lpafMeanRgb[0] = static_cast<f32>(lfSumR / lfCount);
+                lpafMeanRgb[1] = static_cast<f32>(lfSumG / lfCount);
+                lpafMeanRgb[2] = static_cast<f32>(lfSumB / lfCount);
+            }
+            if (lpfStdLum != nullptr)
+                *lpfStdLum = static_cast<f32>(std::sqrt(lfVariance));
+            lbRead = true;
+
+            spStaging->UnlockRect();
+        }
+
+        lpFaceSurface->Release();          // GetCubeMapSurface AddRefs
+        return lbRead;
     }
 
     // =========================================================================

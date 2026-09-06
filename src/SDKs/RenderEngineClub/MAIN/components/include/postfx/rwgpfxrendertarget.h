@@ -168,6 +168,19 @@ namespace postfx
         // Resolve() is, and for the same reason -- on PC the shadow cascade atlas is rendered
         // straight into its own texture, so there is nothing to copy out.
         void Resolve(u32 luFace);
+
+        // [FLAG PC bring-up probe -- NOT an X360 function] BRN_ENVMAP_STATS witness.
+        // Read one RESOLVED cube face back through a system-memory staging surface
+        // (GetCubeMapSurface -> GetRenderTargetData -> LockRect) and reduce it to four
+        // numbers: the per-channel mean over the whole face and the standard deviation of
+        // its luminance. It STALLS the GPU, so the only caller is the env-map pass's
+        // rate-limited witness (BrnRendererModule.cpp, first N samples, one every N
+        // updates); it returns false for any target that is not a registered cube.
+        // The question it exists to answer is the one no screenshot can: does the cube
+        // hold six DIFFERENT, non-degenerate faces, and is the +Y face sky and the -Y
+        // face ground.
+        // DELETE-WHEN the reflections regression (b5-decomp#5) is closed.
+        bool PCReadBackFaceStats(u32 luFace, f32* lpafMeanRgb, f32* lpfStdLum) const;
     };
 
     // rwgpfxrendertarget.h:502 (DWARF). The fields are owned by this class's own TU; only the

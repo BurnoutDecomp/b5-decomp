@@ -1,5 +1,9 @@
 #include "types.hpp"
 #include "SharedClasses/Graphics/BrnEffectsData.h"
+// The asset-keyed VignetteData::Construct @0x826780D0 builds one of these. Kept out of
+// BrnEffectsData.h so the AttribSys runtime does not follow the data structs into every
+// consumer TU.
+#include "GameSource/AttribSys/Generated/classes/vignetteasset.h"   // Attrib::Gen::vignetteasset
 
 // Post-FX data blend helpers. Declaration shape from the DecFIGS DWARF
 // (SharedClasses/Graphics/BrnEffectsData.h:113/:120, :161/:168, :210/:217, :260/:267,
@@ -125,6 +129,76 @@ void BloomData::SetToBlend(const BloomData& lA, f32 lfWa,
 }
 
 // ---- VignetteData --------------------------------------------------------
+// ==========================================================================
+// BrnEffects::VignetteData::Construct(const u64&) @0x826780D0 -- the ASSET-KEYED Construct.
+//
+// The X360 body is a vignetteasset construction plus six loads off the instance's attribute
+// data area (`_R11 = v11`, the stack instance's mpAttributeData):
+//     lvx128 v0,[data+0x10] -> stvx128 [out+0x30]      mv4InnerColour <- layout +0x10
+//     lvx128 v0,[data+0x00] -> stvx128 [out+0x40]      mv4OuterColour <- layout +0x00
+//     out[1] = *(data + 64)                            mfSharpness    <- layout +0x40
+//     out[0] = *(data + 68)                            mfAngle        <- layout +0x44
+//     lvx128 v0,[data+0x20] -> stvx128 [out+0x20]      mv2Centre      <- layout +0x20
+//     lvx128 v0,[data+0x30] -> stvx128 [out+0x10]      mv2Amount      <- layout +0x30
+// then `Attrib::Instance::~Instance(v10)`. Those six destinations are exactly this struct's
+// member offsets (mfAngle 0x00, mfSharpness 0x04, mv2Amount 0x10, mv2Centre 0x20,
+// mv4InnerColour 0x30, mv4OuterColour 0x40 -- the static_asserts at the bottom of the header
+// pin them), so the copies are written BY NAME here. The layout block itself is external
+// serialised AttribSys data, not a C++ object, which is the documented raw-offset exception.
+//
+// ⭐ THE COLLECTION KEY IS THE LOW 32 BITS. The console calls
+// `vignetteasset::vignetteasset(v10, *(a2 + 4), 0)` -- a2 is the 64-bit hash's address and
+// `*(a2+4)` is its LOW word on a big-endian host, which is also what the generated ctor's u32
+// parameter takes. Reproduced by the explicit truncation, NOT by passing the doubleword.
+//
+// ⭐ WHAT THIS RESOLVES TO ON THE SHIPPED DATA, and why the base layer is meant to be inert.
+// The one call site is EffectsModule::GenerateRenderRequests @0x8227FF10 with
+// Attrib::StringToKey("198102") (hash64 = 0x8AED0283_083E735C). No shipped collection carries
+// that key: POSTFXVAULT.BIN is the only vault with vignetteasset collections and its 84
+// exports were enumerated -- 30 are vignetteasset (class 0x92F96F62_9C02B73F) and none of
+// them is 198102 (the vault DOES carry bloomasset 191270, tint2d 374388 and b4blur 218901,
+// which is what makes the enumeration conclusive rather than a failed search). So the ctor's
+// `if (!mpAttributeData) mpAttributeData = DefaultDataArea(0x50)` tail fires, and
+// Attrib::DefaultDataArea @0x821F0048 returns `&unk_82FA8880` -- 0x1D48 bytes that are ALL
+// ZERO in the shipped image (file offset 0xFA8880 in the loaded image; the 0x400 bytes
+// immediately before it are dense real data, so this is a genuine zero-initialised block and
+// not a short-file artefact). The base layer therefore contributes a ZERO vignette, which the
+// composite's `lerp(inner, outer, g)` collapses to a zero multiplier -- i.e. the base layer
+// contributes nothing until the environment timeline's world layer replaces it at weight 1.
+// (This closes the "vignetteasset DefaultDataArea bytes unattested" park that
+// BrnRendererModule::PCBringUpProduceBaseEffectsFrame carried.)
+// ==========================================================================
+void VignetteData::Construct(const u64& lruAssetKey)
+{
+    Attrib::Gen::vignetteasset lAsset(static_cast<u32>(lruAssetKey), 0);
+
+    const u8* const lpLayout = static_cast<const u8*>(lAsset.GetLayoutPointer());
+
+    // Lane by lane, NOT by casting the block to a Vector2/Vector4. rw::math::vpu::VectorIntrinsic
+    // is `alignas(16)`, so a whole-vector cast would tell the compiler the layout block is
+    // 16-byte aligned. The vault's own payload regions are (their PtrN targets are all 16-byte
+    // multiples), but Attrib::DefaultDataArea's shared block is a plain static byte array with no
+    // stated alignment -- and that is exactly the block this call resolves to today. Four scalar
+    // float loads need no such promise. (The console's `lvx128` has the same requirement and gets
+    // it from the console allocator; on the host the guarantee does not exist, so it is not taken.)
+    const f32* const lpOuter  = reinterpret_cast<const f32*>(lpLayout + 0x00);
+    const f32* const lpInner  = reinterpret_cast<const f32*>(lpLayout + 0x10);
+    const f32* const lpCentre = reinterpret_cast<const f32*>(lpLayout + 0x20);
+    const f32* const lpAmount = reinterpret_cast<const f32*>(lpLayout + 0x30);
+
+    mv4OuterColour.x = lpOuter[0];  mv4OuterColour.y = lpOuter[1];
+    mv4OuterColour.z = lpOuter[2];  mv4OuterColour.w = lpOuter[3];
+    mv4InnerColour.x = lpInner[0];  mv4InnerColour.y = lpInner[1];
+    mv4InnerColour.z = lpInner[2];  mv4InnerColour.w = lpInner[3];
+    mv2Centre.x      = lpCentre[0]; mv2Centre.y      = lpCentre[1];
+    mv2Centre.z      = lpCentre[2]; mv2Centre.w      = lpCentre[3];
+    mv2Amount.x      = lpAmount[0]; mv2Amount.y      = lpAmount[1];
+    mv2Amount.z      = lpAmount[2]; mv2Amount.w      = lpAmount[3];
+
+    mfSharpness = *reinterpret_cast<const f32*>(lpLayout + 0x40);
+    mfAngle     = *reinterpret_cast<const f32*>(lpLayout + 0x44);
+}
+
 // 2-way @0x823F35B8: scalars mfAngle/mfSharpness folded individually; the four vector
 // members (mv2Amount @0x10, mv2Centre @0x20, mv4InnerColour @0x30, mv4OuterColour @0x40 --
 // the `li r30,0x10 / li r31,0x20 / li r5,0x30 / li r7,0x40` index registers) each via a

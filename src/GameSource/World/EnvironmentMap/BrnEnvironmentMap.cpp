@@ -218,7 +218,35 @@ namespace BrnGraphics
                 lCameraPosition,
                 KAV_ENV_MAP_UP_DIRECTIONS[luEnvMapFace],
                 lTargetPosition);
-            maEnvMapCameras[luEnvMapFace].SetPerspectiveProjectionMatrixRightHanded();
+
+            // ⚠ FLAG PC-platform leaf: the console ends each face on
+            // Camera::SetPerspectiveProjectionMatrixRightHanded @0x827EC698 (whose z row is
+            // (n+f)/(n-f) with w = -1, i.e. clip.w = -view.z) and this build ended here on the
+            // same call. On D3D9 that is WRONG, and measurably so -- b5-decomp#5, "reflections
+            // are weird ... they don't reflect the environment properly".
+            //
+            // WHY. Camera::LookAt @0x827F9510 builds a LEFT-handed view (its third column is
+            // +dir, so a point in front has POSITIVE view z). Pairing that view with a
+            // w = -view.z projection makes the visible half-space the one BEHIND the look
+            // direction: every face renders, and every face renders the ANTIPODAL hemisphere.
+            // This build then compensated on the query side only -- GetFrustumPerspective's
+            // lbNegateNearFar arm selects that same back frustum -- so the cube came out
+            // internally consistent and physically reversed: measured 2026-09-06 by reading the
+            // six resolved faces back off the GPU (BRN_ENVMAP_STATS), the +Y face held the dark
+            // GROUND (lum 39, rgb 35/41/40) and the -Y face held the blue SKY (lum 78, rgb
+            // 57/84/105). D3D9's texCUBE picks the face from the reflection vector's dominant
+            // axis, so a car sampling +Y got the road and a car sampling -Y got the sky.
+            //
+            // The console's own UpdatePerspectiveProjectionMatrix @0x827EC778 was already
+            // PC-ported from the [-1,1] OpenGL depth mapping to D3D's [0,1] (CgsCamera.cpp) --
+            // its RIGHT-HANDED sibling never was, and this is the one place that consumed it.
+            // The face camera is now published with the same D3D projection every other camera
+            // in the frame uses, and the two env-map frustum queries drop their negate flag to
+            // match (BrnWorldModule.cpp :3751 / :6678). Nothing outside the env-map cameras is
+            // touched: these six are the only users of the right-handed build.
+            // DELETE-WHEN Camera acquires a real handedness-aware projection pair AND the
+            // vehicle pixel shaders are re-verified against it.
+            maEnvMapCameras[luEnvMapFace].UpdatePerspectiveProjectionMatrix();
         }
     }
 }
