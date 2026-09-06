@@ -407,6 +407,133 @@ namespace Deformation
 	}
 
 	// =============================================================================================
+	// [hop] NOT IN THE X360 BINARY -- host-side witness, opt-in on BRN_HOP_PROBE (0/unset ==
+	// fully inert). DELETE-WHEN the deformation-SHAPE question is banked.
+	//
+	// IT ANSWERS ONE QUESTION: HOW WIDE IS A DENT?
+	//   A dent that stays on ONE sensor while its neighbours hold still IS a stretched panel --
+	//   UpdateIK blends every tag point from TWO sensor sphere centres, so a big move on A with
+	//   zero on B pulls the panel between them apart. A dent shared across a CHAIN of sensors is
+	//   a crumple. The chain is authored: ApplyLocalImpulse ends with
+	//       ImpulsePasser::PassOnImpulse(spec->maNextSensor[dir], params, absorbed * 0.5)
+	//   and DeformationSensor::RecievePassedOnImpulse deposits into ITS sphere and forwards with
+	//   the SAME direction and the SAME magnitude (`vmr128 v1, v127` @0x825E12BC -- the incoming
+	//   argument, never attenuated), so the chain deposits at CONSTANT amplitude once per hop and
+	//   the HOP COUNT is the width of the crumple.
+	//
+	// THE ORACLE IS OFFLINE AND INDEPENDENT, AND ITS PREDICTION IS PRE-REGISTERED HERE.
+	// tools/re/deform_chain_walk.py (parent repo) walks the same maNextSensor[] out of the shipped
+	// VEH_*_AT.BIN, so the runtime histogram below has a number to be checked against rather than
+	// a plausible one to be admired. Measured over the fleet 2026-09-07 -- 429 cars, 8,334 sensors,
+	// 50,004 chains, ALL terminating at the car body (0 cycles, 0 out-of-range, 0 self-loops,
+	// mu8SceneIndex == i+1 everywhere):
+	//     mean hops per direction    +X 0.80   -X 0.78   +Y 0.00   -Y 0.16   +Z 1.95   -Z 1.99
+	//     hop histogram   0:29668 1:8910 2:4123 3:3122 4:1479 5:1386 6:1316
+	//     PUSMC01 alone   +X 0.80  -X 0.80  +Y 0.00  -Y 0.20  +Z 2.25  -Z 2.25
+	// ⭐ THAT SIX-VALUE FINGERPRINT IS THE NEGATIVE CONTROL. It is strongly shaped -- the vertical
+	// axes are near zero and the two crush axes are an order of magnitude larger -- so a ledger
+	// that is merely counting something plausible cannot reproduce it by accident, and a ledger
+	// reporting every chain dead at depth 0 while the data says 1.99 has found the smear rather
+	// than a bug in itself. dirDepth[d] / dirN[d] is the runtime side of the comparison.
+	// The absorption-weighted spread profile puts numbers on what is at stake: on the two crush
+	// axes the chain carries 1.01 / 1.03 times the displacement of the sensor that was actually
+	// hit, so a dead chain loses HALF of a head-on dent and concentrates the rest on one sphere.
+	//
+	// WHY IT COUNTS RATHER THAN MAXIMISES: a max is monotone -- it can only freeze -- and this
+	// campaign has read a frozen max as a stall before. Every field here is a COUNT or a SUM
+	// printed with its present number, so two dumps subtract into a window.
+	//
+	// muNextZeroAtHead / muNextZeroAtHop exist so that "no chain ever got past depth 0" can be
+	// told apart from "the receiving body never ran" -- those are two completely different
+	// findings and only the pair of counters distinguishes them.
+	//
+	// THE dt FIELDS ARE THE FRAME-RATE COUPLING, AND THEY ARE LOAD-BEARING HERE. The direct-hit
+	// arm scales its absorption by pow(base, 60*dt) (the inlined powf at 0x825E14E4..0x825E16C0)
+	// while THIS chain arm has NO such correction (the asm 0x825E12DC..0x825E12E4 is three plain
+	// multiplies). At the console's dt == 1/60 the exponent is exactly 1 and the two arms agree;
+	// at any other dt their ratio is base^(60*dt - 1) != 1, so a step that is not 1/60 changes the
+	// BALANCE between the direct dent and the spread dent -- i.e. it changes the SHAPE. The
+	// game's first frame runs a ~9.8 s sim catch-up, so this is not hypothetical.
+	// =============================================================================================
+	namespace
+	{
+		const s32 KI_HOP_BINS = 12;
+		// ⚠️ 512, AND A REFUSAL COUNTER. The [dent] table above learned this the expensive way:
+		// its 48 rows were shared FIRST-COME between the player and every traffic car, so a
+		// 148 mph wreck produced rows for three of the player's sensors and read exactly like
+		// "only one corner of the car ever deforms". muRowsRefused below makes a full table say
+		// so instead of silently answering a different question. [[diagnostics-that-lie]]
+		const s32 KI_HOP_ROWS = 512;
+
+		struct HopSensorRow
+		{
+			const void* mpSensor;
+			s32         miDir;
+			f32         mafInitialOffset[3];
+			f32         mfChainMove;    // sum of the moves this sensor took AS A CHAIN MEMBER
+			u32         muHits;
+			u32         muNegative;     // deposits pulled BACKWARD (room - consumed < 0)
+			s32         miOwner;
+			s32         miDepth;        // the depth of the last hop that reached it
+		};
+
+		struct HopLedger
+		{
+			u32 muHeadApplies;              // ApplyLocalImpulse tails that started a chain
+			u32 muNextZeroAtHead;           // ...of those, next == 0 (straight to the car body)
+			u32 muChainDeposits;            // DeformationSensor::RecievePassedOnImpulse entries
+			u32 muNextZeroAtHop;            // ...of those, whose own next == 0
+			u32 muPositive, muZeroMove, muNegative;
+			u32 mauDepth[KI_HOP_BINS];      // terminal chain depth histogram
+			f32 mafDepthMove[KI_HOP_BINS];  // metres deposited at each depth
+			f32 mfHeadMove;                 // metres deposited by direct hits
+			f32 mfChainMove;                // metres deposited by chain hops
+			u32 mauDirCount[6];             // chains started per direction
+			u32 mauDirDepthSum[6];          // and the total depth they reached
+			u32 muDtSamples, muDtOffConsole, muDtBig;
+			f32 mfDtMax;
+			u32 muRowsRefused;              // chain deposits the per-sensor table had no room for
+		};
+
+		HopLedger    gHop = { 0 };
+		HopSensorRow gaHopRows[KI_HOP_ROWS];
+		s32          giHopRows = 0;
+		s32          giHopDepth = 0;
+		u32          guHopLastDump = 0xFFFFFFFFu;
+		s32          giHopProbe = -1;
+
+		s32 HopProbeLevel()
+		{
+			if ( giHopProbe < 0 )
+			{
+				const char* lpcEnv = getenv( "BRN_HOP_PROBE" );
+				giHopProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? atoi( lpcEnv ) : 0;
+				if ( giHopProbe < 0 ) { giHopProbe = 0; }
+			}
+			return giHopProbe;
+		}
+
+		HopSensorRow* HopFind( const void* lpSensor, s32 liDir )
+		{
+			for ( s32 li = 0; li < giHopRows; ++li )
+			{
+				if ( gaHopRows[li].mpSensor == lpSensor && gaHopRows[li].miDir == liDir )
+				{
+					return &gaHopRows[li];
+				}
+			}
+			if ( giHopRows >= KI_HOP_ROWS ) { ++gHop.muRowsRefused; return 0; }
+			HopSensorRow& lrNew = gaHopRows[giHopRows++];
+			lrNew.mpSensor = lpSensor;   lrNew.miDir = liDir;
+			lrNew.mafInitialOffset[0] = 0.0f; lrNew.mafInitialOffset[1] = 0.0f;
+			lrNew.mafInitialOffset[2] = 0.0f;
+			lrNew.mfChainMove = 0.0f;    lrNew.muHits = 0u;   lrNew.muNegative = 0u;
+			lrNew.miOwner = -1;          lrNew.miDepth = -1;
+			return &lrNew;
+		}
+	}
+
+	// =============================================================================================
 	// RecievePassedOnImpulse @ 0x825E11F8 -- CollidableBody override.
 	//
 	// An impulse passed down the chain deposits displacement into this sensor -- clamped to the
@@ -424,6 +551,30 @@ namespace Deformation
 	// (c) read the FLAGGED-zero KsaHitDirection duplicate where the asm reads the RECOVERED
 	// KA_IMPULSE_DIRECTIONS table (unk_82FB9680). Every factor below is a homed ImpulseParams
 	// field or a recovered table row; nothing is silently zero any more.
+	//
+	// ⭐⭐ RE-VERIFIED INSTRUCTION BY INSTRUCTION 2026-09-07 (deformation-SHAPE wave) against the
+	// ARTIST export .ida-exports/BURNOUT_X360_ARTIST.XEX/0x825E11F8.json -- this function is NOT an
+	// export hole, so the whole 50-instruction body reads straight off. Three things that look like
+	// transcription slips are the console's own arithmetic and must not be "fixed":
+	//   1. THERE IS NO ZERO FLOOR ON THE REMAINING ROOM. 0x825E12B0 is a bare `vsubfp128 v11,
+	//      v125, v124` (room - consumed) and the only clamp on the deposit is `vminfp v0, v0, v11`
+	//      @0x825E12E8. So when a sensor's already-consumed compression exceeds the room THIS
+	//      impulse's budget allows, the amount goes NEGATIVE and the sphere is pulled back toward
+	//      rest. That is reachable in ordinary play: a dent banked during a crash (allowed 1.0) and
+	//      then passed a drive-time impulse (allowed 0.2) has consumed more than 0.2 of its limit.
+	//   2. THE PASSED MAGNITUDE IS NOT ATTENUATED ALONG THE CHAIN. `vmr128 v1, v127` @0x825E12BC
+	//      restores the INCOMING argument into the outgoing v1 before the PassOnImpulse at
+	//      0x825E1308, so every hop after the first deposits from the same magnitude. The chain is
+	//      a constant-amplitude spreader, not a decaying one -- see the [hop] banner below.
+	//   3. THERE IS NO powf HERE. ApplyLocalImpulse frame-rate-corrects its absorption with
+	//      pow(base, 60*dt); this arm's 0x825E12DC..0x825E12E4 is three plain multiplies. At the
+	//      console's 1/60 the two agree exactly; at any other dt they do not.
+	// The room itself is `max(specLim[dir], 0.01) * savfCompressionLimitFactor[set] *
+	// mvfAllowedCompressionFactor` (vmaxfp @0x825E128C, vmulfp128 @0x825E1290/94) and the consumed
+	// term is `max(dot3(axis, centre - mInitialOffset), 0)` (vmsum3fp128 @0x825E1298, vmaxfp128
+	// @0x825E129C) -- both exactly as written below. The console also dereferences the passer
+	// unconditionally (`lwz r3, 0xB0(r31)` @0x825E12FC then bl); the null test below is a PC
+	// tripwire on a field that IS written by all three params builders.
 	void DeformationSensor::RecievePassedOnImpulse(const ImpulseParams* lpImpulseParams, VecFloat lvfPassedMagnitude)
 	{
 		const ENextSensorDirection leDir = lpImpulseParams->meImpulseDirection;   // params +0x00
@@ -483,6 +634,41 @@ namespace Deformation
 			lCentre.y += lrAxis.y * lfAmount;
 			lCentre.z += lrAxis.z * lfAmount;
 			// w (radius) lane preserved.
+		}
+
+		// ---- [hop] the chain arm's ledger (see the banner above; opt-in, inert by default) -----
+		// ⚠️ THE SIGN IS RECORDED SEPARATELY AND IT IS NOT A BUG. There is no max(.,0) on
+		// `lfRemaining` in the asm -- 0x825E12B0 is a bare `vsubfp128 v11, v125, v124` and the
+		// only clamp is the `vminfp v0, v0, v11` at 0x825E12E8 -- so a sensor whose consumed
+		// compression already EXCEEDS the room this impulse's budget allows takes a NEGATIVE
+		// move and is pulled back toward rest. That is the console's own arithmetic (it happens
+		// whenever a dent banked at allowedCompression 1.0 is later passed an impulse at the
+		// 0.2 drive-time budget), so it is counted, not clamped.
+		if ( HopProbeLevel() > 0 )
+		{
+			++giHopDepth;
+			++gHop.muChainDeposits;
+			if ( ( mpSpec ? mpSpec->maNextSensor[liDir] : 0u ) == 0u ) { ++gHop.muNextZeroAtHop; }
+			if ( lfAmount > 0.0f )       { ++gHop.muPositive; }
+			else if ( lfAmount < 0.0f )  { ++gHop.muNegative; }
+			else                         { ++gHop.muZeroMove; }
+			gHop.mfChainMove += ( lfAmount >= 0.0f ? lfAmount : -lfAmount );
+
+			HopSensorRow* lpRow = HopFind( this, liDir );
+			if ( lpRow != 0 )
+			{
+				if ( mpSpec != 0 )
+				{
+					lpRow->mafInitialOffset[0] = mpSpec->mInitialOffset.x;
+					lpRow->mafInitialOffset[1] = mpSpec->mInitialOffset.y;
+					lpRow->mafInitialOffset[2] = mpSpec->mInitialOffset.z;
+				}
+				lpRow->mfChainMove += ( lfAmount >= 0.0f ? lfAmount : -lfAmount );
+				++lpRow->muHits;
+				if ( lfAmount < 0.0f ) { ++lpRow->muNegative; }
+				lpRow->miOwner = BrnPhysics::Vehicle::gT5ApplyOwner;
+				lpRow->miDepth = giHopDepth;
+			}
 		}
 
 		// Forward the (now absorbed) impulse onto the next body in the chain. The X360
@@ -786,6 +972,19 @@ namespace Deformation
 		const f32 lfToLimit = Dot3(lToLimit, lHitDir);
 
 		// vsubfp v13 (@0x825E1408); vminfp v0 (@0x825E140C); vmaxfp128 v121,v0,v127 (@0x825E1410).
+		// ⭐ RE-DECODED FROM THE IMAGE 2026-09-07 (deformation-SHAPE wave, tools/re/ppcdis.py over
+		// 0x825E1320..0x825E1410) because "how much of the budget does one impact consume" is the
+		// crash-time half of the shape question. Every operand of the room ladder lands where this
+		// body puts it: 0x825E13F4 vmsum3fp128 v0 = dot3(mLimitVector - centre, axis); 0x825E13FC
+		// vmsum3fp128 v12 = dot3(axis, centre - mInitialOffset); 0x825E1404 vmaxfp128 floors that at
+		// zero; 0x825E1408 subtracts it from the compression limit; 0x825E140C takes the min against
+		// the box term; 0x825E1410 floors the result at zero. UNLIKE the pass-on arm above, THIS one
+		// does floor at zero -- so lfMove is never negative here -- and the difference between the two
+		// is real, not a slip. The absorption row that scales lfAbsorbed was re-verified in the same
+		// pass: GetAbsorption/GetSpeedForMaxAbsorbtion/GetProportionToSpeed all index
+		// unk_82FB9780 as 160*set + 16*value and splat word 0 / 1 / 2 respectively (0x825C0EF8/FC,
+		// 0x825C0FA4/A8, 0x825C1040/44), and the per-direction speed modifier is applied INSIDE
+		// GetSpeedForMaxAbsorbtion (vmulfp128 v1,v13,v0 @0x825C0FAC), never twice.
 		const f32 lfHeadroom = lfCompressionLimit - lfClampedUsed;
 		f32 lfRoom = lfHeadroom < lfToLimit ? lfHeadroom : lfToLimit;
 		if ( lfRoom < 0.0f )
@@ -1074,11 +1273,107 @@ namespace Deformation
 		// unconditionally: it is now a real, meaningful test on a field that is really written, and
 		// on the host it is the difference between a located defect and a wild jump if a future
 		// builder ever forgets the store again.
+		// ---- [hop] arm the chain-depth bracket (see the ledger banner above RecievePassedOnImpulse)
+		const s32 liHopProbe = HopProbeLevel();
+		if ( liHopProbe > 0 )
+		{
+			giHopDepth = 0;
+			++gHop.muHeadApplies;
+			if ( lu8NextSlot == 0u ) { ++gHop.muNextZeroAtHead; }
+			gHop.mfHeadMove += ( lfMove >= 0.0f ? lfMove : -lfMove );
+			if ( liDir >= 0 && liDir < 6 ) { ++gHop.mauDirCount[liDir]; }
+			const f32 lfDt = lpImpulseParams->mvfTimeStep.x;
+			++gHop.muDtSamples;
+			if ( lfDt > gHop.mfDtMax ) { gHop.mfDtMax = lfDt; }
+			const f32 lfDtErr = lfDt - 0.016666668f;
+			if ( lfDtErr > 1.0e-4f || lfDtErr < -1.0e-4f ) { ++gHop.muDtOffConsole; }
+			if ( lfDt > 0.05f ) { ++gHop.muDtBig; }
+		}
+
 		if ( lpImpulseParams->mpImpulsePasser )
 		{
 			lpImpulseParams->mpImpulsePasser->PassOnImpulse(
 				lu8NextSlot, lpImpulseParams,
 				Vector4{ lfPassedOn, lfPassedOn, lfPassedOn, lfPassedOn });
+		}
+
+		// ---- [hop] the chain has fully unwound: giHopDepth IS the number of sensor hops --------
+		if ( liHopProbe > 0 )
+		{
+			const s32 liDepth = ( giHopDepth < KI_HOP_BINS - 1 ) ? giHopDepth : KI_HOP_BINS - 1;
+			++gHop.mauDepth[liDepth];
+			gHop.mafDepthMove[liDepth] += ( lfMove >= 0.0f ? lfMove : -lfMove );
+			if ( liDir >= 0 && liDir < 6 )
+			{
+				gHop.mauDirDepthSum[liDir] += static_cast<u32>( giHopDepth );
+			}
+
+			// One cumulative dump per PRESENT window. Every field is a COUNT or a SUM printed with
+			// its present number, so two dumps SUBTRACT into a window -- which is the only honest
+			// way to read a counter that was armed before the ~9.8 s boot catch-up.
+			if ( CgsDev::Log::gpDebugPrint != 0
+			     && ( renderengine::guPresentCount / 60u ) != guHopLastDump )
+			{
+				guHopLastDump = renderengine::guPresentCount / 60u;
+				*CgsDev::Log::gpDebugPrint
+					<< "[hop] present " << static_cast<s32>( renderengine::guPresentCount )
+					<< " heads " << static_cast<s32>( gHop.muHeadApplies )
+					<< " headNext0 " << static_cast<s32>( gHop.muNextZeroAtHead )
+					<< " chain " << static_cast<s32>( gHop.muChainDeposits )
+					<< " chainNext0 " << static_cast<s32>( gHop.muNextZeroAtHop )
+					<< " pos " << static_cast<s32>( gHop.muPositive )
+					<< " zero " << static_cast<s32>( gHop.muZeroMove )
+					<< " neg " << static_cast<s32>( gHop.muNegative )
+					<< " headMove " << gHop.mfHeadMove
+					<< " chainMove " << gHop.mfChainMove
+					<< " dtN " << static_cast<s32>( gHop.muDtSamples )
+					<< " dtOff " << static_cast<s32>( gHop.muDtOffConsole )
+					<< " dtBig " << static_cast<s32>( gHop.muDtBig )
+					<< " dtMax " << gHop.mfDtMax
+					<< " rows " << static_cast<s32>( giHopRows )
+					<< " rowsRefused " << static_cast<s32>( gHop.muRowsRefused )
+					<< " depth";
+				for ( s32 li = 0; li < KI_HOP_BINS; ++li )
+				{
+					*CgsDev::Log::gpDebugPrint << " " << static_cast<s32>( gHop.mauDepth[li] );
+				}
+				*CgsDev::Log::gpDebugPrint << " depthMove";
+				for ( s32 li = 0; li < KI_HOP_BINS; ++li )
+				{
+					*CgsDev::Log::gpDebugPrint << " " << gHop.mafDepthMove[li];
+				}
+				*CgsDev::Log::gpDebugPrint << " dirN";
+				for ( s32 li = 0; li < 6; ++li )
+				{
+					*CgsDev::Log::gpDebugPrint << " " << static_cast<s32>( gHop.mauDirCount[li] );
+				}
+				*CgsDev::Log::gpDebugPrint << " dirDepth";
+				for ( s32 li = 0; li < 6; ++li )
+				{
+					*CgsDev::Log::gpDebugPrint << " " << static_cast<s32>( gHop.mauDirDepthSum[li] );
+				}
+				*CgsDev::Log::gpDebugPrint << "\n";
+
+				// The per-sensor CHAIN pattern: which sensors move only because a neighbour was
+				// hit. A [dent] row exists only where a sensor took a DIRECT hit, so without
+				// these the spread half of the shape is invisible.
+				for ( s32 li = 0; li < giHopRows; ++li )
+				{
+					const HopSensorRow& lrR = gaHopRows[li];
+					if ( lrR.mfChainMove <= 0.0005f ) { continue; }
+					*CgsDev::Log::gpDebugPrint
+						<< "[hopsens] present " << static_cast<s32>( renderengine::guPresentCount )
+						<< " owner " << lrR.miOwner
+						<< " off (" << lrR.mafInitialOffset[0] << "," << lrR.mafInitialOffset[1]
+						<< "," << lrR.mafInitialOffset[2] << ")"
+						<< " dir " << lrR.miDir
+						<< " hits " << static_cast<s32>( lrR.muHits )
+						<< " neg " << static_cast<s32>( lrR.muNegative )
+						<< " chainMove " << lrR.mfChainMove
+						<< " lastDepth " << lrR.miDepth
+						<< "\n";
+				}
+			}
 		}
 	}
 
