@@ -484,6 +484,22 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
             static f32  sfSkidFactorPeak   = 0.0f;
             static f32  sfRoadLatPeak      = 0.0f;
             static u64  su64SurfaceIdMask  = 0;
+            // ⭐⭐ WHEN, not just HOW MANY (2026-09-06, contact-census wave). Three runs were read
+            // as "the harness stops making progress mid-run" because `air frames`, `edges` and
+            // `peak` all stopped changing partway through while `pub=` kept climbing. THEY WERE
+            // NOT MEASURING PROGRESS. `peak` is a MAX -- monotone, so it can only ever freeze --
+            // and `air frames`/`edges` are EVENT counters whose event is "the car is off the
+            // ground", which stops the moment the car lands and stays landed. The counters that
+            // do track the sim (`pub`, `gateFrames`, `gateWheels`) advanced at a constant rate to
+            // the last line of all three logs: 15,600 / 15,600 / 15,000 publishes over 245.6 /
+            // 245.8 / 245.0 s of driving == 63.5 / 63.5 / 61.2 Hz, i.e. FULL RATE THROUGHOUT, and
+            // the same three runs' own [boostloc] car= traces cover 0.9 km, 2.5 km and 4.1 km.
+            // [[diagnostics-that-lie]] -- a max statistic read as a progress indicator.
+            // These two make the freeze SELF-EXPLAINING instead of inferable: the line now says
+            // which publish last saw air, so "frozen since pub 10800 of 15000" is printed rather
+            // than reconstructed from the fact that a number stopped moving.
+            static s32  siLastAirPub       = -1;
+            static s32  siLastEdgePub      = -1;
 
             if ( !sbArmedLinePrinted )
             {
@@ -499,6 +515,7 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
             if ( lfTimeInAir > 0.0f )
             {
                 ++siAirFrames;
+                siLastAirPub = siPublishes;
                 if ( lfTimeInAir > sfAirPeak )
                 {
                     sfAirPeak = lfTimeInAir;
@@ -509,6 +526,7 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
                 if ( lfTimeInAir > 0.0f && safPrevTimeInAir[liRaceCarIndex] <= 0.0f )
                 {
                     ++siAirEdges;
+                    siLastEdgePub = siPublishes;
                 }
                 safPrevTimeInAir[liRaceCarIndex] = lfTimeInAir;
             }
@@ -553,6 +571,8 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
                     << " | air frames=" << siAirFrames
                     << " edges="        << siAirEdges
                     << " peak="         << sfAirPeak
+                    << " lastAirPub="   << siLastAirPub
+                    << " lastEdgePub="  << siLastEdgePub
                     << " | skid gateFrames=" << siSkidGateFrames
                     << " gateWheels="        << siSkidGateWheels
                     << " peakSkidFactor="    << sfSkidFactorPeak

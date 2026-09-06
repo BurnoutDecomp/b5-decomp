@@ -646,6 +646,34 @@ namespace Deformation
         PrimitivePairListBuilder lWheelBuilder;
         lWheelBuilder.Construct();
 
+        // ============================================================================================
+        // [wheelspy] NOT IN THE X360 BINARY -- THE DETACHED-WHEEL CONTACT LADDER. BRN_VFXFEED_PROBE=1.
+        //
+        // WHY. PhysicsModule::StoreContact's `case 9 / case 10` arm (the DETACHED_RACECAR_WHEEL /
+        // DETACHED_TRAFFIC_WHEEL bucket) counted ZERO over a 40,000-store census, and this routine
+        // plus StartPartContactGeneration's wheel-vs-car entry are its only two feeds. A zero at the
+        // far end cannot say WHICH of five rungs is empty, and the five have completely different
+        // meanings: no wheel ever went DETACHED (a drive-recipe limit, not a defect) / the
+        // DetachedWheelManager lookup missed (the SILENT wrong-key class this very loop was fixed
+        // for on 2026-09-05 -- GetWheel is a match-walk, so a wrong key just returns null) / the
+        // body was frozen / the triangle cache slot was empty / the entry really was appended and
+        // the loss is downstream. So every rung gets its own counter and the line prints the
+        // FIRST-EVER appended entry's key owner byte, which is the one fact that says whether owner
+        // 9/10 (BurnoutWheelBodyID::Set @0x825C1D40 rewrites the owning vehicle's owner byte to 9
+        // for a player car and 10 for traffic) actually reaches the contact-generation list.
+        // ⚠️ It prints the ZEROS as well, on a fixed period, for the same reason the [propvfx]
+        // witness does: a rung that speaks only when it has something to say cannot separate "no
+        // wheel detached" from "the probe never armed". [[diagnostics-that-lie]]
+        // COST WHEN OFF: one bool test per call. DELETE-WHEN the wheel bucket is proven to fill.
+        // ============================================================================================
+        static const bool sbWheelSpy = ( getenv( "BRN_VFXFEED_PROBE" ) != 0 );
+        static s32 siWsCalls = 0, siWsDetached = 0, siWsNullLookup = 0, siWsFrozen = 0;
+        static s32 siWsNoTris = 0, siWsEntries = 0, siWsLines = 0, siWsFirstOwner = -1;
+        if ( sbWheelSpy )
+        {
+            ++siWsCalls;
+        }
+
         for (s32 liWheel = 0; liWheel < KI_NUM_DETACHABLE_WHEELS; ++liWheel)
         {
             // asm: `*(vehiclePhysics + 224 * wheel + 519) == 2` -- only a DETACHED wheel generates.
@@ -655,6 +683,7 @@ namespace Deformation
             {
                 continue;
             }
+            if ( sbWheelSpy ) { ++siWsDetached; }
 
             // sub_825E8308 == DetachedWheelManager::GetWheel(EntityId, s32).
             // ⛔⛔ 2026-09-05 (hinge-geometry wave): THE KEY WAS mGlobalEntityId AND THE CONSOLE'S IS
@@ -679,6 +708,7 @@ namespace Deformation
             const PhysicalWheel* lpWheel = lpWheelMgr->GetWheel(lWheelLookupEntityId, liWheel);
             if (lpWheel == nullptr)
             {
+                if ( sbWheelSpy ) { ++siWsNullLookup; }
                 continue;
             }
 
@@ -686,6 +716,7 @@ namespace Deformation
             // +0x1E6. (Both are byte reads the pseudocode renders as an anonymous offset.)
             if (lpWheel->IsFrozen())
             {
+                if ( sbWheelSpy ) { ++siWsFrozen; }
                 continue;
             }
 
@@ -694,6 +725,7 @@ namespace Deformation
             const s32 liNumCachedBatches = lpTriCache->GetNumCachedTriangleBatches(liCacheSlot);
             if (liNumCachedBatches <= 0)
             {
+                if ( sbWheelSpy ) { ++siWsNoTris; }
                 continue;
             }
 
@@ -736,6 +768,34 @@ namespace Deformation
 
             // Keyed (WHEEL, WORLD) -- `ld 112(wheel)`, the whole 8-byte mWheelBodyId.
             lpGenList->AddEntry(lpWheel->GetVolumeInstanceId(), lWorldVolumeInstanceId, 0u, 0u);
+
+            if ( sbWheelSpy )
+            {
+                ++siWsEntries;
+                if ( siWsFirstOwner < 0 )
+                {
+                    // The owner byte of the key this entry is filed under -- 9 (player wheel) or
+                    // 10 (traffic wheel) if BurnoutWheelBodyID::Set's rewrite reached here. Read
+                    // BY NAME off the packed handle, not by shifting the widened composite.
+                    siWsFirstOwner = static_cast<s32>(
+                        lpWheel->GetWheelBodyId().muEntityWord >> 24 );
+                }
+            }
+        }
+
+        if ( sbWheelSpy && CgsDev::Log::gpDebugPrint != 0 && siWsLines < 40 &&
+             ( siWsCalls == 1 || ( siWsCalls % 600 ) == 0 ) )
+        {
+            ++siWsLines;
+            *CgsDev::Log::gpDebugPrint
+                << "[wheelspy] calls=" << siWsCalls
+                << " detached="  << siWsDetached
+                << " nullLookup=" << siWsNullLookup
+                << " frozen="    << siWsFrozen
+                << " noTris="    << siWsNoTris
+                << " entries="   << siWsEntries
+                << " firstKeyOwner=" << siWsFirstOwner
+                << "\n";
         }
     }
 }

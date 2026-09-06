@@ -450,12 +450,43 @@ namespace BrnPhysics
         // own jump-table default (owners 0/4/5/8/>=12), not a reconstruction gap -- which is the one
         // distinction a bare "queue length" reading at the far end could not make.
         // COST WHEN OFF: one bool test per stored contact.
+        //
+        // ⭐⭐ 2026-09-06, contact-census wave: THE SIX NAMED BUCKETS COULD NOT DECOMPOSE `dropped`,
+        // and `dropped` was 49% of a 40,000-store census (racecar=489 traffic=0 prop=12810
+        // carpart=7190 wheel=0 dropped=19511, run vfxprod_C). A single lumped default bin is the
+        // "max statistic that cannot tell one row at the cap from all rows" shape -- owner 0
+        // (WORLD), owner 8 (an ATTACHED race-car wheel) and owner 12 (a PHYSICAL TRAFFIC CAR, whose
+        // simulation id carries `oris r11,r11,0xC00` from PhysicalTrafficManager::
+        // SendCreateRemoveTrafficEvents @0x825F222C/@0x825F2CA0) are three completely different
+        // findings and the old rung printed one number for all three. So the A-side owner is now
+        // histogrammed WHOLE (0..15 + an over-15 bin), and for every store that lands in the
+        // console's default arm the B-side owner is histogrammed too -- because a dropped store's
+        // partner owner is what says WHICH contact it is the reciprocal of.
+        //
+        // ⭐ WHY THE B HISTOGRAM IS THE LOAD-BEARING HALF. ProcessContactSpy stores EVERY surviving
+        // contact TWICE -- as-is, then A/B-swapped (asm 0x825AB890 and 0x825AB958, one straight-line
+        // tail with no branch between, verified instruction by instruction). So a contact against
+        // the WORLD contributes one store with A=<entity> and one with A=0, and owner 0 is not in
+        // the console's jump table (`addi r11,r11,-1 ; cmplwi r11,0xA ; bgt default` @0x825A5E24 --
+        // owners 1..11 ONLY). Half of every world contact's stores is therefore dropped BY DESIGN,
+        // on the console too. The prediction this rung tests: dropped == count(ownerA==0), and the
+        // B-owners of those dropped stores are exactly the entity owners of the non-dropped half.
+        // Bounded: two 17-entry tables, one line per report period.
         // ============================================================================================
         {
             static const bool sbVfxFeedProbe = ( getenv( "BRN_VFXFEED_PROBE" ) != 0 );
             if ( sbVfxFeedProbe && CgsDev::Log::gpDebugPrint != 0 )
             {
-                static const s32 KI_STORE_REPORT_PERIOD = 20000;
+                // ⚠️ 5,000 WITH A FIRST LINE AT 1,000, not a flat 20,000. This rung's own first
+                // revision reported every 20,000 stores, and TWO of the three runs it shipped with
+                // (vfxprod_A, vfxprod_B) never reached that threshold, so they printed NOTHING --
+                // not even the ARMED line's follow-up -- which reads identically to "StoreContact
+                // never ran". A witness whose period exceeds the event rate measures the witness.
+                // [[diagnostics-that-lie]] -- the same trap the [spy-owners] histogram above
+                // already carries a banner about after a 4,000-spy threshold silenced a whole run.
+                static const s32 KI_STORE_REPORT_PERIOD = 5000;
+                static const s32 KI_STORE_FIRST_REPORT  = 1000;
+                static const u32 KU_OWNER_BINS = 17;   // 0..15 by value, 16 == "16 or above"
                 static bool sbArmed    = false;
                 static s32  siCalls    = 0;
                 static s32  siRaceCar  = 0;   // cases 1 / 11
@@ -464,6 +495,8 @@ namespace BrnPhysics
                 static s32  siCarPart  = 0;   // cases 6 / 7
                 static s32  siWheel    = 0;   // cases 9 / 10
                 static s32  siDropped  = 0;   // the console's jump-table default
+                static s32  saiOwnerA[KU_OWNER_BINS]   = { 0 };   // EVERY store, by A-side owner
+                static s32  saiDroppedB[KU_OWNER_BINS] = { 0 };   // the default arm only, by B-side owner
 
                 if ( !sbArmed )
                 {
@@ -473,16 +506,24 @@ namespace BrnPhysics
                            " reporting every " << KI_STORE_REPORT_PERIOD << " stores.\n";
                 }
                 ++siCalls;
-                switch ( GetIdOwner( lpRawContact->mIDA ) )
+
+                const u32 luOwnerA = GetIdOwner( lpRawContact->mIDA );
+                const u32 luOwnerB = GetIdOwner( lpRawContact->mIDB );
+                const u32 luBinA   = ( luOwnerA < 16u ) ? luOwnerA : 16u;
+                const u32 luBinB   = ( luOwnerB < 16u ) ? luOwnerB : 16u;
+                ++saiOwnerA[luBinA];
+
+                switch ( luOwnerA )
                 {
                     case 1u:  case 11u: ++siRaceCar; break;
                     case 2u:            ++siTraffic; break;
                     case 3u:            ++siProp;    break;
                     case 6u:  case 7u:  ++siCarPart; break;
                     case 9u:  case 10u: ++siWheel;   break;
-                    default:            ++siDropped; break;
+                    default:            ++siDropped; ++saiDroppedB[luBinB]; break;
                 }
-                if ( ( siCalls % KI_STORE_REPORT_PERIOD ) == 0 )
+                if ( siCalls == KI_STORE_FIRST_REPORT ||
+                     ( siCalls % KI_STORE_REPORT_PERIOD ) == 0 )
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "[storecontact] calls=" << siCalls
@@ -493,6 +534,34 @@ namespace BrnPhysics
                         << " wheel="    << siWheel
                         << " dropped="  << siDropped
                         << "\n";
+
+                    // The two histograms, non-zero bins only, with a DISTINCT-VALUE COUNT so a
+                    // single crowded owner cannot read like a spread.
+                    s32 liDistinctA = 0;
+                    *CgsDev::Log::gpDebugPrint << "[storecontact] ownerA:";
+                    for ( u32 luBin = 0; luBin < KU_OWNER_BINS; ++luBin )
+                    {
+                        if ( saiOwnerA[luBin] != 0 )
+                        {
+                            ++liDistinctA;
+                            *CgsDev::Log::gpDebugPrint
+                                << " " << static_cast<s32>( luBin ) << "=" << saiOwnerA[luBin];
+                        }
+                    }
+                    *CgsDev::Log::gpDebugPrint << " | distinct=" << liDistinctA << "\n";
+
+                    s32 liDistinctB = 0;
+                    *CgsDev::Log::gpDebugPrint << "[storecontact] droppedB:";
+                    for ( u32 luBin = 0; luBin < KU_OWNER_BINS; ++luBin )
+                    {
+                        if ( saiDroppedB[luBin] != 0 )
+                        {
+                            ++liDistinctB;
+                            *CgsDev::Log::gpDebugPrint
+                                << " " << static_cast<s32>( luBin ) << "=" << saiDroppedB[luBin];
+                        }
+                    }
+                    *CgsDev::Log::gpDebugPrint << " | distinct=" << liDistinctB << "\n";
                 }
             }
         }
