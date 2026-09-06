@@ -18,6 +18,8 @@
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"                                             // PhysicsModuleIO::OutputBuffer::GetDeformationOutputInterface
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h"          // DeformationOutputInterface::mDetachedPartNotificationQueue
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"                    // DetachedPartNotificationEvent
+#include "GameSource/Physics/ContactSpies/BrnContactSpyData.h"                                  // ContactSpy::ContactSpyData::AddContact (AddContactSpy's sink)
+#include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"                                // ContactSpy::HingedPartContact (the record AddContactSpy builds)
 
 #include <cstring>   // memset (matching the X360 memset of the BBox scratch tail)
 #include <cmath>     // std::sqrt / std::fabs (the vrsqrtefp magnitude refinements + the skin self-check)
@@ -183,6 +185,21 @@ namespace Deformation
     // The "Bad inertia: " tripwire's threshold -- stru_8208F620 lane 0, byte-read = 1.1920929e-07
     // (FLT_EPSILON). The asm splats lane 0 and tests CR6 bit 2 (== none of the lanes is greater).
     static const f32 KF_INERTIA_DEGENERATE_EPSILON = 1.1920929e-07f;          // RECOVERED 0x8208F620
+
+    // ⭐ RECOVERED 2026-09-06 (contact-spy wave). AddContactSpy's SECOND gate -- and it really is a
+    // gate, not a tripwire: 0x8260B950's `vcmpgtfp` result is vperm-compressed to a word, stored,
+    // read back with `lwz`, and `beq`'d straight to the function epilogue at 0x8260C0E0. (The
+    // store/`lwz`/compare round trip is just how X360 moves a VMX compare mask into a GPR; the
+    // 0x0004080C vperm control gathers lane byte 0 of each of the four lanes.)
+    //   findinit.py 0x82FB9620 -> exactly 2 sites: the reader @0x8260B930 (this gate, its only
+    //   consumer in the image) and the writer @0x82C5DD68, whose thunk is
+    //   `lfs f0, flt_82002540 ; vspltw ; stvx128 -> unk_82FB9620` with flt_82002540 == 1e-4.
+    static const f32 KF_CONTACT_SPY_MIN_COLLISION_MAGNITUDE = 9.99999975e-05f; // RECOVERED 0x82FB9620 <- flt_82002540
+
+    // AddContactSpy's normalise tripwire tolerance (`lfs f0, flt_82004014` @0x8260BA5C, splatted and
+    // compared against |dot(n,n) - 1| for the "Normalise failed for hinged body part normal: "
+    // FireAssert). Same rodata word KV_MIN_BBOX_SIZE is built from; read independently here.
+    static const f32 KF_CONTACT_SPY_NORMALISE_TOLERANCE = 0.1f;               // RECOVERED flt_82004014
 
     namespace
     {
@@ -352,6 +369,11 @@ namespace Deformation
             }
             return (siProbe == 1) && (CgsDev::Log::gpDebugPrint != 0);
         }
+
+        // [DIAG] AddContactSpy's four gate-stage counters. File-local, incremented unconditionally
+        // (so the counts are the truth even on a run where the probe is off) and read only under
+        // DetachProbeOn(). NOT IN THE X360 BINARY.
+        u32 gxSpyCalls = 0, gxSpyGate1 = 0, gxSpyGate2 = 0, gxSpyAppended = 0;
     }
     // ==========================================================================================
     // PhysicalBodyPart::Construct @0x825B4178 MOVED OUT on 2026-08-03 (task #116) to
@@ -2116,17 +2138,225 @@ namespace Deformation
     // Reconstruct and DELETE each gate; AddToSim @0x8260AD38 is the one that matters most (it is
     // why a shed panel never moves). See its own banner below.
     // =============================================================================================
-    void PhysicalBodyPart::AddContactSpy(ContactSpyData* /*lpContactSpyData*/)
+    // =============================================================================================
+    // AddContactSpy @0x8260B8D8 (519 instructions) -- RECONSTRUCTED 2026-09-06 (contact-spy wave).
+    // THE GATE IS GONE.
+    //
+    // ⭐⭐ WHY IT MATTERED: this is the ONLY producer of the hinged-part contact queue in the whole
+    // image. `BaseEventQueue<HingedPartContact>::AddEvent @0x825E50B8` has exactly one xref, and it
+    // is the tail of this function; PhysicsModule::StoreContact @0x825A5DB0 -- which fills the
+    // race-car (+0x00000), traffic (+0x070A0), physical-car-part (+0x106C0) and prop (+0x167E0)
+    // queues -- has no hinged arm at all. So while this was a log-once stub,
+    // ContactSpyData::mHingedPartContactQueue was provably empty on every frame of every run, and
+    // BrnEffects::EffectsModule::ProcessHingedPartContacts (the consumer that turns grinding
+    // hinged-panel contacts into sparks) had nothing to read. Of the three car-contact queues the
+    // effects side drains via ProcessCarContactQueues, this was the one with no producer.
+    //
+    // THE 519 INSTRUCTIONS ARE MOSTLY TRIPWIRE. Eleven rw::math::IsValid / normalise FireAsserts,
+    // each building a formatted StrStream message, account for the bulk; the data path is ~60
+    // instructions. Per the file-wide convention the asserts are non-gating CGS_ASSERTs.
+    //
+    // ⛔ TWO GATES, AND HEX-RAYS SHOWS ONLY ONE OF THEM AS CONTROL FLOW:
+    //   (1) 0x8260B908..0x8260B920  mAverageCollisionPointPlusNumCollisions.w > 0  -- "this part
+    //       took at least one collision this frame" (the w lane IS the running collision count the
+    //       running-average accumulator maintains).
+    //   (2) 0x8260B928..0x8260B980  |mWorldPenetrationPlusCollisionMagnitude.w| > 1e-4. The `vandc`
+    //       against `vslw128 v124,v124` (all-ones shifted left 31 == 0x80000000) is the sign-bit
+    //       clear, i.e. fabs. Hex-Rays renders the compare but folds the `beq cr6, loc_8260C0E0`
+    //       into the assert block above it, so reading the pseudocode alone loses a real early-out.
+    //       Read from the RAW asm.
+    //
+    // THE PAYLOAD, store for store (record base = var_120, the HingedPartContact the tail appends):
+    //   +0   mEntityIdA     EntityId::Set(owner, entityIndex, partIndex) @0x8260B9A0 -- and the
+    //                       three arguments come from TWO DIFFERENT members:
+    //                         r4 owner       = *(this+0x1D0) >> 24        (mRigidBodyId's owner tag)
+    //                         r5 entityIndex = (*(this+0x1D8) >> 10) & 0x3FFF   (mGlobalVehicleId's)
+    //                         r6 partIndex   = *(this+0x1D0) & 0x3FF      (mRigidBodyId's)
+    //                       ⚠️ Hex-Rays prints `Set(v337, HIBYTE(*(v0+472)), 0, *(v0+472) & 0x3FF)`
+    //                       -- it collapses the two members onto +472 and hard-zeroes the middle
+    //                       argument. The `ld 0x1D0 ; srdi 32` pair is a big-endian read of the
+    //                       FIRST word of the 8-byte mRigidBodyId, which is its packed entity word
+    //                       (owner[24..31] | entityIndex[10..23] | partIndex[0..9], per
+    //                       BrnBurnoutBodyPartID.h). Taken from the raw asm, by name.
+    //   +4   mEntityIdB     0                          (stw r27 @0x8260B9C4, r27 == 0)
+    //   +8   mCollisionTagB 0xFFFF8000                 (sth -1 @+8 ; sth -0x8000 @+10) -- the same
+    //                       invalid sentinel BaseContact::Construct writes (BrnContactSpyEvents.cpp).
+    //   +16  mFrictionStress   linearVelocity + omega x (contactPoint - bodyPos)
+    //   +32  mNormalStress     normalise(penetration) * collisionMagnitude
+    //   +48  mNormal           normalise(penetration)
+    //   +64  mPointOnA         mAverageCollisionPointPlusNumCollisions.xyz
+    //   +80  mPointOnB         the SAME point (both stvx128 v125) -- a hinged panel's contact has
+    //                          one point, so the console stores it into both slots.
+    //   +96  meType            mpIKPart->GetPartType()  (`lwz 0x1DC ; lwz 8 ; lwz 0x1DC` ==
+    //                          mpIKPart->mpSpec->mePartType, the spec+476 word GetPartType reads)
+    //
+    // ⚠️ mFrictionStress CARRIES A VELOCITY, NOT A STRESS. The console stores the contact point's
+    // world velocity into the +16 slot that BaseContact names mFrictionStress. That is what the
+    // asm does and it is not ours to rename; flagged here so the next reader does not "fix" it.
+    //
+    // THE VELOCITY CHAIN is the same one AddToSim and TestJointForBreaking already run, down to the
+    // +0x10 vptr adjustment: `lwz 0x1E0` (mpDeformableObject), `lwz 0x194C` (its attached vehicle
+    // physics), `addi 0x10` (SimpleVehiclePhysics introduces the vtable, so the non-polymorphic
+    // ExternalPhysicsBody base sits 16 bytes in), then +0x30/+0x40/+0x50 == wAxis / mLinearVelocity
+    // / mAngularVelocity. The cross product is the textbook two-`vpermwi128 0x63` form
+    // (`vmulfp128` + `vnmsubfp`, D = B - A*C in IDA's raw D,A,B,C field order).
+    //
+    // THE NORMALISE is `vmsum3fp128` + `vrsqrtefp` + TWO Newton refines (0x8260BA0C..0x8260BA54),
+    // de-optimised to the exact divide per this subsystem's committed convention. ⚠️ Note it has NO
+    // vsel zero guard on this path (unlike the glass remap): the 1e-4 magnitude gate above is what
+    // keeps a degenerate penetration vector out, and the "Normalise failed" tripwire at :887 is
+    // what reports it if one gets through. Reproduced as the console has it -- no guard added.
+    // =============================================================================================
+    void PhysicalBodyPart::AddContactSpy(BrnPhysics::ContactSpy::ContactSpyData* lpContactSpyData)
     {
-        static bool sbLoggedACS = false;
-        if ( !sbLoggedACS )
+        auto lfAbs = [](f32 lf) { return lf < 0.0f ? -lf : lf; };
+
+        // [DIAG] NOT IN THE X360 BINARY -- see the [spy] banner at the append below. Counters only;
+        // no early-out and no store depends on them.
+        ++gxSpyCalls;
+
+        // ---- GATE 1: did this part take a collision this frame? (asm 0x8260B90C..0x8260B920) ----
+        if ( !(mAverageCollisionPointPlusNumCollisions.GetPlus() > 0.0f) )
         {
-            sbLoggedACS = true;
-            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalBodyPart::AddContactSpy reached but not "
-                                              "reconstructed [FLAG PC boot gate]\n";
+            return;
         }
-        
+        ++gxSpyGate1;
+
+        // ---- GATE 2: is the collision magnitude non-negligible? (asm 0x8260B934..0x8260B980) ----
+        const f32 lfCollisionMagnitude = mWorldPenetrationPlusCollisionMagnitude.GetPlus();
+        if ( !(lfAbs(lfCollisionMagnitude) > KF_CONTACT_SPY_MIN_COLLISION_MAGNITUDE) )
+        {
+            return;
+        }
+        ++gxSpyGate2;
+
+        BrnPhysics::ContactSpy::HingedPartContact lEvent;
+
+        // ---- the two ids + the sentinel tag (asm 0x8260B984..0x8260BAA0) ----
+        // The console calls CgsSceneManager::EntityId::Set(&record, owner, entityIndex, partIndex)
+        // @0x8260B9A0. Our contact records carry the PLAIN 32-bit POD `EntityId` from
+        // BrnCommonTypes.h (a bare `u32 muValue`), which has no Set, so the same word is packed
+        // here from the SAME three extracts the asm feeds that call -- the field geometry is
+        // BurnoutBodyPartIDLayout's, the one place this packing is spelled.
+        const u32 luOwner       = mRigidBodyId.GetOwner();                 // srwi r4, r11, 24
+        const u32 luPartIndex   = mRigidBodyId.GetPartIndex();             // clrlwi r6, r11, 22
+        const u32 luEntityIndex =                                          // extrwi r5, r10, 14, 8
+            (mGlobalVehicleId.muValue >> BurnoutBodyPartIDLayout::KU_ENTITY_INDEX_BASE)
+            & ((1u << BurnoutBodyPartIDLayout::KU_NUM_BITS_FOR_ENTITY_NUM) - 1u);
+
+        lEvent.mEntityIdA.muValue =
+              (luOwner       << BurnoutBodyPartIDLayout::KU_OWNER_BASE)
+            | (luEntityIndex << BurnoutBodyPartIDLayout::KU_ENTITY_INDEX_BASE)
+            |  luPartIndex;
+        lEvent.mEntityIdB.muValue = 0u;
+        lEvent.mCollisionTagB.muValue = 0xFFFF8000u;
+
+        // ---- the contact point's world velocity under the vehicle's rigid motion ----
+        const Vector3 lContactPoint = mAverageCollisionPointPlusNumCollisions.GetVector3();
+
+        const ExternalPhysicsBody& lrVehicleBody = mpDeformableObject->GetVehicleBody();
+        const Vector3 lBodyPos    = lrVehicleBody.GetTransform().wAxis;    // body +0x30
+        const Vector3 lBodyLinVel = lrVehicleBody.GetLinearVelocity();     // body +0x40
+        const Vector3 lBodyAngVel = lrVehicleBody.GetAngularVelocity();    // body +0x50
+
+        const Vector3 lLever = { lContactPoint.x - lBodyPos.x,
+                                 lContactPoint.y - lBodyPos.y,
+                                 lContactPoint.z - lBodyPos.z, 0.0f };
+
+        const Vector3 lPointVelocity = {
+            lBodyAngVel.y * lLever.z - lBodyAngVel.z * lLever.y + lBodyLinVel.x,
+            lBodyAngVel.z * lLever.x - lBodyAngVel.x * lLever.z + lBodyLinVel.y,
+            lBodyAngVel.x * lLever.y - lBodyAngVel.y * lLever.x + lBodyLinVel.z,
+            0.0f
+        };
+
+        // ---- normalise the accumulated world penetration -> the contact normal ----
+        const Vector3 lPenetration = mWorldPenetrationPlusCollisionMagnitude.GetVector3();
+        const f32 lfPenetrationSq  = lPenetration.x * lPenetration.x
+                                   + lPenetration.y * lPenetration.y
+                                   + lPenetration.z * lPenetration.z;
+        const f32 lfInvLength      = 1.0f / std::sqrt(lfPenetrationSq);   // vrsqrtefp + 2x Newton
+        const Vector3 lNormal = { lPenetration.x * lfInvLength,
+                                  lPenetration.y * lfInvLength,
+                                  lPenetration.z * lfInvLength, 0.0f };
+
+        // ---- the payload ----
+        lEvent.mFrictionStress = lPointVelocity;   // FLAG: a VELOCITY in the friction-stress slot
+        lEvent.mNormalStress   = Vector3{ lNormal.x * lfCollisionMagnitude,
+                                          lNormal.y * lfCollisionMagnitude,
+                                          lNormal.z * lfCollisionMagnitude, 0.0f };
+        lEvent.mNormal         = lNormal;
+        lEvent.mPointOnA       = lContactPoint;
+        lEvent.mPointOnB       = lContactPoint;
+        // ⚠️ FLAGGED ENUM FORK, NOT A CONVERSION THE CONSOLE DOES. `lwz 0x1DC ; lwz 8 ; lwz 0x1DC`
+        // is one 32-bit word copied straight into the record; there is no conversion in the asm.
+        // The cast exists only because this tree carries TWO declarations of the same DWARF enum:
+        // Deformation::EBodyParts (BrnIKBodyPart.h, what GetPartType returns) and
+        // ContactSpy::EBodyParts (BrnContactSpyEvents.h, what the record's meType is typed as,
+        // whose own comment says it was "Recovered from BrnIKBodyPart.h"). Both are `: s32` with
+        // the same E_BODY_PART_NONE == -1, so the value is identical. NOT unified here on purpose:
+        // ContactSpy::EBodyParts also types PhysicalCarPartContact::meType, which the effects lane
+        // is actively writing consumers against -- retyping it belongs in a wave that owns both
+        // sides. Reported rather than reached across. [[odr-forks-link-silently]]
+        lEvent.meType          = static_cast<BrnPhysics::ContactSpy::EBodyParts>(mpIKPart->GetPartType());
+
+        // ---- the eleven finiteness / normalise tripwires (asm :887..:898) ----
+        // Non-gating, exactly as the console's BeginAssert/FireAssert/EndAssert triples: execution
+        // continues past a failure. The console's :887 message is built from the raw penetration
+        // vector and the :898 one additionally prints the normal stress, the normal and the
+        // collision magnitude; the formatted-message construction has no observable side effect,
+        // so each is modelled as the plain predicate it gates.
+        CGS_ASSERT(lfAbs(lNormal.x * lNormal.x + lNormal.y * lNormal.y + lNormal.z * lNormal.z - 1.0f)
+                       <= KF_CONTACT_SPY_NORMALISE_TOLERANCE,
+                   "Normalise failed for hinged body part normal");
+        CGS_ASSERT(rw::math::vpu::IsValid(lPointVelocity), "rw::math::IsValid( lContactPointVelocity )");
+        CGS_ASSERT(rw::math::vpu::IsValid(lNormal),        "rw::math::IsValid( lNormal )");
+        CGS_ASSERT(rw::math::vpu::IsValid(lEvent.mNormalStress), "rw::math::IsValid( lNormalStress )");
+        CGS_ASSERT(rw::math::vpu::IsValid(lContactPoint),  "rw::math::IsValid( lContactPoint )");
+
+        // ---- append (asm 0x8260C0C4: AddEvent(contactSpyData + 0x151E0, &record)) ----
+        // ⚠️ BY NAME, NOT BY THE CONSOLE OFFSET. +0x151E0 is mHingedPartContactQueue's seat on the
+        // 32-bit console; on this host every widened pointer above it moves that seat, so the raw
+        // offset would land inside a neighbouring queue -- the same x64-widening ghost that cost
+        // this subsystem the GlassState +15920 queue write and the PhysicalWheel +0x9C frozen bit.
+        lpContactSpyData->AddContact(lEvent);
+
+        // ---------------------------------------------------------------------------------------
+        // [DIAG] NOT IN THE X360 BINARY. BRN_DEFORM_TRACE=1 only. Read-only.
+        //
+        // VOLUME IS BOUNDED BY CONSTRUCTION, which matters here more than usual: this runs once per
+        // still-joined part per frame, so an unbounded row would be ~50 x 60 x 240 = 720k lines and
+        // would starve the harness the way the rivals assert storm does. So: the first
+        // KU_SPY_DETAIL_ROWS appends print in full, and after that only a rolling summary every
+        // KU_SPY_SUMMARY_EVERY appends.
+        //
+        // THE THREE GATE COUNTERS ARE THE POINT. "appended 0" alone cannot distinguish (a) the
+        // function is never called, (b) no joined part ever takes a collision, (c) collisions
+        // happen but every magnitude is under 1e-4. calls/gate1/gate2/appended separates all four
+        // states, and the row prints even when every counter is zero, so an unarmed probe is
+        // distinguishable from an armed one that saw nothing. DELETE-WHEN banked.
+        ++gxSpyAppended;
+        if ( DetachProbeOn() )
+        {
+            static const u32 KU_SPY_DETAIL_ROWS   = 12;
+            static const u32 KU_SPY_SUMMARY_EVERY = 500;
+
+            const bool lbDetail  = (gxSpyAppended <= KU_SPY_DETAIL_ROWS);
+            const bool lbSummary = (gxSpyAppended % KU_SPY_SUMMARY_EVERY) == 0;
+
+            if ( lbDetail || lbSummary )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[spy] f " << renderengine::guPresentCount
+                    << " type " << static_cast<s32>(mpIKPart->GetPartType())
+                    << " mag " << lfCollisionMagnitude
+                    << " n (" << lNormal.x << ", " << lNormal.y << ", " << lNormal.z << ")"
+                    << " v (" << lPointVelocity.x << ", " << lPointVelocity.y << ", " << lPointVelocity.z << ")"
+                    << " | calls " << gxSpyCalls << " gate1 " << gxSpyGate1
+                    << " gate2 " << gxSpyGate2 << " appended " << gxSpyAppended
+                    << "\n";
+            }
+        }
     }
 
     // =============================================================================================

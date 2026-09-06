@@ -99,6 +99,17 @@ namespace Deformation
         // The owner tag the deformation consumers branch on -- the entity word's top byte.
         u32 GetOwner() const { return muEntityWord >> BurnoutBodyPartIDLayout::KU_OWNER_BASE; }
 
+        // ⭐ ADDED 2026-09-06 (contact-spy wave), the symmetric read of the SAME entity word.
+        // ATTESTED by PhysicalBodyPart::AddContactSpy @0x8260B99C, which builds the contact
+        // event's EntityId from this handle with `clrlwi r6, r11, 22` -- keep the low 10 bits,
+        // i.e. exactly KU_NUM_BITS_FOR_PART_NUM. The matching `srwi r4, r11, 24` two
+        // instructions earlier is GetOwner() above, off the same `ld 0x1D0 ; srdi 32` load, so
+        // the two accessors are read out of one instruction pair and cannot disagree.
+        u32 GetPartIndex() const
+        {
+            return muEntityWord & ((1u << BurnoutBodyPartIDLayout::KU_NUM_BITS_FOR_PART_NUM) - 1u);
+        }
+
         u32 muEntityWord;   // this+0 (high dword): owner | entityIndex | partIndex
         u16 muSubA;         // this+4
         u16 muSubB;         // this+6

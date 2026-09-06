@@ -267,7 +267,7 @@ namespace Deformation
     void DetachedPartManager::UpdatePostPhysics(
         const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimModuleOutputBuffer,
         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
-        ContactSpyData* lpContactSpyData,
+        BrnPhysics::ContactSpy::ContactSpyData* lpContactSpyData,
         const PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface)
     {
         // ---- (1) broadcast the consumed time-step into a VecFloat ----

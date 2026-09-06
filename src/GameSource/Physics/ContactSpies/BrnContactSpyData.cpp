@@ -146,6 +146,27 @@ void ContactSpyData::AddContact(const PhysicalCarPartContact& lrContact)
     }
 }
 
+// AddContact(const HingedPartContact&) -- DWARF-declared, and the console emits NO out-of-line
+// body for it, because the ONE producer of the hinged queue in the whole image reaches the queue
+// directly: PhysicalBodyPart::AddContactSpy @0x8260C0C4 does
+//     bl BaseEventQueue<HingedPartContact>::AddEvent(contactSpyData + 0x151E0, &record)
+// i.e. the overload is inlined at its single call site. Bodied here as exactly that one append so
+// AddContactSpy can reach the PRIVATE mHingedPartContactQueue BY NAME instead of by the console's
+// byte offset -- +0x151E0 is a 32-bit-console seat and every widened pointer above it moves that
+// seat on this host, which is the same x64-widening ghost class that cost this subsystem the
+// GlassState +15920 queue write.
+//
+// ⚠️ NOTE THE ASYMMETRY WITH ITS FOUR SIBLINGS, AND THAT IT IS THE CONSOLE'S. The others call the
+// bounds-gated AddEventSafe and print a "Ran out of contacts in ..." warning when full. The hinged
+// producer calls the UNCONDITIONAL AddEvent, whose own overflow tripwire fires an assert and then
+// appends anyway (see BaseEventQueue_HingedPartContact_AddEvent.cpp's banner, and the `blt` that
+// skips the assert without skipping the append). No warning arm is added here: the console has none
+// on this path, and inventing one would change what a full hinged queue does.
+void ContactSpyData::AddContact(const HingedPartContact& lrContact)
+{
+    mHingedPartContactQueue.AddEvent(lrContact);
+}
+
 void ContactSpyData::AddContact(const PropContact& lrContact)
 {
     if (!mPropContactQueue.AddEventSafe(lrContact))

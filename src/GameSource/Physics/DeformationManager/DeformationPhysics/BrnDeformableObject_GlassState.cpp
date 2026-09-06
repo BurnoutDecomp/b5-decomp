@@ -13,6 +13,7 @@
 #include "rw/math/vpu/matrix44affine_operation.h"     // rw::math::vpu::{TransformPoint, TransformVector}
 
 #include <cstring>   // std::memset (the FLAGGED zero-seed of the un-homed wheel-state scratch)
+#include <cmath>     // std::sqrt  (the crack-amount remap's vrsqrtefp + Newton refine converges to this)
 
 // ============================================================================
 // GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject_GlassState.cpp
@@ -55,12 +56,17 @@
 //    asserts build a formatted message in the asm; that is a pure tripwire whose body has no
 //    observable side effect, so it is modelled as the simple bounds CGS_ASSERT it gates.
 //
-//  * FLAGGED-0 / placeholder rodata: the two glass-displacement thresholds UpdateGlassSmashedState
-//    compares against (X360 rodata &unk_82FB9BC0 = the SMASH band, &unk_82FB9AD0 = the CRACK band)
-//    are NOT in the per-function exports. Per the project no-fabrication rule they are carried as
-//    correctly-shaped, clearly-labelled file-static placeholders (honest zeros) -- NEVER invented.
+//  * ⭐ THE GLASS BAND IS FULLY RECOVERED -- no flagged zeros remain in this file's glass path.
+//    The two thresholds UpdateGlassSmashedState compares against (&unk_82FB9BC0 = SMASH,
+//    &unk_82FB9AD0 = CRACK) are .bss dyn-init slots, so they read 0 out of the image BY
+//    DEFINITION; the values come from their store thunks at 0x82C5DA38 / 0x82C5DA80, each of
+//    which is literally `lvx128 the constant; vmulfp128 v0,v0,v0; stvx128 the threshold` -- the
+//    thresholds are the SELF-SQUARES of the two SendGlassUpdateEvents remap constants
+//    (0.05^2 = 0.0025 and 0.001^2 = 1e-06, both read from .rdata at 0x820047C8 / 0x82013F90).
 //    The pane is scaled by a vcfsx(2)^2 == 4.0 factor before the compare (vspltisw v0,2; vcfsx;
-//    vmulfp128 v127,v0,v0 -> 4.0) -- that 4.0 IS visible in the asm and is reproduced.
+//    vmulfp128 v127,v0,v0 -> 4.0) -- that 4.0 IS visible in the asm and is reproduced. Since the
+//    state machine SUMS four corners' squared displacement, that 4.0 makes the compare a MEAN:
+//    the pane cracks at 1 mm of average control-point displacement and smashes at 5 cm.
 //
 //  * Console member byte offsets the asm indexes (this+6368 mpDeformationSpec, this+6476 the
 //    attached vehicle physics, this+15120 maTagPoints[stride 32], this+19232 maDrivenPoints
@@ -84,7 +90,8 @@ namespace Deformation
     namespace
     {
         // -------------------------------------------------------------------------------------
-        // FLAGGED-0 PLACEHOLDER rodata: the two per-pane displacement thresholds the smash-state
+        // RECOVERED rodata (history kept because the zeros here were NOT inert -- see the ⚠️ below):
+        // the two per-pane displacement thresholds the smash-state
         // machine compares the summed squared control-point displacement against. The asm loads a
         // full vec4 from each, multiplies it by the visible 4.0 scale (lane 0 is the live compare),
         // and runs a vcmpgtfp. Shape (a 16-byte vec4 threshold) is authoritative; the numeric bytes
@@ -108,16 +115,39 @@ namespace Deformation
         // threshold vec4 is then vmulfp128'd by (2.0 * 2.0) == 4.0 before the compare.
         static const f32 KF_GLASS_DISPLACEMENT_SCALE = 4.0f;   // asm-visible (= 2.0 * 2.0)
 
-        // ⚠️ STILL A PLACEHOLDER, DELIBERATELY. The two constants ARE now recovered --
-        //   unk_82FB9DF0 @82C5DA58 <- flt_82013F90 = 0.001   (splat)
-        //   unk_82FB9650 @82C5DA10 <- flt_820047C8 = 0.05    (splat)
-        // -- but what is missing here is not the numbers, it is the CODE: SendGlassUpdateEvents runs
-        // them through a vrsqrtefp / vrefp Newton refine that maps the max corner displacement-squared
-        // into the [0,1] remap feeding the 1-(1-clamp)^2 outer shape, and that remap has never been
-        // transcribed. Substituting a plausible sqrt-clamp formula around the real constants would be
-        // exactly the kind of confident invention this repo keeps paying for, so the result stays an
-        // honest zero and the two values are recorded here for whoever writes the remap.
-        static const f32 KF_GLASS_CRACK_REMAP_PLACEHOLDER = 0.0f; // FLAG: the REMAP is unmodelled (values known: 0.001 / 0.05)
+        // ⭐ THE REMAP IS TRANSCRIBED (2026-09-06). It was carried as an honest zero for two waves
+        // because the CODE, not the numbers, was missing. Decoded operand by operand out of
+        // SendGlassUpdateEvents' `if (state == CRACKED)` arm (the vrsqrtefp/vrefp block), reading
+        // classic vmaddfp/vnmsubfp/vsel in RAW FIELD ORDER D,A,B,C:
+        //     vrsqrtefp v13,v12                ; r0   = rsqrt_est(maxDispSq)
+        //     vcmpeqfp  v4, v8, v12            ; mask = (maxDispSq == 0)          <- the zero guard
+        //     vcfsx     v5, v10, 1  / v0,v10,0 ; 0.5  /  1.0   (from vspltisw v10,1)
+        //     vmulfp128 v2, v13, v13           ; r0^2
+        //     vnmsubfp  v7, v12, v0, v2        ; 1 - maxDispSq*r0^2       (D = B - A*C)
+        //     vmulfp128 v5, v13, v5            ; 0.5*r0
+        //     vmaddfp   v13, v5, v13, v7       ; r1 = r0 + 0.5*r0*(1 - x*r0^2)    (D = A*C + B)
+        //     vmulfp128 v13, v12, v13          ; x*r1 == sqrt(maxDispSq)
+        //     vsel      v7, v13, v8, v4        ; (x == 0) ? 0 : sqrt(x)   (D = C ? B : A)
+        //     vsubfp    v11, v0, v9            ; SPAN     = 0.05 - 0.001
+        //     vrefp/vnmsubfp/vmaddfp x2        ; 1/SPAN, two Newton refines
+        //     vsubfp    v12, v7, v9            ; sqrt(maxDispSq) - 0.001
+        //     vmulfp128 v13, v13, v12          ; t = (sqrt(maxDispSq) - 0.001) / SPAN
+        //     vmaxfp/vminfp v8 / v0            ; clamp01(t)
+        //     vsubfp/vmulfp128/vsubfp          ; 1 - (1 - clamp01(t))^2
+        // so the whole thing is a LINEAR RAMP in displacement DISTANCE across the band, eased out.
+        //
+        // ⭐⭐ IT CORROBORATES ITSELF, and that is why it can be landed without inventing anything:
+        // the two remap endpoints are EXACTLY the two state-machine band edges. UpdateGlassSmashedState
+        // compares against unk_82FB9AD0 == unk_82FB9DF0^2 == 0.001^2 (crack) and unk_82FB9BC0 ==
+        // unk_82FB9650^2 == 0.05^2 (smash) -- the dyn-init thunks at 0x82C5DA38 / 0x82C5DA80 are
+        // literally `lvx128 the constant; vmulfp128 v0,v0,v0; stvx128 the threshold`. A pane is
+        // CRACKED exactly while its displacement sits between 1 mm and 5 cm, and the crack amount
+        // ramps 0 -> 1 across exactly that interval. Two independently recovered pairs of numbers
+        // meeting at the same two edges is not a coincidence a fabricated formula could produce.
+        // (Aggregate differs by design: the state machine sums the four corners' squared displacement
+        // and scales the threshold by 4 -- i.e. compares the MEAN; the remap takes the MAX corner.)
+        static const f32 KF_GLASS_CRACK_REMAP_LO = 0.001000000047497451f;  // unk_82FB9DF0 <- flt_82013F90 @82C5DA58
+        static const f32 KF_GLASS_CRACK_REMAP_HI = 0.05000000074505806f;   // unk_82FB9650 <- flt_820047C8 @82C5DA10
 
         // -------------------------------------------------------------------------------------
         // Console byte offsets the X360 image indexes through raw pointer arithmetic. They hold on
@@ -307,9 +337,12 @@ namespace Deformation
     // MODELLED-vs-asm: the event payload writes hit the GlassSmashOrCrackEvent fields whose interior
     // layout is homed (BrnDeformationOutputInterface.h). The per-corner world transform reproduces
     // the asm's vmaddfp cascade through the homed TransformPoint/Add vocabulary. The crack-amount
-    // shaping reproduces the asm's outer "1 - (1 - clamp)^2" form gated on the CRACKED (==1) state;
-    // the inner remap pulls two UNRECOVERED rodata vec4s (unk_82FB9DF0 / unk_82FB9650) and is carried
-    // as a FLAGGED-0 placeholder (NEVER a fabricated sqrt-clamp). The two queue appends call the homed
+    // shaping reproduces the asm's outer "1 - (1 - clamp)^2" form gated on the CRACKED (==1) state,
+    // and ⭐ as of 2026-09-06 the INNER REMAP too: the vrsqrtefp/vrefp block is transcribed operand
+    // by operand into a linear ramp of |maxDisplacement| across [unk_82FB9DF0, unk_82FB9650] ==
+    // [0.001, 0.05], both read out of the image and both equal to the state machine's own two band
+    // edges. The vsel (maxDispSq == 0) NaN guard is the console's and is reproduced. The queue
+    // appends call the homed
     // BaseEventQueue::AddEventSafe BY NAME on the two glass queues (render-side @ +6896, entity-
     // module-side @ +15920).
     // ===========================================================================================
@@ -396,26 +429,101 @@ namespace Deformation
         // seed feeds the crack-amount/max-disp lanes (v69/v10), not the velocity.
         lEvent.mLinearVelocity = *reinterpret_cast<const Vector3*>(lpcVehicle + 80);
 
-        // Crack amount: gated on the pane being CRACKED (the asm's `if (v11 == 1)`). The asm shapes
-        // 1 - (1 - clamp01(remap(maxDispSq)))^2, where the inner remap pulls TWO unrecovered rodata
-        // vec4s (unk_82FB9DF0, unk_82FB9650) through a vrsqrtefp/vrefp Newton refine. Those two
-        // constants are NOT in the exports; per the project no-fabrication rule the inner remap is
-        // carried as a FLAGGED-0 placeholder (the remap result degenerates to 0 -> crack amount 0)
-        // rather than substituting a fabricated sqrt-clamp formula. The 1-(1-clamp)^2 outer shape
-        // and the CRACKED(==1) gate are reproduced. When not cracked the amount stays at the 0.0 seed.
+        // Crack amount: gated on the pane being CRACKED (the asm's `if (v11 == 1)`). The console
+        // shapes 1 - (1 - clamp01(t))^2 over t = (|maxDisplacement| - 0.001) / (0.05 - 0.001), i.e.
+        // a linear ramp in displacement DISTANCE across exactly the intact->cracked->smashed band,
+        // eased out by the outer square. See the KF_GLASS_CRACK_REMAP_LO/HI banner above for the
+        // operand-by-operand decode and for why the two endpoints are self-corroborating.
+        //
+        // MODELLED-vs-asm: the console reaches the square root as `vrsqrtefp` + ONE Newton refine
+        // (r1 = r0 + 0.5*r0*(1 - x*r0^2)) then `x * r1`, and the 1/(0.05-0.001) divide as `vrefp` +
+        // TWO Newton refines. Both converge to within a float ulp, so they are written here as the
+        // exact sqrt/divide -- the same de-optimisation every committed sibling in this subsystem
+        // uses for the identical idiom (BrnDeformationSensor.cpp, BrnPenetrationSolver.cpp,
+        // BrnDeformationManager_VehicleContactFixUp.cpp).
+        //
+        // ⚠️ THE ZERO GUARD IS THE CONSOLE'S, NOT DEFENSIVE CODE WE ADDED. `vcmpeqfp v4, v8, v12`
+        // builds a (maxDispSq == 0) mask and the `vsel v7, v13, v8, v4` substitutes 0 for the
+        // sqrt result on that lane -- because vrsqrtefp(0) is +inf and 0 * inf is a NaN, which
+        // would otherwise propagate all the way into the event's crack amount. Reproduced exactly.
         f32 lfCrackAmount = 0.0f;
         if (leNewState == E_GLASS_STATE_CRACKED)
         {
-            // FLAG: unk_82FB9DF0 / unk_82FB9650 unrecovered -> inner remap placeholder == 0.0.
-            const f32 lfRemapped = KF_GLASS_CRACK_REMAP_PLACEHOLDER;   // FLAG: rodata pair unrecovered
+            // vrsqrtefp + Newton + the vsel zero-guard == a guarded sqrt.
+            const f32 lfMaxDisplacement = (lfMaxDisplacementSq == 0.0f)
+                                              ? 0.0f
+                                              : std::sqrt(lfMaxDisplacementSq);
+
+            // t = (|maxDisplacement| - LO) / (HI - LO), then clamp01 (vmaxfp 0 / vminfp 1.0).
+            const f32 lfSpan     = KF_GLASS_CRACK_REMAP_HI - KF_GLASS_CRACK_REMAP_LO;  // vsubfp v11, v0, v9
+            const f32 lfRemapped = (lfMaxDisplacement - KF_GLASS_CRACK_REMAP_LO) / lfSpan;
+
             f32 lfClamped = lfRemapped;
             if (lfClamped < 0.0f) lfClamped = 0.0f;
             if (lfClamped > 1.0f) lfClamped = 1.0f;
             const f32 lfOneMinus = 1.0f - lfClamped;
             lfCrackAmount = 1.0f - lfOneMinus * lfOneMinus;
-            (void)lfMaxDisplacementSq;   // the asm feeds maxDispSq into the (placeholder) remap.
         }
         lEvent.mfCrackAmount = lfCrackAmount;
+
+        // ---------------------------------------------------------------------------------------
+        // [DIAG] NOT IN THE X360 BINARY. BRN_GLASS_PROBE=1 only. Read-only; deleted when the glass
+        // question is banked.
+        //
+        // WHAT IT HAS TO DISTINGUISH, and why it is a HISTOGRAM and not a max: the failure this
+        // replaces was a hard 0.0, so "did the remap light up" is answered by whether any bucket
+        // ABOVE b0 is populated -- a max alone could not tell one saturated pane from a whole car
+        // of them, and a mean could not tell "all zero" from "half zero". Buckets are on the crack
+        // amount; the three counters above them bound the population the buckets came from. The
+        // summary prints on EVERY smash/crack event once armed (state changes are rare -- a pane
+        // changes state at most twice per wreck) and re-prints its zero row, so a silent probe is
+        // distinguishable from a probe that armed and saw nothing.
+        {
+            static s32 siGlassProbe = -1;
+            if ( siGlassProbe < 0 )
+            {
+                const char* lpcEnv = getenv("BRN_GLASS_PROBE");
+                siGlassProbe = (lpcEnv != 0 && atoi(lpcEnv) > 0) ? 1 : 0;
+            }
+            if ( siGlassProbe == 1 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                static u32 suEvents = 0, suCracked = 0, suSmashed = 0, suIntact = 0;
+                static u32 suBucket[6] = { 0, 0, 0, 0, 0, 0 };
+                static f32 sfMinDisp = 1e30f, sfMaxDisp = -1e30f;
+
+                ++suEvents;
+                if      ( leNewState == E_GLASS_STATE_CRACKED ) ++suCracked;
+                else if ( leNewState == E_GLASS_STATE_SMASHED ) ++suSmashed;
+                else                                            ++suIntact;
+
+                if ( leNewState == E_GLASS_STATE_CRACKED )
+                {
+                    const f32 lfDisp = (lfMaxDisplacementSq > 0.0f) ? std::sqrt(lfMaxDisplacementSq) : 0.0f;
+                    if ( lfDisp < sfMinDisp ) sfMinDisp = lfDisp;
+                    if ( lfDisp > sfMaxDisp ) sfMaxDisp = lfDisp;
+
+                    const f32 lfA = lfCrackAmount;
+                    if      ( lfA <= 0.0f  ) ++suBucket[0];
+                    else if ( lfA <  0.25f ) ++suBucket[1];
+                    else if ( lfA <  0.5f  ) ++suBucket[2];
+                    else if ( lfA <  0.75f ) ++suBucket[3];
+                    else if ( lfA <  1.0f  ) ++suBucket[4];
+                    else                     ++suBucket[5];
+                }
+
+                *CgsDev::Log::gpDebugPrint
+                    << "[glass] pane " << liPaneIndex << " state " << static_cast<s32>(leNewState)
+                    << " crack " << lfCrackAmount
+                    << " maxDisp " << ((lfMaxDisplacementSq > 0.0f) ? std::sqrt(lfMaxDisplacementSq) : 0.0f)
+                    << " | events " << suEvents
+                    << " intact " << suIntact << " cracked " << suCracked << " smashed " << suSmashed
+                    << " | crackAmt b0 " << suBucket[0] << " b1 " << suBucket[1] << " b2 " << suBucket[2]
+                    << " b3 " << suBucket[3] << " b4 " << suBucket[4] << " b1.0 " << suBucket[5]
+                    << " | dispRange " << ((sfMinDisp < 1e29f) ? sfMinDisp : 0.0f)
+                    << " .. " << ((sfMaxDisp > -1e29f) ? sfMaxDisp : 0.0f)
+                    << "\n";
+            }
+        }
 
         // The remaining scalar payload: transform, entity id, body-part type, new state, suppress flag.
         // The asm writes three consecutive int fields v66/v67/v68 == the event's id / part / state.

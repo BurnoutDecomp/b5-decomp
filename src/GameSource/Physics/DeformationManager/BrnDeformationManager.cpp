@@ -862,11 +862,14 @@ namespace Deformation
 
         CgsDev::PerfMonCpu::StartMonitor(miPostPhysicsUpdateDetachedPartsManPerfMon);
         mDetachedPartManager.AddPartsToScene(lpSceneInterface);
-        // FLAG (fork to reconcile): DetachedPartManager::UpdatePostPhysics still takes the
-        // LOCAL Deformation::ContactSpyData model (its header note says the same); the real
-        // ContactSpy::ContactSpyData flows through the same bytes. Cast at the seam.
+        // ⭐ THE CAST IS GONE 2026-09-06 (contact-spy wave). This read
+        // `reinterpret_cast<ContactSpyData*>(lpContactSpyData)` and was flagged "fork to
+        // reconcile": the whole chain below it was declared over a PHANTOM
+        // Deformation::ContactSpyData. Bodying PhysicalBodyPart::AddContactSpy made the pointer
+        // load-bearing (it has to reach mHingedPartContactQueue by name), so the phantom was
+        // retired and the chain now carries BrnPhysics::ContactSpy::ContactSpyData end to end.
         mDetachedPartManager.UpdatePostPhysics(lpSimOutput, lpSceneInterface,
-                                               reinterpret_cast<ContactSpyData*>(lpContactSpyData),
+                                               lpContactSpyData,
                                                lpContacts);
         mDetachedWheelManager.UpdatePostPhysics(lpSimOutput, lpSceneInterface);
         CgsDev::PerfMonCpu::StopMonitor(miPostPhysicsUpdateDetachedPartsManPerfMon);

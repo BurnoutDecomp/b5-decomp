@@ -243,7 +243,7 @@ namespace Deformation
     // ------------------------------------------------------------------------------------------
     void PhysicalBodyPartPool::UpdateJoinedParts(
         const PhysicsModuleIO::PotentialContactInterfaceModel* lpPotentialContactsInterface,
-        ContactSpyData* lpContactSpyData, VecFloat lvfTimeStep)
+        BrnPhysics::ContactSpy::ContactSpyData* lpContactSpyData, VecFloat lvfTimeStep)
     {
         // ---- phase (1): post-vehicle bookkeeping over the still-joined parts ----
         for (s32 liPart = mUsedParts.GetFirstNonZeroBit();

@@ -2469,18 +2469,27 @@ namespace Deformation
         // 0x82642290..0x826422A8: r4 = simIn, r5 = wheelMgr, f1 = timestep lane, r7 = random.
         UpdateWheels(lpInput, lpWheelMgr, lvfTimeStep.x, lpRandom);
 
-        {
-            static bool sbLoggedGlassGate = false;
-            if ( !sbLoggedGlassGate )
-            {
-                sbLoggedGlassGate = true;
-                if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                    *CgsDev::Log::gpDebugPrint
-                        << "conductor gate: DeformableObject::UpdateGlass leg of "
-                           "UpdateIKAndLocators skipped (module-output deformation interfaces "
-                           "not homed) [FLAG PC boot gate]\n";
-            }
-        }
+        // ⭐ THE GLASS GATE IS GONE 2026-09-06 (contact-spy wave), and BOTH halves of its reason
+        // were STALE. It said "module-output deformation interfaces not homed" and "glass pane
+        // updates are dead on the junkyard path (no glass impacts)".
+        //   * NOT HOMED is false: PhysicsModuleIO::OutputBuffer::GetDeformationOutputInterface
+        //     (+148656, X360 0x825A0128) and ::GetDeformationOutputInterfaceForEntityModules
+        //     (+159648, X360 0x825A01D0) are both declared, and their Storage typedefs ARE
+        //     Deformation::DeformationOutputInterface / ...ForEntityModules -- exactly the two
+        //     parameter types UpdateGlass takes. EmitDetachedPartNotification in
+        //     BrnPhysicalBodyPart.cpp:2034 has been calling the first of them all along.
+        //   * DEAD ON THE JUNKYARD PATH is the [[gates-are-stale-not-dead]] shape: it describes a
+        //     boot that never left the junkyard. This build now drives, crashes into walls and
+        //     traffic, and sheds panels -- the run this landed with logged 20 crash-exits and
+        //     2,646 detach-band rows. A gate whose premise is "nothing ever hits the glass" has
+        //     to be re-asked once the car can crash, and the answer changed.
+        // ⚠️ MEASURED CONSEQUENCE, stated plainly: with the gate in place the [glass] probe read
+        // ZERO, and that zero did NOT mean "no pane crossed the 1 mm threshold" -- it meant the
+        // entire leg never executed. A probe inside a function an upstream gate skips reports the
+        // absence of the gate, not the absence of the phenomenon. [[diagnostics-that-lie]]
+        UpdateGlass(lvfTimeStep.x,
+                    lpOutput->GetDeformationOutputInterface(),
+                    lpOutput->GetDeformationOutputInterfaceForEntityModules());
 
         UpdateDeformedBBox();
 

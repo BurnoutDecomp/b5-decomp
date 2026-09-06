@@ -135,6 +135,39 @@ namespace ContactSpy
             return mpData->GetPropContacts();
         }
 
+        // ⭐⭐ NEW 2026-09-06 (contact-spy wave). The two accessors
+        // BrnEffects::EffectsModule::ProcessCarContactQueues @0x8229B7F8 calls, and the reason it
+        // could not be written: they did not exist at either level, so the effects side had no
+        // route to two of the three car-contact queues it drains (both queue members are private).
+        //
+        // Unlike GetRaceCarContacts/GetPropContacts these two ARE emitted out-of-line, and each
+        // body is the "mpData != NULL" FireAssert baking THIS header's own line number, then the
+        // pass-through:
+        //     @0x82277958  FireAssert(..., 0xC3 == 195) ; return mpData + 0x106C0
+        //     @0x822779B8  FireAssert(..., 0xCB == 203) ; return mpData + 0x151E0
+        // -- and 0x106C0 / 0x151E0 are exactly ContactSpyData::mPhysicalCarPartContactQueue and
+        // ::mHingedPartContactQueue. ProcessCarContactQueues calls them in that order and hands
+        // the results to ProcessCarDetatchedPartContacts and ProcessHingedPartContacts.
+        // Kept header-inline for the same reason as the siblings: the pass-through has no state
+        // and the assert is CGS_ASSERT-stamped.
+        //
+        // ⚠️ FOR WHOEVER WIRES THE EFFECTS SIDE: as of this wave both queues have a live producer,
+        // but they did NOT start out equal. mPhysicalCarPartContactQueue has been filled all along
+        // by PhysicsModule::StoreContact's owner-6/7 and owner-9/10 arms; mHingedPartContactQueue
+        // had NO producer anywhere in this build -- PhysicalBodyPart::AddContactSpy, its only one
+        // in the whole image, was a log-once stub until it was bodied this wave.
+        const ContactSpyData::PhysicalCarPartContactQueue* GetPhysicalCarPartContacts() const
+        {
+            CGS_ASSERT(mpData != nullptr, "mpData != NULL");
+            return mpData->GetPhysicalCarPartContacts();
+        }
+
+        const ContactSpyData::HingedCarPartContactQueue* GetHingedPartContacts() const
+        {
+            CGS_ASSERT(mpData != nullptr, "mpData != NULL");
+            return mpData->GetHingedPartContacts();
+        }
+
     private:
         // DWARF BrnContactSpyInterface.h:130. The single published-aggregate pointer
         // (the console's 32-bit slot; widens to 8 on this host -- see the banner).

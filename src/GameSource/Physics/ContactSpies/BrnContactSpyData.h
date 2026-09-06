@@ -116,8 +116,22 @@ namespace BrnPhysics
             // in the tree until now, and it is the ONE route to the traffic contacts that
             // GameStateModule::ProcessContacts needs (mTrafficContactQueue is private).
             const TrafficContactQueue*         GetTrafficContacts() const { return &mTrafficContactQueue; }
-            const PhysicalCarPartContactQueue* GetPhysicalCarPartContacts() const;
-            const HingedCarPartContactQueue*   GetHingedPartContacts() const;
+            // ⭐ BODIED 2026-09-06 (contact-spy wave). Same footing as the three siblings above:
+            // the X360 emits NO out-of-line symbol for either, because each one's only caller --
+            // the matching ContactSpyInterface accessor -- inlines the whole second level as bare
+            // offset math off mpData. Both interface accessors ARE emitted out-of-line and both
+            // are called by BrnEffects::EffectsModule::ProcessCarContactQueues @0x8229B7F8:
+            //     @0x82277958  assert(mpData) ; return mpData + 0x106C0   -> the physical-car-part
+            //                  queue, feeding ProcessCarDetatchedPartContacts
+            //     @0x822779B8  assert(mpData) ; return mpData + 0x151E0   -> the hinged-part
+            //                  queue, feeding ProcessHingedPartContacts
+            // 0x106C0 and 0x151E0 are exactly the mPhysicalCarPartContactQueue /
+            // mHingedPartContactQueue seats this header's member table already carries. Declared
+            // here with no definition anywhere in the tree until now, and they are the ONLY route
+            // to either queue (both members are private), so the effects side had no way to reach
+            // the two queues that carry grinding-contact sparks.
+            const PhysicalCarPartContactQueue* GetPhysicalCarPartContacts() const { return &mPhysicalCarPartContactQueue; }
+            const HingedCarPartContactQueue*   GetHingedPartContacts() const { return &mHingedPartContactQueue; }
             // ⭐ BODIED 2026-08-18 (wave Q round 2). DWARF BrnContactSpyData.h:146. It was
             // declared here with no definition anywhere in the tree, and it is the ONE route
             // to the prop contacts (mPropContactQueue is private) that

@@ -43,6 +43,10 @@ namespace CgsGeometric { struct Box; }  // GetBoundingBox out-param (DWARF CgsGe
                                         // `class`->`struct` 2026-08-14 (walls leg 4): unified with the
                                         // provisional home + BrnDeformableObject.h (MSVC mangle fork).
 
+// The REAL contact-spy aggregate AddContactSpy appends its hinged-part contact to. Class key
+// `struct`, matching BrnContactSpyData.h. See the retired-fork note further down.
+namespace BrnPhysics { namespace ContactSpy { struct ContactSpyData; } }
+
 namespace CgsSceneManager
 {
 namespace SceneManagerIO
@@ -141,9 +145,16 @@ namespace Deformation
     // retired-fork banner in BrnPhysicalBodyPartPool.h.
     typedef CgsSceneManager::SceneManagerIO::PotentialContact PotentialContact;
 
-    // The per-part contact-spy debug record AddContactSpy writes. Owned by the contact-spy TU.
-    // FLAG: forward-declared.
-    struct ContactSpyData;
+    // ⭐ THE FORK IS RETIRED 2026-09-06 (contact-spy wave). This was `struct ContactSpyData;` in
+    // the Deformation namespace -- a PHANTOM type that shares only a name with the real
+    // BrnPhysics::ContactSpy::ContactSpyData (PS3 mangle `PNS_10ContactSpy14ContactSpyDataE`).
+    // It linked silently for months because the pointer was only ever threaded through, never
+    // dereferenced; the seam was held together by a reinterpret_cast in DeformationManager::
+    // UpdatePostPhysics that a previous wave flagged "fork to reconcile". Bodying AddContactSpy
+    // is what made the pointer load-bearing -- it has to reach mHingedPartContactQueue -- so the
+    // phantom is gone and the whole chain (DeformationManager -> DetachedPartManager ->
+    // PhysicalBodyPartPool -> PhysicalBodyPart) now carries the real type. The cast at the seam
+    // is deleted with it. [[odr-forks-link-silently]]
 
     // The skinned bounding-box control point CalculateSkinnedPoint transforms (the static
     // per-corner skin weights). Already homed in BrnBBoxPointSkinData.h / BrnBodyPartBBoxSpec.h
@@ -388,7 +399,7 @@ namespace Deformation
                                   BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput);
 
         // BrnPhysicalBodyPart.h:285. Write this part's contact-spy debug record.
-        void AddContactSpy(ContactSpyData* lpContactSpyData);
+        void AddContactSpy(BrnPhysics::ContactSpy::ContactSpyData* lpContactSpyData);
 
         // BrnPhysicalBodyPart.h:288. Recompute the local bounding box (no scene publish).
         void UpdateBoundingBox();

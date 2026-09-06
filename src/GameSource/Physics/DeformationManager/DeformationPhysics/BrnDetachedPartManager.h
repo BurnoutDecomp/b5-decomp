@@ -157,7 +157,7 @@ namespace Deformation
         // to the pool -- reconcile when it mounts.
         void UpdatePostPhysics(const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimModuleOutputBuffer,
                                CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
-                               ContactSpyData* lpContactSpyData,
+                               BrnPhysics::ContactSpy::ContactSpyData* lpContactSpyData,
                                const BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface);
 
         // BrnDetachedPartManager.h:103. Update each live part's entry in the scene triangle cache

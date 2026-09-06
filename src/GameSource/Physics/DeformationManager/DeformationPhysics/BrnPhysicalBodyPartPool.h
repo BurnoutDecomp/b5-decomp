@@ -49,6 +49,9 @@ namespace PhysicsSimulationIO
 }
 }
 
+// The REAL contact-spy aggregate UpdateJoinedParts forwards per-part (see BrnPhysicalBodyPart.h).
+namespace BrnPhysics { namespace ContactSpy { struct ContactSpyData; } }
+
 namespace BrnPhysics
 {
 namespace Deformation
@@ -129,9 +132,10 @@ namespace Deformation
     class DeformableObject;          // owning deformable model (CreatePart arg). Owned by BrnDeformableObject.h.
     struct OutUpdateRigidBody;       // per-frame rigid-body update event (UpdatePart). FLAG: forward-declared.
 
-    // The contact-spy debug sink UpdateJoinedParts forwards per-part. Owned by the contact-spy TU.
-    // FLAG: forward-declared.
-    struct ContactSpyData;
+    // ⭐ THE FORK IS RETIRED 2026-09-06 (contact-spy wave). This was a PHANTOM
+    // Deformation::ContactSpyData sharing only a name with the real
+    // BrnPhysics::ContactSpy::ContactSpyData; see the full note in BrnPhysicalBodyPart.h.
+    // The real type is forward-declared above the namespace.
 
     // The two deformation output sinks OutputEvents fills (detached-part render events +
     // current-position events). Homed under DeformationManager/SharedIO. FLAG: forward-declared
@@ -203,7 +207,7 @@ namespace Deformation
         // potential contacts from the contact interface, accumulate them (PhysicalBodyPart::
         // AddContact), integrate each active joint, and forward to the contact spy.
         void UpdateJoinedParts(const PhysicsModuleIO::PotentialContactInterfaceModel* lpPotentialContactsInterface,
-                               ContactSpyData* lpContactSpyData, VecFloat lvfTimeStep);
+                               BrnPhysics::ContactSpy::ContactSpyData* lpContactSpyData, VecFloat lvfTimeStep);
 
         // BrnPhysicalBodyPartPool.h:120. Whether the given slot index is currently in use.
         bool IsPartIndexUsed(s32 liIndex);
