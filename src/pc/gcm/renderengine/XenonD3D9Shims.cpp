@@ -309,6 +309,18 @@ namespace
         // bundle's own bytes) so the read does not depend on the DEC3N expansion.
         u16                          mau16TexcoordSourceOffset[2];
         u8                           mau8TexcoordType[2];
+        // ---- [PROBE scratch] THE SKINNING PAIR, in the SOURCE stream ----------------
+        // [0] = BLENDINDICES0, [1] = BLENDWEIGHT0. The vehicle Damaged VERTEX program
+        // builds its whole verlet result out of these two elements --
+        //   verletOffset = g_verletOffsets[idx.x] * wt.x + g_verletOffsets[idx.y] * wt.y
+        // -- and hands the W lane of that blend to the pixel shader as
+        // vertToEyeVector.w, which is the ONLY per-vertex input to the bare-metal
+        // reveal. Recording the source offsets lets the probe evaluate that same blend
+        // on the CPU, per vertex, for the buffer that is about to be drawn: the device
+        // constant alone cannot say what any vertex actually receives, because a row is
+        // only read by the vertices whose bone indices name it.
+        u16                          mau16BlendSourceOffset[2];
+        u8                           mau8BlendType[2];
     };
     std::unordered_map<const void*, Vd32Cached> sVdCache;
 
@@ -530,6 +542,10 @@ namespace
     // [PROBE crumple] the two UV sets of the declaration just bound, in the SOURCE stream.
     u16                     sau16LastDeclTexcoordOffset[2] = { 0xFFFFu, 0xFFFFu };
     u8                      sau8LastDeclTexcoordType[2] = { D3DDECLTYPE_UNUSED, D3DDECLTYPE_UNUSED };
+    // [PROBE scratch] BLENDINDICES0 / BLENDWEIGHT0 of the declaration just bound, in the
+    // SOURCE stream (see Vd32Cached's banner).
+    u16                     sau16LastDeclBlendOffset[2] = { 0xFFFFu, 0xFFFFu };
+    u8                      sau8LastDeclBlendType[2] = { D3DDECLTYPE_UNUSED, D3DDECLTYPE_UNUSED };
     // Set by WorldFallbackShader_MarkInstancedMesh (see its banner further down): the next
     // mesh is CONSOLE-INSTANCED. WorldFallbackShader_SelectForMesh turns that into a fallback
     // only when the technique's vertex program cannot be fed a `world` matrix.
@@ -1722,6 +1738,10 @@ namespace renderengine
                         sizeof(sau16LastDeclTexcoordOffset));
             std::memcpy(sau8LastDeclTexcoordType, lIt->second.mau8TexcoordType,
                         sizeof(sau8LastDeclTexcoordType));
+            std::memcpy(sau16LastDeclBlendOffset, lIt->second.mau16BlendSourceOffset,
+                        sizeof(sau16LastDeclBlendOffset));
+            std::memcpy(sau8LastDeclBlendType, lIt->second.mau8BlendType,
+                        sizeof(sau8LastDeclBlendType));
             return lIt->second.mpDeclaration;
         }
 
@@ -1732,6 +1752,10 @@ namespace renderengine
         lEntry.mau16TexcoordSourceOffset[1] = 0xFFFFu;
         lEntry.mau8TexcoordType[0] = D3DDECLTYPE_UNUSED;
         lEntry.mau8TexcoordType[1] = D3DDECLTYPE_UNUSED;
+        lEntry.mau16BlendSourceOffset[0] = 0xFFFFu;
+        lEntry.mau16BlendSourceOffset[1] = 0xFFFFu;
+        lEntry.mau8BlendType[0] = D3DDECLTYPE_UNUSED;
+        lEntry.mau8BlendType[1] = D3DDECLTYPE_UNUSED;
         const u8* lpImage = static_cast<const u8*>(lpVdImage);
         u16 lu16NumElements;
         std::memcpy(&lu16NumElements, lpImage + 0x08, 2);
@@ -1793,6 +1817,16 @@ namespace renderengine
             {
                 lEntry.mau16TexcoordSourceOffset[lu8UsageIndex] = lu16Offset;
                 lEntry.mau8TexcoordType[lu8UsageIndex] = lu8Type;
+            }
+            if (lu8Usage == D3DDECLUSAGE_BLENDINDICES && lu8UsageIndex == 0)
+            {
+                lEntry.mau16BlendSourceOffset[0] = lu16Offset;
+                lEntry.mau8BlendType[0] = lu8Type;
+            }
+            if (lu8Usage == D3DDECLUSAGE_BLENDWEIGHT && lu8UsageIndex == 0)
+            {
+                lEntry.mau16BlendSourceOffset[1] = lu16Offset;
+                lEntry.mau8BlendType[1] = lu8Type;
             }
             lEntry.muUsageMask |= DeclUsageBit(lu8Usage, lu8UsageIndex);
             if (lu8Type == D3DDECLTYPE_DEC3N && !lbSupportsDec3n)
@@ -1981,6 +2015,10 @@ namespace renderengine
                     sizeof(sau16LastDeclTexcoordOffset));
         std::memcpy(sau8LastDeclTexcoordType, lrStored.mau8TexcoordType,
                     sizeof(sau8LastDeclTexcoordType));
+        std::memcpy(sau16LastDeclBlendOffset, lrStored.mau16BlendSourceOffset,
+                    sizeof(sau16LastDeclBlendOffset));
+        std::memcpy(sau8LastDeclBlendType, lrStored.mau8BlendType,
+                    sizeof(sau8LastDeclBlendType));
         if (lEntry.muDec3nCount != 0 && lEntry.mpDeclaration != nullptr)
             LogOnce("vd32dec3n", "[WorldVd32] driver lacks DEC3N; packed normals expanded to FLOAT3\n");
         return lEntry.mpDeclaration;
@@ -2818,6 +2856,435 @@ namespace renderengine
         CgsDev::Log::WriteToLog(lacMsg);
     }
 
+    // =====================================================================================
+    // [PROBE, env-gated: BRN_SCRATCH_PROBE] THE BARE-METAL REVEAL: WHAT THE W LANE OF
+    // g_verletOffsets ACTUALLY DELIVERS TO A VERTEX.
+    //
+    // ---- what the shipped programs do with that lane, read out of build/game/SHADERS.BNDL
+    // Technique Vehicle_Opaque_PaintGloss_Textured_Damaged (F8D3E7E3) imports VS 274C49FB
+    // and PS 9FB09AA7. The VS blends the FULL float4 of two verlet rows and forwards the
+    // w lane untouched:
+    //     mul  r0, v6.y, c0[a0.x]        ; g_verletOffsets[idx.y] * weight.y   (xyzw)
+    //     mad  r0, c0[a0.y], v6.x, r0    ; + g_verletOffsets[idx.x] * weight.x
+    //     mov  o1.w, r0.w                ; vertToEyeVector.w = blended scratch
+    // and the PS turns it into the reveal, on the SAME TEXCOORD1 unwrap the crumple map
+    // uses (untiled here, x6/x3 there):
+    //     add     r0.x, c14.z, -v0.w     ; 1 - w
+    //     texld   r6, v2.zwzw, s5        ; scratchTex
+    //     add     r0.x, -r0.x, r6.y      ; scratchTex.g - (1 - w)
+    //     mul_sat r0.x, r0.x, c14.w      ; * 2.5, saturate            -> scratchReveal
+    //     lrp     r7.xyz, r0.x, r6.x, r4.xzww   ; baseColour = lerp(paint, scratch.rrr, .)
+    //     mad     r6, c10, r6.z, -r8 ; mad r6, r0.x, r6, c9  ; the scratch fresnel lerp
+    // So a vertex needs w > 1 - scratchTex.g before ANY bare metal appears at all.
+    //
+    // ---- WHY THE DEVICE CONSTANT ALONE CANNOT ANSWER THE QUESTION ------------------------
+    // The crumple probe reports max|w| over c0..c127, and it measured a flat 0.7500 on every
+    // damaged sample. A MAX says nothing about who reads it: a row is only seen by the
+    // vertices whose BLENDINDICES name it, so "one row at 0.75 and 127 rows at 0" and "all
+    // 128 rows at 0.75" produce the same max and completely different cars. This probe
+    // therefore reports the ROW CENSUS (a bucket histogram over w, not a max) AND evaluates
+    // the vertex program's own blend on the CPU for the buffer that is about to be drawn.
+    //
+    // Placed in WorldDraw_IndexedUP immediately before DrawIndexedPrimitive, next to the
+    // crumple probe and for the same reason: SetMeshTechniquePC is guarded by
+    // `lpTechnique != spLastTechnique`, so a bind fires once per technique CHANGE and says
+    // nothing about the state at this draw. Arms loudly ("[scratch] probe ARMED") so an
+    // unarmed run cannot be read as an absence.
+    //
+    // ---- ⭐ WHAT IT MEASURED, SO NOBODY RE-DERIVES IT ------------------------------------
+    // One 70 m/s wall shot (BRN_CRASH_SWEEP 3273.446,-3.7,-1882.033 shots=220:70), technique
+    // Vehicle_Opaque_PaintGloss_Textured_Damaged, series in evidence order:
+    //     pristine   rows zero=128            nz=0   distinct=0   max 0.0000   vert maxW 0.0000
+    //     early      zero=117 <0.25=6         nz=11  distinct=4   max 0.1022
+    //                zero=98  <0.50=7         nz=30  distinct=15  max 0.2972   vert maxW 0.2972
+    //                zero=80  <0.50=22        nz=48  distinct=24  max 0.4897
+    //     at peak    zero=65  >=0.7495=15     nz=63  distinct=23  max 0.7500   vert maxW 0.7096
+    //                (a body part: 634/945 verts above 0.25, 372/945 above 0.50)
+    // ⇒ THE W LANE IS DRIVEN, NOT DEFAULTED. 63 of 128 rows non-zero carrying 23 distinct
+    // values, ramping from 0 through the crash. The "flat 0.7500 to four decimals" the
+    // crumple wave saw is a MAX statistic sitting on the console's OWN ceiling: the sensor
+    // scratch accumulator in DeformableObject::ApplySensorImpulse clamps to
+    // max(0.75, scratch) on the friction leg, so a saturating accumulator is exactly what
+    // reports a constant maximum. A defaulted lane would show distinct=1, not 23.
+    // The reveal is on film: scratch/SCRATCH/evidence/A_sim_wreck_bb003004.png has bare
+    // metal on the rear quarter, the door and the boot lid; B_forced075_bb003010.png is the
+    // same wreck with BRN_SCRATCH_FORCE=0.75 on every row -- the term's ceiling, and it is
+    // dramatically heavier, so the term has full visible authority and the sim is using a
+    // real fraction of it.
+    // ---- and the console AGREES, instruction for instruction (X360 SHADERS.BNDL) ---------
+    // Same resource ids on both sides. PS 9FB09AA7's Xenos microcode (literal block
+    // c250 = {20, 0.4, 0.05, 2.5}, c252 = {-1, -0.5, 1, 1.5}):
+    //     8  tfetch  r9.xyz_, r2.zwz, tf5        ; the scratch fetch, sampler 5, TEXCOORD1
+    //     10 subsc0  r8.x___, c252.z - r0.w      ; 1 - interpolated verlet w
+    //     34 add     r1.xyzw, -r8.xyzw, r9.yxxx  ; scratchTex.g - (1 - w)
+    //     35 mulsc1  r3.x___, c250.w * r1.x [clamp]   ; * 2.5, saturate
+    //     36 mad     r7.xyz_, r3.xxxx, r1.yzww, r8.yzww ; lerp to scratchTex.rrr
+    // and VS 274C49FB blends the full float4 (`mul r1.xyzw, r3.yyyy, c30.wxyz` /
+    // `mad r5.xyzw, r3.xxxx, c30.xyzw, r1.yzwx`) and exports the w lane at instruction 50
+    // (`maxs export0.___w, r5.ww`) -- the same interpolator lane the PC program writes.
+    // =====================================================================================
+    const u32 KU_SCRATCH_PROBE_SLOTS = 64u;
+    const u32 KU_SCRATCH_PROBE_LINES = 4000u;   // hard global budget, then it says so once
+    const u32 KU_SCRATCH_PROBE_VERTS = 4096u;   // per-draw census cap
+    // ⛔ MEASURED, AND THE REASON THIS CAP EXISTS. The first cut of this probe had only the
+    // global budget, and the run it was written for never reached its own subject: the
+    // CAR-SELECT screen spent all 4,000 entries (16,002 log lines) before the crash fired --
+    // "[scratch] line budget spent" at log line 21,624, "[sweep] shot 0" at 39,678 -- because
+    // the stale-constant draws cycle between three census states for ever and a "log on
+    // change" trigger fires on every one of them. 3,987 of 4,000 entries were the wheel-chrome
+    // technique reading world-matrix leftovers. A per-technique cap stops one screen spending
+    // the whole run's budget; the STALE FILTER below removes that churn at its source.
+    const u32 KU_SCRATCH_PROBE_PER_TECH = 200u;
+    // A verlet W lane is a SCRATCH RATIO. Its producer ladder caps it at max(0.75, seed) and
+    // the seeds are 0.8 / 0.75 / 0.0 (GetInitialCompressionScalesAndLimits), so nothing in the
+    // simulation can put 3538 or 9500 there. A row above this is the previous world draw's
+    // matrix left in c0..c127 -- counted separately, never bucketed as scratch.
+    const f32 KF_SCRATCH_STALE_ABOVE = 2.0f;
+
+    struct ScratchProbeRecord
+    {
+        const char* mpcTechnique;
+        u32         muDraws;
+        u32         muLines;         // per-technique budget (see KU_SCRATCH_PROBE_PER_TECH)
+        u32         muStaleDraws;    // draws whose rows carried world-matrix leftovers
+        bool        mbCapSaid;
+        s32         miLastKeyA;      // quantised row census
+        s32         miLastKeyB;      // quantised vertex census
+        s32         miLastKeyC;      // distinct-row-value count
+    };
+
+    ScratchProbeRecord saScratchProbe[KU_SCRATCH_PROBE_SLOTS] = {};
+    u32                suScratchProbeUsed = 0u;
+    u32                suScratchProbeLines = 0u;
+    bool               sbScratchProbeOverflow = false;
+
+    // Decode BLENDINDICES0 / BLENDWEIGHT0 for one vertex out of the SOURCE stream.
+    // Returns false when the declaration does not carry the pair (every non-skinned mesh).
+    bool ScratchProbe_ReadSkinPair(const u8* lpVertex, u32 lau8Index[4], f32 laf4Weight[4])
+    {
+        const u16 lu16IdxOffset = sau16LastDeclBlendOffset[0];
+        const u16 lu16WgtOffset = sau16LastDeclBlendOffset[1];
+        if (lu16IdxOffset == 0xFFFFu || lu16WgtOffset == 0xFFFFu)
+            return false;
+        // Every skinned vehicle declaration in the shipped data spells these UBYTE4 /
+        // UBYTE4N; anything else is out of this probe's competence and says so rather than
+        // decoding garbage.
+        if (sau8LastDeclBlendType[0] != D3DDECLTYPE_UBYTE4
+            || sau8LastDeclBlendType[1] != D3DDECLTYPE_UBYTE4N)
+            return false;
+
+        u8 lau8Idx[4];
+        u8 lau8Wgt[4];
+        std::memcpy(lau8Idx, lpVertex + lu16IdxOffset, 4);
+        std::memcpy(lau8Wgt, lpVertex + lu16WgtOffset, 4);
+        for (u32 lu = 0; lu < 4u; ++lu)
+        {
+            lau8Index[lu]  = lau8Idx[lu];
+            laf4Weight[lu] = static_cast<f32>(lau8Wgt[lu]) / 255.0f;
+        }
+        return true;
+    }
+
+    void ScratchProbe_AtDraw(IDirect3DDevice9* lpDevice, const u8* lpVertices,
+                             u32 luSourceStride, u32 luNumVertices)
+    {
+        static const char* const spcProbe = std::getenv("BRN_SCRATCH_PROBE");
+        if (spcProbe == nullptr || spcProbe[0] == '0' || lpDevice == nullptr)
+            return;
+
+        LogOnce("scrarm", "[scratch] probe ARMED (BRN_SCRATCH_PROBE) -- per-ROW and"
+                          " per-VERTEX census of the g_verletOffsets W lane at draw time\n");
+
+        // ⚠️ THE TWO KNOBS MUST NOT BE READ TOGETHER AS A MEASUREMENT. ScratchForce_Apply
+        // writes c0..c127's W lane before the draw, and the array is only re-published when
+        // the owning object publishes it -- so in a forced run every draw after the first
+        // reads the FORCED value back. Say so on every line rather than quietly reporting a
+        // number this build's simulation never produced.
+        static const bool sbForceArmed = (std::getenv("BRN_SCRATCH_FORCE") != nullptr);
+        if (sbForceArmed)
+            LogOnce("scrboth", "[scratch] ⚠️ BRN_SCRATCH_FORCE IS ALSO ARMED -- the W values"
+                               " below are the FORCED ones, not the simulation's\n");
+
+        const char* const lpcName = (spCurrentTechniqueName != nullptr)
+                                        ? spCurrentTechniqueName : "<no technique>";
+
+        // Same filter convention as the crumple probe, and the same warning: the technique
+        // NAME's first character is overwritten with the shader-profile digit by
+        // ShaderTechniqueResourceType::PostFixUp, so "Vehicle_" reads "0ehicle_".
+        static const char* const spcFilter =
+            (spcProbe[0] == '1' && spcProbe[1] == '\0') ? nullptr
+            : ((spcProbe[0] == 'v' || spcProbe[0] == 'V') && spcProbe[1] == 'e') ? "ehicle"
+            : spcProbe;
+        if (spcFilter != nullptr && std::strstr(lpcName, spcFilter) == nullptr)
+            return;
+
+        ScratchProbeRecord* lpRecord = nullptr;
+        for (u32 lu = 0; lu < suScratchProbeUsed; ++lu)
+        {
+            if (saScratchProbe[lu].mpcTechnique == lpcName)
+            {
+                lpRecord = &saScratchProbe[lu];
+                break;
+            }
+        }
+        if (lpRecord == nullptr)
+        {
+            if (suScratchProbeUsed >= KU_SCRATCH_PROBE_SLOTS)
+            {
+                // ⚠️ SAY SO -- a silently truncated table is a coverage claim nobody can check.
+                LogOnce("scrfull", "[scratch] technique table FULL -- later techniques are NOT"
+                                   " being probed; this run cannot claim coverage\n");
+                sbScratchProbeOverflow = true;
+                return;
+            }
+            lpRecord = &saScratchProbe[suScratchProbeUsed++];
+            lpRecord->mpcTechnique = lpcName;
+            lpRecord->muDraws      = 0u;
+            lpRecord->muLines      = 0u;
+            lpRecord->muStaleDraws = 0u;
+            lpRecord->mbCapSaid    = false;
+            lpRecord->miLastKeyA = -1;
+            lpRecord->miLastKeyB = -1;
+            lpRecord->miLastKeyC = -1;
+        }
+        ++lpRecord->muDraws;
+
+        // ---- (1) THE ROW CENSUS -- a histogram, never a max ------------------------------
+        static float safRows[128 * 4];
+        if (FAILED(lpDevice->GetVertexShaderConstantF(0u, safRows, 128u)))
+            return;
+
+        // Buckets over the W lane. The 0.75 bucket is separated to a tenth of a per-cent
+        // because the sensor ladder's own ceiling is max(0.75, scratch)
+        // (BrnDeformableObject_Update.cpp, the friction leg) -- so "at the cap" and "near
+        // the cap" are different findings and must not share a bucket.
+        u32 lauBucket[6] = { 0u, 0u, 0u, 0u, 0u, 0u };
+        //  [0] |w| <= 1e-4      [1] < 0.10   [2] < 0.25   [3] < 0.50
+        //  [4] < 0.7495         [5] >= 0.7495 (the cap, up to KF_SCRATCH_STALE_ABOVE)
+        f32 lfRowMax = 0.0f;
+        f32 lfRowSum = 0.0f;
+        u32 luRowsNz = 0u;
+        u32 luRowsStale = 0u;
+        s32 liMaxRow = -1;
+        // How many DISTINCT w values the array carries, quantised to 1/1000. A lane that is
+        // DEFAULTED reads one value on every row; a lane that is DRIVEN reads many. This is
+        // the measurement that separates the two, and the max cannot.
+        s32 laiSeen[64];
+        u32 luNumSeen = 0u;
+        for (u32 lu = 0; lu < 128u; ++lu)
+        {
+            const f32 lfW = safRows[lu * 4 + 3];
+            const f32 lfA = (lfW < 0.0f) ? -lfW : lfW;
+            if (lfA > KF_SCRATCH_STALE_ABOVE)
+            {
+                // Not scratch. Counted, never bucketed, and kept out of every statistic --
+                // otherwise a 9500 drowns the whole census and the mean is meaningless.
+                ++luRowsStale;
+                continue;
+            }
+            if (lfA <= 1.0e-4f)            ++lauBucket[0];
+            else if (lfA < 0.10f)          ++lauBucket[1];
+            else if (lfA < 0.25f)          ++lauBucket[2];
+            else if (lfA < 0.50f)          ++lauBucket[3];
+            else if (lfA < 0.7495f)        ++lauBucket[4];
+            else                           ++lauBucket[5];
+            if (lfA > 1.0e-4f)
+            {
+                ++luRowsNz;
+                lfRowSum += lfA;
+                const s32 liQ = static_cast<s32>(lfA * 1000.0f);
+                bool lbFound = false;
+                for (u32 luS = 0; luS < luNumSeen; ++luS)
+                {
+                    if (laiSeen[luS] == liQ) { lbFound = true; break; }
+                }
+                if (!lbFound && luNumSeen < 64u)
+                    laiSeen[luNumSeen++] = liQ;
+            }
+            if (lfA > lfRowMax) { lfRowMax = lfA; liMaxRow = static_cast<s32>(lu); }
+        }
+
+        // ---- (2) THE VERTEX CENSUS -- the vertex program's own blend, on the CPU ----------
+        // This is the number the reveal actually depends on. Bounded to the head of the
+        // buffer so a 40,000-vertex body cannot turn one draw into a stall.
+        u32 luVertsRead = 0u;
+        u32 luVertsW10  = 0u;   // blended w > 0.10
+        u32 luVertsW25  = 0u;   // > 0.25  -> reveals where scratchTex.g > 0.75
+        u32 luVertsW50  = 0u;   // > 0.50  -> reveals where scratchTex.g > 0.50
+        u32 luVertsW70  = 0u;   // > 0.70  -> reveals where scratchTex.g > 0.30
+        f32 lfVertMaxW  = 0.0f;
+        f32 lfVertSumW  = 0.0f;
+        u32 luIdxMax    = 0u;
+        f32 lfWeightSum = 0.0f;
+        if (lpVertices != nullptr && luSourceStride != 0 && luNumVertices != 0)
+        {
+            u32 luSample = luNumVertices;
+            if (luSample > KU_SCRATCH_PROBE_VERTS)
+                luSample = KU_SCRATCH_PROBE_VERTS;
+            for (u32 lu = 0; lu < luSample; ++lu)
+            {
+                u32 lau8Index[4];
+                f32 laf4Weight[4];
+                const u8* const lpV = lpVertices + static_cast<size_t>(lu) * luSourceStride;
+                if (!ScratchProbe_ReadSkinPair(lpV, lau8Index, laf4Weight))
+                    break;
+                // The vertex program reads lanes x and y only (VerletOffsetPlusScratches).
+                const u32 luI0 = lau8Index[0] & 127u;
+                const u32 luI1 = lau8Index[1] & 127u;
+                if (lau8Index[0] > luIdxMax) luIdxMax = lau8Index[0];
+                if (lau8Index[1] > luIdxMax) luIdxMax = lau8Index[1];
+                const f32 lfW = safRows[luI0 * 4 + 3] * laf4Weight[0]
+                              + safRows[luI1 * 4 + 3] * laf4Weight[1];
+                lfWeightSum += laf4Weight[0] + laf4Weight[1];
+                ++luVertsRead;
+                lfVertSumW += lfW;
+                if (lfW > lfVertMaxW) lfVertMaxW = lfW;
+                if (lfW > 0.10f) ++luVertsW10;
+                if (lfW > 0.25f) ++luVertsW25;
+                if (lfW > 0.50f) ++luVertsW50;
+                if (lfW > 0.70f) ++luVertsW70;
+            }
+        }
+
+        // ---- (3) the trigger: a CHANGE of the census, never a high-water mark -------------
+        // ⛔ The crumple probe's own banner records why: draw #14 latched a startup outlier
+        // and 140,000 later draws could never beat it. A census key changes whenever the
+        // picture changes, so a run of identical lines is positive evidence of "nothing
+        // moved" rather than an unwritten one.
+        if (luRowsStale != 0u)
+            ++lpRecord->muStaleDraws;
+        // Quantised COARSELY on purpose: the question is "does the W lane move at all and by
+        // how much", not the fourth decimal, and a twitchy key is what spent the first run's
+        // whole budget on the car-select screen.
+        const s32 liKeyA = static_cast<s32>(luRowsNz) * 100 + static_cast<s32>(lfRowMax * 20.0f);
+        const s32 liKeyB = static_cast<s32>(lfVertMaxW * 20.0f) * 100
+                         + static_cast<s32>(luVertsRead != 0u
+                               ? (luVertsW25 * 20u) / (luVertsRead + 1u) : 0u);
+        const s32 liKeyC = static_cast<s32>(luNumSeen) + ((luRowsStale != 0u) ? 1000 : 0);
+        const bool lbChanged = (liKeyA != lpRecord->miLastKeyA)
+                            || (liKeyB != lpRecord->miLastKeyB)
+                            || (liKeyC != lpRecord->miLastKeyC);
+        if (!lbChanged && lpRecord->muDraws != 1u && (lpRecord->muDraws % 20000u) != 0u)
+            return;
+        lpRecord->miLastKeyA = liKeyA;
+        lpRecord->miLastKeyB = liKeyB;
+        lpRecord->miLastKeyC = liKeyC;
+
+        if (lpRecord->muLines >= KU_SCRATCH_PROBE_PER_TECH)
+        {
+            if (!lpRecord->mbCapSaid)
+            {
+                lpRecord->mbCapSaid = true;
+                ++suScratchProbeLines;
+                char lacCap[256];
+                std::snprintf(lacCap, sizeof(lacCap),
+                              "[scratch] tech='%s' PER-TECHNIQUE CAP reached (%u lines) --"
+                              " later changes on THIS technique are not logged; the rest of"
+                              " the run's budget is reserved for the others\n",
+                              lpcName, static_cast<unsigned>(KU_SCRATCH_PROBE_PER_TECH));
+                CgsDev::Log::WriteToLog(lacCap);
+            }
+            return;
+        }
+        ++lpRecord->muLines;
+
+        if (suScratchProbeLines >= KU_SCRATCH_PROBE_LINES)
+        {
+            LogOnce("scrbudget", "[scratch] line budget spent -- the probe has STOPPED logging;"
+                                 " later state changes are NOT in this log\n");
+            return;
+        }
+        ++suScratchProbeLines;
+
+        // The scratch map itself, and the two fresnel constants the reveal lerps between:
+        // g_scratchFresnelRanges is an OBJECT-scope external at PS c10, and an external whose
+        // source pointer is null is SKIPPED rather than zeroed, so it has to be read at the
+        // draw like everything else.
+        char lacS5[96];
+        CrumpleProbe_DescribeUnit(lpDevice, 5u, lacS5, sizeof(lacS5));
+        DWORD luAddrU = 0, luAddrV = 0, luMag = 0, luMin = 0, luMip = 0;
+        lpDevice->GetSamplerState(5u, D3DSAMP_ADDRESSU,  &luAddrU);
+        lpDevice->GetSamplerState(5u, D3DSAMP_ADDRESSV,  &luAddrV);
+        lpDevice->GetSamplerState(5u, D3DSAMP_MAGFILTER, &luMag);
+        lpDevice->GetSamplerState(5u, D3DSAMP_MINFILTER, &luMin);
+        lpDevice->GetSamplerState(5u, D3DSAMP_MIPFILTER, &luMip);
+        float lafFresnel[4] = { -9.0f, -9.0f, -9.0f, -9.0f };
+        float lafScratchFresnel[4] = { -9.0f, -9.0f, -9.0f, -9.0f };
+        lpDevice->GetPixelShaderConstantF(9u, lafFresnel, 1u);
+        lpDevice->GetPixelShaderConstantF(10u, lafScratchFresnel, 1u);
+
+        char lacMsg[1600];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+            "[scratch] tech='%s' draw#%u%s\n"
+            "[scratch]   rows w: zero=%u <0.10=%u <0.25=%u <0.50=%u <0.7495=%u >=0.7495=%u"
+            " | nz=%u mean=%.4f max=%.4f@row%d distinct=%u stale=%u(draws %u)\n"
+            "[scratch]   verts: read=%u maxBlendW=%.4f meanBlendW=%.4f"
+            " >0.10=%u >0.25=%u >0.50=%u >0.70=%u maxBoneIdx=%u meanWeightSum=%.3f\n"
+            "[scratch]   %s addrUV=%u/%u filt=%u/%u/%u  g_fresnelRanges=(%.3f %.3f %.3f %.3f)"
+            "  g_scratchFresnelRanges=(%.3f %.3f %.3f %.3f)\n",
+            lpcName, static_cast<unsigned>(lpRecord->muDraws),
+            sbForceArmed ? "  [W LANE IS FORCED -- not a measurement]" : "",
+            static_cast<unsigned>(lauBucket[0]), static_cast<unsigned>(lauBucket[1]),
+            static_cast<unsigned>(lauBucket[2]), static_cast<unsigned>(lauBucket[3]),
+            static_cast<unsigned>(lauBucket[4]), static_cast<unsigned>(lauBucket[5]),
+            static_cast<unsigned>(luRowsNz),
+            static_cast<double>(luRowsNz != 0u ? lfRowSum / static_cast<f32>(luRowsNz) : 0.0f),
+            static_cast<double>(lfRowMax), static_cast<int>(liMaxRow),
+            static_cast<unsigned>(luNumSeen),
+            static_cast<unsigned>(luRowsStale),
+            static_cast<unsigned>(lpRecord->muStaleDraws),
+            static_cast<unsigned>(luVertsRead), static_cast<double>(lfVertMaxW),
+            static_cast<double>(luVertsRead != 0u ? lfVertSumW / static_cast<f32>(luVertsRead)
+                                                  : 0.0f),
+            static_cast<unsigned>(luVertsW10), static_cast<unsigned>(luVertsW25),
+            static_cast<unsigned>(luVertsW50), static_cast<unsigned>(luVertsW70),
+            static_cast<unsigned>(luIdxMax),
+            static_cast<double>(luVertsRead != 0u ? lfWeightSum / static_cast<f32>(luVertsRead)
+                                                  : 0.0f),
+            lacS5, static_cast<unsigned>(luAddrU), static_cast<unsigned>(luAddrV),
+            static_cast<unsigned>(luMag), static_cast<unsigned>(luMin),
+            static_cast<unsigned>(luMip),
+            static_cast<double>(lafFresnel[0]), static_cast<double>(lafFresnel[1]),
+            static_cast<double>(lafFresnel[2]), static_cast<double>(lafFresnel[3]),
+            static_cast<double>(lafScratchFresnel[0]), static_cast<double>(lafScratchFresnel[1]),
+            static_cast<double>(lafScratchFresnel[2]), static_cast<double>(lafScratchFresnel[3]));
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
+
+    // =====================================================================================
+    // [DIAG, env-gated: BRN_SCRATCH_FORCE=<0..1>] THE CONTROL FOR THE PROBE ABOVE.
+    // Overwrites ONLY the W lane of g_verletOffsets c0..c127 with the given value, for the
+    // vehicle *Damaged* techniques, immediately before the draw. Nothing else is touched --
+    // the xyz lanes stay exactly as the simulation published them, so the geometry of the
+    // wreck is unchanged and the ONLY difference between a control frame and a forced frame
+    // is the scratch input.
+    // ⛔ THIS IS A CONTROL, NOT A FIX. It exists to answer "does the reveal term have any
+    // visible authority on this build", which is a different question from "what should the
+    // simulation put there"; dialling it until a wreck looks right would be inventing a
+    // number the console does not have. Off by default and never referenced by shipped code.
+    // =====================================================================================
+    void ScratchForce_Apply(IDirect3DDevice9* lpDevice)
+    {
+        static const char* const spcForce = std::getenv("BRN_SCRATCH_FORCE");
+        if (spcForce == nullptr || lpDevice == nullptr || spCurrentTechniqueName == nullptr)
+            return;
+        if (std::strstr(spCurrentTechniqueName, "ehicle") == nullptr
+            || std::strstr(spCurrentTechniqueName, "Damaged") == nullptr)
+            return;
+
+        const f32 lfValue = static_cast<f32>(std::atof(spcForce));
+        LogOnce("scrforce", "[scratch] BRN_SCRATCH_FORCE armed -- the W lane of g_verletOffsets"
+                            " is being OVERWRITTEN on every vehicle Damaged draw. This is a"
+                            " CONTROL; no shipped path sets it.\n");
+
+        static float safForce[128 * 4];
+        if (FAILED(lpDevice->GetVertexShaderConstantF(0u, safForce, 128u)))
+            return;
+        for (u32 lu = 0; lu < 128u; ++lu)
+            safForce[lu * 4 + 3] = lfValue;
+        lpDevice->SetVertexShaderConstantF(0u, safForce, 128u);
+    }
+
     void WorldDraw_IndexedUP(u32 luPrimTypeXenon, u32 luBaseVertexIndex,
                              u32 luStartIndex, u32 luIndexCount)
     {
@@ -3349,6 +3816,13 @@ namespace renderengine
                             suVertexSourceStride, luNumVertices);
         // [DIAG, env-gated] BRN_CRUMPLE_FORCE=<0..1> -- see CrumpleForce_Apply's banner.
         CrumpleForce_Apply(lpDevice);
+        // [PROBE, env-gated] BRN_SCRATCH_PROBE -- the W lane of g_verletOffsets, per ROW and
+        // per VERTEX, at this draw. Same placement and the same reason as the crumple probe.
+        ScratchProbe_AtDraw(lpDevice, static_cast<const u8*>(lpVertexData),
+                            suVertexSourceStride, luNumVertices);
+        // [DIAG, env-gated] BRN_SCRATCH_FORCE=<0..1>. AFTER the probe, so the probe always
+        // reports the value the SIMULATION published, never the forced one.
+        ScratchForce_Apply(lpDevice);
 
         // The retained submit is the exact equivalent of the UP call beside it: the UP form
         // offsets the vertex POINTER by baseVertex * stride and passes base 0, the retained
