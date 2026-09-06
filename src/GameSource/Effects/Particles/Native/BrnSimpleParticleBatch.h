@@ -31,22 +31,22 @@
 // ============================================================================
 
 #include "types.hpp"
+#include "GameSource/Effects/Particles/EffectsVertexBuffer.h"  // the canonical EffectsVertexBufferBatch
 
 namespace BrnParticle
 {
 namespace Native
 {
-    // EffectsVertexBuffer.h:42 (DWARF) -- base of every effects vertex-buffer batch.
-    // Minimal 8-byte base sized to the attested SimpleParticleBatch/SparkBatch strides;
-    // replace with the shared EffectsVertexBuffer.h definition once that TU is reconstructed.
-    struct EffectsVertexBufferBatch
-    {
-        u32 muStartVertex;   // EffectsVertexBuffer.h:59 -- @ +0x00
-        u32 muVertexCount;   // EffectsVertexBuffer.h:60 -- @ +0x04
-
-        u32 GetStartVertex() const { return muStartVertex; }
-        u32 GetVertexCount() const { return muVertexCount; }
-    };
+    // ⭐ ODR FORK RETIRED 2026-09-06. This header used to DEFINE its own eight-byte
+    // EffectsVertexBufferBatch, with its own note saying "EffectsVertexBuffer.h (not yet
+    // committed)". That home IS committed now, in the GLOBAL namespace, and it is the type
+    // EffectsVertexBufferLocked::BeginBatch / EndBatch actually take -- so the two
+    // definitions were a silent fork: any batch declared through this header could not be
+    // handed to the functions that fill it. SparkVertexBufferBuilder::BuildDispatchData is
+    // the first body that had to do exactly that, and it is where the fork surfaced (as
+    // "cannot convert argument 2 from BrnParticle::Native::SparkBatch to
+    // EffectsVertexBufferBatch &"). The console has ONE type; so does the tree now.
+    using ::EffectsVertexBufferBatch;
 
     // BrnSimpleParticleRenderer.h:125 (DWARF). sizeof == 16 (== Array element stride,
     // X360-attested by Array<SimpleParticleBatch,13>::Append slwi-by-4 and operator[]).

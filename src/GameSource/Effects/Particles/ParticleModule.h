@@ -382,6 +382,12 @@ namespace BrnParticle
         void Update(f32 lfTimeStep, f32 lfTime, f32 lfTimeStepMultiplier, const BrnDirector::Camera::Camera* lpCamera);
         // X360 0x82294C30 -- the frame's end: latch mbStalled, then the trail system's buffer flip.
         void EndOfFrame(bool lbStalled);
+        // X360 0x8228A7C0 -- render thread, immediately BEFORE BuildLionVertexBuffers
+        // (BrnRendererModule::Render @0x8240BFA8 :453-454 calls the pair under one gate).
+        // Advances the spark motion-blur ring, retires the banks' expired buckets, flips and
+        // locks the two vertex buffers and starts the two particle render jobs. The jobs are
+        // run inline on this single-threaded build -- see the .cpp.
+        void BeginParticleRenderJob(const ParticleRenderData* lpRenderData);
         // X360 0x8228AC20 -- render thread: the trail system's per-frame time + view-projection
         // (+ the Lion vertex buffers, carved out on PC -- see the .cpp).
         void BuildLionVertexBuffers(const ParticleRenderData* lpRenderData);

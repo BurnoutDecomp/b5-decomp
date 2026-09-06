@@ -53,6 +53,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"               // Array<SparkBatch,4>
 #include "GameSource/Effects/Particles/Native/FXBuckets.h"
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleBatch.h" // EffectsVertexBufferBatch base
+#include "GameSource/Effects/Particles/Native/BrnNativeParticleVertex.h" // the vertex iterator RenderBank writes through
 
 // Pointer-only uses -- documented forward-declaration exception (b): including
 // CgsIm3d.h / the renderengine texture header here would drag the whole immediate-mode
@@ -261,6 +262,32 @@ namespace Native
         // :230 -- the name LoadFXBundle hashes against the FX bundle's texture-name map.
         const char* GetTextureName() const { return mpcSparkTextureName; }
 
+        // X360 @0x8291FC78 -- a pure-VMX leaf, six vector arguments in v1..v6, result in v1.
+        // Evaluates one spark's position at age lAge under the two-phase drag model, and
+        // clamps the visible y against the SECOND trajectory carried in the w lanes (the
+        // bounce SpawnSpark solved). Not in the DecFIGS DWARF for this class -- it is a
+        // private helper the merge window added; declared here at the shape the asm gives.
+        static rw::math::vpu::Vector4 CalculateSparkPosition(
+            rw::math::vpu::Vector4::InParam lPosition,      // v1  spark->mPosition
+            rw::math::vpu::Vector4::InParam lVelocity,      // v2  spark->mVelocity
+            rw::math::vpu::Vector4::InParam lAge,           // v3  splat(age)
+            rw::math::vpu::Vector4::InParam lHalfGravity,   // v4  (0, g/2, 0, g/2)
+            rw::math::vpu::Vector4::InParam lDragDuration,  // v5  splat(mfDragDuration)
+            rw::math::vpu::Vector4::InParam lDragParams);   // v6  (init, term, slope, dur*term)
+
+        // X360 @0x8291FD50 (1,033 instructions). Turn one bank's live sparks into motion-
+        // blurred triangle-strip ribbons in lrIterator. Same "not in the DWARF" note as
+        // CalculateSparkPosition; the register contract is SparkVertexBufferBuilder::
+        // BuildDispatchData's own call setup (0x82920E40..0x82920E84).
+        void RenderBank(NativeParticleVertex::VertexIterator& lrIterator,
+                        EffectsVertexBufferLocked*            lpLockedBuffer,
+                        SparkBatch*                           lpBatch,
+                        const SparkBank&                      lrBank,
+                        f32                                   lfSparkRadius,
+                        const SparkFrameDataSet&              lrFrameData,
+                        f32                                   lfMotionBlurWindow,
+                        f32                                   lfWhiteLevel) const;
+
         // :250 -- inlined into EffectsModule::Prepare @0x8229E690 and
         // EffectsModule::Update @0x8229EC28, which each run it once per array straight out
         // of that array's Attrib::Gen::sparkeffect record.
@@ -273,6 +300,24 @@ namespace Native
                           rw::math::vpu::Vector4::InParam lColour3,
                           rw::math::vpu::Vector4::InParam lLifetimes,
                           const char* lpcSparkTextureName);
+    };
+
+    // BrnSparkRenderer.h -- SparkVertexBufferBuilder. No state: one static that walks the
+    // four spark arrays and fills the frame's vertex buffer + batch list. Its only caller is
+    // ParticleRenderJob::Execute @0x8291DF38.
+    struct SparkVertexBufferBuilder
+    {
+        // X360 @0x82920D78. For each of the four arrays: open a batch, render its regular
+        // bank (and, when lbRenderCrashBanks, its crash bank too), close the batch, and
+        // append it to lrBatches if anything was written.
+        static void BuildDispatchData(EffectsVertexBufferLocked* lpLockedBuffer,
+                                      SparkBatchArray&           lrBatches,
+                                      SparkArray*                lpSparkArrays,
+                                      u32                        luNumSparkArrays,
+                                      f32                        lfMotionBlurScale,
+                                      const SparkFrameDataSet&   lrFrameData,
+                                      f32                        lfWhiteLevel,
+                                      bool                       lbRenderCrashBanks);
     };
 
     // BrnSparkRenderer.h:374 (DWARF) -- SparkRenderer. One pointer: the module's textured

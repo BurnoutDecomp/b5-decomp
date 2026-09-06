@@ -4943,6 +4943,13 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
                 lpDispatchThreadInputBuffer->GetParticleRenderData();
             if (lpPreRenderData != 0 && lpPreRenderData->mpParticleModule != 0)
             {
+                // ParticleModule::BeginParticleRenderJob @0x8228A7C0 -- the console calls it
+                // FIRST of the pair, at Render :453. It advances the spark motion-blur ring,
+                // retires dead bucket, flips + locks the two effects vertex buffers and (here,
+                // inline: no job scheduler on this build) builds the spark vertex buffer for
+                // the batches RenderFullResParticles replays. Landed 2026-09-06 with the spark
+                // family; before that this call had nothing to drive.
+                lpPreRenderData->mpParticleModule->BeginParticleRenderJob(lpPreRenderData);
                 lpPreRenderData->mpParticleModule->BuildLionVertexBuffers(lpPreRenderData);
             }
         }

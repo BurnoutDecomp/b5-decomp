@@ -34,6 +34,7 @@
 
 #include "types.hpp"
 #include "rw/math/vpu/types.h" // rw::math::vpu::Vector4
+#include "GameSource/Effects/Particles/EffectsVertexBuffer.h" // EffectsVertexBufferIterator
 
 namespace renderengine { class VertexDescriptor; }
 namespace rw { class IResourceAllocator; }
@@ -69,9 +70,19 @@ struct NativeParticleVertex
     // BrnNativeParticleVertex.h:69 -- the on-disk vertex stride (asserted 24 in Write).
     static u32 GetStride() { return 24u; }
 
-    // Stand-in for renderengine::VertexIterator3<Float4,PS3Color,Float4>; mirrors the
-    // committed BrnGraphics::SkidVertex::VertexIterator (BrnSkidVertex.h:64). FLAG.
-    struct VertexIterator : public VertexIteratorBaseClass
+    // BrnNativeParticleVertex.h -- the concrete VertexIterator3<Float4,PS3Color,Float4>
+    // writer.
+    //
+    // ⭐ REBASED 2026-09-06 onto EffectsVertexBufferIterator, which is what the DWARF spells
+    // for its sibling (BrnLionBlendVertex.h:101 `struct VertexIterator : Effects
+    // VertexBufferIterator`) and what the console actually has: ONE
+    // renderengine::VertexIteratorBaseClass, handed to BeginBatch/EndBatch and to Write
+    // alike. Deriving from the bare base instead made this a SIBLING of the type
+    // EffectsVertexBufferLocked::BeginBatch fills, so the one iterator the console passes
+    // to both could not be spelled in C++ at all -- SparkVertexBufferBuilder::
+    // BuildDispatchData does exactly that (`addi r4, r1, var_80` to BeginBatch, EndBatch
+    // and, through RenderBank, to Write).
+    struct VertexIterator : public EffectsVertexBufferIterator
     {
         // X360 @ 0x8291E478. Writes one 24-byte vertex: pos.x/y/z @ cur+4/+8/+12,
         // colour @ cur+16, uv.u @ cur+20, uv.v @ cur+24 (store-for-store off the asm).
@@ -79,7 +90,7 @@ struct NativeParticleVertex
                    const int* lpColour,
                    const float* lpUv);
 
-        u32 GetStride() { return VertexIteratorBaseClass::GetStride(); }
+        u32 GetStride() const { return EffectsVertexBufferIterator::GetStride(); }
     };
 };
 

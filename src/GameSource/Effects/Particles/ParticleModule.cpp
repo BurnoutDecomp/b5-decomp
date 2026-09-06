@@ -318,6 +318,16 @@ namespace BrnParticle
     // =========================================================================
     LionBatchArray gLionBatchArray;
 
+    // FLAG PC-platform leaf, EXACTLY the reason above, for the spark batches. The console
+    // holds one Array<SparkBatch,4> inside each particle-render JOB parameter block (the
+    // spark job's is at module +151512, the console's `a2 + 600`), and those blocks live
+    // inside maJob0Placeholder / maJob1Placeholder -- asm-sized spans this build has no job
+    // framework to fill. Nothing outside this TU addresses it either: BeginParticleRenderJob
+    // clears it and hands it to SparkVertexBufferBuilder::BuildDispatchData, and
+    // RenderFullResParticles replays it through SparkRenderer::Dispatch -- all three calls
+    // are in this file. DELETE-WHEN the job parameter blocks are typed.
+    Native::SparkBatchArray gSparkBatchArray;
+
     // [lionhandoff] FLAG PC bring-up counters -- see the witness in DispatchThreadUpdate.
     // Not console state; ours, and deleted with that witness.
     u32 muCreatedLionInstances   = 0;
@@ -646,6 +656,198 @@ namespace BrnParticle
     }
 
     // =========================================================================
+    // BeginParticleRenderJob  @0x8228A7C0 -- render thread, the spark half.
+    //
+    // The console's body, in order:
+    //   1. if renderData->muCurrentFrame differs from the module-static last frame
+    //      (dword_82CDB404 -- ONE static for the whole game, not a member):
+    //        a. SparkFrameDataSet::Update(mSparkFrameDataSetUpdate, camera view, camera
+    //           projection, renderData->mfCurrentTimeStep) -- the ring advances by a DELTA;
+    //        b. per spark array, the three-fsel max of its four lifetimes, then
+    //           SparkBank::FreeUnusedBuckets on the regular bank AND the crash bank at
+    //           frames[0].mfTimeStamp (`*(this + 151728)` == +0x250B0 == the ring's own
+    //           newest timestamp -- so the retire clock is the ring's, not the sim's);
+    //        c. remember whether ANY bank still holds a bucket. If none does, the ring is
+    //           RESET to the current camera at time 0, collapsing the motion blur so the
+    //           next spark does not streak from wherever the camera was minutes ago;
+    //           if some do, the reset only happens on the camera-switched flag.
+    //   2. clear the two batch arrays, flip and lock the spark and simple-particle vertex
+    //      buffers, fill the two job parameter blocks and AddJobs both.
+    //
+    // FLAG PC bring-up wiring, same shape and same reason as the PreRenderUpdate /
+    // DispatchThreadUpdate pair in GenerateDispatchLists: this build has no EA::Jobs
+    // scheduler and no job parameter blocks (maJob0Placeholder / maJob1Placeholder are
+    // asm-sized), so step 2's two AddJobs are replaced by running the SPARK job's body
+    // inline -- ParticleRenderJob::Execute @0x8291DF38's `if (*(a2+674))` arm, which is
+    // exactly SparkVertexBufferBuilder::BuildDispatchData with the arguments the console
+    // stages into that block:
+    //     +368 the locked spark vertex buffer       +600 the spark batch array
+    //     +656 &maSparks[0]                         +688 mSparkFrameDataSetUpdate
+    //     +664 mfTimeStepMultiplier (the blur scale)
+    //     +668 mfWhiteLevel                         +672 (muFlags >> 6) & 1
+    // The SIMPLE-PARTICLE job (`if (*(a2+673))` -> RenderSimpleParticles) is announced: its
+    // array family is still a partial layout. DELETE-WHEN the job framework lands.
+    // =========================================================================
+    void ParticleModule::BeginParticleRenderJob(const ParticleRenderData* lpRenderData)
+    {
+        if (lpRenderData == 0)
+            return;
+
+        // dword_82CDB404 -- a module-scope static on the console too, not a member.
+        static u32 suLastRenderedFrame = 0;
+        const bool lbFrameChanged = (lpRenderData->muCurrentFrame != suLastRenderedFrame);
+        suLastRenderedFrame = lpRenderData->muCurrentFrame;
+
+        if (lbFrameChanged)
+        {
+            // The console copies four 16-byte rows out of renderData+0x60 (mCgsCamera.mView)
+            // and four out of +0xA0 (mProjection) onto the stack and hands the two blocks
+            // straight to Update -- it has no type to disagree with. In C++ the destination
+            // is a Matrix44Affine (SparkFrameData::mViewMatrix, DWARF) while CgsCamera models
+            // its own view as a Matrix44, so the four rows are re-typed here, row by row,
+            // rather than punned. Same 64 bytes, same order.
+            const rw::math::vpu::Matrix44& lrCameraView = lpRenderData->mCgsCamera.mView;
+            rw::math::vpu::Matrix44Affine  lView;
+            lView.xAxis.x = lrCameraView.xAxis.x; lView.xAxis.y = lrCameraView.xAxis.y;
+            lView.xAxis.z = lrCameraView.xAxis.z; lView.xAxis.w = lrCameraView.xAxis.w;
+            lView.yAxis.x = lrCameraView.yAxis.x; lView.yAxis.y = lrCameraView.yAxis.y;
+            lView.yAxis.z = lrCameraView.yAxis.z; lView.yAxis.w = lrCameraView.yAxis.w;
+            lView.zAxis.x = lrCameraView.zAxis.x; lView.zAxis.y = lrCameraView.zAxis.y;
+            lView.zAxis.z = lrCameraView.zAxis.z; lView.zAxis.w = lrCameraView.zAxis.w;
+            lView.wAxis.x = lrCameraView.wAxis.x; lView.wAxis.y = lrCameraView.wAxis.y;
+            lView.wAxis.z = lrCameraView.wAxis.z; lView.wAxis.w = lrCameraView.wAxis.w;
+
+            const rw::math::vpu::Matrix44Affine& lrView = lView;
+            const rw::math::vpu::Matrix44&       lrProj = lpRenderData->mCgsCamera.mProjection;
+
+            mSparkFrameDataSetUpdate.Update(lrView, lrProj, lpRenderData->mfCurrentTimeStep);
+
+            // `*(a1 + 151728)` == +0x250B0 == mSparkFrameDataSetUpdate.maFrames[0].mfTimeStamp.
+            f32 lfRetireTime = mSparkFrameDataSetUpdate.GetFrame(0).mfTimeStamp;
+
+            bool lbAnyBucketsLive = false;
+            for (u32 luArray = 0; luArray < KU_NUM_SPARK_ARRAYS; ++luArray)
+            {
+                maSparks[luArray].FreeUnusedBuckets(lfRetireTime);
+                if (maSparks[luArray].mRegularBank.mpBuckets != 0
+                    || maSparks[luArray].mCrashBank.mpBuckets != 0)
+                {
+                    lbAnyBucketsLive = true;
+                }
+            }
+
+            if (!lbAnyBucketsLive)
+            {
+                lfRetireTime = 0.0f;
+                mSparkFrameDataSetUpdate.Reset(lrView, lrProj, lfRetireTime);
+            }
+            else if ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagCameraSwitched) != 0)
+            {
+                mSparkFrameDataSetUpdate.Reset(lrView, lrProj, lfRetireTime);
+            }
+        }
+
+        gSparkBatchArray.Clear();
+
+        // The console's `*(this+143752) = (*(this+143752) - 1) & 1` pair, one per manager,
+        // each preceded by its own !mbLocked assert (EffectsVertexBufferManager.h:104).
+        mVertexBufferManagerSparks.FlipBuffer();
+        mVertexBufferManagerParticles.FlipBuffer();
+
+        EffectsVertexBufferLocked& lrLockedSparkBuffer = mVertexBufferManagerSparks.Lock();
+        (void)mVertexBufferManagerParticles.Lock();
+
+        // ---- ParticleRenderJob::Execute @0x8291DF38, the spark arm, run inline ------------
+        if ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagRenderSparks) != 0)
+        {
+            Native::SparkVertexBufferBuilder::BuildDispatchData(
+                &lrLockedSparkBuffer,
+                gSparkBatchArray,
+                maSparks,
+                KU_NUM_SPARK_ARRAYS,
+                lpRenderData->mfTimeStepMultiplier,
+                mSparkFrameDataSetUpdate,
+                lpRenderData->mfWhiteLevel,
+                (lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0);
+        }
+
+        {
+            static bool sbLogged = false;
+            LogNotReconstructed(sbLogged,
+                "ParticleModule::BeginParticleRenderJob's SIMPLE-PARTICLE job "
+                "(ParticleRenderJob::RenderSimpleParticles -- BrnSimpleParticleArray is a "
+                "partial layout). THE SPARK JOB IS REAL AND RUNS");
+        }
+
+        // =====================================================================================
+        // [DIAG] BRN_SPARK_DIAG=1 -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+        //
+        // Placed HERE, at the point the geometry is CONSUMED, and reporting the numbers a
+        // reader could otherwise only assume:
+        //   live   -- sparks actually held by the eight banks RIGHT NOW, counted by walking
+        //             the bucket lists (mu16NumberOfParticlesInBucket), not a spawn tally;
+        //   batches/verts -- what BuildDispatchData actually wrote this frame, read back off
+        //             gSparkBatchArray AFTER it ran, so a frame that culled everything reads 0
+        //             rather than inheriting last frame's number;
+        //   ring   -- how many motion-blur frames the ring currently spans and its newest
+        //             timestamp, which is what makes "nothing drawn" separable into "no
+        //             sparks", "no ring" and "all culled".
+        // Printed only on frames where something changed, so an idle run does not flood.
+        {
+            static bool sbArmed  = false;
+            static bool sbProbed = false;
+            if (!sbProbed)
+            {
+                sbProbed = true;
+                const char* const lpcEnv = std::getenv("BRN_SPARK_DIAG");
+                sbArmed = (lpcEnv != 0 && lpcEnv[0] != '0');
+                if (sbArmed)
+                    CgsDev::Log::WriteToLog("[spark] probe ARMED (BRN_SPARK_DIAG)\n");
+            }
+            if (sbArmed)
+            {
+                u32 luLive = 0;
+                for (u32 luArray = 0; luArray < KU_NUM_SPARK_ARRAYS; ++luArray)
+                {
+                    const Native::SparkArray::SparkBank* lapBanks[2] =
+                        { &maSparks[luArray].mRegularBank, &maSparks[luArray].mCrashBank };
+                    for (u32 luBank = 0; luBank < 2; ++luBank)
+                    {
+                        for (const Native::SparkBucket* lpBucket = lapBanks[luBank]->mpBuckets;
+                             lpBucket != 0;
+                             lpBucket = static_cast<const Native::SparkBucket*>(lpBucket->mpNextBucket))
+                        {
+                            luLive += lpBucket->mu16NumberOfParticlesInBucket;
+                        }
+                    }
+                }
+
+                u32 luVerts = 0;
+                const s32 lnBatches = gSparkBatchArray.GetCount();
+                for (s32 lnBatch = 0; lnBatch > -1 && lnBatch < lnBatches; ++lnBatch)
+                    luVerts += gSparkBatchArray[static_cast<u32>(lnBatch)].muVertexCount;
+
+                static u32 suLastLive    = 0xFFFFFFFFu;
+                static u32 suLastVerts   = 0xFFFFFFFFu;
+                if (luLive != suLastLive || luVerts != suLastVerts)
+                {
+                    suLastLive  = luLive;
+                    suLastVerts = luVerts;
+                    char lacMsg[224];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                        "[spark] live=%u batches=%d verts=%u ringNow=%.3f ring1=%.3f "
+                        "flags=0x%04X dt=%.4f\n",
+                        luLive, lnBatches, luVerts,
+                        mSparkFrameDataSetUpdate.GetFrame(0).mfTimeStamp,
+                        mSparkFrameDataSetUpdate.GetFrame(1).mfTimeStamp,
+                        lpRenderData->muFlags, lpRenderData->mfCurrentTimeStep);
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+            }
+        }
+    }
+
+    // =========================================================================
     // BuildLionVertexBuffers  @0x8228AC20 -- render thread, BEFORE the world passes.
     //   BrnRendererModule::Render @0x8240BFA8 :453-454 calls BeginParticleRenderJob and
     //   then this, both under the same v295 gate, well before the scene geometry. The
@@ -870,19 +1072,53 @@ namespace BrnParticle
                               0);                          // the stack slot, written 0
         }
 
-        // ---- the four branches this build cannot run ---------------------------------
-        // ---- the four branches this build cannot run ---------------------------------
+        // ---- (flags & 2) -- eRenderDataFlagRenderSparks ---------------------------------
+        // The GEOMETRY behind this branch is landed: BeginParticleRenderJob has already run
+        // SparkVertexBufferBuilder::BuildDispatchData over the four arrays and gSparkBatchArray
+        // holds this frame's batches. What is NOT landed is the DEVICE half --
+        // SparkRenderer::Dispatch @0x8228BBC8 -- and it is blocked on exactly one thing:
+        // mSparkRenderer.mpRenderer is null because ParticleModule's mImmediateModeRenderer
+        // (+0x9010) is still a ContainedInterface placeholder, and Dispatch opens with
+        // `ImRenderer<BasicColouredTexturedVertex>::BeginRendering` + `::SetTransform` on it
+        // before it can bind the stream and issue its DrawVertices. Calling it now would
+        // dereference a null renderer -- a crash, not a missing effect.
+        //
+        // The rest of Dispatch is fully read and recorded here so the next wave has it:
+        //   assert(batches.GetCount() != -1); if (count == 0) return;
+        //   shadow::Device::ResetShadowing();
+        //   ImDeviceSet{DepthStencil,Rasterizer,Blend}State(dword_83010F24/F3C/F4C)
+        //   bind the vertex declaration dword_83010F60 (sub_827E8950, cached in dword_830109A8)
+        //   mpRenderer->BeginRendering(); mpRenderer->SetTransform(viewProjection);
+        //   the format record off_82FAB6A4 -> stride = fmt[((*(u16*)(fmt+8) + 1) << 4)]
+        //   D3DDevice_SetStreamSource(dev, 0, vb, 0, 0) then again with that stride
+        //   for each batch:  assert(GetVertexCount() > 0)          BrnSparkRenderer.cpp:1193
+        //                    assert(0 <= meArrayId < 4)            BrnSparkRenderer.h:240
+        //                    tex = SparkArray::GetTexture(meArrayId)
+        //                    if (tex != the cached one) D3DDevice_SetTexture(dev, 0, tex, 0x80000000)
+        //                    shadow::Device::FlushVertexProgramState()
+        //                    D3DDevice_DrawVertices(dev, 6 /*Xenos TRIANGLESTRIP*/,
+        //                                           GetStartVertex(), GetVertexCount())
+        //   assert(mgpActiveRenderer == mpRenderer); mgpActiveRenderer = 0;
+        // Primitive type 6 is the Xenos TRIANGLESTRIP the PC shim's MapPrimitive already
+        // translates, which is why the ribbons are emitted with duplicated end vertices.
+        {
+            static bool sbLogged = false;
+            LogNotReconstructed(sbLogged,
+                "ParticleModule::RenderFullResParticles' SparkRenderer::Dispatch @0x8228BBC8 -- "
+                "the spark GEOMETRY is built (see the [spark] line) but mSparkRenderer.mpRenderer "
+                "is null while mImmediateModeRenderer is a ContainedInterface placeholder");
+        }
+
+        // ---- the branches this build still cannot run -----------------------------------
         // EndSimulateDebris is UNCONDITIONAL on the console and closes the debris
         // simulation jobs before the debris renderer reads their output; the jobs are
-        // asm-sized placeholders here (maJob0Placeholder / maFrameJobsPlaceholder), so
-        // there is nothing to end.
+        // asm-sized placeholders here, so there is nothing to end.
         {
             static bool sbLogged = false;
             LogNotReconstructed(sbLogged,
                 "ParticleModule::RenderFullResParticles' EndSimulateDebris + the debris "
-                "(flags & 4) and spark (flags & 2) branches -- their job/frame-data members "
-                "are asm-sized placeholders. THE TRAIL BRANCH (flags & 0x20) AND THE LION "
-                "DISPATCH ARE REAL AND RUN");
+                "(flags & 4) branch -- their job members are asm-sized placeholders. "
+                "THE TRAIL BRANCH (flags & 0x20) AND THE LION DISPATCH ARE REAL AND RUN");
         }
     }
 
