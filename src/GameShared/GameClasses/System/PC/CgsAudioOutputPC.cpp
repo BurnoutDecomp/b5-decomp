@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>   // std::getenv (the BRN_AUDIO_MUTE harness knob)
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -178,6 +179,41 @@ HRESULT CreateMasteringVoiceWithEndpointFallback(int liChannels, int liSampleRat
     return lResult;
 }
 
+// ===========================================================================
+// FLAG PC-platform leaf: BRN_AUDIO_MUTE=1 -- a SILENT run, and nothing else.
+//
+// WHY IT EXISTS. Every bug-test case on this box boots a real game that opens the machine's
+// default render endpoint at full volume, so a sixteen-case sweep is half an hour of Burnout
+// playing out loud over whatever the box's owner is doing. flow_run.ps1 therefore sets this on
+// every harness run (its -Audio switch turns it back off); launching Burnout_PC.exe by hand is
+// unaffected, because nothing but the harness sets the variable.
+//
+// ⭐ WHAT IT IS: ONE SetVolume(0) ON THE MASTERING VOICE, at creation. The mastering voice is the
+// last gain in the graph -- every source voice, submix, movie stream and engine mix passes
+// through it -- so zeroing it is the complete and only change needed to make the run silent.
+// ⛔ WHAT IT IS NOT, and this is the part that matters for every other lane: it does NOT skip
+// audio init, stub XAudio2, drop a fill, or shorten a callback. The device is really opened, the
+// source voice really runs, SubmitBuffer still pulls both the primary and the ENGINE fill every
+// buffer, and every decoder, AEMS bytecode program and engine-note state machine behind them
+// keeps running EXACTLY as before -- so the sound lanes' witnesses and timings do not move when
+// a run is muted. A muted run and an audible one differ in one float in the OS mixer.
+// ⚠️ It is deliberately NOT the "running muted" fallback further up this file. That phrase means
+// the device could not be opened AT ALL (no XAudio2 DLL, no endpoint), which is a degraded run
+// and reads as silence to a naive listener; this is a working device at zero gain, and the
+// witness below is what lets a test tell the two apart.
+// DELETE-WHEN the harness gains a per-process output endpoint it can throw away.
+// ===========================================================================
+bool AudioMuteRequested()
+{
+    static s32 siMute = -1;
+    if (siMute < 0)
+    {
+        const char* lpcEnv = std::getenv("BRN_AUDIO_MUTE");
+        siMute = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
+    }
+    return siMute == 1;
+}
+
 // --- the built-in diagnostic test tone (440 Hz) ---
 struct ToneState
 {
@@ -252,6 +288,13 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
         return false;
     }
 
+    // BRN_AUDIO_MUTE: the whole mute, applied to the voice every mix passes through. Applied
+    // HERE, per Open, because the device is opened and re-opened many times in one boot (the
+    // movie streams churn the primary fill through ReleasePrimaryFill) and a single un-muted
+    // re-open is an audible run. See the knob's banner above.
+    if (AudioMuteRequested())
+        g_pMaster->SetVolume(0.0f, 0 /* XAUDIO2_COMMIT_NOW */);
+
     WAVEFORMATEX lWfx;
     std::memset(&lWfx, 0, sizeof(lWfx));
     lWfx.wFormatTag      = WAVE_FORMAT_PCM;
@@ -281,6 +324,19 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
               << " ch (16-bit PCM)";
     if (luEndpointIndex != UINT32_MAX)
         AUDIO_LOG << " via active endpoint " << luEndpointIndex;
+    // [FLAG PC witness] The mastering voice's OWN gain, read back out of the engine rather than
+    // echoed from the request -- "this run is silent" is then a measurement and not a claim, and
+    // a SetVolume that silently failed cannot pass for a mute. Once per Open, so it is bounded by
+    // the number of device opens (a handful per boot). tools\tests\cases\quiet_audio_mute.ps1
+    // requires EVERY one of these lines in a harness run to read 0.000.
+    // ⚠️ Formatted with sprintf, not the stream: the log stream has no float precision control,
+    // and the check parses this number.
+    float lfMasterVolume = -1.0f;
+    g_pMaster->GetVolume(&lfMasterVolume);
+    char lacVolume[32];
+    sprintf_s(lacVolume, "%.3f", lfMasterVolume);
+    AUDIO_LOG << "; master volume=" << lacVolume
+              << (AudioMuteRequested() ? " (BRN_AUDIO_MUTE=1)" : "");
     AUDIO_LOG << "\n";
     return true;
 }

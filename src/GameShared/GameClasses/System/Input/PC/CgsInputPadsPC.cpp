@@ -4,6 +4,7 @@
 #include <cstdlib>   // std::getenv (the harness focus-gate bypass)
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog (the pause gate's one-shot)
+#include "GameShared/GameClasses/System/CgsHarnessSlot.h"     // BRN_HARNESS_SLOT channel-name suffix (parallel harness slots)
 #include "GameSource/Input/GameInputActions.h"                // EGameInputActions -- the action vocabulary KA_BINDINGS binds to
 
 // ============================================================================
@@ -74,6 +75,18 @@ extern "C" __declspec(dllimport) void* __stdcall OpenEventA(unsigned long dwDesi
                                                               const char* lpName);
 extern "C" __declspec(dllimport) unsigned long __stdcall WaitForSingleObject(void* hHandle,
                                                                               unsigned long dwMilliseconds);
+
+// THE GAME'S OWN WINDOW, by handle -- the thing the focus gate below compares against.
+// It is the SAME OBJECT as `renderengine::hWnd` in pc/gcm/renderengine/device.h (defined in
+// device.cpp, created by CgsSystem::HardwareInit::InitializeHardware), re-declared here so this
+// file need not pull <Windows.h> in -- exactly the pattern Xbox2SurfaceShims.h already uses for
+// renderengine::gAntiAliasing, and for the same reason (the lean NOUSER/NOGDI defines the game
+// TUs carry conflict with it). ⚠️ `HWND` IS `struct HWND__*`, so the forward declaration has to
+// be `struct HWND__` and the type has to be spelled `HWND__*`: a `void*` here would mangle to a
+// DIFFERENT decorated name and link against nothing (the same class-key trap as `class X;` for a
+// `struct X`).
+struct HWND__;
+namespace renderengine { extern HWND__* hWnd; }
 
 namespace
 {
@@ -205,26 +218,69 @@ namespace
         return 0.0f;
     }
 
-    // FOCUS GATE: GetAsyncKeyState reads the GLOBAL key state and XInputGetState reads the
-    // pad no matter which window owns the desktop, so without a foreground check the game
-    // reacts to input meant for another app (verified: terminal Enters accepted the title
-    // menu). Both host sources are gated on this process being foreground.
-    // FLAG PC-platform leaf: BRN_INPUT_ALLOW_BACKGROUND=1 (set only by the scripted
-    // boot-validation harness at launch) bypasses the gate so the harness's injected
-    // key events land without fighting the desktop for foreground (the injection is
-    // still deliberate keybd_event state, not stray typing -- see boot_test.ps1).
-    bool IsProcessForeground()
+    // ====================================================================================
+    // THE FOCUS GATE, IN TWO PIECES -- and the split is the whole point.
+    //
+    // GetAsyncKeyState reads the GLOBAL key state: it answers "is this key physically down
+    // anywhere on this machine", with no notion of which window the person meant to type into.
+    // XInputGetState is different in kind -- it reads a DEVICE somebody deliberately picked up,
+    // and Windows has no per-window notion of a pad at all.
+    //
+    // ⭐⭐ 2026-09-06 (lane quiet). The user's report is verbatim: "only uses input on the actual
+    //   window not system wide, so that i can scroll on x without it going all over the place".
+    //   The single gate that used to live here answered that with `return true` whenever
+    //   BRN_INPUT_ALLOW_BACKGROUND was set -- which is EVERY harness run -- so the keyboard half
+    //   was ungated for the entire class of runs the complaint is about.
+    //   ⭐ MEASURED, RED: scratch\bugtest\runs\quiet_focus_input\20260906_145815. A boot with no
+    //   -Drive and NOTHING pressed by the harness, while a topmost window (not the game) held
+    //   the foreground for 117 of 117 samples and W+A were physically down for all 117: the
+    //   game's own [motion] probe reports gas rising to 1.000 and steering to 0.393, and the car
+    //   DROVE 20.85 m. Keys typed into another window drove the test car, exactly as reported.
+    //
+    // ⭐ THE RULE, and it holds with AND without BRN_INPUT_ALLOW_BACKGROUND:
+    //   keyboard state is consumed ONLY while GetForegroundWindow() is the game's OWN window.
+    //   BRN_INPUT_ALLOW_BACKGROUND exists so the HARNESS's named-event channels and an attached
+    //   XInput pad are accepted while the window sits in the background; it never meant "read
+    //   the person's keyboard", and it no longer can.
+    // ⚠️ GetForegroundWindow can return NULL during a focus transition (and does, while another
+    //   process is being activated). NULL is treated as NOT US -- the safe direction, because the
+    //   alternative is a window-less instant in which every global key is live.
+    // ⚠️ COMPARED BY HWND, not by process id. The window is owned by the render/hardware leaf and
+    //   is looked up as a pointer, not re-found from a title string per poll.
+    // ⓘ MOUSE: there is nothing to gate. This leaf consumes no mouse state at all -- no
+    //   GetCursorPos, no raw input, no WM_MOUSE* consumer, and no KA_BINDINGS row carries
+    //   VK_LBUTTON/VK_RBUTTON/VK_MBUTTON -- so "the mouse only when focused" holds because the
+    //   mouse is never read. Anything added later belongs behind IsGameWindowForeground().
+    // ====================================================================================
+    bool IsGameWindowForeground()
+    {
+        void* lpForeground = GetForegroundWindow();
+        if (lpForeground == 0)
+            return false;                              // focus transition -- not us
+        if (renderengine::hWnd != 0)
+            return lpForeground == static_cast<void*>(renderengine::hWnd);
+        // Before InitializeHardware has created the window there is no handle to compare, so
+        // fall back to the process test this gate has always used. It cannot let a foreign
+        // window's keys in (a different process fails it), and no input is consumed this early
+        // anyway -- UpdatePlayer0 does not run before the game module exists.
+        unsigned long luPid = 0;
+        GetWindowThreadProcessId(lpForeground, &luPid);
+        return luPid == GetCurrentProcessId();
+    }
+
+    // The PAD gate. FLAG PC-platform leaf: BRN_INPUT_ALLOW_BACKGROUND=1 (set only by the scripted
+    // harness at launch) keeps the XInput read alive while the window is in the background, so a
+    // scripted run is not fighting the desktop for foreground. Left as it was, deliberately: a
+    // pad is a device in someone's hands, not a window, and gating it on focus would break every
+    // unattended run that uses one without answering the complaint above, which is about the
+    // keyboard. A pad in the user's hand while a harness run is up is still theirs to hold.
+    bool IsPadReadAllowed()
     {
         static const bool s_bAllowBackground =
             (std::getenv("BRN_INPUT_ALLOW_BACKGROUND") != nullptr);
         if (s_bAllowBackground)
             return true;
-        void* lpForeground = GetForegroundWindow();
-        if (lpForeground == 0)
-            return false;
-        unsigned long luPid = 0;
-        GetWindowThreadProcessId(lpForeground, &luPid);
-        return luPid == GetCurrentProcessId();
+        return IsGameWindowForeground();
     }
 
     // ====================================================================================
@@ -608,8 +664,9 @@ namespace
 
     // ⛔⛔⛔ AN UNATTENDED RUN MUST NOT READ THE PHYSICAL KEYBOARD (2026-09-03, harness wave).
     //   GetAsyncKeyState is GLOBAL key state. The only thing standing between it and this game's
-    //   controls is IsProcessForeground() -- and an unattended harness run ALWAYS has the game
-    //   foreground, for minutes, while the box is being used for everything else. So any 'M' or
+    //   controls is the focus gate (IsGameWindowForeground) -- and an unattended harness run
+    //   ALWAYS has the game foreground, for minutes, while the box is being used for everything
+    //   else. So any 'M' or
     //   'P' typed anywhere on the machine lands on action 46 GUI_BACK / 45 GUI_START, which are
     //   InGame::PauseGame(true,false) / (true,true): the map or the driver-details screen opens,
     //   GuiEventActivateCrashNav(false) becomes game event 93 -> RequestPause(4) -> mbSimPaused,
@@ -627,6 +684,15 @@ namespace
     //   it is noise from whatever else the box is doing. Suppressed, announced ONCE (a silent
     //   behaviour change is the thing this whole file's banners exist to prevent), and escapable
     //   with BRN_INPUT_KEEP_KEYBOARD=1 for anyone who wants to type at a harness-launched build.
+    //   ⭐⭐ THIS IS NO LONGER THE ONLY THING BETWEEN A HARNESS RUN AND THE USER'S KEYBOARD, and
+    //   it never should have been (2026-09-06, lane quiet). It is a blanket refusal keyed on
+    //   "am I a harness run", which is a different question from "did the person mean to type at
+    //   this window" -- so BRN_INPUT_KEEP_KEYBOARD used to hand back a keyboard that was read
+    //   SYSTEM-WIDE, and every non-harness build was gated on the process rather than the window.
+    //   IsGameWindowForeground() above is now the primary rule and applies to every build and
+    //   every run; this remains as the stricter harness default on top of it, so KEEP_KEYBOARD
+    //   now means "read the keyboard, while the game's window has the focus" rather than
+    //   "read the whole machine's keyboard".
     //   ⚠️ IT DOES NOT TOUCH THE ASSERT-DISMISS FALLBACK. flow_run.ps1's [KBFLOW]::Tap(0x23) is
     //   read by CgsAssertManager.cpp:316/323 with its own GetAsyncKeyState(VK_END), not through
     //   KA_BINDINGS, and VK_END is in no KAI_KEYS_* row. Checked, not assumed.
@@ -785,7 +851,15 @@ namespace
         if (luBinding >= KU_NUM_BINDINGS)
             return false;
         if (sapHarnessEvents[luBinding] == 0)
-            sapHarnessEvents[luBinding] = OpenEventA(0x00100000u, 0, lpcEventName);
+        {
+            // ⭐ THE SLOT SUFFIX (CgsHarnessSlot.h). These channels are session-global named
+            // events, so with several game instances on one box a single Set() would press the
+            // control in EVERY one of them. BRN_HARNESS_SLOT unset or 0 yields the empty
+            // suffix, i.e. the names every existing harness script already opens.
+            char lacEventName[64];
+            sapHarnessEvents[luBinding] = OpenEventA(0x00100000u, 0,
+                CgsSystem::HarnessSlot::Name(lacEventName, sizeof(lacEventName), lpcEventName));
+        }
         return sapHarnessEvents[luBinding] != 0
             && WaitForSingleObject(sapHarnessEvents[luBinding], 0) == 0;
     }
@@ -807,9 +881,12 @@ namespace
         const u32 luIndex = lbRight ? 1u : 0u;
         if (sapSteerEvents[luIndex] == 0)
         {
+            // Slot-suffixed like the action channels above (CgsHarnessSlot.h).
+            char lacEventName[64];
             sapSteerEvents[luIndex] = OpenEventA(0x00100000u, 0,
-                    lbRight ? "Local\\BurnoutPC_Input_SteerRight"
-                            : "Local\\BurnoutPC_Input_SteerLeft");
+                    CgsSystem::HarnessSlot::Name(lacEventName, sizeof(lacEventName),
+                            lbRight ? "Local\\BurnoutPC_Input_SteerRight"
+                                    : "Local\\BurnoutPC_Input_SteerLeft"));
         }
         return sapSteerEvents[luIndex] != 0
             && WaitForSingleObject(sapSteerEvents[luIndex], 0) == 0;
@@ -831,15 +908,54 @@ namespace CgsInput
         }
         DumpInputMapOnce();   // opt-in [input-map] witness; see its banner
 
-        // Host device reads. Both sources are focus-gated (see IsProcessForeground).
-        const bool lbForeground = IsProcessForeground();
+        // Host device reads, through the TWO gates (see their banner at IsGameWindowForeground):
+        //   lbForeground  -- the game's own window has the focus. The ONLY gate the keyboard is
+        //                    allowed to use, in every build and every run.
+        //   lbPadAllowed  -- the XInput read; a pad is a device, not a window, so a harness run
+        //                    keeps it in the background.
+        const bool lbForeground  = IsGameWindowForeground();
+        const bool lbPadAllowed  = IsPadReadAllowed();
         XInputState lXState;
         std::memset(&lXState, 0, sizeof(lXState));
         bool lbXPad = false;
-        if (lbForeground)
+        if (lbPadAllowed)
         {
             if (XInputGetStateFn lpfGetState = ResolveXInputGetState())
                 lbXPad = (lpfGetState(0, &lXState) == 0);   // ERROR_SUCCESS
+        }
+
+        // ---- [input] focus witness -------------------------------------------------------
+        // DIAG. NOT IN THE X360 BINARY. One line per CHANGE of the focus gate, capped, naming
+        // how many BOUND keys were physically down at the instant it changed. It is the only way
+        // to say, from a run's own log, "the window lost the focus here and the N keys that were
+        // down stopped counting" -- the measurement the lane brief asks for, and the thing that
+        // separates "the gate held" from "nobody typed". A count only: no key identity is logged.
+        // Bounded at 64 changes so a user alt-tabbing for an hour cannot flood the log.
+        {
+            static s32 siLastFocus   = -1;
+            static u32 suFocusPrints = 0;
+            // ⚠️ HOISTED OUT OF THE STREAM EXPRESSION BELOW, deliberately. HostKeyboardSuppressed()
+            // emits its own one-shot WriteToLog on its FIRST call, and calling it mid-`<<` chain
+            // spliced that whole paragraph into the middle of this line -- a witness a check
+            // cannot parse. Evaluate it first; the one-shot then lands on its own line.
+            const bool lbKbdSuppressed = HostKeyboardSuppressed();
+            const s32 liFocus = lbForeground ? 1 : 0;
+            if (liFocus != siLastFocus && suFocusPrints < 64u && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++suFocusPrints;
+                s32 liKeysDown = 0;
+                for (u32 luBind = 0; luBind < KU_NUM_BINDINGS; ++luBind)
+                    for (const int* lpiKey = KA_BINDINGS[luBind].paiVKeys; *lpiKey != 0; ++lpiKey)
+                        if ((GetAsyncKeyState(*lpiKey) & 0x8000) != 0)
+                            ++liKeysDown;
+                *CgsDev::Log::gpDebugPrint
+                    << "[input] focus=" << liFocus
+                    << " kbd=" << liKeysDown
+                    << " (bound keys physically down; consumed only when focus=1)"
+                    << " padgate=" << (lbPadAllowed ? 1 : 0)
+                    << " kbdsuppressed=" << (lbKbdSuppressed ? 1 : 0) << "\n";
+            }
+            siLastFocus = liFocus;
         }
 
         // ---- the analogue axis block (CgsInput::EPadAxis, the record's leading floats) ----
@@ -1038,6 +1154,7 @@ namespace CgsInput
                     << " padbtn " << (labFromPad[luAction] ? 1 : 0)
                     << " harness " << (labFromHarness[luAction] ? 1 : 0)
                     << " (foreground " << (lbForeground ? 1 : 0)
+                    << " padgate " << (lbPadAllowed ? 1 : 0)
                     << " xpad " << (lbXPad ? 1 : 0)
                     << " padButtons 0x" << static_cast<s32>(lXState.Gamepad.wButtons)
                     << ") -- this press PAUSES THE SIMULATION\n";
