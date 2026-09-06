@@ -319,6 +319,34 @@ public:
     s32  GetCurrentCarType() const             { return meCurrentCarType; }
     void SetCurrentCarType(s32 leCarType)      { meCurrentCarType = leCarType; }
 
+    // ---- [issue #10 odometer, 2026-09-06] the six per-frame mutators ProgressionManager::
+    // PreWorldUpdate @0x823A4F68 / AddDistanceDriven @0x823668F0 drive. DWARF-declared
+    // (BrnProfile.h:631 SetCarPosition, :635 SetCarDirection, :647 AddDistanceDrivenOnline,
+    // :651 AddDistanceDrivenOffline, :655 AddInCarTimePlayed, :659 AddRealTimePlayed); the X360
+    // emits no out-of-line symbol for any of them -- every caller inlines the load/add/store --
+    // so they are defined inline here, the GetIsNewProfile precedent. Bodies are the asm's:
+    //   AddDistanceDrivenOnline   `lfs/fadds/stfs 0x1D4(pm)`  == Profile+0x64 (+100)
+    //   AddDistanceDrivenOffline  `lfs/fadds/stfs 0x68(profile)` == +104, THEN the per-car-type
+    //                             tally: `lwzx r10, profile, 0x1CCBC` (meCurrentCarType) ->
+    //                             `lfsx/fadds/stfsx profile + 0x1CCB0 + 4*type` (mafCarTypes[]).
+    //                             The console indexes with no bounds test; meCurrentCarType is
+    //                             written only from a VehicleListEntry's car-type byte (0..2)
+    //                             and Construct seeds 0.
+    //   AddInCarTimePlayed        `lfs/fadds/stfs 0x6C(profile)`  == +108
+    //   AddRealTimePlayed         `lfs/fadds/stfs 0x1CD28(profile)` == +118056
+    //   SetCarPosition/Direction  `lvx128 rcs+0x220 ; stvx128 pm+0x1A0` / `+0x210 -> +0x1B0`
+    //                             == Profile+0x30 / +0x40 (the spawn-on-load pose).
+    void AddDistanceDrivenOnline(f32 lfDistance)   { mfDistanceDrivenOnline  += lfDistance; }
+    void AddDistanceDrivenOffline(f32 lfDistance)
+    {
+        mfDistanceDrivenOffline += lfDistance;
+        mafCarTypes[meCurrentCarType] += lfDistance;
+    }
+    void AddInCarTimePlayed(f32 lfSeconds)         { mfInCarTimePlayed += lfSeconds; }
+    void AddRealTimePlayed(f32 lfSeconds)          { mfRealTimePlayed  += lfSeconds; }
+    void SetCarPosition(Vector3 lPosition)         { mCarPosition  = lPosition; }
+    void SetCarDirection(Vector3 lDirection)       { mCarDirection = lDirection; }
+
     // ADDITIVE GROW (BrnGui::PreRaceFlyByState::Set*Description): the progression-rank byte
     // at +112 (mi8CurrentProgressionRank, Construct seeds it -2). DWARF BrnProfile.h:553
     // gives the shape (`int8_t GetCurrentProgressionRank() const`). No standalone X360
@@ -654,7 +682,9 @@ public:
     // [tut-ticker] X360 raw read of Profile+108 (mfInCarTimePlayed): TrainingManager::Update /
     // RequestTraining / TriggerAnyFollowOnTrainingTips all `lfs` it for the timed-tip and
     // "seconds since last tip" gates. Trivial named-member getter; body in the Profile TU.
-    // ⚠️ FLAG: nothing on this build ACCUMULATES the member yet (its console writer is the
+    // ⚠️ FLAG: [issue #10, 2026-09-06: PAID] the console writer -- ProgressionManager::PreWorldUpdate's
+    // AddInCarTimePlayed arm -- is now mounted; the note below is history. (Was: nothing on this
+    // build ACCUMULATES the member yet; its console writer is the
     // un-reconstructed progression time tick), so it reads as the loaded/Construct value.
     f32 GetInCarTimePlayed() const;
 

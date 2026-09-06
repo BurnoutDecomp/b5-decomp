@@ -726,6 +726,15 @@ enum EGameActionType
     //      record RoadRagePlayerDamageAction {f32, bool, bool} is exactly the 8 bytes the producer
     //      writes at record+0/+4/+5.
     E_ACTION_ROAD_RAGE_PLAYER_DAMAGE                     = 205,  // DWARF 197 (+8 X360); size 8  BAND
+    // ---- ProgressionManager::PreWorldUpdate @0x823A4F68 (issue #10 wave, 2026-09-06) -----------
+    // BAND (+8, the same band as ROAD_RAGE_PLAYER_DAMAGE above). `li r5, 0xD2` @0x823A5254 +
+    // `li r6, 1` @0x823A5250, posted once the 2 s all-rivals-beaten hold elapses; DWARF
+    // BrnProgressionManager.cpp:374 names the local `AllRivalsShutDownAction`. Payload is ONE byte
+    // the console never initialises (var_70 is only stored on the autosave arm).
+    // [!] The placeholder `E_ACTION_SOUND_TRIGGER = 210` in the first table above is the RAW PS3
+    // DWARF value (BrnGameActions.h:220); by this band it lands at 218 on the X360. Nothing in
+    // src posts it; it is left as found and named here so the collision is visible.
+    E_ACTION_ALL_RIVALS_SHUTDOWN                         = 210,  // DWARF 202 (+8 X360); size 1  BAND
     // 255: RoadRageModeScoring::IncrementPlayerNumTakedowns @0x823445D0, `li r5,0xFF` + `li r6,4`
     //      @0x823446BC/0x823446B8 AND again @0x823446D4/0x823446D0 (the console posts it twice,
     //      back to back). DWARF :248 E_ACTION_HUD_MESSAGE_ROAD_RAGE_TIME_EXTENSION. [!] That is a

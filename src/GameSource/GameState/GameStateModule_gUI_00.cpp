@@ -1348,9 +1348,10 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     //     with the two swapped the first frame of a hold would test last frame's junction.
     //   * both run BEFORE #103 (StuntManager::Update), which is the console's own placement.
     //
-    // [X] #95 ProgressionManager::PreWorldUpdate NOT STAGED: its console argument list
-    // (0x823A5B84..0x823A5B9C) carries two floats plus four interface pointers this build does not
-    // stage, and nothing in the junction/start chain reads what it writes. Named, not forgotten.
+    // [x] #95 ProgressionManager::PreWorldUpdate IS STAGED (issue #10 wave, 2026-09-06) -- leg 2c
+    // below, at the console's own position (after the trigger legs, before #96). It used to read
+    // "NOT STAGED ... nothing in the junction/start chain reads what it writes"; what it writes is
+    // the ODOMETER, and the HUD read 0.0 km for as long as this leg was missing.
     // [X] #97 SendSetUpAllDriveThrusMessage NOT STAGED: the console gates it on a one-shot byte at
     // gsm+0x2C988 that it clears in the same breath (0x823A5BB4..0x823A5BD4), and the tree's
     // DriveThruManager is itself parked (see PreWorldUpdatePlayerTriggersBringUp's own FLAG).
@@ -1360,6 +1361,44 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // is consolidated these two are unresolved externals at LINK time -- the per-TU compile gate
     // passes, the exe does not link. That is the parallel-wave contract, stated rather than hidden.
     //
+    // ---- 2c) ProgressionManager::PreWorldUpdate -- THE ODOMETER (issue #10, 2026-09-06) --------
+    // X360 PreWorldUpdate @0x823A5328, 0x823A5B84..0x823A5B9C, inside the same `(a6 & 8)` leg as
+    // the trigger legs above, after their StopMonitor and BEFORE CheckIfPlayerIsAtJunctionWithAnEvent:
+    //     lfs  f1, 0(r15)          ; gsm+292284 == the SIM step (simTimer +4 * +8)
+    //     fmr  f2, f31             ; the GAME step (gameTimer +4 * +8)
+    //     mr   r6, r29             ; lpOutput
+    //     mr   r7, r23             ; gsm+235488 == this module's active-race-car snapshot
+    //     mr   r8, r21             ; the caller's update-set halfword (arg_3E)
+    //     clrlwi r9, r11, 24       ; lbIsInJunkyard == (invite XUID != 0) || gsm+0x2CE34 byte
+    //     bl   ProgressionManager::PreWorldUpdate
+    // This is the ONLY console caller of ProgressionManager::AddDistanceDriven @0x823668F0, the
+    // writer of every "distance driven" number in the game (Profile online/offline, the per-car-
+    // type tally, the current livery's own metres -> CopyScoringDataToOutput ->
+    // GuiEventCurrentStatus -> the HUD odometer). It was never staged; the odometer read 0.0 km.
+    //
+    // THE TWO TIMESTEPS ARE THE FRAME'S TIMER SNAPSHOT, the same object CopyScoringDataToOutput
+    // and ModeManager::PreWorldUpdate already read (see the banner on this function's
+    // declaration): the sim step is the sim timer's base*multiplier, exactly what gsm+292284
+    // holds on the console; the game step is the argument this pump was handed.
+    //
+    // [FLAG PC bring-up] TWO arguments are PC derivations, named rather than hidden -- the SAME
+    // two the DriveThruManager::Update call at the top of this function already carries:
+    //   * lUpdateSet -- the console's caller value comes from ConstructUpdateSetFromFsm; this pump
+    //     has no update set. The callee tests ONLY bit 0 (network catch-up, the same bit Physics/
+    //     AI test -- never set on an offline build), so 0 is the offline console value.
+    //   * lbIsInJunkyard -- (invite in progress) || the gsm+0x2CE34 occupancy byte; neither is
+    //     staged here, false as for DriveThruManager. Cost: while the player is IN the junkyard
+    //     the callee integrates distance (0 -- the car is stationary) instead of saving the
+    //     spawn pose to the profile. DELETE-WHEN the junkyard-occupancy latch is reconstructed.
+    {
+        const f32 lfSimTimestep =
+            lrTimerStatusInterface.GetSimTimerStatus()->GetCurrentTimeStep();
+        const BrnUpdateSet luUpdateSet = 0;
+        mProgressionManager.PreWorldUpdate(lfSimTimestep, lfGameTimestep,
+                                           mpOutputBuffer, &mLastActiveRaceCarInterface,
+                                           luUpdateSet, /*lbIsInJunkyard*/ false);
+    }
+
     // Read-locked for the same reason leg 1b is: whatever D3's bodies read off the buffer, they
     // read through the read-lock halves of its accessors.
     if (mpPreWorldInputBuffer != 0)

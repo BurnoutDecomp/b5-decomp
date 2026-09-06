@@ -353,11 +353,12 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
     // THE CONSOLE SEAT is PreWorldUpdate @0x823A4F68 -> `if (mbMedalsUpdateRequested)` ->
     // UpdatePlayerMedals @0x8239FE50, which computes CalculateRankFromMedalTotal(0 medals) == 0,
     // sees it above the profile's -2 "rank not set" seed, and calls UnlockToProgressionRank(0).
-    // Neither PreWorldUpdate nor UpdatePlayerMedals is reconstructed, so the rank-0 call is made
-    // from this seam at the same boot position, latched to run once. The population itself is
+    // PreWorldUpdate landed 2026-09-06 (BrnProgressionManager_PreWorldUpdate.cpp, issue #10) but
+    // UpdatePlayerMedals is still not reconstructed -- its medals arm parks -- so the rank-0 call
+    // is made from this seam at the same boot position, latched to run once. The population itself is
     // idempotent (it skips any junction the profile already holds a record for), which is the
     // console's own guarantee -- the latch only keeps the arms AROUND it single-shot.
-    // DELETE-WHEN UpdatePlayerMedals + PreWorldUpdate land.
+    // DELETE-WHEN UpdatePlayerMedals lands.
     //
     // The HasMemoryResource() test guards THIS SEAM, not console code: LoadProgressionData also
     // answers true from its corrupt-stage default arm (which fires its own :2799 assert and
