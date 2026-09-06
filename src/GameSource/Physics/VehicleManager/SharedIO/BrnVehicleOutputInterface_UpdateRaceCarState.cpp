@@ -144,8 +144,10 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Engine.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] gpDebugPrint (BRN_VFXFEED_PROBE)
 
 #include <cmath>
+#include <stdlib.h>                                          // [DIAG] getenv (BRN_VFXFEED_PROBE)
 
 namespace BrnPhysics
 {
@@ -424,6 +426,141 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
             && std::fabs(lfYawRate)  < KF_FULLY_DRIVABLE_MAX_SPIN_RATE)
         {
             lrState.mbFullyDrivableFromCrash = true;
+        }
+    }
+
+    // ================================================================================================
+    // [DIAG] NOT IN THE X360 BINARY -- the VFX-FEED WITNESS.  Opt in with BRN_VFXFEED_PROBE=1.
+    //
+    // WHY IT IS HERE AND NOWHERE ELSE.  This function is the console's ONLY writer of RaceCarState,
+    // so it is the exact boundary at which the effects lane's two state-driven effects read their
+    // inputs.  Both of those effects are currently DEAD on screen, and "the producer never produces"
+    // and "the consumer was never written" are indistinguishable from the effects side:
+    //
+    //   JUMP / LANDING.  EffectsModule::UpdateActiveRaceCars (EffectsModule.cpp:1528) computes
+    //     CarState::mbJumping = !mbCrashing && mfTimeInAir > 0.0f, and JumpStateMachine::
+    //     OnDetermineNextState @0x8229B9F8 uses exactly that byte (`*(a2+78)`) as the ONLY entry
+    //     transition out of state 0.  So `air.edges` below is the number of times the jump machine
+    //     was offered a start this run.  mfTimeInAir is published a few lines above from
+    //     RaceCarPhysics' TimeWithoutTraction lane, accumulated by VehiclePhysics::UpdateInAirStats
+    //     @0x825D0A50 (`+= dt` while no wheel is on the ground and |speed| > 1.8 m/s).
+    //
+    //   WHEEL SKID SMOKE.  WheelStateMachine::Update @0x82293EB8 early-outs unless mbAttached &&
+    //     mbHasTraction && mRoadContact.mbIsOnGround, then drives its two layers off mfSkidFactor
+    //     (layer 0) and |mfRoadLatSpeed| (layer 1) and indexes the module's surfacelist with
+    //     (mRoadContact.mCollisionTag >> 4) & 0x3F.  `skid.*` below is that whole input set,
+    //     measured where it is written rather than where it is read.
+    //
+    // ⚠️ WHAT MAKES THIS NOT A LYING DIAGNOSTIC (the three traps this project keeps hitting):
+    //   1. It prints an ARMED line on its FIRST execution.  A run with the variable set and no
+    //      "[vfxfeed] ARMED" line means the publish itself never ran -- which is a completely
+    //      different finding from "the numbers are zero", and a probe that only prints when it has
+    //      something to say cannot tell you which one happened.
+    //   2. It reports PEAKS AND COUNTS OVER THE WHOLE RUN, not a sample.  The existing
+    //      `[collision-tag]` rung prints timeInAir on its first ~30 frames and reads 0.000000 every
+    //      time; that is a first-N sample of a car that has not jumped yet, and reading it as
+    //      "mfTimeInAir is always zero" is exactly the mistake this replaces.
+    //   3. Every quantity is accompanied by the count of samples it was drawn from, so "one row at
+    //      the cap" and "every row" are distinguishable.
+    //
+    // COST WHEN OFF: one already-initialised bool test per published car per frame.
+    // ================================================================================================
+    {
+        static const bool sbVfxFeedProbe = ( getenv( "BRN_VFXFEED_PROBE" ) != 0 );
+
+        if ( sbVfxFeedProbe && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            static const s32 KI_VFXFEED_REPORT_PERIOD = 600;   // publishes between report lines
+
+            static bool sbArmedLinePrinted = false;
+            static s32  siPublishes        = 0;
+            // Per-slot previous air time, for the RISING-EDGE count (the jump machine's entry).
+            static f32  safPrevTimeInAir[8] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+            static s32  siAirFrames        = 0;
+            static s32  siAirEdges         = 0;
+            static f32  sfAirPeak          = 0.0f;
+            static s32  siSkidGateFrames   = 0;   // >= 1 wheel attached && traction && on ground
+            static s32  siSkidGateWheels   = 0;   // and the wheel-granular count
+            static f32  sfSkidFactorPeak   = 0.0f;
+            static f32  sfRoadLatPeak      = 0.0f;
+            static u64  su64SurfaceIdMask  = 0;
+
+            if ( !sbArmedLinePrinted )
+            {
+                sbArmedLinePrinted = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[vfxfeed] ARMED -- VehicleOutputInterface::UpdateRaceCarState is publishing;"
+                       " reporting every " << KI_VFXFEED_REPORT_PERIOD << " publishes.\n";
+            }
+
+            ++siPublishes;
+
+            const f32 lfTimeInAir = lrState.mfTimeInAir;
+            if ( lfTimeInAir > 0.0f )
+            {
+                ++siAirFrames;
+                if ( lfTimeInAir > sfAirPeak )
+                {
+                    sfAirPeak = lfTimeInAir;
+                }
+            }
+            if ( liRaceCarIndex >= 0 && liRaceCarIndex < 8 )
+            {
+                if ( lfTimeInAir > 0.0f && safPrevTimeInAir[liRaceCarIndex] <= 0.0f )
+                {
+                    ++siAirEdges;
+                }
+                safPrevTimeInAir[liRaceCarIndex] = lfTimeInAir;
+            }
+
+            bool lbAnyWheelPastSkidGate = false;
+            for ( s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel )
+            {
+                const WheelLite& lrWheelLite = lrState.maWheels[liWheel];
+
+                // WheelStateMachine::Update's own three early-outs, in its own order.
+                if ( !lrWheelLite.mbAttached )                 { continue; }
+                if ( !lrWheelLite.mbHasTraction )              { continue; }
+                if ( !lrWheelLite.mRoadContact.mbIsOnGround )  { continue; }
+
+                lbAnyWheelPastSkidGate = true;
+                ++siSkidGateWheels;
+
+                if ( lrWheelLite.mfSkidFactor > sfSkidFactorPeak )
+                {
+                    sfSkidFactorPeak = lrWheelLite.mfSkidFactor;
+                }
+                const f32 lfAbsLat = std::fabs( lrWheelLite.mfRoadLatSpeed );
+                if ( lfAbsLat > sfRoadLatPeak )
+                {
+                    sfRoadLatPeak = lfAbsLat;
+                }
+
+                // The exact expression WheelStateMachine::Update indexes surfacelist with.
+                const u32 luSurfaceId =
+                    ( lrWheelLite.mRoadContact.mCollisionTag.muValue >> 4 ) & 0x3Fu;
+                su64SurfaceIdMask |= ( static_cast<u64>( 1 ) << luSurfaceId );
+            }
+            if ( lbAnyWheelPastSkidGate )
+            {
+                ++siSkidGateFrames;
+            }
+
+            if ( ( siPublishes % KI_VFXFEED_REPORT_PERIOD ) == 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[vfxfeed] pub=" << siPublishes
+                    << " | air frames=" << siAirFrames
+                    << " edges="        << siAirEdges
+                    << " peak="         << sfAirPeak
+                    << " | skid gateFrames=" << siSkidGateFrames
+                    << " gateWheels="        << siSkidGateWheels
+                    << " peakSkidFactor="    << sfSkidFactorPeak
+                    << " peakRoadLat="       << sfRoadLatPeak
+                    << " surfMaskHi="        << static_cast<u32>( su64SurfaceIdMask >> 32 )
+                    << " surfMaskLo="        << static_cast<u32>( su64SurfaceIdMask & 0xFFFFFFFFu )
+                    << "\n";
+            }
         }
     }
 }

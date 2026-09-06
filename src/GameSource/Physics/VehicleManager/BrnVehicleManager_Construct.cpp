@@ -251,15 +251,28 @@ namespace Vehicle
             // check at the console's own site, not because it can fire.
             CGS_ASSERT(&maRaceCarDebugComponent[liCar] != NULL, "lpDebugComponent != NULL");
 
-            // FLAG (span cast, deliberate and inert). maRaceCarDebugComponent is an OPAQUE
-            // 8x1024 byte span -- the console's DebugComponent is 1024 bytes and this tree
-            // reconstructs 112 of them -- so the pointer this stores does not address a constructed
-            // object. That is faithful to the store the console makes (it only records the address;
-            // nothing constructs the components here either), and it is currently harmless: NOTHING
-            // in the mounted tree dereferences VehiclePhysics::mpDebugComponent (grep: zero hits in
-            // VehiclePhysics.cpp / RaceCarPhysics.cpp / Wheel.cpp). Size and alignment are at least
-            // safe -- 112 <= 1024 and both the span base and the 1024 stride are 16-aligned.
-            // The day a debug-draw body reads through this pointer, the 1024-byte span has to
+            // FLAG (span cast, deliberate). maRaceCarDebugComponent is an OPAQUE 8x1024 byte
+            // span -- the console's DebugComponent is 1024 bytes and this tree reconstructs 112
+            // of them -- so the pointer this stores does not address a constructed object. That
+            // is faithful to the store the console makes (it only records the address; nothing
+            // constructs the components here either). Size and alignment are safe -- 112 <= 1024
+            // and both the span base and the 1024 stride are 16-aligned.
+            //
+            // ⚠️ CORRECTION 2026-09-06 (effects-producer wave, found by tools/re/widening_sweep.py
+            // as its ONLY unpinned hit in this lane). This banner used to end "it is currently
+            // harmless: NOTHING in the mounted tree dereferences VehiclePhysics::mpDebugComponent
+            // (grep: zero hits in VehiclePhysics.cpp / RaceCarPhysics.cpp / Wheel.cpp)". THAT IS
+            // NO LONGER TRUE and has not been since the down-force leg landed:
+            // VehiclePhysics::UpdateDownForce (VehiclePhysics.cpp, the `mpDebugComponent != 0`
+            // arm at its tail) WRITES a float through this pointer at the CONSOLE offset +0x3F4,
+            // reproducing asm 0x825F6614..0x825F6624. It is still not a fault -- 0x3F4 + 4 == 1016
+            // is inside the 1024-byte slot, and nothing reads the span back -- but the REASON in
+            // the old sentence was stale, and a stale safety reason is how the next console offset
+            // through this pointer gets written without anyone re-checking the bound. There is no
+            // host DebugComponent layout to disagree with here, so it is not an x64-widening ghost:
+            // `struct DebugComponent` is forward-declared only (VehiclePhysics.h) and defined
+            // nowhere in the tree.
+            // The day a debug-draw body READS through this pointer, the 1024-byte span has to
             // become a real DebugComponent[8] first. Do not "just" dereference it.
             maRaceCarVehicles[liCar].mpDebugComponent =
                 reinterpret_cast<DebugComponent*>(&maRaceCarDebugComponent[liCar]);

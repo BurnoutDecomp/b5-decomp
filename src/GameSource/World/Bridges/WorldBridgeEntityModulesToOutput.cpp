@@ -234,10 +234,18 @@ void BridgePropToOutput_PreScene(
 // STILL DROPPED, DELIBERATELY (each now exactly specified above, so landing one is mechanical):
 //   * legs 4/6/7/13 -- the remaining traffic transfers. Source getters un-homed on this
 //     build. (Leg 3, the resource-request flush, has landed -- see the body.)
-//   * legs 8/9  -- the prop became-physical + VFX-locator queues. Both destinations exist and
-//     are typed (BrnWorldModuleIO.h :: AppendPropBecamePhysicalEventQueue /
-//     SetPropVFXLocatorQueue) and both const source getters now exist, so these are two
-//     one-liners; they are OFF the OnPropHit chain, so the gateui brief says note-don't-land.
+//   (legs 8/9 are LANDED 2026-09-06, effects-producer wave -- see the block in the body. The
+//    note above used to read "they are OFF the OnPropHit chain, so the gateui brief says
+//    note-don't-land", which was true of the chain that brief was scoped to and is exactly why
+//    they sat here for three weeks. ⭐ LEG 9 IS THE WHOLE WORLD-SIDE HOP OF THE PROP-STRIKE VFX:
+//    PropEntityModule::ProcessContacts fills the source queue (its `AddEventSafe(lVfxLocatorEvent)`
+//    tail), BrnGameModule::BridgeWorldToEffects @BrnGameModule.cpp:1868 already hands
+//    `lpWorldOutputBuffer->GetPropVFXLocatorQueue()` to the effects input buffer, and
+//    BrnEffects::PropCollisions::UpdateLocatorVfx drains it -- so with this leg dropped every
+//    smashed prop's VFX locators died inside the prop module and the effects side read an
+//    always-empty queue. Leg 8's destination is likewise live downstream: GameBridgeWorldToX.cpp
+//    :626 appends the world copy into the ROOT SOUND input every frame, so its source was
+//    permanently empty too.)
 //   * leg 11 -- the overhead-sign transfer (game event 118). ⚠️ NOT the billboard/smash-gate
 //     feature: it feeds CrashModeScoring::DealWithHitOverheadSign, the Showtime overhead-sign
 //     scorer (gateui scout §0.1).
@@ -352,6 +360,95 @@ void BridgeEntityModulesToOutput_PostPhysics(
     // ================================================================================
     if (lpPropOutput_PostPhysics != 0)
     {
+        // ============================================================================
+        // ⭐⭐ LEG 8, @0x827AF040..0x827AF048 -- the PROP-BECAME-PHYSICAL transfer.
+        //   0x827AF040  mr r3, r28                 ; r28 == lpPropOutput_PostPhysics
+        //   0x827AF044  bl sub_827A1F58            ; GetPropBecamePhysicalEventQueue() const -> +0x10
+        //   0x827AF048  bl …AppendPropBecamePhysicalEventQueue
+        // Destination: UpdateOutputBuffer::mPropBecamePhysicalEventQueue (console +202960), whose
+        // Append is the committed BaseEventQueue<PropBecamePhysicalEvent>::Append.
+        //
+        // ⭐ WHY IT MATTERS: BrnGameModule::BridgeWorldToSound (GameBridgeWorldToX.cpp:626) already
+        // appends this world copy into the ROOT SOUND input buffer every frame. With this leg
+        // dropped that append ran on a queue nothing ever filled, so the sound module's
+        // prop-became-physical feed was empty for the life of the build -- the same shape as
+        // leg 10 before it landed. It is the console instruction immediately ahead of leg 9 and
+        // takes the same read-lock/const accessor, so the two land together.
+        // ============================================================================
+        lpOutputBuffer->AppendPropBecamePhysicalEventQueue(
+            lpPropOutput_PostPhysics->GetPropBecamePhysicalEventQueue());
+
+        // ============================================================================
+        // ⭐⭐ LEG 9, @0x827AF050..0x827AF05C -- the PROP-VFX-LOCATOR transfer. THE
+        // WORLD-SIDE HOP OF THE PROP-STRIKE VFX.
+        //   0x827AF050  mr r3, r28                 ; r28 == lpPropOutput_PostPhysics
+        //   0x827AF054  bl sub_827A1E08            ; GetPropVFXLocatorQueue() const -> +0xCB2C0
+        //   0x827AF05C  bl …SetPropVFXLocatorQueue ; @0x827AA880 == Clear() then Append(source)
+        //
+        // The setter REPLACES (`stw 0, +8` == Clear, then EventQueue<PropVFXLocatorEvent,10>::
+        // Append), not accumulates, which is why the console can call it unconditionally every
+        // frame; the source queue is re-filled from scratch each frame by
+        // PropEntityModule::ProcessContacts (PropEntityModule_wQ2_03.cpp, its LEG 2 tail:
+        // `lpOutput->GetPropVFXLocatorQueue()->AddEventSafe( lVfxLocatorEvent )`).
+        //
+        // ⭐⭐ THE WHOLE CHAIN, and what this leg was breaking:
+        //   producer  PropEntityModule::ProcessContacts            -- BODIED, fills the source
+        //   >> THIS   BridgeEntityModulesToOutput_PostPhysics leg 9 -- WAS DROPPED
+        //   bridge    BrnGameModule (BrnGameModule.cpp:1868)
+        //               lpEffectsInputBuffer->SetPropVFXLocatorQueue(
+        //                   lpWorldOutputBuffer->GetPropVFXLocatorQueue())  -- BODIED
+        //   consumer  BrnEffects::PropCollisions::UpdateLocatorVfx @0x822993A0 -- NO BODY
+        //               (announced once in EffectsModule.cpp; EFFECTS LANE, not this one)
+        // So the effects side has been reading a queue that could not be non-empty. Landing this
+        // does not by itself put a spark on screen -- the consumer is still absent -- but it is
+        // the half that lives in this lane, and it is the half that has to be true before the
+        // effects lane's own measurement of "did anything arrive" can mean anything.
+        // ============================================================================
+        lpOutputBuffer->SetPropVFXLocatorQueue(
+            lpPropOutput_PostPhysics->GetPropVFXLocatorQueue());
+
+        // [DIAG] NOT IN THE X360 BINARY -- the witness for the two legs just landed. Same idiom
+        // and the same BRN_PROP_DIAG guard as the `[UI-gate] bridged prop-hit` rung below.
+        //
+        // ⚠️ IT PRINTS ON EVERY ARMED FRAME FOR THE FIRST N, INCLUDING THE ZERO ONES, and that
+        // is deliberate: a rung that prints only when a count is non-zero cannot distinguish
+        // "no prop was smashed" from "the probe never ran", and this wave's whole job is to
+        // tell a missing PRODUCER from a missing CONSUMER. The first line proves the leg
+        // executes; a later line with vfx=N>0 proves it carries. Both counts are read AFTER
+        // the transfer, from the SOURCE queue, because the destination setter Clear()s first
+        // and a destination read would report the same number by construction.
+        {
+            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+            static s32 siLegDiagLinesLeft = 24;
+            static s32 siVfxCarried       = 0;      // running total across the whole run
+            static s32 siPhysCarried      = 0;
+
+            if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                const s32 liVfx  = lpPropOutput_PostPhysics->GetPropVFXLocatorQueue()->GetLength();
+                const s32 liPhys = lpPropOutput_PostPhysics->GetPropBecamePhysicalEventQueue()->GetLength();
+                siVfxCarried  += liVfx;
+                siPhysCarried += liPhys;
+
+                // First N frames unconditionally (proves the leg runs at all), then only the
+                // frames that actually carry something (so a long drive still reports every
+                // smash without flooding).
+                if ( siLegDiagLinesLeft > 0 || liVfx > 0 || liPhys > 0 )
+                {
+                    if ( siLegDiagLinesLeft > 0 )
+                    {
+                        --siLegDiagLinesLeft;
+                    }
+                    *CgsDev::Log::gpDebugPrint
+                        << "[propvfx] leg8/9 vfx=" << liVfx
+                        << " phys=" << liPhys
+                        << " | totalVfx=" << siVfxCarried
+                        << " totalPhys=" << siPhysCarried
+                        << "\n";
+                }
+            }
+        }
+
         const BrnWorld::PropEntityIO::OutputBuffer_PostPhysics::RecordHitPropQueue* lpRecordHitPropQueue =
             lpPropOutput_PostPhysics->GetRecordHitPropQueue();
 

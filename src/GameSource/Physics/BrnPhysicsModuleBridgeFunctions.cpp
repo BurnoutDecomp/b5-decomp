@@ -429,6 +429,74 @@ namespace BrnPhysics
         CGS_ASSERT(lpRawContact != nullptr, "lpRawContact != NULL");               // :1208
         CGS_ASSERT(lpPotentialContact != nullptr, "lpPotentialContact != NULL");   // :1209
 
+        // ============================================================================================
+        // [DIAG] NOT IN THE X360 BINARY -- the CONTACT-QUEUE FILL WITNESS. BRN_VFXFEED_PROBE=1.
+        //
+        // WHY. Four of the effects lane's dead effects are drains of the queues this switch fills,
+        // and for each of them "the producer never produced" and "the consumer was never written"
+        // look identical from the effects side:
+        //   RaceCarContact          -> EffectsModule::ProcessRaceCarContacts @0x82297C08 (NO BODY),
+        //                              which is the sole caller of HandleBurstDebris @0x82290BC8
+        //                              (NO BODY) -- i.e. THE CRASH DEBRIS BURST.
+        //   PhysicalCarPartContact  -> ProcessCarDetatchedPartContacts (the detached-part sparks)
+        //   PropContact             -> the prop contact drain
+        //   TrafficContact          -> the traffic contact drain
+        // EffectsModule::ProcessCarContactQueues @0x8229B7F8, which calls the first three, is an
+        // announced no-op in this tree, so nothing downstream can report on these counts at all.
+        // The hinged-part queue is NOT filled here (it has one producer, PhysicalBodyPart::
+        // AddContactSpy, measured separately by [spy]); this rung covers the other four.
+        //
+        // The counters are bumped where the console DISPATCHES, so a `dropped` tick is the console's
+        // own jump-table default (owners 0/4/5/8/>=12), not a reconstruction gap -- which is the one
+        // distinction a bare "queue length" reading at the far end could not make.
+        // COST WHEN OFF: one bool test per stored contact.
+        // ============================================================================================
+        {
+            static const bool sbVfxFeedProbe = ( getenv( "BRN_VFXFEED_PROBE" ) != 0 );
+            if ( sbVfxFeedProbe && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                static const s32 KI_STORE_REPORT_PERIOD = 20000;
+                static bool sbArmed    = false;
+                static s32  siCalls    = 0;
+                static s32  siRaceCar  = 0;   // cases 1 / 11
+                static s32  siTraffic  = 0;   // case 2
+                static s32  siProp     = 0;   // case 3
+                static s32  siCarPart  = 0;   // cases 6 / 7
+                static s32  siWheel    = 0;   // cases 9 / 10
+                static s32  siDropped  = 0;   // the console's jump-table default
+
+                if ( !sbArmed )
+                {
+                    sbArmed = true;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[storecontact] ARMED -- PhysicsModule::StoreContact is running;"
+                           " reporting every " << KI_STORE_REPORT_PERIOD << " stores.\n";
+                }
+                ++siCalls;
+                switch ( GetIdOwner( lpRawContact->mIDA ) )
+                {
+                    case 1u:  case 11u: ++siRaceCar; break;
+                    case 2u:            ++siTraffic; break;
+                    case 3u:            ++siProp;    break;
+                    case 6u:  case 7u:  ++siCarPart; break;
+                    case 9u:  case 10u: ++siWheel;   break;
+                    default:            ++siDropped; break;
+                }
+                if ( ( siCalls % KI_STORE_REPORT_PERIOD ) == 0 )
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[storecontact] calls=" << siCalls
+                        << " racecar="  << siRaceCar
+                        << " traffic="  << siTraffic
+                        << " prop="     << siProp
+                        << " carpart="  << siCarPart
+                        << " wheel="    << siWheel
+                        << " dropped="  << siDropped
+                        << "\n";
+                }
+            }
+        }
+
         switch (GetIdOwner(lpRawContact->mIDA))
         {
             case 1u:    // E_ENTITYTYPE_RACECAR
