@@ -13,6 +13,9 @@
 // AssertOnClassCheck call -- it resolves its own collection via FindCollection (like
 // shotgroup) and only guards the default data area. Derives from Attrib::Instance.
 #include "types.hpp"                                                          // u32
+#include "rw/math/vpu/types.h"                                                // Vector4 (the colour / lifetime slots)
+#include <cstring>                                                            // std::memcpy (TextAt)
+#include <cstdint>                                                            // uintptr_t  (TextAt)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"   // Attrib::FindCollection (canonical)
 
@@ -38,12 +41,78 @@ namespace Gen
         // registry is keyed by the whole doubleword, so the low word alone MISSES.
         static const u64 KU_SPARKEFFECT_CLASS_KEY = 0xCAF7F032BCD68E9CULL;
 
+        // ====================================================================
+        // The generated per-attribute accessor API, modelled back out of the
+        // X360's inlined reader (the same convention boostparamsasset.h and
+        // vehicleengine.h already use). ⚠ FLAG -- THESE NAMES ARE THE
+        // CONSUMER'S, NOT THE SCHEMA'S. AttribSys keys every attribute by a
+        // 64-bit hash and the shipped schema carries no strings (grepped:
+        // build/game/schema.bin holds no "spark*" text), so the real attribute
+        // names are not recovered. What IS recovered, exactly, is which slot
+        // feeds which SparkArray member: EffectsModule::Prepare @0x8229E910..
+        // 0x8229E9E0 copies this 0x90-byte data area into one SparkArray with
+        // one load per member, and every offset below is one of those loads.
+        //   +0x00/+0x10/+0x20/+0x30  the four colour Vector4s
+        //                            (maColours[i] <- Colour(3 - i); the
+        //                             console's copy is REVERSED -- see
+        //                             SparkArray::UpdateParams)
+        //   +0x40                    the four lifetimes, as one Vector4
+        //   +0x50                    the texture name (a 32-bit PtrN slot)
+        //   +0x68 radius   +0x74 motion blur   +0x78 gravity
+        //   +0x7C drag terminal   +0x80 drag initial   +0x84 drag duration
+        //   +0x88 bounce
+        // The layout size is the ctor's own DefaultDataArea(0x90) argument.
+        // ====================================================================
+        static const u32 KU_LAYOUT_SIZE = 0x90;
+
+        rw::math::vpu::Vector4 Colour(u32 luIndex) const { return VectorAt(luIndex * 0x10u); }
+        rw::math::vpu::Vector4 Lifetimes()         const { return VectorAt(0x40u); }
+        const char* SparkTextureName()             const { return TextAt(0x50u); }
+        f32 SparkRadius()                          const { return FloatAt(0x68u); }
+        f32 MotionBlurTime()                       const { return FloatAt(0x74u); }
+        f32 GravityStrength()                      const { return FloatAt(0x78u); }
+        f32 DragTerminalVelocityScale()            const { return FloatAt(0x7Cu); }
+        f32 DragInitialVelocityScale()             const { return FloatAt(0x80u); }
+        f32 DragDuration()                         const { return FloatAt(0x84u); }
+        f32 BounceStrength()                       const { return FloatAt(0x88u); }
+
+        using Instance::IsValid;
+
         // Construct over the sparkeffect collection, optionally owned by lpOwner.
         explicit sparkeffect(void* lpOwner = nullptr);
         // The X360 ctor's r4 IS the collection key (it is passed straight through to
         // FindCollection(class, key)); EffectsModule::Prepare @0x8229E690 hands it
         // Attrib::StringToKey("376835"/"376836"/"376837"/"554431"). Additive (2026-09-02).
         sparkeffect(u64 luCollectionKey, void* lpOwner);
+
+    private:
+        // The layout block is a packed array of 4-byte attribute slots; Float/Vector4 slots
+        // are the same width on console and host, so the console offsets ARE the host
+        // offsets (the reasoning boostparamsasset.h:216-227 records for its own SlotAt).
+        const void* SlotAt(u32 luOffset) const
+        {
+            return static_cast<const u8*>(GetLayoutPointer()) + luOffset;
+        }
+        f32 FloatAt(u32 luOffset) const
+        {
+            return *static_cast<const f32*>(SlotAt(luOffset));
+        }
+        rw::math::vpu::Vector4 VectorAt(u32 luOffset) const
+        {
+            return *static_cast<const rw::math::vpu::Vector4*>(SlotAt(luOffset));
+        }
+        // The name slot is a 32-bit PtrN fixup target that stays 32-bit on disk; the PC
+        // resource arena is allocated below 4 GiB, so widen only after reading it (the
+        // identical treatment vehicleengine.h:114-130 gives its seven string attributes).
+        const char* TextAt(u32 luOffset) const
+        {
+            if (!GetLayoutPointer())
+                return 0;
+            u32 luAddress = 0;
+            std::memcpy(&luAddress, static_cast<const u8*>(GetLayoutPointer()) + luOffset,
+                        sizeof(luAddress));
+            return reinterpret_cast<const char*>(static_cast<uintptr_t>(luAddress));
+        }
     };
 
     inline sparkeffect::sparkeffect(u64 luCollectionKey, void* lpOwner)

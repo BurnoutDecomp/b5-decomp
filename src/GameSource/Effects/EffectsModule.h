@@ -297,6 +297,11 @@ namespace BrnEffects
         void GenerateRenderRequests(const EffectsIO::DispatchInputBuffer* lpDispatchInputBuffer);
         // @0x82290510. Push the 12 native simple-particle parameter sets into the arrays.
         void LoadNativeParticleParams();
+        // The four-array SparkArray::UpdateParams publish. NOT a console symbol: the copy is
+        // emitted INLINE at two sites -- Prepare @0x8229E910..0x8229E9E0 and Update
+        // @0x8229EFC4..0x8229F084 -- and the two emissions are instruction-identical, so the
+        // original source must have had one shared body here. Outlined at that shape.
+        void PushSparkParams();
         // @0x822803C0.
         const BrnPhysics::Vehicle::RaceCarState*
         GetPlayerRaceCarState(const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars);

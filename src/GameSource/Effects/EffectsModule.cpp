@@ -611,17 +611,10 @@ bool EffectsModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllo
 
         LoadNativeParticleParams();
 
-        // asm 0x8229E8F0-0x8229E9C4: the four spark parameter sets are copied (36 words
-        // each: the 4-vector head + the 9 scalars) into the particle module's four spark
-        // arrays (ParticleModule +0x9544..). NOT RECONSTRUCTED: the spark arrays are an
-        // asm-sized placeholder in ParticleModule.h (no committed SparkArray type), so
-        // there is no named destination. Loud, not silent.
-        {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "EffectsModule::Prepare's spark-parameter copy into ParticleModule's spark arrays "
-                "(the SparkArray type is a placeholder; sparks are not reconstructed)");
-        }
+        // asm 0x8229E910-0x8229E9E0: the four spark parameter sets are copied (a 0x90-byte
+        // attrib data area each) into the particle module's four spark arrays. BODIED
+        // 2026-09-06 -- SparkArray is a real type now, so this has a named destination.
+        PushSparkParams();
 
         // Attrib::SetEditNotifier(sub_822793C8): the attrib live-edit hook that raises
         // mResetAttribs on the module. NOT RECONSTRUCTED: there is no attrib editor on
@@ -663,6 +656,43 @@ bool EffectsModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllo
     default:
         CGS_ASSERT(false, "Invalid Stage\n");   // EffectsModule.cpp:556
         return false;
+    }
+}
+
+// =============================================================================
+// PushSparkParams -- the four-array SparkArray::UpdateParams publish.
+//
+// The console emits this INLINE at two sites, instruction for instruction:
+//   EffectsModule::Prepare @0x8229E910..0x8229E9E0 and ::Update @0x8229EFC4..0x8229F084.
+// Both walk `r8 = &mSparkParams[0].mpAttributeData` with a 16-byte stride and
+// `r11 = &mParticleModule.maSparks[0] + 0x74` with a 0x90 stride, four times, and both
+// issue exactly the same thirteen loads and thirteen stores. Outlined here once.
+//
+// ⭐ THE COLOURS ARE COPIED IN REVERSE, and that is the console's, not ours: the four
+//    vector LOADS are v0 <- attrib+0x00, v13 <- +0x10, v12 <- +0x20, v11 <- +0x30, and the
+//    four STORES are array+0x00 <- v11, +0x10 <- v12, +0x20 <- v13, +0x30 <- v0. So
+//    maColours[i] takes the attrib's colour (3 - i). Checked register by register at both
+//    sites; the loop below spells it as Colour(3 - i) rather than re-ordering inside
+//    UpdateParams, so the destination member order stays the DWARF's.
+// =============================================================================
+void EffectsModule::PushSparkParams()
+{
+    for (u32 luArray = 0; luArray < KU_NUM_SPARK_PARAMS; ++luArray)
+    {
+        const Attrib::Gen::sparkeffect& lrParams = mSparkParams[luArray];
+
+        mParticleModule.maSparks[luArray].UpdateParams(
+            lrParams.GravityStrength(),             // attrib +0x78 -> array +0x70
+            lrParams.BounceStrength(),              // attrib +0x88 -> array +0x74
+            lrParams.MotionBlurTime(),              // attrib +0x74 -> array +0x78
+            lrParams.SparkRadius(),                 // attrib +0x68 -> array +0x7C
+            lrParams.DragInitialVelocityScale(),    // attrib +0x80 -> array +0x80
+            lrParams.DragTerminalVelocityScale(),   // attrib +0x7C -> array +0x84
+            lrParams.DragDuration(),                // attrib +0x84 -> array +0x88
+            lrParams.Colour(3), lrParams.Colour(2), // the reversal above
+            lrParams.Colour(1), lrParams.Colour(0),
+            lrParams.Lifetimes(),                   // attrib +0x40, all four lanes
+            lrParams.SparkTextureName());           // attrib +0x50 -> array +0x8C
     }
 }
 
@@ -1072,9 +1102,11 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
     mParticleModule.mbLionEnabled   = mDebugComponent.LionEnabled();     // +0x2C347 -> +0x23BB4
     mParticleModule.mbZFadeEnabled  = mDebugComponent.UseZFade();        // +0x2C349 -> +0x23BB5
 
-    // asm 0x8229EFC4-0x8229F0A8: the four spark parameter sets copied into the particle
-    // module's spark arrays every step. NOT RECONSTRUCTED (placeholder destination); the
-    // Prepare-time copy already announced it once.
+    // asm 0x8229EFC4-0x8229F084: the four spark parameter sets copied into the particle
+    // module's spark arrays every step -- instruction-identical to the Prepare-time copy
+    // (same four vector loads, same nine scalar loads, same 0x90 cursor stride), which is
+    // why both call the same helper. BODIED 2026-09-06.
+    PushSparkParams();
 
     if (mEffectsSerialiser.GetStaticLayout() == 0)
     {
@@ -1126,7 +1158,7 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
     if (lbPlaying && !lbStalled)
     {
         if (sfLastUpdateTime > lfTime)
-            mParticleModule.ResetSparkFrameData();
+            mParticleModule.ResetSparkFrameData(lfTime);   // `fmr f1, f31` -- the frame time
         mEffectsSerialiser.Read();
         meCurrentGameMode  = static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(lpLayout->GetGameMode());
         lbInJunkyardCamera = lpLayout->GetInJunkyardCamera();

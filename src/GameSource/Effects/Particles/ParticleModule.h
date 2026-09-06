@@ -20,6 +20,7 @@
 #include "GameSource/Effects/Particles/Native/BrnDebrisArray.h"        // BrnParticle::Native::BrnDebrisArray (maDebris[5], BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleRenderer.h" // BrnParticle::Native::BrnSimpleParticleRenderer (BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleArray.h"    // BrnParticle::Native::BrnSimpleParticleArray (maSimpleParticles[13], BY VALUE)
+#include "GameSource/Effects/Particles/Native/BrnSparkRenderer.h"          // SparkRenderer / SparkArray / SparkFrameDataSet (BY VALUE)
 
 namespace CgsMemory { class HeapMalloc; }   // GameShared/GameClasses/Memory/CgsHeapMalloc.h (fwd; avoids a cross-module include cycle)
 namespace renderengine { class Texture; }   // ParticleRenderData::mpEnvironmentMap (pointer-only)
@@ -441,10 +442,12 @@ namespace BrnParticle
         // (asserts the slot is non-NULL and in use). Body in ParticleModule.cpp.
         void StopLionEffect(LionEffect* lpEffect);
 
-        // X360 0x8227EAC8. Reset both spark-frame data sets (Prepare / EffectsModule::Update
-        // drive this). DECLARE-ONLY: its body depends on BrnParticle::Native::SparkFrameDataSet
-        // (no committed layout) and three un-recovered rodata constant vectors; see the .cpp.
-        void ResetSparkFrameData();
+        // X360 0x8227EAC8. Stamp both spark-frame motion-blur rings with the identity view /
+        // projection and lfTimeStamp. The timestamp is a REAL parameter -- the body never
+        // writes f1 and forwards it to SparkFrameDataSet::Reset; ParticleModule::Prepare
+        // passes 0.0 (`lfs f1, flt_82001CC0`) and EffectsModule::Update passes the frame
+        // time (`fmr f1, f31`). See the .cpp.
+        void ResetSparkFrameData(f32 lfTimeStamp);
 
         // X360 0x8227A2B8 / 0x8228A320 -- the suspend/resume pair EffectsModule::Update's
         // suspend ladder drives (states 3 and 2). Bodies in ParticleModule.cpp.
@@ -587,9 +590,22 @@ namespace BrnParticle
         // re-authored programs in pc/gcm/renderengine/LionBlendProgramsPC.cpp.
         BrnGraphics::LionBlendRenderer mLionImmediateModeRenderer; // +0x92E0 (37600)
 
-        // Gap to the trail system at +0x9710: DWARF :70 SparkRenderer mSparkRenderer (+0x94C0)
-        // and :73 SparkArray maSparks[4] -- not typed. FLAG: PLACEHOLDER.
-        u8 maPadIfaceETo9710[0x9710 - (0x92E0 + sizeof(BrnGraphics::LionBlendRenderer))]; // -> +0x9710
+        // +0x94C0 (38080): DWARF :70 SparkRenderer mSparkRenderer and :73 SparkArray
+        // maSparks[4]. NO LONGER A PLACEHOLDER (2026-09-06). ParticleModule::Prepare
+        // @0x8229BEA0 constructs all five objects inline and its own stores pin the whole
+        // region: `stwx r27, r31, 0x94C0` is the renderer's Im3d, and the four bank records
+        // land at +0x9520/+0x9530, +0x95B0/+0x95C0, +0x9640/+0x9650, +0x96D0/+0x96E0 --
+        // array base +0x94D0, stride 0x90, and +0x94D0 + 4*0x90 == +0x9710 == mTrailSystem,
+        // closing the gap exactly. See BrnSparkRenderer.h for the full derivation.
+        //
+        // The host object is 128 bytes WIDER through here than the console's, because each
+        // SparkArray carries five console 4-byte pointers (two per bank + the texture name)
+        // and one SparkRenderer pointer. That is the same widening every record before the
+        // +0x249C4 anchor already has, and it is why _AssertLayout in the .cpp pins only the
+        // pointer-free tail (see its banner) -- no absolute offset in this region is asserted
+        // anywhere, on either side.
+        Native::SparkRenderer mSparkRenderer;   // +0x94C0 (console)
+        Native::SparkArray    maSparks[KU_NUM_SPARK_ARRAYS];  // +0x94D0 (console), stride 0x90
 
         // +0x9710 (38672): DWARF :76 BrnParticle::Native::TrailSystem mTrailSystem, 102652
         // bytes on the console (.. +0x2280C). The 0x7FFFFFFF the ctor stamps at +0x22190
@@ -627,6 +643,19 @@ namespace BrnParticle
         EffectsVertexBufferManager mVertexBufferManagerSparks;     // +0x23184 (143732)  Prepare: Construct(rw, 0x80000, 0)
         EffectsVertexBufferManager mVertexBufferManagerParticles;  // +0x231AC (143772)  Prepare: Construct(rw, 163840, 0)
 
+        // ⭐ HOST-ONLY TAIL ALIGNMENT ANCHOR (2026-09-06, four bytes, no console counterpart).
+        // Everything from miLionBatchCount down is pointer-free, so _AssertLayout in the .cpp
+        // reproduces the console's byte offsets EXACTLY, as deltas from that word. Two of
+        // those members are now real Native::SparkFrameDataSets, which embed 16-byte-aligned
+        // Matrix44Affines, and the console places them at +0x25030 and +0x25D30 -- 0x66C and
+        // 0x136C past the +0x249C4 anchor, both == 12 (mod 16). Those deltas are therefore
+        // reproducible only if the anchor word itself lands at a host offset == 4 (mod 16),
+        // and nothing above guarantees that (every record up there carries host-widened
+        // pointers). Without this the compiler inserts four bytes of its own in front of the
+        // first frame set and SIX of the eight tail asserts fail -- which is exactly how this
+        // was found. This member forces the residue; the asserts prove it stayed forced.
+        alignas(16) u32 muTailAlignmentAnchor;
+
         // +0x231D4 (143812): DWARF :136 LionBatchArray mLionBatchArray .. +0x249C8 (its trailing
         // count word at +0x249C4 is the -1 the ctor stamps / the 0 BuildLionVertexBuffers
         // resets). FLAG: PLACEHOLDER (the Lion batch array type is the Lion core's).
@@ -643,10 +672,16 @@ namespace BrnParticle
         u8  maPad24FD4To25008[0x25008 - (0x24FD0 + 4)];// -> +0x25008
         s32 miSentinel25008;                           // +0x25008 == -1
         u8  maPad2500CTo25030[0x25030 - (0x25008 + 4)];// -> +0x25030
-        // FLAG: PLACEHOLDER. BrnParticle::Native::SparkFrameDataSet (no reconstructed
-        // layout). Sized to the next named member (+0x25700). ResetSparkFrameData
-        // targets this set (a1 + 151600 == +0x25030).
-        u8  maSparkFrameDataSet0Placeholder[0x25700 - 0x25030]; // +0x25030
+        // +0x25030 (151600): BrnParticle::Native::SparkFrameDataSet -- the UPDATE-side
+        // motion-blur ring. NO LONGER A PLACEHOLDER (2026-09-06). ResetSparkFrameData
+        // @0x8227EAC8 and BeginParticleRenderJob @0x8228A7C0 both address it as
+        // `this + 151600`, and BeginParticleRenderJob reads its frame-0 timestamp as
+        // `*(this + 151728)` == +0x250B0 == +0x25030 + 0x80, which is exactly
+        // maFrames[0].mfTimeStamp -- an independent confirmation of both the base and the
+        // 0xD0 frame stride. sizeof is 8 * 0xD0 == 0x680; the 0x50 that follows it is the
+        // console's own gap to the next job.
+        Native::SparkFrameDataSet mSparkFrameDataSetUpdate;      // +0x25030 (0x680)
+        u8  maPad256B0To25700[0x25700 - (0x25030 + 8 * 0xD0)];   // -> +0x25700
 
         // +0x25700 (153344): an EA::Jobs::Job. FLAG: PLACEHOLDER (sub-ctor DEFERRED).
         u8  maJob1Placeholder[0x350];                  // +0x25700
@@ -657,8 +692,11 @@ namespace BrnParticle
         u8  maPad25CD4To25D08[0x25D08 - (0x25CD0 + 4)];// -> +0x25D08
         s32 miSentinel25D08;                           // +0x25D08 == -1
         u8  maPad25D0CTo25D30[0x25D30 - (0x25D08 + 4)];// -> +0x25D30 (0x24, mirrors set0's pad)
-        // FLAG: PLACEHOLDER. The second BrnParticle::Native::SparkFrameDataSet.
-        u8  maSparkFrameDataSet1Placeholder[0x26400 - 0x25D30]; // +0x25D30 (size 0x6D0, mirrors set0)
+        // +0x25D30 (154928): the second BrnParticle::Native::SparkFrameDataSet -- the
+        // RENDER-side ring. ResetSparkFrameData resets BOTH sets (`this + 151600` and
+        // `this + 154928`); only the update-side one is advanced per frame.
+        Native::SparkFrameDataSet mSparkFrameDataSetRender;      // +0x25D30 (0x680)
+        u8  maPad263B0To26400[0x26400 - (0x25D30 + 8 * 0xD0)];   // -> +0x26400
 
         // +0x26400 (156672): an array of 5 EA::Jobs::Job (stride 0x350; the ctor loops
         // i = 4..0 calling Job::Job(v5, 0), v5 += 0x350). FLAG: PLACEHOLDER (sub-ctors

@@ -977,11 +977,11 @@ namespace BrnParticle
         static_assert(PM_TAIL_DELTA(maJob0Placeholder)              == 0x249D0 - 0x249C4, "job 0 @ +0x249D0");
         static_assert(PM_TAIL_DELTA(miSentinel24FD0)                == 0x24FD0 - 0x249C4, "-1 sentinel @ +0x24FD0");
         static_assert(PM_TAIL_DELTA(miSentinel25008)                == 0x25008 - 0x249C4, "-1 sentinel @ +0x25008");
-        static_assert(PM_TAIL_DELTA(maSparkFrameDataSet0Placeholder) == 0x25030 - 0x249C4, "spark set 0 @ +0x25030");
+        static_assert(PM_TAIL_DELTA(mSparkFrameDataSetUpdate)        == 0x25030 - 0x249C4, "spark set 0 @ +0x25030");
         static_assert(PM_TAIL_DELTA(maJob1Placeholder)              == 0x25700 - 0x249C4, "job 1 @ +0x25700");
         static_assert(PM_TAIL_DELTA(miSentinel25CD0)                == 0x25CD0 - 0x249C4, "-1 sentinel @ +0x25CD0");
         static_assert(PM_TAIL_DELTA(miSentinel25D08)                == 0x25D08 - 0x249C4, "-1 sentinel @ +0x25D08");
-        static_assert(PM_TAIL_DELTA(maSparkFrameDataSet1Placeholder) == 0x25D30 - 0x249C4, "spark set 1 @ +0x25D30");
+        static_assert(PM_TAIL_DELTA(mSparkFrameDataSetRender)        == 0x25D30 - 0x249C4, "spark set 1 @ +0x25D30");
         static_assert(PM_TAIL_DELTA(maFrameJobsPlaceholder)         == 0x26400 - 0x249C4, "frame jobs @ +0x26400");
         static_assert(PM_TAIL_DELTA(miNumDebrisUpdateJobsToWaitOn)   == 0x27780 - 0x249C4, "debris job wait count @ +0x27780");
         static_assert(PM_TAIL_DELTA(mbFlag27784)                    == 0x27784 - 0x249C4, "bool sentinel @ +0x27784");

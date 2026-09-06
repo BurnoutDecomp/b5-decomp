@@ -449,18 +449,35 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         mBucketManager.Construct(mpHeapMalloc, KU_FX_BUCKET_POOL_BYTES);
 
         // --- the spark renderer + the four spark arrays -----------------------------------
-        // `stwx r27, r31, 0x94C0` (SparkRenderer's Im3d) then four pairs of
-        // {bucketManager, 0, 0, 2000} / {bucketManager, 0, 0, 1000} records at
-        // +0x9520/+0x9530, +0x95B0/+0x95C0, +0x9640/+0x9650, +0x96D0/+0x96E0.
+        // BODIED 2026-09-06 (was an announcement while SparkArray had no type).
+        // `stwx r27, r31, 0x94C0` is the renderer's Im3d -- r27 is the same
+        // &mImmediateModeRenderer the debris/simple families are handed -- and the four
+        // {0, &mBucketManager, 0, 2000} / {0, &mBucketManager, 0, 1000} bank records land at
+        // +0x9520/+0x9530, +0x95B0/+0x95C0, +0x9640/+0x9650, +0x96D0/+0x96E0. The console
+        // writes NOTHING else here: colours, lifetimes, the seven scalars and the texture
+        // name all arrive later, from EffectsModule::Prepare's UpdateParams copy.
+        //
+        // ⛔ THE RENDERER ARGUMENT IS THE ONE PLACEHOLDER LEFT IN THIS BLOCK. r27 is
+        //    &mImmediateModeRenderer (+0x9010), which is still a `ContainedInterface`
+        //    stand-in for CgsGraphics::Im3d -- the same placeholder that keeps
+        //    BrnDebrisRenderer::Construct announced twenty lines below. Type-punning it to
+        //    an Im3d* would be an invented type, so the pointer is left null AND SAID SO;
+        //    the spark SIMULATION does not read it (only SparkRenderer::Dispatch does).
         {
             static bool sbLogged = false;
             LogNotReconstructed(sbLogged,
-                "ParticleModule::Prepare's SparkRenderer + maSparks[4] bucket records "
-                "(SparkRenderer / SparkArray have no committed type; the region is an "
-                "asm-sized placeholder)");
+                "ParticleModule::Prepare's SparkRenderer::Construct renderer argument -- "
+                "mImmediateModeRenderer is still a ContainedInterface placeholder, so "
+                "mSparkRenderer.mpRenderer is null (the spark ARRAYS are real)");
+        }
+        mSparkRenderer.Construct(mpHeapMalloc, 0);
+        for (u32 luArray = 0; luArray < KU_NUM_SPARK_ARRAYS; ++luArray)
+        {
+            maSparks[luArray].Construct(&mBucketManager,
+                                        static_cast<Native::ESparkArrayID>(luArray));
         }
 
-        ResetSparkFrameData();
+        ResetSparkFrameData(0.0f);   // `lfs f1, flt_82001CC0` == 0.0
 
         // --- the trail system: the tyre-mark spine ----------------------------------------
         // TrailSystem::Construct is inlined here on the console -- four stores:
@@ -739,12 +756,37 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
 
             mLionRenderer.AcquireTexture(luEntryHash, lTexture);
 
-            // (b) the four spark arrays -- placeholder type, announced once.
+            // (b) ⭐ THE FOUR SPARK ARRAYS. BODIED 2026-09-06 (was announced while
+            // SparkArray had no type). The console loop, 0x8229D3AC..0x8229D420:
+            //     r26 = &unk_82FAC230 (the STATIC 4-entry handle table)
+            //     r27 = &maSparks[0].mpcSparkTextureName
+            //     do { hash = TextureNameMap::Entry::HashString(*r27);
+            //          if (hash == entry[replyIndex].muHashedLionTextureName) {
+            //              assert(0 <= i && i < 4); *r26 = handle; }
+            //          r26 += 8; ++i; r27 += 0x90;
+            //     } while (r26 < &qword_82FAC250);
+            // i.e. every array whose OWN texture name hashes to this reply's entry takes
+            // the handle. The array index is the ESparkArrayID -- the same index
+            // SparkRenderer::Dispatch reads the table back with.
+            for (u32 luSparkArray = 0; luSparkArray < KU_NUM_SPARK_ARRAYS; ++luSparkArray)
             {
-                static bool sbLogged = false;
-                LogNotReconstructed(sbLogged,
-                    "LoadFXBundle stage 12's spark-array texture publish (the four "
-                    "SparkArray slots at unk_82FAC230 have no committed type)");
+                const char* const lpcSparkTextureName = maSparks[luSparkArray].GetTextureName();
+                // ⚠ FLAG -- ONE TERM THE CONSOLE DOES NOT HAVE. The X360 dereferences the
+                // name unconditionally, because SparkArray::Construct leaves it unwritten
+                // and EffectsModule::Prepare's UpdateParams copy has always run by the time
+                // stage 12 is reached. That ordering holds here too, but ParticleModule is
+                // pool-carved (no ctor runs over this region), so a build that reached this
+                // stage with UpdateParams not yet wired would hash a garbage pointer -- a
+                // valid-pointer/invalid-object fault, not a missing effect. The null test is
+                // the whole of the difference; delete it once nothing can reach stage 12
+                // before EffectsModule::Prepare's RESOURCES stage.
+                if (lpcSparkTextureName == 0)
+                    continue;
+                if (TextureNameMap::Entry::HashString(lpcSparkTextureName) == luEntryHash)
+                {
+                    Native::SparkArray::AcquireTexture(
+                        lTexture, static_cast<Native::ESparkArrayID>(luSparkArray));
+                }
             }
 
             // (c) ⭐ THE TRAIL TEXTURE. `off_82CDAE74` is the literal "fxskid".
@@ -1018,19 +1060,37 @@ u32 ParticleModule::StartLionEffect(u32 luNameHash, const char* lpcEffectName, u
 }
 
 // =========================================================================================
-// ResetSparkFrameData  @0x8227EAC8 -- DECLARE-ONLY on this build.
-//   The body builds six SIMD arguments from the engine identity vector and three
-//   un-recovered rodata constant vectors (unk_82181510/20/30) and calls
-//   Native::SparkFrameDataSet::Reset on the two sets at +0x25030 / +0x25D30. Both sets are
-//   asm-sized placeholders in ParticleModule.h and the constants are not recoverable, so
-//   there is nothing to write to. Loud, never silent.
+// ResetSparkFrameData  @0x8227EAC8 -- BODIED 2026-09-06.
+//
+// ⭐ IT TAKES A TIMESTAMP, AND THE OLD DECLARATION DROPPED IT. The body never writes f1,
+//    and SparkFrameDataSet::Reset's third argument IS f1 (`stfs f1, 0x80(r3)` /
+//    `stfs f1, 0x84(r3)` per frame), so the caller's float passes straight through. Both
+//    call sites supply it: ParticleModule::Prepare loads `lfs f1, flt_82001CC0` == 0.0
+//    immediately before the call, and EffectsModule::Update hands it the frame time.
+//    (This is the same shape as the CgsPerfMonCpu::AddMonitor artefact recorded in
+//    9e13eb91, read the other way round: Hex-Rays showed no float parameter at all
+//    because the value is only forwarded, never used.)
+//
+// ⭐ THE "UN-RECOVERED RODATA CONSTANT VECTORS" ARE THE IDENTITY. The old note called
+//    unk_82181510/20/30 unrecoverable; they sit in plain initialised .rdata and read
+//    (0,1,0,0) / (0,0,1,0) / (0,0,0,1), and `rw::math::vpu::detail::gIVector` at
+//    0x82181500 immediately before them reads (1,0,0,0). Together they ARE
+//    Matrix44::SetIdentity(). The view argument is built on the stack out of four
+//    hand-written rows -- (1,0,0,0) (0,1,0,0) (0,0,1,0) (0,0,0,0) -- which is exactly
+//    Matrix44Affine::SetIdentity(). So both matrices are identities and the whole
+//    16-instruction constant-building preamble collapses to the two SetIdentity calls the
+//    original source must have written.
 // =========================================================================================
-void ParticleModule::ResetSparkFrameData()
+void ParticleModule::ResetSparkFrameData(f32 lfTimeStamp)
 {
-    static bool sbLogged = false;
-    LogNotReconstructed(sbLogged,
-        "ParticleModule::ResetSparkFrameData @0x8227EAC8 (SparkFrameDataSet is an asm-sized "
-        "placeholder and its three rodata constant vectors are not recovered)");
+    rw::math::vpu::Matrix44Affine lViewMatrix;
+    lViewMatrix.SetIdentity();
+
+    rw::math::vpu::Matrix44 lProjectionMatrix;
+    lProjectionMatrix.SetIdentity();
+
+    mSparkFrameDataSetUpdate.Reset(lViewMatrix, lProjectionMatrix, lfTimeStamp);   // this + 151600
+    mSparkFrameDataSetRender.Reset(lViewMatrix, lProjectionMatrix, lfTimeStamp);   // this + 154928
 }
 
 }   // namespace BrnParticle
