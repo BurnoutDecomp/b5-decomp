@@ -850,6 +850,28 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
         // one crash burst carried 2,580 in a SINGLE frame -- and it is overridable so the number
         // never has to be argued about:
         //     BRN_SPARK_FILM_VERTS=<n>   cumulative drawn vertices before the strip opens
+        //
+        // ⛔⛔ MEASURED 2026-09-07, AND IT DEFEATS THIS ARM: DO NOT TRUST THE THRESHOLD TO
+        // REACH A CRASH. A CUMULATIVE counter cannot separate boot from driving, because the
+        // game's FIRST frame runs a ~9.8 s simulation catch-up in one present (the first
+        // [spark] prod sample of a run reads `rdt=9.81669` against 0.016667 for every sample
+        // after it). Contact sparks spawn and draw throughout that catch-up, so the count is
+        // already large before the world is ever on screen. Two runs, same build:
+        //     BRN_SPARK_FILM_VERTS=8000  -> latched 0.9 s into a 200 s run; all 240 frames
+        //                                   were the LOADING SCREEN.
+        //     BRN_SPARK_FILM_VERTS=20000 -> latched before present 0 (the strip is named
+        //                                   bb_000000..); frames spanned t=1.1 s..8.6 s.
+        // Raising the number does not help -- the boot reaches any threshold first, and on a
+        // run whose boot does NOT catch up (measured: `drew=0/0 line=0` still at t=31.6 s)
+        // the same threshold instead fires far too late. The behaviour is a property of the
+        // boot, not of the number, so no value of this variable is correct for both.
+        // ⭐ THE FIX IS A DIFFERENT SHAPE, NOT A DIFFERENT NUMBER: arm on a PER-FRAME burst
+        // (this frame drew >= N spark vertices), which is bounded by one present and so cannot
+        // be saturated by a catch-up, and/or gate the latch on the game being in DRIVING.
+        // ⚠️ Until that lands, `BRN_FRAME_DUMP_ARM=spark` is only usable for filming the BOOT
+        // spark path. To film a crash, use `slomo` -- but note it latches at IMPACT, where the
+        // ladder still reads `drew=0/0 line=0`, so the grinding sparks come AFTER it and the
+        // strip needs a budget long enough to reach them (400 frames was measured too short).
         static u32 suFilmThreshold = 0u;
         if (suFilmThreshold == 0u)
         {

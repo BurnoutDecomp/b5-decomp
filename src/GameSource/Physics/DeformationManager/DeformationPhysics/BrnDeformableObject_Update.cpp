@@ -1604,9 +1604,28 @@ namespace Deformation
     //       remainder to the car body" -- the crumple terminus -- not "no neighbour", and there
     //       are NO self-loops. (Counting self-loops 0-based invents seven of them; that reading is
     //       wrong.) No off-by-one here.
+    //   (e) The per-direction CRUSH BUDGET is indexed correctly, on all six axes. SensorSpec::
+    //       maDirectionParams[k] is the budget for motion along KA_IMPULSE_DIRECTIONS[k]
+    //       (+X,-X,+Y,-Y,+Z,-Z), which the preset-damage path pins independently: its hit rows are
+    //       {+-0.7, 0, -1, 0} (motion along -Z) and it scales them by maDirectionParams[5], and
+    //       BOTH consoles read [5] there. The authored table then agrees with the car's geometry on
+    //       every axis, for PUSMC01:
+    //           nose  (z +1.99)  crushes -Z  -> [5] = 1.10  (the largest value in the table, and
+    //                                                        the nose's ONLY non-zero entry)
+    //           rear  (z -2.02)  crushes +Z  -> [4] = 0.75
+    //           left  (x < 0)    crushes +X  -> [0] non-zero;  right (x > 0) -> [1] non-zero
+    //           cabin (highest y) crushes -Y -> [3] = 0.30, and ONLY on sensors 0..3
+    //       End to end: a head-on wall hit gives an impulse pointing -Z, whose positive projection
+    //       selects liDir 5, which reads the nose's 1.10. ⚠️ This is the branch that would have
+    //       produced the owner's symptoms exactly -- a nose hit reading a ZERO budget cannot crush,
+    //       so nothing is subtracted at the crumple-zone store and the whole impulse arrives at the
+    //       rigid body ("the car flies, and does not crumple"). It is NOT what happens.
+    //       (57.5% of the 6x20 table is zero, which is BY DESIGN: a sensor has a budget only for
+    //       the few axes it can actually crush along. A zero is not a missing value here.)
     // ⇒ WHAT IS LEFT is the crash-time half: where the sensor sphere centres TRAVEL during an
-    // impact -- the per-sensor `lfRoom` crush budget, the hit direction, and how many chain hops an
-    // impulse actually makes before it terminates at the body. That needs a run, not a byte audit.
+    // impact -- how much of that budget a given impact CONSUMES (`lfRoom` at runtime, and the
+    // absorption row that scales it), and how many chain hops an impulse actually makes before it
+    // terminates at the body. That needs a run, not a byte audit.
     // =============================================================================================
     void DeformableObject::UpdateIK(VecFloat lvfTime)
     {
