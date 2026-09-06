@@ -191,8 +191,13 @@ namespace Deformation
         static const u32 KU_CARSTATE_SENSOR_STRIDE   = 80;     // per-sensor record stride
         static const u32 KU_CARSTATE_WHEEL_BASE      = 1600;   // the 4 wheel handling-transform rows
         static const u32 KU_CARSTATE_WHEEL_STRIDE    = 16;     // one row per wheel slot
-        static const u32 KU_CARSTATE_SCRATCH_SUM     = 1696;   // f32 accumulated scratch displacement
-        static const u32 KU_CARSTATE_SENSOR_COUNT    = 1700;   // sensor count (mirror of spec count)
+        // ⭐ These two are now REFERENCE ONLY (2026-09-06, widening-sweep wave): both members are
+        // homed and named in BrnDeformationState.h, so OutputState reaches them as
+        // mfSummedDisplacementSquared / mu8NumSensors. Kept as the figures for reading the asm
+        // (`stfs f0, 0x6A0(r4)` @0x825C1F7C and `stb r11, 0x6A4(r4)` @0x825C1EDC -- note the
+        // console stores a BYTE at 0x6A4, which is what retired the old 4-byte write there).
+        static const u32 KU_CARSTATE_SCRATCH_SUM     = 1696;   // reference only -- mfSummedDisplacementSquared
+        static const u32 KU_CARSTATE_SENSOR_COUNT    = 1700;   // reference only -- mu8NumSensors (a BYTE)
         static const u32 KU_CARSTATE_WHEEL_TAG_BASE  = 1632;   // the 4 wheel tag-point world positions
 
         // DeformationSensor stride / fields OutputState walks (console).
@@ -700,9 +705,20 @@ namespace Deformation
         char*       lpcCarState = reinterpret_cast<char*>(lpCarState);
         const char* lpcSpec     = reinterpret_cast<const char*>(mpDeformationSpec);
 
-        // (1) sensor count: spec +1618 (mu8NumDeformationSensors) -> CarState +1700.
+        // (1) sensor count: spec +1618 (mu8NumDeformationSensors) -> CarState::mu8NumSensors.
+        // ⭐ BY NAME 2026-09-06 (widening-sweep wave). This was
+        //     *reinterpret_cast<s32*>(lpcCarState + 1700) = liNumSensors;
+        // and it wrote FOUR bytes over a ONE-byte member: Deformation::CarState declares
+        // `u8 mu8NumSensors` at +0x6A4 (1700) followed immediately by `u8 maTailPad[11]`
+        // (BrnDeformationState.h:83-85), so three bytes of the tail pad were clobbered on every
+        // call. It read back correctly only because x64 is little-endian and the count is < 256,
+        // so the low byte happened to land on the member -- the console's own reader
+        // (CarState::GetSensor @0x825B3678) `lbz`s exactly this one byte.
+        // ⚠️ NOT a widening ghost: CarState is an explicitly-padded POD with NO pointers and
+        // `static_assert(sizeof(CarState) == 1712)` in BrnDeformationState_DeformationState.cpp,
+        // so 1700 IS the host offsetof. The offset was right; the WIDTH was not.
         const s32 liNumSensors = *reinterpret_cast<const u8*>(lpcSpec + 1618);
-        *reinterpret_cast<s32*>(lpcCarState + KU_CARSTATE_SENSOR_COUNT) = liNumSensors;
+        lpCarState->mu8NumSensors = static_cast<u8>(liNumSensors);
 
         // (2) per-sensor displacement copy + summed-squared-displacement accumulate.
         f32 lfScratchSumSq = 0.0f;   // v61 (the running vaddfp accumulator)
@@ -754,8 +770,11 @@ namespace Deformation
             while (liRemaining);
         }
 
-        // CarState +1696 = the accumulated scratch displacement sum.
-        *reinterpret_cast<f32*>(lpcCarState + KU_CARSTATE_SCRATCH_SUM) = lfScratchSumSq;
+        // The accumulated scratch displacement sum. BY NAME 2026-09-06 (widening-sweep wave);
+        // was `*(f32*)(lpcCarState + 1696)`. CarState::mfSummedDisplacementSquared is at exactly
+        // +0x6A0 == 1696 (BrnDeformationState.h:82) and the struct is pointer-free, so this was
+        // the right byte -- it is spelled by name so it STAYS the right byte.
+        lpCarState->mfSummedDisplacementSquared = lfScratchSumSq;
 
         // (3) copy the four wheel handling rows from the attached vehicle (vehicle +1744) into the
         // CarState wheel block (+1600..). The asm copies four 16-byte rows.
@@ -765,6 +784,20 @@ namespace Deformation
         // dereferenced garbage. BOOT-MEASURED: first OutputData frame AV'd at OutputWheelData+0x67
         // (fault 0x123587, event log -> map). KU_VEHICLE_PHYSICS_PTR stays as asm provenance only.
         const char* lpcHandling = lpcVehicle + KU_VEHICLE_HANDLING_ROWS;
+        // ⚠️ OPEN, RAISED 2026-09-06 (widening-sweep wave) -- NOT RESOLVED HERE, AND NOT TOUCHED.
+        // Two banners in this tree disagree about how wide this copy is, and raw offsets are why
+        // nobody has had to notice:
+        //   * BrnDeformationState.h:71-73 calls +0x640 a "deformed-bbox pair (32 bytes)" and homes
+        //     it as mDeformedBBoxMin/mDeformedBBoxMax, with maWheelTagPoints[4] starting at +0x660.
+        //   * this loop writes FOUR 16-byte rows from +0x640, i.e. +0x640..+0x680 -- so rows 2 and
+        //     3 land on maWheelTagPoints[0] and [1], which step (4) below then writes again.
+        // The console sets up BOTH cursors together (@0x825C1F78 `addi r10,r4,0x640` and
+        // @0x825C1F94 `addi r9,r4,0x660`, source @0x825C1F88 `addi r9,r11,0x6D0`), so the overlap
+        // may be real and order-dependent, or this loop may simply be one iteration count too
+        // long. Settling it needs the +0x640 cursor's own loop read out of OutputState @0x825C1EA8;
+        // that is an OutputState PARITY question, not an x64-widening one, so this wave leaves it
+        // stated rather than guessed. ⭐ Note WHAT SURFACED IT: spelling the neighbouring writes by
+        // name made two writes to the same bytes visible; as raw offsets they were invisible.
         for (s32 liRow = 0; liRow < 4; ++liRow)
         {
             *reinterpret_cast<Vector3*>(lpcCarState + KU_CARSTATE_WHEEL_BASE + KU_CARSTATE_WHEEL_STRIDE * liRow) =

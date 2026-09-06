@@ -107,11 +107,30 @@ namespace Deformation
 		static const u32 KU_DRIVETIME_DEFORM_LIMITS_OFFSET = 0x40;   // 64
 
 		// VehiclePhysics::IsCrashing flag -- `*(vehiclePhysics + 0x710)`; mfSpeedMPH @ +0x6C0. Both are
-		// reached by name below (IsCrashing()/the speed read), retained here for the asm cross-ref only.
+		// reached by name below (IsCrashing()/GetSpeedMPH()), retained here for the asm cross-ref only.
+		// ⚠️ THAT SENTENCE WAS FALSE FOR THE SPEED UNTIL 2026-09-06 (widening-sweep wave): IsCrashing
+		// was by name, the speed was NOT -- a `VehicleSpeedMPH()` helper below read the console
+		// offset 0x6C0 raw off a `const char*` view, with the comment "private member, header not
+		// editable". `SimpleVehiclePhysics::GetSpeedMPH()` is PUBLIC and DWARF-declared
+		// (BrnSimpleVehiclePhysics.h:425), so the excuse never held. [[gates-are-stale-not-dead]]
 
-		// DeformableObject state word UpdateDeformedBBox gates on -- `*(this + 26384)`, HIGH byte == 1.
-		// No separately-named member in the frozen DWARF sequence; read by the asm-proven console offset.
-		static const u32 KU_DEFORMED_BBOX_GATE_WORD_OFFSET = 26384;
+		// ⛔⛔ RETIRED 2026-09-06 (widening-sweep wave) -- KU_DEFORMED_BBOX_GATE_WORD_OFFSET = 26384.
+		// This was an X64-WIDENING GHOST and the banner beside it was wrong on both counts.
+		// It said "*(this + 26384), HIGH byte == 1. No separately-named member in the frozen DWARF
+		// sequence". There IS a named member: console +26384 is `mHandlingBodyID`
+		// (BrnDeformableObject.h:626, the 8-byte CgsPhysics::RigidBodyId), which this repo's own
+		// idfield_sweep.py has hard-coded as the HANDLING field at 0x6710 since it was written, and
+		// whose owner byte is `GetHandlingBodyIdHighByte()` -- already called on the very next line
+		// of the same log statement.
+		// ⭐ AND THE HOST OFFSET IS NOWHERE NEAR 26384. Arithmetic, from the seats the glass wave
+		// MEASURED out of the live object (0dc332c0): maDrivenPoints sits at host 22992 with a host
+		// stride of 64, so the array spans 22992 .. 22992 + 128*64 == 31184. mHandlingBodyID is
+		// declared AFTER it, so it is at >= 31184 -- at least 4,800 bytes past this read. Host byte
+		// 26384 is therefore still INSIDE maDrivenPoints, at element (26384-22992)/64 == 53 exactly.
+		// The witness's `gateRaw` column has been printing the top byte of maDrivenPoints[53]'s
+		// first word and labelling it an entity-owner selector, on every logged row of every run,
+		// right beside the correct `gateOwner`. [[diagnostics-that-lie]] [[x64-widening-ghost]]
+		// Found by tools/re/widening_sweep.py, which is the point of that tool existing.
 
 		// (The deformed-AABB corner pair the console stores at vehiclePhysics+0x6D0/+0x6E0 used to be
 		// reached from here by those two literals. RETIRED 2026-09-03: it goes through the DWARF-declared
@@ -167,10 +186,28 @@ namespace Deformation
 			return *(reinterpret_cast<const u8*>(lpSpec) + KU_SPEC_NUM_DEFORMATION_SENSORS_OFFSET);
 		}
 
-		// Read VehiclePhysics::mfSpeedMPH by console offset (+0x6C0); private member, header not editable.
+		// VehiclePhysics::mfSpeedMPH, BY NAME.
+		// ⭐ CORRECTED 2026-09-06 (widening-sweep wave). This used to be
+		//     *reinterpret_cast<const f32*>(reinterpret_cast<const char*>(lpPhysics) + 1728)
+		// with the comment "private member, header not editable". Both halves were wrong:
+		// `SimpleVehiclePhysics::GetSpeedMPH()` is a PUBLIC, DWARF-declared accessor
+		// (BrnSimpleVehiclePhysics.h:425, X360-attested via UpdateRaceCarState @0x825EC808), and
+		// the whole rest of the tree already spells this `->GetSpeedMPH().x` (PropManager_wQ2_01,
+		// BrnPhysicalTrafficManager_CrashResponse x4, BrnRendererModulePostFx).
+		// ⚠️ STATED PLAINLY, BECAUSE IT MATTERS: THIS WAS NOT A GHOST. 1728 == 0x6C0 IS the host
+		// offsetof -- measured and pinned by `static_assert(offsetof(VehiclePhysics, mfSpeedMPH)
+		// == X360LayoutCheck::KU_A_SPEEDMPH)` in VehiclePhysics_layout_check.cpp, because
+		// SimpleVehiclePhysics' own block is pointer-free and the leaf vptr's 4->8 widening is
+		// absorbed by the 16-aligned base. The raw read produced the RIGHT NUMBER. It is retired
+		// because it is a raw-offset hack over a homed member (AGENTS.md forbids exactly this),
+		// and because it was the one read standing between an unpinned literal and a silent
+		// breakage the day someone carves a pointer out of that block.
+		// ⚠️ Also a real type correction: mfSpeedMPH is a `VecFloat` (a BROADCAST splat -- see
+		// GetSpeed()'s note), not an f32. Lane .x is the scalar; the old 4-byte read happened to
+		// land on it only because the splat makes every lane equal.
 		inline f32 VehicleSpeedMPH(const BrnPhysics::Vehicle::VehiclePhysics* lpPhysics)
 		{
-			return *reinterpret_cast<const f32*>(reinterpret_cast<const char*>(lpPhysics) + KU_VEHICLE_SPEED_MPH_OFFSET);
+			return lpPhysics->GetSpeedMPH().x;
 		}
 	}
 
@@ -602,10 +639,14 @@ namespace Deformation
 				const bool lbPeriodic = ( (sluTraceCalls % static_cast<u32>(siBBoxTracePeriod)) == 0u );
 				if ( lbMoved || lbPeriodic )
 				{
-					// `gateRaw` == the retired 4-byte-stand-in read (`*(u32*)(this+26384) >> 24`), kept
-					// in the witness ONLY so a log shows what the old gate compared against 1.
-					const u32 lu32GateWord = *reinterpret_cast<const u32*>(
-						reinterpret_cast<const char*>(this) + KU_DEFORMED_BBOX_GATE_WORD_OFFSET);
+					// ⛔ `gateRaw` IS GONE (2026-09-06, widening-sweep wave). It printed
+					// `*(u32*)((char*)this + 26384) >> 24` -- a CONSOLE seat on a WIDENED host
+					// object -- as "what the old gate compared against 1". On the host that byte
+					// is inside maDrivenPoints[53], ~4.8 KB below mHandlingBodyID; see the banner
+					// on the retired KU_DEFORMED_BBOX_GATE_WORD_OFFSET at the top of this file for
+					// the arithmetic. It was never the gate word, so a column named for the raw
+					// gate could only mislead the next reader. `gateOwner` below is the same datum
+					// read BY NAME and is the only honest form of it.
 					for ( s32 liL = 0; liL < 6; ++liL ) { safTraceLast[liSlot][liL] = lafNow[liL]; }
 					saiTraceLastBeyond[liSlot] = liBeyondNow;
 					const u32 luArmsDrive = guDeformLimitRowArmApplies[0] - sauArmsAtLast[0];
@@ -625,7 +666,6 @@ namespace Deformation
 						// crush series can be attributed to ONE CAR.
 						<< " gid " << static_cast<s32>((GetGlobalEntityId().muValue >> 10) & 0x3FFFu)
 						<< " crashing " << ( ( lpDeformPhysics != 0 && lpDeformPhysics->IsCrashing() ) ? 1 : 0 )
-						<< " gateRaw " << static_cast<s32>(static_cast<u8>(lu32GateWord >> 24))
 						<< " gateOwner " << static_cast<s32>(GetHandlingBodyIdHighByte())
 						<< " defMin (" << lvMinPositions.x << "," << lvMinPositions.y << "," << lvMinPositions.z << ")"
 						<< " limMin (" << mDriveTimeBBoxLimitMin.x << "," << mDriveTimeBBoxLimitMin.y << "," << mDriveTimeBBoxLimitMin.z << ")"
