@@ -1,8 +1,10 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclebaseattribs.h"   // the base-attribs wrapper (Prepare{Front,Rear}Tire's source record)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Wheel::Prepare's lpTireAttribs gate, Wheel.cpp:478)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([wheellock] probe only)
 
-#include <cmath>   // std::fabs, std::sqrt
+#include <cmath>    // std::fabs, std::sqrt
+#include <cstdlib>  // getenv ([wheellock] probe only)
 
 // BrnPhysics::Vehicle::Wheel -- the C04_wheels_tire_gripcurve group's out-of-line bodies:
 // the per-wheel lifecycle (Clear/Reset/SetPosition/SetRoadContact/Prepare/SwitchAttribs/
@@ -458,15 +460,58 @@ namespace Vehicle
                                 || std::fabs(lfCandidate) < KF_STOPPED_SPIN_EPSILON;
         mSuspensionAndInertiaVariables.z = lbKeepInertia ? lfInertia    : 0.0f;   // vrlimi 2 (z)
         mSuspensionAndInertiaVariables.w = lbKeepInertia ? lfInvInertia : 0.0f;   // vrlimi 1 (w)
-        // ⭐ MEASURED 2026-09-06, with a throwaway BRN_WHEEL_LOCK_DIAG counter on this exact line
-        // (not committed -- a new engine getenv has to be registered in flow_run.ps1's wipe list in
-        // the same change, and that file was another wave's dirty file).  One 150 s run, teleport
-        // 2958,12.5,-1764 heading 90, five accel/brake cycles, 2920 m of path:
+
+        // ---- [wheellock] the measurement that made the epsilon a DEFECT, not a nicety ---------
+        // OPT-IN (BRN_WHEEL_LOCK_DIAG=1); a default run never evaluates the second predicate, so
+        // it is byte-identical to a build without this block.  Registered in flow_run.ps1's wipe
+        // list in the same change -- an engine getenv that the harness does not clear turns a
+        // leftover shell variable into a silent measurement of nothing.
+        //
+        // ⭐⭐ IT COUNTS BOTH PREDICATES ON THE SAME FRAMES, ON PURPOSE.  The honest way to price
+        // a constant change on a box that is sharing its frame budget is NOT an A/B of two runs:
+        // this project has measured two runs of the SAME build driving 1,643 m and 305 m, so a
+        // cross-run delta prices the box, not the change.  Evaluating the old 100.0 alongside the
+        // console's epsilon inside one frame removes the box from the comparison entirely.
+        //
+        // MEASURED 2026-09-06, one 150 s run (teleport 2958,12.5,-1764 heading 90, five
+        // accel/brake cycles, 2920 m of path):
         //     [wheellock] calls 70000  brakeAbsorbed 1294  lanesZeroed 729  differsFromOld100 729
-        // i.e. the latch fires 729 times with the console's epsilon, and the old 100.0 would have
-        // decided EVERY ONE of those 729 the other way -- it made the latch unreachable in
-        // ordinary driving.  Re-derive by re-adding the counter; the numbers are the evidence for
-        // calling this a behaviour defect rather than a cosmetic constant.
+        // 729 of 729: the old 100.0 would have decided EVERY firing the other way.  At a ~0.33 m
+        // wheel it reads "|omega| < 100 rad/s" == every wheel below roughly 74 mph, so the latch
+        // was unreachable in ordinary driving and a fully brake-absorbed wheel kept its inertia
+        // lanes for ApplyFrictionReaction to spin straight back up in the same frame's tyre pass.
+        {
+            static s32 siWheelLockDiag = -1;
+            if (siWheelLockDiag < 0)
+            {
+                const char* lpcEnv = getenv("BRN_WHEEL_LOCK_DIAG");
+                siWheelLockDiag = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
+            }
+            if (siWheelLockDiag == 1 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                // The value the constant carried before the 2026-09-06 audit, kept ONLY so the
+                // two decisions can be counted side by side.  It is not a fallback.
+                static const f32 KF_OLD_WRONG_EPSILON = 100.0f;
+                const bool lbKeepInertiaOld = lbKeepSpinning
+                                           || std::fabs(lfCandidate) < KF_OLD_WRONG_EPSILON;
+
+                static u32 suCalls = 0, suBrakeAbsorbed = 0, suLanesZeroed = 0, suDiffers = 0;
+                ++suCalls;
+                if (!lbKeepSpinning)      ++suBrakeAbsorbed;   // the brakes took the whole wheel
+                if (!lbKeepInertia)       ++suLanesZeroed;     // ...and the latch actually fired
+                if (lbKeepInertia != lbKeepInertiaOld) ++suDiffers;
+
+                if ((suCalls % 10000u) == 0u)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[wheellock] calls " << static_cast<s32>(suCalls)
+                        << "  brakeAbsorbed "   << static_cast<s32>(suBrakeAbsorbed)
+                        << "  lanesZeroed "     << static_cast<s32>(suLanesZeroed)
+                        << "  differsFromOld100 " << static_cast<s32>(suDiffers)
+                        << "\n";
+                }
+            }
+        }
     }
 
     // ===========================================================================================
