@@ -20,15 +20,27 @@
 namespace BrnAI
 {
     // --- file-scope tuning constants (DWARF-`extern`; grounded by the asm rodata uses) ------
-    // Two are pinned by rodata (200.0 / 0.5); the four marked (runtime) were initialised in the
-    // X360 data segment and their concrete values were NOT recovered -- defined as 0.0f
-    // placeholders (not invented gameplay values) so the extern definitions link.
+    // ⭐⭐ THE FOUR "(runtime; value not recovered)" ZEROS ARE RECOVERED (2026-09-06, driving-path
+    // 1:1 constant audit).  They were never un-homed: three are .bss slots the CRT fills at
+    // static-init time, in the SAME mph->m/s shape BrnAICar_Constants.h already documents --
+    //     lfs f0, flt_82F31928 (0.44703999) ; lfs f13, <mph> ; fmuls f0,f0,f13 ; stfs f0, <slot>
+    // -- and the fourth is plain .rdata that a literal scan would have found.  A flagged zero is
+    // only safe when 0 is the expression's identity, and here it was not: MIN_SPEED_FOR_BUZZING
+    // is a `speed < K -> refuse` gate, so at 0.0 the player was buzzable while STOPPED, and the
+    // two START_FAR_* feed a reset request's SPEED field, so road-rage rivals were teleported in
+    // at a standstill.
+    // ⚠️ NO STATIC-INIT ORDER HAZARD HERE (the trap BrnTrafficEntityModule_wT2_03.cpp documents
+    // for flt_830180B0): the multiplier flt_82F31928 is a plain image constant that reads
+    // 0.44703999 straight out of .rdata, not a slot another thunk has to compute first.
     const f32 KF_ON_COMING_RESET_SPEED    = 200.0f;  // flt_820C4318 (rodata-pinned)
-    const f32 KF_START_FAR_AHEAD          = 0.0f;    // flt_8300DBEC (runtime; value not recovered)
-    const f32 KF_START_FAR_BEHIND         = 0.0f;    // flt_8300D7F4 (runtime; value not recovered)
-    const f32 KF_MIN_SPEED_FOR_BUZZING    = 0.0f;    // flt_8300D938 (runtime; value not recovered)
+    const f32 KF_START_FAR_AHEAD          = 35.7631989f;  // flt_8300DBEC = init 0x82C68F00, flt_82004A18 ( 80) * 0.44704
+    const f32 KF_START_FAR_BEHIND         = 11.1759996f;  // flt_8300D7F4 = init 0x82C68EE0, flt_820C4870 ( 25) * 0.44704
+    const f32 KF_MIN_SPEED_FOR_BUZZING    =  3.35279989f; // flt_8300D938 = init 0x82C68F20, flt_820C42D4 (7.5) * 0.44704
     const f32 KF_START_BEHIND_PROBABLITY  = 0.5f;    // flt_820C4168 (rodata-pinned)
-    const f32 KF_SIDE_TURNING_PROBABILITY = 0.0f;    // flt_820C4330 (runtime; value not recovered)
+    // Plain .rdata, read straight out of the image (0x820C4330 == 0x3F4CCCCD).  ChooseAheadOrBehind
+    // @0x8277197C does `fcmpu cr6, roll, flt_820C4330 ; bge` -> ON_COMING, so this is a 20%/80%
+    // split between the head-on and from-turnings reset types.
+    const f32 KF_SIDE_TURNING_PROBABILITY = 0.800000012f;  // flt_820C4330 (plain .rdata, 0x3F4CCCCD)
 
     // DWARF marks BuzzBy::mRandom `extern` -- it is a TU-local file-scope static (mirroring
     // BrnRouteRequestManager's mRandom), NOT a per-instance member.
@@ -87,10 +99,21 @@ namespace BrnAI
                                      f32 lfPlayerSpeed,
                                      EGlobalRaceCarIndex leGlobalRaceCarToTeleport)
     {
-        // draw in [1,2); (draw - 1.0) is the uniform [0,1) roll vs KF_START_BEHIND_PROBABLITY.
-        const f32 lfAheadLikelyHood = mRandom.RandomFloat();
+        // ⭐⭐ THE `- 1.0f` THAT USED TO BE ON BOTH COMPARISONS WAS A DOUBLE SUBTRACTION, and it
+        // made the whole far-AHEAD half of this function DEAD CODE (2026-09-06 driving-path audit).
+        // The console's ring-buffer draw yields a float in [1,2) and the caller subtracts 1.0 --
+        // `lis r7,0x3F80 ; inslwi r7,r8,23,9` then `fsubs f12, f13, flt_82001C98(1.0)` at
+        // 0x8277192C..0x82771934 -- but OUR CgsNumeric::Random::RandomFloat() already performs
+        // that subtraction internally (CgsRandom.cpp: `lfRandomFraction = lfRandomFractionPlusOne
+        // - 1.0f; return lfRandomFraction;`).  Subtracting again put the roll in [-1, 0), so
+        // `roll <= 0.5` was ALWAYS true and every buzz-by reset took the BEHIND arm; the console
+        // takes it about half the time.  Nothing can see this but the asm: it compiles, links,
+        // runs, and simply never chooses the other branch.
+        //   asm 0x82771940  fcmpu cr6, roll, flt_820C4168 (0.5) ; ble -> the BEHIND arm
+        //   asm 0x8277197C  fcmpu cr6, roll2, flt_820C4330 (0.8) ; bge -> ON_COMING else TURNINGS
+        const f32 lfAheadLikelyHood = mRandom.RandomFloat();   // already the uniform [0,1) roll
 
-        if ((lfAheadLikelyHood - 1.0f) <= KF_START_BEHIND_PROBABLITY)
+        if (lfAheadLikelyHood <= KF_START_BEHIND_PROBABLITY)
         {
             // Start the reset far BEHIND the player, road-rage style. asm: f1=FAR_BEHIND+speed,
             // f2=-60.0, type=3. Construct stores f1->resetSpeed(+4), f2->resetDistance(+8).
@@ -105,7 +128,7 @@ namespace BrnAI
             const f32 lfSideTurningsLikelyHood = mRandom.RandomFloat();
 
             EResetType leResetType;
-            if ((lfSideTurningsLikelyHood - 1.0f) >= KF_SIDE_TURNING_PROBABILITY)
+            if (lfSideTurningsLikelyHood >= KF_SIDE_TURNING_PROBABILITY)
             {
                 leResetType = E_RESET_TYPE_AHEAD_PLAYER_ON_COMING;
             }

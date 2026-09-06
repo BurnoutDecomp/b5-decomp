@@ -519,10 +519,12 @@ s32 AIModule::RoundRobinDrivers(s32 liMaxWork, ERoundRobinType leType)
 //                        suitable = 1 }
 //   The lpCarInterface argument (r5) is never read by the body.
 //
-// [FLAG PC bring-up] flt_8300D704 is a .bss float (KF_MIN_SPEED_FOR_AGGRESSION or similar) whose
-// dyn-init writer has no ARTIST export (the only exported reader is this function); the
-// pre-init value 0.0 is what the image holds. Until the writer is found the threshold is 0.0,
-// i.e. speed never blocks suitability. DELETE-WHEN the constant's writer is recovered.
+// ⭐ RESOLVED 2026-09-06 (driving-path 1:1 constant audit). The old FLAG here read "flt_8300D704
+// is a .bss float whose dyn-init writer has no ARTIST export ... until the writer is found the
+// threshold is 0.0, i.e. speed never blocks suitability."  The writer needed no export: it is a
+// CRT static-init thunk, found by scanning the image for the `lis`/`@l` pair that materialises the
+// slot (tools/re/findinit.py).  It is at 0x82C68578 and computes 60 mph * 0.44703999 = 26.8223991
+// m/s.  At 0.0 a stationary AI car was "suitable for aggression"; the console requires 60 mph.
 // =================================================================================================
 void AIModule::SetSuitabilityForAggression(EActiveRaceCarIndex leActiveRaceCarIndex,
                                            const AIModuleIO::RaceCarAIInterface* lpCarInterface)
@@ -543,7 +545,11 @@ void AIModule::SetSuitabilityForAggression(EActiveRaceCarIndex leActiveRaceCarIn
     }
 
 #if BRNAI_AIWAVE_A3_LANDED
-    const f32 KF_MIN_SPEED_FOR_AGGRESSION = 0.0f;   // flt_8300D704 -- see the banner FLAG
+    // flt_8300D704 = init 0x82C68578: `lfs f0, flt_82F31928 (0.44703999) ; lfs f13, flt_820C4158
+    // (60.0) ; fmuls f0,f0,f13 ; stfs f0, 0x8300D704` -- 60 mph in m/s, the same mph->m/s
+    // static-init shape every constant in BrnAICar_Constants.h uses.  RECOVERED 2026-09-06 by the
+    // driving-path constant audit, which is what the FLAG above asked for.
+    const f32 KF_MIN_SPEED_FOR_AGGRESSION = 26.8223991f;   // flt_8300D704
 
     bool lbSuitable;
     if (lpCar->GetRouteFindingStyle() == static_cast<ERouteFindingStyle>(2))

@@ -351,7 +351,18 @@ namespace Vehicle
     // FLAG was also false: every constant is a static-init'd BSS splat with an rdata-attested
     // writer in the 0x82C5Cxxx initializer bank, all read this wave (x360rd, self-test 10/10):
     //   unk_82FB9CF0 = 9000.0  (flt_8209D728, writer @0x82C5CDB0)  -- the hard spin clamp
-    //   unk_82FB8BC0 =  100.0  (flt_820049E0, writer @0x82C5CE00)  -- momentum-test scale
+    //   unk_82FB8BC0 = FLT_EPSILON  (stru_8208F620 lane 0, writer @0x82C5CE00) -- the "the wheel
+    //                          is stopped" epsilon in the lock-up latch.  ⭐⭐ CORRECTED 2026-09-06
+    //                          (driving-path 1:1 constant audit).  The line above used to read
+    //                          "= 100.0 (flt_820049E0)" and that was an OFF-BY-ONE-THUNK read: the
+    //                          writer at 0x82C5CE00 materialises 0x8208F620 (`lis r11,8209 ; addi
+    //                          r11,r11,F620 ; lvlx v0 ; vspltw v0,v0,0 ; addi r11,r11,8BC0 ;
+    //                          stvx128`), and it is the NEXT thunk, at 0x82C5CE20, that loads
+    //                          flt_820049E0 == 100.0 -- into unk_82FB9F50, not into this slot.
+    //                          An exhaustive raw scan of every executable word carrying the
+    //                          immediate 0x8BC0 finds exactly two sites for this symbol: the
+    //                          reader at 0x825D7060 and that one writer.  100.0 vs 1.19e-07 is
+    //                          not cosmetic -- see step 11 below.
     //   unk_82FB8B40 =  500.0  (flt_8200A034, writer @0x82C5CDD8)  -- freewheel decel rate
     //   unk_8327F240 = the shared {FALSE(0x0..0), TRUE(0xF..F)} vsel mask pair (writer
     //   @0x82C74368) -- the bool->vector-mask idiom (cntlzw/rlwinm row select), NOT a data table.
@@ -371,17 +382,29 @@ namespace Vehicle
     //   8. rev limit: maxAngVel >= 0 ? min(result, maxAngVel) : max(result, maxAngVel)
     //   9. mu8State == eWheelInertiaTypeLocked -> result = 0
     //  10. mIntegrationVariables.x = result; .y = 0         (vrlimi 8,0 then vrlimi 4,3)
-    //  11. lockInertia = !(keepSpin || |candidate| < 100.0):
-    //      mSuspensionAndInertiaVariables.z/.w are KEPT when the wheel keeps spinning or is slow,
-    //      and ZEROED otherwise (the braked wheel stops accepting torque until UpdateWheelInertia
-    //      re-seeds the lanes next frame)  (vor v13,v8,v10 ; vsel ; vrlimi 2,2 / 1,1)
+    //  11. lockInertia = !(keepSpin || |candidate| < unk_82FB8BC0):
+    //      mSuspensionAndInertiaVariables.z/.w are KEPT when the wheel keeps spinning or is
+    //      STOPPED, and ZEROED otherwise (the braked wheel stops accepting torque until
+    //      UpdateWheelInertia re-seeds the lanes next frame)
+    //      (0x825D70C0 `vcmpgefp v10, |cand|, v8` ; 0x825D70E4 `vnot v10, v10` ;
+    //       0x825D7158 `vor v13, v8(keepSpin), v10` ; vsel ; vrlimi 2,2 / 1,1)
+    //      ⭐⭐ THE SECOND DISJUNCT IS AN EPSILON, NOT A SPEED BAND.  With the old 100.0 the
+    //      test read "|omega| < 100 rad/s", which at a ~0.33 m wheel is every wheel below about
+    //      74 mph -- so the lock-up latch could never fire in ordinary driving and a fully
+    //      brake-absorbed wheel kept its inertia lanes, letting Wheel::ApplyFrictionReaction
+    //      spin it straight back up in the same frame's tyre pass.  The console zeroes the lanes
+    //      whenever the brakes absorb the wheel and it is not already stopped, which is what
+    //      makes a braked wheel LOCK.
     void Wheel::UpdateVelocity(VecFloat lvfTimeStep, VecFloat lvfMaxAngularVelocity,
                                VecFloat lvfBrakeFactor, VecFloat lvfBrakeCapacityScale,
                                VecFloat lvfBrakeDecelScale, bool lbGasReleased, bool lbInReverse)
     {
         static const f32 KF_SPIN_HARD_CLAMP     = 9000.0f;   // unk_82FB9CF0 <- flt_8209D728
         static const f32 KF_FREEWHEEL_DECEL     = 500.0f;    // unk_82FB8B40 <- flt_8200A034
-        static const f32 KF_SLOW_SPIN_THRESHOLD = 100.0f;    // unk_82FB8BC0 <- flt_820049E0
+        // unk_82FB8BC0 <- stru_8208F620 lane 0 == FLT_EPSILON (writer @0x82C5CE00; the whole
+        // derivation is in the banner above).  This is the lock-up latch's "already stopped"
+        // epsilon, NOT a slow-spin band.
+        static const f32 KF_STOPPED_SPIN_EPSILON = 1.1920928955078125e-07f;   // unk_82FB8BC0
 
         const f32 lfDt         = lvfTimeStep.x;
         const f32 lfInertia    = mSuspensionAndInertiaVariables.z;
@@ -432,9 +455,18 @@ namespace Vehicle
         // 11. the lock-up latch: a fast wheel fully absorbed by the brakes loses its inertia
         // lanes (stops integrating torque) until UpdateWheelInertia re-seeds them next frame.
         const bool lbKeepInertia = lbKeepSpinning
-                                || std::fabs(lfCandidate) < KF_SLOW_SPIN_THRESHOLD;
+                                || std::fabs(lfCandidate) < KF_STOPPED_SPIN_EPSILON;
         mSuspensionAndInertiaVariables.z = lbKeepInertia ? lfInertia    : 0.0f;   // vrlimi 2 (z)
         mSuspensionAndInertiaVariables.w = lbKeepInertia ? lfInvInertia : 0.0f;   // vrlimi 1 (w)
+        // ⭐ MEASURED 2026-09-06, with a throwaway BRN_WHEEL_LOCK_DIAG counter on this exact line
+        // (not committed -- a new engine getenv has to be registered in flow_run.ps1's wipe list in
+        // the same change, and that file was another wave's dirty file).  One 150 s run, teleport
+        // 2958,12.5,-1764 heading 90, five accel/brake cycles, 2920 m of path:
+        //     [wheellock] calls 70000  brakeAbsorbed 1294  lanesZeroed 729  differsFromOld100 729
+        // i.e. the latch fires 729 times with the console's epsilon, and the old 100.0 would have
+        // decided EVERY ONE of those 729 the other way -- it made the latch unreachable in
+        // ordinary driving.  Re-derive by re-adding the counter; the numbers are the evidence for
+        // calling this a behaviour defect rather than a cosmetic constant.
     }
 
     // ===========================================================================================
