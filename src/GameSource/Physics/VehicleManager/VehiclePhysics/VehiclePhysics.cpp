@@ -2472,8 +2472,11 @@ namespace Vehicle
             if (lfPitch > lfWheelieSin)
             {
                 // Bleed the body right-axis (mTransform.xAxis) component out of each row, but only the
-                // positive-direction component (the asm tests `flt_82001CC0(=0) > dot`). With the damp
-                // factor at its flagged 0 the subtraction is inert; the structure is exact.
+                // positive-direction component (the asm tests `flt_82001CC0(=0) > dot`).
+                // ⭐ The trailing clause here used to read "with the damp factor at its flagged 0 the
+                // subtraction is inert". STALE and retired 2026-09-06: kfWheelieLimitDamping
+                // @0x82F2A268 reads 0x3E19999A == 0.15 straight out of the image and the constant
+                // above carries it, so this bleed is LIVE.
                 const Vector3& lvRight = mTransform.xAxis;
 
                 const f32 lfRollVel = vpu::Dot(lvRight, mAngularVelocity);
@@ -5746,9 +5749,11 @@ namespace Vehicle
     // fsel(a,b,c) = (a >= 0) ? b : c. 0x825D48E8-4900: f0=ratio ; f11=-f0 ; fsel f0,f11,0.0,f0 (low
     // clamp of the RATIO: ratio<=0 -> 0.0, else ratio) ; f11 = 1.0-f0 ; fsel f0,f11,f0,1.0 (high clamp:
     // f0<=1.0 -> f0 unchanged, else 1.0) ; f12 = f0 * 4.0. The multiplicand is the clamped RATIO itself
-    // (grows with air time), never (1-ratio). FLAG: flt_82F2A294 is un-homed rodata -> flagged-0; with
-    // K==0 the divide is guarded (taper left at 0.0, matching ratio==0/K==0) so the scale is exact-but-
-    // inert. NEVER fabricated.
+    // (grows with air time), never (1-ratio).
+    // ⭐ THE "FLAG: flt_82F2A294 is un-homed rodata -> flagged-0" SENTENCE THAT STOOD HERE IS
+    // RETIRED (2026-09-06 constant audit) -- it had already outlived the fix once (see the [clean]
+    // banner above, refreshed 2026-08-24) and survived into a second reading. The value is 150.0,
+    // it is in the body, and the zero-denominator guard it justified is gone with it.
     s8 VehiclePhysics::AddSlam(bool lbTaper, f32 lfDuration, f32 lfSteer, f32 lfRecoveryTime, s8 li8RaceCarId)
     {
     static const f32 KF_SLAM_RATE_LIMIT = 0.5f;            // inline 0.5 -- min gap between slams
@@ -5765,16 +5770,14 @@ namespace Vehicle
     f32 lfScale = KF_SLAM_BASE_SCALE;
     if (lbTaper)
     {
-        // taper = clamp01(airTime / K), the RATIO itself (grows with air time). With K flagged-0,
-        // leave taper at 0.0 (guarded divide; matches the asm's ratio==0/K==0 degenerate case).
-        f32 lfTaper = 0.0f;
-        if (KF_SLAM_TAPER_DENOM != 0.0f)
-        {
-            const f32 lfAirTime = mfSpeedMPH.x;   // this+0x6C0 lane the asm splats (air-time/speed source)
-            lfTaper = lfAirTime / KF_SLAM_TAPER_DENOM;
-            if (lfTaper < 0.0f) lfTaper = 0.0f;   // fsel clamp low
-            if (lfTaper > 1.0f) lfTaper = 1.0f;   // fsel clamp high
-        }
+        // taper = clamp01(airTime / K), the RATIO itself (grows with air time).
+        // The `if (K != 0)` that used to wrap this was an INVENTED ARM -- defensive code we added
+        // to survive the flagged-zero denominator, which the console has no counterpart for.
+        // The denominator is 150.0; the guard is removed with the flag that justified it.
+        const f32 lfAirTime = mfSpeedMPH.x;   // this+0x6C0 lane the asm splats (air-time/speed source)
+        f32 lfTaper = lfAirTime / KF_SLAM_TAPER_DENOM;   // fdivs @0x825D48E0
+        if (lfTaper < 0.0f) lfTaper = 0.0f;   // fsel clamp low
+        if (lfTaper > 1.0f) lfTaper = 1.0f;   // fsel clamp high
         lfScale = lfTaper * KF_SLAM_BASE_SCALE;
     }
 

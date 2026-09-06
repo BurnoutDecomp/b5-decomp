@@ -1007,10 +1007,13 @@ namespace Vehicle
         // kAero_CdA_Scalar), and coeff is the .w lane of mpAttribs->mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo (@+0xB0). The
         // X360 broadcasts the scalar across a VMX register; here a flat Vector3 with the magnitude
         // in every lane. There is NO speed-curve table -- downforce grows purely with v^2.
-        // FLAG (rodata): the rho/CdA seed scalars are un-homed .rdata not present in the function
-        // exports; carried as honest flagged-0 placeholders (faithful-but-inert) per project rule
-        // -- the formula + offsets are exact, the numeric output stays 0 until the seeds are
-        // recovered from the XEX .rdata. NEVER fabricated.
+        // ⭐ THE FLAG THAT STOOD HERE IS STALE AND IS RETIRED (2026-09-06 constant audit). It said
+        // "the rho/CdA seed scalars are un-homed .rdata ... the numeric output stays 0 until the
+        // seeds are recovered". They were recovered, and the body has carried them for some time:
+        // kAero_Rho_Scalar @0x820948D4 == 6.1 and kAero_CdA_Scalar @0x820948D0 == 1.225, both read
+        // by GetDownForce's own lazy first-call cache (0x825D0868 / 0x825D08E0) rather than by any
+        // static-init thunk, which is why the static-init sweeps missed them. Downforce is NOT
+        // inert -- see the full derivation on the body in VehiclePhysics.cpp.
         VecFloat GetDownForce();
 
         // ----- ADDITIVE GROW (surface-response group): the per-surface grip/drag/roughness
