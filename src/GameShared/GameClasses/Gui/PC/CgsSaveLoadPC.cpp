@@ -9,6 +9,8 @@
 
 #include <Windows.h>
 
+#include "GameShared/GameClasses/System/CgsHarnessSlot.h"  // BRN_HARNESS_SLOT Memcard-directory suffix (parallel harness slots)
+
 namespace CgsGui
 {
 namespace SaveLoadPC
@@ -19,6 +21,21 @@ namespace
     // "Memcard\SaveImage.png" content image the save/load system already reads.
     const char KACP_MEMCARD_DIR[]     = "Memcard";
     const char KACP_SAVE_EXTENSION[]  = ".sav";
+
+    // ⭐ THE HARNESS SLOT SUFFIX (CgsHarnessSlot.h). The profile container is the one piece
+    // of per-instance state the parallel test harness cannot share: the directory is resolved
+    // against the working directory, which every slot shares (that is what lets one 5.9 GB
+    // data set serve them all), so two instances writing one Profile.sav is a CORRUPTED save,
+    // not merely a contended one. BRN_HARNESS_SLOT unset or 0 yields "Memcard" verbatim, so
+    // an ordinary launch reads and writes exactly the save it always has.
+    const char* MemcardDir()
+    {
+        static char sacDir[32] = { 0 };
+        static const char* spcDir = 0;
+        if (spcDir == 0)
+            spcDir = CgsSystem::HarnessSlot::Name(sacDir, sizeof(sacDir), KACP_MEMCARD_DIR);
+        return spcDir;
+    }
 
     const u32 KU_CONTAINER_MAGIC   = 0x42355356u;   // 'B5SV'
     const u32 KU_CONTAINER_VERSION = 1u;
@@ -72,7 +89,7 @@ namespace
             return false;
         }
         const int liWritten = std::snprintf(lpacPath, luPathSize, "%s\\%s%s",
-                                            KACP_MEMCARD_DIR, lpacName, KACP_SAVE_EXTENSION);
+                                            MemcardDir(), lpacName, KACP_SAVE_EXTENSION);
         return liWritten > 0 && static_cast<u32>(liWritten) < luPathSize;
     }
 
@@ -154,7 +171,7 @@ bool WriteContainer(const char* lpacName,
 
     // The container directory may not exist on a fresh install; ERROR_ALREADY_EXISTS
     // is the normal case afterwards.
-    ::CreateDirectoryA(KACP_MEMCARD_DIR, 0);
+    ::CreateDirectoryA(MemcardDir(), 0);
 
     ContainerHeader lHeader;
     std::memset(&lHeader, 0, sizeof(lHeader));

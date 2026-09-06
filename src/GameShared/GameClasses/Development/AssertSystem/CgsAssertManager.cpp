@@ -10,6 +10,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"               // DebugManager::RenderAssertOverlay (the ARTIST overlay)
 #include "GameShared/GameClasses/Development/MapFile/Reader/CgsMapFileReaderMinimalMemory.h"  // the call-stack symbol resolver
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"  // IsHardwareWantingToShutdown (the window-close request)
+#include "GameShared/GameClasses/System/CgsHarnessSlot.h"   // BRN_HARNESS_SLOT name suffix (parallel harness slots)
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device (FrameBegin/ShowPixelBuffer) + <Windows.h>
 #undef DrawText                            // <Windows.h> (via device.h) #defines DrawText -> DrawTextA; keep our method name
 
@@ -297,8 +298,15 @@ namespace Assert
                         return false;
                     static HANDLE shEvent = nullptr;
                     if (shEvent == nullptr)
+                    {
+                        // The name carries the harness slot suffix so a release Set() reaches
+                        // ONE instance (CgsHarnessSlot.h). Slot 0 / unset keeps the old name.
+                        char lacEventName[64];
                         shEvent = OpenEventA(0x00100000u /*SYNCHRONIZE*/, FALSE,
-                                             "Local\\BurnoutPC_Assert_Release");
+                                             CgsSystem::HarnessSlot::Name(
+                                                 lacEventName, sizeof(lacEventName),
+                                                 "Local\\BurnoutPC_Assert_Release"));
+                    }
                     return shEvent != nullptr &&
                            WaitForSingleObject(shEvent, 0) == WAIT_OBJECT_0;
                 }

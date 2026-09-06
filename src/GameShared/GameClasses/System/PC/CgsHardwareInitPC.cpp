@@ -7,6 +7,7 @@
 
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [gateui r7] the exit-path diagnostics
+#include "GameShared/GameClasses/System/CgsHarnessSlot.h"    // BRN_HARNESS_SLOT name suffix
 #include "pc/gcm/renderengine/device.h"
 
 static const char *kDefaultAutoTestScript = "autotest.txt";
@@ -445,7 +446,16 @@ void CgsSystem::HardwareInit::ReleaseHardware()
 
 bool CgsSystem::HardwareInit::IsAlreadyRunning()
 {
-    HANDLE hMutex = OpenMutex(MUTEX_ALL_ACCESS, FALSE, mutexName);
+    // FLAG PC-platform leaf: the single-instance mutex carries the harness slot suffix
+    // (CgsHarnessSlot.h). This guard is what refuses a second copy of the game, so without
+    // the suffix the parallel test harness cannot exist -- slot 1 would OpenMutex slot 0's
+    // name, find it, and quit before writing a single log line. BRN_HARNESS_SLOT unset or 0
+    // yields the empty suffix, i.e. the shipped name "BurnoutParadiseexe", so an ordinary
+    // launch behaves exactly as before and two ordinary launches still refuse each other.
+    char lacMutexName[64];
+    const char* lpcMutexName = CgsSystem::HarnessSlot::Name(lacMutexName, sizeof(lacMutexName), mutexName);
+
+    HANDLE hMutex = OpenMutex(MUTEX_ALL_ACCESS, FALSE, lpcMutexName);
     GetLastError(); // TODO: This is probably handled in the internal build
     if (hMutex)
     {
@@ -457,7 +467,7 @@ bool CgsSystem::HardwareInit::IsAlreadyRunning()
     }
 
     // No existing mutex, create a new one
-    CreateMutex(nullptr, FALSE, mutexName);
+    CreateMutex(nullptr, FALSE, lpcMutexName);
     return FALSE;
 }
 
