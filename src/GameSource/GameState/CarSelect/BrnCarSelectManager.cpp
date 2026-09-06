@@ -13,6 +13,7 @@
 #include "GameSource/GameState/Progression/BrnProgressionCarData.h" // BrnProgression::CarData (Id / unlock-type / deform)
 #include "GameSource/GameState/Progression/BrnProfile.h"           // BrnProgression::Profile (SetChosenLiveryIdForBaseCar / FindCar)
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"// BrnProgression::ProgressionManager (GetCarColourAndPalette)
+#include "GameSource/GameState/Progression/BrnDerivedCars.h"       // BrnProgression::DerivedCarArray (StartCarModificationState's livery family)
 #include "GameSource/GameState/BrnGameStateModule.h"               // BrnGameState::GameStateModule (streaming / car-change / pause hooks)
 #include "GameSource/GameState/BrnGameActions.h"                   // GameStateModuleIO::ResetPlayerCarAction / CarSelectionChangedAction (typed payloads)
 
@@ -516,15 +517,85 @@ void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQu
         CgsDev::Assert::EndAssert();
     }
 
-    if (CgsDev::Log::gpDebugPrint != 0)
+    // ⭐ UN-PARKED [progression wave 2026-09-06, lane completion] -- THE DERIVED-LIVERY
+    // COLLECTION, asm 0x82387560..0x82387728. Everything the old park was blocked on has a body:
+    // DerivedCarArray::ConstructColourLiveryList @0x82374F60 (BrnDerivedCars.h, map arm
+    // 2026-08-27), ProgressionManager::UnlockDerivedCarCollection @0x8237AD70 and
+    // DerivedCarArray::DEBUG_PrintArray @0x8236ACE8 (this wave).
+    //
+    //     DerivedCarArray lDerivedCars;                                  // stw -1 into both counts
+    //     lDerivedCars.ConstructColourLiveryList(mpVehicleList, mDesiredCarId);   // 0x8238756C
+    //     CGS_ASSERT(lDerivedCars.GetLength() <= 8, "We weren't expecting <n> livery versions.");
+    //     mpProgressionManager->UnlockDerivedCarCollection(lDerivedCars);         // 0x8238765C
+    //     lDerivedCars.DEBUG_PrintArray();                                        // 0x82387664
+    //     if (lDerivedCars.GetLength() > 1) { ...post the 88-byte action 69... }
+    //
+    // ⓘ THE ARGUMENTS ARE THIS CLASS'S OWN MEMBERS, not the progression manager's: the console
+    // reads `lwz r4, 0x14(r29)` (mpVehicleList, +0x14) and `addi r31, r29, 0x48` (&mDesiredCarId,
+    // +0x48) off the CarSelectManager, and only `lwz r3, 0x10(r29)` (mpProgressionManager) for
+    // the unlock call itself.
     {
-        *CgsDev::Log::gpDebugPrint
-            << "[FLAG PC bring-up] CarSelectManager::StartCarModificationState: the derived-livery "
-               "collection is NOT reconstructed (needs BrnDerivedCars.h -- "
-               "DerivedCarArray::ConstructColourLiveryList @0x82374F60). Car "
-            << static_cast<u32>(mDesiredCarId)
-            << " entered the modification screen without its livery versions being unlocked or "
-               "published (action 69 not posted).\n";
+        BrnProgression::DerivedCarArray lDerivedCars;
+
+        if (mpVehicleList.Get() != 0)
+        {
+            lDerivedCars.ConstructColourLiveryList(mpVehicleList.Get(), mDesiredCarId);
+        }
+        else
+        {
+            // [FLAG PC bring-up] the console dereferences mpVehicleList unconditionally. It is
+            // installed on every mounted path; an empty-but-constructed list is the honest
+            // fallback rather than a fault. DELETE-WHEN the install is unconditional.
+            lDerivedCars.Clear();
+        }
+
+        // 0x823875A4..0x82387650. The console streams "We weren't expecting " << n <<
+        // " livery versions." -- collapsed to the leading rodata fragment per the project
+        // convention on the StrStream assert machinery. It cannot fire (Array<CgsID,8>::Append
+        // asserts out-of-space first), and it is reproduced because it is in the binary.
+        if (lDerivedCars.GetLength() > BrnProgression::KU_MAX_AMOUNT_OF_DERIVED_CARS)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("We weren't expecting ", KAC_CSM_FILE, 407);
+            CgsDev::Assert::EndAssert();
+        }
+
+        if (mpProgressionManager.Get() != 0)
+        {
+            mpProgressionManager.Get()->UnlockDerivedCarCollection(lDerivedCars);
+        }
+
+        // Debug dump, gated internally on CgsDev::Message::gxMessageFilterFlags bit 0.
+        // Its own GetLength() != 0 assert (BrnDerivedCars.h:248) is the console's.
+        lDerivedCars.DEBUG_PrintArray();
+
+        // ⛔ PARK -- THE LIVERY-LIST PUBLISH (game action 69, size 88). Still parked because it
+        // is a GUI record this lane does not own: the console builds it at 0x82387698..0x82387724
+        // and the layout IS recovered --
+        //     +0x00  CgsID  maCarIds[8]     one per entry, GetItem(i) in order
+        //     +0x40  s32    miCount         the number written
+        //     +0x44  u8     mab44[8]        zeroed per entry, then [0] overwritten with 5
+        //     +0x4C  u8     mab4C[8]        set to 1 per entry
+        // -- but the id has no enumerator in BrnGameActions.h and the DWARF name at the
+        // car-select band's +5 shift (X360 76 == DWARF 71 E_ACTION_CAR_SELECT_MODIFICATION_SCREEN
+        // pins that shift) would be DWARF 64 == E_ACTION_CAR_SELECTION_REQUEST_STREAMING, whose
+        // semantics do NOT obviously match an 88-byte livery list. Naming it on that alone would
+        // be a guess, and a wrongly-named action id is exactly the defect BrnGameActions.h's own
+        // 204/229 correction notes exist about. The UNLOCK half above -- what the player keeps --
+        // is landed; only the screen's list publish is missing.
+        // DELETE-WHEN action 69's consumer is identified (find the `case 69` arm of
+        // BrnGuiModule's TranslateGameActionsToGuiEvents) and the enumerator + record land in
+        // BrnGameActions.h.
+        if (CgsDev::Log::gpDebugPrint != 0 && lDerivedCars.GetLength() > 1)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[FLAG PC bring-up] CarSelectManager::StartCarModificationState: the "
+                   "livery-list publish (game action 69, 88 B) is NOT reconstructed -- the "
+                   "modification screen was not told about the "
+                << lDerivedCars.GetLength()
+                << " livery versions of car " << static_cast<u32>(mDesiredCarId)
+                << " (they ARE unlocked on the profile now).\n";
+        }
     }
 }
 

@@ -63,6 +63,11 @@
 // type is required -- consistent with the original header-resident bodies (the CGS_ASSERT
 // __FILE__ evidence in the banner), which could not have compiled against a fwd-decl.
 #include "SharedClasses/DataLists/VehicleList.h"         // BrnResource::VehicleList (the builder walks)
+// [progression wave: completion 2026-09-06] DEBUG_PrintArray's body landed here (its console
+// home -- the assert __FILE__ evidence in the banner above), so the two facilities it uses come
+// with it: the base-40 id expander and the debug stream + its category filter.
+#include "GameShared/GameClasses/Core/CgsID.h"                    // CgsIDUnCompress / KI_CGSID_STRING_LEN
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"        // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
 
 namespace BrnProgression
 {
@@ -77,6 +82,20 @@ namespace BrnProgression
 
     struct DerivedCarArray : public Array<CgsID, KU_MAX_AMOUNT_OF_DERIVED_CARS>
     {
+        // [progression wave: completion 2026-09-06] THE DEFAULT CONSTRUCTOR, which the console
+        // inlines at every stack-local site as exactly two `stw -1` -- e.g.
+        // CarSelectManager::StartCarModificationState @0x8238742C/0x82387438 and
+        // ProgressionManager::OnEventFinishUpdateProfile @0x823A0244/0x823A0248, each writing the
+        // KI_UNCONSTRUCTED sentinel into BOTH count words (base+0x40 and base+0x68) before the
+        // Construct*LiveryList call. Array<T,N> declares no constructor of its own, so without
+        // this a stack-local DerivedCarArray would carry INDETERMINATE counts on the host --
+        // and the whole point of that sentinel is that "used before Construct/Clear" is loud.
+        DerivedCarArray()
+        {
+            MarkUnconstructed();                 // X360 `stw -1, +0x40` -- the CgsID array
+            maLiveryTypes.MarkUnconstructed();   // X360 `stw -1, +0x68` -- the livery-kind array
+        }
+
         // DWARF h:56, body h:~90-140 IN THIS HEADER, emitted out-of-line @0x82374F60.
         // [map arm 2026-08-27] BODIED (the BrnMainMapLinkGates stand-in died with it).
         // Builds the colour-livery family of lParentOrSiblingCarId: resolve the seed
@@ -207,12 +226,56 @@ namespace BrnProgression
         }
 
         // DWARF h:70, body h:~246-262 IN THIS HEADER, emitted out-of-line @0x8236ACE8.
-        // Debug-only dump ("--------\n", " Parent Car: <id>\n", then "  [i] Car: <id>
-        // LiveryType: <kind>\n" per entry) through CgsDev::Log::gpDebugPrint, gated on
-        // CgsDev::Message::gxMessageFilterFlags bit 0, after asserting GetLength() != 0
-        // (h:248). NOT reconstructed here -- it needs the CgsDev::Message stream helpers
-        // and has no caller in the tree. Declared so the class shape stays the DWARF's.
-        void DEBUG_PrintArray() const;
+        // [progression wave: completion 2026-09-06] BODIED -- it has a caller again
+        // (CarSelectManager::StartCarModificationState @0x82387664, and its online twin
+        // OnlineCarSelectManager::StartCarModificationState @0x823880A8).
+        //
+        // ⚠️ WHAT IS INSIDE THE FILTER AND WHAT IS NOT. The X360 evaluates GetItem() and
+        // CgsIDUnCompress UNCONDITIONALLY (0x8236AD8C..0x8236ADA0 and 0x8236AE64..0x8236AE78,
+        // both BEFORE the gxMessageFilterFlags test that follows them); only the stream calls
+        // and the livery-kind fetch sit inside the `& 1` gate. Reproduced in that order, so the
+        // asserts GetItem can fire still fire when logging is off.
+        //
+        // The console formats the index and the livery kind through StrStreamBase::AppendFormat
+        // with the stream's own radix mode ("%u" / "0x%X" for the index, "%d" / "0x%X" for the
+        // kind, chosen by dword_82F3191C -- the one-shot PrintMode this tree models as
+        // StrStreamBase::mePrintMode). The scalar operator<< overloads render through the same
+        // mode, so they are used directly rather than re-implementing the radix latch.
+        void DEBUG_PrintArray() const
+        {
+            CGS_ASSERT(GetLength() != 0, "GetLength() != 0");                          // h:248
+
+            const bool lbLog = ((CgsDev::Message::gxMessageFilterFlags & 1) != 0) &&
+                               (CgsDev::Log::gpDebugPrint != 0);
+            if (lbLog)
+            {
+                *CgsDev::Log::gpDebugPrint << "---------------------------------\n";
+            }
+
+            // Element 0 is the parent car (both builders Append it first).
+            char lacCarId[KI_CGSID_STRING_LEN];
+            CgsIDUnCompress(GetItem(0), lacCarId);
+            if (lbLog)
+            {
+                *CgsDev::Log::gpDebugPrint << " Parent Car: " << lacCarId << "\n";
+            }
+
+            for (u32 luIndex = 1; luIndex < GetLength(); ++luIndex)
+            {
+                CgsIDUnCompress(GetItem(luIndex), lacCarId);
+                if (lbLog)
+                {
+                    // `BrnResource::VehicleL(this + 0x48, i)` == maLiveryTypes.GetItem(i). Note
+                    // the console does NOT run GetLiveryType's capacity assert here -- it reaches
+                    // the parallel array's own checked accessor directly.
+                    const BrnResource::VehicleListEntry::ELiveryType leLiveryType =
+                        maLiveryTypes.GetItem(luIndex);
+                    *CgsDev::Log::gpDebugPrint
+                        << "  [" << luIndex << "] Car: " << lacCarId
+                        << " LiveryType: " << static_cast<s32>(leLiveryType) << "\n";
+                }
+            }
+        }
 
     private:
         // DWARF h:73. X360 @+0x48 (elements) / @+0x68 (count word).

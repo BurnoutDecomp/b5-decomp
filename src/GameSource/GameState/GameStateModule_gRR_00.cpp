@@ -166,13 +166,16 @@ void GameStateModule::ProcessTakedownEvents(
                 // DWARF BrnProgressionManager.h:254:
                 //     void OnTakedownTo(InputBuffer::GameActionQueue*, BrnGameState::ETakedownType,
                 //                       CgsID, bool);
-                // Not declared and not bodied anywhere in the tree -> header_request filed. It is
-                // the OFFLINE hook (rival-takedown tally, the aggression / takedown training tips
-                // 22 and 40), so this park is the one that costs offline road rage something.
-                (void)lVictimRivalId;
-                LogParkedLegOnce(sbParkedOnTakedownTo,
-                    "ProgressionManager::OnTakedownTo @0x823666D0 is not in the tree; the offline "
-                    "rival-takedown tally and its training tips are skipped");
+                // ⭐ UN-PARKED P1 [progression wave 2026-09-06, lane rivals]: bodied in
+                // BrnProgressionManager_Rivals.cpp @0x823666D0. It tallies the takedown into the
+                // profile (Profile::AddTakedown) and asks for the aggression (22) / generic (40)
+                // takedown training tip. The queue and the rival id ride the console's r4/r6 and
+                // are DEAD in its body -- passed anyway so the call keeps the DWARF shape.
+                mProgressionManager.OnTakedownTo(
+                    lpGameActionQueue,
+                    lrEvent.meType,
+                    lVictimRivalId,
+                    GetCurrentGameModeType() == GameStateModuleIO::E_MODE_MARKED_MAN);
             }
             else
             {

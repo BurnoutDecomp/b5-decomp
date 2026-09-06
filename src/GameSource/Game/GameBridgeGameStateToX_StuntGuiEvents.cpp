@@ -586,7 +586,7 @@ namespace
             //
             // ⚠️ SEVEN DESTINATION FIELDS ARE FED FROM THE MODULE, NOT THE ACTION (the console's
             // `lwzx r11, r29, <const>` reads, r29 == this): miCarsTotal and miDriversTot from
-            // ProgressionManager::miSponsorCarCount (+133468, the second halved with
+            // ProgressionManager::miMaxCarCount (+133468, the second halved with
             // `srawi 1 / addze`), the five "won" counters from the profile's
             // maGameModeTypeAmountCompletedSinceTheStart at modes 0/3/5/7/8, and
             // miBestRoadRageTakedownCount from Profile+118020.
@@ -616,7 +616,7 @@ namespace
                 lEvent.miCarsCollected   = lpStats->GetValue(GS::E_INT_VALUE_TYPE_CARS_COLLECTED);
                 // `lwzx r7, r29, 0x69598C` -- the module's own car total, and `srawi r7,r7,1 /
                 // addze r8, r7` (a signed halving that rounds toward zero) for the drivers total.
-                lEvent.miCarsTotal  = lpProgressionManager->GetSponsorCarCount();
+                lEvent.miCarsTotal  = lpProgressionManager->GetMaxCarCount();
                 lEvent.miDriversTot = lEvent.miCarsTotal / 2;
                 lEvent.miDrivers    = 0;                                   // `stw r19` (r19 == 0)
 

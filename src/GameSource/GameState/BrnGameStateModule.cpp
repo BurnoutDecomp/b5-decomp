@@ -179,6 +179,34 @@ void GameStateModule::Construct()
 
     mModeManager.ConstructInterModeStateBringUp(this);
 
+    // ⭐⭐ [progression wave: lifecycle, 2026-09-06] THE PROGRESSION MANAGER'S CONSTRUCT, at the
+    // console's own position. X360 0x82380388, the call IMMEDIATELY AFTER ModeManager::Construct
+    // (call 14 of this function's 50) at 0x8238050C:
+    //     BrnProgression::ProgressionManager::Construct(a1 + 47920,    // &mProgressionManager
+    //                                                   a1 + 183712,   // &mCarSelectManager
+    //                                                   a1 + 284520,   // &mStreetManager
+    //                                                   a1 + 46640,    // the TrainingManager
+    //                                                   a1 + 183952);  // &mStuntManager
+    // Verbatim, same argument order (the four are named by Construct's own asserts,
+    // BrnProgressionManager.cpp:124..127). This is the ONLY installer of the progression layer's
+    // mpStreetManager / mpStuntManager / mpTrainingManager / mpCarSelectManager back-pointers, of
+    // every scalar seed the manager owns, of Profile::Construct's first call, and of the two
+    // PerfMonCpu handles PreWorldUpdate brackets itself with.
+    //
+    // ⓘ It is placed here, after the ModeManager bring-up and BEFORE mStuntManager.Construct, to
+    // match the console's ordering as closely as this function's existing (documented) order
+    // deviation allows. The three sub-objects whose addresses it takes -- mCarSelectManager,
+    // mStreetManager, mStuntManager -- are only STORED, never dereferenced, so taking the address
+    // of one that has not been Constructed yet is well-defined and the stored value is final;
+    // that is the same argument mCarSelectManager.Construct's own banner above makes. The
+    // TrainingManager is the heap object allocated further up, so the pointer is non-null here
+    // and Construct's `lpTrainingManager != NULL` assert passes.
+    // ⓘ This pays HALF the DELETE-WHEN on mCarSelectManager.Construct's banner above (it asked
+    // for TriggerQueryManager::Construct AND this one to run before that line). The other half
+    // is still absent, so the line is left where it is; see this lane's report.
+    mProgressionManager.Construct(&mCarSelectManager, &mStreetManager,
+                                  mpTrainingManager, &mStuntManager);
+
     mStuntManager.Construct(&mProgressionManager, &mTriggerQueryManager, &mModeManager,
                             mpTrainingManager, this);
 
@@ -630,12 +658,21 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         if (!ReceiveListResource(KI_REPLY_VEHICLE_LIST, 556, 561,
                                  reinterpret_cast<void**>(&mpVehicleList)))
             break;
-        // [deferred] ProgressionManager::ApplyVehicleList(this+47920) and
-        // ModeManager::ApplyVehicleList(this+4128, mpVehicleList). Neither has a body in this
-        // tree yet (only ChallengeManager::ApplyVehicleList is even declared). The pointer
-        // itself IS installed, which is what every GameStateModule body that asserts on it
-        // needs; the two republish hooks land with their managers.
-        LogPrepareStageOnce(8, "vehicle list installed; 2 x ApplyVehicleList [deferred]");
+        // ⭐ [progression wave: lifecycle, 2026-09-06] REAL. X360 0x8239E8E8, the instruction
+        // after the reply is stamped into mpVehicleList:
+        //     BrnProgression::ProgressionManager::ApplyVehicleList(a1 + 47920);
+        // -- one argument on the console because the list it reads is the module's own word it
+        // has just written (`lwz r4, 0x20(r29)` / `stw r4, 0(r29)` immediately above); the
+        // reconstructed signature takes it explicitly rather than reaching back into the caller.
+        // It installs ProgressionManager::mpVehicleList AND seeds miMaxCarCount from the list's
+        // selectable/sponsor pair. This is the seat the old stage-26 SetVehicleList stand-in was
+        // guessing at; that line is retired (see its note in the DONE stage).
+        mProgressionManager.ApplyVehicleList(mpVehicleList);
+        // [deferred] the SECOND of the console's two republish hooks here,
+        // ModeManager::ApplyVehicleList(this+4128, mpVehicleList) -- no body in this tree (only
+        // ChallengeManager::ApplyVehicleList is even declared). It lands with its manager.
+        LogPrepareStageOnce(8, "vehicle list installed; ProgressionManager::ApplyVehicleList REAL, "
+                               "ModeManager::ApplyVehicleList [deferred]");
         mePrepareStage = E_PREPARESTAGE_REQUEST_WHEEL_LIST;
         // fall through
 
@@ -664,16 +701,40 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     case E_PREPARESTAGE_INVITEMANAGER:
     case E_PREPARESTAGE_FLYBYMANAGER:
     case E_PREPARESTAGE_NETWORKROUNDMANAGER:
-    case E_PREPARESTAGE_PROGRESSION:
-    case E_PREPARESTAGE_RICH_PRESENCE:
-    case E_PREPARESTAGE_ACHIEVEMENT_MANAGER:
-        LogPrepareStageOnce(13, "the 10 manager prepares (Mode..Achievement) [deferred]");
+        LogPrepareStageOnce(13, "the manager prepares Mode..NetworkRound [deferred]");
         // [takedown wave 2026-09-02] stage 14 of the console ladder, `if (TakedownManager::Prepare(gsm+568))`
-        // -- REAL now (the other nine stay deferred as the line above says).
+        // -- REAL now (the others in this group stay deferred as the line above says).
         if (!PrepareTakedownBringUp())
         {
             break;
         }
+        mePrepareStage = E_PREPARESTAGE_PROGRESSION;
+        // fall through
+
+    case E_PREPARESTAGE_PROGRESSION:
+        // ⭐ [progression wave: lifecycle, 2026-09-06] REAL. X360 LABEL_48 / 0x8239EB4C:
+        //     *(this + 552) = 20;
+        //     if (!BrnProgression::ProgressionManager::Prepare(this + 47920)) break;
+        // Hex-Rays shows one argument; the ASM at 0x8239EB50..0x8239EB60 sets THREE registers --
+        //     add r5, r31, r24   (r24 == 232384 -> &mReceiverQueue)
+        //     mr  r4, r19        (the output buffer)
+        //     add r3, r31, r16   (&mProgressionManager)
+        // -- and ProgressionManager::Prepare @0x8239DC38 forwards r4/r5 to LoadAIData without
+        // ever writing them. So it is a two-argument method, and this is what binds
+        // ProgressionManager::mpAISectionData: LoadAILanes("AI.dat", pool 5) -> GetAILanes
+        // ("WorldMapData") -> CreateFromHandle. It returns false while the stream is in flight,
+        // which re-enters this stage on the next Prepare pass exactly like stage 23's
+        // StreetManager::Prepare below -- that is the console's own polling shape, not a stall.
+        // ⓘ ORDERING NOTE: this is the console's FIRST loader of AI.dat, seventeen stages before
+        // anything else wants it. StreetManager::Prepare (stage 23) only GETs the resource.
+        mePrepareStage = E_PREPARESTAGE_PROGRESSION;
+        if (!mProgressionManager.Prepare(lpOutputBuffer, &mReceiverQueue))
+            break;
+        // fall through
+
+    case E_PREPARESTAGE_RICH_PRESENCE:
+    case E_PREPARESTAGE_ACHIEVEMENT_MANAGER:
+        LogPrepareStageOnce(21, "RichPresenceManagerBase / AchievementManagerX360::Prepare [deferred]");
         // fall through
 
     case E_PREPARESTAGE_STREET_MANAGER:
@@ -755,10 +816,17 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // its SetVehicleList had zero callers in the whole tree, and the header's own FLAG said
         // so ("nothing installs it yet -- Prepare2's caller does on the console"). Every
         // progression body that resolves a car record reads that pointer.
-        // [FLAG PC bring-up] the console installs it from Prepare2's caller; this is the same
-        // list, published from the stage that already publishes it to the two car-select
-        // managers. DELETE-WHEN Prepare2's caller lands.
-        mProgressionManager.SetVehicleList(mpVehicleList);
+        // ✅ [progression wave: lifecycle, 2026-09-06] THE STAND-IN IS RETIRED, ITS OWN
+        // DELETE-WHEN PAID -- but read the correction, because the FLAG that stood here guessed
+        // the wrong seat. It said "the console installs it from Prepare2's caller". It does not:
+        // the console's installer is ProgressionManager::ApplyVehicleList @0x82359A20, called
+        // from THIS function's stage 8 (E_PREPARESTAGE_RECEIVE_VEHICLE_LIST, X360 0x8239E8E8),
+        // seventeen stages EARLIER than here -- and it also seeds miMaxCarCount from the list,
+        // which SetVehicleList never did. That call is live now (see the stage), so this line is
+        // redundant and gone. Nothing else changes: the pointer installed is the same pointer,
+        // from the same list, only earlier and with the count seed the console pairs with it.
+        // The SetVehicleList setter itself is left declared -- it is another lane's neighbour in
+        // the header and has no other caller. FOLLOW-UP: delete SetVehicleList.
 
         // [diagnostic, one-shot] Prove the junkyard half of the trigger data end to end, WITHOUT
         // driving anything: count the E_TYPE_JUNK_YARD generic regions, run the console's own

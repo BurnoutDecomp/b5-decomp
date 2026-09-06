@@ -144,6 +144,45 @@ struct ProgressionData
     int FixUp(int liDelta);
     int FixDown(int liDelta);
 
+    // ---- [progression wave: medals] ---------------------------------------------------------
+    // Three accessors the licence/rank-up chain needs. All INLINE ON PURPOSE: the X360 emits no
+    // standalone symbol for any of them (they are absent from scratch/func_index.tsv), and both
+    // consumers carry them open-coded -- the same precedent as GetProgressionRankCount and
+    // GetPersonality above. NO member is added and no layout moves.
+    //
+    // GetPlayerCarIdCount / GetPlayerCarId -- the rank-0 starting garage. ProgressionManager::
+    // UnlockDefaultPlayerCars @0x8237BF98 reads muPlayerCarIdCount (+0x0C) as its loop bound and
+    // `ldx` an 8-byte CgsID out of the +0x08 table TWICE per pass (@0x8237C020 and @0x8237C0AC),
+    // which is exactly why the assert baked as BrnProgressionData.h:310 ("luIndex <
+    // muPlayerCarIdCount", `li r5, 0x136`) appears twice per pass in that function's asm. THE
+    // ASSERT IS THIS BODY'S -- callers must not restate it.
+    //
+    // FindOfflineEvent -- DWARF-attested (it is in the callee list the dwarfdump prints for
+    // ProgressionManager::ClearMedalsOnRankUp, BrnProgressionManager.cpp:4247). That function
+    // @0x823705D8 carries the whole scan open-coded at 0x823706AC..0x823706E4: count +0x1C, base
+    // +0x18, 16-byte stride, `lwz 0(junction)` against the id, then `lwz 4(junction)` for the
+    // OFFLINE event slot. It is a SCAN, not an indexed access, so it does not route through
+    // GetEventJunction and carries no bound assert -- the console's does not either. A junction
+    // whose offline slot is null answers null, and the caller owns the ":4372 lpEventData" assert.
+    u32 GetPlayerCarIdCount() const { return muPlayerCarIdCount; }
+    CgsID GetPlayerCarId(u32 luIndex) const
+    {
+        CGS_ASSERT(luIndex < muPlayerCarIdCount, "luIndex < muPlayerCarIdCount");   // BrnProgressionData.h:310
+        return TableFromSlot<CgsID>(muaPlayerCarIds)[luIndex];
+    }
+    const RaceEventData* FindOfflineEvent(u32 luEventID) const
+    {
+        const EventJunction* lpcJunctions = GetEventJunctions();
+        for (u32 luIndex = 0; luIndex < muEventJunctionCount; ++luIndex)
+        {
+            if (lpcJunctions[luIndex].GetID() == luEventID)
+            {
+                return lpcJunctions[luIndex].GetOfflineEvent();
+            }
+        }
+        return 0;
+    }
+
 private:
     // ========================================================================================
     // SERIALISED 32-BIT ARRAY-BASE SLOTS (corrected 2026-08-11).

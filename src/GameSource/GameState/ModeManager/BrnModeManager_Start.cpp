@@ -709,7 +709,9 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
         //   if (v39 == -1) { mScoringSystem.ClearCumulativeData(); }     // 0x8231F140 (DEF)
         //   else {
         //     if (!lbTimedOut && meCurrentGameModeType == E_MODE_ONLINE_RACE)
-        //       mpProgressionManager->OnOnlineRaceComplete(                // 0x82366B98 (ABSENT)
+        //       mpProgressionManager->OnOnlineRaceComplete(                // 0x82366B98 (BODIED
+        //           2026-09-06, lane rivals -- BrnProgressionManager_Rivals.cpp; this seat stays
+        //           deferred because the block around it still needs GetLocalPlayerNetworkID)
         //           mScoringSystem.GetNumberOfNetworkPlayers(),            // 0x82311020
         //           mScoringSystem.GetLead() == GetCarData(v39)->+0x144);  // 0x82310DA0 / 0x8231DD88
         //     if (meCurrentGameModeType != E_MODE_ONLINE_SHOWTIME)
@@ -734,7 +736,8 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
         // DEFERRED because it needs, at minimum: GetLocalPlayerNetworkID (ABSENT),
         // OnlineRoundResults::Construct (declared-only), the two unnamed ScoringSystem CarData
         // helpers sub_8231DD88 / sub_8231DCD0 / sub_82326878, two private CarData fields
-        // (+0x134 / +0x138) with no accessors, ProgressionManager::OnOnlineRaceComplete (ABSENT),
+        // (+0x134 / +0x138) with no accessors (ProgressionManager::OnOnlineRaceComplete is no
+        // longer a blocker -- bodied 2026-09-06 in BrnProgressionManager_Rivals.cpp),
         // and the E_ACTION_ONLINE_ROUND_RESULT value correction below.
         // [!!] VALUE CORRECTION TO REPORT: BrnGameActions.h spells
         // `E_ACTION_ONLINE_ROUND_RESULT = 222` (the PS3 value). The X360 posts THIS record --

@@ -1302,16 +1302,20 @@ void GameStateModule::StartModeAtLights(const GameStateModuleIO::PreWorldInputBu
     // E_TRAINING_TYPE_DISCOVERS_EVENT.
     lpProfile->SetTrainingAlreadySeen(BrnProgression::E_TRAINING_TYPE_DISCOVERS_EVENT);
 
-    // [PARKED] ProgressionManager::FixGameModeRanks @0x82395CD8, called here (@0x82396FC4).
-    // It re-derives cached per-mode rank thresholds on the manager -- console reads/writes at
-    // ProgressionManager +480 / +876 / +888 / +904, walking ProgressionRankData +96/+97/+98 with
-    // its own "liProgressionRank >= 0 && liProgressionRank < liNumRanks" assert at
-    // BrnProgressionManager.cpp:3802. None of those four manager members is modelled on this
-    // tree's ProgressionManager slice, so the call is NAMED rather than faked. Effect of the
-    // park: those cached thresholds keep whatever the last writer left; the rank VALUES the fork
-    // below reads (GetProgressionRankForGameMode / GetProgressionRank) are computed
-    // independently of them, so the start still gets a rank -- it just may not have been
-    // re-clamped this frame.
+    // ✅ [progression wave: medals, 2026-09-06] THE PARK IS PAID. ProgressionManager::
+    // FixGameModeRanks @0x82395CD8 is bodied in BrnProgressionManager_Medals.cpp and called here,
+    // at the console's own seat (@0x82396FC4).
+    // The old note said "none of those four manager members is modelled on this tree's slice" --
+    // that reading was wrong, and correcting it is what made the body writable: the four offsets
+    // are not manager members at all. ProgressionManager+480 is Profile+0x70 ==
+    // mi8CurrentProgressionRank, and +876 / +888 / +904 / +908 are Profile+0x1FC + 4*mode ==
+    // maiRankWinsPerOfflineGameMode[0] / [3] / [7] / [8] -- the SAME array
+    // Profile::GetNumRankWinsForGameMode reads (BrnProgressionManager.cpp's
+    // GetProgressionRankForGameMode banner already pinned that anchor). All four have been
+    // modelled at those offsets all along; the function just needed the DWARF-named setter.
+    // What it does: no mode's difficulty ladder is allowed to lag more than TWO licence ranks
+    // behind, so a player who ranked up on races does not meet rank-1 road rage at licence 5.
+    mProgressionManager.FixGameModeRanks();
 
     // ---- build the params (@0x82396FC8..0x8239729C) -----------------------------------------
     // `sub_823102F0(&frame, this + 235488)` is the inlined

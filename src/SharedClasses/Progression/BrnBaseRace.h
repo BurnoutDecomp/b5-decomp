@@ -64,6 +64,48 @@ protected:
     u8    maPad[5];                  // 0x2B (DWARF :127)
 };
 
+// ---- [progression wave: lifecycle, 2026-09-06] ADDITIVE: two bodies, NO layout change --------
+// SetName / SetId are the two BaseRace setters the console INLINES into
+// BrnProgression::ProgressionManager::HACK_SetupRaces @0x82366968, which is the first
+// reconstructed caller (Prepare2 -> ProcessLoadedPresetRaces -> HACK_SetupRaces). Both were
+// declaration-only above; they are bodied HERE, in the owning header, because the console has no
+// standalone symbol for either -- they exist only inlined, so there is no TU to put them in. The
+// asm emits them per race as exactly:
+//     0x823669D8  li  r5, 0x20 ; bl strncpy   -- strncpy(macName, "Hack 0N", KI_NAME_LENGTH)
+//     0x82366A08  stb r28, 0x1F(race)         -- macName[KI_NAME_LENGTH - 1] = '\0'
+//     0x823669EC  std r10, 0x20(race)         -- mId = 0x6E5D8 + N, a full-width 64-bit store
+// GROW this header when a BaseRace TU lands; do not fork.
+inline void
+BaseRace::SetName(const char* lpcName)
+{
+    for (s32 liChar = 0; liChar < KI_NAME_LENGTH; ++liChar)          // strncpy(dst, src, 32)
+    {
+        macName[liChar] = lpcName[liChar];
+        if (lpcName[liChar] == '\0')
+        {
+            // strncpy zero-pads the remainder of the 32-byte field.
+            for (s32 liPad = liChar; liPad < KI_NAME_LENGTH; ++liPad)
+            {
+                macName[liPad] = '\0';
+            }
+            break;
+        }
+    }
+    macName[KI_NAME_LENGTH - 1] = '\0';                              // `stb 0, 0x1F(race)`
+}
+
+inline void
+BaseRace::SetId(CgsID lId)
+{
+    mId = lId;                                                       // `std r10, 0x20(race)`
+}
+
+inline CgsID
+BaseRace::GetId() const
+{
+    return mId;
+}
+
 }
 
 #endif // BRN_BASE_RACE_H

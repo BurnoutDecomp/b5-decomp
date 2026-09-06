@@ -4,6 +4,7 @@
 #include "SharedClasses/Trigger/BrnKillzone.h"       // complete Killzone (GetKillzone stride)
 #include "SharedClasses/Trigger/BrnSpawnLocation.h"  // complete SpawnLocation (GetSpawnLocation stride)
 #include "SharedClasses/Trigger/BrnGenericRegion.h"  // complete GenericRegion (GetGenericRegion stride == 0x38)
+#include "SharedClasses/Trigger/BrnRoamingLocation.h" // complete RoamingLocation (GetRoamingLocation stride == 0x20)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (GetOnlineLandmark / FixUp message build)
 #include <cstdint>                                   // uintptr_t (load-time pointer relocation arithmetic)
@@ -58,6 +59,25 @@ BrnTrigger::TriggerData::GetSpawnLocation( int liIndex ) const
 {
     CGS_ASSERT( liIndex < miSpawnLocationCount, "liIndex < miSpawnLocationCount" );
     return &mpSpawnLocations[liIndex];
+}
+
+// ---- [progression wave: lifecycle, 2026-09-06] ---------------------------------------------
+// GetRoamingLocation. Declared on this struct since the header was carved; bodied now because
+// BrnProgression::ProgressionManager::SetupRoamingSections @0x8236FE60 (one of the five calls
+// the console's ProgressionManager::Prepare2 makes) is the first reconstructed consumer.
+// Same story as GetSpawnLocation / GetGenericRegion above -- no standalone X360 symbol, it is
+// inlined at every call site. SetupRoamingSections open-codes exactly this shape at
+// 0x8236FF08..0x8236FF44:
+//     assert(liRoamingLocationIndex < *(triggerData + 0x68));   // BrnTriggerData.h:569 (0x239)
+//     location = *(triggerData + 0x64) + liRoamingLocationIndex * 0x20;
+// The 0x20 stride is sizeof(RoamingLocation) (a 16-byte-aligned Vector3 plus the district byte);
+// 0x64/0x68 are mpRoamingLocations/miRoamingLocationCount. The assert TEXT and LINE are the
+// X360's verbatim, streamed from SetupRoamingSections' own inlined copy of this accessor.
+const BrnTrigger::RoamingLocation*
+BrnTrigger::TriggerData::GetRoamingLocation( int liIndex ) const
+{
+    CGS_ASSERT( liIndex < miRoamingLocationCount, "liRoamingLocationIndex < miRoamingLocationCount" );
+    return &mpRoamingLocations[liIndex];
 }
 
 // GetGenericRegion. Same story as GetSpawnLocation above: no standalone X360 symbol, because it

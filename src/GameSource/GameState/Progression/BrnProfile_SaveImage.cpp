@@ -476,11 +476,14 @@ void Profile::Serialise(BrnGuiSaveLoad::Profile* lpImage,
     StoreImageField(lpaImage, SaveImage::KU_LICENCE_PICTURE_IS_VALID, mbPlayerLicencePictureIsValid);
 
     // ---- mugshot galleries -------------------------------------------------------------
-    // The console copies all five galleries in one 5640-byte memcpy (5 * 1128). On x64 an
-    // Array<MugshotInfo,20> is 1124 bytes (no trailing pad after the count word), so the
-    // copy is done per gallery at the console's 1128-byte image stride -- which keeps every
-    // gallery's count word at image + gallery*1128 + 1120, exactly where the console put it
-    // (and where BrnGuiProfile.cpp's stored-image constants expect it).
+    // The console copies all five galleries in one 5640-byte memcpy (5 * 1128). The copy is done
+    // per gallery at the console's 1128-byte image stride, which keeps every gallery's count word
+    // at image + gallery*1128 + 1120, exactly where the console put it (and where
+    // BrnGuiProfile.cpp's stored-image constants expect it).
+    // [progression wave 2026-09-06, lane profile] sizeof(Array<MugshotInfo,20>) is now 1128 on
+    // x64 too -- MugshotInfo stopped being an align-1 opaque pad when its real members landed
+    // (the 24-byte UniquePlayerID gives it the console's 8-byte alignment), so the live gallery
+    // and the image slot are the same size again. The <= assert below still holds either way.
     static_assert(sizeof(maaMugshotInfo[0]) <= SaveImage::KU_MUGSHOT_GALLERY_STRIDE,
                   "a live gallery must fit the console's 1128-byte image slot");
     for (s32 liGallery = 0; liGallery < SaveImage::KI_MUGSHOT_GALLERY_COUNT; ++liGallery)

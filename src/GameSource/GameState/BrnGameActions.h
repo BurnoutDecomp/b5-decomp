@@ -387,6 +387,24 @@ enum EGameActionType
     // == 189 (+8 X360), the same +8 UPDATE_CAR_STATS (190 -> 198) takes right above.
     E_ACTION_RIVAL_STATE_CHANGED        = 197,   // DWARF 189 (+8 X360); size 120  PINNED (producer body)
 
+    // [progression wave 2026-09-06, lane rivals] The two rival WORLD actions, pinned at BOTH
+    // ends -- which is why they are not extrapolations:
+    //   PRODUCER  ProgressionManager::UpdateRivals @0x82396298 posts `li r5,0xC3` (195) with
+    //             `li r6,1` @0x823962C4/0x823962C0, and ::AddRivalToWorld @0x8238B0A8 posts
+    //             `li r5,0xC4` (196) with `li r6,0xB0` (176) @0x8238B300/0x8238B2FC.
+    //   CONSUMER  RaceCarEntityModule::HandleGameActions @0x8230BE08 has `case 195:` ->
+    //             RemoveAllRivalsFromWorld and `case 196:` -> AddRivalCar(record, output).
+    //   DWARF     BrnGameActions.h:197/:198 E_ACTION_REMOVE_ALL_RIVALS == 187 and
+    //             E_ACTION_ADD_RIVAL == 188 -- the SAME +8 the whole 187..202 band takes and the
+    //             same +8 their neighbour RIVAL_STATE_CHANGED (189 -> 197) takes right above.
+    // The 176-byte AddRivalCar record is documented in BrnProgressionManager_Rivals.cpp's
+    // AddRivalToWorld banner (spawn position, spawn heading, Rival, EventRacerPersonality,
+    // RivalData, AI-section id, rival index); it is NOT modelled as a struct here because its
+    // producer is parked at the spawn-section pick and there is no PC consumer yet
+    // (BrnRaceCarEntityModule.cpp records RemoveAllRivalsFromWorld / AddRivalCar as absent).
+    E_ACTION_REMOVE_ALL_RIVALS          = 195,   // DWARF 187 (+8 X360); size 1    PINNED (producer + consumer)
+    E_ACTION_ADD_RIVAL                  = 196,   // DWARF 188 (+8 X360); size 176  PINNED (producer + consumer)
+
     // X360-ATTESTED value: the DWARF (PS3) enumerator is 74, but every X360 producer posts
     // `li r5, 0x4F` (79) with size 8, and the X360 consumer is HandleGameActions' `case 79`.
     // That is the SAME +5 shift this enum already records for NEW_CAR_UNLOCKED (DWARF 57 ->
@@ -527,6 +545,14 @@ enum EGameActionType
     // posted from the ONE place the game decides it is finished, so the name is the producer's
     // own symbol name (PINNED tier), not a band extrapolation.
     E_ACTION_GAME_COMPLETION_RESULTS                     = 208,  // size 8
+    // ---- [progression wave: completion, 2026-09-06] ----------------------------------------
+    // 206, size 4. PRODUCER-PINNED: ProgressionManager::CheckForAllModeTypeCompletion
+    // @0x82389698 posts `li r5, 0xCE` (206) with `li r6, 4` (@0x82389714/0x82389718), payload =
+    // the single word ProgressionManager::GetEvent(leModeType) returns. The name is the DWARF's
+    // (E_ACTION_ALL_EVENT_TYPE_WON == 198) at the +8 shift the whole 200-band already carries and
+    // that its two immediate neighbours here witness at both ends -- TROPHY_UNLOCK 196->204 and
+    // ROAD_RAGE_PLAYER_DAMAGE 197->205 -- and 4 is exactly sizeof(AllEventTypeWonAction) below.
+    E_ACTION_ALL_EVENT_TYPE_WON                          = 206,  // DWARF 198 (+8 X360); size 4
 
     // =========================================================================================
     // [!!] [stuntrace waveB CLOSURE round, 2026-08-26] THE MODE-LIFECYCLE / TRANSMIT BLOCK.
@@ -1166,6 +1192,25 @@ static_assert(sizeof(TrophyUnlockAction) == 16,
 static_assert(offsetof(TrophyUnlockAction, mCarToUnlock) == 0x00 &&
               offsetof(TrophyUnlockAction, meUnlockType) == 0x08,
               "the producer's std/stw pair and the consumer's ld 0(r3) / lwz 8(r3) asserts");
+
+// ---- [progression wave: completion, 2026-09-06] --------------------------------------------
+// The 4-byte record ProgressionManager::CheckForAllModeTypeCompletion @0x82389698 posts as game
+// action 206 -- "every event of this mode has now been won", the HUD message the console shows
+// once per mode. SHAPE from the DWARF (BrnGameActions.h:1614, one EGameModeType member); the
+// producer's own frame confirms the width: `stw r3, 0x90+var_40(r1)` writes ONE word (the value
+// ProgressionManager::GetEvent(leModeType) returned) and the post is `li r6, 4`.
+// ⚠️ NAMING NOTE, stated rather than smoothed over: the DWARF member is spelled leGameEventType
+// and typed EGameModeType, but the word the X360 stores is GetEvent()'s return -- the offline
+// mode index mapped through the 0->0 / 1->3 / 2->7 / 3->8 / 4->5 / 5->4 table, i.e. an EVENT
+// type id, not an EGameModeType. The member keeps the DWARF name+type (rung 2 owns declaration
+// shape); what goes into it is rung 1's, and it is documented here so no consumer reads it as a
+// game-mode enum.
+struct AllEventTypeWonAction : public GameAction<E_ACTION_ALL_EVENT_TYPE_WON>
+{
+    EGameModeType leGameEventType;   // 0x00  (DWARF BrnGameActions.h:1614)
+};
+static_assert(sizeof(AllEventTypeWonAction) == 4,
+              "CheckForAllModeTypeCompletion posts the record as action 206 with `li r6, 4`");
 
 // X360 0x8230FDF0 (Construct), 0x822A0198 (GetPlayerDisconnected), 0x8230FD60 (SetPlayerDisconnected).
 // True owning home (DWARF BrnGameActions.h:853); all DWARF members/methods declared, only the three

@@ -66,7 +66,15 @@ struct Rival
     s16            GetPersonalityIndex() const;
     s8             GetUnlockRank() const;
     void           SetUnlockRank(s8 liUnlockRank);
-    u8             GetNumMedalsToUnlock() const;
+    // ---- ADDITIVE (progression wave 2026-09-06, lane rivals) -------------------------------
+    // BODIED (it was in the declared-only list above and defined nowhere in the tree -- the same
+    // latent unresolved-external state GetId / GetCarId / GetDistrict / GetIsUsedForRankUpGiftCar
+    // were in, and it surfaced the moment its first caller was mounted). No standalone X360
+    // symbol: ProgressionManager::UnlockRivals @0x8236F714 reads it as a bare
+    // `lbz r11, 0x16(r28)` on the 56-byte-strided record and compares it UNSIGNED
+    // (`cmplw`) against the profile's medal count truncated to a byte, so a header inline IS the
+    // faithful shape and the u8 return type is the load's own width.
+    u8             GetNumMedalsToUnlock() const { return mu8NumMedalsToUnlock; }
     void           SetNumMedalsToUnlock(u8 luNumMedals);
     void           IsUsedForRankUpGiftCar(bool lbIsUsed);
 

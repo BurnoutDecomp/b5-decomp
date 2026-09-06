@@ -14,14 +14,23 @@
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"
 #include "GameShared/GameClasses/Network/Utilities/CgsNetworkImageConverter.h"
 #include "pc/gcm/renderengine/pixelformat.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint ([profile] selftest witness)
 
-#include <string.h>   // memset
+#include <string.h>   // memset / memcpy
+#include <stdlib.h>   // getenv (the [profile] selftest gate)
 
 namespace BrnProgression
 {
 
 // The alias the original source (and every assert string) uses for the game-state IO namespace.
 namespace GsmIO = BrnGameState::GameStateModuleIO;
+
+namespace
+{
+    // [FLAG PC witness] declared here, defined at the foot of this TU beside the six bodies it
+    // exercises. NOT IN THE X360 BINARY.
+    void RunProfileSelfTest(Profile& lrProfile);
+}
 
 // ------------------------------------------------------------------------------------
 // ProfileEvent -- trivial record accessors (the X360 inlines all of these at their call
@@ -237,13 +246,23 @@ void Profile::Construct()
     memset(&macPlayerLicenceTextureData[0], 0, sizeof(macPlayerLicenceTextureData));
     mbPlayerLicencePictureIsValid = false;
 
-    // The five mugshot galleries: each is an Array<MugshotInfo,20> (Construct -> empty) plus a
-    // 30-bit "available file id" bit array (all bits clear). The X360 walks the five galleries
-    // and asserts the running index stays <= E_IMAGE_GALLERY_TYPE_COUNT (== 5).
+    // The five mugshot galleries: each is an Array<MugshotInfo,20> (Construct -> empty) plus its
+    // "available file id" bit array. The X360 walks the five galleries and asserts the running
+    // index stays <= E_IMAGE_GALLERY_TYPE_COUNT (== 5).
+    //
+    // ⭐ [progression wave 2026-09-06, lane profile] THE BIT ARRAY IS SET, NOT CLEARED. The X360
+    // loop body (@0x82370BB8..0x82370BD4) issues TWO stores to the SAME address -- `std r31(0),
+    // 0(r11)` then `std r26(-1), 0(r10)`, both r11 and r10 holding this+0x1CC88+8*type -- i.e.
+    // the zero-init followed by a set-every-bit, and the second store is the one that survives.
+    // A SET bit means the file id is AVAILABLE (AddMugshot @0x82370D70 takes the first SET bit
+    // and clears it with `andc`; DeleteMugshot @0x82371018 sets the freed id back). The previous
+    // `memset(..., 0, ...)` left every gallery with NO available file id, so the very first
+    // AddMugshot fell straight through to the full-gallery eviction path on an EMPTY gallery.
     for (liIndex = 0; liIndex < 5; ++liIndex)
     {
         maaMugshotInfo[liIndex].Construct();
-        memset(&maAvailableMugshotFileIDs[liIndex], 0, sizeof(maAvailableMugshotFileIDs[liIndex]));
+        maAvailableMugshotFileIDs[liIndex].UnSetAll();   // X360 `std r31(0), 0(r11)`
+        maAvailableMugshotFileIDs[liIndex].SetAll();     // X360 `std r26(-1), 0(r10)`
         CGS_ASSERT(liIndex + 1 <= 5, "leEnumIndex <= E_IMAGE_GALLERY_TYPE_COUNT");
     }
 
@@ -298,6 +317,13 @@ void Profile::Construct()
     maTargetEventScores.Clear();               // X360 stw 0 @ +120032
     maEventScoresToUpload.Clear();             // X360 stw 0 @ +120824
     mDeveloperChallengesCompleted.Construct(); // X360 8-byte zero @ +120832
+
+    // [FLAG PC witness] NOT IN THE X360 BINARY -- see RunProfileSelfTest above. Opt-in
+    // (BRN_PROGRESSION_PROFILE_SELFTEST=1), once, on the freshly-constructed profile, and it
+    // leaves the profile exactly as it found it apart from one synthetic freeburn-challenge id.
+    // DELETE-WHEN the ChallengeManager / GameStateImageManagerBase TUs are mounted, because then
+    // the real callers reach these six bodies and a scenario can measure them instead.
+    RunProfileSelfTest(*this);
 }
 
 // ====================================================================================
@@ -704,51 +730,202 @@ void Profile::SetPlayerLicencePicture(const CgsNetwork::NetworkTexture* lpNewPla
 }
 
 // ====================================================================================
-// Profile::AddMugshot  @ 0x82370D70
-// Add (or replace the oldest non-locked) mugshot in gallery leMugshotType. Returns the
-// assigned file id, or -1 if no slot is free. The X360 first claims a free file-id from
-// the gallery's available-id bit array; if the gallery is full it evicts the first
-// non-locked entry and reuses its file id. (Pseudocode for this function suffered a local-
-// allocation failure in the decompiler; reconstructed to its observable behaviour with the
-// real Array<MugshotInfo,20> / BitArray<30> members reached by name.)
+// MugshotInfo::Construct  (DWARF BrnProfile.h:365; X360-INLINED into both of AddMugshot's
+// Append paths -- the six stack stores at 0x82370F30..0x82370F84 / 0x82370FA8..0x82370FF8).
 // ====================================================================================
-s32 Profile::AddMugshot(s32 leMugshotType, MugshotUniqueIdArg /*lUniqueID*/,
-                        CgsSystem::DateAndTime /*lDateTaken*/, s32 /*leWorldRegion*/)
+void MugshotInfo::Construct(UniquePlayerID lUniquePlayerID, CgsSystem::DateAndTime lCaptureDate,
+                            BrnWorld::WorldRegion lWorldRegion, u16 lu16FileID)
 {
-    CGS_ASSERT(leMugshotType != 5, "leMugshotType != GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");
+    mUniquePlayerID = lUniquePlayerID;   // +0x00, the r5/r6/r7 doubleword triple
+    mCaptureDate    = lCaptureDate;      // +0x18 (12 bytes)
+    mWorldRegion    = lWorldRegion;      // +0x24 (`std r23`)
+    miNumCaptures   = 1;                 // +0x2C (`stw r7`(1) / `li r11,1 ; stw`)
+    mu16FileID      = lu16FileID;        // +0x30 (`sth`)
+    mbLocked        = false;             // +0x32 (`stb r24`(0))
+}
 
-    CgsContainers::BitArray<30u>& lFileIds = maAvailableMugshotFileIDs[leMugshotType];
+// ====================================================================================
+// MugshotInfo -- the named sub-block getters BrnGameStateImageManagerBase builds its
+// type-290 "image info" wire record from. See the NAME NOTE in BrnProfile.h: three of
+// these names were minted from the offsets that TU saw moved, before the DWARF member
+// list was attached; the bodies below say which member each one actually reads.
+// ====================================================================================
+MugshotInfo::UniquePlayerIDImage MugshotInfo::GetUniquePlayerID() const
+{
+    // The 16-byte PlayerName base, moved as the two opaque qwords the wire record carries.
+    UniquePlayerIDImage lImage;
+    memcpy(&lImage, &mUniquePlayerID.macName[0], sizeof(lImage));
+    return lImage;
+}
+u64 MugshotInfo::GetGamerCardXuid() const { return mUniquePlayerID.mqXuid; }              // +0x10
+s32 MugshotInfo::GetImageWord0() const    { return mCaptureDate.IsLocal() ? 1 : 0; }      // +0x18
+s32 MugshotInfo::GetImageWord1() const                                                    // +0x1C
+{
+    return static_cast<s32>(static_cast<u32>(mCaptureDate.GetRawTimeValue()));
+}
+s32 MugshotInfo::GetImageWord2() const                                                    // +0x20
+{
+    return static_cast<s32>(static_cast<u32>(mCaptureDate.GetRawTimeValue() >> 32));
+}
+u64 MugshotInfo::GetDateTaken() const                                                     // +0x24
+{
+    // mWorldRegion's 8 bytes, in the console's big-endian qword order (county then district).
+    return (static_cast<u64>(static_cast<u32>(mWorldRegion.GetCounty())) << 32)
+         |  static_cast<u64>(static_cast<u32>(mWorldRegion.GetDistrict()));
+}
+s32 MugshotInfo::GetImageWord2C() const { return miNumCaptures; }                          // +0x2C
+s32 MugshotInfo::GetFileID() const     { return static_cast<s32>(mu16FileID); }            // +0x30 (lhz == zero-extended)
+u8  MugshotInfo::GetLockedFlag() const { return mbLocked ? 1u : 0u; }                      // +0x32
 
-    // INCOMPLETE (dependency-blocked on MugshotInfo's internal layout: locked flag @+0x32,
-    // file-id @+0x30, UniquePlayerID region -- currently an opaque pad). Both X360 paths build a
-    // MugshotInfo record and call MugshotInfo_20_::Append (free-id path @0x82370F08; full-gallery
-    // path evicts the first non-locked entry, reuses its +0x30 file id, then Append). This body
-    // claims/returns the file id but does NOT append the record; reconstruct the Append paths once
-    // MugshotInfo is recovered.
-    // Claim the lowest available (still-clear) file id, if any remain.
-    s32 liFileId = -1;
-    for (u32 luBit = 0; luBit < 20u; ++luBit)
+// ====================================================================================
+// Profile::AddMugshot  @ 0x82370D70
+// Add (or replace the oldest non-locked) mugshot in gallery leMugshotType and return the
+// FILE ID it was given (1000*type + bit index), or -1 when the gallery is full of locked
+// photos. The X360 claims the first AVAILABLE (== set) bit of the gallery's file-id bit
+// array and clears it; if none is available it asserts the gallery is full, evicts the
+// first non-locked record and reuses that record's file id.
+//
+// ⭐ [progression wave 2026-09-06, lane profile] this body used to be a stated partial: it
+// claimed a file id with the bit polarity INVERTED (first CLEAR bit, then SetBit) and never
+// appended a record at all, because MugshotInfo was an opaque 56-byte pad. Both are fixed --
+// the record is real now (MugshotInfo::Construct above) and the polarity is the console's
+// (`GetFirstNonZeroBit` + `andc`, see Profile::Construct).
+// Hex-Rays suffered a local-allocation failure on this function; the asm is the spine.
+// ====================================================================================
+s32 Profile::AddMugshot(s32 leMugshotType, MugshotUniqueIdArg lUniqueID,
+                        CgsSystem::DateAndTime lDateTaken, s32 leWorldRegion)
+{
+    CGS_ASSERT(leMugshotType != 5, "leMugshotType != GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");  // X360 BrnProfile.cpp:758
+
+    CgsContainers::BitArray<20u>& lrFileIds = maAvailableMugshotFileIDs[leMugshotType];
+    Array<MugshotInfo, 20u>&      lrGallery = maaMugshotInfo[leMugshotType];
+
+    // ⛔ [FLAG PC bring-up] the console's AddMugshot takes the WHOLE 24-byte UniquePlayerID
+    // (r5/r6/r7) and a whole 8-byte WorldRegion (r10); the PC signature this TU inherited takes
+    // only the 16-byte name block and the district ordinal, because the ImageManager's
+    // ImageToSaveEvent models the XUID slot at +0x10 as `maPad0x10` and passes
+    // `lrRegion.GetDistrict()`. The district DOES reconstruct the whole region (WorldRegion::
+    // Construct derives the county from it), so only the gamercard XUID is genuinely lost.
+    // DELETE-WHEN BrnGameStateImageManagerBase widens ImageToSaveEvent to the real 24-byte id and
+    // passes the WorldRegion by value: then this signature becomes the DWARF's
+    // (UniquePlayerID, DateAndTime, WorldRegion) and these two lines go away.
+    MugshotInfo::UniquePlayerID lPlayerID;
+    memcpy(&lPlayerID.macName[0], &lUniqueID, sizeof(lPlayerID.macName));
+    lPlayerID.mqXuid = 0;
+    BrnWorld::WorldRegion lRegion;
+    lRegion.Construct(static_cast<BrnWorld::EDistrict>(leWorldRegion));
+
+    MugshotInfo lRecord;
+
+    // X360 0x82370DD8..0x82370E28: the inlined BitArray<20>::GetFirstNonZeroBit (isolate the
+    // lowest set bit with `x - (x & (x-1))`, index == field*64 + 63 - cntlzd), then `>= 20 -> -1`.
+    const s32 liFreeFileIdBit = lrFileIds.GetFirstNonZeroBit();
+    if (liFreeFileIdBit != CgsContainers::BitArray<20u>::KI_INVALID_BITINDEX)
     {
-        if (!lFileIds.IsBitSet(luBit))
+        CGS_ASSERT(static_cast<u32>(liFreeFileIdBit) < 20u, "luIndex < NUMBITS");   // CgsBitArray.h:241
+        lrFileIds.UnSetBit(static_cast<u32>(liFreeFileIdBit));                      // X360 `andc`
+
+        // X360 `mulli r8, r28, 0x3E8 ; add r30, r8, r31` -- the file id is namespaced per gallery.
+        const s32 liFileID = 1000 * leMugshotType + liFreeFileIdBit;
+        lRecord.Construct(lPlayerID, lDateTaken, lRegion, static_cast<u16>(liFileID));
+        lrGallery.Append(lRecord);
+        return liFileID;
+    }
+
+    // No file id left: the gallery must be full (X360 BrnProfile.cpp:784).
+    CGS_ASSERT(lrGallery.IsFull(), "maaMugshotInfo[leMugshotType].IsFull()");
+
+    // Evict the first NON-LOCKED record and reuse its file id (X360 0x82370E84..0x82371008).
+    const s32 liCount = static_cast<s32>(lrGallery.GetLength());
+    for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+    {
+        MugshotInfo& lrVictim = lrGallery.GetItem(static_cast<u32>(liIndex));
+        if (!lrVictim.mbLocked)                                   // X360 `lbz 0x32 ; beq`
         {
-            liFileId = static_cast<s32>(luBit);
-            lFileIds.SetBit(luBit);
-            break;
+            const s32 liFileID = static_cast<s32>(lrVictim.mu16FileID);   // X360 `lhz 0x30`
+            lrGallery.Erase(static_cast<u32>(liIndex));
+            lRecord.Construct(lPlayerID, lDateTaken, lRegion, static_cast<u16>(liFileID));
+            lrGallery.Append(lRecord);
+            return liFileID;
         }
     }
 
-    if (liFileId < 0)
+    return -1;   // X360 `mr r3, r25` with r25 == -1
+}
+
+// ====================================================================================
+// Profile::GetMugshotInfo  @ 0x82371290
+// The leMugshotType'th gallery's liImageIndex'th record, or NULL when the index is past the
+// gallery's live count. The X360 range-asserts the gallery type, then reads the count word
+// (whose own "Array used before Construct/Clear was called" assert is Array::GetLength's) and
+// SIGNED-compares the index against it before calling Array<MugshotInfo,20>::GetItem.
+// ====================================================================================
+MugshotInfo* Profile::GetMugshotInfo(s32 leMugshotType, s32 liImageIndex)
+{
+    CGS_ASSERT(leMugshotType < 5, "leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");  // X360 BrnProfile.cpp:999
+
+    Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
+    if (liImageIndex >= static_cast<s32>(lrGallery.GetLength()))    // X360 `cmpw ; bge -> li r3,0`
     {
-        // Gallery exhausted: the X360 evicts the first non-locked entry and reuses its id.
-        CGS_ASSERT(maaMugshotInfo[leMugshotType].IsFull(),
-                   "maaMugshotInfo[leMugshotType].IsFull()");
-        // The per-entry "locked" flag + UniquePlayerID copy live in MugshotInfo's (not-yet-
-        // recovered) body; without that layout the eviction copy cannot be reconstructed
-        // byte-faithfully, so on a full gallery we report no free slot.
-        return -1;
+        return 0;
+    }
+    return &lrGallery.GetItem(static_cast<u32>(liImageIndex));
+}
+
+// ====================================================================================
+// Profile::LockOrUnlockMugshot  @ 0x823711C0
+// Toggle one record's "locked for deletion" flag. Returns true when the index named a live
+// record, false when it did not. The X360 computes `!flag` as `cntlzw ; extrwi ..,1,26`.
+// (The console fetches the record TWICE -- once to read the flag, once as the store target;
+// one reference is the same store.)
+// ====================================================================================
+bool Profile::LockOrUnlockMugshot(s32 leMugshotType, s32 liImageIndex)
+{
+    CGS_ASSERT(leMugshotType < 5, "leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");  // X360 BrnProfile.cpp:926
+
+    Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
+    if (liImageIndex >= static_cast<s32>(lrGallery.GetLength()))
+    {
+        return false;                                             // X360 `li r3, 0`
     }
 
-    return liFileId;
+    MugshotInfo& lrInfo = lrGallery.GetItem(static_cast<u32>(liImageIndex));
+    lrInfo.mbLocked = !lrInfo.mbLocked;                            // X360 `stb .., 0x32`
+    return true;                                                   // X360 `li r3, 1`
+}
+
+// ====================================================================================
+// Profile::DeleteMugshot  @ 0x82371018
+// Remove one gallery record and hand its file id back to the gallery's available-id bit
+// array. Returns the freed file id, or -1 when the index is out of range or the record is
+// LOCKED. The bit index is the file id with the gallery's 1000-per-type namespace removed.
+// ====================================================================================
+s32 Profile::DeleteMugshot(s32 leMugshotType, s32 liImageIndex)
+{
+    CGS_ASSERT(leMugshotType < 5, "leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");  // X360 BrnProfile.cpp:836
+
+    s32 liFileID = -1;                                             // X360 `li r27, -1`
+
+    Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
+    if (liImageIndex < static_cast<s32>(lrGallery.GetLength()))
+    {
+        MugshotInfo& lrInfo = lrGallery.GetItem(static_cast<u32>(liImageIndex));
+        if (!lrInfo.mbLocked)                                      // X360 `lbz 0x32 ; bne -> out`
+        {
+            liFileID = static_cast<s32>(lrInfo.mu16FileID);        // X360 `lhz 0x30` (zero-extended)
+            lrGallery.Erase(static_cast<u32>(liImageIndex));
+
+            // X360 `mulli r11, r30, 0x3E8 ; subf r29, r11, r27` then the inlined
+            // BitArray<20>::SetBit. The bounds assert (CgsBitArray.h:222, whose streamed message
+            // is "Index: <n>, Number of bits: 20") is NOT a guard on the console -- the store is
+            // issued either way -- so it is kept as an assert, not an early-out.
+            const s32 liNewlyAvailableID = liFileID - 1000 * leMugshotType;
+            CGS_ASSERT(static_cast<u32>(liNewlyAvailableID) < 20u, "luIndex < NUMBITS");
+            maAvailableMugshotFileIDs[leMugshotType].SetBit(static_cast<u32>(liNewlyAvailableID));
+        }
+    }
+
+    return liFileID;
 }
 
 // ====================================================================================
@@ -1817,5 +1994,175 @@ void Profile::SetRoadRuleChallengeData(const BrnStreetData::ChallengePlayerScore
 {
     memcpy(maChallengeData, lpaChallengeScores, sizeof(maChallengeData));
 }
+
+// ====================================================================================
+// Profile::HasPlayerCompletedFreeburnChallenge  @ 0x82371338
+// A one-line forwarder: `addis r3,r3,1 / addi r3,r3,-0x5850` == this + 42928 ==
+// maFreeBurnChallengeData, `std r4, arg_18` == the 64-bit CgsID spilled so its ADDRESS can be
+// handed to Array<CgsID,2000>::Contains (which takes a const T&), then a tail call.
+// Callers: ChallengeManager::CheckForOnlineChallengeUnlocks / ::OnProfileLoaded / ::EndChallenge
+// and ChallengeManagerDebugComponent::CompleteAllChallenges.
+// ====================================================================================
+bool Profile::HasPlayerCompletedFreeburnChallenge(CgsID lChallengeID) const
+{
+    return maFreeBurnChallengeData.Contains(lChallengeID);
+}
+
+// ====================================================================================
+// Profile::CompleteFreeburnChallenge  @ 0x82371368
+// Record one freeburn challenge as complete and return the array's NEW live length.
+//   if (Contains(id)) assert("Trying to mark a freeburn challenge as complete twice",
+//                            BrnProfile.cpp:1122)      -- an assert, NOT a guard: the console
+//                                                         Appends the duplicate anyway.
+//   Append(id)
+//   return maFreeBurnChallengeData.GetLength()          -- `lwz r11, 0x3E80(r28)`, the count word
+//                                                         after the 2000 8-byte elements, with
+//                                                         Array::GetLength's own -1-sentinel
+//                                                         assert (CgsArray.h:336) in front of it.
+// The X360 streams the duplicate message through the assert message buffer; per project
+// convention the dynamic message collapses to the static CGS_ASSERT string.
+// ====================================================================================
+u32 Profile::CompleteFreeburnChallenge(CgsID lChallengeID)
+{
+    CGS_ASSERT(!maFreeBurnChallengeData.Contains(lChallengeID),
+               "Trying to mark a freeburn challenge as complete twice");
+
+    maFreeBurnChallengeData.Append(lChallengeID);
+
+    return maFreeBurnChallengeData.GetLength();
+}
+
+// ====================================================================================
+// Profile::GetGameModeTypeCompletedAmountSinceTheStart  @ 0x82354B98
+// `if (mode <= -1) assert("lEGameModeType > GsmIO::E_MODE_NONE", BrnProfile.h:2108);`
+// then `return *(4 * (mode + 84) + this)` == maGameModeTypeAmountCompletedSinceTheStart[mode]
+// (base +336 == 84 * 4). Its one caller is ProgressionManager::OnEventFinishUpdateProfile
+// @0x823A0040, which compares it against GetGameModeTypeAmount to decide the
+// "every event of this mode is completed" trophy.
+// ====================================================================================
+s32 Profile::GetGameModeTypeCompletedAmountSinceTheStart(GsmIO::EGameModeType lEGameModeType) const
+{
+    CGS_ASSERT(lEGameModeType > -1, "lEGameModeType > GsmIO::E_MODE_NONE");
+
+    return maGameModeTypeAmountCompletedSinceTheStart[lEGameModeType];
+}
+
+namespace
+{
+// ====================================================================================
+// [FLAG PC witness] RunProfileSelfTest -- NOT IN THE X360 BINARY.
+//
+// The six Profile services above have live CONSOLE callers, but the PC translation units that
+// hold those callers (BrnGameState::ChallengeManager* and GameStateImageManagerBase) are not in
+// tools/build/build_game_exe.bat's mount list, and the sixth one's caller only runs when an
+// event is WON -- so no 60 s harness scenario can reach any of them. This exercises them once,
+// at the profile boot seam (ProgressionManager::Prepare2 -> Profile::Construct), on the freshly
+// constructed profile, and prints the result of every step: it is the lane's RED->GREEN oracle
+// (tools/tests/cases/progression_profile.ps1).
+//
+// It is default-OFF (BRN_PROGRESSION_PROFILE_SELFTEST=1), runs at most once per process, and
+// LEAVES THE PROFILE AS IT FOUND IT except for one synthetic freeburn-challenge id that no real
+// challenge can collide with (Array<CgsID,2000> has no remove). The mugshot half round-trips:
+// Add -> Get -> Lock -> Unlock -> Delete -> Add(again, to prove the freed file id went back into
+// the available-id bit array) -> Delete.
+//
+// DELETE-WHEN the ChallengeManager / GameStateImageManagerBase TUs are mounted -- then the real
+// callers reach these bodies and a scenario measures them instead of a selftest.
+// ====================================================================================
+void RunProfileSelfTest(Profile& lrProfile)
+{
+    static bool sbAlreadyRun = false;
+    if (sbAlreadyRun || getenv("BRN_PROGRESSION_PROFILE_SELFTEST") == 0
+        || CgsDev::Log::gpDebugPrint == 0)
+    {
+        return;
+    }
+    sbAlreadyRun = true;
+
+    // ---- the freeburn-challenge pair -------------------------------------------------
+    // A synthetic id: no CHALLENGE resource carries it, so completing it changes no gameplay.
+    const CgsID lSelfTestChallengeID = static_cast<CgsID>(0x5E1F7E57C0DE0001ull);
+
+    const s32 liHasBefore = lrProfile.HasPlayerCompletedFreeburnChallenge(lSelfTestChallengeID) ? 1 : 0;
+    const u32 luCount     = lrProfile.CompleteFreeburnChallenge(lSelfTestChallengeID);
+    const s32 liHasAfter  = lrProfile.HasPlayerCompletedFreeburnChallenge(lSelfTestChallengeID) ? 1 : 0;
+    const bool lbChallengeOk = (liHasBefore == 0) && (luCount == 1u) && (liHasAfter == 1);
+
+    // ---- the mugshot chain (gallery 0) -----------------------------------------------
+    const s32 KI_SELFTEST_GALLERY = 0;
+
+    // The 16 bytes AddMugshot copies into MugshotInfo::mUniquePlayerID's PlayerName base. Any
+    // value does; this one is the ASCII of "SELFTEST" packed into a qword, so the record is
+    // recognisable in a memory dump (byte order is the host's, which is not the console's).
+    Profile::MugshotUniqueIdArg lUniqueID;
+    lUniqueID.mu64Lo = 0x53454C4654455354ull;   // 'S','E','L','F','T','E','S','T'
+    lUniqueID.mu64Hi = 0;
+
+    CgsSystem::DateAndTime lNow;
+    lNow.SetLocal(true);
+    lNow.Update();
+
+    const s32 liNumBefore = lrProfile.GetNumMugshots(KI_SELFTEST_GALLERY);
+    const s32 liFileID    = lrProfile.AddMugshot(KI_SELFTEST_GALLERY, lUniqueID, lNow, 0);
+    const s32 liNumAdded  = lrProfile.GetNumMugshots(KI_SELFTEST_GALLERY);
+
+    s32 liLock0 = -1, liLock1 = -1, liLock2 = -1, liDeleted = -1, liNumAfter = -1, liReclaimed = 0;
+    bool lbGotRecord = false, lbFileIDMatches = false, lbPastEndIsNull = false;
+
+    if (liFileID >= 0 && liNumAdded == liNumBefore + 1)
+    {
+        const s32 liIndex = liNumAdded - 1;
+        MugshotInfo* lpInfo = lrProfile.GetMugshotInfo(KI_SELFTEST_GALLERY, liIndex);
+        lbGotRecord     = (lpInfo != 0);
+        lbFileIDMatches = lbGotRecord && (lpInfo->GetFileID() == liFileID);
+        lbPastEndIsNull = (lrProfile.GetMugshotInfo(KI_SELFTEST_GALLERY, liNumAdded) == 0);
+
+        if (lbGotRecord)
+        {
+            liLock0 = lpInfo->GetLockedFlag();
+            lrProfile.LockOrUnlockMugshot(KI_SELFTEST_GALLERY, liIndex);
+            liLock1 = lpInfo->GetLockedFlag();
+            lrProfile.LockOrUnlockMugshot(KI_SELFTEST_GALLERY, liIndex);   // back to unlocked
+            liLock2 = lpInfo->GetLockedFlag();
+
+            liDeleted  = lrProfile.DeleteMugshot(KI_SELFTEST_GALLERY, liIndex);
+            liNumAfter = lrProfile.GetNumMugshots(KI_SELFTEST_GALLERY);
+
+            // The freed file id must be available again: re-adding must hand back the SAME id.
+            const s32 liFileIDAgain = lrProfile.AddMugshot(KI_SELFTEST_GALLERY, lUniqueID, lNow, 0);
+            liReclaimed = (liFileIDAgain == liFileID) ? 1 : 0;
+            if (liFileIDAgain >= 0)
+            {
+                lrProfile.DeleteMugshot(KI_SELFTEST_GALLERY,
+                                        lrProfile.GetNumMugshots(KI_SELFTEST_GALLERY) - 1);
+            }
+        }
+    }
+
+    const bool lbMugshotOk = (liFileID >= 0) && lbGotRecord && lbFileIDMatches && lbPastEndIsNull
+                          && (liLock0 == 0) && (liLock1 == 1) && (liLock2 == 0)
+                          && (liDeleted == liFileID) && (liNumAfter == liNumBefore)
+                          && (liReclaimed == 1);
+
+    *CgsDev::Log::gpDebugPrint << "[profile] selftest challenge="
+                               << (lbChallengeOk ? "ok" : "FAIL")
+                               << " mugshot=" << (lbMugshotOk ? "ok" : "FAIL") << "\n";
+    *CgsDev::Log::gpDebugPrint << "[profile] selftest detail has0=" << liHasBefore
+                               << " count=" << luCount
+                               << " has1="  << liHasAfter
+                               << " | file=" << liFileID
+                               << " num=" << liNumAdded
+                               << " rec=" << (lbGotRecord ? 1 : 0)
+                               << " idmatch=" << (lbFileIDMatches ? 1 : 0)
+                               << " pastend=" << (lbPastEndIsNull ? 1 : 0)
+                               << " lock0=" << liLock0
+                               << " lock1=" << liLock1
+                               << " lock2=" << liLock2
+                               << " del=" << liDeleted
+                               << " numAfter=" << liNumAfter
+                               << " avail=" << liReclaimed
+                               << "\n";
+}
+}   // anonymous namespace
 
 } // namespace BrnProgression

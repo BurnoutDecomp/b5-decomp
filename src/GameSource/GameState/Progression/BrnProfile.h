@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"   // CgsContainers::Array<T,N> (freeburn-challenge + mugshot arrays)
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h"  // CgsSystem::DateAndTime (licence / 100% dates)
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"   // CgsNetwork::NetworkTexture (player licence picture)
+#include "GameShared/GameClasses/Network/Players/X360/CgsUniquePlayerIDX360.h"  // CgsNetwork::UniquePlayerIDX360 (MugshotInfo::UniquePlayerID, 24B)
 #include "SharedClasses/StreetData/BrnChallengeData.h"                  // BrnStreetData::ChallengePlayerScoreEntry
 #include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h" // BrnStreetData::ChallengeHighScoreEntry
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"   // CgsContainers::FastBitArray<15> (developer-challenge bits)
@@ -130,39 +131,67 @@ template<> void SplitArray<ProfileEvent, BrnGuiSaveLoad::ProfileEvent>(
         s32* lpiBaseCount, BrnGuiSaveLoad::ProfileEvent* lpBase,
         s32* lpiDlcCount,  BrnGuiSaveLoad::ProfileEvent* lpDlc, s32 liMaxDlcCount);
 
-// Minimal owning slice for BrnProgression::MugshotInfo -- the element type of
-// Array<BrnProgression::MugshotInfo, 20>. The X360 BINARY proves N=20 and a 56-byte stride
+// BrnProgression::MugshotInfo -- one persisted gallery photo record; the element type of
+// Array<BrnProgression::MugshotInfo, 20>. N==20 and the 56-byte stride are X360-proven
 // (Array<MugshotInfo,20>::GetItem returns `56*index + this`; live-count word at +1120 == 20*56;
-// IsFull returns count==20). The full internal layout (incl. MugshotInfo::UniquePlayerID) is
-// NOT yet reverse-engineered; modelled as an opaque 56-byte buffer so the container stride is
-// exact without fabricating member names. The owning TU of MugshotInfo's real members must
-// replace this pad.
+// IsFull returns count==20).
+//
+// ⭐ [progression wave 2026-09-06, lane profile] THE OPAQUE 56-BYTE PAD IS GONE. The member list
+// is the DecFIGS DWARF's (BrnProfile.h:345-366: mUniquePlayerID / mCaptureDate / mWorldRegion /
+// miNumCaptures / mu16FileID / mbLocked, then `void Construct(UniquePlayerID, DateAndTime,
+// WorldRegion, uint16_t)`), and every offset below is pinned by Profile::AddMugshot @0x82370D70,
+// which builds the record on its stack and Appends it:
+//   +0x00 (24B)  `std r6,0(r10) / std r31,8(r10) / std r11,0x10(r10)` -- the r5/r6/r7 doubleword
+//                triple AddMugshot was handed == a 24-byte UniquePlayerID. On the X360 the DWARF's
+//                `typedef UniquePlayerIDPS3 UniquePlayerID` resolves to CgsNetwork::
+//                UniquePlayerIDX360 (PlayerName macName[16] @+0x00 + u64 mqXuid @+0x10 == 24B),
+//                which is exactly the width and exactly the two sub-blocks the ImageManager reads.
+//   +0x18 (12B)  `stw var_78 / stw var_78+4 / stw var_70` from r8 (8B) + r9's HIGH half (4B) --
+//                a 12-byte struct passed left-justified in a register pair == CgsSystem::
+//                DateAndTime (bool mbIsLocal @+0, FileTime @+4).
+//   +0x24 (8B)   `std r23, var_6C` from r10 == BrnWorld::WorldRegion (ECounty @+0, EDistrict @+4).
+//   +0x2C (4B)   `stw r7(1), var_64` / `li r11,1 ; stw r11, var_64` -- BOTH AddMugshot paths store
+//                literal 1, i.e. miNumCaptures starts at one capture.
+//   +0x30 (2B)   `sth r30/r31, var_60` -- mu16FileID; DeleteMugshot reads it back with `lhz 0x30`.
+//   +0x32 (1B)   `stb r24(0), var_5E` -- mbLocked starts false.
+// 0x33 rounded to the 8-byte alignment the 24-byte UniquePlayerID forces == 56. The layout is
+// pointer-free, so it is byte-identical on the x64 host.
 struct MugshotInfo
 {
-    struct UniquePlayerID;   // declared-only: real layout not recovered here
+    typedef CgsNetwork::UniquePlayerIDX360 UniquePlayerID;   // DWARF BrnProfile.h:347
 
-    // ADDITIVE GROW (declare-only) for the BrnGameStateImageManagerBase TU. That manager builds the
-    // gallery "image info" GUI event (X360 type-290 record) field-for-field out of a MugshotInfo:
-    // the X360 reads a 16-byte unique-id block (+0x00), three image words (+0x18/+0x1C/+0x20), an
-    // 8-byte date (+0x24), one word (+0x2C), a 4-byte file id (+0x30) and a 1-byte locked flag (+0x32).
-    // The internal member layout/semantics of MugshotInfo are NOT yet reverse-engineered, so rather
-    // than fabricate member names the touched sub-blocks are exposed as named, declared-only getters
-    // (offsets/widths X360-attested); their bodies + the real members land with MugshotInfo's own TU.
-    // Returned by const-ref/value so the ImageManager accesses every field BY NAME (no raw offsets).
-    // 16-byte unique-player-id block (the X360 only ever moves it as 16 opaque bytes -- two qwords).
+    // DWARF BrnProfile.h:365. Inlined into both of Profile::AddMugshot's Append paths on the
+    // X360 (no standalone symbol); the six stores above ARE its body.
+    void Construct(UniquePlayerID lUniquePlayerID, CgsSystem::DateAndTime lCaptureDate,
+                   BrnWorld::WorldRegion lWorldRegion, u16 lu16FileID);
+
+    // The named sub-block getters the BrnGameStateImageManagerBase TU builds its type-290
+    // "image info" GUI record out of. They were minted declare-only when this struct was an
+    // opaque pad; they are kept (that TU calls them by these names) and are now real bodies over
+    // the real members -- see BrnProfile.cpp.
+    // ⚠️ NAME NOTE, now that the record is recovered: `GetImageWord0/1/2` are the three words of
+    // mCaptureDate (+0x18/+0x1C/+0x20) and `GetDateTaken` is mWorldRegion's 8 bytes (+0x24) -- the
+    // ImageManager lane named them from the offsets it saw moved, before the DWARF member list was
+    // attached. Rename them at that TU (GetCaptureDate / GetWorldRegion) rather than re-deriving
+    // the offsets; the wire record they fill is unchanged either way.
     struct UniquePlayerIDImage { u64 mu64Lo; u64 mu64Hi; };
-    UniquePlayerIDImage GetUniquePlayerID() const;  // +0x00 (16 bytes)
-    u64  GetGamerCardXuid() const;                   // +0x10 (8-byte gamercard XUID posted by ProcessShowGamerCardRequest)
-    s32  GetImageWord0() const;                      // +0x18
-    s32  GetImageWord1() const;                      // +0x1C
-    s32  GetImageWord2() const;                      // +0x20
-    u64  GetDateTaken() const;                       // +0x24 (8-byte date image)
-    s32  GetImageWord2C() const;                     // +0x2C
-    s32  GetFileID() const;                           // +0x30
-    u8   GetLockedFlag() const;                       // +0x32
+    UniquePlayerIDImage GetUniquePlayerID() const;  // +0x00 (16 bytes == the PlayerName base)
+    u64  GetGamerCardXuid() const;                   // +0x10 (UniquePlayerIDX360::mqXuid)
+    s32  GetImageWord0() const;                      // +0x18 (mCaptureDate.mbIsLocal word)
+    s32  GetImageWord1() const;                      // +0x1C (mCaptureDate FILETIME low)
+    s32  GetImageWord2() const;                      // +0x20 (mCaptureDate FILETIME high)
+    u64  GetDateTaken() const;                       // +0x24 (mWorldRegion's 8 bytes)
+    s32  GetImageWord2C() const;                     // +0x2C (miNumCaptures)
+    s32  GetFileID() const;                           // +0x30 (mu16FileID, zero-extended)
+    u8   GetLockedFlag() const;                       // +0x32 (mbLocked)
 
-private:
-    u8 mPad_Body[56];        // sizeof(MugshotInfo) == 56 (X360 Array<MugshotInfo,20>::GetItem stride)
+    UniquePlayerID         mUniquePlayerID;   // +0x00 (24 bytes)
+    CgsSystem::DateAndTime mCaptureDate;      // +0x18 (12 bytes)
+    BrnWorld::WorldRegion  mWorldRegion;      // +0x24 (8 bytes)
+    s32                    miNumCaptures;     // +0x2C
+    u16                    mu16FileID;        // +0x30
+    bool                   mbLocked;          // +0x32
+    // 5 bytes trailing pad -> sizeof(MugshotInfo) == 56 (the X360 GetItem stride)
 };
 
 // ============================================================================================
@@ -507,6 +536,20 @@ public:
         return maGameModeTypeAmountCompletedSinceTheStart[lEGameModeType];
     }
 
+    // ---- [progression wave: profile] ------------------------------------------------------
+    // The SAME array under the name the console gave the out-of-line copy it emitted. The X360
+    // has BOTH forms: the inline above (open-coded at the pause-stats / Driver-Details sites) and
+    // a standalone symbol @0x82354B98 -- `if (lEGameModeType <= -1) assert(...)` at the baked
+    // location BrnProfile.h:2108, then `return *(4 * (mode + 84) + this)` == +336 + 4*mode ==
+    // maGameModeTypeAmountCompletedSinceTheStart[mode]. Its one caller is ProgressionManager::
+    // OnEventFinishUpdateProfile @0x823A0040 (asm 0x823A0424), which compares it against
+    // GetGameModeTypeAmount to decide the "every event of this mode completed" trophy -- the
+    // comparison BrnProgressionManager_EventFinish.cpp's PARK P4 used to stand in for.
+    // Bodied out-of-line (BrnProfile.cpp) because it carries the range assert the inline does not;
+    // both names are kept because both shapes are in the image.
+    s32  GetGameModeTypeCompletedAmountSinceTheStart(
+             BrnGameState::GameStateModuleIO::EGameModeType lEGameModeType) const;   // 0x82354B98
+
     // Offline win/loss tallies.
     void AddWinForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType);   // 0x82354C80
     void AddLossForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType);  // 0x8230FB20
@@ -776,6 +819,154 @@ public:
     s32  GetRivalCount() const                { return miRivalCount; }                   // +0x274
     const RivalData* GetRivalData(s32 liIndex) const { return &maRivals[liIndex]; }      // +0x6280 + 0x38*i
 
+    // ---- [progression wave: completion] ----
+    // DWARF BrnProfile.h:844 `void RecordPowerParkingRating(int32_t, bool);`. The X360 emits NO
+    // standalone symbol -- its only caller, ProgressionManager::OnPowerParkResult @0x8238AF78,
+    // inlines it whole (0x8238AF94..0x8238AFCC) -- so an inline body here is the faithful form,
+    // the same precedent as GetPowerParkingBestRating above (which reads the byte this writes).
+    //   lbz r9, 0x72(profile) / extsb / cmpw r4, r9 / ble skip / stb r4, 0x72(profile)
+    //   lbz r9, 0x71(profile) / extsb / cmpw r4, r9 / ble skip / stb r4, 0x71(profile)
+    // i.e. a "keep the best" max against the stored SIGNED byte, with the incoming s32 truncated
+    // to its low byte by the `stb`. Reproduced as written: a rating above 127 wraps negative on
+    // the console too, and clamping it here would change the value the trophy gate reads.
+    void RecordPowerParkingRating(s32 liRating, bool lbBetweenOtherPlayers)
+    {
+        if (lbBetweenOtherPlayers)
+        {
+            if (liRating > static_cast<s32>(mi8PowerParkingBetweenOtherPlayersBestRating))
+            {
+                mi8PowerParkingBetweenOtherPlayersBestRating = static_cast<s8>(liRating);   // +114
+            }
+        }
+        else
+        {
+            if (liRating > static_cast<s32>(mi8PowerParkingBestRating))
+            {
+                mi8PowerParkingBestRating = static_cast<s8>(liRating);                      // +113
+            }
+        }
+    }
+
+    // ---- [progression wave: rivals] ----
+    // DWARF BrnProfile.h:1114/:1117/:1120 -- `int32_t GetNumOnlineRacesDone() const;`,
+    // `int32_t GetNumOnlineRacesWon() const;`, `void OnOnlineRaceComplete(int32_t, bool);`.
+    // The X360 emits NO standalone symbol for any of the three: their only caller,
+    // ProgressionManager::OnOnlineRaceComplete @0x82366B98, inlines the whole trio
+    // (0x82366BAC..0x82366BEC), so inline bodies here are the faithful form -- the same
+    // precedent as GetDistanceDrivenOffline / RecordPowerParkingRating above. NO layout change;
+    // both members already sit at their console-proven offsets.
+    //   0x82366BAC  lwz/addi/stw  profile + 0x1CCE0    ; ++miNumOnlineRacesDone   (+117984)
+    //   0x82366BB8  if (lbWonRace)                     ;   `clrlwi r11, r5, 24 ; beq`
+    //   0x82366BC4  lwz/addi/stw  profile + 0x1CCE4    ; ++miNumOnlineRacesWon    (+117988)
+    // ⚠️ FLAG: the DWARF prototype carries the player count, and the console body stores it
+    // NOWHERE -- it only rides r4 on to AchievementManagerBase::OnOnlineRaceComplete. Kept in the
+    // signature (it is the DWARF's) and explicitly discarded, rather than dropped from the shape.
+    void OnOnlineRaceComplete(s32 liNumberOfPlayers, bool lbWonRace)
+    {
+        (void)liNumberOfPlayers;
+        ++miNumOnlineRacesDone;                                                  // +117984
+        if (lbWonRace)
+        {
+            ++miNumOnlineRacesWon;                                               // +117988
+        }
+    }
+    s32  GetNumOnlineRacesDone() const        { return miNumOnlineRacesDone; }   // +117984
+    s32  GetNumOnlineRacesWon() const         { return miNumOnlineRacesWon; }    // +117988
+
+    // ---- [progression wave: medals] ---------------------------------------------------------
+    // The seven accessors the licence / rank-up chain needs. EVERY ONE IS DWARF-ATTESTED and
+    // header-inline: none has a standalone X360 symbol (none appears in scratch/func_index.tsv),
+    // and each is open-coded at the single console site named below -- the same precedent as
+    // GetCurrentProgressionRank / HasUnlockedCredits / SetMedalCountFromTheStart above.
+    // NO MEMBER IS ADDED and no layout moves; every one of these reaches a member that is already
+    // declared below at its console-proven offset.
+    // ------------------------------------------------------------------------------------------
+
+    // DWARF :892 `void SetCurrentProgressionRank(int8_t);` -- the setter half of
+    // GetCurrentProgressionRank above (+112). UnlockToProgressionRank's shared rank tail mirrors
+    // the manager's cached rank onto the profile with it (`stb r11, 0x70(profile)` @0x8239E174).
+    void SetCurrentProgressionRank(s8 li8Rank) { mi8CurrentProgressionRank = li8Rank; }
+
+    // DWARF :817 `void SetNumRankWinsForGameMode(int32_t, EGameModeType);` -- ARG ORDER IS THE
+    // DWARF's (value first). The setter half of GetNumRankWinsForGameMode (+508 + 4*mode);
+    // ProgressionManager::FixGameModeRanks @0x82395CD8 stores through it four times
+    // (`stw r11, 0x36C/0x378/0x388/0x38C(progMgr)`). The console does NOT fire the getter's range
+    // assert at those four sites -- all four modes are compile-time constants there and the
+    // compiler folded it away -- so it is not restated here either.
+    void SetNumRankWinsForGameMode(s32 liWins,
+                                   BrnGameState::GameStateModuleIO::EGameModeType leGameModeType)
+    {
+        maiRankWinsPerOfflineGameMode[leGameModeType] = liWins;
+    }
+
+    // DWARF `void ClearCurrentEventCompleteCounts();` -- zero maGameModeTypeAmountCompleted
+    // (+264). UnlockToProgressionRank's rank tail runs it as an 18-iteration `mtctr`/`stw` loop
+    // over `progMgr + 0x278` == Profile+0x108 (@0x8239E1A4..0x8239E1BC); 18 is this build's array
+    // width (the DLC island mode is slot 17), which is what makes the loop count word-exact.
+    void ClearCurrentEventCompleteCounts()
+    {
+        for (s32 liModeIndex = 0; liModeIndex < 18; ++liModeIndex)
+        {
+            maGameModeTypeAmountCompleted[liModeIndex] = 0;
+        }
+    }
+
+    // DWARF `BrnResource::ECarType GetCurrentCarTypeWithMinDistance() const;` -- which of the
+    // three car types the player has driven LEAST, i.e. the index of the smallest mafCarTypes
+    // (+117936) entry. The rank tail inlines it at 0x8239E0E8..0x8239E12C, seeded from
+    // flt_82029B70 == 0x7F7FFFFF == FLT_MAX (read out of image.bin at file offset 0x29B70) with
+    // index 0 as the fallback, and a STRICT `<` so ties keep the earlier type.
+    // ⓘ Returned as s32, matching this header's existing treatment of meCurrentCarType
+    // ("logical: BrnResource::ECarType; not yet homed"); no enum is invented here.
+    s32 GetCurrentCarTypeWithMinDistance() const
+    {
+        f32 lfSmallest = 3.40282347e+38f;                  // flt_82029B70
+        s32 liCarType  = 0;                                // r9 starts at r22 == 0
+        for (s32 liIndex = 0; liIndex < 3; ++liIndex)
+        {
+            if (mafCarTypes[liIndex] < lfSmallest)
+            {
+                lfSmallest = mafCarTypes[liIndex];
+                liCarType  = liIndex;
+            }
+        }
+        return liCarType;
+    }
+
+    // DWARF `void ResetCarTypeDistances();` -- the three `stw 0` the rank tail runs over
+    // mafCarTypes right after picking the least-used type (@0x8239E194..0x8239E19C).
+    void ResetCarTypeDistances()
+    {
+        mafCarTypes[0] = 0.0f;
+        mafCarTypes[1] = 0.0f;
+        mafCarTypes[2] = 0.0f;
+    }
+
+    // DWARF :1072 `void ResetEventMedals(uint32_t, bool);` -- the per-event half of
+    // ProgressionManager::ClearMedalsOnRankUp @0x823705D8, inlined there at
+    // 0x82370708..0x82370740: mask the flag halfword down to `DISCOVERED|WON_SPECIAL_EVENT_BEFORE`
+    // (0x11) for an event that carries a special-event car, else to `DISCOVERED|WON_EVENT_BEFORE`
+    // (0x21). So FINISHED / RANK_WIN / NON_RANK_WIN are cleared -- the medals are earned again at
+    // the new rank -- and DISCOVERED plus the matching "won before" memory survive.
+    // ⓘ THE FIRST PARAMETER IS THE ARRAY INDEX, not the event id. The DWARF types it `uint32_t`
+    // and does not say which; the asm settles it -- the mask is applied to the ALREADY-LOADED
+    // maEvents[luIndex] record (`add r11, r30, r29` / `lhz r10, 0x7084(r11)`, r30 being the
+    // 8-byte stride cursor), with no second id scan anywhere in the function.
+    void ResetEventMedals(u32 luEventIndex, bool lbEventHasSpecialCar)
+    {
+        ProfileEvent& lrEvent = maEvents[luEventIndex];
+        const u16 lu16Keep = static_cast<u16>(
+            lbEventHasSpecialCar
+                ? (ProfileEvent::E_FLAG_DISCOVERED | ProfileEvent::E_FLAG_WON_SPECIAL_EVENT_BEFORE)   // 0x11
+                : (ProfileEvent::E_FLAG_DISCOVERED | ProfileEvent::E_FLAG_WON_EVENT_BEFORE));         // 0x21
+        lrEvent.SetFlags(static_cast<u16>(lrEvent.GetFlags() & lu16Keep));
+    }
+
+    // The non-const twin of GetRivalData above. ProgressionManager::DEBUG_ClearMedals @0x82366BF8
+    // walks the same table (base +0x6280, 0x38 stride, count +0x274) and WRITES each record's
+    // state word back to 0 == RivalData::E_STATE_LOCKED (`stw r9, 0(r10)` @0x82366C28).
+    RivalData* GetRivalData(s32 liIndex) { return &maRivals[liIndex]; }
+
 private:
     // ----- byte-exact member layout (offsets in comments; all X360-proven) -----
     s32   miVersionNumber;                                   // +0
@@ -845,7 +1036,16 @@ private:
     char  macPlayerLicenceTextureData[9600];                 // +102648
     bool  mbPlayerLicencePictureIsValid;                     // +112248
     Array<MugshotInfo, 20u> maaMugshotInfo[5];               // +112256 (1128B each)
-    CgsContainers::BitArray<30u> maAvailableMugshotFileIDs[5];// +117896 (8B each)
+    // ⭐ [progression wave 2026-09-06, lane profile] 20u, NOT the DWARF's 30u. The X360 pins
+    // NUMBITS at 20 twice: AddMugshot's SetBit-side guard fires "luIndex < NUMBITS"
+    // (CgsBitArray.h:241) on `cmplwi r31, 0x14`, and DeleteMugshot's streams "Index: <n>, Number
+    // of bits: 20" (CgsBitArray.h:222) from `li r4, 0x14`. 20 == the gallery capacity above; the
+    // PS3 build had 30-photo galleries. One 64-bit field either way, so 5 * 8 == 40 bytes and the
+    // save-image block (BrnProfile_SaveImage.cpp's five-qword copy) is unchanged.
+    // A SET bit means that file id is AVAILABLE: Profile::Construct stores all-ones into each
+    // field (`std r26(-1)` @0x82370BD4), AddMugshot takes the first set bit and CLEARS it
+    // (`andc`), and DeleteMugshot SETS the freed id back.
+    CgsContainers::BitArray<20u> maAvailableMugshotFileIDs[5];// +117896 (8B each)
     f32   mafCarTypes[3];                                    // +117936
     s32   meCurrentCarType;                                  // +117948  (logical: BrnResource::ECarType; not yet homed)
     CgsContainers::BitArray<256u> maHasPlayerSeenTraining;   // +117952 (32 bytes)

@@ -61,8 +61,8 @@ static const f32 KF_STUNT_TARGET_SIGNIFICANT_FIGURES = 2.0f;
 // ProgressionManager::ProgressionManager  @ 0x827DEA50  (EXECUTED in the boot trace)
 //
 // X360 ctor. It performs three groups of stores:
-//   (1) resets the 18 manager-handle head slots to the -1 sentinel (the ctor loop:
-//       18 stores of -1 at +0x10, stride 0x14);
+//   (1) marks the 18 per-district roaming-section arrays UNCONSTRUCTED (the ctor loop: 18 stores
+//       of -1 at +0x10, stride 0x14 -- see the corrected banner inside the loop below);
 //   (2) marks the embedded Profile's index->element containers "unconstructed" by poking
 //       the -1 sentinel into their count words (the freeburn-challenge array + the five
 //       mugshot arrays + the late trophy/achievement tail). FLAG: those count words are
@@ -76,10 +76,17 @@ static const f32 KF_STUNT_TARGET_SIGNIFICANT_FIGURES = 2.0f;
 // ------------------------------------------------------------------------------------
 ProgressionManager::ProgressionManager()
 {
-    // (1) 18 head handle slots -> -1 "unset" sentinel.
-    for (s32 liSlot = 0; liSlot < KI_HANDLE_SLOT_COUNT; ++liSlot)
+    // (1) [progression wave: lifecycle, 2026-09-06] SHAPE CORRECTION -- the store is the SAME
+    // store, but it is now made through the member it actually is. The head region is
+    // `RoamingSections maRoamingSections[18]` (Array<u16,8> each, DWARF BrnProgressionManager.h:822
+    // + BrnGameStateTypes.h:202), and the -1 the ctor writes at record +0x10 is CgsArray's
+    // KI_UNCONSTRUCTED sentinel, not the leading id word of a 20-byte handle record. Its producer,
+    // SetupRoamingSections @0x8236FE60, Clear()s each entry before Appending -- and CgsArray's own
+    // "Array used before Construct/Clear was called" assert is exactly what this sentinel exists
+    // to arm. See the member's banner in the header for the instruction-level evidence.
+    for (s32 liDistrict = 0; liDistrict < KI_DISTRICT_COUNT; ++liDistrict)
     {
-        maHandleSlots[liSlot].mi32Id = -1;
+        maRoamingSections[liDistrict].MarkUnconstructed();
     }
 
     // (3a) install the debug component's vtable (X360: result[33250] = off_820CDE4C). The
@@ -287,12 +294,12 @@ bool ProgressionManager::LoadProgressionData(BrnGameState::GameStateModuleIO::Ou
 //
 // ⭐ THE LOAD IS REAL NOW (2026-08-11): LoadProgressionData above is reconstructed, so this
 // function's `if (LoadProgressionData(...))` gate is the console's gate, not a pass-through.
-// FLAG (still deferred): ComputeLandmarkAISectionIndices / ProcessLoadedPresetRaces /
-// ProgressionDebugComponent::Construct / DebugComponent::Register / SetupRoamingSections are
-// sibling functions in other (not-yet-reconstructed) ProgressionManager TUs. The ASM proves the
-// call sequence + the three stores; the helper bodies are out of scope for this slice, so the
-// orchestration is documented rather than dispatched (calling undeclared siblings would not
-// compile). The three back-pointer stores -- the observable side effects -- are reproduced.
+// ✅ [progression wave: lifecycle, 2026-09-06] AND SO IS THE TAIL. The FLAG that stood here said
+// ComputeLandmarkAISectionIndices / ProcessLoadedPresetRaces / ProgressionDebugComponent::Construct
+// / DebugComponent::Register / SetupRoamingSections were "documented rather than dispatched".
+// Four of the five are reconstructed in BrnProgressionManager_Lifecycle.cpp and dispatched below
+// through RunPrepare2Tail, in the console's order; the debug component alone stays parked by name
+// (it has no class home in the tree). This function is now the console's Prepare2 end to end.
 // ------------------------------------------------------------------------------------
 bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer* lpOutput,
                                   BrnGameState::ModeManager* lpModeManager,
@@ -303,19 +310,19 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
     CGS_ASSERT(lpOutput != nullptr, "lpOutput");            // X360 BrnProgressionManager.cpp:249
     CGS_ASSERT(lpReceiverQueue != nullptr, "lpReceiverQueue");  // X360 :250
 
-    // ⭐ THE PROFILE BOOT SEAM (landed 2026-08-24, deform-land wave). Profile::Construct
-    // @0x823708A8 was bodied but had NO caller anywhere in the tree, so the embedded
-    // mProfile booted as raw storage -- BOOT-MEASURED: mbIsNewProfile read 0 at junkyard
-    // entry ([deform-preset] probe newProfile=0), which silently disabled the start-of-game
-    // 0.85 junkyard deform. The console constructs the profile on this manager's own
-    // construct/prepare path (idat xrefs: ProgressionManager::Construct @0x8237A74C and the
-    // outer Prepare's call @0x8239DC78, immediately before this Prepare2 body); neither outer
-    // is reconstructed, so the call lands here at the same boot position, guarded to run once.
-    if (!mbProfileConstructed)
-    {
-        mbProfileConstructed = true;
-        mProfile.Construct();
-    }
+    // ✅ [progression wave: lifecycle, 2026-09-06] THE PROFILE BOOT SEAM IS RETIRED, ITS OWN
+    // DELETE-WHEN PAID. The seam that stood here (landed 2026-08-24, deform-land wave) called
+    // Profile::Construct @0x823708A8 from this body, latched by mbProfileConstructed, because
+    // "the console constructs the profile on this manager's own construct/prepare path (idat
+    // xrefs: ProgressionManager::Construct @0x8237A74C and the outer Prepare's call @0x8239DC78)
+    // ... neither outer is reconstructed". BOTH OUTERS ARE RECONSTRUCTED NOW
+    // (BrnProgressionManager_Lifecycle.cpp) and both are called from GameStateModule at the
+    // console's own positions, so the profile is constructed twice on the way in, exactly as the
+    // console constructs it -- and the LAST of those two calls now happens EARLIER than this seam
+    // did (Prepare, stage 20, rather than Prepare2), which can only help anything that loads a
+    // saved profile between the two. mbProfileConstructed is left declared but unused; it is the
+    // rivals/medals lanes' neighbour in the header and removing a member mid-wave is not worth
+    // the merge risk. FOLLOW-UP: delete mbProfileConstructed.
 
     // X360: if ( LoadProgressionData(this, lpOutput, lpReceiverQueue) ) { ... } else return false;
     if (!LoadProgressionData(lpOutput, lpReceiverQueue))
@@ -330,45 +337,82 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
     CGS_ASSERT(lpAchievementManager != nullptr, "lpAchievementManager");
     mpAchievementManager = lpAchievementManager; // X360 +0x20938 (a6)
 
-    // X360 then calls, in order:
-    //   ComputeLandmarkAISectionIndices(this);
-    //   ProcessLoadedPresetRaces(this);
-    //   ProgressionDebugComponent::Construct(&mDebugComponent, this, lpModeManager);
-    //   CgsDev::DebugComponent::Register(&mDebugComponent);
-    //   SetupRoamingSections(this, ...);
-    // (helper bodies land with their own TUs; see FLAG above.)
+    // ✅ [progression wave: lifecycle, 2026-09-06] THE FIVE TRAILING CALLS ARE REAL NOW. What
+    // stood here was a comment listing them ("X360 then calls, in order: ..."); four of the five
+    // are reconstructed in BrnProgressionManager_Lifecycle.cpp and dispatched by RunPrepare2Tail
+    // in the console's order, and the fifth (ProgressionDebugComponent::Construct + its Register)
+    // is parked BY NAME with a one-shot log inside it. See that function's banner.
+    RunPrepare2Tail();
 
-    // ⭐⭐ THE PROFILE EVENT-LIST SEAM (landed 2026-08-27, D1 wave) -- the twin of the
-    // Profile::Construct seam above, and the reason it has to sit HERE rather than up there:
-    // the population reads the loaded ProgressionData, so it cannot run until the acquire
-    // above has bound mpProgressionData.
+    // ⭐⭐ THE PROFILE EVENT-LIST SEAM -- KEPT, and now BOOT-MEASURED (progression wave, lane
+    // medals, 2026-09-06). The lane brief said to retire it "ONLY if UpdatePlayerMedals'
+    // boot-time call produces the same rank-0 unlock the console does". IT DOES NOT, and the
+    // measurement is the interesting part:
     //
-    // WHAT WAS BROKEN: Profile::Construct zeroes miEventCount, and the ONLY console writer of
-    // the ProfileEvent table -- UnlockToProgressionRank, the single xref to Profile::AddEvent
-    // @0x82359EB8 in the whole XEX -- had no caller on this build. So mProfile.GetEventCount()
-    // stayed 0 for the entire run, every id->record lookup answered NULL, and winning an
-    // offline event fired `lpEvent` (BrnProgressionManager.cpp:1669) in
+    //   run scratch\bugtest\runs\progression_medals\20260906_213407 (seam retired, medals arm
+    //   live): `[medals] total=0 rank=1 profileRank=1 winsToNext=7 events=120`.
+    //
+    // The chain works -- but it lands on rank ONE, not zero. CalculateRankFromMedalTotal starts
+    // at GetProgressionRank() == 0 and the AUTHORED THRESHOLD OF RANK 0 IS ZERO (that run's
+    // winsToNext=7 is rank 1's threshold), so a player with no medals at all already clears rank
+    // 0 and the answer is 1. UnlockToProgressionRank is therefore called with 1, which takes the
+    // RANK-N arm -- and the profile EVENT-LIST population is the RANK-ZERO arm. It never runs.
+    // The event list came out of the save image in that run, not out of the console seat; on a
+    // first-ever profile it would have been EMPTY, which is exactly the `lpEvent` null the D1
+    // wave fixed. So: the seam stays, and it stays as a call to UnlockToProgressionRank(0).
+    // ⓘ THE SAME READING APPLIES TO THE CONSOLE. UnlockToProgressionRank has five xrefs in the
+    // XEX -- UpdatePlayerMedals plus four ProgressionDebugComponent entry points -- and
+    // Profile::AddEvent has exactly one, this function. Whatever populates a retail profile's
+    // event list, it is not the UpdatePlayerMedals path with these thresholds. Open question,
+    // recorded rather than guessed at; do not retire this seam on a theory about it.
+    //
+    // It ALSO now stands in for ProgressionManager::Construct @0x8237A5F8's medals-request store,
+    // which is what makes the console's own seat run at all.
+    //
+    // WHAT WAS BROKEN (D1 wave, 2026-08-27): Profile::Construct zeroes miEventCount, and the ONLY
+    // console writer of the ProfileEvent table -- UnlockToProgressionRank, the single xref to
+    // Profile::AddEvent @0x82359EB8 in the whole XEX -- had no caller on this build. So
+    // mProfile.GetEventCount() stayed 0 for the entire run, every id->record lookup answered NULL,
+    // and winning an offline event fired `lpEvent` (BrnProgressionManager.cpp:1669) in
+    // OnEventFinishUpdateProfile and then crashed on the null record. The D1 fix called
+    // UnlockToProgressionRank(0, 0) from here, which is a PC-INVENTED CALL SITE.
+    //
+    // WHAT WAS BROKEN (D1 wave, 2026-08-27): Profile::Construct zeroes miEventCount, and the ONLY
+    // console writer of the ProfileEvent table -- UnlockToProgressionRank, the single xref to
+    // Profile::AddEvent @0x82359EB8 in the whole XEX -- had no caller on this build. So
+    // mProfile.GetEventCount() stayed 0 for the entire run, every id->record lookup answered NULL,
+    // and winning an offline event fired `lpEvent` (BrnProgressionManager.cpp:1669) in
     // OnEventFinishUpdateProfile and then crashed on the null record.
     //
-    // THE CONSOLE SEAT is PreWorldUpdate @0x823A4F68 -> `if (mbMedalsUpdateRequested)` ->
-    // UpdatePlayerMedals @0x8239FE50, which computes CalculateRankFromMedalTotal(0 medals) == 0,
-    // sees it above the profile's -2 "rank not set" seed, and calls UnlockToProgressionRank(0).
-    // PreWorldUpdate landed 2026-09-06 (BrnProgressionManager_PreWorldUpdate.cpp, issue #10) but
-    // UpdatePlayerMedals is still not reconstructed -- its medals arm parks -- so the rank-0 call
-    // is made from this seam at the same boot position, latched to run once. The population itself is
-    // idempotent (it skips any junction the profile already holds a record for), which is the
-    // console's own guarantee -- the latch only keeps the arms AROUND it single-shot.
-    // DELETE-WHEN UpdatePlayerMedals lands.
+    // WHAT THE CALL DOES NOW THAT IT IS NOT A NO-OP TAIL. Parks Q1 and Q4 are paid, so this same
+    // rank-0 call also fills the starting garage (UnlockDefaultPlayerCars) and runs the shared
+    // rank tail. On the boot path the profile at THIS moment is the freshly Constructed one --
+    // measured, 20260906_213407: this seam logs "restored from the profile as -2" while the save
+    // image is deserialised LATER, before the first in-game frame -- so the tail's
+    // ClearMedalsOnRankUp finds an empty event list and cannot wipe a saved medal.
+    //
+    // DELETE-WHEN something reconstructed populates the profile event list at its console seat.
     //
     // The HasMemoryResource() test guards THIS SEAM, not console code: LoadProgressionData also
     // answers true from its corrupt-stage default arm (which fires its own :2799 assert and
     // reports DONE), and the rank-0 arm dereferences mpProgressionData unconditionally the way
     // the console can afford to. It is a [PC GUARD] on a PC-invented call site.
-    // DELETE-WHEN this call moves to its console seat in UpdatePlayerMedals.
     if (!mbInitialRankUnlockDone && mpProgressionData.HasMemoryResource())
     {
         mbInitialRankUnlockDone = true;
+
         UnlockToProgressionRank(0, 0);
+
+        // ProgressionManager::Construct @0x8237A5F8's medals-request store (`li r11, 1` /
+        // `stbx r11, r31, 0x20973` @0x8237A798/0x8237A7B0), stood in for here so the CONSOLE SEAT
+        // -- PreWorldUpdate's medals arm -> UpdatePlayerMedals -> the licence rank -- actually
+        // runs. Setting it after the call above is deliberate: the call already left the rank
+        // cache at 0, and UpdatePlayerMedals is what turns that into the player's real licence.
+        // ⓘ Construct DOES run on this build (the lifecycle lane landed it this wave, called from
+        // GameStateModule at Prepare stage 20, before this), so this is normally a re-store of a
+        // byte that is already 1. It is kept because the two seams are deleted independently.
+        // DELETE-WHEN Construct's own store is the only one that matters.
+        RequestMedalUpdate();
     }
 
     return true;
@@ -398,14 +442,18 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
 //               profile, zero the three car-type affinities, ClearMedalsOnRankUp, and clear
 //               the 18 per-rank completed counts.
 //
+// ⭐⭐ [progression wave: medals, 2026-09-06] Q1, Q3 AND Q4 ARE PAID. Only Q2 is still parked,
+// and its blocker is a MEASUREMENT, not a missing body -- read its note before touching it.
+// The caller set changed with them: UpdatePlayerMedals @0x8239FE50 is bodied
+// (BrnProgressionManager_Medals.cpp), so this function is once again reached from its console
+// seat and CAN now be called with a NON-ZERO rank, which is what makes the Q3/Q4 arms live code
+// rather than dead code.
+//
 // ⛔ HONEST PARTIAL -- WHAT IS LANDED AND WHAT IS PARKED.
-// LANDED: the :965 assert and the whole rank-0 EVENT-LIST arm (the junction walk, the
-//   duplicate test, AddEvent and AddEventTypeToEventTotals). That is the arm this build's
-//   single caller uses and the arm the whole `lpEvent`-assert class hangs on.
-// PARKED, each on a sibling that has NO body anywhere in b5-decomp/src (landing the calls
-//   would add unresolved externals to a MOUNTED TU -- the F2 failure mode this campaign keeps
-//   re-learning), with the console body written out for whoever lands it:
-//   Q1  UnlockDefaultPlayerCars @0x8237BF98 (absent) -- the rank-0 starting-garage fill.
+// LANDED: the :965 assert; the whole rank-0 EVENT-LIST arm (the junction walk, the duplicate
+//   test, AddEvent and AddEventTypeToEventTotals); UnlockDefaultPlayerCars (Q1); the RANK-N
+//   licence-upgrade arm (Q3); and the shared rank tail (Q4).
+// PARKED, with the console body written out for whoever lands it:
 //   Q2  the starting-drive-thru tail: `if (!mBodyShopsDriveThruSet.Contains(0x6C72D)) {
 //         mBodyShopsDriveThruSet.Insert(0x6C72D);
 //         if (GetLength() == 11) { OnTrophyUnlock(20);
@@ -416,20 +464,23 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
 //       -- OnTrophyUnlock @0x82389740 is declared and parked tree-wide (the same P2 park
 //       OnEventFinishUpdateProfile carries), and the two AchievementManagerBase vtable slots
 //       route into a TU that is deliberately NOT MOUNTED.
-//   Q3  the RANK-N arm: AchievementManagerBase::OnLicenseUpgrade @0x8235ADC8 (same unmounted
-//       TU) + `TelemetryData::AddParameter(22, "%i" % rank)` and `queue->AddEvent(record, 228,
-//       20)`. UNREACHABLE from this build's only caller, which passes rank 0.
-//   Q4  the shared rank tail, which needs ClearMedalsOnRankUp @0x823705D8 (absent) plus two
-//       un-homed words (the manager's chosen-car-type slot +133480 and the profile byte
-//       +118404 the `rank >= 5` store targets). Leaving it parked means the profile's
-//       mi8CurrentProgressionRank keeps the -2 "rank not set" seed Profile::Construct wrote,
-//       which is the value this build already ships to the GUI -- landing HALF the tail would
-//       change that reading without the medal/rank machinery that gives it meaning.
-// The lpGameActionQueue parameter is consumed only by Q3, so this build's caller passes 0
-// exactly as the console's UpdatePlayerMedals passes its own (unused-on-this-path) queue.
+// ✅ Q3 PAID (progression wave: medals). The old text here said OnLicenseUpgrade @0x8235ADC8
+//   "lives in a TU that is not mounted" and that the arm was "UNREACHABLE from this build's only
+//   caller, which passes rank 0". BOTH HALVES WERE STALE: BrnGameStateAchievementManagerBase.cpp
+//   is mounted (build_game_exe.bat, right after the X360 leaf -- the rem block above that echo
+//   still argues for the old state), OnLicenseUpgrade is bodied there, and the caller is now
+//   UpdatePlayerMedals, which passes whatever rank the medal total bought. Body:
+//   UnlockToProgressionRankLicenceUpgrade in BrnProgressionManager_Medals.cpp.
+// ✅ Q4 PAID (progression wave: medals). ClearMedalsOnRankUp @0x823705D8 is bodied, and the two
+//   "un-homed words" are homed: the chosen-car-type slot is meLeastUsedCarType (+133480, DWARF
+//   :167) and the `rank >= 5` store targets Profile::mbHasUnlockedCredits at profile+0x1CD14 ==
+//   +118036 (the old note's "+118404" was a mis-read of `lis 1 / ori 0xCD14`). Body:
+//   UnlockToProgressionRankTail in BrnProgressionManager_Medals.cpp. One store of the tail stays
+//   parked -- the debug component's own display-ready flag; see that body's banner.
+// The lpGameActionQueue parameter is consumed only by Q3.
 // ------------------------------------------------------------------------------------
 void ProgressionManager::UnlockToProgressionRank(s8 li8Rank,
-                                                 BrnGameState::GameStateModuleIO::GameActionQueue* /*lpGameActionQueue*/)
+                                                 BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue)
 {
     // @0x8239DE14 -- `lwz r11, 0x14(r3)` vs the cached rank byte, i.e. PlayerHasFinishedLastRank().
     if (PlayerHasFinishedLastRank())
@@ -469,8 +520,14 @@ void ProgressionManager::UnlockToProgressionRank(s8 li8Rank,
             AddEventTypeToEventTotals(lpcJunction);
         }
 
-        // ⛔ PARK Q1 -- UnlockDefaultPlayerCars @0x8237BF98 (`bl` @0x8239DF44), still bodiless.
-        //
+        // ✅ [progression wave: medals, 2026-09-06] PARK Q1 IS PAID. UnlockDefaultPlayerCars
+        // @0x8237BF98 (`bl` @0x8239DF44) is bodied in BrnProgressionManager_Medals.cpp: it walks
+        // PROGRESSION.DAT's player-car id table, AddCar()s any the profile does not already own
+        // (type 0 == E_UNLOCK_TYPE_UNLOCK) and marks each one's unlock sequence already-seen.
+        // That is the rank-0 STARTING GARAGE -- until now the profile started with no cars at all
+        // from this path.
+        UnlockDefaultPlayerCars();
+
         // ⭐⭐ PARK Q2 IS NO LONGER BLOCKED ON WHAT THIS SITE SAID IT WAS (2026-08-27,
         // drive-thru link-closure wave). The old text named "OnTrophyUnlock @0x82389740 + the
         // unmounted AchievementManagerBase" as the blockers; OnTrophyUnlock is bodied now
@@ -515,27 +572,28 @@ void ProgressionManager::UnlockToProgressionRank(s8 li8Rank,
                    "event list populated -- "
                 << mProfile.GetEventCount()
                 << " records from " << luJunctionCount
-                << " authored junctions. STILL PARKED on this path: UnlockDefaultPlayerCars "
-                   "@0x8237BF98, and the starting-body-shop drive-thru registration "
-                   "(CgsID 0x6C72D -> mBodyShopsDriveThruSet, @0x8239DF48) which is UNBLOCKED "
-                   "but unverified -- see the note at this call site.\n";
+                << " authored junctions; starting garage now holds "
+                << mProfile.GetCarCount()
+                << " cars. STILL PARKED on this path: ONLY the "
+                   "starting-body-shop drive-thru registration (CgsID 0x6C72D -> "
+                   "mBodyShopsDriveThruSet, @0x8239DF48), which is UNBLOCKED but unverified -- "
+                   "see the note at this call site.\n";
         }
     }
     else
     {
-        // ⛔ PARK Q3 -- the RANK-N licence-upgrade arm (@0x8239E034). Unreachable from this
-        // build's only caller (Prepare2 passes rank 0); see the banner for the console body.
-        if (CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] ProgressionManager::UnlockToProgressionRank("
-                << static_cast<s32>(li8Rank)
-                << "): the licence-upgrade arm is PARKED (AchievementManagerBase::"
-                   "OnLicenseUpgrade @0x8235ADC8 lives in a TU that is not mounted).\n";
-        }
+        // ✅ [progression wave: medals, 2026-09-06] PARK Q3 IS PAID -- see the banner for why the
+        // "unmounted TU" blocker was stale. @0x8239E034..0x8239E090.
+        UnlockToProgressionRankLicenceUpgrade(li8Rank, lpGameActionQueue);
     }
 
-    // ⛔ PARK Q4 -- the shared rank tail (@0x8239E094 onward). See the banner.
+    // ✅ [progression wave: medals, 2026-09-06] PARK Q4 IS PAID. The shared rank tail
+    // (@0x8239E094 onward) runs for BOTH arms, exactly as the console falls into it: clamp and
+    // write back the cached rank, pick the least-used car type, walk the rank up to li8Rank,
+    // mirror it onto the profile (which is what finally moves mi8CurrentProgressionRank off the
+    // -2 "rank not set" seed), unlock the credits at rank 5, reset the car-type distances, clear
+    // the medals, and clear the 18 per-rank completed counts.
+    UnlockToProgressionRankTail(li8Rank);
 }
 
 // ------------------------------------------------------------------------------------
@@ -832,19 +890,15 @@ BrnGameState::AchievementManagerBase* ProgressionManager::GetAchievementManager(
 // agent's file this round), so the cast to the real type is made here, in the only body that
 // dereferences it. Re-point the member's type when that signature is next touched.
 //
-// ⚠️⚠️ FLAG -- THE PRODUCER IS NOT MOUNTED, SO THE TABLE IS EMPTY TODAY. The cache is filled by
-// ProgressionManager::ComputeLandmarkAISectionIndices (X360 0x82370008), which the console's
-// Prepare2 calls immediately after installing the back-pointers -- and which this tree's Prepare2
-// only lists in its "X360 then calls, in order:" comment. Until that lands, every lookup walks a
-// zeroed table, misses, fires the console's own "landmark not found " assert and returns
-// KI_INVALID_SECTION_INDEX. That is the console's genuine miss behaviour rather than an invented
-// one, and the callers all carry the answer as a plain u16, so nothing dereferences it -- but no
-// caller gets a REAL section index yet. This is a one-function frontier, not a research problem:
-// ComputeLandmarkAISectionIndices' two heavy legs, AISectionsData::BuildAISectionPointMap
-// @0x8267A688 and AISectionsData::FindNearestAISection @0x82676CC0, are BOTH already bodied and
-// mounted (SharedClasses/AI/AISectionsData.cpp:76 / :277); what it still needs is a bound
-// mpAISectionData and the CgsMemory::LinearMalloc scratch arena. Reported as this slice's
-// follow-up -- do not quote this function as "working" until that call is wired.
+// ✅ [progression wave: lifecycle, 2026-09-06] THE PRODUCER IS MOUNTED. The FLAG that stood here
+// said "THE PRODUCER IS NOT MOUNTED, SO THE TABLE IS EMPTY TODAY ... a one-function frontier, not
+// a research problem", and named exactly what was missing: a bound mpAISectionData and the
+// LinearMalloc scratch arena. Both are supplied now --
+// ProgressionManager::Prepare @0x8239DC38 -> LoadAIData @0x8239A0D0 binds mpAISectionData at
+// GameStateModule::Prepare stage 20, and ComputeLandmarkAISectionIndices @0x82370008 is
+// reconstructed in BrnProgressionManager_Lifecycle.cpp and dispatched by Prepare2's own tail. So
+// this scan walks a REAL table (one entry per authored landmark, 105 in the shipped trigger data)
+// and its "landmark not found " assert has gone back to meaning what it means on the console.
 // ============================================================================================
 u16 ProgressionManager::FindLandmarkAISectionIndex(CgsID lLandmarkId) const
 {
@@ -1360,14 +1414,14 @@ CarData* ProgressionManager::AddCar(CgsID lCarId, s32 leUnlockType)
     // X360: `if (a3 == 5) ++*(this + 133468);` -- E_UNLOCK_TYPE_SPONSOR.
     if (leUnlockType == CarData::E_UNLOCK_TYPE_SPONSOR)
     {
-        ++miSponsorCarCount;
+        ++miMaxCarCount;
     }
     // X360: `if (carId == CgsIDCompress("CARBEAGT")) ++*(this + 133468);` -- the same counter is
     // bumped a second time for that one car id. (CgsIDCompress is constant-folded by the console
     // compiler; the packed literal is reproduced by the shared helper.)
     if (lCarId == CgsIDCompress("CARBEAGT"))
     {
-        ++miSponsorCarCount;
+        ++miMaxCarCount;
     }
 
     if (mProfile.GetSilverCarsUnlocked())   // Profile+42516, the console's `lwz *(progMgr+42884)`

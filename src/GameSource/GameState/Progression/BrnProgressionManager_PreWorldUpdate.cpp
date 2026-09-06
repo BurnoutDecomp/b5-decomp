@@ -24,10 +24,13 @@
 // load lands on. The embedded Profile is this+0x170 on the console (`addi r30, r31, 0x170`).
 //
 // WHAT IS PARKED (named, not faked -- each parks ONCE per run in the log):
-//   UpdatePlayerMedals @0x8239FE50 / UnlockRivals / CheckForAllModeTypeCompletion /
-//   UpdateRivals / SendTrophyUnlockUpdate @0x823892B8 -- none has a body in the tree. Their
-//   GATES (the request bytes and the two 2 s holds) run exactly as the console runs them, so
-//   the state machine around them is real and the day a body lands it is a one-line un-park.
+//   UnlockRivals / CheckForAllModeTypeCompletion / UpdateRivals / SendTrophyUnlockUpdate
+//   @0x823892B8. Their GATES (the request bytes and the two 2 s holds) run exactly as the
+//   console runs them, so the state machine around them is real and the day a body lands it is a
+//   one-line un-park.
+//   ✅ [progression wave: medals, 2026-09-06] UpdatePlayerMedals @0x8239FE50 IS NO LONGER PARKED
+//   -- it is bodied in BrnProgressionManager_Medals.cpp and called from the medals arm below,
+//   which is what makes that arm self-limiting (the callee clears the request byte).
 // ============================================================================================
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"
 
@@ -80,7 +83,6 @@ namespace
             *CgsDev::Log::gpDebugPrint << lpcMessage;
         }
     }
-    bool gbSaidMedals       = false;
     bool gbSaidAllModeTypes = false;
     bool gbSaidUpdateRivals = false;
     bool gbSaidTrophyUpdate = false;
@@ -203,14 +205,64 @@ void ProgressionManager::PreWorldUpdate(
     // `lbzx +0x20973` -- mbPlayerMedalsUpdateRequired -> UpdatePlayerMedals + UnlockRivals.
     if (mbPlayerMedalsUpdateRequired)
     {
-        // ⛔ PARK -- console: `UpdatePlayerMedals(lpGameActionQueue); UnlockRivals(lpGameActionQueue);`
-        // (@0x823A5154 / @0x823A5160). Neither has a body in the tree (the _EventFinish partfile
-        // parks the same pair at its own seat). The byte stays set, as it would until the
-        // callee cleared it. DELETE-WHEN 0x8239FE50 has a body.
-        ParkOnce(gbSaidMedals,
-                 "[FLAG PC bring-up] ProgressionManager::PreWorldUpdate: the medals arm "
-                 "(UpdatePlayerMedals @0x8239FE50 + UnlockRivals) is NOT reconstructed; "
-                 "mbPlayerMedalsUpdateRequired stays set.\n");
+        // ⛔ [FLAG PC bring-up] STAND-IN for ProgressionManager::OnLoadProfile @0x823893A8's
+        // RANK-CACHE RESTORE, and it is LOAD-BEARING rather than cosmetic.
+        // OnLoadProfile's head is `UnlockDefaultPlayerCars(); +133492 = 0; +133491 = 1;
+        // +133489 = 1; *(this + 133484) = *(this + 480)` -- that last store copies the SAVED
+        // Profile::mi8CurrentProgressionRank (Profile+0x70) into this manager's rank cache.
+        // NOTHING CALLS OnLoadProfile ON PC: its only caller, GameStateModule::OnProfileLoaded
+        // @0x82397310, is not reconstructed.
+        // WITHOUT IT the cache keeps Construct's -2 for a profile that has already been played,
+        // so UpdatePlayerMedals below re-derives a rank from -2 on EVERY boot, takes the
+        // `newRank > cachedRank` branch, and UnlockToProgressionRank's tail runs
+        // ClearMedalsOnRankUp -- wiping the medals the save just restored, every boot.
+        // WHY HERE AND NOT AT THE Prepare2 SEAM: measured (run 20260906_213407) the save image is
+        // deserialised AFTER Prepare2 and BEFORE the first in-game frame -- that seam logged
+        // "restored from the profile as -2" while the very next `[medals]` line already reported
+        // events=120 out of the save. This arm is the first console seat that runs with a loaded
+        // profile, so it is the earliest honest place for the restore.
+        // ⓘ ONLY the rank restore is stood in for. OnLoadProfile's other work (its own
+        // UnlockDefaultPlayerCars call, the sponsor-car max-car-count scan, mNewlyUnlockedCarID,
+        // mbDriveThruDataDirtyFlag, mbHasJustRankedUp = 0) is NOT reproduced here.
+        // The latch is a function-local static rather than a member because this is not console
+        // state: ProgressionManager is a singleton sub-object, so it is one latch per run.
+        // DELETE-WHEN ProgressionManager::OnLoadProfile is reconstructed and OnProfileLoaded
+        // calls it -- then delete this whole block, not just the call.
+        static bool sbRankCacheRestoredFromProfile = false;
+        if (!sbRankCacheRestoredFromProfile)
+        {
+            sbRankCacheRestoredFromProfile = true;
+            const s8 li8SavedRank = mProfile.GetCurrentProgressionRank();
+            if (li8SavedRank != mi8ProgressionRank)
+            {
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[FLAG PC bring-up] ProgressionManager::PreWorldUpdate: standing in for "
+                           "OnLoadProfile @0x823893A8 -- rank cache "
+                        << static_cast<s32>(mi8ProgressionRank) << " -> "
+                        << static_cast<s32>(li8SavedRank) << " (from the loaded profile).\n";
+                }
+                mi8ProgressionRank = li8SavedRank;              // OnLoadProfile: +133484 = +480
+            }
+        }
+
+        // ✅ [progression wave: medals, 2026-09-06] THE MEDALS ARM IS LIVE. UpdatePlayerMedals
+        // @0x823A5154 is bodied in BrnProgressionManager_Medals.cpp, and it is the callee that
+        // CLEARS mbPlayerMedalsUpdateRequired on its way out (`stbx 0 -> +0x20973` @0x823A0034),
+        // so this arm is self-limiting exactly as the console's is -- the byte no longer stays set.
+        // This is the seat that turns ProgressionManager::Construct's boot seed of that flag into
+        // the rank-0 licence unlock; see the Prepare2 stand-in in BrnProgressionManager.cpp.
+        UpdatePlayerMedals(lpGameActionQueue);
+
+        // [conductor 2026-09-06] console: `UnlockRivals(lpGameActionQueue);` @0x823A5160 -- the
+        // second seat of the CgsID-returning UnlockRivals (BrnProgressionManager_Rivals.cpp);
+        // this seat discards the id (the `bl` result is never read). The medals lane held this
+        // call back because it runs at BOOT (Construct seeds the request byte) and writes the
+        // saved profile's rival table; that IS the console's own boot behaviour -- the first
+        // rival whose medal threshold the profile already clears is unlocked here -- so it is
+        // called as the console calls it. Its writes are what the rivals case witnesses.
+        (void)UnlockRivals(lpGameActionQueue);
     }
 
     // `lbz +0x20975` then `lbz +0x20976` -- the all-win-types check runs a 2 s hold on the SIM step.
@@ -229,12 +281,16 @@ void ProgressionManager::PreWorldUpdate(
                         KAC_PROGRESSION_MANAGER_CPP, 382);
                     CgsDev::Assert::EndAssert();
                 }
-                // ⛔ PARK -- console: `CheckForAllModeTypeCompletion(lpGameActionQueue,
-                // meModeToCheckForAllWinTypes);` @0x823A51EC. No body in the tree.
-                ParkOnce(gbSaidAllModeTypes,
-                         "[FLAG PC bring-up] ProgressionManager::PreWorldUpdate: "
-                         "CheckForAllModeTypeCompletion() is NOT reconstructed; the "
-                         "all-win-types HUD message for this mode was not evaluated.\n");
+                // ⭐ UN-PARKED [progression wave 2026-09-06, lane completion]: console
+                // `CheckForAllModeTypeCompletion(lpGameActionQueue,
+                // meModeToCheckForAllWinTypes);` @0x823A51EC, bodied in
+                // BrnProgressionManager_Completion.cpp @0x82389698. It counts the authored
+                // events of that mode against the ones the player has uniquely won and, on a
+                // catch-up, posts AllEventTypeWonAction (game action 206, size 4) and latches
+                // the profile's "seen this message" bit. The four clears below are the console's
+                // and stay unconditional -- the callee's own profile bit is what makes the
+                // message once-ever, not this arm.
+                CheckForAllModeTypeCompletion(lpGameActionQueue, meModeToCheckForAllWinTypes);
                 mbCheckAllWinTypesPending                = false;               // stb 0 -> +0x20975
                 mbCheckAllWinTypesArmed                  = false;               // stb 0 -> +0x20976
                 mfTimeTillAllEventTypeCompleteHudMessage = 0.0f;                // flt_82001CC0
@@ -276,26 +332,36 @@ void ProgressionManager::PreWorldUpdate(
     }
 
     // `lbzx +0x20971` -- mbUpdateRivals -> UpdateRivals(lpGameActionQueue).
+    // ⭐ UN-PARKED [progression wave 2026-09-06, lane rivals]: console `UpdateRivals(
+    // lpGameActionQueue);` @0x823A52BC, bodied in BrnProgressionManager_Rivals.cpp @0x82396298.
+    // It is the callee that clears the byte -- it does so only when its resume cursor
+    // (miLastUpdatedRival) reaches the end of the authored rival table, so this arm runs on as
+    // many consecutive frames as there are rivals and then goes quiet, exactly as the console's.
     if (mbUpdateRivalsRequested)
     {
-        // ⛔ PARK -- console: `UpdateRivals(lpGameActionQueue);` @0x823A52BC. No body in the
-        // tree; the byte stays set as it would until the callee cleared it.
-        ParkOnce(gbSaidUpdateRivals,
-                 "[FLAG PC bring-up] ProgressionManager::PreWorldUpdate: UpdateRivals() is "
-                 "NOT reconstructed; mbUpdateRivalsRequested stays set.\n");
+        UpdateRivals(lpGameActionQueue);
     }
+
+    // [FLAG PC harness stimulus -- NOT IN THE X360 BINARY] one-shot, default off, and off unless
+    // a test case's DiagEnv sets BRN_PROGRESSION_COMPLETION_SEEDTROPHY=1 (flow_run.ps1 clears
+    // every BRN_* first). It Appends ONE record to the queue below so
+    // tools/tests/cases/progression_completion.ps1 can watch the drain actually drain -- nothing
+    // a 60 s scenario can do earns a trophy car. It touches no profile state and awards no car.
+    // See BrnProgressionManager_Completion.cpp. DELETE-WHEN a scenario can complete a category.
+    DEBUG_HarnessSeedTrophyQueue();
 
     // `lwz r11, 0xC0(this+0x20808)` -- mQueueOfTrophyCarUnLocks' count word; the CgsArray.h:336
     // "Array used before Construct/Clear was called" assert is GetLength's own (the tree's
     // Array::GetLength fires the identical string on the -1 sentinel), then `> 0`.
+    // ⭐ UN-PARKED [progression wave 2026-09-06, lane completion]: console
+    // `SendTrophyUnlockUpdate(lpGameActionQueue);` @0x823892B8, bodied in
+    // BrnProgressionManager_Completion.cpp. It posts the TAIL element as game action 204
+    // (E_ACTION_TROPHY_UNLOCK, 16 B) and Erases it, so one queued trophy car leaves per frame --
+    // and this `> 0` test is the console's own empty guard for a callee that has none.
+    // Before this, UnlockCarFromTrophy (_Unlocks.cpp) could only ever FILL the 12-slot queue.
     if (mQueueOfTrophyCarUnLocks.GetLength() > 0)
     {
-        // ⛔ PARK -- console: `SendTrophyUnlockUpdate(lpGameActionQueue);` @0x823892B8 (posts the
-        // tail element as game action 204 and Erases it). No body in the tree, so the queue keeps
-        // its entries; the _Unlocks partfile that Appends them already documents the same park.
-        ParkOnce(gbSaidTrophyUpdate,
-                 "[FLAG PC bring-up] ProgressionManager::PreWorldUpdate: SendTrophyUnlockUpdate() "
-                 "is NOT reconstructed; queued trophy-car unlocks are not posted.\n");
+        SendTrophyUnlockUpdate(lpGameActionQueue);
     }
 
     // [FLAG PC witness] see OdometerDiagEnabled.
