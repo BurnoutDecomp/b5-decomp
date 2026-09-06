@@ -973,8 +973,23 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // ---- end [DIAG carrender wave] --------------------------------------------
 
     // ========================================================================
-    // ⭐⭐ THE CRACKED-GLASS LOOP  (@0x822D0964..0x822D0F64) -- LANDED 2026-09-06.
+    // ⭐⭐⭐ THE CRACKED-GLASS LOOP  (@0x822D0964..0x822D0F64) -- LANDED 2026-09-06,
+    // AND IT IS ON FILM (2026-09-07, run scratch/GLASSFX/run_B, exe c39d8998de92).
     //
+    // EVIDENCE FIRST. A 22 m/s wall shot cracks panes without driving them past the 5 cm smash
+    // edge, and the same two side windows read
+    //     evidence/B_INTACT_bb002320_zoom4x.png    clean, smooth, green-tinted glass
+    //     evidence/B_CRACKED_bb003180_zoom5x.png   a bright branching crack web across BOTH,
+    //                                              panes still present and still see-through
+    //     evidence/B_CRACKED_windscreen_bb002688_zoom4x.png   the windscreen at full strength
+    // and the device agrees on the line above the draw: pixel c5 takes the console's own
+    // {(1-s)*inv, inv, 0, 0} -- {11.611, 12.611, 0, 0} at s = 0.0793 up to {0, 1, 0, 0} at
+    // s = 1.0 -- with s14 holding the 512x512 DXT5 crack map at WRAP/LINEAR, and vertex
+    // c159/c160 cycling the per-pane offset table and the per-pane {scale, scale*eq} pair.
+    // Final histogram over the run: s0=17044 <.10=14 <.25=27 <.50=222 <1=7507 ==1=10003,
+    // FIFTY-SEVEN distinct strengths. Zero access violations.
+    //
+
     // This block used to be the file's largest named absence, and it is not cosmetic: it is
     // the ONLY thing that draws a cracked pane. The body-part loop above hands AddToBin
     // `excludeMeshBits = mu8RenderDamageFlags`, and DrawRenderable::Interpret drops every
@@ -1028,7 +1043,12 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
         // [DIAG glassfx wave] THE OUTCOME CENSUS, not a "did it run" flag. Five different
         // things can make this loop draw nothing and a boolean could only ever report the
         // first car's answer, so every pane's outcome is tallied and the tuple is printed once
-        // per DISTINCT value. ⛔ DELETE-WHEN cracked panes are confirmed on film.
+        // per DISTINCT value. It walked the whole state machine on its first run --
+        //     seen 6 notDamaged 6 smashed 0 noModel 0 SUBMITTED 0   flags 0x00  (intact)
+        //     seen 6 notDamaged 0 smashed 0 noModel 0 SUBMITTED 6   flags 0x63  (all cracked)
+        //     seen 6 notDamaged 0 smashed 6 noModel 0 SUBMITTED 0   flags 0x63  (all smashed)
+        // -- with noModel 0 at every step. ⛔ DELETE-WHEN the loop stops being new; the film is
+        // already taken (see the banner above), this now only guards regressions.
         u32 luSeen = 0u, luNotDamaged = 0u, luSmashed = 0u, luNoModel = 0u, luSubmitted = 0u;
 
         // [PC guard] the console dereferences the table unguarded, because it only reaches
