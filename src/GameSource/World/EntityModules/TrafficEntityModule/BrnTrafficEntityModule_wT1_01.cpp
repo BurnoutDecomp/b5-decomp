@@ -2572,8 +2572,37 @@ void TrafficEntityModule::Construct()
     // HandleRecycledTraffic landed, no slot was ever freed, so each of the 25 records was
     // claimed at most once per session; now they are RECYCLED, and a fresh occupant would
     // otherwise inherit the previous car's dent, wheel and light-locator state for the frames
-    // before ProcessDeformationData refreshes them. The standing "one-frame 4.86 m vertex spike
-    // on a freshly promoted traffic car, pure +Y, gone the next frame" lead is that shape.
+    // before ProcessDeformationData refreshes them.
+    //
+    // ⛔⛔ THE "one-frame 4.86 m vertex spike" LEAD WAS ATTACHED HERE AND IS REFUTED (2026-09-06,
+    // A/B run tdef_ab, exe 095054d26174, 200 s, BRN_DEFORM_TRACE=1; 2,803 [tdef] + 400
+    // [tdef-upload] lines, so both probes are ARMED and this is not an absence).
+    // The spike is REAL and reproduces -- three occurrences, and every one is the FIRST [tdef]
+    // line for its vehicle, i.e. the promotion frame, pure +Y with x and z exactly 0:
+    //     frame  5180  veh 208 phys 3  maxVerlet  6.113039  sum 24.42  nnz 52  deforming 0
+    //     frame 10835  veh 122 phys 8  maxVerlet  6.044299  sum 24.15  nnz 52  deforming 0
+    //     frame 11361  veh 327 phys 9  maxVerlet 12.409976  sum 49.50  nnz 59  deforming 0
+    // and the next sample for each is 0.372 / 0.152 / 0.114 -- "gone the next frame", exactly the
+    // reported shape. But THIS memset is not its mechanism, for a reason visible in the code and
+    // not needing a run at all: ProcessDeformationData's copy loop overwrites ALL 128 rows of
+    // maSkinningOffsets_Scratch from lrSkin.mpSkinOffsets_Scratch on every call, so what [tdef]
+    // reads is the DeformationManager's OWN output for that frame and the record's prior contents
+    // are unreachable. sum/max is ~4.0 on the spike frame AND on the frame after it, so the whole
+    // block scales down uniformly -- a first-frame relaxation transient in the verlet points,
+    // not stale memory.
+    // ⭐ AND IT NEVER REACHES THE GPU. The render upload is gated on mbIsDeforming, which
+    // TrafficPhysicsInfo::Construct sets false on EVERY claim -- first or recycled (the promotion
+    // path calls it at 0x82721160, _wT3_01.cpp) -- and all three spikes read `deforming 0`.
+    // Across all 400 [tdef-upload] lines the largest maxVerlet actually handed to constant 22 was
+    // 0.312529 m. The console's head-leg order seals it: HandleExternalResponses (which sets
+    // mbIsDeforming) runs IMMEDIATELY before ProcessDeformationData (0x8274E870..0x8274E8A4), so
+    // the first frame a car can be flagged deforming is a frame whose offsets were already
+    // refreshed.
+    // ⚠️ WHAT THIS DOES NOT SETTLE: these probes only see the traffic deforming-arm upload. If a
+    // 4.86 m spike was ever seen ON SCREEN, it did not come through this path, and where it did
+    // come from is still open. Do not re-file it against this memset.
+    // The memset stays -- it is the console's own call and it is what makes a slot's FIRST claim
+    // read zeros instead of host storage. That is its whole justification; the spike never was.
     // THE CONSOLE'S OWN CALL, read out of Construct @0x82740220 (nobody had opened it):
     //     0x827408E8  addis r27, r31, 6       ; this + 0x60000
     //     0x827408F0  addi  r27, r27, -0x7DF0 ; this + 0x58210 == 360976 == the array base
