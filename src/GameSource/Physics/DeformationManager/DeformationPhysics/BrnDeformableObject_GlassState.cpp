@@ -156,13 +156,29 @@ namespace Deformation
         // struct interior is not (yet) homed -- the homed members are reached BY NAME.
         // -------------------------------------------------------------------------------------
         // DeformableObject member offsets (console).
-        static const u32 KU_TAG_POINT_ARRAY_OFFSET   = 15120;  // &maTagPoints[0]      (TagPoint stride 32)
-        static const u32 KU_TAG_POINT_STRIDE         = 32;     // sizeof(TagPoint)
-        static const u32 KU_DRIVEN_POINT_ARRAY_OFFSET = 19232; // &maDrivenPoints[0]   (IKDrivenPoint stride 48)
-        static const u32 KU_DRIVEN_POINT_STRIDE      = 48;     // sizeof(IKDrivenPoint)
-        static const u32 KU_TAG_POINT_SPEC_PTR       = 16;     // TagPoint::mpSpec (the +16 control-point spec ptr)
-        static const u32 KU_TAG_SPEC_REST_POS_OFFSET = 32;     // TagPointSpec rest-position vector (+32)
-        static const u32 KU_DRIVEN_REST_POS_OFFSET   = 32;     // IKDrivenPoint control-vector POINTER (+32 -> ptr -> vec)
+        // ⛔⛔ X360 VALUES -- REFERENCE ONLY, NEVER IN HOST POINTER ARITHMETIC (2026-09-06, glass
+        // wave). maTagPoints and maDrivenPoints are homed BY-VALUE members, and EVERY OTHER reader
+        // in the tree already spells them `maTagPoints[i]` / `maDrivenPoints[i]`. This file was the
+        // last holdout: five reads used `this + 15120 + 32*i` / `this + 19232 + 48*i`, and BOTH the
+        // seat and the stride are wrong on x64. ⭐ MEASURED, run glassfix_A, printed by the
+        // [glassspec] probe below out of the live object:
+        //       host tagSeat 16832 stride 48   drivenSeat 22992 stride 64
+        //     (console          15120       32              19232       48)
+        // The seats are out by 1,712 and 3,760 bytes -- mLocatorData, mImpulsePasser, mVehicleBody
+        // and maDeformationSensors[20] all sit between `this` and maTagPoints and all contain
+        // pointers -- and the strides are out by 50% and 33% (TagPoint is {Vector3, 3 ptrs, f32}:
+        // 32 bytes on a 32-bit console, 48 here; IKDrivenPoint 48 -> 64). For the highest live tag
+        // index the old expression missed by 3.3 KB, i.e. it read a DIFFERENT MEMBER; the glass
+        // pair then took *(element+16) as a TagPointSpec* and DEREFERENCED it. Kept below purely as
+        // the figures for reading the asm, exactly like KU_SENSOR_ARRAY_OFFSET /
+        // KU_VEHICLE_PHYSICS_PTR.
+        static const u32 KU_TAG_POINT_ARRAY_OFFSET   = 15120;  // reference only -- &maTagPoints[0]  (console stride 32)
+        static const u32 KU_TAG_POINT_STRIDE         = 32;     // reference only -- console sizeof(TagPoint)
+        static const u32 KU_DRIVEN_POINT_ARRAY_OFFSET = 19232; // reference only -- &maDrivenPoints[0] (console stride 48)
+        static const u32 KU_DRIVEN_POINT_STRIDE      = 48;     // reference only -- console sizeof(IKDrivenPoint)
+        static const u32 KU_TAG_POINT_SPEC_PTR       = 16;     // reference only -- TagPoint::mpSpec
+        static const u32 KU_TAG_SPEC_REST_POS_OFFSET = 32;     // reference only -- TagPointSpec::mInitialPositionAndDetachThreshold
+        static const u32 KU_DRIVEN_REST_POS_OFFSET   = 32;     // reference only -- IKDrivenPoint::mpSpec (-> mInitialPos @ +0)
 
         // GlassPaneSpec member offsets (console; sizeof 112).
         static const u32 KU_GLASS_POINT_INDEX_0      = 80;     // maiPointIndex[0]  (s16; [1]=82,[2]=84,[3]=86)
@@ -244,7 +260,6 @@ namespace Deformation
         const f32 lfSmashThreshold = KVF_GLASS_SMASH_THRESHOLD.x * KF_GLASS_DISPLACEMENT_SCALE;
         const f32 lfCrackThreshold = KVF_GLASS_CRACK_THRESHOLD.x * KF_GLASS_DISPLACEMENT_SCALE;
 
-        const char* lpcThis        = reinterpret_cast<const char*>(this);
         const char* lpcPaneSpec    = reinterpret_cast<const char*>(lpPaneSpec);
 
         // Accumulate the four control points' squared rest-to-live displacement (vaddfp of the four
@@ -259,26 +274,31 @@ namespace Deformation
                 lpcPaneSpec + KU_GLASS_SKIN_FLAG_0 + liPoint);
 
             // Live world position + its rest/control position, selected by the skin flag.
+            // ⭐⭐ BY NAME as of 2026-09-06 (glass wave) -- SEE THE X64-WIDENING BANNER AT
+            // KU_TAG_POINT_ARRAY_OFFSET. This was `this + 15120 + 32*index` / `this + 19232 +
+            // 48*index`: CONSOLE seats and CONSOLE strides applied to a WIDENED host object, so
+            // neither the base nor the stride landed on a point. The tag-point read then took
+            // *(element+16) -- a field of whatever member actually sits at +15120 -- as a
+            // TagPointSpec pointer and dereferenced it. Same defect class, same file, as the
+            // `*(this + 6476)` vehicle read fixed in the deform-land wave 12 lines below.
             Vector3 lLivePosition;
             Vector3 lRestPosition;
             if (lu8SkinFlag)
             {
                 // Skinned: the TagPoint table. element = maTagPoints[index]; live = element.mPos
-                // (element +0); rest = *(element.mpSpec + 32).
-                const char* lpcElement = lpcThis + KU_TAG_POINT_ARRAY_OFFSET + KU_TAG_POINT_STRIDE * li16PointIndex;
-                lLivePosition = *reinterpret_cast<const Vector3*>(lpcElement);
-                const char* lpcSpec = *reinterpret_cast<const char* const*>(lpcElement + KU_TAG_POINT_SPEC_PTR);
-                lRestPosition = *reinterpret_cast<const Vector3*>(lpcSpec + KU_TAG_SPEC_REST_POS_OFFSET);
+                // (element +0); rest = *(element.mpSpec + 32) == TagPointSpec::GetInitialPosition.
+                const TagPoint& lrTagPoint = maTagPoints[li16PointIndex];
+                lLivePosition = lrTagPoint.GetPosition();
+                lRestPosition = lrTagPoint.GetInitialPosition();
             }
             else
             {
                 // Driven: the IKDrivenPoint table. element = maDrivenPoints[index]; live = element +0;
-                // rest = *(*(element + 32)) -- element+32 holds a POINTER to the control vector
-                // (asm: _R10 = *(_R11+32); lvx128 v12, r0, r10).
-                const char* lpcElement = lpcThis + KU_DRIVEN_POINT_ARRAY_OFFSET + KU_DRIVEN_POINT_STRIDE * li16PointIndex;
-                lLivePosition = *reinterpret_cast<const Vector3*>(lpcElement);
-                const char* lpcControl = *reinterpret_cast<const char* const*>(lpcElement + KU_DRIVEN_REST_POS_OFFSET);
-                lRestPosition = *reinterpret_cast<const Vector3*>(lpcControl);
+                // rest = *(*(element + 32)) -- console +0x20 is mpSpec and its leading vector is
+                // IKDrivenPointSpec::mInitialPos (asm: _R10 = *(_R11+32); lvx128 v12, r0, r10).
+                const IKDrivenPoint& lrDrivenPoint = maDrivenPoints[li16PointIndex];
+                lLivePosition = lrDrivenPoint.GetPosition();
+                lRestPosition = lrDrivenPoint.GetOriginalPosition();
             }
 
             // (live - rest), squared magnitude (vsubfp then vmsum3fp128), summed.
@@ -352,7 +372,6 @@ namespace Deformation
         const GlassPaneSpec* lpPaneSpec = mpDeformationSpec->GetGlassPaneSpec(liPaneIndex);
 
         const char* lpcPane    = reinterpret_cast<const char*>(lpPaneSpec);
-        const char* lpcThis    = reinterpret_cast<const char*>(this);
 
         // The attached vehicle physics (the asm's *(this+6476)). Two transforms are used: the
         // graphics transform (GetGraphicsVehicleTransf result v71) rotates the pane normal into
@@ -395,21 +414,22 @@ namespace Deformation
             const u8 lu8SkinFlag = *reinterpret_cast<const u8*>(
                 lpcPane + KU_GLASS_SKIN_FLAG_0 + liCorner);
 
+            // ⭐⭐ BY NAME as of 2026-09-06 (glass wave), same fix and same reason as
+            // UpdateGlassSmashedState above: console seats + console strides on a widened host
+            // object reached neither table.
             Vector3 lLivePosition;
             Vector3 lRestPosition;
             if (lu8SkinFlag)
             {
-                const char* lpcElement = lpcThis + KU_TAG_POINT_ARRAY_OFFSET + KU_TAG_POINT_STRIDE * li16PointIndex;
-                lLivePosition = *reinterpret_cast<const Vector3*>(lpcElement);
-                const char* lpcTagSpec = *reinterpret_cast<const char* const*>(lpcElement + KU_TAG_POINT_SPEC_PTR);
-                lRestPosition = *reinterpret_cast<const Vector3*>(lpcTagSpec + KU_TAG_SPEC_REST_POS_OFFSET);
+                const TagPoint& lrTagPoint = maTagPoints[li16PointIndex];
+                lLivePosition = lrTagPoint.GetPosition();
+                lRestPosition = lrTagPoint.GetInitialPosition();
             }
             else
             {
-                const char* lpcElement = lpcThis + KU_DRIVEN_POINT_ARRAY_OFFSET + KU_DRIVEN_POINT_STRIDE * li16PointIndex;
-                lLivePosition = *reinterpret_cast<const Vector3*>(lpcElement);
-                const char* lpcControl = *reinterpret_cast<const char* const*>(lpcElement + KU_DRIVEN_REST_POS_OFFSET);
-                lRestPosition = *reinterpret_cast<const Vector3*>(lpcControl);
+                const IKDrivenPoint& lrDrivenPoint = maDrivenPoints[li16PointIndex];
+                lLivePosition = lrDrivenPoint.GetPosition();
+                lRestPosition = lrDrivenPoint.GetOriginalPosition();
             }
 
             // World corner = (live control point + per-corner offset) transformed by the vehicle
@@ -563,11 +583,70 @@ namespace Deformation
     void DeformableObject::UpdateGlass(f32 lfTimeStep, DeformationOutputInterface* lpOut,
                                        DeformationOutputInterfaceForEntityModules* lpOutEM)
     {
-        // miNumGlassPanes lives at spec +32; the asm reads *(*(this+6368)+32). The spec keeps it
-        // private, so reach it at the asm-attested offset (the spec interior is homed but the count
-        // is not exposed by a public accessor).
-        const char* lpcSpec      = reinterpret_cast<const char*>(mpDeformationSpec);
-        const s32   liNumPanes   = *reinterpret_cast<const s32*>(lpcSpec + 32);
+        // miNumGlassPanes lives at spec +32; the asm reads *(*(this+6368)+32). BY NAME as of
+        // 2026-09-06 -- the record's members are public (it IS the on-disc image) and the header
+        // static_asserts miNumGlassPanes @ +32, so the two spellings are the same read.
+        const s32 liNumPanes = mpDeformationSpec->miNumGlassPanes;
+
+        // ---------------------------------------------------------------------------------------
+        // [DIAG] NOT IN THE X360 BINARY. BRN_GLASS_PROBE=1 only. Read-only; deleted when the glass
+        // question is banked.
+        //
+        // WHY THIS EXISTS AND WHAT IT HAS TO SETTLE. 59702646 concluded from an AV's CODE OFFSET
+        // (UpdateGlassSmashedState+0x3E) that maGlassPaneData was absent behind a non-zero pane
+        // count. No faulting address was captured and the registers quoted were call-clobbered, so
+        // that was an inference, not a measurement -- and there is a second, certain pointer bug in
+        // the same 62 bytes (the console-seat tag/driven reads, fixed above). This prints the SPEC'S
+        // OWN FOUR TABLE SLOTS side by side, so the three explanations separate on sight:
+        //   * all four slots small and similar  -> FixUp never ran; the slots are still on-disc
+        //     base-relative offsets (the record is 1712 bytes, so a real offset is >= 1712).
+        //   * glass slot 0 while the other three are large  -> the pane array really is absent and
+        //     the producer hunt is on (the 27 rig-less retail cars carry a GARBAGE glass slot with
+        //     count 0 -- count 0 with a junk slot is NORMAL and is not this).
+        //   * all four large and the pane loop runs  -> the AV was the tag/driven ghost.
+        // It also prints the HOST seats of maTagPoints/maDrivenPoints so the console figures
+        // 15120/19232 and strides 32/48 can be compared against what this build actually has.
+        // Capped at 8 lines for the whole process: a per-object-per-frame probe would starve the
+        // harness [[watch-the-window-asserts-pause]].
+        {
+            static s32 siSpecProbe = -1;
+            if ( siSpecProbe < 0 )
+            {
+                const char* lpcEnv = getenv("BRN_GLASS_PROBE");
+                siSpecProbe = (lpcEnv != 0 && atoi(lpcEnv) > 0) ? 1 : 0;
+            }
+            if ( siSpecProbe == 1 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                static u32 suSpecLines = 0;
+                if ( suSpecLines < 8u )
+                {
+                    ++suSpecLines;
+                    const StreamedDeformationSpec* lpSpec = mpDeformationSpec;
+                    const char* lpcObject = reinterpret_cast<const char*>(this);
+                    *CgsDev::Log::gpDebugPrint
+                        << "[glassspec] obj " << static_cast<s32>(mu16DeformableObjectIndex)
+                        << " spec " << static_cast<void*>(const_cast<StreamedDeformationSpec*>(lpSpec))
+                        << " sizeof " << static_cast<u64>(sizeof(StreamedDeformationSpec))
+                        << " | tag slot "    << lpSpec->maTagPointData.muSlot
+                        << " n " << lpSpec->miNumberOfTagPoints
+                        << " | driven slot " << lpSpec->maDrivenPointData.muSlot
+                        << " n " << lpSpec->miNumberOfDrivenPoints
+                        << " | ik slot "     << lpSpec->maIKPartData.muSlot
+                        << " n " << lpSpec->miNumberOfIKParts
+                        << " | GLASS slot "  << lpSpec->maGlassPaneData.muSlot
+                        << " n " << lpSpec->miNumGlassPanes
+                        << " ptr " << static_cast<void*>(lpSpec->maGlassPaneData.Get())
+                        << " | live tags " << miNumTagPoints << " driven " << miNumDrivenPoints
+                        << " | host tagSeat "
+                        << static_cast<u64>(reinterpret_cast<const char*>(&maTagPoints[0]) - lpcObject)
+                        << " stride " << static_cast<u64>(sizeof(TagPoint))
+                        << " drivenSeat "
+                        << static_cast<u64>(reinterpret_cast<const char*>(&maDrivenPoints[0]) - lpcObject)
+                        << " stride " << static_cast<u64>(sizeof(IKDrivenPoint))
+                        << " (console 15120/32, 19232/48)\n";
+                }
+            }
+        }
 
         for (s32 liPane = 0; liPane < liNumPanes; ++liPane)
         {
@@ -617,7 +696,6 @@ namespace Deformation
     void DeformableObject::OutputState(CarState* lpCarState)
     {
         char*       lpcCarState = reinterpret_cast<char*>(lpCarState);
-        const char* lpcThis     = reinterpret_cast<const char*>(this);
         const char* lpcSpec     = reinterpret_cast<const char*>(mpDeformationSpec);
 
         // (1) sensor count: spec +1618 (mu8NumDeformationSensors) -> CarState +1700.
@@ -721,9 +799,11 @@ namespace Deformation
             CGS_ASSERT(vpu::IsValid(lWheelBlockValue), "Invalid wheel position: , please tell Graham D.");
 
             // maTagPoints[tagIndex] (LOCAL, NOT transformed), w lane replaced by the wheel-block w lane.
-            const char* lpcElement = lpcThis + KU_TAG_POINT_ARRAY_OFFSET +
-                                     KU_TAG_POINT_STRIDE * lpWheelSpec->liTagPointIndex;
-            Vector3 lTagPoint = *reinterpret_cast<const Vector3*>(lpcElement);
+            // ⭐⭐ BY NAME as of 2026-09-06 (glass wave): this read used the console seat/stride on
+            // the widened host object, so every wheel tag point written into the CarState was a
+            // slice of whatever member actually sits at host +15120. Silent -- unlike the glass
+            // path it never dereferenced what it read, so it produced wrong numbers, not a fault.
+            Vector3 lTagPoint = maTagPoints[lpWheelSpec->liTagPointIndex].GetPosition();
             lTagPoint.w = lWheelBlockValue.w;   // vrlimi128 v127, v0, 4, 0 (w-lane merge)
             *reinterpret_cast<Vector3*>(lpcWheelTagDst) = lTagPoint;
 
@@ -748,7 +828,6 @@ namespace Deformation
     {
         CGS_ASSERT(mpDeformationSpec != nullptr, "mpDeformationSpec");
 
-        const char* lpcThis    = reinterpret_cast<const char*>(this);
         const char* lpcVehicle = reinterpret_cast<const char*>(mVehicleBody.GetVehiclePhysics());
         // ^ BY NAME (fixed 2026-08-24, deform-land wave): the old `*(this + 6476)` read used the
         // CONSOLE offset on the HOST object -- every pointer above the seat widens on x64, so it
@@ -767,9 +846,9 @@ namespace Deformation
             const s32 liTagPointIndex = lpWheelSpec->liTagPointIndex;
             if (liTagPointIndex != -1)
             {
-                const char* lpcElement = lpcThis + KU_TAG_POINT_ARRAY_OFFSET +
-                                         KU_TAG_POINT_STRIDE * liTagPointIndex;
-                const Vector3 lTagPointLocal = *reinterpret_cast<const Vector3*>(lpcElement);
+                // ⭐⭐ BY NAME as of 2026-09-06 (glass wave) -- see OutputState above; the console
+                // seat/stride never reached maTagPoints on the widened host object.
+                const Vector3 lTagPointLocal = maTagPoints[liTagPointIndex].GetPosition();
 
                 // Validity tripwire (the asm's formatted FireAssert literal; pure tripwire, no side
                 // effect). asm string == "Invalid wheel tag point position: <pos> . Please tell Graham D".
