@@ -1,6 +1,7 @@
 #include "GameSource/Physics/VehicleManager/StuntOffences/BrnStuntOffencesManager.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"   // RaceCarPhysics (GetTransform/GetAngularVelocity/GetLinearVelocity/GetNumberOfWheelsOnTheGround/IsCrashing)
 #include "GameSource/Math/BrnMathUtils.h"                                      // BrnMath::Flatten
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"        // BrnPhysics::Vehicle::RaceCarState (OutputStuntsInProgress publishes into it BY NAME)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                             // CgsDev::Assert::{Begin,Fire,End}Assert
 #include "rw/math/vpu/vector3_operation.h"                                     // rw::math::vpu::{Dot, Add, Subtract, Mult, Normalize, Magnitude, MagnitudeSquared, Max, Abs}
 #include "rw/math/vpu/matrix44affine_operation.h"                             // rw::math::vpu::InverseOfMatrixWithOrthonormal3x3, operator*
@@ -818,20 +819,25 @@ namespace BrnPhysics
     // ============================================================================================
     // @0x8263B278  OutputStuntsInProgress -- mirror live stunt scalars into the RaceCarState + push.
     // ============================================================================================
-    void StuntOffencesManager::OutputStuntsInProgress(RaceCarState* lpRaceCarState,
-                                                      BrnGameState::GameStateModuleIO::GameEventQueue* lpGameEventQueue)
+    void StuntOffencesManager::OutputStuntsInProgress(Vehicle::RaceCarState* lpRaceCarState,
+                                                      CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue)
     {
         if (!lpRaceCarState) FireAssert("lpRaceCarState != NULL", 166);
 
-        // copy the 6 live scalars into the RaceCarState (word offsets +0x41C..+0x438). FLAG: written by
-        // raw offset because RaceCarState is GameState-side and not homed here; see shared_header_grows.
-        u8* lpRcs = reinterpret_cast<u8*>(lpRaceCarState);
-        std::memcpy(lpRcs + 0x438, &muStuntActionInProgress,        4);   // a2[270]
-        std::memcpy(lpRcs + 0x41C, &mfInProgressBarrelRollAngle,    4);   // a2[263]
-        std::memcpy(lpRcs + 0x420, &mfInProgressAirSpinAngle,       4);   // a2[264]
-        std::memcpy(lpRcs + 0x424, &mfInProgressHandbreakTurnAngle, 4);   // a2[265]
-        std::memcpy(lpRcs + 0x428, &mfInProgressDriftTime,          4);   // a2[266]
-        std::memcpy(lpRcs + 0x42C, &mfInProgressDriftDistance,      4);   // a2[267]
+        // Publish the 6 live stunt scalars into the player's RaceCarState. [stunt lane 2026-09-06]
+        // BY NAME, not by offset: the X360 word offsets +0x41C..+0x438 are EXACTLY the six
+        // members below (BrnVehicleEvents.h @1052/@1056/@1060/@1064/@1068/@1080), so the
+        // reinterpret_cast + memcpy block this replaced was the type fork's symptom, not a
+        // serialised-blob access. These six fields are the ONLY input StuntModeScoring's drift and
+        // handbrake detectors have (UpdateDriftStunts @0x8232CAE0 gates on mfInProgressDriftTime,
+        // UpdateDrivingStunts @0x8232CD70 on mfInProgressHandbreakTurnAngle), and this function is
+        // their ONLY writer anywhere in the image.
+        lpRaceCarState->muStuntActionInProgress        = muStuntActionInProgress;         // +0x438
+        lpRaceCarState->mfInProgressBarrelRollAngle    = mfInProgressBarrelRollAngle;     // +0x41C
+        lpRaceCarState->mfInProgressAirSpinAngle       = mfInProgressAirSpinAngle;        // +0x420
+        lpRaceCarState->mfInProgressHandbreakTurnAngle = mfInProgressHandbreakTurnAngle;  // +0x424
+        lpRaceCarState->mfInProgressDriftTime          = mfInProgressDriftTime;           // +0x428
+        lpRaceCarState->mfInProgressDriftDistance      = mfInProgressDriftDistance;       // +0x42C
 
         if (!lpGameEventQueue) FireAssert("lpGameEventQueue != NULL", 177);
 
@@ -875,8 +881,9 @@ namespace BrnPhysics
             const f32 lfDiff = mfDistanceOfLastJump - mfDistanceInAirSoFar;
             lEvent.mfMaxJumpDistance = (lfDiff > 0.0f) ? mfDistanceOfLastJump : mfDistanceInAirSoFar;   // fsel
             lEvent.mbTookOffInReverse   = mbTookOffInReverse ? 1 : 0;
-            reinterpret_cast<CgsModule::VariableEventQueue<1536, 16>*>(lpGameEventQueue)
-                ->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent), 120 /*0x78*/, 148 /*0x94*/);
+            // [stunt lane 2026-09-06] no cast any more: the parameter IS the queue template now.
+            lpGameEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent),
+                                       120 /*0x78*/, 148 /*0x94*/);
         }
 
         // clear the in-progress block.

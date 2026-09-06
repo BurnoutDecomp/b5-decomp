@@ -58,6 +58,8 @@
 #include "rw/math/vpu/vector3_operation.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [stunt] the per-award witness rung
+#include <cstdlib>                                          // getenv (BRN_STUNT_DIAG)
 
 // PreWorldUpdate drains the pending stunt-info HUD event into the per-frame output-action queue
 // (CgsModule::VariableEventQueue<13312,16>); it calls AddEvent BY NAME, so the full template
@@ -108,6 +110,24 @@ namespace BrnGameState
 
         // UpdateBufferedScore armed pending-score window.
         const f32 KF_PENDING_SCORE_PENDING_TIME            = 0.5f;  // flt_82CDB788 : armed pending-score window
+
+        // [FLAG PC witness] NOT IN THE X360 BINARY -- the EStuntType spelling used by the
+        // [stunt] award rung in UpdateScore. The 19 names are the committed EStuntType enum
+        // (BrnGameStateTypes.h:74); indices 15..18 are the ERROR/RATING pseudo-categories the
+        // X360's `< 18` range bound admits, so the table is sized to the range the asm walks,
+        // not to E_STUNT_TYPE_COUNT (15). DELETE-WHEN that rung goes.
+        const char* GetStuntTypeDiagName(EStuntType leStuntType)
+        {
+            static const char* const KAPC_STUNT_TYPE_NAMES[19] =
+            {
+                "SPIN", "BARREL_ROLL", "AIR", "DRIFT", "SUPER_JUMP", "SUPER_SMASH",
+                "BILLBOARD", "BURNOUT", "BOOST", "REVERSE_DRIVING", "HANDBRAKE_TURN",
+                "POWER_PARK", "CRASH_FINISH", "PROP", "REVERSE_TAKEOFF",
+                "ERROR_REPETITION", "ERROR_CRASHED", "RATING_GOOD", "RATING_AWESOME"
+            };
+            const s32 liType = static_cast<s32>(leStuntType);
+            return (liType >= 0 && liType < 19) ? KAPC_STUNT_TYPE_NAMES[liType] : "?";
+        }
     }
 
     // The "pending-score timer is not running" sentinel (X360 flt_82CDB784,
@@ -316,6 +336,37 @@ namespace BrnGameState
         {
             const f32 lfSum = mfPendingNonGuaranteedScore + lfScore;
             mfPendingNonGuaranteedScore = (lfSum >= KF_ZERO) ? lfSum : KF_ZERO;
+        }
+
+        // [FLAG PC witness] [stunt] PER-AWARD RUNG. NOT IN THE X360 BINARY. Opt-in behind
+        // BRN_STUNT_DIAG, first-N capped. Every stunt category passes through this one function,
+        // so this is the single line that answers "which stunt TYPES does the scorer ever see?" --
+        // the question the parked drift/handbrake feed makes load-bearing (tools\tests\cases\
+        // stunt_run_lifecycle.ps1 gates on it). Never per-frame unbounded: an in-progress drift
+        // awards once per frame, so the first-N cap is the budget, not the gate.
+        // DELETE-WHEN the stunt-run scoring feeds have a standing regression case that does not
+        // need the log to see them.
+        {
+            // PER-TYPE budget, not one shared pool. Measured 2026-09-06 (run 20260906_100601):
+            // a single sustained drift awards once per frame and burned a shared 200-line budget
+            // by itself, so every LATER stunt type -- the handbrake turn this very case drives --
+            // was invisible in the log while being scored perfectly well. A per-category cap makes
+            // "which types does the scorer see?" answerable regardless of how noisy one of them is.
+            static const bool sbStuntDiag  = (getenv("BRN_STUNT_DIAG") != 0);
+            static s32        saiAwardLines[19] = { 0 };
+            const s32         KI_AWARD_LINE_MAX_PER_TYPE = 12;
+            if (sbStuntDiag && liType >= 0 && liType < 19
+                && saiAwardLines[liType] < KI_AWARD_LINE_MAX_PER_TYPE
+                && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++saiAwardLines[liType];
+                *CgsDev::Log::gpDebugPrint
+                    << "[stunt] award type=" << liType << " " << GetStuntTypeDiagName(leStuntType)
+                    << " pts=" << lfScore
+                    << " pendG=" << mfPendingGuaranteedScore
+                    << " pendNG=" << mfPendingNonGuaranteedScore
+                    << " combo=" << mfComboScore << "\n";
+            }
         }
     }
 

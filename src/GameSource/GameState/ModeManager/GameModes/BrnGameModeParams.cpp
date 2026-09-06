@@ -70,6 +70,31 @@ void GameModeParams::Construct(GameStateModuleIO::EGameModeType leGameModeType)
     // (mfOnlineModeTimeLimit stays unset here -- deliberate; do not add a store for it).
     meAStarDistanceFunction           = E_ASTARDIST_STUB;   // == 0
 
+    // [stunt lane 2026-09-06] THE FOUR AI-CONFIG WORDS WERE MISSING FROM THIS CLEAR, AND THAT WAS
+    // A LIVE DEFECT, not a comment gap. The console's own trailing zero cluster writes r11 (== 0)
+    // to FIVE words in this region, not one:
+    //     0x8231C3F4  stw r11, 0x848(r3)   meAISpeedSelectionMethod
+    //     0x8231C3F8  stw r11, 0x840(r3)   meDefaultPlayerRouteFindingStyle
+    //     0x8231C3FC  stw r11, 0x844(r3)   meDefaultAIRouteFindingStyle
+    //     0x8231C400  stw r11, 0x84C(r3)   miAIAggressiveCarCount
+    //     0x8231C408  stw r11, 0x854(r3)   meAStarDistanceFunction        (the one already above)
+    // Only 0x854 was reproduced. The other four members are PRIVATE and only RoadRageMode::Start
+    // and PursuitMode set them, so on every other mode -- a stunt run included -- they carried
+    // whatever the STACK held: GameModeParams is a stack local at BrnModeManager_Start.cpp:226.
+    // MEASURED (pre-fix run scratch\bugtest\runs\stunt_run_lifecycle\20260906_094030): starting
+    // stunt event 558269 left meDefaultPlayerRouteFindingStyle == 480897 -- the event-junction id
+    // sitting in the same stack frame -- which AIModule::OnModeStart @0x82791F44 copies into the
+    // module, HandleGameActions action 7 stamps onto the PLAYER's AICar, and the AI then asserts on
+    // every frame from both ends: 7,893 x "Invalid route finding style" (BrnAICar.cpp:555) plus
+    // 7,651 x "Unknown route finding style 480897" (BrnRouteRequestManager.cpp:485) -- 15,603
+    // asserts in one 235 s run, which is also why that run took 542 s of wall clock.
+    // Zero is E_ROUTE_FINDING_FREE_ROAM / the first speed-selection method / no aggressive cars --
+    // exactly what an offline stunt run wants, and exactly what the console writes.
+    meDefaultPlayerRouteFindingStyle  = E_ROUTEFINDINGSTYLE_STUB;   // 0x840 == 0 (FREE_ROAM)
+    meDefaultAIRouteFindingStyle      = E_ROUTEFINDINGSTYLE_STUB;   // 0x844 == 0 (FREE_ROAM)
+    meAISpeedSelectionMethod          = E_AISPEEDSEL_STUB;          // 0x848 == 0
+    miAIAggressiveCarCount            = 0;                          // 0x84C
+
     // Per-event identity / counts cleared.
     muEventJunctionID            = 0;
     muJunctionID                 = 0;

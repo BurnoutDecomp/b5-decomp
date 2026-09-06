@@ -4,6 +4,7 @@
 #include "GameSource/GameState/ModeManager/GameModeStates/BrnGameModeState.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"   // ScoringSystem::GetPlayerNoInputTime / GetPlayerStationaryTime (slot 13)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [stunt] the mode-state ladder rung (see SetCurrentState)
 
 namespace BrnGameState
 {
@@ -474,6 +475,34 @@ void GameMode::SetCurrentState(s32 liState)
         }
 
         meCurrentState = liState;
+
+        // [FLAG PC witness] [stunt] THE MODE-STATE LADDER RUNG. NOT IN THE X360 BINARY.
+        // flow_run.ps1's event ladder carries `e-inprog` as a CONTRACT cue -- the text
+        // "E_GMS_IN_PROGRESS" that NO producer in the tree printed, so every stunt-run run so far
+        // stamped it "(never) CUE UNVERIFIED" and said nothing about the game. This is the single
+        // console transition point (GameMode::SetCurrentState @0x82327238), so one line here names
+        // every state change of every mode exactly once. Gated on gpDebugPrint only -- the same
+        // rung discipline as the case-20 arm's "[start] event 20" lines, because a ladder rung that
+        // needs a diag variable is a rung that reads BLIND on a run that did not set it. Bounded by
+        // a first-N cap: transitions are a handful per mode, but a mode that restarts in a loop
+        // must not be able to flood the 128 MB log budget.
+        // DELETE-WHEN the ladder cue is retired from flow_run.ps1.
+        {
+            static const char* const KAPC_GAME_MODE_STATE_NAMES[KI_GMS_COUNT] =
+            {
+                "E_GMS_COUNTDOWN", "E_GMS_INTRO", "E_GMS_IN_PROGRESS", "E_GMS_OUTRO",
+                "E_GMS_RESULTS",   "E_GMS_QUIT",  "E_GMS_ONLINE_LOADING", "E_GMS_ONLINE_SPLASH"
+            };
+            static s32 siStateLines = 0;
+            const s32 KI_STATE_LINE_MAX = 64;
+            if (siStateLines < KI_STATE_LINE_MAX && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++siStateLines;
+                *CgsDev::Log::gpDebugPrint << "[stunt] mode state -> "
+                                           << KAPC_GAME_MODE_STATE_NAMES[liState] << "\n";
+            }
+        }
+
         maGameModeStates[liState]->OnEnter();
     }
 }

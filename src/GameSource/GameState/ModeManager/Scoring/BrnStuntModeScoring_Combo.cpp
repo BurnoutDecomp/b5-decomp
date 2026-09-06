@@ -2,6 +2,8 @@
 
 #include "GameSource/GameState/BrnGameActions.h"      // GameStateModuleIO action types (parity with sibling bodies)
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [stunt] the running-total witness rung
+#include <cstdlib>                                          // getenv (BRN_STUNT_DIAG)
 
 // ============================================================================
 // BrnStuntModeScoring_Combo.cpp
@@ -151,6 +153,29 @@ void StuntModeScoring::EndCombo()
 
     // X360 0x10 += (s32)0x20 * 0x24  (mfComboScore re-read + fctiwz; mullw; add to miCurrentScore).
     miCurrentScore += miComboMultiplier * static_cast<s32>(mfComboScore);
+
+    // [FLAG PC witness] [stunt] THE RUNNING-TOTAL RUNG. NOT IN THE X360 BINARY. Opt-in behind
+    // BRN_STUNT_DIAG, first-N capped. miCurrentScore is the number the stunt run is judged on
+    // (StuntModeScoring::HasStuntModeEnded compares it with miTargetScore, and it is what
+    // ScoringSystem::WriteDataToOutput publishes to the HUD), and THIS is its only writer outside
+    // Construct/ClearData -- so one line here is the whole "does the score MOVE?" question.
+    // Combos end at human cadence, so the rung cannot flood; the cap is belt and braces.
+    // DELETE-WHEN the stunt-run scoring feeds have a standing regression case that does not need
+    // the log to see them.
+    {
+        static const bool sbStuntDiag = (getenv("BRN_STUNT_DIAG") != 0);
+        static s32        siBankLines = 0;
+        const s32         KI_BANK_LINE_MAX = 200;
+        if (sbStuntDiag && siBankLines < KI_BANK_LINE_MAX && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++siBankLines;
+            *CgsDev::Log::gpDebugPrint
+                << "[stunt] combo banked score=" << liComboScore
+                << " mult=" << miComboMultiplier
+                << " total=" << miCurrentScore
+                << " target=" << miTargetScore << "\n";
+        }
+    }
 
     // X360 container clears (same three Clear()s as ClearData): jump ring @0x208/0x20C/0x210,
     // stunt-element set length @0x2220, prop ring @0x2230/0x2234/0x2238.

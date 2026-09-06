@@ -29,14 +29,19 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"    // CgsModule::VariableEventQueue<1536,16>
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"          // CgsContainers::BitArray<8> (live-car bitset)
 
-namespace BrnPhysics { namespace Vehicle { class RaceCarPhysics; } }
+namespace BrnPhysics { namespace Vehicle { class RaceCarPhysics; struct RaceCarState; } }
 namespace BrnGameState { namespace GameStateModuleIO { class GameEventQueue; } } // == VariableEventQueue<1536,16>
 
 namespace BrnPhysics
 {
-    // FLAG: GameState-side output target (OutputStuntsInProgress arg). Not homed by this physics TU;
-    // forward-declared. The body writes its live stunt scalars into it by word offset via a narrow grow.
-    class RaceCarState;
+    // [stunt lane 2026-09-06] THE TYPE FORK IS GONE. This used to declare its own
+    // `BrnPhysics::RaceCarState` -- a placeholder class in the WRONG namespace that matched
+    // nothing in the tree -- so OutputStuntsInProgress could only reach the state through a
+    // reinterpret_cast + word-offset memcpys, and its console call site
+    // (VehicleManager::WriteOutVehicleStats @0x8263F460, which holds the real
+    // BrnPhysics::Vehicle::RaceCarState) had to be parked rather than mint a second cast over
+    // the fork. The argument is now the committed struct, forward-declared in its own namespace
+    // exactly as nine other consumers already declare it, and the body stores BY NAME.
 
     class StuntOffencesManager
     {
@@ -50,8 +55,12 @@ namespace BrnPhysics
                     BrnGameState::GameStateModuleIO::GameEventQueue* lpGameEventQueue,
                     f32 lfTimeStep);                                                               // @0x82642408
 
-        void OutputStuntsInProgress(RaceCarState* lpRaceCarState,
-                                    BrnGameState::GameStateModuleIO::GameEventQueue* lpGameEventQueue); // @0x8263B278
+        // The console's second argument is the VehicleOutputInterface's OWN embedded game-event
+        // queue (`addi r5, r19, 0x65F0` at the 0x8263F768 call site), i.e. the same
+        // CgsModule::VariableEventQueue<1536,16> the DWARF calls GameEventQueue. Named as that
+        // template here so no cast stands between the call site and the body.
+        void OutputStuntsInProgress(Vehicle::RaceCarState* lpRaceCarState,
+                                    CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue);  // @0x8263B278
 
         // DWARF-attested
         // (BrnStuntOffencesManager.h:232 `void SetCurrentRaceCarState(BrnPhysics::ECurrentCarState)`),

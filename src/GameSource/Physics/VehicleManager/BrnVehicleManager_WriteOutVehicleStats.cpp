@@ -42,53 +42,40 @@
 //   0x8263FA28  mPhysicalTrafficManager.WriteOutVehicleStats(lpOutputInterface)
 //   0x8263FA38  mbPlayerCarStuckInCollision = false     (`stbx r23(0), r18, 0x2A240`)
 //
-// ONE LEG IS PARKED, LOUDLY, WITH ITS OWN LOG-ONCE -- never a silent no-op:
+// THE ONE PARKED LEG IS RETIRED (stunt lane, 2026-09-06) -- history kept, because the park's own
+// "RESTORE-WHEN" fired and the reasoning that kept it is what dates:
 //
-//   (1) StuntOffencesManager::OutputStuntsInProgress @0x8263B278 IS bodied
-//       (BrnStuntOffencesManager.cpp:819) but its declared signature takes
-//       `BrnPhysics::RaceCarState*` and `BrnGameState::GameStateModuleIO::GameEventQueue*` --
-//       TWO FORWARD-DECLARED PLACEHOLDER CLASSES that are NOT the committed
-//       `BrnPhysics::Vehicle::RaceCarState` and `CgsModule::VariableEventQueue<1536,16>` this call
-//       site holds. That is a REAL TYPE FORK in the tree (BrnStuntOffencesManager.h:37-40 declares
-//       both itself), and its body reaches the state through `reinterpret_cast` + memcpy at raw
-//       word offsets +0x41C..+0x438. Calling it from here would mean minting a second
-//       reinterpret_cast over the fork; the honest move is to name the fork and park the call.
-//       ⇒ FIX: retype StuntOffencesManager::OutputStuntsInProgress onto the committed
-//       BrnPhysics::Vehicle::RaceCarState + CgsModule::VariableEventQueue<1536,16> (both are
-//       includable from that TU), replace its offset memcpys with the named members
-//       (muStuntActionInProgress / mfInProgressBarrelRollAngle / mfInProgressAirSpinAngle /
-//       mfInProgressHandbreakTurnAngle / mfInProgressDriftTime / mfInProgressDriftDistance --
-//       +0x41C..+0x438 are EXACTLY those six, verified against BrnVehicleEvents.h), then delete
-//       this park. It publishes the player's in-progress stunt scalars only; it has no bearing on
-//       the pose.
+//   (1) StuntOffencesManager::OutputStuntsInProgress @0x8263B278 was bodied but NOT CALLED, because
+//       its declared arguments were `BrnPhysics::RaceCarState*` and
+//       `BrnGameState::GameStateModuleIO::GameEventQueue*` -- two forward-declared placeholders
+//       that were NOT the committed `BrnPhysics::Vehicle::RaceCarState` /
+//       `CgsModule::VariableEventQueue<1536,16>` this call site holds. Calling it would have meant
+//       minting a second reinterpret_cast over that fork, so the fork was named and the call
+//       parked. THE FORK IS NOW GONE: the callee takes the committed types and stores BY NAME
+//       (BrnStuntOffencesManager.h/.cpp), and the call below is the console's own.
 //
-//       ⛔⛔ [bugwave 2026-08-23] READ THIS BEFORE SPENDING A WAVE ON THIS PARK. It was the
-//       PRIME SUSPECT for the "super jumps do not get counted / camera does not fire" report,
-//       and it is NOT the cause -- of either half. Measured, not argued:
-//         * The super-jump TALLY comes from the GameState collectible ladder
-//           (TriggerQueryManager player-trigger fan-out -> StuntManager::LatchJumpElement ->
-//            UpdateJumps -> ProcessStuntElement(isJump) -> Profile::AddStuntElement + game
-//            action 58), which never touches StuntOffencesManager at all. The real break was
-//           that ProcessPlayerTriggers had NO CALLER in the tree; fixed this wave in
-//           BrnTriggerQueryManager.cpp :: PreWorldUpdatePlayerTriggersBringUp.
-//         * What this leg publishes is the STUNT-RUN / FREEBURN-SKILL telemetry (air time,
-//           jump distance, barrel-roll / flat-spin / drift angles) as game EVENT 120
-//           (InProgressStuntEvent). ON THIS BUILD THAT EVENT HAS NO CONSUMER: the only
-//           GameState-side drain that exists is GameStateModule_gUI_00.cpp ::
-//           ProcessGameEventsPropHitBringUp, whose `if (liType == E_EVENT_RECORD_PROP_HIT)`
-//           accepts event 111 and nothing else. Its would-be readers -- ChallengeManager
-//           (BrnChallengeManager_wC_06.cpp) and StuntModeScoring (Scoring/*) -- are in TUs
-//           that are not on the build list.
-//         * Its SIBLING is already live and equally unread: StuntOffencesManager::Update
-//           (BrnVehicleManager_UpdateVehiclePhysics.cpp:681) calls OutputStuntsCompleted every
-//           frame, which posts game event 119 into the same queue. So retyping this fork today
-//           would add a SECOND event nobody reads -- the textbook "publishes scalars nobody
-//           consumes is not a fix".
-//       The park therefore STAYS, and its cost is restated honestly: no freeburn stunt-run
-//       skill telemetry. RESTORE-WHEN a GameState ProcessGameEvents arm drains event 120
-//       (i.e. when ChallengeManager or the Scoring subsystem mounts) -- retyping the signature
-//       is then worth doing and the shape of that change is spelled out above.
+//       ⭐ WHY NOW -- the park's own RESTORE-WHEN condition ("when ChallengeManager or the Scoring
+//       subsystem mounts") CAME TRUE, and the 2026-08-23 reasoning that kept it was about the
+//       WRONG HALF of what this leg publishes. It publishes TWO things, not one:
+//         (a) game EVENT 120 (InProgressStuntEvent) -- still undrained. That is the half the
+//             bugwave note measured, and it is still true: ProcessGameEvents accepts 111 only.
+//         (b) THE SIX IN-PROGRESS STUNT SCALARS, straight into the player's RaceCarState. THAT
+//             half has a live consumer and has had one since the stunt-race scoring mount:
+//             StuntModeScoring::UpdateDriftStunts @0x8232CAE0 reads
+//             RaceCarState::mfInProgressDriftTime and UpdateDrivingStunts @0x8232CD70 reads
+//             mfInProgressHandbreakTurnAngle -- and this function is their ONLY writer in the
+//             whole image (grep the tree: nothing else assigns those fields).
+//       So while the park stood, a stunt run could never score a DRIFT or a HANDBRAKE TURN, at
+//       all, ever: both gates compared against a permanent 0.0. MEASURED, not argued --
+//       scratchugtestuns\stunt_run_lifecycle60906_094030 (pre-fix): 80 sampled
+//       [stunt] feed lines, every one `drift=0.000000 hb=0.000000 mask=0`, and ZERO
+//       [stunt] award lines across a full 120 s stunt run driven into handbrake spins and
+//       sustained full-lock drifts on purpose.
+//       ⚠️ The bugwave note's OTHER conclusion still stands and is not disturbed: this leg is NOT
+//       the super-jump tally (that is the StuntManager collectible ladder), and event 120 still
+//       has no drain -- if you are here about event 120, nothing changed.
 //
+
 // THE CONSOLE'S OWN ASSERTS ARE KEPT AS ASSERTS, with one exception, named. The
 // "Player car stuck in world. Resetting." tripwire at :7269 fires on a PC-only precondition (the
 // stuck-in-collision test chain that sets mbPlayerCarStuckInCollision is
@@ -108,6 +95,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstdlib>   // getenv (BRN_STUNT_DIAG -- the [stunt] publish rung)
 
 namespace BrnPhysics
 {
@@ -213,23 +201,71 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
             RaceCarState* lpPlayerRaceCarState = lpOutputInterface->GetRaceCarState(liRaceCar);
             CGS_ASSERT(lpPlayerRaceCarState != 0, "lpPlayerRaceCarState != NULL");
 
-            // PARKED -- see park (1) in this file's banner. The callee exists and is bodied; its
-            // declared parameter types are a fork of the committed ones.
-            (void)lpPlayerRaceCarState;
-            static bool sbLoggedStuntPark = false;
-            if (!sbLoggedStuntPark)
+
+            // 0x8263F764..0x8263F774. THE PARK IS RETIRED (stunt lane, 2026-09-06) -- see the
+            // banner above. The callee's argument types are now the committed ones, so this is the
+            // console's own call with the console's own two arguments: the player's RaceCarState,
+            // and the OUTPUT INTERFACE'S OWN game-event queue (`addi r5, r19, 0x65F0` -- r19 is
+            // lpOutputInterface and +0x65F0 is VehicleOutputInterface::mGameEventQueueStorage,
+            // reached here through its named GetGameEventQueue() accessor).
+            mStuntOffencesManager.OutputStuntsInProgress(lpPlayerRaceCarState,
+                                                         lpOutputInterface->GetGameEventQueue());
+
+            // [FLAG PC witness] [stunt] THE PUBLISH RUNG. NOT IN THE X360 BINARY. Opt-in behind
+            // BRN_STUNT_DIAG, budgeted (see below) -- this is a per-frame site, so an unbounded
+            // line here is exactly the 128 MB flood the harness aborts on. It prints the six
+            // in-progress stunt scalars AS THE SCORER READS THEM (RaceCarState, not the manager's
+            // own copy), because that is where the feed was severed:
+            // StuntModeScoring::UpdateDriftStunts @0x8232CAE0 gates on mfInProgressDriftTime > 1.0
+            // and UpdateDrivingStunts @0x8232CD70 on mfInProgressHandbreakTurnAngle >= 160.0, and
+            // both fields have exactly one writer -- the OutputStuntsInProgress call above.
+            //
+            // ⛔ IT MUST SIT *AFTER* THAT CALL, AND THAT IS NOT CODE-STYLE TIDINESS. The first
+            // version read the state BEFORE the publish and reported `mask=0` on a run whose
+            // scorer awarded twelve HANDBRAKE_TURNs from these very fields (20260906_115233):
+            // VehicleOutputInterface::UpdateRaceCarState, three statements up, REBUILDS this
+            // record from the physics car every frame, so between it and the publish the six
+            // fields are always the wipe value. Read a published field after its publisher.
+            // DELETE-WHEN the stunt-run scoring feeds have a standing regression case that does
+            // not need the log to see them.
             {
-                sbLoggedStuntPark = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[FLAG PC bring-up] WriteOutVehicleStats: StuntOffencesManager::"
-                       "OutputStuntsInProgress @0x8263B278 NOT called -- its declared arg types "
-                       "(BrnPhysics::RaceCarState / BrnGameState::GameStateModuleIO::"
-                       "GameEventQueue) are a fork of the committed BrnPhysics::Vehicle::"
-                       "RaceCarState / CgsModule::VariableEventQueue<1536,16>. COST: no "
-                       "freeburn stunt-run skill telemetry (game event 120). NOT the super-jump "
-                       "bug -- that is the StuntManager collectible ladder, and event 120 has no "
-                       "drain on this build (ProcessGameEvents accepts 111 only). "
-                       "DELETE-WHEN a ProcessGameEvents arm consumes event 120.\n";
+                static const bool sbStuntDiag = (getenv("BRN_STUNT_DIAG") != 0);
+                static s32        siFeedCalls  = 0;
+                static s32        siZeroLines  = 0;   // periodic "still nothing" heartbeat
+                static s32        siLiveLines  = 0;   // frames the feed actually carries something
+                // Period 300 x 60 lines == 18,000 player publishes, i.e. the whole of a 235 s run.
+                // At 60 x 20 the heartbeat ran out at IN_PROGRESS (run 20260906_113310, log line
+                // 5294 of 44,026) and said nothing about the event it was there to watch.
+                const s32         KI_FEED_SAMPLE_PERIOD = 300;
+                const s32         KI_ZERO_LINE_MAX      = 60;
+                const s32         KI_LIVE_LINE_MAX      = 60;
+                // TWO budgets, and the split is the point: a purely PERIODIC sample answers "is the
+                // feed dead?" only by luck -- the first version of this rung ran its 80-line budget
+                // out at log line 18310 of run 20260906_100601, exactly 400 lines before the first
+                // drift, and reported all-zeros on a build whose scorer awarded 200 DRIFTs. So the
+                // heartbeat (zeros, every 60th publish, 20 lines) proves the rung is armed, and a
+                // SEPARATE budget prints the frames that carry a value, which cannot be missed.
+                const bool lbFeedLive =
+                    lpPlayerRaceCarState != 0
+                    && (lpPlayerRaceCarState->muStuntActionInProgress != 0u
+                        || lpPlayerRaceCarState->mfInProgressDriftTime != 0.0f
+                        || lpPlayerRaceCarState->mfInProgressHandbreakTurnAngle != 0.0f);
+                const bool lbHeartbeat = ((siFeedCalls % KI_FEED_SAMPLE_PERIOD) == 0);
+                ++siFeedCalls;
+                if (sbStuntDiag && lpPlayerRaceCarState != 0 && CgsDev::Log::gpDebugPrint != 0
+                    && ((lbFeedLive && siLiveLines < KI_LIVE_LINE_MAX)
+                        || (!lbFeedLive && lbHeartbeat && siZeroLines < KI_ZERO_LINE_MAX)))
+                {
+                    if (lbFeedLive) { ++siLiveLines; } else { ++siZeroLines; }
+                    *CgsDev::Log::gpDebugPrint
+                        << "[stunt] feed drift=" << lpPlayerRaceCarState->mfInProgressDriftTime
+                        << " dist=" << lpPlayerRaceCarState->mfInProgressDriftDistance
+                        << " hb=" << lpPlayerRaceCarState->mfInProgressHandbreakTurnAngle
+                        << " roll=" << lpPlayerRaceCarState->mfInProgressBarrelRollAngle
+                        << " spin=" << lpPlayerRaceCarState->mfInProgressAirSpinAngle
+                        << " mask=" << static_cast<s32>(lpPlayerRaceCarState->muStuntActionInProgress)
+                        << "\n";
+                }
             }
         }
 
