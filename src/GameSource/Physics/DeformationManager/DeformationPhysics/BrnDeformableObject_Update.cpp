@@ -2077,6 +2077,19 @@ namespace Deformation
             if ( siAbsorbProbe < 0 )
             {
                 const char* lpcEnv = getenv( "BRN_CRASH_RESPONSE_DIAG" );
+                // ⭐⭐⭐ BRN_DENT_PROBE ARMS THIS LINE TOO, AT THE EMITTER (2026-09-07).
+                // A `[dent]` depth taken without this line beside it is unreadable -- the whole
+                // A1/A2 corpus was measured on a car in E_ABSORPTIONSET_INVINCIBLE and nothing in
+                // the log said so. The obvious fix is "remember to pass both variables", and that
+                // is exactly the kind of rule a harness forgets: the campaign ran the dent probe
+                // alone for three waves. Arming it HERE means every launcher inherits the
+                // guarantee -- flow_run, a bare `set BRN_DENT_PROBE=1`, a future script nobody has
+                // written yet -- because the dependency lives in the code that prints, not in the
+                // code that launches. flow_run.ps1 also arms it and SAYS so, for the human.
+                if ( lpcEnv == 0 || lpcEnv[0] == '0' )
+                {
+                    lpcEnv = getenv( "BRN_DENT_PROBE" );
+                }
                 siAbsorbProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
             }
             static u32 suAbsorbLines  = 0u;
@@ -2084,8 +2097,16 @@ namespace Deformation
             const bool lbCrashingNow =
                 mVehicleBody.GetVehiclePhysics() != 0 && mVehicleBody.GetVehiclePhysics()->IsCrashing();
             ++suAbsorbFrames;
+            // ⭐⭐ AN INVINCIBLE FRAME IS NEVER SAMPLED AWAY. The `suAbsorbFrames % 10` decimation
+            // below is what let mwA_h240_s60_r1 print 13 lines that all read `set 4` and then stop
+            // -- so the report's own banner had to say a `4` means "invincible at SOME point",
+            // never "throughout". The set is the one field on this line whose transitions must be
+            // seen exactly, and it changes at most a handful of times per crash, so it costs
+            // nothing to print every frame it is 4. (The 900-line cap still bounds the whole probe.)
+            const bool lbInvincibleNow = ( meAbsorptionSet == E_ABSORPTIONSET_INVINCIBLE );
             if ( siAbsorbProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && lbCrashingNow
-                 && suAbsorbLines < 900u && ( suAbsorbLines < 12u || ( suAbsorbFrames % 10u ) == 0u ) )
+                 && suAbsorbLines < 900u
+                 && ( lbInvincibleNow || suAbsorbLines < 12u || ( suAbsorbFrames % 10u ) == 0u ) )
             {
                 ++suAbsorbLines;
                 // accumulated damage: the per-sensor scratch ladder ApplySensorImpulse maintains

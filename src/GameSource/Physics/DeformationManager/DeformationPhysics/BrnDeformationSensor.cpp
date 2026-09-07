@@ -782,6 +782,16 @@ namespace Deformation
 			s32         miSet;
 			s32         miLevel;
 			u32         muWorld;        // applies whose params carried mbWorldContact
+			// ⭐⭐ THE THREE FIELDS THAT MAKE THE ROW'S SILENCE READABLE (2026-09-07). Everything
+			// above is a SUM or a LAST-VALUE, and both go to zero in an invincible window -- so the
+			// row above cannot distinguish "no impulse arrived" from "an impulse arrived and
+			// absorbed nothing". These three separate them: muApplies counts arrivals whatever
+			// they absorbed, muInvApplies counts the arrivals that landed in
+			// E_ABSORPTIONSET_INVINCIBLE, and muAppliesLastDump is what the dump filter below
+			// subtracts to ask "was this row touched since the last present".
+			u32         muApplies;
+			u32         muInvApplies;
+			u32         muAppliesLastDump;
 		};
 		// ⚠️⚠️ 48 WAS A DIAGNOSTIC THAT LIED BY OMISSION (momentum wave, 2026-09-05). DentFind
 		// allocates one row per (sensor, direction) pair FIRST-COME, and every vehicle in the
@@ -800,6 +810,12 @@ namespace Deformation
 		u32         guDentLastDump = 0xFFFFFFFFu;
 		u32         guDentLines    = 0;
 		s32         giDentProbe    = -1;
+		// running total of impulse arrivals that landed in E_ABSORPTIONSET_INVINCIBLE, over every
+		// row and every owner -- the run-level counter the `[dent-guard]` line reports.
+		u32         guDentInvincibleApplies = 0;
+		// the last present at which a `[dent-guard]` line was emitted (one per present, at most)
+		u32         guDentGuardLastDump     = 0xFFFFFFFFu;
+		u32         guDentGuardLines        = 0;
 
 		s32 DentProbeLevel()
 		{
@@ -831,6 +847,7 @@ namespace Deformation
 			lrNew.mfSupply60 = 0.0f; lrNew.mfLastDt = 0.0f; lrNew.mfLastBase = 0.0f;
 			lrNew.muRoomClamped = 0u; lrNew.muFree = 0u; lrNew.muWorld = 0u;
 			lrNew.miOwner = -1; lrNew.miSet = -1; lrNew.miLevel = -1;
+			lrNew.muApplies = 0u; lrNew.muInvApplies = 0u; lrNew.muAppliesLastDump = 0u;
 			return &lrNew;
 		}
 	}
@@ -1195,6 +1212,14 @@ namespace Deformation
 				lpRow->miLevel       = static_cast<s32>( lu8AbsorptionLevel );
 				if ( lpImpulseParams->mbWorldContact ) { ++lpRow->muWorld; }
 				if ( lfUnclamped > lfRoom ) { ++lpRow->muRoomClamped; } else { ++lpRow->muFree; }
+				// ⭐ ARRIVAL COUNTERS -- the only fields on this row that are not silenced by an
+				// absorption set whose whole table row is 0.0. See the DentRow banner.
+				++lpRow->muApplies;
+				if ( leSet == E_ABSORPTIONSET_INVINCIBLE )
+				{
+					++lpRow->muInvApplies;
+					++guDentInvincibleApplies;
+				}
 			}
 			// Dump the whole ledger once per PRESENT, so every row in a block shares one frame.
 			//
@@ -1227,14 +1252,39 @@ namespace Deformation
 			//    ⭐ THE RULE: a `[dent]` depth is only meaningful beside the `[absorb]` line for
 			//    the same frames. Arm BRN_CRASH_RESPONSE_DIAG with BRN_DENT_PROBE, always, and
 			//    discard any crash whose contact frames carry `set 4`.
+			//
+			// ⭐⭐⭐ THE GUARD THAT MAKES THAT RULE STRUCTURAL, NOT ADVISORY (2026-09-07). The
+			//    banner above is a WARNING, and a warning in a source file is not an instrument.
+			//    Three things changed here so the blind window cannot be silent again:
+			//      1. The filter is now `moved OR TOUCHED-SINCE-LAST-PRESENT-WHILE-INVINCIBLE`.
+			//         A row that received an impulse and absorbed nothing PRINTS, with
+			//         `pcApplied 0` and `set 4` on its face -- which is the state the old filter
+			//         deleted. The extra clause is scoped to set 4 on purpose: a set-0 row that
+			//         merely brushes the ground still filters out, so this does not change the
+			//         line volume of an ordinary run (measured below by the guard counter).
+			//      2. Every row carries `applies` (arrivals, whatever they absorbed) and `nInv`
+			//         (of those, how many were invincible). A ZERO-VALUED SUM AND A ZERO ARRIVAL
+			//         COUNT ARE NOW DIFFERENT NUMBERS on the same line.
+			//      3. A `[dent-guard]` line prints once per present whenever ANY arrival that
+			//         present was invincible, so `grep '\[dent-guard\]'` answers "was this corpus
+			//         taken on a car that could dent" without reading a single dent row.
+			//    ⚠️ THE NEGATIVE CONTROL, and it bites by construction: on a run with no
+			//    invincible arrivals, `[dent-guard]` prints NOTHING and `nInv` is 0 on every row.
+			//    On the A1/A2 corpus that produced this finding it would have printed on ~15
+			//    consecutive presents before the first ordinary `[dent]` row existed at all.
 			if ( renderengine::guPresentCount != guDentLastDump && CgsDev::Log::gpDebugPrint != 0
 			     && guDentLines < 200000u )
 			{
 				guDentLastDump = renderengine::guPresentCount;
 				for ( s32 li = 0; li < giDentRows; ++li )
 				{
-					const DentRow& lrR = gaDentRows[li];
-					if ( lrR.mfApplied <= 0.005f && lrR.mfSupply <= 0.05f ) { continue; }
+					DentRow& lrR = gaDentRows[li];
+					const bool lbMoved   = ( lrR.mfApplied > 0.005f || lrR.mfSupply > 0.05f );
+					const bool lbTouched = ( lrR.muApplies != lrR.muAppliesLastDump );
+					const bool lbBlind   = ( lbTouched
+					                      && lrR.miSet == E_ABSORPTIONSET_INVINCIBLE );
+					lrR.muAppliesLastDump = lrR.muApplies;
+					if ( !lbMoved && !lbBlind ) { continue; }
 					// the PC's achieved displacement along THIS direction, read live off the sphere
 					f32 lfDisp = 0.0f;
 					const DeformationSensor* lpS = static_cast<const DeformationSensor*>( lrR.mpSensor );
@@ -1266,11 +1316,65 @@ namespace Deformation
 						<< " nRoom " << static_cast<s32>( lrR.muRoomClamped )
 						<< " nFree " << static_cast<s32>( lrR.muFree )
 						<< " nWorld " << static_cast<s32>( lrR.muWorld )
+						// ⭐ applies/nInv: see the guard banner. `applies 0` means nothing ever hit
+						// this sensor; `applies N nInv N` with `pcApplied 0` means N impulses hit it
+						// and the absorption table refused every one of them.
+						<< " applies " << static_cast<s32>( lrR.muApplies )
+						<< " nInv " << static_cast<s32>( lrR.muInvApplies )
 						<< " lastMag " << lrR.mfLastMag
 						<< " lastInvI " << lrR.mfLastInvI
 						<< " lastF " << lrR.mfLastFactor
 						<< " lastVn " << lrR.mfLastVn
 						<< "\n";
+				}
+			}
+
+			// ---- [dent-guard] ONE LINE PER PRESENT IN WHICH AN ARRIVAL WAS INVINCIBLE -----------
+			// The whole point is that it is CHEAP TO GREP and prints in the state the dent table
+			// used to delete. A run with no line here took its dents on a car that could dent.
+			if ( CgsDev::Log::gpDebugPrint != 0
+			     && renderengine::guPresentCount != guDentGuardLastDump
+			     && guDentGuardLines < 20000u )
+			{
+				// ⚠️⚠️ THE OWNER IS THE ONE THE CURRENT IMPULSE BELONGS TO, NOT "the last row that
+				// happened to be invincible". UpdateContacts runs for EVERY DeformableObject, and a
+				// traffic car's own post-spawn invincibility overlaps the player's crash constantly
+				// -- so scanning the table for an owner would name owner 2 on a line the player's
+				// impulse produced, and every consumer that filters `owner 1` (crash_sweep_report
+				// does) would then MISS the contamination it exists to catch. gT5ApplyOwner is the
+				// same selector the row itself records, so the two always agree. Blind rows are
+				// counted for THAT owner only, for the same reason.
+				const s32 liGuardOwner = BrnPhysics::Vehicle::gT5ApplyOwner;
+				s32 liBlindRows = 0;
+				for ( s32 li = 0; li < giDentRows; ++li )
+				{
+					if ( gaDentRows[li].miSet == E_ABSORPTIONSET_INVINCIBLE
+					     && gaDentRows[li].muInvApplies != 0u
+					     && gaDentRows[li].miOwner == liGuardOwner )
+					{
+						++liBlindRows;
+					}
+				}
+				if ( liBlindRows > 0 && leSet == E_ABSORPTIONSET_INVINCIBLE )
+				{
+					guDentGuardLastDump = renderengine::guPresentCount;
+					++guDentGuardLines;
+					*CgsDev::Log::gpDebugPrint
+						<< "[dent-guard] present " << static_cast<s32>( renderengine::guPresentCount )
+						<< " owner " << liGuardOwner
+						<< " set " << static_cast<s32>( leSet )
+						<< " blindRows " << liBlindRows
+						<< " invAppliesTotal " << static_cast<s32>( guDentInvincibleApplies )
+						// ⛔ NO BRACKETED TAG IN THIS PROSE. It used to end "Read [absorb] for
+						// noDamageTimer", and crash_sweep_report.py dispatched log lines by
+						// SUBSTRING -- so every one of these lines matched its [absorb] branch,
+						// failed that branch's regex, and was dropped. The report then said
+						// "[dent-guard] presents 0" about a log containing six of them. The
+						// parser now matches by prefix; this text stays tag-free so the next
+						// substring-matching reader cannot be poisoned the same way.
+						<< " -- IMPULSES ARE ARRIVING INTO E_ABSORPTIONSET_INVINCIBLE:"
+						   " every dent depth on these frames is 0 BY ARITHMETIC, not by physics."
+						   " Read the absorb line for noDamageTimer and DISCARD this crash.\n";
 				}
 			}
 		}

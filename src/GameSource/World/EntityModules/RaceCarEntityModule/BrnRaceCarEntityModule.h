@@ -924,10 +924,38 @@ private:
     u8  maTailPadB1a0[0x183A0 - 0x18398];  // +0x18398 (99224) .. +0x183A0 (99232)  mfSimTimerTimeStep / mfIntroTimer seats
     f32 mfSimTime;                          // +0x183A0 (99232)  DWARF :407
     u8  maTailPadB1a[0x184D0 - 0x183A4];   // +0x183A4 (99236) .. +0x184D0 (99536)
-    s32 miPlayerBaseDeformationTypeMirror; // +0x184D0 (99536) -- the reset-type mirror
-    u8  maTailPadB1b[4];                   // +0x184D4 (99540)
-    f32 mfPlayerBaseDeformAmountMirror;    // +0x184D8 (99544) -- the amount mirror
-    u8  maTailPadB1c[0x187BC - 0x184DC];   // +0x184DC (99548) .. +0x187BC (100284)
+    // ⭐⭐⭐ 2026-09-07 (measurement-guard wave): the pad is split again, because this is not one
+    // mirror pair, it is TWO PAIRS AND A ONE-SHOT, and reading it as one pair is how a wave loses
+    // an afternoon. Every writer and reader in the image was enumerated by OFFSET (a name-grep
+    // finds none of them -- see the note on `liInCarSelect` in HandleResetPlayerCarAction):
+    //   LIVE pair   +0x184D0 type / +0x184D8 amount
+    //     Construct   @0x822FD898  0x822FE284 / 0x822FE274   -> -1 / 0.0f
+    //     HandleResetPlayerCarAction @0x82304FE8  0x82305638 / 0x82305630  <- action +0x38/+0x34
+    //     AddRaceCarToStartingGridOrFreeburnLobby @0x82300B38  0x823011D8 / 0x823011D4
+    //     HandleStopModeAction @0x82307A30  0x82307AB4 / 0x82307AB0   <- RESTORED from the saved pair
+    //     ResetActiveRaceCar   @0x822F4880  0x822F4A70 / 0x822F4A74   -- THE ONLY READER
+    //   SAVED pair  +0x184D4 type / +0x184E0 amount
+    //     Construct   @0x822FE2A4 / 0x822FE2A8                        -> -1 / 0.0f
+    //     HandlePrepareForModeAction @0x823092F0  0x82309568 / ...    <- SAVED from the live pair
+    //     HandleGameActions case 97   @0x8230C6CC / 0x8230C6A8        -> -1 / 0.0f
+    //   ONE-SHOT    +0x184DC  (a byte)
+    //     Construct   @0x822FE2AC                                     -> 0
+    //     HandleGameActions case 97 @0x8230C6C8                       -> 1   (the ONLY arm site)
+    //     ResetActiveRaceCar @0x822F4A58                              -> 0   (consumed)
+    // The saved pair is the mode-change stash: PrepareForMode pushes the live pair into it and
+    // StopModeAction (mode 0x10) pops it back, so a mode that overwrites the player's base
+    // deformation does not lose the free-burn value.
+    s32  miPlayerBaseDeformationTypeMirror; // +0x184D0 (99536) LIVE reset-type mirror (-1 == none)
+    s32  miPlayerBaseDeformationTypeSaved;  // +0x184D4 (99540) mode-change stash of the above
+    f32  mfPlayerBaseDeformAmountMirror;    // +0x184D8 (99544) LIVE amount mirror
+    // ⚠️ ARMED ONLY BY GAME ACTION 97, which is one of the network add/remove arms and is NOT
+    // reconstructed on this build -- so on the single-player/harness path it is permanently 0 and
+    // ResetActiveRaceCar always takes the mirror-READ arm. Naming it anyway because the consume
+    // side IS reconstructed, and a consume with no declared producer reads like dead code.
+    bool mbPlayerBaseDeformRequestPending;  // +0x184DC (99548) one-shot: force mbResetDeformation
+    u8   maTailPadB1c0[0x184E0 - 0x184DD];  // +0x184DD (99549) .. +0x184E0 (99552)
+    f32  mfPlayerBaseDeformAmountSaved;     // +0x184E0 (99552) mode-change stash of the amount
+    u8   maTailPadB1c[0x187BC - 0x184E4];   // +0x184E4 (99556) .. +0x187BC (100284)
 
     // X360 +0x187BC (100284). Player-scoring-slot -> active-race-car-slot map. The X360
     // DWORD index is 0x61EF (25071). Indexed by EPlayerScoringIndex (0..7); each cell is

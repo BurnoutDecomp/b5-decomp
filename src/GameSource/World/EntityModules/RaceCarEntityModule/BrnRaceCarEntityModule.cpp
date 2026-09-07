@@ -294,6 +294,20 @@ void RaceCarEntityModule::Construct()
     mpWheelList          = 0;
     mbCarColoursBound    = false;
 
+    // ⭐ 0x822FE274..0x822FE2AC -- the base-deformation mirror block. These five seats were NAMED
+    // in this header but NEVER SEEDED here, so on the host they started as whatever the module's
+    // pool storage happened to hold, while the console writes all five explicitly in Construct.
+    // That matters now that ResetActiveRaceCar actually READS the live pair (it used to pass a
+    // hard -1/0.0f, which accidentally matched these initialisers and hid the omission).
+    //   0x822FE284  stwx  -1   -> +0x184D0    0x822FE274  stfsx 0.0f -> +0x184D8
+    //   0x822FE2A4  stwx  -1   -> +0x184D4    0x822FE2A8  stfsx 0.0f -> +0x184E0
+    //   0x822FE2AC  stbx  r30(=0) -> +0x184DC
+    miPlayerBaseDeformationTypeMirror = -1;
+    mfPlayerBaseDeformAmountMirror    = 0.0f;
+    miPlayerBaseDeformationTypeSaved  = -1;
+    mfPlayerBaseDeformAmountSaved     = 0.0f;
+    mbPlayerBaseDeformRequestPending  = false;
+
     // The three render switches the dispatch leg reads (see the header for the offset
     // fit). The console seeds them from its debug-variable table, which is not live on
     // this build; body, coronas and wheels all default ON.
@@ -1197,6 +1211,14 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
 // no body -- same drift as BrnMath::BuildTransform last wave). It is UNREACHABLE on this
 // build: nothing re-requests placement for a car that is already ACTIVE.
 // DELETE-WHEN those members are named and ResetAfterCrash lands.
+//
+// ⭐⭐ THIS BANNER IS NOW HISTORY, NOT STATUS (kept because the arm below quotes it, and because
+// a banner that quietly turns into a lie is worse than one that dates itself). Corrections:
+//   * the arm IS reproduced and IS reached -- the harness teleport and the crash sweep both take
+//     it (2026-08-21, gateui r9);
+//   * +99536 / +99544 / +99548 are NAMED (miPlayerBaseDeformationTypeMirror /
+//     mfPlayerBaseDeformAmountMirror / mbPlayerBaseDeformRequestPending) and the block that reads
+//     them is landed (2026-09-07). Only +99164 and +65760 remain unnamed.
 // ============================================================================
 void RaceCarEntityModule::ResetActiveRaceCar(
         EActiveRaceCarIndex leActiveRaceCarIndex,
@@ -1243,13 +1265,16 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         //    ::IsDeformationFixedAfterCrash have no declaration or body anywhere in this tree;
         //    guessing either would decide whether a wrecked car's transform is reset at all.
         //    A crashing car is therefore left alone, LOUDLY.
-        // ⛔ PARK 2 -- the three unnamed module members at +99536/+99544/+99548 (the deformation
-        //    reset type, its amount, and its one-shot flag) are inside maTailPadB1 and unnamed,
-        //    exactly as this function's own banner records. Their NOTHING-PENDING values are the
-        //    console's own initialisers -- type -1 (`li r29, -1` @0x822F4A24) and amount
-        //    flt_82001CC0 == 0.0f (@0x822F4A2C) -- and those are what is passed. That is the
-        //    console's behaviour whenever no deformation reset is queued, which is every frame
-        //    outside a crash.
+        // ⛔ PARK 2 -- RETIRED 2026-09-07 (measurement-guard wave). See the block below the
+        //    classification, which lands 0x822F4A14..0x822F4A78 for real. The park said the three
+        //    members "are inside maTailPadB1 and unnamed" and that "their NOTHING-PENDING values
+        //    are the console's own initialisers -- type -1 and amount 0.0f -- and those are what
+        //    is passed". THE SECOND HALF WAS STALE: two of the three had been named by the
+        //    2026-08-24 deform-land wave (miPlayerBaseDeformationTypeMirror /
+        //    mfPlayerBaseDeformAmountMirror), and HandleResetPlayerCarAction WRITES them on the
+        //    junkyard car-select confirm -- so "nothing pending" stopped being true the moment
+        //    the player picked a car. Passing the initialisers unconditionally is therefore a
+        //    divergence, not a faithful default.
         // ⛔ PARK 3 -- the reset BitArray + ResetAfterCrash, unchanged from the banner above.
         //    Neither is on the transform path: the bit is read by the deformation legs and
         //    ResetAfterCrash re-seats crash bookkeeping.
@@ -1342,12 +1367,124 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         // otherwise the console's not-crashing defaults apply (r26 = 1, r24 = IsWrecked(),
         // r22 = 0). [crash exit 2026-08-25] PARK 1 retired -- see the block above.
         const bool lbResetTransform      = lbIsCrashingReset ? lbCrashResetTransform : true;
-        const bool lbResetDeformation    = lbIsCrashingReset ? lbCrashResetDeformation
+        bool       lbResetDeformation    = lbIsCrashingReset ? lbCrashResetDeformation
                                                              : lpActiveRaceCar->IsWrecked();
         const bool lbResettingAfterWreck = lbIsCrashingReset ? lbCrashResettingAfterWreck : false;
-        const f32  lfHowCloseToTotalled  = 0.0f;                             // f31, flt_82001CC0
-        const BrnPhysics::Deformation::DeformationResetType leDeformationResetType =
-            static_cast<BrnPhysics::Deformation::DeformationResetType>( -1 );   // r29
+        f32        lfHowCloseToTotalled  = 0.0f;                             // f31, flt_82001CC0
+        BrnPhysics::Deformation::DeformationResetType leDeformationResetType =
+            static_cast<BrnPhysics::Deformation::DeformationResetType>( -1 );   // r29, li @0x822F4A24
+
+        // ============ 0x822F4A14..0x822F4A78 -- THE PLAYER BASE-DEFORMATION ARM ==================
+        // ⭐⭐⭐ LANDED 2026-09-07. This block is NOT optional and it is NOT the crashing arm's:
+        // all four paths above (`b loc_822F4A14` at 0x822F49B8 / 0x822F49F0 / 0x822F49FC, and the
+        // not-crashing fallthrough at 0x822F4A10) converge HERE, so it runs on EVERY
+        // ResetActiveRaceCar for a live car -- every place-on-track, every reset-pump recovery.
+        //
+        //   0x822F4A14  r10 = 0x182F8 ; lwzx r4, this, r10 ; bl GetActiveRaceCar
+        //   0x822F4A38  cmplw r31, r3 ; bne -> 0x822F4A7C          <- IS THIS SLOT THE PLAYER'S?
+        //   0x822F4A40  addis r11, this, 2 ; addi r11, r11, -0x7B24 == this + 0x184DC
+        //   0x822F4A48  lbz r10, 0(r11) ; beq -> 0x822F4A60
+        //     one-shot SET:   0x822F4A54 li r24, 1      -- FORCE mbResetDeformation
+        //                     0x822F4A58 stb r25(==0)   -- consume, then `b loc_822F4B00`
+        //     one-shot CLEAR: 0x822F4A70 lwzx r29, this, 0x184D0   -- type   = LIVE mirror
+        //                     0x822F4A74 lfsx f31, this, 0x184D8   -- amount = LIVE mirror
+        //
+        // ⚠️⚠️ THE TWO ARMS ARE MUTUALLY EXCLUSIVE, and a reading that runs them in sequence is
+        // wrong in a way that matters. The one-shot arm BRANCHES PAST the mirror reads
+        // (`b loc_822F4B00` at 0x822F4A5C), so a forced reset carries type -1 / amount 0.0f --
+        // NOT the mirror's values. And the mirror arm never forces mbResetDeformation, which
+        // stays IsWrecked(). So the console does NOT "force a reset and re-arm invincibility on
+        // every player place-on-track": it re-arms the deformation TYPE, and the type is what
+        // ResetDeformation @0x82639D60 turns into mfNoDamageTimer = 1.5f + set 4 when it is 1.
+        //
+        // ⭐ WHAT ACTUALLY CHANGES ON THIS BUILD. The one-shot's only arm site is HandleGameActions
+        // case 97 (0x8230C6C8), a network add/remove arm this tree does not reconstruct, so it is
+        // permanently false here and the mirror arm always wins. The mirror is written by
+        // HandleResetPlayerCarAction's unlock-deformation step (the junkyard car-select confirm,
+        // whose builder calls the type field `liInCarSelect` and writes 1) and by
+        // AddRaceCarToStartingGridOrFreeburnLobby. So on a normal boot this hands the console's own
+        // queued reset type through instead of a hard -1 -- which is exactly the arm that decides
+        // whether a placed car spends 1.5 s unable to deform. WE WERE LESS INVINCIBLE THAN THE
+        // CONSOLE HERE; the [reset-mirror] line below prints both halves so a run can say which.
+        //
+        // ⭐⭐ DOES THIS HURT THE PLAYER? MEASURED, NOT ASSUMED (2026-09-07). Landing this makes the
+        // console's 1.5 s no-damage window real on every deformation-resetting respawn, so the
+        // obvious worry is that an ordinary player who crashes just after a respawn gets a crash
+        // that cannot dent. Over the whole banked run corpus (108 runs contributing), the gap from
+        // a `resetDeform=1` respawn to the NEXT crash entry splits cleanly in two populations:
+        //     HARNESS-driven pairs (a sweep shot fires the moment the settle gate opens):
+        //         11 pairs, 10 INSIDE the 90-frame window, min 37 frames (0.62 s)
+        //     ORDINARY pairs (reset pump -> drive -> crash):
+        //         44 pairs, ZERO inside it, min 254 frames (4.23 s), median 1069 (17.8 s)
+        // No overlap: the shortest ordinary gap is 2.8x the window. The reason is physical -- the
+        // reset pump seats a wrecked car AT REST (`vel (0,0,0)` on its own [teleport] line), and a
+        // car accelerating from a standstill cannot reach a damaging speed and meet something in
+        // 1.5 s. Confirmed live on run mg_B1: the ordinary crash's 37 [absorb] lines all read
+        // `set 0` with the timer already expired, and the [dent-guard] instrument stayed silent for
+        // 3,526 presents and then fired for 39 -- the ones right after the wreck-respawn.
+        // ⇒ THE WINDOW THIS RESTORES BELONGS TO THE HARNESS, NOT THE PLAYER. What it does change is
+        // the crash CORPUS: a sweep shot IS a place-on-track, so the guard in BrnDeformationSensor
+        // .cpp and crash_sweep_report.py's discard are what keep that out of the numbers.
+        //
+        // ⛔ PARK -- the NON-player arm (0x822F4A7C..0x822F4AC4) reads two module flags at +0x18358
+        //    (a 64-bit BitArray word, `rlwinm 0,1,1`) and +0x18345, and on either takes
+        //    lfHowCloseToTotalled from GetGlobalRaceCar()+0xA0. Both flags are unnamed bytes inside
+        //    maTailPadA0/B0 and neither has a reconstructed writer, so guessing them would decide
+        //    an AI car's damage carry-over. Left alone, LOUDLY, exactly as PARK 1 was until its
+        //    inputs landed.
+        // ⭐ The console spells this test as `GetActiveRaceCar(*(this+0x182F8))` and compares the
+        // returned POINTER with r31 (0x822F4A34/0x822F4A38). The map index -> &maActiveRaceCars[i]
+        // is a pure injective array index, so comparing the INDICES is the same test with the same
+        // answer -- including when the player index is E_ACTIVE_RACE_CAR_INDEX_INVALID, where the
+        // console's call computes a one-past-the-end address that matches no live car and this
+        // comparison is likewise false. Written this way on purpose: our GetActiveRaceCar asserts
+        // its bound (the console's does too, but ours BLOCKS the sim), so reproducing the pointer
+        // form would fire an assert once per reset on any frame the player slot is not yet bound.
+        const bool lbIsPlayerSlot = ( leActiveRaceCarIndex == mePlayerActiveRaceCarIndex );
+        if( lbIsPlayerSlot )
+        {
+            if( mbPlayerBaseDeformRequestPending )
+            {
+                lbResetDeformation               = true;    // li r24, 1   @0x822F4A54
+                mbPlayerBaseDeformRequestPending = false;   // stb r25, 0  @0x822F4A58
+            }
+            else
+            {
+                leDeformationResetType =
+                    static_cast<BrnPhysics::Deformation::DeformationResetType>(
+                        miPlayerBaseDeformationTypeMirror );          // lwzx @0x822F4A70
+                lfHowCloseToTotalled = mfPlayerBaseDeformAmountMirror; // lfsx @0x822F4A74
+            }
+        }
+
+        // ⛔ NOT REPRODUCED, DELIBERATELY: the `lfHowCloseToTotalled >= 0.0f && <= 1.0f` assert at
+        // 0x822F4AE0 (BrnRaceCarEntityModule.cpp:1896; bounds flt_82001CC0 == 0.0f and
+        // flt_82001C98 == 1.0f, both read out of the image). It is NOT a check on the value this
+        // function passes -- it sits INSIDE the non-player arm, after `lfs f31, 0xA0(globalRaceCar)`
+        // at 0x822F4AC4, and both player arms branch straight to loc_822F4B00 (0x822F4A5C /
+        // 0x822F4A78) without ever reaching it. Hoisting it to cover the player mirror would be an
+        // INVENTED ARM on a build where an assert BLOCKS the sim -- the exact defect class that put
+        // 839,983 asserts in one run. It belongs with the parked non-player arm; it lands with it.
+
+        // ---- [reset-mirror] DIAG. NOT IN THE X360 BINARY. Opt-in (BRN_CRASH_RESPONSE_DIAG=1). ---
+        // Prints BOTH halves of the arm above on every live-car reset, so a run can say whether the
+        // console's queued type was 1 (which re-arms the 1.5 s invincibility downstream) or -1
+        // (which does not) -- instead of that being inferred from a dent that did not happen.
+        if( getenv( "BRN_CRASH_RESPONSE_DIAG" ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[reset-mirror] car " << static_cast<s32>( leActiveRaceCarIndex )
+                << " isPlayer " << ( lbIsPlayerSlot ? 1 : 0 )
+                << " oneShot " << ( mbPlayerBaseDeformRequestPending ? 1 : 0 )
+                << " mirrorType " << miPlayerBaseDeformationTypeMirror
+                << " mirrorAmount " << mfPlayerBaseDeformAmountMirror
+                << " -> resetType " << static_cast<s32>( leDeformationResetType )
+                << " amount " << lfHowCloseToTotalled
+                << " resetDeform " << ( lbResetDeformation ? 1 : 0 )
+                << " wrecked " << ( lpActiveRaceCar->IsWrecked() ? 1 : 0 )
+                << " crashing " << ( lbIsCrashingReset ? 1 : 0 )
+                << "\n";
+        }
 
         // 0x822F4B0C `vspltisw v2, 0` -- the ANGULAR velocity argument is a hard zero; only the
         // linear velocity this call was handed travels through.
@@ -1369,7 +1506,9 @@ void RaceCarEntityModule::ResetActiveRaceCar(
                 << lrTransform.wAxis.x << ", " << lrTransform.wAxis.y << ", "
                 << lrTransform.wAxis.z << ") vel (" << lrVelocity.x << ", " << lrVelocity.y
                 << ", " << lrVelocity.z << ") resetDeform="
-                << ( lbResetDeformation ? 1 : 0 ) << "\n";
+                << ( lbResetDeformation ? 1 : 0 )
+                << " resetType=" << static_cast<s32>( leDeformationResetType )
+                << " amount=" << lfHowCloseToTotalled << "\n";
         }
         return;
     }
