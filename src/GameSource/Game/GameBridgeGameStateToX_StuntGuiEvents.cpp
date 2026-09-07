@@ -162,8 +162,9 @@ namespace
     // ⚠️⚠️ PARTIAL RECONSTRUCTION, AND IT IS NAMED, NOT HIDDEN. The console body is a
     // ~700-case jump table (`jpt_823EA1F0`) over every game action in the build. The arms
     // reproduced here are 58 / 59 / 60 (the stunt-collectible family), 55, 112, 148 (the
-    // training ticker, [tut-ticker] 2026-08-24), 181, and 97 / 98 / 100 / 101 (the drive-thru
-    // family, [drive-thru] 2026-08-29); the event-flow arms live in the sibling
+    // training ticker, [tut-ticker] 2026-08-24), 181, 97 / 98 / 100 / 101 (the drive-thru
+    // family, [drive-thru] 2026-08-29), and 45 (the drive-thru ICON TABLE -> the pending sat-nav
+    // record posted at the tail, [minimap blips, issue #9] 2026-09-07); the event-flow arms live in the sibling
     // GameBridgeGameStateToX_EventFlowGuiEvents.cpp, reached through the `default:` below.
     // Every other action falls through with NO event posted. A future owner adding, say, the
     // takedown or road-rules arms must add them HERE rather than in a parallel function.
@@ -211,6 +212,15 @@ namespace
         static const bool sbPropDiag      = ( getenv( "BRN_PROP_DIAG" ) != 0 );
         static s32        siDiagLinesLeft = 8;
 
+        // ⭐ [minimap blips, issue #9, 2026-09-07] THE PENDING SAT-NAV RECORD. The console keeps ONE
+        // GuiEventUpdateSatNav (2320 bytes) on its frame across the whole drain, with its icon count
+        // zeroed at entry; the case-45 arm APPENDS into it and the tail posts it ONCE, after the
+        // loop, when the count is > 0. Static, not stack: the single-threaded build's oversized-
+        // event-local convention (the world bridge's own per-frame 199 record does the same). Its
+        // never-written tail bytes stay zero here where the console's frame local carried junk.
+        static BrnGui::GuiEventUpdateSatNav lPendingSatNavEvent;
+        s32 liPendingSatNavIcons = 0;
+
         const CgsModule::Event* lpAction     = 0;
         s32                     liActionSize = 0;
         s32                     liActionType = lpActionQueue->GetFirstEvent(&lpAction, &liActionSize);
@@ -219,6 +229,88 @@ namespace
         {
             switch (liActionType)
             {
+            // ---- 45  E_ACTION_SET_UP_ALL_DRIVE_THRUS (1112 bytes) -------------------------
+            // ⭐⭐ [minimap blips, issue #9] THE DRIVE-THRU ICON TABLE HOP. While the pending count
+            // is below 48, one SatNavIconInfo per DriveThruInfo:
+            //   * the GenericRegion::Type (info +0x10) becomes the icon-type byte (+0x28):
+            //     0 JUNK_YARD -> 7 JUNKYARD, 1 GAS_STATION -> 10, 2 BODY_SHOP -> 9,
+            //     3 PAINT_SHOP -> 11, 4 CAR_PARK -> 8, 16 TIRE_SHOP -> 12, anything else -> 4
+            //     LANDMARK after a message-stream print of the type;
+            //   * the position lane (+0x00) is {x, 0, z, 0} from the info's two floats;
+            //   * the CgsID (+0x10) is copied whole; rotation (+0x18) and speed (+0x1C) are 0.0;
+            //     the design-index (+0x22) and hidden-drive-thru (+0x23) bytes are 0.
+            // Unlike the neighbouring arms this one posts NOTHING here -- see the tail.
+            case BrnGameState::GameStateModuleIO::E_ACTION_SET_UP_ALL_DRIVE_THRUS:
+            {
+                typedef BrnGui::GuiEventUpdateSatNav::SatNavIconInfo SatNavIconInfo;
+                typedef BrnGameState::GameStateModuleIO::SetUpAllDriveThrusAction SetUpAction;
+
+                const SetUpAction* lpSetUp = reinterpret_cast<const SetUpAction*>(lpAction);
+                const s32 liNumDriveThrus  = static_cast<s32>(lpSetUp->maDriveThrus.GetLength());
+
+                for (s32 liDriveThru = 0; liDriveThru < liNumDriveThrus; ++liDriveThru)
+                {
+                    if (liPendingSatNavIcons >= BrnGui::GuiEventUpdateSatNav::KI_MAX_SAT_NAV_ICONS)
+                    {
+                        break;   // the pending record is full
+                    }
+
+                    const SetUpAction::DriveThruInfo& lrInfo =
+                        lpSetUp->maDriveThrus.GetItem(static_cast<u32>(liDriveThru));
+                    SatNavIconInfo& lrIcon = lPendingSatNavEvent.maIconInfo[liPendingSatNavIcons];
+
+                    SatNavIconInfo::SatNavIconType leIconType;
+                    switch (lrInfo.meType)
+                    {
+                    case BrnTrigger::GenericRegion::E_TYPE_JUNK_YARD:   // 0
+                        leIconType = SatNavIconInfo::E_SATNAVICON_JUNKYARD;      // 7
+                        break;
+                    case BrnTrigger::GenericRegion::E_TYPE_GAS_STATION: // 1
+                        leIconType = SatNavIconInfo::E_SATNAVICON_GAS_STATION;   // 10
+                        break;
+                    case BrnTrigger::GenericRegion::E_TYPE_BODY_SHOP:   // 2
+                        leIconType = SatNavIconInfo::E_SATNAVICON_BODYSHOP;      // 9
+                        break;
+                    case BrnTrigger::GenericRegion::E_TYPE_PAINT_SHOP:  // 3
+                        leIconType = SatNavIconInfo::E_SATNAVICON_PAINT_SHOP;    // 11
+                        break;
+                    case BrnTrigger::GenericRegion::E_TYPE_CAR_PARK:    // 4
+                        leIconType = SatNavIconInfo::E_SATNAVICON_CAR_PARK;      // 8
+                        break;
+                    case BrnTrigger::GenericRegion::E_TYPE_TIRE_SHOP:   // 16
+                        leIconType = SatNavIconInfo::E_SATNAVICON_TIRE_SHOP;     // 12
+                        break;
+                    default:
+                        // The console prints the offending type on the message stream first
+                        // (gxMessageFilterFlags & 1; the prefix string is not recovered).
+                        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+                        {
+                            *CgsDev::Log::gpDebugPrint
+                                << "[drivethru] BRIDGE: unexpected drive-thru region type "
+                                << static_cast<s32>(lrInfo.meType) << "\n";
+                        }
+                        leIconType = SatNavIconInfo::E_SATNAVICON_LANDMARK;      // 4
+                        break;
+                    }
+
+                    Vector4 lv4Position;
+                    lv4Position.x = lrInfo.mfXCoord;
+                    lv4Position.y = 0.0f;
+                    lv4Position.z = lrInfo.mfZCoord;
+                    lv4Position.w = 0.0f;
+                    lrIcon.SetPositionLane(lv4Position);
+                    lrIcon.SetCgsId(lrInfo.mDriveThruId);
+                    lrIcon.SetRotation(0.0f);
+                    lrIcon.SetSpeedMph(0.0f);
+                    lrIcon.SetDesignIndex(0);
+                    lrIcon.SetHiddenDriveThru(false);
+                    lrIcon.SetIconType(leIconType);
+
+                    ++liPendingSatNavIcons;
+                }
+                break;
+            }
+
             // ---- 58  E_ACTION_ON_STUNT_ELEMENT_COMPLETE (24 bytes) ------------------------
             // ⭐⭐ THE BILLBOARD / SMASH-GATE HUD POPUP. @0x823EB870..0x823EB96C.
             //   lwz r11, 0x14(r31)   -- meCurrentGameMode picks the presentation
@@ -875,6 +967,27 @@ namespace
             const CgsModule::Event* lpNextAction = 0;
             liActionType = lpActionQueue->GetNextEvent(lpAction, &lpNextAction, &liActionSize);
             lpAction     = lpNextAction;
+        }
+
+        // ---- the tail: the pending sat-nav record, posted once ------------------------------
+        // The console posts the pending GuiEventUpdateSatNav (id 199, 2320 bytes) after the drain
+        // when its icon count is > 0. (It follows the console's unconditional
+        // GuiEventRacePositionInfo post, which this build does not reproduce here; the two are
+        // independent.) The count is written into the record's own +0x900 word, which is what
+        // the cache's case-199 arm reads.
+        if (liPendingSatNavIcons > 0)
+        {
+            lPendingSatNavEvent.miNumIcons = liPendingSatNavIcons;
+            PushGuiEvent(lPendingSatNavEvent, lpGuiInput);
+
+            // [DIAG] NOT IN THE X360 BINARY -- one line per publish (boot / discovery / junkyard
+            // exit), same `[drivethru]` tag as the producer's SETUP line.
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[drivethru] BRIDGE: action 45 -> gui 199 with " << liPendingSatNavIcons
+                    << " drive-thru icon record(s)\n";
+            }
         }
     }
 } // namespace BrnGame

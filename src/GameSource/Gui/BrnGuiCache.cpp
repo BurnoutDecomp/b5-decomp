@@ -184,12 +184,73 @@ namespace BrnGui
 
     // @ 0x82505860 -- the cache Construct. The X360 form takes the tracker + system-user
     // -profile pointers (asserted non-null, stored at +16468/+16472) and inits the far
-    // member block before running the embedded watcher's Construct. The tracker/profile
-    // owners are un-reconstructed on PC, so this slice performs the watcher reset (the
-    // part the boot path consumes -- it seeds the 23 wildcard types the resource state
-    // machine's consistency asserts key on); the pointer stores land with their owners.
-    void GuiCache::Construct()
+    // member block before running the embedded watcher's Construct.
+    // ⭐⭐ 2026-09-07: THE TWO ARGUMENTS ARE BACK. The old slice took none, with the note
+    // "the tracker/profile owners are un-reconstructed on PC ... the pointer stores land
+    // with their owners" -- but they never landed anywhere, so mpGuiTracker had readers and
+    // NO writer in the whole tree and every sat-nav publish took the guarded absent branch.
+    // See the header for the asm-to-C++ map of the prologue and the two stores.
+    // ⭐ [minimap blips, issue #9, 2026-09-07] THE DRIVE-THRU ICON POSITION OVERRIDE TABLES that
+    // GuiCache::RecEvent's case-199 drive-thru arm walks: fifteen drive-thru CgsIDs whose map icon
+    // is NOT drawn at the trigger region's own position but at a hand-placed one (the bay sits off
+    // the road, under an overpass, ...). The two tables pair by index.
+    //   ids       read straight off the console image's read-only data (a known control value in
+    //             the same dump checked out);
+    //   positions {x, 0, z, 0} metres in world space. The console's slot for them is ALL ZERO in
+    //             the image -- a compiler-generated startup initialiser assembles each lane from
+    //             scattered read-only floats and copies them out in table order; the values here
+    //             come from decoding that initialiser instruction for instruction (e.g. {3000,
+    //             -2060} is the junkyard exit the baseline case teleports beside).
+    // The last id, 0x6C72D, is the starting body shop.
+    namespace
     {
+        const s32 KI_NUM_DRIVE_THRU_ICON_POSITION_OVERRIDES = 15;
+
+        const u64 KAU_DRIVE_THRU_ICON_POSITION_IDS[KI_NUM_DRIVE_THRU_ICON_POSITION_OVERRIDES] =
+        {
+            0x000000000003797Bull, 0x0000000000037CBFull, 0x000000000003B01Eull, 0x000000000003BFFFull,
+            0x000000000003D34Cull, 0x000000000004704Aull, 0x00000000000476A9ull, 0x0000000000048A4Aull,
+            0x000000000004C3C8ull, 0x000000000004D6F2ull, 0x000000000004E090ull, 0x000000000004E42Full,
+            0x000000000004F5B4ull, 0x000000000006C72Dull, 0x00000000000476B9ull,
+        };
+
+        const f32 KAAF_DRIVE_THRU_ICON_POSITIONS[KI_NUM_DRIVE_THRU_ICON_POSITION_OVERRIDES][4] =
+        {
+            {  1320.0f,    0.0f, -1050.0f,    0.0f },   // 0x3797B
+            {  1165.0f,    0.0f,  -523.92f,   0.0f },   // 0x37CBF
+            {  2907.29f,   0.0f, -1500.0f,    0.0f },   // 0x3B01E
+            {  2421.14f,   0.0f,   320.0f,    0.0f },   // 0x3BFFF
+            {  3000.0f,    0.0f, -2060.0f,    0.0f },   // 0x3D34C
+            { -1049.0f,    0.0f, -1730.0f,    0.0f },   // 0x4704A
+            {  1305.0f,    0.0f,  -508.5f,    0.0f },   // 0x476A9
+            {  1084.0f,    0.0f,   500.0f,    0.0f },   // 0x48A4A
+            {   704.94f,   0.0f,  1315.0f,    0.0f },   // 0x4C3C8
+            {  1125.0f,    0.0f,   260.0f,    0.0f },   // 0x4D6F2
+            { -2483.65f,   0.0f,  -364.65f,   0.0f },   // 0x4E090
+            { -2730.0f,    0.0f, -2165.0f,    0.0f },   // 0x4E42F
+            { -2775.0f,    0.0f, -1548.0f,    0.0f },   // 0x4F5B4
+            {  3345.78f,   0.0f, -1712.68f,   0.0f },   // 0x6C72D
+            {  -896.84f,   0.0f,   -25.0f,    0.0f },   // 0x476B9
+        };
+    }
+
+    void GuiCache::Construct(GuiTracker* lpGuiTracker,
+                             CgsGui::SystemUserProfile* lpSystemUserProfile)
+    {
+        // The console's two prologue asserts, in its order and with its own literals. Both
+        // are NON-GATING (CgsDev::Assert::FireAssert returns and the stores run regardless),
+        // so they are reproduced as plain CGS_ASSERTs ahead of the stores.
+        CGS_ASSERT(lpGuiTracker != 0, "Invalid tracker pointer");       // BrnGuiCache.cpp:1226
+        CGS_ASSERT(lpSystemUserProfile != 0, "lpSystemUserProfile");    // BrnGuiCache.cpp:1227
+
+        // `stw r25, 0x4054(r31)` @0x82505934 -- THE ONLY WRITER of mpGuiTracker in the whole
+        // image. GetGuiTracker() (BrnGuiCache.h) returns this, and the three wave-J sat-nav
+        // publishers in BrnGuiCache_wJ_01.cpp hand their GuiEventSetTracker record to it.
+        mpGuiTracker = lpGuiTracker;
+
+        // `stw r24, 0x4058(r31)` @0x8250593C.
+        mpSystemUserProfile = lpSystemUserProfile;
+
         mStateLoadingHelper.Construct();
         // X360 0x82505860 mid-body: BrnGui::OptionsDataProfile::Construct(this + 47224)
         // -- default the embedded player-options profile (brightness/contrast 50, the
@@ -277,6 +338,25 @@ namespace BrnGui
         mEventsCtorSentinel  = 0;   // X360 `*(v47 + 40532) = 0`  (mEvents / GetNumPresetEvents)
         miProfileEventsCount = 0;   // X360 `*(v47 + 80724) = 0`  (GetNumProfileEvents)
 
+        // ⭐⭐ [minimap blips, issue #9, 2026-09-07] THE SAT-NAV EVENT-FILTER SEED, and it was the
+        // reason the minimap showed no EVENT icons. The console's Construct, in the same far-member
+        // run as the stores above, writes the filter pair and the drive-thru count:
+        //     +0x8038 mbSatNavEventFilterEnabled = true
+        //     +0x8034 meSatNavEventFilter        = 6   (RaceEventData::E_MODE_COUNT: every mode,
+        //                                               the same value the DISABLE post carries)
+        //     +0x8030 miNumDriveThroughs         = 0
+        // FBurnMainHudState::UpdateSetupState mirrors the pair and calls EnableSatNavEventsFilter
+        // or DisableSatNavEventsFilter on the byte; the ENABLE posts the id-204
+        // GuiEventEnableSatNavIcons {displayType 0, filter, show 1} that raises
+        // SatNavRenderer::mbRenderEventStarts, and RenderIconsForSatNav returns at !that flag.
+        // With this seed missing the byte was the allocation's zero, the HUD always chose
+        // DISABLE, and the renderer never drew a single event icon -- the "events" half of #9.
+        // The 120-record event-start table it draws from has been reaching the cache since the
+        // event-starts wave (case 203 below); it was one enable byte away from live.
+        mbSatNavEventFilterEnabled = true;
+        meSatNavEventFilter        = 6;      // RaceEventData::E_MODE_COUNT
+        miNumDriveThroughs         = 0;
+
         // ⭐⭐⭐ THE GAME-FLOW-STATE SEED, and it is not cosmetic -- it is the single word that
         // was suppressing EVERY HUD MESSAGE IN THE BUILD.
         //   X360 GuiCache::Construct @0x82505860: `li r11, 1` @0x82505AB4 (the same 1 the
@@ -315,6 +395,24 @@ namespace BrnGui
         miShowTimeCarsCrashed       = -1;      // stwx  r29  +0xA004
         miShowTimeComboMultiplier   = -1;      // stwx  r29  +0xA008
         mfShowTimeDistanceTravelled = -1.0f;   // stfsx f0   +0xA00C  (flt_820037C8)
+
+        // ⚠️ THE CONSOLE'S OWN SECOND STORE TO mpSystemUserProfile, reproduced rather than
+        // dropped. `stw r30, 0x4058(r31)` @0x82506058, with r30 == 0 for the whole body
+        // (`li r30, 0` @0x82505888 / @0x82505FB0, no other definition) and r31 reloaded from
+        // the saved `this` at @0x82505F9C -- so the argument latched at the top of Construct
+        // is deliberately cleared again here, in the same far-member reset run that clears
+        // +0x47F8/+0xB828 and immediately before the `stfs f31, 0(r31)` mfTimeStep store.
+        // It is not a decompiler artefact and it is not a contradiction: GuiCache::RecEvent
+        // @0x8250DDF0's case-126 arm is the live publisher (`stw r11, 0x4058(r31)`
+        // @0x82510D9C after the "lpSystemUserProfileEvent->mpSystemUserProfile" assert), so
+        // the console really does construct with the pointer, null it, and take the real one
+        // from the sign-in event. NOTHING in this tree reads mpSystemUserProfile yet, so
+        // reproducing the console exactly costs no behaviour -- and diverging would be the
+        // invention.
+        // ⛔ NOT the same for mpGuiTracker (+0x4054): it is stored ONCE and never cleared
+        // (the only two stores to that word in the image are @0x82505934 here and none
+        // elsewhere), which is why the tracker binding above is permanent.
+        mpSystemUserProfile = 0;   // stw r30(==0), 0x4058(r31)  @0x82506058
     }
 
     // @0x8250DC30 -- publish the queue selected on the previous frame, clear it,
@@ -1007,11 +1105,12 @@ namespace BrnGui
             // arm (icon type 0) is THE producer of the mv4WorldCameraPosition block the
             // whole sat-nav view chain reads -- gated on the case-376 pair being live and
             // the case-207 used byte (IsActiveRaceCarIndexUsed).
-            // [FLAG deferred] the DRIVE-THRU arm (icon types 7/9/10/11/12: the dedupe-by-id
-            // append into maDriveThroughInfo + the 15-entry canned-position override table
-            // @0x8206F868) -- no producer on this build emits those icon types (the world
-            // route-information bridge that does is itself FLAG-deferred in
-            // GameBridgeWorldToGui.cpp); the arm lands with that producer.
+            // ⭐⭐ [minimap blips, issue #9, 2026-09-07] the DRIVE-THRU arm (icon types 7 / 9 / 10 /
+            // 11 / 12 -- note 8 CAR_PARK is NOT in the console's case list and is dropped here
+            // too) IS LANDED below, with its producer: GameStateModule::SendSetUpAllDriveThrusMessage
+            // -> action 45 -> the bridge's case-45 arm -> this event. The old note blamed the
+            // world route-information bridge; that function is the sat-nav ROUTE LINE producer
+            // (event 211) and never carried a drive-thru icon.
             {
                 const BrnGui::GuiEventUpdateSatNav* lpSatNavEvent =
                     reinterpret_cast<const BrnGui::GuiEventUpdateSatNav*>(lpEvent);
@@ -1066,6 +1165,80 @@ namespace BrnGui
                             mePlayerDistrict       = static_cast<s32>(lrIcon.GetDistrict()); // +19228
                         }
                         break;
+                    case BrnGui::GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_JUNKYARD:     // 7
+                    case BrnGui::GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_BODYSHOP:     // 9
+                    case BrnGui::GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_GAS_STATION:  // 10
+                    case BrnGui::GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_PAINT_SHOP:   // 11
+                    case BrnGui::GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_TIRE_SHOP:    // 12
+                    {
+                        // The console's arm, in order:
+                        //   * the capacity assert against 46 (non-gating there);
+                        //   * DEDUPE on the whole 64-bit CgsID (record +0x10) against every
+                        //     stored row -- a hit skips the record;
+                        //   * the 48-byte copy into maDriveThroughInfo[count];
+                        //   * the 15-entry OVERRIDE walk: each canned id against the record's
+                        //     CgsID; on a match the stored row's position LANE (+0x00) is
+                        //     replaced by the canned Vector4 (the tables below);
+                        //   * ++miNumDriveThroughs.
+                        // ⚠ [FLAG PC bring-up] the capacity assert GATES here: the console's
+                        // record array is 46 deep and it writes the 47th anyway; ours stops.
+                        typedef BrnGui::GuiEventUpdateSatNav::SatNavIconInfo SatNavIconInfo;
+                        const s32 KI_MAX_DRIVE_THRUS_IN_THE_WORLD =
+                            static_cast<s32>(sizeof(maDriveThroughInfo) / sizeof(maDriveThroughInfo[0]));   // 46
+                        CGS_ASSERT(miNumDriveThroughs < KI_MAX_DRIVE_THRUS_IN_THE_WORLD,
+                                   "miNumDriveThroughs < (static_cast<const int32_t>(KI_MAX_DRIVE_THRUS_IN_THE_WORLD))");
+                        if (miNumDriveThroughs >= KI_MAX_DRIVE_THRUS_IN_THE_WORLD)
+                        {
+                            break;
+                        }
+
+                        bool lbIsNew = true;
+                        for (s32 liStored = 0; liStored < miNumDriveThroughs; ++liStored)
+                        {
+                            if (maDriveThroughInfo[liStored].GetCgsId() == lrIcon.GetCgsId())
+                            {
+                                lbIsNew = false;
+                                break;
+                            }
+                        }
+                        if (!lbIsNew)
+                        {
+                            break;
+                        }
+
+                        SatNavIconInfo& lrStored = maDriveThroughInfo[miNumDriveThroughs];
+                        lrStored = lrIcon;   // the whole 48-byte record
+
+                        for (s32 liEntry = 0; liEntry < KI_NUM_DRIVE_THRU_ICON_POSITION_OVERRIDES; ++liEntry)
+                        {
+                            if (KAU_DRIVE_THRU_ICON_POSITION_IDS[liEntry] == lrIcon.GetCgsId())
+                            {
+                                Vector4 lv4Canned;
+                                lv4Canned.x = KAAF_DRIVE_THRU_ICON_POSITIONS[liEntry][0];
+                                lv4Canned.y = KAAF_DRIVE_THRU_ICON_POSITIONS[liEntry][1];
+                                lv4Canned.z = KAAF_DRIVE_THRU_ICON_POSITIONS[liEntry][2];
+                                lv4Canned.w = KAAF_DRIVE_THRU_ICON_POSITIONS[liEntry][3];
+                                lrStored.SetPositionLane(lv4Canned);
+                            }
+                        }
+
+                        ++miNumDriveThroughs;
+
+                        // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] one line per NEW table
+                        // row (bounded by the 46-row table); the minimap_drivethru_blips case
+                        // pairs it with the producer's SETUP rec line by id.
+                        if (CgsDev::Log::gpDebugPrint != 0)
+                        {
+                            *CgsDev::Log::gpDebugPrint
+                                << "[satnav-diag] cache 199 drive-thru row " << (miNumDriveThroughs - 1)
+                                << " id=" << static_cast<u32>(lrIcon.GetCgsId())
+                                << " type=" << static_cast<s32>(lrIcon.GetIconTypeByte())
+                                << " pos=(" << lrStored.GetPositionLane().x << ","
+                                << lrStored.GetPositionLane().z << ")\n";
+                        }
+                        break;
+                    }
+
                     default:
                         // (rival/network icons are read straight off the record by the
                         // renderer's icon pass; the cache stores nothing for them here.)
@@ -1304,13 +1477,14 @@ namespace BrnGui
             // checkpoint index through the active-landmark u16 table at cache+0x5288 into a
             // u16 scratch list at cache+0x4B9C, and then -- ONLY when meGameModeType ==
             // E_MODE_ONLINE_BURNING_HOME_RUN (13) AND the count actually changed -- calls
-            // GuiCache::UpdateTrackerInfo(this, cache+0x4B9C, count). THREE things are
-            // missing here: cache+0x4B9C (unmodelled, inside mPad_4B77), the +0x5288 u16
-            // array (unmodelled, inside mPad_5287) and UpdateTrackerInfo itself (no body
-            // anywhere in src). All of it is dead outside mode 13, which is the ONLINE
+            // GuiCache::UpdateTrackerInfo(this, cache+0x4B9C, count). TWO things are still
+            // missing here: cache+0x4B9C (unmodelled, inside mPad_4B77) and the +0x5288 u16
+            // array (unmodelled, inside mPad_5287). ⭐ UpdateTrackerInfo itself is NO LONGER
+            // one of them -- it is bodied in BrnGuiCache_wJ_01.cpp and publishes to
+            // GuiTracker::RecEvent for real. All of it is dead outside mode 13, which is the ONLINE
             // Burning Home Run -- unreachable from this wave's offline stunt-run target --
-            // so it is named rather than faked. Landing it is a header carve plus one
-            // function, and the arm below is where it plugs in.
+            // so it is named rather than faked. Landing it is now just the header carve, and
+            // the arm below is where it plugs in.
             {
                 const BrnGui::GuiEventCurrentStatus* lpStatus =
                     reinterpret_cast<const BrnGui::GuiEventCurrentStatus*>(lpEvent);
@@ -1622,9 +1796,13 @@ namespace BrnGui
                 // Three console legs of this tail are named rather than faked:
                 //   (a) `sub_82507070(this, &maOnlineGameModeOptions[round])` -- the GuiTracker
                 //       refresh: it walks the round's SpecificGameModeEventInterface events,
-                //       resolves each through GuiCache::GetLandmarkInfoFromIndex (declared-only,
-                //       BrnGuiCache.h:465, no body in src) and posts the 3088-byte record to
-                //       GuiTracker::RecEvent @0x82501D28. Both callees are un-bodied here.
+                //       resolves each through GuiCache::GetLandmarkInfoFromIndex and posts the
+                //       3088-byte record to GuiTracker::RecEvent @0x82501D28.
+                //       ⭐ BOTH CALLEES ARE BODIED NOW (GetLandmarkInfoFromIndex and the
+                //       sub_82507070 twin, GuiCache::UpdateTrackerInfoFromOnlineEvent, in
+                //       BrnGuiCache_wJ_01.cpp; RecEvent in SatNav/BrnGuiTracker.cpp), so what
+                //       is still missing is only the CALL from this arm -- it stays deferred
+                //       with the rest of the online tail below, not for want of a body.
                 //   (b) the meGameModeType 10/11 arm: mEventDestinationLandmarkIndex <- the
                 //       round's first event index, then mEventDestinationDistrict <-
                 //       WorldDataController::GetLandmarkInfoFromIndex(...)+50, behind the
@@ -1657,10 +1835,15 @@ namespace BrnGui
                     mEventDestinationLandmarkIndex = 0xFFFFu; // sth +0x9F4C (word_82F27F00)
                 }
                 // [FLAG deferred] `GuiCache::UpdateTrackerInfo(this, payload + 24, count)` --
-                // the SAME un-bodied function the case-492 arm above already defers (there is
-                // no UpdateTrackerInfo body anywhere in src). It feeds the landmark TRACKER
-                // panel, not the event-info readout. DELETE-WHEN UpdateTrackerInfo lands;
-                // this is its second call site.
+                // the SAME call the case-492 arm above already defers. It feeds the landmark
+                // TRACKER panel, not the event-info readout.
+                // ⭐ THE BLOCKER IS GONE: UpdateTrackerInfo is bodied (BrnGuiCache_wJ_01.cpp)
+                // and now publishes to GuiTracker::RecEvent for real, and payload+24 is this
+                // record's modelled mau16CheckpointLandmark. Wiring it here is one line --
+                // UpdateTrackerInfo(lpPrepare->mau16CheckpointLandmark,
+                //                   lpPrepare->mu8CheckpointCount) -- and it is left OUT only
+                // because it is a live behaviour change this TU's owner has not verified.
+                // DELETE-WHEN that line lands; this is its second call site.
             }
 
             miSatNavZoomLevel = 0;   // stw +0x803C -- both tails converge on this
@@ -1965,6 +2148,15 @@ namespace BrnGui
     s32 GuiCache::GetCurrentGameModeType() const
     {
         return meGameModeType;
+    }
+
+    // @ (far member +0xA9C8 / 43464) -- the online lobby's vehicle-choice / host-game state
+    // word. Plain read, no assert in the X360 path (every reader inlines a bare `lwzx`).
+    // First mounted caller: CarSelectVehicle::HandleLobbyPlayerList (BrnCarSelectVehicle_Input.cpp,
+    // event 244); the other caller, BrnCarSelectOnlineEnd.cpp, is still unmounted.
+    s32 GuiCache::GetOnlineHostGameState() const
+    {
+        return miOnlineHostGameState;
     }
 
     // @ (far member +0x13B58 / 80728) -- the latched BrnGui::GuiEventCamStatus word.

@@ -440,7 +440,8 @@ public:
     //     #93   TriggerQueryManager::PreWorldUpdate            <- the two legs already here
     //     #95   ProgressionManager::PreWorldUpdate             (not staged -- see the body)
     //     #96   GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent @0x82390418
-    //     #97   GameStateModule::SendSetUpAllDriveThrusMessage (gated on a latch; not staged)
+    //     #97   GameStateModule::SendSetUpAllDriveThrusMessage (STAGED 2026-09-07, issue #9; gated
+    //           on ProgressionManager's drive-thru-data dirty byte, read + cleared at the call)
     //     #98   GameStateModule::DetectModeStarts @0x8239A428
     //     #103  StuntManager::Update                           <- the leg already here
     //
@@ -857,6 +858,18 @@ public:
     // is where this build calls it) and ProcessGameEvents @0x823A0A18.
     // Body: GameStateModule_SendSetUpAllEventStarts.cpp (read its banner before touching this).
     void SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBuffer* lpOutput);
+
+    // ⭐⭐ SendSetUpAllDriveThrusMessage -- THE DRIVE-THRU ICON TABLE PRODUCER ([minimap blips,
+    // issue #9, 2026-09-07]: the sat-nav had no gas / body-shop / paint / junkyard / car-park blips).
+    // Walks the track's generic regions, keeps the five drive-thru sub-types the profile has
+    // DISCOVERED, and posts one SetUpAllDriveThrusAction (action 45, 1112 bytes) onto the output
+    // action queue. The bridge's case-45 arm turns it into GUI event 199 records (icon types 7..12)
+    // for GuiCache's maDriveThroughInfo, which MapIconManager::UpdateWorldIcons reads on every
+    // sat-nav frame. Sole console call site: PreWorldUpdate, behind ProgressionManager's
+    // drive-thru-data dirty byte (+0x20988), read and cleared in one breath
+    // (IsDriveThruDataDirty / ClearDriveThruDataDirtyFlag).
+    // Body: GameStateModule_SendSetUpAllDriveThrus.cpp.
+    void SendSetUpAllDriveThrusMessage(GameStateModuleIO::GameActionQueue* lpOutputActionQueue);
 
     // X360 0x82363450 -- the player-scoring slot currently mapped to leActiveRaceCarIndex.
     // Linear scan of the scoring module's eight per-player records (stride 344 bytes) for the one

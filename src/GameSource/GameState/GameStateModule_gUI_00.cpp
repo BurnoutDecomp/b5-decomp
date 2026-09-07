@@ -1352,9 +1352,14 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // below, at the console's own position (after the trigger legs, before #96). It used to read
     // "NOT STAGED ... nothing in the junction/start chain reads what it writes"; what it writes is
     // the ODOMETER, and the HUD read 0.0 km for as long as this leg was missing.
-    // [X] #97 SendSetUpAllDriveThrusMessage NOT STAGED: the console gates it on a one-shot byte at
-    // gsm+0x2C988 that it clears in the same breath (0x823A5BB4..0x823A5BD4), and the tree's
-    // DriveThruManager is itself parked (see PreWorldUpdatePlayerTriggersBringUp's own FLAG).
+    // [x] #97 SendSetUpAllDriveThrusMessage IS STAGED ([minimap blips, issue #9, 2026-09-07]) -- leg
+    // 2d below, at the console's own position (after #96, before #98). It used to read "NOT STAGED:
+    // the console gates it on a one-shot byte at gsm+0x2C988 that it clears in the same breath";
+    // that byte is ProgressionManager+0x20988 (gsm+0xBB30 + 0x20988), the manager's
+    // mbDriveThruDataDirtyFlag, already modelled as mbDriveThrusDirty and raised by Construct /
+    // OnDriveThru / UnlockToProgressionRank / the junkyard exit -- it was armed on every boot and
+    // nobody drained it, so the drive-thru icon table was never published and the minimap had no
+    // gas / body-shop / paint / junkyard / car-park blips.
     //
     // â›” CROSS-LANE: THE BODIES ARE AGENT D3'S. This lane owns the CALL SITES and the two
     // declarations in BrnGameStateModule.h (see the [D4 PUMP SEAM] block there). Until D3's landing
@@ -1405,6 +1410,22 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     {
         mpPreWorldInputBuffer->LockForRead();
         CheckIfPlayerIsAtJunctionWithAnEvent(mpPreWorldInputBuffer, mpOutputBuffer);
+
+        // ---- 2d) #97 THE DRIVE-THRU ICON TABLE ([minimap blips, issue #9, 2026-09-07]) ----------
+        // The console's PreWorldUpdate, between #96 and #98: read the progression manager's
+        // drive-thru-data dirty byte (+0x20988), CLEAR it, and if the value read was set run
+        // SendSetUpAllDriveThrusMessage on the output action queue. Read-then-clear is the
+        // console's order: a discovery that lands while the message is being built is not lost
+        // (OnDriveThru raises the byte again), and a boot publishes the table exactly once
+        // (ProgressionManager::Construct seeds the byte set).
+        {
+            const bool lbDriveThruDataDirty = mProgressionManager.IsDriveThruDataDirty();
+            mProgressionManager.ClearDriveThruDataDirtyFlag();
+            if (lbDriveThruDataDirty)
+            {
+                SendSetUpAllDriveThrusMessage(mpOutputBuffer->GetGameActionQueue());
+            }
+        }
         // [!] D3's DetectModeStarts carries a THIRD argument the console does not: the
         // module's cached game timestep at +292284, whose producer (PreWorldUpdate's own
         // timer leg) is not reconstructed -- see its declaration. Fed the same game-timer

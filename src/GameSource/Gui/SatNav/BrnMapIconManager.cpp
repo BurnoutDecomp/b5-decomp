@@ -1432,6 +1432,7 @@ void MapIconManager::UpdateSatNavIcons()
                 << "[satnav-icon] slot " << (liIcon + liExtraIcons)
                 << " type " << static_cast<s32>(li8IconType)
                 << " state " << liState
+                << " id=" << static_cast<u32>(lrRecord.GetCgsId())
                 << " dev(" << lv2Now.x << "," << lv2Now.y << ")\n";
         }
         lrIcon.Update();   // the X360 slot-+0x20 commit -- a folded-empty no-op for sat-nav icons

@@ -361,16 +361,12 @@ public:
 
     // X360 0x82396058. Re-evaluates whether any special car should unlock after a stunt-element
     // milestone; CheckForTrophyUnlocks calls it unconditionally after the trophy path.
-    //
-    // ⛔ [gateui] PARKED 2026-08-20, NOT bodied. Same reason: 0x82396058 gates the silver-car
-    // unlock on `mProfile.GetCurrentProgressionRank() >= ProgressionData[+20]` and the
-    // gold-car unlock on `ComputeCompletionPercentage() >= 100.0`, and needs two missing
-    // bodies --
-    //     BrnProgression::ProgressionManager::ComputeCompletionPercentage @0x8238A198 (320 insns)
-    //     BrnProgression::ProgressionManager::UnlockSpecialCars           @0x8237AF38 (106 insns)
-    // -- plus the two Profile unlock flags at Profile+42516/+42517 and a ProgressionData
-    // layout that is not modelled. (AchievementManagerBase::OnGameCompletion, the third
-    // callee, DOES exist.) See report_r2_deps.md.
+    // BODIED (BrnProgressionManager_Completion.cpp): gates the silver-car unlock on
+    // `mProfile.GetCurrentProgressionRank() >= ProgressionData[+20]` and the gold-car unlock on
+    // `ComputeCompletionPercentage() >= 100.0`, through ComputeCompletionPercentage and
+    // UnlockSpecialCars (both bodied). Its two callers, StuntManager::CheckForTrophyUnlocks and
+    // StuntManager::ProcessStuntElement, went live 2026-09-07 (they had been parked on the
+    // "not bodied" claim that used to stand here).
     void CheckForSpecialCarUnlocks();
 
     // ------------------------------------------------------------------------
@@ -586,6 +582,13 @@ public:
     // X360 UpdateExitState de-inlined byte poke at ProgressionManager+133512 (`stbx 1`) -- a
     // drive-thrus/rivals dirty flag. FLAG: de-inlined byte poke, not a named member in the exports.
     void SetDriveThrusDirtyFlag();
+
+    // [minimap blips, issue #9, 2026-09-07] the CONSUMER side of that byte. The console's
+    // GameStateModule::PreWorldUpdate reads it (ProgressionManager +0x20988), clears it in the
+    // same breath, and only then decides whether to run SendSetUpAllDriveThrusMessage. The pair
+    // below is that read + clear, by name -- the same de-inlined-byte-poke idiom as the setter.
+    bool IsDriveThruDataDirty() const     { return mbDriveThrusDirty; }
+    void ClearDriveThruDataDirtyFlag()    { mbDriveThrusDirty = false; }
 
     // X360 this+133448 (0x20948). The loaded vehicle list the progression layer resolves car
     // records through (ProgressionManager::OnPlayerCarChange / GetCarColourAndPalette / AddCar all

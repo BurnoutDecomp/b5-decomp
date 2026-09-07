@@ -844,6 +844,21 @@ void SatNavRenderer::RenderIconsForSatNav(
     // unconditionally after the gate, before loading muNumberOfSatNavIcons @0x8245FA64).
     InitSatNavIcons();
 
+    // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the line that proves the event-icon gate
+    // above opened (it never did before GuiCache::Construct seeded the sat-nav event filter,
+    // issue #9). Once per boot.
+    {
+        static bool sbLoggedGate = false;
+        if (!sbLoggedGate && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLoggedGate = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[satnav-diag] event icons: " << static_cast<s32>(muNumberOfSatNavIcons)
+                << " cached, display type " << static_cast<s32>(meIconDisplayType)
+                << ", filter " << meGameModeFilter << "\n";
+        }
+    }
+
     // The world-camera position is latched ONCE here (X360 @0x8245FA48 lvx128 v124, mpGuiCache,
     // 0x4AE0). The per-icon off-screen distance below measures against it.
     const Vector4& lv4CameraPos = mpGuiCache->GetWorldCameraPosition();
