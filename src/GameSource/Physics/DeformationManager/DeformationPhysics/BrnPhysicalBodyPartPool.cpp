@@ -392,21 +392,74 @@ namespace Deformation
 {
 
     // =============================================================================================
-    // LOG-ONCE GATES 2026-08-14 (walls leg 4): the two remaining declared pool drivers --
-    // UpdateABoundingBox (per-frame round-robin bbox refresh) and UpdatePart (post-physics
-    // per-part read-back). Both dead today (0 detached parts). Reconstruct and DELETE.
+    // UpdateABoundingBox @ 0x8260CC88 -- ⭐⭐ RECONSTRUCTED 2026-09-07 (part-box wave).
+    // THE GATE IS GONE, AND IT WAS STALE RATHER THAN DEAD.
+    //
+    // What stood here was a log-once "conductor gate" left on 2026-08-14 whose own banner said
+    // "dead today (0 detached parts)". That premise expired the moment parts began shedding: this
+    // is step (4) of DetachedPartManager::UpdatePostPhysics @0x8260E118, so it runs EVERY physics
+    // frame with a live pool, and until now it did nothing at all. [[gates-are-stale-not-dead]] --
+    // ask WHEN a gate last ran, not whether it is reachable.
+    //
+    // CONSEQUENCE OF THE STUB, stated plainly: a detached part's collision box was whatever
+    // CalcBoundingBox produced inside Prepare at the instant of detachment, frozen for the whole
+    // life of the part. PhysicalBodyPart::UpdateBoundingBox() -- the recompute-only overload that
+    // re-derives mBoundingBoxHalfDimensions from the CURRENT skinned control points -- had ZERO
+    // callers anywhere in the tree. The console refreshes ONE part per frame, for ever.
+    //
+    // ---- the console's body, register for register (X360 ARTIST; the export set has a HOLE for
+    // this address, so it is read out of the image with tools/re/ppcdis.py) ----------------------
+    //   0x8260CC98  lwz    r11, 0x60E8(r15)      ; miLastUpdatedBoundingBox   (pool +24808)
+    //   0x8260CC9C  cmpwi  cr6, r11, -1
+    //   0x8260CCA0  bne    cr6, 0x8260CD24       ; cursor live -> GetNextNonZeroBit(cursor)
+    //   0x8260CCA4  addi   r9, r15, 0x60E0       ; &mUsedParts                (pool +24800)
+    //   0x8260CCA8..CCC8                          ; inlined GetFirstNonZeroBit (one 64-bit word)
+    //   0x8260CCCC  li     r11, -1               ; nothing set / ran off the end
+    //   0x8260CCD0  stw    r11, 0x60E8(r15)      ; the cursor is stored EITHER WAY
+    //   0x8260CCD8  cmpwi  cr6, r11, -1
+    //   0x8260CCDC  beq    cr6, 0x8260CCEC       ; -1 -> update NOTHING this frame
+    //   0x8260CCE0  mulli  r11, r11, 0x1F0       ; 496 == sizeof(PhysicalBodyPart)
+    //   0x8260CCE4  add    r3, r11, r15          ; &maParts[slot]
+    //   0x8260CCE8  bl     0x8260ACC8            ; PhysicalBodyPart::UpdateBoundingBox
+    //   0x8260CD24..CF34                          ; inlined GetNextNonZeroBit + its CgsBitArray
+    //                                             ; ":193/:203 invalid index" tripwire, then the
+    //                                             ; same 0x8260CCD0 store-and-update tail
+    //
+    // ⭐ CORROBORATED ON THE NEAR-ANCESTOR: DecFIGS PS3 @0x7517A8 decompiles to exactly this shape
+    // (`if (*(this+24808) == -1) <first> else <next>; ... if (cursor != -1)
+    // PhysicalBodyPart::UpdateBoundingBox(496*cursor + this)`), which also pins sizeof 496,
+    // mUsedParts @+24800 and the cursor @+24808 -- the offsets this header already carries.
+    //
+    // ⚠️ lpSceneInterface IS GENUINELY UNUSED, on BOTH builds. r4 is never read on any path of the
+    // X360 body before being clobbered as the assert helper's own argument, and the PS3 pseudocode
+    // never mentions the parameter either. The header comment beside the declaration says
+    // "recompute + REPUBLISH"; the republish half does not exist -- UpdateBoundingBox takes only
+    // `this` and touches no scene interface. The parameter is kept because it is the DWARF
+    // signature, not dropped, and it is named here so the next reader does not go looking for a
+    // publish that the binary does not contain.
+    //
+    // ⛔ NOT MEASURED IN A RUN: this wave did not take the box lock (two other waves were mid
+    // measurement and the sim is frame-coupled). What is proven is the divergence, not its
+    // magnitude -- the recompute can only change the box's EXTENTS, never its orientation, so it
+    // cannot by itself turn a flat panel upright. It can, however, move a part across the
+    // min-half <= 0.15 "thin" gate that DoBodyPartWorldContactGeneration @0x8260962C uses to pick
+    // the contact padding, which is a behaviour change worth a witness when the box is free.
     // =============================================================================================
     void PhysicalBodyPartPool::UpdateABoundingBox(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInterface*/)
     {
-        static bool sbLoggedUBB = false;
-        if ( !sbLoggedUBB )
+        // `cmpwi r11, -1` -> restart the sweep at the first used slot, else continue after it.
+        const s32 liSlot =
+            ( miLastUpdatedBoundingBox == CgsContainers::BitArray<KU_MAX_DETACHED_PARTS>::KI_INVALID_BITINDEX )
+                ? mUsedParts.GetFirstNonZeroBit()
+                : mUsedParts.GetNextNonZeroBit(miLastUpdatedBoundingBox);
+
+        // `stw r11, 0x60E8(r15)` -- stored on BOTH arms, including the -1 that ends a sweep.
+        miLastUpdatedBoundingBox = liSlot;
+
+        if ( liSlot != CgsContainers::BitArray<KU_MAX_DETACHED_PARTS>::KI_INVALID_BITINDEX )
         {
-            sbLoggedUBB = true;
-            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalBodyPartPool::UpdateABoundingBox reached but not "
-                                              "reconstructed [FLAG PC boot gate]\n";
+            maParts[liSlot].UpdateBoundingBox();   // bl 0x8260ACC8 on &maParts[slot]
         }
-        
     }
 
     // ------------------------------------------------------------------------------------------

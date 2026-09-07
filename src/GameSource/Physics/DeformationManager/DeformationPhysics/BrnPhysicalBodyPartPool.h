@@ -193,8 +193,11 @@ namespace Deformation
         void UpdatePart(const OutUpdateRigidBody* lpUpdateEvent,
                         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface);
 
-        // BrnPhysicalBodyPartPool.h:102. Recompute + republish ONE part's bounding box this frame
-        // (round-robins via miLastUpdatedBoundingBox to amortise the cost).
+        // BrnPhysicalBodyPartPool.h:102. Recompute ONE used part's bounding box this frame,
+        // round-robining via miLastUpdatedBoundingBox to amortise the cost.
+        // ⚠️ 2026-09-07: this said "recompute + REPUBLISH" and there is no republish -- the body
+        // (@0x8260CC88, and DecFIGS PS3 @0x7517A8) never reads lpSceneInterface on any path, and
+        // the PhysicalBodyPart::UpdateBoundingBox it calls takes only `this`. See the .cpp banner.
         void UpdateABoundingBox(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface);
 
         // BrnPhysicalBodyPartPool.h:106. Add any parts pending scene insertion to the scene.

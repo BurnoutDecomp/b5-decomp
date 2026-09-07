@@ -26,7 +26,17 @@ namespace Deformation
             maParts[luPart].Construct();
         }
         mUsedParts.UnSetAll();
-        miLastUpdatedBoundingBox = 0;
+
+        // ⭐⭐ CORRECTED 2026-09-07 (part-box wave): THE CURSOR SEED IS -1, NOT 0, AND THE TWO ARE
+        // NOT INTERCHANGEABLE. UpdateABoundingBox @0x8260CC88 branches on this value: -1 means
+        // "start a fresh sweep at the FIRST used slot" (GetFirstNonZeroBit), any other value means
+        // "continue AFTER slot N" (GetNextNonZeroBit). Seeded 0, slot 0's bounding box is skipped
+        // for the whole of the first sweep. The console's own store, on both rungs:
+        //   ARTIST  0x8262158C  li  r6, -1        (PhysicalBodyPartPool::Construct is INLINED into
+        //           0x826215A0  stw r6, 0x60E8(r29)   DeformationManager::Construct @0x82621510,
+        //                                             beside `std r30,0x60E0` / `stb r30,0x60EC`)
+        //   DecFIGS PS3 @0x6C83AC   *(this + 24808) = -1;   (with 24800 and 24812 set to 0)
+        miLastUpdatedBoundingBox = CgsContainers::BitArray<KU_MAX_DETACHED_PARTS>::KI_INVALID_BITINDEX;
         mu8NumDetachedParts = 0;
     }
 }
