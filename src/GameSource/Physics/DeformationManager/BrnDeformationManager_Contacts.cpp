@@ -317,6 +317,47 @@ namespace Deformation
                             << " wallN " << lWallN.x << " " << lWallN.y << " " << lWallN.z
                             << "\n";
                     }
+
+                    // [wall] JUMP -- one solve moved this model by more than a metre. Dump the
+                    // world contacts that did it, in the solver's own terms (A = this model's
+                    // point in world space through the PRE-solve transform, B = the world point,
+                    // depth = (B - A) . n, which is exactly what Solve() adds along n). Written
+                    // for issue #14 (a crashed traffic car teleporting out of the highway tunnel);
+                    // same opt-in as the rest of this probe.
+                    if ( lfCorr > 1.0f )
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[wall] JUMP model " << liModelIndex
+                            << " veh " << static_cast<u32>( reinterpret_cast<u64>( lpVeh ) )
+                            << " pos " << lNow.wAxis.x << " " << lNow.wAxis.y << " " << lNow.wAxis.z
+                            << " -> " << lpSolvedTransform->wAxis.x << " "
+                            << lpSolvedTransform->wAxis.y << " " << lpSolvedTransform->wAxis.z
+                            << " corr " << lfCorr << " mine " << liMine << " nWtot " << liNumWorld
+                            << "\n";
+                        s32 liDumped = 0;
+                        for ( s32 liC = 0; liC < liNumWorld && liDumped < 16; ++liC )
+                        {
+                            if ( lpWC[liC].miIndexA != liModelIndex ) { continue; }
+                            const Vector3& lA = lpWC[liC].mPointOnA;
+                            const Vector3& lB = lpWC[liC].mPointOnB;
+                            const Vector3& lN = lpWC[liC].mNormal;
+                            Vector3 lWorldA;
+                            lWorldA.x = lNow.xAxis.x * lA.x + lNow.yAxis.x * lA.y + lNow.zAxis.x * lA.z + lNow.wAxis.x;
+                            lWorldA.y = lNow.xAxis.y * lA.x + lNow.yAxis.y * lA.y + lNow.zAxis.y * lA.z + lNow.wAxis.y;
+                            lWorldA.z = lNow.xAxis.z * lA.x + lNow.yAxis.z * lA.y + lNow.zAxis.z * lA.z + lNow.wAxis.z;
+                            const f32 lfDepth = ( lB.x - lWorldA.x ) * lN.x
+                                              + ( lB.y - lWorldA.y ) * lN.y
+                                              + ( lB.z - lWorldA.z ) * lN.z;
+                            *CgsDev::Log::gpDebugPrint
+                                << "[wall]   c" << liC
+                                << " localA " << lA.x << " " << lA.y << " " << lA.z
+                                << " A " << lWorldA.x << " " << lWorldA.y << " " << lWorldA.z
+                                << " B " << lB.x << " " << lB.y << " " << lB.z
+                                << " n " << lN.x << " " << lN.y << " " << lN.z
+                                << " depth " << lfDepth << "\n";
+                            ++liDumped;
+                        }
+                    }
                 }
             }
             // ---- end [wall] -------------------------------------------------------------------

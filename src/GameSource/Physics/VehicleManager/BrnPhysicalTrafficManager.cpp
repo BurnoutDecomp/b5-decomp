@@ -290,14 +290,28 @@ void PhysicalTrafficManager::Construct()
 // fourth result region at +0x570 that is zeroed then stamped with the "invalid surface" tag
 // 0xFFFF/0x8000 + a const float).
 //
-// FLAG (un-homed): every per-vehicle store in this function lands inside SimpleVehiclePhysics
-// at byte offsets (+0x130, +0x210, +0x3D0, +0x570, +0x318/+0x3C4, ...) whose named layout is
-// the BrnSimpleVehiclePhysics TU, which is NOT homed. Reproducing those raw-offset stores here
-// would require fabricating that layout, which the rules forbid. We therefore reproduce the
-// CONTROL FLOW faithfully BY NAME (iterate the used-vehicle bits, fetch each vehicle body) and
-// delegate the per-body reset to SimpleVehiclePhysics once that TU lands. The reset call is a
-// declared-only hook on the forward-declared type, so this is honest, not approximated:
-// nothing is silently zeroed.
+// LANDED 2026-09-07 (issue #14, "traffic cars disappear when touched, consistently in the
+// highway tunnel"). The per-body reset is SimpleVehiclePhysics::ResetAboveGroundTestResult
+// (BrnSimpleVehiclePhysics.cpp), bodied off the identical inline the race-car loop in
+// VehicleManager::UpdateVehiclePhysics runs one call earlier -- so this is the same call the
+// race cars already get, per used traffic vehicle, exactly as the console has it.
+//
+// WHAT THE PARK COST. The loop body here was `(void)liVehicle;` from the day the TU was
+// written ("delegate the per-body reset to SimpleVehiclePhysics once that TU lands"); that TU
+// landed and nobody came back. Without it a traffic wheel's RoadContact latch (mbIsOnGround +
+// the contact position/normal), mi8NumContacts, mbHasTraction and the down-ray latch were
+// NEVER cleared between frames, so:
+//   * a body created into a pooled slot inherited the PREVIOUS occupant's road contact, and
+//     VehiclePhysics::UpdateSuspensionPostSimulation seated the brand-new car on that stale
+//     plane in its very first frame (measured: a car promoted at y = -10.8 inside the I-88
+//     tunnel rose 11.3 m in one step, with no vertical velocity, onto the surface street
+//     above -- where the slot's previous occupant had lived -- and then sat there, every frame
+//     re-lifted to the same plane; a crashed car did the same 10.02 m jump one frame after
+//     its crash). That is the "car ceases to exist" of the report: it is still alive, it is
+//     on the road above the tunnel.
+//   * any frame whose line tests missed kept the last hit as if it were this frame's.
+// The reset is what makes a traffic wheel's ground contact a per-frame fact instead of a
+// sticky one, and it is the only thing this function does.
 // ---------------------------------------------------------------------------------------
 void PhysicalTrafficManager::ResetAboveGroundTestResults()
 {
@@ -309,11 +323,15 @@ void PhysicalTrafficManager::ResetAboveGroundTestResults()
         CGS_ASSERT(liVehicle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
                    "liVehicle < ku8TotalMaxNumPhysicalTraffic");
 
-        // X360: SimpleVehiclePhysics* lpBody = GetTrafficVehicle(liVehicle)->mpVehicleBody;
-        //       lpBody->ResetAboveGroundTestResults();   // the +0x130/+0x210/+0x3D0/+0x570 stores
-        // FLAG: GetTrafficVehicle(liVehicle)->mpVehicleBody and the per-body reset are deferred to
-        // the BrnSimpleVehiclePhysics TU (un-homed byte layout); see header note.
-        (void)liVehicle;
+        // The console dereferences the body unconditionally (every used slot has one from
+        // Create onwards); the null test is a host tripwire on the pool seat, not a branch the
+        // console takes.
+        SimpleVehiclePhysics* const lpBody = GetTrafficVehicle(liVehicle)->mpVehicleBody;
+        CGS_ASSERT(lpBody != 0, "mpVehicleBody != NULL");
+        if (lpBody != 0)
+        {
+            lpBody->ResetAboveGroundTestResult();
+        }
     }
 }
 

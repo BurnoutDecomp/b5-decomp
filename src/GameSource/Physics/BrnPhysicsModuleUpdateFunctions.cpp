@@ -27,6 +27,7 @@
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // PotentialContact (muVolumeInstanceIdA/B)
 #include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"  // the three custom-queue accessors
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"            // VehicleManager::GetPhysicsEntityIDFromGlobalEntityID
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"  // [T-ystep] probe: GetTransform on a traffic body
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"    // DeformationManager::FixUpVehicleContact[ByInterpolation]
 
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"                          // PhysicsModuleIO::{InputBuffer,OutputBuffer}
@@ -91,6 +92,63 @@ namespace BrnPhysics
         // (the same device, and the same reason, as
         // RaceCarEntityModule::PublishNewVehicleToDirectorWithoutPhysicsBringUp's edge flag).
         EActiveRaceCarIndex gs_ePublishedPlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+
+        // ---- [T-ystep] DIAG. NOT IN THE X360 BINARY. Opt-in BRN_TRAFFIC_DIAG. -------------------
+        // Issue #14 bisect: a promoted traffic body's Y is written by SOMETHING between two
+        // UpdateTrafficPhysics ticks (a crashed car in the I-88 tunnel rose 10.02 m in one frame
+        // with no vertical velocity and landed on the surface street). This samples every live
+        // traffic body's transform Y at each stage of the physics frame and prints ONLY when a
+        // slot moved more than 0.25 m since the previous sample, tagged with the stage that ran
+        // in between. Event-driven, so it is silent on a healthy frame. It is what found the
+        // parked PhysicalTrafficManager::ResetAboveGroundTestResults (the +11.3 m step landed
+        // between "readbodies" and "postsim"), and it is the oracle of the tunnel case
+        // (tools/tests/cases/traffic_tunnel_touch.ps1), so it stays. Opt-in, one line per event.
+        bool TrafficYStepEnabled()
+        {
+            static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
+            return sbEnabled;
+        }
+
+        void TrafficYStep(const char* lpcStage, Vehicle::VehicleManager& lrVehicleManager)
+        {
+            if (!TrafficYStepEnabled() || CgsDev::Log::gpDebugPrint == 0)
+            {
+                return;
+            }
+            static f32  s_afLastY[20];
+            static bool s_abValid[20] = { false };
+
+            Vehicle::PhysicalTrafficManager& lrTraffic = lrVehicleManager.GetPhysicalTrafficManager();
+            for (s32 liSlot = 0; liSlot < 20; ++liSlot)
+            {
+                const Vehicle::PhysicalTrafficVehicle* lpVehicle = lrTraffic.GetTrafficVehicle(liSlot);
+                const bool lbLive =
+                    lpVehicle->mu8PhysicalType == Vehicle::PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_FULL
+                    && lpVehicle->mpVehicleBody != 0;
+                if (!lbLive)
+                {
+                    s_abValid[liSlot] = false;
+                    continue;
+                }
+                const Vector3 lvPos = lpVehicle->mpVehicleBody->GetTransform().wAxis;
+                if (s_abValid[liSlot])
+                {
+                    const f32 lfDY = lvPos.y - s_afLastY[liSlot];
+                    if (lfDY > 0.25f || lfDY < -0.25f)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[T-ystep] stage=" << lpcStage << " slot=" << liSlot
+                            << " state=" << static_cast<s32>(lpVehicle->mePhysicalTrafficState)
+                            << " y " << s_afLastY[liSlot] << " -> " << lvPos.y
+                            << " dy=" << lfDY
+                            << " pos=(" << lvPos.x << "," << lvPos.y << "," << lvPos.z << ")"
+                            << "\n";
+                    }
+                }
+                s_afLastY[liSlot] = lvPos.y;
+                s_abValid[liSlot] = true;
+            }
+        }
     }
 
     // ==========================================================================================
@@ -337,6 +395,7 @@ namespace BrnPhysics
         // The ten per-frame contact-spy container clears (mContactData.Clear() inlined on
         // the console -- see BrnContactSpyData.cpp), then the first state sweep.
         mContactData.Clear();
+        TrafficYStep("update-start", mVehicleManager);
         mVehicleManager.CheckState();
 
         // ---- the five per-frame IO buffers ---------------------------------------------------
@@ -488,6 +547,7 @@ namespace BrnPhysics
             CgsDev::PerfMonCpu::StartMonitor(miPhysicsUpdateFixUpVehContactsPM);         // +433200
             FixUpVehicleContacts(lpPotentialContacts);
             CgsDev::PerfMonCpu::StopMonitor(miPhysicsUpdateFixUpVehContactsPM);
+            TrafficYStep("fixup", mVehicleManager);
             DvWitnessMark("fixup");
 
             lpPotentialContacts->UnlockForWrite();
@@ -506,6 +566,7 @@ namespace BrnPhysics
                 &mDeformationInput,
                 lpPotentialContacts);
             CgsDev::PerfMonCpu::StopMonitor(miPhysicsUpdateCrashPredictionPM);
+            TrafficYStep("crashpred", mVehicleManager);
             mVehicleManager.CheckState();
             DvWitnessMark("crashpred");
 
@@ -615,6 +676,7 @@ namespace BrnPhysics
                 reinterpret_cast<const Vehicle::VehicleEffectsInputInterface*>(
                     lpPhysicsModuleInputBuffer->GetVehicleEffectsInputInterface()));  // FLAG: storage->real seam cast
             CgsDev::PerfMonCpu::StopMonitor(miPhysicsUpdateVehiclePhysicsPM);
+            TrafficYStep("vehphys", mVehicleManager);
 
             lpVehManagerBuffer->UnlockForWrite();
             lpPotentialContacts->UnlockForRead();
@@ -630,6 +692,7 @@ namespace BrnPhysics
                                                        lpPropCollisionGenerator, mWorldEntityId);
             CgsDev::PerfMonCpu::StopMonitor(miPhysicsUpdateDoPropContactGenEndPM);
             CgsDev::PerfMonCpu::StopMonitor(miPhysicsUpdateContactGenAsyncPM);
+            TrafficYStep("contactgen-end", mVehicleManager);
 
             lpInputBufferStack->DestroyIOBuffer(&lpPropLinearAlloc);
             lpInputBufferStack->DestroyIOBuffer(&lpPropCollisionGenerator);
@@ -675,6 +738,7 @@ namespace BrnPhysics
             BridgeContactsToSimulation(lpSimInputBuffer, lpPhysicsModuleInputBuffer,
                                        lpPotentialContacts, lpPropRaceCarContacts);
             CgsDev::PerfMonCpu::StopMonitor(miPhysicsBridgeContactsPM);
+            TrafficYStep("bridge", mVehicleManager);
 
             mVehicleManager.ClearSnappedNetworkCarContacts(&mDeformationManager);
 
@@ -697,6 +761,7 @@ namespace BrnPhysics
                                                  lfSimTimerTimeStep, lfSimTimerTimeStep },
                                        meCurrentGameMode);
             CgsDev::PerfMonCpu::StopMonitor(miPhysicsProcessRaceCarContactsPM);
+            TrafficYStep("deform-update", mVehicleManager);
             DvWitnessMark("deform");   // [dv] after DeformationManager::Update (the [kerb-imp] arm)
             lpPotentialContacts->UnlockForRead();
             lpSimOutputBuffer->UnlockForWrite();
@@ -709,6 +774,7 @@ namespace BrnPhysics
             mSimulationModule.Update(lpInputBufferStack, lpOutputBufferStack,
                                      lpSimInputBuffer, lpSimOutputBuffer);
             CgsDev::PerfMonCpu::StopMonitor(miPhysicsUpdateSimulationPM);
+            TrafficYStep("sim", mVehicleManager);
             DvWitnessMark("sim");   // [dv] after the rw::physics step
 
             // ---- the three NaN-validation sweeps over the sim's spy queues -------------------
@@ -780,6 +846,7 @@ namespace BrnPhysics
                 lpConstSimOutputBuffer->GetUpdateRigidBodyQueue(),
                 VecFloat{ lfSimTimerTimeStep, lfSimTimerTimeStep, lfSimTimerTimeStep, lfSimTimerTimeStep });
             CgsDev::PerfMonCpu::StopMonitor(miPhysicsUpdateReadUpdatedBodiesPM);
+            TrafficYStep("readbodies", mVehicleManager);
             // [dv] after gravity + IntegrateTransform -- the ONLY place a car's pose advances.
             DvWitnessMark("integrate");
 
@@ -797,12 +864,14 @@ namespace BrnPhysics
             DvWitnessMark("postsim");
 
             CgsDev::PerfMonCpu::StartMonitor(miDeformationManagerPM);                    // +433132 (v518)
+            TrafficYStep("postsim", mVehicleManager);
             mDeformationManager.UpdatePostPhysics(lpSimOutputBuffer, lpPhysicsModuleOutputBuffer,
                                                   &mContactData, lpInputBufferStack,
                                                   lpPotentialContacts);
             CgsDev::PerfMonCpu::StopMonitor(miDeformationManagerPM);
             mDeformationManager.VerifyPartIndices();
             mDeformationManager.VerifyPartIndices();
+            TrafficYStep("deform-postphys", mVehicleManager);
 
             // ⭐ SEAMS RETIRED 2026-08-24 (deform-land wave, P1(b)): the output buffer's two
             // deformation seats hold their real types, so the storage->real reinterpret_casts
@@ -816,6 +885,7 @@ namespace BrnPhysics
                 lpPhysicsModuleOutputBuffer->GetDeformationOutputInterface());
             mDeformationManager.VerifyPartIndices();
 
+            TrafficYStep("deform-states", mVehicleManager);
             // FLAG: gate-bodied (image-only address 0x8263C7C0).
             mVehicleManager.ProcessCrashingNetworkCars(
                 reinterpret_cast<const Vehicle::VehicleDriverInputInterface*>(
@@ -828,6 +898,7 @@ namespace BrnPhysics
 
             // [dv] close the step. The frame number is the [kerb]/[kerb-car] counter so a [dv]
             // dump and the contact lines for the same step share an index.
+            TrafficYStep("netcars", mVehicleManager);
             DvWitnessEndStep(lfSimTimerTimeStep, Vehicle::guKerbProbeFrame);
         }
         else
@@ -846,6 +917,7 @@ namespace BrnPhysics
             &mDeformationInput);
         mVehicleManager.CheckState();
         lpVehManagerBuffer->UnlockForWrite();
+        TrafficYStep("reset-events", mVehicleManager);
 
         CGS_ASSERT(lpSimInputBuffer != 0, "lpInputBuffer");                              // CgsModuleUtils.h:238
         lpSimInputBuffer->LockForWrite();
@@ -1008,6 +1080,7 @@ namespace BrnPhysics
                                          BrnUpdateSet lUpdateSet )
     {
         CgsDev::PerfMonCpu::StartMonitor(miPhysicsPreSceneUpdatePM);                     // +433096
+        TrafficYStep("postscene-start", mVehicleManager);
 
         CGS_ASSERT(lpInputBufferStack  != 0, "lpInputBufferStack != NULL");              // :68
         CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");             // :69
@@ -1219,6 +1292,7 @@ namespace BrnPhysics
         lpInputBufferStack->DestroyIOBuffer(&lpSimInputBuffer);
         lpOutputBufferStack->DestroyIOBuffer(&lpVehManagerBuffer);
 
+        TrafficYStep("postscene-end", mVehicleManager);
         mVehicleManager.CheckState();
         CgsDev::PerfMonCpu::StopMonitor(miPhysicsPreSceneUpdatePM);
     }

@@ -816,7 +816,10 @@ public:
 
     void Construct();
 
-    // X360 0x825E8808: reset the above-ground (down-ray) test results for every used vehicle.
+    // Reset every used vehicle's per-frame line-test latches: the four wheels' RoadContact /
+    // traction flags and the body-origin down-ray result (SimpleVehiclePhysics::
+    // ResetAboveGroundTestResult per body). Runs once per physics frame, before the traction
+    // line results are harvested. Landed 2026-09-07 (issue #14); it had been a parked no-op.
     void ResetAboveGroundTestResults();
 
     // Two DWARF-attested
