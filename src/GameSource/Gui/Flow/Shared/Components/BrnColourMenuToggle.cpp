@@ -20,29 +20,37 @@
 namespace BrnGui
 {
     // off_82F27474 -- the five child colour-selection component names, by offset-from-centre.
-    // Only entry [0] "ItemColourM2" is rodata-attested for this TU; [1..4] follow the M2..P2
-    // pattern the class uses everywhere. Verify against off_82F27474 when the block is dumped.
+    // ⭐ ALL FIVE READ OUT OF THE IMAGE 2026-09-07 (issue #3); the four that used to be
+    // "pattern" guesses are confirmed byte-for-byte:
+    //   0x82F27474 "ItemColourM2"  0x82F27478 "ItemColourM1"  0x82F2747C "ItemColour"
+    //   0x82F27480 "ItemColourP1"  0x82F27484 "ItemColourP2"
     const char* const ColourMenuToggle::KAC_ITEM_COLOUR_COMPONENT[ColourMenuToggle::KI_NUM_ITEMS] =
     {
-        "ItemColourM2",   // [0] (attested)
-        "ItemColourM1",   // [1] (pattern)
-        "ItemColour",     // [2] (pattern, centre)
-        "ItemColourP1",   // [3] (pattern)
-        "ItemColourP2",   // [4] (pattern)
+        "ItemColourM2",   // [0]
+        "ItemColourM1",   // [1]
+        "ItemColour",     // [2] (centre)
+        "ItemColourP1",   // [3]
+        "ItemColourP2",   // [4]
     };
 
     // off_82F27488 -- per-state apt view-state names, indexed by MenuToggleStates. Update()
-    // only ever reads [1..4] (INVISIBLE..HIGHLIGHTED); [0] (UNUSED) aliases INVISIBLE's string
-    // exactly as the sibling MenuItem::KAC_STATE_NAMES does. Only [0] ("Invisible") is
-    // rodata-attested for this TU; [2..4] follow the toggle's enum-named apt states -- verify
-    // against off_82F27488 when the block is dumped.
+    // @0x824E8D08 reads `off_82F27488[v3]` with v3 in 1..4.
+    //
+    // ⭐⭐ [3]/[4] USED TO BE GUESSED ("Unhighlighted"/"Highlighted") AND WERE WRONG -- that is
+    // why the CS_LIVERY colour picker never drew. Read out of the image 2026-09-07 (issue #3):
+    //   0x82F27488 -> 0x8204B13C "Invisible"   0x82F2748C -> 0x8204B13C "Invisible"
+    //   0x82F27490 -> 0x8206B5A0 "Disabled"    0x82F27494 -> 0x8206B594 "Unselected"
+    //   0x82F27498 -> 0x8206B588 "Selected"
+    // See the long note on BrnGui::MenuToggle::KAC_STATE_NAMES for the mechanism: the value is
+    // the argument of the movie's own gotoAndPlay(), B5MENUITEMCOLOURPICKER.bundle labels its
+    // bands `selected`/`unselected`, and an unresolvable label leaves the clip on `invisible`.
     const char* const ColourMenuToggle::KAC_STATE_NAMES[ColourMenuToggle::E_MENUTOGGLESTATES_COUNT] =
     {
-        "Invisible",       // [0] E_MENUTOGGLESTATES_UNUSED (aliases INVISIBLE, attested)
-        "Invisible",       // [1] E_MENUTOGGLESTATES_INVISIBLE
-        "Disabled",        // [2] E_MENUTOGGLESTATES_DISABLED
-        "Unhighlighted",   // [3] E_MENUTOGGLESTATES_UNHIGHLIGHTED
-        "Highlighted",     // [4] E_MENUTOGGLESTATES_HIGHLIGHTED
+        "Invisible",     // [0] E_MENUTOGGLESTATES_UNUSED (aliases INVISIBLE's string)
+        "Invisible",     // [1] E_MENUTOGGLESTATES_INVISIBLE
+        "Disabled",      // [2] E_MENUTOGGLESTATES_DISABLED
+        "Unselected",    // [3] E_MENUTOGGLESTATES_UNHIGHLIGHTED
+        "Selected",      // [4] E_MENUTOGGLESTATES_HIGHLIGHTED
     };
 
     // @ 0x824E5670 -- Clear each of the 5 embedded colour selections via their component

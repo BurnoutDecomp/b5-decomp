@@ -22,16 +22,34 @@
 
 namespace BrnGui
 {
-    // off_82F27460 -- the toggle's per-state apt view-state names. Only the ladder is
-    // binary-attested (Update indexes 1..4); the strings are the shared component
-    // vocabulary BrnGui::MenuItem and BrnGui::ColourMenuToggle already carry.
+    // off_82F27460 -- the toggle's per-state apt view-state names.
+    //
+    // ⭐⭐ ALL FIVE ENTRIES ARE NOW READ OUT OF THE IMAGE (2026-09-07, issue #3). The table
+    // used to carry GUESSED strings for [3]/[4] ("Unhighlighted"/"Highlighted") on the stated
+    // grounds that only the ladder was binary-attested. THEY WERE WRONG, and they are the
+    // reason the CS_LIVERY screen's livery / paint-finish rows never drew:
+    //   0x82F27460 -> 0x8204B13C "Invisible"    0x82F27464 -> 0x8204B13C "Invisible"
+    //   0x82F27468 -> 0x8206B5A0 "Disabled"     0x82F2746C -> 0x8206B594 "Unselected"
+    //   0x82F27470 -> 0x8206B588 "Selected"
+    // (Update @0x824E8AB0 indexes exactly this block: `lis r11, off_82F27460@ha /
+    //  slwi r9, r10, 2 / lwzx r5, r9, r11` with r10 in 1..4.)
+    //
+    // ⛔ WHY A WRONG STRING HERE IS INVISIBLE AND FATAL. The value is pushed as the component's
+    // "apt_state" and the movie's AS hands it straight to gotoAndPlay(). B5MENUTOGGLE.bundle's
+    // frame labels are `selected` / `unselected` / `disabled` / `invisible`; the label hash is
+    // case-folding (EAStringC::CalculateHashValue lowercases, HashFindKey uses EqualNoCaseHash),
+    // so "Selected" resolves and "Highlighted" resolves to NOTHING -- AptLabelToFrame returns -1,
+    // the caller's `>= 0` gate skips the seek, and the clip stays on the frame Initialize left it
+    // on, which is `invisible`. No assert, no log line, no drawn row. The sibling
+    // BrnGui::MenuItem table (@0x82F27430) and BrnGui::TableRow (@0x82F27444) already carried the
+    // right vocabulary, which is exactly why every other menu row on this build draws.
     const char* const MenuToggle::KAC_STATE_NAMES[MenuToggle::E_MENUTOGGLESTATES_COUNT] =
     {
-        "Invisible",       // [0] E_MENUTOGGLESTATES_UNUSED (aliases INVISIBLE)
-        "Invisible",       // [1] E_MENUTOGGLESTATES_INVISIBLE
-        "Disabled",        // [2] E_MENUTOGGLESTATES_DISABLED
-        "Unhighlighted",   // [3] E_MENUTOGGLESTATES_UNHIGHLIGHTED
-        "Highlighted",     // [4] E_MENUTOGGLESTATES_HIGHLIGHTED
+        "Invisible",     // [0] E_MENUTOGGLESTATES_UNUSED (aliases INVISIBLE's string)
+        "Invisible",     // [1] E_MENUTOGGLESTATES_INVISIBLE
+        "Disabled",      // [2] E_MENUTOGGLESTATES_DISABLED
+        "Unselected",    // [3] E_MENUTOGGLESTATES_UNHIGHLIGHTED
+        "Selected",      // [4] E_MENUTOGGLESTATES_HIGHLIGHTED
     };
 
     // ---- Construct @ 0x824E8938 -----------------------------------------------------

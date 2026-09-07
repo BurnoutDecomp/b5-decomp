@@ -508,11 +508,20 @@ namespace BrnGui
             liNumColours = lpPalette->miNumColours;
         }
 
-        // [DIAG -- BRING-UP SCAFFOLDING, NOT CONSOLE CODE, one shot.] The colour picker has
-        // no drawn representation on this build yet (the livery Apt movie does not composite
-        // the toggle), so a screenshot cannot show whether the palette actually arrived.
-        // Print what the resource resolved to instead: the palette index, its colour count
-        // and the first paint/pearl pair. Expected from the shipped payload:
+        // [DIAG -- BRING-UP SCAFFOLDING, NOT CONSOLE CODE, one shot.]
+        // ⛔ CORRECTED 2026-09-07 (b5-decomp issue #3). This note used to say "the colour
+        // picker has no drawn representation on this build yet (the livery Apt movie does not
+        // composite the toggle)". THAT WAS FALSE and it was the same wave's own bug read back
+        // as a property of the assets: BRNCARSELECTLIVERY.bundle carries `colourOptionToggle`
+        // (and `optionToggle_0` / `optionToggle_1`) as placed instances right beside
+        // `HelpItemRestore_mc` and `CarName_mc`, which do draw. Nothing composited because
+        // ColourMenuToggle::KAC_STATE_NAMES pushed the invented "Highlighted"/"Unhighlighted"
+        // instead of the console's "Selected"/"Unselected" (image @0x82F27488), so every
+        // gotoAndPlay() missed and the clip stayed on `invisible`.
+        // The print below is still useful -- it distinguishes "the picker drew empty" from
+        // "the palette resource never arrived" -- so it stays until the palette is confirmed
+        // on film. It reports the palette index, its colour count and the first paint/pearl
+        // pair. Expected from the shipped payload:
         // {25, 25, 25, 2} colours, palette 0 colour 0 == paint (0.784, 0, 0, 1) /
         // pearl (0.588, 0, 0, 1). Remove with the FLAG above once the toggle draws.
         {
