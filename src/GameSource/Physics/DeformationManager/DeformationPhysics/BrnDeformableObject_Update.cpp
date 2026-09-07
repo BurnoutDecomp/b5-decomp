@@ -807,6 +807,37 @@ namespace Deformation
         //   room-clamped row is the +Y axis whose authored limit is the 0.01 floor. The budget and
         //   the mLimitVector box never bound a single crumple apply. Any remaining 1:1 gap in dent
         //   MAGNITUDE is on the SUPPLY side (what reaches the sensor), not in this select.
+        //   ⚠️⚠️ TWO CORRECTIONS TO THE PARAGRAPH ABOVE, 2026-09-07 (reconciliation wave). The
+        //   headline ("the crash-time budget is 1.0, do not tune this row") STANDS -- it is proved
+        //   by the console's call order, which no run can weaken. These are the two supporting
+        //   numbers, re-derived from the same two logs by reading `nRoom`/`nFree` as the per-row
+        //   RUNNING counters they are (last print of each (sensor-offset, dir) block, owner==1,
+        //   allowed==1.0 -- which for a race car IS the crash-time population, since the other two
+        //   arms of this select are traffic-owner and showtime):
+        //     (a) "the only room-clamped row in either run is +Y" is TRUE OF A1 AND FALSE OF A2.
+        //         A1: 180 crash-time applies, 56 room-clamped, all 56 on +Y (dir 2, ceiling 0.010,
+        //             pinned at 100%); +X and -Z are 0/118.
+        //         A2: 628 crash-time applies, 222 room-clamped -- +Y 160/232 (the floor), but ALSO
+        //             -X 60/141 (42.6%) and -Z 2/180. So room DOES bind, on a lateral crumple axis,
+        //             in the faster run. It still does not bind the deep -Z crush (1.1%).
+        //     (b) A1's "124/124 impulse-limited" is TRUE AND VACUOUS. A1's whole impact ran with
+        //         meAbsorptionSet == E_ABSORPTIONSET_INVINCIBLE (`[absorb] set 4 noDamageTimer
+        //         0.650001` on the first contact frame, 15 sampled frames of it), so lfAbsorbed
+        //         was identically 0, lfUnclamped was identically 0, and `lfUnclamped > lfRoom` is
+        //         false BY ARITHMETIC on every apply. "nRoom 0" there measures the absence of a
+        //         supply, not the presence of headroom. The same window is why A1's "0.045 m of a
+        //         0.900 m ceiling" is not a 108 mph crash depth -- see the banner at the `[dent]`
+        //         dump filter in BrnDeformationSensor.cpp for the full evidence and the rule.
+        //   ⭐ AND THE COMPLAINT IT WAS OPENED AGAINST IS ANSWERED: across five wall-crash
+        //   measurements on three binaries (budg_A2 second crash 0.4814/0.900 and 0.5401/1.000;
+        //   scorecard 154 mph 0.596/0.900; rmfilm_wall deepest verlet row 0.502; shape_B1 0.8174/
+        //   0.900) the deepest crumple sits at 53-91% of the car's OWN authored direction ceiling
+        //   and NOTHING has ever exceeded one. The "only 5% of the band" reading was the
+        //   invincibility window; the "100% of the band" reading was a HINGE ANGLE, not a
+        //   displacement (`[joint-int]` rot vs its authored angular band -- reproduced on
+        //   rmfilm_wall: bonnet 59.97 deg of 59.97, door 54.97 of 54.97, bumper 9.99 of 9.99,
+        //   grille/wings 5.00 of 5.00, exhaust 3.00 of 3.00). Angle and distance: the two
+        //   "contradictory" results were never the same quantity.
         if ( GetHandlingBodyIdHighByte() == KU_GAMEMODE_BOUNCE_ELIGIBLE || lbCrashed || lbIgnoringPassedOn )
         {
             // vcfsx(vspltisw 1, 0) == 1.0 @0x82607A20 -- crash / showtime / bounce-eligible gets the

@@ -1197,6 +1197,36 @@ namespace Deformation
 				if ( lfUnclamped > lfRoom ) { ++lpRow->muRoomClamped; } else { ++lpRow->muFree; }
 			}
 			// Dump the whole ledger once per PRESENT, so every row in a block shares one frame.
+			//
+			// ⛔⛔ READ THIS BEFORE QUOTING ANY `[dent]` DEPTH: THIS INSTRUMENT IS STRUCTURALLY
+			//    BLIND TO AN `E_ABSORPTIONSET_INVINCIBLE` WINDOW, AND ITS SILENCE LOOKS EXACTLY
+			//    LIKE "THE CAR BARELY DENTED". (Recorded 2026-09-07, reconciliation wave.)
+			//    The skip below is the mechanism. With meAbsorptionSet == 4 the whole
+			//    AbsorptionTable row is 0.0, so lfAbsorbFactor == 0, lfAbsorbed == 0 and
+			//    lfMove == lfAbsorbed * invI * dt == 0 -- every row keeps mfApplied == 0 and
+			//    mfSupply == 0 and is therefore SKIPPED HERE, on every present, for the whole
+			//    window. Nothing is printed and nothing says so.
+			//    MEASURED on the two boots ef38a2e8 published (exe 97de10bb...,
+			//    scratch/flow_run/budg_A1, budg_A2). `[absorb]` in the SAME logs prints the
+			//    state this table cannot:
+			//      A1 (108 mph): first contact frame is `set 4 noDamageTimer 0.650001
+			//        contacts 1 scratchSum 0.000000` -- the ENTIRE contact-producing part of the
+			//        impact is set 4 (15 sampled frames, timer 0.650 -> 0.033), then set 0.
+			//        The FIRST `[dent]` line of the run is 105 log lines AFTER the LAST set-4
+			//        line. The impact produced ZERO dent rows.
+			//      A2 (154 mph): identical shape -- 17 set-4 frames (timer 0.883 -> 0.050)
+			//        covering the first impact, then 50 set-0 frames.
+			//    Second, independent tell, from `[tanbank]` in the same logs: peak |J| into the
+			//    rigid body is 43,146 (A1) / 45,377 (A2). BrnVehicleRigidBody.cpp's own census is
+			//    max|J| 45,248 INVINCIBLE vs 1,202 absorbing normally -- so the arriving impulse
+			//    names the state as well as the flag does.
+			//    ⇒ ef38a2e8's "A1's 108 mph head-on reached 0.045 m of a 0.900 m ceiling" is NOT
+			//    a measurement of that impact. It is the post-invincibility tail: 59 applies on
+			//    ONE front-left sensor, after the energy was already spent. Do not read it as a
+			//    deformation shortfall, and do not compare it with any number from a set-0 crash.
+			//    ⭐ THE RULE: a `[dent]` depth is only meaningful beside the `[absorb]` line for
+			//    the same frames. Arm BRN_CRASH_RESPONSE_DIAG with BRN_DENT_PROBE, always, and
+			//    discard any crash whose contact frames carry `set 4`.
 			if ( renderengine::guPresentCount != guDentLastDump && CgsDev::Log::gpDebugPrint != 0
 			     && guDentLines < 200000u )
 			{
