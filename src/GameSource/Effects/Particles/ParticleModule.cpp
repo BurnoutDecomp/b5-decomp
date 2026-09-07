@@ -550,6 +550,50 @@ namespace BrnParticle
     }
 
     // =========================================================================
+    // EndOfFrame  @0x82294C30 -- two statements, and the SECOND ONE IS THE ONLY THING IN THIS
+    // GAME THAT CAN EVER END A TYRE MARK.
+    //
+    //     0x82294C38  ori   r10, r10, 0x8DF5      -> mbStalled
+    //     0x82294C44  stbx  r4, r11, r10          -> mbStalled = lbStalled
+    //     0x82294C40  addi  r3, r3, -0x68F0       -> r3 = this + 0x9710 == &mTrailSystem
+    //     0x82294C48  b     TrailSystem::EndOfFrame   (a TAIL call, hence the `b`)
+    //
+    // ⭐⭐⭐ WHY THIS FUNCTION IS LOAD-BEARING, MEASURED (GitHub issue #17, 2026-09-07).
+    // It was DECLARED in ParticleModule.h and never defined, and nothing called it -- which links
+    // silently, because an uncalled declaration needs no body. TrailSystem::EndOfFrame is
+    // therefore the only body in the trail system that has never run on PC, and it owns three
+    // things at once:
+    //   * the emitter RELEASE. An emitter idle longer than its 10 s life goes back on the free
+    //     stack and its owner is Detatch()ed. Without it the 96-emitter pool DRAINS AND NEVER
+    //     REFILLS -- measured over one 165 s run, free 95 -> 84, monotonic, never rising -- so
+    //     after 96 attachments AttachTrailEmitter returns null and NO TYRE MARK CAN EVER BE LAID
+    //     AGAIN for the rest of the session.
+    //   * the only way a wheel's strip can END. The other two new-emitter reasons in
+    //     TrailSystem::AddTrailSegment either continue the strip (a full 16-segment emitter is
+    //     re-seeded with its predecessor's last segment) or never fire: the "too much time
+    //     passed" test compares against ParticleRenderData::mfCurrentTimeStep * 1.5, and that
+    //     field is a MONOTONICALLY GROWING ACCUMULATOR in the shipped X360 image too
+    //     (`lfs/fadds/stfs` on module+0x8E0C at 0x8228185C..0x82281870, no reset anywhere --
+    //     PreRenderUpdate @0x822947B8 only READS it), so the gate is ~1.5x the elapsed time and
+    //     can never be crossed. So without the release, a wheel keeps ONE emitter for ever and
+    //     the renderer draws a single quad straight across every stretch the wheel travelled
+    //     without skidding: measured 69.7 m laid across a 48.3 s pause in a run of this recipe.
+    //   * the segment double buffer's swap + copy.
+    // ⚠ It does NOT make the trail perfect: bridges shorter than the 10 s life are the console's
+    //   own behaviour (see the dead-gate note above) and are deliberately left alone.
+    //
+    // lbStalled is the game module's own `thisFrameFlag || lastFrameFlag` pair
+    // (OnEndOfUpdateFrame @0x823DBBA0: `v5 = *(gm+10092520) || *(gm+10092519)`), the same value
+    // it hands BrnRendererModule::EndOfFrame. Nothing in the reconstructed tree reads mbStalled
+    // yet; it is latched because the console latches it.
+    // =========================================================================
+    void ParticleModule::EndOfFrame(bool lbStalled)
+    {
+        mbStalled = lbStalled;
+        mTrailSystem.EndOfFrame();
+    }
+
+    // =========================================================================
     // DispatchThreadUpdate  @0x8229C5F0 -- THE CONSUMER, and the second half.
     //
     // Under the dispatch buffer's READ lock, for every record PreRenderUpdate published:

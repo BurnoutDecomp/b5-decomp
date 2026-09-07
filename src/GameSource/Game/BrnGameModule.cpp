@@ -3408,6 +3408,40 @@ namespace BrnGame
     // written slot and every world dispatch list reads empty).
     void BrnGameModule::OnEndOfUpdateFrame()
     {
+        // ⭐⭐⭐ THE PARTICLE END-OF-FRAME, restored 2026-09-07 (GitHub issue #17, "tyre marks
+        // appear in chunks"). The console runs it HERE, before the dispatch swap and before the
+        // GUI/renderer end-of-frame:
+        //     BrnParticle::ParticleModule::EndOfFrame(_R30 + 8883008, v6);   // @0x823DBBA0
+        //     ...DispatchThreadInputBufferManager::Swap (inlined)...
+        //     BrnGui::GuiModule::EndOfFrame(_R30 + 7250912);
+        //     BrnRendererModule::EndOfFrame(_R30 + 15808, v6, ...);
+        //
+        // This was the "[gated] the metrics/particle/GUI end-of-frame notifies land with their
+        // subsystems" line in the banner above -- and the particle subsystem landed some time
+        // ago, so the gate was STALE, not dead. [[gates-are-stale-not-dead]]
+        //
+        // ⭐ IT IS THE ONLY THING THAT CAN EVER END A TYRE MARK. ParticleModule::EndOfFrame tail-
+        // calls TrailSystem::EndOfFrame, which releases an emitter idle longer than its 10 s life
+        // back to the free stack and Detatch()es its wheel. Measured without it, over one 165 s
+        // run: the 96-emitter free pool went 95 -> 84 and NEVER ROSE (so a long session must
+        // eventually run it dry and stop every tyre mark for good), and because a wheel then keeps
+        // one emitter for ever, the trail renderer drew a single quad straight across every
+        // stretch the wheel travelled WITHOUT skidding -- 69.7 m across a 48.3 s pause in that
+        // one run. See the full banner on ParticleModule::EndOfFrame.
+        //
+        // ⚠ FLAG -- the argument. The console passes `v6 = *(gm+10092520) || *(gm+10092519)`, a
+        // game-module byte and its previous-frame copy, the same value it hands
+        // BrnRendererModule::EndOfFrame. It is NOT this class's mbStalled (that byte is
+        // gm+10094120, written by ResourceUpdateThread through the +1600-shifted thread `this`),
+        // and an image-wide scan finds NO writer of gm+10092520 in the export set, so the
+        // console's own data attests only the zero it is constructed with. It is passed false
+        // here rather than invented. Nothing reads the byte it latches -- not
+        // ParticleModule+0x8DF5's only two touchers in the image (Construct and EndOfFrame
+        // itself), and nothing in this tree -- and the trail release this call exists for is
+        // unconditional in the callee, so the argument cannot change what this fixes.
+        // DELETE-WHEN: the gm+10092520 pair is identified and modelled.
+        mEffectsModule.ParticleModuleRef().EndOfFrame(false);
+
         mDispatchThreadInputBufferManager.Swap();
         mRenderModule.EndOfFrame();
     }

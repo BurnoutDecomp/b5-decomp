@@ -46,6 +46,7 @@
 #include <cstring>   // memset / memcpy (the X360 calls both by name)
 #include <cstdio>    // [diag] snprintf (the [trailpass] render probe)
 #include <cstdlib>   // [diag] getenv  (BRN_SKID_PROBE gates the render probe too)
+#include <cmath>     // [diag] sqrt    ([trailseg] prints metres beside the console's squared test)
 
 namespace BrnParticle
 {
@@ -95,6 +96,42 @@ namespace Native
             }
             return siEnabled != 0;
         }
+
+        // [DIAG] NOT IN THE X360 BINARY. Inert unless BRN_TRAIL_CADENCE names a value.
+        // DELETE-WHEN-STABLE.
+        //
+        // WHY A SECOND PROBE. GitHub issue #17 says the marks "appear in chunks" -- a claim
+        // about the SPACING BETWEEN CONSECUTIVE SEGMENTS, i.e. about the emitter's cadence.
+        // Neither existing probe can make that measurement:
+        //   * the [skid] gate probe in HandleWheels counts the frames on which the gate PASSED;
+        //     it never learns whether TrailEmitter::AddTrailSegment then laid anything, because
+        //     that function's return value is discarded by the console's own call site;
+        //   * the [trailpass] render probe counts segments ALIVE, a running total, which rises
+        //     identically whether the segments are 0.3 m apart or 8 m apart.
+        // A chunked trail and a continuous one are indistinguishable in both. What separates
+        // them is (a) the distance from the previous segment on every call, including the calls
+        // that lay NOTHING, and (b) every point at which the strip is BROKEN -- a new emitter
+        // taken WITHOUT the continuance seed, which is the only construct in this system that
+        // can put a real gap in a mark. Both are recorded below, per call, with the arithmetic
+        // that decided them, so the spacing histogram and the break census come out of the same
+        // run.
+        bool TrailCadenceProbeEnabled()
+        {
+            static int siEnabled = -1;
+            if (siEnabled < 0)
+            {
+                const char* lpcValue = std::getenv("BRN_TRAIL_CADENCE");
+                siEnabled = (lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0') ? 1 : 0;
+            }
+            return siEnabled != 0;
+        }
+
+        // [diag] one ordinal per TrailSystem::AddTrailSegment call, so a log line can be tied to
+        // the [trailseg] line it produced without trusting a float time to be unique.
+        u32 guTrailCadenceCall = 0;
+        // [diag] the distance from the previous segment on the call that laid one, carried the
+        // few lines from the min-length test to the MERGE / APPEND exits so both print it.
+        f32 gfTrailCadenceLastDist = 0.0f;
     }
 
     // X360 .data flt_82CDAE78 (8 floats per type: start RGBA, end RGBA). Read out of the image:
@@ -188,8 +225,27 @@ namespace Native
             // Too close to the previous segment: nothing laid (vcmpgefp 0.09 >= |d|^2, all lanes).
             if (KR_TRAILS_MIN_SEGMENT_LENGTH_SQUARED >= MagnitudeSquared(lDirectionVec))
             {
+                // [trailseg] THE CALLS THAT LAY NOTHING -- the half no existing probe records.
+                // dist is the plain distance so the histogram is in metres; d2 is what the
+                // console actually compares, printed beside it so the probe cannot silently
+                // disagree with the binary's own test. DELETE-WHEN-STABLE.
+                if (TrailCadenceProbeEnabled())
+                {
+                    char lacMsg[220];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                        "[trailseg] c=%u e=%p CLOSE  n=%d dist=%.4f d2=%.5f t=%.3f "
+                        "pos=%.3f,%.3f,%.3f\n",
+                        guTrailCadenceCall, static_cast<void*>(this), lnNumSegments,
+                        static_cast<double>(std::sqrt(MagnitudeSquared(lDirectionVec))),
+                        static_cast<double>(MagnitudeSquared(lDirectionVec)),
+                        static_cast<double>(lfCurrentTime),
+                        static_cast<double>(lPosition.x), static_cast<double>(lPosition.y),
+                        static_cast<double>(lPosition.z));
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
                 return false;
             }
+            gfTrailCadenceLastDist = std::sqrt(MagnitudeSquared(lDirectionVec));
 
             // The half-width axis is direction x normal (vrsqrtefp + two Newton steps, then the
             // two-multiply cross @0x8227AAE0-0x8227AAEC).
@@ -215,6 +271,22 @@ namespace Native
                     mpCurrentSegments->WriteSegmentTime(lfCurrentTime, lnPrevIndex);
                     mpCurrentSegments->WriteSegmentStrength(lfSkidStrength, lnPrevIndex);
                     mrTimeLastSegmentAdded = lfCurrentTime;
+                    // [trailseg] a MERGE moves the strip's tip; it does not lengthen the strip.
+                    // DELETE-WHEN-STABLE.
+                    if (TrailCadenceProbeEnabled())
+                    {
+                        char lacMsg[220];
+                        std::snprintf(lacMsg, sizeof(lacMsg),
+                            "[trailseg] c=%u e=%p MERGE  n=%d dist=%.4f cos=%.6f t=%.3f "
+                            "pos=%.3f,%.3f,%.3f\n",
+                            guTrailCadenceCall, static_cast<void*>(this), lnNumSegments,
+                            static_cast<double>(gfTrailCadenceLastDist),
+                            static_cast<double>(Dot(lUnitDirection, lPrevDirectionVec)),
+                            static_cast<double>(lfCurrentTime),
+                            static_cast<double>(lPosition.x), static_cast<double>(lPosition.y),
+                            static_cast<double>(lPosition.z));
+                        CgsDev::Log::WriteToLog(lacMsg);
+                    }
                     return true;
                 }
             }
@@ -239,6 +311,22 @@ namespace Native
         mpCurrentSegments->WriteSegmentStrength(lfSkidStrength, mn8NumSegments);
         ++mn8NumSegments;
         mrTimeLastSegmentAdded = lfCurrentTime;
+        // [trailseg] an APPEND lengthens the strip. `dist` is 0 on the very first segment of an
+        // emitter (no previous point exists); every other APPEND must carry dist >= 0.3 or the
+        // probe itself is wrong -- that is the probe's own falsifiable check.
+        // DELETE-WHEN-STABLE.
+        if (TrailCadenceProbeEnabled())
+        {
+            char lacMsg[220];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[trailseg] c=%u e=%p APPEND n=%d dist=%.4f t=%.3f pos=%.3f,%.3f,%.3f\n",
+                guTrailCadenceCall, static_cast<void*>(this), lnNumSegments,
+                static_cast<double>(lnNumSegments != 0 ? gfTrailCadenceLastDist : 0.0f),
+                static_cast<double>(lfCurrentTime),
+                static_cast<double>(lPosition.x), static_cast<double>(lPosition.y),
+                static_cast<double>(lPosition.z));
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
         return true;
     }
 
@@ -337,6 +425,8 @@ namespace Native
     {
         CGS_ASSERT(lpTrailEmitterData != 0, "lpTrailEmitterData != NULL");
 
+        ++guTrailCadenceCall;
+
         TrailEmitter* const lpExisting          = lpTrailEmitterData->mpTrailEmitter;
         const bool          lbAlreadyHasEmitter = lpExisting != 0;
         bool                lbChangedTrailType  = true;
@@ -359,6 +449,41 @@ namespace Native
         if (lbNeedANewEmitter)
         {
             TrailEmitter* const lpTrailEmitter = AttachTrailEmitter(lu8TrailTypeID);
+
+            // [trailseg] THE BREAK CENSUS -- the whole point of this probe. A new emitter taken
+            // for ANY reason but "ran out of segments" gets NO continuance seed, so the strip
+            // it starts is disconnected from the one it replaces: that is the only construct in
+            // this system that can put a real gap in a mark. The timeout arithmetic is printed
+            // term by term because its `dt` is ParticleRenderData::mfCurrentTimeStep, which
+            // ParticleModule::Update ACCUMULATES and never resets -- so whether this test can
+            // ever fire depends on a number no probe has previously shown.
+            // `seed=1` means the break was bridged; `seed=0 prev=1` is a REAL GAP.
+            // DELETE-WHEN-STABLE.
+            if (TrailCadenceProbeEnabled())
+            {
+                const bool lbSeeded = (lpTrailEmitter != 0 && lbAlreadyHasEmitter
+                                       && lbRunOutOfSegments && !lbChangedTrailType
+                                       && !lbTooMuchTimePassedSinceLastTrail);
+                char lacMsg[320];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[trailseg] c=%u d=%p NEWEMIT prev=%d why=%s%s%s new=%p seed=%d "
+                    "t=%.3f dt=%.5f last=%.3f gate=%.3f pool=%d pos=%.3f,%.3f,%.3f\n",
+                    guTrailCadenceCall, static_cast<void*>(lpTrailEmitterData),
+                    lbAlreadyHasEmitter ? 1 : 0,
+                    (lbAlreadyHasEmitter && lbChangedTrailType) ? "type," : "",
+                    (lbAlreadyHasEmitter && lbTooMuchTimePassedSinceLastTrail) ? "timeout," : "",
+                    (lbAlreadyHasEmitter && lbRunOutOfSegments) ? "full," : "",
+                    static_cast<void*>(lpTrailEmitter), lbSeeded ? 1 : 0,
+                    static_cast<double>(lrCurrentTime),
+                    static_cast<double>(mfCurrentTimeStep),
+                    static_cast<double>(lpTrailEmitterData->mrLastTrailTime),
+                    static_cast<double>(mfCurrentTimeStep * KF_TRAIL_TIMEOUT_TIMESTEPS
+                                        + lpTrailEmitterData->mrLastTrailTime),
+                    mFreeEmitters.GetLength(),
+                    static_cast<double>(lContactPoint.x), static_cast<double>(lContactPoint.y),
+                    static_cast<double>(lContactPoint.z));
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
 
             if (lpTrailEmitter != 0 && lbAlreadyHasEmitter
                 && lbRunOutOfSegments && !lbChangedTrailType && !lbTooMuchTimePassedSinceLastTrail)
@@ -424,6 +549,9 @@ namespace Native
                     TrailEmitter* const lpEmitter = lrActive[lnIndex];
                     CGS_ASSERT(lpEmitter != 0, "lpEmitter != NULL");
 
+                    // [diag] read before the reset below clears it; used only by the probe.
+                    const f32 lfIdle = mfCurrentTime - lpEmitter->mrTimeLastSegmentAdded;
+
                     if (lpEmitter->mpOwner != 0)
                     {
                         lpEmitter->mpOwner->Detatch();
@@ -437,6 +565,23 @@ namespace Native
                     lrActive.RemoveEntry(lnIndex);
                     mFreeEmitters.Push(lpEmitter);
                     --lnIndex;   // re-examine the entry swapped into this slot
+
+                    // [trailseg] THE RELEASE, witnessed. This loop had never executed on PC --
+                    // ParticleModule::EndOfFrame was declared and never defined, and nothing
+                    // called it -- so the free pool only ever went DOWN. The `free=` number
+                    // rising across a run is the falsifiable half of that claim.
+                    // DELETE-WHEN-STABLE.
+                    if (TrailCadenceProbeEnabled())
+                    {
+                        char lacMsg[200];
+                        std::snprintf(lacMsg, sizeof(lacMsg),
+                            "[trailseg] RELEASE e=%p type=%d idle=%.3f t=%.3f free=%d active=%d\n",
+                            static_cast<void*>(lpEmitter), lnTrailType,
+                            static_cast<double>(lfIdle),
+                            static_cast<double>(mfCurrentTime),
+                            mFreeEmitters.GetLength(), lrActive.GetSize());
+                        CgsDev::Log::WriteToLog(lacMsg);
+                    }
                 }
             }
         }
