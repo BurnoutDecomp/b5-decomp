@@ -104,6 +104,12 @@ namespace
     const f32 KF_DRIVER_SWERVE_STEERING_TIME       = 3.0f;    // flt_820BA5F4
     const f32 KF_DRIVER_REVERSE_TURN_DIST          = -15.0f;  // folded -15.0
 
+    // ---- UpdateRecoveringFromSlam @0x8273E778 ----
+    // flt_82005548 (0x8273E868). Read out of the image: `x360rd.py 82005548` -> 40200000 == 2.5f.
+    // Seconds of PHYSICAL life for which a shoved car drives on the recorded slam direction
+    // before it falls through to DriveTowardsTarget.
+    const f32 KF_SLAM_RECOVERY_DRIVE_TIME          = 2.5f;    // flt_82005548
+
     // ---- UpdateExtremeSwerving @0x8273E8D0's own RODATA (headless idat) ----
     //   flt_8200473C  == 0.4f    the crash-slider level below which the arm just drives
     //   unk_8300C9F0  == splat(1600.0f), dyn-init thunk 0x82C66C50 from flt_820BA810 (1600) --
@@ -558,11 +564,16 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
                 }
                 else if (lpVehicle->IsRecoveringFromSlam())                     // 0x827495DC
                 {
-                    // GATE UpdateRecoveringFromSlam @0x8273E778 -- exported, no body.
-                    static bool sbLoggedSlamArm = false;
-                    LogMissingLeg(sbLoggedSlamArm,
-                                  "GenerateDriverInputs arm UpdateRecoveringFromSlam "
-                                  "@0x8273E778 -- no body");
+                    // 0x827495F4 -- UNGATED 2026-09-07 (issue #14, "traffic cars disappear
+                    // when we touch them"). The arm is bodied below in this file. WHAT THE
+                    // GATE COST, measured: with it skipped the shoved car kept the ZERO
+                    // control record for ever, so GenerateDriverInputs' own
+                    // `mfGas > 0 || mfBrake > 0` reset never ran, TrafficPhysicsInfo::
+                    // mfTimeNotDriving climbed monotonically from the shove, and at 6 s
+                    // (KF_JUNCTION_FUP_VEHICLE_NOT_DRIVING_TIME) JunctionFUP_TryClearupNon-
+                    // MovingPhysical @0x8273F2E8 deleted the car -- at ANY distance from the
+                    // player, its only guard being mVehiclesRenderedLastFrame.
+                    UpdateRecoveringFromSlam(static_cast<u32>(liVehicle), &lControls);
                 }
                 else if (lpVehicle->IsNormalPhysical())                         // 0x82749618
                 {
@@ -1040,6 +1051,93 @@ void TrafficEntityModule::UpdateNormalPhysical(u32 luVehicle,
     CGS_ASSERT(lpVehicle->IsNormalPhysical(), "lpVehicle->IsNormalPhysical()");     // .cpp 17073
 
     DriveTowardsTarget(luVehicle, true, lpControls);
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::UpdateRecoveringFromSlam  @0x8273E778  (85 insns)
+//   DWARF BrnTrafficEntityModule.h -- void UpdateRecoveringFromSlam(uint32_t,
+//   BrnTrafficDriverControls*); the header already carried the declaration.
+//
+// THE ARM A TRAFFIC CAR TAKES AFTER THE PLAYER HAS SHOVED IT. For the first 2.5 s of physical
+// life it drives itself along the direction the slam recorded; after that it falls through to
+// the ordinary DriveTowardsTarget, which is also the only path that hands it back to the param
+// sim (ReturnPhysicalVehicleToTraffic).
+//
+// WHY IT MATTERS (issue #14, measured on run tvan_r5 with this arm still gated): the arm writes
+// the ONLY non-zero pedals a slammed car ever gets. Without them GenerateDriverInputs sends a
+// zero-control record, its `mfGas > 0 || mfBrake > 0` reset never fires, and mfTimeNotDriving
+// runs monotonically from the shove -- 9 cars in one 260 s run reached the 6 s
+// KF_JUNCTION_FUP_VEHICLE_NOT_DRIVING_TIME and were deleted by JunctionFUP_TryClearupNonMoving-
+// Physical @0x8273F2E8, five of them within 12-50 m of the player.
+//
+// Body, instruction for instruction (0x8273E778..0x8273E8C8):
+//   r3 this, r4 luVehicle, r5 lpDriverControls; three asserts, then
+//   0x8273E850  bl IsRecoveringFromSlam            -- re-called, not cached
+//   0x8273E864  lfs f13, 0x44(vehicle)             == Vehicle::GetPhysicalTime()
+//   0x8273E868  lfs f0,  flt_82005548              == 2.5f (x360rd: 82005548 -> 40200000)
+//   0x8273E870  bge -> DriveTowardsTarget(luVehicle, true, lpControls)
+//   0x8273E884  lfs f0, 0xFE0(info)                == TrafficPhysicsInfo::mfDrivingDirection
+//   0x8273E88C  fsel                               -- raw word FC00682E decodes
+//               (op 63, xo 23, frD f0, frA f0, frB f13, frC f0) => gas   = (drv >= 0) ? drv : 0
+//   0x8273E898  fsel                               -- raw word FC00036E
+//               (frD f0, frA f0, frB f0, frC f13)  => brake = (drv >= 0) ? 0 : drv
+//   0x8273E8A0  lfs f0, 0xFDC(info)                == mfSteeringDirection -> mfSteering (+0x10)
+// The two fsel operands were decoded from the raw instruction words rather than from IDA's
+// printed order (AGENTS.md: "fsel prints D,A,C,B"), so the sign convention is the image's own:
+// mfBrake receives the NEGATIVE driving direction, exactly as the console stores it.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::UpdateRecoveringFromSlam(
+        u32 luVehicle,
+        BrnPhysics::Vehicle::BrnTrafficDriverControls* lpControls)
+{
+    CGS_ASSERT(lpControls != 0, "lpDriverControls");                                // .cpp 16732
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC"); // .h 2459
+
+    const Vehicle* const lpVehicle = GetVehicle(luVehicle);
+
+    CGS_ASSERT(lpVehicle->IsRecoveringFromSlam(),
+               "lpVehicle->IsRecoveringFromSlam()");                                // .cpp 16735
+    CGS_ASSERT(lpVehicle->IsOfStandardSpecies(),
+               "lpVehicle->IsOfStandardSpecies()");                                 // .cpp 16736
+
+    // ---- [FLAG PC control] NOT IN THE X360 BINARY. BRN_TRAFFIC_NO_SLAM_DRIVE=1 restores the
+    // pre-2026-09-07 gate: the arm is still reached and still costs its asserts, but no pedal
+    // is written -- exactly the state issue #14 was measured in. It exists because the shared
+    // checkout is fast-forwarded by other lanes mid-session, so a "before" build and an "after"
+    // build are NOT comparable; this makes the A/B one binary and one recipe, differing in one
+    // store. DELETE-WHEN the issue-#14 evidence is banked.
+    static s32 siNoSlamDrive = -1;
+    if (siNoSlamDrive < 0)
+    {
+        const char* lpcEnv = getenv("BRN_TRAFFIC_NO_SLAM_DRIVE");
+        siNoSlamDrive = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
+    }
+    if (siNoSlamDrive == 1)
+    {
+        return;
+    }
+
+    // 0x8273E850 -- the console calls the predicate a SECOND time here rather than reusing the
+    // assert's result, so the test is reproduced as a call, not as a cached bool.
+    if (lpVehicle->IsRecoveringFromSlam() &&
+        lpVehicle->GetPhysicalTime() < KF_SLAM_RECOVERY_DRIVE_TIME)
+    {
+        const TrafficPhysicsInfo* const lpInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);
+        CGS_ASSERT(lpInfo != 0, "lpPhysInfo");
+        if (lpInfo == 0)
+        {
+            return;   // PC-safety guard, as in the sibling arms in this file
+        }
+
+        const f32 lfDrivingDirection = lpInfo->mfDrivingDirection;   // +0xFE0
+
+        lpControls->mfGas   = (lfDrivingDirection >= 0.0f) ? lfDrivingDirection : 0.0f;
+        lpControls->mfBrake = (lfDrivingDirection >= 0.0f) ? 0.0f : lfDrivingDirection;
+        lpControls->mfSteering = lpInfo->mfSteeringDirection;        // +0xFDC
+        return;                                                     // 0x8273E8A8
+    }
+
+    DriveTowardsTarget(luVehicle, true, lpControls);                // 0x8273E8C0, r5 == 1
 }
 
 // =================================================================================================
