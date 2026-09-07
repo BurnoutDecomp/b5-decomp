@@ -512,6 +512,22 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
                 // acos(clamp(dot,-1,1)) (XMVectorACos), sign-resolved against UP (0,1,0)
                 // through the cross product: below the plane -> 2pi - angle. Constants:
                 // unk_82181520 = (0,0,1), unk_82181510 = (0,1,0), 0x82034E30 = 2pi.
+                //
+                // ⭐ ISSUE #7 (2026-09-07): THE CROSS PRODUCT IS cross(NORTH, at), NOT
+                // cross(at, NORTH). The asm @0x823E60E4..0x823E6114 is the two-permute
+                // cross with v127 (= normalised unk_82181520, north) as the LEFT operand:
+                //   vpermwi128 v11, v126(at), yzx ; vpermwi128 v10, v127(north), yzx
+                //   vmulfp128  v11, v127, v11        ; north * yzx(at)
+                //   vnmsubfp   v12, v10, v11, v12    ; v11 - yzx(north) * at
+                //   vpermwi128 v12, v12, yzx         ; = cross(north, at)
+                //   vmsum3fp128 v0, v12, unk_82181510; . up == +at.x
+                //   vcmpgtfp.  v0, 0, v0             ; flip when at.x < 0
+                // so the heading is atan2(at.x, at.z) in [0, 2pi): RotationY(h).(0,0,1)
+                // == (sin h, 0, cos h), the basis every consumer already assumes
+                // (MapIconManager's rival FOV cone, the sat-nav rect builder, the compass).
+                // The previous body flipped on -at.x -- the heading came out NEGATED and the
+                // minimap arrow (and every rival icon) rendered mirrored about the map's
+                // vertical axis. RED/GREEN: tools/tests/cases/minimap_player_arrow.ps1.
                 {
                     const Vector3 lAt = lpGlobalInterface->GetRaceCarAt(leGlobal);
                     const bool lbNaN = (lAt.x != lAt.x) || (lAt.y != lAt.y) ||
@@ -532,8 +548,9 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
                             if (lfDot > 1.0f)  lfDot = 1.0f;
                             if (lfDot < -1.0f) lfDot = -1.0f;
                             lfRotation = acosf(lfDot);
-                            // cross(dHat, north) . up == -dHat.x ; below the plane flips.
-                            const f32 lfSide = -lAt.x * lfInvLen;
+                            // cross(north, dHat) . up == +dHat.x ; below the plane flips
+                            // (vcmpgtfp 0 > dot -> 2pi - angle).
+                            const f32 lfSide = lAt.x * lfInvLen;
                             if (lfSide < 0.0f)
                             {
                                 const f32 KF_TWO_PI = 6.2831855f;  // 0x82034E30 lane 0

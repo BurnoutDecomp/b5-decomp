@@ -1214,6 +1214,34 @@ void MapIconManager::UpdateSatNavIcons()
             lrIcon.SetRotation(mbRotateSatNav ? 0.0f                                  // +0xAA1C
                                               : (KF_PI - lrRecord.GetRotation()));    // pi - rot
 
+            // [FLAG PC witness] `[satnav-arrow] pos=<x>,<z> heading=<rad> apt=<deg> rotate=<0|1>`
+            // -- NOT IN THE X360 BINARY (issue #7, the minimap arrow mirrored on one axis).
+            // Opt-in (BRN_SATNAV_DIAG), every 15th call (~4 Hz), capped at 600 lines a run.
+            // heading = the icon record's mfRotation exactly as the world->GUI bridge posted
+            // it (GameBridgeWorldToGui.cpp, the acos/cross derivation @0x823E5FC0..0x823E6178);
+            // apt = the "_rotation" degrees the arrow sprite receives for it (the pi - rot
+            // above, scaled by SatNavMapIcon::Update's 57.29578). tools/tests/cases/
+            // minimap_player_arrow.ps1 scores apt against the direction the car actually
+            // moves between samples. DELETE-WHEN: the case is retired.
+            {
+                static const bool sbDiag = (getenv("BRN_SATNAV_DIAG") != 0);
+                static u32 suCalls = 0;
+                static s32 siLeft  = 600;
+                if (sbDiag && CgsDev::Log::gpDebugPrint != 0 && siLeft > 0
+                    && (++suCalls % 15u) == 0u)
+                {
+                    --siLeft;
+                    const Vector4& lv4Pos = lrRecord.GetPositionLane();
+                    const f32 lfApt = (mbRotateSatNav ? 0.0f : (KF_PI - lrRecord.GetRotation()))
+                                      * 57.29578f;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[satnav-arrow] pos=" << lv4Pos.x << "," << lv4Pos.z
+                        << " heading=" << lrRecord.GetRotation()
+                        << " apt=" << lfApt
+                        << " rotate=" << (mbRotateSatNav ? 1 : 0) << "\n";
+                }
+            }
+
             // The LARGE-map event-icon proximity fade (freeburn big map only).
             if (meIconSizeMode == E_ICONSIZE_LARGE && mpGuiCache->GetGameMode() == -1)
             {
