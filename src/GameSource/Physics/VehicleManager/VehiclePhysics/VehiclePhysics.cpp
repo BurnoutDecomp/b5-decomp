@@ -941,6 +941,56 @@ namespace Vehicle
     //   friction = wheelLat * dot(wheelLat, -movementHat) * massOnWheel * g * lateralFriction.
     // It applies (point - bodyPos) x friction as torque and accumulates friction times the selected
     // linear multiplier into mTotalLinearForce (0x825D47C0..0x825D47FC).
+    //
+    // ⭐⭐ RE-VERIFIED AND MEASURED 2026-09-07 (crash-roll wave). Every rung re-read from the image,
+    //   because this is the largest deliberate ROLL lever in the crash update and nobody had ever
+    //   checked its handedness or its size.
+    //   * The eight constants, read out of the image (x360rd): player {30.0 flt_82004F5C,
+    //     3.0 flt_82004270, 0.95 flt_82004FDC, 1.0 flt_82001C98}; AI/traffic {20.0 flt_8208F9D4,
+    //     4.0 flt_8208FA0C, 1.0 flt_82001C98, 0.2 flt_82004744}. All eight EXACT. The selector is
+    //     `lwz r11,0x10D4(r26)` + cmpwi 1 / cmpwi 3 (AI / TRAFFIC), and the register file is
+    //     asymmetric on purpose: the player set is pre-loaded into v7/v6/v127 and only v11
+    //     (speedForMaxRoll) is overwritten on the player path.
+    //   * The height drop is on the **Y lane and DOWNWARD**, decoded from the encodings, not the
+    //     text: `vmr v31,v2` (contact pos) + `vspltw v2,v2,1` (lane 1 = y) + `vsubfp v0,v2,v0` +
+    //     `vrlimi128 v31,v0,4,0` (mask 4 = the y lane). The scale is min(|v|,speedForMaxRoll) times
+    //     a Newton-refined vrefp reciprocal of speedForMaxRoll -- i.e. clamped to [0,1].
+    //   * CROSS-PRODUCT HANDEDNESS IS `arm x friction`, decoded operand-by-operand. Both
+    //     `vpermwi128 ...,0x63` are the yzx rotate (imm 0x63 = word selects 1,2,0,3); the classic
+    //     `vnmsubfp v0,v0,v12,v13` prints RAW FIELD ORDER D,A,B,C so it is B - A*C =
+    //     (arm*perm(fric)) - (perm(arm)*fric), and the final perm rotates that into
+    //     (ay*fz-az*fy, az*fx-ax*fz, ax*fy-ay*fx) == arm x friction. Torque = r x F. Correct.
+    //   * THE ACCUMULATOR IS mTotalLinearForce, NOT mTotalTorque -- and the offset alone will fool
+    //     you. The store is `addi r11,r26,0xF0` with r26 = `this` (VehiclePhysics), and
+    //     ExternalPhysicsBody's own frame puts mTotalTorque at ITS +0xF0. They are different
+    //     members: the EPB subobject starts at VehiclePhysics+0x10 (this fn calls
+    //     AddWorldSpaceTorque with r3 = r27 = `this+0x10`, and EPB reads its world position at
+    //     ITS +0x30 == this+0x40, which is where this fn loads the body position from). So
+    //     this+0xF0 == EPB+0xE0 == mTotalLinearForce. As written.
+    //
+    //   MEASURED (`[wfc]`, exe 593c4cbf, b5 224cc76d, TWO wall boots h230 s55/s70 -- two boots are
+    //   not a trend, and both took their hardest impact inside the post-junkyard
+    //   E_ABSORPTIONSET_INVINCIBLE window (`[absorb] set 4`, noDamageTimer 0.72/0.88 counting down;
+    //   the absorption set gates DEFORMATION and is not read by this scrub, so it does not bias
+    //   these numbers):
+    //     mass 1589 < KF_CRASH_SCRUB_MASS 3500  ->  the caller's mass gate passes on 438/438 frames
+    //     >=1 wheel actually applied on 127/196 (64.8%) and 151/242 (62.4%) of crashing frames
+    //     |tqRoll| median 3627 / 268 N.m, p99 14757 / 19611 N.m, max 15839 / 20650 N.m
+    //     |dWroll| (Iinv_world * tau*dt, the drain's own arithmetic) max 0.347 / 0.453 rad/s IN ONE
+    //       FRAME; summed |dWroll| over the crash 13.55 / 10.42 rad/s = 76.6% / 48.0% of ALL the
+    //       frame-to-frame roll-rate traffic the car saw. This is the dominant roll channel.
+    //     the full 3.0 m drop IS reached (hDropMax max 3.000 in both boots)
+    //   ⭐ AND YET IT DOES NOT TUMBLE THE CAR, because its sign alternates: signed sum of dWroll
+    //     -0.046 rad/s against an absolute sum of 13.55 (100% cancellation) and +4.48 against 10.42
+    //     (57%). A huge oscillating scrub, not a net roll-over. Both boots reached past
+    //     on-its-side (max|right.y| 0.796 / 0.922, min up.y 0.611 / 0.372) with 0 roll half-turns.
+    //   CONTROL THAT BITES: on the 5 / 40 frames with NO wheel on the ground the probe reports
+    //     gates 0000, applied 0, tqRoll 0 -- and the `gates 1111` pattern (64 / 51 frames) is the
+    //     planar-movement gate shutting the lever off once the car has stopped. The instrument
+    //     separates "applied" from "gated" and shows both in the same boot.
+    //   ⚠️ [rollcatch] CANNOT SEE ANY OF THIS. UpdateWheels runs no CalculateNewVelocity after the
+    //     crash-scrub block, so this torque is integrated at the NEXT drain and lands in
+    //     [rollcatch]'s `integ2` bucket. Reading `wheels` as "the crash scrub" is wrong.
     void VehiclePhysics::HandleWheelFrictionCrashing(EVehicleDrivenWheel leWheel,
                                                      VecFloat lvfTimeStep)
     {
@@ -1785,6 +1835,39 @@ namespace Vehicle
     //   consumed-time lane); the slice's stub returns void, so the decrement is taken as the frame dt
     //   (the faithful per-frame countdown). Behaviourally identical: mfTimeRemaining bleeds down each
     //   frame until it crosses the 0.01 cut.
+    //
+    // ⭐⭐⭐ SETTLED 2026-09-07 (crash-roll wave): THIS CHANNEL HAS NO PRODUCER IN ANY CONSOLE BUILD.
+    //   It is called from UpdateCrashing on every crashing frame and does nothing, and that is 1:1.
+    //   Do not "reconnect" it and do not hunt for our missing AddSpin -- there isn't one to miss.
+    //
+    //   (a) X360 ARTIST, EXHAUSTIVE OFFSET SCAN. Over all 30,084 exported functions (which include
+    //       the ~2,535 unnamed sub_ bodies, so naming cannot hide a producer), the ONLY instructions
+    //       anywhere in the image that touch VehiclePhysics +0x1220..+0x132F -- mUsedSpins and the
+    //       eight maSpinEffects -- are:
+    //           Construct  0x8262DCB0   std r30,0x1220(r31)      <- clear
+    //           Destruct   0x8262DE08   std r30,0x1220(r31)      <- clear
+    //           Prepare    0x82638084   std r30,0x1220(r31)      <- clear
+    //           this fn    0x825FCD1C   addi r22,r29,0x1220 ; li r11,0x1230 ; lfs/stfs 0x1244  <- walk
+    //       No SetBit, no store into maSpinEffects[i].mForce or .mfTotalTime, ANYWHERE.
+    //       NEGATIVE CONTROL (the instrument bites): the same scan over the AIR-RAM slot region
+    //       +0x1158..+0x121F finds the producer immediately -- AddAirRam 0x825FE698 `addi r25,r17,
+    //       0x1160`, 0x825FE8A8..B0 `stfs 0x1180 / stw 0x1184 / stfs 0x1188` -- so the scan CAN see
+    //       a producer of exactly this shape when one exists.
+    //   (b) BOTH PS3 BUILDS: `VehiclePhysics::AddSpin(Vector3, float)` EXISTS as a real out-of-line
+    //       body (DecFIGS 0x729108, External PS3 0x3AFC0C) and has **zero xrefs in both**. GCC keeps
+    //       an uncalled non-static member; MSVC/the X360 link dropped it, which is why the ARTIST
+    //       ledger has no AddSpin at all. Absent from the X360 ledger ⇒ correctly absent here.
+    //   (c) THE EVENT PLUMBING IS LIVE BUT EMPTY. `VehicleEffectsInputInterface::CreateSpin` /
+    //       `mSpinQueue` (EventQueue<CreateSpinEvent,10>, DWARF BrnVehicleEvents.h:620 = {mVolumeId,
+    //       mForce, mfTime}) is Construct'ed by three IO buffers and Append'ed twice by
+    //       WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics -- but NO AddEvent/
+    //       AddEventSafe/AllocateEvent instantiation for CreateSpinEvent exists in the image (the
+    //       air-ram twin's AddEventSafe @0x822C7FB8 does, called from CrashPlayManager::
+    //       UpdateTrafficStomp), and nothing reads the queue: two functions return
+    //       PhysicsModuleIO::InputBuffer + 147840 (the air-ram queue) and NOTHING returns or reads
+    //       + 149136 (the spin queue). VehicleManager::UpdateVehicleEffects @0x82629E18 drains the
+    //       air-ram queue only ("Invalid Entity type in air ram UpdateVehicleEffects Effects").
+    //   (d) IN-GAME CORROBORATION: every `[rollcatch]` line ever printed shows `spin 0.000000`.
     // -------------------------------------------------------------------------------------
     void VehiclePhysics::UpdateSpinEffects(VecFloat lvfDeltaTime)
     {
