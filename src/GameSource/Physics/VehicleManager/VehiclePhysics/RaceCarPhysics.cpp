@@ -217,6 +217,98 @@ namespace Vehicle
     // "fold the definition back here when this TU mounts" note aged out -- the split stands because
     // both TUs link today and folding would be churn, not because of any mount gap.
     namespace { PlayerParameters& MS = msPlayerParams; }   // short alias for the bodies below
+
+    // =========================================================================================
+    // ---- [at-gate] AFTERTOUCH GATE CENSUS -- NOT IN THE X360 BINARY. OPT-IN (BRN_AT_GATE_DIAG=1).
+    //
+    // THE QUESTION. The owner reports that a crashing car "in the air can turn weirdly, like
+    // someone is pulling it and making it turn". `UpdateAftertouch` @0x8262EBE8 is the only crash
+    // helper that adds a yaw ANGULAR impulse plus two +/-4 m world-up LEVER impulses, and their
+    // arms come from the CAMERA's axes (lpCameraMatrix->xAxis / ->zAxis), which rotate
+    // independently of the car. If it ever ran during an ordinary crash, that is exactly the felt
+    // symptom. The console gates the WHOLE body on three tests (asm 0x8262EC1C-EC4C) and the
+    // CALLER gates the dispatch on a fourth (UpdateCrashing asm 0x82638E30 `beq`).
+    //
+    // ⭐ WHY A HISTOGRAM AND NOT A MAX. The previous wave's "peak yaw" numbers (6.499/6.336/...)
+    // were the +/-6.5 KF_MAX_CRASH_ANGVEL clamp being read back, not a torque. A gate question is
+    // answered by COUNTS of distinct outcomes, so this keys every crash frame by the four gate
+    // bits at once and counts the 16 combinations.
+    //
+    // ⭐⭐ THE DENOMINATOR AND THE CONTROL BIT ARE BOTH IN THE KEY, DELIBERATELY.
+    //   * `crashF` is incremented on EVERY frame the player's car is crashing, from
+    //     RaceCarPhysics::Update -- which runs whether or not UpdateAftertouch is dispatched. So a
+    //     zero aftertouch census can be told apart from a probe that never ran: crashF > 0 proves
+    //     the instrument is live at the point where the decision is made.
+    //   * bit 3 of the key is `hasAir`, a bit that MUST vary across a real crash. A key histogram
+    //     that collapses onto one value with hasAir stuck is a broken probe, not a finding.
+    // Every printed line carries its own window boundary (`win=[a,b]`) beside the accumulators.
+    // DELETE-WHEN the aftertouch/tumble question is closed and banked.
+    // =========================================================================================
+    namespace
+    {
+        struct AtGateCensus
+        {
+            // --- caller side: RaceCarPhysics::Update, every frame the player car is crashing ---
+            u32 muCrashFrames;
+            u32 muCrashFrameAtEpisodeStart;
+            u32 mauKey[16];          // bit0 additive | bit1 showtimeVCall | bit2 showtimeAllowed | bit3 hasAir
+            u32 muEpisodes;
+            bool mbInEpisode;
+            // --- callee side: RaceCarPhysics::UpdateAftertouch ---
+            u32 muEnter;
+            u32 mauGateCrashing[2];   // [0] = IsCrashing() false, [1] = true
+            u32 mauGateStartLine[2];  // [0] = not on start line (proceed), [1] = on start line (bail)
+            u32 mauGateShowtime[2];   // [0] = +0x14 vcall FALSE (bail), [1] = TRUE (proceed)  <-- THE ANSWER
+            u32 muBodyRan;            // passed all three entry gates
+            u32 muChannelsRan;        // ... and (additive && enable > 0)
+            u32 muYawAngImpulse;      // AddWorldSpaceAngularImpulse actually issued
+            u32 muLeverRoll;          // lever impulse 1 (yaw / camera-X arm) actually issued
+            u32 muLeverPitch;         // lever impulse 2 (pitch / camera-Z arm) actually issued
+        };
+        AtGateCensus gsAtGate = { 0, 0, { 0 }, 0, false, 0, { 0 }, { 0 }, { 0 }, 0, 0, 0, 0, 0 };
+
+        bool AtGateArmed()
+        {
+            static const bool sbArmed = (std::getenv("BRN_AT_GATE_DIAG") != 0);
+            return sbArmed;
+        }
+
+        void AtGatePrint(const char* lpcWhy, u32 luWinFrom, u32 luWinTo)
+        {
+            if (CgsDev::Log::gpDebugPrint == 0)
+                return;
+            *CgsDev::Log::gpDebugPrint
+                << "[at-gate] " << lpcWhy
+                << " ep=" << static_cast<s32>(gsAtGate.muEpisodes)
+                << " win=[" << static_cast<s32>(luWinFrom) << "," << static_cast<s32>(luWinTo) << "]"
+                << " crashF=" << static_cast<s32>(gsAtGate.muCrashFrames)
+                << " | key(add,stVCall,stAllow,air):";
+            for (s32 liK = 0; liK < 16; ++liK)
+            {
+                if (gsAtGate.mauKey[liK] != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << " " << ((liK & 1) ? 1 : 0) << ((liK & 2) ? 1 : 0)
+                        << ((liK & 4) ? 1 : 0) << ((liK & 8) ? 1 : 0)
+                        << "=" << static_cast<s32>(gsAtGate.mauKey[liK]);
+                }
+            }
+            *CgsDev::Log::gpDebugPrint
+                << " | AT enter=" << static_cast<s32>(gsAtGate.muEnter)
+                << " crashing[0,1]=" << static_cast<s32>(gsAtGate.mauGateCrashing[0])
+                << "," << static_cast<s32>(gsAtGate.mauGateCrashing[1])
+                << " startline[0,1]=" << static_cast<s32>(gsAtGate.mauGateStartLine[0])
+                << "," << static_cast<s32>(gsAtGate.mauGateStartLine[1])
+                << " showtimeVCall[0,1]=" << static_cast<s32>(gsAtGate.mauGateShowtime[0])
+                << "," << static_cast<s32>(gsAtGate.mauGateShowtime[1])
+                << " bodyRan=" << static_cast<s32>(gsAtGate.muBodyRan)
+                << " channels=" << static_cast<s32>(gsAtGate.muChannelsRan)
+                << " yawAng=" << static_cast<s32>(gsAtGate.muYawAngImpulse)
+                << " leverRoll=" << static_cast<s32>(gsAtGate.muLeverRoll)
+                << " leverPitch=" << static_cast<s32>(gsAtGate.muLeverPitch)
+                << "\n";
+        }
+    }
     // -----------------------------------------------------------------------------------------
     // THE SEED CONSTANTS ARE READ (2026-08-03, constants wave). The banner that used to sit
     // here said "the exports do NOT contain their numeric values (verified: 0x82F2A2xx have no
@@ -445,7 +537,16 @@ namespace Vehicle
     // than "the bounce flags are zero" (those could be zero because nothing hit anything).
     // The gate is `VehiclePhysics::UpdateCrashing`'s `if (lbPlayerAftertouchForceAdditive)` --
     // console-faithful, asm 0x82638E30 `beq` -- fed by VehicleManager::mbAftertouchIsForceAdditive,
-    // whose only writer is game action 42, which nothing in the tree posts. The full five-link
+    // whose only writer is game action 42.
+    // ⭐ STALE CLAIM CORRECTED 2026-09-07 (aftertouch-gate wave), WITH ITS OWN NUMBER. The line
+    // above used to end "...game action 42, which nothing in the tree posts", and the pushT
+    // paragraph above it is that era's evidence. Action 42's producer landed the same day
+    // (2026-08-27) -- see the arm in BrnPhysicsModuleGameActions.cpp -- and the [at-gate] census
+    // measured it firing: over run atg_showB, 753 of 753 UpdateAftertouch entries arrived with the
+    // additive flag SET, and 688 of them reached the aftertouch channels. So this gate now OPENS
+    // in showtime. What has NOT changed is that it stays SHUT everywhere else: the same census on
+    // a plain 156 mph wall crash (run atg_crashA) read the flag clear on 944 of 944 crash frames.
+    // The full five-link
     // diagnosis is written out at that arm in BrnPhysicsModuleGameActions.cpp.
     // ⇒ ENTERING showtime and RUNNING showtime are two different milestones. This witness is what
     // keeps the first from being reported as the second.
@@ -505,6 +606,37 @@ namespace Vehicle
                 }
             }
         }
+
+        // ---- [at-gate] CALLER-SIDE CENSUS. See the banner on AtGateCensus. This is the
+        // DENOMINATOR half: it fires on every frame this car is crashing, whether or not
+        // UpdateCrashing dispatches the +0x28 vcall, so "the aftertouch never ran" can be told
+        // apart from "the probe never ran". Reads only; changes nothing the console does.
+        if (AtGateArmed() && IsCrashing())
+        {
+            // The +0x14 virtual is sampled HERE, through the same dispatch UpdateAftertouch uses,
+            // so the key records what the console's own gate would have read on this frame even
+            // on the frames where the caller's `if (lbPlayerAftertouchForceAdditive)` skips it.
+            const s32 liKey = (lbPlayerAftertouchForceAdditive ? 1 : 0)
+                            | (IsPlayerVehicleActuallyInShowtime() ? 2 : 0)
+                            | (lbShowtimeAllowed ? 4 : 0)
+                            | (mbHasAir ? 8 : 0);
+            if (!gsAtGate.mbInEpisode)
+            {
+                gsAtGate.mbInEpisode = true;
+                gsAtGate.muEpisodes++;
+                gsAtGate.muCrashFrameAtEpisodeStart = gsAtGate.muCrashFrames;
+            }
+            gsAtGate.muCrashFrames++;
+            gsAtGate.mauKey[liKey]++;
+            if ((gsAtGate.muCrashFrames % 60u) == 0u)
+                AtGatePrint("tick", gsAtGate.muCrashFrameAtEpisodeStart, gsAtGate.muCrashFrames);
+        }
+        else if (AtGateArmed() && gsAtGate.mbInEpisode)
+        {
+            gsAtGate.mbInEpisode = false;
+            AtGatePrint("EPISODE-END", gsAtGate.muCrashFrameAtEpisodeStart, gsAtGate.muCrashFrames);
+        }
+
         // THE ZERO TIMESTEP IS GONE (2026-08-01, physics wave 1). This used to read
         //     static const f32 KF_DT = 0.0f;   // FLAG: frame dt ... un-homed here
         // -- a committed zero that made EVERY timer in this function a no-op, and a `0.0f`
@@ -1418,6 +1550,50 @@ namespace Vehicle
 
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::UpdateAftertouch  @0x8262EBE8
+    //
+    // ⭐⭐⭐ MEASURED AND CLEARED 2026-09-07 (aftertouch-gate wave). THIS FUNCTION IS **NOT** THE
+    // SOURCE OF "the car in the air turns weirdly, like someone is pulling it".
+    //
+    // WHY IT WAS THE SUSPECT. It is the only crash helper that adds a yaw ANGULAR impulse and two
+    // +/-4 m world-up LEVER impulses, and their arms are built from `lpCameraMatrix->xAxis` /
+    // `->zAxis` -- the CAMERA's axes, which rotate independently of the car. If it ran during an
+    // ordinary crash it would feel exactly like that, and left/right-wrong for free.
+    //
+    // WHAT THE CENSUS MEASURED (the [at-gate] instrument above; exe md5 827CBC6A...).
+    //   run atg_crashA -- a 70 m/s (156 mph) placed wall crash, free burn, 2 crash episodes:
+    //       crashF = 944         (the probe is live at the decision point)
+    //       add    = 0 / 944     (UpdateCrashing's own gate, asm 0x82638E30, never opened)
+    //       +0x14 showtime vcall = 0 / 944  (sampled through the same dispatch this body uses)
+    //       AT enter = 0, bodyRan = 0, yawAng = leverRoll = leverPitch = 0
+    //     Liveness control: the key's `hasAir` bit took BOTH values (902 grounded / 42 airborne),
+    //     so the histogram was reading live state, not stuck.
+    //   run atg_showB -- the NEGATIVE CONTROL, a real both-bumpers showtime entry:
+    //       AT enter = 753, crashing[0,1] = 0,753, startline[0,1] = 753,0,
+    //       showtimeVCall[0,1] = 0,753, bodyRan = 753, channels = 688
+    //   run atg_showD -- the same, with the STEERING STICK held so the channels have an input:
+    //       AT enter = 917, bodyRan = 917, channels = 688, **leverRoll = 688**
+    //     i.e. every counter the crash run reported as zero is DEMONSTRABLY able to move,
+    //     including the +/-4 m camera-X lever impulse itself.
+    // ⇒ TWO independent gates -- the caller's `mbAftertouchIsForceAdditive` and this body's own
+    //   +0x14 `IsPlayerVehicleActuallyInShowtime` -- were shut on 944 of 944 crash frames.
+    //   Aftertouch is a SHOWTIME behaviour and only a showtime behaviour, which is what the
+    //   console does. Every sign, constant and axis below was re-read from the image the same day
+    //   and is faithful (see the per-line citations).
+    //
+    // ⭐⭐ AND THE YAW ANGULAR IMPULSE IS STRUCTURALLY DEAD -- IN THE CONSOLE TOO. Its magnitude is
+    // `lfScalar * -2000 * dt * enable`, and `lfScalar` is the THIRD out-param of
+    // GetAftertouchValues @0x825B2E88, which both arms of that leaf set to `flt_82001CC0` == 0.0
+    // (image read). Nothing writes that stack slot (`var_124`) between the call @0x8262EE78 and
+    // the read @0x8262F2D4 -- checked instruction by instruction across the whole listing -- so
+    // the impulse is the zero vector and the `vcmpgtfp` epsilon guard @0x8262F374 always skips
+    // `AddWorldSpaceAngularImpulse`. The measurement agrees independently: yawAng = 0 across 688
+    // channel executions in the showtime control run. So do NOT read the `-2000` below as a live
+    // torque; it is multiplied by a hard zero, and that is ARTIST's own arithmetic.
+    // ⚠️ WHAT THIS CANNOT DISTINGUISH: it counts APPLICATIONS, not magnitudes, so a tiny impulse
+    // and a huge one score the same; and it says nothing about torque applied by any body other
+    // than this one. `leverPitch` is the ONE counter never seen to move -- it needs
+    // `mfForwardSteering` (the in-air pitch stick), which no harness channel supplies -- so its
+    // zero is unproven, unlike every other zero above.
     // REWRITTEN 2026-08-24 (showtime wave) from a fresh full disassembly (show_asm.txt in the
     // wave scratchpad; 2616 bytes read end to end). The committed body's channel structure was
     // a slice sketch; the console's is:
@@ -1458,16 +1634,32 @@ namespace Vehicle
                                           VecFloat lvfTimeStep,
                                           bool lbDoForceAdditiveAftertouch, bool lbUseSixaxis)
     {
+        // ---- [at-gate] CALLEE-SIDE CENSUS (see the banner on AtGateCensus). Each gate is
+        // counted as a two-bin histogram BEFORE it is taken, so a bail is attributed to the
+        // gate that caused it rather than inferred from a silent function.
+        const bool lbAtGate = AtGateArmed();
+        if (lbAtGate)
+        {
+            gsAtGate.muEnter++;
+            gsAtGate.mauGateCrashing[IsCrashing() ? 1 : 0]++;
+        }
+
         if (!IsCrashing())                        // lbz +0x710 @0x8262EC1C, beq -> bail
             return;
+        if (lbAtGate)
+            gsAtGate.mauGateStartLine[lpControls->mbIsOnStartLine ? 1 : 0]++;
         // RE-NAMED 2026-08-03. `lbz r11, 0x40(r25)` @0x8262EC28, must be ZERO to proceed --
         // 0x40 is mbIsOnStartLine. Aftertouch is disabled while the car sits on the start line.
         if (lpControls->mbIsOnStartLine)          // asm lbz +0x40, bne -> bail
             return;
         // the vtbl+0x14 virtual (image-attested slot; IsPlayerVehicleActuallyInShowtime on the
         // RaceCarPhysics vtable @0x820D1034). FALSE bails the whole body @0x8262EC4C.
+        if (lbAtGate)
+            gsAtGate.mauGateShowtime[IsPlayerVehicleActuallyInShowtime() ? 1 : 0]++;
         if (!IsPlayerVehicleActuallyInShowtime())
             return;
+        if (lbAtGate)
+            gsAtGate.muBodyRan++;
 
         // normalise the camera X and Z axes (the console's own asserts, :0x207 / :0x20F).
         CGS_ASSERT(vpu::MagnitudeSquared(lpCameraMatrix->xAxis) > 0.0f,
@@ -1491,6 +1683,8 @@ namespace Vehicle
 
         if (lbDoForceAdditiveAftertouch && lfEnable > 0.0f)
         {
+            if (lbAtGate)
+                gsAtGate.muChannelsRan++;
             f32 lfYaw = 0.0f, lfPitch = 0.0f, lfScalar = 0.0f;
             // FORK RESOLVED 2026-08-06 (UpdateVehiclePhysics wave): the console leaf
             // @0x825B2E88 is the 4-arg reference form; THIS call site passes the bool as a
@@ -1565,7 +1759,11 @@ namespace Vehicle
             Vector3 lvYawImpulse = vpu::Mult(
                 KV_WORLD_UP, lfScalar * KF_AT_ROLL_SCALAR * lvfTimeStep.x * lfEnable);
             if (vpu::MagnitudeSquared(lvYawImpulse) > 1.1920929e-07f)
+            {
+                if (lbAtGate)
+                    gsAtGate.muYawAngImpulse++;
                 AddWorldSpaceAngularImpulse(lvYawImpulse);
+            }
 
             // lever impulse 1 -- roll from yaw (0x8262F394-F49C): worldUp * |yaw| * 1400 * dt *
             // enable, applied at carPos +/- cameraX * 4.0 (sign of yaw). WORLD/WORLD tags
@@ -1578,8 +1776,12 @@ namespace Vehicle
                 const Vector3 lvAt  = (lfYaw > 0.0f) ? vpu::Add(mTransform.Pos(), lvArm)
                                                      : vpu::Subtract(mTransform.Pos(), lvArm);
                 if (vpu::MagnitudeSquared(lvImpulse) > 1.1920929e-07f)
+                {
+                    if (lbAtGate)
+                        gsAtGate.muLeverRoll++;
                     AddLocalImpulse(lvImpulse, rw::physics::WORLD_SPACE,
                                     lvAt, rw::physics::WORLD_SPACE);
+                }
             }
 
             // lever impulse 2 -- wheelie/pitch (0x8262F4A8-F5D0): worldUp * |pitch| * 1400 * dt
@@ -1596,8 +1798,12 @@ namespace Vehicle
                 const Vector3 lvAt  = (lfPitch > 0.0f) ? vpu::Add(mTransform.Pos(), lvArm)
                                                        : vpu::Subtract(mTransform.Pos(), lvArm);
                 if (vpu::MagnitudeSquared(lvImpulse) > 1.1920929e-07f)
+                {
+                    if (lbAtGate)
+                        gsAtGate.muLeverPitch++;
                     AddLocalImpulse(lvImpulse, rw::physics::WORLD_SPACE,
                                     lvAt, rw::physics::WORLD_SPACE);
+                }
             }
         }
 
