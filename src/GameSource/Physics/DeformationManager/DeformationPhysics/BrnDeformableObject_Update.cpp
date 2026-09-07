@@ -776,8 +776,13 @@ namespace Deformation
         //     0x825B0FB8 UpdateSensorDisplacements   0x825B10BC DeformationManager::Update
         //                -> DeformableObject::Update @0x82649160 -> UpdateContacts @0x826478B0
         //                -> ApplyCarWorldImpulse @0x82624898 -> HERE (lbz 0x710 @0x826079B8).
-        //   A whole-image census of +0x710 WRITERS is exactly four (SetCrashing/ClearCrashing/
-        //   Reset/Prepare) -- UpdateCrashing @0x82638810 does NOT touch the byte -- so the flag can
+        //   A whole-image census of +0x710 WRITERS on a vehicle is exactly FIVE STORES in four
+        //   roles: SetCrashing @0x825D990C (stores 1), ClearCrashing @0x825B8EAC (stores 0),
+        //   SimpleVehiclePhysics::Reset @0x825D9B0C, SimpleVehiclePhysics::Prepare @0x8262FE88 and
+        //   VehiclePhysics::Prepare @0x82638088. (The other +0x710 hits in the image belong to
+        //   unrelated classes -- TriggerQueryManager, TeamSelectionManager, a WMVideoDec stack
+        //   slot.) ⚠️ UpdateCrashing @0x82638810 -- the function the lead named -- does NOT touch
+        //   the byte at all: it is the per-frame crash RESPONSE, not the latch. So the flag can
         //   only change at those points, and the only one on the crash path precedes this read.
         //   ⇒ A frame the classifier calls a crash CANNOT deform at the drive-time budget. This
         //   tree has the identical order (BrnPhysicsModuleUpdateFunctions.cpp), so neither can it.
