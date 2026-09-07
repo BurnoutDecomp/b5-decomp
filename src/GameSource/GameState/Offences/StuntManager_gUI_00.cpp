@@ -429,24 +429,40 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     // The assert above is KEPT (StuntManager's own, line 710). RESTORE-WHEN the seven land.
     (void)leElementType;
 
-    // ⚠️ [gateui] PARKED CALLS, NOT FABRICATED -- the HandleWorldStunt treatment (step 6 above).
-    // The console runs, next, in this order:
-    //     mpProgressionManager->CheckForSpecialCarUnlocks();                    // 0x82396058
-    //     mpProgressionManager->SendGameCompletionResults(lpActionQueueImpl);   // 0x82395C28
-    // Owner `deps` PARKED both this wave with the measured blocker list now carried in
-    // BrnProgressionManager.h's declarations: CheckForSpecialCarUnlocks needs
-    // ComputeCompletionPercentage @0x8238A198 (320 insns) + UnlockSpecialCars @0x8237AF38
-    // (106 insns); SendGameCompletionResults needs the same percentage plus an mpModeManager
-    // back-pointer member (X360 +133436) that nothing in the tree models or installs. Neither
-    // has a body anywhere in b5-decomp/src and no link stub stands in -> calling them is a hard
-    // LNK2019 that blocks the whole gsm mount.
-    // ⓘ Neither is on the HUD path: BOTH run BEFORE `lCompleteAction` is built below and neither
-    // writes any of its five fields (X360 0x8239CDB0 posts `AddEvent(a2,&v51,58,24)` only after
-    // these calls, and v51 is untouched by them). Parking them costs the popup nothing.
-    // A fabricated SendGameCompletionResults would additionally post a WRONG "game complete"
-    // (action 208) onto the very queue this function is writing. Land the calls when the bodies do.
-    // (`lpActionQueueImpl` is NOT (void)'d here -- it is still the live sink for actions 58/59/60
-    //  below; only the two calls are parked.)
+    // The console's next two calls, in the console's order. X360 0x8239D2E0..0x8239D2F0:
+    //     lwz r3, 0x5E8(r31) ; bl CheckForSpecialCarUnlocks       (this only)
+    //     mr  r4, r20 ; lwz r3, 0x5E8(r31) ; bl SendGameCompletionResults
+    // r20 is this function's own second argument (`mr r20, r4` in the prologue @0x8239CDC8),
+    // i.e. the game-action queue -- the same sink actions 58/59/60 go to below.
+    //
+    // ⭐ UN-PARKED 2026-09-07. The 2026-08-20 park here claimed neither symbol had a body in
+    // b5-decomp/src (a hard LNK2019 on the gsm mount). Both do now:
+    //     CheckForSpecialCarUnlocks  BrnProgressionManager_Completion.cpp:405, with its
+    //                                ComputeCompletionPercentage (:254) and UnlockSpecialCars
+    //                                (BrnProgressionManager_Unlocks.cpp:123)
+    //     SendGameCompletionResults  BrnProgressionManager_Completion.cpp:462 -- and its cited
+    //                                blocker, "an mpModeManager back-pointer that nothing in the
+    //                                tree models or installs", is stale too: the member is
+    //                                declared (BrnProgressionManager.h) and Prepare2 installs it
+    //                                (BrnProgressionManager.cpp:335).
+    // Both partfiles are mounted in tools/build/build_game_exe.bat.
+    // ⓘ Position is the console's and it is load-bearing in one direction only: both run BEFORE
+    // `lCompleteAction` is built below and neither writes any of its five fields, so the action-58
+    // HUD popup is unaffected either way.
+    mpProgressionManager->CheckForSpecialCarUnlocks();                    // X360 0x82396058
+    mpProgressionManager->SendGameCompletionResults(lpActionQueueImpl);   // X360 0x82395C28
+
+    // [DIAG] NOT IN THE X360 BINARY. Same env guard + first-N budget as this TU's other rungs.
+    // This is the REACHABLE witness that the un-parked unlock path ran: it prints on every FIRST
+    // completion of any stunt element, unlike CheckForTrophyUnlocks' own line which needs a whole
+    // element type to be finished.
+    static s32 siUnlockDiagCount = 0;
+    if (UIGateDiagFirstN(&siUnlockDiagCount))
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[UI-gate] special-car unlock check + completion results posted (type="
+            << static_cast<s32>(leElementType) << ")\n";
+    }
 
     // ---- the action-58 record: THE HUD POPUP ----------------------------------------------
     // Both counts are read AFTER AddStuntElement above, so `current` already includes this

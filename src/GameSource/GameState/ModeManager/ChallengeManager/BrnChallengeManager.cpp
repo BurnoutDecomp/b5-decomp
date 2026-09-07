@@ -26,8 +26,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
 #include "SharedClasses/DataLists/ChallengeListEntry.h" // BrnResource::ChallengeListEntry::GetNumPlayers/GetChallengeStyle
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent::Register
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint  ([fburn] diag)
 
 #include <cstddef>   // offsetof (layout assert)
+#include <stdlib.h>  // getenv     ([fburn] diag)
 
 namespace BrnGameState
 {
@@ -151,6 +153,31 @@ void ChallengeManager::Construct(GameStateModule*                    lpGameState
     }
 
     mScoresSetThisFrameBitArray.UnSetAll();   // X360 std 0,+0xFD0
+
+    // ==============================================================================================
+    // [DIAG] NOT IN THE X360 BINARY -- the `[fburn]` witness (added 2026-09-07, the round that
+    // embedded mChallengeManager in ModeManager). Gated on BRN_MODEMGR_DIAG, the same env the
+    // `[evt-finish]` / `[queue-hwm]` / `[mode-results]` witnesses in this subsystem stand behind.
+    // ==============================================================================================
+    // WHY IT EARNS ITS PLACE. Construct is the FIRST observable moment of the whole freeburn
+    // subsystem, and it is the one fact that separates "the ChallengeManager mount landed and the
+    // ModeManager call was un-parked" from "the member is embedded but nothing calls it" -- which is
+    // exactly the state this file's callers are in today. Without it a run tells you nothing either
+    // way. One line per Construct, i.e. once per ModeManager::Construct, so it is not a sampler.
+    // ⛔ NO SIDE EFFECTS: prints the two back-pointers' non-nullness and nothing else.
+    // DELETE-WHEN the freeburn bring-up is done.
+    {
+        static const bool sbFburnDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
+        if (sbFburnDiag && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[fburn] ChallengeManager::Construct DONE"
+                << " modeMgr "    << (mpModeManager != 0 ? 1 : 0)
+                << " gameState "  << (mpGameStateModule != 0 ? 1 : 0)
+                << " roadRules "  << (mpRoadRulesManager != 0 ? 1 : 0)
+                << " triggerQry " << (mpTriggerQueryManager != 0 ? 1 : 0) << "\n";
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------

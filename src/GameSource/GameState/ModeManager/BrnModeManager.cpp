@@ -31,8 +31,34 @@
 // The checkpoint TriggerData landmark lookup needs the complete Landmark / BoxRegion layout.
 #include "SharedClasses/Trigger/BrnRegion.h"           // BrnTrigger::BoxRegion::GetPosition
 
+#include <cstddef>                                     // offsetof (the SendModeResults record oracle)
+#include <stdlib.h>                                    // getenv        ([mode-results] diag)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint ([mode-results] diag)
+
 namespace BrnGameState
 {
+
+// ----------------------------------------------------------------------------
+// SendModeResults' wire record. The X360 posts it with a HARD-CODED `li r6,0x30` size argument, so
+// the host struct has to measure the same 48 bytes and seat every field where the console's stack
+// block does -- these are pointer-free scalars, so the console offsets are host offsets too. A
+// silent drift here would ship a mis-parsed results action to the GUI/standings consumers rather
+// than failing anything, which is exactly why it is asserted at compile time.
+// ----------------------------------------------------------------------------
+static_assert(sizeof(GameStateModuleIO::FinishedModeAction) == 48,
+              "SendModeResults @0x82343438 posts sizeof == 48 (`li r6,0x30`)");
+static_assert(offsetof(GameStateModuleIO::FinishedModeAction, mFinishTime) == 0x00, "mFinishTime @+0x00");
+static_assert(offsetof(GameStateModuleIO::FinishedModeAction, mFastestLapTime) == 0x08, "mFastestLapTime @+0x08");
+static_assert(offsetof(GameStateModuleIO::FinishedModeAction, meFinishedGameModeType) == 0x10, "meFinishedGameModeType @+0x10");
+static_assert(offsetof(GameStateModuleIO::FinishedModeAction, meEliminatorIndex) == 0x14, "meEliminatorIndex @+0x14");
+static_assert(offsetof(GameStateModuleIO::FinishedModeAction, meBeatenRivalIndex) == 0x18, "meBeatenRivalIndex @+0x18");
+static_assert(offsetof(GameStateModuleIO::FinishedModeAction, miNumberOfTakedowns) == 0x1C, "miNumberOfTakedowns @+0x1C");
+static_assert(offsetof(GameStateModuleIO::FinishedModeAction, mfDistanceFromFinish) == 0x20, "mfDistanceFromFinish @+0x20");
+static_assert(offsetof(GameStateModuleIO::FinishedModeAction, miFinishPosition) == 0x24, "miFinishPosition @+0x24");
+static_assert(offsetof(GameStateModuleIO::FinishedModeAction, miEliminations) == 0x28, "miEliminations @+0x28");
+static_assert(offsetof(GameStateModuleIO::FinishedModeAction, mbIsOnlineGameMode) == 0x2C, "mbIsOnlineGameMode @+0x2C");
+static_assert(offsetof(GameStateModuleIO::FinishedModeAction, mbTimedOut) == 0x2D, "mbTimedOut @+0x2D");
+static_assert(offsetof(GameStateModuleIO::FinishedModeAction, mbWonRound) == 0x2E, "mbWonRound @+0x2E");
 
 // ----------------------------------------------------------------------------
 // Small predicates (X360-inlined field reads de-inlined to named accessors).
@@ -349,8 +375,43 @@ void ModeManager::FillInRaceDistanceInterface(GameStateModuleIO::RaceCarRaceDist
 }
 
 // X360 0x82343438. Pack the player's mode results and queue them.
+//
+// THE RECORD IS HOMED (2026-09-07): the stack block the X360 builds spans [sp+0x60 .. sp+0x8F]
+// (`var_60`..`var_32` + one tail pad byte) and is posted with
+//   `li r6,0x30` / `li r5,0x24` / `addi r4,r1,var_60` / `mr r3,r27` / bl VariableEventQueue<13312,16>::AddEvent
+// i.e. AddEvent(lpEvent = &record, liType = 36, liSize = 48) -- NOT "size 36". (The old banner here
+// read the IDA argument order `AddEvent(a2, &v19, 36, 48)` as {size=36, align=48}; the asm register
+// assignment above settles it.) 36 == GameStateModuleIO::E_ACTION_FINISHED_MODE and 48 ==
+// sizeof(GameStateModuleIO::FinishedModeAction), whose eleven fields land on the eleven attested
+// stack seats one-for-one:
+//   +0x00 mFinishTime            (var_60/var_5C : the 8-byte CgsSystem::Time GetFinishTime returns)
+//   +0x08 mFastestLapTime        (var_58/var_54)
+//   +0x10 meFinishedGameModeType (var_50 = `lwz r10,0xD94(r29)` == meCurrentGameModeType @+3476)
+//   +0x14 meEliminatorIndex      (var_4C)
+//   +0x18 meBeatenRivalIndex     (var_48 = `li r11,-1`)
+//   +0x1C miNumberOfTakedowns    (var_44)
+//   +0x20 mfDistanceFromFinish   (var_40, `stfs f1`)
+//   +0x24 miFinishPosition       (var_3C)
+//   +0x28 miEliminations         (var_38)
+//   +0x2C mbIsOnlineGameMode     (var_34 = mode+0xAC, 0 when there is no current mode)
+//   +0x2D mbTimedOut             (var_33 = `lbzx r29,0x94FD` == mbPlayerFinishedTimedOut)
+//   +0x2E mbWonRound             (var_32 = `lbz r11,0xD9(GetCarData)` == CarScoreData::mbEliminated)
+// [!] NAME MISMATCH, SEAT AGREED, DELIBERATELY NOT "FIXED" HERE: BrnGameActions.h spells the +0x2E
+// byte `mbWonRound` (a FLAGGED, unattested name taken from its CONSUMER, StandingsManager
+// @0x82550BB8, which forwards it as the round-outcome bool). THIS producer stores the ELIMINATED
+// flag into it. Both halves are asm-attested and they are the same byte; only the name is in doubt,
+// so the store below is written against the declared member and the disagreement is recorded here
+// rather than renamed in a header this TU does not own.
 void ModeManager::SendModeResults(CgsModule::VariableEventQueue<13312, 16>* lpOutputQueue)
 {
+    GameStateModuleIO::FinishedModeAction lAction;
+
+    // The console zeroes the two Time fields up front (`stw 0`/`stfs 0.0` into var_60..var_54)
+    // before anything else; every one of them is overwritten below, so this is the original's
+    // defensive init, kept verbatim.
+    lAction.mFinishTime     = CgsSystem::Time();
+    lAction.mFastestLapTime = CgsSystem::Time();
+
     // Online stunt-style modes finalise the online stunt scorer first (X360 vtable slot +0x20 on the
     // embedded online stunt scorer). FLAG: exact named virtual at slot +0x20 not recoverable -- the
     // semantic role is "end-of-mode finalise"; deferred to StuntModeScoring's vtable reconstruction.
@@ -364,51 +425,86 @@ void ModeManager::SendModeResults(CgsModule::VariableEventQueue<13312, 16>* lpOu
     CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");
     const EActiveRaceCarIndex lePlayer = mpGameStateModule->GetPlayerActiveRaceCarIndex();
 
-    // Gather the per-car result fields by name from the ScoringSystem.
-    const CgsSystem::Time lFinishTime      = mScoringSystem.GetFinishTime(lePlayer);
-    const CgsSystem::Time lFastestLapTime  = mScoringSystem.GetRaceCarFastestLapTime(lePlayer);
-    const s32             liTakedowns      = mScoringSystem.GetNumberOfTakedowns(lePlayer);
-    const f32             lfDistanceToFin  = mScoringSystem.GetRaceCarDistanceToFinishAtRoundEnd(lePlayer);
-    const EActiveRaceCarIndex leEliminator = mScoringSystem.GetRaceCarEliminatorIndex(lePlayer);
-    const s32             liEliminations   = mScoringSystem.GetNumberOfEliminations(lePlayer);
+    lAction.meFinishedGameModeType = meCurrentGameModeType;
+    lAction.mbIsOnlineGameMode     = IsOnlineGameMode();   // X360 mode ? mode+0xAC : 0
+
+    // Gather the per-car result fields by name from the ScoringSystem, in the console's call order.
+    lAction.mFinishTime          = mScoringSystem.GetFinishTime(lePlayer);
+    lAction.mFastestLapTime      = mScoringSystem.GetRaceCarFastestLapTime(lePlayer);
+    lAction.miNumberOfTakedowns  = mScoringSystem.GetNumberOfTakedowns(lePlayer);
+    lAction.mfDistanceFromFinish = mScoringSystem.GetRaceCarDistanceToFinishAtRoundEnd(lePlayer);
+    lAction.meEliminatorIndex    = mScoringSystem.GetRaceCarEliminatorIndex(lePlayer);
+
+    // The eliminated flag (CarData+0xD9 == CarScoreData::mbEliminated) + the per-mode latch byte.
+    lAction.mbWonRound         = mScoringSystem.GetCarData(lePlayer)->GetScoreData()->GetEliminated();
+    lAction.meBeatenRivalIndex = E_GLOBAL_RACE_CAR_INDEX_INVALID;   // X360 `li r11,-1` -> var_48
+    lAction.mbTimedOut         = mbPlayerFinishedTimedOut;
 
     // Race position: the explicit override (mbFinishCurrentModeNextUpdate + a positive miDebugFinishPosition)
     // wins; otherwise the live scoring position.
-    s32 liRacePosition;
     if (mbFinishCurrentModeNextUpdate && (miDebugFinishPosition > 0))
     {
-        liRacePosition = miDebugFinishPosition;
+        lAction.miFinishPosition = miDebugFinishPosition;
     }
     else
     {
-        liRacePosition = static_cast<s32>(mScoringSystem.GetCarRacePosition(lePlayer));
+        lAction.miFinishPosition = static_cast<s32>(mScoringSystem.GetCarRacePosition(lePlayer));
     }
 
-    // The eliminated flag (CarData+0xD9 == CarScoreData::mbEliminated) + the per-mode latch byte.
-    const bool lbEliminated = mScoringSystem.GetCarData(lePlayer)->GetScoreData()->GetEliminated();
+    lAction.miEliminations = mScoringSystem.GetNumberOfEliminations(lePlayer);
 
-    // FLAG: the X360 builds a 36-byte results record on the stack (finish time, fastest lap,
-    // takedowns/distance/eliminator/race position/eliminations + the online flag + the two latch
-    // bytes), fills its last field through the current mode's vtable slot +0x3C, and AddEvent's it as
-    // {ptr,size=36,align=48}. The 36-byte record type (GameStateModuleIO mode-results action) is not
-    // yet homed and the GameMode slot-+0x3C virtual is not named in the bounded GameMode view, so the
-    // record build + the AddEvent are deferred (NOT fabricated). The gather above is bodied by name.
-    (void)lFinishTime;
-    (void)lFastestLapTime;
-    (void)liTakedowns;
-    (void)lfDistanceToFin;
-    (void)leEliminator;
-    (void)liEliminations;
-    (void)liRacePosition;
-    (void)lbEliminated;
-    (void)lpOutputQueue;
-    (void)mbPlayerFinishedTimedOut;
+    // Slot 15 (vtbl+60) == GameMode::FillInGameModeSpecificResults(const ScoringSystem*,
+    // FinishedModeAction*). The console reloads mpCurrentGameMode (`lwz r11,0xD98(r29)`) and
+    // dispatches through it WITHOUT a null check -- unlike the mbIsOnlineGameMode read above, which
+    // does check. Reproduced as-is: this is only ever reached at a mode finish, where the mode
+    // exists.
+    mpCurrentGameMode->FillInGameModeSpecificResults(&mScoringSystem, &lAction);
+
+    const bool lbPosted =
+        lpOutputQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAction),
+                                GameStateModuleIO::E_ACTION_FINISHED_MODE,
+                                static_cast<s32>(sizeof(GameStateModuleIO::FinishedModeAction)));
+
+    // ==============================================================================================
+    // [DIAG] NOT IN THE X360 BINARY -- the `[mode-results]` witness (added 2026-09-07, the round
+    // that un-parked this record). Gated on BRN_MODEMGR_DIAG, the same env the `[evt-finish]` /
+    // `[queue-hwm]` / `[evt-prop]` witnesses in this subsystem already stand behind.
+    // ==============================================================================================
+    // WHY IT EARNS ITS PLACE. Until this round the eight gathered result fields were read and
+    // thrown away, so "the mode finished" and "the results actually reached the GUI/standings
+    // consumers" were indistinguishable from a log -- `[evt-finish]` proves the first and says
+    // nothing about the second. This line is the only thing that separates them.
+    // ⚠️ NOT A SAMPLER: SendModeResults runs once per mode finish, so this prints once per event
+    // and cannot miss one through a sample period.
+    // ⛔ NO SIDE EFFECTS: every value printed is a field of the record just built, plus AddEvent's
+    // own return. Nothing is re-read from the ScoringSystem and no consume-once reader is touched.
+    // DELETE-WHEN the freeburn/results bring-up is done.
+    {
+        static const bool sbResultsDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
+        if (sbResultsDiag && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[mode-results] action 36 size "
+                << static_cast<s32>(sizeof(GameStateModuleIO::FinishedModeAction))
+                << (lbPosted ? " POSTED" : " DROPPED (queue full)")
+                << " mode "     << static_cast<s32>(lAction.meFinishedGameModeType)
+                << " pos "      << lAction.miFinishPosition
+                << " takedowns " << lAction.miNumberOfTakedowns
+                << " elims "    << lAction.miEliminations
+                << " eliminator " << static_cast<s32>(lAction.meEliminatorIndex)
+                << " distToFin " << lAction.mfDistanceFromFinish
+                << " online "   << (lAction.mbIsOnlineGameMode ? 1 : 0)
+                << " timedOut " << (lAction.mbTimedOut ? 1 : 0)
+                << " eliminated " << (lAction.mbWonRound ? 1 : 0) << "\n";
+        }
+    }
+    (void)lbPosted;
+
     // ([wave B 2026-08-26] the `(void)mbResultsEliminatorValid;` line that used to sit here is gone
     //  with the member: its claimed X360 seat +0x9519 is byte 1 of miDebugFinishPosition's four, and
     //  THIS body -- its only claimed reader -- makes exactly three loads in that region
     //  (`lbzx 0x94F7`, `lbzx 0x94FD`, `lwzx 0x9518`) and none at 0x9519. The eliminator this record
-    //  reports is leEliminator above, straight out of ScoringSystem::GetRaceCarEliminatorIndex.)
-    (void)IsOnlineGameMode();
+    //  reports is meEliminatorIndex above, straight out of ScoringSystem::GetRaceCarEliminatorIndex.)
 }
 
 // X360 0x82329B68. Refresh the cumulative results and latch the final-standings flag.

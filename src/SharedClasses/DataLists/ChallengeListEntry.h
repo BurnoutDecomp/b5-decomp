@@ -141,16 +141,16 @@ struct ChallengeListEntryAction
     EChallengeActionType  GetActionType() const;                  // :162  RECONSTRUCTED (inline below)
     bool                  HasTimeLimit() const;                   // :165
     f32                   GetTimeLimit() const;                   // :169
-    bool                  HasConvoyTime() const;                  // :172
+    bool                  HasConvoyTime() const;                  // :172  RECONSTRUCTED (inline below)
     f32                   GetConvoyTime() const;                  // :175
     int32_t               GetTargetValue(int32_t liIndex) const;  // :179
     EChallengeDataType    GetTargetDataType(int32_t liIndex) const; // :183  RECONSTRUCTED (inline below)
-    CgsID                 GetCgsIDTarget(int32_t liIndex) const;  // :187
+    CgsID                 GetCgsIDTarget(int32_t liIndex) const;  // :187  RECONSTRUCTED (ChallengeListEntry.cpp)
     int32_t               GetNumTargets() const;                  // :190  RECONSTRUCTED (inline below)
     ECombineActionType    GetCombineAction() const;               // :193  RECONSTRUCTED (inline below)
-    EChallengeCoopType    GetCoopType() const;                    // :196
-    uint8_t               GetModifier() const;                    // :199
-    uint8_t               GetNumLocations() const;                // :202
+    EChallengeCoopType    GetCoopType() const;                    // :196  RECONSTRUCTED (inline below)
+    uint8_t               GetModifier() const;                    // :199  RECONSTRUCTED (inline below)
+    uint8_t               GetNumLocations() const;                // :202  RECONSTRUCTED (inline below)
     ELocationType         GetLocationType(uint8_t lu8Index) const; // :206
     int32_t               GetDistrict(uint8_t lu8Index) const;    // :210 (real ret BrnWorld::EDistrict)
     CgsID                 GetTriggerID(uint8_t lu8Index) const;   // :214  RECONSTRUCTED (inline below)
@@ -266,8 +266,8 @@ struct ChallengeListEntry
     // name `BrnResource::ChallengeListEntry::GetChall` -- see the note above; there is no
     // separate `GetChall` method.
     EFreeburnChallengeStyle       GetChallengeStyle() const;         // :396  RECONSTRUCTED (inline below)
-    ECarRestrictionType           GetCarType() const;                // :399  declared-only
-    CgsID                         GetCarID() const;                  // :402  declared-only
+    ECarRestrictionType           GetCarType() const;                // :399  RECONSTRUCTED (inline below)
+    CgsID                         GetCarID() const;                  // :402  RECONSTRUCTED (inline below)
     void                          SetChallengeID(CgsID lID);         // :409  declared-only
     void                          SetNumPlayers(int32_t liNum);      // :412  declared-only
     void                          SetNewNumPlayers(int32_t liNum);   // :415  declared-only
@@ -536,6 +536,65 @@ inline CgsID ChallengeListEntryAction::GetTriggerID( uint8_t lu8Index ) const
                 "(ELocationType) mauLocationType[luLocationIndex] == E_LOCATION_TYPE_TRIGGER" );
 
     return maLocationData[ lu8Index ].mTriggerID;
+}
+
+// -----------------------------------------------------------------------------
+// [challenge-manager mount 2026-09-07] Six more accessors the X360 ALWAYS inlines
+// (none carries a standalone address in the ledger). They were declared-only until now,
+// so the 27 mounted ChallengeManager TUs referenced six symbols that had no definition
+// anywhere. Each body is the console's own load at the DWARF-pinned member offset, taken
+// from the caller asm listed beside it -- the same route the block above was recovered by.
+//
+//   ChallengeListEntry::GetCarID
+//       CheckCurrentCar @0x82333700 `ld r11, 0xC8(challenge)`   -> mCarID       (@0xC8, 8B)
+//   ChallengeListEntry::GetCarType
+//       CheckCurrentCar @0x82333764 `lbz r11, 0xD0(challenge)`  -> muCarType    (@0xD0)
+//   ChallengeListEntryAction::GetCoopType
+//       BankSkillScore  @0x8231719C `lbz r11, 1(action)`        -> muCoopType   (@0x01)
+//   ChallengeListEntryAction::GetModifier
+//       CheckForModifiers @0x82316724 / @0x8231676C `lbz r11, 2(action)` -> mxModifier (@0x02)
+//   ChallengeListEntryAction::GetNumLocations
+//       CheckCurrentLocation @0x823339A0 / @0x82333B98 `lbz 4(action)`   -> muNumLocations (@0x04)
+//   ChallengeListEntryAction::HasConvoyTime
+//       HandleChallengeSuccessEvent @0x82316C40 `lfs f0, 0x44(action) ; fcmpu f0, f31(0.0) ; bgt`
+//       -> mfConvoyTime > 0.0f. Double-attested: the out-of-line GetConvoyTime @0x8230EE20
+//       (ChallengeListEntry.cpp) fires an assert whose baked message text IS "HasConvoyTime()"
+//       over exactly that `mfConvoyTime > 0.0f` test, so the predicate's body is the
+//       sibling's own guard.
+//
+// None of the six carries a guard in the asm (GetCarID/GetCarType/GetCoopType/GetModifier/
+// GetNumLocations are bare loads; HasConvoyTime is the bare compare).
+// -----------------------------------------------------------------------------
+
+inline CgsID ChallengeListEntry::GetCarID() const
+{
+    return mCarID;
+}
+
+inline ChallengeListEntry::ECarRestrictionType ChallengeListEntry::GetCarType() const
+{
+    return static_cast<ECarRestrictionType>( muCarType );
+}
+
+inline ChallengeListEntryAction::EChallengeCoopType
+ChallengeListEntryAction::GetCoopType() const
+{
+    return static_cast<EChallengeCoopType>( muCoopType );
+}
+
+inline uint8_t ChallengeListEntryAction::GetModifier() const
+{
+    return mxModifier;
+}
+
+inline uint8_t ChallengeListEntryAction::GetNumLocations() const
+{
+    return muNumLocations;
+}
+
+inline bool ChallengeListEntryAction::HasConvoyTime() const
+{
+    return mfConvoyTime > 0.0f;
 }
 
 } // namespace BrnResource

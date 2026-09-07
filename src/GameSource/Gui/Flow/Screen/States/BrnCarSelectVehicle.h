@@ -116,13 +116,19 @@
 namespace CgsModule { struct Event; }
 namespace CgsFsm    { class  ScriptedFsm; }
 namespace CgsGui    { struct GuiEventAptTriggerPayload; }
+// mpHostStatusData's target. The record has a real home --
+// GameSource/Network/SharedIO/BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h -- and this
+// header only ever holds a POINTER to one, so it forward-declares the real type instead of
+// pulling the network IO tree into every car-select TU. Same treatment BrnGuiCache.h:44 gives
+// the sibling InGamePlayerStatusData. (It used to declare a phantom BrnGui::LobbyPlayerStatusData
+// with no definition anywhere -- that fork is retired, 2026-09-07.)
+namespace BrnNetwork { namespace BrnNetworkModuleIO { struct LobbyPlayerStatusData; } }
 
 namespace BrnGui
 {
-    // Event 244's payload (the online lobby player table). Pointer-only: the record has no
-    // reconstructed home and the only consumer is the online-lobby handler below.
+    // Event 244's payload (the online lobby player table). Pointer-only here; the queue
+    // delivers the raw record and the handler's own TU carries the payload view.
     struct GuiEventNetworkLobbyPlayerList;
-    struct LobbyPlayerStatusData;          // mpHostStatusData target (online lobby only)
 
     struct CarSelectVehicle : public CarSelectMain
     {
@@ -285,7 +291,8 @@ namespace BrnGui
         CarSelectOnlineCountdown  mOnlineCountdown;                    // +0x2750  h:147
         CarSelectOnlinePlayerList mOnlinePlayerList;                   // +0x2908  h:150
         bool                      mbFirstFrame;                        // +0x4120  h:152
-        const LobbyPlayerStatusData* mpHostStatusData;                 // +0x4124  h:153
+        const BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData*
+                                  mpHostStatusData;                    // +0x4124  h:153
         f32                       mfCarouselXOffset;                   // +0x4128  h:158
         f32                       mfCarouselXOffsetDecay;              // +0x412C  h:159
         f32                       mafCarouselOriginalXPos[KI_NUMBER_VISIBLE_VEHICLE_ICONS];  // +0x4130 h:162

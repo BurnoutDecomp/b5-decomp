@@ -17,7 +17,6 @@
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h" // CgsGui::GuiModule::AddGuiEvent (the world-load report below)
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h" // CgsGui::GuiEventTimeInfo (the per-frame GUI timestep)
 #include "GameSource/Game/BrnLoadingScreenRenderer.h" // BrnGame::ELoadingScreenCommand (BridgeGuiToGame's command slot)
-#include "GameSource/Director/Camera/BrnCameraValidityAccount.h" // ValidityAccount::SetupFailFlagMask (interim bridge in Construct)
 #include "GameSource/Resource/BrnGameDataModuleIO.h" // GameDataIO::InputBuffer/OutputBuffer (GamePrepare's request bracket)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // CgsResource::Events::AcquireResourceResponse (GamePrepare's acquire drain)
 #include "rw/rwcore_structs.h"                       // rw::ResourceAllocatorRegistry::GetDefaultAllocator (the debug-font texture state)
@@ -381,12 +380,10 @@ namespace BrnGame
         mGuiModule.Construct(mGameDataModule.GetHudMessageController(), lbHighDef);
         mGameStateModule.Construct();    // +0x669500  (slot 0; placeholder -> base)
         mEffectsModule.Construct();      // +0x878700  (slot 0; placeholder -> base)
-        // [FLAG interim bridge] ValidityAccount's static fail-flag mask must be built BEFORE the
-        // director module constructs its cameras: CameraState::Construct/Clear (@0x82220950) and
-        // BehaviourHelper::Update both assert `sbFailFlagMaskSet`. The console builds it inside
-        // CameraState::Construct; until that runs it, the one-time setup happens here.
-        // DELETE-WHEN: CameraState::Construct performs the setup itself.
-        BrnDirector::Camera::ValidityAccount::SetupFailFlagMask();
+        // (The interim ValidityAccount::SetupFailFlagMask bridge that used to sit here was
+        // retired 2026-09-07: CameraState::Construct @0x82252348 performs the setup itself
+        // -- BrnCameraState.cpp:133 -- and DirectorModule::Construct reaches it through
+        // mCamera.Construct() (BrnDirectorModule.cpp:108) before anything reads the mask.)
         mDirectorModule.Construct(1.7777778f); // +0x6B0B10  X360 slot +64 @0x8225C590 (REAL module,
                                          //            mounted 2026-07-29 -- DJ fly-by campaign).
         mReplayModule.Construct();       // +0x8BD300  (slot 0; ReplayModule -> base)
@@ -2564,10 +2561,45 @@ namespace BrnGame
             // BrnParticle::ParticleModule::Update @0x822817D8 (the virtual at vtable+68) once per
             // simulation sub-step, and EffectsModule::GenerateDispatchLists @0x82296668 drives
             // ParticleModule::GenerateRenderRequests @0x82281BD8 once per frame, which memcpy's the
-            // module's record into DispatchThreadInputBuffer::mParticleRenderData. Neither module is
-            // on this build's list, so the record was never written and
-            // BrnRendererUpdatePostFxMotionBlur has been fed a NULL since the rung-7 producers wave.
-            // The named PC stand-in for both is BrnParticle::PCBringUpProduceParticleRenderData.
+            // module's record into DispatchThreadInputBuffer::mParticleRenderData. BOTH modules are
+            // now on this build's list and the real pair runs below -- the stand-in
+            // BrnParticle::PCBringUpProduceParticleRenderData is what covers the frames the real
+            // pair does NOT run on, and nothing else.
+            //
+            // ⭐ 2026-09-07: THE STAND-IN IS NOW GATED, NOT UNCONDITIONAL. Its own DELETE-WHEN is
+            // met (both TUs mounted, GenerateDispatchLists driven from here), but deleting it
+            // outright is NOT safe yet, and the reason is in two files this file does not own:
+            //
+            //   1. THE MOTION-BLUR GATE IS ARMED ONLY BY THIS CALL.
+            //      BrnRendererModule.cpp:~5437 hands MotionBlurState::Update a record only when
+            //      BrnParticle::PCBringUpParticleRenderDataProducedFor(buffer) is true, and that
+            //      latch is raised exclusively by RememberStampedBuffer() inside the stand-in
+            //      (ParticleModuleBringUp.cpp:448). The real producer -- EffectsModule::
+            //      GenerateDispatchLists -> ParticleModule::GenerateRenderRequests
+            //      (ParticleModule.cpp:306) -- publishes the record but never touches the latch.
+            //      Delete the stand-in and BrnRendererUpdatePostFxMotionBlur is fed NULL forever:
+            //      a silent regression of a live feature.
+            //   2. AN UNWRITTEN RECORD IS NOT A SKIPPED DRAW, IT IS A WILD CALL.
+            //      mParticleRenderData is EMBEDDED in the buffer, so there is no dangling pointer
+            //      to the record -- but DispatchThreadInputBuffer::Construct deliberately does not
+            //      clear it (faithfully; the console does not either) and CreateIOBuffer stopped
+            //      zero-filling in the 2026-08-15 perf wave, so before any producer runs the
+            //      payload is UNINITIALISED bytes. The three particle passes
+            //      (BeginParticleRenderJob / BuildLionVertexBuffers / RenderFullResParticles /
+            //      RenderQuarterResParticles) gate on `mpParticleModule != 0` and then CALL
+            //      THROUGH it, so a garbage non-zero first word is a jump into nowhere. The
+            //      stand-in leaves that word deterministically NULL, which is what makes the
+            //      renderer's null test a skipped draw rather than a crash.
+            //
+            // So: the stand-in runs on a frame ONLY when the real pair will not run on it, plus on
+            // the at-most-two frames needed to arm the per-instance latch for each of the two
+            // double-buffered instances. It can therefore never overwrite a record the real
+            // producer stamped and then leave it standing: on a latch-arming frame the real
+            // producer runs immediately afterwards, inside this same DoDispatch, and the renderer
+            // only ever reads after OnEndOfUpdateFrame's Swap.
+            // DELETE-WHEN the renderer's PCBringUpParticleRenderDataProducedFor gate goes (its own
+            // DELETE-WHEN, BrnRendererModule.cpp) -- then the record is written before any reader,
+            // as on the console, and this whole seam goes with ParticleModuleBringUp.cpp.
             //
             // THE THREE FLOATS ARE THE CONSOLE'S OWN THREE VIRTUAL-Update ARGUMENTS, read off the
             // SIM timer exactly as EffectsModule::Update reads them from the effects input buffer's
@@ -2592,12 +2624,27 @@ namespace BrnGame
             // instead would be swapped away unread -- the symptom is `[postfx-mb] update=1` with
             // wvpDelta exactly 0.
             //
-            // UNCONDITIONAL, beside PCBringUpSetCameraInput and for the same reason: the console's
-            // producer runs every frame regardless of what the director is doing, and the
-            // mbDirectorCameraLive / origin guards below are world-STREAMER safety, not camera
-            // validity. A static camera simply produces a zero-velocity reprojection.
-            // DELETE-WHEN BrnParticle::ParticleModule + BrnEffects::EffectsModule are on the build
-            // list and EffectsModule::GenerateDispatchLists drives the real pair.
+            // NOT gated on mbDirectorCameraLive / the origin guard below: those are world-STREAMER
+            // safety, not camera validity, and the console's producer runs regardless of what the
+            // director is doing. A static camera simply produces a zero-velocity reprojection.
+            BrnGame::DispatchThreadInputBuffer* const lpDispatchWriteBuffer =
+                mDispatchThreadInputBufferManager.GetWriteBuffer();
+
+            // The real pair's own gate, hoisted so the stand-in can ask whether it is about to run.
+            // mpUpdateInputBufferStack is set in Construct (:207) and never cleared, so in practice
+            // this is the effects module's prepare stage alone; it is spelt out because
+            // GenerateDispatchLists dereferences the stack to create its "Particles" input.
+            const bool lbRealProducerWillRun =
+                (mEffectsModule.GetPrepareStage() == BrnEffects::EffectsModule::E_PREPARESTAGE_DONE
+                 && mpUpdateInputBufferStack != 0);
+
+            // ...and the latch-arming exception: this buffer INSTANCE has never been stamped, so
+            // the renderer would not hand its record to MotionBlurState::Update even after the
+            // real producer fills it (reason 1 above). At most two frames, one per instance.
+            const bool lbNeedsLatchArming =
+                !BrnParticle::PCBringUpParticleRenderDataProducedFor(lpDispatchWriteBuffer);
+
+            if (!lbRealProducerWillRun || lbNeedsLatchArming)
             {
                 const f32 lfSimTimeStep = mSimTimer.IsRunning()
                     ? (mSimTimer.GetRate() * mSimTimer.GetScaleCurrent())
@@ -2605,43 +2652,71 @@ namespace BrnGame
                 const f32 lfSimTime = static_cast<f32>(mSimTimer.GetAccumTicks())
                                     + mSimTimer.GetAccumulator();
                 BrnParticle::PCBringUpProduceParticleRenderData(
-                    mDispatchThreadInputBufferManager.GetWriteBuffer(),
+                    lpDispatchWriteBuffer,
                     lpDispatchCamera,
                     lfSimTimeStep,
                     lfSimTime,
                     mSimTimer.GetScaleCurrent());
             }
 
-            // ---- THE REAL PRODUCER, RUNNING AFTER THE STAND-IN (tyre-mark wave, 2026-09-02) ----
-            // EffectsModule::GenerateDispatchLists @0x82296668 has had a complete body since the
-            // effects module landed and NO CALLER. It is the console's own once-per-frame producer:
-            // it fills the "Particles" dispatch input from the effects dispatch input, then calls
-            // ParticleModule::GenerateRenderRequests @0x82281BD8, which publishes the module's
-            // mRenderData into DispatchThreadInputBuffer::mParticleRenderData under that buffer's
-            // write lock. THAT record is what carries mpParticleModule (the module `this`, written
-            // by Construct) and the muFlags word ParticleModule::Update rebuilt this frame --
-            // including eRenderDataFlagRenderTrails (0x20), the bit BrnRendererModule::Render tests
-            // before drawing a tyre mark. The PC stand-in above writes NEITHER, which is precisely
-            // why the trail pass could never run.
+            // [FLAG PC bring-up diagnostic] the retirement witness. Edge-triggered, so it costs one
+            // line per transition and says on which frame the stand-in stopped standing in. Read it
+            // with [trailpass]: "standin: RETIRED" followed by a [trailpass] line with trailBit=1
+            // is the pair that proves the real record is being stamped instead. DELETE with the
+            // stand-in.
+            {
+                static s32 siLastStandInState = -1;
+                const s32 liStandInState = (!lbRealProducerWillRun || lbNeedsLatchArming)
+                    ? (lbRealProducerWillRun ? 2 : 1)   // 2 = latch-arming only, 1 = covering
+                    : 0;                                 // 0 = retired, the real pair owns the record
+                if (liStandInState != siLastStandInState)
+                {
+                    siLastStandInState = liStandInState;
+                    char lacMsg[192];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                                  "[postfx-mb] standin: %s (realProducer=%d latched=%d "
+                                  "effectsPrepare=%d)\n",
+                                  (liStandInState == 0) ? "RETIRED"
+                                      : ((liStandInState == 2) ? "LATCH-ARMING" : "COVERING"),
+                                  lbRealProducerWillRun ? 1 : 0,
+                                  lbNeedsLatchArming ? 0 : 1,
+                                  static_cast<int>(mEffectsModule.GetPrepareStage()));
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+            }
+
+            // ---- THE REAL PRODUCER (tyre-mark wave, 2026-09-02; owns the record since -09-07) ----
+            // EffectsModule::GenerateDispatchLists @0x82296668 is the console's own once-per-frame
+            // producer: it fills the "Particles" dispatch input from the effects dispatch input,
+            // then calls ParticleModule::GenerateRenderRequests @0x82281BD8, which publishes the
+            // module's mRenderData into DispatchThreadInputBuffer::mParticleRenderData under that
+            // buffer's write lock. THAT record is the one that carries mpParticleModule (the module
+            // `this`, written by ParticleModule::Construct @0x82294220) -- the first word every
+            // particle pass in BrnRendererModule::Render tests and then calls through. The stand-in
+            // above deliberately leaves it NULL, which is why no particle pass -- tyre marks
+            // included -- can run off a stand-in record, whatever its muFlags say. (It does build a
+            // real muFlags word, trails bit and all, ParticleModuleBringUp.cpp:361; the earlier note
+            // here that said it wrote no flags was wrong. The flags are not the blocker; the module
+            // pointer is.)
             //
-            // ORDER IS DELIBERATE AND THIS IS THE HALF-STEP, NOT THE END STATE. The stand-in runs
-            // FIRST and the real producer overwrites it, so a frame where the real one is skipped
-            // (the effects module not yet prepared) still leaves MotionBlurState::Update the record
-            // it has been fed since the rung-7 producers wave -- no regression to a live feature
-            // while this one is being brought up.
-            // DELETE-WHEN the [trailpass]/[skid] evidence shows the real record is stamped every
-            // frame: then PCBringUpProduceParticleRenderData goes, per its own DELETE-WHEN, and the
-            // console's single producer is all that remains.
+            // The record's own freshness comes from ParticleModule::Update
+            // (ParticleModule_Lifecycle.cpp:888), which EffectsModule::Update drives per sub-step
+            // (EffectsModule.cpp:1372) -- so this call publishes a record the sim already refreshed
+            // rather than sampling anything here.
+            //
+            // ORDER: the stand-in above runs first on the frames it runs at all, so on a
+            // latch-arming frame this call overwrites it within the same DoDispatch, before
+            // OnEndOfUpdateFrame's Swap makes the buffer readable. No reader ever observes the
+            // intermediate record.
             //
             // The second argument is the EFFECTS dispatch input, which does not exist on this build
             // (BridgeRendererToEffects @0x823C1168 is not reconstructed) -- GenerateDispatchLists
             // takes its documented null arm, which announces once and uses white level 1.0, the
             // identity for the trail colour scale.
-            if (mEffectsModule.GetPrepareStage() == BrnEffects::EffectsModule::E_PREPARESTAGE_DONE
-                && mpUpdateInputBufferStack != 0)
+            if (lbRealProducerWillRun)
             {
                 mEffectsModule.GenerateDispatchLists(mpUpdateInputBufferStack, 0,
-                                                     mDispatchThreadInputBufferManager.GetWriteBuffer());
+                                                     lpDispatchWriteBuffer);
             }
         }
 

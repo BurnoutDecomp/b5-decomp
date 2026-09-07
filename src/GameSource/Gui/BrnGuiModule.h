@@ -21,6 +21,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"             // CgsGui::SystemUserProfile (module-owned; X360 +949152)
 #include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache (the flow states' cache)
 #include "GameSource/Gui/SatNav/BrnMapIconManager.h"   // [H3b] BrnGui::MapIconManager (by-value member)
+#include "GameSource/Gui/SatNav/BrnGuiTracker.h"       // BrnGui::GuiTracker (module-owned; X360 +1131872)
 #include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h" // BrnGui::FreeburnChallengeManager (module-owned; X360 +309584)
 #include "GameSource/Gui/BrnGuiHudMessageDirector.h"                    // BrnGui::HudMessageDirector (module-owned; X360 +639264)
 #include "GameSource/Gui/BrnGuiHudMessageAnalyzer.h"                    // BrnGui::HudMessageAnalyzer (module-owned; X360 +660992)
@@ -308,6 +309,22 @@ namespace BrnGui
         // [H3b] the shared map-icon manager (X360 +1088304; ctor from GuiModule::GuiModule
         // @0x827E5D7C, Construct + GuiCache::SetMapIconManager from GuiModule::Construct).
         MapIconManager    mMapIconManager;
+
+        // ⭐ X360 +1131872 -- THE SAT-NAV TRACKER, and the object GuiCache::mpGuiTracker
+        // points at. GuiModule::Construct @0x82518028 owns it exactly the way it owns
+        // mWorldDataController / mMapIconManager / mFreeburnChallengeManager above: a plain
+        // by-value member, inline-Constructed (the eleven stores off r29 == gm+1131872 at
+        // @0x82518874..@0x825188C8), handed to GuiCache::Construct as its FIRST argument
+        // (`mr r4, r29` @0x82518940), and finally given the cache back through the tail
+        // publish `GuiTracker::RecEvent(gm+1131872, {gm+1005376}, 64, 4)`.
+        //
+        // Until this member existed, GuiCache::mpGuiTracker had ZERO writers in the whole
+        // tree: the three sat-nav publishers in BrnGuiCache_wJ_01.cpp built their
+        // GuiEventSetTracker record, found GetGuiTracker() null, logged the one-shot
+        // "[guicache-tracker] ... mpGuiTracker is not bound" and dropped it -- so the
+        // sat-nav route line could never come up. (Same failure shape as the
+        // mpChallengeManager gap noted below.)
+        GuiTracker        mGuiTracker;      // X360 +1131872
 
         // ⭐ [stuntrace] X360 +309584 -- THE GUI-SIDE FREEBURN-CHALLENGE TRACKER, and the
         // object GuiCache::mpChallengeManager points at. GuiModule::Construct @0x82518028

@@ -15,10 +15,14 @@
 // SOURCE-OF-TRUTH: declaration SHAPE (virtual/const, vtable order, method set and
 // the mFadeTime / mbWheelsOnGround[4] member set) from the DecFIGS DWARF
 // (GameSource/Effects/Jump/JumpStateMachine.h), gated on the ARTIST X360 ledger.
-// SetVapourBlend behaviour verified against the ARTIST asm @ 0x82288A58; the
-// remaining bodies (OnDetermineNextState, OnChangeState 0x82299510,
-// FireWheelSparks 0x82299670, FireWheelDebris 0x822939D8, OnTick) are authored by
-// sibling wave agents in this same TU -- GROW this header additively, do NOT fork.
+// SetVapourBlend behaviour verified against the ARTIST asm @ 0x82288A58. The full
+// transition ladder is reconstructed as of 2026-09-07: OnDetermineNextState
+// (0x8229B9F8) and OnChangeState (0x82299510) are bodied store-for-store against the
+// ARTIST asm, and OnTick is the empty base slot the console ICF-folded. Only
+// FireWheelSparks (0x82299670) and FireWheelDebris (0x822939D8) remain parked --
+// their spawn callees (EffectsModule::FireJumpSparks / ParticleModule::SpawnDebris)
+// have no declaration or body in the tree; see the banners in the .cpp.
+// GROW this header additively, do NOT fork.
 //
 // LAYOUT (base EffectsStateMachine occupies +0x00..+0x0B = vptr + mState + mTime):
 //   +0x0C  mFadeTime            (DWARF JumpStateMachine.h:46)

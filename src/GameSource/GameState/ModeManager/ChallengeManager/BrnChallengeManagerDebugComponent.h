@@ -21,10 +21,11 @@
 //   mbDebugBeginChallengePending = +0x14
 //
 // SCOPE: only the three functions this TU's X360 ledger attests are bodied here
-// (CompleteAllChallenges, GetName, OnActivate). The other DWARF-listed methods
-// (Construct/Destruct/RenderHUD/GetPath/StartChallenge/DebugStartChallenge) are owned by
-// their own passes and are intentionally NOT declared here (gate every DWARF declaration on
-// X360 attestation -- declaring them now would force unimplemented vtable slots / link refs).
+// (CompleteAllChallenges, GetName, OnActivate), plus StartChallenge as a NAMED TRAP STUB (see its
+// declaration). The other DWARF-listed methods (Construct/Destruct/RenderHUD/GetPath/
+// DebugStartChallenge) are owned by their own passes and are intentionally NOT declared here
+// (gate every DWARF declaration on X360 attestation -- declaring them now would force
+// unimplemented vtable slots / link refs).
 
 namespace BrnGameState
 {
@@ -46,16 +47,18 @@ namespace BrnGameState
         void OnActivate() override;                  // @ BrnChallengeManagerDebugComponent.cpp:93
 
         // The "Start Challenge" debug action callback (registered with `this` as user-data, so STATIC).
-        // DECLARATION ONLY here: its body is owned by a separate pass (DWARF cpp:114) and is NOT in this
-        // TU's X360 ledger, so it is referenced (its address is taken in OnActivate) but not defined here
-        // -- the body resolves at link from its own TU.
         //
         // ICF NOTE: in the X360 ARTIST build OnActivate's "Start Challenge" callback address resolves to
         // CgsDev::DebugComponentPerfMonCpu::DebugCallbackResetCounters (0x82817350) -- i.e. this static
         // wrapper was identical-code-folded onto that symbol. The DWARF (cpp:114) names the real callback
         // StartChallenge, which is what the original C++ registered; we register StartChallenge here and
         // treat the folded-symbol resolution as the ICF artifact it is.
-        static void StartChallenge(void* lpContext); // @ BrnChallengeManagerDebugComponent.cpp:114 (own pass)
+        //
+        // ⚠️ [challenge-manager mount 2026-09-07] It is a NAMED TRAP STUB in this TU's .cpp, NOT a
+        // reconstruction: the folding means the image gives the wrong function's code and there is no
+        // second reference to disambiguate it, so the body is unrecoverable and is not guessed. It logs
+        // once and asserts. See the banner over the definition.
+        static void StartChallenge(void* lpContext); // @ BrnChallengeManagerDebugComponent.cpp:114 (TRAP STUB)
 
         // The "Complete all challenges" debug action callback (X360 0x82335010). Registered with the
         // debug menu as a plain DebugCallbackFunction with `this` handed back as the user-data, so it

@@ -33,24 +33,29 @@
 //     there re-arms one the moment anybody mounts wB_res -- and the gate's own banner
 //     already scheduled this move. (Done in this change; noted for the reviewer.)
 //
-// ⛔⛔ ONE HONEST HOLE, NAMED RATHER THAN FAKED -- READ THIS BEFORE SCORING THE WAVE.
-// Three of the bodies below end by publishing a 3088-byte GuiEventSetTracker to the sat-nav
-// tracker: `GuiTracker::RecEvent(tracker, &record, 232, 3088)`. **GuiTracker::RecEvent
-// @0x82501D28 has no body anywhere in the tree**, and bodying it is a THREE-function slice
-// in a TU this partfile does not own (its 165/211 arms tail into GuiTracker::GenerateRouteData
-// @0x824FA008, its 233 arm into GuiTracker::RegenerateRouteData @0x824F41E0, and its 211 arm
-// needs the 5136-byte GuiEventRouteInformation record -- none of the three is reconstructed).
-// Writing only the case-232 arm would be an invented body for the other four ids.
-// So the publish -- and ONLY the publish -- goes through
-// GuiCacheTrackerBoundary::PublishSetTrackerEvent below, which LOGS ONCE and drops
-// ([[silent-drop-stubs]]: an absence downstream must never read as a silent success).
-// EVERYTHING ELSE IS REAL: the console's asserts fire at the console's conditions, the record
-// is built store-for-store, HandleSetActiveLandmarksEvent genuinely latches the cache's
-// active-landmark table (which is the leg the crash-nav map's icon manager actually reads),
-// and the HACK worker returns the console's count. Retiring the boundary is a two-line edit.
-// ⚠️ WHAT A TESTER SEES UNTIL THEN: the map's icons and the active-landmark set are live; the
-// tracker ROUTE LINE stays empty, and one `[guicache-tracker-boundary]` line appears in the
-// log the first time a map screen or fly-by leaves. That is the whole residual.
+// ⭐ THE TRACKER PUBLISH IS LIVE (park retired 2026-09-07). Three of the bodies below end by
+// publishing a 3088-byte GuiEventSetTracker to the sat-nav tracker. The console's call is
+// `RecEvent(cache->mpGuiTracker, &record, 232, 3088)` -- r3 the tracker off cache+0x4054, r4
+// the stack record, `li r5, 0xE8`, `li r6, 0xC10` (@0x82507050, @0x825071A8, @0x82507378) --
+// and all three now go straight through BrnGui::GuiTracker::RecEvent, whose real body lives at
+// GameSource/Gui/SatNav/BrnGuiTracker.cpp (the five-arm switch; the case-232 arm adopts the
+// record). The old GuiCacheTrackerBoundary::PublishSetTrackerEvent log-and-drop shim, and its
+// `[guicache-tracker-boundary]` print, are DELETED -- there is no longer anything to attribute.
+// The size argument is spelled `sizeof(lSetTrackerEvent)`, which the header pins to the
+// console's own 0xC10 with a static_assert; RecEvent itself accepts and ignores it, exactly as
+// the X360 body does.
+// ⚠️ WHAT A TESTER SEES NOW: the tracker latches, so the sat-nav ROUTE LINE and the tracker
+// icon come up on a set destination instead of staying empty. The opt-in `[satnav-tracker]`
+// witness below (BRN_SATNAV_DIAG) reports each publish that reaches RecEvent.
+//
+// ⛔ PUBLISH GUARD -- THE ONE PIECE STILL MISSING, NAMED RATHER THAN FAKED. Nothing in this
+// tree WRITES GuiCache::mpGuiTracker (X360 cache+0x4054); the member has readers only
+// (GetGuiTracker, BrnGuiCache.h:626). The console derefs it right after its non-gating
+// "Invalid tracker pointer" assert, so on this build an unguarded deref would turn a reported
+// miss into a crash on a path the offline map and the pre-race fly-by reach every run. All
+// three publishes therefore test the pointer and, when it is absent, report it ONCE through
+// LogAbsentGuiTrackerOnce ([[silent-drop-stubs]]) instead of dropping the record silently.
+// DELETE-WHEN the GuiCache binds its GuiTracker at construction.
 //
 // ⭐ CONSOLE BEHAVIOUR THAT WILL LOOK LIKE A REGRESSION AFTER THE MOUNT, pre-empted:
 // GetLandmarkInfoFromIndex / GetLandmarkInfoFromID now FIRE the console's `lpLandmark`
@@ -68,12 +73,13 @@
 // =================================================================================================
 
 #include <cstring>   // std::memset (the GetOnlineFinishPoint link gate)
+#include <cstdlib>   // getenv (the opt-in [satnav-tracker] publish witness)
 
 #include "GameSource/Gui/BrnGuiCache.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the tracker-publish boundary print
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the two PC bring-up prints
 #include "GameSource/Gui/BrnGuiWorldDataController.h"        // WorldDataController (the three forwardees)
-#include "GameSource/Gui/SatNav/BrnGuiTracker.h"             // GuiTracker + GuiEventSetTracker
+#include "GameSource/Gui/SatNav/BrnGuiTracker.h"             // GuiTracker::RecEvent + GuiEventSetTracker
 #include "GameSource/GameState/BrnGameStateTypes.h"          // BrnGameState::LandmarkIndex
 #include "GameSource/GameState/BrnGameStateSharedIO.h"       // SpecificGameModeEventInterface::Event
 #include "SharedClasses/Trigger/BrnLandmark.h"               // BrnTrigger::Landmark (COMPLETE: field reads)
@@ -82,16 +88,6 @@
 
 namespace
 {
-    // ⛔ LINK BOUNDARY, NOT A RECONSTRUCTION -- see the banner's "ONE HONEST HOLE".
-    // X360: `lwz r3, 0x4054(cache) ; addi r4, r1, <record> ; li r5, 0xE8 ; li r6, 0xC10 ;
-    //        bl BrnGui__GuiTracker__RecEvent`  (@0x82507050, @0x82507378 and the online twin).
-    // The three arguments this boundary drops are exactly those four registers.
-    // Logs ONCE per process so an empty route line is always attributable.
-    // DELETE-WHEN GuiTracker::RecEvent @0x82501D28 lands in
-    // GameSource/Gui/SatNav/BrnGuiTracker.cpp: replace the three call sites below with
-    //     lpTracker->RecEvent(reinterpret_cast<const CgsModule::Event*>(&lSetTrackerEvent),
-    //                         lSetTrackerEvent.GetEventType(), sizeof(lSetTrackerEvent));
-    // and delete this namespace. The declaration is already on BrnGuiTracker.h.
     // [FLAG PC bring-up guard, wave J] LOG-ONCE report that the landmark table is not
     // resident. WorldDataController::GetLandmarkInfoFrom{Index,ID} go STRAIGHT through
     // `mpTriggerData->...` with no null path of their own (their owning header says so at
@@ -121,12 +117,16 @@ namespace
         }
     }
 
-    void PublishSetTrackerEvent(BrnGui::GuiTracker* lpTracker,
-                                const BrnGui::GuiEventSetTracker& lrSetTrackerEvent)
+    // [FLAG PC bring-up guard, 2026-09-07] LOG-ONCE report that GuiCache::mpGuiTracker
+    // (X360 cache+0x4054) is not bound. The console derefs it straight after its non-gating
+    // "Invalid tracker pointer" assert; nothing in this tree WRITES that member yet, so an
+    // unguarded deref would turn a reported miss into a crash on the offline map / fly-by
+    // path. The three publishes below therefore test it and report the absence once, rather
+    // than dropping the record silently.
+    // DELETE-WHEN GuiCache::mpGuiTracker is bound at construction (that is the ONE remaining
+    // piece between here and a drawn route line -- the RecEvent side is real).
+    void LogAbsentGuiTrackerOnce(const char* lpacProducer)
     {
-        (void)lpTracker;
-        (void)lrSetTrackerEvent;
-
         static bool sbLogged = false;
         if (sbLogged)
         {
@@ -136,10 +136,36 @@ namespace
         if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
         {
             *CgsDev::Log::gpDebugPrint
-                << "[guicache-tracker-boundary] BrnGui::GuiTracker::RecEvent(232): no body in "
-                   "the tree, the GuiEventSetTracker record is built and dropped -- the sat-nav "
-                   "ROUTE LINE will stay empty [FLAG link boundary]\n";
+                << "[guicache-tracker] " << lpacProducer
+                << ": GuiCache::mpGuiTracker is not bound -- the GuiEventSetTracker record was "
+                   "built but there is no GuiTracker to hand it to, so the sat-nav route line "
+                   "stays empty [FLAG PC bring-up]\n";
         }
+    }
+
+    // [FLAG PC witness -- NOT IN THE X360 BINARY] `[satnav-tracker] <producer> -> RecEvent(232)
+    // items=<n> current=<i> entireRoute=<0|1>`. It exists so the conductor can prove the three
+    // publishers now reach BrnGui::GuiTracker::RecEvent (they used to build the record and drop
+    // it). Opt-in via BRN_SATNAV_DIAG and budgeted to the first 32 publishes a run, the same
+    // shape as the `[satnav-arrow]` witness in BrnMapIconManager.cpp.
+    // DELETE-WHEN the sat-nav route line has a standing runtime test.
+    void LogTrackerPublishWitness(const char* lpacProducer,
+                                  const BrnGui::GuiEventSetTracker& lrSetTrackerEvent)
+    {
+        static const bool sbDiag = (getenv("BRN_SATNAV_DIAG") != 0);
+        static s32 siLinesLeft = 32;
+
+        if (!sbDiag || siLinesLeft <= 0 || CgsDev::Log::gpDebugPrint == 0)
+        {
+            return;
+        }
+        --siLinesLeft;
+
+        *CgsDev::Log::gpDebugPrint
+            << "[satnav-tracker] " << lpacProducer << " -> GuiTracker::RecEvent(232) items="
+            << lrSetTrackerEvent.miNumTrackedItems
+            << " current=" << lrSetTrackerEvent.miCurrentlyTrackedIndex
+            << " entireRoute=" << (lrSetTrackerEvent.mbIsEntireRoute ? 1 : 0) << "\n";
     }
 }
 
@@ -445,7 +471,22 @@ namespace BrnGui
         lSetTrackerEvent.miNumTrackedItems = liCount;
 
         CGS_ASSERT(mpGuiTracker != 0, "Invalid tracker pointer");           // cpp:3932
-        PublishSetTrackerEvent(mpGuiTracker, lSetTrackerEvent);            // [FLAG link boundary]
+
+        // X360 `lwz r3, 0x4054(cache) ; addi r4, r1, <record> ; li r5, 0xE8 ; li r6, 0xC10 ;
+        // bl BrnGui__GuiTracker__RecEvent` @0x82507050. See PUBLISH GUARD in the file banner
+        // for why the deref is behind a test the console does not have.
+        if (mpGuiTracker != 0)
+        {
+            LogTrackerPublishWitness("GuiCache::UpdateTrackerInfo", lSetTrackerEvent);
+            mpGuiTracker->RecEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lSetTrackerEvent),
+                lSetTrackerEvent.GetEventType(),                   // `li r5, 0xE8`  == 232
+                static_cast<s32>(sizeof(lSetTrackerEvent)));       // `li r6, 0xC10` == 3088
+        }
+        else
+        {
+            LogAbsentGuiTrackerOnce("GuiCache::UpdateTrackerInfo");
+        }
     }
 
     // X360 sub_82507070 (NO SYMBOL -- the name below is ours, see the header note). The ONLINE
@@ -495,7 +536,21 @@ namespace BrnGui
         lSetTrackerEvent.miNumTrackedItems = static_cast<s32>(luNumLandmarks);
 
         CGS_ASSERT(mpGuiTracker != 0, "Invalid tracker pointer");           // cpp:3967
-        PublishSetTrackerEvent(mpGuiTracker, lSetTrackerEvent);            // [FLAG link boundary]
+
+        // The online twin of the publish above (X360 @0x825071A8, same four registers).
+        if (mpGuiTracker != 0)
+        {
+            LogTrackerPublishWitness("GuiCache::UpdateTrackerInfoFromOnlineEvent",
+                                     lSetTrackerEvent);
+            mpGuiTracker->RecEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lSetTrackerEvent),
+                lSetTrackerEvent.GetEventType(),                   // `li r5, 0xE8`  == 232
+                static_cast<s32>(sizeof(lSetTrackerEvent)));       // `li r6, 0xC10` == 3088
+        }
+        else
+        {
+            LogAbsentGuiTrackerOnce("GuiCache::UpdateTrackerInfoFromOnlineEvent");
+        }
     }
 
     // X360 BrnGui::GuiCache::RefreshMapState @0x82510F40. The whole body is the two-way
@@ -663,7 +718,23 @@ namespace BrnGui
         HandleSetActiveLandmarksEvent(&lActiveLandmarksEvent);
 
         CGS_ASSERT(mpGuiTracker != 0, "Invalid tracker pointer");
-        PublishSetTrackerEvent(mpGuiTracker, lSetTrackerEvent);            // [FLAG link boundary]
+
+        // The map/fly-by publish (X360 @0x82507378, same four registers).
+        if (mpGuiTracker != 0)
+        {
+            LogTrackerPublishWitness(
+                "GuiCache::HACK_FindABetterPlaceForMe_SetActiveLandmarksByEventID",
+                lSetTrackerEvent);
+            mpGuiTracker->RecEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lSetTrackerEvent),
+                lSetTrackerEvent.GetEventType(),                   // `li r5, 0xE8`  == 232
+                static_cast<s32>(sizeof(lSetTrackerEvent)));       // `li r6, 0xC10` == 3088
+        }
+        else
+        {
+            LogAbsentGuiTrackerOnce(
+                "GuiCache::HACK_FindABetterPlaceForMe_SetActiveLandmarksByEventID");
+        }
 
         return liNumTracked;
     }

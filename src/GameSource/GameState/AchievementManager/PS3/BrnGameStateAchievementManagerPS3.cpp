@@ -27,7 +27,8 @@ namespace
     // ---- X360-attested achievement ids (raw integers from the X360 .text). ----
     // FLAG: X360-SKU numbering; intentionally NOT the PS3 EAchievement names/values.
     const EAchievement E_X360_ACHIEVEMENT_CAUGHT_FEVER             = static_cast<EAchievement>(49); // OnCaughtFever (0x31)
-    const EAchievement E_X360_ACHIEVEMENT_FREEBURN_BLOCK_COMPLETE  = static_cast<EAchievement>(47); // OnFreeburnChallengeBlockComplete (0x2F)
+    // (id 47, OnFreeburnChallengeBlockComplete, MOVED with its body to
+    //  ../BrnGameStateAchievementManagerBase_Freeburn.cpp)
     const EAchievement E_X360_ACHIEVEMENT_FIND_ALL_EVENTS          = static_cast<EAchievement>(48); // OnFreeburnSkillzTotalChange (0x30)
     const EAchievement E_X360_ACHIEVEMENT_MUGSHOT_ADDED            = static_cast<EAchievement>(43); // OnMugshotAdded (0x2B)
     const EAchievement E_X360_ACHIEVEMENT_MUGSHOT_SENT_5           = static_cast<EAchievement>(41); // OnMugshotSent / OnOnlineRaceComplete-band (0x29)
@@ -51,33 +52,9 @@ namespace
     const s32 KI_RIVAL_ADDED_1                   = 1;     // OnRivalAdded (cmpwi r30,1)
     const s32 KI_RIVAL_ADDED_50                  = 50;    // OnRivalAdded (cmpwi r30,0x32)
 
-    // ------------------------------------------------------------------------
-    // FLOOR / FLAG: OnFreeburnChallengeComplete table.
-    //
-    // The X360 (0x8235B2D8) iterates a const data table at &unk_82CDBDC4 whose entry
-    // count is the dword at dword_82CDBDDC. Each entry is stride 8 = { EAchievement
-    // achievement; u32 threshold }. For each entry it fires entry.achievement once
-    // (!IsAchievementEarnt && completedCount >= entry.threshold).
-    //
-    // The table CONTENTS and the count are UNRECOVERABLE rodata: they are NOT in the
-    // dossier, dwarfdump, or the IDA data exports (verified). The loop LOGIC is
-    // reconstructed faithfully below, but the rows are modelled here as an HONEST
-    // placeholder: an EMPTY array with count 0, so the loop no-ops. Populate the real
-    // rows + count (from X360 unk_82CDBDC4 / dword_82CDBDDC) when those bytes surface.
-    // Do NOT fabricate rows.
-    // ------------------------------------------------------------------------
-    struct FreeburnChallengeAchievementEntry
-    {
-        EAchievement meAchievement;   // unk_82CDBDC4 + 0
-        u32          muThreshold;     // unk_82CDBDC4 + 4
-    };
-
-    // FLAG: placeholder -- real rows/count are unrecoverable X360 game data. The table
-    // base (X360 unk_82CDBDC4) is modelled as a null pointer with a zero count
-    // (X360 dword_82CDBDDC), so the loop no-ops. When the bytes surface, point this at a
-    // static const FreeburnChallengeAchievementEntry[] and set the count accordingly.
-    const FreeburnChallengeAchievementEntry* const KAPFREEBURN_CHALLENGE_ACHIEVEMENTS = nullptr;
-    const u32 KU_FREEBURN_CHALLENGE_ACHIEVEMENT_COUNT = 0u; // X360 dword_82CDBDDC (unrecoverable; placeholder 0)
+    // (The OnFreeburnChallengeComplete achievement table -- its FLOOR/FLAG note, the
+    //  FreeburnChallengeAchievementEntry struct and the unrecoverable-rowset placeholder -- MOVED
+    //  with that body to ../BrnGameStateAchievementManagerBase_Freeburn.cpp.)
 }
 
 // ----------------------------------------------------------------------------
@@ -94,37 +71,14 @@ void AchievementManagerBase::OnCaughtFever()
 
 // ----------------------------------------------------------------------------
 // OnFreeburnChallengeBlockComplete  (X360 0x8235B370)
-//   Fires the freeburn-challenge-block achievement (id 47) unconditionally, first
-//   time only.
+// OnFreeburnChallengeComplete       (X360 0x8235B2D8)
+//   ⭐ MOVED 2026-09-07 (challenge-manager mount) to the sibling partfile
+//   AchievementManager/BrnGameStateAchievementManagerBase_Freeburn.cpp -- MOVED, not copied, so
+//   there is no ODR fork. Both hooks are on the freeburn-challenge path the ChallengeManager
+//   mount lights up, and this PS3 unit is not on the build list; the partfile carries them (and
+//   the unrecoverable-table FLOOR note, and the id-47 constant) for zero new externals. Fold them
+//   back here if this unit is ever mounted whole.
 // ----------------------------------------------------------------------------
-void AchievementManagerBase::OnFreeburnChallengeBlockComplete()
-{
-    if (!IsAchievementEarnt(E_X360_ACHIEVEMENT_FREEBURN_BLOCK_COMPLETE))
-    {
-        AchievementEarnt(E_X360_ACHIEVEMENT_FREEBURN_BLOCK_COMPLETE);
-    }
-}
-
-// ----------------------------------------------------------------------------
-// OnFreeburnChallengeComplete  (X360 0x8235B2D8)  -- THE FLOOR (table-driven)
-//   For each row in the (unrecoverable) achievement table, fire row.meAchievement
-//   the first time the player's completed-challenge count reaches row.muThreshold.
-//   The threshold compare is UNSIGNED on the X360 (cmplw). The table is an honest
-//   EMPTY placeholder (count 0), so this loop currently no-ops -- see the FLOOR/FLAG
-//   note above the table definition.
-// ----------------------------------------------------------------------------
-void AchievementManagerBase::OnFreeburnChallengeComplete(u32 luCompletedChallengeCount)
-{
-    for (u32 luIndex = 0; luIndex < KU_FREEBURN_CHALLENGE_ACHIEVEMENT_COUNT; ++luIndex)
-    {
-        const FreeburnChallengeAchievementEntry& lrEntry = KAPFREEBURN_CHALLENGE_ACHIEVEMENTS[luIndex];
-        if (!IsAchievementEarnt(lrEntry.meAchievement)
-            && luCompletedChallengeCount >= lrEntry.muThreshold)
-        {
-            AchievementEarnt(lrEntry.meAchievement);
-        }
-    }
-}
 
 // ----------------------------------------------------------------------------
 // OnFreeburnSkillzTotalChange  (X360 0x8235B500)

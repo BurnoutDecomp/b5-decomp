@@ -507,6 +507,12 @@ namespace BrnTrafficIO
     // ========================================================================
     // OutputBuffer_PostScene extra accessors: the non-const scene coarse-query queue (0x82711118)
     // and the const traffic-AI interface (0x827A0008).
+    //
+    // The class's read/write ladder, read straight off the console asserts (bit 4 = read,
+    // bit 3 = write; the header line each one names is the declaration it was inlined from):
+    //   .h:256 R +4      0x8279FF60      .h:257 W +4      0x82711118
+    //   .h:259 R +16416  0x827A0008      .h:260 W +16416  0x827111C0
+    //   .h:262 R +63424  0x827A00B0      .h:263 W +63424  -- no body in the image (see below)
     // ========================================================================
 
     // X360 0x82711118: write-lock; return &mSceneCoarseQueryQueue (this + 4, first member).
@@ -522,6 +528,34 @@ namespace BrnTrafficIO
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
         return &mTrafficAIInterface;
     }
+
+    // X360 0x827A00B0 (asserts BrnTrafficEntityModuleIO.h:262, DWARF :258): read-lock tripwire
+    // then `addis r3,this,1 ; addi r3,r3,-0x840` == this + 63424 == &mTrafficToRaceCarInterface_
+    // PostScene (the member after the 47,008-byte mTrafficAIInterface at +16416). The tripwire is
+    // the standard non-gating one: the console falls through and returns the member either way.
+    //
+    // Its ONE xref in the image is WorldModule::BridgeTrafficToRaceCar_PrePhysics @0x827A51F0
+    // (`bl BrnTraffic__BrnTrafficIO__O` at 0x827A5258, whose r3 goes straight into
+    // RaceCarEntityModuleIO::InputBuffer_PrePhysics::SetTrafficToRaceCarInterface_PostScene) --
+    // i.e. this getter WAS the last unresolved external keeping that bridge's home TU,
+    // World/Bridges/WorldBridgeEntityModulesToEntityModules.cpp, off the build list.
+    const OutputBuffer_PostScene::TrafficToRaceCarInterface_PostScene*
+    OutputBuffer_PostScene::GetTrafficToRaceCarInterface_PostScene() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mTrafficToRaceCarInterface_PostScene;
+    }
+
+    // ⛔ NO BODY FOR THE WRITE TWIN, AND THAT IS THE ATTESTED ANSWER, NOT A PARK.
+    // OutputBuffer_PostScene::GetTrafficToRaceCarInterface_PostScene() (non-const, .h:263 /
+    // DWARF :259) is DECLARED in the header and has NO out-of-line body anywhere in
+    // BURNOUT_X360_ARTIST.XEX: a scan of all 30,096 exported functions for the pair
+    // (`this + 63424`, "BrnTrafficEntityModuleIO.h") returns exactly one hit, 0x827A00B0 above.
+    // It is a header inline the console never called, so the compiler emitted nothing for it --
+    // unlike its five siblings, all six of whose bodies are enumerated in the ladder above.
+    // Nothing in this tree calls it either (the only consumer is the const bridge path), so the
+    // declaration stays declaration-only. Do NOT invent a body from the twin pattern: write one
+    // only when a real caller appears, and cite that caller.
 
     // ========================================================================
     // OutputBuffer_PreScene accessors, laid out from Construct @0x82761790 plus the read-lock

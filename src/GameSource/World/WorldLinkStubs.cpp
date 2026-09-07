@@ -1962,9 +1962,12 @@ void WorldModule::BridgeTrafficModuleToSceneModule_PostScene(void *,struct CgsSc
     }
 }
 
-// (BridgeTrafficToRaceCar_PrePhysics stub RETIRED 2026-07-27: the REAL body
-// @0x827A51F0 lives in its own home TU, Bridges/WorldBridgeEntityModulesToEntityModules.cpp,
-// which the world-drive wave mounts on the build list.)
+// (BridgeTrafficToRaceCar_PrePhysics: nothing here. Its gate lived further down this file
+// until 2026-09-07 -- see the retirement banner beside BridgeTrafficToTrigger_PreScene's.
+// The 2026-07-27 note that used to sit here claimed the stub was already retired and the
+// home TU already mounted; NEITHER was true, and the claim is exactly what stopped anyone
+// looking for six weeks. Do not restate a mount here: the build list is the only place that
+// records one.)
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
@@ -2628,29 +2631,24 @@ void BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene::Construct()
 // accessor closure)") was accurate AND is exactly why nobody looked: it said the body existed,
 // not that nothing was running it.
 
-// BOOT GATE -- real body @0x827AD788 in its own home TU (not mounted: IO accessor closure).
-void WorldModule::BridgeTrafficToTrigger_PreScene(void *,class BrnWorld::TriggerEntityModuleIO::InputBuffer_PreScene *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeTrafficToTrigger_PreScene: inert [FLAG PC boot gate]\n";
-    }
-}
-
-// BOOT GATE -- real body @0x827A51F0 in its own home TU (not mounted: IO accessor closure).
-void WorldModule::BridgeTrafficToRaceCar_PrePhysics(void *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeTrafficToRaceCar_PrePhysics: inert [FLAG PC boot gate]\n";
-    }
-}
+// ⛔⛔ BOTH STUBS RETIRED 2026-09-07 (traffic-to-trigger wave). WorldModule::
+// BridgeTrafficToTrigger_PreScene @0x827AD788 and WorldModule::BridgeTrafficToRaceCar_PrePhysics
+// @0x827A51F0 are REAL, and were real all along, in their shared home TU
+// GameSource/World/Bridges/WorldBridgeEntityModulesToEntityModules.cpp -- MOUNTED with this
+// commit. These inert copies were the only definitions in the link, so:
+//   - the traffic module's add-trigger and remove-trigger queues never reached the trigger
+//     module's pre-scene input (BrnWorldModule.cpp:2129 calls the bridge every frame), and
+//   - the traffic->race-car post-scene interface was never latched into the race-car module's
+//     pre-physics input.
+// What it took: the LAST declaration-only accessor the TU referenced,
+// BrnTrafficIO::OutputBuffer_PostScene::GetTrafficToRaceCarInterface_PostScene (const), whose
+// X360 body is 0x827A00B0 -- now in BrnTrafficEntityModuleIO.cpp. Its two siblings
+// (TriggerEntityModuleIO::InputBuffer_PreScene::GetInputInterface and
+// BrnTrafficIO::OutputBuffer_PreScene::GetTriggerManagementInputInterface) had already landed.
+// ⚠ Note for the next reader: the gates' own text ("real body ... in its own home TU (not
+// mounted)") was accurate and was still read as a status rather than a defect -- the same way
+// the BridgeRaceCarModuleToAIModule_PreScene gate below went unnoticed. A "not mounted" gate is
+// a live bug, not a footnote.
 
 // ⭐⭐ GATE RETIRED 2026-08-26 (resetpump): WorldModule::BridgeRaceCarModuleToAIModule_PreScene
 // @0x827A4FA0 is REAL in GameSource/World/Bridges/WorldBridgeEntityModulesToAI.cpp -- and it

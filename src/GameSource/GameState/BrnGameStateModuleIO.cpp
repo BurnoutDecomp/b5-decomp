@@ -5,6 +5,7 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h" // RequestInterface<3072> (the +0x3414 member's real type)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"            // RaceCarRaceDistanceInterface / ScoringOutputInterface / OnlineScoringOutputInterface (the tail members' real types)
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // TriggerManagementInputInterface (Construct's two embedded queues)
+#include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h"    // GameStateToNetworkInterface (the +0x4190 seat's real type; sizeof for its seat static_assert)
 
 // =============================================================================
 // BrnGameState::GameStateModuleIO buffer accessors.
@@ -495,6 +496,47 @@ TakedownEventOutputQueueType* OutputBuffer::GetTakedownEventOutputQueue()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
     return reinterpret_cast<TakedownEventOutputQueueType*>(&mTakedownEventOutputQueueStorage);
+}
+
+// X360 0x8231D4B8 - the SAME console accessor as GetGameActionQueue() above, reached under its
+// concrete return type. [challenge-manager mount 2026-09-07]
+//
+// There is no second symbol in the image: ChallengeManager::PreWorldUpdate @0x82353640 calls
+// `BrnGameState__GameStateModuleIO__Ou` five times (0x8235369C / 0x823536FC / 0x82353714 /
+// 0x82353754 / 0x8235377C) and null-checks the first result against the assert string
+// "lpOutput->GetGameActionQueue()" (BrnChallengeManager.cpp:0x2B1) -- that truncated symbol is
+// 0x8231D4B8, the write-lock game-action-queue accessor, and the member it returns is this+0x04.
+// The host split exists only because GameStateModuleIO::GameActionQueue is a forward-declared
+// incomplete type at the ChallengeManager call sites, which therefore cannot AddEvent through it;
+// this twin hands back the same member as the complete VariableEventQueue<13312,16>. Same member,
+// same write lock, same X360 address -- so the two must never diverge.
+CgsModule::VariableEventQueue<13312, 16>* OutputBuffer::GetGuiOutputQueue()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return reinterpret_cast<CgsModule::VariableEventQueue<13312, 16>*>(&mGameActionQueueStorage);
+}
+
+// X360 0x8231D800 (exported unnamed as sub_8231D800) - write-lock accessor for the
+// GameState->Network interface (this+0x4190 == 16784). [challenge-manager mount 2026-09-07]
+//
+// RECOVERED IDENTITY, the same route GetGameActionQueue() const / GetTriggerQueryInputInterface()
+// const were recovered by: the body is the "Not locked for writing\n" assert with
+// __FILE__/__LINE__ = BrnGameStateModuleIO.h:290 followed by `addi r3, r28, 0x4190` and nothing
+// else. Its caller ChallengeManager::WriteDataToOutput @0x82346CE8 supplies the NAME -- the very
+// next assert string is "lpOutput->GetGameStateToNetworkInterface()" (BrnChallengeManager.cpp:0x6FB)
+// on that call's own result -- and OutputBuffer::Construct's console list supplies the type
+// (`GameStateToNetworkInterface::Clear(this + 16784)`).
+//
+// ⚠️ Storage is HOST-width (544), not the console's 540-byte span -- see the ⚠️ note on the
+// member in the header. The static_assert below is what makes that claim self-checking.
+BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface* OutputBuffer::GetGameStateToNetworkInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    static_assert(sizeof(BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface)
+                      <= KI_GAME_STATE_TO_NETWORK_INTERFACE_SEAT_SIZE,
+                  "GameStateToNetworkInterface must fit the OutputBuffer's +0x4190 seat");
+    return reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface*>(
+               &mGameStateToNetworkInterfaceStorage);
 }
 
 // X360 0x8231D8A8 - write-lock accessor for the game-state-to-GUI interface (this+0x4450).

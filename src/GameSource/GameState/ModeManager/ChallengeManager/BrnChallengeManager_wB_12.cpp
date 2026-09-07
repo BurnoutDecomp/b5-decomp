@@ -26,10 +26,22 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                       // GameStateModuleIO::EFreeburnChallengeSuccess
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h"
 
-#include "GameSource/GameState/BrnGameStateModuleIO.h"                       // OutputBuffer accessors
-#include "GameSource/GameState/BrnGameStateModule.h"                         // GameStateModule::GetPlayerActiveRaceCarIndex / GetModeManager
-#include "GameSource/GameState/ModeManager/BrnModeManager.h"                 // ModeManager::GetScoringSystem
+// [X][X] INCLUDE ORDER IS LOAD-BEARING HERE, DO NOT RE-SORT.
+// BrnGameStateModuleIO.h reaches BrnTakedownManagerTypes.h (via GameSource/Network/BrnNetworkModuleIO.h),
+// and THAT header declares a second `enum EActiveRaceCarIndex : s32` inside namespace BrnGameState.
+// BrnScoringSystem.h spells its parameters with the UNQUALIFIED name, so if it is parsed after
+// BrnGameStateModuleIO.h its declarations bind to the BrnGameState one and this TU emits calls to
+// `?GetCarData@ScoringSystem@BrnGameState@@QEAAPEAUCarData@2@W4EActiveRaceCarIndex@2@@Z` -- a symbol
+// that does not exist, because every other TU in the build mangles the same method with
+// `W4EActiveRaceCarIndex@@` (the global BurnoutConstants.h enum). That is a LINK error the per-TU
+// compile gate is blind to; it was measured on this exact file. Keeping the ScoringSystem /
+// ModeManager / GameStateModule headers AHEAD of the IO header pins the global binding.
+// (The real cure is global-qualifying the name in BrnScoringSystem.h, the way BrnGameStateModuleIO.h:672
+// already does for its own members -- that header is not this pass's to edit.)
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"       // ScoringSystem::GetCarData
+#include "GameSource/GameState/ModeManager/BrnModeManager.h"                 // ModeManager::GetScoringSystem
+#include "GameSource/GameState/BrnGameStateModule.h"                         // GameStateModule::GetPlayerActiveRaceCarIndex / GetModeManager
+#include "GameSource/GameState/BrnGameStateModuleIO.h"                       // OutputBuffer accessors
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h" // GameStateToNetworkInterface::SetPlayerInFreeburnChallenge
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"            // CgsModule::VariableEventQueue<13312,16>::AddEvent / Event
 

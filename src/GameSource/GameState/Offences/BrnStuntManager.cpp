@@ -1227,33 +1227,41 @@ void StuntManager::CheckForTrophyUnlocks(GameStateModuleIO::OnStuntElementComple
                     "I dont know what this stunt type is! Someone has added a new one without thinking about the trophies! What scum!\n",
                     KAC_FILE, 795);
                 CgsDev::Assert::EndAssert();
-                // X360 falls through to CheckForSpecialCarUnlocks then returns.
-                // [gateui] PARKED CALL -- see the block below (same symbol, same reason).
+                // X360 0x8239941C..0x82399428: the unknown-type arm still runs the special-car
+                // check (`lwz r3, 0x5E8(r29) ; bl CheckForSpecialCarUnlocks`) and then returns,
+                // skipping OnTrophyUnlock -- there is no trophy id to award.
+                mpProgressionManager->CheckForSpecialCarUnlocks();
                 return;
             }
             liTrophyId = 1;         // BILLBOARD
         }
 
-        // ⚠️ [gateui] PARKED CALLS, NOT FABRICATED -- the ModeManager::HandleWorldStunt treatment
-        // (StuntManager_gUI_00.cpp :: ProcessStuntElement, step 6), applied for the same measured
-        // reason. The console runs, in this order:
-        //     mpProgressionManager->OnTrophyUnlock(liTrophyId);            // X360 0x82389740
-        //     mpProgressionManager->CheckForSpecialCarUnlocks();           // X360 0x82396058
-        // Owner `deps` PARKED both this wave with a measured blocker list, written into the
-        // declarations at BrnProgressionManager.h (`⛔ [gateui] PARKED 2026-08-20, NOT bodied`):
-        //     OnTrophyUnlock            needs ProgressionManager::UnlockCarFromTrophy @0x8237B0E8
-        //                               and an owning header for BrnProgression::ProgressionData's
-        //                               trophy table (+64 base / +68 count, 16-byte records)
-        //     CheckForSpecialCarUnlocks needs ProgressionManager::ComputeCompletionPercentage
-        //                               @0x8238A198 (320 insns) and
-        //                               ProgressionManager::UnlockSpecialCars @0x8237AF38 (106 insns)
-        // NEITHER symbol has a body anywhere in b5-decomp/src and no link stub stands in, so
-        // calling them is a hard LNK2019 that blocks the ENTIRE gsm mount -- and with it every
-        // `[UI-gate]` line this wave exists to print. Both are trophy/car-unlock side effects that
-        // run AFTER the action-58 record is fully built (CheckForTrophyUnlocks is handed a
-        // finished OnStuntElementCompleteAction and writes none of its five fields), so parking
-        // them costs the HUD popup nothing. Land the calls the moment either body does.
-        (void)liTrophyId;
+        // The console's two calls, in the console's order. X360 0x82399440..0x8239944C:
+        //     lwz r3, 0x5E8(r29) ; bl OnTrophyUnlock            (r3 = mpProgressionManager,
+        //                                                        r4 = the trophy id above)
+        //     lwz r3, 0x5E8(r29) ; bl CheckForSpecialCarUnlocks (this only -- no argument)
+        // mpProgressionManager is the +0x5E8 member the asm reloads before each branch.
+        //
+        // ⭐ UN-PARKED 2026-09-07. The 2026-08-20 park here claimed neither symbol had a body
+        // anywhere in b5-decomp/src (a hard LNK2019). Both do now, and so does everything they
+        // reach: ProgressionManager::OnTrophyUnlock (BrnProgressionManager_Unlocks.cpp:206) and
+        // its UnlockCarFromTrophy (:77), ProgressionManager::CheckForSpecialCarUnlocks
+        // (BrnProgressionManager_Completion.cpp:405) and its ComputeCompletionPercentage (:254)
+        // + UnlockSpecialCars (BrnProgressionManager_Unlocks.cpp:123). Both partfiles are
+        // mounted in tools/build/build_game_exe.bat.
+        mpProgressionManager->OnTrophyUnlock(liTrophyId);        // X360 0x82389740
+        mpProgressionManager->CheckForSpecialCarUnlocks();       // X360 0x82396058
+
+        // [DIAG] NOT IN THE X360 BINARY. Same env guard + first-N budget as this TU's other
+        // rungs: the one witness that the trophy-car path actually ran for a completed set.
+        static s32 siTrophyUnlockDiagCount = 0;
+        if (UIGateDiagFirstN(&siTrophyUnlockDiagCount))
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[UI-gate] trophy unlock: stuntType=" << static_cast<s32>(lpAction->meStuntElementType)
+                << " trophyId=" << liTrophyId
+                << " count=" << lpAction->miCurrentCount << "/" << lpAction->miTotalCount << "\n";
+        }
     }
 }
 

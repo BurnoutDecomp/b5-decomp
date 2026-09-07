@@ -291,7 +291,15 @@ namespace BrnGameState
         void RemoteEndChallenge(TGameActionQueue* lpActionQueue, EChallengeStatus leChallengeStatus);
 
         // ---------------- queries (DWARF :189-:206) ----------------
-        bool IsChallengeActive() const;    // DWARF :189 (not in this TU's X360 ledger)
+        // DWARF :189. NOT a standalone X360 function -- the compiler inlined it at every call site,
+        // which is also how its body is known: EndChallenge @0x8234DE30 fires the assert whose text
+        // is the source expression ("IsChallengeActive()") straight off `lwz r11,0xE08(r3); cmpwi 0`,
+        // i.e. the status word compared against NONE. Defined inline here for the same reason the
+        // console has no out-of-line copy.
+        bool IsChallengeActive() const
+        {
+            return meChallengeManagerStatus != E_CHALLENGE_MANAGER_STATUS_NONE;
+        }
         bool IsChallengeRunning() const;   // DWARF :193 (not in this TU's X360 ledger)
         // X360 0x82355FA8 (DWARF :196). Style of the active challenge, or NONE unless RUNNING.
         BrnResource::ChallengeListEntry::EFreeburnChallengeStyle GetChallengeStyle() const;

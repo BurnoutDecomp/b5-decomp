@@ -570,15 +570,29 @@ PropEntityModule::GenerateDispatchLists(
     DispatchFrame* lpDispatchFrame = lpInput->GetDispatchFrame();
     ShadowMap*     lpShadowMap     = lpInput->GetShadowMap();
 
-    // @0x822FB59C / @0x822FB5D4 (cpp:2551 / 2554).
+    // @0x822FB59C / @0x822FB5D4 (cpp:2551 / 2554). The console fires two NON-GATING asserts
+    // here and falls through either way: "Invalid (NULL) Corona Submission Interface" at
+    // BrnPropEntityModule.cpp:2551 (0x9F7) and "lpShadowMap" at :2554 (0x9FA). There is no
+    // console assert on the dispatch frame.
     //
-    // ⭐ DEGRADED TO A LOG-ONCE GATE 2026-08-12 (conductor). The console assert is faithful
-    // and stays faithful in spirit -- but on THIS tree the corona submission interface is
-    // NULL BY KNOWN DESIGN, not by accident: its only writer is
-    // WorldModule::BridgeWorldModuleToEntityModules_Render, which is still an inert boot gate
-    // (parked with reason -- the shipped signature has no `this` and no shadow-map source, and
-    // its body is a hole in the IDA export). So this condition is guaranteed false on every
-    // frame that renders props.
+    // ⭐ DEGRADED TO A LOG-ONCE GATE 2026-08-12 (conductor); PREMISE CORRECTED 2026-09-07.
+    // The corona seat really is NULL on every frame this build renders props, but NOT for the
+    // reason this note used to give. WorldModule::BridgeWorldModuleToEntityModules_Render is
+    // BODIED (World/Bridges/WorldBridgeToEntityModules.cpp:273) and MOUNTED, and it does seed
+    // all three prop-buffer seats -- dispatch frame, shadow map, corona interface -- at :299-302.
+    // What it does not have is a LIVE CALLER: both of its call sites (BrnWorldModule.cpp:4093
+    // and :4447) sit inside WorldModule::GenerateDispatchLists @0x827D1CE8
+    // (BrnWorldModule.cpp:3871), which nothing on this build calls -- BrnGameModule::DoDispatch
+    // drives the PC-local WorldModule::GenerateDispatchListsBringUp (BrnWorldModule.cpp:5319)
+    // instead. That bring-up producer seeds this buffer ITSELF, inline, and seeds only two of
+    // the three seats (SetDispatchFrame + SetShadowMap at :7203-7206 for the main view and
+    // :7453-7456 per env-map face). It never touches SetCoronaSubmissionInterface.
+    //
+    // ⛔ SO THE RESTORE CONDITION IS THE CALLER, NOT THE BRIDGE: restore the console's hard
+    // assert when the real WorldModule::GenerateDispatchLists becomes the live producer (or
+    // when the bring-up producer starts seeding the corona seat) -- at that point a NULL here
+    // really is a bug worth stopping for. Merely bodying/mounting the bridge, which has already
+    // happened, changes nothing on the live path.
     //
     // MEASURED: as a hard assert it fired 281 times in a single ~2-minute run -- the single
     // largest source in the log -- halting the game each time and making the build unplayable.
@@ -586,8 +600,6 @@ PropEntityModule::GenerateDispatchLists(
     // once per frame. Same treatment the project already gave DebugComponent::Update and the
     // contact-generation liIndex tripwire when they began firing per-entity-per-frame.
     //
-    // ⛔ RESTORE THE HARD ASSERT when that bridge is bodied -- at which point a NULL here
-    // really would be a bug worth stopping for.
     if ( lpInput->GetCoronaSubmissionInterface() == 0 )
     {
         // (gpDebugPrint guard added: every other log site in this file checks it, and this
@@ -598,7 +610,10 @@ PropEntityModule::GenerateDispatchLists(
             s_bLoggedNullCorona = true;
             *CgsDev::Log::gpDebugPrint
                 << "[props-gdl] corona submission interface is NULL -- prop coronas skipped "
-                   "(BridgeWorldModuleToEntityModules_Render still gated) [FLAG PC boot gate]\n";
+                   "(the live producer GenerateDispatchListsBringUp seeds only the dispatch "
+                   "frame and shadow map; the seat's writer "
+                   "BridgeWorldModuleToEntityModules_Render has no live caller) "
+                   "[FLAG PC bring-up gate]\n";
         }
     }
     CGS_ASSERT( lpShadowMap != 0, "lpShadowMap" );
@@ -609,13 +624,18 @@ PropEntityModule::GenerateDispatchLists(
                                      lpShadowMap->IsUsingZOnlyRenderingPath();
 
     // ---- [FLAG PC bring-up gate] NOT IN THE CONSOLE -------------------------
-    // ⛔ DELETE-WHEN WorldModule::BridgeWorldModuleToEntityModules_Render is bodied.
-    // On the console this buffer is always seeded before the call. In this tree it is NOT:
-    // its only writer is BridgeWorldModuleToEntityModules_Render, still an inert boot gate
-    // at WorldLinkStubs.cpp:1690, so the frame / shadow map / corona interface are all
-    // still zero. Without this guard the very first frame that reaches this function
-    // null-derefs in RenderModel's DispatchFrame::GetList. The two asserts above are the
-    // faithful tripwires; this is the bring-up safety net under them.
+    // ⛔ DELETE-WHEN the real WorldModule::GenerateDispatchLists @0x827D1CE8 becomes the live
+    // producer. On the console this buffer is always seeded before the call, by
+    // BridgeWorldModuleToEntityModules_Render inside that producer. On this build the live
+    // producer is WorldModule::GenerateDispatchListsBringUp (BrnWorldModule.cpp:5319), which
+    // seeds the two seats this guard tests directly on its own file-static stand-in buffer
+    // (:7203-7206 main view, :7453-7456 env-map faces) -- so in the ordinary case the guard is
+    // already satisfied and never trips. It stays because that seeding is bring-up code on a
+    // stand-in buffer, not the console contract: any path that reaches this function without
+    // going through those two sites (a new caller, a reordered bring-up, the env-map arm
+    // dropping out) hands us a zeroed buffer, and without the guard the first such frame
+    // null-derefs in RenderModel's DispatchFrame::GetList. The asserts above are the faithful
+    // console tripwires; this is the bring-up safety net under them.
     if ( lpDispatchFrame == 0 || lpShadowMap == 0 )
     {
         static bool sbLoggedUnseeded = false;
@@ -626,8 +646,9 @@ PropEntityModule::GenerateDispatchLists(
                 << "[props-gdl] BLOCKED: the prop dispatch input is unseeded (frame="
                 << ( lpDispatchFrame != 0 ? 1 : 0 ) << " shadowMap="
                 << ( lpShadowMap != 0 ? 1 : 0 )
-                << "). WorldModule::BridgeWorldModuleToEntityModules_Render is still an "
-                   "inert stub -- no prop can be drawn until it seeds this buffer.\n";
+                << "). Whoever called PropEntityModule::GenerateDispatchLists did not seed "
+                   "this buffer -- neither GenerateDispatchListsBringUp's inline seeding nor "
+                   "BridgeWorldModuleToEntityModules_Render ran ahead of it.\n";
         }
         lpInput->UnlockForRead();
         return;

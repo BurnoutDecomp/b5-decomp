@@ -62,7 +62,14 @@
 //   ONLINE ARM DEFERRED  : the online-stunt network-player-results sweep, UpdatePaybackTakedowns,
 //                          UpdateOnlineStuntModeScorePreWorld, StuntModeScoringOnline::Update,
 //                          the mode-15 BurnoutSkillzManager tick, the online-stunt SetPlayerStuntScore.
-//   DIVERGENCE           : ChallengeManager::PreWorldUpdate / ::PostWorldUpdate (not embedded).
+//   [x] ChallengeManager::PostWorldUpdate -- UN-PARKED 2026-09-07 (the mount landed; the member is
+//                          embedded at BrnModeManager.h +28160 and the 27 TUs are mounted).
+//   [X] ChallengeManager::PreWorldUpdate  -- STILL PARKED, and it is the ONLY one of the five
+//                          ChallengeManager call sites that is. Two blockers, spelled out in full
+//                          at the site itself (search "THE ONE CALL OF THE FIVE"): (1) this body is
+//                          LIVE while ModeManager::Construct is not, so the call would tick an
+//                          unconstructed manager every frame; (2) three of its seven arguments have
+//                          no named accessor in this tree.
 //   PARKED (conductor #4): HUDMessageLogic::PreWorldUpdate / ::PostWorldUpdate.
 //   PARKED (header)      : every site whose declaration this frozen tree does not carry; each one
 //                          is filed as a numbered header_request in agent 7a's report.
@@ -81,6 +88,7 @@
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"        // TrainingManager::IsInPictureParadise (gsm+0xB644)
 #include "GameSource/GameState/CarSelect/BrnCarSelectManager.h"             // CarSelectManager::GetJunkyardId      (gsm+0x2CDC0)
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h"   // StuntModeScoring::PreWorldUpdate / ::Update
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h" // VehicleManagerOutputInterface::RaceCarCrashEventQueue (the REAL crash-queue type; header_request #6 stand-in cast)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"            // VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // PerfMonCpu::Start/StopMonitor
@@ -544,17 +552,66 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
         }
     }
 
-    // [X][X] [stuntrace] DIVERGENCE: ChallengeManager NOT embedded/mounted (29 TUs, ~35 unresolved
-    // externals; freeburn challenges are off the offline-event path -- header_grow_spec section 5).
-    // Console 0x82353C80..0x82353CC4:
+    // ==========================================================================================
+    // [X][X] THE ONE CALL OF THE FIVE THAT IS STILL PARKED -- and the LAST thing standing between
+    // this build and freeburn challenges actually running. Everything else landed 2026-09-07: the
+    // member IS embedded (BrnModeManager.h at +28160), the 27 ChallengeManager TUs are mounted,
+    // all twelve link-closure symbols are bodied, and Construct / Prepare / ProcessEvent /
+    // PostWorldUpdate are all made.
+    //
+    // Console 0x82353C80..0x82353CC4, register-attested (r3=this+0x6E00, r4=r19, r5, r6, r7=r15,
+    // r8=r30, r9=r16):
     //   ChallengeManager::PreWorldUpdate(this + 28160,
-    //       &mTimerStatusInterface,
-    //       *(lpPreWorldInputBuffer->GetNetworkToGameStateInterface() + 0x2434),
-    //       lpPreWorldInputBuffer->GetNetworkToGameStateInterface() + 0x1B20,
-    //       lpActiveRaceCarOutput,
-    //       lpPreWorldInputBuffer->GetPlayerStatusInterface()-><byte @ +0x9EC>,
-    //       lpOutputBuffer);
-    // Behaviour lost: freeburn challenges do not tick. Re-wire when the ChallengeManager mount lands.
+    //       &mTimerStatusInterface,                                          // r19 == this+0x6DA0
+    //       *(lpPreWorldInputBuffer->GetNetworkToGameStateInterface() + 0x2434),  // liFramesSinceNetworkStart
+    //       lpPreWorldInputBuffer->GetNetworkToGameStateInterface() + 0x1B20,     // the completed-challenge status queue
+    //       lpActiveRaceCarOutput,                                           // r15
+    //       lpPreWorldInputBuffer->GetPlayerStatusInterface()-><byte @ +0x9EC>,   // lbIsOnline
+    //       lpOutputBuffer);                                                 // r16
+    //
+    // ⛔ BLOCKER 1 -- ORDER, AND IT IS THE DANGEROUS ONE. This body IS LIVE: GameStateModule::
+    // PreWorldUpdateStuntBringUp calls ModeManager::PreWorldUpdate every unpaused frame
+    // (GameStateModule_gUI_00.cpp:1151). ModeManager::Construct is NOT -- it has no caller at all;
+    // ConstructInterModeStateBringUp (ModeManager_gUI_00.cpp) is the one armed construction seam,
+    // and it is a deliberate SUBSET that does not construct the ChallengeManager. So making this
+    // call today would tick a NEVER-CONSTRUCTED ChallengeManager on every frame from boot -- null
+    // mpGameStateModule / mpVehicleList / mpRoadRulesManager and unbuilt object pools -- which is a
+    // crash, not a divergence. And the construct seam cannot simply be armed: ModeManager::Construct
+    // needs a RoadRulesManager to forward, and `GameStateModule::mRoadRulesManager` DOES NOT EXIST
+    // in this tree yet (BrnGameStateModule.h:1492 records the DWARF declaration and its absence).
+    //   ⇒ UN-PARK ONLY AFTER ChallengeManager::Construct actually runs -- i.e. once
+    //     GameStateModule grows mRoadRulesManager and BrnGameStateModule.cpp:180 swaps
+    //     ConstructInterModeStateBringUp for the real ModeManager::Construct.
+    //
+    // ⛔ BLOCKER 2 -- REACH. Three of the seven arguments have no named accessor in this tree, and
+    // all three live in headers this pass does not own (filed as header_requests, NOT invented):
+    //   (a) GameStateModuleIO::NetworkToGameStateInterface is still the 16-byte placeholder
+    //       `u8 maOpaque[16]` (BrnGameStateModuleIO.h:333) standing in for the console's
+    //       0x7B0..0x2CC8 object. It needs TWO inline accessors at X360-attested offsets:
+    //         +0x1B20 (6944) -> const CgsModule::BaseEventQueue<GameStateModuleIO::CompletedFburnChallengesData>*
+    //         +0x2434 (9268) -> s32   (the frames-since-network-start counter)
+    //       Both offsets are CROSS-CONFIRMED from the producer side: BrnNetworkModuleIO.cpp's
+    //       PostSimulationInputBuffer::operator= @0x82593158 names its embedded
+    //       "GameStateModuleIO::CompletedFburnChallengesData queue @ +6944" and its "trailing
+    //       scalar word @ +9268" -- the same two offsets, in the same object, from the module that
+    //       fills it. Growing the placeholder is layout-inert here: maPadToPlayerStatus is computed
+    //       as `0x2CC8 - (0x7B0 + sizeof(NetworkToGameStateInterface))`, so it absorbs the growth
+    //       and mPlayerStatusInterface stays pinned at +0x2CC8.
+    //   (b) BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface has no member at +0x9EC
+    //       (2540). Its modelled run ends at mbLocalPlayerIsHost (+2536) and the header calls
+    //       2537..2543 "trailing pad". The console reads a BOOL at +2540 there and hands it to this
+    //       call as lbIsOnline -- an X360 additive grow the PS3 DWARF does not list (the same shape
+    //       as ChallengeListEntry::muContentBoughtType @0xD6). Adding
+    //         u8 mauPad2537[3]; bool <the +2540 flag>;
+    //       after mbLocalPlayerIsHost is sizeof-NEUTRAL -- host sizeof is already 2544 (measured),
+    //       because NetworkPlayerStats forces 8-byte alignment -- so it moves nothing, in this
+    //       buffer or in BrnNetworkModuleIO's OutputBuffer copy. But
+    //       BrnNetworkModuleInGamePlayerStatusInterface.h is not this pass's file.
+    // Behaviour lost meanwhile: freeburn challenges do not tick -- no timer, no per-action scoring,
+    // no arbitration, and WriteDataToOutput never posts the GUI update action, so a challenge that
+    // ProcessEvent starts would hang. (ProcessEvent is inert today for the same reason as the other
+    // three: ModeManager::ProcessEvent has no caller either.)
+    // ==========================================================================================
 
     // ------------------------------------------------------------------------------------------
     // The three checkpoint/finish transmitters (agent 7b's bodies -- CALLED here).
@@ -1039,12 +1096,34 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
             }
         }
 
-        // [X][X] [stuntrace] DIVERGENCE: ChallengeManager NOT embedded/mounted. Console 0x8234AEE8:
+        // [x] UN-PARKED 2026-09-07 (ChallengeManager mount). Console 0x8234AEE8:
         //   ChallengeManager::PostWorldUpdate(this + 28160,
         //       lpPostWorldInputBuffer->GetRaceCarCrashEventQueue(),
         //       &lStuntScoreInfo,
         //       &mTimerStatusInterface);
-        // Behaviour lost: freeburn challenges never see the frame's stunt score.
+        // Behaviour restored: freeburn challenges see the frame's crash events and stunt score.
+        //
+        // [!] TYPE STAND-IN (header_request #6) -- THE IDENTICAL FIX ProcessPlayerCrashes ALREADY
+        // MAKES, and whose own banner (BrnModeManager_TransmitCrash.cpp:425) says in as many words
+        // "Agent 7a's PostWorldUpdate needs the identical fix". PostWorldInputBuffer::
+        // GetRaceCarCrashEventQueue() (X360 0x8231D170, read-locked this+0x10) still returns the
+        // named-opaque placeholder `GameStateModuleIO::RaceCarCrashEventQueue { u8 maOpaque[0x210]; }`,
+        // while the real type IS homed -- BrnScoringSystemEventQueues.h completes
+        // `VehicleManagerOutputInterface::RaceCarCrashEventQueue : public EventQueue<RaceCarCrashEvent,8>`,
+        // which is exactly what ChallengeManager::PostWorldUpdate (and ScoringSystem::UpdateCrashes)
+        // take. The cast is a TYPE re-home of the same bytes at the same offset -- no fabricated
+        // offset, no invented member -- and it disappears the moment the accessor is retyped.
+        //
+        // [!] ORDER NOTE, and it is why this call is SAFE while the PreWorldUpdate one is not:
+        // ModeManager::PostWorldUpdate has NO call site on this build (its legs are lifted into
+        // GameStateModule::PostWorldUpdateStuntBringUp -- see the ARMING STATE banner at the top of
+        // this file), so nothing here can reach an unconstructed mChallengeManager. Read the parked
+        // PreWorldUpdate banner above before assuming the same of that one.
+        mChallengeManager.PostWorldUpdate(
+            reinterpret_cast<const VehicleManagerOutputInterface::RaceCarCrashEventQueue*>(
+                lpPostWorldInputBuffer->GetRaceCarCrashEventQueue()),
+            &lStuntScoreInfo,
+            &mTimerStatusInterface);
 
         if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
         {

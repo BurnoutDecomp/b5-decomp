@@ -714,8 +714,31 @@ namespace GameStateModuleIO
         u8  mResourceRequestInterfaceStorage[0x4024 - 0x3414];            // ResourceRequestInterface     @ +0x3414 (RequestInterface<3072>, 3088B -> +0x4024 = 16420)
         u8  mTimerRequestInterfaceStorage[0x4034 - 0x4024];               // TimerRequestInterface        @ +16420 (16B)
         u8  mFrameRateTypeRequestInterfaceStorage[0x4040 - 0x4034];       // FrameRateTypeRequestInterface@ +16436 (12B)
-        u8  mTakedownEventOutputQueueStorage[0x43AC - 0x4040];            // TakedownEventOutputQueue     @ +0x4040 (16448)
-        GameStateToControllerInterface mGameStateToControllerInterface;   // @ +0x43AC (17324, named opaque)
+        // ⭐ [challenge-manager mount 2026-09-07] SPLIT. This used to be ONE opaque span
+        //     u8 mTakedownEventOutputQueueStorage[0x43AC - 0x4040];   // 876 bytes
+        // and the label was only half right: OutputBuffer::Construct's own console list (see the
+        // body in the .cpp) reads `TakedownEvent<..,8>::Construct(this + 16448)` AND
+        // `GameStateToNetworkInterface::Clear(this + 16784)`, i.e. TWO objects share that span.
+        // 16784 == 0x4190 is confirmed independently by the accessor itself: X360 0x8231D800
+        // (exported unnamed as sub_8231D800) asserts "Not locked for writing" with
+        // __FILE__/__LINE__ = BrnGameStateModuleIO.h:290 and then returns `addi r3, r28, 0x4190`.
+        // Its one caller in the ChallengeManager mount, WriteDataToOutput @0x82346CE8, names it in
+        // the very next assert string: "lpOutput->GetGameStateToNetworkInterface()".
+        //
+        // ⚠️ HOST WIDTH, MEASURED on this x64 build: sizeof(EventQueue<TakedownEvent,8>) == 336,
+        // an EXACT fit for the console's 16448..16784; sizeof(GameStateToNetworkInterface) == 544
+        // against the console's 540 (16784..17324) -- the embedded EventQueue<DirtyTrickEvent,28>
+        // head widens on LLP64. The seat is therefore sized at the HOST width, not the console's,
+        // for the same reason mTriggerManagementInputInterface / mTriggerQueryInputInterface are
+        // (they overshoot by 4 too): everything after slides 4 bytes past its console offset, which
+        // is inert because every access to this buffer is BY NAMED MEMBER and the buffer is
+        // heap-allocated at sizeof. Keeping the console's 540 would be the bug -- a 544-byte object
+        // viewed through a 540-byte blob, overlapping mGameStateToControllerInterface. The .cpp
+        // carries the static_assert that keeps that claim honest.
+        static const s32 KI_GAME_STATE_TO_NETWORK_INTERFACE_SEAT_SIZE = 544; // console span is 0x43AC - 0x4190 == 540
+        u8  mTakedownEventOutputQueueStorage[0x4190 - 0x4040];            // TakedownEventOutputQueue     @ +0x4040 (16448, 336)
+        u8  mGameStateToNetworkInterfaceStorage[KI_GAME_STATE_TO_NETWORK_INTERFACE_SEAT_SIZE]; // GameStateToNetworkInterface @ console +0x4190 (16784)
+        GameStateToControllerInterface mGameStateToControllerInterface;   // console +0x43AC (17324, named opaque)
         u8  maPadToGameStateToGui[0x4450 - (0x43AC + sizeof(GameStateToControllerInterface))]; // -> +0x4450
         // ⭐ 2026-08-27 (stunt-races frontier round 2, defect D2): was
         //     u8 mGameStateToGuiInterfaceStorage[0x4840 - 0x4450];

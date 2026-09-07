@@ -8,7 +8,7 @@
 // ============================================================================
 // BrnDirector::Arbitrator -- reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity)
 //   Construct               @0x82254E90   [reconstructed]
-//   Update                  @0x8226ADA0   [DECLARATION-ONLY + FLAG -- see header / below]
+//   Update                  @0x8226ADA0   [reconstructed; per-arm GATEs noted inline]
 //   UpdateCameraCycleControl@0x821F5D28   [reconstructed]
 //   Destruct                (no asm in this TU's function set)   [DECLARATION-ONLY]
 //   UpdateDebugCameras      (no asm in this TU's function set)   [DECLARATION-ONLY]
@@ -17,10 +17,10 @@
 // state container, the shared-camera container, the three special-cam states, the
 // final-elite + debug camera handles) and seeds the outer state machine to PREPARE.
 // UpdateCameraCycleControl runs the "hold to slow-mo / tap to cycle" normal-camera control.
-// Update -- the outer state-select spine -- is documented but left declaration-only (it
-// dispatches across a not-yet-homed camera/effect/behaviour-manager API surface; writing a
-// body would require fabricating those signatures + the trimmed-DWARF flag offsets, which the
-// reconstruction rules forbid).
+// Update -- the outer state-select spine -- is bodied; the handful of arms that still read
+// bytes inside the un-homed MainDirector GameState / PlayerCrashInfo blocks, or that would
+// dispatch a vtable through a not-yet-re-homed behaviour fork, carry their own inline GATE
+// note with its consequence and DELETE-when rather than a fabricated condition.
 //
 // All member access is BY NAME (the project's x64-gate rule); the X360 offsets quoted in the
 // header are provenance only.
@@ -200,18 +200,57 @@ namespace BrnDirector
         // ---- 0: PREPARE ---------------------------------------------------------------
         case E_STATE_PREPARE:
             mSharedCameraContainer.Prepare(lrSharedInfo);
-            // ⚠️ GATE: the two debug-camera allocations
-            //     BehaviourManager::NewBehaviour<BehaviourDebugOrbitPlayer>(
-            //         *info.mpBehaviourManager, mDebugCameraOrbitPlayer, 0, 0, 1 );
-            //     BehaviourManager::NewBehaviour<BehaviourDebugFlyWorld>( ... );
-            //     mDebugCameraOrbitPlayer.SetUpdatesDuringPause(true);
-            //     mDebugCameraFlyWorld.SetUpdatesDuringPause(true);
-            //   -- NewBehaviour<> is declaration-only behind the un-homed Camera::Behaviour
-            //   base (see the banner). CONSEQUENCE: the fly-world / orbit-player debug cameras
-            //   never exist; UpdateDebugCameras has nothing to drive and IsDebugCamera() stays
-            //   false. Nothing in the shipping path uses them.
-            //   DELETE-WHEN: Camera::Behaviour + BehaviourHelper::Prepare are homed and
-            //   BehaviourManager::NewBehaviour<> is bodied.
+            // ⚠️ GATE: the two debug-camera allocations. The console's PREPARE arm is
+            // (asm 0x8226AE4C..0x8226AEA4, r3 = *(info + 0x18) == mpBehaviourManager,
+            //  r4 = the handle, r5 = r6 = 0, r7 = 1):
+            //     lrSharedInfo.mpBehaviourManager->NewBehaviour<BehaviourDebugOrbitPlayer>(
+            //         mDebugCameraOrbitPlayer, 0, 0, 1);          // handle at arb +0x00
+            //     lrSharedInfo.mpBehaviourManager->NewBehaviour<BehaviourDebugFlyWorld>(
+            //         mDebugCameraFlyWorld, 0, 0, 1);             // handle at arb +0x14
+            //     mDebugCameraOrbitPlayer.SetUpdatesDuringPause(true);   // sub_822139F8(h, 1)
+            //     mDebugCameraFlyWorld.SetUpdatesDuringPause(true);      // sub_82213B30(h, 1)
+            // (both sub_ are BehaviourHandle<T>::SetUpdatesDuringPause -- each asserts
+            //  "IsAllocated()" against BrnBehaviourManager.h:676 and then forwards
+            //  handle+0x0C / handle+0x04 to BehaviourManager::SetBehaviourUpdatesDuringPause.)
+            //
+            // ⛔ THE OLD BLOCKER IS RETIRED AND THE REAL ONE IS DIFFERENT. This note used to
+            // read "NewBehaviour<> is declaration-only behind the un-homed Camera::Behaviour
+            // base". That is no longer true: Camera::Behaviour is homed
+            // (Camera/Behaviours/Behaviour.h), BehaviourHelper::Prepare is bodied
+            // (BrnBehaviourManager.cpp @0x82255F48), and NewBehaviour<TBehaviour> has a real
+            // out-of-line body (BrnBehaviourManager.h). What actually blocks the two calls is
+            // the ALLOCATION TARGETS:
+            //
+            //   BehaviourDebugOrbitPlayer and BehaviourDebugFlyWorld are still PRE-BASE FORKS.
+            //   Neither derives from Camera::Behaviour -- each declares its own five virtuals
+            //   (Construct / Prepare / Update / SetupTweaker / GetName) plus a hand-rolled
+            //   `void* mpVTable` member. But BehaviourHelper::GetBehaviour() reaches a pooled
+            //   object through `static_cast<Behaviour*>(voidHandle.Get())`, so every manager
+            //   pass dispatches Camera::Behaviour's vtable INDICES against a class that has no
+            //   relationship to it:
+            //     base index 1 (Construct)  ->  the fork's index 1 == Prepare(SharedPrepareRelease&)
+            //     base index 3 (Update)     ->  the fork's index 3 == SetupTweaker(Tweaker&)
+            //     base index 4 (PostColl.)  ->  the fork's index 4 == GetName()
+            //   (Camera::Behaviour declares `virtual ~Behaviour()` first, so its slots sit one
+            //    past the forks'; the forks declare no virtual destructor at all.)
+            //   The very first mis-dispatch is inside NewBehaviour itself -- BehaviourHelper::
+            //   Prepare calls GetBehaviour()->Construct() the moment the slot is taken -- so
+            //   writing the two calls today would land a type-confused virtual call with an
+            //   uninitialised argument register on the PREPARE frame, for every player, not
+            //   just in a dev build. The type erasure means the compiler cannot see it.
+            //
+            //   CONSEQUENCE (unchanged): the fly-world / orbit-player debug cameras never
+            //   exist; UpdateDebugCameras has nothing to drive and IsDebugCamera() stays false.
+            //   Nothing in the shipping path uses them, and DebugCameraFlyWorldLookAt's
+            //   "IsAllocated()" tripwire below is the intended report if a dev tool asks.
+            //   DELETE-WHEN: BehaviourDebugOrbitPlayer and BehaviourDebugFlyWorld are re-homed
+            //   onto the Camera::Behaviour base (`class X : public Behaviour`, hand-rolled
+            //   mpVTable + base-shadow padding dropped, the five virtuals marked `override`) --
+            //   the same fork retirement BehaviourRoadRunner and BehaviourInterpolate already
+            //   had. Then paste the six lines above in, and add
+            //   #include "GameSource/Director/Camera/Behaviours/BrnBehaviourDebugOrbitPlayer.h"
+            //   next to the FlyWorld include at the top of this file (NewBehaviour<T> needs
+            //   both types COMPLETE for AllocateBehaviour<T>'s sizeof pool-select).
             meState = E_STATE_PRE_NORMAL;
             break;
 

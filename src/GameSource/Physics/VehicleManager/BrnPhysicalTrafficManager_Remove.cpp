@@ -12,12 +12,15 @@
 //   DeallocateInternalBuffers      @0x82615A38 ( 53)  .ida-exports HOLE, dumped headless
 //   ComputeTrafficVehicleInertia   @0x825CAF60 (201)
 //   SendCreateRemoveTrafficEvents  @0x825F2088 (990)
-//   PhysicallyUncrashTrafficCar    @0x825F00D8 (140)  -- named gate (body not reconstructed)
+//   PhysicallyUncrashTrafficCar    @0x825F00D8 (140)
 //
 // -------------------------------------------------------------------------------------------------
 // TWO ENTITY-ID SPACES CROSS HERE, AND THE CONSOLE SPLICES A DIFFERENT OWNER BYTE INTO EACH.
 //   * The DEFORMATION model's handling-body id keeps the TRAFFIC owner (2):
 //       `extldi r30, r11, 64,32`   == (u64)entityWord << 32, posted verbatim (0x825F229C).
+//     PhysicallyUncrashTrafficCar builds the SAME word the long way round -- a stack
+//     VolumeInstanceId, SetEntityIDOwner(2) + SetEntityIDEntityIndex(slot) + SetVolumeIndex(0)
+//     (0x825F0254..0x825F0278) -- and it is bit-for-bit that id, owner 2 and all.
 //   * The rw::physics SIMULATION's rigid-body id gets owner 0x0C spliced in:
 //       `clrlwi r11,r11,8 ; oris r11,r11,0xC00 ; sldi 32 ; or lo`   (0x825F2228 / 0x825F2C9C).
 // Both are built from the SAME entity word in the same three instructions apart. Do not unify them.
@@ -45,8 +48,49 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                           // the named gates
 #include "rw/physics/inertia.h"                                                      // rw::physics::Inertia
 
+#include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG witness below)
+
 namespace
 {
+    // DIAG. NOT IN THE X360 BINARY, OFF BY DEFAULT -- the same BRN_TRAFFIC_DIAG switch the sibling
+    // partfiles (BrnPhysicalTrafficManager_CrashResponse.cpp:64) already use. DELETE-WHEN-STABLE.
+    bool TrafficDiagEnabled()
+    {
+        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
+        return sbEnabled;
+    }
+
+    // [T3-uncrash] budget: at most this many witness lines per run, so a soak that removes traffic
+    // every few frames cannot flood the log.
+    const s32 KI_UNCRASH_WITNESS_BUDGET = 24;
+    s32 giUncrashWitnessLinesLeft = KI_UNCRASH_WITNESS_BUDGET;
+
+    // DIAG. NOT IN THE X360 BINARY. The one witness for PhysicallyUncrashTrafficCar below:
+    //   active=0 -- the function was reached with a CRASHED car but mTrafficDeformationModelsActive
+    //               was clear, so the console's own arm did not fire either (the expected line in
+    //               this build -- see that function's banner).
+    //   active=1 -- the arm fired; deactQ/removeQ are the deformation input queue lengths read
+    //               back AFTER the two posts, i.e. proof the events are in the buffer the
+    //               deformation manager drains this same PostSceneUpdate.
+    // DELETE-WHEN-STABLE.
+    void UncrashWitness(u16 lu16Slot, u64 lu64BodyId, bool lbModelActive,
+                        s32 liDeactivateQueueLength, s32 liRemoveQueueLength)
+    {
+        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0
+            || giUncrashWitnessLinesLeft <= 0)
+        {
+            return;
+        }
+        --giUncrashWitnessLinesLeft;
+        *CgsDev::Log::gpDebugPrint
+            << "[T3-uncrash] slot=" << static_cast<s32>(lu16Slot)
+            << " active=" << (lbModelActive ? 1 : 0)
+            << " id=" << lu64BodyId
+            << " deactQ=" << liDeactivateQueueLength
+            << " removeQ=" << liRemoveQueueLength
+            << "\n";
+    }
+
     inline void TrafficRemoveLogOnce(bool& lrbLogged, const char* lpcMessage)
     {
         if (!lrbLogged)
@@ -102,13 +146,131 @@ namespace Vehicle
     }
 
     // =============================================================================================
-    // GATE PhysicalTrafficManager::PhysicallyUncrashTrafficCar @0x825F00D8 (140)
-    //   blocker: body not reconstructed (it posts the DeactivateDeformationModelEvent that tears
-    //   the crashed car's deformation model down). DELETE-WHEN that body lands.
+    // PhysicallyUncrashTrafficCar @0x825F00D8 (140)
+    //   asserts BrnPhysicalTrafficManager.cpp:2434 / :2435, plus the two CgsBitArray.h bounds
+    //   (:203 streamed by IsBitSet, :241 by UnSetBit). DWARF :297; the body hints sit at
+    //   BrnPhysicalTrafficManager.cpp:2432 and name the local `VolumeInstanceId lTrafficBodyID`
+    //   (:2442) along with the exact call set reproduced below.
+    //
+    // THE TEARDOWN HALF OF PhysicallyCrashTrafficCar (@0x825CAC10, bodied in
+    // BrnPhysicalTrafficManager_CrashResponse.cpp:218): it hands the crashed car's deformation
+    // model back to the deformation manager. RemoveTrafficVehicle calls it UNCONDITIONALLY
+    // (below), i.e. on every physical-traffic removal and via RecycleTrafficVehicle.
+    //
+    // MEASURED, AND IT CHANGES WHAT THIS BODY IS WORTH AT RUNTIME: NOTHING IN ARTIST EVER SETS
+    // mTrafficDeformationModelsActive, so its guard below is false on every call and the
+    // two posts never happen on the console either. The bitset is written in exactly four places
+    // in the whole image, and all four ZERO it -- PhysicalTrafficManager::Construct @0x82636CC8
+    // and ::Release @0x825EEA7C and VehicleManager::Destruct @0x8263390C (`addis rX,this,2 ;
+    // addi rX,rX,-0x6778 ; std 0`), plus the UnSetBit at the tail of this function. A repo-wide
+    // sweep of the export set for that addressing form (and for the `0x3311` index form this
+    // function's own IsBitSet uses) returns only those four functions; the create side
+    // (SendCreateRemoveTrafficEvents, CreateTrafficVehicle, ProcessCreateNonArticulatedTraffic,
+    // SetTrafficVehicleCrashing) touches -0x6798/-0x6780/-0x6768/-0x6760/-0x6758 -- used,
+    // potential, added, removed, madeSimple -- and never -0x6778. This is the same
+    // half-disabled shape its sibling PhysicallyCrashTrafficCar has (that one mints the identical
+    // id and then drops it on the floor).
+    // So this body does NOT close a model-slot leak: the traffic deformation models are
+    // actually torn down by SendCreateRemoveTrafficEvents' mRemovedTrafficVehicles drain below,
+    // which posts RemoveDeformationModel for every removed non-simple car and already runs. What
+    // landing this body buys is that the last unreconstructed call in RemoveTrafficVehicle is
+    // gone and the arm is present and correct if a setter ever appears (network/replay paths are
+    // the obvious candidates -- neither is in this build's ledger yet).
+    //
+    // ASM SPINE, 0x825F00D8..0x825F0304:
+    //   0x825F00FC  assert lpDeformationInterface != NULL                             (.cpp:2434)
+    //   0x825F011C  `clrlwi r30,r30,16` -- the parameter really is a u16; assert < 20  (.cpp:2435)
+    //   0x825F014C  GetTrafficVehicle(idx), then `lwz r11,0x20(r3) ; cmpwi cr6,r11,1` -- the
+    //               inlined IsTrafficVehicleCrashed(idx) the DWARF hints name
+    //               (mePhysicalTrafficState == E_TRAFFIC_TYPE_CRASHING). Everything below is
+    //               inside that test; a non-crashed car leaves the function untouched.
+    //   0x825F0218  `srwi r11,r30,6 ; addi r11,r11,0x3311 ; slwi 3 ; ldx r11,r11,r25` -- the
+    //               64-bit word at this+104584 == mTrafficDeformationModelsActive, then the
+    //               `sld ; and` bit test. Second guard: no active model, nothing to tear down.
+    //   0x825F0254  `std r27(0), var_70` + SetEntityIDOwner(&id, 2) + SetEntityIDEntityIndex(&id,
+    //               idx) -- the stack VolumeInstanceId.
+    //   0x825F0278  `clrrdi r31, r11, 8` == SetVolumeIndex(0) (the DWARF lists that call; the
+    //               `or` half folds away because the index is the literal 0).
+    //   0x825F02A0  `stb r27(0), 0x30(r10)` on the second GetTrafficVehicle result == the
+    //               vehicle's mbRammed (+48), cleared with the crash.
+    //   0x825F02A8  `addi r3,r24,0xD40` + the 16-byte stack event {id, flt_82001CC0 == 0.0f,
+    //               -1} + AddEvent == DeactivateDeformationModel(id, 0.0f, ResetType(-1)).
+    //   0x825F02B8  `addi r3,r24,0xC90` + {id} + AddEvent == RemoveDeformationModel(id).
+    //   0x825F02FC  `andc ; stdx` back into this+104584 == UnSetBit(idx) on the same bitset the
+    //               guard read, so the teardown runs once per crashed car.
+    //
+    // THE ID IS THE TRAFFIC-OWNER HANDLING-BODY ID, NOT THE 0x0C SIMULATION ID (see the file
+    // banner): owner byte 2 at bits [56..63], the traffic slot at bits [42..55], volume index 0.
+    // Bit for bit that is `(u64)GetPhysicsEntityId(idx).muValue << 32` -- the very word
+    // SendCreateRemoveTrafficEvents below hands to RemoveDeformationModel, and the word
+    // DeformationManager::ProcessDeactivate/RemoveDeformationModelEvents look up with
+    // FindModelIndexByEntityID. The console spells it through the VolumeInstanceId setters rather
+    // than through GetPhysicsEntityId (those setters are the two `bl`s in the asm, and the DWARF
+    // local is a VolumeInstanceId), so it is spelled that way here too -- identically to the
+    // surviving half of PhysicallyCrashTrafficCar.
+    //
+    // FLAG: IsTrafficVehicleCrashed(u16) const is DWARF-declared on this class
+    // (BrnPhysicalTrafficManager.h:589) but has no X360 symbol and no declaration in the recon
+    // header yet, so the predicate is spelled inline here exactly as the console folds it --
+    // the same treatment the inlined GetFullTrafficPhysics gets in
+    // SendCreateRemoveTrafficEvents below.
     // =============================================================================================
-    void PhysicalTrafficManager::PhysicallyUncrashTrafficCar(u16, Deformation::DeformationInputInterface*)
+    void PhysicalTrafficManager::PhysicallyUncrashTrafficCar(
+            u16 lu16TrafficCarIndex,
+            Deformation::DeformationInputInterface* lpDeformationInterface)
     {
-        BRN_T3_REMOVE_GATE("PhysicalTrafficManager::PhysicallyUncrashTrafficCar @0x825F00D8 (140)");
+        CGS_ASSERT(lpDeformationInterface != 0, "NULL != lpDeformationInterface");            // :2434
+        CGS_ASSERT(lu16TrafficCarIndex < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                   "lu16TrafficCarIndex < ku8TotalMaxNumPhysicalTraffic");                    // :2435
+
+        // The inlined IsTrafficVehicleCrashed (see the FLAG above).
+        if (GetTrafficVehicle(static_cast<s32>(lu16TrafficCarIndex))->mePhysicalTrafficState
+                != static_cast<u32>(E_TRAFFIC_TYPE_CRASHING))
+        {
+            return;
+        }
+
+        CGS_ASSERT(lu16TrafficCarIndex < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                   "invalid index : luIndex < 20");                                  // CgsBitArray.h:203
+        if (!mTrafficDeformationModelsActive.IsBitSet(lu16TrafficCarIndex))
+        {
+            // The arm that never fires in this build -- see the MEASURED note in the banner.
+            // This witness is what proves the function is REACHED (crashed car, at a removal);
+            // the one after the posts is what would prove the posts happened.
+            UncrashWitness(lu16TrafficCarIndex, 0, false, 0, 0);
+            return;
+        }
+
+        CgsSceneManager::VolumeInstanceId lTrafficBodyID;                            // DWARF .cpp:2442
+        lTrafficBodyID.muId = 0;
+        lTrafficBodyID.SetEntityIDOwner(static_cast<u8>(KU_ENTITYTYPE_TRAFFIC_VEHICLE));
+        lTrafficBodyID.SetEntityIDEntityIndex(lu16TrafficCarIndex);
+        lTrafficBodyID.SetVolumeIndex(0);
+
+        // `stb r27(0), 0x30(vehicle)` -- the ram latch goes with the crash it belongs to.
+        GetTrafficVehicle(static_cast<s32>(lu16TrafficCarIndex))->mbRammed = false;
+
+        // Deactivate FIRST (the model resets its deformation in place), then remove (the model
+        // slot is handed back). Both posts carry the same handling-body id.
+        lpDeformationInterface->DeactivateDeformationModel(
+                CgsPhysics::RigidBodyId(lTrafficBodyID.muId),
+                KF_ZERO,
+                static_cast<Deformation::DeformationResetType>(-1));
+        lpDeformationInterface->RemoveDeformationModel(
+                CgsPhysics::RigidBodyId(lTrafficBodyID.muId));
+
+        CGS_ASSERT(lu16TrafficCarIndex < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                   "luIndex < NUMBITS");                                             // CgsBitArray.h:241
+        mTrafficDeformationModelsActive.UnSetBit(lu16TrafficCarIndex);
+
+        // The two queue lengths are read back AFTER the posts, so a line with both non-zero is
+        // proof the events reached the frame's deformation input buffer -- which is what
+        // DeformationManager::ProcessEvents drains (ProcessDeactivateDeformationModelEvents
+        // @0x82641C58 / ProcessRemoveDeformationModelEvents @0x82641A00) on the same
+        // PostSceneUpdate. `id` is the handling-body id the consumer matches on.
+        UncrashWitness(lu16TrafficCarIndex, lTrafficBodyID.muId, true,
+                       lpDeformationInterface->GetDeactivateDeformationModelQueue().GetLength(),
+                       lpDeformationInterface->GetRemoveDeformationModelQueue().GetLength());
     }
 
     // =============================================================================================

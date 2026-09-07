@@ -144,16 +144,28 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     miDebugFinishPosition = 0;                                          // +38168 (0x9518)
 
     // ------------------------------------------------------------------------
-    // [X][X] DIVERGENCE: ChallengeManager NOT embedded/mounted (29 TUs, ~35 unresolved externals;
-    // freeburn challenges are off the offline-event path).
-    // Console: BrnGameState::ChallengeManager::Construct(this + 28160, lpGameStateModule, this,
-    //                                                    lpProgressionManager, lpRoadRulesManager,
-    //                                                    lpTriggerQueryManager);
-    // Re-wire when the ChallengeManager mount lands. lpRoadRulesManager exists ONLY to be forwarded
-    // here -- it is consumed nowhere else in this body, which is why it is void-ed below rather than
-    // stored.
+    // [x] UN-PARKED 2026-09-07 (ChallengeManager mount). Console, register-attested at
+    // 0x8234009C-0x823400C0:
+    //   r3 = this + 0x6E00 (== +28160, mChallengeManager)
+    //   r4 = r28 (a2, lpGameStateModule)      r5 = r31 (this)
+    //   r6 = r26 (a3, lpProgressionManager)   r7 = r25 (a8, lpRoadRulesManager)
+    //   r8 = r24 (a4, lpTriggerQueryManager)
+    // -- i.e. exactly the call below, in the console's argument order.
+    // It had been parked while the 27 ChallengeManager TUs were off the exe mount: measured
+    // 2026-09-07 by compiling all 27 and diffing their UNDEF externals against the tree, TWELVE
+    // symbols they referenced had no definition anywhere (the ChallengeListEntry/
+    // ChallengeListEntryAction blob accessors GetCarID/GetCarType/GetCgsIDTarget/GetCoopType/
+    // GetModifier/GetNumLocations/HasConvoyTime, GameStateModuleIO::OutputBuffer::
+    // GetGuiOutputQueue/GetGameStateToNetworkInterface, GameStateModule::GetActiveRaceCarIndex
+    // @0x82363978, GameStateToNetworkInterface::SetPlayerInFreeburnChallenge, and
+    // ChallengeManagerDebugComponent::StartChallenge). All twelve are bodied in this same change
+    // -- see the roll-call at BrnModeManager.h's +28160 member -- and the 27 TUs join the mount
+    // with it, so this call and the four below now cost ZERO unresolved externals.
+    // lpRoadRulesManager exists ONLY to be forwarded here -- it is consumed nowhere else in this
+    // body.
     // ------------------------------------------------------------------------
-    (void)lpRoadRulesManager;
+    mChallengeManager.Construct(lpGameStateModule, this, lpProgressionManager,
+                                lpRoadRulesManager, lpTriggerQueryManager);
 
     CGS_ASSERT(lpGameStateModule != nullptr, "lpGameStateModule");      // BrnModeManager.cpp:202
     mpGameStateModule = lpGameStateModule;                              // +27992
@@ -346,14 +358,17 @@ bool ModeManager::Prepare(const BrnResource::ChallengeList* lpFreeburnChallengeL
                           CgsMemory::HeapMalloc*            lpHeapMalloc)
 {
     // ------------------------------------------------------------------------
-    // [X][X] DIVERGENCE: ChallengeManager NOT embedded/mounted.
-    // Console: `if (!BrnGameState::ChallengeManager::Prepare(this + 28160, lpFreeburnChallengeList))
-    //            return false;`  -- i.e. a FAILED challenge-list prepare short-circuits the whole
-    // method and the ScoringSystem is left un-prepared. With no ChallengeManager the gate is treated
-    // as having succeeded, which is the console's normal-path behaviour (Prepare fails only when the
-    // challenge list is unusable). Re-wire when the ChallengeManager mount lands.
+    // [x] UN-PARKED 2026-09-07 (ChallengeManager mount). The console's own gate
+    // (`clrlwi/cmplwi/bne` on the returned byte at 0x823407C4): a FAILED challenge-list prepare
+    // short-circuits the whole method and leaves the ScoringSystem un-prepared. That is the
+    // console's behaviour, not a defensive addition. On the normal path nothing changes --
+    // ChallengeManager::Prepare @0x8233AAF8 returns true unconditionally; the only way it fails is
+    // an unusable challenge list.
     // ------------------------------------------------------------------------
-    (void)lpFreeburnChallengeList;
+    if (!mChallengeManager.Prepare(lpFreeburnChallengeList))
+    {
+        return false;
+    }
 
     return mScoringSystem.Prepare(lpHeapMalloc);
 }
@@ -404,14 +419,14 @@ void ModeManager::ProcessEvent(GameStateModuleIO::EGameEventType leEventType,
                                f32                               lfDelta)
 {
     // ------------------------------------------------------------------------
-    // [X][X] DIVERGENCE: ChallengeManager NOT embedded/mounted.
-    // Console, UNCONDITIONALLY and as the FIRST statement:
-    //     BrnGameState::ChallengeManager::ProcessEvent(this + 28160, leEventType, lpEvent);
+    // [x] UN-PARKED 2026-09-07 (ChallengeManager mount). Console: UNCONDITIONALLY and as the FIRST
+    // statement, ahead of the event-type test below (`r3 = this + 0x6E00 ; bl
+    // ChallengeManager::ProcessEvent`, with r4/r5 forwarded untouched).
     // [!] THIS IS THE ARM THAT CHANGES BEHAVIOUR, not just layout: every freeburn-challenge event
     // (start / trigger / cancel / success / status) reaches the ChallengeManager through here and
-    // through here only. While this is parked, freeburn challenges receive NOTHING. Re-wire when the
-    // ChallengeManager mount lands.
+    // through here only. While it was parked, freeburn challenges received NOTHING.
     // ------------------------------------------------------------------------
+    mChallengeManager.ProcessEvent(leEventType, lpEvent);
 
     if (leEventType != GameStateModuleIO::E_EVENT_INPROGRESS_STUNT)      // console `cmpwi r31, 0x78` (120)
     {

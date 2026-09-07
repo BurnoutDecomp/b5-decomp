@@ -977,7 +977,8 @@ private:
     void ComputeTrafficVehicleInertia(s32 liTrafficVehicleIndex, rw::physics::Inertia* lpOutInertia);
 
     // @0x825F00D8 (140) DWARF :297. Crash-side; RemoveTrafficVehicle calls it unconditionally.
-    // Named gate this round (see BrnPhysicalTrafficManager_Remove.cpp).
+    // Bodied in BrnPhysicalTrafficManager_Remove.cpp (2026-09-07); its banner carries the measured
+    // finding that nothing in ARTIST ever sets mTrafficDeformationModelsActive.
     void PhysicallyUncrashTrafficCar(u16 lu16TrafficEntityNum,
                                      BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
 

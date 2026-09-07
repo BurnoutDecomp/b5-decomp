@@ -40,12 +40,9 @@ namespace BrnGui
         // GuiEventSetTracker banner in the header for the same finding). FLAG
         // consumer-named, sizes not independently attested beyond the fields read.
 
-        // case 64: one pointer, asserted non-null twice ("lpcacheEvent->mpCachePointer"
-        // then "lpPlayerInfo", the second being the null test on cache+0x4AE0).
-        struct GuiEventCachePointer
-        {
-            GuiCache* mpCachePointer;   // +0x00
-        };
+        // (case 64's one-pointer payload -- BrnGui::GuiEventCachePointer -- moved to the
+        // owning header 2026-09-07: BrnGui::GuiModule::Construct publishes one, so it can
+        // no longer live in this TU's anonymous namespace.)
 
         // case 165: the arm reads a single u16 at +0x00 (`*a2`, a2 is `unsigned __int16*`)
         // and compares it against TrackerInformation::mTargetLandmarkIndex, which is itself
@@ -61,6 +58,56 @@ namespace BrnGui
         {
             u16 muSectionId;   // +0x00
         };
+    }
+
+    // ⭐ X360-INLINED into BrnGui::GuiModule::Construct @0x82518028 -- there is no
+    // out-of-line GuiTracker::Construct symbol in the image, so this body is outlined back
+    // from the eleven stores the module emits off the tracker base (r29 == gm+1131872,
+    // set by `addis r29, r31, 0x11 / addi r29, r29, 0x4560` @0x82518824/@0x8251883C).
+    // Store-for-store, in the console's own emission order:
+    //
+    //   0x82518874  stw   r30, 4(r29)          -> miTrackerCount          = 0
+    //   0x8251887C  stb   r30, 0(r29)          -> mbTrackingActive        = false
+    //   0x82518884  stwx  r30, r29, 0x65060    -> miCurrentlyTrackedIndex = 0
+    //   0x8251888C  stb   r30, 1(r29)          -> mbRouteDataPending      = false
+    //   0x82518894  stb   r30, 2(r29)          -> mbIsEntireRoute         = false
+    //   0x8251889C  stb   r30, 3(r29)          -> mbHasRoute              = false
+    //   0x825188AC  stwx  r30, r29, 0x65050    -> mRoutePoints count      = 0
+    //   0x825188B4  sthx  r30, r29, 0x65064    -> muPlayerTargetSectionId = 0
+    //   0x825188BC  stwx  r30, r29, 0x51040    -> miNumRouteInfoReceived  = 0
+    //   0x825188C4  stfsx f30, r29, 0x65068    -> mfRouteDistance         = 0.0f
+    //   0x825188C8  stwx  r30, r29, 0x650EC    -> mpGuiCache              = 0
+    //
+    // r30 is 0 for the whole of GuiModule::Construct; f30 is flt_82001CC0, which the SAME
+    // constant-pool slot proves is 0.0f -- GuiCache::Construct loads it into f31 and stores
+    // it to cache+0 (mfTimeStep), which Hex-Rays renders `*v47 = 0.0`. (ClearTracker below
+    // reads the identical literal.)
+    //
+    // ⚠️ TWO honest deltas from the console's stores, both value-identical here:
+    //   * +0x65064 is written with a HALF-word (`sthx`) by the console even though the only
+    //     other writer -- RecEvent's case-233 arm -- writes the full word. Big-endian, that
+    //     `sth 0` clears the member's high half only. The host writes the whole named word
+    //     (the member is s32); the observable value is the same 0 either way, and going
+    //     through the name is what the x64 gate requires.
+    //   * the point-array count word at +0x65050 is mRoutePoints' own CgsArray count, so it
+    //     goes through Clear() exactly as ClearTracker's identical store does.
+    //
+    // ⛔ NOT the same as ClearTracker: Construct seeds miCurrentlyTrackedIndex to 0 (not
+    // -1) and DOES clear mbHasRoute (which ClearTracker deliberately leaves alone).
+    // Reproduced as the console has it.
+    void GuiTracker::Construct()
+    {
+        miTrackerCount          = 0;       // stw   0, 4(r29)
+        mbTrackingActive        = false;   // stb   0, 0(r29)
+        miCurrentlyTrackedIndex = 0;       // stwx  0, r29, 0x65060
+        mbRouteDataPending      = false;   // stb   0, 1(r29)
+        mbIsEntireRoute         = false;   // stb   0, 2(r29)
+        mbHasRoute              = false;   // stb   0, 3(r29)
+        mRoutePoints.Clear();              // stwx  0, r29, 0x65050
+        muPlayerTargetSectionId = 0;       // sthx  0, r29, 0x65064
+        miNumRouteInfoReceived  = 0;       // stwx  0, r29, 0x51040
+        mfRouteDistance         = 0.0f;    // stfsx flt_82001CC0 (0.0f), r29, 0x65068
+        mpGuiCache              = 0;       // stwx  0, r29, 0x650EC
     }
 
     // @ 0x82443EC0 - bounds-checked pointer to tracker record `liIndex`.

@@ -163,6 +163,14 @@ namespace BrnGui
             u8  maTailPad[4];       // +0x140C..+0x140F (the 0x1410 published stride)
         };
 
+        // ⭐ X360-INLINED into BrnGui::GuiModule::Construct @0x82518028 (the eleven stores
+        // at @0x82518874..@0x825188C8, off the tracker base gm+1131872 that r29 holds).
+        // There is no out-of-line GuiTracker::Construct symbol in the image -- the free
+        // build folded it -- so the body is outlined back here from that store run, exactly
+        // as the tree outlines the other inlined GuiModule-owned Constructs.
+        // See the body in BrnGuiTracker.cpp for the store-for-store map.
+        void Construct();
+
         // @ 0x82443EC0 - return the pointer to tracker record `liIndex`
         // (&maTrackerRecords[liIndex]). Asserts 0 <= liIndex < miTrackerCount.
         TrackerInformation* GetTrackerInformation(s32 liIndex);
@@ -200,11 +208,29 @@ namespace BrnGui
         // "the 211 arm additionally needs the 5136-byte GuiEventRouteInformation record":
         // that record is now recovered (GuiTracker::RouteInformation above) from the arm's
         // own memcpy plus GenerateRouteData's walk, so nothing in the slice is invented.
-        // ⚠️ STILL TO DO, and NOT part of this fix: delete
-        // GuiCacheTrackerBoundary::PublishSetTrackerEvent (the LOG-ONCE boundary in
-        // GameSource/Gui/BrnGuiCache_wJ_01.cpp) and have the three wave-J GuiCache
-        // publishers call this directly -- that is what actually lights the sat-nav route
-        // line, and it is a behaviour change that wants its own verification pass.
+        // ✅ DONE (2026-09-07), replacing the note that used to stand here ("STILL TO DO:
+        // delete GuiCacheTrackerBoundary::PublishSetTrackerEvent and have the three wave-J
+        // GuiCache publishers call this directly"). The boundary is gone -- the three
+        // publishers in BrnGuiCache_wJ_01.cpp call mpGuiTracker->RecEvent(..., 232, 3088)
+        // -- and GuiCache::Construct now binds mpGuiTracker (see BrnGuiCache.h), so the
+        // publish path reaches this body end to end.
+        //
+        // ⚠️ WHAT IS STILL OPEN on this path, honestly:
+        //   * Nothing in this tree posts event 165 (landmark reached), 211 (a route record)
+        //     or 233 (the player's new section). The 232 arm therefore adopts the tracked
+        //     set and arms mbRouteDataPending, but mbHasRoute is only ever raised by
+        //     GenerateRouteData -- which runs off the 165/211 arms -- so
+        //     IsRouteInfoAvailable() still returns false and GetRouteDistance() is
+        //     unreachable. The producer of the 211 route records is the (unreconstructed)
+        //     game-state route generator, not this class.
+        //   * The event-64 GuiCache hand-off IS landed (BrnGui::GuiModule::Construct, the
+        //     console's tail `GuiTracker::RecEvent(gm+1131872, {gm+1005376}, 64, 4)`), so
+        //     mpGuiCache and mPlayersTrackerInfo are bound once at boot; the console
+        //     re-posts 64 per cache update and this build does not, so the player's own
+        //     record does not follow the camera yet.
+        //   * GuiTracker::Update @0x82511BD0, ContructRouteNodeFromTrackedItem @0x8250A520,
+        //     GetNumActivelyTrackedLandmarks @0x824F4330 and GetActivelyTrackedLandmarks
+        //     @0x824F4358 are still unreconstructed (no body anywhere in the tree).
         void RecEvent(const CgsModule::Event* lpEvent, s32 liEventId, s32 liEventSizeBytes);
 
         // @ 0x824FA008 -- flatten every received route record's live points into
@@ -294,6 +320,20 @@ namespace BrnGui
 
     // The record stride is load-bearing (it reproduces the X360 48-byte stride).
     static_assert(sizeof(GuiTracker::TrackerInformation) == 0x30, "GuiTracker record stride");
+
+    // ⭐ 2026-09-07: the event-64 payload, PROMOTED out of BrnGuiTracker.cpp's anonymous
+    // namespace so the publisher can build one. It is a single GuiCache pointer: the
+    // console's GuiModule::Construct tail stores the cache into a stack word and publishes
+    // `GuiTracker::RecEvent(gm+1131872, &word, 64, 4)` (the 4 is the X360's 32-bit pointer
+    // size; RecEvent never reads the size argument). RecEvent's case-64 arm asserts the
+    // pointer twice ("lpcacheEvent->mpCachePointer" BrnGuiTracker.cpp:189, then
+    // "lpPlayerInfo" :192 -- the null test on the cache's own +0x4AE0 camera lane),
+    // refreshes mPlayersTrackerInfo from that lane and latches mpGuiCache.
+    // FLAG consumer-named: the console has no recovered type name for this one-word record.
+    struct GuiEventCachePointer
+    {
+        GuiCache* mpCachePointer;   // +0x00
+    };
 
     // [FIX1] The route record's stride is the case-211 memcpy size literal AND
     // GenerateRouteData's per-record walk; pin it the way the tree pins every other

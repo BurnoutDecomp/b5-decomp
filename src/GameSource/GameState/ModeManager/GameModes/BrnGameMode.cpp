@@ -5,6 +5,11 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"   // ScoringSystem::GetPlayerNoInputTime / GetPlayerStationaryTime (slot 13)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [stunt] the mode-state ladder rung (see SetCurrentState)
+// PreWorldUpdate's rival-visibility scan: the complete active-race-car output interface
+// (IsPlayerCarActive / GetPlayerActiveRaceCarIndex / IsRaceCarActive / GetPlayerRaceCarState /
+// GetRaceCarState) and BrnPhysics::Vehicle::RaceCarState, which it reaches by value.
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+#include "rw/math/vpu/vector3_operation.h"                   // Dot / Magnitude / operator- over Vector3
 
 namespace BrnGameState
 {
@@ -42,6 +47,13 @@ static const s32 KI_NUM_WEAKEST_CAR_CRASHES      = 2;
 static const s32 KI_NUM_WEAK_CAR_CRASHES         = 3;
 static const s32 KI_NUM_MEDIUM_CAR_CRASHES       = 4;
 static const s32 KI_NUM_STRONG_CAR_CRASHES       = 5;
+
+// PreWorldUpdate's rival-visibility radii. X360 .rdata literals loaded by the two arms of the
+// scan's distance test: flt_82006530 == 150.0f on the AHEAD arm (0x8232FCD0) and
+// flt_82004A20 == 10.0f on the BEHIND arm (0x8232FCE4). A rival in front of the player counts
+// as "on screen" from much further away than one the player has already passed.
+static const f32 KF_VISIBLE_DISTANCE_AHEAD  = 150.0f;
+static const f32 KF_VISIBLE_DISTANCE_BEHIND = 10.0f;
 
 // Source path baked into the X360 asserts of this TU; reused verbatim for parity.
 static const char* const KPC_SOURCE_FILE =
@@ -228,18 +240,42 @@ void GameMode::Initialise()
 // OnlineRaceMode, OnlineStuntRunMode, OnlineBurningHomeRunMode and OnlineFreeBurnLobbyMode all
 // override this slot, and a 0-arg override would have MINTED A NEW SLOT rather than binding.
 //
-// [!] STILL PARKED -- the rival-visibility scan. The console walks lpActiveRaceCars with
-// RCEntityActiveRaceCarOutputInterface::IsRaceCarActive (0x8232FB20's inner loop) and fires that
-// header's own asserts ("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" and
-// "Player car index hasn't been set", BrnRaceCarEntityModuleOutputInterface.h:967/:980). The
-// argument is now present, but the TYPE is still declaration-only tree-wide (no member layout, no
-// IsRaceCarActive body -- grep BrnWorld::RaceCarEntityModuleIO), so the scan cannot be written
-// yet. That is the exact blocker; it is no longer "the signature drops the input".
-// DELETE-WHEN: RCEntityActiveRaceCarOutputInterface lands. Then, for each active rival !=
-// the player car, compute its offset from the player along travel and set mbVisibleCars if
-// |ahead| < KF_VISIBLE_DISTANCE_AHEAD (150) or |behind| < KF_VISIBLE_DISTANCE_BEHIND (10).
-// Consequence while parked: mbVisibleCars stays false, so GameMode::ShouldExit always takes its
-// 3.0f stationary threshold rather than the 10.0f "a rival is on screen" one.
+// ⭐ THE RIVAL-VISIBILITY SCAN IS LANDED (2026-09-07). It was parked on
+// "RCEntityActiveRaceCarOutputInterface is declaration-only tree-wide (no member layout, no
+// IsRaceCarActive body)"; that type is now complete
+// (BrnRaceCarEntityModuleOutputInterface.h:139) and every accessor the scan needs is bodied in
+// BrnRCEntityActiveRaceCarOutputInterface.cpp -- IsPlayerCarActive (:539), IsRaceCarActive
+// (:556), GetPlayerActiveRaceCarIndex (:230), GetPlayerRaceCarState (:725), GetRaceCarState
+// (:592) -- each carrying the console's own baked asserts, which is where the two the park
+// names ("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" :967 and "Player car
+// index hasn't been set" :980) now come from.
+//
+// THE SCAN, STORE FOR STORE OFF 0x8232FB20 (r29 == r7 == lpActiveRaceCars):
+//   0x8232FB4C  stb  r31(0), 0xB3(r21)          mbVisibleCars = false
+//   0x8232FB50..FB98  the inlined IsPlayerCarActive() gate: the :967 range assert, then
+//                     `idx == -1 ? 0 : lbz 0x2860` -- beq skips the whole scan
+//   0x8232FBA4  bl sub_82310240                  == GetPlayerRaceCarState() (its own :967 +
+//                                                  "IsPlayerCarActive()" :1266 tripwires)
+//   0x8232FBBC  lvx128 v126, r3, 0x210           element+528 == mTransform.At()   (direction)
+//   0x8232FBC4  lvx128 v127, r3, 0x220           element+544 == mTransform.Pos()  (position)
+//   loop r30 = 0..7:
+//     0x8232FBE4..FC04  the inlined GetPlayerActiveRaceCarIndex() (:980 assert)
+//     0x8232FC10  beq -> next when r30 == the player's own index
+//     0x8232FC1C  bl IsRaceCarActive(r30); beq -> next when inactive
+//     0x8232FC34  bl 0x8227D690 == GetRaceCarState(r30); lvx128 v13, r3, 0x220 (its position)
+//     0x8232FC58  vsubfp128 v0, v13, v127        lv3Delta = rivalPos - playerPos
+//     0x8232FC7C  vmsum3fp128 v13, v126, v0      Dot(playerDirection, lv3Delta)
+//     0x8232FC80  vmsum3fp128 v0, v0, v0         MagnitudeSquared(lv3Delta)
+//     0x8232FC84  vcmpgefp. v13, v13, splat(0)   AHEAD := Dot >= 0   (CR6 bit 0, read back by
+//                                                the mfocrf/extrwi pair at 0x8232FCBC)
+//     0x8232FC88..FCB8  vrsqrtefp + two Newton steps + vsel(lenSq==0 -> 0) == Magnitude()
+//     0x8232FCD0  ahead  -> compare against flt_82006530 == 150.0f
+//     0x8232FCE4  behind -> compare against flt_82004A20 == 10.0f
+//     0x8232FD20  stb 1, 0xB3(r21) and BREAK on the first hit
+//     0x8232FCF0..FD18  ++idx with the "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" assert
+//                       (BurnoutConstants.h:39) -- this tree's EActiveRaceCarIndex operator++
+// The rsqrt refinement is de-optimised to rw::math::vpu::Magnitude (a plain sqrt), per the
+// project's de-optimisation rule; its zero-length case returns 0 exactly as the console's vsel.
 // ===========================================================================
 void GameMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
                               const GameStateModuleIO::PreWorldInputBuffer* lpInput,
@@ -248,14 +284,75 @@ void GameMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
                               bool lbPaused,
                               const ScoringSystem* lpScoringSystem)
 {
+    // The console body never reads these four (they exist because this is vtable slot 2 and the
+    // derived overrides do); only lpActiveRaceCars is consumed here.
     (void)lpOutput;
     (void)lpInput;
     (void)lpGlobalRaceCars;
-    (void)lpActiveRaceCars;   // [!] the parked scan's input -- see the banner above
     (void)lbPaused;
     (void)lpScoringSystem;
 
     mbVisibleCars = false;
+
+    if (lpActiveRaceCars->IsPlayerCarActive())
+    {
+        const BrnPhysics::Vehicle::RaceCarState* lpPlayerState = lpActiveRaceCars->GetPlayerRaceCarState();
+        const Vector3 lPlayerDirection = lpPlayerState->mTransform.At();
+        const Vector3 lPlayerPosition  = lpPlayerState->mTransform.Pos();
+
+        // `::` qualified: BrnGameState declares its own EActiveRaceCarIndex (the dual-scope
+        // banner at BrnGameMode.h:64), and only the global one has the post-increment operator
+        // that carries the console's in-loop BurnoutConstants.h:39 range assert.
+        for (::EActiveRaceCarIndex leIndex = ::E_ACTIVE_RACE_CAR_INDEX_0;
+             leIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT;
+             leIndex++)
+        {
+            // Re-read every iteration, as the console does (the accessor is the inlined one
+            // whose "Player car index hasn't been set" tripwire the loop fires).
+            if (leIndex == lpActiveRaceCars->GetPlayerActiveRaceCarIndex())
+            {
+                continue;
+            }
+            if (!lpActiveRaceCars->IsRaceCarActive(leIndex))
+            {
+                continue;
+            }
+
+            const Vector3 lv3Delta =
+                lpActiveRaceCars->GetRaceCarState(leIndex)->mTransform.Pos() - lPlayerPosition;
+
+            const bool lbIsAhead   = (rw::math::vpu::Dot(lPlayerDirection, lv3Delta) >= 0.0f);
+            const f32  lfDistance  = rw::math::vpu::Magnitude(lv3Delta);
+            const f32  lfThreshold = lbIsAhead ? KF_VISIBLE_DISTANCE_AHEAD : KF_VISIBLE_DISTANCE_BEHIND;
+
+            if (lfDistance < lfThreshold)
+            {
+                mbVisibleCars = true;
+                break;
+            }
+        }
+    }
+
+    // [FLAG PC witness] NOT IN THE X360 BINARY. Same rung discipline as the mode-state ladder in
+    // SetCurrentState below: gpDebugPrint only, first-N capped. EDGE-triggered -- this function
+    // runs every frame, so only a CHANGE of mbVisibleCars prints. It is the one line that shows
+    // the scan producing a true, and therefore that GameMode::ShouldExit is taking its 10.0 s
+    // stationary threshold rather than the 3.0 s one.
+    {
+        static s32  siVisibleCarsLines = 0;
+        static bool sbLastVisibleCars  = false;
+        const s32   KI_VISIBLE_CARS_LINE_MAX = 32;
+        if (mbVisibleCars != sbLastVisibleCars)
+        {
+            sbLastVisibleCars = mbVisibleCars;
+            if (siVisibleCarsLines < KI_VISIBLE_CARS_LINE_MAX && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++siVisibleCarsLines;
+                *CgsDev::Log::gpDebugPrint
+                    << "[stunt] mbVisibleCars -> " << (mbVisibleCars ? "true" : "false") << "\n";
+            }
+        }
+    }
 
     if (meCurrentState != -1)
     {

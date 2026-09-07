@@ -393,8 +393,11 @@ namespace BrnTrafficIO
         SceneCoarseQueryQueue*       GetSceneCoarseQueryQueue();                            // :253
         const TrafficAIInterface*    GetTrafficAIInterface() const;                        // :255
         TrafficAIInterface*          GetTrafficAIInterface();                              // :256 W (0x827111C0)
-        const TrafficToRaceCarInterface_PostScene* GetTrafficToRaceCarInterface_PostScene() const; // :258
-        TrafficToRaceCarInterface_PostScene*       GetTrafficToRaceCarInterface_PostScene();        // :259
+        const TrafficToRaceCarInterface_PostScene* GetTrafficToRaceCarInterface_PostScene() const; // :258 R (0x827A00B0)
+        // :259 W -- DECLARATION ONLY, deliberately. No out-of-line body exists in the X360 image
+        // (see the ladder + the scan note in BrnTrafficEntityModuleIO.cpp): the console never
+        // called the write twin, so nothing was emitted for it, and no caller exists here either.
+        TrafficToRaceCarInterface_PostScene*       GetTrafficToRaceCarInterface_PostScene();
 
     private:
         SceneCoarseQueryQueue               mSceneCoarseQueryQueue;                // :263 (offset 4)

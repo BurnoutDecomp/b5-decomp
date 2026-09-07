@@ -189,5 +189,42 @@ namespace BrnNetwork
             maMapping[liFreeEntry].mNetworkPlayerID     = lNetworkPlayerID;
             maMapping[liFreeEntry].meActiveRaceCarIndex = leActiveRaceCarIndex;
         }
+
+        // [challenge-manager mount 2026-09-07] SetPlayerInFreeburnChallenge -- the write twin of
+        // GetPlayerInFreeburnChallenge above. X360-INLINED, so it has no address of its own; the
+        // whole body is attested inside ChallengeManager::WriteDataToOutput @0x82346918, whose
+        // per-player mirror loop reads
+        //     0x82346D14  lbzx r30, r22, r31          ; mabPlayerStartedChallenge[i] -- the value
+        //     0x82346D18  bl   sub_8231D800           ; OutputBuffer::GetGameStateToNetworkInterface
+        //     0x82346D1C  mr   r29, r3
+        //     0x82346D20  cmpwi cr6, r31, 0
+        //     0x82346D24  bge  -> skip
+        //     0x82346D2C  li   r5, 0x23C              ; BrnNetworkModuleGameStateIOInterfaces.h:572
+        //     ...        FireAssert "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0"
+        //     0x82346D40  cmpwi cr6, r31, 8
+        //     0x82346D44  blt  -> skip
+        //     0x82346D4C  li   r5, 0x23D              ; ...h:573
+        //     ...        FireAssert "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT"
+        //     0x82346D60  add  r11, r29, r31
+        //     0x82346D6C  stb  r30, 0x20C(r11)        ; mabPlayersInFreeburnChallenge[index]
+        // +0x20C == 524 is exactly the member the const getter reads, and the two guards are the
+        // same pair in the same branch-around shape (both non-gating tripwires), one source line
+        // apart from the getter's -- so the setter is the getter mirrored, store for load.
+        void GameStateToNetworkInterface::SetPlayerInFreeburnChallenge(
+                EActiveRaceCarIndex leActiveRaceCarIndex, bool lbInChallenge)
+        {
+            if (leActiveRaceCarIndex < 0)
+            {
+                CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                           "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            }
+            if (leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
+            {
+                CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                           "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            }
+
+            mabPlayersInFreeburnChallenge[leActiveRaceCarIndex] = lbInChallenge;
+        }
     } // namespace BrnNetworkModuleIO
 } // namespace BrnNetwork

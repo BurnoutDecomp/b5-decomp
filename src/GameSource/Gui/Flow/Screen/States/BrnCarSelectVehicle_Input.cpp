@@ -31,6 +31,9 @@
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiWorldDataController.h"                     // BrnGui::WorldDataController
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiAudioTriggerEvent
+#include "GameSource/GameState/BrnGameStateSharedIO.h"                    // GsmIO::ECarSelectType
+#include "GameSource/Network/SharedIO/BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h" // LobbyPlayerStatusData (the event-244 rows)
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"      // InGamePlayerStatusData (the gamertag)
 #include "SharedClasses/DataLists/VehicleList.h"                          // BrnResource::VehicleList
 #include "SharedClasses/DataLists/VehicleListEntry.h"                     // BrnResource::VehicleListEntry
 
@@ -116,7 +119,44 @@ namespace BrnGui
             s32   miNumCarsUnlocked;    // +0x428
         };
 
+        // Event 244 (GuiEventNetworkLobbyPlayerList). The queue delivers the RAW record --
+        // AddGuiEvent<GuiEventNetworkLobbyPlayerList> @0x823CF4C8 hands VariableEventQueue::
+        // AddEvent the record with its id 244 and length 456 passed out-of-band, so there is
+        // no CgsGui::GuiEvent header on this path. The 456 bytes are the eight lobby rows then
+        // the live count (X360 `lwz r11, 0x1C0(record)` == 8 * 56). Row fields come from the
+        // record's real home, BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h -- no forked
+        // layout here. Identical view to the sibling consumers, BrnCarSelectLivery_wJ_01.cpp:31
+        // and BrnOnlineGameRoomPlayerInfo_wH_15.cpp:60.
+        struct GuiEventNetworkLobbyPlayerListPayload
+        {
+            BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData
+                maPlayers[CarSelectOnlinePlayerList::KI_MAX_PLAYERS];   // +0x000
+            s32 miNumPlayers;                                           // X360 +0x1C0 (448)
+        };
+
+        // The lobby vehicle-choice mode HandleLobbyPlayerList's host arm runs on
+        // (X360 `lwzx r11, mpGuiCache, 0xA9C8 ; cmplwi cr6, r11, 1`): the host picks one car
+        // for the whole lobby, so a non-host client never drives the table itself.
+        // FLAG consumer-named -- the console has no symbol for the value, only the misspelt
+        // "Not a valid vehicle chouce mode : " assert that bounds the word at 1.
+        const s32 KI_VEHICLE_CHOICE_HOST_PICKS = 1;
+
         // ---- out-queue wire records -------------------------------------------------
+
+        // The "activate car select" record HandleLobbyPlayerList's non-host arm posts:
+        // { 8, 192, 12, 2, 2 }, channel 40, 20 bytes. Same wire shape (and the same reason for
+        // building it by hand rather than through StateInterface::OutputGuiEvent) as
+        // BrnCarSelectMain_wG_01.cpp's GuiEventActivateCarSelect20 -- see the call site.
+        // The two payload words are (ACTION, TYPE), recovered from the consumer
+        // GameStateModule::ProcessGameEvents @0x823A0A18 case 94.
+        struct GuiEventActivateCarSelect20 : public CgsGui::GuiEvent<192>
+        {
+            u32 muWord0;   // +0x0C -- the ACTION
+            u32 muWord1;   // +0x10 -- the TYPE (2 == E_CAR_SELECT_TYPE_ONLINE_EVENT_START)
+
+            GuiEventActivateCarSelect20(u32 luWord0, u32 luWord1)
+                : CgsGui::GuiEvent<192>(8, 12), muWord0(luWord0), muWord1(luWord1) {}
+        };
 
         // The "clear the ticker" command: { 2, 536, 12, u8 1, u8 0 }, channel 40, 16 bytes.
         struct GuiTickerFlagsWire536 : public CgsGui::GuiEvent<536>
@@ -524,20 +564,166 @@ namespace BrnGui
     }
 
     // ---- HandleLobbyPlayerList @ 0x824C9E58 ----------------------------------------
-    // ⛔ NOT RECONSTRUCTED, and deliberately NOT a silent {}. Event 244 is the ONLINE lobby
-    // player table: the X360 body walks the event's player records and drives
-    // CarSelectOnlinePlayerList::Show / Hide / SetPlayerName / SetPlayerCar /
-    // SetFinalSelection (@0x8241B1C8 / 0x8241B2A0 / 0x82427948 / 0x82434B70 / 0x8241B0C8),
-    // none of which has a reconstructed body, and it reads a GuiEventNetworkLobbyPlayerList
-    // record with no recovered home. The offline Junkyard flow this wave brings up never
-    // observes event 244 (it is only raised by the online lobby), so the assert is a
-    // tripwire rather than a live path: if it ever fires, the online car-select lobby table
-    // is missing and says so instead of silently showing nothing.
-    void CarSelectVehicle::HandleLobbyPlayerList(const GuiEventNetworkLobbyPlayerList* /*lpEvent*/)
+    // RECONSTRUCTED 2026-09-07 from this function's OWN X360 export (asm arbitrates); the
+    // tripwire that stood here is retired. Both of the things its banner named as missing
+    // have landed: CarSelectOnlinePlayerList::Show / Hide / SetPlayerName / SetPlayerCar /
+    // SetFinalSelection are bodied in that component's own TU, and the event-244 record is
+    // the eight LobbyPlayerStatusData rows + the live count, read through the rows' real
+    // home rather than a forked layout.
+    //
+    // Event 244 is the online lobby roster. The whole body is behind an ONLINE-ONLY entry
+    // gate (`lwz 0x288` != 0 and `lwz 0x7C8` == 2), so the offline Junkyard flow -- which
+    // observes 244 too -- falls straight out.
+    //
+    // Past the gate the console splits on the lobby's VEHICLE-CHOICE mode, read out of the
+    // GuiCache (`lwzx r11, mpGuiCache, 0xA9C8`, `cmplwi 1`):
+    //   * 0  -> straight to the row refresh.
+    //   * 1  -> "the host picks the car for everybody": latch the roster's host row once,
+    //           and if THIS client is not that row, accept immediately on the client's
+    //           behalf instead of showing a table it cannot drive. If it IS the host row,
+    //           fall through to the row refresh.
+    //   * >1 -> the console's own misspelt assert, then the row refresh anyway.
+    //
+    // ⓘ NAMING, FLAGGED. The word at cache+0xA9C8 is exposed as GuiCache::GetOnlineHostGameState()
+    // (BrnGuiCache.h:381), which is a CONSUMER name minted by the CarSelectOnlineEnd TU; that
+    // header already notes the slot is structurally the game-params mirror's meVehicleChoice and
+    // marks the naming MERGE RECONCILE PENDING. THIS body's own assert text -- "Not a valid
+    // vehicle chouce mode : ", the console's typo -- settles it: the slot is the vehicle-choice
+    // mode. The accessor is called by its committed name here so this TU does not fork the cache
+    // header; the rename belongs to whoever next owns BrnGuiCache.h.
+    void CarSelectVehicle::HandleLobbyPlayerList(const GuiEventNetworkLobbyPlayerList* lpEvent)
     {
-        CGS_ASSERT(false,
-                   "CarSelectVehicle::HandleLobbyPlayerList (0x824C9E58) is not reconstructed -- "
-                   "the online lobby player table is missing. Recover CarSelectOnlinePlayerList's "
-                   "Show/Hide/SetPlayerName/SetPlayerCar/SetFinalSelection first.");
+        if (mpGuiCache == 0
+            || meCarSelectType != BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_ONLINE_EVENT_START)
+        {
+            return;
+        }
+
+        const GuiEventNetworkLobbyPlayerListPayload* lpPlayerList =
+            reinterpret_cast<const GuiEventNetworkLobbyPlayerListPayload*>(lpEvent);
+
+        if (mpGuiCache->GetOnlineHostGameState() == KI_VEHICLE_CHOICE_HOST_PICKS)
+        {
+            // The host row is latched ONCE: the console skips this whole arm while
+            // mpHostStatusData is already set (`lwz 0x4124 ; bne -> the row refresh`).
+            if (mpHostStatusData == 0)
+            {
+                for (s32 liPlayer = 0; liPlayer < lpPlayerList->miNumPlayers; ++liPlayer)
+                {
+                    // X360 `lbz r8, 0(r10)` walking row+0x31 with a 56-byte stride.
+                    if (lpPlayerList->maPlayers[liPlayer].mbIsHost)
+                    {
+                        // ⚠️ The console stores a pointer INTO THE EVENT RECORD
+                        // (`mulli r11, r11, 0x38 ; add r11, r11, <event> ; stw r11, 0x4124`),
+                        // not a copy of the row -- so mpHostStatusData is only good for as
+                        // long as the queued record is. Reproduced, not "fixed": the member's
+                        // only reader is the byte test two statements down, in this same call.
+                        mpHostStatusData = &lpPlayerList->maPlayers[liPlayer];
+                        break;
+                    }
+                }
+
+                CGS_ASSERT(mpHostStatusData != 0, "mpHostStatusData");   // cpp:1417
+
+                // The console reloads the pointer and reads its mbLocalPlayer byte (row+0x30)
+                // straight after that non-gating assert -- the assert is a report, not a gate.
+                // [FLAG PC bring-up guard] a roster with no host row leaves the pointer null,
+                // and this build's asserts do not stop execution, so the extra `!= 0` term
+                // keeps a reported miss from becoming a null deref. It is NOT in the X360 body.
+                // It is spelled so a null falls through to the row refresh below rather than
+                // firing an ACCEPT nobody asked for -- the smaller of the two divergences.
+                // DELETE-WHEN asserts gate.
+                if (mpHostStatusData != 0 && !mpHostStatusData->mbLocalPlayer)
+                {
+                    // The X360 posts this through
+                    // StateInterface::OutputGuiEvent<GuiEventActivateCarSelect>, whose console
+                    // body wraps the 8-byte payload as { 8, 192, 12, <payload> } and queues 20
+                    // bytes on channel 40. The in-tree OutputGuiEvent template does NOT wrap
+                    // (see its FLAG in CgsGuiStateInterface.h), so the exact wire record is
+                    // built here and posted through the output queue -- the same standing
+                    // accommodation CarSelectMain::ExitCarSelection uses for this very id.
+                    // The two payload words are (ACTION, TYPE); the console writes 2 into
+                    // both (`li r11, 2` stored twice). TYPE 2 is E_CAR_SELECT_TYPE_ONLINE_EVENT;
+                    // ACTION 2 is NOT in the recovered action legend (0 start / 1 modify /
+                    // 4 exit-junkyard) and the consumer, GameStateModule::ProcessGameEvents
+                    // case 94, returns early for every non-junkyard car-select type anyway --
+                    // so the literal is carried through as the console's, unnamed.
+                    GuiEventActivateCarSelect20 lActivateEvent(2, 2);
+                    mpStateInterface->GetOutputEventQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lActivateEvent),
+                        KI_CHANNEL_GUI_OUT,
+                        static_cast<s32>(sizeof(lActivateEvent)));   // X360 record size 20
+
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0
+                        && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint << "RG :: CSV : SendStateEvent( \"ACCEPT\" )\n";
+                    }
+
+                    SendStateEvent("ACCEPT");
+                    return;
+                }
+            }
+        }
+        else
+        {
+            // cpp:1444, the console's streamed assert (its own spelling of "choice"). It fires
+            // only for a mode ABOVE 1 -- mode 0 branches past it -- and it is non-gating, so
+            // the row refresh below runs either way.
+            CGS_ASSERT(static_cast<u32>(mpGuiCache->GetOnlineHostGameState())
+                           <= static_cast<u32>(KI_VEHICLE_CHOICE_HOST_PICKS),
+                       "Not a valid vehicle chouce mode : ");
+        }
+
+        // ---- the row refresh (X360 loc_824C9F0C) ------------------------------------
+        if (meCurrentState != E_CARSELECT_VISIBLE_INTERACTIVE)
+        {
+            return;
+        }
+
+        // liPlayer is carried OUT of the fill loop into the hide sweep (X360 r31), which is
+        // why it is declared here and the sweep has no initialiser. The count is a signed
+        // compare and bounds the fill loop on its own, exactly as the console does it.
+        s32 liPlayer = 0;
+        for (; liPlayer < lpPlayerList->miNumPlayers; ++liPlayer)
+        {
+            const BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData& lrPlayer =
+                lpPlayerList->maPlayers[liPlayer];
+
+            // A row that is not up yet is shown and named once; the name is only ever
+            // fetched on that transition.
+            if (!mOnlinePlayerList.IsShowing(liPlayer))
+            {
+                mOnlinePlayerList.Show(liPlayer);
+
+                // The console fetches the record twice around the assert -- that is the assert
+                // macro expanding, not two reads -- and derefs it unguarded either way.
+                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo =
+                    mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lrPlayer.mPlayerID);
+
+                CGS_ASSERT(lpPlayerInfo != 0,
+                           "Trying to show the name of a player who isn't in our game");  // cpp:1464
+
+                // X360 `addi r5, r3, 0x100` -- the record's name field at console +256.
+                mOnlinePlayerList.SetPlayerName(liPlayer, lpPlayerInfo->mPlayerName.macName);
+            }
+
+            // Driven every refresh, shown or not: the tick and the car can change under a row
+            // that is already up. ⚠️ Hex-Rays renders the car fetch as two 32-bit reads
+            // (`*(v13-4)`, `*(v13-3)`) and drops the index; the asm is one `ld r5, -0x10(r30)`
+            // == row+0x00, the 64-bit CgsID, with the index still in r4.
+            mOnlinePlayerList.SetFinalSelection(liPlayer, lrPlayer.mbFinalSelection);  // lbz row+0x32
+            mOnlinePlayerList.SetPlayerCar(liPlayer, lrPlayer.mSelectedCarID);         // ld  row+0x00
+        }
+
+        // Take down the tail, starting from the first row the roster did not fill. The rows are
+        // contiguous, so the sweep stops at the first one already hidden rather than running to
+        // the end of the bank. Entered even when the roster is empty (the console's `ble` jumps
+        // straight in with the index still zero).
+        for (; liPlayer < CarSelectOnlinePlayerList::KI_MAX_PLAYERS
+               && mOnlinePlayerList.IsShowing(liPlayer); ++liPlayer)
+        {
+            mOnlinePlayerList.Hide(liPlayer);
+        }
     }
 }

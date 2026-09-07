@@ -7,6 +7,17 @@
 //   RotateAboutPivotParams::Interpolate   @0x8221E9D0
 //   ExtractRotateAboutPivotParams         @0x8221EAC0
 //   RotateAboutPivot                      @0x8223DA28
+//   Update                                @0x822513D8
+//
+// ⭐ THE ONE HOME FOR THIS CLASS. The DWARF puts BrnDirector::CameraInterpolationController in
+// exactly one place -- dwarfdump/GameSource/Director/Shots/ShotControllers/
+// BrnCameraInterpolationController.{h,cpp}, and nowhere else in the tree -- so this pair is
+// the canonical home and the only definition of the class. A second declaration of the SAME
+// fully-qualified class used to sit under Director/Camera/ with an incompatible
+// Matrix44AffineFromRota (pointer-out / pointer-in, and an unbodied result) next to a
+// RotateAboutPivot that therefore returned an uninitialised stack matrix; whichever of the two
+// headers an includer picked up decided which class it got. That fork is retired -- do not
+// re-add a Director/Camera/ copy.
 //
 // ⭐ WHY THIS FAMILY EXISTS. BehaviourInterpolate's blend has two methods, chosen by the
 // camera's mu8InterpolateType (+0x11E): method 0 is a plain camera SLERP, method 1 is
@@ -27,14 +38,14 @@
 //     `vmaddfp128 vD, vA, vB, vC` ==  vD = vA * vB + vC
 // Both appear in this family, sometimes in the same basic block.
 //
-// ⛔ NOT YET REACHABLE. CameraInterpolationController::Update @0x822513D8 -- the caller that
-// selects between the two methods and then blends CameraState / CameraEffects / the
-// DepthOfField block / FOV / near-clip -- is NOT in this TU yet, and neither is the
-// direction-preserving slerp this family's Interpolate leans on
-// (Camera::Utils::DirectionPreservingSLerp @0x82205558 + rw::math::vpu::QueryRotate
-// @0x822038F0 + QueryRotateDegenerateUnitAxis @0x82203768). Until those land,
-// BehaviourInterpolate::PostCollisionUpdate keeps its documented t == 1 cut.
-// DELETE-WHEN: those four land; then the in-between un-gates.
+// ⭐ REACHABLE END TO END. Update @0x822513D8 -- the caller that selects between the two
+// methods and then blends CameraState / CameraEffects / the DepthOfField block / FOV /
+// near-clip -- is in this TU below, and the direction-preserving slerp its Interpolate leans
+// on is real too: Camera::Utils::DirectionPreservingSLerp @0x82205558 (Matrix33) and
+// @0x82217C08 (Matrix44Affine) in Camera/Utils/CameraUtils.cpp, over
+// rw::math::vpu::QueryRotate @0x822038F0 + QueryRotateDegenerateUnitAxis @0x82203768 in
+// vendor/renderware/include/rw/math/vpu/matrix44affine_operation.h. So
+// BehaviourInterpolate::PostCollisionUpdate gets the eased ramp, not a t == 1 cut.
 // ============================================================================
 
 #include "GameSource/Director/Shots/ShotControllers/BrnCameraInterpolationController.h"
@@ -81,8 +92,13 @@ namespace
     const u32 KU_STATE_FLAG_NO_INTERPOLATE = 2u;
 
     // The params carry their two 3x3s inside Matrix44Affine storage (rows 0..2 used, row 3
-    // scratch), matching the console's 0x70-byte record. These two convert at the boundary
-    // so the Matrix33 slerp overload is the one selected.
+    // scratch) so the Mult()/InverseOfMatrixWithOrthonormal3x3 affine overloads apply
+    // directly; these two convert at the boundary so the Matrix33 slerp overload is the one
+    // selected. ⚠️ THAT WIDENS THE RECORD: the console's is 0x70 bytes (the DWARF declares
+    // Matrix33 mLookatLocalRotation @+0x00, Matrix33 mLookAtRotation @+0x30, f32 mfRadius
+    // @+0x60), while this one is 0x84. Every access here is BY NAME and the struct never
+    // crosses an ABI boundary or a serialised blob, so the widening is inert -- but do not
+    // quote these offsets as the console's.
     inline Matrix33 To33(const Matrix44Affine& lrMatrix)
     {
         Matrix33 lResult;

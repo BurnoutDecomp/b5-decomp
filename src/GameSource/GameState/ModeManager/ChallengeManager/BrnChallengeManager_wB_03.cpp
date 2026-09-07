@@ -23,6 +23,9 @@
 #include "SharedClasses/DataLists/ChallengeListEntry.h"     // BrnResource::ChallengeListEntry::GetNumPlayers/GetOriginalNumPlayers/SetNumPlayers
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent::Destruct
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint ([fburn] diag)
+
+#include <stdlib.h>                                         // getenv       ([fburn] diag)
 
 namespace BrnGameState
 {
@@ -120,6 +123,29 @@ bool ChallengeManager::Prepare(const BrnResource::ChallengeList* lpFreeburnChall
     }
 
     mPotentiallyLeaptCars.Clear();   // X360 free-queue refill @+0xE0..+0x100
+
+    // ==============================================================================================
+    // [DIAG] NOT IN THE X360 BINARY -- the `[fburn]` witness, second rung (2026-09-07). Gated on
+    // BRN_MODEMGR_DIAG, the same env as the Construct rung in BrnChallengeManager.cpp.
+    // ==============================================================================================
+    // WHY IT EARNS ITS PLACE. Construct proves the object exists; only Prepare proves it has DATA.
+    // The challenge count it prints is the single number that says whether the freeburn challenge
+    // list actually loaded -- a zero there and a missing line are two very different bugs, and the
+    // Construct rung alone cannot tell them apart. One line per Prepare, i.e. once per level load.
+    // ⛔ NO SIDE EFFECTS: re-reads the already-cached list pointer and the histogram just built.
+    // DELETE-WHEN the freeburn bring-up is done.
+    {
+        static const bool sbFburnDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
+        if (sbFburnDiag && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[fburn] ChallengeManager::Prepare DONE challenges "
+                << mpFreeburnChallengeList->GetChallengeCount()
+                << " onePlayer " << maChallengePlayerCounts[0]
+                << " twoPlayer " << maChallengePlayerCounts[1] << "\n";
+        }
+    }
+
     return true;
 }
 

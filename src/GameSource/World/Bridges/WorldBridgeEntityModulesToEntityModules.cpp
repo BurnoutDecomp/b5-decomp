@@ -1,6 +1,9 @@
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToEntityModules.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags (the DIAG witness only)
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // TriggerManagementInputInterface (real aggregate)
+
+#include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG witness below)
 
 // WorldModule entity-module -> entity-module bridges -- reconstructed from
 // BURNOUT_X360_ARTIST.XEX @ 0x827A52B0 / 0x827A51F0 / 0x827AD788 (this TU's DWARF home is
@@ -9,18 +12,43 @@
 // leading lpWorldModule arg is the X360 r3 (the WorldModule `this`), per the committed bridge
 // precedent (WorldBridgeInputToEntityModules.cpp / WorldBridgeToEntityModules.cpp).
 
+namespace
+{
+    // ---- [DIAG] NOT IN THE X360 BINARY. OFF unless BRN_TRAFFIC_DIAG is set. ----------------
+    // Same opt-in switch the traffic partfiles already use
+    // (BrnPhysicalTrafficManager_Remove.cpp:56). This is the runtime witness that the
+    // traffic->trigger hand-off actually reaches the trigger module now that this TU is
+    // mounted: the source's two queue lengths and the destination's, taken just before the
+    // merge. Budgeted, because the bridge runs every frame. DELETE-WHEN-STABLE.
+    bool TrafficDiagEnabled()
+    {
+        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
+        return sbEnabled;
+    }
+
+    const s32 KI_TRIGGER_MERGE_WITNESS_BUDGET = 24;
+    s32       giTriggerMergeWitnessLinesLeft  = KI_TRIGGER_MERGE_WITNESS_BUDGET;
+}
+
 namespace WorldModule
 {
 
+// ⭐⭐ THIS TU IS MOUNTED AS OF 2026-09-07 (traffic-to-trigger wave), and its two bridges are
+// now the ONLY definitions of their symbols in the link -- the inert copies in
+// GameSource/World/WorldLinkStubs.cpp were deleted in the same change. The three IO accessors
+// that held the mount up are all bodied:
+//   TriggerEntityModuleIO::InputBuffer_PreScene::GetInputInterface
+//       (BrnTriggerEntityModuleIO_Accessors.cpp / _QueueAccessors.cpp)
+//   BrnTrafficIO::OutputBuffer_PreScene::GetTriggerManagementInputInterface
+//       (BrnTrafficEntityModuleIO.cpp, X360 0x8279FE00 / 0x82710E78)
+//   BrnTrafficIO::OutputBuffer_PostScene::GetTrafficToRaceCarInterface_PostScene   <- the last one
+//       (BrnTrafficEntityModuleIO.cpp, X360 0x827A00B0; landed with this change)
+//
 // ⛔ MOVED OUT 2026-08-01 (car-select hand-off wave): BridgeRaceCarModuleToWorldModule_PreScene
-// @0x827A52B0 now lives in its own TU, GameSource/World/Bridges/WorldBridgeRaceCarToWorldModule.cpp,
-// so it can be MOUNTED. This TU cannot be: its two remaining bridges reference three IO accessors
-// that are still declaration-only (MEASURED +3 unresolved --
-//   TriggerEntityModuleIO::InputBuffer_PreScene::GetInputInterface,
-//   BrnTrafficIO::OutputBuffer_PostScene::GetTrafficToRaceCarInterface_PostScene,
-//   BrnTrafficIO::OutputBuffer_PreScene::GetTriggerManagementInputInterface),
-// and the moved bridge needs none of them. Fold it back here when they land -- as the
-// WorldModule METHOD it now is, NOT as a namespace function.
+// @0x827A52B0 lives in its own TU, GameSource/World/Bridges/WorldBridgeRaceCarToWorldModule.cpp.
+// Now that this TU mounts, folding it back is possible -- but do it as the WorldModule METHOD it
+// now is, NOT as a namespace function, and only together with the build-list change that drops
+// the other TU.
 //
 // ⛔ ITS X360-OFFSET CONSTANTS ARE DELETED WITH IT (2026-08-11). They read
 //   KU_WORLD_MODULE_PLAYER_ACTIVE_RACE_CAR_INDEX_OFFSET = 6167272 / ..._TYPE_ARRAY = 6167280,
@@ -78,9 +106,56 @@ void BridgeTrafficToTrigger_PreScene(
     BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface* lpTriggerManagementInput =
         reinterpret_cast<BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface*>(
             lpTriggerInputBuffer_PreScene->GetInputInterface());
-    lpTriggerManagementInput->Append(
-        *reinterpret_cast<const BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface*>(
-            lpTrafficOutputBuffer_PreScene->GetTriggerManagementInputInterface()));
+    const BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface* lpSource =
+        reinterpret_cast<const BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface*>(
+            lpTrafficOutputBuffer_PreScene->GetTriggerManagementInputInterface());
+
+    // ---- [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG), budget 24 lines. --------
+    // Reads only. A "[T-trigmerge] ... merge:" line with a non-zero src count is the proof that
+    // the trigger module's PRE-SCENE input received traffic trigger events; the one-shot
+    // "bridge LIVE, traffic source empty" line below proves the bridge itself is running when
+    // there is nothing to carry. No line at all means this TU is not in the link.
+    // DELETE-WHEN-STABLE.
+    const s32 liSourceAdds    = lpSource->GetAddTriggerEventQueue().GetLength();
+    const s32 liSourceRemoves = lpSource->GetRemoveTriggerEventQueue().GetLength();
+    if (TrafficDiagEnabled() &&
+        (CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        if (liSourceAdds != 0 || liSourceRemoves != 0)
+        {
+            if (giTriggerMergeWitnessLinesLeft > 0)
+            {
+                --giTriggerMergeWitnessLinesLeft;
+                *CgsDev::Log::gpDebugPrint
+                    << "[T-trigmerge] traffic->trigger PreScene merge: src add=" << liSourceAdds
+                    << " remove=" << liSourceRemoves
+                    << " dest before add="
+                    << lpTriggerManagementInput->GetAddTriggerEventQueue().GetLength()
+                    << " remove="
+                    << lpTriggerManagementInput->GetRemoveTriggerEventQueue().GetLength()
+                    << "\n";
+            }
+        }
+        else
+        {
+            // One-shot, so a run can tell "this bridge never executed" (no line at all, i.e.
+            // still the deleted WorldLinkStubs gate or an unmounted TU) apart from "it executed
+            // and the traffic module had nothing queued". The latter is the EXPECTED state until
+            // the traffic pre-scene producer that writes BrnTrafficIO::OutputBuffer_PreScene's
+            // trigger-management interface lands: the non-const writer accessor (X360 0x82710E78)
+            // has no caller in this tree yet.
+            static bool sbLoggedEmptySource = false;
+            if (!sbLoggedEmptySource)
+            {
+                sbLoggedEmptySource = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[T-trigmerge] bridge LIVE, traffic source empty (no traffic trigger "
+                       "events queued this frame)\n";
+            }
+        }
+    }
+
+    lpTriggerManagementInput->Append(*lpSource);
 }
 
 }

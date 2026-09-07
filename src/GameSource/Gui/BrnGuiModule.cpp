@@ -1009,7 +1009,22 @@ namespace BrnGui
         // GuiModule::Construct @0x82518028 hands it the cache, the sign-in watcher, and
         // the view module's language manager), then the flows against the cache; the
         // controller starts UNLOADED on every flow slot.
-        mGuiCache.Construct();
+        // ⭐⭐ THE SAT-NAV TRACKER, Constructed BEFORE the cache exactly as the console does.
+        // X360 GuiModule::Construct @0x82518028 emits the tracker's inlined Construct at
+        // @0x82518874..@0x825188C8 (off r29 == gm+1131872) and only then calls
+        // GuiCache::Construct @0x82518948 with `mr r4, r29`. Order matters here for the same
+        // reason it does on the console: the cache's own "Invalid tracker pointer" assert
+        // (BrnGuiCache.cpp:1226) fires on a pointer that is handed over before its object is
+        // initialised, and every reader downstream (GetGuiTracker) gets the live one.
+        mGuiTracker.Construct();
+
+        // X360 @0x8251893C..@0x82518948, verbatim:
+        //     mr r5, r26   ; the module's CgsGui::SystemUserProfile @gm+949152
+        //     mr r4, r29   ; the module's GuiTracker              @gm+1131872
+        //     mr r3, r27   ; the GuiCache                         @gm+1005376
+        //     bl BrnGui::GuiCache::Construct
+        // ⭐ This is the WRITER of GuiCache::mpGuiTracker (+0x4054) the tree never had.
+        mGuiCache.Construct(&mGuiTracker, &mSystemUserProfile);
 
         // X360 GuiModule::Construct @0x82518028, the two lines that follow GuiCache::Construct
         // and MapIconManager::Construct: Construct the module's own WorldDataController (the
@@ -1160,6 +1175,26 @@ namespace BrnGui
                     lrClaim.mabOverriddenEventIds[li] = false;
             }
         }
+        // ⭐ THE EVENT-64 CACHE HAND-OFF -- the console's own tail of GuiModule::Construct,
+        // two lines before its GuiAccessPointers block:
+        //     v102[0] = a1 + 1005376;                              // the GuiCache
+        //     BrnGui::GuiTracker::RecEvent(a1 + 1131872, v102, 64, 4);
+        // (The 4 is the X360's 32-bit pointer size; RecEvent never reads the size argument,
+        // so the host passes sizeof the record it actually built.) The arm latches
+        // mpGuiCache and seeds mPlayersTrackerInfo from the cache's world-camera lane
+        // (GuiCache +0x4AE0), which is the tracker's own view of where the player is.
+        // ⚠️ The console re-posts 64 on every cache update; this build posts it once, at
+        // construction -- so the tracker's player record does not follow the camera yet.
+        // Named as the known gap (see the RecEvent banner in BrnGuiTracker.h), not papered
+        // over: the 232 publish path that draws the route line does not depend on it.
+        {
+            GuiEventCachePointer lCachePointerEvent;
+            lCachePointerEvent.mpCachePointer = &mGuiCache;
+            mGuiTracker.RecEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lCachePointerEvent), 64,
+                static_cast<s32>(sizeof(lCachePointerEvent)));
+        }
+
         mbResourcesReadyFed = false;
         mbPrepared          = false;
     }

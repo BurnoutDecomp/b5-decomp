@@ -14,7 +14,19 @@
 // THE OWNING PATH IS THE CONSOLE'S OWN. Every assert in this family names
 //   "..\..\..\GameSource\Director/Shots/ShotControllers/BrnCameraInterpolationController.cpp"
 // (lines 112, 156 and 212), so the file sits under Director/Shots/ShotControllers/ rather
-// than under Director/Camera/ where its callers live.
+// than under Director/Camera/ where its callers live. The DWARF agrees and is the tiebreak:
+// it places this class in Shots/ShotControllers/BrnCameraInterpolationController.{h,cpp} and
+// in no other file.
+//
+// ⛔ THIS IS THE ONLY DECLARATION OF THE CLASS. A second one used to sit at
+// Director/Camera/BrnCameraInterpolationController.h declaring the same fully-qualified
+// BrnDirector::CameraInterpolationController with an incompatible Matrix44AffineFromRota
+// (pointer-out / pointer-in, and its .cpp left the out matrix untouched, so the
+// RotateAboutPivot compiled against it returned a garbage stack matrix). The DWARF spells the
+// method value-returning with a const-ref params argument -- h:109,
+// `Matrix44Affine Matrix44AffineFromRotateAboutPivotParams(const RotateAboutPivotParams&,
+// Matrix44Affine)` -- which is the shape declared below. The fork is deleted; never re-add a
+// Director/Camera/ copy, and grow THIS header if the class needs more.
 //
 // LAYOUT -- two Utils::Interpolater sub-objects, by value:
 //   +0x00  mRotationInterpolater   the orientation blend's remembered-axis state
@@ -68,9 +80,15 @@ public:
                                                   Camera::Utils::Interpolater& lrLookAtInterpolater,
                                                   f32 lfT);
 
-        Matrix44Affine mRotation;    // +0x00 (rows 0..2 used; row 3 is scratch)
-        Matrix44Affine mLookAt;      // +0x30 (rows 0..2 used)
-        f32            mfDistance;   // +0x60
+        // ⚠️ These three are the console's members under RECONSTRUCTION names, in
+        // Matrix44Affine storage. The DWARF (h:76/77/79) names and types them
+        // `Matrix33 mLookatLocalRotation` / `Matrix33 mLookAtRotation` / `f32 mfRadius`, which
+        // is the 0x70-byte record the offsets below quote. Nothing here crosses an ABI or
+        // serialisation boundary and every access is by name, so the widening is inert -- but
+        // the DWARF names/types are the ones to converge on.
+        Matrix44Affine mRotation;    // console +0x00 (rows 0..2 used; row 3 is scratch)
+        Matrix44Affine mLookAt;      // console +0x30 (rows 0..2 used)
+        f32            mfDistance;   // console +0x60
     };
 
     // Reset both remembered-axis states. The console INLINES this at
@@ -105,7 +123,10 @@ public:
                                        RotateAboutPivotParams& lrOut) const;
 
     // @0x821F8220. The inverse of the extraction: rebuild a world transform from a
-    // pivot-relative description and the pivot's own transform.
+    // pivot-relative description and the pivot's own transform. (The X360 ledger identity for
+    // this address is the truncated `Matrix44AffineFromRota`, kept here so the name matches
+    // progress/identity.json; the DWARF spells it in full as
+    // Matrix44AffineFromRotateAboutPivotParams, h:109.)
     Matrix44Affine Matrix44AffineFromRota(const RotateAboutPivotParams& lrParams,
                                           const Matrix44Affine& lrPivot) const;
 

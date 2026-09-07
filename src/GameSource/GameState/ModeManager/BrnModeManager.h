@@ -112,6 +112,16 @@
 #include "SharedClasses/Trigger/BrnTriggerData.h"       // BrnTrigger::TriggerData (checkpoint landmark lookup)
 #include "SharedClasses/Trigger/BrnLandmark.h"          // BrnTrigger::Landmark / BoxRegion::GetPosition
 
+// -- the embedded freeburn-challenge manager (console +28160, 4128 B) -------------------------------
+// [2026-09-07] SAFE TO INCLUDE, and CHECKED BEFORE LANDING against the dual-scope hazard the ban on
+// BrnGameStateModuleIO.h above exists for: BrnChallengeManager.h's transitive include set reaches
+// NEITHER BrnTakedownManagerTypes.h (the second `enum EActiveRaceCarIndex` in namespace
+// BrnGameState) NOR BrnGameStateModuleIO.h / BrnNetworkModuleIO.h, so every unqualified
+// EActiveRaceCarIndex in this header keeps binding to the global BurnoutConstants.h one and no
+// committed ModeManager signature is re-mangled. It also does not reach back to this header
+// (it forward-declares BrnGameState::ModeManager), so there is no include cycle.
+#include "GameSource/GameState/ModeManager/ChallengeManager/BrnChallengeManager.h" // ChallengeManager @+28160
+
 namespace BrnProgression
 {
 // Pointer-only: mpProgressionManager + GetProgressionManager(). Owning header is
@@ -153,7 +163,6 @@ class StreetManager;
 class MugshotManager;
 class RoadRulesManager;
 class ModeManagerDebugComponent;   // [X] NOT embedded -- see the DIVERGENCE at its console seat below.
-class ChallengeManager;            // [X] NOT embedded -- see the DIVERGENCE at its console seat below.
 
 namespace GameStateModuleIO
 {
@@ -655,13 +664,43 @@ private:
                                                                  //         Its Construct leg is PARKED: the component header
                                                                  //         declares no Construct and both fields are private.
 
-    // [X][X] DIVERGENCE at console +28160: `ChallengeManager mChallengeManager` (4128 B, ends +32288)
-    // IS NOT EMBEDDED ON HOST (29 TUs, ~35 unresolved externals; freeburn challenges are off the
-    // offline-event path). The console spine calls into it FIVE times -- Construct, Prepare,
-    // ProcessEvent (unconditionally, as the FIRST statement), PreWorldUpdate, PostWorldUpdate -- and
-    // every one of those call sites carries its own DIVERGENCE banner naming the exact console call.
-    // [!] THE ProcessEvent ARM IS THE ONE THAT CHANGES BEHAVIOUR: freeburn challenge events die.
-    // Re-wire all five when the ChallengeManager mount lands.
+    // [2026-09-07] EMBEDDED (it was a DIVERGENCE until this pass). Console +28160: 4128 B (0x1020),
+    // ending exactly on maLandmarkIndices' +32288. Its own layout is pinned by
+    // BrnChallengeManager.cpp's static_assert block; nothing here reaches into it by offset, and
+    // nothing downstream of it in GameStateModule is pinned to an absolute offset, so the growth is
+    // inert on the host (verified: the whole 66-TU fan-out of this header still compiles).
+    //
+    // [x] FOUR OF THE FIVE CALL SITES ARE LIVE (2026-09-07, ChallengeManager mount). The console
+    // spine calls in five times: Construct, Prepare and ProcessEvent (unconditionally, as
+    // ProcessEvent's FIRST statement) in BrnModeManager_Lifecycle.cpp, PreWorldUpdate and
+    // PostWorldUpdate in BrnModeManager_WorldTick.cpp. All are made EXCEPT PreWorldUpdate.
+    // ⛔ PreWorldUpdate stays parked for a reason that is NOT link closure and NOT layout, and the
+    // full evidence is at the site (BrnModeManager_WorldTick.cpp, search "THE ONE CALL OF THE
+    // FIVE"): it is the only one of the five whose ModeManager parent is actually CALLED on this
+    // build (GameStateModule_gUI_00.cpp:1151, every unpaused frame) while ModeManager::Construct is
+    // NOT called at all (ConstructInterModeStateBringUp is the armed seam, and the real Construct
+    // cannot be armed until GameStateModule grows the mRoadRulesManager it has to forward). Making
+    // that one call today would tick a never-constructed ChallengeManager from boot. It also needs
+    // three arguments no accessor in this tree reaches. The other four are on ModeManager entry
+    // points with no caller, so landing them changes no behaviour today and arms them exactly when
+    // their parents arm.
+    // The blocker had been LINK CLOSURE, not layout: the 27 ChallengeManager TUs compiled clean but
+    // referenced twelve symbols with no definition anywhere in the tree, and the member itself
+    // dragged ChallengeManagerDebugComponent's vtable (GetName / OnActivate) into the static game
+    // module through ChallengeManager's constructor while that component's TU was off the build
+    // list (LNK2001 x2, build 20260907_133427). Both are paid in the same change: all twelve
+    // symbols are bodied (GameStateModule::GetActiveRaceCarIndex in its own GameState partfile;
+    // the seven ChallengeListEntry/ChallengeListEntryAction blob accessors in their owning
+    // header/.cpp; OutputBuffer::GetGuiOutputQueue + ::GetGameStateToNetworkInterface in
+    // BrnGameStateModuleIO.cpp; GameStateToNetworkInterface::SetPlayerInFreeburnChallenge in
+    // BrnNetworkModuleGameStateIOInterfaces.cpp; ChallengeManagerDebugComponent::StartChallenge as
+    // a named TRAP STUB in its own TU, its X360 registration being ICF-folded onto an unrelated
+    // callback), the two AchievementManagerBase freeburn hooks moved into their own base partfile,
+    // and all 27 ChallengeManager TUs -- the debug component included -- join the exe mount.
+    // [!] THE ProcessEvent ARM IS THE ONE THAT CHANGES BEHAVIOUR: while it was parked, freeburn
+    // challenge events died on the floor.
+    ChallengeManager mChallengeManager;                          // +28160  (C) Construct(gsm, this,
+                                                                 //         progression, roadRules, triggerQuery)
 
     // ---- the landmark / checkpoint block -----------------------------------------------------------
     // Cleared by ClearLandmarkAndFinishLineData @0x82328590 using the sentinel half-word at X360

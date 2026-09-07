@@ -103,7 +103,15 @@ void ModeManager::_AssertLayout()
     static_assert(offsetof(ModeManager, mpGameActionQueue)         < offsetof(ModeManager, mRandom),                "order (console +28008 < +28016)");
     static_assert(offsetof(ModeManager, mRandom)                   < offsetof(ModeManager, mTimerStatusInterface),  "order (console +28016 < +28064)");
     static_assert(offsetof(ModeManager, mTimerStatusInterface)     < offsetof(ModeManager, mScoringSystemDebugComponent), "order (console +28064 < +28136)");
-    static_assert(offsetof(ModeManager, mScoringSystemDebugComponent) < offsetof(ModeManager, maLandmarkIndices),   "order (console +28136 < +32288)");
+    // [challenge-manager mount 2026-09-07] The embedded ChallengeManager's two ordering links. It
+    // sits at console +28160, between the ScoringSystem debug component (+28136) and the landmark
+    // block (+32288), and its own 0x1020-byte internal layout is pinned by the static_assert block
+    // in BrnChallengeManager.cpp -- not here. What THESE two catch is the thing this file exists
+    // for: someone re-sorting the member run and moving the 4128-byte sub-object out of the console
+    // position every comment in the header claims for it. They are `<`, never absolute, because the
+    // host object is not byte-identical to the console's (see the banner at the top).
+    static_assert(offsetof(ModeManager, mScoringSystemDebugComponent) < offsetof(ModeManager, mChallengeManager), "order (console +28136 < +28160)");
+    static_assert(offsetof(ModeManager, mChallengeManager)         < offsetof(ModeManager, maLandmarkIndices),   "order (console +28160 < +32288)");
     static_assert(offsetof(ModeManager, mauNextLandmark)           < offsetof(ModeManager, muNumLandmarks),         "order (console +32760 < +32796)");
     static_assert(offsetof(ModeManager, muNumLandmarks)            < offsetof(ModeManager, mPlayerCurrentLandmark), "order (console +32796 < +32800)");
     static_assert(offsetof(ModeManager, mPlayerCurrentLandmark)    < offsetof(ModeManager, mfModeTimeLimit),        "order (console +32800 < +32804)");

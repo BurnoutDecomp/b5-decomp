@@ -27,6 +27,9 @@ namespace BrnGui { class FriendsListComponent; }
 // the methods reached by the in-scope GUI code are declared on GuiCache (its full data
 // layout is an out-of-scope boundary object the leaves only touch through these calls).
 namespace CgsGui { class ObjectController; struct GuiEventAptTriggerPayload; class GuiEventTimeInfo; }
+// GuiCache::Construct's second argument and the mpSystemUserProfile member below (pointer
+// only; home GameShared/GameClasses/Gui/CgsGuideIntegration.h).
+namespace CgsGui { class SystemUserProfile; }
 namespace CgsGui { namespace ModelIO { struct InputBuffer; } }
 namespace BrnResource { class ChallengeList; } // GetFreeburnChallengeList return (pointer only)
 namespace BrnGui { struct WorldDataController; }  // GetWorldDataController return (pointer only)
@@ -288,9 +291,24 @@ namespace BrnGui
     class GuiCache
     {
     public:
-        // @ 0x82505860 -- the cache Construct (PC slice: the embedded watcher reset;
-        // the X360 tracker/system-user-profile stores land with their owners).
-        void Construct();
+        // @ 0x82505860 -- the cache Construct.
+        //
+        // ⭐⭐ SIGNATURE RESTORED 2026-09-07 (sat-nav tracker bind). This used to take NO
+        // arguments, with the note "the X360 tracker/system-user-profile stores land with
+        // their owners". They never did: nothing in the tree wrote mpGuiTracker, so every
+        // sat-nav publish in BrnGuiCache_wJ_01.cpp took the guarded "absent" branch and the
+        // route line stayed empty. The console's prologue settles the shape --
+        //     mr r31, r3 / mr r25, r4 / mr r24, r5    @0x82505878..0x82505884
+        //     cmplwi r25, 0 -> FireAssert("Invalid tracker pointer",
+        //                                 "...GameSource\Gui/BrnGuiCache.cpp", 0x4CA)
+        //     cmplwi r24, 0 -> FireAssert("lpSystemUserProfile", same file, 0x4CB)
+        //     stw r25, 0x4054(r31)   @0x82505934   -> mpGuiTracker
+        //     stw r24, 0x4058(r31)   @0x8250593C   -> mpSystemUserProfile
+        // -- so Construct takes exactly two arguments, in that order. The one caller is
+        // BrnGui::GuiModule::Construct @0x82518028 (`mr r4, r29` = the module's own
+        // GuiTracker @gm+1131872, `mr r5, r26` = its CgsGui::SystemUserProfile @gm+949152).
+        void Construct(GuiTracker* lpGuiTracker,
+                       CgsGui::SystemUserProfile* lpSystemUserProfile);
 
         // @0x8250DD80 -- resource-helper update. The unrelated per-car scratch reset
         // in the tail is outside this cache slice.
@@ -1272,10 +1290,24 @@ namespace BrnGui
         // ADDITIVE CARVE (OnlineGameRoomPlayerInfo keystone, wave H): the sat-nav GUI
         // tracker pointer. X360 +0x4054 (16468) -- the "mpGuiCache->GetGuiTracker()"
         // assert + GuiTracker::ClearTracker(*(cache+0x4054)) in the screen's
-        // HandleGuiCacheEvent @0x824A3F60 region. One X360 word (+0x4058) stays
-        // unclaimed between this and mpProfile.
+        // HandleGuiCacheEvent @0x824A3F60 region.
+        // ⭐ 2026-09-07: Construct above is now its WRITER (`stw r25, 0x4054(r31)`
+        // @0x82505934), which is what makes GetGuiTracker() return a live object.
         GuiTracker*               mpGuiTracker;          // +0x4054 (16468)
-        u8  mPad_4058[4];                                // +0x4058..+0x405B (unclaimed word)
+        // ⭐ CARVED 2026-09-07 out of the old mPad_4058 "unclaimed word", and NAMED BY THE
+        // CONSOLE, not by a consumer: GuiCache::RecEvent @0x8250DDF0's case-126 arm asserts
+        // "lpSystemUserProfileEvent->mpSystemUserProfile" (BrnGuiCache.cpp:0xB22) and then
+        // `stw r11, 0x4058(r31)` @0x82510D9C -- the same word Construct's second argument
+        // lands in (`stw r24, 0x4058(r31)` @0x8250593C, guarded by the "lpSystemUserProfile"
+        // assert at BrnGuiCache.cpp:0x4CB).
+        // ⚠️ The console's own Construct writes this word TWICE -- the argument at
+        // @0x8250593C and then plain 0 at @0x82506058, in the far-member reset run just
+        // before the `stfs f31, 0(r31)` that clears mfTimeStep (r31 is reloaded from the
+        // saved `this` at @0x82505F9C, r30 is 0 for the whole body, so both stores are real
+        // and both target this member). Construct therefore LEAVES IT NULL; the live binding
+        // arrives with GUI event 126. Reproduced as-is below rather than "corrected" --
+        // see the note in GuiCache::Construct.
+        CgsGui::SystemUserProfile* mpSystemUserProfile;  // +0x4058 (16472)
         BrnProgression::Profile*  mpProfile;             // +0x405C (16476) OdometerComponent::Construct @0x82415088 (mpGuiCache+0x405C); DetermineCarUnlockPending source
         MapIconManager*           mpMapIconManager;      // +0x4060 (16480) SetMapIconManager @0x824EC3C8 (v3[4120]=a2)
         WorldDataController*      mpWorldDataController;  // +0x4064 (16484)
