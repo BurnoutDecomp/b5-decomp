@@ -1,5 +1,9 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenuItem.h"
 
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
+
 // CgsDev::DebugUI::MenuItem - base ctor + size accessors. The update/render/size virtual protocol is
 // the menu-render follow-on; stubbed here so the class vtable links (this code is dead in the
 // loading-screen build - no menu is ticked or drawn during loading). GetDisplayName/GetItemString
@@ -42,9 +46,63 @@ namespace CgsDev
         void    MenuItem::GetItemString(char* lpcBuffer, s32 liBufferLen) const  { if (liBufferLen > 0) lpcBuffer[0] = '\0'; }
         Window* MenuItem::OpenAsWindow() { return nullptr; }
 
-        // --- text helpers used by MenuItemVariable/MenuItemFunction render: menu-render
-        // follow-on, dead on the loading-screen boot. Stubbed for link. ---
-        void MenuItem::RenderMenuItemText(Debug2DImmediateRender*, const char*, f32, f32, f32, f32, bool, f32) {}
-        void MenuItem::ComputeSizeFromText(const char*) {}
+        // X360 0x828294C0. Selected rows get a one-border highlight spanning the window's full
+        // content width; text then uses the selected or ordinary palette colour.
+        void MenuItem::RenderMenuItemText(Debug2DImmediateRender* lpRender, const char* lpcText,
+                                          f32 lfX, f32 lfY, f32 /*lfWidth*/, f32 lfHeight,
+                                          bool lbSelected, f32 lfItemWidth)
+        {
+            const Metrics& lrMetrics = GetMetrics();
+            const Palette& lrPalette = GetPalette();
+            RGBA lTextColour = lrPalette.mColourText;
+
+            if (lbSelected)
+            {
+                const f32 lfBorder = lrMetrics.mfWindowBorderSize;
+                lpRender->DrawBox(lfX - lfBorder, lfY - lfBorder,
+                                  lfItemWidth + lfBorder * 2.0f,
+                                  lfHeight + lfBorder * 2.0f,
+                                  lrPalette.mColourHighlight);
+                lTextColour = lrPalette.mColourHighlightText;
+            }
+
+            lpRender->DrawText(lpcText, lfX, lfY, lrMetrics.mfTextSize, lTextColour);
+        }
+
+        void MenuItem::RenderMenuItemBackground(Debug2DImmediateRender* lpRender,
+                                                f32 lfX, f32 lfY, f32 /*lfWidth*/, f32 lfHeight,
+                                                bool lbSelected, f32 lfItemWidth)
+        {
+            if (!lbSelected)
+                return;
+
+            const f32 lfBorder = GetMetrics().mfWindowBorderSize;
+            lpRender->DrawBox(lfX - lfBorder, lfY - lfBorder,
+                              lfItemWidth + lfBorder * 2.0f,
+                              lfHeight + lfBorder * 2.0f,
+                              GetPalette().mColourHighlight);
+        }
+
+        void MenuItem::ComputeSizeFromText(const char* lpcText)
+        {
+            const Metrics& lrMetrics = GetMetrics();
+            mfWidth = Get2DRenderer()->CalcTextWidth(lpcText, lrMetrics.mfTextSize);
+            mfHeight = lrMetrics.mfTextSize;
+        }
+
+        const Palette& MenuItem::GetPalette() const
+        {
+            return DebugManager::GetInstance()->GetUI().GetPalette();
+        }
+
+        const Metrics& MenuItem::GetMetrics() const
+        {
+            return DebugManager::GetInstance()->GetUI().GetMetrics();
+        }
+
+        Debug2DImmediateRender* MenuItem::Get2DRenderer() const
+        {
+            return DebugManager::GetInstance()->GetUI().Get2DRenderer();
+        }
     }
 }

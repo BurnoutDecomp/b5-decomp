@@ -24,6 +24,7 @@ namespace CgsDev
     namespace DebugUI
     {
         struct MenuItem;
+        struct MenuItemFunction;
         struct MenuItemVariable;
     }
 
@@ -33,6 +34,9 @@ namespace CgsDev
         // each component's active flag / section callback (it reaches mbActive + OnRegister).
         friend struct CgsDev::Internal::DebugLinkedList<DebugComponent>;
         friend class CgsDev::DebugManager;
+        // MenuItemFunction::IsUseful compares its callback with the private section callback
+        // (ARTIST 0x82832240) so auto-generated component headers are not treated as actions.
+        friend struct CgsDev::DebugUI::MenuItemFunction;
 
     public:
         DebugComponent();

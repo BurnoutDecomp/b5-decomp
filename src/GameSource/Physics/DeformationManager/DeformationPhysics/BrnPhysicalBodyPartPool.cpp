@@ -66,7 +66,7 @@ namespace Deformation
     // BrnPhysicalBodyPartPool.h:34 (DWARF `float32_t KF_PART_EXTRA_GRAVITY`). The numeric value is
     // NOT in the per-function exports; carried as an honest zero (NEVER fabricated). Used only by
     // UpdateRWBodies below.
-    static const f32 KF_PART_EXTRA_GRAVITY = 0.0f;
+    f32 kfPartExtraGravity = 0.0f;   // ARTIST .bss default at 0x82FB7E14
 
     // X360 deformation-part owner tags written into the contact volume-instance id (see
     // BrnBurnoutBodyPartID.h). UpdateJoinedParts tripwires that each contact's owner is one of
@@ -204,7 +204,7 @@ namespace Deformation
             // orientation row (asm vmulfp128 against the +0xD0 row). See the FLAG above.
             const Matrix44Affine lRenderTransform = lpPart->GetRenderTransform();
             const Vector3& lvUpRow = lRenderTransform.Up();
-            const Vector3 lvLocalGravity = { 0.0f, KF_PART_EXTRA_GRAVITY, 0.0f, 0.0f };
+            const Vector3 lvLocalGravity = { 0.0f, kfPartExtraGravity, 0.0f, 0.0f };
             const Vector3 lvForce = {
                 lvLocalGravity.x * lvUpRow.x,
                 lvLocalGravity.y * lvUpRow.y,

@@ -188,7 +188,6 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo)
             CgsDev::DebugRender& lRender1 = lDebug1.CgsDev::DebugInterface::GetRender();
             lRender1.CgsDev::DebugRender::DrawAxis(
                 reinterpret_cast<const f32*>(&mLastRigTransform));
-            CgsDev::DebugManager::ThreadSafeRelease(&lDebug1.GetDebugManager());
         }
         else
         {
@@ -285,7 +284,6 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo)
             0xFF0000FFu, Vector3(), Vector3(), Vector3(), Vector3());
         lRender2.CgsDev::DebugRender::DrawSolidQuad(
             0xFF00FF00u, Vector3(), Vector3(), Vector3(), Vector3());
-        CgsDev::DebugManager::ThreadSafeRelease(&lDebug2.GetDebugManager());
 
         (void)lfFar;
         (void)lfIntensity;

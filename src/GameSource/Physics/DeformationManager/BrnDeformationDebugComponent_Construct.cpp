@@ -188,46 +188,5 @@ namespace Deformation
         lpThis->SetReadOnly( &lpThis->mfSensorScratch,  false );
     }
 
-    // ==============================================================================================
-    // ⚠️⚠️ THE THREE VIRTUALS -- LOUD STUBS, AND HERE IS EXACTLY WHY.
-    //
-    // Defining DeformationManager::mDebugComponent (BrnDeformationConstructShims.cpp) instantiates
-    // this class, and instantiating a polymorphic class emits its VTABLE, which the linker will not
-    // let you have unless EVERY virtual has a definition somewhere in the link. This class declares
-    // three (BrnDeformationDebugComponent.h:62/:67/:71) and all three have REAL, COMPLETE bodies
-    // already written in BrnDeformationDebugComponent.cpp:
-    //     Update      @0x82623178      RenderWorld @0x82606548      OnActivate  @0x82623198
-    // Those bodies are NOT reproduced here and NOT re-derived; they are exactly the functions that
-    // make that TU unmountable. The MEASURED trial link (task #116, M2) attributes 25 of its 53
-    // unresolved externals to OnActivate and 12 to RenderWorld -- the CgsDev debug-menu
-    // RegisterVariable/SetStep/SetRange surface and the Debug3DImmediateRender draw API, which are
-    // blocked behind the DebugUI Window/MenuItem/CustomWindow layout reconstruction.
-    //
-    // ⛔ SO THESE ARE STUBS, AND THEY ARE DELIBERATELY LOUD -- never a quiet no-op. Nothing on this
-    // build can reach them: a DebugComponent's virtuals are driven by the debug menu, and this
-    // component is only ever handed to it by DeformationDebugComponent_Register, which is called
-    // from DeformationManager::Prepare -- still in the unmounted BrnDeformationManager.cpp. If that
-    // ever changes, the assert fires immediately instead of the component silently drawing nothing.
-    //
-    // ⚠️ WHEN BrnDeformationDebugComponent.cpp IS MOUNTED, DELETE THIS BLOCK FIRST -- otherwise it is
-    // a duplicate-symbol error (which is the failure mode you want here, not a silent override).
-    // ==============================================================================================
-    void DeformationDebugComponent::Update()
-    {
-        CGS_ASSERT(false, "DeformationDebugComponent::Update: vtable stub reached -- the real body is "
-                          "in BrnDeformationDebugComponent.cpp; mount it (see task #116)");
-    }
-
-    void DeformationDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* /*lpRender*/)
-    {
-        CGS_ASSERT(false, "DeformationDebugComponent::RenderWorld: vtable stub reached -- the real body "
-                          "is in BrnDeformationDebugComponent.cpp; mount it (see task #116)");
-    }
-
-    void DeformationDebugComponent::OnActivate()
-    {
-        CGS_ASSERT(false, "DeformationDebugComponent::OnActivate: vtable stub reached -- the real body "
-                          "is in BrnDeformationDebugComponent.cpp; mount it (see task #116)");
-    }
 }
 }

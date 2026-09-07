@@ -7,17 +7,13 @@
 
 // CgsDev::DebugRender - the BUFFERED debug renderer (the DebugManager's mBufferedRenderer, X360
 // DebugManager+0x14C). Debug draws are QUEUED here as byte-image events in a VariableEventQueue and
-// replayed once per frame by Dispatch2D into the immediate-mode Debug2DImmediateRender.
-// DebugManager::RenderHUD flushes it (Dispatch2D) before the per-component HUD pass. Recovered from
-// the X360 ARTIST build (Draw2DText 0x8282B1D0 / Draw2DBox 0x8282B2D8 / Dispatch2D 0x8282A4B8): each
-// Draw2DX queues a CInEventDrawX2D under a type ID; Dispatch2D walks the queue
-// (GetFirstEvent/GetNextEvent) and replays each into the renderer, then clears.
+// replayed once per frame by Dispatch2D/Dispatch3D into the immediate renderers. Recovered from
+// the X360 ARTIST publishers and complete replay switches at 0x8282A4B8/0x8282A6F0.
 //
 // LAYOUT (X360 DebugManager::Construct @0x828332C0 + the ctor @0x82822370): the object is exactly
 // TWO VariableEventQueue<16384,16> back to back - the 3D (world-space) queue at +0, the 2D queue at
 // +0x4010 (DebugManager reaches them at +0x14C and +0x415C). Both queues are real members now; the
-// 3D DISPATCH path (Dispatch3D + the world-space replay) is still the Debug3D render follow-on -
-// only the 2D replay is bodied.
+// 3D queue at +0 is replayed during DebugManager::RenderWorld; 2D at +0x4010 during RenderHUD.
 //
 // This header is pulled by value into CgsDebugManager.h, so it stays light: the immediate renderer
 // is forward-declared (Dispatch2D takes it by pointer); CgsDebugRender.cpp includes the real type.
@@ -37,6 +33,32 @@ namespace CgsDev
             E_INEVENT_2D_TEXT   = 1,
             E_INEVENT_2D_LINE   = 2,
             E_INEVENT_2D_BOX    = 3,
+            E_INEVENT_2D_FRAME  = 4,
+        };
+
+        enum InEvent3DType
+        {
+            E_INEVENT_3D_STRING       = 0,
+            E_INEVENT_3D_TEXT         = 5,
+            E_INEVENT_3D_LINE         = 6,
+            E_INEVENT_3D_POINT        = 7,
+            E_INEVENT_3D_QUAD         = 8,
+            E_INEVENT_3D_SOLID_QUAD   = 9,
+            E_INEVENT_3D_ANGLE        = 10,
+            E_INEVENT_3D_AXIS         = 11,
+            E_INEVENT_3D_SPHERE       = 12,
+            E_INEVENT_3D_SOLID_SPHERE = 13,
+            E_INEVENT_3D_HOLLOW_SPHERE = 14,
+            E_INEVENT_3D_CIRCLE       = 15,
+            E_INEVENT_3D_BOX          = 16,
+            E_INEVENT_3D_BOX_AA       = 17,
+            E_INEVENT_3D_SOLID_BOX    = 18,
+            E_INEVENT_3D_SOLID_BOX_AA = 19,
+            E_INEVENT_3D_ARROW        = 20,
+            E_INEVENT_3D_SOLID_ARROW  = 21,
+            E_INEVENT_3D_TRIANGLE     = 22,
+            E_INEVENT_3D_CYLINDER     = 23,
+            E_INEVENT_3D_CAPSULE      = 24,
         };
 
         // The queued 2D/3D event records (CInEventDrawText2D / CInEventDrawLine2D / CInEventDrawBox2D
@@ -48,10 +70,6 @@ namespace CgsDev
     class DebugRender
     {
     public:
-        // WorldEntityModule::RenderInstance debug path (@0x822D5AB0 tail): draw a
-    // world-space circle (centre, facing, radius, packed colour). Declaration only;
-    // the body lands with the DebugRender TU (per-TU compile gate).
-    void DrawCircle( Vector3 lCentre, Vector3 lNormal, f32 lfRadius, u32 luColour );
         // Text justification for Draw2DTextJustified (DecFIGS DWARF CgsDebugRender.h:112).
         enum Justification
         {
@@ -61,6 +79,7 @@ namespace CgsDev
         };
 
         void Construct();
+        void Destruct();
         void Clear();
 
         // Draw a justified 2D text string: measure the text width at lfSize, shift lv2Position left
@@ -77,49 +96,55 @@ namespace CgsDev
         // X360-attested Vector2 overloads (DecFIGS DWARF CgsDebugRender.h:93/96): the debug overlay
         // code (ICERender) passes the screen rect/position as Vector2 values and a packed RGBA.
         void Draw2DText(const char* lpcText, Vector2 lv2Position, f32 lfScale, RGBA lColour);
+        void Draw2DLine(Vector2 lv2Start, Vector2 lv2End, RGBA lColour);
         void Draw2DBox(Vector2 lv2Min, Vector2 lv2Max, RGBA lColour);
+        void Draw2DFrame(Vector2 lv2Min, Vector2 lv2Max, RGBA lColour);
 
         void Draw2DText(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
         void Draw2DLine(f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, RGBA lColour);
         void Draw2DBox(f32 lfMinX, f32 lfMinY, f32 lfMaxX, f32 lfMaxY, RGBA lColour);
+        void Draw2DFrame(f32 lfMinX, f32 lfMinY, f32 lfMaxX, f32 lfMaxY, RGBA lColour);
 
-        // Queue a 3D (WORLD-space) box: an axis-aligned box at `lpv3Centre` extending
-        // from `lv4MinCorner` to `lv4MaxCorner` (corner offsets) in the space of the
-        // passed world transform.
-        // X360-attested (CgsDev::DebugRender::DrawBox, progress/tu_index.json):
-        // ICEWidgetTargetBox::Render @0x8252D2B8 passes the widget's world transform base
-        // as the `float*` (r4 = this+0x10, the caller's 4-row matrix), the packed colour
-        // (r5), and the two corner vectors in the SIMD arg registers (v1 = min corner
-        // {-0.05,-0.05,-0.05,0}, v2 = max corner {+0.05,+0.05,+0.05,0}). DECLARATION-ONLY:
-        // the body queues a CInEventDrawBox into the 3D event queue and is the Debug3D
-        // render follow-on (this render currently models only the 2D queue, so no 3D body
-        // is defined here).
-        // FLAG (header grow): DrawBox (3D) added here for ICEWidgetTargetBox::Render; the
-        //       symbol is X360-attested but has no DWARF here, so the arg shape (transform
-        //       float* + RGBA + two Vector4 corners) is asm-derived from the call.
+        // Canonical world-space API from the DecFIGS declaration shape. Each method publishes the
+        // byte-image record consumed by the ARTIST Dispatch3D switch.
+        void DrawText(Vector3 lv3Position, const char* lpcText, f32 lfScale, RGBA lColour);
+        void DrawLine(Vector3 lv3From, Vector3 lv3To, RGBA lColour);
+        void DrawPoint(Vector3 lv3Position, RGBA lColour);
+        void DrawQuad(Vector3 lv3A, Vector3 lv3B, Vector3 lv3C, Vector3 lv3D, RGBA lColour);
+        void DrawSolidQuad(Vector3 lv3A, Vector3 lv3B, Vector3 lv3C, Vector3 lv3D, RGBA lColour);
+        void DrawAngleDeg(Vector3 lv3Position, f32 lfAngle, RGBA lColour);
+        void DrawAngleRad(Vector3 lv3Position, f32 lfAngle, RGBA lColour);
+        void DrawAxis(Matrix44Affine lTransform);
+        void DrawSphere(Vector3 lv3Centre, f32 lfRadius, RGBA lColour);
+        void DrawSolidSphere(Vector3 lv3Centre, f32 lfRadius, RGBA lColour);
+        void DrawHollowSphere(Vector3 lv3Centre, f32 lfRadius, RGBA lColour);
+        void DrawCircle(Matrix44Affine lTransform, f32 lfRadius, RGBA lColour);
+        void DrawCircle(Vector3 lv3Centre, Vector3 lv3Normal, f32 lfRadius, RGBA lColour);
+        void DrawBox(Vector3 lv3Min, Vector3 lv3Max, Matrix44Affine lTransform, RGBA lColour);
+        void DrawBox(Vector3 lv3Min, Vector3 lv3Max, RGBA lColour);
+        void DrawSolidBox(Vector3 lv3Min, Vector3 lv3Max, Matrix44Affine lTransform, RGBA lColour);
+        void DrawSolidBox(Vector3 lv3Min, Vector3 lv3Max, RGBA lColour);
+        void DrawArrow(Vector3 lv3From, Vector3 lv3To, RGBA lColour);
+        void DrawSolidArrow(Vector3 lv3From, Vector3 lv3To, RGBA lColour);
+        void DrawCapsule(Vector3 lv3Start, Vector3 lv3End, f32 lfRadius, RGBA lColour);
+        void DrawCylinder(Vector3 lv3Start, Vector3 lv3End, f32 lfRadius, RGBA lColour);
+        void DrawTriangle(Vector3 lv3A, Vector3 lv3B, Vector3 lv3C, RGBA lColour);
+        void DrawWireTriangle(Vector3 lv3A, Vector3 lv3B, Vector3 lv3C, RGBA lColour);
+        void DrawCross(Vector3 lv3Position, f32 lfSize, RGBA lColour);
+
+        // Compatibility spellings used by already-reconstructed call sites whose matrix/vector ABI
+        // was recovered before the DecFIGS declaration was mounted. They forward to the canonical
+        // methods and do not create a second render path.
         void DrawBox(const f32* lpTransform, RGBA lColour, Vector4 lv4MinCorner, Vector4 lv4MaxCorner);
-
-        // FLAG (header grow 2026-08-02): DrawLine (3D) added for
-        // BehaviourGameplayExternal::Update's debug-render arm (.cpp:370, X360 @0x82241524).
-        // ARGUMENT SHAPE IS ASM-DERIVED and matches DrawSolidQuad's above: the packed colour
-        // arrives in the GPR slot (r4) and the two world-space endpoints in v1/v2. No DWARF
-        // here; DECLARATION-ONLY, the body is the Debug3D render follow-on.
         void DrawLine(RGBA lColour, Vector3 lv3From, Vector3 lv3To);
-
-        // FLAG (header grow): DrawAxis + DrawSolidQuad added for BehaviourRig::Update.
-        // DrawAxis: draws the 3 coordinate axes of a world-space transform (asm @BehaviourRig::Update).
         void DrawAxis(const f32* lpTransform);
-        // DrawSolidQuad: draws a world-space solid quad defined by 4 corner points + colour.
         void DrawSolidQuad(RGBA lColour, Vector3 lv3A, Vector3 lv3B, Vector3 lv3C, Vector3 lv3D);
 
         // X360 Dispatch2D: replay the queued 2D events into lpRenderer; clear the queue if lbClear.
         void Dispatch2D(Debug2DImmediateRender* lpRenderer, bool lbClear);
 
         // X360 Dispatch3D: replay the queued WORLD-space events into the 3D renderer; clear the
-        // queue if lbClear (DebugManager::RenderWorld @0x8282E030 calls it inside the 3D Begin/End
-        // bracket). BOUNDED: the replay switch is the Debug3D render follow-on - no 3D events are
-        // queued on this build (the 3D Draw* publishers are declaration-only), so the body only
-        // honours the clear.
+        // queue if lbClear (DebugManager::RenderWorld brackets this with Begin/End).
         void Dispatch3D(Debug3DImmediateRender* lpRenderer, bool lbClear);
 
     private:

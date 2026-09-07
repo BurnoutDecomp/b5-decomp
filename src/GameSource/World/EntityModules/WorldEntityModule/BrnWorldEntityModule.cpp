@@ -56,7 +56,7 @@ namespace BrnWorld
 // BrnWorldEntityModule.cpp:109 (DWARF: WorldEntityModule::_mbAllowStreamStalling).
 // X360 byte_82CDB588. When set, PostPhysicsUpdate only reports the world as
 // streamed once the player + required zones are resident.
-static bool _mbAllowStreamStalling = true;
+bool _mbAllowStreamStalling = true;
 
 // X360 dword_82FAD9B4 -- UpdateStream's warm-up counter: the stream does not run
 // for the first few frames after boot (static, file scope).

@@ -102,7 +102,7 @@ namespace BrnNetworkModuleIO
     class GuiEventQueueSmall;            // OutputBuffer @ +16
     class StatsOutputInterface;          // OutputBuffer @ +178692
     class NetworkToGuiInterface;         // OutputBuffer @ +180588
-    class NetworkToGameStateInterface;   // OutputBuffer @ +172376
+    struct NetworkToGameStateInterface;  // OutputBuffer @ +172376
     class NetworkEventQueue;             // OutputBuffer @ +184080 ; PostSim @ +72952..+73284
     class VehicleDriverInputInterface;   // OutputBuffer @ +5312   (DWARF mVehicleDriverInputInterface, h:440)
     class NetworkInputInterface;         // OutputBuffer @ +147488 (DWARF mCrashNetworkInputInterface, h:442)

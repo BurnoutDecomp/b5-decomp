@@ -193,15 +193,14 @@ namespace BrnGameState
     //
     // Draw one line of on-screen debug text (the invite-state overlay) through the CgsDev debug
     // system: construct a stack DebugInterface (acquires the debug manager), grab its buffered
-    // renderer, queue a 2D text draw at lTextPosition in the invite text colour/size, then
-    // thread-safe-release the manager.
+    // renderer, and queue a 2D text draw at lTextPosition in the invite text colour/size. The
+    // interface destructor releases the manager.
     // ========================================================================
     void GameStateInviteManager::RenderDebugText(const char* lpcDebugText, Vector2 lTextPosition)
     {
         CgsDev::DebugInterface lDebugInterface;
         lDebugInterface.GetRender().Draw2DText(lpcDebugText, lTextPosition,
                                                KF_INVITE_MANAGER_TEXT_SIZE, KU_INVITE_MANAGER_TEXT_COLOUR);
-        CgsDev::DebugManager::ThreadSafeRelease(&lDebugInterface.GetDebugManager());
     }
 
     // ========================================================================

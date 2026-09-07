@@ -70,7 +70,12 @@ namespace Deformation
         u8      GetNextSensor(ENextSensorDirection leDirection) const;  // DWARF :75
         CgsSceneManager::VolumeId GetVolumeID(u8 lu8Index) const;       // DWARF :80
         void    SetInitialOffset(Vector3 lInitialOffset);              // DWARF :93
-        VecFloat GetCompressionLimit(ENextSensorDirection leDirection) const; // DWARF :98
+        // Console-inline: broadcast the selected direction's scalar compression limit.
+        VecFloat GetCompressionLimit(ENextSensorDirection leDirection) const
+        {
+            const f32 lfLimit = maDirectionParams[static_cast<s32>(leDirection)].mCompressionLimits;
+            return VecFloat{ lfLimit, lfLimit, lfLimit, lfLimit };
+        } // DWARF :98
         void    FixUp(void* lpBaseAddress);                            // DWARF :105
         void    FixDown(void* lpBaseAddress);                          // DWARF :108
         u8      GetNeighbourIndex(s32 liIndex) const;                  // DWARF :115

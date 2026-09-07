@@ -13,6 +13,7 @@ namespace CgsDev
     {
         struct Function
         {
+            friend struct FunctionManager;
             typedef void (*DebugCallbackFunction)(void* lpParameter);
 
             bool                  Prepare(DebugCallbackFunction lpfFunction, void* lpParameter, const char* lpcName);

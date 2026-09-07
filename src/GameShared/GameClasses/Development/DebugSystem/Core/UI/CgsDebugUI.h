@@ -2,9 +2,14 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugCollections.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Controller/CgsDebugController.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenuManager.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsVariableManager.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsFunctionManager.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Console/CgsConsole.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Windows/CgsErrorWindow.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/ScriptInterface/CgsScriptInterface.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CommandWindow/CgsCommandWindow.h"
 
 // CgsDev::DebugUI::DebugUI - the singleton hub of the whole debug menu: the window stack, the
 // shared palette/metrics/controller, and the three managers (menu / variable / function) every
@@ -34,13 +39,11 @@ namespace CgsDev
         struct Window;
         struct Palette;
         struct Metrics;
-        struct DebugController;
         struct Console;
         struct ErrorWindow;
         struct ScriptInterface;
         struct CommandWindow;
         struct LogWindow;
-        struct DebugManagerPad;
 
         enum DockEdge
         {
@@ -58,6 +61,9 @@ namespace CgsDev
             // (X360 0x82832660). dwarfdump does not surface friend declarations, so this access
             // is attested by that inlined asm.
             friend struct ScriptInterface;
+            friend struct MenuWindow;
+            friend struct CustomWindow;
+            friend struct CommandWindow;
 
         private:
             Window*                          mpActiveWindow;
@@ -67,20 +73,23 @@ namespace CgsDev
             bool                             mbVisible;
             bool                             mbRunAutoExec;
             Debug2DImmediateRender*          mp2dRender;
-            // -- deferred heavy members (see header note): Palette, DebugController here --
-            Metrics                          mMetrics;   // screen metrics the render layout reads (real)
+            Palette                          mPalette;
+            Metrics                          mMetrics;
+            CgsDev::DebugController          mController;
             MenuManager                      mMenuManager;
             VariableManager                  mVariableManager;
             FunctionManager                  mFunctionManager;
-            // -- deferred heavy members (see header note): Console, ErrorWindow, ScriptInterface,
-            //    CommandWindow follow --
+            Console                          mConsole;
+            ErrorWindow                      mErrorWindow;
+            ScriptInterface                  mScriptInterface;
+            CommandWindow                    mCommandWindow;
 
         public:
             void Construct(const DebugManagerConstructParameters* lpParameters);
             void Update(f32 lfTimeStep);
             void Destruct();
 
-            void SetGamePad(DebugManagerPad* lpPad);
+            void SetGamePad(CgsDev::DebugManagerPad* lpPad);
             void Render();
 
             void          AddWindow(Window* lpWindow);
@@ -100,7 +109,7 @@ namespace CgsDev
             ScriptInterface& GetScriptInterface();
             LogWindow&       GetLogWindow();
             CommandWindow&   GetCommandWindow();
-            DebugController&  GetController();
+            CgsDev::DebugController& GetController();
             bool             IsVisible();
 
             void ShowErrorMessage(const char* lpcMessage);

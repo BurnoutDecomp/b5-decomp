@@ -255,6 +255,7 @@ namespace BrnGameState
         void       SetTimeSinceLastScoringStunt(f32 lfTime) { mfTimeSinceLastStunt = lfTime; }
         f32        GetComboActiveTimer() const           { return mfSpeedMPHBeforeCrashing; }  // +0x5C
         void       SetComboActiveTimer(f32 lfTime)       { mfSpeedMPHBeforeCrashing = lfTime; }
+        s32        GetBillboardStuntCount() const        { return maStuntTypeScoreCount[E_STUNT_TYPE_BILLBOARD]; } // +0x1C8
         // The recent-combo snapshot timer (this+0x88) -- backed by mfRecentComboTime (added below).
         f32        GetRecentComboTime() const            { return mfRecentComboTime; }         // +0x88
         void       SetRecentComboTime(f32 lfTime)        { mfRecentComboTime = lfTime; }
@@ -493,6 +494,10 @@ namespace BrnGameState
         AchievementManager* mpAchievementManager; // :354
 
     public:
+        // Header-inline address used by ModeManagerDebugComponent::OnActivate. In ARTIST
+        // this is manager+0x33BC == ScoringSystem+0x260C == offline scorer+0x22BC.
+        bool* GetEndlessStuntRunFlag() { return &mbEndlessStuntRun; }
+
         // Named access for the X360-proven, DWARF-silent stunt-info-event-pending flag (+0x22BD).
         // UpdateBufferedScore arms it; PreWorldUpdate reads+clears it. Public so PreWorldUpdate's
         // sibling-mode caller chain (deferred TUs) can consume it by name.

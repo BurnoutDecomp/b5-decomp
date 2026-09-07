@@ -16,6 +16,8 @@ namespace CgsDev
     {
         struct Menu : public MenuItem
         {
+            friend struct MenuWindow;
+
             static const s32 KI_MAXMENUNAME = 25;
 
             Menu();
@@ -23,7 +25,7 @@ namespace CgsDev
             void Prepare(const char* lpcCaption, Menu* lpParent);
 
             virtual void    Update(f32 lfTimeStep, InputEvent leEvent);
-            virtual void    Render(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY, bool lbSelected, f32 lfAlpha);
+            virtual void    Render(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY, bool lbSelected, f32 lfItemWidth);
             virtual void    ComputeSize();
             virtual void    GetDisplayName(char* lpcBuffer, s32 liBufferLen) const;
             virtual Window* OpenAsWindow();

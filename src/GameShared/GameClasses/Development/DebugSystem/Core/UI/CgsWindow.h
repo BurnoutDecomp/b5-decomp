@@ -24,6 +24,7 @@ namespace CgsDev
         struct Palette;
         struct Metrics;
         struct ScriptInterface;
+        struct CommandWindow;
 
         struct Window : public Internal::DebugInternal
         {
@@ -34,6 +35,7 @@ namespace CgsDev
             // GetMenuPath virtual (vtable slot +0x10) and ClampToScreen on arbitrary list windows.
             // dwarfdump does not surface friend declarations; attested by that asm.
             friend struct ScriptInterface;
+            friend struct CommandWindow;
 
             // Window flag bits (X360 CgsWindow.h:62-72).
             static const s32 KX_FLAGNORMAL        = 0;
@@ -88,6 +90,7 @@ namespace CgsDev
             const Palette&          GetPalette() const;
             const Metrics&          GetMetrics() const;
             Debug2DImmediateRender* Get2DRenderer() const;
+            RGBA                    ScaleColour(RGBA lColour) const;
 
             const char* mpcCaption;
             s32         mxFlags;

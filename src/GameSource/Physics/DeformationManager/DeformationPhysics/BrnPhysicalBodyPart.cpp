@@ -153,12 +153,16 @@ namespace Deformation
     // and it is what AddToSim divides into 1.0 for the event's inverse mass. Two masses, both real:
     // the body carries 5.0, the sim is told 100.0. Neither is a stand-in for the other, and
     // BrnPhysicalBodyPart_Construct.cpp's own copy is renamed to say so.
-    static const f32 KF_PART_LINEAR_DRAG          = 0.0049999999f; // RECOVERED 0x82F2A370
-    static const f32 KF_PART_ANGULAR_DRAG         = 0.0049999999f; // RECOVERED 0x82F2A374
-    static const f32 KF_PART_MAX_LINEAR_VELOCITY  = 30.0f;         // RECOVERED 0x82F2A378
-    static const f32 KF_PART_MAX_ANGULAR_VELOCITY = 30.0f;         // RECOVERED 0x82F2A37C
-    static const f32 KF_PART_MASS                 = 100.0f;        // RECOVERED 0x82F2A380 (NOT the 5.0)
-    static const f32 KF_PART_INERTIA_MULTIPLIER   = 1.2f;          // RECOVERED 0x82F2A384
+    f32 kfPartLinearDrag          = 0.0049999999f; // RECOVERED 0x82F2A370
+    f32 kfPartAngularDrag         = 0.0049999999f; // RECOVERED 0x82F2A374
+    f32 kfPartMaxLinearVelocity   = 30.0f;         // RECOVERED 0x82F2A378
+    f32 kfPartMaxAngularVelocity  = 30.0f;         // RECOVERED 0x82F2A37C
+    f32 kfPartMass                = 100.0f;        // RECOVERED 0x82F2A380 (NOT the 5.0)
+    f32 kfPartInertiaMultiplier   = 1.2f;          // RECOVERED 0x82F2A384
+    f32 kfPartDynamicFriction     = 0.300000012f;  // RECOVERED 0x82F2A140
+    f32 kfPartStaticFriction      = 0.300000012f;  // RECOVERED 0x82F2A144
+    f32 kfJointPenetrationMultiplier = 1.5f;       // dynamic initializer @0x82C5DD78
+    f32 kfJointForceMultiplier       = 0.40000001f;// dynamic initializer @0x82C5DDA0
 
     // ----- AddToSim's own three numeric inputs ----------------------------------------------------
     // The fat-box rounding margin AddToSim hands ComputeFatBoxInertia: `lfs f4, flt_82001CC0`
@@ -262,8 +266,12 @@ namespace Deformation
         // zero was a hard kill switch: no joint could break at any energy. The old banner below called
         // that "a documented INERT behaviour-shift" -- it was the single biggest reason no part had
         // ever come off a car on this build.
-        const f32 KF_JOINT_FORCE_MULTIPLIER       = 0.40000001f;   // RECOVERED: 0x82FB96F0 @82C5DDA0 <- flt_8200473C
-        const f32 KF_JOINT_PENETRATION_MULTIPLIER = 1.5f;          // RECOVERED: 0x82FB95D0 @82C5DD78 <- flt_820945DC
+        // The two multipliers this block used to define as consts now live as the MUTABLE file-scope
+        // globals kfJointForceMultiplier (0.40000001f, RECOVERED 0x82FB96F0 @82C5DDA0 <- flt_8200473C)
+        // and kfJointPenetrationMultiplier (1.5f, RECOVERED 0x82FB95D0 @82C5DD78 <- flt_820945DC) at
+        // the top of this TU: BrnDeformationDebugComponent republishes its sliders into them, and a
+        // namespace-scope const would snapshot the value at static-init and leave the sliders dead.
+        // Same recovered values, same provenance -- read each time, so the tweakables take effect.
         // ⭐⭐⭐ THE UpdateJoint INTEGRATOR TUNING -- ALL FIVE RECOVERED 2026-09-05 (the recon wave;
         // read through their CRT thunks with tools/re/findinit.py + ppcdis + x360rd, each thunk the
         // same `lfs <rodata> ; stfs ; lvx ; vspltw ; stvx128 <slot>` 4-lane splat shape). They read
@@ -1961,7 +1969,7 @@ namespace Deformation
         {
             const f32 lfCensusMaxStress = lpActiveJoint->GetMaxStress();
             const f32 lfCensusPen = mLocalInitialJointPositionPlusLimitStress.GetPlus()
-                                  * KF_JOINT_PENETRATION_MULTIPLIER;
+                                  * kfJointPenetrationMultiplier;
             ++gxJbPenHist[JbDecade(lfCensusMaxStress > 0.0f ? (lfCensusPen / lfCensusMaxStress) : 0.0f)];
         }
 
@@ -2075,7 +2083,7 @@ namespace Deformation
                 const f32 lfJointForceMagnitude = lPointVelocity.x * lWorldAxis.x
                                                 + lPointVelocity.y * lWorldAxis.y
                                                 + lPointVelocity.z * lWorldAxis.z;
-                const f32 lfScaledForce = lfAbs(lfJointForceMagnitude) * KF_JOINT_FORCE_MULTIPLIER;
+                const f32 lfScaledForce = lfAbs(lfJointForceMagnitude) * kfJointForceMultiplier;
                 ++gxJbForceHist[JbDecade(lfMaxStress > 0.0f ? (lfScaledForce / lfMaxStress) : 0.0f)];  // [DIAG]
                 if ( lfScaledForce > lfMaxStress )
                 {
@@ -2088,7 +2096,7 @@ namespace Deformation
         // scales by kfJointPenetrationMultiplier.
         {
             const f32 lfPenetration = mLocalInitialJointPositionPlusLimitStress.GetPlus();   // +400 w
-            const f32 lfScaledPenetration = lfPenetration * KF_JOINT_PENETRATION_MULTIPLIER;
+            const f32 lfScaledPenetration = lfPenetration * kfJointPenetrationMultiplier;
             if ( lfScaledPenetration > lfMaxStress )
             {
                 lbBreak = true;   // v34 = 1
@@ -2570,11 +2578,11 @@ namespace Deformation
         lAddBodyEvent.mRigidBody.mAngularVelocity = lInitialAngularVelocity;
 
         // +0x80/+0x88/+0x8C/+0x90/+0x94 -- the five scalar tuning fields.
-        lAddBodyEvent.mRigidBody.mInertia.SetInverseMass(1.0f / KF_PART_MASS);
-        lAddBodyEvent.mRigidBody.mInertia.SetMaxLinearVelocity(KF_PART_MAX_LINEAR_VELOCITY);
-        lAddBodyEvent.mRigidBody.mInertia.SetMaxAngularVelocity(KF_PART_MAX_ANGULAR_VELOCITY);
-        lAddBodyEvent.mRigidBody.mInertia.SetLinearDrag(KF_PART_LINEAR_DRAG);
-        lAddBodyEvent.mRigidBody.mInertia.SetAngularDrag(KF_PART_ANGULAR_DRAG);
+        lAddBodyEvent.mRigidBody.mInertia.SetInverseMass(1.0f / kfPartMass);
+        lAddBodyEvent.mRigidBody.mInertia.SetMaxLinearVelocity(kfPartMaxLinearVelocity);
+        lAddBodyEvent.mRigidBody.mInertia.SetMaxAngularVelocity(kfPartMaxAngularVelocity);
+        lAddBodyEvent.mRigidBody.mInertia.SetLinearDrag(kfPartLinearDrag);
+        lAddBodyEvent.mRigidBody.mInertia.SetAngularDrag(kfPartAngularDrag);
 
         // +0xA0 `stb 1` -- TRUE here (the prop producers store 0). The sim's spy flag.
         lAddBodyEvent.mRigidBody.mbSpy = true;
@@ -2592,9 +2600,9 @@ namespace Deformation
                                           lAABBHalfExtents.z, KF_PART_FAT_BOX_MARGIN, &lInertia);
 
         // lInertia = (fatBox * mass) * splat(multiplier) + the floor vector. Lane 3 is not read.
-        lInertia.x = lInertia.x * KF_PART_MASS * KF_PART_INERTIA_MULTIPLIER + KV_PART_INERTIA_FLOOR.x;
-        lInertia.y = lInertia.y * KF_PART_MASS * KF_PART_INERTIA_MULTIPLIER + KV_PART_INERTIA_FLOOR.y;
-        lInertia.z = lInertia.z * KF_PART_MASS * KF_PART_INERTIA_MULTIPLIER + KV_PART_INERTIA_FLOOR.z;
+        lInertia.x = lInertia.x * kfPartMass * kfPartInertiaMultiplier + KV_PART_INERTIA_FLOOR.x;
+        lInertia.y = lInertia.y * kfPartMass * kfPartInertiaMultiplier + KV_PART_INERTIA_FLOOR.y;
+        lInertia.z = lInertia.z * kfPartMass * kfPartInertiaMultiplier + KV_PART_INERTIA_FLOOR.z;
 
         // NON-GATING tripwire, exactly as the asm spells it: the abs of the three lanes (the w lane
         // is replaced by a copy of x by the vrlimi128 so it cannot poison the reduction) compared

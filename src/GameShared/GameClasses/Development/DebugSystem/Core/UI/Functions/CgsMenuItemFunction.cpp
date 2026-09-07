@@ -3,6 +3,7 @@
 #include <string.h>  // strncpy
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsFunction.h"  // Function::Get*
 
 // CgsDev::DebugUI::MenuItemFunction - the manager-path bodies (Prepare + the function accessor) and
@@ -52,14 +53,24 @@ namespace CgsDev
             ComputeSizeFromText(mpFunction->GetName());
         }
 
-        // X360 0x82832240: a function row is useful unless its callback is
-        // DebugComponent::DebugUISectionCallback (the auto-generated section-header row). That
-        // callback is a *private static* of DebugComponent (CgsDebugComponent.h) with no public
-        // accessor and MenuItemFunction is not a friend, so this comparison cannot be expressed
-        // without a cross-TU change to that header. Left as the committed stub pending that edit.
-        bool MenuItemFunction::IsUseful() const { return true; }
+        // X360 0x82832240: section-header callbacks identify hierarchy rows, not invokable
+        // actions, and are the only registered functions filtered out here.
+        bool MenuItemFunction::IsUseful() const
+        {
+            return mpFunction->GetFunction() != &CgsDev::DebugComponent::DebugUISectionCallback;
+        }
 
-        void MenuItemFunction::GetDisplayName(char* lpcBuffer, s32 liBufferLen) const { if (liBufferLen > 0) lpcBuffer[0] = '\0'; }
+        void MenuItemFunction::GetDisplayName(char* lpcBuffer, s32 liBufferLen) const
+        {
+            const char* lpcName = mpFunction->GetName();
+            if (lpcName && liBufferLen > 1)
+            {
+                strncpy(lpcBuffer, lpcName, liBufferLen - 1);
+                lpcBuffer[liBufferLen - 1] = '\0';
+            }
+            else if (liBufferLen > 0)
+                lpcBuffer[0] = '\0';
+        }
 
         // X360 0x828163A8: copy the bound function's name into the caller buffer (truncating).
         void MenuItemFunction::GetItemString(char* lpcBuffer, s32 liBufferLen) const

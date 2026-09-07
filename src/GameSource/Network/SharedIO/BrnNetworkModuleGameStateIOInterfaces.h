@@ -100,5 +100,37 @@ namespace BrnNetwork
             bool                     mbIsInOnlineGameMode;                           // +536
             bool                     mbIsInCarSelect;                                // +537
         };
+
+        // ===================================================================
+        // NetworkToGameStateInterface (DWARF BrnNetworkModuleGameStateIOInterfaces.h:177)
+        // ===================================================================
+        // ARTIST's network input interface is 0x2438 bytes. Its final word is the
+        // monotonically increasing network-frame counter used by the online stunt
+        // scorer, ChallengeManager and the scoring-system debug overlay. The queues
+        // before it are still being reconstructed in their owning passes, so retain
+        // that prefix as named opaque storage while exposing the exact DWARF member.
+        struct NetworkToGameStateInterface
+        {
+            typedef CgsModule::EventQueue<DirtyTrickEvent, 28> DirtyTrickQueue;
+
+            const DirtyTrickQueue* GetDirtyTrickQueue() const;
+
+            void SetFramesSinceStart(s32 liFramesSinceStart)
+            {
+                miNetworkFrameSinceStart = liFramesSinceStart;
+            }
+
+            s32 GetFramesSinceStart() const
+            {
+                return miNetworkFrameSinceStart;
+            }
+
+        private:
+            u8  maNetworkInputQueues[0x2434];
+            s32 miNetworkFrameSinceStart;                 // +0x2434
+        };
+
+        static_assert(sizeof(NetworkToGameStateInterface) == 0x2438,
+                      "NetworkToGameStateInterface must retain the ARTIST 0x2438-byte span");
     } // namespace BrnNetworkModuleIO
 } // namespace BrnNetwork

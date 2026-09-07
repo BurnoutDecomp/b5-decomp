@@ -26,6 +26,7 @@ namespace BrnWorld
 {
 namespace EnvironmentSettings
 {
+class DebugComponent;
 // EnvironmentManager -- the environment-settings blend/update manager. Reconstructed
 // incrementally from BURNOUT_X360_ARTIST.XEX; member names cross-checked against the
 // DecFIGS DWARF (GameSource/World/EnvironmentManager/BrnEnvironmentManager.h). ONLY
@@ -216,6 +217,10 @@ public:
     // @ 0x827B0DA8
     bool UpdateFromTool(bool lbPause);
 
+    // @0x827B0D08. The ordinary pause transition uses E_BLENDMODE_PAUSED (2),
+    // distinct from UpdateFromTool's reserved tool-blocking state (3).
+    bool Pause(bool lbPause);
+
     // Commit the pending season swap and clear the current-season ref once the season
     // stream-in has completed. @ 0x827B0E50
     void DiscardCurrSeason();
@@ -299,6 +304,7 @@ public:
     enum { K_JUNKYARD_LIGHTING_DATA_BUFFER_SIZE = 2048 };
 
 private:
+    friend class DebugComponent;
     // @ 0x827C30E8 (T = Keyframe) / @ 0x827C3048 (T = Dictionary): the X360 emitted one out-of-line
     // copy per instantiated T of CgsResource::ResourcePtr<T>::GetMemoryResource()'s null-resource
     // assert (CgsResourcePtr.h line 581); returns the memory resource. A member TEMPLATE here

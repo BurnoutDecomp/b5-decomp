@@ -21,12 +21,43 @@
 
 namespace BrnWorld
 {
-// Name strings live in the X360 .data segment; declared extern here and in the
-// header (DWARF BrnWorldRegion.cpp hint lines 4/7/10). KAPC_COUNTY_NAMES_ALT is
-// the alternate county-name table the X360 build emits alongside the primary one.
-extern const char* KAPC_COUNTY_NAMES[E_COUNTY_COUNT];
+// Exact ARTIST tables at 0x82F2C90C and 0x820A7600. Their compact spellings are
+// intentional: these are debug/serialization names rather than presentation text.
+const char* KAPC_COUNTY_NAMES[E_COUNTY_COUNT] =
+{
+    "PalmBayHeights",
+    "SilverLake",
+    "HarborTown",
+    "WhiteMountain",
+    "DowntownParadise",
+    "Anywhere",
+};
+
+const char* const KAPC_DISTRICT_NAMES[E_DISTRICT_COUNT] =
+{
+    "OceanView",
+    "WestAcres",
+    "TwinBridges",
+    "BigSurfBeach",
+    "EasternShore",
+    "HillsidePass",
+    "HeartbreakHills",
+    "RockridgeCliffs",
+    "SouthBay",
+    "ParkVale",
+    "ParadiseWharf",
+    "CristalSummit",
+    "LonePeaks",
+    "SunsetValley",
+    "Downtown",
+    "RiverCity",
+    "MotorCity",
+    "Waterfront",
+    "DistrictInvalid",
+};
+
+// KAPC_COUNTY_NAMES_ALT is not read by either ARTIST ToString routine.
 extern const char* KAPC_COUNTY_NAMES_ALT[E_COUNTY_COUNT];
-extern const char* const KAPC_DISTRICT_NAMES[E_DISTRICT_COUNT];
 
 const char* WorldRegion::CountyToString(ECounty leCounty)
 {

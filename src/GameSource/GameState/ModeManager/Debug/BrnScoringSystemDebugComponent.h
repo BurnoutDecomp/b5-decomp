@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"                                            // EActiveRaceCarIndex
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"   // CgsDev::DebugComponent (real base)
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // BrnGameState::ScoringSystemDebugComponent - the in-game "Scoring System" debug HUD overlay. Derives
 // from the real CgsDev::DebugComponent: OnActivate registers a single "Show chainable stunts" bool
@@ -29,6 +30,15 @@ namespace BrnGameState
     class ScoringSystemDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        // Header-inline in ARTIST's ModeManager::Construct: bind the embedded scoring
+        // system and clear the overlay toggle before the component is registered.
+        void Construct(ScoringSystem* lpScoringSystem)
+        {
+            CGS_ASSERT(lpScoringSystem != nullptr, "lpScoringSystem");
+            mpScoringSystem = lpScoringSystem;
+            mbShowChainableStunts = false;
+        }
+
         // @ 0x82337C38 - draw the live chainable-stunt multiplier table for the current mode. Asserts
         // mpScoringSystem is wired; only renders when mbShowChainableStunts is set AND the mode has at
         // least one car (ScoringSystem::muCarsInCurrentMode > 0). Acquires a stack DebugInterface,
@@ -37,7 +47,7 @@ namespace BrnGameState
         void DebugRenderChainableStunts(const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarOutput,
                                         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpPlayerStatusInterface,
                                         s32 liMaxMultiplier,
-                                        bool lbThirtyFps);
+                                        bool lbSimTimerAt50Hz);
 
     protected:
         const char* GetName() const override;   // @ 0x82312470 ("Scoring System")
@@ -52,7 +62,7 @@ namespace BrnGameState
                                     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarOutput,
                                     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpPlayerStatusInterface,
                                     s32 liMaxMultiplier,
-                                    bool lbThirtyFps,
+                                    bool lbSimTimerAt50Hz,
                                     char* lpcOutBuffer,
                                     u32* lpuOutColour);
 

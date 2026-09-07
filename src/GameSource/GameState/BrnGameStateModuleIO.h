@@ -327,21 +327,10 @@ namespace GameStateModuleIO
     // Modelled minimally as a named opaque payload; swap for the real interface when it is homed.
     struct TriggerEntityModuleOutputInterface { u8 maOpaque[16]; };
 
-    // PreWorldInputBuffer +0x7B0. DWARF (:140/141, :166): the network-to-game-state input
-    // interface (NetworkToGameStateInterface). Read-locked by BurnoutSkillzManager::PreWorldUpdate.
-    // Modelled minimally as a named opaque payload; swap for the real interface when it is homed.
-    struct NetworkToGameStateInterface
-    {
-        // ADDITIVE GROW (declare-only) for the BrnPaybackManager TU. The X360 PaybackManager::
-        // ProcessDirtyTrickEventQueue reaches the per-frame inbound dirty-trick queue as
-        // lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue() (the queue lives at
-        // interface +0x2268: a CgsModule::EventQueue<DirtyTrickEvent,28> walked by GetLength()/
-        // GetEvent(i)). Body + the real embedded-queue member land with this interface's own TU.
-        const CgsModule::EventQueue<BrnNetwork::BrnNetworkModuleIO::DirtyTrickEvent, 28>*
-            GetDirtyTrickQueue() const;
-
-        u8 maOpaque[16];
-    };
+    // PreWorldInputBuffer +0x7B0. This is the network subsystem's real input aggregate, not a
+    // GameState-local lookalike. Its final miNetworkFrameSinceStart word (+0x2434) drives online
+    // stunt expiry and the chainable-stunt debug table.
+    typedef BrnNetwork::BrnNetworkModuleIO::NetworkToGameStateInterface NetworkToGameStateInterface;
 
     // OutputBuffer +0x9050. DWARF (:283/284, :347): the trigger-management input interface.
     // Returned read-locked (BridgeGameStateToWorld) and write-locked (ModeManager::StartGameMode).

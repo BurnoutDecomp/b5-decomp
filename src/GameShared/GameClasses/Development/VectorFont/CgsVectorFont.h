@@ -24,6 +24,14 @@ namespace CgsDev
         // Draw lpcString at (lfX, lfY) in luColour; returns the pen X after the string.
         f32 Print(f32 lfX, f32 lfY, const char* lpcString, u32 luColour);
 
+        // Measure the longest line and total occupied line height.  This is static in the
+        // original: the result depends only on the carved per-character advance table.
+        static Vector2 ComputeTextExtent(const char* lpcText, Vector2 lTextSize);
+        static f32 ComputeTextWidth(const char* lpcText, Vector2 lTextSize)
+        {
+            return ComputeTextExtent(lpcText, lTextSize).x;
+        }
+
     private:
         void DrawLine(Vector2 lP1, Vector2 lP2, u32 luColour);
 

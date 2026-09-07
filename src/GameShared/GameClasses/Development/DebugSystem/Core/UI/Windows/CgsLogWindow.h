@@ -69,11 +69,13 @@ namespace CgsDev
             void Append(const char* lpcText);
             void Clear();
 
+            // Public in the DecFIGS declaration; DebugInterface::GetConsole returns this stream.
+            LogWindowStrStream mLog;                  // +56: the stream front-end (mLog.mpWindow @ +64)
+
         protected:
             f32  ComputeConsoleHeight();
             void RefreshWidth();
 
-            LogWindowStrStream mLog;                  // +56: the stream front-end (mLog.mpWindow @ +64)
             CConsoleTextLine*  mpLinesArray;          // the ring of stored lines
             s8                 miLineCount;
             s8                 miLineHead;

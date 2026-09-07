@@ -29,10 +29,23 @@ public:
     virtual const char* GetName() const;                               // slot 6,  X360 0x827E2560
     virtual f32         GetOutroTimeout() const;                       // slot 16, X360 0x827E2570
 
+    f32 GetRampTimer() const              { return mfRampTimer; }
+    f32 GetMaxRampTimer() const           { return mfMaxRampTimer; }
+    s32 GetBroadcastOpponentCount() const { return miBroadcastOpponentCount; }
+
 private:
     // DWARF: BrnSurvivor.cpp:27. The mode's fixed outro timeout; the X360 GetOutroTimeout body
     // returns 0.0, so this constant is 0.0f for this build (same shape as RaceMode).
     static const f32 KF_OUTRO_TIME_SECONDS;
+
+    // DecFIGS source names/order, with the three HUD fields independently pinned by
+    // ARTIST at ModeManager +0x6D0/+0x6D4/+0x6D8.
+    bool mbInShortcut;
+    f32  mfRampTimer;
+    f32  mfMaxRampTimer;
+    s32  miBroadcastOpponentCount;
+    s32  miMaxOpponentCount;
+    f32  mfTimeInReverse;
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------

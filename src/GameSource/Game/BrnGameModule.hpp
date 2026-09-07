@@ -156,6 +156,11 @@ namespace BrnNetwork   { class BrnNetworkModule : public CgsModule::ModuleSingle
 
 namespace BrnGame
 {
+    // BrnGameModule.cpp:92 (DecFIGS) / byte_82FAE28A (ARTIST). PVSDebugComponent registers
+    // this exact game-level flag as "Show stall message"; DoUpdate_GameStatePreWorld reads it
+    // while the streaming-pause latch is active.
+    extern bool sbShowStreamStallMessage;
+
     // BrnGame::BrnGameModule - the top-level game module. It owns every engine module and is
     // the engine's IThreadClass implementor (the update/dispatch/resource threads call back
     // into it). Reconstructed from the X360 ARTIST build.
@@ -895,7 +900,10 @@ namespace BrnGame
         bool mbStalled;                                              // h:412
         bool mbRequestDoStepFrame;                                   // h:413
         bool mbRequestDoPlayFrame;                                   // h:414
-        // [h:415-453: streaming flags, input-bind state, gui-flow, prepare stages - omitted]
+        bool mbWorldStreamingRequestedStall;                          // h:415
+        bool mbStreamingStalled;                                     // h:416
+        bool mbIsLoadingScreenVisible;                               // h:417
+        // [h:418-453: loading allocator, input-bind state, gui-flow, prepare stages - omitted]
         EReleaseStage    meReleaseStage;                             // h:455 (Release() stage machine)
         EGamePrepareStage meGamePrepareStage;                        // h:456 (X360 gm+10094164)
         // [h:457: meGameReleaseStage - omitted]

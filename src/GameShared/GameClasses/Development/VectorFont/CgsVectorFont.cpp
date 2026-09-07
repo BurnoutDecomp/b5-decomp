@@ -33,6 +33,48 @@ namespace CgsDev
             mp2DRenderer->DrawLine(lP1, lP2, luColour);
     }
 
+    // X360 0x82818E10.  Character advances are expressed in the source font's 8x8
+    // coordinate cell. Newlines finish the current line and tabs advance by four spaces.
+    Vector2 VectorFont::ComputeTextExtent(const char* lpcText, Vector2 lTextSize)
+    {
+        if (!lpcText)
+            return { 0.0f, 0.0f, 0.0f, 0.0f };
+
+        const f32 lfScaleX = lTextSize.x / KF_CHARWIDTH;
+        f32 lfLongestLine = 0.0f;
+        f32 lfLineLength = 0.0f;
+        f32 lfHeight = 0.0f;
+
+        for (const unsigned char* lpcString = reinterpret_cast<const unsigned char*>(lpcText);
+             *lpcString; ++lpcString)
+        {
+            const unsigned char lcCharacter = *lpcString;
+            if (lcCharacter == '\n')
+            {
+                if (lfLineLength > lfLongestLine)
+                    lfLongestLine = lfLineLength;
+                lfLineLength = 0.0f;
+                lfHeight += lTextSize.y;
+            }
+            else if (lcCharacter == '\t')
+            {
+                lfLineLength += lfScaleX * 4.0f * static_cast<f32>(KAN_CHARWIDTH[0]);
+            }
+            else if (lcCharacter >= KI_FIRST_CHAR && lcCharacter <= KI_LAST_CHAR)
+            {
+                lfLineLength += lfScaleX
+                              * static_cast<f32>(KAN_CHARWIDTH[lcCharacter - KI_FIRST_CHAR]);
+            }
+        }
+
+        if (lfLineLength > lfLongestLine)
+            lfLongestLine = lfLineLength;
+        if (lfLineLength > 0.0f)
+            lfHeight += lTextSize.y;
+
+        return { lfLongestLine, lfHeight, 0.0f, 0.0f };
+    }
+
     f32 VectorFont::Print(f32 lfX, f32 lfY, const char* lpcString, u32 luColour)
     {
         if (!lpcString)

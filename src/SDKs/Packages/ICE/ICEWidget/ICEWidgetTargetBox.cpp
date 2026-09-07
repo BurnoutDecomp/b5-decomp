@@ -54,6 +54,5 @@ namespace ICE
         lDebugInterface.GetRender().DrawBox(reinterpret_cast<const f32*>(&mTransform),
                                             (CgsDev::RGBA)0xFFFFFFFFu,
                                             lv4MinCorner, lv4MaxCorner);
-        CgsDev::DebugManager::ThreadSafeRelease(&lDebugInterface.GetDebugManager());
     }
 }

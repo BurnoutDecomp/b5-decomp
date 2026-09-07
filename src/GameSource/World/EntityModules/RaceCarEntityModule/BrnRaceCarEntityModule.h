@@ -152,6 +152,8 @@ struct RaceCarNeedsHidingEventRecord
 
 class RaceCarEntityModule
 {
+    friend class WorldDebugComponent;
+
 public:
         // ---- ADDITIVE (attested by WorldModule::Construct @0x827CF540, which
         //      virtual-dispatches the fleet lifecycle) ----
@@ -1190,6 +1192,19 @@ private:
     f32  DEBUG_mfSelfIlluminationR    = 0.0f;   // +0x18788 (100232)
     f32  DEBUG_mfSelfIlluminationG    = 0.0f;   // +0x1878C (100236)
     f32  DEBUG_mfSelfIlluminationB    = 0.0f;   // +0x18790 (100240)
+
+    // X360 +0x18740..+0x18770. These are the named vehicle-cannon request
+    // members initialised by RaceCarEntityModule::Construct/Destruct and written
+    // by WorldDebugComponent. ARTIST contains no reader for the request in the
+    // final image; they remain represented because the debug component publishes
+    // them exactly.
+    bool    DEBUG_mbSpawnDebugRaceCarThisFrame = false; // +0x18740 (100160)
+    bool    DEBUG_mbCleanDebugRaceCarThisFrame = false; // +0x18741 (100161)
+    bool    DEBUG_mbDebugRaceCarIsActive = false;       // +0x18742 (100162)
+    Vector3 DEBUG_mDebugRaceCarPosition = { 0.0f, 0.0f, 0.0f, 0.0f }; // +0x18750
+    Vector3 DEBUG_mDebugRaceCarDirection = { 0.0f, 0.0f, 0.0f, 0.0f }; // +0x18760
+    f32     DEBUG_mfDebugRaceCarVelocity = 0.0f;        // +0x18770 (100208)
+    RaceCar* DEBUG_mpDebugRaceCar = nullptr;            // DWARF :469
 
     // ========================================================================
     // MODELLED members (paint wave 2026-08-02): the two DEBUG COLOUR OVERRIDES

@@ -1,47 +1,37 @@
-#ifndef CGS_SCENE_SWEEPER_DEBUG_COMPONENT_H
-#define CGS_SCENE_SWEEPER_DEBUG_COMPONENT_H
+#pragma once
 
-#include "DebugSystem/Core/CgsDebugComponent.h"
+#include "types.hpp"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
+#include "rw/rwcore_structs.h"
+
+namespace CgsDev { struct Debug3DImmediateRender; }
 
 namespace CgsSceneManager
 {
+    class IntervalList;
     class SceneSweeper;
+
+    // DecFIGS declaration shape, with all behavior below verified against ARTIST.
+    class SceneSweeperDebugComponent : public CgsDev::DebugComponent
+    {
+    public:
+        void Construct(SceneSweeper* lpSceneSweeper);
+        void Destruct();
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) override;
+
+    protected:
+        void OnActivate() override;
+        const char* GetName() const override { return "Scene sweeper"; }
+        const char* GetPath() const override { return "World"; }
+
+    private:
+        void RenderIntervalList(CgsDev::Debug3DImmediateRender* lpDisplay,
+                                const IntervalList* lpIntervalList,
+                                rw::RGBA lColour);
+
+        SceneSweeper* mpSceneSweeper;
+        f32 mfDrawDistance;
+        bool mbRenderDynamicBoxes;
+        bool mbRenderInactiveBoxes;
+    };
 }
-
-namespace CgsSceneManager
-{
-
-class SceneSweeperDebugComponent : public CgsDev::DebugComponent
-{
-public:
-    void Construct( SceneSweeper* lpSceneSweeper );
-    void Destruct();
-    virtual void RenderWorld( CgsDev::Debug3DImmediateRender * lpDisplay );
-
-protected:
-    virtual void OnActivate();
-    inline virtual const char* GetName() const;
-    inline virtual const char* GetPath() const;
-
-private:
-    void RenderIntervalList( CgsDev::Debug3DImmediateRender * lpDisplay, void* lpIntervalList, rw::RGBA lColour );
-
-    SceneSweeper* mpSceneSweeper;
-    float32_t mfDrawDistance;
-    bool mbRenderDynamicBoxes;
-    bool mbRenderInactiveBoxes;
-};
-
-inline const char* SceneSweeperDebugComponent::GetName() const
-{
-    return "Scene sweeper";
-}
-
-inline const char* SceneSweeperDebugComponent::GetPath() const
-{
-    return "World";
-}
-
-}
-
-#endif

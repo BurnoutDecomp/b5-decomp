@@ -105,6 +105,8 @@ namespace BrnWorld
     // ------------------------------------------------------------------------
     class WorldModule : public CgsModule::ModuleSingleBuffered
     {
+        friend class WorldDebugComponent;
+
     public:
         // ---- prepare / release / resource / district-map stage enums (DWARF :127..185) ----
         enum EWorldPrepareStage : s32

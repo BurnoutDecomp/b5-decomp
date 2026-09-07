@@ -26,6 +26,9 @@ namespace CgsDev
         virtual void Update();
         void SetPageName( s32 liPage, const char* lpcPageName );
         void GetCurrentPage( s32* lpiPage, char* lpcName, s32 liNameLen );
+        bool SetFirstPage();
+        bool SetNextPage();
+        void SetNoPage();
 
     protected:
         virtual const char* GetName() const { return "CPU Monitors"; }

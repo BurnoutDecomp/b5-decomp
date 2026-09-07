@@ -73,6 +73,7 @@ namespace BrnGame
     //                    to a shared global when its other readers are reconstructed.
     static bool         _lbForceAssert = false;
     static volatile s32 sbSimUpdateComplete = 0;
+    bool                sbShowStreamStallMessage = false; // byte_82FAE28A
 
     BrnGameModule::BrnGameModule()
         : mpUpdateInputBufferStack(0)
@@ -84,6 +85,9 @@ namespace BrnGame
         , mbStalled(false)
         , mbRequestDoStepFrame(false)
         , mbRequestDoPlayFrame(false)
+        , mbWorldStreamingRequestedStall(false)
+        , mbStreamingStalled(false)
+        , mbIsLoadingScreenVisible(false)
         // ⭐ SEEDED 2026-08-17 (boot audit F-P1-6). Construct's step 3 stores 7 at
         // gm+0x9A0650, and E_RELEASESTAGE_DONE is 7 -- the console parks the release ladder
         // at DONE so a Release() reached before Prepare has armed it answers true and walks
@@ -404,16 +408,6 @@ namespace BrnGame
         // including the two the console repeats (pages 10/11 both "Graphics", 13/14 both
         // "Director" -- not a transcription slip).
         //
-        // [FLAG] the CALLS are not made, because SetPageName is declared-only
-        // (CgsDebugComponentPerfMonCpu.h:27) with no storage member behind it, and the
-        // console's array shape is not attested anywhere I can read. Inventing a
-        // `const char* [24]` would be a guess about layout in a class this build already
-        // models loosely. So the DATA lands -- it did not exist in the tree at all before,
-        // and recovering it is the part that needed the disassembly -- and the wiring waits
-        // for the member.
-        // DELETE-WHEN DebugComponentPerfMonCpu grows its page-name storage: then this table
-        // feeds a plain 24-iteration SetPageName loop, and the component instance
-        // (file-static gDebugComponentPerfMonCpu in CgsDebugManager.cpp) needs an accessor.
         static const char* const KAPC_PERFMON_PAGE_NAMES[24] =
         {
             "General",              // 0
@@ -441,7 +435,9 @@ namespace BrnGame
             "Video",                // 22
             "Flapt",                // 23
         };
-        (void)KAPC_PERFMON_PAGE_NAMES;
+        for (s32 liPage = 0; liPage < CgsDev::E_PMP_MAX; ++liPage)
+            mDebugManager.mDebugComponentPerfMonCpu.SetPageName(
+                static_cast<CgsDev::PerfMonCpuPage>(liPage), KAPC_PERFMON_PAGE_NAMES[liPage]);
 
         // ⭐ THE DEBUG-INTERFACE REGISTRATIONS, PINNED 2026-08-17 (boot audit F-P1-14). The
         // note used to say only "Debug/Framerate + Debug/Sim (Step/Play via StepFrameCB/
@@ -471,8 +467,7 @@ namespace BrnGame
             lDebugInterface.RegisterFunction(&BrnGameModule::PlayFrameCB, this, "Debug/Sim", "Play");
         }
 
-        // [gated] the rest of steps 7-9 (pages 0-23 named above:
-        // "General".."Flapt"), the vsync-rate 50/60 M_CGS_PERFMON_CPU_SETGAMEFREQUENCY check, the
+        // [gated] the rest of steps 7-9 (the
         // event-receiver queue @+10094268 (capacity 1024, align 16), the update/lookback timers +
         // CgsSystem::FrameRateManager::Construct, and the Debug/Framerate + Debug/Sim (Step/Play
         // via StepFrameCB/PlayFrameCB) + screenshot debug-interface registrations, and the two
@@ -532,6 +527,7 @@ namespace BrnGame
             const u32 luRefreshHz = renderengine::GetDisplayRefreshRate();
             const u32 luRateHz    = KU_SIMULATION_RATE_HZ;
             const f32 lfTimerRate = 1.0f / static_cast<f32>(luRateHz);
+            CgsDev::PerfMonCpu::SetGameFrequency(CgsDev::E_PMF_60HZ);
             if (CgsDev::Message::gxMessageFilterFlags & 1)
                 *CgsDev::Log::gpDebugPrint
                     << "[timers] display refresh " << (s32)luRefreshHz
@@ -3993,6 +3989,52 @@ namespace BrnGame
                 // this gate stands in for that ordering, not for the call.
                 if (leState == BrnGameMainFlowController::E_MGS_IN_GAME)
                 {
+                    // ARTIST DoUpdate_GameStatePreWorld @0x823EE264..0x823EE398. The world
+                    // streamer requests pause while its immediate PVS set is incomplete. The
+                    // first non-paused frame posts PLAYER_PAUSE_STATE_CHANGED {1,1,loading},
+                    // and the first frame after the request clears posts {0,0,loading}. On this
+                    // build the PreWorldInputBuffer event source is reduced into the same carry
+                    // queue that PreWorldUpdateStuntBringUp drains later in this block.
+                    if (mbWorldStreamingRequestedStall)
+                    {
+                        if (!mbSimPaused)
+                        {
+                            const u8 lauPauseEvent[3] =
+                            {
+                                1u,
+                                1u,
+                                static_cast<u8>(mbIsLoadingScreenVisible ? 1u : 0u)
+                            };
+                            BrnGameState::GameStateModuleIO::PostWorldInput(&mGameStateModule)->AddEvent(
+                                reinterpret_cast<const CgsModule::Event*>(lauPauseEvent),
+                                BrnGameState::GameStateModuleIO::E_EVENT_PLAYER_PAUSE_STATE_CHANGED,
+                                static_cast<s32>(sizeof(lauPauseEvent)));
+                            mbStreamingStalled = true;
+                        }
+                    }
+                    else if (mbStreamingStalled)
+                    {
+                        const u8 lauUnpauseEvent[3] =
+                        {
+                            0u,
+                            0u,
+                            static_cast<u8>(mbIsLoadingScreenVisible ? 1u : 0u)
+                        };
+                        BrnGameState::GameStateModuleIO::PostWorldInput(&mGameStateModule)->AddEvent(
+                            reinterpret_cast<const CgsModule::Event*>(lauUnpauseEvent),
+                            BrnGameState::GameStateModuleIO::E_EVENT_PLAYER_PAUSE_STATE_CHANGED,
+                            static_cast<s32>(sizeof(lauUnpauseEvent)));
+                        mbStreamingStalled = false;
+                    }
+
+                    if (mbStreamingStalled && sbShowStreamStallMessage)
+                    {
+                        CgsDev::DebugInterface lDebugInterface(&mDebugManager);
+                        lDebugInterface.Get2dRender().Draw2DText(
+                            "STREAM STALL: Stalling game while streaming catches up",
+                            200.0f, 40.0f, 16.0f, 0xFF0000FFu);
+                    }
+
                     // ⭐⭐ [D2 gesture-sink] THE CONTROLLER -> GAME-STATE BRIDGE. Placed FIRST in
                     // this block because that is the console's own order: DoUpdate_GameStatePreWorld
                     // @0x823EE0E8 runs BridgeNetworkToGameState + BridgeControllerToGameState and
@@ -4206,6 +4248,19 @@ namespace BrnGame
                 {
                     MainGameFlowState* lpState = mMainFlowStateMachine.GetState(leState);
                     lpState->Update();
+                }
+
+                // ARTIST DoUpdate_World @0x823E8D88..0x823E8DB0: after WorldModule::Update,
+                // publish `!StatusInterface::GetImmediateStreamed()` into the game-module
+                // streaming-pause request latch. This is the producer consumed at the top of
+                // the next pre-world pass above.
+                if (mpWorldUpdateOutputBuffer != 0)
+                {
+                    mpWorldUpdateOutputBuffer->LockForRead();
+                    const BrnWorldIO::UpdateOutputBuffer* lpcWorldOutput = mpWorldUpdateOutputBuffer;
+                    mbWorldStreamingRequestedStall =
+                        !lpcWorldOutput->GetWorldEntityStatusInterface()->GetImmediateStreamed();
+                    mpWorldUpdateOutputBuffer->UnlockForRead();
                 }
 
                 // ⭐⭐ [gateui] THE GAME-STATE POST-WORLD PASS (X360 DoUpdate_GameStatePostWorld

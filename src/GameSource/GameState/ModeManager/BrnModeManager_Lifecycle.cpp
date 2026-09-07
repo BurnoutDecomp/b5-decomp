@@ -107,38 +107,13 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
                             const RoadRulesManager*               lpRoadRulesManager,
                             StuntModeScoring::AchievementManager* lpAchievementManager)
 {
-    // ------------------------------------------------------------------------
-    // [X] PARKED LEG 1 -- the ModeManagerDebugComponent. Console (inlined
-    // ModeManagerDebugComponent::Construct(this) followed by Register):
-    //     v30 = this + 28112;
-    //     *(v30 + 12) = this;   // mpModeManager
-    //     *(v30 + 16) = 0;      // mbShowModeInfo
-    //     *(v30 + 17) = 0;      // mbInfiniteLives
-    //     *(v30 + 20) = 1;      // miFinishPosition  (matches SetRange(&miFinishPosition, 1, 8))
-    //     CgsDev::DebugComponent::Register(v30);
-    // The MEMBER is not declared (include cycle -- see BrnModeManager.h's DIVERGENCE banner at
-    // console +28112) and ModeManagerDebugComponent declares no Construct, so there is nothing to
-    // call. Registering it half-wired would be worse than not registering it: FinshMode
-    // dereferences mpModeManager. DELETE-WHEN the two-line include-cycle fix lands and the member
-    // is re-declared; this leg is written and ready.
-    // ------------------------------------------------------------------------
+    mModeManagerDebugComponent.Construct(this);
+    mModeManagerDebugComponent.Register();
 
-    // ------------------------------------------------------------------------
-    // [X] PARKED LEG 2 -- the ScoringSystemDebugComponent's own Construct. Console:
-    //     if (this + 3504 == NULL) assert "lpScoringSystem"   (BrnScoringSystemDebugComponent.cpp:99)
-    //     *(this + 28148) = this + 3504;   // comp+12  mpScoringSystem
-    //     *(this + 28152) = 0;             // comp+16  mbShowChainableStunts
-    //     CgsDev::DebugComponent::Register(this + 28136);
-    // The MEMBER exists here (mScoringSystemDebugComponent), but BrnScoringSystemDebugComponent.h
-    // declares no Construct and both fields are private, so the two stores cannot be made by name
-    // and DebugComponent::Register alone would register a component whose
-    // DebugRenderChainableStunts asserts on a null mpScoringSystem. The assert itself IS kept --
-    // it is the console's, verbatim, and it is the one part of this leg that costs nothing.
-    // DELETE-WHEN ScoringSystemDebugComponent grows `void Construct(ScoringSystem*)` (filed as a
-    // header_request).
-    // ------------------------------------------------------------------------
     ScoringSystem* lpScoringSystem = GetScoringSystem();
     CGS_ASSERT(lpScoringSystem != nullptr, "lpScoringSystem");
+    mScoringSystemDebugComponent.Construct(lpScoringSystem);
+    mScoringSystemDebugComponent.Register();
 
     // Console orders this store BEFORE the ChallengeManager call; kept in place.
     miDebugFinishPosition = 0;                                          // +38168 (0x9518)
@@ -291,7 +266,7 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     ClearLandmarkAndFinishLineData();
 
     mfPlayerTotalledTime               = 0.0f;                           // +32808
-    mbHasAborted                       = false;                          // +38137
+    mbWinIfSecond                      = false;                          // +38137
     mfPFMSecondPhaseTimer              = 0.0f;                           // +38128
     mbModeDataIsLoading                = false;                          // +38145
     mbIsModePrepared                   = false;                          // +38147

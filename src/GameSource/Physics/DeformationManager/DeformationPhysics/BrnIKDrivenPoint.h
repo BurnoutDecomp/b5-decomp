@@ -52,9 +52,12 @@ namespace Deformation
         {
             return reinterpret_cast<const Vector3&>(mPositionPlusDistanceToA);
         }
-        const Vector3& GetDirection() const;
-        const TagPoint* GetTagPointA() const;
-        const TagPoint* GetTagPointB() const;
+        const Vector3& GetDirection() const
+        {
+            return reinterpret_cast<const Vector3&>(mDirectionPlusDistanceToB);
+        }
+        const TagPoint* GetTagPointA() const { return mpTagPointA; }
+        const TagPoint* GetTagPointB() const { return mpTagPointB; }
 
         // X360 OnPointPositionChange (0x825B98F8) writes a new xyz position into a driven
         // point but PRESERVES the existing w lane (the desired distance-to-A the IK solver

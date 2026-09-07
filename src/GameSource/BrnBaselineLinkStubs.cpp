@@ -432,30 +432,9 @@ namespace CgsDev
 {
     namespace DebugUI
     {
-        // No window is ever active while the UI is inert, so Window::IsActiveWindow
-        // is false for every window.
-        const Window* DebugUI::GetActiveWindow() const { return 0; }
-
-        // Window::Prepare uses this only to place an unpositioned window; the origin
-        // is the neutral answer with no cascade state to read.
-        void DebugUI::GetCascadePosition(const Window* /*lpWindow*/, f32& lrfX, f32& lrfY)
-        {
-            lrfX = 0.0f;
-            lrfY = 0.0f;
-        }
-
-        // Window::GetPalette forwards straight to this; a zeroed palette keeps every
-        // colour lookup in range for a UI that never draws.
-        const Palette& DebugUI::GetPalette() const
-        {
-            static const Palette lsEmpty = Palette();
-            return lsEmpty;
-        }
-
         // Variable::SetValueFromString feeds this; leaving the variant untouched
         // means a console "set" is ignored rather than writing a parsed-from-nothing
         // value into a live game variable.
-        void Variant::ConvertFromString(const char* /*lpcString*/) {}
     }
 }
 

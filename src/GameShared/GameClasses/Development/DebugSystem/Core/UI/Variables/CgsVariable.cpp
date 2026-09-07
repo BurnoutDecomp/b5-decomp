@@ -18,6 +18,14 @@ namespace CgsDev
 {
     namespace DebugUI
     {
+        bool VariableMetadata::Prepare(const Variant& lrValue, Type leType)
+        {
+            mValue = lrValue.mValue;
+            meType = leType;
+            mpNextMetadata = nullptr;
+            return true;
+        }
+
         bool Variable::Prepare(const Variant& lrVariant, const char* lpcName)
         {
             mVariant.Copy(lrVariant);
@@ -28,6 +36,71 @@ namespace CgsDev
 
         Variant&    Variable::GetValue()       { return mVariant; }
         const char* Variable::GetName() const  { return mpcName; }
+
+        void Variable::Release()
+        {
+            mVariant.Clear();
+            mpcName = nullptr;
+            mpMetadata = nullptr;
+        }
+
+        bool Variable::Prepare(f32 lfValue, const char* lpcName)   { return Prepare(Variant(lfValue), lpcName); }
+        bool Variable::Prepare(s32 liValue, const char* lpcName)   { return Prepare(Variant(liValue), lpcName); }
+        bool Variable::Prepare(u32 luValue, const char* lpcName)   { return Prepare(Variant(luValue), lpcName); }
+        bool Variable::Prepare(bool lbValue, const char* lpcName)  { return Prepare(Variant(lbValue), lpcName); }
+        bool Variable::Prepare(f32* lpfValue, const char* lpcName) { return Prepare(Variant(lpfValue), lpcName); }
+        bool Variable::Prepare(s32* lpiValue, const char* lpcName) { return Prepare(Variant(lpiValue), lpcName); }
+        bool Variable::Prepare(u32* lpuValue, const char* lpcName) { return Prepare(Variant(lpuValue), lpcName); }
+        bool Variable::Prepare(bool* lpbValue, const char* lpcName){ return Prepare(Variant(lpbValue), lpcName); }
+
+        void Variable::GetDisplayString(char* lpcBuffer)
+        {
+            GetValueAsString(lpcBuffer, 100);
+        }
+
+        f32 Variable::GetValueAsFloat() const
+        {
+            switch (mVariant.meType)
+            {
+            case Variant::E_TYPE_FLOAT: return mVariant.mValue.mfFloat;
+            case Variant::E_TYPE_INT32: return static_cast<f32>(mVariant.mValue.miInt32);
+            case Variant::E_TYPE_UINT32: return static_cast<f32>(mVariant.mValue.muUInt32);
+            case Variant::E_TYPE_BOOL: return mVariant.mValue.mbBool ? 1.0f : 0.0f;
+            case Variant::E_TYPE_PTR_FLOAT: return *mVariant.mValue.mpfFloat;
+            case Variant::E_TYPE_PTR_INT32: return static_cast<f32>(*mVariant.mValue.mpiInt32);
+            case Variant::E_TYPE_PTR_UINT32: return static_cast<f32>(*mVariant.mValue.mpuUInt32);
+            case Variant::E_TYPE_PTR_BOOL: return *mVariant.mValue.mpbBool ? 1.0f : 0.0f;
+            default: return 0.0f;
+            }
+        }
+
+        f32 Variable::GetMinAsFloat(f32 lfDefault) const
+        {
+            const VariableMetadata* lpMin = FindMetadata(VariableMetadata::E_TYPE_MIN);
+            if (!lpMin)
+                return lfDefault;
+            switch (mVariant.GetDereferenceType())
+            {
+            case Variant::E_TYPE_FLOAT: return lpMin->mValue.mfFloat;
+            case Variant::E_TYPE_INT32: return static_cast<f32>(lpMin->mValue.miInt32);
+            case Variant::E_TYPE_UINT32: return static_cast<f32>(lpMin->mValue.muUInt32);
+            default: return lfDefault;
+            }
+        }
+
+        f32 Variable::GetMaxAsFloat(f32 lfDefault) const
+        {
+            const VariableMetadata* lpMax = FindMetadata(VariableMetadata::E_TYPE_MAX);
+            if (!lpMax)
+                return lfDefault;
+            switch (mVariant.GetDereferenceType())
+            {
+            case Variant::E_TYPE_FLOAT: return lpMax->mValue.mfFloat;
+            case Variant::E_TYPE_INT32: return static_cast<f32>(lpMax->mValue.miInt32);
+            case Variant::E_TYPE_UINT32: return static_cast<f32>(lpMax->mValue.muUInt32);
+            default: return lfDefault;
+            }
+        }
 
         // Linear scan of the attribute chain for the first node of leType (DecFIGS CgsVariable.cpp:610,
         // local `lpMetadata` at :613). The X360 always inlines it; the walk is attested twice inside
@@ -385,8 +458,30 @@ namespace CgsDev
         // header is outside this agent's file list, so the value path below is left as it was found.
         void Variable::GetValueAsString(char* lpcValue, int liLength)
         {
-            if (liLength > 0)
-                lpcValue[0] = '\0';
+            const StringList* lpStringList = GetStringList();
+            if (lpStringList != nullptr)
+            {
+                CGS_ASSERT(mVariant.meType == Variant::E_TYPE_PTR_INT32,
+                           "mVariant.meType == Variant::E_TYPE_PTR_INT32");
+                if (mVariant.meType == Variant::E_TYPE_PTR_INT32)
+                {
+                    while (lpStringList->mpcName != nullptr)
+                    {
+                        if (lpStringList->miValue == *mVariant.mValue.mpiInt32)
+                        {
+                            if (liLength > 0)
+                            {
+                                strncpy(lpcValue, lpStringList->mpcName, liLength - 1);
+                                lpcValue[liLength - 1] = '\0';
+                            }
+                            return;
+                        }
+                        ++lpStringList;
+                    }
+                }
+            }
+
+            mVariant.ConvertToString(lpcValue, liLength);
         }
     }
 }

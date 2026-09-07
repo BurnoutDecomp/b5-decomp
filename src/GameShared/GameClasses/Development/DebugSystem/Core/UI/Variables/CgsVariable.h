@@ -26,6 +26,7 @@ namespace CgsDev
             // inlined into ScriptInterface::SaveState (0x828328B8-0x82832938) load meType at +4,
             // mpNextMetadata at +8 and the value byte at +0 straight out of the node.
             friend struct Variable;
+            friend struct VariableManager;
 
             enum Type
             {
@@ -54,6 +55,7 @@ namespace CgsDev
         // A registered debug variable: value + name + metadata list.
         struct Variable
         {
+            friend struct VariableManager;
             bool Prepare(const Variant& lrVariant, const char* lpcName);
             void Release();
 

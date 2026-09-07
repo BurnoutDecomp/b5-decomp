@@ -122,6 +122,22 @@ namespace BrnGameState
         // member BY NAME so the debug component does not reach into the private layout.
         const CgsWorld::WorldMap2D& GetDistrictMap() const { return mWorldMap2D; }
 
+        // Header-inlined member routes used by StuntManagerDebugComponent. ARTIST's debug
+        // callbacks write the pending completion type at +0x360, while the "all but one"
+        // traversal follows the manager's +0x5E8/+0x5EC pointers to progression/trigger data.
+        void SetDebugCompletedUnlockType(StuntElementType leType)
+        {
+            meDebugCompletedUnlockType = leType;
+        }
+        BrnProgression::ProgressionManager* GetProgressionManager() const
+        {
+            return mpProgressionManager;
+        }
+        TriggerQueryManager* GetTriggerQueryManager() const
+        {
+            return mpTriggerQueryManager;
+        }
+
         // Additive accessor (FLAG: not its own X360 function -- inlined at the call site).
         // ProgressionManager::ComputeCompletionPercentage @0x8238A198 reads the three world
         // totals straight off this manager through its own +0x20944 back-pointer:

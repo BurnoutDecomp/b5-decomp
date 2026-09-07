@@ -53,6 +53,29 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
+    // These three methods are header-inline in the console build.  They are emitted here because
+    // the host header deliberately keeps Sphere incomplete at DeformationSensor's declaration.
+    void DeformationSensor::SetLocalPosition(Vector3 lPosition)
+    {
+        const f32 lfRadius = mpLocalSpaceSphere->mPositionRadius.w;
+        mpLocalSpaceSphere->mPositionRadius =
+            Vector4{ lPosition.x, lPosition.y, lPosition.z, lfRadius };
+    }
+
+    void DeformationSensor::UpdateWorldPosition(Matrix44Affine lVehicleTransform)
+    {
+        const Vector3 lLocal = {
+            mpLocalSpaceSphere->mPositionRadius.x,
+            mpLocalSpaceSphere->mPositionRadius.y,
+            mpLocalSpaceSphere->mPositionRadius.z,
+            0.0f
+        };
+        const Vector3 lWorld = rw::math::vpu::TransformPoint(lVehicleTransform, lLocal);
+        const f32 lfRadius = mpWorldSpaceSphere->mPositionRadius.w;
+        mpWorldSpaceSphere->mPositionRadius =
+            Vector4{ lWorld.x, lWorld.y, lWorld.z, lfRadius };
+    }
+
     // ==============================================================================================
     // MOVED OUT on 2026-08-03 (task #116) to BrnDeformationDebugComponent_Construct.cpp, verbatim:
     //   DeformationSensor::GetLocalSphereCentre / DeformationManager::GetDeformableObject
@@ -94,11 +117,11 @@ namespace Deformation
     extern bool kbAllowDeformationDebug;
     extern bool kbAllowRandomPartDetachment;
     extern bool kbAllowDriveTimeDeformation;
-    extern bool kbSlowMoDeformation;
+    bool kbSlowMoDeformation = false;   // ARTIST .bss byte 0x82FB7DF3
 
     // The "render only this car part" selector (asm dword_82CDB49C); -1 == render all parts. Edited by
     // the "Render car part" debug variable; consulted by RenderWorld / DetachPart.
-    extern s32 giDebugOnlyRenderThisCarPart;
+    s32 giDebugOnlyRenderThisCarPart = -1;   // ARTIST dword_82CDB49C
 
     namespace
     {
@@ -269,6 +292,22 @@ namespace Deformation
         lpRig->SetDeformedThisFrameDebug();
     }
 
+    // X360 0x825B9898.  The callback ignores the edited value pointer and writes the complete
+    // component slider state into the selected sensor, preserving both sphere radii.
+    void DeformationDebugComponent::OnSensorPositionChange(void* /*lpValue*/, void* lpUserData)
+    {
+        DeformationDebugComponent* lpThis = static_cast<DeformationDebugComponent*>(lpUserData);
+        if ( lpThis->mpSelectedSensor == nullptr || lpThis->mpSelectedRig == nullptr )
+        {
+            return;
+        }
+
+        lpThis->mpSelectedSensor->SetLocalPosition(
+            Vector3{ lpThis->mfSensorX, lpThis->mfSensorY, lpThis->mfSensorZ, 0.0f } );
+        lpThis->mpSelectedSensor->SetScratchAmount(lpThis->mfSensorScratch);
+        lpThis->mpSelectedRig->SetDeformedThisFrameDebug();
+    }
+
     // =============================================================================================
     // OnCompressionChange  @ 0x825DF2E0  (registered VariableCallbackFunction; static)
     //
@@ -325,6 +364,47 @@ namespace Deformation
         }
 
         lpThis->CompressSelectedRig( lfScale, lfScale, lfScale, lfScale, lfScale, lfScale );
+    }
+
+    // X360 0x825DF030.  Rebuild every local sensor position from its streamed rest position and
+    // the six signed-axis compression limits, then transform the updated centre into world space.
+    void DeformationDebugComponent::CompressSelectedRig(f32 lfRightSide, f32 lfLeftSide,
+                                                         f32 lfFloor, f32 lfRoof,
+                                                         f32 lfRear, f32 lfFront)
+    {
+        mfCompressRightSide = lfRightSide;
+        mfCompressLeftSide  = lfLeftSide;
+        mfCompressFloor     = lfFloor;
+        mfCompressRoof      = lfRoof;
+        mfCompressRear      = lfRear;
+        mfCompressFront     = lfFront;
+
+        DeformableObject* lpRig = mpSelectedRig;
+        if ( lpRig == nullptr || lpRig->GetDeformationSpec() == nullptr )
+        {
+            return;
+        }
+
+        Matrix44Affine lVehicleTransform;
+        lpRig->GetTransform(lVehicleTransform);
+
+        const s32 liNumSensors = lpRig->GetDeformationSpec()->GetNumDeformationSensors();
+        for ( s32 liSensor = 0; liSensor < liNumSensors; ++liSensor )
+        {
+            DeformationSensor& lrSensor = lpRig->GetSensorDebug(liSensor);
+            const SensorSpec* lpSpec = lrSensor.mpSpec;
+            Vector3 lPosition = lpSpec->GetInitialOffset();
+
+            lPosition.x += lpSpec->GetCompressionLimit(E_NSD_POS_XAXIS).x * lfRightSide;
+            lPosition.x -= lpSpec->GetCompressionLimit(E_NSD_NEG_XAXIS).x * lfLeftSide;
+            lPosition.y += lpSpec->GetCompressionLimit(E_NSD_POS_YAXIS).x * lfFloor;
+            lPosition.y -= lpSpec->GetCompressionLimit(E_NSD_NEG_YAXIS).x * lfRoof;
+            lPosition.z += lpSpec->GetCompressionLimit(E_NSD_POS_ZAXIS).x * lfRear;
+            lPosition.z -= lpSpec->GetCompressionLimit(E_NSD_NEG_ZAXIS).x * lfFront;
+
+            lrSensor.SetLocalPosition(lPosition);
+            lrSensor.UpdateWorldPosition(lVehicleTransform);
+        }
     }
 
     // =============================================================================================
@@ -434,6 +514,45 @@ namespace Deformation
     void DeformationDebugComponent::DetachPartCallback(void* lpUserData)
     {
         static_cast<DeformationDebugComponent*>(lpUserData)->DetachPart();
+    }
+
+    // X360 0x825B9708 / 0x825B9740.  The console stores a splat VecFloat; the PC physics
+    // consumers use the equivalent scalar tuning value.
+    void DeformationDebugComponent::JointPentrationMultiplierCallback(void* lpValue,
+                                                                       void* /*lpUserData*/)
+    {
+        kfJointPenetrationMultiplier = *static_cast<f32*>(lpValue);
+    }
+
+    void DeformationDebugComponent::JointForceMultiplierCallback(void* lpValue,
+                                                                  void* /*lpUserData*/)
+    {
+        kfJointForceMultiplier = *static_cast<f32*>(lpValue);
+    }
+
+    // X360 0x825B9790.  Either of the two sliders republishes both values.
+    void DeformationDebugComponent::AngularVelocityDetachmentCallback(void* /*lpValue*/,
+                                                                      void* lpUserData)
+    {
+        DeformationDebugComponent* lpThis = static_cast<DeformationDebugComponent*>(lpUserData);
+        kfAngularVelocityForDetachment = lpThis->mfAngularVelocityForDetachment;
+        kfAngularVelocityDecay = lpThis->mfAngularVelocityDecay;
+    }
+
+    // ARTIST registers the folded empty BaseCollisionGenerator::Destruct body for this action.
+    void DeformationDebugComponent::ResetSensors(void* /*lpUserData*/)
+    {
+    }
+
+    // DecFIGS names the console-inline action: schedule a complete deformation reset on the
+    // selected model's next update.
+    void DeformationDebugComponent::ResetSelectedRig(void* lpUserData)
+    {
+        DeformationDebugComponent* lpThis = static_cast<DeformationDebugComponent*>(lpUserData);
+        if ( lpThis->mpSelectedRig != nullptr )
+        {
+            lpThis->mpSelectedRig->ResetDeformationNextUpdate(true);
+        }
     }
 
     // =============================================================================================

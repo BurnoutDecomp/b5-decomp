@@ -538,17 +538,12 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
         if ((lbOnlineStuntFamily || mbStuntChallengeActive) &&
             IsGameModeInProgress(mpCurrentGameMode))
         {
-            // [!] [stuntrace] ONLINE ARM DEFERRED -- the online stunt scorer's pre-world step.
-            // Console 0x82353C50..0x82353C7C:
-            //   ScoringSystem::UpdateOnlineStuntModeScorePreWorld(&mScoringSystem,
-            //       *(lpPreWorldInputBuffer->GetNetworkToGameStateInterface() + 0x2434),
-            //       lpOutputBuffer->GetGameActionQueue(),
-            //       mbStuntChallengeActive);
-            // NOT REPRODUCED: the committed declaration is the TWO-argument
-            // (s32 liCurrentTimeMs, VariableEventQueue<13312,16>*) shape (header_request #7), and
-            // the s32 it wants comes from an UNNAMED word at NetworkToGameStateInterface+0x2434
-            // that this tree has no accessor for (header_request #8). Fabricating either would be
-            // an invented offset. Offline stunt races take the mode-7 arm above instead.
+            const GameStateModuleIO::NetworkToGameStateInterface* lpNetworkInput =
+                lpPreWorldInputBuffer->GetNetworkToGameStateInterface();
+            CGS_ASSERT(lpNetworkInput != NULL, "lpNetworkToGameStateInterface");
+            mScoringSystem.UpdateOnlineStuntModeScorePreWorld(
+                lpNetworkInput->GetFramesSinceStart(),
+                lpOutputBuffer->GetGameActionQueue());
         }
     }
 
@@ -812,19 +807,18 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
     // ScoringSystemDebugComponent::DebugRenderChainableStunts spells this fourth argument
     // `bool lbThirtyFps`; the console value is "the SIM timer is running at 50 Hz".
     const bool lbSimTimerAt50Hz = mTimerStatusInterface.IsSimTimerFrequency50Hz();
-    (void)lbSimTimerAt50Hz;
-
-    // [!] [stuntrace] PARKED (header) -- header_request #8. Console 0x82353F58..0x82353FFC:
-    //     CGS_ASSERT(lpActiveRaceCarOutput,   "lpActiveCarInterface");     // BrnScoringSystemDebugComponent.cpp:135
-    //     CGS_ASSERT(lpPlayerStatusInterface, "lpPlayerStatusInterface");  // ...:136
-    //     mScoringSystemDebugComponent.DebugRenderChainableStunts(
-    //         lpActiveRaceCarOutput,
-    //         lpPreWorldInputBuffer->GetPlayerStatusInterface(),
-    //         *(lpPreWorldInputBuffer->GetNetworkToGameStateInterface() + 0x2434),
-    //         lbSimTimerAt50Hz);
-    // NOT REPRODUCED: the third argument is the same unnamed NetworkToGameStateInterface+0x2434
-    // word the online stunt arm needs, and this tree has no accessor for it. Developer HUD overlay
-    // only (the grouping sheet already classes this call verify-or-park).
+    const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpPlayerStatusInterface =
+        lpPreWorldInputBuffer->GetPlayerStatusInterface();
+    const GameStateModuleIO::NetworkToGameStateInterface* lpNetworkInput =
+        lpPreWorldInputBuffer->GetNetworkToGameStateInterface();
+    CGS_ASSERT(lpActiveRaceCarOutput != NULL, "lpActiveCarInterface");
+    CGS_ASSERT(lpPlayerStatusInterface != NULL, "lpPlayerStatusInterface");
+    CGS_ASSERT(lpNetworkInput != NULL, "lpNetworkToGameStateInterface");
+    mScoringSystemDebugComponent.DebugRenderChainableStunts(
+        lpActiveRaceCarOutput,
+        lpPlayerStatusInterface,
+        lpNetworkInput->GetFramesSinceStart(),
+        lbSimTimerAt50Hz);
 
     CgsDev::PerfMonCpu::StopMonitor(miPreWorldUpdatePM);
 }

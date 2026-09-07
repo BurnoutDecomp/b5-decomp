@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"                // CgsDev::DebugRender / RGBA / Vector2
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                                          // CgsCore::StrCpy / SPrintf
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                               // CGS_ASSERT
+#include "rw/math/vpu/vector3_operation.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The "Scoring System" chainable-stunt-multiplier debug
 // table. OnActivate registers the single "Show chainable stunts" bool tweakable; GetName returns the
@@ -45,23 +46,16 @@ namespace BrnGameState
         // header for the name row.
         const char* const KAPC_ROW_HEADERS[7] =
         {
-            "PLAYERS", "x2", "x3", "x4", "x5", "x6", "x7",
+            "PLAYERS", "BIG AIR", "SPINS", "ROLLS", "JUMPS", "BILLBOARD", "LEAP CARS",
         };
 
-        // Per-row stunt-multiplier bit index: the bit tested in the gathered ChainableMultiplierInfo's
-        // chainable-score mask to decide whether a band is "armed". One entry per band (rows 1..6 ->
-        // indices 0..5). The X360 reads this from the dword_82020F54[a3-1] table, but that rodata's
-        // CONTENTS are NOT in the exports. UNRECOVERED PLACEHOLDER: a best-effort identity mapping
-        // (band N -> bit N); the real per-row bit indices are unknown and may differ.
-        const s32 KAI_ROW_BIT_INDEX[6] = { 0, 1, 2, 3, 4, 5 };
+        // Exact ARTIST dword_82020F54 table, indexed by rows 1..6.
+        const s32 KAI_ROW_BIT_INDEX[6] = { 2, 0, 1, 4, 6, 16 };
 
-        // File-scope cell colours. The X360 loads these as single constant words from dword_82CDB878
-        // (box), dword_82CDB87C (default text) and dword_82CDB880 (active text), but those rodata words
-        // are NOT in the exports. UNRECOVERED PLACEHOLDERS: best-effort RGBA8 values chosen to read
-        // plausibly; the real X360 colour words are unknown.
-        const CgsDev::RGBA KU_BOX_COLOUR          = 0x000000C0u; // placeholder: translucent black backing box
-        const CgsDev::RGBA KU_CELL_DEFAULT_COLOUR = 0xFFFFFFFFu; // placeholder: white (inactive / header cell)
-        const CgsDev::RGBA KU_CELL_ACTIVE_COLOUR  = 0xFF8000FFu; // placeholder: orange (armed/recent multiplier)
+        // Exact ARTIST words at dword_82CDB878 / _87C / _880.
+        const CgsDev::RGBA KU_BOX_COLOUR          = 0x80000000u;
+        const CgsDev::RGBA KU_CELL_DEFAULT_COLOUR = 0xFFFFFFFFu;
+        const CgsDev::RGBA KU_CELL_ACTIVE_COLOUR  = 0xFF5000FFu;
 
         inline Vector2 MakeVector2(f32 lfX, f32 lfY)
         {
@@ -101,7 +95,7 @@ namespace BrnGameState
                                                              const ActiveCarOutput* lpActiveCarOutput,
                                                              const PlayerStatusInterface* lpPlayerStatusInterface,
                                                              s32 liMaxMultiplier,
-                                                             bool lbThirtyFps,
+                                                             bool lbSimTimerAt50Hz,
                                                              char* lpcOutBuffer,
                                                              u32* lpuOutColour)
     {
@@ -168,26 +162,41 @@ namespace BrnGameState
         if ((lEntry.miChainableScore & liBit) != liBit)
             return;
 
-        CGS_ASSERT(lpActiveCarOutput->IsPlayerCarActive(), "lpLocalPlayersCarState");
+        const BrnPhysics::Vehicle::RaceCarState* lpLocalPlayersCarState =
+            lpActiveCarOutput->GetPlayerRaceCarState();
+        CGS_ASSERT(lpLocalPlayersCarState != nullptr, "lpLocalPlayersCarState");
 
-        // The X360 then runs a screen-space proximity cull on the local player's car position/forward
-        // (RaceCarState +0x220 position / +0x330 forward) before emitting the timer text, and only
-        // draws the cell when the other car is within ~320m and ahead. FLAG: the RaceCarState byte
-        // layout (position/forward at the +0x220/+0x330 offsets the cull reads) is NOT homed in-tree
-        // (BrnPhysics::Vehicle::RaceCarState is only forward-declared everywhere); reproducing the cull
-        // would require raw-offset reads, which the HARD RULES forbid (members BY NAME, no offset
-        // casts). The cull is a render-time visibility gate only -- it does not change the cell's text/
-        // colour -- so this models the post-cull result: emit the band timer text in the active colour.
-        // When RaceCarState gains a homed layout (GetPosition/GetForward accessors) the cull should be
-        // restored here using the named accessors off lpActiveCarOutput->GetPlayerRaceCarState() and the
-        // other car's GetRaceCarState(leRaceCarIndex).
+        if (!lpActiveCarOutput->IsRaceCarActive(leRaceCarIndex))
+            return;
+        if (lpActiveCarOutput->GetPlayerActiveRaceCarIndex() == leRaceCarIndex)
+            return;
+
+        const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
+            lpActiveCarOutput->GetRaceCarState(leRaceCarIndex);
+        if (lpRaceCarState == nullptr)
+            return;
+
+        // ARTIST loads the two transform positions at RaceCarState+0x220 and the local
+        // player's linear velocity at +0x330. A cell is shown only for another car less
+        // than 320 units away and in the forward half-space of the player's current motion.
+        // Both vectors are normalised before the dot product, exactly as the VMX body does.
+        const Vector3 lToRaceCar =
+            lpRaceCarState->mTransform.Pos() - lpLocalPlayersCarState->mTransform.Pos();
+        if (rw::math::vpu::MagnitudeSquared(lToRaceCar) >= 102400.0f)
+            return;
+
+        const f32 lfMotionDot = rw::math::vpu::Dot(
+            rw::math::vpu::Normalize(lpLocalPlayersCarState->mLinearVelocity),
+            rw::math::vpu::Normalize(lToRaceCar));
+        if (lfMotionDot < 0.0f)
+            return;
 
         // Timer text: the band's remaining-window in seconds. The X360 derives the frame count from the
         // gathered entry's supplied/field deltas (+300 frames) and scales by the frame period (1/50 at
         // 30fps display, 1/60 otherwise), formatting "%.3fs". An armed band under 1s flips to the active
         // colour.
-        const s32 liFrames = (lEntry.miSuppliedValue - liMaxMultiplier) + 300;
-        const f32 lfFramePeriod = lbThirtyFps ? 0.02f : 0.016666668f;
+        const s32 liFrames = (lEntry.miMultiplier - liMaxMultiplier) + 300;
+        const f32 lfFramePeriod = lbSimTimerAt50Hz ? 0.02f : 0.016666668f;
         const f32 lfSeconds = static_cast<f32>(liFrames) * lfFramePeriod;
         CgsCore::SPrintf(lpcOutBuffer, 200, "%.3fs", static_cast<f64>(lfSeconds));
         if (lfSeconds <= 1.0f)
@@ -198,7 +207,7 @@ namespace BrnGameState
     void ScoringSystemDebugComponent::DebugRenderChainableStunts(const ActiveCarOutput* lpActiveCarOutput,
                                                                  const PlayerStatusInterface* lpPlayerStatusInterface,
                                                                  s32 liMaxMultiplier,
-                                                                 bool lbThirtyFps)
+                                                                 bool lbSimTimerAt50Hz)
     {
         CGS_ASSERT(mpScoringSystem != nullptr, "mpScoringSystem");
 
@@ -236,7 +245,7 @@ namespace BrnGameState
             {
                 u32 luCellColour = KU_CELL_DEFAULT_COLOUR;
                 GetChainableTableEntry(liColumn, liRow, lpActiveCarOutput,
-                                       lpPlayerStatusInterface, liMaxMultiplier, lbThirtyFps,
+                                       lpPlayerStatusInterface, liMaxMultiplier, lbSimTimerAt50Hz,
                                        lacCell, &luCellColour);
 
                 const Vector2 lv2CellPos = MakeVector2(lfPenX, lfPenY);
@@ -251,6 +260,5 @@ namespace BrnGameState
             lfPenX += lfMaxCellWidth + KF_CELL_GAP_X;
         }
 
-        CgsDev::DebugManager::ThreadSafeRelease(&lDebugInterface.GetDebugManager());
     }
 }

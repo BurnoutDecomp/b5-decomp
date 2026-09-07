@@ -132,6 +132,13 @@ namespace CgsDev
         // set: the *WINDOW handler guards it with `if (lbPinned && !IsPinned())`.
         void Window::TogglePin() { mxFlags ^= KX_FLAGPINNED; }
 
+        void Window::ApplyMovement(f32 lfDeltaX, f32 lfDeltaY)
+        {
+            mfX += lfDeltaX;
+            mfY += lfDeltaY;
+            ClampToScreen();
+        }
+
         // X360 0x8282E600. Grow the requested width to the caption width, store both, clamp each to
         // the screen extent plus a fixed 100.0f slack, then re-clamp the position to the screen.
         //
@@ -159,6 +166,18 @@ namespace CgsDev
         }
 
         void Window::SetPosition(f32 lfX, f32 lfY) { mfX = lfX; mfY = lfY; }
+
+        void Window::SetCaption(const char* lpcCaption)
+        {
+            mpcCaption = lpcCaption;
+            if ((mxFlags & KX_FLAGNOCAPTION) == 0)
+            {
+                CGS_ASSERT(mpcCaption, "mpcCaption");
+                const f32 lfCaptionWidth = CalcCaptionWidth();
+                if (mfWidth < lfCaptionWidth)
+                    mfWidth = lfCaptionWidth;
+            }
+        }
 
         // The on-screen footprint: the client rect plus the border on both sides (unless the window
         // has no border) and, for the height, the caption strip on top. Attested by DebugUI::DockWindow
@@ -258,11 +277,78 @@ namespace CgsDev
             return DebugManager::GetInstance()->GetUI().Get2DRenderer();
         }
 
+        // X360 0x828160A8. Window transparency is applied to the packed colour's alpha byte;
+        // inactive and disabled windows receive the original opacity multipliers.
+        RGBA Window::ScaleColour(RGBA lColour) const
+        {
+            f32 lfAlpha = static_cast<f32>((lColour >> 24) & 0xFFu);
+            if (!IsActiveWindow())
+                lfAlpha *= 0.9f;
+            if (!IsEnabled())
+                lfAlpha *= 0.25f;
+            lfAlpha *= 1.0f - mfTransparency;
+
+            if (lfAlpha < 0.0f)
+                lfAlpha = 0.0f;
+            else if (lfAlpha > 255.0f)
+                lfAlpha = 255.0f;
+
+            return (lColour & 0x00FFFFFFu) | (static_cast<u32>(lfAlpha) << 24);
+        }
+
         // The base virtuals. Update/OnGetFocus/OnLostFocus are empty in the X360 image (no out-of-line
         // address survives; every derived window supplies the behaviour). Render 0x82828F20 has a real
         // body -- see the file header for why it is not written yet.
         void Window::Update(f32 /*lfTimeStep*/, InputEvent /*leEvent*/) {}
-        void Window::Render(Debug2DImmediateRender* /*lpRender*/) {}
+
+        // X360 0x82828F20. Draw the client background, frame and optional caption with the
+        // state-selected palette colours. The frame includes the caption strip above the client.
+        void Window::Render(Debug2DImmediateRender* lpRender)
+        {
+            const Palette& lrPalette = GetPalette();
+            const Metrics& lrMetrics = GetMetrics();
+
+            RGBA lCaptionColour;
+            RGBA lBackgroundColour;
+            RGBA lCaptionTextColour;
+            if (!IsEnabled())
+            {
+                lCaptionColour = lrPalette.mColourDisabled;
+                lBackgroundColour = lrPalette.mColourWindow;
+                lCaptionTextColour = lrPalette.mColourDisabledText;
+            }
+            else if (IsPinned())
+            {
+                lCaptionColour = lrPalette.mColourPinned;
+                lBackgroundColour = lrPalette.mColourPinned;
+                lCaptionTextColour = lrPalette.mColourPinnedText;
+            }
+            else
+            {
+                lCaptionColour = IsActiveWindow() ? lrPalette.mColourActiveCaption : lrPalette.mColourCaption;
+                lBackgroundColour = lrPalette.mColourWindow;
+                lCaptionTextColour = lrPalette.mColourCaptionText;
+            }
+
+            const f32 lfCaptionHeight = CalcCaptionHeight();
+            if ((mxFlags & KX_FLAGNOBACKGROUND) == 0)
+                lpRender->DrawBox(mfX, mfY, mfWidth, mfHeight, ScaleColour(lBackgroundColour));
+
+            if ((mxFlags & KX_FLAGNOBORDER) == 0)
+                lpRender->DrawFrame(mfX, mfY - lfCaptionHeight, mfX + mfWidth, mfY + mfHeight,
+                                    ScaleColour(lrPalette.mColourBorder), lrMetrics.mfWindowBorderSize);
+
+            if ((mxFlags & KX_FLAGNOCAPTION) == 0)
+            {
+                lpRender->DrawBox(mfX, mfY - lfCaptionHeight, mfWidth, lfCaptionHeight,
+                                  ScaleColour(lCaptionColour));
+                lpRender->DrawText(mpcCaption,
+                                   mfX + lrMetrics.mfWindowBorderSize,
+                                   mfY - lfCaptionHeight + lrMetrics.mfWindowBorderSize,
+                                   lrMetrics.mfTextSize,
+                                   ScaleColour(lCaptionTextColour));
+            }
+        }
         void Window::OnGetFocus() {}
         void Window::OnLostFocus() {}
 

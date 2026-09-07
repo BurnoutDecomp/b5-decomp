@@ -91,6 +91,8 @@ namespace CgsSceneManager
     void SceneSweeper::Construct()
     {
         mOverlappingPairQueue.Construct();
+        mDebugComponent.Construct(this);
+        mDebugComponent.Register();
         Clear();
     }
 

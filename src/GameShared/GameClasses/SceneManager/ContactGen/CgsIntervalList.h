@@ -120,6 +120,11 @@ namespace CgsSceneManager
 
         u32 GetNumIntervals() const { return muNumIntervals; }
         const Interval* GetInterval(u32 luIndex) const { return &mpaIntervals[luIndex]; }
+        const Interval* GetObjectInterval(u16 luObjectIndex, u8 luMinMax) const
+        {
+            return &mpaIntervals[
+                mpaObjectToIntervalMap[luObjectIndex].GetIntervalIndex(luMinMax)];
+        }
 
         // CgsIntervalList.h:173/174 (DWARF): min-role vs max-role selector into ObjectToIntervalMap.
         static const s32 KI_MIN_INDEX = 0;

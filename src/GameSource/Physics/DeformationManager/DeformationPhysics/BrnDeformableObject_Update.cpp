@@ -113,6 +113,13 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
+    // Namespace tuning objects edited by DeformationDebugComponent.  Values are the shipped
+    // ARTIST data at 0x82F2A33C/0x82F2A340/0x82F2A346.
+    f32  kfNormalImpulseScale = 0.0500000007f;
+    f32  kfFrictionImpulseScale = 0.0199999996f;
+    bool kbAllowDriveTimeDeformation = true;
+    extern bool kbAllowDeformationDebug;
+
     namespace vpu = rw::math::vpu;
 
     namespace
@@ -211,8 +218,6 @@ namespace Deformation
         // `mpImpulsePasser` -- see BrnDeformableObject.cpp and BrnDeformationSensor.cpp), so the two
         // flags were flipped TOGETHER exactly as leg 8 prescribed. This is no longer a divergence:
         // the shipped X360 image's byte at 0x82F2A346 is 0x01 and so is this.
-        const bool KB_ALLOW_DRIVE_TIME_DEFORMATION = true;
-
         // The two part-type ids whose driven points are skinned through the BOX-CLAMPED path
         // (UpdateSkinningOffsetsWithinBox) -- the asm's `v23 == 24 || v23 == 25` GetPartType test.
         // ⭐⭐ NAMED CORRECTLY 2026-09-05 (detach wave): 24/25 are the LEFT AND RIGHT SILLS (rocker
@@ -845,7 +850,7 @@ namespace Deformation
             lParams.mvfAllowedCompressionFactor = VecFloat{ 1.0f, 1.0f, 1.0f, 1.0f };
             lParams.mvfMaximumAllowedAbsorption = VecFloat{ 1.0f, 1.0f, 1.0f, 1.0f };
         }
-        else if ( KB_ALLOW_DRIVE_TIME_DEFORMATION )
+        else if ( kbAllowDriveTimeDeformation )
         {
             lParams.mvfAllowedCompressionFactor = KVF_DRIVE_TIME_DEFORMATION;
             lParams.mvfMaximumAllowedAbsorption = KVF_DRIVE_TIME_DEFORMATION;
@@ -2775,6 +2780,11 @@ namespace Deformation
         UpdateAbsorptionSet(liGameMode);
         UpdateContacts(lvfStep, lrRandom);
         UpdateOutputContactSpies(lpOutput, lpContacts);
+
+        if ( kbAllowDeformationDebug )
+        {
+            mbHasDeformedThisFrame = true;
+        }
 
         UpdateSpinningDetachment(lpInput, lpModuleOutput, lpPartMgr, lvfStep, lrRandom);
         UpdateIKSuspensionOffsets();
