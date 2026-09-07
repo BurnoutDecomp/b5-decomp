@@ -984,12 +984,18 @@ namespace Vehicle
     //     because its sign alternates ... a huge OSCILLATING scrub, not a net roll-over."
     //     THE NUMBER WAS RIGHT AND THE INFERENCE WAS WRONG. signed/abs over the WHOLE crash is a
     //     cumulative table spanning two physically OPPOSITE phases -- textbook
-    //     [[diagnostics-that-lie]]. Run-length-encode the per-frame sign instead of summing it and
-    //     THERE IS NO ALTERNATION AT ALL: the car-level tqRoll sign holds for
-    //         s55: [1, 61, 65] frames   s70: [35, 1, 8, 41, 63] frames
-    //     i.e. 1/127 and 1/148 applied frames sit in a length-1 run (0.8% / 0.7%), and the
-    //     signed/abs ratio INSIDE each phase is 1.000 -- literally constant sign. Per wheel the
-    //     runs are 96, 86, 59, 59, 47, 39, 35, 27, 23... frames long. The phases are:
+    //     [[diagnostics-that-lie]]. COUNT THE SIGN CHANGES instead of summing the signed value and
+    //     THERE IS NO ALTERNATION AT ALL:
+    //         s55: 2 sign changes over 127 applied frames   (chatter would give ~126)
+    //         s70: 4 sign changes over 148 applied frames   (chatter would give ~147)
+    //         per wheel: 0, 2, 2, 2 (s70) and 2, 2, 3, 5 (s55)
+    //     and the signed/abs ratio INSIDE each phase is 1.000 -- literally constant sign.
+    //     (Sign CHANGES, not run lengths, is the metric to quote: a wheel stops applying for a few
+    //     frames mid-phase, so a naive run-length encode concatenates across the hole. Frame-stamp
+    //     the [wfc] lines off `[crash-response] pose crash f=N` -- 194/194 and 238/238 successive
+    //     [wfc] lines are +1 frame apart, no duplicates -- and the runs are s55 [1,61,14,51] /
+    //     s70 [35,1,8,41,63], with the s55 14 and 51 being the SAME sign either side of a hole.)
+    //     The phases are:
     //         s55  +6.753 rad/s over 61 frames while up.y 1.000 -> 0.721  (rolling over)
     //              -6.799 rad/s over 65 frames while up.y 0.733 -> 0.999  (falling back)
     //         s70  +6.990 rad/s over 35 frames while up.y 1.000 -> 0.574
