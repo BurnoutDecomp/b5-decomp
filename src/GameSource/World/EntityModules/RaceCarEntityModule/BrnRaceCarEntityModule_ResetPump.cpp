@@ -63,6 +63,7 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h" // AboveGroundTestResult
 #include "GameSource/AttribSys/Generated/classes/surface.h"                        // Attrib::Gen::surface (the surface-list tripwire)
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"              // Attrib::FindCollectionWithDefault
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"    // Attrib::StringToKey (the surface-list collection key)
 #include "SharedClasses/World/BrnCollisionTag.h"                        // the KU_COLLISION_* masks
 
 namespace BrnWorld
@@ -573,11 +574,15 @@ void RaceCarEntityModule::ProcessResetOnTrackResultQueue(
 namespace
 {
     // qword_82FAD4F0 -- the collection key the console passes beside the surfacelist class key.
-    // It READS 0x0000000000000000 out of the decrypted ARTIST image (tools/re/x360rd.py
-    // 82FAD4F0), and 0 is FindCollectionWithDefault's own "use the class's default collection"
-    // value -- the same one generated surfacelist::ChangeWithDefault passes by default.
-    // ⚠️ FLAGGED, not proven inert: no image-wide writer scan was run for this symbol.
-    const u64 KU_SURFACE_LIST_COLLECTION_KEY = 0ull;
+    // ⭐ IT IS NOT ZERO. The image byte is 0 because the slot is written by a CRT static
+    // initialiser (the thunk @0x82C4B988: StringToKey("340654") -> std qword_82FAD4F0), and the
+    // same slot is what WorldEntityModule::PrepareSurfaceList @0x822F9C58 loads for ITS bind.
+    // Read as 0 it selected the class's default collection, which carries no "Surfaces"
+    // attribute, so the lookup fell through to DefaultDataArea's zeroed RefSpec and the tripwire
+    // reported "Surface list appears to be corrupt" on every boot while the world module's bind
+    // of the very same list resolved 20 surfaces. Found with the lis/@l pair sweep
+    // (tools/re/findinit.py): three readers, one writer in the CRT init bank.
+    const u64 KU_SURFACE_LIST_COLLECTION_KEY = Attrib::StringToKey( "340654" );
 
     // The attribute key the watchdog reads off mSurfaceList, built by the asm at
     // 0x822CEA28..0x822CEA40 (`lis -0xC26 / ori 0x7F1F` low, `lis 0xADC / ori 0xE56E` high,
@@ -633,38 +638,28 @@ void RaceCarEntityModule::CheckForResetOnTrackConditions()
             || ( AbsF( lrLeading.z ) > KF_SURFACE_LIST_MIN_MAGNITUDE )
             || ( AbsF( lrLeading.w ) > KF_SURFACE_LIST_MIN_MAGNITUDE );
 
-        // ⚠️⚠️ [FLAG PC bring-up] THE CONSOLE'S ASSERT IS UNCONDITIONAL AND FIRES EVERY FRAME
-        // HERE; THIS LATCHES IT TO ONCE PER PROCESS. Measured on the first run that carried this
-        // body (cs6_film_h230_s70): the tripwire fired 4,082 times in 85 seconds and took the
-        // run's assert count from 19 to 4,055. That is not a spurious report -- on this build the
-        // surfacelist collection does not resolve, so GetAttributePointer returns null, the
-        // console's own Attrib::DefaultDataArea(0x18) fallback hands back a ZEROED RefSpec, and
-        // the surface built over it has an all-zero leading quad. The check is doing exactly what
-        // the console wrote it to do; the DATA is what is missing.
-        // ⛔ IT IS LATCHED BECAUSE A PER-FRAME DEV ASSERT IS A HARNESS-KILLER, not because the
-        // report is unwanted: an assert storm PAUSES the simulation waiting for a keypress and
-        // starves every measurement taken through it. The verdict is still printed, once, with
-        // the values that produced it, so nothing is hidden.
-        // DELETE-WHEN the surfacelist collection resolves on this build -- at that point the
-        // console's unconditional form is safe and this latch should go with the comment.
+        // The verdict and the values behind it, printed once per process (the bug-test case
+        // surface_list_tripwire reads this line). Until 2026-09-07 the assert below was latched
+        // to once per process because the collection key above read as 0 and the tripwire fired
+        // 4,082 times in 85 seconds; with the key real the collection resolves and the console's
+        // unconditional per-frame form is what runs.
         {
             static bool sbSurfaceListReported = false;
-            if( !lbSurfaceListLooksSane && !sbSurfaceListReported )
+            if( !sbSurfaceListReported )
             {
                 sbSurfaceListReported = true;
                 if( CgsDev::Log::gpDebugPrint != 0 )
                 {
                     *CgsDev::Log::gpDebugPrint
-                        << "[reset-watchdog] surface-list tripwire: leading quad ("
-                        << lrLeading.x << ", " << lrLeading.y << ", " << lrLeading.z << ", "
-                        << lrLeading.w << ") is within FLT_EPSILON of zero -- the surfacelist"
-                           " collection does not resolve on this build, so the console's"
-                           " DefaultDataArea fallback is what is being read. Reported ONCE"
-                           " [FLAG PC bring-up]\n";
+                        << "[reset-watchdog] surface-list tripwire: entry="
+                        << ( lpEntry != 0 ? "resolved" : "DefaultDataArea" )
+                        << " leading quad (" << lrLeading.x << ", " << lrLeading.y << ", "
+                        << lrLeading.z << ", " << lrLeading.w << ") sane="
+                        << ( lbSurfaceListLooksSane ? 1 : 0 ) << "\n";
                 }
-                CGS_ASSERT( lbSurfaceListLooksSane, "Surface list appears to be corrupt" );  // :2516
             }
         }
+        CGS_ASSERT( lbSurfaceListLooksSane, "Surface list appears to be corrupt" );  // :2516
     }
 
     // ---- the per-car walk (0x822CEB94..0x822CEE94) ------------------------------------------
