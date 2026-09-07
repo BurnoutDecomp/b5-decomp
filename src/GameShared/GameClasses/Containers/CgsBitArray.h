@@ -172,11 +172,15 @@ public:
         }
     }
 
-    // ADDITIVE GROW (race-car render wave 2026-07-31). Whole-field store/load. The X360
-    // ActiveRaceCar::RenderParams::Reset @0x822E6818 seeds the 96-bit body-part mask by
-    // storing a single 64-bit LITERAL (0xB80FFFFFFFF) into each of its two fields -- not
-    // by setting individual bits -- so the faithful expression of that store needs a
-    // field-granular setter rather than a bit-granular one.
+    // ADDITIVE GROW (race-car render wave 2026-07-31). Whole-field store/load, for the
+    // console's own whole-field `std` stores.
+    //
+    // ⛔ 2026-09-07: this comment used to cite ActiveRaceCar::RenderParams::Reset
+    // @0x822E6818 as seeding the body-part mask with "a single 64-bit LITERAL
+    // (0xB80FFFFFFFF)". IT DOES NOT -- that literal is a Hex-Rays fusion of the unrelated
+    // `li r6, 0xB80` (a byte offset for mPaintColour) with `li r7, -1`; the asm stores -1.
+    // Reset now calls SetAll(). The live user of this setter is
+    // PropEntityModule's maPropsPreviouslyHit restore, which really does store whole words.
     void SetBitField(u32 luField, u64 lu64Value)
     {
         maxBits[luField] = lu64Value;

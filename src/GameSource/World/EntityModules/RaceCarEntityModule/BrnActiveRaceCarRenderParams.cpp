@@ -390,11 +390,31 @@ void ActiveRaceCar::RenderParams::Reset()
         mabWheelExists[luByte] = false;
     }
 
-    // Body-part visibility. The console seeds BOTH 64-bit fields with the literal
-    // 0xB80FFFFFFFF; that is not "all parts visible", it is the authored default part
-    // mask, so it is preserved verbatim rather than "corrected" to all-ones.
-    mBodyPartVisibility.SetBitField(0, 0xB80FFFFFFFFull);
-    mBodyPartVisibility.SetBitField(1, 0xB80FFFFFFFFull);
+    // Body-part visibility -> ALL PARTS VISIBLE (both 64-bit fields to -1).
+    //
+    // ⛔⛔ CORRECTED 2026-09-07 (detachable-parts wave). This used to store the literal
+    // 0xB80FFFFFFFF into both fields, on the strength of the Hex-Rays line
+    //     *(_R30 + 3488) = 0xB80FFFFFFFFLL;
+    // and a comment calling it "the authored default part mask". **There is no such mask.**
+    // The asm is two stores of a single register that was loaded with -1:
+    //     0x822E699C  li      r6, 0xB80          <- a BYTE OFFSET, not a mask half
+    //     0x822E69F8  li      r7, -1
+    //     0x822E6A24  stvx128 v0, r30, r6        <- r6 used HERE: RenderParams+0xB80 == mPaintColour
+    //     0x822E6A54  std     r7, 0xDA0(r30)     <- mBodyPartVisibility field 0 = -1
+    //     0x822E6A58  std     r7, 0xDA8(r30)     <- mBodyPartVisibility field 1 = -1
+    // r7 is not touched between 0x822E69F8 and the two stores. Hex-Rays FUSED the unrelated
+    // `li r6, 0xB80` into the 64-bit store's value, producing 0xB80_FFFFFFFF -- the high half
+    // is the paint-colour offset register, the low half is -1's low word. The decompiler
+    // literal was copied into the reconstruction; the asm is authoritative.
+    //
+    // WHAT THE BAD SEED DID: 0xB80FFFFFFFF leaves bit 32 (and 33..38, 42, 44..63) CLEAR, so
+    // body part index 32 was invisible for as long as the seed survived. MEASURED over the
+    // 430 shipped VEHICLES/VEH_*_GR.BIN GraphicsSpecs: muPartsCount maxes at 33 and exactly
+    // five cars reach it -- PUSCPI3 / PUSCPI4 / PUSCPI5 / PUSCPIC / PUSCPIG -- so those five
+    // lost their 33rd part until ActiveRaceCar::Attach (@0x822BF244, `li r6,-1` + two `std`)
+    // or ResetAfterCrash (@0x822BF4A4, same shape) re-seeded all-ones. The other 425 cars
+    // index only 0..31 and could not tell the two seeds apart.
+    mBodyPartVisibility.SetAll();
 
     // Detached-part render queue: empty, pointing at its embedded storage.
     maDetachedParts.Construct();
