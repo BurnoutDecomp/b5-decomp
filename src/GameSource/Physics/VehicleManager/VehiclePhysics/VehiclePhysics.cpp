@@ -873,6 +873,53 @@ namespace Vehicle
         // ---- end [tyre] ---------------------------------------------------------------------
     }
 
+    // ---- [wfc] PC bring-up instrument -- NOT IN THE X360 BINARY. ------------------------------
+    // OPT-IN on the existing BRN_CRASH_RESPONSE_DIAG latch, so one run carries [crash-response],
+    // [rollcatch], [absorb] and this together.
+    //
+    // THE QUESTION IT ANSWERS: HandleWheelFrictionCrashing is the largest deliberate ROLL lever in
+    // the crash update -- it pushes the friction contact point DOWN by up to 3 m (player) / 4 m
+    // (AI) and levers the body over with cross(arm, friction) -- and NOTHING has ever measured it.
+    // It is also invisible to [rollcatch]: it deposits TORQUE, and UpdateWheels runs no
+    // CalculateNewVelocity after the crash-scrub block, so its whole contribution is integrated at
+    // the NEXT drain and shows up in [rollcatch]'s `integ2` bucket, never in `wheels`. Reading
+    // `wheels` as "the crash scrub" is wrong.
+    //
+    // The four slots are written by the four back-to-back calls of one car's block and read
+    // immediately after it (single-threaded build, no interleave possible); the call site resets
+    // them first and prints the block's torque delta, so nothing here accumulates across frames.
+    // DELETE-WHEN the crash-scrub lever is banked.
+    namespace
+    {
+        bool WfcProbeArmed()
+        {
+            static s32 siArmed = -1;
+            if (siArmed < 0)
+            {
+                const char* lpcEnv = getenv("BRN_CRASH_RESPONSE_DIAG");
+                siArmed = (lpcEnv != NULL && lpcEnv[0] != '0') ? 1 : 0;
+            }
+            return (siArmed == 1) && (CgsDev::Log::gpDebugPrint != NULL);
+        }
+
+        // Per-wheel outcome of one HandleWheelFrictionCrashing call.
+        //   0 = no traction / burnout    -> the 0.95 spin-decay leg, no torque
+        //   1 = planar movement <= 0.1   -> early return, no torque
+        //   2 = applied                  -> torque + linear force added
+        struct WfcSlot
+        {
+            s32 miGate;
+            f32 mfMassOnWheel;
+            f32 mfScale;        // min(|v|, speedForMaxRoll) / speedForMaxRoll
+            f32 mfHeightDrop;   // maxHeightOffset * scale  (metres the contact point is pushed DOWN)
+            f32 mfFrictionMag;  // |lFriction|
+            f32 mfTorqueRoll;   // dot(cross(arm, friction), mTransform.zAxis)
+            f32 mfTorqueMag;
+        };
+        WfcSlot s_aWfcSlots[4];
+        bool    s_bWfcCapture = false;
+    }
+
     // ===========================================================================================
     //  @0x825D41A8  BrnPhysics::Vehicle::VehiclePhysics::HandleWheelFrictionCrashing (433 instrs)
     // ===========================================================================================
@@ -921,6 +968,7 @@ namespace Vehicle
         {
             // loc_825D4804: only mIntegrationVariables.x is multiplied by flt_82004FDC.
             lrWheel.mIntegrationVariables.x *= KF_CRASH_SPIN_DECAY;
+            if (s_bWfcCapture) { s_aWfcSlots[leWheel].miGate = 0; }   // [wfc]
             return;
         }
 
@@ -942,7 +990,10 @@ namespace Vehicle
             lPointVelocityAtWheel.z - lContact.mNormal.z * lfNormalVelocity, 0.0f };
 
         if (!(vpu::MagnitudeSquared(lMovementInPlane) > KF_MIN_PLANAR_MOVEMENT_SQUARED))
+        {
+            if (s_bWfcCapture) { s_aWfcSlots[leWheel].miGate = 1; }   // [wfc]
             return;
+        }
 
         const Vector3 lWheelLatDirection =
             vpu::Normalize(vpu::Cross(lContact.mNormal, mTransform.At()));
@@ -993,6 +1044,20 @@ namespace Vehicle
                                     lLocalPosition.z - lBodyPosition.z, 0.0f };
         const Vector3 lTorque = vpu::Cross(lFrictionArm, lFriction);
         AddWorldSpaceTorque(lTorque);
+
+        // ---- [wfc] (see the banner above the function) ---------------------------------------
+        if (s_bWfcCapture)
+        {
+            WfcSlot& lrSlot = s_aWfcSlots[leWheel];
+            lrSlot.miGate       = 2;
+            lrSlot.mfMassOnWheel = lvfMassOnWheel;
+            lrSlot.mfScale       = lfScaleFactor;
+            lrSlot.mfHeightDrop  = lvfMaxFrictionHeightOffset * lfScaleFactor;
+            lrSlot.mfFrictionMag = vpu::Magnitude(lFriction);
+            lrSlot.mfTorqueRoll  = vpu::Dot(lTorque, mTransform.zAxis);
+            lrSlot.mfTorqueMag   = vpu::Magnitude(lTorque);
+        }
+        // ---- end [wfc] -----------------------------------------------------------------------
 
         mTotalLinearForce.x += lFriction.x * lvfLinearForceMultiplier;
         mTotalLinearForce.y += lFriction.y * lvfLinearForceMultiplier;
@@ -7375,15 +7440,98 @@ namespace Vehicle
         CalculateNewVelocity(lvfTimeStep);
 
         // ---- 0x8261F414: the crash scrub (light cars only) -----------------------------------
-        if (mbCrashing &&
-            KF_CRASH_SCRUB_MASS >
-                mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x)
+        // [wfc] instrument (opt-in, BRN_CRASH_RESPONSE_DIAG -- see the banner above
+        // HandleWheelFrictionCrashing). The gate is sampled OUTSIDE the `if` on purpose: an
+        // "it never runs" answer has to be distinguishable from "the probe never printed".
+        // (mpAttribs is dereferenced only under mbCrashing, exactly as the shipped short-circuit does)
+        const f32 lfWfcMass = mbCrashing
+            ? mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x
+            : 0.0f;
+        const bool lbWfcProbe = mbCrashing && WfcProbeArmed();
+        const Vector3 lWfcTorque0 = mTotalTorque;
+        const Vector3 lWfcLinF0   = mTotalLinearForce;
+        if (lbWfcProbe)
+        {
+            for (s32 li = 0; li < 4; ++li)
+            {
+                s_aWfcSlots[li].miGate = -1;
+                s_aWfcSlots[li].mfMassOnWheel = 0.0f;
+                s_aWfcSlots[li].mfScale = 0.0f;
+                s_aWfcSlots[li].mfHeightDrop = 0.0f;
+                s_aWfcSlots[li].mfFrictionMag = 0.0f;
+                s_aWfcSlots[li].mfTorqueRoll = 0.0f;
+                s_aWfcSlots[li].mfTorqueMag = 0.0f;
+            }
+            s_bWfcCapture = true;
+        }
+
+        if (mbCrashing && KF_CRASH_SCRUB_MASS > lfWfcMass)
         {
             HandleWheelFrictionCrashing(eRearLeftWheel,   lvfTimeStep);
             HandleWheelFrictionCrashing(eRearRightWheel,  lvfTimeStep);
             HandleWheelFrictionCrashing(eFrontLeftWheel,  lvfTimeStep);
             HandleWheelFrictionCrashing(eFrontRightWheel, lvfTimeStep);
         }
+
+        // ---- [wfc] the ledger line -----------------------------------------------------------
+        if (lbWfcProbe)
+        {
+            s_bWfcCapture = false;
+            static u32 suWfcLines = 0u;
+            if (++suWfcLines <= 4000u)
+            {
+                const Vector3 lTq{ mTotalTorque.x - lWfcTorque0.x,
+                                   mTotalTorque.y - lWfcTorque0.y,
+                                   mTotalTorque.z - lWfcTorque0.z, 0.0f };
+                // dW = Iinv_world * (tau * dt), the same drain arithmetic CalculateNewVelocity uses.
+                const Vector3 lL{ lTq.x * lvfTimeStep.x, lTq.y * lvfTimeStep.x, lTq.z * lvfTimeStep.x, 0.0f };
+                const Vector3 lDW = vpu::Add(
+                    vpu::Add(vpu::Mult(mWorldInverseInertia.xAxis, lL.x),
+                             vpu::Mult(mWorldInverseInertia.yAxis, lL.y)),
+                    vpu::Mult(mWorldInverseInertia.zAxis, lL.z));
+                s32 liApplied = 0;
+                f32 lfHeightDropMax = 0.0f;
+                for (s32 li = 0; li < 4; ++li)
+                {
+                    if (s_aWfcSlots[li].miGate == 2) ++liApplied;
+                    if (s_aWfcSlots[li].mfHeightDrop > lfHeightDropMax)
+                        lfHeightDropMax = s_aWfcSlots[li].mfHeightDrop;
+                }
+                *CgsDev::Log::gpDebugPrint
+                    << "[wfc] car " << static_cast<s32>(reinterpret_cast<u64>(this) & 0xFFFFFFu)
+                    << " drv " << static_cast<s32>(mPreviousControls.GetType())
+                    << " mass " << lfWfcMass
+                    << " massGate " << ((KF_CRASH_SCRUB_MASS > lfWfcMass) ? 1 : 0)
+                    << " gates " << s_aWfcSlots[0].miGate << s_aWfcSlots[1].miGate
+                                 << s_aWfcSlots[2].miGate << s_aWfcSlots[3].miGate
+                    << " applied " << liApplied
+                    << " tqRoll " << vpu::Dot(lTq, mTransform.zAxis)
+                    << " tqPitch " << vpu::Dot(lTq, mTransform.xAxis)
+                    << " tqYaw " << vpu::Dot(lTq, mTransform.yAxis)
+                    << " tqMag " << vpu::Magnitude(lTq)
+                    << " dWroll " << vpu::Dot(lDW, mTransform.zAxis)
+                    << " dWpitch " << vpu::Dot(lDW, mTransform.xAxis)
+                    << " dWyaw " << vpu::Dot(lDW, mTransform.yAxis)
+                    << " dLinF " << vpu::Magnitude(Vector3{ mTotalLinearForce.x - lWfcLinF0.x,
+                                                            mTotalLinearForce.y - lWfcLinF0.y,
+                                                            mTotalLinearForce.z - lWfcLinF0.z, 0.0f })
+                    << " hDropMax " << lfHeightDropMax
+                    << " mow " << s_aWfcSlots[0].mfMassOnWheel << " " << s_aWfcSlots[1].mfMassOnWheel
+                        << " " << s_aWfcSlots[2].mfMassOnWheel << " " << s_aWfcSlots[3].mfMassOnWheel
+                    << " tqRollW " << s_aWfcSlots[0].mfTorqueRoll << " " << s_aWfcSlots[1].mfTorqueRoll
+                        << " " << s_aWfcSlots[2].mfTorqueRoll << " " << s_aWfcSlots[3].mfTorqueRoll
+                    << " wog " << (maWheels[0].GetRoadContact().mbIsOnGround ? 1 : 0)
+                               << (maWheels[1].GetRoadContact().mbIsOnGround ? 1 : 0)
+                               << (maWheels[2].GetRoadContact().mbIsOnGround ? 1 : 0)
+                               << (maWheels[3].GetRoadContact().mbIsOnGround ? 1 : 0)
+                    << " upy " << mTransform.yAxis.y
+                    << " rollRate " << vpu::Dot(mAngularVelocity, mTransform.zAxis)
+                    << " spd " << mfSpeedMPH.x
+                    << " dt " << lvfTimeStep.x
+                    << "\n";
+            }
+        }
+        // ---- end [wfc] -----------------------------------------------------------------------
 
         // ---- 0x8261F494: advance the wheel rotation angles (order 1,0,3,2) -------------------
         // Runs unless the body is frozen -- except on the start line, where the wheels animate
