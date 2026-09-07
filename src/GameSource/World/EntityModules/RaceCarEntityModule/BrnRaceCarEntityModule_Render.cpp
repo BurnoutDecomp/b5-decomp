@@ -557,6 +557,69 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     //
     // The array itself is zero-seeded in RenderParams::Reset until BrnDeformationManager
     // lands; see the flagged block there.
+    //
+    // ⭐⭐⭐ 2026-09-07 (deformation-SHAPE wave) -- THE CONSUMPTION SIDE OF THE DEFORMATION IS
+    // CLOSED AS FAITHFUL. The owner reported panels reading SMEARED / STRETCHED rather than
+    // crumpled and this was the obvious suspect, because the weights scale the OFFSET, not
+    // the position: blend data that came apart in the BE->LE port would distort the
+    // DEFORMATION while leaving the REST POSE exact, i.e. invisible to every rest-pose audit
+    // this campaign has run. It did not come apart. Measured on shipped bytes, no runtime:
+    //
+    //   * THE MESH. 430/430 VEHICLES/*_GR.BIN (and 138/138 WHEELS/*_GR.BNDL) are platform 4
+    //     with a retail twin. Over all 430 cars -- 144,958 renderable meshes, 144,143 of them
+    //     skinned, 20,475,516 vertices compared against the X360 retail bytes -- the
+    //     {BLENDINDEX, BLENDWEIGHT} multiset is IDENTICAL on every single vertex, no index is
+    //     out of range, and the only weight sums that miss 255 (16,180, 0.079%) miss it
+    //     IDENTICALLY on both sides: the console's own authoring rounds those to 256.
+    //   * THE LANE ASSIGNMENT, which is the part a dword flip could have wrecked.
+    //     BLENDINDICES is UBYTE4 (0x1A2286) and BLENDWEIGHT UBYTE4N (0x1A2086) -- four bytes
+    //     in ONE dword, flipped AS A DWORD by renderable_transcode. X360 memory carries the
+    //     two live influences in bytes 2,3 (lane mask 0b1100 on 19,657,114 vertices, 0b1000
+    //     on the 818,402 single-influence ones); the port reverses BOTH elements consistently
+    //     so PC memory carries them in bytes 0,1 (0b0011 / 0b0001 -- an exact mirror). D3D9
+    //     UBYTE4N delivers memory byte 0 as .x, so the pair lands in .x/.y -- and the console
+    //     must be delivering memory byte 3 as .x (an 8-in-32 fetch swap) or NO X360 car would
+    //     ever deform. So the reversal is not merely consistent, it is the right one, lane
+    //     for lane, including which of the two influences is .x.
+    //   * THE PROGRAM. X360 VS 274C49FB's Xenos microcode against its PC twin (same resource
+    //     id in both bundles), instruction for instruction:
+    //         X360  trunc r5.xy, r1.xy | maxas a0<-r5.y | mul r1, r3.yyyy, c30[a0]
+    //                                  | maxas a0<-r5.x | mad r5, r3.xxxx, c30[a0], r1
+    //                                  | add r1.xyz, r5, position
+    //         PC    mova a0.xy, r0.yx  | mul r0.xyz, v4.y, c0[a0.x]
+    //                                  | mad r0.xyz, c0[a0.y], v4.x, r0 | add r0.xyz, r0, v0
+    //     Same formula, same two lanes, same order, and NEITHER side deforms the normal. The
+    //     X360 CTAB puts g_verletOffsets at c30 x128 and the PC recompile at c0 x128 -- a
+    //     different fxc register allocation of the same declaration, which is harmless
+    //     because ShaderConstantsExternal::FixUp binds by NAME through
+    //     GetVariableHandleByName and then OVERRIDES the register count with
+    //     (mu8SizeInBytes * mu8NumEntries) >> 4 == 128 for any array entry.
+    //   * THE COUNT SURVIVES THE PORT END TO END: AddShaderConstantArray(22,"g_verletOffsets",
+    //     16,128) -> SetSize/SetNumEntries cache 128 qw -> AllocateMemoryFast(128) quad-words
+    //     (DispatchCommand is u32[4], still 16 B on x64) -> FastNonOverlappedVectorMemcpy 128
+    //     Vector4 -> DispatchExternalBlock -> SetVertexShaderConstantF(0, ., 128), under
+    //     D3D9's 256-register vertex limit so WorldShaderConstants_Set never clamps. All 16
+    //     vs_3_0 programs in the shipped SHADERS.BNDL declare the array float4[128] at c0.
+    //     Upstream, RaceCarEntityModule's L4 arm copies the full 128 rows out of the
+    //     DeformableObject scratch, and RenderParams pins maVerletOffsets@64 with
+    //     mWheelTransforms@2112 -- 2048 bytes, i.e. 128 x 16 exactly.
+    //   * THE ROW NUMBERING MATCHES PER CAR, not just on PUSMC01. On all 430 cars the mesh's
+    //     max BLENDINDEX + 1 equals (skinned tag count + SUM of GetNumberOfDrivenPoints)
+    //     EXACTLY -- no row the physics never writes, and no spare row either. And the
+    //     two-writer hazard the UpdateSkinningOffsets banner flagged as data-dependent is
+    //     safe fleet-wide: every car has exactly FOUR unskinned tag points, they ARE the four
+    //     wheel tags, and they are always the last four, so packed row == raw tag index for
+    //     every skinned tag -- while UpdateIKSuspensionOffsets' raw-indexed scratch write is
+    //     gated on lpSpec->IsSkinned(), which no retail wheel tag satisfies, so the two
+    //     numberings cannot collide on any shipped car.
+    //
+    // => DO NOT RE-OPEN THE MESH/SHADER/UPLOAD PATH FOR A "the panels stretch" REPORT. Rebuild
+    // any of the above with tools/assets/bundles/vehicle_skin_audit.py (parent repo): --car,
+    // --fleet, --rows, --tags, --platform, and --selftest, whose four negative controls were
+    // each seen to BITE (a weights-only reversal fires the pairing test; a consistent
+    // reversal of both does not, and restores the X360 lane mask exactly -- which is what
+    // proves the port's transform IS that reversal; +1 on a weight byte fires the sum test;
+    // inverting the skinned flag flags all 430 cars).
     const bool lbDamaged = lpRenderParams->IsDamaged();
 
     // ⚠ DELIBERATE DEVIATION from the console's `if (mbDamaged || <debug>)` gate: the upload
