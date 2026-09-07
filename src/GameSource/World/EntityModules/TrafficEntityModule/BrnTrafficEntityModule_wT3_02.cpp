@@ -1100,6 +1100,34 @@ void TrafficEntityModule::UpdateRecoveringFromSlam(
     CGS_ASSERT(lpVehicle->IsOfStandardSpecies(),
                "lpVehicle->IsOfStandardSpecies()");                                 // .cpp 16736
 
+    // ---- [T5-slam] witness. NOT IN THE X360 BINARY, off unless BRN_TRAFFIC_DIAG.
+    // Printed BEFORE the control below so BOTH arms of the A/B produce rows: `wrote=0` is the
+    // pre-fix state (the arm reached, no pedal written), `wrote=1` is this landing. The row
+    // carries mfTimeNotDriving, which is the number the junction-FUP valve kills on.
+    // Budgeted; DELETE-WHEN the issue-#14 evidence is banked.
+    {
+        static s32 siSlamWitnessLines = 0;
+        const s32 KI_SLAM_WITNESS_CAP = 200;
+        if (siSlamWitnessLines < KI_SLAM_WITNESS_CAP)
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                ++siSlamWitnessLines;
+                const TrafficPhysicsInfo* const lpWInfo =
+                    GetTrafficPhysicsInfoForVehicl(luVehicle);
+                const char* lpcEnvW = getenv("BRN_TRAFFIC_NO_SLAM_DRIVE");
+                const bool lbSuppressed = (lpcEnvW != 0 && lpcEnvW[0] != '0');
+                *lpDiag << "[T5-slam] veh=" << static_cast<s32>(luVehicle)
+                        << " physTime=" << lpVehicle->GetPhysicalTime()
+                        << " drv=" << (lpWInfo != 0 ? lpWInfo->mfDrivingDirection : 0.0f)
+                        << " steer=" << (lpWInfo != 0 ? lpWInfo->mfSteeringDirection : 0.0f)
+                        << " notDriving=" << (lpWInfo != 0 ? lpWInfo->mfTimeNotDriving : -1.0f)
+                        << " wrote=" << (lbSuppressed ? 0 : 1)
+                        << "\n";
+            }
+        }
+    }
+
     // ---- [FLAG PC control] NOT IN THE X360 BINARY. BRN_TRAFFIC_NO_SLAM_DRIVE=1 restores the
     // pre-2026-09-07 gate: the arm is still reached and still costs its asserts, but no pedal
     // is written -- exactly the state issue #14 was measured in. It exists because the shared
