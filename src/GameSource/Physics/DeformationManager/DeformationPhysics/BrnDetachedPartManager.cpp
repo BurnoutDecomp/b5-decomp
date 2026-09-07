@@ -8,6 +8,7 @@
 #include "rw/math/vpu/vector3_operation.h"                         // rw::math::vpu::MagnitudeSquared (transform validation tripwires)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint -- [part-rest] DIAG only
 #include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"   // CgsGeometric::Box -- [part-rest] resting-orientation read
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h"   // IKBodyPart::GetPartType -- [part-rest] type join, DIAG only
 
 #include <cstdlib>   // getenv/atoi -- [part-rest] DIAG only, host-side
 
@@ -464,8 +465,16 @@ namespace Deformation
                     const f32 lfBasisSq = lfFlatness * lfFlatness + lfMidUp * lfMidUp + lfUpright * lfUpright;
 
                     *CgsDev::Log::gpDebugPrint
+                        // ⭐ ADDED 2026-09-07 (part-box witness wave). The PART TYPE and IK INDEX,
+                        // so a row joins to the AUTHORED per-type table (tools/re/part_bbox_dump.py)
+                        // WITHOUT inferring the type from [detach-part] line order. Pool slots are
+                        // reused, so that inference is order-dependent and silently wrong the moment
+                        // a log is truncated or two entities interleave -- and the plate-tail
+                        // question this run exists to settle is a PER-TYPE question.
                         << "[part-rest] f " << static_cast<s32>(sluRestFrames)
                         << " slot " << liProbe
+                        << " type " << static_cast<s32>(lpProbePart->GetIKPart()->GetPartType())
+                        << " ik " << lpProbePart->GetIKPartIndex()
                         << " inScene " << (lpProbePart->IsAddedToScene() ? 1 : 0)
                         << " joined "  << (lpProbePart->IsJoinedToVehicle() ? 1 : 0)
                         << " frozen "  << (lpProbePart->IsFrozen() ? 1 : 0)

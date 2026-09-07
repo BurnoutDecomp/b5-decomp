@@ -541,6 +541,92 @@ namespace Deformation
                                                                             : KF_MAX_PART_CONTACT_PADDING)
                     : KF_MAX_PART_CONTACT_PADDING;
 
+            // ---- [part-pad] READ-ONLY WITNESS. NOT IN THE X360 BINARY. Opt-in via
+            //      BRN_DEFORM_TRACE. DELETE-WHEN the part-box question is banked.
+            //
+            // ⭐⭐ THIS IS THE ONLY PLACE THE BOX'S *SIZE* CHANGES BEHAVIOUR. The refresh landed in
+            // PhysicalBodyPartPool::UpdateABoundingBox @0x8260CC88 can only move a box's EXTENTS,
+            // never its orientation -- so it cannot stand a panel up. What it CAN do is move a part
+            // across the `min-half > 0.15` fat test three lines above, and the pad is INVERSELY
+            // gated on box size: a thin box gets the flat 0.5 m, a fat one only min(extent, 0.5).
+            // lbBoxIsFat is ALSO the `lbUseFatPath` argument of the stream entry point below, so a
+            // crossing changes which generator path the part takes, not merely a number.
+            //
+            // ⚠️ IT COUNTS TRANSITIONS, NOT STATES, AND IT KEYS ON THE PART -- NOT THE SLOT. The
+            // part pool is SHARED across every deformable object (one DetachedPartManager, whose
+            // single mPartPool member is why the console passes the manager address as the pool's
+            // `this`), and slots are REUSED: one run routinely puts three different panels, from
+            // different cars, through slot 5. A per-slot latch would score every reuse as a gate
+            // crossing. The latch therefore stores the part's whole ENTITY WORD -- owner, entity
+            // index AND part index, not the IK index alone, because two cars' parts can share an
+            // IK index in the same recycled slot -- and treats a change of it as a NEW EPISODE
+            // with no transition.
+            {
+                static s32 siPadProbe = -1;
+                if ( siPadProbe < 0 )
+                {
+                    const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
+                    siPadProbe = ( lpcEnv != 0 && atoi(lpcEnv) > 0 ) ? 1 : 0;
+                }
+                static s8  saPadLastFat[64];        // -1 unseen, 0 thin, 1 fat
+                static u32 saPadLastPart[64];       // the ENTITY WORD that state belongs to
+                static bool sbPadInit = false;
+                static u32 suPadSamples = 0u, suPadFat = 0u, suPadEpisodes = 0u;
+                static u32 suPadToFat = 0u, suPadToThin = 0u, suPadRows = 0u;
+                if ( !sbPadInit )
+                {
+                    sbPadInit = true;
+                    for ( s32 liInit = 0; liInit < 64; ++liInit )
+                    {
+                        saPadLastFat[liInit] = -1;
+                        saPadLastPart[liInit] = 0xFFFFFFFFu;
+                    }
+                }
+
+                const s32 liPadSlot = static_cast<s32>(lpCurrentPart->GetPoolIndex()) & 63;
+                // The whole entity word -- owner byte, entity index and part index in one u32
+                // (BurnoutBodyPartID's own packing; see its GetBaseRigidBodyID banner).
+                const u32 luPadKey =
+                    static_cast<u32>(lpCurrentPart->GetRigidBodyId().GetBaseRigidBodyID() >> 32);
+                const s8  li8Fat = lbBoxIsFat ? 1 : 0;
+                ++suPadSamples;
+                if ( lbBoxIsFat ) { ++suPadFat; }
+
+                const bool lbNewEpisode = ( saPadLastPart[liPadSlot] != luPadKey );
+                const bool lbCrossed = ( !lbNewEpisode && saPadLastFat[liPadSlot] >= 0
+                                         && saPadLastFat[liPadSlot] != li8Fat );
+                if ( lbNewEpisode ) { ++suPadEpisodes; }
+                if ( lbCrossed )
+                {
+                    if ( li8Fat != 0 ) { ++suPadToFat; } else { ++suPadToThin; }
+                }
+                saPadLastPart[liPadSlot] = luPadKey;
+                saPadLastFat[liPadSlot]  = li8Fat;
+
+                if ( siPadProbe == 1 && CgsDev::Log::gpDebugPrint != 0
+                     && ( lbCrossed || lbNewEpisode || (suPadSamples % 900u) == 0u )
+                     && suPadRows < 600u )
+                {
+                    ++suPadRows;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[part-pad] slot " << liPadSlot
+                        << " ik " << liIKPartIndex
+                        << " half (" << lBoxHalfDimensions.x << ", " << lBoxHalfDimensions.y
+                        << ", " << lBoxHalfDimensions.z << ")"
+                        << " minHalf " << lfSmallestHalfExtent
+                        << (lbBoxIsFat ? " FAT" : " THIN")
+                        << " pad " << lfContactPadding
+                        << (lbCrossed ? " CROSSED" : (lbNewEpisode ? " NEW" : " -"))
+                        << " | samples " << static_cast<s32>(suPadSamples)
+                        << " fat " << static_cast<s32>(suPadFat)
+                        << " episodes " << static_cast<s32>(suPadEpisodes)
+                        << " toFat " << static_cast<s32>(suPadToFat)
+                        << " toThin " << static_cast<s32>(suPadToThin)
+                        << "\n";
+                }
+            }
+            // ---- end [part-pad] ------------------------------------------------------------
+
             // One fresh single-primitive list per detached part. Prepare fully re-initialises the
             // builder (pointer / used / count / capacity), which is why the console Constructs only
             // the shared hinged one.

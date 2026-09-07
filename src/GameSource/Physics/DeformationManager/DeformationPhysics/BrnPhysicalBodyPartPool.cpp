@@ -438,15 +438,47 @@ namespace Deformation
     // signature, not dropped, and it is named here so the next reader does not go looking for a
     // publish that the binary does not contain.
     //
-    // ⛔ NOT MEASURED IN A RUN: this wave did not take the box lock (two other waves were mid
-    // measurement and the sim is frame-coupled). What is proven is the divergence, not its
-    // magnitude -- the recompute can only change the box's EXTENTS, never its orientation, so it
-    // cannot by itself turn a flat panel upright. It can, however, move a part across the
-    // min-half <= 0.15 "thin" gate that DoBodyPartWorldContactGeneration @0x8260962C uses to pick
-    // the contact padding, which is a behaviour change worth a witness when the box is free.
+    // ✅ MEASURED IN A RUN 2026-09-07 (part-box witness wave), 8 boots on exe a116fb3efe35, all
+    // eight byte-identical, against a 15-boot PRE-FIX corpus. The banner above used to end "NOT
+    // MEASURED IN A RUN"; here is the measurement, and one of its three claims did not survive.
+    //
+    //  (1) IT RUNS, ON A LIVE POOL. Per boot: 6,600 calls, ~5,500 of them with a non-empty pool,
+    //      4,443-5,132 actual refreshes, 129-635 of which CHANGED the box. The control is in the
+    //      same runs: every boot's first [ubb] census row reads `livePool 0 refreshed 0` with an
+    //      empty [ubb-visits], and the two shots that shed nothing (pbd_h240_s70/s80) read
+    //      `calls 6600 livePool 0 refreshed 0` for their whole length. The counter can print zero.
+    //
+    //  (2) THE BOX IS NO LONGER FROZEN, and this is the headline. Distinct half-extent triples per
+    //      DETACHED (joined-0) episode:
+    //          PRE-FIX  (15 boots, three builds)    0 of 110 episodes ever moved
+    //          POST-FIX (8 boots)                  42 of  46 episodes moved (91.3%), max 499
+    //      and the metric was never blind: the HINGED (joined-1) arm -- the same field, the same
+    //      log line, the same runs -- moved 92.9% pre-fix and 91.3% post-fix. The two arms now
+    //      agree, which is exactly what this function existing predicts.
+    //
+    //  (3) ⛔ THE CONTACT CONSEQUENCE IS NIL AT THESE SPEEDS, and the honest number is zero.
+    //      The pad gate below (min-half > 0.15) was crossed by 1 of 46 free episodes over its whole
+    //      free life, and by 0 of 46 while UNFROZEN -- and DoBodyPartWorldContactGeneration skips a
+    //      frozen part outright, so the contact site never saw the other side. At the decision site
+    //      itself: 6,356 pad evaluations over 41 detached episodes, 1,181 FAT (18.6%), toFat 0,
+    //      toThin 0. The reason is measurable, not a shrug: once a part is free its box moves by a
+    //      median of 0.0030 m (p90 0.0136, max 0.0495) while the median distance to the gate is
+    //      0.0790 m -- 26x the movement. The deformation that DOES cross the gate happens while
+    //      the panel is still attached (9 of 67 paired player parts, 13.4%, are already THIN->FAT
+    //      by the time they detach). So this fix restores the console's arithmetic; it does not
+    //      change how a shed panel collides in any run taken so far.
     // =============================================================================================
+    // [DIAG] NOT IN THE X360 BINARY -- the [ubb] census, defined below this function so the
+    // console's own body reads uninterrupted. File-local (anonymous namespace): no ODR surface,
+    // no class-surface change, no storage. DELETE-WHEN the part-box question is banked.
+    namespace { void UbbCensus(s32, s32, bool, f32, f32, u8, s32); }
+
     void PhysicalBodyPartPool::UpdateABoundingBox(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInterface*/)
     {
+        // [DIAG] the entry-state reads for the [ubb] census below. Read-only; see its banner.
+        const s32 liCursorOnEntry = miLastUpdatedBoundingBox;
+        const bool lbPoolWasLive  = !mUsedParts.IsZero();
+
         // `cmpwi r11, -1` -> restart the sweep at the first used slot, else continue after it.
         const s32 liSlot =
             ( miLastUpdatedBoundingBox == CgsContainers::BitArray<KU_MAX_DETACHED_PARTS>::KI_INVALID_BITINDEX )
@@ -456,11 +488,185 @@ namespace Deformation
         // `stw r11, 0x60E8(r15)` -- stored on BOTH arms, including the -1 that ends a sweep.
         miLastUpdatedBoundingBox = liSlot;
 
+        // [DIAG] the pre-refresh box scalar, for the "did the recompute MOVE anything" counter.
+        const f32 lfRadiusBefore =
+            ( liSlot != CgsContainers::BitArray<KU_MAX_DETACHED_PARTS>::KI_INVALID_BITINDEX )
+                ? maParts[liSlot].GetSphereRadius() : 0.0f;
+
         if ( liSlot != CgsContainers::BitArray<KU_MAX_DETACHED_PARTS>::KI_INVALID_BITINDEX )
         {
             maParts[liSlot].UpdateBoundingBox();   // bl 0x8260ACC8 on &maParts[slot]
         }
+
+        UbbCensus(liCursorOnEntry, liSlot, lbPoolWasLive, lfRadiusBefore,
+                  ( liSlot != CgsContainers::BitArray<KU_MAX_DETACHED_PARTS>::KI_INVALID_BITINDEX )
+                      ? maParts[liSlot].GetSphereRadius() : 0.0f,
+                  mu8NumDetachedParts, miLastUpdatedBoundingBox);
     }
+
+    // =============================================================================================
+    // [DIAG] NOT IN THE X360 BINARY. The [ubb] CENSUS -- the runtime witness for the reconstruction
+    // above. Opt-in on the SAME BRN_DEFORM_TRACE latch the [detach-*] / [part-rest] probes use, so
+    // one armed run produces all of them and they are directly correlatable. Read-only: it reads
+    // the cursor, the used-mask and the part's own broad-phase radius, and writes nothing the
+    // console does not.
+    //
+    // ⭐ WHY A CENSUS AND NOT A PER-CALL ROW. This runs EVERY physics frame -- ~60 rows a second,
+    // ~15k rows a run -- and an assert/print storm starves the harness badly enough to manufacture
+    // physics failures [[watch-the-window-asserts-pause]]. So the counters are incremented
+    // unconditionally (their values are true even on an unarmed run) and printed on a period.
+    //
+    // ⭐⭐ WHY THESE COUNTERS AND NOT A MAXIMUM. "UpdateABoundingBox ran" cannot distinguish the
+    // four states this wave has to separate:
+    //     (a) it is never called at all                      -> calls == 0
+    //     (b) it is called, but the pool is always empty      -> calls > 0, livePool == 0
+    //     (c) it is called on a live pool but never refreshes -> livePool > 0, refreshed == 0
+    //     (d) it refreshes, but every recompute is identical  -> refreshed > 0, moved == 0
+    // and the per-slot VISIT HISTOGRAM (a distinct-value count, not a maximum) is the only thing
+    // that can say whether the round-robin reaches EVERY used slot or parks on a subset.
+    //
+    // ⭐ THE CURSOR-SEED WITNESS (Construct seeds -1, not 0 -- see BrnPhysicalBodyPartPool_
+    // Construct.cpp). `firstCall` records the cursor value and pool state at the FIRST call after
+    // Construct, and `firstSweep` records the ORDERED slot list of the first sweep that visits
+    // anything. Between them they say whether the seed had an observable consequence in this run
+    // or was overwritten before the pool ever went live -- which is a measurement, not an
+    // assumption. DELETE-WHEN the part-box question is closed and banked.
+    // =============================================================================================
+    namespace
+    {
+        s32 UbbProbePeriod()
+        {
+            static s32 siPeriod = -1;
+            if ( siPeriod < 0 )
+            {
+                const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
+                const s32 liValue = (lpcEnv != 0) ? atoi(lpcEnv) : 0;
+                siPeriod = (liValue > 0 && CgsDev::Log::gpDebugPrint != 0) ? liValue : 0;
+            }
+            return siPeriod;
+        }
+
+        // ⭐ THE PERIOD IS THE CONTROL. At 600 calls (~10 s of physics) a crash run prints
+        // several census rows BEFORE the first part ever detaches, and those rows must read
+        // `livePool 0 refreshed 0` with an EMPTY [ubb-visits]. That is the negative control for
+        // this counter, in the SAME process and through the SAME path as the positive result: a
+        // counter that cannot print zero cannot be trusted when it prints a number.
+        static const u32 KU_UBB_CENSUS_EVERY   = 600;
+        static const u32 KU_UBB_FIRST_SWEEP_MAX = 24;
+
+        u32 gxUbbCalls     = 0;   // every entry -- step (4) of UpdatePostPhysics ran
+        u32 gxUbbLivePool  = 0;   // ... with at least one used slot
+        u32 gxUbbRestarts  = 0;   // ... entered with the cursor at -1 (GetFirstNonZeroBit arm)
+        u32 gxUbbIdle      = 0;   // ... and chose -1 (empty pool, or the sweep just ended)
+        u32 gxUbbRefreshed = 0;   // entries that actually called PhysicalBodyPart::UpdateBoundingBox
+        u32 gxUbbMoved     = 0;   // ... where the broad-phase radius CHANGED across the call
+        u32 gxaUbbVisits[PhysicalBodyPartPool::KU_MAX_DETACHED_PARTS] = { 0 };
+
+        bool gxbUbbFirstCallSeen = false;
+        s32  gxiUbbFirstCursor   = -2;    // the cursor Construct left, as seen by the first call
+        bool gxbUbbFirstLive     = false; // ... and whether the pool was already live then
+        s32  gxaUbbFirstSweep[KU_UBB_FIRST_SWEEP_MAX] = { 0 };
+        u32  gxUbbFirstSweepLen  = 0;
+        bool gxbUbbSweepOpen     = false;
+        bool gxbUbbFirstSweepDone = false;
+
+    void UbbCensus(s32 liCursorOnEntry, s32 liSlot, bool lbPoolWasLive,
+                   f32 lfRadiusBefore, f32 lfRadiusAfter,
+                   u8 lu8UsedNow, s32 liCursorNow)
+    {
+        const u32 KU_MAX_DETACHED_PARTS = PhysicalBodyPartPool::KU_MAX_DETACHED_PARTS;
+        const s32 KI_NONE = CgsContainers::BitArray<PhysicalBodyPartPool::KU_MAX_DETACHED_PARTS>::KI_INVALID_BITINDEX;
+
+        ++gxUbbCalls;
+        if ( !gxbUbbFirstCallSeen )
+        {
+            gxbUbbFirstCallSeen = true;
+            gxiUbbFirstCursor   = liCursorOnEntry;
+            gxbUbbFirstLive     = lbPoolWasLive;
+        }
+        if ( lbPoolWasLive )  { ++gxUbbLivePool; }
+        if ( liCursorOnEntry == KI_NONE ) { ++gxUbbRestarts; }
+
+        if ( liSlot == KI_NONE )
+        {
+            ++gxUbbIdle;
+            if ( gxbUbbSweepOpen ) { gxbUbbSweepOpen = false; gxbUbbFirstSweepDone = true; }
+        }
+        else
+        {
+            ++gxUbbRefreshed;
+            if ( lfRadiusAfter != lfRadiusBefore ) { ++gxUbbMoved; }
+            if ( liSlot >= 0 && liSlot < static_cast<s32>(KU_MAX_DETACHED_PARTS) )
+            {
+                ++gxaUbbVisits[liSlot];
+            }
+            if ( !gxbUbbFirstSweepDone )
+            {
+                gxbUbbSweepOpen = true;
+                if ( gxUbbFirstSweepLen < KU_UBB_FIRST_SWEEP_MAX )
+                {
+                    gxaUbbFirstSweep[gxUbbFirstSweepLen++] = liSlot;
+                }
+            }
+        }
+
+        if ( UbbProbePeriod() <= 0 || (gxUbbCalls % KU_UBB_CENSUS_EVERY) != 0u )
+        {
+            return;
+        }
+
+        u32 luDistinctSlots = 0;
+        u32 luMaxVisits = 0;
+        u32 luMinVisitsOfVisited = 0xFFFFFFFFu;
+        for ( u32 luSlot = 0; luSlot < KU_MAX_DETACHED_PARTS; ++luSlot )
+        {
+            if ( gxaUbbVisits[luSlot] == 0u ) { continue; }
+            ++luDistinctSlots;
+            if ( gxaUbbVisits[luSlot] > luMaxVisits ) { luMaxVisits = gxaUbbVisits[luSlot]; }
+            if ( gxaUbbVisits[luSlot] < luMinVisitsOfVisited ) { luMinVisitsOfVisited = gxaUbbVisits[luSlot]; }
+        }
+        if ( luDistinctSlots == 0u ) { luMinVisitsOfVisited = 0u; }
+
+        *CgsDev::Log::gpDebugPrint
+            << "[ubb] f " << renderengine::guPresentCount
+            << " calls " << static_cast<s32>(gxUbbCalls)
+            << " livePool " << static_cast<s32>(gxUbbLivePool)
+            << " restarts " << static_cast<s32>(gxUbbRestarts)
+            << " idle " << static_cast<s32>(gxUbbIdle)
+            << " refreshed " << static_cast<s32>(gxUbbRefreshed)
+            << " moved " << static_cast<s32>(gxUbbMoved)
+            << " usedNow " << static_cast<s32>(lu8UsedNow)
+            << " cursorNow " << liCursorNow
+            << " | firstCall cursor " << gxiUbbFirstCursor
+            << " live " << (gxbUbbFirstLive ? 1 : 0)
+            << " | distinctSlots " << static_cast<s32>(luDistinctSlots)
+            << " visitMin " << static_cast<s32>(luMinVisitsOfVisited)
+            << " visitMax " << static_cast<s32>(luMaxVisits)
+            << " slot0 " << static_cast<s32>(gxaUbbVisits[0])
+            << "\n";
+
+        *CgsDev::Log::gpDebugPrint << "[ubb-visits]";
+        for ( u32 luSlot = 0; luSlot < KU_MAX_DETACHED_PARTS; ++luSlot )
+        {
+            if ( gxaUbbVisits[luSlot] != 0u )
+            {
+                *CgsDev::Log::gpDebugPrint << " " << static_cast<s32>(luSlot)
+                                           << ":" << static_cast<s32>(gxaUbbVisits[luSlot]);
+            }
+        }
+        *CgsDev::Log::gpDebugPrint << "\n";
+
+        *CgsDev::Log::gpDebugPrint << "[ubb-sweep1] closed "
+                                   << (gxbUbbFirstSweepDone ? 1 : 0)
+                                   << " len " << static_cast<s32>(gxUbbFirstSweepLen)
+                                   << " slots";
+        for ( u32 luIndex = 0; luIndex < gxUbbFirstSweepLen; ++luIndex )
+        {
+            *CgsDev::Log::gpDebugPrint << " " << gxaUbbFirstSweep[luIndex];
+        }
+        *CgsDev::Log::gpDebugPrint << "\n";
+    }
+    }   // anonymous namespace ([ubb] census)
 
     // ------------------------------------------------------------------------------------------
     // UpdatePart @ 0x8260CB08  (74 instructions) -- ⭐⭐ RECONSTRUCTED 2026-08-27 (detach-2 wave).
