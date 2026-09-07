@@ -328,26 +328,23 @@ void BridgeEntityModulesToScene_PostPhysics(
     }
 
     // ---- LEG 3/4: PROP (0x827AB6F8, `mr r3,r27 ; bl sub_827A1CB8`) ---------------------
-    // ⛔ PARKED on ONE declaration + ONE body in a file this cluster does not own.
-    // sub_827A1CB8 is PropEntityIO::OutputBuffer_PostPhysics::GetSceneInputInterface() const
-    // -- read-lock (`extrwi r11,r11,1,27`), baked BrnPropEntityModuleIO.h line 0x2DC == 732,
-    // epilogue `addi r3, r28, 0x860` == this + 2144, which is the SAME member
-    // (mSceneInputInterface) and the SAME real InSceneUpdateInterface type the tree already
-    // models from Construct's roll-call. Only the const overload is missing: the header
-    // declares just the write twin 0x822B9B28 (line 741) at :468, and
-    // BrnPropEntityModuleIO_OutputBuffer_PostPhysics.cpp bodies only that one. Reaching the
-    // writer through a const_cast would fire "Not locked for writing" every frame, because
-    // WorldModule::Update read-locks every source of this bridge -- so the leg is parked
-    // rather than faked.
-    // COSTS NOTHING TODAY: every prop producer in the tree writes the PREPARE or PRE-SCENE
-    // buffer (PropZoneManager::LoadProp / UpdateInstance, PropCellManager::AddPropToScene /
-    // AddPropToContactGeneration, PropEntityModule's Prepare + PreScene stages), and both of
-    // those legs are live. It becomes load-bearing the moment a post-physics prop producer
-    // lands (a smashed gate's parts moving after the physics step).
-    // [park owner: BrnPropEntityModuleIO.h:468 + BrnPropEntityModuleIO_OutputBuffer_PostPhysics.cpp
-    //  -- add `const SceneInputInterface* GetSceneInputInterface() const;` and its read-lock
-    //  body, then this leg is one line.]
-    (void)lpPropOutputBuffer_PostPhysics;
+    // RESTORED 2026-09-07 (b5-decomp#2, props sent flying). The park that stood here waited
+    // for the const read-lock accessor PropEntityIO::OutputBuffer_PostPhysics::
+    // GetSceneInputInterface() const; it has since been declared and bodied
+    // (BrnPropEntityModuleIO_OutputBuffer_PostPhysics.cpp), and Construct builds the interface,
+    // so the leg is the same one-line merge as its three siblings.
+    //
+    // WHY IT WAS LOAD-BEARING: this is the ONLY route by which a prop that the physics step
+    // moved reaches the scene. PropZoneManager::UpdateInstance stages SetEntityPosition and,
+    // for props in contact generation, one SetVolumeInstanceTransform per volume into THIS
+    // buffer's scene interface every frame the prop is updated. With the leg dropped, every
+    // physical prop's collision volume stayed at its spawn pose while its rigid body moved
+    // away, so a car resting against a lamppost kept 'penetrating' the stale volume and the
+    // solver's positional correction shoved the body out by the full penetration again every
+    // frame (measured: two contacts, 0.31 m each, identical contact points frame after frame
+    // while the centre of mass had already moved 2 m) -- a prop pushed at walking pace at
+    // ~15 m/s, and a prop hit at speed carried until it left at the 27 m/s clamp.
+    lpScene->Append( *lpPropOutputBuffer_PostPhysics->GetSceneInputInterface() );
 
     // ---- LEG 4/4: WORLD ENTITY (0x827AB714, `mr r3,r26 ; bl sub_827A2F20`) -------------
     // ⭐ RESTORED 2026-08-19 (wave Q5 cluster F3), and the FLAG that parked it was WRONG,

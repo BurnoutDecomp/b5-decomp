@@ -63,6 +63,9 @@ namespace rw
 namespace physics
 {
 
+// [DIAG] b5-decomp#2 witness hook (simulation.h). NULL == inert. DELETE-WHEN closed.
+Simulation::ContactDiagHook Simulation::gpContactDiagHook = 0;
+
 namespace
 {
     // -------------------------------------------------------------------------------------
@@ -1600,6 +1603,10 @@ bool Simulation::SimulationUpdate(f32 lfTimeStep)
         else
             Horus_Pipeline();
     }
+
+    // [DIAG] NOT IN THE X360 BINARY -- b5-decomp#2 witness hook, inert when NULL (simulation.h).
+    if (gpContactDiagHook != 0)
+        gpContactDiagHook(this);
 
     BatchIntegrator();
 

@@ -1312,6 +1312,10 @@ void PropManager::ReadUpdatedBodies(
                             << "," << lUpdatedLinearVelocity.z << ")"
                             << " dt=" << lvfTimeStep.x
                             << " moveState=" << static_cast<s32>( lpProp->GetMovementState() )
+                            << " w=(" << lUpdatedAngularVelocity.x << "," << lUpdatedAngularVelocity.y
+                            << "," << lUpdatedAngularVelocity.z << ")"
+                            << " up=(" << lUpdatedTransform.Up().x << "," << lUpdatedTransform.Up().y
+                            << "," << lUpdatedTransform.Up().z << ")"
                             << "\n";
                     }
                 }

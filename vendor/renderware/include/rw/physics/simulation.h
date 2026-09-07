@@ -334,6 +334,16 @@ public:
     u32 GetJointSpyCount() const   { return m_JS_Count; }   // :467
     u32 GetDriveSpyCount() const   { return m_DS_Count; }   // :471
 
+    // [DIAG] NOT IN THE X360 BINARY -- 2026-09-07 props lane (b5-decomp#2). A host-only hook the
+    // owning module may install to read the SOLVED contact jacobians after the pipelines and
+    // BEFORE BatchIntegrator consumes the reaction rows / SpyContactJacobians overwrites the head
+    // of the stack. NULL by default, and nothing in SimulationUpdate changes while it is NULL.
+    // DELETE-WHEN b5-decomp#2 is closed.
+    typedef void (*ContactDiagHook)(const Simulation* lpSim);
+    static ContactDiagHook gpContactDiagHook;
+    u32         GetContactCountForDiag() const { return m_CT_Count; }
+    const void* GetContactStackForDiag() const { return m_CJ_Stack; }
+
     ContactJacobianSpy* GetContactSpy(u32 luIndex) const    // :487 (DWARF: ContactSpy*)
     {
         return m_CS_Count ? reinterpret_cast<ContactJacobianSpy*>(m_CJ_Stack) + luIndex : 0;

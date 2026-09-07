@@ -2305,6 +2305,53 @@ namespace CgsPhysics
     // DRAIN 19 -- THE CONTACT DRAIN (2026-08-05). All nineteen input drains now exist.
     // =====================================================================================
 
+    // [DIAG] NOT IN THE X360 BINARY -- 2026-09-07 props lane (b5-decomp#2). The post-solve half
+    // of the contact witness pair. ProcessAddContactQueue below flags, per contact RECORD
+    // index, whether either body is prop-owned and prints the geometry it fed the solver
+    // ([prop-contact]); this hook runs inside Simulation::SimulationUpdate after the solver
+    // pipelines and before BatchIntegrator, and prints what the solver DECIDED for the same
+    // record ([prop-solve]: the accumulated impulse lanes, the positional lambda, the
+    // pre-divided bias, the normal, both inverse masses and both lever arms). Opt-in
+    // (BRN_PROP_DIAG), first-N. Host-only; the console has no such hook.
+    // DELETE-WHEN b5-decomp#2 is closed.
+    static const u32 KU_PROP_DIAG_MAX_CONTACTS = 1024u;
+    static bool      gabPropDiagContact[KU_PROP_DIAG_MAX_CONTACTS];
+
+    static void PropContactSolveDiagHook(const rw_physics::Simulation* lpSim)
+    {
+        static s32 siLinesLeft = 6000;
+        const u32 luCount = lpSim->GetContactCountForDiag();
+        const rw_physics::ContactJacobian* const lpJ =
+            static_cast<const rw_physics::ContactJacobian*>(lpSim->GetContactStackForDiag());
+        for (u32 luI = 0; luI < luCount && luI < KU_PROP_DIAG_MAX_CONTACTS; ++luI)
+        {
+            if (!gabPropDiagContact[luI])
+            {
+                continue;
+            }
+            gabPropDiagContact[luI] = false;   // per-frame flags, consumed here
+            if (siLinesLeft <= 0 || CgsDev::Log::gpDebugPrint == 0)
+            {
+                continue;
+            }
+            --siLinesLeft;
+            const rw_physics::ContactJacobian& lrJ = lpJ[luI];
+            *CgsDev::Log::gpDebugPrint
+                << "[prop-solve] ci=" << luI << " tag=" << lrJ.mTag
+                << " L=(" << lrJ.mLambda.x << "," << lrJ.mLambda.y << "," << lrJ.mLambda.z << ")"
+                << " Lp=" << lrJ.mLambdaPos
+                << " bias=(" << lrJ.mBias.x << "," << lrJ.mBias.y << "," << lrJ.mBias.z << ")"
+                << " biasP=" << lrJ.mBiasPos
+                << " n=(" << lrJ.mRi.x << "," << lrJ.mRi.y << "," << lrJ.mRi.z << ")"
+                << " invmA=" << lrJ.mInvmA << " invmB=" << lrJ.mInvmB
+                << " rA=(" << lrJ.mRA.x << "," << lrJ.mRA.y << "," << lrJ.mRA.z << ")"
+                << " rB=(" << lrJ.mRB.x << "," << lrJ.mRB.y << "," << lrJ.mRB.z << ")"
+                << " TnA=(" << lrJ.mTnA.x << "," << lrJ.mTnA.y << "," << lrJ.mTnA.z << ")"
+                << " TnB=(" << lrJ.mTnB.x << "," << lrJ.mTnB.y << "," << lrJ.mTnB.z << ")"
+                << "\n";
+        }
+    }
+
     // -------------------------------------------------------------------------------------
     // PhysicsSimulationModule::ProcessAddContactQueue @ 0x828A3458   (363 instructions)
     //
@@ -2386,6 +2433,51 @@ namespace CgsPhysics
                                              lrEvent.mPointOnA, lrEvent.mPointOnB, lrEvent.mNormal,
                                              lrEvent.mStaticFriction, lrEvent.mDynamicFriction,
                                              lrEvent.mRestitution, static_cast<u32>(li));
+
+            // [DIAG] NOT IN THE X360 BINARY -- 2026-09-07 props lane (b5-decomp#2). The drain
+            // half of the contact witness pair (see PropContactSolveDiagHook above): the
+            // geometry the solver is fed for any pair with a PROP-owned body -- both points,
+            // the normal, the signed penetration n.(pB - pA), both COMs, inverse masses,
+            // states and velocities -- keyed by the record index. Opt-in, first-N.
+            // DELETE-WHEN b5-decomp#2 is closed.
+            {
+                static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
+                if (sbPropDiag && lpContact != NULL)
+                {
+                    const u32 luOwnerA = static_cast<u32>((lrEvent.mIDA >> 56) & 0xFFu);
+                    const u32 luOwnerB = static_cast<u32>((lrEvent.mIDB >> 56) & 0xFFu);
+                    const bool lbProp  = (luOwnerA == 3u || luOwnerB == 3u);
+                    const u32 luRecord = mpSimulation->GetContactCountForDiag() - 1u;
+                    if (luRecord < KU_PROP_DIAG_MAX_CONTACTS)
+                    {
+                        gabPropDiagContact[luRecord] = lbProp;
+                    }
+                    static s32 siLinesLeft = 6000;
+                    if (lbProp && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        --siLinesLeft;
+                        const rw_physics::Contact& lrC = *lpContact;
+                        const f32 lfPen = lrC.mRi.x * (lrC.mPosB.x - lrC.mPosA.x)
+                                        + lrC.mRi.y * (lrC.mPosB.y - lrC.mPosA.y)
+                                        + lrC.mRi.z * (lrC.mPosB.z - lrC.mPosA.z);
+                        *CgsDev::Log::gpDebugPrint
+                            << "[prop-contact] ci=" << luRecord
+                            << " A=" << luOwnerA << "/" << static_cast<u32>(lrEvent.mIDA >> 32)
+                            << " B=" << luOwnerB << "/" << static_cast<u32>(lrEvent.mIDB >> 32)
+                            << " pA=(" << lrC.mPosA.x << "," << lrC.mPosA.y << "," << lrC.mPosA.z << ")"
+                            << " pB=(" << lrC.mPosB.x << "," << lrC.mPosB.y << "," << lrC.mPosB.z << ")"
+                            << " n=(" << lrC.mRi.x << "," << lrC.mRi.y << "," << lrC.mRi.z << ")"
+                            << " pen=" << lfPen
+                            << " comA=(" << lrC.mComA.x << "," << lrC.mComA.y << "," << lrC.mComA.z << ")"
+                            << " comB=(" << lrC.mComB.x << "," << lrC.mComB.y << "," << lrC.mComB.z << ")"
+                            << " invmA=" << lrC.mInvmA << " invmB=" << lrC.mInvmB
+                            << " stA=" << lrC.mStateA << " stB=" << lrC.mStateB
+                            << " relv=(" << lrC.mVel.x << "," << lrC.mVel.y << "," << lrC.mVel.z << ")"
+                            << " mus=" << lrC.mMus << " mud=" << lrC.mMud << " res=" << lrC.mRes
+                            << "\n";
+                    }
+                }
+            }
 
             // Register the pair -- skipped ONLY when both indices match the previous event's
             // (0x828A39B8..0x828A39C4); the memo updates only when LinkParts runs.
@@ -3044,6 +3136,14 @@ namespace CgsPhysics
         // BridgeEntityModulesToPhysicsModule_PreScene delivers, over an EMPTY body set
         // (the vehicle create path is still absent). The temporary witness prints that
         // recorded it were removed after observation, as briefed.
+        // [DIAG] b5-decomp#2 -- install the post-solve contact witness (opt-in, once). Host-only.
+        {
+            static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
+            if (sbPropDiag)
+            {
+                rw_physics::Simulation::gpContactDiagHook = &PropContactSolveDiagHook;
+            }
+        }
         mpSimulation->HackResetSpyCountHack();                 // `stw 0, 0x68/0x78/0x70`
         mpSimulation->SimulationUpdate(lfNewStep);
         CgsDev::PerfMonCpu::StopMonitor(miTimeInSim3);
