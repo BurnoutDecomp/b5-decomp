@@ -980,10 +980,56 @@ namespace Vehicle
     //       FRAME; summed |dWroll| over the crash 13.55 / 10.42 rad/s = 76.6% / 48.0% of ALL the
     //       frame-to-frame roll-rate traffic the car saw. This is the dominant roll channel.
     //     the full 3.0 m drop IS reached (hDropMax max 3.000 in both boots)
-    //   ⭐ AND YET IT DOES NOT TUMBLE THE CAR, because its sign alternates: signed sum of dWroll
-    //     -0.046 rad/s against an absolute sum of 13.55 (100% cancellation) and +4.48 against 10.42
-    //     (57%). A huge oscillating scrub, not a net roll-over. Both boots reached past
-    //     on-its-side (max|right.y| 0.796 / 0.922, min up.y 0.611 / 0.372) with 0 roll half-turns.
+    //   ⛔⛔ RETRACTED 2026-09-07 (same day, next wave): "AND YET IT DOES NOT TUMBLE THE CAR,
+    //     because its sign alternates ... a huge OSCILLATING scrub, not a net roll-over."
+    //     THE NUMBER WAS RIGHT AND THE INFERENCE WAS WRONG. signed/abs over the WHOLE crash is a
+    //     cumulative table spanning two physically OPPOSITE phases -- textbook
+    //     [[diagnostics-that-lie]]. Run-length-encode the per-frame sign instead of summing it and
+    //     THERE IS NO ALTERNATION AT ALL: the car-level tqRoll sign holds for
+    //         s55: [1, 61, 65] frames   s70: [35, 1, 8, 41, 63] frames
+    //     i.e. 1/127 and 1/148 applied frames sit in a length-1 run (0.8% / 0.7%), and the
+    //     signed/abs ratio INSIDE each phase is 1.000 -- literally constant sign. Per wheel the
+    //     runs are 96, 86, 59, 59, 47, 39, 35, 27, 23... frames long. The phases are:
+    //         s55  +6.753 rad/s over 61 frames while up.y 1.000 -> 0.721  (rolling over)
+    //              -6.799 rad/s over 65 frames while up.y 0.733 -> 0.999  (falling back)
+    //         s70  +6.990 rad/s over 35 frames while up.y 1.000 -> 0.574
+    //              -2.963 rad/s over 41 frames while up.y 0.935 -> 1.000
+    //     So the lever DOES tip the car -- coherently, at ~7 rad/s of deposited roll -- the car
+    //     reaches 44 deg / 68 deg of tilt, does not pass the balance point, and the scrub then
+    //     correctly reverses to kill the returning roll. That is a Coulomb friction damper doing
+    //     exactly what its arithmetic says, not a defect. (Both boots still ended with 0 roll
+    //     half-turns; max|right.y| 0.796 / 0.922, min up.y 0.611 / 0.372.)
+    //   ⭐⭐ AND THE TWO SIGN-DECIDING INPUTS ARE VERIFIED, three independent ways:
+    //     (a) BIT-EXACT INVARIANCE. Both uses of the contact normal are PROJECTIONS --
+    //         `v - n*(v.n)` and `F = latDir*(latDir.u)*k` -- so the body's output is invariant
+    //         under n -> -n AND under Cross(n,At) vs Cross(At,n), and exactly so in floats (the
+    //         only approximation, the rsqrt Newton chain, takes |v|^2). A flipped normal or a
+    //         flipped cross order therefore CANNOT produce wrong-sign alternation; only a WRONG
+    //         AXIS could.
+    //     (b) THE CONSOLE'S OWN CHAIN. AddTractionPoint @0x825D9608 parks the normal in v126 at
+    //         entry and re-issues `vmr128 v2,v126` immediately before `bl SetRoadContact` --
+    //         untouched. SetRoadContact @0x825D6C08 stores it verbatim (`stvx128 v127,[this+0x10]`)
+    //         and then derives traction from ITS Y LANE: `vspltw v0,v0,1` + `vcfsx v13,v13,1`
+    //         (= 0.5) + `vcmpgtfp` -- the console itself asserting the normal is WORLD space with
+    //         +Y up. And At is `lvx128 v12,[this+0x30]` = mTransform.zAxis == At(). As written.
+    //     (c) A LIVE TEST IN THE LEDGER ITSELF. latDir = Normalize(n x At) lies in the plane
+    //         perpendicular to At, so tqPitch = tau.Right = -k sin(phi) (arm.At) where phi is the
+    //         angle between the car's own Up and the ROAD normal; hence
+    //         |tqPitch/tqRoll| ~= tan(phi)*|arm_z/arm_y|. Measured, binned by up.y:
+    //             up.y>0.995 (level): median 0.003 / 0.012   <- latDir IS the car's Right axis
+    //             up.y 0.90-0.97 (20 deg): 0.221 / 0.191     ratio/tan(tilt) 0.61 / 0.51
+    //             up.y 0.55-0.75 (48 deg): 0.483 / 0.495     ratio/tan(tilt) 0.44 / 0.44
+    //             up.y <0.55     (68 deg): 0.596             ratio/tan(tilt) 0.24
+    //         It GROWS as tan(tilt) with a coefficient in the predicted |arm_z/arm_y| band. Had the
+    //         normal been the car's OWN up axis (the classic space/staleness defect) latDir would be
+    //         exactly +-Right at every tilt and this column would stay at 0.003 forever. It does not.
+    //   ⛔ AND THE ROLL IS NOT REMOVED BY THIS FUNCTION. In the same boots [rollcatch]'s `susp`
+    //     bucket (the roll-rate change across UpdateSuspension, whose ApplySuspensionForces
+    //     re-integrates) OPPOSES the scrub's `integ2` on 47/49 and 76/95 frames where both are
+    //     nonzero, at comparable size (sum|susp| 8.28 / 12.69 vs sum|integ2| 8.66 / 10.71, single
+    //     frames up to 0.50 rad/s with only ONE wheel on the ground). A spring resisting roll is
+    //     expected physics and NOTHING here says ours is unfaithful -- but that is where the
+    //     scrub's ~7 rad/s goes, and it is the next thing to measure against the console.
     //   CONTROL THAT BITES: on the 5 / 40 frames with NO wheel on the ground the probe reports
     //     gates 0000, applied 0, tqRoll 0 -- and the `gates 1111` pattern (64 / 51 frames) is the
     //     planar-movement gate shutting the lever off once the car has stopped. The instrument
