@@ -3399,8 +3399,13 @@ namespace BrnGame
     // the read buffer and the new write buffer is re-Constructed), then the GUI/renderer
     // end-of-frame + perfmon swap. The swap is the piece the boot path needs: it publishes
     // this frame's loading-screen command to the dispatch side and clears the next write
-    // buffer's one-shot slot. [gated] the metrics/particle/GUI end-of-frame notifies land with
-    // their subsystems.
+    // buffer's one-shot slot.
+    // ⛔⛔ THIS BANNER USED TO END "[gated] the metrics/particle/GUI end-of-frame notifies land
+    // with their subsystems." That gate went STALE and cost two player-visible defects: the
+    // PARTICLE notify (issue #17, c227a165) and the GUI notify (below). Both subsystems had
+    // landed long before; nothing re-read the line. Only the RENDER-METRICS GameTalk report is
+    // still out -- it needs EA::GameTalk, which this tree does not have.
+    // [[gates-are-stale-not-dead]]
     //
     // BrnRendererModule::EndOfFrame @0x823FFE28 is live now: its SwapBuffers @0x823FC678 advances
     // the game-side dispatch-list ring so the frame the world modules filled this update becomes
@@ -3443,6 +3448,21 @@ namespace BrnGame
         mEffectsModule.ParticleModuleRef().EndOfFrame(false);
 
         mDispatchThreadInputBufferManager.Swap();
+
+        // ⭐⭐⭐ THE GUI END-OF-FRAME NOTIFY, restored 2026-09-07 -- the SIBLING of the
+        // particle hole above, named by the very same stale banner line, and found the same
+        // way: `BrnGui::GuiModule::EndOfFrame @0x824F1008` was DECLARED NOWHERE, DEFINED
+        // NOWHERE and CALLED BY NOTHING in this tree, which links in silence. The console
+        // calls it HERE, after the dispatch swap and before the renderer's own end-of-frame,
+        // exactly as the pseudocode above shows.
+        //
+        // It is three tail calls: GuiModule::EndOfFrame -> CustomRendererManager::EndOfFrame
+        // (+311952) -> NetworkPlayerImageRenderer::SwapBuffers (+112192), and it is the ONLY
+        // writer of that renderer's two ring cursors. Frozen, they sit at render=1 / copyTo=2
+        // for the life of the process, so a picture RecvEvent copies into slot 2 is read back
+        // from slot 1 and can never appear. Full derivation on the body in BrnGuiModule.cpp.
+        mGuiModule.EndOfFrame();   // X360 @0x823DBBA0 calls it HERE, before mRenderModule's
+
         mRenderModule.EndOfFrame();
     }
 

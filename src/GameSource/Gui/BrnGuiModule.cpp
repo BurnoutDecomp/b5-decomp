@@ -998,6 +998,23 @@ namespace BrnGui
         // other custom control) had nowhere to resolve to.
         mCustomRendererManager.Construct();
 
+        // ⭐ X360 GuiModule::Construct's LAST TWO ACTIONS, @0x82518D2C-54:
+        //     addis r30, r31, 5 ; addi r30, r30, -0x3D70   ; r30 = gm + 311952 (the manager)
+        //     mr r3, r30 ; lwz r11,0(r30) ; lwz r11,0(r11) ; mtctr r11 ; bctrl   ; its Construct
+        //     addis r4, r31, 5 ; mr r3, r30 ; addi r4, r4, -0x6E80
+        //     bl BrnGui__CustomRendererManager__SetFlaptRenderer
+        // The argument is gm + 327680 - 28352 - 64... i.e. +299392, which is
+        // mViewModule (gm+132224) + mFlaptManager (view +0x28CC0 == +167104) + mRenderer
+        // (+0x40): 132224 + 167104 + 64 == 299392 exactly. (The sibling constant at
+        // @0x82518C6C, gm+299328, is the FlaptManager itself -- the `this` the
+        // SetSoundTriggerHandler call above uses.)
+        // ⛔ THIS CALL WAS MISSING, and the setter it drives was writing the wrong field
+        // (see BrnCustomRenderer.cpp), so NetworkPlayerImageRenderer::mpFlaptRenderer had
+        // ZERO writers in this build. It is read by SwapBuffers, which the newly-wired
+        // GuiModule::EndOfFrame runs every frame -- without this line that is a
+        // "mpFlaptRenderer" assert per frame, not a fix.
+        mCustomRendererManager.SetFlaptRenderer(&mViewModule.GetFlaptManager()->mRenderer);
+
         mpGuiEventInputBuffer = 0;
         mpOutputBuffer = 0;
         mpTextureAllocator = 0;   // filled by Prepare (X360 GuiModule::Prepare @0x82518DE0)
@@ -3582,6 +3599,44 @@ void GuiModule::Destruct()
             mViewOutputBuffer.UnlockForWrite();
         }
 
+    }
+
+    // ⭐⭐⭐ THE GUI END-OF-FRAME NOTIFY, restored 2026-09-07. X360 @0x824F1008, verbatim:
+    //     addis r3, r3, 5 ; addi r3, r3, -0x3D70 ; b BrnGui__CustomRendererManager__EndOfFrame
+    // -- +327680-15728 == +311952 == mCustomRendererManager, tail-called. That in turn is
+    //     addis r3, r3, 2 ; addi r3, r3, -0x49C0 ; b BrnGui__NetworkPlayerImageRenderer__SwapBuffers
+    // -- +131072-18880 == +112192 == the embedded NetworkPlayerImageRenderer. So the whole
+    // notify is one thing: SWAP THE PLAYER-IMAGE TRIPLE BUFFER.
+    //
+    // ⛔ IT WAS DECLARED NOWHERE, DEFINED NOWHERE AND CALLED BY NOTHING -- which links in
+    // total silence. Both bodies below it were already correct and had NEVER EXECUTED. This
+    // is the exact sibling of ParticleModule::EndOfFrame (c227a165, issue #17), named by the
+    // same stale banner line in BrnGameModule::OnEndOfUpdateFrame.
+    //
+    // ⭐ WHAT ITS ABSENCE COSTS, from the console's own arithmetic (no eyeballing):
+    //   NetworkPlayerImageRenderer::Construct @0x82445A50 seeds `*(this+736) = 1` and
+    //   `*(this+740) = 2` -- miCurrentRenderTexture = 1, miCurrentCopyToTexture = 2 -- and
+    //   SwapBuffers @0x82445E58 is the ONLY writer of either word in the whole image (both
+    //   `(x+1) % 3`, via the 0x55555556 magic-multiply pair at 0x82445E9C/0x82445EA4).
+    //   RecvEvent @0x82449CA0 case 258 copies an arriving picture into slot `v4[185]` ==
+    //   miCurrentCopyToTexture and flags `maabRender*Texture[idx][thatSlot]`; GetRenderOutput
+    //   @0x82445CC0 reads slot `miCurrentRenderTexture` and consults the flags at THAT slot.
+    //   With the cursors frozen at 1 and 2, every picture is written to slot 2 and every read
+    //   asks slot 1, whose flags no code path can ever set. ⇒ A RECEIVED PLAYER PICTURE CAN
+    //   NEVER BE DISPLAYED. The two type-258 producers are single-player:
+    //   LicenseComponent::SendPlayerPictureEvent and PhotoBoothComponent (see the bridge note
+    //   in DispatchInboundGuiEvents) -- the licence card and the photo booth.
+    //   Secondary: SwapBuffers is also the only per-frame writer of the Flapt special texture
+    //   ("CustomComponentTexture.tif", FlaptFile::SetSpecialTexture @0x8246D750) and of
+    //   FlaptRenderer::miSpecialTextureShaderProgram, so both stayed at whatever
+    //   NetworkPlayerImageRenderer::Prepare @0x82451560 left on the frame it ran.
+    //
+    // ⚠️ NOT a fix for GitHub #9 (minimap blips) or #11 (in-game event UI): this chain is
+    // three tail calls long and touches nothing but the player-image buffer set. Measured,
+    // not assumed -- see the wave report.
+    void GuiModule::EndOfFrame()
+    {
+        mCustomRendererManager.EndOfFrame();
     }
 
     // The per-frame GUI render drive. X360 BrnGui::GuiModule::Render @0x825146B8 gates on

@@ -109,6 +109,19 @@ namespace BrnGui
         // Called from BrnRendererModule::Render (the PC render thread).
         void Render(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer);
 
+        // ⭐⭐ THE GUI END-OF-FRAME NOTIFY. X360 BrnGui::GuiModule::EndOfFrame @0x824F1008 is
+        // three instructions -- `addis r3,r3,5 ; addi r3,r3,-0x3D70 ; b CustomRendererManager::
+        // EndOfFrame` -- a tail call into mCustomRendererManager (+311952), which is itself a
+        // tail call into NetworkPlayerImageRenderer::SwapBuffers (+112192). Its ONLY console
+        // caller is BrnGameModule::OnEndOfUpdateFrame @0x823DBBA0, between the dispatch-buffer
+        // swap and BrnRendererModule::EndOfFrame.
+        //
+        // It was DECLARED NOWHERE, DEFINED NOWHERE and CALLED BY NOTHING in this tree until
+        // 2026-09-07 -- the sibling of the ParticleModule::EndOfFrame hole fixed in c227a165,
+        // and named by the same stale "[gated] the metrics/particle/GUI end-of-frame notifies
+        // land with their subsystems" comment. See the body for what its absence cost.
+        void EndOfFrame();                                                    // 0x824F1008
+
         // @ 0x82511240 -- MovieManager::Update + the movie frame draw (the movie pass).
         void UpdateAndRenderMovieManager(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer);
 

@@ -210,9 +210,12 @@ private:
     // Construct() and Update(); Render() increments it and clears the event queue past 10.
     s32 miHACK_NumberOfRendersWithoutUpdate;
 
-    // Shared sub-system back-pointers the setters store (guest +0x1B91C / +0x1BEC4 /
-    // +0x1BEC8 / +0x1BED0). The replay serialiser's concrete type is out of scope.
-    BrnFlapt::FlaptRenderer*      mpFlaptRenderer;     // guest +0x1B91C
+    // Shared sub-system back-pointers the setters store (guest +0x1BEC4 / +0x1BEC8 /
+    // +0x1BED0). The replay serialiser's concrete type is out of scope.
+    // ⛔ There is NO mpFlaptRenderer here. The guest's SetFlaptRenderer store at +0x1B91C is
+    // mNetworkPlayerImageRenderer(+0x1B640) + 0x2DC -- the SUBOBJECT's field, which is the
+    // one SwapBuffers reads. A member of this class stood here until 2026-09-07 and swallowed
+    // the pointer, so the renderer's own copy had no writer at all. See the setter's banner.
     CgsGraphics::TextRenderer*    mpTextRenderer;      // guest +0x1BEC4
     CgsLanguage::LanguageManager* mpLanguageManager;   // guest +0x1BEC8
     void*                         mpReplaySerialiser;  // guest +0x1BED0

@@ -186,7 +186,6 @@ CustomRendererManager::CustomRendererManager()
     , mePrepareStage(E_PREPARESTAGE_START)
     , meReleaseStage(E_RELEASESTAGE_START)
     , miHACK_NumberOfRendersWithoutUpdate(0)
-    , mpFlaptRenderer(0)
     , mpTextRenderer(0)
     , mpLanguageManager(0)
     , mpReplaySerialiser(0)
@@ -832,21 +831,30 @@ void CustomRendererManager::EndOfFrame()
 }
 
 // ================= SetFlaptRenderer @ 0x82449920 =================
-// guest: `*(result + 112924) = a2; return result;`  (112924 == 0x1B91C) -- ONE store, and
-// that is all.
-// ⚠️ I nearly propagated this into the embedded NetworkPlayerImageRenderer's own
-// mpFlaptRenderer "because it obviously needs one". It does not come from here: SwapBuffers
-// @0x82445E58 reads the renderer's copy at `a1[183]` == its +0x2DC, i.e. absolute
-// 0x1B660 + 0x2DC = 0x1B93C -- a DIFFERENT field from the 0x1B91C this writes. The
-// renderer's copy is installed by its own NetworkPlayerImageRenderer::SetFlaptRenderer
-// from another caller. Adding the hand-down would have been an invented side effect that
-// happened to look sensible.
-// ⇒ CONSEQUENCE, recorded rather than papered over: EndOfFrame() -> SwapBuffers() asserts
-//   "mpFlaptRenderer" if that other caller has not run. Nothing in this build calls
-//   EndOfFrame yet; whoever wires it must wire the renderer's Flapt setter first.
+// guest, all four instructions:
+//     lis  r11, 1 ; ori r11, r11, 0xB91C ; stwx r4, r3, r11 ; blr
+// i.e. `*(this + 0x1B91C) = lpFlaptRenderer` -- ONE store.
+//
+// ⛔ THE OFFSET THIS FUNCTION USED TO CARRY WAS ARITHMETIC THAT DID NOT CHECK OUT, and the
+// note built on it inverted the conclusion. The previous banner said the guest's 0x1B91C was
+// "a DIFFERENT field" from the renderer's own mpFlaptRenderer because it put the embedded
+// NetworkPlayerImageRenderer at 0x1B660. It is not there. EndOfFrame @0x82449930 forms the
+// subobject address as `addis r3,r3,2 ; addi r3,r3,-0x49C0` == +131072-18880 == 112192 ==
+// **0x1B640**, and SwapBuffers @0x82445E58 reads its Flapt renderer at `a1[183]` == +0x2DC.
+//     0x1B640 + 0x2DC = 0x1B91C = 112924  -- EXACTLY the word this store writes.
+// So this setter IS the embedded renderer's setter (the compiler inlined
+// NetworkPlayerImageRenderer::SetFlaptRenderer into it), CustomRendererManager has no Flapt
+// pointer of its own, and the store must land in the subobject or SwapBuffers reads NULL.
+// The old `mpFlaptRenderer` member has been deleted from the class for the same reason: it
+// stood for a console field that does not exist.
+//
+// The console's only caller is GuiModule::Construct @0x82518D48-54, which passes
+// `guiModule + 5<<16 - 0x6E80` == +299392 == mViewModule(+132224).mFlaptManager(+0x28CC0)
+// .mRenderer(+0x40). See the matching call in BrnGuiModule.cpp.
 CustomRendererManager* CustomRendererManager::SetFlaptRenderer(BrnFlapt::FlaptRenderer* lpFlaptRenderer)
 {
-    mpFlaptRenderer = lpFlaptRenderer;   // guest stwx -> this+0x1B91C
+    // guest stwx -> this+0x1B91C == mNetworkPlayerImageRenderer(+0x1B640) + 0x2DC
+    mNetworkPlayerImageRenderer.SetFlaptRenderer(lpFlaptRenderer);
     return this;
 }
 

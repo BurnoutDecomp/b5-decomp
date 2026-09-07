@@ -11,6 +11,9 @@
 #include "pc/gcm/renderengine/device.h"                                       // renderengine::gDevice (the PC device gate)
 
 #include <cstring>   // memset
+#include <cstdio>    // [diag] snprintf ([netimg] slot-ring probe)
+#include <cstdlib>   // [diag] getenv   (BRN_NETIMG gates it)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                     // [diag] CgsDev::Log::WriteToLog
 
 // ============================================================================
 // BrnGui::NetworkPlayerImageRenderer -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -55,6 +58,61 @@ namespace BrnGui
             { 236u, static_cast<CgsGui::ResourceRequestTypes>(11) },   // ARTIST type 11 == texture
         };
         const u32 muNumResourcesToLoad = 1u;
+
+        // ================= [netimg] THE SLOT-RING PROBE =================================
+        // DELETE-WHEN-STABLE. Inert unless BRN_NETIMG names a non-zero value.
+        //
+        // WHAT IT HAS TO SEPARATE, and why nothing already in the tree could. The defect this
+        // was written for is not "the picture is wrong", it is "the picture is written to a
+        // buffer nothing ever reads". A probe that only counted arriving events, or only
+        // counted GetRenderOutput calls, would look IDENTICAL before and after the fix: the
+        // events arrive either way and the reads happen either way. The separating quantity is
+        // the pair of RING CURSORS -- miCurrentCopyToTexture (where RecvEvent writes) and
+        // miCurrentRenderTexture (where GetRenderOutput reads) -- and specifically the SET OF
+        // DISTINCT VALUES each takes over a run. SwapBuffers is their only writer in the whole
+        // image, so without it each set has exactly ONE element and the two elements differ;
+        // with it each has three and they meet. Hence bitmasks + distinct-value counts below,
+        // not maxima. [[diagnostics-that-lie]]
+        bool NetImgProbeEnabled()
+        {
+            static int siEnabled = -1;
+            if (siEnabled < 0)
+            {
+                const char* lpcValue = std::getenv("BRN_NETIMG");
+                siEnabled = (lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0') ? 1 : 0;
+            }
+            return siEnabled != 0;
+        }
+
+        u32 guNetImgRenderSlotMask = 0;   // bit n set == miCurrentRenderTexture was n at a READ
+        u32 guNetImgCopySlotMask   = 0;   // bit n set == miCurrentCopyToTexture was n at a WRITE
+        u32 guNetImgSwaps          = 0;
+        u32 guNetImgRecv258        = 0;   // type-258 events seen
+        u32 guNetImgCopies         = 0;   // of those, ones carrying a real texture (-> CopyTexture)
+        u32 guNetImgReads          = 0;   // GetRenderOutput calls
+        u32 guNetImgReadsDefault   = 0;   //   ... answered with the baked default texture
+        u32 guNetImgReadsLive      = 0;   //   ... answered with a live buffer  (THE ONE THAT MATTERS)
+        u32 guNetImgReadsNull      = 0;   //   ... answered NULL
+        u32 guNetImgUpdates        = 0;   // per-frame Update() calls -- the census cadence
+
+        void NetImgDumpCensus(const char* lpcWhere)
+        {
+            char lacMsg[320];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[netimg] census@%s upd=%u swaps=%u recv258=%u copies=%u reads=%u "
+                "live=%u default=%u null=%u renderSlots=0x%X(%u) copySlots=0x%X(%u)\n",
+                lpcWhere, guNetImgUpdates, guNetImgSwaps, guNetImgRecv258, guNetImgCopies,
+                guNetImgReads, guNetImgReadsLive, guNetImgReadsDefault, guNetImgReadsNull,
+                guNetImgRenderSlotMask,
+                static_cast<unsigned>(((guNetImgRenderSlotMask >> 0) & 1u) +
+                                      ((guNetImgRenderSlotMask >> 1) & 1u) +
+                                      ((guNetImgRenderSlotMask >> 2) & 1u)),
+                guNetImgCopySlotMask,
+                static_cast<unsigned>(((guNetImgCopySlotMask >> 0) & 1u) +
+                                      ((guNetImgCopySlotMask >> 1) & 1u) +
+                                      ((guNetImgCopySlotMask >> 2) & 1u)));
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
 
         // The id the default texture is fetched from the GuiCache under (X360 GetLoadedResource
         // arg 0xEC = 236). FLAG: recovered constant.
@@ -347,6 +405,26 @@ namespace BrnGui
             // Render is on while either a texture is supplied or the index is a real slot.
             mbRenderTexture = (lpImageEvent->mpTexture != 0) || (lpImageEvent->miTextureIndex != -1);
 
+            // [netimg] DELETE-WHEN-STABLE. One line per arriving picture, carrying BOTH
+            // cursors, so the write slot and the read slot are on the same line.
+            ++guNetImgRecv258;
+            if (lpImageEvent->mpTexture != 0) ++guNetImgCopies;
+            if (miCurrentCopyToTexture >= 0 && miCurrentCopyToTexture < KI_NUM_TEXTURES_TO_BUFFER)
+                guNetImgCopySlotMask |= (1u << miCurrentCopyToTexture);
+            if (NetImgProbeEnabled())
+            {
+                char lacMsg[220];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[netimg] RECV258 n=%u tex=%p idx=%d copyTo=%d render=%d "
+                    "renderTexture=%d useDefault=%d\n",
+                    guNetImgRecv258, static_cast<void*>(lpImageEvent->mpTexture),
+                    static_cast<int>(lpImageEvent->miTextureIndex),
+                    static_cast<int>(miCurrentCopyToTexture),
+                    static_cast<int>(miCurrentRenderTexture),
+                    mbRenderTexture ? 1 : 0, mbUseDefaultTexture ? 1 : 0);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+
             if (mbRenderTexture)
             {
                 CGS_ASSERT((lpImageEvent->miTextureIndex >= 0) &&
@@ -390,6 +468,16 @@ namespace BrnGui
     // Count the arm-to-clear timer down; clear the surfaces when it underflows.
     void NetworkPlayerImageRenderer::Update()
     {
+        // [netimg] DELETE-WHEN-STABLE. THE CENSUS CADENCE IS HERE, not on the read path, and
+        // that is deliberate: the first version of this probe printed every 600th
+        // GetRenderOutput call and printed NOTHING AT ALL over a 150 s run, because the
+        // default-texture short-circuit means the component is barely read. A probe whose
+        // sampling clock is the very quantity under test reports silence as "no data" and
+        // silence as "no defect" identically. Update() is the per-frame drive, so this ticks
+        // whatever the renderer is doing. [[diagnostics-that-lie]]
+        ++guNetImgUpdates;
+        if (NetImgProbeEnabled() && (guNetImgUpdates % 300u) == 0u) NetImgDumpCensus("upd");
+
         if (miClearTexturesFrameCount >= 0)
         {
             --miClearTexturesFrameCount;
@@ -411,12 +499,40 @@ namespace BrnGui
     renderengine::Texture* NetworkPlayerImageRenderer::GetRenderOutput(
         s32 liTextureIndex, s32* lpiShaderProgram, CgsGui::ImRendererSet* /*lpRendererSet*/)
     {
+        // [netimg] DELETE-WHEN-STABLE. Census only -- one line per read would be one line per
+        // component per frame. The census is dumped from SwapBuffers (and, when the ring is
+        // frozen, every 600th read, so a run in which SwapBuffers never fires still reports).
+        ++guNetImgReads;
+        if (miCurrentRenderTexture >= 0 && miCurrentRenderTexture < KI_NUM_TEXTURES_TO_BUFFER)
+            guNetImgRenderSlotMask |= (1u << miCurrentRenderTexture);
+        if (NetImgProbeEnabled() && guNetImgReads <= 3u)
+        {
+            char lacFirst[200];
+            std::snprintf(lacFirst, sizeof(lacFirst),
+                "[netimg] READ n=%u idx=%d render=%d useDefault=%d renderTexture=%d "
+                "flags=%d%d%d default=%p\n",
+                guNetImgReads, static_cast<int>(liTextureIndex),
+                static_cast<int>(miCurrentRenderTexture), mbUseDefaultTexture ? 1 : 0,
+                mbRenderTexture ? 1 : 0,
+                (liTextureIndex >= 0 && liTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY &&
+                 maabRenderTexture[liTextureIndex][miCurrentRenderTexture]) ? 1 : 0,
+                (liTextureIndex >= 0 && liTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY &&
+                 maabRenderCompressedTexture[liTextureIndex][miCurrentRenderTexture]) ? 1 : 0,
+                (liTextureIndex >= 0 && liTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY &&
+                 maabRenderYUY2Texture[liTextureIndex][miCurrentRenderTexture]) ? 1 : 0,
+                static_cast<void*>(mpDefaultTexture));
+            CgsDev::Log::WriteToLog(lacFirst);
+        }
+
         if (mbUseDefaultTexture)
         {
+            ++guNetImgReadsDefault;
+            if (NetImgProbeEnabled() && (guNetImgReads % 600u) == 0u) NetImgDumpCensus("read");
             CGS_ASSERT(mpDefaultTexture != 0, "NULL != mpDefaultTexture");
             *lpiShaderProgram = 0;
             return mpDefaultTexture;
         }
+        if (NetImgProbeEnabled() && (guNetImgReads % 600u) == 0u) NetImgDumpCensus("read");
 
         CGS_ASSERT((liTextureIndex >= 0) && (liTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY),
                    "(liTextureIndex >= 0) && (liTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY)");
@@ -428,15 +544,23 @@ namespace BrnGui
         {
             const s32 liRender = miCurrentRenderTexture;
             if (maabRenderTexture[liTextureIndex][liRender])
+            {
+                ++guNetImgReadsLive;   // [netimg]
                 return maapTextureBuffer[liTextureIndex][liRender];
+            }
             if (maabRenderCompressedTexture[liTextureIndex][liRender])
+            {
+                ++guNetImgReadsLive;   // [netimg]
                 return mapCompressedTextureBuffer[liTextureIndex];
+            }
             if (maabRenderYUY2Texture[liTextureIndex][liRender])
             {
+                ++guNetImgReadsLive;   // [netimg]
                 *lpiShaderProgram = 1;
                 return maapYUY2TextureBuffer[liTextureIndex][miCurrentRenderTexture];
             }
         }
+        ++guNetImgReadsNull;   // [netimg]
         return 0;
     }
 
@@ -452,6 +576,23 @@ namespace BrnGui
         renderengine::Texture* lpOutput = GetRenderOutput(0, &liShaderProgram, 0);
         BrnFlapt::FlaptFile::SetSpecialTexture(lpOutput,
                                                KAC_SPECIAL_TEXTURE_NAME);
+
+        // [netimg] DELETE-WHEN-STABLE. Not one line per swap (that is one per frame); the
+        // first 5 swaps prove the ring moves at all, then a census every 600.
+        ++guNetImgSwaps;
+        if (miCurrentCopyToTexture >= 0 && miCurrentCopyToTexture < KI_NUM_TEXTURES_TO_BUFFER)
+            guNetImgCopySlotMask |= (1u << miCurrentCopyToTexture);   // the CURSOR, not just writes
+        if (NetImgProbeEnabled() && (guNetImgSwaps <= 5u || (guNetImgSwaps % 600u) == 0u))
+        {
+            char lacMsg[200];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[netimg] SWAP n=%u render=%d copyTo=%d out=%p shader=%d flapt=%p\n",
+                guNetImgSwaps, static_cast<int>(miCurrentRenderTexture),
+                static_cast<int>(miCurrentCopyToTexture), static_cast<void*>(lpOutput),
+                static_cast<int>(liShaderProgram), static_cast<void*>(mpFlaptRenderer));
+            CgsDev::Log::WriteToLog(lacMsg);
+            if ((guNetImgSwaps % 600u) == 0u) NetImgDumpCensus("swap");
+        }
 
         CGS_ASSERT(mpFlaptRenderer, "mpFlaptRenderer");
         mpFlaptRenderer->SetSpecialTextureShaderProgram(liShaderProgram);
