@@ -740,6 +740,20 @@ namespace BrnPhysics
     // The first-order `r + (omega x r) dt` step is the console's own approximation, not a
     // simplification introduced here -- there is no quaternion, no matrix exponential and no
     // sub-stepping in this function; the re-orthonormalisation is what keeps it stable.
+    //
+    // ⭐⭐⭐ AND THAT LAST CLAUSE IS LOAD-BEARING (issue #15, 2026-09-07). The step leaves rows
+    // a,b with a.b == (omega x a).(omega x b) dt^2 exactly -- a SHEAR proportional to the product
+    // of two DIFFERENT angular-velocity components, so zero for the single-axis yaw of ordinary
+    // driving and largest for a car tumbling in the air. Until 2026-09-07 the OrthoNormalize3x3
+    // this line calls only NORMALISED the three rows; normalisation cannot remove a shear, so the
+    // vehicle basis sheared without bound and was repaired only by a path that overwrote
+    // mTransform outright (PlaceCarOnTrack after a crash, or HackedResetAndFlyAround @0x825D0008
+    // -- the console's own "flydebug"). Measured on the jump ladder BEFORE the fix: |cos| between
+    // rows grew monotonically through every airborne episode (worst +0.054 over 36 frames), mean
+    // 0.0380 airborne against 0.0090 on the ground, peak 0.1057 -- against the console's own
+    // shipped tolerance for this matrix, IsOrthogonal3x3(mTransform, 0.01f) in
+    // DeformableObject::UpdateWheels (BrnDeformableObject.cpp:2832), which a single |cos| of
+    // 0.0707 already fails. The fix is in the callee; see its banner.
     // ---------------------------------------------------------------------------------------
     void ExternalPhysicsBody::IntegrateTransform(VecFloat lvfDeltaTime)
     {

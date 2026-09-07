@@ -296,25 +296,127 @@ namespace vpu
 
     // -- orthonormalisation -------------------------------------------------------------
 
-    // OrthoNormalize3x3(m): re-normalise the three rotation rows (xAxis/yAxis/zAxis) of an
-    // affine whose 3x3 is built from a (near-)orthogonal basis, leaving each row a unit
-    // vector and the translation row untouched. X360 0x82203B28: per row it computes
-    // vmsum3fp (magnitude-squared), a vrsqrtefp estimate refined by two Newton-Raphson
-    // steps (vnmsubfp/vmaddfp), then scales the row by that reciprocal magnitude; a degenerate
-    // (zero-length) row is selected to zero via vcmpeqfp/vsel. The PC reconstruction
-    // de-optimises the rsqrt-estimate-plus-refinement to an exact 1/sqrt (the same convention
-    // as Normalize in vector3_operation.h) -- numerically a touch tighter, never a placeholder.
-    // The console reads the source rows from one buffer and writes the result to another; here
-    // the input is taken by const ref and the orthonormalised matrix returned. Each row is
-    // independently normalised (the caller feeds three mutually-orthogonal axes -- a direction,
-    // a rotation axis and their cross product -- so per-row normalisation yields an orthonormal
-    // 3x3).
+    // OrthoNormalize3x3(m): rebuild the three rotation rows (xAxis/yAxis/zAxis) as a genuinely
+    // ORTHONORMAL right-handed basis, leaving the translation row untouched.
+    //
+    // ⭐⭐⭐ CORRECTED 2026-09-07 (issue #15). Until this commit the body here was three
+    // independent Normalize() calls, with a comment claiming that was enough "because the caller
+    // feeds three mutually-orthogonal axes". ONE OF THE CALLERS DOES NOT:
+    // ExternalPhysicsBody::IntegrateTransform @0x825A7930 -- the only place a car's pose advances
+    // -- feeds it the result of the first-order spin step `row += (omega*dt) x row`, whose rows
+    // are NOT mutually orthogonal. For rows a,b that step leaves a.b == (omega x a).(omega x b)
+    // dt^2 exactly, i.e. a SHEAR proportional to the product of two DIFFERENT angular-velocity
+    // components. Normalisation cannot remove a shear, so with the rebuild missing the vehicle
+    // basis sheared without bound and was only ever repaired by a path that overwrote the
+    // transform outright (a crash reset, PlaceCarOnTrack, flydebug). Measured on the jump ladder
+    // before the fix: |cos| between rows reached 0.106 (6.1 deg) with the car in the air, against
+    // < 2e-4 on the ground, and the console has no such term at all.
+    //
+    // THE CONSOLE'S ALGORITHM, read off X360 0x82203B28 instruction by instruction (868 bytes;
+    // the raw words were re-decoded with tools/re/vmx128.py rather than trusted from IDA's text,
+    // and the vperm control word at 0x82CDA350 -- 00 01 02 03 | 14 15 16 17 | 00 01 02 03 |
+    // 00 01 02 03 -- was read out of the image with tools/re/x360rd.py):
+    //
+    //   1. NORMALISE ALL THREE ROWS into three stack slots (0x82203B2C..0x82203C44). Each is
+    //      vmsum3fp128 for the magnitude-squared, vrsqrtefp refined by two Newton-Raphson steps,
+    //      then a 4-lane vmulfp128; a zero-length row is selected to ZERO by vcmpeqfp/vsel
+    //      (0x82203C64/0x82203C88/0x82203CB0). Normalize() below already reproduces exactly that,
+    //      exact-1/sqrt in place of the estimate+refinement, zero guard included.
+    //   2. CHOOSE A PIVOT ROW -- the one row that is kept, and from which the other two are
+    //      rebuilt (0x82203CBC..0x82203DB8). First on LENGTH: a row of length <= 0 is never the
+    //      pivot (len0 dead -> pivot row1; len1 dead -> pivot row2; len2 dead -> pivot row0). If
+    //      all three have length, on the pairwise |cos| of the normalised rows
+    //          a = |n1.n2|,  b = |n2.n0|,  c = |n0.n1|          (0x82203D0C..0x82203D34, the
+    //                                                            vandc against the 0x80000000
+    //                                                            splat is the absolute value)
+    //      the pivot is the FIRST row of the most orthogonal pair: a smallest -> row1,
+    //      b smallest -> row2, c smallest -> row0. The console's own branch order is reproduced
+    //      literally below so the ties fall the same way it does.
+    //   3. REBUILD THE OTHER TWO BY CROSS PRODUCT (0x82203DBC..0x82203E68), with the pivot i:
+    //          row[i+2] = normalize( cross( row[i],   row[i+1] ) )
+    //          row[i+1] = normalize( cross( row[i+2], row[i]   ) )
+    //      Both are the VMX shifted-cross idiom -- `B*A.yzx - B.yzx*A` followed by one more
+    //      `vpermwi128 ..., 0x63` -- and each result is put through the same rsqrt pipeline.
+    //      For a right-handed input (z == x cross y) this reproduces the input exactly: with
+    //      pivot 0 it is z = cross(x,y) then y = cross(z,x).
+    //   4. The translation row is copied through unchanged (`lvx128 v8, r0, r8` where r8 is
+    //      src+0x30, `stvx128 v8, r3, 0x30`), and slots 0/1/2 are written to xAxis/yAxis/zAxis
+    //      (0x82203E6C..0x82203E8C).
+    //
+    // FLAG (VMX -> portable, this vendor home's standing convention): the vrsqrtefp estimate plus
+    // two Newton steps is reconstructed as an exact 1/sqrt inside Normalize, exactly as Normalize
+    // / SLerp / Inverse already are. Numerically tighter, never a placeholder.
+    //
+    // FLAG (degenerate inputs only): the console's zero guard sits on the LENGTHS the pivot test
+    // reads (the vcmpeqfp/vsel at 0x82203C64/C88/CB0 force an exactly-zero length), NOT on the
+    // three inline normalisations themselves and not on the two cross-product normalisations
+    // (0x82203DDC..0x82203E0C, 0x82203E34..0x82203E64 have no vsel at all). So on the console a
+    // zero-length row normalises to NaN -- harmlessly, because the length test routes that row
+    // into the write-only slot and it is rebuilt before it is ever read -- while TWO dead rows, or
+    // two parallel live ones, make the whole result NaN. Routing through the vendor Normalize
+    // below substitutes ZERO for those NaNs. The two agree on every input with three independent
+    // non-zero rows, i.e. on everything a caller can reach without already being broken; they
+    // differ only in which flavour of garbage a broken basis produces.
+    //
+    // The decode above was re-derived a second time, blind, from the raw words alone (a fresh
+    // reader given only the address and the VMX rules, told nothing of this reconstruction). It
+    // returned the same two cross products, the same cyclic keep/rebuild rule, the same
+    // slot-to-row map for all three branch targets and the same argmin pivot with the same tie
+    // order (C, then B) -- which is the order the branch structure below reproduces literally.
     inline Matrix44Affine OrthoNormalize3x3(const Matrix44Affine& lrMatrix)
     {
+        // ---- 1. the three normalised rows (zero-length -> zero, the console's vsel) ----------
+        Vector3 laRows[3];
+        laRows[0] = Normalize(lrMatrix.xAxis);
+        laRows[1] = Normalize(lrMatrix.yAxis);
+        laRows[2] = Normalize(lrMatrix.zAxis);
+
+        const float lafLength[3] = { Magnitude(lrMatrix.xAxis),
+                                     Magnitude(lrMatrix.yAxis),
+                                     Magnitude(lrMatrix.zAxis) };
+
+        // ---- 2. the pivot row -----------------------------------------------------------------
+        int liPivot;
+        if (!(lafLength[0] > 0.0f))        // 0x82203CC0 vcmpgtfp. len0 > 0  -> 0x82203DB0
+        {
+            liPivot = 1;
+        }
+        else if (!(lafLength[1] > 0.0f))   // 0x82203CDC vcmpgtfp. len1 > 0  -> 0x82203DA0
+        {
+            liPivot = 2;
+        }
+        else if (!(lafLength[2] > 0.0f))   // 0x82203CF8 vcmpgtfp. len2 > 0  -> 0x82203D7C
+        {
+            liPivot = 0;
+        }
+        else
+        {
+            // the vandc against the 0x80000000 splat == std::fabs
+            const float lfA = std::fabs(Dot(laRows[1], laRows[2]));   // 0x82203D14 |n1.n2|
+            const float lfB = std::fabs(Dot(laRows[2], laRows[0]));   // 0x82203D0C |n2.n0|
+            const float lfC = std::fabs(Dot(laRows[0], laRows[1]));   // 0x82203D1C |n0.n1|
+
+            if (lfB > lfA)                          // 0x82203D4C / 0x82203D64
+            {
+                liPivot = (lfC > lfA) ? 1 : 0;      // 0x82203D68 / 0x82203D78
+            }
+            else
+            {
+                liPivot = (lfC > lfB) ? 2 : 0;      // 0x82203D8C / 0x82203D9C
+            }
+        }
+
+        // ---- 3. rebuild the other two by cross product ----------------------------------------
+        const int liNext = (liPivot + 1) % 3;
+        const int liPrev = (liPivot + 2) % 3;
+        laRows[liPrev] = Normalize(Cross(laRows[liPivot], laRows[liNext]));
+        laRows[liNext] = Normalize(Cross(laRows[liPrev], laRows[liPivot]));
+
+        // ---- 4. publish ------------------------------------------------------------------------
         Matrix44Affine lResult;
-        lResult.xAxis = Normalize(lrMatrix.xAxis);
-        lResult.yAxis = Normalize(lrMatrix.yAxis);
-        lResult.zAxis = Normalize(lrMatrix.zAxis);
+        lResult.xAxis = laRows[0];
+        lResult.yAxis = laRows[1];
+        lResult.zAxis = laRows[2];
         lResult.wAxis = lrMatrix.wAxis;
         return lResult;
     }
