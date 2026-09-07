@@ -760,6 +760,48 @@ namespace Deformation
         // ⭐ RECOVERED FROM THE INITIALISER, not guessed: unk_82FB9520 is dynamic-init (it reads 0.0
         // straight out of the image, like the AbsorptionTable rows); its initialiser @0x82C5D818..
         // 0x82C5D83C loads flt_82004744 (== 0.2), splats it and stores it.
+        //
+        // ⛔⛔ SETTLED 2026-09-07 (budget wave) -- "THE WALL IMPACT RUNS AT 0.2, SO THE CAR DEFORMS
+        //     FIVE TIMES TOO LITTLE" IS **REFUTED**. DO NOT RE-CHASE IT, AND DO NOT TUNE THIS ROW.
+        //   THE CONSOLE MAKES A LATE LATCH IMPOSSIBLE, BY CALL ORDER. In PhysicsModule::Update
+        //   @0x825B0640 the crash decision runs ~1,175 instructions BEFORE the deformation consumes
+        //   this frame's contacts, inside the SAME update:
+        //     0x825B0B24 EndVehicleContactGeneration   0x825B0B60 DoRaceCarWorldContactValidation
+        //     0x825B0C20 DoCrashPrediction  -> HandleCrashPredictionForRaceCarAndWorld @0x8264644C
+        //                -> HandleRaceCarWorldPotentialContact -> SetRaceCarCrashing @0x82634C90
+        //                -> RaceCarPhysics::SetCrashing @0x825B8A70 -> VehiclePhysics::SetCrashing
+        //                @0x825FD088 -> SimpleVehiclePhysics::SetCrashing @0x825D98F0
+        //                                                       -> `stb r11, 0x710(r3)` @0x825D990C
+        //     0x825B0E04 UpdateVehiclePhysics   0x825B0E6C EndPartContactGeneration
+        //     0x825B0FB8 UpdateSensorDisplacements   0x825B10BC DeformationManager::Update
+        //                -> DeformableObject::Update @0x82649160 -> UpdateContacts @0x826478B0
+        //                -> ApplyCarWorldImpulse @0x82624898 -> HERE (lbz 0x710 @0x826079B8).
+        //   A whole-image census of +0x710 WRITERS is exactly four (SetCrashing/ClearCrashing/
+        //   Reset/Prepare) -- UpdateCrashing @0x82638810 does NOT touch the byte -- so the flag can
+        //   only change at those points, and the only one on the crash path precedes this read.
+        //   ⇒ A frame the classifier calls a crash CANNOT deform at the drive-time budget. This
+        //   tree has the identical order (BrnPhysicsModuleUpdateFunctions.cpp), so neither can it.
+        //   MEASURED, two boots, exe 97de10bb..., same wall, `[world-crash]`+`[dent]`+`[absorb]`:
+        //     230 deg / 50 m/s (108 mph closing): crash classified HEAD_ON on sim frame 559 with
+        //       `crashing=0`; the FIRST deformation contact of the whole impact is also frame 559
+        //       (`[absorb] contacts=1 scratchSum=0.000000` -- the scratch ladder is advanced by
+        //       EVERY ApplyLocalImpulse, crashing or not, so a zero there proves no earlier apply).
+        //       188 `[dent]` rows inside the crash: `allowed` == 1.000000 on ALL of them, 0 at 0.2.
+        //     230 deg / 70 m/s (154 mph): latch frame 546, first contact frame 546, 51 rows, all 1.0.
+        //   NEGATIVE CONTROL BIT: the same instrument printed 12,000 rows at 0.2 in run A1 -- every
+        //   one of them AFTER `CRASH COMPLETE` (first 0.2 row 528 presents later).
+        //   ⚠️⚠️ WHERE THE 0.2 SIGHTING CAME FROM -- A DIAGNOSTIC THAT LIES BY LAST-VALUE. `[dent]`
+        //   dumps a CUMULATIVE per-(sensor,dir) table every present and RESETS a row's accumulators
+        //   when `allowed` changes, so a row's printed `allowed`/`pcApplied` describe only its most
+        //   recent budget. The harness holds the throttle after the crash ends, so the car grinds
+        //   into the wall for thousands of drive-time frames and the front rows re-accumulate to the
+        //   drive-time ceilings (0.900*0.2 = 0.18, 1.100*0.2 = 0.22) -- which is where "front sensors
+        //   pinned at 0.18-0.22" came from. It is the post-crash grind, not the impact.
+        //   ⭐ AND RAISING THIS ROW WOULD CHANGE NOTHING: of the crash-time applies, 124/124 (A1)
+        //   and 103/103 (A2) on the crumple axes were IMPULSE-limited (`nRoom 0`); the only
+        //   room-clamped row is the +Y axis whose authored limit is the 0.01 floor. The budget and
+        //   the mLimitVector box never bound a single crumple apply. Any remaining 1:1 gap in dent
+        //   MAGNITUDE is on the SUPPLY side (what reaches the sensor), not in this select.
         if ( GetHandlingBodyIdHighByte() == KU_GAMEMODE_BOUNCE_ELIGIBLE || lbCrashed || lbIgnoringPassedOn )
         {
             // vcfsx(vspltisw 1, 0) == 1.0 @0x82607A20 -- crash / showtime / bounce-eligible gets the
