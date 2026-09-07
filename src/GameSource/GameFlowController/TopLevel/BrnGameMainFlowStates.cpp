@@ -185,10 +185,16 @@ bool LoadingScriptedState::LoadEffectsModule(
     if (!lbPrepared && lpGameDataInputBuffer != 0)
     {
         lpEffectsOutput->LockForRead();
+        // The console reads BOTH interfaces through the CONST accessors under the read lock
+        // (the pair guarded by "Not locked for reading"). Through the non-const pointer, C++
+        // overload resolution picks the write-lock accessors instead, and their guard ("Not
+        // locked for writing") fires on the first prepare frame of every boot -- the assert
+        // screen was the whole game from then on. Same shape as LoadWorldModule below.
+        const BrnEffects::EffectsIO::OutputBuffer* lpEffectsOutputRead = lpEffectsOutput;
         lpGameDataInputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
-            lpEffectsOutput->GetVaultRequestInterface()->mRequestQueue);
+            lpEffectsOutputRead->GetVaultRequestInterface()->mRequestQueue);
         lpGameDataInputBuffer->AppendRequestInterface<4096>(
-            *lpEffectsOutput->GetResourceRequestInterface());
+            *lpEffectsOutputRead->GetResourceRequestInterface());
         lpEffectsOutput->UnlockForRead();
     }
 
