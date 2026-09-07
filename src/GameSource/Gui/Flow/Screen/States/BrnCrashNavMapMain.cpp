@@ -77,15 +77,9 @@
 
 namespace BrnGui
 {
-    // MainMapComponent::Construct's GuiCache high-definition boundary, defined in the
-    // MOUNTED GameSource/Gui/SatNav/BrnMainMap.cpp:163. Declared here rather than
-    // re-implemented: the cache byte at X360 GuiCache+0x4B49 still falls inside
-    // BrnGuiCache.h's `mPad_4B44[6]`, this TU may not carve the cache header, and a
-    // second local stand-in would be a fork of a single-definition boundary. The zoom
-    // arm below is its FOURTH attested consumer (BrnMainMap.cpp:131 already lists it).
-    // DELETE-WHEN BrnGuiCache.h carves that byte as `bool mbIsHighDef; // +0x4B49` with
-    // an accessor -- then this reads mpGuiCache->IsHighDef() and the declaration goes.
-    namespace MainMapCacheBoundary { bool IsHighDef(const GuiCache* lpGuiCache); }
+    // (The MainMapCacheBoundary::IsHighDef declaration that stood in for the GuiCache
+    // high-definition byte is gone: the byte is GuiCache::mbIsHighDef with an accessor and
+    // a real writer now -- issue #11. The zoom arm below reads the cache directly.)
 
     namespace
     {
@@ -558,9 +552,8 @@ namespace BrnGui
             if (mpGuiCache != 0)
             {
                 // `lbz r11, 0x4B49(cache)` -- the cache high-definition byte. SET picks
-                // the 9000 pull-back, CLEAR the 12000 one. Routed through the single
-                // committed boundary (see the declaration at the top of this file).
-                const f32 lfCustomZoom = MainMapCacheBoundary::IsHighDef(mpGuiCache)
+                // the 9000 pull-back, CLEAR the 12000 one.
+                const f32 lfCustomZoom = mpGuiCache->IsHighDefinition()
                                              ? KF_MAP_ZOOM_OUT_HD
                                              : KF_MAP_ZOOM_OUT_SD;
 

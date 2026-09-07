@@ -728,6 +728,11 @@ namespace BrnGui
         // Both are inlined at every X360 consumer (no standalone symbol), so exposing them
         // as one-load accessors keeps those consumers off the raw offsets.
         bool IsHighDefinition() const         { return mbIsHighDef; }                // +0x4B49
+        // The byte's one writer: GuiModule::Construct @0x82518A24, `*(gm + 1024649) = a6`
+        // (1024649 - 1005376 == 19273 == +0x4B49), a6 being the video-mode HD bool the game
+        // module received from BrnRendererModule::Construct. Inlined on the console, so it
+        // gets a named face here like the accessor above (issue #11).
+        void SetIsHighDefinition(bool lbHighDef) { mbIsHighDef = lbHighDef; }         // +0x4B49
         u16  GetLicencePointsToNextRank() const { return mu16LicencePointsToNextRank; } // +0xB874
 
         // The online-event timeout-timer gate. RaceMainHudState::UpdateWFInit @0x824802A8
@@ -1434,8 +1439,10 @@ namespace BrnGui
         // CrashNavMapMain::HandleCrashNavInputPressed @0x824CCC74 and
         // RoadSignIconManager::Update @0x82517014. BrnMainMap.cpp:168 asked for exactly
         // this carve by name; it is made here so that its FLAG boundary can retire.
-        // No member is shifted (5 + 1 == 6). FLAG: consumer-named -- there is NO writer
-        // anywhere in the export set, so it reads 0 (== SD) on this build.
+        // No member is shifted (5 + 1 == 6). Consumer-named. The WRITER is GuiModule::Construct
+        // @0x82518A24 (`*(gm + 1024649) = a6`, a gm-relative store the +0x4B49 grep could not
+        // see): the video-mode HD bool. Written on this build since 2026-09-07 (issue #11);
+        // before that it read 0 == SD everywhere.
         bool mbIsHighDef;                                // +0x4B49 (19273)
         bool mbInEventColouringGate;                     // +0x4B4A (19274) RoadRuleComponent::ShouldUseInEventColouring gate byte
         u8   mPad_4B4B[1];                                // +0x4B4B

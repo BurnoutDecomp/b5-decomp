@@ -1491,6 +1491,23 @@ void BrnRendererModule::Construct()
     maShaderConstantsFrames[0].Construct();
     maShaderConstantsFrames[1].Construct();
 
+    // ---- The display class (X360 Construct @0x8240A778, right after the stage seeds) ----
+    //     renderengine::Device::Parameters::Initialize(&params, 4);   // 1280x720@60
+    //     mu16FrontBufferHeight = LOWORD(params.height);              // +0x234
+    //     mbIsHD                = mu16FrontBufferHeight >= 0x2D0;     // +0x236
+    //     XGetVideoMode(&mode); *lpbIsHiDefOut = mode.fIsHiDef != 0;  // -> GuiModule::Construct
+    // The console asks mode 4 for its OWN class and the TV for the GUI's; on this host the
+    // swap chain IS the display (renderengine::gDisplayWidth/Height -- the values device.cpp
+    // hands D3DPRESENT_PARAMETERS, config.ini-overridable), so both questions read the same
+    // extent. Until 2026-09-07 neither member left the ctor's `false`, which is one half of
+    // BurnoutDecomp/b5-decomp#11 (the GUI cache's HD byte was never written -- see
+    // BrnGameModule::Construct's GuiModule::Construct call for the other half).
+    {
+        const s32 liHeight = renderengine::gDisplayHeight;
+        mu16FrontBufferHeight = static_cast<u16>((liHeight > 0 && liHeight < 0x10000) ? liHeight : 0);
+        mbIsHD                = mu16FrontBufferHeight >= 0x2D0u;
+    }
+
     // ---- the GAME-side named shader constants (X360 Construct, in this order) --
     // Slots 0..7 belong to the engine and are registered by the table's own ctor
     // (@0x827EDDC8); these 27 are the game set. The registration ORDER is the

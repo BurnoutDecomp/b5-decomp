@@ -354,7 +354,31 @@ namespace BrnGame
         // console reaches it by offset and this tree does not use offsets.
         // The second (lpPopupController, +0x65A1F4 == GameData +0x65974) has no reconstructed
         // type yet and is NOT passed -- see the GuiModule::Construct declaration.
-        mGuiModule.Construct(mGameDataModule.GetHudMessageController());
+        //
+        // ⭐ THE HIGH-DEFINITION FLAG (BurnoutDecomp/b5-decomp#11, 2026-09-07). The console's
+        // last argument to GuiModule::Construct @0x82518028 is the video-mode HD bool that
+        // BrnRendererModule::Construct @0x8240A778 handed back through its `bool*` out-param
+        // (`*v6 = XVIDEO_MODE.fIsHiDef != 0`); GuiModule stores it into the GUI cache
+        // (`*(gm + 1024649) = a6` == GuiCache +0x4B49) and every HD/SD layout choice in the
+        // GUI reads that byte. It was never passed here, so the cache said SD: the title
+        // screen revealed the SD-only "HD compatible" composite, the map ran the SD zoom
+        // table, the licence card sat at its SD position. The renderer now derives the class
+        // from the real front buffer (see its Construct) and the module reads it back.
+        //
+        // [FLAG PC data-set gate] The PC repack ships ONLY the HD apt/flapt/font bundles
+        // (build\game\GUIAPT, FLAPTHUD.BUNDLE, LANGUAGE\FONTS; there is no GUIAPTSD
+        // directory), so a sub-720 display cannot be given the console's SD path -- the GUI
+        // would have nothing to load. It is forced HD and the log says so. DELETE-WHEN the
+        // repack carries the SD set (or the maintainers drop SD outright, per issue #11).
+        bool lbHighDef = mRenderModule.IsHD();
+        if (!lbHighDef)
+        {
+            CgsDev::Log::WriteToLog("[GameModule] [FLAG PC] display is standard-definition "
+                                    "(front buffer < 720 rows) but the PC data set has no SD GUI "
+                                    "bundles -- forcing the HD GUI path\n");
+            lbHighDef = true;
+        }
+        mGuiModule.Construct(mGameDataModule.GetHudMessageController(), lbHighDef);
         mGameStateModule.Construct();    // +0x669500  (slot 0; placeholder -> base)
         mEffectsModule.Construct();      // +0x878700  (slot 0; placeholder -> base)
         // [FLAG interim bridge] ValidityAccount's static fail-flag mask must be built BEFORE the

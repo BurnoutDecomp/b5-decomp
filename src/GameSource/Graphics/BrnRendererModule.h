@@ -223,6 +223,14 @@ public:
         eRendererReleaseDone
     };
 
+    // The display class the renderer came up on. Console Construct @0x8240A778 seeds them from
+    // the device parameters of video mode 4 (`field_234 = LOWORD(params.height)`,
+    // `field_236 = height >= 0x2D0`) and hands the video mode's HD bit back to the game module,
+    // which passes it on to BrnGui::GuiModule::Construct (GuiCache +0x4B49). Both are the same
+    // question on this host -- is the front buffer at least 720 rows tall.
+    u16  GetFrontBufferHeight() const { return mu16FrontBufferHeight; }   // +0x234
+    bool IsHD() const                 { return mbIsHD; }                  // +0x236
+
     enum EFrameStallStage
     {
         E_FRAMESTALL_NOT_STALLED,

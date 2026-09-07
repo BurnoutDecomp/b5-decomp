@@ -116,9 +116,12 @@ namespace BootLegalCacheBoundary
         return lElapsed.count();
     }
 
+    // X360 *(cache+19273) == GuiCache +0x4B49, the high-definition byte GuiModule::Construct
+    // writes from the video mode (issue #11). The "HD compatible" composite is revealed only
+    // when it is CLEAR. (Until 2026-09-07 this returned a constant `false`, i.e. SD, which is
+    // why every boot of this build showed the logo.)
+    bool IsHighDefinition(const GuiCache* lpCache) { return lpCache != 0 && lpCache->IsHighDefinition(); }
     // FLAG (no named accessor on the committed GuiCache) -- faithful cold-boot defaults:
-    // X360 *(cache+19273): the HD-composite transition has not run yet, so let it run (false).
-    bool IsHDCompAlreadyTransitioned(const GuiCache* /*lpCache*/) { return false; }
     // X360 *(cache+42996): the ESRB panel is not force-visible on a normal boot.
     bool IsEsrbVisible(const GuiCache* /*lpCache*/)               { return false; }
     // X360 *(cache+77578/77579): the start message is not forced (mbWaitForStartPressed drives it).

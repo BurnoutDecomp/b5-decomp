@@ -66,11 +66,19 @@ namespace BrnGui
         // GuiCache::mpHudMessageController had ZERO writers and every HUD message died at
         // HudMessageDirector::FilterAndSendOffMessage's `mpController` assert.
         //
-        // The console's remaining arguments are NOT reconstructed here: `lpPopupController`
+        // `lbHighDef` is the console's LAST argument (a6): the video-mode HD bool the renderer
+        // handed the game module. GuiModule::Construct stores it into the cache
+        // (`*(gm + 1024649) = a6` == GuiCache +0x4B49, the byte every HD/SD layout choice in
+        // the GUI reads), picks the sat-nav view rect with it (@0x82518A2C) and constructs
+        // the GUI resource module with it (the GuiApt\ vs GuiAptSD\ bundle path). Until
+        // 2026-09-07 it was not passed and the byte was never written -- issue #11.
+        //
+        // The console's other arguments are NOT reconstructed here: `lpPopupController`
         // (gm+0x65A1F4, assert BrnGuiModule.cpp:230 -> `*(gm + 1021880)`) has no
-        // reconstructed type in this tree, and the trailing aspect/bool pair is already
-        // sourced inside the body. Named, not fabricated.
-        void Construct(const BrnResource::HudMessageController* lpHudMessageController);
+        // reconstructed type in this tree, and the aspect ratio is already sourced inside
+        // the body. Named, not fabricated.
+        void Construct(const BrnResource::HudMessageController* lpHudMessageController,
+                       bool lbHighDef);
 
         bool Prepare() override;
         bool Release() override;

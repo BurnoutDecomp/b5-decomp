@@ -950,7 +950,8 @@ namespace BrnGui
     // X360 GuiModule::Construct (0x82518028) builds the whole GUI subsystem. This slice
     // constructs the view module, the movie manager, and the real flow-controller chain
     // (cache + HUD flow + FSM controller).
-    void GuiModule::Construct(const BrnResource::HudMessageController* lpHudMessageController)
+    void GuiModule::Construct(const BrnResource::HudMessageController* lpHudMessageController,
+                              bool lbHighDef)
     {
         // X360 GuiModule::Construct @0x82518028, pseudocode lines 327-332 -- the console's
         // own argument assert, fired before anything is built.
@@ -1024,10 +1025,26 @@ namespace BrnGui
         // view-rect pick + the mask matrix build (the @0x82518A2C..@0x82518A64 run).
         mMapIconManager.Construct(&mGuiCache);
         mGuiCache.SetMapIconManager(&mMapIconManager);
-        // isHighDef == true on this host (the HD apt path) -> the HD rect @0x82FB30A0.
-        // MapUtils' static default IS that rect; the explicit install keeps the console's
-        // HD/SD pick visible (the SD alt {0.750781238079071, y0, 0.9039062261581421, y1}).
-        MapTransform::SetSatNavRect(MapTransform::GetSatNavViewRect());
+        // ⭐ THE HIGH-DEFINITION BYTE (issue #11). X360 @0x82518A24: `*(gm + 1024649) = a6`
+        // -- 1024649 - 1005376 == 19273 == GuiCache +0x4B49, the byte BootLegal::Update,
+        // MainMapComponent::Construct, CrashNavMapMain, CrashNavDriverDetails and
+        // RoadSignIconManager all read to choose between their HD and SD constants. This
+        // store is the byte's ONLY writer in the image; without it the cache said SD.
+        mGuiCache.SetIsHighDefinition(lbHighDef);
+        {
+            // [FLAG PC witness] once, unconditional -- tools/tests/cases/hd_ui_flag.ps1 reads it.
+            char lacLine[160];
+            std::snprintf(lacLine, sizeof(lacLine),
+                          "[GuiModule] high-definition=%d (GuiCache +0x4B49; display %dx%d)\n",
+                          lbHighDef ? 1 : 0,
+                          static_cast<int>(renderengine::gDisplayWidth),
+                          static_cast<int>(renderengine::gDisplayHeight));
+            CgsDev::Log::WriteToLog(lacLine);
+        }
+        // @0x82518A2C..A64: the sat-nav view rect pick, `a6 ? unk_82FB30A0 : unk_82FB3130`
+        // stored to the live rect @0x82FB36A0.
+        MapTransform::SetSatNavRect(lbHighDef ? MapTransform::GetSatNavViewRectHD()
+                                              : MapTransform::GetSatNavViewRectSD());
         SetMaskAspectCorrectionMatrix(&mGuiCache);
 
         // ⭐ [stuntrace] THE FREEBURN-CHALLENGE MANAGER HAND-OFF -- the missing writer of
@@ -1120,13 +1137,14 @@ namespace BrnGui
 
         // The REAL GUI resource-loading module + its persistent IO pair (replaces the
         // host FSM-bundle stand-in). Construct the IO buffers (their embedded queues come
-        // up here) and the module. HighDef == true: matches the HD apt/flapt path the
-        // boot uses (the FSM bundle path itself is HD-independent). Construct seeds the
-        // module counters/stages + marks it a new-module type (its base Prepare then skips
-        // the old-module IO-structure lock path -- no assert).
+        // up here) and the module. The HD flag is the console's own argument (the same a6
+        // the cache byte above took): it picks GuiApt\ vs GuiAptSD\, FLAPTHUD vs FLAPTHUDSD
+        // and Fonts\ vs FontsSD\ (the FSM bundle path itself is HD-independent). Construct
+        // seeds the module counters/stages + marks it a new-module type (its base Prepare
+        // then skips the old-module IO-structure lock path -- no assert).
         mResourceInputBuffer.Construct();
         mResourceOutputBuffer.Construct();
-        mGuiResourceModule.Construct(true);
+        mGuiResourceModule.Construct(lbHighDef);
 
         for (s32 lf = 0; lf < KI_NUM_EVENT_OBSERVERS; ++lf)
         {

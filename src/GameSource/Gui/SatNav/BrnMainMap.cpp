@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // the one-shot gate log
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"       // CgsGui::GuiAccessPointers::GetGuiCache
+#include "GameSource/Gui/BrnGuiCache.h"                     // BrnGui::GuiCache::IsHighDefinition (the +0x4B49 byte)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface::GetAccessPointers
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"          // BrnGui::MapTransform (device space / world rect)
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"      // BrnGui::GuiEventShowHideSatNav (the 213 payload)
@@ -139,48 +140,12 @@ namespace BrnGui
     // corrected at that body -- the {0,0,1,1} it attributed to mWorldRect is actually
     // mLowResTexture.mBB at +0x24.)
 
-    // -------------------------------------------------------------------------
-    // FLAG BOUNDARY -- the GuiCache high-definition byte at X360 GuiCache +0x4B49 (19273).
-    //
-    // Construct's tail reads it (`lbz r11, 0x4B49(r10)` @0x8245E5D4) and takes the
-    // standard-def zoom table when it is CLEAR. BrnGuiCache.h has no member there yet: the
-    // byte falls inside `mPad_4B44[6]` (BrnGuiCache.h:1172), and this TU may not carve the
-    // cache header, so the read is routed through this boundary.
-    //
-    // WHAT THE BYTE IS, measured across all four consumers in the export set -- every one of
-    // them picks an HD constant when SET and an SD constant when CLEAR:
-    //   * MainMapComponent::Construct @0x8245E5D4 -- clear => SetStandardDefZoomParams(),
-    //     i.e. the live zoom table becomes {5000, 2750, 1000, 0} instead of {6500, 3500,
-    //     2500, 0}. This is the strongest witness: the SD table is literally named.
-    //   * CrashNavMapMain::HandleCrashNavInputPressed @0x824CCC74 -- set => SetZoom custom
-    //     9000.0f, clear => 12000.0f.
-    //   * CrashNavDriverDetails::UpdateWFInit @0x824BFEB8 -- set => LicenseComponent
-    //     position unk_82FB4A90, clear => unk_82FB4C00.
-    //   * RoadSignIconManager::Update @0x82517014 -- set => the alternate distance-fade pair
-    //     at unk_82F27FA8/AC; BootLegal::Update @0x824778D8 gates the HD-composite transin.
-    // There is NO writer anywhere in the export set (grepped every `st?` to 0x4B49 across
-    // .ida-exports: zero hits), so the producer is a dyn-init or an unexported path -- the
-    // recurring "a .bss zero does not mean the console value is zero" trap. The stand-in
-    // therefore does NOT read the byte.
-    //
-    // [FLAG PC-only stand-in] Returns true because this host IS the HD path:
-    // GuiModule::Construct installs the HD sat-nav rect and constructs the GUI resource
-    // module with HighDef == true (BrnGuiModule.cpp:1062 / :1140). Returning false here
-    // would silently retune every map zoom to the SD table.
-    // DELETE-WHEN BrnGuiCache.h carves that byte as a named member (suggested
-    // `bool mbIsHighDef;  // +0x4B49 (19273)`, out of mPad_4B44, WITHOUT shifting
-    // mbInEventColouringGate at +0x4B4A) with an accessor -- then this reads
-    // `lpGuiCache->IsHighDef()` and the boundary goes.
-    // -------------------------------------------------------------------------
-    namespace MainMapCacheBoundary
-    {
-        bool IsHighDef(const GuiCache* /*lpGuiCache*/)
-        {
-            static bool sbLogged = false;
-            LogGateOnce(sbLogged, "BrnGui::GuiCache high-definition byte (+0x4B49)");
-            return true;
-        }
-    }
+    // The GuiCache high-definition byte (X360 GuiCache +0x4B49, `lbz r11, 0x4B49(r10)`
+    // @0x8245E5D4) is a named member with an accessor now -- GuiCache::IsHighDefinition() --
+    // and it has its writer (GuiModule::Construct @0x82518A24, the video-mode HD bool; issue
+    // #11). The MainMapCacheBoundary::IsHighDef stand-in that used to answer `true` here for
+    // this TU and BrnCrashNavMapMain.cpp is RETIRED: Construct's tail and the crash-nav zoom
+    // arm read the cache directly, as the console does.
 
     // -------------------------------------------------------------------------
     // BrnGui::MainMapComponent::Construct
@@ -279,7 +244,7 @@ namespace BrnGui
 
         // X360 `lbz r11, 0x4B49(mpGuiCache)`: the cache's high-definition byte. Clear ==
         // standard definition, which swaps the whole zoom-scale table for the SD one.
-        if (!MainMapCacheBoundary::IsHighDef(mpGuiCache))
+        if (!mpGuiCache->IsHighDefinition())
         {
             SetStandardDefZoomParams();
         }

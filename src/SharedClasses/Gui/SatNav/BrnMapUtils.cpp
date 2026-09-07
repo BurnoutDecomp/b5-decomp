@@ -88,9 +88,16 @@ const Matrix33 MapTransform::smm33WorldSpace      = MapTransform::MakeCoordSpace
 const Matrix33 MapTransform::smm33NormalisedSpace = MapTransform::MakeCoordSpaceFromRect( MapTransform::smv4NormalizedRect );
 const Matrix33 MapTransform::smm33DeviceSpace     = MapTransform::MakeCoordSpaceFromRect( MapTransform::smv4DeviceRect );
 
+// The two authored sat-nav viewport rects. HD @0x82FB30A0; SD @0x82FB3130 (the x pair read
+// off the image in the H3b dump: 0.750781238079071 / 0.9039062261581421 -- the SD strip is
+// wider because the 4:3 composite is letterboxed; FLAG: its y pair is carried over from the
+// HD rect, the dump recorded the y's as "y0, y1" without values).
+const Vector4 MapTransform::smv4SatNavViewRectHD = { 0.778124988079071f, 0.6652777791023254f, 0.9312499761581421f, 0.8666666746139526f };
+const Vector4 MapTransform::smv4SatNavViewRectSD = { 0.750781238079071f, 0.6652777791023254f, 0.9039062261581421f, 0.8666666746139526f };
+
 // The live sat-nav viewport rect (@0x82FB36A0). Default = the HD rect @0x82FB30A0
 // (the cinit copy thunk @0x82C52340); GuiModule::Construct re-installs the HD/SD pick
-// through SetSatNavRect. (SD alt @0x82FB3130 = {0.750781238079071, y0, 0.9039062261581421, y1}.)
+// through SetSatNavRect by its high-definition argument (issue #11).
 Vector4  MapTransform::smv4SatNavViewRect = { 0.778124988079071f, 0.6652777791023254f, 0.9312499761581421f, 0.8666666746139526f };
 
 Vector4  MapTransform::smv4ZoomedWorldRect                = { 0.0f, 0.0f, 0.0f, 0.0f };

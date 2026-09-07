@@ -258,9 +258,12 @@ namespace BootLegalCacheBoundary  // FLAG boundary helpers
     void UnloadResources(GuiCache* lpCache, const CgsGui::sResourceTuple* lpResources, u32 luCount); // FLAG
     f32  GetTime(const GuiCache* lpCache);                                                // FLAG
 
-    // X360 *(cache+19273) (byte): non-zero suppresses the HD-composite "transin" call in
-    // E_STAGE_FADE_IN (0x824778D8). FLAG: no named accessor on the committed GuiCache API.
-    bool IsHDCompAlreadyTransitioned(const GuiCache* lpCache);                            // FLAG
+    // X360 *(cache+19273) (byte) == GuiCache +0x4B49, the cache's HIGH-DEFINITION flag
+    // (written by GuiModule::Construct from the video mode). E_STAGE_FADE_IN (0x824778D8)
+    // reveals the "HD compatible" composite only when it is CLEAR -- the logo is an advert
+    // to standard-definition players. Forwards to GuiCache::IsHighDefinition() (issue #11;
+    // the old name "IsHDCompAlreadyTransitioned" misread the byte as a one-shot latch).
+    bool IsHighDefinition(const GuiCache* lpCache);
     // X360 *(cache+42996) (word): non-zero -> "visible", zero -> "invisible" for the ESRB
     // panel in E_STAGE_FADE_IN (0x8247790C). FLAG: no named accessor on the committed GuiCache API.
     bool IsEsrbVisible(const GuiCache* lpCache);                                          // FLAG
@@ -592,9 +595,10 @@ namespace BrnGui
                 break;
 
             // FLAG: the two AddOutputAptViewState calls below are the apt-view boundary.
-            // *(cache+19273)/*(cache+42996) are far cache flags the X360 reads to choose the
-            // transition (0x824778D8 / 0x8247790C) -- gated via the cache boundary helpers.
-            if (!BootLegalCacheBoundary::IsHDCompAlreadyTransitioned(mpGuiCache))
+            // *(cache+19273) is the cache's high-definition byte (SD => reveal the "HD
+            // compatible" composite, 0x824778D8); *(cache+42996) is the ESRB force-visible
+            // word (0x8247790C) -- the latter still via the cache boundary helper.
+            if (!BootLegalCacheBoundary::IsHighDefinition(mpGuiCache))
                 mHDCompAnimator.AddOutputAptViewState("apt_Transition", "transin", false);  // this+0x58
             mEsrbAnimator.AddOutputAptViewState("apt_Transition",
                 BootLegalCacheBoundary::IsEsrbVisible(mpGuiCache) ? "visible" : "invisible", false); // this+0xE4

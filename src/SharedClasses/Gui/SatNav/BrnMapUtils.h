@@ -116,6 +116,16 @@ private:
     // debug component's sliders poke it on console). Defaults to the HD rect.
     static Vector4  smv4SatNavViewRect;
 
+public:
+    // The two authored sat-nav view rects GuiModule::Construct @0x82518A2C picks between
+    // by its high-definition argument (`a6 ? unk_82FB30A0 : unk_82FB3130`) and stores into
+    // the live rect above.
+    static const Vector4&  GetSatNavViewRectHD() { return smv4SatNavViewRectHD; }   // @0x82FB30A0
+    static const Vector4&  GetSatNavViewRectSD() { return smv4SatNavViewRectSD; }   // @0x82FB3130
+private:
+    static const Vector4  smv4SatNavViewRectHD;
+    static const Vector4  smv4SatNavViewRectSD;
+
     static Vector4  smv4ZoomedWorldRect;             // @0x82FB3440 (SetZoomedWorldRect: {C.xy, B.xy})
     static Matrix33 smm33ZoomedWorldTransform;       // @0x82FB32E0 world -> zoomed-unit (INVERSE corner space)
     static Matrix33 smm33ZoomedViewportTransform;    // @0x82FB3330 zoomed-unit -> viewport
