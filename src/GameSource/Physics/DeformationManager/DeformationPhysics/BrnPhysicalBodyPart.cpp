@@ -374,6 +374,45 @@ namespace Deformation
         // (so the counts are the truth even on a run where the probe is off) and read only under
         // DetachProbeOn(). NOT IN THE X360 BINARY.
         u32 gxSpyCalls = 0, gxSpyGate1 = 0, gxSpyGate2 = 0, gxSpyAppended = 0;
+
+        // [DIAG] NOT IN THE X360 BINARY. TestJointForBreaking's GATE CENSUS. Read-only, file-local,
+        // incremented unconditionally so the counts are true even on an unarmed run; printed only
+        // under DetachProbeOn().
+        //
+        // ⭐ WHY A CENSUS AND NOT A MAX. "jointBreaks 0" cannot distinguish six different states:
+        // the joint is authored never-to-break (gate 2), the part is the non-breaking type class
+        // (gate 3b), the hinge has not rotated far enough (gate 3a), the sensor gate refuses (3c),
+        // the force arm's axis gate is idle (4a), or both break arms simply fall short. A single
+        // maximum would report the last of those and be read as all six. So: one counter per exit,
+        // plus DECADE HISTOGRAMS of how far short each break arm falls (ratio = scaledValue /
+        // maxStress; bucket 5 == ratio >= 1, i.e. would have broken).
+        // DELETE-WHEN the "no body panel ever leaves the car" question is banked.
+        u32 gxJbCalls = 0, gxJbNeverBreak = 0, gxJbRotGate = 0, gxJbType3 = 0, gxJbSensorGate = 0;
+        u32 gxJbAxisIdle = 0, gxJbArmA = 0, gxJbBreak = 0;
+        u32 gxJbRotHist[7]  = { 0, 0, 0, 0, 0, 0, 0 };   // rotationProportion / 0.3 by decade
+        u32 gxJbForceHist[7] = { 0, 0, 0, 0, 0, 0, 0 };  // (|force| * 0.4)   / maxStress by decade
+        u32 gxJbPenHist[7]   = { 0, 0, 0, 0, 0, 0, 0 };  // (penetration*1.5) / maxStress by decade
+
+        // ratio -> bucket: 0:NEGATIVE 1:<1e-4 2:<1e-3 3:<1e-2 4:<0.1 5:<1 6:>=1 (would break)
+        //
+        // ⛔⛔ BUCKET 0 IS SEPARATE FOR A MEASURED REASON. The first version of this folded every
+        // ratio <= 0 into the "<1e-4" bucket, so a NEGATIVE rotation proportion and a ZERO one
+        // printed the same row -- on precisely the question the census exists to answer.
+        // GetJointRotationProportion's denominator is the NEGATED max joint angle: SetJoinedToVehicle
+        // @0x825BA4A8 builds a 0x80000000 sign mask (`vspltisw v13,-1 ; vslw v13,v13,v13`
+        // @0x825BA548/0x825BA560) and XORs it into the max-angle splat before storing the w lane of
+        // mLocalInitialComPositionPlusMaxJointAngle. So the proportion is
+        // -rotation/maxAngle and its SIGN is the whole discriminator. [[diagnostics-that-lie]]
+        inline u32 JbDecade(f32 lfRatio)
+        {
+            if ( lfRatio < 0.0f )    { return 0u; }
+            if ( lfRatio >= 1.0f )   { return 6u; }
+            if ( lfRatio >= 0.1f )   { return 5u; }
+            if ( lfRatio >= 0.01f )  { return 4u; }
+            if ( lfRatio >= 0.001f ) { return 3u; }
+            if ( lfRatio >= 0.0001f ){ return 2u; }
+            return 1u;
+        }
     }
     // ==========================================================================================
     // PhysicalBodyPart::Construct @0x825B4178 MOVED OUT on 2026-08-03 (task #116) to
@@ -1877,33 +1916,97 @@ namespace Deformation
 
         const DeformationJointSpec* lpActiveJoint = mpIKPart->GetActiveJointSpec();
 
+        ++gxJbCalls;   // [DIAG] census -- see the counter block at the top of this file.
+        if ( DetachProbeOn() && (gxJbCalls % 600u) == 0u )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[jb-census] calls " << static_cast<s32>(gxJbCalls)
+                << " | exits: neverBreak(g2) " << static_cast<s32>(gxJbNeverBreak)
+                << " rotGate(g3a) " << static_cast<s32>(gxJbRotGate)
+                << " type3(g3b) " << static_cast<s32>(gxJbType3)
+                << " sensorGate(g3c) " << static_cast<s32>(gxJbSensorGate)
+                << " | armA: idle " << static_cast<s32>(gxJbAxisIdle)
+                << " ran " << static_cast<s32>(gxJbArmA)
+                << " breaks " << static_cast<s32>(gxJbBreak)
+                << " | rotProp/gate ["
+                << static_cast<s32>(gxJbRotHist[0]) << " " << static_cast<s32>(gxJbRotHist[1]) << " "
+                << static_cast<s32>(gxJbRotHist[2]) << " " << static_cast<s32>(gxJbRotHist[3]) << " "
+                << static_cast<s32>(gxJbRotHist[4]) << " " << static_cast<s32>(gxJbRotHist[5]) << " "
+                << static_cast<s32>(gxJbRotHist[6]) << "]"
+                << " force/maxStress ["
+                << static_cast<s32>(gxJbForceHist[0]) << " " << static_cast<s32>(gxJbForceHist[1]) << " "
+                << static_cast<s32>(gxJbForceHist[2]) << " " << static_cast<s32>(gxJbForceHist[3]) << " "
+                << static_cast<s32>(gxJbForceHist[4]) << " " << static_cast<s32>(gxJbForceHist[5]) << " "
+                << static_cast<s32>(gxJbForceHist[6]) << "]"
+                << " pen/maxStress ["
+                << static_cast<s32>(gxJbPenHist[0]) << " " << static_cast<s32>(gxJbPenHist[1]) << " "
+                << static_cast<s32>(gxJbPenHist[2]) << " " << static_cast<s32>(gxJbPenHist[3]) << " "
+                << static_cast<s32>(gxJbPenHist[4]) << " " << static_cast<s32>(gxJbPenHist[5]) << " "
+                << static_cast<s32>(gxJbPenHist[6]) << "]"
+                << " (buckets: NEG <1e-4 <1e-3 <1e-2 <0.1 <1 >=1)\n";
+        }
+
         // (2) early "never breaks": detach threshold (asm reads spec+52 == mfJointDetachThreshold)
         // <= -0.9 -> return false. The asm dereferences spec+52 UNCONDITIONALLY (no null guard), so the
         // 'lpActiveJoint &&' guard is removed to match.
         if ( lpActiveJoint->GetMaxStress() <= KF_JOINT_DETACH_DISABLED_THRESHOLD )
         {
+            ++gxJbNeverBreak;   // [DIAG]
             return false;   // LABEL_20: _restvmx_121(0)
+        }
+
+        // [DIAG] The penetration arm's input, read BEFORE the gates so the census can say how close
+        // arm (4b) came even on the frames the early-outs never let it run. A member read; no side
+        // effect, no control-flow change.
+        {
+            const f32 lfCensusMaxStress = lpActiveJoint->GetMaxStress();
+            const f32 lfCensusPen = mLocalInitialJointPositionPlusLimitStress.GetPlus()
+                                  * KF_JOINT_PENETRATION_MULTIPLIER;
+            ++gxJbPenHist[JbDecade(lfCensusMaxStress > 0.0f ? (lfCensusPen / lfCensusMaxStress) : 0.0f)];
         }
 
         // (3) early "no break" gates.
         //   a. rotation proportion < gate (STRICT). The asm is vcmpgtfp128(gate, proportion) -> the
         //      early-out fires when gate > proportion, i.e. proportion < gate.
         const VecFloat lJointRotationProportion = GetJointRotationProportion();
+        ++gxJbRotHist[JbDecade(lJointRotationProportion.x / KF_ROTATION_PROPORTION_GATE)];   // [DIAG]
         if ( lJointRotationProportion.x < KF_ROTATION_PROPORTION_GATE )   // vcmpgtfp gate,proportion
         {
+            ++gxJbRotGate;   // [DIAG]
             return false;
         }
         //   b. part-type word == 3 (the *(*(mpIKPart->GetSpec())+476) == 3 test). GetPartType() reads
         //      the same word.
         if ( mpIKPart->GetPartType() == 3 )
         {
+            ++gxJbType3;   // [DIAG]
             return false;
         }
-        //   c. sensor-force detachment gate. FLAG: the bool arg (false) is a GUESS -- the X360 Hex-Rays
-        //   dropped the arg list for CheckSensorForcesForJointDetachment, so the argument value is not
-        //   recovered from the asm.
-        if ( !mpIKPart->CheckSensorForcesForJointDetachment(false) )
+        //   c. sensor-force detachment gate.
+        // ⭐⭐ FLAG RETIRED 2026-09-07 (part-rest wave). The banner here said "the bool arg (false) is
+        // a GUESS -- the X360 Hex-Rays dropped the arg list". The PSEUDOCODE dropped it; the ASSEMBLY
+        // computes it branchlessly right before the call, and it is not a constant at all:
+        //     0x8260C1D0  ld     r11, 0x1D0(r31)   ; the whole 8-byte mRigidBodyId
+        //     0x8260C1D4  srdi   r11, r11, 32      ; -> muEntityWord
+        //     0x8260C1D8  srwi   r11, r11, 24      ; -> the owner field == GetOwner()
+        //     0x8260C1DC  addi   r11, r11, -7
+        //     0x8260C1E0  cntlzw r11, r11          ; 32 iff owner == 7
+        //     0x8260C1E4  extrwi r4, r11, 1, 26    ; bit 26 is that "32" -> r4 = (owner == 7)
+        //     0x8260C1E8  bl     CheckSensorForcesForJointDetachment
+        // i.e. the argument is "is this a TRAFFIC car's body part" (KU_OWNER_TRAFFIC_BODY_PART == 7;
+        // the player's is 6). The prologue confirms the callee takes it as a byte
+        // (`clrlwi r11, r4, 24 ; cmplwi cr6, r11, 0` @0x825C1818), matching the DWARF
+        // `bool CheckSensorForcesForJointDetachment(bool) const`.
+        // CALIBRATION: the identical `addi -N ; cntlzw ; extrwi 1,26` idiom appears 40 bytes later at
+        // 0x8263AC78..0x8263AC88 to build `(liDetachJointOut != -1)`, whose meaning is independently
+        // known -- so the decode is checked against a site whose answer we already had.
+        // ⚠️ OBSERVATIONALLY INERT ON EVERY MEASUREMENT THIS TREE HAS: a player car's parts carry
+        // owner 6, so the expression is `false`, exactly what the guess supplied. It differs only for
+        // TRAFFIC body parts, where the hardcoded false was wrong.
+        if ( !mpIKPart->CheckSensorForcesForJointDetachment(
+                 mRigidBodyId.GetOwner() == BurnoutBodyPartID::KU_OWNER_TRAFFIC_BODY_PART) )
         {
+            ++gxJbSensorGate;   // [DIAG]
             return false;
         }
 
@@ -1946,6 +2049,8 @@ namespace Deformation
                 || lfAbs(lWorldAxis.y * lfPenetrationAlongAxis) > KF_INERTIA_DEGENERATE_EPSILON
                 || lfAbs(lWorldAxis.z * lfPenetrationAlongAxis) > KF_INERTIA_DEGENERATE_EPSILON;
 
+            if ( !lbAxisEngaged ) { ++gxJbAxisIdle; } else { ++gxJbArmA; }   // [DIAG]
+
             if ( lbAxisEngaged )
             {
                 // v124 = omega x (partPos - bodyPos) + v  -- the world velocity of the part's origin
@@ -1971,6 +2076,7 @@ namespace Deformation
                                                 + lPointVelocity.y * lWorldAxis.y
                                                 + lPointVelocity.z * lWorldAxis.z;
                 const f32 lfScaledForce = lfAbs(lfJointForceMagnitude) * KF_JOINT_FORCE_MULTIPLIER;
+                ++gxJbForceHist[JbDecade(lfMaxStress > 0.0f ? (lfScaledForce / lfMaxStress) : 0.0f)];  // [DIAG]
                 if ( lfScaledForce > lfMaxStress )
                 {
                     lbBreak = true;
@@ -1993,6 +2099,8 @@ namespace Deformation
         {
             return false;   // LABEL_20: _restvmx_121(0)
         }
+
+        ++gxJbBreak;   // [DIAG]
 
         // (5) break path tripwires.
         CGS_ASSERT(mbJoinedToVehicle, "IsJoinedToVehicle()");

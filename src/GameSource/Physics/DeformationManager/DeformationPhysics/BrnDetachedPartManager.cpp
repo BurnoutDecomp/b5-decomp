@@ -433,6 +433,36 @@ namespace Deformation
                                                                        : lProbeBoxFrame.zAxis;
                     const f32 lfFlatness = (lrThinWorldAxis.y < 0.0f) ? -lrThinWorldAxis.y : lrThinWorldAxis.y;
 
+                    // ⭐ ADDED 2026-09-07 (part-rest wave). `flat` ALONE IS NOT ENOUGH AND WAS BEING
+                    // OVER-READ. Two measured reasons:
+                    //  (1) NOT EVERY POOLED PART IS A PANEL. The pool holds bumper BARS
+                    //      (half 0.797,0.162,0.150 -> a 1.59 x 0.32 x 0.30 m box) and RODS
+                    //      (half 0.050,0.067,0.92 -> two lanes on the console's own 0.05 half floor).
+                    //      For those the two smallest half-extents differ by ~10-30%, so `thinAxis`
+                    //      is a near-tie and `flat` is the tie-break, not an orientation. A rod lying
+                    //      flat on the road reads flat ~ 0 -- indistinguishable, on that number alone,
+                    //      from a panel standing on edge. Reading it as the latter would MANUFACTURE
+                    //      a defect.
+                    //  (2) "Standing on edge" for a chunky box is really "the LONGEST axis is
+                    //      vertical", which `flat` cannot express at all.
+                    // So print the world-Y component of all three box axes plus the half-extent
+                    // ordering. `up` = |longestAxis.y| (1 = standing on end); `mid` = the middle one.
+                    // ⭐ AND IT SELF-CHECKS: for an orthonormal box basis flat^2 + mid^2 + up^2 == 1,
+                    // so a basis that is scaled or stale is visible in the log rather than silently
+                    // biasing every number (a `flat` of 1.0027 was seen before this went in).
+                    const f32 lfAxY0 = (lProbeBoxFrame.xAxis.y < 0.0f) ? -lProbeBoxFrame.xAxis.y : lProbeBoxFrame.xAxis.y;
+                    const f32 lfAxY1 = (lProbeBoxFrame.yAxis.y < 0.0f) ? -lProbeBoxFrame.yAxis.y : lProbeBoxFrame.yAxis.y;
+                    const f32 lfAxY2 = (lProbeBoxFrame.zAxis.y < 0.0f) ? -lProbeBoxFrame.zAxis.y : lProbeBoxFrame.zAxis.y;
+                    s32 liLongAxis = 0;
+                    f32 lfLongHalf = lvBoxHalf.x;
+                    if ( lvBoxHalf.y > lfLongHalf ) { lfLongHalf = lvBoxHalf.y; liLongAxis = 1; }
+                    if ( lvBoxHalf.z > lfLongHalf ) { lfLongHalf = lvBoxHalf.z; liLongAxis = 2; }
+                    const s32 liMidAxis = 3 - liThinAxis - liLongAxis;
+                    const f32 lafAxisY[3] = { lfAxY0, lfAxY1, lfAxY2 };
+                    const f32 lfUpright = lafAxisY[liLongAxis];
+                    const f32 lfMidUp   = (liMidAxis >= 0 && liMidAxis <= 2) ? lafAxisY[liMidAxis] : 0.0f;
+                    const f32 lfBasisSq = lfFlatness * lfFlatness + lfMidUp * lfMidUp + lfUpright * lfUpright;
+
                     *CgsDev::Log::gpDebugPrint
                         << "[part-rest] f " << static_cast<s32>(sluRestFrames)
                         << " slot " << liProbe
@@ -445,6 +475,10 @@ namespace Deformation
                         << " half (" << lvBoxHalf.x << ", " << lvBoxHalf.y << ", " << lvBoxHalf.z << ")"
                         << " thinAxis " << liThinAxis
                         << " flat " << lfFlatness
+                        << " longAxis " << liLongAxis
+                        << " up " << lfUpright
+                        << " mid " << lfMidUp
+                        << " basisSq " << lfBasisSq
                         << "\n";
                 }
             }

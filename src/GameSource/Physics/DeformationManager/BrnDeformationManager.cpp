@@ -44,14 +44,41 @@ namespace BrnPhysics
 namespace Deformation
 {
     // -----------------------------------------------------------------------------------
-    // DWARF BrnDeformationManager.h namespace-scope rodata (:57-58, :752). The float /
-    // VecFloat VALUES are not recovered (the X360 loads them from a constant pool with no
-    // resolvable symbol); per the no-fabrication rule they are honest FLAGGED-0 placeholders,
-    // defined here once (the frozen header declares them extern). The friction pair is the
-    // detached-part dynamic/static friction; the padding is the swept-sphere project radius pad.
+    // DWARF BrnDeformationManager.h namespace-scope rodata (:57-58, :752), defined here once
+    // (the frozen header declares them extern). The friction pair is the detached-part
+    // dynamic/static friction; the padding is the swept-sphere project radius pad.
+    //
+    // ⭐⭐ THE FRICTION PAIR IS RECOVERED (2026-09-07, part-rest wave). The old banner said the
+    // X360 "loads them from a constant pool with no resolvable symbol" -- it does not. They are
+    // ordinary initialised .data, not the dyn-init VMX splats that defeated five earlier sweeps
+    // on the neighbouring 0x82FBxxxx statics, and they read straight out of the image:
+    //     0x82F2A140  kfPartDynamicFriction  raw 3E99999A  = 0.30000001192092896f
+    //     0x82F2A144  kfPartStaticFriction   raw 3E99999A  = 0.30000001192092896f
+    // The addresses come from DeformationDebugComponent::OnActivate @0x82623198, which is the
+    // only function in the whole image that names them:
+    //     0x82623BA0  addi r27, r11, kfPartStaticFriction@l      -> 0x82F2A144
+    //     0x82623BA4  raw 389BFFFC == addi r4, r27, -4           -> 0x82F2A140
+    // SECOND, INDEPENDENT ATTESTATION (required before trusting an image read): the DecFIGS PS3
+    // DWARF static-init dump carries the same bytes for the same two symbols --
+    // references/DecFIGS/dwarfdump/_compile/BrnMain.cpp:7742,7744 give [62,153,153,154] ==
+    // 0x3E99999A for both. Two builds, two mechanisms, identical bits.
+    // CALIBRATION CONTROL that the reader is on-address: the adjacent block reads
+    // kfNormalImpulseScale 0.05, kfFrictionImpulseScale 0.02, kfPartLinear/AngularDrag 0.005,
+    // kfPartMax{Linear,Angular}Velocity 30.0, kfPartMass 100.0, kfPartInertiaMultiplier 1.2 --
+    // the exact set PhysicalBodyPart::AddToSim @0x8260AD38 consumes by name -- while
+    // 0x82FB9E00 (the rotation gate, a known dyn-init splat) still reads 00000000, so the reader
+    // separates the two classes correctly.
+    //
+    // ⚠️ CONSOLE-DEAD, AND THAT IS FAITHFUL -- NOT A MISSING WIRE. An exhaustive search of all
+    // 30,084 X360 ARTIST function exports and all 35,902 DecFIGS PS3 exports for these two
+    // symbols returns exactly ONE function on each build, and it is the same one: the debug
+    // component's RegisterVariable/SetStep call. No shipped code path on either console reads
+    // them -- AddToSim sets a detached part's mass, drags, velocity caps and inertia multiplier
+    // and never a friction coefficient. So the fact that nothing in this tree consumes them is
+    // the console's own state; do not "connect" them to anything.
     // -----------------------------------------------------------------------------------
-    const f32      KF_PART_DYNAMIC_FRICTION         = 0.0f;                       // FLAG: rodata value unrecovered
-    const f32      KF_PART_STATIC_FRICTION          = 0.0f;                       // FLAG: rodata value unrecovered
+    const f32      KF_PART_DYNAMIC_FRICTION         = 0.30000001f;                // RECOVERED 0x82F2A140 (3E99999A)
+    const f32      KF_PART_STATIC_FRICTION          = 0.30000001f;                // RECOVERED 0x82F2A144 (3E99999A)
     const VecFloat KVF_PROJECTSPHERE_RADIUS_PADDING = { 0.0f, 0.0f, 0.0f, 0.0f }; // FLAG: rodata value unrecovered
 
     // The packed-entity-id owner tags this TU's asserts test against (BrnWorld::E_ENTITYTYPE_*;
