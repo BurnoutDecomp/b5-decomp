@@ -58,6 +58,11 @@ numeric menu edits, SET, SAVE/EXEC round-trip, aliases, F12 bindings, window
 pinning and hidden-key isolation. It also exercises Step/Play and captures
 screenshots for visual inspection. Any game assertion fails the run.
 
+Use `-Effects -MaxSeconds 250` to check Bloom, Vignette, DOF, Tint and 2d Tint
+at the post-processing consumer, capture the same paused scene with effects on
+and off, and verify function and variable aliases survive SAVE/EXEC. DOF still
+depends on camera blurriness when enabled, as in ARTIST.
+
 Harness keys are manual-reset events named `Local\BurnoutPC_DebugKey_XX`, where
 `XX` is the two-digit Windows virtual-key code. Hold the event for key-down and
 reset it for key-up. All 256 handles should exist before the game reads them.

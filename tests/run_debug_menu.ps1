@@ -141,10 +141,26 @@ try {
         Command 'alias jumps "Gameplay/Stunt Manager/Complete All Jumps"'
         Command 'alias smashes "Gameplay/Stunt Manager/Complete All Smashes"'
         Command 'alias stunts "Gameplay/Stunt Manager/Complete All Stunts"'
+        Command 'alias tone "Effects/Enable Tint"'
         $state = Save-State 'effects-restored'
         foreach ($alias in @('jumps','smashes','stunts')) {
             if ($state -notmatch "ALIAS $alias ") { throw "Activated menu lost the $alias action." }
         }
+        if ($state -notmatch '(?m)^ALIAS jumps "/Gameplay/Stunt Manager/Complete All Jumps"\r?$' -or
+            $state -notmatch '(?m)^ALIAS tone "/Effects/Enable Tint"\r?$') {
+            throw 'Saved aliases contain an incorrect menu path.'
+        }
+        Command 'alias jumps "Debug/Sim/Play"'
+        Command 'alias tone "Effects/Enable Bloom"'
+        Command "exec `"$prefix-effects-restored.txt`""
+        Command 'tone FALSE'
+        $state = Save-State 'aliases-reloaded'
+        if ($state -notmatch '(?m)^ALIAS jumps "/Gameplay/Stunt Manager/Complete All Jumps"\r?$' -or
+            $state -notmatch 'SET "/Effects/Enable Tint" "FALSE"' -or
+            $state -notmatch 'SET "/Effects/Enable Bloom" "TRUE"') {
+            throw 'Reloaded aliases do not resolve to their saved targets.'
+        }
+        Command 'tone TRUE'
         Command 'call "Debug/Sim/Play"'
         Tap-Key 192
         Tap-Key 27

@@ -278,10 +278,9 @@ namespace CgsDev
             }
 
             lpMenu->GetPath(lpcPathOut, liSize);
-            GetUI().SafeStringCat(lpcPathOut, "/", liSize);
-            char acName[256];
-            lpMenuItem->GetDisplayName(acName, sizeof(acName));
-            GetUI().SafeStringCat(lpcPathOut, acName, liSize);
+            // ARTIST 0x82819F20 returns the containing menu path only. Callers
+            // append the variable/function name; adding it here duplicates the
+            // leaf in saved aliases and makes them fail to resolve after EXEC.
         }
 
         void MenuManager::ReplaceMenuItem(MenuItem* lpOld, MenuItem* lpNew)
