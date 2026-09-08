@@ -85,14 +85,14 @@ namespace BrnAI
 {
 // ---- the class's static state (DWARF BrnRacingLineGenerator.h:380..:385, :393) ------------
 // DEFINED ONCE, here. No other RacingLineGenerator partfile may define them (LNK2005).
-// The console registers all six handles in InitialiseRacingLine @0x8278FB20; until that body
-// lands they stay 0, which CgsDev::PerfMonCpu treats as monitor handle 0.
-s32  RacingLineGenerator::miGenerateRacingLinePM = 0;
-s32  RacingLineGenerator::miGenerateInSectionPM  = 0;
-s32  RacingLineGenerator::miHNGMapGenerationPM1  = 0;
-s32  RacingLineGenerator::miHNGMapGenerationPM2  = 0;
-s32  RacingLineGenerator::miHNGMapGenerationPM3  = 0;
-s32  RacingLineGenerator::miFarAheadPM           = 0;
+// ARTIST data at 0x82F30254..0x82F30268 contains six 0xFFFFFFFF words.
+// InitialiseRacingLine @0x8278FBF4 registers them only when the first handle is -1.
+s32  RacingLineGenerator::miGenerateRacingLinePM = -1;
+s32  RacingLineGenerator::miGenerateInSectionPM  = -1;
+s32  RacingLineGenerator::miHNGMapGenerationPM1  = -1;
+s32  RacingLineGenerator::miHNGMapGenerationPM2  = -1;
+s32  RacingLineGenerator::miHNGMapGenerationPM3  = -1;
+s32  RacingLineGenerator::miFarAheadPM           = -1;
 bool RacingLineGenerator::mbDrawAvoidanceDebug   = false;
 
 namespace
