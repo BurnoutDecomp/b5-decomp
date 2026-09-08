@@ -64,6 +64,32 @@
 namespace BrnGameState
 {
 
+// ARTIST 0x82397568: update progression, reset the model at the current location,
+// then apply the selected car's saved palette and colour.
+void GameStateModule::HandleChangePlayerCarEvent(
+    const GameStateModuleIO::ChangePlayerCarEvent* lpEvent,
+    GameStateModuleIO::GameActionQueue* lpActions)
+{
+    OnPlayerCarChange(lpEvent->mCarModelId, lpEvent->mWheelModelId, lpActions, true);
+    GameStateModuleIO::ResetPlayerCarAction lReset = {};
+    lReset.mCarModelId = lpEvent->mCarModelId;
+    lReset.mWheelModelId = lpEvent->mWheelModelId;
+    lReset.mePlayerScoringIndex = GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT;
+    lReset.muReserved0x42 = lpEvent->mbResetPlayerCamera;
+    lReset.mbKeepResetSection = lpEvent->mbKeepResetSection;
+    lReset.mfDeformationAmount = mProgressionManager.GetProfile()->GetPlayerBaseDeformAmount(lpEvent->mCarModelId);
+    lReset.miBaseDeformationType = lReset.mfDeformationAmount > 0.0f ? 1 : -1;
+    lpActions->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lReset),
+                       GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR, sizeof(lReset));
+    GameStateModuleIO::CarSelectChangeColourAction lColour;
+    s32 liColour, liPalette;
+    mProgressionManager.GetCarColourAndPalette(lpEvent->mCarModelId, &liColour, &liPalette);
+    lColour.muPaletteIndex = liPalette;
+    lColour.muColourIndex = liColour;
+    lpActions->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lColour),
+                       GameStateModuleIO::E_ACTION_CAR_SELECT_CHANGE_COLOUR, sizeof(lColour));
+}
+
 // ARTIST ProcessGameEvents @0x823A0A18: case 4 @0x823A1550,
 // case 5 @0x823A15B8, case 6 @0x823A1654, and the case-82 derived-livery query.
 // PC extracted leg: the offline branch runs over the existing carry queue before
@@ -79,6 +105,27 @@ void GameStateModule::ProcessGameEventsCarCustomizationBringUp(
     {
         switch (liType)
         {
+        case GameStateModuleIO::E_EVENT_TELEPORT_PLAYER_CAR:
+        {
+            // ARTIST ProcessGameEvents case 1 at 0x823A145C.
+            const auto& lrTeleport = *reinterpret_cast<const GameStateModuleIO::TeleportPlayerCarEvent*>(lpEvent);
+            GameStateModuleIO::ResetPlayerCarAction lReset = {};
+            lReset.mPosition = lrTeleport.mPosition;
+            lReset.mDirection = lrTeleport.mDirection;
+            lReset.mCarModelId = mActivePlayerCarId;
+            lReset.mWheelModelId = mActivePlayerWheelId;
+            lReset.mePlayerScoringIndex = GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT;
+            lReset.mfDeformationAmount = -1.0f;
+            lpActions->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lReset),
+                               GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR, sizeof(lReset));
+            break;
+        }
+        case GameStateModuleIO::E_EVENT_CHANGE_PLAYER_CAR:
+            if (mCarSelectManager.IsInJunkyard())
+                mCarSelectManager.ForceExitJunkyard(lpActions, false);
+            HandleChangePlayerCarEvent(
+                reinterpret_cast<const GameStateModuleIO::ChangePlayerCarEvent*>(lpEvent), lpActions);
+            break;
         case GameStateModuleIO::E_EVENT_STREAMING_COMPLETE:
         {
             // ProcessStreamingCompleteEvent @0x82390200's junkyard completion arm.

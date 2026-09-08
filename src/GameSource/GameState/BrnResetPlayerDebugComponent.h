@@ -64,9 +64,7 @@ namespace BrnGameState
         void        OnChangeCarFilter();
         static void OnChangeCarFilterCallback(void* lpData, void* lpUserData);   // @ 0x82382E10
 
-        // The selection (car/version) change handler + its menu-change trampoline. OnChangeCarSelection
-        // is reached through the attested ...SelectionCallback (@ 0x82377230); its body lands with the
-        // dedicated reconstruction (only the callback forwarder is attested here).
+        // ARTIST 0x82376F80 and callback 0x82377230: rebuild versions and select the default wheel.
         void        OnChangeCarSelection();
         static void OnChangeCarSelectionCallback(void* lpData, void* lpUserData);   // @ 0x82377230
 
@@ -74,19 +72,21 @@ namespace BrnGameState
         static const s32 KI_CAR_FILTER_COUNT            = 10;    // :114
         static const s32 KI_LOCATION_TEXT_LENGTH        = 64;    // :117
         static const s32 KI_CAR_TEXT_LENGTH             = 64;    // :118
-        static const s32 KI_MAX_CAR_NAME_COUNT          = 96;    // :119
+        static const s32 KI_MAX_CAR_NAME_COUNT          = 100;   // ARTIST OnActivate count, +0x460..+0x780
         static const s32 KI_MAX_CAR_VERSION_NAME_COUNT  = 16;    // :120
         static const s32 KI_MAX_WHEEL_NAME_COUNT        = 128;   // :121
         static const s32 KI_MAX_TELEPORT_LOCATION_COUNT = 128;   // :122
 
         // ---- members (DWARF order, BrnResetPlayerDebugComponent.h:124-146) -------------------------
+        // FLAG PC-platform leaf: each option array includes a null-name terminator
+        // for the host string lookup; the original selectable counts are unchanged.
         GameStateModule* mpGameStateModule;                                            // :124  (+0x0C)
 
-        CgsDev::DebugUI::StringList maLocationNames[KI_MAX_TELEPORT_LOCATION_COUNT];    // :126
-        CgsDev::DebugUI::StringList maCarFilterNames[KI_CAR_FILTER_COUNT];              // :127
-        CgsDev::DebugUI::StringList maCarNames[KI_MAX_CAR_NAME_COUNT];                  // :128
-        CgsDev::DebugUI::StringList maCarVersionNames[KI_MAX_CAR_VERSION_NAME_COUNT];   // :129
-        CgsDev::DebugUI::StringList maWheelNames[KI_MAX_WHEEL_NAME_COUNT];              // :130
+        CgsDev::DebugUI::StringList maLocationNames[KI_MAX_TELEPORT_LOCATION_COUNT + 1] = {};    // :126
+        CgsDev::DebugUI::StringList maCarFilterNames[KI_CAR_FILTER_COUNT + 1] = {};              // :127
+        CgsDev::DebugUI::StringList maCarNames[KI_MAX_CAR_NAME_COUNT + 1] = {};                  // :128
+        CgsDev::DebugUI::StringList maCarVersionNames[KI_MAX_CAR_VERSION_NAME_COUNT + 1] = {};   // :129
+        CgsDev::DebugUI::StringList maWheelNames[KI_MAX_WHEEL_NAME_COUNT + 1] = {};              // :130
 
         CgsID maCarIds[KI_MAX_CAR_NAME_COUNT];                                          // :131
         CgsID maCarVersionIds[KI_MAX_CAR_VERSION_NAME_COUNT];                           // :132

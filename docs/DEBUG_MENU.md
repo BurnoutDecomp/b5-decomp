@@ -44,6 +44,11 @@ Paths are relative to the game's working directory. ARTIST initializes the
 autoexec guard to skip `autoexec.txt`; that default is preserved. Use EXEC to run
 a script explicitly.
 
+In freeburn, open **Reset Player Car**, adjust **Car filter**, **Car**, **Car version**
+and **Wheel** with Left/Right, then press Enter on **Change player car**. The car
+list uses the original internal names and model IDs. The original mode guard
+prevents this action while a game mode is active.
+
 ## Regression harness
 
 From BP-Decomp_Workflow, after building the executable and installing game data:
@@ -62,6 +67,10 @@ Use `-Effects -MaxSeconds 250` to check Bloom, Vignette, DOF, Tint and 2d Tint
 at the post-processing consumer, capture the same paused scene with effects on
 and off, and verify function and variable aliases survive SAVE/EXEC. DOF still
 depends on camera blurriness when enabled, as in ARTIST.
+
+`-Entries` checks the restored Core/AttribSys and Physics/Deformation menus.
+`-ResetPlayer -MaxSeconds 230` leaves the junkyard, chooses another model through
+Reset Player Car, and verifies that it streams and becomes the player vehicle.
 
 Harness keys are manual-reset events named `Local\BurnoutPC_DebugKey_XX`, where
 `XX` is the two-digit Windows virtual-key code. Hold the event for key-down and

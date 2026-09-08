@@ -26,6 +26,8 @@ const s32 KI_MAX_RACE_CARS = 8;
 // values are placeholders used purely as template tags.
 enum EGameEventType
 {
+    E_EVENT_TELEPORT_PLAYER_CAR     = 1,
+    E_EVENT_CHANGE_PLAYER_CAR       = 2,
     E_EVENT_SELECT_PLAYER_CAR       = 4,
     E_EVENT_CHANGE_PLAYER_CAR_COLOUR = 5,
     E_EVENT_PLAYER_CAR_COLOUR_REQUEST = 6,
@@ -158,6 +160,22 @@ enum EGameEventType
 
 template <EGameEventType T>
 struct GameEvent { };
+
+// ARTIST debug callbacks and ProcessGameEvents cases 1/2; DWARF member names.
+struct TeleportPlayerCarEvent : public GameEvent<E_EVENT_TELEPORT_PLAYER_CAR>
+{
+    Vector3 mPosition;
+    Vector3 mDirection;
+};
+struct ChangePlayerCarEvent : public GameEvent<E_EVENT_CHANGE_PLAYER_CAR>
+{
+    CgsID mCarModelId;
+    CgsID mWheelModelId;
+    bool mbResetPlayerCamera;
+    bool mbKeepResetSection;
+};
+static_assert(sizeof(TeleportPlayerCarEvent) == 32, "ARTIST teleport payload");
+static_assert(sizeof(ChangePlayerCarEvent) == 24, "ARTIST car-change payload");
 
 // ARTIST ProcessGameEvents cases 4/5/6/82; declaration names from DecFIGS.
 struct SelectPlayerCarEvent : public GameEvent<E_EVENT_SELECT_PLAYER_CAR>

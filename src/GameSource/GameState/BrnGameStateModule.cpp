@@ -236,6 +236,7 @@ void GameStateModule::Construct()
     // trap paid up front -- PostWorldUpdate Appends into it and PreWorldUpdate Clears it, and
     // Clear() does NOT bind a buffer.
     mGameEventCarryQueue.Construct();
+    mResetPlayerDebugComponent.Construct(this);
 
     // ⭐ [showtime score wave 2026-08-29] THE SHOWTIME CRASH HAND-OFF STACK (X360 this+284488).
     // Same never-Constructed-container trap, and this container makes it LOUD rather than latent:
@@ -577,10 +578,9 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     switch (mePrepareStage)
     {
     case E_PREPARESTAGE_START:
-        // X360: GameStateModule::ClearData(this); DebugComponent::Register(this+208544);
-        // DebugComponent::Register(this+208376). [deferred -- ClearData is a large member-wipe
-        // over members this slice does not model; the two components are debug-menu only.]
-        LogPrepareStageOnce(0, "ClearData + 2 x DebugComponent::Register [deferred]");
+        mResetPlayerDebugComponent.Register();
+        // ClearData and the separate GameStateDebugComponent remain deferred here.
+        LogPrepareStageOnce(0, "Reset Player Car registered; ClearData + GameState debug deferred");
         // fall through
 
     case E_PREPARESTAGE_MANAGER:

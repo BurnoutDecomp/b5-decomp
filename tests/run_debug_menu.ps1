@@ -1,6 +1,6 @@
 # Drive the real debug controller through named keys, with the existing game harness.
 # Requires this repo inside BP-Decomp_Workflow and a built executable + game data.
-param([string]$OutDir = '', [int]$MaxSeconds = 180, [switch]$Effects, [switch]$Entries)
+param([string]$OutDir = '', [int]$MaxSeconds = 180, [switch]$Effects, [switch]$Entries, [switch]$ResetPlayer)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 if (!$OutDir) { $OutDir = Join-Path $root ('.scratch/debug-menu-' + (Get-Date -Format yyyyMMdd-HHmmss)) }
@@ -84,7 +84,9 @@ try {
     }
     # This process owns the box lock for the entire child lifetime, including key cleanup.
     $arguments = @('-NoProfile', '-File', "`"$root/tools/diagnostics/flow_run.ps1`"",
-        '-OutDir', "`"$out`"", '-MaxSeconds', "$MaxSeconds", '-Frames', '-FrameEvery', '60', '-HoldCarSelect', '-NoLock')
+        '-OutDir', "`"$out`"", '-MaxSeconds', "$MaxSeconds", '-Frames', '-FrameEvery', '60', '-NoLock')
+    if (!$ResetPlayer) { $arguments += '-HoldCarSelect' }
+    else { $arguments += '-MotionProbe' }
     $launch = Get-Date
     $runner = Start-Process pwsh -ArgumentList $arguments -PassThru -WindowStyle Hidden `
         -RedirectStandardOutput "$out.runner.log" -RedirectStandardError "$out.runner.err"
@@ -98,12 +100,53 @@ try {
         }
         if ($freshLog -and (Test-Path $log) -and (Get-Item $log).LastWriteTime -ge $launch) {
             Check-Game
-            if ((Get-Content $log -Raw) -match 'CSV : Entering Car Select') { $ready = $true; break }
+            $readyPattern = if ($ResetPlayer) { 'CarSelectManager: Exit state is finished' } else { 'CSV : Entering Car Select' }
+            if ((Get-Content $log -Raw) -match $readyPattern) { $ready = $true; break }
         }
         Start-Sleep -Milliseconds 250
         $runner.Refresh()
     }
     if (!$ready) { throw 'The default junkyard flow never reached car selection.' }
+    if ($ResetPlayer) {
+        Tap-Key 32 $false $true
+        Snapshot 'reset-root'
+        Tap-Key 192
+        Command 'component "Reset Player Car"'
+        Command 'bind F12 *WINDOW "/Reset Player Car" 84 101'
+        Tap-Key 192
+        Tap-Key 123
+        Snapshot 'reset-menu'
+        Tap-Key 192
+        $before = Save-State 'reset-before'
+        Command 'set "Reset Player Car/Car filter" 0'
+        Command 'set "Reset Player Car/Car" 1'
+        $selected = Save-State 'reset-selected'
+        $pattern = 'SET "/Reset Player Car/Car version" "[^"\r\n]* - ([A-Z0-9]+) *"'
+        if ($selected -notmatch $pattern) { throw 'The selected car has no model version.' }
+        $model = $Matches[1]
+        if (($before -match $pattern) -and $Matches[1] -eq $model) {
+            throw 'The test did not choose a different car.'
+        }
+        $beforeChange = (Get-Content $log -Raw).Length
+        Command 'call "Reset Player Car/Change player car"'
+        Tap-Key 192
+        Tap-Key 27
+        $deadline = (Get-Date).AddSeconds(45)
+        $changed = $false
+        do {
+            Check-Game
+            $changeLog = (Get-Content $log -Raw).Substring($beforeChange)
+            if ($changeLog -match ('STRM: Adding racecar for streaming: car=0, model=VEH_' + [regex]::Escape($model)) -and
+                $changeLog -match '\[ai-act\] ActivateRaceCar slot 0') { $changed = $true; break }
+            Start-Sleep -Milliseconds 250
+        } while ((Get-Date) -lt $deadline)
+        if (!$changed) { throw "The requested car $model was not streamed and activated." }
+        Snapshot 'reset-streamed'
+        Start-Sleep -Seconds 8
+        Snapshot 'reset-changed'
+        Write-Output "Reset Player Car regression: PASS ($model, $out)"
+        return
+    }
     if ($Entries) {
         Tap-Key 32 $false $true
         Snapshot 'root'

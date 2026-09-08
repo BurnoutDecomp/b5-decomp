@@ -16,6 +16,7 @@
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // BrnGameState::TriggerQueryManager (mTriggerQueryManager, by value)
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"         // CgsModule::EventReceiverQueue<3072,16> (mReceiverQueue)
 #include "GameSource/GameState/CarSelect/BrnCarSelectManager.h"      // BrnGameState::CarSelectManager (mCarSelectManager, by value)
+#include "GameSource/GameState/BrnResetPlayerDebugComponent.h"
 // [gateui] The two sub-objects the smash/billboard chain needs BY VALUE, both at their console
 // positions (StuntManager this+183952, DeveloperChallengeManager this+185712). Neither header
 // includes this one back, so there is no cycle (contrast mpTrainingManager below).
@@ -1309,6 +1310,11 @@ public:
     // aggregation of wheel records the change-wheel menu enumerates).
     BrnResource::WheelList* GetWheelList();
 
+    // ARTIST reset-player callbacks append to the carry queue at +0x3CA40.
+    CgsModule::VariableEventQueue<1536, 16>* GetDebugGameEventQueue() { return &mGameEventCarryQueue; }
+    void HandleChangePlayerCarEvent(const GameStateModuleIO::ChangePlayerCarEvent* lpEvent,
+                                   GameStateModuleIO::GameActionQueue* lpActions);
+
     // X360 read at GameStateModule+0xAB70 (43888). The currently-loaded track's trigger data (the
     // landmark / generic-region table the teleport-location menu is built from). The X360 reaches
     // it through the embedded resource pointer at this offset; de-inlined to a named accessor.
@@ -1678,6 +1684,7 @@ private:
     // at a different offset (its accessor is X360 0x823566F8); +248384 is this <1536,16> queue,
     // as both Append<1536,16> call sites prove. That comment had no member behind it either.
     CgsModule::VariableEventQueue<1536, 16>  mGameEventCarryQueue;
+    ResetPlayerDebugComponent mResetPlayerDebugComponent; // ARTIST +0x32EA0 (208544)
 
     // ⚠️ [FLAG PC bring-up] X360 this+46640. The console embeds TrainingManager BY VALUE here
     // (PreWorldUpdate @0x823A5328 calls `TrainingManager::Update(a1 + 46640, ...)`, and four

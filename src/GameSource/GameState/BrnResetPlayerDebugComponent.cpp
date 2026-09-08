@@ -13,6 +13,8 @@
 #include "SharedClasses/Trigger/BrnGenericRegion.h"                  // BrnTrigger::GenericRegion (+ type-name table)
 #include "SharedClasses/Trigger/BrnRegion.h"                         // BrnTrigger::BoxRegion::ComputeDirection / GetPosition
 #include "SharedClasses/World/BrnWorldRegion.h"                      // BrnWorld::WorldRegion district/county helpers
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h"
 
 #include <cstring>   // strncmp
 
@@ -20,7 +22,7 @@
 // (BrnGameState::ResetPlayerDebugComponent). It builds five menu lists off the loaded track +
 // vehicle/wheel resources -- teleport locations, a car filter, the (filtered) cars, car versions
 // and wheels -- and registers them plus the teleport / change-car actions with the debug UI. The
-// teleport/change actions publish their requests onto the owning module's output GUI event queue.
+// teleport/change actions publish their requests onto the owning module's game-event carry queue.
 //
 // SOURCE-OF-TRUTH: behaviour + the AddEvent payload shapes/sizes are read off the X360 asm; the
 // class layout / member names come from the DecFIGS DWARF; the named GameStateModule + resource
@@ -30,43 +32,24 @@ namespace BrnGameState
 {
     // ---- file-scope menu tables (DWARF BrnResetPlayerDebugComponent.cpp:37/51) ----------------------
     //
-    // The car-filter menu's option labels and the per-filter vehicle-name prefix. A vehicle passes a
-    // filter when its display name starts with the filter's prefix (an empty/null prefix == "all
-    // cars"). The X360 stores these as off_82CDB8D4 (labels) / off_82CDB8FC (prefixes); only the
-    // first entry ("All cars", no prefix) is asm-attested here (the OnActivate loop seeds option 0
-    // from off_82CDB8D4 and the filter compare reads off_82CDB8FC[filter]). FLAG: the remaining nine
-    // manufacturer-grouping labels/prefixes are inferred -- the exact strings are not pinned by this
-    // TU's asm; they are sized to the DWARF count (KI_CAR_FILTER_COUNT == 10) and documented as such.
+    // ARTIST pointer tables at 0x82CDB8D4 (labels) and 0x82CDB8FC (ID prefixes).
     static const s32 KI_CAR_FILTER_COUNT = 10;
 
     static const char* const KAPC_CAR_FILTER_STRINGS[KI_CAR_FILTER_COUNT] =
     {
         "All cars",   // filter 0 (X360 off_82CDB8D4[0])
-        "Cars 1", "Cars 2", "Cars 3", "Cars 4", "Cars 5",
-        "Cars 6", "Cars 7", "Cars 8", "Cars 9",
+        "Race cars", "Traffic cars", "US race cars", "Euro race cars", "Asian race cars",
+        "Special race cars", "US Trophy race cars", "Euro Trophy race cars", "Asian Trophy race cars",
     };
 
     static const char* const KAPC_CAR_FILTER_PREFIXES[KI_CAR_FILTER_COUNT] =
     {
         "",   // filter 0: no prefix -> every car passes (X360 off_82CDB8FC[0])
-        "", "", "", "", "",
-        "", "", "", "",
+        "P", "T", "PUS", "PEU", "PAS",
+        "PSP", "XUS", "XEU", "XAS",
     };
 
-    // The teleport / change-car requests are published as variable-size events onto the module's
-    // per-frame output GUI event queue. The X360 event-type ids + record sizes are taken verbatim
-    // from the AddEvent calls (see TeleportCar / ChangeCar below).
-    // X360 AddEvent(queue, payload, liType, liSize): the teleport event is liType==1 / 32 bytes; the
-    // change-car event is liType==2 / 24 bytes (read off the `li r5,<type>` / `li r6,<size>` pairs).
-    static const s32 KI_EVENT_TYPE_TELEPORT_PLAYER_CAR = 1;    // X360 li r5, 1
-    static const s32 KI_EVENT_TYPE_CHANGE_PLAYER_CAR   = 2;    // X360 li r5, 2
-
-    // Menu-list capacities as the X360 build hard-codes them in the OnActivate / OnChangeCarFilter
-    // loop bounds + SetRange clamps. NOTE these literals are what the binary uses and differ slightly
-    // from the DWARF array sizes (the car list loops/clamps to 100/99 against a maCarNames[96] DWARF
-    // array; the wheel-version clamp is 15 against a maCarVersionNames[16] array). The asm is
-    // authoritative for behaviour (the loops/clamps below use these literals verbatim); the array
-    // declarations follow the DWARF. FLAG: asm-literal vs DWARF-size discrepancy, preserved as-is.
+    // ARTIST uses 100 car slots; the older DWARF declares 96.
     static const s32 KI_CAR_MENU_LOOP_LIMIT   = 100;   // OnChangeCarFilter break (cmpwi 0x64)
     static const s32 KI_CAR_MENU_MAX_INDEX    = 99;    // car-index SetRange clamp (cmpwi 0x63)
     static const s32 KI_VERSION_MENU_MAX_INDEX = 15;   // car-version SetRange clamp (cmpwi 0xF)
@@ -114,67 +97,28 @@ namespace BrnGameState
     // ------------------------------------------------------------------------------------------------
     void ResetPlayerDebugComponent::TeleportCar()
     {
-        const s32 liLocation = miCurrentLocationIndex;
-
-        // 32-byte payload: { Vector3 direction; Vector3 position; } (each 16B, w lane packed). The X360
-        // reads the direction slot (maLocationDirections, 16*(locIdx+762)) FIRST, then the position
-        // slot (maLocationPositions, 16*(locIdx+890)).
-        struct TeleportEvent
-        {
-            Vector3 mDirection;
-            Vector3 mPosition;
-        } lEvent;
-        lEvent.mDirection = maLocationDirections[liLocation];
-        lEvent.mPosition  = maLocationPositions[liLocation];
-
-        mpGameStateModule->GetOutputGuiEventQueue()->AddEvent(
+        GameStateModuleIO::TeleportPlayerCarEvent lEvent = {};
+        lEvent.mPosition = maLocationPositions[miCurrentLocationIndex];
+        lEvent.mDirection = maLocationDirections[miCurrentLocationIndex];
+        mpGameStateModule->GetDebugGameEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lEvent),
-            KI_EVENT_TYPE_TELEPORT_PLAYER_CAR,
-            static_cast<s32>(sizeof(lEvent)));
+            GameStateModuleIO::E_EVENT_TELEPORT_PLAYER_CAR, sizeof(lEvent));
     }
 
-    // ------------------------------------------------------------------------------------------------
-    // ChangeCar @ X360 0x82382B20 (the body the ChangeCarCallback trampoline forwards to)
-    //
-    // Publish a "change player car" event carrying the selected car-version + wheel, but ONLY while no
-    // mode change is in progress (the X360 early-outs when the leading mModeManager flag at +0x1DB8 is
-    // set). The 24-byte payload is { car-version id ; wheel id ; two apply flags }.
-    // ------------------------------------------------------------------------------------------------
+    // ARTIST 0x82382B20 checks the full current-mode pointer, then queues the
+    // selected model and wheel with camera-reset and keep-reset-section enabled.
     void ResetPlayerDebugComponent::ChangeCar()
     {
-        // X360: `if ( !*(mpGameStateModule + 7608) ) { ... }` -- only publish the change-car request
-        // when no mode change / mode-data load is in progress (the leading mModeManager flag).
-        if (mpGameStateModule->IsModeChangeInProgress())
-        {
+        if (mpGameStateModule->GetModeManager()->GetCurrentGameMode() != nullptr)
             return;
-        }
-
-        // 24-byte payload: { selected car-version id ; selected wheel's record id ; two true flags }.
-        // The X360 packs the chosen car-version id (maCarVersionIds at miCurrentCarVersionIndex), the
-        // selected wheel record's leading id, then two bytes both set to 1 (the "apply car"/"apply
-        // wheel" change flags), padded to the 24-byte record.
-        struct ChangeCarEvent
-        {
-            CgsID mCarVersionId;     // maCarVersionIds[miCurrentCarVersionIndex] (X360 v8[0])
-            CgsID mWheelId;          // GetWheelData(miCurrentWheelIndex)->mID    (X360 v8[1])
-            bool  mbApplyCar;        // X360 v9  = stb 1
-            bool  mbApplyWheel;      // X360 v10 = stb 1
-            u8    maPad[6];          // pad to the 24-byte record
-        } lEvent;
-
-        const BrnResource::WheelList* lpWheelList = mpGameStateModule->GetWheelList();
-        const BrnResource::WheelListEntry* lpWheelEntry =
-            lpWheelList->GetWheelData(miCurrentWheelIndex);
-
-        lEvent.mCarVersionId = maCarVersionIds[miCurrentCarVersionIndex];
-        lEvent.mWheelId      = lpWheelEntry->mID;
-        lEvent.mbApplyCar    = true;
-        lEvent.mbApplyWheel  = true;
-
-        mpGameStateModule->GetOutputGuiEventQueue()->AddEvent(
+        GameStateModuleIO::ChangePlayerCarEvent lEvent = {};
+        lEvent.mCarModelId = maCarVersionIds[miCurrentCarVersionIndex];
+        lEvent.mWheelModelId = mpGameStateModule->GetWheelList()->GetWheelData(miCurrentWheelIndex)->mID;
+        lEvent.mbResetPlayerCamera = true;
+        lEvent.mbKeepResetSection = true;
+        mpGameStateModule->GetDebugGameEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lEvent),
-            KI_EVENT_TYPE_CHANGE_PLAYER_CAR,
-            24);
+            GameStateModuleIO::E_EVENT_CHANGE_PLAYER_CAR, sizeof(lEvent));
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -191,14 +135,14 @@ namespace BrnGameState
         static_cast<ResetPlayerDebugComponent*>(lpData)->ChangeCar();
     }
 
-    void ResetPlayerDebugComponent::OnChangeCarFilterCallback(void* lpData, void* /*lpUserData*/)
+    void ResetPlayerDebugComponent::OnChangeCarFilterCallback(void* /*lpData*/, void* lpUserData)
     {
-        static_cast<ResetPlayerDebugComponent*>(lpData)->OnChangeCarFilter();
+        static_cast<ResetPlayerDebugComponent*>(lpUserData)->OnChangeCarFilter();
     }
 
-    void ResetPlayerDebugComponent::OnChangeCarSelectionCallback(void* lpData, void* /*lpUserData*/)
+    void ResetPlayerDebugComponent::OnChangeCarSelectionCallback(void* /*lpData*/, void* lpUserData)
     {
-        static_cast<ResetPlayerDebugComponent*>(lpData)->OnChangeCarSelection();
+        static_cast<ResetPlayerDebugComponent*>(lpUserData)->OnChangeCarSelection();
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -280,17 +224,44 @@ namespace BrnGameState
     }
 
     // ------------------------------------------------------------------------------------------------
-    // OnChangeCarSelection -- the car/version selection-change handler.
-    //
-    // FLAG: this TU's X360 ledger attests the ...SelectionCallback trampoline (@ 0x82377230) and the
-    // OnChangeCarFilter caller, but NOT a standalone OnChangeCarSelection body (the DecFIGS DWARF
-    // shows only `using namespace CgsDev::Message;` -- a build that repopulates the car-version menu
-    // from the selected car's livery list). The full body lands with its own reconstruction; here it
-    // is intentionally a no-op so the attested call path (OnChangeCarFilter -> OnChangeCarSelection
-    // and the callback trampoline) links and is structurally faithful without fabricating behaviour.
-    // ------------------------------------------------------------------------------------------------
+    // ARTIST 0x82376F80: select the default wheel, collect the parent and its
+    // variants, then select the first variant. Compare full 64-bit IDs.
     void ResetPlayerDebugComponent::OnChangeCarSelection()
     {
+        const BrnResource::VehicleList* lpVehicleList = mpGameStateModule->GetVehicleList();
+        const BrnResource::WheelList* lpWheelList = mpGameStateModule->GetWheelList();
+        const CgsID lCarId = maCarIds[miCurrentCarIndex];
+        const s32 liCarIndex = lpVehicleList->GetVehicleIndex(lCarId);
+        const BrnResource::VehicleListEntry* lpCar = lpVehicleList->GetVehicleData(liCarIndex);
+        for (s32 liWheel = 0; liWheel < lpWheelList->GetWheelCount(); ++liWheel)
+        {
+            if (::_stricmp(lpWheelList->GetWheelData(liWheel)->macName, lpCar->GetDefaultWheelName()) == 0)
+            {
+                miCurrentWheelIndex = liWheel;
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint << "Wheel index = " << miCurrentWheelIndex << "\n";
+                break;
+            }
+        }
+
+        s32 liVersionCount = 0;
+        for (s32 liVehicle = 0; liVehicle < lpVehicleList->GetVehicleCount() &&
+             liVersionCount < KI_MAX_CAR_VERSION_NAME_COUNT; ++liVehicle)
+        {
+            const BrnResource::VehicleListEntry* lpEntry = lpVehicleList->GetVehicleData(liVehicle);
+            if (lpEntry->GetId() != lCarId && lpEntry->GetParentId() != lCarId)
+                continue;
+            char lacId[KI_CGSID_STRING_LEN];
+            CgsIDUnCompress(lpEntry->GetId(), lacId);
+            CgsDev::StrStream lLabel(maCarVersionStrings[liVersionCount], KI_CAR_TEXT_LENGTH);
+            lLabel << (lpEntry->GetName() ? lpEntry->GetName() : "<NULLSTRING>") << " - " << lacId;
+            maCarVersionNames[liVersionCount].miValue = liVersionCount;
+            maCarVersionNames[liVersionCount].mpcName = maCarVersionStrings[liVersionCount];
+            maCarVersionIds[liVersionCount] = lpEntry->GetId();
+            ++liVersionCount;
+        }
+        SetRange(&miCurrentCarVersionIndex, 0, liVersionCount - 1);
+        miCurrentCarVersionIndex = 0;
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -300,7 +271,7 @@ namespace BrnGameState
     // ------------------------------------------------------------------------------------------------
     void ResetPlayerDebugComponent::OnActivate()
     {
-        BrnTrigger::TriggerData* lpTriggerData = mpGameStateModule->GetTrackTriggerData();
+        const BrnTrigger::TriggerData* lpTriggerData = mpGameStateModule->GetTriggerQueryManager()->GetTriggerData();
 
         // --- car-filter list: seed the 10 filter options from the label table -----------------------
         for (s32 liFilter = 0; liFilter < KI_CAR_FILTER_COUNT; ++liFilter)
@@ -416,25 +387,20 @@ namespace BrnGameState
             lLabelStream << ", ";
             lLabelStream << BrnWorld::WorldRegion::CountyToString(leCounty);
 
-            // Record the region's facing direction + the teleport spawn point. The X360 stores the
-            // raw region facing (BoxRegion::ComputeDirection) in the FIRST location array, and a
-            // per-lane transform `direction*position + dimensionZ` in the SECOND. FLAG: the exact
-            // semantics of this vmaddfp transform (the teleport spawn offset along the region facing)
-            // are inferred from the AltiVec ops; the array roles match the X360 byte offsets the
-            // TeleportCar event then reads back (first slot read first into the payload).
+            // ARTIST 0x823913F0..0x82391410: position + facing * dimensionZ.
             const BrnTrigger::BoxRegion* lpBox = lpRegion->GetBoxRegion();
             const Vector3 lFacing   = lpBox->ComputeDirection();
             const Vector3 lPosition = lpBox->GetPosition();
             const f32     lfDimZ    = lpBox->GetDimensionZ();
 
             Vector3 lSpawnPoint;
-            lSpawnPoint.x = lFacing.x * lPosition.x + lfDimZ;
-            lSpawnPoint.y = lFacing.y * lPosition.y + lfDimZ;
-            lSpawnPoint.z = lFacing.z * lPosition.z + lfDimZ;
-            lSpawnPoint.w = lFacing.w * lPosition.w + lfDimZ;
+            lSpawnPoint.x = lFacing.x * lfDimZ + lPosition.x;
+            lSpawnPoint.y = lFacing.y * lfDimZ + lPosition.y;
+            lSpawnPoint.z = lFacing.z * lfDimZ + lPosition.z;
+            lSpawnPoint.w = lFacing.w * lfDimZ + lPosition.w;
 
-            maLocationPositions[liLocationCount]  = lFacing;       // X360 array @ +0x37A0 (read first by TeleportCar)
-            maLocationDirections[liLocationCount] = lSpawnPoint;   // X360 array @ +0x2FA0
+            maLocationDirections[liLocationCount] = lFacing;       // X360 +0x37A0
+            maLocationPositions[liLocationCount]  = lSpawnPoint;   // X360 +0x2FA0
 
             maLocationNames[liLocationCount].miValue = liLocationCount;
             maLocationNames[liLocationCount].mpcName = lpcLabel;
