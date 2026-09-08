@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"    // CgsDev::StrStream (SetupGameMode's streamed assert)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"      // CgsDev::Log (the [p0-postable] witness)
 #include "GameShared/GameClasses/Network/CgsNetworkUtils.h"     // CgsNetwork::UsernameCompare
 #include "GameSource/Gui/BrnGuiCache.h"                         // BrnGui::GuiCache (GetFreeburnChallengeManager / GetGameMode)
 
@@ -168,6 +169,23 @@ namespace BrnGui
         SetSkillsText("");   // @0x8243E7A4 / @0x8243E814
 
         SetValuesDirty();    // the inlined nine-row raise loop
+
+        // [p0-postable] one-shot witness. NOT console code. The table is flag-gated by
+        // RaceMainHudState's mbPlayerPositionTable, which is only raised for the ONLINE
+        // game modes -- every offline mode either never sets it or has it cleared again by
+        // the ladder tail -- so this line firing at all means an offline path reached the
+        // component, which would be worth knowing.
+        {
+            static bool sbLoggedSetup = false;
+            if (!sbLoggedSetup && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbLoggedSetup = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[p0-postable] PlayerPositionTableComponent::SetupGameMode -- mode "
+                    << static_cast<s32>(meGameMode)
+                    << ", title/skills text cleared\n";
+            }
+        }
 
         if (!lbOnlineMode)
         {

@@ -132,21 +132,27 @@ void RaceCarEntityModule::HandleCarTypeTrainingMessage(u32 luCarType)
         static_cast<BrnProgression::ETrainingType>(KAI_CARTYPE_TRAINING_TIP[luCarType]));
 }
 
-// ⭐ [tut-ticker] X360 0x822F6BE8 -- SendGameEvents. PARTIAL, and named as such:
-//   * the leading "player car changed" arm (game event 9, 16 bytes: a re-compressed CgsID
-//     pair) is DROPPED: its gate byte (+0x18371), its flag word (+0x11104 region) and the id
-//     it re-compresses (+0x123EC region) all live in this module's un-homed pads with no
-//     recovered member name. Nothing on this build sets the gate, so the arm is inert on the
-//     console flow being reproduced; it lands when those members are homed.
-//   * the TRAINING drain is whole and console-exact: pop the ring LIFO
-//     (`v7 = --count; v9 = ring[v7];`) and post each as game event 113, size 4, into the
-//     output buffer's game-event queue.
+// X360 0x822F6BE8 -- SendGameEvents. Publish the streaming-complete edge
+// (module 1, slot-zero car model id), then drain training requests in LIFO order.
 void RaceCarEntityModule::SendGameEvents(RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput)
 {
     CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");   // :5114
     if (lpOutput == 0)
     {
         return;
+    }
+
+    // ARTIST 0x822F6C24..0x822F6C98. GetCarModelId is the exact ACTIVE-bit test
+    // and graphics asset prefix removal inlined by the console for slot zero.
+    if (mbSendStreamingComplete)
+    {
+        BrnGameState::GameStateModuleIO::StreamingCompleteEvent lEvent;
+        lEvent.meModule = BrnGameState::GameStateModuleIO::StreamingCompleteEvent::E_MODULE_RACE_CAR_ENTITY;
+        lEvent.mUserId = mRaceCarStreamer.GetCarModelId(0);
+        lpOutput->GetGameEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lEvent),
+            BrnGameState::GameStateModuleIO::E_EVENT_STREAMING_COMPLETE, sizeof(lEvent));
+        mbSendStreamingComplete = false;
     }
 
     while (miPendingRequestCount > 0)
@@ -286,6 +292,8 @@ void RaceCarEntityModule::Construct()
     mbIsInGameMode            = false;
     mbIsInOnlineGameMode      = false;
     mbOnlineModeJustFinished  = false;
+    mbWaitingForStreaming    = false;
+    mbSendStreamingComplete  = false;
     mbCarSelectAllowedInGameMode = false;
     mbInCarSelectScreen       = false;
     mbCarSelectDontStreamAudio = false;
@@ -573,7 +581,7 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
                 const u8* lpResourceMemoryBase =
                     *reinterpret_cast<u8* const*>( mDistrictMapResourceHandle.mpResourceMemory );
                 const void* lpMapBlob =
-                    lpResourceMemoryBase + *reinterpret_cast<const u32*>( lpResourceMemoryBase + 4 );
+                    lpResourceMemoryBase + *reinterpret_cast<const u32*>( lpResourceMemoryBase + 4 ); // serialized resource header
                 mWorldMap2D.Construct( lpMapBlob,
                                        KV_DISTRICT_MAP_WORLD_ORIGIN, KV_DISTRICT_MAP_WORLD_SIZE );
 
@@ -710,6 +718,8 @@ void RaceCarEntityModule::UpdateStreaming(
 
     mRaceCarStreamer.Update( lpInput, lpOutput, mfTimeStep );
 
+    bool lbAllLoaded = true;
+
     for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
     {
         ActiveRaceCar* lpActiveRaceCar =
@@ -736,9 +746,15 @@ void RaceCarEntityModule::UpdateStreaming(
         }
         else
         {
-            // Console: `lbAllLoaded = false` (the flag feeds the streaming-complete
-            // publish, whose output member is not modelled here).
+            lbAllLoaded = false;
         }
+    }
+    // ARTIST UpdateStreaming's completion edge. Retains the existing PC resource
+    // readiness predicate above; unmounted prefetch/audio wait lanes remain separate.
+    if (lbAllLoaded && mbWaitingForStreaming)
+    {
+        mbWaitingForStreaming = false;
+        mbSendStreamingComplete = true;
     }
 }
 
@@ -2836,8 +2852,7 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
         // whose members at those offsets this tree has not named. They are render/deform
         // bookkeeping, not placement; dropped rather than poked by offset.
 
-        // asm `*(this + 99144) = 1` -- the byte immediately after mbIsInGameMode(+99140) in
-        // the same DWARF bool run. [FLAG] unnamed in this header's model of that run.
+        mbWaitingForStreaming = true; // ARTIST HandleResetPlayerCarAction +99144
     }
     else
     {

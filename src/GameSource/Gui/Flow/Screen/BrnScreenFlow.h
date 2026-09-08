@@ -33,12 +33,14 @@ namespace BrnGui
     // -- committed screen states (class-key matches each definition) ----------------------
     struct Intro;                          // States/BrnIntro.h
     struct CarSelectVehicle;               // States/BrnCarSelectVehicle.h
+    struct CarSelectUnlock;                // States/BrnCarSelectUnlock.h
     struct CarSelectLivery;                // States/BrnCarSelectLivery.h
     struct CarSelectOnlineEnd;             // States/BrnCarSelectOnlineEnd.h
     struct ScreenLoading;                  // States/BrnScreenLoading.h
     struct InGame;                         // States/BrnInGame.h
     struct CrashNavStats;                  // States/BrnCrashNavStats.h
     struct CrashNavSettings;               // States/BrnCrashNavSettings.h
+    struct CrashNavMapEvent;               // States/BrnCrashNavMapEvent.h
     class  CrashNavOptions;                // States/BrnCrashNavOptions.h
     struct CrashNavAccountManagement;      // States/BrnCrashNavAccountManagement.h
     struct CrashNavTrax;                   // States/BrnCrashNavTrax.h
@@ -83,8 +85,6 @@ namespace BrnGui
 
     // -- not-yet-reconstructed screen states (placeholders in States/BrnScreenStatesLinkStubs.h)
     struct NullState;
-    struct CarSelectUnlock;
-    struct CrashNavMapEvent;
     struct CrashNavMapMain;
     struct CrashNavProfile;
     struct OnlineGameRoomPlayerInfoState;   // placeholder name; see the stub header's FLAG note

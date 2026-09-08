@@ -12,6 +12,7 @@
 #include "GameSource/BurnoutConstants.h"          // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT
 #include "BrnCommonTypes.h"                        // Vector3 / Vector4 (event-position / camera accessors)
 #include "GameSource/GameState/BrnCgsPlayerName.h" // CgsNetwork::PlayerName (COMPLETE: value member of ReplayPlayerActive below)
+#include "GameSource/GameState/BrnGameStateTypes.h" // BrnGameState::LandmarkIndex (COMPLETE: 2-byte value member mCurrentLandmarkIndex below; header pulls only types.hpp)
 // [gateui r4] CE-4: BrnGui::InGameMessagesQueue is a BY-VALUE member of the cache at
 // +0x4080 (see mInGameMessagesQueue), so the COMPLETE type is required here. No cycle:
 // that header pulls only types.hpp / BrnCommonTypes.h / BrnGameStateSharedIO.h /
@@ -34,6 +35,7 @@ namespace CgsGui { namespace ModelIO { struct InputBuffer; } }
 namespace BrnResource { class ChallengeList; } // GetFreeburnChallengeList return (pointer only)
 namespace BrnGui { struct WorldDataController; }  // GetWorldDataController return (pointer only)
 namespace BrnProgression { struct ProfileEvent; } // GetProfileEvent return (pointer only)
+namespace BrnProgression { struct Race; }         // GetPresetRace return (pointer only; home SharedClasses/Progression/BrnRace.h)
 namespace BrnProgression { class Profile; }       // DetermineCarUnlockPending arg (pointer only; class per BrnProfile.h:208)
 namespace BrnGameState { class LandmarkIndex; }    // GetLandmarkInfoFromIndex arg (by value)
 // GetRequiredScoreForMedal arg (by value). Opaque-enum forward declaration with the
@@ -83,8 +85,17 @@ namespace BrnGui
     struct SatNavEventDisplayInfo;
     struct PreEventInfo;   // opaque boundary record (GetPreEventInfo result; consumed by
                            // OnlinePreEventMessages::Show -- pointer-only)
-    struct PresetRace;     // opaque boundary record (GetPresetRace result; the preset-race
-                           // CgsArray element, stride 120 -- pointer-only, un-homed element type)
+    // [p0 map-event wave, 2026-09-08] `PresetRace` IS `BrnProgression::Race` -- it is not an
+    // un-homed record. The recovered declaration outline of every consumer spells the result
+    // of GetPresetRace `const Race *` (CrashNavMapEvent::{SetTracker, SetEventData,
+    // HandleControllerInput, Update}), and the console layout agrees field for field: the
+    // stride is 120 == sizeof(BrnProgression::Race), SetEventData reads the 8-byte id at
+    // +0x20 (BaseRace::mId), the u16 landmark array at +0x30 (Race::maLandmarkIndices), the
+    // second u16 array at +0x50 (Race::mauAiSectionIndices) and the count byte at +0x70
+    // (Race::muNumLandmarks). Kept as a POINTER-ONLY forward declaration here so this
+    // boundary header does not have to pull in the progression tree; consumers include
+    // SharedClasses/Progression/BrnRace.h.
+    typedef BrnProgression::Race PresetRace;   // the committed spelling, kept for existing callers
 
     // One entry of the cache's "stunts to display" list (X360 GuiCache::GetStuntToDisplay
     // @0x8240F770 walks it at stride 8, testing the leading id word against -1 as the
@@ -1055,6 +1066,16 @@ namespace BrnGui
             GetScoringTrafficData(u32 luIndex) const;      // X360 @0x82450718 (maScoringTrafficData @0xA150)
         const StuntToDisplayInfo* GetStuntToDisplay(s32 liIndex) const; // X360 @0x8240F770 (maStuntToDisplay @0xAC5C)
         const PresetRace* GetPresetRace(s32 liPresetRaceIndex) const;   // X360 @0x824B2FE8 (maPresetRaces @0x4FB0, count miNumPresetRaces @0x5280)
+
+        // [p0 map-event wave] ADDITIVE GROW, same header-inline precedent as GetGuiTracker
+        // above. Both are named by the recovered declaration outline and INLINED at every
+        // console call site -- there is no out-of-line symbol for either, so the owning
+        // header is their only home. CrashNavMapEvent::{SetTracker, SetEventData} read the
+        // count at +0x5280 guarding "mpGuiCache->GetNumPresetRaces() > 0", and
+        // CrashNavMapEvent::HandleSelect reads the landmark half-word at +0x5284 and feeds
+        // it to GetLandmarkInfoFromIndex.
+        s32 GetNumPresetRaces() const                            { return miNumPresetRaces; }
+        BrnGameState::LandmarkIndex GetCurrentLandmarkIndex() const { return mCurrentLandmarkIndex; }
         u32  GetNumOnlineFinishPoints() const;             // X360 @0x8241E7D8 (sum of per-word 64-bit popcounts over maOnlineFinishPointsMask @+0x7770, 4 doublewords)
 
         // --- replay slot / player tables ---
@@ -1626,7 +1647,12 @@ namespace BrnGui
         u8   maPad_4FA9[7];                              // +0x4FA9..+0x4FAF
         u8   maPresetRacesStorage[6 * 120];              // +0x4FB0 (20400) PresetRace maPresetRaces[6] (stride 120; GetPresetRace @0x824B2FE8 -> 120*(idx+170)+this; element un-homed)
         s32 miNumPresetRaces;                            // +0x5280 (21120) count of maPresetRaces (GetPresetRace bound)
-        u8  mPad_5284[2];                                // +0x5284..+0x5285
+        // [p0 map-event wave] ADDITIVE CARVE from the 2-byte pad -- the landmark the map
+        // cursor is currently over. CrashNavMapEvent::HandleSelect reads this half-word and
+        // passes it straight into GetLandmarkInfoFromIndex, which takes a LandmarkIndex BY
+        // VALUE; the recovered outline names the read GuiCache::GetCurrentLandmarkIndex.
+        // sizeof(LandmarkIndex) == 2, so no member moves.
+        BrnGameState::LandmarkIndex mCurrentLandmarkIndex;   // +0x5284 (21124)
         // [gateui r3] ADDITIVE CARVE from the head of the former mPad_5284[9436] -- the count of
         // ACTIVE landmarks. Producer GuiCache::HandleSetActiveLandmarksEvent @0x824EE7D0 copies
         // the incoming list into the u16 array at +0x5288 (`addi r10, r30, 0x5288`, `sth`) and

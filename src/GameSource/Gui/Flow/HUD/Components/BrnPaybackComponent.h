@@ -79,10 +79,10 @@ namespace BrnGui
 
     private:
         // ---- private helpers ----
-        // Declared-only (not part of this TU's ledger set): bodies land with their own
-        // functions. Kept in the class surface so the shape stays complete.
+        // EnterState is declared-only (not part of this TU's ledger set): its body lands with
+        // its own function. Kept in the class surface so the shape stays complete.
         void EnterState(EPaybackComponentStates lePaybackComponentState);            // :117 (other TU)
-        void SendAwardTriggerableEvent();                                            // :491 (CgsGuiEvent.h path)
+        void SendAwardTriggerableEvent();                                            // bodied in the .cpp
 
         void UpdateState();                                                          // @0x8241FE98
         void SetDisplayedIcon(EAwardTypes leAwardType);                              // @0x824116C8

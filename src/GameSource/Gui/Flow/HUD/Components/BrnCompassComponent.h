@@ -116,19 +116,16 @@ namespace BrnGui
         bool ShowChallengeOnCompass(f32 lfBearing);
 
         // @ 0x8241FC10 -- place a world-space destination on the compass strip: bearing =
-        // signed angle between the car->destination vector and world north, mapped to the
-        // marker position (and the on/off-route player-marker state).
-        // BLOCKED (todo): the X360 body inlines VMX using un-exported permute/const-vector
-        // rodata (unk_82181510, unk_8204B610) and calls the un-homed platform intrinsic
-        // XMVectorACos -- neither is recoverable, so the body is left for a keystone wave.
+        // signed angle between the camera->destination vector and world north, mapped to
+        // the marker position (and the on/off-route player-marker state). RECONSTRUCTED
+        // in the .cpp (p0 wave 2026-09-08); the "un-recoverable rodata" it was parked on
+        // is the north/up frame plus 2*pi and 180/pi.
         void ShowPositionOnCompass(Vector3 lv3Destination, f32 lfBearing);
 
         // @ 0x82411640 -- set the East_mc / West_mc child clips of lpMovieClipRef to the
-        // per-language direction-letter frame.
-        // BLOCKED (todo): indexes the un-exported per-language rodata string tables
-        // KAPC_FRAMES_EAST (off_82F248B8) / KAPC_FRAMES_WEST (off_82F24918) -- 24 entries
-        // each, only [E_LANGUAGE_...0] == "E"/"W" is attested, so the tables cannot be
-        // reconstructed without fabrication.
+        // per-language direction-letter frame. RECONSTRUCTED in the .cpp (p0 wave
+        // 2026-09-08) together with the two E_LANGUAGE_TOTAL-entry label tables, which
+        // read out of the shipped image rather than being fabricated.
         void FormatDirectionLetters(CgsLanguage::ELanguage leLanguage,
                                     BrnFlapt::MovieClipRef* lpMovieClipRef);
 
@@ -139,9 +136,8 @@ namespace BrnGui
         void SetMarkerPos(f32 lfMarkerBearing, bool lbShowMarker);
 
         // BrnCompassComponent.h:105 -- per-route-state animator frame names, indexed by
-        // EPlayerRouteState (XEX .data off_82F248AC). DWARF-attested class static.
-        // Only [E_PLAYER_ROUTE_ON_COURSE] == "onTrack" is X360-attested; [1]/[2] are
-        // filled by the consolidator from the .data table.
+        // EPlayerRouteState. An attested class static; all three entries are recovered
+        // in the .cpp (p0 wave 2026-09-08) -- "onTrack" / "offTrack" / "neither".
         static const char* const KAPC_PLAYER_ROUTE_STATES[E_PLAYER_ROUTE_COUNT];
 
         // BrnCompassComponent.h:44

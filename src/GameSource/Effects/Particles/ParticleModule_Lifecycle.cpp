@@ -484,21 +484,53 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         mTrailSystem.Prepare();
 
         // --- debris ------------------------------------------------------------------------
-        // BrnDebrisRenderer::Construct(this+0x22810, off_82F2C814, this+0x91A0). The second
-        // argument is &mWorldTexRenderer, which is a ContainedInterface placeholder -- there
-        // is no Im3dTexPlusLighting object to hand it, so this construct is announced.
+        // BrnDebrisRenderer::Construct(&mDebrisRenderer, lpGraphicsAllocator, &mWorldTexRenderer).
+        // STILL ANNOUNCED, and for ONE reason only: the third argument is &mWorldTexRenderer,
+        // which is a `ContainedInterface` placeholder in ParticleModule.h -- there is no
+        // BrnGraphics::Im3dTexPlusLighting object to hand it, and type-punning the placeholder
+        // would be an invented type. The renderer's BODY is reconstructed and its TU is now
+        // mounted; landing this call needs Im3dTexPlusLighting itself, i.e. the converted
+        // world-textured program pair (the same job SkidProgramsPC.cpp did for the skids
+        // renderer), not anything in the debris family.
         {
             static bool sbLogged = false;
             LogNotReconstructed(sbLogged,
                 "ParticleModule::Prepare's BrnDebrisRenderer::Construct -- its renderer "
                 "argument is mWorldTexRenderer, a ContainedInterface placeholder");
         }
-        // ...and the five BrnDebrisArray::Construct calls beside it. NOT CALLED: the array's
-        // Construct binds `mpParams = &_gaDebrisArrayParams[type]`, and that table is an
-        // `extern const` with no definition anywhere in the tree -- writing a zero-filled one
-        // would be a fabricated constant, and the debris family is not on this wave's path.
-        // Announced with its sibling above; both go live with the debris pass.
-        (void)KU_NUM_DEBRIS_ARRAYS;
+        // ...and the five BrnDebrisArray::Construct calls beside it, which ARE called now.
+        // ⭐ THE PARAMETER TABLE IS REAL AS OF THIS WAVE. `mpParams = &_gaDebrisArrayParams[type]`
+        // used to bind an `extern const` with no definition anywhere in the tree, so this loop
+        // was announced rather than run. The table has been recovered from the console image --
+        // both halves of it: the scalar half read straight out, and the two vector members
+        // (colour, bounciness) out of the CRT dynamic initialiser that writes them at startup,
+        // because a non-trivial Vector4/Vector3 reads as a silent zero in the image itself.
+        // It is defined in BrnDebrisRenderer.cpp; see that file's banner.
+        // The loop is the console's own: one Construct per EDebrisArrayID, all five sharing
+        // the module's FXBucketManager.
+        for (u32 luArray = 0; luArray < KU_NUM_DEBRIS_ARRAYS; ++luArray)
+        {
+            maDebris[luArray].Construct(&mBucketManager,
+                                        static_cast<Native::EDebrisArrayID>(luArray));
+        }
+        {
+            static bool sbLogged = false;
+            if (!sbLogged)
+            {
+                sbLogged = true;
+                char lacMsg[192];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                              "[p0-debris] %u debris arrays constructed; presets: "
+                              "coloured=%d shiny=%d dark=%d highdetail=%d glass=%d particles\n",
+                              KU_NUM_DEBRIS_ARRAYS,
+                              Native::_gaDebrisArrayParams[Native::eDebrisArray_Coloured].mnNumParticles,
+                              Native::_gaDebrisArrayParams[Native::eDebrisArray_Shiny].mnNumParticles,
+                              Native::_gaDebrisArrayParams[Native::eDebrisArray_Dark].mnNumParticles,
+                              Native::_gaDebrisArrayParams[Native::eDebrisArray_HighDetail].mnNumParticles,
+                              Native::_gaDebrisArrayParams[Native::eDebrisArray_Glass].mnNumParticles);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
 
         // --- simple particles ---------------------------------------------------------------
         // BrnSimpleParticleRenderer::Construct(this+0x228B8, mpHeapMalloc, this+0x9274) and,

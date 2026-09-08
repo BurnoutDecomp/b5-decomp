@@ -11,10 +11,12 @@
 // The committed screen states (REAL classes; constructed exactly as the X360 Prepare does).
 #include "GameSource/Gui/Flow/Screen/States/BrnIntro.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectVehicle.h"
+#include "GameSource/Gui/Flow/Screen/States/BrnCarSelectUnlock.h"  // the real CS_UNLOCK (p0 wave; NewPoolState needs the complete type)
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectLivery.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectOnlineEnd.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnScreenLoading.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnInGame.h"
+#include "GameSource/Gui/Flow/Screen/States/BrnCrashNavMapEvent.h" // the real CN_MAP_EVENT (p0 wave; NewPoolState needs the complete type)
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavMapMain.h"  // the real CN_MAP_MAIN (main-menu wave; NewPoolState needs the complete type)
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavStats.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavSettings.h"

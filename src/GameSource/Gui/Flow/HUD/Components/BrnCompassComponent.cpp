@@ -10,15 +10,19 @@
 //   SetVisibility           @ 0x824115E8
 //   ShowLandmarkOnCompass   @ 0x82428C68
 //   ShowChallengeOnCompass  @ 0x82428CC0
+//   ShowPositionOnCompass                  (p0 wave 2026-09-08)
+//   FormatDirectionLetters                 (p0 wave 2026-09-08)
 //
-// Reconstructed store-for-store from the X360 asm; DWARF-attested shape.
+// Reconstructed store-for-store from the console listing; attested declaration shape.
 //
-// STILL TODO (blocked, bodies left for a keystone wave -- declared in the header):
-//   ShowPositionOnCompass  @ 0x8241FC10 -- inlines VMX over un-exported permute/const
-//                                          rodata (unk_82181510 / unk_8204B610) + the
-//                                          un-homed platform intrinsic XMVectorACos.
-//   FormatDirectionLetters @ 0x82411640 -- indexes the un-exported per-language rodata
-//                                          string tables off_82F248B8 / off_82F24918.
+// [p0 wave 2026-09-08] The two leaves above were parked as "un-reconstructable rodata".
+// They are not: the const-vector operands are the ordinary compass frame (north = +Z,
+// up = +Y), the two scalars beside them are 2*pi and 180/pi, and the per-language
+// direction-letter tables read straight out of the shipped image (see below). The
+// player-route frame-name table was likewise a two-entry placeholder and is now the
+// real triple. Nothing here is invented; every value is read from the image.
+//
+// STILL TODO (blocked, body left for a keystone wave -- declared in the header):
 //   Update                 @ 0x8242E160 -- un-homed GuiTracker actively-tracked-landmark
 //                                          accessors (GetActivelyTrackedLandmarks /
 //                                          GetNumActivelyTrackedLandmarks -- no reconstructed
@@ -26,7 +30,12 @@
 //                                          event-destination-landmark reads.
 // ===================================================================================
 #include "GameSource/Gui/Flow/HUD/Components/BrnCompassComponent.h"
+
+#include <cmath>                                            // acosf / fabsf (the bearing derivation)
+
+#include "rw/math/vpu/vector3_operation.h"                  // Dot / Cross / Normalize over Vector3
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint (the one-shot mount witness)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"     // CgsCore::SnPrintf
 #include "GameSource/Gui/BrnGuiCache.h"                     // GuiCache::GetLandmarkInfoFromIndex / GetFreeburnChallengeManager / GetWorldDataController
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"             // GuiEventUpdateSatNav::SatNavIconInfo
@@ -45,18 +54,117 @@ namespace CgsSystem { namespace HardwareSku { s32 FindLanguage(); } }
 namespace BrnGui
 {
     // --------------------------------------------------------------------------
-    // KAPC_PLAYER_ROUTE_STATES (BrnCompassComponent.h:105 / XEX .data off_82F248AC).
-    // DWARF-attested class static; only [E_PLAYER_ROUTE_ON_COURSE] == "onTrack" is
-    // X360-attested. CONSOLIDATOR: fill [E_PLAYER_ROUTE_OFF_COURSE] and
-    // [E_PLAYER_ROUTE_WITHIN_NORMAL_BOUNDS] from the .data string table -- the values
-    // below marked TODO are placeholders and MUST NOT ship as-is.
+    // KAPC_PLAYER_ROUTE_STATES (BrnCompassComponent.h:105) -- an attested class static;
+    // the per-route-state animator frame names.
+    //
+    // [p0 wave 2026-09-08] The last two entries stood here as empty-string placeholders
+    // carrying a "MUST NOT ship as-is" note. They are no longer placeholders: the whole
+    // three-pointer table reads out of the shipped image's constant data, and the slot
+    // immediately past its end is the first entry of the direction-letter table below,
+    // which pins the array length at exactly three. UpdatePlayerMarkerState now runs for
+    // real (ShowPositionOnCompass calls it), so an empty label would have been a live
+    // lookup miss on every off-course frame.
     // --------------------------------------------------------------------------
     const char* const CompassComponent::KAPC_PLAYER_ROUTE_STATES[E_PLAYER_ROUTE_COUNT] =
     {
-        "onTrack",   // [0] E_PLAYER_ROUTE_ON_COURSE            -- X360-attested
-        "",          // [1] E_PLAYER_ROUTE_OFF_COURSE           -- TODO consolidator (XEX .data @0x82F248AC)
-        "",          // [2] E_PLAYER_ROUTE_WITHIN_NORMAL_BOUNDS -- TODO consolidator (XEX .data @0x82F248AC)
+        "onTrack",    // [0] E_PLAYER_ROUTE_ON_COURSE
+        "offTrack",   // [1] E_PLAYER_ROUTE_OFF_COURSE
+        "neither",    // [2] E_PLAYER_ROUTE_WITHIN_NORMAL_BOUNDS
     };
+
+    // --------------------------------------------------------------------------
+    // The per-language direction-letter frame names FormatDirectionLetters plays on the
+    // East_mc / West_mc children of every compass view sub-clip. Two parallel tables of
+    // CgsLanguage::E_LANGUAGE_TOTAL const char*, indexed by the SKU language, read out of
+    // the shipped image's constant data. Almost every slot points at the same one-letter
+    // string; the interesting rows are the four that do not:
+    //   * German  -- "Ost"   -> East letter is 'O' (its West letter stays 'W').
+    //   * French  -- "Ouest" -> West letter is 'O'.
+    //   * Italian -- "Ovest" -> West letter is 'O'.
+    //   * Spanish -- "Oeste" -> West letter is 'O'.
+    // That pattern is itself the corroboration that the tables were read at the right
+    // stride and the right base: the four exceptions land exactly on the four languages
+    // whose compass words begin with O, and nowhere else.
+    // --------------------------------------------------------------------------
+    namespace
+    {
+        const char* const KAPC_FRAMES_EAST[CgsLanguage::E_LANGUAGE_TOTAL] =
+        {
+            "E",  // E_LANGUAGE_ARABIC
+            "E",  // E_LANGUAGE_CHINESE
+            "E",  // E_LANGUAGE_CHINESE_SIMPLIFIED
+            "E",  // E_LANGUAGE_CHINESE_TRADITIONAL
+            "E",  // E_LANGUAGE_CZECH
+            "E",  // E_LANGUAGE_DANISH
+            "E",  // E_LANGUAGE_DUTCH
+            "E",  // E_LANGUAGE_ENGLISH_US
+            "E",  // E_LANGUAGE_ENGLISH_UK
+            "E",  // E_LANGUAGE_FINNISH
+            "E",  // E_LANGUAGE_FRENCH
+            "O",  // E_LANGUAGE_GERMAN                -- "Ost"
+            "E",  // E_LANGUAGE_GREEK
+            "E",  // E_LANGUAGE_HEBREW
+            "E",  // E_LANGUAGE_HUNGARIAN
+            "E",  // E_LANGUAGE_ITALIAN
+            "E",  // E_LANGUAGE_JAPANESE
+            "E",  // E_LANGUAGE_KOREAN
+            "E",  // E_LANGUAGE_NORWEGIAN
+            "E",  // E_LANGUAGE_POLISH
+            "E",  // E_LANGUAGE_PORTUGUESE_BRAZIL
+            "E",  // E_LANGUAGE_PORTUGUESE_PORTUGAL
+            "E",  // E_LANGUAGE_SPANISH
+            "E",  // E_LANGUAGE_SWEDISH
+        };
+
+        const char* const KAPC_FRAMES_WEST[CgsLanguage::E_LANGUAGE_TOTAL] =
+        {
+            "W",  // E_LANGUAGE_ARABIC
+            "W",  // E_LANGUAGE_CHINESE
+            "W",  // E_LANGUAGE_CHINESE_SIMPLIFIED
+            "W",  // E_LANGUAGE_CHINESE_TRADITIONAL
+            "W",  // E_LANGUAGE_CZECH
+            "W",  // E_LANGUAGE_DANISH
+            "W",  // E_LANGUAGE_DUTCH
+            "W",  // E_LANGUAGE_ENGLISH_US
+            "W",  // E_LANGUAGE_ENGLISH_UK
+            "W",  // E_LANGUAGE_FINNISH
+            "O",  // E_LANGUAGE_FRENCH                -- "Ouest"
+            "W",  // E_LANGUAGE_GERMAN
+            "W",  // E_LANGUAGE_GREEK
+            "W",  // E_LANGUAGE_HEBREW
+            "W",  // E_LANGUAGE_HUNGARIAN
+            "O",  // E_LANGUAGE_ITALIAN               -- "Ovest"
+            "W",  // E_LANGUAGE_JAPANESE
+            "W",  // E_LANGUAGE_KOREAN
+            "W",  // E_LANGUAGE_NORWEGIAN
+            "W",  // E_LANGUAGE_POLISH
+            "W",  // E_LANGUAGE_PORTUGUESE_BRAZIL
+            "W",  // E_LANGUAGE_PORTUGUESE_PORTUGAL
+            "O",  // E_LANGUAGE_SPANISH               -- "Oeste"
+            "W",  // E_LANGUAGE_SWEDISH
+        };
+
+        // The compass's world frame, both read as 16-byte constant vectors beside the
+        // bearing math: NORTH is +Z and UP is +Y -- the very same pair the sat-nav icon
+        // heading uses (GameBridgeWorldToGui's rotation derivation), so a compass bearing
+        // and a minimap arrow agree by construction.
+        const Vector3 KV3_COMPASS_NORTH = { 0.0f, 0.0f, 1.0f, 0.0f };
+        const Vector3 KV3_COMPASS_UP    = { 0.0f, 1.0f, 0.0f, 0.0f };
+
+        const f32 KF_TWO_PI             = 6.2831855f;    // the acos sign flip
+        const f32 KF_RADIANS_TO_DEGREES = 57.29578f;
+        const f32 KF_DEGREES_PER_TURN   = 360.0f;
+        const f32 KF_DEGREES_HALF_TURN  = 180.0f;
+
+        // The two route-state thresholds, in degrees off the destination.
+        const f32 KF_ON_COURSE_LIMIT  = 22.5f;
+        const f32 KF_OFF_COURSE_LIMIT = 157.5f;
+
+        // The destination marker never leaves the visible strip: the relative bearing is
+        // clamped to +/-120 degrees before it is handed to SetMarkerPos (console fsel pair).
+        const f32 KF_MARKER_BEARING_MIN = -120.0f;
+        const f32 KF_MARKER_BEARING_MAX =  120.0f;
+    }
 
     // @ 0x8241EBA8 -- when the player's on/off-route state changes, remember it and
     // play the matching animator frame (the per-state frame-name table, XEX .data
@@ -109,6 +217,103 @@ namespace BrnGui
         }
     }
 
+    // ShowPositionOnCompass -- place a world-space destination on the compass strip.
+    //
+    // The console body is one long VMX pipeline; de-optimised it is the ordinary
+    // "which way is that, relative to where I am pointing" derivation:
+    //
+    //   1. take the direction from the world camera to the destination and normalise it
+    //      (the camera position is the far 16-byte lane the sat-nav renderer also reads,
+    //      GuiCache::GetWorldCameraPosition -- so the compass and the minimap share one
+    //      reference point);
+    //   2. the unsigned angle to north is acos of the clamped dot product. The clamp is a
+    //      vmaxfp/vminfp pair against -1 / +1, in that order, and exists because the
+    //      normalise leaves the dot a hair outside the domain;
+    //   3. the SIGN comes from cross(NORTH, toDestination) . UP -- north is the LEFT
+    //      operand. That is the same convention as the sat-nav icon heading, and the same
+    //      trap: flipping the operands negates every bearing and mirrors the strip. With
+    //      north = +Z and up = +Y the triple product reduces to the normalised direction's
+    //      own x lane, which is exactly what the console computes by summing the cross
+    //      against its up-vector constant. Below the plane the angle becomes 2*pi - angle;
+    //   4. convert to degrees and add half a turn (the strip's zero sits half a turn from
+    //      north), then wrap into [0, 360];
+    //   5. subtract that from the player heading and wrap into [-180, 180] -- the marker's
+    //      bearing relative to the direction the player faces;
+    //   6. that relative bearing drives BOTH outputs: the coarse on/off-route player-marker
+    //      state, and the clamped marker position.
+    //
+    // The wrap loops are the console's own compare-and-branch pairs, kept as loops. Both
+    // are written as ordered compares so an unordered operand exits, matching the PPC
+    // branch senses (bge/ble are taken when unordered).
+    void CompassComponent::ShowPositionOnCompass(Vector3 lv3Destination, f32 lfBearing)
+    {
+        const Vector4& lrv4CameraPosition = mpGuiCache->GetWorldCameraPosition();
+        const Vector3 lv3CameraPosition = { lrv4CameraPosition.x, lrv4CameraPosition.y,
+                                            lrv4CameraPosition.z, 0.0f };
+
+        const Vector3 lv3North         = Normalize(KV3_COMPASS_NORTH);
+        const Vector3 lv3ToDestination = Normalize(lv3Destination - lv3CameraPosition);
+
+        f32 lfDot = Dot(lv3North, lv3ToDestination);
+        if (lfDot < -1.0f)
+            lfDot = -1.0f;
+        if (lfDot > 1.0f)
+            lfDot = 1.0f;
+
+        f32 lfAngle = acosf(lfDot);
+        if (Dot(Cross(lv3North, lv3ToDestination), KV3_COMPASS_UP) < 0.0f)
+            lfAngle = KF_TWO_PI - lfAngle;
+
+        f32 lfDestinationBearing = lfAngle * KF_RADIANS_TO_DEGREES + KF_DEGREES_HALF_TURN;
+        while (lfDestinationBearing < 0.0f)
+            lfDestinationBearing += KF_DEGREES_PER_TURN;
+        while (lfDestinationBearing > KF_DEGREES_PER_TURN)
+            lfDestinationBearing -= KF_DEGREES_PER_TURN;
+
+        f32 lfRelativeBearing = lfBearing - lfDestinationBearing;
+        while (lfRelativeBearing < -KF_DEGREES_HALF_TURN)
+            lfRelativeBearing += KF_DEGREES_PER_TURN;
+        while (lfRelativeBearing > KF_DEGREES_HALF_TURN)
+            lfRelativeBearing -= KF_DEGREES_PER_TURN;
+
+        // Within 22.5 degrees of the destination the player is on course; past 157.5 the
+        // destination is behind them and they are off course; between the two the console
+        // reports the middle state. The 157.5 test is the console's own greater-than, so a
+        // NaN bearing lands in the middle state, not off course.
+        EPlayerRouteState lePlayerOnTrack;
+        if (fabsf(lfRelativeBearing) < KF_ON_COURSE_LIMIT)
+            lePlayerOnTrack = E_PLAYER_ROUTE_ON_COURSE;
+        else if (fabsf(lfRelativeBearing) > KF_OFF_COURSE_LIMIT)
+            lePlayerOnTrack = E_PLAYER_ROUTE_OFF_COURSE;
+        else
+            lePlayerOnTrack = E_PLAYER_ROUTE_WITHIN_NORMAL_BOUNDS;
+        UpdatePlayerMarkerState(lePlayerOnTrack);
+
+        f32 lfMarkerBearing = lfRelativeBearing;
+        if (lfMarkerBearing < KF_MARKER_BEARING_MIN)
+            lfMarkerBearing = KF_MARKER_BEARING_MIN;
+        if (lfMarkerBearing > KF_MARKER_BEARING_MAX)
+            lfMarkerBearing = KF_MARKER_BEARING_MAX;
+
+        SetMarkerPos(lfMarkerBearing, true);
+    }
+
+    // FormatDirectionLetters -- stamp the localised East/West letters onto one compass view sub-clip.
+    // Each sub-clip owns an East_mc and a West_mc child whose timelines carry a labelled
+    // frame per letter; the SKU language picks the label out of the two tables above. The
+    // component's own `this` is untouched -- the console body reads only its two arguments.
+    void CompassComponent::FormatDirectionLetters(CgsLanguage::ELanguage leLanguage,
+                                                  BrnFlapt::MovieClipRef* lpMovieClipRef)
+    {
+        BrnFlapt::MovieClipRef lEastMovie;
+        BrnFlapt::MovieClipRef lWestMovie;
+        lpMovieClipRef->FindChildMovieClip(&lEastMovie, "East_mc");
+        lpMovieClipRef->FindChildMovieClip(&lWestMovie, "West_mc");
+
+        lEastMovie.GotoAndPlayLabel(KAPC_FRAMES_EAST[leLanguage]);
+        lWestMovie.GotoAndPlayLabel(KAPC_FRAMES_WEST[leLanguage]);
+    }
+
     // @ 0x82411568 -- adopt the state channel through the base component, construct the
     // embedded player-marker animator against that same channel, then clear the cache
     // pointer and default the route state. lacName / lacParentName / liParentAptLayer are
@@ -119,6 +324,17 @@ namespace BrnGui
         (void)lacName;
         (void)lacParentName;
         (void)liParentAptLayer;
+
+        // [p0-compass] one-shot mount witness (existing convention). Retire once the
+        // compass has been seen drawing in a live event.
+        {
+            static bool s_bLoggedConstruct = false;
+            if (!s_bLoggedConstruct)
+            {
+                s_bLoggedConstruct = true;
+                *CgsDev::Log::gpDebugPrint << "[p0-compass] CompassComponent::Construct -- real TU\n";
+            }
+        }
 
         // BrnFlaptComponent::Construct: assert lpStateInterface (h:113), store it, SetInvalid the clip.
         BrnFlaptComponent::Construct(lpStateInterface);
@@ -133,6 +349,17 @@ namespace BrnGui
     // matches the requested visibility (immediate vs. animated).
     void CompassComponent::SetVisibility(bool lbVisible, bool lbImmediate)
     {
+        {
+            static bool s_bLoggedSetVisibility = false;
+            if (!s_bLoggedSetVisibility)
+            {
+                s_bLoggedSetVisibility = true;
+                *CgsDev::Log::gpDebugPrint << "[p0-compass] CompassComponent::SetVisibility visible="
+                                           << (lbVisible ? 1 : 0) << " immediate="
+                                           << (lbImmediate ? 1 : 0) << "\n";
+            }
+        }
+
         if (lbVisible)
             mAptRef.GotoAndPlayLabel(lbImmediate ? "visible" : "transin");
         else
@@ -246,5 +473,16 @@ namespace BrnGui
         FormatDirectionLetters(leLanguage, &lCompassViewBackLeft);
         FormatDirectionLetters(leLanguage, &lCompassViewBackCentre);
         FormatDirectionLetters(leLanguage, &lCompassViewBackRight);
+
+        {
+            static bool s_bLoggedPrepare = false;
+            if (!s_bLoggedPrepare)
+            {
+                s_bLoggedPrepare = true;
+                *CgsDev::Log::gpDebugPrint << "[p0-compass] CompassComponent::Prepare done language="
+                                           << static_cast<s32>(leLanguage) << " viewLen="
+                                           << mfSingleViewLength << "\n";
+            }
+        }
     }
 }

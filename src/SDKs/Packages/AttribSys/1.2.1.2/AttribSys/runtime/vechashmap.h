@@ -51,6 +51,8 @@
 namespace Attrib
 {
     class Class;
+    class ClassExportPolicy;
+    class CollectionExportPolicy;
 
     // TablePolicy::Free -- releases a bucket array previously handed out by the policy's
     // Allocate. IDA names the free-standing thunk Attrib::TableFreeFunc; body lives in its
@@ -76,6 +78,8 @@ namespace Attrib
 // Kept in the vendor vechashmap home so all VecHashMap instantiations share one header.
 class VecHashMap_Attrib_Class_TablePolicy_0_16
 {
+    friend class Attrib::ClassExportPolicy;
+    friend class Attrib::CollectionExportPolicy;
 public:
     // The rehash threshold (the 16u template argument): a worst-case probe run longer
     // than this triggers a grow-and-rehash.
@@ -161,6 +165,7 @@ namespace Attrib
     // mCollections). Multi-key; maps a 64-bit collection key -> Attrib::Collection*.
     class CollectionHashMap
     {
+        friend class CollectionExportPolicy;
     public:
         // The template worst-collision rebuild threshold (the 96u instantiation param).
         static const u16 KU_WORST_COLLISION_LIMIT = 96;
@@ -222,7 +227,7 @@ namespace Attrib
         bool InternalAdd(u64 luKey, Collection* lpPtr);
 
         // X360 0x82806A28 -- table-invariant maintenance after a remove vacates a slot.
-        u32 UpdateSearchLength(u32 luFreedSlot, u32 luHomeSlot);
+        u32 UpdateSearchLength(u32 luHomeSlot, u32 luFreedSlot);
 
         // Attrib::Class::TablePolicy::GrowRequest -- the next-larger bucket count
         // ((20 * n) / 16 + 3) & ~3, or 1 when n == 0. Declared here; bodied in

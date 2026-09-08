@@ -2240,7 +2240,7 @@ namespace BrnResource
 
         if (memcmp(lacName, "VEH_", 4) == 0)
         {
-            DeferredGameDataRequest("UnloadVehicle (0x82672DE0, id 40)", lpSlot);
+            ProcessUnloadVehicleRequest(lpResourceInput, lpEvent, 40, liIndex);
         }
         else if (memcmp(lacName, "WHE_", 4) == 0)
         {
@@ -2387,6 +2387,86 @@ namespace BrnResource
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
             2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // @ 0x82670990. The attrib vault must be acquired before it can be unregistered.
+    void GameDataModule::PostAcquireVehicleAttribsRequest(
+            CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 /*liEventId*/, s32 liSlotIndex)
+    {
+        char lacVehicleID[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacVehicleID);
+        char lacResourceName[128];
+        strncpy(lacResourceName, lacVehicleID + 4, 9);
+        CGS_ASSERT(strlen(lacResourceName) + 10 < 0x7F,
+                   "(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1");
+        strcat(lacResourceName, "_AttribSys");
+
+        CgsResource::Events::AcquireResourceRequest lRequest = {};
+        lRequest.mpUser = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.miPoolId = lpEvent->miPoolId;
+        lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
+            CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacResourceName)))));
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest), 4, sizeof(lRequest));
+    }
+
+    // @ 0x82672DE0. Unregister attribs first; physics shares the AT bundle.
+    // Sound owns two bundles, in exhaust/engine order, matching the load chain.
+    void GameDataModule::ProcessUnloadVehicleRequest(
+            CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex)
+    {
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+        char lacVehicleID[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacVehicleID);
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS
+                       || lpEvent->meType == E_ASSETSET_PHYSICS
+                       || lpEvent->meType == E_ASSETSET_SOUND
+                       || lpEvent->meType == E_ASSETSET_ATTRIBS,
+                   "Invalid asset type for vehicles\n");
+        if (lpEvent->meType == E_ASSETSET_ATTRIBS)
+        {
+            PostAcquireVehicleAttribsRequest(lpResourceInput, lpEvent, liEventId, liSlotIndex);
+            return;
+        }
+
+        const u32 luBundleAssetSet = lpEvent->meType == E_ASSETSET_PHYSICS
+            ? static_cast<u32>(E_ASSETSET_ATTRIBS) : static_cast<u32>(lpEvent->meType);
+        const VehicleListEntry* lpVehicle = 0;
+        if (lpEvent->meType == E_ASSETSET_SOUND)
+        {
+            CGS_ASSERT(strstr(lacVehicleID, "VEH_") != 0, "strstr( lacVehicleID, \"VEH_\" )");
+            lpVehicle = mVehicleList.GetVehicleData(CgsIDCompress(lacVehicleID + 4));
+            CGS_ASSERT(lpVehicle != 0, "lpVehicleListEntry");
+            CGS_ASSERT(muLoadedSoundBundlesCount == 2, "muLoadedSoundBundlesCount == 2");
+        }
+        const u32 luBundleCount = lpEvent->meType == E_ASSETSET_SOUND ? 2 : 1;
+        for (u32 luBundle = 0; luBundle < luBundleCount; ++luBundle)
+        {
+            char lacFileName[128];
+            if (lpEvent->meType == E_ASSETSET_SOUND)
+            {
+                char lacEngineName[KI_CGSID_STRING_LEN];
+                CgsIDConvertToString(luBundle == 0 ? lpVehicle->mExhaustName : lpVehicle->mEngineName,
+                                     lacEngineName);
+                CgsCore::SPrintf(lacFileName, 64, KPC_ENGINE_BUNDLE_FILE_FORMAT,
+                    CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacEngineName)));
+            }
+            else
+                CgsCore::SPrintf(lacFileName, 128, KPC_VEHICLE_FILE_FORMAT,
+                                 lacVehicleID, KAPC_ASSET_SET_SUFFIXES[luBundleAssetSet]);
+
+            CgsResource::Events::UnloadBundleRequest lRequest = {};
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = liSlotIndex;
+            lRequest.SetFileName(lacFileName);
+            lRequest.mbLiveUpdateReplace = false;
+            lRequest.miPoolId = lpEvent->miPoolId;
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 3, sizeof(lRequest));
+        }
     }
 
     // @ 0x8266EF00 -- service a LOAD traffic-vehicle request (dispatch id 28). The wheel
@@ -4005,19 +4085,29 @@ namespace BrnResource
     // X360 asserts the slot's asset set is ATTRIBS, rebuilds the vehicle bundle file name
     // ("Vehicles\%s_%s.bin" from the CgsIDUnCompress'd id + the off_82F2A6BC asset-set
     // suffix table) and publishes the type-3 UnloadBundle that completes the vehicle
-    // unload chain. [FLAG PC boot gate] the vehicle GameData path (ids 27/39/40/50) is
-    // not exercised on the PC boot-to-world path and its suffix table/unload chain is not
-    // committed -- log + free the slot (honest observable: the vehicle unload never
-    // completes).
+    // unload chain after the vault is no longer registered.
     void GameDataModule::ProcessUnregisterVehicleAttribsResponse(
-            CgsResource::ResourceIO::InputBuffer* /*lpResourceInput*/,
+            CgsResource::ResourceIO::InputBuffer* lpResourceInput,
             const CgsModule::Event* lpResponse)
     {
         const s32 liSlotIndex = *reinterpret_cast<const s32*>(lpResponse);
         GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)];
         CGS_ASSERT(lpSlot->mEvent.meType == E_ASSETSET_ATTRIBS,
                    "leBundleAssetSet == E_ASSETSET_ATTRIBS");   // X360 line 3861
-        DeferredGameDataRequest(
-            "vehicle attrib unload continuation (0x8266EAA0) -- vehicle path deferred", lpSlot);
+        char lacVehicleID[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpSlot->mEvent.mId, lacVehicleID);
+        char lacFileName[128];
+        CgsCore::SPrintf(lacFileName, 128, KPC_VEHICLE_FILE_FORMAT,
+                         lacVehicleID, KAPC_ASSET_SET_SUFFIXES[lpSlot->mEvent.meType]);
+        CgsResource::Events::UnloadBundleRequest lRequest = {};
+        lRequest.mpUser = &mReceiverQueue;
+        lRequest.miEventId = static_cast<s16>(liSlotIndex);
+        lRequest.SetFileName(lacFileName);
+        lRequest.mbLiveUpdateReplace = false;
+        lRequest.miPoolId = lpSlot->mEvent.miPoolId;
+        lpResourceInput->LockForWrite();
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest), 3, sizeof(lRequest));
+        lpResourceInput->UnlockForWrite();
     }
 }

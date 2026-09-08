@@ -108,17 +108,9 @@ namespace BrnGui
         LogUnreconstructedState("ChallengeSelector", "Construct");
     }
 
-    // ---- PaybackComponent (real TU: BrnPaybackComponent.cpp, X360 Construct @0x8242E3A8).
-    //      Measured residual: ONE symbol, and it is the component's OWN private leaf --
-    //          BrnGui::PaybackComponent::SendAwardTriggerableEvent()   (declared h:85, DWARF
-    //          :491, called from BrnPaybackComponent.cpp:240; NO body anywhere in src/).
-    //      So this one is not an accessor gap: it needs a real reconstruction of the
-    //      award-triggerable gui-event post before its TU can mount.
-    void PaybackComponent::Construct(const char* /*lpacName*/, CgsGui::StateInterface* /*lpStateInterface*/,
-                                     const char* /*lpacParentName*/)
-    {
-        LogUnreconstructedState("PaybackComponent", "Construct");
-    }
+    // ---- PaybackComponent::Construct: SCAFFOLD RETIRED 2026-09-08 (p0 wave) -- real TU
+    //      BrnPaybackComponent.cpp is MOUNTED. Its one measured residual,
+    //      PaybackComponent::SendAwardTriggerableEvent, is now bodied in that TU.
 
     // ---- the RACE_MAIN mount's measured residual gates (2026-08-27 trial links) -------
     // Each symbol below is referenced by the mounted BrnRaceMainHudState TU set but its
@@ -128,47 +120,18 @@ namespace BrnGui
     // behind component-enable flags that are false. One-shot logs make any future live hit
     // attributable.
     //
-    // Compass (real TU BrnCompassComponent.cpp, all three bodied there; its own residual =
-    // ShowPositionOnCompass + FormatDirectionLetters + ChallengeListEntryAction::
-    // GetNumLocations). DELETE-WHEN BrnCompassComponent.cpp mounts.
-    void CompassComponent::Construct(const char* /*lpacName*/, CgsGui::StateInterface* /*lpStateInterface*/,
-                                     const char* /*lpacParentName*/, s32 /*liParentAptLayerIndex*/)
-    {
-        LogUnreconstructedState("CompassComponent", "Construct");
-    }
-    void CompassComponent::Prepare(const char* /*lpacName*/, const BrnFlapt::FileRef& /*lrFile*/)
-    {
-        LogUnreconstructedState("CompassComponent", "Prepare");
-    }
-    void CompassComponent::SetVisibility(bool /*lbVisible*/, bool /*lbImmediate*/)
-    {
-        LogUnreconstructedState("CompassComponent", "SetVisibility");
-    }
+    // ---- CompassComponent: SCAFFOLD RETIRED 2026-09-08 (p0 wave) -- real TU
+    //      BrnCompassComponent.cpp is MOUNTED and carries Construct / Prepare /
+    //      SetVisibility, plus the two leaves its residual named (ShowPositionOnCompass,
+    //      FormatDirectionLetters). The three log-and-return gates are deleted -- LNK2005
+    //      otherwise.
 
-    // PlayerPositionTable (real TU BrnPlayerPositionTable.cpp, SetCache @0x82473458 +
-    // SetupGameMode @0x8243E6F8 bodied there; its residual = SingleComponent::SetCache,
-    // SetTitleText @0x82437AD0, SetSkillsText @0x82413B30, CgsNetwork::UsernameCompare,
-    // BurnoutSkillsManager::GetCurrentSkill). DELETE-WHEN the table pair mounts.
-    void PlayerPositionTableComponent::SetCache(GuiCache* /*lpCache*/)
-    {
-        LogUnreconstructedState("PlayerPositionTableComponent", "SetCache");
-    }
-    void PlayerPositionTableComponent::SetupGameMode()
-    {
-        LogUnreconstructedState("PlayerPositionTableComponent", "SetupGameMode");
-    }
+    // PlayerPositionTableComponent::SetCache / SetupGameMode: SCAFFOLD RETIRED 2026-09-08
+    // (p0 wave) -- the real TU BrnPlayerPositionTable.cpp is MOUNTED and carries both
+    // bodies; its five-symbol residual closed in the same change.
 
-    // Payback (real TU BrnPaybackComponent.cpp, unmounted -- see the Construct scaffold
-    // above; these two join it). DELETE-WHEN BrnPaybackComponent.cpp mounts.
-    void PaybackComponent::Initialize(GuiCache* /*lpCache*/)
-    {
-        LogUnreconstructedState("PaybackComponent", "Initialize");
-    }
-    void PaybackComponent::ShowAvailableInstantly(BrnNetwork::EPaybackType /*lePaybackType*/,
-                                                  EActiveRaceCarIndex /*leCarIndex*/)
-    {
-        LogUnreconstructedState("PaybackComponent", "ShowAvailableInstantly");
-    }
+    // PaybackComponent::Initialize / ShowAvailableInstantly: SCAFFOLD RETIRED 2026-09-08
+    // (p0 wave) -- real TU BrnPaybackComponent.cpp is MOUNTED and carries both bodies.
 
     // ---- RoadRuleShotComponent: SCAFFOLD RETIRED 2026-08-27 (stunt-race UI wave). The
     //      real TU BrnRoadRuleShotComponent.cpp was fully bodied all along and is MOUNTED;

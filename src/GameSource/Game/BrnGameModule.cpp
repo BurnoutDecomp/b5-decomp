@@ -3586,40 +3586,13 @@ namespace BrnGame
                 static_cast<s32>(sizeof(laRecord)));
         }
 
-        // ---- GUI event 413 (the UNLOCKED-LIVERY list, 0x48 bytes) ---------------------------
-        // +0x00 CgsContainers::Array<s64,8> ids   +0x40 its count
-        //
-        // ⭐ WITHOUT THIS THE CS_LIVERY SCREEN'S CAROUSEL IS EMPTY, and empty is not benign:
-        // BrnGui::CarSelectLivery::HandleUnlockedLiveryResponseEvent is the ONLY writer of
-        // muNumUnlockedLiveryCars, so with no producer SetupComponents calls
-        // SetupTextSelection(0, ...) and every later GetHighlighted() runs on an empty
-        // SelectableGroup -- which has no lower bound on miHighlightedIndex and has already
-        // been observed returning the NON-NULL garbage 0x0000FF00, defeating the console's own
-        // `!= 0` assert and access-violating downstream.
-        //
-        // FLAG STAND-IN, same shape and same reason as the 406 / 412 records above: the
-        // console's producer answers a GUI request out of the player's PROFILE livery
-        // ownership, which this build's (empty) profile car list cannot serve. The one car the
-        // game state actually has is published as its own single unlocked livery -- which is
-        // also what the Junkyard starter car genuinely is. Replace with the real
-        // GameStateModule producer when the profile livery path lands. ⛔ Do NOT widen this
-        // into a "every livery is unlocked" list; that would invent a rule the console
-        // does not have.
-        {
-            u8 laRecord[0x48];
-            std::memset(laRecord, 0, sizeof(laRecord));
-            reinterpret_cast<CgsID*>(&laRecord[0])[0] = lPlayerCarId;
-            *reinterpret_cast<s32*>(&laRecord[0x40]) = 1;   // one unlocked livery
-            mpGuiInputBuffer->GetGuiEvents()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(laRecord), 413,
-                static_cast<s32>(sizeof(laRecord)));
-        }
+        // GUI 413 now answers the real case-82 livery request through game action 183.
 
         if (CgsDev::Log::gpDebugPrint != 0)
         {
             *CgsDev::Log::gpDebugPrint
-                << "[CarSelectBridge] published GUI 406 + 412 + 413 for car id "
-                << static_cast<u32>(lPlayerCarId) << " (1 selectable car, 1 unlocked livery)\n";
+                << "[CarSelectBridge] published GUI 406 + 412 for car id "
+                << static_cast<u32>(lPlayerCarId) << " (1 selectable car)\n";
         }
     }
 

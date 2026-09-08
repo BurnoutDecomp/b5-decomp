@@ -54,6 +54,37 @@ private:
     u8            muNumLandmarks;                         // 0x70 (DWARF :105)
 };
 
+// ---- [p0 map-event wave, 2026-09-08] ADDITIVE: three bodies, NO layout change -----------------
+// The three route readers have no standalone symbol -- they exist only inlined, so the owning
+// header is their only possible home. Their first reconstructed callers are
+// BrnGui::CrashNavMapEvent::{SetTracker, SetEventData}, which read them straight off the race:
+//   * GetNumLandmarks       -- the count byte at +0x70 (the loop trip count / posted count)
+//   * GetLandmarkIndexArray -- the u16 array at +0x30 (the cursor the fill loop strides)
+//   * GetAiSectionIndexArray-- the u16 array at +0x50 (the second copy's source)
+// GROW this header when a Race TU lands; do not fork.
+inline u8
+Race::GetNumLandmarks() const
+{
+    return muNumLandmarks;
+}
+
+inline const LandmarkIndex*
+Race::GetLandmarkIndexArray() const
+{
+    return maLandmarkIndices;
+}
+
+inline const u16*
+Race::GetAiSectionIndexArray() const
+{
+    return mauAiSectionIndices;
+}
+
+// The console's own stride for this record: GuiCache::GetPresetRace indexes its preset-race
+// array as `120 * (index + 170) + cache`, and every producer/consumer memcpy of a whole race
+// is a 120-byte one. Pin the host size to it.
+static_assert(sizeof(Race) == 120, "BrnProgression::Race is the 120-byte race record");
+
 }
 
 #endif // BRN_RACE_H

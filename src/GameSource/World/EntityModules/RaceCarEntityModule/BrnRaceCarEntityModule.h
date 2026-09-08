@@ -1097,6 +1097,9 @@ private:
 
     // X360 +0x18344 (99140). DWARF BrnRaceCarEntityModule.h:370.
     bool mbIsInGameMode;
+    // ARTIST +99144 / +99185; DWARF :374 / :400. Streaming completion edge.
+    bool mbWaitingForStreaming;
+    bool mbSendStreamingComplete;
 
     // X360 +0x186C9 (100041) / +0x186D0 (100048). DWARF BrnRaceCarEntityModule.h:444/:447
     // (mbInCarSelectScreen, mbInCarModScreen, meCarSelectResetType(4),

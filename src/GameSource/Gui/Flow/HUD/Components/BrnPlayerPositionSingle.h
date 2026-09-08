@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (the header-inline SetCache tripwire)
 #include "GameSource/BurnoutConstants.h"                                       // EActiveRaceCarIndex
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                          // GameStateModuleIO::EPlayerTeam
 #include "GameSource/GameState/BrnCgsPlayerName.h"                              // CgsNetwork::PlayerName (mPlayerName, 16 bytes)
@@ -128,7 +129,21 @@ namespace BrnGui
         // (declaration-only here).
         void Update(struct PlayerPositionSingleData* lpData);
         void SetInvisible();
-        void SetCache(GuiCache* lpCache);
+
+        // ADDITIVE GROW (p0 wave, 2026-09-08). Declared alongside the rest of the row
+        // surface, but the original compiler inlined it at every call site, so it has no
+        // standalone symbol and the body lands here -- header-inline, which is where the
+        // original had it: the tripwire it fires cites this header (line 316), i.e. the
+        // assert text lived in THIS file, not in the sibling .cpp.
+        // Recovered from the nine-row instance the sibling table's SetCache emits: the
+        // "lpCache != NULL" tripwire, then one store into mpCache (+0xC4 within the row)
+        // per row. One named store, one non-gating assert; nothing else.
+        void SetCache(GuiCache* lpCache)
+        {
+            CGS_ASSERT(lpCache != 0, "lpCache != NULL");   // non-gating
+            mpCache = lpCache;
+        }
+
         f32 GetValue() const { return mfValue; }   // trivial accessor (header-inline)
 
         // ADDITIVE GROW ([stuntrace F2] wave, 2026-08-27). DWARF-declared PUBLIC

@@ -121,7 +121,8 @@ public:
                    GameStateModule* lpGameStateModule,
                    BrnProgression::ProgressionManager* lpProgressionManager);   // X360 0x823564D0
     bool IsInJunkyard() const;
-    bool IsWaitingForStreaming() const;
+    // Inlined in ProcessStreamingCompleteEvent @0x82390200: manager +0x58.
+    bool IsWaitingForStreaming() const { return mbWaitingForStreaming; }
     void Prepare(const BrnResource::VehicleList* lpVehicleList,
                  const BrnResource::WheelList* lpWheelList);
     void Update(GameStateModuleIO::GameActionQueue* lpActionQueue,

@@ -1038,7 +1038,7 @@ struct alignas(16) CarSelectionChangedAction
     Vector3 mPosition;          // +0x10  SpawnLocation::mPosition
     Vector3 mDirection;         // +0x20  SpawnLocation::mDirection
     bool    mbJunkyardPosIsLeft;// +0x30  == (SpawnLocation::GetType() == E_TYPE_CAR_SELECT_LEFT)
-    bool    mbReserved0x31;     // +0x31  written 0
+    bool    mbReserved0x31;     // +0x31  1 for a model change, 0 on entry
     u8      maReserved0x32[14]; // +0x32..+0x3F  tail of the 64-byte AddEvent image
 };
 static_assert(sizeof(CarSelectionChangedAction) == 64,

@@ -14,6 +14,10 @@
 // own home; included here so this header's existing consumers keep resolving the NAME (there is
 // exactly one type, no ODR fork). See the deleted shell's tombstone below.
 #include "GameSource/Gui/Events/BrnGuiEventStatsResponse.h"
+// [p0 map-event wave] the custom-event trio below carries a whole BrnProgression::Race by
+// value (ids 172 / 174) and the race's landmark list (id 167), so both need COMPLETE types.
+#include "SharedClasses/Progression/BrnRace.h"        // BrnProgression::Race
+#include "GameSource/GameState/BrnGameStateTypes.h"   // BrnGameState::LandmarkIndex
 
 // ============================================================================
 // b5-decomp/src/GameSource/Gui/BrnGuiDemangledEventTypes.h
@@ -599,7 +603,56 @@ namespace BrnGui
     struct GuiEventCamStatus { u8 maData[4]; s32 GetEventType() const { return 570; } };  // id 570 size 4
     struct alignas(8) GuiEventChallengedEventDataRequest { u8 maData[8]; s32 GetEventType() const { return 331; } };  // id 331 size 8 [8-aligned: OGE off16]
     struct GuiEventControllerSettings { u8 maData[3]; s32 GetEventType() const { return 472; } };  // id 472 size 3
-    struct alignas(8) GuiEventCustomeEventCreate : public CgsGui::GuiEvent<172> { u8 maPayload[108]; };  // id 172 size 120 [8-aligned: OGE off16]
+    // =============================================================================
+    // [p0 map-event wave, 2026-09-08] THE CUSTOM-EVENT TRIO, RECOVERED.
+    // All three are the same wire shape -- ONE whole BrnProgression::Race, nothing else --
+    // and none of them carries a GuiEvent<N> header. Measured, not inferred:
+    //   * The console's OutputGuiEvent<GuiEventCustomeEventCreate> instantiation copies
+    //     exactly 120 bytes out of its argument and publishes { size 120, id 172, offset
+    //     16 } + that copy at 136 bytes on channel 40. Its caller,
+    //     CrashNavMapEvent::Update, fills the argument with a straight 120-byte copy of
+    //     mCreatedRace -- so the argument IS the race, and a 12-byte event header in
+    //     front of it could not fit the 120-byte size literal.
+    //   * The delete twin is inlined in the same body: a 120-byte copy of the preset race
+    //     into the record's payload under { size 120, id 174, offset 16 }, 136 bytes,
+    //     channel 40. The recovered outline names the local `GuiEventCustomeEventDelete`.
+    //   * The accept-start record is inlined in CrashNavMapEvent::SetEventData:
+    //     { size 80, id 167, offset 16 } + 80 bytes, 96 total, channel 40. Its four
+    //     fields are copied out of a preset race, and its two asserts name it
+    //     "lAcceptEventStart.muNumLandmarks".
+    // The catalogue's old shell for 172 (`GuiEvent<172> + u8 maPayload[108]`) had the right
+    // SIZE and the wrong SHAPE; reshaped in place rather than forked, because
+    // CgsGuiStateInterface_OutputGuiEvent_Inst.cpp already instantiates the template on it.
+    // =============================================================================
+    struct alignas(8) GuiEventCustomeEventCreate                        // id 172 size 120
+    {
+        BrnProgression::Race mRace;   // +0x00 -- the authored race, name and all
+        s32 GetEventType() const { return 172; }
+    };
+
+    struct alignas(8) GuiEventCustomeEventDelete                        // id 174 size 120
+    {
+        BrnProgression::Race mRace;   // +0x00 -- the preset race being retired
+        s32 GetEventType() const { return 174; }
+    };
+
+    // id 167. The route the player just accepted, flattened out of the preset race: the
+    // race id, the ordered landmark list, the matching AI-section list and the live count.
+    struct alignas(8) GuiEventAcceptEventStart                          // id 167 size 80
+    {
+        CgsID                       mId;                    // +0x00  from BaseRace::mId
+        BrnGameState::LandmarkIndex maLandmarkIndices[16];   // +0x08  Race::maLandmarkIndices
+        u16                         mauAiSectionIndices[16]; // +0x28  Race::mauAiSectionIndices
+        u8                          muNumLandmarks;         // +0x48  Race::muNumLandmarks
+        u8                          maPad_49[7];            // +0x49..+0x4F (the 80-byte size)
+
+        s32 GetEventType() const { return 167; }
+    };
+
+    static_assert(sizeof(GuiEventCustomeEventCreate) == 120, "id 172 publishes 120 bytes");
+    static_assert(sizeof(GuiEventCustomeEventDelete) == 120, "id 174 publishes 120 bytes");
+    static_assert(sizeof(GuiEventAcceptEventStart)   == 80,  "id 167 publishes 80 bytes");
+
     struct GuiEventKeyboardResponse { u8 maData[4]; s32 GetEventType() const { return 142; } };  // id 142 size 4
     // id 272. The payload word is the sign-in flavour the producer asks for (0 = full
     // sign-in, 2 = no-title); the producer-side enum name is unrecovered.

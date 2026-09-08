@@ -33,14 +33,20 @@
 //   X360 sizeof(CrashNavMapEvent) == 25104 (BrnScreenFlow::Prepare's state-size roster).
 //   The host layout is NAME-BASED; the offsets above are documentation.
 //
-// ⚠️⚠️ THIS TU IS NOT MOUNTABLE YET -- see the .cpp banner. Six of the class's methods
-// are BLOCKED on collaborator types that have no home in the tree, so the vtable cannot
-// be completed. Until they land, this header must NOT be included by any TU in
-// tools/build/build_game_exe.bat, and the placeholder
-// `struct CrashNavMapEvent : public CgsGui::State` in
-// States/BrnScreenStatesLinkStubs.h must STAY. Two definitions of
-// BrnGui::CrashNavMapEvent in one linked image would be an ODR fork; keeping this TU
-// unmounted keeps the fork dormant (only this file's own .cpp sees this declaration).
+// ⭐⭐ MOUNTED 2026-09-08 (p0 wave). The methods the previous pass reported BLOCKED are all
+// landed; every collaborator it named turned out to be homed or recoverable (the .cpp
+// banner costs each one). The `struct CrashNavMapEvent : public CgsGui::State` placeholder
+// in States/BrnScreenStatesLinkStubs.h and its three-body escape hatch in the matching .cpp
+// are DELETED in the same change -- this is now the only definition of the class.
+//
+// VTABLE (14 slots -- read straight out of the console image's own vtable data, so the
+// shape below is measured rather than inferred): +0x00 OnEnter, +0x04 OnLeave, +0x08
+// Update, +0x0C State::PreUpdate, +0x10 State::PostUpdate, +0x18 Construct, +0x20
+// GetResourcesToLoad, +0x24 HandleCrashNavInputPressed (NOT overridden here -- it is the
+// empty base slot, which is why this screen has no controller map of its own), +0x2C
+// CrashNavMap::AppendExpectedAptComponents, +0x30 CrashNavMap::SetupComponents, +0x34
+// UpdatePanelData. The gaps hold the empty function the linker folds every trivial
+// method onto.
 // ===================================================================================
 
 #include "types.hpp"
@@ -58,14 +64,10 @@ namespace BrnGui
     // "name your custom event" dialog.
     //
     // ⭐ CANONICAL HOME (DWARF), declared here 2026-08-29.
-    // ⚠️ CORRECTED SAME DAY (FIX1): CgsSaveLoad.cpp does NOT include this header, and must
-    // not until this TU is mounted. CgsSaveLoad.cpp is mounted and owns the KeyboardClosed
-    // @0x824C1820 body; including this header from there drags in the real
-    // `CrashNavMapEvent : CrashNavMap` alongside the mounted BrnScreenStatesLinkStubs.h
-    // placeholder `CrashNavMapEvent : CgsGui::State` -- a LIVE ODR fork. CgsSaveLoad.cpp
-    // therefore keeps a minimal, layout-identical file-local copy of THIS struct with a
-    // DELETE-WHEN note pointing at the mount. Two declarations of the listener, one of
-    // CrashNavMapEvent -- that is the deliberate trade until the mount.
+    // ⭐ DE-FORKED 2026-09-08 (p0 wave, at mount time exactly as planned): CgsSaveLoad.cpp's
+    // minimal file-local copy of this struct is gone and that TU now includes this header,
+    // so there is again ONE declaration of the listener. Its KeyboardClosed body stays
+    // where it is.
     // The member offsets below are the ones CgsSaveLoad.cpp measured
     // (macKeyboardString @+0x04, mbKeyboardClosed @+0x24, mbNewData @+0x25), and they
     // are independently confirmed by FillString @0x824B7568, which reads +0x24/+0x25 and
@@ -116,7 +118,7 @@ namespace BrnGui
         virtual void Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm);   // @0x824B7510 (cpp:59)
         virtual void OnEnter();                                           // @0x824CC6C0 (cpp:76)
         virtual void OnLeave();                                           // @0x824CC790 (cpp:232)
-        virtual void Update();                                            // @0x824DDB90 (cpp:118) [BLOCKED]
+        virtual void Update();                                            // cpp:118
 
         // DWARF BrnCrashNavMapEvent.h:103 -- header-inline, same shape and the same
         // X360 evidence gap as CrashNavMapMain's (see that header's long FLAG). SHORT
@@ -140,17 +142,24 @@ namespace BrnGui
         }
 
     private:
-        // DWARF BrnCrashNavMapEvent.h (cpp:664) -- vtable slot the console calls as
-        // `(*(*this + 52))(this)` from Update's head @0x824DDBE0. [BLOCKED]
+        // Reference declaration (cpp:664) -- the vtable +0x34 slot Update dispatches
+        // through. The body is EMPTY on the console; see the .cpp for the vtable read
+        // that proves it.
         virtual void UpdatePanelData();
 
         // ---- private helpers (DWARF order) -------------------------------------------
-        void HandleControllerInput(const CgsModule::Event* lpEvent);   // DWARF cpp:257 [BLOCKED]
-        void HandleSelect();                                           // @0x824D8F68 (cpp:443) [BLOCKED]
-        void SetTracker();                                             // @0x824BFA88 (cpp:526) [BLOCKED]
-        void UpdateEventData();                                        // DWARF cpp:590 [BLOCKED]
-        void ClearTracker();                                           // @0x824BCD38 (cpp:607)
-        void SetEventData();                                           // @0x824CC830 (cpp:627) [BLOCKED]
+        // HandleControllerInput and UpdateEventData are DECLARATION-ONLY: the reference
+        // outline declares both, but the console image has no body for either and no
+        // reconstructed body calls them -- this screen never overrides the
+        // HandleCrashNavInputPressed vtable slot, so the input handler has no caller in
+        // the shipped build. Declaring without defining is correct for a member nothing
+        // calls; it is not a link hole.
+        void HandleControllerInput(const CgsModule::Event* lpEvent);   // cpp:257 (no body in the image)
+        void HandleSelect();                                           // cpp:443
+        void SetTracker();                                             // cpp:526
+        void UpdateEventData();                                        // cpp:590 (no body in the image)
+        void ClearTracker();                                           // cpp:607
+        void SetEventData();                                           // cpp:627
 
         // ---- statics (DWARF cpp:26 / cpp:41) -----------------------------------------
         // X360 dword_8206632C; OnEnter @0x824CC6EC and OnLeave @0x824CC7A0 both pass it

@@ -85,6 +85,13 @@ namespace Native
         f32                    mfDragResistance;     // +0x44
     };
 
+    // The five debris parameter presets, indexed by EDebrisArrayID. DEFINED in
+    // BrnDebrisRenderer.cpp (the console's own home for it -- both Construct asserts cite
+    // that file). Declared here so BrnDebrisArray.cpp and its owner share one declaration
+    // instead of two hand-matched externs. `extern` is load-bearing: a namespace-scope
+    // `const` has internal linkage in C++ without it.
+    extern const BrnDebrisArrayParams _gaDebrisArrayParams[eDebrisArray_Max];
+
     class BrnDebrisArray
     {
     public:
@@ -124,8 +131,8 @@ namespace Native
     private:
         // BrnParticle::Native::BrnDebrisArray::GetNewDebris (BrnDebrisRenderer.cpp:250). Claim the
         // next free debris slot from the tail bucket, threading in a fresh bucket from the pool
-        // when the current one fills up. Reconstructed in a later pass; declared here so
-        // SpawnDebris can dispatch to it.
+        // when the array is still under its particle budget and recycling the oldest bucket
+        // once it is not. Bodied in BrnDebrisArray.cpp.
         BrnDebris* GetNewDebris(f32 lfBirthTime);
 
         const BrnDebrisArrayParams*                            mpParams;        // this[0] @ +0x00

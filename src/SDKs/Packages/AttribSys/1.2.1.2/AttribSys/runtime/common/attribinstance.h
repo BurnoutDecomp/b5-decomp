@@ -143,6 +143,7 @@ namespace Attrib
         // Tear the collection down: remove every attribute this collection owns and free
         // every inherited/laid-out attribute's backing data, asserting the count balances.
         void  Clear();                                                      // @0x8280AE60
+        void  Clean();                                                      // @0x82809CC0
         // Free one attribute's backing data: per-element type-handler release for arrays
         // then the whole-block free, or the single-value handler release + block free,
         // selected by the storage flags and the schema TypeDesc.

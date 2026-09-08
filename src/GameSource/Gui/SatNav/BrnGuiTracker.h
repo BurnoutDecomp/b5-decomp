@@ -180,6 +180,12 @@ namespace BrnGui
         // last-record lookups).
         s32 GetNumTracked() const { return miTrackerCount; }
 
+        // The head flag, by name. ADDITIVE GROW (p0 map-event wave), same header-inline
+        // precedent as GetNumTracked above: CrashNavMapEvent::Update reads this +0x00 byte
+        // through the cache's tracker pointer and treats a live tracked set as its select
+        // signal, so the byte needs a face rather than a raw read at that call site.
+        bool IsTrackingActive() const { return mbTrackingActive; }
+
         // @ 0x82488ED0 - true when a route of >= 2 points is loaded. Returns false when
         // the "has route" flag (mbHasRoute) is clear; otherwise asserts the route-info
         // array was Construct/Clear'd and returns (count >= 2).

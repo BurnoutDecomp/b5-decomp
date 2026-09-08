@@ -106,6 +106,18 @@ BaseRace::GetId() const
     return mId;
 }
 
+// ---- [p0 map-event wave, 2026-09-08] ADDITIVE: one body, NO layout change ---------------------
+// SetFlag has no standalone symbol either -- it exists only inlined. The first reconstructed
+// caller is BrnGui::CrashNavMapEvent::HandleSelect, whose E_CREATE_EVENT_NEW_PANEL arm emits a
+// read-modify-write OR of the flag bit into mxFlags (+0x28) over the newly constructed race,
+// with the bit set being 1 == E_FLAG_CUSTOM. GROW this header when a BaseRace TU lands; do not
+// fork.
+inline void
+BaseRace::SetFlag(Flag leFlag)
+{
+    mxFlags = static_cast<u8>(mxFlags | static_cast<u8>(leFlag));
+}
+
 }
 
 #endif // BRN_BASE_RACE_H

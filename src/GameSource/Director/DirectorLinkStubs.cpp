@@ -583,11 +583,9 @@ namespace BrnDirector
 
     void DebugComponent::OnActivate() {}
 
-    // -- SharedPlaylists::Construct. Home = Utils/BrnICEMoviePlayer.cpp (bodied there), which
-    //    is not in the link because ICEMoviePlayer pulls the whole ICE take/movie chain.
-    //    The container Constructs one by value; nothing reads it on this path.
-    //    DELETE-WHEN: BrnICEMoviePlayer.cpp joins the link.
-    void SharedPlaylists::Construct() {}
+    // ---- SharedPlaylists::Construct: SCAFFOLD RETIRED 2026-09-08 (p0 wave) -- real TU
+    //      GameSource/Director/Utils/BrnICEMoviePlayer_wP0_01.cpp is MOUNTED (the playlist
+    //      half split out of BrnICEMoviePlayer.cpp) and really seeds the five playlists.
 
     // -- The two scene-query post-office free functions BrnSceneQueryInterface.h declares.
     //    OutEventVolumeTestDeepest mints the 16-bit query id for a staged volume test; 0 is

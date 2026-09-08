@@ -17,8 +17,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiKeyboard.h"     // CgsGui::GuiKeyboardListener, CgsUtf16
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavSettings.h"   // BrnGui::CrashNavProductCodeKeyboardListener (its real home)
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
-// ⛔ DO NOT include GameSource/Gui/Flow/Screen/States/BrnCrashNavMapEvent.h here. See the
-// FIX1 note at the CrashNavMapEventKeyboardListener declaration below.
+#include "GameSource/Gui/Flow/Screen/States/BrnCrashNavMapEvent.h"   // BrnGui::CrashNavMapEventKeyboardListener (its real home)
 
 namespace CgsGui
 {
@@ -99,48 +98,14 @@ namespace CgsGui
 namespace BrnGui
 {
     // =================================================================================
-    // ⭐⭐ FIX1 (2026-08-29): FILE-LOCAL AGAIN, ON PURPOSE. ⚠️ DELETE-WHEN NOTE BELOW.
-    //
-    // Earlier this wave this declaration was replaced by an #include of the listener's
-    // DWARF home, BrnCrashNavMapEvent.h. That was a LIVE ODR FORK, not a de-fork: this
-    // TU is MOUNTED (tools/build/build_game_exe.bat), the header drags in the real
-    // ~25KB `BrnGui::CrashNavMapEvent : public CrashNavMap`, and the mounted
-    // States/BrnScreenStatesLinkStubs.h declares a 56-byte
-    // `BrnGui::CrashNavMapEvent : public CgsGui::State` placeholder for the same name --
-    // two incompatible definitions in one linked image. The Event TU itself stays
-    // UNMOUNTED (six of its methods are still blocked), so the header cannot yet be the
-    // single home for anything a mounted TU sees.
-    //
-    // This TU needs the type for exactly one thing: the KeyboardClosed @0x824C1820 body
-    // below, which touches mbKeyboardClosed (+0x24), mbNewData (+0x25) and
-    // macKeyboardString (+0x04). Nothing here needs Construct/FillString/HasJustClosed or
-    // the owning screen state, so the minimal local shape is declared instead -- the same
-    // treatment CrashNavProductCodeKeyboardListener already gets a few lines down. The
-    // layout is IDENTICAL to the header's (same DWARF rows h:64/:65/:66), so the two
-    // declarations agree byte-for-byte; only the surplus members differ.
-    //
-    // ⚠️ DELETE WHEN: BrnCrashNavMapEvent.cpp is added to tools/build/build_game_exe.bat
-    // and the CrashNavMapEvent placeholder is removed from BrnScreenStatesLinkStubs.{h,cpp}.
-    // At that moment -- and NOT before -- delete this struct, restore the
-    // `#include "GameSource/Gui/Flow/Screen/States/BrnCrashNavMapEvent.h"` at the top, and
-    // the header becomes the single definition for real. Mount and de-fork together, or
-    // neither.
-    //
-    // ---- BrnCrashNavMapEvent.h:42 / h:64..:66 (DWARF) ----
-    // vptr @0; macKeyboardString[32] @+0x04, mbKeyboardClosed @+0x24, mbNewData @+0x25.
-    // Independently confirmed by FillString @0x824B7568, which reads +0x24/+0x25 and
-    // returns `this + 4`.
+    // ⭐⭐ DE-FORKED 2026-09-08 (p0 wave), at mount time exactly as the note here asked.
+    // BrnCrashNavMapEvent.cpp is now mounted and the CrashNavMapEvent placeholder is gone
+    // from BrnScreenStatesLinkStubs.{h,cpp}, so the header above is the SINGLE definition
+    // of both BrnGui::CrashNavMapEvent and this listener again. The file-local copy of
+    // `struct CrashNavMapEventKeyboardListener` that stood here is deleted; only its
+    // KeyboardClosed body stays, because the console folds that body into THIS TU (it
+    // calls CgsGui::ConvertWideCharToAsciiSafe).
     // =================================================================================
-    struct CrashNavMapEventKeyboardListener : public CgsGui::GuiKeyboardListener
-    {
-        // @ 0x824C1820
-        virtual void KeyboardClosed(const CgsGui::CgsUtf16* lpResultText);
-
-        char macKeyboardString[32];   // +0x04 .. +0x23
-        bool mbKeyboardClosed;        // +0x24
-        bool mbNewData;               // +0x25
-    };
-
     // @ 0x824C1820 -- mark the dialog closed; if a result was returned, flag new data and
     // copy it (up to 32 chars) into macKeyboardString. With no result, just clear mbNewData.
     void CrashNavMapEventKeyboardListener::KeyboardClosed(const CgsGui::CgsUtf16* lpResultText)

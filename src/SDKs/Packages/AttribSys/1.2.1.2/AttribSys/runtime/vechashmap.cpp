@@ -572,15 +572,16 @@ bool CollectionHashMap::InternalAdd(u64 luKey, Collection* lpPtr)
     return true;
 }
 
-// @ 0x82806A28 -- UpdateSearchLength(freedSlot, homeSlot): table-invariant maintenance
+// @ 0x82806A28 -- UpdateSearchLength(homeSlot, freedSlot): table-invariant maintenance
 // after a remove vacates a slot. Re-find the probe chain rooted at homeSlot, relocate its
 // last live member into the freed slot, recompute that chain's max-search count, and --
 // when the map was at its worst-collision bound -- rescan the whole table to recompute the
 // high-water mark. Returns the relocated node's new index, or (u32)-1 when the chain could
 // not be rebalanced.
-u32 CollectionHashMap::UpdateSearchLength(u32 luFreedSlot, u32 luHomeSlot)
+u32 CollectionHashMap::UpdateSearchLength(u32 luHomeSlot, u32 luFreedSlot)
 {
-    u32 luProbe = luFreedSlot;
+    // r4 initializes the probe; r5 is the invalid slot (ARTIST 0x82806A34-38).
+    u32 luProbe = luHomeSlot;
 
     if (luFreedSlot == luHomeSlot)
     {
@@ -621,7 +622,7 @@ u32 CollectionHashMap::UpdateSearchLength(u32 luFreedSlot, u32 luHomeSlot)
     Node& lrLast = mTable[luLast];
     if (lrLast.IsValid())
     {
-        CGS_ASSERT(luProbe == (lrLast.Key() % luTableSize), "Incorrect max search length found in table.");
+        CGS_ASSERT(luProbe == (static_cast<u32>(lrLast.Key()) % luTableSize), "Incorrect max search length found in table.");
     }
 
     CGS_ASSERT(!mTable[luFreedSlot].IsValid(), "Free node is not invalid!");
@@ -642,7 +643,7 @@ u32 CollectionHashMap::UpdateSearchLength(u32 luFreedSlot, u32 luHomeSlot)
     {
         Node& lrNode = mTable[(luStep + luProbe) % luTableSize];
         const u64 luKey = lrNode.Key();
-        if (luKey % luTableSize == luProbe)
+        if (static_cast<u32>(luKey) % luTableSize == luProbe)
             luNewMax = luStep;
     }
 

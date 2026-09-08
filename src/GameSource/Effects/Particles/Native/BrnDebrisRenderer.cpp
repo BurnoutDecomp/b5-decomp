@@ -1,4 +1,5 @@
 #include "GameSource/Effects/Particles/Native/BrnDebrisRenderer.h"
+#include "GameSource/Effects/Particles/Native/BrnDebrisArray.h"     // BrnDebrisArrayParams table
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h" // renderengine::BlendState*
@@ -47,6 +48,65 @@ namespace BrnParticle
 {
 namespace Native
 {
+    // =====================================================================================
+    // _gaDebrisArrayParams -- the five debris parameter presets, indexed by EDebrisArrayID.
+    // This file is the table's home (both BrnDebrisArray::Construct asserts cite it), and
+    // BrnDebrisArray::Construct binds mpParams to one of these entries.
+    //
+    // RECOVERED FROM THE CONSOLE IMAGE, not authored. The scalar half is plain initialised
+    // data read straight out of the image; the two vector members (mColour, mvBounciness)
+    // are SILENT ZEROES there -- Vector4/Vector3 are non-trivial, so the compiler emitted a
+    // CRT dynamic initialiser that writes them at startup. That initialiser was located and
+    // disassembled, and it is where the colours and the bounce vectors below come from:
+    //
+    //   * the shared bounce base is one namespace-scope const Vector3 (0.7, 0.6, 0.7). The
+    //     initialiser stores it UNSCALED into entry 0 and stores base * s into entries 1..4,
+    //     with s = 0.9 / 0.8 / 0.5 / 0.8 -- four broadcast-then-multiply pairs against a
+    //     scalar. Written below as that multiply, not as its product, because the multiply
+    //     is what the original source said.
+    //   * every colour is white except the Dark preset, which is (0.5, 0.5, 0.5, 1.0).
+    //
+    // Corroboration that the offsets are right, independent of the initialiser: the entry
+    // stride is 80 bytes (the value the array index is scaled by), the two vector stores land
+    // at entry +0x20 and entry +0x30, and the particle counts below are exactly what
+    // GetNewDebris compares its 96-per-bucket budget against.
+    // =====================================================================================
+    namespace
+    {
+        // The bounce-damping base every preset scales. Per-axis: the debris keeps 70% of its
+        // horizontal speed and 60% of its vertical speed across a bounce.
+        constexpr rw::math::vpu::Vector3 KV_DEBRIS_BOUNCINESS = { 0.7f, 0.6f, 0.7f, 0.0f };
+
+        constexpr rw::math::vpu::Vector3 ScaledBounciness(f32 lfScale)
+        {
+            return rw::math::vpu::Vector3{ KV_DEBRIS_BOUNCINESS.x * lfScale,
+                                           KV_DEBRIS_BOUNCINESS.y * lfScale,
+                                           KV_DEBRIS_BOUNCINESS.z * lfScale,
+                                           KV_DEBRIS_BOUNCINESS.w * lfScale };
+        }
+
+        constexpr rw::math::vpu::Vector4 KV_DEBRIS_WHITE = { 1.0f, 1.0f, 1.0f, 1.0f };
+    }
+
+    extern const BrnDebrisArrayParams _gaDebrisArrayParams[eDebrisArray_Max] =
+    {
+        // eDebrisArray_Coloured
+        { "lowres_debris.rf3",     400, 10.0f,  0.2f,  1.0f, 0.2f,
+          KV_DEBRIS_WHITE,                  KV_DEBRIS_BOUNCINESS,        0.1f,   0.8f },
+        // eDebrisArray_Shiny
+        { "lowres_debris.rf3",     300, 10.0f,  0.2f,  0.7f, 0.3f,
+          KV_DEBRIS_WHITE,                  ScaledBounciness( 0.9f ),    0.1f,   0.8f },
+        // eDebrisArray_Dark
+        { "lowres_debris.rf3",     400,  1.0f,  0.01f, 0.5f, 0.2f,
+          { 0.5f, 0.5f, 0.5f, 1.0f },       ScaledBounciness( 0.8f ),    0.1f,   0.8f },
+        // eDebrisArray_HighDetail
+        { "highres_debris_02.rf3", 100, 10.0f,  0.2f,  1.0f, 0.2f,
+          KV_DEBRIS_WHITE,                  ScaledBounciness( 0.5f ),    0.1f,   0.8f },
+        // eDebrisArray_Glass
+        { "Glass_debris.rf3",      400, 50.0f, 50.0f,  1.0f, 0.6f,
+          KV_DEBRIS_WHITE,                  ScaledBounciness( 0.8f ),    0.001f, 0.8f },
+    };
+
     void BrnDebrisRenderer::Construct(rw::IResourceAllocator* lpAllocator,
                                       BrnGraphics::Im3dTexPlusLighting* lpRenderer)
     {
