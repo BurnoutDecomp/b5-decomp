@@ -3675,13 +3675,7 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
     else
     {
         ActiveRaceCar* lpPlayerSlot = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
-        // [FLAG] the console's `mbPlayerWrecked = lpPlayerSlot->IsWrecked()` is OMITTED:
-        // ActiveRaceCar::IsWrecked @0x822BFDA0 is its own un-reconstructed ledger function
-        // (it walks the paired RaceCar's type, mPhysicsState's crash-cause bitfield at +484
-        // bit 14, the crash flags at +488/+1100 and the slot's crash timer at +1252).
-        // Publishing a fabricated answer would be worse than leaving the field at what
-        // Clear() put there, which is the same `false` the -1 arm publishes. Nothing on the
-        // reconstructed path reads mbPlayerWrecked. DELETE-WHEN IsWrecked lands.
+        lpActiveCarInterface->SetPlayerWrecked( lpPlayerSlot->IsWrecked() );
 
         if( lpPlayerSlot->IsAttached() )
         {
@@ -5600,6 +5594,7 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     if( !lbSimPaused )
     {
         UpdateHidingEvents( lpOutput->GetGameEventQueue() );
+        StorePlayerRoutePortalPositions(lpInput);
     }
 
     // ⭐ THE PAINT PUBLISH, at the console's own position. VERIFIED from the asm of
@@ -5815,7 +5810,7 @@ void RaceCarEntityModule::PrePhysicsUpdate(
         // mPlayerVehicleControls + 32 / + 36 == mfAcceleration / mfBraking.
         UpdateActiveCars( mfTimeStep,
                           mPlayerVehicleControls.mfAcceleration,
-                          mPlayerVehicleControls.mfBraking );
+                          mPlayerVehicleControls.mfBraking, lpOutput->GetGameEventQueue() );
 
         // Breaker @0x823072FC..0x82307318: tailgate state is updated first,
         // then the writable game-event queue is passed to UpdateBoost. The PC
@@ -5874,7 +5869,8 @@ void RaceCarEntityModule::PrePhysicsUpdate(
 //    (ActiveRaceCar::SendAddedRemovedNetworkCarForCollisionEvents @0x822BF840) is itself
 //    dropped by Update's slice, so running it here would drain a queue nothing fills.
 // ============================================================================
-void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfAcceleration, f32 lfBraking )
+void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfAcceleration, f32 lfBraking,
+                                          RaceCarEntityModuleIO::GameEventQueue* lpGameEvents )
 {
     for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
     {
@@ -5885,7 +5881,8 @@ void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfAcceleration, 
             // mbIsInOnlineGameMode / mbInCarSelectScreen are the console's own
             // `lbzx r10, r31, 0x18345` / `lbzx r8, r31, 0x186C9` -- both read from `this`.
             lrCar.Update( lfTimeStep, lfAcceleration, lfBraking,
-                          mbIsInOnlineGameMode, mbInCarSelectScreen );
+                          mbIsInOnlineGameMode, mbInCarSelectScreen, static_cast<s32>(meGameModeType),
+                          mPlayersCurrentRouteNodePosition, mPlayersNextRouteNodePosition, lpGameEvents );
         }
     }
 }
@@ -6574,6 +6571,15 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 //   alone; bodying it would require homing those members. Left declaration-only to
 //   avoid fabricating member names. (Construct/Destruct are additionally [VMX].)
 // ============================================================================
+
+// X360 0x822BD698.
+void RaceCarEntityModule::StorePlayerRoutePortalPositions(
+        const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput)
+{
+    CGS_ASSERT(lpInput != nullptr, "lpInput != NULL");
+    mPlayersCurrentRouteNodePosition = lpInput->GetAIRaceCarInterface()->mCurrentNodePosition;
+    mPlayersNextRouteNodePosition = lpInput->GetAIRaceCarInterface()->mNextNodePosition;
+}
 
 // X360 0x822BD7B8. Publish the player and every car participating in this mode.
 void RaceCarEntityModule::TransmitCarsInRaceToQueryManager(

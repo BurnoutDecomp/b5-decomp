@@ -28,6 +28,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h"         // CgsGui::GuiModule::AddGuiEvent
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // StrStream (streamed assert messages)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"              // BrnGui::GuiEventBoostInfo (event 206)
+#include "GameSource/Gui/Events/BrnGuiCrashEvents.h"
 #include "GameSource/World/BrnWorldModuleIO.h"               // BrnWorldIO::UpdateOutputBuffer
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // the active-car interface + BoostOutputInfo
 #include "GameSource/Gui/BrnGuiRaceCarInfoEvent.h"           // GuiRaceCarInfoEvent (207, the mRaceCarInfo SoA feed)
@@ -181,6 +182,14 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
                     << (lbCrashState ? " (START_CRASHED)" : " (LEAVE_CRASHED)") << "\n";
             }
         }
+    }
+
+    // ARTIST 0x823E58CC..0x823E5918: repeat the drivable notification during the crash.
+    if (lpActiveInterface->IsPlayerCarCrashing() && lpActiveInterface->GetCanDriveAwayFromCrash())
+    {
+        BrnGui::GuiPlayerDrivableFromCrash lEvent{};
+        lpGuiInputBuffer->GetGuiEvents()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lEvent), lEvent.GetEventType(), sizeof(lEvent));
     }
 
     // ---- THE ENGINE-STATE CHANGE POST (GUI event 379 -> GuiCache +0x4B20) -------------
@@ -439,9 +448,13 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
         }
     }
 
-    // FLAG deferred (console order, between the HUD post and the satnav post): the
-    // GuiEventPlayerWrecked edge (off the module's player-wrecked byte) -- its consumer
-    // is not on this build's reconstructed path yet.
+    // ARTIST 0x823E5C74..0x823E5C8C: the analyzer accumulates the duration of this signal.
+    if (lpActiveInterface->IsPlayerWrecked())
+    {
+        BrnGui::GuiEventPlayerWrecked lEvent{};
+        lpGuiInputBuffer->GetGuiEvents()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lEvent), lEvent.GetEventType(), sizeof(lEvent));
+    }
 
     // ---- THE SATNAV ICON POST (GUI event 199 -> GuiCache case 199) -------------------
     // [hud H3b tracking slice 2026-08-25] the console's per-frame icon publish

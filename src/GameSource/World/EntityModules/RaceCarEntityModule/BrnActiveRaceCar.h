@@ -89,6 +89,7 @@ namespace CgsSceneManager { namespace SceneManagerIO { struct InSceneUpdateInter
 
 namespace BrnWorld
 {
+namespace RaceCarEntityModuleIO { struct GameEventQueue; }
 class RaceCar;
 
 // DWARF BrnActiveRaceCar.h:58/:60. The 96 is the width of RenderParams' body-part
@@ -356,7 +357,11 @@ public:
                 f32 lfAcceleration,
                 f32 lfBraking,
                 bool lbIsInOnlineGameMode,
-                bool lbInCarSelectScreen);
+                bool lbInCarSelectScreen,
+                s32 liGameModeType,
+                const Vector2& lrCurrentRouteNode,
+                const Vector2& lrNextRouteNode,
+                RaceCarEntityModuleIO::GameEventQueue* lpGameEvents);
 
     // X360 0x822B8610: for an AI car ramp a braking hysteresis counter
     // (miBrakeChangeCounter, +1 toward +KI_MAX_BRAKE_COUNTER when braking / -2 toward

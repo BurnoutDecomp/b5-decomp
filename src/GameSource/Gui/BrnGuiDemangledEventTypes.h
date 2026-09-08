@@ -1,4 +1,5 @@
 #pragma once
+#include "GameSource/Gui/Events/BrnGuiCrashEvents.h"
 #include "GameSource/Gui/Events/BrnGuiEventRacePositionInfo.h"
 
 #include <cstring>
@@ -242,7 +243,6 @@ namespace BrnGui
     static_assert(sizeof(GuiEventOnlineReceiveFriendInfo) == 672, "friend batch payload");
     struct GuiEventOnlineTimeout { u8 maData[4]; s32 GetEventType() const { return 108; } };  // id 108 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventPlayerReachedRoadRageTarget { u8 maData[1]; s32 GetEventType() const { return 168; } };  // id 168 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiEventPlayerWrecked { u8 maData[1]; s32 GetEventType() const { return 548; } };  // id 548 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventPreRaceMessages : public CgsGui::GuiEvent<159> { u8 maPayload[1732]; };  // id 159 size 1744 (12B GuiEvent header + opaque payload)
     struct GuiEventPrepareForInvite { u8 maData[1]; s32 GetEventType() const { return 128; } };  // id 128 size 1 (raw; size not GuiEvent-shaped)
     // [A9 mode-type arm 2026-08-27] GuiEventPrepareForModeStart (id 93) has been RECOVERED and
@@ -475,7 +475,6 @@ namespace BrnGui
     struct GuiPFXStopBackgroundHookEvent : public CgsGui::GuiEvent<499> { u8 maPayload[28]; };  // id 499 size 40 (12B GuiEvent header + opaque payload)
     struct GuiPaybackReceivedEvent { u8 maData[4]; s32 GetEventType() const { return 182; } };  // id 182 size 4 (raw; size not GuiEvent-shaped)
     struct GuiPlayerCarColourResponse { u8 maData[8]; s32 GetEventType() const { return 414; } };  // id 414 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiPlayerDrivableFromCrash { u8 maData[1]; s32 GetEventType() const { return 378; } };  // id 378 size 1 (raw; size not GuiEvent-shaped)
     struct GuiPlayerEliminatedEvent { u8 maData[4]; s32 GetEventType() const { return 450; } };  // id 450 size 4 (raw; size not GuiEvent-shaped)
     // GuiPlayerEngineEvent (id 379 size 4) MOVED OUT 2026-08-25 (hud reveal gate) to
     // GameSource/Gui/BrnGuiEventTypeDefs.h, per this header's own migration rule at the top:

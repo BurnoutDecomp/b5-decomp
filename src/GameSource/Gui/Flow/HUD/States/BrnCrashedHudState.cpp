@@ -1,102 +1,24 @@
-// ===================================================================================
-// BrnGui::CrashedHudState  -- the "CRASHED" HUD flow state (impact-time slice)
-//   class:BrnGui::CrashedHudState
-//
-//   SetExpectedComponent   @ 0x82473780
-//   EnterSteerWreckScreen  @ 0x82473868
-//   EnterImpactTimeScreen  @ 0x824738C0
-//   OnEnter                @ 0x82475DD0   (PARTIAL -- see the OnEnter banner)
-//   OnLeave                @ 0x8247D308   (PARTIAL -- see the OnLeave banner)
-//   Update                 @ 0x82481B88   (PARTIAL -- see the Update banner)
-//   UpdatePermenant        @ 0x824812A0   (PARTIAL -- every arm enumerated below)
-// Reconstructed store-for-store from the X360 asm.
-//
-// ===================================================================================
-// ⭐⭐ WHY THE END_CRASH ARM IS HERE AND NOT IN BrnFBurnMainHudState
-// ===================================================================================
-// The tree carried a standing note (GameBridgeWorldToGui.cpp, BrnVehicleManager.cpp) saying the
-// GUI-377 producer posts LEAVE_CRASHED but "there is NO END_CRASH arm anywhere in the tree" and
-// that writing one would be "fabricating a console behaviour". Half right, and the half that was
-// wrong sent the search to the wrong file.
-//
-// FBurnMainHudState::UpdatePermenant @0x824810F0 really does have only the 0|2 -> "START_CRASH"
-// arm: the string "END_CRASH" does not occur in that function, and adding the mirror there WOULD
-// have been an invented arm. But the console's END_CRASH arm exists -- it is 0x1B0 bytes further
-// on, in THIS state, at 0x824812A0:
-//
-//     if ( mEvent == 377 && (*lpEvent == 1 || *lpEvent == 3) )
-//         CgsGui::State::SendStateEvent(this, sEndCrashEvent);      // sEndCrashEvent = "END_CRASH"
-//
-// which is the coherent design: FBurnMain sends START_CRASH and is LEFT; CRASHED is entered and
-// sends END_CRASH to leave ITSELF. A state leaves itself; its predecessor does not leave it for it.
-// (PausedHudState carries both arms because it can be entered from either side -- that is why the
-// pause wave found the pair there and read it as the whole story.)
-//
-// ⭐ And 377 really is routed here: maiEventToObserve below is read out of the image, and 377 is
-// entry [5] of 21. What was missing was never the arm -- it was the state. Before this wave
-// CrashedHudState declared no virtuals at all, so it never registered, never updated and never
-// sent anything: a hollow shell the FSM could enter and never leave. That, not a missing arm in
-// FBurnMain, is why the HUD did not come back after a crash.
-//
-// ===================================================================================
-// ⭐⭐⭐ THE HUD BLACKOUT IS THIS STATE, AND IT IS NOW ON FILM (showtime-score wave, 2026-08-30)
-// ===================================================================================
-// A long-standing unattributed report -- "the HUD goes black for ~18-21 s and three waves could
-// not reproduce it" -- has a named cause and a frame pair. scratch/flow_run/sthud_score2:
-//
-//   log 7261  [crash-hud] posting GUI 377 ... state=0 (START_CRASHED)
-//   log 7262  [crash-hud] FBurnMainHudState received GUI 377, payload=0
-//   log 7263  [crash-hud] SendStateEvent("START_CRASH")
-//   log 7265  [crash-hud] CrashedHudState::OnEnter -- registered 21 events (377 included)
-//
-//   frame bb_006990  FBURN_MAIN: boost bar bottom-left, sat-nav minimap + "RIVER CITY" +
-//                    "MILES DRIVEN : 0.0km" bottom-right.
-//   frame bb_010020  CRASHED:    NOTHING. No boost bar, no sat-nav, no district panel, no
-//                    odometer. Only the build-date/fps/memory debug overlay, which is not the
-//                    game HUD.
-//
-// The mechanism is the FSM, not a renderer: BRNFBFSM's Transition_2FBURN_MAIN_4CRASHED runs
-// FBurnMainHudState::OnLeave (which tears the freeburn HUD down) and then enters THIS state,
-// which constructs nothing and drives nothing. The blackout lasts until 377's FALLING edge
-// (payload 1) reaches UpdatePermenant below and sends END_CRASH -- i.e. exactly as long as the
-// car stays in its crash, which is the tens-of-seconds order the original report described.
-//
-// ⛔ AND IT IS *NOT* THE SHOWTIME PATH, which is what earlier attempts were looking at. The
-// GUI-377 producer suppresses itself for game modes 2/16 (GameBridgeWorldToGui.cpp's showtime
-// term, console-faithful), so a showtime session NEVER enters CRASHED -- measured: zero
-// [crash-hud] lines anywhere in the showtime segment of two runs, while the same runs print all
-// four lines above the moment showtime ENDS and the still-crashing car posts 377 in free burn.
-// The showtime HUD itself draws fine throughout (the Distance / Cars Crashed panels are on
-// screen in scratch/flow_run/wm_meter2 frames bb_002970..bb_004410).
-//
-// ⇒ THE FIX IS THE REST OF THIS FILE, and OnEnter alone will not do it: the eleven components
-// OnEnter builds are only ever DRIVEN by the five phase bodies (UpdateGetCache -> UpdateLoading
-// -> UpdateWFInit -> UpdateSetupState -> UpdateRunning) that Update's switch dispatches, and
-// UpdateSetupState is the one that pushes the apt view states and posts the enable events. A
-// wave that lands OnEnter without the phase machine will construct twelve components that
-// nothing ever shows.
-// ===================================================================================
+// Crash HUD lifecycle and offline presentation, recovered from ARTIST.
+// Online mugshot and road-rule-shot dispatch remain un-reconstructed.
 #include "GameSource/Gui/Flow/HUD/States/BrnCrashedHudState.h"
-
-#include "GameShared/GameClasses/Containers/CgsHash.h"    // CgsContainers::CgsHash::CalculateHash
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // Register/UnRegisterForEvents
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // the state in-queue
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"               // CgsDev::Log (witnesses)
-
-#include <cstring>   // std::strlen
-
-namespace BrnGui
-{
-namespace
-{
+#include "GameShared/GameClasses/Containers/CgsHash.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"
+#include "GameShared/GameClasses/Gui/CgsGuiShared.h"
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameSource/Gui/BrnGuiCache.h"
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"
+#include "GameSource/Gui/Flapt/BrnFlaptManager.h"
+#include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"
+#include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"
+#include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponentUtils.h"
+#include <cstring>
+namespace BrnGui {
+namespace {
     typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;
 }
-
-// @0x8205B070 -- the 21 event ids OnEnter registers. The IDA export set has no data symbols, so
-// this address was decoded from OnEnter's own instruction bytes (`lis r11, ..@ha` @0x82475E6C =
-// 0x3D608206, `addi r4, r11, ..@l` @0x82475E78 = 0x388BB070 -> 0x8205B070) and the words were read
-// out of the image, not guessed. The `li r5, 0x15` between them is the count, 21.
 const s32 CrashedHudState::maiEventToObserve[21] =
 {
       5,   6,   7,  21,  64, 377, 154, 156, 148, 320, 291,
@@ -151,129 +73,242 @@ const u32 CrashedHudState::muNumResourcesToLoad = 4;
     // @ 0x82473868 -- switch the impact-time apt page to "SteerWreck" and show the LTHUMB glyph.
     void CrashedHudState::EnterSteerWreckScreen()
     {
-        ImpactTimePageChanger().AddOutputAptViewState("apt_Transition", "SteerWreck", false); // this+0x4B8
-        ImpactTimeButton().SetButton(ButtonIconComponent::E_PADBUTTON_LTHUMB,
+        mImpactTimePageChanger.AddOutputAptViewState("apt_Transition", "SteerWreck", false); // this+0x4B8
+        mImpactTimeButton.SetButton(ButtonIconComponent::E_PADBUTTON_LTHUMB,
                                      ButtonIconComponent::E_PADBUTTON_STATE_ACTIVE);          // this+0x544, (13, 0)
     }
 
     // @ 0x824738C0 -- switch the impact-time apt page to "ImpactTime" and show the SELECT glyph.
     void CrashedHudState::EnterImpactTimeScreen()
     {
-        ImpactTimePageChanger().AddOutputAptViewState("apt_Transition", "ImpactTime", false); // this+0x4B8
-        ImpactTimeButton().SetButton(ButtonIconComponent::E_PADBUTTON_SELECT,
+        mImpactTimePageChanger.AddOutputAptViewState("apt_Transition", "ImpactTime", false); // this+0x4B8
+        mImpactTimeButton.SetButton(ButtonIconComponent::E_PADBUTTON_SELECT,
                                      ButtonIconComponent::E_PADBUTTON_STATE_ACTIVE);          // this+0x544, (4, 0)
     }
 
-    // ===============================================================================
-    //  OnEnter  @ 0x82475DD0   -- ⚠️ PARTIAL, AND SAYING SO IS THE POINT
-    // ===============================================================================
-    // The console's OnEnter is ~110 lines: it resets the phase word, grabs the FLAPT file, REGISTERS
-    // FOR THE 21 EVENTS, ends the replay static-layout message, resolves "CrashHUD_mc" and resets its
-    // timeline, then constructs+prepares eleven sub-components (InGameMessagesComponent,
-    // ImpactTimePageChanger, ImpactTimeButton, ShowTimeButton1/2, ShowTimeAnimator, MudAnimator,
-    // MugShotComponent, the Gamertag text field, RoadRuleShotComponent, SkipPromptAnimator,
-    // SkipPromptButton) and sets the six enable bytes.
-    //
-    // ⛔ ONLY THE RegisterForEvents LEG IS REPRODUCED HERE. Every other leg needs a component TU or a
-    // member this header still carries as an opaque guest span (+0x5C..+0x4B8), and fabricating
-    // storage for them is exactly what this header's PHASE NOTE forbids. The omission is stated, not
-    // hidden: this state still draws nothing. What it now does is OBSERVE and LEAVE.
-    //
-    // ⭐ The registration is the leg that had to come first, and the pause wave paid for that lesson
-    // already: its first cut omitted CrashNavMapMain's RegisterForEvents and shipped a perfectly
-    // faithful exit arm as DEAD CODE, because a state that observes nothing receives nothing. Here
-    // the state did not even update, so it could not observe either.
-    void CrashedHudState::OnEnter()
-    {
-        mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
+// ARTIST 0x82475DD0.
+void CrashedHudState::OnEnter()
+{
+    meInternalState = E_CRASHINTERNALSTATE_GETCACHE;
+    mbInImpactTime = false;
+    mpCache = nullptr;
+    auto* lpAccess = mpStateInterface->GetAccessPointers();
+    CGS_ASSERT(lpAccess != nullptr, "mpAccessPointers != NULL");
+    auto* lpFlapt = lpAccess->GetFlaptManager();
+    CGS_ASSERT(lpFlapt != nullptr, "NULL != mpFlaptManager");
+    BrnFlapt::FileRef lFile;
+    lpFlapt->GetFile(&lFile, 0);
+    mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
+    // FLAG deferred: replay GuiModuleSerialiser::GetStaticLayout()->EndMessage();
+    // GuiAccessPointers does not yet carry the replay serialiser (shared HUD limitation).
+    BrnFlapt::MovieClipRef lRoot;
+    lFile.GetRootMovieClip(&lRoot);
+    lRoot.FindChildMovieClip(&mCrashHudAnimator, "CrashHUD_mc");
+    CGS_ASSERT(mCrashHudAnimator.IsValid(), "mpMovieClipInst");
+    mCrashHudAnimator.mpMovieClipInst->ResetTimeline();
+    mHudMessageComponent.Construct("crashHudMessages_mc", mpStateInterface, nullptr);
+    GuiCache* lpCache = lpAccess->GetGuiCache();
+    CGS_ASSERT(lpCache != nullptr, "mpGuiCache");
+    mHudMessageComponent.SetInGameMessagesQueue(lpCache->GetInGameMessagesQueue());
+    mHudMessageComponent.Prepare("crashHudMessages_mc", lFile);
+    mImpactTimePageChanger.Construct("ImpactOption_mc", mpStateInterface, nullptr);
+    mImpactTimeButton.Construct("ImpactButton_mc", mpStateInterface, nullptr);
+    mShowTimeButton1.Construct("ShowTimeButton1_mc", mpStateInterface, nullptr);
+    mShowTimeButton2.Construct("ShowTimeButton2_mc", mpStateInterface, nullptr);
+    mShowTimeAnimator.Construct("ShowHideComp_mc", mpStateInterface, nullptr);
+    mMudAnimator.Construct("DirtAnimator_mc", mpStateInterface, nullptr);
+    mMugShotComponent.Construct("CrashMugShot_mc", mpStateInterface, nullptr);
+    mMugShotComponent.Prepare("CrashMugShot_mc", lFile, nullptr);
+    mMugshotOpponentGamertag = {};
+    AttachToTextFieldComponent(&mMugshotOpponentGamertag, "Gamertag_txt", "Gamertag_mc", "CrashMugShot_mc", lFile);
+    // FLAG deferred: online RoadRuleShotComponent name/data and mugshot event handlers.
+    mSkipPromptAnimator.Construct("skipAnim_cpt", mpStateInterface, nullptr);
+    mSkipPromptButton.Construct("skipButton", mpStateInterface, nullptr);
+    mSkipPromptAnimator.Prepare("skipAnim_cpt", lFile, nullptr);
+    mSkipPromptButton.Prepare("skipButton", lFile);
+    mbSkipPrompt = false;
+    mbCrashIsSkippable = false;
+    mbHudMessages = true;
+    mbImpactTimer = true;
+    mbShowTime = true;
+    mbBoostBar = true;
+}
 
-        if (CgsDev::Log::gpDebugPrint != 0)
+// ARTIST 0x8247D308.
+void CrashedHudState::OnLeave()
+{
+    CGS_ASSERT(mCrashHudAnimator.IsValid(), "mpMovieClipInst");
+    mCrashHudAnimator.mpMovieClipInst->ResetTimeline();
+    mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
+    mpStateInterface->PlayAptMovie("", 1);
+    if (mpCache)
+    {
+        InGameMessagesQueue* lpMessages = mpCache->GetInGameMessagesQueue();
+        lpMessages->muCurrentEventEndTime = 0;
+        for (s32 liSlot = 0; liSlot < 2; ++liSlot)
+            if (lpMessages->maeMessageState[liSlot] == E_MESSAGESTATE_WAITING ||
+                lpMessages->maeMessageState[liSlot] == E_MESSAGESTATE_TRANSIN)
+                lpMessages->maeMessageState[liSlot] = E_MESSAGESTATE_NOMESSAGE;
+    }
+}
+
+// ARTIST 0x82481B88: advance through ready phases within the same update.
+void CrashedHudState::Update()
+{
+    mbInImpactTime = false;
+    switch (meInternalState)
+    {
+    case E_CRASHINTERNALSTATE_GETCACHE:
+        UpdateGetCache();
+    case E_CRASHINTERNALSTATE_LOADING:
+        meInternalState = E_CRASHINTERNALSTATE_LOADING;
+        if (!UpdateLoading()) break;
+    case E_CRASHINTERNALSTATE_WF_INIT:
+        meInternalState = E_CRASHINTERNALSTATE_WF_INIT;
+        if (!UpdateWFInit()) break;
+    case E_CRASHINTERNALSTATE_SETUPSTATE:
+        meInternalState = E_CRASHINTERNALSTATE_SETUPSTATE;
+        if (!UpdateSetupState()) break;
+    case E_CRASHINTERNALSTATE_RUNNING:
+        meInternalState = E_CRASHINTERNALSTATE_RUNNING;
+        UpdateRunning();
+        break;
+    case E_CRASHINTERNALSTATE_IDLE:
+        meInternalState = E_CRASHINTERNALSTATE_IDLE;
+        break;
+    default:
+        CGS_ASSERT(false, "Should never call update in the following state");
+        break;
+    }
+    UpdatePermenant();
+    reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue)->Clear();
+}
+
+// ARTIST 0x82476698.
+void CrashedHudState::UpdateGetCache()
+{
+    auto* lpQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+    const CgsModule::Event* lpEvent = nullptr;
+    s32 liSize = 0;
+    CGS_ASSERT(mpCache == nullptr, "mpCache == NULL");
+    for (s32 liId = lpQueue->GetFirstEvent(&lpEvent, &liSize); lpEvent;
+         liId = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+    {
+        if (liId == 64)
         {
-            // [crash-hud] witness. NOT X360. Proves the FSM really enters CRASHED and that the
-            // 377 route is armed -- the two things no static read could settle.
-            static bool sbLoggedEnter = false;
-            if (!sbLoggedEnter)
-            {
-                sbLoggedEnter = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[crash-hud] CrashedHudState::OnEnter -- registered "
-                    << miNumEventsObserved << " events (377 included)\n";
-            }
+            GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
+            CGS_ASSERT(lpCache != nullptr, "Invalid cache in CrashedHudState::Update");
+            mpCache = lpCache;
+            break;
         }
     }
+    CGS_ASSERT(mpCache != nullptr, "mpCache != NULL");
+}
 
-    // ===============================================================================
-    //  OnLeave  @ 0x8247D308   -- ⚠️ PARTIAL (the mirror of the above)
-    // ===============================================================================
-    // Console: ResetTimeline(mpMovieClipInst) -> UnRegisterForEvents(table, 21) -> post an id-18
-    // record {8, 18, 12} + {1, &unk_820046A7} on channel 41 (size 20) -> clear three in-game-message
-    // queue bytes off the GuiCache. Only the UnRegisterForEvents leg is reproduced, for the same
-    // reason as OnEnter: the rest reaches members this phase carries as opaque storage.
-    void CrashedHudState::OnLeave()
+// ARTIST 0x8247CE98.
+bool CrashedHudState::UpdateLoading()
+{
+    if (!mpCache) return false;
+    if (mbHudMessages)
     {
-        mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
+        mHudMessageComponent.SetController(mpCache->GetHudMessageController());
+        mHudMessageComponent.SetDirector(mpCache->GetHudMessageDirector());
+        mHudMessageComponent.SetGameMode(static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(mpCache->GetGameMode()));
     }
+    if (!mpCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad)) return false;
+    mpStateInterface->PlayAptMovie("B5CrashedHud", 1);
+    SetExpectedAptComponentList();
+    return true;
+}
 
-    // ===============================================================================
-    //  Update  @ 0x82481B88   -- ⚠️ PARTIAL: the phase machine is deferred, the tail is not
-    // ===============================================================================
-    // Console: `mbInImpactTime = 0`, then a six-way switch on meInternalState that falls THROUGH its
-    // phases (GETCACHE -> LOADING -> WF_INIT -> SETUPSTATE -> RUNNING, each advancing on its body's
-    // return; IDLE is a no-op; anything else asserts "Should never call update in the following
-    // state" at BrnCrashedHudState.cpp:337), and then ALWAYS the two-line tail:
-    //     UpdatePermenant();  mpInGuiEventQueue->Clear();
-    //
-    // ⛔ The five phase bodies (UpdateGetCache @0x82476698, UpdateLoading @0x8247CE98, UpdateWFInit
-    // @0x824753A8, UpdateSetupState @0x8247CF60, UpdateRunning @0x824767D8) are NOT reconstructed --
-    // they drive the eleven components OnEnter does not construct here, so calling them would be
-    // calling into storage that does not exist. They are deferred as a set, and meInternalState is
-    // left where the pool's value-initialisation put it (0 == GETCACHE). Nothing in this file reads
-    // it, so no arm silently depends on the deferral.
-    //
-    // ⭐ The tail is the console's, verbatim in shape, and it is unconditional there -- UpdatePermenant
-    // runs in EVERY phase including GETCACHE. So reproducing the tail alone is not a shortcut past the
-    // phase machine: it is the one part of Update whose behaviour does not depend on it.
-    void CrashedHudState::Update()
+// ARTIST 0x824753A8 / 0x82475428.
+bool CrashedHudState::UpdateWFInit()
+{
+    CGS_ASSERT(mpCache != nullptr, "mpCache");
+    return mpCache->AreAllAptComponentsInitialised(E_GUIFLOW_HUD);
+}
+void CrashedHudState::SetExpectedAptComponentList()
+{
+    mpCache->ClearExpectedAptComponentList(E_GUIFLOW_HUD);
+    std::memset(mauExpectedComponentIds, 0, sizeof(mauExpectedComponentIds));
+    muNumExpectedComponents = 0;
+    SetExpectedComponent(mImpactTimePageChanger.GetName());
+    SetExpectedComponent(mImpactTimeButton.GetName());
+    SetExpectedComponent(mShowTimeButton1.GetName());
+    SetExpectedComponent(mShowTimeButton2.GetName());
+    CGS_ASSERT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM, "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM");
+    mpCache->SetExpectedAptComponentList(E_GUIFLOW_HUD, mauExpectedComponentIds, muNumExpectedComponents);
+}
+
+// ARTIST 0x8247CF60, offline crash presentation. Online road-rule-shot arm remains deferred.
+bool CrashedHudState::UpdateSetupState()
+{
+    CGS_ASSERT(mpCache != nullptr, "Cache pointer should be valid by now as its used in the WFInit stage");
+    mbBoostBar = false;
+    mbShowTime = false;
+    mbSkipPrompt = false;
+    mbHudMessages = true;
+    mbImpactTimer = mpCache->miGameFlowState != 2;
+    struct BoostVisibility : CgsGui::GuiEvent<214>
     {
-        // FLAG deferred: `mbInImpactTime = 0` and the five-phase dispatch (see the banner).
-
-        UpdatePermenant();
-
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        if (lpInQueue != 0)
-            lpInQueue->Clear();
+        u8 mbVisible;
+        u8 maPad[3];
+        BoostVisibility(bool lbVisible) : CgsGui::GuiEvent<214>(1, 12), mbVisible(lbVisible), maPad{} {}
+    } lBoost(mbBoostBar);
+    mpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lBoost), 41, sizeof(lBoost));
+    if (mbImpactTimer)
+    {
+        if (mbInImpactTime) EnterSteerWreckScreen();
+        else EnterImpactTimeScreen();
     }
+    else
+    {
+        mImpactTimePageChanger.AddOutputAptViewState("apt_Transition", "Invisible", false);
+        mImpactTimeButton.SetButton(ButtonIconComponent::E_PADBUTTON_INVISIBLE, ButtonIconComponent::E_PADBUTTON_STATE_ACTIVE);
+    }
+    mShowTimeAnimator.AddOutputAptViewState("apt_Transition", mbShowTime ? "Visible" : "Invisible", false);
+    mShowTimeButton1.SetButton(mbShowTime ? ButtonIconComponent::E_PADBUTTON_LSHOULDER : ButtonIconComponent::E_PADBUTTON_INVISIBLE, ButtonIconComponent::E_PADBUTTON_STATE_ACTIVE);
+    mShowTimeButton2.SetButton(mbShowTime ? ButtonIconComponent::E_PADBUTTON_RSHOULDER : ButtonIconComponent::E_PADBUTTON_INVISIBLE, ButtonIconComponent::E_PADBUTTON_STATE_ACTIVE);
+    if (mbSkipPrompt && mbCrashIsSkippable) mSkipPromptAnimator.Run("transIn");
+    mSkipPromptButton.SetItem("$HUD_END_CRASH", FlaptButtonIconComponent::E_PADBUTTON_SELECT, FlaptButtonIconComponent::E_PADBUTTON_INVISIBLE, true);
+    mpCache->SetGameplayHudActive(true);
+    return true;
+}
 
-    // ===============================================================================
-    //  UpdatePermenant  @ 0x824812A0   -- the ten console arms, each accounted for
-    // ===============================================================================
-    // Drains the state in-queue every frame. The console dispatches TEN ids. Every one is listed
-    // here with its console behaviour and its status, so that nothing is dropped silently:
-    //
-    //   LIVE (dependencies all present in this tree):
-    //     377 -> payload word 1|3 : SendStateEvent("END_CRASH")     <-- THE ARM THIS WAVE IS FOR
-    //     320 -> SendStateEvent("PAUSE")                (unconditional)
-    //     291 -> SendStateEvent("PAUSE")                (unconditional)
-    //     148 -> payload word == 0 : SendStateEvent("PAUSE")
-    //     309 -> payload[0]==1 && payload[1]==0 && game-mode-type == -1 : SendStateEvent("PAUSE")
-    //
-    //   ⛔ FLAG deferred (needs a member inside the +0x5C..+0x4B8 opaque span, or an unhomed TU):
-    //       5  -> if payload word 4 == 49 : mbInImpactTime = 1        (mbInImpactTime is opaque)
-    //     547  -> mbCrashIsSkippable = 1; if meInternalState > SETUPSTATE :
-    //             mSkipPromptAnimator.Run("transIn")                  (both members opaque)
-    //     573  -> payload[2] 0|1|3 fall through; 2 -> StartFreeburnChallengeTicker; else assert
-    //             "Unknown freeburn challenge selector action " (:937)
-    //     574  -> assert lpChallengeEvent (:869); payload[2]==0 -> StartFreeburnChallengeTicker
-    //     576  -> StartFreeburnChallengeTicker
-    //     581  -> GetFreeburnChallengeManager(mpCache)+4 in {2,3,4} -> StartFreeburnChallengeTicker
-    //     578  -> post {2, 536, 12} + s16 1 on channel 40 (size 16) via the access-pointer queue
-    //     579  -> the same record as 578
-    //     (StartFreeburnChallengeTicker @0x8247D410 and the FreeburnChallengeManager reach are not
-    //      reconstructed; 578/579 need the StateInterface[1] access-pointer queue this phase does
-    //      not model.)
-    //
-    //   Ids observed but NOT dispatched by the console's UpdatePermenant (they fall through its
-    //   `default`): 6, 7, 21, 64, 154, 156, 140, 325. Registered, deliberately ignored here.
+// ARTIST 0x824767D8.
+void CrashedHudState::UpdateRunning()
+{
+    auto* lpQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+    const CgsModule::Event* lpEvent = nullptr;
+    s32 liSize = 0;
+    for (s32 liId = lpQueue->GetFirstEvent(&lpEvent, &liSize); lpEvent;
+         liId = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+    {
+        const s32* lpiPayload = reinterpret_cast<const s32*>(lpEvent);
+        switch (liId)
+        {
+        case 154: if (mbHudMessages) mHudMessageComponent.AddMessage(lpEvent); break;
+        case 156: if (mbHudMessages) mHudMessageComponent.TerminateMessages(); break;
+        case 140:
+            if (lpiPayload[0] == 0) mMudAnimator.AddOutputAptViewState("apt_Transition", "transin", false);
+            else if (lpiPayload[0] == 1) mMudAnimator.AddOutputAptViewState("apt_Transition", "invisible", false);
+            break;
+        case 6: if (mbImpactTimer && lpiPayload[1] == 49) EnterSteerWreckScreen(); break;
+        case 7: if (mbImpactTimer && lpiPayload[1] == 49) EnterImpactTimeScreen(); break;
+        case 21:
+        {
+            const auto* lpTrigger = reinterpret_cast<const CgsGui::GuiEventAptTriggerPayload*>(lpEvent);
+            if (lpTrigger->meEventType == 4 && mbHudMessages && std::strcmp(lpTrigger->mpacComponentName, "crashHudMessages_mc") == 0)
+                mHudMessageComponent.EndTransition();
+            break;
+        }
+        // FLAG deferred: GUI325 online mugshot sequence, original HandleMugshotEvent.
+        default: break;
+        }
+    }
+    if (mbHudMessages) mHudMessageComponent.Update();
+}
+
     void CrashedHudState::UpdatePermenant()
     {
         StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
@@ -289,6 +324,14 @@ const u32 CrashedHudState::muNumResourcesToLoad = 4;
             const s32* lpiPayload = reinterpret_cast<const s32*>(lpEvent);
             switch (liEventId)
             {
+            case 5:
+                if (lpiPayload[1] == 49) mbInImpactTime = true;
+                break;
+            case 547:
+                mbCrashIsSkippable = true;
+                if (meInternalState > E_CRASHINTERNALSTATE_SETUPSTATE)
+                    mSkipPromptAnimator.Run("transIn");
+                break;
             case 377:
                 // 0x82481C74: `cmpwi r11, 1 / beq` + `cmpwi r11, 3 / beq` -> "END_CRASH".
                 // The producer (GameBridgeWorldToGui) posts 1 == E_CRASHBARSTATE_LEAVE_CRASHED on
@@ -314,27 +357,21 @@ const u32 CrashedHudState::muNumResourcesToLoad = 4;
                 break;
 
             case 148:
-                // 0x82481D24 `lwz r11, 0(r19)` -- a WORD here (PausedHudState reads the same id as
-                // a BYTE; that difference is the console's, and both are kept as written).
-                if (lpiPayload[0] == 0)
+                // ARTIST 0x82481374 reads the controller flag as one byte.
+                if (*reinterpret_cast<const u8*>(lpEvent) == 0)
                     SendStateEvent("PAUSE");
                 break;
 
             case 309:
-                // Console: payload[0]==1 && payload[1]==0 && *(guiCache + 40536) == -1.
-                // ⚠️ FLAG, and it is the && identity in this build: cache+40536 is the game-mode-type
-                // word (-1 == offline/none) -- the same word FBurnMainHudState reaches through its
-                // GuiCache_GetGameModeType leaf, which is itself a PC-platform stub returning -1
-                // unconditionally (BrnFBurnMainHudState.cpp:208). Rather than fork a second copy of
-                // that stub, the term is pinned to its constant and named here.
-                // DELETE-WHEN: GuiCache_GetGameModeType becomes a real cache read -- then this arm
-                // must consult it.
-                if (lpiPayload[0] == 1 && lpiPayload[1] == 0 /* && game-mode-type == -1 */)
+                // ARTIST: two byte flags and the current game-mode gate.
+                if (reinterpret_cast<const u8*>(lpEvent)[0] == 1 &&
+                    reinterpret_cast<const u8*>(lpEvent)[1] == 0 &&
+                    mpStateInterface->GetAccessPointers()->GetGuiCache()->GetGameMode() == -1)
                     SendStateEvent("PAUSE");
                 break;
 
             default:
-                // The deferred arms (5, 547, 573, 574, 576, 578, 579, 581) and the eight registered-
+                // The deferred online challenge arms (573, 574, 576, 578, 579, 581) and the eight registered-
                 // but-undispatched ids land here. The console has no assert on its default path in
                 // this function, so neither does this -- adding one would be an invented arm.
                 break;

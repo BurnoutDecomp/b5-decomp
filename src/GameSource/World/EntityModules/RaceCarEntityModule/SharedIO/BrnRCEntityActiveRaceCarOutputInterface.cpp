@@ -647,6 +647,13 @@ Vector3 RCEntityActiveRaceCarOutputInterface::GetPlayerPosition() const
 // (Bodied out-of-line here rather than turned into a header inline so the frozen
 // declaration set in BrnRaceCarEntityModuleOutputInterface.h is left untouched.)
 // ----------------------------------------------------------------------------
+// DWARF BrnRaceCarEntityModuleOutputInterface.h:405; inlined ARTIST load
+// in BridgeWorldVehicleDataToGui at 0x823E5900 (interface +0x28E1).
+bool RCEntityActiveRaceCarOutputInterface::GetCanDriveAwayFromCrash() const
+{
+    return mbCanDriveAwayFromCrash;
+}
+
 bool RCEntityActiveRaceCarOutputInterface::IsPlayerWrecked() const
 {
     return mbPlayerWrecked;

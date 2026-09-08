@@ -1276,6 +1276,7 @@ namespace BrnGui
         // miGameFlowState is one of the X360-only consumer-carved words with no DWARF
         // accessor row -- the same situation, and the same answer, as the analyzer above.
         friend struct HudMessageDirector;
+        friend struct CrashedHudState; // ARTIST crash-state read at cache +0x4B30.
         friend struct CrashedStuntHudState; // ARTIST last combo score/multiplier at +0x9FD4/+0x9FD8.
 
         // [stunt-readout wave A8 2026-08-27] Same exposure rule once more for the in-race

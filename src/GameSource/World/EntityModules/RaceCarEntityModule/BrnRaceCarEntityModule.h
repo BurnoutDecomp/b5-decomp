@@ -1332,7 +1332,9 @@ private:
     // so they are read from the members directly rather than threaded through the signature.
     // Only the three floats this slice forwards are declared; see the .cpp banner for the
     // console's other five arguments and for SendAddedForCollisionStateToPhysics.
-    void UpdateActiveCars( f32 lfTimeStep, f32 lfAcceleration, f32 lfBraking );
+    void UpdateActiveCars( f32 lfTimeStep, f32 lfAcceleration, f32 lfBraking,
+                          RaceCarEntityModuleIO::GameEventQueue* lpGameEvents );
+    void StorePlayerRoutePortalPositions(const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput);
 
     // X360 +0x17890 (96400). DWARF :347. The receiver of
     // `BoostManager::SetBoostEarningEnabled(module + 96400, 1)` in this TU's dirty-trick arm; it
@@ -1505,6 +1507,8 @@ private:
     // all as game event 40 and resets the count to zero.
     RaceCarNeedsHidingEventRecord mHidingEvents[8];
     s32                           miHidingEvents;
+    Vector2 mPlayersCurrentRouteNodePosition; // ARTIST +0x18720; DecFIGS named member.
+    Vector2 mPlayersNextRouteNodePosition;    // ARTIST +0x18730.
 };
 
 // X360 0x822A34A8. Asserts the index is in [E_ACTIVE_RACE_CAR_INDEX_0,

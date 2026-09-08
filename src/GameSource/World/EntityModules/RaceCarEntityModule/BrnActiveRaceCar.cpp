@@ -35,6 +35,7 @@
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleIOQueues.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "rw/math/vpu/matrix44affine_operation.h"    // rw::math::vpu::Mult
 #include "GameSource/Math/BrnMathUtils.h"                // BrnMath::IsNormal
@@ -1889,14 +1890,8 @@ void ActiveRaceCar::UpdateEngineState(f32 lfTimeStep,
 //
 // ---- [FLAG PC bring-up] WHAT THIS SLICE DROPS -- named, not paraphrased --------------------
 //  1. `lpVehicleOutput != NULL` (X360 :260) -- the argument itself is not plumbed here.
-//  2. mbIsTouchingWorld's value (0x822F7A0C): `mbCrashing ? false : (*(this+0x4E4) <= 0.0f)`.
-//     +0x4E4 is RaceCarState+0x404 and this tree has not named that field, so the flag is
-//     LEFT ALONE rather than written from a guess. Nothing in the PC build reads it today.
-//  3. the whole route/direction block (X360 0x822F7A5C..0x822F7C5C): GetDirection, BrnMath::
-//     Flatten, the RwMathVPU::IsValid assert (:315), the mfTimeDriveableInCrash accumulator
-//     and the `> 1.5s` VariableEventQueue<1536,16>::AddEvent(type 38). It is gated on
-//     +0x536 (RaceCarState+0x456, also unnamed here) and on the two VMX route vectors, which
-//     this slice does not receive.
+//  2-3. RESTORED: touching-world status and the crash drive-away decision/timer,
+//       including route-direction inputs and the 1.5-second game-event-38 publish.
 //  4. the IsOnRaceStartState(0) start-line rev RNG (0x822F7C64..0x822F7CE4) -- it needs the
 //     module's RNG at +0x18490.
 //  5. RaceCar::GetTransform / GetPreviousPosition / GetPosition (0x822F7D44..0x822F7DC8):
@@ -1915,7 +1910,11 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
                            f32 lfAcceleration,
                            f32 lfBraking,
                            bool lbIsInOnlineGameMode,
-                           bool lbInCarSelectScreen)
+                           bool lbInCarSelectScreen,
+                           s32 liGameModeType,
+                           const Vector2& lrCurrentRouteNode,
+                           const Vector2& lrNextRouteNode,
+                           RaceCarEntityModuleIO::GameEventQueue* lpGameEvents)
 {
     CGS_ASSERT( IsAttached(), "IsAttached()" );          // BrnActiveRaceCar.h:1418
 
@@ -1937,7 +1936,56 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
 
     mbIsTouchingAnotherRaceCar = false;                  // +0x772
     mbIsTouchingPlayer         = false;                  // +0x773
-    // [FLAG PC bring-up] mbIsTouchingWorld (+0x774) -- drop #2 in the banner.
+    mbIsTouchingWorld = !lbCrashing && !(mPhysicsState.mfTimeInAir > 0.0f);
+
+    // ARTIST 0x822F79F8..0x822F7C54: classify a settled crash and publish drive-away.
+    if (lbCrashing && !mbIsInShowtime)
+    {
+        if (mPhysicsState.mbFullyDrivableFromCrash)
+        {
+            if (liGameModeType != 0 && liGameModeType != 5)
+            {
+                if (!mbIsWrecked)
+                {
+                    mbCanDriveAwayFromCrash = true;
+                    mfTimeDriveableInCrash += lfTimeStep;
+                }
+            }
+            else if (IsPlayer() && mbDriveAwayCheckRequired)
+            {
+                // The VMX validity checks compare each planar lane with itself (NaN test).
+                if (!std::isnan(lrCurrentRouteNode.x) && !std::isnan(lrCurrentRouteNode.y) &&
+                    !std::isnan(lrNextRouteNode.x) && !std::isnan(lrNextRouteNode.y))
+                {
+                    const Vector2 lvDirection = BrnMath::Flatten(GetDirection());
+                    const f32 lfX = lrNextRouteNode.x - lrCurrentRouteNode.x;
+                    const f32 lfY = lrNextRouteNode.y - lrCurrentRouteNode.y;
+                    const f32 lfInvLength = 1.0f / std::sqrt(lfX * lfX + lfY * lfY);
+                    const f32 lfRouteX = lfX * lfInvLength;
+                    const f32 lfRouteY = lfY * lfInvLength;
+                    CGS_ASSERT(!std::isnan(lfRouteX) && !std::isnan(lfRouteY),
+                               "RwMathVPU::IsValid( lCurrentRouteVec )");
+                    if (!(lvDirection.x * lfRouteX + lvDirection.y * lfRouteY >= 0.0f))
+                    {
+                        mbIsWrecked = true;
+                        mbCanDriveAwayFromCrash = false;
+                    }
+                    else
+                    {
+                        mbCanDriveAwayFromCrash = true;
+                        mfTimeDriveableInCrash += lfTimeStep;
+                    }
+                    mbDriveAwayCheckRequired = false;
+                }
+            }
+        }
+        else mfTimeDriveableInCrash = 0.0f;
+        if (mfTimeDriveableInCrash > 1.5f)
+        {
+            const EActiveRaceCarIndex leIndex = GetActiveRaceCarIndex();
+            lpGameEvents->AddEvent(reinterpret_cast<const CgsModule::Event*>(&leIndex), 38, sizeof(leIndex));
+        }
+    }
 
     // 0x822F7DF4..0x822F7E48. ⭐ THE GATE AND THE CALL. Only a PLAYER-typed global slot gets an
     // engine state; AI / traffic / remote slots skip it entirely.
