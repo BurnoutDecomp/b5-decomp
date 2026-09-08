@@ -131,9 +131,7 @@ void ActiveRaceCar::Construct(EActiveRaceCarIndex leActiveRaceCarIndex)
     // the first frame after this slot is built draws the tick pose straight rather than
     // blending it against uninitialised storage. (This module's array is not zero-filled --
     // DebugMemoryInit stamps module memory with 0x7FFFFFFF.)
-    mBodyPoseTrack.Reset();
-    for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
-        maWheelPoseTracks[luWheel].Reset();
+    ResetRenderPoseInterpolation();
 
     meRaceStartState             = E_RACE_START_STATE_RACING;     // 0x77C = 2
     mfTimeSinceCreation          = 0.0f;                          // 0x728
@@ -468,9 +466,7 @@ void ActiveRaceCar::Detach( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicl
     // interpolator (mBodyPoseTrack / maWheelPoseTracks, PC-only, reset in Construct) keeps the
     // OLD car's pose across a slot re-use; a re-spawn into this slot at another location would
     // blend old->new for one frame (a one-frame streak). Reset the history with the slot.
-    mBodyPoseTrack.Reset();
-    for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
-        maWheelPoseTracks[luWheel].Reset();
+    ResetRenderPoseInterpolation();
 }
 
 // ----------------------------------------------------------------------------
@@ -683,7 +679,7 @@ void ActiveRaceCar::CalcBodyTransform(Matrix44Affine& lrBodyTransform) const
 // in BrnActiveRaceCar.h for why these exist and what they deliberately do not touch.
 // ============================================================================
 // Each of the three is the same three-line shape over one PoseTrack per interpolated
-// transform -- the body, and each of the six WORLD wheel transforms. The ordering rules
+// transform -- the body, six WORLD wheels and damage-event WORLD part poses. The ordering rules
 // (restore before the producers, latch after them, apply per rendered frame) and the
 // reason the restore is mandatory live on PoseTrack itself; the module drives the pairing
 // (RaceCarEntityModule::PostPhysicsUpdate brackets its producers with the first two).
@@ -692,6 +688,14 @@ void ActiveRaceCar::RestoreTickRenderPose()
     mBodyPoseTrack.Restore(mRenderParams.GetBodyTransformForWrite());
     for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
         maWheelPoseTracks[luWheel].Restore(mRenderParams.GetWheelTransform(luWheel));
+    RenderParams::DetachedPartRenderQueue& lrParts = mRenderParams.GetDetachedPartQueue();
+    for (s32 liEvent = 0; liEvent < lrParts.GetLength(); ++liEvent)
+    {
+        DetachedPartRenderEvent& lrPart = lrParts.GetEvent(liEvent);
+        CGS_ASSERT(static_cast<u32>(lrPart.miPartIndex) < KU_MAX_BODY_PARTS_PER_RACE_CAR,
+                   "Invalid render part index");
+        maPartPoseTracks[lrPart.miPartIndex].Restore(lrPart.mTransform);
+    }
 }
 
 void ActiveRaceCar::LatchTickRenderPose()
@@ -699,6 +703,20 @@ void ActiveRaceCar::LatchTickRenderPose()
     mBodyPoseTrack.Latch(mRenderParams.GetBodyTransform());
     for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
         maWheelPoseTracks[luWheel].Latch(mRenderParams.GetWheelTransform(luWheel));
+    bool labPresent[KU_MAX_BODY_PARTS_PER_RACE_CAR] = {};
+    const RenderParams::DetachedPartRenderQueue& lrParts = mRenderParams.GetDetachedPartQueue();
+    for (s32 liEvent = 0; liEvent < lrParts.GetLength(); ++liEvent)
+    {
+        const DetachedPartRenderEvent& lrPart = lrParts.GetEvent(liEvent);
+        CGS_ASSERT(static_cast<u32>(lrPart.miPartIndex) < KU_MAX_BODY_PARTS_PER_RACE_CAR,
+                   "Invalid render part index");
+        maPartPoseTracks[lrPart.miPartIndex].Latch(lrPart.mTransform);
+        labPresent[lrPart.miPartIndex] = true;
+    }
+    // A removed/repaired part must not reuse an old world pose if it breaks again.
+    for (u32 luPart = 0; luPart < KU_MAX_BODY_PARTS_PER_RACE_CAR; ++luPart)
+        if (!labPresent[luPart])
+            maPartPoseTracks[luPart].Reset();
 }
 
 void ActiveRaceCar::ApplyRenderPoseInterpolation(f32 lfAlpha)
@@ -706,6 +724,14 @@ void ActiveRaceCar::ApplyRenderPoseInterpolation(f32 lfAlpha)
     mBodyPoseTrack.Apply(mRenderParams.GetBodyTransformForWrite(), lfAlpha);
     for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
         maWheelPoseTracks[luWheel].Apply(mRenderParams.GetWheelTransform(luWheel), lfAlpha);
+    RenderParams::DetachedPartRenderQueue& lrParts = mRenderParams.GetDetachedPartQueue();
+    for (s32 liEvent = 0; liEvent < lrParts.GetLength(); ++liEvent)
+    {
+        DetachedPartRenderEvent& lrPart = lrParts.GetEvent(liEvent);
+        CGS_ASSERT(static_cast<u32>(lrPart.miPartIndex) < KU_MAX_BODY_PARTS_PER_RACE_CAR,
+                   "Invalid render part index");
+        maPartPoseTracks[lrPart.miPartIndex].Apply(lrPart.mTransform, lfAlpha);
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1118,6 +1144,8 @@ void ActiveRaceCar::ResetRenderPoseInterpolation()
     mBodyPoseTrack.Reset();
     for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
         maWheelPoseTracks[luWheel].Reset();
+    for (u32 luPart = 0; luPart < KU_MAX_BODY_PARTS_PER_RACE_CAR; ++luPart)
+        maPartPoseTracks[luPart].Reset();
 }
 
 // ----------------------------------------------------------------------------

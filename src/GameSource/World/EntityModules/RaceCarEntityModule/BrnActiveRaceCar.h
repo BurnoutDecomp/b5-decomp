@@ -870,8 +870,8 @@ public:
     // WHY NOT IN RenderParams: its layout is X360-pinned down to sizeof == 5280
     // (BrnActiveRaceCarRenderParams.cpp's static_assert block). ActiveRaceCar is not.
     //
-    // WHAT IS BLENDED: the body transform and the six WORLD wheel transforms -- every
-    // matrix the render leg turns into geometry. NOT the wheel SCALE matrices (a scale,
+    // WHAT IS BLENDED: the body, six WORLD wheel transforms and the WORLD transforms
+    // of damaged/detached panels. NOT the wheel SCALE matrices (a scale,
     // republished only when the wheel scale changes), not the LOD, not the visibility bits,
     // not the light locators: those are discrete per-tick decisions, and blending a
     // decision produces a state the game was never in.
@@ -1267,5 +1267,8 @@ private:
     static const u32 KU_INTERP_WHEELS = 6u;              // == RenderParams::mWheelTransforms[6]
     CgsSystem::FrameInterpolation::PoseTrack mBodyPoseTrack;
     CgsSystem::FrameInterpolation::PoseTrack maWheelPoseTracks[KU_INTERP_WHEELS];
+    // Damage events carry world poses even while a panel is still attached. Track by
+    // model part index: the compact event queue can reorder or lose entries each tick.
+    CgsSystem::FrameInterpolation::PoseTrack maPartPoseTracks[KU_MAX_BODY_PARTS_PER_RACE_CAR];
 };
 }
