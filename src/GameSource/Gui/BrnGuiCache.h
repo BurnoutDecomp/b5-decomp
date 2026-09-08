@@ -750,6 +750,7 @@ namespace BrnGui
         // (`ori r10,r10,0xB86C ; lbzx` -> FriendsListComponent::Close) and ::UpdateWFInit
         // @0x824805B8 (`ori r10,r10,0xB86D ; lbzx ; cmplwi 1` -> FriendsListChangeIcon::ShowNow).
         // FLAG: consumer-named -- neither producer is recovered.
+        bool IsFreeBurnMenuLocked() const { return mbFreeBurnMenuLocked; } // ARTIST +0x4B57
         bool IsFriendsListOpen() const        { return mbFriendsListOpen; }          // +0xB86C
         bool IsFriendsListChangePending() const { return mbFriendsListChangePending; } // +0xB86D
 
@@ -898,7 +899,7 @@ namespace BrnGui
         // ADDITIVE GROW (BrnGui::FriendsListComponent TU). BuildShortcutOptions
         // @0x824145B0 gates the offline shortcut list's option-1 entry on this far byte
         // (`lbzx r10, cache, 0x13B9A`). DECLARATION-ONLY per the far-member convention.
-        bool GetOfflineShortcutProgressGate() const;          // X360 far member @0x13B9A
+        bool GetOfflineShortcutProgressGate() const { return mbAreRoadRulesAvailable; }          // X360 far member @0x13B9A
 
         // ADDITIVE GROW (BrnCarSelectVehicle TU). The car-select "transition already shown"
         // gate at X360 far member @0x13B5E -- see the member's own note. Header-inline (a
@@ -2125,7 +2126,9 @@ namespace BrnGui
         bool mbCarSelectTransitionAlreadyShown;          // +0x13B5E (80734)
         u8  mPad_13B5F[53];                              // +0x13B5F..+0x13B93
         f32 mfDistanceDriven;                            // +0x13B94 (80788) GetDistanceDriven (OdometerComponent::Update @0x82424160)
-        u8  mPad_13B98[8];                               // +0x13B98..+0x13B9F
+        u8  mPad_13B98[2];                               // +0x13B98..+0x13B99
+        bool mbAreRoadRulesAvailable;                    // +0x13B9A (RecEvent 350)
+        u8  mPad_13B9B[5];                               // +0x13B9B..+0x13B9F
         // ---- replay slots / status interface / player tables ----
         s32 maReplayReelForSlot[6];                      // +0x13BA0 (80800) ReplayConvert... @0x824EEBE0 (4*(slot+20200)+this)
         s32 miReplaySlotsUsed;                           // +0x13BB8 (80824) ReplayConvert... bound

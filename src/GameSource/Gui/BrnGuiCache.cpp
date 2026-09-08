@@ -251,6 +251,13 @@ namespace BrnGui
         // `stw r24, 0x4058(r31)` @0x8250593C.
         mpSystemUserProfile = lpSystemUserProfile;
 
+        // ARTIST Construct 0x82505A68: freeburn is E_MODE_NONE, not race (zero).
+        meGameModeType = -1;
+        mbAreRoadRulesAvailable = false; // 0x82505A3C
+        mbFriendsListOpen = false;
+        mbFriendsListChangePending = false;
+
+
         mStateLoadingHelper.Construct();
         // X360 0x82505860 mid-body: BrnGui::OptionsDataProfile::Construct(this + 47224)
         // -- default the embedded player-options profile (brightness/contrast 50, the
@@ -1053,6 +1060,14 @@ namespace BrnGui
 
         switch (liEventId)
         {
+        // ARTIST RecEvent 94 / 106: EasyDrive's open state and pending-change icon.
+        case 94:
+            mbFriendsListOpen = *reinterpret_cast<const u8*>(lpEvent) != 0;
+            mbFriendsListChangePending = false;
+            break;
+        case 106:
+            if (!mbFriendsListOpen) mbFriendsListChangePending = true;
+            break;
         case 14:
             mStateLoadingHelper.OnLoadNotification(
                 reinterpret_cast<const CgsGui::GuiEventLoadNotification*>(lpEvent));
@@ -1431,8 +1446,8 @@ namespace BrnGui
             //     *(byte*)(this+80794) = payload->flag;         // the road-rules byte
             //     [gated] DetermineCarUnlockPending(mpProfile);
             //     [gated] word@44096 refinement off Profile+42517
-            // Reproduced: the profile store. FLAG'd deferrals: the +80794 byte (un-homed
-            // member; not fabricated), the DetermineCarUnlockPending call (bodied in
+            // Reproduced: the profile and road-rules availability stores. Remaining
+            // deferrals: DetermineCarUnlockPending (bodied in
             // BrnGuiCache_wB_10.cpp but its two gate bytes +19318/+19316 are un-homed
             // here), and the +44096 refinement (un-homed). The PC producer is the
             // event-350 stand-in in BrnGameModule.cpp, which posts a REAL Profile*.
@@ -1441,6 +1456,7 @@ namespace BrnGui
                     reinterpret_cast<const BrnGui::GuiEventProgressionProfileData*>(lpEvent);
                 CGS_ASSERT(lpProfileEvent != 0, "lpProfileEvent");   // cpp:2977
                 mpProfile = lpProfileEvent->mpProfile;
+                mbAreRoadRulesAvailable = lpProfileEvent->mbRoadRulesAvailable;
             }
             break;
         case 169:

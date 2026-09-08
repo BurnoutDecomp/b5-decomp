@@ -474,9 +474,7 @@ namespace BrnGui
         mFriendsList.Construct(macFriendListName, mpStateInterface, 0);
         mFriendsListChangeIcon.Construct(macFriendsListChangeIconName, mpStateInterface, 0);
         mFriendsListChangeIcon.Prepare(macFriendsListChangeIconName, lFile);
-        // [FLAG deferred] FriendsListComponent::Prepare @0x8242B188 -- declared
-        // (BrnFriendsList.h:92), no body. DELETE-WHEN: BrnFriendsList.cpp bodies it.
-        LogDeferredComponent("FriendsListComponent::Prepare");
+        mFriendsList.Prepare(macFriendListName, lFile);
 
         PostCommand16<94>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
 
@@ -572,10 +570,7 @@ namespace BrnGui
             CGS_ASSERT(lpGuiCache != 0, "mpGuiCache");                       // CgsGuiShared.h:201
             if (lpGuiCache->IsFriendsListOpen())   // X360 OnLeave: `ori r10,r10,0xB86C ; lbzx`
             {
-                // [FLAG deferred] FriendsListComponent::Close @0x824397E8 -- declared
-                // (BrnFriendsList.h:95), no body.
-                // DELETE-WHEN: BrnFriendsList.cpp bodies Close.
-                LogDeferredComponent("FriendsListComponent::Close");
+                mFriendsList.Close();
             }
         }
 

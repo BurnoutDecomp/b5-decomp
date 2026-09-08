@@ -241,4 +241,13 @@ void FriendsListEntry::SetEntryStatus(EFriendListEntryState leNewStatus)
     SetDirty();
 }
 
+// ARTIST 0x824395E0..0x82439604 (inlined by UpdateAllChallengesEntryData).
+void FriendsListEntry::SetIndexText(s32 index)
+{
+    char text[32];
+    CgsCore::SnPrintf(text, sizeof(text), "%d", index);
+    text[sizeof(text) - 1] = 0;
+    mIndexTextField.SetLocalisedText(text, 11);
+}
+
 }

@@ -1,4 +1,5 @@
 #pragma once
+#include "GameSource/Network/SharedIO/BrnBuddyInformation.h"
 
 #include "BrnCommonTypes.h"
 

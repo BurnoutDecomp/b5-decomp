@@ -134,7 +134,7 @@ namespace BrnGui
         // DWARF cpp:274/:297 / h:277/:292/:308 / cpp:419 -- declared-only (their own
         // ledger functions / X360 inlines not exported).
         const char* GetPlayerName() const;
-        EFriendListEntryState GetEntryStatus() const;
+        EFriendListEntryState GetEntryStatus() const { return meEntryStatus; }
         void SetText(const char* lpacText, bool lbLocalise);
         void SetEntryStatus(EFriendListEntryState leStatus);
 

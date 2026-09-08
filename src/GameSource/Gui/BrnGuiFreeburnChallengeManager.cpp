@@ -46,15 +46,6 @@ static const f32 KF_PAGE_ROTATE_SECONDS = 5.0f;
 // the state is OFF, so a constructed-but-idle manager is exactly what an offline event
 // (E_MODE_STUNT_ATTACK included) sees for its whole run.
 //
-// ⚠️ FLAG deferred (ONE console leg, unreachable on this build): the trailing
-// FburnChallengeEveryPlayerStatusData::Construct(a1+184). mCompletedData is deliberately NOT
-// modelled by this struct -- BrnGuiFreeburnChallengeManager.h:148 records that HONEST BOUNDARY
-// (its real home is the GameState IO header graph) -- so there is no member to construct. It
-// costs nothing here: the only producer is GuiModule::Update's case 581 (a 2104-byte memcpy
-// into manager+184) and the only reader is RaceMainHudState::StartFreeburnChallengeTicker's
-// already-deferred completed-challenge bit; neither is on this build.
-// DELETE-WHEN BrnGuiFreeburnChallengeManager.h models mCompletedData -- this becomes
-// `mCompletedData.Construct();`.
 void FreeburnChallengeManager::Construct( GuiCache* lpCache )
 {
     CGS_ASSERT( lpCache, "lpCache" );   // BrnGuiFreeburnChallengeManager.cpp:46
@@ -68,6 +59,7 @@ void FreeburnChallengeManager::Construct( GuiCache* lpCache )
     miTargetsCount       = 0;
     mbIsLocalHost        = false;
     miCurrentAction      = 0;
+    mCompletedData.Construct();
 
     // the X360 XMemSet(a1 + 32, 0, 8) -- the two target-type words
     for ( s32 liTarget = 0; liTarget < KI_MAX_TARGETS; ++liTarget )

@@ -471,6 +471,11 @@ namespace BrnGameState
             // (ChallengeManager::OutputFreeburnChallengeEveryPlayerStatusEvent @ 0x823480A0:
             // memcpy(event+0x738, manager+0xD00, 0x100)) -- the member copy below emits exactly
             // that 256-byte copy. Defined inline so the inlining call sites stay store-for-store.
+            // DWARF :947; ARTIST FriendsListComponent::UpdateAllChallengesEntryData
+            // reads this tail at completedData+0x738 (manager+0x7F0).
+            const CompletedFburnChallenges* GetLocalPlayerCompletionStatus() const
+            { return &mLocalChallengeCompletionData; }
+
             void AddLocalPlayerCompletionStatus(const CompletedFburnChallenges* lpCompletedChallenges)
             {
                 mLocalChallengeCompletionData = *lpCompletedChallenges;

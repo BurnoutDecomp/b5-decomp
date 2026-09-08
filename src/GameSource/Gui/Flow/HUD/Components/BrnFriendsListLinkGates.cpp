@@ -64,14 +64,6 @@ namespace BrnGui
         LogGateOnce(sbLogged, "BrnGui::FriendsListEntry::Select");
     }
 
-    // X360 0x8242B498. Called from three sites inside BrnFriendsList.cpp itself
-    // (ShowSpecificFriend and the two refresh arms) and declared at BrnFriendsList.h:112.
-    void FriendsListComponent::UpdateAllFriendsEntryData()
-    {
-        static bool sbLogged = false;
-        LogGateOnce(sbLogged, "BrnGui::FriendsListComponent::UpdateAllFriendsEntryData");
-    }
-
     // GuiCache far member -- X360 CheckPrivileges @0x82485980 calls the real out-of-line method.
     // ⚠️ RETURNS false, WHICH IS THE FAIL-CLOSED ANSWER: every caller uses it to decide whether
     // to OFFER an online affordance, so false hides a menu entry rather than entering an
@@ -85,14 +77,7 @@ namespace BrnGui
         return false;
     }
 
-    // GuiCache far byte @0x13B9A, read by BuildShortcutOptions @0x824145B0. Fail-closed: false
-    // suppresses the option-1 shortcut entry rather than publishing an unbacked one.
-    bool GuiCache::GetOfflineShortcutProgressGate() const
-    {
-        static bool sbLogged = false;
-        LogGateOnce(sbLogged, "BrnGui::GuiCache::GetOfflineShortcutProgressGate");
-        return false;
-    }
+
 }
 
 namespace BrnResource

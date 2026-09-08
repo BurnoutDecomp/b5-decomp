@@ -4,6 +4,7 @@
                      // header words from the HOST layout, never from a console literal
 
 #include "types.hpp"
+#include "GameSource/Network/SharedIO/BrnBuddyInformation.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEvent<N> (12-byte event header)
 #include "GameShared/GameClasses/Core/CgsID.h"
 #include "GameSource/GameState/BrnCgsPlayerName.h"  // CgsNetwork::PlayerName (scoreboard request payloads)        // CgsID (GuiPlayerInfoResponse::mCarId)
@@ -225,7 +226,16 @@ namespace BrnGui
     struct GuiEventOnlineAccountSettings { u8 maData[3]; s32 GetEventType() const { return 125; } };  // id 125 size 3 (raw; size not GuiEvent-shaped)
     struct GuiEventOnlineNumFriendsCount { u8 maData[4]; s32 GetEventType() const { return 101; } };  // id 101 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventOnlinePostEventScalps : public CgsGui::GuiEvent<319> { u8 maPayload[56]; };  // id 319 size 68 (12B GuiEvent header + opaque payload)
-    struct GuiEventOnlineReceiveFriendInfo : public CgsGui::GuiEvent<102> { u8 maPayload[660]; };  // id 102 size 672 (12B GuiEvent header + opaque payload)
+    // ARTIST 0x823CF9D0: raw 672-byte payload. DecFIGS supplies member names.
+    struct GuiEventOnlineReceiveFriendInfo
+    {
+        BrnNetwork::BrnNetworkModuleIO::BuddyInformation mBuddyInformation[5];
+        s32 miNumberOfBuddiesInEvent;
+        s32 miIndexOfFirstBuddyInFullBuddyList;
+        bool mbConnected;
+        s32 GetEventType() const { return 102; }
+    };
+    static_assert(sizeof(GuiEventOnlineReceiveFriendInfo) == 672, "friend batch payload");
     struct GuiEventOnlineTimeout { u8 maData[4]; s32 GetEventType() const { return 108; } };  // id 108 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventPlayerReachedRoadRageTarget { u8 maData[1]; s32 GetEventType() const { return 168; } };  // id 168 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventPlayerWrecked { u8 maData[1]; s32 GetEventType() const { return 548; } };  // id 548 size 1 (raw; size not GuiEvent-shaped)
@@ -768,8 +778,20 @@ namespace BrnGui
     struct GuiEventNetworkOutputPlayerTexture { u8 maData[8]; s32 GetEventType() const { return 264; } };  // id 264 size 8
     struct GuiEventNetworkQuickMatch { u8 maData[2]; s32 GetEventType() const { return 251; } };  // id 251 size 2
     struct GuiEventNetworkSelectedPlayerOption { u8 maData[8]; s32 GetEventType() const { return 246; } };  // id 246 size 8
-    struct GuiEventOnlineInviteEvent : public CgsGui::GuiEvent<100> { u8 maPayload[12]; };  // id 100 size 24
-    struct GuiEventOnlineShowProfile : public CgsGui::GuiEvent<99> { u8 maPayload[4]; };  // id 99 size 16
+    struct GuiEventOnlineInviteEvent
+    {
+        s32 meRequestedAction;
+        CgsNetwork::PlayerName mFriendToAddress;
+        bool mbHasOnlineGameBeenStarted;
+        s32 GetEventType() const { return 100; }
+    }; // ARTIST 0x824369C0: 24-byte payload
+
+    struct GuiEventOnlineShowProfile
+    {
+        CgsNetwork::PlayerName mFriendToView;
+        s32 GetEventType() const { return 99; }
+    }; // ARTIST 0x82436B30: 16-byte payload
+
     struct alignas(8) GuiEventPostEventFreeCarSequenceStart { u8 maData[8]; s32 GetEventType() const { return 302; } };  // id 302 size 8 [8-aligned: OGE off16]
     struct GuiEventPostEventRankUpSequenceStart { u8 maData[8]; s32 GetEventType() const { return 303; } };  // id 303 size 8
     struct GuiEventRequestCompressedCamPic : public CgsGui::GuiEvent<568> {};  // id 568 size 12

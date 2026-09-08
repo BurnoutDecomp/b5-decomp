@@ -164,25 +164,19 @@ namespace BrnGui
             lpGuiCache->SetGameplayHudActive(true);   // stb 1 @cache+0x407C
         }
 
-        // FLAG PC-platform leaf: the friends-list overlay-active word (X360
-        // cache+47212); un-named. No live overlay on the PC boot path.
-        bool GuiCache_FriendsListOverlayActive(const GuiCache* /*lpGuiCache*/)
+        bool GuiCache_FriendsListOverlayActive(const GuiCache* lpGuiCache)
         {
-            return false;
+            return lpGuiCache->IsFriendsListOpen();
         }
 
-        // FLAG PC-platform leaf: the friends-list input-block byte (X360 cache+19287);
-        // un-named. Input is never blocked on the PC boot path.
-        bool GuiCache_FriendsListInputBlocked(const GuiCache* /*lpGuiCache*/)
+        bool GuiCache_FriendsListInputBlocked(const GuiCache* lpGuiCache)
         {
-            return false;
+            return lpGuiCache->IsFreeBurnMenuLocked();
         }
 
-        // FLAG PC-platform leaf: the friends-list change-pending byte (X360
-        // cache+46870); un-named.
-        bool GuiCache_FriendsListChangePending(const GuiCache* /*lpGuiCache*/)
+        bool GuiCache_FriendsListChangePending(const GuiCache* lpGuiCache)
         {
-            return false;
+            return lpGuiCache->IsFriendsListChangePending();
         }
 
         // [hud reveal gate 2026-08-25] ⭐ THIS IS THE SAME WORD AS GuiCache_GetPlayerEngineState
@@ -203,11 +197,9 @@ namespace BrnGui
             return lpGuiCache->GetPlayerEngineState();
         }
 
-        // FLAG PC-platform leaf: the game-mode-type word (X360 cache+40536; -1 ==
-        // offline/none); un-named.
-        s32 GuiCache_GetGameModeType(const GuiCache* /*lpGuiCache*/)
+        s32 GuiCache_GetGameModeType(const GuiCache* lpGuiCache)
         {
-            return -1;
+            return lpGuiCache->GetGameMode();
         }
 
         // One-shot deferral log: the un-reconstructed component TUs this state drives.
@@ -406,10 +398,8 @@ namespace BrnGui
         mRoadRuleComponent.Construct("RoadRule_mc", mpStateInterface, 0, 1);
         mRoadRuleComponent.Prepare("RoadRule_mc", lFile);
 
-        // FLAG deferred (Slice B): FriendsListComponent::Construct/Prepare
-        // ("friendList") -- the committed FriendsList TU is the SetGuiCachePointer/
-        // SetDirty slice only.
-        LogDeferredComponent("FriendsListComponent");
+        mFriendsList.Construct("friendList", mpStateInterface, 0);
+        mFriendsList.Prepare("friendList", lFile);
         mFriendsListChangeIcon.Construct("FriendListChange_mc", mpStateInterface, 0);
         mFriendsListChangeIcon.Prepare("FriendListChange_mc", lFile);
 
@@ -454,7 +444,7 @@ namespace BrnGui
             CGS_ASSERT(lpGuiCache != 0, "mpGuiCache");
             if (GuiCache_FriendsListOverlayActive(lpGuiCache))
             {
-                /* FLAG deferred (Slice B): FriendsList Close */;
+                mFriendsList.Close();
             }
         }
 
@@ -799,7 +789,7 @@ namespace BrnGui
             mFriendsList.SetGuiCachePointer(mpGuiCache);
             if (GuiCache_FriendsListChangePending(mpGuiCache))
                 mFriendsListChangeIcon.ShowNow();
-            /* FLAG deferred (Slice B): FriendsList AttemptStateRestore */;
+            mFriendsList.AttemptStateRestore();
         }
 
         // X360 byte +0x155-gated mirror of cache byte +19264 into +0x89A rides the
@@ -844,11 +834,11 @@ namespace BrnGui
             {
             case 6:      // controller input
                 if (mbFriendsListEnabled && !GuiCache_FriendsListInputBlocked(mpGuiCache))
-                    /* FLAG deferred (Slice B): FriendsList HandleControllerInput */;
+                    mFriendsList.HandleControllerInput(lpiPayload);
                 break;
             case 79:
                 if (mbFriendsListEnabled && GuiCache_FriendsListOverlayActive(mpGuiCache))
-                    /* FLAG deferred (Slice B): FriendsList Close */;
+                    mFriendsList.Close();
                 break;
             case 94:
                 if (mbFriendsListEnabled)
@@ -856,23 +846,23 @@ namespace BrnGui
                 break;
             case 95:
                 if (mbFriendsListEnabled)
-                    /* FLAG deferred (Slice B): FriendsList EndWait */;
+                    mFriendsList.EndWait();
                 break;
             case 101:
                 if (mbFriendsListEnabled)
-                    /* FLAG deferred (Slice B): FriendsList SetTotalFriends */;
+                    mFriendsList.SetTotalFriends(lpiPayload[0]);
                 break;
             case 102:
                 if (mbFriendsListEnabled)
-                    /* FLAG deferred (Slice B): FriendsList ProcessNewEntryData */;
+                    mFriendsList.ProcessNewEntryData(lpEvent);
                 break;
             case 103:
                 if (mbFriendsListEnabled)
-                    /* FLAG deferred (Slice B): FriendsList RequestRefreshedData */;
+                    mFriendsList.RequestRefreshedData();
                 break;
             case 104:
                 if (mbFriendsListEnabled && !GuiCache_FriendsListInputBlocked(mpGuiCache))
-                    /* FLAG deferred (Slice B): FriendsList ReshowShortcuts */;
+                    mFriendsList.ReshowShortcuts();
                 break;
             case 106:
                 if (mbFriendsListEnabled && !GuiCache_FriendsListOverlayActive(mpGuiCache))
@@ -1182,7 +1172,7 @@ namespace BrnGui
         }
         if (mbFriendsListEnabled)
         {
-            /* FLAG deferred (Slice B): FriendsList Update */;
+            mFriendsList.Update();
         }
         if (mbRoadRulesEnabled)
         {
@@ -1284,7 +1274,7 @@ namespace BrnGui
                 if (lpiPayload[0] == 0 || lpiPayload[0] == 2)
                 {
                     if (mbFriendsListEnabled)
-                        /* FLAG deferred (Slice B): FriendsList SaveCurrentState */;
+                        mFriendsList.SaveCurrentState();
                     if (CgsDev::Log::gpDebugPrint != 0)
                     {
                         *CgsDev::Log::gpDebugPrint
@@ -1313,8 +1303,8 @@ namespace BrnGui
         }
         if (mbFriendsListEnabled && mpGuiCache != 0)
         {
-            mbFriendsListOffline = GuiCache_GetGameModeType(mpGuiCache) == -1;
-            /* FLAG deferred (Slice B): FriendsList UpdateAptVariables */;
+            mFriendsList.mabEntryFlags[1] = GuiCache_GetGameModeType(mpGuiCache) == -1;
+            mFriendsList.UpdateAptVariables();
         }
     }
 

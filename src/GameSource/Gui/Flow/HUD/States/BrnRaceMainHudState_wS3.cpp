@@ -237,9 +237,7 @@ namespace BrnGui
             case 6:      // controller input pressed
                 if (mbFriendsList)
                 {
-                    // FLAG deferred: FriendsListComponent::HandleControllerInput @0x82443280
-                    // has no body anywhere in the tree (BrnFriendsList.cpp does not define it).
-                    LogDeferredComponent("FriendsListComponent::HandleControllerInput");
+                    mFriendsList.HandleControllerInput(lpiPayload);
                 }
                 if (mbBurnoutSkillz && lpiPayload[1] == 38 &&
                     !mpCache->IsFriendsListOpen())
@@ -291,8 +289,7 @@ namespace BrnGui
             case 95:
                 if (mbFriendsList)
                 {
-                    // FLAG deferred: FriendsListComponent::EndWait @0x82442FF0 -- no body.
-                    LogDeferredComponent("FriendsListComponent::EndWait");
+                    mFriendsList.EndWait();
                 }
                 break;
             case 101:
@@ -302,8 +299,7 @@ namespace BrnGui
             case 102:
                 if (mbFriendsList)
                 {
-                    // FLAG deferred: FriendsListComponent::ProcessNewEntryData @0x824430D0 -- no body.
-                    LogDeferredComponent("FriendsListComponent::ProcessNewEntryData");
+                    mFriendsList.ProcessNewEntryData(lpEvent);
                 }
                 break;
             case 103:
@@ -314,8 +310,7 @@ namespace BrnGui
                 if (mbFriendsList && mpCache->IsOnlineStartInProgress() &&
                     GuiCache_IsOnlineHost(mpCache))
                 {
-                    // FLAG deferred: FriendsListComponent::ReshowShortcuts @0x82441E78 -- no body.
-                    LogDeferredComponent("FriendsListComponent::ReshowShortcuts");
+                    mFriendsList.ReshowShortcuts();
                 }
                 break;
             case 106:
@@ -777,8 +772,7 @@ namespace BrnGui
             mHudMessageComponent.Update();
         if (mbFriendsList)
         {
-            // FLAG deferred: FriendsListComponent::Update @0x82442C78 -- no body.
-            LogDeferredComponent("FriendsListComponent::Update");
+            mFriendsList.Update();
         }
         if (mbRoadRuleComponent)
         {

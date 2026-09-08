@@ -30,6 +30,7 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "GameSource/Network/SharedIO/BrnBuddyInformation.h"
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"   // [friends wave] branch labels/title
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"  // [friends wave] arrow clips
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"      // Prepare(const FileRef&)
@@ -130,9 +131,9 @@ namespace BrnGui
         void HandleDPadRight();                                                         // 0x82442D98
         void HandleDPadRightFriends();                                                  // 0x824386B0
         void HandleDPadRightChallenges();                                               // 0x82438760
-        void HandleDPadRightShortcuts();                                                // 0x82438DC0
+        void HandleDPadRightShortcuts();                                                // 0x82442938
         void HandleBranchDPadRightFriends();                                            // 0x82438938
-        void HandleBranchDPadRightShortcuts();                                          // 0x82438DC0 sibling @0x82438938 pair -- see cpp map
+        void HandleBranchDPadRightShortcuts();                                          // 0x82438DC0
         void HandleBranchInteraction(s32 liAction);                                     // 0x82439040
         void HandleTableInteraction(s32 liAction);                                      // 0x82442E50
         static void TransitionCompleteCallback(void* lpUserData);                       // 0x82414AA0
@@ -148,6 +149,7 @@ namespace BrnGui
         // (r11 == 1 when meGameModeType is 15 or 16, else 0). Friendship rather than a
         // fabricated setter, because the byte's semantics are not recovered.
         friend struct RaceMainHudState;
+        friend struct FBurnMainHudState;
 
         // ---- current selection cursor (X360 +0x870..+0x894) ----
         u32 muCachedCacheField;   // +0x870 -- cached GuiCache far field (set by SetGuiCachePointer)
@@ -171,30 +173,14 @@ namespace BrnGui
         u8  mbSnapshotFlagA;      // +0x4119 = mbSelectionFlagA
         u8  mbSnapshotFlagB;      // +0x411A = mbSelectionFlagB
         // ---- one online-friend record [friends wave]: stride 0x84, base +0xBEC ----
-        struct SFriendRecord
-        {
-            u32  muType;                     // +0x00 presence/class code (BuddySort 1/2 arms)
-            u32  muPad04;
-            u32  muPad08;
-            char macName[16];                // +0x0C (LobbyNameCmp target)
-            u8   mubClassA;                  // +0x1C (zero => "you" row -> state 5)
-            u8   mubClassB;                  // +0x1D (secondary sort class)
-            u8   mubMatchedLobbyName;        // +0x1E (set by SortFullList lobby scan)
-            u8   mubJoinable;                // +0x1F (joinable/not-joinable state pairs)
-            u8   maRest[0x64];               // +0x20..+0x83 (unwitnessed interior)
-        };
-    
-        static_assert(sizeof(SFriendRecord) == 0x84, "record stride");
-        static_assert(__builtin_offsetof(SFriendRecord, macName) == 0x0C &&
-                      __builtin_offsetof(SFriendRecord, mubClassA) == 0x1C,
-                      "SortFullList/BuddySort field witnesses");
+        using SFriendRecord = BrnNetwork::BrnNetworkModuleIO::BuddyInformation;
 
     private:
         // ---- [friends wave] asm-pinned additions (offsets in comments) ----
         FriendsListEntry maEntries[KI_VISIBLE_ROWS];                // +0x8A0 (stride 0x98)
         s32  maeAvailableShortcutOptions[E_SHORTCUTOPTION_COUNT];   // +0x00C, sentinel NONE(21)
         s32  mauNumBranches[3];                                     // +0x060 (Construct seeds 15)
-        CgsID mau64ChallengeIds[KI_MAX_FRIEND_RECORDS];             // +0x070 ((idx+14)*8 addressing)
+        CgsID mau64ChallengeIds[256];             // +0x070 ((idx+14)*8 addressing)
         BrnFlapt::TextFieldRef  maBranchLabelFields[3];             // +0xB98 ("branchOptionOne_txt" chain)
         BrnFlapt::TextFieldRef  mListTitleField;                    // +0xBBC ("listTitle_mc"/"listTitle_txt")
         // CORRECTED [stuntrace F2] 2026-08-27 -- these three were named ONE SLOT OFF
@@ -217,7 +203,6 @@ namespace BrnGui
         CgsNetwork::PlayerName mHighlightedName;                    // +0x884
         u8   mabEntryFlags[2];                                      // +0x898
         s32  meDataState;                                           // +0x89C (0 none/1 requested/2 ready)
-        u8   mabRecordTailFlags[KI_MAX_FRIEND_RECORDS][2];          // +0xB78 (parallel pairs, stride 0x84)
         bool mbReopenAfterClose;                                    // +0x4104 (TransitionCompleteCallback)
     };
 

@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include "GameSource/GameState/BrnGameStateSharedIO.h"
 #include "types.hpp"                                            // s32/f32 widths, bool
 #include "BrnCommonTypes.h"                                     // CgsID, Vector3
 #include "GameSource/BurnoutConstants.h"                        // EActiveRaceCarIndex
@@ -98,6 +99,9 @@ struct FreeburnChallengeManager
     void TriggerChallenge(const GuiChallengeTriggerResponse* lpEvent);   // @0x8250A160
     void HandleNewData(const GuiChallengeUpdateEvent* lpEvent);          // @0x824F3FC8
 
+    const BrnGameState::GameStateModuleIO::FburnChallengeEveryPlayerStatusData* GetCompletedChallengesData() const
+    { return &mCompletedData; }
+
     // ---- reconstructed accessors (X360 out-of-line) ----
     const BrnResource::ChallengeListEntry*       GetCurrentChallenge() const;          // @0x8240EC30
     const BrnResource::ChallengeListEntryAction* GetCurrentAction() const;             // @0x8240EC88
@@ -157,11 +161,10 @@ private:
     f32                        maafIndividualTargetContributions[KI_MAX_TARGETS][KI_MAX_ARCI]; // :212 @0x68 a1[26..41]
     s32                        maiOverallTargetRemaining[KI_MAX_TARGETS];               // :213  @0xA8  a1[42..43]
     s32                        miCurrentAction;        // :214  @0xB0  a1[44]
-    // :217 mCompletedData (BrnGameState::GameStateModuleIO::FburnChallengeEveryPlayerStatusData)
-    // is the trailing member. It is NOT touched by any reconstructed accessor in this
-    // slice and its real home is GameSource/GameState/BrnGameStateSharedIO.h; pulling
-    // that header graph in here is unwarranted coupling, so the tail is left
-    // unmodelled (the struct is never size-asserted). HONEST BOUNDARY.
+    // DWARF :217; ARTIST Construct +0xB8, local completion bits at +0x7F0.
+    BrnGameState::GameStateModuleIO::FburnChallengeEveryPlayerStatusData mCompletedData;
+
+
 };
 
 } // namespace BrnGui

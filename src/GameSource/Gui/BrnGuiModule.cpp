@@ -1716,6 +1716,10 @@ void GuiModule::Destruct()
     {
         if (liId < 0 || liId >= KI_MAX_OBSERVED_EVENT_ID)
             return;
+        if (std::getenv("BRN_EASYDRIVE_TRACE") && (liId == 284 || liId == 94) && CgsDev::Log::gpDebugPrint)
+            *CgsDev::Log::gpDebugPrint << "[easydrive-route] id " << liId << " screen "
+                << (mabObservedEventIds[0][liId] ? 1 : 0) << " hud " << (mabObservedEventIds[1][liId] ? 1 : 0) << "\n";
+
 
         // IsPriorityEvent + IsEventBlocked from ARTIST's EventInterpreterModule.
         // The first registered priority key owns the event; a blocking owner removes

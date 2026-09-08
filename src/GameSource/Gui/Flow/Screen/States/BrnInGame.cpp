@@ -1,4 +1,6 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnInGame.h"
+#include <cstdlib>
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface / GuiEventNetworkSuspension / GuiEventPlayAptMovie
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
@@ -559,6 +561,9 @@ namespace BrnGui
     {
         const EMainMenuOptions leOption =
             reinterpret_cast<const GuiEventMainMenuOptionPayload*>(lpEvent)->meMainMenuOption;
+        if (std::getenv("BRN_EASYDRIVE_TRACE") && CgsDev::Log::gpDebugPrint)
+            *CgsDev::Log::gpDebugPrint << "[easydrive-command] main option " << static_cast<s32>(leOption) << "\n";
+
 
         if (!CheckPrivileges(leOption))
         {

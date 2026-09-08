@@ -789,6 +789,11 @@ namespace
         //                                          accept control and so needs its own channel
         //                                          (BootLegal's press-start path reads 45).
         //    All six are AUTO-RESET taps, like a menu press.
+        // The gameplay EasyDrive UI listens to D-pad actions, distinct from GUI arrows.
+        case E_GAMEINPUTACTIONS_GUI_DPAD_UP:    lpcEventName = "Local\\BurnoutPC_Input_DPadUp"; break;
+        case E_GAMEINPUTACTIONS_GUI_DPAD_DOWN:  lpcEventName = "Local\\BurnoutPC_Input_DPadDown"; break;
+        case E_GAMEINPUTACTIONS_GUI_DPAD_LEFT:  lpcEventName = "Local\\BurnoutPC_Input_DPadLeft"; break;
+        case E_GAMEINPUTACTIONS_GUI_DPAD_RIGHT: lpcEventName = "Local\\BurnoutPC_Input_DPadRight"; break;
         case E_GAMEINPUTACTIONS_GUI_SELECT: lpcEventName = "Local\\BurnoutPC_Input_Accept";   break;
         case E_GAMEINPUTACTIONS_GUI_CANCEL: lpcEventName = "Local\\BurnoutPC_Input_Stop";     break;
         case E_GAMEINPUTACTIONS_GUI_DOWN:   lpcEventName = "Local\\BurnoutPC_Input_Next";     break;
