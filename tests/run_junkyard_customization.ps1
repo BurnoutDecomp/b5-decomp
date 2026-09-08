@@ -49,9 +49,18 @@ if ([regex]::Matches($runLog, 'CarSelectManager: StreamingFinished').Count -lt 3
 if ($runLog -notmatch 'ChangePlayerCarColour' -or $runLog -notmatch 'CarSelectManager: Exit state is finished') {
     throw 'Paint changes or the return to driving did not complete.'
 }
-foreach ($colour in @(14,15)) {
-    if ($runLog -notmatch "ChangePlayerCarColour: player slot 0 -> palette 1 colour $colour") {
-        throw "Paint type/colour update was not applied (palette 1, colour $colour)."
+# Initial paint indices vary with the fresh profile's randomized selection. The last
+# three paint writes witness the current colour followed by our two OptionNext taps.
+# Check that both taps change colour within the selected palette, rather than pinning
+# this regression to one run's starting colour (formerly palette 1, colours 14/15).
+$paintWrites = [regex]::Matches($runLog,
+    'ChangePlayerCarColour: player slot 0 -> palette (\d+) colour (\d+)')
+if ($paintWrites.Count -lt 3) { throw 'Missing paint-selection witnesses.' }
+$lastPaint = @($paintWrites | Select-Object -Last 3)
+for ($index = 1; $index -lt 3; $index++) {
+    if ($lastPaint[$index].Groups[1].Value -ne $lastPaint[$index - 1].Groups[1].Value -or
+        $lastPaint[$index].Groups[2].Value -eq $lastPaint[$index - 1].Groups[2].Value) {
+        throw 'Each colour-selection tap must change colour within the selected palette.'
     }
 }
 Write-Output "Junkyard customization regression: PASS ($out)"
