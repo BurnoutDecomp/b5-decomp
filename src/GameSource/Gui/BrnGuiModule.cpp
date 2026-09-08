@@ -1,3 +1,4 @@
+#include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "GameSource/Gui/BrnGuiModule.h"
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"   // [H3b] MapTransform (the sat-nav view-rect install)
 
@@ -953,6 +954,10 @@ namespace BrnGui
     void GuiModule::Construct(const BrnResource::HudMessageController* lpHudMessageController,
                               bool lbHighDef)
     {
+        // ARTIST 0x82518054: register GUI profiling handles before any view updates.
+        // The registry is static; the initializer does not use its receiver.
+        GuiPerfmons().Initialise();
+
         // X360 GuiModule::Construct @0x82518028, pseudocode lines 327-332 -- the console's
         // own argument assert, fired before anything is built.
         CGS_ASSERT(lpHudMessageController != 0, "lpHudMessageController");   // BrnGuiModule.cpp:229

@@ -2469,8 +2469,7 @@ void TrafficEntityModule::Reset()
 //
 // Gated: the ~25 vectorised tuning members (:799..:821), the four TrafficJobStub constructs
 // ([MEMBER HOLE 5]), the replay serialiser, the 102,800-byte
-// maTrafficPhysicsInfoList memset, the debug component and logger allocations, the twenty
-// perfmon monitors, and the debug-render stream reader. Each is a named one-shot below.
+// maTrafficPhysicsInfoList memset, the debug component and logger allocations, and the debug-render stream reader. Each is a named one-shot below.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::Construct()
 {
@@ -2553,8 +2552,7 @@ void TrafficEntityModule::Construct()
             "Construct sub-object legs TrafficEntitySerialiser::Construct, "
             "CgsResource::BaseResourcePtr::CreateFromHandle(mpData-adjacent slot), "
             "the 32-slot showtime "
-            "list seed, the DebugComponent and Logger allocations, the twenty "
-            "CgsDev::PerfMonCpu::AddMonitor registrations and DebugRenderStreamReader::"
+            "list seed, the DebugComponent and Logger allocations and DebugRenderStreamReader::"
             "Construct -- none of those callees has a body or a usable declaration in this tree");
     }
 
@@ -2711,6 +2709,46 @@ void TrafficEntityModule::Construct()
 
     mbNetworkHasDetectedDivergence = false;            // 0x72B54
     mbHullSyncDivergence           = false;            // 0x725EC
+
+    // X360 Construct 0x82740E14..0x82741330: page 2 counters, in registration order.
+    // AddMonitor receives name/r3, page/r4, minimum/r5, budget/f1, scaled/r7.
+    // The two unregistered subdivisions retain the original invalid handle.
+    miPerfMon_UpdateParam_IncParam = -1;
+    miPerfMon_UpdateParam_CalcSpeed = -1;
+    miPerfMon_PreSceneUpdate = CgsDev::PerfMonCpu::AddMonitor("PreSceneUpdate", CgsDev::E_PMP_2, false, 0.8f, true);
+    miPerfMon_UpdateCollidableVehicles = CgsDev::PerfMonCpu::AddMonitor("  UpdateCollidableVehicles", CgsDev::E_PMP_2, false, 0.8f, true);
+    miPerfMon_PostSceneUpdate = CgsDev::PerfMonCpu::AddMonitor("PostSceneUpdate", CgsDev::E_PMP_2, false, 1.1f, true);
+    miPerfMon_PrePhysicsUpdate = CgsDev::PerfMonCpu::AddMonitor("PrePhysicsUpdate", CgsDev::E_PMP_2, false, 0.6f, true);
+    miPerfMon_Driving = CgsDev::PerfMonCpu::AddMonitor("  Driving", CgsDev::E_PMP_2, false, 0.5f, true);
+    miPerfMon_PostPhysicsUpdate = CgsDev::PerfMonCpu::AddMonitor("PostPhysicsUpdate", CgsDev::E_PMP_2, false, 7.5f, true);
+    miPerfMon_PostPhysicsUpdate_Pre0 = CgsDev::PerfMonCpu::AddMonitor("  PostPhysicsUpdate Pre0", CgsDev::E_PMP_2, false, 0.2f, true);
+    miPerfMon_PostPhysicsUpdate_Pre1 = CgsDev::PerfMonCpu::AddMonitor("  PostPhysicsUpdate Pre1", CgsDev::E_PMP_2, false, 0.2f, true);
+    miPerfMon_ProcessDeformation = CgsDev::PerfMonCpu::AddMonitor("  ProcessDeformation", CgsDev::E_PMP_2, false, 0.2f, true);
+    miPerfMon_UpdateParam = CgsDev::PerfMonCpu::AddMonitor("  UpdateParam", CgsDev::E_PMP_2, false, 3.0f, true);
+    miPerfMon_UpdateParamNonDecision = CgsDev::PerfMonCpu::AddMonitor("  UpdateParamND", CgsDev::E_PMP_2, false, 3.0f, true);
+    miPerfMon_UpdateVehicle = CgsDev::PerfMonCpu::AddMonitor("  UpdateVehicle", CgsDev::E_PMP_2, false, 1.75f, true);
+    miPerfMon_PostPhysicsUpdate_Post0 = CgsDev::PerfMonCpu::AddMonitor("  PostPhysicsUpdate Post0", CgsDev::E_PMP_2, false, 0.2f, true);
+    miPerfMon_PostPhysicsUpdate_Post1 = CgsDev::PerfMonCpu::AddMonitor("  PostPhysicsUpdate Post1", CgsDev::E_PMP_2, false, 0.2f, true);
+    miPerfMon_UpdateDecision_Part0 = CgsDev::PerfMonCpu::AddMonitor("   UpdateDecisionFrame Part0", CgsDev::E_PMP_2, false, 0.2f, true);
+    miPerfMon_UpdateDecision_Part1 = CgsDev::PerfMonCpu::AddMonitor("   UpdateDecisionFrame Part1", CgsDev::E_PMP_2, false, 0.2f, true);
+    miPerfMon_RenderCoronas_ActiveHulls = CgsDev::PerfMonCpu::AddMonitor("Coronas_AH", CgsDev::E_PMP_2, true, 0.2f, true);
+    miPerfMon_RenderCoronas_InactiveHulls = CgsDev::PerfMonCpu::AddMonitor("Coronas_IH", CgsDev::E_PMP_2, true, 0.2f, true);
+    miPerfMon_RenderCoronas_Vehicles = CgsDev::PerfMonCpu::AddMonitor("Coronas_Veh", CgsDev::E_PMP_2, true, 0.2f, true);
+
+    CGS_ASSERT(miPerfMon_PreSceneUpdate >= 0, "miPerfMon_PreSceneUpdate >= 0");
+    CGS_ASSERT(miPerfMon_UpdateCollidableVehicles >= 0, "miPerfMon_UpdateCollidableVehicles >= 0");
+    CGS_ASSERT(miPerfMon_PostSceneUpdate >= 0, "miPerfMon_PostSceneUpdate >= 0");
+    CGS_ASSERT(miPerfMon_PrePhysicsUpdate >= 0, "miPerfMon_PrePhysicsUpdate >= 0");
+    CGS_ASSERT(miPerfMon_PostPhysicsUpdate >= 0, "miPerfMon_PostPhysicsUpdate >= 0");
+    CGS_ASSERT(miPerfMon_ProcessDeformation >= 0, "miPerfMon_ProcessDeformation >= 0");
+    CGS_ASSERT(miPerfMon_UpdateParam >= 0, "miPerfMon_UpdateParam >= 0");
+    CGS_ASSERT(miPerfMon_UpdateParamNonDecision >= 0, "miPerfMon_UpdateParamNonDecision >= 0");
+    CGS_ASSERT(miPerfMon_UpdateVehicle >= 0, "miPerfMon_UpdateVehicle >= 0");
+    CGS_ASSERT(miPerfMon_UpdateDecision_Part0 >= 0, "miPerfMon_UpdateDecision_Part0 >= 0");
+    CGS_ASSERT(miPerfMon_UpdateDecision_Part1 >= 0, "miPerfMon_UpdateDecision_Part1 >= 0");
+    CGS_ASSERT(miPerfMon_RenderCoronas_ActiveHulls >= 0, "miPerfMon_RenderCoronas_ActiveHulls >= 0");
+    CGS_ASSERT(miPerfMon_RenderCoronas_InactiveHulls >= 0, "miPerfMon_RenderCoronas_InactiveHulls >= 0");
+    CGS_ASSERT(miPerfMon_RenderCoronas_Vehicles >= 0, "miPerfMon_RenderCoronas_Vehicles >= 0");
 
     // ---- the density seed (0x827413E0: stfsx flt_82001C98 -> this + 0x71810) -------------
     mfBaseDensityScale = 1.0f;

@@ -5,8 +5,8 @@
 namespace BrnGui
 {
 // Perfmon handle tree for the GUI module's CPU performance monitors. Each handle
-// is the int returned by CgsDev::PerfMonCpu::AddMonitor and is used as the parent
-// of its child monitors (see BrnGuiPerfmons.cpp).
+// is the int returned by CgsDev::PerfMonCpu::AddMonitor. Label indentation groups
+// related regions in the performance overlay (see BrnGuiPerfmons.cpp).
 struct GuiPerfmons
 {
 public:
