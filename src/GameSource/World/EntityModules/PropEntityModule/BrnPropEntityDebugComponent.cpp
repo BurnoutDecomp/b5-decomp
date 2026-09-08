@@ -743,8 +743,7 @@ namespace BrnWorld
         const f32 lfMapScale = 1000.0f / mfCellGridZoom;
         mMapDimensions.x = lfMapScale;
         mMapDimensions.y = lfMapScale;
-        mScreenSize.x = mMapDimensions.x;
-        mScreenSize.y = mMapDimensions.y;
+        mScreenSize = lpDisplay->GetVirtualScreenSize();
         mfAspect = (mScreenSize.y != 0.0f) ? (mScreenSize.x / mScreenSize.y) : 1.0f;
 
         // The player's current cell origin is ringed with a blue marker (X360: the final
@@ -759,6 +758,33 @@ namespace BrnWorld
         const f32 KF_PLAYER_CELL_MARKER_RADIUS = 5.0f;  // FLAG: flt_820149B4 @ 0x822F0550 (value un-dumped)
         const Vector2 lOrigin = ToCellGridScreenCoords(MakeVector3(0.0f, 0.0f, 0.0f));
         lpDisplay->DrawCircle(lOrigin, KF_PLAYER_CELL_MARKER_RADIUS, 5, 0xFF0000FFu);  // ARGB 0xFF0000FF (blue)
+    }
+
+    // @ 0x822DC3D8. Translate into player-relative XZ space, shift the map by
+    // half its world dimensions, normalise, then scale to the current virtual screen.
+    Vector2 PropEntityDebugComponent::ToCellGridScreenCoords(Vector3 lWorldPosition)
+    {
+        const Vector3 lPlayerRelative = {
+            lWorldPosition.x - mpPropEntityModule->mPlayerPosition.x,
+            lWorldPosition.y - mpPropEntityModule->mPlayerPosition.y,
+            lWorldPosition.z - mpPropEntityModule->mPlayerPosition.z,
+            0.0f
+        };
+
+        Vector2 lScreenPosition = { 0.0f, 0.0f, 0.0f, 0.0f };
+        if (mMapDimensions.x != 0.0f)
+        {
+            lScreenPosition.x =
+                ((lPlayerRelative.x + mMapDimensions.x * 0.5f) / mMapDimensions.x) *
+                mScreenSize.x;
+        }
+        if (mMapDimensions.y != 0.0f)
+        {
+            lScreenPosition.y =
+                ((lPlayerRelative.z + mMapDimensions.y * 0.5f) / mMapDimensions.y) *
+                mScreenSize.y;
+        }
+        return lScreenPosition;
     }
 
     // @ 0x822A9758 -- the "Reset props" debug-menu action callback (registered in OnActivate

@@ -16,9 +16,31 @@
 
 #include "rw/core/debug/host.h"
 
-#include <io.h>  // _close / _read / _write -- the CRT POSIX low-level file API
+#include <io.h>  // _open / _close / _read / _write -- the CRT POSIX low-level file API
+#include <fcntl.h>
+#include <sys/stat.h>
 
 namespace rw { namespace core { namespace debug { namespace host {
+
+    // The host API uses its own compact flag word. Mode 1 is read-only; the remaining bits map to
+    // the CRT write/read-write/append/create/truncate/binary flags. SaveState passes 0x32
+    // (write + create + truncate), while ExecuteScript passes 1.
+    int Open(const char* FileName, int OpenFlag)
+    {
+        int liFlags = 0;
+        int liPermission = 0;
+        if (OpenFlag & 0x02) liFlags |= _O_WRONLY;
+        if (OpenFlag & 0x04) liFlags |= _O_RDWR;
+        if (OpenFlag & 0x08) liFlags |= _O_APPEND;
+        if (OpenFlag & 0x10)
+        {
+            liFlags |= _O_CREAT;
+            liPermission = _S_IWRITE;
+        }
+        if (OpenFlag & 0x20) liFlags |= _O_TRUNC;
+        if (OpenFlag & 0x40) liFlags |= _O_BINARY;
+        return _open(FileName, liFlags, liPermission);
+    }
 
     // X360 0x82BBC668:  b _close
     int Close(int FileHandle)

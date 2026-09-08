@@ -68,6 +68,10 @@ namespace EnvironmentSettings
         // ---- members (DWARF order, BrnSkyDebugComponent.h:90..160) ---------
         EnvironmentManager* mpEnvironmentManager;               // :90
 
+        // ARTIST added this tool-refresh switch after DecFIGS. Its three leading
+        // bytes are independently pinned by Construct/OnActivate/Update at
+        // +0x10/+0x11/+0x12 on the X360 object.
+        bool  mbUpdateValuesFromTool;
         bool  mbPrintDebugInfo;                                 // :95
         bool  mbSimulateTimeOfDay;                              // :97
         u32   muTimeOfDay_HH;                                   // :98

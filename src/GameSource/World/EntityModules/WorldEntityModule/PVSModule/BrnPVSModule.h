@@ -50,6 +50,13 @@
 
 namespace BrnWorld
 {
+    class PVSDebugComponent;
+
+    extern f32 mfCentreZoneBaseScore;
+    extern f32 mfImmediateZoneBaseScore;
+    extern f32 mfSecondaryZoneBaseScore;
+    extern f32 mfDirectionalScoreMultiplier;
+
     class PVSModule
         : public CgsModule::ModuleSingleBufferedTemplate<PVSIO::InputBuffer, PVSIO::OutputBuffer>
     {
@@ -135,7 +142,9 @@ namespace BrnWorld
         // "no PVS expansion" path. FLAG: no writer for this byte was recovered in this slice
         // (Construct is the only attested store); the name describes the behaviour Update
         // selects on it, which IS attested (0x822EE138 lbz +0x1FB0 -> the single-zone branch).
-        bool mbCurrentZoneOnly;                                          // X360 +0x1FB0
+        bool mbDebugRestrictZoneLists;                                   // X360 +0x1FB0
+
+        friend class PVSDebugComponent;
     };
 }
 

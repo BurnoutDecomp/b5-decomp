@@ -15,6 +15,8 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // CgsDev::DebugComponent (real base)
 #include "GameShared/GameClasses/Development/CgsStrStream.h"        // CgsDev::SimpleStrStream (committed home)
 #include "BrnCommonTypes.h"                                         // Vector3
+#include "GameSource/GameState/BrnGameStateTypes.h"                 // StuntElementType
+#include "SharedClasses/Trigger/BrnGenericRegion.h"                 // BrnTrigger::GenericRegion
 #include "SharedClasses/World/BrnWorldRegion.h"                     // BrnWorld::WorldRegion (GetTriggerWorldRegion return)
 
 namespace CgsDev { struct Debug2DImmediateRender; struct Debug3DImmediateRender; }
@@ -22,8 +24,6 @@ namespace CgsDev { struct Debug2DImmediateRender; struct Debug3DImmediateRender;
 namespace BrnGameState
 {
     struct StuntManager;          // pointer member only; full def in BrnStuntManager.h
-    enum  StuntElementType;       // used only by declared-only CompleteAllStuntTypeButOne; home TBD
-
     class StuntManagerDebugComponent : public CgsDev::DebugComponent
     {
     public:
@@ -41,13 +41,13 @@ namespace BrnGameState
         const char* GetPath() const override;
 
     private:
-        void        CompleteAllJumps(void* lpData);
-        void        CompleteAllSmashes(void* lpData);
-        void        CompleteAllStunt(void* lpData);
+        static void CompleteAllJumps(void* lpData);
+        static void CompleteAllSmashes(void* lpData);
+        static void CompleteAllStunt(void* lpData);
         void        CompleteAllStuntTypeButOne(StuntElementType leType);
-        void        CompleteAllJumpsButOneCallback(void* lpData);
-        void        CompleteAllSmashesButOneCallback(void* lpData);
-        void        CompleteAllBillboardsButOneCallback(void* lpData);
+        static void CompleteAllJumpsButOneCallback(void* lpData);
+        static void CompleteAllSmashesButOneCallback(void* lpData);
+        static void CompleteAllBillboardsButOneCallback(void* lpData);
 
         // @ 0x8236F070. Sample the StuntManager's 2D district map at a trigger's
         // world position and return the resulting world region. The X360 reads
@@ -56,7 +56,7 @@ namespace BrnGameState
         // to (E_DISTRICT_INVALID -> DistrictToCounty(E_DISTRICT_INVALID)) when the
         // sample is off-map (KU_INVALID_WORLD_MAP_VALUE == 255); otherwise the
         // region Construct()ed from the sampled district byte.
-        BrnWorld::WorldRegion GetTriggerWorldRegion(const Vector3& lrTriggerPosition);
+        BrnWorld::WorldRegion GetTriggerWorldRegion(const BrnTrigger::GenericRegion* lpGenericRegion);
 
         // DWARF member layout (BrnStuntManagerDebugComponent.h:86-88), declared order:
         StuntManager*           mpStuntManager;     // +0x0C (set by Construct, NOT the ctor)

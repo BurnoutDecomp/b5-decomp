@@ -3,6 +3,8 @@
 #include <Windows.h>   // QueryPerformanceCounter / QueryPerformanceFrequency (high-res timer)
 #include <new>         // ::operator new[] (monitor array backing)
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+
 // winspool.h (pulled in by Windows.h) macro-defines AddMonitor -> AddMonitorA, which would rename our
 // registry entry point and break the link against callers that don't include Windows.h. Drop the macro.
 #ifdef AddMonitor
@@ -18,6 +20,8 @@ namespace CgsDev
 {
     namespace PerfMonCpu
     {
+        bool mbIgnoreZeroCallsInAverage = false;
+
         namespace
         {
             PerfMonCpuInstance* gpMonitorsArray   = nullptr;
@@ -25,6 +29,8 @@ namespace CgsDev
             s32                 giMonitorCount     = 0;
             s32                 giNumIterations    = 1;
             s64                 gi64TimerFrequency = 0;
+            PerfMonGameFrequency geGameFrequency  = E_PMF_60HZ;
+            bool                gbResetAllValues   = true;
 
             u64 GetTimerTicks()
             {
@@ -33,11 +39,18 @@ namespace CgsDev
                 return static_cast<u64>(liNow.QuadPart);
             }
 
-            f32 TicksToMs(u64 lu64Ticks)
+            f32 GetGameFrequencyHz()
             {
-                if (gi64TimerFrequency == 0)
-                    return 0.0f;
-                return static_cast<f32>(static_cast<double>(lu64Ticks) * 1000.0 / static_cast<double>(gi64TimerFrequency));
+                switch (geGameFrequency)
+                {
+                case E_PMF_60HZ: return 59.94f;
+                case E_PMF_50HZ: return 50.0f;
+                case E_PMF_30HZ: return 29.97f;
+                case E_PMF_25HZ: return 25.0f;
+                default:
+                    CGS_ASSERT(false, "invalid game frequency");
+                    return 59.94f;
+                }
             }
 
             bool IsValidHandle(s32 liHandle)
@@ -54,6 +67,10 @@ namespace CgsDev
 
             giMaxMonitorCount = liMaxMonitorCount;
             giMonitorCount    = 0;
+            giNumIterations   = 1;
+            geGameFrequency   = E_PMF_60HZ;
+            gbResetAllValues  = true;
+            mbIgnoreZeroCallsInAverage = false;
 
             gpMonitorsArray = static_cast<PerfMonCpuInstance*>(
                 ::operator new[](static_cast<size_t>(liMaxMonitorCount) * sizeof(PerfMonCpuInstance)));
@@ -94,7 +111,112 @@ namespace CgsDev
             giMaxMonitorCount = 0;
         }
 
-        s32 AddMonitor(const char* lpcName, PerfMonCpuPage lePage, bool lbMinimum, f32 lfCpuBudget, bool lbLibPerfTagged)
+        void SetGameFrequency(PerfMonGameFrequency leFrequency)
+        {
+            geGameFrequency = leFrequency;
+        }
+
+        // ARTIST 0x82817238. Clear the complete accumulated-value set for every registered
+        // monitor. Minimum monitors are seeded by StartProfiling after this call.
+        void PrepareActiveMonitorsForUpdate()
+        {
+            for (s32 liIndex = 0; liIndex < giMonitorCount; ++liIndex)
+            {
+                PerfMonCpuInstance& lrInstance = gpMonitorsArray[liIndex];
+                lrInstance.mu64StartValue       = 0;
+                lrInstance.mu64Value            = 0;
+                lrInstance.miFrameCounter       = 0;
+                lrInstance.miNumCalls           = 0;
+                lrInstance.miMaxCalls           = 0;
+                lrInstance.mfCurrentValue       = 0.0f;
+                lrInstance.mfMinMaxValue        = 0.0f;
+                lrInstance.mfAverageValue       = 0.0f;
+                lrInstance.mfAverageAccumulator = 0.0f;
+            }
+        }
+
+        // DecFIGS names the inline ARTIST reset latch: the actual clear happens at the start of
+        // the next profiling frame, so no active monitor is torn down mid-region.
+        void ResetValuesInActiveMonitors()
+        {
+            gbResetAllValues = true;
+        }
+
+        // ARTIST 0x828251D0. Begin a CPU profiling frame: service the deferred reset, then clear
+        // only this frame's raw ticks/call counts. Long-running average/min/max values remain.
+        void StartProfiling()
+        {
+            if (gbResetAllValues)
+            {
+                PrepareActiveMonitorsForUpdate();
+                for (s32 liIndex = 0; liIndex < giMonitorCount; ++liIndex)
+                {
+                    PerfMonCpuInstance& lrInstance = gpMonitorsArray[liIndex];
+                    lrInstance.mfMinMaxValue = lrInstance.mbMinimum ? 100.0f : 0.0f;
+                    lrInstance.miMaxCalls = 0;
+                }
+                gbResetAllValues = false;
+            }
+
+            for (s32 liIndex = 0; liIndex < giMonitorCount; ++liIndex)
+            {
+                PerfMonCpuInstance& lrInstance = gpMonitorsArray[liIndex];
+                lrInstance.mu64Value = 0;
+                lrInstance.miNumCalls = 0;
+            }
+        }
+
+        // ARTIST 0x82825350, with the platform timer conversion expressed in host-native QPC
+        // units. Values are percentage of one game frame, not milliseconds.
+        void StopProfiling()
+        {
+            const f32 lfFrameScale = GetGameFrequencyHz() * 100.0f;
+            const s32 liIterations = (giNumIterations > 0) ? giNumIterations : 1;
+
+            for (s32 liIndex = 0; liIndex < giMonitorCount; ++liIndex)
+            {
+                PerfMonCpuInstance& lrInstance = gpMonitorsArray[liIndex];
+                if (lrInstance.miNumCalls > lrInstance.miMaxCalls)
+                    lrInstance.miMaxCalls = lrInstance.miNumCalls;
+
+                f32 lfCurrent = 0.0f;
+                if (gi64TimerFrequency > 0)
+                {
+                    lfCurrent = static_cast<f32>(
+                        static_cast<double>(lrInstance.mu64Value) /
+                        static_cast<double>(gi64TimerFrequency)) * lfFrameScale;
+                }
+
+                if (lrInstance.mbScaled)
+                {
+                    lrInstance.miNumCalls /= liIterations;
+                    lfCurrent /= static_cast<f32>(liIterations);
+                }
+
+                lrInstance.mfCurrentValue = lfCurrent;
+                lrInstance.mfAverageAccumulator += lfCurrent;
+                if (!mbIgnoreZeroCallsInAverage || lfCurrent > 0.0f)
+                    ++lrInstance.miFrameCounter;
+
+                if (lrInstance.miFrameCounter > 0)
+                {
+                    lrInstance.mfAverageValue = lrInstance.mfAverageAccumulator /
+                        static_cast<f32>(lrInstance.miFrameCounter);
+                }
+
+                if (lrInstance.mbMinimum)
+                {
+                    if (lfCurrent < lrInstance.mfMinMaxValue)
+                        lrInstance.mfMinMaxValue = lfCurrent;
+                }
+                else if (lfCurrent > lrInstance.mfMinMaxValue)
+                {
+                    lrInstance.mfMinMaxValue = lfCurrent;
+                }
+            }
+        }
+
+        s32 AddMonitor(const char* lpcName, PerfMonCpuPage lePage, bool lbMinimum, f32 lfCpuBudget, bool lbScaled)
         {
             if (!gpMonitorsArray || giMonitorCount >= giMaxMonitorCount)
                 return -1;
@@ -111,8 +233,11 @@ namespace CgsDev
             lrInstance.mePage          = lePage;
             lrInstance.mbMinimum       = lbMinimum;
             lrInstance.mfCpuBudget     = lfCpuBudget;
-            lrInstance.mbLibPerfTagged = lbLibPerfTagged;
-            lrInstance.mbActive        = true;
+            lrInstance.mbScaled        = lbScaled;
+            lrInstance.mbLibPerfTagged = false;
+            lrInstance.mbActive        = false;
+            lrInstance.miOrigLibPerfTraceId = -1;
+            lrInstance.miLibPerfTraceId = -1;
             return liHandle;
         }
 
@@ -120,7 +245,12 @@ namespace CgsDev
         {
             if (!IsValidHandle(liMonitorHandle))
                 return;
-            gpMonitorsArray[liMonitorHandle].mu64StartValue = GetTimerTicks();
+
+            PerfMonCpuInstance& lrInstance = gpMonitorsArray[liMonitorHandle];
+            CGS_ASSERT(!lrInstance.mbActive, "Monitor already started");
+            lrInstance.mbActive = true;
+            lrInstance.mu64StartValue = GetTimerTicks();
+            ++lrInstance.miNumCalls;
         }
 
         void StopMonitor(s32 liMonitorHandle)
@@ -129,18 +259,10 @@ namespace CgsDev
                 return;
 
             PerfMonCpuInstance& lrInstance = gpMonitorsArray[liMonitorHandle];
+            CGS_ASSERT(lrInstance.mbActive, "mpMonitorsArray[liMonitorID].mbActive == true");
             const u64 lu64Elapsed = GetTimerTicks() - lrInstance.mu64StartValue;
-
-            lrInstance.mu64Value      = lu64Elapsed;
-            lrInstance.mfCurrentValue = TicksToMs(lu64Elapsed);
-            ++lrInstance.miNumCalls;
-
-            lrInstance.mfAverageAccumulator += lrInstance.mfCurrentValue;
-            lrInstance.mfAverageValue = (lrInstance.miNumCalls > 0)
-                ? lrInstance.mfAverageAccumulator / static_cast<f32>(lrInstance.miNumCalls)
-                : lrInstance.mfCurrentValue;
-            if (lrInstance.mfCurrentValue > lrInstance.mfMinMaxValue)
-                lrInstance.mfMinMaxValue = lrInstance.mfCurrentValue;
+            lrInstance.mbActive = false;
+            lrInstance.mu64Value += lu64Elapsed;
         }
 
         void SetNumIterationsTaken(s32 liNumIterations)

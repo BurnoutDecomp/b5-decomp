@@ -58,6 +58,9 @@ namespace CgsDev
         // [0,mfVirtualScreenWidth] x [0,mfVirtualScreenHeight] (inclusive). Used by the
         // line/text cull (Is2DLineOnScreen / DrawText). X360 @ 0x82818838.
         bool Is2DPointOnScreen(Vector2 lv2Point) const;
+        bool Is2DLineOnScreen(Vector2 lv2Start, Vector2 lv2End) const;
+        bool Is2DBoxOnScreen(Vector2 lv2Min, Vector2 lv2Max) const;
+        bool Is2DPolygonOnScreen(const Vector2* lpaPoints, u32 luCount) const;
 
         void DrawBox(Vector2 lv2Min, Vector2 lv2Max, RGBA lColour);
         void DrawBox(f32 lfX, f32 lfY, f32 lfWidth, f32 lfHeight, RGBA lColour);
@@ -71,6 +74,8 @@ namespace CgsDev
         // body is the text follow-on (used by ErrorWindow::Render). lfAlign in [0,1] centres.
         void DrawTextInBox(const char* lpcText, f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1,
                            f32 lfSize, RGBA lColour, f32 lfAlign);
+        void DrawAlignedText(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale,
+                             RGBA lColour, f32 lfAlignment);
         void DrawWirePolygon(const rw::math::vpu::Vector2* lpaPoints, u32 luCount, RGBA lColour);
         void DrawSolidConvexPolygon(const rw::math::vpu::Vector2* lpaPoints, u32 luCount, RGBA lColour);
         void DrawCircle(Vector2 lv2Centre, f32 lfRadius, s32 liSegments, RGBA lColour);
@@ -79,15 +84,18 @@ namespace CgsDev
         void DrawText(const char* lpcText, Vector2 lv2Position, f32 lfScale, RGBA lColour, bool lbCentred);
         void DrawText(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
         void DrawHorizontalBar(Vector2 lv2Min, Vector2 lv2Max, f32 lfValue, f32 lfMax, RGBA lBackColour, RGBA lBarColour);
+        void DrawTextWithBackground(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale,
+                                    RGBA lTextColour, RGBA lBackgroundColour, f32 lfBorder);
 
         // X360 @0x82824098: sprintf the integer value as "%d" and draw it as text at (x,y). Used by the
         // debug HUDs to print a labelled numeric read-out next to a name. Body lives in this TU.
-        void DrawValue(u32 luValue, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
+        void DrawValue(s32 liValue, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
 
         // Width (in virtual-screen units) the given text would occupy at the given scale; used by
         // label/value layout code to position a value just after its label. Body is the text/font
         // follow-on (lives in this TU).
         f32 CalcTextWidth(const char* lpcText, f32 lfScale) const;
+        Vector2 CalcTextExtent(const char* lpcText, f32 lfScale) const;
 
         void SetRenderBuffer(CgsGraphics::Im2d* lpRenderBuffer);
         bool HasRenderBuffer() const { return mpRenderBuffer != nullptr; }   // safe to Begin() only once set

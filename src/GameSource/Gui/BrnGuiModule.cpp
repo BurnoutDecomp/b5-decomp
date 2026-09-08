@@ -1,3 +1,4 @@
+#include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "GameSource/Gui/BrnGuiModule.h"
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"   // [H3b] MapTransform (the sat-nav view-rect install)
 
@@ -953,6 +954,10 @@ namespace BrnGui
     void GuiModule::Construct(const BrnResource::HudMessageController* lpHudMessageController,
                               bool lbHighDef)
     {
+        // ARTIST 0x82518054: register GUI profiling handles before any view updates.
+        // The registry is static; the initializer does not use its receiver.
+        GuiPerfmons().Initialise();
+
         // X360 GuiModule::Construct @0x82518028, pseudocode lines 327-332 -- the console's
         // own argument assert, fired before anything is built.
         CGS_ASSERT(lpHudMessageController != 0, "lpHudMessageController");   // BrnGuiModule.cpp:229
@@ -2649,7 +2654,7 @@ void GuiModule::Destruct()
                     // ⭐⭐ [hud F4 2026-09-06] THE WHITELIST IS GONE -- THE CONSOLE HAS NO ID
                     // FILTER ON THIS CHANNEL. The list that stood here (204/212/213/214/215/223)
                     // was a bring-up stand-in that grew one record type at a time as each
-                    // consumer landed, and it silently dropped everything else. The console's
+                    // consumer landed, and it excluded every other record type. The console's
                     // arm is EventInterpreterModule::ProcessOutEvents @0x8285E1D0, case ')'
                     // (== 41), five instructions at @0x8285E64C:
                     //     lwz r11, 8(r22)   ; headerOffset = record[2]

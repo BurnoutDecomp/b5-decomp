@@ -33,7 +33,7 @@ namespace CgsDev
             void Prepare();
 
             virtual void           Update(f32 lfTimeStep, InputEvent leEvent);
-            virtual void           Render(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY, bool lbSelected, f32 lfAlpha);
+            virtual void           Render(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY, bool lbSelected, f32 lfItemWidth);
             virtual void           ComputeSize();
             virtual bool           IsUseful() const;
             virtual bool           IsVisible() const;
@@ -47,8 +47,8 @@ namespace CgsDev
             void SetHeight(f32 lfHeight);
 
         protected:
-            void RenderMenuItemText(Debug2DImmediateRender* lpRender, const char* lpcText, f32 lfX, f32 lfY, f32 lfWidth, f32 lfHeight, bool lbSelected, f32 lfAlpha);
-            void RenderMenuItemBackground(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY, f32 lfWidth, f32 lfHeight, bool lbSelected, f32 lfAlpha);
+            void RenderMenuItemText(Debug2DImmediateRender* lpRender, const char* lpcText, f32 lfX, f32 lfY, f32 lfWidth, f32 lfHeight, bool lbSelected, f32 lfItemWidth);
+            void RenderMenuItemBackground(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY, f32 lfWidth, f32 lfHeight, bool lbSelected, f32 lfItemWidth);
             void ComputeSizeFromText(const char* lpcText);
 
             const Palette&          GetPalette() const;

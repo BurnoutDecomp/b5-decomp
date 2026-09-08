@@ -26,6 +26,7 @@ namespace CgsDev
         struct FunctionManager : public Internal::DebugInternal
         {
             friend struct ScriptInterface;   // the console resolves an action by path (FindFunctionFromPath)
+            friend class CgsDev::DebugManager;
 
         private:
             Internal::DebugStaticPool<Function>         mFunctionPool;
@@ -42,6 +43,7 @@ namespace CgsDev
 
         private:
             Function* FindFunction(Function::DebugCallbackFunction lpfCallback, void* lpUserData);
+            MenuItemFunction* FindMenuItem(Function* lpFunction);
 
             // Resolve a registered action from its menu path (X360 0x82823778 caller side). Body is
             // reconstructed with the menu-tree follow-on; declared here so the console can call it.

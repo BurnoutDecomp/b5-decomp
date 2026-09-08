@@ -83,6 +83,23 @@ namespace BrnStreetData
         mDirty.UnSetBit( static_cast<u32>( leScoreType ) );
     }
 
+    // X360 0x8231B8C8. Scores outside the per-type legal range are ignored.
+    // A successful write marks both the valid and dirty bitsets before storing
+    // the value in the embedded ScoreList.
+    void ChallengeData::SetScore( ScoreType leScoreType, int32_t liScore )
+    {
+        CGS_ASSERT( leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT,
+                    "leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT" );
+
+        if ( liScore <= ScoreList::KAI_MAX_SCORES[ leScoreType ] &&
+             liScore >= ScoreList::KAI_MIN_SCORES[ leScoreType ] )
+        {
+            mValidScores.SetBit( static_cast<u32>( leScoreType ) );
+            mDirty.SetBit( static_cast<u32>( leScoreType ) );
+            mScoreList.SetScore( leScoreType, liScore );
+        }
+    }
+
     // X360 BrnStreetData::ChallengePlayerScoreEntry::SetCarID @ 0x8230EC18.
     // Stores the owning car id for one score type: maCarIDs[leScoreType] = lCarID,
     // guarded by the score-type bounds assert. The X360 store is a full 64-bit stdx

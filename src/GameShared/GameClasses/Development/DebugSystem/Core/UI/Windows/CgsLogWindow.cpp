@@ -1,6 +1,10 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h"
 
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugCollections.h"   // the debug operator new[] shim (Construct's line-ring alloc)
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
+
+#include <cstring>
 
 // CgsDev::DebugUI::LogWindow / LogWindowStrStream - the default ctor + the stream sink. Recovered
 // from the DecFIGS DWARF (Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h) + the X360 default
@@ -66,11 +70,127 @@ namespace CgsDev
             miLineHead = 0;                // +73
         }
 
-        // FLAG: MINIMAL STUBS FOR LINK (not decompiled). The LogWindow render/update protocol + the
-        // line-ring push are grown when the DebugUI window stack lands; Append is a guarded no-op
-        // (the ring buffer mpLinesArray is unallocated in this minimal slice).
-        void LogWindow::Update(f32 /*lfTimeStep*/, InputEvent /*leEvent*/) {}
-        void LogWindow::Render(Debug2DImmediateRender* /*lpRender*/) {}
-        void LogWindow::Append(const char* /*lpcText*/) {}
+        bool LogWindow::Prepare(const char* lpcCaption, const char* lpcMenuPath, s32 lxFlags)
+        {
+            Window::Prepare(mfCurrentWidth, ComputeConsoleHeight(), lpcCaption, lxFlags);
+            mMenuItem.Prepare(this);
+            if (lpcMenuPath)
+                Register(lpcMenuPath);
+            return true;
+        }
+
+        void LogWindow::Update(f32 lfTimeStep, InputEvent leEvent)
+        {
+            CustomWindow::Update(lfTimeStep, leEvent);
+            SetSize(mfCurrentWidth, ComputeConsoleHeight());
+            if (leEvent == E_INPUTEVENT_SELECT)
+                Clear();
+        }
+
+        void LogWindow::Render(Debug2DImmediateRender* lpRender)
+        {
+            Window::Render(lpRender);
+
+            const Metrics& lrMetrics = GetMetrics();
+            RGBA lColour = GetPalette().mColourText;
+            if (GetFlags() & KX_FLAGNOBACKGROUND)
+                lColour = GetPalette().mColourTextScreen;
+
+            f32 lfY = GetY() + GetHeight() - lrMetrics.mfTextSize;
+            s32 liIndex = miLineHead;
+            for (s32 liCount = 0; liCount < static_cast<s32>(miLineCount) - 1; ++liCount)
+            {
+                liIndex = (liIndex + static_cast<s32>(miLineCount) - 1) % static_cast<s32>(miLineCount);
+                lpRender->DrawText(mpLinesArray[liIndex].macText,
+                                   GetX() + lrMetrics.mfWindowBorderSize + mfHorizontalIndent,
+                                   lfY, lrMetrics.mfTextSize, lColour);
+                if (lfY < 0.0f)
+                    break;
+                lfY -= lrMetrics.mfTextSize;
+            }
+        }
+
+        void LogWindow::Print(const char* lpcText)
+        {
+            if (!mpLinesArray || miLineCount <= 0 || !lpcText)
+                return;
+
+            if (mpLinesArray[miLineHead].macText[0])
+            {
+                miLineHead = static_cast<s8>((miLineHead + 1) % miLineCount);
+                RefreshWidth();
+                mpLinesArray[miLineHead].macText[0] = '\0';
+            }
+
+            Append(lpcText);
+
+            if (mpLinesArray[miLineHead].macText[0])
+            {
+                miLineHead = static_cast<s8>((miLineHead + 1) % miLineCount);
+                RefreshWidth();
+                mpLinesArray[miLineHead].macText[0] = '\0';
+            }
+        }
+
+        void LogWindow::Append(const char* lpcText)
+        {
+            if (!mpLinesArray || miLineCount <= 0 || !lpcText)
+                return;
+
+            const char* lpcRead = lpcText;
+            while (*lpcRead)
+            {
+                char* lpcLine = mpLinesArray[miLineHead].macText;
+                s32 liLength = static_cast<s32>(std::strlen(lpcLine));
+                char* lpcWrite = lpcLine + liLength;
+
+                while (*lpcRead && *lpcRead != '\n' && liLength < KI_CONSOLESTRINGLENGTH - 1)
+                {
+                    *lpcWrite++ = *lpcRead++;
+                    ++liLength;
+                }
+                *lpcWrite = '\0';
+
+                if (!*lpcRead)
+                    break;
+                if (*lpcRead == '\n')
+                    ++lpcRead;
+
+                miLineHead = static_cast<s8>((miLineHead + 1) % miLineCount);
+                RefreshWidth();
+                mpLinesArray[miLineHead].macText[0] = '\0';
+            }
+        }
+
+        void LogWindow::Clear()
+        {
+            for (s32 liIndex = 0; liIndex < miLineCount; ++liIndex)
+                mpLinesArray[liIndex].macText[0] = '\0';
+            miLineHead = 0;
+        }
+
+        f32 LogWindow::ComputeConsoleHeight()
+        {
+            const Metrics& lrMetrics = GetMetrics();
+            f32 lfHeight = static_cast<f32>(miLineCount - 1) * lrMetrics.mfTextSize + mfVerticalIndent;
+            if (lfHeight > lrMetrics.mfScreenHeight)
+                lfHeight = lrMetrics.mfScreenHeight;
+            return lfHeight;
+        }
+
+        void LogWindow::RefreshWidth()
+        {
+            if (!mbAutosize || miLineCount <= 0)
+                return;
+
+            const s32 liIndex = (static_cast<s32>(miLineHead) + static_cast<s32>(miLineCount) - 1) %
+                                static_cast<s32>(miLineCount);
+            const f32 lfWidth = Get2DRenderer()->CalcTextWidth(mpLinesArray[liIndex].macText,
+                                                               GetMetrics().mfTextSize) +
+                                mfHorizontalIndent;
+            if (lfWidth > GetWidth())
+                mfCurrentWidth = lfWidth;
+            SetSize(mfCurrentWidth, GetHeight());
+        }
     }
 }

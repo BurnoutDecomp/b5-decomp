@@ -156,6 +156,10 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
+    bool kbAllowRandomPartDetachment = true;          // ARTIST 0x82F2A344
+    f32  kfAngularVelocityDecay = 0.99000001f;        // initializer @0x82C5D6D8
+    f32  kfAngularVelocityForDetachment = 8.0f;       // initializer @0x82C5D6B0
+
     // MakeDetachedPart / TestJointForBreaking free hooks REMOVED 2026-08-27 -- both real bodies are
     // mounted and are now called by name on lpPartMgr (see the file header).
     // EmitDetachedPartNotification's free hook is GONE (2026-08-27) -- see the file header.
@@ -221,10 +225,7 @@ namespace Deformation
         // landing the 0.99 decay shrinks the accumulator that feeds it instead of holding it flat.
         // Both changes reduce the chance of a spurious hinge; neither can create one.
         // [[placeholder-identity-element]] once more: 0 is the identity of `+`, not of `>`.
-        const f32  KF_ANGULAR_VELOCITY_DECAY          = 0.99000001f;   // RECOVERED 0x82FB9BA0
-        const f32  KF_ANGULAR_VELOCITY_FOR_DETACHMENT = 8.0f;          // RECOVERED 0x82FB9AA0
         const f32  KF_ANGULAR_DECAY_REFERENCE_RATE    = 60.0f;         // RECOVERED flt_82092BC4
-        const bool KB_ALLOW_RANDOM_PART_DETACHMENT    = true;          // RECOVERED @0x82F2A344 == 1
 
         // SIMD magnitude-squared of a VecFloat's xyz lanes (vmsum3fp128 / the spin-speed^2 compared).
         inline f32 MagnitudeSquared3(const VecFloat& lvf)
@@ -548,7 +549,7 @@ namespace Deformation
         // Master gate. asm @0x8263A748: `if ( !kbAllowRandomPartDetachment ) goto LABEL_17;` -- when the
         // master switch is OFF the function jumps straight to LABEL_17 (restore + return) WITHOUT zeroing
         // the spin accumulator. Do NOT SetZero here.
-        if ( !KB_ALLOW_RANDOM_PART_DETACHMENT )
+        if ( !kbAllowRandomPartDetachment )
             return;
 
         // "is the body actively simulating" gate (*(body+1808) == 0). Only on the master-ON-but-body-not-
@@ -574,14 +575,14 @@ namespace Deformation
         // frame; at any other step it is the frame-rate-independent equivalent, which matters on a
         // host that does not hold 60.
         const f32 lfDecayFactor =
-            std::exp( std::log( KF_ANGULAR_VELOCITY_DECAY ) * ( lfTimeStep * KF_ANGULAR_DECAY_REFERENCE_RATE ) );
+            std::exp( std::log( kfAngularVelocityDecay ) * ( lfTimeStep * KF_ANGULAR_DECAY_REFERENCE_RATE ) );
         mAngularVelocitySum.x *= lfDecayFactor;
         mAngularVelocitySum.y *= lfDecayFactor;
         mAngularVelocitySum.z *= lfDecayFactor;
 
         // (2) over-threshold test (vcmpgtfp v13, spinSpeed^2, threshold). Below threshold returns.
         const f32 lfSpinSpeedSq = MagnitudeSquared3(mAngularVelocitySum);
-        if ( !( lfSpinSpeedSq > KF_ANGULAR_VELOCITY_FOR_DETACHMENT ) )
+        if ( !( lfSpinSpeedSq > kfAngularVelocityForDetachment ) )
             return;
 
         // (3) force a random attached jointed part to hinge off. Inline LCG draw -> part ordinal.

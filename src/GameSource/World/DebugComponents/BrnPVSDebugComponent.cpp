@@ -2,30 +2,18 @@
 //   PVSDebugComponent::Construct               @ 0x827B2108   (bodied here)
 //   PVSDebugComponent::RenderHUD               @ 0x827CEAD8   (bodied here)
 //   PVSDebugComponent::RenderCollisionZones    @ 0x827C7378   (bodied here)
-//   PVSDebugComponent::OnActivate              @ 0x827B2178   (declared; deferred - see note)
-//   PVSDebugComponent::RenderPVS               @ 0x827C6E58   (declared; deferred - see note)
-//   PVSDebugComponent::RenderPvsCentrePosition @ 0x827BFB08   (declared; deferred - see note)
-//
-// DEFERRED FUNCTIONS. Three of this component's six functions reach through types that are not
-// yet reconstructed in b5-decomp and cannot be forked locally without violating the no-raw-offset
-// rule:
-//   * OnActivate registers the PVS-module score-tuning globals (flt_82CDB58C.. in another TU's
-//     rodata) and a WorldEntityModule "Restrict PVS to 1 zone" flag reached at module+0x2610;
-//     BrnWorld::WorldEntityModule has no reconstructed class home with that accessor yet.
-//   * RenderPVS walks the loaded ZoneList obtained from mpWorldEntityModule (module+0x23D8) and a
-//     PVS-module-internal compiled-zone format (48-byte records, NOT CgsSceneManager::Zone), then
-//     queries the graphics streamer (module+0x4990) via InternalBaseStreamer::DebugGetAssetStatus.
-//     Those module/PVS internals are not reconstructed.
-//   * RenderPvsCentrePosition calls an as-yet-unrecovered CgsDev::Debug2DImmediateRender marker
-//     primitive (X360 sub_8281C3E0) that is not declared on the committed render header.
-// They are declared in the header (RenderHUD/RenderCollisionZones call them through those
-// declarations, so the per-TU `cl /c` gate is satisfied) and their bodies land when the
-// WorldEntityModule / PVS-module / render-marker homes exist.
+//   PVSDebugComponent::OnActivate              @ 0x827B2178
+//   PVSDebugComponent::RenderPVS               @ 0x827C6E58
+//   PVSDebugComponent::RenderPvsCentrePosition @ 0x827BFB08
 
 #include "GameSource/World/DebugComponents/BrnPVSDebugComponent.h"
 
+#include "GameSource/Game/BrnGameModule.hpp"                                                   // BrnGame::sbShowStreamStallMessage
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // Debug2DImmediateRender (DrawCircle / DrawText / CalcTextWidth)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                                      // CgsCore::SPrintf
+#include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModule.h"
+#include "GameSource/World/EntityModules/WorldEntityModule/PVSModule/BrnPVSModule.h"
+#include "GameSource/Resource/SharedIO/BrnAssetIds.h"
 
 #include <cmath>   // sqrtf (the X360's vmsum3fp + vrsqrtefp Newton sequence == a 3D length)
 
@@ -60,21 +48,16 @@ namespace BrnWorld
         // is the X360 scale passed to CalcTextWidth / the label draw.
         const f32 KF_BOUNDING_SPHERE_TEXT_SIZE = 20.0f;
 
-        // INFERRED DATA TABLE: the X360 colours each collision-zone disc by zone-number modulo 8 from
-        // an 8-entry .rdata RGBA wheel (dword_82F30DFC). The raw bytes are not in the available X360
-        // exports, so the wheel below is a plausible 8-hue debug palette (packed 0xAARRGGBB, fully
-        // opaque). FLAGGED: the per-hue values are a reconstruction guess; the INDEXING
-        // (zoneNumber % 8) and the use as the DrawCircle colour are confirmed from the asm.
         const CgsDev::RGBA KAU_ZONE_COLOUR_WHEEL[8] =
         {
-            0xFFFF0000u, // red
-            0xFF00FF00u, // green
-            0xFF0000FFu, // blue
-            0xFFFFFF00u, // yellow
-            0xFFFF00FFu, // magenta
-            0xFF00FFFFu, // cyan
-            0xFFFF8000u, // orange
-            0xFFFFFFFFu, // white
+            0xFF0000FFu,
+            0xFF00FF00u,
+            0xFFFF0000u,
+            0xFFFF00FFu,
+            0xFF00FFFFu,
+            0xFFFFFF00u,
+            0xFFFFFFFFu,
+            0xFF0088FFu,
         };
 
         // INFERRED projection constants. The X360 maps the world XZ plane to the debug overlay with a
@@ -90,6 +73,18 @@ namespace BrnWorld
         // quarter scale.
         const f32 KF_WORLD_TO_SCREEN_SCALE = 0.200000003f;  // flt_82F30E30 (world units AND sphere radius -> overlay pixels)
         const f32 KF_OVERLAY_HALF          = 0.5f;   // flt_82001DA0 (screen-centre origin + label-width halving)
+
+        const char* const KAPC_ASSET_STATUS_NAMES[8] =
+        {
+            "UNKNOWN",
+            "NOT IN LIST",
+            "PENDING LOAD",
+            "LOADING",
+            "READY",
+            "PENDING ABORT LOAD",
+            "UNLOADING",
+            "PENDING UNLOAD",
+        };
     }
 
     // @ 0x827B2108. Bind the world-entity module this component debugs and clear the collision-zone
@@ -116,6 +111,49 @@ namespace BrnWorld
         miNumCollisionZones = 0;      // +0x2010
     }
 
+    // @ 0x827B2178. Register the display modes and the live PVS/streaming
+    // tunings used by the world update.
+    void PVSDebugComponent::OnActivate()
+    {
+        _miColourMode = 1;
+        maColourModeOptions[0].miValue = 1;
+        maColourModeOptions[0].mpcName = "Streaming";
+        maColourModeOptions[1].miValue = 0;
+        maColourModeOptions[1].mpcName = nullptr;
+
+        RegisterVariable(&_mbShowPVS, "Show PVS");
+        RegisterVariable(&mbDrawPVSWireFrame, "Show PVS wire frame");
+        RegisterVariable(&_miColourMode, "Colours");
+        RegisterVariable(&_mbShowCollisionZones, "Show collision zones");
+        SetOptions(&_miColourMode, maColourModeOptions);
+
+        RegisterVariable(&_mrDrawCollisionRadius, "Draw collision zone radius");
+        SetRange(&_mrDrawCollisionRadius, 100.0f, 1500.0f);
+        SetStep(&_mrDrawCollisionRadius, 20.0f);
+
+        RegisterVariable(&mpWorldEntityModule->mPVSModule.mbDebugRestrictZoneLists,
+                         "Restrict PVS to 1 zone");
+
+        RegisterVariable(&mfCentreZoneBaseScore, "Centre zone base score");
+        SetRange(&mfCentreZoneBaseScore, 0.0f, 200.0f);
+        SetStep(&mfCentreZoneBaseScore, 0.5f);
+
+        RegisterVariable(&mfImmediateZoneBaseScore, "Immediate zone base score");
+        SetRange(&mfImmediateZoneBaseScore, 0.0f, 200.0f);
+        SetStep(&mfImmediateZoneBaseScore, 0.5f);
+
+        RegisterVariable(&mfSecondaryZoneBaseScore, "Secondary zone base score");
+        SetRange(&mfSecondaryZoneBaseScore, 0.0f, 200.0f);
+        SetStep(&mfSecondaryZoneBaseScore, 0.5f);
+
+        RegisterVariable(&mfDirectionalScoreMultiplier, "Score Multiplier");
+        SetRange(&mfDirectionalScoreMultiplier, 0.0f, 10.0f);
+        SetStep(&mfDirectionalScoreMultiplier, 0.1f);
+
+        RegisterVariable(&_mbAllowStreamStalling, "Allow Stream Stalling");
+        RegisterVariable(&BrnGame::sbShowStreamStallMessage, "Show stall message");
+    }
+
     // @ 0x827CEAD8. The HUD pass: always draw the PVS overlay, then draw the collision-zone overlay
     // only while the "Show collision zones" toggle is set. (The toggle byte_8300E117 is the
     // file-scope _mbShowCollisionZones.) The pseudocode's `return RenderCollisionZones(...)` /
@@ -127,6 +165,110 @@ namespace BrnWorld
         if (_mbShowCollisionZones)
         {
             RenderCollisionZones(lpRender);
+        }
+    }
+
+    // @ 0x827C6E58. Project every loaded PVS polygon around the current PVS
+    // centre, colour it either by response membership or streaming state, and
+    // optionally draw the wire/label pass.
+    void PVSDebugComponent::RenderPVS(CgsDev::Debug2DImmediateRender* lpRender)
+    {
+        if (!mbCanRender || !_mbShowPVS)
+            return;
+
+        PVSModule& lrPVSModule = mpWorldEntityModule->mPVSModule;
+        if (!lrPVSModule.mZoneList.HasMemoryResource())
+            return;
+
+        const CgsSceneManager::ZoneList* lpZoneList = lrPVSModule.mZoneList.operator->();
+        const CgsSceneManager::Zone* lpZones = lpZoneList->GetZones();
+        const u32 luZoneCount = lpZoneList->GetTotalZones();
+        const Vector2 lScreenSize = lpRender->GetVirtualScreenSize();
+        const Vector2 lScreenCentre = {
+            lScreenSize.x * KF_OVERLAY_HALF,
+            lScreenSize.y * KF_OVERLAY_HALF,
+            0.0f,
+            0.0f
+        };
+
+        for (u32 luZoneIndex = 0; luZoneIndex < luZoneCount; ++luZoneIndex)
+        {
+            const CgsSceneManager::Zone& lrZone = lpZones[luZoneIndex];
+            const s32 liPointCount = lrZone.GetNumPoints();
+            if (liPointCount <= 0 || liPointCount > 32)
+                continue;
+
+            Vector2 laPoints[32];
+            Vector2 lMinimum = { 100000000.0f, 100000000.0f, 0.0f, 0.0f };
+            for (s32 liPoint = 0; liPoint < liPointCount; ++liPoint)
+            {
+                const Vector2 lWorldPoint = lrZone.GetPoint(static_cast<s16>(liPoint));
+                laPoints[liPoint] = {
+                    (lWorldPoint.x - mPvsCentrePosition.x) * KF_WORLD_TO_SCREEN_SCALE + lScreenCentre.x,
+                    (lWorldPoint.y - mPvsCentrePosition.z) * KF_WORLD_TO_SCREEN_SCALE + lScreenCentre.y,
+                    0.0f,
+                    0.0f
+                };
+                if (laPoints[liPoint].x < lMinimum.x) lMinimum.x = laPoints[liPoint].x;
+                if (laPoints[liPoint].y < lMinimum.y) lMinimum.y = laPoints[liPoint].y;
+            }
+
+            s32 liPvsIndex = -1;
+            const s32 liPvsCount = mpWorldEntityModule->mPlayerZoneResponse.GetNumZones();
+            for (s32 liIndex = 0; liIndex < liPvsCount; ++liIndex)
+            {
+                if (lrZone.GetId() == mpWorldEntityModule->mPlayerZoneResponse.GetZoneId(liIndex))
+                {
+                    liPvsIndex = liIndex;
+                    break;
+                }
+            }
+
+            const InternalBaseStreamer::EAssetStatus leStatus =
+                mpWorldEntityModule->mWorldGraphicsStreamer.DebugGetAssetStatus(
+                    BrnResource::MakeTrackUnitId(static_cast<u32>(lrZone.GetId())));
+
+            CgsDev::RGBA lFillColour = 0;
+            if (_miColourMode == 0)
+            {
+                if (liPvsIndex == 0)
+                    lFillColour = 0x1400FF00u;
+                else if (liPvsIndex > 0)
+                    lFillColour = 0x14FF0000u;
+            }
+            else
+            {
+                switch (leStatus)
+                {
+                    case InternalBaseStreamer::E_AS_PENDING_LOAD:       lFillColour = 0x140000FFu; break;
+                    case InternalBaseStreamer::E_AS_LOADING:            lFillColour = 0x1400FFFFu; break;
+                    case InternalBaseStreamer::E_AS_READY:
+                    case InternalBaseStreamer::E_AS_UNLOADING:          lFillColour = 0x14FF0000u; break;
+                    case InternalBaseStreamer::E_AS_PENDING_ABORT_LOAD: lFillColour = 0x14FF00FFu; break;
+                    case InternalBaseStreamer::E_AS_PENDING_UNLOAD:     lFillColour = 0x14FFFF00u; break;
+                    default:                                             lFillColour = 0; break;
+                }
+            }
+
+            if ((lFillColour >> 24) != 0)
+                lpRender->DrawSolidConvexPolygon(laPoints, static_cast<u32>(liPointCount), lFillColour);
+
+            if (mbDrawPVSWireFrame)
+            {
+                lpRender->DrawWirePolygon(laPoints, static_cast<u32>(liPointCount), 0xFFFFFFFFu);
+
+                if (lMinimum.x >= 0.0f && lMinimum.x <= 1000.0f &&
+                    lMinimum.y >= 0.0f && lMinimum.y <= 1000.0f)
+                {
+                    char lacLabel[256];
+                    const s32 liStatus = static_cast<s32>(leStatus);
+                    const char* lpcStatus =
+                        (liStatus >= 0 && liStatus < 8) ? KAPC_ASSET_STATUS_NAMES[liStatus] : "UNKNOWN";
+                    CgsCore::SPrintf(lacLabel, sizeof(lacLabel), "%d: %s",
+                                     static_cast<s32>(static_cast<u32>(lrZone.GetId())), lpcStatus);
+                    lpRender->DrawText(lacLabel, lMinimum.x, lMinimum.y, 15.0f, 0xFFFFFFFFu);
+                }
+            }
         }
     }
 
@@ -206,5 +348,25 @@ namespace BrnWorld
         }
 
         RenderPvsCentrePosition(lpRender);
+    }
+
+    // @ 0x827BFB08. The original marker is a 10-by-20 white rectangle centred
+    // on the virtual screen.
+    void PVSDebugComponent::RenderPvsCentrePosition(CgsDev::Debug2DImmediateRender* lpRender)
+    {
+        const Vector2 lScreenSize = lpRender->GetVirtualScreenSize();
+        const Vector2 lMinimum = {
+            lScreenSize.x * 0.5f - 5.0f,
+            lScreenSize.y * 0.5f - 10.0f,
+            0.0f,
+            0.0f
+        };
+        const Vector2 lMaximum = {
+            lScreenSize.x * 0.5f + 5.0f,
+            lScreenSize.y * 0.5f + 10.0f,
+            0.0f,
+            0.0f
+        };
+        lpRender->DrawBox(lMinimum, lMaximum, 0xFFFFFFFFu);
     }
 }

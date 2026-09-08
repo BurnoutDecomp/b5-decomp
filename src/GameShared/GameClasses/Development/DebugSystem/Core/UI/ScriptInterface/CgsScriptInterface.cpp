@@ -11,7 +11,11 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsVariableManager.h"  // VariableManager::FindVariableFromPath
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsFunction.h"     // Function
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsFunctionManager.h"  // FunctionManager::FindFunctionFromPath
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsMenuItemVariable.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsMenuItemFunction.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenuManager.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h"      // LogWindow::Print
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "rw/core/debug/host.h"                                                              // rw::core::debug::host file I/O
 
 // CgsDev::DebugUI::ScriptInterface - script command runner.
@@ -58,6 +62,31 @@ namespace CgsDev
             { nullptr,                         nullptr,     nullptr },
         };
 
+        // ARTIST inlines this initialization into DebugUI::Construct (0x8282FB40..0x8282FB80):
+        // clear both target pointers and the first alias byte for all 40 aliases, then clear the
+        // first byte of each of the twelve 128-byte F-key bindings.
+        void ScriptInterface::Construct()
+        {
+            for (s32 liIndex = 0; liIndex < KI_MAX_ALIASES; ++liIndex)
+            {
+                maAliasTable[liIndex].macAlias[0] = '\0';
+                maAliasTable[liIndex].mpVariable = nullptr;
+                maAliasTable[liIndex].mpFunction = nullptr;
+            }
+            for (s32 liIndex = 0; liIndex < KI_MAX_BINDINGS; ++liIndex)
+                maBindingTable[liIndex].macBinding[0] = '\0';
+        }
+
+        // DecFIGS names the folded ARTIST body: F1 begins at SpecialKey value 5, and the twelve
+        // consecutive values index the binding table directly.
+        void ScriptInterface::Update(CgsDev::DebugController::SpecialKey leSpecialKey)
+        {
+            const s32 liBinding = static_cast<s32>(leSpecialKey) -
+                                  static_cast<s32>(CgsDev::DebugController::E_KEY_F1);
+            if (liBinding >= 0 && liBinding < KI_MAX_BINDINGS)
+                Execute(maBindingTable[liBinding].macBinding);
+        }
+
         // -- alias / variable / function lookup -------------------------------------------------
 
         ScriptInterface::Alias* ScriptInterface::FindAlias(const char* lpcAlias)
@@ -90,6 +119,39 @@ namespace CgsDev
                     return lpAlias->mpFunction;
             }
             return GetUI().GetFunctionManager().FindFunctionFromPath(lpcPath);
+        }
+
+        void ScriptInterface::GetAliasString(Alias* lpAlias, char* lpcBuffer, s32 liBufferLen)
+        {
+            lpcBuffer[0] = '\0';
+
+            MenuItem* lpMenuItem = nullptr;
+            const char* lpcName = nullptr;
+            if (lpAlias->mpVariable)
+            {
+                lpMenuItem = GetUI().GetVariableManager().FindMenuItem(lpAlias->mpVariable);
+                lpcName = lpAlias->mpVariable->GetName();
+            }
+            else if (lpAlias->mpFunction)
+            {
+                lpMenuItem = GetUI().GetFunctionManager().FindMenuItem(lpAlias->mpFunction);
+                lpcName = lpAlias->mpFunction->GetName();
+            }
+
+            if (!lpMenuItem)
+                return;
+
+            GetUI().GetMenuManager().GetMenuItemPath(lpMenuItem, lpcBuffer, liBufferLen);
+            GetUI().SafeStringCat(lpcBuffer, "/", liBufferLen);
+            GetUI().SafeStringCat(lpcBuffer, lpcName, liBufferLen);
+        }
+
+        void ScriptInterface::OutputMessage(const char* lpcMessage)
+        {
+            const char* lpcOutput = lpcMessage ? lpcMessage : "<NULLSTRING>";
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint)
+                *CgsDev::Log::gpDebugPrint << lpcOutput << "\n";
+            GetUI().GetLogWindow().Print(lpcMessage);
         }
 
         bool ScriptInterface::CreateAlias(const char* lpcAlias, const char* lpcValue)

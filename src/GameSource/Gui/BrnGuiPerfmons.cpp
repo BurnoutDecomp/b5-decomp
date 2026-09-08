@@ -1,17 +1,12 @@
 #include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "types.hpp"
-#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu::AddMonitor (6-param overload)
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu::AddMonitor
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (BrnGui::GuiPerfmons::Initialise @0x824EF050).
 //
-// Registers the GUI module's 33-monitor CPU perfmon tree, storing each handle in a
-// GuiPerfmons static member, then mirrors selected handles into a set of file-static
-// aliases. Parent wiring (the decompiler-lost 5th AddMonitor arg) is recovered from the
-// monitor name indentation (2 spaces per tree level): a monitor's parent is the nearest
-// preceding monitor one level shallower; the 3 root monitors pass the -1 "no parent"
-// sentinel. Call order is the exact X360 order (so every parent handle is registered
-// before its children). The X360 build's 6-param AddMonitor(name, colour, min, budget,
-// parent, flags) is the overload declared in the committed CgsPerfMonCpu.h (its real home).
+// Registers the 33 GUI monitors and publishes the shared handle aliases. ARTIST uses
+// r3/r4/r5/f1/r7 for AddMonitor; the apparent r6 parent argument is a decompiler
+// artefact. Indentation belongs to the displayed name, not a separate parent tree.
 
 namespace BrnGui
 {
@@ -72,48 +67,44 @@ static int32_t giAliasAptAuxUpdFlshNRes;  // dword_82F3313C = miAptAuxUpdateFlas
 
 void GuiPerfmons::Initialise()
 {
-    // Each AddMonitor: (name, colour=3, min=0, budget_ms, parentHandle, flags).
-    // Parent recovered from name indentation; the 3 roots have no parent (-1).
-    static const int KI_NO_PARENT = -1;
-
     // --- Root: GUI MODULE PRE-WORLD UPDATE ---
-    miGuiModulePreWorldUpdate = CgsDev::PerfMonCpu::AddMonitor("GUI MODULE PRE-WORLD UPDATE", 3, 0, 0.1, KI_NO_PARENT, 1);
+    miGuiModulePreWorldUpdate = CgsDev::PerfMonCpu::AddMonitor("GUI MODULE PRE-WORLD UPDATE", CgsDev::E_PMP_3, false, 0.1f, true);
 
     // --- Root: ENTIRE GUI MODULE UPDATE + subtree ---
-    miGuiModuleUpdate = CgsDev::PerfMonCpu::AddMonitor("ENTIRE GUI MODULE UPDATE", 3, 0, 1.9, KI_NO_PARENT, 1);
-    miGuiModuleEventPump = CgsDev::PerfMonCpu::AddMonitor("  Gui Module Event Pump", 3, 0, 0.050000001, miGuiModuleUpdate, 1);
-    miGuiUpdate = CgsDev::PerfMonCpu::AddMonitor("  CgsGui - Update Total", 3, 0, 1.7, miGuiModuleUpdate, 1);
-    miModelUpdate = CgsDev::PerfMonCpu::AddMonitor("    CgsGui - Model Update", 3, 0, 0.40000001, miGuiUpdate, 1);
-    miModelUpdate_Input = CgsDev::PerfMonCpu::AddMonitor("      Model Update INPUT", 3, 0, 0.0099999998, miModelUpdate, 1);
-    miModelUpdate_Main = CgsDev::PerfMonCpu::AddMonitor("      Model Update MAIN", 3, 0, 0.34999999, miModelUpdate, 1);
-    miHudUpdate = CgsDev::PerfMonCpu::AddMonitor("        Gui - HudFlow Update", 3, 0, 0.30000001, miModelUpdate_Main, 1);
-    miHudStateUpdate = CgsDev::PerfMonCpu::AddMonitor("          HUD state Update", 3, 0, 0.2, miHudUpdate, 1);
-    miSatNavUpdate = CgsDev::PerfMonCpu::AddMonitor("            SatNav Update", 3, 0, 0.02, miHudStateUpdate, 1);
-    miMapIconMgrUpdate = CgsDev::PerfMonCpu::AddMonitor("              MapIconMgr Update", 3, 0, 0.0099999998, miSatNavUpdate, 1);
-    miMapIconMgrUpdate2 = CgsDev::PerfMonCpu::AddMonitor("              MapIconMgr Upd 2", 3, 0, 0.0099999998, miSatNavUpdate, 1);
-    miPlayerPosTableUpdate = CgsDev::PerfMonCpu::AddMonitor("            PlayerPosTbl Update", 3, 0, 0.0099999998, miHudStateUpdate, 1);
-    miScreenUpdate = CgsDev::PerfMonCpu::AddMonitor("        Gui - ScreenFlow Update", 3, 0, 0.050000001, miModelUpdate_Main, 1);
-    miModelUpdate_Output = CgsDev::PerfMonCpu::AddMonitor("      Model Update OUTPUT", 3, 0, 0.0099999998, miModelUpdate, 1);
-    miModelViewBridge = CgsDev::PerfMonCpu::AddMonitor("    CgsGui - Model View Bridge", 3, 0, 0.02, miGuiUpdate, 1);
-    miViewUpdate = CgsDev::PerfMonCpu::AddMonitor("    CgsGui - View Update", 3, 0, 1.2, miGuiUpdate, 1);
-    miFlaptUpdate = CgsDev::PerfMonCpu::AddMonitor("      FLApt - Update", 3, 0, 0.5, miViewUpdate, 1);
-    miViewProcessIncomingEvents = CgsDev::PerfMonCpu::AddMonitor("      Process Incoming Events", 3, 0, 0.0, miViewUpdate, 1);
-    miAptAuxUpdate = CgsDev::PerfMonCpu::AddMonitor("      ViewModuleApt", 3, 0, 1.1, miViewUpdate, 1);
-    miAptAuxUpdateFlashComponentRes = CgsDev::PerfMonCpu::AddMonitor("        AptAux - Upd Flsh Res", 3, 0, 0.1, miAptAuxUpdate, 1);
-    miAptAuxUpdateFlashComponentNRes = CgsDev::PerfMonCpu::AddMonitor("        AptAux - Upd Flsh NRes", 3, 0, 0.1, miAptAuxUpdate, 1);
-    miAptAuxUpdateComponents = CgsDev::PerfMonCpu::AddMonitor("        AptAux - Upd Comps", 3, 0, 0.44999999, miAptAuxUpdate, 1);
-    miAptAuxUpdateTarget = CgsDev::PerfMonCpu::AddMonitor("        AptAux - Upd Tgt", 3, 0, 0.44999999, miAptAuxUpdate, 1);
-    miCgsLanguageManager = CgsDev::PerfMonCpu::AddMonitor("      Language Manager", 3, 0, 0.1, miViewUpdate, 1);
+    miGuiModuleUpdate = CgsDev::PerfMonCpu::AddMonitor("ENTIRE GUI MODULE UPDATE", CgsDev::E_PMP_3, false, 1.9f, true);
+    miGuiModuleEventPump = CgsDev::PerfMonCpu::AddMonitor("  Gui Module Event Pump", CgsDev::E_PMP_3, false, 0.050000001f, true);
+    miGuiUpdate = CgsDev::PerfMonCpu::AddMonitor("  CgsGui - Update Total", CgsDev::E_PMP_3, false, 1.7f, true);
+    miModelUpdate = CgsDev::PerfMonCpu::AddMonitor("    CgsGui - Model Update", CgsDev::E_PMP_3, false, 0.40000001f, true);
+    miModelUpdate_Input = CgsDev::PerfMonCpu::AddMonitor("      Model Update INPUT", CgsDev::E_PMP_3, false, 0.0099999998f, true);
+    miModelUpdate_Main = CgsDev::PerfMonCpu::AddMonitor("      Model Update MAIN", CgsDev::E_PMP_3, false, 0.34999999f, true);
+    miHudUpdate = CgsDev::PerfMonCpu::AddMonitor("        Gui - HudFlow Update", CgsDev::E_PMP_3, false, 0.30000001f, true);
+    miHudStateUpdate = CgsDev::PerfMonCpu::AddMonitor("          HUD state Update", CgsDev::E_PMP_3, false, 0.2f, true);
+    miSatNavUpdate = CgsDev::PerfMonCpu::AddMonitor("            SatNav Update", CgsDev::E_PMP_3, false, 0.02f, true);
+    miMapIconMgrUpdate = CgsDev::PerfMonCpu::AddMonitor("              MapIconMgr Update", CgsDev::E_PMP_3, false, 0.0099999998f, true);
+    miMapIconMgrUpdate2 = CgsDev::PerfMonCpu::AddMonitor("              MapIconMgr Upd 2", CgsDev::E_PMP_3, false, 0.0099999998f, true);
+    miPlayerPosTableUpdate = CgsDev::PerfMonCpu::AddMonitor("            PlayerPosTbl Update", CgsDev::E_PMP_3, false, 0.0099999998f, true);
+    miScreenUpdate = CgsDev::PerfMonCpu::AddMonitor("        Gui - ScreenFlow Update", CgsDev::E_PMP_3, false, 0.050000001f, true);
+    miModelUpdate_Output = CgsDev::PerfMonCpu::AddMonitor("      Model Update OUTPUT", CgsDev::E_PMP_3, false, 0.0099999998f, true);
+    miModelViewBridge = CgsDev::PerfMonCpu::AddMonitor("    CgsGui - Model View Bridge", CgsDev::E_PMP_3, false, 0.02f, true);
+    miViewUpdate = CgsDev::PerfMonCpu::AddMonitor("    CgsGui - View Update", CgsDev::E_PMP_3, false, 1.2f, true);
+    miFlaptUpdate = CgsDev::PerfMonCpu::AddMonitor("      FLApt - Update", CgsDev::E_PMP_3, false, 0.5f, true);
+    miViewProcessIncomingEvents = CgsDev::PerfMonCpu::AddMonitor("      Process Incoming Events", CgsDev::E_PMP_3, false, 0.0f, true);
+    miAptAuxUpdate = CgsDev::PerfMonCpu::AddMonitor("      ViewModuleApt", CgsDev::E_PMP_3, false, 1.1f, true);
+    miAptAuxUpdateFlashComponentRes = CgsDev::PerfMonCpu::AddMonitor("        AptAux - Upd Flsh Res", CgsDev::E_PMP_3, false, 0.1f, true);
+    miAptAuxUpdateFlashComponentNRes = CgsDev::PerfMonCpu::AddMonitor("        AptAux - Upd Flsh NRes", CgsDev::E_PMP_3, false, 0.1f, true);
+    miAptAuxUpdateComponents = CgsDev::PerfMonCpu::AddMonitor("        AptAux - Upd Comps", CgsDev::E_PMP_3, false, 0.44999999f, true);
+    miAptAuxUpdateTarget = CgsDev::PerfMonCpu::AddMonitor("        AptAux - Upd Tgt", CgsDev::E_PMP_3, false, 0.44999999f, true);
+    miCgsLanguageManager = CgsDev::PerfMonCpu::AddMonitor("      Language Manager", CgsDev::E_PMP_3, false, 0.1f, true);
 
     // --- Root: ENTIRE GUI MODULE RENDER + subtree ---
-    miGuiModuleRender = CgsDev::PerfMonCpu::AddMonitor("ENTIRE GUI MODULE RENDER", 3, 0, 2.0, KI_NO_PARENT, 1);
-    miFlaptRender = CgsDev::PerfMonCpu::AddMonitor("  FLApt - Render", 3, 0, 1.5, miGuiModuleRender, 0);
-    miGuiRender = CgsDev::PerfMonCpu::AddMonitor("  CgsGui - Render", 3, 0, 0.94999999, miGuiModuleRender, 0);
-    miCustomRender = CgsDev::PerfMonCpu::AddMonitor("    Custom renderer Render", 3, 0, 50.0, miGuiRender, 0);
-    miAptAuxRenderTarget = CgsDev::PerfMonCpu::AddMonitor("    AptAux - Rndr Tgt", 3, 0, 0.89999998, miGuiRender, 0);
-    miCgsAptStringRender = CgsDev::PerfMonCpu::AddMonitor("      Flash String render", 3, 0, 0.40000001, miAptAuxRenderTarget, 1);
-    miCgsAptDrawRenderingUnit = CgsDev::PerfMonCpu::AddMonitor("      Flash Draw Rendering Unit", 3, 0, 0.40000001, miAptAuxRenderTarget, 1);
-    miCgsAptFlashRender = CgsDev::PerfMonCpu::AddMonitor("        Flash Object render", 3, 0, 0.15000001, miCgsAptDrawRenderingUnit, 1);
+    miGuiModuleRender = CgsDev::PerfMonCpu::AddMonitor("ENTIRE GUI MODULE RENDER", CgsDev::E_PMP_3, false, 2.0f, true);
+    miFlaptRender = CgsDev::PerfMonCpu::AddMonitor("  FLApt - Render", CgsDev::E_PMP_3, false, 1.5f, false);
+    miGuiRender = CgsDev::PerfMonCpu::AddMonitor("  CgsGui - Render", CgsDev::E_PMP_3, false, 0.94999999f, false);
+    miCustomRender = CgsDev::PerfMonCpu::AddMonitor("    Custom renderer Render", CgsDev::E_PMP_3, false, 50.0f, false);
+    miAptAuxRenderTarget = CgsDev::PerfMonCpu::AddMonitor("    AptAux - Rndr Tgt", CgsDev::E_PMP_3, false, 0.89999998f, false);
+    miCgsAptStringRender = CgsDev::PerfMonCpu::AddMonitor("      Flash String render", CgsDev::E_PMP_3, false, 0.40000001f, true);
+    miCgsAptDrawRenderingUnit = CgsDev::PerfMonCpu::AddMonitor("      Flash Draw Rendering Unit", CgsDev::E_PMP_3, false, 0.40000001f, true);
+    miCgsAptFlashRender = CgsDev::PerfMonCpu::AddMonitor("        Flash Object render", CgsDev::E_PMP_3, false, 0.15000001f, true);
 
     // --- Alias copies (X360 dword_82F330xx / 82F331xx = primary handles) ---
     giAliasUpdateTotal = miGuiUpdate;

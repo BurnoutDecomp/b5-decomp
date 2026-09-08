@@ -36,7 +36,6 @@ namespace BrnDirector
         LiveCamUpdate(lrCamera);
 
         CgsDev::DebugInterface lDebugInterface;
-        CgsDev::DebugManager& lrDebugManager = lDebugInterface.GetDebugManager();
         CgsDev::DebugUI::DebugUI& lrDebugUI = lDebugInterface.GetUI();
         ICEWrapper& lrICEWrapper = mpDirectorModule->GetICEWrapper();
 
@@ -51,7 +50,6 @@ namespace BrnDirector
         if (!lrDebugUI.IsVisible() && lbEditorActive)
             lrICEWrapper.UpdateAction(lpInput->GetControll()->mDebugController);
 
-        CgsDev::DebugManager::ThreadSafeRelease(&lrDebugManager);
     }
 
     // -----------------------------------------------------------------------

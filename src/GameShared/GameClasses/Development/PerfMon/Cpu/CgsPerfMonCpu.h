@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Development/PerfMon/CgsPerfMon.h"
 
 // CgsDev::PerfMonCpu - the CPU performance-monitor registry. Each timed region of the frame is
 // bracketed by StartMonitor/StopMonitor on an int handle returned by AddMonitor; the registry
@@ -28,14 +29,13 @@ namespace CgsDev
     // X360 CgsPerfMonCpu.h:40.
     static const s32 KI_PERFMONCPU_MAXSTRINGLENGTH = 32;
 
-    // The page a monitor is grouped under in the overlay (X360 CgsPerfMonCpu.h:47, E_PMP_GENERAL..23,
-    // E_PMP_MAX=24). Only the general page + the count are needed for the bounded bar overlay.
-    // The DWARF names the whole run E_PMP_GENERAL(0), E_PMP_1 .. E_PMP_23, E_PMP_MAX(24).
-    // Only the pages the reconstructed call sites actually pass are declared here; add the
-    // next one when a wave needs it (they are plain positional page ids, not semantic names).
+    // The page a monitor is grouped under in the overlay (X360 CgsPerfMonCpu.h:47).
     enum PerfMonCpuPage
     {
         E_PMP_GENERAL = 0,
+        E_PMP_1       = 1,
+        E_PMP_2       = 2,
+        E_PMP_3       = 3,
         E_PMP_4       = 4,   // CgsPhysics::PhysicsSimulationModule::Construct's four "Sim *" monitors
         E_PMP_5       = 5,   // [stuntrace waveB] BrnGameState::ModeManager::Construct's two
                              // "ModeManager PreWorld" / "ModeManager PostWorld" monitors: the
@@ -43,11 +43,25 @@ namespace CgsDev
                              // (with r3 = "ModeManager PostWorld", r5 = 0, r7 = 1, f1 = the 1.0f
                              // budget at flt_82001C98)
         E_PMP_6       = 6,   // BrnPhysics::Vehicle::VehicleManager::Construct's "PHYS ValidateRCWorldContact"
+        E_PMP_7       = 7,
+        E_PMP_8       = 8,
         E_PMP_9       = 9,   // BrnNetwork::BrnServerInterfaceX360::Construct's two "Int - * Update" monitors
+        E_PMP_10      = 10,
+        E_PMP_11      = 11,
         E_PMP_12      = 12,  // VehicleManager::Construct's other twenty-nine "VMan: ..." monitors (`li r4, 0xC`)
+        E_PMP_13      = 13,
+        E_PMP_14      = 14,
+        E_PMP_15      = 15,
+        E_PMP_16      = 16,
+        E_PMP_17      = 17,
+        E_PMP_18      = 18,
+        E_PMP_19      = 19,
+        E_PMP_20      = 20,
         E_PMP_21      = 21,  // LionPerfMon::Construct's twenty-three Lion monitors (`li r4, 0x15`
                              // @0x82279EB4 and twenty-two more, all with r5 = 0, r7 = 0 and the
                              // f1 budget flt_820049E0 == 100.0f loaded once into f31 @0x82279EB8)
+        E_PMP_22      = 22,
+        E_PMP_23      = 23,
         E_PMP_MAX     = 24,
     };
 
@@ -99,10 +113,15 @@ namespace CgsDev
         // pools take (CgsDebugCollections.cpp); the faithful rw-allocator path is the allocator follow-on.
         bool Construct(s32 liMaxMonitorCount, rw::IResourceAllocator* lpAllocator);
         void Destruct();
+        void SetGameFrequency(PerfMonGameFrequency leFrequency);
+        void StartProfiling();
+        void StopProfiling();
+        void PrepareActiveMonitorsForUpdate();
+        void ResetValuesInActiveMonitors();
 
         // Register a monitor and return its handle (a 0-based index into the registry). StartMonitor /
         // StopMonitor / GetMonitorData take that handle. Returns -1 if the registry is full/unbuilt.
-        s32  AddMonitor(const char* lpcName, PerfMonCpuPage lePage, bool lbMinimum, f32 lfCpuBudget, bool lbLibPerfTagged);
+        s32  AddMonitor(const char* lpcName, PerfMonCpuPage lePage, bool lbMinimum, f32 lfCpuBudget, bool lbScaled);
 
         // ⚠️⚠️ THE 6-PARAMETER FORM IS A HEX-RAYS ARTEFACT, NOT A SECOND CONSOLE OVERLOAD.
         // SETTLED 2026-08-03 (VehicleManager layout wave). On the PPC ABI a float/double argument
@@ -153,5 +172,9 @@ namespace CgsDev
         // through a no-op shim; the per-counter format string the X360 passed lived in rodata that
         // did not survive (FLAG: format string is a documented placeholder, not a recovered fact).
         void AddPIXCounters();
+
+        // Original private static, exposed only because this PC namespace model has no class
+        // privacy. DebugComponentPerfMonCpu registers this exact flag in its ARTIST menu.
+        extern bool mbIgnoreZeroCallsInAverage;
     }
 }

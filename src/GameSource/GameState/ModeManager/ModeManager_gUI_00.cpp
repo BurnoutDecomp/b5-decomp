@@ -75,14 +75,10 @@ const ScoringSystem* ModeManager::GetScoringSystem() const
 // [tut-ticker] ConstructInterModeStateBringUp -- the extracted INTER-MODE SEED stores of
 // ModeManager::Construct @0x82340008 (sole caller GameStateModule::Construct).
 //
-// It is a strict SUBSET of the real Construct, chosen by one rule: every store here must be
-// self-contained. Anything in Construct that needs an unmounted callee -- the 18-slot mode table
-// (GameMode::Construct, i.e. the fourteen unmounted mode TUs), ScoringSystem::Construct,
-// ClearLandmarkAndFinishLineData (which calls the unmounted ResetNextLandmarks), the PerfMon
-// registrations, the two debug components -- is deliberately absent, because THIS file is mounted
-// and those are not. That is the whole reason the seam is not simply "call Construct's inner legs":
-// a call from here into BrnModeManager_Lifecycle.cpp would be an unresolved external in the
-// shipping link.
+// This PC startup is a subset of the original Construct. The per-mode and scoring
+// initialization below, and now both debug components, are restored as their mounted
+// callees become available. The full lifecycle still needs additional manager wiring;
+// do not replace this seam with the full Construct until its dependencies are ready.
 //
 // Console stores covered here (asm @0x82340008, offsets verbatim):
 //     *(a1 + 27992) = a2;    // mpGameStateModule   (+0x6D58)
@@ -112,6 +108,14 @@ const ScoringSystem* ModeManager::GetScoringSystem() const
 void ModeManager::ConstructInterModeStateBringUp(GameStateModule* lpGameStateModule)
 {
     CGS_ASSERT(lpGameStateModule != nullptr, "lpGameStateModule");   // BrnModeManager.cpp:202
+
+    // FLAG PC-platform leaf: this partial startup replaces ModeManager::Construct.
+    // Carry its original debug-component initialization (ARTIST 0x82340008) here
+    // before PreWorldUpdate can call the now-mounted scoring debug renderer.
+    mModeManagerDebugComponent.Construct(this);
+    mModeManagerDebugComponent.Register();
+    mScoringSystemDebugComponent.Construct(GetScoringSystem());
+    mScoringSystemDebugComponent.Register();
 
     mpGameStateModule = lpGameStateModule;                                  // +27992
     // [stuntrace 2026-08-26] +28000: the real Construct @0x82340008 wires the TQM back-pointer

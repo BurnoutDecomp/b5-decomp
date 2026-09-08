@@ -1085,27 +1085,14 @@ void PropManager::ReadUpdatedBodies(
             }
         }
 
-        // :1027  mbRenderCOM (+0x48). The console builds a stack DebugInterface, draws the gizmo on
-        // the event's own transform row (sp+0x120), and releases through the inlined
-        // DebugManager::ThreadSafeRelease (Leave, then assert lpDebugManager == mpInstance,
-        // CgsDebugManager.h:353). The committed ~DebugInterface is a documented no-op, so the
-        // release is explicit -- the same spelling BehaviourRig::Update uses in-tree.
-        //
-        // ⚠️ ONE CONSOLE BRANCH IS DELIBERATELY ABSENT AND IT IS EXACT, NOT A SIMPLIFICATION
-        // (round-1 G6 NIT 1, applied). The console gates the release on the stack DebugInterface's
-        // OWN mbIsAutomaticClass byte: 0x82632D7C `lbz r11, var_2CC(r1)` / 0x82632D80 `cmplwi
-        // cr6,r11,0` / 0x82632D84 `beq cr6, loc_82632DBC`, where var_2CC is var_2D0 (the
-        // DebugInterface) + 4 and CgsDebugInterface.h:107-108 lays the struct out as
-        // mpDebugManager(+0), mbIsAutomaticClass(+4). The default ctor ALWAYS sets that flag
-        // (CgsDebugInterface.h:33 `, mbIsAutomaticClass(true)`), so the branch is always taken and
-        // the unconditional release below is a reproduction. Said out loud so the next agent
-        // diffing this arm against the asm does not see an unexplained missing branch.
+        // :1027 mbRenderCOM (+0x48). The console builds an automatic DebugInterface and draws the
+        // gizmo on the event's own transform row (sp+0x120). Its destructor tests
+        // mbIsAutomaticClass and releases the manager, matching the inlined ARTIST tail.
         if ( mbRenderCOM )
         {
             CgsDev::DebugInterface lInt;
             lInt.GetRender().DrawAxis(
                 reinterpret_cast<const f32*>( &lUpdatePropEvent.mTransform ) );
-            CgsDev::DebugManager::ThreadSafeRelease( &lInt.GetDebugManager() );
         }
 
         // See decode (F): the event carries the RAW velocities, written before any clamping.

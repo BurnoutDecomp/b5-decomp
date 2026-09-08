@@ -8,8 +8,8 @@
 //   * ScrPrintf        @0x825343D0  -- white-text vararg front end -> ScrPrintfArg
 //   * ScrShadowPrintf  @0x825342E0  -- ScrPrintfArg x3 (dark shadow pass + main)
 //
-// Each draw acquires a stack DebugInterface, queues the 2D prim through its
-// Get2dRender() buffered renderer, then thread-safe-releases the manager.
+// Each draw acquires a stack DebugInterface and queues the 2D primitive through its
+// Get2dRender() buffered renderer; the automatic interface releases the manager.
 //
 // COLOUR: the colour params arrive as ICE::Vector4 with one float per channel in
 // [0,255]; the X360 clamps each lane to [0,255] and packs it to a CgsDev::RGBA
@@ -88,7 +88,6 @@ namespace ICE
 
         CgsDev::DebugInterface lDebugInterface;
         lDebugInterface.Get2dRender().Draw2DBox(lv2Corner, lv2Extent, lColour);
-        CgsDev::DebugManager::ThreadSafeRelease(&lDebugInterface.GetDebugManager());
     }
 
     // ------------------------------------------------------------------------
@@ -108,7 +107,6 @@ namespace ICE
 
         CgsDev::DebugInterface lDebugInterface;
         lDebugInterface.Get2dRender().Draw2DText(lacBuffer, lv2Position, lfSize, lColour);
-        CgsDev::DebugManager::ThreadSafeRelease(&lDebugInterface.GetDebugManager());
     }
 
     // ------------------------------------------------------------------------

@@ -17,11 +17,43 @@ namespace CgsDev
 {
     namespace DebugUI
     {
+        const f32 ErrorWindow::KF_ERRORWINDOWWIDTH = 0.5f;
+        const f32 ErrorWindow::KF_ERRORWINDOWHEIGHT = 0.2f;
+        const f32 ErrorWindow::KF_ERRORPULSETIME = 1.5f;
+
+        ErrorWindow::ErrorWindow()
+            : Window()
+            , mpcErrorMessage(nullptr)
+            , mfPulse(0.0f)
+        {
+        }
+
+        // ARTIST's body is folded into the DecFIGS-named implementation at 0xB2CCBC: retain the
+        // caller-owned message pointer, create one centred modal window, and leave an already-open
+        // error window in place while updating only its text.
+        void ErrorWindow::Prepare(const char* lpcErrorMessage)
+        {
+            mpcErrorMessage = lpcErrorMessage;
+            if (GetUI().IsWindowAdded(this))
+                return;
+
+            mfPulse = 0.0f;
+            const Metrics& lrMetrics = GetMetrics();
+            const f32 lfWidth = lrMetrics.mfScreenWidth * KF_ERRORWINDOWWIDTH;
+            const f32 lfHeight = lrMetrics.mfScreenHeight * KF_ERRORWINDOWHEIGHT;
+            Window::Prepare(lfWidth, lfHeight, nullptr,
+                            KX_FLAGNOCAPTION | KX_FLAGNOBACKGROUND |
+                            KX_FLAGMODAL | KX_FLAGNOCASCADE);
+            SetPosition((lrMetrics.mfScreenWidth - lfWidth) * 0.5f,
+                        (lrMetrics.mfScreenHeight - lfHeight) * 0.5f);
+            GetUI().AddWindow(this);
+        }
+
         namespace
         {
             // The X360 Window::ScaleColour repack (0x8282EF88..0x8282F044): keep the top (alpha) byte
             // of the packed colour and scale each of the three low channel bytes by lfScale.
-            RGBA ScaleColour(RGBA lColour, f32 lfScale)
+            RGBA ScalePulseColour(RGBA lColour, f32 lfScale)
             {
                 const u32 luB0 = (u32)((f32)( lColour        & 0xFFu) * lfScale);
                 const u32 luB1 = (u32)((f32)((lColour >>  8) & 0xFFu) * lfScale);
@@ -47,7 +79,7 @@ namespace CgsDev
             const f32 lfScale     = lfIntensity * (1.0f / 255.0f);
 
             // Both the box fill and the frame draw with the pulse-scaled error-window colour.
-            const RGBA lPulseColour = ScaleColour(lrPalette.mColourErrorWindow, lfScale);
+            const RGBA lPulseColour = ScalePulseColour(lrPalette.mColourErrorWindow, lfScale);
 
             // Window geometry (mfX/mfY/mfWidth/mfHeight are private on the base -> public getters).
             const f32 lfX      = GetX();

@@ -35,14 +35,11 @@ namespace BrnGameState
 {
 
 BrnWorld::WorldRegion
-StuntManagerDebugComponent::GetTriggerWorldRegion(const Vector3& lrTriggerPosition)
+StuntManagerDebugComponent::GetTriggerWorldRegion(const BrnTrigger::GenericRegion* lpGenericRegion)
 {
-    // Build the sample position: x/y/z from the trigger, w lane forced to 0.
-    Vector3 lSamplePosition;
-    lSamplePosition.x = lrTriggerPosition.x;
-    lSamplePosition.y = lrTriggerPosition.y;
-    lSamplePosition.z = lrTriggerPosition.z;
-    lSamplePosition.w = 0.0f;
+    // BoxRegion::GetPosition produces the x/y/z trigger centre with a zero w lane,
+    // matching the three scalar loads + vector staging in ARTIST.
+    const Vector3 lSamplePosition = lpGenericRegion->GetBoxRegion()->GetPosition();
 
     const u8 luValue =
         mpStuntManager->GetDistrictMap().GetValue(lSamplePosition);

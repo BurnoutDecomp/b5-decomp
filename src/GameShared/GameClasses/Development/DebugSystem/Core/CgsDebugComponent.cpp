@@ -24,10 +24,7 @@
 // (chosen by IsSimple()). Construct / Destruct are the base two-phase init/teardown over the two
 // members (the X360 inlines them; bodies reconstructed from the attested member set).
 //
-// NOT in this TU yet (the link-closure follow-on): the menu-row helpers AddMenuItem / RemoveMenuItem /
-// DebugUISectionCallback (they need the Menu/MenuItem tree), and the VariableManager /
-// FunctionManager / DebugManager method bodies themselves. The variable/function registration
-// surface below is the keystone that every in-game DebugComponent subclass compiles against.
+// The menu-row helpers share MenuManager's canonical CreateMenuPath/Add/Remove implementation.
 
 namespace CgsDev
 {
@@ -306,6 +303,25 @@ namespace CgsDev
         GetUI().GetFunctionManager().SetFunctionName(lpfCallback, lpUserData, lpcName);
     }
 
+    void DebugComponent::AddMenuItem(const char* lpcName, DebugUI::MenuItem* lpMenuItem)
+    {
+        char lacPath[256];
+        MakeFullPath(lacPath, sizeof(lacPath), lpcName);
+        GetUI().GetMenuManager().AddMenuItem(lacPath, lpMenuItem);
+    }
+
+    void DebugComponent::AddMenuItem(DebugUI::MenuItem* lpMenuItem)
+    {
+        char lacPath[256];
+        GetComponentPath(lacPath, sizeof(lacPath));
+        GetUI().GetMenuManager().AddMenuItem(lacPath, lpMenuItem);
+    }
+
+    void DebugComponent::RemoveMenuItem(DebugUI::MenuItem* lpMenuItem)
+    {
+        GetUI().GetMenuManager().RemoveMenuItem(lpMenuItem);
+    }
+
     // ---- overridable hooks (base defaults; real components override the meaningful ones) --------
 
     void        DebugComponent::Update()                              {}
@@ -317,12 +333,19 @@ namespace CgsDev
     void        DebugComponent::OnActivate()                          {}
     void        DebugComponent::OnRegister()                          {}
 
-    // X360: ActivateComponent(this) -> GetComponentPath -> MenuManager::GetMenuFromPath -> Open. The
-    // menu-open path (DebugManager::ActivateComponent / MenuManager::GetMenuFromPath / Open) is the
-    // menu-navigation follow-on; stubbed here - this fires only when a debug section is selected,
-    // never during loading.
+    // ARTIST 0x82831F70: expand the one-shot component row, then open the component menu that its
+    // OnActivate registration just created.
     void DebugComponent::DebugUISectionCallback(void* lpUserData)
     {
-        (void)lpUserData;
+        DebugComponent* lpComponent = static_cast<DebugComponent*>(lpUserData);
+        DebugManager* lpManager = DebugManager::GetInstance();
+        lpManager->ActivateComponent(lpComponent);
+
+        char lacPath[256];
+        lpComponent->GetComponentPath(lacPath, sizeof(lacPath));
+        DebugUI::MenuManager& lrMenuManager = lpManager->GetUI().GetMenuManager();
+        DebugUI::Menu* lpMenu = lrMenuManager.GetMenuFromPath(lacPath, nullptr);
+        if (lpMenu)
+            lrMenuManager.Open(lpMenu);
     }
 }

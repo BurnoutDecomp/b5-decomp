@@ -94,6 +94,12 @@ namespace Deformation
 	// [deform-bbox] DIAG only -- defined in BrnDeformableObject_Update.cpp: ApplySensorImpulse calls
 	// whose limit rows came from the drive-time pair ([0]) vs the crash pair ([1]).
 	extern u32 guDeformLimitRowArmApplies[2];
+	// Console-inline accessor used by the deformation debug component.  The live deformed
+	// AABB is owned by the attached SimpleVehiclePhysics at its named mDeformableAABB seat.
+	void DeformableObject::GetDeformedBoundingBox(CgsGeometric::AxisAlignedBox* lpBoxOut)
+	{
+		*lpBoxOut = mVehicleBody.GetVehiclePhysics()->GetDeformableAABB();
+	}
 
 	namespace
 	{

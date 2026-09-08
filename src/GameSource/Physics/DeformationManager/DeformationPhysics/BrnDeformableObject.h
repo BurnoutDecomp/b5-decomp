@@ -65,7 +65,7 @@ namespace CgsNumeric { class Random; }
 //      Where the DWARF spells a NESTED type (e.g. OutputBuffer::SceneInputInterface), the comment
 //      records the DWARF spelling and the signature uses the underlying forward-declared type. ----
 namespace CgsGeometric { struct Box; struct AxisAlignedBox; }
-namespace CgsDev { class Debug3DImmediateRender; }
+namespace CgsDev { struct Debug3DImmediateRender; }
 // ⚠⚠ CLASS-KEY FIXED 2026-08-27 (detach-3 wave): SimpleDataStreamProducer is a `struct` in its
 // real home (CgsSimpleDataStreamProducer.h:39). `class` here mangled every signature carrying it
 // as ?AV instead of ?AU -- the same ODR fork the 2026-08-06 note below records for the sim buffers.
@@ -216,8 +216,8 @@ namespace Deformation
                               VecFloat lvfTime, DeformationResetType leResetType, bool lbFlag,
                               CgsNumeric::Random& lrRandom);                                     // :204
         void ResetScratching();                                                                 // :207
-        void ResetDeformationNextUpdate(bool lbReset);                                          // :212
-        bool ShouldResetDeformationNextUpdate() const;                                          // :216
+        void ResetDeformationNextUpdate(bool lbReset) { mbResetDeformationNextUpdate = lbReset; } // :212
+        bool ShouldResetDeformationNextUpdate() const { return mbResetDeformationNextUpdate; }    // :216
         void UpdateSensorDisplacements(VecFloat lvfTimeStep);                                   // :222
         // ⭐ PARAMS 3/4 + lpContacts CORRECTED 2026-08-14 (walls leg 4): the PS3 DecFIGS mangle
         // (0x7585D8) types params 3/4 as the PHYSICS-MODULE IO buffers (PKNS_15PhysicsModuleIO

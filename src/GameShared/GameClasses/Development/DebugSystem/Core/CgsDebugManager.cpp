@@ -3,6 +3,8 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // DebugComponent (mbActive/OnRegister/DebugUISectionCallback/RenderHUD)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"      // GetUI().GetVariableManager()/GetFunctionManager()
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"        // Variant
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenu.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsMenuItemFunction.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // mp2dRender Begin/End/SetRenderBuffer/Construct/SetDebugFont
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"  // mp3dRender SetDebugFont (font handoff)
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"             // mBufferedRenderer (buffered debug prims)
@@ -21,9 +23,6 @@
 namespace CgsSystem { u32 GetAvailablePhysicalMemoryBytes(); }
 
 // CgsDev::DebugManager - the in-game debug systems owner.
-//
-// Boot/loading path: the per-frame tick is a no-op so the game-module update spine links and runs;
-// the full Update (driving the UI) is the manager-construction follow-on.
 //
 // Registration/lifecycle (what DebugComponent::Register drives): ThreadSafeAquire/Release bracket
 // the singleton behind the debug critical section (X360 0x821F1E50 / ThreadSafeRelease);
@@ -255,7 +254,19 @@ namespace CgsDev
                          lSystemTime.wDay, lSystemTime.wMonth, lSystemTime.wYear);
     }
 
-    void DebugManager::Update(f32) {}
+    // X360 0x82834390. Active components tick first, then the UI consumes this frame's input.
+    void DebugManager::Update(f32 lfDeltaTime)
+    {
+        for (DebugComponent* lpComponent = mComponentList.GetFirst();
+             lpComponent;
+             lpComponent = mComponentList.GetNext(lpComponent))
+        {
+            if (lpComponent->IsActive())
+                lpComponent->Update();
+        }
+
+        mpUI->Update(lfDeltaTime);
+    }
 
     // Faithful port of X360 0x821F1E50: assert the singleton exists, enter the per-manager debug
     // critical section, then hand the singleton back. (Enter is a no-op until the section is Created.)
@@ -293,9 +304,39 @@ namespace CgsDev
             mp2dRender->SetDebugFont(lrFont);
     }
 
+    // X360 CgsDebugManager.cpp:1052: the manager is only a pass-through; the controller owns
+    // the pad pointer and translates it into DebugUI events during Update.
+    void DebugManager::SetGamePad(DebugManagerPad* lpDebugManagerPad)
+    {
+        mpUI->SetGamePad(lpDebugManagerPad);
+    }
+
     bool DebugManager::IsComponentRegistered(DebugComponent* lpComponent)
     {
         return mComponentList.IsAdded(lpComponent);
+    }
+
+    // ARTIST 0x82822400. Accept both a component's short virtual name and its full registered
+    // component path, treating one leading slash as optional.
+    DebugComponent* DebugManager::FindComponentByName(const char* lpcName)
+    {
+        if (!lpcName)
+            return nullptr;
+        if (*lpcName == '/')
+            ++lpcName;
+
+        char lacPath[256];
+        for (DebugComponent* lpComponent = mComponentList.GetFirst();
+             lpComponent;
+             lpComponent = mComponentList.GetNext(lpComponent))
+        {
+            lpComponent->GetComponentPath(lacPath, sizeof(lacPath));
+            const char* lpcPath = lacPath[0] == '/' ? lacPath + 1 : lacPath;
+            if (_stricmp(lpComponent->GetName(), lpcName) == 0 ||
+                _stricmp(lpcPath, lpcName) == 0)
+                return lpComponent;
+        }
+        return nullptr;
     }
 
     // X360 0x82832008. Register a component as a full menu section: a function row that, when
@@ -333,9 +374,9 @@ namespace CgsDev
         lpComponent->OnRegister();
     }
 
-    // X360 ActivateComponent(DebugComponent*): make a registered component active so the render spine
-    // draws it. Bounded to flipping the active flag (which puts the component in RenderHUD's draw loop)
-    // + the component's OnActivate hook; the X360 also opens the component's variable page in the menu.
+    // ARTIST 0x828320F0. A full component starts life as a function row. Its first activation
+    // registers the component's real controls, replaces that function row in-place with the new
+    // submenu, and retires the one-shot function registration.
     void DebugManager::ActivateComponent(DebugComponent* lpComponent)
     {
         CGS_ASSERT(lpComponent, "lpComponent");
@@ -347,12 +388,29 @@ namespace CgsDev
             return;
         lpComponent->mbActive = true;
         lpComponent->OnActivate();
+
+        char lacCompletePath[256];
+        lpComponent->GetComponentPath(lacCompletePath, sizeof(lacCompletePath));
+        DebugUI::Menu* lpComponentVariablePath =
+            GetUI().GetMenuManager().GetMenuFromPath(lacCompletePath, nullptr);
+        if (lpComponentVariablePath)
+        {
+            DebugUI::Function* lpFunction = GetUI().GetFunctionManager().FindFunction(
+                &DebugComponent::DebugUISectionCallback, lpComponent);
+            if (lpFunction)
+            {
+                DebugUI::MenuItemFunction* lpMenuItem =
+                    GetUI().GetFunctionManager().FindMenuItem(lpFunction);
+                if (lpMenuItem)
+                    GetUI().GetMenuManager().MoveItemAfter(lpMenuItem, lpComponentVariablePath);
+            }
+        }
+        GetUI().GetFunctionManager().UnregisterFunction(
+            &DebugComponent::DebugUISectionCallback, lpComponent);
     }
 
     // X360 RenderHUD 0x8282E108 (2D screen-space pass - the debug squares): open the 2D renderer,
-    // let each active component draw its HUD, close. The X360 also flushes the buffered debug prims
-    // (DebugRender::Dispatch2D over mBufferedRenderer) and renders the DebugUI menus between Begin and
-    // the component loop; those two paths are the buffered-render / menu-render follow-on.
+    // flush buffered primitives, render active components, then draw the UI windows before closing.
     void DebugManager::RenderHUD()
     {
         mp2dRender->Begin();
@@ -368,6 +426,8 @@ namespace CgsDev
             if (lpComponent->IsActive())
                 lpComponent->RenderHUD(mp2dRender);
         }
+
+        mpUI->Render();
 
         mp2dRender->End();
     }
@@ -535,11 +595,11 @@ namespace CgsDev
     // batch, replay the buffered world-space prims, run each ACTIVE component's RenderWorld, close.
     // (The 3D renderer's draw bodies are the Debug3D render follow-on; the pass shape is the
     // console's.) lCameraPosition is carried for the components' distance culls.
-    void DebugManager::RenderWorld(const Matrix44& lViewProjection, const Vector3& /*lCameraPosition*/)
+    void DebugManager::RenderWorld(const Matrix44& lViewProjection, const Vector3& lCameraPosition)
     {
         CGS_ASSERT(mp3dRender != nullptr, "must call ConstructRenderer");
 
-        mp3dRender->Begin(lViewProjection);
+        mp3dRender->Begin(lViewProjection, lCameraPosition);
         mBufferedRenderer.Dispatch3D(mp3dRender, true);
 
         for (DebugComponent* lpComponent = mComponentList.GetFirst();

@@ -129,6 +129,14 @@ private:
     // ToAlwaysRaceTo @+184, BrnOfflineGameMode.h), so +188 is exactly where the DWARF's first
     // RoadRageMode member lands -- the base and the derived agree, no padding is needed. Host
     // offsets differ (x64 widening of the base); parity is by NAME, pinned order-only below.
+public:
+    // Debug read-only accessors (BrnModeManagerDebugComponent's road-rage HUD line).
+    f32 GetRoadRageMadness() const      { return mfRoadRageMadness; }
+    f32 GetRoadRageMadnessRatio() const { return mfRoadRageMadnessRatio; }
+
+private:
+    // DecFIGS supplies the source names/order; ARTIST's RenderHUD independently pins
+    // mfRoadRageMadness and mfRoadRageMadnessRatio at ModeManager +0x358/+0x35C.
     s32  miNumberOfTransmittedRivals;
     s32  miNumberOfAllowedRoadRageRivals;
     s32  miNumberOfRivals;

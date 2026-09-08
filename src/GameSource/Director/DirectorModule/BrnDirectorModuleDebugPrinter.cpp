@@ -17,10 +17,8 @@
 //   DebugPrinter::Construct   @ 0x821F7108
 //   DebugPrinter::ActualPrint @ 0x821F71D8
 //   DebugLog::Print           @ 0x8221BAC8
-// Each method that touches the debug system brackets its work with a stack-scoped
-// CgsDev::DebugInterface (acquire) + an explicit DebugManager::ThreadSafeRelease (release), the
-// established Director idiom (see BrnDirectorDevTools.cpp) -- the asm makes the release conditional
-// on the interface's "automatic" flag, which the default DebugInterface() ctor always sets.
+// Each method that touches the debug system uses the original stack-scoped CgsDev::DebugInterface;
+// its automatic destructor conditionally releases the acquired manager.
 // ============================================================================
 
 namespace BrnDirector
@@ -45,7 +43,6 @@ namespace BrnDirector
         mDebugPrinterInfo.mJustification   = CgsDev::DebugRender::E_JUSTIFY_LEFT;
         mbEnabled = true;
 
-        CgsDev::DebugManager::ThreadSafeRelease(&lDebugInterface.GetDebugManager());
     }
 
     // X360 0x821F71D8. If enabled, draw one justified line at the current cursor through the buffered
@@ -71,7 +68,6 @@ namespace BrnDirector
         // Advance the cursor to the next line.
         mDebugPrinterInfo.mfY += mDebugPrinterInfo.mfLineSize;
 
-        CgsDev::DebugManager::ThreadSafeRelease(&lDebugInterface.GetDebugManager());
     }
 
     // X360 0x82218D50 (class:BrnDirector::DebugPrinter TU). Resolve the moment's display

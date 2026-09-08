@@ -45,11 +45,23 @@ using BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface;
 // the binary (the DWARF spells them class-scope statics miPreWorldUpdatePM..miSpikeTrigger2 at
 // BrnTriggerQueryManager.h:261-266, but the X360 emits them as file-scope globals).
 // ============================================================================
-static s32 gsiPreWorldUpdatePM  = 0;
-static s32 gsiPostWorldUpdatePM = 0;
-static s32 gsiUpdateTriggersPM  = 0;
-static s32 gsiSpikeTrigger1     = 0;
-static s32 gsiSpikeTrigger2     = 0;
+static s32 gsiPreWorldUpdatePM  = -1;
+static s32 gsiPostWorldUpdatePM = -1;
+static s32 gsiUpdateTriggersPM  = -1;
+static s32 gsiSpikeTrigger1     = -1;
+static s32 gsiSpikeTrigger2     = -1;
+
+// ARTIST 0x82364BF0 constructor's monitor registrations. AddMonitor reads r3/r4/r5/f1/r7;
+// r6 is the ABI's FP argument hole, not a parent handle.
+static void RegisterTriggerQueryMonitors()
+{
+    gsiPreWorldUpdatePM  = CgsDev::PerfMonCpu::AddMonitor("TriggerQueryManager PreWorld",  CgsDev::E_PMP_5, false, 1.0f, true);
+    gsiPostWorldUpdatePM = CgsDev::PerfMonCpu::AddMonitor("TriggerQueryManager PostWorld", CgsDev::E_PMP_5, false, 1.0f, true);
+    gsiUpdateTriggersPM  = CgsDev::PerfMonCpu::AddMonitor("Update Triggers",               CgsDev::E_PMP_5, false, 1.0f, true);
+    gsiSpikeTrigger1     = CgsDev::PerfMonCpu::AddMonitor("Spike Trigger 1",               CgsDev::E_PMP_5, false, 1.0f, true);
+    gsiSpikeTrigger2     = CgsDev::PerfMonCpu::AddMonitor("Spike Trigger 2",               CgsDev::E_PMP_5, false, 1.0f, true);
+}
+
 
 // One-shot guard: the road-limit-region validation sweep runs only once for the loaded
 // TriggerData (X360 byte_82FAE278). File-scope to match the binary.
@@ -156,15 +168,7 @@ void TriggerQueryManager::Construct(BrnProgression::ProgressionManager* lpProgre
     mbDoSoundLookAheadThisFrame = true;
     mbCarHasTeleported          = true;
 
-    // Register the five CPU perf monitors (X360: dword_82CDB928..938; 6-arg AddMonitor form). The
-    // 5th (parent) arg is 1632 (0x660) -- the binary loads `li r6,0x660` for the earlier zero-store
-    // loop and never reloads r6 before the five AddMonitor calls, so all five pass 1632. Profiling
-    // only; no gameplay effect.
-    gsiPreWorldUpdatePM  = CgsDev::PerfMonCpu::AddMonitor("TriggerQueryManager PreWorld",  5, 0, 1.0, 1632, 1);
-    gsiPostWorldUpdatePM = CgsDev::PerfMonCpu::AddMonitor("TriggerQueryManager PostWorld", 5, 0, 1.0, 1632, 1);
-    gsiUpdateTriggersPM  = CgsDev::PerfMonCpu::AddMonitor("Update Triggers",               5, 0, 1.0, 1632, 1);
-    gsiSpikeTrigger1     = CgsDev::PerfMonCpu::AddMonitor("Spike Trigger 1",               5, 0, 1.0, 1632, 1);
-    gsiSpikeTrigger2     = CgsDev::PerfMonCpu::AddMonitor("Spike Trigger 2",               5, 0, 1.0, 1632, 1);
+    RegisterTriggerQueryMonitors();
 }
 
 // ============================================================================
@@ -223,6 +227,11 @@ void TriggerQueryManager::UpdateTriggers(
         gsbRoadLimitRegionsValidated = true;
     }
 
+    // FLAG PC-platform leaf: the partial game-state startup runs this live update before
+    // the full constructor is mounted. Register its original profiling counters here once;
+    // an unregistered zero handle would alias the game's first monitor.
+    if (gsiUpdateTriggersPM < 0)
+        RegisterTriggerQueryMonitors();
     CgsDev::PerfMonCpu::StartMonitor(gsiUpdateTriggersPM);
 
     // The world trigger-management input interface (write-locked; X360 GetTriggerManagementInput-

@@ -76,6 +76,7 @@
 #include "GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.h"     // HUDMessageLogic              @+27392
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                    // CgsNumeric::Random           @+28016
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // TimerStatusInterface         @+28064
+#include "GameSource/GameState/ModeManager/Debug/BrnModeManagerDebugComponent.h" // ModeManagerDebugComponent @+28112
 #include "GameSource/GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.h" // ScoringSystemDebugComponent @+28136
 #include "GameSource/GameState/BrnGameActions.h"                         // GameStateModuleIO::PrepareForModeAction @+35856
                                                                          //   (BY VALUE -- the memcpy'd wire record) and,
@@ -493,22 +494,8 @@ public:
     // HasRaceCarHitValidCheckpoint @0x82329910 fires around that read. Bodied, not fabricated.
     EActiveRaceCarIndex GlobalToActiveRaceCarIndex(EGlobalRaceCarIndex leGlobalRaceCarIndex) const;
 
-    // -----------------------------------------------------------------------------------------------
-    // Debug-menu tunables. PUBLIC ON PURPOSE: ModeManagerDebugComponent::OnActivate registers
-    // &mpModeManager->mbEndlessStuntRun / &mbWinIfSecond BY ADDRESS and FinshMode writes
-    // mbFinishCurrentEvent / miFinishPosition (BrnModeManagerDebugComponent.cpp:24/27/41/42).
-    // [!] FLAG (unchanged from the bounded header): their real X360 seats are NOT proven. What IS now
-    // proven is that they are NOT the debug component's own fields -- Construct @0x82340008 seeds the
-    // component's OWN three at component+16 / +17 / +20 (mbShowModeInfo = 0, mbInfiniteLives = 0,
-    // miFinishPosition = 1, which matches that .cpp's SetRange(&miFinishPosition, 1, 8)). These four
-    // are the manager's own.
-    // -----------------------------------------------------------------------------------------------
-    bool mbEndlessStuntRun;
-    bool mbWinIfSecond;
-    bool mbFinishCurrentEvent;
-    s32  miFinishPosition;
-
 private:
+    friend class ModeManagerDebugComponent;
     // ===============================================================================================
     // PRIVATE SPINE (agents 3, 6, 7, 8)
     // ===============================================================================================
@@ -642,19 +629,7 @@ private:
                                                                  //           +28104 / +28108 = sim mTime        (iface+40/+44)
                                                                  //         48 B, ends +28112, flush against the next member.
 
-    // [X][X] DIVERGENCE at console +28112: `ModeManagerDebugComponent mModeManagerDebugComponent` (24 B)
-    // IS NOT DECLARED HERE, and this is NOT a scope decision -- it is an INCLUDE CYCLE:
-    // Debug/BrnModeManagerDebugComponent.h:5 does `#include ".../BrnModeManager.h"`, so this header
-    // cannot include it back (whichever of the two a TU reaches first, the other's class is incomplete
-    // at the point of use, and BrnModeManagerDebugComponent.cpp dereferences mpModeManager).
-    // Console: `*(comp+12) = this; *(comp+16) = 0; *(comp+17) = 0; *(comp+20) = 1;
-    //           CgsDev::DebugComponent::Register(comp);`  -- an inlined ModeManagerDebugComponent::
-    // Construct(this), whose three seeded fields are mpModeManager / mbShowModeInfo / mbInfiniteLives
-    // and miFinishPosition = 1.
-    // THE FIX IS TWO LINES AND IS FILED AS A HEADER_REQUEST (agent 1's report):
-    //   BrnModeManagerDebugComponent.h  : replace that include with `namespace BrnGameState { class ModeManager; }`
-    //   BrnModeManagerDebugComponent.cpp: add `#include ".../BrnModeManager.h"`
-    // Re-declare the member here the moment that lands; Construct's parked leg is already written for it.
+    ModeManagerDebugComponent mModeManagerDebugComponent;          // +28112
 
     ScoringSystemDebugComponent mScoringSystemDebugComponent;    // +28136  (C) scoring pointer at comp+12 (== +28148), the
                                                                  //         show-chainable flag at comp+16 (== +28152) = 0,
@@ -831,7 +806,7 @@ private:
                                             //                 CONTESTED: do not mass-rename until
                                             //                 SetRivalShutDown / HasRivalShutDown are read from asm.
                                             //                                                                (C)=0
-    bool mbHasAborted;                      // +38137  0x94F9  PROVISIONAL                                    (C)=0
+    bool mbWinIfSecond;                     // +38137  0x94F9  debug toggle registered by ARTIST OnActivate   (C)=0
     bool mbAbortedDuringIntro;              // +38138  0x94FA  PROVISIONAL -- [!] NOT zeroed by Construct;
                                             //                 PrepareForMode zeroes it (semantics fit).
     bool mbHasTimedOut;                     // +38139  0x94FB  PROVISIONAL: UpdateCurrentMode passes it to

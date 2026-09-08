@@ -1,7 +1,11 @@
 #include "GameShared/GameClasses/Development/PerfMon/DebugComponent/CgsDebugComponentPerfMonCpu.h"
 
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // DrawBox
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                            // CGS_ASSERT (LogBufferEnable)
+
+#include <cstdio>
+#include <cstring>
 
 // CgsDev::DebugComponentPerfMonCpu - the CPU performance overlay bodies. RenderHUD draws one row per
 // registered CPU monitor (the on-screen "debug squares"): a dark track the full bar width, with a
@@ -24,16 +28,9 @@ namespace CgsDev
 
     namespace
     {
-        // Overlay layout in the 1280x720 Im2d pixel space.
-        const f32 KF_BAR_X         = 40.0f;    // left edge of the bars
-        const f32 KF_BAR_TOP       = 60.0f;    // top of the first row
-        const f32 KF_BAR_MAX_WIDTH = 220.0f;   // bar width at full scale (mfMaxCpu)
-
-        // Packed RGBA (u32 -> RGBA8 {r,g,b,a} via Debug2DImmediateRender::AddVertex's reinterpret;
-        // little-endian, so 0xAABBGGRR). All full-alpha (opaque) so they show regardless of blend state.
-        const RGBA KC_TRACK = 0xFF202020u;   // dark row track   (r=32,g=32,b=32)
-        const RGBA KC_UNDER = 0xFF00FF00u;   // under budget     (green)
-        const RGBA KC_OVER  = 0xFF0000FFu;   // over budget      (red)
+        const f32 KAF_COLUMN_OFFSETS[6] = { 0.0f, 270.0f, 340.0f, 410.0f, 510.0f, 580.0f };
+        const RGBA KC_WHITE       = 0xFFFFFFFFu;
+        const RGBA KC_OVER_BUDGET = 0xFF6496DCu;
     }
 
     // Faithful port of PS3 DecFIGS Construct @0xB21C44 (X360 wrapper @0x8282CC98, called by
@@ -56,6 +53,8 @@ namespace CgsDev
             maStringList[liPage + 1].miValue = liPage;
             maStringList[liPage + 1].mpcName = "Unused";
         }
+        maStringList[E_PMP_MAX + 1].miValue = 0;
+        maStringList[E_PMP_MAX + 1].mpcName = nullptr;
 
         mfMaxCpu              = 0.0f;
         mbResetMonitors       = false;
@@ -101,14 +100,30 @@ namespace CgsDev
 
     void DebugComponentPerfMonCpu::Destruct() {}
 
-    // X360 OnActivate (CgsDebugComponentPerfMonCpu.cpp:136, bounded): nothing extra to bring up for the
-    // bar overlay (the registry is always live); the page reset / trace setup is the follow-on.
-    void DebugComponentPerfMonCpu::OnActivate() {}
+    // ARTIST 0x82831DC8. Register the complete Paradise CPU-monitor menu surface.
+    void DebugComponentPerfMonCpu::OnActivate()
+    {
+        RegisterVariable(&miCurrentPage, "Page");
+        SetRange(&miCurrentPage, -1, E_PMP_MAX - 1);
+        SetOptions(&miCurrentPage, maStringList);
+        RegisterVariable(&mbDisplayAsGraph, "Draw As Graph");
+        RegisterVariable(&PerfMonCpu::mbIgnoreZeroCallsInAverage,
+                         "Don't avg zero-called perfmons");
+        RegisterFunction(&DebugCallbackResetCounters, this, "Reset CPU Monitors");
+        if (mpLogBuffer)
+            RegisterFunction(&DebugCallbackDumpLogFile, this, "Dump CPU Log Files");
+    }
 
-    // X360 Update (CgsDebugComponentPerfMonCpu.cpp:216, bounded): the registry computes each monitor's
-    // current time in StopMonitor, so the overlay has nothing to advance per frame yet (the trace/log
-    // update + page input is the follow-on).
-    void DebugComponentPerfMonCpu::Update() {}
+    // ARTIST 0x8282CDA0. The UI callback defers reset until the perfmon frame boundary.
+    void DebugComponentPerfMonCpu::Update()
+    {
+        if (mbResetMonitors)
+        {
+            PerfMonCpu::ResetValuesInActiveMonitors();
+            mbResetMonitors = false;
+        }
+        LogBufferUpdate();
+    }
 
     // X360 RenderHUD (CgsDebugComponentPerfMonCpu.cpp:246): draw the active page. Bounded to the table
     // (bar) view; the graph view is the follow-on.
@@ -123,49 +138,233 @@ namespace CgsDev
             RenderPerformanceTable( lpDebug2DRender );
     }
 
-    // X360 RenderPerformanceTable (CgsDebugComponentPerfMonCpu.cpp:271, bounded): one row per monitor -
-    // a dark full-width track + a coloured value bar (current time / mfMaxCpu), red over budget else
-    // green. The per-monitor text label is the deferred font path.
+    // ARTIST 0x82826368. Text table laid out from the DebugUI metrics and the six data-section
+    // column offsets recovered from ARTIST (0,270,340,410,510,580).
     void DebugComponentPerfMonCpu::RenderPerformanceTable( Debug2DImmediateRender* lpDebug2DRender )
     {
-        const s32 liCount   = PerfMonCpu::GetMonitorCount();
-        const f32 lfMaxCpu  = (mfMaxCpu > 0.0f) ? mfMaxCpu : 33.3f;
-        const f32 lfRowH    = KF_COLORBARHEIGHT;
-        const f32 lfBarH    = lfRowH - 2.0f;   // 2px gap between rows
+        if (miCurrentPage == -1)
+            return;
 
+        const DebugUI::Metrics& lrMetrics = GetUI().GetMetrics();
+        const f32 lfFontSize = lrMetrics.mfTextSize;
+        const f32 lfX = lrMetrics.mfScreenBorderLeft;
+        f32 lfY = lrMetrics.mfScreenBorderTop;
+
+        lpDebug2DRender->DrawText(maStringList[miCurrentPage + 1].mpcName,
+                                  lfX + KAF_COLUMN_OFFSETS[0],
+                                  lfY - lfFontSize * 1.5f, lfFontSize * 1.5f, KC_WHITE);
+        lpDebug2DRender->DrawText("Current", lfX + KAF_COLUMN_OFFSETS[1],
+                                  lfY - lfFontSize, lfFontSize, KC_WHITE);
+        lpDebug2DRender->DrawText("Average", lfX + KAF_COLUMN_OFFSETS[2],
+                                  lfY - lfFontSize, lfFontSize, KC_WHITE);
+        lpDebug2DRender->DrawText("Min/Max", lfX + KAF_COLUMN_OFFSETS[3],
+                                  lfY - lfFontSize, lfFontSize, KC_WHITE);
+        lpDebug2DRender->DrawText("Calls", lfX + KAF_COLUMN_OFFSETS[4],
+                                  lfY - lfFontSize, lfFontSize, KC_WHITE);
+        lpDebug2DRender->DrawText("Max Calls", lfX + KAF_COLUMN_OFFSETS[5],
+                                  lfY - lfFontSize, lfFontSize, KC_WHITE);
+
+        const s32 liCount = PerfMonCpu::GetMonitorCount();
         for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
         {
+            if (PerfMonCpu::GetMonitorPage(liIndex) != miCurrentPage)
+                continue;
+
             PerfMonCpuMonitorData lData;
-            PerfMonCpu::GetMonitorData( liIndex, &lData );
+            PerfMonCpu::GetMonitorData(liIndex, &lData);
 
-            const f32 lfY = KF_BAR_TOP + static_cast<f32>(liIndex) * lfRowH;
+            char acValue[32];
+            const RGBA lNameColour = (lData.mfAverageValue > lData.mfCpuBudget)
+                ? KC_OVER_BUDGET : KC_WHITE;
+            lpDebug2DRender->DrawText(lData.mpcName, lfX + KAF_COLUMN_OFFSETS[0],
+                                      lfY, lfFontSize, lNameColour);
 
-            // The row track (always drawn, so the overlay is visible even before a region has timed).
-            lpDebug2DRender->DrawBox( KF_BAR_X, lfY, KF_BAR_MAX_WIDTH, lfBarH, KC_TRACK );
-
-            // The value bar.
-            f32 lfFraction = lData.mfCurrentValue / lfMaxCpu;
-            if (lfFraction < 0.0f) lfFraction = 0.0f;
-            if (lfFraction > 1.0f) lfFraction = 1.0f;
-            const f32 lfWidth = KF_BAR_MAX_WIDTH * lfFraction;
-
-            if (lfWidth > 0.0f)
-            {
-                const RGBA lColour = PerfMonCpu::IsMonitorOverBudget( liIndex ) ? KC_OVER : KC_UNDER;
-                lpDebug2DRender->DrawBox( KF_BAR_X, lfY, lfWidth, lfBarH, lColour );
-            }
+            std::snprintf(acValue, sizeof(acValue), "%.03f", lData.mfCurrentValue);
+            lpDebug2DRender->DrawText(acValue, lfX + KAF_COLUMN_OFFSETS[1], lfY, lfFontSize,
+                                      lData.mfCurrentValue > lData.mfCpuBudget ? KC_OVER_BUDGET : KC_WHITE);
+            std::snprintf(acValue, sizeof(acValue), "%.03f", lData.mfAverageValue);
+            lpDebug2DRender->DrawText(acValue, lfX + KAF_COLUMN_OFFSETS[2], lfY, lfFontSize,
+                                      lData.mfAverageValue > lData.mfCpuBudget ? KC_OVER_BUDGET : KC_WHITE);
+            std::snprintf(acValue, sizeof(acValue), "%.03f", lData.mfMinMaxValue);
+            lpDebug2DRender->DrawText(acValue, lfX + KAF_COLUMN_OFFSETS[3], lfY, lfFontSize,
+                                      lData.mfMinMaxValue > lData.mfCpuBudget ? KC_OVER_BUDGET : KC_WHITE);
+            std::snprintf(acValue, sizeof(acValue), "%d", lData.miNumCalls);
+            lpDebug2DRender->DrawText(acValue, lfX + KAF_COLUMN_OFFSETS[4],
+                                      lfY, lfFontSize, KC_WHITE);
+            std::snprintf(acValue, sizeof(acValue), "%d", lData.miMaxCalls);
+            lpDebug2DRender->DrawText(acValue, lfX + KAF_COLUMN_OFFSETS[5],
+                                      lfY, lfFontSize, KC_WHITE);
+            lfY += lfFontSize;
         }
     }
 
-    // X360 RenderPerformanceGraph (CgsDebugComponentPerfMonCpu.cpp:440): the history/graph view (the
-    // monitors plotted over time). Deferred - the bounded overlay uses the table (bar) view; defined as
-    // an empty body so RenderHUD's table/graph switch links. The graph plotting is the perfmon follow-on.
-    void DebugComponentPerfMonCpu::RenderPerformanceGraph( Debug2DImmediateRender* /*lpDebug2DRender*/ )
+    // ARTIST 0x82826820. Paradise's graph is a single fixed strip for the selected page's
+    // "Update cost" and "Render cost" monitors; it is not a history graph.
+    void DebugComponentPerfMonCpu::RenderPerformanceGraph( Debug2DImmediateRender* lpDebug2DRender )
     {
+        if (miCurrentPage == -1)
+            return;
+
+        lpDebug2DRender->DrawFrame(32.0f, 408.0f, 608.0f, 412.0f,
+                                   0xFF000000u, 2.0f);
+        lpDebug2DRender->DrawBox(32.0f, 408.0f, mfMaxCpu * 2.8799999f,
+                                 4.0f, 0xFF252525u);
+
+        f32 lfX = 32.0f;
+        f32 lfTotal = 0.0f;
+        const s32 liCount = PerfMonCpu::GetMonitorCount();
+        for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+        {
+            if (PerfMonCpu::GetMonitorPage(liIndex) != miCurrentPage)
+                continue;
+
+            PerfMonCpuMonitorData lData;
+            PerfMonCpu::GetMonitorData(liIndex, &lData);
+            if (std::strcmp(lData.mpcName, "Update cost") != 0 &&
+                std::strcmp(lData.mpcName, "Render cost") != 0)
+                continue;
+
+            const f32 lfWidth = lData.mfCurrentValue * 2.8800001f;
+            lpDebug2DRender->DrawBox(lfX, 408.0f, lfWidth, 4.0f, 0xFFCC59CCu);
+            lfX += lfWidth;
+            lfTotal += lData.mfCurrentValue;
+        }
+
+        if (lfTotal > mfMaxCpu)
+            mfMaxCpu = (lfTotal > 200.0f) ? 200.0f : lfTotal;
     }
 
-    // --- perfmon follow-on (declared, deferred): graph view, page navigation, the reset/dump/tracing
-    // debug callbacks, and the CPU-trace log buffer. None is needed for the bar overlay; bodies land
-    // with the perfmon menu + trace reconstruction. They are intentionally left undefined (not called
-    // and non-virtual, so the link stays closed). ---
+    void DebugComponentPerfMonCpu::SetPageName(s32 liPage, const char* lpcPageName)
+    {
+        CGS_ASSERT(liPage >= 0 && liPage < E_PMP_MAX,
+                   "liPage >= 0 && liPage < E_PMP_MAX");
+        maStringList[liPage + 1].mpcName = lpcPageName;
+    }
+
+    void DebugComponentPerfMonCpu::GetCurrentPage(s32* lpiPage, char* lpcName, s32 liNameLen)
+    {
+        *lpiPage = miCurrentPage;
+        if (miCurrentPage < 0 || miCurrentPage >= E_PMP_MAX)
+        {
+            lpcName[0] = '\0';
+            return;
+        }
+
+        const char* lpcPageName = maStringList[miCurrentPage + 1].mpcName;
+        CGS_ASSERT(static_cast<s32>(std::strlen(lpcPageName)) < liNameLen, "String too long");
+        std::strncpy(lpcName, lpcPageName, static_cast<size_t>(liNameLen));
+    }
+
+    bool DebugComponentPerfMonCpu::SetFirstPage()
+    {
+        miCurrentPage = 0;
+        return true;
+    }
+
+    bool DebugComponentPerfMonCpu::SetNextPage()
+    {
+        ++miCurrentPage;
+        if (static_cast<u32>(miCurrentPage) > static_cast<u32>(E_PMP_MAX - 1))
+        {
+            SetNoPage();
+            return false;
+        }
+        return true;
+    }
+
+    void DebugComponentPerfMonCpu::SetNoPage()
+    {
+        miCurrentPage = -1;
+    }
+
+    void DebugComponentPerfMonCpu::DebugCallbackResetCounters(void* lpUserData)
+    {
+        static_cast<DebugComponentPerfMonCpu*>(lpUserData)->mbResetMonitors = true;
+    }
+
+    void DebugComponentPerfMonCpu::DebugCallbackDumpLogFile(void* lpUserData)
+    {
+        char acLogFileName[] = "d:\\PM_Log";
+        static_cast<DebugComponentPerfMonCpu*>(lpUserData)->LogBufferDump(acLogFileName);
+    }
+
+    // ARTIST 0x82826CB0. One frame record is a u16 monitor count followed by one 10-bit
+    // fixed-point u16 value per registered monitor.
+    void DebugComponentPerfMonCpu::LogBufferUpdate()
+    {
+        if (!mpLogBuffer)
+            return;
+
+        const s32 liCount = PerfMonCpu::GetMonitorCount();
+        *mpau16LogBufferWritePtr++ = static_cast<u16>(liCount);
+        for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+        {
+            PerfMonCpuMonitorData lData;
+            PerfMonCpu::GetMonitorData(liIndex, &lData);
+            *mpau16LogBufferWritePtr++ = static_cast<u16>(lData.mfCurrentValue * 1024.0f);
+        }
+
+        if (reinterpret_cast<u8*>(mpau16LogBufferWritePtr) >= static_cast<u8*>(mpLogBufferEnd))
+        {
+            mpau16LogBufferWritePtr = static_cast<u16*>(mpLogBuffer);
+            mbLogBufferOverflow = true;
+        }
+    }
+
+    // ARTIST 0x82826D70. Dump one CSV per perfmon page, preserving the circular-record order.
+    void DebugComponentPerfMonCpu::LogBufferDump(char* lpcFileName)
+    {
+        if (!mpLogBuffer)
+            return;
+
+        for (s32 liPage = 0; liPage < E_PMP_MAX; ++liPage)
+        {
+            char acFileName[256];
+            std::snprintf(acFileName, sizeof(acFileName), "%s_%s.csv", lpcFileName,
+                          maStringList[liPage + 1].mpcName);
+            std::FILE* lpFile = std::fopen(acFileName, "w");
+            if (!lpFile)
+                break;
+
+            const s32 liMonitorCount = PerfMonCpu::GetMonitorCount();
+            for (s32 liIndex = 0; liIndex < liMonitorCount; ++liIndex)
+            {
+                if (PerfMonCpu::GetMonitorPage(liIndex) == liPage)
+                {
+                    PerfMonCpuMonitorData lData;
+                    PerfMonCpu::GetMonitorData(liIndex, &lData);
+                    std::fprintf(lpFile, "%s, ", lData.mpcName);
+                }
+            }
+            std::fprintf(lpFile, "\n");
+
+            u16* lpRecord = mbLogBufferOverflow
+                ? mpau16LogBufferWritePtr : static_cast<u16*>(mpLogBuffer);
+            u16* const lpEndRecord = mpau16LogBufferWritePtr;
+            do
+            {
+                const u16 luCount = *lpRecord++;
+                for (u16 luIndex = 0; luIndex < luCount; ++luIndex)
+                {
+                    if (luIndex < static_cast<u16>(liMonitorCount) &&
+                        PerfMonCpu::GetMonitorPage(luIndex) == liPage)
+                    {
+                        std::fprintf(lpFile, "%.03f, ",
+                                     static_cast<f32>(lpRecord[luIndex]) * 0.0009765625f);
+                    }
+                }
+                lpRecord += luCount;
+                std::fprintf(lpFile, "\n");
+
+                if (reinterpret_cast<u8*>(lpRecord) >= static_cast<u8*>(mpLogBufferEnd))
+                {
+                    CGS_ASSERT(mbLogBufferOverflow, "mbLogBufferOverflow");
+                    lpRecord = static_cast<u16*>(mpLogBuffer);
+                }
+            }
+            while (lpRecord != lpEndRecord);
+
+            std::fclose(lpFile);
+        }
+    }
 }

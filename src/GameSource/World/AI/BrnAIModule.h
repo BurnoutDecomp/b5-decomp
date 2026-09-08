@@ -31,6 +31,7 @@
 namespace BrnResource { namespace GameDataIO { template <int N> class AllocatorListT; class AllocatorList; } }
 
 namespace CgsModule { struct IOBufferStack; }
+namespace BrnWorld { class WorldDebugComponent; }
 
 // ---- ADDITIVE (aiwave lane A7, 2026-09-03) -- pointer-only parameter types of the eight
 //      game-action handlers below. Declared, not included: BrnGameActions.h /
@@ -86,6 +87,8 @@ struct AISectionsData;
 // its Release/Destruct) are written BY NAME.
 class AIModule : public CgsModule::ModuleSingleBuffered
 {
+    friend class ::BrnWorld::WorldDebugComponent;
+
 public:
         // X360 0x82794D08. Reached by the wired WorldModule::Construct @0x827CF540 fleet cascade.
         void Construct() override;

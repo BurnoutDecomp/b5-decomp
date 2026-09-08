@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/Development/PerfMon/DebugComponent/CgsDebugComponentPerfMonCpu.h"     // mDebugComponentPerfMonCpu (+0x000)
 #include "GameShared/GameClasses/Development/PerfMon/DebugComponent/CgsDebugComponentPerfMonGpu.h"     // mDebugComponentPerfMonGpu (+0x118)
 #include "GameShared/GameClasses/Development/MessageSystem/DebugComponent/CgsDebugComponentMessageFilter.h" // mDebugComponentMessageFilter (+0x12C)
+#include "GameShared/GameClasses/Development/DebugSystem/Controller/CgsDebugController.h" // DebugManagerPad
 
 // CgsDev::DebugManager - the process-wide owner of the in-game debug systems (perfmon overlays,
 // debug menus, console, on-screen variables): it holds the DebugUI, the resource allocator, and
@@ -53,6 +54,7 @@ namespace CgsDev
     };
 }
 namespace CgsGraphics { struct Im2d; class Im3dRenderBuffer; }
+namespace BrnGame { class BrnGameModule; }
 namespace CgsDev
 {
 
@@ -113,6 +115,7 @@ namespace CgsDev
         // sets the font on BOTH the 3D and 2D immediate renderers so their DrawText uses the resource
         // font (instead of the vector-font fallback). Asserts the handle is not NULLResourceHandle.
         void SetDebugFont(const CgsResource::SafeResourceHandle<CgsResource::Font>& lrFont);
+        void SetGamePad(DebugManagerPad* lpDebugManagerPad);
 
         // Per-frame debug render spine (X360 Render 0x8282F770 -> RenderWorld + RenderHUD 0x8282E108).
         // RenderHUD is the 2D screen-space pass that draws the debug overlay (the "debug squares"):
@@ -161,6 +164,11 @@ namespace CgsDev
         // members raw -- both reach private members by offset on the console, modelled as friends.
         friend struct DebugInterface;
         friend struct Internal::DebugInternal;
+        // BrnGameModule::Construct names the owned CPU monitor's 24 pages directly. On X360
+        // the CPU component begins at DebugManager +0, so the original call passes the manager
+        // address itself; friendship models that direct owning-object access without adding a
+        // public forwarding API that the binary does not have.
+        friend class BrnGame::BrnGameModule;
 
     private:
         // X360 member layout (ctor @0x82822370 / Construct @0x828332C0); offsets in comments are

@@ -84,7 +84,10 @@ namespace Deformation
         f32                      GetDetachThresholdSquared() const { return mpSpec->GetDetachThresholdSquared(); }
         f32                      GetJointDetachThresholdSquared() const;
         // (GetJointIndex: inlined above, walls leg 4)
-        bool                     HasJoint() const;
+        bool                     HasJoint() const
+        {
+            return static_cast<u8>(mpSpec->GetJointIndex()) != 0xFFu;
+        }
     };
 }
 }

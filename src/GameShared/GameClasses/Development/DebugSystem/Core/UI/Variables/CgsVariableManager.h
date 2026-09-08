@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/Internal/CgsDebugInternal.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugCollections.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"   // Variant, StringList
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsVariable.h"
 
 // CgsDev::DebugUI::VariableManager - owns every debug-menu variable: the typed RegisterVariable
 // overloads build a Variant tag + resolve the menu path, then funnel into the private
@@ -26,9 +27,7 @@ namespace CgsDev
 
     namespace DebugUI
     {
-        struct Variable;
         struct MenuItemVariable;
-        struct VariableMetadata;
         struct ScriptInterface;
 
         struct VariableManager : public Internal::DebugInternal
@@ -83,6 +82,9 @@ namespace CgsDev
             // SetMetadata / RemoveMetadata (DWARF :115/:118) take VariableMetadata::Type and so
             // need the full VariableMetadata definition; reconstructed with it in the follow-on.
             void RecycleMetadata(VariableMetadata* lpMetadata);
+            VariableMetadata* SetMetadata(Variable* lpVariable, const Variant& lrValue,
+                                          VariableMetadata::Type leType);
+            void RemoveMetadata(Variable* lpVariable, VariableMetadata::Type leType);
         };
     }
 }

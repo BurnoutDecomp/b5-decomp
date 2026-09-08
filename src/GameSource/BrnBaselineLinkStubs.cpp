@@ -344,40 +344,7 @@ namespace BrnGameState
     }
 }
 
-// ---- ScoringSystemDebugComponent vtable gate (stuntrace waveB mount closure, 2026-08-26) ----
-// EXACTLY the StreetManagerDebugComponent case above, one class over. ModeManager now embeds
-// ScoringSystemDebugComponent BY VALUE (BrnModeManager.h:614, X360 ModeManager+28136), and
-// GameStateModule embeds ModeManager by value, so the ctor chain emits this component's vtable
-// and its two out-of-line virtuals must link.
-//
-// The component's REAL TU EXISTS AND COMPILES (BrnScoringSystemDebugComponent.cpp, 256 lines --
-// GetName / OnActivate / GetChainableTableEntry / DebugRenderChainableStunts, X360 0x82312470 /
-// 0x82312490 / 0x82329D60 / 0x82337C38). It stays UNMOUNTED on purpose: its two table bodies
-// carry self-declared UNRECOVERED PLACEHOLDERS whose rodata is not in the exports -- the per-row
-// stunt-multiplier bit table (dword_82020F54[]) and the three cell colours (dword_82CDB878 /
-// _87C / _880). Mounting it would put invented constants on a live vtable for no gain: the debug
-// UI never constructs on this build (same reason the CgsDev::DebugUI block further down exists).
-//
-//   GetName    IS THE REAL BODY. @0x82312470 is a two-instruction leaf returning the literal
-//              "Scoring System" (lis/addi aScoringSystem; blr), dumped this session. No state.
-//   OnActivate is an INERT GATE. The console body @0x82312490 is a single tail call,
-//              sub_8282D800(this, this + 0x10, "Show chainable stunts") -- the debug-menu bool
-//              tweakable registration pointing at mbShowChainableStunts (+0x10). Registering a
-//              tweakable against a component whose render half is not mounted would only park a
-//              live pointer; the log makes the gap visible instead.
-//
-// DELETE-WHEN BrnScoringSystemDebugComponent.cpp joins the exe source list (i.e. when its
-// placeholder rodata is recovered). Both definitions in one build is an LNK2005.
-#include "GameSource/GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.h"
-namespace BrnGameState
-{
-    const char* ScoringSystemDebugComponent::GetName() const { return "Scoring System"; }
-    void ScoringSystemDebugComponent::OnActivate()
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "ScoringSystemDebugComponent::OnActivate: inert [FLAG PC boot gate]\n";
-    }
-}
+// ScoringSystemDebugComponent is mounted from its original source file.
 
 // (The DeveloperChallengeManager::OnEventEnd link gate that stood here was DELETED 2026-09-03: the
 //  real TU BrnDeveloperChallengeManager.cpp is mounted -- lane P3 closed its five externals.)
@@ -432,30 +399,9 @@ namespace CgsDev
 {
     namespace DebugUI
     {
-        // No window is ever active while the UI is inert, so Window::IsActiveWindow
-        // is false for every window.
-        const Window* DebugUI::GetActiveWindow() const { return 0; }
-
-        // Window::Prepare uses this only to place an unpositioned window; the origin
-        // is the neutral answer with no cascade state to read.
-        void DebugUI::GetCascadePosition(const Window* /*lpWindow*/, f32& lrfX, f32& lrfY)
-        {
-            lrfX = 0.0f;
-            lrfY = 0.0f;
-        }
-
-        // Window::GetPalette forwards straight to this; a zeroed palette keeps every
-        // colour lookup in range for a UI that never draws.
-        const Palette& DebugUI::GetPalette() const
-        {
-            static const Palette lsEmpty = Palette();
-            return lsEmpty;
-        }
-
         // Variable::SetValueFromString feeds this; leaving the variant untouched
         // means a console "set" is ignored rather than writing a parsed-from-nothing
         // value into a live game variable.
-        void Variant::ConvertFromString(const char* /*lpcString*/) {}
     }
 }
 

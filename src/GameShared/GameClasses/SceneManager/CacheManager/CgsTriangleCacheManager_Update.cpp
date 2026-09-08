@@ -539,7 +539,6 @@ namespace CgsSceneManager
                                                      0xFF0000FFu);
             lfTextY += 22.0f;   // flt_820F56B8
 
-            CgsDev::DebugManager::ThreadSafeRelease(&lDebugInterface.GetDebugManager());
         }
 
         if (s_miReadCacheResultsPerfMon > -1)

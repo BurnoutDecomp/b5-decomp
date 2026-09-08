@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"  // DebugUI::Metrics / InputEvent
+#include "GameShared/GameClasses/System/Input/Devices/X360/CgsInputDeviceX360Pad.h"
 
 // CgsDev::DebugController - the debug-UI input layer. It reads the host pad + keyboard each frame and
 // translates raw input into the DebugUI::InputEvent the menu/console consume (cursor moves, select,
@@ -16,7 +17,7 @@
 namespace CgsDev
 {
     class DebugManager;
-    struct DebugManagerPad;
+    typedef CgsInput::DeviceX360Pad DebugManagerPad;
 
     class DebugController
     {
@@ -67,6 +68,15 @@ namespace CgsDev
         bool       IsKeyboardPresent() const  { return mbKeyboardPresent; }
 
         bool IsKeyboardLocked() const { return mbKeyboardLocked; }
+        // FLAG PC-platform leaf: shared keyboard ownership with the gameplay input adapter.
+        bool IsPCKeyboardCaptured() const
+        {
+#if !defined(D_PLATFORM_X360)
+            return mbPCKeyboardCaptured;
+#else
+            return false;
+#endif
+        }
         void LockKeyboard();
         void UnlockKeyboard();
 
@@ -89,6 +99,10 @@ namespace CgsDev
         void ClearKeyboard();
         void ReadKey(f32 lfTimeStep);
         char SimpleLocaliseKey(char lcKey);
+#if !defined(D_PLATFORM_X360)
+        bool IsKeyDown(s32 liKey) const { return mabPCKeysDown[liKey]; }
+        bool WasKeyPressed(s32 liKey) const { return mabPCKeysPressed[liKey]; }
+#endif
 
         // --- members (DWARF CgsDebugController.h order) ----------------------
         const DebugUI::Metrics* mpMetrics;             // h:140
@@ -113,7 +127,13 @@ namespace CgsDev
         bool                    mbCtrlPressed;         // h:183
 
         bool                    mbKeyboardLocked;      // h:199
+        f32                     mfKeyRepeatDelay;      // X360 +0x3c, keyboard keystroke repeat timer
 
         static const f32        KF_KEY_REPEAT_TIME;    // h:186
+#if !defined(D_PLATFORM_X360)
+        bool mabPCKeysDown[256];
+        bool mabPCKeysPressed[256];
+        bool mbPCKeyboardCaptured;
+#endif
     };
 }

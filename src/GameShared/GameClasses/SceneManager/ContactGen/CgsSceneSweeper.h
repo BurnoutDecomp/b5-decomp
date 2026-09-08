@@ -127,6 +127,7 @@
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsInterval.h"      // Interval, OverlapPairQueue
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsIntervalList.h"  // IntervalList, ObjectToIntervalMap
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsIntervalStack.h" // IntervalStack, IntervalStackEntry
+#include "GameShared/GameClasses/SceneManager/ContactGen/CgsSceneSweeperDebugComponent.h"
 #include "vendor/renderware/collision/BitTable.hpp"                          // rw::BitTable (culling table)
 #include "rw/physics/rigidbody.h"                                            // rw::physics::BodyState
 
@@ -291,6 +292,9 @@ namespace CgsSceneManager
         }
         void ForceNoPadding(u32 luObjectIndex);                                  // :171 @0x828B0578
 
+        const IntervalList& GetDynamicIntervalList() const { return mDynamicIntervalList; }
+        const IntervalList& GetInactiveIntervalList() const { return mInactiveIntervalList; }
+
         // ---- perf-monitor ids (DWARF :174-176; Update @0x828D5A88 reads them as
         // dword_82F33F54 / _58 / _5C and brackets each phase with PerfMonCpu Start/StopMonitor
         // when the id is > -1). Statics, defined in CgsSceneSweeper.cpp.
@@ -313,10 +317,9 @@ namespace CgsSceneManager
 
         // ---- members, DWARF declaration order :203-248 (console offsets in the LAYOUT table) ----
 
-        // :203  SceneSweeperDebugComponent mDebugComponent -- sized opaque slice, see the FLAG
-        // in the banner. 0x18 bytes is the console span (its last member, mbRenderInactiveBoxes,
-        // sits at +0x15 per OverlapGenerationModule::Construct, padded to 4).
-        u8 maDebugComponentSlice[0x18];                                       // 0x00000
+        // :203. Real debug component; the previous opaque slice was retired once the debug
+        // base/UI and Debug3D renderer were reconstructed.
+        SceneSweeperDebugComponent mDebugComponent;                           // 0x00000
 
         OverlapPairQueue mOverlappingPairQueue;                               // 0x00018 :207
 

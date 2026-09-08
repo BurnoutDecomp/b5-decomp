@@ -55,6 +55,16 @@ namespace CgsDev
             RGBA mColour;
         };
 
+        // Screen-space frame stored as origin + extent, exactly like the box record.
+        struct CInEventDrawFrame2D : public CgsModule::Event
+        {
+            f32  mfX;
+            f32  mfY;
+            f32  mfWidth;
+            f32  mfHeight;
+            RGBA mColour;
+        };
+
         // --- 3D (world-space) records ---
 
         // AddEventSafe @ 0x82828640, size 0x14 (20).
@@ -79,6 +89,14 @@ namespace CgsDev
             RGBA mColour;
         };
 
+        struct CInEventDrawPoint : public CgsModule::Event
+        {
+            f32  mfX;
+            f32  mfY;
+            f32  mfZ;
+            RGBA mColour;
+        };
+
         // AddEventSafe @ 0x828287B0, size 0x34 (52). Four world-space corners.
         struct CInEventDrawQuad : public CgsModule::Event
         {
@@ -94,6 +112,15 @@ namespace CgsDev
             f32  mfX4;
             f32  mfY4;
             f32  mfZ4;
+            RGBA mColour;
+        };
+
+        struct CInEventDrawAngle : public CgsModule::Event
+        {
+            f32  mfX;
+            f32  mfY;
+            f32  mfZ;
+            f32  mfAngle;
             RGBA mColour;
         };
 
@@ -126,6 +153,15 @@ namespace CgsDev
 
         // AddEventSafe @ 0x828289D8, size 0x14 (20).
         struct CInEventDrawSolidSphere : public CgsModule::Event
+        {
+            f32  mfX;
+            f32  mfY;
+            f32  mfZ;
+            f32  mfRadius;
+            RGBA mColour;
+        };
+
+        struct CInEventDrawHollowSphere : public CgsModule::Event
         {
             f32  mfX;
             f32  mfY;
@@ -172,6 +208,17 @@ namespace CgsDev
             RGBA mColour;
         };
 
+        struct CInEventDrawBoxAA : public CgsModule::Event
+        {
+            f32  mfInfX;
+            f32  mfInfY;
+            f32  mfInfZ;
+            f32  mfSupX;
+            f32  mfSupY;
+            f32  mfSupZ;
+            RGBA mColour;
+        };
+
         // AddEventSafe @ 0x82828C00, size 0x4C (76). Same layout as CInEventDrawBox (filled solid).
         struct CInEventDrawSolidBox : public CgsModule::Event
         {
@@ -196,6 +243,17 @@ namespace CgsDev
             RGBA mColour;
         };
 
+        struct CInEventDrawSolidBoxAA : public CgsModule::Event
+        {
+            f32  mfInfX;
+            f32  mfInfY;
+            f32  mfInfZ;
+            f32  mfSupX;
+            f32  mfSupY;
+            f32  mfSupZ;
+            RGBA mColour;
+        };
+
         // AddEventSafe @ 0x82828CB8, size 0x1C (28). Two world-space endpoints.
         struct CInEventDrawArrow : public CgsModule::Event
         {
@@ -208,19 +266,78 @@ namespace CgsDev
             RGBA mColour;
         };
 
+        struct CInEventDrawSolidArrow : public CgsModule::Event
+        {
+            f32  mfX1;
+            f32  mfY1;
+            f32  mfZ1;
+            f32  mfX2;
+            f32  mfY2;
+            f32  mfZ2;
+            RGBA mColour;
+        };
+
+        struct CInEventDrawCylinder : public CgsModule::Event
+        {
+            f32  mfX1;
+            f32  mfY1;
+            f32  mfZ1;
+            f32  mfX2;
+            f32  mfY2;
+            f32  mfZ2;
+            f32  mfRadius;
+            RGBA mColour;
+        };
+
+        struct CInEventDrawCapsule : public CgsModule::Event
+        {
+            f32  mfX1;
+            f32  mfY1;
+            f32  mfZ1;
+            f32  mfX2;
+            f32  mfY2;
+            f32  mfZ2;
+            f32  mfRadius;
+            RGBA mColour;
+        };
+
+        struct CInEventDrawTriangle : public CgsModule::Event
+        {
+            f32  mfX1;
+            f32  mfY1;
+            f32  mfZ1;
+            f32  mfX2;
+            f32  mfY2;
+            f32  mfZ2;
+            f32  mfX3;
+            f32  mfY3;
+            f32  mfZ3;
+            RGBA mColour;
+        };
+
         // sizeof cross-check: each == the size immediate baked into its AddEventSafe instance.
         static_assert(sizeof(CInEventDrawText2D)     == 0x10, "CInEventDrawText2D must be 16 bytes (AddEventSafe li r6,0x10)");
         static_assert(sizeof(CInEventDrawLine2D)     == 0x14, "CInEventDrawLine2D must be 20 bytes");
         static_assert(sizeof(CInEventDrawBox2D)      == 0x14, "CInEventDrawBox2D must be 20 bytes (AddEventSafe li r6,0x14)");
+        static_assert(sizeof(CInEventDrawFrame2D)    == 0x14, "CInEventDrawFrame2D must be 20 bytes");
         static_assert(sizeof(CInEventDrawText)       == 0x14, "CInEventDrawText must be 20 bytes (AddEventSafe li r6,0x14)");
         static_assert(sizeof(CInEventDrawLine)       == 0x1C, "CInEventDrawLine must be 28 bytes (AddEventSafe li r6,0x1C)");
+        static_assert(sizeof(CInEventDrawPoint)      == 0x10, "CInEventDrawPoint must be 16 bytes");
         static_assert(sizeof(CInEventDrawQuad)       == 0x34, "CInEventDrawQuad must be 52 bytes (AddEventSafe li r6,0x34)");
+        static_assert(sizeof(CInEventDrawAngle)      == 0x14, "CInEventDrawAngle must be 20 bytes");
         static_assert(sizeof(CInEventDrawAxis)       == 0x30, "CInEventDrawAxis must be 48 bytes (AddEventSafe li r6,0x30)");
         static_assert(sizeof(CInEventDrawSphere)     == 0x14, "CInEventDrawSphere must be 20 bytes (AddEventSafe li r6,0x14)");
         static_assert(sizeof(CInEventDrawSolidSphere) == 0x14, "CInEventDrawSolidSphere must be 20 bytes (AddEventSafe li r6,0x14)");
+        static_assert(sizeof(CInEventDrawHollowSphere) == 0x14, "CInEventDrawHollowSphere must be 20 bytes");
         static_assert(sizeof(CInEventDrawCircle)     == 0x20, "CInEventDrawCircle must be 32 bytes (AddEventSafe li r6,0x20)");
         static_assert(sizeof(CInEventDrawBox)        == 0x4C, "CInEventDrawBox must be 76 bytes (AddEventSafe li r6,0x4C)");
+        static_assert(sizeof(CInEventDrawBoxAA)      == 0x1C, "CInEventDrawBoxAA must be 28 bytes");
         static_assert(sizeof(CInEventDrawSolidBox)   == 0x4C, "CInEventDrawSolidBox must be 76 bytes (AddEventSafe li r6,0x4C)");
+        static_assert(sizeof(CInEventDrawSolidBoxAA) == 0x1C, "CInEventDrawSolidBoxAA must be 28 bytes");
         static_assert(sizeof(CInEventDrawArrow)      == 0x1C, "CInEventDrawArrow must be 28 bytes (AddEventSafe li r6,0x1C)");
+        static_assert(sizeof(CInEventDrawSolidArrow) == 0x1C, "CInEventDrawSolidArrow must be 28 bytes");
+        static_assert(sizeof(CInEventDrawCylinder)   == 0x20, "CInEventDrawCylinder must be 32 bytes");
+        static_assert(sizeof(CInEventDrawCapsule)    == 0x20, "CInEventDrawCapsule must be 32 bytes");
+        static_assert(sizeof(CInEventDrawTriangle)   == 0x28, "CInEventDrawTriangle must be 40 bytes");
     }
 }

@@ -136,32 +136,9 @@ void AchievementManagerBase::OnSetRoadRule(BrnStreetData::ScoreType leScoreType,
     }
 }
 
-// ----------------------------------------------------------------------------
-// OnSetAllRoadRules  (X360 0x8235ACF8)
-//   On completing every TIME (or every CRASH) road rule, fire the matching
-//   set-all achievement.
-// ----------------------------------------------------------------------------
-void AchievementManagerBase::OnSetAllRoadRules(BrnStreetData::ScoreType leScoreType)
-{
-    if (leScoreType == BrnStreetData::E_SCORE_TYPE_TIME)
-    {
-        if (!IsAchievementEarnt(E_X360_ACHIEVEMENT_SET_ALL_ROAD_RULE_TIME))
-        {
-            AchievementEarnt(E_X360_ACHIEVEMENT_SET_ALL_ROAD_RULE_TIME);
-        }
-    }
-    else if (leScoreType == BrnStreetData::E_SCORE_TYPE_CRASH)
-    {
-        if (!IsAchievementEarnt(E_X360_ACHIEVEMENT_SET_ALL_ROAD_RULE_CRASH))
-        {
-            AchievementEarnt(E_X360_ACHIEVEMENT_SET_ALL_ROAD_RULE_CRASH);
-        }
-    }
-    else
-    {
-        CGS_ASSERT(false, "dodgy road rule type!");
-    }
-}
+// OnSetAllRoadRules moved to BrnGameStateAchievementManagerBase_RoadRules.cpp so
+// the live Street Manager debug component can mount this exact leaf without
+// pulling the unrelated achievement-event handlers in this large TU.
 
 // ----------------------------------------------------------------------------
 // OnTakedown  (X360 0x8235AAE0)

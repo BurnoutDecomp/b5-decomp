@@ -76,6 +76,8 @@ namespace CgsGraphics
 namespace BrnWorld
 {
 
+extern bool _mbAllowStreamStalling;
+
 // DWARF BrnWorldEntityModule.h:48/53/55.
 static const s32 KI_MAX_COLLISION_MESHES_PER_ZONE      = 1;
 static const s32 KI_NUM_COLLISION_ZONES_LOADED_PER_FRAME = 20;

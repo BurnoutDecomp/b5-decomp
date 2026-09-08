@@ -114,6 +114,29 @@ namespace BrnWorld
 namespace EnvironmentSettings
 {
 
+// @ 0x827B0D08. Normal environment pause transition. This is deliberately a
+// separate state machine from UpdateFromTool below: normal pause owns the DWARF
+// E_BLENDMODE_PAUSED value (2), while the tool refresh uses the unnamed value 3.
+bool EnvironmentManager::Pause(bool lbPause)
+{
+    if (meBlendMode >= E_BLENDMODE_PAUSED)
+    {
+        if (!lbPause)
+        {
+            CGS_ASSERT(meBlendMode == E_BLENDMODE_PAUSED, "Tyring to unpause a blocking op");
+            meBlendMode = meBlendModePaused;
+        }
+        return true;
+    }
+
+    if (lbPause)
+    {
+        meBlendModePaused = meBlendMode;
+        meBlendMode = E_BLENDMODE_PAUSED;
+    }
+    return false;
+}
+
 // @ 0x827B0DA8. Tool-driven blend/pause transition.
 //   meBlendMode >= 3  -> already in a blocking op: on unpause (lbPause == false) restore
 //                         the saved state (asserting the state really is the reserved 3),

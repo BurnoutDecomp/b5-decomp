@@ -10,6 +10,7 @@
 
 #include "pc/gcm/renderengine/device.h"
 #include "GameSource/Game/BrnGameModule.hpp"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/System/PC/CgsAudioOutputPC.h"
 #include "GameShared/GameClasses/System/PC/CgsCrashHandlerPC.h"
@@ -306,6 +307,10 @@ void EngineUpdate()
             // on the idle branch so it samples once per frame.
             CgsSystem::CrashHandler::PollProcessHealth();
 
+            // BrnGameModule::Update @0x823C5480 brackets ThreadLayout::Update with the CPU
+            // profiler's frame start/stop. This inline PC loop is the current ThreadLayout
+            // stand-in, so retain the bracket around the complete update/dispatch sequence.
+            CgsDev::PerfMonCpu::StartProfiling();
             gGameModule.OnStartOfUpdateFrame();
             gGameModule.OnCompletionOfVsyncWait();
             gGameModule.UpdateThread();
@@ -321,6 +326,7 @@ void EngineUpdate()
             // renders no world at all.
             gGameModule.OnEndOfUpdateFrame();
             gGameModule.DispatchThread();
+            CgsDev::PerfMonCpu::StopProfiling();
         }
     }
 

@@ -495,15 +495,5 @@ namespace Deformation
 }
 }
 
-// 2026-08-18 (wave Q4 PropManager mount): PRE-EXISTING declaration-only hole surfaced by mounting
-// PropManager::ReadUpdatedBodies' mbRenderCOM debug arm (BehaviourRig.cpp:189 was the older
-// caller). CgsDev::DebugRender::DrawAxis @0x8282BE40 (35 insns) is declared in CgsDebugRender.h:104
-// with no body anywhere. Debug-only render; an inert gate is safe. Retire when the body lands.
-#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
-namespace CgsDev
-{
-    void DebugRender::DrawAxis(const f32*)
-    {
-        BRN_CONDUCTOR_GATE("CgsDev::DebugRender::DrawAxis @0x8282BE40 (35; declaration-only, pre-existing hole)");
-    }
-}
+// DebugRender::DrawAxis's former conductor gate is retired; the ARTIST publisher lives in
+// CgsDebugRender.cpp and feeds the reconstructed 3D replay path.

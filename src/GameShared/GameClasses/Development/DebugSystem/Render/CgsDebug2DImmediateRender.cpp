@@ -1,6 +1,23 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 
 #include <math.h>   // sqrtf (DrawLine thickness)
+#include <cstring>
+
+// X360 0x82824048. Shared screen-space text wrapper used throughout the game debug HUDs.
+// ARTIST builds a Vector2 from the two scalar coordinates and forwards every remaining
+// argument to Debug2DImmediateRender::DrawText.
+int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred)
+{
+    Vector2 lv2Position;
+    lv2Position.x = lfX;
+    lv2Position.y = lfY;
+    lv2Position.z = 0.0f;
+    lv2Position.w = 0.0f;
+    lpDisplay->DrawText(lpcText, lv2Position, lfScale, lColour, lbCentred);
+    return 0;
+}
+#include <cstdio>
 
 namespace
 {
@@ -134,6 +151,46 @@ namespace CgsDev
         return true;
     }
 
+    // ARTIST 0x8281A318. A segment is visible when either endpoint is on-screen or
+    // its axis-aligned bounds overlap the virtual-screen rectangle.
+    bool Debug2DImmediateRender::Is2DLineOnScreen(Vector2 lv2Start, Vector2 lv2End) const
+    {
+        if (Is2DPointOnScreen(lv2Start) || Is2DPointOnScreen(lv2End))
+            return true;
+
+        const f32 lfMinX = (lv2Start.x < lv2End.x) ? lv2Start.x : lv2End.x;
+        const f32 lfMinY = (lv2Start.y < lv2End.y) ? lv2Start.y : lv2End.y;
+        const f32 lfMaxX = (lv2Start.x > lv2End.x) ? lv2Start.x : lv2End.x;
+        const f32 lfMaxY = (lv2Start.y > lv2End.y) ? lv2Start.y : lv2End.y;
+        return lfMaxX >= 0.0f && lfMaxY >= 0.0f &&
+               lfMinX <= mfVirtualScreenWidth && lfMinY <= mfVirtualScreenHeight;
+    }
+
+    bool Debug2DImmediateRender::Is2DBoxOnScreen(Vector2 lv2Min, Vector2 lv2Max) const
+    {
+        return lv2Max.x >= 0.0f && lv2Max.y >= 0.0f &&
+               lv2Min.x <= mfVirtualScreenWidth && lv2Min.y <= mfVirtualScreenHeight;
+    }
+
+    // ARTIST 0x828188F8. Build the polygon bounds and intersect them with the
+    // virtual-screen rectangle.
+    bool Debug2DImmediateRender::Is2DPolygonOnScreen(const Vector2* lpaPoints, u32 luCount) const
+    {
+        if (!lpaPoints || luCount == 0)
+            return false;
+
+        Vector2 lMin = lpaPoints[0];
+        Vector2 lMax = lpaPoints[0];
+        for (u32 luIndex = 1; luIndex < luCount; ++luIndex)
+        {
+            if (lpaPoints[luIndex].x < lMin.x) lMin.x = lpaPoints[luIndex].x;
+            if (lpaPoints[luIndex].y < lMin.y) lMin.y = lpaPoints[luIndex].y;
+            if (lpaPoints[luIndex].x > lMax.x) lMax.x = lpaPoints[luIndex].x;
+            if (lpaPoints[luIndex].y > lMax.y) lMax.y = lpaPoints[luIndex].y;
+        }
+        return Is2DBoxOnScreen(lMin, lMax);
+    }
+
     // Faithful port of X360 0x823B13A8 -- the debug-font handoff. The game's GamePrepare loads the
     // "Language\Fonts\Default.font" bundle, calls Font::CreateTextureState on the resolved font, then
     // DebugManager::SetDebugFont -> here. Storing a non-null handle flips DrawText off the vector-font
@@ -177,6 +234,14 @@ namespace CgsDev
     {
         if (miIm2dVertsHead > 0)
         {
+            // FLAG PC-platform leaf: resource-font draws bind the glyph atlas on this
+            // shared Im2d buffer. Restore untextured state before solid primitives;
+            // otherwise menu backgrounds sample the transparent corner of the atlas.
+            if (meDrawingMode != E_DRAWING_TRISTRIP_SOLID)
+            {
+                SetDebugRenderStates();
+                meDrawingMode = E_DRAWING_TRISTRIP_SOLID;
+            }
             mpRenderBuffer->Render(mePrimitiveType, maIm2dVertsArray, static_cast<u32>(miIm2dVertsHead));
             miIm2dVertsHead = 0;
         }
@@ -238,6 +303,9 @@ namespace CgsDev
     // A line is drawn as a thin (1px) quad so it survives the triangle-strip-only Im2d path.
     void Debug2DImmediateRender::DrawLine(Vector2 lv2Start, Vector2 lv2End, RGBA lColour)
     {
+        if (!Is2DLineOnScreen(lv2Start, lv2End))
+            return;
+
         const f32 lfDeltaX = lv2End.x - lv2Start.x;
         const f32 lfDeltaY = lv2End.y - lv2Start.y;
         const f32 lfLength = sqrtf(lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY);
@@ -255,6 +323,77 @@ namespace CgsDev
         AddVertex(lv2End.x   + lfNormalX, lv2End.y   + lfNormalY, lColour);
         AddVertex(lv2End.x   - lfNormalX, lv2End.y   - lfNormalY, lColour);
         DispatchVertices();
+    }
+
+    void Debug2DImmediateRender::DrawFrame(Vector2 lv2Min, Vector2 lv2Max, RGBA lColour)
+    {
+        DrawFrame(lv2Min.x, lv2Min.y, lv2Max.x, lv2Max.y, lColour, 1.0f);
+    }
+
+    // ARTIST 0x8281C440. The wire polygon closes the final point back to the first.
+    void Debug2DImmediateRender::DrawWirePolygon(const Vector2* lpaPoints, u32 luCount, RGBA lColour)
+    {
+        if (luCount < 2 || !Is2DPolygonOnScreen(lpaPoints, luCount))
+            return;
+
+        for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+            DrawLine(lpaPoints[luIndex], lpaPoints[(luIndex + 1) % luCount], lColour);
+    }
+
+    // ARTIST 0x8281C4F0. Emit the convex polygon as the original triangle fan.
+    void Debug2DImmediateRender::DrawSolidConvexPolygon(const Vector2* lpaPoints, u32 luCount, RGBA lColour)
+    {
+        if (luCount < 3 || !Is2DPolygonOnScreen(lpaPoints, luCount))
+            return;
+
+        for (u32 luIndex = 1; luIndex + 1 < luCount; ++luIndex)
+        {
+            DispatchVertices();
+            AddVertex(lpaPoints[0].x, lpaPoints[0].y, lColour);
+            AddVertex(lpaPoints[luIndex].x, lpaPoints[luIndex].y, lColour);
+            AddVertex(lpaPoints[luIndex + 1].x, lpaPoints[luIndex + 1].y, lColour);
+            DispatchVertices();
+        }
+    }
+
+    // ARTIST 0x8281C688. Advance a fixed angular step and join each sample to
+    // the next, including the closing segment.
+    void Debug2DImmediateRender::DrawCircle(Vector2 lv2Centre, f32 lfRadius,
+                                             s32 liSegments, RGBA lColour)
+    {
+        if (liSegments < 3 || lfRadius <= 0.0f)
+            return;
+
+        const f32 lfTwoPi = 6.2831853071795864769f;
+        const f32 lfStep = lfTwoPi / static_cast<f32>(liSegments);
+        Vector2 lPrevious = { lv2Centre.x + lfRadius, lv2Centre.y, 0.0f, 0.0f };
+        for (s32 liIndex = 1; liIndex <= liSegments; ++liIndex)
+        {
+            const f32 lfAngle = lfStep * static_cast<f32>(liIndex);
+            Vector2 lCurrent = {
+                lv2Centre.x + cosf(lfAngle) * lfRadius,
+                lv2Centre.y + sinf(lfAngle) * lfRadius,
+                0.0f,
+                0.0f
+            };
+            DrawLine(lPrevious, lCurrent, lColour);
+            lPrevious = lCurrent;
+        }
+    }
+
+    // ARTIST 0x8281CAC0. A two-pixel frame surrounds the track; the filled
+    // portion occupies its interior in proportion to value/max.
+    void Debug2DImmediateRender::DrawHorizontalBar(Vector2 lv2Min, Vector2 lv2Max,
+                                                    f32 lfValue, f32 lfMax,
+                                                    RGBA lBackColour, RGBA lBarColour)
+    {
+        if (lfMax <= 0.0f || lfValue < 0.0f || lfValue > lfMax)
+            return;
+
+        DrawFrame(lv2Min.x, lv2Min.y, lv2Max.x, lv2Max.y, lBackColour, 2.0f);
+        const f32 lfWidth = (lv2Max.x - lv2Min.x - 4.0f) * (lfValue / lfMax);
+        DrawBox(lv2Min.x + 2.0f, lv2Min.y + 2.0f,
+                lfWidth, lv2Max.y - lv2Min.y - 4.0f, lBarColour);
     }
 
     // Faithful port of X360 0x82823DE0 (the pseudocode is VPU-garbled -- the rect setup is reconstructed
@@ -322,33 +461,124 @@ namespace CgsDev
     {
         f32 lfX = lv2Position.x;
         if (lbCentred && lpcText)
-        {
-            s32 liLength = 0;
-            for (const char* lpc = lpcText; *lpc; ++lpc)
-                ++liLength;
-            // Approximate centring (mean vector-glyph advance ~ 0.375 * height); exact ComputeTextWidth
-            // over KAN_CHARWIDTH is the follow-on.
-            lfX -= static_cast<f32>(liLength) * lfScale * 0.375f * 0.5f;
-        }
+            lfX -= CalcTextWidth(lpcText, lfScale) * 0.5f;
         DrawText(lpcText, lfX, lv2Position.y, lfScale, lColour);
     }
 
-    // ------------------------------------------------------------------------
-    // FLAG trap-stub bodies (link scaffold, 2026-07-01): GetVirtualScreenSize +
-    // CalcTextWidth are declared (header) and referenced by the language debug
-    // component's RenderHUD (wave f0de9b78), but not yet reconstructed. Trap
-    // bodies per the stub scaffold -- reachable only via that debug HUD panel.
-    // ------------------------------------------------------------------------
-    Vector2 Debug2DImmediateRender::GetVirtualScreenSize() const
+    // ARTIST 0x8282C4C0. Alignment is expressed as 0=left, .5=centre, 1=right.
+    void Debug2DImmediateRender::DrawAlignedText(const char* lpcText, f32 lfX, f32 lfY,
+                                                 f32 lfScale, RGBA lColour, f32 lfAlignment)
     {
-        __debugbreak();                       // FLAG trap-stub
-        const Vector2 lv2Zero = { 0.0f, 0.0f, 0.0f, 0.0f };
-        return lv2Zero;
+        DrawText(lpcText, lfX - CalcTextWidth(lpcText, lfScale) * lfAlignment,
+                 lfY, lfScale, lColour);
     }
 
-    f32 Debug2DImmediateRender::CalcTextWidth(const char* /*lpcText*/, f32 /*lfScale*/) const
+    // ARTIST 0x8282C6A8. Size the background from CalcTextExtent, expand it by
+    // the caller's border, then render the text at the requested origin.
+    void Debug2DImmediateRender::DrawTextWithBackground(const char* lpcText,
+                                                         f32 lfX, f32 lfY, f32 lfScale,
+                                                         RGBA lTextColour,
+                                                         RGBA lBackgroundColour,
+                                                         f32 lfBorder)
     {
-        __debugbreak();                       // FLAG trap-stub
-        return 0.0f;
+        const Vector2 lExtent = CalcTextExtent(lpcText, lfScale);
+        DrawBox(lfX - lfBorder, lfY - lfBorder,
+                lExtent.x + lfBorder * 2.0f,
+                lExtent.y + lfBorder * 2.0f,
+                lBackgroundColour);
+        DrawText(lpcText, lfX, lfY, lfScale, lTextColour);
+    }
+
+    // ARTIST 0x82824098.
+    void Debug2DImmediateRender::DrawValue(s32 liValue, f32 lfX, f32 lfY,
+                                            f32 lfScale, RGBA lColour)
+    {
+        char lacValue[256];
+        std::snprintf(lacValue, sizeof(lacValue), "%d", liValue);
+        DrawText(lacValue, lfX, lfY, lfScale, lColour);
+    }
+
+    Vector2 Debug2DImmediateRender::GetVirtualScreenSize() const
+    {
+        return { mfVirtualScreenWidth, mfVirtualScreenHeight, 0.0f, 0.0f };
+    }
+
+    // ARTIST 0x8282C548. This is a fixed-width line splitter (rather than word wrapping): derive
+    // the maximum character count from the width of "A", honour explicit newlines, align every
+    // emitted line independently inside the box, and stop before another line would cross y1.
+    void Debug2DImmediateRender::DrawTextInBox(const char* lpcText,
+                                                f32 lfX0, f32 lfY0,
+                                                f32 lfX1, f32 lfY1,
+                                                f32 lfSize, RGBA lColour,
+                                                f32 lfAlign)
+    {
+        if (!lpcText)
+            return;
+
+        const f32 lfWidth = lfX1 - lfX0;
+        const f32 lfCentreX = lfX0 + lfWidth * lfAlign;
+        s32 liMaxCharacters = static_cast<s32>(lfWidth / CalcTextWidth("A", lfSize));
+        if (liMaxCharacters > 511)
+            liMaxCharacters = 511;
+
+        const char* lpcRead = lpcText;
+        f32 lfY = lfY0;
+        while (*lpcRead)
+        {
+            const char* lpcEnd = lpcRead;
+            while (*lpcEnd && *lpcEnd != '\n')
+                ++lpcEnd;
+
+            s32 liCount = static_cast<s32>(lpcEnd - lpcRead);
+            if (liCount > liMaxCharacters)
+                liCount = liMaxCharacters;
+            if (liCount <= 0 && *lpcRead != '\n')
+                break;
+
+            char lacLine[568];
+            std::strncpy(lacLine, lpcRead, static_cast<size_t>(liCount));
+            lacLine[liCount] = '\0';
+
+            const f32 lfLineWidth = CalcTextWidth(lacLine, lfSize);
+            DrawText(lacLine, lfCentreX - lfLineWidth * lfAlign, lfY, lfSize, lColour);
+
+            lfY += lfSize;
+            if (lfY + lfSize > lfY1)
+                break;
+
+            lpcRead += liCount;
+            if (*lpcRead == '\n')
+                ++lpcRead;
+        }
+    }
+
+    // X360 0x82824250. The resource font stores advances in em-like units and is scaled by
+    // the requested height; the no-resource path measures the original vector-font table.
+    f32 Debug2DImmediateRender::CalcTextWidth(const char* lpcText, f32 lfScale) const
+    {
+        if (HasResourceFont())
+        {
+            const CgsResource::CgsUtf8* lpUtf8 =
+                reinterpret_cast<const CgsResource::CgsUtf8*>(lpcText);
+            return mpFont->GetStringWidth(lpUtf8) * lfScale;
+        }
+
+        return VectorFont::ComputeTextExtent(
+            lpcText, Vector2{ lfScale, lfScale, 0.0f, 0.0f }).x;
+    }
+
+    // X360 0x82824308. Bitmap-font height is exactly the requested text size; vector-font
+    // measurement handles embedded newlines and tabs itself.
+    Vector2 Debug2DImmediateRender::CalcTextExtent(const char* lpcText, f32 lfScale) const
+    {
+        if (HasResourceFont())
+        {
+            const CgsResource::CgsUtf8* lpUtf8 =
+                reinterpret_cast<const CgsResource::CgsUtf8*>(lpcText);
+            return { mpFont->GetStringWidth(lpUtf8) * lfScale, lfScale, 0.0f, 0.0f };
+        }
+
+        return VectorFont::ComputeTextExtent(
+            lpcText, Vector2{ lfScale, lfScale, 0.0f, 0.0f });
     }
 }

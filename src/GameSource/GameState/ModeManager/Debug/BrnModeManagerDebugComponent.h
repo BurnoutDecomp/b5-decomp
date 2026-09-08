@@ -26,6 +26,7 @@ namespace BrnGameState
     protected:
         const char* GetName() const override;          // @ BrnModeManagerDebugComponent.cpp:231
         void        OnActivate() override;             // @ BrnModeManagerDebugComponent.cpp:243
+        void        RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override; // X360 0x8231EC30
 
     private:
         // The "End Current Event" action callback registered with the debug menu; the void*

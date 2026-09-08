@@ -241,6 +241,9 @@ namespace Deformation
 		// loads the leading Vector4 of *(sensor+412)). Declared-only here because Sphere is only
 		// forward-declared in this header; bodied where the full Sphere layout is in scope.
 		const Vector4& GetLocalSphereCentre() const;
+		void SetLocalPosition(Vector3 lPosition);
+		void UpdateWorldPosition(Matrix44Affine lVehicleTransform);
+		void SetScratchAmount(f32 lfAmount) { mfScratchAmount = lfAmount; }
 
 		// The per-sensor biggest-impulse vector the joint-detach test reads. Now bodied against the real
 		// DWARF member (its w lane carries the magnitude the detach band compares). Called by

@@ -29,14 +29,15 @@
 
 namespace BrnWorld
 {
+f32 mfCentreZoneBaseScore         = 100.0f;
+f32 mfImmediateZoneBaseScore      = 10.0f;
+f32 mfSecondaryZoneBaseScore      = 9.8f;
+f32 mfDirectionalScoreMultiplier = 1.0f;
+
 namespace
 {
     // Update's rodata constants (read out of the X360 image at the addresses the asm cites).
     const f32 KF_ZERO_WEIGHT          = 0.0f;   // flt_82001CC0 -- every weight's seed
-    const f32 KF_PLAYER_ZONE_WEIGHT   = 100.0f; // flt_82CDB58C -- weight of the zone the listener is in
-    const f32 KF_REQUIRED_ZONE_WEIGHT = 10.0f;  // flt_82CDB590 -- base weight of an IMMEDIATE neighbour
-    const f32 KF_OPTIONAL_ZONE_WEIGHT = 9.8f;   // flt_82CDB594 -- base weight of a non-IMMEDIATE neighbour
-    const f32 KF_HEADING_WEIGHT_SCALE = 1.0f;   // flt_82CDB598 -- the heading dot-product's contribution
 
     // The X360 loads the request's Vector4 position/velocity and runs it through the
     // vperm control word at unk_82CDA450 == 00 01 02 03 | 18 19 1A 1B | 00 01 02 03 |
@@ -64,7 +65,7 @@ namespace
         , meReleaseStage( E_RELEASESTAGE_START )
         , mZoneList()
         , mReceiverQueue()
-        , mbCurrentZoneOnly( false )
+        , mbDebugRestrictZoneLists( false )
     {
         // The stage members' real seeds are written by Construct @0x822C3F50 (below); the
         // ctor itself only clears the flag byte and default-builds the resource pointer.
@@ -86,7 +87,7 @@ namespace
 
         mReceiverQueue.Construct();              // miCapacity 512 / miAlignment 16 / buffer = +0x18, then Clear
 
-        mbCurrentZoneOnly = false;               // stb 0, 0x1FB0
+        mbDebugRestrictZoneLists = false;         // stb 0, 0x1FB0
     }
 
     // X360 0x82302E00. The PVS data load stage machine.
@@ -320,7 +321,7 @@ namespace
             lResponse.miLookupIndex =
                 static_cast<s32>( lpCentreZone - mZoneList->GetZones() );
 
-            if ( mbCurrentZoneOnly )
+            if ( mbDebugRestrictZoneLists )
             {
                 lResponse.miNumZones = 1;
             }
@@ -407,7 +408,7 @@ namespace
 
             if ( lbUseVelocity )
             {
-                lResponse.mafZoneWeights[0] = KF_PLAYER_ZONE_WEIGHT;
+                lResponse.mafZoneWeights[0] = mfCentreZoneBaseScore;
 
                 // unit(velocity) -- vrsqrtefp + two Newton refinements, then a vsel that
                 // yields the zero vector when the length is not > 0.
@@ -428,8 +429,8 @@ namespace
                                 "(liIndex >= 0) && (liIndex < KI_MAX_ZONES)" );  // BrnPVSModuleEvents.h:306
 
                     const f32 lfBaseWeight = lResponse.mabZoneRequired[liZone]
-                                                 ? KF_REQUIRED_ZONE_WEIGHT
-                                                 : KF_OPTIONAL_ZONE_WEIGHT;
+                                                 ? mfImmediateZoneBaseScore
+                                                 : mfSecondaryZoneBaseScore;
 
                     const rw::math::vpu::Vector2 lCentre = lapZones[liZone]->CalculateCentre();
 
@@ -454,7 +455,7 @@ namespace
                                 "(liIndex >= 0) && (liIndex < KI_MAX_ZONES)" );  // BrnPVSModuleEvents.h:241
 
                     lResponse.mafZoneWeights[liZone] =
-                        ( lfDot * KF_HEADING_WEIGHT_SCALE ) + lfBaseWeight;
+                        ( lfDot * mfDirectionalScoreMultiplier ) + lfBaseWeight;
                 }
             }
 
