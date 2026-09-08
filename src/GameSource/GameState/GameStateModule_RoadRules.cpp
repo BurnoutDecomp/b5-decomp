@@ -212,3 +212,20 @@ void GameStateModule::UpdateRoadRulesManagerImpactTimeBringUp(
 }
 
 }  // namespace BrnGameState
+
+namespace BrnGameState {
+// Display arm of StreetManager::Update 0x82352E90, called at the street-update
+// position in PreWorldUpdate 0x823A5D6C. Network score synchronization stays in
+// StreetManager::Update; this restores its road tracking and upcoming-sign feed.
+void GameStateModule::UpdateStreetDisplay(f32 delta)
+{
+    if (mLastActiveRaceCarInterface.GetPlayerActiveRaceCarIndex() == E_ACTIVE_RACE_CAR_INDEX_INVALID ||
+        !mLastActiveRaceCarInterface.IsPlayerCarActive()) return;
+    const bool hasMode = mModeManager.GetCurrentGameMode() != 0;
+    const auto* params = mModeManager.GetCurrentGameModeParams();
+    if (hasMode && params->GetFlag(GameModeParams::KU_FLAG_DISABLE_UPCOMING_ROAD_SIGNS)) return;
+    const f32 wrongWayTime = mModeManager.GetScoringSystem()->GetPlayerWrongWayTime();
+    mStreetManager.UpdateRoadDisplay(&mLastActiveRaceCarInterface, &mLastAICarOutputInterface,
+        mpOutputBuffer, delta, wrongWayTime, hasMode && params->GetFlag(GameModeParams::KU_FLAG_USES_NAVIGATION));
+}
+}

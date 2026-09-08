@@ -15,6 +15,7 @@
 // frozen-header named fields (never raw-offset casts).
 // ===========================================================================
 
+#include "GameSource/GameState/BrnGameActions.h"
 #include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"
 
 #include "GameSource/GameState/BrnGameStateModuleIO.h"             // GameStateModuleIO::OutputBuffer / GetGuiOutputQueue (13312 queue)
@@ -40,30 +41,7 @@ namespace
     // 0x82348868 / 0x82348874 -- both fed from the SAME staging copy of
     // mFirstJunctionPosition (w lane zeroed).
     // -----------------------------------------------------------------------
-    struct UpcomingRoadMessage
-    {
-        ::CgsID mLeftRoadId;                                            // +0x000  var_200
-        ::CgsID mRightRoadId;                                           // +0x008  var_1F8
-        Vector3 mJunctionPosition;                                      // +0x010  var_1F0
-        Vector3 mSecondJunctionPosition;                                // +0x020  var_1E0
-        f32     mfLeftSignValue;                                        // +0x030  var_1D0
-        f32     mfRightSignValue;                                       // +0x034  var_1CC
-        BrnStreetData::ChallengeParScoresEntry   mLeftParScore;         // +0x038  var_1C8 (40B)
-        BrnStreetData::ChallengeHighScoreEntry   mLeftFriendHighScore;  // +0x060  var_1A0 (56B)
-        BrnStreetData::ChallengePlayerScoreEntry mLeftUserScore;        // +0x098  var_168 (40B)
-        BrnStreetData::ChallengeParScoresEntry   mRightParScore;        // +0x0C0  var_140 (40B)
-        BrnStreetData::ChallengeHighScoreEntry   mRightFriendHighScore; // +0x0E8  var_118 (56B)
-        BrnStreetData::ChallengePlayerScoreEntry mRightUserScore;       // +0x120  var_E0  (40B)
-        s32     miCurrentRoadHighlightState;                            // +0x148  var_B8
-        s32     miLeftRoadHighlightState;                               // +0x14C  var_B4
-        s32     miRightRoadHighlightState;                              // +0x150  var_B0
-        BrnStreetData::RoadIndex miCurrentRoadIndex;                    // +0x154  var_AC  (== miLastPlayerRoadIndex)
-        BrnStreetData::RoadIndex miLeftRoadIndex;                       // +0x158  var_A8
-        BrnStreetData::RoadIndex miRightRoadIndex;                      // +0x15C  var_A4
-        u8      mu8LeftRoadIsInterstate;                                // +0x160  var_A0
-        u8      mu8RightRoadIsInterstate;                               // +0x161  var_9F
-    };
-    static_assert( sizeof(UpcomingRoadMessage) == 368, "upcoming-road message is 0x170" );
+    using UpcomingRoadMessage = BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction;
 
     // The interstate sentinel road id both sides store for a -2 road index. The
     // X360 materialises it inline (lis 0x6845 / ori 0x61A1 / lis 0x6800 /

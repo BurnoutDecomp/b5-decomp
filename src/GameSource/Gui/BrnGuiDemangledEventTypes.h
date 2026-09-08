@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstring>
+#include "GameSource/Gui/Events/BrnGuiEventRoadRuleData.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <cstddef>   // offsetof -- GuiEventNetworkCustomMatchSearch derives its two record
                      // header words from the HOST layout, never from a console literal
@@ -270,7 +271,7 @@ namespace BrnGui
     struct GuiEventRoadRuleBatchDataResponse : public CgsGui::GuiEvent<344> { u8 maPayload[764]; };  // id 344 size 776 (12B GuiEvent header + opaque payload)
     struct GuiEventRoadRuleBegin { u8 maData[4]; s32 GetEventType() const { return 335; } };  // id 335 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventRoadRuleChangeMode { u8 maData[4]; s32 GetEventType() const { return 343; } };  // id 343 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiEventRoadRuleData : public CgsGui::GuiEvent<334> { u8 maPayload[76]; };  // id 334 size 88 (12B GuiEvent header + opaque payload)
+
     // GuiEventRoadRuleEnd (id 336): NO placeholder here -- UPGRADED to the real
     // hand-reconstructed home in BrnGuiEventTypeDefs.h (HUD H2 2026-08-25; named
     // fields, X360-attested). A placeholder must never shadow a real home (C2011).

@@ -1,6 +1,9 @@
 #pragma once
 
 #include "types.hpp"
+#include "SharedClasses/StreetData/BrnChallengeData.h"
+#include "SharedClasses/StreetData/BrnStreetData.h"
+#include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h"
 #include "BrnCommonTypes.h"                                  // Vector3, CgsID, EntityId
 #include "GameSource/BurnoutConstants.h"                     // EActiveRaceCarIndex
 #include "GameSource/GameState/BrnGameStateSharedIO.h"       // EPlayerScoringIndex, EPlayerTeam
@@ -960,9 +963,32 @@ struct JustBouncedAction
 // binary itself and not only by DWARF BrnGameActions.h:4793.
 struct RoadRulesEnterRoadAction
 {
-    u8    maPad00[0x10];     // +0x00 unrecovered ARTIST head -- never read by OnEnterRoad
-    CgsID mRoadId;           // +0x10
+    CgsID maParRivalIds[2];
+    CgsID mRoadId;
+    BrnStreetData::ChallengeParScoresEntry mParScores;
+    BrnStreetData::ChallengeHighScoreEntry mFriendScores;
+    BrnStreetData::ChallengePlayerScoreEntry mUserScores;
+    BrnStreetData::RoadIndex miRoadIndex;
 };
+
+// ARTIST StreetManager::SendUpcomingRoadMessage 0x82348798, action 276.
+struct UpcomingRoadChangeAction
+{
+    CgsID mLeftRoadId, mRightRoadId;
+    Vector3 mJunctionPosition, mSecondJunctionPosition;
+    f32 mfLeftSignValue, mfRightSignValue;
+    BrnStreetData::ChallengeParScoresEntry mLeftParScore;
+    BrnStreetData::ChallengeHighScoreEntry mLeftFriendHighScore;
+    BrnStreetData::ChallengePlayerScoreEntry mLeftUserScore;
+    BrnStreetData::ChallengeParScoresEntry mRightParScore;
+    BrnStreetData::ChallengeHighScoreEntry mRightFriendHighScore;
+    BrnStreetData::ChallengePlayerScoreEntry mRightUserScore;
+    s32 miCurrentRoadHighlightState, miLeftRoadHighlightState, miRightRoadHighlightState;
+    BrnStreetData::RoadIndex miCurrentRoadIndex, miLeftRoadIndex, miRightRoadIndex;
+    u8 mu8LeftRoadIsInterstate, mu8RightRoadIsInterstate;
+};
+static_assert(sizeof(RoadRulesEnterRoadAction) == 168, "ARTIST road-enter action");
+static_assert(sizeof(UpcomingRoadChangeAction) == 368, "ARTIST upcoming-road action");
 
 // Consumer: CrashPlayManager::OnEnterJunction @0x822A7E30 -- `lwz r11, 0(r30)`, three times,
 // and nothing else. Its assert string is "lpJAction->muJunctionID != 0", so again the member

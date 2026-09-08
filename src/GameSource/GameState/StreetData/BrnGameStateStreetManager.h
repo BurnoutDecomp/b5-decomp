@@ -465,6 +465,11 @@ namespace BrnGameState
         // DWARF :452 (not in this wave's ledger).
         ::CgsID GetParRivalId( s32 liChallengeIndex, BrnStreetData::ScoreType leScoreType );
 
+        void UnlockUpcomingRoadSigns() { mbLockRightSign = false; mbLockLeftSign = false; }
+        // Road-display arm of ARTIST Update 0x82352E90.
+        void UpdateRoadDisplay(BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* active,
+            BrnAI::AIModuleIO::AICarOutputInterface* ai, GameStateModuleIO::OutputBuffer* output,
+            f32 delta, f32 wrongWayTime, bool useRoute);
         BrnStreetData::RoadIndex GetCurrentPlayerRoadIndex();            // :456
         ::CgsID GetForwardPlayerRoadId();                                // :459
         ::CgsID GetLeftPlayerRoadId();                                   // :462

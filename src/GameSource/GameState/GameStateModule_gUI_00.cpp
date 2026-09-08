@@ -236,7 +236,8 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
         f32                                           lfDelta,
         const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpyInterface,
         const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue,
-        const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue)
+        const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue,
+        const BrnAI::AIModuleIO::AICarOutputInterface* lpAICarOutputInterface)
 {
     // ---- leg 1: refresh the cached active-race-car snapshot ---------------------------------
     // âš ï¸ COPIED BY ASSIGNMENT, NEVER AT THE CONSOLE'S LITERAL 10480 BYTES. 10480 is the X360
@@ -248,6 +249,10 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     {
         mLastActiveRaceCarInterface = *lpActiveRaceCarOutputInterface;
     }
+
+    // ARTIST PostWorldUpdate 0x8238F358 also copies the AI output snapshot.
+    // As with the active-car snapshot, use assignment for the native-width type.
+    if (lpAICarOutputInterface) mLastAICarOutputInterface = *lpAICarOutputInterface;
 
     // ---- leg 2: fold the world's game events into the carry queue ----------------------------
     // The world module's OutputBuffer::GetGameEventQueue() is the SAME <1536,16> queue type
@@ -1335,6 +1340,10 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     if (!IsSimPaused(true, false))
     {
         UpdateRoadRulesManagerImpactTimeBringUp(lpActionQueue);
+        if (mLastActiveRaceCarInterface.GetPlayerActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+            mLastActiveRaceCarInterface.IsPlayerCarActive())
+            mRoadRulesManager.UpdateRoadDisplay(mStreetManager.GetCurrentPlayerRoadIndex(),
+                lrTimerStatusInterface.GetSimTimerStatus()->GetCurrentTimeStep(), lpActionQueue);
     }
 
     // (merge 2026-08-27: both waves added a leg at this seam the same day -- the bounce wave's
@@ -1626,6 +1635,9 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
             }
         }
     }
+
+    if (!IsSimPaused(true, false))
+        UpdateStreetDisplay(lrTimerStatusInterface.GetSimTimerStatus()->GetCurrentTimeStep());
 
     mbIsUpdating = false;
     mpOutputBuffer->UnlockForWrite();

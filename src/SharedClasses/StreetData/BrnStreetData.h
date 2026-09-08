@@ -97,7 +97,7 @@ namespace BrnStreetData
 
         void       Construct( RoadIndex liRoadIndex, SpanIndex liSpanIndex );
         ESpanType  GetSpanType() const;
-        RoadIndex  GetRoadIndex() const;
+        RoadIndex  GetRoadIndex() const { return miRoadIndex; }
         SpanIndex  GetSpanIndex() const;
         void       FixDown();
         void       FixUp();
@@ -221,6 +221,7 @@ namespace BrnStreetData
         void Update();
 
         int32_t      GetRoadCount() const;
+        int32_t      GetStreetCount() const { return miStreetCount; }
 
         // --- the three reconstructed accessors (bodies below, inline) ---
         const Road*                    GetRoad( RoadIndex liIndex ) const;          // 0x8230ECD0
@@ -230,7 +231,8 @@ namespace BrnStreetData
 
         const Junction*  GetJunction( SpanIndex liIndex );
         bool             IsJunction( SpanIndex liIndex );
-        bool             IsStreet( SpanIndex liIndex );
+        // ARTIST GetStreet 0x8231BAD0 inlines the signed upper-bound test.
+        bool             IsStreet( SpanIndex liIndex ) { return liIndex < miStreetCount; }
         const SpanBase*  GetSpan( SpanIndex liIndex );
 
         int32_t GetSize() const;

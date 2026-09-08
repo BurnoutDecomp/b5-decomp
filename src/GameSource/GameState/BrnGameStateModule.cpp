@@ -276,69 +276,11 @@ void GameStateModule::Construct()
     // DELETE-WHEN PostWorldUpdate's snapshot leg lands (it XMemCpy's both interfaces).
     mLastGlobalRaceCarInterface.Clear();
 
-    // (DeveloperChallengeManager::Construct @0x82380794 -- see the call after WireOwnerPointers below;
-    //  the "BrnModeManager.cpp unmounted" reason recorded here was stale: ModeManager::GetScoringSystem
-    //  is bodied in ModeManager_gUI_00.cpp, mounted.)
-
-    // ⚠️⚠️ THE TWO PREPARE2 SUB-OBJECTS ARE NOT Construct()ed HERE (2026-08-11), and the reason in
-    // BOTH cases is a MEASURED LINK COST -- not a missing body. The X360 Construct @0x82380388 runs
-    //
-    //   BrnGameState::AchievementManagerBase::Construct(a1 + 181680,   // &mAchievementManager
-    //                                                   a1 + 47920,    // &mProgressionManager
-    //                                                   a1 + 284520,   // &mStreetManager
-    //                                                   a1 + 7632,     // mModeManager.GetScoringSystem()
-    //                                                   a1);           // this
-    //   BrnGameState::StreetManager::Construct(a1 + 284520,            // &mStreetManager
-    //                                          a1,                     // this
-    //                                          a1 + 47920,             // &mProgressionManager
-    //                                          a1 + 183592);           // &mRoadRulesManager
-    //
-    // (`a1 + 7632` is the ScoringSystem EMBEDDED IN mModeManager, not a module member of its own:
-    // mModeManager sits at a1 + 4128 and BrnModeManager.h:303 puts mScoringSystem at ModeManager
-    // +0xDB0 == 3504; 4128 + 3504 == 7632 exactly. So the argument is mModeManager.GetScoringSystem().)
-    //
-    // What blocks each call, MEASURED with `cl /c` + dumpbin /SYMBOLS over the candidate mount set:
-    //   * AchievementManagerBase::Construct lives in BrnGameStateAchievementManagerBase.cpp, and
-    //     mounting that TU costs EIGHT unresolved externals with NO definition anywhere in the
-    //     tree -- ScoringSystem::GetPlayerScore / GetPlayerModeCrashes / GetPlayerModeTakedowns /
-    //     GetNewlyWreckedCarCount / GetNumberOfTakedownsAgainst and ProgressionManager::
-    //     GetCarChallengeWinCount / GetCollectedStuntElementCount / GetProfileTotalTakedowns
-    //     (pulled in by the base's gameplay-event hooks). ⚠️ VERIFIED, because the tree's folklore
-    //     says otherwise: /Gy + /OPT:REF does NOT excuse those. A minimal repro (one COMDAT calling
-    //     an undefined symbol, never referenced, linked with /OPT:REF) still fails LNK2019 -- the
-    //     linker resolves symbols before it discards. So "nothing calls it" is NOT a link defence.
-    //   * StreetManager::Construct's FIRST statement is mStreetManagerDebugComponent.Construct(this),
-    //     which emits StreetManagerDebugComponent's vtable; that vtable hard-references the
-    //     component's virtual Update/OnActivate/RenderHUD, and those pull in ~15 still-unhomed
-    //     StreetManager / ScoringSystem / ProgressionManager / OutputBuffer symbols.
-    //
-    // What stands in, so neither subobject is INDETERMINATE (the thing that would actually bite):
-    // the exact values each Construct writes are carried as in-class initialisers on the members
-    // that the wired path reads -- the achievement manager's four back-pointers
-    // (BrnGameStateAchievementManagerBase.h) and the street manager's three stage words
-    // (BrnGameStateStreetManager.h). Both are FLAGGED at their declarations.
-    //
-    // ⛔⛔ AND THE SENTENCE THAT USED TO END THAT PARAGRAPH -- "Nothing on the wired path reads
-    // any other member of either subobject" -- WAS TRUE WHEN WRITTEN AND WAS FALSIFIED BY THE
-    // VERY NEXT WAVE. Un-parking Prepare2's SetupParRivals leg (2026-08-11) put
-    // StreetManager::mpProgressionManager on the wired path, and StreetManager::Construct is its
-    // ONLY writer. First boot after the un-park: EXCEPTION_ACCESS_VIOLATION reading 0x1D9E8 in
-    // ProgressionManager::GetProgressionData <- StreetManager::SetupParRivals. 0x1D9E8 == 121320
-    // is exactly the host offsetof(ProgressionManager, mpProgressionData) -- measured with a
-    // compile-time probe against this build's headers -- i.e. a member read off a NULL base.
-    // ⚠️ THE LESSON, for whoever un-parks the next call into a not-Construct()ed subobject:
-    // "the stage words are seeded" is NOT the same claim as "every member this path reads has a
-    // writer". Enumerate the `this->mp*` reads of the code you are un-parking and check each one.
-    //
-    // WIRED BELOW at the console's own call position (X360 0x82380768, immediately after
-    // AchievementManagerBase::Construct), with the console's own two available values, through a
-    // NAMED subset helper -- not a partial `Construct`. Its full contract, its console
-    // attestation and its deliberate omission (the third owner pointer, whose RoadRulesManager
-    // member does not exist on PC yet) are documented at its declaration in
-    // BrnGameStateStreetManager.h. This is the same shape as mCarSelectManager.Construct above:
-    // pointer stores only, into a subobject that is not otherwise constructed yet, which is
-    // well-defined because nothing dereferences the stored values until Prepare2.
-    mStreetManager.WireOwnerPointers(this, &mProgressionManager);
+    // Restore StreetManager's full initialization before Prepare loads its data.
+    // The road-display slice owns the original road identity/timeout state;
+    // active road-rule scoring remains in the RoadRulesManager reconstruction.
+    mRoadRulesManager.InitialiseRoadDisplay(&mStreetManager, &mModeManager);
+    mStreetManager.Construct(this, &mProgressionManager, &mRoadRulesManager);
 
     // ⭐ 2026-09-03 (aiwave, lane P1): AchievementManagerBase.cpp is MOUNTED -- the eight externals the
     // bat named are bodied (BrnScoringSystem_Accessors2.cpp / _Queries.cpp, BrnProgressionManager_Rivals.cpp),

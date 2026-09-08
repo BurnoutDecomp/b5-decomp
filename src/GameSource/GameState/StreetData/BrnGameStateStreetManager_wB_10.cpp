@@ -495,3 +495,16 @@ namespace BrnGameState
         return;
     }
 }
+
+namespace BrnGameState {
+// Tracking arm of Update 0x82352E90 (0x82352F38..0x82352FA0).
+void StreetManager::UpdateRoadDisplay(BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* active,
+    BrnAI::AIModuleIO::AICarOutputInterface* ai, GameStateModuleIO::OutputBuffer* output,
+    f32 delta, f32 wrongWayTime, bool useRoute)
+{
+    if (wrongWayTime <= 0.0f) mfTotalTimeGoinTheWrongWay = 0.0f;
+    else mfTotalTimeGoinTheWrongWay += wrongWayTime;
+    mbWrongWay = mfTotalTimeGoinTheWrongWay >= 10.0f;
+    UpdateUpcomingStreets(active, ai, output, delta, 0, useRoute);
+}
+}

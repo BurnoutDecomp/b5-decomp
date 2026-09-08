@@ -599,3 +599,14 @@ namespace BrnGameState
         }
     }
 }
+
+namespace BrnGameState {
+// ARTIST 0x8230F990 / 0x8230FA20, the bounded portal-walk stack.
+void StreetManager::PushSectionIndex(u16 section)
+{
+    CGS_ASSERT(miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK, "miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK");
+    CGS_ASSERT(section != 0x7FFF, "luNewSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX");
+    mauWalkedSections[miNextFreeSectionSlot++] = section;
+}
+bool StreetManager::CanContinueWalking() { return miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK; }
+}

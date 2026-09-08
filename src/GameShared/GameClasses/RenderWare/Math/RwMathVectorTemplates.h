@@ -1,4 +1,5 @@
 #pragma once
+#include <cmath>
 
 // The single-precision LANE (vpu) vocabulary, for Matrix44Template's widening constructor from
 // rw::math::vpu::Matrix44 (DWARF matrix44.h:111). vendor/renderware/include is on every
@@ -449,5 +450,25 @@ inline Type Determinant(const Matrix44Template<Type>& lrMatrix)
     Type lfDeterminant = static_cast<Type>(0);
     Inverse(lrMatrix, lfDeterminant);
     return lfDeterminant;
+}
+}
+
+namespace rw::math::fpu {
+// ARTIST 0x8231A570. Preserve the individual branch comparisons, including
+// unordered inputs: the first two reject on >, the final axis returns <=.
+template<typename Type>
+inline bool IsSimilar(const Vector3Template<Type>& a, const Vector3Template<Type>& b, Type tolerance)
+{
+    if (std::fabs(a.X() - b.X()) > tolerance) return false;
+    if (std::fabs(a.Y() - b.Y()) > tolerance) return false;
+    return std::fabs(a.Z() - b.Z()) <= tolerance;
+}
+// ARTIST 0x8231A638.
+template<typename Type>
+inline bool IsZero(const Vector3Template<Type>& v, Type tolerance)
+{
+    if (v.X() > tolerance || !(v.X() >= -tolerance)) return false;
+    if (v.Y() > tolerance || !(v.Y() >= -tolerance)) return false;
+    return !(v.Z() > tolerance) && v.Z() >= -tolerance;
 }
 }

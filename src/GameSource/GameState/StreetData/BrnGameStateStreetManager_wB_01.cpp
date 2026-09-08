@@ -278,14 +278,10 @@ bool StreetManager::LoadAIData( GameStateModuleIO::OutputBuffer* lpOutput,
                 reinterpret_cast<const BrnResource::GameDataIO::GameDataEvent*>( lpEvent );
             CGS_ASSERT( lpAIDataResponse->miEventId == 1, "lpAIDataResponse->GetEventId() == 1" );
 
-            // X360: CgsResource::BaseResourcePtr::CreateFromHandle(&mpAISectionData,
-            // <response payload + 0x20>) -- rebind mpAISectionData from the AI-data response's
-            // ResourceHandle. DEFERRED (not fabricated): the response event is a foreign,
-            // un-homed GameData response shape (its ResourceHandle sits past the committed
-            // GameDataAssetEvent), and the bind uses BaseResourcePtr::CreateFromHandle, which is
-            // protected (no public/instantiated ResourcePtr<AISectionsData> handle-assignment is
-            // reachable from here). The stage transition + result below are the reproduced,
-            // observable side effects.
+            // ARTIST 0x8234FA70 binds the received AI-lanes resource before
+            // marking the load complete (same native-width handle as Progression).
+            const auto* asset = reinterpret_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>(lpEvent);
+            mpAISectionData = asset->mHandle;
 
             meAILoadStage = E_AI_DATA_LOAD_COMPLETE;
             return true;
@@ -480,3 +476,26 @@ const BrnAI::AISectionsData* StreetManager::GetAISectionData() const
 }
 
 } // namespace BrnGameState
+
+#include "SharedClasses/AI/AISectionsResourceType.h"
+namespace BrnGameState {
+// ARTIST 0x82326478: the section's signed span index selects a Street.
+BrnStreetData::RoadIndex StreetManager::GetRoadIndexFromAISectionIndex(u16 section)
+{
+    if (section == 0x7FFF) return BrnStreetData::KI_INVALID_ROAD_INDEX;
+    const s16 span = mpAISectionData->GetAISection(section)->miSpanIndex;
+    if (span == -1 || span >= mpStreetData->GetStreetCount()) return BrnStreetData::KI_INVALID_ROAD_INDEX;
+    return mpStreetData->GetStreet(span)->GetRoadIndex();
+}
+// ARTIST 0x8230F8F8 (64-bit ID return).
+CgsID StreetManager::GetParRivalId(s32 road, BrnStreetData::ScoreType type)
+{
+    CGS_ASSERT(static_cast<u32>(road) < KI_MAX_CHALLENGES, "liRoadIndex >= 0 && liRoadIndex < KI_MAX_CHALLENGES");
+    CGS_ASSERT(static_cast<u32>(type) < BrnStreetData::E_SCORE_TYPE_COUNT, "Invalid score type");
+    return maaParRivalIds[road][type];
+}
+}
+
+namespace BrnGameState {
+BrnStreetData::RoadIndex StreetManager::GetCurrentPlayerRoadIndex() { return miCurrentPlayerRoadIndex; }
+}

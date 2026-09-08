@@ -105,3 +105,81 @@ bool BrnGameState::RoadRulesManager::IsRoadLimitRegionValid(CgsID lRegionId, Cgs
 
     return liRoadIndex != mpStreetManager->GetStreetData()->GetRoadCount();
 }
+
+#include "GameSource/GameState/BrnGameActions.h"
+#include "GameSource/GameState/ModeManager/BrnModeManager.h"
+#include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstdlib>
+
+namespace BrnGameState {
+// Owner/road-state stores from Construct 0x82324838. Debug registration and
+// scoring state are not part of this extracted display path.
+void RoadRulesManager::InitialiseRoadDisplay(StreetManager* streets, ModeManager* modes)
+{
+    mpStreetManager = streets;
+    mpModeManager = modes;
+    miLastRoadIndex = -1;
+    maiChallengeRoadIndex[0] = maiChallengeRoadIndex[1] = -1;
+    mfInRoadTimeout = 0.0f;
+}
+
+// ARTIST 0x823481E8.
+void RoadRulesManager::OnEnterRoad(GameStateModuleIO::GameActionQueue* queue, BrnStreetData::RoadIndex road)
+{
+    if (road == BrnStreetData::KI_INVALID_ROAD_INDEX) return;
+    GameStateModuleIO::RoadRulesEnterRoadAction action;
+    action.mParScores = *mpStreetManager->GetStreetData()->GetChallengeParScore(road);
+    mpStreetManager->GetChallengeUserScore(road, &action.mUserScores, true);
+    mpStreetManager->GetChallengeFriendHighScore(road, &action.mFriendScores, true);
+    mpStreetManager->UnlockUpcomingRoadSigns();
+    action.mRoadId = mpStreetManager->GetStreetData()->GetRoad(road)->GetId();
+    action.miRoadIndex = road;
+    for (s32 i = 0; i < 2; ++i)
+        action.maParRivalIds[i] = mpStreetManager->GetParRivalId(road, static_cast<BrnStreetData::ScoreType>(i));
+    queue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&action), 273, sizeof(action));
+    CGS_ASSERT(mpModeManager != 0, "mpModeManager");
+    if (const auto* mode = mpModeManager->GetCurrentGameMode())
+        const_cast<GameMode*>(mode)->OnEnterRoad(road);
+    if (std::getenv("BRN_STREET_UI_TRACE") && CgsDev::Log::gpDebugPrint)
+        *CgsDev::Log::gpDebugPrint << "[street-ui] entered road " << road << "\n";
+}
+
+// ARTIST 0x82348320.
+void RoadRulesManager::OnLeaveRoad(GameStateModuleIO::GameActionQueue* queue, BrnStreetData::RoadIndex road)
+{
+    if (road == BrnStreetData::KI_INVALID_ROAD_INDEX) return;
+    const CgsID id = mpStreetManager->GetStreetData()->GetRoad(road)->GetId();
+    queue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&id), 274, sizeof(id));
+}
+
+// Road transition and off-road timeout arms of Update 0x823532A8. The active
+// score-attempt arms remain with the gameplay reconstruction. This does not
+// start or finish attempts; it emits the original road-enter/leave messages.
+void RoadRulesManager::UpdateRoadDisplay(BrnStreetData::RoadIndex road, f32 delta,
+    GameStateModuleIO::GameActionQueue* queue)
+{
+    if (road != BrnStreetData::KI_INVALID_ROAD_INDEX && maiChallengeRoadIndex[1] == -1)
+    {
+        if (road != miLastRoadIndex)
+        {
+            OnLeaveRoad(queue, miLastRoadIndex);
+            OnEnterRoad(queue, road);
+        }
+        miLastRoadIndex = road;
+    }
+    if (maiChallengeRoadIndex[1] == -1)
+    {
+        if (miLastRoadIndex == -1 || road != -1) mfInRoadTimeout = 15.0f;
+        else
+        {
+            mfInRoadTimeout -= delta;
+            if (mfInRoadTimeout <= 0.0f)
+            {
+                OnLeaveRoad(queue, miLastRoadIndex);
+                miLastRoadIndex = -1;
+            }
+        }
+    }
+}
+}

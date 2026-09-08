@@ -106,6 +106,7 @@
 // delete both hand-rolled posts.
 // ============================================================================
 
+#include "GameSource/Gui/Events/BrnGuiEventRoadRuleData.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Game/GameBridgeGameStateToX.h"                // PushGuiEvent<T>
 
@@ -1280,6 +1281,33 @@ namespace
                     << " oneMore " << static_cast<s32>(lEvent.mbOneMoreCrashToTotalled)
                     << " totalled " << static_cast<s32>(lEvent.mbPlayerTotalled) << ")\n";
             }
+            return true;
+        }
+
+        // ARTIST TranslateGameActionsToGuiEvents 0x823E9CE0, road display arms.
+        case 273:
+        {
+            BrnGui::GuiEventRoadRuleEnter event = {};
+            event.Construct(reinterpret_cast<const BrnGameState::GameStateModuleIO::RoadRulesEnterRoadAction*>(lpAction));
+            PushGuiEvent(event, lpGuiInput);
+            BrnGui::GuiEventRoadRuleData data;
+            data.Construct(reinterpret_cast<const BrnGameState::GameStateModuleIO::RoadRulesEnterRoadAction*>(lpAction));
+            PushGuiEvent(data, lpGuiInput);
+            return true;
+        }
+        case 274:
+        {
+            struct RoadLeave { CgsID id; u8 residue[8]; s32 GetEventType() const { return 340; } } event = {};
+            static_assert(sizeof(RoadLeave) == 16, "ARTIST GUI road-leave payload");
+            event.id = *reinterpret_cast<const CgsID*>(lpAction);
+            PushGuiEvent(event, lpGuiInput);
+            return true;
+        }
+        case 276:
+        {
+            BrnGui::GuiEventRoadRuleUpcomingRoads event = {};
+            event.Construct(reinterpret_cast<const BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction*>(lpAction));
+            PushGuiEvent(event, lpGuiInput);
             return true;
         }
 

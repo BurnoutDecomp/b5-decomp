@@ -1,36 +1,12 @@
-// ---------------------------------------------------------------------------
-// GameSource/GameState/RoadRules/BrnRoadRulesManager.h
-//   (canonical home for BrnGameState::RoadRulesManager)
-//
-// MINIMAL-COHERENT SLICE for the one X360-attested out-of-line function:
-//   RoadRulesManager::GetCurrentRoadID  @ 0x82327438
-//
-// Member layout pinned to the X360 binary AND the DecFIGS DWARF
-// (references/DecFIGS/dwarfdump/GameSource/GameState/RoadRules/BrnRoadRulesManager.h).
-// The two offsets this function reads:
-//   *(this+20) -> mpStreetManager   (asserted "mpStreetManager")
-//   *(this+32) -> miLastRoadIndex   (the "current road"; -1 == none)
-// These pin the DWARF member order:
-//   mRoadRulesDebugComponent  +0   (20 bytes; DebugComponent vtbl + mpRoadRulesManager + 2 bools, padded)
-//   mpStreetManager           +20  (0x14)
-//   mpModeManager             +24  (0x18)
-//   mpTrainingManager         +28  (0x1C)
-//   miLastRoadIndex           +32  (0x20)   <-- read by GetCurrentRoadID
-//
-// The leading mRoadRulesDebugComponent is represented as explicit 20-byte
-// storage because its real type (BrnGameState::RoadRulesDebugComponent :
-// CgsDev::DebugComponent) is not committed yet and is not touched by this
-// function. Trailing members (after miLastRoadIndex) are declaration-only
-// padding -- not read by this TU -- and are left for the full class build.
-//
-// DWARF return type for GetCurrentRoadID is CgsID (u64); the X360 Hex-Rays
-// "int" + 4-byte "*(Road+16)" read is the decompiler truncating the 8-byte
-// CgsID load (it also printed "local variable allocation has failed").
-// ---------------------------------------------------------------------------
+// BrnGameState::RoadRulesManager -- original road identity and road-limit data.
+// The display path is restored through named Construct/Update extracts. Active
+// road-rule scoring and the debug component remain outside this UI slice.
+// All field access uses the native-width members below; X360 offsets are evidence.
 #ifndef BRN_ROAD_RULES_MANAGER_H
 #define BRN_ROAD_RULES_MANAGER_H
 
 #include "types.hpp"
+#include "GameSource/GameState/BrnGameStateSharedIO.h"
 #include "BrnCommonTypes.h"                          // CgsID (u64)
 #include "SharedClasses/StreetData/BrnStreetData.h"  // BrnStreetData::RoadIndex (SpanBase::RoadIndex in DWARF)
 
@@ -65,6 +41,15 @@ namespace BrnGameState
         // GetCurrentRoadID returns this when there is no current road
         // (X360 returns literal 0 -> K_INVALID_ID == 0).
         static const CgsID K_INVALID_ID;
+
+        // Road-display extraction of Construct/Update. Active road-rule scoring
+        // remains outside this slice; the original road identity and timeout state
+        // is owned here so its full Update can use the same state when restored.
+        void InitialiseRoadDisplay(StreetManager* streets, ModeManager* modes);
+        void UpdateRoadDisplay(BrnStreetData::RoadIndex road, f32 delta,
+                               GameStateModuleIO::GameActionQueue* queue);
+        void OnEnterRoad(GameStateModuleIO::GameActionQueue* queue, BrnStreetData::RoadIndex road);
+        void OnLeaveRoad(GameStateModuleIO::GameActionQueue* queue, BrnStreetData::RoadIndex road);
 
         // The single X360-attested out-of-line function (body in the .cpp).
         // DWARF: CgsID GetCurrentRoadID() const;  (BrnRoadRulesManager.h:131)
@@ -128,6 +113,8 @@ namespace BrnGameState
         f32                      mfStuntTime;               // +88  <-- DecreaseCurrentStuntTime
         f32                      mfStuntRuleComboTimeout;   // +92
         s32                      miCrashScore;              // +96  <-- AddCrashScore
+
+        f32 mfInRoadTimeout;
 
         // ---- further trailing members: declaration-only, NOT read by this slice ----
         // Per DWARF, after miCrashScore: f32 mfInRoadTimeout; bool mbAllowExitRoadRulesAfterTimeout;

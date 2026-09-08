@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "GameSource/GameState/BrnGameActions.h"
 #include "types.hpp"                                   // u8/s8/u32 widths, f32
 #include "BrnCommonTypes.h"                             // Vector3, CgsID
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::ResourceHandle
@@ -1135,9 +1136,9 @@ struct PlayerName
 };
 
 // The world/game actions the road-rules event Constructs consume (pointer-only).
-struct RoadRulesEnterRoadAction;
+using RoadRulesEnterRoadAction = BrnGameState::GameStateModuleIO::RoadRulesEnterRoadAction;
 struct RoadRulesUpdateTargetScoreAction;
-struct UpcomingRoadChangeAction;
+using UpcomingRoadChangeAction = BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction;
 
 // DWARF :1071 -- "entered a road-ruled road" (the road-rules panel refresh
 // payload). H2 (2026-08-25): the FULL X360 interior is now pinned (the old
@@ -1152,8 +1153,9 @@ struct UpcomingRoadChangeAction;
 //   +0x4C maFriendLeader   GetNameOfRule 16-byte stride @+0x4C (PlayerName == char[16])
 //   +0x6C mabChallenge     GuiEventRoadRuleEnter::Construct @0x824F60E4 (stbx @+0x6C+i)
 // X360 AddGuiEvent<GuiEventRoadRuleEnter> @0x823D69F0 bakes id 333 (was PS3-DWARF 329).
-struct GuiEventRoadRuleEnter : public CgsGui::GuiEvent<333>
+struct GuiEventRoadRuleEnter
 {
+    s32 GetEventType() const { return 333; }
     CgsID                 mRoadId;                                                         // :1083 (X360 +0x00)
     CgsID                 maAILeaderId[BrnStreetData::E_SCORE_TYPE_COUNT];                 // :1075 (X360 +0x08; FLAG slot)
     RoadRuleLeaderType    maeRoadRuleLeaderType[BrnStreetData::E_SCORE_TYPE_COUNT];        // :1076 (X360 +0x18)
@@ -1168,6 +1170,7 @@ struct GuiEventRoadRuleEnter : public CgsGui::GuiEvent<333>
 
     // DWARF :1089 -- its own ledger function (declaration-only; the action-driven form).
     void Construct(const RoadRulesEnterRoadAction* lpAction);
+    void SetupRoadRule(const RoadRulesEnterRoadAction* lpAction, BrnStreetData::ScoreType type);
 
     // @ 0x824F60B8 (DWARF :1093) -- reset: zero the road id, the AI-leader slots, the
     // ACTIVE leader/best pairs (the offline/online mirrors are deliberately left), the
@@ -1190,8 +1193,9 @@ struct GuiEventRoadRuleEnter : public CgsGui::GuiEvent<333>
 //   +0x6C meRoadStates[2]          Construct zeroes; HandleRoadRuleBegin lwz 0x4CC/0x4D0
 //   +0x74 meCurrentSignState       Construct @0x824F615C (:= 3), tail-pad to 0x80
 // X360 AddGuiEvent<GuiEventRoadRuleUpcomingRoads> @0x823D6E40 bakes id 341 (was PS3-DWARF 337).
-struct GuiEventRoadRuleUpcomingRoads : public CgsGui::GuiEvent<341>
+struct GuiEventRoadRuleUpcomingRoads
 {
+    s32 GetEventType() const { return 341; }
     // DWARF :1218 / :1226.
     enum ERoadSide
     {
@@ -1226,6 +1230,7 @@ struct GuiEventRoadRuleUpcomingRoads : public CgsGui::GuiEvent<341>
 
     // DWARF :1252 -- its own ledger function (declaration-only; the action-driven form).
     void Construct(const UpcomingRoadChangeAction* lpAction);
+    void FindRoadRuler(ERoadSide side, const UpcomingRoadChangeAction* action, BrnStreetData::ScoreType type);
 
     // @ 0x824F6170 (truncated export name "ConvertG") -- map a 3-valued game-state
     // enum (0..2) to this event's road category id (0->0, 1->2, 2->1) with two

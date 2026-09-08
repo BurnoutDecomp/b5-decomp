@@ -17,6 +17,8 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"         // CgsModule::EventReceiverQueue<3072,16> (mReceiverQueue)
 #include "GameSource/GameState/CarSelect/BrnCarSelectManager.h"      // BrnGameState::CarSelectManager (mCarSelectManager, by value)
 #include "GameSource/GameState/BrnResetPlayerDebugComponent.h"
+#include "GameSource/GameState/RoadRules/BrnRoadRulesManager.h"
+#include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h"
 // [gateui] The two sub-objects the smash/billboard chain needs BY VALUE, both at their console
 // positions (StuntManager this+183952, DeveloperChallengeManager this+185712). Neither header
 // includes this one back, so there is no cycle (contrast mpTrainingManager below).
@@ -382,7 +384,8 @@ public:
         const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue,
         // [takedown wave] the world output's traffic-type response queue, cached for
         // TakedownManager::Update's "last traffic type response queue" argument.
-        const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue);
+        const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue,
+        const BrnAI::AIModuleIO::AICarOutputInterface* lpAICarOutputInterface);
 
     // ==========================================================================================
     // ⭐⭐⭐ [showtime score wave 2026-08-29] ProcessContacts -- X360 0x8236BC68, DWARF :853.
@@ -1500,19 +1503,11 @@ private:
     // the PC exe -- there is no AchievementManagerPC leaf in any build.
     AchievementManagerX360                   mAchievementManager;
 
-    // (DWARF BrnGameStateModule.h:229 also declares `RoadRulesManager mRoadRulesManager;` between
-    // these two -- X360 this+183592. NOT modelled yet: its only consumer here would be
-    // StreetManager::Construct's third argument, and that Construct is deferred for the measured
-    // link reason spelled out in BrnGameStateModule.cpp's Construct. Add it with that call.)
-
-    // ⭐ DWARF BrnGameStateModule.h:425 -- `StreetManager mStreetManager;` (X360 this+284520,
-    // 0x457E8). Embedded BY VALUE: GameStateModule::Construct @0x82380388 runs
-    // `StreetManager::Construct(a1 + 284520, a1, a1 + 47920, a1 + 183592)` and FIVE other
-    // subobjects take its address there (ProgressionManager / RoadRulesManager /
-    // AchievementManagerBase / DeveloperChallengeManager Constructs all receive a1 + 284520).
-    // Prepare2's case 2 (`StreetManager::Prepare2(a1 + 284520, a2, a1 + 232384, a1 + 42320)`)
-    // pumps it.
+    // Street/road display state, held by value as in the original. The AI snapshot
+    // is copied during PostWorldUpdate before the next street-tracking update.
     StreetManager                            mStreetManager;
+    RoadRulesManager                         mRoadRulesManager;
+    BrnAI::AIModuleIO::AICarOutputInterface    mLastAICarOutputInterface;
 
     // The module's own output buffer -- see GetOutputBuffer() above for the ownership FLAG.
     // Zero-initialised in-class: BrnGameModule embeds this module by value and does NOT list
@@ -1901,6 +1896,7 @@ public:
     // inventory and for which arms are deferred and why. Takes the action queue the caller
     // already holds the output buffer's write lock for, the same way every other ...BringUp leg
     // in GameStateModule_gUI_00.cpp does.
+    void UpdateStreetDisplay(f32 delta);
     void UpdateRoadRulesManagerImpactTimeBringUp(GameStateModuleIO::GameActionQueue* lpActionQueue);
 };
 }

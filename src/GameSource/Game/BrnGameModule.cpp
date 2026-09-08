@@ -4316,7 +4316,8 @@ namespace BrnGame
                         // same one-feed rule: the race-car crash-event queue the buffer would carry.
                         lpcWorldOutput->GetVehicleManagerOutputInterface()->GetRaceCarCrashEventQueue(),
                         // [takedown wave 2026-09-02] the traffic-type response queue, same rule.
-                        lpcWorldOutput->GetTrafficTypeResponseQueue());
+                        lpcWorldOutput->GetTrafficTypeResponseQueue(),
+                        lpcWorldOutput->GetAICarOutputInterface());
                     mpWorldUpdateOutputBuffer->UnlockForRead();
                 }
 
