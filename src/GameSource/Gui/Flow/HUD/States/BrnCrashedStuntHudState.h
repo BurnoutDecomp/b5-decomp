@@ -4,44 +4,10 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
 
-// BrnGui::CrashedStuntHudState - the CRASHEDSTNT HUD flow state: the crash screen shown when the
-// player crashes DURING a stunt run (mode 7). Built by BrnHudFlow::Prepare as the lapStates[11]
-// slot and Construct'd with CgsIDCompress("CRASHEDSTNT"). Derives from CgsGui::State.
-// Distinct from BrnGui::CrashedHudState, which is the FREEBURN crash state.
-//
-// Class shape, member names/order and both enums are from the DecFIGS DWARF
-// (BrnCrashedStuntHudState.h / .cpp). The X360 attests these guest byte offsets (the asm's base
-// pointer is a u8*, so its load/store displacements are true byte offsets):
-//   +0x38  meInternalState           (Update's switch selector)
-//   +0x3C  meRunningState            (OnEnter zeroes it; UpdateSetupState sets TRANSIN)
-//   +0x40  mpCache                   (filled by the GUI-64 cache event in UpdatePermenant)
-//   +0x44  mbHudMessages             (OnEnter sets 1; UpdateLoading gates the controller leg on it)
-//   +0x45  mbBoostBar                (OnEnter sets 1; UpdateSetupState clears it)
-//   +0x48  mHudMessageComponent      (InGameMessagesComponent)
-//   +0x494 mStuntScoreAnimator       (AnimationComponent; the three animators are 140 bytes each,
-//   +0x520 mStuntMultiplierAnimator   which the 1172/1312/1452/1592 stride in OnEnter confirms)
-//   +0x5AC mScoreTallyAnimator
-//   +0x638 mStuntRunScoreText        (TextField; 296 bytes, confirmed by the 1592->1888->2184 stride)
-//   +0x760 mStuntRunMultiplierText   (TextField)
-//   +0x888 mfTallyScoreStartTime
-//   +0x88C miStartMultiplier   +0x890 miStartScore
-//   +0x894 miFinishMultiplier  +0x898 miFinishScore
-//   +0x89C miCurrentScore      +0x8A0 miCurrentMultiplier
-//   +0x8A4 mCrashHudAnimator         (MovieClipRef; the 8-byte pair OnEnter stores from
-//                                     FindChildMovieClip("CrashHUD_mc"), and OnLeave's a1[553])
-//
-// The six score words are pinned by UpdateSetupState @0x8247D9E0, which reads the run's score from
-// cache+40916 into +0x890 and its multiplier from cache+40920 into +0x88C, then sets +0x894 = 1 and
-// +0x898 = score * multiplier -- i.e. the tally animates from (score, multiplier) to (score*mult, 1).
-// That is what fixes which of the two "start"/"finish" pairs is the score and which the multiplier.
-//
-// PHASE NOTE: this header declares the DWARF members this wave actually touches, in DWARF order, and
-// reserves the GUEST span of every member it does not model as opaque storage, so the offsets above
-// stay checkable against the asm. The host layout still diverges from the guest one (pointer
-// widening 4->8 in the base and in mpCache), and that is SAFE here because BrnHudFlow's
-// NewPoolState<T> allocates sizeof(T) on the host rather than a hardcoded guest size
-// (BrnHudFlow.cpp:44-49 says so explicitly). The five component sub-objects get their faithful
-// layout when their TUs are homed; until then nothing in this tree reads inside their spans.
+#include "GameSource/Gui/Flow/HUD/Components/BrnInGameMessagesComponent.h"
+#include "GameSource/Gui/Flow/Shared/Components/BrnAnimationComponent.h"
+#include "GameSource/Gui/BrnGuiTextField.h"
+// Native component members in DecFIGS order, verified by ARTIST call sites.
 namespace BrnGui
 {
     class GuiCache;   // GameSource/Gui/BrnGuiCache.h (held by pointer only)
@@ -72,11 +38,9 @@ namespace BrnGui
         };
 
         // ---- X360 vtable overrides (CgsGui::State virtuals) --------------------------
-        // These reuse existing base vtable slots and add no data, so sizeof and every guest
-        // offset recorded above are unchanged.
-        virtual void OnEnter();   // @0x82476318 - PARTIAL, see the .cpp banner
-        virtual void OnLeave();   // @0x8247DF68 - PARTIAL, see the .cpp banner
-        virtual void Update();    // @0x82481CF0 - PARTIAL, see the .cpp banner
+        virtual void OnEnter();   // @0x82476318
+        virtual void OnLeave();   // @0x8247DF68
+        virtual void Update();    // @0x82481CF0
 
         // @ 0x82508510 - hands the crashed-stunt HUD state's static resource list to the
         // loader (X360: *r4 = &maResourcesToLoad; *r5 = muNumResourcesToLoad).
@@ -107,20 +71,12 @@ namespace BrnGui
         bool               mbHudMessages;     // guest +0x44
         bool               mbBoostBar;        // guest +0x45
 
-        // guest +0x48 : mHudMessageComponent (BrnGui::InGameMessagesComponent). Opaque this phase.
-        u8  maHudMessageComponent[0x494 - 0x48];
-
-        // guest +0x494 / +0x520 / +0x5AC : the three BrnGui::AnimationComponent members
-        // (mStuntScoreAnimator / mStuntMultiplierAnimator / mScoreTallyAnimator). Opaque this phase.
-        u8  maStuntScoreAnimator[0x520 - 0x494];
-        u8  maStuntMultiplierAnimator[0x5AC - 0x520];
-        u8  maScoreTallyAnimator[0x638 - 0x5AC];
-
-        // guest +0x638 / +0x760 : the two BrnGui::TextField members. Opaque this phase -- note
-        // OnEnter's byte store at guest +1886 lands INSIDE mStuntRunScoreText's span, so that
-        // store is deferred with the component rather than guessed at.
-        u8  maStuntRunScoreText[0x760 - 0x638];
-        u8  maStuntRunMultiplierText[0x888 - 0x760];
+        InGameMessagesComponent mHudMessageComponent;
+        AnimationComponent mStuntScoreAnimator;
+        AnimationComponent mStuntMultiplierAnimator;
+        AnimationComponent mScoreTallyAnimator;
+        TextField mStuntRunScoreText;
+        TextField mStuntRunMultiplierText;
 
         f32 mfTallyScoreStartTime;   // guest +0x888
         s32 miStartMultiplier;       // guest +0x88C
@@ -130,10 +86,13 @@ namespace BrnGui
         s32 miCurrentScore;          // guest +0x89C
         s32 miCurrentMultiplier;     // guest +0x8A0
 
-        // guest +0x8A4 : mCrashHudAnimator (BrnFlapt::MovieClipRef, the 8-byte {instance, ref}
-        // pair). Opaque this phase -- its only producer (OnEnter's FindChildMovieClip leg) is
-        // deferred, so nothing may read it. See the OnLeave banner.
-        u8  maCrashHudAnimator[8];
+        BrnFlapt::MovieClipRef mCrashHudAnimator;
+        bool UpdateLoading();
+        bool UpdateWFInit();
+        bool UpdateSetupState();
+        bool UpdateRunning();
+        void UpdateCrashRunningState();
+        void SetExpectedAptComponentList();
 
     private:
         static const CgsGui::sResourceTuple maResourcesToLoad[];  // @ 0x82F26488 (.rdata)
