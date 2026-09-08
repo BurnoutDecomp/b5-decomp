@@ -27,12 +27,13 @@ namespace CgsAttribSys
 // Construct (X360 dword_83011BB4) and handed back by GetVaultArray.
 bool        AttribSysModule::sbSchemaLoaded = false;
 VaultArray* AttribSysModule::spVaultArray   = nullptr;
+// ARTIST off_82F31050 is shared with AttribSysDebugComponent::OnActivate.
+CgsDev::DebugUI::LogWindow sLogWindow;
 
 namespace
 {
     // The module's debug log window (X360 off_82F31050) and its running line counter
     // (X360 dword_83011BAC), constructed in AttribSysModule::Construct. Pure debug plumbing.
-    CgsDev::DebugUI::LogWindow sLogWindow;
     s32                        siLogLineCount = 0;
 
     // X360 schema vault allocation size (CgsAttribSysModule.cpp:151 -> LinearMalloc::Malloc(.., 88)).

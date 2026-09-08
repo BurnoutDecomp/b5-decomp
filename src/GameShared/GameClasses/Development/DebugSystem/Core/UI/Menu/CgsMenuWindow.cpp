@@ -3,6 +3,13 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenu.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenuManager.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstdio>
+#include <cstdlib>
+#include <typeinfo>
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsMenuItemFunction.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsFunction.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
 
 // CgsDev::DebugUI::MenuWindow - the on-screen window that renders an open Menu. The manager-path
 // bodies (ctor + Prepare + the Menu accessor) are reconstructed from the DecFIGS DWARF
@@ -138,6 +145,28 @@ namespace CgsDev
         void MenuWindow::Render(Debug2DImmediateRender* lpRender)
         {
             Window::Render(lpRender);
+            // FLAG PC-platform leaf: dump root labels once for the opt-in UI harness.
+            static bool lbDumped = false;
+            if (!lbDumped && std::getenv("BRN_DEBUG_UI_TRACE") && !mpMenu->GetParent())
+            {
+                lbDumped = true;
+                for (MenuItem* lpItem = mpMenu->mMenuItems.GetFirst(); lpItem;
+                     lpItem = mpMenu->mMenuItems.GetNext(lpItem))
+                {
+                    char lacName[256] = {};
+                    char lacTrace[512];
+                    lpItem->GetDisplayName(lacName, sizeof(lacName));
+                    const char* lpcType = typeid(*lpItem).name();
+                    if (MenuItemFunction* lpFunctionItem = dynamic_cast<MenuItemFunction*>(lpItem))
+                    {
+                        Function* lpFunction = lpFunctionItem->GetFunction();
+                        if (!lpFunctionItem->IsUseful())
+                            lpcType = typeid(*static_cast<CgsDev::DebugComponent*>(lpFunction->GetParameter())).name();
+                    }
+                    std::snprintf(lacTrace, sizeof(lacTrace), "[debug-menu-row] type=%s name=\"%s\"\n", lpcType, lacName);
+                    CgsDev::Log::WriteToLog(lacTrace);
+                }
+            }
 
             const Metrics& lrMetrics = GetMetrics();
             const f32 lfBorder = lrMetrics.mfWindowBorderSize;

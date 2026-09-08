@@ -70,6 +70,10 @@ namespace Deformation
         // steps, read-only state, change callbacks), then refresh the selected-rig + selected-sensor.
         virtual void OnActivate();
 
+        // ARTIST 0x825DB0C0 and the shared Physics path getter at 0x825DB0D0.
+        const char* GetName() const override { return "Deformation"; }
+        const char* GetPath() const override { return "Physics"; }
+
         // ⭐ ADDITIVE named views (2026-08-14, walls wave), for DeformationManager::Destruct
         // @0x82603F78's two direct pokes on the file-scope static component:
         //   * the "mpDeformationManager != NULL" assert READ  -> HasManager()

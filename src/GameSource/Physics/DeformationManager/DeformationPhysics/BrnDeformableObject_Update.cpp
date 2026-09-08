@@ -2613,7 +2613,9 @@ namespace Deformation
                                                CgsNumeric::Random* lpRandom)
     {
         CGS_ASSERT(mbActive, "mbActive");                                                    // :1801
-        CGS_ASSERT(mbIKUpdateRequired, "mbIKUpdateRequired || gboEnableDeformationDebug");   // :1806
+        // ARTIST 0x82642298..0x826422B0 also permits the selected debug rig.
+        CGS_ASSERT(mbIKUpdateRequired || kbAllowDeformationDebug,
+                   "mbIKUpdateRequired || gboEnableDeformationDebug");   // :1806
 
         CheckForDetachment(lpInput, lpOutput, lpPartMgr, lvfTimeStep.x);
 

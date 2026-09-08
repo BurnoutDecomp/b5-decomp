@@ -60,7 +60,7 @@ namespace CgsDev
             LogWindow();
 
             void Construct(s32 liMaxLines);
-            bool Prepare(const char* lpcCaption, const char* lpcMenuPath, s32 lxFlags);
+            bool Prepare(const char* lpcMenuPath, const char* lpcCaption, s32 lxFlags);
 
             virtual void Update(f32 lfTimeStep, InputEvent leEvent) override;
             virtual void Render(Debug2DImmediateRender* lpRender) override;

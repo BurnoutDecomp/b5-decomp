@@ -70,7 +70,8 @@ namespace CgsDev
             miLineHead = 0;                // +73
         }
 
-        bool LogWindow::Prepare(const char* lpcCaption, const char* lpcMenuPath, s32 lxFlags)
+        // ARTIST 0x8282F0C8 keeps r4 for Register and forwards r5 as the caption.
+        bool LogWindow::Prepare(const char* lpcMenuPath, const char* lpcCaption, s32 lxFlags)
         {
             Window::Prepare(mfCurrentWidth, ComputeConsoleHeight(), lpcCaption, lxFlags);
             mMenuItem.Prepare(this);

@@ -11,17 +11,12 @@ namespace CgsAttribSys
     const char* KPAC_DEBUG_COMPONENT_NAME = "AttribSys";
     const char* KPAC_DEBUG_COMPONENT_PATH = "Core";
 
-    // The component's scrolling log window (off_82F31050 == &sLogWindow); a TU-static instance
-    // shared by every AttribSysDebugComponent member. OnActivate is the only member committed so
-    // far, so it lives file-local here (the un-committed Construct/Destruct/Update siblings that
-    // share it home to this same .cpp when their turn comes).
-    static CgsDev::DebugUI::LogWindow sLogWindow;
+    // ARTIST off_82F31050: the same window constructed by AttribSysModule.
+    extern CgsDev::DebugUI::LogWindow sLogWindow;
 
-    // The log window's caption + debug-menu path, as passed positionally to LogWindow::Prepare by
-    // the X360 asm (r4 == off_82F31048 -> "Core/AttribSys" == caption; r5 == off_82F31044 -> "Log"
-    // == menu path). Names follow the Prepare parameter positions, not the intuitive reading.
-    const char* KPAC_LOG_WINDOW_CAPTION = "Core/AttribSys";
-    const char* KPAC_LOG_WINDOW_PATH    = "Log";
+    // Prepare receives the menu path in r4 and caption in r5.
+    const char* KPAC_LOG_WINDOW_PATH    = "Core/AttribSys";
+    const char* KPAC_LOG_WINDOW_CAPTION = "Log";
 
     // The size passed to Window::SetSize (flt_820D87EC / flt_820D87F0).
     const f32 KF_LOG_WINDOW_WIDTH  = 320.0f;
@@ -34,7 +29,7 @@ namespace CgsAttribSys
     {
         DebugComponent::OnActivate();
 
-        sLogWindow.Prepare( KPAC_LOG_WINDOW_CAPTION, KPAC_LOG_WINDOW_PATH, 0 );
+        sLogWindow.Prepare( KPAC_LOG_WINDOW_PATH, KPAC_LOG_WINDOW_CAPTION, 0 );
         sLogWindow.SetSize( KF_LOG_WINDOW_WIDTH, KF_LOG_WINDOW_HEIGHT );
     }
 

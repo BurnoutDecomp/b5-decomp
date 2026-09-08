@@ -17,7 +17,7 @@
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultArray.h"
-#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysDebugComponent.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h"
 
 namespace CgsMemory
@@ -43,13 +43,6 @@ namespace AttribSysIO
     struct RegisterSchemaRequest;
     struct UnregisterVaultRequest;
 }
-
-// The AttribSys module's own debug overlay (registered with the debug menu in Prepare).
-// The X360 build only ever reaches the inherited DebugComponent::Register on it, so the
-// recon is a minimal named subclass; its registered variables live in its own TU.
-class AttribSysDebugComponent : public CgsDev::DebugComponent
-{
-};
 
 // The garbage-collector callback AttribSys invokes when it reclaims a vault. Concrete host
 // of Attrib::IGarbageCollector: its construction folds to an empty body, ReleaseData's body

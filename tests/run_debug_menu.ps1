@@ -1,6 +1,6 @@
 # Drive the real debug controller through named keys, with the existing game harness.
 # Requires this repo inside BP-Decomp_Workflow and a built executable + game data.
-param([string]$OutDir = '', [int]$MaxSeconds = 180, [switch]$Effects)
+param([string]$OutDir = '', [int]$MaxSeconds = 180, [switch]$Effects, [switch]$Entries)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 if (!$OutDir) { $OutDir = Join-Path $root ('.scratch/debug-menu-' + (Get-Date -Format yyyyMMdd-HHmmss)) }
@@ -89,12 +89,14 @@ try {
     $runner = Start-Process pwsh -ArgumentList $arguments -PassThru -WindowStyle Hidden `
         -RedirectStandardOutput "$out.runner.log" -RedirectStandardError "$out.runner.err"
     $ready = $false
+    $freshLog = $false
     while (!$runner.HasExited) {
         if (Test-Path "$out.runner.log") {
             $runnerLog = Get-Content "$out.runner.log" -Raw
             if ($runnerLog -match '\[flow\] pid=(\d+)') { $gamePid = [int]$Matches[1] }
+            $freshLog = $runnerLog -match 'log confirmed fresh'
         }
-        if ((Test-Path $log) -and (Get-Item $log).LastWriteTime -ge $launch) {
+        if ($freshLog -and (Test-Path $log) -and (Get-Item $log).LastWriteTime -ge $launch) {
             Check-Game
             if ((Get-Content $log -Raw) -match 'CSV : Entering Car Select') { $ready = $true; break }
         }
@@ -102,6 +104,31 @@ try {
         $runner.Refresh()
     }
     if (!$ready) { throw 'The default junkyard flow never reached car selection.' }
+    if ($Entries) {
+        Tap-Key 32 $false $true
+        Snapshot 'root'
+        for ($i = 0; $i -lt 30; ++$i) { Tap-Key 40 }
+        Snapshot 'root-traversed'
+        $rows = [regex]::Matches((Get-Content $log -Raw), '\[debug-menu-row\][^\r\n]+')
+        if (!$rows.Count -or ($rows.Value -match 'name=""')) { throw 'The root menu contains an unnamed entry.' }
+        Tap-Key 192
+        Command 'component "Core/AttribSys"'
+        Command 'bind F12 *WINDOW /Core/AttribSys 84 101'
+        Tap-Key 192
+        Tap-Key 123
+        Snapshot 'attribsys'
+        Tap-Key 192
+        Command 'component "Physics/Deformation"'
+        Command 'bind F12 *WINDOW /Physics/Deformation 84 101'
+        $state = Save-State 'entries-activated'
+        if ($state -notmatch 'COMPONENT "Core/AttribSys"' -or
+            $state -notmatch 'SET "/Physics/Deformation/Selected rig"') { throw 'Missing component controls after activation.' }
+        Tap-Key 192
+        Tap-Key 123
+        Snapshot 'deformation'
+        Write-Output "Debug menu entries regression: PASS ($out)"
+        return
+    }
     if ($Effects) {
         # The flags are edited through the script interface, then checked at the actual
         # postfx consumer and in screenshots. No render state is injected by this test.
