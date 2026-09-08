@@ -164,6 +164,14 @@ s32 GameModeParams::GetCheckpointCount() const
 // KU_MAX_ACTIVE_RACE_CARS assert because the CONSOLE emits one at their sites (it is the
 // grid-slot range check, not the array's), and this one has no such console assert.
 // -----------------------------------------------------------------------------
+// Inlined in SetUpCheckPointsForGameMode, ARTIST0x82328FE8..0x82328FF8.
+void GameModeParams::AddCheckpoint(LandmarkIndex luLandmarkIndex, u16 luAISectionIndex)
+{
+    CheckpointData lCheckpointData;
+    lCheckpointData.Construct(luLandmarkIndex, luAISectionIndex);
+    maCheckpointDataArray.Append(lCheckpointData);
+}
+
 const CheckpointData* GameModeParams::GetCheckpointData(s32 liIndex) const
 {
     return &maCheckpointDataArray.Ge(static_cast<u32>(liIndex));

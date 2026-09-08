@@ -347,6 +347,15 @@ struct RaceEventData
     // UnlockCarChallengeForCar matches each junction against the repaired car id). Declare-only.
     CgsID GetUnlockCarId() const;
 
+    // ARTIST0x823291FC reads the authored A* choice; DWARF owns these enum names.
+    enum AStarType
+    {
+        E_ASTAR_TYPE_EUCLIDEAN = 0,
+        E_ASTAR_TYPE_EUCLIDEAN_X_BIASED = 1,
+        E_ASTAR_TYPE_EUCLIDEAN_Y_BIASED = 2,
+    };
+    AStarType GetAStarType() const { return static_cast<AStarType>(mu8AStarType); }
+
     // ADDITIVE GROW (declare-only; bodies in the RaceEventData TU) -- BrnSatNavRenderer TU.
     //
     // NAME CORRECTION (2026-08-26): bytes +0xEC/+0xED are NOT sat-nav presentation fields. They are
@@ -486,16 +495,15 @@ private:
     // `(0xEC, 1, 11)  # mu8Mode .. mi8UnlockRank (0xF7 pad)`. GROWN IN PLACE 2026-08-26: the next
     // two of that run, mu8StartRivalCount (DWARF :268) and mu8AddRivalCount (DWARF :271), are now
     // carved because RaceMode::Start links against their accessors -- see the accessor banner
-    // above for the asm that pins both bytes. The SEVEN still inside maPad_F0 are, in DWARF order,
-    // mu8TakeDownBronze (+0xF0), mu8TakeDownSilver (+0xF1), mu8TakeDownGold (+0xF2),
-    // mu8DamageLimit (+0xF3), mu8ExtensionTimeCount (+0xF4), mu8AStarType (+0xF5) and
-    // mi8UnlockRank (+0xF6), with +0xF7 the closing alignment byte; carve one here when a caller
-    // needs it. Do not fork this owner.
+    // above for the asm that pins both bytes. AStarType is now named at +0xF5;
+    // the remaining unconsumed byte fields stay in their original positions.
     u8  mu8Mode;                        // 0xEC  RaceEventData::EModeType       (GetMode)
     u8  mu8OnlineMode;                  // 0xED  RaceEventData::EOnlineModeType (GetOnlineMode)
     u8  mu8StartRivalCount;             // 0xEE  (DWARF :268)  GetStartRivalCount
     u8  mu8AddRivalCount;               // 0xEF  (DWARF :271)  GetAddRivalCount
-    u8  maPad_F0[0x08];                 // 0xF0..0xF7 (sizeof == 0xF8)
+    u8  maPad_F0[5];                    // 0xF0..0xF4
+    u8  mu8AStarType;                   // 0xF5, ARTIST0x823291FC
+    u8  maPad_F6[2];                    // unlock rank + closing alignment
 
     // ProgressionData's relocation walks the event table and rebases muaCheckpointsOffset.
     friend struct ProgressionData;

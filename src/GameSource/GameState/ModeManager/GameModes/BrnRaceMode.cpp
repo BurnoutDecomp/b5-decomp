@@ -54,6 +54,10 @@ void RaceMode::Start(const StartGameModeParams* lpStartGameModeParams,
     // Initialise the run-time param block for this mode type, then thread through the start
     // mechanism / traffic-light trigger straight from the immutable start params.
     lpGameModeParams->Construct(lpStartGameModeParams->GetGameModeType());
+    // ARTIST0x82330100..0x8233010C, the same identity fields as every offline event.
+    lpGameModeParams->muJunctionID = lpStartGameModeParams->GetJunctionID();
+    lpGameModeParams->miNumNetworkPlayers = 0;
+    lpGameModeParams->muEventJunctionID = lpStartGameModeParams->GetEventJunctionId();
 
     // Debug spew of the rank/start tuning values, gated on the global message filter. The X360
     // emits six CGS_MESSAGE lines, each its own `if (gxMessageFilterFlags & 1)` (the macro
@@ -96,13 +100,12 @@ void RaceMode::Start(const StartGameModeParams* lpStartGameModeParams,
 
     lpGameModeParams->SetProgressionRankAsRatio(lpStartGameModeParams->GetProgressionRankAsRatio());
 
-    // The X360 body sets the route-finding / AI-speed-selection style fields to their
-    // race defaults (raw enum values 8, 8, 8, 2 in the pseudocode) and ORs in the race
-    // run-mode flag set. These large-offset writes are the inlined GameModeParams mutators;
-    // they are surfaced as the named flag set below. The two route-finding-style fields, the
-    // AI speed-selection method and the A* distance-function field are GameModeParams members
-    // set to fixed race defaults -- left to the full GameModeParams TU to model with their
-    // BrnAI enums (not surfaced here to avoid forking those enums for a partial stub).
+    // ARTIST0x82330378..0x823303D0: rank tuning and the race route/AI defaults.
+    lpProgressionRankData->GetOvertakingDifficulty(lpGameModeParams->mfOvertakingDifficulty);
+    lpGameModeParams->SetDefaultPlayerRouteFindingStyle(static_cast<ERouteFindingStyle_Stub>(1));
+    lpGameModeParams->SetDefaultAIRouteFindingStyle(static_cast<ERouteFindingStyle_Stub>(1));
+    lpGameModeParams->SetAISpeedSelectionMethod(static_cast<EAISpeedSelMethod_Stub>(1));
+    lpGameModeParams->SetAIAggresiveCarCount(2);
 
     // muFlags |= 0x0000_0008_2080_E803 (low dword 0x2080E803, high dword 8 = bit35 set). The
     // X360 asm composes the mask in r12: `li r12,8; sldi r12,r12,32; oris r12,r12,0x2080;
@@ -132,6 +135,7 @@ void RaceMode::Start(const StartGameModeParams* lpStartGameModeParams,
     // X360 also reads the first start position (GetStartPosition(0)); the result is discarded
     // (the call has the side effect of the in-bounds array assert). Cache the mode's rival
     // total and the nearest-player-to-finish seed distance.
+    lpGameModeParams->GetStartPosition(0);
     miNumRivalsInRace = lpEventData->GetStartRivalCount() + lpEventData->GetAddRivalCount();
 
     // flt_82CDB7D0 -- a large "very far" sentinel that seeds the nearest-player-to-finish

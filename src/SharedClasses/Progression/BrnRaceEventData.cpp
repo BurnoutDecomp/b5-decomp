@@ -35,6 +35,14 @@ const CheckpointData* RaceEventData::GetCheckpointData(s32 liCheckpointIndex) co
     return lpaCheckpoints + liCheckpointIndex;
 }
 
+// Inlined in SetupPathfinding, ARTIST0x823292DC..0x82329304.
+u32 CheckpointData::GetBlockSectionId(s32 liIndex) const
+{
+    CGS_ASSERT(liIndex >= 0 && liIndex < miBlockSectionCount,
+               "liIndex >= 0 && liIndex < miBlockSectionCount");
+    return mauBlockSectionIds[liIndex];
+}
+
 // X360 0x823543D0. Returns the target score for rank luRank. The X360 build asserts the rank is
 // in range (the signed `index < 0 || index >= 6` test collapses to the unsigned `luRank < 6`
 // here; BrnRaceEventData.h:883), then returns maiRankScores[luRank] (X360: `*(this + 4*(rank+10))`

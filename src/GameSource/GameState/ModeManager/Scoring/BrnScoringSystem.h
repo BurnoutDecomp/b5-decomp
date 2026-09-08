@@ -391,7 +391,12 @@ namespace BrnGameState
         bool HasModeTimeExpired(const CgsSystem::Time& lTime);                      // :480 / 0x82310B20
         void UpdateTimerForEliminator(const CgsSystem::Time& lTime);                // :485
 
-        void SetCheckPointsForCarsWithinRace(s32 liCheckpoints);                    // :490
+        // Inlined at ARTIST0x82329188: checkpoint progress is reset for all eight slots.
+        void SetCheckPointsForCarsWithinRace(s32 liCheckpoints)
+        {
+            for (s32 i = 0; i < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++i)
+                maRaceCarPositioningData[i].miCurrentCheckpoint = liCheckpoints;
+        }
         bool AcheivedGold();                                                        // :493
         bool HasCrashModeEnded() const;                                             // :497
         // X360 0x82326708: the PS3 DWARF 1-Time sig is wrong; the body + its caller pass (Time&,

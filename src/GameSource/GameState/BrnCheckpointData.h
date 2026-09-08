@@ -43,9 +43,9 @@ public:
         mauBlockSectionIds.Construct();     // X360: trailing count word -> 0
     }
 
-    void                  AddBlockSectionId(u32 luBlockSectionId);   // declared-only
-    void                  SetDistrict(s32 leDistrict);               // declared-only (real arg BrnWorld::EDistrict)
-    LandmarkIndex         GetLandmarkIndex() const;                  // declared-only
+    void                  AddBlockSectionId(u32 luBlockSectionId) { mauBlockSectionIds.Append(luBlockSectionId); } // ARTIST0x82329314
+    void                  SetDistrict(s32 leDistrict) { meDistrict = leDistrict; } // ARTIST0x82329870
+    LandmarkIndex         GetLandmarkIndex() const { return muLandmarkIndex; } // ARTIST0x823EAF9C
     // [stuntrace start-grid wave, 2026-08-27] BODIED, header-inline, for the same reason the
     // ctor and Construct above are: there is no BrnCheckpointData.cpp on this tree
     // (grep-verified), so a declared-only accessor is an LNK2019 for its first caller. That
@@ -54,7 +54,7 @@ public:
     // (asm 0x82307EAC..0x82307EB0) -- one halfword off +0x02, which is exactly this member.
     // Fold it back out-of-line if a real BrnCheckpointData.cpp ever lands.
     u16                   GetAISectionIndex() const { return muAISectionIndex; }
-    s32                   GetDistrict() const;                       // declared-only
+    s32                   GetDistrict() const { return meDistrict; } // ARTIST0x823EAFB8
     const Array<u32, 8u>* GetBlockSectionIds() const;               // declared-only
 
 private:

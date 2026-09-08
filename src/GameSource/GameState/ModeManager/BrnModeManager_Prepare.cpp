@@ -485,30 +485,11 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     // the count.
     for (u32 luCheckpoint = 0; luCheckpoint < muNumLandmarks; ++luCheckpoint)
     {
-        // ------------------------------------------------------------------------------------
-        // [X] FRONTIER -- the per-entry read is parked on ONE missing declaration. Console (asm
-        // 0x8234B6AC..0x8234B73C), verbatim:
-        //     const CheckpointData* lpCheckpointData =
-        //         lpGameModeParams->GetCheckpointData(luCheckpoint);       // Array<..,16>::GetItem
-        //     maLandmarkIndices[luCheckpoint] =
-        //         static_cast<u16>(lpCheckpointData->GetLandmarkIndex());  // lhz 0(It)/sth -0xA0(r28)
-        //     maLandmarkCgsIDs[luCheckpoint] = lpTriggerData->GetLandmarkFromRegionIndex(
-        //         static_cast<s16>(maLandmarkIndices[luCheckpoint]))->GetId();
-        //         // ^ the two inlined asserts in the export ("liRegionIndex < miRegionCount",
-        //         //   BrnTriggerData.h:624, and "lpTriggerRegion->GetType() ==
-        //         //   TriggerRegion::E_TYPE_LANDMARK", :615) ARE that callee's own body, and the
-        //         //   `lwz 0x24; extsw; std` IS TriggerRegion::GetId() widening its s32 storage.
-        //     mauLandmarkSectionIndices[luCheckpoint] = lpCheckpointData->GetAISectionIndex();
-        //         // lhz 2(It) / sth 0(r28)
-        // BLOCKED BECAUSE: GameModeParams declares GetCheckpointCount() but NOT
-        // GetCheckpointData(s32) / GetCheckpoints(), and maCheckpointDataArray is private.
-        // StartGameModeParams -- the sibling class in the SAME header -- declares BOTH, so this is
-        // a one-line symmetry gap. Filed as a BLOCKING header_request; agent 4's
-        // SetUpCheckPointsForGameMode fills the same array and needs the same accessor.
-        // BEHAVIOURAL IMPACT: the landmark tables stay unpublished for CHECKPOINTED modes (race /
-        // burning route / marked man). ZERO impact on stunt races, which author no checkpoints.
-        // ------------------------------------------------------------------------------------
-        break;   // the loop body cannot be written until the accessor lands; see the banner
+        const CheckpointData* lpCheckpointData = lpGameModeParams->GetCheckpointData(luCheckpoint);
+        maLandmarkIndices[luCheckpoint] = static_cast<u16>(lpCheckpointData->GetLandmarkIndex());
+        maLandmarkCgsIDs[luCheckpoint] = lpTriggerData->GetLandmarkFromRegionIndex(
+            static_cast<s16>(maLandmarkIndices[luCheckpoint]))->GetId();
+        mauLandmarkSectionIndices[luCheckpoint] = lpCheckpointData->GetAISectionIndex();
     }
 
     // ss+0x4EE0 (`stw r11, 0x5C90(this)`) == miTotalCheckpoints. The console re-reads the array
