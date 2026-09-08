@@ -160,6 +160,9 @@ namespace BrnEffects
     class EffectsModule : public CgsModule::ModuleSingleBuffered
     {
     public:
+        EffectsDebugPostFxSettingsPC GetPostFxDebugSettingsPC() const
+        { return mDebugComponent.GetPostFxSettingsPC(); }
+
         // DWARF EffectsModule.h:99 / :108 / :115.
         enum EPrepareStage
         {

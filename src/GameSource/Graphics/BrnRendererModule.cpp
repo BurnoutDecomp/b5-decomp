@@ -362,33 +362,8 @@ namespace
     // The weight the console's producer writes for an effect it enabled (`frame+8 = 1.0` etc.).
     const f32 KF_BASE_FRAME_ENABLED_WEIGHT  = 1.0f;
 
-    // --- [FLAG PC bring-up] the EffectsDebugComponent flags the console's producer gates on ------
-    // The base-frame producer reads six enable flags and four motion-blur "user settings" fields
-    // off BrnEffects::EffectsDebugComponent mDebugComponent (DWARF EffectsModule.h:580), embedded
-    // in BrnEffects::EffectsModule at module +181040. Names come from the DWARF
-    // (BrnEffectsDebugComponent.h:215-224, in this exact order at module +181100..+181116):
-    //   +181100 mbBloom  +181101 mbVignette  +181102 mbDepthOfField  +181103 mbTint
-    //   +181104 mbTint2d +181105 mbMotionBlur +181106 mbMotionBlurEnableUserSettings
-    //   +181108 mfMotionBlurUserAmountCars   +181112 mfMotionBlurUserAmountWorld
-    //   +181116 mbMotionBlurUserHighQuality
-    // and the VALUES are BrnEffects::EffectsDebugComponent::Construct @0x82278C98, verbatim from
-    // the pseudocode (it names them itself):
-    //   mbEnableBloom = 1;  mbEnableVignette = 1;  mbEnableDOF = 1;  mbEnableTint = 1;
-    //   mbEnable2dTint = 1; mbEnableMotionBlur = 1;
-    //   mbEnableMotionBlurUserSettings = 0;   mbEnableMotionBlurUserHighQuality = 1;
-    //   mbEnableMotionBlurUserCars = 0.0;     mbEnableMotionBlurUserWorld = 1.0;
-    // (the last two are Hex-Rays mis-typing the DWARF's two f32 user AMOUNTS as bools -- the
-    //  0.0/1.0 initialisers give them away, and the DWARF names them mfMotionBlurUserAmountCars /
-    //  mfMotionBlurUserAmountWorld). The module does not exist on this build, so the producer reads
-    //  the Construct defaults, which is what a console frame with the debug UI untouched reads too.
-    //  The FOUR always-on ones (bloom/vignette/tint/tint2d) were already spelled as literal `true`
-    //  in the producer before this wave and are left that way.
-    const bool KB_DEBUG_ENABLE_DOF                     = true;    // mbDepthOfField
-    const bool KB_DEBUG_ENABLE_MOTION_BLUR             = true;    // mbMotionBlur
-    const bool KB_DEBUG_ENABLE_MOTION_BLUR_USER_SETTINGS = false; // mbMotionBlurEnableUserSettings
-    const bool KB_DEBUG_MOTION_BLUR_USER_HIGH_QUALITY  = true;    // mbMotionBlurUserHighQuality
-    const f32  KF_DEBUG_MOTION_BLUR_USER_AMOUNT_CARS   = 0.0f;    // mfMotionBlurUserAmountCars
-    const f32  KF_DEBUG_MOTION_BLUR_USER_AMOUNT_WORLD  = 1.0f;    // mfMotionBlurUserAmountWorld
+    // The original EffectsDebugComponent controls are staged at dispatch in
+    // mPCEffectsDebugSettings; the base-frame producer must not freeze their defaults.
 
     // --- [FLAG PC bring-up] the B4-BLUR block: POSTFX vault asset "218901" ----------------------
     // Read data, not chosen numbers, exactly like the bloom five above. The console does
@@ -1666,61 +1641,22 @@ void BrnRendererModule::StartOfFrame()
 }
 
 // ==================================================================================================
-// [FLAG PC bring-up] PCBringUpProduceBaseEffectsFrame -- NOT an X360 function.
+// FLAG PC-platform leaf: PCBringUpProduceBaseEffectsFrame adapts the original
+// EffectsModule::GenerateRenderRequests @0x8227FF10 while the EffectsIO/RendererIO
+// dispatch path is incomplete. The EffectsModule and its debug component ARE live.
+// DoDispatch snapshots its debug controls alongside the director camera; StartOfFrame
+// writes the external base layer, which EndOfFrame publishes to the renderer.
 //
-// STANDS IN FOR BrnEffects::EffectsModule::GenerateRenderRequests @0x8227FF10 (lines 40-120), which
-// writes the LAYER-0 EXTERNAL BrnEffectsFrame every dispatch update; BrnRendererModule::Update
-// @0x82405E28 (line 105) then publishes that frame through
-// RendererIO::OutputBuffer::SetBaseEffectsFrame. NEITHER runs on this build:
-//     $ grep -rn "GenerateRenderRequests" b5-decomp/src
-//     (no hits)
-//     $ grep -n "EffectsModule" tools/build/build_game_exe.bat
-//     (no hits)
-// and the RendererIO buffers are not created either (BrnGameModule.cpp:1339-1360 says so at length).
+// Original enable predicates (component offsets are X360 evidence only):
+//   bloom / vignette / tint / tint2d: component +181100 / +181101 / +181103 / +181104
+//   DOF: camera blurriness > 0 and component +181102
+//   radial blur: camera blur active OR (user settings AND motion blur enabled)
+// MotionBlurData uses the user values when requested, otherwise the camera values
+// gated by mbMotionBlur. Bloom, vignette and tint2d data/weights are written only
+// while their respective flags are enabled (0x8228004C..0x82280168).
 //
-// WHERE IT RUNS. The console's producer runs on the DISPATCH thread, between Update and SwapBuffers;
-// what matters is only that it writes the EXTERNAL slot before EffectsArbitrator::EndOfFrame flips
-// it. On PC the frame is BrnGameModule::OnStartOfUpdateFrame -> StartOfFrame (here) ... DoDispatch
-// ... DispatchThread -> Render (reads the INTERNAL slot) ... OnEndOfUpdateFrame -> EndOfFrame ->
-// SwapBuffers -> EffectsArbitrator::EndOfFrame (the flip). So a write here reaches Render on the
-// NEXT frame -- which is exactly the console's own one-frame producer/consumer pipeline, not a
-// deviation. (Measured, first bloom-lit boot: the very first `[postfx-fx] apply-call 0` line already
-// reads bloom=1 -- the composite's first apply-block call happens after at least one StartOfFrame/
-// EndOfFrame pair has run, so there is no visible "all-false" first line; the counter in that log
-// line counts apply-block CALLS, not game frames.)
-//
-// WHAT IT WRITES -- every value is the console's, on a frame with NO camera effects and the effects
-// module's debug component at its Construct @0x82278C98 defaults (scratch/postfx_step4_bloom/
-// DATA_NOTE.md section 3, conductor-extracted):
-//   mbUseTint     = mbEnableTint     (module +181103)  -> true
-//   mbUseTint2d   = mbEnable2dTint                     -> true
-//   mbUseVignette = mbEnableVignette                   -> true
-//   mbUseBloom    = mbEnableBloom                      -> true
-//   mbUseBlur     = camera+180 flag | (module +181106 & +181105)   -> false with no camera effects
-//   mbUseDepthOfField = (camera+308 > 0) && mbEnableDOF            -> false with no camera effects
-// then, per ENABLED effect, the data block is built from an AttribSys asset and the weight set to
-// 1.0f. The three assets and their SHIPPED values (build/game/POSTFX/POSTFXVAULT.BIN, resource
-// 0x627894D7; the keys are Attrib::StringToKey of the decimal ids):
-//   bloom    "191270" -> BloomData::Construct @0x82678070 reads data+20 / data+16 / data+0..16, i.e.
-//                        mfLuminance 1.8f, mfThreshold 0.655738f, mv4Scale (0.954116, 0.947919,
-//                        0.886839, 1.0). The console then ADDS camera+252 to the luminance and
-//                        camera+248 to the threshold; both are 0 with no camera effects.
-//   tint2d   "374388" -> TintData2d::Construct @0x82678268 copies 16 bytes: (0,0,0,0) -- NEUTRAL.
-//   vignette "198102" -> NOT PRESENT in POSTFXVAULT.BIN nor in any other shipped bnd2 (the conductor
-//                        searched every bundle under build/game). See the vignette block below.
-//
-// mbUseTint IS WRITTEN AND IS INERT ON THIS BUILD, deliberately. The colour-cube tint is consumed by
-// Render's OTHER effects block (pseudocode lines 502-534: EffectsArbitrator::EvalTint ->
-// BrnPostFx::SetTint -> BrnPostFx::BeginTintBlend), which this wave does NOT reconstruct, for a
-// measured reason: E_FX_TINT (0x20) is the ONLY one of the five bits that moves the composite's
-// PERMUTATION INDEX (BrnPostFxShader.cpp:1377-1380, `leShader = 4*blur | 2*dof | tint3d`), and only
-// permutation 0 has a PC program pair -- BrnPostFxShader::Render hard-returns without drawing on any
-// other (BrnPostFxShader.cpp:1389-1397). Lighting tint before its programs exist would present the
-// frame un-composited. Bloom and vignette are IN permutation 0 (E_SHADER_BLOOM_VIGNETTE_TINT2D) and
-// move no index, which is why this wave can light them. Writing the bool faithfully costs nothing
-// while nothing reads it, and is what the tint step will need.
-//
-// DELETE-WHEN BrnEffects::EffectsModule::GenerateRenderRequests and the RendererIO buffers are live.
+// Asset and camera/cache evidence for the data blocks remains at each block below.
+// Remove this adapter when GenerateRenderRequests and the dispatch IO chain are live.
 // ==================================================================================================
 void BrnRendererModule::PCBringUpProduceBaseEffectsFrame()
 {
@@ -1753,7 +1689,7 @@ void BrnRendererModule::PCBringUpProduceBaseEffectsFrame()
     const BrnDirector::Camera::DepthOfField&   lrCameraDof  = lrCamera.GetDepthOfField();
 
     // ---- the six bools (GenerateRenderRequests lines 40-56) --------------------------------------
-    // Four are the debug component's always-on enables; the two CAMERA-DRIVEN ones are:
+    // Four are the live debug component's enable flags; the two CAMERA-DRIVEN ones are:
     //   v6  = mbMotionBlurEnableUserSettings && mbMotionBlur              (the debug override)
     //   v9  = camera.mMotionBlurData.mbIsActive | v6      -> frame+3 mbUseBlur
     //   v12 = (camera.mDepthOfField.mfBlurriness > 0) && mbDepthOfField
@@ -1761,16 +1697,16 @@ void BrnRendererModule::PCBringUpProduceBaseEffectsFrame()
     // NOTE the asymmetry, and it IS the asm: mbUseBlur (the B4 radial/zoom blur) is gated on the
     // CAMERA's motion-blur-active flag alone -- `v9 = *(CameraInput + 180) | v6`, no module term.
     const bool lbMotionBlurUserOverride =
-        KB_DEBUG_ENABLE_MOTION_BLUR_USER_SETTINGS && KB_DEBUG_ENABLE_MOTION_BLUR;
+        mPCEffectsDebugSettings.mbMotionBlurEnableUserSettings && mPCEffectsDebugSettings.mbMotionBlur;
     const bool lbUseBlur         = lrCameraBlur.IsActive() || lbMotionBlurUserOverride;
-    const bool lbUseDepthOfField = (lrCameraDof.GetBlurriness() > 0.0f) && KB_DEBUG_ENABLE_DOF;
+    const bool lbUseDepthOfField = (lrCameraDof.GetBlurriness() > 0.0f) && mPCEffectsDebugSettings.mbDepthOfField;
 
-    lpFrame->SetUseBloom(true);
-    lpFrame->SetUseVignette(true);
+    lpFrame->SetUseBloom(mPCEffectsDebugSettings.mbBloom);
+    lpFrame->SetUseVignette(mPCEffectsDebugSettings.mbVignette);
     lpFrame->SetUseDepthOfField(lbUseDepthOfField);
     lpFrame->SetUseBlur(lbUseBlur);
-    lpFrame->SetUseTint(true);
-    lpFrame->SetUseTint2d(true);
+    lpFrame->SetUseTint(mPCEffectsDebugSettings.mbTint);
+    lpFrame->SetUseTint2d(mPCEffectsDebugSettings.mbTint2d);
 
     // ---- bloom: vault asset 191270, plus the camera's two ADDITIVE modifiers --------------------
     // GenerateRenderRequests, immediately after BloomData::Construct:
@@ -1778,6 +1714,7 @@ void BrnRendererModule::PCBringUpProduceBaseEffectsFrame()
     //   *(v47 + 1) = *(CameraInput + 248) + *(v47 + 1);   // mfThreshold += mEffects.mfBloomThreshold
     // Both are 0.0f on a Constructed camera, so nothing changes today; the expression is the
     // console's, landed so a director state that raises them reaches the frame.
+    if (mPCEffectsDebugSettings.mbBloom)
     {
         BrnEffects::BloomData lBloom;
         lBloom.mfLuminance = KF_BASE_FRAME_BLOOM_LUMINANCE + lrCameraFx.GetBloomLuminanceModifier();
@@ -1788,6 +1725,7 @@ void BrnRendererModule::PCBringUpProduceBaseEffectsFrame()
     }
 
     // ---- 2D tint: vault asset 374388 (all four lanes zero -- neutral) --------------------------
+    if (mPCEffectsDebugSettings.mbTint2d)
     {
         BrnEffects::TintData2d lTint2d;
         lTint2d.mv4Colour.SetZero();
@@ -1802,9 +1740,8 @@ void BrnRendererModule::PCBringUpProduceBaseEffectsFrame()
     //         <10 x ld/std: v50 -> frame + 0x40>               // the 80-byte block
     //         *(frame + 12) = 1.0f;                            // the weight
     //     }
-    // mbVignette is 1 (EffectsDebugComponent::Construct @0x82278C98 seeds mbEnableBloom /
-    // mbEnableVignette / mbEnableDOF / mbEnableTint / mbEnable2dTint / mbEnableMotionBlur all to 1),
-    // which is why SetUseVignette(true) above is unconditional -- and why this block is too.
+    // The live debug flag gates both the use bit and this data/weight write,
+    // as in ARTIST 0x8228004C..0x8228005C.
     //
     // UNBLOCKED 2026-09-06 (bug-test lane `postfx`, BurnoutDecomp/b5-decomp#4). The FLAG that stood
     // here said the vignetteasset DefaultDataArea bytes were "NOT ATTESTED BY ANYTHING WE HAVE", so
@@ -1836,6 +1773,7 @@ void BrnRendererModule::PCBringUpProduceBaseEffectsFrame()
     //
     // The key is hashed ONCE, exactly as the console caches it: dword_82FAD0A8's bit 0 guards a
     // one-shot `Attrib::StringToKey("198102") -> qword_82FAD0A0` (asm lines 56-61).
+    if (mPCEffectsDebugSettings.mbVignette)
     {
         static const u64 KU_BASE_FRAME_VIGNETTE_ASSET = Attrib::StringToKey("198102");
 
@@ -1917,16 +1855,16 @@ void BrnRendererModule::PCBringUpProduceBaseEffectsFrame()
     // slot; nothing reads them).
     {
         BrnDirector::Camera::MotionBlurData lMotionBlur = lpFrame->GetMotionBlurData();
-        if (KB_DEBUG_ENABLE_MOTION_BLUR_USER_SETTINGS)
+        if (mPCEffectsDebugSettings.mbMotionBlurEnableUserSettings)
         {
-            lMotionBlur.Set(KB_DEBUG_ENABLE_MOTION_BLUR,
-                            KB_DEBUG_MOTION_BLUR_USER_HIGH_QUALITY,
-                            KF_DEBUG_MOTION_BLUR_USER_AMOUNT_CARS,
-                            KF_DEBUG_MOTION_BLUR_USER_AMOUNT_WORLD);
+            lMotionBlur.Set(mPCEffectsDebugSettings.mbMotionBlur,
+                            mPCEffectsDebugSettings.mbMotionBlurUserHighQuality,
+                            mPCEffectsDebugSettings.mfMotionBlurUserAmountCars,
+                            mPCEffectsDebugSettings.mfMotionBlurUserAmountWorld);
         }
         else
         {
-            lMotionBlur.Set(KB_DEBUG_ENABLE_MOTION_BLUR && lrCameraBlur.IsActive(),
+            lMotionBlur.Set(mPCEffectsDebugSettings.mbMotionBlur && lrCameraBlur.IsActive(),
                             lrCameraBlur.IsExpensiveMotionBlur(),
                             lrCameraBlur.GetCarsBlendAmount(),
                             lrCameraBlur.GetWorldBlendAmount());

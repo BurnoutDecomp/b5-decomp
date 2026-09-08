@@ -1,4 +1,5 @@
 #pragma once
+#include "GameSource/Effects/EffectsDebugPostFxSettingsPC.h"
 
 #include "types.hpp"
 
@@ -446,6 +447,8 @@ public:
     // director's Camera::Construct defaults if nothing has ever been staged).
     // DELETE-WHEN the EffectsIO dispatch buffer set is real on PC (this goes with the producer).
     void PCBringUpSetCameraInput(const BrnDirector::Camera::Camera* lpCamera);
+    void PCBringUpSetEffectsDebugSettings(const BrnEffects::EffectsDebugPostFxSettingsPC& lrSettings)
+    { mPCEffectsDebugSettings = lrSettings; }
 
     // [FLAG PC bring-up] PCBringUpSetRaceCarStateCache -- NOT an X360 function.
     //
@@ -676,6 +679,7 @@ private:
     // [FLAG PC bring-up] Write the LAYER-0 (base) effects frame the console's effects module writes.
     // Stands in for BrnEffects::EffectsModule::GenerateRenderRequests @0x8227FF10 (lines 40-120);
     // see the banner over the definition in BrnRendererModule.cpp for what it writes and why.
+    BrnEffects::EffectsDebugPostFxSettingsPC mPCEffectsDebugSettings;
     void PCBringUpProduceBaseEffectsFrame();
 
     ERendererPrepareStage mePrepareStage;

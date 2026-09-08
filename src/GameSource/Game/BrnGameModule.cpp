@@ -2498,6 +2498,7 @@ namespace BrnGame
         // banner on LatchDispatchCamera. The buffer is still locked and read where a
         // consumer needs something other than the camera out of it (the race-car state
         // below), and that read keeps its own null guard.
+        mRenderModule.PCBringUpSetEffectsDebugSettings(mEffectsModule.GetPostFxDebugSettingsPC());
         if (lpDispatchCamera != 0)
         {
             mRenderModule.PCBringUpSetCameraInput(lpDispatchCamera);

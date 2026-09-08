@@ -1,6 +1,6 @@
 # Drive the real debug controller through named keys, with the existing game harness.
 # Requires this repo inside BP-Decomp_Workflow and a built executable + game data.
-param([string]$OutDir = '', [int]$MaxSeconds = 180)
+param([string]$OutDir = '', [int]$MaxSeconds = 180, [switch]$Effects)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 if (!$OutDir) { $OutDir = Join-Path $root ('.scratch/debug-menu-' + (Get-Date -Format yyyyMMdd-HHmmss)) }
@@ -46,6 +46,7 @@ function Type-Text([string]$Text) {
                 '"' { Tap-Key 222 $true }
                 '.' { Tap-Key 190 }
                 '-' { Tap-Key 189 }
+                '*' { Tap-Key 56 $true }
                 default { throw "Unsupported test character: $c" }
             }
         }
@@ -101,6 +102,60 @@ try {
         $runner.Refresh()
     }
     if (!$ready) { throw 'The default junkyard flow never reached car selection.' }
+    if ($Effects) {
+        # The flags are edited through the script interface, then checked at the actual
+        # postfx consumer and in screenshots. No render state is injected by this test.
+        Tap-Key 192
+        Command 'component Effects'
+        Command 'call "Debug/Sim/Step"'
+        Command 'bind F12 *WINDOW /Effects 84 101'
+        Tap-Key 192
+        Tap-Key 123
+        Snapshot 'effects-enabled-menu'
+        Tap-Key 27
+        Snapshot 'effects-enabled'
+        Tap-Key 192
+        foreach ($name in @('Bloom', 'Vignette', 'DOF', 'Tint', '2d Tint')) {
+            Command "set `"Effects/Enable $name`" FALSE"
+        }
+        $state = Save-State 'effects-disabled'
+        foreach ($name in @('Bloom', 'Vignette', 'DOF', 'Tint', '2d Tint')) {
+            if ($state -notmatch ('Enable ' + $name + '" "FALSE"')) { throw "Setting $name did not change." }
+        }
+        Tap-Key 192
+        Tap-Key 123
+        Snapshot 'effects-disabled-menu'
+        Tap-Key 27
+        Snapshot 'effects-disabled'
+        $consumer = [regex]::Matches((Get-Content $log -Raw), '\[postfx-fx\][^\r\n]+') | Select-Object -Last 1
+        if (!$consumer -or $consumer.Value -notmatch 'bloom=0.*vig=0 dof=0.*tint2d=0 tint3d=0') {
+            throw 'Disabled UI flags did not reach the postfx consumer.'
+        }
+        Tap-Key 192
+        foreach ($name in @('Bloom', 'Vignette', 'DOF', 'Tint', '2d Tint')) {
+            Command "set `"Effects/Enable $name`" TRUE"
+        }
+        # Activation must preserve the submenu and every registered action. Resolve
+        # aliases only; do not execute profile-changing stunt callbacks.
+        Command 'component "Stunt Manager"'
+        Command 'alias jumps "Gameplay/Stunt Manager/Complete All Jumps"'
+        Command 'alias smashes "Gameplay/Stunt Manager/Complete All Smashes"'
+        Command 'alias stunts "Gameplay/Stunt Manager/Complete All Stunts"'
+        $state = Save-State 'effects-restored'
+        foreach ($alias in @('jumps','smashes','stunts')) {
+            if ($state -notmatch "ALIAS $alias ") { throw "Activated menu lost the $alias action." }
+        }
+        Command 'call "Debug/Sim/Play"'
+        Tap-Key 192
+        Tap-Key 27
+        Snapshot 'effects-restored'
+        $consumer = [regex]::Matches((Get-Content $log -Raw), '\[postfx-fx\][^\r\n]+') | Select-Object -Last 1
+        if (!$consumer -or $consumer.Value -notmatch 'bloom=1.*vig=1.*tint2d=1 tint3d=1') {
+            throw 'Re-enabled UI flags did not reach the postfx consumer.'
+        }
+        Write-Output "Debug effects regression: PASS ($out)"
+        return
+    }
     Tap-Key 32 $false $true
     Snapshot 'root'
     # Root -> World -> activate Scene sweeper, then edit its boolean and numeric rows.

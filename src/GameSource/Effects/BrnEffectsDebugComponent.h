@@ -2,6 +2,7 @@
 #define GAMESOURCE_EFFECTS_BRNEFFECTSDEBUGCOMPONENT_H
 
 #include "types.hpp"
+#include "GameSource/Effects/EffectsDebugPostFxSettingsPC.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
 
 // ============================================================================
@@ -84,6 +85,11 @@ namespace BrnEffects
 
         // Query accessors used by the effects module (declared per the DWARF; bodies
         // are trivial inline reads, kept here so callers compile against the shape).
+        EffectsDebugPostFxSettingsPC GetPostFxSettingsPC() const
+        {
+            return { mbBloom, mbVignette, mbDepthOfField, mbTint, mbTint2d, mbMotionBlur, mbMotionBlurEnableUserSettings, mbMotionBlurUserHighQuality, mfMotionBlurUserAmountCars, mfMotionBlurUserAmountWorld };
+        }
+
         bool IsForceStateBlend() const          { return mbForceStateBlend; }
         f32  ForceStateBlendValue() const        { return mfForceStateBlendValue; }
         bool IsBoostTransitionEditing() const    { return mbBoostTransition; }

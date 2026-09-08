@@ -1116,7 +1116,17 @@ void BrnRendererLogPostFxEffectState()
     static u32 suCalls  = 0u;
     static u32 suPrints = 0u;
     const u32 luFrame = suCalls++;
-    if ((luFrame % 500u) != 0u || suPrints >= 6u)
+    // FLAG PC-platform leaf: report actual consumer flag changes while testing the
+    // debug UI, even after the normal six startup samples have been exhausted.
+    const u32 luFlags = (gDiag.mbBloom ? 1u : 0u) | (gDiag.mbVignette ? 2u : 0u)
+        | (gDiag.mbDepthOfField ? 4u : 0u) | (gDiag.mbBlur ? 8u : 0u)
+        | (gDiag.mbTint2d ? 16u : 0u) | (gDiag.mbTint3d ? 32u : 0u);
+    static u32 suLastFlags = ~0u;
+    char lacTrace[2];
+    const bool lbDebugChange = GetEnvironmentVariableA("BRN_DEBUG_UI_TRACE", lacTrace, sizeof(lacTrace)) != 0
+        && luFlags != suLastFlags;
+    suLastFlags = luFlags;
+    if (!lbDebugChange && ((luFrame % 500u) != 0u || suPrints >= 6u))
         return;
     ++suPrints;
 
