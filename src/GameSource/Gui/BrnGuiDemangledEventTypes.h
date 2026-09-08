@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstring>
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <cstddef>   // offsetof -- GuiEventNetworkCustomMatchSearch derives its two record
                      // header words from the HOST layout, never from a console literal
 
@@ -317,7 +319,32 @@ namespace BrnGui
     // HandleStuntInfo @0x8251F650 -- read named words straight off the queued record.
     struct GuiEventSuperJumpFailed { u8 maData[1]; s32 GetEventType() const { return 549; } };  // id 549 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventTickerClearMessages { u8 maData[2]; s32 GetEventType() const { return 536; } };  // id 536 size 2 (raw; size not GuiEvent-shaped)
-    struct GuiEventTickerCustomMessage : public CgsGui::GuiEvent<537> { u8 maPayload[2060]; };  // id 537 size 2072 (12B GuiEvent header + opaque payload)
+    // ARTIST 0x823A6940 / 0x82436C40: raw 2072-byte payload, types precede strings.
+    // DecFIGS names the fields; ARTIST doubles the old 256-byte strings to 512.
+    struct GuiEventTickerCustomMessage
+    {
+        s32 maeStringTypes[4];
+        char macMessageStrings[4][512];
+        s8 mi8NumStrings;
+        bool mbLoopMessage, mbTrainingMessage, mbAllowDuplicates, mbIsChallengeMessage;
+        s32 GetEventType() const { return 537; }
+        void Construct(bool loop, bool training, bool duplicates, bool challenge)
+        {
+            std::memset(maeStringTypes, 0, sizeof(maeStringTypes));
+            std::memset(macMessageStrings, 0, sizeof(macMessageStrings));
+            mi8NumStrings = 0;
+            mbLoopMessage = loop; mbTrainingMessage = training;
+            mbAllowDuplicates = duplicates; mbIsChallengeMessage = challenge;
+        }
+        void AddString(const char* text, s32 type)
+        {
+            CGS_ASSERT(mi8NumStrings >= 0 && mi8NumStrings < 4, "mi8NumStrings in range");
+            CGS_ASSERT(text != 0, "lpString");
+            std::strncpy(macMessageStrings[mi8NumStrings], text, 512);
+            maeStringTypes[mi8NumStrings++] = type;
+        }
+    };
+    static_assert(sizeof(GuiEventTickerCustomMessage) == 2072, "ARTIST ticker payload");
     struct GuiEventTimeUp { u8 maData[1]; s32 GetEventType() const { return 550; } };  // id 550 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventToggleChangeCarMessage { u8 maData[1]; s32 GetEventType() const { return 540; } };  // id 540 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventTogglePictureParadise { u8 maData[1]; s32 GetEventType() const { return 222; } };  // id 222 size 1 (raw; size not GuiEvent-shaped)

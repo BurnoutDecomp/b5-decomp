@@ -2554,6 +2554,12 @@ void GuiModule::Destruct()
                     // observer fan-out.  This is why a state that posts voice-over event 466
                     // observes 466 as "started" on the following GUI update, while sound later
                     // posts the distinct completion event 467 through its pre-update output.
+                    // ARTIST GuiModule::Update 0x828602C8 appends the output events
+                    // to mLoadNotifications for the next input/view pass. The PC
+                    // pump already delivers these to observers here; include the
+                    // renderer observer too, as DispatchInboundGuiEvents does.
+                    // Without it, screen-posted ticker messages never reach the view.
+                    mCustomRendererManager.RecvEvent(lpRawEvent, static_cast<s32>(luEventType));
                     RouteEventToFlow(
                         lpRawEvent, static_cast<s32>(luEventType),
                         static_cast<s32>(luPayloadSize));

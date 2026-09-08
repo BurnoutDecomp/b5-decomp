@@ -70,8 +70,8 @@ public:
     // BrnChallengeListComponent.h:155/169/179/185 -- declared-only (out of this slice).
     bool IsChallengeSelectable();
     void ShowButton(bool lbShow);
-    bool IsAtTopOfList() const;
-    bool IsAtBottomOfList() const;
+    bool IsAtTopOfList() const { return miStartChallengeIndex + miHighlightedIndex == 0; }
+    bool IsAtBottomOfList() const { return miStartChallengeIndex + miHighlightedIndex == miNumChallenges - 1; }
 
     // @0x8248FB58 -- resolve lID to its list entry and forward the entry's freeburn style.
     // Kept at its committed s32 return (the DecFIGS DWARF types it

@@ -273,9 +273,9 @@ namespace BrnGui
         // +0x4B52) boundary write; no-op until the GuiCache TU exposes it.
         void CacheSetDoJoinOnlineFreeburnGame(GuiCache* /*lpCache*/, bool /*lbFreeburn*/) {}
 
-        // FLAG PC-platform leaf: GuiCache::mbEnteredOnlineViaEasyDrive (DWARF h:1671; X360
-        // +0x4B53, set unconditionally by SelectOnlineMenuOption) boundary write.
-        void CacheSetEnteredOnlineViaEasyDrive(GuiCache* /*lpCache*/) {}
+        // ARTIST SelectOnlineMenuOption 0x824D0C9C: restore the return-to-EasyDrive latch.
+        // The existing cache accessor has the earlier consumer name OnlineStartPending.
+        void CacheSetEnteredOnlineViaEasyDrive(GuiCache* lpCache) { lpCache->SetOnlineStartPending(true); }
 
         // FLAG PC-platform leaf: GuiCache::mbIsInJunkyard (DWARF h:1675; X360 +0x4B57)
         // pause gate; the PC boot is not in the junkyard.

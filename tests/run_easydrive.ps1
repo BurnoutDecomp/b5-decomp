@@ -33,7 +33,7 @@ function Snapshot([string]$Name) {
     Write-Output "Captured $Name"
 }
 try {
-    foreach ($name in @('DPadRight','DPadLeft','DPadDown','DPadUp')) {
+    foreach ($name in @('DPadRight','DPadLeft','DPadDown','DPadUp','Next','Prev','OptionNext','OptionPrev','Stop')) {
         $events[$name] = [Threading.EventWaitHandle]::new($false, [Threading.EventResetMode]::AutoReset,
             "Local\BurnoutPC_Input_$name")
         $events[$name].Reset() | Out-Null
@@ -86,8 +86,18 @@ try {
     Press 'DPadRight'
     Start-Sleep -Seconds 5
     Snapshot 'view-challenges'
+    if ((Get-Content $log -Raw) -notmatch '\[challenge-browser\] ready') { throw 'Challenge browser never became ready.' }
+    1..6 | ForEach-Object { Press 'Next' }
+    Snapshot 'challenges-scrolled'
+    Press 'OptionNext'
+    Snapshot 'challenges-three-players'
+    Press 'Stop'
+    Start-Sleep -Seconds 3
+    Snapshot 'returned-to-driving'
+
     if ((Get-Content $log -Raw) -notmatch '\[easydrive-command\] main option 4') { throw 'View Challenges did not reach InGame.' }
-    Write-Output "EasyDrive navigation and command routing: PASS ($out). Inspect captured frames; destination screens need their own checks."
+    if ((Get-Content $log -Raw) -notmatch "\[tut-ticker\] InGameMessageRenderer queued custom message added=1 training=0") { throw 'Challenge description did not reach the ticker renderer.' }
+    Write-Output "EasyDrive and challenge browser: PASS ($out). Captured navigation, scrolling, player filter, ticker, and return to driving."
 } finally {
     foreach ($event in $events.Values) { $event.Reset() | Out-Null; $event.Dispose() }
     if (Test-Path $log) { Copy-Item -LiteralPath $log -Destination "$out/BrnGame.log" }

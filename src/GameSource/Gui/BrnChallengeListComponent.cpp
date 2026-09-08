@@ -11,14 +11,6 @@
 //   HandleEveryPlayerCompletionStatus  @ 0x8241B618
 //   Setup                              @ 0x82441170
 //
-// BLOCKED (un-homed collaborators, left declared-only):
-//   HighlightPrevious @0x82440F90 / HighlightNext @0x82441078 -- both build a
-//     BrnGui::GuiAudioTriggerEvent on the stack and post it through the StateInterface
-//     event queue; that event type and the OutputGuiEvent<> posting helper are not yet
-//     reconstructed.
-//   Update @0x82434CC8 -- needs the CgsLanguage formatting entry (sub_82866450) and the
-//     off_82F253xx apt state-name table, neither homed.
-
 #include "GameSource/Gui/BrnChallengeListComponent.h"
 #include "GameSource/Gui/BrnGuiCache.h"                     // BrnGui::GuiCache::GetFreeburnChallengeList
 #include "SharedClasses/DataLists/ChallengeList.h"          // BrnResource::ChallengeList (complete)
@@ -26,6 +18,10 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"     // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
+#include "GameShared/GameClasses/Language/CgsLanguageManager.h"
 #include <cstring>                                          // memcpy (X360 whole-block copy)
 
 namespace BrnGui
@@ -204,6 +200,99 @@ void ChallengeListComponent::Setup( GuiCache* lpGuiCache, s32 liNumPlayers, bool
     mbShowButton = ( lbShowButton && miNumChallenges > 0 );
 
     ShowDescriptionInTicker();
+}
+
+namespace {
+    template<class T> void Output(CgsGui::StateInterface* state, T& event)
+    {
+        CgsGui::GuiEventWrapper<T, 40> wrapper(event);
+        state->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&wrapper), 40, sizeof(wrapper));
+    }
+    void NavigationAudio(CgsGui::StateInterface* state)
+    {
+        GuiAudioTriggerEvent event;
+        event.Construct(7, "", "MenuToggleDefault");
+        struct Record { s32 size, type, offset; GuiAudioTriggerWirePayload457 payload; } record = {100, 457, 12, {}};
+        std::memcpy(&record.payload, event.macComponent, sizeof(record.payload));
+        state->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&record), 40, sizeof(record));
+    }
+}
+
+// ARTIST 0x8243D930, including the original four identical ticker posts.
+void ChallengeListComponent::ShowDescriptionInTicker()
+{
+    GuiEventTickerClearMessages clear = {{0, 1}};
+    Output(mpStateInterface, clear);
+    s32 index;
+    const auto* entry = GetFilteredChallenge(miStartChallengeIndex + miHighlightedIndex, &index);
+    GuiEventTickerCustomMessage message = {};
+    message.Construct(true, false, true, false);
+    message.AddString("%1", 1);
+    message.AddString(entry ? entry->GetDescriptionStringID() : "No Challenges Available", entry ? 2 : 1);
+    for (s32 i = 0; i < 4; ++i) Output(mpStateInterface, message);
+}
+
+// ARTIST 0x82440F90.
+bool ChallengeListComponent::HighlightPrevious()
+{
+    if (miStartChallengeIndex + miHighlightedIndex <= 0) return false;
+    NavigationAudio(mpStateInterface);
+    if (miHighlightedIndex != 0) --miHighlightedIndex;
+    else --miStartChallengeIndex;
+    mbDirty = true;
+    ShowDescriptionInTicker();
+    return true;
+}
+
+// ARTIST 0x82441078.
+bool ChallengeListComponent::HighlightNext()
+{
+    if (miStartChallengeIndex + miHighlightedIndex >= miNumChallenges - 1) return false;
+    NavigationAudio(mpStateInterface);
+    if (miHighlightedIndex == 4) ++miStartChallengeIndex;
+    else ++miHighlightedIndex;
+    mbDirty = true;
+    ShowDescriptionInTicker();
+    return true;
+}
+
+// ARTIST 0x82434CC8. Skip unowned content while filling the five visible slots.
+void ChallengeListComponent::Update()
+{
+    if (!mbDirty) return;
+    char highlighted[16];
+    CgsCore::SnPrintf(highlighted, sizeof(highlighted), "%d", miHighlightedIndex);
+    AddOutputAptViewState("apt_HighlightedIndex", highlighted, false);
+    AddOutputAptViewState("apt_show_button", mbShowButton ? "1" : "0", false);
+    s32 examined = 0;
+    for (s32 row = 0; row < KI_MAX_DISPLAYABLE_CHALLENGES; ++examined)
+    {
+        const s32 filteredIndex = miStartChallengeIndex + examined;
+        if (filteredIndex >= miNumChallenges)
+        {
+            AddOutputAptViewState(maacAptState[row++], "invisible", false);
+            continue;
+        }
+        s32 index;
+        const auto* entry = GetFilteredChallenge(filteredIndex, &index);
+        if (entry == 0) continue;
+        CGS_ASSERT(static_cast<u32>(index) < 2000, "Challenge index out of range");
+        const auto* completion = mEveryPlayerCompletionStatus.GetLocalPlayerCompletionStatus();
+        const bool done = (completion->maxBits[index / 64] & (u64(1) << (index % 64))) != 0;
+        AddOutputAptViewState(maacAptState[row], done ? "completed" : "unCompleted", false);
+        char textId[64], number[64];
+        CgsCore::SnPrintf(textId, sizeof(textId), "$CHALLENGE_COMP_DESC_%d", row);
+        CgsCore::SnPrintf(number, sizeof(number), "%d", filteredIndex + 1);
+        textId[63] = number[63] = 0;
+        auto* language = mpStateInterface->GetLanguageManager();
+        language->FormatAndAddText(textId + 1, language->GetCurrentLanguage() == 10 ? "%1 : %2" : "%1: %2",
+            CgsLanguage::LanguageManager::E_FORMAT_TEXT, 2,
+            number, CgsLanguage::LanguageManager::E_FORMAT_INTEGER,
+            entry->GetTitleStringID(), CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+        AddOutputAptViewState(maacAptStateText[row], textId, false);
+        ++row;
+    }
+    mbDirty = false;
 }
 
 } // namespace BrnGui
