@@ -72,4 +72,20 @@ namespace CgsNetwork
         CgsCore::SPrintf(lacIPAddress, KI_IPADDRESS_STRING_LENGTH, "%d.%d.%d.%d",
                          liByte0, liByte1, liByte2, liByte3);
     }
+
+    // ---- UsernameCompare -----------------------------------------------------------
+    // ADDITIVE (p0 wave, 2026-09-08). Declared in this TU's own header, but the original
+    // compiler folded it into a straight tail-branch to the DirtySDK lobby comparator at
+    // every call site, so it has no standalone symbol. Recovered from the instance inside
+    // PlayerPositionTableComponent::FunctionSortTeamHighToLow, whose
+    // disconnected-vs-disconnected arm is a bare tail-branch to LobbyNameCmp with the two
+    // name pointers already in place -- no argument shuffling, no null guard, and the
+    // branch target's result is the comparator's own return value.
+    //
+    // LobbyNameCmp is the vendor leaf (declared extern "C" at global scope in
+    // CgsStringUtils.h; the real body is vendor\dirtysdk\src\lobbyname.cpp).
+    s32 UsernameCompare(const char* lpacName1, const char* lpacName2)
+    {
+        return ::LobbyNameCmp(lpacName1, lpacName2);
+    }
 }

@@ -165,18 +165,14 @@ void IceMovie::Serialise(TSerialiser& lrSerialiser)
 template void IceMovie::Serialise<Camera::TextFileWriteSerialiser>(Camera::TextFileWriteSerialiser&);
 template void IceMovie::Serialise<Camera::TextFileReadSerialiser>(Camera::TextFileReadSerialiser&);
 
-// ----------------------------------------------------------------------------
-// BrnDirector::ICEMoviePlaylist::GetMovieCount
-//
-// The number of movies in the list == the order array's live-element count. Asserts the
-// order array was Construct/Clear'd (its count is off the -1 sentinel).
-// ----------------------------------------------------------------------------
-s32 ICEMoviePlaylist::GetMovieCount() const
-{
-    CGS_ASSERT(mMoviePoolIndicies.GetCount() != -1,
-               "Array used before Construct/Clear was called");
-    return mMoviePoolIndicies.GetCount();
-}
+// ---- ICEMoviePlaylist::Construct / ::InsertMovieBefore / ::GetMovieCount and
+//      SharedPlaylists::Construct / ::GetPausePlaylist MOVED OUT 2026-09-08 (p0 wave) to
+//      GameSource/Director/Utils/BrnICEMoviePlayer_wP0_01.cpp, which IS mounted. This TU
+//      still cannot join the link (see that file's banner for the 24 symbols it would open),
+//      and the boot path needs only the playlist half. Not a byte-identical move: in the
+//      moved SharedPlaylists::Construct the three pause playlists are now constructed
+//      BEFORE the race-intro and post-race ones, which is the console's order (the copy
+//      that stood here had them the other way round). Merge them back when this file mounts.
 
 // ----------------------------------------------------------------------------
 // BrnDirector::ICEMoviePlaylist::DebugMenuNewMovie
@@ -558,131 +554,6 @@ void ICEMoviePlayer::InterpolateFrom(Camera::BehaviourManager& lrBehaviourManage
     mInInterpolator.GetBehaviour()->Setup();
 
     mbInterpolateIn = true;
-}
-
-// ----------------------------------------------------------------------------
-// BrnDirector::SharedPlaylists::Construct
-//
-// Construct the five shared playlists (race intro, post race, three pause playlists),
-// then seed each with its fixed list of takes (all referenced as group/take pairs). The
-// take lists differ per playlist; muCurrentPausePlaylist starts at 0.
-// ----------------------------------------------------------------------------
-void SharedPlaylists::Construct()
-{
-    mRaceIntroPlaylist.Construct();
-    mPostRacePlaylist.Construct();
-    for (u32 luPause = 0; luPause < KU_NUM_PAUSE_PLAYLISTS; ++luPause)
-    {
-        maPausePlaylists[luPause].Construct();
-    }
-
-    // Seed table: one row == (playlist, ICE group, take index, vehicle ref type, flash).
-    // Each row appends one movie to the named playlist (insert-before-current-end). The
-    // group/take/vehicle/flash values are the reconstructed per-playlist seed sequence.
-    struct SeedEntry
-    {
-        ICEMoviePlaylist*   mpPlaylist;
-        IceMovie::EIceGroup meGroup;
-        u32                 muTake;
-        VehicleRef::EType   meVehicleType;
-        bool                mbFlash;
-    };
-
-    // Every seeded row uses vehicle ref type 0 (player car); muVehicleIndex is 0
-    // throughout. The only per-row variation is group / take / flash (pause-1 rows fire
-    // the flash hook).
-    const VehicleRef::EType leVeh0 = VehicleRef::E_PLAYER_CAR;
-
-    const SeedEntry laSeeds[] =
-    {
-        // Race-intro playlist (4 entries).
-        { &mRaceIntroPlaylist, IceMovie::E_ICE_GROUP_GENERIC_ALL,  42u, leVeh0, false },
-        { &mRaceIntroPlaylist, IceMovie::E_ICE_GROUP_EVENTS_START, 20u, leVeh0, false },
-        { &mRaceIntroPlaylist, IceMovie::E_ICE_GROUP_GENERIC_ALL,  12u, leVeh0, false },
-        { &mRaceIntroPlaylist, IceMovie::E_ICE_GROUP_GENERIC_ALL,  41u, leVeh0, false },
-
-        // Post-race playlist (4 entries).
-        { &mPostRacePlaylist,  IceMovie::E_ICE_GROUP_GENERIC_ALL,  31u, leVeh0, false },
-        { &mPostRacePlaylist,  IceMovie::E_ICE_GROUP_GENERIC_ALL,  32u, leVeh0, false },
-        { &mPostRacePlaylist,  IceMovie::E_ICE_GROUP_GENERIC_ALL,  27u, leVeh0, false },
-        { &mPostRacePlaylist,  IceMovie::E_ICE_GROUP_GENERIC_ALL,  12u, leVeh0, false },
-
-        // Pause playlist 0 (4 entries).
-        { &maPausePlaylists[0], IceMovie::E_ICE_GROUP_EVENTS_START, 0u, leVeh0, false },
-        { &maPausePlaylists[0], IceMovie::E_ICE_GROUP_EVENTS_START, 2u, leVeh0, false },
-        { &maPausePlaylists[0], IceMovie::E_ICE_GROUP_EVENTS_START, 3u, leVeh0, false },
-        { &maPausePlaylists[0], IceMovie::E_ICE_GROUP_EVENTS_END,   0u, leVeh0, false },
-
-        // Pause playlist 1 (11 entries; each fires the flash hook on start).
-        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 36u, leVeh0, true },
-        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL,  7u, leVeh0, true },
-        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 19u, leVeh0, true },
-        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 21u, leVeh0, true },
-        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 28u, leVeh0, true },
-        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 32u, leVeh0, true },
-        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 27u, leVeh0, true },
-        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 18u, leVeh0, true },
-        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL,  3u, leVeh0, true },
-        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 24u, leVeh0, true },
-        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 12u, leVeh0, true },
-
-        // Pause playlist 2 (13 entries).
-        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 43u, leVeh0, false },
-        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 19u, leVeh0, false },
-        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 36u, leVeh0, false },
-        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL,  7u, leVeh0, false },
-        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 21u, leVeh0, false },
-        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 28u, leVeh0, false },
-        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 32u, leVeh0, false },
-        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 27u, leVeh0, false },
-        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 18u, leVeh0, false },
-        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL,  3u, leVeh0, false },
-        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 24u, leVeh0, false },
-        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 26u, leVeh0, false },
-        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 12u, leVeh0, false },
-    };
-
-    const u32 luNumSeeds = sizeof(laSeeds) / sizeof(laSeeds[0]);
-    for (u32 luSeed = 0; luSeed < luNumSeeds; ++luSeed)
-    {
-        const SeedEntry& lrSeed = laSeeds[luSeed];
-
-        IceMovie lMovie;
-        lMovie.SetMovie(lrSeed.meGroup, lrSeed.muTake);
-        lMovie.SetStartPosition(0.0f);
-        lMovie.SetVehicle(lrSeed.meVehicleType, 0u);
-        lMovie.SetShouldFlash(lrSeed.mbFlash);
-
-        lrSeed.mpPlaylist->InsertMovieBefore(lrSeed.mpPlaylist->GetMovieCount(), lMovie);
-    }
-
-    muCurrentPausePlaylist = 0;
-}
-
-
-
-// ----------------------------------------------------------------------------
-// BrnDirector::SharedPlaylists::GetPausePlaylist @0x821F59F8
-//
-//   lwz   r11, 0x1888(this)   ; muCurrentPausePlaylist
-//   cmplwi r11, 3             ; < KU_NUM_PAUSE_PLAYLISTS -> assert on >=
-//   ...assert...
-//   lwz   r11, 0x1888(this)   ; reload muCurrentPausePlaylist
-//   addi  r11, r11, 2         ; skip mRaceIntroPlaylist (0) + mPostRacePlaylist (1)
-//   mulli r11, r11, 0x4E8     ; * sizeof(ICEMoviePlaylist) (1256)
-//   add   r3,  r11, this      ; &maPausePlaylists[muCurrentPausePlaylist]
-//
-// The (index + 2) * 0x4E8 + this address is exactly &maPausePlaylists[index]: the two
-// skipped playlists are mRaceIntroPlaylist (+0x0000) and mPostRacePlaylist (+0x04E8), so
-// maPausePlaylists[0] sits at +0x09D0 == 2 * 0x4E8 and each pause slot is one 0x4E8-byte
-// playlist further on.
-// ----------------------------------------------------------------------------
-const ICEMoviePlaylist&
-SharedPlaylists::GetPausePlaylist() const
-{
-    CGS_ASSERT(muCurrentPausePlaylist < KU_NUM_PAUSE_PLAYLISTS,
-               "muCurrentPausePlaylist < KI_NUM_PAUSE_PLAYLISTS");
-    return maPausePlaylists[muCurrentPausePlaylist];
 }
 
 // ----------------------------------------------------------------------------

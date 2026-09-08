@@ -18,12 +18,36 @@ namespace BrnParticle
 {
 namespace Native
 {
-    // File-scope table of the five debris parameter presets (BrnDebrisRenderer.cpp:86,
-    // base symbol off_82CDB250). Construct indexes it by EDebrisArrayID. Its contents (mesh
-    // names / colours / bounciness / fade+drag) are static rodata not reconstructed in this
-    // pass; declared here so Construct can take the address of an entry and read
-    // mnNumParticles. Defined by the (future) full BrnDebrisRenderer TU globals recon.
-    extern const BrnDebrisArrayParams _gaDebrisArrayParams[eDebrisArray_Max];
+    // The five debris parameter presets are DECLARED in BrnDebrisArray.h and DEFINED in
+    // BrnDebrisRenderer.cpp, recovered from the console image. Construct indexes the table
+    // by EDebrisArrayID.
+
+    namespace
+    {
+        // Push a bucket onto the FRONT of the intrusive used list. GetNewDebris's two relink
+        // arms emit this identical sequence twice over (the compiler inlined the helper at
+        // both sites); de-inlined here. The head's own mpPreviousBucket is carried across
+        // rather than assumed null -- that is what the console does.
+        void LinkBucketAtFront( BrnDebrisArray::DebrisBucket*& lrpHead,
+                                BrnDebrisArray::DebrisBucket*  lpBucket )
+        {
+            lpBucket->mpNextBucket = lrpHead;
+
+            if ( lrpHead )
+            {
+                lpBucket->mpPreviousBucket = lrpHead->mpPreviousBucket;
+                if ( lrpHead->mpPreviousBucket )
+                    lrpHead->mpPreviousBucket->mpNextBucket = lpBucket;
+                lrpHead->mpPreviousBucket = lpBucket;
+            }
+            else
+            {
+                lpBucket->mpPreviousBucket = nullptr;
+            }
+
+            lrpHead = lpBucket;
+        }
+    }
 
     // ------------------------------------------------------------------------
     // BrnDebrisArray::Construct @ 0x8227A3D0
@@ -126,6 +150,81 @@ namespace Native
         }
 
         muNumBuckets = 0;
+    }
+
+    // ------------------------------------------------------------------------
+    // BrnDebrisArray::GetNewDebris
+    //
+    // Claim the next free debris slot. Three arms, in the console's own order:
+    //   (a) the tail bucket still has room  -> use it;
+    //   (b) the array is still under its particle budget -> pull a fresh bucket off the
+    //       pool free list and push it onto the FRONT of the used list, ++muNumBuckets;
+    //   (c) the budget is spent -> walk to the OLDEST bucket (the used list's tail),
+    //       unlink it, re-push it at the front and rewind its write cursor. Note what the
+    //       console does NOT do here: it neither Clear()s the recycled bucket nor touches
+    //       muNumBuckets / mu16NumberOfParticlesInBucket, so the recycled bucket keeps its
+    //       live count and simply overwrites its own oldest particles.
+    // Returns NULL only when the pool itself is exhausted (arm (b) with no free bucket, or
+    // arm (c) with no used bucket at all).
+    //
+    // The "still has room" test and the budget test are both against the bucket's OWN
+    // capacity -- the FXBucket<BrnDebris,32> element count, NOT the template's `32`. That
+    // capacity is derived from the 8192-byte bucket and sizeof(BrnDebris) and comes out at
+    // 96, which is exactly the constant the console tests the write cursor against and the
+    // factor it multiplies muNumBuckets by. The static_assert below re-derives it on the host,
+    // so a change to BrnDebris's layout cannot silently move the budget.
+    // ------------------------------------------------------------------------
+    BrnDebris* BrnDebrisArray::GetNewDebris(f32 lfBirthTime)
+    {
+        static_assert( DebrisBucket::KuMaxNumParticles == 96,
+                       "the debris bucket holds 96 particles (the console's own immediate)" );
+
+        DebrisBucket* lpBucket = mpBuckets;
+
+        if ( !lpBucket ||
+             ( lpBucket->mu16NextPositionInBucket >= DebrisBucket::KuMaxNumParticles ) )
+        {
+            const u32 luParticleCapacity = DebrisBucket::KuMaxNumParticles * muNumBuckets;
+
+            if ( luParticleCapacity < static_cast<u32>( mpParams->mnNumParticles ) )
+            {
+                // (b) Room in the budget: take a fresh bucket from the pool.
+                DebrisBucket* lpNewBucket =
+                    mpBucketManager->AllocateBucket<DebrisBucket>();
+                if ( !lpNewBucket )
+                    return nullptr;
+
+                LinkBucketAtFront( mpBuckets, lpNewBucket );
+                ++muNumBuckets;
+                lpBucket = lpNewBucket;
+            }
+            else
+            {
+                // (c) Budget spent: recycle the oldest bucket, which is the list's tail.
+                if ( !lpBucket )
+                    return nullptr;
+
+                DebrisBucket* lpOldestBucket = lpBucket;
+                while ( lpOldestBucket->mpNextBucket )
+                    lpOldestBucket = static_cast<DebrisBucket*>( lpOldestBucket->mpNextBucket );
+
+                if ( lpOldestBucket->mpPreviousBucket )
+                    lpOldestBucket->mpPreviousBucket->mpNextBucket = lpOldestBucket->mpNextBucket;
+                if ( lpOldestBucket->mpNextBucket )
+                    lpOldestBucket->mpNextBucket->mpPreviousBucket = lpOldestBucket->mpPreviousBucket;
+
+                lpOldestBucket->mpNextBucket     = nullptr;
+                lpOldestBucket->mpPreviousBucket = nullptr;
+
+                LinkBucketAtFront( mpBuckets, lpOldestBucket );
+
+                // Rewind the write cursor only: the live count is deliberately left alone.
+                lpOldestBucket->mu16NextPositionInBucket = 0;
+                lpBucket = lpOldestBucket;
+            }
+        }
+
+        return lpBucket->GetNewParticle( lfBirthTime );
     }
 
     // ------------------------------------------------------------------------

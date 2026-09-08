@@ -51,12 +51,8 @@ namespace BrnGui
     void NullState::Update()  {}
 
     // ---- CS_UNLOCK --------------------------------------------------------------------
-    // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed CarSelectUnlock.
-    void CarSelectUnlock::OnEnter() { LogUnreconstructedState("CarSelectUnlock", "OnEnter"); }
-    // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed CarSelectUnlock.
-    void CarSelectUnlock::OnLeave() {}
-    // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed CarSelectUnlock.
-    void CarSelectUnlock::Update()  {}
+    // (CarSelectUnlock: SCAFFOLD RETIRED 2026-09-08 (p0 wave) -- the real TU
+    //  States/BrnCarSelectUnlock.cpp is MOUNTED and carries all three lifecycle bodies.)
 
     // ---- CS_LIVERY --------------------------------------------------------------------
     // (CarSelectLivery's placeholder lifecycle is GONE -- the real class landed 2026-08-02.)
@@ -68,6 +64,7 @@ namespace BrnGui
     // for the controller event and drains 45/50 -> "GO_BACK", 54/55 -> "TOGGLE_LEFT"/
     // "TOGGLE_RIGHT". The FSM owns where those lead; InGame::OnEnter posts the
     // ActivateCrashNav(true) resume, so a bare GO_BACK is safe.
+    // [p0 wave 2026-09-08] CN_MAP_EVENT no longer uses these; OnlinePlay still does.
     namespace
     {
         typedef CgsModule::VariableEventQueue<18432, 16> HatchInputQueue;
@@ -102,27 +99,10 @@ namespace BrnGui
         }
     }
 
-    // ---- CN_MAP_EVENT -----------------------------------------------------------------
-    // FLAG PC-platform leaf: ESCAPE-HATCHED placeholder for the not-yet-mountable
-    // CrashNavMapEvent (real TU landed 2026-08-29 but blocked on collaborator types --
-    // mount it and DELETE these three in the same commit). Reached via InGame's 58
-    // GUI_EVENT_DETAILS -> "MAP_EVENT"; without the hatch that key was a one-way trap.
-    void CrashNavMapEvent::OnEnter()
-    {
-        mpStateInterface->RegisterForEvents(KAI_HATCH_EVENTS, 1);
-        LogUnreconstructedState("CrashNavMapEvent", "OnEnter[escape hatch armed -- no screen drawn]");
-    }
-    void CrashNavMapEvent::OnLeave() { mpStateInterface->UnRegisterForEvents(KAI_HATCH_EVENTS, 1); }
-    void CrashNavMapEvent::Update()
-    {
-        switch (HatchDrain(mpInGuiEventQueue))
-        {
-        case 45: case 50: SendStateEvent("GO_BACK");      break;
-        case 54:          SendStateEvent("TOGGLE_LEFT");  break;
-        case 55:          SendStateEvent("TOGGLE_RIGHT"); break;
-        default:          break;
-        }
-    }
+    // ---- CN_MAP_EVENT: SCAFFOLD RETIRED 2026-09-08 (p0 wave) -- real TU
+    //  States/BrnCrashNavMapEvent.cpp is MOUNTED and carries all four lifecycle bodies.
+    //  Its escape-hatched placeholder lifecycle is deleted; the real screen carries its
+    //  own fenced 45/50 exit arm until a preset-race producer lands. See that TU's banner.
 
     // ---- CN_MAP_MAIN ------------------------------------------------------------------
     // (CrashNavMapMain -- the offline pause / main menu -- RECONSTRUCTED 2026-08-29,

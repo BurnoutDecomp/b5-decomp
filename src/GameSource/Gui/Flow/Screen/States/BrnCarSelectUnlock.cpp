@@ -11,8 +11,9 @@
 //   UpdateRunning       @0x824CA420  (raw-asm walked; the Hex-Rays local allocation fails)
 //   UpdateWFInit        @0x824B5B28
 //
-// NOT BODIED HERE (declared in the header; their own ledger slices):
-//   * Update / PlayMovie.
+// The remaining two members the header declares -- Update (the fall-through internal
+// state ladder) and PlayMovie (the screen's own apt-movie post) -- land here as well
+// (p0 wave 2026-09-08); nothing of this class is bodied outside this file any more.
 //
 // The statics below are MEASURED (wave L headless-IDA dump,
 // scratchpad/waveL/carselectunlock_rodata.txt): maiEventToObserve @0x82066054 =
@@ -245,6 +246,65 @@ namespace BrnGui
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
         meInternalState = E_INTERNALSTATE_LEFT;   // +0x3C (4)
+    }
+
+    // ---- Update -------------------------------------------------------------------
+    // The family's fall-through sub-state ladder: each rung re-stamps meInternalState and,
+    // when its Update* returns true, falls straight into the next rung in the SAME frame.
+    // The in-event queue is cleared unconditionally at the tail, so an event that no rung
+    // consumed is still dropped before the next frame.
+    void CarSelectUnlock::Update()
+    {
+        switch (meInternalState)
+        {
+        case E_INTERNALSTATE_GETCACHE:
+            UpdateGetCache();
+            // fall through
+
+        case E_INTERNALSTATE_LOADRESOURCES:
+            meInternalState = E_INTERNALSTATE_LOADRESOURCES;
+            if (!UpdateLoadResources())
+            {
+                break;
+            }
+            // fall through
+
+        case E_INTERNALSTATE_WFINIT:
+            meInternalState = E_INTERNALSTATE_WFINIT;
+            if (!UpdateWFInit())
+            {
+                break;
+            }
+            // fall through
+
+        case E_INTERNALSTATE_RUNNING:
+            meInternalState = E_INTERNALSTATE_RUNNING;
+            UpdateRunning();
+            break;
+
+        case E_INTERNALSTATE_LEFT:
+            // Inert once OnLeave has latched E_INTERNALSTATE_LEFT (no re-stamp, no rung).
+            break;
+
+        default:
+            // The original streams the fixed prefix, then meInternalState, then a newline
+            // into the assert message buffer and fires unconditionally; the macro carries
+            // the fixed half of that text.
+            CGS_ASSERT(false, "Invalid internal state : ");
+            break;
+        }
+
+        reinterpret_cast<InGuiEventQueue*>(mpInGuiEventQueue)->Clear();
+    }
+
+    // ---- PlayMovie ----------------------------------------------------------------
+    // Post the screen's own apt movie at level 3. The original inlines the record the
+    // StateInterface helper builds -- GuiEventPlayAptMovie(8, 12) { movie name, level }
+    // pushed onto the view-state channel 41 as a 20-byte record -- so the de-inlined call
+    // is exact. The name matches this screen's own resource identifier (id 148).
+    void CarSelectUnlock::PlayMovie()
+    {
+        mpStateInterface->PlayAptMovie("BrnCarSelectUnlock", 3);
     }
 
     // ---- UpdateGetCache @ 0x824C15A8 ----------------------------------------------

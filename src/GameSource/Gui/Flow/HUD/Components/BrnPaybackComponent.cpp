@@ -27,6 +27,7 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnPaybackComponent.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"        // CgsDev::Log::gpDebugPrint (the [p0-payback] witness)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface::OutputGuiEvent
 #include "GameSource/Gui/BrnGuiCache.h"                               // BrnGui::GuiCache (GetOnlinePlayerInfo)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData (mPlayerName / meActiveRaceCarIndex)
@@ -105,6 +106,17 @@ void PaybackComponent::Construct(const char* lpacName, CgsGui::StateInterface* l
     mePreviouslyShownPayback = E_AT_EVIL_AXIS;   // +0xD8 = 3
     mePaybackComponentState  = E_PCS_INVISIBLE;  // +0xD0 = 0
     mePaybackAnimationState  = E_PCA_INVISIBLE;  // +0xD4 = 0
+
+    // [FLAG PC witness] one-shot mount proof for this component. No console counterpart.
+    // DELETE-WHEN: the payback widget has been screenshot-verified in an online race.
+    {
+        static bool sbConstructWitnessDone = false;
+        if (!sbConstructWitnessDone && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbConstructWitnessDone = true;
+            *CgsDev::Log::gpDebugPrint << "[p0-payback] PaybackComponent::Construct [FLAG PC witness]\n";
+        }
+    }
 }
 
 // @0x82428DF0
@@ -117,6 +129,17 @@ void PaybackComponent::Initialize(GuiCache* lpGuiCache)
     mePaybackAnimationState = E_PCA_INVISIBLE;                                     // +0xD4 = 0
     AddOutputAptViewState("MainFrame", "Invisible", false);
     AddOutputAptViewState("IconFrame", "Blank", false);
+
+    // [FLAG PC witness] one-shot proof the HUD state actually initialises this component.
+    // No console counterpart. DELETE-WHEN: as above.
+    {
+        static bool sbInitialiseWitnessDone = false;
+        if (!sbInitialiseWitnessDone && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbInitialiseWitnessDone = true;
+            *CgsDev::Log::gpDebugPrint << "[p0-payback] PaybackComponent::Initialize [FLAG PC witness]\n";
+        }
+    }
 }
 
 // @0x8241FF38
@@ -243,6 +266,19 @@ void PaybackComponent::RespondToTransitionComplete()
         default:
             break;
     }
+}
+
+// Announce that the settled payback award is now triggerable. The recovered
+// body posts the SAME fixed output record BeginAwardAnimation posts: it loads the component's
+// state interface, builds the { payload bytes = 1, event id = 370, payload offset = 12 }
+// header with a single uninitialised payload byte, and queues it on the state's output event
+// queue. Reusing the file-local event type posts exactly what BeginAwardAnimation posts,
+// subject to the same flagged raw-vs-wrapped divergence of the OutputGuiEvent helper
+// (see CgsGuiStateInterface.h), rather than hand-rolling a second copy of the record.
+void PaybackComponent::SendAwardTriggerableEvent()
+{
+    GuiEventPaybackBeginAward lEvent;   // payload left uninitialised, matching the binary
+    mpStateInterface->OutputGuiEvent(lEvent);
 }
 
 // @0x824116C8

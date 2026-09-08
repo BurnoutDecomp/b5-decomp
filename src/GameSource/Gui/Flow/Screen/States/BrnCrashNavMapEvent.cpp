@@ -2,77 +2,81 @@
 // BrnGui::CrashNavMapEvent -- the CN_MAP_EVENT screen state (the event-creation map),
 // plus its keyboard listener's FillString.
 //
-//   Construct   @0x824B7510  (BrnCrashNavMapEvent.cpp:59)   LANDED
-//   OnEnter     @0x824CC6C0  (cpp:76)                       LANDED
-//   OnLeave     @0x824CC790  (cpp:232)                      LANDED
-//   ClearTracker@0x824BCD38  (cpp:607)                      LANDED
-//   CrashNavMapEventKeyboardListener::FillString
-//               @0x824B7568  (cpp:703)                      LANDED
+// Bodies present here: Construct, OnEnter, Update, OnLeave, HandleSelect, SetTracker,
+// ClearTracker, SetEventData, UpdatePanelData (empty on the console -- see (d) below),
+// and CrashNavMapEventKeyboardListener::FillString.
 //
-//   Update      @0x824DDB90  (cpp:118)   ⛔ BLOCKED -- see below
-//   HandleSelect@0x824D8F68  (cpp:443)   ⛔ BLOCKED
-//   SetTracker  @0x824BFA88  (cpp:526)   ⛔ BLOCKED
-//   SetEventData@0x824CC830  (cpp:627)   ⛔ BLOCKED
-//   UpdatePanelData          (cpp:664)   ⛔ BLOCKED (no X360 export)
-//   HandleControllerInput    (cpp:257)   ⛔ BLOCKED (no X360 export)
-//   UpdateEventData          (cpp:590)   ⛔ BLOCKED (no X360 export)
+// HandleControllerInput and UpdateEventData are DECLARED, NEVER DEFINED -- see (e).
 //
-// Bodies are read off the raw X360 ARTIST assembly; OnEnter's nine member stores were
-// store-walked directly (0x824CC758..0x824CC77C, with r29 == 1 and r30 == 0) rather
-// than taken from Hex-Rays.
+// ⭐⭐ MOUNTED 2026-09-08 (p0 wave). The previous pass reported this TU un-mountable and
+// listed five blockers. FOUR OF THE FIVE WERE NOT BLOCKERS AT ALL -- they were unread
+// evidence -- and the fifth is a real platform leaf, parked the way this tree parks
+// platform leaves. Costing each, so the next reader does not re-derive it:
 //
-// ⛔⛔ THIS TU IS DELIBERATELY *NOT* MOUNTABLE, AND THAT IS THE HONEST OUTCOME OF THIS
-// PASS. Six methods cannot be reconstructed without FABRICATING types the tree does not
-// have a home for, so the class's vtable cannot be completed. Naming the blockers
-// precisely so the follow-up wave can cost them:
+//   (a) ✅ RETIRED. `GuiCache::PresetRace` is not an un-homed opaque record: it IS
+//       `BrnProgression::Race`. The recovered declaration outline of every consumer
+//       spells GetPresetRace's result `const Race *`, and the console layout agrees field
+//       for field -- the array stride is 120 == sizeof(Race); SetEventData reads the
+//       8-byte id at +0x20 (BaseRace::mId), the u16 array at +0x30 (maLandmarkIndices),
+//       the second u16 array at +0x50 (mauAiSectionIndices) and the count byte at +0x70
+//       (muNumLandmarks). BrnGuiCache.h now typedefs PresetRace to it; nothing was forked.
+//   (b) ✅ RETIRED. The 3088-byte "tracker route record" already had a home and a name:
+//       it is `BrnGui::GuiEventSetTracker` (GameSource/Gui/SatNav/BrnGuiTracker.h), and
+//       its 64 entries are `GuiTracker::TrackerInformation`. The three fields
+//       SetTracker's fill loop writes per 48-byte entry map onto that type exactly --
+//       meIconType at +0x00 set to the landmark icon type, mv3Position at +0x10 taking
+//       the icon record's whole 16-byte lane, and mTargetLandmarkIndex at +0x28. That is
+//       the same fill GuiCache::UpdateTrackerInfo already ships; the file-local
+//       placeholder record this TU carried is deleted.
+//   (c) ⛔ REAL, AND PARKED (the one genuine leaf). `BrnGuiKeyboard::Show` forwards to
+//       `CgsGui::GuiKeyboard::Show`, which IS reconstructed -- in
+//       GameShared/GameClasses/Gui/CgsGuiKeyboard.cpp -- but that TU is NOT mounted and
+//       its body bottoms out in the console's system keyboard UI, for which this build
+//       has no PC leaf. Both keyboard call sites are parked EXACTLY as
+//       BrnCrashNavSettings.cpp parks the same leaf, with the console's call spelled out
+//       in a comment and a one-shot log so the gap is visible in the log rather than
+//       silent. The three UTF-16 dialog strings the console passes ARE recovered -- they
+//       are "An Event", "Event Name" and "Create a name to recognize this event" -- and
+//       are recorded at the parked sites.
+//   (d) ✅ RETIRED. `UpdatePanelData` needs no recovered body: it is a VTABLE SLOT, and
+//       the vtable is data. This class's vtable is 14 slots; the slot Update dispatches
+//       through (+0x34) holds the address of a function whose entire body is a single
+//       return -- the empty function every trivial method in the image is folded onto.
+//       UpdatePanelData is EMPTY on the console. (The sibling CrashNavMapMain has no
+//       +0x34 slot at all, which is the cross-check: the slot belongs to the first
+//       virtual CrashNavMapEvent introduces, and the declaration reference says that is
+//       UpdatePanelData.)
+//   (e) ✅ RETIRED as a mount blocker. `HandleControllerInput` and `UpdateEventData` are
+//       declared by the reference outline and have no body in the console image AND no
+//       caller: this screen does not override the HandleCrashNavInputPressed vtable slot
+//       (+0x24 is the empty base slot), so the shipped build never routes input into
+//       them. They stay DECLARATION-ONLY in the header, which is correct for a member
+//       nothing calls.
 //
-//   (a) `GuiCache::PresetRace` is an OPAQUE forward declaration (BrnGuiCache.h:83:
-//       "opaque boundary record ... stride 120 -- pointer-only, un-homed element type").
-//       SetEventData @0x824CC830 and SetTracker @0x824BFA88 both read its interior:
-//       +0x20 (an 8-byte id), +0x30 (u16 landmark indices), +0x50 (a second per-landmark
-//       array) and +0x70 (`muNumLandmarks`, asserted >= 2 and <= 16). Homing that
-//       element is a BrnGuiCache.h job, not this TU's.
-//   (b) The 3088-byte GuiTracker route record. Its shape IS recovered (see
-//       GuiTrackerRouteRecord below) but its 64 ENTRIES are not: SetTracker's fill loop
-//       @0x824BFB98..0x824BFBE8 writes three fields per 48-byte entry -- a whole-quadword
-//       position lane at entry+0x00, a byte 4 at entry+0x0E and a u16 at entry+0x18,
-//       sourced from GuiCache::GetLandmarkInfoFromIndex's SatNavIconInfo out-record. No
-//       consumer for those three has been read, so the entry stays unnamed. ClearTracker
-//       only needs the count word and is therefore landed below.
-//   (c) `BrnGuiKeyboard::Show` is not declared anywhere: BrnGuiKeyboard.h carries only
-//       Prepare @0x824EACC0 plus a 0x420-byte reserved block. Both HandleSelect's
-//       E_CREATE_EVENT_EDIT_MODIFIER arm and Update's keyboard arm call it with four
-//       UTF-16 rodata pointers (unk_8206AB64 / unk_8206AB78 / unk_8206AB90) whose bytes
-//       this pass could not read.
-//   (d) ✅ RETIRED 2026-08-29 (FIX1). `maiEventToObserve` (X360 dword_8206632C) is now
-//       DEFINED below from an actual big-endian read of the raw image; the old claim
-//       "this repo ships only the ARTIST .i64, not a raw image" was FALSE. The old
-//       dispatch-set inference it declined to commit is also confirmed wrong -- see the
-//       definition's comment. This blocker no longer holds anything back.
-//   (e) Update's own remaining needs: `GuiCache::GetPresetRace` (blocked by (a)), the
-//       id-174 record it posts, and the `(*(*this + 52))(this)` UpdatePanelData virtual,
-//       for which there is no X360 export to reconstruct from at all.
+// ⚠️ THE SCREEN'S CONSOLE EXIT PATH IS PRESENT BUT INERT IN THIS BUILD -- and that is why
+// a small, clearly-fenced PC bring-up arm survives in Update below. The console's only
+// exit is HandleSelect's E_CREATE_EVENT_NONE arm (SetEventData, then
+// SendStateEvent("GO_BACK")), and HandleSelect is reached only when
+// `mpGuiCache->GetGuiTracker()` reports tracking active. That flag is set by
+// GuiTracker::RecEvent's 232 arm when SetTracker publishes a NON-EMPTY route -- which
+// needs `GuiCache::GetNumPresetRaces() > 0`. Nothing in this tree writes
+// miNumPresetRaces yet (its producer, GuiCache::HandleSpecificPreSetRacesEvent, is not
+// reconstructed), so SetTracker always takes the "one landmark or fewer" arm,
+// ClearTracker publishes an empty set, tracking never goes active, HandleSelect never
+// runs and GO_BACK is never sent. Reproducing that faithfully and stopping there would
+// re-create the exact one-way trap the retired scaffold existed to prevent. DELETE THE
+// FENCED ARM the moment a preset-race producer lands.
 //
-// CONSEQUENCE, AND THE INSTRUCTION THAT GOES WITH IT: do NOT add this file to
-// tools/build/build_game_exe.bat, and do NOT delete the CrashNavMapEvent placeholder
-// from BrnScreenStatesLinkStubs.{h,cpp} yet. While this TU is unmounted its class
-// declaration is seen only by this file, so the "two BrnGui::CrashNavMapEvent
-// definitions" ODR hazard stays DORMANT. Mount and stub-delete together, or neither.
+// This screen does NOT post the 165 / 211 / 233 tracker records, so it is not one of the
+// sat-nav route posters GenerateRouteData is waiting on -- its only tracker traffic is
+// the 232 set-publish in SetTracker / ClearTracker.
 //
-// ⚠️ NOTHING SHIPS INTO A MOUNTED TU FROM THIS HEADER (corrected 2026-08-29, FIX1).
-// An earlier edit this wave had the mounted GameShared/GameClasses/Gui/CgsSaveLoad.cpp
-// include BrnCrashNavMapEvent.h to de-fork the keyboard listener. That ACTIVATED the
-// dormant hazard above instead of removing one: it put the real CrashNavMapEvent in the
-// same image as the stub. CgsSaveLoad.cpp now keeps a minimal, layout-identical
-// file-local `CrashNavMapEventKeyboardListener` with a DELETE-WHEN note; its
-// KeyboardClosed @0x824C1820 body stays there. Do the listener de-fork at MOUNT time.
-//
-// LINK-TIME EXTERNALS (reported, not fabricated): CrashNavMap::{Construct, OnEnter,
-// OnLeave}, BrnProgression::Race::Construct, GuiCache::GetGuiTracker (header-inline).
-// (maiEventToObserve left this list on 2026-08-29 -- it is defined here now; so did
-// GuiTracker::RecvEvent @0x82501D28, bodied this pass in BrnGuiTracker.cpp.)
+// LINK-TIME EXTERNALS (the per-TU compile gate cannot see these; reported, not
+// fabricated): CrashNavMap::{Construct, OnEnter, OnLeave, Update},
+// GuiCache::{GetPresetRace, GetLandmarkInfoFromIndex}, GuiTracker::RecEvent,
+// GuiCursor::{SetActive, SetInactive}, BrnProgression::Race::Construct,
+// CgsGui::State::SendStateEvent, CgsIDCompress -- all already bodied and mounted.
 // ===================================================================================
-
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavMapEvent.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT / Begin/Fire/EndAssert
@@ -80,11 +84,18 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (out-queue)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event / VariableEventQueue
+#include "GameShared/GameClasses/Core/CgsID.h"                            // CgsID / CgsIDCompress
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                // the parked-leaf + bring-up prints
+#include "GameSource/GameState/BrnGameStateTypes.h"                       // BrnGameState::LandmarkIndex
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
-#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiEventActivateCrashNav
-#include "GameSource/Gui/SatNav/BrnGuiTracker.h"                          // BrnGui::GuiTracker
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // the custom-event trio (167/172/174)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiEventActivateCrashNav / GuiOverlayCompleteEvent / SatNavIconInfo
+#include "GameSource/Gui/Flow/Screen/Components/BrnCursor.h"              // BrnGui::GuiCursor::Set{Active,Inactive}
+#include "GameSource/Gui/SatNav/BrnGuiTracker.h"                          // BrnGui::GuiTracker / GuiEventSetTracker
+#include "SharedClasses/Progression/BrnRace.h"                            // BrnProgression::Race (== GuiCache::PresetRace)
 
-#include <cstring>   // std::memset (the tracker record)
+#include <cstdio>    // std::snprintf (the parked-leaf + bring-up prints)
+#include <cstring>   // std::memset (the empty tracker record)
 
 namespace BrnGui
 {
@@ -104,36 +115,84 @@ namespace BrnGui
         // (`li r11 == 0x215`). Same record CrashNavMapMain's exit arm sends.
         const s32 KI_EVENT_CRASHNAV_DONE = 533;     // 0x215
 
-        // GuiTracker::RecEvent's wire id and record size, both compile-time immediates at
-        // the two call sites (`li r5, 0xE8` / `li r6, 0xC10`).
-        const s32 KI_EVENT_TRACKER_ROUTE      = 232;    // 0xE8
-        const s32 KI_TRACKER_ROUTE_RECORD_SIZE = 3088;  // 0xC10
-
         // The X360 assert-site file string, verbatim.
         const char KAC_ASSERT_FILE[] =
             "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMapEvent.cpp";
 
-        // ---- the tracker route record -----------------------------------------------
-        // The 3088-byte stack record both ClearTracker and SetTracker hand to
-        // GuiTracker::RecEvent. MEASURED from SetTracker's frame @0x824BFA88, which is
-        // the site that fills it: the record base is sp+0xA0, the fill loop's cursor
-        // starts at sp+0xC8 and strides 48, and the three trailing words live at sp+0xCA0
-        // / +0xCA4 / +0xCA8 -- i.e. record+0xC00 / +0xC04 / +0xC08. (0xC00 - 0x10) / 0x30
-        // == 64 entries exactly, and 0xC10 == 3088 == the size immediate. ClearTracker
-        // @0x824BCD38 lays the same record on its own frame (base sp+0x60, count word at
-        // sp+0xC60 == base+0xC00) and initialises ONLY the count.
-        // FLAG consumer-named, and only partly recovered: the 16-byte head and the entry
-        // interior have no reader this pass could point at, so they stay reserved rather
-        // than being named. See the TU banner's blocker (b).
-        struct GuiTrackerRouteRecord
+        // ---- the state input queue --------------------------------------------------
+        // CgsGui::State::mpInGuiEventQueue is an opaque InputBuffer::GuiEventQueue*; the
+        // console calls VariableEventQueue<18432,16>::GetFirstEvent / GetNextEvent / Clear
+        // on it. Same typedef + reinterpret_cast as BrnCrashNavMap_wJ_08.cpp and every
+        // other committed GUI state.
+        typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;
+
+        // ---- the wire ids Update's own walk dispatches on ---------------------------
+        // Read from the console's compare chain. Both are members of maiEventToObserve
+        // below, so they are ids this state is registered for.
+        const s32 KI_EVENT_CONTROLLER_INPUT_PRESSED = 6;     // registered; see the fenced arm
+        const s32 KI_EVENT_KEYBOARD_RESPONSE        = 142;   // 0x8E
+        const s32 KI_EVENT_OVERLAY_COMPLETE         = 189;   // 0xBD
+
+        // ---- the GUI ACTION ids the fenced bring-up arm looks at --------------------
+        // Names are the recovered EGameInputActions spellings, the same table
+        // CrashNavMapMain's input map switches on.
+        const s32 KI_ACTION_GUI_START  = 45;
+        const s32 KI_ACTION_GUI_CANCEL = 50;
+
+        // SetEventData's upper bound, named by its own assert string
+        // ("lAcceptEventStart.muNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE"); the console
+        // compares against 16, which is BrnProgression::Race's own slot count.
+        const u8 KI_MAX_LANDMARKS_IN_MODE = 16;
+
+        // ---- the FSM script event this screen sends ---------------------------------
+        // The literal HandleSelect's E_CREATE_EVENT_NONE arm loads.
+        const char KAC_STATE_EVENT_GO_BACK[] = "GO_BACK";
+
+        // The overlay whose OK answer retires a custom event. Update compares the 189
+        // record's id against this with a FULL 64-bit compare over the payload's leading
+        // doubleword.
+        const char KAC_OVERLAY_DELETE_CUSTOM_EVENT[] = "CNDelCustEv";
+
+        // Event 142 ("keyboard response") payload view: the queue hands the state the
+        // HEADER-STRIPPED payload, and the console reads the keyboard pointer straight off
+        // its first word. Same idiom as BrnCrashNavEnterOnline_wI_07.cpp's
+        // GuiOverlayCompletePayload.
+        struct GuiEventKeyboardResponsePayload : public CgsModule::Event
         {
-            u8  maHeadReserved[0x10];        // +0x0000..+0x000F  never written by either site
-            u8  maEntries[64 * 0x30];        // +0x0010..+0x0BFF  64 x 48-byte route points
-            s32 miNumPoints;                 // +0x0C00  the live point count
-            s32 miReserved_C04;              // +0x0C04  SetTracker stores 0
-            u8  mbReserved_C08;              // +0x0C08  SetTracker stores 1
-            u8  maTailPad[7];                // +0x0C09..+0x0C0F  record-size pad
+            BrnGuiKeyboard* mpKeyboard;   // +0x00
         };
+
+        // Event 189 ("overlay complete") payload view -- the compressed overlay id at
+        // +0x00 then how the overlay was left at +0x08, both read off the stripped
+        // payload.
+        struct GuiOverlayCompletePayload : public CgsModule::Event
+        {
+            CgsID                                mOverlayId;     // +0x00
+            GuiOverlayCompleteEvent::LeaveMethod meLeaveMethod;  // +0x08
+        };
+
+        // Event 6 ("controller input pressed") payload view. Only the fenced PC bring-up
+        // arm below reads it; the console's own Update never looks at event 6, and this
+        // screen does not override the HandleCrashNavInputPressed vtable slot either.
+        // Shape is CgsGui::GuiEventControllerInputPressed minus its 12-byte header, which
+        // is the same +4 action word BrnCrashNavMapMain.cpp reads.
+        struct GuiControllerInputPressedPayload : public CgsModule::Event
+        {
+            s32 miPadId;    // +0x00
+            s32 miAction;   // +0x04
+        };
+
+        // ⛔ PARKED-LEAF PRINT, and the fenced bring-up print. Same shape as
+        // BrnCrashNavSettings.cpp's LogParkedPlatformLeaf, for the same reason: a gap that
+        // logs once is visible in BrnGame.log, a gap that is silent is not.
+        void LogParkedPlatformLeaf(const char* lpacSite, const char* lpacMissingLeaf)
+        {
+            char lac[192];
+            std::snprintf(lac, sizeof(lac),
+                          "[CrashNavMapEvent] %s PARKED -- no PC leaf for %s (FLAG).\n",
+                          lpacSite, lpacMissingLeaf);
+            CgsDev::Log::WriteToLog(lac);
+        }
     }
 
     const s32 CrashNavMapEvent::miNumEventsObserved = 10;
@@ -233,6 +292,21 @@ namespace BrnGui
 
         // 0x824CC758 loaded r3 = this + 0x6168 (24936) for the tail call.
         mCreatedRace.Construct();
+
+        // ⛔⛔ PC BRING-UP ESCAPE HATCH (1 of 3) -- NOT CONSOLE BEHAVIOUR. One line, once
+        // per run, so that "the map-event screen was actually entered" is visible in
+        // BrnGame.log while the console's own exit path is inert (see the file banner).
+        // Delete with the other two blocks in Update.
+        {
+            static bool sbLoggedEntry = false;
+            if (!sbLoggedEntry)
+            {
+                sbLoggedEntry = true;
+                CgsDev::Log::WriteToLog(
+                    "[p0-mapevent] CrashNavMapEvent::OnEnter -- real screen state entered "
+                    "(Start/Back leaves via the fenced bring-up arm).\n");
+            }
+        }
     }
 
     // =================================================================================
@@ -272,14 +346,17 @@ namespace BrnGui
     // =================================================================================
     void CrashNavMapEvent::ClearTracker()
     {
-        // The console builds the record on the stack and initialises ONLY the count word
-        // (`stw r30(=0), 0xC00(record)`); the remaining 3084 bytes are whatever the frame
-        // held. Zeroed here instead: RecEvent reads miNumPoints first and a zero route has
-        // no entries to read, so the observable record is identical and the reconstruction
-        // does not ship uninitialised stack.
-        GuiTrackerRouteRecord lRecord;
-        std::memset(&lRecord, 0, sizeof(lRecord));
-        lRecord.miNumPoints = 0;
+        // The record is the same GuiEventSetTracker SetTracker publishes -- the recovered
+        // outline names this local `lSetTrackerEvent` too. The console builds it on the
+        // stack and initialises ONLY the count word at +0xC00; the remaining 3084 bytes
+        // are whatever the frame held. Zeroed here instead, because
+        // RecEvent's 232 arm reads miCurrentlyTrackedIndex and mbIsEntireRoute back
+        // UNCONDITIONALLY (not just the count), so a zero fill is the only reproduction
+        // that does not hand the tracker two words of uninitialised stack. An empty set
+        // has no entries either way, so nothing observable changes.
+        GuiEventSetTracker lSetTrackerEvent;
+        std::memset(&lSetTrackerEvent, 0, sizeof(lSetTrackerEvent));
+        lSetTrackerEvent.miNumTrackedItems = 0;
 
         if (mpGuiCache->GetGuiTracker() == 0)
         {
@@ -295,8 +372,444 @@ namespace BrnGui
         // The console re-loads mpGuiCache and derefs the tracker AFTER the assert -- an
         // assert is not a guard here.
         mpGuiCache->GetGuiTracker()->RecEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lSetTrackerEvent),
+            lSetTrackerEvent.GetEventType(),                    // the console's 232
+            static_cast<s32>(sizeof(lSetTrackerEvent)));        // the console's 3088
+    }
+
+    // =================================================================================
+    //  SetEventData
+    //
+    //  Publish the route the player just accepted. Flattens the preset race the cursor is
+    //  sitting on into the 80-byte id-167 record -- its id, its landmark list, its
+    //  AI-section list and the live count -- and posts it on the OutputGuiEvent channel.
+    //  The first assert's message names HandleControllerInput; that is the original
+    //  source's own copy-paste and is kept verbatim.
+    // =================================================================================
+    void CrashNavMapEvent::SetEventData()
+    {
+        if (mpGuiCache == 0)
+        {
+            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessageBuffer,
+                                         CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Invalid cache in CrashNavMapEvent::HandleControllerInput";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), KAC_ASSERT_FILE, 635);
+            CgsDev::Assert::EndAssert();
+        }
+
+        CGS_ASSERT(mpGuiCache->GetNumPresetRaces() > 0,
+                   "mpGuiCache->GetNumPresetRaces() > 0");
+
+        const PresetRace* lpPresetRace = mpGuiCache->GetPresetRace(mi8CurrentEventIndex);
+
+        GuiEventAcceptEventStart lAcceptEventStart;
+        lAcceptEventStart.muNumLandmarks = lpPresetRace->GetNumLandmarks();
+
+        // The console asserts on the local's own count byte AFTER storing it -- it reads
+        // the value back off the frame slot -- so the two asserts read lAcceptEventStart,
+        // not the race.
+        CGS_ASSERT(lAcceptEventStart.muNumLandmarks >= 2,
+                   "lAcceptEventStart.muNumLandmarks >= 2");
+        CGS_ASSERT(lAcceptEventStart.muNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE,
+                   "lAcceptEventStart.muNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE");
+
+        // Two `memcpy(dst, src, 2 * muNumLandmarks)` calls: the LIVE landmarks only, not
+        // the whole 16-slot arrays. The trailing slots keep whatever the frame held on the
+        // console; they are left default-initialised here for the same reason
+        // GuiCache::UpdateTrackerInfo leaves its record alone -- a defensive fill would be
+        // a divergence, and nothing downstream reads past muNumLandmarks.
+        std::memcpy(lAcceptEventStart.maLandmarkIndices,
+                    lpPresetRace->GetLandmarkIndexArray(),
+                    2u * lAcceptEventStart.muNumLandmarks);
+        std::memcpy(lAcceptEventStart.mauAiSectionIndices,
+                    lpPresetRace->GetAiSectionIndexArray(),
+                    2u * lAcceptEventStart.muNumLandmarks);
+
+        // The full-width 64-bit id, copied whole.
+        lAcceptEventStart.mId = lpPresetRace->GetId();
+
+        // { 80, 167, 16 } + the 80-byte record, posted at 96 bytes on channel 40. The
+        // console inlines the OutputGuiEvent<GuiEventAcceptEventStart> body here (there is
+        // no standalone instantiation for it), so the wrapper is spelled out -- same
+        // idiom as CrashNavMap::Update's cache-accepted record.
+        CgsGui::GuiEventWrapper<GuiEventAcceptEventStart, KI_CHANNEL_GUI_EVENT>
+            lRecord(lAcceptEventStart);
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRecord),
-            KI_EVENT_TRACKER_ROUTE, KI_TRACKER_ROUTE_RECORD_SIZE);
+            lRecord.GetChannel(),
+            static_cast<s32>(sizeof(lRecord)));
+    }
+
+    // =================================================================================
+    //  UpdatePanelData  (cpp:664)  -- vtable slot +0x34
+    //
+    //  EMPTY ON THE CONSOLE, and that is measured rather than assumed. This class's
+    //  vtable is 14 slots; the slot Update dispatches through (+0x34) holds the address
+    //  of a function whose whole body is a bare return -- the empty function the linker
+    //  folds every trivial method in the image onto. The slot exists only because this
+    //  class introduces the virtual: the sibling CrashNavMapMain's vtable stops one slot
+    //  earlier.
+    // =================================================================================
+    void CrashNavMapEvent::UpdatePanelData()
+    {
+    }
+
+    // =================================================================================
+    //  SetTracker
+    //
+    //  Hand the sat-nav tracker the route to draw. While the player is mid-authoring
+    //  (any stage past E_CREATE_EVENT_NONE) that is the race being built; otherwise it is
+    //  the preset race the cursor is sitting on. A route of one landmark or fewer is not
+    //  a route -- that clears the tracker instead. Both asserts are the STREAMED flavour.
+    // =================================================================================
+    void CrashNavMapEvent::SetTracker()
+    {
+        if (mpGuiCache == 0)
+        {
+            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessageBuffer,
+                                         CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Invalid cache in CrashNavMapEvent::SetTracker";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), KAC_ASSERT_FILE, 532);
+            CgsDev::Assert::EndAssert();
+        }
+
+        u8 luNumLandmarks = 0;
+        const BrnGameState::LandmarkIndex* laLandmarkIndices = 0;
+
+        if (meCreateEventStage != E_CREATE_EVENT_NONE)
+        {
+            // mCreatedRace's own count and landmark array, reached through the race
+            // rather than by offset.
+            luNumLandmarks    = mCreatedRace.GetNumLandmarks();
+            laLandmarkIndices = mCreatedRace.GetLandmarkIndexArray();
+        }
+        else
+        {
+            CGS_ASSERT(mpGuiCache->GetNumPresetRaces() > 0,
+                       "mpGuiCache->GetNumPresetRaces() > 0");
+
+            const PresetRace* lpPresetRace =
+                mpGuiCache->GetPresetRace(mi8CurrentEventIndex);
+            luNumLandmarks    = lpPresetRace->GetNumLandmarks();
+            laLandmarkIndices = lpPresetRace->GetLandmarkIndexArray();
+        }
+
+        // One landmark is not a route.
+        if (luNumLandmarks <= 1)
+        {
+            ClearTracker();
+            return;
+        }
+
+        // The record is left default-initialised on purpose: RecEvent's 232 arm copies
+        // EXACTLY miNumTrackedItems records, so the untouched tail is never read. Same
+        // reasoning (and the same fill) as GuiCache::UpdateTrackerInfo, which publishes
+        // this identical record from the cache side.
+        GuiEventSetTracker lSetTrackerEvent;
+        lSetTrackerEvent.miCurrentlyTrackedIndex = 0;
+        lSetTrackerEvent.mbIsEntireRoute         = true;
+
+        for (s32 liIndex = 0; liIndex < static_cast<s32>(luNumLandmarks); ++liIndex)
+        {
+            GuiEventUpdateSatNav::SatNavIconInfo lSatNavInfo;
+            mpGuiCache->GetLandmarkInfoFromIndex(laLandmarkIndices[liIndex], &lSatNavInfo);
+
+            GuiTracker::TrackerInformation& lrItem = lSetTrackerEvent.mTrackedDataInfo[liIndex];
+            lrItem.meIconType = GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK;
+            // The WHOLE 16-byte lane, w included, not a three-component narrow -- the
+            // console moves it as one quadword.
+            const Vector4& lrv4Lane = lSatNavInfo.GetPositionLane();
+            lrItem.mv3Position.x = lrv4Lane.x;
+            lrItem.mv3Position.y = lrv4Lane.y;
+            lrItem.mv3Position.z = lrv4Lane.z;
+            lrItem.mv3Position.w = lrv4Lane.w;
+            lrItem.mTargetLandmarkIndex =
+                static_cast<u16>(lSatNavInfo.GetLandmarkIndexHalf());
+        }
+
+        // Stored AFTER the fill loop on the console.
+        lSetTrackerEvent.miNumTrackedItems = luNumLandmarks;
+
+        if (mpGuiCache->GetGuiTracker() == 0)
+        {
+            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessageBuffer,
+                                         CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Invalid tracker pointer";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), KAC_ASSERT_FILE, 573);
+            CgsDev::Assert::EndAssert();
+        }
+
+        mpGuiCache->GetGuiTracker()->RecEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lSetTrackerEvent),
+            lSetTrackerEvent.GetEventType(),                    // the console's 232
+            static_cast<s32>(sizeof(lSetTrackerEvent)));        // the console's 3088
+    }
+
+    // =================================================================================
+    //  HandleSelect
+    //
+    //  The event-creation state machine's one step function -- a four-arm switch on
+    //  meCreateEventStage, and the ONLY place this screen leaves itself. Stage 0 accepts
+    //  whatever the cursor is on and goes back; stage 1 opens the map and starts a fresh
+    //  custom race; stage 2 closes the route once it has at least two landmarks; stage 3
+    //  raises the name dialog. Stages 4..7 fall through the jump table's default.
+    // =================================================================================
+    void CrashNavMapEvent::HandleSelect()
+    {
+        switch (meCreateEventStage)
+        {
+        case E_CREATE_EVENT_NONE:
+            SetEventData();
+            SendStateEvent(KAC_STATE_EVENT_GO_BACK);   // CN_MAP_EVENT -> INGAME
+            break;
+
+        case E_CREATE_EVENT_NEW_PANEL:
+        {
+            // The stage store happens BEFORE the map-state test on the console.
+            meCreateEventStage = E_CREATE_EVENT_EDIT_ROUTE;
+            if (meMapState != E_MAPSTATE_MAP)
+            {
+                mCursor.SetActive();
+                meMapState = E_MAPSTATE_MAP;
+            }
+
+            mCreatedRace.Construct();
+            mCreatedRace.SetFlag(BrnProgression::BaseRace::E_FLAG_CUSTOM);  // bit 0 of +0x28
+
+            // The info is fetched and then thrown away -- the arm ends in an
+            // UNCONDITIONAL assert, which is the console developers saying so out loud.
+            GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;             // cpp:466
+            mpGuiCache->GetLandmarkInfoFromIndex(mpGuiCache->GetCurrentLandmarkIndex(),
+                                                 &lLandmarkInfo);           // cpp:465
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("I was really hoping we weren't using this - IWL",
+                                       KAC_ASSERT_FILE, 474);
+            CgsDev::Assert::EndAssert();
+            break;
+        }
+
+        case E_CREATE_EVENT_EDIT_ROUTE:
+            // A route needs two landmarks before the modifier step will take it; the
+            // console compares the count against 1 and falls through when it is not more.
+            if (mCreatedRace.GetNumLandmarks() > 1)
+            {
+                meCreateEventStage = E_CREATE_EVENT_EDIT_MODIFIER;
+                if (meMapState != E_MAPSTATE_PANEL)
+                {
+                    mCursor.SetInactive();
+                    meMapState = E_MAPSTATE_PANEL;
+                }
+            }
+            break;
+
+        case E_CREATE_EVENT_EDIT_MODIFIER:
+            CGS_ASSERT(mpGuiKeyboard != 0, "mpGuiKeyboard");               // cpp:493
+            meCreateEventStage = E_CREATE_EVENT_KEYBOARD;
+
+            // ⛔ PARKED PLATFORM LEAF -- see the file banner (c). The console's tail is,
+            // verbatim, for whoever lands the keyboard:
+            //     mpGuiKeyboard->Show(KAC16_DEFAULT_EVENT_NAME,     // "An Event"
+            //                         KAC16_DIALOG_TITLE,           // "Event Name"
+            //                         KAC16_DIALOG_DESCRIPTION,     // "Create a name to
+            //                                                       //  recognize this event"
+            //                         mKeyboardListener);
+            // BrnGuiKeyboard::Show has no declaration and no body in this tree; it
+            // forwards to CgsGui::GuiKeyboard::Show, which IS reconstructed but sits in
+            // the unmounted CgsGuiKeyboard.cpp and bottoms out in the console's system
+            // keyboard UI. Same park, same reason, as BrnCrashNavSettings.cpp's.
+            {
+                static bool sbLoggedKeyboardSelect = false;
+                if (!sbLoggedKeyboardSelect)
+                {
+                    sbLoggedKeyboardSelect = true;
+                    LogParkedPlatformLeaf("HandleSelect[E_CREATE_EVENT_EDIT_MODIFIER]",
+                                          "BrnGuiKeyboard::Show (the system keyboard UI)");
+                }
+            }
+            break;
+
+        default:
+            // Stages 4..7 are past the jump table's bound; the console falls straight to
+            // the epilogue.
+            break;
+        }
+    }
+
+    // =================================================================================
+    //  Update
+    //
+    //  The screen's frame pump, in the console's order: adopt a newly chosen event, run
+    //  the base map, offer the tracker's "something is selected" flag to HandleSelect,
+    //  walk the in-queue (latch the keyboard, act on a confirmed delete-custom-event
+    //  overlay), consume a closed name dialog, then republish the route if it was dirtied.
+    // =================================================================================
+    void CrashNavMapEvent::Update()
+    {
+        // ---- a different event was picked: adopt it, redraw its route ----------------
+        if (mbUpdateNewEventInfo)
+        {
+            // The index is read BEFORE the three stores, exactly as the console loads it.
+            const s8 li8NextEventIndex = mi8NextEventIndex;
+            mbIsInEvent          = true;
+            meCreateEventStage   = E_CREATE_EVENT_NONE;
+            mi8CurrentEventIndex = li8NextEventIndex;
+
+            SetTracker();
+            UpdatePanelData();                     // the vtable +0x34 dispatch
+
+            mbUpdateNewEventInfo = false;
+        }
+
+        CrashNavMap::Update();
+
+        // The tracker's own "a set is being tracked" flag is this screen's select signal.
+        // Faithful to the console, which does not null-check either pointer here (the
+        // base's Update has just run and latched the cache from the id-64 event).
+        const bool lbTrackingActive = mpGuiCache->GetGuiTracker()->IsTrackingActive();
+        if (lbTrackingActive)
+        {
+            HandleSelect();
+        }
+
+        // ---- the in-queue walk ------------------------------------------------------
+        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+
+        // ⛔⛔ PC BRING-UP ESCAPE HATCH -- NOT CONSOLE BEHAVIOUR. See the file banner: the
+        // console's own exit (HandleSelect's stage-0 arm) is gated on the tracker going
+        // active, which needs a preset-race producer this tree does not have yet, so
+        // without this the "MAP_EVENT" key is a one-way trap. It only records an action;
+        // the send happens after the console's own Clear(), so the walk below is
+        // byte-for-byte the console's. DELETE THIS AND ITS TWO SIBLING BLOCKS the moment
+        // GuiCache::HandleSpecificPreSetRacesEvent (or any other miNumPresetRaces
+        // producer) lands.
+        s32 liBringUpExitAction = 0;
+
+        const CgsModule::Event* lpEvent = 0;                               // cpp:140
+        s32 liEventSize = 0;                                               // cpp:141
+        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liEventSize);  // cpp:142
+             lpEvent != 0;
+             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
+        {
+            if (liEventId == KI_EVENT_KEYBOARD_RESPONSE)
+            {
+                const GuiEventKeyboardResponsePayload* lpKeyboardResponse =        // cpp:169
+                    static_cast<const GuiEventKeyboardResponsePayload*>(lpEvent);
+
+                CGS_ASSERT(lpKeyboardResponse->mpKeyboard != 0,
+                           "lpKeyboardResponse->lpKeyboard");                      // cpp:170
+
+                mpGuiKeyboard = lpKeyboardResponse->mpKeyboard;
+            }
+            else if (liEventId == KI_EVENT_OVERLAY_COMPLETE)
+            {
+                const GuiOverlayCompletePayload* lpCompleteEvent =                 // cpp:152
+                    static_cast<const GuiOverlayCompletePayload*>(lpEvent);
+
+                // Full 64-bit id compare (`cmpld`), then the OK gate.
+                if (lpCompleteEvent->mOverlayId == CgsIDCompress(KAC_OVERLAY_DELETE_CUSTOM_EVENT) &&
+                    lpCompleteEvent->meLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK)
+                {
+                    const PresetRace* lpPresetRace =                               // cpp:155
+                        mpGuiCache->GetPresetRace(mi8CurrentEventIndex);
+
+                    // { 120, 174, 16 } + the whole race, posted at 136 bytes on channel
+                    // 40. The console inlines the OutputGuiEvent body here.
+                    GuiEventCustomeEventDelete lDeleteCustomEvent;                 // cpp:157
+                    lDeleteCustomEvent.mRace = *lpPresetRace;
+                    CgsGui::GuiEventWrapper<GuiEventCustomeEventDelete, KI_CHANNEL_GUI_EVENT>
+                        lRecord(lDeleteCustomEvent);
+                    mpStateInterface->GetOutputEventQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lRecord),
+                        lRecord.GetChannel(),
+                        static_cast<s32>(sizeof(lRecord)));
+
+                    // Re-adopt event 0 next frame, which is what redraws the map.
+                    mbUpdateNewEventInfo = true;
+                    mi8NextEventIndex    = 0;
+                }
+            }
+            else if (liEventId == KI_EVENT_CONTROLLER_INPUT_PRESSED)
+            {
+                // ⛔⛔ PC BRING-UP ESCAPE HATCH (2 of 3) -- NOT CONSOLE BEHAVIOUR. The
+                // console registers for event 6 (it is maiEventToObserve[2]) and then
+                // drops it: this screen never overrides the HandleCrashNavInputPressed
+                // vtable slot, so the base's empty one runs. Delete with the other two.
+                const GuiControllerInputPressedPayload* lpInput =
+                    static_cast<const GuiControllerInputPressedPayload*>(lpEvent);
+                if (liBringUpExitAction == 0 &&
+                    (lpInput->miAction == KI_ACTION_GUI_START ||
+                     lpInput->miAction == KI_ACTION_GUI_CANCEL))
+                {
+                    liBringUpExitAction = lpInput->miAction;
+                }
+            }
+        }
+
+        // ---- the name dialog came back ----------------------------------------------
+        if (mKeyboardListener.HasJustClosed())
+        {
+            CGS_ASSERT(meCreateEventStage == E_CREATE_EVENT_KEYBOARD,
+                       "meCreateEventStage == E_CREATE_EVENT_KEYBOARD");    // cpp:187
+
+            char* lpcTempString = mKeyboardListener.FillString();           // cpp:188
+            if (lpcTempString != 0 && lpcTempString[0] != '\0')
+            {
+                // A bounded 32-byte name copy with an explicit terminator, i.e.
+                // BaseRace::SetName.
+                mCreatedRace.SetName(lpcTempString);
+
+                GuiEventCustomeEventCreate lCreateCustomEvent;              // cpp:193
+                lCreateCustomEvent.mRace = mCreatedRace;
+                mpStateInterface->OutputGuiEvent<GuiEventCustomeEventCreate>(lCreateCustomEvent);
+
+                mbUpdateNewEventInfo = true;
+                mi8NextEventIndex    = static_cast<s8>(mi8CurrentEventIndex + 1);
+            }
+            else
+            {
+                // ⛔ PARKED PLATFORM LEAF -- see the file banner (c). The console re-raises
+                // the dialog when the player dismissed it without typing anything:
+                //     mpGuiKeyboard->Show(KAC16_DEFAULT_EVENT_NAME,    // "An Event"
+                //                         KAC16_DIALOG_TITLE,          // "Event Name"
+                //                         KAC16_DIALOG_DESCRIPTION,    // "Create a name to
+                //                                                      //  recognize this event"
+                //                         mKeyboardListener);
+                static bool sbLoggedKeyboardUpdate = false;
+                if (!sbLoggedKeyboardUpdate)
+                {
+                    sbLoggedKeyboardUpdate = true;
+                    LogParkedPlatformLeaf("Update[keyboard re-show]",
+                                          "BrnGuiKeyboard::Show (the system keyboard UI)");
+                }
+            }
+        }
+
+        // ---- the route was dirtied (OnEnter always dirties it) ----------------------
+        if (mbShouldUpdateRoute)
+        {
+            SetTracker();
+            mbShouldUpdateRoute = false;
+        }
+
+        lpInQueue->Clear();
+
+        // ⛔⛔ PC BRING-UP ESCAPE HATCH (3 of 3) -- NOT CONSOLE BEHAVIOUR. Start/Back leaves
+        // the screen the same way CrashNavMapMain's 45/50 arm does; OnLeave already posts
+        // the crash-nav re-activate, so a bare GO_BACK resumes the world. Gated on the
+        // tracker being INACTIVE: once a preset-race producer lands and the console's own
+        // exit (HandleSelect) is reachable, this block must not fire beside it (it would
+        // double the GO_BACK and let Start/Back abort an in-progress authoring stage).
+        // Delete with the other two blocks.
+        if (!lbTrackingActive && liBringUpExitAction != 0)
+        {
+            SendStateEvent(KAC_STATE_EVENT_GO_BACK);
+        }
     }
 
     // =================================================================================

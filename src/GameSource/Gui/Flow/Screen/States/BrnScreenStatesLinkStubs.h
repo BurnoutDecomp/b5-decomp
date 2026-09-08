@@ -30,28 +30,17 @@ namespace BrnGui
         virtual void Update();
     };
 
-    // FLAG PC-platform leaf: placeholder -- real BrnGui::CarSelectUnlock (X360 1216B;
-    // inline ctor wiring text-selection/menu-item component vtables) not yet
-    // reconstructed. Script id "CS_UNLOCK".
-    struct CarSelectUnlock : public CgsGui::State
-    {
-        virtual void OnEnter();
-        virtual void OnLeave();
-        virtual void Update();
-    };
+    // (BrnGui::CarSelectUnlock -- the CS_UNLOCK screen -- SCAFFOLD RETIRED 2026-09-08
+    //  (p0 wave); its real home is States/BrnCarSelectUnlock.h + .cpp, which BrnScreenFlow
+    //  now includes directly for the pool carve-out's complete type.)
 
     // (BrnGui::CarSelectLivery -- the CS_LIVERY screen -- was RECONSTRUCTED 2026-08-02;
     //  its real home is States/BrnCarSelectLivery.h + three partfiles.)
 
-    // FLAG PC-platform leaf: placeholder -- real BrnGui::CrashNavMapEvent (X360 25104B;
-    // CrashNavMap base ctor + the event-map vtable @0x82077044) not yet reconstructed
-    // (nor is its CrashNavMap base). Script id "CN_MAP_EVENT".
-    struct CrashNavMapEvent : public CgsGui::State
-    {
-        virtual void OnEnter();
-        virtual void OnLeave();
-        virtual void Update();
-    };
+    // ---- CN_MAP_EVENT: SCAFFOLD RETIRED 2026-09-08 (p0 wave) -- real TU
+    //  States/BrnCrashNavMapEvent.{h,cpp} is MOUNTED, so the placeholder and its
+    //  escape-hatch lifecycle in the matching .cpp are gone. BrnScreenFlow includes the
+    //  real header directly.
 
     // (BrnGui::CrashNavMapMain -- the CN_MAP_MAIN screen, the offline pause / main menu --
     //  was RECONSTRUCTED 2026-08-29 (main-menu wave); its real home is

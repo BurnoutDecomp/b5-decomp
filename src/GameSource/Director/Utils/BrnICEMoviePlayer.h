@@ -28,10 +28,14 @@
 // struct-relative offsets quoted in comments are provenance only, never used as casts.
 //
 // Bodies for Construct/Prepare/Play/Stop/Update/Loop/CutToInterpolateOut/GetCamera/
-// InterpolateFrom (player), GetMovieCount/DebugMenuNewMovie (playlist), GetCgsID
-// (IceMovie) and SharedPlaylists::Construct land in BrnICEMoviePlayer.cpp. The rest of
-// the recovered method set is DECLARATION-ONLY here (each lands a body with its own
-// ledger TU; the per-TU `cl /c` gate does not link, so declarations suffice).
+// InterpolateFrom (player), DebugMenuNewMovie (playlist) and GetCgsID (IceMovie) land in
+// BrnICEMoviePlayer.cpp. The playlist half that the boot path actually runs --
+// ICEMoviePlaylist::Construct / InsertMovieBefore / GetMovieCount and
+// SharedPlaylists::Construct / GetPausePlaylist -- was split out 2026-09-08 into
+// BrnICEMoviePlayer_wP0_01.cpp, which is the one of the two that is MOUNTED (see its
+// banner). The rest of the recovered method set is DECLARATION-ONLY here (each lands a
+// body with its own ledger TU; the per-TU `cl /c` gate does not link, so declarations
+// suffice).
 //
 // The IceMovie and ICEMoviePlaylist::DebugMenuRemoveData element structs are defined in
 // full so the separate AbstractPool/ObjectPool instantiation TUs can instantiate over
@@ -116,16 +120,46 @@ struct IceMovie
     // ICEMoviePlaylist::Serialise). The per-instance body is a separate TU.
     template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
     const CgsResource::ID  GetCgsID() const;        // body in BrnICEMoviePlayer.cpp
-    f32               GetStartPosition() const;
     VehicleRef::EType GetVehicleRefType() const;
     u32               GetVehicleIndex() const;
     void              SetMovie(CgsResource::ID lCgsID);
     void              SetMovie(const char* lpcName);
-    void              SetMovie(EIceGroup leGroup, u32 luTakeIndex);
-    void              SetStartPosition(f32 lfStartPosition01);
-    void              SetVehicle(VehicleRef::EType leType, u32 luIndex);
-    bool              GetShouldFlash() const;
-    void              SetShouldFlash(bool lbShouldFlash);
+
+    // ⭐ HEADER-INLINE ON THE CONSOLE (2026-09-08, p0 wave). These six carry NO out-of-line
+    // symbol -- they exist only folded into their callers: SharedPlaylists::Construct and
+    // ICEMoviePlaylist::DebugMenuNewMovie inline the four setters' stores, ICEMoviePlayer::Play
+    // inlines the +0x18 float read and ::Update the +0x24 byte read. That is the signature of
+    // an in-class inline accessor, so they are defined here rather than in the .cpp.
+    // Each setter is attested to store its ARGUMENT rather than a folded constant, because the
+    // two inlining call sites disagree on the values: the shared-playlist seeds store vehicle
+    // type 0 / flash 0, while the dev-menu new-movie stores vehicle type 1 / flash 1.
+    // FLAG: SetStartPosition's only inlining call sites both pass 0.0f, so a range assert (if
+    // the source had one) would have folded away -- the plain store is what is attested.
+    f32               GetStartPosition() const { return mfStartPosition01; }  // +0x18
+    bool              GetShouldFlash()   const { return mbPlayFlash; }        // +0x24
+
+    void              SetMovie(EIceGroup leGroup, u32 luTakeIndex)
+    {
+        meRefType   = E_REF_TYPE_GROUP_TAKE;   // +0x00 -- a group/take movie names its take
+        meGroup     = leGroup;                 // +0x10
+        muTakeIndex = luTakeIndex;             // +0x14
+    }
+
+    void              SetStartPosition(f32 lfStartPosition01)
+    {
+        mfStartPosition01 = lfStartPosition01;                                // +0x18
+    }
+
+    void              SetVehicle(VehicleRef::EType leType, u32 luIndex)
+    {
+        meVehicleType  = leType;               // +0x1C
+        muVehicleIndex = luIndex;              // +0x20
+    }
+
+    void              SetShouldFlash(bool lbShouldFlash)
+    {
+        mbPlayFlash = lbShouldFlash;                                          // +0x24
+    }
 
     ERefType          meRefType;          // +0x00  CGSID vs GROUP_TAKE vs INVALID
     // +0x04 implicit padding to 8-byte-align the 64-bit id below.

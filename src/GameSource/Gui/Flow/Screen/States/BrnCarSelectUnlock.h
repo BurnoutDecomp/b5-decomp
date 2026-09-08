@@ -59,8 +59,8 @@ namespace BrnGui
         // list and mark E_INTERNALSTATE_LEFT.
         virtual void OnLeave();
 
-        // Per-frame tick (dispatches the internal-state machine). Body lands with its own
-        // ledger slice; declared here for the vtable shape.
+        // Per-frame tick: the fall-through internal-state ladder (GetCache -> LoadResources
+        // -> WFInit -> Running), then an unconditional in-queue Clear().
         virtual void Update();
 
         // @0x824B5A20 -- this state loads its resources internally (UpdateLoadResources), so the
@@ -86,8 +86,8 @@ namespace BrnGui
         // SendStateEvent("ADVANCE") on event 74.
         void UpdateRunning();
 
-        // @cpp:297 -- play the screen's unlock apt movie. Not in this slice's ledger set;
-        // declared here for the UpdateLoadResources call site (body links from its own slice).
+        // Play the screen's own unlock apt movie ("BrnCarSelectUnlock", level 3) -- the
+        // UpdateLoadResources call site.
         void PlayMovie();
 
         // ---- statics (DWARF cpp:26-53; .rdata; values MEASURED, wave L dump) ----
