@@ -250,6 +250,9 @@ namespace BrnGui
         // route-receive state. Called by RecEvent's 233 arm.
         void RegenerateRouteData();
 
+        // Inlined by EventInfoComponent::UpdateDestinationText, ARTIST0x82412F78.
+        s32 GetCurrentlyTrackedIndex() const { return miCurrentlyTrackedIndex; }
+
     private:
         // ===============================================================================
         // ⭐⭐ LAYOUT REBUILT 2026-08-29 (FIX1), from the three bodies that own it --

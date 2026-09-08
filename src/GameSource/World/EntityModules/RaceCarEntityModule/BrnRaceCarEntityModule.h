@@ -457,6 +457,9 @@ public:
                 RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpReplayActiveCarInterface,
                 RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpReplayGlobalCarInterface );
 
+        void TransmitCarsInRaceToQueryManager(
+                RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface );
+
         // X360 0x822D1BD0 (PS3 named export 0x17F30C). THE per-frame BOOST publish: fill
         // one BoostOutputInfo per active-car slot -- the player's from the live
         // BoostStrategy + near-miss tracker + controls, every other attached car's

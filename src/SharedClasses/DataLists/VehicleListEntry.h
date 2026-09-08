@@ -162,6 +162,7 @@ struct VehicleListEntry
     // AttribSysCollectionKey (blocked today: that type's Destruct() is declaration-only, and
     // VehicleListResourceType::FixUp calls Destruct on this member).
     // WIDENED to 64 bits 2026-08-01 (physics wave 1) -- see CgsAttribSysCollectionKey.cpp.
+    u64 GetRivalReleasedVoiceOverKeyHash() const; // ARTIST0x824C5BC4..0x824C5BD4
     u64 GetAttribCollectionKeyHash() const;
 
     // ADDITIVE GROW (drivable wave 2026-08-01). The car's STRENGTH RATING byte at +0x9B.
@@ -234,7 +235,8 @@ struct VehicleListEntry
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mExhaustEntityKey;           // +0xB0
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mEngineEntityKey;            // +0xB8
     CgsID mEngineName;                                                    // +0xC0
-    u8 maPad200[8];                                                       // +0xC8
+    u32 mRivalUnlockName;                                                 // +0xC8 (Playback::Name hash)
+    u8 maPadCC[4];
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mWonCarVoiceOverKey;         // +0xD0
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mRivalReleasedVoiceOverKey;  // +0xD8
     u32 muiMusicLoopContentSpec;                                          // +0xE0

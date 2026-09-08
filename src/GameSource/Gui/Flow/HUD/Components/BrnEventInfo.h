@@ -235,6 +235,10 @@ namespace BrnGui
 
         // @0x82421980 (DWARF :396) -- lerp the field colour KV4_SAFECOLOUR -> KV4_DANGERCOLOUR
         // over the last KF_DANGERTIME_START (10.0f) seconds and apply it.
+        void UpdateDestinationText(GuiCache* lpCache); // ARTIST0x82412F20
+        void SetPositionData(GuiCache* lpCache, TextFieldComponentType* lpPosition,
+                             TextFieldComponentType* lpTotalRacers); // ARTIST0x82421668
+
         void SetTextFieldDangerColour(TextFieldComponentType* lpTextField, f32 lfTimeLeft);
 
         // @0x824214C8 (DWARF :389) -- the apt frame-trigger that ends a banking

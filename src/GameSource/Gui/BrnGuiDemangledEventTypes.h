@@ -1,4 +1,5 @@
 #pragma once
+#include "GameSource/Gui/Events/BrnGuiEventRacePositionInfo.h"
 
 #include <cstring>
 #include "GameSource/Gui/Events/BrnGuiEventRoadRuleData.h"
@@ -261,7 +262,6 @@ namespace BrnGui
     // @0x823EBBA4) fills all 12 bytes with payload. Do not re-add it here.
     struct GuiEventRaceDistanceRemaining : public CgsGui::GuiEvent<239> { u8 maPayload[132]; };  // id 239 size 144 (12B GuiEvent header + opaque payload)
     struct GuiEventRaceDistanceToCheckpoint { u8 maData[4]; s32 GetEventType() const { return 240; } };  // id 240 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiEventRacePositionInfo : public CgsGui::GuiEvent<238> { u8 maPayload[12]; };  // id 238 size 24 (12B GuiEvent header + opaque payload)
     struct GuiEventRequestCollisionWorldEvent { u8 maData[4]; s32 GetEventType() const { return 493; } };  // id 493 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventReturnDistrict { u8 maData[8]; s32 GetEventType() const { return 196; } };  // id 196 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventRivalInfoResponse : public CgsGui::GuiEvent<444> { u8 maPayload[20]; };  // id 444 size 32 (12B GuiEvent header + opaque payload)

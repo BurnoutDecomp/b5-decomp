@@ -1,5 +1,7 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnEventInfo.h"
 
+#include "GameSource/Gui/SatNav/BrnGuiTracker.h"
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include <cmath>                                                  // std::floor (the inlined BrnMath::IntRound)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
@@ -136,6 +138,7 @@ namespace
     // wave bodied it earlier today; a stub there would have killed the process on the first
     // metre driven in showtime, not merely blanked the field.)
     const s32 KI_FORMAT_SMALL_DISTANCE       = 17;   // E_FORMAT_SMALL_DISTANCE (FormatSmallDistanceString @0x82861988)
+    const s32 KI_FORMAT_LARGE_DISTANCE       = 19;   // E_FORMAT_LARGE_DISTANCE
 
     // The event-state indices the mode-frame latch picks (KAPC_EVENT_STATE_NAMES rows).
     const s32 KI_EVENT_STATE_IDLE              = 1;
@@ -899,10 +902,157 @@ namespace
     }
 }
 
-void EventInfoComponent::UpdateRace(GuiCache*)         { LogDeferredModeArm("UpdateRace"); }
+
 void EventInfoComponent::UpdateOnlineRace(GuiCache*)   { LogDeferredModeArm("UpdateOnlineRace"); }
 void EventInfoComponent::UpdateFreeBurnLobby(GuiCache*){ LogDeferredModeArm("UpdateFreeBurnLobby"); }
-void EventInfoComponent::UpdateBurningRoute(GuiCache*) { LogDeferredModeArm("UpdateBurningRoute"); }
-void EventInfoComponent::UpdateSurvivor(GuiCache*)     { LogDeferredModeArm("UpdateSurvivor"); }
+
+
+
+// ARTIST0x82412F20: the destination label is shared by checkpoint event panels.
+void EventInfoComponent::UpdateDestinationText(GuiCache* lpCache)
+{
+    BrnGameState::LandmarkIndex landmark;
+    if (lpCache->IsOnlineStartInProgress())
+    {
+        GuiTracker* tracker = lpCache->GetGuiTracker();
+        CGS_ASSERT(tracker != 0, "lpGuiTracker");
+        const s32 trackedIndex = tracker->GetCurrentlyTrackedIndex();
+        if (trackedIndex < 0)
+        {
+            maTextField[0].ClearText();
+            return;
+        }
+        landmark = lpCache->GetOnlineLandmarkIndex(static_cast<u32>(trackedIndex));
+    }
+    else
+        landmark = lpCache->GetEventDestinationLandmarkIndex();
+    if (landmark != mCurrentLandmark)
+    {
+        mCurrentLandmark = landmark;
+        CGS_ASSERT(mCurrentLandmark != BrnGameState::LandmarkIndex(-1),
+                   "BrnGameState::K_INVALID_LANDMARK != mCurrentLandmark");
+        GuiEventUpdateSatNav::SatNavIconInfo info;
+        lpCache->GetLandmarkInfoFromIndex(mCurrentLandmark, &info);
+        char name[32];
+        CgsCore::SnPrintf(name, sizeof(name), "LM_%llu", info.GetCgsId());
+        maTextField[0].SetLocalisedText(name, KI_FORMAT_TEXT_DATABASE_LOOKUP);
+    }
+}
+
+// ARTIST0x82421668. Position changes are held for at least one second.
+void EventInfoComponent::SetPositionData(GuiCache* lpCache, TextFieldComponentType* lpPosition,
+                                         TextFieldComponentType* lpTotalRacers)
+{
+    mfCurrentTimeSinceLastPositionChange += lpCache->GetTimeStep();
+    if (lpCache->GetPlayerRacePosition() != miCurrentPosition && mfCurrentTimeSinceLastPositionChange > 1.0f)
+    {
+        mfCurrentTimeSinceLastPositionChange = 0.0f;
+        miCurrentPosition = lpCache->GetPlayerRacePosition();
+        lpPosition->SetLocalisedText(miCurrentPosition, KI_FORMAT_INTEGER);
+        SetPositionTextState(miCurrentPosition);
+    }
+    if (lpCache->GetOpponentsInEvent() + 1 != miTotalRacers)
+    {
+        miTotalRacers = lpCache->GetOpponentsInEvent() + 1;
+        lpTotalRacers->SetLocalisedText(miTotalRacers, KI_FORMAT_INTEGER);
+    }
+}
+
+// ARTIST0x8242FCF0.
+void EventInfoComponent::UpdateRace(GuiCache* lpCache)
+{
+    UpdateDestinationText(lpCache);
+    if (lpCache->IsInShortcut() != mbInShortcut)
+    {
+        mbInShortcut = !mbInShortcut;
+        mDistanceAnimatorRace.Run(mbInShortcut ? "inShortcut" : (mbNearFinish ? "flashing" : "notFlashing"));
+    }
+    const f32 distance = lpCache->GetDistanceInEvent();
+    if (!mbInShortcut && distance != mfDistToCheckpoint)
+    {
+        if (!(distance > mfDistanceWarningThreshold) &&
+            (mfDistToCheckpoint < 0.0f || !(mfDistanceWarningThreshold >= mfDistToCheckpoint)))
+        {
+            mbNearFinish = true;
+            mDistanceAnimatorRace.Run("flashing");
+        }
+        else if (!(mfDistToCheckpoint > mfDistanceWarningThreshold) && !(distance <= mfDistanceWarningThreshold))
+        {
+            mbNearFinish = false;
+            mDistanceAnimatorRace.Run("notFlashing");
+        }
+        mfDistToCheckpoint = distance;
+        maTextField[4].SetLocalisedText(distance, KI_FORMAT_LARGE_DISTANCE);
+        if (mbNearFinish)
+        {
+            const f32 proximity = 1.0f - distance * (mpStateInterface->IsUsingMetricUnits() ? 0.001f : 0.00062137097f);
+            const f32 nonnegative = -proximity >= 0.0f ? 0.0f : proximity;
+            mDistanceInterpolator.SetProportion(1.0f - nonnegative >= 0.0f ? nonnegative : 1.0f);
+        }
+    }
+    SetPositionData(lpCache, &maTextField[2], &maTextField[3]);
+}
+
+// ARTIST0x82421530.
+void EventInfoComponent::UpdateSurvivor(GuiCache* lpCache)
+{
+    UpdateDestinationText(lpCache);
+    if (lpCache->GetDistanceInEvent() != mfRivalDistanceFromTarget)
+    {
+        mfRivalDistanceFromTarget = lpCache->GetDistanceInEvent();
+        maTextField[2].SetLocalisedText(mfRivalDistanceFromTarget, KI_FORMAT_LARGE_DISTANCE);
+    }
+    if (lpCache->GetTargetTimeInEvent() != mfTargetTimeInEvent)
+    {
+        mfTargetTimeInEvent = lpCache->GetTargetTimeInEvent();
+        maTextField[3].SetLocalisedText(static_cast<s32>(mfTargetTimeInEvent), KI_FORMAT_INTEGER);
+    }
+    if (lpCache->GetCurrentTimeInEvent() != mfCurrentTimeInEvent)
+    {
+        mfCurrentTimeInEvent = lpCache->GetCurrentTimeInEvent();
+        maTextField[4].SetLocalisedText(static_cast<s32>(mfCurrentTimeInEvent), KI_FORMAT_INTEGER);
+    }
+}
+
+// ARTIST0x8242A830.
+void EventInfoComponent::UpdateBurningRoute(GuiCache* lpCache)
+{
+    UpdateDestinationText(lpCache);
+    if (lpCache->GetDistanceInEvent() != mfRivalDistanceFromTarget)
+    {
+        mfRivalDistanceFromTarget = lpCache->GetDistanceInEvent();
+        maTextField[2].SetLocalisedText(mfRivalDistanceFromTarget, KI_FORMAT_LARGE_DISTANCE);
+    }
+    char timeText[128];
+    if (lpCache->GetTargetTimeInEvent() != mfTargetTimeInEvent)
+    {
+        mfTargetTimeInEvent = lpCache->GetTargetTimeInEvent();
+        const s32 minutes = static_cast<s32>(mfTargetTimeInEvent * 0.016666668f);
+        const s32 seconds = static_cast<s32>(mfTargetTimeInEvent - static_cast<f32>(minutes) * 60.0f);
+        CgsCore::SPrintf(timeText, sizeof(timeText), "%dm%02ds", minutes, seconds);
+        maTextField[3].SetText(timeText, false);
+    }
+    if (lpCache->GetCurrentTimeInEvent() != mfCurrentTimeInEvent)
+    {
+        const f32 currentTime = lpCache->GetCurrentTimeInEvent();
+        mfCurrentTimeInEvent = mfTargetTimeInEvent - currentTime >= 0.0f ? currentTime : mfTargetTimeInEvent;
+        const s32 minutes = static_cast<s32>(mfCurrentTimeInEvent * 0.016666668f);
+        const s32 seconds = static_cast<s32>(mfCurrentTimeInEvent - static_cast<f32>(minutes) * 60.0f);
+        CgsCore::SPrintf(timeText, sizeof(timeText), "%dm%02ds", minutes, seconds);
+        maTextField[4].SetText(timeText, false);
+        const f32 remaining = mfTargetTimeInEvent - mfCurrentTimeInEvent;
+        SetTextFieldDangerColour(&maTextField[4], remaining);
+        if (remaining < 10.0f && !mbTimeRemainingFlashing)
+        {
+            mTimeAnimatorBRoute.Run("flashing");
+            mbTimeRemainingFlashing = true;
+        }
+        else if (remaining >= 10.0f && mbTimeRemainingFlashing)
+        {
+            mTimeAnimatorBRoute.Run("notFlashing");
+            mbTimeRemainingFlashing = false;
+        }
+    }
+}
 
 }

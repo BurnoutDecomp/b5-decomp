@@ -13,6 +13,7 @@
 // i.e. != E_ACTIVE_RACE_CAR_INDEX_INVALID). The enum indexes the arrays directly.
 // ============================================================================
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"
 #include "GameSource/BurnoutConstants.h"            // EActiveRaceCarIndex / EGlobalRaceCarIndex enumerators
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint (the demoted player-index tripwire)
@@ -501,29 +502,23 @@ EntityId RCEntityActiveRaceCarOutputInterface::GetPlayerRaceCarEntityId() const
 // index and type, packed them into a CarsInTheRaceData and appended it to
 // maCarsInTheRace.
 //
-// FLAG: BrnWorld::RaceCar is only forward-declared at this interface's home (an
-// incomplete type with no in-tree accessors: GetPosition/GetPreviousPosition/
-// GetVelocity and the meActiveRaceCarIndex/muType fields the asm reads are NOT
-// reconstructable until BrnRaceCar.h lands its own TU). Bodied here as the
-// store-shape that compiles -- it appends a default-initialised CarsInTheRaceData
-// (carrying the global-index arg) -- pending the RaceCar home, at which point the
-// position/velocity/index/type reads must be wired in. The Append target and the
-// E_ACTIVE_RACE_CAR_INDEX bounds assert match the asm 1:1.
 // ============================================================================
-void RCEntityActiveRaceCarOutputInterface::AddCarToRace(BrnWorld::RaceCar* /*lpRaceCar*/,
+void RCEntityActiveRaceCarOutputInterface::AddCarToRace(BrnWorld::RaceCar* lpRaceCar,
                                                        EGlobalRaceCarIndex leGlobalRaceCarIndex)
 {
     CarsInTheRaceData lCachedCar;
-    // FLAG (RaceCar incomplete): lCachedCar.mPosition/mPreviousPosition/mDirection and
-    // meActiveRaceCarIndex come from lpRaceCar once BrnRaceCar.h is homed; asm asserts
-    // lCachedCar.meActiveRaceCarIndex in [0,8) and lpRaceCar->muType < E_RACE_CAR_TYPE_COUNT.
-    lCachedCar.meActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
-    lCachedCar.meGlobalRaceCarIndex = leGlobalRaceCarIndex;
-    lCachedCar.mbIsPlayer           = false;
+    lCachedCar.mPosition = lpRaceCar->GetPosition();
+    lCachedCar.meActiveRaceCarIndex = lpRaceCar->GetActiveRaceCarIndex();
     CGS_ASSERT((lCachedCar.meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) &&
                (lCachedCar.meActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT),
                "( lCachedCar.meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && "
                "(lCachedCar.meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
+    lCachedCar.meGlobalRaceCarIndex = leGlobalRaceCarIndex;
+    lCachedCar.mPreviousPosition = lpRaceCar->GetPreviousPosition();
+    CGS_ASSERT(lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT,
+               "muType < E_RACE_CAR_TYPE_COUNT");
+    lCachedCar.mbIsPlayer = lpRaceCar->GetType() == E_RACE_CAR_TYPE_PLAYER;
+    lCachedCar.mDirection = lCachedCar.mbIsPlayer ? lpRaceCar->GetVelocity() : Vector3{};
     maCarsInTheRace.Append(lCachedCar);
 }
 

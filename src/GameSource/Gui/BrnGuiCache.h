@@ -741,6 +741,7 @@ namespace BrnGui
         // The player's live race position, straight to PositionIndicator::SetPosition.
         // RaceMainHudState::UpdateRunning @0x8247FEE4 `lbz r4, 0x4B24(r11)` -> the value is
         // passed in r4 and range-checked `0 < r4 <= 8` @0x8247FF10/18; 0 hides the indicator.
+        bool IsInShortcut() const { return mbInShortcut; } // ARTIST0x8242FD10
         u8   GetPlayerRacePosition() const    { return mu8PlayerRacePosition; }     // +0x4B24
         // The override that skips that range/enable check (@0x8247FEF8 `lbz r11, 0x4B25(r11)`
         // -> branch straight to SetPosition). FLAG: consumer-named, producer unrecovered.
@@ -1499,7 +1500,7 @@ namespace BrnGui
         // before that it read 0 == SD everywhere.
         bool mbIsHighDef;                                // +0x4B49 (19273)
         bool mbInEventColouringGate;                     // +0x4B4A (19274) RoadRuleComponent::ShouldUseInEventColouring gate byte
-        u8   mPad_4B4B[1];                                // +0x4B4B
+        bool mbInShortcut;                               // +0x4B4B, GUI380
         // ADDITIVE GROW (BrnOnlinePlay TU): the online-play main-menu invite / online-start flag
         // cluster the online-play state reads/writes (X360 far bytes GuiCache+0x4B4C..+0x4B53).
         // Carved from the former mPad_4B4B WITHOUT shifting any following member. Names are inferred

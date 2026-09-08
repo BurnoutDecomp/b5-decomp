@@ -1418,6 +1418,35 @@ namespace BrnGui
             }
             break;
 
+        case 238: // ARTIST0x8250ED20..0x8250EDE4.
+        {
+            const auto* positions = reinterpret_cast<const GuiEventRacePositionInfo*>(lpEvent);
+            std::memcpy(maEventPositionOfRaceCar, positions->maiPositions, sizeof(maEventPositionOfRaceCar));
+            std::memcpy(maRaceCarFinished, positions->mabFinished, sizeof(maRaceCarFinished));
+            std::memcpy(maEventPositionValid, positions->mabValid, sizeof(maEventPositionValid));
+            if (mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+            {
+                CGS_ASSERT(mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                           "lePlayerActiveRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                if (maEventPositionValid[mePlayerActiveRaceCarIndex])
+                {
+                    const u8 position = static_cast<u8>(maEventPositionOfRaceCar[mePlayerActiveRaceCarIndex]);
+                    mbPlayerRacePositionOverride = mu8PlayerRacePosition != position;
+                    mu8PlayerRacePosition = position;
+                }
+                else
+                {
+                    mbPlayerRacePositionOverride = false;
+                    mu8PlayerRacePosition = 0;
+                }
+            }
+            break;
+        }
+
+        case 380: // ARTIST0x82510624..28: player entered/left a shortcut.
+            mbInShortcut = *reinterpret_cast<const u8*>(lpEvent) != 0;
+            break;
+
         case 379:
             // [hud reveal gate 2026-08-25] X360 case 379 -- the IGNITION latch, and the
             // whole free-burn HUD reveal gate. The console arm is one store, and it is the

@@ -439,6 +439,19 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
             }
         }
 
+        // ARTIST ModeManager::PostWorldUpdate0x8234ACB0..0x8234AD18. Route event HUD
+        // distances and positions use the same scorer as the mode; its global-interface
+        // argument is never read (UpdateRacePositions0x8232A668), so the host extraction
+        // passes null for that unavailable snapshot, as with the other unused input legs.
+        if (lpCurrentGameMode != 0)
+        {
+            ScoringSystem* scoring = lpModeManager->GetScoringSystem();
+            scoring->UpdateNumberOfCarsInMode(&mLastActiveRaceCarInterface);
+            if (lpModeManager->GetCurrentGameModeParams()->GetFlag(GameModeParams::KU_FLAG_HAS_ROUTE))
+                scoring->UpdateRacePositions(&mLastActiveRaceCarInterface, nullptr,
+                                             &mLastAICarOutputInterface, lpModeManager);
+        }
+
         // ------------------------------------------------------------------------------------
         // [showtime score wave 2026-08-29] THE PER-MODE SCORER FORK'S *FIRST* ARM.
         // Console 0x8234AD2C..0x8234AD90, transcribed by BrnModeManager_WorldTick.cpp:745-789
@@ -1303,10 +1316,6 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
             &mLastActiveRaceCarInterface,
             /*lbPaused -- FLAG (c)*/ false);
         mpPreWorldInputBuffer->UnlockForRead();
-
-        // â­ [D4] THE TEMPORARY OFFLINE-INTRO SELF-TRIGGER (see the body of
-        // ProcessGameEventsModeIntroBringUp for why it is needed and when it dies).
-        HarnessOfflineIntroSelfTriggerBringUp(lfGameTimestep);
     }
 
     // ---- 1c) THE SECOND LEG OF THE SAME HOP (console #86, EmmPreWorldUpdate's own tail) -------
@@ -1854,12 +1863,9 @@ void GameStateModule::ProcessGameEventsStartGameModeBringUp(
 // a tree-wide `tools/re/hasbody.py`, not an assumption -- so their two arms stay written out and
 // PARKED. Nothing faked. DELETE-WHEN those three land: un-park each arm exactly as quoted above.
 //
-// (i) WHY CASE 25 IS THE ONE THAT MATTERS TODAY. IntroState::OnEnter sets mbUseCountdown only for
-// online modes and offline Showtime, so an offline stunt run's intro state has NO timer at all --
-// its ONLY exit is this event. The producer half is already live and mounted
-// (BridgeGuiToGameState case 163 -> game event 25, GameBridgeGUIToX_GameState.cpp:153); what is
-// missing is the pre-event GUI that sends 163, which is why HarnessOfflineIntroSelfTriggerBringUp
-// exists.
+// IntroState uses a countdown for online modes and offline Showtime. Other offline modes
+// wait for the pre-event GUI to finish its presentation and send GUI 163, which
+// BridgeGuiToGameState relays as game event 25.
 //
 // [!][!] AND WHAT HAPPENS NEXT IS NOT THIS FUNCTION'S FAULT: FinishOfflineModeIntro advances the
 // mode to E_GMS_COUNTDOWN, and CountdownState::Update advances only when
@@ -1978,75 +1984,6 @@ void GameStateModule::ProcessGameEventsModeIntroBringUp(
         const CgsModule::Event* lpCurrent = lpEvent;
         liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
     }
-}
-
-// ============================================================================
-// [D4 stuntrace WAVE D] HarnessOfflineIntroSelfTriggerBringUp -- TEMPORARY, NOT CONSOLE CODE.
-// The full justification and the DELETE-WHEN are at the declaration in BrnGameStateModule.h.
-// Shape: while the current mode sits in E_GMS_INTRO, accumulate the frame timestep; once it passes
-// the mode's own GameMode::GetIntroDurationSeconds() (vtable slot 8; StuntAttackMode's override
-// returns 6.0f, X360 0x827E2538 loading flt [0x82021240]), post game event 25 -- ONE byte, the
-// same "signal" shape BridgeGuiToGameState uses for its 163 -> 25 relay
-// (GameBridgeGUIToX_GameState.cpp:153-155) -- into the carry queue, where the case-25 arm above
-// drains it on the next pre-world leg. The accumulator resets whenever the mode leaves INTRO, so a
-// second event gets its own full intro.
-// ============================================================================
-void GameStateModule::HarnessOfflineIntroSelfTriggerBringUp(f32 lfGameTimestep)
-{
-    static f32  sfIntroElapsed = 0.0f;
-    static bool sbPosted       = false;
-
-    // â­ 2026-08-27 (frontier round 2): STAND DOWN when the REAL 163 producer exists. With
-    // BRN_EVENT_FSM armed the HUD flow runs the real PreRaceFlyByState, whose Update tail
-    // posts GUI 163 at the end of the fly-by (proven: run 20260827_134528 log:6815 carried a
-    // SECOND event 25 at intro+6.15 s -- the fly-by's own). Both firing made
-    // FinishOfflineModeIntro run TWICE and the second SendEvent(E_GME_NEXT) short-circuited
-    // CountdownState to 0.13 s. This stand-in exists ONLY for runs where the fly-by cannot
-    // run (the FSM hop gated off); it dies entirely with the BRN_EVENT_FSM exe gate.
-    static const bool sbRealFlyByArmed = (getenv("BRN_EVENT_FSM") != 0);
-    if (sbRealFlyByArmed)
-    {
-        return;
-    }
-
-    const GameMode* lpCurrentGameMode = mModeManager.GetCurrentGameMode();
-
-    // E_GMS_INTRO is the state IntroState owns; anything else (or no mode) rearms the trigger.
-    if (lpCurrentGameMode == 0 ||
-        lpCurrentGameMode->GetCurrentState() != GameStateModuleIO::E_GMS_INTRO)
-    {
-        sfIntroElapsed = 0.0f;
-        sbPosted       = false;
-        return;
-    }
-
-    if (sbPosted)
-    {
-        return;
-    }
-
-    sfIntroElapsed += lfGameTimestep;
-
-    const f32 lfIntroDuration = lpCurrentGameMode->GetIntroDurationSeconds();
-    if (sfIntroElapsed < lfIntroDuration)
-    {
-        return;
-    }
-
-    sbPosted = true;
-
-    if (CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[start] HARNESS-ONLY offline-intro self-trigger: intro ran "
-            << sfIntroElapsed << " s >= GetIntroDurationSeconds() " << lfIntroDuration
-            << " -- posting game event 25 in place of the unreconstructed pre-event GUI "
-               "(GUI command 163)\n";
-    }
-
-    // The 1-byte signal payload, exactly as the GUI bridge posts it.
-    unsigned char lSignal = 0;
-    mGameEventCarryQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSignal), 25, 1);
 }
 
 // ============================================================================

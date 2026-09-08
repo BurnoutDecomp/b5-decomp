@@ -66,6 +66,8 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnButtonIcon.h"  // ButtonIconComponent::EPadButton
 #include "GameSource/GameState/BrnGameStateSharedIO.h"   // BrnGameState::GameStateModuleIO::EGameModeType (assert bounds)
 
+#include "SharedClasses/DataLists/VehicleList.h"
+#include "SharedClasses/DataLists/VehicleListEntry.h"
 #include <cstring>   // strcmp / strstr (HandleAptTriggers' component-name matching)
 
 namespace BrnGui
@@ -1891,4 +1893,125 @@ namespace BrnGui
             reinterpret_cast<const CgsModule::Event*>(&lRunFsm), KI_CHANNEL_GUI_OUT,
             static_cast<s32>(sizeof(lRunFsm)));
     }
+    // ARTIST0x824C5598. Present the newly unlocked rival, then resume results teardown.
+    void InstantResultsState::UpdateShowingRivals()
+    {
+        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS,
+                   "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState");
+        if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
+        {
+            CGS_ASSERT(meNewRivalsPresentationStage == E_NEW_RIVALS_PRESENTATION_WAITING,
+                       "E_NEW_RIVALS_PRESENTATION_WAITING == meNewRivalsPresentationStage");
+            mResultsIcon.SetState("Invisible");
+            mPendingRivalId = mResults.mNewlyUnlockedRivalID;
+            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            const BrnResource::VehicleList* vehicles = mpGuiCache->GetWorldDataController()->GetVehicleList();
+            CGS_ASSERT(vehicles != 0, "lpVehicleList");
+            const s32 index = vehicles->GetVehicleIndex(mPendingRivalId);
+            const BrnResource::VehicleListEntry* entry = index < 0 ? 0 : vehicles->GetVehicleData(index);
+            CGS_ASSERT(entry != 0, "lpVehicleListEntry");
+            GuiEventPostEventNewRivalSequenceStart sequence;
+            sequence.mRivalUnlockName = entry->mRivalUnlockName;
+            sequence.mVoiceOver = entry->GetRivalReleasedVoiceOverKeyHash();
+            mpStateInterface->GetOutputEventQueue()->AddEvent(&sequence, 40, sizeof(sequence));
+            mUnlockedRivalCarComponent.SetCarInfo(mPendingRivalId, static_cast<BrnGuiResourceId>(123));
+            meSubStateState = E_SUBSTATE_RUNNING;
+            return;
+        }
+        if (meSubStateState != E_SUBSTATE_RUNNING)
+        {
+            FireUnexpectedStateAssert("Should not be updating rival presentation when substate is in state ",
+                                      meSubStateState, "\n");
+            return;
+        }
+        switch (meNewRivalsPresentationStage)
+        {
+        case E_NEW_RIVALS_PRESENTATION_WAITING:
+            if (!mLicense.IsHiding() && mpcAnimatingComponentName == 0)
+            {
+                mLicense.ReleaseResources();
+                mPhotoBoothComponent.ReleaseResources();
+                mUnlockedXSCarComponent.ReleaseResources();
+                mpStateInterface->PlayAptMovie("", 2);
+                if (mLargeIconResource.muId != 0 && mpGuiCache != 0)
+                    mpGuiCache->EnsureResourceIsUnloaded(mLargeIconResource);
+                mfRivalPresentationTimeRemaining = 3.0f;
+                meNewRivalsPresentationStage = E_NEW_RIVALS_PRESENTATION_SHOWING_RIVAL_SET_UP_TEXT;
+            }
+            break;
+        case E_NEW_RIVALS_PRESENTATION_INTRO_SET_UP:
+            mNewRivalsIcon.SetState(0u);
+            mNewRivalDescText.SetLocalisedText("POSTRACE_NEW_RIVALS_INTRO", CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+            meNewRivalsPresentationStage = E_NEW_RIVALS_PRESENTATION_INTRO;
+            break;
+        case E_NEW_RIVALS_PRESENTATION_INTRO:
+        case E_NEW_RIVALS_PRESENTATION_OUTRO_ENDING:
+            break;
+        case E_NEW_RIVALS_PRESENTATION_SHOWING_RIVAL_SET_UP_TEXT:
+        {
+            CGS_ASSERT(mPendingRivalId != 0, "Cannot display a rival if we don't know who they are!");
+            mNewRivalsIcon.SetState(2u);
+            char car[24], text[32];
+            CgsIDConvertToString(mPendingRivalId, car);
+            car[12] = 0;
+            CgsCore::SPrintf(text, sizeof(text), "$CAR_CAPS_%s", car);
+            text[31] = 0;
+            mNewRivalCarText.SetText(text);
+            mNewRivalManuIcon.Set(mpGuiCache->GetWorldDataController()->GetVehicleList(), mPendingRivalId);
+            mNewRivalDescText.SetLocalisedText("POSTRACE_NEW_RIVALS_DESCRIPTION_SUBTITLE", CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+            mPendingRivalId = 0;
+            meNewRivalsPresentationStage = E_NEW_RIVALS_PRESENTATION_SHOWING_RIVAL_SET_UP_ICON;
+            break;
+        }
+        case E_NEW_RIVALS_PRESENTATION_SHOWING_RIVAL_SET_UP_ICON:
+            if (mLicense.EnsureResourcesAreUnloaded() && mPhotoBoothComponent.EnsureResourcesAreUnloaded()
+                && mUnlockedXSCarComponent.EnsureResourcesAreUnloaded()
+                && mUnlockedFreeCarComponent.EnsureResourcesAreUnloaded()
+                && mpGuiCache->EnsureResourceIsUnloaded(mLargeIconResource)
+                && mUnlockedRivalCarComponent.EnsureResourcesAreLoaded())
+            {
+                mUnlockedRivalCarComponent.OnLoad();
+                mUnlockedRivalCarComponent.ShowCar();
+                meNewRivalsPresentationStage = E_NEW_RIVALS_PRESENTATION_SHOWING_RIVAL;
+            }
+            break;
+        case E_NEW_RIVALS_PRESENTATION_SHOWING_RIVAL:
+            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            mfRivalPresentationTimeRemaining -= mpGuiCache->GetTimeStep();
+            if (mfRivalPresentationTimeRemaining <= 0.0f)
+            {
+                mNewRivalsIcon.SetState(3u);
+                mfRivalPresentationTimeRemaining = 3.0f;
+            }
+            break;
+        case E_NEW_RIVALS_PRESENTATION_OUTRO_SET_UP:
+            mNewRivalsIcon.SetState(4u);
+            mNewRivalDescText.SetLocalisedText("POSTRACE_NEW_RIVALS_OUTRO", CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+            meNewRivalsPresentationStage = E_NEW_RIVALS_PRESENTATION_OUTRO;
+            break;
+        case E_NEW_RIVALS_PRESENTATION_OUTRO:
+            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            mfRivalPresentationTimeRemaining -= mpGuiCache->GetTimeStep();
+            if (mfRivalPresentationTimeRemaining <= 0.0f)
+            {
+                mNewRivalsIcon.SetState(5u);
+                meNewRivalsPresentationStage = E_NEW_RIVALS_PRESENTATION_OUTRO_ENDING;
+            }
+            break;
+        case E_NEW_RIVALS_PRESENTATION_CLEANING_UP:
+            if (mUnlockedRivalCarComponent.EnsureResourcesAreUnloaded())
+                meNewRivalsPresentationStage = E_NEW_RIVALS_PRESENTATION_DONE;
+            break;
+        case E_NEW_RIVALS_PRESENTATION_DONE:
+            meActiveSubState = GetNextSubstate();
+            ResetStateTimer();
+            meSubStateState = E_SUBSTATE_SET_UP_COMPONENTS;
+            break;
+        default:
+            FireUnexpectedStateAssert("Unknown rival presentation state (currently in state ",
+                                      meNewRivalsPresentationStage, " )");
+            break;
+        }
+    }
+
 }

@@ -1,3 +1,4 @@
+#include "GameSource/Gui/Events/BrnGuiEventRacePositionInfo.h"
 // BrnGuiEventTypeDefs.h
 // Home of the BrnGui GUI-event payload structs. This slice reconstructs ONLY
 // BrnGui::GuiEventUpdateSatNav::SatNavIconInfo, and within it only the four
@@ -2531,6 +2532,7 @@ static_assert(__builtin_offsetof(GuiRoadRageScoreUpdate, miTargetTakedowns) == 0
 //             +0x18[i] -> 0x9F54 + 2i (sth)   +0x38[i] -> 0x9F74 + 4i (stw)
 // The trailing 6 bytes are the record's tail padding to the attested 152 (the console posts a
 // stack frame that width; nothing reads +0x92..+0x97).
+
 struct GuiEventPrepareForModeStart
 {
     CgsID mPursuedCarId;                   // +0x00  GameModeParams::mPursuedCarID
@@ -2626,6 +2628,18 @@ static_assert(__builtin_offsetof(GuiEventPrepareForModeStart, meGameModeType)   
 // there -- i.e. naming that run from the DWARF would demonstrably mis-name at least one field.
 // They are therefore reserved spans, not guesses. Name them when a producer-side write pins
 // them (the writer is GuiCache +40552; that is the place to look, not this consumer).
+// ARTIST0x824C5BE4..0x824C5C0C: native event298 carries the sequence name and voice key.
+// DecFIGS names this sequence-start record but numbers it296; ARTIST uses298.
+struct GuiEventPostEventNewRivalSequenceStart : public CgsGui::GuiEvent<298>
+{
+    u32 muHeaderPadding;
+    u32 mRivalUnlockName;
+    u32 muPayloadPadding;
+    u64 mVoiceOver;
+    GuiEventPostEventNewRivalSequenceStart() : CgsGui::GuiEvent<298>(16, 16) {}
+};
+static_assert(sizeof(GuiEventPostEventNewRivalSequenceStart) == 32, "rival sequence event size");
+
 struct GuiEventOfflinePostEvent
 {
     struct OfflinePostEventData

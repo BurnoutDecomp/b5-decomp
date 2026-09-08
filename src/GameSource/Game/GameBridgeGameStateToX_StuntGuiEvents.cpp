@@ -994,9 +994,20 @@ namespace
         // ---- the tail: the pending sat-nav record, posted once ------------------------------
         // The console posts the pending GuiEventUpdateSatNav (id 199, 2320 bytes) after the drain
         // when its icon count is > 0. (It follows the console's unconditional
-        // GuiEventRacePositionInfo post, which this build does not reproduce here; the two are
+        // GuiEventRacePositionInfo post above; the two are
         // independent.) The count is written into the record's own +0x900 word, which is what
         // the cache's case-199 arm reads.
+        // ARTIST0x823EDCE0..0x823EDD1C: publish standings even on frames with no actions.
+        const auto* scoring = lpGameStateOutput->GetScoringOutputInterface();
+        BrnGui::GuiEventRacePositionInfo positions;
+        for (s32 i = 0; i < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++i)
+        {
+            positions.maiPositions[i] = static_cast<s8>(scoring->maCarScoreData[i].GetRacePosition());
+            positions.mabFinished[i] = scoring->maCarScoreData[i].GetHasFinished();
+            positions.mabValid[i] = scoring->mabValid[i];
+        }
+        PushGuiEvent(positions, lpGuiInput);
+
         if (liPendingSatNavIcons > 0)
         {
             lPendingSatNavEvent.miNumIcons = liPendingSatNavIcons;

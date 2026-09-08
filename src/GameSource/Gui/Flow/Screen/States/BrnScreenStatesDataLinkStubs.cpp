@@ -342,7 +342,6 @@ namespace BrnGui
     void InstantResultsState::UpdateLicense()           { LogUnreconstructedState("InstantResultsState", "UpdateLicense"); }
     void InstantResultsState::UpdateCarUnlock()         { LogUnreconstructedState("InstantResultsState", "UpdateCarUnlock"); }
     void InstantResultsState::UpdateFreeCarUnlock()     { LogUnreconstructedState("InstantResultsState", "UpdateFreeCarUnlock"); }
-    void InstantResultsState::UpdateShowingRivals()     { LogUnreconstructedState("InstantResultsState", "UpdateShowingRivals"); }
     void InstantResultsState::UpdatePhoto()             { LogUnreconstructedState("InstantResultsState", "UpdatePhoto"); }
     // ⚠️ THE RETURN VALUE IS NOT NEUTRAL, so it is stated rather than left to a bare `false`:
     // IsXSCarInUnlockedArray false => SelectSubstates does not raise CAR_UNLOCK. That is the

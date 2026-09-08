@@ -5683,6 +5683,8 @@ void RaceCarEntityModule::PostPhysicsUpdate(
                             lpOutput->GetReplayActiveRaceCarOutputInterface(),
                             lpOutput->GetReplayGlobalRaceCarOutputInterface() );
 
+    TransmitCarsInRaceToQueryManager( lpOutput->GetActiveRaceCarOutputInterface() );
+
     // ⭐⭐ THE PER-CAR CULLING / LATE-COLLISION REFRESH, at the console's own position: the
     // `bl` at 0x8230773C, i.e. after UpdateOutputInterfaces (0x8230771C) and
     // TransmitCarsInRaceToQueryManager (0x82307730), and OUTSIDE the sim-paused skip (the
@@ -6572,5 +6574,33 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 //   alone; bodying it would require homing those members. Left declaration-only to
 //   avoid fabricating member names. (Construct/Destruct are additionally [VMX].)
 // ============================================================================
+
+// X360 0x822BD7B8. Publish the player and every car participating in this mode.
+void RaceCarEntityModule::TransmitCarsInRaceToQueryManager(
+        RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface )
+{
+    lpActiveCarInterface->maCarsInTheRace.Clear();
+    for( s32 liCar = 0; liCar < E_GLOBAL_RACE_CAR_INDEX_COUNT; ++liCar )
+    {
+        const EGlobalRaceCarIndex leIndex = static_cast<EGlobalRaceCarIndex>(liCar);
+        RaceCar* lpCar = GetGlobalRaceCar(leIndex);
+        CGS_ASSERT(lpCar->GetType() < E_RACE_CAR_TYPE_COUNT,
+                   "muType < E_RACE_CAR_TYPE_COUNT");
+        if( lpCar->GetType() != E_RACE_CAR_TYPE_INACTIVE )
+        {
+            bool lbInRace = lpCar->IsInCurrentGameMode();
+            if( !lbInRace )
+            {
+                CGS_ASSERT(lpCar->GetType() < E_RACE_CAR_TYPE_COUNT,
+                           "muType < E_RACE_CAR_TYPE_COUNT");
+                lbInRace = lpCar->GetType() == E_RACE_CAR_TYPE_PLAYER;
+            }
+            if( lbInRace )
+                lpActiveCarInterface->AddCarToRace(lpCar, leIndex);
+        }
+        CGS_ASSERT(liCar + 1 <= E_GLOBAL_RACE_CAR_INDEX_COUNT,
+                   "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT");
+    }
+}
 
 }   // namespace BrnWorld

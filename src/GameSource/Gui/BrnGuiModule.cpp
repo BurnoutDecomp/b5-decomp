@@ -1968,6 +1968,8 @@ void GuiModule::Destruct()
                 case 207:   // [H3b] GuiRaceCarInfoEvent -- the mRaceCarInfo SoA feed
                 case 376:   // [H3b] GuiPlayerRaceCarIdEvent -- the player index pair (case-199 gate)
                 case 379:   // [reveal gate] GuiPlayerEngineEvent -- the ignition latch (+0x4B20)
+                case 238:   // Race positions, finished flags and per-slot validity.
+                case 380:   // Player entered or left a shortcut.
                 case 492:   // [E1] GuiEventCurrentStatus  -- distance driven + player-team table
                 case 424:   // [E1] GuiEventScoreUpdate    -- THE EVENT TIMER (mfEventTime/mfTargetTime)
                 case 428:   // [E1] GuiAttackScoreUpdate   -- THE STUNT SCORE (current/target/combo/multiplier)

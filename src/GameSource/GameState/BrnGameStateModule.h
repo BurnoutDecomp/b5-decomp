@@ -661,19 +661,7 @@ public:
     // sign of the player car's angular velocity Y at the moment the intro opens.
     f32 GetShowtimeIntroSteering() const;
 
-    // ⭐ [D4 stuntrace WAVE D] TEMPORARY, NOT IN THE X360 BINARY. The offline event intro has NO
-    // timer by design (IntroState::OnEnter raises mbUseCountdown only for online modes and offline
-    // Showtime), so its ONLY console exit is GUI command 163 -> game event 25 ->
-    // ModeManager::FinishOfflineModeIntro. The pre-event GUI that sends 163 is not reconstructed,
-    // so a started offline mode would sit in E_GMS_INTRO for ever. This posts event 25 into the
-    // carry queue once the intro has run for GameMode::GetIntroDurationSeconds() (StuntAttackMode
-    // returns 6.0f, X360 0x827E2538 -> lfs [0x82021240]), which is the duration the console's own
-    // pre-event screen is scheduled against. Posting the EVENT rather than calling
-    // FinishOfflineModeIntro directly is deliberate: it exercises the real case-25 arm.
-    // ⛔ DELETE-WHEN BrnGui's offline pre-event state sends GUI command 163 (the producer half,
-    // BridgeGuiToGameState case 163 -> event 25, is ALREADY live and mounted at
-    // GameBridgeGUIToX_GameState.cpp:153) -- then this function and its call go, in one edit.
-    void HarnessOfflineIntroSelfTriggerBringUp(f32 lfGameTimestep);
+
 
     // ⭐⭐ [gateui] X360 ProcessGameEvents @0x823A0A18, THE CASE-111 ARM (0x823A1684..0x823A1698).
     // The console's dispatcher is a ~180-case jump table this tree extracts one arm at a time

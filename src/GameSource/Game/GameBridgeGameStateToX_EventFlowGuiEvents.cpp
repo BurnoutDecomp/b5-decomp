@@ -643,24 +643,6 @@ namespace
         //      the image literal at var_3524 (loaded @0x823E9DC8).
         //   9. always post GuiSetEasyDriveNotAllowedEvent (96) with a zero byte.
         //
-        // FLAG -- THE CHECKPOINT BLOCK IS LEFT ZEROED (payload +0x18..+0x77 and the count byte at
-        // +0x8C). This is an ACCESS hole, not a proof hole: the store map is fully recovered
-        // (`Array<CheckpointData,16>::operator[](params+0x260, i)` then `lhz +0` into
-        // payload+0x18+2i and `lwz +4` into payload+0x38+4i, @0x823EAF84..0x823EAFCC), but the
-        // three members it needs are unreachable from here --
-        //     GameModeParams::maCheckpointDataArray  is PRIVATE with no accessor;
-        //     GameModeParams::GetCheckpointCount()   is DECLARED-ONLY (its body lives in the
-        //                                            unmounted, non-compiling BrnGameModeParams.cpp);
-        //     CheckpointData::GetLandmarkIndex() / GetDistrict() are DECLARED-ONLY over private
-        //                                            members (BrnCheckpointData.h:30-38).
-        // Neither header is in this wave's file list, so the fields are zeroed rather than faked.
-        // CONSEQUENCE: a mode with checkpoints (race / burning route) hands the GUI a zero
-        // checkpoint list; a Stunt Run has none, so this wave's own target path is unaffected.
-        // SHARED_HEADER_REQUEST (owner: the GameState lane) -- add an inline
-        // `const CheckpointDataArray& GetCheckpointDataArray() const` + an inline
-        // GetCheckpointCount() to BrnGameModeParams.h, and inline GetLandmarkIndex() /
-        // GetDistrict() to BrnCheckpointData.h; then this block is the six lines above.
-        //
         // FLAG -- payload +0x91 (mbOnlineLobbyTransition) is transcribed exactly but its NAME is
         // a guess from its inputs: the console computes it as
         // `action->IsMovingBetweenOnlineLobbyModes() && IsOnlineLobbyOrShowtimeMode(mode)`
@@ -700,10 +682,14 @@ namespace
             lEvent.mu8DifficultyLevel          = lpParams->muDifficultyLevel;
             lEvent.mu8RoadRageThreshold        = static_cast<u8>(lpParams->miRoadRageThreshold);
             lEvent.mbIsOnline                  = lpParams->mbIsOnline ? 1u : 0u;
-            // FLAG (see the banner on this case): the checkpoint id/district arrays and the count
-            // byte stay at the memset zero -- GameModeParams::maCheckpointDataArray and
-            // CheckpointData's getters are unreachable from this TU.
-            lEvent.mu8CheckpointCount          = 0;
+            const s32 checkpointCount = lpParams->GetCheckpointCount();
+            CGS_ASSERT(checkpointCount <= 16, "Exceded landmark count");
+            lEvent.mu8CheckpointCount = static_cast<u8>(checkpointCount);
+            for (s32 i = 0; i < checkpointCount; ++i)
+            {
+                lEvent.mau16CheckpointLandmark[i] = static_cast<u16>(lpParams->GetCheckpointData(i)->GetLandmarkIndex());
+                lEvent.maiCheckpointDistrict[i] = lpParams->GetCheckpointData(i)->GetDistrict();
+            }
 
             if (lpParams->mbIsOnline)
             {
@@ -750,22 +736,8 @@ namespace
             }
             if (lbRunEventFsm)
             {
-                // [FLAG PC bring-up gate 2026-08-27, NOT in the X360 binary] The hop itself is
-                // console-faithful and PROVEN live (BrnGame.log: action 23 -> PRE_FLY_BY OnEnter),
-                // but today both destination states (PRE_FLY_BY / RACE_MAIN) are inert scaffolds
-                // in BrnHudStatesLinkStubs.cpp, and the hop's side effect is FBurnMainHudState::
-                // OnLeave tearing down the whole HUD apt (PlayAptMovie("",1) + UnRegisterForEvents)
-                // with nothing to rebuild it -- the HUD vanishes for the rest of the process.
-                // Until the real states land, the hop is OPT-IN: set BRN_EVENT_FSM=1 to take it;
-                // default keeps the freeburn HUD (junction panel, odometer, sat-nav) alive through
-                // the event. DELETE-WHEN: PreRaceFlyBy wJ set + RaceMainHudState.cpp are MOUNTED
-                // with real OnEnter bodies -- then the gate inverts the console behaviour and lies.
-                static const bool sbEventFsm = ( getenv( "BRN_EVENT_FSM" ) != 0 );
-                if (sbEventFsm)
-                {
-                    PostRunFsm(lpGuiInput, "BRNEVENTFSM", 0,
-                               BrnGui::E_GUI_HUD_EVENT, BrnGui::E_GUIFLOW_HUD);
-                }
+                PostRunFsm(lpGuiInput, "BRNEVENTFSM", 0,
+                           BrnGui::E_GUI_HUD_EVENT, BrnGui::E_GUIFLOW_HUD);
             }
 
             // @0x823EB05C..0x823EB06C -- unconditional tail.
