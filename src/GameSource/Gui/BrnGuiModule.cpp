@@ -2654,7 +2654,7 @@ void GuiModule::Destruct()
                     // ⭐⭐ [hud F4 2026-09-06] THE WHITELIST IS GONE -- THE CONSOLE HAS NO ID
                     // FILTER ON THIS CHANNEL. The list that stood here (204/212/213/214/215/223)
                     // was a bring-up stand-in that grew one record type at a time as each
-                    // consumer landed, and it silently dropped everything else. The console's
+                    // consumer landed, and it excluded every other record type. The console's
                     // arm is EventInterpreterModule::ProcessOutEvents @0x8285E1D0, case ')'
                     // (== 41), five instructions at @0x8285E64C:
                     //     lwz r11, 8(r22)   ; headerOffset = record[2]

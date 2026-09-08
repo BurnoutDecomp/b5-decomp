@@ -3962,52 +3962,11 @@ namespace BrnGame
                 // this gate stands in for that ordering, not for the call.
                 if (leState == BrnGameMainFlowController::E_MGS_IN_GAME)
                 {
-                    // ARTIST DoUpdate_GameStatePreWorld @0x823EE264..0x823EE398. The world
-                    // streamer requests pause while its immediate PVS set is incomplete. The
-                    // first non-paused frame posts PLAYER_PAUSE_STATE_CHANGED {1,1,loading},
-                    // and the first frame after the request clears posts {0,0,loading}. On this
-                    // build the PreWorldInputBuffer event source is reduced into the same carry
-                    // queue that PreWorldUpdateStuntBringUp drains later in this block.
-                    if (mbWorldStreamingRequestedStall)
-                    {
-                        if (!mbSimPaused)
-                        {
-                            const u8 lauPauseEvent[3] =
-                            {
-                                1u,
-                                1u,
-                                static_cast<u8>(mbIsLoadingScreenVisible ? 1u : 0u)
-                            };
-                            BrnGameState::GameStateModuleIO::PostWorldInput(&mGameStateModule)->AddEvent(
-                                reinterpret_cast<const CgsModule::Event*>(lauPauseEvent),
-                                BrnGameState::GameStateModuleIO::E_EVENT_PLAYER_PAUSE_STATE_CHANGED,
-                                static_cast<s32>(sizeof(lauPauseEvent)));
-                            mbStreamingStalled = true;
-                        }
-                    }
-                    else if (mbStreamingStalled)
-                    {
-                        const u8 lauUnpauseEvent[3] =
-                        {
-                            0u,
-                            0u,
-                            static_cast<u8>(mbIsLoadingScreenVisible ? 1u : 0u)
-                        };
-                        BrnGameState::GameStateModuleIO::PostWorldInput(&mGameStateModule)->AddEvent(
-                            reinterpret_cast<const CgsModule::Event*>(lauUnpauseEvent),
-                            BrnGameState::GameStateModuleIO::E_EVENT_PLAYER_PAUSE_STATE_CHANGED,
-                            static_cast<s32>(sizeof(lauUnpauseEvent)));
-                        mbStreamingStalled = false;
-                    }
-
-                    if (mbStreamingStalled && sbShowStreamStallMessage)
-                    {
-                        CgsDev::DebugInterface lDebugInterface(&mDebugManager);
-                        lDebugInterface.Get2dRender().Draw2DText(
-                            "STREAM STALL: Stalling game while streaming catches up",
-                            200.0f, 40.0f, 16.0f, 0xFF0000FFu);
-                    }
-
+                    // FLAG PC-platform leaf: the partial WorldModule update calls only
+                    // UpdateCollisionValidation, not WorldEntityModule::Update_PostPhysics.
+                    // It therefore does not publish a live immediate-streamed status yet.
+                    // Keep the existing PC pause scheduling until that producer is restored;
+                    // consuming its untouched output byte here permanently pauses the junkyard.
                     // ⭐⭐ [D2 gesture-sink] THE CONTROLLER -> GAME-STATE BRIDGE. Placed FIRST in
                     // this block because that is the console's own order: DoUpdate_GameStatePreWorld
                     // @0x823EE0E8 runs BridgeNetworkToGameState + BridgeControllerToGameState and
@@ -4221,19 +4180,6 @@ namespace BrnGame
                 {
                     MainGameFlowState* lpState = mMainFlowStateMachine.GetState(leState);
                     lpState->Update();
-                }
-
-                // ARTIST DoUpdate_World @0x823E8D88..0x823E8DB0: after WorldModule::Update,
-                // publish `!StatusInterface::GetImmediateStreamed()` into the game-module
-                // streaming-pause request latch. This is the producer consumed at the top of
-                // the next pre-world pass above.
-                if (mpWorldUpdateOutputBuffer != 0)
-                {
-                    mpWorldUpdateOutputBuffer->LockForRead();
-                    const BrnWorldIO::UpdateOutputBuffer* lpcWorldOutput = mpWorldUpdateOutputBuffer;
-                    mbWorldStreamingRequestedStall =
-                        !lpcWorldOutput->GetWorldEntityStatusInterface()->GetImmediateStreamed();
-                    mpWorldUpdateOutputBuffer->UnlockForRead();
                 }
 
                 // ⭐⭐ [gateui] THE GAME-STATE POST-WORLD PASS (X360 DoUpdate_GameStatePostWorld
