@@ -2244,7 +2244,7 @@ namespace BrnResource
         }
         else if (memcmp(lacName, "WHE_", 4) == 0)
         {
-            DeferredGameDataRequest("UnloadWheel (0x82670AA0, id 47)", lpSlot);
+            ProcessUnloadWheelRequest(lpResourceInput, lpEvent, 47, liIndex);
         }
         else if (memcmp(lacName, "TVEH", 4) == 0)
         {
@@ -2605,6 +2605,31 @@ namespace BrnResource
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
             2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // ARTIST 0x82670AA0: finish the old wheel bundle before the component streamer
+    // can load its replacement. The type-3 reply returns through the saved slot as 47.
+    void GameDataModule::ProcessUnloadWheelRequest(
+            CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex)
+    {
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+        char lacWheelID[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacWheelID);
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for wheels\n");
+
+        char lacFileName[128];
+        CgsCore::SPrintf(lacFileName, 128, KPC_WHEEL_FILE_FORMAT, lacWheelID,
+                         KAPC_ASSET_SET_SUFFIXES[lpEvent->meType]);
+        CgsResource::Events::UnloadBundleRequest lRequest = {};
+        lRequest.mpUser = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.SetFileName(lacFileName);
+        lRequest.mbLiveUpdateReplace = false;
+        lRequest.miPoolId = lpEvent->miPoolId;
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest), 3, sizeof(lRequest));
     }
 
     // @ 0x8266FDA0 -- service a GET vehicle request (dispatch id 50).

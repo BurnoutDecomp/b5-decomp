@@ -1,6 +1,10 @@
 # Drive the real debug controller through named keys, with the existing game harness.
 # Requires this repo inside BP-Decomp_Workflow and a built executable + game data.
-param([string]$OutDir = '', [int]$MaxSeconds = 180, [switch]$Effects, [switch]$Entries, [switch]$ResetPlayer)
+param([string]$OutDir = '', [int]$MaxSeconds = 180, [switch]$Effects, [switch]$Entries, [switch]$ResetPlayer, [switch]$Wheels)
+if ($Wheels) {
+    $ResetPlayer = $true
+    if (!$PSBoundParameters.ContainsKey('MaxSeconds')) { $MaxSeconds = 360 }
+}
 $ErrorActionPreference = 'Stop'
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 if (!$OutDir) { $OutDir = Join-Path $root ('.scratch/debug-menu-' + (Get-Date -Format yyyyMMdd-HHmmss)) }
@@ -46,6 +50,7 @@ function Type-Text([string]$Text) {
                 '"' { Tap-Key 222 $true }
                 '.' { Tap-Key 190 }
                 '-' { Tap-Key 189 }
+                '_' { Tap-Key 189 $true }
                 '*' { Tap-Key 56 $true }
                 default { throw "Unsupported test character: $c" }
             }
@@ -119,6 +124,50 @@ try {
         Tap-Key 192
         $before = Save-State 'reset-before'
         Command 'set "Reset Player Car/Car filter" 0'
+        if ($Wheels) {
+            $cases = @(
+                @{ Name = 'retro-default'; Car = 'Euro Retro Racer'; Model = 'PEUSR01'; Wheel = '' },
+                @{ Name = 'retro-wheel-only'; Car = 'Euro Retro Racer'; Model = 'PEUSR01'; Wheel = '20Spoke_01_16_650' },
+                @{ Name = 'truck-shared-wheel'; Car = 'US Classic Truck'; Model = 'PUSCLT02'; Wheel = '' },
+                @{ Name = 'retro-return'; Car = 'Euro Retro Racer'; Model = 'PEUSR01'; Wheel = '' }
+            )
+            foreach ($case in $cases) {
+                $label = $case.Car + ' - ' + $case.Model.PadRight(12)
+                Command ('set "Reset Player Car/Car" "' + $label + '"')
+                # SET by option name does not call OnChange in the original UI.
+                # Exercise the normal change callbacks and return to the chosen car.
+                Command 'increment "Reset Player Car/Car"'
+                Command 'decrement "Reset Player Car/Car"'
+                if ($case.Wheel) { Command ('set "Reset Player Car/Wheel" "' + $case.Wheel + '"') }
+                $selected = Save-State $case.Name
+                if ($selected -notmatch ('SET "/Reset Player Car/Car version" "[^"\r\n]* - ' + $case.Model + ' *"')) {
+                    throw "Could not select $($case.Model)."
+                }
+                if ($case.Wheel -and $selected -notmatch ('SET "/Reset Player Car/Wheel" "' + [regex]::Escape($case.Wheel) + '"')) {
+                    throw "Could not select wheel $($case.Wheel)."
+                }
+                $beforeChange = (Get-Content $log -Raw).Length
+                Command 'call "Reset Player Car/Change player car"'
+                Tap-Key 192
+                Tap-Key 27
+                $deadline = (Get-Date).AddSeconds(45)
+                do {
+                    Check-Game
+                    $changeLog = (Get-Content $log -Raw).Substring($beforeChange)
+                    $streamed = $changeLog -match ('STRM: Adding racecar for streaming: car=0, model=VEH_' + $case.Model)
+                    $wheelReady = $changeLog -match 'STRM: Wheel graphics loaded: 0|STRM:   WheelGfx already loaded'
+                    $active = $changeLog -match '\[ai-act\] ActivateRaceCar slot 0'
+                    if ($changeLog -match 'request handler DEFERRED: UnloadWheel') { throw 'Wheel unload is still deferred.' }
+                    if ($streamed -and $wheelReady -and $active) { break }
+                    Start-Sleep -Milliseconds 250
+                } while ((Get-Date) -lt $deadline)
+                if (!$streamed -or !$wheelReady -or !$active) { throw "Car or wheel failed to reload: $($case.Name)." }
+                Snapshot $case.Name
+                Tap-Key 192
+            }
+            Write-Output "Debug car/wheel replacement regression: PASS ($out)"
+            return
+        }
         Command 'set "Reset Player Car/Car" 1'
         $selected = Save-State 'reset-selected'
         $pattern = 'SET "/Reset Player Car/Car version" "[^"\r\n]* - ([A-Z0-9]+) *"'

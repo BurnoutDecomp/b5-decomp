@@ -277,6 +277,9 @@ namespace BrnResource
         void ProcessGetWheelRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                     const GameDataIO::GameDataAssetEvent* lpEvent,
                                     s32 liEventId, s32 liSlotIndex);                   // 0x82670140
+        void ProcessUnloadWheelRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                       const GameDataIO::GameDataAssetEvent* lpEvent,
+                                       s32 liEventId, s32 liSlotIndex);               // 0x82670AA0
         // The TRAFFIC-vehicle pair (dispatch ids 28 / 51) -- the wheel pair's twin, GRAPHICS
         // only. LOAD overwrites the id's "TVEH" prefix with "VEH_" and streams
         // "Vehicles\VEH_<code>_GR.bin"; ProcessInternalLoadBundleResponse's case 28 then
