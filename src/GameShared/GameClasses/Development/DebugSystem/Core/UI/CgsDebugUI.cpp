@@ -1,6 +1,10 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 
 #include <string.h>  // strncpy - the X360 SafeStringCopy/SafeStringCat bodies call it directly
+#include <cstdlib>
+#include <cstdio>
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenu.h"
 
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // DebugManagerConstructParameters
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsWindow.h"     // Window (mWindowList element - Add/Remove/IsAdded)
@@ -260,6 +264,9 @@ namespace CgsDev
 
         void DebugUI::Update(f32 lfTimeStep)
         {
+            // X360 0x82833EE4..0x82833F00 skips when this byte is nonzero, then
+            // stores 1 after execution. Construct seeds 1 in ARTIST: preserve its
+            // disabled startup-script default; scripts remain available through EXEC.
             if (!mbRunAutoExec)
             {
                 mScriptInterface.ExecuteScript("autoexec.txt");
@@ -268,6 +275,7 @@ namespace CgsDev
 
             mController.Update(lfTimeStep);
             const InputEvent leEvent = mController.GetInputEvent();
+            InputEvent leWindowInputEvent = E_INPUTEVENT_NONE;
 
             switch (leEvent)
             {
@@ -287,7 +295,7 @@ namespace CgsDev
                 }
                 break;
             case E_INPUTEVENT_NEXTWINDOW:
-                if (!HasModalWindow())
+                if (mpActiveWindow && !HasModalWindow())
                 {
                     Window* lpNext = GetNextActiveWindow(mpActiveWindow);
                     if (lpNext)
@@ -295,7 +303,7 @@ namespace CgsDev
                 }
                 break;
             case E_INPUTEVENT_PREVWINDOW:
-                if (!HasModalWindow())
+                if (mpActiveWindow && !HasModalWindow())
                 {
                     Window* lpPrevious = GetPreviousActiveWindow(mpActiveWindow);
                     if (lpPrevious)
@@ -314,7 +322,7 @@ namespace CgsDev
             case E_INPUTEVENT_DOCKBOTTOM:
             case E_INPUTEVENT_DOCKLEFT:
             case E_INPUTEVENT_DOCKRIGHT:
-                if (mpActiveWindow && !HasModalWindow())
+                if (mpActiveWindow)
                 {
                     DockWindow(mpActiveWindow, static_cast<DockEdge>(leEvent - E_INPUTEVENT_DOCKTOP));
                     Window* lpNext = GetNextActiveWindow(mpActiveWindow);
@@ -322,7 +330,13 @@ namespace CgsDev
                         SetActiveWindow(lpNext);
                 }
                 break;
+            case E_INPUTEVENT_BACK:
+                if (mbVisible)
+                    leWindowInputEvent = mController.IsKeyboardPresent() ? E_INPUTEVENT_CLOSE : leEvent;
+                break;
             default:
+                if (mbVisible)
+                    leWindowInputEvent = leEvent;
                 break;
             }
 
@@ -337,13 +351,34 @@ namespace CgsDev
                     mpActiveWindow->ApplyMovement(lfTimeStep * mController.GetX2() * mMetrics.mfWindowMoveSpeed,
                                                   lfTimeStep * mController.GetY2() * mMetrics.mfWindowMoveSpeed);
                 }
-                mpActiveWindow->Update(lfTimeStep, leEvent);
+                mpActiveWindow->Update(lfTimeStep, leWindowInputEvent);
             }
 
             if (mbVisible && mWindowList.IsEmpty())
                 mbVisible = false;
 
             mScriptInterface.Update(mController.GetSpecialKeyPress());
+
+            // FLAG PC-platform leaf: opt-in witness for the named-event UI harness.
+            if (std::getenv("BRN_DEBUG_UI_TRACE") &&
+                (leEvent != E_INPUTEVENT_NONE || mController.GetKeyPress() != 0))
+            {
+                char lacSelection[256] = {};
+                if (MenuWindow* lpMenuWindow = dynamic_cast<MenuWindow*>(mpActiveWindow))
+                {
+                    Menu* lpMenu = lpMenuWindow->GetMenu();
+                    lpMenu->GetSelectedItemString(lacSelection, sizeof(lacSelection));
+                    if (MenuItem* lpItem = lpMenu->FindMenuItemByName(lacSelection))
+                        lpItem->GetDisplayName(lacSelection, sizeof(lacSelection));
+                }
+                char lacTrace[512];
+                std::snprintf(lacTrace, sizeof(lacTrace),
+                    "[debug-ui] event=%d visible=%d window=\"%s\" selection=\"%s\" key=%d\n",
+                    static_cast<s32>(leEvent), mbVisible ? 1 : 0,
+                    mpActiveWindow && mpActiveWindow->GetCaption() ? mpActiveWindow->GetCaption() : "",
+                    lacSelection, static_cast<s32>(mController.GetKeyPress()));
+                CgsDev::Log::WriteToLog(lacTrace);
+            }
         }
 
         void DebugUI::Render()

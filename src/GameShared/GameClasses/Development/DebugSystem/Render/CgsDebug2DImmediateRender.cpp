@@ -234,6 +234,14 @@ namespace CgsDev
     {
         if (miIm2dVertsHead > 0)
         {
+            // FLAG PC-platform leaf: resource-font draws bind the glyph atlas on this
+            // shared Im2d buffer. Restore untextured state before solid primitives;
+            // otherwise menu backgrounds sample the transparent corner of the atlas.
+            if (meDrawingMode != E_DRAWING_TRISTRIP_SOLID)
+            {
+                SetDebugRenderStates();
+                meDrawingMode = E_DRAWING_TRISTRIP_SOLID;
+            }
             mpRenderBuffer->Render(mePrimitiveType, maIm2dVertsArray, static_cast<u32>(miIm2dVertsHead));
             miIm2dVertsHead = 0;
         }

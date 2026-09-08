@@ -4,6 +4,11 @@
 
 #if !defined(D_PLATFORM_X360)
 #include <cstdlib>
+#include <cstdio>
+#include "GameShared/GameClasses/System/CgsHarnessSlot.h"
+#include "GameShared/GameClasses/System/Input/PC/CgsDebugKeyboardPC.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 
 // FLAG PC-platform leaf: host keyboard polling in place of the X360 keystroke API. The resulting
 // DebugController state and its event translation remain the original platform-independent path.
@@ -11,10 +16,21 @@ extern "C" __declspec(dllimport) short __stdcall GetAsyncKeyState(int vKey);
 extern "C" __declspec(dllimport) void* __stdcall GetForegroundWindow(void);
 extern "C" __declspec(dllimport) unsigned long __stdcall GetWindowThreadProcessId(void* hWnd, unsigned long* lpdwProcessId);
 extern "C" __declspec(dllimport) unsigned long __stdcall GetCurrentProcessId(void);
+extern "C" __declspec(dllimport) void* __stdcall OpenEventA(unsigned long, int, const char*);
+extern "C" __declspec(dllimport) unsigned long __stdcall WaitForSingleObject(void*, unsigned long);
+struct HWND__;
+namespace renderengine { extern HWND__* hWnd; }
 #endif
 
 namespace CgsDev
 {
+#if !defined(D_PLATFORM_X360)
+    bool IsDebugKeyboardCapturedPC()
+    {
+        DebugManager* lpDebug = DebugManager::GetInstance();
+        return lpDebug && lpDebug->GetUI().GetController().IsPCKeyboardCaptured();
+    }
+#endif
     namespace
     {
         const DebugUI::InputEvent KAE_BUTTON_MAP_TABLE[DebugController::KI_MAX_BUTTONS] =
@@ -50,24 +66,29 @@ namespace CgsDev
 #if !defined(D_PLATFORM_X360)
         bool IsProcessForeground()
         {
-            if (std::getenv("BRN_INPUT_ALLOW_BACKGROUND"))
-                return true;
             void* lpForeground = GetForegroundWindow();
             if (!lpForeground)
                 return false;
+            if (renderengine::hWnd)
+                return lpForeground == static_cast<void*>(renderengine::hWnd);
             unsigned long luPid = 0;
             GetWindowThreadProcessId(lpForeground, &luPid);
             return luPid == GetCurrentProcessId();
         }
 
-        bool IsKeyDown(s32 liVirtualKey)
+        // FLAG PC-platform leaf: debug keystrokes use the same named-event harness as gameplay.
+        // Manual-reset events support modifier chords/holds; auto-reset events supply taps.
+        bool HarnessKeyDown(s32 liVirtualKey)
         {
-            return (GetAsyncKeyState(liVirtualKey) & 0x8000) != 0;
-        }
-
-        bool WasKeyPressed(s32 liVirtualKey)
-        {
-            return (GetAsyncKeyState(liVirtualKey) & 1) != 0;
+            static void* sapEvents[256] = {};
+            if (!sapEvents[liVirtualKey])
+            {
+                char lacName[96];
+                std::snprintf(lacName, sizeof(lacName), "Local\\BurnoutPC_DebugKey_%02X%s",
+                              liVirtualKey, CgsSystem::HarnessSlot::Suffix());
+                sapEvents[liVirtualKey] = OpenEventA(0x00100000, 0, lacName);
+            }
+            return sapEvents[liVirtualKey] && WaitForSingleObject(sapEvents[liVirtualKey], 0) == 0;
         }
 #endif
     }
@@ -85,6 +106,11 @@ namespace CgsDev
         mbKeyboardPresent = InitKeyboard();
         mbKeyboardLocked = false;
         mfKeyRepeatDelay = KF_KEY_REPEAT_TIME;
+#if !defined(D_PLATFORM_X360)
+        for (s32 liKey = 0; liKey < 256; ++liKey)
+            mabPCKeysDown[liKey] = mabPCKeysPressed[liKey] = false;
+        mbPCKeyboardCaptured = false;
+#endif
     }
 
     void DebugController::Destruct() {}
@@ -168,8 +194,20 @@ namespace CgsDev
 #if defined(D_PLATFORM_X360)
         ReadKey(lfTimeStep);
 #else
-        if (!IsProcessForeground())
-            return;
+        // Snapshot high-bit state once. GetAsyncKeyState's low bit is shared with other
+        // pollers, so it cannot reliably represent this controller's key-down edges.
+        const bool lbHarness = std::getenv("BRN_INPUT_ALLOW_BACKGROUND") != nullptr;
+        const bool lbPhysical = (!lbHarness || std::getenv("BRN_INPUT_KEEP_KEYBOARD"))
+                                && IsProcessForeground();
+        bool lbAnyKeyDown = false;
+        for (s32 liKey = 0; liKey < 256; ++liKey)
+        {
+            const bool lbDown = (lbPhysical && (GetAsyncKeyState(liKey) & 0x8000) != 0)
+                                || (lbHarness && HarnessKeyDown(liKey));
+            mabPCKeysPressed[liKey] = lbDown && !mabPCKeysDown[liKey];
+            mabPCKeysDown[liKey] = lbDown;
+            if (liKey >= 8) lbAnyKeyDown = lbAnyKeyDown || lbDown;
+        }
 
         mbShiftPressed = IsKeyDown(0x10);
         mbCtrlPressed = IsKeyDown(0x11);
@@ -189,6 +227,19 @@ namespace CgsDev
                 }
         }
         ReadKey(lfTimeStep);
+
+        const bool lbVisible = DebugManager::GetInstance()->GetUI().IsVisible();
+        const bool lbOpenMenu = mcKeyPress == ' ' && mbCtrlPressed;
+        const bool lbOpenConsole = mcKeyPress == '`';
+        mbPCKeyboardCaptured = lbVisible || lbOpenMenu || lbOpenConsole
+                               || (mbPCKeyboardCaptured && lbAnyKeyDown);
+        // FLAG PC-platform leaf: Ctrl+Space opens the menu without stealing Space/Enter/Esc
+        // from the game's screens. Once open, the original menu bindings apply unchanged.
+        if (!lbVisible)
+        {
+            if (!lbOpenMenu && !lbOpenConsole) mcKeyPress = 0;
+            if (meSpecialKeyPress < E_KEY_F1) meSpecialKeyPress = E_KEY_NONE;
+        }
 #endif
     }
 

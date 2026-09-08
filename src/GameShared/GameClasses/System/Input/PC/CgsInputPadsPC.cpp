@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog (the pause gate's one-shot)
 #include "GameShared/GameClasses/System/CgsHarnessSlot.h"     // BRN_HARNESS_SLOT channel-name suffix (parallel harness slots)
 #include "GameSource/Input/GameInputActions.h"                // EGameInputActions -- the action vocabulary KA_BINDINGS binds to
+#include "GameShared/GameClasses/System/Input/PC/CgsDebugKeyboardPC.h"
 
 // ============================================================================
 // FLAG PC-platform leaf (whole file): the host pad source standing in for the
@@ -700,6 +701,10 @@ namespace
     //   only the global-key-state read is noise. The [input-src] line still names both sources.
     bool HostKeyboardSuppressed()
     {
+        // FLAG PC-platform leaf: menu/console navigation owns the shared host keyboard.
+        // The controller keeps ownership through the closing key's release.
+        if (CgsDev::IsDebugKeyboardCapturedPC())
+            return true;
         static s32 siSuppressed = -1;
         if (siSuppressed < 0)
         {

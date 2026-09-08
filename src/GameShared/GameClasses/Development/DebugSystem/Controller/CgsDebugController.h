@@ -68,6 +68,15 @@ namespace CgsDev
         bool       IsKeyboardPresent() const  { return mbKeyboardPresent; }
 
         bool IsKeyboardLocked() const { return mbKeyboardLocked; }
+        // FLAG PC-platform leaf: shared keyboard ownership with the gameplay input adapter.
+        bool IsPCKeyboardCaptured() const
+        {
+#if !defined(D_PLATFORM_X360)
+            return mbPCKeyboardCaptured;
+#else
+            return false;
+#endif
+        }
         void LockKeyboard();
         void UnlockKeyboard();
 
@@ -90,6 +99,10 @@ namespace CgsDev
         void ClearKeyboard();
         void ReadKey(f32 lfTimeStep);
         char SimpleLocaliseKey(char lcKey);
+#if !defined(D_PLATFORM_X360)
+        bool IsKeyDown(s32 liKey) const { return mabPCKeysDown[liKey]; }
+        bool WasKeyPressed(s32 liKey) const { return mabPCKeysPressed[liKey]; }
+#endif
 
         // --- members (DWARF CgsDebugController.h order) ----------------------
         const DebugUI::Metrics* mpMetrics;             // h:140
@@ -117,5 +130,10 @@ namespace CgsDev
         f32                     mfKeyRepeatDelay;      // X360 +0x3c, keyboard keystroke repeat timer
 
         static const f32        KF_KEY_REPEAT_TIME;    // h:186
+#if !defined(D_PLATFORM_X360)
+        bool mabPCKeysDown[256];
+        bool mabPCKeysPressed[256];
+        bool mbPCKeyboardCaptured;
+#endif
     };
 }
