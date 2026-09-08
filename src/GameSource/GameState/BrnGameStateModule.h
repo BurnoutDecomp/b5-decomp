@@ -995,6 +995,11 @@ public:
     // DELETE-WHEN ProcessGameEvents + the post-world input buffer + BridgeGuiToGameState's
     // caller are real.
     void ProcessGameEventsActivateCarSelectBringUp(s32 liAction, s32 liCarSelectType);
+    // Extracted ARTIST ProcessGameEvents cases 4/5/6/82 for the offline junkyard.
+    // The online car-select manager is not staged in this PC module.
+    void ProcessGameEventsCarCustomizationBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpEvents,
+        GameStateModuleIO::GameActionQueue* lpActions);
 
     // ---- bodies already reconstructed in BrnGameStateModule.cpp -------------
     // X360 @ 0x82311620. The player's GLOBAL race-car index (its slot in the full world

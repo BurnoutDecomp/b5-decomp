@@ -26,6 +26,10 @@ const s32 KI_MAX_RACE_CARS = 8;
 // values are placeholders used purely as template tags.
 enum EGameEventType
 {
+    E_EVENT_SELECT_PLAYER_CAR       = 4,
+    E_EVENT_CHANGE_PLAYER_CAR_COLOUR = 5,
+    E_EVENT_PLAYER_CAR_COLOUR_REQUEST = 6,
+    E_EVENT_UNLOCKED_LIVERY_REQUEST = 82, // ARTIST; DecFIGS has 83
     E_EVENT_STREAMING_COMPLETE      = 9,   // DWARF BrnGameEvents.h:19 (full contiguous EGameEventType)
     E_EVENT_CHANGE_NETWORK_CAR      = 7,
     E_EVENT_ONLINE_PLAYER_ADDED     = 127,
@@ -155,6 +159,26 @@ enum EGameEventType
 template <EGameEventType T>
 struct GameEvent { };
 
+// ARTIST ProcessGameEvents cases 4/5/6/82; declaration names from DecFIGS.
+struct SelectPlayerCarEvent : public GameEvent<E_EVENT_SELECT_PLAYER_CAR>
+{
+    CgsID mCarModelId;
+    CgsID mWheelModelId;
+};
+struct ChangePlayerCarColourEvent : public GameEvent<E_EVENT_CHANGE_PLAYER_CAR_COLOUR>
+{
+    u32 muPaletteIndex;
+    u32 muColourIndex;
+};
+struct PlayerCarColourRequestEvent : public GameEvent<E_EVENT_PLAYER_CAR_COLOUR_REQUEST>
+{
+    CgsID mCarId;
+};
+struct UnlockedLiveryRequest : public GameEvent<E_EVENT_UNLOCKED_LIVERY_REQUEST>
+{
+    CgsID mCgsID;
+};
+
 // X360 element of EventQueue<HitOverheadSignEvent,100> (DWARF BrnGameEvents.h:429). Single byte.
 struct HitOverheadSignEvent : public GameEvent<E_EVENT_OVERHEAD_SIGN_HIT>
 {
@@ -172,6 +196,7 @@ struct StreamingCompleteEvent : public GameEvent<E_EVENT_STREAMING_COMPLETE>
     // BrnGameEvents.h:757 nested enum; value 2 attested by the X360 UpdateStream store.
     enum EModule
     {
+        E_MODULE_RACE_CAR_ENTITY = 1,
         E_MODULE_WORLD_GRAPHICS = 2,
     };
 

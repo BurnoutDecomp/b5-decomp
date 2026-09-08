@@ -363,9 +363,28 @@ void ClassExportPolicy::PrepareToClean(Vault&)
 {
     CGS_ASSERT(false, "ClassExportPolicy::PrepareToClean @0x8280B450: deferred TU");
 }
-void ClassExportPolicy::PrepareToDeinitialize(Vault&)
+// @ 0x8280CB78. Release this vault's registry references; deletion stays deferred.
+void ClassExportPolicy::PrepareToDeinitialize(Vault& lrVault)
 {
-    CGS_ASSERT(false, "ClassExportPolicy::PrepareToDeinitialize @0x8280CB78: deferred TU");
+    auto& lrClasses = GetDatabasePrivate()->mClasses;
+    // Inlined ScanForValidKey<ClassTable>: scan after the supplied bucket, -1 starts it.
+    const auto Scan = [&lrClasses](u32 luIndex) -> u64 {
+        if (lrClasses.mpTable != NULL)
+            for (++luIndex; luIndex < lrClasses.muTableSize; ++luIndex)
+                if (lrClasses.mpTable[luIndex].IsValid())
+                    return lrClasses.mpTable[luIndex].mKey;
+        return 0;
+    };
+    for (u64 luKey = Scan(0xFFFFFFFFu); luKey != 0; )
+    {
+        ClassPrivate* lpClass = reinterpret_cast<ClassPrivate*>(lrClasses.Find(luKey));
+        if (lpClass->mSource == &lrVault)
+            lpClass->Release();
+        const u32 luIndex = lrClasses.FindIndex(luKey);
+        if (!lrClasses.ValidIndex(luIndex))
+            break;
+        luKey = Scan(luIndex);
+    }
 }
 bool CollectionExportPolicy::AnyReferences(const Vault&)
 {
@@ -376,9 +395,44 @@ void CollectionExportPolicy::PrepareToClean(Vault&)
 {
     CGS_ASSERT(false, "CollectionExportPolicy::PrepareToClean @0x8280B9F8: deferred TU");
 }
-void CollectionExportPolicy::PrepareToDeinitialize(Vault&)
+// @ 0x8280CD80. Clean references in ALL collections before releasing this vault's own.
+void CollectionExportPolicy::PrepareToDeinitialize(Vault& lrVault)
 {
-    CGS_ASSERT(false, "CollectionExportPolicy::PrepareToDeinitialize @0x8280CD80: deferred TU");
+    auto& lrClasses = GetDatabasePrivate()->mClasses;
+    const auto ScanClasses = [&lrClasses](u32 luIndex) -> u64 {
+        if (lrClasses.mpTable != NULL)
+            for (++luIndex; luIndex < lrClasses.muTableSize; ++luIndex)
+                if (lrClasses.mpTable[luIndex].IsValid())
+                    return lrClasses.mpTable[luIndex].mKey;
+        return 0;
+    };
+    for (u64 luClassKey = ScanClasses(0xFFFFFFFFu); luClassKey != 0; )
+    {
+        Class* lpClass = lrClasses.Find(luClassKey);
+        auto& lrCollections = static_cast<ClassPrivate*>(lpClass->GetPrivates())->mCollections;
+        const auto ScanCollections = [&lrCollections](u32 luIndex) -> u64 {
+            if (lrCollections.mTable != NULL)
+                for (++luIndex; luIndex < lrCollections.mTableSize; ++luIndex)
+                    if (lrCollections.mTable[luIndex].IsValid())
+                        return lrCollections.mTable[luIndex].mKey;
+            return 0;
+        };
+        for (u64 luKey = ScanCollections(0xFFFFFFFFu); luKey != 0; )
+        {
+            Collection* lpCollection = lrCollections.Find(luKey);
+            lpCollection->Clean();
+            if (lpCollection->mpSource == &lrVault)
+                lpCollection->Release();
+            const u32 luIndex = lrCollections.FindIndex(luKey);
+            if (luIndex >= lrCollections.mTableSize || !lrCollections.mTable[luIndex].IsValid())
+                break;
+            luKey = ScanCollections(luIndex);
+        }
+        const u32 luClassIndex = lrClasses.FindIndex(luClassKey);
+        if (!lrClasses.ValidIndex(luClassIndex))
+            break;
+        luClassKey = ScanClasses(luClassIndex);
+    }
 }
 
 // Attrib::ClassStaticDesc::GetStatic (generated code, codegen area). The PC

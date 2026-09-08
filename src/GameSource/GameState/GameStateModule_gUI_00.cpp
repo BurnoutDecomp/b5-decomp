@@ -25,6 +25,7 @@
 // Each function's console attestation, and each deliberate deviation, is written out at its
 // declaration in BrnGameStateModule.h and again at its body below. Nothing here is fabricated:
 // every reduction is named as a reduction.
+#include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/GameState/BrnGameStateModule.h"
 
 #include <stdlib.h>                                                     // getenv ([UI-gate] diag)
@@ -45,6 +46,7 @@
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"     // ProgressionManager::GetGameStats
 #include "SharedClasses/Progression/BrnProgressionData.h"                // ProgressionData::GetProgressionRankCount
 #include "GameSource/GameState/Progression/BrnProfile.h"                // Profile::GetNumRankWinsForGameMode
+#include "GameSource/GameState/Progression/BrnDerivedCars.h"
 
 #include "SharedClasses/Trigger/BrnTriggerData.h"                       // TriggerData::GetRegion
 #include "SharedClasses/Trigger/BrnTriggerBase.h"                       // TriggerRegion::GetType
@@ -61,6 +63,94 @@
 
 namespace BrnGameState
 {
+
+// ARTIST ProcessGameEvents @0x823A0A18: case 4 @0x823A1550,
+// case 5 @0x823A15B8, case 6 @0x823A1654, and the case-82 derived-livery query.
+// PC extracted leg: the offline branch runs over the existing carry queue before
+// it is cleared. Model selections use the original CarSelectManager swap machine.
+void GameStateModule::ProcessGameEventsCarCustomizationBringUp(
+    const CgsModule::VariableEventQueue<1536, 16>* lpEvents,
+    GameStateModuleIO::GameActionQueue* lpActions)
+{
+    const CgsModule::Event* lpEvent = 0;
+    s32 liSize = 0;
+    s32 liType = lpEvents->GetFirstEvent(&lpEvent, &liSize);
+    while (lpEvent != 0)
+    {
+        switch (liType)
+        {
+        case GameStateModuleIO::E_EVENT_STREAMING_COMPLETE:
+        {
+            // ProcessStreamingCompleteEvent @0x82390200's junkyard completion arm.
+            const auto& lrComplete =
+                *reinterpret_cast<const GameStateModuleIO::StreamingCompleteEvent*>(lpEvent);
+            if (lrComplete.meModule == GameStateModuleIO::StreamingCompleteEvent::E_MODULE_RACE_CAR_ENTITY
+                && mCarSelectManager.IsInJunkyard() && mCarSelectManager.IsWaitingForStreaming())
+                mCarSelectManager.StreamingFinished(lrComplete.mUserId, lpActions);
+            break;
+        }
+        case GameStateModuleIO::E_EVENT_SELECT_PLAYER_CAR:
+            if (mCarSelectManager.IsInJunkyard())
+                mCarSelectManager.RequestChangeCar(
+                    reinterpret_cast<const GameStateModuleIO::SelectPlayerCarEvent*>(lpEvent)->mCarModelId);
+            break;
+
+        case GameStateModuleIO::E_EVENT_CHANGE_PLAYER_CAR_COLOUR:
+        {
+            const auto& lrColour =
+                *reinterpret_cast<const GameStateModuleIO::ChangePlayerCarColourEvent*>(lpEvent);
+            if (!mCarSelectManager.IsInJunkyard())
+                break; // online manager's arm is outside this offline extraction
+            BrnProgression::CarData* lpCar =
+                mProgressionManager.GetProfile()->FindCar(mActivePlayerCarId);
+            if (lpCar != 0)
+            {
+                lpCar->SetColourIndex(static_cast<s32>(lrColour.muColourIndex));
+                lpCar->SetPaletteIndex(static_cast<s32>(lrColour.muPaletteIndex));
+            }
+            GameStateModuleIO::CarSelectChangeColourAction lAction;
+            lAction.muPaletteIndex = lrColour.muPaletteIndex;
+            lAction.muColourIndex = lrColour.muColourIndex;
+            lpActions->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAction),
+                GameStateModuleIO::E_ACTION_CAR_SELECT_CHANGE_COLOUR, sizeof(lAction));
+            break;
+        }
+        case GameStateModuleIO::E_EVENT_PLAYER_CAR_COLOUR_REQUEST:
+        {
+            const CgsID lCarId =
+                reinterpret_cast<const GameStateModuleIO::PlayerCarColourRequestEvent*>(lpEvent)->mCarId;
+            // Action 81 and GUI 414 both carry {palette, colour}, two signed words.
+            s32 laiColour[2];
+            mProgressionManager.GetCarColourAndPalette(lCarId, &laiColour[1], &laiColour[0]);
+            lpActions->AddEvent(reinterpret_cast<const CgsModule::Event*>(laiColour), 81, sizeof(laiColour));
+            break;
+        }
+        case GameStateModuleIO::E_EVENT_UNLOCKED_LIVERY_REQUEST:
+        {
+            const CgsID lCarId =
+                reinterpret_cast<const GameStateModuleIO::UnlockedLiveryRequest*>(lpEvent)->mCgsID;
+            BrnProgression::DerivedCarArray lDerived;
+            lDerived.ConstructColourLiveryList(mpVehicleList, lCarId);
+            // Offline case-82 unconditionally attempts the original unlock policy;
+            // UnlockDerivedCarCollection retains the gold/silver progression gates.
+            mProgressionManager.UnlockDerivedCarCollection(lDerived);
+            Array<CgsID, 8> lUnlocked;
+            lUnlocked.Clear();
+            for (s32 liCar = 0; liCar < lDerived.GetLength(); ++liCar)
+            {
+                const CgsID lId = lDerived.GetItem(liCar);
+                if (mProgressionManager.IsCarUnlocked(lId))
+                    lUnlocked.Append(lId);
+            }
+            lpActions->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lUnlocked), 183, sizeof(lUnlocked));
+            break;
+        }
+        }
+        const CgsModule::Event* lpNext = 0;
+        liType = lpEvents->GetNextEvent(lpEvent, &lpNext, &liSize);
+        lpEvent = lpNext;
+    }
+}
 
 // ============================================================================
 // â­ [gateui] GetDeveloperChallengeManager -- the body behind the declaration the StreetManager
@@ -1019,6 +1109,7 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // (nothing creates a PreWorldInputBuffer, and the InviteManager's queue is never written), so
     // the local queue would be a byte-for-byte copy of the carry queue. The Clear IS the
     // console's, and it is what makes the queue a strict one-frame buffer.
+    ProcessGameEventsCarCustomizationBringUp(&mGameEventCarryQueue, lpActionQueue);
     ProcessGameEventsPropHitBringUp(&mGameEventCarryQueue);
     // â­ [tut-ticker] the dispatcher's CASE-113 arm, over the same merged queue in the same
     // walk position (the console's ProcessGameEvents handles every case in one pass; this

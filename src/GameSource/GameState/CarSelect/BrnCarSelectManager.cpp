@@ -1013,16 +1013,16 @@ void CarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameAction
         CgsDev::Assert::EndAssert();
     }
 
-    // CarSelectionChangedAction (64B): the junkyard id + the spawn-location "type is type 0" bit.
+    // ARTIST 0x82387C44-0x82387C94: full spawn pose and flags at +0x30/+0x31.
     {
-        u8 lacChanged[64];
-        std::memset(lacChanged, 0, sizeof(lacChanged));
-        std::memcpy(lacChanged, &mJunkyardId, sizeof(mJunkyardId));
-        const u32 luType = static_cast<u32>(lpSpawnLocation->GetType());
-        lacChanged[0x10] = (luType == 0) ? 1 : 0;
-        lacChanged[0x11] = 1;
+        GameStateModuleIO::CarSelectionChangedAction lChanged = {};
+        lChanged.mJunkyardId = mJunkyardId;
+        lChanged.mPosition = lpSpawnLocation->mPosition;
+        lChanged.mDirection = lpSpawnLocation->mDirection;
+        lChanged.mbJunkyardPosIsLeft = lpSpawnLocation->GetType() == 1;
+        lChanged.mbReserved0x31 = true;
         AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(lacChanged), KI_ACTION_CAR_SELECTION_CHANGED, 64);
+            reinterpret_cast<const CgsModule::Event*>(&lChanged), KI_ACTION_CAR_SELECTION_CHANGED, sizeof(lChanged));
     }
 
     if (!mbInCarModScreen)

@@ -27,6 +27,7 @@
 // CgsGui::GuiModule::AddGuiEvent<T>.
 // ============================================================================
 
+#include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Game/GameBridgeGameStateToX.h"
 
@@ -229,6 +230,27 @@ namespace
         {
             switch (liActionType)
             {
+            // ARTIST 0x823ED838-0x823ED84C: release the GUI's model-change wait.
+            case 66:
+                lpGuiInput->GetGuiEvents()->AddEvent(lpAction, 565, sizeof(CgsID));
+                break;
+            // ARTIST 0x823EA760 / 0x823EBC50: colour and unlocked-livery replies.
+            // These are raw GUI payloads, without a GuiEvent header.
+            case 81:
+                lpGuiInput->GetGuiEvents()->AddEvent(lpAction, 414, 8);
+                break;
+            case 183:
+            {
+                const auto& lrCars =
+                    *reinterpret_cast<const Array<CgsID, 8>*>(lpAction);
+                Array<CgsID, 8> lReply;
+                lReply.Clear();
+                for (s32 liCar = 0; liCar < lrCars.GetLength(); ++liCar)
+                    lReply.Append(lrCars.GetItem(liCar));
+                lpGuiInput->GetGuiEvents()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lReply), 413, sizeof(lReply));
+                break;
+            }
             // ---- 45  E_ACTION_SET_UP_ALL_DRIVE_THRUS (1112 bytes) -------------------------
             // ⭐⭐ [minimap blips, issue #9] THE DRIVE-THRU ICON TABLE HOP. While the pending count
             // is below 48, one SatNavIconInfo per DriveThruInfo:

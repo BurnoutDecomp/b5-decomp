@@ -788,6 +788,9 @@ namespace
         case E_GAMEINPUTACTIONS_GUI_CANCEL: lpcEventName = "Local\\BurnoutPC_Input_Stop";     break;
         case E_GAMEINPUTACTIONS_GUI_DOWN:   lpcEventName = "Local\\BurnoutPC_Input_Next";     break;
         case E_GAMEINPUTACTIONS_GUI_UP:     lpcEventName = "Local\\BurnoutPC_Input_Prev";     break;
+        // PC harness: option changes use the same actions as comma/period and pad left/right.
+        case E_GAMEINPUTACTIONS_GUI_LEFT:  lpcEventName = "Local\\BurnoutPC_Input_OptionPrev"; break;
+        case E_GAMEINPUTACTIONS_GUI_RIGHT: lpcEventName = "Local\\BurnoutPC_Input_OptionNext"; break;
         case E_GAMEINPUTACTIONS_GUI_START:  lpcEventName = "Local\\BurnoutPC_Input_Start";    break;
         // -- driving. These three ids are the rows BridgeControllerToWorld reads straight out
         //    of maActionInfo[] into PlayerVehicleControls (asm-attested: [0].mfValue ->

@@ -315,6 +315,55 @@ void* Attrib::Collection::GetData(u64 luKey, unsigned int luIndex) const
     return lpNode->GetPointer(lpOwner->mpData, lpOwner);
 }
 
+// @ 0x82809CC0. Drop type-handler references without freeing attribute storage.
+void Attrib::Collection::Clean()
+{
+    ClassPrivate* lpClassPrivate = static_cast<ClassPrivate*>(mpClass->GetPrivates());
+    const auto CleanData = [](ITypeHandler* lpHandler, void* lpData, bool lbArray) {
+        if (lbArray)
+        {
+            Array* lpArray = static_cast<Array*>(lpData);
+            for (u32 luIndex = 0; luIndex < lpArray->muNumElements; ++luIndex)
+                lpHandler->Clean(lpArray->GetData(luIndex));
+        }
+        else
+            lpHandler->Clean(lpData);
+    };
+
+    bool lbInLayoutTable = false;
+    u64 luKey = ScanForValidKey(*this, 0xFFFFFFFFu);
+    if (luKey == 0)
+    {
+        luKey = ScanForValidKey(lpClassPrivate->mLayoutTable, 0xFFFFFFFFu);
+        lbInLayoutTable = true;
+    }
+    for (; luKey != 0; luKey = NextKey(luKey, lbInLayoutTable))
+    {
+        const Collection* lpContainer = this;
+        Attrib::Node* lpNode = GetNode(luKey, lpContainer);
+        if (lpContainer != this)
+            continue;
+        CGS_ASSERT((lpNode->muFlags & 0x80u) != 0, "Invalid node found at valid index.");
+        ITypeHandler* lpHandler = lpNode->GetTypeDesc()->mHandler;
+        if (lpHandler != NULL)
+            CleanData(lpHandler, lpNode->GetPointer(mpData, this), (lpNode->muFlags & 2u) != 0);
+    }
+
+    if (mpData != NULL)
+    {
+        lpClassPrivate = static_cast<ClassPrivate*>(mpClass->GetPrivates());
+        for (u32 luIndex = 0; luIndex < lpClassPrivate->mNumDefinitions; ++luIndex)
+        {
+            const Definition& lrDef = lpClassPrivate->mDefinitions[luIndex];
+            if ((lrDef.mFlags & 8u) == 0 || (lrDef.mFlags & 0x10u) != 0)
+                continue;
+            ITypeHandler* lpHandler = Database::Get().GetTypeDesc(lrDef.mType).mHandler;
+            if (lpHandler != NULL)
+                CleanData(lpHandler, static_cast<u8*>(mpData) + lrDef.mOffset, (lrDef.mFlags & 1u) != 0);
+        }
+    }
+}
+
 // ============================================================================
 // Attrib::Collection::FreeNodeData @ 0x8280A068
 // ============================================================================

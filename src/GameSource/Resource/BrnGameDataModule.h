@@ -262,6 +262,12 @@ namespace BrnResource
         void ProcessGetVehicleRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                       const GameDataIO::GameDataAssetEvent* lpEvent,
                                       s32 liEventId, s32 liSlotIndex);                 // 0x8266FDA0
+        void ProcessUnloadVehicleRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                         const GameDataIO::GameDataAssetEvent* lpEvent,
+                                         s32 liEventId, s32 liSlotIndex);              // 0x82672DE0
+        void PostAcquireVehicleAttribsRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                             const GameDataIO::GameDataAssetEvent* lpEvent,
+                                             s32 liEventId, s32 liSlotIndex);          // 0x82670990
         // The wheel pair (dispatch ids 36 / 60) -- the vehicle pair's twin, one asset set
         // only. LOAD streams "Wheels/<WHE_id>_GR.bndl"; ProcessInternalLoadBundleResponse's
         // case 36 then chains straight into GET, which acquires "<id-without-WHE_>_Graphics".
