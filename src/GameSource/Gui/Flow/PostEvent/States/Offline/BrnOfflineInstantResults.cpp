@@ -32,7 +32,7 @@
 //
 // ⛔ STILL NOT RECONSTRUCTED (declared in the header, bodied as LOGGED stubs in
 // BrnScreenStatesDataLinkStubs.cpp so the gap is visible in the log instead of silent):
-//   HandleControllerInput (124) UpdateLicense
+//   HandleControllerInput (124)
 //   UpdatePhoto RenderDebug
 // Those are the remaining substate PRESENTATIONS. Several of them need OfflinePostEventData
 // flag slots the X360 asm does not yet pin -- see the ⛔ block in BrnGuiEventTypeDefs.h.
@@ -2261,6 +2261,140 @@ namespace BrnGui
             // The original diagnostic prints the XS-car stage even on this free-car path.
             FireUnexpectedStateAssert("Unknown car unlock presentation state (currently in state ",
                                       meCarUnlockPresentationStage, " )\n");
+            break;
+        }
+    }
+
+    // ARTIST 0x824C4F98. Swap the results movie for the licence upgrade, then resume it.
+    void InstantResultsState::UpdateLicense()
+    {
+        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_LICENSE,
+                   "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_LICENSE == meActiveSubState");
+        if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
+        {
+            meSubStateState = E_SUBSTATE_RUNNING;
+            meRankUpPresentationStage = E_RANKUP_PRESENTATION_WAITING_FOR_CLEANUP_ONE;
+            return;
+        }
+        if (meSubStateState != E_SUBSTATE_RUNNING)
+        {
+            FireUnexpectedStateAssert("Should not be updating license when substate is in state ",
+                                      meSubStateState, "\n");
+            return;
+        }
+        const CgsGui::sResourceTuple lPhotoMovie = { KU_PHOTO_MOVIE_RESOURCE, CgsGui::E_GUI_RESOURCETYPE_APT };
+        const CgsGui::sResourceTuple lResultsMovie = { KU_RESULTS_MOVIE_RESOURCE, CgsGui::E_GUI_RESOURCETYPE_APT };
+        switch (meRankUpPresentationStage)
+        {
+        case E_RANKUP_PRESENTATION_WAITING_FOR_CLEANUP_ONE:
+            if (mpcAnimatingComponentName == 0 && mpGuiCache->EnsureResourceIsUnloaded(mLargeIconResource))
+            {
+                mpStateInterface->PlayAptMovie("", 2);
+                meRankUpPresentationStage = E_RANKUP_PRESENTATION_WAITING_FOR_CLEANUP_TWO;
+            }
+            break;
+        case E_RANKUP_PRESENTATION_WAITING_FOR_CLEANUP_TWO:
+            if (meCurrentMainMovie == KU_RESULTS_MOVIE_RESOURCE)
+            {
+                mpStateInterface->PlayAptMovie("", 3);
+                if (mpGuiCache->EnsureResourceIsUnloaded(lResultsMovie))
+                {
+                    meCurrentMainMovie = KU_PHOTO_MOVIE_RESOURCE;
+                    meRankUpPresentationStage = E_RANKUP_PRESENTATION_LOADING;
+                }
+            }
+            else
+                meRankUpPresentationStage = E_RANKUP_PRESENTATION_INITIALISING;
+            break;
+        case E_RANKUP_PRESENTATION_LOADING:
+            if (mpGuiCache->EnsureResourceIsLoaded(lPhotoMovie))
+            {
+                mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+                mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mUpgradeText.GetName());
+                mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mUpgradeStateAnimator.GetName());
+                mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[meCurrentMainMovie], 3);
+                meRankUpPresentationStage = E_RANKUP_PRESENTATION_INITIALISING;
+            }
+            break;
+        case E_RANKUP_PRESENTATION_INITIALISING:
+            if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
+            {
+                mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+                const s32 liBurnoutLicenseRank = static_cast<s32>(
+                    mpGuiCache->GetWorldDataController()->GetProgressionData()->GetProgressionRankCount()) - 1;
+                CGS_ASSERT(liBurnoutLicenseRank > 0, "liBurnoutLicenseRank > 0");
+                const bool lbShowPoints = liBurnoutLicenseRank != mResults.miPlayerNewRank
+                    && liBurnoutLicenseRank != mResults.miPlayerOldRank && !mResults.mbCompletedLastRank;
+                mLicense.RankUp(3.0f, 0.0f, lbShowPoints);
+                const s32 liSequenceRank = mResults.miPlayerNewRank < 1 || mResults.miPlayerNewRank > 6
+                    ? 6 : mResults.miPlayerNewRank;
+                GuiEventPostEventRankUpSequenceStart lSequence;
+                std::memset(lSequence.maData, 0, sizeof(lSequence.maData));
+                std::memcpy(lSequence.maData, &liSequenceRank, sizeof(liSequenceRank));
+                lSequence.maData[4] = mpGuiCache->GetProfile()->AreGoldCarsUnlocked();
+                CgsGui::GuiEventWrapper<GuiEventPostEventRankUpSequenceStart, 40> lRecord(lSequence);
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lRecord), 40, sizeof(lRecord));
+                meRankUpPresentationStage = E_RANKUP_PRESENTATION_RUNNING;
+            }
+            break;
+        case E_RANKUP_PRESENTATION_RUNNING:
+            if (HasSubstateTimedOut())
+            {
+                if (mLicense.IsVisible())
+                    mLicense.HideLicense();
+                meRankUpPresentationStage = E_RANKUP_PRESENTATION_LEAVING;
+            }
+            else
+            {
+                if (!mbStartedUpgradeTransOut && !(mfTimeRemaining > 1.0f))
+                {
+                    mbStartedUpgradeTransOut = true;
+                    const s32 liBurnoutLicenseRank = static_cast<s32>(
+                        mpGuiCache->GetWorldDataController()->GetProgressionData()->GetProgressionRankCount()) - 1;
+                    CGS_ASSERT(liBurnoutLicenseRank > 0, "liBurnoutLicenseRank > 0");
+                    const char* lpacTransition = mResults.mbCompletedLastRank ? "upgradeEliteOut"
+                        : liBurnoutLicenseRank == mResults.miPlayerNewRank ? "upgradeBurnoutOut" : "upgradeOut";
+                    mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION, lpacTransition, false);
+                }
+                mLicense.Update();
+            }
+            break;
+        case E_RANKUP_PRESENTATION_LEAVING:
+            if (!mLicense.IsVisible())
+            {
+                mLicense.ReleaseResources();
+                mpStateInterface->PlayAptMovie("", 3);
+                meRankUpPresentationStage = E_RANKUP_PRESENTATION_CLEANING_UP;
+            }
+            break;
+        case E_RANKUP_PRESENTATION_CLEANING_UP:
+            if (mpGuiCache->EnsureResourceIsUnloaded(lPhotoMovie))
+            {
+                meCurrentMainMovie = KU_RESULTS_MOVIE_RESOURCE;
+                meRankUpPresentationStage = E_RANKUP_PRESENTATION_RESTORING_STATE;
+            }
+            break;
+        case E_RANKUP_PRESENTATION_RESTORING_STATE:
+            if (mpGuiCache->EnsureResourceIsLoaded(lResultsMovie))
+            {
+                mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[meCurrentMainMovie], 3);
+                mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
+                AppendExpectedScreenComponents();
+                meCurrentState = E_RESULTS_STATE_LOADING_COMPONENTS;
+                if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
+                    *CgsDev::Log::gpDebugPrint << "INSTANT RESULTS DEBUG: UpdateLicense (meCurrentState = "
+                                               << meCurrentState << ")\n";
+                meRankUpPresentationStage = E_RANKUP_PRESENTATION_DONE;
+            }
+            break;
+        case E_RANKUP_PRESENTATION_DONE:
+            meActiveSubState = GetNextSubstate();
+            ResetStateTimer();
+            meSubStateState = E_SUBSTATE_SET_UP_COMPONENTS;
+            break;
+        default:
+            CGS_ASSERT(false, "Invalid substate when upgrading license");
             break;
         }
     }
