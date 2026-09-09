@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameSource/Sound/Global/BrnGlobalStateManager.h"
@@ -151,7 +152,7 @@ bool PresentationEffect::Attach()
     mStreamParams.mVoiceSpecName = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash("StereoWavVoiceSpec"));
     mStreamParams.mSlotName = static_cast<u32>(
-        CgsSound::Playback::Name::MakeHash("Player"));
+        CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue());
     mStreamParams.mSendName = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash("Send01"));
     mStreamParams.mSubMixVoiceID = 1;
@@ -233,7 +234,7 @@ void PresentationEffect::Play(const PresentationEntry& arEntry)
             CgsSound::Playback::Name::MakeHash("StereoWavVoiceSpec"));
         lParams.mContentSpecName = arEntry.mu32ContentSpec;
         lParams.mSlotName = static_cast<u32>(
-            CgsSound::Playback::Name::MakeHash("Player"));
+            CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue());
     }
     else
     {
@@ -253,7 +254,9 @@ void PresentationEffect::Play(const PresentationEntry& arEntry)
     lpVoice->mu16Age = 0;
     lpVoice->mfTimeSinceLastTick = 0.0f;
     lpVoice->mVoice.Create(lParams);
-    lpVoice->mVoice.Play(arEntry.mu16Splice);
+    // ARTIST 0x826F78D8: a WAV request starts at zero; splice voices use the index.
+    lpVoice->mVoice.Play(arEntry.mu16Splice == PresentationEntry::KU16_SPECIAL_SPLICE_WAVE
+        ? 0 : arEntry.mu16Splice);
     SetMixerInputValue(arEntry.mu8MixerOutput, 0x7FFF);
 }
 
