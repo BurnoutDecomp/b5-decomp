@@ -2696,7 +2696,11 @@ struct GuiEventOfflinePostEvent
         s32   miCarsRevealed;                    // +0xA8  "Results.Cars Revealed = "
         s32   miEventsUnlocked;                  // +0xAC  "Results.Events Unlocked = "
         s8    miPlayerFinishPosition;            // +0xB0  "Results.Player Finish Position = "
-        u8    maReservedB1[5];                   // +0xB1  UNNAMED flag run (see the ⛔ above)
+        u8    muReservedB1;                      // +0xB1  still unnamed
+        bool  mbCrashedOut;                      // +0xB2  DWARF :2387; ARTIST SetupComponents
+                                                 // tests it for POSTRACE_TOTALLED. The bridge copies
+                                                 // action+E2, written from mbPlayerFinishedCarDestroyed.
+        u8    maReservedB3[3];                   // +0xB3..B5  remaining flag run
         bool  mbCompletedLastRank;               // +0xB6  "Results.Completed Last Rank = "
         bool  mbHasUnlockedFreeCar;              // +0xB7  lbz @0x824D5A3C
         bool  mbHasRankedUp;                     // +0xB8  lbz @0x824D59F0

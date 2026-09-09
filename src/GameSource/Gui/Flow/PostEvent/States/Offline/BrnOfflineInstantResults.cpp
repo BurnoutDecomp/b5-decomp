@@ -857,7 +857,7 @@ namespace BrnGui
     //     mLargeEventIcon.SetState("transIn") -> the mode icon transitions in (win only)
     //
     // ⛔ PARTIAL, ARM BY ARM, AND DELIBERATELY SO. The X360 switches on
-    // meFinishedGameModeType across nine arms. Several of them (0, 4, 5, 6, 8) gate on bytes
+    // meFinishedGameModeType across nine arms. Several of them (0, 4, 5, 6) gate on bytes
     // in OfflinePostEventData's +0xB1..+0xB5 flag run, and that run is NOT attributable: the
     // PS3 DWARF's declaration order is already proven wrong for this struct, and following it
     // would put mbEliminated at +0xB3 where the X360's own string is "POSTRACE_OUTOFTIME".
@@ -868,6 +868,7 @@ namespace BrnGui
     // LANDED arms: 1 (won/lost by finish position) and 7/9 (the SCORE modes -- the stunt run
     // and its sibling), whose every input is attested: miModeScore by its own string id,
     // GetTargetScoreInEvent by its X360 symbol, miPlayerFinishPosition by the debug print.
+    // Marked Man (8) now uses the producer-pinned mbCrashedOut byte at +0xB2.
     // -----------------------------------------------------------------------------------
     void InstantResultsState::SetupComponents()
     {
@@ -941,8 +942,33 @@ namespace BrnGui
             break;
         }
 
+        case 8: // Marked Man, ARTIST 0x824B4550..0x824B4628.
+            if (mResults.mbCrashedOut)
+            {
+                mFinishedText.SetLocalisedText("POSTRACE_TOTALLED",
+                    CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+                meWinState = E_RESULTS_DETAILED_LOSS;
+            }
+            else
+            {
+                CGS_ASSERT(mpGuiCache->GetEventDestinationLandmarkIndex() != BrnGameState::LandmarkIndex(-1),
+                    "BrnGameState::K_INVALID_LANDMARK != mpGuiCache->GetEventDestinationLandmarkIndex()");
+                GuiEventUpdateSatNav::SatNavIconInfo lLandmark;
+                mpGuiCache->GetLandmarkInfoFromIndex(mpGuiCache->GetEventDestinationLandmarkIndex(), &lLandmark);
+                char lacDestination[1024];
+                CgsCore::SPrintf(lacDestination, 1023, "LM_%llu", lLandmark.GetCgsId());
+                lacDestination[1023] = 0;
+                const char* lapacParams[] = { lacDestination };
+                const CgsLanguage::LanguageManager::ParameterFormatType laeFormats[] =
+                    { CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP };
+                mFinishedText.SetLocalisedText("POSTRACE_FINISH_REACHED_DESTINATION",
+                    CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP, 1, lapacParams, laeFormats);
+                meWinState = E_RESULTS_DETAILED_WIN;
+            }
+            break;
+
         default:
-            // ⛔ Arms 0 / 3 / 4 / 5 / 6 / 8 are NOT reconstructed -- see the banner. The X360's
+            // ⛔ Arms 0 / 3 / 4 / 5 / 6 are NOT reconstructed -- see the banner. The X360's
             // own default arm also lands here and prints exactly this line.
             if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
             {
