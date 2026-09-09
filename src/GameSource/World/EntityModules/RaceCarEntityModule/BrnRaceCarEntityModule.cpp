@@ -749,6 +749,19 @@ void RaceCarEntityModule::UpdateStreaming(
             lbAllLoaded = false;
         }
     }
+    // ARTIST UpdateStreaming: required junkyard prefetch slots participate in the
+    // same completion edge as active cars; audio-only waits remain in their own lane.
+    if (mbInCarSelectScreen)
+    {
+        for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
+        {
+            if (mabCarSelectWaitForStreaming[liCar])
+            {
+                mabCarSelectWaitForStreaming[liCar] = !mRaceCarStreamer.IsDesiredRaceCarLoadedForCarSelect(liCar);
+                if (mabCarSelectWaitForStreaming[liCar]) lbAllLoaded = false;
+            }
+        }
+    }
     // ARTIST UpdateStreaming's completion edge. Retains the existing PC resource
     // readiness predicate above; unmounted prefetch/audio wait lanes remain separate.
     if (lbAllLoaded && mbWaitingForStreaming)
@@ -3014,6 +3027,9 @@ void RaceCarEntityModule::HandleGameActions(
     {
         switch( liType )
         {
+        case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECTION_REQUEST_STREAMING:
+            HandleSelectionRequestStreamingAction(reinterpret_cast<const BrnGameState::GameStateModuleIO::CarSelectionRequestStreamingAction*>(lpEvent));
+            break;
         case BrnGameState::GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR:   // 0
             HandleResetPlayerCarAction(
                 reinterpret_cast<const BrnGameState::GameStateModuleIO::ResetPlayerCarAction*>(
@@ -6610,3 +6626,63 @@ void RaceCarEntityModule::TransmitCarsInRaceToQueryManager(
 }
 
 }   // namespace BrnWorld
+
+namespace BrnWorld
+{
+// ARTIST 0x822E9918. Keep matching prefetched models, release obsolete slots,
+// and stage the requested models without displacing the player's slot zero.
+void RaceCarEntityModule::HandleSelectionRequestStreamingAction(
+    const BrnGameState::GameStateModuleIO::CarSelectionRequestStreamingAction* lpAction)
+{
+    bool labNeedsLoad[8] = {true,true,true,true,true,true,true,true};
+    bool labAvailable[8] = {true,true,true,true,true,true,true,true};
+    for (bool& lbWait : mabCarSelectWaitForStreaming) lbWait = false;
+    for (s32 liSlot = 1; liSlot < 8; ++liSlot)
+    {
+        const auto* lpActive = GetActiveRaceCar(static_cast<EActiveRaceCarIndex>(liSlot));
+        if (lpActive->IsAttached() && lpActive->GetGlobalRaceCar() &&
+            lpActive->GetGlobalRaceCar()->GetType() == E_RACE_CAR_TYPE_NETWORK)
+        {
+            labAvailable[liSlot] = false;
+            continue;
+        }
+        if (!mRaceCarStreamer.IsRaceCarActive(liSlot)) continue;
+        const CgsID lLoadedId = mRaceCarStreamer.GetCarModelId(liSlot);
+        bool lbRemove = true;
+        for (s32 liCar = 0; liCar < lpAction->miCount; ++liCar)
+        {
+            if (lpAction->maCars[liCar] == lLoadedId)
+            {
+                labNeedsLoad[liCar] = false;
+                labAvailable[liSlot] = false;
+                lbRemove = false;
+                break;
+            }
+        }
+        if (lbRemove) mRaceCarStreamer.RemoveVehicleData(liSlot);
+    }
+    labAvailable[0] = false;
+    for (s32 liCar = 0; liCar < lpAction->miCount; ++liCar)
+    {
+        if (!labNeedsLoad[liCar]) continue;
+        s32 liSlot = 1;
+        while (liSlot < 8 && !labAvailable[liSlot]) ++liSlot;
+        if (liSlot == 8) continue;
+        labAvailable[liSlot] = false;
+        const CgsID lCarId = lpAction->maCars[liCar];
+        const s32 liVehicle = mpVehicleList->GetVehicleIndex(lCarId);
+        const auto* lpVehicle = liVehicle < 0 ? nullptr : mpVehicleList->GetVehicleData(liVehicle);
+        s32 liWheel = mpWheelList->FindWheelIndexFromName(lpVehicle->GetDefaultWheelName());
+        if (liWheel == -1)
+        {
+            liWheel = 0;
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "*** Couldn't find Wheel: " << lpVehicle->GetDefaultWheelName() << " for Vehicle: " << lCarId << "\n";
+        }
+        const auto* lpWheel = mpWheelList->GetWheelData(liWheel);
+        mRaceCarStreamer.SetDesiredVehicleData(liSlot, lCarId, lpWheel->mID, lpAction->maiPriorities[liCar]);
+        if ((lpAction->mauExtraInfoFlags[liCar] & 4) != 0) mabCarSelectWaitForStreaming[liSlot] = true;
+    }
+    mbWaitingForStreaming = true;
+}
+}

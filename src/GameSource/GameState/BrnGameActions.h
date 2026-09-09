@@ -413,6 +413,7 @@ enum EGameActionType
     // `li r5, 0x4F` (79) with size 8, and the X360 consumer is HandleGameActions' `case 79`.
     // That is the SAME +5 shift this enum already records for NEW_CAR_UNLOCKED (DWARF 57 ->
     // X360 62) and CAR_UNLOCK_END (DWARF 58 -> X360 63).
+    E_ACTION_CAR_SELECTION_REQUEST_STREAMING = 69, // ARTIST; DecFIGS 64
     E_ACTION_CAR_SELECT_CHANGE_COLOUR   = 79,    // DWARF 74 (+5 X360)
 
     // ⭐ [tut-ticker] X360-attested pair (2026-08-24):
@@ -1080,6 +1081,16 @@ static_assert(sizeof(CarSelectionChangedAction) == 64,
               "CarSelectionChangedAction must be the 64-byte image AddEvent(.., 64, 64) posts");
 static_assert(offsetof(CarSelectionChangedAction, mbJunkyardPosIsLeft) == 0x30,
               "CarSelectionChangedAction::mbJunkyardPosIsLeft at +0x30 (the consumer's lbz offset)");
+
+// ARTIST action 69, 88 bytes; DecFIGS BrnGameActions.h:2657.
+struct CarSelectionRequestStreamingAction : public GameAction<E_ACTION_CAR_SELECTION_REQUEST_STREAMING>
+{
+    CgsID maCars[8];
+    s32 miCount;
+    u8 mauExtraInfoFlags[8];
+    s8 maiPriorities[8];
+};
+static_assert(sizeof(CarSelectionRequestStreamingAction) == 88, "Car selection streaming action");
 
 // Game action 79 -- "paint the player's car": the palette (paint finish) and colour indices the
 // car-select / junkyard flow resolved for the car that is now in the world. It is the ONLY route

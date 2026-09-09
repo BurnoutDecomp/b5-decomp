@@ -66,6 +66,7 @@ namespace BrnResource { struct VehicleList; class WheelList; enum ECarType : int
 // RaceCarAIInterface is the AI publish surface SpawnRaceCar posts its attach event into.
 namespace BrnGameState { namespace GameStateModuleIO {
     struct ResetPlayerCarAction;
+        struct CarSelectionRequestStreamingAction;
     struct PrepareForModeAction;
 } }
 // [stuntrace start-grid wave] SetupOpponents / SetUpPlayerCarForMode take the mode's parameter
@@ -521,6 +522,7 @@ public:
         //   r31 = r3 (this); r3 = r4 (the pre-scene INPUT buffer, whose GetGameActionQueue
         //   the very next instruction calls); r20 = r5 (the pre-scene OUTPUT buffer, which
         //   every case forwards to its handler). Recovered from the asm, not the pseudocode.
+        void HandleSelectionRequestStreamingAction(const BrnGameState::GameStateModuleIO::CarSelectionRequestStreamingAction* lpAction);
         void HandleGameActions( RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
                                 RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
 
@@ -902,7 +904,8 @@ private:
     // SUPER-FATAL properties are consulted.
     f32 mfResetOnWaterHeight;           // +0x184CC (99532)
 
-    u8 maTailPadB0[0x18374 - 0x18360];  // +0x18360 (99168) .. +0x18374 (99188)
+    bool mabCarSelectWaitForStreaming[8] = {}; // ARTIST +99168, DecFIGS :216
+    u8 maTailPadB0[0x18374 - 0x18368];  // +0x18368 (99176) .. +0x18374 (99188)
 
     // X360 +0x18374 (99188). Ring of training requests queued this frame, drained by the
     // progression handler. AddTrainingRequest appends at miPendingRequestCount; each cell

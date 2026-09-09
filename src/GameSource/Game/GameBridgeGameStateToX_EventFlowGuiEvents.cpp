@@ -547,6 +547,39 @@ namespace
 
         switch (liActionType)
         {
+        // ARTIST junkyard unlock transport. These events connect the camera's
+        // streaming wait, unlock screen, car-description ticker and return to selection.
+        case 2: // CarUnlockAction -> GuiCarUnlockEvent, id 76, CgsID payload.
+        {
+            struct UnlockWire { CgsID mCar; s32 GetEventType() const { return 76; } };
+            const CgsID lCar = *reinterpret_cast<const CgsID*>(lpAction);
+            CGS_ASSERT(lCar != 0, "Invalid car unlock id");
+            PushGuiEvent(UnlockWire{lCar}, lpGuiInput);
+            return true;
+        }
+        case 62: // NewCarUnlockedAction -> GuiCarUnlockNewCarEvent, id 73.
+        {
+            struct NewCarWire { CgsID mCar; s32 GetEventType() const { return 73; } };
+            PushGuiEvent(NewCarWire{*reinterpret_cast<const CgsID*>(lpAction)}, lpGuiInput);
+            return true;
+        }
+        case 63: // CarUnlockEndAction -> unlock screen ADVANCE.
+        {
+            struct UnlockEndWire { u8 mSignal; s32 GetEventType() const { return 74; } };
+            PushGuiEvent(UnlockEndWire{0}, lpGuiInput);
+            return true;
+        }
+        case 73: // Transition-in begins with unlocks -> InGame TO_CUNLOCK.
+        {
+            const auto* lFlags = reinterpret_cast<const u8*>(lpAction);
+            if (lFlags[0] && lFlags[1])
+            {
+                struct UnlockStartWire { u8 mSignal; s32 GetEventType() const { return 75; } };
+                PushGuiEvent(UnlockStartWire{0}, lpGuiInput);
+            }
+            return true;
+        }
+
 
         // ---- 201  E_ACTION_EVENT_AT_JUNCTION_AVAILABLE (40 bytes) --------------------------
         // *** THE VISIBLE ORACLE. @0x823EA810..0x823EA874, instruction for instruction: eleven

@@ -1582,3 +1582,11 @@ void CarSelectManager::ForceExitJunkyard(GameStateModuleIO::GameActionQueue* lpA
     mbCarUnlockEnabled = true;   // X360 *(this+117) = 1 == byte 0x75 == mbCarUnlockEnabled (re-enable car unlock on exit)
 }
 }
+
+// ARTIST ProcessGameEvents case 83 inlines CarSelectManager::OnCarUnlockTickerComplete.
+// The fade-out must finish before UpdateUnlockState advances to the next car.
+void BrnGameState::CarSelectManager::OnCarUnlockTickerComplete()
+{
+    mbCurrentCarTickerVisible = false;
+    mfCarUnlockFadedOutTargetTime = mfStateTimer + 2.0f;
+}

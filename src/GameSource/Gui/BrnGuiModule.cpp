@@ -3491,6 +3491,24 @@ void GuiModule::Destruct()
             // machine froze at the Construct-seeded FULL -- the user-reported "asserts
             // when there is no boost" ("Visibility is full but we are not allowed to
             // boost", :1080) and "bar doesn't update with the correct values".
+            // ARTIST BridgeFromViewToOutput 0x8285DE50..64 copies the custom
+            // renderer's +12 event queue into GUI output; the next update feeds it
+            // back to cache/flow observers. Preserve that feedback before Update
+            // clears the queue, including the ticker's visibility edge (538).
+            {
+                const auto* lpFeedback = mCustomRendererManager.GetOutputEventQueue();
+                const CgsModule::Event* lpEvent = nullptr;
+                s32 liSize = 0;
+                s32 liType = lpFeedback->GetFirstEvent(&lpEvent, &liSize);
+                while (lpEvent)
+                {
+                    mGuiCache.RecEvent(lpEvent, liType);
+                    RouteEventToFlow(lpEvent, liType, liSize);
+                    const CgsModule::Event* lpNext = nullptr;
+                    liType = lpFeedback->GetNextEvent(lpEvent, &lpNext, &liSize);
+                    lpEvent = lpNext;
+                }
+            }
             mCustomRendererManager.Update();
 
             // [PC diagnostic] log the flow-movie mount state on CHANGE only (live /

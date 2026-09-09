@@ -105,6 +105,9 @@ void GameStateModule::ProcessGameEventsCarCustomizationBringUp(
     {
         switch (liType)
         {
+        case 83: // ARTIST: car unlock ticker finished (GUI command 77).
+            mCarSelectManager.OnCarUnlockTickerComplete();
+            break;
         case GameStateModuleIO::E_EVENT_TELEPORT_PLAYER_CAR:
         {
             // ARTIST ProcessGameEvents case 1 at 0x823A145C.
