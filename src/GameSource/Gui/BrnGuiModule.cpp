@@ -2584,6 +2584,10 @@ void GuiModule::Destruct()
                     // renderer observer too, as DispatchInboundGuiEvents does.
                     // Without it, screen-posted ticker messages never reach the view.
                     mCustomRendererManager.RecvEvent(lpRawEvent, static_cast<s32>(luEventType));
+                    // The results teardown also belongs to the cache observer. Flow
+                    // output does not pass through DispatchInboundGuiEvents on PC.
+                    if (luEventType == 292u)
+                        mGuiCache.RecEvent(lpRawEvent, static_cast<s32>(luEventType));
                     RouteEventToFlow(
                         lpRawEvent, static_cast<s32>(luEventType),
                         static_cast<s32>(luPayloadSize));
