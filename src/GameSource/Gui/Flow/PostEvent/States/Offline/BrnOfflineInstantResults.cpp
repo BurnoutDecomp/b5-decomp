@@ -858,7 +858,7 @@ namespace BrnGui
     //
     // Original per-mode result text and animation selection. Race (0), Marked Man (8)
     // and Burning Route (5) now use the producer-pinned win/crashed-out/timed-out bytes.
-    // Road Rage (3), Pursuit (4) and mode 6 remain to be reconstructed.
+    // Road Rage (3) displays takedowns against its target. Pursuit (4) and mode 6 remain.
     // -----------------------------------------------------------------------------------
     void InstantResultsState::SetupComponents()
     {
@@ -942,6 +942,27 @@ namespace BrnGui
             break;
         }
 
+        case 3: // Road Rage, ARTIST 0x824B4450..0x824B454C.
+        {
+            CGS_ASSERT(liFinishPositionIndex >= 0, "liFinishPositionIndex >= 0");
+            CGS_ASSERT(liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS,
+                       "liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS");
+            char lacTakedowns[1024];
+            CgsCore::SPrintf(lacTakedowns, 1023, "%d", mpGuiCache->GetCurrentTakedownsInEvent());
+            lacTakedowns[1023] = 0;
+            const char* lapacParams[] = { lacTakedowns };
+            const CgsLanguage::LanguageManager::ParameterFormatType laeFormats[] =
+                { CgsLanguage::LanguageManager::E_FORMAT_INTEGER };
+            mFinishedText.SetLocalisedText("POSTRACE_FINISH_YOUR_SCORE_TDS",
+                CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP, 1, lapacParams, laeFormats);
+            CgsCore::SPrintf(lacTakedowns, 1023, "%d", mpGuiCache->GetTargetTakedownsInEvent());
+            lacTakedowns[1023] = 0;
+            mTargetResultText.SetLocalisedText("POSTRACE_FINISH_TARGET_SCORE_TDS",
+                CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP, 1, lapacParams, laeFormats);
+            meWinState = liFinishPositionIndex != 0 ? E_RESULTS_LOSS_WITH_TARGETS : E_RESULTS_WIN_WITH_TARGETS;
+            break;
+        }
+
         case 5: // Burning Route, ARTIST 0x824B4634..0x824B4724.
             if (mResults.mbTimedOut)
             {
@@ -993,7 +1014,7 @@ namespace BrnGui
             break;
 
         default:
-            // ⛔ Arms 3 / 4 / 6 are NOT reconstructed -- see the banner. The X360's
+            // ⛔ Arms 4 / 6 are NOT reconstructed -- see the banner. The X360's
             // own default arm also lands here and prints exactly this line.
             if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
             {
