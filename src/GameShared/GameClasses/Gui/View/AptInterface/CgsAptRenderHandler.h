@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptString.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"      // CgsGraphics::Im2dTransform (mVertexTransform)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // CgsGraphics::ImRenderBuffer<V> (the +4 command buffer)
 #include "GameShared/GameClasses/Containers/CgsHashTable.h"                      // CgsContainers::HashTable<u32,TextureState*,25>
@@ -54,19 +55,6 @@ namespace CgsGuiModuleIO { struct ImRendererSet; }         // the active 2D/3D r
 
 namespace CgsGui
 {
-    // One pooled text unit. The guest array strides 0x80 (128 bytes) per element (the
-    // DestroyAptString slot search uses `i << 7`); only the pool bookkeeping is in scope, so the
-    // unit body is modelled as opaque storage. FLAG: CgsAptString interior is out-of-scope
-    // opaque state (the REAL type lives in CgsAptString.h; the AllocateString TU casts the slot
-    // to it and Prepare fills it in place). x64 STRIDE: the real object widens past the console
-    // 0x80 (the embedded TextObject's pointers + the two-pointer font handle push it to ~0xB8),
-    // so the opaque slot reserves 0x100 -- byte offsets are not load-bearing on the x64 gate,
-    // only "each slot is big enough for the real object" is.
-    struct CgsAptString
-    {
-        u8 mau8Opaque[256];   // console stride 0x80; x64 slot reserves 0x100 (see FLAG above)
-    };
-
     // The active 2D renderer the Apt rasteriser drives. On the X360 this is an Im2dRenderBuffer:
     // its leading word is a head slot (the value GetIm2dRendererType returns the ADDRESS of), and
     // the actual command-buffer state (CgsGraphics::ImRenderBuffer<V>) lives at +4. Render reads
@@ -309,7 +297,7 @@ namespace CgsGui
         // INLINE per slot (same observable: GetUnusedAptString hands each claimed slot its own
         // stable 256-byte text buffer).
         static const u32 KU_APT_STRING_CHARS = 256;
-        CgsAptString    maAptStrings[KU_NUM_APT_STRINGS];       // [guest +99520+192] 0x80-byte units
+        CgsAptString    maAptStrings[KU_NUM_APT_STRINGS];       // native CgsAptString objects
         u8              maacAptStringChars[KU_NUM_APT_STRINGS][KU_APT_STRING_CHARS]; // per-slot text storage
         u8              mabUnusedAptStrings[KU_NUM_APT_STRINGS];// [guest +99520] free flags (1 == free)
 

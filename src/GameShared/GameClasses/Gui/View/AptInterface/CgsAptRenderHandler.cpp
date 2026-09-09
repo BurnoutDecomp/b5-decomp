@@ -190,17 +190,14 @@ namespace CgsGui
         mBackgroundColour.m_rgba = 0;
 
         // ---- build the 256-slot AptString pool against the alt-colour table -----------------
-        // The guest loops 256 times: mark each slot FREE (`*v24 = 1`) then
-        // CgsAptString::Construct(slot, lpAlternateTextColours, liNumAlternateColours). This slice
-        // models the pool slot as opaque storage (the real CgsAptString text-object Construct is
-        // driven from the AllocateString TU that owns that type), so here the pool bookkeeping is
-        // brought up: every slot FREE, the char-pointer table cleared, and the alt-colour table
-        // retained as the table the pool was built with.
+        // ARTIST 0x82854430 constructs every text object with the shared colour table.
         mpAlternateTextColours = lpAlternateTextColours;
         miNumAlternateColours  = liNumAlternateColours;
         for (u32 luIndex = 0; luIndex < KU_NUM_APT_STRINGS; ++luIndex)
         {
             mabUnusedAptStrings[luIndex]    = 1;
+            maAptStrings[luIndex].Construct(
+                reinterpret_cast<const ::RGBA*>(lpAlternateTextColours), liNumAlternateColours);
             maacAptStringChars[luIndex][0]  = 0;   // x64: inline per-slot text storage (header note)
         }
 
