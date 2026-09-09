@@ -669,10 +669,17 @@ namespace RaceCarEntityModuleIO
             mVehicleEffectsInterface.Construct();
             mGameEventQueue.Construct();
             mGameEventQueue.Clear();
-            // [FLAG] the two effects counters and the +149280/+149296 block (mPlayerResetInterface):
-            // those members are still sized-opaque here. The counters are redundant with the two
-            // queue Constructs above (EventQueue::Construct clears miLength); the X360 emits them
-            // separately only because it inlined both Constructs.
+            // The +149280 16-byte block and the +149296 word this Construct's list above names
+            // ARE mPlayerResetInterface, and Clear() is exactly those two stores (rest position
+            // vector + the this-frame flag byte). Mandatory now that
+            // BridgeRaceCarModuleToTrafficModule_PrePhysics copies the whole interface into the
+            // traffic pre-physics input buffer every frame: without it traffic reads a stale
+            // reset position and a stale reset flag out of the previous tenant of this IO-stack
+            // slot. [[unconstructed-buffer]]
+            mPlayerResetInterface.Clear();
+            // [FLAG] the two effects counters: redundant with the two queue Constructs above
+            // (EventQueue::Construct clears miLength); the console emits them separately only
+            // because it inlined both Constructs.
         }
         // ⚠️ THE :4xx NUMBERS BELOW ARE **PS3 DWARF** DECL LINES. The X360 bodies' baked
         // __LINE__ for the same five const accessors is +9 (479/482/485/488/491) -- do NOT use
@@ -685,7 +692,14 @@ namespace RaceCarEntityModuleIO
         VehicleDriverInputInterface*        GetVehicleDriverInterface();                   // :474
         const VehicleEffectsInputInterface* GetVehicleEffectsInterface() const;            // :476 R (0x8279E118, +147488)
         VehicleEffectsInputInterface*       GetVehicleEffectsInterface();                  // :477
-        const RCEntityPlayerResetInterface* GetPlayerResetInterface() const;               // :479 R (0x8279E1C0, +149280)
+        // Inline here, same disposition as the InputBuffer_PrePhysics::GetSceneResultQueue()
+        // const twin above: read-lock tripwire + the member seat, the console's own accessor
+        // shape. It had no out-of-line body anywhere in the tree.
+        const RCEntityPlayerResetInterface* GetPlayerResetInterface() const                // :479 R (+149280)
+        {
+            CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+            return &mPlayerResetInterface;
+        }
         RCEntityPlayerResetInterface*       GetPlayerResetInterface();                     // :480
         const GameEventQueue* GetGameEventQueue() const;                                   // :482 R (0x8279E268, +149312)
         GameEventQueue*       GetGameEventQueue();                                         // :483 W (0x822B5CA8)

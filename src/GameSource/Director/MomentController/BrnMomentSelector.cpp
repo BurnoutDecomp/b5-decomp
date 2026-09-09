@@ -28,6 +28,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] one-shot jump-ladder rungs only
+#include "GameSource/Director/MomentController/BrnMomentSelectorSelector.h"   // Selector<u32,10> (the random arm)
 
 namespace BrnDirector
 {
@@ -555,6 +556,93 @@ bool MomentSelector::SelectBestLRUMomentWithExclusion(s32 liExclusion)
                 << " type=" << static_cast<s32>(
                        mMomentDescriptionArray[static_cast<u32>(liBestMoment)].meMomentType)
                 << " (7=PLAYER_JUMPING 8=PLAYER_STUNT 10=NEW_CAR_JOINED)"
+                << " valid=" << static_cast<s32>(muValidMoments)
+                << " excl=" << liExclusion << "\n";
+        }
+    }
+
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------
+// SelectBestRandomMomentWithExclusion -- the E_MODE_RANDOM_BEST arm of
+// SelectBestMomentWithExclusion. Unreachable on the shipped path: Construct writes
+// meSelectionMode = E_MODE_LRU_BEST and SetSelectionMode has no caller in this tree.
+//
+// The candidate loop and the success tail are identical to the LRU arm above; only the
+// "keep the best" step differs -- every qualifying candidate is pushed into a local
+// Selector<u32,10> (BrnMomentSelectorSelector.h) as {score, slot index} and the winner is
+// drawn weighted-randomly.
+//
+// Weight contract: Selector::AddElement asserts 0.0f < lfWeight0To1 <= 1.0f, so a
+// zero-scoring candidate trips that assert here where the LRU arm would accept it. That
+// assert belongs to AddElement, not to this function, and is deliberately not pre-filtered.
+// ---------------------------------------------------------------------------------------
+bool MomentSelector::SelectBestRandomMomentWithExclusion(CgsNumeric::Random& lRandom,
+                                                        s32 liExclusion)
+{
+    if (muValidMoments == 0)                                        // +0x1D0
+    {
+        return false;
+    }
+
+    Selector<u32, 10> lSelector;
+    lSelector.Construct();
+
+    const s32 liMomentCount = static_cast<s32>(mMomentDescriptionArray.GetLength());   // +0x0A0
+
+    for (s32 liLoop = 0; liLoop < liMomentCount; ++liLoop)
+    {
+        if (!mMomentHandleArray[static_cast<u32>(liLoop)].IsAllocated())
+        {
+            continue;
+        }
+
+        if (mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment()->GetState() !=
+            Moment::E_STATE_VALID)                                   // +0x174 == 3
+        {
+            continue;
+        }
+
+        if (!mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment()->CanSwitchToMeNow())
+        {                                                            // +0x178
+            continue;
+        }
+
+        if (liLoop == liExclusion)
+        {
+            continue;
+        }
+
+        const MomentDescription& lrDescription = mMomentDescriptionArray[static_cast<u32>(liLoop)];
+        const f32 lfScore =
+            (1.0f - mRecencyArray[static_cast<u32>(liLoop)]) * lrDescription.mfWeighting;
+
+        lSelector.AddElement(lfScore, static_cast<u32>(liLoop));
+    }
+
+    if (lSelector.GetLength() == 0)
+    {
+        return false;
+    }
+
+    const s32 liSelectedMoment = static_cast<s32>(lSelector.GetSelection(lRandom));
+
+    mbHasSelectedMoment = true;            // +0x1E0
+    miSelectedMoment    = liSelectedMoment;   // +0x1D8
+    mRecencyArray[static_cast<u32>(liSelectedMoment)] = 1.0f;
+
+    // [DIAG] one-shot jump-ladder rung 7 for the random arm; remove with the other diagnostics.
+    {
+        static bool sbLoggedFirstRandomSelection = false;
+        if (!sbLoggedFirstRandomSelection && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLoggedFirstRandomSelection = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[FLAG PC bring-up] [jump-ladder] MomentSelector SELECTED moment (RANDOM arm) slot="
+                << liSelectedMoment
+                << " type=" << static_cast<s32>(
+                       mMomentDescriptionArray[static_cast<u32>(liSelectedMoment)].meMomentType)
                 << " valid=" << static_cast<s32>(muValidMoments)
                 << " excl=" << liExclusion << "\n";
         }

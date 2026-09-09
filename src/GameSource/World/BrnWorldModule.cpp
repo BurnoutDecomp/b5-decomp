@@ -600,10 +600,19 @@ WorldModule::Destruct()
 // ============================================================================
 // ExternalSceneQueriesUpdate  @ 0x827B06C8
 // ============================================================================
+// A pointer-adjusting tail-jump onto the scene module's virtual slot 17, so the
+// target receives the caller's first four arguments verbatim. The fifth (the frame
+// update set) is not consumed by the target and stops here.
 void
-WorldModule::ExternalSceneQueriesUpdate()
+WorldModule::ExternalSceneQueriesUpdate(
+    CgsModule::IOBufferStack* lpInputBufferStack,
+    CgsModule::IOBufferStack* lpOutputBufferStack,
+    CgsSceneManager::SceneManagerIO::InputBuffer_Query* lpQueryInput,
+    CgsSceneManager::SceneManagerIO::OutputBuffer* lpQueryOutput,
+    BrnUpdateSet /*lUpdateSet*/ )
 {
-    mSceneModule.ExternalSceneQueriesUpdate();
+    mSceneModule.ExternalSceneQueriesUpdate( lpInputBufferStack, lpOutputBufferStack,
+                                             lpQueryInput, lpQueryOutput );
 }
 
 // ============================================================================

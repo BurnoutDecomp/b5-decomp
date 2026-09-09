@@ -822,17 +822,11 @@ public:
     // line results are harvested. Landed 2026-09-07 (issue #14); it had been a parked no-op.
     void ResetAboveGroundTestResults();
 
-    // Two DWARF-attested
-    // per-frame members the manager's conductor calls (BrnPhysicalTrafficManager.h:152/:155).
-    // Both DECLARED for the conductor's closure; bodies are named FLAG TRAP STUBS in
-    // BrnVehicleManagerLinkStubs.cpp (dead until PhysicsModule::Update lands):
-    //   * UpdateTrafficPhysics @0x82644418 is an .ida-exports HOLE (image-only; the
-    //     VehiclePhysicsLinkStubs banner already records it as the console caller of the
-    //     traffic Update leaves) -- its body is its own wave.
-    //   * PassNearbyCrashingTrafficIdsToRaceCarModule's X360 address is not yet pinned
-    //     (absent from this TU's dossier; recover by caller set at its own wave).
-    // Conductor call sites: asm 0x82645E1C..44 (f1/f2 = sim/game dt, r6 = &mCameraMatrix,
-    // r7 = mbImpactTime, r8 = 0) and 0x82645EB0..D0 (r4 = manager-out, v1 = player pos).
+    // The two per-frame members the manager's conductor calls, both bodied:
+    // UpdateTrafficPhysics in BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp, and
+    // PassNearbyCrashingTrafficIdsToRaceCarModule -- the traffic pass-by stage that fills the
+    // manager-output interface's FINE crashed-traffic queue -- in
+    // BrnPhysicalTrafficManager_wG_CrashingIds.cpp.
     void UpdateTrafficPhysics(f32 lfSimTimeStep, f32 lfGameTimeStep,
                               const Matrix44Affine* lpCameraMatrix,
                               bool lbImpactTime, bool lbUnknownFalse);

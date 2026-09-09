@@ -29,7 +29,6 @@
 //     earlier than this note said.
 //   * DoCrashPrediction -- NOT dead-gated on the console: it runs unconditionally in the
 //     non-catchup path. Deferral list = the L1/L2 web banked in BrnVehicleManager.h's banner.
-//   * deformation Update/post/sensors/verify -- no deformation this wave.
 //   * CheckState -- pure validation sweep; skipping it validates nothing (170 insns).
 //
 // ⭐⭐ THE TRACTION-LINE CHAIN, RESOLVED BY NAME 2026-08-10 (create-path wave) -- READ THIS
@@ -156,70 +155,6 @@ namespace BrnPhysics
     // EndImpactTime -- 32 X360 instructions between them) landed in the same commit, in
     // BrnVehicleManagerPlayerStats.cpp. If a gate for it ever reappears here the link will say so
     // (LNK2005).
-
-    // =============================================================================================
-    // ⭐ ADDED 2026-08-10 (create-path wave): the three PostSceneUpdate callees whose own closures
-    // are not reconstructed, plus THE SIM FIREWALL. PhysicsModule::PostSceneUpdate @0x825ABC10 is
-    // REAL as of this wave (its WorldLinkStubs boot gate is deleted), so every one of these is now
-    // REACHED EVERY FRAME -- which is exactly why each gets a named, logged deferral rather than a
-    // silent no-op or a trap.
-    // =============================================================================================
-
-    // @0x825A70C0 (63 insns). The POST-scene game-action dispatch. Distinct from HandleGameActions
-    // (now real, in BrnPhysicsModuleGameActions.cpp) and much smaller:
-    // DeformationManager::ProcessDebugResetDeformationModels, then a switch over the same
-    // VariableEventQueue<13312,16> with four arms -- 23 OnPrepareGameMode, 34 OnStartGameMode,
-    // 97 ProcessResetDeformationModelEvent (bracketed by two VerifyPartIndices sweeps),
-    // 99 OnJunkYardDriveThru.
-    //
-    // ⚠️ STILL GATED, AND THE BOUNDARY IS EXACT (re-verified 2026-08-27, showtime S3 wave):
-    // ZERO of its five callees is available, which is why the pre-scene sibling could be landed
-    // this wave and this one could not.
-    //   VehicleManager::OnPrepareGameMode  @0x825B5770  -- ⚠️ AN IDA EXPORT HOLE (no JSON at all).
-    //       Read it headless (x360rd + ppcdis) before recording it as absent.
-    //       ⛔ DO NOT CONFUSE IT WITH `OnGameModePrepare` @0x825B5708, which IS landed this wave
-    //       (BrnVehicleManagerPlayerStats.cpp). Two different functions, near-anagram names, one
-    //       called from each of the two dispatches.
-    //   VehicleManager::OnStartGameMode    @0x825B5838 (46)  -- absent
-    //   VehicleManager::OnJunkYardDriveThru@0x825EB050 (60)  -- absent
-    //   DeformationManager::ProcessDebugResetDeformationModels @0x82641E50 -- DECLARED
-    //       (BrnDeformationManager.h:492), never defined -> LNK2019 if called.
-    //   DeformationManager::ProcessResetDeformationModelEvent  @0x82641D50 -- DECLARED
-    //       (BrnDeformationManager.h:487), never defined -> LNK2019 if called.
-    //   (and VerifyPartIndices @0x826042F8 is itself a conductor gate, further down this file.)
-    //
-    // ⭐ NARROWED 2026-08-29 (drive-thru wave). THE BODY-SHOP REPAIR IS NOW BLOCKED ON CASE 97
-    // ALONE, and case 97 needs exactly ONE new body, not five. The other three arms' callees
-    // (OnPrepareGameMode / OnStartGameMode / OnJunkYardDriveThru) and
-    // ProcessDebugResetDeformationModels stay absent, but they are independent arms -- a drain
-    // loop with 97 live and 23/34/99 FLAG-gated is a legitimate partial, the same shape
-    // TranslateGameActionsToGuiEvents already ships.
-    // The producer half is DONE and MEASURED: `[drivethru] POST bodyshop action=97
-    // entityId=16777216` is on the queue on a real body-shop drive-thru (2026-08-29), the id
-    // comes from RaceCarState::mEntityId at payload+128, and the deepest callee
-    // DeformableObject::ResetDeformation @0x82639D60 is already reconstructed and already
-    // called live from the deactivate path (BrnDeformationManager.cpp).
-    // ProcessResetDeformationModelEvent is then, from the asm:
-    //     idx = FindModelIndexByEntityID(payload+128)          // header-inline, exists
-    //     if (idx == -1) assert("Failed to find deformation model to deactivate", cpp:505)
-    //     mpaModels[idx].ResetDeformation(lpSimInput, lpSceneInterface,
-    //                                     &mDetachedPartManager, &mDetachedWheelManager,
-    //                                     VecFloat{0,0,0,0}, (DeformationResetType)-1,
-    //                                     false, mRandom);
-    // ⛔⛔ AND THERE IS A HAZARD IN IT THAT NOBODY HAS RECORDED: unlike the DEACTIVATE sibling
-    // (@0x82641C58), which has a real `if (idx == -1) continue;` branch, THIS FUNCTION HAS NO
-    // BRANCH. The console asserts and then dereferences `26496 * -1 + mpaModels` regardless --
-    // a wild pointer on a miss. A faithful reconstruction therefore carries an AV that fires
-    // the moment a body-shop action names an entity with no deformation model. Whoever lands
-    // it should decide that deliberately and say so in the commit, not discover it in a shared
-    // build. (Left unlanded here for exactly that reason, not for lack of callees.)
-    void PhysicsModule::HandleGameActionsPostScene(
-        const BrnGameState::GameStateModuleIO::GameActionQueue*,
-        CgsPhysics::PhysicsSimulationIO::InputBuffer*,
-        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*)
-    {
-        BRN_CONDUCTOR_GATE("PhysicsModule::HandleGameActionsPostScene @0x825A70C0 (63)");
-    }
 
     // ⭐⭐ GATE DELETED 2026-08-11 (prepare-chain wave): PhysicsModule::
     // BridgeVehicleManagerToSimulation_PostScene @0x825AB408 -- THE SIM FIREWALL -- is REAL, in
@@ -402,20 +337,6 @@ namespace Vehicle
     // ReadTrafficTractionLineTestResults @0x8262D2B8, are REAL together in
     // BrnPhysicalTrafficManager_TractionLineTests.cpp.
 
-    // UpdateTrafficPhysicsPostSimulation @0x826371D0 is real now. Its articulated-joint tail is
-    // orthogonal to the vehicle post-simulation dispatch and remains loudly deferred here.
-    void PhysicalTrafficManager::ResolveArticulatedJoints()
-    {
-        BRN_CONDUCTOR_GATE("PhysicalTrafficManager::ResolveArticulatedJoints @0x825F0A90");
-    }
-
-    void PhysicalTrafficManager::ProcessJointSpys(
-        const CgsPhysics::PhysicsSimulationIO::OutputBuffer*)
-    {
-        BRN_CONDUCTOR_GATE("PhysicalTrafficManager::ProcessJointSpys "
-                           "(inlined at UpdateTrafficPhysicsPostSimulation @0x826375C4)");
-    }
-
     // ---- 2026-08-11 (driver-arms wave): the TRAFFIC arm gate that stood here for one wave is
     // DELETED. PhysicalTrafficManager::UpdateTrafficDriver @0x825CA8A0 (169) is REAL, in
     // BrnPhysicalTrafficManager_UpdateTrafficDriver.cpp, together with the four VehicleManager arms
@@ -438,11 +359,6 @@ namespace Vehicle
 
 namespace Deformation
 {
-    void DeformationManager::VerifyPartIndices()
-    {
-        BRN_CONDUCTOR_GATE("DeformationManager::VerifyPartIndices @0x826042F8 (165)");
-    }
-
     // ⭐⭐⭐ 2026-08-16 (walls leg 10): the UpdateSensorDisplacements @0x82604000 gate is DELETED --
     // the real body (a perf-mon-bracketed walk of mModelsAdded calling the per-model
     // DeformableObject::UpdateSensorDisplacements) is in BrnDeformationManager.cpp. LNK2005 if it

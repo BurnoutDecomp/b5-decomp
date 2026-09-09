@@ -412,6 +412,19 @@ namespace Vehicle
         // mbOtherGrindingPlayer / mbRubbing).
         VehicleGuiOutputMessages& GetVehicleGuiOutputMessages() { return mVehicleGuiOutputMessages; }
 
+        // ADDITIVE 2026-09-09 (gate wave, lane 03), same family and same evidence as the
+        // Get*EventQueue accessors above: PhysicalTrafficManager::
+        // PassNearbyCrashingTrafficIdsToRaceCarModule folds this to a bare displacement of 752
+        // off the manager-output interface it is handed, and 752 == 0x2F0 is exactly
+        // mFineTrafficCrashedEventQueue's seat below. Its consumer,
+        // BrnWorld::RaceCarEntityModule::UpdateNearMisses, folds the same 752 off its own input
+        // buffer. Mutable because the producer appends to it. No layout, member or existing
+        // signature is touched.
+        FineTrafficCrashedEventQueue& GetFineTrafficCrashedEventQueue()
+        {
+            return mFineTrafficCrashedEventQueue;
+        }
+
     private:
         TrafficCrashedEventQueue     mCrashedTrafficEventQueue;     // @0x0000  (DWARF :176)
         TrafficSlammedEventQueue     mSlammedTrafficEventQueue;     // @0x0150  (DWARF :177)

@@ -58,19 +58,19 @@ namespace CgsResource
         // ---- lifecycle / step machine ------------------------------------------------
         void Construct(PoolModule* lpPoolModule);                         // :80 (deferred)
         void Begin(BaseDefragParams* lpParams);                           // :83 (THIS PASS @ 0x828DA090)
-        bool BeginDefragment(s32 liMemType);                              // :86 (deferred)
-        bool DoFinalAllocations();                                        // :89 (deferred)
+        bool BeginDefragment(s32 liMemType);                              // :86 (parked: _wG_11 partfile)
+        bool DoFinalAllocations();                                        // :89 (parked: _wG_11 partfile)
         s32  FindFirstFreeNode();                                         // :92 (deferred)
         s32  FindNextFreeNode(s32 liStartNode);                           // :95 (THIS PASS @ 0x828DA248)
         s32  BuildFinalRelocationData();                                  // :98 (THIS PASS @ 0x828DA2E8)
 
         // ---- request builders / accessors --------------------------------------------
-        u32  AddAddressedAllocRequest(u32 luSize, u32 luOffset, void* lpOwner);  // :181 (deferred)
+        u32  AddAddressedAllocRequest(u32 luSize, u32 luOffset, void* lpOwner);  // :181 (parked: _wG_11 partfile)
         u32  AddRelocateRequest(u16 luNode, u32 luDestOffset);                   // :203 (THIS PASS @ 0x828D8010)
-        Pool*           GetPool();                                               // :217 (deferred)
+        Pool*           GetPool();                                               // :217 (landed)
         PoolModule*     GetPoolModule();                                         // :223 (deferred)
-        EBatchAllocResult GetAllocationResult(s32 liIndex);                      // :229 (deferred)
-        void            SetMaxToMove(s32 liMaxToMove);                           // :235 (deferred)
+        EBatchAllocResult GetAllocationResult(s32 liIndex);                      // :229 (landed)
+        void            SetMaxToMove(s32 liMaxToMove);                           // :235 (landed)
 
     private:
         // ---- the two concrete-strategy hooks -----------------------------------------

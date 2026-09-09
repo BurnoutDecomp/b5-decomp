@@ -121,6 +121,15 @@ namespace PhysicsSimulationIO
         return &mJointSpyQueue;
     }
 
+    // READ-lock (bit 4) guarded const twin of the accessor above. Its caller,
+    // PhysicalTrafficManager::ProcessJointSpys, is a post-step consumer that runs with the sim
+    // output buffer read-locked.
+    const OutputBuffer::OutJointSpyQueue* OutputBuffer::GetJointSpyQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mJointSpyQueue;
+    }
+
     // X360 0x8259F270. Write-lock (bit 3) guarded accessor returning &mDriveSpyQueue
     // (console +0x20040). ⭐ RETYPED 2026-08-06 from the raw-byte-offset GetOutDriveSpyQueue
     // -- see the header note; the console offset stopped being the host offset the moment

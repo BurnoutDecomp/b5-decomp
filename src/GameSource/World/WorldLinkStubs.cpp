@@ -912,41 +912,6 @@ bool BrnWorld::RaceCarEntityModule::Release()
 // assert-trap bodies in the same TU (off the default ORTHO path) -- see
 // BrnShadowMap.h for the per-function notes.
 // -------------------------------------------------------------------------
-// BrnWorld::TriggerEntityModule
-// -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::TriggerEntityModule::PostSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnWorld::TriggerEntityModuleIO::InputBuffer_PostScene *,class BrnWorld::TriggerEntityModuleIO::OutputBuffer_PostScene *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::TriggerEntityModule::PostSceneUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::TriggerEntityModule::PrePhysicsUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnWorld::TriggerEntityModuleIO::InputBuffer_PrePhysics *,class BrnWorld::TriggerEntityModuleIO::OutputBuffer_PrePhysics *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::TriggerEntityModule::PrePhysicsUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// -------------------------------------------------------------------------
 // BrnWorld::TriggerEntityModuleDebugComponent
 // (world-module mount 2026-07-26: linking the committed
 // BrnTriggerEntityModuleDebugComponent.cpp was tried and REVERTED -- its
@@ -1148,25 +1113,6 @@ int CgsDev::PerfMonCpu::AddMonitor(char const * lpcName, int liColour, int liMin
 // (Camera::Clear() remains declaration-only in the header -- never referenced
 // by a linked TU, so it carries no stub here.)
 // -------------------------------------------------------------------------
-// CgsGraphics::DispatchBin
-// -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void CgsGraphics::DispatchBin::HandleMemoryOverflow(unsigned int)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "CgsGraphics::DispatchBin::HandleMemoryOverflow: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// -------------------------------------------------------------------------
 // CgsGraphics::DispatchList / CgsGraphics::DrawRenderable
 // -------------------------------------------------------------------------
 // (renderer world-pass wave 2026-07-27): DispatchList::AllocateKeyBlock
@@ -1332,8 +1278,8 @@ void CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::AddVolumeInstance(
 //  RETIRED 2026-07-27: real read-locked accessor now inline in CgsSceneManagerIO.h.)
 
 // -------------------------------------------------------------------------
-// CgsSceneManager::SceneManagerModule -- ASSESSED, all seven left stubbed
-// (2026-07-26 wave), each for a concrete reason:
+// CgsSceneManager::SceneManagerModule -- ASSESSED (2026-07-26 wave), each gate
+// left stubbed for a concrete reason:
 //   * Update: the committed 5-arg signature is the X360 vtbl+64 VIRTUAL the
 //     WorldModule stages dispatch through; the concrete target (UpdateScene
 //     @0x828D4C28) drives the spatial-partition / overlap sub-modules that are
@@ -1341,10 +1287,6 @@ void CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::AddVolumeInstance(
 //     shell would still trap inside the seams. (The X360 symbol literally
 //     named SceneManagerModule::Update @0x827E1F28 is a "Don't use this
 //     function" assert trap, not this entry.)
-//   * UpdateQueries / ExternalSceneQueriesUpdate: vtbl+68 dispatch; the
-//     concrete targets (ProcessSceneQueries @0x828D57D0 / ProcessFineQueries
-//     @0x828D5608 family) cannot be pinned without the un-dumped vtable and
-//     also run the seam-stubbed fine-query sub-modules.
 //   * ProcessFrustumTestJobRequests @0x828C7628: starts the loose-octree
 //     frustum-test jobs (rw::collision + job-system closure, seam-stubbed).
 //   * The three Bridge* bodies (@0x828BA8C8 / @0x828BA538 / the truncated-
@@ -1353,22 +1295,6 @@ void CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::AddVolumeInstance(
 // -------------------------------------------------------------------------
 // GATES RETIRED 2026-08-19 (wave Q5 round 3 / F1): SceneManagerModule::BridgeOverlapCullerToOutputBuffer @0x828BA8C8 (THE PotentialContact producer), BridgeOverlapGenerationToOutputBuffer @0x828BA6A0 and BridgeOverlapGenerationToOverlapCulling @0x828BA538 are REAL in CgsSceneManagerBridgeFunctions.cpp (mounted), with the DWARF parameter types.
 
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void CgsSceneManager::SceneManagerModule::ExternalSceneQueriesUpdate()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::SceneManagerModule::ExternalSceneQueriesUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
 
 // (CgsSceneManager::SceneManagerModule::ProcessFrustumTestJobRequests gate RETIRED
 //  2026-07-28, culling wave: the real body @0x828C7628 now lives in
@@ -1512,22 +1438,8 @@ void CgsSceneManager::SceneManagerModule::ExternalSceneQueriesUpdate()
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
-void WorldModule::BridgeRaceCarEntityInfoToOutput_PrePhysics(void *,struct BrnWorldIO::UpdateOutputBuffer *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarEntityInfoToOutput_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
+// BLOCKED: both source queues are opaque 16400-byte blobs (SceneManagerIO::SceneCoarseQueryQueue,
+// ::SceneFineLineTestQueue) with no Append; unpark = collapse them onto the real queue types.
 void WorldModule::BridgeRaceCarModuleToSceneModule_PostScene(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene const *)
 {
     static bool s_bLogged = false;
@@ -1544,6 +1456,8 @@ void WorldModule::BridgeRaceCarModuleToSceneModule_PostScene(void *,struct CgsSc
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
+// BLOCKED on the destination: BrnTrafficIO::InputBuffer_PostScene has no SetRaceCarToTrafficInterface,
+// and RaceCarToTrafficInterface is forked into two unrelated one-byte placeholders.
 void WorldModule::BridgeRaceCarModuleToTrafficModule_PostScene(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostScene *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene const *)
 {
     static bool s_bLogged = false;
@@ -1552,22 +1466,6 @@ void WorldModule::BridgeRaceCarModuleToTrafficModule_PostScene(void *,class BrnT
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
             *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarModuleToTrafficModule_PostScene: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void WorldModule::BridgeRaceCarModuleToTrafficModule_PrePhysics(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarModuleToTrafficModule_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -1583,6 +1481,10 @@ void WorldModule::BridgeRaceCarModuleToTrafficModule_PrePhysics(void *,class Brn
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
+// BLOCKED on the post-physics leg: BrnTrafficIO::InputBuffer_PostPhysics models its scene-result queue
+// as an opaque 32784-byte blob with no getter, and that buffer has no Construct (promoting the blob must
+// bring the Construct call with it). The pre-physics leg alone is expressible but half a bridge is worse
+// than an inert one.
 void WorldModule::BridgeSceneQueryResultsToTrafficModule_PrePhysics(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics *,class BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics *,struct CgsSceneManager::SceneManagerIO::OutputBuffer const *)
 {
     static bool s_bLogged = false;
@@ -1599,22 +1501,8 @@ void WorldModule::BridgeSceneQueryResultsToTrafficModule_PrePhysics(void *,class
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
-void WorldModule::BridgeSceneQueryResultsToTriggerModule_PrePhysics(void *,class BrnWorld::TriggerEntityModuleIO::InputBuffer_PrePhysics *,struct CgsSceneManager::SceneManagerIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeSceneQueryResultsToTriggerModule_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
+// BLOCKED: this one builds an event rather than merging a queue, and the traffic vehicle-input
+// interface interior, the 56-byte record type and its record id all have no home in the tree.
 void WorldModule::BridgeTrafficCarEntityInfoToOutput_PrePhysics(void *,struct BrnWorldIO::UpdateOutputBuffer *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PrePhysics const *)
 {
     static bool s_bLogged = false;
@@ -1631,6 +1519,8 @@ void WorldModule::BridgeTrafficCarEntityInfoToOutput_PrePhysics(void *,struct Br
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
+// BLOCKED: the source, BrnTrafficIO::OutputBuffer_PostScene, holds its own nested 16400-byte
+// SceneCoarseQueryQueue blob with no Append (same fork as BridgeRaceCarModuleToSceneModule_PostScene).
 void WorldModule::BridgeTrafficModuleToSceneModule_PostScene(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene const *)
 {
     static bool s_bLogged = false;
@@ -1648,22 +1538,6 @@ void WorldModule::BridgeTrafficModuleToSceneModule_PostScene(void *,struct CgsSc
 // home TU already mounted; NEITHER was true, and the claim is exactly what stopped anyone
 // looking for six weeks. Do not restate a mount here: the build list is the only place that
 // records one.)
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void WorldModule::BridgeTriggerModuleToSceneModule_PostScene(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,class BrnWorld::TriggerEntityModuleIO::OutputBuffer_PostScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeTriggerModuleToSceneModule_PostScene: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
 
 // (rw::BitTable::GetResourceDescriptor stub RETIRED 2026-07-26: the real body now
 // lives in its owning TU, src/vendor/renderware/collision/BitTable.cpp.)
@@ -1843,6 +1717,8 @@ RealmcIface::MemcardInterface::~MemcardInterface()
 // X360 the _PrePhysics sibling's pre-scene twin -- reconstruct and DELETE this gate.
 // One-shot log + inert: the module/interface it would feed is itself gated
 // inert, so dropping the transfer is the consistent observable.
+// BLOCKED ON EVIDENCE: this function has no per-function export at all, so there is nothing to
+// reconstruct from. Likely the pre-scene twin of BridgeTrafficCarEntityInfoToOutput_PrePhysics.
 void WorldModule::BridgeTrafficEntityInfoToOutput_PreScene(void *,struct BrnWorldIO::UpdateOutputBuffer *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene const *)
 {
     static bool s_bLogged = false;
@@ -1876,6 +1752,8 @@ void WorldModule::BridgeTrafficEntityInfoToOutput_PreScene(void *,struct BrnWorl
 // X360 the crash post-physics output leg -- reconstruct and DELETE this gate.
 // One-shot log + inert: the module/interface it would feed is itself gated
 // inert, so dropping the transfer is the consistent observable.
+// BLOCKED ON EVIDENCE: this function has no per-function export at all, so there is nothing to
+// reconstruct from. Known: it is the sole caller of UpdateOutputBuffer::SetCrashNetworkOutputInterface.
 void WorldModule::BridgeCrashModuleToOutput(void *,struct BrnWorldIO::UpdateOutputBuffer *,struct BrnWorld::CrashIO::OutputBuffer_PostPhysics const *)
 {
     static bool s_bLogged = false;
@@ -1996,22 +1874,6 @@ void WorldModule::BridgeCrashModuleToOutput(void *,struct BrnWorldIO::UpdateOutp
 
 // definition here would be a duplicate symbol at link.
 // GATE RETIRED 2026-08-18 (breakable-props wave Q mount): BrnWorld::PropEntityModule::PostPhysicsUpdate @0x823031D8 (PropEntityModule_wQ2_02.cpp) is now REAL.
-
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the trigger pre-scene tick (X360 vtbl+64).
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnWorld::TriggerEntityModule::PreSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnWorld::TriggerEntityModuleIO::InputBuffer_PreScene *,class BrnWorld::TriggerEntityModuleIO::OutputBuffer_PreScene *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TriggerEntityModule::PreSceneUpdate: inert [FLAG PC boot gate]\n";
-    }
-}
 
 // GATE RETIRED 2026-08-25 (crash exit): BrnWorld::CrashModule::PreSceneUpdate @0x827D3A60 is REAL
 // in GameSource/World/CrashModule/BrnCrashModule_RaceCarCrashes.cpp -- it runs TickCrashes and

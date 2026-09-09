@@ -436,6 +436,11 @@ namespace PhysicsSimulationIO
         // with `bl sub_8259F1C8`.)
         OutJointSpyQueue* GetJointSpyQueue();
 
+        // READ-lock (bit 4) guarded const twin, returning the same &mJointSpyQueue. Its consumer,
+        // PhysicalTrafficManager::ProcessJointSpys, runs off the read-locked sim output buffer;
+        // the mutable overload would fire "Not locked for writing" there every frame.
+        const OutJointSpyQueue* GetJointSpyQueue() const;
+
         // X360 0x8259F270: write-lock (bit 3) guarded; returns &mDriveSpyQueue (console +0x20040).
         // ⭐ RETYPED 2026-08-06: this was `void* GetOutDriveSpyQueue()` returning a raw
         // `this + 0x20040` byte pointer -- a CONSOLE offset that would have silently pointed

@@ -94,6 +94,13 @@ namespace Vehicle
         ArticulatedJoint* GetJoint(s32 liJointIndex);                 // @0x825C2B40 (DWARF :136)
         bool              IsJointInUse(s32 liJointIndex) const;       // @0x825C29C8 (DWARF :119)
 
+        // Given one half of an articulated pair, the TRAFFIC INDEX of the other half. Bodied in
+        // the sibling partfile BrnArticulatedJointPool_wG12_OtherHalf.cpp. FLAG: liArticulatedType
+        // is the caller's PhysicalTrafficVehicle::EArticulatedVehicleType taken as s32 -- that
+        // type is declared in BrnPhysicalTrafficManager.h, which includes THIS header, so naming
+        // the enum here would close an include cycle.
+        s32               GetIndexOfOtherHalf(s32 liJointIndex, s32 liArticulatedType);
+
         // @0x826013C0 (DWARF :104). Drain one frame's batched joint create/remove requests out of
         // the working buffer and onto the simulation request interface.
         void SendCreateRemoveJointEvents(VehicleOutputRequestInterface* lpRequestInterface,

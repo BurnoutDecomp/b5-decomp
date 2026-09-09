@@ -2,8 +2,7 @@
 // GameSource/Director/BrnDirectorICEWrapper.cpp
 //
 // BrnDirector::ICEWrapper -- the director-side owner/driver of the ICE (In-game
-// Camera Editor) runtime. The four functions in this TU:
-//   ICEWrapper              build the heaps + manager + mover, seed the action queue
+// Camera Editor) runtime. The three functions in this TU:
 //   EditorOn                console off, stop playback, enter editor mode
 //   EditorOff               console on, leave the editor if it is active
 //   ReconstructCameraMover  rebuild the mover from the active take
@@ -24,20 +23,9 @@
 namespace BrnDirector
 {
 
-// ---------------------------------------------------------------------------
-// ICEWrapper (ctor)
-//
-// The base heap, the second scratch heap, the ICE manager, the camera mover, the ICE
-// camera and the reference-space cache are all embedded members, so member
-// construction performs their builds. The only scalar the ctor body sets is the
-// action queue's length word: it is seeded to the Stack's "unconstructed" sentinel
-// (the queue is made usable later by Construct()/UpdateAction, which Clear it to 0).
-// ---------------------------------------------------------------------------
-ICEWrapper::ICEWrapper()
-{
-    // The action stack starts unconstructed: any use before Construct/Clear asserts.
-    mActionQueue.miLength = CgsContainers::KI_STACK_UNCONSTRUCTED;
-}
+// PARKED, missing declarations: ICEController::EditorOn, ICEController::SetState,
+// ICECameraMover::Construct, DebugInterface::EnableConsole, DebugInterface::DisableConsole
+// have no definition in the tree.
 
 // ---------------------------------------------------------------------------
 // EditorOn

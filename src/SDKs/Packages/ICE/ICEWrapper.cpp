@@ -67,9 +67,17 @@ namespace
 // @+0x11D70); mfTimeScale = 0 (+0x9B20). No write to the manager playback flag, the
 // current-movie id, or the accept-input gate happens here.
 // ----------------------------------------------------------------------------
+// PARKED, missing declaration: BrnDirector::Camera::Camera::Construct has no linked body
+// (GameSource/Director/Camera/Camera.cpp is not on the source list).
 void ICEWrapper::Construct()
 {
     mVehicleRef.Construct();
+
+    // VehicleRef::Set(E_PLAYER_CAR, ..) inlined -- the ref is bound to the player car.
+    mVehicleRef.meType         = VehicleRef::E_PLAYER_CAR;
+    mVehicleRef.mbSet          = true;
+    mVehicleRef.muRef          = 0;
+    mVehicleRef.miRaceCarIndex = -1;
 
     // Reset the two ICE load-state scalars.
     miICELoadStateA = 0;

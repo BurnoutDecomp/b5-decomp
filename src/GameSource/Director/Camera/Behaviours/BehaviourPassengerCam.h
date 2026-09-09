@@ -21,14 +21,25 @@ namespace BrnDirector
 namespace Camera
 {
 
+// The passenger cam's own behaviour-type enumerator; the value 7 is the tag SetParameters
+// compares against.
+enum EBehaviourTypePassengerCam
+{
+    eBehaviourPassengerCam = 7
+};
+
 struct BehaviourPassengerCam : public Behaviour
 {
     // DWARF BehaviourPassengerCam.h:104 -- the authored parameter block.
     struct Parameters : public Behaviour::Parameters
     {
         // BehaviourPassengerCam.h:108 (cpp:34 body calls Behaviour::Parameters::
-        // Construct) -- not X360-exported (folded); declared-only.
+        // Construct) -- not exported (folded); declared-only.
         void Construct();
+
+        // The camera-tunings visitor: walks this block's fields into the serialiser S
+        // (TextFile{Read,Write}Serialiser / DebugMenuSerialiser). Body is a separate TU.
+        template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
         // BehaviourPassengerCam.h:115 -- Utils::CameraImpactEffect::Parameters
         // BY VALUE. FLAG: the impact-effect parameter block's own home

@@ -235,7 +235,16 @@ namespace BrnWorld
         // environment map.
 
         // @0x827B06C8 -- forward the scene module's external-queries update.
-        void ExternalSceneQueriesUpdate();
+        // The caller (the game module's director update) passes the two buffer
+        // stacks, the query input buffer, the scene output buffer and the frame
+        // update set. The scene-side target consumes the first four; the update set
+        // stops here, which is why it is accepted and not forwarded.
+        void ExternalSceneQueriesUpdate(
+            CgsModule::IOBufferStack* lpInputBufferStack,
+            CgsModule::IOBufferStack* lpOutputBufferStack,
+            CgsSceneManager::SceneManagerIO::InputBuffer_Query* lpQueryInput,
+            CgsSceneManager::SceneManagerIO::OutputBuffer* lpQueryOutput,
+            BrnUpdateSet lUpdateSet );
 
         // @0x827B06E0 -- forward the physics network catch-up (buffer-stack args
         // asserted non-null, then mPhysicsModule.UpdateNetworkCatchup).

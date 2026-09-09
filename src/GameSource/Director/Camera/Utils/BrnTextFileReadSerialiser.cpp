@@ -43,7 +43,7 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGyroCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourHeliCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h"
-#include "GameSource/Director/Camera/Behaviours/BrnBehaviourPassengerCam.h"
+#include "GameSource/Director/Camera/Behaviours/BehaviourPassengerCam.h"
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"     // BehaviourRig::Parameters + Utils::{CameraShake,Looker}::Parameters
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"            // BrnDirector::{IceMovie,ICEMoviePlaylist}
 

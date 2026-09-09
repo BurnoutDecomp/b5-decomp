@@ -1,6 +1,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/System/Resource/PoolModuleStates/CgsBaseDefragPoolModuleState.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"   // Pool, AllocListSet (GetAllocationResult)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -132,6 +133,24 @@ namespace CgsResource
         u32 luIndex = muRelocationCount;       // result = *(a1+0x40)
         muRelocationCount = luIndex + 1;       // *(a1+0x40) = result + 1
         return luIndex;
+    }
+
+    // -------- trivial accessors --------
+    // Header-inline on the console; given out-of-line homes here.
+    Pool* BaseDefragPoolModuleState::GetPool()
+    {
+        return mpPool;
+    }
+
+    void BaseDefragPoolModuleState::SetMaxToMove(s32 liMaxToMove)
+    {
+        miMaxToMove = liMaxToMove;
+    }
+
+    EBatchAllocResult BaseDefragPoolModuleState::GetAllocationResult(s32 liIndex)
+    {
+        CGS_ASSERT(mpAllocListSet, "mpAllocListSet");
+        return mpAllocListSet->maeAllocRequestResults[liIndex];
     }
 
     // FLAG (link stub): the base RunDefragAlgorithm / RunPoolDefragmentation are declared

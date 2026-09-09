@@ -10,14 +10,13 @@
 // ⭐ 2026-08-09 (conductor wave): PhysicsModule::Update IS LANDED, so this file's census split
 // in two. The stubs REACHED UNCONDITIONALLY EVERY FRAME by the landed UpdateVehiclePhysics
 // (UpdateVehicleImpacts, EndVehicleTractionLineTests, UpdateAggressiveDriving, UpdateCrashes,
-// CrashFatalRaceCars [mbCrashRaceCarWhenFatal is Construct-seeded TRUE], PTM::UpdateTrafficPhysics,
-// PTM::PassNearbyCrashingTrafficIdsToRaceCarModule) are converted from CGS_ASSERT(false) traps --
-// which would block the sim on frame one -- to the sanctioned LOUD one-shot boot-gate shape:
-// one log line per boot naming symbol/address/insns, then inert. The rest stay ASSERT TRAPS
-// because their call sites are genuinely input/state-gated on a default run (SetRaceCarCrashing:
-// takedown chain; ReadSurfaceProperties: player reset button behind a != -1 guard;
-// VehicleDriver::UpdateVehicle + DebugComponent::Update: per-LIVE-car, and the create path is
-// still inert so the live set is empty).
+// CrashFatalRaceCars [mbCrashRaceCarWhenFatal is Construct-seeded TRUE], PTM::UpdateTrafficPhysics)
+// are converted from CGS_ASSERT(false) traps -- which would block the sim on frame one -- to the
+// sanctioned LOUD one-shot boot-gate shape: one log line per boot naming symbol/address/insns,
+// then inert. The rest stay ASSERT TRAPS because their call sites are genuinely input/state-gated
+// on a default run (SetRaceCarCrashing: takedown chain; VehicleDriver::UpdateVehicle +
+// DebugComponent::Update: per-LIVE-car, and the create path is still inert so the live set is
+// empty).
 //
 // ⛔ NEVER make a gate silent. The log-once IS the loudness. Reconstruct the real body in its
 // own TU and DELETE the stub (duplicate-definition LNK2005 is the intended tripwire).
@@ -53,8 +52,6 @@
 //       against the DWARF + the PS3 mangle before writing it (the dropped-argument trap).
 //   CrashFatalRaceCars (DWARF h:1287)         -- STILL genuinely absent from the export set by
 //       name; its callee, the 6-arg ForceRaceCarCrash @0x82635B00, lands with it.
-//   ReadSurfaceProperties(u64) @0x825C7BB8 (187) -- AttribSys walk; two unidentified callees
-//       (Attrib::FindCollectionWithDefault [external], sub_8227FB58).
 //   VehicleDriver::UpdateVehicle @0x825D7290 (219) -- ⭐ BODIED 2026-08-11 in BrnVehicleDriver.cpp;
 //       the stub AND its (wrong) "driver-controls dispatch" description are gone. See the
 //       deletion note below.
@@ -64,8 +61,6 @@
 //       JSON at that address and nothing of that name in the set). ⚠️ Its sibling
 //       UpdateTrafficPhysicsPostSimulation @0x826371D0 (270) IS exported -- do not mistake one
 //       for the other when decoding the `bl` at the call site.
-//   PTM::PassNearbyCrashingTrafficIdsToRaceCarModule -- ⭐ ADDRESS PINNED 2026-08-10:
-//       **0x825EEB70, 256 insns** (was "address not yet pinned; recover by caller set").
 //
 // ⚠️⚠️ WHY THREE OF THE LINES ABOVE CHANGED -- AN AUDIT WORTH REPEATING ELSEWHERE.
 // On 2026-08-10 a name->address index was built over ALL 30,084 X360 export JSONs and every
@@ -133,60 +128,6 @@ namespace Vehicle
     // InstantTakedown's end and PhysicalTrafficManagerDebugComponent::RenderWorld), and it was
     // decoded from image.bin -- see that TU's banner for the register map.
 
-    // Breaker @0x825C7BB8; DecFIGS BrnVehicleManager.cpp:9410.
-    // A STALE SURFACELIST.BIN makes this walk die in Attrib::Collection::GetData ("Cannot
-    // get non-array data from a non-zero index", then an AV): the vault must come from the
-    // CURRENT attribsys-vault converter (build_game_data.py --only "SURFACELIST.BIN"
-    // --force). Data from the pre-built drop predates it.
-    void VehicleManager::ReadSurfaceProperties(u64 luSurfaceListKey)
-    {
-        Attrib::Gen::surfacelist lSurfaceList;
-        lSurfaceList.ChangeWithDefault(luSurfaceListKey);
-
-        // The console sanity-checks surface element 1's leading colour/vector. Its
-        // sign bits are cleared, every lane is compared with FLT_EPSILON, and CR6.EQ
-        // fires the assert only when NONE of the four lanes is greater than epsilon.
-        void* lpSampleRefData = lSurfaceList.Surfaces(1);
-        if (!lpSampleRefData)
-            lpSampleRefData = Attrib::DefaultDataArea(sizeof(Attrib::RefSpec));
-
-        Attrib::RefSpec* lpSampleRef = static_cast<Attrib::RefSpec*>(lpSampleRefData);
-        Attrib::Gen::surface lSampleSurface(
-            const_cast<Attrib::Collection*>(lpSampleRef->GetCollection()), nullptr);
-        const f32* lpSampleData = static_cast<const f32*>(lSampleSurface.GetAttributeData());
-        const f32 KF_EPSILON = 1.1920928955078125e-07f; // stru_8208F620.x
-        CGS_ASSERT(std::fabs(lpSampleData[0]) > KF_EPSILON ||
-                       std::fabs(lpSampleData[1]) > KF_EPSILON ||
-                       std::fabs(lpSampleData[2]) > KF_EPSILON ||
-                       std::fabs(lpSampleData[3]) > KF_EPSILON,
-                   "Surface list appears to be corrupt");
-
-        KI_NUM_USED_SURFACES = lSurfaceList.Num_Surfaces();
-        for (s32 liSurface = 0; liSurface < KI_NUM_USED_SURFACES; ++liSurface)
-        {
-            void* lpSurfaceRefData = lSurfaceList.Surfaces(static_cast<u32>(liSurface));
-            if (!lpSurfaceRefData)
-                lpSurfaceRefData = Attrib::DefaultDataArea(sizeof(Attrib::RefSpec));
-
-            Attrib::Gen::surface lSurface(
-                *static_cast<Attrib::RefSpec*>(lpSurfaceRefData), nullptr);
-            Attrib::Gen::gameplaysurface lGameplaySurface(lSurface.GameplaySurface(), nullptr);
-            Attrib::Gen::physicssurface lPhysicsSurface(lSurface.PhysicsSurface(), nullptr);
-
-            const f32 lfRoughness = lPhysicsSurface.Roughness();
-            const f32 lfLinearDrag = lPhysicsSurface.LinearDrag();
-            const f32 lfGrip = lPhysicsSurface.Grip();
-            KAVF_SURFACE_ROUGHNESS[liSurface] =
-                VecFloat{lfRoughness, lfRoughness, lfRoughness, lfRoughness};
-            KAVF_SURFACE_GRIP[liSurface] = VecFloat{lfGrip, lfGrip, lfGrip, lfGrip};
-            KAVF_SURFACE_LINEAR_DRAG[liSurface] =
-                VecFloat{lfLinearDrag, lfLinearDrag, lfLinearDrag, lfLinearDrag};
-            KAB_SURFACE_IS_WATER[liSurface] = lGameplaySurface.IsWater();
-        }
-
-        gbReadSurfaceProperties = true;
-    }
-
     // ⭐⭐ 2026-08-11 (driving-path wave): the VehicleDriver::UpdateVehicle @0x825D7290 LINK STUB
     // THAT STOOD HERE IS DELETED -- the real 219-instruction body is in BrnVehicleDriver.cpp.
     // ⚠️ AND ITS COMMENT WAS WRONG, which is worth keeping on the record. It said "the driver-type
@@ -224,20 +165,5 @@ namespace Vehicle
     // GATE RETIRED 2026-08-22 (traffic wave T3): PhysicalTrafficManager::UpdateTrafficPhysics
     // @0x82644418 is REAL in BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp (export hole closed
     // with headless idat).
-
-    // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
-    void PhysicalTrafficManager::PassNearbyCrashingTrafficIdsToRaceCarModule(
-        VehicleManagerOutputInterface*, Vector3)
-    {
-        // BOOT GATE (conductor wave 2026-08-09): reached every frame by the landed
-        // UpdateVehiclePhysics. Reconstruct and DELETE this gate.
-        static bool s_bLogged = false;
-        if (!s_bLogged)
-        {
-            s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalTrafficManager::PassNearbyCrashingTrafficIdsToRaceCarModule @0x825EEB70 (256; address PINNED 2026-08-10) inert [FLAG PC boot gate]\n";
-        }
-    }
 }
 }

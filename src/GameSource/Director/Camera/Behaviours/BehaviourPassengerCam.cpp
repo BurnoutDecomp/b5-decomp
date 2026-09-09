@@ -53,5 +53,32 @@ const char* BehaviourPassengerCam::GetName() const
     return "BehaviourPassengerCam";
 }
 
+// Adopt an authored passenger-cam parameter block: assert the block's type tag (a non-gating
+// tripwire -- the stores happen either way), then store the block pointer and its debug name.
+void BehaviourPassengerCam::SetParameters(const Parameters* lpParameters)
+{
+    CGS_ASSERT(lpParameters->GetType() == eBehaviourPassengerCam,
+               "lpParameters->GetType() == eBehaviourPassengerCam");
+
+    mpParameters = lpParameters;                                 // +0x14
+    SetDebugParametersName(lpParameters->GetDebugName());        // +0x10
+}
+
+// vtable slot 1: a bare `return true`, COMDAT-folded in the console image (hence no symbol of
+// its own). The parameter block is not adopted here and the shared info is untouched.
+bool BehaviourPassengerCam::Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo)
+{
+    (void)lrInfo;
+    return true;
+}
+
+// vtable slot 6: a tail call into Utils::Tweaker::Construct on the SUPPLIED tweaker, folded
+// with BehaviourIceAnim::SetupTweaker. The passenger cam resets the tweaker it is handed and
+// exposes no tweakable of its own.
+void BehaviourPassengerCam::SetupTweaker(Utils::Tweaker& lrTweaker)
+{
+    lrTweaker.Construct();
+}
+
 }
 }

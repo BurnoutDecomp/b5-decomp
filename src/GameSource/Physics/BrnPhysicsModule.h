@@ -417,9 +417,10 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
         // VehicleManager::OnPrepareGameMode / OnStartGameMode / OnJunkYardDriveThru, id 97
         // reaches DeformationManager::ProcessResetDeformationModelEvent between two
         // VerifyPartIndices sweeps, and the whole loop is preceded by
-        // DeformationManager::ProcessDebugResetDeformationModels. FLAG: DECLARED for
-        // PostSceneUpdate's closure; body is a LOUD one-shot gate (BrnPhysicsConductorGates.cpp)
-        // -- every one of its four arms is itself unreconstructed.
+        // DeformationManager::ProcessDebugResetDeformationModels.
+        // Bodied in BrnPhysicsModule_wG_GameActionsPostScene.cpp. Only arm 97 (the body-shop
+        // repair) is live; the other three arms and the pre-loop debug sweep call bodies that do
+        // not exist in the tree and log named one-shot deferrals instead.
         void HandleGameActionsPostScene( const BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue,
                                          CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
                                          CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface );

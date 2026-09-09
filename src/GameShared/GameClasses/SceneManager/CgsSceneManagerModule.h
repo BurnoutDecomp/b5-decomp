@@ -152,8 +152,14 @@ namespace CgsSceneManager
     {
     public:
         // ADDITIVE (WorldModule::ExternalSceneQueriesUpdate @0x827B06C8 forwards to
-        // this virtual -- X360 vtbl slot +68). Declaration-only; body with its own TU.
-        void ExternalSceneQueriesUpdate();
+        // this virtual -- vtbl slot +68). Body in
+        // CgsSceneManagerModule_wG_ExternalQueries.cpp. The four parameters are the
+        // first four the console's caller passes; the vtbl+68 target
+        // (ProcessSceneQueries) consumes exactly those.
+        void ExternalSceneQueriesUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
+                                         CgsModule::IOBufferStack* lpOutputBufferStack,
+                                         SceneManagerIO::InputBuffer_Query* lpQueryInput,
+                                         SceneManagerIO::OutputBuffer* lpQueryOutput );
 
         // ADDITIVE (WorldModule::GenerateFrustumQueries @0x827DADF8 hands the staged
         // frustum-test queries to the job system through this). Declaration-only.

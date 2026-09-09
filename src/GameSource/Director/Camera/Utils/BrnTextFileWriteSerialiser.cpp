@@ -41,7 +41,7 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGyroCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourHeliCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h"
-#include "GameSource/Director/Camera/Behaviours/BrnBehaviourPassengerCam.h"
+#include "GameSource/Director/Camera/Behaviours/BehaviourPassengerCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourRoadRunner.h"          // BehaviourRoadRunner::Parameters (attested-empty text walk)
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.h"  // BehaviourRotateAboutVehicle::Parameters (attested-empty text walk)
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h"  // BehaviourSpirallingDeathcam::Parameters (attested-empty text walk)

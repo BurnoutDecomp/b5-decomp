@@ -21,11 +21,6 @@ namespace BrnDirector
         return true;
     }
 
-    // FLAG (placeholder name): the bystander moment's debug name string lives in
-    // un-homed rodata; returning a stable literal here keeps the embed concrete
-    // without fabricating the exact X360 string as fact.
-    const char* MomentBystanderSeesAction::GetName() const
-    {
-        return "MomentBystanderSeesAction";
-    }
+    // Prepare (above) is the one MomentBystanderSeesAction member homed in this TU rather than
+    // in the class's own Moments/BrnMomentBystanderSeesAction.cpp.
 }

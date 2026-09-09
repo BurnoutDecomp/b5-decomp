@@ -31,6 +31,21 @@
 // ICEMoviePlayer / ICEWrapper. The GameState / player-car snapshot it reacts to is read by named
 // members.
 // ----------------------------------------------------------------------------
+//
+// PARKED -- not on the exe source list. It compiles clean; twelve externals it needs have no
+// definition in any mounted TU, and the five ArbStateCrashNav stubs in
+// Director/DirectorLinkStubs.cpp stay until they are all cleared:
+//   ICEMoviePlayer::Construct / Prepare / Update / Stop / Loop / GetCamera /
+//     InterpolateFrom / CutToInterpolateOut  (8) -- written, in the unmounted
+//     Director/Utils/BrnICEMoviePlayer.cpp (only its partfile BrnICEMoviePlayer_wP0_01.cpp
+//     is on the source list).
+//   ICEWrapper::GetCurrentMovie / PlayMovie  (2) -- written, unmounted
+//     SDKs/Packages/ICE/ICEWrapper.cpp.
+//   SharedCameraContainer::GetGameplayCameraHelperIndex  (1) -- written, unmounted
+//     Camera/BrnSharedCameraContainer.cpp.
+//   Camera::Camera::SetRequestedBorderPostFX  (1) -- declared in Camera/Camera.h, defined
+//     nowhere in the tree; three call sites here. Needs recovery, not a mount.
+// ----------------------------------------------------------------------------
 
 namespace BrnDirector
 {

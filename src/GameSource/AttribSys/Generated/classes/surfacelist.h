@@ -73,6 +73,12 @@ namespace Gen
         // guarantees the surfacelist collection resolves at WorldModule::Prepare time.
         using Instance::GetCollection;
 
+        // GetCollection above returns the bound collection's KEY, and key == 0 is not a reliable
+        // "no collection" test -- a real bind can carry any key. IsValid (mpCollection != 0) is
+        // the predicate ReadSurfaceProperties' boot guard wants. Re-exported like the two above
+        // because the derivation is private; no new API.
+        using Instance::IsValid;
+
         // The generated "Surfaces" indexed-array accessor (DWARF Attrib::Gen::surfacelist
         // ::Surfaces): return the attribute pointer for element luIndex of the Surfaces
         // array. Inlined at its call sites in the X360 build (e.g. WheelStateMachine::
