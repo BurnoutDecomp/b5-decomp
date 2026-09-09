@@ -2619,15 +2619,9 @@ static_assert(__builtin_offsetof(GuiEventPrepareForModeStart, meGameModeType)   
 //   +0xB7  mbHasUnlockedFreeCar    streamed "Results.Unlocked Free Car = "; `lbz 0x232F`.
 //   +0xB8  mbHasRankedUp           `lbz r11, 0x2330(r31)` gating mabSubStateFlags[RANK_UP_LICENSE].
 //
-// ⛔ WHAT IS DELIBERATELY LEFT UNNAMED (six spans). The DWARF supplies four more flag names
-// (mbCrashedOut / mbTimedOut / mbEliminated / mbCountsTowardsProgression) plus miModeScore,
-// miBaseScore, miScoreMultiplier, mfDistanceTravelled and mNewlyUnlockedFreeCarID, but the
-// X360 asm does not pin ANY of them to a slot from this class's code, and the DWARF order is
-// already proven wrong for this struct. SetupComponents reads +0xB3 where the string is
-// "POSTRACE_OUTOFTIME" (so +0xB3 is a timed-out flag) but the DWARF run would put mbEliminated
-// there -- i.e. naming that run from the DWARF would demonstrably mis-name at least one field.
-// They are therefore reserved spans, not guesses. Name them when a producer-side write pins
-// them (the writer is GuiCache +40552; that is the place to look, not this consumer).
+// Remaining reserved spans stay unnamed until their producer/consumer chain is pinned.
+// Do not assign them by DWARF order: ARTIST places win/crashed-out/timed-out at B1/B2/B3,
+// which differs from the PS3 declaration order. The named fields below cite their evidence.
 // ARTIST0x824C5BE4..0x824C5C0C: native event298 carries the sequence name and voice key.
 // DecFIGS names this sequence-start record but numbers it296; ARTIST uses298.
 struct GuiEventPostEventNewRivalSequenceStart : public CgsGui::GuiEvent<298>
@@ -2696,7 +2690,7 @@ struct GuiEventOfflinePostEvent
         s32   miCarsRevealed;                    // +0xA8  "Results.Cars Revealed = "
         s32   miEventsUnlocked;                  // +0xAC  "Results.Events Unlocked = "
         s8    miPlayerFinishPosition;            // +0xB0  "Results.Player Finish Position = "
-        u8    muReservedB1;                      // +0xB1  still unnamed
+        bool  mbPlayerWon;                       // +0xB1; bridge copies action E0, produced by HasPlayerWon().
         bool  mbCrashedOut;                      // +0xB2  DWARF :2387; ARTIST SetupComponents
                                                  // tests it for POSTRACE_TOTALLED. The bridge copies
                                                  // action+E2, written from mbPlayerFinishedCarDestroyed.

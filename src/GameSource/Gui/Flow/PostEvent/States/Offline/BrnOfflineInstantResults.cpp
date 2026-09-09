@@ -856,20 +856,9 @@ namespace BrnGui
     //     mResultsIcon.SetState(meWinState)   -> KAC_RESULTS_FRAMES[meWinState] as "apt_state"
     //     mLargeEventIcon.SetState("transIn") -> the mode icon transitions in (win only)
     //
-    // ⛔ PARTIAL, ARM BY ARM, AND DELIBERATELY SO. The X360 switches on
-    // meFinishedGameModeType across nine arms. Several of them (0, 4, 6) gate on bytes
-    // in OfflinePostEventData's +0xB1..+0xB5 flag run, and that run is NOT attributable: the
-    // PS3 DWARF's declaration order is already proven wrong for this struct, and following it
-    // would put mbEliminated at +0xB3 where the X360's own string is "POSTRACE_OUTOFTIME".
-    // Guessing there prints the WRONG RESULT LINE at the player, silently. So those arms are
-    // left out, loudly, and meWinState keeps the E_RESULTS_PLAIN_LOSS the X360 itself seeds
-    // BEFORE the switch (`li r11, 5` / store to +0x2208 ahead of the dispatch) -- a real
-    // frame, not an out-of-range index, so the panel still appears.
-    // LANDED arms: 1 (won/lost by finish position) and 7/9 (the SCORE modes -- the stunt run
-    // and its sibling), whose every input is attested: miModeScore by its own string id,
-    // GetTargetScoreInEvent by its X360 symbol, miPlayerFinishPosition by the debug print.
-    // Marked Man (8) now uses the producer-pinned mbCrashedOut byte at +0xB2.
-    // Burning Route (5) also uses mbTimedOut at +0xB3, copied from the timed-out producer.
+    // Original per-mode result text and animation selection. Race (0), Marked Man (8)
+    // and Burning Route (5) now use the producer-pinned win/crashed-out/timed-out bytes.
+    // Road Rage (3), Pursuit (4) and mode 6 remain to be reconstructed.
     // -----------------------------------------------------------------------------------
     void InstantResultsState::SetupComponents()
     {
@@ -895,6 +884,16 @@ namespace BrnGui
 
         switch (liGameMode)
         {
+        case 0: // Race, ARTIST 0x824B4134..0x824B41E0.
+            CGS_ASSERT(liFinishPositionIndex >= 0, "liFinishPositionIndex >= 0");
+            CGS_ASSERT(liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS,
+                       "liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS");
+            mFinishedText.SetLocalisedText(KAC_FINISH_POS_STRINGIDS[liFinishPositionIndex],
+                CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+            meWinState = (mResults.mbPlayerWon && !mResults.mbTimedOut)
+                ? E_RESULTS_DETAILED_WIN : E_RESULTS_DETAILED_LOSS;
+            break;
+
         case 1:
             CGS_ASSERT(liFinishPositionIndex >= 0, "liFinishPositionIndex >= 0");          // cpp:1359
             CGS_ASSERT(liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS,
@@ -994,7 +993,7 @@ namespace BrnGui
             break;
 
         default:
-            // ⛔ Arms 0 / 3 / 4 / 6 are NOT reconstructed -- see the banner. The X360's
+            // ⛔ Arms 3 / 4 / 6 are NOT reconstructed -- see the banner. The X360's
             // own default arm also lands here and prints exactly this line.
             if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
             {
