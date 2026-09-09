@@ -1053,6 +1053,19 @@ namespace BrnGui
 
     // @ 0x8250DDF0 -- the three event families used by the reconstructed module:
     // resource load/unload completions and Apt ONLOAD component triggers.
+    // ARTIST 0x824F8988: search the authored event-start table by junction ID.
+    const SatNavEventDisplayInfo* GuiCache::GetEventStartInfoFromJunctionID(u32 luJunctionID) const
+    {
+        for (u32 luIndex = 0; luIndex < GetNumEventStarts(); ++luIndex)
+        {
+            const SatNavEventDisplayInfo* lpStart = GetEventStart(luIndex);
+            if (lpStart->muJunctionId == luJunctionID)
+                return lpStart;
+        }
+        CGS_ASSERT(false, "Unable to find event start with junction id");
+        return 0;
+    }
+
     void GuiCache::RecEvent(const CgsModule::Event* lpEvent, s32 liEventId)
     {
         if (lpEvent == 0)

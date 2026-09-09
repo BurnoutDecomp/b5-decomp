@@ -1534,17 +1534,17 @@ void MapIconManager::UpdateCrashNavIcons()
     }
     else if ((mbShowingPreRaceRoute || mbShowingCrashNavRoute) && muSelectedJunctionID != 0)
     {
-        // [UI-gate] sub_824F8988 -- the junction start-point lookup. Same parked slice.
-        // (State 49 E_ICONSTATE_CRASHNAV_PRERACE_START_POINT, or 51 CUSTOMRENDERED when
-        // mbShowingCrashNavRoute is up.)
-        static bool sbLoggedJunctionPark = false;
-        if (!sbLoggedJunctionPark && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedJunctionPark = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] PARK: UpdateCrashNavIcons junction start-point icon "
-                   "(junction lookup unreconstructed)\n";
-        }
+        const SatNavEventDisplayInfo* lpStart =
+            mpGuiCache->GetEventStartInfoFromJunctionID(muSelectedJunctionID);
+        CrashNavMapIcon& lrStartIcon = mCrashNavIcons[0].mIcon;
+        lrStartIcon.SetAlpha(mbIsActive ? 100.0f : KF_INACTIVE_ALPHA);
+        lrStartIcon.SetRotation(0.0f);
+        lrStartIcon.SetPosition(MapTransform::WorldToDevice(lpStart->mv3Position, true));
+        lrStartIcon.SetState(mbShowingCrashNavRoute
+            ? MapIconBrnBase::E_ICONSTATE_CRASHNAV_CUSTOMRENDERED_START_POINT
+            : MapIconBrnBase::E_ICONSTATE_CRASHNAV_PRERACE_START_POINT);
+        lrStartIcon.Update();
+        liExtraIcons = 1;
     }
 
     // v124: the camera lane the alpha fade measures against (the @0x82CDA450 vperm picks

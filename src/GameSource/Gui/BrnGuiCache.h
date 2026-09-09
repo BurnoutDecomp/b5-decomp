@@ -532,6 +532,9 @@ namespace BrnGui
         // Bodied INLINE over the already-carved member rather than declared-only, because the
         // console body is just the array GetAt and a declaration-only accessor would only move
         // the missing symbol somewhere else. Carries the console's two asserts.
+        // ARTIST sub_824F8988; DecFIGS BrnGuiCache.h names this lookup.
+        const SatNavEventDisplayInfo* GetEventStartInfoFromJunctionID(u32 luJunctionID) const;
+
         const SatNavEventDisplayInfo* GetEventStart(u32 luEventStartIndex) const
         {
             CGS_ASSERT(miEventStartsCount != -1,
