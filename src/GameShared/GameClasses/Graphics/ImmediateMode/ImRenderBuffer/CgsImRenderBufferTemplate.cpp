@@ -1573,7 +1573,8 @@ namespace CgsGraphics
                 // same BORDER addressing reproduces that exactly.
                 IDirect3DBaseTexture9* lpMaskD3D =
                     (lpMaskTexture != nullptr) ? lpMaskTexture->mpD3DTexture : nullptr;
-                if (lpMaskD3D == nullptr)
+                const bool lbWhiteMask = (lpMaskD3D == nullptr);
+                if (lbWhiteMask)
                     lpMaskD3D = DispatchWhiteMaskTexture(lpDevice);
                 if (lpCorners != nullptr && lpMaskD3D != nullptr)
                 {
@@ -1589,6 +1590,18 @@ namespace CgsGraphics
                     lfMaskV0   = lpCorners[0].mv2Tex0UV.y;
                     lfMaskDU   = lpCorners[1].mv2Tex0UV.x - lpCorners[0].mv2Tex0UV.x;
                     lfMaskDV   = lpCorners[1].mv2Tex0UV.y - lpCorners[0].mv2Tex0UV.y;
+
+                    // FLAG PC-platform leaf: the console tests the mask rectangle
+                    // independently of its texture UVs. Untextured Apt masks have
+                    // zero UVs; map their bounds over our opaque-white fallback.
+                    // POINT + BORDER implements the in-rect test without blending
+                    // the 1x1 white texel with its black border (LINEAR at UV 0,0
+                    // yields alpha 0.25, fading every otherwise opaque child).
+                    if (lbWhiteMask)
+                    {
+                        lfMaskU0 = lfMaskV0 = 0.0f;
+                        lfMaskDU = lfMaskDV = 1.0f;
+                    }
 
                     // Stage 1 = the mask sample. ONE convention for both opcodes: the mask
                     // multiplies ALPHA by the mask texture's ALPHA and leaves COLOUR alone.
@@ -1623,8 +1636,9 @@ namespace CgsGraphics
                     lpDevice->SetTextureStageState(1, D3DTSS_ALPHAOP,   D3DTOP_MODULATE);
                     lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
                     lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG2, D3DTA_CURRENT);
-                    lpDevice->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-                    lpDevice->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+                    const DWORD luMaskFilter = lbWhiteMask ? D3DTEXF_POINT : D3DTEXF_LINEAR;
+                    lpDevice->SetSamplerState(1, D3DSAMP_MINFILTER, luMaskFilter);
+                    lpDevice->SetSamplerState(1, D3DSAMP_MAGFILTER, luMaskFilter);
                     lpDevice->SetSamplerState(1, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
                     // â­ [map-world 2026-08-29] THE MASK CROP. This pair used to be a hardcoded
                     // D3DTADDRESS_BORDER/0 for BOTH opcodes -- a stand-in calibrated against the
@@ -1648,7 +1662,7 @@ namespace CgsGraphics
                     // the geometry-bounded border pair it was calibrated with.
                     DWORD luMaskAddressU = static_cast<DWORD>(D3DTADDRESS_BORDER);
                     DWORD luMaskAddressV = static_cast<DWORD>(D3DTADDRESS_BORDER);
-                    if (lpCommand->muType == IM_CMD_PUSH_MASK)
+                    if (lpCommand->muType == IM_CMD_PUSH_MASK && !lbWhiteMask)
                     {
                         DispatchTextureStateAddressModes(lpMaskState,
                                                          &luMaskAddressU, &luMaskAddressV);
