@@ -30,19 +30,8 @@
 //   UpdateTakePhotoPage            @0x824C3C70         UpdateRankUp    @0x824BE6A8 ( 77)
 //   UpdateLeaving                  @0x824BE7E0 ( 68)   HandleAptTriggers @0x824BDAB8 (475)
 //
-// ⛔ STILL NOT RECONSTRUCTED (declared in the header, bodied as LOGGED stubs in
-// BrnScreenStatesDataLinkStubs.cpp so the gap is visible in the log instead of silent):
-//   HandleControllerInput (124)
-//   UpdatePhoto RenderDebug
-// Those are the remaining substate PRESENTATIONS. Several of them need OfflinePostEventData
-// flag slots the X360 asm does not yet pin -- see the ⛔ block in BrnGuiEventTypeDefs.h.
-// Guessing those names is how a results page ends up printing the wrong string, so they are
-// left for a wave that can attest them.
-// ⚠️ THIS BLOCK WAS STALE FOR A WHOLE WAVE: it still listed SetupComponents,
-// UpdateEventResults, UpdateSecondResultsPage, UpdateTakePhotoPage, UpdateRankUp and
-// UpdateLeaving as un-reconstructed while all six had real bodies a few hundred lines below.
-// A brief written off this list would have re-scoped work that was already done. If you land
-// a body, move its name -- the list is load-bearing.
+//   HandleControllerInput          @0x824B3E00 (124)   UpdatePhoto    @0x824B47C8 ( 55)
+// RenderDebug remains unreconstructed; it is diagnostic-only.
 // ===================================================================================
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.h"
 
@@ -1107,6 +1096,63 @@ namespace BrnGui
         return leWinState == InstantResultsState::E_RESULTS_WIN_WITH_TARGETS
             || leWinState == InstantResultsState::E_RESULTS_DETAILED_WIN
             || leWinState == InstantResultsState::E_RESULTS_PLAIN_WIN;
+    }
+
+    // ARTIST 0x824B3E00: only the photo interrupt consumes select/cancel.
+    void InstantResultsState::HandleControllerInput(const void* lpEvent)
+    {
+        CGS_ASSERT(lpEvent, "lpEvent");
+        struct GuiEventControllerAction : public CgsModule::Event
+        {
+            s32 miPad0;
+            s32 miAction;
+        };
+        const s32 liAction = reinterpret_cast<const GuiEventControllerAction*>(lpEvent)->miAction;
+        if (liAction == 49 && meCurrentState == E_RESULTS_STATE_PHOTO_INTERRUPT)
+        {
+            if (mPhotoBoothComponent.Select())
+            {
+                meCurrentState = E_RESULTS_STATE_ACTIVE;
+                if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
+                    *CgsDev::Log::gpDebugPrint << "INSTANT RESULTS DEBUG: HandleControllerInput"
+                        << " (meCurrentState = " << meCurrentState << ")\n";
+                if (mResults.mbHasRankedUp)
+                    mUpgradeStateAnimator.AddOutputAptViewState("apt_Transition", "takePhotoOut", false);
+                else if (IsAWinningResult(meWinState))
+                    mLargeEventIcon.SetState("idle");
+            }
+        }
+        else if (liAction == 50 && meCurrentState == E_RESULTS_STATE_PHOTO_INTERRUPT)
+        {
+            if (mPhotoBoothComponent.Cancel())
+            {
+                meCurrentState = E_RESULTS_STATE_ACTIVE;
+                mLicense.SetVisible(true);
+                if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
+                    *CgsDev::Log::gpDebugPrint << "INSTANT RESULTS DEBUG: HandleControllerInput"
+                        << " (meCurrentState = " << meCurrentState << ")\n";
+            }
+        }
+    }
+
+    // ARTIST 0x824B47C8: resume results if the camera disappears during a photo.
+    void InstantResultsState::UpdatePhoto()
+    {
+        if (mpGuiCache->GetCamStatus() != 0)
+        {
+            mPhotoBoothComponent.SendPlayerPictureEvent();
+        }
+        else
+        {
+            mPhotoBoothComponent.HideComponent(true);
+            meCurrentState = E_RESULTS_STATE_ACTIVE;
+            mLicense.SetVisible(true);
+            if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
+                *CgsDev::Log::gpDebugPrint << "INSTANT RESULTS DEBUG: UpdatePhoto"
+                    << " (meCurrentState = " << meCurrentState << ")\n";
+            if (IsAWinningResult(meWinState))
+                mLargeEventIcon.SetState("idle");
+        }
     }
 
     // -----------------------------------------------------------------------------------

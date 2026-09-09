@@ -274,18 +274,6 @@ namespace BrnGui
     void Credits::OnLeave() {}
     void Credits::Update()  {}
 
-    // ---- InstantResultsState (BrnOfflineInstantResults.cpp is partial) --------------
-    // The members below are declared in BrnOfflineInstantResults.h so the reconstructed
-    // dispatch can name them, and bodied here logged, not silent, so a run that reaches one
-    // says so in BrnGame.log. Do NOT tidy these into empty bodies: a silent no-op is what
-    // hid the original results-screen defect. None is on the path that puts the results
-    // movie on screen; they are sub-state presentations and the component fill.
-    // HandleControllerInput answers two buttons in the photo-booth interrupt only.
-    void InstantResultsState::HandleControllerInput(const void*) { LogUnreconstructedState("InstantResultsState", "HandleControllerInput"); }
-    void InstantResultsState::UpdatePhoto()             { LogUnreconstructedState("InstantResultsState", "UpdatePhoto"); }
-    // The return value is not neutral: false => SelectSubstates does not raise CAR_UNLOCK,
-    // the ordinary case (no XS car unlocked), so it degrades to "no car-unlock page".
-
     // ---- OnlineGameOptionsSummary ------------------------------------------------------
     void OnlineGameOptionsSummary::OnEnter() { LogUnreconstructedState("OnlineGameOptionsSummary", "OnEnter"); }
     void OnlineGameOptionsSummary::OnLeave() {}
