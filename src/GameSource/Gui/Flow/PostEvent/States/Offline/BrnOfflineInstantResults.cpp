@@ -1382,13 +1382,8 @@ namespace BrnGui
     // non-NULL -- so without this the state never leaves state 0 and never reaches the
     // PlayAptMovie in state 1. It is not optional decoration.
     //
-    // ⛔ PARTIAL, itemised. Landed: 64, 14, 16, 307, 350, 436, 569 plus the two dispatch
-    // forwards (21, 6). NOT landed: 296, 297, 299, 300, 301 -- the new-rival presentation
-    // arms. They assert `E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState`
-    // and drive meNewRivalsPresentationStage / mNewRivalsIcon, i.e. they only ever run inside
-    // a sub-state this wave does not reconstruct. Listing them here rather than dropping them
-    // silently is the point: a missing arm that "does nothing plausible" is precisely the
-    // silent-drop failure this file's banner is about.
+    // The rival sequence's start/next/end notifications (299/300/301) drive its
+    // presentation stages. Observed IDs 296/297 have no handler in ARTIST's switch.
     // -----------------------------------------------------------------------------------
     void InstantResultsState::HandleIncomingEvents()
     {
@@ -1459,6 +1454,30 @@ namespace BrnGui
                     reinterpret_cast<const CgsGui::GuiEventUnloadNotification*>(lpEvent));
                 break;
 
+            case 299: // ARTIST 0x824DBAD8: start the new-rivals introduction.
+                CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS,
+                    "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState");
+                CGS_ASSERT(meNewRivalsPresentationStage == E_NEW_RIVALS_PRESENTATION_WAITING,
+                    "E_NEW_RIVALS_PRESENTATION_WAITING == meNewRivalsPresentationStage");
+                meNewRivalsPresentationStage = E_NEW_RIVALS_PRESENTATION_INTRO_SET_UP;
+                break;
+
+            case 300: // The next rival's full-width CgsID.
+                CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS,
+                    "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState");
+                mPendingRivalId = *reinterpret_cast<const CgsID*>(lpEvent);
+                mNewRivalsIcon.SetState(meNewRivalsPresentationStage == E_NEW_RIVALS_PRESENTATION_INTRO
+                    ? 1u : 3u);
+                break;
+
+            case 301: // Finish the sequence after any active car reveal.
+                CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS,
+                    "E_ACTIVE_SUBSTATE_EVENT_RANK_UP_SHOWING_RIVALS == meActiveSubState");
+                if (meNewRivalsPresentationStage != E_NEW_RIVALS_PRESENTATION_SHOWING_RIVAL)
+                    meNewRivalsPresentationStage = E_NEW_RIVALS_PRESENTATION_OUTRO_ENDING;
+                mNewRivalsIcon.SetState(3u);
+                break;
+
             case KI_EVENT_SETUP_COMPONENTS:
                 // ⭐ GUI event 307 -- the id the finish also posts via game action 200. It
                 // cannot OPEN this screen (that is 291 -> TO_OFF_POST), but it IS what this
@@ -1488,9 +1507,6 @@ namespace BrnGui
                 break;
 
             default:
-                // 296 / 297 / 299 / 300 / 301: observed and registered for, but their
-                // handlers belong to the un-reconstructed new-rivals presentation. See the
-                // banner above -- this is a KNOWN gap, not an accident.
                 break;
             }
         }
@@ -2430,7 +2446,7 @@ namespace BrnGui
         switch (meNewRivalsPresentationStage)
         {
         case E_NEW_RIVALS_PRESENTATION_WAITING:
-            if (!mLicense.IsHiding() && mpcAnimatingComponentName == 0)
+            if (!mLicense.IsVisible() && mpcAnimatingComponentName == 0)
             {
                 mLicense.ReleaseResources();
                 mPhotoBoothComponent.ReleaseResources();
