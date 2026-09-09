@@ -2639,7 +2639,7 @@ struct GuiEventOfflinePostEvent
     struct OfflinePostEventData
     {
         CgsID mNewlyUnlockedRivalID;             // +0x00  ld @0x824D5A4C (gates substate 7)
-        u8    maReserved08[8];                   // +0x08  UNNAMED -- no X360 access from this class
+        CgsID mNewlyUnlockedFreeCarID;           // +0x08; ARTIST UpdateFreeCarUnlock loads 0x2280.
         CgsID mBeatenRival;                      // +0x10  ld; "Results.Beaten Rival = "
         s32   meFinishedGameModeType;            // +0x18  lwz @0x824D59DC; switched on
         s32   miModeScore;                       // +0x1C  SetupComponents case 7/9 SPrintf's it
