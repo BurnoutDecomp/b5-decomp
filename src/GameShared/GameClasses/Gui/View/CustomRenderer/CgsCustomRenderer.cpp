@@ -1,3 +1,5 @@
+#include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
+#include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h"
@@ -33,30 +35,18 @@ namespace CgsGui
         return 0;
     }
 
-    // ---- Render @ 0x82857748 --------------------------------------------------------
-    // Non-virtual (DWARF). The guest installs the shared 2D immediate-mode render state on
-    // the set's Im2d render buffer, then tail-calls the virtual RenderComponent:
-    //
-    //   v4 = *a2 + 4;                       ; &set->mpIm2dRenderBuffer->mCommandBuffer
-    //   sub_824587B0(v4);                   ; open/begin the render block
-    //   sub_82458EC0(v4, dword_83010F20);   ; install program state
-    //   sub_82458CD0(v4, dword_83010F3C);   ; install blend/raster state
-    //   sub_82458DC8(v4, dword_83010F54);   ; install sampler state
-    //   sub_82458898(v4);                   ; commit
-    //   return (*(*a1 + 52))(a1, a2);       ; RenderComponent(lpRendererSet)
-    //
-    // FLAG (out of scope, NOT invented): the five Im2dRenderBuffer state entry points and
-    // the three state-library globals they take are uncommitted -- CgsGui::ImRendererSet
-    // itself is only forward-declared in this slice, so `*a2 + 4` cannot even be spelled
-    // here without inventing a layout. The state block is therefore DOCUMENTED, not
-    // stubbed with a plausible-looking substitute, and the dispatch the manager actually
-    // depends on (the RenderComponent tail-call) is reproduced. Every custom render
-    // component in this build currently draws through its own path or not at all, so the
-    // missing state install is a no-draw, never a wrong-draw.
+    // ARTIST 0x82857748: publish default states before each custom component.
     void CustomRenderComponentInterface::Render(ImRendererSet* lpRendererSet)
     {
+        auto& lrBuffer = lpRendererSet->mpIm2dRenderBuffer->mCommandBuffer;
+        lrBuffer.BeginRendering();
+        lrBuffer.SetState(gpGuiBlendStateStandard);
+        lrBuffer.SetState(gpGuiRasterizerStateCullNone);
+        lrBuffer.SetState(gpBillboardDepthStencilState);
+        lrBuffer.EndRendering();
         RenderComponent(lpRendererSet);
     }
+
 }
 
 // ⭐ 2026-08-29 (map-world wave) -- BrnGui::MainMapRenderer::SetRenderEnabled @0x82C290D8

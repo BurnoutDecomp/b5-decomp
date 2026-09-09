@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
 
 #include <cstring>
@@ -388,7 +389,7 @@ namespace CgsGui
             // BrnGui::CustomRendererManager::RecvEvent through the per-event TAIL FORWARD
             // below, which every view event rides -- so a bring-up case list here was both
             // redundant with the restored tail and, worse, the reason a record type that
-            // lacked a label was silently dropped even after GuiModule bridged it.
+            // lacked a label never reached the renderer even after GuiModule bridged it.
 
             default:
                 break;
@@ -674,14 +675,9 @@ namespace CgsGui
         lUnitToScreen.mColourScale.w = 255.0f;
         lrBuffer.SetTransform(lUnitToScreen);
 
-        // Frame states: the X360 binds the shared state library's untextured texture
-        // state (dword_83010F5C), cull-none rasteriser (dword_83010F3C) and standard
-        // alpha-blend (dword_83010F20). The ImRendererBase::StateLibrary global is not
-        // modelled in this slice (see AptRenderHandler::Construct's white-texture note);
-        // the PC dispatch installs exactly those defaults in its prologue, and the
-        // untextured contract is carried by the null-texture command (the dispatch's
-        // SELECTARG2/diffuse-only path). FLAG: bind the three library states here once
-        // the state-library global lands.
+        // ARTIST frame-clear states from the shared immediate-mode state library.
+        lrBuffer.SetState(gpGuiBlendStateStandard);
+        lrBuffer.SetState(gpGuiRasterizerStateCullNone);
         lrBuffer.SetTexture(0);
 
         // The unit-square strip: (0,0) (0,1) (1,0) (1,1), UV == position, colour black
@@ -741,12 +737,11 @@ namespace CgsGui
         // buffer (the boot/title movies are 2D-only) -- so the bracket is STRUCTURALLY
         // GATED on the Im3d render-buffer instantiations landing.
 
-        // Frame-default states (standard blend dword_83010F20, cull-none rasteriser
-        // dword_83010F3C, z-buffer-off depth dword_83010F54 from the shared state
-        // library). The StateLibrary global is not modelled in this slice; the PC
-        // dispatch prologue installs exactly those defaults (blend on/src-alpha,
-        // cull none, z off). FLAG: bind the three library states here once the
-        // state-library global lands.
+        // ARTIST 0x82858AF8: reset the movie states after layer-1 custom renderers.
+        // The map tile pass leaves additive blending in the same command stream.
+        lrBuffer.SetState(gpGuiBlendStateStandard);
+        lrBuffer.SetState(gpGuiRasterizerStateCullNone);
+        lrBuffer.SetState(gpBillboardDepthStencilState);
 
         mAptAux.Render(liDeltaMs);
 
