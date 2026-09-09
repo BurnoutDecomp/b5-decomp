@@ -1060,6 +1060,15 @@ namespace BrnGui
 
         switch (liEventId)
         {
+        case 307: // GuiEventMedalUpdate; ARTIST 0x8250FEB8..0x8250FEF4.
+        {
+            const u16* lpMedals = reinterpret_cast<const u16*>(lpEvent);
+            mu16NumGoldMedals = lpMedals[0];
+            mu16NumSilverMedals = lpMedals[1];
+            mu16NumBronzeMedals = lpMedals[2];
+            mu16LicencePointsToNextRank = lpMedals[3];
+            break;
+        }
         // ARTIST RecEvent 94 / 106: EasyDrive's open state and pending-change icon.
         case 94:
             mbFriendsListOpen = *reinterpret_cast<const u8*>(lpEvent) != 0;

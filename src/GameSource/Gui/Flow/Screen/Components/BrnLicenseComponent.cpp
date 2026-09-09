@@ -20,13 +20,11 @@
 // AddWin / Update's timed cases) belongs to CompletedGame / InstantResults and is
 // reproduced but not reachable from the intro.
 //
-// TWO FLAG'd PC-platform boundaries live in the anonymous namespace below -- both are GUI
-// CACHE reads, neither is a behaviour invention, and each names the console function it
-// stands in for. See their comments.
 // ============================================================================
 
 #include "GameSource/Gui/Flow/Screen/Components/BrnLicenseComponent.h"
 
+#include "GameSource/Gui/BrnGuiWorldDataController.h"
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache (resources + time step)
 #include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier (resource name table)
 #include "GameSource/GameState/Progression/BrnProfile.h"                  // BrnProgression::Profile
@@ -221,42 +219,7 @@ namespace BrnGui
                                                              static_cast<s32>(sizeof(lRecord)));
         }
 
-        // ================================================================================
-        // FLAG'd PC-platform GUI-CACHE boundaries. Both stand in for reads the console makes
-        // straight through BrnGui::GuiCache; each names the console callee it replaces and
-        // returns the console's own answer for the state the PC cache is actually in.
-        // ================================================================================
 
-        // X360: `mpGuiCache->GetWorldDataController()->GetRequiredWinsInRank(liRank)`
-        // (BrnGui::WorldDataController::GetRequiredWinsInRank @0x82428740 -- rank -1 returns 0,
-        // otherwise it asserts the controller is READY and reads the loaded ProgressionData's
-        // per-rank required-wins word).
-        //
-        // The GUI cache's WorldDataController (GuiCache +0x4064) is the GUI's front end onto
-        // the streamed progression resource. ⚠️ CORRECTED 2026-08-02: the POINTER is populated
-        // now (GuiModule::Construct binds the module's own WorldDataController into the cache),
-        // so the old claim "nothing on PC populates it" is stale. What is still missing is the
-        // DATA and the accessor: WorldDataController::Prepare parks at
-        // PREPARING_ACQUIRING_PROGRESSION because no PC producer answers the "CarColours"
-        // acquire, so meState never reaches READY and every readiness-gated accessor would
-        // assert; GetRequiredWinsInRank (@0x82428740) has no body here either. Until both land,
-        // report the console's own no-rank-data answer: 0, which is exactly what
-        // GetRequiredWinsInRank itself returns for an unknown rank. With 0 the three consumers
-        // behave as they do for a brand-new profile -- ShowLicense picks
-        // E_LICENSE_SHOWING_NORMAL, SetPlayerInfo leaves miWinsInCurrentRank at 0, and
-        // UpdateDirt clamps to the console's 0.01 dirt ceiling.
-        // FLAG PC-platform leaf.
-        s32 CacheGetRequiredWinsInRank(GuiCache* /*lpGuiCache*/, s32 /*liRank*/) { return 0; }
-
-        // X360: the u16 at `mpGuiCache + 0xB874` that RankUp @0x8243C918 and Update's
-        // E_LICENSE_UPGRADING_ADDING_REQUIRED_WINS case read as the wins needed in the rank
-        // being upgraded INTO (`lhzx r6, mpGuiCache, 0xB874`). The byte still sits inside
-        // BrnGuiCache.h's mPad_B865[19] hole ("un-modelled sat-nav/landmark words") and has no
-        // DWARF name, so it is NOT carved here -- guessing a member name is worse than naming
-        // the boundary. Reached only from the UPGRADE half of the state machine
-        // (CompletedGame / InstantResults), which nothing on PC enters today.
-        // FLAG PC-platform leaf.
-        s32 CacheGetUpgradeRequiredWins(GuiCache* /*lpGuiCache*/) { return 0; }
     }
 
     // ================================================================================
@@ -530,7 +493,7 @@ namespace BrnGui
         case E_LICENSE_UPGRADING_ADDING_REQUIRED_WINS:
             if (mfTimeToNextWinIncrement <= 0.0f)
             {
-                const s32 liRequiredWins = CacheGetUpgradeRequiredWins(mpGuiCache);
+                const s32 liRequiredWins = mpGuiCache->GetLicencePointsToNextRank();
                 if (liRequiredWins == 1)
                 {
                     // NOTE the console's own asymmetry: the SINGULAR branch tests
@@ -683,7 +646,7 @@ namespace BrnGui
         }
         else
         {
-            s32 liWins = CacheGetRequiredWinsInRank(mpGuiCache, liRank) - liPointsToNextRank;
+            s32 liWins = mpGuiCache->GetWorldDataController()->GetRequiredWinsInRank(liRank) - liPointsToNextRank;
             if (liWins <= 0)
                 liWins = 0;
 
@@ -743,7 +706,7 @@ namespace BrnGui
         {
             // X360: the GuiCache::GetWorldDataController assert (BrnGuiCache.h:2324) is
             // inlined here, then GetRequiredWinsInRank(miCurrentRank).
-            if ((CacheGetRequiredWinsInRank(mpGuiCache, miCurrentRank) - miWinsInCurrentRank) == 1)
+            if ((mpGuiCache->GetWorldDataController()->GetRequiredWinsInRank(miCurrentRank) - miWinsInCurrentRank) == 1)
                 lbOneWinFromUpgrade = true;
         }
 
@@ -827,7 +790,7 @@ namespace BrnGui
             return;
 
         const s32 liWinsLeft =
-            CacheGetRequiredWinsInRank(mpGuiCache, miCurrentRank) - miWinsInCurrentRank;
+            mpGuiCache->GetWorldDataController()->GetRequiredWinsInRank(miCurrentRank) - miWinsInCurrentRank;
 
         if (liWinsLeft < 2)
         {
@@ -907,7 +870,7 @@ namespace BrnGui
 
         if (!mbAtTopRank)
         {
-            const s32 liRequiredWins = CacheGetUpgradeRequiredWins(mpGuiCache);
+            const s32 liRequiredWins = mpGuiCache->GetLicencePointsToNextRank();
 
             // The console computes mbAtTopRank from the OLD rank (== KI_MAX_RANK - 1) and then
             // increments, so the flag names the rank being moved INTO.
@@ -1091,7 +1054,7 @@ namespace BrnGui
 
         CGS_ASSERT(miWinsInCurrentRank >= 0, "miWinsInCurrentRank >= 0");   // cpp:1167
 
-        const s32 liRequiredWins = CacheGetRequiredWinsInRank(mpGuiCache, miCurrentRank);
+        const s32 liRequiredWins = mpGuiCache->GetWorldDataController()->GetRequiredWinsInRank(miCurrentRank);
 
         const f32 lfRatio = static_cast<f32>(miWinsInCurrentRank) / static_cast<f32>(liRequiredWins);
         const f32 lfCeiling = 0.01f;                       // flt_82002138

@@ -1979,6 +1979,7 @@ void GuiModule::Destruct()
                 case 93:    // [A9] GuiEventPrepareForModeStart -- THE MODE-TYPE SEED (meGameModeType)
                 case 289:   // [results] GuiEventOfflinePostEvent -- THE OFFLINE RESULT RECORD
                 case 292:   // [results] post-event teardown (clears the record + suppress byte)
+                case 307:   // Medal totals and wins remaining on the licence.
                 case 304:   // [results] raises the presentation-suppressed byte
                     // [H1 wave 2026-08-25] On the console EVERY module-input event reaches
                     // GuiCache::RecEvent (its ~180-case switch consumes what it wants);

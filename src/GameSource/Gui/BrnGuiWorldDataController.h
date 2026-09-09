@@ -22,7 +22,7 @@
 // This wave homes the readiness accessors GetColourPaletteFromType / GetProgressionData /
 // GetTotalNumberOfLandmarks / GetTotalNumberOfOnlineLandmarks, and keeps the two the sat-nav
 // renderer already links (GetEventInfoFromEventId / GetTotalNumberOfOnlineLandmarks).
-// GetRequiredWinsInRank lands in a later wave.
+// GetRequiredWinsInRank reads the authored per-rank medal threshold.
 //
 // 2026-08-02 (carousel wave): Construct + the Prepare ACQUIRE STATE MACHINE are now real
 // (X360 0x82516770). Both were previously missing, which is why GuiCache::mpWorldDataController
@@ -185,6 +185,7 @@ namespace BrnGui
         const BrnWorld::PlayerCarColourPalette* GetColourPaletteFromType(BrnWorld::EPalettesTypes lType) const;
 
         // DWARF h:151 / X360 0x82428818 -- the loaded progression resource (ResourcePtr operator->).
+        s32 GetRequiredWinsInRank(s32 liRank) const; // ARTIST 0x82428740
         const BrnProgression::ProgressionData* GetProgressionData() const;
 
     private:

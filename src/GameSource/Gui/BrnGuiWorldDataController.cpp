@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"    // ResourcePtr<T>::operator->
 #include "GameShared/GameClasses/Development/CgsStrStream.h"          // CgsDev::StrStream (not-found diagnostics)
 #include "SharedClasses/Graphics/BrnGlobalColourPalette.h"            // BrnWorld::GlobalColourPalette / PlayerCarColourPalette
+#include "SharedClasses/Progression/BrnProgressionRankData.h"
 #include "SharedClasses/Progression/BrnProgressionData.h"             // BrnProgression::ProgressionData
 #include "SharedClasses/Progression/BrnRaceEventData.h"               // BrnProgression::EventJunction / RaceEventData
 #include "SharedClasses/Trigger/BrnTriggerData.h"                     // BrnTrigger::TriggerData
@@ -22,7 +23,7 @@
 // against 11 / WFPLAYERCARCOLOURS; the baked rodata text names READY, reproduced verbatim) then
 // forward to a resource pointer via ResourcePtr<T>::operator-> const. Construct + the Prepare
 // acquire state machine (0x82516770) are real as of f80e1fab; of the DWARF-declared method set
-// only GetRequiredWinsInRank @0x82428740, Release, GetRoadTriggerVolumeRegions and the two
+// only Release, GetRoadTriggerVolumeRegions and the two
 // *AtPositionInList lookups remain un-homed (no bodies anywhere in the tree).
 
 namespace BrnGui
@@ -459,6 +460,21 @@ WorldDataController::GetColourPaletteFromType(BrnWorld::EPalettesTypes lType) co
     const BrnWorld::GlobalColourPalette* const lpPalette = mpPlayerCarColours.operator->();
     CGS_ASSERT(lType < BrnWorld::eNumPalettes, "lType < eNumPalettes");
     return &lpPalette->maPalettes[lType];
+}
+
+// ARTIST 0x82428740; DWARF BrnGuiWorldDataController.h:268.
+s32 WorldDataController::GetRequiredWinsInRank(s32 liRank) const
+{
+    if (liRank == -1)
+        return 0;
+    CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
+        "E_WORLDDATACONTROLLERSTATE_READY <= meState");
+    CGS_ASSERT(liRank >= 0 && static_cast<s32>(mpProgressionData->GetProgressionRankCount()) >= liRank,
+        "(0 <= liRank) && (static_cast<int32_t>( mpProgressionData->GetProgressionRankCount() ) >= liRank)");
+    const BrnProgression::ProgressionRankData* lpRankData =
+        mpProgressionData->GetProgressionRankData(liRank);
+    CGS_ASSERT(lpRankData, "lpRankData");
+    return lpRankData->GetMedalThresholdToNextRank();
 }
 
 // X360 0x82428818. Accessor for the loaded progression resource. Asserts the controller has

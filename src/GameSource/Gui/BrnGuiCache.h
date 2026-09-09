@@ -2048,14 +2048,17 @@ namespace BrnGui
         // is recovered, so both read 0 on this build (no panel, no pending change).
         bool mbFriendsListOpen;                          // +0xB86C (47212)
         bool mbFriendsListChangePending;                 // +0xB86D (47213)
-        u8 mPad_B86E[6];                                 // +0xB86E..+0xB873
+        // DWARF medal names; ARTIST event 307 stores these three halfwords.
+        u16 mu16NumGoldMedals;                           // +0xB86E rank wins
+        u16 mu16NumSilverMedals;                         // +0xB870 non-rank wins
+        u16 mu16NumBronzeMedals;                         // +0xB872 special-event wins
         // ADDITIVE CARVE (pause wave, 2026-08-28) from the TAIL of the former
         // mPad_B86E[10] -- the licence card's "points to the next rank" counter, read as a
         // HALFWORD (`ori r10,r10,0xB874 ; lhzx r27, r11, r10`, the far-member idiom) by
         // CrashNavDriverDetails::UpdateSetupLicense @0x824C1D20 and handed straight to
         // LicenseComponent::SetPlayerInfo's liPointsToNextRank slot. u16 because the
         // console loads it with lhzx, not lwz. No member is shifted (6 + 2 + 2 == 10).
-        // FLAG: consumer-named -- the producer is not recovered, so it reads 0 here.
+        // Updated from GUI event 307, payload halfword +6 (ARTIST 0x8250FEF0).
         u16 mu16LicencePointsToNextRank;                 // +0xB874 (47220)
         u8 mPad_B876[2];                                 // +0xB876..+0xB877
         u8 mOptionsDataProfileStorage[0x8000];           // +0xB878 (X360 object: 0x7370 bytes)
