@@ -155,6 +155,8 @@ public:
     u8 GetNumWinsToRankUpMarkedMan() const { return muNumWinsToRankUpMarkedMan; }
 
     // [road-rage wave 2026-09-02] three accessors RoadRageMode::Start @0x82330678 inlines:
+    // Inlined by SurvivorMode::Start at ARTIST 0x823324E0 (rank +0x10).
+    f32 GetTrafficDensitySurvival() const { return mfTrafficDensitySurvival; }
     f32 GetTrafficDensityRoadRage() const { return mfTrafficDensityRoadRage; } // DWARF :156; Start `lfs f13,0xC(r24)` @0x823307E4
     u16 GetRoadRageTime() const           { return muRoadRageTime; }           // DWARF :132; Start `lhz r10,0x52(r24)` @0x823309F4
     u32 GetRoadRageRivalsNumber() const   { return muRoadRageRivalsNumber; }   // DWARF :111; Start `lbz r11,0x5E(r24)` @0x82330938

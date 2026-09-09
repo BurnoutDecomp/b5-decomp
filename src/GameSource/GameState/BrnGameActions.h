@@ -388,6 +388,7 @@ enum EGameActionType
     // exactly sizeof(RivalStateChangeAction) below (Rival 56 + RivalData 56 + s32 + s8, padded to
     // 8) -- the size match is the proof. DWARF BrnGameActions.h:199 E_ACTION_RIVAL_STATE_CHANGED
     // == 189 (+8 X360), the same +8 UPDATE_CAR_STATS (190 -> 198) takes right above.
+    E_ACTION_ALLOW_CAR_TO_JOIN_ROAD_RAGE = 129, // ARTIST SurvivorMode::UpdateOpponents, raw 8-byte payload
     E_ACTION_RIVAL_STATE_CHANGED        = 197,   // DWARF 189 (+8 X360); size 120  PINNED (producer body)
 
     // [progression wave 2026-09-06, lane rivals] The two rival WORLD actions, pinned at BOTH
@@ -881,6 +882,14 @@ struct DamageCriticalMessageAction : public GameAction<E_ACTION_DAMAGE_CRITICAL>
 // pointer-free 56-byte records on the host, so the console layout survives verbatim.
 // No consumer in this tree yet (the console's is BrnGameModule::TranslateGameActionsToGuiEvents).
 // =============================================================================================
+// DWARF BrnGameActions.h:5670; ARTIST 0x82345274..0x823452E0.
+struct AllowCarToJoinRoadRageAction : public GameAction<E_ACTION_ALLOW_CAR_TO_JOIN_ROAD_RAGE>
+{
+    ::EActiveRaceCarIndex mActiveRaceCarIndex;
+    bool mbAllowedInRoadRage;
+};
+static_assert(sizeof(AllowCarToJoinRoadRageAction) == 8, "Allow-car action wire size");
+
 struct RivalStateChangeAction : public GameAction<E_ACTION_RIVAL_STATE_CHANGED>
 {
     BrnProgression::Rival             mRival;           // +0x00 (DWARF :3063)
