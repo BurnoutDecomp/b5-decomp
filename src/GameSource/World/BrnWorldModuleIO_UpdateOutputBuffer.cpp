@@ -69,6 +69,7 @@ void UpdateOutputBuffer::Construct()
     mAttribSysVaultRequestInterface.mRequestQueue.Construct(); // X360 VEQ<2048,16> +150832 (Construct+Clear)
     mAttribSysVaultRequestInterface.mRequestQueue.Clear();
     mTrafficTypeResponseQueue.Construct();                  // X360 TrafficTypeResponse<32> +155616
+    mCrashNetworkOutputInterface.Construct();               // CrashingTrafficUpdateEvent<24> +156144
     mSoundWorldLoadInterface.Construct();                   // X360 SoundWorldLoadEvent<25> +169096
     mGameEventQueue.Construct();                            // X360 VEQ<1536,16> +216116
     mPropVFXLocatorQueue.Construct();                       // X360 PropVFXLocatorEvent<10> +169360

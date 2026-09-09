@@ -1,24 +1,8 @@
 // ===========================================================================
-// BrnGuiViewModuleLinkStubs.cpp -- residual GUI view-module link homes.
-//
-// Out-of-line definitions still needed by the homed CgsGui::ViewModule /
-// BrnGui::ViewModule ownership slice. The Flapt lifecycle, timeline update, named
-// lookups, rendering, and always-available component preparation now all live in their
-// real TUs; only the GUI event-queue specialisations below remain here (faithful
-// specialisations of their VariableEventQueue base lifecycle).
-//
-// AUDIT (2026-07-15, vs the on-disk tree + the exe source list):
-//   - BrnFlapt::MovieClipInstance::Render is now homed in BrnFlaptMovieClipInstance.cpp
-//     alongside Construct/GotoFrame/Update and the child/trigger/keyframe machinery
-//     (the empty render stub that used to live here has been retired).
-//   - CgsGui::GuiEventQueueBase<256,16>::{Construct,Prepare,Release} -- the tiny GUI
-//     output queue the view module owns (mOutputEventQueue). CgsGuiEvent.h declares them
-//     out-of-line; no TU instantiates them. Forwarded to the homed CgsModule::
-//     VariableEventQueue<256,16> base bodies (the queue's real lifecycle) via explicit
-//     member specialisation -- faithful for the lifecycle, marked FLAG for the un-homed
-//     GUI-specific override.
-//   (FlaptManager, FlaptFileInstance, FlaptRenderer, and the always-available manager
-//   are homed to their real TUs and no longer have definitions here.)
+// BrnGuiViewModuleLinkStubs.cpp -- the CgsGui::GuiEventQueueBase<N,A> member
+// specialisations the GUI module group needs and no other TU instantiates. Each is a
+// thin forwarder to the homed CgsModule::VariableEventQueue<N,A> base body (the console
+// emits one body per instantiation). FLAG for the un-homed GUI-specific override, if any.
 // ===========================================================================
 
 #include "types.hpp"
@@ -30,29 +14,22 @@
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"              // CgsGui::ImRendererSet / FontCollection (struct)
 #include "GameSource/Gui/Flapt/BrnFlaptManager.h"                          // BrnFlapt::FlaptManager, FlaptFiles
 #include "GameSource/Gui/Flapt/BrnFlaptFileInstance.h"                     // BrnFlapt::FlaptFileInstance
-#include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"                // BrnFlapt::MovieClipInstance (Render below)
+#include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"                // BrnFlapt::MovieClipInstance
 #include "GameSource/Gui/Flapt/BrnFlaptRenderer.h"                         // BrnFlapt::FlaptRenderer
-#include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                          // BrnFlapt::FileRef (PrepareFlapt param)
-#include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"                     // BrnFlapt::MovieClipRef (lookup-stub out handles)
-#include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"                     // BrnFlapt::TextFieldRef (FindChildTextField stub out handle)
+#include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                          // BrnFlapt::FileRef
+#include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"                     // BrnFlapt::MovieClipRef
+#include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"                     // BrnFlapt::TextFieldRef
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"         // BrnGui::AlwaysAvailableComponentsManager
-#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"     // CgsResource::ResourceHandle (RegisterFlaptFile by-value param)
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"     // CgsResource::ResourceHandle
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                        // CgsGui::GuiEventQueueBase<N,A>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"           // CgsModule::VariableEventQueue<N,A> (forward target)
 
-// The ModelIO buffer queues the GUI flow controller's IO pair constructs/drains
-// (BrnGuiModule::Prepare / ServiceFsmBundleRequests): the 32768 inbound event queue and
-// the 4096 load-request queue. Same thin forwarders to the VariableEventQueue base as
-// the <256,16> family below (the X360 emits one body per instantiation).
+// <32768,16>: the GUI module input buffer's event queue (BrnGuiModule::Prepare constructs
+// it; HudMessageAnalyzer::Update reads it; BrnGuiModule::Update's model-input drain clears it).
 template <> void CgsGui::GuiEventQueueBase<32768, 16>::Construct()
 {
     this->CgsModule::VariableEventQueue<32768, 16>::Construct();
 }
-// [gateui] The READ half of the same <32768,16> instantiation. The GUI module input
-// buffer's event queue is what BrnGui::HudMessageAnalyzer::Update @0x82525FC0 drains
-// (`GetFirstEvent`/`GetNextEvent` on the queue sub_8284F238 hands back), and no TU had
-// ever instantiated the pair -- Construct above was the only member that existed. Same
-// thin forwarder to the VariableEventQueue base as every sibling here.
 template <> s32 CgsGui::GuiEventQueueBase<32768, 16>::GetFirstEvent(
     const CgsModule::Event** lppEvent, s32* lpiSize) const
 {
@@ -63,18 +40,13 @@ template <> s32 CgsGui::GuiEventQueueBase<32768, 16>::GetNextEvent(
 {
     return this->CgsModule::VariableEventQueue<32768, 16>::GetNextEvent(lpEvent, lppNextEvent, lpiSize);
 }
-// [gateui r2] Clear, the last member of the <32768,16> instantiation with no home.
-// MEASURED (dumpbin /SYMBOLS over the whole Gui mount set): Construct + the read pair
-// above existed; Clear did not, so the first consumer to drain-and-reset a
-// GuiEventQueueBase<32768,16> was an LNK2019 that `cl /c` cannot see. That consumer is
-// now BrnGuiModule::Update's model-input drain (the HudMessageDirector::Update leg --
-// nothing else empties that queue and it overflows after ~39 840-byte HUD messages).
-// Same thin forwarder to the VariableEventQueue base as every sibling here.
 template <> void CgsGui::GuiEventQueueBase<32768, 16>::Clear()
 {
     this->CgsModule::VariableEventQueue<32768, 16>::Clear();
 }
 
+// <4096,16>: the GUI flow controller's load-request queue, and the event queue embedded in
+// CgsGui::CustomRendererManager (whose Destruct is this instantiation's Destruct).
 template <> void CgsGui::GuiEventQueueBase<4096, 16>::Construct()
 {
     this->CgsModule::VariableEventQueue<4096, 16>::Construct();
@@ -83,10 +55,6 @@ template <> void CgsGui::GuiEventQueueBase<4096, 16>::Clear()
 {
     this->CgsModule::VariableEventQueue<4096, 16>::Clear();
 }
-// Destruct: needed since the GUI custom-renderer manager landed --
-// CgsGui::CustomRendererManager::Destruct (@0x828577D8) is literally
-// `VariableEventQueue<4096,16>::Destruct(this + 12)` on its embedded event queue, which is
-// this <4096,16> instantiation. Same thin forwarder as the siblings above.
 template <> void CgsGui::GuiEventQueueBase<4096, 16>::Destruct()
 {
     this->CgsModule::VariableEventQueue<4096, 16>::Destruct();
@@ -102,12 +70,8 @@ template <> s32 CgsGui::GuiEventQueueBase<4096, 16>::GetNextEvent(
     return this->CgsModule::VariableEventQueue<4096, 16>::GetNextEvent(lpEvent, lppNextEvent, lpiSize);
 }
 
-// The GuiResourceModuleIO buffer queues the GUI resource module's IO pair constructs/
-// drains (CgsGuiResourceModuleIO::InputBuffer::mLoadRequests +
-// OutputBuffer::mLoadNotifications, both GuiEventQueueBase<18432,16>). The module was
-// "not yet wired" until BrnGuiModule::DispatchGuiResourceModule wired it, so this 18432
-// specialisation had never been instantiated; same thin forwarders to the
-// VariableEventQueue base as the families above (the X360 emits one body per instantiation).
+// <18432,16>: the GUI resource module's IO pair (CgsGuiResourceModuleIO::InputBuffer::
+// mLoadRequests + OutputBuffer::mLoadNotifications), wired by BrnGuiModule::DispatchGuiResourceModule.
 template <> void CgsGui::GuiEventQueueBase<18432, 16>::Construct()
 {
     this->CgsModule::VariableEventQueue<18432, 16>::Construct();
@@ -127,6 +91,8 @@ template <> s32 CgsGui::GuiEventQueueBase<18432, 16>::GetNextEvent(
     return this->CgsModule::VariableEventQueue<18432, 16>::GetNextEvent(lpEvent, lppNextEvent, lpiSize);
 }
 
+// <256,16>: the view module's output queue (mOutputEventQueue); CgsGuiEvent.h declares
+// these out-of-line.
 template <> void CgsGui::GuiEventQueueBase<256, 16>::Construct()
 {
     this->CgsModule::VariableEventQueue<256, 16>::Construct();

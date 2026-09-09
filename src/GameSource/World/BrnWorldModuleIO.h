@@ -680,9 +680,17 @@ namespace BrnWorldIO
         const PropVFXLocatorQueue* GetPropVFXLocatorQueue() const;                         // :712 R (0x823B6740, "U")
         void SetPropVFXLocatorQueue(const PropVFXLocatorQueue* lpQueue);                   // :600 W (0x827AA880)
 
-        // ---- gui events (own TU: one of the pair is X360 @ 0x823B6890) ----
-        const GuiEventInputQueue* GetGuiEventQueue() const;                                // :607 (own TU)
-        GuiEventInputQueue*       GetGuiEventQueue();                                      // :608 (own TU)
+        // ---- gui events (+170176; :607 read-lock, :608 write-lock) ----
+        const GuiEventInputQueue* GetGuiEventQueue() const
+        {
+            CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+            return &mGuiEventQueue;
+        }
+        GuiEventInputQueue* GetGuiEventQueue()
+        {
+            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+            return &mGuiEventQueue;
+        }
 
         // ---- prop physical/update notifications ----
         void AppendPropBecamePhysicalEventQueue(const PropBecamePhysicalEventQueue* lpQueue); // :614 W (0x827AA938)

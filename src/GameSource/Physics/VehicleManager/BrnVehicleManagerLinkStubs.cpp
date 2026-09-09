@@ -1,77 +1,8 @@
 // =================================================================================================
-// BrnVehicleManagerLinkStubs.cpp -- FLAG (big-five #3 UpdateVehiclePhysics mount stubs, 2026-08-06).
-//
-// The named remainder of VehicleManager::UpdateVehiclePhysics' honest closure: the conductor's
-// FULL body is landed (BrnVehicleManager_UpdateVehiclePhysics.cpp) and these are the callees whose
-// bodies are NOT -- each one a LOUD CGS_ASSERT(false) trap, per the VehiclePhysicsLinkStubs.cpp
-// precedent. Every stub below is DEAD today: the conductor's only caller is
-// BrnPhysics::PhysicsModule::Update, which is not landed.
-//
-// ⭐ 2026-08-09 (conductor wave): PhysicsModule::Update IS LANDED, so this file's census split
-// in two. The stubs REACHED UNCONDITIONALLY EVERY FRAME by the landed UpdateVehiclePhysics
-// (UpdateVehicleImpacts, EndVehicleTractionLineTests, UpdateAggressiveDriving, UpdateCrashes,
-// CrashFatalRaceCars [mbCrashRaceCarWhenFatal is Construct-seeded TRUE], PTM::UpdateTrafficPhysics)
-// are converted from CGS_ASSERT(false) traps -- which would block the sim on frame one -- to the
-// sanctioned LOUD one-shot boot-gate shape: one log line per boot naming symbol/address/insns,
-// then inert. The rest stay ASSERT TRAPS because their call sites are genuinely input/state-gated
-// on a default run (SetRaceCarCrashing: takedown chain; VehicleDriver::UpdateVehicle +
-// DebugComponent::Update: per-LIVE-car, and the create path is still inert so the live set is
-// empty).
-//
-// ⛔ NEVER make a gate silent. The log-once IS the loudness. Reconstruct the real body in its
-// own TU and DELETE the stub (duplicate-definition LNK2005 is the intended tripwire).
-//
-// Per-symbol status (insn counts from the X360 dossier):
-//   SetRaceCarCrashing @0x82634C90 (923)      -- REAL BODY EXISTS in the unmounted
-//       BrnVehicleManager.cpp (the takedown chain); mounting it drags the twelve M2-measured
-//       externals, which is that chain's own wave. This stub carries the seam until then --
-//       the mount of BrnVehicleManager.cpp DELETES this stub (LNK2005 says so loudly).
-//   UpdateVehicleImpacts @0x82635C00 (322)    -- not in tree (callee set: HasRaceCarHadRecentImpact
-//       [bodied, unmounted PlayerStats TU], VehiclePhysics::AddSlam/AddShunt [mounted],
-//       sub_821F0EC8 [unidentified], VariableEventQueue::AddEvent).
-//   UpdateAggressiveDriving @0x82640690 (264) -- not in tree (needs HasRaceCarHadRecentImpact +
-//       InstantTakedown, both in unmounted TUs).
-//   UpdateCrashes (DWARF h:1224)              -- ⭐ ADDRESS RESOLVED 2026-08-10: **0x825EA640,
-//       203 insns**. (See the audit note below -- this line used to read "the ledger mis-keys it
-//       to the CgsBitArray.h TU; address to be re-derived at its wave". The ledger key is still
-//       wrong; the address never needed re-deriving.)
-//       ⭐ BODIED 2026-09-02 (takedown-chain wave, agent P) in BrnVehicleManager_UpdateCrashes.cpp;
-//       the boot gate that stood in this file is DELETED. The 203 instructions are the inlined
-//       BitArray<32u> first/next-bit walk over mUsedRaceCarCrashesList around ONE store: age each
-//       allocated maRaceCarCrashes slot's mfTimeSinceImpact by the timestep, free it past 0.1 s.
-//   EndVehicleTractionLineTests (DWARF h:893) -- ⭐ NOT A HOLE, claim RETRACTED 2026-08-10:
-//       **0x82633CD8, 68 insns**, with pseudocode. Body: assert mpContactGenerator != NULL
-//       (BrnVehicleManager.cpp:2387); WaitOn(mpTractionLineTestsJob) then null it;
-//       DataStreamCommandPoster::End(producer+0x80) and a zero byte at producer+0x100; then the
-//       three harvests -- ReadRaceCarTractionLineTestResults @0x82618058 (231),
-//       PhysicalTrafficManager::ReadTrafficTractionLineTestResults @0x8262D2B8 (291),
-//       ReadPlayerStuckTractionLineTestResults @0x825C3898 (118), each handed an 8-byte value
-//       loaded from producer+0x38 -- then DoVehicleTractionLineDecallocations @0x825B5268 (37).
-//       ⚠️ ARITY FLAG for whoever bodies it: the emitted body reads r3 and r4 ONLY -- r5 is never
-//       touched -- while this stub's declaration takes two parameters. Settle the signature
-//       against the DWARF + the PS3 mangle before writing it (the dropped-argument trap).
-//   CrashFatalRaceCars (DWARF h:1287)         -- STILL genuinely absent from the export set by
-//       name; its callee, the 6-arg ForceRaceCarCrash @0x82635B00, lands with it.
-//   VehicleDriver::UpdateVehicle @0x825D7290 (219) -- ⭐ BODIED 2026-08-11 in BrnVehicleDriver.cpp;
-//       the stub AND its (wrong) "driver-controls dispatch" description are gone. See the
-//       deletion note below.
-//   DebugComponent::Update                    -- recovered-to B5PhysicsHandlingDebugComponent.cpp
-//       (unmounted TU, body not reconstructed).
-//   PTM::UpdateTrafficPhysics @0x82644418     -- .ida-exports HOLE, RE-CONFIRMED 2026-08-10 (no
-//       JSON at that address and nothing of that name in the set). ⚠️ Its sibling
-//       UpdateTrafficPhysicsPostSimulation @0x826371D0 (270) IS exported -- do not mistake one
-//       for the other when decoding the `bl` at the call site.
-//
-// ⚠️⚠️ WHY THREE OF THE LINES ABOVE CHANGED -- AN AUDIT WORTH REPEATING ELSEWHERE.
-// On 2026-08-10 a name->address index was built over ALL 30,084 X360 export JSONs and every
-// "hole"/"unpinned"/"to be re-derived" claim in this banner was looked up again. Three of six
-// resolved immediately. This is [[ida-export-set-has-holes]] run in the OTHER direction:
-// "absent from the export set" is a claim about a SEARCH, and a search that is never repeated
-// after the set grows stops being evidence -- while the note it produced keeps being quoted.
-// The audit is discriminating, not permissive: three of the six are still genuinely absent
-// (GetUpdatedVehicleBodies @0x82619340, ProcessCrashingNetworkCars @0x8263C7C0,
-// PTM::UpdateTrafficPhysics @0x82644418 -- no JSON at any of those addresses either), so the
-// index is not simply matching everything.
+// BrnVehicleManagerLinkStubs.cpp -- boot gate for the one VehicleManager::UpdateVehiclePhysics
+// callee that still has no body in the tree. It is reached per live car per frame, so it logs
+// once and then is inert. Reconstruct the body in its own TU and delete the gate (LNK2005 is the
+// tripwire).
 // =================================================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
@@ -92,62 +23,9 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
-    // LINK STUB DELETED 2026-08-24 (physics mount wave B3b): BrnVehicleManager.cpp is mounted --
-    // the real 923-insn SetRaceCarCrashing @0x82634C90 owns the symbol, exactly the flip this
-    // stub's own text prescribed ("mount that chain and DELETE this stub").
-
-    // BOOT GATES DELETED 2026-09-03 (crash-state wave, lane P2a): VehicleManager::UpdateVehicleImpacts
-    // @0x82635C00 and VehicleManager::UpdateAggressiveDriving @0x82640690 are REAL in
-    // BrnVehicleManager_CrashState.cpp (LNK2005 if either reappears here). The census line above
-    // that called sub_821F0EC8 "unidentified" is settled: it is StrStream::operator<<(u32), assert
-    // text only.
-
-    // BOOT GATE DELETED 2026-09-02 (takedown-chain wave, agent P): VehicleManager::UpdateCrashes
-    // @0x825EA640 is REAL, in BrnVehicleManager_UpdateCrashes.cpp (LNK2005 if it reappears here).
-
-    // ⭐⭐ 2026-08-11 (lifetime wave): the VehicleManager::EndVehicleTractionLineTests @0x82633CD8
-    // LINK STUB THAT STOOD HERE IS DELETED. The real 68-instruction body is in
-    // BrnVehicleManager_TractionLineTests.cpp, landed in the SAME commit as
-    // StartVehicleTractionLineTests -- which is the whole point: the stub's own banner said "the
-    // two halves are lifetime-coupled by the producer: they land together or not at all", and
-    // they did. The three blockers that banner named are all retired:
-    //   * the triangle-cache FILL half (StartUpdateTriangleCaches / EndUpdateTriangleCaches) --
-    //     landed 2026-08-10 and running every frame;
-    //   * SimpleVehiclePhysics::GetTractionLine @0x825D85C0 (174, export hole) -- bodied this wave
-    //     in BrnSimpleVehiclePhysics.cpp from the image plus the PS3 export;
-    //   * the null+0x80 write -- cannot happen now, because Start ALWAYS runs first in the same
-    //     frame (PhysicsModule::Update calls Start; UpdateVehiclePhysics calls End) and always
-    //     seats the producer.
-    // ⚠️ The stub's OTHER claim -- "arity CORRECTED to 1 param" -- is RETRACTED; the caller sets
-    // r5 and the PS3 DWARF types it. See BrnVehicleManager.h.
-
-    // BOOT GATE DELETED 2026-09-03 (crash-state wave, lane P2a): VehicleManager::CrashFatalRaceCars
-    // is REAL in BrnVehicleManager_CrashState.cpp, together with its 6-arg ForceRaceCarCrash
-    // @0x82635B00. The "genuinely absent" line in the banner above is half right: there is no JSON,
-    // but IDA's xref table names the body at **0x826361C0, 280 insns** (the words between
-    // InstantTakedown's end and PhysicalTrafficManagerDebugComponent::RenderWorld), and it was
-    // decoded from image.bin -- see that TU's banner for the register map.
-
-    // ⭐⭐ 2026-08-11 (driving-path wave): the VehicleDriver::UpdateVehicle @0x825D7290 LINK STUB
-    // THAT STOOD HERE IS DELETED -- the real 219-instruction body is in BrnVehicleDriver.cpp.
-    // ⚠️ AND ITS COMMENT WAS WRONG, which is worth keeping on the record. It said "the driver-type
-    // dispatch into the four Update(controls) overloads". The asm contains no meDriverType read, no
-    // switch, and no call to any Update overload: the function is the network catch-up SLERP
-    // APPLIER -- gated on mi8NumOfInterpSteps (+0xD4) > 0, it concatenates mSlerpTransform (+0x90)
-    // into the vehicle's own mTransform (unless the vehicle is frozen), runs the two
-    // "Slerped race car transform is not normalised/orthogonal" dev tripwires
-    // (BrnVehicleDriver.cpp:219/:220) and decrements the counter. Construct seeds the counter to 0,
-    // so it is a NO-OP on every non-networked frame -- the stub's own claim that it was
-    // "per-LIVE-car" gated was right for the wrong reason.
-    // LESSON: a stub's prose is a HYPOTHESIS, not a finding. This one had been quoted forward
-    // through three banners without anyone reading the 219 instructions it was describing.
-
-    // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
-    // ⚠️ DEGRADED trap -> log-once gate (conductor, 2026-08-11, create-drain wave): the hard
-    // CGS_ASSERT(false) was written when no car existed and the stub was unreachable. The create
-    // drain went live this wave, so this is now reached PER LIVE CAR PER FRAME -- the hard trap
-    // halted the boot once a second (measured). Loudness preserved via the standard one-shot log.
-    // Reconstruct with the B5PhysicsHandlingDebugComponent pass and DELETE this gate.
+    // DebugComponent::Update(f32): no body in the tree. Its home TU
+    // B5PhysicsHandlingDebugComponent.cpp is mounted but defines only GetPath and
+    // SetLastWallTriangle; reconstruct Update there and delete this gate.
     void DebugComponent::Update(f32)
     {
         static bool sbLogged = false;
@@ -161,9 +39,5 @@ namespace Vehicle
                        "pass) [FLAG PC boot gate]\n";
         }
     }
-
-    // GATE RETIRED 2026-08-22 (traffic wave T3): PhysicalTrafficManager::UpdateTrafficPhysics
-    // @0x82644418 is REAL in BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp (export hole closed
-    // with headless idat).
 }
 }

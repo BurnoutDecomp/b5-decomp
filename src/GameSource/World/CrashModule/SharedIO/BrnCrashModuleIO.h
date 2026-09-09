@@ -24,6 +24,7 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                          // CgsModule::IOBuffer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleNetworkIOInterfaces.h" // NetworkOutputInterface + NetworkInputInterface
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                     // CgsModule::VariableEventQueue<1536,16> (OutputBuffer_PostPhysics game-event queue)
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleTrafficIOInterfaces.h" // TrafficInputInterface + TrafficOutputInterface
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleRaceCarIOInterfaces.h" // RaceCarOutputInterface (the crash-complete ring)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"    // BrnPhysics::Vehicle::VehicleOutputInterface + VehicleManagerOutputInterface
@@ -39,15 +40,47 @@ namespace BrnWorld
 
 namespace CrashIO
 {
-    // BrnCrashModuleIO.h:208 -- the crash module's post-physics output buffer.
+    // BrnCrashModuleIO.h:208 -- the crash module's post-physics output buffer. Console
+    // allocation 3504 == status pad 16 + the 1936-byte network output interface at +0x10 + the
+    // 1552-byte game-event queue at +0x7A0. The network interface widens on the host (its queue
+    // carries a pointer), so only the +0x10 offset is pinned; the queue follows it by name.
     struct OutputBuffer_PostPhysics : public CgsModule::IOBuffer
     {
+        typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
+
         // 0x827BB9C0 -- write-lock tripwire ("Not locked for writing"); return &mNetworkOutputInterface
         // (X360 returns this + 0x10).
         NetworkOutputInterface* GetNetworkOutputInterface();
 
+        // :207 -- read-lock tripwire; the world's crash-to-output bridge reads the interface
+        // through this one (returns +0x10).
+        const NetworkOutputInterface* GetNetworkOutputInterface() const
+        {
+            CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+            return &mNetworkOutputInterface;
+        }
+
+        // :210 -- read-lock tripwire; the post-physics game events (+0x7A0) the world's
+        // crash-to-output bridge appends into the update output buffer.
+        const GameEventQueue* GetGameEventQueue() const
+        {
+            CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+            return &mGameEventQueue;
+        }
+
+        // Inlined into the buffer's CreateIOBuffer on the console: status byte, the network
+        // interface's queue Construct plus its length reset, then the game-event queue Construct.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mNetworkOutputInterface.Construct();
+            mNetworkOutputInterface.Clear();
+            mGameEventQueue.Construct();
+        }
+
     private:
         NetworkOutputInterface mNetworkOutputInterface;   // at offset +0x10 (16-aligned member)
+        GameEventQueue         mGameEventQueue;           // console +0x7A0
     };
 
     // ========================================================================

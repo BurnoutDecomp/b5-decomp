@@ -1,6 +1,6 @@
-// AptRenderLinkStubs.cpp -- FLAG link-skeleton (auto-gen). Empty stubs for un-homed Apt-engine
-// function shims so the stack LINKS; homed faithfully as the render path hits each (link-then-home).
-// Co-evolves with the parallel Apt homing -- regenerate against the current unresolved set.
+// AptRenderLinkStubs.cpp -- PC link stubs for the Apt engine: host-callback slots that are
+// un-installed on PC, the single-threaded EA::Thread / EA::Jobs surface, the rw::core::filesys
+// entry points the DeviceManager replay path bypasses, and a few Apt helpers with no other home.
 #include "types.hpp"
 #include "SDKs/EATech/Apt/AptActionDefineFunction2.h"
 #include "SDKs/EATech/Apt/AptActionTryCatchFinallyBlock.h"
@@ -115,8 +115,7 @@
 #include "SDKs/EATech/include/Apt/AptXmlNode.h"
 
 // ===================================================================================
-// Engine link-stub headers (the 42 off-render-path ENGINE symbols, below). These are
-// the EXISTING decls the Apt code already references; included so each stub matches the
+// Engine link-stub headers. These are the EXISTING decls the Apt code already references; included so each stub matches the
 // canonical signature/mangling exactly. NOTE: the reconstructed BrnEAThreadX360.h is
 // deliberately NOT pulled (it declares EA::Thread::GetThreadId() returning ThreadId
 // (void*), which would collide with the int-returning EA::Thread::GetThreadId() the Apt
@@ -144,137 +143,30 @@
 #include <cstring>                                         // std::memset (SnapshotMixer::InitSnapshots)
 
 
-    // AptResolveFontGlyph RETIRED (2026-07-02): homed in AptRenderItemStaticText.cpp.
-    // AptResolveTextFontCharacter RETIRED (2026-07-02): homed in AptRenderItemStaticText.cpp.
-    // findCharacterInLibrary RETIRED (2026-07-02): homed in
-    // AptCIHNativeFunctionHelper.cpp (the X360 @0x82AFDF58 parent-chain
-    // export/import library resolve).
-    // AptApt_GetDragState RETIRED (2026-07-02): homed in
-    // AptActionInterpreterSpecialOps.cpp (the view over the director's
-    // mpDragMC..mGrabOffset run -- X360 StartDragMovie @0x82B03B00).
-    // AptLoader_LoadX360 RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
-    // (the by-value-return wrapper over the homed AptLoader::Load).
-    // AptScriptFunctionBase_GetActiveFrameStack RETIRED (2026-07-02): homed in AptFrameStack.cpp.
-    // AptValue_EmbeddedNativeHash RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp (the AptValueWithHash mHash @+8).
-    // AptInterp_GetNodeFrameContextHash RETIRED (2026-07-02): homed in AptActionInterpreterInterpHelpers.cpp
-    // (setVariable @0x82B03374: the display PARENT's char-inst property hash -- the enclosing clip's scope).
-    // AptTextFormat_ConstructDefault RETIRED (2026-07-02): homed in
-    // AptTextFormat.cpp (sub_82AFB2A8 == the public ctor + the homed
-    // ConstructRecord with the all-inherit tail). THE LAST ENGINE STUB --
-    // everything remaining in this file is the genuine PC-leaf KEEP list.
-    // AptActionInterpreter_SetIntervalImpl RETIRED (2026-07-02): homed in
-    // AptIntervalTimer.cpp (the X360 cbCallMethod_setInterval @0x82B019D8 body).
-    // AptApt_DeriveFunctionAnimation RETIRED (2026-07-01): homed in AptScriptFunctionBase.cpp
-    // (== AptCIH::GetRootAnimation, the enclosing-timeline walk).
-    // AptApt_GetRootContext RETIRED (2026-07-02): homed in
-    // AptActionInterpreterContext.cpp (== AptGetAnimationAtLevel(0), the
-    // level-0 root the absolute "/" paths resolve from).
-    // AptCIH_gotoAndX RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
-    // (the real AptCIH::_gotoAndX @0x82B0D2F0 -- label/frame goto core).
     // host extern-object member-GET callback slot (X360 dword_8324E858); the host installs it for
     // AptVFT_Extern (type-11) script objects -- none are registered on the PC title path, so the
     // un-installed slot faithfully answers null (matches the X360 null fn-ptr slot, not an engine stub).
     AptValue* AptExtern_GetMember(const char* szName) { return nullptr; }   // FLAG PC-platform leaf
-    // AptFrameStackFirstLocal RETIRED (2026-07-02): homed in AptArray.cpp (a tag-14 ARRAY's first element).
-    // AptLookupScopeChain RETIRED (2026-07-02): homed in AptFrameStack.cpp (spFrameStack->GetInScopeChain).
-    // AptUpdateZombieVector RETIRED (2026-07-02): homed in AptGC.cpp (the real
-    // reap over gpAptZombieVector -- XB1 sub_140830A40; the vector itself is
-    // allocated by AptUpdateInitialize from config word 14). The old "absent
-    // from all dumps" claim was false -- the whole subsystem is in the XB1.
-    // AptValue_GetMCParent RETIRED (2026-07-02): the shim was a reconstruction
-    // invention -- the shipped isMCInParentChain @0x82AD8458 walks
-    // GetNativeHashVirtual()->mp__Proto__ directly (corrected in AptValue.cpp).
-    // isNaN RETIRED (2026-07-02): homed in AptActionInterpreterBuiltins.cpp
-    // (the full @0x82AF9768 ECMA-ish NaN classification incl. the SWF7 arm).
-    // AptLinkerIsFileImported RETIRED (2026-07-10): homed as the real member
-    // AptLinker::isFileImported @0x82AECC58 (AptLinker.cpp) -- the false stub made
-    // the cancel path treat every candidate import as un-imported.
-    // AptResolveTextFieldFontName RETIRED (2026-07-10): homed in AptCIHText.cpp (the
-    // fontID -> owning movie charTable -> type-3 font-char name walk; the "" stub
-    // blanked the getTextFormat/setTextFormat round-trip's font name -- every
-    // AS-re-formatted field fell back to the collection's first typeface).
-    // Apt_atoff RETIRED (2026-07-02): homed in AptValueConvert.cpp
-    // (PS3 @0x7E2990 == (float)strtod; the stub's 0 broke every string->number).
-    // AptValueGCPool_GetAllocatedCount RETIRED (2026-07-02): homed in
-    // AptValueGCPoolManager.cpp (the DOGMA mnItemsAllocated counter).
-    // AptHook_GetBytesTotal RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
-    // (the host gAptFuncs.pfnGetBytesTotal dispatch @+0x94).
-    // AptActionInterpreter_InstanceOfChainWalk RETIRED (2026-07-02): homed in
-    // AptActionInterpreter.cpp (the X360 isObjectOfType @0x82AEA5B8 object arm).
-    // AptCIH_ShapeHitTest RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
-    // (the host pfnPointHitTest dispatch, X360 dword_8324E8A4 == gAptFuncs+0x8C).
-    // AptInterp_LabelToFrame RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
-    // (the clip movie's label-hash lookup, X360 @0x82B0C618 chain).
     int GetThreadId() { return 0; }   // FLAG PC-platform leaf: single-threaded PC (one thread id)
     uint32_t AptCurrentThreadId() { return 0; }   // FLAG PC-platform leaf: single-threaded PC (one thread id)
-    // AptGetSwfVersion RETIRED (2026-07-02): homed in AptLinker.cpp -- the
-    // dword_8324E530 SWF-version cache (parsed from the .apt "Apt Data:1:7:8"
-    // header at first link; NOT a frame rate as previously misread).
-    // AptRand RETIRED (2026-07-02): homed in AptRandom.cpp (the X360 MT19937
-    // variant @0x82AE04F0 -- custom tempering b 0x9D2C56FF, auto-seed 0x1105).
-    // AptActionInterpreter_ClearIntervalImpl RETIRED (2026-07-02): homed in
-    // AptIntervalTimer.cpp (the X360 cbCallMethod_clearInterval @0x82AE3AE0 body).
-    // AptAnimationAdd/ReleaseCharacterRef RETIRED (2026-07-10): the "+0x0C character
-    // ref" is the CIH ZOMBIE-COUNT bitfield (bits 7-22, step 0x80 -- decoded from the
-    // ScriptFunctionBase ctor asm); the ctor/dtor call Inc/DecZombieCount directly.
-    // The {} stubs dropped every function-value zombie-count balance.
-    // AptPrepareCallContextScope RETIRED (2026-07-10): the ctor's vtbl+0x60 dispatch
-    // is CreateFrameStack (@0x82AF1260) -- the ScriptFunctionBase ctor calls the
-    // member directly. The {} stub left nested closures with a null parent frame.
     // host extern-object member-SET callback slot (X360 dword_8324E854); un-installed on the PC
     // title path (no type-11 extern objects) -> faithful no-op, matching the X360 null fn-ptr slot.
     void      AptExtern_SetMember(const char* szName, const char* szValue) {}   // FLAG PC-platform leaf
-    // AptActionInterpreter_runStream RETIRED (IGNITION 2026-07-01): the init passes call the real
-    // member gAptActionInterpreter.runStream (AptActionRun.cpp dispatch loop) -- ActionScript executes.
-
-    // AptStringPoolReleaseString RETIRED (2026-07-10): homed as
-    // StringPool::ReleaseString (XB1 sub_14083F2A0, AptStringPool.cpp) -- decGCRoot
-    // + last-use bucket unchain/Release, the inverse of FindOrCreate's hit path.
-    // FLAG deferred (NOT a clean swap -- boot-verified 2026-07-04): the real member
-    // AptCharacterAnimation::ExecuteInitActions (AptCharacterAnimation.cpp, X360 0x82AF4340) is homed
-    // but its init-action VM path RUNS AWAY at boot frame 3 (a flood of mkitem instantiation -> crash)
-    // because the deeper import->AptFile->embedded-movie chase is still deferred. Keep this no-op until
-    // that sub-record path is homed, THEN swap the AptMovie::doFrameControls tag-8 caller to the member.
+    // FLAG deferred: the real AptCharacterAnimation::ExecuteInitActions (AptCharacterAnimation.cpp)
+    // is homed, but its init-action VM path runs away at boot (a flood of mkitem instantiation)
+    // until the import->AptFile->embedded-movie chase is homed. Keep this no-op until that
+    // sub-record path lands, THEN swap the AptMovie::doFrameControls tag-8 caller to the member.
     void  AptExecuteInitActionsGate(void* pAnim, void* pCIH, int nId) {}
     void  AptFreeFontUnit(void* pUnit) {}   // FLAG PC-platform leaf: host render-unit free callback (un-installed on PC)
     void  AptFreeRenderingUnit(void* pUnit) {}   // FLAG PC-platform leaf: host render-unit free callback (un-installed on PC)
-    // AptPseudoDisplayList_Insert RETIRED (2026-07-01): homed member AptPseudoDisplayList::Insert
-    // (AptPseudoDisplayList.cpp, faithful list-insert) called directly in AptMovie; the {} stub dropped it.
-    // AptPseudoDisplayListFindInst RETIRED (2026-07-10): the console
-    // DoTemporaryFrameControls @0x82AEEB98 place arm calls the real 3-arg member
-    // AptPseudoDisplayList::FindInst (homed in AptPseudoDisplayList.cpp) -- the
-    // invented 6-arg shape here nulled every lookup, so jumpToFrame replays
-    // re-created every already-live pseudo node instead of merging onto it.
-    // AptValue_setGCRoot RETIRED: the real member AptValue::setGCRoot(int) is called directly
-    // (AptAnimationTarget.cpp, AptLinker.cpp, AptString.cpp).
-    // AptActionInterpreter_UnEscape RETIRED (2026-07-02): homed in
-    // AptActionInterpreter.cpp (X360 _unEscape @0x82AEE110 + _escape2Char).
-    // AptActionInterpreter_getName RETIRED (2026-07-02): homed in
-    // AptCIHNativeFunctionHelper.cpp (getName @0x82AF75C8 + the recursive
-    // sub_82AF7400 target-path builder).
-    // AptActionInterpreter_stackPushIndirect RETIRED (2026-07-01): homed as the real member
-    // AptActionInterpreter::stackPushIndirect in AptActionInterpreter.cpp; caller uses the member.
-    // AptAnimationTargetSetConstruct is now HOMED faithfully in AptAnimationTarget.cpp
-    // (sub_82AE1708: allocate the slot array + set capacity; native-8 pointer stride).
-    // AptAnimationTargetSetDestruct/2 RETIRED (2026-07-10): homed in
-    // AptAnimationTarget.cpp (sub_82AE1670/sub_82AE1780, ICF twins -- Release each
-    // live slot + free the slot array; the {} stubs leaked both at teardown).
-    // AptAnimationTarget_TickNewInsts RETIRED: the real static AptAnimationTarget::TickNewInsts()
-    // (AptAnimationTarget.cpp:562, X360 0x82B0C8E0 -- drains the module new-instance table) is now
-    // called directly at its one call site (AptCIHNativeFunctionHelper.cpp duplicateMovieClip).
-    // AptFlushDeferredReleases RETIRED (2026-07-01): homed in AptGC.cpp as the real
-    // gValuesToRelease.ReleaseValues() drain (the {} stub dropped every GC drain).
     // Host URL-fetch callback slot (dword_8324E84C/..850), null on the PC title path (no host
     // loadVariables installed) -- the same host boundary as AptExtern_SetMember above.
     // FLAG PC-platform leaf: host callback slot, faithfully null on PC.
     AptValue* AptApt_LoadVariablesFetch(const char* pUrl) { return 0; }   // dword_8324E84C/850 un-installed -> null
 
-    // AptApt_GetDragTargetTranslate -- the drag target's clip matrix translation
-    // (X360 StartDragMovie @0x82B03A20: v11 = *(*(*(Variable+0x20)+4)+8) -- the
-    // CIH -> mpCharacterInst -> render item's position matrix, with the null-matrix
-    // fallback to the identity flt_8324E2B0 == gAptIdentityMatrix; translate =
-    // v11[4]/v11[5] == tx/ty). The homed AptRenderItem::GetPositionMatrixConst
-    // performs exactly that raw read + identity fallback.
+    // AptApt_GetDragTargetTranslate -- the drag target's clip matrix translation: CIH ->
+    // character inst -> render item position matrix (GetPositionMatrixConst carries the
+    // console's null-matrix -> identity fallback), tx/ty out.
     void AptApt_GetDragTargetTranslate(AptValue* pDragTarget, float* pOutX, float* pOutY)
     {
         const AptMatrix* pPos = static_cast<AptCIH*>(pDragTarget)->GetCharacterInst()
@@ -282,111 +174,19 @@
         *pOutX = pPos->tx;   // matrix +0x10 (console v11[4])
         *pOutY = pPos->ty;   // matrix +0x14 (console v11[5])
     }
-    // AptApt_PopValues RETIRED: it IS AptActionInterpreter::stackPop(int) (AptActionInterpreter.cpp:65,
-    // @0x7FDB68 -- "pop nCount values, releasing each"; ICF-folded as Burnout_X360_Artist_01e3_0). The
-    // ControlOps/StackOps call sites call the member directly; the {} shim skipped every collapse.
-    // AptCIH_GetWorldBounds RETIRED: its body IS the shared GetBoundingRectClamped
-    // (AptCIHBehaviour.cpp, X360 sub_82AE2C58, asm-verified 2-arg (AptCIH* r3, float* r4)); the
-    // getBounds/hitTest native methods now call it directly (AptValue clip -> AptCIH via static_cast).
-    // AptCIH_SetDirtyState RETIRED (2026-07-01): the real member AptCIH::SetDirtyState
-    // (AptCIH.cpp, faithful) is called directly; the {} stub dropped the dirty latch.
-    // AptCIH_SetProceduralProperty RETIRED: the real member AptCIH::SetProceduralProperty
-    // (AptCIHBehaviour.cpp:963, X360 0x82AE73C0 -- 4th arg bASChanged is r6, asm-verified) is called
-    // directly by createTextField; the invented shim dropped the value AND the bASChanged flag.
-    // AptCIH_jumpToFrame RETIRED (2026-07-01): homed member AptCIH::jumpToFrame (AptCIH.cpp,
-    // faithful play-head seek) called directly at all 5 VM sites; the {} stub dropped every seek.
-    // AptCIH_tick is now homed faithfully in AptCIHBehaviour.cpp (forwards to AptCIH::tick).
 
-    // ---- AptCIH "link cluster" statics: the .data slots the homed
-    // AptCIHBehaviour.cpp bodies (queueClipEvents / GeneralisedProcess / ClearCIH /
-    // AddToDelayReleaseList / PreDestroyHook) reach. All boot zero/null on the
-    // console exactly as defined here -- these ARE the faithful homes. ------------------
-    // AptAnimationTargetAddToRemList RETIRED (2026-07-10): homed in
-    // AptAnimationTarget.cpp (@0x82AEE3F8 -- queue on the shared delayed-release
-    // table with the bit26 latch + CleanRemList overflow flush; the {} stub
-    // dropped every delay-released clip).
-    // gpAptCIHPreDestroyHook RETIRED (2026-08-11): console dword_8324E8A0 is not a
-    // standalone global -- it is gAptFuncs+0x88 == gAptFuncs.pfnOnUnload (the slot
-    // AptAux::ConstructApt installs with CgsGui::AptCallbackFile::OnUnload). The
-    // parallel never-installed global meant AptCIH::PreDestroy never released the
-    // AptCommunicator component registrations (256-entry table overflow at the
-    // menus); AptCIHBehaviour.cpp now dispatches gAptFuncs.pfnOnUnload directly.
-    // AptQueueClipEventsRunMatched RETIRED (2026-07-01): homed faithfully in
-    // AptCIHBehaviour.cpp from the PS3 body @0x815BD0 (the clip-event record scan +
-    // AddActionFront/Back enqueues; the byte-code-block + __proto__ tails staged there).
-    // AptClearCIHDrainQueuesAndZombie RETIRED (2026-07-02): homed in
-    // AptCIHBehaviour.cpp (the director-set/new-inst drain + the unload-event tail;
-    // the zombie-vector decision stays documented + staged there).
-    // The GeneralisedProcess gate + callback statics (AptCIH::bEarlyReturn /
-    // sCIHProcessCb[0..2] / nTreeDepth). All boot zero/null on the console exactly
-    // as here; AptUpdate.cpp installs/swaps the three callbacks around its process
-    // pass and AptCIHBehaviour.cpp reads them -- faithful .data homes.
+    // ---- AptCIH GeneralisedProcess gate + callback statics (bEarlyReturn / sCIHProcessCb[0..2] /
+    // nTreeDepth): boot zero/null on the console exactly as here. AptUpdate.cpp installs/swaps
+    // the three callbacks around its process pass and AptCIHBehaviour.cpp reads them.
     bool AptCIH_sbGeneralisedProcessEarlyReturn = false;   // bEarlyReturn (boot 0)
     unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*)  = nullptr;   // dword_8324E41C
     unsigned int (*AptCIH_sCIHProcessCb1)(AptCIH*, AptCIH*, void*) = nullptr;   // dword_8324E420
     unsigned int (*AptCIH_sCIHProcessCb2)(AptCIH*, AptCIH*, void*) = nullptr;   // dword_8324E424
     int  AptCIH_snGeneralisedProcessTreeDepth = 0;   // nTreeDepth (boot 0)
 
-    // AptCIH::ProcessCustomControls -- the per-frame custom-control refresh pass the
-    // AptUpdate slot install (dword_8324E420) targets.
-    //
-    // ⚠️⚠️ THE BANNER THAT USED TO BE HERE WAS WRONG. It said "its X360 body has no
-    // per-address export in the dump set". It has one: **AptCIH::ProcessCustomControls
-    // @0x82B07788**, with complete pseudocode, assembly and xrefs. (Checked 2026-08-16
-    // while chasing why the mounted GUI custom-renderer layer was never being called.)
-    //
-    // ⛔ IT IS STILL A STUB, AND THAT IS NOW THE ONE REMAINING BREAK IN THE CUSTOM-CONTROL
-    // CHAIN. Everything downstream of it is live as of 2026-08-16:
-    //     movie types the clip `_type='PlayerImage' _index=1`
-    //       -> [THIS FUNCTION classifies the clip + fills the render item's Type/Target/
-    //           Properties strings]                                  <-- returns false
-    //       -> AptRenderItemCustomControl::Render @0x82AEF8F8         (mounted, real)
-    //       -> gAptFuncs.pfnCustomControlRender                       (installed)
-    //       -> CgsGui::AptCallbackCustom::ControlRender @0x8285BFA0   (reconstructed)
-    //       -> AptRenderHandler::mpCustomRendererManager              (installed + read)
-    //       -> BrnGui::CustomRendererManager::GetComponentTexture     (mounted)
-    //       -> NetworkPlayerImageRenderer::GetRenderOutput            (mounted)
-    // MEASURED: with this returning false the boot log records ZERO
-    // `[custrend] ControlRender` lines. Nothing else in the chain is missing.
-    //
-    // What a reconstruction needs beyond the pseudocode (recorded so the next pass does
-    // not re-derive it):
-    //   * the AptCharacterInst +0x14 classification bitfield -- bits 4..5 hold
-    //     {0 = unclassified, 1 = string-style custom control, 2 = NOT a custom control,
-    //      3 = zid-style}; the pass caches its verdict there and only re-derives it when
-    //     the field is 0.
-    //   * the two native-hash keys it looks the clip's variables up by: unk_8324E5C8 (the
-    //     `_type` key -- the same variable the licence movie's PLACE tag sets) and the
-    //     literal "_CustomControlType".
-    //   * AptActionInterpreter::getVariable(&dword_8324E760, node, 0, &unk_8324E5C0, 1,1,0)
-    //     for the TARGET string.
-    //   * AptValue::urlEncodeCustomRender @0x82AF9410 for the PROPERTIES blob -- that is
-    //     what produces the "_index=1" text AptCallbackCustom::ControlRender parses.
-    //   * gAptFuncs.pfnCustomControlUpdate (dword_8324E890) gates the properties refresh;
-    //     a null slot means "always refresh", so it does NOT have to be installed first.
-    //   * the zid arm additionally needs gbAptCustomControlRenderEnabled (byte_82F733F6),
-    //     which this build leaves false -- so only the string arm matters.
-    // ⚠️ It runs on EVERY display-list node EVERY frame and can promote a live sprite
-    // render item to a custom control (AptRenderItemCustomControl::CopyFromSprite +
-    // AptCharacterInst::SetRenderItem), so a wrong classification breaks the whole GUI,
-    // not just custom controls. Reconstruct it with a control, not by eye.
-    // ⭐ RETIRED 2026-08-24 ([licence-icon] wave): the real body is homed in
-    // AptCIHBehaviour.cpp, transcribed from @0x82B07788 with the XB1 x64 build as the
-    // bit-layout oracle. The notes
-    // above were the reconstruction's map and are kept for the record.
-
-    // AptGC::CleanUnreachable -- RETIRED 2026-08-28. The note that stood here said
-    // "No per-address export in the dump set", and that was a NAME SEARCH failing,
-    // not a hole in the image: AptUpdate @0x82B0DB68 calls it BY NAME
-    // (bl AptGC__CleanUnreachable @0x82B0DC48) and the PS3 EXTERNAL ELF carries the
-    // whole body under ._ZN5AptGC16CleanUnreachableEv @0x7F19F0. The real mark/sweep
-    // is homed in AptGC.cpp beside CleanAll; the empty body here was the only reason
-    // no Apt value was ever reclaimed on a live frame.
-
-    // The saved-input REPLAY driver (sub_82B0D7E8, ~4.3KB): drains the recorded
-    // input stream instead of live-ticking. Gated on gbAptSavedInputActive (boot
-    // default 0); the empty body is unreachable until a host arms the replay,
-    // and its own TU lands before that feature does.
+    // The saved-input REPLAY driver: drains the recorded input stream instead of live-ticking.
+    // Gated on gbAptSavedInputActive (boot 0), so the empty body is unreachable until a host
+    // arms the replay.
     void AptUpdateReplaySavedInputs(int, int) {}
 
     // Host debug-output sink (console dword_8324E82C, a printf-style hook the host installs).
@@ -398,15 +198,12 @@
             gpAptHookTraceFn(szFormat, szMessage);
     }
 
-    // AptKeyManagerAddListener -- the Key-listener registration tail of
-    // sMethod_addListener (X360 @0x82ADC6E0): scan the director's mListenerSet
-    // (gpAptTarget->mpAnimationTarget+0x10; scan bound = mnCapacity, @0x82ADC764) --
-    // already present -> no-op -- else the shared set `add` (__::add @0x82ADBCE0):
-    // store head = count+1, probe forward from slots[head] for the first free slot
-    // (wrapping at capacity: `li r10,-1; addi r10,r10,1`), store the listener and
-    // AddRef it (vtbl[0] tail-call). The modulo probe is the committed sibling idiom
-    // (AptCIHMembers.cpp AddNodeToInputSet) -- identical slot choice for head < cap,
-    // in-bounds where the console's raw slots[cap] read is UB.
+    // AptKeyManagerAddListener -- the Key-listener registration tail of sMethod_addListener:
+    // scan the director's mListenerSet (bound = mnCapacity); already present -> no-op; else the
+    // shared set add: head = count+1, probe forward from slots[head] for the first free slot
+    // (wrapping at capacity), store the listener and AddRef it. The modulo probe is the
+    // committed sibling idiom (AptCIHMembers.cpp AddNodeToInputSet): identical slot choice for
+    // head < cap, in-bounds where the console's raw slots[cap] read is UB.
     void AptKeyManagerAddListener(AptValue* pListener)
     {
         AptAnimationTargetSet* const pSet = &gpAptTarget->GetAnimationTarget()->mListenerSet;
@@ -434,10 +231,9 @@
         }
     }
 
-    // AptKeyManagerRemoveListener -- the shared set `remove` (__::remove @0x82ADBC28)
-    // over the same director mListenerSet: empty (count 0) -> false; linear-scan the
-    // slots (bound = capacity) for pListener; on a hit decrement the count, Release
-    // the slot's value (vtbl[1]) and null the slot. True iff one was removed.
+    // AptKeyManagerRemoveListener -- the shared set remove over the same director mListenerSet:
+    // empty (count 0) -> false; linear-scan the slots (bound = capacity) for pListener; on a hit
+    // decrement the count, Release the slot's value and null the slot. True iff one was removed.
     bool AptKeyManagerRemoveListener(AptValue* pListener)
     {
         AptAnimationTargetSet* const pSet = &gpAptTarget->GetAnimationTarget()->mListenerSet;
@@ -457,60 +253,17 @@
         pSet->mppSlots[luIndex] = nullptr;
         return true;
     }
-    // AptLinkerGetUrlLoad RETIRED (2026-07-10): the getURL/getURL2 .swf arm calls
-    // the homed member AptLinker::Load(EAStringC*, EAStringC*) @0x82B06660 directly
-    // (the {} forwarder dropped every getURL movie load).
     // FLAG PC-platform leaf: host async-stream cancel hook (dword_8324E83C) -- the
     // PC stream hook (AptLoaderStartAsyncLoad) loads synchronously, so nothing is
     // ever in flight to cancel; the empty body matches the un-installed slot.
     void AptLoaderCancelAsyncLoad(void* pDataBlock) {}
-    // AptLoaderStartAsyncLoad is HOMED in BrnGuiAptRuntime.cpp (the platform stream hook: it
-    // synchronously content-loads the import bundle + drives AptCompleteAnimationAsyncLoad). The
-    // former link-stub here was removed so the strong host definition is the only one.
-    // AptMovie_runFrameActions RETIRED (2026-07-01): homed as the real const member
-    // AptMovie::runFrameActions(AptCIH*, int) (AptMovie.cpp, PS3 @0x820FA4 -- the invented
-    // void* shim shape was wrong); the CallFrame handler calls it on the clip's embedded movie.
-    // AptObject_SetImplementedObjects RETIRED (2026-07-01): the real member
-    // AptObject::SetImplementedObjects (AptObject.cpp) is called directly; the {} stub dropped it.
-    // AptScriptFunctionBase_InitializeStaticData RETIRED (2026-07-01): the real static member
-    // AptScriptFunctionBase::InitializeStaticData allocates the register block at boot (the {}
-    // stub left the block unallocated, so the AS register file never existed).
-    // AptScriptFunctionBase_PopStaticData RETIRED (2026-07-01): homed as the real static member
-    // AptScriptFunctionBase::PopStaticData (AptScriptFunctionBase.cpp, asm-decoded register-block pop).
-    // GlobalNotificationFunction RETIRED (2026-07-16): homed as the real @0x82B00C78
-    // body (AptLinker.cpp) -- the loader's "file linked" notify into the current
-    // target's linker pending list. The {} stub silently dropped every async movie
-    // load completion (nothing ever mounted through the engine linker).
     void Mutex_Lock(void* pMutex, void* pName) {}   // FLAG PC-platform leaf: single-threaded PC (no lock needed)
-    // AptMath::ClipStackShutdown RETIRED (2026-08-07): homed in AptMath.cpp from the
-    // targeted export @0x82AE24E8 (the ClipStackInit inverse: pool-Deallocate the raw
-    // allocation at the init-matching size, then clear the base; AptRenderShutdown
-    // @0x82B0C2F0 calls it first). The old "body un-exported" park is closed.
     void Mutex_Unlock(void* pMutex) {}   // FLAG PC-platform leaf: single-threaded PC (no lock needed)
-    // TextFormat_copyTextFormatObj RETIRED (2026-07-10): homed as the real member
-    // TextFormat::copyTextFormatObj @0x82AE5820 (AptTextFormat.cpp) -- the {} stub
-    // dropped every get/setTextFormat record copy.
-    // escape/unescape RETIRED (2026-07-10): homed as AptActionInterpreter::escape
-    // @0x82AEE008 / ::unEscape @0x82AEE110 (AptActionInterpreter.cpp) -- the {}
-    // stubs made the AS escape()/unescape() builtins identity transforms.
-    // AptActionInterpreter_CleanupAfterExecution RETIRED (IGNITION 2026-07-01): the real member
-    // (thrown-value drop + PopStaticData window pop) is called directly with the saved base.
-    // AptFileAssign DELETED (2026-07-10): the AptFile::operator= wrapper had no
-    // remaining callers (the loader paths use the AptSharedPtr refcount helpers).
-    // sub_82AFD150 (the remove-command dispatcher @0x82AFD150) is now HOMED faithfully as
-    // AptDispatchRemoveCommand in AptMovie.cpp (findInst by depth + removeObject). The null
-    // link-stub -- which dropped every timeline remove -- is retired.
-    // sub_82B0AE08 (the place-command dispatcher @0x82B0AE08) is now HOMED faithfully as
-    // AptDispatchPlaceCommand in AptMovie.cpp (reads the PlaceObject record + calls the homed
-    // AptDisplayList::placeObjectNCXForm). The null link-stub is retired.
-    // AptValueGC_PoolManager_GetAllAllocatedAptValues RETIRED (2026-07-02): homed in
-    // AptValueGCPoolManager.cpp (the CleanAll pool-walk snapshotted flat).
 
 // ===================================================================================
-// ENGINE link-stubs (42) -- off the PC render-critical path. The PC bring-up is
+// ENGINE link-stubs -- off the PC render-critical path. The PC bring-up is
 // single-threaded; the bundle FS uses the existing DeviceManager replay path (NOT
-// rw::core::filesys); audio mix is wired after the render works. Each is a deliberate
-// bring-up bridge to reach a RUNNING link; homed faithfully once we see which are hit.
+// rw::core::filesys). Each is a deliberate bring-up bridge; homed faithfully once hit.
 // ===================================================================================
 
 // ---- rw::core::filesys -------------------------------------------------------------
@@ -604,27 +357,6 @@ namespace rw { namespace collision {
     class VolumeLineQuery { public: int GetIntersections(); };   // FLAG link-stub (minimal decl for mangling)
     int VolumeLineQuery::GetIntersections() { return 0; }        // FLAG link-stub
 
-    // RETIRED 2026-08-18 (waveQ5 rwc3): the six per-type volume-handler symbols
-    // (gVolumeHandler_82F91740 / _82F9176C / _82F91894 / _82F918C0 / _82F919A4 /
-    // _82F919D0) used to be defined here as single zero BYTES ("FLAG link-stub"), so a
-    // fixed-up Volume's +0x40 descriptor pointer aimed at one zero byte and
-    // Volume::GetType() read four bytes of whatever followed it.
-    //
-    // They are now REAL `rw::collision::Volume::VTable` records -- typeID, name and flags
-    // dumped out of the shipped image, and their METHOD SLOTS BOUND as of the wave-Q5
-    // vtbind change (34 of the 40 slots the image binds are live; 2 are genuine image
-    // zeros and 6 are parked with per-slot reasons at the record). They are defined in
-    // vendor/renderware/collision/VolumeVTables.cpp -- NOT in
-    // SDKs/EATech/rwcollision/volume.cpp, which keeps only the SDK-side declarations, the
-    // shared gVolumeVTable array and InitializeVTable's fill (the records had to move
-    // across the Vector3 header fork so every primitive's methods are visible). Their type
-    // therefore changed from `const u8` to `const Volume::VTable`, which changes the
-    // mangled symbol (MEASURED: ...@@3EB vs ...@@3U...@B), so both sides moved together
-    // in one change and the tree never carries the two spellings at once.
-    // Nothing outside volume.cpp ever referenced these symbols (grepped: the only other
-    // mentions are comments in CgsVolumeManager.cpp:195 and PropManager_wQ2_09.cpp:109,
-    // both of which now describe a state that no longer exists).
-
 }}
 
 // ---- EA::Thread --------------------------------------------------------------------
@@ -696,28 +428,14 @@ namespace EA { namespace Jobs {
     { (void)pBackend; (void)uHandle; }
     JobThreadHandle::JobThreadHandle() {}   // FLAG PC-platform leaf: synchronous jobs on PC
 
-    // The vendor accessors (declaration-only in entry_point.h): each returns its
-    // member (DWARF entry_point.h:80-82; layout ARTIST-verified via SetAffinity
-    // @0x82BC98B0 storing mAffinity at +20). Trivial reads, inlined on the console.
-    // (Merge 2026-08-11: these real member reads supersede origin/dev's hard-coded
-    // JOB_AFFINITY_NONE/LOCAL/HIGH link-stub answers.)
+    // The vendor accessors (declaration-only in entry_point.h): trivial member reads,
+    // inlined on the console.
     JobAffinity    EntryPoint::GetAffinity()    const { return mAffinity; }
     JobEnvironment EntryPoint::GetEnvironment() const { return mEnvironment; }
     JobPriority    EntryPoint::GetPriority()    const { return mPriority; }
-    // ⛔⛔ SILENT-DROP STUB DELETED 2026-08-10 (fill-worker wave 2). What stood here was
-    //     void EntryPoint::SetName(const char* lpcName) { (void)lpcName; }
-    // labelled "FLAG PC-platform leaf: synchronous jobs on PC (no worker names)". The REAL
-    // 22-instruction body (X360 0x82BC9858) was in entrypoint.cpp the whole time -- but that
-    // TU declared its own forked `class EntryPoint` whose SetName returned `char*`, so it
-    // mangled to a DIFFERENT symbol and this stub won every link, silently, for every caller.
-    // Retiring ODR fork #3 (entrypoint.cpp's local class) is what made the two collide and
-    // exposed it. Deleted; the real body serves now. (origin/dev's matching ⚠ about the
-    // GetNumDependencies 0-stub is retired by the real body below, from this branch.)
 
-    // The mDependencies twin of the homed Job::GetNumDependents @0x82BCA390
-    // (job.cpp): this node's bucket count + the overflow chain's ListSize
-    // (@0x82BCA030). The 0 stub starved JobScheduler::AddTree's dependency walk
-    // (job_scheduler.cpp:199) of every real dependency.
+    // The mDependencies twin of Job::GetNumDependents (job.cpp): this node's bucket count
+    // + the overflow chain's ListSize.
     int Job::GetNumDependencies() const
     {
         u32 luOverflow = 0;
@@ -746,13 +464,3 @@ namespace EA { namespace Allocator {
     // non-null is only needed if an immediate deref happens (then home a file-scope one).
     ICoreAllocator* ICoreAllocator::GetDefaultAllocator() { return nullptr; }   // FLAG link-stub
 }}
-
-
-// ---- audio (Nicotine / NFSMixMaster / NFSMixMap) -----------------------------------
-// RELOCATED (2026-08-25, audio-faithfulness wave 2): the real Nicotine/NFSMix bodies
-// a 2026-08-07 targeted export parked here (SnapshotMixer::InitSnapshots @0x82B47350 /
-// DestroySnapshots @0x82B46D20 / SetSnapshot() stub / SnapshotVolumeCurve @0x82B453C0
-// + its 512-entry LUT; NFSMixMaster::InitMixMap stub / DestroyMainMainMap @0x82B457E0 /
-// AssignSFXCallbacks @0x82B45A80; NFSMixMap::CreateMainMapState @0x82B49680) now live
-// in their natural TUs: include/Nicotine/SnapshotMixer.cpp, include/NFSMix/
-// NFSMixMaster.cpp, include/NFSMix/NFSMixMap.cpp.

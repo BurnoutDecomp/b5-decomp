@@ -1,23 +1,18 @@
 // ===========================================================================
 // BrnScreenStatesDataLinkStubs.cpp -- link scaffold for the SCREEN/PostEvent
 // state surface the BrnScreenFlow closure pulls in but whose per-state TUs are
-// only partially reconstructed (2026-07-12). Two kinds of content:
+// absent or partial. Two kinds of content:
 //
 //   * The per-state static RESOURCE TABLES (maResourcesToLoad /
-//     maResourceTuplesToLoad / KA_RESOURCES_TO_LOAD + their counts). The IDA
-//     exports are function-only, so every table below was read STRAIGHT FROM
-//     THE DECRYPTED XEX at the address its declaring header documents -- these
-//     are real reconstructions, not placeholders (every entry requests type
-//     4 == CgsGui::E_GUI_RESOURCETYPE_APT). (PauseScreen's table, once the odd
-//     one out, is now attested + defined by its own TU, BrnPauseScreen.cpp.)
+//     maResourceTuplesToLoad / KA_RESOURCES_TO_LOAD + their counts), read from
+//     the decrypted image at the address each declaring header documents --
+//     real reconstructions, not placeholders (every entry requests type
+//     4 == CgsGui::E_GUI_RESOURCETYPE_APT).
 //
 //   * The LIFECYCLE VIRTUALS (OnEnter/OnLeave/Update/GetResourcesToLoad and
-//     one menu hook) of states whose own TUs have not landed (or landed
-//     partial -- per the campaign rule the partial TUs are NOT edited; their
-//     missing pieces live here). These log once on entry and are otherwise
-//     inert, the BrnHudStatesLinkStubs pattern. FLAG link scaffold: every
-//     function body below is a stand-in, not a reconstruction (the real X360
-//     bodies are noted where their ledger addresses are known).
+//     one menu hook) of states whose own TUs have not landed or landed partial.
+//     These log once on entry and are otherwise inert. FLAG link scaffold:
+//     every function body below is a stand-in, not a reconstruction.
 // ===========================================================================
 
 #include <cstdio>   // std::snprintf (the one-shot gap log)
@@ -74,10 +69,6 @@ namespace
                       lpacState, lpacHook);
         CgsDev::Log::WriteToLog(lac);
     }
-
-    // (The escape-hatch helper that lived here died with the CN_SETTINGS / CN_D_DETAIL
-    //  hatches below -- both real screens landed. The MapEvent/OnlinePlay hatches keep
-    //  their own copy in BrnScreenStatesLinkStubs.cpp.)
 }
 
 namespace BrnGui
@@ -102,11 +93,6 @@ namespace BrnGui
     const CgsGui::sResourceTuple CrashNavColourCalibrate::maResourcesToLoad[] =
         { { 143, CgsGui::E_GUI_RESOURCETYPE_APT }, { 34, CgsGui::E_GUI_RESOURCETYPE_APT } };
     const u32 CrashNavColourCalibrate::muNumResourcesToLoad = 2;
-
-    // CrashNavDriverDetails's resource table has MOVED to its own TU
-    // (BrnCrashNavDriverDetails.cpp, pause wave 2026-08-28) along with the rest of the
-    // screen. The values here were right -- {144, APT}, {63, APT} -- and are carried over
-    // unchanged; only the home changed, so this stand-in would now be a duplicate symbol.
 
     // .rdata @0x82066114 / count @0x8206611C
     const CgsGui::sResourceTuple CrashNavEnterOnlineBase::maResourceTuplesToLoad[] =
@@ -141,9 +127,6 @@ namespace BrnGui
     // .rodata @0x8205E608 (the fixed one-entry list; no count static)
     const CgsGui::sResourceTuple ImageGalleryState::KA_RESOURCES_TO_LOAD[1] =
         { { 164, CgsGui::E_GUI_RESOURCETYPE_APT } };
-
-    // (InstantResultsState's own table @0x82F26AFC is already defined by its
-    // committed TU, BrnOfflineInstantResults.cpp -- not duplicated here.)
 
     // .rdata @0x82F27318 / count @0x82066898
     const CgsGui::sResourceTuple OfflineRivalShutdown::maResourcesToLoad[] =
@@ -255,8 +238,7 @@ namespace BrnGui
     const u32 ShowtimeInstantResultsState::muNumResourcesToLoad = 3;
 
     // =======================================================================
-    //  Lifecycle scaffold -- FLAG stand-ins for the not-yet-landed bodies
-    //  (real X360 addresses noted where the ledger names them).
+    //  Lifecycle scaffold -- FLAG stand-ins for the not-yet-landed bodies.
     // =======================================================================
 
     // ---- BrnDebug (BrnBrnDebug.cpp is partial: OnEnter/OnLeave landed) ----------------
@@ -284,16 +266,6 @@ namespace BrnGui
     void CrashNavAccountManagement::OnLeave() {}
     void CrashNavAccountManagement::Update()  {}
 
-    // ---- CN_SETTINGS / CN_D_DETAIL: the ESCAPE HATCHES DIED 2026-08-29 (rebase) --------
-    //      Both real screen TUs landed on dev the same day (BrnCrashNavSettings.cpp /
-    //      BrnCrashNavDriverDetails.cpp, the START-button-screen wave) -- exactly the
-    //      DELETE-WHEN the hatches carried. Settings' resource table above STAYS (its TU
-    //      still reads it from here); DriverDetails' moved to its own TU.
-
-    // ---- CrashNavColourCalibrate: the three lifecycle virtuals moved to the state's own
-    //      TU (BrnCrashNavColourCalibrate.cpp, post-fx step 11). Only its static resource
-    //      table stays here, with the rest of the measured .rdata block above.
-
     // ---- CrashNavEnterOnline variants (Mod TU landed NoTitle only) --------------------
     void CrashNavEnterOnlineFull::OnEnter() { LogUnreconstructedState("CrashNavEnterOnlineFull", "OnEnter"); }
     void CrashNavEnterOnlineX360::OnEnter() { LogUnreconstructedState("CrashNavEnterOnlineX360", "OnEnter"); }
@@ -302,54 +274,20 @@ namespace BrnGui
     void Credits::OnLeave() {}
     void Credits::Update()  {}
 
-    // ---- InstantResultsState: THE THREE LIFECYCLE STUBS ARE GONE -------------------
-    // ⭐⭐ OnEnter / OnLeave / Update are now REAL, in
-    // GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.cpp. Those three
-    // stubs were why finishing an offline event produced no pixels: the whole chain in front
-    // of them (FinishCurrentMode -> ShowModeResults -> action 37 -> GUI 291 -> InGame::Update
-    // case 291 -> SendStateEvent("TO_OFF_POST")) succeeded and then landed on a log line.
-    //
-    // What stays here is the OTHER half of the same lesson. The class has 32 functions; this
-    // wave bodied 17. The remaining 15 are declared in BrnOfflineInstantResults.h so the
-    // reconstructed dispatch can name them, and they are bodied HERE -- logged, not silent --
-    // so a run that reaches one says so in BrnGame.log instead of quietly doing nothing.
-    // ⛔ DO NOT "tidy" these into empty bodies. A silent no-op is exactly what made the
-    // original defect invisible to the link, to the ledger and to four run logs.
-    //
-    // NONE of these is on the path that puts the results movie on screen -- that is Update's
-    // E_RESULTS_STATE_LOADING_RESOURCES arm (two PlayAptMovie calls), which runs before any
-    // sub-state does. These are the sub-state PRESENTATIONS and the component fill.
-    // (SetupComponents and UpdateEventResults now have REAL bodies in
-    //  BrnOfflineInstantResults.cpp -- they are the reveal path.)
-    // ⭐⭐ FOUR MORE ARE GONE (2026-08-29, the results-presentation wave):
-    // UpdateTakePhotoPage / UpdateLeaving / UpdateRankUp / UpdateSecondResultsPage are REAL
-    // in BrnOfflineInstantResults.cpp. UpdateTakePhotoPage is why they had to go together:
-    // measured over five runs (rs1..rs5), the results presentation DOES draw its "YOU WIN"
-    // stamp, dwells out on schedule, hands over to TAKE_PHOTO -- and then this stub logged
-    // 2,795 identical lines to the end of the run, because nothing advanced the sub-state
-    // machine again. The panel was not failing to appear; it appeared and had nowhere to go.
-    // UpdateLeaving is the far end of the same chain (LEAVING -> DONE -> TriggerExitResults).
-    // ⭐⭐ TWO MORE ARE GONE (2026-08-29, the results-EXIT wave): HandleAptTriggers and
-    // WillShowCredits are REAL in BrnOfflineInstantResults.cpp. HandleAptTriggers is why they
-    // had to go with it: it is the ONLY writer that clears mpcAnimatingComponentName, and
-    // UpdateTakePhotoPage's WAITING_FOR_CLEANUP arm will not swap the results movie out until
-    // that pointer is null -- so the stub below did not "do nothing", it HUNG the screen one
-    // step past where the previous wave's stall had been. It is also not a player-facing
-    // control: event 21 is the APT MOVIE's own load/transition callback. The class's only
-    // controller-input handler is HandleControllerInput, and it answers two buttons in the
-    // photo-booth interrupt only -- this screen has no skip.
+    // ---- InstantResultsState (BrnOfflineInstantResults.cpp is partial) --------------
+    // The members below are declared in BrnOfflineInstantResults.h so the reconstructed
+    // dispatch can name them, and bodied here logged, not silent, so a run that reaches one
+    // says so in BrnGame.log. Do NOT tidy these into empty bodies: a silent no-op is what
+    // hid the original results-screen defect. None is on the path that puts the results
+    // movie on screen; they are sub-state presentations and the component fill.
+    // HandleControllerInput answers two buttons in the photo-booth interrupt only.
     void InstantResultsState::HandleControllerInput(const void*) { LogUnreconstructedState("InstantResultsState", "HandleControllerInput"); }
     void InstantResultsState::UpdateLicense()           { LogUnreconstructedState("InstantResultsState", "UpdateLicense"); }
     void InstantResultsState::UpdateCarUnlock()         { LogUnreconstructedState("InstantResultsState", "UpdateCarUnlock"); }
     void InstantResultsState::UpdateFreeCarUnlock()     { LogUnreconstructedState("InstantResultsState", "UpdateFreeCarUnlock"); }
     void InstantResultsState::UpdatePhoto()             { LogUnreconstructedState("InstantResultsState", "UpdatePhoto"); }
-    // ⚠️ THE RETURN VALUE IS NOT NEUTRAL, so it is stated rather than left to a bare `false`:
-    // IsXSCarInUnlockedArray false => SelectSubstates does not raise CAR_UNLOCK. That is the
-    // ordinary case (no XS car unlocked), so it degrades to "no car-unlock page".
-    // (WillShowCredits' stub is gone -- see above. The note that stood here, "the real body
-    // needs BrnGui::WorldDataController::GetProgressionData, which has no home in the tree",
-    // was STALE: that function has had a body since BrnGuiWorldDataController.cpp:466 landed,
-    // and all three OfflinePostEventData slots the body reads were already named.)
+    // The return value is not neutral: false => SelectSubstates does not raise CAR_UNLOCK,
+    // the ordinary case (no XS car unlocked), so it degrades to "no car-unlock page".
     bool InstantResultsState::IsXSCarInUnlockedArray()  { LogUnreconstructedState("InstantResultsState", "IsXSCarInUnlockedArray"); return false; }
 
     // ---- OnlineGameOptionsSummary ------------------------------------------------------
@@ -373,17 +311,8 @@ namespace BrnGui
         LogUnreconstructedState("OnlineQuickCustomCreate", "ProcessSelectedMenuOption");
     }
 
-    // (PauseScreen's full surface -- OnEnter/OnLeave/Update/GetResourcesToLoad --
-    //  landed in its own TU, BrnPauseScreen.cpp; nothing of it lives here any more.)
-
-    // ---- ShowtimeInstantResultsState -- NOTHING LIVES HERE ANY MORE ------------------
-    // OnEnter/OnLeave/Update were logging stubs here until 2026-08-29; all three (and the
-    // other twelve functions of the class) are now real bodies in
-    // GameSource/Gui/Flow/PostEvent/States/Showtime/BrnShowtimeInstantResults.cpp.
-    // Only the .rdata resource table above still belongs to this file.
-
     // ---- ImageGallerySelectable::Select (component; BrnImageGallerySelectable.cpp is
     //      partial -- Construct/Update/HandleLoadNotifications landed, the Select
-    //      override has no X360 export of its own) ------------------------------------
+    //      override has no export of its own) -----------------------------------------
     void ImageGallerySelectable::Select() {}
 }

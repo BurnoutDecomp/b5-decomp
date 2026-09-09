@@ -1,28 +1,9 @@
 // ===========================================================================
 // BrnBaselineLinkStubs.cpp -- FLAG (baseline link stubs).
 //
-// Minimal out-of-line definitions so the game exe LINKS without compiling the full
-// IntelliFrag / EmergencyFrag defrag-pool-state TUs, whose real bodies call into a
-// CgsResource::Pool defrag surface that is still declaration-only.
-//
-// These paths are NOT exercised on the current loading-screen -> EA -> Criterion boot.
-//
-// AUDIT (2026-07-02, vs the on-disk tree + the exe source list):
-//   - The REAL CgsIntelliFragPoolModuleState.cpp / CgsEmergencyFragPoolModuleState.cpp
-//     reconstructions now EXIST (RunDefragAlgorithm 0x828E3EB8/0x828E40C8,
-//     RunPoolDefragmentation 0x828F80C0/0x828F80E0) but stay OUT of the exe build:
-//     they call Pool::BeginDefragmentation and BaseDefragPoolModuleState::
-//     AddAddressedAllocRequest, whose BODIES are still unreconstructed (declared in
-//     CgsResourcePool.h / CgsBaseDefragPoolModuleState.h, marked deferred), so linking
-//     the real TUs would leave unresolved externals. Swap them in (and delete the two
-//     stub pairs below) when those Pool bodies land.
-//   - The REAL ReplayModule ctor now EXISTS too (BrnReplayModule.cpp, X360 0x827E03D0,
-//     boot-trace EXECUTED) but that TU also stays out of the exe build: it defines the
-//     rest of the module group (Update_Dispatch -> GPUDiskWriteStream::Dispatch,
-//     WaitForSerialiseJobs -> EA::Jobs, the command poster paths), so adding it pulls
-//     the replay-stream closure (Stream/BrnReplayGPUDiskWriteStream.cpp + its deps)
-//     into the link. When that closure is added to the source list, DELETE the ctor
-//     stub below -- the two definitions must never coexist in one build.
+// Out-of-line definitions the game exe needs to link whose real bodies are either
+// unreconstructed or in TUs that cannot be mounted yet. Each block names what blocks it.
+// None of these paths runs on the offline boot -> title -> driving slice.
 // ===========================================================================
 
 #include "GameShared/GameClasses/System/Resource/PoolModuleStates/CgsIntelliFragPoolModuleState.h"
@@ -34,16 +15,18 @@
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsFloatQuantiser.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"                      // BrnPhysics::Vehicle::RaceCarState
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"          // InGamePlayerStatusInterface (+ NetworkPlayerStats / LiveRevengeRelationship)
-#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"                // DebugUI deferred accessors (see the block at the end)
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"                // DebugUI
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"                  // Palette / Variant
 #include "SDKs/Realmc/RealmcLoadEntryInfo.h"                                                  // LoadEntryInfo (3-arg ctor stub)
 #include "SDKs/Realmc/RealmcIfaceSaveCheckParams.h"                                           // SaveCheckParams (ctor/dtor stubs)
 
 namespace CgsResource
 {
-    // The concrete defrag strategies (the Base versions are stubbed in
-    // CgsBaseDefragPoolModuleState.cpp). Returning false / doing nothing leaves the pool
-    // un-defragmented, which is benign on the boot path.
+    // The concrete defrag strategies. Real bodies exist in CgsIntelliFragPoolModuleState.cpp /
+    // CgsEmergencyFragPoolModuleState.cpp (unmounted): they call Pool::BeginDefragmentation and
+    // BaseDefragPoolModuleState::AddAddressedAllocRequest, declared in CgsResourcePool.h /
+    // CgsBaseDefragPoolModuleState.h with no body. Mount those TUs and delete these four when
+    // the Pool bodies land. Returning false / doing nothing leaves the pool un-defragmented.
     bool IntelliFragPoolModuleState::RunDefragAlgorithm(AllocListSet*, LinearHeapNode*, s32, s32)      { return false; }
     void IntelliFragPoolModuleState::RunPoolDefragmentation(RelocateRequest*, RelocateSource*, u32, s32) {}
     bool EmergencyFragPoolModuleState::RunDefragAlgorithm(AllocListSet*, LinearHeapNode*, s32, s32)      { return false; }
@@ -52,33 +35,19 @@ namespace CgsResource
 
 namespace BrnReplays
 {
-    // Link stub for the replay module ctor (BrnGameModule constructs mReplayModule). The
-    // member sub-objects default-construct; the real ctor body is in BrnReplayModule.cpp
-    // (out of the exe build -- see the header audit note).
-    // STILL NEEDED 2026-09-02 (tyre-mark wave). BrnReplayModule.cpp is STILL not on the build
-    // list: mounting it pulls Update_Dispatch -> GPUDiskWriteStream::Dispatch, and
-    // Stream/BrnReplayGPUDiskWriteStream.cpp does not compile today (two u64 ->
-    // CgsFileSystem::Handle casts at :186/:220 -- it has never been compiled, so nobody had
-    // seen them). The two functions that wave needed -- ReplayModule::Prepare @0x82652768 and
-    // ::StoreSerialisers @0x8264B600 -- are therefore in their own TU,
-    // Replays/BrnReplayModule_Prepare.cpp, which is on the list. This ctor stub still stands.
+    // Link stub for the replay module ctor (BrnGameModule constructs mReplayModule). The real
+    // ctor is in BrnReplayModule.cpp, unmounted: that TU also defines Update_Dispatch ->
+    // GPUDiskWriteStream::Dispatch, and Stream/BrnReplayGPUDiskWriteStream.cpp does not compile
+    // (two u64 -> CgsFileSystem::Handle casts at :186/:220). Delete this stub when that closure
+    // mounts.
     ReplayModule::ReplayModule()
     {
-        // The two members ReplayModule::Prepare / StoreSerialisers depend on. The real ctor
-        // (BrnReplayModule.cpp) zeroes them too; this stub is what actually runs in this build,
-        // and an unzeroed mpLinearMalloc would be read as a live allocator on the first frame.
+        // The two members ReplayModule::Prepare / StoreSerialisers depend on; the real ctor
+        // zeroes them too. An unzeroed mpLinearMalloc would be read as a live allocator.
         mbPrepared     = false;
         mpLinearMalloc = 0;
     }
 }
-
-// RETIRED 2026-08-01 (camera wave). BrnPhysics::Vehicle::RaceCarState::operator= used to be
-// an inert `{}` here, on the reasoning quoted in its own comment: "Only the Director camera
-// path -- OFF the boot/title/menu path -- reaches it." That path went live with
-// BridgeWorldToDirector, and the empty body then discarded EVERY RaceCarState copy in the
-// tree with no diagnostic (the world published a car at (3008.17, -1.16, -1874.30); the
-// director's camera received one at the origin). The real bitwise body now lives in its home,
-// GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.cpp.
 
 namespace BrnNetwork
 {
@@ -99,18 +68,8 @@ namespace BrnNetworkModuleIO
 
 namespace BrnGameState
 {
-    // [stuntrace wave B mount, 2026-08-26] PARTIAL RETIREMENT of the old scoring stub block.
-    // The scoring subsystem is mounted now (BrnScoringSystem_*.cpp + the offline StuntModeScoring
-    // set + the four Online*ModeScoring TUs), so every stub with a real body DIED here -- retired:
-    // ScoringSystem::ScoringSystem, BaseOnlineModeScoring::GetCurrentPlayerTeam,
-    // OnlineRaceModeScoring::{ClearData,Update,UpdatePlayerPoints},
-    // OnlineRoadRageModeScoring::{Construct,Prepare,ClearData,UpdatePlayerPoints,WriteDataToOutput},
-    // OnlineStuntRunModeScoring::UpdatePlayerPoints,
-    // OnlineBurningHomeRunModeScoring::{UpdatePlayerPoints,WriteDataToOutput},
-    // StuntModeScoring::{HasStuntModeEnded,CalculateMultiplier} (the return-true HasStuntModeEnded
-    // stub would have ended every stunt run on frame 1).
-    // The stubs BELOW have NO body anywhere in src (measured, seam audit S7 2026-08-26): deleting
-    // any one is an LNK2019. Each dies only when its real body lands in its own TU.
+    // Online scoring virtuals with no body anywhere in src (the scoring TUs are mounted and
+    // define the rest). Each dies when its real body lands in its own TU.
 
     // --- BaseOnlineModeScoring: the 9 bodiless virtuals ---
     void BaseOnlineModeScoring::Construct() {}
@@ -151,40 +110,20 @@ namespace BrnGameState
     void OnlineBurningHomeRunModeScoring::Destruct() {}
     void OnlineBurningHomeRunModeScoring::ClearData() {}
     void OnlineBurningHomeRunModeScoring::Update(const ScoringSystem*, s32) {}
-
-    // --- CarScoreData ctor: RETIRED 2026-08-01 (BridgeGameStateToWorld wave) ---
-    // The real body (X360 0x822A45A8, zero-inits the whole 296-byte record) has been sitting
-    // in BrnGameStateSharedIO.cpp:393 the whole time; that TU was simply never mounted, so this
-    // empty stub was what every scoring record actually got constructed with -- a 296-byte
-    // record left at whatever the allocation held. It is mounted now (for
-    // RaceCarRaceDistanceInterface::Clear, which OutputBuffer::Construct needs), and the stub
-    // would be a duplicate symbol.
 }
-
-// The wave-30 MainGameFlowStateInGame virtual stubs that used to live here are GONE:
-// DoUpdate/DoDispatch landed, so the real TU (BrnGameMainFlowInGameState.cpp) is in
-// the exe source list now. Its OnEnter requests GUI FSM stage 5 (the front-end/
-// freeburn handoff) -- the inert stubs silently swallowed that request, which was
-// the post-intro handoff stall.
 
 namespace CgsSound
 {
 namespace TestBed
 {
-    // Testbed-allocator tail. (2026-08-25, faithful-audio-engine phase A4: the RWAC/LOGIC
-    // carve stages of RootSoundModule::Prepare went REAL, so DoAllocate is now LIVE on the
-    // boot path -- rw::audio::core::System::CreateInstance carves through it. The old inert
-    // empty-Resource stub made CreateInstance fail and left mpSystem null.)
+    // Testbed-allocator tail. DoAllocate is live on the boot path (rw::audio::core::System::
+    // CreateInstance carves through it).
     //
-    // FLAG [interim pass-through]: the real DoAllocate @0x826AE420 is the full 441-line
-    // TRACKED carve (per-block Header + guard words + history ring + verbose log) -- its own
-    // recon slice, ledgered. This interim body forwards the carve straight to the backing
-    // allocator: behaviour-transparent to every consumer (they only see the returned
-    // Resource); the debug surfaces (SanityCheck/SafeDump/IsValidMemoryAddress) see an empty
-    // tracking list until the real body lands. DoFree mirrors it.
-    //   NOTE: Header::Dump is NOT stubbed here -- its real body now lives in
-    //   CgsTestBedAllocator.cpp (wired into the exe source list). A prior stub collided
-    //   (LNK2005) with that body and was removed.
+    // FLAG [interim pass-through]: the real DoAllocate is the full tracked carve
+    // (per-block Header + guard words + history ring + verbose log), its own recon slice. This
+    // interim body forwards the carve straight to the backing allocator: behaviour-transparent
+    // to every consumer; the debug surfaces (SanityCheck/SafeDump/IsValidMemoryAddress) see an
+    // empty tracking list until the real body lands. DoFree mirrors it.
     rw::Resource Allocator::DoAllocate(const rw::ResourceDescriptor& lrDescriptor,
                                        const char* lpcName)
     {
@@ -202,20 +141,10 @@ namespace TestBed
 }
 
 // ===========================================================================
-// wave46 link-resolution stubs.
-//
-// Several TUs already in the exe source list had their bodies EXPANDED (wave46) to call
-// helpers that are declared-only / reconstructed as isolated compile-gate TUs whose symbols
-// do not link (they drag X360 XDK externals). None of these helper paths run on the
-// title-screen boot slice, so inert stubs satisfy the link and stay behaviourally neutral.
-// Replace each with the real body when its subsystem is wired into the build.
+// Helpers that mounted TUs call and that are declared-only or live in TUs that drag XDK
+// externals. None of these paths runs on the boot slice; replace each with the real body
+// when its subsystem is wired into the build.
 // ===========================================================================
-
-// --- CgsUnicode::Copy / SafelyTerminate are NOT stubbed here -- their real asm-decoded bodies
-// (X360 0x82834448 / 0x828345F0) now live in GameShared/GameClasses/Fonts/CgsUnicode.cpp (already in
-// build_game_exe.bat), reached from UnicodeBuffer::Convert / LanguageManager::Format*String /
-// GuiHudMessage::GetParam. The prior inert stubs (copy-nothing / terminate-at-[0]) were removed to
-// avoid an LNK2005 double-definition with the real bodies.
 
 // --- EA::GameTalk::GameTalkMessage accessors (BrnGameModule::RenderMetricsMessageHandler,
 // a debug-metrics GameTalk handler -- not on the boot path). No keys / no key strings. ---
@@ -262,20 +191,11 @@ namespace renderengine
         if (lpParamsOut) { lpParamsOut[0] = 0u; lpParamsOut[1] = 0u; }
         return lpBuffer;
     }
-    // NOT A STUB. Relocated from src/pc/gcm/renderengine/VertexBuffer.cpp (X360 0x82B63778), which
-    // stays unmounted because mounting that TU was MEASURED WORSE (29 externals / 23 unresolved plus
-    // an LNK2005 against the linked CgsIm2d.cpp -- see the sky-wave note in build_game_exe.bat).
-    // The two bodies are kept identical; delete this one the day VertexBuffer.cpp mounts.
-    //
-    // The previous inert stub zeroed all five entries, which made slot0 m_size == 0. A zero-size lane
-    // is exactly the "nothing requested" case, so LinearResourceAllocator::DoAllocate skipped the
-    // Alloc and handed back a null lane 0, tripping BrnSkyDomeManager::CreateGeometry's
-    // CGS_ASSERT(vbResource.GetMemoryResource()) on both dome builds. (The sky still drew only
-    // because the PC leaf's VertexBuffer::Initialize falls back to ArenaAlloc.)
-    //
-    // See VertexBuffer.cpp for the endianness derivation: the console's merged 64-bit stores encode
-    // {m_size, m_alignment} in big-endian dword order, so they are written by NAME here rather than
-    // replayed as literals.
+    // NOT A STUB. Relocated from src/pc/gcm/renderengine/VertexBuffer.cpp, which stays unmounted
+    // (29 externals / 23 unresolved plus an LNK2005 against the linked CgsIm2d.cpp). The two
+    // bodies are kept identical; DELETE-WHEN VertexBuffer.cpp mounts. Slot 0 must not be
+    // zero-size: LinearResourceAllocator::DoAllocate treats a zero lane as "nothing requested".
+    // See VertexBuffer.cpp for why {m_size, m_alignment} are written by name.
     ::rw::BaseResourceDescriptors<5>* VertexBuffer::GetResourceDescriptor(
         ::rw::BaseResourceDescriptors<5>* lpDescriptorOut, const VertexBuffer::Parameters* lpParams)
     {
@@ -292,19 +212,11 @@ namespace renderengine
     }
 }
 
-// CgsNetwork::FloatQuantiser::UnPack is NOT stubbed here -- the real asm-decoded body
-// lives in GameShared/.../BitStream/CgsFloatQuantiser.cpp (wired into build_game_exe.bat).
-// (A prior inert "reconstruct as the range minimum" stub was removed: it collided
-// (LNK2005) with the real body and was itself an invented fallback.)
-
 // ===========================================================================
-// XDK boundary shims (profile link-closure wave, 2026-07-12): the Xbox 360 XDK
-// imports referenced by CgsSaveLoadPS3.cpp (SaveLoadSystem::Update's overlapped
-// pump) and CgsGuideIntegration.cpp (SystemUserProfile's XNotify/XUser watcher),
-// both now in the exe source list. These are XDK IMPORTS on the X360 (no game
-// body to reconstruct); the PC has no XDK, so each returns the value that makes
-// its caller take the no-device/no-user branch. Same precedent as
-// XShowDirtyDiscErrorUI above.
+// XDK boundary shims: the XDK imports referenced by CgsSaveLoadPS3.cpp (SaveLoadSystem::
+// Update's overlapped pump), CgsGuideIntegration.cpp (SystemUserProfile's XNotify/XUser
+// watcher) and CgsXOverlapped. No game body to reconstruct; the PC has no XDK, so each
+// returns the value that makes its caller take the no-device/no-user branch.
 // ===========================================================================
 
 // FLAG PC-platform leaf: XDK overlapped-result query; 0 (== ERROR_SUCCESS, not the
@@ -314,25 +226,19 @@ extern "C" unsigned long XGetOverlappedResult(void* /*lpOverlapped*/,
                                               unsigned long* /*lpdwResult*/,
                                               int /*bWait*/) { return 0; }
 
-// FLAG PC-platform leaf: XDK overlapped EXTENDED-error query -- the twin of the call
-// above, and the only other XDK import in CgsSystem::CgsXOverlapped (achievement-manager
-// wave, 2026-08-11: CgsXOverlappedX360.cpp joins the exe so AchievementManagerX360::
-// Prepare/Release can construct the module's embedded overlapped). Its ONLY caller is
-// CgsXOverlapped::GetResultString @0x823557F0, which only reaches it on a code the three
-// named cases (0 / 996 / 997) did not cover; 0 keeps that diagnostic string honest on a
-// platform where no overlapped I/O is ever started.
+// FLAG PC-platform leaf: XDK overlapped EXTENDED-error query; only reached from
+// CgsXOverlapped::GetResultString on a code its three named cases (0 / 996 / 997) did not
+// cover. 0 on a platform where no overlapped I/O is ever started.
 extern "C" unsigned long XGetOverlappedExtendedError(void* /*lpOverlapped*/) { return 0; }
 
-// ---- StreetManagerDebugComponent vtable gate (street wave, 2026-08-11) ------------------
-// GameStateModule now embeds StreetManager (X360 this+284520) whose embedded debug
-// component's vtable is emitted by the module ctor chain -- so its two out-of-line
-// virtuals must link. The component's REAL TUs (BrnStreetManagerDebugComponent.cpp +
-// _wO_01.cpp, bodies on disk) stay unmounted: they close over the road-rules cheat set
-// (StreetManager::SetChallengeUserScore / ScoreList::KAI_MIN/MAX_SCORES /
-// ProgressionManager trophy hooks -- 16 link-measured externals). Until that wave:
-// GetName is the real one-line body (@0x823175F0, same string); OnActivate is an inert
-// gate (the console registers the six debug-menu cheat callbacks here; activating the
-// menu on PC logs instead of registering dead pointers).
+// ---- StreetManagerDebugComponent vtable gate --------------------------------------------
+// GameStateModule embeds StreetManager, whose embedded debug component's vtable is emitted by
+// the module ctor chain, so these two virtuals must link. The real TUs
+// (BrnStreetManagerDebugComponent.cpp + _wO_01.cpp) are unmounted: they close over
+// StreetManager::SetChallengeUserScore, ScoreList::KAI_MIN/MAX_SCORES and the
+// ProgressionManager trophy hooks (16 externals). GetName is the real one-line body;
+// OnActivate is an inert gate (the console registers six debug-menu cheat callbacks here).
+// Delete both when those TUs mount.
 #include "GameSource/GameState/StreetData/BrnStreetManagerDebugComponent.h"
 namespace BrnGameState
 {
@@ -343,11 +249,6 @@ namespace BrnGameState
             << "StreetManagerDebugComponent::OnActivate: inert [FLAG PC boot gate]\n";
     }
 }
-
-// ScoringSystemDebugComponent is mounted from its original source file.
-
-// (The DeveloperChallengeManager::OnEventEnd link gate that stood here was DELETED 2026-09-03: the
-//  real TU BrnDeveloperChallengeManager.cpp is mounted -- lane P3 closed its five externals.)
 
 // FLAG PC-platform leaf: XDK notification-listener creation; a null handle makes
 // SystemUserProfile::Update early-return (no sign-in/storage/invite events on PC).
@@ -381,45 +282,14 @@ extern "C" u32 XUserReadProfileSettings(u32 /*luTitleId*/, u32 /*luUserIndex*/,
                                         unsigned long* /*lpcbResults*/, void* /*lpResults*/,
                                         void* /*lpOverlapped*/) { return 87u; /* ERROR_INVALID_PARAMETER */ }
 
-// ===========================================================================
-// DebugUI deferred accessors (2026-07-28).
-//
-// CgsWindow.cpp and CgsVariable.cpp were bodied against four DebugUI members that
-// CgsDebugUI.h/CgsTypes.h declare but no TU defines yet -- CgsDebugUI.h says so at
-// its head ("the deferred-member accessors ... are declared but defined in" the
-// unreconstructed manager TU) and CgsTypes.cpp repeats it for Variant. Both callers
-// are in the exe source list, so the link needs definitions.
-//
-// The debug UI is never constructed on this boot (DebugManager's UI is inert), so
-// none of these runs; each returns the value that makes its caller take the
-// no-debug-UI branch. DELETE the whole block when the real DebugUI manager /
-// Variant conversion TUs land -- the definitions must never coexist.
-// ===========================================================================
-namespace CgsDev
-{
-    namespace DebugUI
-    {
-        // Variable::SetValueFromString feeds this; leaving the variant untouched
-        // means a console "set" is ignored rather than writing a parsed-from-nothing
-        // value into a live game variable.
-    }
-}
-
-// ===========================================================================
-// RealmcIface record members whose owning TUs are not in the link (2026-07-28).
-//
-// CgsSaveLoadPS3.cpp's SaveLoadSystem::Save now builds real Realmc records.
-// RealmcLoadEntryInfo.cpp and RealmcTitleInfo.cpp are in the exe source list and
-// supply the rest, but:
-//   * LoadEntryInfo's three-argument ctor (X360 0x82B51A08) is declared in
-//     RealmcLoadEntryInfo.h and not yet reconstructed;
-//   * SaveCheckParams' ctor/dtor (0x82B51E38 / 0x82B51F88) ARE reconstructed, in
-//     RealmcIfaceSaveCheckParams.cpp, but that TU calls RealmcCore::AllocateMem /
-//     FreeMemSize / RealmcCopySaveReq, and RealmcCore.cpp drags the whole vendor
-//     Message / RefCount / Response / RealmcString closure into the link.
-// Save() is never reached on this boot (the PC profile backend is CgsSaveLoadPC and
-// nothing writes a card save during a world drive). DELETE these three when the
-// Realmc core closure is added to the source list.
+// RealmcIface record members whose owning TUs are not in the link (SaveLoadSystem::Save
+// builds them; Save is never reached on this boot -- the PC backend is CgsSaveLoadPC):
+//   * LoadEntryInfo's three-argument ctor is declared in RealmcLoadEntryInfo.h and not
+//     reconstructed;
+//   * SaveCheckParams' ctor/dtor are reconstructed in RealmcIfaceSaveCheckParams.cpp, but
+//     that TU calls RealmcCore::AllocateMem / FreeMemSize / RealmcCopySaveReq, and
+//     RealmcCore.cpp drags the vendor Message / RefCount / Response / RealmcString closure.
+// DELETE-WHEN the Realmc core closure is added to the source list.
 // ===========================================================================
 namespace RealmcIface
 {
@@ -448,15 +318,10 @@ namespace RealmcIface
 }
 
 // ===========================================================================
-// Faithful-audio-engine phase B5 mount-closure (2026-08-25).
-//
-// The playback/logic engine TU group entered the exe source list (CgsSoundLogic-
-// Module / CgsSoundPlaybackModule(+IO) / Playback CgsEnvironment / CgsVoice /
-// CgsFactory / CgsGenericRwacFactory), which makes the linker want the symbols
-// below. Each is a declared-only surface whose real body lands with its own
-// ledgered slice; every one is INERT on the boot path today -- the paths that
-// reach them (voice attach, content lookup by factory name, registry dumps, the
-// DAC plug-in events) only run once item-3 content / the phase-D DAC land.
+// Sound playback/logic engine surface the mounted TU group (CgsSoundLogicModule /
+// CgsSoundPlaybackModule(+IO) / Playback CgsEnvironment / CgsVoice / CgsFactory /
+// CgsGenericRwacFactory) references and no TU defines. Each real body lands with its own
+// slice; all inert on the boot path (voice attach, registry dumps only run once content lands).
 // ===========================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h"  // the factory-shim decls + Playback surface
@@ -480,15 +345,10 @@ namespace Playback
     {
     }
 
-    // (The per-factory registry accessors are BOTH REAL now -- AEMS-cascade
-    // slices 1+2: GetRwacFactoryRegistry in CgsGenericRwacFactory.cpp on the
-    // +0x401C registry, GetAemsFactoryRegistry in CgsAemsFactory.cpp on +0x60.)
+    // Real intern: the console static initializer (sub_82C654A8) stores
+    // Name::MakeHash("~GenericRwacFactory::SK_NAME~") into dword_83008650.
     const Name& GenericRwacFactorySkName()
     {
-        // DECODED (AEMS-cascade wave; progress/scratch_dossiers/
-        // aems_factory_cascade_codex.md): the console dword_83008650 writer is the
-        // static initializer sub_82C654A8, which stores
-        // Name::MakeHash("~GenericRwacFactory::SK_NAME~"). The intern is real now.
         static const Name SK_NAME("~GenericRwacFactory::SK_NAME~");
         return SK_NAME;
     }
@@ -496,13 +356,10 @@ namespace Playback
     {
     }
 
-    // The interned-name globals Environment::GetR keys on. gu32VoiceTypeTag IS
-    // the console dword_83008650 (the wave-3 decode: GetR's "type tag" compares
-    // voice->mFactory.mName against it) -- now the real
-    // "~GenericRwacFactory::SK_NAME~" intern (writer sub_82C654A8, AEMS-cascade
-    // wave). dword_830080A8 is PlayerVoice::SK_PLAYER_SLOT_NAME: the same global
-    // is used by GenericRwacVoice::CreateVoiceInstance and every streaming voice
-    // attach/detach call, pinning its interned literal.
+    // The interned-name globals Environment::GetR keys on: gu32VoiceTypeTag is the console
+    // dword_83008650 (GetR compares voice->mFactory.mName against it); dword_830080A8 is
+    // PlayerVoice::SK_PLAYER_SLOT_NAME (used by GenericRwacVoice::CreateVoiceInstance and
+    // every streaming voice attach/detach call).
     const u32 gu32VoiceTypeTag      = Name("~GenericRwacFactory::SK_NAME~").GetValue();
     const u32 gu32NamedSlotSentinel = Name("~PlayerVoice::SK_PLAYER_SLOT_NAME~").GetValue();
 
@@ -514,19 +371,13 @@ namespace Playback
 }
 }
 
-// (The former RwacPlugInEvent placeholder is RETIRED -- the phase-D Dac slice
-// 2026-08-28 bodied the real 3-arg engine event entry beside RwacSystemLock/Unlock
-// in RWAC/CgsGenericRwacFactory.cpp.)
-
 namespace CgsSound
 {
 namespace Playback
 {
-    // ---- the Voice base-virtual surface (phase B5 mount closure) ----
-    // playback_voice.obj emits the Voice vtable; the base slots below have no
-    // standalone X360 dumps (every live vtable carries a subclass override).
-    // Each base declines/idles -- the only reachable behaviour until the
-    // concrete voice slices land (no Voice object exists before item-3 content).
+    // ---- the Voice base-virtual surface ----
+    // playback_voice.obj emits the Voice vtable; the base slots below have no standalone
+    // console dumps (every live vtable carries a subclass override). Each base declines/idles.
     f32 Voice::GetCpuTicks()
     {
         return 0.0f;
@@ -555,13 +406,3 @@ namespace Playback
 }
 }
 
-namespace CgsSound
-{
-namespace Playback
-{
-}
-}
-
-// (The FriendsListEntry::Select link gate that lived here died 2026-08-26: the friends-list
-// tranche landed its own gates TU, BrnFriendsListLinkGates.cpp, which carries Select --
-// the DELETE-WHEN fired; two definitions would be LNK2005.)

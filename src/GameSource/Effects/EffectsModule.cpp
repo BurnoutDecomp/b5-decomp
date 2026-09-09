@@ -143,8 +143,10 @@ namespace
     // ---- the contact-spark drains (2026-09-06) -------------------------------------------------
     // unk_8200D990 == FLT_EPSILON -- the constant RwMathVPU::IsZero compares |lane| against, in
     // the two HandleSparkContacts asserts (EffectsModule.cpp:1578 / :1579). The console's vector
-    // form masks the sign bit off the whole quad and then `vrlimi128 v12, v0, 1, 1` restricts the
-    // compare to lanes x and y -- so it is a TWO-lane test, not a three-lane one.
+    // form masks the sign bit off the whole quad and then `vrlimi128 v12, v0, 1, 1` overwrites the
+    // w lane with a copy of x (rotate-by-one, mask w) so the pad lane cannot vote; the compare
+    // that follows is over x, y AND z -- a THREE-lane test, the same idiom this tree reads in
+    // BrnCrashModeScoring's IsVectorSet and BrnPropZoneManager's first-move gate.
     const f32 KF_RWMATH_IS_ZERO_EPSILON     = 1.1920928955078125e-07f;
     // flt_8200DD18 -- ProcessHingedPartContacts' friction-stress floor, used BOTH as its own
     // pre-filter and as the threshold it hands HandleSparkContacts.
@@ -2304,14 +2306,52 @@ void EffectsModule::HandleSparkContacts(const BrnPhysics::ContactSpy::BaseContac
     }
 
     // The console's own two self-checks, EffectsModule.cpp:1578 and :1579. IsZero here is the
-    // RwMathVPU one: it masks the sign bit off each lane and compares against unk_8200D990 ==
-    // FLT_EPSILON, over lanes x and y only (`vrlimi128 v12, v0, 1, 1`).
-    CGS_ASSERT(!(std::fabs(lrFriction.x) <= KF_RWMATH_IS_ZERO_EPSILON
-                 && std::fabs(lrFriction.y) <= KF_RWMATH_IS_ZERO_EPSILON),
-               "RwMathVPU::IsZero( lContact.mFrictionStress ) == false");
-    CGS_ASSERT(!(std::fabs(lrContact.mNormalStress.x) <= KF_RWMATH_IS_ZERO_EPSILON
-                 && std::fabs(lrContact.mNormalStress.y) <= KF_RWMATH_IS_ZERO_EPSILON),
-               "RwMathVPU::IsZero( lContact.mNormalStress ) == false");
+    // RwMathVPU one: it masks the sign bit off each lane, replaces the w lane with x
+    // (`vrlimi128 v12, v0, 1, 1`) and compares (|x|,|y|,|z|,|x|) against unk_8200D990 ==
+    // FLT_EPSILON; the assert fires only when NO lane exceeds it, i.e. x, y and z are all zero.
+    // A stress along a single world axis (a normal of exactly (0,0,+-1) against an axis-aligned
+    // wall while the car runs along x) has x == y == 0 and z != 0 and must NOT fire. Written as
+    // `!(|lane| > eps)` so a NaN lane counts as "not greater", the way the vector compare's
+    // all-false bit counts it.
+    const bool lbFrictionIsZero = !(std::fabs(lrFriction.x) > KF_RWMATH_IS_ZERO_EPSILON)
+                               && !(std::fabs(lrFriction.y) > KF_RWMATH_IS_ZERO_EPSILON)
+                               && !(std::fabs(lrFriction.z) > KF_RWMATH_IS_ZERO_EPSILON);
+    const bool lbNormalIsZero   = !(std::fabs(lrContact.mNormalStress.x) > KF_RWMATH_IS_ZERO_EPSILON)
+                               && !(std::fabs(lrContact.mNormalStress.y) > KF_RWMATH_IS_ZERO_EPSILON)
+                               && !(std::fabs(lrContact.mNormalStress.z) > KF_RWMATH_IS_ZERO_EPSILON);
+
+    // [DIAG] BRN_EFFECTS_DIAG=1 -- NOT IN THE CONSOLE BINARY. DELETE-WHEN-STABLE. Prints the two
+    // stress vectors for every contact whose x and y lanes are both zero, so a run can attest
+    // which lane carried the stress on the contacts that used to trip the assert above, and
+    // whether any contact reaches here with a genuinely all-zero stress.
+    {
+        static const bool sbEffectsDiag = (std::getenv("BRN_EFFECTS_DIAG") != 0);
+        if (sbEffectsDiag
+            && std::fabs(lrContact.mNormalStress.x) <= KF_RWMATH_IS_ZERO_EPSILON
+            && std::fabs(lrContact.mNormalStress.y) <= KF_RWMATH_IS_ZERO_EPSILON)
+        {
+            char lacMsg[320];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[spark-iszero] type=%d ownerA=%u normalStress=(%g,%g,%g) frictionStress=(%g,%g,%g)"
+                " normal=(%g,%g,%g) allZero=%d\n",
+                static_cast<int>(leSparkType),
+                static_cast<unsigned>(lrContact.mEntityIdA.muValue >> 24),
+                static_cast<double>(lrContact.mNormalStress.x),
+                static_cast<double>(lrContact.mNormalStress.y),
+                static_cast<double>(lrContact.mNormalStress.z),
+                static_cast<double>(lrFriction.x),
+                static_cast<double>(lrFriction.y),
+                static_cast<double>(lrFriction.z),
+                static_cast<double>(lrContact.mNormal.x),
+                static_cast<double>(lrContact.mNormal.y),
+                static_cast<double>(lrContact.mNormal.z),
+                lbNormalIsZero ? 1 : 0);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
+
+    CGS_ASSERT(!lbFrictionIsZero, "RwMathVPU::IsZero( lContact.mFrictionStress ) == false");
+    CGS_ASSERT(!lbNormalIsZero,   "RwMathVPU::IsZero( lContact.mNormalStress ) == false");
 
     // The spark type indexes mSparkParams[] (this + 16*type + 0x2D348) and everything below comes
     // out of that sparkeffect's attribute block -- the fields postfxvault.bin publishes.

@@ -42,6 +42,7 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficTypeInterface.h"      // TrafficTypeResponse (OutputBuffer_PostPhysics @+830144)
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficToRaceCarInterface.h"  // TrafficToRaceCarInterface_PreScene (OutputBuffer_PreScene @+818784)
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface (OutputBuffer_PreScene @+819328)
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficGuiInterface.h"    // ScoringVehicleArray (OutputBuffer_PreScene @+951456)
 
 // ---- OutputBuffer_PreDispatch member type home ----
 // BrnTraffic::VehicleRenderInfo is stored by value inside an Array<...,64>, so the complete type
@@ -561,11 +562,11 @@ namespace BrnTrafficIO
     // is that buffer's ladder (256 -> +4, 259 -> +16416, 262 -> +63424), and +63424 falls inside
     // this buffer's scene-interface span [16, 818784).
     //
-    // NOT MODELLED, named so nobody re-derives it: mPotentialScorees (DWARF :209,
-    // GuiTrafficCarInfoEvent::ScoringVehicleArray, console +951072, count word zeroed by
-    // Construct) has no accessor and no producer in the tree. It is this buffer's last member, so
-    // leaving it out shortens the host object without moving anything. Its AddPotentialScoree
-    // (:198) and GetPotentialScorees (:202) are absent too.
+    // mPotentialScorees (:209) is the buffer's last member: the 656-byte score-target array at
+    // console +951456 (the allocation is 952112 == 951456 + 656), whose count word Construct
+    // zeroes at +952096 (== 951456 + 20 * 32). The world's pre-scene traffic-info bridge copies
+    // the whole array out as the GUI traffic-car-info event. Its producer AddPotentialScoree
+    // (:198) has no home in the tree yet, so the array is empty on every frame.
     class OutputBuffer_PreScene : public CgsModule::IOBuffer
     {
     public:
@@ -599,6 +600,10 @@ namespace BrnTrafficIO
         const TriggerManagementInputInterface* GetTriggerManagementInputInterface() const;       // 0x8279FE00 [192]
         TriggerManagementInputInterface*       GetTriggerManagementInputInterface();             // 0x82710E78 [193]
 
+        // :202 -- +951456 read. A header inline on the console: the world's pre-scene
+        // traffic-info bridge reaches the array with a bare displacement and no lock check.
+        const ScoringVehicleArray* GetPotentialScorees() const { return &mPotentialScorees; }
+
         static void _AssertLayout();
 
     private:
@@ -606,6 +611,7 @@ namespace BrnTrafficIO
         SceneInputInterface                mSceneInputInterface;                          // console +16     :206
         TrafficToRaceCarInterface_PreScene mTrafficToRaceCarInterface_PreScene;           // console +818784 :207
         TriggerManagementInputInterface    mTriggerManagementInputInterface;              // console +819328 :208
+        ScoringVehicleArray                mPotentialScorees;                             // console +951456 :209
     };
 
     // ============================================================================

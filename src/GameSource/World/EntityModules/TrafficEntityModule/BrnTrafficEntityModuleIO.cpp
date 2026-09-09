@@ -585,7 +585,7 @@ namespace BrnTrafficIO
     // VariableEventQueue<131072,16>::Construct(this+0xC8080) and
     // EventQueue<InRemoveTriggerEvent,256>::Construct(this+0xE8090) -- i.e. the two queues of
     // mTriggerManagementInputInterface, in member order; then the count word of mPotentialScorees
-    // (console +951072), which this slice does not model.
+    // (console +952096 == 951456 + 20 * 32).
     //
     // The 544-byte block's leg is TrafficToRaceCarInterface_PreScene::Construct(), which spells
     // the console's zero pattern field by field (7 doublewords of mSympatheticCrashers, the two
@@ -599,6 +599,7 @@ namespace BrnTrafficIO
         mTrafficToRaceCarInterface_PreScene.Construct();             // the +0xC7E60 zero run
         mTriggerManagementInputInterface.GetAddTriggerEventQueue().Construct();     // +0xC8080
         mTriggerManagementInputInterface.GetRemoveTriggerEventQueue().Construct();  // +0xE8090
+        mPotentialScorees.Construct();                                              // +0xE8720 count word
     }
 
     // X360 0x8279FD58 (baked 186, DWARF :182): read-lock; return &mSceneInputInterface

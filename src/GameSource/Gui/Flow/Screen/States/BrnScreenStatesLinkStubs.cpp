@@ -50,21 +50,11 @@ namespace BrnGui
     // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed NullState.
     void NullState::Update()  {}
 
-    // ---- CS_UNLOCK --------------------------------------------------------------------
-    // (CarSelectUnlock: SCAFFOLD RETIRED 2026-09-08 (p0 wave) -- the real TU
-    //  States/BrnCarSelectUnlock.cpp is MOUNTED and carries all three lifecycle bodies.)
-
-    // ---- CS_LIVERY --------------------------------------------------------------------
-    // (CarSelectLivery's placeholder lifecycle is GONE -- the real class landed 2026-08-02.)
-
-    // ---- the PC bring-up ESCAPE HATCH (main-menu wave, 2026-08-29) --------------------
-    // FLAG link scaffold: same pattern as BrnScreenStatesDataLinkStubs.cpp's hatch banner.
-    // A placeholder that observes nothing traps the player in an invisible state (the
-    // pause-wave lesson: a bodied consumer is not a reached consumer). The hatch registers
-    // for the controller event and drains 45/50 -> "GO_BACK", 54/55 -> "TOGGLE_LEFT"/
-    // "TOGGLE_RIGHT". The FSM owns where those lead; InGame::OnEnter posts the
-    // ActivateCrashNav(true) resume, so a bare GO_BACK is safe.
-    // [p0 wave 2026-09-08] CN_MAP_EVENT no longer uses these; OnlinePlay still does.
+    // ---- the PC bring-up ESCAPE HATCH (used by OnlinePlay below) ----------------------
+    // FLAG link scaffold: a placeholder that observes nothing traps the player in an
+    // invisible state. The hatch registers for the controller event and drains 45/50 ->
+    // "GO_BACK", 54/55 -> "TOGGLE_LEFT"/"TOGGLE_RIGHT". The FSM owns where those lead;
+    // InGame::OnEnter posts the ActivateCrashNav(true) resume, so a bare GO_BACK is safe.
     namespace
     {
         typedef CgsModule::VariableEventQueue<18432, 16> HatchInputQueue;
@@ -98,17 +88,6 @@ namespace BrnGui
             return liMatched;
         }
     }
-
-    // ---- CN_MAP_EVENT: SCAFFOLD RETIRED 2026-09-08 (p0 wave) -- real TU
-    //  States/BrnCrashNavMapEvent.cpp is MOUNTED and carries all four lifecycle bodies.
-    //  Its escape-hatched placeholder lifecycle is deleted; the real screen carries its
-    //  own fenced 45/50 exit arm until a preset-race producer lands. See that TU's banner.
-
-    // ---- CN_MAP_MAIN ------------------------------------------------------------------
-    // (CrashNavMapMain -- the offline pause / main menu -- RECONSTRUCTED 2026-08-29,
-    //  main-menu wave: real home States/BrnCrashNavMapMain.{h,cpp}, deriving the landed
-    //  CrashNavMap base. The pause-wave partial bodies + the 19-id observer table moved
-    //  there, values unchanged.)
 
     // ---- CN_PROFILE ---------------------------------------------------------------------
     // FLAG PC-platform leaf: placeholder for the un-reconstructed CrashNavProfile's wider
@@ -186,42 +165,25 @@ namespace BrnGui
     void ReplayCredits::Update()  {}
 
     // =====================================================================================
-    // ⛔ LINK SCAFFOLD FOR THE THREE ONLINE-SCREEN RECONSTRUCTIONS -- ADDED 2026-08-02.
+    // Link scaffold for the online screens BrnScreenFlow.cpp instantiates through
+    // NewPoolState<T> (CrashNavEnterOnline, OnlineGameOptions, OnlineScoreboards): their
+    // headers declare ctors and virtuals whose bodies are unmounted or absent. Defining a
+    // ctor forces the class vtable, which references every virtual, hence the full lifecycle
+    // set per class. All online-only, unreachable on this build.
     //
-    // WHY THIS BLOCK EXISTS. The `Decomp: OnlineScoreboards` / `Decomp: CrashNavEnterOnlineBase`
-    // / `Decomp: OnlineGameOptions` commits (f551f7da / e1c0b31a / 6e583e47) grew these three
-    // leaf headers to their full DWARF shape and, in doing so, DECLARED constructors and
-    // virtuals whose bodies live in foreign ledger TUs that do not exist yet. Their own commit
-    // messages say so outright ("...are defined nowhere yet ... the screen does not link. All
-    // declared, none stubbed."). BrnScreenFlow.cpp instantiates all three through
-    // `NewPoolState<T>`, so from those commits on the whole exe fails to link with 10
-    // unresolved externals the moment BrnScreenFlow.cpp is recompiled -- which the incremental
-    // build only deferred, not avoided. This block is the minimum that restores a linkable
-    // tree; it changes no behaviour, because none of these three screens is reachable on this
-    // build (they are online-only) and because a class with no user-declared constructor -- the
-    // shape these were in before -- left exactly the same members uninitialised.
-    //
-    // ⚠️ DELETE-WHEN, PER SYMBOL. Four of the eleven bodies below already exist in the tree but
-    // in UNMOUNTED TUs; mounting those TUs REQUIRES deleting the matching stub here, or the
-    // link fails the other way (LNK2005):
+    // DELETE-WHEN, per symbol: mounting any of these TUs requires deleting the matching
+    // stub here (LNK2005 otherwise):
     //     CrashNavEnterOnlineX360::OnLeave / ::ShowSignInUI
     //         -> src/GameSource/Gui/Flow/Screen/States/X360/BrnCrashNavEnterOnlineX360.cpp
     //     GuiNetworkRouteInfo::GuiNetworkRouteInfo
     //         -> src/GameSource/Gui/Flow/Screen/Components/BrnGuiNetworkRouteInfo.cpp
     //     OnlineGameOptions::OnEnter
     //         -> src/GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions_wI_05.cpp:218
-    // The other seven have NO definition anywhere in the tree (verified by grep over all of
-    // src/), so they are genuine gaps, not mounting gaps. HelpBar::HelpBar is the loudest of
-    // them: BrnHelpBar.cpp:46 carries its own "BLOCKED: left declared-but-undefined" note.
+    // The rest have no definition anywhere in src/.
     // =====================================================================================
 
     // ---- CN_ENTER_ONLINE ----------------------------------------------------------------
-    // ⚠️ DEFINING THE CTOR IS WHAT FORCES THE WHOLE VTABLE. MSVC emits a class's vtable in the
-    // TU that defines its constructor, and the vtable references EVERY virtual -- so the
-    // lifecycle set below is not optional padding, it is the cost of the ctor above it. That
-    // is also why this block is bigger than the linker's first error list: each round of stubs
-    // materialised the next vtable.
-    // FLAG link scaffold: no definition anywhere in src/ (ctor + the @0x824E0680 Update).
+    // FLAG link scaffold: no definition anywhere in src/ (ctor and Update).
     CrashNavEnterOnlineBase::CrashNavEnterOnlineBase() {}
     // FLAG link scaffold: no definition anywhere in src/.
     void CrashNavEnterOnlineBase::Update() {}
@@ -237,10 +199,8 @@ namespace BrnGui
     u32 CrashNavEnterOnlineX360::ShowSignInUI() { return 0; }
 
     // ---- ONLINE_GAME_OPTIONS ------------------------------------------------------------
-    // (No ctor stub: OnlineGameOptions declares none, so the compiler generates it inline.
-    //  The LNK2019 the linker reported "in NewPoolState<OnlineGameOptions>" was for the two
-    //  BY-VALUE members that generated ctor calls -- GuiNetworkRouteInfo and HelpBar, both
-    //  stubbed at the bottom of this block -- NOT for a missing OnlineGameOptions ctor.)
+    // (No ctor stub: OnlineGameOptions declares none; its by-value GuiNetworkRouteInfo and
+    //  HelpBar members are stubbed at the bottom of this block.)
     // FLAG link scaffold: REAL BODY EXISTS, unmounted -- BrnOnlineGameOptions_wI_05.cpp:218.
     void OnlineGameOptions::OnEnter() { LogUnreconstructedState("OnlineGameOptions", "OnEnter"); }
     // FLAG link scaffold: no definition anywhere in src/ (cpp:443, foreign ledger TU).
@@ -276,62 +236,21 @@ namespace BrnGui
     HelpBar::HelpBar() {}
 
     // =====================================================================================
-    // ⛔ THE SAME REGRESSION, A THIRD TIME -- ON_CUST_MAT, ADDED 2026-08-03.
-    //
-    // b5-decomp a1fec0e9 ("Gui components: grow thirteen thin header slices to their DWARF
-    // shapes") grew BrnOnlineCustomMatch.h from a one-accessor slice to the full DWARF class
-    // and, in doing so, DECLARED OnEnter/OnLeave/Update virtual. Its own trailing comments say
-    // where the bodies are ("FOREIGN TU ... defined nowhere yet"), and grep over all of src/
-    // confirms it: there is no BrnOnlineCustomMatch.cpp in the tree at all, so ALL THREE are
-    // undefined. BrnScreenFlow.cpp:178 instantiates the class through NewPoolState<T>, which
-    // materialises the vtable, and the vtable references every virtual -- so from that commit
-    // on the exe failed to link with LNK2001 x3 (plus the Table::Table() LNK2019 the same
-    // header's by-value BrnGui::Table member introduced; that one is a MOUNT, see the build
-    // script). Identical shape to the CN_ENTER_ONLINE / ONLINE_GAME_OPTIONS /
-    // ONLINE_SCOREBOARDS block above, same minimum fix, same zero behaviour change: ON_CUST_MAT
-    // is online-only and unreachable on this build, and the pre-a1fec0e9 shape inherited these
-    // three from CgsFsm::State, whose bodies are empty.
-    //
-    // ⚠️ DELETE-WHEN, PER SYMBOL. The moment a TU defining any of these three lands AND IS
-    // MOUNTED, the matching stub here MUST be deleted or the link fails the other way
-    // (LNK2005). One of the three already has its real body in the tree -- see below. The
-    // console addresses are on the declarations in BrnOnlineCustomMatch.h (OnEnter
-    // @0x82496C10, OnLeave @0x824970D0, Update @0x824AC808).
-    // =====================================================================================
-
-    // ---- ON_CUST_MAT: SCAFFOLDS RETIRED 2026-09-02 ----------------------------------------
-    // The three stubs that stood here (OnEnter / OnLeave / Update) are GONE: OnLeave
-    // @0x824970D0 and Update @0x824AC808 are reconstructed in
-    // BrnOnlineCustomMatch_wJ_07.cpp, OnEnter @0x82496C10 was already real in _wJ_06, and all
-    // seven _wJ_ partfiles are MOUNTED (build_game_exe.bat). Re-adding a body here is
-    // LNK2005.
-
-    // =====================================================================================
-    // ⛔ THE SAME REGRESSION, A FOURTH TIME -- ONLINE_PLAY / ON_SELECT_ROUTE, ADDED 2026-08-07
-    // (the dev->physics merge).
-    //
-    // dev 4ee3195e ("Gui: restore two screen headers a merge resolved to the wrong side")
-    // grew BrnOnlinePlay.h / BrnOnlineSelectRoute.h back to their full shapes, declaring
-    // out-of-line ctors (and, for OnlinePlay, the OnEnter/OnLeave/Update virtuals).
-    // BrnScreenFlow.cpp's NewPoolState<T> materialises both, so the exe needs the symbols.
-    // Real reconstructions exist -- BrnOnlinePlay.cpp (dev 2b505a01) and
-    // BrnOnlineSelectRoute.cpp -- but NEITHER TU closes at link (2026-08-07, trial-mounted):
+    // ONLINE_PLAY / ON_SELECT_ROUTE: BrnScreenFlow.cpp's NewPoolState<T> needs the symbols.
+    // Real reconstructions exist (BrnOnlinePlay.cpp / BrnOnlineSelectRoute.cpp) but neither
+    // TU closes at link:
     //     BrnOnlinePlay.cpp     -> OnlinePlay::Update + OnlinePlay::ShowFriendsMenu have no
-    //                              definition anywhere in src/ (the header's "body links from
-    //                              another slice" note is not yet true), and it also needs
-    //                              GuiCache::IsMultiplayerAllowed, NetworkPlayerStats::Construct
-    //                              and MenuComponent::AppendExpectedAptComponent, all undefined.
+    //                              definition anywhere in src/, and it also needs
+    //                              NetworkPlayerStats::Construct and
+    //                              MenuComponent::AppendExpectedAptComponent, both undefined.
     //     BrnOnlineSelectRoute.cpp -> its ctor writes through eight BrnGui::gp*VTable image
     //                              globals (gpOnlineSelectRouteVTable et al.) that no TU
     //                              defines, and runs the unmounted MapManager ctor.
-    // Same rationale as the three blocks above, same zero behaviour change: both screens are
-    // online-only and unreachable on this build, and their pre-4ee3195e shapes had no
-    // user-declared ctor. Both states' static resource tables already live in
-    // BrnScreenStatesDataLinkStubs.cpp (no data stubs needed here).
+    // Both screens are online-only and unreachable on this build.
     //
-    // ⚠️ DELETE-WHEN, PER SYMBOL (LNK2005 otherwise): mounting BrnOnlinePlay.cpp requires
-    // deleting the four OnlinePlay stubs below; mounting BrnOnlineSelectRoute.cpp requires
-    // deleting the OnlineSelectRoute ctor stub.
+    // DELETE-WHEN (LNK2005 otherwise): mounting BrnOnlinePlay.cpp requires deleting the four
+    // OnlinePlay stubs below; mounting BrnOnlineSelectRoute.cpp requires deleting the
+    // OnlineSelectRoute ctor stub.
     // =====================================================================================
 
     // ---- ONLINE_PLAY --------------------------------------------------------------------
@@ -341,9 +260,9 @@ namespace BrnGui
     // FLAG link scaffold: REAL BODY EXISTS, unmounted -- BrnOnlinePlay.cpp:136 (@0x8249BC18).
     void OnlinePlay::OnEnter()
     {
-        // ESCAPE HATCH (main-menu wave, 2026-08-29): ON_PLAY sits on the offline CrashNav
-        // tab ring (CN_SETTINGS <-TOGGLE-> ON_PLAY <-TOGGLE-> CN_MAP_MAIN), so the stub must
-        // observe the controller or tabbing onto it is a one-way trap. See the hatch banner.
+        // ESCAPE HATCH: ON_PLAY sits on the offline CrashNav tab ring (CN_SETTINGS <-TOGGLE->
+        // ON_PLAY <-TOGGLE-> CN_MAP_MAIN), so the stub must observe the controller or tabbing
+        // onto it is a one-way trap.
         mpStateInterface->RegisterForEvents(KAI_HATCH_EVENTS, 1);
         LogUnreconstructedState("OnlinePlay", "OnEnter[escape hatch armed -- no screen drawn]");
     }
