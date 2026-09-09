@@ -45,21 +45,39 @@ typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueImpl;
 //   flt_8202AC20 == 3.0  : KF_DRIVE_THRU_PRESENTATION_TIME (HandleDriveThru arm value).
 //   flt_82001C98 == 1.0  : the re-arm minimum (HandleDriveThru).
 //   flt_8200426C == 5.0  : the training-tip "settle" delay (seconds since region change).
-// The three thresholds below are rodata floats NOT present in the exports (see `flagged`):
-//   flt_82CDBD90 : the timer activation window (KF_DRIVE_THRU_PRESENTATION_TIME?).
-//   flt_82CDBD94 : KF_DRIVE_THRU_DISCOVERY_DISTANCE_SQ (squared XZ discovery radius).
+// The thresholds below are rodata floats NOT present in the exports (see `flagged`):
+//   flt_82CDBD90 == 2.1 : the Update handback threshold. HandleDriveThru arms at 3.0,
+//                          then Update fires KI_ACTION_STOPPED_DRIVE_THRU/SetPlayerCarDriver
+//                          when the countdown crosses 2.1.
+//   flt_82CDBD94 == 5625.0 : KF_DRIVE_THRU_DISCOVERY_DISTANCE_SQ (75m squared XZ discovery radius).
 //   flt_82FADEC8 : the "just-armed min-time" comparison bound.
-//   flt_82F31928 : exit-speed scale applied to KAF_MAX_DRIVE_THRU_EXIT_SPEEDS[i].
+//   flt_82F31928 == 0.4470399916 : exit-speed scale applied to KAF_MAX_DRIVE_THRU_EXIT_SPEEDS[i].
 // ============================================================================
 static const f32 KF_DRIVE_THRU_INACTIVE_TIME         = -1.0f;  // flt_82001CC0
 static const f32 KF_DRIVE_THRU_REARM_TIME            =  1.0f;  // flt_82001C98
 static const f32 KF_DRIVE_THRU_PRESENTATION_TIME     =  3.0f;  // flt_8202AC20
 static const f32 KF_TRAINING_TIP_SETTLE_TIME         =  5.0f;  // flt_8200426C
-static const f32 KF_DRIVE_THRU_ACTIVATION_TIME       =  0.0f;  // FLAG: flt_82CDBD90 (not in exports)
-static const f32 KF_DRIVE_THRU_DISCOVERY_DISTANCE_SQ =  0.0f;  // FLAG: flt_82CDBD94 (not in exports)
+static const f32 KF_DRIVE_THRU_ACTIVATION_TIME       =  2.1f;  // flt_82CDBD90
+static const f32 KF_DRIVE_THRU_DISCOVERY_DISTANCE_SQ =  5625.0f;       // flt_82CDBD94
 static const f32 KF_DRIVE_THRU_DISCOVERY_MAX_Y       =  5.0f;  // X360 literal 5.0
 static const f32 KF_DRIVE_THRU_JUST_ARMED_BOUND      =  0.0f;  // FLAG: flt_82FADEC8 (not in exports)
-static const f32 KF_DRIVE_THRU_EXIT_SPEED_SCALE      =  1.0f;  // FLAG: flt_82F31928 (not in exports)
+static const f32 KF_DRIVE_THRU_EXIT_SPEED_SCALE      =  0.4470399916f; // flt_82F31928
+
+// X360 rodata `unk_8202AD38`: one exit-speed entry per DriveThruTriggerData slot. Update
+// @0x8239F074 initialises r28=this+0x20 (the first mfTimeToActiveation) and r27=unk_8202AD38,
+// then @0x8239F250..0x8239F260 advances r28 += 0x30 and r27 += 4 for 0x2E iterations.
+static const f32 KAF_MAX_DRIVE_THRU_EXIT_SPEEDS[KI_MAX_DRIVE_THRUS_IN_THE_WORLD] =
+{
+    100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f,
+    100.0f, 100.0f, 100.0f,  85.0f, 100.0f,  75.0f, 120.0f, 140.0f,
+    120.0f, 120.0f, 120.0f,  90.0f, 100.0f,  80.0f, 130.0f,  75.0f,
+    140.0f, 140.0f, 100.0f, 130.0f, 100.0f, 130.0f, 140.0f, 100.0f,
+    130.0f, 120.0f, 100.0f, 140.0f,  80.0f, 140.0f, 110.0f, 100.0f,
+    130.0f, 100.0f, 140.0f, 100.0f, 110.0f, 100.0f
+};
+static_assert((sizeof(KAF_MAX_DRIVE_THRU_EXIT_SPEEDS) / sizeof(KAF_MAX_DRIVE_THRU_EXIT_SPEEDS[0]))
+              == KI_MAX_DRIVE_THRUS_IN_THE_WORLD,
+              "drive-thru exit speed table must stay aligned to the 46 trigger slots");
 // [drive-thru wave 2026-08-27] The sim-timestep multiplier SetPlayerCarDriver applies while the
 // drive-thru presentation is playing (the console's own baked 0.52631581 == 10/19; the
 // player-driving arm restores 1.0). X360 @0x823867A0.
@@ -849,8 +867,8 @@ void DriveThruManager::Update(GameStateModuleIO::GameActionQueue*  lpActionQueue
     }
 
     // ---- age timers + run proximity discovery over every entry ------------
-    // FLAG: KAF_MAX_DRIVE_THRU_EXIT_SPEEDS[46] (per-type exit-speed table, rodata unk_8202AD38)
-    // is not in the exports; the exit speed handed to SetPlayerCarDriver is modelled as 0.0.
+    // KAF_MAX_DRIVE_THRU_EXIT_SPEEDS[46] is the DecFIGS-named table at ARTIST rodata
+    // unk_8202AD38. The table pointer advances in lock-step with the trigger-entry pointer.
     for (s32 liIndex = 0; liIndex < static_cast<s32>(KI_MAX_DRIVE_THRUS_IN_THE_WORLD); ++liIndex)
     {
         DriveThruTriggerData& lrEntry = maDriveThruTriggerData[liIndex];
@@ -868,7 +886,8 @@ void DriveThruManager::Update(GameStateModuleIO::GameActionQueue*  lpActionQueue
                 lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lac), KI_ACTION_STOPPED_DRIVE_THRU, 1);
                 if (!lbIsOnline)
                 {
-                    const f32 lfExitSpeed = 0.0f * KF_DRIVE_THRU_EXIT_SPEED_SCALE;  // FLAG: table not in exports
+                    const f32 lfExitSpeed =
+                        KAF_MAX_DRIVE_THRU_EXIT_SPEEDS[liIndex] * KF_DRIVE_THRU_EXIT_SPEED_SCALE;
                     SetPlayerCarDriver(lpActionQueue, lpTimerRequestInterface,
                                        lrEntry.mpGenericRegion->GetBoxRegion(),   // leading BoxRegion subobject
                                        true, lfExitSpeed);
