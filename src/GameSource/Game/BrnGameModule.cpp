@@ -1,3 +1,5 @@
+#include "SharedClasses/DataLists/VehicleListEntry.h"
+#include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [diag] BrnDiag::gFilmLatch (time-dilation capture arm)
@@ -3498,53 +3500,11 @@ namespace BrnGame
     // filesystem-status interface, which is not reconstructed (the output buffer's status
     // member is a documented deferral in BrnGameDataModuleIO.h).
     // ============================================================================================
-    // FLAG GameState stand-in -- THE CAR-SELECT CAR LIST (GUI events 406 and 412).
-    //
-    // CONSOLE CHAIN, recovered end to end from ARTIST:
-    //   BrnGameState::GameStateModule::ProcessGameEvents @0x823A0A18, case 88, calls
-    //   GetListOfPlayerSelectableVehicles @0x82376500 into a stack CgsContainers::Array<s64,128>,
-    //   fills the two BitArray<128> state words and the cars-unlocked count beside it, and posts
-    //   the whole 0x430-byte record as GAME ACTION 184; the player's own car goes out the same
-    //   way as game action 182. BrnGameModule::BridgeGameStateToGui @0x823EE880 ->
-    //   TranslateGameActionsToGuiEvents @0x823E9CE0 then converts them:
-    //     case 182 @0x823EBC10 -> AddGuiEvent<GuiPlayerInfoResponse>  (GUI event 406, 0x40 bytes)
-    //     case 184 @0x823EBCA4 -> AddGuiEvent<GuiCarSelectionEvent>   (GUI event 412, 0x430 bytes)
-    //   Event 412 is the ONLY writer of CarSelectVehicle::maSelectedCars / gsiNumCarouselCars, and
-    //   406 is the only writer of CarSelectMain::mCurrentSetupInfo.mCarId before the player picks.
-    //
-    // BOTH PAYLOAD LAYOUTS ARE X360-ATTESTED, not guessed:
-    //   406 @0x823D4828 queues id 0x196 / size 0x40, and the consumer reads the car id at +0x20
-    //       (CarSelectMain's own `ld r11, 0x20(r30)`).
-    //   412 @0x823D4998 queues id 0x19C / size 0x430; HandleCarInfoResponseEvent @0x824BEDC0 reads
-    //       the count at payload +0x400 (`lwz r11, 0x400(r29)`) -- i.e. the record leads with the
-    //       Array<s64,128> at +0, NOT with a 12-byte GuiEvent header. (⚠️ the opaque placeholder
-    //       `GuiCarSelectionEvent : GuiEvent<412>` in BrnGuiDemangledEventTypes.h has the right
-    //       SIZE and the wrong interior, so this posts the record directly rather than through
-    //       AddGuiEvent<T> -- the same reason the GuiEventTimeInfo publish above bypasses it.)
-    //
-    // WHY A STAND-IN: neither producer exists on PC. BridgeGameStateToGui is a documented
-    // deferral in GameBridgeGameStateToX.cpp (a ~300-case switch over un-homed action payloads),
-    // and its action-184 source lives in ProcessGameEvents' case 88, itself unreconstructed.
-    //
-    // ⚠️ AND THE CONSOLE FILTER WOULD RETURN THE SAME ONE CAR HERE. GetListOfPlayerSelectableVehicles
-    // admits a vehicle only if the player OWNS it: the offline arm needs Profile::FindCar(id) to
-    // hit, the other needs ProgressionManager::IsCarUnlocked(id), and both scan the player
-    // profile's owned-car list. On this build that list is EMPTY (GameStateModule::Prepare's
-    // progression stages are `[deferred]`, and no save exists), so a faithful transcription of the
-    // filter would publish ZERO cars. The one car the player demonstrably has is the one the
-    // junkyard entry put them in -- CarSelectManager::EnterJunkyardAtStartOfGame hands it to
-    // OnSpecialEventPlayerCarChange, which is what GetActivePlayerCarId reads back -- so that is
-    // what goes out, as a one-entry list with both state BitArrays clear (never driven, never
-    // wrecked: the same answer an empty profile gives the console) and cars-unlocked == 1.
-    // DELETE-WHEN: the progression profile is populated at game start and the real
-    // ProcessGameEvents/BridgeGameStateToGui producers land -- then transcribe the filter.
-    //
-    // WHEN IT FIRES: once per car-select entry, on the edge where the SCREEN flow's live state
-    // subscribes to event 412 (its own RegisterForEvents record, which the module tracks). Posting
-    // before that would drop the record on the subscription filter; posting every frame would
-    // re-commit the player's selection under them, because event 406's handler overwrites
-    // mCurrentSetupInfo/mDesiredSetupInfo.
-    // ============================================================================================
+    // FLAG PC-platform leaf: publish the offline junkyard response at the existing
+    // GUI subscription boundary. The filter is ARTIST GetListOfPlayerSelectableVehicles
+    // 0x82376500's offline arm; flags/count are ProcessGameEvents case 88, and GUI
+    // transport is TranslateGameActionsToGuiEvents cases 182/184. The online car-select
+    // manager has a separate class-limit policy and is not driven by this host path.
     void BrnGameModule::PublishCarSelectionToGui()
     {
         const bool lbListening = mGuiModule.IsScreenFlowObserving(412);
@@ -3572,20 +3532,43 @@ namespace BrnGame
                 static_cast<s32>(sizeof(laRecord)));
         }
 
-        // ---- GUI event 412 (GuiCarSelectionEvent, 0x430 bytes) ------------------------------
-        // +0x000 CgsContainers::Array<s64,128> ids   +0x400 its count
-        // +0x408 BitArray<128> driven                +0x418 BitArray<128> wrecked
-        // +0x428 cars-unlocked total
+        // GUI 412's native-width record retains the console offsets: ids/count,
+        // driven bits at +0x408, damaged-on-unlock bits at +0x418, garage total at +0x428.
+        struct CarSelectionResponse
         {
-            u8 laRecord[0x430];
-            std::memset(laRecord, 0, sizeof(laRecord));
-            reinterpret_cast<CgsID*>(&laRecord[0])[0] = lPlayerCarId;
-            *reinterpret_cast<s32*>(&laRecord[0x400]) = 1;   // one selectable car
-            *reinterpret_cast<s32*>(&laRecord[0x428]) = 1;   // cars unlocked total
-            mpGuiInputBuffer->GetGuiEvents()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(laRecord), 412,
-                static_cast<s32>(sizeof(laRecord)));
+            Array<CgsID, 128> mCars;
+            CgsContainers::BitArray<128> mDriven;
+            CgsContainers::BitArray<128> mDamagedOnUnlock;
+            s32 miCarsTotal;
+        };
+        static_assert(sizeof(CarSelectionResponse) == 0x430, "GUI 412 record size");
+        CarSelectionResponse lSelection;
+        lSelection.mCars.Clear();
+        lSelection.mDriven.Prepare();
+        lSelection.mDamagedOnUnlock.Prepare();
+        auto* lpProgression = mGameStateModule.GetProgressionManager();
+        auto* lpProfile = lpProgression->GetProfile();
+        const auto* lpVehicles = mGameStateModule.GetVehicleList();
+        lSelection.miCarsTotal = lpProgression->GetMaxCarCount();
+        for (s32 liVehicle = 0; liVehicle < lpVehicles->GetVehicleCount(); ++liVehicle)
+        {
+            const auto* lpVehicle = lpVehicles->GetVehicleData(liVehicle);
+            if (!lpVehicle->IsTrophyCar() || lpVehicle->IsLiveryColour())
+                continue;
+            const auto* lpCar = lpProfile->FindCar(lpVehicle->GetId());
+            if (!lpCar || (lpCar->GetUnlockType() == BrnProgression::CarData::E_UNLOCK_TYPE_SPONSOR &&
+                lpProgression->GetProgressionRank() < lpVehicle->GetUnlockRank()))
+                continue;
+            const u32 luIndex = lSelection.mCars.GetLength();
+            lSelection.mCars.Append(lpVehicle->GetId());
+            if (lpCar->GetUnlockDeformationAmount() > 0.0f)
+                lSelection.mDamagedOnUnlock.SetBit(luIndex);
+            const auto* lpLivery = lpProfile->GetChosenLiveryDataForBaseCar(lpVehicle->GetId());
+            if (lpLivery && lpLivery->mfDistanceDriven > 0.0f)
+                lSelection.mDriven.SetBit(luIndex);
         }
+        mpGuiInputBuffer->GetGuiEvents()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lSelection), 412, sizeof(lSelection));
 
         // GUI 413 now answers the real case-82 livery request through game action 183.
 
@@ -3593,7 +3576,7 @@ namespace BrnGame
         {
             *CgsDev::Log::gpDebugPrint
                 << "[CarSelectBridge] published GUI 406 + 412 for car id "
-                << static_cast<u32>(lPlayerCarId) << " (1 selectable car)\n";
+                << static_cast<u32>(lPlayerCarId) << " (" << lSelection.mCars.GetLength() << " selectable cars)\n";
         }
     }
 
