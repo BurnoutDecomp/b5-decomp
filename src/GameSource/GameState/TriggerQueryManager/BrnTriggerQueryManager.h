@@ -53,6 +53,8 @@ namespace BrnGameState
 // committed; the leaf explicit instantiation lives in Array_LandmarkIndex_16.cpp.
 typedef Array<LandmarkIndex, 16> LandmarkIndexArray;
 
+class ModeManager;
+
 class TriggerQueryManager
 {
 public:
@@ -138,6 +140,8 @@ public:
 
     // X360 0x823265E8. Arm one landmark index for the active mode if it is not already present.
     bool AddLandmarkIndexForGameMode(LandmarkIndex lLandmarkIndex);
+    void PostWorldUpdateLandmarksBringUp(const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+                                        ModeManager* lpModeManager);
 
     // X360 0x82355D78. Return the trigger id of the traffic-light region the player is currently in.
     LightTriggerId GetPlayerCurrentTrafficLightId() const;

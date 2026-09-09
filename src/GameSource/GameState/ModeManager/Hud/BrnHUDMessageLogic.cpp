@@ -95,16 +95,21 @@ void HUDMessageLogic::Construct()
 //   *(a1+484) = 0     -> miLastVictoryTeam           (+0x1E4)
 //   *(a1+488) = -1.0  -> mfLastTimeWarningAnnounced  (+0x1E8)
 //
-// [X] NOT REPRODUCED, named rather than faked: the other nineteen stores -- +456 (-1), +460 (0),
-// +496/+504/+560 (8-byte zeroes), +512/+513 (0), +516/+520 (5.0), +524/+528 (0.0), +532 and +540
-// (CgsSystem::Time::SetFloatVal 1.5 / 7.5), +548 (1), +552/+584 (-1), +568/+588 (0), +592 (-1.0),
-// +596 (0.0), the +440 8-byte zero and the +400..+432 table Construct also writes. Every one of
-// them belongs to a HUD generator this build does not mount (the race / crash / rival / BHR
-// message families); none is read by GenerateStuntMessage. Note the console's Prepare does NOT
-// touch miScoreSampleThisFrame (+0x1D4) or miScoreSampleLastFrame (+0x1D8) -- that omission is
-// faithful, not an oversight here.
+// Checkpoint and finisher latches below are also initialized by ARTIST Prepare.
+// Still unmounted: +516/+520 (5.0), +524/+528 (0), +532/+540 (times 1.5/7.5),
+// +584 (-1), +568/+588 (0), +592 (-1), +596 (0), +440 and +400..+432.
+// Prepare deliberately leaves the two score-sample fields untouched, as in ARTIST.
 void HUDMessageLogic::Prepare()
 {
+    meFinishingRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    miFinishPosition = 0;
+    mCurrentPlayerCheckpointID = 0;
+    mNextPlayerCheckpointID = 0;
+    mbIsLastCheckpoint = false;
+    mbPlayerHasJustTriggeredCheckpoint = false;
+    miNextRivalCheckpoint = 1;
+    meCheckpointTriggeringRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    mRivalCheckpointID = 0;
     mfTimeInMode               = 0.0f;                                  // +0x1C4
     miScoreMessageRaceCarIndex = static_cast<EActiveRaceCarIndex>(-1);  // +0x1D0
     meEliminationRaceCarIndex  = static_cast<EActiveRaceCarIndex>(-1);  // +0x1DC

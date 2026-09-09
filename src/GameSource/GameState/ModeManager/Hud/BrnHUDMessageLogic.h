@@ -197,6 +197,7 @@ public:
     void OnlineTeamChange(EActiveRaceCarIndex leActiveRaceCarIndex);
 
 private:
+    friend class ModeManager; // ARTIST inlined finish/checkpoint notification setters.
     // ===== data members (semantic-parity order; see LAYOUT NOTE above) =====
     // The action queue is the first member (object offset 0): the X360 passes `this`
     // directly as the queue pointer to AddEvent.
@@ -212,6 +213,9 @@ private:
     // Seconds spent in the latched mode (X360 +0x1C4). PostWorldUpdate accumulates the frame
     // delta into it; Prepare zeroes it.
     f32                 mfTimeInMode;                 // +0x1C4 (452)
+
+    EActiveRaceCarIndex meFinishingRaceCarIndex; // ARTIST +456
+    s32 miFinishPosition;                       // ARTIST +460
 
     // Stunt-run score-milestone tracker (X360 +0x1D0..+0x1D8): the rival whose milestone
     // is being watched plus the previous/current score samples used to detect the
@@ -229,6 +233,14 @@ private:
     // Last time-warning threshold already announced (X360 +0x1E8), so the 30-second
     // warning fires once.
     f32                 mfLastTimeWarningAnnounced;   // +0x1E8
+
+    CgsID mCurrentPlayerCheckpointID; // ARTIST +496
+    CgsID mNextPlayerCheckpointID;    // ARTIST +504
+    bool mbIsLastCheckpoint;         // ARTIST +512
+    bool mbPlayerHasJustTriggeredCheckpoint; // ARTIST +513
+    s32 miNextRivalCheckpoint;       // ARTIST +548
+    EActiveRaceCarIndex meCheckpointTriggeringRaceCarIndex; // ARTIST +552
+    CgsID mRivalCheckpointID;        // ARTIST +560
 
     // Per-car "has changed team this round" flags (X360 +0x240). One bit per active race
     // car slot (E_ACTIVE_RACE_CAR_INDEX_COUNT == 8).

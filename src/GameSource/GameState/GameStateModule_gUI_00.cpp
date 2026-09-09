@@ -580,6 +580,9 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
             lfDelta);
     }
 
+    // ARTIST PostWorldUpdate calls TriggerQueryManager after the mode and HUD updates.
+    mTriggerQueryManager.PostWorldUpdateLandmarksBringUp(&mLastActiveRaceCarInterface, GetModeManager());
+
     // ============================================================================
     // [showtime score wave 2026-08-29] LEG 5 -- THE CONTACT PASS
     // (console PostWorldUpdate `bl` #25, GameStateModule::ProcessContacts @0x8236BC68).

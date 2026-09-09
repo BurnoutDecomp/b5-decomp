@@ -528,21 +528,20 @@ private:
     void TransmitAndIncrementFinishReached(GameStateModuleIO::GameActionQueue* lpGameActionQueue);      // DWARF :882 / X360 0x823424D0
     void SendGameResultsToNetwork(GameStateModuleIO::GameActionQueue* lpGameActionQueue);               // DWARF :899 / X360 0x82343E88
 
-    // [stuntrace waveB fix round, 2026-08-26] DECLARE-ONLY, no body in this wave. X360 0x82337258,
-    // three console callers (CheckForOutOfRangeCarsReachingFinish, RemoteRaceCarHitsCheckpoint
-    // @0x82340930, TriggerQueryManager::PostWorldUpdate @0x82386BD8) and the ONLY writer of the
-    // UNPLACED mauLastLandmarkHit[35] the member block FLAGs below -- which is why declaring it now
-    // matters: whoever bodies it is the one who gets to pin that array. Signature is DWARF-exact
-    // (references/DecFIGS/dwarfdump/.../BrnModeManager.h:399); the first argument's identity is
-    // independently confirmed at the CheckForOutOfRangeCarsReachingFinish call site, where r4 ==
-    // sub_8231D2C0(buffer) == PostWorldInputBuffer::GetActiveRaceCarOutputInterface() (+0x7250).
-    // [X] It is assigned to NO agent this wave -- do not body it from a ModeManager partfile
-    // without pinning mauLastLandmarkHit from this function's own asm first.
+    // Shared landmark dispatch: ARTIST 0x82337258, DecFIGS declaration :399.
+public:
+    // ARTIST TriggerQueryManager::PostWorldUpdate clears +0x94F5 before its hit scan.
+    void ClearModeStartRegion() { mbInModeStartRegion = false; }
     void RaceCarTriggersLandmark(const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutput,
                                  EGlobalRaceCarIndex leGlobalRaceCarIndex,
                                  EActiveRaceCarIndex leActiveRaceCarIndex,
                                  LandmarkIndex       lLandmarkIndex,
                                  bool                lbIsPlayer);                                      // DWARF :399 / X360 0x82337258
+
+private:
+    void RaceCarFinishes(EGlobalRaceCarIndex leGlobalRaceCarIndex,
+                         EActiveRaceCarIndex leActiveRaceCarIndex, bool lbIsPlayer); // ARTIST 0x82327DF8
+    void PlayerTriggersLandmark(LandmarkIndex lLandmarkIndex); // ARTIST 0x82311A68
 
     // Compile-only layout oracle; defined in BrnModeManager_AssertLayout.cpp. Never called.
     static void _AssertLayout();
@@ -713,10 +712,9 @@ private:
     GameStateModuleIO::CarCheckpointData maCarCheckpointData[E_GLOBAL_RACE_CAR_INDEX_COUNT]; // +32480  8 B each, 280 B.
                                                                                 //   [!] ORDER NOTE 4: DWARF does not list it.
     u8  mauNextLandmark[E_GLOBAL_RACE_CAR_INDEX_COUNT];                         // +32760  RENAMED from maNextLandmarkIndex.
-    // [!] FLAG (UNPLACED -- deliberately NOT declared): DWARF :964 puts `uint8_t mauLastLandmarkHit[35]`
-    // immediately after mauNextLandmark, but +32760 + 35 == 32795 and muNumLandmarks sits at 32796, so
-    // 35 bytes CANNOT fit there. Its only writer is RaceCarTriggersLandmark (out of this wave's scope).
-    // Do not declare it blind; pin it from that writer's asm when that leg is worked.
+    // DecFIGS lists mauLastLandmarkHit[35] here, but ARTIST has no room between
+    // mauNextLandmark and muNumLandmarks. RaceCarTriggersLandmark's assembly does not
+    // write such an array; retain the ARTIST layout rather than importing that PS3 member.
     u32           muNumLandmarks;             // +32796  cleared to 0 by ClearLandmarkAndFinishLineData
     LandmarkIndex mPlayerCurrentLandmark;     // +32800  DWARF :967; cleared to K_INVALID_LANDMARK (-1)
 

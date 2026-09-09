@@ -533,3 +533,105 @@ void ModeManager::TellGuiToShowOnlineFinalStandings()
 //  a whole; see that partfile's duplicate-symbol watch note.)
 
 } // namespace BrnGameState
+
+namespace BrnGameState
+{
+// ARTIST 0x82337258. The landmark handler is shared by local and remote race cars.
+void ModeManager::RaceCarTriggersLandmark(
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutput,
+    EGlobalRaceCarIndex leGlobalRaceCarIndex, EActiveRaceCarIndex leActiveRaceCarIndex,
+    LandmarkIndex lLandmarkIndex, bool lbIsPlayer)
+{
+    CGS_ASSERT(static_cast<u32>(leActiveRaceCarIndex) < E_ACTIVE_RACE_CAR_INDEX_COUNT, "Invalid active race car index");
+    CGS_ASSERT(static_cast<u32>(leGlobalRaceCarIndex) < E_GLOBAL_RACE_CAR_INDEX_COUNT, "Invalid global race car index");
+    if (CountCheckpointsRemaining(leGlobalRaceCarIndex) == 0)
+        return;
+    const s32 liState = mpCurrentGameMode ? mpCurrentGameMode->GetCurrentState() : -1;
+    if (liState >= 2 && liState <= 5 &&
+        HasRaceCarHitValidCheckpoint(static_cast<s16>(static_cast<s32>(lLandmarkIndex)), leGlobalRaceCarIndex))
+    {
+        if (CountCheckpointsRemaining(leGlobalRaceCarIndex) != 0)
+        {
+            if (mpCurrentGameMode && mpCurrentGameMode->GetCurrentState() == 2)
+            {
+                if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN)
+                    mHUDMessageLogic.meCheckpointTriggeringRaceCarIndex = leActiveRaceCarIndex;
+                else if (lbIsPlayer)
+                {
+                    const bool lbIsLast = CountCheckpointsRemaining(leGlobalRaceCarIndex) == 1;
+                    const u8 luNext = GetNextLandmarkIndex(leGlobalRaceCarIndex);
+                    mHUDMessageLogic.mNextPlayerCheckpointID = maLandmarkCgsIDs[luNext + 1];
+                    mHUDMessageLogic.mbIsLastCheckpoint = lbIsLast;
+                    mHUDMessageLogic.mbPlayerHasJustTriggeredCheckpoint = true;
+                    mHUDMessageLogic.mCurrentPlayerCheckpointID = maLandmarkCgsIDs[GetNextLandmarkIndex(leGlobalRaceCarIndex)];
+                }
+                else
+                {
+                    const s32 liNext = GetNextLandmarkIndex(leGlobalRaceCarIndex);
+                    const CgsID lNextID = maLandmarkCgsIDs[GetNextLandmarkIndex(leGlobalRaceCarIndex)];
+                    if (liNext >= mHUDMessageLogic.miNextRivalCheckpoint && liNext < static_cast<s32>(muNumLandmarks) - 1)
+                    {
+                        mHUDMessageLogic.meCheckpointTriggeringRaceCarIndex = leActiveRaceCarIndex;
+                        mHUDMessageLogic.mRivalCheckpointID = lNextID;
+                        mHUDMessageLogic.miNextRivalCheckpoint = liNext + 1;
+                    }
+                }
+            }
+            mScoringSystem.RaceCarHasReachedCheckPointWithinEvent(leActiveRaceCarIndex, meCurrentGameModeType);
+        }
+        else
+            RaceCarFinishes(leGlobalRaceCarIndex, leActiveRaceCarIndex, lbIsPlayer);
+        mRaceCarReachedCheckpoint.SetBit(static_cast<u32>(leGlobalRaceCarIndex));
+    }
+    if (lbIsPlayer && (!lpActiveRaceCarOutput->IsPlayerCarActive() ||
+        !lpActiveRaceCarOutput->GetPlayerRaceCarState()->mbCrashing))
+        PlayerTriggersLandmark(lLandmarkIndex);
+}
+
+// ARTIST 0x82327DF8: bank the lap, then finish or arm the next lap.
+void ModeManager::RaceCarFinishes(EGlobalRaceCarIndex leGlobalRaceCarIndex,
+    EActiveRaceCarIndex leActiveRaceCarIndex, bool lbIsPlayer)
+{
+    CGS_ASSERT(static_cast<u32>(leActiveRaceCarIndex) < E_ACTIVE_RACE_CAR_INDEX_COUNT, "Invalid active race car index");
+    CGS_ASSERT(static_cast<u32>(leGlobalRaceCarIndex) < E_GLOBAL_RACE_CAR_INDEX_COUNT, "Invalid global race car index");
+    if (meCurrentGameModeType == GameStateModuleIO::E_MODE_BURNING_ROUTE && mbIsInTimeUpOutro)
+        return;
+    if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN)
+        return;
+    if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE &&
+        (mScoringSystem.GetPlayerTeam(leActiveRaceCarIndex) == 1 ||
+         mScoringSystem.GetRaceCarEliminatorIndex(leActiveRaceCarIndex) != E_ACTIVE_RACE_CAR_INDEX_INVALID))
+        return;
+    CGS_ASSERT(meCurrentGameModeType != GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY,
+        "Race car finishing in freeburn lobby, Tell Alex V please!");
+    const CgsSystem::Time lTime = mTimerStatusInterface.GetSimTimerStatus()->GetTime();
+    mScoringSystem.RegisterFinishForCar(mpCurrentGameMode && mpCurrentGameMode->IsOnline(), leActiveRaceCarIndex, lTime);
+    if (mScoringSystem.GetRaceCarNumCompletedLaps(leActiveRaceCarIndex) < mScoringSystem.GetTotalLaps())
+        ResetCheckpointDataForNextLap(leGlobalRaceCarIndex);
+    else
+    {
+        mRaceCarReachedFinish.SetBit(static_cast<u32>(leActiveRaceCarIndex));
+        if (lbIsPlayer)
+        {
+            miDebugFinishPosition = -1;
+            mbFinishCurrentModeNextUpdate = true;
+        }
+        const s32 liPosition = mScoringSystem.GetCarRaceFinishPosition(leActiveRaceCarIndex);
+        if (liPosition <= 3)
+        {
+            mHUDMessageLogic.meFinishingRaceCarIndex = leActiveRaceCarIndex;
+            mHUDMessageLogic.miFinishPosition = liPosition;
+        }
+    }
+}
+
+// ARTIST 0x82311A68.
+void ModeManager::PlayerTriggersLandmark(LandmarkIndex lLandmarkIndex)
+{
+    CGS_ASSERT(static_cast<s32>(lLandmarkIndex) != -1, "lLandmarkIndex != K_INVALID_LANDMARK");
+    mPlayerCurrentLandmark = lLandmarkIndex;
+    if (!mpCurrentGameMode && mbReadyForModeIntro &&
+        mpGameStateModule->GetProgressionManager()->LandmarkHasAvailableRaces(lLandmarkIndex))
+        mbInModeStartRegion = true;
+}
+}

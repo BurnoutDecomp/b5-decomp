@@ -1,3 +1,5 @@
+#include "GameSource/GameState/ModeManager/BrnModeManager.h"
+#include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h"
 
 #include <cstddef>   // offsetof (layout asserts)
@@ -1427,4 +1429,52 @@ void PackedIndex::SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex
 
     // X360: stw (a2 & 0xff) @ this+4 (meActiveRaceCarIndex).
     meActiveRaceCarIndex = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leActiveRaceCarIndex) & 0xff);
+}
+
+namespace BrnGameState
+{
+// FLAG PC-platform leaf: CPU scene-query fallback for the landmark part of the currently
+// disabled trigger line-test pipeline. Consume the same swept car positions as ARTIST
+// SubmitTriggerQueries (0x82392680), against the armed landmark boxes. Gameplay handling
+// remains RaceCarTriggersLandmark, as in PostWorldUpdate (0x82386BD8).
+void TriggerQueryManager::PostWorldUpdateLandmarksBringUp(
+    const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface, ModeManager* lpModeManager)
+{
+    lpModeManager->ClearModeStartRegion();
+    const BrnTrigger::TriggerData* lpData = mpTriggerData.operator->();
+    if (!lpData)
+        return;
+    const auto& lrCars = lpActiveRaceCarInterface->maCarsInTheRace;
+    for (s32 liCar = static_cast<s32>(lrCars.GetLength()) - 1; liCar >= 0; --liCar)
+    {
+        const auto& lrCar = lrCars.GetItem(liCar);
+        // Original query gate: exclude placement jumps of ten metres or more.
+        const Vector3 lv3Delta = lrCar.mPosition - lrCar.mPreviousPosition;
+        const f32 lfDistanceSq = lv3Delta.x * lv3Delta.x + lv3Delta.y * lv3Delta.y + lv3Delta.z * lv3Delta.z;
+        if (!(lfDistanceSq < 100.0f) || (lpModeManager->IsOnlineGameMode() && !lrCar.mbIsPlayer))
+            continue;
+        for (u32 luIndex = 0; luIndex < mLandmarkIndexArray.GetLength(); ++luIndex)
+        {
+            const LandmarkIndex lLandmark = mLandmarkIndexArray.GetItem(luIndex);
+            const BrnTrigger::TriggerRegion* lpRegion = lpData->GetRegion(static_cast<s32>(lLandmark));
+            const BrnTrigger::BoxRegion* lpBox = lpRegion->GetBoxRegion();
+            const Matrix44Affine lmBox = lpBox->ComputeTransform();
+            const Vector3 lv3Start = lrCar.mPreviousPosition - lmBox.wAxis;
+            const Vector3 lv3End = lrCar.mPosition - lmBox.wAxis;
+            const auto lToLocal = [&lmBox](const Vector3& lv3Point)
+            {
+                return Vector4{lv3Point.x * lmBox.xAxis.x + lv3Point.y * lmBox.xAxis.y + lv3Point.z * lmBox.xAxis.z,
+                    lv3Point.x * lmBox.yAxis.x + lv3Point.y * lmBox.yAxis.y + lv3Point.z * lmBox.yAxis.z,
+                    lv3Point.x * lmBox.zAxis.x + lv3Point.y * lmBox.zAxis.y + lv3Point.z * lmBox.zAxis.z, 0.0f};
+            };
+            const Vector3 lv3Half = lpBox->GetDimensions() * 0.5f;
+            CgsGeometric::AxisAlignedBox lBounds;
+            lBounds.mMin = Vector4{-lv3Half.x, -lv3Half.y, -lv3Half.z, 0.0f};
+            lBounds.mMax = Vector4{lv3Half.x, lv3Half.y, lv3Half.z, 0.0f};
+            if (CgsGeometric::TestLineStartEndAxisAlignedBox(lToLocal(lv3Start), lToLocal(lv3End), lBounds))
+                lpModeManager->RaceCarTriggersLandmark(lpActiveRaceCarInterface, lrCar.meGlobalRaceCarIndex,
+                    lrCar.meActiveRaceCarIndex, lLandmark, lrCar.mbIsPlayer);
+        }
+    }
+}
 }
