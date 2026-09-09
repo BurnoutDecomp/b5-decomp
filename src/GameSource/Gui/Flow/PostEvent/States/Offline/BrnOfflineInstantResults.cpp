@@ -226,13 +226,10 @@ namespace BrnGui
         // ---- durations (.rdata floats read at the addresses OnEnter/ResetStateTimer load
         //      them from; DWARF names from BrnOfflineInstantResults.cpp:41..57) -------------
         const f32 KF_SHOW_LICENSE_PAUSE  = 4.5f;   // flt_82F2740C
-        // ⚠️ flt_82FB4C10 reads 0.0f. That is NOT a "flagged zero" placeholder: it is the
-        // expression's own value and it MEANS "immediately". UpdateEventResults fires
-        // LicenseComponent::AddWin on `mfTimeToIncrementWin <= 0.0f && !mbWinsIncremented`,
-        // so a 0.0f seed increments the win on the first tick of the results substate. Read,
-        // not assumed -- but flagged here because a 0.0f duration is exactly the shape of a
-        // placeholder and the next reader should not have to re-derive that it is real.
-        const f32 KF_WIN_INCREMENT_PAUSE = 0.0f;   // flt_82FB4C10
+        // ARTIST CRT initializer 0x82C54BB0..0x82C54BC8 writes flt_82FB4C10:
+        // flt_82F2740C (4.5f) + flt_82065670 (2.0f). The raw BSS zero is not
+        // the runtime value: the card appears first, then increments the win two seconds later.
+        const f32 KF_WIN_INCREMENT_PAUSE = KF_SHOW_LICENSE_PAUSE + 2.0f;
 
         // ---- GUI event ids used by name below --------------------------------------------
         const s32 KI_EVENT_APT_TRIGGER              = 21;
@@ -1036,10 +1033,6 @@ namespace BrnGui
     // UpdateEventResults  @0x824BE228  (cpp:1727, 184 instructions)
     // The RESULTS sub-state: set the components up on the first tick, then run the licence
     // win-increment / reveal timers until the dwell expires and hand over to the next one.
-    // ⛔ ONE FLAGGED GATE: the X360 guards its ShowLicense call (and a +4.0 s dwell bump) with
-    // mResults +0xB5, a byte in the un-attributable flag run. Reading it by offset would be a
-    // guess, so the licence reveal is not driven here; it is left to the wave that pins that
-    // run. Everything else in this body is faithful.
     // -----------------------------------------------------------------------------------
     void InstantResultsState::UpdateEventResults()
     {
@@ -1049,6 +1042,8 @@ namespace BrnGui
         if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
         {
             SetupComponents();
+            if (meWinState <= E_RESULTS_PLAIN_WIN && mResults.mbCountsTowardsProgression)
+                mfTimeRemaining += 4.0f; // ARTIST 0x824BE450..0x824BE470.
             mfTimeToShowLicense  = KF_SHOW_LICENSE_PAUSE;
             mbLicenseShown       = false;
             mfTimeToIncrementWin = KF_WIN_INCREMENT_PAUSE;
@@ -1089,6 +1084,8 @@ namespace BrnGui
         }
         else
         {
+            if (meWinState <= E_RESULTS_PLAIN_WIN && mResults.mbCountsTowardsProgression)
+                mLicense.ShowLicense(false);
             mbLicenseShown = true;
         }
     }

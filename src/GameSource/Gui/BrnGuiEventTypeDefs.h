@@ -2695,7 +2695,8 @@ struct GuiEventOfflinePostEvent
                                                  // tests it for POSTRACE_TOTALLED. The bridge copies
                                                  // action+E2, written from mbPlayerFinishedCarDestroyed.
         bool  mbTimedOut;                        // +0xB3; bridge copies action E1 (mbPlayerFinishedTimedOut).
-        u8    maReservedB4[2];                   // +0xB4..B5 remaining flag run
+        bool  mbEliminated;                      // +0xB4 action E3
+        bool  mbCountsTowardsProgression;         // +0xB5 action DA; DWARF :2390
         bool  mbCompletedLastRank;               // +0xB6  "Results.Completed Last Rank = "
         bool  mbHasUnlockedFreeCar;              // +0xB7  lbz @0x824D5A3C
         bool  mbHasRankedUp;                     // +0xB8  lbz @0x824D59F0
