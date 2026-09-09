@@ -436,6 +436,17 @@ public:
     // GameStateModule::OnPlayerCarChange.
     s32 GetProgressionRank() const;
 
+    // DWARF BrnProgressionManager.h:580..586; inlined in ARTIST ShowModeResults
+    // (0x82343CE4, 0x82343D08, 0x82343D90..94).
+    CgsID GetNewlyUnlockedCarID() { return mNewlyUnlockedCarID; }
+    bool HasJustRankedUp() { return mbHasJustRankedUp; }
+    void ClearRankUpCache()
+    {
+        mbHasJustRankedUp = false;
+        mNewlyUnlockedCarID = 0;
+    }
+
+
     // ADDITIVE GROW [pause-stats wave 2026-08-29] -- miMaxCarCount (+133468), read BY NAME so
     // the GUI bridge stays off the raw offset. TranslateGameActionsToGuiEvents case 180
     // @0x823EC8D4 reads it (`lwzx r7, r29, 0x69598C` == manager+133468) as the DENOMINATOR of the
@@ -1187,12 +1198,11 @@ private:
     // ⚠️ NO READER ON PC. The console consumer is GetGiftCarId @0x8237AC80 (DWARF
     // BrnProgressionManager.cpp:559, `GetGiftCarId(ECarType leLeastUsedCarType)`), which is not
     // reconstructed. The store is real and is reproduced; nothing observes it yet.
+    CgsID     mNewlyUnlockedCarID = 0; // X360 +133472 (0x20960), DWARF :164
     s32       meLeastUsedCarType = 0;                           // X360 +133480 (0x20968), DWARF :167
     // mbHasJustRankedUp -- DWARF :182. `stbx 1 -> +0x20970` @0x8239E1D0, and ONLY when the rank
     // argument is non-zero, so the rank-0 starting unlock does not read as "you just ranked up".
-    // ⚠️ NO READER IN THE MOUNTED SET either: OnEventFinishUpdateProfile's next-rank-car leg
-    // (park P8, BrnProgressionManager_EventFinish.cpp) is where the console forks on it, and that
-    // leg is parked on the ProgressionRankData record. Landing the WRITER is what unblocks it.
+    // Consumed and cleared by ShowModeResults after it records the rank-up.
     bool      mbHasJustRankedUp = false;                        // X360 +133488 (0x20970), DWARF :182
 
     // Pointer-INVARIANT layout facts only (host is the LLP64 gate target). The X360 byte offsets are

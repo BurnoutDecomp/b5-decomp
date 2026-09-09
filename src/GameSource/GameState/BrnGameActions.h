@@ -2240,7 +2240,8 @@ struct ShowModeResultsAction : public GameAction<E_ACTION_SHOW_MODE_RESULTS>
                               //       `stfs f0, var_168` @0x82343848 -- the raw metres value that
                               //       the +0x08 score above converts to yards. Every other mode:
                               //       `stfs f31, var_168` @0x823438C4 == 0.0f (flt_82001CC0).
-    u8   maPad1C[0x24];       // +0x1C..+0x3F never read by the arm
+    u8   maPad1C[0x1C];       // +0x1C..+0x37
+    CgsID mNewlyUnlockedCarID; // +0x38 ARTIST ShowModeResults 0x82343D08..15
     u64  mu64Field40;         // +0x40 FLAG: copied to the GUI record only when mbField DE is set
     s32  miField48;           // +0x48 FLAG
     s32  miField4C;           // +0x4C FLAG

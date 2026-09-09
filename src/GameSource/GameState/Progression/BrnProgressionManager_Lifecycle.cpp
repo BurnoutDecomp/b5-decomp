@@ -302,17 +302,17 @@ void ProgressionManager::Construct(BrnGameState::CarSelectManager* lpCarSelectMa
         FireConsoleAssert("miPostWorldUpdate >= 0", 198);
     }
 
-    // [FLAG PC bring-up] SEVEN CONSOLE STORES HAVE NO MODELLED MEMBER IN THIS TREE'S HEADER and
-    // are therefore NOT made here, rather than made through an offset hack. All seven are named
-    // by the DWARF; six are zero-seeded on the console, which is also the host's zero state, so
-    // nothing observable differs -- this is a completeness note, not a behavioural deviation:
+    mbHasJustRankedUp = false;
+    mNewlyUnlockedCarID = 0;
+
+    // [FLAG PC bring-up] Remaining console stores HAVE NO MODELLED MEMBER IN THIS TREE'S HEADER and
+    // are therefore NOT made here, rather than made through an offset hack. They are named
+    // by the DWARF; the remaining initialization gaps are listed below:
     //   +0x2092C miLastReturnedRival                  (DWARF :842 -- the rivals lane declared its
     //                                                  twin miLastUpdatedRival; add this with it)
     //   +0x20974 mbPlayerJustWonATrophyUpdateRequired (DWARF :194)
     //   +0x2096D mi8HackEventRankNumber               (DWARF :173)
     //   +0x2096E mbHackEventNumberActive              (DWARF :176)
-    //   +0x20970 mbHasJustRankedUp                    (DWARF :182)
-    //   +0x20960 mNewlyUnlockedCarID, an 8-byte zero  (DWARF :164)
     //   +0x20800 mbSendAchievementAwardedEvent_DEBUG /
     //   +0x20804 miAchievementToAward_DEBUG           (DWARF :828/:829)
     // The ONE that is NOT zero is +0x2094C meLastPlayerDistrict = 18 (DWARF :853); its value is

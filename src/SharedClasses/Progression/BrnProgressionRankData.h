@@ -97,6 +97,8 @@ namespace BrnProgression
 class ProgressionRankData
 {
 public:
+    // DWARF : GetFreeCarForRankUpID; ARTIST 0x823A0570 inlined load.
+    CgsID GetFreeCarForRankUpID() const { return mFreeCarForRankUpID; }
     // Sizes maOvertakingDifficulty. Eight entries == the eight race positions the per-position
     // AI overtaking-difficulty table is authored for; PursuitMode::Start copies all eight into
     // GameModeParams::mfOvertakingDifficulty (f32[8]).

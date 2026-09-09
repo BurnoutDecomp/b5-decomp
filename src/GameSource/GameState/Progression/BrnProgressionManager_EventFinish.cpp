@@ -49,9 +49,7 @@
 //       @0x8239FE50 (producer of action 200) is bodied in BrnProgressionManager_Medals.cpp and
 //       CALLED at its seat below.
 //   P7  ProgressionManager::UnlockRivals                     (absent; fills lpAction->mu64FieldC8)
-//   P8  ProgressionData::GetProgressionRankData's record -- BrnProgression::ProgressionRankData
-//       is an INCOMPLETE type tree-wide (BrnProgressionData.h:41); the leg needs its CgsID at
-//       +0x68 of the 112-byte record.
+//   P8  Paid: rank-up free car uses the recovered ProgressionRankData record.
 //   P9  AchievementManagerBase::OnEventWin -- BODIED, but BrnGameStateAchievementManagerBase.cpp
 //       is deliberately NOT MOUNTED (build_game_exe.bat:2610 "mounting it costs EIGHT ...").
 //   P10 ProgressionManager::ComputeCompletionPercentage @0x8238A198 (absent; 320 instructions)
@@ -65,6 +63,7 @@
 
 #include "BrnProgressionManager.h"
 #include "BrnProfile.h"
+#include "SharedClasses/Progression/BrnProgressionRankData.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // CgsDev::Log::gpDebugPrint (the park lines)
 #include "SharedClasses/Progression/BrnProgressionData.h"               // ProgressionData (rank count / junction table)
@@ -140,7 +139,6 @@ bool gbSaidAllCompleted    = false;   // P4
 // UpdatePlayerMedals @0x8239FE50 are bodied in BrnProgressionManager_Medals.cpp and called at
 // their seats. Do not re-mint them.
 bool gbSaidUnlockRivals    = false;   // P7
-bool gbSaidNextRankCar     = false;   // P8
 bool gbSaidAchievement     = false;   // P9
 bool gbSaidCompletionPct   = false;   // P10
 bool gbSaidNoTrainingMgr   = false;   // the uninstalled mpTrainingManager back-pointer
@@ -601,7 +599,7 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
         lpAction->mu64FieldC8 = static_cast<u64>(UnlockRivals(lpGameActionQueue));
 
         // X360 `std r23, 0x40(r19)` / `stb r23, 0xDE(r19)` -- clear the next-rank car slot
-        // and its gate before the (parked) next-rank leg below can set them.
+        // and its gate before the next-rank leg below can set them.
         lpAction->mu64Field40 = 0;
         lpAction->mbHasField40 = 0;
 
@@ -610,46 +608,17 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
         // "not started" seed counts as non-zero.
         if (static_cast<u8>(mi8ProgressionRank) != 0 && !PlayerHasFinishedLastRank())
         {
-            // ⛔ PARK P8 -- console:
-            //     const ProgressionRankData* lpRank =
-            //         mpProgressionData->GetProgressionRankData((s8)mi8ProgressionRank);
-            //     CgsID lCarId = <the CgsID at ProgressionRankData +0x68>;   // `ld r4, 0x68(r11)`
-            //     if (!mProfile.FindCar(lCarId)) {
-            //         lpAction->mu64Field40 = lCarId;
-            //         lpAction->mbHasField40 = true;
-            //         AddCar(lCarId, 1)->SetUnlockDeformationAmount(0.85f);
-            //     }
-            // ProgressionData::GetProgressionRankData IS bodied (BrnProgressionData.cpp:21) and
-            // Profile::FindCar / AddCar exist -- the blocker is the RECORD:
-            // BrnProgression::ProgressionRankData is an INCOMPLETE type tree-wide
-            // (BrnProgressionData.h:41 `class ProgressionRankData;`, 112-byte stride, no owning
-            // header). Reading +0x68 off it would be exactly the raw-console-offset trap this
-            // campaign bans. FRONTIER: SharedClasses/Progression/BrnProgressionRankData.h with
-            // `CgsID GetUnlockCarId() const;` at +0x68.
-            // ⚠️ IDA NOTE: the pseudocode's `FindCar(*(rank+104), *(rank+108))` is register-pair
-            // noise -- the asm makes ONE 8-byte load and passes ONE argument.
-            //
-            // [!!] P8 AND ShowModeResults' RANK-UP-NOTIFICATION PARK ARE **ONE BLOCKING ITEM**.
-            // NEITHER LANDS ALONE. (Cross-seam audit S1c, 2026-08-26; the twin of this paragraph is
-            // on the other park's banner at BrnModeManager_Finish.cpp:1008.)
-            // P8's entire output is the two stores above it -- lpAction->mu64Field40 = lCarId and
-            // lpAction->mbHasField40 = true (console `std r4, 0x40(r19)` @0x823A0584 /
-            // `stb r27, 0xDE(r19)` @0x823A058C). ShowModeResults runs AFTER this function returns,
-            // and forks on the rank-up-pending byte progMgr+0x20970 (`lbzx r11, r3, r29`
-            // @0x82343CE4). BrnModeManager_Finish.cpp hardcodes that byte FALSE while its own park
-            // stands, which forces the PLAIN arm -- and the plain arm ZEROES record+0x40 and
-            // record+0xDE (`std r25, var_140` @0x82343DDC / `stb r25, var_A2` @0x82343DE0).
-            // => Un-parking P8 on its own would compute the unlock, hand it over, and have it
-            // overwritten with zero on the very next call, with no assert and no log line. That is
-            // the placeholder-zero failure mode, not a partial win. Un-park BOTH in one change:
-            // the ProgressionRankData owning header here AND the progMgr +0x20970/+0x20960
-            // accessors there. (The +0x20970 flag's WRITER is in neither function -- this whole
-            // export was grepped for it -- so a third function has to land with them.)
-            ParkOnce(gbSaidNextRankCar,
-                     "[FLAG PC bring-up] ProgressionManager::OnEventFinishUpdateProfile: the "
-                     "next-rank car unlock is NOT reconstructed (BrnProgression::"
-                     "ProgressionRankData is an incomplete type -- no owning header for its "
-                     "+0x68 car id).\n");
+            // ARTIST 0x823A0544..05A4: one 64-bit CgsID, not the decompiler's
+            // spurious pair of arguments. The authored rank record owns this award.
+            const ProgressionRankData* lpRank =
+                GetProgressionData()->GetProgressionRankData(static_cast<s8>(mi8ProgressionRank));
+            const CgsID lCarId = lpRank->GetFreeCarForRankUpID();
+            if (!mProfile.FindCar(lCarId))
+            {
+                lpAction->mu64Field40 = lCarId;
+                lpAction->mbHasField40 = true;
+                AddCar(lCarId, 1)->SetUnlockDeformationAmount(KF_UNLOCK_DEFORM_AMOUNT);
+            }
         }
 
         // ---- the achievement hook -------------------------------------------------------

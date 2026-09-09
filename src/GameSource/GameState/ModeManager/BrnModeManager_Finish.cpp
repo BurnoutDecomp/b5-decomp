@@ -752,10 +752,6 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
 // profile/progression updates for the offline event modes {0,3,5,7,8}, and posts the record plus
 // its two follow-on actions.
 //
-// [!] [stuntrace] ONLINE ARM DEFERRED -- none of the offline progression path is gated (hazards H7
-// is explicit: OnEventFinishUpdateProfile is the campaign payoff and must NOT be gated). The one
-// parked leg is the rank-up notification arm, and it is parked on a MISSING MEMBER, not on
-// online-ness -- see its banner.
 void ModeManager::ShowModeResults(
     const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCarOutput,
     GameStateModuleIO::GameActionQueue*                                          lpGameActionQueue)
@@ -1081,41 +1077,32 @@ void ModeManager::ShowModeResults(
     }
 
     // ---- the progression-rank block ----------------------------------------------------------------
-    // [X] [stuntrace] DIVERGENCE -- THE RANK-UP NOTIFICATION ARM IS PARKED ON TWO MISSING MEMBERS.
-    // Console:
-    //     if (*(mpProgressionManager + 133488) && meCurrentGameModeType < 10) { ...celebration... }
-    //     else                                                               { ...plain rank... }
-    // where progMgr+133488 (0x20970) is a one-BYTE "a rank-up is pending" flag and progMgr+133472
-    // (0x20960) is the QWORD it carries (copied into record+0x38, its non-zero-ness into record+0xDD);
-    // the arm then CLEARS both. Neither exists in BrnProgressionManager.h -- the nearest declared
-    // members are mi8ProgressionRank @+133484 and mbUpdateRivalsRequested @+133489, so +133488 and
-    // +133472 are genuinely unnamed. header_request filed naming AGENT 10.
-    // Behavioural cost while parked: the "you ranked up / you unlocked X" fields of the results
-    // record stay zero; the ordinary rank fields below are filled exactly as the console fills them.
-    //
-    // [!!] THIS PARK AND PROGRESSION PARK P8 ARE **ONE BLOCKING ITEM**. NEITHER LANDS ALONE.
-    // (Cross-seam audit S1c, 2026-08-26; the twin of this paragraph is on P8's own banner at
-    // BrnProgressionManager_EventFinish.cpp:558.)
-    //   * P8 is the next-rank CAR UNLOCK. Its whole output is `lpAction->mu64Field40 = lCarId;
-    //     lpAction->mbHasField40 = true` -- record+0x40 and record+0xDE
-    //     (asm 0x823A0584 `std r4, 0x40(r19)` / 0x823A058C `stb r27, 0xDE(r19)`, r19 == lpAction).
-    //   * ShowModeResults runs AFTER OnEventFinishUpdateProfile returns and FORKS on the byte this
-    //     park hardcodes false. The celebration arm (`0x82343D24 ld r11, var_140`) READS record+0x40
-    //     and carries it through. The PLAIN arm -- the one `lbRankUpNotificationPending = false`
-    //     forces -- ZEROES it: `0x82343DDC std r25, var_140` / `0x82343DE0 stb r25, var_A2`, which
-    //     is exactly the `mu64Field40 = 0` / `mbHasField40 = 0` pair at the tail of this block.
-    //   => Landing P8 while THIS park stands computes the unlock and then throws it away, silently,
-    //     with no diagnostic and no assert -- the placeholder-zero failure mode the shadow-system
-    //     campaign lost five days to. Landing THIS one while P8 stands is harmless but pointless
-    //     (the celebration arm would carry a zero).
-    // UN-PARK ORDER: P8's ProgressionRankData header AND the progMgr +0x20970 / +0x20960 accessors
-    // in the SAME change, then delete both banners together. (For the record: the +0x20970 flag's
-    // WRITER is neither of these two functions -- OnEventFinishUpdateProfile's whole export was
-    // grepped and never touches it -- so a third, still-unfound function has to land with them.)
+    if (mpProgressionManager->HasJustRankedUp() &&
+        meCurrentGameModeType < GameStateModuleIO::E_MODE_ONLINE_RACE)
     {
-        const bool lbRankUpNotificationPending = false;   // console: *(mpProgressionManager + 133488) != 0
-        (void)lbRankUpNotificationPending;
-
+        // ARTIST 0x82343D00..94: preserve the free car written by event progression,
+        // publish the previous/current ranks, then consume this notification once.
+        lAction.mu8FieldDC = 1;
+        lAction.mNewlyUnlockedCarID = mpProgressionManager->GetNewlyUnlockedCarID();
+        lAction.maPadDD[0] = lAction.mNewlyUnlockedCarID != 0;
+        lAction.mbHasField40 = lAction.mu64Field40 != 0;
+        if (mpProgressionManager->PlayerHasFinishedLastRank())
+        {
+            lAction.mu8FieldDB = 1;
+            lAction.mu8FieldDA = 1;
+            lAction.miField48 = 5;
+            lAction.miField4C = -1;
+        }
+        else
+        {
+            lAction.miField4C = static_cast<s32>(
+                static_cast<s8>(mpProgressionManager->GetProgressionRank()));
+            lAction.miField48 = lAction.miField4C - 1;
+        }
+        mpProgressionManager->ClearRankUpCache();
+    }
+    else
+    {
         if (mpProgressionManager->PlayerHasFinishedLastRank())
         {
             lAction.mu8FieldDB = 1;    // record+0xDB
@@ -1130,8 +1117,7 @@ void ModeManager::ShowModeResults(
         }
 
         lAction.mu8FieldDC   = 0;    // record+0xDC
-        // record+0x38 = 0 -- inside ShowModeResultsAction's maPad1C[0x24]; already zero from the
-        // memset, so the console's `std r25, var_148` is a no-op here (noted, not faked).
+        lAction.mNewlyUnlockedCarID = 0;
         lAction.maPadDD[0]   = 0;    // record+0xDD
         lAction.mu64Field40  = 0;    // record+0x40
         lAction.mbHasField40 = 0;    // record+0xDE
