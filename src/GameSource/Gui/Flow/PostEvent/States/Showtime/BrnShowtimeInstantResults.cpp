@@ -300,7 +300,15 @@ namespace BrnGui
             lRunFsm.mInitialStateId = static_cast<CgsID>(0);
             lRunFsm.meFsmToRun      = E_GUI_HUD_FREEBURN;
             lRunFsm.meFlowToUse     = E_GUIFLOW_HUD;
-            mpStateInterface->OutputGuiEvent(lRunFsm);
+            // ARTIST 0x824938D0 boxes this raw payload on channel 40. The
+            // direct-pass OutputGuiEvent template cannot carry GuiEventRunFsm:
+            // the flow drain needs its inner event id and aligned payload offset.
+            CgsGui::GuiEventWrapper<GuiEventRunFsm, 40> lRunFsmRecord(lRunFsm);
+            static_assert(sizeof(lRunFsmRecord) == 40,
+                          "RunFsm record contains a 16-byte header and 24-byte payload");
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRunFsmRecord),
+                lRunFsmRecord.GetChannel(), sizeof(lRunFsmRecord));
         }
 
         mpGuiCache = 0;
