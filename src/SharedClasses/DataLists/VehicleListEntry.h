@@ -163,6 +163,7 @@ struct VehicleListEntry
     // VehicleListResourceType::FixUp calls Destruct on this member).
     // WIDENED to 64 bits 2026-08-01 (physics wave 1) -- see CgsAttribSysCollectionKey.cpp.
     u64 GetRivalReleasedVoiceOverKeyHash() const; // ARTIST0x824C5BC4..0x824C5BD4
+    u64 GetWonCarVoiceOverKeyHash() const; // ARTIST 0x824C4F64..0x824C4F70
     u64 GetAttribCollectionKeyHash() const;
 
     // ADDITIVE GROW (drivable wave 2026-08-01). The car's STRENGTH RATING byte at +0x9B.

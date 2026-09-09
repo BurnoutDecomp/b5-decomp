@@ -2180,6 +2180,18 @@ void GuiModule::Destruct()
                 }
                 mModelOutputBuffer.GetLoadNotificationsNonConst()->AddEvent(
                     lpEvent, liId, liSize);
+                // Dynamic components observe completion directly (ARTIST
+                // LargeCarComponent 0x8241B7A8/0x8241B868). These local module
+                // notifications bypass DispatchInboundGuiEvents, so fan them
+                // out here as well as delivering them to the cache/controller.
+                // The PC loader also emits id-zero Apt registrations for every
+                // bundled clip (CgsGuiResourceModulePC.cpp); those are view data,
+                // not completions for a component's named resource request.
+                if ((liId == 14 && (!lbAptMovie
+                         || reinterpret_cast<const CgsGui::GuiEventLoadNotification*>(
+                                lpEvent)->muLoadRequestId != 0))
+                    || liId == 16)
+                    RouteEventToFlow(lpEvent, liId, liSize);
                 if (lbAptMovie)
                     mViewInputBuffer.GetViewStateQueue()
                         .CgsModule::VariableEventQueue<65536, 16>::AddEvent(lpEvent, 14, liSize);
@@ -2413,6 +2425,15 @@ void GuiModule::Destruct()
                 }
                 case 38:   // StopPriorityEventBlocking
                     mabPriorityBlocking[liFlow] = false;
+                    break;
+
+                case 39:   // StateInterface::RequestResource (dynamic car artwork, etc.)
+                    // ARTIST EventInterpreterModule::ProcessOutEvents 0x8285E1D0
+                    // forwards these records to its resource-output queue. Feed the
+                    // same native request to the resource module alongside cached loads.
+                    mModelInputBuffer.LockForWrite();
+                    mModelInputBuffer.GetLoadRequests()->AddEvent(lpEvent, liId, liSize);
+                    mModelInputBuffer.UnlockForWrite();
                     break;
 
                 case KI_GUIEVENT_PLAY_VIDEO:   // 508

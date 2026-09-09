@@ -283,12 +283,10 @@ namespace BrnGui
     // HandleControllerInput answers two buttons in the photo-booth interrupt only.
     void InstantResultsState::HandleControllerInput(const void*) { LogUnreconstructedState("InstantResultsState", "HandleControllerInput"); }
     void InstantResultsState::UpdateLicense()           { LogUnreconstructedState("InstantResultsState", "UpdateLicense"); }
-    void InstantResultsState::UpdateCarUnlock()         { LogUnreconstructedState("InstantResultsState", "UpdateCarUnlock"); }
     void InstantResultsState::UpdateFreeCarUnlock()     { LogUnreconstructedState("InstantResultsState", "UpdateFreeCarUnlock"); }
     void InstantResultsState::UpdatePhoto()             { LogUnreconstructedState("InstantResultsState", "UpdatePhoto"); }
     // The return value is not neutral: false => SelectSubstates does not raise CAR_UNLOCK,
     // the ordinary case (no XS car unlocked), so it degrades to "no car-unlock page".
-    bool InstantResultsState::IsXSCarInUnlockedArray()  { LogUnreconstructedState("InstantResultsState", "IsXSCarInUnlockedArray"); return false; }
 
     // ---- OnlineGameOptionsSummary ------------------------------------------------------
     void OnlineGameOptionsSummary::OnEnter() { LogUnreconstructedState("OnlineGameOptionsSummary", "OnEnter"); }

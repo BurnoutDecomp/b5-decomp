@@ -32,8 +32,8 @@
 //
 // ⛔ STILL NOT RECONSTRUCTED (declared in the header, bodied as LOGGED stubs in
 // BrnScreenStatesDataLinkStubs.cpp so the gap is visible in the log instead of silent):
-//   HandleControllerInput (124) UpdateLicense UpdateCarUnlock UpdateFreeCarUnlock
-//   UpdateShowingRivals UpdatePhoto IsXSCarInUnlockedArray RenderDebug
+//   HandleControllerInput (124) UpdateLicense UpdateFreeCarUnlock
+//   UpdatePhoto RenderDebug
 // Those are the remaining substate PRESENTATIONS. Several of them need OfflinePostEventData
 // flag slots the X360 asm does not yet pin -- see the ⛔ block in BrnGuiEventTypeDefs.h.
 // Guessing those names is how a results page ends up printing the wrong string, so they are
@@ -769,7 +769,7 @@ namespace BrnGui
 
         if (!WillShowCredits())
         {
-            if (IsXSCarInUnlockedArray())
+            if (IsXSCarInUnlockedArray(0, 0, 0))
                 mabSubStateFlags[E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK] = true;
             if (mResults.mbHasUnlockedFreeCar)
                 mabSubStateFlags[E_ACTIVE_SUBSTATE_EVENT_FREE_CAR_UNLOCK] = true;
@@ -1965,6 +1965,177 @@ namespace BrnGui
             reinterpret_cast<const CgsModule::Event*>(&lRunFsm), KI_CHANNEL_GUI_OUT,
             static_cast<s32>(sizeof(lRunFsm)));
     }
+    // ARTIST 0x824C0730. The optional outputs are the array index and full CgsID.
+    bool InstantResultsState::IsXSCarInUnlockedArray(
+        s32 liStartIndex, s32* lpiFoundIndex, CgsID* lpFoundCar)
+    {
+        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        const s32 liCount = mResults.maCarsToUnlockFromSpecialEvent.GetLength();
+        for (s32 liIndex = liStartIndex; liIndex < liCount; ++liIndex)
+        {
+            const CgsID lCar = mResults.maCarsToUnlockFromSpecialEvent[liIndex];
+            const BrnResource::VehicleList* lpVehicles = mpGuiCache->GetWorldDataController()->GetVehicleList();
+            const s32 liVehicleIndex = lpVehicles->GetVehicleIndex(lCar);
+            const BrnResource::VehicleListEntry* lpVehicle =
+                liVehicleIndex < 0 ? 0 : lpVehicles->GetVehicleData(liVehicleIndex);
+            CGS_ASSERT(lpVehicle != 0, "lpVehicleEntry");
+            if (lpVehicle->GetLiveryType() == BrnResource::VehicleListEntry::E_LIVERY_TYPE_PATTERN)
+            {
+                if (lpiFoundIndex != 0)
+                    *lpiFoundIndex = liIndex;
+                if (lpFoundCar != 0)
+                    *lpFoundCar = lCar;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ARTIST 0x824C4870. Each pattern-livery award runs its own reveal and cleanup.
+    void InstantResultsState::UpdateCarUnlock()
+    {
+        CGS_ASSERT(meActiveSubState == E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK,
+                   "E_ACTIVE_SUBSTATE_EVENT_CAR_UNLOCK == meActiveSubState");
+        if (meSubStateState == E_SUBSTATE_SET_UP_COMPONENTS)
+        {
+            CGS_ASSERT(meCarUnlockPresentationStage == E_CAR_UNLOCK_PRESENTATION_WAITING,
+                       "E_CAR_UNLOCK_PRESENTATION_WAITING == meCarUnlockPresentationStage");
+            mResultsIcon.SetState("Invisible");
+            const bool lbFound = IsXSCarInUnlockedArray(
+                miCurrentCarUnlockIndex, &miCurrentCarUnlockIndex, &mCarUnlockId);
+            CGS_ASSERT(lbFound, "IsXSCarInUnlockedArray( miCurrentCarUnlockIndex, &miCurrentCarUnlockIndex, &mCarUnlockId )");
+            CGS_ASSERT(mCarUnlockId != 0, "Couldn't find an XS (pattern livery) car in the unlocked car list!");
+            mUnlockedXSCarComponent.SetCarInfo(mCarUnlockId, static_cast<BrnGuiResourceId>(122));
+            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            const BrnResource::VehicleList* lpVehicles = mpGuiCache->GetWorldDataController()->GetVehicleList();
+            CGS_ASSERT(lpVehicles != 0, "lpVehicleList");
+            const s32 liIndex = lpVehicles->GetVehicleIndex(mCarUnlockId);
+            const BrnResource::VehicleListEntry* lpVehicle = liIndex < 0 ? 0 : lpVehicles->GetVehicleData(liIndex);
+            CGS_ASSERT(lpVehicle != 0, "lpVehicleListEntry");
+
+            GuiEventAudioGenericSequence lAudio;
+            std::memcpy(lAudio.maData, &lpVehicle->mRivalUnlockName, sizeof(lAudio.maData));
+            CgsGui::GuiEventWrapper<GuiEventAudioGenericSequence, 40> lAudioRecord(lAudio);
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lAudioRecord), 40, sizeof(lAudioRecord));
+            if (mpGuiCache->GetProfile()->HasPlayerSeenTrainingType(BrnProgression::E_TRAINING_TYPE_LIVERY_WIN))
+            {
+                GuiEventPostEventFreeCarSequenceStart lSequence;
+                const u64 luVoiceOver = lpVehicle->GetWonCarVoiceOverKeyHash();
+                std::memcpy(lSequence.maData, &luVoiceOver, sizeof(lSequence.maData));
+                CgsGui::GuiEventWrapper<GuiEventPostEventFreeCarSequenceStart, 40> lSequenceRecord(lSequence);
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lSequenceRecord), 40, sizeof(lSequenceRecord));
+            }
+            else
+            {
+                GuiEventRequestTraining lTraining;
+                lTraining.meTrainingType = BrnProgression::E_TRAINING_TYPE_LIVERY_WIN;
+                CgsGui::GuiEventWrapper<GuiEventRequestTraining, 40> lTrainingRecord(lTraining);
+                mpStateInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lTrainingRecord), 40, sizeof(lTrainingRecord));
+            }
+            meSubStateState = E_SUBSTATE_RUNNING;
+            return;
+        }
+        if (meSubStateState != E_SUBSTATE_RUNNING)
+        {
+            FireUnexpectedStateAssert("Should not be updating car unlock presentation when substate is in state ",
+                                      meSubStateState, ".\n");
+            return;
+        }
+        switch (meCarUnlockPresentationStage)
+        {
+        case E_CAR_UNLOCK_PRESENTATION_WAITING:
+            if (!mLicense.IsVisible() && mpcAnimatingComponentName == 0)
+            {
+                mLicense.ReleaseResources();
+                mPhotoBoothComponent.ReleaseResources();
+                mpStateInterface->PlayAptMovie("", 2);
+                if (mLargeIconResource.muId != 0 && mpGuiCache != 0)
+                    mpGuiCache->EnsureResourceIsUnloaded(mLargeIconResource);
+                meCarUnlockPresentationStage = E_CAR_UNLOCK_PRESENTATION_INTRO_SET_UP;
+            }
+            break;
+        case E_CAR_UNLOCK_PRESENTATION_INTRO_SET_UP:
+        {
+            CGS_ASSERT(mCarUnlockId != 0, "mCarUnlockId != kCGSID_NULL");
+            mCarUnlockIcon.SetState(0u);
+            char lacCar[16], lacText[64];
+            CgsIDConvertToString(mCarUnlockId, lacCar);
+            CgsCore::SnPrintf(lacText, 63, "CAR_CAPS_%s", lacCar);
+            lacText[63] = 0;
+            mCarUnlockManuIcon.Set(mpGuiCache->GetWorldDataController()->GetVehicleList(), mCarUnlockId);
+            mCarUnlockText.SetLocalisedText(lacText, CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+            mCarUnlockDescText.SetLocalisedText("POSTRACE_NEW_CAR_DESC1", CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+            meCarUnlockPresentationStage = E_CAR_UNLOCK_PRESENTATION_SHOWING_CAR_SET_UP_ICON;
+            break;
+        }
+        case E_CAR_UNLOCK_PRESENTATION_SHOWING_CAR_SET_UP_ICON:
+            if (mLicense.EnsureResourcesAreUnloaded() && mPhotoBoothComponent.EnsureResourcesAreUnloaded()
+                && mUnlockedRivalCarComponent.EnsureResourcesAreUnloaded()
+                && mUnlockedFreeCarComponent.EnsureResourcesAreUnloaded()
+                && mpGuiCache->EnsureResourceIsUnloaded(mLargeIconResource)
+                && mUnlockedXSCarComponent.EnsureResourcesAreLoaded())
+            {
+                mUnlockedXSCarComponent.OnLoad();
+                mUnlockedXSCarComponent.ShowCar();
+                mfCarUnlockPresentationTimeRemaining = 7.4f;
+                meCarUnlockPresentationStage = E_CAR_UNLOCK_PRESENTATION_SHOWING_CAR;
+            }
+            break;
+        case E_CAR_UNLOCK_PRESENTATION_SHOWING_CAR:
+            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            mfCarUnlockPresentationTimeRemaining -= mpGuiCache->GetTimeStep();
+            if (!(mfCarUnlockPresentationTimeRemaining > 0.0f))
+            {
+                mCarUnlockIcon.SetState(1u);
+                mfCarUnlockPresentationTimeRemaining = 3.0f;
+            }
+            break;
+        case E_CAR_UNLOCK_PRESENTATION_OUTRO_SET_UP:
+            mCarUnlockDescText.SetLocalisedText("POSTRACE_NEW_CAR_INSTRUCTIONS", CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+            mCarUnlockIcon.SetState(2u);
+            meCarUnlockPresentationStage = E_CAR_UNLOCK_PRESENTATION_OUTRO;
+            break;
+        case E_CAR_UNLOCK_PRESENTATION_OUTRO:
+            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            mfCarUnlockPresentationTimeRemaining -= mpGuiCache->GetTimeStep();
+            if (!(mfCarUnlockPresentationTimeRemaining > 0.0f))
+            {
+                mUnlockedXSCarComponent.ReleaseResources();
+                mCarUnlockIcon.SetState(3u);
+                meCarUnlockPresentationStage = E_CAR_UNLOCK_PRESENTATION_OUTRO_ENDING;
+            }
+            break;
+        case E_CAR_UNLOCK_PRESENTATION_OUTRO_ENDING:
+            break;
+        case E_CAR_UNLOCK_PRESENTATION_CLEANING_UP:
+            if (mUnlockedXSCarComponent.EnsureResourcesAreUnloaded())
+                meCarUnlockPresentationStage = E_CAR_UNLOCK_PRESENTATION_DONE;
+            break;
+        case E_CAR_UNLOCK_PRESENTATION_DONE:
+            ++miCurrentCarUnlockIndex;
+            if (IsXSCarInUnlockedArray(miCurrentCarUnlockIndex, &miCurrentCarUnlockIndex, 0))
+            {
+                ResetStateTimer();
+                meSubStateState = E_SUBSTATE_SET_UP_COMPONENTS;
+                meCarUnlockPresentationStage = E_CAR_UNLOCK_PRESENTATION_WAITING;
+            }
+            else
+            {
+                meActiveSubState = GetNextSubstate();
+                ResetStateTimer();
+                meSubStateState = E_SUBSTATE_SET_UP_COMPONENTS;
+            }
+            break;
+        default:
+            FireUnexpectedStateAssert("Unknown car unlock presentation state (currently in state ",
+                                      meCarUnlockPresentationStage, " )\n");
+            break;
+        }
+    }
+
     // ARTIST0x824C5598. Present the newly unlocked rival, then resume results teardown.
     void InstantResultsState::UpdateShowingRivals()
     {

@@ -85,11 +85,8 @@ namespace CgsGui
     {
         CGS_ASSERT(lpacFileName != nullptr, "Invalid file to load in StateInterface::RequestResource");
 
-        GuiEventRequestResource lEvent;
-        lEvent.meType       = leType;
-        lEvent.meLoadUnload = leLoadUnload;
-        lEvent.mpacFileName = lpacFileName;
-        lEvent.miUserData   = liUserData;
+        GuiEventLoadRequest lEvent;
+        lEvent.Construct(leType, leLoadUnload, lpacFileName, static_cast<u32>(liUserData));
         mOutEventQueue.AddEvent(&lEvent, 39, sizeof(lEvent));   // X360 size 24
     }
 

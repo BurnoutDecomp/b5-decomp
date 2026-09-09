@@ -244,7 +244,7 @@ namespace BrnGui
         void UpdateShowingRivals();        // @0x824C5598
         void UpdateLeaving();              // @0x824BE7E0 (68)
         void UpdatePhoto();                // @0x824B47C8
-        bool IsXSCarInUnlockedArray();     // @0x824C0730
+        bool IsXSCarInUnlockedArray(s32 liStartIndex, s32* lpiFoundIndex, CgsID* lpFoundCar); // @0x824C0730
 
         static const CgsGui::sResourceTuple maResourcesToLoad[];  // @0x82F26AFC (.rdata)
         static const u32                    muNumResourcesToLoad; // @0x82F26B0C (.rdata)

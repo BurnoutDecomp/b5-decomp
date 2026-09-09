@@ -185,4 +185,11 @@ u64 VehicleListEntry::GetAttribCollectionKeyHash() const
     return lKey.GetHashKey();
 }
 
+u64 VehicleListEntry::GetWonCarVoiceOverKeyHash() const
+{
+    CgsAttribSys::AttribSysCollectionKey lKey;
+    std::memcpy(&lKey, &mWonCarVoiceOverKey, sizeof(lKey));
+    return lKey.GetHashKey();
+}
+
 } // namespace BrnResource
