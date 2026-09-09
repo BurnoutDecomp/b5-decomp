@@ -857,7 +857,7 @@ namespace BrnGui
     //     mLargeEventIcon.SetState("transIn") -> the mode icon transitions in (win only)
     //
     // ⛔ PARTIAL, ARM BY ARM, AND DELIBERATELY SO. The X360 switches on
-    // meFinishedGameModeType across nine arms. Several of them (0, 4, 5, 6) gate on bytes
+    // meFinishedGameModeType across nine arms. Several of them (0, 4, 6) gate on bytes
     // in OfflinePostEventData's +0xB1..+0xB5 flag run, and that run is NOT attributable: the
     // PS3 DWARF's declaration order is already proven wrong for this struct, and following it
     // would put mbEliminated at +0xB3 where the X360's own string is "POSTRACE_OUTOFTIME".
@@ -869,6 +869,7 @@ namespace BrnGui
     // and its sibling), whose every input is attested: miModeScore by its own string id,
     // GetTargetScoreInEvent by its X360 symbol, miPlayerFinishPosition by the debug print.
     // Marked Man (8) now uses the producer-pinned mbCrashedOut byte at +0xB2.
+    // Burning Route (5) also uses mbTimedOut at +0xB3, copied from the timed-out producer.
     // -----------------------------------------------------------------------------------
     void InstantResultsState::SetupComponents()
     {
@@ -942,6 +943,31 @@ namespace BrnGui
             break;
         }
 
+        case 5: // Burning Route, ARTIST 0x824B4634..0x824B4724.
+            if (mResults.mbTimedOut)
+            {
+                mFinishedText.SetLocalisedText("POSTRACE_OUTOFTIME",
+                    CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+            }
+            else
+            {
+                char lacTime[1024];
+                CgsCore::SPrintf(lacTime, 1023, "%4.2f", static_cast<double>(mResults.mfTime));
+                lacTime[1023] = 0;
+                const char* lapacParams[] = { lacTime };
+                const CgsLanguage::LanguageManager::ParameterFormatType laeFormats[] =
+                    { CgsLanguage::LanguageManager::E_FORMAT_MINUTES_SECONDS_HUNDREDTHS };
+                mFinishedText.SetLocalisedText("POSTRACE_FINISH_YOUR_TIME",
+                    CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP, 1, lapacParams, laeFormats);
+                CgsCore::SPrintf(lacTime, 1023, "%d", static_cast<s32>(mpGuiCache->GetTargetTimeInEvent()));
+                lacTime[1023] = 0;
+                mTargetResultText.SetLocalisedText("POSTRACE_FINISH_TARGET_TIME",
+                    CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP, 1, lapacParams, laeFormats);
+            }
+            meWinState = (mResults.mbTimedOut || mResults.mbCrashedOut)
+                ? E_RESULTS_DETAILED_LOSS : E_RESULTS_DETAILED_WIN;
+            break;
+
         case 8: // Marked Man, ARTIST 0x824B4550..0x824B4628.
             if (mResults.mbCrashedOut)
             {
@@ -968,7 +994,7 @@ namespace BrnGui
             break;
 
         default:
-            // ⛔ Arms 0 / 3 / 4 / 5 / 6 are NOT reconstructed -- see the banner. The X360's
+            // ⛔ Arms 0 / 3 / 4 / 6 are NOT reconstructed -- see the banner. The X360's
             // own default arm also lands here and prints exactly this line.
             if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
             {

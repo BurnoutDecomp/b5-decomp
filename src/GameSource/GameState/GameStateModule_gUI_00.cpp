@@ -237,7 +237,8 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
         const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpyInterface,
         const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue,
         const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue,
-        const BrnAI::AIModuleIO::AICarOutputInterface* lpAICarOutputInterface)
+        const BrnAI::AIModuleIO::AICarOutputInterface* lpAICarOutputInterface,
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCarOutputInterface)
 {
     // ---- leg 1: refresh the cached active-race-car snapshot ---------------------------------
     // âš ï¸ COPIED BY ASSIGNMENT, NEVER AT THE CONSOLE'S LITERAL 10480 BYTES. 10480 is the X360
@@ -249,6 +250,10 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     {
         mLastActiveRaceCarInterface = *lpActiveRaceCarOutputInterface;
     }
+
+    // ARTIST PostWorldUpdate copies the global snapshot immediately after the active one.
+    // This carries the player/global-to-active mapping used by Burning Routes and checkpoints.
+    mLastGlobalRaceCarInterface = *lpGlobalRaceCarOutputInterface;
 
     // ARTIST PostWorldUpdate 0x8238F358 also copies the AI output snapshot.
     // As with the active-car snapshot, use assignment for the native-width type.
@@ -629,15 +634,7 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     // the contact pass reads the PREVIOUS frame's index. That one-frame staleness is the
     // console's own; do not "fix" it by hoisting this above leg 5.
     //
-    // [!] PARKED, named rather than faked -- the GLOBAL half (`*(this+208308)`,
-    // miPlayerGlobalRaceCarIndex). Its source is mLastGlobalRaceCarInterface, which still has
-    // NO WRITER on this build (its own member FLAG in BrnGameStateModule.h says so: only
-    // PostWorldUpdate's 2416-byte snapshot leg fills it, and that leg is not landed). Calling
-    // RCEntityGlobalRaceCarOutputInterface::GetPlayerGlobalRaceCarIndex() on the Clear()ed
-    // interface would fire its "Player car index hasn't been set" assert EVERY FRAME and then
-    // publish -1 anyway -- a per-frame assert storm in exchange for the value the member
-    // already holds. DELETE-WHEN that snapshot leg lands.
-    // [!] PARKED for the same reason: the per-slot maRaceCarCrashing[8] refresh
+    // [!] Still unimplemented: the per-slot maRaceCarCrashing[8] refresh
     // (console 0x8238F460..0x8238F4E4, `*(this + 208316 + i) = <iface slot i in use> ?
     // GetRaceCarState(i)->mbCrashing : 0`). Its gate is a u16-per-slot flag array at
     // iface+10112 that this tree's RCEntityActiveRaceCarOutputInterface does not yet name, and
@@ -646,6 +643,7 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     if (mLastActiveRaceCarInterface.IsPlayerCarActive())
     {
         mePlayerActiveRaceCarIndex = mLastActiveRaceCarInterface.GetPlayerActiveRaceCarIndex();
+        miPlayerGlobalRaceCarIndex = mLastGlobalRaceCarInterface.GetPlayerGlobalRaceCarIndex();
     }
     else
     {
@@ -654,6 +652,7 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
         // unqualified enumerator resolves to BrnGameState::E_ACTIVE_RACE_CAR_INDEX_INVALID and
         // will not convert to the member's global-scope type.
         mePlayerActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        miPlayerGlobalRaceCarIndex = ::E_GLOBAL_RACE_CAR_INDEX_INVALID;
     }
 }
 
@@ -1286,13 +1285,8 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     //       Nothing on PC fills that buffer's timer block, so the console route would hand
     //       ModeManager an all-zero interface and every mode clock, the countdown and the mode
     //       timer would stand still. Same data, one copy earlier. See the header for the full note.
-    //   (b) lpGlobalRaceCarOutput is 0. The console's is the world's
-    //       RCEntityGlobalRaceCarOutputInterface; BrnWorldIO::UpdateOutputBuffer exposes only the
-    //       ACTIVE one (BrnWorldModuleIO.h typedefs the global flavour but hands out no getter), so
-    //       there is nothing to pass. MEASURED SAFE ON THIS PATH: ModeManager::PreWorldUpdate only
-    //       forwards it, UpdateCurrentMode only forwards it, and GameMode::PreWorldUpdate
-    //       (BrnGameMode.cpp:274) does `(void)lpGlobalRaceCars;`. Race-position work is the
-    //       consumer that will need it. DELETE-WHEN the world output buffer grows the getter.
+    //   (b) Global and active car inputs now both use their original cached snapshots,
+    //       filled together after the previous world update (EmmPreWorldUpdate 0x8238F128).
     //   (c) lbPaused is false. The console's tenth argument is a stacked byte the IDA export
     //       renders as register residue (v50..v64), and EmmPreWorldUpdate reaches PreWorldUpdate
     //       only down its NOT-sim-paused arm, so "paused" here is not the sim pause. Not guessed
@@ -1312,7 +1306,7 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
             static_cast<::EGlobalRaceCarIndex>(GetPlayerGlobalRaceCarIndex()),
             IsOnlineGameMode(),
             lpActionQueue,
-            /*lpGlobalRaceCarOutput -- FLAG (b)*/ 0,
+            &mLastGlobalRaceCarInterface,
             &mLastActiveRaceCarInterface,
             /*lbPaused -- FLAG (c)*/ false);
         mpPreWorldInputBuffer->UnlockForRead();

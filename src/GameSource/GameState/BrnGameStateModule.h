@@ -385,7 +385,8 @@ public:
         // [takedown wave] the world output's traffic-type response queue, cached for
         // TakedownManager::Update's "last traffic type response queue" argument.
         const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue,
-        const BrnAI::AIModuleIO::AICarOutputInterface* lpAICarOutputInterface);
+        const BrnAI::AIModuleIO::AICarOutputInterface* lpAICarOutputInterface,
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCarOutputInterface);
 
     // ==========================================================================================
     // ⭐⭐⭐ [showtime score wave 2026-08-29] ProcessContacts -- X360 0x8236BC68, DWARF :853.
@@ -1210,13 +1211,7 @@ public:
     // written two ways -- 0x3C0D0 == 245968 -- and it is the GLOBAL interface, not a second ACTIVE
     // one. There is NO live-active interface member on GameStateModule at all: the live one arrives
     // through the world module's input buffer and is only ever COPIED into the two snapshots above.
-    // ⚠️ FLAG: exactly like its active sibling, nothing on PC refreshes it (PostWorldUpdate's
-    // world-snapshot leg is not reconstructed), so it reads as the Clear()ed state -- every
-    // GetActiveRaceCarIndex answers E_ACTIVE_RACE_CAR_INDEX_INVALID. That is the console's own
-    // "no data yet" answer and it fires the console's own asserts at the readers, which is the
-    // wanted behaviour, not a silent wrong index.
-    // DELETE-WHEN GameStateModule::PostWorldUpdate's snapshot leg lands (same commit as the active
-    // interface's refresh -- the console does both copies back to back).
+    // Refreshed alongside the active snapshot by PostWorldUpdateStuntBringUp.
     const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface*
         GetLastGlobalRaceCarInterface() const;
 

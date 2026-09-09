@@ -4317,7 +4317,8 @@ namespace BrnGame
                         lpcWorldOutput->GetVehicleManagerOutputInterface()->GetRaceCarCrashEventQueue(),
                         // [takedown wave 2026-09-02] the traffic-type response queue, same rule.
                         lpcWorldOutput->GetTrafficTypeResponseQueue(),
-                        lpcWorldOutput->GetAICarOutputInterface());
+                        lpcWorldOutput->GetAICarOutputInterface(),
+                        lpcWorldOutput->GetRaceCarGlobalOutputInterface());
                     mpWorldUpdateOutputBuffer->UnlockForRead();
                 }
 

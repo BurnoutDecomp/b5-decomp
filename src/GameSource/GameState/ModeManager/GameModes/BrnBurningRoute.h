@@ -5,18 +5,17 @@
 
 namespace BrnGameState
 {
-// BurningRouteMode is a concrete offline game mode. Bases (OfflineGameMode -> GameMode) are #included
-// from their owning headers, never forked. Only GetName and GetOutroTimeout are owned by this
-// TU (DWARF-attested); the rest of the mode belongs to BrnBurningRoute.cpp.
-//
-// NOT-YET-RECONSTRUCTED OVERRIDES (vtable 0x820D06B8, checked 2026-08-26): BurningRouteMode also
-// overrides slot 2 PreWorldUpdate (0x82331D98), slot 5 Start (0x82331A80) and slot 15
-// FillInGameModeSpecificResults -- the DWARF declares that set. No body exists in the tree for any
-// of them, so none is declared here (a declaration with no definition is an unresolved external as
-// soon as the vtable is emitted); the mode inherits the GameMode base for all three.
+// Original offline Burning Route setup and player tracking.
 class BurningRouteMode : public OfflineGameMode
 {
 public:
+    void Start(const StartGameModeParams* lpStartGameModeParams, GameModeParams* lpGameModeParams,
+               ScoringSystem* lpScoringSystem) override;
+    void PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
+                        const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+                        const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCars,
+                        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
+                        bool lbPaused, const ScoringSystem* lpScoringSystem) override;
     virtual const char* GetName() const;                               // slot 6,  X360 0x827E2508
     virtual f32         GetOutroTimeout() const;                       // slot 16, X360 0x827E2518
 
@@ -29,6 +28,7 @@ private:
     // DWARF: BrnBurningRoute.cpp:27. The mode's fixed outro timeout; the X360 GetOutroTimeout body
     // returns 0.0, so this constant is 0.0f for this build (same shape as RaceMode).
     static const f32 KF_OUTRO_TIME_SECONDS;
+    ::EActiveRaceCarIndex mePlayerActiveIndex; // DecFIGS :97; ARTIST PreWorldUpdate stores +0xD4.
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------

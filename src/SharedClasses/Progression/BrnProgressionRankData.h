@@ -156,6 +156,7 @@ public:
 
     // [road-rage wave 2026-09-02] three accessors RoadRageMode::Start @0x82330678 inlines:
     // Inlined by SurvivorMode::Start at ARTIST 0x823324E0 (rank +0x10).
+    f32 GetTrafficDensityBurningRoute() const { return mfTrafficDensityBurningRoute; } // ARTIST 0x82331B74 (+0x08)
     f32 GetTrafficDensitySurvival() const { return mfTrafficDensitySurvival; }
     f32 GetTrafficDensityRoadRage() const { return mfTrafficDensityRoadRage; } // DWARF :156; Start `lfs f13,0xC(r24)` @0x823307E4
     u16 GetRoadRageTime() const           { return muRoadRageTime; }           // DWARF :132; Start `lhz r10,0x52(r24)` @0x823309F4
