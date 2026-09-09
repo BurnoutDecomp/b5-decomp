@@ -17,10 +17,10 @@
 // FUNCTIONS BODIED HERE (X360 addresses; instruction counts from the exports):
 //   InstantResultsState (ctor)     @0x825006D8 ( 56)   OnEnter        @0x824C3398 (357)
 //   OnLeave                        @0x824C3930 (208)   Update         @0x824DF760 (244)
-//   HandleIncomingEvents           @0x824DBAD8 (427, PARTIAL -- see the banner on it)
+//   HandleIncomingEvents           @0x824DBAD8 (427)
 //   AppendAllExpectedComponents    @0x824BB458 ( 31)   AppendExpectedScreenComponents
 //                                                                     @0x824B3CB0 ( 83)
-//   SelectSubstates                @0x824D59B0 ( 49)   UpdateSubstate @0x824DC188 (133, PARTIAL)
+//   SelectSubstates                @0x824D59B0 ( 49)   UpdateSubstate @0x824DC188 (133)
 //   TickSubstateAndEndIfDone       @0x824BB4D8 ( 27)   HasSubstateTimedOut @0x824B48C8 ( 52)
 //   TriggerExitResults             @0x824D58A8 ( 66)   WillShowCredits @0x824C5C38 ( 59)
 //   GetNextSubstate                @0x824B3820         ResetStateTimer @0x824B38C0
@@ -637,16 +637,30 @@ namespace BrnGui
     }
 
     // -----------------------------------------------------------------------------------
+    // IsAWinningResult -- the three-way `meWinState` test the X360 emits inline in
+    // UpdateTakePhotoPage @0x824C4044 and again @0x824C4168, and that SetupComponents /
+    // UpdateEventResults spell as `meWinState <= E_RESULTS_PLAIN_WIN`.
+    //
+    // ⭐ The asm is worth recording, because it is NOT a `<=`: it compares against 1, then 0,
+    // then 2, and sets the flag on any of the three (`cmpwi 1 / beq; cmpwi 0 / beq; cmpwi 2 /
+    // bne`). Over EResultsAnimations that is exactly the set {DETAILED_WIN, WIN_WITH_TARGETS,
+    // PLAIN_WIN} -- i.e. "the player won" -- so the source-level predicate is a membership
+    // test, not an ordering one. Outlined here (AGENTS.md "inlining reversal") so the two call
+    // sites read as the question they are asking.
+    // -----------------------------------------------------------------------------------
+    static bool IsAWinningResult(InstantResultsState::EResultsAnimations leWinState)
+    {
+        return leWinState == InstantResultsState::E_RESULTS_WIN_WITH_TARGETS
+            || leWinState == InstantResultsState::E_RESULTS_DETAILED_WIN
+            || leWinState == InstantResultsState::E_RESULTS_PLAIN_WIN;
+    }
+
+    // -----------------------------------------------------------------------------------
     // OnLeave  @0x824C3930  (cpp:399, 208 instructions)
     // Post the three tear-down state-interface events, release every streamed component
     // resource, drop the large event icon, and unregister.
-    // ⛔ PARTIAL, AND SAID SO OUT LOUD: the X360 body also (a) emits a
-    // GuiEventTickerCustomMessage("NO_LICENCE_WIN_ACQUIRED") on a losing result whose gate
-    // reads mResults +0xB5, and (b) computes a "suggested game mode" from the cache
-    // (a `% 10` walk skipping modes 2/4/6/9, asserted against E_MODE_OFFLINE_COUNT at
-    // cpp:468/469) whose result the visible asm never stores -- it feeds an arm this wave
-    // could not attribute. Neither is on the results-screen path; both are named here so the
-    // next wave finds them instead of assuming OnLeave is complete.
+    // ARTIST clears ordinary ticker messages, then explains a win that did not count
+    // towards the licence. The later suggested-mode scan remains unattributed.
     // -----------------------------------------------------------------------------------
     void InstantResultsState::OnLeave()
     {
@@ -660,6 +674,11 @@ namespace BrnGui
         mpStateInterface->PlayAptMovie("", 3);
         mpStateInterface->PlayAptMovie("", 2);
 
+        GuiEventTickerClearMessages lClear = {{0, 0}};
+        CgsGui::GuiEventWrapper<GuiEventTickerClearMessages, 40> lClearRecord(lClear);
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lClearRecord), 40, sizeof(lClearRecord));
+
         mLicense.ReleaseResources();
         mPhotoBoothComponent.ReleaseResources();
         mUnlockedXSCarComponent.ReleaseResources();
@@ -670,6 +689,16 @@ namespace BrnGui
         {
             mpGuiCache->EnsureResourceIsUnloaded(mLargeIconResource);
             mLargeIconResource.muId = 0;
+        }
+
+        if (mpGuiCache != 0 && IsAWinningResult(meWinState) && !mResults.mbCountsTowardsProgression)
+        {
+            GuiEventTickerCustomMessage lMessage = {};
+            lMessage.Construct(false, false, true, false);
+            lMessage.AddString("NO_LICENCE_WIN_ACQUIRED", 2);
+            CgsGui::GuiEventWrapper<GuiEventTickerCustomMessage, 40> lMessageRecord(lMessage);
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lMessageRecord), 40, sizeof(lMessageRecord));
         }
 
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, KI_NUM_EVENTS_OBSERVED);
@@ -794,12 +823,7 @@ namespace BrnGui
 
     // -----------------------------------------------------------------------------------
     // UpdateSubstate  @0x824DC188  (133 instructions)
-    // ⛔ PARTIAL. The X360 dispatches all ten sub-states; the eight presentation updaters are
-    // not reconstructed yet (see the ⛔ list in this file's banner), so they route through the
-    // logged stubs in BrnScreenStatesDataLinkStubs.cpp, so a run that reaches one says so in
-    // BrnGame.log instead of doing nothing and looking correct.
-    // The dispatch structure itself, its two asserts and the two trailing picture pumps are
-    // faithful.
+    // Dispatch the ten presentation stages and pump both player-picture components.
     // -----------------------------------------------------------------------------------
     void InstantResultsState::UpdateSubstate()
     {
@@ -1077,25 +1101,6 @@ namespace BrnGui
                 mLicense.ShowLicense(false);
             mbLicenseShown = true;
         }
-    }
-
-    // -----------------------------------------------------------------------------------
-    // IsAWinningResult -- the three-way `meWinState` test the X360 emits inline in
-    // UpdateTakePhotoPage @0x824C4044 and again @0x824C4168, and that SetupComponents /
-    // UpdateEventResults spell as `meWinState <= E_RESULTS_PLAIN_WIN`.
-    //
-    // ⭐ The asm is worth recording, because it is NOT a `<=`: it compares against 1, then 0,
-    // then 2, and sets the flag on any of the three (`cmpwi 1 / beq; cmpwi 0 / beq; cmpwi 2 /
-    // bne`). Over EResultsAnimations that is exactly the set {DETAILED_WIN, WIN_WITH_TARGETS,
-    // PLAIN_WIN} -- i.e. "the player won" -- so the source-level predicate is a membership
-    // test, not an ordering one. Outlined here (AGENTS.md "inlining reversal") so the two call
-    // sites read as the question they are asking.
-    // -----------------------------------------------------------------------------------
-    static bool IsAWinningResult(InstantResultsState::EResultsAnimations leWinState)
-    {
-        return leWinState == InstantResultsState::E_RESULTS_WIN_WITH_TARGETS
-            || leWinState == InstantResultsState::E_RESULTS_DETAILED_WIN
-            || leWinState == InstantResultsState::E_RESULTS_PLAIN_WIN;
     }
 
     // ARTIST 0x824B3E00: only the photo interrupt consumes select/cancel.
