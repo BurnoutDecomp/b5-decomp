@@ -421,3 +421,16 @@ f32 MapTransform::CalculateZoomFactor( Vector2 lv2A, Vector2 lv2B, Vector2 lv2C,
 }
 
 } // namespace BrnGui
+
+namespace BrnGui
+{
+// ARTIST 0x824581F0. Each failed all-lanes comparison branches to true (0x82458364).
+// Preserve those early-outs, including their disjunction, rather than correcting the game.
+bool MapTransform::IsWithinViewport(Vector3 lv3World, f32 lfMarginX, f32 lfMarginY)
+{
+    const Vector2 lv2World = { lv3World.x, lv3World.z, 0.0f, 0.0f };
+    const Vector2 lv2Unit = Transform(lv2World, smm33ZoomedWorldTransform);
+    return !(-lfMarginX > lv2Unit.x) || !(lv2Unit.x > lfMarginX + 1.0f) ||
+        !(-lfMarginY > lv2Unit.y) || !(lv2Unit.y > lfMarginY + 1.0f);
+}
+}

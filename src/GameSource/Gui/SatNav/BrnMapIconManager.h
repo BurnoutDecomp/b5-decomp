@@ -316,6 +316,13 @@ namespace BrnGui
                                            // mbRotateSatNav, meIconSizeMode,
                                            // mbShowingPreRaceRoute, miNumUsedIcons
 
+        bool IsTrackedIcon(const GuiEventUpdateSatNav::SatNavIconInfo* lpIcon);
+        bool IsStartIcon(const GuiEventUpdateSatNav::SatNavIconInfo* lpIcon);
+        bool IsPendingRaceLandmark(const GuiEventUpdateSatNav::SatNavIconInfo* lpIcon) const;
+        bool IsFinishIcon(const GuiEventUpdateSatNav::SatNavIconInfo* lpIcon);
+        bool IsActiveLandmark(const GuiEventUpdateSatNav::SatNavIconInfo* lpIcon);
+        bool ShouldDisplayLandmark(const GuiEventUpdateSatNav::SatNavIconInfo* lpIcon);
+
         // @ 0x824F7B60 -- count the rival icons in the sat-nav info set (network rivals,
         // marked men and ordinary rivals).
         s32 GetNumRivalIcons() const;

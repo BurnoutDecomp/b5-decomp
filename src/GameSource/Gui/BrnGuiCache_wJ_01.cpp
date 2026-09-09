@@ -839,3 +839,47 @@ namespace BrnGui
         return lpOutIconInfo;
     }
 }
+
+namespace BrnGui
+{
+// ARTIST 0x825063C8. Unlike the index lookup, this stores the landmark's region index.
+void GuiCache::GetLandmarkInfoAtPositionInList(s32 liIndex,
+    GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
+{
+    CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");
+    const BrnTrigger::Landmark* lpLandmark =
+        mpWorldDataController->GetLandmarkInfoAtPositionInList(liIndex);
+    CGS_ASSERT(lpLandmark != 0, "lpLandmark");
+        // The three `lfs` off the landmark's BoxRegion position + `stw 0` for the w lane,
+        // then one `stvx128` -- the whole 16-byte lane in one store.
+        const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
+        const Vector4 lv4PositionLane = { lv3LandmarkPosition.x, lv3LandmarkPosition.y,
+                                          lv3LandmarkPosition.z, 0.0f };
+        lpOutIconInfo->SetPositionLane(lv4PositionLane);                    // stvx128 -> +0x00
+        lpOutIconInfo->SetRotation(0.0f);                                   // stfs    -> +0x18
+        lpOutIconInfo->SetSpeedMph(0.0f);                                   // stfs    -> +0x1C
+        lpOutIconInfo->SetCgsId(lpLandmark->GetId());                       // std     -> +0x10
+        lpOutIconInfo->SetDistrict(
+            static_cast<BrnWorld::EDistrict>(lpLandmark->GetDistrict()));   // stb     -> +0x25
+        lpOutIconInfo->SetCounty(
+            BrnWorld::WorldRegion::DistrictToCounty(lpOutIconInfo->GetDistrict()));  // -> +0x24
+        lpOutIconInfo->SetLandmarkIndexHalf(
+            static_cast<s16>(lpLandmark->GetRegionIndex()));            // sth     -> +0x20
+        lpOutIconInfo->SetIconType(
+            GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK);   // stb 4   -> +0x28
+        lpOutIconInfo->SetActiveRaceCarIndex(E_ACTIVE_RACE_CAR_INDEX_INVALID); // stb -1 -> +0x26
+        lpOutIconInfo->SetDesignIndex(lpLandmark->GetDesignIndex());        // stb     -> +0x22
+
+}
+}
+
+namespace BrnGui
+{
+// ARTIST 0x824EC610: the final authored event checkpoint is the finish landmark.
+BrnGameState::LandmarkIndex GuiCache::GetEventFinishLandmark() const
+{
+    const u8 luCount = GetCheckpointsInEvent();
+    CGS_ASSERT(luCount > 0, "lu8NumCheckpointsInEvent > 0");
+    return BrnGameState::LandmarkIndex(maCheckpointLandmarks[luCount - 1]);
+}
+}

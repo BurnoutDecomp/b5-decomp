@@ -478,3 +478,23 @@ namespace BrnGui
         }
     }
 }
+
+namespace BrnGui
+{
+// ARTIST 0x824F4358: refresh the compact active landmark list from remaining trackers.
+const BrnGameState::LandmarkIndex* GuiTracker::GetActivelyTrackedLandmarks()
+{
+    if (miCurrentlyTrackedIndex != -1)
+    {
+        s32 liActive = 0;
+        for (s32 liIndex = miCurrentlyTrackedIndex; liIndex < miTrackerCount; ++liIndex)
+        {
+            CGS_ASSERT(liIndex >= 0 && liIndex < KI_TRACKER_STACK_SIZE, "Invalid tracker index");
+            CGS_ASSERT(liActive >= 0 && liActive < KI_TRACKER_STACK_SIZE, "Invalid active tracker count");
+            maActivelyTrackedLandmarks[liActive++] =
+                BrnGameState::LandmarkIndex(maTrackerRecords[liIndex].mTargetLandmarkIndex);
+        }
+    }
+    return maActivelyTrackedLandmarks;
+}
+}

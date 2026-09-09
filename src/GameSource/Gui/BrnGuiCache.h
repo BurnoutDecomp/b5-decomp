@@ -544,6 +544,9 @@ namespace BrnGui
             return &maEventStarts[luEventStartIndex];
         }
 
+        void GetLandmarkInfoAtPositionInList(s32 liIndex,
+            GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const; // ARTIST 0x825063C8
+
         // DWARF h:1456-ish -- fill lpOutIconInfo with the online-landmark icon record at the given
         // position-in-list slot (used for meIconDisplayType == ONLINE_CHECKPOINTS). Returns the
         // out pointer. The element is the GuiEventUpdateSatNav::SatNavIconInfo (committed type).
@@ -1242,6 +1245,7 @@ namespace BrnGui
         // its Update / HandleWreckedEvent sites and the PS3 DWARF has no accessor rows
         // for these X360-only offsets, so friendship -- not a fabricated accessor
         // surface -- is the honest exposure. (HudMessageAnalyzer wave-C keystone.)
+        friend class MapIconManager; // ARTIST map icon reads of landmark lists.
         friend struct HudMessageAnalyzer;
 
         // Same exposure rule for the online game-room screen (wave-H keystone): the
@@ -1625,7 +1629,7 @@ namespace BrnGui
         // reset on mode start, the shape every other 8-lane table on this class has.
         // No member is shifted (5 + 32 + 1024 == 0x4F9C - 0x4B77).
         s32  maPerRaceCarWord_4B7C[8];                   // +0x4B7C (19324) FLAG: name inferred, no reader recovered
-        u8   mPad_4B9C[0x4F9C - 0x4B9C];                 // +0x4B9C..+0x4F9B
+        u16 maTargetLandmarkIndices[512];                 // +0x4B9C, DecFIGS; ARTIST IsTrackedIcon/IsActiveLandmark
         // ADDITIVE CARVE (E1 event-status wave 2026-08-26) from the TAIL of the former
         // mPad_4B77 -- the count of remaining checkpoints the id-492 GuiEventCurrentStatus
         // record carries. X360 GuiCache::RecEvent case 112 @0x82510540/0x82510558:

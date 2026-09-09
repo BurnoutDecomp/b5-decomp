@@ -1,3 +1,6 @@
+#include "GameSource/Gui/BrnGuiWorldDataController.h"
+#include "GameSource/Gui/SatNav/BrnGuiTracker.h"
+#include "SharedClasses/Progression/BrnRace.h"
 // BrnMapIconManager.cpp
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The BrnGui::MapIconManager members the
 // X360 ARTIST build emits as out-of-line functions in this slice:
@@ -961,6 +964,152 @@ void MapIconManager::UpdateFreeburnChallengeIcons()
     }
 }
 
+
+// ARTIST 0x824F49E0.
+bool MapIconManager::IsTrackedIcon(const SatNavIconInfo* lpIcon)
+{
+    CGS_ASSERT(lpIcon != 0, "lpSatNavIconInfo");
+    bool lbTracked = false;
+    if (mpGuiCache)
+    {
+        GuiTracker* lpTracker = mpGuiCache->GetGuiTracker();
+        CGS_ASSERT(lpTracker != 0, "Invalid tracker pointer");
+        const s32 liMode = mpGuiCache->GetGameMode();
+        if (liMode == 15 || liMode == 16)
+        {
+            for (s32 li = 0; li < mpGuiCache->miNumRemainingCheckpoints; ++li)
+                if (lpIcon->GetIconType() == SatNavIconInfo::E_SATNAVICON_LANDMARK &&
+                    static_cast<u16>(lpIcon->GetLandmarkIndexHalf()) == mpGuiCache->maTargetLandmarkIndices[li])
+                    lbTracked = true;
+        }
+        else if (lpTracker->IsTrackingActive())
+        {
+            const auto* lpInfo = lpTracker->GetTrackerInformation(lpTracker->GetCurrentlyTrackedIndex());
+            lbTracked = lpInfo->meIconType == lpIcon->GetIconType() &&
+                lpInfo->mTargetLandmarkIndex == static_cast<u16>(lpIcon->GetLandmarkIndexHalf());
+        }
+    }
+    return lpIcon->GetIconType() == SatNavIconInfo::E_SATNAVICON_NETWORKRIVAL || lbTracked;
+}
+
+// ARTIST 0x824F4BC0.
+bool MapIconManager::IsStartIcon(const SatNavIconInfo* lpIcon)
+{
+    CGS_ASSERT(lpIcon != 0, "lpSatNavIconInfo");
+    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+    if ((mbIsDisplayingEventInfo || mpGuiCache->GetInEventColouringGate()) && mpGuiCache->GetNumPresetRaces() > 0)
+    {
+        CGS_ASSERT(mi8CurrentEventIndex >= 0 && mi8CurrentEventIndex < mpGuiCache->GetNumPresetRaces(), "Invalid preset race index");
+        const auto* lpRace = mpGuiCache->GetPresetRace(mi8CurrentEventIndex);
+        CGS_ASSERT(lpRace != 0, "lpPresetRace");
+        return static_cast<s32>(lpRace->GetStartLandmarkIndex()) == static_cast<u16>(lpIcon->GetLandmarkIndexHalf());
+    }
+    return false;
+}
+
+// ARTIST 0x824F4D00.
+bool MapIconManager::IsPendingRaceLandmark(const SatNavIconInfo* lpIcon) const
+{
+    CGS_ASSERT(lpIcon != 0, "lpSatNavIconInfo");
+    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+    const s32 liMode = mpGuiCache->GetGameMode();
+    if (!mpGuiCache->GetInEventColouringGate() || liMode == 15 || liMode == 16)
+        return false;
+    GuiTracker* lpTracker = mpGuiCache->GetGuiTracker();
+    CGS_ASSERT(lpTracker != 0, "lpTracker");
+    const s32 liCurrent = lpTracker->GetCurrentlyTrackedIndex();
+    if (liCurrent >= lpTracker->GetNumTracked() - 1)
+        return false;
+    const auto* lpInfo = lpTracker->GetTrackerInformation(liCurrent + 1);
+    CGS_ASSERT(lpInfo != 0, "lpTrackerInfo");
+    return lpInfo->mTargetLandmarkIndex == static_cast<u16>(lpIcon->GetLandmarkIndexHalf());
+}
+
+// ARTIST 0x824F4E48.
+bool MapIconManager::IsFinishIcon(const SatNavIconInfo* lpIcon)
+{
+    if (mpGuiCache->GetInEventColouringGate())
+        return mpGuiCache->GetGameMode() != 13 &&
+            static_cast<s32>(mpGuiCache->GetEventFinishLandmark()) == static_cast<u16>(lpIcon->GetLandmarkIndexHalf());
+    if (mbIsDisplayingEventInfo && mpGuiCache->GetNumPresetRaces() > 0)
+    {
+        CGS_ASSERT(mi8CurrentEventIndex >= 0 && mi8CurrentEventIndex < mpGuiCache->GetNumPresetRaces(), "Invalid preset race index");
+        const auto* lpRace = mpGuiCache->GetPresetRace(mi8CurrentEventIndex);
+        CGS_ASSERT(lpRace != 0, "lpPresetRace");
+        return static_cast<s32>(lpRace->GetFinishLandmarkIndex()) == static_cast<u16>(lpIcon->GetLandmarkIndexHalf());
+    }
+    return false;
+}
+
+// ARTIST 0x8250A970: select the active landmark source, then apply the county filter.
+bool MapIconManager::IsActiveLandmark(const SatNavIconInfo* lpIcon)
+{
+    if (lpIcon->GetIconType() != SatNavIconInfo::E_SATNAVICON_LANDMARK)
+        return false;
+    u16 laBuiltLandmarks[512];
+    const u16* lpLandmarks = mpGuiCache->mau16ActiveLandmarks;
+    u8 luCount = mpGuiCache->GetNumActiveLandmarks();
+    if (!mbShowingOnlineRoute && !mbShowingPreRaceRoute && !mbShowingCrashNavRoute)
+    {
+        const s32 liMode = mpGuiCache->GetGameMode();
+        if (liMode == 13 || liMode == 15 || liMode == 16)
+        {
+            lpLandmarks = mpGuiCache->maTargetLandmarkIndices;
+            luCount = static_cast<u8>(mpGuiCache->miNumRemainingCheckpoints);
+        }
+        else if (static_cast<u32>(liMode) <= 9 || mpGuiCache->GetInEventColouringGate())
+        {
+            GuiTracker* lpTracker = mpGuiCache->GetGuiTracker();
+            CGS_ASSERT(lpTracker != 0, "lpGuiTracker");
+            const s32 liCurrent = lpTracker->GetCurrentlyTrackedIndex();
+            luCount = liCurrent == -1 ? 0 : static_cast<u8>(lpTracker->GetNumTracked() - liCurrent);
+            const auto* lpTracked = lpTracker->GetActivelyTrackedLandmarks();
+            for (u8 li = 0; li < luCount; ++li)
+                laBuiltLandmarks[li] = static_cast<u16>(static_cast<s32>(lpTracked[li]));
+            lpLandmarks = laBuiltLandmarks;
+        }
+        else if (meIconFilterMode >= E_ICONFILTER_LANDMARKS_ALL && meIconFilterMode <= E_ICONFILTER_LANDMARKS_DOWNTOWN_PARADISE)
+        {
+            s32 liCount = 0;
+            for (s32 li = 0; li < mpGuiCache->GetWorldDataController()->GetTotalNumberOfLandmarks(); ++li)
+            {
+                SatNavIconInfo lInfo;
+                mpGuiCache->GetLandmarkInfoAtPositionInList(li, &lInfo);
+                if (lInfo.GetIconType() == SatNavIconInfo::E_SATNAVICON_LANDMARK)
+                {
+                    CGS_ASSERT(liCount < 512, "Landmark list capacity exceeded");
+                    laBuiltLandmarks[liCount++] = static_cast<u16>(lInfo.GetLandmarkIndexHalf());
+                }
+            }
+            lpLandmarks = laBuiltLandmarks;
+            luCount = static_cast<u8>(liCount);
+        }
+    }
+    if (meIconFilterMode == E_ICONFILTER_PLAYER_ONLY)
+        return false;
+    if (meIconFilterMode >= E_ICONFILTER_LANDMARKS_PALM_BAY_HEIGHTS &&
+        meIconFilterMode <= E_ICONFILTER_LANDMARKS_DOWNTOWN_PARADISE &&
+        static_cast<s32>(lpIcon->GetCounty()) != static_cast<s32>(meIconFilterMode) - 2)
+        return false;
+    for (u8 li = 0; li < luCount; ++li)
+        if (lpLandmarks[li] == static_cast<u16>(lpIcon->GetLandmarkIndexHalf()))
+            return true;
+    return false;
+}
+
+// ARTIST 0x8250AD40: tracked and next checkpoints remain visible outside the map bounds.
+bool MapIconManager::ShouldDisplayLandmark(const SatNavIconInfo* lpIcon)
+{
+    if (!IsActiveLandmark(lpIcon))
+        return false;
+    if (IsTrackedIcon(lpIcon) || IsPendingRaceLandmark(lpIcon))
+        return true;
+    const Vector4& lrBounds = MapTransform::GetZoomedWorldRect();
+    const Vector4& lrPos = lpIcon->GetPositionLane();
+    return lrPos.x >= lrBounds.x && lrPos.x <= lrBounds.z &&
+        lrPos.z <= lrBounds.y && lrPos.z >= lrBounds.w;
+}
+
 // @ 0x82511C88 -- refresh the world-derived icons into the used set.
 void MapIconManager::UpdateWorldIcons()
 {
@@ -973,20 +1122,35 @@ void MapIconManager::UpdateWorldIcons()
 
     if (liGameMode != -1 || mbShowingCrashNavRoute || mbShowingOnlineRoute)
     {
-        // [UI-gate] the landmark passes: the crash-nav/online landmark-list walk
-        // (WorldDataController landmark table + ShouldDisplayLandmark) and the in-event
-        // checkpoint walk (GetCheckpointsInEvent + GetLandmarkInfoFromIndex). Their
-        // whole dependency family (the landmark state machine, IsTracked/IsStart/
-        // IsFinish/IsPending, GuiTracker's tracked list) rides one parked slice with
-        // the case-4 consumer in UpdateSatNavIcons -- no producer, no consumer, both
-        // logged. Unreachable in offline freeburn (mode -1, no routes shown).
-        static bool sbLoggedLandmarkPark = false;
-        if (!sbLoggedLandmarkPark && CgsDev::Log::gpDebugPrint != 0)
+        if (mbShowingCrashNavRoute || mbShowingOnlineRoute)
         {
-            sbLoggedLandmarkPark = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] PARK: MapIconManager::UpdateWorldIcons landmark/checkpoint "
-                   "passes (landmark slice unreconstructed)\n";
+            const s32 liCount = mpGuiCache->GetWorldDataController()->GetTotalNumberOfLandmarks();
+            for (s32 li = 0; li < liCount && miNumUsedIcons < miMaxNumberIcons; ++li)
+            {
+                SatNavIconInfo lInfo;
+                mpGuiCache->GetLandmarkInfoAtPositionInList(li, &lInfo);
+                if (!ShouldDisplayLandmark(&lInfo))
+                    continue;
+                if (mbShowingOnlineRoute)
+                {
+                    for (u8 lu = 0; lu < mpGuiCache->GetNumActiveLandmarks() && miNumUsedIcons < miMaxNumberIcons; ++lu)
+                        if (mpGuiCache->mau16ActiveLandmarks[lu] == static_cast<u16>(lInfo.GetLandmarkIndexHalf()))
+                            mSatNavIconInfo[miNumUsedIcons++] = lInfo;
+                }
+                else
+                    mSatNavIconInfo[miNumUsedIcons++] = lInfo;
+            }
+        }
+        else
+        {
+            const s32 liCount = mpGuiCache->GetCheckpointsInEvent();
+            for (s32 li = 0; li < liCount && miNumUsedIcons < miMaxNumberIcons; ++li)
+            {
+                SatNavIconInfo lInfo;
+                mpGuiCache->GetLandmarkInfoFromIndex(BrnGameState::LandmarkIndex(mpGuiCache->maCheckpointLandmarks[li]), &lInfo);
+                if (ShouldDisplayLandmark(&lInfo))
+                    mSatNavIconInfo[miNumUsedIcons++] = lInfo;
+            }
         }
     }
 
@@ -1332,18 +1496,78 @@ void MapIconManager::UpdateSatNavIcons()
 
         case SatNavIconInfo::E_SATNAVICON_LANDMARK:   // 4
         {
-            // [UI-gate] the landmark state machine (tracked/start/finish/pending +
-            // the checkpoint-stacking offsets) rides the parked landmark slice with
-            // its producers in UpdateWorldIcons -- no records of this type can enter
-            // the used set until that slice lands, so this arm is a coherent park.
-            static bool sbLoggedLandmarkArmPark = false;
-            if (!sbLoggedLandmarkArmPark && CgsDev::Log::gpDebugPrint != 0)
+            if (meIconSizeMode != E_ICONSIZE_SMALL)
             {
-                sbLoggedLandmarkArmPark = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[UI-gate] PARK: UpdateSatNavIcons landmark arm (case 4) "
-                       "(landmark slice unreconstructed)\n";
+                if (mbShowingOnlineRoute || mbShowingPreRaceRoute || mbShowingCrashNavRoute)
+                {
+                    liState = mbShowingOnlineRoute ? MapIconBrnBase::E_ICONSTATE_CRASHNAV_ONLINE_FINISH_POINT :
+                        (mbShowingCrashNavRoute || mpGuiCache->GetInEventColouringGate() ?
+                         MapIconBrnBase::E_ICONSTATE_CRASHNAV_CUSTOMRENDERED_FINISH_POINT :
+                         MapIconBrnBase::E_ICONSTATE_CRASHNAV_PRERACE_FINISH_POINT);
+                    const u8 luCount = mpGuiCache->GetNumActiveLandmarks();
+                    const u16 luLandmark = static_cast<u16>(lrRecord.GetLandmarkIndexHalf());
+                    s32 liCheckpoint = -1;
+                    for (s32 li = 0; li < luCount; ++li)
+                        if (mpGuiCache->mau16ActiveLandmarks[li] == luLandmark &&
+                            (liCheckpoint == -1 || li + 1 == miSelectedCheckpoint))
+                            liCheckpoint = li + 1;
+                    CGS_ASSERT(liCheckpoint != -1, "liCheckpointIndex != -1");
+                    s32 liDuplicates = 0, liEarlier = 0;
+                    for (s32 li = 0; li < liNumIcons; ++li)
+                        if (mSatNavIconInfo[li].GetLandmarkIndexHalf() == lrRecord.GetLandmarkIndexHalf())
+                        {
+                            ++liDuplicates;
+                            if (li < liIcon) ++liEarlier;
+                        }
+                    const bool lbOnlineRace = mpGuiCache->GetOnlineGameMode() == 13;
+                    if (lbOnlineRace || liCheckpoint != luCount)
+                    {
+                        if (liEarlier || mpGuiCache->mau16ActiveLandmarks[luCount - 1] != luLandmark || lbOnlineRace)
+                        {
+                            lfStackOffsetY = static_cast<f32>(liDuplicates - liEarlier - 1) * -4.0f;
+                            char lacCheckpoint[128];
+                            if (liDuplicates - liEarlier == 1)
+                                CgsCore::SPrintf(lacCheckpoint, sizeof(lacCheckpoint), "%d", liCheckpoint);
+                            else
+                                lacCheckpoint[0] = '\0';
+                            lrIcon.SetIconText(lacCheckpoint, false);
+                            liState = MapIconBrnBase::E_ICONSTATE_CRASHNAV_ONLINE_CHECKPOINT;
+                        }
+                        else
+                            lfStackOffsetY = static_cast<f32>(liDuplicates - 1) * -4.0f;
+                    }
+                    else
+                        lfStackOffsetY = static_cast<f32>(liDuplicates - liEarlier - 1) * -4.0f;
+                }
+                else if (IsStartIcon(&lrRecord))
+                    liState = MapIconBrnBase::E_ICONSTATE_CRASHNAV_LANDMARKSTART;
+                else if (IsFinishIcon(&lrRecord))
+                    liState = MapIconBrnBase::E_ICONSTATE_CRASHNAV_LANDMARKFINISH;
             }
+            else if (mpGuiCache->GetInEventColouringGate())
+            {
+                if (IsTrackedIcon(&lrRecord))
+                    liState = IsFinishIcon(&lrRecord) ? MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARKFINISH :
+                        MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARKTRACKED;
+                else if (IsPendingRaceLandmark(&lrRecord))
+                {
+                    GuiTracker* lpTracker = mpGuiCache->GetGuiTracker();
+                    CGS_ASSERT(lpTracker != 0, "lpGuiTracker");
+                    const auto* lpInfo = lpTracker->GetTrackerInformation(lpTracker->GetCurrentlyTrackedIndex());
+                    CGS_ASSERT(lpInfo != 0, "lpTrackerInfo");
+                    if (MapTransform::IsWithinViewport(lpInfo->mv3Position, 0.0f, 0.0f))
+                        liState = IsFinishIcon(&lrRecord) ? MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARKFINISH_PENDING :
+                            MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARK_PENDING;
+                }
+            }
+            else if (IsFinishIcon(&lrRecord))
+                liState = MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARKFINISH;
+            else if (IsTrackedIcon(&lrRecord))
+                liState = MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARKTRACKED;
+            else
+                liState = IsStartIcon(&lrRecord) ? MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARKSTART :
+                    MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARK;
+            lrIcon.SetRotation(0.0f);
             break;
         }
 
@@ -1419,7 +1643,7 @@ void MapIconManager::UpdateSatNavIcons()
             lv3Record.x = lv4Pos.x; lv3Record.y = lv4Pos.y;
             lv3Record.z = lv4Pos.z; lv3Record.w = lv4Pos.w;
             Vector2 lv2Device = MapTransform::WorldToDevice(lv3Record, true);
-            lv2Device.y += lfStackOffsetY;   // the (parked) checkpoint-stacking lift
+            lv2Device.y += lfStackOffsetY;   // the checkpoint-stacking lift
             lrIcon.SetPosition(lv2Device);
         }
         lrIcon.SetState(static_cast<MapIconBrnBase::IconState>(liState));
@@ -1693,25 +1917,78 @@ void MapIconManager::UpdateCrashNavIcons()
 
         case SatNavIconInfo::E_SATNAVICON_LANDMARK:   // 4
         {
-            // [UI-gate] the crash-nav landmark state machine. Two whole sub-trees:
-            //   * the LARGE-map route arm (states 47 / 50 / 52 / 48) with its checkpoint
-            //     index walk over the cache's junction tables and the "%d" / "-" label
-            //     SetIconText naming plus the stack offsets;
-            //   * the SMALL-map arm (tracked / pending / start / finish -> 26..33) which
-            //     needs IsTrackedIcon @0x824F49E0, IsStartIcon @0x824F4BC0, IsFinishIcon
-            //     @0x824F4E48, IsPendingRaceLandmark @0x824F4D00,
-            //     GuiTracker::GetTrackerInformation and MapTransform::IsWithinViewport.
-            // NONE of those has a body in the tree, and their PRODUCER (the landmark pass
-            // of UpdateWorldIcons) is parked too -- so no record of this type can reach
-            // the used set on this build. A coherent park at both ends.
-            static bool sbLoggedLandmarkArmPark = false;
-            if (!sbLoggedLandmarkArmPark && CgsDev::Log::gpDebugPrint != 0)
+            if (meIconSizeMode != E_ICONSIZE_SMALL)
             {
-                sbLoggedLandmarkArmPark = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[UI-gate] PARK: UpdateCrashNavIcons landmark arm (case 4) "
-                       "(landmark/tracker slice unreconstructed)\n";
+                if (mbShowingOnlineRoute || mbShowingPreRaceRoute || mbShowingCrashNavRoute)
+                {
+                    liState = mbShowingOnlineRoute ? MapIconBrnBase::E_ICONSTATE_CRASHNAV_ONLINE_FINISH_POINT :
+                        (mbShowingCrashNavRoute && mpGuiCache->GetInEventColouringGate() ?
+                         MapIconBrnBase::E_ICONSTATE_CRASHNAV_CUSTOMRENDERED_FINISH_POINT :
+                         MapIconBrnBase::E_ICONSTATE_CRASHNAV_PRERACE_FINISH_POINT);
+                    const u8 luCount = mpGuiCache->GetNumActiveLandmarks();
+                    const u16 luLandmark = static_cast<u16>(lrRecord.GetLandmarkIndexHalf());
+                    s32 liCheckpoint = -1;
+                    for (s32 li = 0; li < luCount; ++li)
+                        if (mpGuiCache->mau16ActiveLandmarks[li] == luLandmark &&
+                            (liCheckpoint == -1 || li + 1 == miSelectedCheckpoint))
+                            liCheckpoint = li + 1;
+                    CGS_ASSERT(liCheckpoint != -1, "liCheckpointIndex != -1");
+                    s32 liDuplicates = 0, liEarlier = 0;
+                    for (s32 li = 0; li < liNumIcons; ++li)
+                        if (mSatNavIconInfo[li].GetLandmarkIndexHalf() == lrRecord.GetLandmarkIndexHalf())
+                        {
+                            ++liDuplicates;
+                            if (li < liIcon) ++liEarlier;
+                        }
+                    const bool lbOnlineRace = mpGuiCache->GetOnlineGameMode() == 13;
+                    if (lbOnlineRace || liCheckpoint != luCount)
+                    {
+                        if (liEarlier || mpGuiCache->mau16ActiveLandmarks[luCount - 1] != luLandmark || lbOnlineRace)
+                        {
+                            lv2StackOffset.y = static_cast<f32>(liDuplicates - liEarlier - 1) * -4.0f;
+                            char lacCheckpoint[128];
+                            if (liDuplicates - liEarlier == 1)
+                                CgsCore::SPrintf(lacCheckpoint, sizeof(lacCheckpoint), "%d", liCheckpoint);
+                            else
+                                lacCheckpoint[0] = '\0';
+                            lrIcon.SetIconText(lacCheckpoint, false);
+                            liState = MapIconBrnBase::E_ICONSTATE_CRASHNAV_ONLINE_CHECKPOINT;
+                        }
+                        else
+                            lv2StackOffset.y = static_cast<f32>(liDuplicates - 1) * -4.0f;
+                    }
+                    else
+                        lv2StackOffset.y = static_cast<f32>(liDuplicates - liEarlier - 1) * -4.0f;
+                }
+                else if (IsStartIcon(&lrRecord))
+                    liState = MapIconBrnBase::E_ICONSTATE_CRASHNAV_LANDMARKSTART;
+                else if (IsFinishIcon(&lrRecord))
+                    liState = MapIconBrnBase::E_ICONSTATE_CRASHNAV_LANDMARKFINISH;
             }
+            else if (mpGuiCache->GetInEventColouringGate())
+            {
+                if (IsTrackedIcon(&lrRecord))
+                    liState = IsFinishIcon(&lrRecord) ? MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARKFINISH :
+                        MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARKTRACKED;
+                else if (IsPendingRaceLandmark(&lrRecord))
+                {
+                    GuiTracker* lpTracker = mpGuiCache->GetGuiTracker();
+                    CGS_ASSERT(lpTracker != 0, "lpGuiTracker");
+                    const auto* lpInfo = lpTracker->GetTrackerInformation(lpTracker->GetCurrentlyTrackedIndex());
+                    CGS_ASSERT(lpInfo != 0, "lpTrackerInfo");
+                    if (MapTransform::IsWithinViewport(lpInfo->mv3Position, 0.0f, 0.0f))
+                        liState = IsFinishIcon(&lrRecord) ? MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARKFINISH_PENDING :
+                            MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARK_PENDING;
+                }
+            }
+            else if (IsFinishIcon(&lrRecord))
+                liState = MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARKFINISH;
+            else if (IsTrackedIcon(&lrRecord))
+                liState = MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARKTRACKED;
+            else
+                liState = IsStartIcon(&lrRecord) ? MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARKSTART :
+                    MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARK;
+            lrIcon.SetRotation(0.0f);
             break;
         }
 

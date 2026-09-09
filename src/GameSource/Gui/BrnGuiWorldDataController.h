@@ -166,6 +166,7 @@ namespace BrnGui
         const BrnProgression::RaceEventData* GetOnlineEventInfoFromEventId(u32 luEventId) const;
 
         // DWARF h:112 / X360 0x8248E6D8 -- total landmark count (mpTriggerData->miLandmarkCount).
+        const BrnTrigger::Landmark* GetLandmarkInfoAtPositionInList(s32 liIndex) const; // 0x825017E8
         s32 GetTotalNumberOfLandmarks() const;
 
         // DWARF h:116 / X360 0x824286E0 -- online landmark count (mpTriggerData->miOnlineLandmarkCount).

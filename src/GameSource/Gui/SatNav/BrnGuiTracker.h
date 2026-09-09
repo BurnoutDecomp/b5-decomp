@@ -252,6 +252,7 @@ namespace BrnGui
 
         // Inlined by EventInfoComponent::UpdateDestinationText, ARTIST0x82412F78.
         s32 GetCurrentlyTrackedIndex() const { return miCurrentlyTrackedIndex; }
+        const BrnGameState::LandmarkIndex* GetActivelyTrackedLandmarks(); // ARTIST 0x824F4358
 
     private:
         // ===============================================================================
@@ -322,7 +323,7 @@ namespace BrnGui
                                      //           RegenerateRouteData into
                                      //           mPlayersTrackerInfo.muTargetSectionId.
         f32 mfRouteDistance;         // +0x65068  live route distance (lfsx)
-        u8  maTailReserved[0x650EC - 0x6506C];   // +0x6506C..+0x650EB  unread by this slice
+        BrnGameState::LandmarkIndex maActivelyTrackedLandmarks[64]; // +0x6506C, ARTIST 0x824F4358
         GuiCache* mpGuiCache;        // +0x650EC  latched ONCE by case 64 (first non-null
                                      //           cache pointer wins).
     };

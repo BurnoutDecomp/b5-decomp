@@ -658,3 +658,16 @@ const BrnResource::ChallengeList* WorldDataController::GetFreeburnChallengeList(
 }
 
 }
+
+namespace BrnGui
+{
+// ARTIST 0x825017E8: list position is distinct from the landmark's region index.
+const BrnTrigger::Landmark* WorldDataController::GetLandmarkInfoAtPositionInList(s32 liIndex) const
+{
+    CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
+        "E_WORLDDATACONTROLLERSTATE_READY <= meState");
+    CGS_ASSERT(liIndex >= 0 && liIndex < mpTriggerData->GetLandmarkCount(),
+        "Landmark list index is outside the valid range");
+    return mpTriggerData->GetLandmark(liIndex);
+}
+}
