@@ -4,6 +4,9 @@
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"   // BrnGui::OptionsDataProfile (types the opaque +0xB878 reservation)
 #include "GameShared/GameClasses/Containers/CgsHash.h" // CgsContainers::CgsHash::CalculateHash (AppendExpectedAptComponent name entry)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/Gui/SatNav/BrnGuiTracker.h"          // GuiTracker::ClearTracker (RecEvent 321/322 tail)
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData::Clear (RecEvent 322)
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"  // BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING (RecEvent 321/322 tail)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag one-shots
 // (BrnGameStateSharedIO.h must NOT be included here: its real BrnGameState /
 // BrnNetwork types clash with BrnGuiOptionsDataProfile.h's compile-only slices.
@@ -1066,6 +1069,45 @@ namespace BrnGui
         return 0;
     }
 
+    namespace
+    {
+        // The 12-byte payload GuiEventStopMode (id 322) carries -- GameBridgeGameStateToX's copy of
+        // the action-39 StopModeAction (GameBridgeGameStateToX_EventFlowGuiEvents.cpp, StopModeWire322:
+        // +0x00 <- action+0x00, +0x04 <- action+0x0C, +0x08 <- action+0x11, +0x09 <- +0x12, +0x0A <-
+        // +0x13). Field identities are the PRODUCER's (SendModeStopMessages @0x8234BEC0): the stopped
+        // mode, miNumUnsucessfulGameModeAttempts, lbTimedOut, "no network rounds remaining", and
+        // mbModeStartFromRegionEnabled. BrnGuiDemangledEventTypes.h's GuiEventStopMode is the 12-byte
+        // GuiEvent<322> HEADER shell every consumer reads past; the two other consumers
+        // (BrnInGame.cpp case 322, BrnShowtimeInstantResults.cpp KI_EVENT_STOP_MODE) read the same
+        // bytes at +9 / +10 off a raw cursor.
+        struct GuiEventStopModePayload
+        {
+            s32 meGameModeType;                     // +0x00
+            s32 miNumUnsuccessfulGameModeAttempts;  // +0x04
+            u8  mbTimedOut;                         // +0x08
+            u8  mbNoRoundsRemaining;                // +0x09
+            u8  mbModeStartedFromRegion;            // +0x0A
+            u8  muPad0B;                            // +0x0B
+        };
+        static_assert(sizeof(GuiEventStopModePayload) == 12,
+                      "X360 AddGuiEvent<GuiEventStopMode> posts 12 bytes (id 322)");
+
+        // The 12-byte payload GUI event 204 carries -- the sat-nav event-filter pair. Producer:
+        // FBurnMainHudState::Enable/DisableSatNavEventsFilter (BrnFBurnMainHudState.cpp, its
+        // GuiEvent204 record: display type, mode filter, show byte). Case 204 below reads the
+        // filter word (+4) and the show byte (+8); the display type (+0) is the custom-renderer
+        // path's, not the cache's.
+        struct GuiEventSatNavEventFilterPayload
+        {
+            s32 miDisplayType;   // +0x00
+            s32 miModeFilter;    // +0x04  -> meSatNavEventFilter (+0x8034)
+            u8  mu8Show;         // +0x08  -> mbSatNavEventFilterEnabled (+0x8038)
+            u8  mau8Pad[3];      // +0x09
+        };
+        static_assert(sizeof(GuiEventSatNavEventFilterPayload) == 12,
+                      "GUI event 204 rides a 12-byte record (GuiEvent<204>(12, 12) at the producer)");
+    }
+
     void GuiCache::RecEvent(const CgsModule::Event* lpEvent, s32 liEventId)
     {
         if (lpEvent == 0)
@@ -1366,10 +1408,10 @@ namespace BrnGui
             // HUD state's Enable/DisableSatNavEventsFilter (the record rides channel 40
             // into the module input; its channel-41 twin feeds the custom-renderer path).
             {
-                const u8* lpu8Payload = reinterpret_cast<const u8*>(lpEvent);
-                mbSatNavEventFilterEnabled = lpu8Payload[8] != 0;                          // +32824
-                meSatNavEventFilter =
-                    *reinterpret_cast<const s32*>(lpu8Payload + 4);                        // +32820
+                const GuiEventSatNavEventFilterPayload* lpFilter =
+                    reinterpret_cast<const GuiEventSatNavEventFilterPayload*>(lpEvent);
+                mbSatNavEventFilterEnabled = lpFilter->mu8Show != 0;                       // +32824
+                meSatNavEventFilter        = lpFilter->miModeFilter;                        // +32820
             }
             break;
 
@@ -1387,6 +1429,64 @@ namespace BrnGui
             mOfflinePostEventData = *reinterpret_cast<
                 const GuiEventOfflinePostEvent::OfflinePostEventData*>(lpEvent);
             break;
+
+        // ---- X360 case 322 (GuiEventStopMode) @0x82510110..0x825101F4, then the shared tail ------
+        // LANDED 2026-09-10. Until then NOTHING on this build ever took the cache out of an event:
+        // meGameModeType stayed at the finished event's type (so MapIconManager::UpdateWorldIcons
+        // kept drawing the event's checkpoint / finish landmarks on the minimap after the results
+        // screen), the tracker kept its route, and the in-event colouring gate stayed up.
+        case 322:
+        {
+            CGS_ASSERT(lpEvent != 0, "lpStopModeEvent");                                   // cpp:2337
+            const GuiEventStopModePayload* lpStop =
+                reinterpret_cast<const GuiEventStopModePayload*>(lpEvent);
+
+            mbOnlineEventCompleted            = false;                                        // stb 0, +0x4B5A
+            miNumUnsuccessfulGameModeAttempts = lpStop->miNumUnsuccessfulGameModeAttempts;    // stw, +0x4B3C
+            mbEventPreparedForModeStart       = false;                                        // stb 0, +0xA014
+
+            // `lbz 0xA(rec) || lbz 8(rec)` -- a region start or a timed-out stop drops the eight
+            // cached online player records and their two counters.
+            if (lpStop->mbModeStartedFromRegion != 0 || lpStop->mbTimedOut != 0)
+            {
+                for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)                             // +0xAC80, stride 312
+                {
+                    reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(
+                        maPlayerInfo[liPlayer])->Clear();
+                }
+                muNumActivePlayers    = 0;                                                    // stw 0, +0xAC74
+                muChallengeSlotMirror = 0;                                                    // stw 0, +0xAC78
+            }
+
+            // `stb 0, +0x7790 + 0x30*i + 0x23` for i < miNumDriveThroughs -- every drive-thru icon
+            // un-hidden again -- then the sat-nav zoom back to 0.
+            for (s32 liDriveThrough = 0; liDriveThrough < miNumDriveThroughs; ++liDriveThrough)
+            {
+                maDriveThroughInfo[liDriveThrough].SetHiddenDriveThru(false);
+            }
+            miSatNavZoomLevel = 0;                                                            // stw 0, +0x803C
+        }
+        // FALLS THROUGH into the tail case 321 shares (the console's LABEL_232).
+
+        // ---- X360 case 321 (GuiEventFinishedModeResults, the bridge's action-38 copy) is the tail
+        // alone: `goto LABEL_232` @0x8250DE3C jumptable. Both ends of an event converge here.
+        case 321:
+        {
+            GuiTracker* lpGuiTracker = GetGuiTracker();      // lwz +0x4054, read BEFORE the stores
+
+            mbInEventColouringGate      = false;                                              // stb 0,  +0x4B4A
+            mbOnlineStartInProgress     = false;                                              // stb 0,  +0x4B4C
+            mbPaybackAvailable          = false;                                              // stb 0,  +0x4B64
+            mePaybackVictimRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;                    // stw -1, +0x4B60
+            meGameModeType              = BrnGameState::GameStateModuleIO::E_MODE_NONE;       // stw -1, +0x9E58
+            mePaybackAvailableType      = BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING;       // stw 3,  +0x4B5C
+
+            CGS_ASSERT(lpGuiTracker != 0, "GetGuiTracker() != NULL");                        // cpp:2381
+            // The seven inlined stores @0x825101D0..0x825101F0 (+0 / +1 / +2 / +4 / +0x65050 /
+            // +0x65068 / +0x65060) ARE GuiTracker::ClearTracker @0x824FA0A8, store for store.
+            lpGuiTracker->ClearTracker();
+            break;
+        }
 
         case 292:
             // X360 case 292: the post-event teardown. If more than one car is queued in the

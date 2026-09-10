@@ -280,6 +280,14 @@ namespace BrnResource
         void ProcessUnloadWheelRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                        const GameDataIO::GameDataAssetEvent* lpEvent,
                                        s32 liEventId, s32 liSlotIndex);               // 0x82670AA0
+        // The traffic-vehicle UNLOAD (dispatch id 41), the wheel unload's twin with the
+        // "TVEH<code>" -> "VEH_<code>" prefix swap the load handler also does. LANDED 2026-09-10
+        // (BurnoutDecomp/b5-decomp#22): while it was a DEFERRED stand-in every TrafficCarStreamer
+        // unload stayed E_LOADSTATE_UNLOAD_STARTED for ever, so AreAllAssetsLoaded() could never
+        // come back true after the event-start traffic reset and the module sat in STARTING_UP.
+        void ProcessUnloadTrafficVehicleRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                s32 liEventId, s32 liSlotIndex);      // 0x82670BE0
         // The TRAFFIC-vehicle pair (dispatch ids 28 / 51) -- the wheel pair's twin, GRAPHICS
         // only. LOAD overwrites the id's "TVEH" prefix with "VEH_" and streams
         // "Vehicles\VEH_<code>_GR.bin"; ProcessInternalLoadBundleResponse's case 28 then

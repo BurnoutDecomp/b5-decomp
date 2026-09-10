@@ -20,6 +20,7 @@
 #include "GameSource/World/BrnWorldSharedConstants.h"         // [takedown] BrnWorld::CarControl (SetPlayerCarDriverAction::meCarControl)
 #include "SharedClasses/Progression/BrnRival.h"                // [takedown P1] BrnProgression::Rival (RivalStateChangeAction::mRival)
 #include "GameSource/GameState/Progression/BrnProgressionRivalData.h" // [takedown P1] BrnProgression::RivalData (RivalStateChangeAction::mRivalSavedData)
+#include "SharedClasses/Progression/BrnRaceEventData.h"    // [rivals] BrnProgression::EventRacerPersonality (AddRivalCarAction::mPersonality)
 
 namespace BrnResource
 {
@@ -900,6 +901,38 @@ struct RivalStateChangeAction : public GameAction<E_ACTION_RIVAL_STATE_CHANGED>
     u8                                maPad[3];         // +0x75..0x77 -- never written by the console; posted size is 120
 };
 static_assert(sizeof(RivalStateChangeAction) == 120, "X360 posts RivalStateChangeAction as 120 bytes (li r6, 0x78 @0x8238A158)");
+
+// =============================================================================================
+// The 176-byte E_ACTION_ADD_RIVAL (196) record. PRODUCER: ProgressionManager::AddRivalToWorld
+// @0x8238B0A8 (`li r5, 0xC4 ; li r6, 0xB0`, BrnProgressionManager_Rivals.cpp). CONSUMER:
+// RaceCarEntityModule::AddRivalCar @0x82301A50 (BrnRaceCarEntityModule_Rivals.cpp), which reads
+// +0x00 / +0x10 as the spawn look-at pair, the Rival at +0x20 for its car id (+0x28), district
+// (+0x34) and medals-to-unlock (+0x36), and the AI section at +0xA0. REHOMED here (2026-09-10)
+// from the producer TU's anonymous namespace the day the consumer landed, exactly as that
+// banner asked. The X360 offsets fall out of the host's natural layout (Vector3 is the 16-byte
+// SIMD alias; Rival and RivalData are 56 bytes each; EventRacerPersonality is 16) -- the
+// static_asserts are the proof, not an assumption.
+// =============================================================================================
+struct AddRivalCarAction : public GameAction<E_ACTION_ADD_RIVAL>
+{
+    Vector3                               mSpawnPosition;      // +0x00  stvx AISection::GetMiddle()
+    Vector3                               mSpawnHeading;       // +0x10  stvx unk_82181520 == (0, 0, 1, 0)
+    BrnProgression::Rival                 mRival;              // +0x20  7x ld/std, 56 B
+    BrnProgression::EventRacerPersonality mPersonality;        // +0x58  4x lwz/stw, 16 B
+    BrnProgression::RivalData             mRivalSavedData;     // +0x68  7x ld/std, 56 B
+    s16                                   mi16AISectionIndex;  // +0xA0  sth r31
+    u8                                    mu8RivalIndex;       // +0xA2  stb r26
+    u8                                    mau8Pad[13];         // +0xA3  stack residue on the console; the producer zeroes it
+};
+static_assert(sizeof(AddRivalCarAction) == 0xB0,
+              "the AddRivalCar record is the 176 bytes AddEvent is given (li r6, 0xB0)");
+static_assert(offsetof(AddRivalCarAction, mSpawnPosition)     == 0x00, "record +0x00");
+static_assert(offsetof(AddRivalCarAction, mSpawnHeading)      == 0x10, "record +0x10");
+static_assert(offsetof(AddRivalCarAction, mRival)             == 0x20, "record +0x20");
+static_assert(offsetof(AddRivalCarAction, mPersonality)       == 0x58, "record +0x58");
+static_assert(offsetof(AddRivalCarAction, mRivalSavedData)    == 0x68, "record +0x68");
+static_assert(offsetof(AddRivalCarAction, mi16AISectionIndex) == 0xA0, "record +0xA0");
+static_assert(offsetof(AddRivalCarAction, mu8RivalIndex)      == 0xA2, "record +0xA2");
 
 // =============================================================================================
 // ⭐ THE THREE CRASH-PLAY ACTION RECORDS (added 2026-08-29 with BrnCrashPlayManager.cpp).

@@ -3327,6 +3327,28 @@ void RaceCarEntityModule::HandleGameActions(
             break;
         }
 
+        // ARTIST 0x8230BE08 case 39: `HandleStopModeAction(this, record, lpOutput)` -- the
+        // world-side mode teardown (BrnRaceCarEntityModule_Rivals.cpp). Landed 2026-09-10: without
+        // it a finished event left every rival in the world, the player's car flagged in-mode,
+        // and mxGameModeFlags / meGameModeType frozen at the finished event's values.
+        case BrnGameState::GameStateModuleIO::E_ACTION_STOP_MODE: // 39
+            HandleStopModeAction(
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::StopModeAction*>(lpEvent),
+                lpOutput);
+            break;
+
+        // ARTIST cases 195 / 196: the rival-refresh pair ProgressionManager::UpdateRivals drives
+        // (one REMOVE_ALL, then one ADD_RIVAL per frame). Bodies in BrnRaceCarEntityModule_Rivals.cpp.
+        case BrnGameState::GameStateModuleIO::E_ACTION_REMOVE_ALL_RIVALS: // 195
+            RemoveAllRivalsFromWorld(lpOutput);
+            break;
+
+        case BrnGameState::GameStateModuleIO::E_ACTION_ADD_RIVAL: // 196
+            AddRivalCar(
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::AddRivalCarAction*>(lpEvent),
+                lpOutput);
+            break;
+
         default:
             break;   // [FLAG PC bring-up] see the banner
         }

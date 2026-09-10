@@ -254,6 +254,11 @@ void TrafficEntityModule::EnterRunningState()
     const ERunningState leRunningStateToUse = meRunningStateToUseAfterStartup;
 
     meState                         = E_STATE_RUNNING;
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())   // [DIAG] see EnterTearingDownState
+    {
+        *lpDiag << "[traffic-diag] EnterRunningState: STARTING_UP -> RUNNING; densityScale "
+                << mfGameModeDensityScale << " amountScale " << mfTrafficAmountScale << "\n";
+    }
     meRunningState                  = leRunningStateToUse;
     meRunningStateToUseAfterStartup = E_RUNNINGSTATE_NORMAL;
     meStartingUpState               = E_STARTINGUPSTATE_INVALID;
@@ -274,6 +279,15 @@ void TrafficEntityModule::EnterTearingDownState()
     meState            = E_STATE_TEARING_DOWN;
     meTearingDownState = E_TEARINGDOWNSTATE_WIPING;
     meRunningState     = E_RUNNINGSTATE_INVALID;
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFIC_DIAG witness for the tear-down / reset chain
+    // (BurnoutDecomp/b5-decomp#22). One line per state entry, so a run's log shows whether the
+    // wipe reached Reset() and RUNNING again. Siblings in Reset() and EnterRunningState().
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        *lpDiag << "[traffic-diag] EnterTearingDownState: RUNNING -> TEARING_DOWN (WIPING); mode "
+                << meGameMode << " densityScale " << mfGameModeDensityScale << "\n";
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1869,6 +1883,10 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         // GenerateCrashedVehicleEvents (PreSceneUpdate, now live) asserts is already clear.
         // The two are one ordered pair; landing only the PreScene half would fire that assert
         // on every record.
+        // 0x8274EB4C / 0x8274EB54 -- the two crash-module drains, immediately before the crashed
+        // publish on the console. LIVE 2026-09-10 (bodies below, this file).
+        GenerateRemovedVehicleEvents(lpOutput->GetCrashTrafficInputInterface());
+        GenerateSlamRecoveryEvents(lpOutput->GetCrashTrafficInputInterface());
         GenerateVehicleCrashedEvents(lpOutput);
 
         {
@@ -1881,8 +1899,7 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
                 "Vehicle::IsHornOn, Vehicle::IsCrashing, NearMissData::Append, "
                 "TrafficSoundOutputInterface::AddTrafficEntity, TrafficDirectorEntity::Append. "
                 "It creates NO physics body and touches no collision volume, so it is not on "
-                "the crash-into-traffic path), GenerateRemovedVehicleEvents, "
-                "GenerateSlamRecoveryEvents, and the three "
+                "the crash-into-traffic path) and the three "
                 "80-byte mVehicleSoaData -> OutputBuffer_PostPhysics copies (soa members "
                 "mPhysicalVehicles / mVehiclesRenderedLastFrame / mPhysicalVehiclesFarFrom"
                 "Player into the crash-traffic input interface at console +3240/+3320/+3400). "
@@ -1892,17 +1909,111 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     }
     break;
 
+    // ====================================================================================
+    // THE TEAR-DOWN, X360 0x8274E7A8..0x8274E8A4 -- LANDED 2026-09-10 (BurnoutDecomp/b5-decomp#22).
+    // HandlePrepareForModeAction enters this state at EVERY offline event start (only the two
+    // showtime modes carry KU_FLAG_DISABLE_TRAFFIC_RESET), so while this arm was a gate the
+    // traffic system parked itself here for the rest of the session: the wipe never ran, the
+    // flush never completed, Reset() was never reached, and no vehicle spawned again -- the
+    // "traffic disappears after event start and persists after event completion" report.
+    //
+    //   meTearingDownState == WIPING (0):
+    //     HandleRecycledTraffic / HandleExternalResponses / ProcessDeformationData (the three
+    //       head legs the RUNNING arm also runs),
+    //     KillParam every ALIVE param (0..0x190; `GetParam(i)->+0x40 & 1`),
+    //     RemoveVehicle every ORPHAN vehicle (0..0x258; `+0x2A85 + 0x80*i & 0x20`),
+    //     StaticVehicles_KillParam every ALIVE static vehicle (0..0xC7; `+0xF285 + 0x80*i & 1`),
+    //     meTearingDownState = FLUSHING;                                    ; stw 1, +0x310
+    //   then, for WIPING and FLUSHING (1) alike:
+    //     GenerateRemovedVehicleEvents / GenerateSlamRecoveryEvents into the crash interface,
+    //     if (mbAllVehiclesDead) { muNumFramesBeforeStateChange = 3 ; state = WAITING_TO_RESET ;
+    //                              fall into the WAITING arm the same frame }
+    //   WAITING_TO_RESET (2): if (muNumFramesBeforeStateChange) --it ; else Reset()
+    //   >= 3: "Invalid tearing down state" (baked .cpp 3032).
+    // mbAllVehiclesDead is published by KillDyingVehicleEntities, which PreSceneUpdate's FLUSHING
+    // arm (_wT1_02.cpp) runs -- that is the frame-coupled handshake between the two passes.
+    // ====================================================================================
     case E_STATE_TEARING_DOWN:
     {
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-            "PostPhysicsUpdate E_STATE_TEARING_DOWN arm -- the WIPING pass (KillParam over "
-            "400 params, RemoveVehicle over 600 vehicles, StaticVehicles_KillParam over 199 "
-            "static params), FLUSHING and the WAITING_TO_RESET countdown into Reset(). "
-            "⚠️ NOTE HALF-CORRECTED 2026-08-28: RemoveVehicle @0x8272E370 IS bodied now "
-            "(_wT5_01.cpp) and is live on three other call sites; the remaining blockers are "
-            "KillParam and StaticVehicles_KillParam, so wiping still cannot be emitted "
-            "without dropping part of it");
+        bool lbRunFlushTail = false;
+
+        switch (meTearingDownState)
+        {
+        case E_TEARINGDOWNSTATE_WIPING:
+        {
+            HandleRecycledTraffic(
+                lpInput->GetVehicleManagerOutputInterface()->GetRemovedTrafficEventQueue());
+            HandleExternalResponses(lpInput);
+            ProcessDeformationData(lpInput->GetDeformationOutputInterfaceForEntityModules());
+
+            for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
+            {
+                if (GetParam(luParam)->IsAlive())
+                {
+                    KillParam(luParam);
+                }
+            }
+            for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
+            {
+                if ((maVehicles[luVehicle].GetFlags() & Vehicle::E_FLAG_ORPHAN) != 0)
+                {
+                    RemoveVehicle(luVehicle);
+                }
+            }
+            for (u32 luStaticParam = 0; luStaticParam < KU_MAX_STATIC_TRAFFIC; ++luStaticParam)
+            {
+                if (GetStaticVehicle(luStaticParam)->IsAlive())
+                {
+                    StaticVehicles_KillParam(luStaticParam);
+                }
+            }
+
+            meTearingDownState = E_TEARINGDOWNSTATE_FLUSHING;
+            lbRunFlushTail     = true;
+            break;
+        }
+
+        case E_TEARINGDOWNSTATE_FLUSHING:
+            lbRunFlushTail = true;
+            break;
+
+        case E_TEARINGDOWNSTATE_WAITING_TO_RESET:
+            if (muNumFramesBeforeStateChange != 0)
+            {
+                --muNumFramesBeforeStateChange;
+            }
+            else
+            {
+                Reset();
+            }
+            break;
+
+        default:
+            CGS_ASSERT(false, "Invalid tearing down state");   // baked .cpp line 3032
+            break;
+        }
+
+        if (lbRunFlushTail)
+        {
+            GenerateRemovedVehicleEvents(lpOutput->GetCrashTrafficInputInterface());
+            GenerateSlamRecoveryEvents(lpOutput->GetCrashTrafficInputInterface());
+
+            if (mbAllVehiclesDead)
+            {
+                muNumFramesBeforeStateChange = 3;
+                meTearingDownState           = E_TEARINGDOWNSTATE_WAITING_TO_RESET;
+
+                // LABEL_31 -- the WAITING arm runs once more in the same frame (3 -> 2).
+                if (muNumFramesBeforeStateChange != 0)
+                {
+                    --muNumFramesBeforeStateChange;
+                }
+                else
+                {
+                    Reset();
+                }
+            }
+        }
     }
     break;
 
@@ -2233,6 +2344,12 @@ void TrafficEntityModule::Reset()
     meTearingDownState = E_TEARINGDOWNSTATE_INVALID;
 
     muUpdateCount = 0;
+
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())   // [DIAG] see EnterTearingDownState
+    {
+        *lpDiag << "[traffic-diag] Reset(): -> STARTING_UP; densityScale " << mfGameModeDensityScale
+                << " base " << mfBaseDensityScale << "\n";
+    }
 
     EnterStartingUpState();
 
@@ -2815,6 +2932,62 @@ void TrafficEntityModule::Construct()
     // override, so the base placeholder returns null and Prepare returns FALSE every frame,
     // forever. That is a boot hang at WorldModule::Prepare's traffic stage.
     mbIsNewModule = true;
+}
+
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::GenerateRemovedVehicleEvents  @ 0x827206E8
+//
+//   0x82720708  ["lpCrashInputInterface" :5240]
+//   loop i < maRecentlyRemovedVehicles.GetLength()   (module +0x57E38 count, records +0x57CF8):
+//     v = GetItem(i) ; ["luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC" interfaces.h:314]
+//     RemoveCrashedTrafficEvent{v} -> AddEvent(lpCrashInputInterface + 0xB5C)
+//   maRecentlyRemovedVehicles.Clear()
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::GenerateRemovedVehicleEvents(
+    BrnWorld::CrashIO::TrafficInputInterface* lpCrashInputInterface)
+{
+    CGS_ASSERT(lpCrashInputInterface != 0, "lpCrashInputInterface");   // baked .cpp 5240
+
+    for (u32 luIndex = 0; luIndex < maRecentlyRemovedVehicles.GetLength(); ++luIndex)
+    {
+        lpCrashInputInterface->AddRemoveCrashedTrafficEvent(maRecentlyRemovedVehicles.GetItem(luIndex));
+    }
+    maRecentlyRemovedVehicles.Clear();
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::GenerateSlamRecoveryEvents  @ 0x827207E0
+//
+//   0x82720800  ["lpCrashInputInterface" :5268]
+//   loop i < maRecentlyRecoveredSlammedTraffic.GetLength()   (module +0x580C0 count, +0x57F80):
+//     v = GetItem(i) ; ["luIndex < KU_MAX_TOTAL_TRAFFIC" BrnTrafficEntityModule.h:2459 -- the
+//                       GetVehicle bound]
+//     if (meState == RUNNING && vehicle.IsAlive() &&
+//         (vehicle.IsCrashing() || vehicle.IsSympatheticallyCrashing()))  continue;
+//     ["luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC" interfaces.h:294]
+//     RemoveSlammedTrafficEvent{v} -> AddEvent(lpCrashInputInterface + 0xA10)
+//   maRecentlyRecoveredSlammedTraffic.Clear()
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::GenerateSlamRecoveryEvents(
+    BrnWorld::CrashIO::TrafficInputInterface* lpCrashInputInterface)
+{
+    CGS_ASSERT(lpCrashInputInterface != 0, "lpCrashInputInterface");   // baked .cpp 5268
+
+    for (u32 luIndex = 0; luIndex < maRecentlyRecoveredSlammedTraffic.GetLength(); ++luIndex)
+    {
+        const u32      luVehicle = maRecentlyRecoveredSlammedTraffic.GetItem(luIndex);
+        const Vehicle* lpVehicle = GetVehicle(luVehicle);                  // carries the :2459 bound
+
+        if (meState == E_STATE_RUNNING && lpVehicle->IsAlive()
+            && (lpVehicle->IsCrashing() || lpVehicle->IsSympatheticallyCrashing()))
+        {
+            continue;
+        }
+
+        lpCrashInputInterface->AddRemoveSlammedTrafficEvent(luVehicle);
+    }
+    maRecentlyRecoveredSlammedTraffic.Clear();
 }
 
 }

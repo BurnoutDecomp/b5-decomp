@@ -264,6 +264,15 @@ namespace BrnWorld
         bool IsActive() const         { return mbIsCrashPlayActive; }
         bool IsInShowtime() const     { return mbIsInShowtime; }
         bool IsBounceBoosting() const { return mfBounceBoostTimer > 0.0f; }
+        // Deactivate() is DWARF-declared (BrnCrashPlayManager.h) and has no out-of-line X360
+        // symbol: RaceCarEntityModule::HandleStopModeAction @0x82307B84 emits it inline as
+        // `stfs 0.0, +0x134 ; stb 0, +0x14C` behind an IsActive() test, followed by the console's
+        // own filter-bit-0 log line. Declared here, bodied out of line in the manager's own TU.
+        void Deactivate();   // body in BrnCrashPlayManager.cpp (needs the log stream)
+        // The showtime byte's setter, inlined by the console the same way (HandleStopModeAction
+        // @0x82307BE4 `stb 0, +0x14D`; the action-143 arm sets it). Same rule as ActiveRaceCar::
+        // SetInShowtime: exposed so the module writes the byte BY NAME.
+        void SetInShowtime(bool lbInShowtime) { mbIsInShowtime = lbInShowtime; }
 
         // DWARF BrnCrashPlayManager.h:181 (`float32_t GetBoostLevel()`), no out-of-line X360
         // symbol -- the console inlines it at its one consumer. That consumer is the SHOWTIME

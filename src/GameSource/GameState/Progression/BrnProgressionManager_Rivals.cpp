@@ -562,40 +562,11 @@ void ProgressionManager::UpdateRivals(BrnGameState::GameStateModuleIO::GameActio
 
 namespace
 {
-    // ------------------------------------------------------------------------------------------
     // The 176-byte E_ACTION_ADD_RIVAL (196) payload -- RaceCarEntityModule::AddRivalCar's record.
-    // Homed HERE, not in BrnGameActions.h, because that header belongs to another lane this wave
-    // and because the PC CONSUMER (AddRivalCar / RemoveAllRivalsFromWorld) is still absent: there
-    // is exactly one user, this producer.
-    // REHOME-WHEN AddRivalCar lands: move this next to RivalStateChangeAction in BrnGameActions.h
-    // so producer and consumer share one definition.
-    //
-    // The X360 offsets fall out of the host's own natural layout (Vector3 is the 16-byte SIMD
-    // alias; Rival and RivalData are 56 bytes each; EventRacerPersonality is 16) -- the
-    // static_asserts below are the proof, not an assumption.
-    // ------------------------------------------------------------------------------------------
-    struct AddRivalCarAction
-    {
-        Vector3                               mSpawnPosition;      // +0x00  stvx GetMiddle()
-        Vector3                               mSpawnHeading;       // +0x10  stvx unk_82181520
-        BrnProgression::Rival                 mRival;              // +0x20  7x ld/std, 56 B
-        BrnProgression::EventRacerPersonality mPersonality;        // +0x58  4x lwz/stw, 16 B
-        BrnProgression::RivalData             mRivalSavedData;     // +0x68  7x ld/std, 56 B
-        s16                                   mi16AISectionIndex;  // +0xA0  sth r31
-        u8                                    mu8RivalIndex;       // +0xA2  stb r26
-        u8                                    mau8Pad[13];         // +0xA3  stack residue on the
-                                                                   //        console; zeroed here
-    };
-
-    static_assert(sizeof(AddRivalCarAction) == 0xB0,
-                  "the AddRivalCar record is the 176 bytes AddEvent is given (li r6, 0xB0)");
-    static_assert(offsetof(AddRivalCarAction, mSpawnPosition)     == 0x00, "record +0x00");
-    static_assert(offsetof(AddRivalCarAction, mSpawnHeading)      == 0x10, "record +0x10");
-    static_assert(offsetof(AddRivalCarAction, mRival)             == 0x20, "record +0x20");
-    static_assert(offsetof(AddRivalCarAction, mPersonality)       == 0x58, "record +0x58");
-    static_assert(offsetof(AddRivalCarAction, mRivalSavedData)    == 0x68, "record +0x68");
-    static_assert(offsetof(AddRivalCarAction, mi16AISectionIndex) == 0xA0, "record +0xA0");
-    static_assert(offsetof(AddRivalCarAction, mu8RivalIndex)      == 0xA2, "record +0xA2");
+    // REHOMED 2026-09-10: it lives next to RivalStateChangeAction in BrnGameActions.h now that the
+    // PC consumer (AddRivalCar / RemoveAllRivalsFromWorld, BrnRaceCarEntityModule_Rivals.cpp) exists;
+    // producer and consumer share that one definition and its offset proofs.
+    using BrnGameState::GameStateModuleIO::AddRivalCarAction;
 }
 
 // ----------------------------------------------------------------------------------------------

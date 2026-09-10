@@ -92,7 +92,12 @@ namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRace
 // game-action graph -- GameModeParams, the drive-thru manager, the progression trophy data --
 // into BrnWorldModule.h through this header. Class key `struct` matches that home, and MSVC
 // mangles struct vs class, so it is load-bearing.
-namespace BrnGameState { namespace GameStateModuleIO { struct PrepareForModeAction; } }
+namespace BrnGameState { namespace GameStateModuleIO { struct PrepareForModeAction; struct StopModeAction; } }
+// The crash module's traffic-input interface, by pointer only (GenerateRemovedVehicleEvents /
+// GenerateSlamRecoveryEvents publish into it). Real home GameSource/World/CrashModule/SharedIO/
+// BrnCrashModuleTrafficIOInterfaces.h; BrnTrafficEntityModuleIO.h already includes it for the
+// buffers, so every .cpp that calls the two sees the complete type.
+namespace BrnWorld { namespace CrashIO { struct TrafficInputInterface; } }
 
 namespace BrnTraffic
 {
@@ -1107,6 +1112,24 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         void HandlePrepareForModeAction(
             const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
             const BrnGameState::GameStateModuleIO::PrepareForModeAction* lpPFMAction);
+
+        // @0x82716280 -- an ARTIST EXPORT HOLE (no .json; read from the image with
+        // tools/re/ppcdis.py off the `bl` at HandleExternalRequests+0x7E4). The game-action 39
+        // (E_ACTION_STOP_MODE) handler: assert both pointers ("lpInput" :6955 / "lpStopModeAction"
+        // :6956), latch mbNeedToKillAllZombies when the simulation is lockstep
+        // (!mbAllowDivergentBehaviour), then ResetEventData() -- which is what puts
+        // mfGameModeDensityScale / mfTrafficAmountScale back to mfBaseDensityScale and drops every
+        // per-event flag when an event ends. Body in _wT6_03.cpp.
+        void HandleStopModeAction(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+                                  const BrnGameState::GameStateModuleIO::StopModeAction* lpStopModeAction);
+
+        // @0x827206E8 / @0x827207E0. The two crash-module publishes PostPhysicsUpdate makes after the
+        // RUNNING legs and after the TEARING_DOWN wipe: drain maRecentlyRemovedVehicles into
+        // RemoveCrashedTrafficEvents and maRecentlyRecoveredSlammedTraffic into
+        // RemoveSlammedTrafficEvents (skipping, while RUNNING, an alive vehicle that is still
+        // crashing or sympathetically crashing). Bodies in _wT1_01.cpp.
+        void GenerateRemovedVehicleEvents(BrnWorld::CrashIO::TrafficInputInterface* lpCrashInputInterface);
+        void GenerateSlamRecoveryEvents(BrnWorld::CrashIO::TrafficInputInterface* lpCrashInputInterface);
 
         // @0x827353E8, DWARF :1551. The jam relief valve UpdateNonDecisionFrame runs when
         // mbNeedToRunTrafficJamNuker is latched: collect each maximal run of consecutive

@@ -736,13 +736,11 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
 
     CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");   // :1670
 
-    // [X] [stuntrace] PARKED CALL -- conductor decision #6: GameStateModule::OnModeFinish belongs to
-    // the detection/start-driver wave, not this one, and is ABSENT from BrnGameStateModule.h.
-    // Console: `GameStateModule::OnModeFinish(mpGameStateModule, lpOutputBuffer)` @0x82390EE0 -- the
-    // module-level end-of-mode hook (it is what unwinds the mode back to FreeBurn). Re-wire the
-    // moment that body lands; this is the LAST statement of the console body, so nothing below it
-    // is lost.
-    (void)lpOutputBuffer;
+    // ✅ LANDED 2026-09-10 (was: PARKED CALL, conductor decision #6). Console: `GameStateModule::
+    // OnModeFinish(mpGameStateModule, lpOutputBuffer)` @0x82390EE0 -- the module-level end-of-mode
+    // hook (takedown camera off, takedowns cleared, drive-thrus reopen); body in
+    // GameStateModule_gTD_00.cpp. The LAST statement of the console body.
+    mpGameStateModule->OnModeFinish(lpOutputBuffer);
 }
 
 // ============================================================================

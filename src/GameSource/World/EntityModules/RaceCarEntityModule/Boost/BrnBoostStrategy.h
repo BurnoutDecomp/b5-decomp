@@ -321,6 +321,12 @@ public:
     // NON-virtual inline accessor (DWARF h:433).
     OncomingState GetPreviousOncomingState() const { return mePreviousOncomingState; }
 
+    // NON-virtual, console-inlined: RaceCarEntityModule::HandleStopModeAction @0x82307C30 does
+    // `lfs f0, 0xB0(strategy) ; stfs f0, 0xAC(strategy)` -- the event-mode boost modifier goes
+    // back to the strategy's original earning rate when a mode ends. Exposed so that store is
+    // made BY NAME (the two members are protected).
+    void ResetBoostEventModeModifier() { mfBoostEventModeModifier = mfOriginalBoostEarning; }
+
 protected:
     // -- slot 49 -- @0x822C0E10 (dispatched virtually by OnModeStart): earn
     // lfBoostAmount scaled by a speed multiplier lerped between 1.0 and a

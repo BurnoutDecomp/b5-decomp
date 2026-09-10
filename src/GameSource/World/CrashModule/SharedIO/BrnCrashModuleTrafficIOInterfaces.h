@@ -5,6 +5,7 @@
 // interface event queues (EventQueue<T, 160>). Layout and member names from the DecFIGS
 // DWARF (BrnCrashModuleTrafficIOInterfaces.h:60-131); element sizes/strides confirmed
 // against the X360 ARTIST queue Construct/AddEvent spine.
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the two AddRemove* publishes)
 #include "BrnCommonTypes.h"                                            // EntityId
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"               // CgsModule::EventQueue<T, N>
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"         // CgsContainers::FastBitArray<N>
@@ -106,6 +107,28 @@ namespace CrashIO
         // r3 unchanged) -- i.e. the queue at offset 0. Reached by name here.
         const AddCrashingTrafficEventQueue& GetAddCrashingTrafficEventQueue() const { return mAddCrashingTrafficEventQueue; }
         AddCrashingTrafficEventQueue&       GetAddCrashingTrafficEventQueue()       { return mAddCrashingTrafficEventQueue; }
+
+        // The two per-vehicle publishes TrafficEntityModule::GenerateSlamRecoveryEvents @0x827207E0
+        // and ::GenerateRemovedVehicleEvents @0x827206E8 make on this interface. Each is the
+        // console's inline pair `assert(index < KU_MAX_TOTAL_TRAFFIC) ; AddEvent(&u16)`: the asserts
+        // are BAKED WITH THIS HEADER'S PATH (BrnCrashModuleTrafficIOInterfaces.h :294 / :314), which
+        // is what places the bounds check here rather than in the traffic module. The queue targets
+        // are the console's `a2 + 0xA10` (slammed) and `a2 + 0xB5C` (crashed), i.e. the two members
+        // below. Names are consumer-derived (no DWARF accessor row).
+        void AddRemoveSlammedTrafficEvent(u32 luVehicleIndex)
+        {
+            CGS_ASSERT(luVehicleIndex < 600u, "luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");   // :294
+            RemoveSlammedTrafficEvent lEvent;
+            lEvent.muVehicleId = static_cast<u16>(luVehicleIndex);
+            mRemoveSlammedTrafficEventQueue.AddEvent(lEvent);
+        }
+        void AddRemoveCrashedTrafficEvent(u32 luVehicleIndex)
+        {
+            CGS_ASSERT(luVehicleIndex < 600u, "luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");   // :314
+            RemoveCrashedTrafficEvent lEvent;
+            lEvent.muVehicleId = static_cast<u16>(luVehicleIndex);
+            mRemoveCrashedTrafficEventQueue.AddEvent(lEvent);
+        }
 
     private:
         AddCrashingTrafficEventQueue   mAddCrashingTrafficEventQueue;    // :187 @0x000

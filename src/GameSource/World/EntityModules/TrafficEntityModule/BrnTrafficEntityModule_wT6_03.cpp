@@ -110,6 +110,39 @@ void TrafficEntityModule::HandleExternalRequests(
             break;
         }
 
+        // --------------------------------------------------------------------------------
+        // 0x8274BB18..0x8274BB4C -- E_ACTION_SET_TRAFFIC_SCALE_BASED_ON_RANK (28), a bare f32.
+        // `lfs f0, 0(record) ; stfs -> +0x71810 (mfBaseDensityScale)`, and when the simulation
+        // is lockstep-free (`lbz +0x717E7`, mbAllowDivergentBehaviour) ALSO `stfs -> +0x71814`
+        // (mfGameModeDensityScale), i.e. the rank scale takes effect immediately offline and only
+        // at the next ResetEventData online. ProgressionManager::OnEventFinishUpdateProfile posts
+        // it at every event finish, which is how the freeburn density is re-published after an
+        // event. Landed 2026-09-10 with the STOP_MODE arm below.
+        // --------------------------------------------------------------------------------
+        case BrnGameState::GameStateModuleIO::E_ACTION_SET_TRAFFIC_SCALE_BASED_ON_RANK:
+        {
+            CGS_ASSERT(lpEvent != 0, "lpSetTrafficScaleAction");     // baked .cpp 5866
+            const f32 lfTrafficScale = *reinterpret_cast<const f32*>(lpEvent);
+            mfBaseDensityScale = lfTrafficScale;
+            if (mbAllowDivergentBehaviour)
+            {
+                mfGameModeDensityScale = lfTrafficScale;
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------------------
+        // 0x8274BE3C..0x8274BE44 -- E_ACTION_STOP_MODE (39): `HandleStopModeAction(this, lpInput,
+        // record)`. THE arm that ends an event's traffic regime -- without it the event's density
+        // scale, clear-traffic flags and start-line protection stayed latched for the rest of the
+        // session (BurnoutDecomp/b5-decomp#22).
+        // --------------------------------------------------------------------------------
+        case BrnGameState::GameStateModuleIO::E_ACTION_STOP_MODE:
+            HandleStopModeAction(
+                lpInput,
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::StopModeAction*>(lpEvent));
+            break;
+
         default:
             break;
         }
@@ -124,10 +157,10 @@ void TrafficEntityModule::HandleExternalRequests(
         // this tree. Listed by action id so the next wave can pick them off individually:
         //   13  empty-pool state advance (meEmptyTrafficPoolState IDLE->EMPTY, no callee --
         //       reconstructable today, left out only to keep this file to its one claim)
-        //   28  SetTrafficScaleBasedOnRank (mfBaseDensityScale / mfGameModeDensityScale)
+        //   28  SetTrafficScaleBasedOnRank -- LIVE above (2026-09-10)
         //   30  start-line sweep over every active race car  -> KillAllTrafficInCylinder
         //   34  StartPlayingMode                             -> TrafficLightManager::SetCountdownValue
-        //   39  StopMode                                     -> HandleStopModeAction
+        //   39  StopMode                                     -- LIVE above (2026-09-10)
         //   47  traffic-light countdown + pause bookkeeping   -> SetCountdownValue / IsPaused
         //   73  crash-camera proximity kill                   -> (inline, needs the +0x7143x block)
         //   75  HideAllTraffic                                -> HideAllTraffic
@@ -142,13 +175,39 @@ void TrafficEntityModule::HandleExternalRequests(
         // KillAllTrafficInCylinder), also blocked on KillAllTrafficInCylinder.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
-            "HandleExternalRequests -- ONLY action 23 (PREPARE_FOR_MODE) is reconstructed. The "
-            "other fifteen arms and the post-loop proximity tail each need a callee with no "
-            "body in this tree (KillAllTrafficInCylinder, RestartTraffic, HandleStopModeAction, "
+            "HandleExternalRequests -- actions 23 (PREPARE_FOR_MODE), 28 (SET_TRAFFIC_SCALE) and "
+            "39 (STOP_MODE) are reconstructed. The other thirteen arms and the post-loop proximity "
+            "tail each need a callee with no body in this tree (KillAllTrafficInCylinder, RestartTraffic, "
             "Hide/UnhideAllTraffic, ClearupCrashedTraffic, FireKillZone, "
             "TrafficLightManager::SetCountdownValue, IsPaused). Nothing regresses: the whole "
             "function was gated at its call site until now, so zero arms ran");
     }
+}
+
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::HandleStopModeAction  @ 0x82716280  (export hole; image-read)
+//
+//   0x82716298  cmplwi r4, 0 ; bne  -> FireAssert("lpInput", BrnTrafficEntityModule.cpp, 6955)
+//   0x827162C0  cmplwi r5, 0 ; bne  -> FireAssert("lpStopModeAction", ..., 6956)
+//   0x827162EC  lbzx r11, this, 0x717E7   ; mbAllowDivergentBehaviour
+//   0x827162F4  bne -> skip ; else stbx 1, this, 0x7180F   ; mbNeedToKillAllZombies = true
+//   0x8271630C  bl ResetEventData
+// Only the two asserts read the arguments; the record's contents are not consumed here.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::HandleStopModeAction(
+    const BrnTrafficIO::InputBuffer_PostPhysics*           lpInput,
+    const BrnGameState::GameStateModuleIO::StopModeAction* lpStopModeAction)
+{
+    CGS_ASSERT(lpInput != 0, "lpInput");                    // baked .cpp 6955
+    CGS_ASSERT(lpStopModeAction != 0, "lpStopModeAction");  // baked .cpp 6956
+
+    if (!mbAllowDivergentBehaviour)
+    {
+        mbNeedToKillAllZombies = true;
+    }
+
+    ResetEventData();
 }
 
 }

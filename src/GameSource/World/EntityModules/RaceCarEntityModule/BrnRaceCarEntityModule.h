@@ -68,6 +68,8 @@ namespace BrnGameState { namespace GameStateModuleIO {
     struct ResetPlayerCarAction;
         struct CarSelectionRequestStreamingAction;
     struct PrepareForModeAction;
+    struct StopModeAction;          // game action 39 -- HandleStopModeAction's record
+    struct AddRivalCarAction;       // game action 196 -- AddRivalCar's record
 } }
 // [stuntrace start-grid wave] SetupOpponents / SetUpPlayerCarForMode take the mode's parameter
 // block by pointer; the .cpp includes BrnGameModeParams.h for the members.
@@ -712,6 +714,30 @@ public:
     // @0x82307EF4 passes false.
     void RemoveRivals(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput,
                       bool lbRemovePlayerCar);
+
+    // X360 0x82305F28. The game-action 195 (E_ACTION_REMOVE_ALL_RIVALS) consumer: RemoveRaceCar
+    // every global slot that is in the world (muType != INACTIVE, BrnRaceCar.h:547) AND AI driven
+    // (muType == E_RACE_CAR_TYPE_AI, :603). ProgressionManager::UpdateRivals @0x82396298 posts
+    // it at the head of every rival refresh (the one ExitCurrentMode requests on leaving an
+    // offline event), before re-adding the unlocked roaming rivals one per frame with 196.
+    void RemoveAllRivalsFromWorld(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput);
+
+    // X360 0x82301A50. The game-action 196 (E_ACTION_ADD_RIVAL) consumer: spawn one roaming
+    // freeburn rival -- an E_RACE_CAR_TYPE_AI car of the Rival's car -- looking down the record's
+    // heading from its spawn position, then seed the AI module's out-of-range record for it at
+    // the record's AI section with the rival's district and medals-to-unlock.
+    void AddRivalCar(const BrnGameState::GameStateModuleIO::AddRivalCarAction* lpAction,
+                     RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput);
+
+    // X360 0x82307A30. The game-action 39 (E_ACTION_STOP_MODE) consumer -- the WORLD-side mode
+    // teardown, one per mode exit: every car back to RACING, the scoring map cleared, the player's
+    // base-deformation pair restored from its mode-change stash, infinite boost off, the player's
+    // car out of the mode, crash play / showtime deactivated (unless the NEXT mode is showtime),
+    // the rivals removed when the mode asked for it, the boost event modifier restored, the
+    // indicators off, the eight mode words/bytes cleared, and the winner's car reset or placed
+    // back on track.
+    void HandleStopModeAction(const BrnGameState::GameStateModuleIO::StopModeAction* lpAction,
+                              RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput);
 
     // X360 0x822A37C8 -- find the player slot currently mapped to leActiveRaceCarIndex
     // and reset it to the sentinel (8). If no slot maps to it, do nothing.

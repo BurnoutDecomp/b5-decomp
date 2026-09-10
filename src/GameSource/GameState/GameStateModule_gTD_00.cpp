@@ -30,6 +30,8 @@
 #include "GameSource/GameState/BrnGameStateModuleIO.h"
 #include "GameSource/GameState/BrnGameStateTakedownCache.h"
 #include "GameSource/GameState/TakedownManager/BrnTakedownManager.h"
+#include "GameSource/GameState/Offences/BrnDriveThruManager.h"    // DriveThroughsCanNowOpenAgain (OnModeFinish / OnModeEnd)
+#include "GameSource/GameState/BrnGameActions.h"                   // SetTakedownCameraAction (OnModeFinish)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"   // GameMode::GetCurrentState / GetTimeInMode (harness hook)
 #include <cstdlib>   // getenv / atof (harness hook)
@@ -186,8 +188,9 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
 
 // ProcessGameEvents @0x823A0A18 case 27 (POST_EVENT_LEAVE) ends with `TakedownManager::
 // ClearRaceCarData(gsm+568)` -- wired. The console's other callers are ProcessGameEvents case 32
-// (no such arm on this build yet) and GameStateModule::OnModeEnd @0x823767E0 (parked). ClearAllTakedowns
-// (OnModeFinish @0x82390EE0 -- parked -- and the online case 18) has no host caller yet.
+// (no such arm on this build yet) and GameStateModule::OnModeEnd @0x823767E0 (below, LIVE
+// 2026-09-10). ClearAllTakedowns' host callers: OnModeFinish @0x82390EE0 (below) and the online
+// case 18 (no such arm yet).
 bool GameStateModule::IsInTakedownCamera() const
 {
     return mpTakedownManager != 0 && mpTakedownManager->IsInTakedownCamera();
@@ -199,6 +202,71 @@ void GameStateModule::ClearTakedownRaceCarData()
     {
         mpTakedownManager->ClearRaceCarData();
     }
+}
+
+
+// ==============================================================================================
+// GameStateModule::OnModeFinish  (X360 0x82390EE0) -- FinishCurrentMode @0x8234B978's last call.
+//
+//   0x82390EFC  var_30 = -1 ; var_2C = 0 ; var_2B = 0        (an 8-byte SetTakedownCameraAction:
+//                                                             focus -1, active 0, signature 0)
+//   0x82390F1C  AddEvent(lpOutputBuffer->GetGameActionQueue(), &var_30, 6, 8)
+//   0x82390F30  TakedownManager::ClearAllTakedowns(this + 568, lpOutputBuffer->GetGameActionQueue())
+//   0x82390F38  stb 0, this+46620 ; std 0, this+46448       == DriveThruManager (this+44240)
+//               +0x94C mbDriveThroughsCloseWhenUsed / +0x8A0 maDriveThroughClosed:
+//               DriveThroughsCanNowOpenAgain().
+// ==============================================================================================
+void GameStateModule::OnModeFinish(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
+{
+    GameStateModuleIO::GameActionQueue* lpActionQueue = lpOutputBuffer->GetGameActionQueue();
+
+    GameStateModuleIO::SetTakedownCameraAction lCameraOff;
+    lCameraOff.meFocusOnRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID; // li r11, -1 -> var_30 (the GLOBAL enum -- two of this name are visible here)
+    lCameraOff.mbActive              = false;                             // stb 0, var_2C
+    lCameraOff.mbIsSignature         = false;                             // stb 0, var_2B
+    lCameraOff.mbIsRevengeTakedown   = false;                             // +6 / +7: stack residue on
+    lCameraOff.muPad07               = 0;                                 //  the console; zeroed here
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCameraOff),
+                            GameStateModuleIO::E_ACTION_SET_TAKEDOWN_CAMERA_STATE,
+                            static_cast<s32>(sizeof(lCameraOff)));
+
+    // Embedded by value on the console; a pointer on this build (see ConstructTakedownBringUp),
+    // guarded the same way ClearTakedownRaceCarData is.
+    if (mpTakedownManager != 0)
+    {
+        mpTakedownManager->ClearAllTakedowns(lpActionQueue);
+    }
+
+    mDriveThruManager.DriveThroughsCanNowOpenAgain();
+}
+
+// ==============================================================================================
+// GameStateModule::OnModeEnd  (X360 0x823767E0) -- SendModeStopMessages @0x8234BEC0's tail.
+//
+//   0x823767F0  MugshotManager::OnRoundEnd(this + 1280)     -- neither manager exists on this
+//   0x823767F8  PaybackManager::OnRoundEnd(this + 1392)        build; named, not faked (the same
+//                                                              two TakedownPreWorldLeg names)
+//   0x82376800  TakedownManager::ClearRaceCarData(this + 568)
+//   0x82376808  lwz this+7604 == meCurrentGameModeType ; == 2 || == 16 (the two SHOWTIME modes) ->
+//   0x82376838      stw 0, +284504   == mShowtimePendingTrafficIndexStack's count (Clear)
+//   0x8237683C      stfs 2.0, +284444 == mfTimeSinceLastCrashMode (the post-mode lockout, re-armed)
+//   0x82376840      sth -1, +284508  == muShowtimeRequestedTrafficIndex (K_INVALID_VEHICLE_INDEX)
+//   0x82376848  stb 0, this+46620 ; std 0, this+46448   == DriveThroughsCanNowOpenAgain()
+// ==============================================================================================
+void GameStateModule::OnModeEnd()
+{
+    ClearTakedownRaceCarData();
+
+    const GameStateModuleIO::EGameModeType leGameModeType = GetCurrentGameModeType();
+    if (leGameModeType == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
+        leGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+    {
+        mShowtimePendingTrafficIndexStack.Clear();
+        mfTimeSinceLastCrashMode        = 2.0f;
+        muShowtimeRequestedTrafficIndex = 0xFFFFu;
+    }
+
+    mDriveThruManager.DriveThroughsCanNowOpenAgain();
 }
 
 }

@@ -46,6 +46,15 @@
 #include "GameSource/BurnoutConstants.h"                                  // EGlobalRaceCarIndex / EActiveRaceCarIndex (+ the ++ guards)
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress("XUSCCOB2")
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameSource/GameState/BrnGameActions.h"                           // StopModeAction / AddRivalCarAction (actions 39 / 196)
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"                  // BrnDirector::Camera::Utils::CreateLookAt (the rival spawn frame)
+#include "SharedClasses/DataLists/VehicleList.h"                           // BrnResource::VehicleList::GetVehicleIndex / GetVehicleData
+#include "SharedClasses/DataLists/VehicleListEntry.h"                      // BrnResource::VehicleListEntry::GetId
+#include "SharedClasses/Progression/BrnRival.h"                            // BrnProgression::Rival (the record's +0x20 field)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostStrategy.h" // BoostStrategy::SetInfiniteBoost / OnEndCrashPlay / ResetBoostEventModeModifier
+#include "GameSource/World/AI/BrnAISharedConstants.h"                     // BrnAI::E_RESET_TYPE_STANDARD
+#include "rw/math/vpu/vector3_operation.h"                                // rw::math::vpu::Add (the spawn look-at target)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint (the console's own Deactivate line)
 
 namespace BrnWorld
 {
@@ -224,6 +233,235 @@ void RaceCarEntityModule::RemoveRivals(
         if (lpRaceCar->IsInWorld() && !lpRaceCar->IsNetworkDriven())        // :547 / :590
         {
             RemoveRaceCar(leGlobalRaceCarIndex, lpOutput);
+        }
+    }
+}
+
+
+// ============================================================================================
+// RemoveAllRivalsFromWorld @0x82305F28 -- game action 195 (E_ACTION_REMOVE_ALL_RIVALS).
+//
+// Console (r30 == the global index, r31 == the RaceCar):
+//   do {
+//       r31 = GetGlobalRaceCar(r30);
+//       [BrnRaceCar.h:547 type assert]  if (muType != 3 /* INACTIVE */)      == IsInWorld()
+//       [BrnRaceCar.h:603 type assert]      if (muType == 1 /* AI */)       == GetType() == AI
+//                                                RemoveRaceCar(r30, lpOutput);
+//       ++r30; [BurnoutConstants.h:84]
+//   } while (r30 < 35);
+// Same shape as RemoveRivals above, but keyed on the AI type instead of !NETWORK, and never
+// skipping the player (a player car is not type AI, so the test excludes it by itself).
+// ============================================================================================
+void RaceCarEntityModule::RemoveAllRivalsFromWorld(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput)
+{
+    for (EGlobalRaceCarIndex leGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_0;
+         leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT;
+         leGlobalRaceCarIndex++)
+    {
+        const RaceCar* lpRaceCar = GetGlobalRaceCar(leGlobalRaceCarIndex);
+
+        if (lpRaceCar->IsInWorld() && lpRaceCar->GetType() == E_RACE_CAR_TYPE_AI)   // :547 / :603
+        {
+            RemoveRaceCar(leGlobalRaceCarIndex, lpOutput);
+        }
+    }
+}
+
+// ============================================================================================
+// AddRivalCar @0x82301A50 -- game action 196 (E_ACTION_ADD_RIVAL).
+//
+//   0x82301A9C  GetVehicleIndex(mpVehicleList, record->mRival.mCarId)     ; lwz 0x2C == low word
+//   0x82301AAC  < 0 -> ["No vehicles available!" :9248 unless miCount > 0] -> index 0
+//   0x82301AD4  GetVehicleData(mpVehicleList, index) ; ["lpVehicleData" :9253]
+//   0x82301AF0  lvx v1 <- record+0x00 ; lvx v0 <- record+0x10 ; vaddfp v2 = v1 + v0
+//   0x82301B08  CreateLookAt(&sp+0x60, v1 == eye, v2 == target)
+//   0x82301B2C  li r11, -1 ; stw r11, sp+0x54            <- liOpponentIndex == -1 (not an opponent)
+//   0x82301B54  SpawnRaceCar(GetRaceCarAIInterface(), &sp+0x60, 1 == AI, entry->mCarId (ld 0),
+//                            r8 = 0 keepResetSection, r9 = 0 wheel, r10 = record+0x20 (the Rival,
+//                            whose +0 IS its CgsID))
+//   0x82301B58  lbz r11, 0x14(rival) == GetDistrict ; lhz r30, 0x16(rival) -- byte +0x16 zero-
+//               extended, GetNumMedalsToUnlock ; lwz 0xA0(record) == mi16AISectionIndex
+//   0x82301BA8  SetUpOutOfRangeRaceCar(GetRaceCarAIInterface(), global, v1 == position,
+//                                      v2 == heading, section, district, medals)
+// ============================================================================================
+void RaceCarEntityModule::AddRivalCar(const BrnGameState::GameStateModuleIO::AddRivalCarAction* lpAction,
+                                      RaceCarEntityModuleIO::OutputBuffer_PreScene*              lpOutput)
+{
+    const BrnProgression::Rival& lrRival = lpAction->mRival;                       // r30 == record + 0x20
+
+    // 0x82301A9C..0x82301AE4: the rival's car, or -- when the vehicle list does not carry it --
+    // entry 0 (asserting the list is not empty first).
+    s32 liVehicleIndex = mpVehicleList->GetVehicleIndex(lrRival.GetCarId());
+    if (liVehicleIndex < 0)
+    {
+        CGS_ASSERT(mpVehicleList->GetVehicleCount() > 0, "No vehicles available!");   // :9248
+        liVehicleIndex = 0;
+    }
+    const BrnResource::VehicleListEntry* lpVehicleData = mpVehicleList->GetVehicleData(liVehicleIndex);
+    CGS_ASSERT(lpVehicleData != 0, "lpVehicleData");                                    // :9253
+
+    // 0x82301AF0..0x82301B08: look from the spawn position towards position + heading.
+    const Matrix44Affine lSpawnTransform = BrnDirector::Camera::Utils::CreateLookAt(
+        lpAction->mSpawnPosition, rw::math::vpu::Add(lpAction->mSpawnPosition, lpAction->mSpawnHeading));
+
+    // 0x82301B2C..0x82301B54. The console hands SpawnRaceCar the Rival's address as its rival-id
+    // pointer -- Rival's first member IS its CgsID (BrnRival.h +0x00) -- so a copy of that id is
+    // what the callee reads. Opponent index -1: a roaming rival is not a grid opponent.
+    const CgsID lRivalId = lrRival.GetId();
+    const EGlobalRaceCarIndex leGlobalRaceCarIndex =
+        SpawnRaceCar(lpOutput->GetRaceCarAIInterface(), lSpawnTransform,
+                     E_RACE_CAR_TYPE_AI, lpVehicleData->GetId(), false,
+                     0 /* lWheelModelId: resolved from the model */,
+                     &lRivalId,
+                     -1);
+
+    // 0x82301B58..0x82301BA8: seed the AI module's out-of-range record for the new car.
+    lpOutput->GetRaceCarAIInterface()->SetUpOutOfRangeRaceCar(
+        leGlobalRaceCarIndex,
+        lpAction->mSpawnPosition,
+        lpAction->mSpawnHeading,
+        static_cast<u16>(lpAction->mi16AISectionIndex),
+        lrRival.GetDistrict(),
+        lrRival.GetNumMedalsToUnlock());
+}
+
+// ============================================================================================
+// HandleStopModeAction @0x82307A30 -- game action 39 (E_ACTION_STOP_MODE).
+//
+// The world-side mode teardown. Store map (r31 == this, r29 == the player's ActiveRaceCar,
+// r30 == 0, r26 == "showtime ended here"):
+//   0x82307A60  SetAllCarsOnStartLine(2 == RACING, 1 == include the player)
+//   0x82307A68  ClearAllActiveRaceCarToPlayerScoringMappings()
+//   0x82307A70  lwz 4(action) -- the NEXT mode; < 10 || == 15 || == 16 ->
+//   0x82307AB0      +0x184D8 <- +0x184E0 ; +0x184D0 <- +0x184D4   (the base-deformation stash)
+//   0x82307AC0  vtbl+128 == slot 32 SetInfiniteBoost(strategy, 0)
+//   0x82307AD4  GetActiveRaceCar(+0x182F8) ; ["lpPlayerActiveRaceCar" :8511] ["IsAttached()"
+//               BrnActiveRaceCar.h:1089] ; RaceCar::SetInCurrentGameMode(car->+0x6F0, 0, 1)
+//   0x82307B5C  stb 0, 0x777(car)                              -- ActiveRaceCar::mbIsInGameMode
+//   0x82307B60  lbz 0x14(action) == next-is-showtime ; == 0 ->
+//   0x82307B84      if (+0x1823C) { +0x18224 = 0.0 ; +0x1823C = 0 ; "SHOWTIME! ...Deactivate" }
+//   0x82307BD0      if (+0x1823D) { +0x1823D = 0 ; vtbl+56 == slot 14 OnEndCrashPlay ; r26 = 1 }
+//   0x82307C0C  lwz 0x1835C -- the LOW word of the u64 flags -- & 2 == KU_FLAG_REMOVE_RIVALS_
+//               FROM_WORLD -> RemoveRivals(lpOutput, 0)
+//   0x82307C30  strategy+0xAC <- strategy+0xB0     (mfBoostEventModeModifier <- mfOriginalBoostEarning)
+//   0x82307C44  SetIndicatorState(car, 0, 0)
+//   0x82307C58  std r30(0), +0x18358                            -- mxGameModeFlags = 0
+//   0x82307C70  stw -1, +0x18368                                -- meGameModeType = E_MODE_NONE
+//   0x82307C84  stb 0 x7: +0x18344 +0x18347 +0x18354 +0x18345 +0x18350 +0x18346 ; stw 0, +0x18340
+//   0x82307CC0  lbz 0x78C(car) == mbWonLastEvent ->
+//   0x82307CD0      r26 || lwz 0(action) < 10 -> RequestResetOnTrack(car->+0x6F0, f1 = flt_82FAD720,
+//                                                 r4 = 1 == E_RESET_TYPE_STANDARD, f2 = 0.0) ; 0x78C = 0
+//   0x82307D14      else: (mode == 15 || 16) || !lbz 0x12 || (lbz 0x11 && !lbz 0x13)
+//                     -> RequestPlaceOnTrack(car, GetPosition, GetDirection, f1 = flt_82FAD720)
+//                     else RequestPlaceOnTrack(car, GetPosition, GetDirection, f1 = 0.0) ; 0x78C = 0
+//
+// flt_82FAD720 is a BSS word with a dyn-init writer: the CRT thunk at 0x82C4BB30 stores
+// flt_82F31928 * flt_820138DC == 0.44704f (mph -> m/s, image-read 3EE4E26D) * 50.0f (image-read
+// 42480000) -- the winner's car is put back on the road at 50 mph. [Its twin flt_82FAD610 is
+// 10 mph, thunk 0x82C4BB10.] The :103/:203 notes in BrnRaceCarEntityModule_CrashExit.cpp that
+// read it as a static 0.0 predate this recovery.
+// ============================================================================================
+namespace
+{
+    const f32 KF_MPH_TO_METRES_PER_SECOND     = 0.44704f;                          // flt_82F31928
+    const f32 KF_POST_MODE_RESET_SPEED_MPH    = 50.0f;                             // flt_820138DC
+    const f32 KF_POST_MODE_RESET_SPEED        = KF_POST_MODE_RESET_SPEED_MPH * KF_MPH_TO_METRES_PER_SECOND; // flt_82FAD720
+}
+
+void RaceCarEntityModule::HandleStopModeAction(const BrnGameState::GameStateModuleIO::StopModeAction* lpAction,
+                                               RaceCarEntityModuleIO::OutputBuffer_PreScene*         lpOutput)
+{
+    bool lbShowtimeEndedHere = false;                                                  // r26
+
+    SetAllCarsOnStartLine(ActiveRaceCar::E_RACE_START_STATE_RACING, true);
+    ClearAllActiveRaceCarToPlayerScoringMappings();
+
+    // 0x82307A70..0x82307AB4: offline successor, or the online lobby / showtime pair -- restore
+    // the player's base-deformation pair from the mode-change stash.
+    const s32 liNextGameModeType = lpAction->miField04;
+    if (liNextGameModeType < 10
+        || liNextGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY
+        || liNextGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+    {
+        mfPlayerBaseDeformAmountMirror    = mfPlayerBaseDeformAmountSaved;
+        miPlayerBaseDeformationTypeMirror = miPlayerBaseDeformationTypeSaved;
+    }
+
+    BoostStrategy* lpBoostStrategy = mBoostManager.GetBoostStrategy();               // +0x450
+    lpBoostStrategy->SetInfiniteBoost(false);                                          // vtbl+128
+
+    ActiveRaceCar* lpPlayerActiveRaceCar = GetActiveRaceCar(mePlayerActiveRaceCarIndex);
+    CGS_ASSERT(lpPlayerActiveRaceCar != 0, "lpPlayerActiveRaceCar");                 // :8511
+    CGS_ASSERT(lpPlayerActiveRaceCar->IsAttached(), "IsAttached()");                 // BrnActiveRaceCar.h:1089
+    lpPlayerActiveRaceCar->GetGlobalRaceCar()->SetInCurrentGameMode(false, true);
+    lpPlayerActiveRaceCar->SetInGameMode(false);                                       // stb 0, 0x777
+
+    // 0x82307B60..0x82307C0C: unless the NEXT mode is showtime, crash play ends here.
+    if (lpAction->mu8Field14 == 0)
+    {
+        if (mCrashPlayManager.IsActive())
+        {
+            mCrashPlayManager.Deactivate();
+        }
+        if (mCrashPlayManager.IsInShowtime())
+        {
+            mCrashPlayManager.SetInShowtime(false);
+            lpBoostStrategy->OnEndCrashPlay();                                          // vtbl+56
+            lbShowtimeEndedHere = true;
+        }
+    }
+
+    if ((mxGameModeFlags & BrnGameState::GameModeParams::KU_FLAG_REMOVE_RIVALS_FROM_WORLD) != 0)
+    {
+        RemoveRivals(lpOutput, false);
+    }
+
+    lpBoostStrategy->ResetBoostEventModeModifier();                                    // +0xAC <- +0xB0
+    lpPlayerActiveRaceCar->SetIndicatorState(false, false);
+
+    mxGameModeFlags              = 0;                                                  // std r30, +0x18358
+    meGameModeType               = BrnGameState::GameStateModuleIO::E_MODE_NONE;       // stw -1, +0x18368
+    mbIsInGameMode               = false;                                              // +0x18344
+    mbCarSelectAllowedInGameMode = false;                                              // +0x18347
+    mbModeStartedPlaying         = false;                                              // +0x18354
+    mbIsInOnlineGameMode         = false;                                              // +0x18345
+    mbSpawnAIBehindStartGrid     = false;                                              // +0x18350
+    mbOnlineModeJustFinished     = false;                                              // +0x18346
+    miOpponentCount              = 0;                                                  // +0x18340
+
+    // 0x82307CC0..0x82307DE0: the winner's car goes back on the road.
+    if (lpPlayerActiveRaceCar->mbWonLastEvent)                                         // lbz 0x78C
+    {
+        const s32 liStoppedGameModeType = static_cast<s32>(lpAction->meGameModeType);   // lwz 0(action)
+
+        if (lbShowtimeEndedHere || liStoppedGameModeType < 10)
+        {
+            lpPlayerActiveRaceCar->GetGlobalRaceCar()->RequestResetOnTrack(
+                KF_POST_MODE_RESET_SPEED, BrnAI::E_RESET_TYPE_STANDARD, 0.0f);
+            lpPlayerActiveRaceCar->mbWonLastEvent = false;
+        }
+        else
+        {
+            const bool lbLobbyPair =
+                (liStoppedGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY
+                 || liStoppedGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
+
+            // `lbz 0x12` no rounds remaining, `lbz 0x11` timed out, `lbz 0x13` started from region.
+            if (lbLobbyPair
+                || lpAction->mu8Field12 == 0
+                || (lpAction->mu8Field11 != 0 && lpAction->mu8Field13 == 0))
+            {
+                lpPlayerActiveRaceCar->RequestPlaceOnTrack(lpPlayerActiveRaceCar->GetPosition(),
+                                                           lpPlayerActiveRaceCar->GetDirection(),
+                                                           KF_POST_MODE_RESET_SPEED);
+            }
+            else
+            {
+                lpPlayerActiveRaceCar->RequestPlaceOnTrack(lpPlayerActiveRaceCar->GetPosition(),
+                                                           lpPlayerActiveRaceCar->GetDirection(),
+                                                           0.0f);
+            }
+            lpPlayerActiveRaceCar->mbWonLastEvent = false;
         }
     }
 }

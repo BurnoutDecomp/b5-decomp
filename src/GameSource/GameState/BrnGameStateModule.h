@@ -1047,6 +1047,17 @@ public:
     void SetActiveGameModeState()   { meControllerState = E_CONTROLLERSTATE_ACTIVE_GAME_MODE_STATE; }
     void SetInActiveGameModeState() { meControllerState = E_CONTROLLERSTATE_INACTIVE_GAME_MODE_STATE; }
 
+    // X360 0x82390EE0 / 0x823767E0 -- the two module-level end-of-mode hooks ModeManager drives,
+    // bodied in GameStateModule_gTD_00.cpp (LANDED 2026-09-10; both were parked since the
+    // stunt-race wave). OnModeFinish is FinishCurrentMode's LAST statement (the results are
+    // pending): takedown camera off, all takedowns cleared, drive-thrus reopen. OnModeEnd is
+    // SendModeStopMessages' tail (the mode is gone): takedown car data cleared, the showtime
+    // lockout re-armed after a showtime, drive-thrus reopen. OnModeEnd's console prologue reads
+    // no argument register -- the caller's `r4 = !lbOnlineLobbyHandover` is dead in the callee,
+    // so it takes none here.
+    void OnModeFinish(GameStateModuleIO::OutputBuffer* lpOutputBuffer);
+    void OnModeEnd();
+
     // [stuntrace waveB fix round, 2026-08-26] X360 this+232296 (0x38B68). See the member banner for
     // the two asm attestations and for why the requested 0x38BE8 spelling is refuted.
     BrnNetwork::NetworkPlayerID GetLocalPlayerNetworkID() const { return mLocalPlayerNetworkID; }

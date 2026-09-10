@@ -109,8 +109,21 @@ public:
                          const BrnResource::VehicleList*                                              lpVehicleList,
                          GameStateModuleIO::OutputBuffer*                                             lpOutput);
 
-    void DriveThroughsCloseOnceActivatedUntilFurtherNotice();   // own TU; declared-only
-    void DriveThroughsCanNowOpenAgain();                        // own TU; declared-only
+    // X360-INLINED at every site (no standalone symbol for either): GameStateModule::StartGameMode
+    // @0x823972B0 does `std 0 -> +0x8A0 ; stb 1 -> +0x94C` for ROAD_RAGE / MARKED_MAN starts, and
+    // OnModeFinish @0x82390EE0 / OnModeEnd @0x823767E0 do `stb 0 -> +0x94C ; std 0 -> +0x8A0` --
+    // i.e. the closed-set bit array is wiped and the close-when-used policy toggled. Inline
+    // bodies are the faithful form (the same rule as GameStateModule::SetControllerState).
+    void DriveThroughsCloseOnceActivatedUntilFurtherNotice()
+    {
+        maDriveThroughClosed.UnSetAll();
+        mbDriveThroughsCloseWhenUsed = true;
+    }
+    void DriveThroughsCanNowOpenAgain()
+    {
+        mbDriveThroughsCloseWhenUsed = false;
+        maDriveThroughClosed.UnSetAll();
+    }
     bool Release();                                             // own TU; declared-only
     void Destruct();                                           // own TU; declared-only
 

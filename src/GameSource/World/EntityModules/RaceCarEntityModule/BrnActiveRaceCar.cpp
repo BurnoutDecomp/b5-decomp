@@ -2468,4 +2468,39 @@ void ActiveRaceCar::GetResetCoords( Vector3* lpOutPosition, Vector3* lpOutDirect
     *lpOutDirection = mPhysicsState.mTransform.zAxis;
 }
 
+
+// ----------------------------------------------------------------------------
+// SetIndicatorState @ 0x822A52B0. Store-for-store:
+//   a2 != 0 : if (!+0x1C8D) +0x1C88 = 0.0 ; +0x1C8C = 1
+//   a3 != 0 : if (!+0x1C8C) +0x1C88 = 0.0 ; +0x1C8D = 0 ; +0x1C8C = 1
+//   else    : +0x1C88 = 0.0 ; +0x1C8C = 0 ; +0x1C8D = 0
+// HandleStopModeAction @0x82307C44 calls it with (0, 0) -- indicators off at mode end.
+// ----------------------------------------------------------------------------
+void ActiveRaceCar::SetIndicatorState(bool lbRightIndicator, bool lbLeftIndicator)
+{
+    if (lbRightIndicator)
+    {
+        if (!mbLeftIndicatorActive)
+        {
+            mfIndicatorTime = 0.0f;
+        }
+        mbRightIndicatorActive = true;
+    }
+    else if (lbLeftIndicator)
+    {
+        if (!mbRightIndicatorActive)
+        {
+            mfIndicatorTime = 0.0f;
+        }
+        mbLeftIndicatorActive  = false;
+        mbRightIndicatorActive = true;
+    }
+    else
+    {
+        mfIndicatorTime        = 0.0f;
+        mbRightIndicatorActive = false;
+        mbLeftIndicatorActive  = false;
+    }
+}
+
 }

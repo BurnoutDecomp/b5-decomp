@@ -2248,7 +2248,7 @@ namespace BrnResource
         }
         else if (memcmp(lacName, "TVEH", 4) == 0)
         {
-            DeferredGameDataRequest("UnloadTrafficVehicle (0x82670BE0, id 41)", lpSlot);
+            ProcessUnloadTrafficVehicleRequest(lpResourceInput, lpEvent, 41, liIndex);
         }
         else if (memcmp(lacName, "GD__", 4) == 0)
         {
@@ -2609,6 +2609,41 @@ namespace BrnResource
 
     // ARTIST 0x82670AA0: finish the old wheel bundle before the component streamer
     // can load its replacement. The type-3 reply returns through the saved slot as 47.
+    // @ 0x82670BE0 -- service an UNLOAD traffic-vehicle request (dispatch id 41). Store order:
+    // the response id is staged FIRST (`stw a4, 0x28(slot)`), the id is converted to text, the
+    // graphics-only type assert fires (X360 line 5186), the 4-char prefix is swapped in place to
+    // "VEH_" (0x8201594C), the bundle name is `Vehicles\%s_%s.bin` of (id, KAPC_ASSET_SET_SUFFIXES
+    // [type]), and one UnloadBundleRequest (type 3, 144 bytes; user = &mReceiverQueue, event id =
+    // the slot, live-update-replace 0, pool = the event's) goes to the resource queue. The reply
+    // rides ProcessInternalUnloadResponse, which posts id 41 back to the streamer's queue.
+    void GameDataModule::ProcessUnloadTrafficVehicleRequest(
+            CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex)
+    {
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        char lacTrafficVehicleID[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacTrafficVehicleID);
+
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for traffic vehicles\n");   // X360 line 5186
+
+        strncpy(lacTrafficVehicleID, "VEH_", 4);                   // "TVEH<code>" -> "VEH_<code>"
+
+        char lacFileName[208];
+        CgsCore::SPrintf(lacFileName, 128, KPC_VEHICLE_FILE_FORMAT, lacTrafficVehicleID,
+                         KAPC_ASSET_SET_SUFFIXES[static_cast<u32>(lpEvent->meType)]);
+
+        CgsResource::Events::UnloadBundleRequest lRequest = {};
+        lRequest.mpUser              = &mReceiverQueue;
+        lRequest.miEventId           = liSlotIndex;
+        lRequest.SetFileName(lacFileName);
+        lRequest.mbLiveUpdateReplace = false;
+        lRequest.miPoolId            = lpEvent->miPoolId;
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest), 3 /*UnloadBundle*/, sizeof(lRequest));
+    }
+
     void GameDataModule::ProcessUnloadWheelRequest(
             CgsResource::ResourceIO::InputBuffer* lpResourceInput,
             const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex)

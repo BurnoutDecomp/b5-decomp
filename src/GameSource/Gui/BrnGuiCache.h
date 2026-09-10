@@ -1482,7 +1482,11 @@ namespace BrnGui
         // ticker mode. FLAG: consumer-named (producer side unrecovered; reads 0 on this
         // build, i.e. controller present).
         s32  miActiveControllerIndex;                     // +0x4B38 (19256)
-        u8   mPad_4B3C[0x4];                              // +0x4B3C..+0x4B3F
+        // RecEvent case 322 (GuiEventStopMode) stores the record's +0x04 word here (`lwz r11, 4(rec) ;
+        // stw r11, 0x4B3C(this)` @0x82510150), and that word is the bridge's copy of
+        // StopModeAction+0x0C == ModeManager::miNumUnsucessfulGameModeAttempts (BrnModeManager_Start
+        // .cpp, SendModeStopMessages). Named after that producer; no reader on this build yet.
+        s32  miNumUnsuccessfulGameModeAttempts;           // +0x4B3C (19260) RecEvent 322 <- GuiEventStopMode+0x04
         // ADDITIVE CARVE (BrnCarSelectMain wave G): the last server-interface error word the
         // disconnect popup shows. DWARF h:1657 `CgsNetwork::EServerInterfaceError
         // meLastDisconnectedError` (order fit: right after miConsecutiveLosses in the DWARF

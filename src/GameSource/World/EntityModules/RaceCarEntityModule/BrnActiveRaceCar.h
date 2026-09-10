@@ -953,6 +953,11 @@ public:
     // assembly of every exported ARTIST function finds two other stores to +0x788, both in this
     // class (Prepare @0x822EAC28 and ResetAfterCrash @0x822BF3A0), and both write ZERO.
     void SetInShowtime(bool lbInShowtime)            { mbIsInShowtime = lbInShowtime; }        // +0x788
+    // X360 0x822A52B0. The indicator latch RaceCarEntityModule drives: the two flag bytes at
+    // +0x1C8C / +0x1C8D and the timer at +0x1C88. Body in BrnActiveRaceCar.cpp. Parameter
+    // names follow the members each argument raises (arg 1 raises +0x1C8C, arg 2's arm raises
+    // +0x1C8C and CLEARS +0x1C8D -- the console's own stores, reproduced as written).
+    void SetIndicatorState(bool lbRightIndicator, bool lbLeftIndicator);
     bool IsNotSendingNetworkUpdates() const          { return mbNotSendingNetworkUpdates; }    // +0x798
     bool IsDisconnectedFromNetwork() const           { return mbIsDisconnectedFromNetwork; }   // +0x799
     const Vector3& GetCurrentInAirRotations() const  { return mCurrentInAirRotations; }        // +0x750

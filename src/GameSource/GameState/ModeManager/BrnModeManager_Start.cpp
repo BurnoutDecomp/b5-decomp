@@ -865,12 +865,13 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
         // Behaviour cost: a road score buffered when the event started stays buffered.
     }
 
-    // [X] PARKED LEG -- GameStateModule::OnModeEnd. Console @0x8234C6E4:
+    // ✅ LANDED 2026-09-10 (was: PARKED LEG, conductor decision #6). Console @0x8234C6E4:
     //     mpGameStateModule->OnModeEnd(!lbOnlineLobbyHandover);   // X360 0x823767E0
-    // PARKED PER CONDUCTOR DECISION #6: GameStateModule::OnModeFinish / OnModeEnd /
-    // WaitForStreaming belong to the DETECTION / START-DRIVER wave, not this one, and none of
-    // the three exists on BrnGameStateModule.h today. Re-wire there.
-    //     mpGameStateModule->OnModeEnd(!lbOnlineLobbyHandover);
+    // The callee's prologue never reads r4 -- the `!lbOnlineLobbyHandover` the caller computes is
+    // dead in it (see BrnGameStateModule.h) -- so the host signature takes nothing. Body in
+    // GameStateModule_gTD_00.cpp: takedown car data cleared, showtime lockout re-armed, drive-thrus
+    // reopen.
+    mpGameStateModule->OnModeEnd();
 
     // RE-ARMED 2026-08-26 (mode-tick verify): the controller-state reset. Console @0x8234C70C:
     //     *(s32*)(mpGameStateModule + 232292) = 0;   // meControllerState = E_CONTROLLERSTATE_NOT_IN_GAME

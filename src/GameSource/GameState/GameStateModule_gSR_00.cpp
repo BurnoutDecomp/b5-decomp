@@ -52,6 +52,7 @@
 // is added behind each, marked [GUARD] at the site.
 // ============================================================================================
 #include "GameSource/GameState/BrnGameStateModule.h"
+#include "GameSource/GameState/Offences/BrnDriveThruManager.h"   // DriveThroughsCloseOnceActivatedUntilFurtherNotice (StartGameMode leg b)
 
 #include <stdlib.h>                                                     // getenv (the diag rungs)
 
@@ -1436,8 +1437,16 @@ void GameStateModule::StartModeAtLights(const GameStateModuleIO::PreWorldInputBu
     //                                 `*(v8 + 5806) = v12` suggests)
     //          *(this + 46620) = 1
     //       both inside the embedded DriveThruManager (base this + 44240).
-    // Neither leg affects a stunt run and neither has a modelled member to bind to. Named here
-    // in full so landing them is a lookup, not a re-derivation.
+    // Leg (a) still has no modelled StreetManager member to bind to. Named in full so landing it is
+    // a lookup, not a re-derivation.
+    // ✅ Leg (b) LANDED 2026-09-10: the two stores are DriveThruManager::maDriveThroughClosed (+0x8A0,
+    // the std of zero) and mbDriveThroughsCloseWhenUsed (+0x94C, the stb of one) --
+    // DriveThroughsCloseOnceActivatedUntilFurtherNotice(), whose inverse OnModeFinish / OnModeEnd run.
+    if (leGameModeType == GameStateModuleIO::E_MODE_ROAD_RAGE ||
+        leGameModeType == GameStateModuleIO::E_MODE_MARKED_MAN)
+    {
+        mDriveThruManager.DriveThroughsCloseOnceActivatedUntilFurtherNotice();
+    }
 }
 
 // ==============================================================================================

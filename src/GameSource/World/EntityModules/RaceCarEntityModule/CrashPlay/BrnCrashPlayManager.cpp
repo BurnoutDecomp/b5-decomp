@@ -1095,4 +1095,22 @@ f32 CrashPlayManager::GetShowtimeTrafficDensityScale() const
     return lfScale;
 }
 
+
+// ----------------------------------------------------------------------------
+// Deactivate -- DWARF BrnCrashPlayManager.h, no out-of-line X360 symbol. The console emits it
+// inline at RaceCarEntityModule::HandleStopModeAction @0x82307B84..0x82307BC4:
+//   stfs 0.0, +0x134 (mfBoostPercentage) ; stb 0, +0x14C (mbIsCrashPlayActive) ;
+//   gxMessageFilterFlags & 1 -> gpDebugPrint << "SHOWTIME! CrashPlayManager::Deactivate called.\n"
+// ----------------------------------------------------------------------------
+void CrashPlayManager::Deactivate()
+{
+    mfBoostPercentage   = 0.0f;
+    mbIsCrashPlayActive = false;
+
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint << "SHOWTIME! CrashPlayManager::Deactivate called.\n";
+    }
+}
+
 }

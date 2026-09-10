@@ -299,19 +299,24 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     }
     break;
 
+    // The three-way switch on meTearingDownState; its only non-empty arm
+    // (FLUSHING) runs KillDyingVehicleEntities, which is what publishes mbAllVehiclesDead for
+    // PostPhysicsUpdate's flush tail to advance on. LIVE 2026-09-10 -- the state producer
+    // (PostPhysicsUpdate's TEARING_DOWN arm, _wT1_01.cpp) landed the same day.
     case E_STATE_TEARING_DOWN:
     {
-        // GATE: a three-way switch on meTearingDownState whose only
-        // non-empty arm (FLUSHING) calls KillDyingVehicleEntities @0x82741E40. The body EXISTS
-        // now (BrnTrafficEntityModule_KillDyingVehicleEntities.cpp); the remaining blocker is
-        // the TEARING_DOWN state machine itself (meTearingDownState has no reconstructed
-        // producer -- PostPhysicsUpdate's whole TEARING_DOWN arm is gated), so emitting only
-        // this switch would run FLUSHING against a state word nothing drives.
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-            "PreSceneUpdate E_STATE_TEARING_DOWN arm -- the meTearingDownState switch. Its "
-            "FLUSHING call KillDyingVehicleEntities @0x82741E40 is bodied now; the switch "
-            "stays gated with PostPhysicsUpdate's TEARING_DOWN arm (no state producer)");
+        switch (meTearingDownState)
+        {
+        case E_TEARINGDOWNSTATE_WIPING:
+            break;
+        case E_TEARINGDOWNSTATE_FLUSHING:
+            KillDyingVehicleEntities(lpOutput);
+            break;
+        case E_TEARINGDOWNSTATE_WAITING_TO_RESET:
+            break;
+        default:
+            break;
+        }
     }
     break;
 
