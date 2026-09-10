@@ -76,43 +76,41 @@ namespace BrnGui
     static const char macAnimationVarName[10] = "apt_label";
 
     // DWARF cpp:25 -- the two toggle-row captions (X360 off_82F251E0, 3 pointers).
-    // ⚠️ FLAG UNRECOVERED: only entries [0] and [1] are attested (the asm comments them as
-    // "$CN_PANEL_FILTER" @0x824403F4 and "$CN_PANEL_TYPE" @0x824405A8). Entry [2] is a
-    // pointer IDA never resolves because no recovered body reads it, and the string is not
-    // present in build/game or in the Xbox One image's export set. It is left NULL rather
-    // than invented; no reconstructed body indexes it.
+    // RECOVERED 2026-09-10 from the .rdata pointer table @0x82F251E0 (tools/re/x360rd.py): entries [0] and [1] were attested (the asm comments them as
+    // "$CN_PANEL_FILTER" @0x824403F4 and "$CN_PANEL_TYPE" @0x824405A8); entry [2]'s pointer
+    // (0x820046A7) is the image's shared empty string, so the third caption is "".
     static const char* KAPC_OPTION_HEADINGS[3] =
     {
         "$CN_PANEL_FILTER",   // [0] @0x82F251E0
         "$CN_PANEL_TYPE",     // [1] @0x82F251E4
-        0,                    // [2] @0x82F251E8 -- FLAG UNRECOVERED
+        "",                   // [2] @0x82F251E8 -> 0x820046A7, the shared empty string (read from the image 2026-09-10)
     };
 
     // DWARF cpp:33 -- the four TOP-LEVEL filter option labels (X360 off_82F251EC, 4
     // pointers), one per PanelType in E_PANEL_EVENT..E_PANEL_RIVALS order.
-    // ⚠️ FLAG UNRECOVERED: only [0] is attested ("$CN_PANEL_EVENTS" @0x824403E8). The array
-    // is passed WHOLE to SetupToggle, so the missing three are a real runtime gap on this
-    // build (the drive-thru / road-rule / rival labels render empty) -- recorded here rather
-    // than papered over with invented ids.
+    // RECOVERED 2026-09-10 from the .rdata pointer table @0x82F251EC: [0] was attested ("$CN_PANEL_EVENTS" @0x824403E8). The array
+    // is passed WHOLE to SetupToggle; the other three pointers (0x82049300 / 0x820492E8 /
+    // 0x820492D4) resolve to the string ids below -- until they were read the drive-thru /
+    // road-rule / rival captions rendered EMPTY on the crash-nav filter row.
     static const char* KAPC_TOP_LEVEL_OPTION_LABELS[4] =
     {
         "$CN_PANEL_EVENTS",   // [0] @0x82F251EC  (E_PANEL_EVENT)
-        0,                    // [1] @0x82F251F0  (E_PANEL_DRIVETHRU) -- FLAG UNRECOVERED
-        0,                    // [2] @0x82F251F4  (E_PANEL_ROADSIGN)  -- FLAG UNRECOVERED
-        0,                    // [3] @0x82F251F8  (E_PANEL_RIVALS)    -- FLAG UNRECOVERED
+        "$CN_PANEL_DRIVETHRUS", // [1] @0x82F251F0 -> 0x82049300 (E_PANEL_DRIVETHRU) -- read from the image 2026-09-10
+        "$CN_PANEL_ROAD_RULES", // [2] @0x82F251F4 -> 0x820492E8 (E_PANEL_ROADSIGN)
+        "$CN_PANEL_RIVALS",     // [3] @0x82F251F8 -> 0x820492D4 (E_PANEL_RIVALS)
     };
 
     // DWARF cpp:50 -- the apt view-state names indexed by CrashNavPanel::AnimState
     // (X360 off_82F251FC, 4 pointers).
-    // ⚠️ FLAG UNRECOVERED: [0] "Invisible" and [1] "transIn" are attested by the asm comment
+    // RECOVERED 2026-09-10 from the .rdata pointer table @0x82F251FC: [0] "Invisible" and [1] "transIn" are attested by the asm comment
     // pair at 0x824408B0/0x824408B4; [2] (IDLE) and [3] (TRANS_OUT) have no reader in any
     // recovered body -- SetAnimState, their only consumer, has no X360 symbol at all.
     static const char* mpacAnimationStrings[CrashNavPanel::E_ANIMSTATE_COUNT] =
     {
         "Invisible",   // [0] E_ANIMSTATE_INVISIBLE @0x82F251FC
         "transIn",     // [1] E_ANIMSTATE_TRANS_IN  @0x82F25200
-        0,             // [2] E_ANIMSTATE_IDLE      -- FLAG UNRECOVERED
-        0,             // [3] E_ANIMSTATE_TRANS_OUT -- FLAG UNRECOVERED
+        "idle",        // [2] E_ANIMSTATE_IDLE      @0x82F25204 -> 0x8204AE94 (read from the image 2026-09-10)
+        "transOut",    // [3] E_ANIMSTATE_TRANS_OUT @0x82F25208 -> 0x8204A75C
     };
 
     // DWARF cpp:61..:64 -- the defaults StoreSettings(true) writes (X360 immediates
