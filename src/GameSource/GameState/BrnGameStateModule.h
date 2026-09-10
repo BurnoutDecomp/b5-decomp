@@ -785,6 +785,14 @@ public:
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
         GameStateModuleIO::GameActionQueue* lpActionQueue);
 
+    // ⭐ [event-state wave 2026-09-10] X360 ProcessGameEvents case 77 (E_EVENT_EVENT_STATE_REQUEST):
+    // answer the GUI's event-state query with action 179 -- the profile's DISCOVERED events packed
+    // into an Array<ProfileEvent,175>. Same drive point as the game-stats query (the carry queue).
+    // Body in GameStateModule_gUI_00.cpp.
+    void ProcessGameEventsEventStateRequestBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue);
+
     // ⭐⭐ [tut-ticker] X360 PreWorldUpdate @0x823A5328, THE TRAINING LEG (@0x823A57A4..0x823A57C8):
     //     bl ShouldAllowTimedTutorialTips     ; r3 = this
     //     mr r8, r3                           ; -> Update's trailing bool

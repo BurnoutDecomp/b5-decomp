@@ -1981,6 +1981,9 @@ void GuiModule::Destruct()
                 case 292:   // [results] post-event teardown (clears the record + suppress byte)
                 case 307:   // Medal totals and wins remaining on the licence.
                 case 304:   // [results] raises the presentation-suppressed byte
+                case 321:   // [event-end 2026-09-10] GuiEventFinishedModeResults -- GuiCache's shared LABEL_232 tail
+                case 322:   // [event-end 2026-09-10] GuiEventStopMode -- game mode back to NONE, tracker cleared
+                case 556:   // [event-state 2026-09-10] GuiEventEventStateResponse -- the DISCOVERED-event array
                     // [H1 wave 2026-08-25] On the console EVERY module-input event reaches
                     // GuiCache::RecEvent (its ~180-case switch consumes what it wants);
                     // this build's pump routes selectively, so the two cache-consumed ids

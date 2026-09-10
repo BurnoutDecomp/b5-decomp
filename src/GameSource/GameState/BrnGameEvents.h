@@ -87,6 +87,15 @@ enum EGameEventType
     // PRODUCER: BrnGui::InGame::OnEnter @0x824D0498 posts GUI command 145 on channel 40
     // (`v19 = 0x100000091LL; AddEvent(queue, &v19, 40, 16)`), and BridgeGuiToGameState
     // @0x823DDB78 case 145 emits this 1-byte signal event.
+    // ⭐ [event-state wave 2026-09-10] THE EVENT-STATE QUERY -- how the GUI learns which events the
+    // profile has DISCOVERED / WON. X360 ProcessGameEvents case 77 @0x823A0A18: walk
+    // Profile::maEvents[0 .. miEventCount), Append every record with flags & 1 (E_FLAG_DISCOVERED)
+    // to a local Array<ProfileEvent,175>, post it as action 179 (1404 bytes). PRODUCER: GUI command
+    // 555 on channel 40 (FBurnMainHudState::UpdateSetupState @0x82480EA0, CrashNavMap::OnEnter
+    // @0x824CB158) -> BridgeGuiToGameState @0x823DDB78 case 555 -> this 1-byte signal. The PS3
+    // DWARF numbers it 78 (the same -1 drift as its neighbours). Without this hop the minimap and
+    // crash-nav drew NO discovered-event blips and no completed ticks, whatever the save held.
+    E_EVENT_EVENT_STATE_REQUEST     = 77,    // X360 case 77 (PS3 DWARF 78)
     E_GUI_HAS_STARTED_GAME          = 78,    // X360 case 78 @0x823A4590 (PS3 DWARF 79)
     // ⭐⭐ [pause-stats wave 2026-08-29] THE GAME-STATS QUERY -- the sibling of the rank query
     // documented immediately below, one id lower, and the three-consecutive-arm attestation in

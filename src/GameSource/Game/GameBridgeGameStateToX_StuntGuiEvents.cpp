@@ -881,6 +881,28 @@ namespace
             //   GUI 437 -> game event 80 -> game action 181 -> GUI 438 (here). Without it
             // CrashNavDriverDetails::UpdateSetupLicense never advances past
             // E_INTERNALSTATE_SETUPLICENSE and the screen never loads its apt movie.
+            // ---- 179  E_ACTION_EVENT_STATE_RESPONSE (1404 bytes) -> GUI event 556 --------------
+            // X360 TranslateGameActionsToGuiEvents @0x823E9CE0 case 179: assert the record
+            // (GameBridgeGameStateToX.cpp:3610), `memcpy(local, action, 1404)`, then
+            // AddGuiEvent<GuiEventEventStateResponse> @0x823D85F8 == AddEvent(queue, local, 556,
+            // 1404). The payload IS the Array<ProfileEvent,175> the game state built; GuiCache's
+            // case 556 copies the same 1404 bytes into its profile-event array.
+            case BrnGameState::GameStateModuleIO::E_ACTION_EVENT_STATE_RESPONSE:
+            {
+                CGS_ASSERT(lpAction != 0, "lpEventStateResponse");   // cpp:3610
+                struct EventStateResponseWire556
+                {
+                    u8 mau8Payload[1404];
+                    s32 GetEventType() const { return 556; }
+                };
+                static_assert(sizeof(EventStateResponseWire556) == 1404,
+                              "X360 AddGuiEvent<GuiEventEventStateResponse> posts 1404 bytes (id 556)");
+                EventStateResponseWire556 lEvent;
+                std::memcpy(lEvent.mau8Payload, lpAction, sizeof(lEvent.mau8Payload));
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
             case BrnGameState::GameStateModuleIO::E_ACTION_RANK_INFO_RESPONSE:
             {
                 const BrnGameState::GameStateModuleIO::RankInfoResponseAction* lpRankInfo =

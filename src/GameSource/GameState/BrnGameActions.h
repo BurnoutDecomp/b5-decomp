@@ -150,6 +150,8 @@ enum EGameActionType
     // the correction is call-site-free -- but the producer this wave adds would have posted 173 and
     // the consumer it adds would never have heard it.
     E_ACTION_RANK_INFO_RESPONSE         = 181,   // DWARF :183 gives 173 (+8 X360); size 36
+    E_ACTION_EVENT_STATE_RESPONSE       = 179,   // DWARF 171 (+8 X360); size 1404 == Array<BrnProgression::ProfileEvent,175>
+                                                 //   (the DISCOVERED events; ProcessGameEvents case 77 -> GUI event 556)
     // ⭐⭐ [pause-stats wave 2026-08-29] THE GAME-STATS RESPONSE -- 181's immediate sibling, and
     // pinned the same way, at the same site, with the same size cross-check. TAKEN FROM THE
     // `li r5,<id>` / `li r6,<size>` PAIR AT THE POST SITE, NOT FROM THE DWARF (which gives 172;

@@ -4,6 +4,8 @@
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"   // BrnGui::OptionsDataProfile (types the opaque +0xB878 reservation)
 #include "GameShared/GameClasses/Containers/CgsHash.h" // CgsContainers::CgsHash::CalculateHash (AppendExpectedAptComponent name entry)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Containers/CgsArray.h"           // Array<ProfileEvent,175> (RecEvent 556)
+#include "GameSource/GameState/Progression/BrnProfile.h"          // BrnProgression::ProfileEvent (RecEvent 556)
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"          // GuiTracker::ClearTracker (RecEvent 321/322 tail)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData::Clear (RecEvent 322)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"  // BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING (RecEvent 321/322 tail)
@@ -1485,6 +1487,22 @@ namespace BrnGui
             // The seven inlined stores @0x825101D0..0x825101F0 (+0 / +1 / +2 / +4 / +0x65050 /
             // +0x65068 / +0x65060) ARE GuiTracker::ClearTracker @0x824FA0A8, store for store.
             lpGuiTracker->ClearTracker();
+            break;
+        }
+
+        // ---- X360 case 556 (GuiEventEventStateResponse): `memcpy(this + 79324, payload, 1404)` --
+        // the game state's Array<ProfileEvent,175> of DISCOVERED events lands in mProfileEventState
+        // (1400 bytes of records + the count word GetNumProfileEvents / GetProfileEvent read).
+        // SatNavRenderer and CrashNavIconRenderer refresh their icon caches on the same event id.
+        // LANDED 2026-09-10 -- see E_EVENT_EVENT_STATE_REQUEST for the whole chain.
+        case 556:
+        {
+            const Array<BrnProgression::ProfileEvent, 175>* lpEvents =
+                reinterpret_cast<const Array<BrnProgression::ProfileEvent, 175>*>(lpEvent);
+            static_assert(sizeof(*lpEvents) == 1404, "the event-state payload is 1404 bytes");
+            static_assert(sizeof(mProfileEventStateStorage) == 1400, "175 x 8-byte ProfileEvent");
+            std::memcpy(mProfileEventStateStorage, lpEvents, sizeof(mProfileEventStateStorage));
+            miProfileEventsCount = static_cast<s32>(lpEvents->GetLength());
             break;
         }
 

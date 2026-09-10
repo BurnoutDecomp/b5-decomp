@@ -1024,6 +1024,72 @@ void GameStateModule::ProcessGameEventsRankInfoRequestBringUp(
 // +0x94 or +0x98. Nothing on the Driver Details panel can show it. Passing the real count would
 // change no pixel; passing 0 loses no pixel. DELETE-WHEN the ChallengeManager mount lands.
 // ============================================================================
+// ==============================================================================================
+// X360 ProcessGameEvents @0x823A0A18 case 77 -- E_EVENT_EVENT_STATE_REQUEST.
+//
+//   v576 = 0                                      ; the local Array<ProfileEvent,175>'s count
+//   for (i = 0; i < Profile::miEventCount (+48920 == profile +0x278); ++i)
+//       if (Profile::GetEvent(i)->mu16Flags (+4) & 1 /* E_FLAG_DISCOVERED */)  Append(v575, event)
+//   AddEvent(lpActionQueue, v575, 179, 1404)
+// The GUI requested it with command 555 (free-burn HUD set-up, crash-nav map entry); the bridge
+// turns the 179 into GUI event 556, which GuiCache copies into its profile-event array and the
+// sat-nav / crash-nav icon renderers refresh from. Its absence was the whole of "discovered
+// events are not remembered and completed events get no tick": the save was right, the GUI's
+// copy of it was never filled.
+// ==============================================================================================
+void GameStateModule::ProcessGameEventsEventStateRequestBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    if (lpGameEventQueue == 0 || lpActionQueue == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        if (liType == GameStateModuleIO::E_EVENT_EVENT_STATE_REQUEST)
+        {
+            const BrnProgression::Profile* lpProfile = mProgressionManager.GetProfile();
+
+            Array<BrnProgression::ProfileEvent, 175> lDiscoveredEvents;
+            lDiscoveredEvents.Construct();
+
+            const u32 luEventCount = lpProfile->GetEventCount();
+            for (u32 luEvent = 0; luEvent < luEventCount; ++luEvent)
+            {
+                const BrnProgression::ProfileEvent* lpProfileEvent = lpProfile->GetEvent(luEvent);
+                if (lpProfileEvent->IsFlagSet(BrnProgression::ProfileEvent::E_FLAG_DISCOVERED))
+                {
+                    lDiscoveredEvents.Append(*lpProfileEvent);
+                }
+            }
+
+            static_assert(sizeof(lDiscoveredEvents) == 1404,
+                          "X360 posts the event-state response as 1404 bytes (175 * 8 + the count word)");
+            lpActionQueue->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lDiscoveredEvents),
+                GameStateModuleIO::E_ACTION_EVENT_STATE_RESPONSE,
+                static_cast<s32>(sizeof(lDiscoveredEvents)));
+
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[event-state] game event 77 -> action 179: " << lDiscoveredEvents.GetLength()
+                    << " discovered of " << luEventCount << " profile events\n";
+            }
+        }
+
+        const CgsModule::Event* lpNext = 0;
+        liType  = lpGameEventQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
+        lpEvent = lpNext;
+    }
+}
+
 void GameStateModule::ProcessGameEventsGameStatsRequestBringUp(
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
         GameStateModuleIO::GameActionQueue* lpActionQueue)
@@ -1207,6 +1273,7 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // order, and 435 is posted before 437. This tree runs one walk per arm, so arm order is what
     // sets action order.
     ProcessGameEventsGameStatsRequestBringUp(&mGameEventCarryQueue, lpActionQueue);
+    ProcessGameEventsEventStateRequestBringUp(&mGameEventCarryQueue, lpActionQueue);
     // [driver-details pause wave] the dispatcher's CASE-80 arm (the rank-progress query the
     // START-button pause screen's licence card waits on), same walk, same
     // must-run-before-the-Clear constraint; it posts action 181 onto the action queue this
