@@ -30,6 +30,7 @@
 // ============================================================================
 
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnCrashNavIconRenderer.h"
+#include <cstdlib>   // getenv ([cnav-diag])
 
 #include "GameSource/Gui/BrnGuiCache.h"                          // BrnGui::GuiCache (resource pump + GetTime)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // sResourceTuple / GuiEventLoadNotification
@@ -633,6 +634,27 @@ void CrashNavIconRenderer::InitEventTypeUvs()
 // ---------------------------------------------------------------------------
 void CrashNavIconRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType)
 {
+    {
+        static const bool sbCnavDiag = (getenv("BRN_SATNAV_DIAG") != 0);
+        static s32 saiSeen[8] = { 0 };
+        s32 liSlot = -1;
+        switch (liEventType)
+        {
+        case KI_EVENT_RENDER_MAIN_MAP:       liSlot = 0; break;
+        case KI_EVENT_DRAW_EVENT_ICONS:      liSlot = 1; break;
+        case KI_EVENT_FILTER_EVENT_ICONS:    liSlot = 2; break;
+        case KI_EVENT_MAP_CURSOR_STATUS:     liSlot = 3; break;
+        case KI_EVENT_MAP_ICON_STATUS:       liSlot = 4; break;
+        case KI_EVENT_ROAD_SIGN_ICON_STATUS: liSlot = 5; break;
+        case KI_EVENT_SET_CACHE:             liSlot = 6; break;
+        default: break;
+        }
+        if (sbCnavDiag && liSlot >= 0 && saiSeen[liSlot] < 3 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++saiSeen[liSlot];
+            *CgsDev::Log::gpDebugPrint << "[cnav-diag] RecvEvent id=" << liEventType << "\n";
+        }
+    }
     switch (liEventType)
     {
     case KI_EVENT_SET_CACHE:
@@ -708,6 +730,8 @@ void CrashNavIconRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEven
         break;
     }
 
+    // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] which map records reach this renderer.
+    // BRN_SATNAV_DIAG only; first 3 arrivals per id.
     case KI_EVENT_RENDER_MAIN_MAP:
         // The console memcpy's 48 bytes into +0x60. On this host the record is
         // native-width (it carries a pointer), so a literal 48-byte copy would truncate it

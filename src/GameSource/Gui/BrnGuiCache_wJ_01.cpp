@@ -215,6 +215,10 @@ namespace BrnGui
                                                   const u32* lpauComponentNameHashes,
                                                   u32 luCount)
     {
+        // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the list form, first/last hash.
+        if (leFlow == E_GUIFLOW_SCREEN && luCount != 0 && getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint << "[cnav-diag] expect list of " << luCount << " hashes " << lpauComponentNameHashes[0]
+                << " .. " << lpauComponentNameHashes[luCount - 1] << "\n";
         mStateLoadingHelper.AppendExpectedAptComponentList(leFlow, lpauComponentNameHashes,
                                                            luCount);
     }

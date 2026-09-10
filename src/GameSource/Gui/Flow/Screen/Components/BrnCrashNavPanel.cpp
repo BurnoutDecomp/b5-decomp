@@ -36,6 +36,8 @@
 // "E_FILTER_LEVEL_SECOND == liCurrentlySelectedFilter", ...), which are reproduced verbatim.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/Components/BrnCrashNavPanel.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // ([cnav-diag])
+#include <cstdlib>   // ([cnav-diag])
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                              // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"                       // CgsGui::GuiEventControllerInputPressed
@@ -764,10 +766,24 @@ namespace BrnGui
 
         if (mePrepareStage != E_PREPARESTAGE_DONE)
         {
+            if (getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+                *CgsDev::Log::gpDebugPrint << "[cnav-diag] panel input dropped: stage " << static_cast<s32>(mePrepareStage) << "\n";
             return false;
         }
 
-        const s32 liAction = lpControllerEvent->miButtonId;
+        // The record on the state's input queue is HEADER-STRIPPED: {miPadId, miButtonId} at
+        // +0 / +4 (X360 `lwz r11, 4(r4)` here @0x824408E0, the same word CrashNavMapMain::
+        // HandleCrashNavInputPressed reads). CgsGui::GuiEventControllerInputPressed as modelled
+        // in the tree carries the 12-byte GuiEvent<6> wrapper in front, so `->miButtonId` read
+        // 12 bytes too far (the word after the payload -- 199 on every press, 2026-09-10) and
+        // no D-pad press ever reached the filter toggles. Read the payload word by offset, as
+        // BrnCarSelectLivery_Input / BrnCarSelectUnlock / BrnBootProfile already do.
+        const s32 liAction =
+            reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpControllerEvent) + 4)[0];
+        // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] every controller press the panel sees.
+        if (getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint << "[cnav-diag] panel input action " << liAction
+                << " row " << mFilterToggles.miHighlightedIndex << " panelType " << static_cast<s32>(mePanelType) << "\n";
 
         switch (liAction)
         {

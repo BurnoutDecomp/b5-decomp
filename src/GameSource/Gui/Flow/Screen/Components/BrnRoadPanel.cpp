@@ -285,9 +285,19 @@ namespace BrnGui
         // its hash is +0x0C6C == a1[795], the tail append below).
         // CORRECTED 2026-08-29: mRoadSign has no committed type (the reserved carve), so the
         // hash is read at its GuiComponent-relative offset rather than by member name.
-        lpGuiCache->AppendExpectedAptComponent(
-            leFlow,
-            *reinterpret_cast<const u32*>(&maRoadSignReserved[0x84]));   // a1[73] == +0x124
+        // The reserved carve is never constructed on this build (RoadSignIconBoundary::Construct
+        // is a parked leaf), so its +0x84 word is ZERO and an expected hash of 0 can never be
+        // marked loaded -- which held the whole crash-nav map behind
+        // AreAllAptComponentsInitialised (2026-09-10). The console value is the RoadSignIcon's
+        // GuiComponent::muHashedName, i.e. CalculateHash of SetName's "%s_%s" composition of
+        // this panel's name and KAC_ROAD_SIGN_NAME; computed here by the same rule until the
+        // RoadSignIcon component itself is homed. DELETE-WHEN mRoadSign is a real GuiComponent.
+        {
+            char lacRoadSignName[CgsGui::GuiComponent::KU_MAX_COMPONENT_NAME_LEN];
+            CgsCore::SPrintf(lacRoadSignName, CgsGui::GuiComponent::KU_MAX_COMPONENT_NAME_LEN,
+                             "%s_%s", GetName(), KAC_ROAD_SIGN_NAME);
+            lpGuiCache->AppendExpectedAptComponent(leFlow, lacRoadSignName);   // a1[73] == +0x124
+        }
 
         for (s32 liRow = 0; liRow < E_ROW_COUNT; ++liRow)                       // li r30/r31 pair
         {

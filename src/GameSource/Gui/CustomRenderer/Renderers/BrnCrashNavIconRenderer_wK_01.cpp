@@ -57,6 +57,7 @@
 // ============================================================================
 
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnCrashNavIconRenderer.h"
+#include <cstdlib>   // getenv ([cnav-diag])
 
 #include "GameSource/Gui/BrnGuiCache.h"                    // BrnGui::GuiCache (GetTime + the icon counts)
 #include "GameSource/Gui/BrnGuiWorldDataController.h"      // BrnGui::WorldDataController::GetTotalNumberOfOnlineLandmarks
@@ -259,7 +260,7 @@ namespace
 
     // The console moves an icon record's position with ONE whole-register `lvx128`/`stvx128`
     // pair, so all four lanes travel; the host types are distinct (Vector4 lane in, Vector3
-    // out), and the copy is spelled out rather than cast so no lane is silently dropped.
+    // out), and the copy is spelled out rather than cast so every lane travels.
     inline void CopyPositionLane(Vector3& lrv3Out, const Vector4& lrv4Lane)
     {
         lrv3Out.x = lrv4Lane.x;
@@ -1047,7 +1048,7 @@ void CrashNavIconRenderer::RenderDriveThroughs(Im2dCommandBuffer* lpRenderBuffer
 
     for (s32 liIndex = 0; liIndex <= mGuiEventMapIconStatus.liNumberOfIcons; ++liIndex)
     {
-        CrashNavMapIcon& lrIcon = mGuiEventMapIconStatus.lpSatNavIcons[liIndex];
+        CrashNavMapIcon& lrIcon = mGuiEventMapIconStatus.lpSatNavIcons[liIndex].mIcon;   // bank + 496*i + 144
 
         const MapIconBrnBase::IconState leState = lrIcon.GetState();
         if (leState >= MapIconBrnBase::E_ICONSTATE_PLAYER_OFFLINE &&
@@ -1087,7 +1088,7 @@ void CrashNavIconRenderer::RenderDriveThroughs(Im2dCommandBuffer* lpRenderBuffer
 void CrashNavIconRenderer::RenderDriveThrough(Im2dCommandBuffer* lpRenderBuffer,
                                               s32 liIndex, f32 lfScale)
 {
-    CrashNavMapIcon& lrIcon = mGuiEventMapIconStatus.lpSatNavIcons[liIndex];
+    CrashNavMapIcon& lrIcon = mGuiEventMapIconStatus.lpSatNavIcons[liIndex].mIcon;   // bank + 496*i + 144
 
     Vector4 lv4Uv;
     switch (lrIcon.GetState())
@@ -1780,6 +1781,30 @@ void CrashNavIconRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     // of which stay null-or-unset until the same event + InitResources have run), so slot 3
     // takes the IDENTICAL early-out -- the two halves of the map screen must appear on the same
     // frame or neither, and matching the guards is what guarantees that.
+    // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the gate report: which of the early-outs
+    // above / below is holding the crash-nav furniture off the screen. BRN_SATNAV_DIAG only,
+    // every 120th call.
+    {
+        static const bool sbDiag = (getenv("BRN_SATNAV_DIAG") != 0);
+        static s32 siTick = 0;
+        if (sbDiag && CgsDev::Log::gpDebugPrint != 0 && (siTick++ % 120) == 0)
+            *CgsDev::Log::gpDebugPrint
+                << "[cnav-diag] RenderComponent: buffer=" << (lpRenderBuffer != 0)
+                << " stage=" << static_cast<s32>(mePrepareStage)
+                << " textures=" << (mRenderMainMapEvent.mpActiveTextures != 0)
+                << " cache=" << (mpGuiCache != 0)
+                << " masks=" << (mpBackgroundMaskTextureState != 0) << "/" << (mpPreRaceMaskTextureState != 0)
+                << " maptype=" << static_cast<s32>(mRenderMainMapEvent.meMapType)
+                << " zoom=" << mRenderMainMapEvent.mfZoomLevel
+                << " active=" << (mRenderMainMapEvent.mbIsActive ? 1 : 0)
+                << " drawEvents=" << (mbRenderEventStarts ? 1 : 0)
+                << " displayType=" << static_cast<s32>(meIconDisplayType)
+                << " numIcons=" << (mpGuiCache != 0 && meIconDisplayType < GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT ? static_cast<s32>(GetNumIcons()) : -1)
+                << " bank=" << mGuiEventMapIconStatus.liNumberOfIcons << "/" << (mGuiEventMapIconStatus.lpSatNavIcons != 0)
+                << " cursor=" << mGuiEventMapCursorStatus.miDisplayState << "/" << mGuiEventMapCursorStatus.miAnimationState
+                << "\n";
+    }
+
     if (mRenderMainMapEvent.mpActiveTextures == 0 ||
         mpGuiCache                           == 0 ||
         mpBackgroundMaskTextureState         == 0 ||

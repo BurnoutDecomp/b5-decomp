@@ -146,11 +146,18 @@ namespace BrnGui
         // Self-clear (this group's own component vtable slot 6 -- the DERIVED Clear).
         Clear();
 
+        // X360 @0x8241D728 (the <3> instantiation; <2>/<4>/<5> are identical): the length
+        // assert measures the COMPOSED name (this+0x1C, GetName()), but the SPrintf's %s is
+        // `a2` -- the SHORT name the caller passed ("filterToggle") -- and the item is then
+        // constructed with the same lpacParentName, so GuiComponent::SetName composes
+        // "<parent>_<short>_<i>" exactly once. Printing GetName() here doubled the parent
+        // ("CrashNavPanel_mc_CrashNavPanel_mc_filterToggle_0"), a name no apt clip carries, so
+        // the crash-nav map's expected-component gate never passed (2026-09-10).
         char lacName[0x80];
         for (s32 liIndex = 0; liIndex < miMaxItems; ++liIndex)
         {
             CGS_ASSERT(std::strlen(GetName()) + 3 < 0x80, "Name too long.");
-            CgsCore::SPrintf(lacName, 0x80, "%s_%d", GetName(), liIndex);
+            CgsCore::SPrintf(lacName, 0x80, "%s_%d", lpacName, liIndex);
             maItems[liIndex].Construct(lacName, lpStateInterface, lpacParentName,
                                        static_cast<u64>(0xFFFFFFFFu));
         }
@@ -262,12 +269,17 @@ namespace BrnGui
         CGS_ASSERT(liIndex >= 0 && liIndex <= miMaxItems,
                    "MenuToggleGroupVarSize::SetupToggle() invalid index specified");
         CGS_ASSERT(GetSelectable(liIndex) != 0, "Invalid selectable specified");
-        CGS_ASSERT(!(lpacText == 0 && lbActive), "Invalid text specified");
+        // X360 @0x82428288 (<3>): `if (!a6 && a3)` -- the OPTION-TEXT array (r8) is null while
+        // liNumOptions (r5) is non-zero. The row text may legitimately be null: CrashNavPanel's
+        // `SetupToggle(KI_TOGGLE_IN_EVENT, 0, true, 0, 0, 0)` is the console's own call.
+        CGS_ASSERT(!(lppacOptions == 0 && liNumOptions != 0), "Invalid text specified");   // h:397
 
         MenuToggle* lpItem = &maItems[liIndex];
         lpItem->Clear();                                 // row slot 6
 
-        if (lbActive)
+        // The console branches on liNumOptions (`if (a3)`), not on the wrap flag: a row with
+        // no options is set INACTIVE and cleared whatever lbActive says.
+        if (liNumOptions != 0)
         {
             lpItem->SetActive(true);                     // row slot 0
             lpItem->SetupMenuToggle(liNumOptions, lbActive, lpacText, lppacOptions, lpu64Ids);

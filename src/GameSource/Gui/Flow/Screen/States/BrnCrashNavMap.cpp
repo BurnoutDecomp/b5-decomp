@@ -73,6 +73,7 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavMap.h"
+#include <cstdlib>   // getenv ([cnav-diag])
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT + Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream (the streamed default-arm assert)
@@ -696,6 +697,12 @@ namespace BrnGui
         // `void SetUseEventIcons(GuiEventDrawEventIcons::EIconDisplayType, StateInterface*,
         //  float32_t, uint32_t*, int32_t)` -- so the observed r7 == 0 and r8 == 0 are the
         // last two arguments and flt_82065668 == 0.5f is the float.
+        // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the resolved filter.
+        if (getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint << "[cnav-diag] SetFilterFromPanel: panel=" << static_cast<s32>(lePanelType)
+                << " displayType=" << static_cast<s32>(meEventIconDisplayType)
+                << " iconFilter=" << static_cast<s32>(mpIconManager->meIconFilterMode)
+                << " roadSigns=" << (mbUseRoadSigns ? 1 : 0) << " driveThrus=" << (mbDrawDriveThrus ? 1 : 0) << "\n";
         mpIconManager->SetUseEventIcons(
             static_cast<GuiEventDrawEventIcons::EIconDisplayType>(meEventIconDisplayType),
             mpStateInterface, 0.5f, 0, 0);

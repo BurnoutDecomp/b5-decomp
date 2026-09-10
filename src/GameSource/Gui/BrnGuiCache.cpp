@@ -1,4 +1,5 @@
 #include "GameSource/Gui/BrnGuiCache.h"
+#include <cstdlib>   // ([cnav-diag])
 #include "GameSource/Gui/BrnGuiRaceCarInfoEvent.h"      // [H3b] GuiRaceCarInfoEvent (207)
 #include "GameSource/Gui/BrnGuiShared.h"               // BrnGui::EGuiResourceId + gGuiResourceIdentifier (this TU defines the table)
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"   // BrnGui::OptionsDataProfile (types the opaque +0xB878 reservation)
@@ -832,6 +833,31 @@ namespace BrnGui
         CGS_ASSERT(static_cast<u32>(leFlow) <= 2, "Invalid GuiFlow of ");   // cpp:895
 
         const ComponentsToWatch& lrWatch = maComponentsToWatch[leFlow];
+        // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] which expected apt components are still
+        // unloaded on the SCREEN flow. BRN_SATNAV_DIAG only, every 300th false answer.
+        {
+            static const bool sbDiag = (getenv("BRN_SATNAV_DIAG") != 0);
+            static s32 siTick = 0;
+            if (sbDiag && leFlow == E_GUIFLOW_SCREEN && CgsDev::Log::gpDebugPrint != 0)
+            {
+                u32 luMissing = 0;
+                for (u32 lu = 0; lu < lrWatch.muNumberOfComponentsToWatch; ++lu)
+                    if (!lrWatch.mabComponentsLoaded[lu]) ++luMissing;
+                if (luMissing != 0 && (siTick++ % 300) == 0)
+                {
+                    *CgsDev::Log::gpDebugPrint << "[cnav-diag] SCREEN apt components: " << luMissing
+                        << " of " << lrWatch.muNumberOfComponentsToWatch << " still unloaded; hashes:";
+                    u32 luShown = 0;
+                    for (u32 lu = 0; lu < lrWatch.muNumberOfComponentsToWatch && luShown < 16; ++lu)
+                        if (!lrWatch.mabComponentsLoaded[lu])
+                        {
+                            ++luShown;
+                            *CgsDev::Log::gpDebugPrint << " " << lrWatch.mauComponentsToWatchIds[lu];
+                        }
+                    *CgsDev::Log::gpDebugPrint << "\n";
+                }
+            }
+        }
         for (u32 luComponent = 0; luComponent < lrWatch.muNumberOfComponentsToWatch; ++luComponent)
         {
             if (!lrWatch.mabComponentsLoaded[luComponent])
@@ -912,6 +938,18 @@ namespace BrnGui
                    "Invalid apt trigger event sent to StateLoadingHelper::MarkAptComponentInitialised");
         if (lpEvent == 0)
             return;
+
+        // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] every ONLOAD name + hash, first 400.
+        {
+            static const bool sbDiag = (getenv("BRN_SATNAV_DIAG") != 0);
+            static s32 siSeen = 0;
+            if (sbDiag && siSeen < 400 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++siSeen;
+                *CgsDev::Log::gpDebugPrint << "[cnav-diag] ONLOAD '" << (lpEvent->mpacComponentName ? lpEvent->mpacComponentName : "<null>")
+                    << "' hash " << lpEvent->muComponentNameHash << "\n";
+            }
+        }
 
         for (u32 luFlow = 0; luFlow < 3; ++luFlow)
         {
@@ -2042,6 +2080,9 @@ namespace BrnGui
     // @ 0x824F87B8 -- the hash-taking face.
     void GuiCache::AppendExpectedAptComponent(GuiFlow leFlow, u32 luComponentNameHash)
     {
+        // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] every SCREEN-flow expectation, in order.
+        if (leFlow == E_GUIFLOW_SCREEN && getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint << "[cnav-diag] expect hash " << luComponentNameHash << " (by hash)\n";
         mStateLoadingHelper.AppendExpectedAptComponent(leFlow, luComponentNameHash);
     }
 
@@ -2054,6 +2095,9 @@ namespace BrnGui
         const u32 luComponentNameHash = CgsContainers::CgsHash::CalculateHash(
             const_cast<char*>(lpacComponentName),
             static_cast<int>(std::strlen(lpacComponentName)));
+        // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] every SCREEN-flow expectation, in order.
+        if (leFlow == E_GUIFLOW_SCREEN && getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint << "[cnav-diag] expect hash " << luComponentNameHash << " name '" << lpacComponentName << "'\n";
         mStateLoadingHelper.AppendExpectedAptComponent(leFlow, luComponentNameHash);
     }
 

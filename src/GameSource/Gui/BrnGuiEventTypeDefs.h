@@ -2747,7 +2747,7 @@ static_assert(__builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData,
 // GuiEventDrawEventIcons above, whose Construct also writes its first member at +0x00.
 // ===================================================================================
 
-class  CrashNavMapIcon;   // GameSource/Gui/SatNav/BrnSatNavIcon.h
+struct CrashNavIconComponent;   // GameSource/Gui/SatNav/BrnSatNavIcon.h (the 0x1F0 pool element)
 struct RoadSignIcon;      // GameSource/Gui/View/BrnRoadSignIconManager.h
 
 // DWARF :2840 -- where the map cursor is and what it is doing. X360 +0x1A0 on the
@@ -2764,10 +2764,18 @@ struct GuiEventMapCursorStatus
 
 // DWARF :2856 -- the live crash-nav icon bank the map component publishes each frame.
 // X360 +0x1C4 on the renderer (RecvEvent case 561, assert "lpMapIconStatus" :471).
+//
+// The bank pointer is MapIconManager::mCrashNavIcons[0] (manager +0x9A0, UpdateCrashNavIcons
+// @0x825212C0 posts `{8, 561, 12, miNumUsedIcons, this + 2464}`), and the one consumer walks
+// it at the POOL-ELEMENT stride: RenderDriveThroughs @0x82469038 steps `v7 += 496` and reads
+// the icon at `bank + v7 + 144` (the GuiComponent half is 0x90 bytes on the console). So the
+// DWARF's `CrashNavMapIcon*` names the 0x1F0 element, which the host models as
+// CrashNavIconComponent { GuiComponent; CrashNavMapIcon mIcon; } -- the pointer is typed as
+// that element here so `[liIndex].mIcon` is the console's `+496*i +144` by name.
 struct GuiEventMapIconStatus
 {
-    CrashNavMapIcon* lpSatNavIcons;    // :2858  payload +0x00 (DWARF spells it lp*, sic)
-    s32              liNumberOfIcons;  // :2859  payload +0x04
+    CrashNavIconComponent* lpSatNavIcons;    // :2858  payload +0x00 (DWARF spells it lp*, sic)
+    s32                    liNumberOfIcons;  // :2859  payload +0x04
 
     s32 GetEventType() const { return 561; }
 };

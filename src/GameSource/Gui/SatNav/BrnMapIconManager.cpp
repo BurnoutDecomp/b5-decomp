@@ -1,4 +1,5 @@
 #include "GameSource/Gui/BrnGuiWorldDataController.h"
+#include <cstddef>   // offsetof (the 561 wrapper header)
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"
 #include "SharedClasses/Progression/BrnRace.h"
 // BrnMapIconManager.cpp
@@ -2113,23 +2114,40 @@ void MapIconManager::UpdateCrashNavIcons()
         }
     }
 
-    // ---- the trailing GUI post ----
-    // [UI-gate] X360: when mpStateInterface (+0xA9FC) is set, the body posts a 40-byte
-    // event (`VariableEventQueue<65536,16>::AddEvent(iface+12, &rec, 40, 20)`) whose
-    // record is {8, 561, 12, miNumUsedIcons, &mCrashNavIcons[0]} -- the crash-nav icon
-    // renderer's per-frame handoff. The event type behind id 561 is not modelled in the
-    // tree yet, so posting it would mean inventing a payload struct. Parked loudly
-    // instead; this is the seam the CrashNavIconRenderer will need.
+    // ---- the trailing GUI post: the icon bank to the CrashNavIconRenderer ----
+    // X360: when mpStateInterface (+0xA9FC) is set, the body posts a 20-byte record
+    // `{8, 561, 12, miNumUsedIcons, &mCrashNavIcons[0]}` on channel 40
+    // (`VariableEventQueue<65536,16>::AddEvent(iface+12, &rec, 40, 20)`): the
+    // GuiEventMapIconStatus payload {bank pointer, count} behind a {size, type, offset}
+    // wrapper header -- the same wrapper GuiCursor::Update writes for 560. The renderer
+    // (RecvEvent case 561) copies the two words and RenderDriveThroughs walks the bank at
+    // the pool-element stride. Header words are the host's own size / offset (the
+    // pointer is 8 bytes here), exactly as the SatNavComponent 212 post does.
     if (mpStateInterface != 0)
     {
-        static bool sbLoggedPostPark = false;
-        if (!sbLoggedPostPark && CgsDev::Log::gpDebugPrint != 0)
+        struct GuiEventMapIconStatusRecord : public CgsGui::GuiEvent<561>
         {
-            sbLoggedPostPark = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] PARK: UpdateCrashNavIcons trailing GUI event 561 "
-                   "(crash-nav icon-set handoff; event payload type unmodelled)\n";
+            GuiEventMapIconStatus mPayload;
+            GuiEventMapIconStatusRecord(CrashNavIconComponent* lpBank, s32 liCount)
+                : CgsGui::GuiEvent<561>(static_cast<u32>(sizeof(GuiEventMapIconStatus)),
+                                        static_cast<u32>(offsetof(GuiEventMapIconStatusRecord, mPayload)))
+            {
+                mPayload.lpSatNavIcons   = lpBank;
+                mPayload.liNumberOfIcons = liCount;
+            }
+        } lRecord(&mCrashNavIcons[0], miNumUsedIcons);   // lwz +0x990 / addi +0x9A0
+        // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the bank handoff, every 120th post.
+        {
+            static const bool sbCnavDiag = (getenv("BRN_SATNAV_DIAG") != 0);
+            static s32 siPostTick = 0;
+            if (sbCnavDiag && CgsDev::Log::gpDebugPrint != 0 && (siPostTick++ % 120) == 0)
+                *CgsDev::Log::gpDebugPrint << "[cnav-diag] 561 post: icons=" << miNumUsedIcons
+                    << " showingDriveThrus=" << (mbShowingDriveThrus ? 1 : 0)
+                    << " eventDisplayType=" << static_cast<s32>(meEventIconDisplayType) << "\n";
         }
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRecord),
+            40 /* KI_CHANNEL_GUI_EVENT_OUT */, static_cast<s32>(sizeof(lRecord)));
     }
 }
 

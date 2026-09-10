@@ -340,21 +340,27 @@ void MapTransform::SetSatNavRect( Vector4 lv4Rect )
     smv4SatNavViewRect = lv4Rect;
 }
 
-// @ 0x824BAB78 — map a device-space (screen) point back into world space.
-// FLAG (pre-existing semantic reconstruction, unchanged this slice): the X360 body
-// reads the ZOOMED matrices (@0x82FB3140 + @0x82FB32E0 per the image xrefs), i.e. it
-// undoes the zoomed chain; this body still routes through the static device/world
-// spaces. No mounted TU calls it yet -- re-derive against the asm when the crash-nav
-// cursor slice (its real consumer) lands.
+// @ 0x824BAB78 — map a device-space (screen) point back into world space: the exact
+// inverse of WorldToDevice's zoomed chain. The X360 body loads the two ZOOMED matrices --
+// smm33ZoomedViewportScreenTransform @0x82FB3140 first, smm33ZoomedWorldTransform
+// @0x82FB32E0 second -- and inverts each in place (the adjugate rows through the
+// vpermwi128 0x63 / vnmsubfp pairs, the determinant through vmsum3fp128, its reciprocal
+// through vrefp plus two Newton steps), then applies device -> zoomed unit -> world. The
+// map's second axis is returned in the world Z lane, which is what Flatten / WorldToDevice
+// read back (and what the vperm through unk_82CDA350 at the tail lays out).
+//
+// RE-DERIVED 2026-09-10: the previous body mapped through the STATIC device/world spaces
+// (the whole-map rect), so CrashNavMap::UpdateMainMap scrolled the map toward a bogus
+// cursor world position and the view drifted off the player to the map's own edge.
 Vector3 MapTransform::DeviceToWorld( Vector2 lv2Device )
 {
-    const Matrix33 lm33DeviceToWorld = MakeTransform( smm33DeviceSpace, smm33WorldSpace );
-    const Vector2  lv2World = Transform( lv2Device, lm33DeviceToWorld );
+    const Vector2 lv2Unit  = Transform( lv2Device, Invert33( smm33ZoomedViewportScreenTransform ) );
+    const Vector2 lv2World = Transform( lv2Unit,   Invert33( smm33ZoomedWorldTransform ) );
 
     Vector3 lv3Out;
     lv3Out.x = lv2World.x;
-    lv3Out.y = lv2World.y;
-    lv3Out.z = 0.0f;
+    lv3Out.y = 0.0f;
+    lv3Out.z = lv2World.y;
     lv3Out.w = 0.0f;
     return lv3Out;
 }

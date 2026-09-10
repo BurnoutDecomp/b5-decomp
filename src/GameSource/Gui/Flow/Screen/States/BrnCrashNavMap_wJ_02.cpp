@@ -31,6 +31,7 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavMap.h"
+#include <cstdlib>   // ([cnav-diag])
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // gpDebugPrint / gxMessageFilterFlags
@@ -78,6 +79,11 @@ namespace BrnGui
         // BEFORE the mpIconManager assert on the console; the order is kept.
         mpGuiCache->AppendExpectedAptComponentList(E_GUIFLOW_SCREEN, mauComponentHashIds,
                                                    KI_CRASHNAVMAP_NUMICONS);
+        // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the expected icon hash range.
+        if (getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint << "[cnav-diag] expected SatNavIcon0 hash " << mauComponentHashIds[0]
+                << " .. SatNavIcon49 hash " << mauComponentHashIds[KI_CRASHNAVMAP_NUMICONS - 1]
+                << " anims '" << mTitleButtonsAnimation.GetName() << "' '" << mButtonPromptsAnimation.GetName() << "'\n";
 
         // cpp:537 -- non-fatal on the X360; the manager is dereferenced either way,
         // exactly as the console does.

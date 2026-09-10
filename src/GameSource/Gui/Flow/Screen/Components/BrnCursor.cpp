@@ -71,6 +71,8 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/Components/BrnCursor.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // getenv ([cnav-diag])
+#include <cstdlib>   // getenv ([cnav-diag])
 
 #include <cfloat>   // FLT_MAX (flt_8204F664 == 0x7F7FFFFF)
 #include <cmath>    // std::sqrt / std::fabs (the de-SIMD'd vrsqrtefp and vandc chains)
@@ -132,6 +134,14 @@ void GuiCursor::Update()
 
     lEvent.miState0 = static_cast<s32>( meDisplayState );     // *(this + 0xE4)
     lEvent.miState1 = static_cast<s32>( meAnimationState );   // *(this + 0xE8)
+    // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the cursor post, every 120th.
+    {
+        static const bool sbCnavDiag = (getenv("BRN_SATNAV_DIAG") != 0);
+        static s32 siTick = 0;
+        if (sbCnavDiag && CgsDev::Log::gpDebugPrint != 0 && (siTick++ % 120) == 0)
+            *CgsDev::Log::gpDebugPrint << "[cnav-diag] 560 post: pos=(" << mv2Position.x << "," << mv2Position.y
+                << ") display=" << static_cast<s32>(meDisplayState) << " anim=" << static_cast<s32>(meAnimationState) << "\n";
+    }
 
     // Push onto the owning state's large output queue with channel id 40 (GuiEventOut),
     // record size 48 bytes (the X360 li r5=0x28=40 type, li r6=0x30=48 size).

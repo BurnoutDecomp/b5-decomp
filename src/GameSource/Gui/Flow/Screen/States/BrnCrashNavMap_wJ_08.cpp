@@ -73,6 +73,8 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavMap.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // getenv ([cnav-diag])
+#include <cstdlib>   // getenv ([cnav-diag])
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT / Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream (streamed asserts)
@@ -327,6 +329,10 @@ namespace BrnGui
              lpEvent != 0;
              liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
         {
+            // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the input events the map screen drains.
+            if ((liEventId == 6 || liEventId == 7) && getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+                *CgsDev::Log::gpDebugPrint << "[cnav-diag] map input event " << liEventId << " action "
+                    << *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpEvent) + 4) << "\n";
             switch (liEventId)
             {
             case KI_EVENT_CONTROLLER_INPUT_PRESSED:
@@ -462,6 +468,9 @@ namespace BrnGui
             mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {
             mbItemsLoaded = true;   // stored BEFORE the virtual call, per the asm
+            // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the one-shot wiring frame.
+            if (getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+                *CgsDev::Log::gpDebugPrint << "[cnav-diag] CrashNavMap items loaded -> SetupComponents/SetFilterFromPanel\n";
             SetupComponents();      // vtable +0x30
             SetFilterFromPanel();
             UpdateButtonPrompts();
