@@ -1981,6 +1981,7 @@ void GuiModule::Destruct()
                 case 292:   // [results] post-event teardown (clears the record + suppress byte)
                 case 307:   // Medal totals and wins remaining on the licence.
                 case 304:   // [results] raises the presentation-suppressed byte
+                case 237:   // [event-start 2026-09-10] GuiGameModeStarted -- drops mbEventPreparedForModeStart
                 case 321:   // [event-end 2026-09-10] GuiEventFinishedModeResults -- GuiCache's shared LABEL_232 tail
                 case 322:   // [event-end 2026-09-10] GuiEventStopMode -- game mode back to NONE, tracker cleared
                 case 556:   // [event-state 2026-09-10] GuiEventEventStateResponse -- the DISCOVERED-event array

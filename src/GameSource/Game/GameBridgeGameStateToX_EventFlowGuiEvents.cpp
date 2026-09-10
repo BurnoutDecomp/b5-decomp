@@ -200,8 +200,27 @@ namespace
     // TriggerExitState -> SendStateEvent("BF_PROCEED") -- the ONLY producer of the lua BRNEVENTFSM's
     // PRE_FLY_BY exit edge. 164 is also one of the eight ids the state registers for
     // (PreRaceFlyByState::maiEventToObserve @0x82065CAC == {6,21,64,159,160,162,164,213}).
-    struct PreRaceFlyByEndWire164
+    // id 237 size 16 -- AddGuiEvent<BrnGui::GuiGameModeStarted> @0x823D4A50 (`li r5,0xED` /
+    // `li r6,0x10` into VariableEventQueue<32768,16>::AddEvent). Posted by the case-34 arm
+    // (E_ACTION_START_PLAYING_MODE) of TranslateGameActionsToGuiEvents @0x823E9CE0, which
+    // copies the action's first two words onto the stack record. The ONE consumer is
+    // GuiCache::RecEvent case 237 @0x8250DDF0 (`*(a1 + 40980) = 0`): it clears
+    // mbEventPreparedForModeStart and reads nothing else, so the record's payload word is the
+    // action's mode type and the header carries the 4-byte payload at +12.
+    // ⭐ WHY IT MATTERS (2026-09-10): RaceMainHudState::UpdateWFInit defers its reveal while
+    // IsEventPreparedForModeStart() && mbPreRaceCountdown ("waiting for the countdown GO").
+    // Without this arm the flag stayed up for the whole event, so pausing a RACE / BURNING
+    // ROUTE / ELIMINATOR and unpausing re-entered RACE_MAIN into that deferral and the HUD
+    // never came back (stunt runs / road rage arm no countdown, which is why they were fine).
+    struct GameModeStartedWire237 : public CgsGui::GuiEvent<237>
     {
+        s32 miGameMode;                        // +0x0C  StartPlayingModeAction::meGameMode
+        explicit GameModeStartedWire237(s32 liGameMode)
+            : CgsGui::GuiEvent<237>(4, 12), miGameMode(liGameMode) {}
+    };
+    static_assert(sizeof(GameModeStartedWire237) == 16, "id 237 size 16");
+
+    struct PreRaceFlyByEndWire164    {
         u8 mu8Unused;                          // +0x00  never written by the arm
         s32 GetEventType() const { return 164; }
     };
@@ -826,8 +845,19 @@ namespace
         // (the SECOND "[start] event 25 -> FinishOfflineModeIntro" at t+6.15 s is the fly-by's own
         // 163 arriving 0.13 s after the one-shot harness self-trigger); the flow stopped dead here
         // because action 30 had no arm and fell through the caller's `default:`.
-        case BrnGameState::GameStateModuleIO::E_ACTION_STOP_MODE_INTRO:
+        // 34 -> GuiGameModeStarted (id 237). X360 case 34 @0x823E9CE0: `v504 = *v7 ;
+        // v503 = *(v7 + 1) ; AddGuiEvent<GuiGameModeStarted>(&v503)`.
+        case BrnGameState::GameStateModuleIO::E_ACTION_START_PLAYING_MODE:
         {
+            const BrnGameState::GameStateModuleIO::StartPlayingModeAction* lpStart =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::StartPlayingModeAction*>(lpAction);
+            GameModeStartedWire237 lStarted(static_cast<s32>(lpStart->meGameMode));
+            PushGuiEvent(lStarted, lpGuiInput);
+            return true;
+        }
+
+        case BrnGameState::GameStateModuleIO::E_ACTION_STOP_MODE_INTRO:        {
             const BrnGameState::GameStateModuleIO::StopModeIntroAction* lpStopIntro =
                 reinterpret_cast<
                     const BrnGameState::GameStateModuleIO::StopModeIntroAction*>(lpAction);

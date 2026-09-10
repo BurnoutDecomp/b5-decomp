@@ -1585,6 +1585,14 @@ namespace BrnGui
             }
             break;
 
+        // ---- X360 case 237 (GuiGameModeStarted): `*(a1 + 40980) = 0` -- the mode is PLAYING, so
+        // the "prepared for mode start" window closes. RaceMainHudState::UpdateWFInit reads this
+        // through IsEventPreparedForModeStart() to decide whether a (re)entry must wait for the
+        // countdown GO; with the flag down, an unpause mid-race reveals the HUD at once.
+        case 237:
+            mbEventPreparedForModeStart = false;   // stb 0, +0xA014
+            break;
+
         case 238: // ARTIST0x8250ED20..0x8250EDE4.
         {
             const auto* positions = reinterpret_cast<const GuiEventRacePositionInfo*>(lpEvent);
