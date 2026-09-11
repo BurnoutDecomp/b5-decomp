@@ -179,6 +179,10 @@ public:
     bool IsOfTrailerSpecies() const { return (muSpecies & 0xF) == E_SPECIES_TRAILER; }
     // DriveTowardsTarget @0x8273E080 / @0x8273E0C4 (`lbz r11,4(this) ; clrlwi r11,r11,28`).
     bool IsOfStandardSpecies() const { return (muSpecies & 0xF) == E_SPECIES_STANDARD; }
+    // The third member of the same inlined family, same byte read and same nibble mask.
+    // Attested by TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults, whose sound leg
+    // switches a parked car off the engine/horn path and onto the alarm path on this test.
+    bool IsOfStaticSpecies() const { return (muSpecies & 0xF) == E_SPECIES_STATIC; }
     // Named by SetHasEntity's baked assert strings (BrnTrafficVehicle.h:979/:980). The console
     // inlines it as `(mxFlags >> 1) & 1`, e.g. 0x8270EB44 `lbz r11,5(r3) ; extrwi r11,r11,1,30`.
     bool HasEntity() const { return (mxFlags & E_FLAG_HASENTITY) != 0; }

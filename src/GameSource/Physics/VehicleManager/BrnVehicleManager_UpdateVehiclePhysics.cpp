@@ -32,12 +32,11 @@
 // `bl 0x82634C90` (SetRaceCarCrashing) with r10 = -1 (the "no takedown type" sentinel)
 // and both contact vectors zero -- while 0x82635B00 passes its EntityId parameter through.
 //
-// TRAP-STUB TAILS THIS TU ARMS (all dead until PhysicsModule::Update lands -- see
-// BrnVehicleManagerLinkStubs.cpp): SetRaceCarCrashing, UpdateVehicleImpacts,
-// UpdateAggressiveDriving, UpdateCrashes, EndVehicleTractionLineTests, CrashFatalRaceCars,
-// ReadSurfaceProperties(u64), VehicleDriver::UpdateVehicle, PhysicalTrafficManager::
-// UpdateTrafficPhysics, PhysicalTrafficManager::PassNearbyCrashingTrafficIdsToRaceCarModule,
-// DebugComponent::Update.
+// OUT-OF-TU TAILS THIS TU ARMS: SetRaceCarCrashing, UpdateVehicleImpacts, UpdateAggressiveDriving,
+// UpdateCrashes, EndVehicleTractionLineTests, CrashFatalRaceCars, ReadSurfaceProperties(u64),
+// VehicleDriver::UpdateVehicle, PhysicalTrafficManager::UpdateTrafficPhysics, PhysicalTraffic
+// Manager::PassNearbyCrashingTrafficIdsToRaceCarModule, DebugComponent::Update. Each once had a
+// trap stub in a stub TU that no longer exists.
 // ============================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"

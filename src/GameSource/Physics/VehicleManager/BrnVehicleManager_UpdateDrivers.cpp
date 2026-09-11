@@ -65,10 +65,11 @@
 //                                                     ------------ 1,346 instructions
 // Each is above the ~100-instruction bar this wave was scoped to, and each is a separate behaviour
 // (control application / network catch-up interpolation / AI mixing / traffic species routing /
-// takedown scoring), so they are five named BRN_CONDUCTOR_GATEs in BrnPhysicsConductorGates.cpp
-// rather than five invented bodies. Their own closures are shallow -- the only non-assert callees
-// are memcpy, BrnTraffic::GetVehicleSpecies, VolumeInstanceId::SetEntityIDEntityIndex and
-// VehicleManager::InstantTakedown -- so they are a well-scoped follow-up wave, not a web.
+// takedown scoring), each landed as a named conductor gate here rather than as an invented body.
+// All five were bodied in the follow-up wave -- four in BrnVehicleManager_DriverArms.cpp, the
+// traffic one in BrnPhysicalTrafficManager_UpdateTrafficDriver.cpp -- and the gates are gone.
+// Their closures are shallow: the only non-assert callees are memcpy, BrnTraffic::
+// GetVehicleSpecies, VolumeInstanceId::SetEntityIDEntityIndex and VehicleManager::InstantTakedown.
 //
 // ⇒ HONEST STATE AFTER THIS WAVE: the queue is drained (records are consumed, not left to pile up),
 // the steering decay and the target-assist publish are real, and the four dispatch arms log once and

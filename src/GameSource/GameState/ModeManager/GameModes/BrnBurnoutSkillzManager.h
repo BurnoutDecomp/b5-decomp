@@ -2,14 +2,6 @@
 
 #include "types.hpp"
 
-// NOTE: the project carries two same-valued EActiveRaceCarIndex enums -- the global one
-// (BurnoutConstants.h) and BrnGameState::EActiveRaceCarIndex (BrnTakedownManagerTypes.h).
-// ScoringSystem / CarData are declared against the GLOBAL one (BrnScoringSystem.h includes
-// BurnoutConstants.h and nothing that introduces the BrnGameState dup), so this header must NOT
-// pull BrnTakedownManagerTypes.h: doing so brings the dup into scope first and every unqualified
-// `EActiveRaceCarIndex` in BrnScoringSystem.h then binds to the BrnGameState one, which mangles
-// the ScoringSystem accessors differently from every other TU on the build and leaves them
-// unresolved at link. Same-valued, so the interface calls need no cast either way.
 #include "GameSource/BurnoutConstants.h"                                          // ::EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT (== 8)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                        // BrnNetwork::NetworkPlayerID (s32), BrnNetwork::Road::ChallengeIndex
 #include "SharedClasses/StreetData/BrnChallengeData.h"                            // BrnStreetData::{ChallengeData, ChallengePlayerScoreEntry, ScoreType}

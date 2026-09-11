@@ -4,11 +4,10 @@
 // VehicleManager::InstantTakedown @0x82636108 -- BUILD-MECHANICS SPLIT ONLY (2026-08-11,
 // create-drain wave; the RaceCarPhysics_Construct.cpp precedent). The body below is byte-identical
 // to the one that lived in BrnVehicleManager.cpp:499 and its declared home is unchanged; it moved
-// because DoHornTakedowns (BrnVehicleManager_DriverArms.cpp, mounted this wave) calls it every
-// frame the horn cheat fires, and the home TU is still unmountable. Its one out-of-TU callee,
-// SetRaceCarCrashing @0x82634C90, resolves to the loud trap in the mounted
-// BrnVehicleManagerLinkStubs.cpp -- the honest state for this edge path until the 923-insn crash
-// commit lands. TO RE-MERGE: mount BrnVehicleManager.cpp, move this body back, delete this TU.
+// because DoHornTakedowns (BrnVehicleManager_DriverArms.cpp) calls it every frame the horn cheat
+// fires, at a time when the home TU could not be mounted. The home TU is mounted now, so its one
+// out-of-TU callee, SetRaceCarCrashing, resolves to the real body there.
+// TO RE-MERGE: move this body back into BrnVehicleManager.cpp and delete this TU.
 // =================================================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"

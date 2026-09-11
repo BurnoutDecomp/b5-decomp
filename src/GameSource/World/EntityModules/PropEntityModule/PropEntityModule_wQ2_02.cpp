@@ -82,27 +82,11 @@
 // ============================================================================
 // LINK-LEVEL FACTS THE CONDUCTOR NEEDS (gate-green != link-green, gotcha 12)
 // ============================================================================
-//  * INERT BOOT GATE -- DO NOT LAND THIS FILE WITHOUT RETIRING IT.
-//    b5-decomp/src/GameSource/World/WorldLinkStubs.cpp defines
-//    `BrnWorld::PropEntityModule::PostPhysicsUpdate(...)` with the identical 5-parameter
-//    signature. EXACT RANGE, RE-MEASURED 2026-08-18 (an earlier banner said 3164-3179, which
-//    is off by two at BOTH ends and would have mangled the neighbouring retired-gate note and
-//    left an orphan `}` -- a compile error in the very file being edited to fix the link):
-//        lines 3166-3170  the `// BOOT GATE (world-drive wave 2026-07-27):` comment block
-//        line  3171       the definition
-//        lines 3172-3180  the one-shot-log body, 3180 being the closing brace
-//    Line 3164 belongs to the RETIRED PreSceneUpdate note above it (:3158-3164); 3165 and 3181
-//    are blank. Delete 3166-3180 and nothing else.
-//    WorldLinkStubs.cpp IS mounted in tools/build/build_game_exe.bat, so mounting this file
-//    without deleting that block is LNK2005. Per AGENTS.md gotcha 7 the gate is NOT retired
-//    here -- the conductor mounts + retires together, then re-LINKS (the retired PreSceneUpdate
-//    gate at :3158 is the precedent and the marker form to copy).
-//    RecordPropPositions has NO gate anywhere (grepped WorldLinkStubs.cpp and
-//    BrnPhysicsConductorGates.cpp).
-//  * NOT MOUNTED: this file, and every PropEntityModule_wQ_0*.cpp / _wQ2_0*.cpp
-//    (`grep -c PropEntityModule_wQ tools/build/build_game_exe.bat` == 0). The MOUNT SET this
-//    file needs is: itself + wQ2_03 (ProcessContacts) + wQ_06 (UpdateProps) + wQ_01
-//    (PrepareForReplay / RestoreFromReplay).
+//  * PostPhysicsUpdate once had an inert boot gate in WorldLinkStubs.cpp; that gate was deleted
+//    in the same change that mounted this file, so the body here is its only definition.
+//    RecordPropPositions never had a gate anywhere (grepped the stub TUs).
+//  * MOUNTED, together with the set this file needs: wQ2_03 (ProcessContacts), wQ_06
+//    (UpdateProps) and wQ_01 (PrepareForReplay / RestoreFromReplay).
 //  * CALLEES: EVERY ONE IS BODY-PRESENT IN THE TREE -- re-grepped 2026-08-18, definition by
 //    definition (an earlier version of this block named two phantom blockers):
 //      ProcessContacts                     PropEntityModule_wQ2_03.cpp:169

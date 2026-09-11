@@ -3,6 +3,7 @@
 //
 //   RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars
 //   RaceCarEntityModule::UpdateNearMisses
+//   RaceCarEntityModule::UpdateTrafficAndRaceCarNearMisses
 //
 // Two halves of the same boost-credit chain, neither of which had a body anywhere in the tree.
 //
@@ -15,6 +16,11 @@
 // PhysicalTrafficManager::PassNearbyCrashingTrafficIdsToRaceCarModule fills every frame, and the
 // only driver of NearMissManager::Update: without it the near-miss / crash-escape chain never
 // aged, never fired and never posted its chain game events.
+//
+// UpdateTrafficAndRaceCarNearMisses is the other half of that chain and the sole caller of
+// NearMissManager::AddNearTraffic / AddNearRaceCar: it drains the traffic module's two proximity
+// collections off the post-scene input buffer into the near lists the tick above matches its
+// remembered crashes against.
 // =================================================================================================
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
@@ -254,6 +260,66 @@ void RaceCarEntityModule::UpdateNearMisses(
     }
 
     mNearMissManager.Update( mfTimeStep, lpOutput->GetGameEventQueue(), &mBoostManager );
+}
+
+// =================================================================================================
+// RaceCarEntityModule::UpdateTrafficAndRaceCarNearMisses -- THE PRODUCER OF BOTH NEAR LISTS.
+//
+// This is the only caller of NearMissManager::AddNearTraffic / AddNearRaceCar anywhere in the
+// game, so until it landed the near-miss tick above aged, snapshotted and remembered crashes
+// correctly but could never FIRE: a near miss is a remembered CRASHED id that was also on the
+// NEAR list, and the near lists had no writer.
+//
+// It is not a detector. The proximity work is the TRAFFIC module's: its scene-query pass fills
+// the two Array<NearMissData,N> collections inside the traffic->race-car pre-scene interface,
+// which the post-scene input buffer carries. This body just drains them, once per post-scene
+// tick, and re-fetches the interface separately for each half exactly as the console does (the
+// accessor carries the buffer's locked-for-reading assert, so the second fetch is not dead).
+//
+// The traffic half is ALSO the power-parking near-traffic tally, counted only when power parking
+// can be scored -- outside a game mode, or in the online free-burn lobby. That flag is computed
+// once, ahead of both drains, and re-tested per record.
+//
+// ⛔ MEASURED, AND IT IS WHY NOTHING FIRES YET: the collections' producer,
+// TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults, has no body anywhere in this tree
+// (it is the gate that TU's own banner already names). Both collections are Construct'd, so they
+// read length 0 every frame and this drain is a well-formed no-op until that gate closes. That
+// is honest state -- the pipe is complete on this side.
+// =================================================================================================
+void RaceCarEntityModule::UpdateTrafficAndRaceCarNearMisses(
+        RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput )
+{
+    typedef RaceCarEntityModuleIO::InputBuffer_PostScene::TrafficToRaceCarInterface_PreScene
+            TrafficInterface;
+
+    const TrafficInterface::NearMissTrafficCollection* lpNearMissTrafficCollection =
+            lpInput->GetTrafficToRaceCarInterface_PreScene()->GetNearMissTrafficCollection();
+
+    CGS_ASSERT( lpNearMissTrafficCollection != 0, "lpNearMissTrafficCollection != NULL" );
+
+    const bool lbCountForPowerParking =
+            !mbIsInGameMode ||
+            meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY;
+
+    for( u32 luIndex = 0; luIndex < lpNearMissTrafficCollection->GetLength(); ++luIndex )
+    {
+        mNearMissManager.AddNearTraffic( ( *lpNearMissTrafficCollection )[ luIndex ].muCarId );
+
+        if( lbCountForPowerParking )
+        {
+            ++miPowerParkingNearTrafficCount;
+        }
+    }
+
+    const TrafficInterface::NearMissRaceCarCollection* lpNearMissRaceCarCollection =
+            lpInput->GetTrafficToRaceCarInterface_PreScene()->GetNearMissRaceCarCollection();
+
+    CGS_ASSERT( lpNearMissRaceCarCollection != 0, "lpNearMissRaceCarCollection != NULL" );
+
+    for( u32 luIndex = 0; luIndex < lpNearMissRaceCarCollection->GetLength(); ++luIndex )
+    {
+        mNearMissManager.AddNearRaceCar( ( *lpNearMissRaceCarCollection )[ luIndex ].muCarId );
+    }
 }
 
 }   // namespace BrnWorld

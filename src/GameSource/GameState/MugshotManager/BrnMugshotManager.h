@@ -48,7 +48,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // BrnNetwork::ECameraStatus, InGamePlayerStatusInterface
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleIOQueues.h" // (TakedownEventQueue element note)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                          // CgsModule::EventQueue<TakedownEvent,8> (Update's takedown-queue arg)
-#include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"         // BrnGameState::TakedownEvent, CgsID, BrnGameState::EActiveRaceCarIndex
+#include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"         // BrnGameState::TakedownEvent, CgsID
 
 namespace BrnGameState
 {

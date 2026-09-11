@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // overhead / per-pool allocators (InitPool)
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (the null-type boot gate)
+#include "GameShared/Jobs/Relocator/CgsRelocator.h"          // Relocator / RelocationParams / RelocateOp
 
 #include <cstdint>   // uintptr_t (the Heap allocation owner is the slot index)
 #include <cstddef>   // size_t (the PC-leaf free notification below)
@@ -777,5 +778,50 @@ namespace CgsResource
         muNumRelocations     = luNum;
 
         maHeaps[liMemType].ExecuteBatchRelocation(lpRequests, luNum);
+    }
+
+    // Arm the emergency defragmentation pass. Same latching as BeginDefragmentation, with two
+    // differences: there is no staging pool (the Relocator moves the bytes directly), and the
+    // stage starts at MAKE_DEST_COPIES because the emergency route skips the temp-copy stages
+    // entirely. After the heap's nodes are re-seated for the whole plan, the plan's offsets are
+    // translated into the absolute source/destination addresses the Relocator works in and the
+    // whole op list is fired in one go rather than a slice per frame.
+    void Pool::BeginEmergencyDefragmentation(CgsMemory::Relocator* lpRelocator,
+                                             CgsMemory::RelocationParams* lpParams,
+                                             RelocateRequest* lpRequests, RelocateSource* lpSources,
+                                             u32 luNum, s32 liMemType)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        CGS_ASSERT(mbAllowDefragmentation, "This pool does not have defragmentation enabled\n");
+
+        mpCurrentRelocator = lpRelocator;
+        miDefragFrame      = 0;
+        miDefragMemType    = liMemType;
+        mpRelocateRequests = lpRequests;
+        mpRelocateSources  = lpSources;
+        muNextRelocation   = 0;
+        muNumRelocations   = luNum;
+        meDefragStage      = DEFRAGSTAGE_MAKE_DEST_COPIES;
+
+        maHeaps[liMemType].ExecuteBatchRelocation(lpRequests, luNum);
+
+        char* lpcHeapBase = maHeaps[liMemType].GetBaseAddress();
+
+        // The memory-space tag stamped on every op: main memory is 0, both graphics pools are 3.
+        const u32 luMemorySpace = (liMemType != 0) ? 3u : 0u;
+
+        const s32 liNumRelocations = static_cast<s32>(muNumRelocations);
+        for (s32 liRelocation = 0; liRelocation < liNumRelocations; ++liRelocation)
+        {
+            CgsMemory::RelocateOp& lrOp = lpParams->mpOps[liRelocation];
+            lrOp.mpDest        = lpcHeapBase + lpRequests[liRelocation].muDestOffset;
+            lrOp.mpSource      = lpcHeapBase + lpSources[liRelocation].muSourceOffset;
+            lrOp.muMemorySpace = luMemorySpace;
+            lrOp.muSize        = lpSources[liRelocation].muSize;
+        }
+
+        lpParams->miNumOps = liNumRelocations;
+
+        mpCurrentRelocator->Execute(lpParams);
     }
 }

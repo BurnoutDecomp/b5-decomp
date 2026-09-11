@@ -242,28 +242,25 @@ namespace Vehicle
         // -- is deleted; the monolith call sites now go through the sink they were always aimed
         // at, VehicleOutputInterface::GetGameEventQueue().
 
-        // The cross-module "a race car crashed" event (X360 AddRaceCarCrashEvent). FLAG: the X360
-        // call passes nine positional args (a leading 0, the victim entity id, a byte-offset/flag, a
-        // local-vs-remote flag, an optional crash matrix, the was-crash-state-1 bool, a 0, and the
-        // splatted crash position). The load-bearing args are kept; the rest are MODELLED as a single
-        // packed call. Declare-only -- bodied by the interface's own TU.
-        // TWO ARGUMENT ROLES CORRECTED 2026-08-03 (VehiclePhysics own-block wave). This used to
-        // take `const Matrix44Affine& lCrashMatrix` and `Vector3 lvCrashPosition`. BOTH were wrong,
-        // and both errors came from the same mis-based reading of VehicleManager::SetRaceCarCrashing:
-        //   * the "crash matrix" was a single 16-byte `stvx128 v127, r30, 0x1440` -- a VECTOR store
-        //     into RaceCarPhysics::mCrashNormal -- and the value passed to this call is that same
-        //     v127 register (`vmr128 v1, v127` @0x82635484). Not a 64-byte matrix.
-        //   * the "crash position" is a SCALAR FLOAT. Both call sites (@0x826354BC and @0x82635530)
-        //     do `lvx128 v0, record+0xEF0 ; vspltw v0,v0,0 ; stvx128 ; lfs f1` -- lane .x of
-        //     mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare, i.e. the crash SPEED.
-        // FLAG (unchanged): the console call still passes more registers than this models -- a
-        // second vector v2 (== v126) and three more integer args. Those are not recovered; the
-        // simplification is deliberate and is not made worse by this correction.
+        // The cross-module "a race car crashed" event. Declare-only -- bodied by the interface's
+        // own TU.
+        // SURFACE COMPLETED 2026-09-11 (the SetRaceCarCrashing wave). The five-argument modelled
+        // surface this used to carry dropped four of the event's own fields on the floor, and two
+        // of them were load-bearing: the crasher id and the takedown type. The body hard-coded
+        // them to 0 and E_TAKEDOWN_NONE, and the takedown detector drops any crash event whose
+        // type is NONE -- so no car-vs-car crash committed by the physics sink could ever be
+        // scored as a takedown. Every argument below now maps one-to-one onto a RaceCarCrashEvent
+        // field, so nothing is modelled away any more.
         void AddRaceCarCrashEvent(EntityId lVictimEntityId,
-                                  bool lbLocalPhysicalCrash,
+                                  EntityId lCrasherEntityId,
                                   Vector3 lvCrashNormal,
-                                  bool lbWasInCrashState1,
-                                  f32 lfCrashSpeedMPH);
+                                  Vector3 lvContactPoint,
+                                  bool lbIsPrimaryCrash,
+                                  bool lbRemoveHandlingVolumeFromScene,
+                                  bool lbCarIsAI,
+                                  bool lbCarIsNetwork,
+                                  f32 lfCrashSpeedMPH,
+                                  BrnGameState::ETakedownType leInstantTakedownType);
 
         // sink+1872: the secondary "remapped entity id" sub-event the type-2-id path fires. Declare-only.
         // IN BOUNDS AND ON THE RIGHT CLASS: 1872 == 0x750 == mTrafficTypeRequestQueue below.

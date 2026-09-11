@@ -594,8 +594,6 @@ void ChallengeManager::UpdateChallenge(f32 lfTimeStep, s32 liFramesSinceNetworkS
 
     // The accessor carries its own "Player car index hasn't been set" assert
     // (BrnRaceCarEntityModuleOutputInterface.h:980) -- do not duplicate it here.
-    // `::` qualified: BrnGameState also declares a same-valued EActiveRaceCarIndex
-    // (BrnTakedownManagerTypes.h); the interface accessor returns the global-scope one.
     const ::EActiveRaceCarIndex leActiveRaceCarIndex =
         lpActiveRaceCarOutputInterface->GetPlayerActiveRaceCarIndex();
 

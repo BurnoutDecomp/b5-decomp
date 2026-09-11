@@ -11,20 +11,19 @@
 //   VehicleManager::ShouldRaceCarCrashOnCarImpact                    @0x825C6FF8 ( 42)
 //   VehicleManager::PredictCarCarIntersection                        @0x825C57B0 (565)  NAMED GATE
 //
-// THREE NAMED GATES, all inside HandleRaceCarTrafficCarPotentialContact (each carries its own
-// name + address + blocker + DELETE-WHEN at its seat):
+// ONE NAMED GATE is left inside HandleRaceCarTrafficCarPotentialContact; it carries its own name +
+// address + blocker + DELETE-WHEN at its seat:
 //   PredictCarCarIntersection                     @0x825C57B0 -- returns true (see its banner)
-//   VehicleManager::InstantTakedown               @0x82636108 -- reaches the SetRaceCarCrashing trap
-//   VehicleManager::SetRaceCarCrashing            @0x82634C90 -- BrnVehicleManagerLinkStubs.cpp:97
-// The last two are the RACE-CAR side of the outcome (flag bit 0). This round is the TRAFFIC car's
-// reaction; the traffic-side arms (bits 1..3) are all live.
+// The two race-car-side gates that stood beside it -- InstantTakedown and SetRaceCarCrashing, the
+// RACE-CAR side of the outcome (flag bit 0) -- were deleted on 2026-08-25 once the crash-commit
+// chain mounted. This round is the TRAFFIC car's reaction; the traffic-side arms (bits 1..3) are
+// all live.
 //
 // HandleRaceCarTrafficCarPotentialContact was an .ida-exports HOLE (dumped by the wave-T3 scout,
 // scratchpad .../wave3/scout/holes/0x8263FA50.txt) AND its Hex-Rays output is the degenerate
 // "local variable allocation has failed" form. Every step below is read off the ASM.
 //
-// NO LEGACYSRC SOURCE for any of these. ARTIST asm; DecFIGS DWARF for declaration shape
-// (BrnVehicleManager.h :1290 / :1293 / :1143 / :1197 / :1194 / :1286).
+// Reconstructed from the retail binary; declaration shape from the recovered type information.
 //
 // THE OUTCOME FLAGS. DecideOutcomeOfRaceCarTrafficContact writes one word whose bits the
 // handler dispatches on; the console's own assert at BrnVehicleManager.cpp:7836 names the mask:
@@ -669,9 +668,9 @@ void VehicleManager::HandleRaceCarTrafficCarPotentialContact(
 
             // GATE DELETED 2026-08-25 (crash-entry wave S1). The gate's own DELETE-WHEN ("the
             // crash-commit chain mounts") was DISCHARGED on 2026-08-24 by wave B3b: the 923-insn
-            // SetRaceCarCrashing @0x82634C90 is mounted in BrnVehicleManager.cpp and
-            // BrnVehicleManagerLinkStubs.cpp:97 now reads "LINK STUB DELETED 2026-08-24". The
-            // gate text was simply stale (verified: bat line 1211 mounts BrnVehicleManager.cpp).
+            // SetRaceCarCrashing is mounted in BrnVehicleManager.cpp and the link stub
+            // that had stood for it is gone. The gate text was simply stale (verified: the bat
+            // mounts BrnVehicleManager.cpp).
             //
             // Argument order read from the image at 0x82640420..0x82640464 (this function is an
             // ARTIST export HOLE, so it was disassembled from the .i64 directly):

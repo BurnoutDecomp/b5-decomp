@@ -409,7 +409,16 @@ namespace Vehicle
                 // +0x2F, process down (BrnCrash.png, module+0xC993F). The gate tests the vptr
                 // word itself; the registered flag stays FALSE on skip so the slot re-registers
                 // the moment the real component ctor lands.
-                // DELETE-WHEN VehicleManager's debug-component construction is reconstructed.
+                //
+                // STILL REQUIRED after DebugComponent::Construct landed (2026-09-11). Construct is
+                // the component's two-phase init, and on the console it stores no vptr: the vptr
+                // comes from the C++ CONSTRUCTOR of VehicleManager's DebugComponent[8] member,
+                // which cannot run while that member is an opaque byte span. Register needs a live
+                // vptr for four virtual dispatches (IsSimple / GetPath / GetName, then OnRegister
+                // from inside DebugManager::RegisterComponent), so the span is still zero at
+                // offset 0 and this gate is still what keeps the create event alive.
+                // DELETE-WHEN maRaceCarDebugComponent becomes a real DebugComponent[8] whose
+                // elements are constructed (not the two-phase Construct -- the C++ ctor).
                 if (*reinterpret_cast<void* const*>(lpComponent) != 0)
                 {
                     lpComponent->Register();

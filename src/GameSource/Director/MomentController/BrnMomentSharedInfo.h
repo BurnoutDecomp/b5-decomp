@@ -32,8 +32,27 @@
 // unbodied and the call is gated out of MainDirector::Update), so no moment's Update runs and
 // no shim below is reachable at runtime. This header closes the READ end only.
 //
-// ⓘ TWO SHIM NAMES DO NOT MATCH THE MEMBER THEY LAND ON, and the shim names are the ones that
-// are wrong -- they were coined from each call site's role before the record existed:
+// ⓘ TWELVE SHIM NAMES DO NOT MATCH THE MEMBER THEY LAND ON, and the shim names are the ones
+// that are wrong -- they were coined from each call site's role before the record existed.
+// Every displacement below is the call site's own; what changed is that the member it lands on
+// is now known. The ten short entries each read as "shim name -> member":
+//   HasTakedownVictim     -> GameState::mbTakedownActive (the SAME flag WasTakedown reads; it
+//                            says a takedown happened, not that a victim slot is filled)
+//   GetStuntFlags         -> GameState::miThisFramesActionFlags
+//   GetTimeCrashing       -> GameState::mfCrashTimeRemaining (remaining, NOT elapsed -- the
+//                            stationary-crash moment's ICE-take-fits test reads the opposite
+//                            sense from what its name suggests)
+//   IsCrashCameraActive   -> GameState::mbCanUseSlomo
+//   GetCrashModeWord      -> GameState::meEventType (crash mode is one of its enumerators)
+//   GetAirborneHeight     -> RaceCarState::mfTimeInAir (seconds, not a height; "0 == grounded"
+//                            is still right)
+//   GetCrashElapsed       -> RaceCarState::mAboveGroundTestResult.mfVerticalDistance
+//   HasCrashDynamics      -> RaceCarState::mAboveGroundTestResult.mbValid
+//   GetCrashSpeedDiff     -> RaceCarState::mTransform.yAxis lane 1, i.e. how upright the car
+//                            still is -- nothing to do with speed
+//   GetSegmentReference   -> RaceCarState::mLinearVelocity (so the look-back's "projection"
+//                            is a time to alignment in seconds, not a position parameter)
+// and the two that were already recorded:
 //   MomentSharedInfo_GetCrashVehicleIndex  reads mePlayerActiveRaceCarIndex, which is the
 //       PLAYER's active race-car index, not the crashing car's. Three moment TUs read it under
 //       the crash name; on the paths that reach it the player IS the crashing car, so the uses
@@ -43,6 +62,11 @@
 //       road-rage car is the spiralling deathcam's, which ArbStateCrashing::Prepare selects off
 //       the same flag.
 // Renaming them is a separate pass across nine TUs and is deliberately not done here.
+//
+// ⓘ The record's layout was re-derived independently of the member order below: every shim's
+// displacement, mapped through an offsetof probe of GameState / RaceCarState / PlayerCrashInfo,
+// lands on exactly one member and leaves no gaps -- and those three sub-structs carry no
+// pointer past their head, so their host layout IS the record's.
 // ============================================================================
 
 namespace CgsNumeric { class Random; }
@@ -51,13 +75,13 @@ namespace BrnDirector
 {
     struct GameState;
     struct AllVehicleData;
-    class  DebugLog;
+    struct DebugLog;
     class  DebugPrinter;
     class  VehicleTracker;
     class  DirectorResourceManager;
     class  ShotSelector;
-    class  CrashAnalysis;
-    class  EffectInterface;
+    struct CrashAnalysis;
+    struct EffectInterface;
     struct NamedParameters;
 
     namespace Camera

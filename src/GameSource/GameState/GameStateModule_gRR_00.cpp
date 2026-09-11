@@ -182,11 +182,9 @@ void GameStateModule::ProcessTakedownEvents(
                 // The console calls the CONST GetCarData twin (0x8231DCD0) on the embedded
                 // ScoringSystem (this+0x1DD0 == mModeManager + 0xDB0).
                 // ⚠️ THE OVERLOAD IS PINNED THROUGH A MEMBER POINTER. ScoringSystem::GetCarData is
-                // overloaded on EActiveRaceCarIndex and on BrnNetwork::NetworkPlayerID (== s32), and
-                // two distinct `enum EActiveRaceCarIndex` exist in this tree; an enum that is not
-                // the parameter's own would convert to s32 and SILENTLY bind the NetworkPlayerID
-                // overload. Naming the by-active-index overload's exact type makes that a compile
-                // error instead.
+                // overloaded on EActiveRaceCarIndex and on BrnNetwork::NetworkPlayerID (== s32);
+                // naming the by-active-index overload's exact type keeps a silent bind to the
+                // NetworkPlayerID overload a compile error.
                 // (The non-const twin @0x8231DC18 is used because the tree's CarData::HasFever is
                 // declared non-const; the two twins are the same search.)
                 typedef CarData* (ScoringSystem::*CarDataByActiveIndexFn)(::EActiveRaceCarIndex);

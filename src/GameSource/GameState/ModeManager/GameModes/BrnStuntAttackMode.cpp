@@ -110,13 +110,6 @@ namespace
 
     struct SetBoostActionRecord
     {
-        // [!] EXPLICITLY GLOBAL-QUALIFIED. This tree carries TWO distinct
-        // `enum EActiveRaceCarIndex : s32` -- the real one (BurnoutConstants.h:8) and a
-        // BrnGameState-scoped stand-in (BrnTakedownManagerTypes.h:18) that unqualified lookup
-        // finds first from inside `namespace BrnGameState`. The value stored here comes from
-        // RCEntityActiveRaceCarOutputInterface::GetPlayerActiveRaceCarIndex, which returns the
-        // GLOBAL one, so the member must name it the same way (same reason BrnGameMode.h:53 and
-        // BrnGameStateModuleIO.h:630 spell theirs `::EActiveRaceCarIndex`).
         ::EActiveRaceCarIndex meRaceCarIndex; // +0x00
         s32                 mxFlags;          // +0x04
         f32                 mfBoostAmount;    // +0x08

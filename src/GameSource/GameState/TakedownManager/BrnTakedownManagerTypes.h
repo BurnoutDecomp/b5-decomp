@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BrnCommonTypes.h"
+#include "GameSource/BurnoutConstants.h"            // ::EActiveRaceCarIndex (the one and only)
 #include "GameSource/GameState/BrnTakedownType.h"   // BrnGameState::ETakedownType (canonical)
 
 namespace BrnGameState
@@ -10,24 +11,12 @@ namespace BrnGameState
     // lands at +16.
     typedef u64 CgsID;
 
-    // Slot index of an active race car (BrnGameState scope, per the DWARF). ETakedownType is
-    // now the canonical one from BrnTakedownType.h (deduped - both used to define it minimally).
-    // (NOTE: a same-valued EActiveRaceCarIndex also lives at global scope in BurnoutConstants.h,
-    // used unqualified by the vehicle/traffic IO headers; unifying those scopes is a separate
-    // cleanup, so this BrnGameState one is kept and completed to the full value set here.)
-    enum EActiveRaceCarIndex : s32
-    {
-        E_ACTIVE_RACE_CAR_INDEX_INVALID = -1,
-        E_ACTIVE_RACE_CAR_INDEX_0       = 0,
-        E_ACTIVE_RACE_CAR_INDEX_1       = 1,
-        E_ACTIVE_RACE_CAR_INDEX_2       = 2,
-        E_ACTIVE_RACE_CAR_INDEX_3       = 3,
-        E_ACTIVE_RACE_CAR_INDEX_4       = 4,
-        E_ACTIVE_RACE_CAR_INDEX_5       = 5,
-        E_ACTIVE_RACE_CAR_INDEX_6       = 6,
-        E_ACTIVE_RACE_CAR_INDEX_7       = 7,
-        E_ACTIVE_RACE_CAR_INDEX_COUNT   = 8,
-    };
+    // Slot index of an active race car. There is exactly ONE such enum, at global scope
+    // (BurnoutConstants.h); TakedownEvent's two index members are that type. The alias exists
+    // so `BrnGameState::EActiveRaceCarIndex` keeps naming it for the code that spells it that
+    // way -- it must never become a second enum, which would re-mangle every unqualified use in
+    // headers included after this one.
+    typedef ::EActiveRaceCarIndex EActiveRaceCarIndex;
 
     struct TakedownEvent
     {

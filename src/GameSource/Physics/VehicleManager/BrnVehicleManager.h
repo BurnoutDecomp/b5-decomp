@@ -2177,23 +2177,40 @@ namespace Vehicle
         // (The member itself is declared with the rest of the class head below.)
         // ==========================================================================================
 
-        // The crash record pool. 32 entries, 12-byte stride, @ class offset +43808.
-        // SetRaceCarCrashing allocates a slot here (seeding +8 to 0) for the scoring/UI layer to
-        // read back by entity id (doc §3b); UpdateCrashes @0x825EA640 ages +8 by the sim timestep
-        // every frame and frees the slot once it passes 0.1 s.
+        // The crash record pool. 32 entries, 12-byte stride, at class offset +0xAB20.
+        // SetRaceCarCrashing allocates a slot here (seeding +0x8 to 0) for the scoring/UI layer to
+        // read back by entity id; UpdateCrashes ages +0x8 by the sim timestep every frame and frees
+        // the slot once it passes 0.1 s.
         //
-        // DWARF (BrnVehicleManager.h:100-104) spells the three members
-        //     EntityId mRaceCarEntityID; EntityId mOtherEntityID; float32_t mfTimeSinceImpact;
-        // +8 RENAMED 2026-09-02 to the DWARF name: UpdateCrashes `fadds` the timestep into it and
-        // SetRaceCarCrashing's pool-full path evicts the LARGEST value -- i.e. the OLDEST record --
-        // which is a time, not a priority. FLAG: +0/+4 keep the earlier proposed names; the
-        // SetRaceCarCrashing recon reads +4 as the takedown type where the DWARF says EntityId
-        // mOtherEntityID -- settle that in SetRaceCarCrashing's own wave (behaviour unchanged).
+        // +0x4 SETTLED 2026-09-11 (the SetRaceCarCrashing wave the older note asked for): it holds
+        // the OTHER party's entity id, not a takedown type. Both commit sinks agree -- each writes
+        // the crasher/aggressor id into this seat, and each uses the (victim, other) PAIR as the
+        // duplicate-crash key before committing, comparing this seat against the incoming crasher
+        // id. A takedown type would make that comparison meaningless. The takedown type has its own
+        // home: it is forwarded to VehicleManagerOutputInterface::AddRaceCarCrashEvent and lands in
+        // RaceCarCrashEvent::meInstantTakedownType, which is what the takedown detector reads.
         struct RaceCarCrashData
         {
-            u32 mEntityId;           // +0 (DWARF: EntityId mRaceCarEntityID)
-            u32 meType;              // +4 (DWARF: EntityId mOtherEntityID -- see the FLAG above)
-            f32 mfTimeSinceImpact;   // +8 (DWARF :104; UpdateCrashes' timer)
+            EntityId mRaceCarEntityID;   // +0x0  the victim, as the caller passed it (pre-remap)
+            EntityId mOtherEntityID;     // +0x4  the crasher/aggressor, as the caller passed it
+            f32      mfTimeSinceImpact;  // +0x8  UpdateCrashes' age timer
+        };
+
+        // The 32-byte crash record both commit sinks push onto the game-side event queue at the
+        // vehicle output interface's +0x65F0. FLAG: only the byte size and the five written seats
+        // are attested; the gaps are not modelled. The seats are the REMAPPED victim and crasher
+        // ids at +0x00/+0x04, a zero flag byte at +0x10, a zero float at +0x14 and the victim's
+        // active-race-car index at +0x18. Shared by both sinks so the seats cannot drift apart.
+        struct RaceCarCrashIoEventRecord : public CgsModule::Event
+        {
+            EntityId mVictimEntityId;    // +0x00
+            EntityId mCrasherEntityId;   // +0x04
+            u32      muPad08;            // +0x08 (not written)
+            u32      muPad0C;            // +0x0C (not written)
+            u32      mbFlag;             // +0x10 (byte seat; zero)
+            f32      mfReserved;         // +0x14 (zero)
+            u32      muVictimIndex;      // +0x18
+            u32      muPad1C;            // +0x1C (not written)
         };
 
         // ==========================================================================================

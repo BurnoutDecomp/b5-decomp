@@ -87,25 +87,14 @@
 //      there (0x822FAF5C `lwz r11, 4(r25)` == mEntityIdB, the car; `srwi r11,r11,10` then
 //      `stb`). Written faithfully below and flagged at the site.
 //
-// ---- LINK-LEVEL (AGENTS.md gotcha 7 + 12; gate NOT retired by this lane) ------------------
-//   b5-decomp/src/GameSource/World/WorldLinkStubs.cpp:1163 defines an inert boot gate for
-//   BrnWorld::PropEntityModule::PostSceneUpdate with the identical 5-parameter signature
-//   (BrnUpdateSet is `typedef u16`, so the two mangle the same). WorldLinkStubs.cpp IS
-//   mounted, so the moment this file is mounted that is a DUPLICATE SYMBOL at link -- and it
-//   is invisible to `cl /c` and to coverage_check, which globs only this directory and so
-//   reports DUPLICATE(ODR) = 0.
-//   EXACT RANGE, MEASURED 2026-08-18: comment block 1158-1162, definition 1163, body
-//   1164-1172 (1172 is the closing brace). Delete 1158-1172 and nothing else -- 1156 is the
-//   tail of the RETIRED GenerateDispatchLists note above and 1157 is blank -- then put the
-//   house marker `// GATE RETIRED <date>: BrnWorld::PropEntityModule::PostSceneUpdate
-//   @0x822C4718 is now REAL (PropEntityModule_wQ2_03.cpp).` in its place, in the form used at
-//   WorldLinkStubs.cpp:1102/:1110/:1118/:1126.
-//   MOUNT AND RETIRE IN ONE CHANGE, THEN RE-LINK; a recompile proves nothing here. Note that
-//   mounting this file ALONE will not link: `grep -c PropEntityModule_wQ
-//   tools/build/build_game_exe.bat` == 0, so none of the wQ_*/wQ2_* partfiles (nor
-//   BrnPropEntityModuleIO_InputBuffer_PostScene.cpp) is mounted yet.
-//   Neither ProcessContacts nor ProcessPotentialContactWithPart has a gate in either
-//   WorldLinkStubs.cpp or BrnPhysicsConductorGates.cpp (re-grepped this pass).
+// ---- LINK-LEVEL (AGENTS.md gotcha 7 + 12) ------------------------------------------------
+//   PostSceneUpdate once had an inert boot gate in WorldLinkStubs.cpp with the identical
+//   5-parameter signature (BrnUpdateSet is `typedef u16`, so the two mangled the same). Mount and
+//   retirement happened in one change -- the duplicate would have been invisible to `cl /c` and to
+//   coverage_check, which globs only this directory and so reports DUPLICATE(ODR) = 0. This file
+//   and the partfiles it links with are mounted.
+//   Neither ProcessContacts nor ProcessPotentialContactWithPart ever had a gate in either stub
+//   TU (re-grepped this pass).
 // ============================================================================
 
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModule.h"

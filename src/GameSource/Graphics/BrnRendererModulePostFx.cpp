@@ -15,7 +15,7 @@
 //
 // This file holds Render's OWN block (pseudocode lines 964..1260, asm 0x8240C290-0x8240C314 and
 // 0x8240D700-0x8240DD4C) verbatim in behaviour, split out of BrnRendererModule.cpp for the single
-// translation-unit reason spelled out in BrnRendererModulePostFx.h (the EA::Jobs::Job placeholder).
+// translation-unit reason spelled out in BrnRendererModulePostFx.h (now vestigial).
 // Render calls each function below from the point the console executes it.
 //
 // WHAT THE BLOCK IS. The console's post-fx effects are driven entirely by data: the effects module,

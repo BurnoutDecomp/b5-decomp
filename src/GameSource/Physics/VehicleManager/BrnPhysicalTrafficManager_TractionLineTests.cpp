@@ -9,7 +9,7 @@
 // stuck) walk ONE shared result cursor that EndVehicleTractionLineTests copies once and passes in
 // turn (BrnVehicleManager_TractionLineTests.cpp @0x82633DA4). An Add without its Read leaves the
 // next leg reading this leg's records; a Read without its Add reads the previous leg's.
-// Both conductor gates (BrnPhysicsConductorGates.cpp:409 / :418) are retired together with this.
+// The two conductor gates that stood for this pair were retired together with it.
 //
 // WHY THIS ROUND NEEDS IT: PhysicalTrafficManager::ReadUpdatedBodies applies
 // `mLinearVelocity.y -= KF_GRAVITY*dt` to every fully-physical traffic body every frame with

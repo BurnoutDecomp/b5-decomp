@@ -2,8 +2,8 @@
 // BrnPhysicsModuleGameActions.cpp
 //
 // PhysicsModule::HandleGameActions @0x825A72F0 (185 insns; PS3 0x69CD60) -- THE PHYSICS SIDE OF THE
-// GAME-ACTION PIPE. Landed 2026-08-27 (showtime S3 wave); its conductor gate in
-// BrnPhysicsConductorGates.cpp is deleted in the same commit.
+// GAME-ACTION PIPE. Landed 2026-08-27 (showtime S3 wave), replacing the conductor gate that had
+// stood for it; this is its only definition tree-wide.
 //
 // WHY THIS ONE FUNCTION MATTERED
 // ------------------------------

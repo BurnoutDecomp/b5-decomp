@@ -99,21 +99,6 @@ namespace Vehicle
     // = 0.44704 * 50.0 == 50 MPH in m/s. The old 0.0 made the gate a pass-through.
     static const f32 KF_MIN_IMPACT_SPEED_SUM = 0.44704f * 50.0f;   // flt_82FB8290 <- init 0x82C5BB18 (22.352 m/s)
 
-    // The packed crash record SetRaceCarCrashing pushes onto the IO VariableEventQueue<1536,16> at
-    // sink+26096 (asm AddEvent(..., 63, 32) -- a 32-byte event). The X360 writes the entity id at
-    // +0 (v228), a re-image at +4 (v229), a flag byte (v232), the priority/age (v233) and the victim
-    // index (v234). FLAG: the EXACT 64-byte on-wire layout is MODELLED here as the load-bearing
-    // fields the asm writes; only the byte SIZE passed to AddEvent (32) is asm-proven. Derives from
-    // CgsModule::Event so it can be queued by the generic AddEvent.
-    struct CrashIoEventRecord : public CgsModule::Event
-    {
-        u32 mEntityIdValue;   // +0  (asm v228)
-        f32 mfReserved;       // +4  (asm v229 re-image; modelled 0)
-        u32 mbFlag;           // +8  (asm v232)
-        u32 muVictimIndex;    // +12 (asm v234)
-        f32 muReservedTail;   // +16 (asm v233)
-    };
-
     // The grind-event record HandleRaceCarRaceCarContact's pre-pass pushes onto the player-driver
     // queue (asm AddEventSafe(..., 31, 12) -- a 12-byte event). The X360 writes a grind type (7 or 8)
     // at +0 and two -1 sentinels (v205/v206). FLAG: 12-byte layout modelled as the fields the asm
@@ -569,13 +554,14 @@ namespace Vehicle
     //   a2 = lAggressorEntityId.muValue  (v41; HIBYTE = the owner/cause sub-code v42)
     //   the two Vector3s + the four interfaces follow; leTakedownType is the trailing enum.
     //
-    // FLAG (the blueprint's open question, carried into the code): the X360 stores `a2` (the
-    // aggressor id word) BOTH as the suppression-gate cause sub-code (HIBYTE) AND into the crash-data
-    // slot's "meType" field, then remaps it via the secondary event. The DWARF names arg2
-    // `lAggressorEntityId` and arg9 `leTakedownType`, and doc §3b documents the slot's meType as the
-    // ETakedownType. We body the DOCUMENTED roles: the cause sub-code / remap key is the aggressor
-    // id's owner byte, and the slot's meType stores leTakedownType. If a later pass proves the X360
-    // genuinely stores the aggressor-id word in meType, swap meType <- lAggressorEntityId here.
+    // SETTLED 2026-09-11 (this wave): the aggressor id has THREE roles here and none of them is a
+    // takedown type. Its owner byte is the suppression-gate cause sub-code; the id itself is the
+    // duplicate-crash key and the crash-data slot's +0x4 seat; and its traffic-remapped form is
+    // what the victim's record and the crash event publish as the party that caused the crash.
+    // The takedown type is a separate argument with a separate destination: it selects the physics
+    // latch predicate and is forwarded to the crash event, where the takedown detector reads it.
+    // The older note that put the takedown type in the slot's +0x4 seat was wrong, and the
+    // remote-crash sink had already contradicted it.
     // -------------------------------------------------------------------------------------------
     void VehicleManager::SetRaceCarCrashing(EntityId lVictimEntityId,
                                             EntityId lAggressorEntityId,
@@ -587,13 +573,9 @@ namespace Vehicle
                                             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
                                             BrnGameState::ETakedownType leTakedownType)
     {
-        // The collision normal + contact point arrive in VMX registers; this sink consumes the
-        // contact point as the crash position only via the in-record vector below, and forwards the
-        // normal into the crash event. Reference the unused-here params so they are explicit.
-        (void)lCollisionNormal;
-        (void)lContactPoint;
+        // Both contact vectors are forwarded to the crash event. The request-output and
+        // deformation interfaces are untouched by this sink.
         (void)lpRequestOutputInterface;
-        (void)lpVehicleOutputInterface;
         (void)lpDeformationInterface;
 
         // ===========================================================================================
@@ -692,6 +674,42 @@ namespace Vehicle
             lValidatedVictimId = mPhysicalTrafficManager.maTrafficEntityIDs[liVictimIndex];
         }
 
+        // ---- Step 2b: the same remap for the AGGRESSOR, by its OWN index ----
+        // A traffic-owned aggressor id is republished as the traffic slot's global entity id; a
+        // race-car-owned one passes through unchanged. This is the id the victim's record and the
+        // crash event publish as the party that caused the crash -- the sink used to publish the
+        // VICTIM id into both of those seats, which told the takedown layer that every car had
+        // taken itself down.
+        EntityId lRemappedAggressorId = lAggressorEntityId;
+        if (luCauseSubCode == 2)
+        {
+            const s32 liAggressorIndex =
+                static_cast<s32>((lAggressorEntityId.muValue >> 10) & 0x3FFF);
+            lRemappedAggressorId = mPhysicalTrafficManager.maTrafficEntityIDs[liAggressorIndex];
+        }
+
+        // ---- Step 2c: the duplicate-crash gate ----
+        // The same (victim, aggressor) pair commits ONCE while its crash record is still alive: a
+        // repeat contact between the same two cars must not re-fire the crash event or burn a
+        // second crash-data slot. The key is the two ids AS PASSED IN, before either remap, which
+        // is exactly what the slot seats hold. This gate was missing from this sink entirely (the
+        // remote-crash sink has always had it), so a sustained car-on-car contact re-committed the
+        // victim every step and churned the 32-slot pool.
+        for (s32 liUsedCrash = mUsedRaceCarCrashesList.GetFirstNonZeroBit();
+             liUsedCrash >= 0;
+             liUsedCrash = mUsedRaceCarCrashesList.GetNextNonZeroBit(liUsedCrash))
+        {
+            if (maRaceCarCrashes[liUsedCrash].mRaceCarEntityID.muValue == lVictimEntityId.muValue
+                && maRaceCarCrashes[liUsedCrash].mOtherEntityID.muValue == lAggressorEntityId.muValue)
+            {
+                return;
+            }
+        }
+
+        // Car type 1 is the AI type -- the same value the mbStopAICrashing suppression gate keys
+        // on. The crash event carries it as its is-AI flag.
+        const bool lbVictimIsAI = (liCrashState == 1);
+
         // ---- Step 3: the two crash-commit branches (the heart) ----
         RaceCarPhysics& lrVictimRecord = maRaceCarVehicles[liVictimIndex];   // asm _R31 = 5216*v36 + this
         RaceCarPhysics* const lpVictimPhysics =
@@ -706,28 +724,35 @@ namespace Vehicle
             // at 0x82635320 -- the victim is mid-crash and gets a second, lighter event.)
             if (lpManagerOutputInterface)
             {
+                // CORRECTED 2026-09-11: this path publishes the INCOMING contact normal, not the
+                // record's stored one. Only path (B) restamps the record, so reading it back here
+                // handed the pile-on event the PREVIOUS wreck's normal.
+                // The event's scalar float is the crash SPEED IN MPH -- the .x lane of the victim's
+                // packed speed/time vector, not a position.
                 lpManagerOutputInterface->AddRaceCarCrashEvent(
                     lValidatedVictimId,
-                    /*lbLocalPhysicalCrash=*/false,
-                    lrVictimRecord.mCrashNormal,          // asm v1 == the crash normal register
-                    // ⭐ CORRECTED 2026-09-02: was `lbWasInCrashState1` (maeRaceCarTypes==1); the
-                    // console passes `li r8, 0` @0x82635504. See the path-(B) note below.
-                    /*lbWasInCrashState1=*/false,
-                    // this argument used to be a phantom `mvCrashPosition`. Both
-                    // AddRaceCarCrashEvent sites do `lvx128 ; vspltw v0,v0,0 ; stvx128 ; lfs f1`
-                    // on record+0xEF0 -- they pass LANE .x as the scalar float f1, and +0xEF0 is
-                    // mvSpeedOnLastCrashMPH_... So the event carries the crash SPEED IN MPH.
-                    lrVictimRecord.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.x);
+                    lRemappedAggressorId,
+                    lCollisionNormal,
+                    lContactPoint,
+                    /*lbIsPrimaryCrash=*/false,
+                    /*lbRemoveHandlingVolumeFromScene=*/false,
+                    lbVictimIsAI,
+                    /*lbCarIsNetwork=*/false,
+                    lrVictimRecord.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.x,
+                    // A pile-on carries no classification of its own.
+                    BrnGameState::E_TAKEDOWN_NONE);
             }
         }
         else
         {
             // (B) LOCAL / physical-crash path.
-            // The X360 latch bool is an AND of four conditions (asm): the player slot is not remote,
-            // the victim is within the proximity radius of the player camera, the victim's car type
-            // is 1, and the a7-derived predicate (here always true -- a7 is the no-takedown-type
-            // sentinel path; the X360 sets v108=1 when a7==-1||a7==0). FLAG: the a7 predicate is
-            // modelled as always-true because the bodied callers pass the -1 sentinel.
+            // The latch bool is an AND of four conditions: the player slot is not itself crashing,
+            // the victim is behind the player along the player's forward axis, the victim is an AI
+            // car, and the takedown type is one of the two "no specific classification" values.
+            // RESOLVED 2026-09-11: the fourth term used to be modelled as always-true on the
+            // assumption that every caller passes the NONE sentinel. It is a real gate -- the
+            // classifier arms pass a specific type, and a classified takedown deliberately does
+            // NOT latch the victim's physics into the crash replay.
             const s32 liPlayerIndex = static_cast<s32>(mePlayerActiveRaceCarIndex);   // asm v109
             RaceCarPhysics& lrPlayerRecord = maRaceCarVehicles[liPlayerIndex];  // asm _R10 = 5216*v109 + this
 
@@ -752,11 +777,14 @@ namespace Vehicle
                 lvDelta.x * lvPlayerForward.x + lvDelta.y * lvPlayerForward.y + lvDelta.z * lvPlayerForward.z;
             const bool lbBehindPlayer = (0.0f > lfAlongForward);   // asm vcmpgtfp. 0.0f > dot
 
+            const bool lbUnclassifiedTakedown = (leTakedownType == BrnGameState::E_TAKEDOWN_NONE)
+                                             || (leTakedownType == BrnGameState::E_TAKEDOWN_STANDARD);
+
             const bool lbLatchPhysics =
-                (!lrPlayerRecord.mbCrashing)   // asm *(_R10+3664)==0  (player not remote)
-                && lbBehindPlayer                          // asm 0.0f > dot3(delta, playerForward)
-                && (liCrashState == 1)                     // asm *(v39+v35)==1  (== maeRaceCarTypes[victim])
-                /* && lbA7Predicate */;                    // asm & v108 (FLAG: modelled true, see above)
+                (!lrPlayerRecord.mbCrashing)
+                && lbBehindPlayer
+                && lbVictimIsAI
+                && lbUnclassifiedTakedown;
 
             // The single call site of RaceCarPhysics::SetCrashing: latch the victim's physics into
             // the crash replay ONLY when near the player; distant cars crash "logically" (SetCrashing
@@ -807,35 +835,35 @@ namespace Vehicle
                 // it mis-clamps the next hit's driven points.
                 lrVictimRecord.ResetDeformableAABB();               // asm 0x82635438..0x82635468
             }
-            lrVictimRecord.mEntityCausingCrash = lValidatedVictimId; // asm *(record+5200) = v34
+            // The victim's record remembers the contact normal and WHO caused the crash.
+            // CORRECTED 2026-09-11: the second seat takes the remapped AGGRESSOR, not the victim --
+            // the member's own name says so, and the sink used to write the victim into it.
+            lrVictimRecord.mCrashNormal        = lCollisionNormal;
+            lrVictimRecord.mEntityCausingCrash = lRemappedAggressorId;
 
-            // Fire the FULL crash event (asm arg `1` + the matrix vs the light path's 0/0).
+            // Fire the FULL crash event.
             if (lpManagerOutputInterface)
             {
                 lpManagerOutputInterface->AddRaceCarCrashEvent(
                     lValidatedVictimId,
-                    /*lbLocalPhysicalCrash=*/true,
-                    lrVictimRecord.mCrashNormal,
-                    // ⭐ CORRECTED 2026-09-02: this used to pass `lbWasInCrashState1`, i.e.
-                    // maeRaceCarTypes[victim] == 1 -- Hex-Rays' v45, which is a term of the
-                    // SetCrashing latch (`and r11, r11, r9` @0x826353D4), NOT this argument. The
-                    // r8 the console passes at 0x826354BC is the re-read gate's own result:
-                    // `mr r8, r20` (1) on the taken arm, `mr r8, r23` (0) at loc_82635470 -- and
-                    // `li r8, 0` on path (A) below.
+                    lRemappedAggressorId,
+                    lCollisionNormal,
+                    lContactPoint,
+                    /*lbIsPrimaryCrash=*/true,
                     lbCrashingAfterLatch,
-                    lrVictimRecord.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.x);
+                    lbVictimIsAI,
+                    /*lbCarIsNetwork=*/false,
+                    lrVictimRecord.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.x,
+                    leTakedownType);
 
-                // Push the 64-byte crash record onto the IO VariableEventQueue<1536,16> @ sink+26096
-                // (asm: AddEvent(a5+26096, &record, 63, 32)). The record packs { entityId, victimIdx }.
-                // FLAG: the exact 64-byte event-record layout is MODELLED as the two load-bearing
-                // fields the asm writes (v228=entityId, v234=victimIdx); the rest is zero-init.
-                CrashIoEventRecord lEventRecord;
-                lEventRecord.mEntityIdValue = lValidatedVictimId.muValue;   // asm v228 = v34
-                lEventRecord.mfReserved     = 0.0f;                         // asm v229 = v34 (re-image; modelled 0)
-                lEventRecord.mbFlag         = 0;                            // asm v232 = 0
-                lEventRecord.muVictimIndex  = static_cast<u32>(liVictimIndex); // asm v234 = v36
-                lEventRecord.muReservedTail  = 0.0f;                        // asm v233 = 0.0
-                // RE-POINTED 2026-08-24 (wave B3b): same r17 sink as the takedown/grind pushes.
+                // Push the 32-byte crash record onto the game-side event queue at the vehicle
+                // output interface's +0x65F0 -- the same sink as the takedown/grind pushes.
+                RaceCarCrashIoEventRecord lEventRecord;
+                lEventRecord.mVictimEntityId  = lValidatedVictimId;
+                lEventRecord.mCrasherEntityId = lRemappedAggressorId;
+                lEventRecord.mbFlag           = 0;
+                lEventRecord.mfReserved       = 0.0f;
+                lEventRecord.muVictimIndex    = static_cast<u32>(liVictimIndex);
                 lpVehicleOutputInterface->GetGameEventQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lEventRecord), 63, 32);
             }
@@ -872,25 +900,21 @@ namespace Vehicle
             }
         }
 
-        // Write the slot: { mEntityId = victim packed id, meType = takedown type, mfTimeSinceImpact = 0 }.
-        // asm: *(v150+43816)=0.0 (the timer UpdateCrashes ages); *(12*(v138+3651)+v35)=v149
-        //      (== slot+43812, meType); *(v150+43808)=a13 (== slot+43808, mEntityId, the packed victim id).
+        // Write the slot. Both ids are the PRE-REMAP ones the caller passed, which is what makes
+        // the duplicate-crash gate above a valid key.
         maRaceCarCrashes[liSlot].mfTimeSinceImpact = 0.0f;
-        maRaceCarCrashes[liSlot].meType     = static_cast<u32>(leTakedownType);   // FLAG: see header note
-        maRaceCarCrashes[liSlot].mEntityId  = lVictimEntityId.muValue;            // asm a13 = packed victim id
+        maRaceCarCrashes[liSlot].mOtherEntityID    = lAggressorEntityId;
+        maRaceCarCrashes[liSlot].mRaceCarEntityID  = lVictimEntityId;
         mUsedRaceCarCrashesList.SetBit(static_cast<u32>(liSlot));   // asm: set the allocation bit (v179 OR into field)
 
         // ---- Step 5: secondary remapped-entity event ----
-        // Only fired when the takedown cause sub-code is type 2 (a TRAFFIC-owned id); the asm reads
-        // the traffic slot's global entity id at +148128 and fires short_::AddEvent(sink+1872,
-        // &packed) with that id's entity index in the high word. FLAG: the asm keys this off
-        // HIBYTE(v149) (the meType-slot word); we key it off the documented cause sub-code (the
-        // aggressor id owner byte) which carries the same type-2 signal.
-        // Same re-seat as Step 2: +148128 is mPhysicalTrafficManager.maTrafficEntityIDs.
+        // Fired only when the AGGRESSOR id is traffic-owned: the sub-event republishes the entity
+        // index of that traffic slot's global id onto the manager's traffic-type request queue.
+        // CORRECTED 2026-09-11: the index used to come from the traffic remap of the VICTIM's slot,
+        // a different car -- and out of range whenever the victim is a race car.
         if (luCauseSubCode == 2 && lpManagerOutputInterface)
         {
-            const u32 luRemappedIndex =
-                (mPhysicalTrafficManager.maTrafficEntityIDs[liVictimIndex].muValue >> 10) & 0x3FFF;   // asm (v180>>10)&0x3FFF
+            const u32 luRemappedIndex = (lRemappedAggressorId.muValue >> 10) & 0x3FFF;
             lpManagerOutputInterface->AddRemappedEntityIdEvent(luRemappedIndex);
         }
     }

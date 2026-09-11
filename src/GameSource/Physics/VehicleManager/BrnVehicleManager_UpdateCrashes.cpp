@@ -6,8 +6,8 @@
 //
 //   VehicleManager::UpdateCrashes  @0x825EA640  (203 insns; DWARF BrnVehicleManager.cpp:7105)
 //
-// Slice TU. The LinkStubs boot gate that stood in BrnVehicleManagerLinkStubs.cpp is DELETED in
-// the same change (LNK2005 is the tripwire if it ever reappears).
+// Slice TU. This is the only definition tree-wide; the boot gate it replaced is gone (LNK2005 is
+// the tripwire if it ever reappears).
 //
 // -------------------------------------------------------------------------------------------------
 // WHAT THE 203 INSTRUCTIONS ARE. All but eleven of them are the INLINED CgsBitArray<32u>

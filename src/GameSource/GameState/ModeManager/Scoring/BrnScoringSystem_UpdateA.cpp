@@ -143,19 +143,6 @@
 
 #include <stdlib.h>   // qsort (sorts the maRaceCarPositioningData[8] scratch best-first)
 
-// NOTE on EActiveRaceCarIndex scoping (the project's unresolved dual-scope gotcha):
-// the keystone ScoringSystem (BrnScoringSystem.h) is built on the GLOBAL ::EActiveRaceCarIndex
-// (from BurnoutConstants.h) -- GetCarData / GetPlayerTeam / IsRaceCarActive all take that type.
-// The three event-queue ELEMENT types, however, spell their index fields with the namespaced
-// BrnGameState::EActiveRaceCarIndex (homed in BrnTakedownManagerTypes.h, identical values, NOT
-// yet unified with the global one). Pulling BrnScoringSystemEventQueues.h in ABOVE the existing
-// bodies would make BrnGameState::EActiveRaceCarIndex shadow the global one inside `namespace
-// BrnGameState`, breaking the already-landed bodies (GetHighestLobbyRoadRuleScore /
-// UpdateRacePositions) that rely on unqualified == global. So the event-queue header is included
-// BELOW the existing namespace block, and the three new bodies live in a SECOND namespace block
-// after it -- there they static_cast each event's BrnGameState::EActiveRaceCarIndex to the global
-// ::EActiveRaceCarIndex the keystone surface expects. Existing bodies stay textually untouched.
-
 namespace BrnGameState
 {
     namespace
@@ -515,10 +502,7 @@ namespace BrnGameState
 // ============================================================================
 // Event-queue update group (UpdateTakedowns / UpdateCrashes / UpdatePaybackTakedowns).
 // ============================================================================
-// Pulled in BELOW the first BrnGameState block on purpose: this header transitively defines
-// BrnGameState::EActiveRaceCarIndex (BrnTakedownManagerTypes.h) which would otherwise shadow
-// the GLOBAL ::EActiveRaceCarIndex the keystone surface (and the bodies above) rely on -- see
-// the scoping note at the top of this file. It completes the three event-queue parameter types
+// Pulled in BELOW the first BrnGameState block: it completes the three event-queue parameter types
 // (empty structs deriving CgsModule::EventQueue<T,N>; full GetLength/GetEvent/Construct/Append
 // surface) and the three committed element-type homes:
 //   TakedownEvent      (BrnTakedownManagerTypes.h)
@@ -571,10 +555,6 @@ namespace BrnGameState
     // StuntModeScoringOnline::DealWithTakedown call (0x8232AE40-0x8232AE7C) is gated on the
     // two extra X360 params (a3/a4) the committed single-arg DWARF signature drops and reaches
     // a scorer not declared on the keystone; it is omitted (see file header).
-    //
-    // The event's index fields are BrnGameState::EActiveRaceCarIndex; GetCarData / GetPlayerTeam
-    // take the GLOBAL ::EActiveRaceCarIndex (identical values, not-yet-unified) -- so each is
-    // static_cast across the dual scope at the call boundary.
     void ScoringSystem::UpdateTakedowns(const InputBuffer::TakedownEventQueue* lpQueue)
     {
         CGS_ASSERT(lpQueue != NULL, "lpTakedownQueue != NULL");
@@ -588,9 +568,7 @@ namespace BrnGameState
             const ::EActiveRaceCarIndex leAggressor = static_cast< ::EActiveRaceCarIndex>(liAggressor);
             const ::EActiveRaceCarIndex leVictim    = static_cast< ::EActiveRaceCarIndex>(liVictim);
 
-            // X360 bounds asserts (cpp:997/1001); compared on the raw value to dodge the
-            // dual-scope EActiveRaceCarIndex enumerator ambiguity (0 == E_ACTIVE_RACE_CAR_INDEX_0,
-            // 8 == E_ACTIVE_RACE_CAR_INDEX_COUNT).
+            // The console's bounds asserts, compared on the raw value.
             CGS_ASSERT((liAggressor >= 0) && (liAggressor < 8),
                        "(leAggressorRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leAggressorRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
             CGS_ASSERT((liVictim >= 0) && (liVictim < 8),
@@ -697,8 +675,7 @@ namespace BrnGameState
     // both indices via GetCarData (sub_8231DCD0), asserts each non-NULL ("lpAggressorCarData"
     // cpp:1072 / "lpVictimCarData" cpp:1073), and bumps +0x4C/+0x50/+0x118/+0x11C; for status 2
     // it does the same map + asserts (cpp:1087/1088) and bumps +0x110/+0x114. Matches the
-    // keystone TWO queue-pointer signature. (Event index fields are BrnGameState::EActiveRaceCarIndex;
-    // static_cast to the GLOBAL ::EActiveRaceCarIndex GetCarData expects -- see scoping note.)
+    // keystone TWO queue-pointer signature.
     void ScoringSystem::UpdatePaybackTakedowns(const GameStateToNetworkInterface::DirtyTrickQueue* lpQueueA,
                                                const GameStateToNetworkInterface::DirtyTrickQueue* lpQueueB)
     {

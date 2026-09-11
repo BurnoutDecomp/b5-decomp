@@ -12,8 +12,8 @@
 //   OutputWheelData              @0x82608E28  -> BrnDeformableObject_GlassState.cpp (was landed)
 //   DetachedPartManager::OutputEvents -> pool OutputEvents @0x8260DBE8
 //                                       -> BrnPhysicalBodyPartPool.cpp / BrnDetachedPartManager.cpp
-// The DeformationManager::OutputData conductor gate in BrnPhysicsConductorGates.cpp is DELETED
-// by the same commit (the link's LNK2005 enforces the pairing).
+// The DeformationManager::OutputData conductor gate that stood until then is gone; this is the
+// only definition (the link's LNK2005 enforces that).
 
 namespace BrnPhysics
 {

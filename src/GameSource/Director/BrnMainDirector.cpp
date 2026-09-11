@@ -310,12 +310,6 @@ namespace BrnDirector
         // ⭐ REAL (was held back for host size): the camera-behaviour manager.
         mBehaviourManager.Construct();
 
-        // The named-camera-parameter bank. On the console this is
-        // BehaviourParameterBank::Construct, which BehaviourManager::Construct calls (that call
-        // is marked as a GATE in its body); here the one modelled block is seeded so
-        // BuildArbStateSharedInfo can publish a REAL pointer instead of the null it used to.
-        mNamedParameters.Construct();
-
         CGS_ASSERT(lpResourceManager != 0, "lpDirectorResourceManager != NULL");
         mBehaviourManager.SetDirectorResourceManager(lpResourceManager);
 
@@ -608,8 +602,11 @@ namespace BrnDirector
     // ever entered. (ArbStateOnlineCarSelect::Prepare has the identical line.) A stub's
     // "not on the live path" reasoning expires silently -- nothing in the build, the linker or
     // any boot test can tell you it has.
-    // The slot now points at MainDirector::mNamedParameters, real named storage seeded by
-    // NamedParameters::Construct.
+    // ⭐ UPDATED 2026-09-11: the slot points at the record's ONE storage, the behaviour
+    // manager's own parameter bank (bank +0x10), reached by name through
+    // GetBehaviourParameterBank().GetNamedParameters() and seeded by that bank's Construct.
+    // The director owns no named-parameter storage of its own: the record has exactly one
+    // home, the bank, which is where the console keeps it too.
     // ⭐ UPDATED 2026-08-02 (framing wave): the block now carries the console's TYPE TAG *AND*
     // its authored tunings. Both halves are transcribed --
     // BehaviourRotateAboutVehicle::Parameters::Construct @0x821FB300's thirteen re-tunes, plus
@@ -617,7 +614,8 @@ namespace BrnDirector
     // Looker subject size 0.75/0.75 and screen offset +0.125/-0.125, transcribed in
     // NamedParameters::Construct with their asm and .rdata provenance). There is no data file
     // to load: BehaviourParameterBank::LoadParameters reads "d:\\camera.txt" and has no callers.
-    // DELETE-WHEN: BehaviourParameterBank is homed (the other ~40 blocks are still unmodelled).
+    // The bank that carries the record is a SLICE: the other ~40 named blocks are unmodelled,
+    // so a state that reaches one of those still has nothing to reach.
     //
     // ⚠️ THE UN-HOMED REGION POINTERS. mpDebugPrinter / mpDebugLog / mpMomentController /
     // mpGameState / mpRandom / mpEffectInterface / mpAllVehicleData / mpPlayerTracker and the
@@ -695,7 +693,8 @@ namespace BrnDirector
         lrSharedInfo.mpStateContainer        = 0;                                   // +0x14 (callee-filled)
         lrSharedInfo.mpBehaviourManager      = const_cast<Camera::BehaviourManager*>(
                                                   &mBehaviourManager);                          // +0x18
-        lrSharedInfo.mpNamedParameters       = &mNamedParameters;                   // +0x1C
+        lrSharedInfo.mpNamedParameters       =
+            &mBehaviourManager.GetBehaviourParameterBank().GetNamedParameters();    // +0x1C
         lrSharedInfo.mpMomentController      = reinterpret_cast<MomentController*>(
                                                   const_cast<u8*>(maMomentController));         // +0x20
         lrSharedInfo.mpGameState             = const_cast<GameState*>(&maGameState);            // +0x24

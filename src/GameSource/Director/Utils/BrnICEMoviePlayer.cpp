@@ -280,6 +280,25 @@ void ICEMoviePlayer::StartCurrentMovie()
 }
 
 // ----------------------------------------------------------------------------
+// BrnDirector::ICEMoviePlayer::ApplyFlashHookToCamera  (private helper)
+//
+// Fire the "2dFlash" start hook on this player's own camera, at full blend.
+//
+// NO STANDALONE SYMBOL: the recorded code folds this into ICEMoviePlayer::Update, which
+// emits the same three stores at each of its three flash sites -- the start-hook name
+// wrapper's Set against the camera's effects block (camera +0x68), the blend amount
+// (effects +0x80) and the has-start-hook flag (effects +0xB7). That is exactly
+// CameraEffects::SetStartHookName(name, blend). Both operands are hoisted once into the
+// function prologue of the enclosing loop: the name is the literal "2dFlash" and the blend
+// is the shared 1.0f constant, so all three sites are identical and unconditional -- the
+// only guard is the caller's own GetShouldFlash() test on the movie entry.
+// ----------------------------------------------------------------------------
+void ICEMoviePlayer::ApplyFlashHookToCamera()
+{
+    mCamera.GetEffects().SetStartHookName("2dFlash", 1.0f);
+}
+
+// ----------------------------------------------------------------------------
 // BrnDirector::ICEMoviePlayer::Play
 //
 // Start playing the playlist from the first movie: set the playing/first-frame flags,

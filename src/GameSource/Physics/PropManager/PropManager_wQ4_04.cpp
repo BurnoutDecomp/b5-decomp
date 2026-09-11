@@ -194,9 +194,8 @@
 //     zero constant and the accessor call replaced by `(void)lImpulse;` -- proving the residual
 //     is exactly those two declarations and nothing structural.
 // ------------------------------------------------------------------------------------------
-// LINK-LEVEL: ApplyPropRaceCarCollisionImpulse has NO inert gate anywhere
-// (grepped BrnPhysicsConductorGates.cpp and WorldLinkStubs.cpp -- neither names it), and no
-// body anywhere in the tree, so mounting it creates no duplicate. Its one caller is
+// LINK-LEVEL: ApplyPropRaceCarCollisionImpulse has NO inert gate anywhere (grepped the stub TUs
+// -- neither names it) and no other body in the tree, so mounting it created no duplicate. Its one caller is
 // PropManager::SetupAndValidatePropContact @0x82628190, which is itself a trap stub today.
 // ==========================================================================================
 

@@ -739,8 +739,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
                 // Deferred for three reasons at once: the results-sent latch has no accessor, the
                 // +27868 store lands inside mHUDMessageLogic (whose lifecycle conductor decision #4
                 // parks), and reaching lpOutputBuffer->GetGameActionQueue() needs
-                // BrnGameStateModuleIO.h -- which BrnModeManager.h bans for the EActiveRaceCarIndex
-                // dual-scope hazard.
+                // BrnGameStateModuleIO.h, which BrnModeManager.h keeps out.
             }
         }
         else

@@ -1320,8 +1320,8 @@ namespace Vehicle
 
     // ==============================================================================================
     // EndPartContactGeneration @0x8261B690 (276) -- BODIED 2026-08-27 (detach-3 wave). Its loud named
-    // gate in BrnPhysicsConductorGates.cpp is DELETED in the same commit; that gate was its only
-    // definition, so nothing else has to be retired with it.
+    // conductor gate was deleted in the same commit; that gate was its only definition, so nothing
+    // else had to be retired with it.
     //
     // The PART harvest, and the last link in the chain: without it every contact
     // StartPartContactGeneration just produced is computed and thrown away.

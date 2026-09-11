@@ -24,8 +24,8 @@
 //
 // GATE-GREEN != LINK-GREEN (AGENTS.md gotcha 12), re-grepped 2026-08-18: both are
 // DECLARED ONLY (BrnPropEntityModule.h:360 / :361); `grep -rn '::ReplayUpdateP.*InScene'
-// --include=*.cpp b5-decomp/src` finds no definition, and neither WorldLinkStubs.cpp nor
-// BrnPhysicsConductorGates.cpp carries an inert gate for them. Mounting THIS partfile in
+// --include=*.cpp b5-decomp/src` finds no definition, and no stub TU carries an inert gate for
+// them. Mounting THIS partfile in
 // tools/build/build_game_exe.bat is therefore two unresolved externals (LNK2019 x2) that
 // `cl /c` and the compile gate cannot see. DO NOT mount this file, and do not close the
 // TU on a compile-gate pass, until those two bodies land (or gates are added) and a real

@@ -84,38 +84,11 @@
 // which ARTIST emits as a real `bl` to 0x8260F010. The ARTIST form is what is reconstructed
 // (rung 1 arbitrates); nothing from the PS3 inline expansion is written into this body.
 //
-// ⚠️ LINK-LEVEL, NOT VISIBLE TO `cl /c` (AGENTS.md gotcha 7/12). Re-derived 2026-08-18 --
-// an earlier revision of this banner got the mounting the wrong way round; what follows was
-// read out of tools/build/build_game_exe.bat, not assumed:
-//   * ProcessInputsPreScene is ALSO defined -- inertly -- at
-//     GameSource/Physics/BrnPhysicsConductorGates.cpp:206 (BRN_CONDUCTOR_GATE at :212).
-//     That gates file IS MOUNTED (build_game_exe.bat:1177). What is not mounted is THIS
-//     partfile -- no PropManager_wQ*.cpp appears anywhere in build_game_exe.bat -- which is
-//     the only reason nothing is duplicated today. The moment this file is mounted the gate
-//     at :206 becomes an LNK2005 duplicate and must be retired in the SAME commit. Reported,
-//     NOT removed here: gate retirement is conductor-only.
-//   * ALL SIX callees below are declared in BrnPropManager.h; NONE of the six has a body in
-//     any MOUNTED translation unit, so compile-green here is NOT link-green. That framing is
-//     unchanged; the ENUMERATION under it was wrong and is corrected here (round-2 MUST_FIX --
-//     two rows claimed "no body anywhere" for functions that a sibling lander had bodied
-//     minutes earlier, and the parenthetical had wQ2_06 parking the wrong function).
-//     Re-grepped 2026-08-18 (`PropManager::<name>` over b5-decomp/src/**/*.cpp):
-//       - BODIED, but only in UNMOUNTED part-files (four of the six):
-//           ProcessAddPartInstanceEvents    @0x826280F8  PropManager_wQ_02.cpp
-//           ProcessRemovePartInstanceEvents @0x82627818  PropManager_wQ_02.cpp
-//           ProcessAddPropInstanceEvents    @0x82632108  PropManager_wQ2_06.cpp  (that file's own
-//                                                        banner says "BODIED BELOW"; the function
-//                                                        it PARKS is OutputUpdatedProps)
-//           UpdateJointedProps              @0x82631260  PropManager_wQ2_05.cpp
-//       - NO body anywhere and no gate -- so mounting the whole wave yields TWO genuine
-//         unresolved externals, not four:
-//           ProcessRemovePropInstanceEvents @0x82627778
-//           RemoveAllPropsAndParts          @0x8260F010
-//         Both are ALSO export holes (no per-address JSON; their names/addresses come from this
-//         function's own xrefs_from), which is what makes them the real end of the closure.
-//     ⚠️ Line numbers are deliberately omitted: these are concurrent landers' files and they
-//     move. RE-VERIFY this list at mount time rather than trusting it -- it went stale once
-//     already, inside a single afternoon.
+// LINK-LEVEL. ProcessInputsPreScene once had an inert conductor-gate twin; that gate is gone,
+// and this body is the only definition of the symbol. All six callees below are bodied in
+// mounted partfiles (PropManager_wQ_02 / wQ2_05 / wQ2_06 / wQ4_02 / wQ6_01), so compile-green
+// here is link-green too. Re-verify at mount time rather than trusting this list: it went
+// stale once already, inside a single afternoon.
 // ==========================================================================================
 
 #include "GameSource/Physics/PropManager/BrnPropManager.h"

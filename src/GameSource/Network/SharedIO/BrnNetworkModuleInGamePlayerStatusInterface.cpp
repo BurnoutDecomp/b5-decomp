@@ -26,11 +26,11 @@ namespace BrnNetwork
         {
             mPlayerName.macName[0]        = 0;                                   // +256 (single byte, not a full memset)
             mNetworkPlayerID              = -1;                                  // +272
-            meActiveRaceCarIndex          = E_ACTIVE_RACE_CAR_NONE;              // +276
+            meActiveRaceCarIndex          = E_ACTIVE_RACE_CAR_INDEX_INVALID;              // +276
             meVOIPStatus                  = 0;                                   // +280
             meCameraStatus                = static_cast<ECameraStatus>(KI_CAMERA_STATUS_DEFAULT); // +284
             mMarkedManPlayerID            = -1;                                  // +288
-            meMarkedManActiveRaceCarIndex = E_ACTIVE_RACE_CAR_NONE;              // +292
+            meMarkedManActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;              // +292
             mbMarkedMan                   = false;                               // +300
 
             mPlayerStats.Clear();
@@ -111,12 +111,12 @@ namespace BrnNetwork
                 const InGamePlayerStatusData* lpPlayerStatusData =
                         lPlayerStatusInterface.GetPlayerStatusData(liIndex);
 
-                CGS_ASSERT((lpPlayerStatusData->meActiveRaceCarIndex > E_ACTIVE_RACE_CAR_NONE) &&
+                CGS_ASSERT((lpPlayerStatusData->meActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                            (lpPlayerStatusData->meActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT),
                            "( lpPlayerStatusData->meActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( lpPlayerStatusData->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
 
                 maMarkedManActiveRaceCarIndex[lpPlayerStatusData->meActiveRaceCarIndex] =
-                        static_cast<::EActiveRaceCarIndex>(lpPlayerStatusData->meMarkedManActiveRaceCarIndex);
+                        lpPlayerStatusData->meMarkedManActiveRaceCarIndex;
             }
             return *this;
         }

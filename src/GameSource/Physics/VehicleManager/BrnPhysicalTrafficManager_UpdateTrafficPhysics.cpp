@@ -5,7 +5,7 @@
 //
 // The per-frame tick of every FULLY physical traffic body: install the driver's controls into
 // the body, then run the full-physics update. Sole caller VehicleManager::UpdateVehiclePhysics
-// @0x82645E44. Its link stub at BrnVehicleManagerLinkStubs.cpp:284 must be DELETED with this.
+// This is its only definition tree-wide; the link stub it replaced is gone.
 //
 // The address was an .ida-exports HOLE (absent from progress/identity.json); the body was dumped
 // headless from a COPY of the ARTIST .i64. DWARF BrnPhysicalTrafficManager.h:152

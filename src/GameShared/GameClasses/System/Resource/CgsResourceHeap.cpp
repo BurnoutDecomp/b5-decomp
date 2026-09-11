@@ -333,6 +333,8 @@ namespace CgsResource
 
     u32 Heap::GetHeapAlignment() const { return muHeapAlignment; }
 
+    char* Heap::GetBaseAddress() const { return mpcAddress; }
+
     // Flatten the live address-ordered node list into the caller's array: one
     // (offset, size, status, node index, owner) record per node in mUsedNodes, in list order.
     // The console does NOT clamp to luMaxLength -- the caller sizes the array from its own

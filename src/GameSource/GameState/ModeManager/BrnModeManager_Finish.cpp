@@ -44,18 +44,8 @@
 
 #include <cstring>   // memset / memcpy (the raw action payloads whose records are not homed yet)
 
-// The spine buffers. BrnModeManager.h deliberately does NOT include BrnGameStateModuleIO.h (its own
-// banner explains why); a partfile includes it locally, where the scope question is local.
-//
-// [!] INCLUDE ORDER IS LOAD-BEARING. BrnGameStateModuleIO.h reaches BrnTakedownManagerTypes.h and
-// that header defines a SECOND `enum EActiveRaceCarIndex : s32` inside `namespace BrnGameState`
-// (the dual-scope hazard BrnGameStateModuleIO.h:630 documents and BrnModeManager.h's own include
-// ban exists for). GameStateModule::GetPlayerActiveRaceCarIndex spells its return type
-// UNQUALIFIED, so whichever of the two enums is visible first WINS -- and every consumer this file
-// hands the index to (ScoringSystem::GetPlayerTeam / GetCarRaceFinishPosition / GetFinishTime /
-// StopModeTimer and GameStateToGuiInterface::AddFinishedRaceEvent) takes the GLOBAL
-// BurnoutConstants.h one. So BrnGameStateModule.h is included FIRST, before anything that can drag
-// the BrnGameState-scoped duplicate in, and every local is spelled `::EActiveRaceCarIndex`.
+// The spine buffers. BrnModeManager.h does not include BrnGameStateModuleIO.h; a partfile
+// includes it locally.
 #include "GameSource/GameState/BrnGameStateModule.h"                       // GameStateModule (player index / car ids / dev challenges)
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                     // GameStateModuleIO::OutputBuffer
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h"   // GameStateToGuiInterface::AddFinishedRaceEvent

@@ -300,9 +300,7 @@ void GameMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
         const Vector3 lPlayerDirection = lpPlayerState->mTransform.At();
         const Vector3 lPlayerPosition  = lpPlayerState->mTransform.Pos();
 
-        // `::` qualified: BrnGameState declares its own EActiveRaceCarIndex (the dual-scope
-        // banner at BrnGameMode.h:64), and only the global one has the post-increment operator
-        // that carries the console's in-loop BurnoutConstants.h:39 range assert.
+        // The post-increment operator carries the console's in-loop range assert.
         for (::EActiveRaceCarIndex leIndex = ::E_ACTIVE_RACE_CAR_INDEX_0;
              leIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT;
              leIndex++)

@@ -252,10 +252,9 @@ namespace GameStateModuleIO
     // layout change. Asserted in the .cpp.
     typedef BrnResource::GameDataIO::RequestInterface<3072> ResourceRequestInterface; // OutputBuffer +0x3414
     class TakedownEventOutputQueueType;    // OutputBuffer +0x4040
-    // [takedown wave 2026-09-03] The console's `TakedownEvent<..,8>::Construct(this + 16448)` line of
-    // OutputBuffer::Construct @0x82382940. The complete type is confined to the takedown TUs (its
-    // header's second EActiveRaceCarIndex re-binds unqualified uses here), so the Construct is
-    // reached through this forwarder, defined in TakedownManager/EventQueue_TakedownEvent_8.cpp.
+    // The console's `TakedownEvent<..,8>::Construct(this + 16448)` line of OutputBuffer::Construct.
+    // The complete type is confined to the takedown TUs, so the Construct is reached through this
+    // forwarder, defined in TakedownManager/EventQueue_TakedownEvent_8.cpp.
     void ConstructTakedownEventOutputQueue(TakedownEventOutputQueueType* lpQueue);
     // GameStateToGuiInterface (OutputBuffer +0x4450) used to be forward-declared here and carried
     // as an opaque span. It is a REAL TYPED MEMBER as of 2026-08-27 -- its complete definition
@@ -658,16 +657,6 @@ namespace GameStateModuleIO
         // Active payback (meActivePaybackType @+173180, meActivePaybackAggressor @+173184)
         BrnNetwork::EPaybackType GetActivePaybackType() const;                          // 0x823B9E28 read, line 298
         void                     SetActivePaybackType(BrnNetwork::EPaybackType lePaybackType); // 0x82362E20 write, line 299
-        // ⚠️ EXPLICITLY GLOBAL-QUALIFIED (2026-08-01). Two distinct `enum EActiveRaceCarIndex : s32`
-        // exist in this tree -- the global one in BurnoutConstants.h (which THIS header includes
-        // for exactly this member; it is also the one BrnWorldIO::UpdateInputBuffer::
-        // SetActivePaybackAggressor takes) and BrnGameState::EActiveRaceCarIndex in
-        // BrnTakedownManagerTypes.h. These three spellings sit inside `namespace BrnGameState`, so
-        // unqualified they bound to WHICHEVER of the two the including TU happened to have pulled
-        // in: the same accessor had two different return types, hence two different mangled names,
-        // depending on include order. Caught by BridgeGameStateToWorld, whose destination takes the
-        // global one ("cannot convert BrnGameState::EActiveRaceCarIndex to EActiveRaceCarIndex").
-        // Unifying the two enums is its own cleanup; pinning the scope here is not.
         ::EActiveRaceCarIndex    GetActivePaybackAggressor() const;                     // 0x823B9ED8 read, line 301
         void                     SetActivePaybackAggressor(::EActiveRaceCarIndex leAggressor);   // 0x82362ED0 write, line 302
 
@@ -777,7 +766,7 @@ namespace GameStateModuleIO
         TriggerManagementInputInterface mTriggerManagementInputInterface; // console +0x9050 (36944)
         TriggerQueryInputInterface      mTriggerQueryInputInterface;      // console +169068 (4112)
         BrnNetwork::EPaybackType meActivePaybackType;                     // console +173180
-        ::EActiveRaceCarIndex    meActivePaybackAggressor;                // console +173184 (see the accessor's ⚠️)
+        ::EActiveRaceCarIndex    meActivePaybackAggressor;                // console +173184
         OutputBufferTime         mGameModeElapsedTime;                    // console +173188 (8B)
         // The tail, carved at the console's own anchors (all three spans are attested by
         // OutputBuffer::Construct's zero-fills / memsets and by the two inlined address

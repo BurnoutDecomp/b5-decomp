@@ -292,10 +292,9 @@ namespace BrnPhysics
     // plain CGS_ASSERT with the console's message prefix -- the committed physics-TU
     // convention (see BrnPhysicsModuleBridgeFunctions.cpp:371).
     //
-    // HONEST-CLOSURE NOTE: several callees below are LOUD one-shot inert gates this
-    // wave (BrnPhysicsConductorGates.cpp names each with its X360 address + insn count).
-    // The CALL SEQUENCE here is complete and faithful; the gated legs log once per boot
-    // and do nothing until their bodies land. No call is dropped, no order changed.
+    // HONEST-CLOSURE NOTE: several callees below stood as LOUD one-shot inert gates when
+    // this banner was written; no such gate is left in the tree. The CALL SEQUENCE here is
+    // complete and faithful either way -- no call is dropped, no order changed.
     // ==========================================================================================
     void PhysicsModule::Update( CgsModule::IOBufferStack* lpInputBufferStack,
                                 CgsModule::IOBufferStack* lpOutputBufferStack,
@@ -440,8 +439,8 @@ namespace BrnPhysics
         // here and the first mark touches a body velocity.
         DvWitnessBeginStep();
 
-        // FLAG: gate-bodied this wave (BrnPhysicsConductorGates.cpp) -- the dispatch's own
-        // ~10-method web is not reconstructed. The call and its arguments are the console's.
+        // The dispatch itself is a real body (BrnPhysicsModuleGameActions.cpp); the call and its
+        // arguments are the console's.
         HandleGameActions(lpPhysicsModuleInputBuffer->GetGameActionQueue(), lpPhysicsModuleOutputBuffer);
 
         // The camera latch: four lvx/stvx pairs, input camera block -> mVehicleManager's
@@ -1155,10 +1154,9 @@ namespace BrnPhysics
 
         lpPhysicsModuleOutputBuffer->UnlockForWrite();
 
-        // THE SIM FIREWALL. Gate-bodied on purpose -- see its banner in
-        // BrnPhysicsConductorGates.cpp. The call and its lock bracket are the console's; what is
-        // deferred is the callee, which is the ONLY thing that would move the vehicle manager's
-        // mRequiredRigidBodiesQueue into the simulation.
+        // THE SIM FIREWALL -- a real body now, see its banner in BrnPhysicsModuleBridgeFunctions
+        // .cpp. The call and its lock bracket are the console's; the callee is the ONLY thing that
+        // moves the vehicle manager's mRequiredRigidBodiesQueue into the simulation.
         lpPhysicsModuleOutputBuffer->LockForRead();
         lpVehManagerBuffer->LockForRead();
         BridgeVehicleManagerToSimulation_PostScene(lpSimInputBuffer, lpVehManagerBuffer);

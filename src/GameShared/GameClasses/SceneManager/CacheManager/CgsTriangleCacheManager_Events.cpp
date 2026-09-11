@@ -395,10 +395,11 @@ namespace CgsSceneManager
             // It matters: ProcessAddToCacheEvents re-stamps only the radius (its store is a
             // read-modify-write that keeps x/y/z), so on the console a recycled slot starts at the
             // origin, while in the old tree it inherited the previous owner's position and kept it
-            // until something posted an InEventUpdateCachedPosition for it. Props post NONE today
-            // (PropManager::UpdateTriangleCache is still the inert gate at
-            // BrnPhysicsConductorGates.cpp:522-527), so for every prop slot that stale centre was
-            // permanent -- exactly the input StartUpdateTriangleCaches hands the fill job.
+            // until something posted an InEventUpdateCachedPosition for it. PropManager::
+            // UpdateTriangleCache posts one per live prop that owns a cache slot, so a prop slot
+            // recovers on its next update -- but a slot whose owner posts nothing (frozen, or no
+            // cache slot of its own) would otherwise keep that stale centre, which is exactly the
+            // input StartUpdateTriangleCaches hands the fill job.
             lrSlot.mLastCachedSphere.x = 0.0f;
             lrSlot.mLastCachedSphere.y = 0.0f;
             lrSlot.mLastCachedSphere.z = 0.0f;

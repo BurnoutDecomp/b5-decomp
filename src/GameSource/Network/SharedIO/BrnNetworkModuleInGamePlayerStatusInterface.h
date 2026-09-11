@@ -146,13 +146,6 @@ namespace BrnNetwork
         // members index the table by an active-race-car slot with a 4-byte stride (slwi ...,2), so the
         // table is an 8-entry array of s32 race-car slots -- one marked-man victim slot per aggressor
         // slot. Consumers reached from BrnGameState::TakedownManager::ProcessTakedownEvent.
-        //
-        // ENUM NOTE: the TABLE element and the method PARAMETERS use the GLOBAL ::EActiveRaceCarIndex
-        // (full 0..8; from BurnoutConstants.h), whose enumerators the range-assert strings name. The
-        // InGamePlayerStatusData meActiveRaceCarIndex/meMarkedManActiveRaceCarIndex fields resolve to
-        // the DIFFERENT BrnNetwork::EActiveRaceCarIndex {NONE=-1}; SetFromPlayerStatusInterface's store
-        // therefore static_casts the field into the global element type. Comparing the two distinct
-        // scoped enums directly would be ill-formed, so both params/element are the global enum.
         // ===================================================================
         struct MarkedManInterface
         {

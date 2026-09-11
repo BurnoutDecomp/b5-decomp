@@ -2302,12 +2302,6 @@ void GameStateModule::CopyScoringDataToOutput(
     // calls are restored. IsPlayerCarActive() carries ":967 mePlayerActiveRaceCarIndex <
     // E_ACTIVE_RACE_CAR_INDEX_COUNT"; GetPlayerActiveRaceCarIndex() carries ":980 Player car index
     // hasn't been set".
-    // ⚠️ EXPLICITLY GLOBAL-QUALIFIED, type AND enumerators. Two distinct
-    // `enum EActiveRaceCarIndex : s32` live in this tree -- the global one (BurnoutConstants.h,
-    // which the race-car output interface and ModeManager::WriteDataToOutput both take) and
-    // BrnGameState::EActiveRaceCarIndex (BrnTakedownManagerTypes.h). Unqualified inside
-    // `namespace BrnGameState` the enumerators bind to the WRONG one. Same pin
-    // BrnGameStateModuleIO.h's GetActivePaybackAggressor already carries, and for the same reason.
     ::EActiveRaceCarIndex lePlayerRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
     if (mLastActiveRaceCarInterface.IsPlayerCarActive())
     {

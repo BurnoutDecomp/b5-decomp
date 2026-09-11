@@ -16,21 +16,12 @@
 #include "GameSource/Graphics/BrnCoronaManager.h"                    // BrnCoronaManager (mCoronaManager, embedded by value)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"   // CgsModule::ModuleSingleBuffered (real base)
 
-// EA::Jobs::Job is still an off-path placeholder (the renderer's sort/dispatch jobs do not run
-// during the loading screen); reconstructed with the job system. The real EA::Thread::RWMutex
-// now comes in via CgsDataBuffer.h (pulled by the real ModuleSingleBuffered base) - the former
-// stub RWMutex was removed so the renderer/game modules share one real module base + mutex type.
-namespace EA
-{
-namespace Jobs
-{
-class Job
-{
-public:
-    Job(s32 liPriority = 0);
-};
-}
-}
+// EA::Jobs::Job is the real type (SDKs/EATech/eajobs/job.h): this module embeds thirty-two of
+// them by value (the object-to-mesh dispatch jobs, the shadow/envmap/scene sort jobs), and the
+// constructor below builds each one exactly as the console does -- Job(0), i.e. an empty,
+// null-named job. The real EA::Thread::RWMutex comes in via CgsDataBuffer.h (pulled by the real
+// ModuleSingleBuffered base).
+#include "SDKs/EATech/eajobs/job.h"
 
 // The REAL dispatch-frame family (BufferedDispatchFrame / DispatchFrame /
 // DispatchList / DispatchBin / DispatchObjectContext / the interpreter) -- the
@@ -871,7 +862,29 @@ inline void BrnRendererModule::ConstructRenderSwitches()
     mbRenderHudImmediateMode = true;
 }
 
+// Every embedded EA::Jobs::Job is constructed empty and null-named -- `Job(0)` -- which is what
+// the console's own constructor does: three counted loops over the object-to-mesh, shadow-map
+// and envmap job arrays (trip counts KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS /
+// KU_NUM_SHADOWMAP_DISPATCH_JOBS / KU_NUM_ENVMAP_SORT_JOBS), then one call per standalone sort
+// job. The jobs are NAMED later, by the setup paths that give them their code and data.
+// Job has no default constructor, so each member is listed here in declaration order.
 inline BrnRendererModule::BrnRendererModule()
+    : maObjectToMeshJob{ EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
+                        EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
+                        EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
+                        EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
+                        EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
+                        EA::Jobs::Job(nullptr) }
+    , maShadowMapSortJob{ EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
+                          EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr) }
+    , maEnvmapSortJobs{ EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
+                        EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr) }
+    , mPreZSortJob(nullptr)
+    , mWorldOpaqueSortJob(nullptr)
+    , mCarOpaqueSortJob(nullptr)
+    , mWorldTransparentSortJob(nullptr)
+    , mCarTransparentSortJob(nullptr)
+    , mOcclusionWorldOpaqueJob(nullptr)
 {
     mePrepareStage = eRendererPrepareStart;
     meReleaseStage = eRendererReleaseStart;

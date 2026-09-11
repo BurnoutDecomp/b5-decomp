@@ -8,13 +8,17 @@
 // WHY THIS IS A FILE OF ITS OWN. These bodies' declared home is
 // GameSource/Director/Utils/BrnICEMoviePlayer.cpp, but that TU also carries the
 // ICEMoviePlayer half and the three Serialise<> instantiation sets, and mounting the whole
-// file costs the link 24 unresolved externals it does not have today (the camera
-// BehaviourInterpolate / BehaviourManager handle overloads, ICEWrapper::PlayMovie and
-// ::IsPlayingMovie, the three camera-tunings serialisers' scalar + nested-block overloads,
-// and ICEMoviePlayer::ApplyFlashHookToCamera, whose body needs the camera effects layer
-// modelled first). The playlist half needs NONE of them. Same file-split pattern as
-// BrnDirectorICEWrapperPrepare.cpp: give the code that can land today its own TU and leave
-// the rest of the class family's home file where it is.
+// file costs the link unresolved externals it does not have today. The playlist half needs
+// NONE of them. Same file-split pattern as BrnDirectorICEWrapperPrepare.cpp: give the code
+// that can land today its own TU and leave the rest of the class family's home file where
+// it is.
+// Re-measured 2026-09-11 on the player half alone (the Serialise<> sets excluded): 9
+// unresolved, not 24 -- BehaviourInterpolate::{GetCamera, SetInterpolationMode,
+// SetupCameraAFromCamera, SetupCameraBFromCamera}, the three BehaviourManager
+// BehaviourHandle<BehaviourInterpolate> overloads, and ICEWrapper::{PlayMovie,
+// IsPlayingMovie}. ApplyFlashHookToCamera came off that list (bodied in the home file).
+// The last of the nine is the deep one: PlayMovie reaches ICEManager::Update ->
+// ICEController::Update, i.e. the whole unmounted ICE editor group.
 // DELETE-WHEN: BrnICEMoviePlayer.cpp joins the link -- then move these bodies back into it.
 //
 // WHAT IT UNBLOCKS. Until 2026-09-08 SharedPlaylists::Construct was an empty body in

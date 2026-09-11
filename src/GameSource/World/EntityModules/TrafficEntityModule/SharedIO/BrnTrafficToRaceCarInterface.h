@@ -88,6 +88,30 @@ namespace BrnTrafficIO
         // stack's previous tenant left -- only its count is reset. Do not "helpfully" clear it.
         void Construct();
 
+        // The two near-miss collections the race-car module drains once per post-scene tick.
+        // The console has no out-of-line body for either: it folds both to the member address
+        // at the drain site and then asserts the result is non-NULL, which is the assert the
+        // consumer still carries. Const because the drain only reads.
+        const NearMissTrafficCollection* GetNearMissTrafficCollection() const
+        {
+            return &mNearMissTrafficCollection;
+        }
+        const NearMissRaceCarCollection* GetNearMissRaceCarCollection() const
+        {
+            return &mNearMissRaceCarCollection;
+        }
+
+        // The write halves, folded the same way at the traffic module's publish site
+        // (GenerateNearMissOutput), which copies each whole Array in over the top.
+        NearMissTrafficCollection* GetNearMissTrafficCollection()
+        {
+            return &mNearMissTrafficCollection;
+        }
+        NearMissRaceCarCollection* GetNearMissRaceCarCollection()
+        {
+            return &mNearMissRaceCarCollection;
+        }
+
     private:
         BitArray<400>              mSympatheticCrashers;        // :150 @0
         VehicleStompingData        mPotentialStompees[8];       // :151 @64 (alignas(16) via VehicleStompingData)

@@ -143,8 +143,6 @@ void ChallengeManager::TriggerFreeburnChallenge(CgsID lChallengeID, TGameActionQ
         const ChallengeCompletionData& lSlot = maChallengeCompletionData[liSlot];
         if (lSlot.mNetworkPlayerID != -1 && lSlot.mbFinalised)     // -1 == free slot
         {
-            // `::` qualified: BrnGameState also declares a same-valued EActiveRaceCarIndex
-            // (BrnTakedownManagerTypes.h), and GetActiveRaceCarIndex returns the global one.
             const ::EActiveRaceCarIndex leActiveRaceCarIndex =
                 mpGameStateModule->GetActiveRaceCarIndex(lSlot.mNetworkPlayerID);
 

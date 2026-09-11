@@ -20,6 +20,10 @@
 // and an arbitrator state reaches one named block out of it to configure a behaviour it has
 // just allocated.
 //
+// THE RECORD HAS EXACTLY ONE STORAGE: BehaviourParameterBank::mNamedParameters, by value at
+// bank +0x10 (see the RECORD MAP banner on that class). The shared-info pointer is bound to
+// it by MainDirector::BuildArbStateSharedInfo. There is no second copy anywhere.
+//
 // FLAG: MINIMAL SLICE. The full bank (every BehaviourXxx::Parameters sub-block, the
 //   BehaviourParameterBank wrapper + its serialiser) is a heavy cascade and has no
 //   reconstructed home of its own yet. This header models ONLY the one named accessor this
@@ -306,10 +310,22 @@ namespace BrnDirector
         // The four head blocks (aftertouch, aftertouch-crash, crash-debug, helicam) total 480
         // bytes; their individual sizes are not separated by anything that reads them.
         //
-        // ⛔ THE STORAGE IS STILL FORKED, and that is NOT this slice's to fix: the arbitrator's
-        // mpNamedParameters points at MainDirector::mNamedParameters, a SEPARATE object from
-        // this bank. The console has exactly one. Rewiring it is a one-line change in
-        // MainDirector once this bank carries the record by value.
+        // ⭐ THE STORAGE FORK IS CLOSED (2026-09-11). The record used to exist TWICE: once as
+        // MainDirector::mNamedParameters (what the arbitrator's mpNamedParameters pointed at)
+        // and once, implicitly, as this bank the console owns it in. The bank now carries it
+        // BY VALUE at bank +0x10 -- mNamedParameters below, placed behind a 16-byte head so
+        // the record starts exactly where the derivation above puts it -- the director member
+        // is deleted, and BuildArbStateSharedInfo publishes &bank.mNamedParameters. One
+        // object, seeded once, by this bank's own Construct as the console does it.
+        //
+        // ⓘ HOST WIDTH INSIDE THE RECORD. Every record offset above is byte-exact through the
+        // gyro run; below it the reconstruction runs 4 bytes long, because the shared
+        // Behaviour::Parameters head carries a debug-name POINTER that is 8 bytes wide on this
+        // host against the console's 4, so the rotate-about-vehicle ("look around") block
+        // lands at record +9016 rather than the console's +9012 and the record ends past
+        // +9328. That is the project's ordinary host-pointer-width divergence and it predates
+        // the record's move into this class; it is why the two tail blocks are reached by name
+        // and why bank +0x2480 and below stay provenance rather than placements.
         //
         // ⭐⭐ THE TWO GAMEPLAY BLOCKS + THE LATCHED CAR KEY ARE HOMED AS OF 2026-08-02
         // (camera parameter-chain wave). They are the three slots the whole chase/bumper
@@ -369,6 +385,14 @@ namespace BrnDirector
             // gets a zero-initialised home of its own.
             void Construct()
             {
+                // The named-parameter record at +0x10 -- the console's first statement in this
+                // function is the first block of this record. Seeding it here is what makes the
+                // bank the record's single owner: nothing outside constructs it any more.
+                // [FLAG, PC-only] the unmodelled head above it is zeroed for the same reason
+                // the two ZeroBlocks below are: no PC consumer may read indeterminate storage.
+                ZeroBlock(maReservedBankHead, sizeof(maReservedBankHead));
+                mNamedParameters.Construct();
+
                 ZeroBlock(&mGameplayExternalCameraParamsForCar,
                           sizeof(mGameplayExternalCameraParamsForCar));
                 ZeroBlock(&mGameplayBumperCameraParamsForCar,
@@ -395,6 +419,13 @@ namespace BrnDirector
                 mBystanderFarParameters.meType   = eBehaviourBystanderCam;
                 mFixedDefault.meType             = eBehaviourFixedCam;
             }
+
+            // The named-parameter record this bank owns, at bank +0x10. The arbitrator states
+            // reach one block out of it through ArbStateSharedInfo::mpNamedParameters, which
+            // MainDirector binds to this member; the moment family reaches it through the
+            // behaviour manager's bank accessor.
+            const NamedParameters& GetNamedParameters() const { return mNamedParameters; }
+            NamedParameters&       GetNamedParameters()       { return mNamedParameters; }
 
             // The `burnoutcarasset` collection key of the car the two blocks below currently
             // hold the tuning for. X360 bank+0x2480 -- see the banner.
@@ -521,6 +552,10 @@ namespace BrnDirector
             // TUs; declared here so SaveParameters can call it. T is deduced from the argument.
             template<class T> void Serialise(T& lrSerialiser);
 
+            // NEVER CALLED. Pins the record's placement inside this class -- a member
+            // function so the assert can see the private member. See _AssertBankLayout below.
+            static void _AssertBankLayout();
+
         private:
             // Byte zero-fill helper for the two blocks -- see Construct's FLAG. Kept as a
             // named helper so no caller memsets a class type in place.
@@ -533,6 +568,15 @@ namespace BrnDirector
                 }
             }
 
+            // ---- the record, by value at its attested offset ------------------------------
+            // The bank's leading sub-record. The 16 bytes ahead of it are the bank's own head
+            // (the version word and its pad up to the record's alignment); nothing in this
+            // slice reads them, so they are a named reserved span rather than typed members --
+            // but they are REAL bytes, so the record starts at +0x10 exactly as derived, and
+            // the offsetof ratchet below fails the build if that ever stops being true.
+            u8              maReservedBankHead[0x10];             // +0x0000 .. +0x000F
+            NamedParameters mNamedParameters;                     // +0x0010
+
             // ---- the three homed slots (see the banner for the pin) -----------------------
             u64                                   mxGameplayCameraCarAttribsKey;        // +0x2480
             BehaviourGameplayExternal::Parameters mGameplayExternalCameraParamsForCar;  // +0x2488
@@ -540,16 +584,34 @@ namespace BrnDirector
 
             // ---- the four moment camera blocks ------------------------------------------
             // On the console these live inside the bank's mNamedParameters sub-record, at the
-            // record offsets in the comments (bank offset == record offset + 0x10). This class
-            // does not model that sub-record, so -- as with every other block in this slice --
-            // parity is BY NAMED MEMBER: each block exists under its own record name, is
-            // seeded, and its one consumer reaches it through the accessor above.
+            // record offsets in the comments (bank offset == record offset + 0x10). The record
+            // IS modelled now (mNamedParameters above), but each of these five offsets falls
+            // inside one of its reserved spans, and carving them out would mean placing runs
+            // whose Parameters this tree models NARROWER than the console's (the bystander and
+            // rig strides) -- a type widening, not a span edit. So they stay where they are and
+            // parity is BY NAMED MEMBER, as for every other block in this slice: each block
+            // exists under its own record name, is seeded, and its one consumer reaches it
+            // through the accessor above. They are not a second copy of anything the record
+            // holds -- the record does not model these five slots at all.
+            // DELETE-WHEN: the gyro / bystander / passenger / fixed runs are placed inside
+            // mNamedParameters; then these members go and the accessors return record blocks.
             BehaviourGyroCam::Parameters      mGyroCamHelicamParams;       // record +2724
             BehaviourBystanderCam::Parameters mBystanderCloseParameters;   // record +3804
             BehaviourBystanderCam::Parameters mBystanderFarParameters;     // record +4116
             BehaviourPassengerCam::Parameters mPassengerDefault;           // record +8660
             BehaviourFixedCam::Parameters     mFixedDefault;               // record +8996
         };
+
+        // NEVER CALLED. The record is the one part of this slice whose bank offset is
+        // byte-exact, and the whole derivation in the banner rests on it: every attested
+        // displacement in the tree is `record offset + 0x10`. If a future edit puts a member
+        // ahead of the record, or widens the head, the build fails here instead of quietly
+        // re-basing every consumer's arithmetic.
+        inline void BehaviourParameterBank::_AssertBankLayout()
+        {
+            static_assert(offsetof(BehaviourParameterBank, mNamedParameters) == 0x10,
+                          "BehaviourParameterBank::mNamedParameters @ bank +0x10");
+        }
     }
 }
 

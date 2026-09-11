@@ -659,7 +659,7 @@ void TrafficEntityModule::StaticVehicles_Generate(u8 luVehicleType, u16 luHull, 
 
 // ----------------------------------------------------------------------------
 // TrafficEntityModule::StaticVehicles_CreateNewVehicles  @ 0x827229F0
-// The parked-car maker. LegacySrc calls it StaticVehicles_MakeAliveTheDeadOnesWithAliveParams
+// The parked-car maker. An earlier revision calls it StaticVehicles_MakeAliveTheDeadOnesWithAliveParams
 // and has no race-car proximity rejection; the ship renamed it and added that rejection, and
 // the shape below is the ship's.
 //
@@ -967,7 +967,7 @@ u8 TrafficEntityModule::PickVehicleToSpawn(u32 luFlowTypeId)
 //       StaticVehicles_Generate(PickVehicleToSpawn(lpRec->mFlowTypeID), luHull, i);  ; +0x40
 //   }
 //
-// The `muFlags` byte at +0x43 is ship-only (it postdates the LegacySrc record) and ARTIST tests
+// The `muFlags` byte at +0x43 is ship-only (it postdates the earlier record) and the retail binary tests
 // only these two bits, so no enumerator is invented for them.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::FillNewHull(u16 luHull)
@@ -983,7 +983,7 @@ void TrafficEntityModule::FillNewHull(u16 luHull)
     // The section loop lays cars along each lane at even DISTANCE spacing (the reference walks in
     // param units and Modulos; the ship walks in metres through
     // Section::CalcParamFromStartParamAndDistanceAlongSection) and carries the leftover
-    // fractional car from one section to the next. Two ship-only additions over LegacySrc:
+    // fractional car from one section to the next. Two ship-only additions over the earlier revision:
     // the initial phase is random, and each car gets a jitter of up to 0.3 spacings.
     f32 lfVehiclesToSpawn = mRand.RandomFloat(0.0f, KF_INITIAL_SPAWN_PHASE);
 
@@ -1768,7 +1768,7 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
 
         case E_STARTINGUPSTATE_WAITING_FOR_STREAMING:
             // 0x8274EC38..0x8274EC70. The `!mbAllowDivergentBehaviour` short-circuit is the
-            // ship's addition over LegacySrc: an online client created no vehicles locally, so
+            // ship's addition over the earlier revision: an online client created no vehicles locally, so
             // it has nothing to wait for.
             if (!mbAllowDivergentBehaviour || mbDEBUGTurnTrafficOff || mStreamer.AreAllAssetsLoaded())
             {
@@ -1803,7 +1803,7 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     //   else { IsDecisionFrame() ? UpdateDecisionFrame : UpdateNonDecisionFrame ;
     //          StartMonitor(+0x72A28);
     //          GenerateSceneUpdateEvents ; TrafficLightManager::Update(mfSimTimeStep) }
-    //   ProcessNearbyTrafficSceneQueryResults                              [GATED]
+    //   ProcessNearbyTrafficSceneQueryResults                              [LIVE]
     //   GenerateRemovedVehicleEvents / GenerateSlamRecoveryEvents /
     //   GenerateVehicleCrashedEvents                                       [GATED]
     //   three 80-byte soa->output copies                                   [GATED]
@@ -1877,6 +1877,14 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
             }
         }
 
+        // LIVE 2026-09-11, at the console's own slot: both paths of the pause test above
+        // converge here, before the crash-module drains below. The NEAR-MISS / HORN / SOUND /
+        // traffic-director consumer of the 70 m sphere query PostNearbyTrafficSceneQueryRequest
+        // posts; body in _wG_NearbyTrafficResults.cpp. ⭐ It is the sole producer of
+        // mNearMissTrafficCollection / mNearMissRaceCarCollection, so with it gated no near
+        // miss could fire anywhere in the game.
+        ProcessNearbyTrafficSceneQueryResults(lpInput, lpOutput);
+
         // 0x8274EB5C -- UN-GATED 2026-09-06. Body in _wT3_01.cpp. It hands each freshly crashed
         // traffic car to the CRASH MODULE once (guarded by mVehiclesAddedToCrashModule) and
         // clears its mbNeedsToBeSentToCrashModule flag -- which is exactly the flag
@@ -1892,14 +1900,7 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         {
             static bool sbLogged = false;
             LogMissingLeg(sbLogged,
-                "PostPhysicsUpdate E_STATE_RUNNING tail legs -- "
-                "ProcessNearbyTrafficSceneQueryResults @0x82726CD0 (NOT crash-module surface: "
-                "it is the NEAR-MISS / HORN / SOUND / traffic-director consumer of the 70 m "
-                "sphere query PostNearbyTrafficSceneQueryRequest @0x827478C8 posts -- xrefs "
-                "Vehicle::IsHornOn, Vehicle::IsCrashing, NearMissData::Append, "
-                "TrafficSoundOutputInterface::AddTrafficEntity, TrafficDirectorEntity::Append. "
-                "It creates NO physics body and touches no collision volume, so it is not on "
-                "the crash-into-traffic path) and the three "
+                "PostPhysicsUpdate E_STATE_RUNNING tail legs -- the three "
                 "80-byte mVehicleSoaData -> OutputBuffer_PostPhysics copies (soa members "
                 "mPhysicalVehicles / mVehiclesRenderedLastFrame / mPhysicalVehiclesFarFrom"
                 "Player into the crash-traffic input interface at console +3240/+3320/+3400). "
@@ -2881,6 +2882,20 @@ void TrafficEntityModule::Construct()
 
     // 0x82741448 `stw r30, 0x2FC(r31)`.
     meEmptyTrafficPoolState = E_EMPTYTRAFFICPOOLSTATE_IDLE;
+
+    // ⭐ THE TWO NEAR-MISS COLLECTION CLEARS, RESTORED 2026-09-11. The console inlines both as
+    // a bare store of zero over each Array's live-count word -- +0x2A8, which is
+    // mNearMissTrafficCollection at +0x228 plus its 16*8 element buffer, and +0x2EC, which is
+    // mNearMissRaceCarCollection at +0x2AC plus its 8*8 -- in this same slot, right after the
+    // per-vehicle-type runtime loop and before the tail stores below.
+    // LOAD-BEARING as of this wave: GenerateNearMissOutput publishes both collections into the
+    // output buffer every pre-scene frame, INCLUDING the frames before the first sphere-query
+    // batch has ever filled them. Without these two clears the published Arrays carry the
+    // KI_UNCONSTRUCTED sentinel on those frames, and the race-car drain's GetLength() both
+    // trips "Array used before Construct/Clear was called" and then walks 4,294,967,295
+    // elements.
+    mNearMissTrafficCollection.Clear();
+    mNearMissRaceCarCollection.Clear();
 
     // The console's tail stores (0x827414D4..0x8274175C): everything Construct re-seeds after
     // ResetEventData and Reset have run. The crash-slider values and showtime timers are the

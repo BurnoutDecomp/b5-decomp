@@ -12,6 +12,7 @@
 #include "GameShared/GameClasses/System/Resource/PoolModuleStates/CgsIntelliFragPoolModuleState.h"  // mIntelliFragState / IntelliFragParams
 #include "GameShared/GameClasses/System/Resource/PoolModuleStates/CgsLiveUpdatePoolModuleState.h"   // mLiveUpdateState
 #include "GameShared/GameClasses/System/Resource/PoolModuleStates/CgsEmergencyFragPoolModuleState.h"// mEmergencyFragState / EmergencyFragParams
+#include "GameShared/Jobs/Relocator/CgsRelocator.h"                      // mRelocator / mRelocationParams
 #include "rw/rwcore_structs.h"                                          // rw::Resource / ResourceDescriptor (InitOptions)
 
 // Async pool-create dispatch (CreateResourceRequest -> MemoryModule -> CreateResourceResponse).
@@ -277,10 +278,10 @@ namespace CgsResource
         LinearHeapNode*        mpLinearHeapNodes;          // :213
         RelocateSource*        mpRelocateSources;          // :214
 
-        // [DWARF :216/:217] CgsMemory::Relocator (~1088B) + RelocationParams -- not reconstructed as a
-        // complete type, so the embedded region is explicit padding (EA-Job / RW-mutex relocator infra
-        // is a deferred subsystem; Construct'd inline, addressed-only by the EmergencyFrag escalation).
-        u8 mPadRelocator[1152];
+        // The block-copy engine the EmergencyFrag escalation drives, plus the parameter block it
+        // hands it. Both are embedded by value, immediately after the defrag scratch arrays.
+        CgsMemory::Relocator        mRelocator;          // :216
+        CgsMemory::RelocationParams mRelocationParams;   // :217
 
         // [DWARF :219] mPendingAllocationRequests (FifoQueue<AllocateResourceListRequest,4>) -- not
         // reconstructed as a complete type, explicit padding.

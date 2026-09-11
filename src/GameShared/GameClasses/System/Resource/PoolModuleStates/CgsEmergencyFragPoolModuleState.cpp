@@ -5,44 +5,35 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"           // gpDebugPrint / gxMessageFilterFlags
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX.
-//
-// THIS TU (GameShared/.../PoolModuleStates/CgsEmergencyFragPoolModuleState.cpp) -- the emergency
-// defragmentation strategy:
-//   CgsResource::EmergencyFragPoolModuleState::Begin                @ 0x828DA9F8
-//   CgsResource::EmergencyFragPoolModuleState::RunDefragAlgorithm   @ 0x828E40C8
-//   CgsResource::EmergencyFragPoolModuleState::RunPoolDefragmentation @ 0x828F80E0
-// Each is bodied store-for-store against the X360 asm; members are referenced by name (offsets
-// verified in the owning header). Base private state (mpPool) is reached through the base's public
-// GetPool()/GetHeapAlignment accessor rather than a raw cross-object offset. The X360 asserts that
-// stream a message into the debug buffer are expressed through CGS_ASSERT.
+// The emergency defragmentation strategy: Begin / RunDefragAlgorithm / RunPoolDefragmentation /
+// Update. Members are referenced by name (offsets in the owning header). Base private state
+// (mpPool) is reached through the base's public GetPool() / GetHeapAlignment accessor rather than
+// a raw cross-object offset.
 
 namespace CgsResource
 {
-    // -------- Begin @ 0x828DA9F8 --------
+    // -------- Begin --------
     // Run the base Begin first (it copies the working set + null-asserts the pointers), then assert
-    // we are currently idle (meState == 0), arm the step machine and latch the Relocator params for
-    // the defragmentation pass. The X360 stores 1 at +0x4C (meState = START_DEFRAGMENTING), 2 at
-    // +0x50 (miCountdown), then *(params+0x30)/*(params+0x34) at +0x54/+0x58 (mpRelocator /
-    // mpRelocationParams). A filtered debug print announces the pass.
+    // we are currently idle, arm the step machine and latch the Relocator plus its parameter block
+    // for the pass. A filtered debug print announces it.
     void EmergencyFragPoolModuleState::Begin(EmergencyFragParams* lpParams)
     {
-        BaseDefragPoolModuleState::Begin(lpParams);                      // bl ...BaseDefragPoolModuleState__Begin
+        BaseDefragPoolModuleState::Begin(lpParams);
 
-        CGS_ASSERT(meState == E_STATE_IDLE, "Can not defrag unless in idle state\n");  // :64 (if (a1[19]) assert)
+        CGS_ASSERT(meState == E_STATE_IDLE, "Can not defrag unless in idle state\n");
 
-        meState            = E_STATE_START_DEFRAGMENTING;   // stw r11(1), 0x4C
-        miCountdown        = E_STATE_DEFRAGMENTING_HEAP;    // stw r10(2), 0x50  (literal 2)
-        mpRelocator        = lpParams->mpRelocator;         // lwz r11,0x30(params); stw r11,0x54
-        mpRelocationParams = lpParams->mpRelocationParams;  // lwz r11,0x34(params); stw r11,0x58
+        meState            = E_STATE_START_DEFRAGMENTING;
+        miCountdown        = 2;                             // the arm-up countdown, a literal
+        mpRelocator        = lpParams->mpRelocator;
+        mpRelocationParams = lpParams->mpRelocationParams;
 
-        if (CgsDev::Message::gxMessageFilterFlags & 1)      // clrldi/cmpldi gate on bit 0
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
         {
             *CgsDev::Log::gpDebugPrint << "Running emergency defragment\n";   // (*gpDebugPrint)[1]("...")
         }
     }
 
-    // -------- RunDefragAlgorithm @ 0x828E40C8 --------
+    // -------- RunDefragAlgorithm --------
     // Pack every live block down toward the first free node. Find the first free node; if there is
     // none, bail (false). Otherwise walk the nodes after it (up to liLastNode): each USED node gets a
     // relocate request to the running destination offset, which then advances by that node's size.
@@ -52,45 +43,43 @@ namespace CgsResource
                                                           LinearHeapNode* lpNodes,
                                                           s32 liLastNode, s32 liMemType)
     {
-        CGS_ASSERT(GetPool(), "GetPool()");   // :185 (if (!*(a1+12)) assert)
+        CGS_ASSERT(GetPool(), "GetPool()");
 
-        s32 liFreeNode = FindNextFreeNode(0);   // bl ...FindNextFreeNode (a2 = 0)
+        s32 liFreeNode = FindNextFreeNode(0);
         if (liFreeNode == -1)
         {
-            return false;                        // li r3,0
+            return false;
         }
 
         // Pack the USED nodes after the free node down into it.
-        u32 luDestOffset = lpNodes[liFreeNode].muOffset;   // v13 = *(16*NextFreeNode + a3)
+        u32 luDestOffset = lpNodes[liFreeNode].muOffset;
         for (s32 liNode = liFreeNode + 1; liNode <= liLastNode; ++liNode)
         {
             LinearHeapNode& lNode = lpNodes[liNode];
-            if (lNode.muStatus == LinearHeapNode::KU_STATUS_USED)   // lhz *(v14+4) == 1
+            if (lNode.muStatus == LinearHeapNode::KU_STATUS_USED)
             {
-                AddRelocateRequest(static_cast<u16>(liNode), luDestOffset);   // clrlwi r4 -> u16 node
-                luDestOffset += lNode.muSize;   // v13 += *v14
+                AddRelocateRequest(static_cast<u16>(liNode), luDestOffset);
+                luDestOffset += lNode.muSize;
             }
         }
 
         // Stage the freed-up addressed allocations for this memory pool at the packed tail.
-        u32          luNumRequests = lpAllocListSet->manAllocRequestCounts[liMemType];  // *(a2 + a5*4)
-        AllocRequest* lpRequest    = lpAllocListSet->mapAllocRequests[liMemType];       // *(a2 + (a5+6)*4)
-        u32          luAlignment   = GetPool()->GetHeapAlignment(liMemType);            // *(mpPool + a5*64 + 44)
+        u32          luNumRequests = lpAllocListSet->manAllocRequestCounts[liMemType];
+        AllocRequest* lpRequest    = lpAllocListSet->mapAllocRequests[liMemType];
+        u32          luAlignment   = GetPool()->GetHeapAlignment(liMemType);
 
         for (; luNumRequests; --luNumRequests, ++lpRequest)
         {
             u32 luAlignedSize = (lpRequest->muSize + luAlignment - 1) & ~(luAlignment - 1);
-            AddAddressedAllocRequest(luAlignedSize, luDestOffset, lpRequest->mpOwner);  // (size, offset, owner)
-            luDestOffset += luAlignedSize;   // v13 += v18
+            AddAddressedAllocRequest(luAlignedSize, luDestOffset, lpRequest->mpOwner);
+            luDestOffset += luAlignedSize;
         }
 
-        return true;   // li r3,1
+        return true;
     }
 
-    // -------- RunPoolDefragmentation @ 0x828F80E0 --------
-    // Hand the staged relocation plan to the pool, executing it through the latched Relocator. Tail
-    // call to Pool::BeginEmergencyDefragmentation(mpRelocator, mpRelocationParams, requests, sources,
-    // num, memType) on mpPool (the pool obtained from the base).
+    // -------- RunPoolDefragmentation --------
+    // Hand the staged relocation plan to the pool, executing it through the latched Relocator.
     void EmergencyFragPoolModuleState::RunPoolDefragmentation(RelocateRequest* lpRequests,
                                                               RelocateSource* lpSources,
                                                               u32 luNum, s32 liMemType)
@@ -99,28 +88,28 @@ namespace CgsResource
                                                  lpRequests, lpSources, luNum, liMemType);
     }
 
-    // -------- Update @ 0x828FF980 --------
+    // -------- Update --------
     // Poll the emergency-defrag step machine. IDLE -> success. START_DEFRAGMENTING -> tick the
     // arm-up countdown, then wait while the pool is still defragmenting; once clear, scan the batch
     // alloc-list results for a memory type that still needs defragmenting and kick BeginDefragment
     // on it (advancing to DEFRAGMENTING_HEAP). DEFRAGMENTING_HEAP -> once the pool reports its defrag
     // mem-type idle (-1), re-arm and do the final allocations. Any other state is invalid.
     //
-    // The console body reads the base-private alloc-result array (&maeAllocRequestResults[0])
-    // directly; this reconstruction reaches it through the ATTESTED base accessor
-    // GetAllocationResult(memType) (the same array the IntelliFrag sibling reads), avoiding an
-    // unattested GetAllocListSet() accessor. The inner 2x re-test of the same slot in the console
-    // codegen is behaviourally a single per-memtype test and is expressed as one here.
+    // The console body reads the base-private alloc-result array directly; this reconstruction
+    // reaches it through the attested base accessor GetAllocationResult(memType) (the same array
+    // the IntelliFrag sibling reads), avoiding an unattested GetAllocListSet() accessor. The
+    // console's repeated re-test of the same slot is behaviourally a single per-memtype test and
+    // is expressed as one here.
     EmergencyFragPoolModuleState::EEmergencyFragResult EmergencyFragPoolModuleState::Update()
     {
-        if (meState == E_STATE_IDLE)   // a1[19] == 0
+        if (meState == E_STATE_IDLE)
         {
             return E_RESULT_SUCCESS;
         }
 
-        if (meState == E_STATE_START_DEFRAGMENTING)   // a1[19] == 1
+        if (meState == E_STATE_START_DEFRAGMENTING)
         {
-            if (miCountdown > 0)   // a1[20] > 0: still arming
+            if (miCountdown > 0)   // still arming
             {
                 --miCountdown;
                 return E_RESULT_PEND;
@@ -136,27 +125,27 @@ namespace CgsResource
             {
                 if (GetAllocationResult(liMemType) == E_BATCHALLOCRESULT_FAIL_NEED_DEFRAG)
                 {
-                    meState = E_STATE_DEFRAGMENTING_HEAP;   // a1[19] = 2
-                    // X360: (BeginDefragment(memType) == 0) + 2  -> ok?PEND(2):EMERGENCY(3).
+                    meState = E_STATE_DEFRAGMENTING_HEAP;
+                    // A refused BeginDefragment escalates; an accepted one just pends.
                     return BeginDefragment(liMemType) ? E_RESULT_PEND : E_RESULT_EMERGENCY;
                 }
             }
 
-            meState = E_STATE_IDLE;   // a1[19] = 0: nothing to defrag
+            meState = E_STATE_IDLE;   // nothing to defrag
             return E_RESULT_SUCCESS;
         }
 
-        if (meState == E_STATE_DEFRAGMENTING_HEAP)   // a1[19] == 2
+        if (meState == E_STATE_DEFRAGMENTING_HEAP)
         {
             if (GetPool()->GetDefragMemType() == -1)   // pool defrag done
             {
-                meState = E_STATE_START_DEFRAGMENTING;   // a1[19] = 1
+                meState = E_STATE_START_DEFRAGMENTING;
                 DoFinalAllocations();
             }
             return E_RESULT_PEND;
         }
 
-        CGS_ASSERT(false, "Defrag state is invalid\n");   // :158
+        CGS_ASSERT(false, "Defrag state is invalid\n");
         return E_RESULT_ERROR;
     }
 }

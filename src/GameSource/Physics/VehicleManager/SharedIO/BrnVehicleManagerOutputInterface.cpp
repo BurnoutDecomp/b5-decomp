@@ -155,21 +155,25 @@ void VehicleManagerOutputInterface::AddRemappedEntityIdEvent(u32 luRemappedActiv
 }
 
 // ==============================================================================================
-// AddRaceCarCrashEvent @0x825E6F60 (528B) -- bodied 2026-08-24 (physics mount wave B3b)
-// against the header's MODELLED 5-arg surface (the FLAG there stands: the console passes
-// more registers -- a second vector v2==v126 and three extra flag bytes -- deliberately
-// simplified). The asm truth kept here:
+// AddRaceCarCrashEvent -- the full ten-argument surface (completed 2026-09-11; the earlier
+// five-argument one modelled away the crasher id, the contact point, the takedown type and the
+// two car-kind flags). What it does:
 //   * two range tripwires on the id's entity index (message-buffer streaming lowered to the
-//     static prefix per the standing rule; BrnVehicleManagerOutputInterface.h:0x204/0x205),
-//   * build one RaceCarCrashEvent and AddEvent it onto mRaceCarCrashEventQueue @+0x3A0,
+//     static prefix per the standing rule),
+//   * build one RaceCarCrashEvent and AddEvent it onto mRaceCarCrashEventQueue at +0x3A0,
 //   * the console RETURNS miLength-1 (the event's slot); the modelled surface is void and no
 //     PC call site consumes it -- recorded, not invented.
 // ==============================================================================================
 void VehicleManagerOutputInterface::AddRaceCarCrashEvent(EntityId lVictimEntityId,
-                                                         bool lbLocalPhysicalCrash,
+                                                         EntityId lCrasherEntityId,
                                                          Vector3 lvCrashNormal,
-                                                         bool lbWasInCrashState1,
-                                                         f32 lfCrashSpeedMPH)
+                                                         Vector3 lvContactPoint,
+                                                         bool lbIsPrimaryCrash,
+                                                         bool lbRemoveHandlingVolumeFromScene,
+                                                         bool lbCarIsAI,
+                                                         bool lbCarIsNetwork,
+                                                         f32 lfCrashSpeedMPH,
+                                                         BrnGameState::ETakedownType leInstantTakedownType)
 {
     const u32 luEntityIndex = (lVictimEntityId.muValue >> 10) & 0x3FFFu;
     CGS_ASSERT(static_cast<s32>(luEntityIndex) >= 0,
@@ -178,16 +182,16 @@ void VehicleManagerOutputInterface::AddRaceCarCrashEvent(EntityId lVictimEntityI
                "Invalid race car index in AddRaceCarCrashEvent");   // :0x205
 
     RaceCarCrashEvent lEvent;
-    lEvent.mRaceCarVolumeInstanceID.muId = static_cast<u64>(lVictimEntityId.muValue) << 32;  // std r31 (the 64-bit id word, entity in the high dword)
-    lEvent.mCrasherEntityID.muValue      = 0;                       // stw r17 -- the modelled surface passes no crasher id
-    lEvent.mCollisionNormal              = lvCrashNormal;           // stvx v127
-    lEvent.mContactPoint.SetZero();                                 // v126 not modelled (see FLAG)
-    lEvent.meInstantTakedownType         = BrnGameState::E_TAKEDOWN_NONE;
-    lEvent.mfSpeedMPH                    = lfCrashSpeedMPH;         // stfs f31
-    lEvent.mbIsPrimaryCrash              = lbLocalPhysicalCrash;    // stb r16
-    lEvent.mbRemoveHandlingVolumeFromScene = lbWasInCrashState1;    // stb r15
-    lEvent.mbCarIsAI                     = false;                   // stb r14 -- not modelled
-    lEvent.mbCarIsNetwork                = false;                   // stb arg byte -- not modelled
+    lEvent.mRaceCarVolumeInstanceID.muId = static_cast<u64>(lVictimEntityId.muValue) << 32;  // the 64-bit id word, entity in the high dword
+    lEvent.mCrasherEntityID              = lCrasherEntityId;
+    lEvent.mCollisionNormal              = lvCrashNormal;
+    lEvent.mContactPoint                 = lvContactPoint;
+    lEvent.meInstantTakedownType         = leInstantTakedownType;
+    lEvent.mfSpeedMPH                    = lfCrashSpeedMPH;
+    lEvent.mbIsPrimaryCrash              = lbIsPrimaryCrash;
+    lEvent.mbRemoveHandlingVolumeFromScene = lbRemoveHandlingVolumeFromScene;
+    lEvent.mbCarIsAI                     = lbCarIsAI;
+    lEvent.mbCarIsNetwork                = lbCarIsNetwork;
 
     mRaceCarCrashEventQueue.AddEvent(lEvent);
 }

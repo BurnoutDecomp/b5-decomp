@@ -519,6 +519,11 @@ namespace BrnTrafficIO
         TrafficSoundOutputInterface*       GetTrafficSoundOutputInterface();       // 0x82711B98 (baked 398)
         // +6208 read mTrafficDirectorOutputInterface.
         const TrafficDirectorOutputInterface* GetTrafficDirectorOutputInterface() const; // 0x827A0A28 (baked 400)
+        // The write half of the +6208 pair, which the accessor map above was missing: same
+        // member, write-lock test, baked 401 -- the slot between the sound write getter (398)
+        // and the game-event read getter (403). Producer:
+        // TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults.
+        TrafficDirectorOutputInterface*       GetTrafficDirectorOutputInterface();       // (baked 401)
         // +9824 read/write mGameEventQueue.
         const GameEventQueue* GetGameEventQueue() const;                          // 0x827A0AD0 (baked 403)
         GameEventQueue*       GetGameEventQueue();                                // 0x82711CE8 (baked 404)

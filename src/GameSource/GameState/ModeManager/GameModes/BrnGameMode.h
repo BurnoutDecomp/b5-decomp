@@ -60,11 +60,8 @@ class ScoringSystem;
 
 namespace GameStateModuleIO
 {
-    // Spine-parameter buffers -- BY POINTER ONLY in this header. BrnGameStateModuleIO.h must NOT
-    // be included from here: it reaches a SECOND `enum EActiveRaceCarIndex : s32` inside
-    // `namespace BrnGameState`, which would silently re-bind the unqualified enum names used in
-    // the declarations below (that is why slots 18/19/20 spell them `::EActiveRaceCarIndex`).
-    // The same ban, with its full post-mortem, is at BrnModeManager.h:52-64.
+    // Spine-parameter buffers -- BY POINTER ONLY in this header, so BrnGameStateModuleIO.h stays
+    // out and forward declarations are enough.
     struct OutputBuffer;
     struct PreWorldInputBuffer;
     struct PostWorldInputBuffer;

@@ -1393,8 +1393,8 @@ namespace BrnPhysics
 
     // =================================================================================================
     // BrnPhysics::PhysicsModule::BridgeVehicleManagerToSimulation_PostScene @0x825AB408 (52 insns)
-    // THE SIM FIREWALL -- LANDED 2026-08-11 (prepare-chain wave); its BrnPhysicsConductorGates
-    // .cpp boot gate is DELETED in the same commit (LNK2005 is the tripwire if it ever comes back).
+    // THE SIM FIREWALL -- LANDED 2026-08-11 (prepare-chain wave); the boot gate it replaced is gone,
+    // and this is its only definition tree-wide (LNK2005 is the tripwire if one ever comes back).
     //
     // THE GATE'S PRECONDITION IS SATISFIED, CHECKED RATHER THAN ASSUMED. The gate banner said
     // "DO NOT LAND THIS UNTIL THE TRACTION-LINE CHAIN IS CLOSED -- a body that enters the simulation

@@ -6,11 +6,32 @@
 // sign-flip / vperm / vrlimi lane inserts), which have no PC implementation; the recovered
 // math is reproduced here scalar over the named Vector2 lanes (semantic parity, members by
 // name), matching the offsets +0x10/+0x20/+0x24/+0x30 the disassembly reads.
+//
+// The two-phase Construct is homed here too: the handling debug component folds it back out
+// of GripCurveDebugWindow::Construct, which inlines it once per graph.
 
 namespace BrnPhysics
 {
 namespace Vehicle
 {
+    // Two-phase init, inlined by the console into GripCurveDebugWindow::Construct (once per
+    // graph). Four stores: the curve pointer word at +0x00, a zero quadword over mAxisTopLeft
+    // (+0x10), a zero quadword over mAxisRanges (+0x20), and a two-lane insert into
+    // mAxisDimensions (+0x30). The axis box is a fixed 300 x 225 pixels -- the same 225 the
+    // window's Render uses as the vertical advance between its two stacked graphs.
+    void GripCurveDebugGraph::Construct()
+    {
+        mpGripCurve = nullptr;
+
+        mAxisTopLeft.SetZero();
+        mAxisRanges.SetZero();
+
+        // Lanes z/w of +0x30 are NOT touched: the console load-modify-stores the quadword and
+        // only replaces the two lanes it sets.
+        mAxisDimensions.x = 300.0f;   // box width, pixels
+        mAxisDimensions.y = 225.0f;   // box height, pixels
+    }
+
     // GetOrigin @0x825E8D00: {topLeft.x, topLeft.y + boxHeight}.
     rw::math::vpu::Vector2 GripCurveDebugGraph::GetOrigin() const
     {

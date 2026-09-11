@@ -41,9 +41,8 @@
 //
 // ⚠️ ODR / LINK NOTE FOR THE CONDUCTOR. Grepped before writing: FindPartIndex has NO other
 //    definition anywhere in b5-decomp/src or b5-decomp/vendor -- not a real body, not a trap stub,
-//    and (unlike UpdateTriangleCache / OutputUpdatedProps / ProcessInputsPreScene) NOT a one-shot
-//    body in GameSource/Physics/BrnPhysicsConductorGates.cpp or World/WorldLinkStubs.cpp. So this
-//    partfile introduces no LNK2005 and retires no gate.
+//    and (unlike UpdateTriangleCache / OutputUpdatedProps / ProcessInputsPreScene) never a one-shot
+//    body in either of the stub TUs. So this partfile introduces no LNK2005 and retires no gate.
 //
 // Grounding: .ida-exports/BURNOUT_X360_ARTIST.XEX/0x82605E10.json -- the RAW `assembly` array. The
 // Hex-Rays pseudocode in the same export was used only to cross-read the stack-slot map. Nothing

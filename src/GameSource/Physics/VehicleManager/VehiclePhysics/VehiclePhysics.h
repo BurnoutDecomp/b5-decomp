@@ -709,8 +709,7 @@ namespace Vehicle
         // to 0.8, mfBrake/mfHandBrake zeroed), so the pointer is non-const. The DWARF spells it
         // exactly (references\DecFIGS\...\VehiclePhysics.h:1505):
         //     void UpdateShunt(BrnPlayerDriverControls *, VecFloat);
-        // in VehiclePhysics.cpp (100 insns, store-for-store); the LOUD TRAP in
-        // VehiclePhysicsLinkStubs.cpp is deleted in the same commit.
+        // in VehiclePhysics.cpp (100 insns, store-for-store).
         void UpdateShunt(BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep);
 
         // SIGNATURE CONFORMED 2026-08-07 (orchestrator wave). The committed 2-arg form
@@ -799,8 +798,7 @@ namespace Vehicle
         //       slot the committed RaceCarPhysics::Update had already identified. It is DECLARED
         //       below with the driving spine and BODIED in VehiclePhysics.cpp.
         // UpdateInAirBehaviour (809 insns) is no longer a
-        //       trap either -- BODIED in VehiclePhysics.cpp, stub deleted from
-        //       VehiclePhysicsLinkStubs.cpp. -----
+        //       trap either -- BODIED in VehiclePhysics.cpp. -----
 
         // @0x825B81A8: the water "hard kill". When the representative contact's surface id maps to a
         // water surface AND the depth scalar (mfWaterDepth, +0x590) is below a threshold, zeroes the
@@ -834,8 +832,7 @@ namespace Vehicle
         // ==========================================================================================
         // THE DRIVING SPINE (orchestrator wave, 2026-08-07). The per-car frame chain that
         // VehiclePhysics::Update @0x826412C0 conducts and UpdateDriving @0x82638148 orders.
-        // Bodies in VehiclePhysics.cpp unless marked TRAP (loud stubs in
-        // VehiclePhysicsLinkStubs.cpp -- delete the stub in the same commit as any body).
+        // Bodies in VehiclePhysics.cpp unless marked TRAP.
         // Signatures are the X360 call-site register maps, cross-checked against the PS3 DecFIGS
         // mangled names where an out-of-line copy exists.
         // ==========================================================================================

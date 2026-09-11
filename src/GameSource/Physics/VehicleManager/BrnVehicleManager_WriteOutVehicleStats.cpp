@@ -313,8 +313,8 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
 // console does -- there is no other writer of a live car's transform outside the integrator.
 // PhysicsModule::Update @0x825B0640 has always called it, every frame, on both the normal and the
 // network-catchup path (BrnPhysicsModuleUpdateFunctions.cpp, "the shared tail"); until now that
-// call reached the inert gate in BrnPhysicsConductorGates.cpp, which is DELETED in the same commit
-// (LNK2005 is the intended tripwire if it returns).
+// call reached an inert conductor gate, which was deleted in the same commit (LNK2005 is the
+// intended tripwire if it returns).
 //
 // THE PRODUCER SIDE, so the whole chain is on one page:
 //     ActiveRaceCar::RequestPlaceOnTrack(pos, dir, speed)          -- the request latch

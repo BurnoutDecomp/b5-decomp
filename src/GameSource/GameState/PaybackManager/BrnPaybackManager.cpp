@@ -64,17 +64,6 @@ namespace BrnGameState
             f32 mfRemaining;
         };
 
-        // The engine carries three layout-identical (all `: s32`) active-race-car-index enums in
-        // different scopes -- global ::EActiveRaceCarIndex (the PaybackManager's own index space),
-        // BrnNetwork::EActiveRaceCarIndex (DirtyTrickEvent fields), and BrnGameState::
-        // EActiveRaceCarIndex (TakedownEvent fields). They are NOT implicitly interconvertible, so
-        // bridge at the boundaries with these explicit same-value converters.
-        inline ::EActiveRaceCarIndex ToGlobalRCI(BrnNetwork::EActiveRaceCarIndex le)
-        { return static_cast<::EActiveRaceCarIndex>(static_cast<s32>(le)); }
-        inline ::EActiveRaceCarIndex ToGlobalRCI(BrnGameState::EActiveRaceCarIndex le)
-        { return static_cast<::EActiveRaceCarIndex>(static_cast<s32>(le)); }
-        inline BrnNetwork::EActiveRaceCarIndex ToNetworkRCI(::EActiveRaceCarIndex le)
-        { return static_cast<BrnNetwork::EActiveRaceCarIndex>(static_cast<s32>(le)); }
     }
 
     // -----------------------------------------------------------------------------------
@@ -104,8 +93,8 @@ namespace BrnGameState
         mbPaybackAwarded          = false;
 
         // The "cleared" inbound event sentinel the manager keeps as mEvent (X360 stores -1,-1,3,5).
-        mEvent.meAggressorActiveRaceCarIndex = BrnNetwork::E_ACTIVE_RACE_CAR_NONE;
-        mEvent.meVictimActiveRaceCarIndex    = BrnNetwork::E_ACTIVE_RACE_CAR_NONE;
+        mEvent.meAggressorActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        mEvent.meVictimActiveRaceCarIndex    = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
         mEvent.meDirtyTrickType              = KE_NO_DIRTY_TRICK;                       // 3
         mEvent.meDirtyTrickStatus            = static_cast<BrnNetwork::EDirtyTrickStatus>(5);
 
@@ -148,8 +137,8 @@ namespace BrnGameState
         mbDirtyTrickButtonWasDown = false;
         mbPaybackAwarded          = false;
 
-        mEvent.meAggressorActiveRaceCarIndex = BrnNetwork::E_ACTIVE_RACE_CAR_NONE;
-        mEvent.meVictimActiveRaceCarIndex    = BrnNetwork::E_ACTIVE_RACE_CAR_NONE;
+        mEvent.meAggressorActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        mEvent.meVictimActiveRaceCarIndex    = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
         mEvent.meDirtyTrickType              = KE_NO_DIRTY_TRICK;                       // 3
         mEvent.meDirtyTrickStatus            = static_cast<BrnNetwork::EDirtyTrickStatus>(5);
 
@@ -257,8 +246,8 @@ namespace BrnGameState
                    "leVictimRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
 
         BrnNetwork::BrnNetworkModuleIO::DirtyTrickEvent lDirtyTrickEvent;
-        lDirtyTrickEvent.meAggressorActiveRaceCarIndex = ToNetworkRCI(leAggressorRaceCarIndex);
-        lDirtyTrickEvent.meVictimActiveRaceCarIndex    = ToNetworkRCI(leVictimRaceCarIndex);
+        lDirtyTrickEvent.meAggressorActiveRaceCarIndex = leAggressorRaceCarIndex;
+        lDirtyTrickEvent.meVictimActiveRaceCarIndex    = leVictimRaceCarIndex;
         lDirtyTrickEvent.meDirtyTrickType              = leDirtyTrickType;
         lDirtyTrickEvent.meDirtyTrickStatus            = leDirtyTrickStatus;
 
@@ -341,14 +330,14 @@ namespace BrnGameState
     {
         const BrnNetwork::EPaybackType leAwarded     = meAwardedDirtyTrick;
         const ::EActiveRaceCarIndex    leVictimIndex = mePaybackVictimRaceCarIndex;
-        const ::EActiveRaceCarIndex    lePlayerIndex = ToGlobalRCI(mpGameStateModule->GetPlayerActiveRaceCarIndex());
+        const ::EActiveRaceCarIndex    lePlayerIndex = mpGameStateModule->GetPlayerActiveRaceCarIndex();
 
         SendNetworkDirtyTrickMessage(lePlayerIndex, leVictimIndex, leAwarded,
                                      static_cast<BrnNetwork::EDirtyTrickStatus>(2));
 
         const BrnNetwork::EPaybackType leAwarded2     = meAwardedDirtyTrick;
         const ::EActiveRaceCarIndex    leVictimIndex2 = mePaybackVictimRaceCarIndex;
-        const ::EActiveRaceCarIndex    lePlayerIndex2 = ToGlobalRCI(mpGameStateModule->GetPlayerActiveRaceCarIndex());
+        const ::EActiveRaceCarIndex    lePlayerIndex2 = mpGameStateModule->GetPlayerActiveRaceCarIndex();
 
         lpOutput->GetGameStateToGuiInterface()->AddDirtyTrickTriggered(
             lePlayerIndex2, leVictimIndex2, leAwarded2);
@@ -384,8 +373,8 @@ namespace BrnGameState
         {
             const TakedownEvent& lTakedownEvent = lpQueue->GetEvent(liIndex);
 
-            const ::EActiveRaceCarIndex leTakedownAggressorRaceCarIndex = ToGlobalRCI(lTakedownEvent.meAggressorIndex);
-            const ::EActiveRaceCarIndex leTakedownVictimRaceCarIndex    = ToGlobalRCI(lTakedownEvent.meVictimIndex);
+            const ::EActiveRaceCarIndex leTakedownAggressorRaceCarIndex = lTakedownEvent.meAggressorIndex;
+            const ::EActiveRaceCarIndex leTakedownVictimRaceCarIndex    = lTakedownEvent.meVictimIndex;
 
             CGS_ASSERT(leTakedownAggressorRaceCarIndex != ::E_ACTIVE_RACE_CAR_INDEX_INVALID,
                        "leTakedownAggressorRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID");
@@ -404,7 +393,7 @@ namespace BrnGameState
                 continue;
 
             // Only react when the local player is the one who was taken down.
-            if (ToGlobalRCI(mpGameStateModule->GetPlayerActiveRaceCarIndex()) != leTakedownVictimRaceCarIndex)
+            if (mpGameStateModule->GetPlayerActiveRaceCarIndex() != leTakedownVictimRaceCarIndex)
                 continue;
 
             mfPaybackAggTimer              = -1.0f;
@@ -444,10 +433,8 @@ namespace BrnGameState
         {
             const BrnNetwork::BrnNetworkModuleIO::DirtyTrickEvent& lEvent = lpDirtyTrickQueue->GetEvent(liIndex);
 
-            const BrnNetwork::EActiveRaceCarIndex leNetAggressor = lEvent.meAggressorActiveRaceCarIndex;
-            const BrnNetwork::EActiveRaceCarIndex leNetVictim    = lEvent.meVictimActiveRaceCarIndex;
-            const ::EActiveRaceCarIndex      leAggressor = ToGlobalRCI(leNetAggressor);
-            const ::EActiveRaceCarIndex      leVictim    = ToGlobalRCI(leNetVictim);
+            const ::EActiveRaceCarIndex      leAggressor = lEvent.meAggressorActiveRaceCarIndex;
+            const ::EActiveRaceCarIndex      leVictim    = lEvent.meVictimActiveRaceCarIndex;
             const BrnNetwork::EPaybackType   leType      = lEvent.meDirtyTrickType;
             const BrnNetwork::EDirtyTrickStatus leStatus = lEvent.meDirtyTrickStatus;
 
@@ -457,7 +444,7 @@ namespace BrnGameState
                     break;
 
                 case 2:   // TRIGGERED on a car -- if it is you, become the victim
-                    if (leVictim == ToGlobalRCI(mpGameStateModule->GetPlayerActiveRaceCarIndex()))
+                    if (leVictim == mpGameStateModule->GetPlayerActiveRaceCarIndex())
                     {
                         // X360 @0x82383CA8 case 2: a1[152]=1 (victim state) then a1[144]=aggressor.
                         // a1[144] == +576 == mePaybackAggressorRaceCarIndex (NOT the victim index at
@@ -465,8 +452,8 @@ namespace BrnGameState
                         mePaybackVictimState           = E_PAYBACK_VICTIM_STATE_TRIGGERED_ON_YOU;
                         mePaybackAggressorRaceCarIndex = leAggressor;
 
-                        mEvent.meAggressorActiveRaceCarIndex = leNetAggressor;
-                        mEvent.meVictimActiveRaceCarIndex    = leNetVictim;
+                        mEvent.meAggressorActiveRaceCarIndex = leAggressor;
+                        mEvent.meVictimActiveRaceCarIndex    = leVictim;
                         mEvent.meDirtyTrickType              = leType;
                         mEvent.meDirtyTrickStatus            = leStatus;
                     }
@@ -480,7 +467,7 @@ namespace BrnGameState
                 case 4:   // ENDED -- the victim crashed
                     lpOutput->GetGameStateToGuiInterface()->AddDirtyTrickEnding(
                         leAggressor, leVictim, leType, /*lbSurvived=*/false);
-                    if (leAggressor == ToGlobalRCI(mpGameStateModule->GetPlayerActiveRaceCarIndex()))
+                    if (leAggressor == mpGameStateModule->GetPlayerActiveRaceCarIndex())
                     {
                         DirtyTrickEndedOnYouEvent lEndedOnYou;
                         lEndedOnYou.meAggressorRaceCarIndex = leAggressor;

@@ -6,12 +6,13 @@
 // This function owns E_STARTINGUPSTATE_WAITING_FOR_PLAYER -> _POPULATING, the only door into
 // the arm that creates parked cars (PostPhysicsUpdate's POPULATING arm, _wT1_01.cpp).
 //
-// // FLAG rung-3: LegacySrc is the primary source for this function's control flow.
-// There is no .ida-exports/BURNOUT_X360_ARTIST.XEX/0x8274A968.json, so rung 1 has no body.
-// Control flow comes from references/LegacySrc/.../BrnTrafficEntityModule.cpp;
+// FLAG rung-3: an earlier source revision is the primary source for this function's control flow.
+// There is no per-function export for it, so rung 1 has no body.
+// Control flow comes from the earlier revision of this function;
 // every member, constant and callee below is attested elsewhere, and which legs exist comes
-// from the ship's 36-entry `xrefs_to` inventory for 0x8274A968. Leg ORDER is not recoverable
-// from an xref list, so unbodied legs are named gates rather than guesses at placement.
+// from the ship's 36-entry `xrefs_to` inventory for 0x8274A968. An xref list carries no order,
+// but the image does: where a leg's slot has been read out of the instruction stream it is
+// placed (see the output-producer run below); the rest stay named gates.
 //
 // MOUNT REQUIRED (conductor-owned; agents may not edit the build script). Add
 //   echo "%SRC%\GameSource\World\EntityModules\TrafficEntityModule\BrnTrafficEntityModule_wT1_02.cpp"
@@ -58,8 +59,8 @@ namespace
 // ----------------------------------------------------------------------------
 // TrafficEntityModule::PreSceneUpdate  @ 0x8274A968   PARTIAL, EXPORT HOLE
 //
-// LegacySrc shape; the WAITING_FOR_PLAYER arm is its second half.
-// The signature is the header's, not the reference's: the reference passes
+// Earlier-revision shape; the WAITING_FOR_PLAYER arm is its second half.
+// The signature is the header's, not the earlier revision's: that revision passes
 // `const InputBuffer_PreScene*` where BrnTrafficEntityModule.h takes a non-const pointer.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
@@ -120,7 +121,7 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     if (mbHullSyncDivergence)
     {
         // GATE: the hull-sync 2D banner. Its four text/position/size/colour constants come
-        // from the reference's BrnTrafficTweakConstants block with no X360 attestation. Online-only
+        // from the earlier revision's BrnTrafficTweakConstants block with no binary attestation. Online-only
         // (mbHullSyncDivergence is set only by UpdateRaceCarHulls' online arm), so offline
         // cannot reach it. DELETE WHEN the four constants are attested on this build.
         static bool sbLogged = false;
@@ -130,26 +131,37 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
             "attestation on this build. ONLINE-only, unreachable offline");
     }
 
+    // ⭐ THE PRODUCER BLOCK, AND ITS ORDER, ARE NOW MEASURED (2026-09-11). The old gate here
+    // said "their order in this function is unknown, so they are not placed" -- that was a
+    // claim about the EXPORT, not the image, and it was wrong the same way the update-set note
+    // above was. Disassembling this function straight out of the image shows the producers as a
+    // straight run right here, between the hull-sync banner and the state switch, each called
+    // with (this, lpInput, lpOutput):
+    //     GenerateSympatheticCrasherOutput
+    //     GenerateNearMissOutput                 <- LIVE below
+    //     GeneratePotentialLeapedAndStompedCarsOutput
+    //     GenerateNearbyParkedTrafficOutput
+    // then ManageTriggers, then the switch. GenerateRivalInActiveHullOutput is NOT among them
+    // on this build; nothing in this function calls it.
+    GenerateNearMissOutput(lpInput, lpOutput);
+
     {
-        // GATE: the ship's five per-frame output producers, none bodied in this tree, and
-        // their order relative to the state switch is not recoverable from an xref list, so
-        // they are named as a block rather than placed. They write into OutputBuffer_PreScene,
-        // which nothing in this build reads yet. DELETE WHEN the bodies land.
+        // GATE: the three remaining pre-scene output producers, none bodied in this tree. They
+        // are placed in the console's own order around the live call above. They write into
+        // OutputBuffer_PreScene. DELETE WHEN the bodies land.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
-            "PreSceneUpdate output producers -- GenerateNearbyParkedTrafficOutput @0x8271FA18, "
-            "GenerateSympatheticCrasherOutput @0x82715C30, GenerateNearMissOutput @0x82715CC0, "
-            "GeneratePotentialLeapedAndStompedCarsOutput @0x8271F298 and the reference's "
-            "GenerateRivalInActiveHullOutput. No bodies in this tree; the ARTIST hole means "
-            "their order in this function is unknown, so they are not placed");
+            "PreSceneUpdate output producers -- GenerateSympatheticCrasherOutput (before the "
+            "live GenerateNearMissOutput), GeneratePotentialLeapedAndStompedCarsOutput and "
+            "GenerateNearbyParkedTrafficOutput (after it). No bodies in this tree");
     }
 
     switch (meState)
     {
-    // Leg order follows LegacySrc BrnTrafficEntityModule.cpp.
+    // Leg order follows the earlier revision of this function.
     //
     // ✅ THE BEHAVIOUR DELTA THAT STOOD HERE IS CLOSED (2026-08-27, pauseresume wave).
-    // It said: "the reference's guard is `!IsPaused() && !lbSimPaused`; only IsPaused() is written ...
+    // It said: "the earlier revision's guard is `!IsPaused() && !lbSimPaused`; only IsPaused() is written ...
     // nothing attests that PreSceneUpdate decodes the same bit, and this function is an export
     // hole ... IsPaused() alone runs the legs on a frame the console might have skipped, WHICH AT
     // WORST REGISTERS A SCENE ENTITY ONE FRAME EARLY."
@@ -170,7 +182,7 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     //     0x8274ABD4  rlwinm r11, r27, 0, 24, 31    ; r27 == lUpdateSet & 1 (prologue, above)
     //     0x8274ABDC  bc  -> 0x8274AC28        ; skip the block if the SIM-PAUSED bit is set
     //     0x8274ABE8  bl     TrafficEntityModule::UpdateTimers (0x82715858)
-    // -- exactly the reference's `!IsPaused() && !lbSimPaused`. Restored below; a RESTORATION, not an
+    // -- exactly the earlier revision's `!IsPaused() && !lbSimPaused`. Restored below; a RESTORATION, not an
     // invented arm. (The console's block also carries UpdateCrashSlider @0x82715A18 and
     // GenerateCrashedVehicleEvents @0x82720030, which stay gated with the tail legs.)
     case E_STATE_RUNNING:
@@ -238,7 +250,7 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
                 "PreSceneUpdate E_STATE_RUNNING remaining legs -- ManageTriggers @0x82747518 / "
                 "UpdateSerialiser @0x8272DA80. Neither bodied; both are trigger/replay surface. "
                 "UpdateCrashSlider @0x82715A18 and GenerateCrashedVehicleEvents @0x82720030 "
-                "WERE in this list and are now live above. The reference's "
+                "WERE in this list and are now live above. The earlier revision's "
                 "KillTrafficTooCloseToRaceCars is NOT in the ship's callee list and is "
                 "therefore not written");
         }

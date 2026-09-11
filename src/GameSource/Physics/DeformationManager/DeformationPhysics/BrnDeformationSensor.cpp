@@ -365,7 +365,7 @@ namespace Deformation
 			lDisp.y = ( lDisp.y < lOffsetA.y ) ? lDisp.y : lOffsetA.y;
 			lDisp.z = ( lDisp.z < lOffsetA.z ) ? lDisp.z : lOffsetA.z;
 
-			// ⭐⭐⭐ GATE RETIRED, walls leg 12 (2026-08-16). Leg 11 landed this arithmetic behind a
+			// ⭐⭐⭐ WHY THIS ARITHMETIC RUNS UNGUARDED (walls leg 12, 2026-08-16). Leg 11 landed it behind a
 			// `gbPlaceSensorSpheres = false` because switching it on parked the car on its belly:
 			// the sensor spheres came out 2*COM == 0.807 m below the wheels, hovering the car 0.764 m
 			// with a per-frame correction that exactly cancelled gravity. That was NOT a defect in

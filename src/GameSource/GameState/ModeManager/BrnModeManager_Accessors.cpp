@@ -97,12 +97,8 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                   // GetRoadRageTakedownTarget's gated debug prints + the parked one-shot log
 #include <cmath>                                                             // std::floor (the de-inlined fsel/magic-constant floor, same precedent as BrnChallengeManager_wC_06.cpp)
 
-// [X][X] DELIBERATELY NOT INCLUDED: GameSource/GameState/BrnGameStateModuleIO.h. It reaches a
-// SECOND `enum EActiveRaceCarIndex : s32` inside namespace BrnGameState (through
-// GameSource/Network/BrnNetworkModuleIO.h -> BrnTakedownManagerTypes.h), which would silently
-// re-bind the unqualified EActiveRaceCarIndex in GlobalToActiveRaceCarIndex's signature below and
-// re-mangle an already-committed declaration. Nothing here needs it -- every enum used in this
-// file comes from BrnGameStateSharedIO.h or BurnoutConstants.h through the owning header.
+// GameSource/GameState/BrnGameStateModuleIO.h is not included: nothing here needs it -- every enum
+// used in this file comes from BrnGameStateSharedIO.h or BurnoutConstants.h through the owning header.
 
 namespace BrnGameState
 {

@@ -77,7 +77,7 @@ namespace BrnDirector
                 s32 miType;   // Camera.h:189
                 s32 miId;     // Camera.h:190
 
-                void Clear();  // Camera.h:187 (declaration-only; body in its own TU)
+                void Clear();  // body: Camera.cpp (the pair of -1 stores)
             };
 
             // DWARF Camera.h:43: `typedef const Attrib::RefSpec ShotReference;`
@@ -181,8 +181,11 @@ namespace BrnDirector
             // +0x44 / +0x48, with both blur-enable flags at +0x4C / +0x4D set true).
             void RequestMotionBlur(f32 lfBlurAmountA, f32 lfBlurAmountB);
 
-            // Request the motion-blur "shake/strobe" overlay (mEffects +0xAC amount, +0xB0 set to
-            // 1.0, the shake-type byte at +0xB4). Only issued while mbBlurShake is set.
+            // ⭐ BODIED 2026-09-11 (Camera.cpp). ⚠️ NAME IS A MISNOMER, kept because the call
+            // site is committed: it writes NO motion-blur field. The three stores are
+            // mEffects.mfShakeAmplitude (+0xAC), .mfShakeFrequency (+0xB0, the `lfBlend`
+            // argument -- the caller passes 1.0) and .mu8ShakeType (+0xB4) -- the same triple,
+            // in the same order, as SetImpactShake above. Only issued while mbBlurShake is set.
             void RequestMotionBlurShake(f32 lfAmount, f32 lfBlend, u8 lu8ShakeType);
 
             // Set the requested full-screen border post-FX amount (mEffects +0xA8). Crash mode

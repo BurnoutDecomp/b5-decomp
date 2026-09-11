@@ -17,47 +17,11 @@
 //         parked on BaseCollisionGenerator::GetNumUsedResultLists(). THAT LANDED TOO
 //         (CgsCollisionGenerator.h:114, a public inline). Body brought in-tree here.
 //
-// ⚠️ ODR NOTE FOR THE CONDUCTOR -- RE-MEASURED 2026-08-19 (wave Q6). Begin and End STILL HAVE
-//    their one-shot conductor-gate bodies in
-//    b5-decomp/src/GameSource/Physics/BrnPhysicsConductorGates.cpp, and the line numbers this
-//    banner used to carry (":485 / :492 / :514") HAD DRIFTED. Re-measured AGAIN 2026-08-19 (wave
-//    Q6, cluster pstream) -- the UpdateTriangleCache range had drifted a second time. Today,
-//    banner/comment line through closing brace:
-//        :471-476  PropManager::BeginPropWorldContactGeneration  @0x82628CB0 (89)
-//        :478-483  PropManager::EndPropWorldContactGeneration    @0x82628E18 (37)
-//        :515-522  PropManager::UpdateTriangleCache              @0x826119A0 (116)
-//                  (the `void` at :517; :515-516 is its two-line comment)
-//    All three are DELIBERATELY LEFT IN PLACE. AGENTS.md's convention is that a gate is retired
-//    only in the same commit that MOUNTS the real body in tools/build/build_game_exe.bat, and that
-//    script lists BrnPhysicsConductorGates.cpp (:1230) but lists NEITHER PropManager_wQ_03.cpp NOR
-//    this file -- its `rem` at :1783-1787 says so in as many words. So there is no LNK2005 today;
-//    it fires the instant either partfile joins the source list. `cl /c` cannot see this --
-//    reported, not "fixed".
-//    ⭐⭐ THE `rem`'s REASON IS STALE TWICE OVER, AND BOTH BLOCKERS ARE NOW CLOSED.
-//    (a) It says these two TUs stay unmounted "because their contact-gen legs are parked". As of
-//        wave Q6 round 1 the legs are NOT parked -- both DoPart/DoPropInstanceWorldContact-
-//        Generation are landed in the already-mounted PropManager_wQ2_03.cpp.
-//    (b) Its current wording says what still blocks the mount is "the primitive-stream family,
-//        Create/RunCollidePrimitiveListWithTriangleListStream". THAT LANDED 2026-08-19 (wave Q6,
-//        cluster pstream) in the mounted CgsCollisionGenerator.cpp, together with the family's
-//        poster AddPrimitiveListWithTriangleListToStream, the descriptor type
-//        (JobDescription/CgsPrimitiveListWithTriangleListStreamJobDesc.h), the job-type-12 enum
-//        member, and the type-12 worker (ContactGeneratorJob::ExecutePrimitiveListWith-
-//        TriangleListStream @0x82926650).
-//    ⇒ BOTH THIS FILE AND PropManager_wQ_03.cpp ARE LINK-READY NOW. Verified by compiling each
-//      into a private obj dir and cross-checking every external UNDEF against a definition AND
-//      against the bat's mount list (scratchpad/waveQ6/probe_pstream/obj/*.sym.txt): zero
-//      unresolved callees remain. Mount both, and retire the three gates above in the SAME commit.
-//    ⚠️ ONE RESIDUAL, AND IT IS A RUNTIME ONE, NOT A LINK ONE: PrimitivePairListBuilder::
-//      AddPrimitive(const rw::collision::Volume*, ...) @0x82814AB8 is still a LOUD NAMED GATE
-//      (CgsPrimitivePairListBuilder.cpp, mounted bat:867). It has a definition, so the exe links;
-//      but while it is gated a prop's collision volumes never become collision primitives, so the
-//      pair list this file's Begin leg posts is EMPTY. Expect [Q6-worldc] to print non-zero counts
-//      with "prop fell out of the world" still firing until that switch lands.
-//    GetTriangleCacheSlotAndRadius has NO gate and no stub anywhere (re-grepped
-//    BrnPhysicsConductorGates.cpp and WorldLinkStubs.cpp) -- this is its only definition, and it
-//    is what PropManager_wQ_03.cpp's UpdateTriangleCache calls, so the two partfiles mount as a
-//    PAIR (wQ_03 alone would take an LNK2019 on it).
+// LINK NOTE. Each of the three functions below is the SOLE definition of its symbol: the conductor
+//    gates that once shadowed Begin/End -- and the one that shadowed PropManager_wQ_03.cpp's
+//    UpdateTriangleCache -- are gone, and this file is mounted. It mounts as a PAIR with wQ_03,
+//    whose UpdateTriangleCache calls this file's GetTriangleCacheSlotAndRadius and would take an
+//    LNK2019 without it.
 //
 // GROUNDING. Every body below was re-derived this round from the RAW `assembly` array of
 // .ida-exports/BURNOUT_X360_ARTIST.XEX/<addr>.json (Hex-Rays pseudocode NOT consulted; its

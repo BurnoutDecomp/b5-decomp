@@ -10,7 +10,7 @@
 // kept separate so the driver-arms wave lands as one reviewable unit alongside
 // BrnVehicleManager_DriverArms.cpp (the other four arms). Fold back at will.
 //
-// The gate for this function in BrnPhysicsConductorGates.cpp is DELETED by this wave.
+// The conductor gate that stood for this function was deleted by the same wave.
 //
 // WHAT IT DOES:
 //   1. assert the record names a STANDARD traffic vehicle (species 0). Static street furniture and

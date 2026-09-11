@@ -22,8 +22,9 @@
 //
 // The two SIDE legs -- traffic (AddTraffic 418 <-> ReadTraffic 291) and player-stuck
 // (AddPlayerStuck 171 + UpdatePlayerStuckTest 87 + UpdatePlayerStuckSpheres 147 <-> ReadPlayerStuck
-// 118) -- are named gates in BrnPhysicsConductorGates.cpp, gated in MATCHED Add<->Read PAIRS
-// because all three harvests share one result cursor.
+// 118) -- were named gates when this landed, gated in MATCHED Add<->Read PAIRS because all three
+// harvests share one result cursor. Both legs are real bodies now, in
+// BrnPhysicalTrafficManager_TractionLineTests.cpp and BrnVehicleManager_PlayerStuck.cpp.
 //
 // =================================================================================================
 

@@ -2,6 +2,7 @@
 #include "GameSource/Network/SharedIO/BrnBuddyInformation.h"
 
 #include "BrnCommonTypes.h"
+#include "GameSource/BurnoutConstants.h"   // ::EActiveRaceCarIndex (the one and only)
 
 namespace BrnNetwork
 {
@@ -10,8 +11,11 @@ namespace BrnNetwork
     {
     };
 
-    // Recovered from BrnNetworkSharedIO.h / CgsNetworkConstants.h (DecFIGS DWARF).
-    enum EActiveRaceCarIndex : s32 { E_ACTIVE_RACE_CAR_NONE = -1 };
+    // The network event records' race-car slot indices are the ONE global enum
+    // (BurnoutConstants.h); this alias only lets them be spelled BrnNetwork::EActiveRaceCarIndex.
+    // Never make it an enum of its own -- that re-mangles every unqualified use in the headers
+    // included after this one.
+    typedef ::EActiveRaceCarIndex EActiveRaceCarIndex;
     // Per-car boost flavour (DWARF BrnNetworkSharedIO.h:14). StartNetworkGameEvent stores
     // this as a raw s32 field; the race-car output interfaces use the enum directly.
     enum EBoostType : s32

@@ -34,16 +34,16 @@
 //     (dumped at scratchpad/waveQ2/probe_wq2_07/asm_0x8260FB60.txt / asm_0x826108B8.txt);
 //   * references/DecFIGS/dwarfdump/GameSource/Physics/PropManager/BrnPropManager.cpp:1400-1702
 //     (Lean scope) and :1703-1902 (Tilt scope) -- the local list AND the callee list;
-//   * references/LegacySrc/.../rwmath/1.02.00/include/rw/math/vpu/*.h -- the shipped SDK headers,
+//   * the shipped rwmath 1.02.00 vpu SDK headers,
 //     which is what pinned every vpu spelling used below.
 // THREE THINGS CHANGED relative to the parked text; each is a defect the park carried, each is
 // flagged at its site below:
 //   (1) `Select` -- the park used the tree's Vector4 argument order (false, true, mask). The SDK
-//       order is Select(mask, trueValue, falseValue). The
+//       order is Select(mask, trueValue, falseValue) (vector3_operation.h). The
 //       SELECTION IS THE SAME either way; only the spelling was wrong. Fixed.
 //   (2) the Mask3 -> MaskScalar lane broadcasts -- the park spelled them as free functions
 //       `vpu::GetX(mask)` and flagged the spelling as a PLACEHOLDER. They are MEMBERS:
-//       `Mask3::GetX/GetY/GetZ() const` (LegacySrc mask3.h + mask3_type_inline.h).
+//       `Mask3::GetX/GetY/GetZ() const` (mask3.h + mask3_type_inline.h).
 //       Fixed; the park's flag is discharged.
 //   (3) ⭐ THE POINT-VELOCITY CALL WAS IN THE WRONG PLACE -- a real, if small, numeric defect.
 //       See the ⚠️ block at step 3 of the Lean body. It is the one substantive correction.
@@ -77,12 +77,8 @@
 //        ExternalPhysicsBody.cpp:839. (Both parked banners claim it is; that claim is STALE and
 //        PropManager_wQ2_07.cpp:53-56 already corrected it. Do not write a second definition.)
 //
-// ⚠️ ODR: HandleContactWithLean/TiltProp have exactly one other definition each -- the two inert
-//    gates at GameSource/Physics/BrnPhysicsConductorGates.cpp:500-505 and :506-511 (with their
-//    shared comment block at :492-499). MOUNTING THIS FILE WITHOUT RETIRING THOSE IS AN LNK2005
-//    that `cl /c` cannot see. Retire the whole :492-511 range in the same change -- after this
-//    landing that comment's "three honest gates" claim covers nothing, because the third
-//    (RemoveAllPropsAndParts) was already retired on 2026-08-19 by the wQ6_01 cluster.
+// ODR: HandleContactWithLean/TiltProp each had one inert conductor-gate twin; both gates were
+//    retired when this file mounted, so the bodies below are their only definitions.
 // =================================================================================================
 
 #include "GameSource/Physics/PropManager/BrnPropManager.h"

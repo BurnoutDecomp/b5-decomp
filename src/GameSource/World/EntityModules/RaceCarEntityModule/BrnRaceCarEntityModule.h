@@ -798,6 +798,13 @@ public:
     void UpdateNearMisses(RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
                           RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput);
 
+    // The PRODUCER of both near lists. Drains the traffic module's two proximity collections
+    // out of the post-scene input buffer's traffic->race-car interface into mNearMissManager,
+    // and tallies the traffic half for power parking while the module is out of a game mode.
+    // The console calls it from PostSceneUpdate, first callee after the lock pair, skipped on
+    // a network-catchup frame. Body in BrnRaceCarEntityModule_NearMissTailgate.cpp.
+    void UpdateTrafficAndRaceCarNearMisses(RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput);
+
 private:
     // True when the player car sits inside the tailgate cone behind any other active race car
     // (reference point 2 m along that car's heading, 20 m along its reversed heading, a
@@ -1549,6 +1556,22 @@ private:
     s32                           miHidingEvents;
     Vector2 mPlayersCurrentRouteNodePosition; // ARTIST +0x18720; DecFIGS named member.
     Vector2 mPlayersNextRouteNodePosition;    // ARTIST +0x18730.
+
+    // ========================================================================
+    // MODELLED member (near-miss producer wave, 2026-09-11).
+    // ========================================================================
+    // Running tally of near-traffic records drained by UpdateTrafficAndRaceCarNearMisses,
+    // counted only while the module is out of a game mode or in the online free-burn lobby --
+    // i.e. only when power parking can be scored at all.
+    // ⚠️ THE CONSOLE'S SEAT IS NOT A MODULE MEMBER: it is mPowerParkingManager's +0x68
+    // (PowerParkingManager::miNearTrafficCount), the sibling of the +0x64 contact tally
+    // UpdateRaceCarContacts bumps, and the ProcessPowerParking / UpdatePowerParking pair reads
+    // it. The manager is NOT embedded in this build: neither PowerParking TU is mounted, only
+    // two of its member functions have bodies, and embedding it by value would drag an
+    // unresolved debug-component vtable into the module. The console's WRITE is reproduced on
+    // this seat rather than dropped. DELETE-WHEN the manager is embedded -- at which point
+    // this becomes mPowerParkingManager.miNearTrafficCount and the accesses move with it.
+    s32 miPowerParkingNearTrafficCount = 0;
 };
 
 // X360 0x822A34A8. Asserts the index is in [E_ACTIVE_RACE_CAR_INDEX_0,

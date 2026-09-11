@@ -40,24 +40,6 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
-    // The crash record pushed onto the game-side event queue at the output interface's +0x65F0.
-    // FLAG: only the byte SIZE (32) and the five written seats are attested; the gaps are not
-    // modelled. The seats the commit writes are the remapped victim and crasher ids at +0x00/+0x04,
-    // a zero flag byte at +0x10, a zero float at +0x14 and the victim's active-race-car index at
-    // +0x18. Note that BrnVehicleManager.cpp's CrashIoEventRecord models the SAME record with the
-    // three tail seats packed at +0x08/+0x0C/+0x10; this one follows the seats as written.
-    struct NetworkCrashIoEventRecord : public CgsModule::Event
-    {
-        u32 mEntityIdValue;     // +0x00
-        u32 mCrasherIdValue;    // +0x04
-        u32 muPad08;            // +0x08 (not written)
-        u32 muPad0C;            // +0x0C (not written)
-        u32 mbFlag;             // +0x10 (byte seat; zero)
-        f32 mfReserved;         // +0x14 (zero)
-        u32 muVictimIndex;      // +0x18
-        u32 muPad1C;            // +0x1C (not written)
-    };
-
     // The crash-data pool is 32 slots wide and the free-list bitset is the same width.
     static const s32 KI_RACE_CAR_CRASH_DATA_COUNT = 32;
 
@@ -230,8 +212,8 @@ namespace Vehicle
              liUsed >= 0;
              liUsed = mUsedRaceCarCrashesList.GetNextNonZeroBit(liUsed))
         {
-            if (maRaceCarCrashes[liUsed].mEntityId == lVictimEntityId.muValue
-                && maRaceCarCrashes[liUsed].meType == lCrasherEntityId.muValue)
+            if (maRaceCarCrashes[liUsed].mRaceCarEntityID.muValue == lVictimEntityId.muValue
+                && maRaceCarCrashes[liUsed].mOtherEntityID.muValue == lCrasherEntityId.muValue)
             {
                 return;
             }
@@ -254,21 +236,26 @@ namespace Vehicle
                 lrVictimRecord.ResetDeformableAABB();
             }
 
-            // The crash normal is the basis x-axis constant -- a remote crash has no measured
-            // contact normal to publish.
-            // FLAG: the id seat of the interface's modelled argument list carries the remapped
-            // CRASHER id at this site, not the victim -- the local sink puts its own remapped id
-            // in the same seat, which is why the modelled parameter is named for the victim.
+            // Both contact vectors are the basis x-axis constant -- a remote crash has no
+            // measured contact geometry to publish.
+            // RE-SEATED 2026-09-11: the first seat is the VICTIM and the second is the crasher.
+            // The old FLAG here guessed the crasher belonged in the leading seat because the
+            // modelled surface had no crasher parameter at all; it has one now.
             lpManagerOutputInterface->AddRaceCarCrashEvent(
+                lRemappedVictimId,
                 lRemappedCrasherId,
-                /*lbLocalPhysicalCrash=*/true,
                 rw::math::vpu::GetVector3_XAxis(),
+                rw::math::vpu::GetVector3_XAxis(),
+                /*lbIsPrimaryCrash=*/true,
                 lbCrashingAfterLatch,
-                lrVictimRecord.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.x);
+                /*lbCarIsAI=*/false,
+                /*lbCarIsNetwork=*/true,
+                lrVictimRecord.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.x,
+                BrnGameState::E_TAKEDOWN_NONE);
 
-            NetworkCrashIoEventRecord lEventRecord;
-            lEventRecord.mEntityIdValue   = lRemappedVictimId.muValue;
-            lEventRecord.mCrasherIdValue  = lRemappedCrasherId.muValue;
+            RaceCarCrashIoEventRecord lEventRecord;
+            lEventRecord.mVictimEntityId  = lRemappedVictimId;
+            lEventRecord.mCrasherEntityId = lRemappedCrasherId;
             lEventRecord.mbFlag           = 0;
             lEventRecord.mfReserved       = 0.0f;
             lEventRecord.muVictimIndex    = static_cast<u32>(liVictimIndex);
@@ -312,8 +299,8 @@ namespace Vehicle
         }
 
         maRaceCarCrashes[liSlot].mfTimeSinceImpact = 0.0f;
-        maRaceCarCrashes[liSlot].meType            = lCrasherEntityId.muValue;
-        maRaceCarCrashes[liSlot].mEntityId         = lVictimEntityId.muValue;
+        maRaceCarCrashes[liSlot].mOtherEntityID   = lCrasherEntityId;
+        maRaceCarCrashes[liSlot].mRaceCarEntityID  = lVictimEntityId;
         mUsedRaceCarCrashesList.SetBit(static_cast<u32>(liSlot));
     }
 }

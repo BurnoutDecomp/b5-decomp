@@ -1096,6 +1096,13 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         // promotion, so with this gated append #161 overwrites the count word with an entity id.
         void GenerateCrashedVehicleEvents(BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
 
+        // One of PreSceneUpdate's per-frame output producers: copies mNearMissTrafficCollection
+        // and mNearMissRaceCarCollection wholesale into the output buffer's traffic->race-car
+        // pre-scene interface. Body in _wG_NearMissOutput.cpp. lpInput is the family's shared
+        // argument and is never read.
+        void GenerateNearMissOutput(BrnTrafficIO::InputBuffer_PreScene* lpInput,
+                                    BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
+
         // @0x82727768 (273 insns). DWARF `void GenerateVehicleCrashedEvents(
         // OutputBuffer_PostPhysics*)` (BrnTrafficUnity.cpp:20156). One of PostPhysicsUpdate's
         // RUNNING tail legs. It does NOT shrink the array -- it walks the same records, hands
@@ -1158,6 +1165,14 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         // crashing or sympathetically crashing). Bodies in _wT1_01.cpp.
         void GenerateRemovedVehicleEvents(BrnWorld::CrashIO::TrafficInputInterface* lpCrashInputInterface);
         void GenerateSlamRecoveryEvents(BrnWorld::CrashIO::TrafficInputInterface* lpCrashInputInterface);
+
+        // The post-physics drain of the player-centred coarse sphere query
+        // PostNearbyTrafficSceneQueryRequest posts: it fills the traffic->director and
+        // traffic->sound output interfaces and is the SOLE producer of the two near-miss
+        // collections below. Body in BrnTrafficEntityModule_wG_NearbyTrafficResults.cpp.
+        void ProcessNearbyTrafficSceneQueryResults(
+            const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+            BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput);
 
         // @0x827353E8, DWARF :1551. The jam relief valve UpdateNonDecisionFrame runs when
         // mbNeedToRunTrafficJamNuker is latched: collect each maximal run of consecutive

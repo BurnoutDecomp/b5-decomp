@@ -565,8 +565,9 @@ public:
     void UpdateTriangleCache(
         CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update);
 
-    // ---- FLAG: gate-bodied (BrnPhysicsConductorGates.cpp) ---------------------------------
-    // The TRAFFIC traction-line pair, gated together 2026-08-11 (lifetime wave). A race car on
+    // ---- The TRAFFIC traction-line pair -----------------------------------------------------
+    // Bodied in BrnPhysicalTrafficManager_TractionLineTests.cpp; gated together 2026-08-11
+    // (lifetime wave) before that. A race car on
     // the ground needs neither, and they are 709 console instructions. KEEP THEM PAIRED: the
     // Add posts one command per live traffic vehicle and the Read consumes exactly that many
     // records off the SHARED result cursor EndVehicleTractionLineTests hands all three harvests
@@ -587,7 +588,7 @@ public:
     // with `add r3, r31, r28` where r28 == 0xAEE0 == 44768 == the manager's own
     // mPhysicalTrafficManager seat, so the `this` really is this class and not the vehicle manager.
     // DWARF-attested verbatim (references/DecFIGS/.../BrnPhysicalTrafficManager.h:158).
-    // STILL BODYLESS -- a named BRN_CONDUCTOR_GATE in BrnPhysicsConductorGates.cpp.
+    // Bodied in BrnPhysicalTrafficManager_UpdateTrafficDriver.cpp.
     void UpdateTrafficDriver(const BrnTrafficDriverControls* lpControls,
                              CgsContainers::BitArray<8u>& lrUpdatedCars);
 
@@ -617,8 +618,8 @@ public:
     // half of the per-frame publish, and the tail call of VehicleManager::WriteOutVehicleStats
     // @0x8263FA28 (`addis r3,r18,1 ; addi r3,r3,-0x5120` == this + 44768 == &mPhysicalTrafficManager,
     // r4 = the same VehicleOutputInterface). Its own body walks mUsedTrafficVehicles into the
-    // interface's PhysicalTrafficStateQueue. FLAG: DECLARED so the race-car half can reproduce the
-    // console's call sequence; the body is a LOUD one-shot gate (BrnPhysicsConductorGates.cpp).
+    // interface's PhysicalTrafficStateQueue, bodied in
+    // BrnPhysicalTrafficManager_WriteOutVehicleStats.cpp.
     void WriteOutVehicleStats(Vehicle::VehicleOutputInterface* lpOutputInterface);
 
     // X360 0x82649768 (246 insns) -- the traffic twin of

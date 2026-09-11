@@ -338,12 +338,10 @@ namespace BrnNetwork
         BrnNetworkModuleIO::GameStateToNetworkInterface* lpInterface =
             mpNetworkModule->GetGameStateToNetworkInterface();
 
-        // ImpactEvent uses the global ::EActiveRaceCarIndex; the network mapping interface uses
-        // BrnNetwork::EActiveRaceCarIndex. They share value semantics -- cast across the scopes.
         const EActiveRaceCarIndex leImpactAggressorActiveRaceCarIndex =
-            static_cast<EActiveRaceCarIndex>(lpImpactEvent->meAggressorActiveRaceCarIndex);
+            lpImpactEvent->meAggressorActiveRaceCarIndex;
         const EActiveRaceCarIndex leImpactVictimActiveRaceCarIndex =
-            static_cast<EActiveRaceCarIndex>(lpImpactEvent->meVictimActiveRaceCarIndex);
+            lpImpactEvent->meVictimActiveRaceCarIndex;
 
         const NetworkPlayerID lImpactAggressorNetworkPlayerID =
             lpInterface->GetNetworkPlayerID(leImpactAggressorActiveRaceCarIndex);
@@ -434,12 +432,10 @@ namespace BrnNetwork
         const EActiveRaceCarIndex leLocalActiveRaceCarIndex =
             lpInterface->GetActiveRaceCarIndex(lLocalPlayerID);
 
-        // ImpactEvent uses the global ::EActiveRaceCarIndex; the mapping interface uses
-        // BrnNetwork::EActiveRaceCarIndex. Cast the impact indices across the scopes (same values).
         const EActiveRaceCarIndex leAggressorActiveRaceCarIndex =
-            static_cast<EActiveRaceCarIndex>(lpImpactEvent->meAggressorActiveRaceCarIndex);
+            lpImpactEvent->meAggressorActiveRaceCarIndex;
         const EActiveRaceCarIndex leVictimActiveRaceCarIndex =
-            static_cast<EActiveRaceCarIndex>(lpImpactEvent->meVictimActiveRaceCarIndex);
+            lpImpactEvent->meVictimActiveRaceCarIndex;
 
         // Pick the *remote* participant: if we are the aggressor the takedown is "ours" so also
         // feed the battling tracker; if we are the victim only the remote (aggressor) matters.
@@ -524,8 +520,8 @@ namespace BrnNetwork
             return false;
         }
 
-        const BrnGameState::EActiveRaceCarIndex leAggressorActiveRaceCarIndex = lpTakedownEvent->meAggressorIndex;
-        const BrnGameState::EActiveRaceCarIndex leVictimActiveRaceCarIndex    = lpTakedownEvent->meVictimIndex;
+        const ::EActiveRaceCarIndex leAggressorActiveRaceCarIndex = lpTakedownEvent->meAggressorIndex;
+        const ::EActiveRaceCarIndex leVictimActiveRaceCarIndex    = lpTakedownEvent->meVictimIndex;
         CGS_ASSERT(leAggressorActiveRaceCarIndex != leVictimActiveRaceCarIndex,
                    "leAggressorActiveRaceCarIndex != leVictimActiveRaceCarIndex");
 
@@ -618,9 +614,9 @@ namespace BrnNetwork
                 lNewMove.Clear();
                 lNewMove.meAggressiveMoveType      = E_AGGRESSIVE_MOVE_TAKE_DOWN;
                 lNewMove.mAggressorNetworkPlayerID =
-                    lpInterface->GetNetworkPlayerID(static_cast<EActiveRaceCarIndex>(leAggressorActiveRaceCarIndex));
+                    lpInterface->GetNetworkPlayerID(leAggressorActiveRaceCarIndex);
                 lNewMove.mVictimNetworkPlayerID    =
-                    lpInterface->GetNetworkPlayerID(static_cast<EActiveRaceCarIndex>(leVictimActiveRaceCarIndex));
+                    lpInterface->GetNetworkPlayerID(leVictimActiveRaceCarIndex);
                 lNewMove.meTakedownType            = lpTakedownEvent->meType;
                 lNewMove.mbMarkedMan               = lpTakedownEvent->mbMarkedManTakeDown;
                 lNewMove.mbSettledScore            = lbSettledScore;
@@ -797,10 +793,8 @@ namespace BrnNetwork
                                "leAggressorActiveRaceCarIndex != leVictimActiveRaceCarIndex");
 
                     BrnGameState::TakedownEvent lTakedownEvent;
-                    lTakedownEvent.meAggressorIndex        =
-                        static_cast<BrnGameState::EActiveRaceCarIndex>(leAggressorActiveRaceCarIndex);
-                    lTakedownEvent.meVictimIndex           =
-                        static_cast<BrnGameState::EActiveRaceCarIndex>(leVictimActiveRaceCarIndex);
+                    lTakedownEvent.meAggressorIndex        = leAggressorActiveRaceCarIndex;
+                    lTakedownEvent.meVictimIndex           = leVictimActiveRaceCarIndex;
                     lTakedownEvent.meType                  = lMove.meTakedownType;
                     lTakedownEvent.mbMarkedManTakeDown     = lMove.mbMarkedMan;
                     lTakedownEvent.mbRemote                = true;
@@ -841,12 +835,8 @@ namespace BrnNetwork
                     case E_AGGRESSIVE_MOVE_TRADING_PAINT: lImpactEvent.meImpactType = static_cast<BrnPhysics::Vehicle::EImpactType>(1); break;
                     default:                              lImpactEvent.meImpactType = static_cast<BrnPhysics::Vehicle::EImpactType>(0); break;
                     }
-                    // The recv mapping yields BrnNetwork::EActiveRaceCarIndex; ImpactEvent stores the
-                    // global ::EActiveRaceCarIndex (same values) -- cast across the scopes.
-                    lImpactEvent.meAggressorActiveRaceCarIndex =
-                        static_cast<::EActiveRaceCarIndex>(leAggressorActiveRaceCarIndex);
-                    lImpactEvent.meVictimActiveRaceCarIndex    =
-                        static_cast<::EActiveRaceCarIndex>(leVictimActiveRaceCarIndex);
+                    lImpactEvent.meAggressorActiveRaceCarIndex = leAggressorActiveRaceCarIndex;
+                    lImpactEvent.meVictimActiveRaceCarIndex    = leVictimActiveRaceCarIndex;
                     lImpactEvent.mDirection                    = lMove.mDirection;
                     lImpactEvent.mfMagnitude                   = lMove.mfMagnitude;
                     lImpactEvent.mfDuration                    = lMove.mfDuration;

@@ -550,7 +550,7 @@ namespace BrnPhysics
     //
     // The three assert sites are the console's own, with its own file/line: :474 here, and
     // CgsModuleUtils.h:238/:248 inside the inlined single-buffer Lock/UnlockBuffersForIO pair
-    // (LegacySrc CgsModuleUtils.h names both outright). FLAG: this tree's
+    // (the original CgsModuleUtils.h names both outright). FLAG: this tree's
     // CgsModule::Lock/UnlockBuffersForIO<TBuffer> single-buffer templates do NOT carry those two
     // `CGS_ASSERT(lpInputBuffer, "lpInputBuffer")` tripwires. Not added here because that header
     // has ~dozens of includers and the change belongs to it, not to this call site.
@@ -662,11 +662,12 @@ namespace BrnPhysics
     // AND ITS ONE CALLER IS WorldModule::Update @0x827D63E8, NOT PhysicsModule::Update -- `xrefs_to`
     // is a one-element set. It is already wired that way (BrnWorldModule.cpp, under LockForWrite).
     //
-    // ARMS 2 AND 3 ARE NAMED GATES THIS WAVE (BrnPhysicsConductorGates.cpp). That is a matched
-    // split, not a partial: the five per-manager producers write INDEPENDENT per-slot events into one
-    // queue whose consumer is per-slot, and props/deformation own ZERO cache slots today
-    // (usedSlots == 28 == 8 race cars + 20 traffic, runtime-witnessed). A manager that does not push
-    // leaves its own unclaimed slots exactly where they already are.
+    // ALL THREE ARMS ARE REAL BODIES: PropManager::UpdateTriangleCache (PropManager_wQ_03.cpp) and
+    // DeformationManager::UpdateTriangleCache (BrnDeformationManager_Contacts.cpp) landed after this
+    // one. The five per-manager producers write INDEPENDENT per-slot events into one queue whose
+    // consumer is per-slot, so a manager that pushes nothing (props and deformation owned ZERO cache
+    // slots when this landed: usedSlots == 28 == 8 race cars + 20 traffic, runtime-witnessed) leaves
+    // its own unclaimed slots exactly where they already are.
     // ================================================================================================
     void PhysicsModule::UpdateCachedPositions(
         CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer )

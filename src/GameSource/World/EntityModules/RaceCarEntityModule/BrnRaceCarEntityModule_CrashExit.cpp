@@ -18,13 +18,12 @@
 // InputBuffer_PostScene::mCrashInterface and been read by nobody, every frame, forever.
 //
 // ⛔ PostSceneUpdate IS LANDED AS A DELIBERATE SLICE, NOT WHOLE. Its console body calls eight
-// helpers and SIX OF THEM DO NOT EXIST ANYWHERE IN THIS TREE:
-//     UpdateTrafficAndRaceCarNearMisses · ProcessLeapedAndStompedCars · ProcessPowerParking ·
-//     PlaceOnTrackManager::PostSceneUpdate · SendResetOnTrackRequests · CheckForResetOnTrackConditions
-// Reconstructing all six is its own multi-wave slice and none of them is on the crash exit. This
-// body therefore runs the two legs that ARE reachable -- the lock pair and
-// ProcessRaceCarCrashCompleteEvents -- and logs the rest once. That is strictly more than the
-// link stub did, and it is honest about exactly what is missing.
+// helpers, and when this file landed SIX of them did not exist anywhere in this tree. Four are
+// bodied now -- ProcessRaceCarCrashCompleteEvents, SendResetOnTrackRequests,
+// CheckForResetOnTrackConditions and (2026-09-11) UpdateTrafficAndRaceCarNearMisses -- and the
+// remaining THREE still have no body: ProcessLeapedAndStompedCars · ProcessPowerParking ·
+// PlaceOnTrackManager::PostSceneUpdate. This body runs every leg that IS reachable and logs the
+// rest once, so it is honest about exactly what is missing.
 //
 // ⚠️⚠️ THE PARK THAT MATTERS, STATED PLAINLY: SendResetOnTrackRequests is the consumer of
 // RaceCar::mbToBeResetOnTrack. RaceCar::RequestResetOnTrack (BrnRaceCar.cpp:251, real and
@@ -225,7 +224,7 @@ void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
 //
 // Console order:
 //   PerfMon start · assert lpInput/lpOutput · LockForRead(in) · LockForWrite(out)
-//   if (!(lUpdateSet & 1)) UpdateTrafficAndRaceCarNearMisses          [ABSENT]
+//   if (!(lUpdateSet & 1)) UpdateTrafficAndRaceCarNearMisses          ⭐ REPRODUCED (2026-09-11)
 //   ProcessRaceCarCrashCompleteEvents                                 ⭐ REPRODUCED
 //   ProcessLeapedAndStompedCars                                       [ABSENT]
 //   the showtime traffic-density publish into the output interface    [ABSENT helper]
@@ -242,10 +241,17 @@ void RaceCarEntityModule::PostSceneUpdate(
     CGS_ASSERT( lpInput  != 0, "lpInput != NULL" );    // BrnRaceCarEntityModule.cpp:1179
     CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );   // BrnRaceCarEntityModule.cpp:1180
 
-    (void)lUpdateSet;
-
     lpInput->LockForRead();
     lpOutput->LockForWrite();
+
+    // ⭐ THE FIRST OF THE EIGHT CALLEES, at the console's own slot (near-miss producer wave
+    // 2026-09-11). It is the only writer of the near-miss manager's two near lists, so the
+    // near-miss tick that PostPhysicsUpdate runs could not fire without it. Bit 0 of the update
+    // set is the network-catchup skip every module's update carries.
+    if( ( lUpdateSet & 1 ) == 0 )
+    {
+        UpdateTrafficAndRaceCarNearMisses( lpInput );
+    }
 
     ProcessRaceCarCrashCompleteEvents( lpInput );
 
@@ -268,13 +274,13 @@ void RaceCarEntityModule::PostSceneUpdate(
         {
             sbLoggedPostScenePark = true;
             *CgsDev::Log::gpDebugPrint
-                << "[crash-exit] RaceCarEntityModule::PostSceneUpdate SLICE: THREE of the eight"
+                << "[crash-exit] RaceCarEntityModule::PostSceneUpdate SLICE: FOUR of the eight"
                    " console callees are reconstructed -- ProcessRaceCarCrashCompleteEvents,"
-                   " (resetpump wave 2026-08-26) SendResetOnTrackRequests and (roll-frequency"
-                   " wave 2026-09-05) CheckForResetOnTrackConditions. FOUR still have no body"
-                   " anywhere in this tree (UpdateTrafficAndRaceCarNearMisses,"
-                   " ProcessLeapedAndStompedCars, ProcessPowerParking,"
-                   " PlaceOnTrackManager::PostSceneUpdate) [FLAG]\n"
+                   " (resetpump wave 2026-08-26) SendResetOnTrackRequests, (roll-frequency"
+                   " wave 2026-09-05) CheckForResetOnTrackConditions and (near-miss producer"
+                   " wave 2026-09-11) UpdateTrafficAndRaceCarNearMisses. THREE still have no"
+                   " body anywhere in this tree (ProcessLeapedAndStompedCars,"
+                   " ProcessPowerParking, PlaceOnTrackManager::PostSceneUpdate) [FLAG]\n"
                    "[crash-exit] ... and the RESET-ON-TRACK PUMP HAS BOTH PRODUCERS: the crash"
                    " leg (ProcessRaceCarCrashCompleteEvents -> RequestResetOnTrack) and, as of"
                    " 2026-09-05, the WATCHDOG leg (CheckForResetOnTrackConditions @0x822CE9E0 --"

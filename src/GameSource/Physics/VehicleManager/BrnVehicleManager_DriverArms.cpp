@@ -4,9 +4,9 @@
 // THE FOUR VehicleManager ARMS OF VehicleManager::UpdateDrivers @0x82642C68 -- the functions
 // that move a frame's driver-control record OUT of the drained queue and INTO the per-car driver
 // state the vehicle sim reads. UpdateDrivers itself landed last wave
-// (BrnVehicleManager_UpdateDrivers.cpp) with all five callees as named BRN_CONDUCTOR_GATEs; this
-// TU bodies four of them and BrnPhysicalTrafficManager_UpdateTrafficDriver.cpp bodies the fifth.
-// All five gates in BrnPhysicsConductorGates.cpp are DELETED by this wave.
+// (BrnVehicleManager_UpdateDrivers.cpp) with all five callees as named conductor gates; this TU
+// bodies four of them and BrnPhysicalTrafficManager_UpdateTrafficDriver.cpp bodies the fifth.
+// All five of those gates were deleted by the same wave.
 //
 //   VehicleManager::UpdatePlayerDriver   @0x825E9F38  (401 insns)  DWARF BrnVehicleManager.h:875
 //   VehicleManager::UpdateAIDriver       @0x825C5110  (185 insns)  DWARF BrnVehicleManager.h:881

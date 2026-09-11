@@ -13,9 +13,8 @@
 //
 // There is NO .ida-exports/BURNOUT_X360_ARTIST.XEX/0x8260F010.json, and no
 // `BrnPhysics::Props::PropManager::RemoveAllPropsAndParts` row in progress/identity.json --
-// which is why three separate committed banners (BrnPropManager.h:507/:939,
-// PropManager_wQ2_08.cpp:113, BrnPhysicsConductorGates.cpp:500) could only name the address
-// and the instruction count, taken from ProcessInputsPreScene's xrefs_from.
+// which is why three separate committed banners could only name the address and the instruction
+// count, taken from ProcessInputsPreScene's xrefs_from.
 //
 // The 331 instructions below were dumped 2026-08-19 by a headless `idat` run over a PRIVATE
 // copy of "IDA Files/BURNOUT_X360_ARTIST.XEX.i64" (never the original):
@@ -161,20 +160,16 @@
 // and RemovePart (:513). The direct `mRemoveFromCacheQueue.AddEvent` form is used here to match
 // its two siblings; a future RemoveCachedObject landing should convert all three together.
 //
-// ---- ⚠️ LINK-LEVEL, NOT VISIBLE TO `cl /c` (AGENTS.md gotcha 7 / 12) ----------------------
-//   * RemoveAllPropsAndParts is ALSO defined -- inertly -- at
-//     GameSource/Physics/BrnPhysicsConductorGates.cpp:514-518 (BRN_CONDUCTOR_GATE at :517).
-//     That gates file IS mounted (build_game_exe.bat:1177). Mounting THIS partfile without
-//     retiring that gate in the SAME change is an LNK2005 duplicate. Reported, NOT removed
-//     here: gate retirement is conductor-only.
+// ---- LINK-LEVEL, NOT VISIBLE TO `cl /c` (AGENTS.md gotcha 7 / 12) -------------------------
+//   * RemoveAllPropsAndParts once had an inert conductor-gate twin; that gate was retired when
+//     this partfile mounted, so the body below is the symbol's only definition.
 //   * This TU introduces NO new unresolved external. Its five callees are:
 //       InputBuffer::GetRemoveAllRigidBodiesQueue()  -- bodied this wave in the already-mounted
 //                                                      CgsPhysicsSimulationModuleIO_InputBuffer.cpp
 //       BaseEventQueue<InRemoveAllRigidBodies>::AddEvent()          header inline
 //       BaseEventQueue<InEventRemoveFromCache>::AddEvent(const T&)  header inline
 //       BitArray<15>/<30>::{GetFirstNonZeroBit,GetNextNonZeroBit,UnSetAll}  header inline
-//     Everything it touches on `this` is a data member. The only thing the linker still needs
-//     from the wave is the retirement above.
+//     Everything it touches on `this` is a data member.
 // ==========================================================================================
 
 #include "GameSource/Physics/PropManager/BrnPropManager.h"

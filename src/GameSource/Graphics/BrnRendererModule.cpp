@@ -271,12 +271,6 @@ namespace
 // no pixels either way.
 #define BRN_GPU_PERFMON_AVAILABLE 0
 
-// Minimal constructor for the off-path job placeholder embedded in BrnRendererModule
-// (Option B). The job system is reconstructed with the threading core; on the
-// single-threaded boot it carries no behaviour, so this definition keeps the link
-// closed without faking functionality. (BufferedDispatchFrame is the REAL type now --
-// its stub ctor is gone with the world-pass mount.)
-EA::Jobs::Job::Job(s32 /*liPriority*/) {}
 #include "GameSource/Gui/BrnGuiMovieManager.h"   // BrnGui::gpActiveMovieManager (the PC presentation draw)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [diag] BRN_IM2D_TRACE probes
 #include "rw/rwcore_structs.h"                   // rw::LinearResourceAllocator (world dispatch bin memory)
@@ -4196,8 +4190,8 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // composite further down, tested a THIRD time here, exactly as the console tests it.
     //
     // The statements live in the sibling TU BrnRendererModulePostFx.cpp for the one translation-
-    // unit reason that file's banner sets out (this file cannot include BrnPostFx.h while
-    // BrnRendererModule.h carries the placeholder EA::Jobs::Job).
+    // unit reason that file's banner sets out -- now vestigial, and a code move away from folding
+    // back into this file.
     // ⚠ THE ONE PC PRECONDITION THIS BLOCK CARRIES ON TOP OF THE CONSOLE'S GATE, and it is not
     // optional. BeginTintBlend LOCKS the tint volume texture (Tint::BeginBlendJob ->
     // renderengine::Texture::Lock) and the ONLY thing that unlocks it is BrnPostFx::Render's step-1
@@ -5296,9 +5290,9 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         //
         // This is the block that turns the layer-0 internal BrnEffectsFrame into BrnPostFx's
         // m_enabledFx bits and its four effect state blocks. Its statements live in the sibling TU
-        // BrnRendererModulePostFx.cpp for one translation-unit reason (the EA::Jobs::Job placeholder
-        // in BrnRendererModule.h) that that file's banner sets out in full; it is called from here,
-        // at the console's position, with the console's gate.
+        // BrnRendererModulePostFx.cpp for the one translation-unit reason that file's banner sets
+        // out -- now vestigial; it is called from here, at the console's position, with the
+        // console's gate.
         //
         // THE GATE IS `if (mbRenderPostFX)` (`if (*HIDWORD(v301[0]))` at pseudocode line 965, i.e.
         // *(this + 50204) == this+0xC41C, which BrnGraphics::DebugComponent::OnActivate @0x823F7B98

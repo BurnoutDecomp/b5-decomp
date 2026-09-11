@@ -630,40 +630,11 @@ namespace BrnWorld
     // potential-contact routing. WorldModule::EntityModulePrePhysicsUpdate
     // (BrnWorldModule.cpp:1688) calls it once per frame inside miPhysicsPropPrePhysicsUpdatePM.
     //
-    // ⚠️ DUPLICATE DEFINITION / HARD LINK BREAK -- RE-CONFIRMED 2026-08-18 (round 2, and
-    // re-measured again in the round-3 fix pass), STILL PRESENT. There is an inert boot gate
-    // for this exact function in b5-decomp/src/GameSource/World/WorldLinkStubs.cpp:
-    //
-    //     lines 1174-1178  the 5-line `// BOOT GATE (world-IO wave 2026-07-27):` comment
-    //     line  1179       void BrnWorld::PropEntityModule::PrePhysicsUpdate(
-    //                          struct CgsModule::IOBufferStack *, struct CgsModule::IOBufferStack *,
-    //                          class BrnWorld::PropEntityIO::InputBuffer_PrePhysics *,
-    //                          class BrnWorld::PropEntityIO::OutputBuffer_PrePhysics *,
-    //                          unsigned short)
-    //     lines 1180-1188  `{ ... one-shot "inert (body not reconstructed) [FLAG PC boot
-    //                      gate]" log ... }`   (1188 is the closing brace)
-    //
-    // `BrnUpdateSet` is `typedef u16` (SharedClasses/BrnSharedConstants.h:12), so that
-    // parameter list is TOKEN-IDENTICAL to the definition below -- same mangled symbol, two
-    // definitions, LNK2005. `cl /c` cannot see it and coverage_check does not scan
-    // WorldLinkStubs.cpp, so BOTH gates read green while the link is broken.
-    //
-    // MOUNT/RETIRE RULE (AGENTS.md gotcha 7) -- the gate is deliberately NOT retired here,
-    // because retiring it before the mount leaves the symbol undefined for every already-
-    // mounted caller. The conductor does all of this in ONE change, in this order:
-    //   1. add this file to tools/build/build_game_exe.bat (re-checked 2026-08-18:
-    //      `grep -c PropEntityModule_wQ tools/build/build_game_exe.bat` == 0, so NO wQ_* or
-    //      wQ2_* partfile is mounted yet -- mounting this one alone will not link, because
-    //      its siblings' externals are still open);
-    //   2. delete WorldLinkStubs.cpp:1174-1188 exactly (that whole range and nothing more --
-    //      1173 and 1189 are blank lines, 1172 closes the neighbouring PostSceneUpdate gate),
-    //      replacing it with the house marker `// GATE RETIRED <date>:
-    //      BrnWorld::PropEntityModule::PrePhysicsUpdate @0x82303048 is now REAL.` in the form
-    //      used at WorldLinkStubs.cpp:1102 / :1110 / :1118 / :1126;
-    //   3. re-LINK. A recompile proves nothing here -- only the linker sees this.
-    // NOTE the two NEIGHBOURING gates in the same file belong to the wQ2_* landers, not to
-    // this file: PostSceneUpdate at :1163 (block 1158-1172) and PostPhysicsUpdate at :3171.
-    // Retiring any of them is a per-function decision tied to that function's own mount.
+    // PrePhysicsUpdate once had an inert boot gate in WorldLinkStubs.cpp whose parameter list was
+    // TOKEN-IDENTICAL to the definition below (`BrnUpdateSet` is `typedef u16`), i.e. the same
+    // mangled symbol twice and an LNK2005 that `cl /c` could not see and coverage_check did not
+    // scan for. That gate was deleted in the same change that mounted this file, so the body
+    // here is its only definition.
     //
     // REGISTER -> PARAMETER MAP (prologue 0x82303054..0x82303064, measured):
     //   r3 -> r31 this | r4 UNUSED | r5 UNUSED | r6 -> r24 lpInput | r7 -> r23 lpOutput

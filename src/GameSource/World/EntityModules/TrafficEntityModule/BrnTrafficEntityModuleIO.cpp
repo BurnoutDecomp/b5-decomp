@@ -135,6 +135,16 @@ namespace BrnTrafficIO
         return &mTrafficDirectorOutputInterface;
     }
 
+    // (baked 401): write-lock; return &mTrafficDirectorOutputInterface (this + 6208). The
+    // write twin of the getter above, sitting between the sound (398) and game-event (404)
+    // write getters in the ladder. Producer:
+    // BrnTraffic::TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults.
+    TrafficDirectorOutputInterface* OutputBuffer_PostPhysics::GetTrafficDirectorOutputInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mTrafficDirectorOutputInterface;
+    }
+
     // X360 0x827A0AD0 (baked 403): read-lock; return &mGameEventQueue (this + 9824).
     const OutputBuffer_PostPhysics::GameEventQueue* OutputBuffer_PostPhysics::GetGameEventQueue() const
     {

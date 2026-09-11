@@ -80,9 +80,7 @@
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 
-// The spine buffers. BrnModeManager.h deliberately BANS this include (its EActiveRaceCarIndex
-// dual-scope banner at :53-61); each partfile includes it locally, where the scope question is
-// local -- which is why every enum-typed parameter below is spelled with the leading `::`.
+// The spine buffers. BrnModeManager.h keeps this include out; each partfile includes it locally.
 #include "GameSource/GameState/BrnGameStateModuleIO.h"
 #include "GameSource/GameState/BrnGameStateModule.h"                        // GetCarSelectManager / GetTrainingManager (the freeburn clock gate)
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"        // TrainingManager::IsInPictureParadise (gsm+0xB644)

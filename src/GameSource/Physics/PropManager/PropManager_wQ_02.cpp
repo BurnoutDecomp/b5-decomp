@@ -72,14 +72,12 @@
 //      PropManager::CreatePart @0x826278D0 and PropManager::RemovePart @0x8260F988 both have real
 //      bodies in the sibling round-2 part-file
 //      b5-decomp/src/GameSource/Physics/PropManager/PropManager_wQ2_04.cpp.
-//    They are still in NO MOUNTED translation unit (tools/build/build_game_exe.bat lists no
-//    PropManager_wQ* part-file at all), so this file gating green still does not mean the TU links
-//    -- but the fix is to MOUNT wQ2_04 alongside this file, not to stub either name. A trap stub
-//    beside a real body is an LNK2005 that `cl /c` cannot see.
+//    wQ2_04 is mounted alongside this file, which is what closes the link -- the fix was never to
+//    stub either name. A trap stub beside a real body is an LNK2005 that `cl /c` cannot see.
 //
-// ⚠️ ODR: neither function has a second definition, a trap stub, or a one-shot gate anywhere
-//    (grepped b5-decomp/src incl. GameSource/Physics/BrnPhysicsConductorGates.cpp and
-//    GameSource/World/WorldLinkStubs.cpp). This file introduces no LNK2005 and retires no gate.
+// ODR: neither function has a second definition, a trap stub, or a one-shot gate anywhere
+//    (grepped b5-decomp/src, the stub TUs included). This file introduces no LNK2005 and retires
+//    no gate.
 // ==========================================================================================
 
 #include "GameSource/Physics/PropManager/BrnPropManager.h"

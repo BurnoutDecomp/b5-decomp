@@ -201,10 +201,9 @@
 // -------------------------------------------------------------------------------------------------
 // LINK-LEVEL FACTS (gate-green != link-green) -- RE-GREPPED 2026-08-19 (wave Q6)
 // -------------------------------------------------------------------------------------------------
-//   * NO gate and NO stub exists for ANY of this file's three functions. Re-grepped this wave over
-//     GameSource/Physics/BrnPhysicsConductorGates.cpp, GameSource/World/WorldLinkStubs.cpp and the
-//     whole of b5-decomp/src: the only hits are the header declarations and comments. This file is
-//     the SOLE definition of all three.
+//   * NO gate and NO stub exists for ANY of this file's three functions. Re-grepped over the whole
+//     of b5-decomp/src, the stub TUs included: the only hits are the header declarations and
+//     comments. This file is the SOLE definition of all three.
 //   * ⭐ THIS FILE IS MOUNTED (tools/build/build_game_exe.bat:1810), so the two Do* bodies landing
 //     here go straight into the link. Their callees, checked ONE BY ONE this wave:
 //       BODIED IN THE TREE -- PropManager::HasProp/HasPartJustBeenRemoved (PropManager_wQ2_04.cpp),
@@ -243,10 +242,9 @@
 //     workers it delegates to landed with it: ::BuildGPInstance @0x829222A0 and
 //     ::CollideGPInstances @0x829253C8, in the sibling partfile ContactGeneratorJob_wQ6_01.cpp.
 //   * ✅ RESOLVED, was "INHERITED, still open": PropManager_wQ_03.cpp's UpdateTriangleCache and
-//     PropManager_wQ2_02.cpp's Begin/End no longer have gate bodies -- all three retired in
-//     BrnPhysicsConductorGates.cpp (:471 / :489 now read GATE RETIRED), and both partfiles are
-//     MOUNTED as a pair right after this one (bat:1816 wQ2_02, bat:1817 wQ_03; wQ_03 alone is an
-//     LNK2019). Mount + retire happened in one change, as that note asked.
+//     PropManager_wQ2_02.cpp's Begin/End no longer have gate bodies -- all three gates are gone,
+//     and both partfiles are MOUNTED as a pair right after this one (wQ_03 alone is an LNK2019).
+//     Mount + retire happened in one change, as that note asked.
 // =================================================================================================
 
 #include "GameSource/Physics/PropManager/BrnPropManager.h"

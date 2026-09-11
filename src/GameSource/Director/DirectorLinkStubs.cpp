@@ -127,7 +127,23 @@ namespace BrnDirector
     //        SDKs/Packages/ICE/ICEWrapper.cpp.
     // The two non-ICE ones are closed: SharedCameraContainer::GetGameplayCameraHelperIndex
     // (Camera/BrnSharedCameraContainer.cpp mounted) and Camera::Camera::SetRequestedBorderPostFX
-    // (bodied in Camera/Camera.cpp). ⇒ these five come out with the ICE mount, nothing else.
+    // (bodied in Camera/Camera.cpp).
+    // Those ten are the DIRECT cost only. Measured 2026-09-11 on the movie-player half itself,
+    // the mount it waits on drags in nine more the link does not have either:
+    //     4  BehaviourInterpolate::{GetCamera, SetInterpolationMode, SetupCameraAFromCamera,
+    //        SetupCameraBFromCamera} -- declared in Camera/Behaviours/BrnBehaviourInterpolate.h,
+    //        bodied nowhere.
+    //     3  BehaviourManager's three BehaviourHandle<BehaviourInterpolate> overloads
+    //        (NewBehaviourInterpolate / ReleaseBehaviour / SetBehaviourUpdatesDuringPause) --
+    //        declared in Camera/BrnBehaviourManager.h, bodied nowhere.
+    //     2  ICEWrapper::{PlayMovie, IsPlayingMovie}.
+    // ICEWrapper::PlayMovie is the deep one and it is what really holds these five: it calls
+    // ICEManager::Update, which calls ICEController::Update, whose body needs the whole
+    // unmounted ICE editor group (the ICEAuthor / ICEController / ICEWidget TUs). Measured
+    // cost of mounting that group whole: 15 remaining holes, most of them small -- the six
+    // ICETake interval accessors, ICEMath::Sqrt, two CgsDev::DebugRender 2D primitives, and
+    // rwcore's stdc string/format wrappers, whose vendor TU simply is not on the build.
+    // ⇒ these five come out with that wave, not before.
     void ArbStateCrashNav::Construct()                          { ArbitratorState::Construct(); }
     // Prepare forwards to the base: the override declared in BrnArbStateCrashNav.h adds a vtable
     // slot MainDirector references, so it must be defined even while the TU is unmounted.
@@ -332,29 +348,36 @@ namespace vpu
 // !IsAllocated(), MomentSelector::Update's classification loop skips them all, muValidMoments
 // is pinned at 0, and ArbStateRoaming::Update's DRIVING arm never calls SelectBestMoment.
 //
-// Mounting the rest of the closure (BrnMomentControllerNewMoment.cpp + the eleven Moments/*.cpp
-// that are still unmounted) costs 135 non-CRT unresolved externals, re-measured 2026-09-11 by
+// Mounting the rest of the closure (BrnMomentControllerNewMoment.cpp + the eight Moments/*.cpp
+// that are still unmounted) costs 91 non-CRT unresolved externals, re-measured 2026-09-11 by
 // compiling every candidate with the shipping flags and subtracting the defined-symbol set of
 // the whole current object list. By family:
-//     39  detail::MomentSharedInfo_* reach shims. The record itself IS homed now
-//         (MomentController/BrnMomentSharedInfo.h) and eleven of its shims are bodied; these
-//         are the rest, each still a declaration at the head of the TU that reads it.
-//     33  per-moment-class virtuals and privates (Destruct / GetInstanceType / SetParameters /
+//     34  per-moment-class virtuals and privates (Destruct / GetInstanceType / SetParameters /
 //         Prepare / Release, plus MomentPlayerJumping::UpdateCamera)
 //     24  BehaviourCollection<T,P,N> methods -- six template methods x four instantiations
-//     24  other subsystems (BehaviourRig's virtual set + Parameters::Construct, six
-//         vector-deleting destructors, BehaviourPassengerCam::SetParameters,
-//         BehaviourLooseAttachment::Parameters::Construct, Camera::SetRequestedBorderPostFX,
+//     13  other subsystems (BehaviourRig's virtual set + Parameters::Construct,
+//         BehaviourPassengerCam::SetParameters, BehaviourLooseAttachment::Parameters::Construct,
+//         BehaviourManager::NewBehaviour<Behaviour>, Camera::SetRequestedBorderPostFX,
 //         ShotSelector::GetCrashShot, DirectorResourceManager::GetKeyAnim)
-//     13  other detail:: reach shims (ICETakeData_*, IceAnimShotData_*, Vehicle_*,
-//         BehaviourRig_*, CameraState_AppendToDebugLog, ...)
+//     10  other detail:: reach shims (the four de-inlined BehaviourHandle accessors, Vehicle_*,
+//         BehaviourRig_*, Behaviour_SetUseCollisionPolicy, CameraState_AppendToDebugLog,
+//         ShotReference_IsIceAnimClassKeyTagged)
+//      6  vector-deleting destructors (Behaviour, BehaviourInterpolate, BehaviourPassengerCam,
+//         BehaviourRig, CollisionPolicy, VisibilityCollisionPolicy)
+//      2  detail::MomentSharedInfo_* reach shims -- all that is left of what was the biggest
+//         family. The rest are bodied against the homed record in BrnMomentSharedInfo.cpp;
+//         these two reach what this tree has not carved: GameState::mDirectorProfileData's
+//         opaque tail (GetStuntAbort493) and VehicleTracker's crash-type word
+//         (GetCurrentCrashType).
 //      2  BehaviourParameterBank accessors -- and only the two INDEXED ones are left
 //         (GetPlayerJumpingRigShotParams / GetPlayerJumpingBystanderShotParams). The four
 //         single-block moment accessors are bodied; see that header's RECORD MAP for why the
 //         indexed pair needs its call sites renumbered before it can follow.
+// (operator delete(void*,size_t) and type_info's vftable also come up unresolved against the
+// object list and are NOT counted above: the whole build already leaves both to the CRT.)
 // Every `AllocateVoid<MomentXxx>()` arm placement-constructs a MomentXxx, which emits its
 // vftable, which needs every virtual of that class defined at link -- so the twelve-arm switch
-// drags all twelve subclasses in whole. That is what makes this ONE gate cost 135 symbols while
+// drags all twelve subclasses in whole. That is what makes this ONE gate cost 91 symbols while
 // the individual moment TUs cost nothing: mounted without NewMoment, a moment TU emits no
 // vftable and so drags none of its siblings' virtuals in.
 //
@@ -363,13 +386,14 @@ namespace vpu
 // declaration-only, and its call is commented out in MainDirector::Update).
 //
 // DELETE-WHEN, in dependency order -- do NOT start at the bottom:
-//   1. Body the rest of the MomentSharedInfo shims against the homed record. Each one is a
-//      named member read; what takes the time is checking the role name the call site coined
-//      against the member it lands on -- two of the eleven already bodied turned out to be
-//      misnamed, and both are recorded in the record's own header.
+//   1. DONE 2026-09-11: the MomentSharedInfo shim family is bodied against the homed record
+//      (BrnMomentSharedInfo.cpp), which took BrnMomentHitTraffic.cpp, BrnMomentStationaryCrash.cpp
+//      and BrnMomentNewCarJoined_wN_01.cpp to zero and mounted them. Two shims are left and
+//      both need a member this tree has not carved, not more shim work.
 //   2. Body MomentController::UpdateAllMoments and MainDirector::UpdateMoments, then un-gate
 //      the commented-out call in MainDirector::Update. Those two are NOT in this file set.
-//   3. Body the six BehaviourCollection<> template methods and the per-class virtuals.
+//   3. Body the six BehaviourCollection<> template methods and the per-class virtuals. This
+//      is now the largest family by far: 58 of the remaining 91.
 //   4. Mount the closure TUs and delete the gate below.
 //
 // The moment pool's bucket is widened on this x64 host (static_assert per moment type; see

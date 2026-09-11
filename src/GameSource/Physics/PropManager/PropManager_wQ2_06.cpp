@@ -52,20 +52,11 @@
 //    member and EventQueue::AddEvent are public and homed, so nothing is blocked. The undeclared
 //    `AddCachedObject` helper is filed as a header request, not a blocker.
 //
-// ⚠️ LINK-LEVEL DUPLICATES -- `cl /c` cannot see these; re-measured 2026-08-19 (wave Q6 A2)
-//    rather than inherited, because both entries here had gone stale:
-//      * PropManager::Prepare's link stub at WorldLinkStubs.cpp is GONE -- RETIRED 2026-08-18 with
-//        the wave-Q4 PropManager mount; that file now carries the tombstone
-//        "GATE RETIRED 2026-08-18 ... PropManager::Prepare @0x8260EE18 is REAL in
-//        PropManager_wQ2_06.cpp" at WorldLinkStubs.cpp:513. This file IS mounted
-//        (tools/build/build_game_exe.bat:1799), and it links, which is the proof.
-//      * PropManager::OutputUpdatedProps's inert one-shot gate is at
-//        b5-decomp/src/GameSource/Physics/BrnPhysicsConductorGates.cpp:487-490 -- NOT :507, which
-//        is what this banner used to say and what the parked body's banner still says. ⛔ IT IS
-//        STILL LIVE, and now that the body below is landed it is a REAL LNK2005 duplicate. THE
-//        CONDUCTOR MUST DELETE BrnPhysicsConductorGates.cpp:487-490 IN THE SAME COMMIT. Reported,
-//        not removed (AGENTS.md gotcha 7 + this wave's ownership split: that file is the
-//        conductor's).
+// LINK-LEVEL DUPLICATES -- `cl /c` cannot see these. Both entries this banner used to track are
+//    now closed: PropManager::Prepare's link stub was retired 2026-08-18 with the wave-Q4
+//    PropManager mount, and PropManager::OutputUpdatedProps's inert one-shot conductor gate has
+//    been deleted, so the body below is that symbol's only definition. This file is mounted and it
+//    links, which is the proof.
 //
 // ✅ EVERY CALLEE REACHED FROM THIS FILE HAS A BODY IN THE TREE (round-2 MUST_FIX, applied;
 //    re-grepped 2026-08-18). The earlier banner said `PropManager::AddPropToSim` @0x826274D8 was
@@ -74,20 +65,14 @@
 //    b5-decomp/src/GameSource/Physics/PropManager/PropManager_wQ2_05.cpp, with a signature matching
 //    this file's call site parameter for parameter. Do NOT add a trap stub for it beside that body
 //    (an LNK2005 `cl /c` cannot see), and do not hold this file's mount for it.
-//    The only LINK-level item left is the one listed above: the OutputUpdatedProps gate at
-//    BrnPhysicsConductorGates.cpp:487-490. Re-grepped 2026-08-19 for the newly landed body's own
-//    two callees, both REAL and both mounted:
+//    Re-grepped 2026-08-19 for the newly landed body's own two callees, both REAL and both
+//    mounted:
 //      * PhysicsModuleIO::OutputBuffer::GetPropManagerOutputInterface -- bodied at
 //        BrnPhysicsModuleIO_OutputBuffer.cpp:188 (write overload, X360 0x825C0DC8), MOUNTED.
-//      * Props::PropOutputInterface::AppendUpdatedProps @0x826153A0 -- bodied at
-//        SharedIO/BrnPropOutputInterface.cpp:36. ⛔ THAT TU IS **NOT** IN build_game_exe.bat
-//        (`grep -c` == 0 on 2026-08-19), so it is THE ONE LINK HOLE this file has. MEASURED with
-//        dumpbin, not asserted: this file's .obj carries the UNDEF
-//        `?AppendUpdatedProps@PropOutputInterface@Props@BrnPhysics@@QEAAXPEBV?$EventQueue@
-//        UUpdatePropEvent@Props@BrnPhysics@@$0MI@@CgsModule@@@Z`, and BrnPropOutputInterface.obj
-//        defines that BYTE-IDENTICAL name -- so mounting that one file closes it exactly (it
-//        pulls in nothing else: its own obj has only 4 UNDEFs, the three assert entry points and
-//        memcpy). Reported, not mounted from here: the build script is the conductor's.
+//      * Props::PropOutputInterface::AppendUpdatedProps -- bodied in
+//        SharedIO/BrnPropOutputInterface.cpp, which IS mounted; that closed the one link hole
+//        this file had. Measured with dumpbin, not asserted: this file's .obj UNDEF for that
+//        symbol and the definition in BrnPropOutputInterface.obj are the same decorated name.
 //    Every OTHER callee was checked and is real: PropInstance::SetTransform / ::SetLinearVelocity
 //    (BrnPropInstance.cpp:24/:56), CgsDev::DebugComponent::Register (CgsDebugComponent.cpp:66),
 //    rw::BaseResourceDescriptor::BaseResourceDescriptor (vendor .../BaseResourceDescriptor.cpp:35),

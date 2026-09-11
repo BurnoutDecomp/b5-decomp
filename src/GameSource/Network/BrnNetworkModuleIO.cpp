@@ -576,11 +576,7 @@ namespace BrnNetworkModuleIO
     // CgsSystem::Time::SetFloatVal(0.0f), the two race-car slots are set to "none" (-1), the finish
     // distance is -1.0f, eliminations is 0, and the three trailing bool bytes are cleared.
     //
-    // NOTE: the two EActiveRaceCarIndex fields resolve to BrnNetwork::EActiveRaceCarIndex (from
-    // BrnNetworkSharedIO.h; BurnoutConstants.h is NOT included by BrnNetworkModuleIO.h), whose only
-    // enumerator is E_ACTIVE_RACE_CAR_NONE == -1 -- exactly the X360 store. Using the
-    // ::E_ACTIVE_RACE_CAR_INDEX_INVALID spelling here would not compile (out of scope). This mirrors
-    // the committed sibling InGamePlayerStatusData::Clear.
+    // This mirrors the sibling InGamePlayerStatusData::Clear.
     void PlayerResultsInterface::Clear()
     {
         for (s32 liIndex = 0; liIndex < 8; ++liIndex)
@@ -588,8 +584,8 @@ namespace BrnNetworkModuleIO
             PlayerResultsData& lRecord = maPlayerResultsData[liIndex];
 
             lRecord.mFinishTime.SetFloatVal(0.0f);                 // +0x00 (out-of-line SetFloatVal)
-            lRecord.meActiveRaceCarIndex = E_ACTIVE_RACE_CAR_NONE; // +0x08 (stw -1)
-            lRecord.meEliminatorIndex    = E_ACTIVE_RACE_CAR_NONE; // +0x0C (stw -1)
+            lRecord.meActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID; // +0x08 (stw -1)
+            lRecord.meEliminatorIndex    = ::E_ACTIVE_RACE_CAR_INDEX_INVALID; // +0x0C (stw -1)
             lRecord.mfDistanceToFinish   = -1.0f;                  // +0x10 (stfs flt_820037C8)
             lRecord.miEliminations       = 0;                      // +0x14 (stw 0)
             lRecord.mbValid              = false;                  // +0x18 (stb 0)

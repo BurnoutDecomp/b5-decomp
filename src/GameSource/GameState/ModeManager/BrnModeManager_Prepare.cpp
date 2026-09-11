@@ -25,9 +25,7 @@
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 
-// The header deliberately BANS BrnGameStateModuleIO.h (the dual-scope EActiveRaceCarIndex hazard,
-// BrnModeManager.h:53-61) and tells each agent to include it in its OWN partfile instead. None of
-// the four signatures bodied here names EActiveRaceCarIndex, so the scope question stays local.
+// BrnModeManager.h keeps BrnGameStateModuleIO.h out; each partfile includes it itself.
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                        // OutputBuffer::GetGameActionQueue
 #include "GameSource/GameState/BrnGameStateModule.h"                          // GameStateModule (mpGameStateModule reads)
 #include "GameSource/GameState/NetworkRoundManager/BrnNetworkRoundManager.h"  // the round index + the StartNetworkGameEvent

@@ -22,39 +22,14 @@
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"   // K_INVALID_ENTITY_ID  (dword_82F2A3A4)
 #include "GameShared/GameClasses/Physics/CgsRigidBody.h"       // K_INVALID_RIGID_BODY_ID (qword_82F2A3A8)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.h"   // BrnPhysics::Vehicle::DebugComponent (the per-car component this seats)
 
 namespace BrnPhysics
 {
 namespace Vehicle
 {
-namespace
-{
-    // GATE: BrnPhysics::Vehicle::DebugComponent::Construct(&maRaceCarDebugComponent[i],
-    // &maRaceCarVehicles[i]) @0x826336A0. BLOCKER: maRaceCarDebugComponent is an OPAQUE
-    // 8x1024-byte span (the component models 112 of its 1024 bytes) and DebugComponent has no
-    // Construct on its reconstructed surface -- constructing into it would write unmodelled
-    // memory. VehicleManager::Construct already declines the same object for the same reason.
-    // DELETE-WHEN the vehicle DebugComponent's own reconstruction pass lands.
-    void LogDebugComponentGate()
-    {
-        static bool sbLogged = false;
-        if (sbLogged)
-        {
-            return;
-        }
-        sbLogged = true;
-        if (CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[T3-gate] VehicleManager::PrepareData: per-car DebugComponent::Construct"
-                   " @0x826336A0 skipped (opaque 1024B span) [FLAG PC partial gate]\n";
-        }
-    }
-}
-
 // @0x82633568. Returns the constant 1; there is no failure path.
 bool VehicleManager::PrepareData(rw::IResourceAllocator* lpPhysicsAllocator)
 {
@@ -85,7 +60,11 @@ bool VehicleManager::PrepareData(rw::IResourceAllocator* lpPhysicsAllocator)
         maRaceCarDrivers[liCar].Prepare();                                        // +64, stride 224
         maRaceCarVehicles[liCar].Construct();
 
-        LogDebugComponentGate();   // stands in for DebugComponent::Construct @0x826336A0
+        // FLAG (span cast, deliberate): maRaceCarDebugComponent is the opaque 8x1024 span, the
+        // same sanctioned cast seam VehicleManager::Construct and UpdateVehiclePhysics already
+        // use on it. Construct reaches its fields at in-slot offsets for exactly that reason.
+        reinterpret_cast<DebugComponent*>(&maRaceCarDebugComponent[liCar][0])
+            ->Construct(&maRaceCarVehicles[liCar]);
 
         mabRaceCarDebugComponentRegistered[liCar] = false;                        // +171456 + i
         maRaceCarEntityIDs[liCar].muValue = CgsSceneManager::K_INVALID_ENTITY_ID; // +43584 + 4i

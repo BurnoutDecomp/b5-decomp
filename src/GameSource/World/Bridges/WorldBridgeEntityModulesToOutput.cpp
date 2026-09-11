@@ -727,9 +727,9 @@ void BridgeWorldEntityInfoToOutput(
 // ----------------------------------------------------------------------------
 // BridgePhysicsToOutput  @ 0x827AEB18
 //
-// [showtime score wave 2026-08-29] GATE RETIRED, PARTIALLY -- the CONTACT-SPY leg only.
-// This replaces the one-shot inert stub that stood in WorldLinkStubs.cpp since the
-// world-drive wave (2026-07-27). The caller already exists and already brackets it
+// [showtime score wave 2026-08-29] ONLY THE CONTACT-SPY LEG IS REAL HERE. It replaced the
+// one-shot inert stub that had stood since the world-drive wave (2026-07-27).
+// The caller already exists and already brackets it
 // correctly: BrnWorldModule.cpp:3183 runs it every frame inside
 // LockBuffersForIO(lpUpdateOutputBuffer, lpPhysicsOutput).
 //

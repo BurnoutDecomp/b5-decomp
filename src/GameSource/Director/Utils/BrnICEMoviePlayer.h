@@ -339,10 +339,9 @@ private:
     void StartCurrentMovie();
 
     // Fire the "2dFlash" start hook on this player's camera for the current movie.
-    // FLAG: reaches the camera-effects start-hook fields, which live inside the minimal
-    // Camera slice's opaque cascade -- DECLARATION-ONLY here; its body lands when the
-    // Camera effects layer is modelled. Declared so Update reads idiomatically by name
-    // rather than poking camera internals through an offset.
+    // Bodied in BrnICEMoviePlayer.cpp: the camera-effects start-hook fields are now
+    // modelled, so this is CameraEffects::SetStartHookName("2dFlash", 1.0f) -- which is
+    // exactly the three stores the recorded Update folds in at each of its flash sites.
     void ApplyFlashHookToCamera();
 
 public:

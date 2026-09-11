@@ -189,9 +189,9 @@ void PlaceOnTrackManager::Construct(RaceCarEntityModule* lpRaceCarEntityModule)
 // byte of the event (`BYTE1(*v4) != 5`), not through SceneQueryId::GetOwner. The query
 // id's low byte is the active-race-car index that asked.
 //
-// ⚠️ VERSION DRIFT vs the LegacySrc tree, ARTIST is authority on all three:
+// ⚠️ VERSION DRIFT vs the earlier source revision; the retail binary is authority on all three:
 //   * the transform is built by BrnMath::BuildTransform(pos, direction, normal), NOT by
-//     the hand-rolled Normalize/Cross chain the 2007 source shows;
+//     the hand-rolled Normalize/Cross chain the earlier revision shows;
 //   * the velocity handed to ResetActiveRaceCar is lResetDirection * speed, NOT
 //     lTransform.ZAxis() * speed;
 //   * ARTIST adds the two "normal and reset direction are too similar" guards and the
@@ -340,7 +340,7 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
         // ⚠️ [FLAG PC bring-up] IT STAYS PARKED HERE ANYWAY, for the reason that survives: this
         // arm runs for a car ActiveRaceCar::Attach has just spawned, whose mPhysicsState is
         // itself unseeded at that moment -- so the fallback would hand out THAT, not a pose. The
-        // requested position is used instead, which is what the LegacySrc tree's own
+        // requested position is used instead, which is what the earlier revision's own
         // no-intersection arm does and is exactly the pose the request carried.
         // ⭐ The ring itself is now WRITTEN per frame (ActiveRaceCar::UpdateResetTransform, landed
         // 2026-08-26), but it only fills while the car is inside the AI section system, which
@@ -789,7 +789,8 @@ namespace
 //
 // WHY IT EXISTS, measured. RequestPlaceOnTrack latches a request; the console answers it
 // by round-tripping a fine line test through the scene manager. On PC that round trip is
-// severed in FIVE independent places, every one of them a stub or an absent body:
+// severed in FIVE independent places. Rungs 2, 4 and 5 named a stub that has since been
+// retired -- each is corrected in place below; the severance itself is still real:
 //   1. PlaceOnTrackManager::PostSceneUpdate @0x822D3168 -- absent (this wave leaves it so)
 //   2. RaceCarEntityModule::PostSceneUpdate @0x822FE3F0 -- ⚠️ THIS RUNG IS STALE AND IS
 //      CORRECTED 2026-08-26 (resetpump): it has NOT been a WorldLinkStubs stub since the
@@ -800,8 +801,12 @@ namespace
 //   3. OutputBuffer_PostScene::GetSceneFineLineTestQueue -- declaration-only; the member is
 //      a 16400-byte opaque blob with no AddEvent (its Construct now runs -- resetpump wave --
 //      but the member type itself is still a `maReserved` slice)
-//   4. WorldModule::BridgeRaceCarModuleToSceneModule_PostScene -- WorldLinkStubs.cpp:2488 stub
-//   5. SceneManagerModule::ProcessSceneQueries -- WorldLinkStubs.cpp:2287 stub;
+//   4. WorldModule::BridgeRaceCarModuleToSceneModule_PostScene -- ⚠️ STALE, CORRECTED
+//      2026-09-11: it is no longer a WorldLinkStubs stub but a real body in the mounted
+//      BrnWorldModule_wG_Bridges_03.cpp.
+//   5. SceneManagerModule::ProcessSceneQueries -- ⚠️ likewise no longer a stub: real body in
+//      the mounted CgsSceneManagerModule.cpp. The REST of this rung is unchanged from the
+//      original measurement and was not re-measured in the 2026-09-11 pass:
 //      ProcessFineQueries/ProcessLineTestFine absent; FineIntersectionTestModule::
 //      ComputeLineTestFine is an EMPTY body with zero callers, so nothing in the program
 //      ever produces an OutEventLineTestFineResult at all.

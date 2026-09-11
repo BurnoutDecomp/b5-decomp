@@ -8,7 +8,6 @@
 //     (DWARF spells the return uint32_t with KU_INVALID==0xffffffff; the X360 build returns the
 //      signed -1 literal -- same bit pattern -- so the committed s32 return is faithful.)
 // Element type is the GLOBAL EActiveRaceCarIndex enum (BurnoutConstants.h); the DWARF key is the
-// unqualified Array<EActiveRaceCarIndex,7u>, and X360 is authoritative over the PS3 DWARF's
-// BrnGameState-scoped same-valued duplicate.
+// unqualified Array<EActiveRaceCarIndex,7u>.
 // Sole caller in the boot trace: BrnGameState::ScoringSystem::UpdateRacePositions.
 template s32 Array<EActiveRaceCarIndex, 7>::FindFirstInstanceOf(const EActiveRaceCarIndex&) const;

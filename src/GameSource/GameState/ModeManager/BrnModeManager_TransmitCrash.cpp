@@ -31,12 +31,6 @@
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 
-// [!] SCOPE NOTE (the hazard BrnModeManager.h:53-61 documents): BrnGameStateModuleIO.h drags in
-// a SECOND `enum EActiveRaceCarIndex : s32` inside `namespace BrnGameState`. It is included HERE
-// (in the partfile, as the header's banner instructs) and AFTER BrnModeManager.h, so the class'
-// member signatures are already bound to the global BurnoutConstants.h enums. Every race-car
-// enum spelled in the bodies below is therefore GLOBAL-QUALIFIED (`::EGlobalRaceCarIndex`,
-// `::EActiveRaceCarIndex`, `::E_..._COUNT`) so it cannot silently rebind.
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                                  // OutputBuffer / PostWorldInputBuffer / GameActionQueue
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                        // CgsModule::VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Containers/CgsArray.h"                                 // CgsContainers::Array<f32,16> (the action-118 payload)

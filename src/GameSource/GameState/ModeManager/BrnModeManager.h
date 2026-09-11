@@ -82,15 +82,9 @@
                                                                          //   (BY VALUE -- the memcpy'd wire record) and,
                                                                          //   transitively, BrnGameModeParams.h:
                                                                          //   StartGameModeParams @+32832 / GameModeParams @+33664
-// [X][X] DO NOT INCLUDE BrnGameStateModuleIO.h HERE. It was tried and REVERTED on 2026-08-26:
-// it reaches BrnTakedownManagerTypes.h through GameSource/Network/BrnNetworkModuleIO.h, and that
-// header defines a SECOND `enum EActiveRaceCarIndex : s32` inside `namespace BrnGameState` (the
-// known dual-scope hazard BrnGameStateModuleIO.h:630 documents). Pulling it in here made every
-// unqualified `EActiveRaceCarIndex` in this class body -- and in every TU that includes this header
-// -- bind to BrnGameState::EActiveRaceCarIndex instead of the global BurnoutConstants.h one, i.e.
-// silently re-mangled the already-committed ModeManager signatures. The spine buffers are used BY
-// POINTER / REFERENCE only in the declarations below, so forward declarations are enough; each
-// agent includes BrnGameStateModuleIO.h in its OWN partfile, where the scope question is local.
+// The spine buffers are used BY POINTER / REFERENCE only in the declarations below, so forward
+// declarations are enough and BrnGameStateModuleIO.h stays out of this widely-included header;
+// each partfile includes it itself.
 
 // -- the fourteen embedded concrete game modes (ORDER NOTE 2: fourteen, not the DWARF's fifteen) ----
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"
@@ -114,13 +108,8 @@
 #include "SharedClasses/Trigger/BrnLandmark.h"          // BrnTrigger::Landmark / BoxRegion::GetPosition
 
 // -- the embedded freeburn-challenge manager (console +28160, 4128 B) -------------------------------
-// [2026-09-07] SAFE TO INCLUDE, and CHECKED BEFORE LANDING against the dual-scope hazard the ban on
-// BrnGameStateModuleIO.h above exists for: BrnChallengeManager.h's transitive include set reaches
-// NEITHER BrnTakedownManagerTypes.h (the second `enum EActiveRaceCarIndex` in namespace
-// BrnGameState) NOR BrnGameStateModuleIO.h / BrnNetworkModuleIO.h, so every unqualified
-// EActiveRaceCarIndex in this header keeps binding to the global BurnoutConstants.h one and no
-// committed ModeManager signature is re-mangled. It also does not reach back to this header
-// (it forward-declares BrnGameState::ModeManager), so there is no include cycle.
+// No include cycle: BrnChallengeManager.h does not reach back to this header (it forward-declares
+// BrnGameState::ModeManager).
 #include "GameSource/GameState/ModeManager/ChallengeManager/BrnChallengeManager.h" // ChallengeManager @+28160
 
 namespace BrnProgression

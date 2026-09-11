@@ -192,6 +192,11 @@ namespace CgsResource
         // ProcessMemoryResponse, drained by ProcessReceiverQueue).
         mReceiverQueue.Construct();
 
+        // Relocator: clear the block-copy engine's running latches. Its parameter block's op
+        // and staging buffers still come from the allocator-carved defrag arrays (deferred
+        // below), so nothing can be relocated yet.
+        mRelocator.Construct();
+
         // (The real pool set is created by GameDataModule::CreatePools, which drives CreatePool over the
         // extracted memory-map table -- not here. The earlier single [5b TEST] pool was retired once that
         // data-driven loader landed.)
@@ -201,8 +206,8 @@ namespace CgsResource
         // Still deferred (need the allocator + subsystems): (1) the built-in "IDList" type (allocate +
         // IDListResourceType vtable + cache); (2) ScratchPool::InitPool over an allocator-carved
         // OverheadMemoryRequired block (CgsPoolModule.cpp:119 "Out of memory"); (3) the 5 pool-type
-        // resource regions through the allocator (:130/131/164-168); (4) Relocator::Construct + two
-        // ID::HashString-keyed defrag sub-objects; (5) zeroing the defrag-state cluster.
+        // resource regions through the allocator (:130/131/164-168); (4) the two ID::HashString-keyed
+        // defrag sub-objects; (5) zeroing the defrag-state cluster.
     }
     // @ 0x829076D8 - per-frame pool dispatch (pool-create slice): write-lock the output + read-lock the
     // input, drain the input requests (ProcessInputBuffer), unlock the input, drain the receiver queue

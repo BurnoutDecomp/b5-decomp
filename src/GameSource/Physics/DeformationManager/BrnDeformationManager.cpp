@@ -579,8 +579,7 @@ namespace Deformation
     // The manager's per-scene-update tick: the two perfmon monitors (miTotalDeformationPerfMon
     // @this+76676, miPostSceneUpdatePerfMon @this+76680 -- `addis r30,r31,1 ; addi r30,r30,0x2B84`
     // / `...0x2B88`) bracket the ProcessEvents call, outer first, inner stopped first. That is the
-    // whole function. Its conductor gate in BrnPhysicsConductorGates.cpp carries the runtime seam
-    // until this TU mounts; the mount deletes that gate (LNK2005 says so loudly).
+    // whole function.
     // -----------------------------------------------------------------------------------
     void DeformationManager::PostSceneUpdate(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
                                              DeformationInputInterface* lpInputInterface,
@@ -641,13 +640,9 @@ namespace Deformation
     }
 
     // -----------------------------------------------------------------------------------
-    // OutputData @0x826225D8 -- ⭐ SPLIT OUT 2026-08-14 (deformation-mount wave) to the
-    // UNMOUNTED slice BrnDeformationManager_Output.cpp, exactly as the walls-wave census
-    // prescribed: this TU mounts this wave, and OutputData's own closure (OutputSensorState
-    // @0x82605618 -- an X360 EXPORT HOLE, PS3 0x6F3E10; UpdateAndOutputJointStates @0x82609AE8;
-    // OutputWheelData @0x82608E28; DetachedPartManager::OutputEvents -> pool OutputEvents
-    // @0x8260DBE8) is a later wave. Its conductor gate in BrnPhysicsConductorGates.cpp still
-    // carries the runtime seam; mounting the _Output slice DELETES that gate (LNK2005 says so).
+    // OutputData -- ⭐ SPLIT OUT 2026-08-14 (deformation-mount wave) to the slice
+    // BrnDeformationManager_Output.cpp, exactly as the walls-wave census prescribed. That slice
+    // is mounted and carries the real body; see its banner for OutputData's own closure.
     // -----------------------------------------------------------------------------------
 
     // ==========================================================================================
@@ -710,8 +705,8 @@ namespace Deformation
     //   StopMonitor(miUpdatePerfMon); StopMonitor(miTotalDeformationPerfMon).
     // =============================================================================================
     // =============================================================================================
-    // UpdateSensorDisplacements @0x82604000 (189) -- ⭐⭐⭐ BODIED 2026-08-16 (walls leg 10); it was
-    // an inert BRN_CONDUCTOR_GATE in BrnPhysicsConductorGates.cpp until now.
+    // UpdateSensorDisplacements (189 insns) -- ⭐⭐⭐ BODIED 2026-08-16 (walls leg 10); it had
+    // no body before that, only an inert log-once gate.
     //
     // The whole function is two perf-mon monitors around a walk of the live-model set, calling
     // DeformableObject::UpdateSensorDisplacements on each with the SAME time step:

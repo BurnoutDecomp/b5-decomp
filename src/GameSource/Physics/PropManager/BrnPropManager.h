@@ -537,21 +537,13 @@ namespace Props
         // prop legs). Signatures per the PS3 DecFIGS mangles (0x77F694 names
         // OutputUpdatedProps; the generation pair and ReadUpdatedBodies carry their
         // param lists in the same export set).
-        // ⚠ THE OLD FLAG HERE -- "all four bodies are LOUD one-shot gates in
-        // BrnPhysicsConductorGates.cpp until reconstructed" -- IS STALE. Re-measured
-        // 2026-08-19 (wave Q6): TWO of the four are real, and only the world-contact
-        // PAIR is still gated.
-        //   * ReadUpdatedBodies    @0x82632918 -- REAL, PropManager_wQ2_01.cpp:871
-        //                                         (gate retired 2026-08-18, wave Q4).
-        //   * OutputUpdatedProps   @0x82627EC8 -- REAL, PropManager_wQ2_06.cpp
-        //                                         (landed 2026-08-19, wave Q6 A2; see its
-        //                                         own block below for the gate to retire).
-        //   * Begin/EndPropWorldContactGeneration -- bodies exist at
-        //     PropManager_wQ2_02.cpp:414/:522 but that TU is deliberately UNMOUNTED
-        //     (build_game_exe.bat:1778-1780), so the gates at
-        //     BrnPhysicsConductorGates.cpp:471-476 / :478-483 are what runs. Effect,
-        //     stated plainly: prop and part rigid bodies get NO world collision, so they
-        //     free-fall until KVF_PROP_OUT_OF_WORLD_HEIGHT deletes them.
+        // ALL FOUR ARE REAL BODIES NOW, in mounted TUs, and no conductor gate is left for
+        // any of them:
+        //   * ReadUpdatedBodies    -- PropManager_wQ2_01.cpp
+        //   * OutputUpdatedProps   -- PropManager_wQ2_06.cpp
+        //   * Begin/EndPropWorldContactGeneration -- PropManager_wQ2_02.cpp. While that TU was
+        //     unmounted, prop and part rigid bodies got NO world collision and free-fell until
+        //     KVF_PROP_OUT_OF_WORLD_HEIGHT deleted them; it is mounted, so they no longer do.
         // ==========================================================================
         void BeginPropWorldContactGeneration(
             const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,
@@ -596,9 +588,8 @@ namespace Props
         //   * The ORIGINAL text ended "Both callees are HOMED -- BrnPhysicsModuleIO.h and
         //     SharedIO/BrnPropOutputInterface.h -- so this one has no blocker at all." FALSE: the
         //     accessor was homed, its RETURN TYPE was not.
-        //   * The 2026-08-18 correction was right about the blocker but named the wrong gate line
-        //     (BrnPhysicsConductorGates.cpp:507; the gate was at :487-490) and pointed at a probe
-        //     path that no longer existed.
+        //   * The 2026-08-18 correction was right about the blocker but named the wrong gate and
+        //     pointed at a probe path that no longer existed.
         // The blocker itself -- `GetPropManagerOutputInterface()` returning the opaque placeholder
         // `struct PropOutputInterfaceStorage { unsigned char maBytes[1]; }` -- was cleared the same
         // day by wave Q6 cluster A1, which promoted BrnPhysicsModuleIO.h:112 to
@@ -608,12 +599,6 @@ namespace Props
         // -- without which this producer would have driven an EventQueue whose mpEvents was NULL.
         // Re-measured, not assumed: scratchpad/waveQ6/probe_outprop/probe_outprop.cpp went
         // STATUS=fail (exactly one C2440 at the accessor's return) -> STATUS=pass across that edit.
-        //
-        // ⛔ REMAINING INTEGRATION ITEMS for the conductor, neither of them this file's to do:
-        //   (a) the inert one-shot gate at BrnPhysicsConductorGates.cpp:487-490 is now a REAL
-        //       LNK2005 duplicate of the landed body and must be deleted in the same commit;
-        //   (b) SharedIO/BrnPropOutputInterface.cpp -- which bodies AppendUpdatedProps @0x826153A0,
-        //       this function's second callee -- is still absent from tools/build/build_game_exe.bat.
         void OutputUpdatedProps(
             BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput ); // @0x82627EC8
 
@@ -622,8 +607,8 @@ namespace Props
         // add/remove prop-and-part instance queues and re-runs the jointed-prop update; its own
         // callees (ProcessRemovePropInstanceEvents / ProcessRemovePartInstanceEvents /
         // RemoveAllPropsAndParts / ProcessAddPropInstanceEvents / ProcessAddPartInstanceEvents /
-        // UpdateJointedProps) are none of them reconstructed. ⚠ FLAG: DECLARED for
-        // PostSceneUpdate's closure; body is a LOUD one-shot gate (BrnPhysicsConductorGates.cpp).
+        // UpdateJointedProps) were none of them reconstructed when this was declared.
+        // Bodied in PropManager_wQ2_08.cpp.
         //
         // ⚠️ THE BOOL WAS MIS-NAMED -- CORRECTED 2026-08-18 (round 2). It was `lbNetworkCatchup`
         // with a comment calling it "the network-catchup flag". That was an INTERPRETATION of
@@ -646,9 +631,7 @@ namespace Props
         // PhysicsModule::UpdateCachedPositions @0x8259C370: per live prop, post one
         // InEventUpdateCachedPosition for that prop's triangle-cache slot. Signature from the PS3
         // DWARF (..PropManager19UpdateTriangleCacheEPN15CgsSceneManager14SceneManagerIO18
-        // InputBuffer_UpdateE). ⚠ FLAG: DECLARED for UpdateCachedPositions' closure; body is a
-        // LOUD one-shot gate (BrnPhysicsConductorGates.cpp) -- props own ZERO triangle-cache
-        // slots today, so a gate here drops nothing.
+        // InputBuffer_UpdateE). Bodied in PropManager_wQ_03.cpp.
         void UpdateTriangleCache(
             CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update);
 

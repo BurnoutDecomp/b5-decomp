@@ -3,8 +3,8 @@
 //
 // THE PLAYER-STUCK LEG of the traction-line chain, plus the two PLAYER-ONLY line-test consumers of
 // UpdateVehiclePhysicsPostSimulation. Six console bodies; every one of them stood as a log-once
-// conductor gate in BrnPhysicsConductorGates.cpp until 2026-09-03 (aiwave lane P2b) and those six
-// gates are DELETED with this file (LNK2005 is the tripwire if one reappears):
+// conductor gate until 2026-09-03 (aiwave lane P2b), and those six gates were deleted with this
+// file (LNK2005 is the tripwire if one reappears):
 //   VehicleManager::UpdatePlayerStuckInCollisionTest        @0x825E9DD8   (87 insns)
 //   VehicleManager::UpdatePlayerStuckInCollisionSpheres     @0x825C4AB8  (147)
 //   VehicleManager::AddPlayerStuckInCollisionLineTests      @0x825E9B28  (171)

@@ -55,12 +55,10 @@ namespace
 // element+0x144 (its loop base is this+0x5044 against an element base of this+0x4F00), which is
 // meRaceCarIndex, and mNetworkPlayerID is the member the DWARF declares immediately after it.
 //
-// THE OVERLOAD IS PINNED THROUGH A MEMBER POINTER, for the reason GameStateModule_gRR_00.cpp:191
-// spells out: ScoringSystem::GetCarData is overloaded on EActiveRaceCarIndex and on
-// BrnNetwork::NetworkPlayerID (== s32), two distinct `enum EActiveRaceCarIndex` exist in this tree,
-// and an enum that is not the parameter's own would decay to s32 and SILENTLY bind the
-// NetworkPlayerID overload. Naming the by-active-index overload's exact type makes that a compile
-// error instead. The CONST twin (0x8231DCD0) is the one the console calls and the one this const
+// THE OVERLOAD IS PINNED THROUGH A MEMBER POINTER: ScoringSystem::GetCarData is overloaded on
+// EActiveRaceCarIndex and on BrnNetwork::NetworkPlayerID (== s32), so naming the by-active-index
+// overload's exact type keeps a silent bind to the NetworkPlayerID overload a compile error.
+// The CONST twin (0x8231DCD0) is the one the console calls and the one this const
 // method can call.
 // ----------------------------------------------------------------------------------------------
 bool GameStateModule::IsActiveRaceCarStillPresent(::EActiveRaceCarIndex leActiveRaceCarIndex) const

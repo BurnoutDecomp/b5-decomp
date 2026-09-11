@@ -522,14 +522,8 @@ void DriveThruManager::HandleDriveThru(
     // the exports; the literal is reproduced faithfully and flagged.
     if (leType == 3)
     {
-        // EActiveRaceCarIndex is a GLOBAL-scope enum (GameSource/BurnoutConstants.h:
-        // `enum EActiveRaceCarIndex : s32`), NOT a member of the interface. GetPlayerActiveRaceCarIndex()
-        // returns the global enum and GetCarModelId(EActiveRaceCarIndex) consumes it; the prior
-        // `RCEntityActiveRaceCarOutputInterface::EActiveRaceCarIndex` did not name a type under
-        // /permissive-.
-        // GLOBAL scope (`::`) is load-bearing: BrnGameState declares its own EActiveRaceCarIndex,
-        // so the unqualified name binds to BrnGameState::EActiveRaceCarIndex inside this namespace
-        // and neither converts to nor calls the interface's global-enum overload (C2440/C2664).
+        // EActiveRaceCarIndex is a global-scope enum (GameSource/BurnoutConstants.h), NOT a member
+        // of the interface: GetPlayerActiveRaceCarIndex() returns it and GetCarModelId() consumes it.
         const ::EActiveRaceCarIndex leCarIndex =
             lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();
         const CgsID lPlayerCarID = lpActiveRaceCarInterface->GetCarModelId(leCarIndex);

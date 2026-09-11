@@ -39,9 +39,6 @@
 #include <cstring>   // std::memcpy / std::memset (the opaque frame-rate-request write; the
                      //   two tail records the console posts with un-written stack bytes)
 
-// The scope question the owning header bans is local here: BrnModeManager.h is parsed FIRST,
-// so every ModeManager declaration has already bound ::EActiveRaceCarIndex (BurnoutConstants.h)
-// before BrnGameStateModuleIO.h can introduce BrnGameState::EActiveRaceCarIndex.
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                 // OutputBuffer, GameActionQueue
 #include "GameSource/GameState/BrnGameStateModule.h"                   // GetLastActiveRaceCarInterface
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h"

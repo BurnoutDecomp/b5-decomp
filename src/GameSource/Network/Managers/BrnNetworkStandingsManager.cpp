@@ -247,9 +247,7 @@ namespace BrnNetwork
         CGS_ASSERT(lpStandingsData->mfDistanceFromFinish != KF_BAD_DISTANCE_SENTINEL,
                    "Bad distance in standings #1, dist from finish");
 
-        // Map the eliminator's active-race-car index to a network player id (-1 stays -1). The
-        // action carries the global ::EActiveRaceCarIndex; the IO mapping table is keyed on the
-        // BrnNetwork-local EActiveRaceCarIndex (same underlying s32), so convert across.
+        // Map the eliminator's active-race-car index to a network player id (-1 stays -1).
         if (static_cast<s32>(lpFinishedModeAction->meEliminatorIndex) == -1)
         {
             lpStandingsData->mEliminatorNetworkPlayerID = K_INVALID_PLAYER_ID;
@@ -258,7 +256,7 @@ namespace BrnNetwork
         {
             lpStandingsData->mEliminatorNetworkPlayerID =
                 mpNetworkModule->GetGameStateToNetworkInterface()->GetNetworkPlayerID(
-                    static_cast<BrnNetwork::EActiveRaceCarIndex>(lpFinishedModeAction->meEliminatorIndex));
+                    lpFinishedModeAction->meEliminatorIndex);
         }
 
         lpStandingsData->miEliminations    = lpFinishedModeAction->miEliminations;

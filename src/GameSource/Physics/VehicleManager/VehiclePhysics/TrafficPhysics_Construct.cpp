@@ -190,7 +190,7 @@ namespace Vehicle
     //       ?Update@TrafficPhysics@Vehicle@BrnPhysics@@UEAAXMMPEBU...
     // That is faithful, not incidental: the console constructor @0x827E42E8 writes those vtables
     // too. Both VehiclePhysics callees (UpdateShunt / UpdateCrashing) are now BODIED in
-    // VehiclePhysics.cpp -- the VehiclePhysicsLinkStubs traps died with this wave.
+    // VehiclePhysics.cpp.
     //
     // What the 2026-08-03 slice had WRONG, all settled off the asm this wave:
     //   * "speed > 5000" -- the gate reads splat(mpAttribs Mass .x) > 5000.0 [flt_82019638]: a

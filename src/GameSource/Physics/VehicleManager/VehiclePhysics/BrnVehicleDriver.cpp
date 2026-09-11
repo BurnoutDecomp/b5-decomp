@@ -111,8 +111,8 @@ namespace Vehicle
     // @0x825D7290  BrnPhysics::Vehicle::VehicleDriver::UpdateVehicle  (219 instructions)
     //
     // THE TRAP THIS REPLACES CARRIED A WRONG COMMENT, AND THE WRONG COMMENT IS THE LESSON.
-    // BrnVehicleManagerLinkStubs.cpp:196 described this function as "the driver-type dispatch into
-    // the four Update(controls) overloads". It is nothing of the sort -- there is no `meDriverType`
+    // That trap described this function as "the driver-type dispatch into the four
+    // Update(controls) overloads". It is nothing of the sort -- there is no `meDriverType`
     // read, no switch, and no call to any Update overload anywhere in the 219 instructions. It is
     // the NETWORK CATCH-UP SLERP APPLIER: one step of the interpolation VehicleDriver::
     // StartCatchupInterpolation arms, applied to the vehicle it is handed.

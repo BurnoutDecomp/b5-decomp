@@ -46,6 +46,12 @@
 // (bodied in Camera/Camera.cpp). Re-measured 2026-09-11 by dumpbin over this TU's object against
 // the mounted symbol set: 60 undefined, all resolved but the ten above, plus CRT and two
 // weak-external vector-deleting-destructor aliases that fall back to their scalar defaults.
+// Those ten are the direct cost. The movie-player half they wait on opens nine more of its
+// own (four BehaviourInterpolate methods and three BehaviourManager BehaviourHandle
+// overloads that are declared and bodied nowhere, plus ICEWrapper::PlayMovie /
+// ::IsPlayingMovie), and PlayMovie in turn reaches ICEController::Update -- the whole
+// unmounted ICE editor group. The gate block in DirectorLinkStubs.cpp carries the full
+// measured chain.
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector

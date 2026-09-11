@@ -8429,7 +8429,7 @@ namespace Vehicle
 
 // [clean] UpdateShunt  @0x825FC748
     // @0x825FC748  BrnPhysics::Vehicle::VehiclePhysics::UpdateShunt  (100 insns, read line by
-    // line; the LOUD TRAP in VehiclePhysicsLinkStubs.cpp is deleted in this commit).
+    // line).
     //
     // Consume the queued shunt effect: while a shunt is active (the inlined
     // ShuntEffect::IsActive() lane pair -- desired speed w > 0 AND life x > 0), and the car
@@ -8517,7 +8517,7 @@ namespace Vehicle
 
 // [clean] UpdateCrashing  @0x82638810
     // @0x82638810  BrnPhysics::Vehicle::VehiclePhysics::UpdateCrashing  (732 insns, read line
-    // by line; the LOUD TRAP in VehiclePhysicsLinkStubs.cpp is deleted in this commit).
+    // by line).
     //
     // THE CRASH-STATE ORCHESTRATOR -- UpdateDriving's twin for a crashing car. Same per-frame
     // phase chain (air stats, air rams, spins, engine, steering, suspension, wheels, velocity

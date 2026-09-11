@@ -6,27 +6,17 @@
 // ==================================================================================================
 // [FLAG PC bring-up] THE ONE DECLARATION BrnRendererModule.cpp NEEDS TO REACH THE POST-FX COMPOSITE.
 //
-// WHY THIS HEADER EXISTS, and it is not tidiness -- it is the only shape that compiles.
-// BrnRendererModule.cpp cannot include GameSource/Graphics/PostFx/BrnPostFx.h. That header needs the
-// REAL EA::Jobs::Job (BrnPostFx::m_blendJob is one by value, so it needs the complete type), while
-// BrnRendererModule.h:21-31 still carries an off-path PLACEHOLDER `class EA::Jobs::Job` with an
-// invented `Job(s32 = 0)` constructor. Bringing both into one translation unit is
-//     error C2011: 'EA::Jobs::Job': class type redefinition   (job.h:41 vs BrnRendererModule.h:25)
-// followed by ten cascade errors and C2079 on BrnPostFx::m_blendJob -- MEASURED, not predicted.
-//
-// AND THE PLACEHOLDER CANNOT SIMPLY BE RETIRED IN THIS WAVE. The real EA::Jobs::Job has exactly one
-// constructor, `explicit Job(const char*)`, in the reconstructed header (job.h:68) AND in the DWARF
-// (references/DecFIGS/dwarfdump/SDKs/EATech/include/job_manager/job.h:83 -- `void Job(const char*)`,
-// no default constructor anywhere in the class). BrnRendererModule.h declares eleven Job members and
-// three Job ARRAYS by value (BrnRendererModule.h:557-574), every one of them default-constructed, so
-// swapping in the real type requires naming all of them in the module's constructor. That is the
-// renderer module's own reconstruction work, and inventing a default constructor to dodge it would
-// be a fabrication. So the two headers stay apart and this one-function seam is what crosses.
+// WHY THIS HEADER EXISTS. BrnRendererModule.cpp used not to be able to include
+// GameSource/Graphics/PostFx/BrnPostFx.h: that header needs the real EA::Jobs::Job (m_blendJob is
+// one by value) and BrnRendererModule.h used to define a placeholder class of the same name, so one
+// translation unit seeing both was a redefinition. The placeholder is gone -- the renderer module
+// now includes the real job.h and constructs its own jobs -- so this seam is VESTIGIAL.
 //
 // The seam is deliberately as thin as a seam can be: one free function, one forward declaration, no
-// post-fx type in the signature. RETIRED WITH THE BRING-UP -- when EA::Jobs::Job is real in
-// BrnRendererModule.h, this file and its definition in BrnPostFx.cpp are deleted and
-// BrnRendererModule.cpp includes BrnPostFx.h directly, as the console's single translation unit did.
+// post-fx type in the signature. RETIRED WITH THE BRING-UP -- this file and its definition in
+// BrnPostFx.cpp are deleted and BrnRendererModule.cpp includes BrnPostFx.h directly, as the
+// console's single translation unit did; that fold is a code move, not a type fix, and is the next
+// wave's.
 // ==================================================================================================
 
 // Pointer/reference-only use: the documented cascade-avoidance forward declaration in AGENTS.md.

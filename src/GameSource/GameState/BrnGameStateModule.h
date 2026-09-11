@@ -71,11 +71,9 @@ namespace CgsModule      { struct IOBufferStack; }
 // this very widely-included header off the timer chain; the .cpp includes the real header.
 namespace CgsSystem      { struct TimerRequests; }
 namespace BrnResource    { namespace GameDataIO { class AllocatorList; } }
-// [road-rage wave, agent C] ProcessTakedownEvents takes the takedown-event queue by pointer only.
-// Forward-declared rather than including BrnTakedownManagerTypes.h here: that header defines a
-// SECOND `enum EActiveRaceCarIndex` inside namespace BrnGameState, which would re-bind every
-// unqualified EActiveRaceCarIndex in this widely-included header (see BrnModeManager.h:86 /
-// BrnGameMode.h:64 for the same rule). The partfile includes the real header.
+// ProcessTakedownEvents takes the takedown-event queue by pointer only, so these are
+// forward-declared rather than pulling BrnTakedownManagerTypes.h into this widely-included
+// header. The partfile includes the real header.
 namespace BrnGameState   { struct TakedownEvent; struct TakedownManager; struct TakedownPostWorldCache; }
 namespace BrnTraffic     { namespace BrnTrafficIO { struct TrafficTypeResponse; } }   // [takedown wave] cache arg
 

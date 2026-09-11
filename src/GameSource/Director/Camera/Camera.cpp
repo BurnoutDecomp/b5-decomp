@@ -396,6 +396,44 @@ void Camera::SetRequestedPostFX(f32 lfAmount)
 }
 
 // ----------------------------------------------------------------------------
+// BrnDirector::Camera::Camera::RequestMotionBlurShake
+//
+// ⚠️⚠️ BODIED 2026-09-11 -- it had NO DEFINITION ANYWHERE IN THE TREE. Camera.h has
+// declared it since the crash-mode effect-request carve and one committed TU already
+// calls it (Arbitrator/States/BrnArbStateCrashMode.cpp, inside the blur-ramp block,
+// guarded by that state's mbBlurShake). That TU is not on the build list, which is the
+// only reason the link is green today -- the same latent link break
+// SetRequestedBorderPostFX below and SetRequestedTimeDilation had.
+//
+// Like every other member of this effect-request family it has no standalone symbol: the
+// console inlines the store run into its caller, and that run is what pins the fields. The
+// crash-mode state holds its camera at state +0x10, and the guarded arm emits exactly three
+// stores -- a float at state +0x124, the constant 1.0f at state +0x128, and the byte 8 at
+// state +0x12C. Subtracting the camera (+0x10) and then mEffects (camera +0x68) puts them on
+// mEffects +0xAC / +0xB0 / +0xB4, in that store order.
+//
+// ⚠️ THE NAME IS A MISNOMER, kept because the call site is committed. This touches NO
+// motion-blur field: +0xAC / +0xB0 / +0xB4 are mfShakeAmplitude / mfShakeFrequency /
+// mu8ShakeType -- the SAME triple, in the same order, that Camera::SetImpactShake above
+// writes. It is the impact-shake request under a second spelling, driven from the crash
+// camera's blur ramp rather than from a collision. Both spellings stay because both
+// call-site sets are committed; the shared lane means a crash-mode blur shake and a
+// roaming impact shake cannot be requested in the same frame without the last writer
+// winning, which is the console's behaviour too.
+//
+// Neither the 1.0f frequency nor the shake-type 8 belongs to this body: both are
+// materialised at the call site (the state's KF_UNIT / KU8_BLUR_SHAKE_TYPE), so they are
+// taken as arguments exactly as SetImpactShake takes them. The second parameter is named
+// `lfBlend` in the committed declaration; it reaches the shake FREQUENCY field.
+// ----------------------------------------------------------------------------
+void Camera::RequestMotionBlurShake(f32 lfAmount, f32 lfBlend, u8 lu8ShakeType)
+{
+    mEffects.mfShakeAmplitude = lfAmount;       // stfs -> mEffects +0xAC (camera +0x114)
+    mEffects.mfShakeFrequency = lfBlend;        // stfs -> mEffects +0xB0 (camera +0x118)
+    mEffects.mu8ShakeType     = lu8ShakeType;   // stb  -> mEffects +0xB4 (camera +0x11C)
+}
+
+// ----------------------------------------------------------------------------
 // BrnDirector::Camera::Camera::SetRequestedBorderPostFX
 //
 // ⚠️⚠️ BODIED 2026-09-11 -- it had NO DEFINITION ANYWHERE IN THE TREE. Camera.h has
@@ -510,6 +548,22 @@ void Camera::Clear()
 
     mShotSelectionInfo.miType = -1;      // stw -1 @+0x154
     mShotSelectionInfo.miId   = -1;      // stw -1 @+0x158
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::Camera::ShotSelectionInfo::Clear
+//
+// BODIED 2026-09-11. Declared with the nested struct since the shot-selection carve and
+// defined nowhere in the tree; no TU calls it by name today, so it is a dormant rather
+// than an armed link hole -- but it is the same declared-with-no-home shape, and the body
+// is not a guess: the console inlines it as the pair of -1 stores at the tail of
+// Camera::Clear above (+0x154 / +0x158), which is the only site that clears the block.
+// Camera::Clear keeps its own two stores, matching the console's inlined form exactly.
+// ----------------------------------------------------------------------------
+void Camera::ShotSelectionInfo::Clear()
+{
+    miType = -1;
+    miId   = -1;
 }
 
 // ----------------------------------------------------------------------------

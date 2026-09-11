@@ -9,8 +9,8 @@
 //   VehicleManager::ProcessContactSpies  @0x82646C98  (118 insns; DWARF BrnVehicleManager.cpp:4434)
 //
 // Slice TU (home BrnVehicleManager.cpp is mounted; this body lives in its own partfile like the
-// other per-frame legs). The conductor gate that stood in BrnPhysicsConductorGates.cpp is DELETED
-// in the same change (LNK2005 is the tripwire if it ever reappears).
+// other per-frame legs). The conductor gate that had stood for it was deleted in the same change
+// (LNK2005 is the tripwire if it ever reappears).
 //
 // -------------------------------------------------------------------------------------------------
 // THE WALK, verbatim (r28 == this, r20 == lpContactSpies, f30 == lfTimeStep):

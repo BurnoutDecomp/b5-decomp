@@ -15,23 +15,10 @@
 //   * PropManager::BeginPropWorldContactGeneration @0x82628CB0 -- REAL, PropManager_wQ2_02.cpp
 //   * PropManager::EndPropWorldContactGeneration   @0x82628E18 -- REAL, PropManager_wQ2_02.cpp
 //
-// ⚠️ ODR NOTE FOR THE CONDUCTOR -- all three of these functions ALSO HAVE A ONE-SHOT
-//    CONDUCTOR-GATE BODY in b5-decomp/src/GameSource/Physics/BrnPhysicsConductorGates.cpp.
-//    ⭐ THE LINE NUMBERS IN THIS BANNER HAD DRIFTED and are RE-MEASURED 2026-08-19 (wave Q6,
-//    cluster pstream -- the UpdateTriangleCache range had drifted a SECOND time; comment/banner
-//    line through closing brace):
-//        :471-476  BeginPropWorldContactGeneration     :478-483  EndPropWorldContactGeneration
-//        :515-522  UpdateTriangleCache   (the `void` is at :517; :515-516 is its comment)
-//    `cl /c` cannot see the duplicate. The :515-522 gate MUST be deleted when this partfile mounts.
-//    The gate is DELIBERATELY LEFT IN PLACE: BrnPhysicsConductorGates.cpp is not this TU's to edit,
-//    and AGENTS.md's convention is that a gate is retired only in the same commit that MOUNTS the
-//    real body in tools/build/build_game_exe.bat. That script lists BrnPhysicsConductorGates.cpp
-//    (:1230 -- the old ":1161" citation had drifted too) and does NOT list PropManager_wQ_03.cpp,
-//    so today there is no LNK2005 -- it fires the instant this partfile is added to the source
-//    list. Reported, not "fixed": deleting the gate unilaterally would leave UpdateTriangleCache
-//    with no definition in the mounted build at all.
-//    Re-run coverage_check against the whole GameSource/Physics directory, not just
-//    GameSource/Physics/PropManager, or this cross-directory duplicate stays invisible.
+// ODR: all three of these functions once had a one-shot conductor-gate twin. All three gates were
+//    retired in the same change that mounted the real bodies, so each symbol now has exactly one
+//    definition. Run coverage_check against the whole GameSource/Physics directory, not just
+//    GameSource/Physics/PropManager, or a cross-directory duplicate would stay invisible.
 //
 // ⭐⭐ THIS PARTFILE IS LINK-READY AS OF 2026-08-19 (wave Q6, cluster pstream). Its only two
 //    non-vendor external callees are InputBuffer_Update::GetInSceneUpdateInterface (real, mounted

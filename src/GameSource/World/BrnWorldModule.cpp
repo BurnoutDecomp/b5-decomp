@@ -108,7 +108,26 @@ namespace BrnWorld
 // WorldModule::Prepare loads the resulting 64-bit key at @0x827D5B6C.
 static const u64 gs_uSurfaceListKey = Attrib::StringToKey("340654");
 
-static CgsSceneManager::SceneQueryId KA_FRUSTUM_QUERY_IDS[11];
+// The eleven scene-query ids this module stamps its coarse frustum queries with, read out of
+// the retail data image. Slot 0 is the main view, slots 2..7 the six environment-map faces and
+// slots 8..10 the three shadow cascades; slot 1 is present in the table but has no emitter.
+// The ids are what the scene manager copies onto each result batch, so they are the ONLY thing
+// that keeps this module's results apart from every other module's -- they must stay distinct
+// from the traffic module's query ids (a different, much lower range) and from each other.
+static CgsSceneManager::SceneQueryId KA_FRUSTUM_QUERY_IDS[11] =
+{
+    { 0xFF000000u },    // main view
+    { 0xFF000001u },    // (no emitter)
+    { 0xFF000002u },    // env-map face 0
+    { 0xFF000003u },    // env-map face 1
+    { 0xFF000004u },    // env-map face 2
+    { 0xFF000005u },    // env-map face 3
+    { 0xFF000006u },    // env-map face 4
+    { 0xFF000007u },    // env-map face 5
+    { 0xFF000008u },    // shadow cascade 0
+    { 0xFF000009u },    // shadow cascade 1
+    { 0xFF00000Au },    // shadow cascade 2
+};
 static CgsGraphics::Camera gFrustumQueryCamera;
 
 // ShadowMap::GetFrustum -- the per-cascade cull volume this file's shadow queries submit --
@@ -6598,10 +6617,9 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         // comes back in SUBMISSION order (CgsSceneManagerModule.cpp:952-965). These
         // events therefore go in between the main view and the cascades, exactly where
         // the console puts them, and PART 2 below walks the cursor past them before the
-        // cascade arm reads. KA_FRUSTUM_QUERY_IDS is still all-zero on PC (it is
-        // declared at :93 with no writer -- the X360 table lives at data 0x82F30DC4 and
-        // has not been dumped), so the ids do NOT discriminate the batches today; order
-        // does, on both arms.
+        // cascade arm reads. KA_FRUSTUM_QUERY_IDS now carries the retail ids, so each
+        // batch can be told apart by id as well; order is still what this producer
+        // relies on, and the id is the cross-check.
         //
         // The four-jobs map is `(queryIndex * 4) / 16 == queryIndex / 4`
         // (CgsSceneManagerModule.cpp:1016) with KU_MAX_FRUSTUM_TEST_JOB_QUERIES == 16,
@@ -7382,9 +7400,9 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 }
 
                 // The console asserts the result id here (:4025-4028). A hard assert
-                // would storm the log on a bring-up mis-order, and the id table is
-                // all-zero on PC anyway, so this is the cascade arm's soft, value-latched
-                // park instead.
+                // would storm the log on a bring-up mis-order, so this is the soft,
+                // value-latched park instead. The ids are real now, so a mismatch here
+                // is a genuine out-of-order (or foreign) batch, not a table of zeroes.
                 const u32 luResultId =
                     reinterpret_cast< const CgsSceneManager::SceneQueryId* >( lpEnvMapResultCursor )->mId;
                 if ( luResultId != KA_FRUSTUM_QUERY_IDS[ 2 + liFace ].mId )

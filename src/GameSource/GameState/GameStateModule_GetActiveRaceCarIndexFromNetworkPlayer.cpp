@@ -10,18 +10,6 @@
 //
 // It lives in its own partfile rather than in BrnGameStateModule.cpp because that file is not
 // this pass's to edit; folding it back in is a free follow-up.
-//
-// ⛔ INCLUDE ORDER IS LOAD-BEARING -- and the cure here is to NOT reach the IO header at all.
-// Two distinct `enum EActiveRaceCarIndex : s32` exist in this tree: the global one in
-// BurnoutConstants.h and BrnGameState::EActiveRaceCarIndex in BrnTakedownManagerTypes.h (which
-// BrnGameStateModuleIO.h drags in via BrnNetworkModuleIO.h). BrnScoringSystem.h spells its
-// parameters with the UNQUALIFIED name, so a TU that parses the IO header first mangles
-// ScoringSystem::GetCarData with `W4EActiveRaceCarIndex@2@` and emits a call to a symbol no
-// other TU in the build defines -- a link error the compile gate is blind to (measured on
-// BrnChallengeManager_wB_12.cpp). This TU includes NEITHER BrnGameStateModuleIO.h nor
-// BrnNetworkModuleIO.h, and BrnModeManager.h carries its own standing ban on the IO header, so
-// every unqualified spelling below binds to the global enum. (The durable cure is
-// global-qualifying the name in BrnScoringSystem.h; that header is not this pass's to edit.)
 // ============================================================================
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"  // ScoringSystem::GetCarData / CarData::GetActiveRaceCarIndex

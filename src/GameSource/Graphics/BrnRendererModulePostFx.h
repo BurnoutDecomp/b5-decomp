@@ -8,29 +8,19 @@
 // BrnRendererModule::Render @0x8240BFA8's own effects-frame -> BrnPostFx apply block (pseudocode
 // lines 964..1260, asm 0x8240D700-0x8240DD4C).
 //
-// WHY THE BLOCK IS NOT IN BrnRendererModule.cpp, WHERE THE CONSOLE PUT IT. It cannot be: the apply
-// block writes BrnPostFx's bloom / vignette / depth-of-field / B4-blur state, so its translation
-// unit must include GameSource/Graphics/PostFx/BrnPostFx.h -- and BrnRendererModule.cpp cannot,
-// for exactly the reason GameSource/Graphics/PostFx/BrnPostFxPCComposite.h already documents at
-// length: BrnPostFx.h needs the REAL EA::Jobs::Job (BrnPostFx::m_blendJob is one by value) while
-// BrnRendererModule.h:21-31 still carries an off-path PLACEHOLDER `class EA::Jobs::Job`, and one
-// translation unit seeing both is
-//     error C2011: 'EA::Jobs::Job': class type redefinition   (job.h:41 vs BrnRendererModule.h:25)
-// That placeholder cannot be retired in this wave either: the real Job's only constructor is
-// `explicit Job(const char*)` (job.h:68, DWARF job_manager/job.h:83 -- there is no default ctor),
-// and BrnRendererModule.h declares eleven Job members AND THREE Job ARRAYS by value
-// (BrnRendererModule.h:557-575). A C++ array member of a type with no default constructor cannot be
-// declared at all, so retiring the placeholder is the renderer module's own job-system
-// reconstruction, not a side effect of lighting bloom.
+// WHY THE BLOCK IS NOT IN BrnRendererModule.cpp, WHERE THE CONSOLE PUT IT. The apply block writes
+// BrnPostFx's bloom / vignette / depth-of-field / B4-blur state, so its translation unit must
+// include GameSource/Graphics/PostFx/BrnPostFx.h -- which BrnRendererModule.cpp could not, because
+// BrnRendererModule.h used to define a placeholder `class EA::Jobs::Job` that redefined the real one
+// BrnPostFx.h needs for m_blendJob. The placeholder is gone: the renderer module includes the real
+// job.h and constructs its thirty-two embedded jobs itself.
 //
-// So the block lives in the sibling TU BrnRendererModulePostFx.cpp, which includes BrnPostFx.h and
-// BrnEffectsArbitrator.h and NOT BrnRendererModule.h. The split is PHYSICAL ONLY: every statement in
-// that file is a reconstruction of Render's own block, at Render's own position, and Render calls
-// each function from exactly the point the console executes it.
+// So the split is now VESTIGIAL, and it was PHYSICAL ONLY to begin with: every statement in
+// BrnRendererModulePostFx.cpp is a reconstruction of Render's own block, at Render's own position,
+// and Render calls each function from exactly the point the console executes it.
 //
-// DELETE-WHEN: EA::Jobs::Job is real in BrnRendererModule.h. At that point this header, its .cpp and
-// BrnPostFxPCComposite.h all retire together and the block moves back into Render, as the console's
-// single translation unit had it.
+// DELETE-WHEN: the block moves back into Render, as the console's single translation unit had it --
+// a code move, at which point this header, its .cpp and BrnPostFxPCComposite.h retire together.
 // ==================================================================================================
 
 namespace BrnGraphics { class EffectsArbitrator; }

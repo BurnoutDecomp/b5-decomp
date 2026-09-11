@@ -25,6 +25,14 @@ namespace Vehicle
     class GripCurveDebugGraph
     {
     public:
+        // Two-phase init. The console has no out-of-line body for this: it is inlined whole into
+        // GripCurveDebugWindow::Construct, once per graph, and folded back out here so the stores
+        // land on the named members instead of on raw offsets inside the window. Clears the curve
+        // pointer, the top-left corner and the axis ranges, and seats the axis box at its fixed
+        // 300x225 pixel size. The box's unused z/w lanes are deliberately left alone -- the console
+        // load-modify-stores only the two lanes it sets.
+        void Construct();
+
         // Screen-space point of the graph origin (bottom-left of the axis box): the top-left
         // corner translated down by the axis box height. X360 GetOrigin @0x825E8D00 reads the
         // top-left at +0x10 and the box dimensions' height lane (Dy) at +0x30, returning

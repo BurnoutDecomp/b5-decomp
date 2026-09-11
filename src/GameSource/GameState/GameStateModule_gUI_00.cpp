@@ -653,10 +653,6 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     }
     else
     {
-        // ⚠️ THE LEADING `::` IS LOAD-BEARING, not style. BrnGameState declares its OWN
-        // EActiveRaceCarIndex (BrnModeManager.h's dual-scope banner at :53-61), so the
-        // unqualified enumerator resolves to BrnGameState::E_ACTIVE_RACE_CAR_INDEX_INVALID and
-        // will not convert to the member's global-scope type.
         mePlayerActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
         miPlayerGlobalRaceCarIndex = ::E_GLOBAL_RACE_CAR_INDEX_INVALID;
     }

@@ -891,10 +891,10 @@ void BrnPostFx::Render(BrnRendererMemory& lrAllocatedMemory,
 // the composite through.  (goes into b5-decomp/src/GameSource/Graphics/PostFx/BrnPostFx.cpp)
 //
 // This is NOT a decompiled function. The console had no such helper: BrnRendererModule::Render calls
-// BrnPostFx::Render directly, in one translation unit. It exists for one measured reason, spelled out
-// in full in BrnPostFxPCComposite.h: BrnRendererModule.h still defines a PLACEHOLDER EA::Jobs::Job,
-// so BrnRendererModule.cpp cannot include BrnPostFx.h without a C2011 redefinition against the real
-// job.h that BrnPostFx.h needs for m_blendJob. Deleted the day that placeholder is retired.
+// BrnPostFx::Render directly, in one translation unit. It exists because BrnRendererModule.h used to
+// define a placeholder EA::Jobs::Job that could not share a translation unit with the real job.h
+// BrnPostFx.h needs for m_blendJob. That placeholder is gone, so this seam is vestigial and retires
+// with the fold described in BrnPostFxPCComposite.h.
 //
 // WHAT IT ADDS OVER THE CONSOLE, and nothing else: a NULL TEST ON THE POOL. BrnPostFx::Render
 // dereferences the bloom, depth-of-field and back-buffer pool slots and m_pfxTint[] unconditionally,

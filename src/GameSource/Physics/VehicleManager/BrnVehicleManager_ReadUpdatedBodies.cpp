@@ -5,9 +5,8 @@
 //   VehicleManager::ReadUpdatedBodies          @0x82619A10 (198 insns)
 //   PhysicalTrafficManager::ReadUpdatedBodies  @0x825EF608 (334 insns)
 //
-// Both were conductor gates (BrnPhysicsConductorGates.cpp) / absent; both are real here, and the
-// gate for the first is DELETED in the same commit (LNK2005 is the intended tripwire if it comes
-// back).
+// Both were conductor gates / absent; both are real here, and the gate for the first was deleted
+// in the same commit (LNK2005 is the intended tripwire if it comes back).
 //
 // THE NAME IS A LIE AND THE COMMITTED HEADER COMMENT WAS WRONG. "ReadUpdatedBodies" reads
 // NOTHING back from the simulation. The X360 body takes the OutUpdateRigidBody queue in r4,
