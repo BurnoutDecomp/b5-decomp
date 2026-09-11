@@ -45,9 +45,9 @@
 // committed layout, the derivation it feeds has to be redone -- so it is asserted here rather than
 // left as a number in a comment.
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"
-// The per-car physics DebugComponent VehicleManager::Construct casts the opaque 8x1024 span to.
-// Needed as a COMPLETE type here so the fit/alignment assert at the bottom is real and not a
-// promise about a forward declaration.
+// The per-car physics DebugComponent. BrnVehicleManager.h now embeds an array of these by value,
+// so it pulls this header in itself; the line is kept because the size asserts at the bottom are
+// about THIS type, and an include that documents what a gate measures is worth its line.
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.h"
 
 #include <cstddef>   // offsetof
@@ -260,98 +260,98 @@ namespace Vehicle
                       "and it closes on the X360's own mDiscardedContacts seat");
 
         // ---- the two master gates (DWARF :865/:866) -------------------------------------------
-        static_assert(offsetof(VehicleManager, mbSlamsAndShuntsOn) == 171464 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
+        static_assert(offsetof(VehicleManager, mbSlamsAndShuntsOn) == 171464 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS,
                       "mbSlamsAndShuntsOn (asm stbx 1 @+171464)");
-        static_assert(offsetof(VehicleManager, mbAllowSlamsAndShuntsEffectsForRivals) == 171465 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
+        static_assert(offsetof(VehicleManager, mbAllowSlamsAndShuntsEffectsForRivals) == 171465 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS,
                       "mbAllowSlamsAndShuntsEffectsForRivals (asm stbx 1 @+171465)");
 
         // ---- the 44-float tuning run (DWARF :868..:920) ----------------------------------------
         // Head, tail, the two retyped/renamed seats in the middle, and the closure. The closure is
         // the real test: 171468 + 44*4 == 171644 only holds if EVERY float in between is declared
         // and none of the old padding runs survived.
-        static_assert(offsetof(VehicleManager, mfFrontRaySensorLength)     == 171468 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "run head (asm +171468 = 4.0f)");
-        static_assert(offsetof(VehicleManager, mfMaxSlamClosingXSpeed)     == 171536 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +171536 = 16.0f");
-        static_assert(offsetof(VehicleManager, mfMinSecondsBetweenImpacts) == 171540 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +171540 = 0.3f -- was mis-typed `s32 miAttackerToRecord`");
-        static_assert(offsetof(VehicleManager, mfTailgatingVunerabilityTime) == 171552 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +171552 = 1.0f (value recovered from the PS3 build)");
-        static_assert(offsetof(VehicleManager, mfTBoneTakedownMaxAngle)    == 171564 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +171564 = 35.0f");
-        static_assert(offsetof(VehicleManager, mfTBoneTakedownSpeed)       == 171568 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +171568 = 30.0f -- was `mfTBoneSidePlaneHalfWidth`");
-        static_assert(offsetof(VehicleManager, mfMinShuntSpeed)            == 171580 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +171580 = 12.0f -- was `mfNudgeMaxClosingSpeed`");
-        static_assert(offsetof(VehicleManager, mfFatalShuntSpeed)          == 171584 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +171584 = 140.0f -- was `mfShuntMaxClosingSpeed`");
-        static_assert(offsetof(VehicleManager, mfMinTradingPaintSpeed)     == 171616 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +171616 = 0.8f");
-        static_assert(offsetof(VehicleManager, mfFatalSlamSpeed)           == 171620 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +171620 = 140.0f -- was `mfTradingPaintMaxSpeed`");
-        static_assert(offsetof(VehicleManager, mfMaxHeadToHeadAngle)       == 171628 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +171628 = 45.0f");
-        static_assert(offsetof(VehicleManager, mfMinHeadToHeadSpeed)       == 171632 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +171632 = 40.0f");
-        static_assert(offsetof(VehicleManager, mfMinHeadToHeadIndividualSpeed) == 171636 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +171636 = 40.0f");
-        static_assert(offsetof(VehicleManager, mfAngleForVerticleTakedown) == 171640 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "run tail (asm +171640 = 60.0f)");
-        static_assert(offsetof(VehicleManager, maeImpactType)              == 171644 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
+        static_assert(offsetof(VehicleManager, mfFrontRaySensorLength)     == 171468 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "run head (asm +171468 = 4.0f)");
+        static_assert(offsetof(VehicleManager, mfMaxSlamClosingXSpeed)     == 171536 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +171536 = 16.0f");
+        static_assert(offsetof(VehicleManager, mfMinSecondsBetweenImpacts) == 171540 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +171540 = 0.3f -- was mis-typed `s32 miAttackerToRecord`");
+        static_assert(offsetof(VehicleManager, mfTailgatingVunerabilityTime) == 171552 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +171552 = 1.0f (value recovered from the sibling build)");
+        static_assert(offsetof(VehicleManager, mfTBoneTakedownMaxAngle)    == 171564 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +171564 = 35.0f");
+        static_assert(offsetof(VehicleManager, mfTBoneTakedownSpeed)       == 171568 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +171568 = 30.0f -- was `mfTBoneSidePlaneHalfWidth`");
+        static_assert(offsetof(VehicleManager, mfMinShuntSpeed)            == 171580 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +171580 = 12.0f -- was `mfNudgeMaxClosingSpeed`");
+        static_assert(offsetof(VehicleManager, mfFatalShuntSpeed)          == 171584 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +171584 = 140.0f -- was `mfShuntMaxClosingSpeed`");
+        static_assert(offsetof(VehicleManager, mfMinTradingPaintSpeed)     == 171616 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +171616 = 0.8f");
+        static_assert(offsetof(VehicleManager, mfFatalSlamSpeed)           == 171620 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +171620 = 140.0f -- was `mfTradingPaintMaxSpeed`");
+        static_assert(offsetof(VehicleManager, mfMaxHeadToHeadAngle)       == 171628 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +171628 = 45.0f");
+        static_assert(offsetof(VehicleManager, mfMinHeadToHeadSpeed)       == 171632 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +171632 = 40.0f");
+        static_assert(offsetof(VehicleManager, mfMinHeadToHeadIndividualSpeed) == 171636 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +171636 = 40.0f");
+        static_assert(offsetof(VehicleManager, mfAngleForVerticleTakedown) == 171640 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "run tail (asm +171640 = 60.0f)");
+        static_assert(offsetof(VehicleManager, maeImpactType)              == 171644 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS,
                       "THE CLOSURE: 171468 + 44*4 == 171644, the next independently asm-proven member");
 
         // ---- per-car impact bookkeeping (DWARF :923..:934) -------------------------------------
-        static_assert(offsetof(VehicleManager, mauImpactScore)          == 171676 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +171676 (stbx 1 per victim)");
-        static_assert(offsetof(VehicleManager, mafNoImpactTimeSeconds)  == 171684 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +171684 -- was mis-typed `s32[8] maRaceCarLastAttacker`");
+        static_assert(offsetof(VehicleManager, mauImpactScore)          == 171676 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +171676 (stbx 1 per victim)");
+        static_assert(offsetof(VehicleManager, mafNoImpactTimeSeconds)  == 171684 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +171684 -- was mis-typed `s32[8] maRaceCarLastAttacker`");
         static_assert(sizeof(VehicleManager::mafNoImpactTimeSeconds) == 32,
                       "8 x f32: HandleRaceCarRaceCarContact seeds it with lfsx/stfsx, so it is a FLOAT array");
-        static_assert(offsetof(VehicleManager, maiPhysicsSlamIndex)     == 171716 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "DWARF :926");
-        static_assert(offsetof(VehicleManager, mPlayerWonImpact)        == 171736 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +171736 (DWARF :934) -- was `mTakenDownRaceCarsBitArray`");
+        static_assert(offsetof(VehicleManager, maiPhysicsSlamIndex)     == 171716 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "recovered member order");
+        static_assert(offsetof(VehicleManager, mPlayerWonImpact)        == 171736 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +171736 -- was `mTakenDownRaceCarsBitArray`");
 
         // ---- the per-car vulnerability / grinding arrays (DWARF :937..:951) --------------------
         // These two bases are what demote the committed scalars `mfGrindingThresholdA` (@171868)
         // and `mfGrindingThresholdB` (@171900) to ELEMENT 7 of two per-car arrays.
-        static_assert(offsetof(VehicleManager, mafVulnerableTimeSeconds) == 171744 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "DWARF :937");
-        static_assert(offsetof(VehicleManager, mafPlayerGrindingOtherDurationSeconds) == 171840 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
+        static_assert(offsetof(VehicleManager, mafVulnerableTimeSeconds) == 171744 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "recovered member order");
+        static_assert(offsetof(VehicleManager, mafPlayerGrindingOtherDurationSeconds) == 171840 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS,
                       "base; 171840 + 7*4 == 171868 == the old scalar mfGrindingThresholdA seat");
-        static_assert(offsetof(VehicleManager, mafOtherGrindingPlayerDurationSeconds) == 171872 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
+        static_assert(offsetof(VehicleManager, mafOtherGrindingPlayerDurationSeconds) == 171872 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS,
                       "base; 171872 + 7*4 == 171900 == the old scalar mfGrindingThresholdB seat");
-        static_assert(offsetof(VehicleManager, mabRubbingThisUpdate)    == 171952 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "DWARF :951");
+        static_assert(offsetof(VehicleManager, mabRubbingThisUpdate)    == 171952 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "recovered member order");
 
         // ---- the spare AI driver and the run that closes onto mePlayerActiveRaceCarIndex -------
-        static_assert(offsetof(VehicleManager, mPlayerAiDriver)          == 171968 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm VehicleDriver::Construct(this + 171968)");
-        static_assert(offsetof(VehicleManager, mbPlayerAiDriverValid)    == 172192 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "DWARF :954");
-        static_assert(offsetof(VehicleManager, mfSteeringUpdateRemainder) == 172200 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "DWARF :956");
-        static_assert(offsetof(VehicleManager, mePlayerActiveRaceCarIndex) == 172204 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm/DWARF +172204");
+        static_assert(offsetof(VehicleManager, mPlayerAiDriver)          == 171968 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm VehicleDriver::Construct(this + 171968)");
+        static_assert(offsetof(VehicleManager, mbPlayerAiDriverValid)    == 172192 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "recovered member order");
+        static_assert(offsetof(VehicleManager, mfSteeringUpdateRemainder) == 172200 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "recovered member order");
+        static_assert(offsetof(VehicleManager, mePlayerActiveRaceCarIndex) == 172204 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +172204");
 
         // ---- the six world/traffic crash thresholds (DWARF :962..:968) -------------------------
-        static_assert(offsetof(VehicleManager, mfCrashingAICollisionCrashThresholdMPH) == 172208 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +172208 = 50.0f");
-        static_assert(offsetof(VehicleManager, mfHeadOnWorldCrashThreshold)   == 172212 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +172212 = 40.5f");
-        static_assert(offsetof(VehicleManager, mfSideOnWorldCrashThreshold)   == 172216 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +172216 = 50.0f");
-        static_assert(offsetof(VehicleManager, mfTrafficCollisionCheckThresholdMPH) == 172220 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +172220 = 30.0f");
-        static_assert(offsetof(VehicleManager, mfMinRCTrafficTranslateSpeedMPH) == 172224 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +172224 = 40.0f");
-        static_assert(offsetof(VehicleManager, mfVerticalTakedownAngleDeg)    == 172228 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +172228 = 65.0f");
+        static_assert(offsetof(VehicleManager, mfCrashingAICollisionCrashThresholdMPH) == 172208 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +172208 = 50.0f");
+        static_assert(offsetof(VehicleManager, mfHeadOnWorldCrashThreshold)   == 172212 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +172212 = 40.5f");
+        static_assert(offsetof(VehicleManager, mfSideOnWorldCrashThreshold)   == 172216 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +172216 = 50.0f");
+        static_assert(offsetof(VehicleManager, mfTrafficCollisionCheckThresholdMPH) == 172220 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +172220 = 30.0f");
+        static_assert(offsetof(VehicleManager, mfMinRCTrafficTranslateSpeedMPH) == 172224 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +172224 = 40.0f");
+        static_assert(offsetof(VehicleManager, mfVerticalTakedownAngleDeg)    == 172228 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +172228 = 65.0f");
 
-        static_assert(offsetof(VehicleManager, mCameraMatrix) == 172240 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm 4 x stvx128 from this+172240");
+        static_assert(offsetof(VehicleManager, mCameraMatrix) == 172240 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm 4 x stvx128 from this+172240");
         static_assert(offsetof(VehicleManager, mCameraMatrix) % 16 == 0,
                       "stvx128 requires 16-alignment -- a compiler-inserted pad here would fault at runtime");
 
         // ---- the 16 gameplay/debug bools (DWARF :972..:988) ------------------------------------
-        static_assert(offsetof(VehicleManager, mbImpactTime)             == 172304 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +172304");
-        static_assert(offsetof(VehicleManager, mbStopPlayerCrashing)     == 172306 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +172306");
-        static_assert(offsetof(VehicleManager, mbStopAICrashing)         == 172307 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +172307 -- was `mbSuppressIfAlreadyCrashState1`");
-        static_assert(offsetof(VehicleManager, DEBUG_mbHornTakedownEnabled) == 172311 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "DWARF :979");
-        static_assert(offsetof(VehicleManager, mbTrafficCheckingAllowed) == 172313 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +172313 -- the one bool Construct seeds TRUE");
-        static_assert(offsetof(VehicleManager, mbIsOnlineGameMode)       == 172315 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +172315 -- was `mbStationaryTakedownsEnabled`");
-        static_assert(offsetof(VehicleManager, mbPlayerCarInJunkYard)    == 172319 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +172319 (DWARF :988)");
+        static_assert(offsetof(VehicleManager, mbImpactTime)             == 172304 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +172304");
+        static_assert(offsetof(VehicleManager, mbStopPlayerCrashing)     == 172306 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +172306");
+        static_assert(offsetof(VehicleManager, mbStopAICrashing)         == 172307 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +172307 -- was `mbSuppressIfAlreadyCrashState1`");
+        static_assert(offsetof(VehicleManager, DEBUG_mbHornTakedownEnabled) == 172311 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "recovered member order");
+        static_assert(offsetof(VehicleManager, mbTrafficCheckingAllowed) == 172313 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +172313 -- the one bool Construct seeds TRUE");
+        static_assert(offsetof(VehicleManager, mbIsOnlineGameMode)       == 172315 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +172315 -- was `mbStationaryTakedownsEnabled`");
+        static_assert(offsetof(VehicleManager, mbPlayerCarInJunkYard)    == 172319 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +172319");
 
         // ---- the player/car stat block (DWARF :993..:1007) -------------------------------------
         // The store opcodes are the type proof: stfsx for the two floats, stwx for the five words.
-        static_assert(offsetof(VehicleManager, mfPlayerStatStrength)     == 172320 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stfsx @+172320");
-        static_assert(offsetof(VehicleManager, mfPlayerStatDamageLimit)  == 172324 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stfsx @+172324");
-        static_assert(offsetof(VehicleManager, miCarSpeed)               == 172328 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx @+172328 -- was `f32 maPlayerCarStats[0]`");
-        static_assert(offsetof(VehicleManager, miCarStrength)            == 172332 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx @+172332");
-        static_assert(offsetof(VehicleManager, miCarControl)             == 172336 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx @+172336");
-        static_assert(offsetof(VehicleManager, miCarBoost)               == 172340 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx @+172340");
-        static_assert(offsetof(VehicleManager, meCarType)                == 172344 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx @+172344, seeded 3");
-        static_assert(offsetof(VehicleManager, miPlayerBoost)            == 172360 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "DWARF :1007");
-        static_assert(offsetof(VehicleManager, meCurrentGameModeType)    == 172380 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx -1 @+172380");
+        static_assert(offsetof(VehicleManager, mfPlayerStatStrength)     == 172320 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm stfsx @+172320");
+        static_assert(offsetof(VehicleManager, mfPlayerStatDamageLimit)  == 172324 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm stfsx @+172324");
+        static_assert(offsetof(VehicleManager, miCarSpeed)               == 172328 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm stwx @+172328 -- was `f32 maPlayerCarStats[0]`");
+        static_assert(offsetof(VehicleManager, miCarStrength)            == 172332 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm stwx @+172332");
+        static_assert(offsetof(VehicleManager, miCarControl)             == 172336 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm stwx @+172336");
+        static_assert(offsetof(VehicleManager, miCarBoost)               == 172340 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm stwx @+172340");
+        static_assert(offsetof(VehicleManager, meCarType)                == 172344 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm stwx @+172344, seeded 3");
+        static_assert(offsetof(VehicleManager, miPlayerBoost)            == 172360 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "recovered member order");
+        static_assert(offsetof(VehicleManager, meCurrentGameModeType)    == 172380 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm stwx -1 @+172380");
 
         // ---- the eight car-stat strength scalars (DWARF :1015..:1023) --------------------------
-        static_assert(offsetof(VehicleManager, mfCarStatStrengthSlamMax) == 172384 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +172384 = 2.0f");
-        static_assert(offsetof(VehicleManager, mfCarrStatStrengthBeingShuntedMin) == 172412 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm +172412 = 0.05f (last of the eight)");
+        static_assert(offsetof(VehicleManager, mfCarStatStrengthSlamMax) == 172384 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +172384 = 2.0f");
+        static_assert(offsetof(VehicleManager, mfCarrStatStrengthBeingShuntedMin) == 172412 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm +172412 = 0.05f (last of the eight)");
 
         // ---- the cached car-vs-car prediction (DWARF :1026..:1029) -----------------------------
-        static_assert(offsetof(VehicleManager, muCachedCarASlot)         == 172416 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx 0 @+172416");
-        static_assert(offsetof(VehicleManager, muCachedCarBSlot)         == 172420 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx 0 @+172420");
-        static_assert(offsetof(VehicleManager, mbCachedCarCarPredictionResult) == 172424 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stbx 0 @+172424");
-        static_assert(offsetof(VehicleManager, mCachedCarCarPredictionNormal) == 172432 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
+        static_assert(offsetof(VehicleManager, muCachedCarASlot)         == 172416 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm stwx 0 @+172416");
+        static_assert(offsetof(VehicleManager, muCachedCarBSlot)         == 172420 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm stwx 0 @+172420");
+        static_assert(offsetof(VehicleManager, mbCachedCarCarPredictionResult) == 172424 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm stbx 0 @+172424");
+        static_assert(offsetof(VehicleManager, mCachedCarCarPredictionNormal) == 172432 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS,
                       "asm stvx128 v0,r31,r9 with r9 == 172432 -- the 16 bytes of unk_82181520, i.e. {0,0,1,0}");
         static_assert(offsetof(VehicleManager, mCachedCarCarPredictionNormal) % 16 == 0,
                       "loaded/stored with lvx128/stvx128 -- must be 16-aligned");
@@ -362,10 +362,10 @@ namespace Vehicle
                       "mpCachedCarA/B are modelled as 32-bit slots so the 16-aligned prediction normal keeps +172432 on x64");
 
         // ---- the tail (DWARF :1032..:1088) ------------------------------------------------------
-        static_assert(offsetof(VehicleManager, meStationaryPlayerWheelAngle) == 172448 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx 2 @+172448");
-        static_assert(offsetof(VehicleManager, mbCrashRaceCarWhenFatal)  == 172452 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stbx 1 @+172452");
-        static_assert(offsetof(VehicleManager, meShowtimeBehaviour)      == 172456 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx 2 @+172456");
-        static_assert(offsetof(VehicleManager, miRaceCarWorldContactValidationPM) == 172460 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
+        static_assert(offsetof(VehicleManager, meStationaryPlayerWheelAngle) == 172448 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm stwx 2 @+172448");
+        static_assert(offsetof(VehicleManager, mbCrashRaceCarWhenFatal)  == 172452 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm stbx 1 @+172452");
+        static_assert(offsetof(VehicleManager, meShowtimeBehaviour)      == 172456 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "asm stwx 2 @+172456");
+        static_assert(offsetof(VehicleManager, miRaceCarWorldContactValidationPM) == 172460 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS,
                       "asm stores the 30th AddMonitor handle here; named by the console's own assert text");
         // the two contact-generation
         // pointers carved from the head of the old +172465..+172580 opaque span (DWARF :1045/:1046;
@@ -375,9 +375,9 @@ namespace Vehicle
         // console's. The growth is absorbed by the REMAINING opaque run of the same span, which is
         // why miContactStreamCounterA below keeps its seat -- that pair of asserts is the carve's
         // whole tripwire.
-        static_assert(offsetof(VehicleManager, mpContactGenList)    == 172468 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 4,
+        static_assert(offsetof(VehicleManager, mpContactGenList)    == 172468 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS + 4,
                       "console +172468; +4 = host 8-alignment of the pointer pair");
-        static_assert(offsetof(VehicleManager, mpContactGenerator)  == 172472 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 8,
+        static_assert(offsetof(VehicleManager, mpContactGenerator)  == 172472 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS + 8,
                       "console +172472; +8 = the alignment pad + mpContactGenList's own 4->8 widening");
         // REBASED 2026-08-06 (big-five #2): the +172476..+172592 span is CARVED IN FULL now
         // (see the header banner over the block) -- five real PrimitivePairListBuilders, nine
@@ -386,10 +386,10 @@ namespace Vehicle
         // miNumTrafficSphereWorldTests and +172584 as the console POINTER
         // mpTractionLineStreamProducer). The block's host growth is one more named drift term.
         static_assert(offsetof(VehicleManager, mDetachedPartPrimPairBuilder)
-                          == 172476 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 12,
+                          == 172476 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS + 12,
                       "block head: console +172476; +12 = the pointer-pair carve's own growth above");
         static_assert(offsetof(VehicleManager, miNumTrafficSphereWorldTests)
-                          == 172580 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 68,
+                          == 172580 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS + 68,
                       "console +172580; +68 = the growth ACCUMULATED BY THIS SEAT (the block's "
                       "full +76 lands only after the tail's own 4-byte alignment pad before "
                       "mpTractionLineStreamProducer -- the sphere pin below carries the full term)");
@@ -411,7 +411,7 @@ namespace Vehicle
         // `sizeof` is permutation-blind and tail padding can absorb a grown array, so pin the END of
         // the data region as well as the seats inside it (the standing rule from the wave that lost
         // a 4->8 array growth to tail padding).
-        static_assert(sizeof(VehicleManager) >= 172616 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
+        static_assert(sizeof(VehicleManager) >= 172616 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS,
                       "the class must extend at least to the end of muTakedownEventsThisFrame");
         // AND PIN THE END EXACTLY, not just `>=`. The standing rule from the wave that lost a
         // 4 -> 8 array growth to tail padding: a `>=` on sizeof cannot see a trailing member that
@@ -438,8 +438,14 @@ namespace Vehicle
         // rule as the five before it: the literal moved only AFTER
         // KU_HOST_DRIFT_AFTER_MODEL_HANDLES did -- and it fired the moment the split landed,
         // exactly as intended. Six moves, six named drift terms, never a bumped literal.
-        static_assert(sizeof(VehicleManager) == 173056,
-                      "MEASURED total. X360 end 172616 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK (+428) == 173044 -> 16-aligned 173056");
+        // SEVEN: 173056 -> 173440 (2026-09-11, the per-car debug-component wave).
+        // `maRaceCarDebugComponent[8][1024]` became the real `DebugComponent[8]`; the component is
+        // 1072 bytes on the host against the console's 1024, so 8 * 48 == +384 and every term from
+        // the array on picks it up (KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK is +812 once it is rebased
+        // on the new term; 172616 + 812 == 173428 -> 16-aligned 173440). Seventh move, seventh named
+        // drift term.
+        static_assert(sizeof(VehicleManager) == 173440,
+                      "MEASURED total. Console end 172616 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK (+812) == 173428 -> 16-aligned 173440");
         static_assert(sizeof(VehicleManager::maeImpactType) == 32, "EImpactType[8]");
         static_assert(sizeof(VehicleManager::mauImpactScore) == 8, "uint8[8]");
         static_assert(sizeof(VehicleManager::mafPlayerGrindingOtherDurationSeconds) == 32, "f32[8] -- NOT a scalar threshold");
@@ -525,13 +531,22 @@ namespace Vehicle
                           == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "maeRaceCarTypes[8]");
         static_assert(sizeof(VehicleManager::mauNetworkCarHiddenFramesRemaining) / sizeof(u32)
                           == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "mauNetworkCarHiddenFrames[8]");
-        // AND the debug-component span the loop casts into: 8 slots of 1024, big enough and
-        // aligned enough for the reconstructed DebugComponent (112 bytes, align 16). If the class
-        // ever outgrows the slot, the reinterpret_cast in the loop stops being merely inert.
-        static_assert(sizeof(VehicleManager::maRaceCarDebugComponent)
-                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS * 1024, "8 x 1024 (asm stride 0x400)");
-        static_assert(sizeof(DebugComponent) <= 1024 && (1024 % alignof(DebugComponent)) == 0,
-                      "the reconstructed per-car DebugComponent must still fit its opaque slot");
+        // AND the per-car debug components. There is no span and no cast any more: this is a real
+        // array of the real class, so what is checkable here is the count, and that the element's
+        // host size is exactly the number the array's drift term is derived from. Change either and
+        // this fires -- which is how the term is kept from going stale.
+        static_assert(sizeof(VehicleManager::maRaceCarDebugComponent) / sizeof(DebugComponent)
+                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "maRaceCarDebugComponent[8]");
+        static_assert(sizeof(DebugComponent) == 1072,
+                      "host sizeof(DebugComponent) against the console's 1024-byte object -- the "
+                      "number KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS is derived from. The "
+                      "component's own layout gate is what pins that 1072 to the console, seat by seat.");
+        static_assert(VehicleManager::KI_MAX_ACTIVE_RACE_CARS
+                          * (static_cast<std::ptrdiff_t>(sizeof(DebugComponent)) - 1024)
+                          == KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS
+                             - KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
+                      "the array's own term must BE 8 * (host sizeof DebugComponent - the console's "
+                      "1024), and nothing else: it cannot absorb an error in the term in front of it");
     }
 }
 }

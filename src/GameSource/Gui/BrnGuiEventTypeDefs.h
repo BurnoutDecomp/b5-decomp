@@ -916,19 +916,22 @@ private:
 };
 
 // ===================================================================================
-// BrnGui::GuiLiveRevengeUpdateEvent -- an online live-revenge status change. DWARF
-// home BrnGuiEventTypeDefs.h:3722 (GuiEvent<364>); consumed by
-// HudMessageAnalyzer::HandleLiveRevengeUpdate @0x8251E1F0 (which reads the four
-// payload fields in declaration order).
+// BrnGui::GuiLiveRevengeUpdateEvent -- an online live-revenge status change, consumed by
+// HudMessageAnalyzer::HandleLiveRevengeUpdate (which reads the four fields in declaration
+// order). The publisher bakes id 369 and a record size of 16, and the consumer reads the
+// aggressor/victim indices at +0x08/+0x0C -- so the four fields sit at +0x00 and there is
+// NO 12-byte GuiEvent base in front of them. The record is flat.
 // ===================================================================================
-// X360 AddGuiEvent<GuiLiveRevengeUpdateEvent> @0x823CF580 bakes id 369 (was PS3-DWARF 364).
-struct GuiLiveRevengeUpdateEvent : public CgsGui::GuiEvent<369>
+struct GuiLiveRevengeUpdateEvent
 {
-    s32                 miDifference;                   // DWARF h:3725 (the points delta)
-    s32                 meNewStatus;                    // DWARF h:3726 (BrnNetwork LiveRevengeStatus; raw s32 -- enum home pending)
-    EActiveRaceCarIndex meAggressorActiveRaceCarIndex;  // DWARF h:3727
-    EActiveRaceCarIndex meVictimActiveRaceCarIndex;     // DWARF h:3728
+    s32                 miDifference;                   // +0x00 (the points delta)
+    s32                 meNewStatus;                    // +0x04 (BrnNetwork LiveRevengeStatus; raw s32 -- enum home pending)
+    EActiveRaceCarIndex meAggressorActiveRaceCarIndex;  // +0x08
+    EActiveRaceCarIndex meVictimActiveRaceCarIndex;     // +0x0C
+
+    s32 GetEventType() const { return 369; }
 };
+static_assert(sizeof(GuiLiveRevengeUpdateEvent) == 16, "live-revenge update record is 16 bytes (id 369)");
 
 // ===================================================================================
 // Online Stunt Run HUD-event family -- the events BrnOnlineStuntRunMode publishes to the
@@ -1108,6 +1111,53 @@ struct GuiOverlayFullInfoResponse
     char                      macButton2Id[MKI_MAX_LENGTH_OF_STRING_ID];     // +0x198
     bool                      mbButon2ParamUsed;                             // +0x1B8 (-> pad to 0x1C0)
 };
+
+// ===================================================================================
+// The overlay handshake records -- the three bare-id payloads the overlays director
+// exchanges with the overlay flow. All three are RAW records: the queued bytes start
+// at the overlay id with no event header in front of it (the director's dispatch and
+// its wait-finish handler both read the id at payload +0x00), so each carries its
+// wire id through GetEventType() rather than a CgsGui::GuiEvent<N> base.
+//   188 GuiOverlayWaitFinishRequest   -- "stop waiting on this overlay"
+//   189 GuiOverlayHiddenNotification  -- "the current overlay finished hiding"
+//   190 GuiOverlayShowingNotification -- "the overlay is on screen now"
+// Every publisher agrees on the 8-byte record: AddGuiEvent<GuiOverlayWaitFinishRequest>
+// and AddGuiOutEvent<GuiOverlayWaitFinishRequest> both queue (188, 8), and the two
+// OutputGuiEvent<T> instantiations box an 8-byte payload at record offset 16 under
+// ids 188 / 190.
+// ===================================================================================
+struct GuiOverlayWaitFinishRequest
+{
+    CgsID mOverlayId;   // +0x00
+
+    s32 GetEventType() const { return 188; }
+
+    // Compress the overlay name into the record's single id word -- the whole attested
+    // body, assert included.
+    void Construct(const char* lpcOverlayName)
+    {
+        CGS_ASSERT(lpcOverlayName != 0, "Invalid Overlay Id");
+        mOverlayId = CgsIDCompress(lpcOverlayName);
+    }
+};
+
+static_assert(sizeof(GuiOverlayWaitFinishRequest) == 8,
+              "GuiOverlayWaitFinishRequest is the queued record: 8 bytes, id at +0x00");
+
+struct GuiOverlayHiddenNotification
+{
+    CgsID mOverlayId;   // +0x00
+};
+
+struct GuiOverlayShowingNotification : public CgsModule::Event   // empty base; the record stays the bare id
+{
+    CgsID mOverlayId;   // +0x00
+
+    s32 GetEventType() const { return 190; }
+};
+
+static_assert(sizeof(GuiOverlayShowingNotification) == 8,
+              "GuiOverlayShowingNotification is the queued record: 8 bytes, id at +0x00");
 
 // ===================================================================================
 // Road-rules event family (ADDITIVE GROW: BrnRoadRuleComponent.h TU). DWARF homes

@@ -1,6 +1,6 @@
 // Embed-check for the BrnGame::BrnGameModule network-bridge family. Forces the four bridge
-// methods + the opaque GUI/game-state event tag layouts to be referenced so the gate compiles
-// them. Mirrors GameBridgeReplayToX_embed_check.cpp / GameBridgeControllerToX_embed_check.cpp.
+// methods + the widest GUI event records to be referenced so the gate compiles them.
+// Mirrors GameBridgeReplayToX_embed_check.cpp / GameBridgeControllerToX_embed_check.cpp.
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Game/GameBridgeNetworkToX.h"
 #include "GameSource/Network/BrnNetworkModuleIO.h"
@@ -25,15 +25,15 @@ namespace
         (void)lpToGui; (void)lpToGameEvents; (void)lpToGuiEvents; (void)lpIfToGui;
     }
 
-    // Exercise the widest opaque event tags so their sizes are pinned.
+    // Pin the widest GUI event records the bridge posts: the publisher bakes sizeof(T) as the
+    // queued record size, so each one must match the size the console bakes.
     void ExerciseEventTags()
     {
-        volatile s32 li =
-            static_cast<s32>(sizeof(BrnGui::GuiEventScoreboardResponseTableEvent))       // 2924-byte record
-            + static_cast<s32>(sizeof(BrnGui::GuiEventNetworkPlayerStatus))              // 8 x 312 + header
-            + static_cast<s32>(sizeof(BrnGui::GuiEventNetworkLobbyPlayerList))           // 8 x 56 + count
-            + static_cast<s32>(sizeof(BrnGui::GuiLiveRevengeUpdateEvent));               // 16-byte record
-        (void)li;
+        static_assert(sizeof(BrnGui::GuiEventScoreboardResponseTableEvent) == 2924, "scoreboard table record");
+        static_assert(sizeof(BrnGui::GuiEventNetworkPlayerStatus) == 2544,           "player status record");
+        static_assert(sizeof(BrnGui::GuiEventNetworkPlayerList) == 168,              "player list record");
+        static_assert(sizeof(BrnGui::GuiEventNetworkLobbyPlayerList) == 456,         "lobby player list record");
+        static_assert(sizeof(BrnGui::GuiLiveRevengeUpdateEvent) == 16,               "live revenge update record");
     }
 }
 

@@ -41,6 +41,7 @@
 #include "GameSource/Physics/VehicleManager/BrnVehicleManagerDebugComponent.h" // BrnPhysics::Vehicle::VehicleManagerDebugComponent (mDebugComponent @+161968 -- embedded BY NAME as of 2026-08-03; that header only forward-declares VehicleManager, so this is not a cycle)
 #include "GameShared/GameClasses/Physics/CgsRigidBody.h"          // CgsPhysics::RigidBodyId (GetRigidBodyId/GetRaceCarPhysics, 2026-08-09)
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle (maRaceCarModelHandles / maRaceCarGraphicsModelHandles @+43616/+43680 -- split out of mPadAA60, 2026-08-11)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.h" // BrnPhysics::Vehicle::DebugComponent (maRaceCarDebugComponent[8] @+163264 -- embedded BY NAME as of 2026-09-11; that header does not include this one, so this is not a cycle)
 
 // Pointer-only collaborators in RaceCarResponseInfo -- forward-declared in their real namespaces
 // (homed by their own TUs; the classifier never dereferences them here).
@@ -307,16 +308,39 @@ namespace Vehicle
                                                    // +224 until 2026-08-11: that was the cumulative
                                                    // value from BEFORE the race-car term became +128)
 
-    // The fourth term, added 2026-08-06 (big-five #2): the contact-generation block carve
+    // The fourth term, added 2026-09-11 (the per-car debug-component wave): **+384**, and it is
+    // the term that let the create drain's NULL-vptr gate be retired. maRaceCarDebugComponent was
+    // an opaque `unsigned char[8][1024]` because the real component was judged un-layoutable on the
+    // host; it is not. The recovered class accounts for all 1024 console bytes with nothing left
+    // over, and its host image is 1072 -- the base's vptr and list link, the car pointer and each
+    // window's vptr plus two wheel pointers widen 4 -> 8, and one of those widenings is absorbed by
+    // padding the console already had. 8 elements * (1072 - 1024) == +384, and 384 % 16 == 0, so
+    // every 16-aligned member behind it keeps its alignment.
+    // THE ARRAY HEAD DOES NOT MOVE: the element size changes, not the offset of element 0, so
+    // maRaceCarDebugComponent itself still takes the term in front of it and only the members
+    // BEHIND the array take this one.
+    // THE STRIDE IS NOT SPELLED ANYWHERE. The old header note warned against "absorbing" an
+    // overflow by silently re-striding this array; that is not what this is. The array is a real
+    // C++ array of a real type, so the subscript does the striding and the console's 1024 appears
+    // in no expression in the tree -- there is nothing left to re-stride.
+    const std::ptrdiff_t KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS =
+        KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT
+        + 8 * (static_cast<std::ptrdiff_t>(sizeof(BrnPhysics::Vehicle::DebugComponent)) - 1024);
+                                                   // step +384 -> cumulative +736. Derived from the
+                                                   // class's own sizeof, so it cannot go stale: the
+                                                   // component's layout gate pins that sizeof to
+                                                   // the console object, seat by seat.
+
+    // The fifth term, added 2026-08-06 (big-five #2): the contact-generation block carve
     // (+172465..+172592 console -> real members). Growth = the pointer-pair carve's +12 (4
     // alignment + 2x pointer widening, already asserted at the head), five builders 12 -> 16
     // (+20), nine more pointers 4 -> 8 (+36), one alignment pad before the producer run (+4),
     // and one before the traction-line pointer (+4): +12+20+36+4+4 == +76. MEASURED against the
     // compiled layout by the gate's own seat asserts (BrnVehicleManager_layout_check.cpp).
     const std::ptrdiff_t KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK =
-        KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 76;  // step +76 -> cumulative +428 (same stale-label
-                                                   // fix as the term above; +428 is the number
-                                                   // BrnVehicleManager_layout_check.cpp:411 quotes)
+        KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS + 76;  // step +76 -> cumulative +812 (rebased
+                                                   // 2026-09-11 onto the per-car debug-component
+                                                   // term, which sits in front of this block)
 
     // Pointer-only use here; the complete type is
     // BrnPotentialContactAverager.h (the DWARF only ever forward-declares it too --
@@ -333,11 +357,11 @@ namespace Vehicle
         // is declared at the class that owns the arrays. DELETE-WHEN BrnWorld homes it.
         static const s32 KI_MAX_ACTIVE_RACE_CARS = 8;
 
-        // Construct @0x8263B7C8, 943 instructions -- BODIED 2026-08-03 in
-        // BrnVehicleManager.cpp. Its only caller is BrnPhysics::PhysicsModule::Construct
-        // @0x825AE308, which is still a link stub (WorldLinkStubs.cpp). See the big recipe block
-        // further down in this header for the full instruction-level shape and every default the
-        // tuning bank seeds; the body is written straight off it.
+        // Construct -- BODIED in BrnVehicleManager_Construct.cpp (mounted). RE-MEASURED
+        // 2026-09-11: its only caller, BrnPhysics::PhysicsModule::Construct, is a real body in the
+        // mounted BrnPhysicsModule.cpp and has not been a link stub for waves. See the big recipe
+        // block further down in this header for the full shape and every default the tuning bank
+        // seeds; the body was written straight off it.
         void Construct();
 
         // ==================================================================================
@@ -371,8 +395,8 @@ namespace Vehicle
         // world potential contact (may REWRITE the contact's normal/point in place -- the
         // wall-normal flatten and the wheel/bottom-plane projection); returns whether the
         // contact survives into the Validated queue. BODIED in
-        // BrnVehicleManager_ValidateRaceCarWorldContact.cpp (slice TU; home BrnVehicleManager.cpp
-        // is still unmounted -- RaceCarPhysics_Construct precedent).
+        // BrnVehicleManager_ValidateRaceCarWorldContact.cpp (slice TU; the home TU
+        // BrnVehicleManager.cpp is mounted too -- fold back whenever this slice is next touched).
         bool ValidateRaceCarWorldContact(
             CgsSceneManager::SceneManagerIO::PotentialContact* lpInOutContact,
             const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriCacheInterface,
@@ -417,24 +441,23 @@ namespace Vehicle
         // the car's live transform -- but it is the difference between "put the car back where
         // it crashed" and "put it back on the last road pose it held".
         //
-        // ⛔⛔ LANDED 2026-08-26 AND IT CHANGED NOTHING YET -- MEASURED, SAY IT PLAINLY. On the
-        // very run that proved the reset pump (rp_crash3) the witness still reads
-        //     [collision-tag] car 0 aboveGroundValid=0 tag=0xFFFF8000 section=32767
-        // on every sample. The producer runs and posts the query; THE ANSWER NEVER COMES BACK.
-        // ⭐⭐ AND THE PREVIOUS WAVE'S NOTE IS WHY THAT WAS A SURPRISE: it recorded "the RESULT
-        // half of that round trip is already fully live", which was true of the VEHICLE-MANAGER
-        // side (WorldBridgeSceneToPhysics case 2 -> AddLineTestResult ->
-        // ProcessAboveGroundLineTestsResults -> SetAboveGroundTestResult, all bodied) and says
-        // NOTHING about whether anything ANSWERS a fine query. Nothing does: the SceneManager
-        // query pipeline is severed in five places (SceneManagerModule::ProcessSceneQueries is a
-        // WorldLinkStubs stub, ProcessFineQueries / ProcessLineTestFine are absent, and
-        // FineIntersectionTestModule::ComputeLineTestFine is an EMPTY body with no callers) --
-        // the same five severances BrnPlaceOnTrackManager.cpp's own bring-up leg was written for.
-        // ⭐ THE LESSON, because it is the third time this campaign: "THE CONSUMER IS BODIED" IS
-        // NOT "THE QUESTION GETS ANSWERED". A round trip has three parts, and the middle one here
-        // is a different subsystem.
-        // DELETE-WHEN the SceneManager fine-query pipeline answers a query; this producer is then
-        // already in place and the AI section system starts filling on its own.
+        // ⭐ THE ROUND TRIP IS CLOSED -- RE-MEASURED 2026-09-11, and the note that used to sit
+        // here is retired. It read "THE ANSWER NEVER COMES BACK ... the SceneManager query
+        // pipeline is severed in five places (ProcessSceneQueries is a WorldLinkStubs stub,
+        // ProcessFineQueries / ProcessLineTestFine are absent, ComputeLineTestFine is an EMPTY
+        // body with no callers)". Four of those five have landed since, in the scene-query waves:
+        // ProcessSceneQueries is a real body in the mounted CgsSceneManagerModule.cpp, and
+        // ProcessFineQueries, ProcessFineQueriesDirectly and ProcessLineTestNearest -- the leg
+        // THIS ray actually takes, because the down-ray is posted as a NEAREST line test -- are
+        // real bodies in the mounted CgsSceneManagerModule_wSQ1.cpp, which carries the whole
+        // producer-to-consumer chain in its banner and the runtime witness for it
+        // (mbValid true on every sampled frame, drift held, once the ray-vs-world kernel landed).
+        // Still unreconstructed on the sibling FINE leg, which this producer does not use:
+        // SceneManagerModule::ProcessLineTestFine and FineIntersectionTestModule::
+        // ComputeLineTestFine are both loud traps in those two mounted TUs.
+        // ⭐ THE LESSON IS STILL WORTH KEEPING: "THE CONSUMER IS BODIED" IS NOT "THE QUESTION
+        // GETS ANSWERED". A round trip has three parts, and the middle one here is a different
+        // subsystem -- which is why this note was wrong for two waves in each direction in turn.
         // BODIED in the slice TU.
         void GenerateAboveGroundLineTests(
             BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestInterface);
@@ -541,16 +564,12 @@ namespace Vehicle
         // 8x VehiclePhysics::Construct + 8x { VehicleDriver::Prepare, VehiclePhysics::Construct,
         // Vehicle::DebugComponent::Construct }, then PhysicalTrafficManager::Prepare
         // @0x8262CA48, VehicleDriver::Prepare on the 9th (traffic) driver, and ~30 scalar seeds.
-        // NOT RECONSTRUCTED 2026-08-10 -- a named LINK STUB in WorldLinkStubs.cpp, deliberately,
-        // for two measured reasons rather than one felt one:
-        //   (1) its own callee closure is ~470 further instructions across four functions of
-        //       which only VehiclePhysics::Construct exists in this tree, and
-        //   (2) the Hex-Rays view degenerates into `_R28`/`_R31` inline-asm with every store at a
-        //       raw console byte offset past mPhysicalTrafficManager -- i.e. past the +224 host
-        //       drift this header documents -- so reproducing it from the pseudocode would be
-        //       exactly the offset hack the project forbids.
-        // It always returns 1 on the console (there is no failure path in the body), which is what
-        // makes the FSM above landable without it; the drop is one greppable symbol.
+        // BODIED in BrnVehicleManager_PrepareData.cpp (mounted). RE-MEASURED 2026-09-11: this note
+        // used to read "NOT RECONSTRUCTED -- a named LINK STUB in WorldLinkStubs.cpp", parked on
+        // its callee closure and on an unusable pseudocode view. Both blockers went away when the
+        // Prepare chain landed -- the callees are bodied and the stores are reached by name -- and
+        // WorldLinkStubs.cpp has not named this symbol since. It always returns 1 (there is no
+        // failure path in the body), which is why the FSM above could land ahead of it.
         bool PrepareData( rw::IResourceAllocator* lpPhysicsAllocator );
 
         // X360 @0x82615BA0 (37 insns); home
@@ -568,7 +587,7 @@ namespace Vehicle
         // A/B entity owner is TRAFFIC_VEHICLE, assert the packed 14-bit entity index is < 20
         // and that mPhysicalTrafficManager.mUsedTrafficVehicles has that traffic slot live.
         // Bodied in BrnVehicleManager_ValidateSimulationContacts.cpp (slice TU -- the home TU
-        // is still unmounted). The queue element is InAddPotentialContact (stride 80); the
+        // is mounted too). The queue element is InAddPotentialContact (stride 80); the
         // spelling below is the same EventQueue instantiation InputBuffer::InAddContactQueue
         // names (typedefs do not change the mangling).
         void ValidateSimulationContacts(
@@ -590,14 +609,19 @@ namespace Vehicle
         // @0x825EAC28 (DWARF h:941; PS3 DecFIGS 0x6E6178). Thin forwarder: null tripwires
         // (BrnVehicleManager.cpp:7727/:7728) + the A-owner==TRAFFIC tripwire (:7730), then
         // mPhysicalTrafficManager.ValidateTrafficContact. Bodied in
-        // BrnVehicleManager_PerFrameLeaves.cpp (home BrnVehicleManager.cpp still unmounted).
+        // BrnVehicleManager_PerFrameLeaves.cpp.
         bool ValidateTrafficContact( CgsSceneManager::SceneManagerIO::PotentialContact* lpContact,
                                      const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriCacheInterface,
                                      f32 lfTimeStep );
 
         // @0x825C83B0 (DWARF h:1073). Forward the simple-traffic-with-car potential contacts into
-        // the sim add-contact queue. FLAG: DECLARED for BridgeContactsToSimulation's closure;
-        // body still a TRAP STUB (375 X360 asm lines -- named, not landed, this wave).
+        // the sim add-contact queue. FLAG: still an INERT ONE-SHOT BOOT GATE (not a trap -- it
+        // returns quietly and logs one line per boot) in the mounted
+        // BrnVehicleManager_PerFrameLeaves.cpp; the real body is 375 console instructions and is
+        // not reconstructed. Its cost is measured and is ZERO today: that TU's banner records a
+        // 6,300-frame witness in which this queue and its world twin were never once non-empty,
+        // because only one SIMPLE traffic slot can exist and the allocator hands out only FULL
+        // ones. Do not spend a wave on it expecting a behaviour change.
         void BridgeSimpleTrafficWithCarContactsToSimulation(
             CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InAddPotentialContact, 1024>* lpContactQueue,
             const BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContactInterface );
@@ -639,11 +663,13 @@ namespace Vehicle
         // callees. Signatures per the PS3 DecFIGS mangles (@0x75C0C8 / @0x788190 / @0x789760);
         // 0x8261BF28 and 0x825C2EA0 are .ida-exports HOLES -- the PS3 twins are the signature
         // authority for both.
-        // STALE FLAG RETIRED 2026-08-19 (wave Q7, cluster `carcar`): this block used to end
-        // "FLAG: all four bodies are TRAP STUBS this wave -- named, not landed". Three of the four
-        // have been real for waves (DoRaceCarWorldContactGeneration since 2026-08-14, IsRaceCarHidden
-        // since 2026-08-11) and DoCarCarContactGeneration is real as of this wave; only
-        // DoTrafficCarWorldContactGeneration is still a trap.
+        // STALE FLAG RETIRED 2026-08-19, RE-MEASURED 2026-09-11: this block used to end "FLAG: all
+        // four bodies are TRAP STUBS this wave", then "only DoTrafficCarWorldContactGeneration is
+        // still a trap". ALL FOUR ARE REAL BODIES TODAY, in the mounted
+        // BrnVehicleManagerContactGeneration.cpp. The one residual is narrower than a trap: the
+        // third arm of DoTrafficCarWorldContactGeneration (FULL car, sphere budget exhausted) is
+        // an inert one-shot gate carrying its own DELETE-WHEN, because the swept-sphere-vs-triangle
+        // collide entry it needs lives in the collision generator's own cluster and is undeclared.
         // ==========================================================================================
 
         // @0x8261BB38 (251; PS3 0x75C0C8) -- REAL as of 2026-08-19 (wave Q7), body in
@@ -703,8 +729,8 @@ namespace Vehicle
         // ==========================================================================================
         // The four small per-frame leaves of
         // PhysicsModule::Update @0x825B0640, DWARF-authoritative signatures, bodied in the slice TU
-        // BrnVehicleManager_PerFrameLeaves.cpp (home BrnVehicleManager.cpp is still unmounted --
-        // the established slice pattern; fold back when the home mounts).
+        // BrnVehicleManager_PerFrameLeaves.cpp. RE-MEASURED 2026-09-11: the home TU
+        // BrnVehicleManager.cpp IS mounted -- this line said it was not, as several siblings did.
         // ==========================================================================================
 
         // @0x8261BAE0 (DWARF h:647). End-of-frame teardown of the two contact-generation IO
@@ -736,13 +762,14 @@ namespace Vehicle
         // ==========================================================================================
         // The remaining per-frame surface Update calls. Signatures are DWARF-authoritative
         // (references/DecFIGS/dwarfdump/.../BrnVehicleManager.h) and corroborated by the PS3
-        // DecFIGS out-of-line mangles. Split by status:
-        //   REAL THIS WAVE (bodied in BrnVehicleManager_ConductorLeaves.cpp): CheckState,
-        //     UpdateCameraMatrix, GetForceNoSlowMo, ResetForceNoSlowMo, ProcessWheelContacts,
-        //     ReadUpdatedBodies.
-        // FLAG -- DECLARED FOR THE CONDUCTOR'S CLOSURE, body still a LOUD one-shot gate in
-        //     BrnPhysicsConductorGates.cpp (each gate names its X360 address + insn count):
-        //     the rest. Reconstruct each and DELETE its gate (LNK2005 is the tripwire).
+        // out-of-line mangles.
+        // EVERY ONE OF THEM IS A REAL BODY IN A MOUNTED TU -- re-measured 2026-09-11, one
+        // definition each: CheckState in BrnVehicleManager_CrashState.cpp; UpdateCameraMatrix and
+        // ProcessWheelContacts in BrnVehicleManager_ConductorLeaves.cpp; ReadUpdatedBodies in
+        // BrnVehicleManager_ReadUpdatedBodies.cpp; the two slow-mo accessors inline below.
+        // This block used to end "the rest are LOUD one-shot gates in a conductor-gates TU --
+        // reconstruct each and DELETE its gate". There is no such TU in the tree and there are no
+        // such gates; nothing in this group is waiting on the conductor.
         // ==========================================================================================
 
         // @0x825EADA8 (DWARF dump :977). Debug validation sweep: for every live race car
@@ -823,17 +850,18 @@ namespace Vehicle
         // between them. Its ONLY console caller is PhysicsModule::PostSceneUpdate @0x825ABC10,
         // which is why nothing in this family has ever executed on this build.
         //
-        // THE FIVE ARMS BELOW ARE ONE-SHOT GATES, and the middle one is the point of the whole
-        // campaign: ProcessCreateEvents @0x82616770 is the ONLY writer anywhere in the XEX that
-        // SETS a bit in mUsedRaceCars (the tree's only other write is Construct's UnSetAll()).
-        // Until it lands, no race car exists to the physics vehicle manager.
-        //
-        // AND IT MUST NOT LAND BEFORE THE GROUND DOES. Setting one bit of mUsedRaceCars
-        // turns on FOUR already-mounted, already-called per-frame loops that walk that bitset --
-        // ReadUpdatedBodies (gravity + IntegrateTransform, i.e. the fall itself),
-        // UpdateVehiclePhysics (both loops, including RaceCarPhysics::Update),
-        // StartVehicleContactGeneration and the traction-line harvest. See the ground-cost census
-        // in BrnPhysicsConductorGates.cpp: the ORDER is traction chain -> create path.
+        // THE FIVE ARMS BELOW ARE ALL REAL BODIES IN MOUNTED TUs -- re-measured 2026-09-11. The
+        // middle one was the point of the whole campaign: ProcessCreateEvents is the ONLY writer
+        // anywhere in the image that SETS a bit in mUsedRaceCars (the tree's only other write is
+        // Construct's UnSetAll()), and it is bodied and mounted, so race cars now exist to the
+        // physics vehicle manager. Setting one bit of mUsedRaceCars turns on FOUR already-mounted,
+        // already-called per-frame loops that walk that bitset -- ReadUpdatedBodies (gravity +
+        // IntegrateTransform, i.e. the fall itself), UpdateVehiclePhysics (both loops, including
+        // RaceCarPhysics::Update), StartVehicleContactGeneration and the traction-line harvest --
+        // and as of the create-drain wave they ARE on. The ordering rule this block used to carry
+        // ("traction chain before create path", with a census in a conductor-gates TU that no
+        // longer exists) is spent: both legs landed, in that order. See
+        // BrnVehicleManager_ProcessCreateEvents.cpp's banner for what the bit switches on.
         // ==========================================================================================
         void ProcessVehicleMaintenanceEvents(
             CgsModule::IOBufferStack* lpInputBufferStack,
@@ -860,9 +888,10 @@ namespace Vehicle
 
         // @0x82616770 (1,067). Arm 3: THE CREATE PATH -- the only writer in the whole XEX that
         // SETS a bit in mUsedRaceCars. Bodied 2026-08-11 in its OWN slice TU,
-        // BrnVehicleManager_ProcessCreateEvents.cpp, which is deliberately kept out of
-        // build_game_exe.bat until RaceCarPhysics::Prepare @0x82639CB8 has a declaration -- see
-        // that file's banner for why the seat and the bit-set cannot be separated.
+        // BrnVehicleManager_ProcessCreateEvents.cpp, WHICH IS MOUNTED (re-measured 2026-09-11 --
+        // this line used to say it was deliberately held out of the build until the per-car
+        // Prepare seat existed; that seat landed and the mount went in with it). See that file's
+        // banner for why the seat and the bit-set cannot be separated.
         void ProcessCreateEvents(const VehicleInputInterface* lpInputInterface,
                                  VehicleOutputRequestInterface* lpOutputInterface,
                                  VehicleManagerOutputInterface* lpManagerOutputInterface,
@@ -915,9 +944,11 @@ namespace Vehicle
         // BrnVehicleManager_TractionLineTests.cpp. A Burnout car does NOT rest on contacts --
         // contacts are the body-shell/crash path; it rests on TRACTION LINE TESTS, and this is the
         // producer lifecycle plus the race-car harvest that ends in Wheel::mRoadContact.mbIsOnGround.
-        // ALL FOUR ARE UNREACHED TODAY: their only callers are StartVehicleTractionLineTests
-        // (gate-bodied below) and EndVehicleTractionLineTests (link stub) -- see those two for why
-        // the generation half cannot land yet. They are mounted so the LINK closure is enforced.
+        // ALL FOUR ARE REACHED EVERY FRAME TODAY -- re-measured 2026-09-11. This block used to say
+        // they were unreached because their two callers were "gate-bodied" and "a link stub";
+        // StartVehicleTractionLineTests and EndVehicleTractionLineTests are both real bodies in
+        // the same mounted TU, they run as a matched pair every frame, and with the create drain
+        // landed the harvest has live cars to walk.
         // ==========================================================================================
 
         // @0x825B5098 (52 insns). Carve the traction-line command stream out of the contact
@@ -963,7 +994,7 @@ namespace Vehicle
         void UpdateTriangleCache(
             CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update);
 
-        // ---- FLAG: gate-bodied (BrnPhysicsConductorGates.cpp) from here down ------------------
+        // ---- the traction producer's two side legs -------------------------------------------
 
         // THE TWO SIDE LEGS OF THE TRACTION-LINE PRODUCER, kept in MATCHED Add<->Read PAIRS because
         // EndVehicleTractionLineTests hands ONE result cursor to the three harvests in turn -- an
@@ -971,7 +1002,7 @@ namespace Vehicle
         // the race-car leg's answers.
         //
         // ⭐ THE PLAYER-STUCK LEG IS REAL AS OF 2026-09-03 (aiwave lane P2b), all four bodies in
-        // BrnVehicleManager_PlayerStuck.cpp, gates DELETED from BrnPhysicsConductorGates.cpp:
+        // the mounted BrnVehicleManager_PlayerStuck.cpp, and their gates are long gone:
         //   0x825E9B28 (171) AddPlayerStuckInCollisionLineTests   <-> 0x825C3898 (118) ReadPlayerStuck...
         //   0x825E9DD8  (87) UpdatePlayerStuckInCollisionTest      (same leg; drives the spheres)
         //   0x825C4AB8 (147) UpdatePlayerStuckInCollisionSpheres   (same leg)
@@ -991,10 +1022,14 @@ namespace Vehicle
             CgsMemory::SimpleDataStreamResultIterator* lpResultIterator);
 
         // @0x82629CE0 (DWARF :308; 78 insns).
-        // STILL GATED 2026-08-10 (ground wave) and here is the measurement, so nobody re-derives
-        // it: this calls its six callees UNCONDITIONALLY, and the two that build the commands
-        // (AddRaceCarTractionLineTests @0x825E9640, PhysicalTrafficManager::AddTrafficTraction-
-        // LineTests @0x8261D580) read the triangles they test against out of a per-object TRIANGLE
+        // REAL BODY, MOUNTED, RUNNING EVERY FRAME -- re-measured 2026-09-11 in
+        // BrnVehicleManager_TractionLineTests.cpp, paired with EndVehicleTractionLineTests in the
+        // same TU (they can never be split: End dereferences the producer Start allocates, with no
+        // null guard). The history below is kept because it is a live lesson about what a
+        // dependency claim is worth, not because anything here is still parked.
+        // WHAT THE PARK WAS: this calls its six callees UNCONDITIONALLY, and the two that build
+        // the commands (AddRaceCarTractionLineTests, PhysicalTrafficManager::AddTrafficTraction-
+        // LineTests) read the triangles they test against out of a per-object TRIANGLE
         // CACHE -- they assert "lpCacheInterface != NULL" / "mpTriangleCacheManager != NULL" /
         // "mpaTriangleCache != NULL" and then dereference it.
         // the previous text claimed
@@ -1010,19 +1045,19 @@ namespace Vehicle
         // StartUpdateTriangleCaches 278, EndUpdateTriangleCaches 475 and SceneManagerModule::
         // StartUpdateTriangleCache 73 are all bodied and run every frame, and PrepareTriangleCache
         // 37 (the one that registers a CAR with the cache at all) is bodied too -- `usedSlots=28`
-        // is runtime-witnessed. What is left, in the order it must happen:
-        //   1. VehicleManager::ProcessCreateEvents @0x82616770 (1,067) -- nothing sets
-        //      mUsedRaceCars today (its only write in this tree is Construct's UnSetAll), so no
-        //      car exists to be positioned;
-        //   2. PhysicsModule::UpdateCachedPositions @0x8259C370 (34) + the six per-manager
-        //      UpdateTriangleCache bodies (~1,029) -- what marks a slot DIRTY;
-        //   3. the PolygonSoupTesterJob fill path (~1,183 across 11) -- what puts triangles in it.
-        // Until those run, the cache is allocated and CLAIMED but holds ZERO batches, so this
-        // would read a valid pointer and get an empty triangle list -- a [[silent-drop-stubs]]
-        // result, not a crash. Still not landable.
-        // SimpleVehiclePhysics::GetTractionLine @0x825D85C0 remains genuinely absent: re-verified
-        // as a true export hole (dir gap 0x825D8490+76insns -> 0x825D8878; no name-index hit in
-        // 30,084 exports), **174 instructions**, image-only.
+        // is runtime-witnessed. ALL THREE OF THE ITEMS THAT PARAGRAPH LISTED AS REMAINING ARE
+        // DISCHARGED -- re-measured 2026-09-11, in the order it said they had to happen:
+        //   1. VehicleManager::ProcessCreateEvents -- bodied and mounted, so mUsedRaceCars is
+        //      written and cars exist to be positioned;
+        //   2. PhysicsModule::UpdateCachedPositions -- a real body in the mounted
+        //      BrnPhysicsModule.cpp, all arms, alongside the per-manager UpdateTriangleCache
+        //      bodies that mark a slot DIRTY;
+        //   3. the PolygonSoupTesterJob fill path -- bodied across its own mounted TUs under
+        //      GameShared/Jobs/PolygonSoupTester/.
+        // So the cache is no longer "claimed but empty": the traction probe records 8-10 batches
+        // per car through a live run. SimpleVehiclePhysics::GetTractionLine, which this paragraph
+        // once called genuinely absent (a true export hole, image-only), has since been recovered
+        // and is a real body in the mounted BrnSimpleVehiclePhysics.cpp.
         void StartVehicleTractionLineTests(CgsModule::IOBufferStack* lpInputBufferStack,
                                            const VehicleInputInterface* lpInputInterface,
                                            Deformation::DeformationManager* lpDeformationManager,
@@ -1098,9 +1133,10 @@ namespace Vehicle
         // UpdateDrivers' own four callees. Every one is
         // DWARF-attested VERBATIM (references/DecFIGS/.../BrnVehicleManager.h:875/:878/:881/:1254)
         // and every one is X360-attested with the SAME register map the DWARF implies, read off
-        // UpdateDrivers @0x82642D38..0x82642E28. ALL FOUR ARE STILL BODYLESS -- they are named
-        // BRN_CONDUCTOR_GATEs in BrnPhysicsConductorGates.cpp (401 / 185 / 258 / 333 console
-        // instructions), so declaring them here buys the drain's compile, not its behaviour.
+        // UpdateDrivers. ALL FOUR ARE REAL BODIES in the mounted BrnVehicleManager_DriverArms.cpp
+        // -- re-measured 2026-09-11, one definition each. This note used to say all four were
+        // still bodyless named gates in a conductor-gates TU; that TU does not exist and no such
+        // gate survives anywhere in the tree.
         // The `BitArray<8u>&` is the per-frame "which race cars did a driver update touch" set that
         // UpdateDrivers builds on its own stack and hands to all four in turn.
         void UpdatePlayerDriver(const BrnPlayerDriverControls* lpControls,
@@ -1785,7 +1821,9 @@ namespace Vehicle
         //    virtuals into link errors -- SimpleVehiclePhysics::SetCrashing and the +0x10 slot
         //    (then role-named "IsIgnoringPassedOnImpulses"; image-settled 2026-08-09 as
         //    VehiclePhysics::IsPlayerVehicleInShowtime, whose recovered default retires that
-        //    trap). SetCrashing's vtable-closure GATE still stands in its own TU.
+        //    trap). BOTH are closed today: SimpleVehiclePhysics::SetCrashing is a real body in the
+        //    mounted BrnSimpleVehiclePhysics.cpp and its vtable-closure gate is gone (re-measured
+        //    2026-09-11 -- this line claimed the gate still stood).
         //
         // WHAT WAS STILL MISSING FOR `VehicleManager::Construct` @0x8263B7C8 -- MEASURED 2026-08-03,
         //    not estimated. The layout wave above mined this function for OFFSETS; this note records
@@ -1805,12 +1843,13 @@ namespace Vehicle
         // THE SENTENCE THAT STOOD HERE -- "⇒ Construct is NOT blocked on link closure" --
         //    IS FALSE; see CORRECTION 1 at the top of this block. "bodied" in the list above means
         //    the body EXISTS SOMEWHERE IN THE TREE, and for two of the six the TU that holds it is
-        //    not mounted, so the symbol does not resolve. Construct IS blocked on link closure, on
+        //    not mounted, so the symbol does not resolve. Construct WAS blocked on link closure, on
         //    exactly two mount lines (BrnStuntOffencesManager.cpp, BrnPhysicalTrafficManager.cpp).
-        //    MEASURED with the linker 2026-08-03, not reasoned.
-        //    Its only caller is PhysicsModule::Construct @0x825AE308, which is still a
-        //    WorldLinkStubs stub for exactly two reasons: this function, and
-        //    PhysicsSimulationModule::Construct.
+        //    MEASURED with the linker 2026-08-03, not reasoned -- AND BOTH MOUNT LINES ARE IN THE
+        //    BAT TODAY (re-measured 2026-09-11), which is why Construct itself is bodied and
+        //    mounted. Its only caller, PhysicsModule::Construct, is likewise a real body in the
+        //    mounted BrnPhysicsModule.cpp; the "still a WorldLinkStubs stub for exactly two
+        //    reasons" that stood here named a stub that no longer exists.
         // BUT DO NOT STOP READING HERE. "Has a body" is not "can be called": three of those
         //    six sub-constructors take a `this` that VehicleManager cannot supply, because the
         //    member is an X360-sized opaque span and the real x64 class does not fit in it. The
@@ -1871,14 +1910,14 @@ namespace Vehicle
         //              -- the export has a GOOD pseudocode, unlike VehiclePhysics::Construct's. No
         //              image read was needed. There are 33 distinct scalars, not ~40.
         //
-        // DO NOT SHIP A PARTIAL Construct. A body that runs the first ~510 instructions and skips
-        //    the tuning bank would leave every takedown/slam/shunt threshold at zero while LOOKING
-        //    complete -- the silent-drop-stub failure class. Either the tuning bank lands with it or
-        //    the function stays unbodied. (The bank's DEFAULTS are now recorded member-by-member
-        //    below, so the body can be written straight off this header.)
+        // DO NOT SHIP A PARTIAL Construct -- the rule that governed the landing, kept because it
+        //    generalises. A body that runs the first ~510 instructions and skips the tuning bank
+        //    would leave every takedown/slam/shunt threshold at zero while LOOKING complete: the
+        //    silent-drop-stub failure class. The bank's DEFAULTS are recorded member-by-member
+        //    below and the landed body was written straight off them.
         //
         // ==========================================================================================
-        // AND HERE IS WHY IT IS STILL UNBODIED -- MEASURED 2026-08-03 (the Construct-blocker
+        // AND HERE IS WHY IT WAS UNBODIED FOR SO LONG -- MEASURED 2026-08-03 (the Construct-blocker
         //     wave), with the compiler, not reasoned. The previous note ended "now that the layout
         //     is settled", and the wave brief that followed it said Construct was "no longer blocked
         //     on layout". **BOTH ARE WRONG.** The TUNING BANK is settled -- that is the last ~340
@@ -1970,11 +2009,14 @@ namespace Vehicle
         //
         // THE TEMPTING WRONG FIX, written down so it is not re-invented: the 32-byte debug
         //       component overflow could be "absorbed" by shrinking the maRaceCarDebugComponent pad
-        //       behind it (both are opaque, nothing reads either by name, and the tuning bank would
-        //       keep its offsets). Do not. Construct stores &maRaceCarDebugComponent[i] into each car
-        //       record at an asm-literal 1024 stride (`addi r27, r27, 0x400`); silently re-striding
-        //       that array to make an unrelated call compile is inventing layout to buy a green
-        //       build. If it is ever done it must be a deliberate, argued decision with its own gate.
+        //       behind it (nothing read either by name, and the tuning bank would keep its
+        //       offsets). Do not. Silently re-striding an array to make an unrelated call compile is
+        //       inventing layout to buy a green build.
+        // STILL TRUE, AND NOT WHAT 2026-09-11 DID. That wave made
+        //       maRaceCarDebugComponent a real `DebugComponent[8]`, which changes the element size
+        //       honestly rather than absorbing anything: the array head stays at +163264, the growth
+        //       is carried by its own term, and the console's 1024 stride now appears in no
+        //       expression in the tree at all, because the subscript does the striding.
         //
         // WHAT IS ALREADY DECODED, so the unblocking wave writes zero new decode. All of the
         //    below is re-derived first-hand from the freshly pulled asm (943 instructions) and
@@ -2469,15 +2511,22 @@ namespace Vehicle
         //   `mDebugComponent.Construct(this);` BY NAME.
         VehicleManagerDebugComponent mDebugComponent;               // +161968 (X360 1296; host 1328)
 
-        // NEWLY PINNED: the per-car debug components. Construct walks them in the 8-car loop with
-        // `addis r27,r31,2 ; addi r27,r27,0x7DC0` -> this + 163264 and `addi r27,r27,0x400`
-        // (stride 1024), storing each into the matching maRaceCarVehicles[] record and firing the
-        // console's own `lpDebugComponent != NULL` assert. DWARF:
-        // `BrnPhysics::Vehicle::DebugComponent[8] maRaceCarDebugComponent` (BrnVehicleManager.h:860),
-        // immediately followed by `bool[8] mabRaceCarDebugComponentRegistered` (:861).
-        // THE CHAIN CLOSES TO THE BYTE: 163264 + 8*1024 == 171456, + 8 == 171464, which is the
-        // independently asm-proven offset of the gate byte below. Four numbers, one closure.
-        unsigned char        maRaceCarDebugComponent[8][1024];        // +163264 (ends 171456)
+        // The per-car debug components. Construct walks them in the 8-car loop, storing each into
+        // the matching maRaceCarVehicles[] record and firing the console's own
+        // `lpDebugComponent != NULL` assert. THE CHAIN CLOSES TO THE BYTE on the console:
+        // 163264 + 8*1024 == 171456, + 8 == 171464, which is the independently asm-proven offset of
+        // the gate byte below. Four numbers, one closure.
+        //
+        // REAL TYPE as of 2026-09-11 (was `unsigned char[8][1024]`). This was the last opaque span
+        // in the class, and it was the one that mattered most, because an opaque span cannot carry
+        // a vptr: the create drain had to gate DebugComponent::Register behind a NULL-vptr test,
+        // since the console's vptr comes from this member's C++ constructor and there was no
+        // constructor to run. There is now -- the elements are default-constructed with the rest of
+        // the manager, so Register's four virtual dispatches land, and the gate is gone. The
+        // component is 1072 bytes on the host against the console's 1024; that is carried, as
+        // everything else here is, by a named term (KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS).
+        BrnPhysics::Vehicle::DebugComponent maRaceCarDebugComponent[8];  // +163264 (console: ends
+                                                                         //          171456)
         bool                 mabRaceCarDebugComponentRegistered[8];   // +171456 (ends 171464)
 
         // ==========================================================================================

@@ -331,14 +331,14 @@ namespace Vehicle
         static_assert(sizeof(PhysicalTrafficManager::mu8GlobalToPhysicalEntityIndexMap) == 600,
                       "and it is 600 bytes -- the sizeof the console's own assert text names "
                       "(asm cmplwi 0x258)");
-        static_assert(offsetof(VehicleManager, mfPlayerStatStrength)     == 172320 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfPlayerStatStrength (asm +172320)");
-        static_assert(offsetof(VehicleManager, mfPlayerStatDamageLimit)  == 172324 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "mfPlayerStatDamageLimit (asm +172324)");
-        static_assert(offsetof(VehicleManager, miCarSpeed)               == 172328 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "miCarSpeed (asm +172328)");
-        static_assert(offsetof(VehicleManager, miCarStrength)            == 172332 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "miCarStrength (asm +172332)");
-        static_assert(offsetof(VehicleManager, miCarControl)             == 172336 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "miCarControl (asm +172336)");
-        static_assert(offsetof(VehicleManager, miCarBoost)               == 172340 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "miCarBoost (asm +172340)");
-        static_assert(offsetof(VehicleManager, meCarType)                == 172344 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "meCarType (asm +172344)");
-        static_assert(offsetof(VehicleManager, meShowtimeBehaviour)             == 172456 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "meShowtimeBehaviour (asm +172456)");
+        static_assert(offsetof(VehicleManager, mfPlayerStatStrength)     == 172320 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfPlayerStatStrength (asm +172320)");
+        static_assert(offsetof(VehicleManager, mfPlayerStatDamageLimit)  == 172324 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfPlayerStatDamageLimit (asm +172324)");
+        static_assert(offsetof(VehicleManager, miCarSpeed)               == 172328 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "miCarSpeed (asm +172328)");
+        static_assert(offsetof(VehicleManager, miCarStrength)            == 172332 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "miCarStrength (asm +172332)");
+        static_assert(offsetof(VehicleManager, miCarControl)             == 172336 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "miCarControl (asm +172336)");
+        static_assert(offsetof(VehicleManager, miCarBoost)               == 172340 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "miCarBoost (asm +172340)");
+        static_assert(offsetof(VehicleManager, meCarType)                == 172344 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "meCarType (asm +172344)");
+        static_assert(offsetof(VehicleManager, meShowtimeBehaviour)             == 172456 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "meShowtimeBehaviour (asm +172456)");
     }
 
     // -------------------------------------------------------------------------------------------

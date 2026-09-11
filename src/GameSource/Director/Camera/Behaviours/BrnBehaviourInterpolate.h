@@ -146,7 +146,9 @@ public:
     void        Release(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;      // slot 4
     const char* GetName() const override;                                              // slot 9
 
-    // 0 == cut / no pause updates, 2 == updates-during-pause. (Own ledger function.)
+    // The blend's timestep flavour, as the consumers spell it: 0 == E_WORLD (the blend stops
+    // with the world clock), 2 == E_GAME (it keeps running while the game is paused). It is a
+    // single word store into the base's meTimestepType -- see the inline below.
     void SetInterpolationMode(s32 liMode);
 
     // The source / destination camera references the blend runs between (populated before
@@ -172,9 +174,6 @@ public:
     void Setup();
 
     bool HasFinished() const { return mbHasFinished; }
-
-    // The camera this interpolator is producing this frame. (Own ledger function.)
-    const Camera& GetCamera() const;
 
     // Layout members are public-of-layout so consumers reach them BY NAME.
     VisibilityCollisionPolicy mCollisionPolicy;   // +0x020
@@ -294,6 +293,50 @@ inline void
 BehaviourInterpolate::SetupCameraBFromHelper(BehaviourHelperIndex lHelper, BehaviourManager& lrManager)
 {
     GetCameraBForSetup().Setup(lHelper, &lrManager);
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::BehaviourInterpolate::SetupCameraAFromCamera / ...BFromCamera
+// -- console header-inlines with no standalone symbol, the by-value-camera siblings of the
+// two FromHelper setters above. The console spells the pair as a COMBINED setup overload
+// (Setup(f32 duration, const Camera&, BehaviourHelperIndex, BehaviourManager&), reached from
+// DestructionPathTakedownPlayer::Prepare) whose camera-A leg is exactly: the caller
+// materialises a Camera copy, then CameraReference::Setup(Camera) runs against mFromCamera
+// (+0x2B0) -- meType = E_TYPE_CACHED, mCamera = the copy.
+//
+// The decomposed shape below reaches the identical end state; it only evaluates the
+// GetCameraXForSetup !mbSetup assert that the combined overload skips (that overload latches
+// mbSetup up front instead), exactly as recorded for the FromHelper pair and for the no-arg
+// Setup() below.
+// ----------------------------------------------------------------------------
+inline void
+BehaviourInterpolate::SetupCameraAFromCamera(const Camera& lrCamera)
+{
+    GetCameraAForSetup().Setup(lrCamera);
+}
+
+inline void
+BehaviourInterpolate::SetupCameraBFromCamera(const Camera& lrCamera)
+{
+    GetCameraBForSetup().Setup(lrCamera);
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::BehaviourInterpolate::SetInterpolationMode -- a console header-inline
+// with no standalone symbol. Recovered from ICEMoviePlayer::Update, which folds its own
+// updates-during-pause flag to `flag ? 2 : 0` and stores the result as ONE word at the
+// behaviour's +0x04 -- which is Behaviour::meTimestepType (the same word
+// BehaviourRoadRunner::Construct seeds). The two values the consumers pass are exactly
+// Timestep::E_WORLD (0) and Timestep::E_GAME (2), i.e. the flavour PostCollisionUpdate reads
+// back through lrInfo.GetTimestep(meTimestepType): a mode-0 blend stops with the world clock,
+// a mode-2 blend keeps running while the game is paused.
+//
+// The s32 spelling is the consumers'; the store itself is the base's typed setter.
+// ----------------------------------------------------------------------------
+inline void
+BehaviourInterpolate::SetInterpolationMode(s32 liMode)
+{
+    SetTimestepType(static_cast<BrnDirector::Timestep::EType>(liMode));
 }
 
 // ----------------------------------------------------------------------------

@@ -15,10 +15,9 @@
 //   Sizes differ from X360 (64-bit PC build); no raw-offset padding for embedded types
 //   that have called methods -- instead each utility type is fully or stub-defined here.
 //
-// FLAG: Minimal stubs for Behaviour, VisibilityCollisionPolicy, BehaviourSharedInfo,
-//   BehaviourSharedPrepareReleaseInfo, CameraRig, CameraShake, OrientationLag, and
-//   Tweaker are defined inline. Replace each with its canonical home header when that
-//   TU is reconstructed; the member/method NAMES are stable.
+// FLAG: CameraRig is still defined inline here -- it has no home header of its own yet,
+//   and BrnCameraRig.cpp reaches its Params layout through this file. Replace it with a
+//   canonical home when that TU lands; the member/method NAMES are stable.
 // ============================================================================
 
 #include "types.hpp"
@@ -39,6 +38,9 @@
                                                               //   full definition is retired below
 #include "GameSource/Director/Camera/Utils/BrnLooker.h"       // Looker + Random typedef
 #include "GameSource/Director/Camera/Utils/BrnPositionLag.h"  // PositionLag
+#include "GameSource/Director/Camera/Utils/BrnOrientationLag.h" // Utils::OrientationLag (+ Parameters)
+                                                              //   -- THE home; this header's own
+                                                              //   full definition is retired
 #include "GameSource/Director/Utils/BrnVehicleRef.h"          // BrnDirector::VehicleRef (base)
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"  // THE canonical Behaviour base +
                                                               //   BehaviourSharedInfo /
@@ -143,39 +145,6 @@ private:
 // outside its own .cpp includes that header, so it collides with nothing. Retire it with the
 // rest of the IceAnim fork family -- Step 0 #3.)
 // ============================================================================
-
-// ============================================================================
-// OrientationLag -- smoothly lag the camera orientation from frame to frame.
-//   FULL DEFINITION from DWARF BrnOrientationLag.h.
-// ============================================================================
-class OrientationLag
-{
-public:
-    struct Parameters
-    {
-        // X360 visitor: `void Serialise<S>(S&)` (camera-tunings TextFile{Read,Write}Serialiser).
-        // Per-instance body is a separate TU.
-        template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
-
-        VersionNumber muVersion;       // +0x00
-        f32  mfPitchSpring;            // +0x04
-        f32  mfYawSpring;              // +0x08
-        f32  mfRollSpring;             // +0x0C
-        f32  mfSlerpSpring;            // +0x10
-        bool mbUseSlerpSpring;         // +0x14
-        void Construct();
-    };
-
-    void Construct();
-    void SetParameters(const Parameters* lpParameters);
-    void Update(f32 lfTimestep, Matrix44Affine lTransform);
-    const Matrix44Affine& GetTransform() const;
-
-private:
-    Matrix44Affine       mLastTransform;  // +0x00 (64 bytes)
-    const Parameters*    mpParameters;   // +0x40
-    bool                 mbFirstFrame;   // +0x44
-};
 
 // ============================================================================
 // The camera dev-tools tweaker: DE-FORKED (BehaviourManager wave).

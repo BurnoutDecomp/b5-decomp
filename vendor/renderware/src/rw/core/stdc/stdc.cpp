@@ -2,16 +2,16 @@
 // (EARenderWare rwcore, rw/core/stdc/stdc.cpp). Bodies reconstructed from the
 // Burnout X360 image; see rw/core/stdc/stdc.h for the per-entry-point contracts.
 //
-// SCOPE NOTE: the integer/hex formatters (ConvertIToA / ConvertI64ToA /
-// ConvertXToA) and the rest of the printf family (Vsnprintf / Snprintf) are
-// DECLARATION-ONLY in the header. Their X360 bodies dispatch into private rwcore
+// SCOPE NOTE: the integer/hex formatters (ConvertIToA / ConvertXToA)
+// are DECLARATION-ONLY in the header. Their console bodies dispatch into private rwcore
 // recursive digit-emit helpers and float/field-padding routines that are not part
 // of this class' function set and have not been reconstructed; reconstructing the
 // bodies here would require fabricating those callees, so they are intentionally
 // left undefined (the per-TU `cl /c` gate is compile-only and does not link).
 // This file homes the fourteen self-contained mem*/string* primitives, each
-// matched against its disassembly, plus (2026-08-01) Vsprintf as the CRT wrapper
-// its own header contract describes -- see the FLAG on that body.
+// matched against its disassembly, plus Vsprintf / Vsnprintf / Snprintf / StringCopy
+// as the CRT wrappers their own header contracts describe -- see the FLAGs on those
+// bodies.
 
 #include "rw/core/stdc/stdc.h"
 
@@ -222,6 +222,24 @@ char* StringCat(char* lpcDst, const char* lpcSrc)
     return lpcDst;
 }
 
+// strcpy: copy lpcSrc (including its NUL) into lpcDst and return lpcDst.
+//
+// FLAG: no standalone symbol -- the console inlines this one at its call sites (the
+// ICE widget menus and menu items copy their label text through it), so there is no
+// disassembly to transcribe. Written to the header's own contract, the same way
+// Vsprintf / Vsnprintf below are; strcpy has exactly one observable behaviour and
+// the returned pointer is the destination.
+char* StringCopy(char* lpcDst, const char* lpcSrc)
+{
+    char* lpcOut = lpcDst;
+    while (*lpcSrc != '\0')
+    {
+        *lpcOut++ = *lpcSrc++;
+    }
+    *lpcOut = '\0';
+    return lpcDst;
+}
+
 // strcmp, signed (0x82BC7298): advance while lpcA's byte is non-zero and equal to
 // lpcB's, then return the sign of the (signed-char) difference of the diverging bytes.
 s32 StringCompare(const char* lpcA, const char* lpcB)
@@ -378,6 +396,39 @@ s32 Vsprintf(char* lpcDst, const char* lpcFormat, va_list lvaArgs)
 #else
     return static_cast<s32>(::vsprintf(lpcDst, lpcFormat, lvaArgs));
 #endif
+}
+
+// ---------------------------------------------------------------------------
+// Vsnprintf -- the bounded vararg formatter. Same story as Vsprintf
+// above: the console body is rwcore's own printf engine, which is not in this class'
+// function set, so this is the header's documented contract -- "like Vsprintf, but
+// bounded to liSize bytes of lpcDst" -- expressed as the C library call it wraps.
+//
+// FLAG (formatting fidelity): as for Vsprintf, rwcore's engine and the CRT's can
+// differ on corner cases. The call sites -- ICERender::ScrPrintfArg and the ICE
+// widget info list -- format on-screen debug text into fixed stack buffers, so a
+// divergence is cosmetic. FLAG (truncation return): the CRT's vsnprintf returns the
+// length the formatted text WOULD have had; both call sites ignore the return value.
+s32 Vsnprintf(char* lpcDst, s32 liSize, const char* lpcFormat, va_list lvaArgs)
+{
+    return static_cast<s32>(::vsnprintf(lpcDst, static_cast<size_t>(liSize), lpcFormat, lvaArgs));
+}
+
+// ---------------------------------------------------------------------------
+// Snprintf -- the bounded vararg formatter's variadic face. The console body is the
+// same rwcore printf engine Vsnprintf reaches, entered through the vararg prologue,
+// so it is expressed here the way the rest of this family is: the header's contract,
+// routed through the va_list sibling one line above. The two FLAGs on Vsnprintf
+// (formatting fidelity, truncation return) carry over unchanged; its one in-tree
+// caller, ICEAuthor::SaveTake, formats a take guid as decimal text and ignores the
+// return.
+s32 Snprintf(char* lpcDst, s32 liSize, const char* lpcFormat, ...)
+{
+    va_list lvaArgs;
+    va_start(lvaArgs, lpcFormat);
+    const s32 liWritten = Vsnprintf(lpcDst, liSize, lpcFormat, lvaArgs);
+    va_end(lvaArgs);
+    return liWritten;
 }
 
 // ----------------------------------------------------------------------------

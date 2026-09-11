@@ -66,6 +66,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface / PlayAptMovie / the out-queue
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event / Get*Event / AddEvent
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache::meLastDisconnectedError
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiOverlayWaitFinishRequest (the 188 payload)
 #include "GameSource/Gui/Flow/Shared/Components/BrnTable.h"               // Table::Update
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuToggleGroup.h"     // MenuToggleGroupVarSize<3>::Update (SelectableGroup)
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuComponent.h"       // MenuComponent::Update (SelectableGroup)
@@ -140,19 +141,20 @@ namespace BrnGui
             }
         };
 
-        // The id-188 "this wait overlay has finished" request: payload = one compressed
-        // overlay id at +0x10 (8-aligned), record 24 bytes -- _wJ_05's wire, restated here
-        // because the partfiles keep their wire records TU-local.
+        // The id-188 "this wait overlay has finished" request: payload = the homed
+        // BrnGui::GuiOverlayWaitFinishRequest at +0x10 (8-aligned), record 24 bytes --
+        // _wJ_05's wire, restated here because the partfiles keep their wire records
+        // TU-local.
         struct GuiOverlayWaitFinishRequestWire : public CgsGui::GuiEvent<188>
         {
-            CgsID mOverlayId;   // +0x10
+            GuiOverlayWaitFinishRequest mRequest;   // +0x10
 
-            explicit GuiOverlayWaitFinishRequestWire(CgsID lOverlayId)
+            explicit GuiOverlayWaitFinishRequestWire(const char* lpcOverlayName)
                 : CgsGui::GuiEvent<188>(
-                      static_cast<u32>(sizeof(CgsID)),
-                      static_cast<u32>(offsetof(GuiOverlayWaitFinishRequestWire, mOverlayId)))
-                , mOverlayId(lOverlayId)
+                      static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)),
+                      static_cast<u32>(offsetof(GuiOverlayWaitFinishRequestWire, mRequest)))
             {
+                mRequest.Construct(lpcOverlayName);
             }
         };
 
@@ -160,7 +162,7 @@ namespace BrnGui
         typedef char KAC_ASSERT_CLEAR_WIRE_SIZE[sizeof(GuiTickerClearWire536) == 16 ? 1 : -1];
         typedef char KAC_ASSERT_WAIT_FINISH_WIRE_SIZE[sizeof(GuiOverlayWaitFinishRequestWire) == 24 ? 1 : -1];
         typedef char KAC_ASSERT_WAIT_FINISH_PAYLOAD_OFFSET[
-            offsetof(GuiOverlayWaitFinishRequestWire, mOverlayId) == 16 ? 1 : -1];
+            offsetof(GuiOverlayWaitFinishRequestWire, mRequest) == 16 ? 1 : -1];
         // The 604-byte AddOutputGuiEvent record IS the member (headerless on both sides).
         typedef char KAC_ASSERT_RESULTS_RECORD_SIZE[sizeof(GuiEventNetworkCustomMatchResults) == 604 ? 1 : -1];
     }
@@ -232,7 +234,7 @@ namespace BrnGui
                 CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:316
 
                 // Take down the "entering game" wait overlay, then advance the flow.
-                const GuiOverlayWaitFinishRequestWire lRequest(CgsIDCompress(KAC_ENTER_GAME_OVERLAY_ID));
+                const GuiOverlayWaitFinishRequestWire lRequest(KAC_ENTER_GAME_OVERLAY_ID);
                 mpStateInterface->GetOutputEventQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,
                     static_cast<s32>(sizeof(lRequest)));   // X360 record size 24

@@ -28,6 +28,7 @@
 
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h"
 #include "GameSource/AttribSys/Generated/classes/iceanim.h"          // Attrib::Gen::iceanim::ClassKey()
 #include "GameSource/AttribSys/Generated/classes/aftertouchcam.h"    // KU_AFTERTOUCHCAM_CLASS_KEY
 #include "GameSource/AttribSys/Generated/classes/proceduralshot.h"   // Attrib::Gen::proceduralshot::ClassKey()
@@ -114,55 +115,88 @@ namespace Camera
         }
         else if (luShotClassKey == Attrib::Gen::aftertouchcam::KU_AFTERTOUCHCAM_CLASS_KEY)
         {
-            // ⚠️ GATE (@0x822678EC..0x8226796C). The console arm is:
-            //     Attrib::Gen::aftertouchcam lShot(lpAttributeData, 0);          // sub_82206728
-            //     lrHelper.Prepare(AllocateBehaviour<BehaviourAftertouchCam>()); // :655
-            //     behaviour->SetParameters(mBehaviourParameterBank + 0x10);
-            //     behaviour->mSourceShot = lShot;                                // +0x334
-            // TWO blockers, both real and both named:
-            //   (a) the parameters argument is BANK+0x10 (console manager+0x12540, bank base
-            //       manager+0x12530) and BrnBehaviourParameterBank.h models everything below
-            //       +0x2334 as `u8 maReservedHead[0x2334]`. Writing it would be a raw-offset
-            //       poke into an un-carved reserved span -- forbidden. Carve the
-            //       BehaviourAftertouchCam::Parameters block at bank+0x10 (the bank's FIRST
-            //       Parameters block; the header already records that fact) exactly as the
-            //       deathcam block was carved into NamedParameters.
-            //   (b) BrnBehaviourAftertouchCam.h is one of the flat-slice behaviour headers that
-            //       mutually collide with BrnBehaviourIceAnim.h, which this TU must include --
-            //       so this arm needs its own isolated partfile, the same way
-            //       BrnBehaviourManager_AllocateBehaviour_{IceAnim,RenderMetrics,Rig}.cpp do.
-            // CONSEQUENCE: an AFTERTOUCH shot allocates no behaviour and the handle is left
-            // holding a helper whose pool handle is empty. That is NOT a silent nothing -- the
-            // assert below fires, and the caller's first GetBehaviour() would fault rather than
-            // quietly produce a still camera.
-            // DELETE-WHEN: (a) the bank's +0x10 block is carved AND (b) this arm moves to its
-            // own partfile.
-            CGS_ASSERT(false,
-                       "FLAG unlanded: aftertouchcam shot -- BehaviourAftertouchCam::Parameters "
-                       "at BehaviourParameterBank+0x10 is not carved");
+            // The aftertouch-cam arm. The shot's attribute block is opened as a generated
+            // aftertouchcam instance FIRST -- before the behaviour is allocated -- and the
+            // instance is a scope local, destroyed on the way out of this arm after it has
+            // been assigned into the behaviour.
+            Attrib::Gen::aftertouchcam lShot(
+                *static_cast<const Attrib::RefSpec*>(lpAttributeData), 0);
+
+            const bool lbHelperPrepared =
+                lrHelper.Prepare(AllocateBehaviour<BehaviourAftertouchCam>());
+            CGS_ASSERT(lbHelperPrepared,
+                       "lrHelper.Prepare(AllocateBehaviour<BehaviourAftertouchCam>())");  // :655
+            (void)lbHelperPrepared;
+
+            // The helper's first word -- the pooled object -- then the bank's FIRST named
+            // block (bank +0x10 == the named-parameter record +0) and the source shot.
+            BehaviourAftertouchCam* const lpBehaviour =
+                static_cast<BehaviourAftertouchCam*>(lrHelper.GetPoolHandle().Get());
+            lpBehaviour->SetParameters(
+                &GetBehaviourParameterBank().GetNamedParameters().GetAftertouchCamParameters());
+            lpBehaviour->SetSourceShot(lShot);
         }
         else if (luShotClassKey == static_cast<u64>(Attrib::Gen::proceduralshot::ClassKey()))
         {
-            // ⚠️ GATE (@0x82267A00..0x82267B7C). The console arm constructs
-            // Attrib::Gen::proceduralshot over the RefSpec, reads its shot-type field and
-            // allocates a BehaviourGyroCam for types 3 / 5 / 6, each with a DIFFERENT
-            // parameter block:
-            //     type 3 -> SetParameters(bank + 0x6B8)   (console manager + 0x12BE8)  :693
-            //     type 5 -> SetParameters(bank + 0x388)   (console manager + 0x128B8)  :679
-            //     type 6 -> SetParameters(bank + 0x454)   (console manager + 0x12984)  :686
-            //     default -> "Unsupported Procedural Shot Type"                        :700
-            // Blocked for the same two reasons as the aftertouch arm: all three offsets fall
-            // inside BehaviourParameterBank::maReservedHead, and BrnBehaviourGyroCam.h collides
-            // with BrnBehaviourIceAnim.h in one TU.
-            // CONSEQUENCE: a PROCEDURAL shot allocates no behaviour. Procedural shots are the
-            // crash/moment shot selector's output (ShotSelector::GetCrashShot builds this very
-            // class key), NOT the authored shotgroup takes the drive-thru and the arbitrator
-            // states play -- so this gate does not stand between any currently-live feature and
-            // its camera. DELETE-WHEN: the three bank blocks are carved and this arm gets its
-            // own partfile.
-            CGS_ASSERT(false,
-                       "FLAG unlanded: proceduralshot -- BehaviourGyroCam::Parameters at "
-                       "BehaviourParameterBank+0x388/+0x454/+0x6B8 are not carved");
+            // The procedural-shot arm -- the crash/moment shot selector's output
+            // (ShotSelector::GetCrashShot builds this very class key). The shot's attribute
+            // block is opened as a generated proceduralshot instance FIRST, exactly like the
+            // aftertouch arm above, and the instance is a scope local destroyed on the way
+            // out of whichever branch is taken. Every branch allocates a BehaviourGyroCam;
+            // what the shot type selects is WHICH named gyro block the behaviour adopts, and
+            // the three the console names here are three of the seven consecutive gyro blocks
+            // the parameter bank's Construct seeds:
+            //     type 3 -> mGyroCamFollow  (record +1704)                              :693
+            //     type 5 -> mGyroCamLeft    (record +888)                               :679
+            //     type 6 -> mGyroCamRight   (record +1092)                              :686
+            //     default -> "Unsupported Procedural Shot Type"                         :700
+            // ⓘ The type-6 branch is what gives mGyroCamRight its first consumer: the moment
+            // tumbling camera reads the other six by subtype and skips that one, so the run's
+            // 204-byte grid is now corroborated by two independent readers.
+            Attrib::Gen::proceduralshot lShot(
+                *static_cast<const Attrib::RefSpec*>(lpAttributeData), 0);
+
+            // The selector word off the instance's resolved layout block (+0x04), compared
+            // against 3 / 5 / 6 in that order.
+            const s32 liShotType = lShot.ShotType();
+
+            if (liShotType == 3)
+            {
+                const bool lbHelperPrepared =
+                    lrHelper.Prepare(AllocateBehaviour<BehaviourGyroCam>());
+                CGS_ASSERT(lbHelperPrepared,
+                           "lrHelper.Prepare(AllocateBehaviour<BehaviourGyroCam>())");    // :693
+                (void)lbHelperPrepared;
+
+                static_cast<BehaviourGyroCam*>(lrHelper.GetPoolHandle().Get())->SetParameters(
+                    &GetBehaviourParameterBank().GetNamedParameters().mGyroCamFollow);
+            }
+            else if (liShotType == 5)
+            {
+                const bool lbHelperPrepared =
+                    lrHelper.Prepare(AllocateBehaviour<BehaviourGyroCam>());
+                CGS_ASSERT(lbHelperPrepared,
+                           "lrHelper.Prepare(AllocateBehaviour<BehaviourGyroCam>())");    // :679
+                (void)lbHelperPrepared;
+
+                static_cast<BehaviourGyroCam*>(lrHelper.GetPoolHandle().Get())->SetParameters(
+                    &GetBehaviourParameterBank().GetNamedParameters().mGyroCamLeft);
+            }
+            else if (liShotType == 6)
+            {
+                const bool lbHelperPrepared =
+                    lrHelper.Prepare(AllocateBehaviour<BehaviourGyroCam>());
+                CGS_ASSERT(lbHelperPrepared,
+                           "lrHelper.Prepare(AllocateBehaviour<BehaviourGyroCam>())");    // :686
+                (void)lbHelperPrepared;
+
+                static_cast<BehaviourGyroCam*>(lrHelper.GetPoolHandle().Get())->SetParameters(
+                    &GetBehaviourParameterBank().GetNamedParameters().mGyroCamRight);
+            }
+            else
+            {
+                CGS_ASSERT(false, "Unsupported Procedural Shot Type");                    // :700
+            }
         }
         else
         {

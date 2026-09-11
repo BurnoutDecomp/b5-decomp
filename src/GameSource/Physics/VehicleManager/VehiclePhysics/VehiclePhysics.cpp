@@ -2,6 +2,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"  // the seat bring-up leg reads the RESIDENT spec (WheelSpecs, mMeshOffset)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"  // BrnPlayerDriverControls (C07 boost/speed-match)
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"  // KVF_HANDBRAKE_OFF_TIME_TO_ALLOW_DRIFT (CheckForEnteringDrift)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.h"  // DebugComponent::RecordDownForce (UpdateDownForce's tail)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h" // CgsNumeric::Random (the shared LCG ring)
 #include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT (UpdateDownForce's attribsys guard)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint ([tyre] bring-up probe only)
@@ -6952,10 +6953,11 @@ namespace Vehicle
             lfAppliedMagnitude = lfForceY;
         }
 
-        // Debug mirror (asm 0x825F6614..0x825F6624).
+        // Debug mirror (asm 0x825F6614..0x825F6624). The console stores the applied magnitude
+        // straight into the component's down-force field; both arms above built their force as
+        // {0, magnitude, 0, 0}, which is the vector the inlined recorder takes.
         if (mpDebugComponent != 0)
-            *reinterpret_cast<f32*>(reinterpret_cast<u8*>(mpDebugComponent) + 0x3F4)
-                = lfAppliedMagnitude;
+            mpDebugComponent->RecordDownForce(Vector3{ 0.0f, lfAppliedMagnitude, 0.0f, 0.0f });
     }
 
 // [clean] SwitchAttribs  @0x8261E498

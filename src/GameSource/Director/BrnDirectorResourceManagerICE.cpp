@@ -25,8 +25,7 @@
 // ⚠️ STILL A SPLIT. Merge this AND BrnDirectorResourceManagerICEWrapper.cpp back into
 // BrnDirectorResourceManager.cpp the moment the ICEWrapper group lands -- neither split
 // has a reason to outlive its blocker.
-// DELETE-WHEN: the ICE take-runtime group lands (BrnDirectorICEWrapper.cpp + a
-// BrnResource::MakeICEMovieId home).
+// DELETE-WHEN: BrnDirectorICEWrapper.cpp mounts.
 // ============================================================================
 
 #include "GameSource/Director/BrnDirectorResourceManager.h"
@@ -69,6 +68,36 @@ ICE::ICETakeData* DirectorResourceManager::GetKeyAnimFromGuid(s32 liGuid) const
             mpICEDictionaryList->GetICETakeDataFromGuid(liGuid));
     }
     return lpTakeData;
+}
+
+// Resolve a take resource id to its take data -- the mirror of GetKeyAnimFromGuid one
+// step earlier in the chain. Look the id up in the loaded take dictionaries first, then
+// let the editor's edited copy of THAT take (matched on the take data's own guid) win if
+// there is one. A dictionary miss is returned as the null it is, without touching the
+// editor; an editor miss falls back to the dictionary take.
+//
+// It takes the resource id and NOTHING else. There is no name formatting and no name
+// hashing anywhere on this path -- the id arrives already hashed by whoever built it --
+// which is also what the recovered public method list says with its single
+// `GetKeyAnim(ID)`. The name-formatting pair this replaces had no counterpart in the
+// shipped code and is gone; so is the id-from-name helper it invented.
+ICE::ICETakeData* DirectorResourceManager::GetKeyAnim(CgsResource::ID lKeyAnimID) const
+{
+    ICE::ICETakeData* lpTakeData = const_cast<ICE::ICETakeData*>(
+        mpICEDictionaryList->GetICETakeData(
+            static_cast<CgsContainers::DictEntry::DictionaryKey>(lKeyAnimID.GetHash())));
+    if (lpTakeData == 0)
+    {
+        return lpTakeData;
+    }
+
+    ICE::ICETakeData* lpEditedTakeData =
+        mpICEWrapper->GetAuthor().FindEditedTakeFromGuid(lpTakeData->GetGuid());
+    if (lpEditedTakeData == 0)
+    {
+        return lpTakeData;
+    }
+    return lpEditedTakeData;
 }
 
 }

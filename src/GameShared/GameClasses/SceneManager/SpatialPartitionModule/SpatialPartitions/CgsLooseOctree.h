@@ -213,6 +213,11 @@ namespace CgsSceneManager
         virtual void Update();                                         // @ 0x828D0180
         virtual void SetEntityPosition(u16 lu16Id, Vector3 lPosition); // @ 0x828C9820
         virtual void SetEntityRadius(u16 lu16Id, f32 lfRadius);        // @ 0x828BC740
+        // Slot 13 -- the narrowing frustum query over an explicit entity run.
+        virtual void FrustumTestEntities(const CgsGeometric::Frustum& lrFrustum,
+                                         u32 lx32EntityTypeMask,
+                                         const u16* lpu16Entities, s32 liNumEntities,
+                                         CoarseQueryResultBuffer<16384>* lpResultBuffer);
         virtual void AddEntityToGraph(u16 lu16Id);                     // @ 0x828BB648
         virtual void RemoveEntityFromGraph(u16 lu16Id);                // @ 0x828C9818
 
@@ -326,7 +331,9 @@ namespace CgsSceneManager
 
         void FrustumTestVpRecursive(u16 lu16NodeIndex, FrustumTestParams* lpParams);   // @0x828BDC38
         void TrivialAcceptRecursive(u16 lu16NodeIndex, FrustumTestParams* lpParams);   // @0x828B1B50
-        void FrustumTestEntities(u16 lu16FirstEntity, FrustumTestParams* lpParams);    // @0x828B1CA0
+        // The leaf accept loop over one node's entity chain. The console inlines it into
+        // every walker that needs it; it is factored out here so the walkers read as one.
+        void TestNodeEntities(u16 lu16FirstEntity, FrustumTestParams* lpParams);
         u32  NodeInsideFrustum(const LooseOctreeNode* lpNode,
                                const CgsGeometric::Frustum& lrFrustum) const;          // @0x828BDAC0
         void PushCoarseResult(FrustumTestParams* lpParams, u16 lu16EntityIndex);

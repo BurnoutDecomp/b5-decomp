@@ -1146,6 +1146,77 @@ namespace CgsSceneManager
     }
 
     // ===========================================================================
+    // FrustumTestEntities -- the NARROWING frustum query.
+    //
+    // Handed an explicit run of entity indices (an earlier query's published results)
+    // rather than a tree root, it re-runs only the per-entity accept test on them:
+    // no node classification, no traversal, no recursion. Every survivor was already
+    // in the run it was given, so the answer is always a subset of that run.
+    //
+    // Store for store this is the leaf of the tree walk with the chain link replaced
+    // by an array index -- the same type-flag gate on the entity's link, the same
+    // eight-lane SoA plane batch against the entity's bounding sphere, the same
+    // PushResult on accept. The tree walk's node counter is NOT touched: nothing here
+    // visits a node.
+    // ===========================================================================
+    void LooseOctree::FrustumTestEntities(const CgsGeometric::Frustum& lrFrustum,
+                                          u32 lx32EntityTypeMask,
+                                          const u16* lpu16Entities, s32 liNumEntities,
+                                          CoarseQueryResultBuffer<16384>* lpResultBuffer)
+    {
+        if (liNumEntities == 0)
+        {
+            return;
+        }
+
+        // The console copies the eight swizzled planes into its frame once, before the
+        // loop, and keeps them in registers for its whole length.
+        FrustumTestParams lParams;
+        lParams.mpFrustum          = &lrFrustum;
+        lParams.mx32EntityTypeMask = lx32EntityTypeMask;
+        lParams.mpResultBuffer     = lpResultBuffer;
+        lParams.mpJobResultBuffer  = 0;
+        lParams.muNumNodesVisited  = 0;
+        lParams.CachePlanes();
+
+        for (s32 liEntity = 0; liEntity < liNumEntities; ++liEntity)
+        {
+            const u16 lu16Entity = lpu16Entities[liEntity];
+
+            CGS_ASSERT(lu16Entity < KI_MAX_NUM_ENTITIES, "lu16Index < KI_MAX_NUM_ENTITIES");
+
+            const SpatialPartitionEntityLink& lrLink = GetEntityLink(lu16Entity);
+            if ((lrLink.mx32TypeFlags & lx32EntityTypeMask) == 0)
+            {
+                continue;
+            }
+
+            CGS_ASSERT(lu16Entity < KI_MAX_NUM_ENTITIES, "lu16Index < KI_MAX_NUM_ENTITIES");
+
+            const Vector4& lrSphere =
+                GetEntityBoundingSphereConst(lu16Entity).mPositionRadius;
+            const f32 lfCx = lrSphere.x, lfCy = lrSphere.y;
+            const f32 lfCz = lrSphere.z, lfR  = lrSphere.w;
+
+            bool lbInside = true;
+            for (u32 luPlane = 0; luPlane < 8; ++luPlane)
+            {
+                if (lParams.maNx[luPlane] * lfCx + lParams.maNy[luPlane] * lfCy
+                    + lParams.maNz[luPlane] * lfCz - lParams.maD[luPlane] > lfR)
+                {
+                    lbInside = false;
+                    break;
+                }
+            }
+
+            if (lbInside)
+            {
+                lpResultBuffer->PushResult(lu16Entity);
+            }
+        }
+    }
+
+    // ===========================================================================
     // FrustumTestVpRecursive @ 0x828BDC38 (== FrustumTestRecursive @0x828CA9D0's shape)
     //
     //   ++muNumNodesVisited
@@ -1181,7 +1252,7 @@ namespace CgsSceneManager
 
         if (lrNode.muNumElements > 0)
         {
-            FrustumTestEntities(lrNode.muHeadIndex, lpParams);
+            TestNodeEntities(lrNode.muHeadIndex, lpParams);
         }
 
         if (lrNode.muFirstChildIndex != KU_INVALID_NODE)
@@ -1233,9 +1304,9 @@ namespace CgsSceneManager
     }
 
     // ===========================================================================
-    // FrustumTestEntities @ 0x828B1CA0
+    // TestNodeEntities -- the leaf accept loop the walkers share.
     //
-    // The leaf test, reproduced from the asm exactly. Per entity in the node's chain:
+    // Per entity in the node's chain:
     //   * skip unless (maEntityLinks[i].mx32TypeFlags & queryMask) -- the FIRST word of
     //     the 8-byte link, read at `this + 8*(i+16)`;
     //   * load the bounding sphere at `this + 16*(i+5008)` and run the SoA plane batch
@@ -1247,7 +1318,7 @@ namespace CgsSceneManager
     //     instruction, so the committed method is used;
     //   * PushResult(index) on accept.
     // ===========================================================================
-    void LooseOctree::FrustumTestEntities(u16 lu16FirstEntity, FrustumTestParams* lpParams)
+    void LooseOctree::TestNodeEntities(u16 lu16FirstEntity, FrustumTestParams* lpParams)
     {
         u16 lu16Entity = lu16FirstEntity;
         while (lu16Entity != KU_INVALID_NODE)

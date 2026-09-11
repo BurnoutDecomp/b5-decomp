@@ -790,11 +790,7 @@ namespace Vehicle
             }
 
             // Per-car debug component tick (asm 0x82645A68..78; f1 = lfSimTimerTimeStep).
-            // FLAG (span cast, deliberate): maRaceCarDebugComponent is the opaque 8x1024
-            // span (console DebugComponent is 1024B, host is not) -- same sanctioned cast
-            // seam as Construct's mpDebugComponent store; see BrnVehicleManager.h.
-            reinterpret_cast<DebugComponent*>(&maRaceCarDebugComponent[liCar][0])
-                ->Update(lfSimTimerTimeStep);
+            maRaceCarDebugComponent[liCar].Update(lfSimTimerTimeStep);
 
             // -- rigid-body change on RESET (dword_82F2A188) --
             CgsDev::PerfMonCpu::StartMonitor(gs_iRBChangePM);

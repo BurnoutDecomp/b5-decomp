@@ -480,7 +480,7 @@ bool EffectsArbitrator::EvalTint2d(BrnEffects::TintData2d& lData) const
 // console's position: BrnRendererModule::Render @0x8240BFA8 calls it at 0x8240C6CC with
 // `addi r4, r1, var_CA0` / `addi r5, r1, var_C70` -- two FIVE-ENTRY stack arrays, r4 the cubes and
 // r5 the weights -- and feeds the result to BrnPostFx::SetColourCube / SetTintBlendFactor /
-// BeginTintBlend. Reconstructed in BrnRendererModulePostFx.cpp as
+// BeginTintBlend. Reconstructed in BrnRendererModule.cpp as
 // BrnRendererBeginPostFxTintBlend(); the array sizes there are this function's contract, not a
 // guess (EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT is the same sum, from the same tables).
 bool EffectsArbitrator::EvalTint(rw::graphics::postfx::ColourCube** lppColourCubes, f32* lpfWeights) const

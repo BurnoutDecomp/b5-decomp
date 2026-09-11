@@ -69,6 +69,70 @@ namespace ICE
     }
 
     // ------------------------------------------------------------------------
+    // ICETake::GetIntervalStart / GetIntervalEnd -- the parameter-space edges of one
+    // interval on one channel. These are the single-edge halves of GetIntervalBracket
+    // above and read through the very same channel accessor it uses: the start is the
+    // interval's own boundary parameter, the end is the next boundary's. The sentinel
+    // rules (boundary 0 -> 0.0, boundary at/past the interval count -> 1.0) live in
+    // ICEChannel::GetIntervalParameter, so both edges inherit them -- which is exactly
+    // the behaviour ICEAuthor::GetIntervalStart / ::GetIntervalEnd describe for the
+    // current channel.
+    //
+    // FLAG (no standalone symbol): the console INLINES both into their callers, as it
+    // does the other channel-forwarding accessors in this family. The bodies are the
+    // bracket's two halves, not an independent recovery.
+    // ------------------------------------------------------------------------
+    f32 ICETake::GetIntervalStart(s32 liChannel, u16 lu16Interval) const
+    {
+        return mChannels[liChannel].GetIntervalParameter(lu16Interval);
+    }
+
+    f32 ICETake::GetIntervalEnd(s32 liChannel, u16 lu16Interval) const
+    {
+        return mChannels[liChannel].GetIntervalParameter((u16)(lu16Interval + 1));
+    }
+
+    // ------------------------------------------------------------------------
+    // ICETake::GetCurrentInterval -- the channel's cached current interval, the one
+    // SetParameter last resolved. A straight forward to the channel's own accessor.
+    // ------------------------------------------------------------------------
+    u16 ICETake::GetCurrentInterval(s32 liChannel) const
+    {
+        return (u16)mChannels[liChannel].GetCurrentInterval();
+    }
+
+    // ------------------------------------------------------------------------
+    // ICETake::IsHardCut -- is the boundary a discontinuity for this element?
+    //
+    // The three-argument form names the interval explicitly; the two-argument form
+    // asks about the channel's CURRENT interval, the same substitution the channel's
+    // own no-interval overloads make (GetIntervalStart(), GetIntervalBracket(f32*,
+    // f32*)). Both land on the one channel body that does the work.
+    // ------------------------------------------------------------------------
+    bool ICETake::IsHardCut(s32 liChannel, u16 lu16Key, s32 liElement) const
+    {
+        return mChannels[liChannel].IsHardCut(lu16Key, liElement);
+    }
+
+    bool ICETake::IsHardCut(s32 liChannel, s32 liElement) const
+    {
+        const ICEChannel& lrChannel = mChannels[liChannel];
+        return lrChannel.IsHardCut((u16)lrChannel.GetCurrentInterval(), liElement);
+    }
+
+    // ------------------------------------------------------------------------
+    // ICETake::GetSubTakeLength -- the bound sub-take's authored length, the mirror
+    // of the inline GetLength() one member along (mpSubTakeData instead of
+    // mpTakeData). The sole caller (ICEAuthor::GetSubAssemRatio) divides it by the
+    // edit take's length, and only after the edit take has been checked for a bound,
+    // non-zero-length take.
+    // ------------------------------------------------------------------------
+    f32 ICETake::GetSubTakeLength() const
+    {
+        return mpSubTakeData->GetLength();
+    }
+
+    // ------------------------------------------------------------------------
     // ICETake::MarkChannelFromSubTake -- flag a channel as sourced from the
     // sub-take rather than the primary take, by setting its bit in the sub-take
     // channel mask. SetDataPointers uses this in edit mode for channels with no

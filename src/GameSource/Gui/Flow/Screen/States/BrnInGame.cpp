@@ -8,17 +8,10 @@
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsID / CgsIDCompress
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiOverlayRequest / GuiOverlayCompleteEvent / GuiEventActivateCrashNav
-// ⚠️ BrnGuiDemangledEventTypes.h -- the canonical home of BrnGui::GuiEventNetworkPlayerImage
-// (id 258) -- CANNOT be included here: it and BrnGuiOverlaysDirector.h (included above, for the
-// 188 wait-finish handshake this state posts eleven times) each define
-// GuiOverlayWaitFinishRequest and GuiOverlayShowingNotification, so the two headers are
-// mutually exclusive -- a pre-existing fork that header itself documents at :548. The 258 wire
-// record is therefore built locally below, the same standing accommodation
-// BrnLicenseComponent.cpp:184 and BrnPhotoBoothComponent.cpp:167 already use for this exact
-// event, and for the same reason. DELETE-WHEN the GuiOverlay* fork is resolved and the
-// demangled header can be included: then post `BrnGui::GuiEventNetworkPlayerImage` through
-// StateInterface::OutputViewState<T> instead.
-#include "GameSource/Gui/BrnGuiOverlaysDirector.h"                        // GuiOverlayWaitFinishRequest (the 188 handshake payload)
+// BrnGuiDemangledEventTypes.h -- the canonical home of BrnGui::GuiEventNetworkPlayerImage
+// (id 258) -- is not included here; the 258 wire record is built locally below, the same
+// standing accommodation BrnLicenseComponent.cpp and BrnPhotoBoothComponent.cpp already make
+// for this exact event.
 #include "GameSource/Gui/Flow/Screen/States/Shared/BrnScreenShared.h"     // GetSplashScreenIDForGameMode (+ GsmIO::EGameModeType)
 #include "GameSource/GameState/Progression/BrnProfile.h"                  // BrnProgression::Profile::GetIsNewProfile (the intro gate)
 #include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)

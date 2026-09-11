@@ -165,7 +165,8 @@ namespace ICEMath
     // DECLARATION-ONLY (TU body).
     Angle ATan(f32 lfY, f32 lfX);
 
-    f32 Sqrt(f32 lfValue);   // DECLARATION-ONLY
+    // Sqrt: inlined at every console call site (no standalone symbol). TU body.
+    f32 Sqrt(f32 lfValue);
 
     // === String helpers =====================================================
     s32 StrLen(const char* lpcString);          // DECLARATION-ONLY

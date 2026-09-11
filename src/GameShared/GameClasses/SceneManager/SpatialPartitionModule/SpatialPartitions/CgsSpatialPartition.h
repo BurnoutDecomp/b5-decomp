@@ -96,6 +96,7 @@ namespace CgsSceneManager
         // slot 10  Update()
         // slot 11  SetEntityPosition(id, position)
         // slot 12  SetEntityRadius(id, radius)
+        // slot 13  FrustumTestEntities(frustum, entityTypeFlags, entities, numEntities, resultBufferOut)
         // slot 14  AddEntityToGraph(id)
         // slot 15  RemoveEntityFromGraph(id)
         virtual void Construct(SpatialPartitionConstructParams* lpParams,
@@ -125,15 +126,23 @@ namespace CgsSceneManager
         // slot  9  FrustumTestVp(entityTypeFlags, frustum, viewProjection, resultBufferOut)
         //   ADDED 2026-09-11, dispatched by SceneManagerModule::ProcessCoarseFrustumTestVp with
         //   the query's entity-type flags, its eight swizzled frustum planes, its view-projection
-        //   matrix and the coarse result buffer. (The next occupied slot is the SUBSET form,
-        //   which narrows an earlier query's result run instead of walking the tree; it has no
-        //   producer on this build -- see ProcessCoarseFrustumTestVp.)
+        //   matrix and the coarse result buffer.
         virtual bool FrustumTestVp(u32 lx32EntityTypeFlags, const CgsGeometric::Frustum& lrFrustum,
                                    const Matrix44& lrViewProjection,
                                    CoarseQueryResultBuffer<16384>* lpResultBufferOut) = 0;
         virtual void Update() = 0;
         virtual void SetEntityPosition(u16 lu16Id, Vector3 lPosition) = 0;
         virtual void SetEntityRadius(u16 lu16Id, float32_t lfRadius) = 0;
+        // slot 13  FrustumTestEntities -- the NARROWING form of the frustum query. It takes an
+        //   EXPLICIT array of entity indices (an earlier query's published result run) instead
+        //   of a tree root, and re-runs only the per-entity sphere-vs-frustum accept test on
+        //   them, pushing the survivors into the caller's result buffer. No traversal, no node
+        //   classification: the answer is always a subset of the run it was handed.
+        //   Dispatched by SceneManagerModule::ProcessCoarseFrustumTestVp's subset arm.
+        virtual void FrustumTestEntities(const CgsGeometric::Frustum& lrFrustum,
+                                         u32 lx32EntityTypeFlags,
+                                         const u16* lpu16Entities, s32 liNumEntities,
+                                         CoarseQueryResultBuffer<16384>* lpResultBufferOut) = 0;
         virtual void AddEntityToGraph(u16 lu16Id) = 0;
         virtual void RemoveEntityFromGraph(u16 lu16Id) = 0;
 

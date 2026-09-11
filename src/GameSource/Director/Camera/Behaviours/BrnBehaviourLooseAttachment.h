@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (SetParameters type assert + race-car index asserts)
 #include "GameSource/Director/Camera/Utils/BrnCameraImpactEffect.h"   // Utils::CameraImpactEffect::Parameters (embedded "Impact" sub-block @+0x2C of Parameters)
+#include "GameSource/Director/Camera/Utils/BrnPositionLag.h"          // Utils::PositionLag::Parameters (embedded lag sub-block @+0x08 of Parameters)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h
@@ -62,8 +63,9 @@ public:
     // +0x2C (walked as the nested "Impact" section) followed by the loose-attachment f32/bool
     // tunables at the a1+0x48..a1+0x60 displacements the write/read/menu asm loads/stores. No
     // pointers in the walked region => the offsets are host-pointer-width invariant (pinned in the
-    // .cpp). Only meType (+0x00) / miParamWord1 (+0x04) and the walked fields are modelled by name;
-    // the +0x08..+0x2B gap is rig data no reconstructed function in this TU touches.
+    // .cpp). Every field is modelled by name: meType (+0x00) / miParamWord1 (+0x04), the two
+    // sub-blocks at +0x08 / +0x1C the behaviour's Update passes by address to PositionLag::Update
+    // and CameraShake::Update, and the walked fields from +0x2C on.
     class Parameters
     {
     public:
@@ -74,14 +76,10 @@ public:
         // Declared so a serialiser's Serialise<Parameters> can drive it by name.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
-        // @0x821FA920 -- seed the block's defaults. MEASURED: a this-only leaf with no
-        // calls, opening `li r9,0xB; stw r9,0(r3)` (type tag 11 to +0x00), then
-        // miParamWord1=0 and the impact/rig/tunable seeds up to mbLookFromTarget=false
-        // at +0x60. Called by MomentNewCarJoined::Construct @0x8225F4D0 with
-        // r3 = this+0x1D0 (&mLooseAttachmentParameters).
-        // Its own ledger function (under the class:BehaviourLooseAttachment TU key,
-        // currently reviewed-but-unimplemented); DECLARATION-ONLY here -- the per-TU
-        // cl /c gate does not link.
+        // Seed the block to its defaults. A leaf with no calls: it writes the type tag, clears
+        // miParamWord1, seeds both sub-blocks at +0x08 / +0x1C and the impact block at +0x2C,
+        // then the +0x48..+0x60 tunables. Defined below, beside the other inline members.
+        // Called by MomentNewCarJoined::Construct on its own by-value parameter block.
         void Construct();
 
         EBehaviourTypeLooseAttachment GetType() const
@@ -92,11 +90,13 @@ public:
         s32 meType;        // +0x00  the behaviour type tag (eBehaviour*)
         s32 miParamWord1;  // +0x04  first behaviour-specific word (cached by SetParameters)
 
-        // FLAG: +0x08..+0x2B is loose-attachment rig data that none of this TU's Serialise<S>
-        //   visitors touch (the field-walk starts at the +0x2C "Impact" sub-block). Modelled as a
-        //   reserved span so the walked fields below land at their asm-attested displacements; name
-        //   these members precisely when the full loose-attachment Parameters schema TU lands.
-        u8  maReserved08[0x2C - 0x08];                   // +0x08 .. +0x2B (rig data not walked here)
+        // +0x08..+0x2B was a reserved span ("rig data not walked here") until the behaviour's own
+        // Update was read: it hands &(params +0x08) to PositionLag::Update and &(params +0x1C) to
+        // CameraShake::Update, so the span is two by-value sub-blocks, not opaque bytes. Neither is
+        // reached by a Serialise<S> visitor -- the field-walk starts at the +0x2C "Impact" block --
+        // which is why the tunings file carries no section for either.
+        Utils::PositionLag::Parameters        mPositionLagParams;   // +0x08  camera position smoother (20B)
+        Utils::CameraShake::Parameters        mShakeParams;         // +0x1C  the rig's own shake block (16B)
 
         Utils::CameraImpactEffect::Parameters mImpact;   // +0x2C  embedded impact-shake block ("Impact")
         f32 mfPitch;                                     // +0x48  "Pitch"
@@ -177,6 +177,52 @@ public:
     // pointer into the 4-byte slot at +0x324.
     const Parameters* mpParameters;
 };
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::BehaviourLooseAttachment::Parameters::Construct
+//   Seed the whole block. Twenty-three stores, every one to a distinct slot (nothing is written
+//   twice, so the console's scheduling order carries no meaning and the seeds are grouped by
+//   sub-block here). Two of the three sub-blocks are seeded with exactly the values their own
+//   Construct writes -- PositionLag::Parameters (1/1/1 responses, 0.5 smoothing, muVersion left
+//   alone) and CameraShake::Parameters (0.06 / 0.0 / 1.15 / 0.11) -- written out field by field
+//   because the console inlines both rather than calling them.
+// ----------------------------------------------------------------------------
+inline void
+BehaviourLooseAttachment::Parameters::Construct()
+{
+    meType       = eBehaviourLooseAttachment;   // +0x00  the type tag SetParameters asserts on
+    miParamWord1 = 0;                           // +0x04
+
+    // +0x08 mPositionLagParams -- the PositionLag::Parameters seed. muVersion (+0x08) is NOT
+    // written, exactly as PositionLag::Parameters::Construct leaves it (the serialiser stamps it).
+    mPositionLagParams.mfXResponse = 1.0f;      // +0x0C
+    mPositionLagParams.mfYResponse = 1.0f;      // +0x10
+    mPositionLagParams.mfZResponse = 1.0f;      // +0x14
+    mPositionLagParams.mfSmoothing = 0.5f;      // +0x18
+
+    // +0x1C mShakeParams -- the CameraShake::Parameters seed.
+    mShakeParams.mfXYShakeMagnitudeDegs  = 0.06f;   // +0x1C
+    mShakeParams.mfZShakeMagnitudeDegs   = 0.0f;    // +0x20
+    mShakeParams.mfXYWobbleMagnitudeDegs = 1.15f;   // +0x24
+    mShakeParams.mfWobbleCenteringFactor = 0.11f;   // +0x28
+
+    // +0x2C mImpact -- the same shake seed again, then the three impact tunables.
+    mImpact.mShakeParams.mfXYShakeMagnitudeDegs  = 0.06f;   // +0x2C
+    mImpact.mShakeParams.mfZShakeMagnitudeDegs   = 0.0f;    // +0x30
+    mImpact.mShakeParams.mfXYWobbleMagnitudeDegs = 1.15f;   // +0x34
+    mImpact.mShakeParams.mfWobbleCenteringFactor = 0.11f;   // +0x38
+    mImpact.mfShakeDecayFactor    = 0.05f;      // +0x3C
+    mImpact.mfShakeMagnitude      = 15.0f;      // +0x40
+    mImpact.mfShakeFrequencyScale = 5.0f;       // +0x44
+
+    mfPitch            = 5.0f;                  // +0x48
+    mfHeight           = 1.0f;                  // +0x4C
+    mfDistance         = 4.0f;                  // +0x50
+    mfField54          = 90.0f;                 // +0x54
+    mfDutch            = 0.0f;                  // +0x58
+    mfDetachLerpAmount = 0.1f;                  // +0x5C
+    mbLookFromTarget   = false;                 // +0x60  (a byte store, the only non-f32 seed)
+}
 
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::BehaviourLooseAttachment::AttachTo @0x821F4458

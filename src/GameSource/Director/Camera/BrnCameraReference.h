@@ -11,9 +11,8 @@ namespace BrnDirector { class ICEWrapper; }                   // GameSource/Dire
 // wrapper's camera) the interpolation behaviour reads through. Class shape /
 // member names / method set verbatim from the DecFIGS DWARF
 // (BrnCameraReference.h:45/:85-:102); gated on the X360 ledger. This TU bodies
-// Setup(ICEWrapper)/GetCamera/Prepare/Release; Construct, the other two Setup
-// overloads and Unlock are their own ledger functions (declaration-only,
-// not X360-exported).
+// Setup(ICEWrapper)/Setup(Camera)/GetCamera/Prepare/Release; Unlock is its own
+// ledger function (declaration-only).
 namespace BrnDirector
 {
 namespace Camera
@@ -44,7 +43,7 @@ struct CameraReference
 
     // @0x8223EA08 (DWARF :58) -- the by-value overload; the CALLER materialises the copy
     // (Camera::Camera @0x8224EF44 runs before the call), which confirms the by-value
-    // signature. Sets meType = E_TYPE_CACHED. Declaration-only.
+    // signature. Sets meType = E_TYPE_CACHED. Bodied in this TU.
     void Setup(Camera lCamera);
 
     // @0x821F8508 (this TU, DWARF :62 / cpp:93).

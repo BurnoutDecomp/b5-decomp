@@ -3,12 +3,11 @@
 
 #include "SDKs/Packages/ICE/ICEData.hpp"
 #include "types.hpp"
-#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"   // CgsResource::ID (GetICETakeData arg / MakeICEMovieId return)
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"   // CgsResource::ID (GetKeyAnim / GetICETakeData arg)
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"      // CgsResource::ResourceHandle (mAttribsysVaultResourceHandle)
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"       // CgsModule::EventReceiverQueue<512,16> (mReceiverQueue)
 #include "GameSource/AttribSys/Generated/classes/shotgroup.h"              // Attrib::Gen::shotgroup      (64 of the 65 slots)
 #include "GameSource/AttribSys/Generated/classes/cameradefaults.h"         // Attrib::Gen::cameradefaults (the 65th)
-#include <cstdio>                                                   // snprintf (GetKeyAnim name formatting)
 
 namespace BrnResource { class ICEList; struct VehicleList; }   // mpICEDictionaryList / mpVehicleList (by pointer)
 namespace ICE { struct ICEGroup; }    // GetShakeTakes' return type (pointer only; no full home yet)
@@ -42,15 +41,6 @@ private:
     DirectorResourceManager* mpResourceManager;
 };
 
-}
-
-// FLAG: BrnResource::MakeICEMovieId hashes an ICE take name into a take resource id.
-// Referenced by DirectorResourceManager::GetKeyAnim but with no reconstructed home yet
-// -- declared here (declaration-only; the per-TU `cl /c` gate does not link). Replace
-// with its real home when the ICE-resource-name TU is reconstructed.
-namespace BrnResource
-{
-    CgsResource::ID MakeICEMovieId(const char* lpacName);
 }
 
 namespace BrnDirector
@@ -439,9 +429,11 @@ public:
     // first; the moment BrnBehaviourIceAnim.h started including this header it broke seven
     // TUs at once. GetKeyAnim IS an out-of-line X360 symbol anyway, and the DWARF's public
     // list has exactly one of it (`GetKeyAnim(ID)`), so out-of-line is also the faithful
-    // shape. Bodies: BrnDirectorResourceManagerInline.cpp.
-    ICE::ICETakeData* GetKeyAnim(int64_t liKeyAnimID) const;      // @0x821F6948
-    ICE::ICETakeData* GetKeyAnim(const char* lpacKeyAnimName) const;
+    // shape -- and exactly one is what the console has: the resource id is carried
+    // straight into the take dictionary lookup, with no name formatting anywhere.
+    // GetKeyAnim's body sits beside GetKeyAnimFromGuid in BrnDirectorResourceManagerICE.cpp
+    // (they share both members); GetShakeTakes is still in the unmounted ICEWrapper sibling.
+    ICE::ICETakeData* GetKeyAnim(CgsResource::ID lKeyAnimID) const;
     ICE::ICEGroup*    GetShakeTakes() const;
 
     // @0x821F69A8 (own ledger fn -- declared for the dev-tools GameTalk handler

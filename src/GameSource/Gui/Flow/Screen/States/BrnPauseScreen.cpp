@@ -8,7 +8,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache (resource pins + apt-component watch)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiEventActivateCrashNav / GuiFlow
-#include "GameSource/Gui/BrnGuiOverlaysDirector.h"                        // GuiOverlayWaitFinishRequest (the 188 handshake payload)
 #include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
 
 // BrnGui::PauseScreen -- reconstructed from BURNOUT_X360_ARTIST.XEX:

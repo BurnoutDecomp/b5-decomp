@@ -11,7 +11,7 @@
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"                  // BrnGui::OptionsDataProfile (stored-segment validate/notify)
 #include "GameSource/Gui/SaveLoad/BrnGuiSaveLoadProfile.h"            // BrnGuiSaveLoad::Profile (stored-segment validate)
 #include "GameSource/GameState/Progression/BrnProfile.h"              // BrnProgression::Profile::Serialise/Deserialise + ProfileUpgradeTable
-#include "GameSource/Gui/BrnGuiOverlaysDirector.h"                    // BrnGui::GuiOverlayWaitFinishRequest (event 188)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                       // BrnGui::GuiOverlayWaitFinishRequest (event 188)
 
 #include <cstring>   // std::memcpy / std::strncpy
 

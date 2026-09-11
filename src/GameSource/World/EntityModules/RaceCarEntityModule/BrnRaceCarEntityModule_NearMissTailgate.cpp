@@ -30,8 +30,10 @@
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"                      // VolumeInstanceId packed-field accessors
 #include "GameSource/BurnoutConstants.h"                                                  // EActiveRaceCarIndex + its range-guarded operator++
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                                // gpDebugPrint (the BRN_TRAFFIC_DIAG witness)
 #include "rw/math/vpu/vector3_operation.h"                                                // Dot / Normalize / operator-
 #include <cmath>                                                                          // std::cos (the console cosines the cone angle per candidate)
+#include <cstdlib>                                                                        // getenv (BRN_TRAFFIC_DIAG)
 
 namespace BrnWorld
 {
@@ -69,6 +71,18 @@ namespace
 
     // An ordinary rodata zero: a crashing player loses the chain timeout outright.
     const f32 KF_NEAR_MISS_TIMEOUT_WHEN_CRASHING = 0.0f;
+
+    // DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE.
+    bool TrafficDiagEnabled()
+    {
+        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
+        return sbEnabled;
+    }
+
+    // [T9-nm] DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE. A BUDGET rather than a single
+    // latch: the drain runs every post-scene tick, so one line would only prove the first
+    // non-empty batch, while unbounded printing would flood a lane drive.
+    s32 s_iNearMissDrainBudget = 24;
 }
 
 // =================================================================================================
@@ -280,11 +294,10 @@ void RaceCarEntityModule::UpdateNearMisses(
 // can be scored -- outside a game mode, or in the online free-burn lobby. That flag is computed
 // once, ahead of both drains, and re-tested per record.
 //
-// ⛔ MEASURED, AND IT IS WHY NOTHING FIRES YET: the collections' producer,
-// TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults, has no body anywhere in this tree
-// (it is the gate that TU's own banner already names). Both collections are Construct'd, so they
-// read length 0 every frame and this drain is a well-formed no-op until that gate closes. That
-// is honest state -- the pipe is complete on this side.
+// The producer side is live: ProcessNearbyTrafficSceneQueryResults fills the two collections on
+// the post-physics tick and GenerateNearMissOutput copies them into the pre-scene interface this
+// body reads, so the drain carries real records. The [T9-nm] witness below reports the two
+// lengths whenever either is non-zero, which is the only proof that the bridge is carrying.
 // =================================================================================================
 void RaceCarEntityModule::UpdateTrafficAndRaceCarNearMisses(
         RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput )
@@ -319,6 +332,24 @@ void RaceCarEntityModule::UpdateTrafficAndRaceCarNearMisses(
     for( u32 luIndex = 0; luIndex < lpNearMissRaceCarCollection->GetLength(); ++luIndex )
     {
         mNearMissManager.AddNearRaceCar( ( *lpNearMissRaceCarCollection )[ luIndex ].muCarId );
+    }
+
+    // [T9-nm] DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE. The bridge witness: the two
+    // published collection lengths for this drain. Both GetLength() reads sit INSIDE the gate,
+    // so an unset BRN_TRAFFIC_DIAG costs one static bool test and nothing else.
+    if( s_iNearMissDrainBudget > 0 && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0 )
+    {
+        const u32 luTrafficLength = lpNearMissTrafficCollection->GetLength();
+        const u32 luRaceCarLength = lpNearMissRaceCarCollection->GetLength();
+
+        if( luTrafficLength != 0 || luRaceCarLength != 0 )
+        {
+            --s_iNearMissDrainBudget;
+            *CgsDev::Log::gpDebugPrint
+                << "[T9-nm] drain traffic=" << static_cast<s32>( luTrafficLength )
+                << " racecar=" << static_cast<s32>( luRaceCarLength )
+                << " [DELETE-WHEN-STABLE]\n";
+        }
     }
 }
 

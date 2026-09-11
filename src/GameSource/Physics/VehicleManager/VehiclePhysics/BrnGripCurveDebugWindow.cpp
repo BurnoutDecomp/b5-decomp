@@ -11,6 +11,21 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+    // Construct: seat both graphs, clear the wheel pair and start hidden. The console inlines the
+    // whole thing (both graph Constructs included) into the handling debug component's Construct,
+    // once per window; it is folded back out here so the stores land on named members. The Window
+    // base is untouched, exactly as on the console -- Prepare is what fills that in.
+    void GripCurveDebugWindow::Construct()
+    {
+        mLongGripCurveGraph.Construct();
+        mLatGripCurveGraph.Construct();
+
+        mpLeftWheel  = 0;
+        mpRightWheel = 0;
+
+        mbVisible = false;
+    }
+
     // Show @0x825B4B00: if currently hidden, add the window to the debug-UI stack (only if it is not
     // already added) and set the visible flag.
     void GripCurveDebugWindow::Show()

@@ -25,7 +25,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "rw/core/stdc/stdc.h"                        // rw::core::stdc::Vsprintf
 
-#include <cmath>     // std::sin / std::cos / std::atan2 (XMVector poly stand-ins)
+#include <cmath>     // std::sin / std::cos / std::atan2 / std::sqrt (XMVector stand-ins)
 #include <cstdarg>   // va_list (StringPrintf)
 
 namespace ICE
@@ -217,6 +217,23 @@ Angle ATan(f32 lfY, f32 lfX)
     lvfRadians.y = lvfRadians.z = lvfRadians.w = lfRadians;
     leResult.SetFromVecFloat(lvfRadians);
     return leResult;
+}
+
+// ===========================================================================
+// Sqrt
+//
+// Square root of a non-negative scalar. Both call sites (ICEController::ToBubble's
+// horizontal and full bubble radii) guard the argument with `> 0.0f` before calling,
+// so the body has no domain check of its own.
+//
+// FLAG: no standalone symbol -- the console emits the platform square-root
+// instruction inline at every call site, so there is nothing to reconstruct
+// per-instruction. Modelled with the C library sqrt, the same mathematical function,
+// exactly as Sin / Cos / ATan above model their inlined XMVector polynomials.
+// ===========================================================================
+f32 Sqrt(f32 lfValue)
+{
+    return (f32)std::sqrt(lfValue);
 }
 
 // ===========================================================================

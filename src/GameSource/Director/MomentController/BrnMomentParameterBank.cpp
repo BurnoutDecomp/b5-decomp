@@ -2,8 +2,8 @@
 // per-moment tuning records MomentController::NewMoment hands to a freshly-allocated moment.
 //
 // Bodied here:
-//   BrnDirector::MomentParameterBank::Construct      @0x82209E38
-//   BrnDirector::MomentParameterBank::GetParameters  @0x821F7428
+//   BrnDirector::MomentParameterBank::Construct
+//   BrnDirector::MomentParameterBank::GetParameters
 //
 // ============================================================================================
 // ODR RECONCILE, 2026-08-23 (jump/stunt cutaway-camera wave). THIS TU USED TO BE A FORK.
@@ -25,13 +25,13 @@
 //
 //   2. THE FIELD NAMES WERE SWAPPED, AND THE VALUES HAD BEEN "FIXED" TO COMPENSATE.
 //      The fork spelled the bystander record {mbClose, mbTakedown, mbCrash} and the tumbling
-//      record {meCameraType, mbTakedown, mbCrash}. The DWARF (and the real homes) have
+//      record {meCameraType, mbTakedown, mbCrash}. The the declaration (and the real homes) have
 //      {mbCloseCamera, mbCrashMoment, mbTakedownMoment} and {meSubType, mbCrashMoment,
 //      mbTakedownMoment} -- i.e. CRASH IS THE FIRST BOOL, TAKEDOWN THE SECOND, in both.
 //      Because the fork had them the other way round, two entries carried FLAG comments
 //      announcing that "ARTIST disagrees with our prior value" and flipped the value to match
-//      the asm byte. Those FLAGs were the SYMPTOM, not a finding: the bytes were always right,
-//      the labels were wrong. Read with the correct names, @0x82209E38's final stores are
+//      the console code byte. Those FLAGs were the SYMPTOM, not a finding: the bytes were always right,
+//      the labels were wrong. Read with the correct names,'s final stores are
 //      exactly what each parameter ID is called --
 //          BYSTANDER_CLOSE_TAKEDOWN_ONLY  -> close=1  crash=0  takedown=1
 //          BYSTANDER_FAR_CRASH_ONLY       -> close=0  crash=1  takedown=0
@@ -41,9 +41,9 @@
 //      UNCHANGED BY THIS COMMIT; only the names and the types are now the real ones.
 // ============================================================================================
 //
-// X360 LAYOUT (@0x82209E38 store offsets -- provenance only; nothing here casts by them):
-//   +0x00 f32   mParamsHardStopDefault.mfDuration            (flt_82004270)
-//   +0x04 f32   mParamsHardStopDefault.mfSpeedDiffThreshold  (flt_8200426C)
+// Console layout (the store offsets -- provenance only; nothing here casts by them):
+//     +0x00 f32   mParamsHardStopDefault.mfDuration
+//     +0x04 f32   mParamsHardStopDefault.mfSpeedDiffThreshold
 //   +0x08..0x0A mParamsBystanderCloseTakedownOnly            (3 bools)
 //   +0x0B..0x0D mParamsBystanderFarCrashOnly                 (3 bools)
 //   +0x10 +0x18 +0x20 +0x28 +0x30 +0x38 +0x40   the seven tumbling records (8 bytes each:
@@ -54,7 +54,7 @@
 //   records are used.
 //
 // FAITHFUL OMISSION (unchanged from the fork, restated so it is not mistaken for a defect):
-// the asm emits each record's `Parameters::Construct()` defaults inline and then immediately
+// the console code emits each record's `Parameters::Construct()` defaults inline and then immediately
 // overwrites EVERY field of that record with the explicit value below -- verified store-for-
 // store for all nine records. The defaults are therefore dead stores with no observable
 // effect. Calling the real Parameters::Construct() here would add two unresolved externals
@@ -62,12 +62,11 @@
 // assignment is written directly, as before.
 //
 // VERIFIED 2026-08-23 (was carried as an unchecked inherited value): the two hard-stop floats
-// are READ, not guessed. The IDA export carries no rodata, so the XEX basefile image was
-// decrypted/decompressed and the two .rdata slots read directly --
-//     flt_82004270 = 3.0f  -> mfDuration            (+0x00)
-//     flt_8200426C = 5.0f  -> mfSpeedDiffThreshold  (+0x04)
-// which matches what this TU has always shipped. The NAMES are the DWARF's
-// (Moments/BrnMomentHardStop.h:117/:118).
+// are READ, not guessed. The exported listing carries no read-only data, so the console
+// image was unpacked and the two read-only-data slots read directly --
+//     3.0f -> mfDuration            (+0x00)
+//     5.0f -> mfSpeedDiffThreshold  (+0x04)
+// which matches what this TU has always shipped. The NAMES are the declaration's
 
 #include "types.hpp"
 
@@ -77,7 +76,7 @@
 namespace BrnDirector
 {
 
-// The X360 bank is 0x48 bytes with the records at the offsets in the banner above. On this
+// The console bank is 0x48 bytes with the records at the offsets in the banner above. On this
 // host the records are the real ones and the layout is checked by SHAPE, not by displacement.
 static_assert(sizeof(MomentHardStop::Parameters) == 8,
               "MomentHardStop::Parameters layout drift");
@@ -88,11 +87,11 @@ static_assert(sizeof(MomentTumbling::Parameters) == 8,
 static_assert(sizeof(MomentParameterBank) == 72,
               "MomentParameterBank layout drift");
 
-// @0x82209E38. Seed all nine authored records. Store order below is the console's.
+// Seed all nine authored records. Store order below is the console's.
 void MomentParameterBank::Construct()
 {
-    mParamsHardStopDefault.mfDuration           = 3.0f;   // +0x00 (flt_82004270)
-    mParamsHardStopDefault.mfSpeedDiffThreshold = 5.0f;   // +0x04 (flt_8200426C)
+    mParamsHardStopDefault.mfDuration           = 3.0f;   // +0x00
+    mParamsHardStopDefault.mfSpeedDiffThreshold = 5.0f;   // +0x04
 
     // +0x08..0x0A -- final stores 1 / 0 / 1.
     mParamsBystanderCloseTakedownOnly.mbCloseCamera    = true;
@@ -147,7 +146,7 @@ void MomentParameterBank::Construct()
     mParamsTumblingSideCrashOnly.mbTakedownMoment = false;
 }
 
-// @0x821F7428. Return the stored record for an id; NULL for E_PARAM_NONE (which is what every
+// Return the stored record for an id; NULL for E_PARAM_NONE (which is what every
 // moment the roaming state registers asks for, so a NULL Parameters* reaching SetParameters is
 // the console's own normal case, not a failure).
 Moment::Parameters* MomentParameterBank::GetParameters(EMomentParamID leMomentParamID)

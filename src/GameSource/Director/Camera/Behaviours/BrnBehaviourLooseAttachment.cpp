@@ -66,6 +66,8 @@ void BehaviourLooseAttachment_SetTargetAnchor(BehaviourLooseAttachment& lr, s32 
 // Pin the asm-attested Parameters field-walk offsets (host-pointer-width invariant -- the walked
 // region holds no pointers): the "Impact" sub-block at +0x2C and the loose-attachment tunables at
 // the a1+0x48..a1+0x60 offsets the write/read/menu asm loads/stores.
+static_assert(offsetof(BehaviourLooseAttachment::Parameters, mPositionLagParams) == 0x08, "position-lag block @ +0x08");
+static_assert(offsetof(BehaviourLooseAttachment::Parameters, mShakeParams)       == 0x1C, "shake block @ +0x1C");
 static_assert(offsetof(BehaviourLooseAttachment::Parameters, mImpact)            == 0x2C, "Impact block @ +0x2C");
 static_assert(offsetof(BehaviourLooseAttachment::Parameters, mfPitch)            == 0x48, "Pitch @ +0x48");
 static_assert(offsetof(BehaviourLooseAttachment::Parameters, mfHeight)           == 0x4C, "Height @ +0x4C");

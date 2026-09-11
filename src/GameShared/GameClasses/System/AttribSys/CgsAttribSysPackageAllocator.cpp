@@ -86,6 +86,14 @@ void AttribSysPackageAllocator::Free(void* lpBlock, s32 /*liSize*/, const char* 
 
 void AttribSysPackageAllocator::Free(void* lpBlock, size_t /*lnSize*/)
 {
+    Free(lpBlock);
+}
+
+// The block-only free, and the one the console actually emits: the size-carrying
+// spellings above are interface sugar that folds onto this body. Asserts the allocator
+// is live, then hands the block straight back to the adopted heap.
+void AttribSysPackageAllocator::Free(void* lpBlock)
+{
     CGS_ASSERT(mbHasAllocator, "mbHasAllocator");
 
     mpHeapAllocator->Free(lpBlock);

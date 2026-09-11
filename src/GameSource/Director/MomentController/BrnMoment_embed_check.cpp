@@ -13,8 +13,8 @@ namespace
     {
         MomentBystanderSeesAction m;
 
-        bool prepared = m.Prepare(nullptr);   // @0x821F7560 -> SetState(searching)
-        m.Inhibit();                           // @0x82208520 (inline; Release + SetState)
+        bool prepared = m.Prepare(nullptr);   // -> SetState(searching)
+        m.Inhibit();                           // (inline; Release + SetState)
 
         // Touch the by-name state the two functions wrote.
         bool inhibited = m.IsInhibited();

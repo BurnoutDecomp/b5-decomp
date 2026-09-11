@@ -4,14 +4,14 @@
 #include "rw/math/vpu/vector3_operation.h"                         // Vector3 operator-/*/+ + Dot
 #include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"   // AllVehicleData (used mask + race cars)
 
-// BrnDirector::MomentTumbling -- reconstructed from BURNOUT_X360_ARTIST.XEX
-// (DWARF primary file BrnMomentTumbling.cpp; member/parameter names verbatim
-// from the DecFIGS DWARF).
+// BrnDirector::MomentTumbling -- reconstructed from the console executable
+// (home file BrnMomentTumbling.cpp; member/parameter names verbatim
+// from the declarations).
 //
 // Bodied here (7 ledger functions):
-//   Construct @0x8225ED28   Update @0x82271F28   Release @0x8223A990
-//   SetParameters @0x821F75A8   GetName @0x821F75B0
-//   SignalIsGoodTimeToPlant @0x8220A078
+//   Construct   Update   Release
+//   SetParameters   GetName
+//   SignalIsGoodTimeToPlant
 //   SetGyroCamParameters
 
 namespace BrnDirector
@@ -19,37 +19,37 @@ namespace BrnDirector
 
 namespace
 {
-    // XEX rodata: the per-frame angular-velocity smoothing factor (@0x82001AEC)
-    // and the tumble speed-squared eligibility threshold (@0x82CDADAC; the DWARF
+    // Read-only-data constants: the per-frame angular-velocity smoothing factor
+    // and the tumble speed-squared eligibility threshold (the declared
     // statics kfTumbleSensitivity / kfTumbleStartThreshold. The third static,
     // kfTumbleStopThreshold, is read by nothing this TU bodies).
-    const f32 KF_TUMBLE_SENSITIVITY     = 0.1f;     // cpp:21 (@0x82001AEC)
-    const f32 KF_TUMBLE_START_THRESHOLD = 200.0f;   // cpp:22 (@0x82CDADAC; |v|^2)
+    const f32 KF_TUMBLE_SENSITIVITY     = 0.1f;
+    const f32 KF_TUMBLE_START_THRESHOLD = 200.0f;   //  (|v|^2)
 
     // How long a lapsed FOLLOW/LEAD tumble may keep running before it gives up
     // the switch gate (the state-3 running-time compare).
     const f32 KF_TUMBLE_LAPSED_TIMEOUT = 0.5f;
 
     // Camera-state head bits (the moment family's shared vocabulary):
-    const u32 KU_HEAD_FLAG_SEARCHING       = 18;   // oris 4
-    const u32 KU_HEAD_FLAG_ALLOCATED       = 19;   // oris 8
-    const u32 KU_HEAD_FLAG_PREPARING       = 20;   // oris 0x10
-    const u32 KU_HEAD_FLAG_LAPSED          = 21;   // oris 0x20
-    const u32 KU_HEAD_FLAG_TIMED_OUT       = 22;   // oris 0x40
-    const u32 KU_HEAD_FLAG_INHIBITED       = 23;   // oris 0x80
-    const u32 KU_HEAD_FLAG_NOT_SWITCHABLE  = 24;   // oris 0x100
-    const u32 KU_HEAD_FLAG_VALID           = 28;   // oris 0x1000 (not raised here; family doc)
-    const u32 KU_HEAD_FLAG_NOT_RELEASABLE  = 30;   // oris 0x4000
+    const u32 KU_HEAD_FLAG_SEARCHING       = 18;
+    const u32 KU_HEAD_FLAG_ALLOCATED       = 19;
+    const u32 KU_HEAD_FLAG_PREPARING       = 20;
+    const u32 KU_HEAD_FLAG_LAPSED          = 21;
+    const u32 KU_HEAD_FLAG_TIMED_OUT       = 22;
+    const u32 KU_HEAD_FLAG_INHIBITED       = 23;
+    const u32 KU_HEAD_FLAG_NOT_SWITCHABLE  = 24;
+    const u32 KU_HEAD_FLAG_VALID           = 28;   // (not raised here; family doc)
+    const u32 KU_HEAD_FLAG_NOT_RELEASABLE  = 30;
 
     // The camera-state CURRENT flag the valid body raises while framing the
-    // PLAYER's own tumble (SetFlag(9) -- ori 0x200; role not yet recovered).
+    // PLAYER's own tumble (SetFlag(9) -- mask 0x200; role not yet recovered).
     const u32 KU_STATE_FLAG_PLAYER_TUMBLE = 9;
 }
 
 namespace detail
 {
     // ---- MomentSharedInfo reaches (un-homed record; the family precedent's
-    // decl-only helpers; X360 shared-info offsets in comments). ----
+    // decl-only helpers; console shared-info offsets in comments). ----
     bool MomentSharedInfo_IsPlayerCrashing(const void* lpSharedInfo);        // +1284 byte 249
     bool MomentSharedInfo_WasTakedown(const void* lpSharedInfo);             // +1284 byte 218
     bool MomentSharedInfo_IsCrashCameraBlocked(const void* lpSharedInfo);    // +1284 byte 449
@@ -78,13 +78,13 @@ namespace detail
 }
 using namespace detail;
 
-// @ 0x8225ED28 -- cpp:46. The inlined base Moment::Construct, the gyro handle
+// The inlined base Moment::Construct, the gyro handle
 // clear, and the latch seeds (mbLookingAtTakedown and mfRunningTime are seeded
 // per-allocation in Update, not here).
 void MomentTumbling::Construct()
 {
-    Moment::Construct();   // inlined on the X360 (state/type/inhibit/camera)
-    mGyroCam.Clear();      // the X360 zeroes the five handle fields inline
+    Moment::Construct();   // inlined in the console build (state/type/inhibit/camera)
+    mGyroCam.Clear();      // the console build zeroes the five handle fields inline
     mbUseLeftForThisCrash  = false;
     mbUseRightForThisCrash = false;
     mbFirstTryThisCrash    = true;
@@ -93,7 +93,7 @@ void MomentTumbling::Construct()
     mpParameters           = 0;
 }
 
-// @ 0x8223A990 -- cpp:356. The inlined guarded handle Release, the gate clears,
+// The inlined guarded handle Release, the gate clears,
 // the searching head bit, then park at INACTIVE (state 0 -- this moment's
 // distinct Release target).
 bool MomentTumbling::Release()
@@ -106,13 +106,12 @@ bool MomentTumbling::Release()
     return true;
 }
 
-// @ 0x821F75A8 -- cpp:388. Adopt the tuning record (no type assert on the X360).
+// Adopt the tuning record (no type assert in the console build).
 void MomentTumbling::SetParameters(const Moment::Parameters* lpParameters)
 {
     mpParameters = static_cast<const Parameters*>(lpParameters);
 }
 
-// @ 0x821F75B0.
 const char* MomentTumbling::GetName() const
 {
     return "MomentTumbling";
@@ -183,26 +182,26 @@ void MomentTumbling::SetGyroCamParameters(const void* lSharedInfo)
         return;
 
     default:
-        CGS_ASSERT(false, "invalid subtype");   // :343 (non-gating)
+        CGS_ASSERT(false, "invalid subtype");   //  (non-gating)
         return;
     }
 }
 
-// @ 0x8220A078 -- cpp:265. On a LEAD-subtype tumble, raise the gyro rig's plant
+// On a LEAD-subtype tumble, raise the gyro rig's plant
 // request pair (behaviour +0x630/+0x631).
 void MomentTumbling::SignalIsGoodTimeToPlant()
 {
-    CGS_ASSERT(IsValid(), "IsValid()");   // :265 (non-gating)
+    CGS_ASSERT(IsValid(), "IsValid()");   //  (non-gating)
     if (mpParameters->meSubType == Parameters::E_SUBTYPE_LEAD)
     {
         mGyroCam.GetBehaviour()->SignalGoodTimeToPlant();
     }
 }
 
-// @ 0x82271F28 -- cpp:87. Every frame FIRST smooth the tracked angular velocity:
+// Every frame FIRST smooth the tracked angular velocity:
 //   mSmoothedAngularVelocity += (sharedAngularVelocity - mSmoothedAngularVelocity)
 //                               * KF_TUMBLE_SENSITIVITY
-// (the X360's vspltw/vsubfp/vmaddfp full-vector pipeline, expressed with the vpu
+// (the console build runs this as a full-vector multiply-add, expressed here with the vpu
 // vector operators -- the RaceIntro vector-op precedent). Then:
 //   SEARCHING        while not crashing, re-arm the per-crash latches. Two
 //                    triggers: the TAKEDOWN one (the takedown byte &&
@@ -234,7 +233,7 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
     Camera::BehaviourManager* lpBehaviourManager =
         static_cast<Camera::BehaviourManager*>(lrBehaviourController);
 
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");   // :89 (non-gating)
+    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");   //  (non-gating)
 
     // ---- the per-frame angular-velocity smoother (before the state machine) ----
     {
@@ -261,7 +260,7 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
         {
             const s32 liVictim = MomentSharedInfo_GetTakedownVictimIndex(lSharedInfo);
             const AllVehicleData* lpAllVehicles = MomentSharedInfo_GetAllVehicleData(lSharedInfo);
-            if (lpAllVehicles->GetUsedRaceCarsBitArray().IsBitSet(liVictim))   // the CgsBitArray.h:203 tripwire
+            if (lpAllVehicles->GetUsedRaceCarsBitArray().IsBitSet(liVictim))   // the  tripwire
             {
                 const rw::math::vpu::Vector3& lv3VictimVelocity =
                     lpAllVehicles->GetRaceCar(EActiveRaceCarIndex(liVictim))
@@ -345,7 +344,7 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
         break;
 
     default:
-        CGS_ASSERT(false, "unhandled case in switch");   // :250 (non-gating)
+        CGS_ASSERT(false, "unhandled case in switch");   //  (non-gating)
         return;
     }
 
@@ -361,7 +360,7 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
     {
         const s32 liVictim = MomentSharedInfo_GetTakedownVictimIndex(lSharedInfo);
         const AllVehicleData* lpAllVehicles = MomentSharedInfo_GetAllVehicleData(lSharedInfo);
-        if (lpAllVehicles->GetUsedRaceCarsBitArray().IsBitSet(liVictim))   // :203 tripwire
+        if (lpAllVehicles->GetUsedRaceCarsBitArray().IsBitSet(liVictim))   //  tripwire
         {
             const rw::math::vpu::Vector3& lv3VictimVelocity =
                 lpAllVehicles->GetRaceCar(EActiveRaceCarIndex(liVictim))

@@ -62,8 +62,8 @@
 //         0x8240A468  BrnPostFx::Render                            reader
 //         0x8240BFA8  BrnRendererModule::Render                    reader
 //     FIVE of those eight readers are not BrnRendererModule and have no factory instance
-//     anywhere in scope; BrnPostFx cannot even include BrnRendererModule.h
-//     (BrnPostFxPCComposite.h says why). A non-static accessor is unreachable from the
+//     anywhere in scope; BrnPostFx cannot even include BrnRendererModule.h. A non-static
+//     accessor is unreachable from the
 //     very call sites this table exists to serve. (Same shape as the blend twin's
 //     twelve-reader census, CgsBlendStateFactory.h:68-83.) And (2) it cannot be
 //     expensively wrong: `static` is the more permissive spelling -- an instance-based

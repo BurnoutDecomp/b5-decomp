@@ -133,11 +133,10 @@ namespace Vehicle
     // The spec name Vehicle-scope code uses; resolves to the REAL Deformation-namespace type.
     using Deformation::StreamedDeformationSpec;
 
-    // Forward decl (own-block closure wave): the per-car physics debug component mpDebugComponent
-    // @+0x13E4 points at (DWARF VehiclePhysics.h:982 types it
-    // `BrnPhysics::Vehicle::DebugComponent *`). Only ever null-checked and forwarded here; the
-    // component's own type is a separate TU.
-    struct DebugComponent;
+    // Forward decl: the per-car physics debug component mpDebugComponent @+0x13E4 points at.
+    // Only ever null-checked and forwarded here; the component's own type lives in its own TU
+    // (B5PhysicsHandlingDebugComponent.h), and the class-key must match that definition.
+    class DebugComponent;
 
     // ----- RETIRED SLICE (2026-08-03). This file used to carry a "by-name, NOT offset-faithful"
     //       `struct VehicleAttribs` of ~14 registers, with a standing note to replace it with an

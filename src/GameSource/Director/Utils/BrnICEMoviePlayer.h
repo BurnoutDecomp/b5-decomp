@@ -28,14 +28,13 @@
 // struct-relative offsets quoted in comments are provenance only, never used as casts.
 //
 // Bodies for Construct/Prepare/Play/Stop/Update/Loop/CutToInterpolateOut/GetCamera/
-// InterpolateFrom (player), DebugMenuNewMovie (playlist) and GetCgsID (IceMovie) land in
-// BrnICEMoviePlayer.cpp. The playlist half that the boot path actually runs --
-// ICEMoviePlaylist::Construct / InsertMovieBefore / GetMovieCount and
-// SharedPlaylists::Construct / GetPausePlaylist -- was split out 2026-09-08 into
-// BrnICEMoviePlayer_wP0_01.cpp, which is the one of the two that is MOUNTED (see its
-// banner). The rest of the recovered method set is DECLARATION-ONLY here (each lands a
-// body with its own ledger TU; the per-TU `cl /c` gate does not link, so declarations
-// suffice).
+// InterpolateFrom (player), the playlist build-and-query set (ICEMoviePlaylist::
+// Construct / InsertMovieBefore / GetMovieCount and SharedPlaylists::Construct /
+// GetPausePlaylist) and GetCgsID (IceMovie) all land in BrnICEMoviePlayer.cpp, which is
+// MOUNTED. The three Serialise<S> visitors and DebugMenuNewMovie are split off into
+// BrnICEMoviePlayerSerialise.cpp, which is not (see its banner). The rest of the
+// recovered method set is DECLARATION-ONLY here (each lands a body with its own ledger
+// TU; the per-TU `cl /c` gate does not link, so declarations suffice).
 //
 // The IceMovie and ICEMoviePlaylist::DebugMenuRemoveData element structs are defined in
 // full so the separate AbstractPool/ObjectPool instantiation TUs can instantiate over

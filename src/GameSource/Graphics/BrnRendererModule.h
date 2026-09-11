@@ -155,10 +155,6 @@ struct SortInfo
 {
 };
 
-struct OcclusionJobData
-{
-};
-
 // DispatchObjectContext / DispatchList are the real CgsGraphics types now
 // (CgsDispatcherCommands.h / CgsDispatcher.h, included above).
 
@@ -738,8 +734,6 @@ private:
     SortInfo                            mWorldTransparentSortJobData;
     EA::Jobs::Job                       mCarTransparentSortJob;
     SortInfo                            mCarTransparentSortJobData;
-    EA::Jobs::Job                       mOcclusionWorldOpaqueJob;
-    OcclusionJobData                    mOcclusionJobWorldOpaqueInfo;
     bool                                mbMultisampledBackbuffer;
     bool                                mbShowEnvironmentMap;
     bool                                mbShowShadowMap;
@@ -884,7 +878,6 @@ inline BrnRendererModule::BrnRendererModule()
     , mCarOpaqueSortJob(nullptr)
     , mWorldTransparentSortJob(nullptr)
     , mCarTransparentSortJob(nullptr)
-    , mOcclusionWorldOpaqueJob(nullptr)
 {
     mePrepareStage = eRendererPrepareStart;
     meReleaseStage = eRendererReleaseStart;

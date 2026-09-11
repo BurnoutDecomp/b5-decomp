@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the SetParameters type assert)
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"  // Utils::CameraShake::Parameters (embedded "Shake Params" sub-block)
+#include "GameSource/AttribSys/Generated/classes/aftertouchcam.h" // Attrib::Gen::aftertouchcam (the adopted source shot)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h
@@ -21,6 +22,7 @@
 //   and stores the pointer at +0x330.
 // GetCo* @0x821FB588: returns &this + 0x20 (a pointer to an embedded sub-object at +0x20);
 //   a single `addi r3, r3, 0x20; blr` -- no body, just the address of the member.
+// Parameters::Construct: the block's authored defaults, transcribed in full -- see it below.
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
@@ -51,8 +53,10 @@ public:
     // recursion names an embedded CameraShake::Parameters at +0x08 (the "Shake Params" sub-section).
     // meType(+0x00)/miParamWord1(+0x04) are the pre-existing behaviour header words SetParameters
     // reads. All three visitors walk the SAME field sequence in the SAME order, so the offsets below
-    // are authoritative; the +0x18..+0x2C span holds aftertouch-cam members none of the three
-    // visitors serialise (reserved to place the walked floats at their attested offsets).
+    // are authoritative. The block's WIDTH and the slots the visitors skip come from the second
+    // witness, Parameters::Construct below: the parameter bank calls it on this block and then
+    // constructs the next block 108 bytes further on, and Construct itself seeds every word in
+    // the +0x1C..+0x28 and +0x58..+0x68 runs that no visitor walks.
     class Parameters
     {
     public:
@@ -75,8 +79,15 @@ public:
         Utils::CameraShake::Parameters mShakeParams;   // +0x08 .. +0x18 (four f32)
 
         // +0x18 .. +0x2C  aftertouch-cam members that none of the three Serialise<S> instances
-        //   walk; reserved so the serialised floats below sit at their asm-attested offsets.
-        u8  maReserved18[0x2C - 0x18];
+        //   walk. Construct below DOES seed four of the five words, so they are named slots
+        //   rather than one reserved span; +0x18 is the only word nothing in this class
+        //   writes or reads. FLAG: the four names are ours (no label survives for them);
+        //   their offsets and their seeded values are attested.
+        u8  maReserved18[4];                // +0x18  (never written, never walked)
+        f32 mfField1C;                      // +0x1C
+        f32 mfField20;                      // +0x20
+        f32 mfField24;                      // +0x24
+        f32 mfField28;                      // +0x28
 
         f32 mfSlowDistance;                 // +0x2C  "Slow Distance"
         f32 mfSlowHeight;                   // +0x30  "Slow Height"
@@ -89,6 +100,57 @@ public:
         f32 mfMaximumBlendFactor;           // +0x4C  "Maximum Blend Factor"
         f32 mfHeightDistanceBlendFactor;    // +0x50  "Height Distance Blend Factor"
         f32 mfHeightDistanceVelocityRange;  // +0x54  "Height Distance Velocity Range"
+
+        // +0x58 .. +0x6C  the block's tail. Like the +0x1C..+0x28 run above, none of the
+        //   three Serialise<S> instances walk these, but Construct seeds every one of them,
+        //   so they are named slots at their attested offsets. The block is 108 bytes: the
+        //   parameter bank places the next block (an aftertouch-crash one) immediately after
+        //   it, which is what fixes the size. FLAG: the five names are ours.
+        f32 mfField58;                      // +0x58
+        f32 mfField5C;                      // +0x5C
+        f32 mfField60;                      // +0x60
+        f32 mfField64;                      // +0x64
+        f32 mfField68;                      // +0x68
+
+        // ------------------------------------------------------------------
+        // Parameters::Construct -- the block's authored defaults, store for store.
+        //
+        // The parameter bank's own Construct calls this on its FIRST named block; it is a
+        // straight-line run of constant stores with no control flow, so the transcription is
+        // complete rather than a slice. The four shake words are the shared
+        // CameraShake::Parameters seed, spelled as the call the compiler inlined there.
+        // Field order below follows the block's offsets, not the emitted store order.
+        // ------------------------------------------------------------------
+        void Construct()
+        {
+            meType       = eBehaviourAftertouchCam;   // the tag SetParameters asserts on
+            miParamWord1 = 0;
+
+            mShakeParams.Construct();                 // +0x08 .. +0x14
+
+            mfField1C = 1.0f;
+            mfField20 = 1.0f;
+            mfField24 = 1.0f;
+            mfField28 = 0.5f;
+
+            mfSlowDistance                = 4.0f;
+            mfSlowHeight                  = 1.75f;
+            mfFastDistance                = 8.0f;
+            mfFastHeight                  = 2.0f;
+            mfPitch                       = 15.0f;
+            mfField40                     = 90.0f;
+            mfBlendFactorBlendFactor      = 0.01f;
+            mfMinimumBlendFactor          = 0.001f;
+            mfMaximumBlendFactor          = 0.01f;
+            mfHeightDistanceBlendFactor   = 0.1f;
+            mfHeightDistanceVelocityRange = 30.0f;
+
+            mfField58 = 1.0f;
+            mfField5C = 91.666664f;
+            mfField60 = 0.5f;
+            mfField64 = 10.0f;
+            mfField68 = 1.0f;
+        }
     };
 
     // FLAG: the +0x20 sub-object the GetCo* accessor exposes. The truncated dossier name
@@ -105,6 +167,15 @@ public:
     // then cache its first word and store the pointer. @0x821F3EA0.
     void SetParameters(const Parameters* lpParameters);
 
+    // Adopt the authored shot this camera was created from. The behaviour factory builds a
+    // generated aftertouchcam instance over the shot's reference spec and assigns it into the
+    // behaviour's own instance member at +0x334, immediately after SetParameters; the console
+    // reaches that member by displacement, so this setter's NAME is ours and its store is not.
+    void SetSourceShot(const Attrib::Gen::aftertouchcam& lrShot)
+    {
+        mSourceShot = lrShot;
+    }
+
 private:
 
     // FLAG: only the members these two functions touch are modelled at their asm-attested
@@ -117,6 +188,12 @@ private:
     u8                maReserved14[0x20 - 0x14];      // +0x14 .. +0x1F (rig members not modelled here)
     u8                maCoSubObject[0x330 - 0x20];    // +0x20  sub-object GetCo* returns (opaque)
     const Parameters* mpParameters;                   // +0x330  the adopted parameter block
+
+    // The authored shot this camera came into existence through. Console +0x334, i.e.
+    // immediately after the parameter pointer -- it CANNOT be placed there here, because
+    // mpParameters above is a host pointer and so is twice the console's width. Parity is by
+    // named member, the same rule the parameter bank's tail blocks follow.
+    Attrib::Gen::aftertouchcam mSourceShot;           // console +0x334
 };
 
 // ----------------------------------------------------------------------------

@@ -131,14 +131,6 @@ namespace TestBed
 // when its subsystem is wired into the build.
 // ===========================================================================
 
-// --- EA::GameTalk::GameTalkMessage accessors (BrnGameModule::RenderMetricsMessageHandler,
-// a debug-metrics GameTalk handler -- not on the boot path). No keys / no key strings. ---
-#include "SDKs/EA/GameTalk/GameTalk.h"
-namespace EA { namespace GameTalk {
-    s32         GameTalkMessage::GetNumKeys() const           { return 0; }
-    const char* GameTalkMessage::GetKey(s32 /*liIndex*/) const { return 0; }
-}}
-
 // --- BrnHW::System360HW::HasGameBeenRebootedDueToInvite (real body is in BrnSystemHWX360.cpp,
 // which is out of the PC exe build). Mirrors the BrnBootLegalBoundary.cpp fallback: false. ---
 #include "GameSource/Game/X360/BrnSystemHWX360.h"

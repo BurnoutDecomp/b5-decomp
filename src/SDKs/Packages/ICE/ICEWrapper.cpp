@@ -4,23 +4,21 @@
 // Runtime bodies for BrnDirector::ICEWrapper (the director-side ICE owner). The home
 // (member layout) is GameSource/Director/BrnDirectorICEWrapper.h; members are accessed
 // BY NAME here -- the struct-relative offsets quoted in comments are provenance only,
-// never used as casts. The five functions in this TU:
-//   PlayMovie        resolve + start a recorded camera take, aim the vehicle ref
+// never used as casts. The two functions left in this TU:
 //   Update           per-frame: cache spaces, scale sim time, advance + render + drive mover
-//   GetCurrentMovie  snapshot the currently-playing movie
-//   IsPlayingMovie   the manager's playback flag
 //   UpdateAction     queue this frame's dev-tools input actions
 //
 // The ctor / EditorOn / EditorOff / ReconstructCameraMover bodies live in the sibling
-// TU GameSource/Director/BrnDirectorICEWrapper.cpp (same home); Construct / Destruct
-// are split into ICEWrapper_wG_11.cpp so they can be on the link while this TU cannot.
+// TU GameSource/Director/BrnDirectorICEWrapper.cpp (same home); Construct, Destruct,
+// PlayMovie, GetCurrentMovie and IsPlayingMovie are split into ICEWrapper_wG_11.cpp so
+// they can be on the link while this TU cannot -- the two converter tables UpdateAction
+// indexes are still unhomed (see the FLAG below).
 // ============================================================================
 
 #include "GameSource/Director/BrnDirectorICEWrapper.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface (sim-time step)
-#include "GameSource/Director/BrnDirectorResourceManager.h"        // BrnDirector::DirectorResourceManager::GetKeyAnim
 
 namespace BrnDirector
 {
@@ -49,48 +47,6 @@ namespace
 
     // The take channel Update samples for the mover's per-frame integer value.
     const s32 KI_MOVER_VALUE_CHANNEL   = 41;
-}
-
-// ----------------------------------------------------------------------------
-// BrnDirector::ICEWrapper::PlayMovie
-//
-// Start playing a recorded camera take ("movie"):
-//   * resolve the take data through the resource manager (assert it exists),
-//   * bind + start the manager's playback take at the requested start position (which
-//     sets the manager's playback flag),
-//   * point the camera mover at the now-active take,
-//   * advance the manager once so the take is live this frame,
-//   * aim the vehicle ref at the requested race car / ref type,
-//   * remember the playing movie's id.
-//
-// Member map (provenance): GetKeyAnim via mpResourceManager (+0x11B24); the
-// SetDataPointers + SetParameter + flag-set on the manager's mPlaybackTake (+0x15A8)
-// is the manager's SetTakeToPlay; the mover's take pointer store is at the mover's
-// +0x110 (SetTake); ICEManager::Update(+0xA40); VehicleRef::Set(&mVehicleRef @+0x120F0,
-// refType, raceCar, 1); mCurrentMovieID store at +0x12100 (8 bytes).
-// ----------------------------------------------------------------------------
-void ICEWrapper::PlayMovie(CgsResource::ID lTakeId, f32 lfStartPosition,
-                           VehicleRef::EType leVehicleRefType, EActiveRaceCarIndex leRaceCar)
-{
-    ICE::ICETakeData* lpTakeData =
-        mpResourceManager->GetKeyAnim(static_cast<int64_t>(lTakeId.GetHash()));
-    CGS_ASSERT(lpTakeData != 0, "Invalid ICE Movie Requested");
-
-    // Bind + start the manager's playback take at the requested position (sets the
-    // manager's playback-active flag).
-    mICEManager.SetTakeToPlay(lpTakeData, lfStartPosition);
-
-    // Drive the mover from whichever take is now active (the playback take).
-    mCameraMover.SetTake(mICEManager.GetCameraTake());
-
-    // Advance the manager once so the take is live this frame.
-    mICEManager.Update();
-
-    // Aim the vehicle ref at the requested race car for this take's ref type.
-    mVehicleRef.Set(leVehicleRefType, leRaceCar, true);
-
-    // Remember the movie now playing.
-    mCurrentMovieID = lTakeId;
 }
 
 // ----------------------------------------------------------------------------
@@ -149,43 +105,6 @@ void ICEWrapper::Update(const CgsSystem::TimerStatusInterface* lpTimer,
 }
 
 // ----------------------------------------------------------------------------
-// BrnDirector::ICEWrapper::GetCurrentMovie
-//
-// Snapshot the currently-playing movie: when a take is playing, return its id and
-// normalised playback position and mark the snapshot valid; otherwise the snapshot is
-// invalid. (Reads the manager's playback flag, this wrapper's stored movie id, and the
-// manager's current take parameter -- the playback take's mfParameter.)
-// ----------------------------------------------------------------------------
-ICEPlayingMovie ICEWrapper::GetCurrentMovie()
-{
-    ICEPlayingMovie lCurrentMovie;
-
-    if (mICEManager.IsPlaybackDataSet())
-    {
-        lCurrentMovie.mID = mCurrentMovieID;
-        lCurrentMovie.mfPlaybackPositionParameter = mICEManager.GetCurrentTakeParameter();
-        lCurrentMovie.mbIsValid = true;
-    }
-    else
-    {
-        lCurrentMovie.mbIsValid = false;
-    }
-
-    return lCurrentMovie;
-}
-
-// ----------------------------------------------------------------------------
-// BrnDirector::ICEWrapper::IsPlayingMovie
-//
-// True while a take started by PlayMovie is still playing (the manager's playback
-// flag, manager +0x1CE0).
-// ----------------------------------------------------------------------------
-bool ICEWrapper::IsPlayingMovie()
-{
-    return mICEManager.IsPlaybackDataSet();
-}
-
-// ----------------------------------------------------------------------------
 // BrnDirector::ICEWrapper::UpdateAction
 //
 // Translate this frame's dev-tools controller input into queued ICE actions (only when
@@ -203,6 +122,10 @@ bool ICEWrapper::IsPlayingMovie()
 // ----------------------------------------------------------------------------
 void ICEWrapper::UpdateAction(const Camera::Utils::DebugController& lrController)
 {
+    // The control index is an int in the recorded loop; the query accessors take the
+    // controller's own enum, so each index is named through it explicitly.
+    typedef Camera::Utils::DebugController::EControl EControl;
+
     if (!mbAcceptInput)
         return;
 
@@ -210,7 +133,9 @@ void ICEWrapper::UpdateAction(const Camera::Utils::DebugController& lrController
 
     for (s32 liControl = 0; liControl < KI_NUM_INPUT_CONTROLS; ++liControl)
     {
-        if (lrController.GetJustPressed(liControl))
+        const EControl leControl = static_cast<EControl>(liControl);
+
+        if (lrController.GetJustPressed(leControl))
         {
             ICE::ActionRef lAction;
             lAction.SetID(maPressConverter[liControl].mAction);
@@ -220,7 +145,7 @@ void ICEWrapper::UpdateAction(const Camera::Utils::DebugController& lrController
                 mActionQueue.Push(lAction);
         }
 
-        if (lrController.GetIsPressed(liControl))
+        if (lrController.GetIsPressed(leControl))
         {
             ICE::ActionRef lAction;
             lAction.SetID(maPadConverter[liControl].mAction);
@@ -229,7 +154,7 @@ void ICEWrapper::UpdateAction(const Camera::Utils::DebugController& lrController
                 mActionQueue.Push(lAction);
         }
 
-        if (liControl == KI_RELEASE_CONTROL && lrController.GetJustReleased(KI_RELEASE_CONTROL))
+        if (liControl == KI_RELEASE_CONTROL && lrController.GetJustReleased(static_cast<EControl>(KI_RELEASE_CONTROL)))
         {
             ICE::ActionRef lAction;
             lAction.SetID(KI_RELEASE_ACTION_ID);

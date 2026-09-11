@@ -10,12 +10,12 @@
 // from BURNOUT_X360_ARTIST.XEX (Show @0x825B4B00, Hide @0x825B4B60, GetSlipRatioRange @0x825B4BC0,
 // GetCoefficientRange @0x825B4C90).
 //
-// LAYOUT: the two GripCurveDebugGraph members sit at the X360 +0x30 / +0x70 and the visible flag
-// at +0xB8. Only the member set the wave-7 functions touch is modelled (the two graphs + mbVisible);
-// they are declared in console order after the Window base. Exact console byte offsets are NOT
-// pinned (host pointers are 8 bytes; semantic parity by named member, per project rule) -- the
-// range getters reach each graph's grip curve via GripCurveDebugGraph::GetGripCurve(), and Show/Hide
-// toggle mbVisible; no consumer embeds this window by value at a pinned offset.
+// LAYOUT: complete. The two graphs sit at +0x30 / +0x70, the axle pair the window plots at
+// +0xB0 / +0xB4 and the visible flag at +0xB8, closing the console's 0xC0-byte object behind a
+// width-identical Window base. The host image is 0xD0, because the two wheel pointers widen
+// 4 -> 8 and the graphs' 16-byte alignment rounds the tail up; the handling debug component embeds
+// two of these BY VALUE and its own layout gate pins that 0xD0 (and therefore this member set)
+// seat by seat.
 // ============================================================================
 
 #include "types.hpp"
@@ -29,6 +29,11 @@ namespace Vehicle
     class GripCurveDebugWindow : public CgsDev::DebugUI::Window
     {
     public:
+        // Two-phase init, run once per window by the handling debug component's Construct. Seats
+        // both graphs, clears the wheel pair the window plots and starts hidden. The window's own
+        // Window base is deliberately NOT touched -- Prepare is what fills that in.
+        void Construct();
+
         // @0x825B4B00 / @0x825B4B60: add/remove this window to/from the debug-UI stack + toggle mbVisible.
         void Show();
         void Hide();
@@ -39,9 +44,11 @@ namespace Vehicle
         f32  GetCoefficientRange();
 
     private:
-        GripCurveDebugGraph mLongGripCurveGraph;   // X360 +0x30
-        GripCurveDebugGraph mLatGripCurveGraph;    // X360 +0x70
-        bool                mbVisible;             // X360 +0xB8
+        GripCurveDebugGraph mLongGripCurveGraph;   // +0x30
+        GripCurveDebugGraph mLatGripCurveGraph;    // +0x70
+        Wheel*              mpLeftWheel;           // +0xB0  the axle pair this window plots;
+        Wheel*              mpRightWheel;          // +0xB4  Prepare fills them in
+        bool                mbVisible;             // +0xB8
     };
 }
 }

@@ -52,8 +52,6 @@
 #include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h"                // FreeburnChallengeManager (state + host reads)
 #include "GameSource/Gui/BrnGuiPerfmons.h"                                // GuiPerfmons::miHudStateUpdate
 
-#include <cstring>   // std::memcpy (the 8-byte overlay-id payload)
-
 namespace BrnGui
 {
     namespace
@@ -675,18 +673,8 @@ namespace BrnGui
             CGS_ASSERT(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed] != 0,
                        "KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]");   // cpp:3737 (li r5, 0xE99)
 
-            // FLAG (two homes, one type): the CANONICAL GuiOverlayWaitFinishRequest
-            // (BrnGuiOverlaysDirector.h:29) carries the Construct that compresses the overlay
-            // name into its CgsID but has no GetEventType(); the catalogue copy in
-            // BrnGuiDemangledEventTypes.h -- which this TU already includes for the ShowHide
-            // and ticker records, and which is MUTUALLY EXCLUSIVE with the director header --
-            // carries GetEventType() == 188 over an opaque 8-byte body. So the id is built
-            // here and copied in; the eight queued bytes are identical either way.
-            // DELETE-WHEN: the two homes are reconciled into one type.
-            const CgsID lOverlayId =
-                CgsIDCompress(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]);
             GuiOverlayWaitFinishRequest lRequest;
-            std::memcpy(lRequest.maData, &lOverlayId, sizeof(lRequest.maData));
+            lRequest.Construct(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]);
             mpStateInterface->OutputGuiEvent(lRequest);
         }
 

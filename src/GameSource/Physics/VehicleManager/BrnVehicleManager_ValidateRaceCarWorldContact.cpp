@@ -404,13 +404,6 @@ namespace Vehicle
     }
     // ---- end [kerb] globals ------------------------------------------------------------------------
 
-    // The whale writes the wall triangle into the per-car debug component through the same
-    // span cast Construct stores (BrnVehicleManager_Construct.cpp:265, the FLAGGED opaque
-    // 8x1024 span). The partial host DebugComponent must FIT the console's 1024-byte slot.
-    static_assert(sizeof(DebugComponent) <= 1024,
-                  "Vehicle::DebugComponent (partial host reconstruction) must fit the console's "
-                  "1024-byte maRaceCarDebugComponent slot");
-
     // ==========================================================================================
     // ValidateRaceCarWorldContact @0x825C6088   (DWARF h:938; asserts BrnVehicleManager.cpp
     // :7419..:7624 -- every line number below is the console's own)
@@ -529,11 +522,7 @@ namespace Vehicle
         //      unconditional on the wall classification -- NOT a draw) --------------------------
         if (lbIsWall)
         {
-            // The console indexes the component array directly (`this + 0x27DC0 + (car << 10)`).
-            // Same span cast as Construct's (BrnVehicleManager_Construct.cpp:265, FLAGGED there);
-            // the fit static_assert at the top of this TU bounds the write.
-            reinterpret_cast<DebugComponent*>(&maRaceCarDebugComponent[luRaceCarIndex][0])
-                ->SetLastWallTriangle(&lTriangle);
+            maRaceCarDebugComponent[luRaceCarIndex].SetLastWallTriangle(&lTriangle);
         }
 
         // ---- the speed-scaled ground-clearance gate --------------------------------------------

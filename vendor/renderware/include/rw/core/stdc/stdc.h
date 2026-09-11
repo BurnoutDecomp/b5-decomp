@@ -61,7 +61,7 @@ namespace stdc
 
     // vsnprintf wrapper: like Vsprintf, but bounded to liSize bytes of lpcDst
     // (the size-limited formatter). ICERender::ScrPrintfArg formats the on-screen
-    // debug text into a 256-byte stack buffer through this. DECLARATION-ONLY.
+    // debug text into a 256-byte stack buffer through this.
     s32 Vsnprintf(char* lpcDst, s32 liSize, const char* lpcFormat, va_list lvaArgs);
 
     // strlen wrapper: number of characters in the NUL-terminated lpcString. The
@@ -75,7 +75,7 @@ namespace stdc
 
     // strcpy wrapper: copy the NUL-terminated lpcSrc into lpcDst and return lpcDst
     // (C-library strcpy semantics). The buffers are read-only source / writable
-    // destination text, modelled as const char*/char* here. DECLARATION-ONLY.
+    // destination text, modelled as const char*/char* here.
     char* StringCopy(char* lpcDst, const char* lpcSrc);
 
     // strncpy wrapper: copy at most luCount characters of the NUL-terminated lpcSrc
@@ -89,7 +89,6 @@ namespace stdc
     // first liSize bytes of lpcDst, returning the number of characters written (the
     // size-bounded sibling of the C-library sprintf). ICEAuthor::SaveTake formats the
     // take guid as a decimal string through it before emitting the take XML.
-    // DECLARATION-ONLY.
     s32 Snprintf(char* lpcDst, s32 liSize, const char* lpcFormat, ...);
 
     // atoi wrapper: parse the leading decimal integer of the NUL-terminated

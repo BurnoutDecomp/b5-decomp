@@ -20,6 +20,7 @@
 // own home; included here so this header's existing consumers keep resolving the NAME (there is
 // exactly one type, no ODR fork). See the deleted shell's tombstone below.
 #include "GameSource/Gui/Events/BrnGuiEventStatsResponse.h"
+#include "GameSource/Gui/Events/BrnGuiEventReplayStatus.h"   // BrnGui::GuiReplayStatusEvent (id 524)
 // [p0 map-event wave] the custom-event trio below carries a whole BrnProgression::Race by
 // value (ids 172 / 174) and the race's landmark list (id 167), so both need COMPLETE types.
 #include "SharedClasses/Progression/BrnRace.h"        // BrnProgression::Race
@@ -456,7 +457,6 @@ namespace BrnGui
     // RecvEvent case 388 latches it with a single float load (@0x82420B38).
     struct GuiOncomingEvent { f32 mfDistance; s32 GetEventType() const { return 388; } };  // id 388 size 4
     struct GuiOnlineCarStatusEvent { u8 maData[8]; s32 GetEventType() const { return 563; } };  // id 563 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiOverlayWaitFinishRequest { u8 maData[8]; s32 GetEventType() const { return 188; } };  // id 188 size 8 (raw; size not GuiEvent-shaped)
     struct GuiOvertakeEvent { u8 maData[8]; s32 GetEventType() const { return 371; } };  // id 371 size 8 (raw; size not GuiEvent-shaped)
     // [boost-msg wave] NEW HOME (no committed record existed). DWARF
     // BrnGuiEventTypeDefs.h:4369 {CgsID mShortcutId}; PS3 GuiEvent<377>, X360 id 382.
@@ -504,7 +504,11 @@ namespace BrnGui
     // [gateui r3] GuiRaceCheckpointReached (id 425) has been RECOVERED and now lives in
     // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :5690, sizeof 12).
     // The opaque placeholder that stood here was DELETED rather than left to shadow it.
-    struct GuiReplayStatusEvent : public CgsGui::GuiEvent<524> { u8 maPayload[1548]; };  // id 524 size 1560 (12B GuiEvent header + opaque payload)
+    // [ODR wave] GuiReplayStatusEvent (id 524) has been RECOVERED and now lives in
+    // GameSource/Gui/Events/BrnGuiEventReplayStatus.h as the real 1560-byte record (the replay
+    // StatusInterface at +0x00). That home is included at the top of this header, so every
+    // consumer of this header still resolves the NAME; the opaque shell that stood here was
+    // DELETED rather than left to shadow it.
     // [road-rage wave 2026-09-02] GuiRoadRageScoreUpdate (id 426) has been RECOVERED and now
     // lives in BrnGuiEventTypeDefs.h as the real 8-byte RAW record (miCurrentTakedowns /
     // miTargetTakedowns, DWARF :4862-4863). The opaque `u8 maData[8]` shell that stood here was
@@ -587,12 +591,6 @@ namespace BrnGui
     // record size match the asm, while preserving the X360 sizeof (all such sizes are 8-multiples).
     // ============================================================================
     struct CalculateRoute : public CgsGui::GuiEvent<494> { u8 maPayload[68]; };  // id 494 size 80
-    // Mirror of BrnGui::GuiOverlayShowingNotification (real home BrnGuiOverlaysDirector.h, id 190,
-    // 8-byte { CgsID } record). BrnGuiDemangledEventTypes.h and BrnGuiOverlaysDirector.h are
-    // mutually-exclusive includes (both also define GuiOverlayWaitFinishRequest), so the event-queue
-    // template TUs that include this header carry the overlay-showing payload here too. alignas(8)
-    // matches the OutputGuiEvent<T> asm (offset 16 -- the real payload is an 8-byte CgsID).
-    struct alignas(8) GuiOverlayShowingNotification { u8 maData[8]; s32 GetEventType() const { return 190; } };  // id 190 size 8 [8-aligned: OGE off16]
     struct alignas(8) GuiAudioEvent : public CgsGui::GuiEvent<456> { u8 maPayload[12]; };  // id 456 size 24 [8-aligned: OGE off16]
     // GuiAudioTriggerEvent: NO placeholder here -- the real hand-reconstructed home is
     // BrnGuiEventTypeDefs.h (macComponent/meAction/macLabel/macMovie, id 201, sizeof 112).

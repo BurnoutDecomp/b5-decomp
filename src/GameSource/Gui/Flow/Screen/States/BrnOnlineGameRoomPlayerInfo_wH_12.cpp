@@ -25,10 +25,9 @@
 // console's 4 / 8 / 12 / 16 / 24 literals (32-bit sizes/offsets) are never reproduced.
 //
 // BrnGui::GuiEventNetworkSplashEvent is homed only in BrnGuiDemangledEventTypes.h, which
-// hard-collides with BrnGuiEventTypeDefs.h (pulled in transitively by
-// BrnGuiOverlaysDirector.h for GuiOverlayWaitFinishRequest), so its payload shape is
-// carried as a file-local view -- the accommodation BrnInGame.cpp,
-// BrnCarSelectMain_wG_02.cpp and the sibling wave-H partfiles all make.
+// this TU does not include, so its payload shape is carried as a file-local view -- the
+// accommodation BrnInGame.cpp, BrnCarSelectMain_wG_02.cpp and the sibling wave-H
+// partfiles all make.
 //
 // HandleGuiCacheEvent @0x824A3DD8 was assigned to this group too, but was blocked on a
 // missing declaration at the time; it is now bodied in BrnOnlineGameRoomPlayerInfo_wH_18.cpp.
@@ -42,7 +41,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event / AddEvent
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                    // GsmIO::EGameModeType / IsOnlineFreeBurnLobby
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache (meGameModeType; we are a friend)
-#include "GameSource/Gui/BrnGuiOverlaysDirector.h"                        // BrnGui::GuiOverlayWaitFinishRequest
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiOverlayWaitFinishRequest
 #include "GameSource/Gui/Flow/Screen/States/Shared/BrnScreenShared.h"     // GetSplashScreenIDForGameMode
 
 namespace BrnGui
@@ -89,21 +88,9 @@ namespace BrnGui
 
         // OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> @0x82476E98: sizeof 8 /
         // type 188 / offset 16 (the 8-aligned CgsID leaves a 4-byte hole after the header
-        // that the X360 never stores -- var_14 is written by neither the callee nor the
-        // caller -- so nothing is modelled there either).
-        //
-        // FLAG: the wrapper takes the payload's own GetEventType(), and the committed
-        // BrnGui::GuiOverlayWaitFinishRequest does not declare one yet (its sibling
-        // GuiOverlayShowingNotification does). Rather than fork the request's layout, the
-        // attested id is supplied by deriving from the canonical type; delete this and add
-        // `s32 GetEventType() const { return 188; }` to BrnGuiOverlaysDirector.h when
-        // shared-header edits are in scope for this wave.
-        struct GuiOverlayWaitFinishEvent : public GuiOverlayWaitFinishRequest
-        {
-            s32 GetEventType() const { return 188; }
-        };
-
-        typedef CgsGui::GuiEventWrapper<GuiOverlayWaitFinishEvent, KI_CHANNEL_GUI_OUT>
+        // that the console never stores -- neither the callee nor the caller writes it --
+        // so nothing is modelled there either).
+        typedef CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, KI_CHANNEL_GUI_OUT>
             GuiOverlayWaitFinishWire;
     }
 
@@ -233,7 +220,7 @@ namespace BrnGui
 
                 // The X360 constructs the request into its own stack slot and the
                 // instantiation copies the 8 bytes into the record.
-                GuiOverlayWaitFinishEvent lWaitFinish;
+                GuiOverlayWaitFinishRequest lWaitFinish;
                 lWaitFinish.Construct(GetSplashScreenIDForGameMode(
                     static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(leGameModeType)));
 

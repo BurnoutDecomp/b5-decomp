@@ -392,51 +392,12 @@ namespace Vehicle
             }
 
             // ---- register the per-car debug component, once ---------------------------------
+            // `slwi r11,r27,10 ; add r11,r11,r24 ; addis r3,r11,2 ; addi r3,r3,0x7DC0`
+            // == this + 163264 + 1024*slot == &maRaceCarDebugComponent[slot].
             if (!mabRaceCarDebugComponentRegistered[luRaceCar])
             {
-                // `slwi r11,r27,10 ; add r11,r11,r24 ; addis r3,r11,2 ; addi r3,r3,0x7DC0`
-                // == this + 163264 + 1024*slot == &maRaceCarDebugComponent[slot]. The array is an
-                // opaque 8x1024 span (the real component is another group's type), so the cast is
-                // the same sanctioned span-cast seam VehicleManager::Construct already uses.
-                CgsDev::DebugComponent* lpComponent = reinterpret_cast<CgsDev::DebugComponent*>(
-                    &maRaceCarDebugComponent[luRaceCar][0]);
-
-                // [FLAG PC bring-up] NULL-VPTR GATE (conductor, 2026-08-11, crash-measured on
-                // the FIRST live create event this project ever drained): the console constructs
-                // the per-car debug components in VehicleManager's ctor chain; this build's chain
-                // is gated, so the span is zero storage and Register()'s first virtual dispatch
-                // reads vtable slot +0x28 through a NULL vptr -- AV at DebugComponent::Register
-                // +0x2F, process down (BrnCrash.png, module+0xC993F). The gate tests the vptr
-                // word itself; the registered flag stays FALSE on skip so the slot re-registers
-                // the moment the real component ctor lands.
-                //
-                // STILL REQUIRED after DebugComponent::Construct landed (2026-09-11). Construct is
-                // the component's two-phase init, and on the console it stores no vptr: the vptr
-                // comes from the C++ CONSTRUCTOR of VehicleManager's DebugComponent[8] member,
-                // which cannot run while that member is an opaque byte span. Register needs a live
-                // vptr for four virtual dispatches (IsSimple / GetPath / GetName, then OnRegister
-                // from inside DebugManager::RegisterComponent), so the span is still zero at
-                // offset 0 and this gate is still what keeps the create event alive.
-                // DELETE-WHEN maRaceCarDebugComponent becomes a real DebugComponent[8] whose
-                // elements are constructed (not the two-phase Construct -- the C++ ctor).
-                if (*reinterpret_cast<void* const*>(lpComponent) != 0)
-                {
-                    lpComponent->Register();
-                    mabRaceCarDebugComponentRegistered[luRaceCar] = true;
-                }
-                else
-                {
-                    static bool sbReportedNullDebugComponentVptr = false;
-                    if (!sbReportedNullDebugComponentVptr)
-                    {
-                        sbReportedNullDebugComponentVptr = true;
-                        if (CgsDev::Message::gxMessageFilterFlags & 1)
-                            *CgsDev::Log::gpDebugPrint
-                                << "[FLAG PC bring-up] ProcessCreateEvents: race-car debug "
-                                   "component vptr is NULL (ctor chain gated) -- Register() "
-                                   "skipped, reported once\n";
-                    }
-                }
+                maRaceCarDebugComponent[luRaceCar].Register();
+                mabRaceCarDebugComponentRegistered[luRaceCar] = true;
             }
 
             // ---- THE BIT ---------------------------------------------------------------

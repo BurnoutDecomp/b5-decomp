@@ -10,6 +10,7 @@
 #include "GameSource/Director/Camera/Behaviours/BehaviourPassengerCam.h"            // BehaviourPassengerCam::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.h" // BehaviourRotateAboutVehicle::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h" // BehaviourSpirallingDeathcam::Parameters
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h"      // BehaviourAftertouchCam::Parameters
 
 // ============================================================================
 // GameSource/Director/Camera/BrnBehaviourParameterBank.h
@@ -54,6 +55,13 @@ namespace BrnDirector
         // BehaviourRotateAboutVehicle::Parameters. (Its interior beyond the shared
         // Behaviour::Parameters head is still unmodelled -- see that class.)
         typedef Camera::BehaviourRotateAboutVehicle::Parameters LookAroundCarCamParameters;
+
+        // The record's leading aftertouch-cam block, at record +0. The behaviour factory hands
+        // it to BehaviourAftertouchCam::SetParameters for every authored aftertouchcam shot.
+        const Camera::BehaviourAftertouchCam::Parameters& GetAftertouchCamParameters() const
+        {
+            return mAftertouchCamDefault;
+        }
 
         // Accessor returning the address of the look-around-car parameter block (mpNamedParameters
         // + 0x2334). Returns by const reference; the caller passes &block to SetParameters.
@@ -122,6 +130,13 @@ namespace BrnDirector
             {
                 maReservedHead[luByte] = 0;
             }
+
+            // ⭐ 2026-09-11: the record's first block, with its own authored Construct -- the
+            // bank's own first statement. Unlike the gyro blocks below it, this one is a real
+            // transcription, not a zero-and-tag stand-in: its per-block Construct is a
+            // straight-line run of constant stores and every one of them is reproduced.
+            mAftertouchCamDefault.Construct();
+
             maLookAroundCarCamParameters.Construct();
 
             // The bank's own four post-Construct re-tunes -- see the banner.
@@ -199,7 +214,18 @@ namespace BrnDirector
         // Placing them at their real offsets costs nothing -- this reconstruction's gyro
         // Parameters is byte-exact (static_asserted below) -- so unlike the two by-name blocks
         // at the tail, these are BYTE-FAITHFUL, and the +0x2334 block below keeps its offset.
-        u8                         maReservedHead[480];              // +0x0000 .. +0x01DF
+        // ⭐ THE RECORD'S FIRST BLOCK, CARVED 2026-09-11. The bank's own Construct opens by
+        // constructing an aftertouch-cam block at record +0, and the behaviour factory hands
+        // that same address to BehaviourAftertouchCam::SetParameters when an authored
+        // aftertouchcam shot comes in -- so this is a named block, not head padding. The four
+        // head blocks are {aftertouch-cam, aftertouch-crash, aftertouch-crash, helicam} at
+        // record +0 / +108 / +220 / +332, each pinned by the bank Construct's own per-block
+        // call, and together they are the 480 bytes the gyro run starts after. Only the first
+        // is carved here (it is the only one with a consumer in this tree); the other three
+        // stay inside the reserved remainder below, which is sized so the gyro run cannot
+        // move whatever this block's reconstruction weighs.
+        Camera::BehaviourAftertouchCam::Parameters mAftertouchCamDefault;   // +0
+        u8 maReservedHead[480 - sizeof(Camera::BehaviourAftertouchCam::Parameters)];
         Camera::BehaviourGyroCam::Parameters mGyroCamDefaultParams;                  // +480
         Camera::BehaviourGyroCam::Parameters mGyroCamTruckFront;                     // +684
         Camera::BehaviourGyroCam::Parameters mGyroCamLeft;                           // +888
@@ -222,6 +248,10 @@ namespace BrnDirector
     // parameter block cannot silently slide them off their attested offsets.
     static_assert(sizeof(Camera::BehaviourGyroCam::Parameters) == 204,
                   "BehaviourGyroCam::Parameters is the 204-byte grid the tumbling blocks sit on");
+    static_assert(sizeof(Camera::BehaviourAftertouchCam::Parameters) == 108,
+                  "BehaviourAftertouchCam::Parameters is the record's 108-byte first block");
+    static_assert(offsetof(NamedParameters, mAftertouchCamDefault) == 0,
+                  "NamedParameters::mAftertouchCamDefault @ +0 (the record's first block)");
     static_assert(offsetof(NamedParameters, mGyroCamDefaultParams) == 480,
                   "NamedParameters::mGyroCamDefaultParams @ +480 (E_SUBTYPE_LEAD)");
     static_assert(offsetof(NamedParameters, mGyroCamTruckFront) == 684,
@@ -307,8 +337,16 @@ namespace BrnDirector
         //   +9012           mRotateAboutVehicleDefault (128)   == the +0x2334 block above
         //   +9140           mSpirallingDeathCamDefault         == the +0x23B4 block above
         //   +9328           end of record
-        // The four head blocks (aftertouch, aftertouch-crash, crash-debug, helicam) total 480
-        // bytes; their individual sizes are not separated by anything that reads them.
+        // ⭐ THE FOUR HEAD BLOCKS ARE SEPARATED NOW (2026-09-11). The note that stood here said
+        // their individual sizes were "not separated by anything that reads them"; the bank's
+        // own Construct separates them, by calling a per-block Parameters::Construct on each in
+        // turn at record +0 / +108 / +220 / +332:
+        //   +0    mAftertouchCamDefault      (108)  aftertouch-cam   -- carved above
+        //   +108  aftertouch-crash           (112)
+        //   +220  aftertouch-crash           (112)  the second of the pair
+        //   +332  helicam                    (148)
+        // 108 + 112 + 112 + 148 == 480, which is the gyro run's start, so the head closes
+        // exactly and the third block is an aftertouch-crash one rather than a "crash-debug".
         //
         // ⭐ THE STORAGE FORK IS CLOSED (2026-09-11). The record used to exist TWICE: once as
         // MainDirector::mNamedParameters (what the arbitrator's mpNamedParameters pointed at)

@@ -148,7 +148,7 @@
 // CARS and WORLD separately behind the stencil mask BrnPostFx writes; this tree's composite has no
 // stencil mask yet, so a real, non-zero velocity blurs the WHOLE frame uniformly. That is a visual
 // deviation the moment this producer goes live, and it is deliberate: the fix is the stencil mask,
-// not a weaker velocity. See BrnRendererModulePostFx.cpp's MotionBlurState::Update banner.
+// not a weaker velocity. See BrnRendererModule.cpp's MotionBlurState::Update banner.
 // ==================================================================================================
 
 namespace BrnParticle

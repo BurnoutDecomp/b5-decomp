@@ -121,17 +121,17 @@ namespace BrnGui
 
         // The OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> wire record OnLeave
         // stack-builds inline (@0x82479894..0x824798B8): { 8, 188, 16, <pad>, CgsID },
-        // channel 40, 24 bytes. The payload type is spelled as its bare CgsID here because
-        // BrnGuiOverlaysDirector.h (which carries the real GuiOverlayWaitFinishRequest with
-        // its Construct) and BrnGuiDemangledEventTypes.h (pulled in transitively through
-        // BrnBoostMessageManager.h) are mutually-exclusive includes -- both define that
-        // type. CgsIDCompress IS the whole attested Construct body.
+        // channel 40, 24 bytes.
         struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
         {
-            u32   muPad0C;      // +0x0C (the 8-aligned payload slot)
-            CgsID mOverlayId;   // +0x10
-            explicit GuiOverlayWaitFinishWire(CgsID lOverlayId)
-                : CgsGui::GuiEvent<188>(8, 16), muPad0C(0), mOverlayId(lOverlayId) {}
+            u32                         muPad0C;    // +0x0C (the 8-aligned payload slot)
+            GuiOverlayWaitFinishRequest mRequest;   // +0x10
+
+            explicit GuiOverlayWaitFinishWire(const char* lpcOverlayName)
+                : CgsGui::GuiEvent<188>(8, 16), muPad0C(0)
+            {
+                mRequest.Construct(lpcOverlayName);
+            }
         };
 
         // The OutputGuiEvent<BrnGui::GuiOverlayRequest> wire record (@0x82436BE0):
@@ -581,10 +581,9 @@ namespace BrnGui
             CGS_ASSERT(KAPC_PRE_EVENT_OVERLAYS[leMode] != 0,
                        "KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]");   // cpp:1668 (non-gating)
 
-            // GuiOverlayWaitFinishRequest::Construct is one CgsIDCompress; the record is
-            // { 8, 188, 16, <pad>, id } posted on the gui-out channel at 24 bytes.
-            GuiOverlayWaitFinishWire lWire(
-                CgsIDCompress(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]));
+            // The record is { 8, 188, 16, <pad>, id } posted on the gui-out channel at
+            // 24 bytes; Construct compresses the name into the id word.
+            GuiOverlayWaitFinishWire lWire(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]);
             mpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT, 24);
         }

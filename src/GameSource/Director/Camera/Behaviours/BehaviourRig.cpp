@@ -167,7 +167,7 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo)
     }
 
     // Snapshot the attached vehicle.
-    void* const lpAttachedVehicle = mAttachedToRef.BrnDirector::VehicleRef::Get(lpWorld);
+    const VehicleInfo* const lpAttachedVehicle = mAttachedToRef.BrnDirector::VehicleRef::Get(lpWorld);
     (void)lpAttachedVehicle;
 
     AABBox lVehicleAABB{};
@@ -236,16 +236,18 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo)
 
     if (mbLooking)
     {
-        void* const lpLookedAtVehicle =
+        const VehicleInfo* const lpLookedAtVehicle =
             mLookingAtRef.BrnDirector::VehicleRef::Get(lpWorld);
         (void)lpLookedAtVehicle;
 
         if (!mbSnap || mbLooking == mbLookingLast)
         {
-            // ::VecFloat -- the global BrnCommonTypes alias for rw::math::vpu::Vector4.
-            // (BrnDirector::VecFloat, the Timestep header's own broadcast-register type, is
-            // now visible here and would otherwise win name lookup inside namespace BrnDirector.)
-            const ::VecFloat lvTimestep = ::VecFloat{ lfTimestep, 0.0f, 0.0f, 0.0f };
+            // The timestep reaches Looker::Update as a BROADCAST register, not as a
+            // {dt,0,0,0} lane set: the frame delta is splatted across all four lanes before
+            // the call. BrnDirector::VecFloat's scalar constructor is that splat, and it is
+            // also the type Looker::Update is declared with, so unqualified lookup here is
+            // both faithful and the spelling that links.
+            const VecFloat lvTimestep(lfTimestep);
             mLooker.BrnDirector::Camera::Utils::Looker::Update(
                 lvTimestep,
                 mRandom,
@@ -296,12 +298,12 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo)
         mpParameters->mfDOFBlurDepth,
         mpParameters->mfDOFIntensity);
 
-    void* const lpLookedAt = mpParameters->mbReverse
+    const VehicleInfo* const lpLookedAt = mpParameters->mbReverse
         ? mLookingAtRef.BrnDirector::VehicleRef::Get(lpWorld)
         : mAttachedToRef.BrnDirector::VehicleRef::Get(lpWorld);
     (void)lpLookedAt;
 
-    void* const lpAttached2 = mpParameters->mbReverse
+    const VehicleInfo* const lpAttached2 = mpParameters->mbReverse
         ? mLookingAtRef.BrnDirector::VehicleRef::Get(lpWorld)
         : mAttachedToRef.BrnDirector::VehicleRef::Get(lpWorld);
     (void)lpAttached2;

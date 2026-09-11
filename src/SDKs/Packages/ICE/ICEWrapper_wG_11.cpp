@@ -1,14 +1,19 @@
 // ============================================================================
-// BrnDirector::ICEWrapper::Construct / ::Destruct, split out of
-// SDKs/Packages/ICE/ICEWrapper.cpp: that TU's other bodies (PlayMovie, Update,
-// UpdateAction, ...) need the two dev-tools control->action converter tables and
-// the ICE movie-player half, none of which has a definition in the tree.
-// DELETE-WHEN: ICEWrapper.cpp can mount -- then move these bodies back into it.
+// BrnDirector::ICEWrapper::Construct / ::Destruct / ::PlayMovie / ::GetCurrentMovie /
+// ::IsPlayingMovie, split out of SDKs/Packages/ICE/ICEWrapper.cpp: what keeps that TU
+// off the link is its remaining pair, Update and UpdateAction, which index two
+// dev-tools control->action converter tables whose contents are not recovered and which
+// have no definition anywhere in the tree.
+// DELETE-WHEN: those two tables are homed and ICEWrapper.cpp can mount -- then move
+// these bodies back into it.
 // MainDirector embeds the wrapper by value and Constructs it at boot, before the
 // debug log exists: nothing here may log.
 // ============================================================================
 
 #include "GameSource/Director/BrnDirectorICEWrapper.h"
+
+#include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameSource/Director/BrnDirectorResourceManager.h"        // DirectorResourceManager::GetKeyAnim
 
 namespace BrnDirector
 {
@@ -64,6 +69,84 @@ void ICEWrapper::Destruct()
 {
     mICEManager.Destruct();
     HeapMalloc::Destruct();
+}
+
+// ----------------------------------------------------------------------------
+// PlayMovie
+//
+// Start playing a recorded camera take ("movie"):
+//   * resolve the take data through the resource manager (assert it exists),
+//   * bind + start the manager's playback take at the requested start position (which
+//     sets the manager's playback flag),
+//   * point the camera mover at the now-active take,
+//   * advance the manager once so the take is live this frame,
+//   * aim the vehicle ref at the requested race car / ref type,
+//   * remember the playing movie's id.
+//
+// Member map (provenance): GetKeyAnim via mpResourceManager (+0x11B24); the
+// SetDataPointers + SetParameter + flag-set on the manager's mPlaybackTake (+0x15A8)
+// is the manager's SetTakeToPlay; the mover's take pointer store is at the mover's
+// +0x110 (SetTake); ICEManager::Update (+0xA40); VehicleRef::Set(&mVehicleRef @+0x120F0,
+// refType, raceCar, 1); mCurrentMovieID store at +0x12100 (8 bytes).
+// ----------------------------------------------------------------------------
+void ICEWrapper::PlayMovie(CgsResource::ID lTakeId, f32 lfStartPosition,
+                           VehicleRef::EType leVehicleRefType, EActiveRaceCarIndex leRaceCar)
+{
+    ICE::ICETakeData* lpTakeData = mpResourceManager->GetKeyAnim(lTakeId);
+    CGS_ASSERT(lpTakeData != 0, "Invalid ICE Movie Requested");
+
+    // Bind + start the manager's playback take at the requested position (sets the
+    // manager's playback-active flag).
+    mICEManager.SetTakeToPlay(lpTakeData, lfStartPosition);
+
+    // Drive the mover from whichever take is now active (the playback take).
+    mCameraMover.SetTake(mICEManager.GetCameraTake());
+
+    // Advance the manager once so the take is live this frame.
+    mICEManager.Update();
+
+    // Aim the vehicle ref at the requested race car for this take's ref type.
+    mVehicleRef.Set(leVehicleRefType, leRaceCar, true);
+
+    // Remember the movie now playing.
+    mCurrentMovieID = lTakeId;
+}
+
+// ----------------------------------------------------------------------------
+// GetCurrentMovie
+//
+// Snapshot the currently-playing movie: when a take is playing, return its id and
+// normalised playback position and mark the snapshot valid; otherwise the snapshot is
+// invalid. (Reads the manager's playback flag, this wrapper's stored movie id, and the
+// manager's current take parameter -- the playback take's mfParameter.)
+// ----------------------------------------------------------------------------
+ICEPlayingMovie ICEWrapper::GetCurrentMovie()
+{
+    ICEPlayingMovie lCurrentMovie;
+
+    if (mICEManager.IsPlaybackDataSet())
+    {
+        lCurrentMovie.mID = mCurrentMovieID;
+        lCurrentMovie.mfPlaybackPositionParameter = mICEManager.GetCurrentTakeParameter();
+        lCurrentMovie.mbIsValid = true;
+    }
+    else
+    {
+        lCurrentMovie.mbIsValid = false;
+    }
+
+    return lCurrentMovie;
+}
+
+// ----------------------------------------------------------------------------
+// IsPlayingMovie
+//
+// True while a take started by PlayMovie is still playing (the manager's playback
+// flag, manager +0x1CE0).
+// ----------------------------------------------------------------------------
+bool ICEWrapper::IsPlayingMovie()
+{
+    return mICEManager.IsPlaybackDataSet();
 }
 
 } // namespace BrnDirector

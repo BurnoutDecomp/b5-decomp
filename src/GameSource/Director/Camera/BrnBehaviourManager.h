@@ -275,11 +275,13 @@ namespace Camera
 
         // --- consumer-driven convenience API (existing committed call sites) ------------
         // These wrap the manager's allocation entry points in the named forms the committed
-        // ICE movie-player and arbitrator states already invoke. DECLARATION-ONLY.
+        // ICE movie-player and arbitrator states already invoke. Bodied in the .cpp.
 
         // Allocate a fresh BehaviourInterpolate into lrHandle (ICE movie-player blend in/out).
+        // The three trailing arguments are NewBehaviour<>'s own {owning arbitrator state,
+        // owning moment, debug ref-count limit}; the committed call sites pass {0, 0, 1}.
         void NewBehaviourInterpolate(BehaviourHandle<BehaviourInterpolate>& lrHandle,
-                                     s32 liArgA, s32 liArgB, s32 liArgC);
+                                     void* lpOwningState, const void* lpOwner, s32 liRefLimit);
         // Release the behaviour a handle owns (leaves the handle ready to Clear()).
         void ReleaseBehaviour(BehaviourHandle<BehaviourInterpolate>& lrHandle);
         // Whether a behaviour keeps updating while the game is paused (handle overload).

@@ -15,16 +15,16 @@
 // HOST BUCKET WIDENING banner there. This TU now spells the element through
 // MomentController::MomentPool so the two can never drift apart.
 //
-// Three X360 ledger symbols land here, all thin instantiations of the generic
+// Three console ledger symbols land here, all thin instantiations of the generic
 // ObjectPool bodies (inline in CgsObjectPool.h):
 //
-//   AllocateObject     @ 0x822009B0  (the moment pool's AllocateVoid<MomentXxx>)
-//   FreeObject         @ 0x827DD838  (the moment pool's FreeObject callback)
-//   IsObjectAllocated  @ 0x82200C90  (MomentController::UpdateAllMoments)
+//   AllocateObject  (the moment pool's AllocateVoid<MomentXxx>)
+//   FreeObject  (the moment pool's FreeObject callback)
+//   IsObjectAllocated  (MomentController::UpdateAllMoments)
 //
-// X360-attested layout of ObjectPool<Vector4[70],20,int> (pins the stride):
-//   maObjectPool[20]       @ +0        (20 buckets * 1120 = 22400 bytes  -- X360 numbers)
-//   maiObjectFreeQueue[20] @ +22400    (int[20]; lwzx/stwx at 4*(idx+5600))
+// console-attested layout of ObjectPool<Vector4[70],20,int> (pins the stride):
+//   maObjectPool[20]       @ +0        (20 buckets * 1120 = 22400 bytes  -- console numbers)
+//   maiObjectFreeQueue[20] @ +22400    (int[20]; indexed word loads/stores at 4*(idx+5600))
 //   miNumObjectsFree       @ +22480    (0x57D0)
 //   mObjectsAllocated      @ +22488    (0x57D8; BitArray<20> = one u64 field)
 // (member ORDER is what this pins; the byte displacements are the console's and shift on the
@@ -36,11 +36,11 @@
 #include "GameSource/Director/MomentController/BrnMomentController.h" // AbstractPool<70,20,Vector4>, mMomentPool
 
 // Element T = MomentController::MomentPool::Bucket (== rw::math::vpu::Vector4[KU_MOMENT_POOL_UNITS]).
-// --- AllocateObject @0x822009B0 -----------------------------------------------------------
+// AllocateObject -----------------------------------------------------------
 template int  CgsContainers::ObjectPool<BrnDirector::MomentController::MomentPool::Bucket, 20, int>::AllocateObject();
 
-// --- FreeObject @0x827DD838 ---------------------------------------------------------------
+// FreeObject ---------------------------------------------------------------
 template void CgsContainers::ObjectPool<BrnDirector::MomentController::MomentPool::Bucket, 20, int>::FreeObject(int);
 
-// --- IsObjectAllocated @0x82200C90 --------------------------------------------------------
+// IsObjectAllocated --------------------------------------------------------
 template bool CgsContainers::ObjectPool<BrnDirector::MomentController::MomentPool::Bucket, 20, int>::IsObjectAllocated(int) const;

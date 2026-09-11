@@ -8,7 +8,7 @@
 // the ref-count Array tables / mpDirectorResourceManager / ...).
 //
 // SOURCE-OF-TRUTH: the X360 BURNOUT_X360_ARTIST.XEX pseudocode + asm for this TU is
-// the spine; DecFIGS DWARF gave the declaration shape; the LegacySrc partial was style
+// the spine; the recovered type information gave the declaration shape; the earlier revision was style
 // only (it has no source for this TU).
 //
 // SCOPE (re-verified wave; the ledger's per-TU function list is a stale raw-offset snapshot --
@@ -964,6 +964,41 @@ namespace Camera
     }
 
     // ========================================================================
+    // The three named BehaviourHandle<BehaviourInterpolate> convenience wrappers
+    // (BrnBehaviourManager.h's "consumer-driven convenience API"). The ICE movie player and
+    // the online-race-intro state reach the manager through these names rather than through
+    // the template family; on the console each one is folded straight into its caller, and
+    // every fold is one of the three shapes below -- so they cost the link nothing beyond the
+    // BehaviourInterpolate instantiation of the templates they forward to.
+    //
+    //  * NewBehaviourInterpolate is the NewBehaviour<BehaviourInterpolate> template with the
+    //    caller's three words passed through unchanged (the movie player passes {0, 0, 1}:
+    //    no owning arbitrator state, no owning moment, a debug ref-count limit of one).
+    //  * ReleaseBehaviour is BehaviourHandle::Release -- drop the manager-side hold and clear
+    //    the handle's five words.
+    //  * SetBehaviourUpdatesDuringPause is BehaviourHandle::SetUpdatesDuringPause -- assert
+    //    the handle is allocated, then forward its helper index to the index-taking overload
+    //    above.
+    // ========================================================================
+    void BehaviourManager::NewBehaviourInterpolate(BehaviourHandle<BehaviourInterpolate>& lrHandle,
+                                                   void* lpOwningState, const void* lpOwner,
+                                                   s32 liRefLimit)
+    {
+        NewBehaviour<BehaviourInterpolate>(lrHandle, lpOwningState, lpOwner, liRefLimit);
+    }
+
+    void BehaviourManager::ReleaseBehaviour(BehaviourHandle<BehaviourInterpolate>& lrHandle)
+    {
+        lrHandle.Release();
+    }
+
+    void BehaviourManager::SetBehaviourUpdatesDuringPause(BehaviourHandle<BehaviourInterpolate>& lrHandle,
+                                                          bool lbUpdatesDuringPause)
+    {
+        lrHandle.SetUpdatesDuringPause(lbUpdatesDuringPause);
+    }
+
+    // ========================================================================
     // AllocateBehaviour<TBehaviour> explicit instantiations (X360 @0x82263370 &c.)
     //
     // The ONE shared body lives out-of-line in BrnBehaviourManager.h; these lines emit the
@@ -1017,6 +1052,9 @@ namespace Camera
         const void* lpOwner, s32 liRefLimit);
     template void BehaviourManager::NewBehaviour<BehaviourGameplayExternal>(
         BehaviourHandle<BehaviourGameplayExternal>& lrHandle, void* lpOwningState,
+        const void* lpOwner, s32 liRefLimit);
+    template void BehaviourManager::NewBehaviour<BehaviourInterpolate>(
+        BehaviourHandle<BehaviourInterpolate>& lrHandle, void* lpOwningState,
         const void* lpOwner, s32 liRefLimit);
 }
 } // namespace BrnDirector

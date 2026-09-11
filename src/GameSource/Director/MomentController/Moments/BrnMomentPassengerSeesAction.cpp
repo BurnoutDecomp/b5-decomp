@@ -4,13 +4,13 @@
 #include "GameSource/Director/Camera/BrnBehaviourParameterBank.h"   // the passenger-cam moment block
 
 // BrnDirector::MomentPassengerSeesAction -- reconstructed from
-// BURNOUT_X360_ARTIST.XEX (DWARF primary file BrnMomentPassengerSeesAction.cpp;
-// member names verbatim from the DecFIGS DWARF).
+// the console executable (home file BrnMomentPassengerSeesAction.cpp;
+// member names verbatim from the declarations).
 //
 // Bodied here (7 ledger functions):
-//   Construct @0x8225EE38   Prepare @0x821F75D0   Update @0x8225EEB8
-//   Release   @0x8223AA80   SetParameters @0x821F75F0
-//   GetName   @0x821F75F8   GetInstanceType @0x829DA908
+//   Construct   Prepare   Update
+//   Release   SetParameters
+//   GetName   GetInstanceType
 
 namespace BrnDirector
 {
@@ -19,38 +19,37 @@ namespace BrnDirector
 namespace
 {
     // The crash window the passenger cam may start in / hold past (the 0.5s
-    // rodata @0x82001DA0 both compares read).
+    // read-only data both compares read).
     const f32 KF_PASSENGER_CRASH_WINDOW = 0.5f;
 
     // Camera-state head bits (the moment family's shared vocabulary):
-    const u32 KU_HEAD_FLAG_SEARCHING = 18;   // oris 4
-    const u32 KU_HEAD_FLAG_ALLOCATED = 19;   // oris 8
-    const u32 KU_HEAD_FLAG_PREPARING = 20;   // oris 0x10 (also the valid body's expired hold)
-    const u32 KU_HEAD_FLAG_INHIBITED = 23;   // oris 0x80
+    const u32 KU_HEAD_FLAG_SEARCHING = 18;
+    const u32 KU_HEAD_FLAG_ALLOCATED = 19;
+    const u32 KU_HEAD_FLAG_PREPARING = 20;   // (also the valid body's expired hold)
+    const u32 KU_HEAD_FLAG_INHIBITED = 23;
 }
 
 namespace detail
 {
     // ---- MomentSharedInfo reaches (un-homed record; the family precedent's
-    // decl-only helpers; X360 shared-info offsets in comments). ----
+    // decl-only helpers; console shared-info offsets in comments). ----
     bool MomentSharedInfo_IsPlayerCrashing(const void* lpSharedInfo);        // +1284 byte 249
     const AllVehicleData* MomentSharedInfo_GetAllVehicleData(const void* lpSharedInfo);   // +1288
     s32  MomentSharedInfo_GetCrashVehicleIndex(const void* lpSharedInfo);    // +1304 word
 }
 using namespace detail;
 
-// @ 0x8225EE38 -- cpp:34. The inlined base Moment::Construct, the handle clear,
+// The inlined base Moment::Construct, the handle clear,
 // the two vehicle-ref set-flag clears, and the parameter reset.
 void MomentPassengerSeesAction::Construct()
 {
-    Moment::Construct();      // inlined on the X360 (state/type/inhibit/camera)
-    mPassengerCam.Clear();    // the X360 zeroes the five handle fields inline
+    Moment::Construct();      // inlined in the console build (state/type/inhibit/camera)
+    mPassengerCam.Clear();    // the console build zeroes the five handle fields inline
     mWitness.mbSet  = 0;
     mIncident.mbSet = 0;
     mpParameters    = 0;
 }
 
-// @ 0x821F75D0 -- cpp:55.
 bool MomentPassengerSeesAction::Prepare(void* /*lrBehaviourController*/)
 {
     mfTimeCrashing = 0.0f;
@@ -58,7 +57,7 @@ bool MomentPassengerSeesAction::Prepare(void* /*lrBehaviourController*/)
     return true;
 }
 
-// @ 0x8223AA80 -- cpp:211. The inlined guarded handle Release, the gate clears,
+// The inlined guarded handle Release, the gate clears,
 // the searching head bit, park at INACTIVE (0).
 bool MomentPassengerSeesAction::Release()
 {
@@ -70,28 +69,25 @@ bool MomentPassengerSeesAction::Release()
     return true;
 }
 
-// @ 0x821F75F0 -- cpp:243.
 void MomentPassengerSeesAction::SetParameters(const Moment::Parameters* lpParameters)
 {
     mpParameters = static_cast<const Parameters*>(lpParameters);
 }
 
-// @ 0x821F75F8 -- cpp:269.
 const char* MomentPassengerSeesAction::GetName() const
 {
     return "MomentPassengerSeesAction";
 }
 
-// @ 0x829DA908.
 Moment::EType MomentPassengerSeesAction::GetInstanceType()
 {
     return E_MOMENT_PASSENGER_SEES_ACTION;
 }
 
-// @ 0x8225EEB8 -- cpp:74. Every frame the crash timer integrates while crashing
+// Every frame the crash timer integrates while crashing
 // (else clears). Then:
 //   SEARCHING        in a crash's first 0.5s: seed the incident ref to the raw
-//                    -1 record, resolve it against the vehicle data (the X360
+//                    -1 record, resolve it against the vehicle data (the console build
 //                    calls Get TWICE back-to-back -- kept), and require the
 //                    crash vehicle index unchanged across the resolve; then
 //                    (unless inhibited, bit 23) point the witness ref at the
@@ -124,7 +120,7 @@ void MomentPassengerSeesAction::Update(f32 lfTimeStep, void* lrBehaviourControll
             const AllVehicleData* lpAllVehicles = MomentSharedInfo_GetAllVehicleData(lSharedInfo);
 
             // Seed the incident ref to the raw invalid record then resolve it
-            // (the X360 issues the resolve twice, back to back -- kept), and
+            // (the console build issues the resolve twice, back to back -- kept), and
             // require the crash vehicle unchanged across the resolve.
             mIncident.mbSet          = 1;
             mIncident.meType         = VehicleRef::EType(0);
@@ -179,7 +175,7 @@ void MomentPassengerSeesAction::Update(f32 lfTimeStep, void* lrBehaviourControll
         break;
 
     default:
-        CGS_ASSERT(false, "unhandled case in switch");   // :198 (non-gating)
+        CGS_ASSERT(false, "unhandled case in switch");   //  (non-gating)
         return;
     }
 

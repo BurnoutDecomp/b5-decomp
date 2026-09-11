@@ -6,9 +6,10 @@
 // BrnDirector::Camera::CameraReference -- reconstructed from BURNOUT_X360_ARTIST.XEX
 // (DWARF primary file BrnCameraReference.cpp).
 //
-// Bodied here (4 ledger functions):
+// Bodied here (5 ledger functions):
 //   Setup(ICEWrapper) @0x821F8508   GetCamera @0x8223EA80
 //   Prepare           @0x822523F0   Release   @0x822524A8
+//   Setup(Camera)
 // All asserts are the X360's non-gating tripwires (the bodies fall through after
 // firing, exactly as the console does).
 
@@ -78,6 +79,25 @@ void CameraReference::Setup(BehaviourHelperIndex lBehaviourHelperIndex,
     mBehaviourHelperIndex = lBehaviourHelperIndex;
 
     mCamera = lpBehaviourController->GetCameraFromBehaviour(mBehaviourHelperIndex);
+}
+
+// ----------------------------------------------------------------------------
+// CameraReference::Setup(Camera) -- adopt a caller-supplied camera as the source, BY VALUE.
+// In the console export set but unnamed; pinned by its own assert string plus its single
+// caller, the combined BehaviourInterpolate::Setup(f32, const Camera&, BehaviourHelperIndex,
+// BehaviourManager&) overload, which materialises the Camera copy before the call -- which is
+// what fixes the by-value signature. Two stores: meType = E_TYPE_CACHED at +0x168, then the
+// camera assignment into mCamera at +0x000.
+//
+// The type write lands FIRST, exactly as in the Setup(ICEWrapper) sibling above; order
+// preserved rather than tidied.
+// ----------------------------------------------------------------------------
+void CameraReference::Setup(Camera lCamera)
+{
+    CGS_ASSERT(meType == E_TYPE_INVALID, "meType == E_TYPE_INVALID");
+
+    meType  = E_TYPE_CACHED;
+    mCamera = lCamera;
 }
 
 // @ 0x8223EA80 -- cpp:172. Refresh mCamera from the referenced source and return it.

@@ -26,6 +26,8 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"                 // OutCoarseQueryResult
 #include "rw/math/vpu/vector3_operation.h"                                  // Dot, Magnitude
 #include <cmath>                                                                   // std::fabs
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstdlib>
 
 namespace BrnTraffic
 {
@@ -50,6 +52,20 @@ namespace
 
     // The per-lane tolerance the two "this position is not the origin" tripwires below use.
     const f32 KF_POSITION_ZERO_TOLERANCE = 1.1920929e-07f;
+
+    // DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE. Same gate and same idiom as the
+    // [T9-nm] drain witness on the consumer side.
+    bool TrafficDiagEnabled()
+    {
+        static const bool sbEnabled = ( getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
+        return sbEnabled;
+    }
+
+    // One-shot: the first matching result batch that carried anything. This is the TRANSPORT
+    // witness -- query posted, sphere answered, bridge carried, drain reached -- and it is
+    // independent of whether any of those entities turns out to be close enough to be a near
+    // miss, which the drain witness on the consumer side reports.
+    bool s_bResultBatchLogged = false;
 
     // The vector zero test both tripwires expand inline. rw::math::vpu::IsZero is declared in
     // the vendor math home but has no body in this tree, so the lane comparison is written
@@ -105,6 +121,17 @@ void TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults(
 
         if ( lpResults->mQueryId.mId == KU_NEARBY_TRAFFIC_SPHERE_QUERY_ID )
         {
+            // DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE.
+            if ( !s_bResultBatchLogged && lpResults->miNumResults > 0
+                 && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                s_bResultBatchLogged = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[T9-nm] results q=" << static_cast<s32>( lpResults->mQueryId.mId )
+                    << " n=" << lpResults->miNumResults
+                    << " [DELETE-WHEN-STABLE]\n";
+            }
+
             const Vector3 lPlayerPosition =
                 lpInput->GetActiveRaceCarOutputInterface()->GetPlayerPosition();
 

@@ -39,7 +39,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface out-queue
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event / AddEvent
-#include "GameSource/Gui/BrnGuiOverlaysDirector.h"                        // GuiOverlayWaitFinishRequest (id 188)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiOverlayWaitFinishRequest (id 188)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface / GuiEventNetworkSuspension
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 

@@ -3,7 +3,6 @@
 #include <new>                                                                  // placement new (the carved effects)
 #include <cstdio>                                                               // std::snprintf (the seam's sampled diag)
 #include "GameSource/Graphics/BrnRendererMemory.h"                              // the render-target pool
-#include "GameSource/Graphics/PostFx/BrnPostFxPCComposite.h"                    // the PC composite seam
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"                     // CgsRenderTarget::GetRenderTarget
 #include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h"        // saDepthStencilStates[1] (Render)
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"          // saRasterizerStates[2]   (Render)
@@ -894,7 +893,7 @@ void BrnPostFx::Render(BrnRendererMemory& lrAllocatedMemory,
 // BrnPostFx::Render directly, in one translation unit. It exists because BrnRendererModule.h used to
 // define a placeholder EA::Jobs::Job that could not share a translation unit with the real job.h
 // BrnPostFx.h needs for m_blendJob. That placeholder is gone, so this seam is vestigial and retires
-// with the fold described in BrnPostFxPCComposite.h.
+// with the bring-up; its three declarations sit at the bottom of BrnPostFx.h.
 //
 // WHAT IT ADDS OVER THE CONSOLE, and nothing else: a NULL TEST ON THE POOL. BrnPostFx::Render
 // dereferences the bloom, depth-of-field and back-buffer pool slots and m_pfxTint[] unconditionally,
@@ -914,7 +913,7 @@ namespace
     bool sbPostFxConstructed = false;
 }
 
-// [FLAG PC bring-up] The deferred BrnPostFx::Construct -- see BrnPostFxPCComposite.h. The console
+// [FLAG PC bring-up] The deferred BrnPostFx::Construct -- see its banner in BrnPostFx.h. The console
 // runs it from BrnRendererModule::Construct (`bl BrnPostFx__Construct` @0x8240B78C, r3 = mPostFxVault,
 // r4 = this->mpGraphicsAllocator); on PC the module's Construct has no device and a null graphics
 // allocator, so it runs from the frame that builds the post-fx pool, on the bring-up allocator.
@@ -1234,7 +1233,7 @@ void BrnPostFx::SetColourCube(int liIndex, rw::graphics::postfx::ColourCube* lpC
     // @0x8240BFA8 inlines this setter five times and every one of the five carries its own
     // `cmplwi cr6, r11, 0` / `beq` over the `stw` into m_colourCubes (0x8240C720/C738/C750/C768/
     // C780), while none of the five weight `stfs` has any test. The caller side therefore does NOT
-    // repeat it (BrnRendererModulePostFx.cpp's apply loop) -- one rule, one place.
+    // repeat it (BrnRendererModule.cpp's apply loop) -- one rule, one place.
     if (lpColourCube != 0)
     {
         m_colourCubes[liIndex] = lpColourCube;

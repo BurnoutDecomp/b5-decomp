@@ -942,15 +942,19 @@ namespace CgsSceneManager
                     CGS_ASSERT(lpaPreviousNumResults[liSeat] != -1,
                                "Bad subset index. No matching union test found");
 
-                    // NOT RECONSTRUCTED -- a LOUD trap, never a quiet "no result". The narrowing
-                    // form re-tests one earlier query's result run against this frustum instead
-                    // of walking the tree; a no-op here would hand the asker an EMPTY answer to a
-                    // query it did ask, which is the silent-drop class. No producer in the tree
-                    // posts a coarse frustum query with a non-zero flag word (every one of them
-                    // writes zero), so this arm is unreachable today and becomes the first thing
-                    // a future producer hits.
-                    CGS_ASSERT(false,
-                               "the narrowing form of the coarse frustum query is not reconstructed");
+                    // The narrowing form: re-test seat i's published result run against this
+                    // query's frustum instead of walking the tree. The run still lives in the
+                    // coarse result buffer -- BeginResultsBatch only moved the write cursor
+                    // past it -- so the earlier pointer stays valid for the whole pass.
+                    // Note the argument order: the frustum leads, the entity-type flags follow,
+                    // and the run is (pointer, count) in that order.
+                    mSpatialPartitionManager.GetSpatialPartition()->FrustumTestEntities(
+                        *reinterpret_cast<const CgsGeometric::Frustum*>(lrQuery.maFrustumPlanes),
+                        lrQuery.mx32EntityTypeFlags,
+                        lpaPreviousResults[liSeat],
+                        lpaPreviousNumResults[liSeat],
+                        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer());
+
                     lbNarrowed = true;
                     break;
                 }
@@ -984,6 +988,28 @@ namespace CgsSceneManager
 
         EmitCoarseQueryResult(mEntityManager, lpSceneOutputBuffer, lQueryId, liNumResults,
                               liNumAttempted, lpu16Results);
+    }
+
+    // =========================================================================================
+    // ProcessTriangleCollisionSphereTests -- the pass that was never implemented.
+    // =========================================================================================
+    void SceneManagerModule::ProcessTriangleCollisionSphereTests(CgsCollision::BaseCollisionGenerator*,
+                                                                 CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionSphereTest, 256>* lpQueue,
+                                                                 SceneManagerIO::OutputBuffer*)
+    {
+        // NOT a trap: this IS the console's body. The triangle-collision sphere pass was never
+        // implemented in the shipping build -- the handler reads its queue length and, if
+        // anything was queued, logs the request and fires "not supported yet". An empty queue
+        // is silent. Its two siblings in the same pass are real handlers; this one never was.
+        if (lpQueue->GetLength() > 0)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "Triangle collision sphere test requested\n";
+            }
+
+            CGS_ASSERT(false, "Triangle sphere tests not supported yet");
+        }
     }
 
     // =========================================================================================
@@ -1047,12 +1073,5 @@ namespace CgsSceneManager
         CGS_ASSERT(lpQueue->GetLength() == 0,
                    "SceneManagerModule::ProcessTriangleCollisionLineTests @0x828C6FB0 is not reconstructed (tests were queued)");
         StopPassMonitor(siProcessTriCollisionLineTestsPerfMon);
-    }
-    void SceneManagerModule::ProcessTriangleCollisionSphereTests(CgsCollision::BaseCollisionGenerator*,
-                                                                 CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionSphereTest, 256>* lpQueue,
-                                                                 SceneManagerIO::OutputBuffer*)
-    {
-        CGS_ASSERT(lpQueue->GetLength() == 0,
-                   "SceneManagerModule::ProcessTriangleCollisionSphereTests @0x828B0B30 is not reconstructed (tests were queued)");
     }
 }

@@ -372,21 +372,6 @@ namespace
     };
     static_assert(sizeof(TickerClearMessagesWire536) == 2, "id 536 size 2");
 
-    // id 188 size 8 -- AddGuiEvent<GuiOverlayWaitFinishRequest> @0x823CFD68.
-    // The canonical type (BrnGui::GuiOverlayWaitFinishRequest, BrnGuiOverlaysDirector.h:29) is a
-    // bare `CgsID mOverlayId` with an inline Construct -- but it has NO GetEventType(), so
-    // PushGuiEvent cannot bake its id. Modelled here with the same single member plus the id,
-    // rather than hand-rolling an AddEvent with a literal.
-    // SHARED_HEADER_REQUEST (owner: the Gui lane): add
-    // `s32 GetEventType() const { return 188; }` to BrnGuiOverlaysDirector.h:29 and this record
-    // collapses to a `using`.
-    struct OverlayWaitFinishRequestWire188
-    {
-        CgsID mOverlayId;                      // +0x00
-        s32 GetEventType() const { return 188; }
-    };
-    static_assert(sizeof(OverlayWaitFinishRequestWire188) == 8, "id 188 size 8");
-
     // id 289 size 192 -- AddGuiEvent<GuiEventOfflinePostEvent> @0x823D20A0.
     // Store map: the case-37 arm's var_2D10-based frame @0x823EAA74..0x823EAB3C. Every member
     // below is a store the arm emits; the gaps are never written by the arm and are explicit
@@ -751,8 +736,8 @@ namespace
                 // name is the image literal at r23 ("GMStrOffline", loaded @0x823EA114).
                 if (IsOnlineLobbyOrShowtimeMode(liGameModeType))
                 {
-                    OverlayWaitFinishRequestWire188 lWaitRequest;
-                    lWaitRequest.mOverlayId = CgsIDCompress("GMStrOffline");
+                    BrnGui::GuiOverlayWaitFinishRequest lWaitRequest;
+                    lWaitRequest.Construct("GMStrOffline");
                     PushGuiEvent(lWaitRequest, lpGuiInput);
                 }
             }

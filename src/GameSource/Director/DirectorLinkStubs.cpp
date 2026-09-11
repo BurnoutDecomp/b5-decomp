@@ -37,7 +37,6 @@
 
 #include "GameSource/Director/Arbitrator/States/BrnArbStateCarSelect.h"
 #include "GameSource/Director/Arbitrator/States/BrnArbStateCrashMode.h"
-#include "GameSource/Director/Arbitrator/States/BrnArbStateCrashNav.h"
 #include "GameSource/Director/Arbitrator/States/BrnArbStateDriveThru.h"
 #include "GameSource/Director/Arbitrator/States/BrnArbStateOnlineCarSelect.h"
 #include "GameSource/Director/Arbitrator/States/BrnArbStateOnlineRaceIntro.h"
@@ -112,45 +111,6 @@ namespace BrnDirector
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStatePostEvent,       "ArbStatePostEvent")
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateRaceIntro,       "ArbStateRaceIntro")
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateRankUp,          "ArbStateRankUp")
-
-    // These five are silent-drop stubs for a state that is fully reconstructed but not mounted:
-    // Arbitrator/States/BrnArbStateCrashNav.cpp owns the real Construct/Prepare/Update/
-    // Release/GetName. While they stand, Update does nothing and Release always succeeds, so
-    // un-gating the arbitrator's crash-nav trigger would enter a state that publishes a camera
-    // nothing ever writes.
-    // ⇒ ALL FIVE COME OUT TOGETHER WITH THE MOUNT, never one at a time (LNK2005 x5 otherwise).
-    // Re-measured 2026-09-11 (dumpbin over that TU's object against the mounted symbol set):
-    // it needs exactly TEN externals this link does not provide, all of them ICE:
-    //     8  ICEMoviePlayer::{Construct,Prepare,Update,Stop,Loop,GetCamera,InterpolateFrom,
-    //        CutToInterpolateOut} -- written, in the unmounted Utils/BrnICEMoviePlayer.cpp.
-    //     2  ICEWrapper::{GetCurrentMovie,PlayMovie} -- written, unmounted
-    //        SDKs/Packages/ICE/ICEWrapper.cpp.
-    // The two non-ICE ones are closed: SharedCameraContainer::GetGameplayCameraHelperIndex
-    // (Camera/BrnSharedCameraContainer.cpp mounted) and Camera::Camera::SetRequestedBorderPostFX
-    // (bodied in Camera/Camera.cpp).
-    // Those ten are the DIRECT cost only. Measured 2026-09-11 on the movie-player half itself,
-    // the mount it waits on drags in nine more the link does not have either:
-    //     4  BehaviourInterpolate::{GetCamera, SetInterpolationMode, SetupCameraAFromCamera,
-    //        SetupCameraBFromCamera} -- declared in Camera/Behaviours/BrnBehaviourInterpolate.h,
-    //        bodied nowhere.
-    //     3  BehaviourManager's three BehaviourHandle<BehaviourInterpolate> overloads
-    //        (NewBehaviourInterpolate / ReleaseBehaviour / SetBehaviourUpdatesDuringPause) --
-    //        declared in Camera/BrnBehaviourManager.h, bodied nowhere.
-    //     2  ICEWrapper::{PlayMovie, IsPlayingMovie}.
-    // ICEWrapper::PlayMovie is the deep one and it is what really holds these five: it calls
-    // ICEManager::Update, which calls ICEController::Update, whose body needs the whole
-    // unmounted ICE editor group (the ICEAuthor / ICEController / ICEWidget TUs). Measured
-    // cost of mounting that group whole: 15 remaining holes, most of them small -- the six
-    // ICETake interval accessors, ICEMath::Sqrt, two CgsDev::DebugRender 2D primitives, and
-    // rwcore's stdc string/format wrappers, whose vendor TU simply is not on the build.
-    // ⇒ these five come out with that wave, not before.
-    void ArbStateCrashNav::Construct()                          { ArbitratorState::Construct(); }
-    // Prepare forwards to the base: the override declared in BrnArbStateCrashNav.h adds a vtable
-    // slot MainDirector references, so it must be defined even while the TU is unmounted.
-    bool ArbStateCrashNav::Prepare(ArbStateSharedInfo& lrInfo)  { return ArbitratorState::Prepare(lrInfo); }
-    void ArbStateCrashNav::Update(ArbStateSharedInfo& lrInfo)   { (void)lrInfo; }
-    bool ArbStateCrashNav::Release(ArbStateSharedInfo& lrInfo)  { (void)lrInfo; return true; }
-    const char* ArbStateCrashNav::GetName() const               { return "ArbStateCrashNav"; }
 
     // Two states declare an explicit Destruct() override that has no body in the tree.
     void ArbStateOnlineRaceIntro::Destruct() {}
@@ -348,37 +308,42 @@ namespace vpu
 // !IsAllocated(), MomentSelector::Update's classification loop skips them all, muValidMoments
 // is pinned at 0, and ArbStateRoaming::Update's DRIVING arm never calls SelectBestMoment.
 //
-// Mounting the rest of the closure (BrnMomentControllerNewMoment.cpp + the eight Moments/*.cpp
-// that are still unmounted) costs 91 non-CRT unresolved externals, re-measured 2026-09-11 by
-// compiling every candidate with the shipping flags and subtracting the defined-symbol set of
-// the whole current object list. By family:
-//     34  per-moment-class virtuals and privates (Destruct / GetInstanceType / SetParameters /
-//         Prepare / Release, plus MomentPlayerJumping::UpdateCamera)
+// Mounting the rest of the closure (BrnMomentControllerNewMoment.cpp + the two Moments/*.cpp
+// that are still unmounted -- PlayerJumping and TakedownLookback) costs 77 non-CRT unresolved
+// externals. Re-measured 2026-09-11 against a baseline built by RECOMPILING every one of the
+// 2,343 mounted TUs with the shipping flags and archiving them into one library: the previous
+// census read 71 off the checked-in object directory, which still held objects for TUs whose
+// source had moved on, so it credited the link with bodies it no longer has. 77 is the honest
+// number for the same closure; nothing regressed between the two readings.
+// PlayerStunt is out of the closure entirely -- it measures ZERO and is mounted.
+// By family:
+//     37  per-moment-class virtuals and privates (Destruct / SetParameters / Prepare /
+//         GetInstanceType / MomentFailSafe::Release, plus MomentPlayerJumping::UpdateCamera)
 //     24  BehaviourCollection<T,P,N> methods -- six template methods x four instantiations
-//     13  other subsystems (BehaviourRig's virtual set + Parameters::Construct,
-//         BehaviourPassengerCam::SetParameters, BehaviourLooseAttachment::Parameters::Construct,
-//         BehaviourManager::NewBehaviour<Behaviour>, Camera::SetRequestedBorderPostFX,
-//         ShotSelector::GetCrashShot, DirectorResourceManager::GetKeyAnim)
-//     10  other detail:: reach shims (the four de-inlined BehaviourHandle accessors, Vehicle_*,
-//         BehaviourRig_*, Behaviour_SetUseCollisionPolicy, CameraState_AppendToDebugLog,
-//         ShotReference_IsIceAnimClassKeyTagged)
-//      6  vector-deleting destructors (Behaviour, BehaviourInterpolate, BehaviourPassengerCam,
-//         BehaviourRig, CollisionPolicy, VisibilityCollisionPolicy)
-//      2  detail::MomentSharedInfo_* reach shims -- all that is left of what was the biggest
-//         family. The rest are bodied against the homed record in BrnMomentSharedInfo.cpp;
-//         these two reach what this tree has not carved: GameState::mDirectorProfileData's
-//         opaque tail (GetStuntAbort493) and VehicleTracker's crash-type word
-//         (GetCurrentCrashType).
+//      6  BehaviourRig's virtual set + Parameters::Construct. Camera/Behaviours/BehaviourRig.cpp
+//         HOLDS all six and now COMPILES (the four const VehicleInfo* conversions and the
+//         Looker::Update VecFloat fork are repaired). It is still unmounted, and its whole
+//         remaining cost is TWO symbols: Utils::CameraRig::Construct, which has no body
+//         anywhere in the tree, and Utils::PositionLag::Update, whose home BrnPositionLag.cpp
+//         is itself blocked on six unbodied camera-serialiser leaf overloads.
+//      5  the four vector-deleting destructors the takedown look-back's rig handle emits
+//         (Behaviour / BehaviourRig / CollisionPolicy / VisibilityCollisionPolicy) plus
+//         BehaviourRig::GetCollisionPolicy
+//      3  detail:: reach shims -- the takedown look-back's two resolved-vehicle lanes
+//         (Vehicle_GetPosition / Vehicle_GetSegmentReference, which want VehicleRef::Get's
+//         return type carved) and BehaviourRig_StartLookingAtRaceCarSnapped
 //      2  BehaviourParameterBank accessors -- and only the two INDEXED ones are left
 //         (GetPlayerJumpingRigShotParams / GetPlayerJumpingBystanderShotParams). The four
 //         single-block moment accessors are bodied; see that header's RECORD MAP for why the
 //         indexed pair needs its call sites renumbered before it can follow.
 // (operator delete(void*,size_t) and type_info's vftable also come up unresolved against the
 // object list and are NOT counted above: the whole build already leaves both to the CRT.)
+// Per-TU, each measured alone against that recompiled baseline:
+//     NewMoment 36 | PlayerJumping 27 | TakedownLookback 14 | PlayerStunt 0 (mounted).
 // Every `AllocateVoid<MomentXxx>()` arm placement-constructs a MomentXxx, which emits its
 // vftable, which needs every virtual of that class defined at link -- so the twelve-arm switch
-// drags all twelve subclasses in whole. That is what makes this ONE gate cost 91 symbols while
-// the individual moment TUs cost nothing: mounted without NewMoment, a moment TU emits no
+// drags all twelve subclasses in whole. That is what makes this ONE gate cost 49 on its own
+// while the individual moment TUs cost nothing: mounted without NewMoment, a moment TU emits no
 // vftable and so drags none of its siblings' virtuals in.
 //
 // The closure alone would not make a cutaway play: nothing in this tree ticks a moment
@@ -386,14 +351,19 @@ namespace vpu
 // declaration-only, and its call is commented out in MainDirector::Update).
 //
 // DELETE-WHEN, in dependency order -- do NOT start at the bottom:
+//   0. DONE 2026-09-11: the layout-stubbed MomentHardStop is retired and its header deleted.
+//      The parameter bank now holds the real Moments/BrnMomentHardStop.h record, so
+//      MomentHardStop has exactly one definition tree-wide and step 4 can no longer fold a
+//      one-liner Prepare over the real body.
 //   1. DONE 2026-09-11: the MomentSharedInfo shim family is bodied against the homed record
-//      (BrnMomentSharedInfo.cpp), which took BrnMomentHitTraffic.cpp, BrnMomentStationaryCrash.cpp
-//      and BrnMomentNewCarJoined_wN_01.cpp to zero and mounted them. Two shims are left and
-//      both need a member this tree has not carved, not more shim work.
+//      (BrnMomentSharedInfo.cpp). All of it: the last two, which the census called uncarved,
+//      were a named VehicleTracker member with its own accessor and a profile-data flag two
+//      mounted arbitrator arms already read through the same byte blob. Seven moment TUs are
+//      mounted off the back of it.
 //   2. Body MomentController::UpdateAllMoments and MainDirector::UpdateMoments, then un-gate
 //      the commented-out call in MainDirector::Update. Those two are NOT in this file set.
-//   3. Body the six BehaviourCollection<> template methods and the per-class virtuals. This
-//      is now the largest family by far: 58 of the remaining 91.
+//   3. Body the six BehaviourCollection<> template methods and the per-class virtuals, and
+//      repair BehaviourRig.cpp so its seven bodies can mount. 65 of the remaining 71.
 //   4. Mount the closure TUs and delete the gate below.
 //
 // The moment pool's bucket is widened on this x64 host (static_assert per moment type; see
@@ -401,7 +371,6 @@ namespace vpu
 // ============================================================================
 #include "GameSource/Director/MomentController/BrnMomentSelector.h"     // MomentSelector
 #include "GameSource/Director/MomentController/BrnMomentController.h"   // MomentController
-#include "GameSource/Director/Camera/BrnCameraValidityAccount.h"        // group G: ValidityAccount::Print x2
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h" // group G: DebugPrinter / DebugLog
 
 namespace BrnDirector
@@ -432,19 +401,18 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
-    // GROUP G -- THE THREE DEV-ONLY LEAVES BrnArbStateCrashing.cpp REACHES. All three are TRAP
-    // stubs, not quiet ones, and that is deliberate: every call site is inside
+    // GROUP G -- THE ONE DEV-ONLY LEAF BrnArbStateCrashing.cpp STILL REACHES. It is a TRAP
+    // stub, not a quiet one, and that is deliberate: every call site is inside
     // `if (IsDebugDisplayActive())`, and ArbStateCrashing::Construct seeds that flag FALSE
-    // (the console only raises it from a dev tool), so retail never reaches any of them.
+    // (the console only raises it from a dev tool), so retail never reaches it.
     //
     //   MomentSelector::ActualDebugRender -- walks the handle + description arrays and prints
     //       one line per candidate through the DebugPrinter.
-    //   ValidityAccount::Print(DebugPrinter&) / Print(DebugLog&) -- both walk the raised
-    //       reason bits and print the name of each; the reason-NAME table is what is missing
-    //       (the 31 enumerators are in BrnCameraValidityAccount.h).
     //
-    // DELETE-WHEN: ActualDebugRender is bodied, and the ValidityAccount reason-name table is
-    // recovered.
+    // The two ValidityAccount::Print overloads that stood here are GONE: the reason-NAME table
+    // they walk is recovered and both are bodied in BrnCameraValidityAccount.cpp.
+    //
+    // DELETE-WHEN: ActualDebugRender is bodied.
     // ------------------------------------------------------------------------
     void MomentSelector::ActualDebugRender(DebugPrinter& lrDebugPrinter) const
     {
@@ -454,23 +422,3 @@ namespace BrnDirector
     }
 }
 
-namespace BrnDirector
-{
-namespace Camera
-{
-    // See the GROUP G banner above -- both overloads are dev-only read-outs.
-    void ValidityAccount::Print(DebugPrinter& lrDebugPrinter) const
-    {
-        (void)lrDebugPrinter;
-        CGS_ASSERT(false, "ValidityAccount::Print(DebugPrinter&) is not reconstructed");
-        __debugbreak();
-    }
-
-    void ValidityAccount::Print(DebugLog& lrDebugLog) const
-    {
-        (void)lrDebugLog;
-        CGS_ASSERT(false, "ValidityAccount::Print(DebugLog&) is not reconstructed");
-        __debugbreak();
-    }
-}
-}

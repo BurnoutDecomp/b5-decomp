@@ -147,4 +147,40 @@ void ICEManager::Update()
     }
 }
 
+// ---------------------------------------------------------------------------
+// SetTakeToPlay / IsPlaybackDataSet / GetCurrentTakeParameter
+//
+// The playback-take trio. None of the three has a standalone symbol -- the console
+// inlines all of them at their one caller, ICEWrapper::PlayMovie / ::GetCurrentMovie,
+// and the shapes below are read off that expansion:
+//
+//   SetTakeToPlay   bind the take data into the playback take (as the PRIMARY, not the
+//                   edit, pointer), seek it to the requested normalised position forcing
+//                   the evaluation and wrapping, and raise the playback flag. The same
+//                   parameter setter Update above calls, with both flags set instead of
+//                   clear; the caller's stray fourth register in the expansion is the
+//                   float-argument skip, not an argument.
+//   IsPlaybackDataSet     the flag, read back.
+//   GetCurrentTakeParameter  the playback take's current normalised position.
+//
+// The one-argument SetTakeToPlay the header also declares stays declaration-only: the
+// console has no expansion of it anywhere in this image.
+// ---------------------------------------------------------------------------
+void ICEManager::SetTakeToPlay(ICETakeData* lpTakeData, f32 lfParameter)
+{
+    mPlaybackTake.SetDataPointers(lpTakeData, false);
+    mPlaybackTake.SetParameter(lfParameter, true, true);
+    mbPlaybackDataSet = true;
+}
+
+bool ICEManager::IsPlaybackDataSet()
+{
+    return mbPlaybackDataSet;
+}
+
+f32 ICEManager::GetCurrentTakeParameter()
+{
+    return mPlaybackTake.GetParameter();
+}
+
 } // namespace ICE

@@ -255,7 +255,7 @@ namespace CgsSceneManager
                                                        SceneManagerIO::OutputBuffer* );
         void ProcessTriangleCollisionSphereTests( CgsCollision::BaseCollisionGenerator*,
                                                   CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionSphereTest, 256>*,
-                                                  SceneManagerIO::OutputBuffer* );                                         // @0x828B0B30 TRAP (when non-empty)
+                                                  SceneManagerIO::OutputBuffer* );                                         // never implemented; asserts when non-empty
 
         // @ 0x828D4C28 -- the X360 vtbl+64 entry: fan the scene input's update
         // interface out into the spatial-partition + overlap-generation sub-modules,

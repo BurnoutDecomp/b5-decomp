@@ -2,15 +2,15 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"    // CgsCore::SPrintf
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint (boot witness)
 #include "GameSource/Director/BrnDirectorICEWrapper.h"     // BrnDirector::ICEWrapper (PlayMovie / IsPlayingMovie / GetCamera)
-#include "GameSource/Director/Camera/Utils/BrnTextFileWriteSerialiser.h"  // Camera::TextFileWriteSerialiser (SharedPlaylists::Serialise<S>)
-#include "GameSource/Director/Camera/Utils/BrnTextFileReadSerialiser.h"   // Camera::TextFileReadSerialiser  (SharedPlaylists::Serialise<S>)
-#include "GameSource/Director/Camera/Behaviours/BrnDebugMenuSerialiser.h" // Camera::DebugMenuSerialiser     (SharedPlaylists::Serialise<S>)
 
 // ============================================================================
 // GameSource/Director/Utils/BrnICEMoviePlayer.cpp
 //
-// Bodies for the ICE movie-player family. Reconstructed for semantic parity; members
+// The ICE movie player and playlist family: ICEMoviePlayer's whole body set, the
+// ICEMoviePlaylist / SharedPlaylists build-and-query bodies, and the take-id helper they
+// share. Reconstructed for semantic parity; members
 // are accessed BY NAME (the struct layouts live in BrnICEMoviePlayer.h). The
 // camera-behaviour layer the player drives is the minimal slice declared in the home
 // (FLAGGED there); the calls below name the methods those bodies will land with when the
@@ -30,15 +30,6 @@ namespace BrnDirector
 // group's generated name and hashing it. File-scope free function -- the home does not
 // need to expose it.
 static const CgsResource::ID MakeCGSId(IceMovie::EIceGroup leGroup, u32 luTakeIndex);
-
-// FLAG: the dev-menu registration callee that (de)registers a playlist's per-movie
-// remove-data entry with the debug component. Not-yet-reconstructed dev-tools TU; this is
-// a DECLARATION-ONLY external callee (its body links later -- the per-TU `cl /c` gate
-// only needs the declaration). The descriptor is built by the caller and passed by
-// address; the trailing playlist + name identify the menu owner.
-void IceMovieDebugMenuRegisterRemoveEntry(const void* lpDescriptor,
-                                          const char* lpcDebugName,
-                                          ICEMoviePlaylist* lpPlaylist);
 
 // ----------------------------------------------------------------------------
 // BrnDirector::MakeCGSId
@@ -118,101 +109,227 @@ const CgsResource::ID IceMovie::GetCgsID() const
     return mCgsID;
 }
 
+// ---- The three Serialise<S> visitor bodies with their instantiation sets, and
+//      ICEMoviePlaylist::DebugMenuNewMovie, live in the sibling TU
+//      BrnICEMoviePlayerSerialise.cpp. Merge them back into this one when the Camera
+//      serialiser TUs and the dev-menu registration callee are reconstructed.
 // ----------------------------------------------------------------------------
-// BrnDirector::IceMovie::Serialise<S> -- the ONE per-movie field-walk visitor body.
-//   <TextFileReadSerialiser>  @0x82202E28
-//   <TextFileWriteSerialiser> @0x82215AB0
+// BrnDirector::ICEMoviePlaylist::Construct
 //
-// Recursed into from ICEMoviePlaylist::Serialise (via S's nested-block Serialise<IceMovie>)
-// to (de)serialise one movie entry. A movie saved/loaded through the text passes is always a
-// GROUP/TAKE reference anchored to the player car, so the body first forces meRefType ==
-// E_REF_TYPE_GROUP_TAKE (asm: *this = 1) and meVehicleType == E_PLAYER_CAR (asm: *(this+0x1C)
-// = 0), then walks the four editable fields as named scalar leaves through S:
-//   "Group"         -> meGroup        (+0x10, the ICE-group enum word)
-//   "Take"          -> muTakeIndex    (+0x14)
-//   "Vehicle Index" -> muVehicleIndex (+0x20)
-//   "Play Flash"    -> mbPlayFlash    (+0x24, the byte flag)
+// Reset the playlist to empty: both object pools back to their all-free state, the play
+// order array back to zero elements, no debug owner, and the dev-menu "new movie" slot at
+// 1 (the 1-based insert position DebugMenuNewMovie later turns back into a 0-based index).
 //
-// The body is uniform across S; only S's inlined leaf helpers differ:
-//   - Write @0x82215AB0: each leaf is FormatName + fprintf "%s : %d\n" of the field, guarded by
-//     `if (mpFile)` (the four `if (*(a2+4))` checks -- mpFile is TextFileWriteSerialiser +0x04).
-//   - Read  @0x82202E28: each leaf is fscanf "%s : %d\n" into the field, guarded by `if (mpFile)`
-//     (the four `if (*a2)` checks -- mpFile is TextFileReadSerialiser +0x00). The read of the
-//     "Play Flash" line parses an int then stores (value != 0), which the asm renders as the
-//     cntlzw/extrwi/xori "!= 0" idiom -- exactly the bool& overload's `store (v != 0)`.
-//
-// meGroup is the signed EIceGroup enum (its storage IS the 4-byte word the asm reads/writes with
-// "%d"); it is handed to S's s32 scalar overload through an aliasing reference so the exact same
-// four bytes are read/written, without a separate enum overload (parity, not a value change).
+// The console body is entirely inlined container work, and it is the pools' Clear() shape
+// -- occupancy bits cleared, free queue refilled DESCENDING (19..0 stored front-to-back)
+// and the free count set to the capacity -- NOT the lifecycle Construct() that only clears
+// the occupancy word. The play-order array gets Construct() (count = 0).
+// miDebugSize is deliberately left alone: it is the throwaway "Ignore this" scratch slot
+// the Serialise visitor writes, and the console does not touch it here.
 // ----------------------------------------------------------------------------
-template<class TSerialiser>
-void IceMovie::Serialise(TSerialiser& lrSerialiser)
+void ICEMoviePlaylist::Construct()
 {
-    // A text-serialised movie is always a group/take reference on the player car.
-    meRefType     = E_REF_TYPE_GROUP_TAKE;   // *this      = 1
-    meVehicleType = VehicleRef::E_PLAYER_CAR; // *(this+0x1C) = 0
+    mMoviePool.Clear();
+    mMoviePoolIndicies.Construct();
+    mDebugMenuRemoveData.Clear();
 
-    lrSerialiser.Serialise("Group", reinterpret_cast<s32&>(meGroup));
-    lrSerialiser.Serialise("Take", muTakeIndex);
-    lrSerialiser.Serialise("Vehicle Index", muVehicleIndex);
-    lrSerialiser.Serialise("Play Flash", mbPlayFlash);
+    mpDebugComponent = 0;
+    mpDebugName      = 0;
+
+    // The dev menu's insert position is 1-based (DebugMenuNewMovie inserts before
+    // miDebugMenuNewMovieIndex - 1), so an empty playlist starts it at 1.
+    miDebugMenuNewMovieIndex = 1;
 }
 
-// Explicit instantiations -- one per text serialiser the movie is saved/loaded through. Each
-// leaf resolves to that serialiser's scalar Serialise(const char*, s32&/u32&/bool&) overload
-// (declaration-only on the serialiser side; their bodies link with the serialiser TUs), so this
-// TU forces no inner-template instantiation of its own.
-template void IceMovie::Serialise<Camera::TextFileWriteSerialiser>(Camera::TextFileWriteSerialiser&);
-template void IceMovie::Serialise<Camera::TextFileReadSerialiser>(Camera::TextFileReadSerialiser&);
-
-// ---- ICEMoviePlaylist::Construct / ::InsertMovieBefore / ::GetMovieCount and
-//      SharedPlaylists::Construct / ::GetPausePlaylist MOVED OUT 2026-09-08 (p0 wave) to
-//      GameSource/Director/Utils/BrnICEMoviePlayer_wP0_01.cpp, which IS mounted. This TU
-//      still cannot join the link (see that file's banner for the 24 symbols it would open),
-//      and the boot path needs only the playlist half. Not a byte-identical move: in the
-//      moved SharedPlaylists::Construct the three pause playlists are now constructed
-//      BEFORE the race-intro and post-race ones, which is the console's order (the copy
-//      that stood here had them the other way round). Merge them back when this file mounts.
-
 // ----------------------------------------------------------------------------
-// BrnDirector::ICEMoviePlaylist::DebugMenuNewMovie
+// BrnDirector::ICEMoviePlaylist::InsertMovieBefore
 //
-// Dev-menu command: drop the current remove-data menu entry, insert a fresh default
-// movie (Generic_All, take 31, vehicle ref type 1, flash on) before the new-movie slot,
-// then re-register the menu entry. lpContext is the dev-menu context (unused by the body
-// beyond the descriptor the registration callee builds from this playlist).
+// Insert a copy of lrMovie into the playlist so that it lands at play position
+// liDesiredZeroBasedIndex:
+//   1. take a slot out of the movie pool and copy the movie into it,
+//   2. splice that pool index into the play-order array at the requested position,
+//   3. take the matching slot out of the dev-menu remove-command pool and point it back at
+//      this playlist / that movie slot,
+//   4. re-derive the dev menu's 1-based "new movie" position from the new movie count.
+//
+// The two pools are allocated in lock-step and have the same capacity, so the console
+// asserts the two slot indices came back equal. The per-movie copy is the
+// compiler-generated IceMovie copy-assign (the console emits it as a block move of that
+// struct's console size); expressed here as the assignment it came from.
 // ----------------------------------------------------------------------------
-void ICEMoviePlaylist::DebugMenuNewMovie(void* /*lpContext*/)
+void ICEMoviePlaylist::InsertMovieBefore(s32 liDesiredZeroBasedIndex, const IceMovie& lrMovie)
 {
-    // The dev-menu item descriptor the registration callee consumes. FLAG: only the
-    // leading enable flag and the owning debug component are recovered; the middle fields
-    // are a not-yet-recovered dev-menu-item span, modelled as a zeroed block so the
-    // descriptor is the right shape to pass by address.
-    struct DebugMenuItemDescriptor
+    const s32 liMoviePoolIndex = mMoviePool.AllocateObject();
+    CGS_ASSERT(liMoviePoolIndex != -1, "liMoviePoolIndex != -1");
+
+    mMoviePool[liMoviePoolIndex] = lrMovie;
+
+    CGS_ASSERT(liDesiredZeroBasedIndex >= 0, "liDesiredZeroBasedIndex >= 0");
+    mMoviePoolIndicies.InsertBefore(static_cast<u32>(liDesiredZeroBasedIndex), liMoviePoolIndex);
+
+    const s32 liIndex = mDebugMenuRemoveData.AllocateObject();
+    CGS_ASSERT(liIndex != -1, "liIndex != -1");
+
+    mDebugMenuRemoveData[liIndex].mpThisPlaylist = this;
+    mDebugMenuRemoveData[liIndex].miIndex        = liMoviePoolIndex;
+    CGS_ASSERT(liIndex == liMoviePoolIndex, "liIndex == liMoviePoolIndex");
+
+    // GetCount() carries the "Array used before Construct/Clear was called" assert.
+    miDebugMenuNewMovieIndex = mMoviePoolIndicies.GetCount() + 1;
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::ICEMoviePlaylist::GetMovieCount
+//
+// The number of movies in the list == the order array's live-element count. Asserts the
+// order array was Construct/Clear'ed (its count is off the -1 sentinel).
+// ----------------------------------------------------------------------------
+s32 ICEMoviePlaylist::GetMovieCount() const
+{
+    CGS_ASSERT(mMoviePoolIndicies.GetCount() != -1,
+               "Array used before Construct/Clear was called");
+    return mMoviePoolIndicies.GetCount();
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::SharedPlaylists::Construct
+//
+// Construct the five shared playlists (race intro, post race, three pause playlists),
+// then seed each with its fixed list of takes (all referenced as group/take pairs). The
+// take lists differ per playlist; muCurrentPausePlaylist starts at 0.
+//
+// Construct order follows the console: the three pause playlists run as a counted loop,
+// then the race-intro and post-race playlists are constructed individually.
+// ----------------------------------------------------------------------------
+void SharedPlaylists::Construct()
+{
+    for (u32 luPause = 0; luPause < KU_NUM_PAUSE_PLAYLISTS; ++luPause)
     {
-        bool            mbEnabled;
-        u8              maUnrecovered[27];
-        DebugComponent* mpDebugComponent;
+        maPausePlaylists[luPause].Construct();
+    }
+    mRaceIntroPlaylist.Construct();
+    mPostRacePlaylist.Construct();
+
+    // Seed table: one row == (playlist, ICE group, take index, vehicle ref type, flash).
+    // Each row appends one movie to the named playlist (insert-before-current-end). The
+    // group/take/vehicle/flash values are the reconstructed per-playlist seed sequence.
+    struct SeedEntry
+    {
+        ICEMoviePlaylist*   mpPlaylist;
+        IceMovie::EIceGroup meGroup;
+        u32                 muTake;
+        VehicleRef::EType   meVehicleType;
+        bool                mbFlash;
     };
 
-    // Drop the current remove-data menu entry before changing the movie list.
+    // Every seeded row uses vehicle ref type 0 (player car); muVehicleIndex is 0
+    // throughout. The only per-row variation is group / take / flash (pause-1 rows fire
+    // the flash hook).
+    const VehicleRef::EType leVeh0 = VehicleRef::E_PLAYER_CAR;
+
+    const SeedEntry laSeeds[] =
     {
-        DebugMenuItemDescriptor lDescriptor = { true, { 0 }, mpDebugComponent };
-        IceMovieDebugMenuRegisterRemoveEntry(&lDescriptor, mpDebugName, this);
+        // Race-intro playlist (4 entries).
+        { &mRaceIntroPlaylist, IceMovie::E_ICE_GROUP_GENERIC_ALL,  42u, leVeh0, false },
+        { &mRaceIntroPlaylist, IceMovie::E_ICE_GROUP_EVENTS_START, 20u, leVeh0, false },
+        { &mRaceIntroPlaylist, IceMovie::E_ICE_GROUP_GENERIC_ALL,  12u, leVeh0, false },
+        { &mRaceIntroPlaylist, IceMovie::E_ICE_GROUP_GENERIC_ALL,  41u, leVeh0, false },
+
+        // Post-race playlist (4 entries).
+        { &mPostRacePlaylist,  IceMovie::E_ICE_GROUP_GENERIC_ALL,  31u, leVeh0, false },
+        { &mPostRacePlaylist,  IceMovie::E_ICE_GROUP_GENERIC_ALL,  32u, leVeh0, false },
+        { &mPostRacePlaylist,  IceMovie::E_ICE_GROUP_GENERIC_ALL,  27u, leVeh0, false },
+        { &mPostRacePlaylist,  IceMovie::E_ICE_GROUP_GENERIC_ALL,  12u, leVeh0, false },
+
+        // Pause playlist 0 (4 entries).
+        { &maPausePlaylists[0], IceMovie::E_ICE_GROUP_EVENTS_START, 0u, leVeh0, false },
+        { &maPausePlaylists[0], IceMovie::E_ICE_GROUP_EVENTS_START, 2u, leVeh0, false },
+        { &maPausePlaylists[0], IceMovie::E_ICE_GROUP_EVENTS_START, 3u, leVeh0, false },
+        { &maPausePlaylists[0], IceMovie::E_ICE_GROUP_EVENTS_END,   0u, leVeh0, false },
+
+        // Pause playlist 1 (11 entries; each fires the flash hook on start).
+        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 36u, leVeh0, true },
+        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL,  7u, leVeh0, true },
+        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 19u, leVeh0, true },
+        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 21u, leVeh0, true },
+        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 28u, leVeh0, true },
+        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 32u, leVeh0, true },
+        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 27u, leVeh0, true },
+        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 18u, leVeh0, true },
+        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL,  3u, leVeh0, true },
+        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 24u, leVeh0, true },
+        { &maPausePlaylists[1], IceMovie::E_ICE_GROUP_GENERIC_ALL, 12u, leVeh0, true },
+
+        // Pause playlist 2 (13 entries).
+        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 43u, leVeh0, false },
+        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 19u, leVeh0, false },
+        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 36u, leVeh0, false },
+        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL,  7u, leVeh0, false },
+        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 21u, leVeh0, false },
+        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 28u, leVeh0, false },
+        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 32u, leVeh0, false },
+        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 27u, leVeh0, false },
+        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 18u, leVeh0, false },
+        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL,  3u, leVeh0, false },
+        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 24u, leVeh0, false },
+        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 26u, leVeh0, false },
+        { &maPausePlaylists[2], IceMovie::E_ICE_GROUP_GENERIC_ALL, 12u, leVeh0, false },
+    };
+
+    const u32 luNumSeeds = sizeof(laSeeds) / sizeof(laSeeds[0]);
+    for (u32 luSeed = 0; luSeed < luNumSeeds; ++luSeed)
+    {
+        const SeedEntry& lrSeed = laSeeds[luSeed];
+
+        IceMovie lMovie;
+        lMovie.SetMovie(lrSeed.meGroup, lrSeed.muTake);
+        lMovie.SetStartPosition(0.0f);
+        lMovie.SetVehicle(lrSeed.meVehicleType, 0u);
+        lMovie.SetShouldFlash(lrSeed.mbFlash);
+
+        lrSeed.mpPlaylist->InsertMovieBefore(lrSeed.mpPlaylist->GetMovieCount(), lMovie);
     }
 
-    IceMovie lNewMovie;
-    lNewMovie.SetMovie(IceMovie::E_ICE_GROUP_GENERIC_ALL, 31u);
-    lNewMovie.SetStartPosition(0.0f);
-    lNewMovie.SetVehicle(VehicleRef::E_RACE_CAR, 0u);
-    lNewMovie.SetShouldFlash(true);
-    InsertMovieBefore(miDebugMenuNewMovieIndex - 1, lNewMovie);
+    muCurrentPausePlaylist = 0;
 
-    // Re-register the remove-data menu entry for the new movie layout.
+    // TEMPORARY p0-wave boot witness -- proves the shared playlists really are seeded now
+    // that this TU is in the link (they were all empty while the scaffold body stood in).
+    // Not console behaviour; remove once the wave is signed off.
     {
-        DebugMenuItemDescriptor lDescriptor = { false, { 0 }, mpDebugComponent };
-        IceMovieDebugMenuRegisterRemoveEntry(&lDescriptor, mpDebugName, this);
+        static bool sbLoggedOnce = false;
+        if (!sbLoggedOnce)
+        {
+            sbLoggedOnce = true;
+            const s32       liFirstIntroSlot = mRaceIntroPlaylist.mMoviePoolIndicies.GetItem(0);
+            const IceMovie& lrFirstIntro     = mRaceIntroPlaylist.mMoviePool[liFirstIntroSlot];
+            *CgsDev::Log::gpDebugPrint
+                << "[p0-icemovie] SharedPlaylists::Construct raceIntro="
+                << mRaceIntroPlaylist.GetMovieCount()
+                << " postRace=" << mPostRacePlaylist.GetMovieCount()
+                << " pause0=" << maPausePlaylists[0].GetMovieCount()
+                << " pause1=" << maPausePlaylists[1].GetMovieCount()
+                << " pause2=" << maPausePlaylists[2].GetMovieCount()
+                << " firstIntroMovie: group " << static_cast<s32>(lrFirstIntro.meGroup)
+                << " take " << lrFirstIntro.muTakeIndex << "\n";
+        }
     }
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::SharedPlaylists::GetPausePlaylist
+//
+// The pause playlist currently selected by muCurrentPausePlaylist. The console reaches it
+// by (index + 2) * sizeof(ICEMoviePlaylist) from the object base -- the two skipped
+// playlists being mRaceIntroPlaylist (+0x0000) and mPostRacePlaylist (+0x04E8), so
+// maPausePlaylists[0] sits at +0x09D0 and each pause slot is one playlist further on.
+// Reached BY NAME here.
+// ----------------------------------------------------------------------------
+const ICEMoviePlaylist&
+SharedPlaylists::GetPausePlaylist() const
+{
+    CGS_ASSERT(muCurrentPausePlaylist < KU_NUM_PAUSE_PLAYLISTS,
+               "muCurrentPausePlaylist < KI_NUM_PAUSE_PLAYLISTS");
+    return maPausePlaylists[muCurrentPausePlaylist];
 }
 
 // ----------------------------------------------------------------------------
@@ -408,8 +525,11 @@ void ICEMoviePlayer::Update(Camera::BehaviourManager& lrBehaviourManager)
 
     if (mOutInterpolator.IsAllocated())
     {
+        // The blend's produced camera lives on the pool HELPER the handle names, not on the
+        // behaviour -- the console reads it through the handle here (and the behaviour only
+        // for the finished flag on the next line).
+        mCamera = mOutInterpolator.GetProducedCamera();
         Camera::BehaviourInterpolate* lpOut = mOutInterpolator.GetBehaviour();
-        mCamera = lpOut->GetCamera();
         if (lpOut->HasFinished())
         {
             mbHasReachedEnd = true;
@@ -417,8 +537,8 @@ void ICEMoviePlayer::Update(Camera::BehaviourManager& lrBehaviourManager)
     }
     else if (mInInterpolator.IsAllocated())
     {
+        mCamera = mInInterpolator.GetProducedCamera();
         Camera::BehaviourInterpolate* lpIn = mInInterpolator.GetBehaviour();
-        mCamera = lpIn->GetCamera();
         if (lpIn->HasFinished())
         {
             mbInterpolateIn = false;
@@ -574,118 +694,5 @@ void ICEMoviePlayer::InterpolateFrom(Camera::BehaviourManager& lrBehaviourManage
 
     mbInterpolateIn = true;
 }
-
-// ----------------------------------------------------------------------------
-// BrnDirector::ICEMoviePlaylist::Serialise<S> -- the ONE playlist movie-list visitor body.
-//   <DebugMenuSerialiser>     @0x8224B240
-//   <TextFileWriteSerialiser> @0x8224CBE8
-//   <TextFileReadSerialiser>  @0x8224CDE8
-//
-// Unlike the SharedPlaylists field-walk below, the playlist visitor drives the movie
-// ObjectPool/Array machinery: serialise the live movie count through the throwaway "Ignore
-// this" scratch member, resize the list to match (Construct() to reset when the incoming
-// count is smaller; InsertMovieBefore() a fresh default IceMovie when it is larger), then
-// hand each movie to the serialiser as a nested "MovieN" block (S recurses into
-// IceMovie::Serialise for the text passes; registers the movie's fields under the path for
-// the debug-menu pass). The body is uniform across S; only S's inlined leaf/nested-block
-// helpers differ (Write: FormatName+fprintf; Read: fscanf; DebugMenu: Process/AddToPath).
-//
-// Offsets verified against the asm: mMoviePoolIndicies at playlist +0x380 (its live-count
-// word at +0x3D0), and the "Ignore this" scratch slot at +0x4DC == miDebugSize (the pool
-// mDebugMenuRemoveData @+0x3D8 is 0x100 bytes, so the trailing s32 pair sits at +0x4D8
-// (miDebugMenuNewMovieIndex) / +0x4DC (miDebugSize), pinned by sizeof(ICEMoviePlaylist)
-// == 0x4E8 from SharedPlaylists::GetPausePlaylist). The default grow-movie is the asm's
-// partial inline init: refType INVALID, startPos 0, vehicleType E_PLAYER_CAR(0), flash true
-// (v20[0]=-1, v20[6]=0.0, v20[7]=0, v21=1); its other fields are left uninitialised exactly
-// as the X360 leaves them. The per-movie label is the "Movie1".."Movie20" name the X360
-// reads from a 10-byte-stride rodata table (only "Movie1" symbolised); reconstructed here as
-// the equivalent deterministic "Movie<1-based index>" format.
-// ----------------------------------------------------------------------------
-template<class TSerialiser>
-void ICEMoviePlaylist::Serialise(TSerialiser& lrSerialiser)
-{
-    // Serialise the movie count through the throwaway "Ignore this" scratch member
-    // (miDebugSize): on a write pass it carries the live count out; on a read pass it is
-    // overwritten with the count parsed from the file.
-    miDebugSize = mMoviePoolIndicies.GetCount();   // GetCount asserts Construct/Clear was called
-    lrSerialiser.Serialise("Ignore this", miDebugSize);
-
-    // If the incoming count is smaller than the live list, reset the list so the read pass
-    // rebuilds exactly miDebugSize movies from scratch.
-    if (miDebugSize < mMoviePoolIndicies.GetCount())
-    {
-        Construct();
-    }
-
-    for (s32 liMovie = 0; liMovie < miDebugSize; ++liMovie)
-    {
-        // Grow the list with a fresh default movie whenever the target count runs past the
-        // live list (append it before the current end).
-        if (mMoviePoolIndicies.GetCount() <= liMovie)
-        {
-            IceMovie lNewMovie;
-            lNewMovie.meRefType         = IceMovie::E_REF_TYPE_INVALID;
-            lNewMovie.mfStartPosition01 = 0.0f;
-            lNewMovie.meVehicleType     = VehicleRef::E_PLAYER_CAR;
-            lNewMovie.mbPlayFlash       = true;
-            InsertMovieBefore(mMoviePoolIndicies.GetCount(), lNewMovie);
-        }
-
-        const s32 liPoolIndex = mMoviePoolIndicies.GetItem(liMovie);
-        IceMovie&  lrMovie     = mMoviePool[liPoolIndex];
-        CGS_ASSERT(mMoviePoolIndicies.GetItem(liMovie) <= KI_CAPACITY,
-                   "mMoviePoolIndicies[liMovie] <= 20");
-
-        // Label the movie "Movie1".."Movie20" and hand it to the serialiser as a nested block.
-        char lacName[16];
-        CgsCore::SPrintf(lacName, sizeof(lacName), "Movie%i", liMovie + 1);
-        lrSerialiser.Serialise(lacName, lrMovie);
-    }
-}
-
-// Explicit instantiations -- one per serialiser the playlist is saved/loaded/menu-registered
-// through. Each drives the count scalar overload + the nested-block Serialise<IceMovie> per
-// movie (both declaration-only on the serialiser side; their bodies link with the serialiser
-// TUs), so this TU forces no inner-template instantiation of its own.
-template void ICEMoviePlaylist::Serialise<Camera::DebugMenuSerialiser>(Camera::DebugMenuSerialiser&);
-template void ICEMoviePlaylist::Serialise<Camera::TextFileWriteSerialiser>(Camera::TextFileWriteSerialiser&);
-template void ICEMoviePlaylist::Serialise<Camera::TextFileReadSerialiser>(Camera::TextFileReadSerialiser&);
-
-// ----------------------------------------------------------------------------
-// BrnDirector::SharedPlaylists::Serialise<S> -- the ONE shared-playlists field-walk visitor body.
-//
-// Serialises only the three pause-camera playlists and the current-pause-playlist index (the race
-// intro / post-race playlists are NOT part of the debug save). Hands each of the three pause
-// playlists to the serialiser as a nested block (S recurses into ICEMoviePlaylist::Serialise), then
-// the current-playlist index as a scalar u32. The body is uniform across S; only S's inlined
-// helpers differ:
-//   - TextFileWriteSerialiser @0x82258C18: three Serialise<ICEMoviePlaylist> section writes, then
-//     FormatName + fprintf "%s : %d\n" for the index.
-//   - TextFileReadSerialiser  @0x82258CC0: three nested-block reads (consume header line + recurse),
-//     then fscanf "%s : %d\n" for the index.
-//   - DebugMenuSerialiser     @0x82252D30: three nested-block Serialise<ICEMoviePlaylist> registrations
-//     (the un-homed sub_8224F218 helper = DebugMenuSerialiser::Serialise<ICEMoviePlaylist>), then the
-//     index leaf which inlines to Process<unsigned int> -- i.e. the u32 Serialise overload's body.
-//
-// Playlist offsets verified against the asm: maPausePlaylists[0/1/2] at +0x09D0/+0x0EB8/+0x13A0
-// (0x4E8-byte stride) and muCurrentPausePlaylist at +0x1888. The DebugMenuSerialiser instance's asm
-// (@0x82252D30) walks the same "Playlists/Pause playlist {0,1,2}" + "Playlists/Current playlist"
-// names at the same field offsets, confirming the shared source body.
-// ----------------------------------------------------------------------------
-template<class TSerialiser>
-void SharedPlaylists::Serialise(TSerialiser& lrSerialiser)
-{
-    lrSerialiser.Serialise("Playlists/Pause playlist 0", maPausePlaylists[0]);
-    lrSerialiser.Serialise("Playlists/Pause playlist 1", maPausePlaylists[1]);
-    lrSerialiser.Serialise("Playlists/Pause playlist 2", maPausePlaylists[2]);
-    lrSerialiser.Serialise("Playlists/Current playlist", muCurrentPausePlaylist);
-}
-
-// Explicit instantiations -- one per serialiser the shared playlists are saved/loaded/menu-registered
-// through. Each ICEMoviePlaylist leaf resolves to the serialiser's nested-block Serialise<ICEMoviePlaylist>
-// overload; the u32 index leaf resolves to its scalar Serialise(const char*, u32&) overload.
-template void SharedPlaylists::Serialise<Camera::TextFileWriteSerialiser>(Camera::TextFileWriteSerialiser&);
-template void SharedPlaylists::Serialise<Camera::TextFileReadSerialiser>(Camera::TextFileReadSerialiser&);
-template void SharedPlaylists::Serialise<Camera::DebugMenuSerialiser>(Camera::DebugMenuSerialiser&);
 
 } // namespace BrnDirector

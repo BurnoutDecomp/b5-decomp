@@ -60,11 +60,7 @@ bool VehicleManager::PrepareData(rw::IResourceAllocator* lpPhysicsAllocator)
         maRaceCarDrivers[liCar].Prepare();                                        // +64, stride 224
         maRaceCarVehicles[liCar].Construct();
 
-        // FLAG (span cast, deliberate): maRaceCarDebugComponent is the opaque 8x1024 span, the
-        // same sanctioned cast seam VehicleManager::Construct and UpdateVehiclePhysics already
-        // use on it. Construct reaches its fields at in-slot offsets for exactly that reason.
-        reinterpret_cast<DebugComponent*>(&maRaceCarDebugComponent[liCar][0])
-            ->Construct(&maRaceCarVehicles[liCar]);
+        maRaceCarDebugComponent[liCar].Construct(&maRaceCarVehicles[liCar]);
 
         mabRaceCarDebugComponentRegistered[liCar] = false;                        // +171456 + i
         maRaceCarEntityIDs[liCar].muValue = CgsSceneManager::K_INVALID_ENTITY_ID; // +43584 + 4i

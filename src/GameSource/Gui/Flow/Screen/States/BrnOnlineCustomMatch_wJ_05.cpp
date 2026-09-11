@@ -39,37 +39,13 @@
 //    `addi r3,r11,0xC`) == &StateInterface::mOutEventQueue == GetOutputEventQueue().
 //  * No float compares anywhere in this body, so there is no PPC NaN-polarity decision.
 //
-// THE ONE DE-INLINE THIS BODY MAKES, AND WHY
-// ------------------------------------------
-// The X360 `bl`s BrnGui::GuiOverlayWaitFinishRequest::Construct @0x823B1D80 with the
-// record's payload slot and "CNOnlEntGame". That callee IS homed and defined in the tree:
-// GameSource/Gui/BrnGuiOverlaysDirector.h:36 inline-defines it as exactly
-//     mOverlayId = CgsIDCompress(lpcOverlayName);   // then `return this`
-// (six committed siblings already call it -- BrnPauseScreen.cpp, BrnInGame.cpp,
-// BrnCarSelectMain_wG_02.cpp, BrnCrashNavEnterOnline_wI_07.cpp and the two
-// BrnOnlineGameRoomPlayerInfo wave-H partfiles). It is unreachable FROM THIS TU only
-// because BrnGuiOverlaysDirector.h and BrnGuiDemangledEventTypes.h are mutually exclusive
-// -- both define GuiOverlayWaitFinishRequest and GuiOverlayShowingNotification (see the
-// note at BrnGuiDemangledEventTypes.h:281-284) -- and BrnOnlineCustomMatch.h:7 pulls in the
-// demangled one for the two mSearchResults / mLastSearchParams member types. The mirror it
-// carries (BrnGuiDemangledEventTypes.h:226) is a payload-only `u8 maData[8]` with no
-// Construct and no named id field, and poking a CgsID into maData would be the
-// offset-hack failure mode. So the wire record below spells its single 8-byte payload word
-// as a named `CgsID mOverlayId` and fills it with CgsIDCompress -- the same two statements
-// the homed Construct runs. The assert Construct skips is on a compile-time string literal
-// that can never be null.
-// (NOT the same symbol: the Construct in GameSource/Game/GameBridgeNetworkToX.h:103 is a
-// DIFFERENT function -- the static Construct(void*, const char*) @0x823E0E98 on that
-// header's own 24-byte record, whose body memsets. It is unrelated to 0x823B1D80.)
-// FLAG: this is the one place this file departs from a call-for-call transliteration.
-//
 // LINK NOTES (`cl /c` cannot see any of these -- do not go hunting)
 // -----------------------------------------------------------------
 //  * BrnGui::OnlineCustomMatch::ShowInitialScreen -- declared BrnOnlineCustomMatch.h:91,
 //    body owned by the wave-J group-1 partfile; no body in the tree yet.
 //  * CgsIDCompress @0x82815A20 -- declared CgsID.h:29 and DEFINED in CgsID.cpp; NOT a gap.
-//  * GuiOverlayWaitFinishRequest::Construct is NOT a gap either (homed + defined at
-//    BrnGuiOverlaysDirector.h:36); it is simply not called from here.
+//  * BrnGui::GuiOverlayWaitFinishRequest::Construct -- inline-defined in
+//    BrnGuiEventTypeDefs.h; NOT a gap.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineCustomMatch.h"
@@ -79,6 +55,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface / the out-queue
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event / AddEvent
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiOverlayWaitFinishRequest (the 188 payload)
 
 namespace BrnGui
 {
@@ -95,34 +72,29 @@ namespace BrnGui
         const char KAC_ENTER_GAME_OVERLAY_ID[] = "CNOnlEntGame";
 
         // ---- out-queue wire record -----------------------------------------------------
-        // The id-188 "this wait overlay has finished" request. Its payload is the single
-        // compressed overlay id. The REAL home of that payload type is
-        // BrnGuiOverlaysDirector.h:29 (`struct GuiOverlayWaitFinishRequest { CgsID
-        // mOverlayId; ... }`), which this TU cannot include (see the de-inline note above);
-        // the mirror reachable from here, BrnGuiDemangledEventTypes.h:226, is `u8
-        // maData[8]` -- byte-aligned, so embedding IT would seat the payload at +0x0C where
-        // the console seats it at +0x10. The payload is a CgsID (`std r3, 0(r27)` in the
-        // console's Construct), so it is typed as one here and the 8-byte alignment
-        // reproduces the console's +0x10 / 24-byte record on the host.
+        // The id-188 "this wait overlay has finished" request. Its payload is the homed
+        // BrnGui::GuiOverlayWaitFinishRequest -- one compressed overlay id, 8-aligned, so
+        // it seats at +0x10 and the record totals the console's 24 bytes.
         struct GuiOverlayWaitFinishRequestWire : public CgsGui::GuiEvent<188>
         {
-            CgsID mOverlayId;   // +0x10 -- CgsIDCompress("CNOnlEntGame")
+            GuiOverlayWaitFinishRequest mRequest;   // +0x10
 
-            explicit GuiOverlayWaitFinishRequestWire(CgsID lOverlayId)
+            explicit GuiOverlayWaitFinishRequestWire(const char* lpcOverlayName)
                 : CgsGui::GuiEvent<188>(
-                      static_cast<u32>(sizeof(CgsID)),
-                      static_cast<u32>(offsetof(GuiOverlayWaitFinishRequestWire, mOverlayId)))
-                , mOverlayId(lOverlayId)
+                      static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)),
+                      static_cast<u32>(offsetof(GuiOverlayWaitFinishRequestWire, mRequest)))
             {
+                mRequest.Construct(lpcOverlayName);
             }
         };
 
         // Layout pins: the console publishes payload-size 8, payload-offset 16, record 24.
-        typedef char KAC_ASSERT_WAIT_FINISH_PAYLOAD_SIZE[sizeof(CgsID) == 8 ? 1 : -1];
+        typedef char KAC_ASSERT_WAIT_FINISH_PAYLOAD_SIZE[
+            sizeof(GuiOverlayWaitFinishRequest) == 8 ? 1 : -1];
         typedef char KAC_ASSERT_WAIT_FINISH_WIRE_SIZE[
             sizeof(GuiOverlayWaitFinishRequestWire) == 24 ? 1 : -1];
         typedef char KAC_ASSERT_WAIT_FINISH_PAYLOAD_OFFSET[
-            offsetof(GuiOverlayWaitFinishRequestWire, mOverlayId) == 16 ? 1 : -1];
+            offsetof(GuiOverlayWaitFinishRequestWire, mRequest) == 16 ? 1 : -1];
     }
 
     // ------------------------------------------------- HandleInGameFailedEvent @0x82497F50
@@ -134,7 +106,7 @@ namespace BrnGui
                    "Invalid event sent to OnlineSelectRoute::HandleInGameEvent");   // cpp:1032
 
         // Take down the "entering game" wait overlay.
-        const GuiOverlayWaitFinishRequestWire lRequest(CgsIDCompress(KAC_ENTER_GAME_OVERLAY_ID));
+        const GuiOverlayWaitFinishRequestWire lRequest(KAC_ENTER_GAME_OVERLAY_ID);
 
         mpStateInterface->GetOutputEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,

@@ -300,8 +300,8 @@ void EnvironmentManager::BeginRelease()
 // also recorded in BrnWorldModule.cpp:4290).
 //
 // FLAG (not fixed here, out of this group's scope): gfBloomLuminanceScale / gfBloomThresholdScale
-// are ALREADY defined in GameSource/Graphics/BrnRendererModulePostFx.cpp, which its own banner calls
-// a provisional home ("WHEN the environment manager's debug registration is reconstructed, declare
+// are ALREADY defined in GameSource/Graphics/BrnRendererModule.cpp, whose own banner calls that a
+// provisional home ("WHEN the environment manager's debug registration is reconstructed, declare
 // `extern f32 ...` there rather than minting a second copy"). The DWARF above says their real home
 // is this file. They are NOT moved here now because that file is on the build list and a second
 // definition would be an LNK2005; the move belongs with EnvironmentManager::Construct's debug-

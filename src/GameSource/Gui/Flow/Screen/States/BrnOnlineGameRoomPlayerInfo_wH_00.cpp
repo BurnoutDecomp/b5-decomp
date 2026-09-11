@@ -15,7 +15,6 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event / the in-queue
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache (delta / camera / disconnect)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiEventActivateCrashNav (id 191)
-#include "GameSource/Gui/BrnGuiOverlaysDirector.h"                        // BrnGui::GuiOverlayWaitFinishRequest (id 188)
 #include "GameSource/Gui/SatNav/BrnMapIconManager.h"                      // BrnGui::MapIconManager::IconSizeMode
 
 namespace BrnGui

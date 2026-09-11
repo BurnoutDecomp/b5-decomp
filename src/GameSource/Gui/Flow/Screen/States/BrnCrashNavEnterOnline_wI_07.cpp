@@ -8,7 +8,6 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // CgsModule::Event / AddEvent
 #include "GameSource/Gui/BrnGuiCache.h"                                  // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                          // GuiOverlayRequest
-#include "GameSource/Gui/BrnGuiOverlaysDirector.h"                       // GuiOverlayWaitFinishRequest (the 188 payload)
 #include "GameShared/GameClasses/Core/CgsID.h"                           // CgsID / CgsIDCompress
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                          // GuiOverlayCompleteEvent::LeaveMethod
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                          // GuiOverlayRequest / GuiEventActivateCrashNav / GuiOverlayCompleteEvent

@@ -8,13 +8,13 @@
 // minimal slice (grown with the crash banks + GetKeyAnimFromGuid) -- the real
 // BrnDirectorResourceManager.h home is MUTUALLY EXCLUSIVE with that slice.
 
-// BrnDirector::MomentStationaryCrash -- reconstructed from BURNOUT_X360_ARTIST.XEX
-// (DWARF primary file BrnMomentStationaryCrash.cpp; member names verbatim from
-// the DecFIGS DWARF).
+// BrnDirector::MomentStationaryCrash -- reconstructed from the console executable
+// (home file BrnMomentStationaryCrash.cpp; member names verbatim from
+// the declarations).
 //
 // Bodied here (5 ledger functions):
-//   Construct @0x8225F518   Prepare @0x821F7688   Update  @0x82272EA8
-//   Release   @0x8223B148   GetName @0x821F76B0
+//   Construct   Prepare   Update
+//   Release   GetName
 
 namespace BrnDirector
 {
@@ -23,14 +23,14 @@ namespace
 {
     const f32 KF_TWO_PI  = 6.2831855f;    // a full integrated turn -> the tumbling variant
     const f32 KF_HALF_PI = 1.5707964f;    // max rotation rate for the stationary take
-    const f32 KF_MAX_SPEED_SQ = 100.0f;   // |velocity|^2 eligibility bound (the splat/vcmpgtfp compare)
+    const f32 KF_MAX_SPEED_SQ = 100.0f;   // |velocity|^2 eligibility bound (a single-lane vector compare)
 
     // Camera-state head bits (the moment family's shared vocabulary):
-    const u32 KU_HEAD_FLAG_SEARCHING = 18;   // oris 4
-    const u32 KU_HEAD_FLAG_ALLOCATED = 19;   // oris 8
-    const u32 KU_HEAD_FLAG_PREPARING = 20;   // oris 0x10
-    const u32 KU_HEAD_FLAG_INHIBITED = 23;   // oris 0x80
-    const u32 KU_HEAD_FLAG_VALID     = 28;   // oris 0x1000
+    const u32 KU_HEAD_FLAG_SEARCHING = 18;
+    const u32 KU_HEAD_FLAG_ALLOCATED = 19;
+    const u32 KU_HEAD_FLAG_PREPARING = 20;
+    const u32 KU_HEAD_FLAG_INHIBITED = 23;
+    const u32 KU_HEAD_FLAG_VALID     = 28;
 
     const u32 KU_STATE_FLAG_KEEP_GATE = 1;   // mState current flag gating stay-valid
 }
@@ -39,45 +39,44 @@ namespace detail
 {
     // ---- MomentSharedInfo reaches (un-homed record; the Moment base type-erases
     // it to const void*). DECLARATION-ONLY named helpers per the moment-family
-    // precedent; X360 shared-info offsets in comments; role names FLAG-inferred. ----
+    // precedent; console shared-info offsets in comments; role names FLAG-inferred. ----
     bool MomentSharedInfo_IsPlayerCrashing(const void* lpSharedInfo);          // +1284 byte 249
     f32  MomentSharedInfo_GetTimeCrashing(const void* lpSharedInfo);           // +1284 f32 +252
     f32  MomentSharedInfo_GetTimestep(const void* lpSharedInfo);               // +1312 f32
     const DirectorResourceManager*
          MomentSharedInfo_GetDirectorResourceManager(const void* lpSharedInfo); // +1340
 
-    // Vehicle-dynamics block (+1292) vector lanes (each a 16-byte Vector3 the X360
+    // Vehicle-dynamics block (+1292) vector lanes (each a 16-byte Vector3 the console build
     // lvx128s straight into the two vmsum3fp128 dot products):
     const rw::math::vpu::Vector3& MomentSharedInfo_GetCrashRotationAxis(const void* lpSharedInfo);   // +1292 vec +528
     const rw::math::vpu::Vector3& MomentSharedInfo_GetLinearVelocity(const void* lpSharedInfo);      // +1292 vec +816
     const rw::math::vpu::Vector3& MomentSharedInfo_GetAngularVelocity(const void* lpSharedInfo);     // +1292 vec +832
 
-    // The ICE take's play length (take data +0x2C f32; the X360 compares it, less
+    // The ICE take's play length (take data +0x2C f32; the console build compares it, less
     // 0.1s, against the time already spent crashing). DECLARATION-ONLY (the
     // ICETakeData field surface is owned by the ICE data TUs).
     f32 ICETakeData_GetDuration(const ICE::ICETakeData* lpTakeData);
 
     // The Gen::iceanim take guid carried in a raw ShotList data block (data +0xC;
-    // the X360 wraps the block in a stack Gen::iceanim and reads its
+    // the console build wraps the block in a stack Gen::iceanim and reads its
     // mpAttributeData +0xC). DECLARATION-ONLY.
     s32 IceAnimShotData_GetAnimGuid(const void* lpShotData);
 }
 using namespace detail;
 
-// @ 0x8225F518 -- cpp:34. The inlined base Moment::Construct, the handle clear,
+// The inlined base Moment::Construct, the handle clear,
 // and the take/rotation/tumbling/parameters resets (mfTimeCrashing is NOT touched
 // here -- Prepare seeds it).
 void MomentStationaryCrash::Construct()
 {
-    Moment::Construct();        // inlined on the X360 (state/type/inhibit/camera)
-    mIceCameraHandle.Clear();   // the X360 zeroes the five handle fields inline
+    Moment::Construct();        // inlined in the console build (state/type/inhibit/camera)
+    mIceCameraHandle.Clear();   // the console build zeroes the five handle fields inline
     muTake            = 0;
     mfRotationAngle   = 0.0f;
     mbIsTumblingCrash = false;
     mpParameters      = 0;
 }
 
-// @ 0x821F7688 -- cpp:56.
 bool MomentStationaryCrash::Prepare(void* /*lrBehaviourController*/)
 {
     mfTimeCrashing = 0.0f;
@@ -85,7 +84,7 @@ bool MomentStationaryCrash::Prepare(void* /*lrBehaviourController*/)
     return true;
 }
 
-// @ 0x8223B148 -- cpp:196. The inlined guarded BehaviourHandle::Release, then back
+// The inlined guarded BehaviourHandle::Release, then back
 // to SEARCHING.
 bool MomentStationaryCrash::Release()
 {
@@ -94,13 +93,12 @@ bool MomentStationaryCrash::Release()
     return true;
 }
 
-// @ 0x821F76B0 -- cpp:252.
 const char* MomentStationaryCrash::GetName() const
 {
     return "MomentStationaryCrash";
 }
 
-// @ 0x82272EA8 -- cpp:75. Every frame: integrate the crash rotation (the
+// Every frame: integrate the crash rotation (the
 // angular-velocity . rotation-axis dot, scaled by the shared timestep) while the
 // player is crashing, latching the tumbling variant past a full turn. Then:
 //   SEARCHING        eligible while (nearly) stationary (|v|^2 < 100) and the
@@ -111,7 +109,7 @@ const char* MomentStationaryCrash::GetName() const
 //                    allocate the ICE-anim behaviour with that shot.
 //   FOUND_PREPARING  failed -> Release (the virtual) + SEARCHING; not yet
 //                    switchable -> hold; switchable -> VALID and RUN THE VALID
-//                    BODY THE SAME FRAME (the X360 falls through).
+//                    BODY THE SAME FRAME (the console build falls through).
 //   VALID            mirror the produced camera; drop back to SEARCHING when the
 //                    keep gate clears or the take finishes/fails.
 void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
@@ -152,9 +150,9 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
                 : lpResourceManager->GetAfterCrashSafe();   // rm +1464
 
             CGS_ASSERT(lrShotGroup.Num_ShotList() > 0,
-                       "lpShotGroup->Num_ShotList() > 0");   // :110 (non-gating)
+                       "lpShotGroup->Num_ShotList() > 0");   //  (non-gating)
 
-            // The group's first ShotList block (the X360 builds a stack
+            // The group's first ShotList block (the console build builds a stack
             // Gen::iceanim over it; the 24-byte null-element fallback is the
             // caller's here).
             const void* lpShotData = lrShotGroup.GetShotListData(0);
@@ -164,7 +162,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
             ICE::ICETakeData* lpTakeData =
                 MomentSharedInfo_GetDirectorResourceManager(lSharedInfo)
                     ->GetKeyAnimFromGuid(IceAnimShotData_GetAnimGuid(lpShotData));
-            CGS_ASSERT(lpTakeData != 0, "lpTakeData != NULL");   // :114 (non-gating)
+            CGS_ASSERT(lpTakeData != 0, "lpTakeData != NULL");   //  (non-gating)
 
             if (ICETakeData_GetDuration(lpTakeData) - 0.1f
                 < MomentSharedInfo_GetTimeCrashing(lSharedInfo))
@@ -215,7 +213,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
             break;
         }
         SetState(E_STATE_VALID);
-        // fall through -- the X360 runs the VALID body the same frame
+        // fall through -- the console build runs the VALID body the same frame
 
     case E_STATE_VALID:
         SetCamera(mIceCameraHandle.GetProducedCamera());
@@ -231,7 +229,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
         break;
 
     default:
-        CGS_ASSERT(false, "unhandled case in switch");   // :183 (non-gating)
+        CGS_ASSERT(false, "unhandled case in switch");   //  (non-gating)
         break;
     }
 }

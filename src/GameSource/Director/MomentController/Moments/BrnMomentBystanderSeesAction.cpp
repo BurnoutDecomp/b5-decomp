@@ -5,14 +5,13 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourBystanderCam.h" // BehaviourBystanderCam (SetParameters/SetTarget)
 
 // BrnDirector::MomentBystanderSeesAction -- reconstructed from
-// BURNOUT_X360_ARTIST.XEX (DWARF primary file BrnMomentBystanderSeesAction.cpp;
-// member names verbatim from the DecFIGS DWARF: mpParameters h:87, mBystander
-// h:89).
+// the console executable (home file BrnMomentBystanderSeesAction.cpp;
+// member names verbatim from the declarations: mpParameters, mBystander
 //
 // Bodied here (5 ledger functions):
-//   Construct @0x8225F118   Update @0x82266730   SetParameters @0x821F7670
-//   Release   @0x8223AAF8   GetName @0x821F7608
-// (Prepare @0x821F7560 was bodied with the BrnMoment.h base TU.)
+//   Construct   Update   SetParameters
+//   Release   GetName
+// (Prepare was bodied with the BrnMoment.h base TU.)
 
 namespace BrnDirector
 {
@@ -20,11 +19,11 @@ namespace BrnDirector
 namespace
 {
     // Camera-state head bits (the moment family's shared vocabulary):
-    const u32 KU_HEAD_FLAG_SEARCHING      = 18;   // oris 4
-    const u32 KU_HEAD_FLAG_ALLOCATED      = 19;   // oris 8
-    const u32 KU_HEAD_FLAG_PREPARING      = 20;   // oris 0x10
-    const u32 KU_HEAD_FLAG_INHIBITED      = 23;   // oris 0x80
-    const u32 KU_HEAD_FLAG_NOT_SWITCHABLE = 24;   // oris 0x100 (valid but the behaviour can't be switched to yet)
+    const u32 KU_HEAD_FLAG_SEARCHING      = 18;
+    const u32 KU_HEAD_FLAG_ALLOCATED      = 19;
+    const u32 KU_HEAD_FLAG_PREPARING      = 20;
+    const u32 KU_HEAD_FLAG_INHIBITED      = 23;
+    const u32 KU_HEAD_FLAG_NOT_SWITCHABLE = 24;   // (valid but the behaviour can't be switched to yet)
 
     const u32 KU_STATE_FLAG_KEEP_GATE = 1;   // mState current flag gating stay-valid
 
@@ -36,7 +35,7 @@ namespace
 namespace detail
 {
     // ---- MomentSharedInfo reaches (un-homed record; the family precedent's
-    // decl-only helpers; X360 shared-info offsets in comments; role names
+    // decl-only helpers; console shared-info offsets in comments; role names
     // FLAG-inferred from the uses). ----
     bool MomentSharedInfo_IsPlayerCrashing(const void* lpSharedInfo);        // +1284 byte 249
     bool MomentSharedInfo_WasTakedown(const void* lpSharedInfo);             // +1284 byte 218 (the takedown-just-happened condition)
@@ -48,22 +47,22 @@ namespace detail
 }
 using namespace detail;
 
-// @ 0x8225F118 -- the inlined base Moment::Construct, the parameter-pointer
+// the inlined base Moment::Construct, the parameter-pointer
 // reset, and the bystander-handle clear.
 void MomentBystanderSeesAction::Construct()
 {
-    Moment::Construct();   // inlined on the X360 (state/type/inhibit/camera)
-    mBystander.Clear();    // the X360 zeroes the five handle fields inline
+    Moment::Construct();   // inlined in the console build (state/type/inhibit/camera)
+    mBystander.Clear();    // the console build zeroes the five handle fields inline
     mpParameters = 0;
 }
 
-// @ 0x821F7670 -- adopt the tuning record (no type assert on the X360).
+// adopt the tuning record (no type assert in the console build).
 void MomentBystanderSeesAction::SetParameters(const Moment::Parameters* lpParameters)
 {
     mpParameters = static_cast<const Parameters*>(lpParameters);
 }
 
-// @ 0x8223AAF8 -- drop the bystander cam if held (the inlined handle Release),
+// drop the bystander cam if held (the inlined handle Release),
 // clear the conditions/switch gates, raise the searching head bit, reset the
 // state. Returns true.
 bool MomentBystanderSeesAction::Release()
@@ -76,13 +75,12 @@ bool MomentBystanderSeesAction::Release()
     return true;
 }
 
-// @ 0x821F7608.
 const char* MomentBystanderSeesAction::GetName() const
 {
     return "MomentBystanderSeesAction";
 }
 
-// @ 0x82266730 -- the per-frame bystander state machine:
+// the per-frame bystander state machine:
 //   SEARCHING        two trigger conditions -- the CRASH one (crashing &&
 //                    Parameters::mbCrashMoment && not blocked/disabled, or the
 //                    force flag) framing the crashing car, and the TAKEDOWN one
@@ -90,7 +88,7 @@ const char* MomentBystanderSeesAction::GetName() const
 //                    the victim. Either allocates a bystander cam with the
 //                    close/far parameter block (Parameters::mbCloseCamera) and
 //                    its target, then enters FOUND_PREPARING.
-//   FOUND_PREPARING  failed -> Release (the virtual); not yet switchable ->
+//   FOUND_PREPARING  failed -> Release (the virtual); not yet switchable
 //                    hold; else VALID (and run the valid tail this frame).
 //   VALID            (the shared switch tail) mirror the produced camera, force
 //                    the bystander motion blur, and drop the moment when the
@@ -101,7 +99,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
     Camera::BehaviourManager* lpBehaviourManager =
         static_cast<Camera::BehaviourManager*>(lrBehaviourController);
 
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");   // :87 (non-gating)
+    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");   //  (non-gating)
 
     switch (GetState())
     {
@@ -183,7 +181,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
         break;   // the shared valid tail
 
     default:
-        CGS_ASSERT(false, "unhandled case in switch");   // :196 (non-gating)
+        CGS_ASSERT(false, "unhandled case in switch");   //  (non-gating)
         return;
     }
 
@@ -213,25 +211,23 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
     }
 }
 
-// ----------------------------------------------------------------------------
-// MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor @0x822197E0
+// MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor
 //
 // ⭐ ADDED 2026-08-29 (crash-camera wave). ArbStateCrashing::Update calls this with 0.5 once a
 // bystander shot has held a crash for longer than kfMomentTime, pulling the framing in so the
 // car stays readable in a long crash.
-//   lbz    r11, 0x184(this)     ; mBystander.IsAllocated()
-//   ... assert "IsAllocated()" (BrnBehaviourManager.h:589) ...
-//   lwz r4, 0x188 / lwz r3, 0x18C / bl <GetBehaviour>
-//   lfs    f0,  0x358(behaviour)
-//   fcmpu  f31, f0 ; beq -> return          ; ONLY writes when the value actually changes
-//   stfs   f31, 0x358(behaviour)            ; mfPerceivedDistanceModificationFactor
-//   stb    1,   0xCF(behaviour)             ; the "re-solve the vantage" latch
+// The console body, in order:
+//   read mBystander's allocated flag at +0x184  ; assert "IsAllocated "
+//   resolve the behaviour through the handle words at +0x188 / +0x18C (GetBehaviour)
+//   read the behaviour's +0x358 float and compare it with the new value;
+//     equal -> return, so it ONLY writes when the value actually changes
+//   store the new value to behaviour +0x358      ; mfPerceivedDistanceModificationFactor
+//   set the behaviour's +0xCF flag byte          ; the "re-solve the vantage" latch
 // The inequality guard is the whole point: raising the latch every frame would make the camera
 // re-solve its vantage continuously.
-// ----------------------------------------------------------------------------
 void MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor(f32 lfFactor)
 {
-    CGS_ASSERT(mBystander.IsAllocated(), "IsAllocated()");   // BrnBehaviourManager.h:589
+    CGS_ASSERT(mBystander.IsAllocated(), "IsAllocated()");
 
     Camera::BehaviourBystanderCam* lpBystander = mBystander.GetBehaviour();
 

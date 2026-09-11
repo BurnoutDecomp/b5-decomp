@@ -1,6 +1,8 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/NearMisses/BrnNearMissManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the not-already-contained tripwire)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint (the BRN_TRAFFIC_DIAG witness)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostManager.h" // BoostManager::OnNearMiss
+#include <cstdlib>                                   // getenv (BRN_TRAFFIC_DIAG)
 
 // -----------------------------------------------------------------------------------------------
 // Chain-event payloads pushed onto the GameStateModuleIO game-event queue (mirrors the sibling
@@ -32,9 +34,23 @@ namespace
         s32  miCount;           // +0x0
         bool mbChainSucceeded;  // +0x4
     };
+
+    // DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE.
+    bool TrafficDiagEnabled()
+    {
+        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
+        return sbEnabled;
+    }
+
+    // [T9-nm] DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE. The 64-event line is budgeted
+    // (a chain can fire several times in a drive and each one is worth seeing); the 65 and 66
+    // lines are one-shot latches because 65 is posted on EVERY frame a chain is alive.
+    s32  s_iNearMissEventBudget    = 24;
+    bool s_bChainInProgressPrinted = false;
+    bool s_bChainCompletePrinted   = false;
 }
 
-// X360 rodata flt_820149B4 (LegacySrc: NearMissManager::KF_NEAR_MISS_CHAIN_TIME = 5.0f).
+// console rodata float (the earlier revision names it NearMissManager::KF_NEAR_MISS_CHAIN_TIME = 5.0f).
 const f32 BrnWorld::NearMissManager::KF_NEAR_MISS_CHAIN_TIME = 5.0f;
 
 // BrnWorld::NearMissManager::HasThereBeenARecentNearMiss @ 0x822CD2E8. Reconstructed from
@@ -96,6 +112,20 @@ void BrnWorld::NearMissManager::NearMissEvent(ENearMissType leNearMissType, u32 
     loEvent.miCount        = miNearMissCount;
     loEvent.meNearMissType = leNearMissType;
     lpEventQueue->AddEvent(&loEvent, 64, 8);
+
+    // [T9-nm] DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE. THE PAYOFF LINE: if this never
+    // prints, no near miss fired in the run, whatever the drain witness reported. category is
+    // ENearMissType (normal / crash-escape, traffic / other race car); id is the vehicle the
+    // player passed -- the console's own body never reads it, this line does.
+    if (s_iNearMissEventBudget > 0 && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+    {
+        --s_iNearMissEventBudget;
+        *CgsDev::Log::gpDebugPrint
+            << "[T9-nm] EVENT 64 id=" << static_cast<s32>(luEntityId)
+            << " category=" << static_cast<s32>(leNearMissType)
+            << " chain=" << miNearMissCount
+            << " [DELETE-WHEN-STABLE]\n";
+    }
 }
 
 // BrnWorld::NearMissManager::Update @ 0x822F8928. One chain-tracking frame. First age the chain
@@ -117,6 +147,16 @@ void BrnWorld::NearMissManager::Update(f32 lfTimeStep, GameEventQueue* lpEventQu
             NearMissChainInProgressEvent loEvent;
             loEvent.miCount = miNearMissCount;
             lpEventQueue->AddEvent(&loEvent, 65, 4);
+
+            // [T9-nm] DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE. One-shot: 65 is posted
+            // on every frame a chain is alive.
+            if (!s_bChainInProgressPrinted && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+            {
+                s_bChainInProgressPrinted = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[T9-nm] EVENT 65 chain=" << miNearMissCount
+                    << " [DELETE-WHEN-STABLE]\n";
+            }
         }
         mfNearMissTimeout -= lfTimeStep;
     }
@@ -129,6 +169,17 @@ void BrnWorld::NearMissManager::Update(f32 lfTimeStep, GameEventQueue* lpEventQu
             loEvent.mbChainSucceeded = !mbFailedNearMissChain;
             CGS_ASSERT(lpEventQueue != 0, "lpEventQueue");
             lpEventQueue->AddEvent(&loEvent, 66, 8);
+
+            // [T9-nm] DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE. One-shot: the first
+            // chain to time out is the one worth seeing.
+            if (!s_bChainCompletePrinted && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+            {
+                s_bChainCompletePrinted = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[T9-nm] EVENT 66 chain=" << miNearMissCount
+                    << " succeeded=" << (loEvent.mbChainSucceeded ? 1 : 0)
+                    << " [DELETE-WHEN-STABLE]\n";
+            }
         }
         miNearMissCount       = 0;
         mbFailedNearMissChain = false;

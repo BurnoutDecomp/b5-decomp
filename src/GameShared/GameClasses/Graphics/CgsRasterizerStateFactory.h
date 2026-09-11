@@ -95,7 +95,7 @@
 //      instance in scope at all. BrnPostFx::Render @0x8240A468 reads
 //      saRasterizerStates[2] (asm 0x8240A514-0x8240A520) and saDepthStencilStates[1]
 //      (0x8240A504-0x8240A510) with no factory anywhere near it -- BrnPostFx cannot
-//      even include BrnRendererModule.h (see BrnPostFxPCComposite.h). On the console
+//      even include BrnRendererModule.h. On the console
 //      that is invisible because the table is a static and the accessor inlined. On
 //      the host a NON-static accessor is simply unreachable from those call sites, so
 //      the non-static choice is what blocks them, and it is not attested. (Same shape

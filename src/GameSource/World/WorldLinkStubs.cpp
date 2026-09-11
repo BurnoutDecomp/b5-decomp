@@ -42,7 +42,6 @@
 #include "SDKs/Realmc/RealmcMemcardInterface.h" // MemcardInterface base ctor/dtor (trivial real bodies)
 #include "GameShared/GameClasses/Graphics/Resources/CgsShaderTechniqueResourceType.h" // the two documented deferrals below       // Attrib::Database stubs
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h" // Attrib::Vault / IGarbageCollector stubs
-#include "SDKs/EA/GameTalk/GameTalk.h"                                          // GameTalkMessage accessor stubs
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsSpatialPartitionManager.h"
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToOutput.h"
 #include "GameSource/World/Bridges/WorldBridgeToEntityModules.h"
@@ -142,21 +141,6 @@ namespace CgsGraphics
 // Attrib::DecodeLiveLinkMessage -- declared here (its home TU attriblivelink.cpp is not
 // reconstructed; CgsAttribSysModule.cpp forward-declares the same signature); body below.
 namespace Attrib { void DecodeLiveLinkMessage(const char*); }
-
-// The GameTalk message accessors the (unregistered on PC) Attribulator LiveLink handler
-// reads. GetChannel has a body in SDKs/EA/GameTalk/GameTalk.cpp, which is not on the
-// build list; GetKeyContent has no body anywhere in the tree.
-const char* EA::GameTalk::GameTalkMessage::GetChannel() const
-{
-    CGS_ASSERT(false, "GameTalkMessage::GetChannel: link stub (attribsys module mount) -- reconstruct from X360");
-    return 0;
-}
-
-const char* EA::GameTalk::GameTalkMessage::GetKeyContent(const char*) const
-{
-    CGS_ASSERT(false, "GameTalkMessage::GetKeyContent: link stub (attribsys module mount) -- reconstruct from X360");
-    return 0;
-}
 
 // -------------------------------------------------------------------------
 // BrnAI::AIModule

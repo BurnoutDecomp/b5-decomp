@@ -27,11 +27,12 @@
 // could mount without dragging GameTalk in. Nothing is invented, nothing is stubbed --
 // both bodies below keep their real, faithful implementations.
 //
-// ⚠️ NOT MOUNTED. Mount this WITH ICEFileClose.cpp + the EA::GameTalk message API + a
-// rw::core::stdc::Snprintf body, and merge it straight back into ICEAuthorTakeOps.cpp at
-// the same time -- the split has no reason to outlive the blocker.
-// DELETE-WHEN: EA::GameTalk lands (or the debug XML dump path is retired) AND
-// rw::core::stdc::Snprintf is bodied.
+// ⚠️ THE BLOCKER IS GONE (2026-09-11). EA::GameTalk is reconstructed and mounted,
+// ICEFileClose.cpp was folded back into ICEFile.cpp, rw::core::stdc::Snprintf is bodied,
+// and this TU is on the build list at zero unresolved. The split itself is now pure
+// history.
+// DELETE-WHEN: next pass over this directory -- merge these two bodies straight back into
+// ICEAuthorTakeOps.cpp and delete this file with its bat line.
 // ============================================================================
 
 #include "SDKs/Packages/ICE/ICEAuthor.hpp"

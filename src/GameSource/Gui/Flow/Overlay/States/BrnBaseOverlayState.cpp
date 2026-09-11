@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // GuiAccessPointers::GetFlaptManager
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // VariableEventQueue<18432,16> (the in-queue view)
-#include "GameSource/Gui/BrnGuiOverlaysDirector.h"                        // GuiOverlayShowingNotification (event 190)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiOverlayShowingNotification (event 190)
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                         // BrnFlapt::FileRef (by value)
 #include "GameSource/Gui/Flapt/BrnFlaptManager.h"                         // BrnFlapt::FlaptManager::GetFile
 

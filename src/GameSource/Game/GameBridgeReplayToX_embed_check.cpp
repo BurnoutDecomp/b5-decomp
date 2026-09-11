@@ -6,11 +6,11 @@
 
 namespace
 {
-    // Exercise the GuiReplayStatusEvent (real GuiEvent<514> boxing the replay status
-    // interface) the bridge synthesises by name.
+    // Exercise the GuiReplayStatusEvent (the real 1560-byte record boxing the replay
+    // status interface) the bridge synthesises by name.
     void ExerciseReplayStatusEvent(BrnGui::GuiReplayStatusEvent& rEvent)
     {
-        volatile s32 li = rEvent.GetEventType()              // GuiEvent<514>::GetEventType()
+        volatile s32 li = rEvent.GetEventType()              // event id 524
                           + rEvent.mInterface.miCurrentRecordReel
                           + rEvent.mInterface.miCurrentPlaybackReel;
         (void)li;

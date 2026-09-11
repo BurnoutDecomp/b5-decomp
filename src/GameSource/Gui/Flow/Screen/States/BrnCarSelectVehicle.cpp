@@ -33,7 +33,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"  // GuiEventAptTriggerPayload
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache (+ GuiFlow)
-#include "GameSource/Gui/BrnGuiOverlaysDirector.h"                        // BrnGui::GuiOverlayRequest (the ticker wire)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiOverlayRequest (the ticker wire)
 #include "SharedClasses/DataLists/VehicleList.h"                          // BrnResource::VehicleList
 #include "SharedClasses/DataLists/VehicleListEntry.h"                     // BrnResource::VehicleListEntry
 

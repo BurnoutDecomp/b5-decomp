@@ -12,17 +12,16 @@
 //
 // X360 asm walk: assert mpParameters (cpp:60; the assert does not early-out), then:
 //   mbFirstFrame set   -> mLastTransform = lrTransform (4 row copies), clear the flag;
-//   mbUseSlerpSpring   -> splat mpParameters->mfSlerpSpring (lvlx params+0x10, vspltw)
-//                         and call rw::math::vpu::SLerp(out, mLastTransform, lrTransform,
-//                         ...) -- the same vendor op the reviewed BrnLooker::Track site
-//                         maps to SLerp(from, to, &amount). Copy the blended rows into
-//                         mLastTransform, then overwrite the w row with lrTransform's
-//                         (the X360 stores out.wAxis then immediately re-stores
-//                         lrTransform.wAxis over it: translation always snaps).
-//                         FLAG: the X360 SLerp variant also receives lfTimestep in f1
-//                         (the caller leaves it live) -- the spring-vs-time integration,
-//                         and the PS3 hint's lAngle/lT locals, live INSIDE the vendor op,
-//                         whose body is declaration-only in this vocabulary.
+//   mbUseSlerpSpring   -> broadcast mpParameters->mfSlerpSpring and call
+//                         rw::math::vpu::SLerp(mLastTransform, lrTransform, that amount,
+//                         &angleOut) -- the same vendor op, and the same four-argument
+//                         shape, as the reviewed BrnLooker::Track site. The angle-out
+//                         slot is a stack local that is written and never read. Copy the
+//                         blended rows into mLastTransform, then overwrite the w row with
+//                         lrTransform's (the store of the blended w row is immediately
+//                         re-stored from lrTransform: translation always snaps).
+//                         The frame delta is NOT part of this call: nothing forwards
+//                         lfTimestep into the blend, so the spring amount is used raw.
 //   otherwise          -> mLastTransform = lrTransform (straight copy, flag untouched).
 
 namespace BrnDirector
@@ -44,11 +43,13 @@ namespace Utils
         else if (mpParameters->mbUseSlerpSpring)
         {
             // Spherically blend the held orientation toward the new transform by the
-            // slerp spring; the translation row snaps to the new transform.
-            // (lfTimestep feeds the vendor SLerp's spring integration -- see FLAG above.)
+            // slerp spring; the translation row snaps to the new transform. The frame
+            // delta plays no part in the blend -- see the banner.
             (void)lfTimestep;
+            rw::math::vpu::Vector3 lUnusedAngle;
             const rw::math::vpu::Matrix44Affine lBlended =
-                rw::math::vpu::SLerp(mLastTransform, lrTransform, &mpParameters->mfSlerpSpring);
+                rw::math::vpu::SLerp(mLastTransform, lrTransform,
+                                     mpParameters->mfSlerpSpring, &lUnusedAngle);
 
             mLastTransform       = lBlended;
             mLastTransform.wAxis = lrTransform.wAxis;
@@ -57,6 +58,24 @@ namespace Utils
         {
             mLastTransform = lrTransform;
         }
+    }
+
+    // Point the lag at a caller-owned tunables block. The console never emits this as a
+    // standalone symbol -- every embedder inlines it -- so it is transcribed from the one
+    // site that shows it whole: BehaviourRig::Prepare stores
+    // &parameters->mOrientationLagParams into the lag's parameter slot and only THEN runs
+    // the null assert, which carries this file's own assert text.
+    void OrientationLag::SetParameters(const Parameters* lpParameters)
+    {
+        mpParameters = lpParameters;
+        CGS_ASSERT(mpParameters != NULL, "mpParameters != NULL");
+    }
+
+    // The lagged output transform. Inlined at every read site as a plain load of the
+    // first member.
+    const rw::math::vpu::Matrix44Affine& OrientationLag::GetTransform() const
+    {
+        return mLastTransform;
     }
 }
 }

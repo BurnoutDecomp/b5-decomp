@@ -30,29 +30,7 @@
 // behaviour is driven through its handle's named accessors, and the ICE playback goes through the
 // ICEMoviePlayer / ICEWrapper. The GameState / player-car snapshot it reacts to is read by named
 // members.
-// ----------------------------------------------------------------------------
-//
-// PARKED -- not on the exe source list. It compiles clean; TEN externals it needs have no
-// definition in any mounted TU, and the five ArbStateCrashNav stubs in
-// Director/DirectorLinkStubs.cpp stay until they are all cleared:
-//   ICEMoviePlayer::Construct / Prepare / Update / Stop / Loop / GetCamera /
-//     InterpolateFrom / CutToInterpolateOut  (8) -- written, in the unmounted
-//     Director/Utils/BrnICEMoviePlayer.cpp (only its partfile BrnICEMoviePlayer_wP0_01.cpp
-//     is on the source list).
-//   ICEWrapper::GetCurrentMovie / PlayMovie  (2) -- written, unmounted
-//     SDKs/Packages/ICE/ICEWrapper.cpp.
-// The other two of the old twelve are closed: SharedCameraContainer::GetGameplayCameraHelperIndex
-// (Camera/BrnSharedCameraContainer.cpp is now mounted) and Camera::Camera::SetRequestedBorderPostFX
-// (bodied in Camera/Camera.cpp). Re-measured 2026-09-11 by dumpbin over this TU's object against
-// the mounted symbol set: 60 undefined, all resolved but the ten above, plus CRT and two
-// weak-external vector-deleting-destructor aliases that fall back to their scalar defaults.
-// Those ten are the direct cost. The movie-player half they wait on opens nine more of its
-// own (four BehaviourInterpolate methods and three BehaviourManager BehaviourHandle
-// overloads that are declared and bodied nowhere, plus ICEWrapper::PlayMovie /
-// ::IsPlayingMovie), and PlayMovie in turn reaches ICEController::Update -- the whole
-// unmounted ICE editor group. The gate block in DirectorLinkStubs.cpp carries the full
-// measured chain.
-// ----------------------------------------------------------------------------
+// ============================================================================
 
 namespace BrnDirector
 {

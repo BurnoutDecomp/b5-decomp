@@ -95,12 +95,11 @@ namespace BrnDirector
     ArbStateOnlineRaceIntro::BehaviourHandle<Camera::BehaviourInterpolate>::GetProducedCamera() const
     {
         CGS_ASSERT(mbAllocated, "IsAllocated()");
-        // The interpolator's produced camera lives at the same manager-pool slot offset the
-        // ICE-anim behaviour's does (the X360 sub_821FCD40 reads slot+0x10); reached BY NAME
-        // through the interpolator's GetCamera() accessor.
-        // FLAG: the BehaviourInterpolate produced-camera accessor is the minimal slice -- the
-        // camera ROLE is reproduced (sub_821FCD40 reads slot+0x10).
-        return mpBehaviour->GetCamera();
+        // The interpolate behaviour holds NO camera of its own: the blend writes the camera the
+        // pool helper owns, and the console's de-inlined accessor reads it straight out of that
+        // helper slot. Reached BY NAME through the manager-side twin of the same lookup.
+        return mpManager->GetCameraFromBehaviour(
+            Camera::BehaviourHelperIndex(static_cast<s32>(muAllocationKey)));
     }
 
     // ------------------------------------------------------------------------
@@ -311,18 +310,20 @@ namespace BrnDirector
 
         Camera::BehaviourInterpolate* lpInterpolator = mInterpolator.GetBehaviour();
 
-        // Seed the interpolation mode + the per-take parameters (the X360 writes the method word
-        // at behaviour +0x10 from mInterpolatorParams and points the params pointer at the state's
-        // InterpolatorParameters block). The InterpolatorParameters POD stands in for the slice's
-        // opaque Parameters here -- cast to the slice type the named setter takes.
+        // Seed the interpolation mode + the per-take parameters (the console writes the mode word
+        // at the behaviour base's +0x04 == meTimestepType, and points the params pointer at the
+        // state's InterpolatorParameters block). The InterpolatorParameters POD stands in for the
+        // slice's opaque Parameters here -- cast to the slice type the named setter takes.
         lpInterpolator->SetInterpolationMode(static_cast<s32>(mInterpolatorParams.muField0C));
         lpInterpolator->SetParameters(
             reinterpret_cast<const Camera::BehaviourInterpolate::Parameters*>(&mInterpolatorParams));
 
-        lpInterpolator->SetupCameraAFromCamera(lrFromCamera);   // X360 sub_821FD4B8 (from-ref)
-        lpInterpolator->SetupCameraBFromCamera(lrToCamera);     // X360 sub_821FD4B8 (to-ref)
+        // The two camera references are SNAPSHOTS: each setter caches the camera it is handed
+        // (meType = E_TYPE_CACHED) rather than recording where it came from.
+        lpInterpolator->SetupCameraAFromCamera(lrFromCamera);
+        lpInterpolator->SetupCameraBFromCamera(lrToCamera);
         lpInterpolator->SetupDuration(mfTimeToSpendInterpolating);
-        lpInterpolator->Setup();                                // X360 sub_8224EE58 latch
+        lpInterpolator->Setup();
     }
 
     // ------------------------------------------------------------------------

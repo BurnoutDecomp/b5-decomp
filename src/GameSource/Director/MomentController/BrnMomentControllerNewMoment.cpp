@@ -1,12 +1,12 @@
 // Out-of-line bodies for the BrnDirector::MomentController moment-factory path.
-// Reconstructed from BURNOUT_X360_ARTIST.XEX, semantic-parity.
+// Reconstructed from the console executable, semantic-parity.
 //
 // Bodied here:
-//   BrnDirector::MomentController::NewMoment              @0x82255850
-//   BrnDirector::MomentController::MomentHandle::Prepare  (DWARF BrnMomentController.cpp:235)
-//   BrnDirector::MomentController::MomentHandle::Release  (DWARF BrnMomentController.cpp:277)
+//   BrnDirector::MomentController::NewMoment
+//   BrnDirector::MomentController::MomentHandle::Prepare
+//   BrnDirector::MomentController::MomentHandle::Release
 //
-// NewMoment is the controller's moment factory. The X360 spine (@0x82255850):
+// NewMoment is the controller's moment factory. The console spine:
 //   1. Release the in/out handle (assert it returned true).
 //   2. switch(leMomentType) -> mMomentPool.AllocateVoid<MomentXxx>() for the 12 types,
 //      each returning the four-word AbstractPoolVoidHandle for the freshly-constructed slot.
@@ -19,8 +19,8 @@
 //   5. lpParameters = mMomentParameterBank.GetParameters(leMomentParamID).
 //   6. assert mbIsAllocated, then GetMoment()->SetParameters(lpParameters)
 //      (vtable +0xC == SetParameters, Moment slot 3).
-// The X360-baked assert file/line are dropped per project convention; the stringized
-// conditions match the X360 message text.
+// The console-baked assert file/line are dropped per project convention; the stringized
+// conditions match the console build message text.
 //
 // =========================================================================================
 // STILL UNMOUNTED as of 2026-08-23, and the reason is now MEASURED rather than guessed.
@@ -39,27 +39,24 @@
 // (b) the four `BehaviourCollection<>` instantiations MomentPlayerJumping holds (24 symbols
 // from SIX template methods -- write the template bodies once and all four resolve);
 // (c) ~38 declaration-only per-class virtuals (Destruct / GetInstanceType / SetParameters /
-// Prepare / Release), most of them one-liners recoverable straight from the asm.
+// Prepare / Release), most of them one-liners recoverable straight from the console code.
 //
 // AND MOUNTING THIS ALONE WOULD STILL NOT MAKE A CUTAWAY PLAY -- see the GROUP F banner in
 // DirectorLinkStubs.cpp: nothing in this tree ticks a moment. MomentController::
-// UpdateAllMoments @0x82239DE8 has no body anywhere, its only caller MainDirector::
-// UpdateMoments @0x82250268 is declaration-only (BrnMainDirector.h:161), and that call is
-// itself commented out in MainDirector::Update (BrnMainDirector.cpp:1617, `GATE:
+// UpdateAllMoments has no body anywhere, its only caller MainDirector::
+// UpdateMoments is declaration-only, and that call is
+// itself commented out in MainDirector::Update (`GATE:
 // UpdateMoments( lpIO, liPlayerCarIndex );`). A moment that is never Updated never leaves
 // E_STATE_INVALID_INACTIVE, so it is never IsValid(), so it is never counted or selected.
 // =========================================================================================
 
 #include "GameSource/Director/MomentController/BrnMomentController.h"
 // ---- the twelve concrete moment types NewMoment allocates ---------------------------------
-// ⭐ 2026-08-23: this umbrella lives HERE, in the only TU that needs all twelve, and NOT in a
-// shared header. BrnMomentParameterBank.h -- which is on BrnMainDirector.cpp's include path --
-// used to carry it via BrnMomentSubclasses.h, and these headers are far too heavy (and, for
-// BrnMomentHardStop.h, outright incompatible with BrnDirectorModuleIO.h) to sit there.
-// MomentBystanderSeesAction (case 5) is homed in BrnMoment.h; MomentTumbling (case 2) arrives
-// via BrnMomentController.h -> BrnMomentParameterBank.h; MomentHardStop (case 0) is STILL the
-// layout-stubbed slice in BrnMomentSubclasses.h -- read that file's DELETE-WHEN.
-#include "GameSource/Director/MomentController/BrnMomentSubclasses.h"                 // case 0  (SLICE -- see its banner)
+// ⭐ This umbrella lives HERE, in the only TU that needs all twelve, and NOT in a shared
+// header: these headers are far too heavy to sit on BrnMainDirector.cpp's include path.
+// MomentBystanderSeesAction (case 5) is homed in BrnMoment.h; MomentTumbling (case 2) and
+// MomentHardStop (case 0) arrive via BrnMomentController.h -> BrnMomentParameterBank.h, which
+// holds both records by value.
 #include "GameSource/Director/MomentController/Moments/BrnMomentHitTraffic.h"         // case 1
 #include "GameSource/Director/MomentController/Moments/BrnMomentTakedownLookback.h"   // case 3
 #include "GameSource/Director/MomentController/Moments/BrnMomentPassengerSeesAction.h"// case 4
@@ -75,7 +72,6 @@
 namespace BrnDirector
 {
 
-// ---------------------------------------------------------------------------------------
 // ⭐ THE BUCKET-FITS RATCHET (2026-08-23, jump/stunt cutaway wave).
 //
 // This is the ONE TU in the program that sees all twelve concrete moment types, so it is the
@@ -87,7 +83,6 @@ namespace BrnDirector
 // This fired for real: with the console's literal 70-unit (1120 B) bucket,
 // MomentPlayerJumping is 1296 B on this x64 host. See the HOST BUCKET WIDENING banner in
 // BrnMomentController.h.
-// ---------------------------------------------------------------------------------------
 namespace
 {
     typedef MomentController::MomentPool::Bucket MomentBucket;
@@ -107,9 +102,9 @@ namespace
     #undef BRN_MOMENT_FITS
 }
 
-// DWARF BrnMomentController.cpp:235. Take ownership of a freshly-allocated pool slot.
-// X360 stores the handle/parent and marks the slot allocated; the two GetMoment() reads the
-// DWARF attests are the moment-type tag/back-reference wiring once the slot is owned.
+// Take ownership of a freshly-allocated pool slot.
+// console stores the handle/parent and marks the slot allocated; the two GetMoment() reads the
+// Declaration attests are the moment-type tag/back-reference wiring once the slot is owned.
 bool MomentController::MomentHandle::Prepare(AbstractPoolVoidHandle lVoidHandle,
                                              MomentController& lrParentMomentController,
                                              Camera::BehaviourManager& /*lrBehaviourManager*/)
@@ -123,13 +118,12 @@ bool MomentController::MomentHandle::Prepare(AbstractPoolVoidHandle lVoidHandle,
 }
 
 // MomentHandle::Release MOVED OUT of this TU 2026-08-01 -> BrnMomentController.cpp, which is
-// the DWARF's own home for it (BrnMomentController.cpp:277) AND is on the exe source list.
+// the declaration's own home for it AND is on the exe source list.
 // This TU is not mounted (NewMoment's twelve AllocateVoid<MomentXxx>() arms drag the moment
 // subclass family), and BrnMomentSelector.cpp -- which IS mounted -- calls Release on every
 // handle, so leaving the only copy here meant the link could not see it.
 // ⚠️ WHEN THIS TU IS FINALLY MOUNTED, do NOT re-add Release here: it would be an LNK2005.
 
-// @0x82255850.
 bool MomentController::NewMoment(Moment::EType leMomentType,
                                  MomentParameterBank::EMomentParamID leMomentParamID,
                                  MomentHandle& lrMomentHandleInOut,
@@ -179,15 +173,16 @@ bool MomentController::NewMoment(Moment::EType leMomentType,
         default:
             // DO NOT "FIX" THE UNINITIALISED lVoidHandle ON THIS ARM -- the console has it too.
             // MSVC reports C4701 here (measured 2026-08-16 under /w14701). It is a TRUE report of
-            // UB that is in the SHIPPED X360 BINARY, not a transcription defect:
-            //   0x82255B68 default: BeginAssert/FireAssert("Unhandled moment type")/EndAssert
-            //   0x82255B84 <- every case ALSO branches here
-            //   0x82255B88 ld r4, var_110(r1) ; 0x82255B90 ld r5, var_108(r1)   <- the handle slot
-            //   0x82255B98 bl MomentHandle::Prepare
-            // The default arm writes NOTHING to var_110/var_108 and falls straight into the one
+            // UB that is in the SHIPPED console BINARY, not a transcription defect:
+            //   default: BeginAssert/FireAssert("Unhandled moment type")/EndAssert
+            //   <- every case ALSO branches to the same join point
+            //   the join point reloads the two stack words holding the handle
+            //   and calls MomentHandle::Prepare
+            // The default arm writes NOTHING to that stack slot and falls straight into the one
             // shared Prepare, i.e. the original source hoisted Prepare out of the switch exactly
-            // as it is written below. (Hex-Rays shows Prepare duplicated into all 13 arms; the ASM
-            // has a single call site. Rung 1 is the asm.) Seeding lVoidHandle would be behaviour
+            // as it is written below. (The automatic C translation shows Prepare duplicated into
+            // all 13 arms; the console code has a single call site, and the console code is the
+            // authority.) Seeding lVoidHandle would be behaviour
             // the binary does not have.
             CGS_ASSERT(false, "Unhandled moment type");
             break;
@@ -204,7 +199,7 @@ bool MomentController::NewMoment(Moment::EType leMomentType,
     CGS_ASSERT(lrMomentHandleInOut.IsAllocated(), "mbIsAllocated");
     lrMomentHandleInOut.GetMoment()->SetParameters(lpParameters);
 
-    // [DIAG] NOT IN THE X360 BINARY. Rung 5b of the `[jump-ladder]`: a moment was really
+    // [DIAG] NOT IN THE console BINARY. Rung 5b of the `[jump-ladder]`: a moment was really
     // ALLOCATED. Until 2026-08-23 this whole function was a GROUP-F stub in
     // DirectorLinkStubs.cpp that returned true while allocating nothing, so every
     // MomentHandle stayed !IsAllocated() and no cutaway could ever exist. First-N (one

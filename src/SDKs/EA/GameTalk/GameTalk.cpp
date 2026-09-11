@@ -91,8 +91,28 @@ namespace GameTalk
     // GameTalkMessage bodies (reconstructed from BURNOUT_X360_ARTIST.XEX).
     // ========================================================================
 
-    // Shared entry-buffer capacity (X360 global dword_82F32FC4, doubled on grow).
-    s32 GameTalkMessage::KsDataBufferCapacity = 0;
+    // Shared entry-buffer capacity, doubled on grow by AddKeyContent. The seed is a
+    // data-segment constant in the console image, NOT zero: a zero seed would make the
+    // first AllocateDataBuffer ask for 0 bytes and leave the doubling in AddKeyContent
+    // stuck at 0 forever, so every message would write its entries through a null table.
+    s32 GameTalkMessage::KsDataBufferCapacity = 25;
+
+    // Allocate (and zero) the message's key/content entry-pointer table at the current
+    // shared capacity. The console tags the allocation "GameTalkMessage"; Alloc ignores
+    // the tag. One slot per entry -- the console asks for four bytes a slot, widened here
+    // to the host pointer size like every other pointer in this class. The zero fill runs
+    // over the freshly returned block unguarded, so an exhausted GameTalk package heap
+    // faults here exactly as it does on the console.
+    void* GameTalkMessage::AllocateDataBuffer()
+    {
+        KeyContent** lppBuffer = static_cast<KeyContent**>(
+            EA::GameTalk::Alloc(static_cast<s32>(sizeof(KeyContent*)) * KsDataBufferCapacity));
+
+        for (s32 liSlot = 0; liSlot < KsDataBufferCapacity; ++liSlot)
+            lppBuffer[liSlot] = 0;
+
+        return lppBuffer;
+    }
 
     // @ 0x828387A8 -- construct a message bound to the named tool channel. Zeroes the
     // flag/entry/count fields, then eagerly allocates the entry-pointer buffer.
@@ -198,10 +218,29 @@ namespace GameTalk
         return mppEntries[liIndex]->miSize;
     }
 
+    // The live key/content entry count -- a plain read of the count word.
+    s32 GameTalkMessage::GetNumKeys() const
+    {
+        return miNumKeys;
+    }
+
     // The message's tool channel string (the +0x10 member).
     const char* GameTalkMessage::GetChannel() const
     {
         return mpcChannel;
+    }
+
+    // Look the named key up (case-insensitively, the same StrIEqual the channel filters
+    // use) and hand back that entry's content blob. NULL when the message carries no
+    // entries or none of them matches.
+    const char* GameTalkMessage::GetKeyContent(const char* lpcKey) const
+    {
+        for (s32 liIndex = 0; liIndex < miNumKeys; ++liIndex)
+        {
+            if (EA::GameTalk::StrIEqual(mppEntries[liIndex]->mpcKey, lpcKey))
+                return static_cast<const char*>(mppEntries[liIndex]->mpContent);
+        }
+        return 0;
     }
 
     // @ 0x82837E88 -- parse a length-prefixed string from the wire cursor. Reads a
@@ -666,6 +705,40 @@ namespace GameTalk
             }
         }
         return liResult;
+    }
+
+    // The transport receive trampoline the manager installs on its protocol at
+    // construction. lpacMessage is a raw run of wire records; each record opens with a
+    // big-endian u32 payload length, so the step to the next record is that length plus
+    // the four bytes of the prefix itself. Each record is decoded into a message, routed,
+    // and released (dtor + the GameTalk package free -- Create package-allocates it, so
+    // this is not an operator-delete). The routing call is made even when Create declined
+    // the record and returned NULL, which is what the console does; only the release is
+    // guarded. The record walk compares signed, so a length with the top bit set ends the
+    // loop immediately rather than running away.
+    void GameTalkManager::ReceiverCallback(const char* lpacMessage, u32 luLength)
+    {
+        const s32 liLength = static_cast<s32>(luLength);
+        s32 liOffset = 0;
+
+        while (liOffset < liLength)
+        {
+            const char* lpcRecord = lpacMessage + liOffset;
+
+            u32 luSwap = 0;
+            std::memcpy(&luSwap, lpcRecord, 4);
+            const s32 liStep = static_cast<s32>(_byteswap_ulong(luSwap)) + 4;
+
+            GameTalkMessage* lpMessage = GameTalkMessage::Create(lpcRecord);
+            ReceiveMessage(lpMessage);
+            if (lpMessage)
+            {
+                lpMessage->~GameTalkMessage();
+                EA::GameTalk::Free(lpMessage);
+            }
+
+            liOffset += liStep;
+        }
     }
 }
 }

@@ -1,4 +1,6 @@
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
+
+#include <cstdio>   // std::snprintf (the load-stage witness strings below)
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h"   // gpMainGameFlowController, SendEvent
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT

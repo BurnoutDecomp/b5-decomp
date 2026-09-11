@@ -8,9 +8,10 @@
 // account the director's shared info carries @ +0x138 (the block the Behaviour /
 // CollisionPolicy Fail paths record their failure reasons into). DWARF home
 // gamesource/director/camera/BrnCameraValidityAccount.h (the SetFlag assert cite).
-// MINIMAL slice: only SetFlag @0x82204028 is homed; the named per-flag enumerators
-// (h:219 asserts a failed-flag range of [0,14)) are not yet recovered -- FLAG: the
-// range bounds are modelled, the flag names land with the account's own TU.
+// The per-flag NAMES are recovered and committed with the account's own TU (the table in
+// BrnCameraValidityAccount.cpp, which both Print overloads index by flag). The enumerators
+// themselves are still unnamed here; the three bands below are what the asserts attest, and
+// that table's three name prefixes agree with them band for band.
 namespace BrnDirector
 {
     // The two dev sinks the Print overloads write to. Reference-only here, so the forward
@@ -50,9 +51,9 @@ namespace Camera
 
         // ---- the two dev read-outs (DWARF BrnCameraValidityAccount.h:85 / :88) -------------
         // Both are `void Print(...) const` overloads: one dumps the raised reason bits to the
-        // on-screen debug printer, the other appends them to the scrolling debug log. They are
-        // DECLARATION-ONLY here; the bodies are trap stubs in DirectorLinkStubs.cpp (GROUP G)
-        // until the reason-name table they walk is recovered.
+        // on-screen debug printer, the other appends them to the scrolling debug log. BOTH ARE
+        // BODIED in BrnCameraValidityAccount.cpp as of 2026-09-11, over the reason-name table
+        // recovered there -- the GROUP G trap stubs that stood in for them are gone.
         //
         // ⭐ ADDED 2026-08-29 (crash-camera wave). Both are X360-attested by
         // ArbStateCrashing: SelectNormalCrashCamera @0x82254FB0 calls the DebugPrinter form on
@@ -60,9 +61,7 @@ namespace Camera
         // @0x8224F5B0 calls the DebugLog form (the export's unnamed `sub_8223E6E0`, identified
         // as this overload by the DWARF pair and by its argument being mpDebugLog).
         // ⚠️ EVERY call site in that state is inside `if (IsDebugDisplayActive())`, and
-        // ArbStateCrashing::Construct seeds that flag FALSE, so retail never reaches them --
-        // which is exactly why a loud trap body is the honest placeholder rather than a quiet
-        // one. DELETE-WHEN: the reason-name table lands and the bodies can be written.
+        // ArbStateCrashing::Construct seeds that flag FALSE, so retail never reaches either.
         void Print(DebugPrinter& lrDebugPrinter) const;
         void Print(DebugLog& lrDebugLog) const;
 

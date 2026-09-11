@@ -199,7 +199,7 @@ namespace Deformation
 		// `SimpleVehiclePhysics::GetSpeedMPH()` is a PUBLIC, DWARF-declared accessor
 		// (BrnSimpleVehiclePhysics.h:425, X360-attested via UpdateRaceCarState @0x825EC808), and
 		// the whole rest of the tree already spells this `->GetSpeedMPH().x` (PropManager_wQ2_01,
-		// BrnPhysicalTrafficManager_CrashResponse x4, BrnRendererModulePostFx).
+		// BrnPhysicalTrafficManager_CrashResponse x4, BrnRendererModule).
 		// ⚠️ STATED PLAINLY, BECAUSE IT MATTERS: THIS WAS NOT A GHOST. 1728 == 0x6C0 IS the host
 		// offsetof -- measured and pinned by `static_assert(offsetof(VehiclePhysics, mfSpeedMPH)
 		// == X360LayoutCheck::KU_A_SPEEDMPH)` in VehiclePhysics_layout_check.cpp, because

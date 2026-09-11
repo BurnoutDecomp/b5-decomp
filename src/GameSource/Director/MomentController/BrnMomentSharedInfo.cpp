@@ -2,6 +2,7 @@
 
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"   // GameState (the flags eight of these read)
 #include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"       // AllVehicleData (the real home + class key)
+#include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"       // VehicleTracker::GetCrashType
 #include "GameSource/Director/Camera/BrnBehaviourParameterBank.h"      // NamedParameters (the gyro block run)
 #include "SDKs/Packages/ICE/ICEData.hpp"                               // ICE::ICETakeData (the take reaches)
 #include "GameSource/AttribSys/Generated/classes/iceanim.h"            // Attrib::Gen::iceanim (the shot-element guid)
@@ -22,9 +23,10 @@
 // second check and are listed in the header banner; the member each one reads is named in
 // its comment here.
 //
-// The shims still WITHOUT a body reach members this tree has not carved: the opaque tail of
-// GameState::mDirectorProfileData, VehicleTracker's crash-type word, and the resolved-vehicle
-// lanes the takedown look-back reads through VehicleRef::Get.
+// The shims still WITHOUT a body are the resolved-vehicle lanes the takedown look-back reads
+// through VehicleRef::Get. The two the census called uncarved are bodied here: the crash-type
+// word is a named VehicleTracker member with its own published accessor, and the profile-data
+// flag is read through the same byte blob two mounted arbitrator arms already read it through.
 //
 // ⛔ DO NOT give these a quiet fallback for a null record. They are reached only from a
 // moment's Update, which the director calls with its own record by reference; a null here
@@ -182,6 +184,19 @@ namespace detail
         return Record(lpSharedInfo).mpGameState->mfCrashTimeRemaining;
     }
 
+    // The showtime-intro flag inside the opaque DirectorProfileData sub-object, at its +0x05.
+    // Two MOUNTED consumers already read this exact byte through the same blob and gate on it
+    // the same way -- ArbStateRoaming::Update FORCES the external chase cam while it is up, and
+    // the same state's showtime-intro border/blur ramp runs only while it is up. So the stunt
+    // moment's use of it is an abort, not a third meaning: the stunt camera stands down while
+    // the showtime intro owns the shot. The sub-object stays opaque -- the recorded field layout
+    // for it does not line up with the displacements its own users read, as its home header
+    // explains -- so this reads the byte blob exactly as those two do rather than inventing one.
+    bool MomentSharedInfo_IsShowtimeIntroActive(const void* lpSharedInfo)
+    {
+        return Record(lpSharedInfo).mpGameState->mDirectorProfileData.maOpaque[0x05] != 0;
+    }
+
     // The slow-motion permission flag, not a camera-active flag.
     bool MomentSharedInfo_IsCrashCameraActive(const void* lpSharedInfo)
     {
@@ -277,6 +292,17 @@ namespace detail
         return Record(lpSharedInfo).mpEffectInterface;
     }
 
+    // ---- through mpPlayerTracker -----------------------------------------------------------
+
+    // This crash's energy classification. The call site recorded a displacement into the tracker
+    // and the census called it "a word this tree has not carved" -- it is carved, and has been:
+    // VehicleTracker names that exact slot meCrashType and already publishes GetCrashType(), so
+    // this is one named read like the rest of the family, not a struct job.
+    s32 MomentSharedInfo_GetCurrentCrashType(const void* lpSharedInfo)
+    {
+        return static_cast<s32>(Record(lpSharedInfo).mpPlayerTracker->GetCrashType());
+    }
+
     // ---- through mpPlayerCar ---------------------------------------------------------------
     // The same snapshot type as the leading copy, reached by pointer. The stationary-crash
     // moment dots the first lane against the other two.
@@ -363,6 +389,17 @@ namespace detail
     s32 ICETakeData_GetGuid(const ICE::ICETakeData* lpTakeData)
     {
         return lpTakeData->GetGuid();
+    }
+
+    // Is this selected shot an iceanim block. The console compares the reference's leading
+    // 8 bytes against the generated iceanim class key and, only then, turns the allocated
+    // behaviour's collision policy on -- so the tag test is what proves the behaviour the
+    // shot-taking NewBehaviour handed back is an ICE-anim one. Both halves of that comparison
+    // are already published by name (RefSpec::GetClassKey / iceanim::ClassKey); nothing here
+    // reads a raw offset.
+    bool ShotReference_IsIceAnimClassKeyTagged(const Attrib::RefSpec* lpShot)
+    {
+        return lpShot->GetClassKey() == static_cast<u64>(Attrib::Gen::iceanim::ClassKey());
     }
 
     // A ShotList element is a RefSpec; the take guid is read by building the generated
